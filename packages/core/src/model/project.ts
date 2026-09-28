@@ -148,6 +148,19 @@ export const StructureSpecSchema = z.object({
 });
 export type StructureSpec = z.infer<typeof StructureSpecSchema>;
 
+/**
+ * Surcharges du mode expert (persistées, typées) : elles s'appliquent sur des nez identifiés
+ * par leur indice ; si l'indice n'existe plus après régénération, la surcharge est déclarée
+ * « orpheline » dans le modèle et n'est pas appliquée (docs/CHALLENGE.md §A4).
+ */
+export const NosingOverrideSchema = z.discriminatedUnion("kind", [
+  /** Nez fixe : non balancé, perpendiculaire à la ligne de foulée (borne de zone). */
+  z.object({ kind: z.literal("fixed"), index: z.number().int().nonnegative() }),
+  /** Angle imposé de la ligne de nez (degrés, écart à la perpendiculaire à la ligne de foulée). */
+  z.object({ kind: z.literal("angle"), index: z.number().int().nonnegative(), angle: z.number() }),
+]);
+export type NosingOverride = z.infer<typeof NosingOverrideSchema>;
+
 export const StairSchema = z.object({
   placement: PlacementSchema,
   layout: LayoutSpecSchema,
@@ -156,6 +169,7 @@ export const StairSchema = z.object({
   balancing: BalancingSchema.prefault({}),
   treads: TreadSpecSchema.prefault({}),
   structure: StructureSpecSchema.default({ kind: "none", params: {} }),
+  nosingOverrides: z.array(NosingOverrideSchema).default([]),
 });
 export type Stair = z.infer<typeof StairSchema>;
 
