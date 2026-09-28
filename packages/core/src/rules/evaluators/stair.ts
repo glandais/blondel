@@ -146,6 +146,14 @@ const headroom: RuleEvaluator = (ctx) => {
   if (!ctx.headroom) {
     if (!ctx.project.site.opening)
       return [notApplicable("Sans objet : pas de trémie (aucun plancher au-dessus).")];
+    if (ctx.headroomClear) {
+      return [
+        {
+          status: "ok",
+          message: "Aucun point de la ligne de foulée sous la dalle haute (trémie couvrante).",
+        },
+      ];
+    }
     return [notEvaluated("Échappée non calculée.")];
   }
   return [

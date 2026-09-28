@@ -1,0 +1,252 @@
+/**
+ * Propriétés du tracé sur générateurs CONTRAINTS (`stairShapeArb`) : continuité, tangence,
+ * distance d_f au jour, emmarchement E dans les parties droites, orientation, longueur exacte
+ * de Γ, emprise, invariance par placement.
+ */
+import fc from "fast-check";
+import { describe, expect, it } from "vitest";
+import {
+  curveEnd,
+  curveLength,
+  curvePointAt,
+  curveStart,
+  curveTangentAt,
+  isContinuous,
+  sampleCurve,
+} from "../geom2d/curve.js";
+import { distanceToCurve } from "../geom2d/intersect.js";
+import { pointInPolygon, signedArea } from "../geom2d/polygon.js";
+import { segLength, segTangentAt } from "../geom2d/segment.js";
+import * as V from "../geom2d/vec.js";
+import type { InnerCorner } from "../model/project.js";
+import { computeLayout } from "./layout.js";
+import { makeProject, setbackOf, stairShapeArb, type StairShape } from "./test-helpers.js";
+
+const TOL = 1e-6;
+const RUNS = { numRuns: 200 };
+
+const turnInners = (shape: StairShape): InnerCorner[] => {
+  const n = shape.legs.length - 1;
+  const inner = shape.inner;
+  return Array.from({ length: n }, (_, j) =>
+    Array.isArray(inner)
+      ? (inner[j] as InnerCorner)
+      : ((inner ?? { kind: "sharp" }) as InnerCorner),
+  );
+};
+
+describe("computeLayout — propriétés", () => {
+  it("C_i, C_e et Γ sont continues (G0) ; Γ est tangente-continue (G1)", () => {
+    fc.assert(
+      fc.property(stairShapeArb, (shape) => {
+        const layout = computeLayout(makeProject(shape));
+        expect(isContinuous(layout.inner, TOL)).toBe(true);
+        expect(isContinuous(layout.outer, TOL)).toBe(true);
+        expect(isContinuous(layout.walkline, TOL)).toBe(true);
+        const segs = layout.walkline.segments.filter((s) => segLength(s) > 0);
+        for (let i = 0; i + 1 < segs.length; i++) {
+          const t1 = segTangentAt(segs[i]!, 1);
+          const t2 = segTangentAt(segs[i + 1]!, 0);
+          expect(V.distance(t1, t2)).toBeLessThan(1e-9);
+        }
+      }),
+      RUNS,
+    );
+  });
+
+  it("distance de Γ au jour = d_f (poteau : ≥ d_f − a·√2/2, et d_f au coin dans le tournant)", () => {
+    fc.assert(
+      fc.property(stairShapeArb, (shape) => {
+        const layout = computeLayout(makeProject(shape));
+        const df = layout.walklineOffset;
+        const inners = turnInners(shape);
+        const hasNewel = inners.some((t) => t.kind === "newel");
+        const minReach = Math.max(
+          0,
+          ...inners.map((t) => (t.kind === "newel" ? (t.size * Math.SQRT2) / 2 : 0)),
+        );
+        for (const { s, p } of sampleCurve(layout.walkline, 37)) {
+          const d = distanceToCurve(p, layout.inner);
+          if (!hasNewel) {
+            expect(Math.abs(d - df)).toBeLessThan(TOL);
+          } else {
+            expect(d).toBeGreaterThan(df - minReach - TOL);
+            expect(d).toBeLessThan(df + TOL);
+          }
+          layout.turns.forEach((z, j) => {
+            if (s >= z.sStart && s <= z.sEnd && inners[j]!.kind !== "arc") {
+              expect(Math.abs(V.distance(p, z.innerCorner) - df)).toBeLessThan(TOL);
+            }
+          });
+        }
+      }),
+      RUNS,
+    );
+  });
+
+  it("parties droites : C_i à d_f et C_e à E − d_f de Γ, du bon côté (orientation)", () => {
+    fc.assert(
+      fc.property(stairShapeArb, (shape) => {
+        const layout = computeLayout(makeProject(shape));
+        const df = layout.walklineOffset;
+        const E = shape.width;
+        const inners = turnInners(shape);
+        const margin = Math.max(0, ...inners.map(setbackOf)) + 1;
+        const inTurn = (s: number): boolean =>
+          layout.turns.some((z) => s > z.sStart - margin && s < z.sEnd + margin);
+        for (const { s, p } of sampleCurve(layout.walkline, 53)) {
+          if (inTurn(s)) continue;
+          const t = curveTangentAt(layout.walkline, s);
+          const nIn = layout.innerSide === "left" ? V.perpLeft(t) : V.perpRight(t);
+          expect(distanceToCurve(V.addScaled(p, nIn, df), layout.inner)).toBeLessThan(TOL);
+          expect(distanceToCurve(V.addScaled(p, nIn, df - E), layout.outer)).toBeLessThan(TOL);
+        }
+      }),
+      RUNS,
+    );
+  });
+
+  it("orientation cohérente : mêmes directions de départ et d'arrivée, virage total ±90° par tournant", () => {
+    fc.assert(
+      fc.property(stairShapeArb, (shape) => {
+        const layout = computeLayout(makeProject(shape));
+        const a = ((shape.rotation ?? 0) * Math.PI) / 180;
+        const up = V.rotate(V.vec(0, 1), a);
+        const start = (c: typeof layout.inner) => curveTangentAt(c, 0);
+        expect(V.distance(start(layout.walkline), up)).toBeLessThan(1e-9);
+        expect(V.distance(start(layout.outer), up)).toBeLessThan(1e-9);
+        const endDir = curveTangentAt(layout.walkline, curveLength(layout.walkline));
+        expect(
+          V.distance(curveTangentAt(layout.outer, curveLength(layout.outer)), endDir),
+        ).toBeLessThan(1e-9);
+        // Virage total de Γ (G1, donc uniquement les arcs).
+        const sign = layout.innerSide === "left" ? 1 : -1;
+        const total = layout.walkline.segments.reduce(
+          (acc, seg) => acc + (seg.kind === "arc" ? seg.sweep : 0),
+          0,
+        );
+        expect(total).toBeCloseTo((sign * Math.PI * layout.turns.length) / 2, 9);
+        expect(V.distance(V.rotate(up, total), endDir)).toBeLessThan(1e-9);
+        // Départ : Γ sur la ligne de départ, à d_f du bord intérieur.
+        expect(
+          Math.abs(
+            V.distance(curveStart(layout.walkline), curveStart(layout.inner)) -
+              layout.walklineOffset,
+          ),
+        ).toBeLessThan(TOL);
+        expect(
+          Math.abs(V.distance(curveStart(layout.inner), curveStart(layout.outer)) - shape.width),
+        ).toBeLessThan(TOL);
+        // Arrivée : Γ, C_i et C_e alignés sur la ligne d'arrivée.
+        const ci = curveEnd(layout.inner);
+        const ce = curveEnd(layout.outer);
+        const g = curveEnd(layout.walkline);
+        expect(Math.abs(V.distance(ci, ce) - shape.width)).toBeLessThan(TOL);
+        expect(Math.abs(V.cross(V.sub(ce, ci), V.sub(g, ci)))).toBeLessThan(TOL * shape.width);
+      }),
+      RUNS,
+    );
+  });
+
+  it("longueur exacte : |Γ| = ΣL − 2E·(N − 1) + Σ_j [(π/2)(r_j + d_f) − 2 r_j]", () => {
+    fc.assert(
+      fc.property(stairShapeArb, (shape) => {
+        const layout = computeLayout(makeProject(shape));
+        const df = layout.walklineOffset;
+        const legs = shape.legs as number[];
+        const inners = turnInners(shape);
+        const expected =
+          legs.reduce((a, b) => a + b, 0) -
+          2 * shape.width * inners.length +
+          inners.reduce((acc, t) => {
+            const r = t.kind === "arc" ? t.radius : 0;
+            return acc + (Math.PI / 2) * (r + df) - 2 * r;
+          }, 0);
+        expect(Math.abs(curveLength(layout.walkline) - expected)).toBeLessThan(1e-6);
+        // Zones de tournant : longueur de l'arc, dans l'ordre, dans [0, |Γ|].
+        layout.turns.forEach((z, j) => {
+          const t = inners[j]!;
+          const r = t.kind === "arc" ? t.radius : 0;
+          expect(z.sEnd - z.sStart).toBeCloseTo((Math.PI / 2) * (r + df), 9);
+          expect(z.index).toBe(j);
+          expect(z.sStart).toBeGreaterThanOrEqual(j === 0 ? -TOL : layout.turns[j - 1]!.sEnd - TOL);
+          expect(z.sEnd).toBeLessThanOrEqual(curveLength(layout.walkline) + TOL);
+          expect(z.mode).toBe(shape.mode);
+          expect(z.direction).toBe(layout.innerSide);
+          expect(
+            Math.abs(V.distance(z.innerCorner, z.outerCorner) - shape.width * Math.SQRT2),
+          ).toBeLessThan(TOL);
+        });
+      }),
+      RUNS,
+    );
+  });
+
+  it("emprise CCW contenant Γ (hors extrémités)", () => {
+    fc.assert(
+      fc.property(stairShapeArb, (shape) => {
+        const layout = computeLayout(makeProject(shape));
+        expect(signedArea(layout.footprint)).toBeGreaterThan(0);
+        const L = curveLength(layout.walkline);
+        for (const { s, p } of sampleCurve(layout.walkline, 97)) {
+          if (s < 1 || s > L - 1) continue;
+          expect(pointInPolygon(p, layout.footprint, 1e-3)).toBe("inside");
+        }
+      }),
+      RUNS,
+    );
+  });
+
+  it("aire exacte de l'emprise : E·ΣL − E²·(N − 1) + Σ (1 − π/4)·r² (arc) − Σ 3·(a/2)² (poteau)", () => {
+    // Relecture : vérifie la forme de C_i et C_e (recouvrement du carré d'angle, gain du
+    // raccord en arc côté jour, trois quarts du poteau pris sur l'escalier). Tolérance : arcs
+    // de C_i discrétisés à 0,1 mm de flèche.
+    fc.assert(
+      fc.property(stairShapeArb, (shape) => {
+        const layout = computeLayout(makeProject(shape));
+        const E = shape.width;
+        const legs = shape.legs as number[];
+        const inners = turnInners(shape);
+        const expected =
+          E * legs.reduce((a, b) => a + b, 0) -
+          E * E * inners.length +
+          inners.reduce(
+            (acc, t) =>
+              acc +
+              (t.kind === "arc" ? (1 - Math.PI / 4) * t.radius ** 2 : 0) -
+              (t.kind === "newel" ? 3 * (t.size / 2) ** 2 : 0),
+            0,
+          );
+        expect(Math.abs(signedArea(layout.footprint) - expected)).toBeLessThan(100);
+      }),
+      RUNS,
+    );
+  });
+
+  it("invariance par placement : le tracé monde est l'image rigide du tracé local", () => {
+    fc.assert(
+      fc.property(stairShapeArb, (shape) => {
+        const world = computeLayout(makeProject(shape));
+        const local = computeLayout(makeProject({ ...shape, origin: { x: 0, y: 0 }, rotation: 0 }));
+        const a = ((shape.rotation ?? 0) * Math.PI) / 180;
+        const o = shape.origin ?? { x: 0, y: 0 };
+        const map = (p: { x: number; y: number }) => V.add(V.rotate(p, a), o);
+        expect(curveLength(world.walkline)).toBeCloseTo(curveLength(local.walkline), 6);
+        for (const f of [0, 0.3, 0.77, 1]) {
+          const sw = f * curveLength(world.walkline);
+          expect(
+            V.distance(curvePointAt(world.walkline, sw), map(curvePointAt(local.walkline, sw))),
+          ).toBeLessThan(1e-6);
+        }
+        expect(Math.abs(signedArea(world.footprint) - signedArea(local.footprint))).toBeLessThan(
+          1e-3,
+        );
+        world.turns.forEach((z, j) => {
+          expect(V.distance(z.innerCorner, map(local.turns[j]!.innerCorner))).toBeLessThan(1e-6);
+          expect(z.sStart).toBeCloseTo(local.turns[j]!.sStart, 6);
+        });
+      }),
+      RUNS,
+    );
+  });
+});

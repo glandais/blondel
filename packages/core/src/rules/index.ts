@@ -23,7 +23,12 @@ export {
   type GuardRailResolution,
   type ResolvedContexts,
 } from "./contexts.js";
-export { DEFAULT_EVALUATORS, createRegistry, type EvaluatorRegistry } from "./evaluators/index.js";
+export {
+  DEFAULT_EVALUATORS,
+  PARTIAL_MODEL_RULES,
+  createRegistry,
+  type EvaluatorRegistry,
+} from "./evaluators/index.js";
 export {
   effectiveSeverity,
   evaluateCompliance,

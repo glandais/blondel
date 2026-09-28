@@ -1,0 +1,237 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`buildModel — exemples du dépôt > acceptance-01-quart-tournant.blondel.json : cotes principales (non-régression) 1`] = `
+{
+  "blondel": 600.02,
+  "colletMin": 157.3,
+  "colletsChord": [
+    223.4,
+    210.1,
+    169,
+    160.9,
+    157.3,
+    157.3,
+    160.9,
+    169,
+    184.3,
+    214.6,
+  ],
+  "firstRise": 180,
+  "g": 240.02,
+  "h": 180,
+  "headroom": 2035,
+  "headroomWidth": {
+    "min": 1600,
+    "nosing": 4,
+  },
+  "n": 15,
+  "parts": 29,
+  "run": 3360.3,
+  "treads": "swwwwwwwwwwsss",
+  "violations": {
+    "avertissement": 0,
+    "bloquant": 0,
+    "conseil": 1,
+  },
+  "zones": [
+    "1-11 M3-cubic",
+  ],
+}
+`;
+
+exports[`buildModel — exemples du dépôt > half-turn.blondel.json : cotes principales (non-régression) 1`] = `
+{
+  "blondel": 629.97,
+  "colletMin": 87.6,
+  "colletsChord": [
+    87.6,
+    88.8,
+    91.2,
+    93.1,
+    102,
+    108.2,
+    133.7,
+    191.3,
+  ],
+  "firstRise": 180,
+  "g": 269.97,
+  "h": 180,
+  "headroom": null,
+  "headroomWidth": {
+    "min": 1960,
+    "nosing": 2,
+  },
+  "n": 15,
+  "parts": 29,
+  "run": 3779.6,
+  "treads": "wwwwwwwwssssss",
+  "violations": {
+    "avertissement": 4,
+    "bloquant": 0,
+    "conseil": 0,
+  },
+  "zones": [
+    "0-8 M3-cubic",
+  ],
+}
+`;
+
+exports[`buildModel — exemples du dépôt > quarter-landing.blondel.json : cotes principales (non-régression) 1`] = `
+{
+  "blondel": 630,
+  "colletMin": null,
+  "colletsChord": [],
+  "firstRise": 180,
+  "g": 270,
+  "h": 180,
+  "headroom": 1960,
+  "headroomWidth": {
+    "min": 1960,
+    "nosing": 2,
+  },
+  "n": 15,
+  "parts": 29,
+  "run": 4216.9,
+  "treads": "sslsssssssssss",
+  "violations": {
+    "avertissement": 0,
+    "bloquant": 0,
+    "conseil": 1,
+  },
+  "zones": [],
+}
+`;
+
+exports[`buildModel — exemples du dépôt > quarter-left.blondel.json : cotes principales (non-régression) 1`] = `
+{
+  "blondel": 629.99,
+  "colletMin": 103.1,
+  "colletsChord": [
+    157.3,
+    144.8,
+    127.3,
+    110.6,
+    103.1,
+  ],
+  "firstRise": 180,
+  "g": 269.99,
+  "h": 180,
+  "headroom": 1960,
+  "headroomWidth": {
+    "min": 1780,
+    "nosing": 3,
+  },
+  "n": 15,
+  "parts": 29,
+  "run": 3779.9,
+  "treads": "wwwwwsssssssss",
+  "violations": {
+    "avertissement": 0,
+    "bloquant": 0,
+    "conseil": 1,
+  },
+  "zones": [
+    "0-4 M3-cubic",
+  ],
+}
+`;
+
+exports[`buildModel — exemples du dépôt > quarter-right.blondel.json : cotes principales (non-régression) 1`] = `
+{
+  "blondel": 629.99,
+  "colletMin": 103.1,
+  "colletsChord": [
+    157.3,
+    144.8,
+    127.3,
+    110.6,
+    103.1,
+  ],
+  "firstRise": 180,
+  "g": 269.99,
+  "h": 180,
+  "headroom": 1960,
+  "headroomWidth": {
+    "min": 1780,
+    "nosing": 3,
+  },
+  "n": 15,
+  "parts": 29,
+  "run": 3779.9,
+  "treads": "wwwwwsssssssss",
+  "violations": {
+    "avertissement": 0,
+    "bloquant": 0,
+    "conseil": 1,
+  },
+  "zones": [
+    "0-4 M3-cubic",
+  ],
+}
+`;
+
+exports[`buildModel — exemples du dépôt > straight.blondel.json : cotes principales (non-régression) 1`] = `
+{
+  "blondel": 630,
+  "colletMin": null,
+  "colletsChord": [],
+  "firstRise": 180,
+  "g": 270,
+  "h": 180,
+  "headroom": 1900,
+  "headroomWidth": {
+    "min": 1960,
+    "nosing": 2,
+  },
+  "n": 15,
+  "parts": 29,
+  "run": 3780,
+  "treads": "ssssssssssssss",
+  "violations": {
+    "avertissement": 0,
+    "bloquant": 0,
+    "conseil": 1,
+  },
+  "zones": [],
+}
+`;
+
+exports[`buildModel — exemples du dépôt > two-quarters-u.blondel.json : cotes principales (non-régression) 1`] = `
+{
+  "blondel": 630.01,
+  "colletMin": 80,
+  "colletsChord": [
+    80,
+    84.7,
+    97.8,
+    142.7,
+    257.5,
+    168.5,
+    120.8,
+    113,
+    121.2,
+    171.5,
+  ],
+  "firstRise": 180,
+  "g": 270.01,
+  "h": 180,
+  "headroom": null,
+  "headroomWidth": {
+    "min": 1960,
+    "nosing": 2,
+  },
+  "n": 15,
+  "parts": 29,
+  "run": 3780.2,
+  "treads": "wwwwwwwwwwssss",
+  "violations": {
+    "avertissement": 3,
+    "bloquant": 0,
+    "conseil": 0,
+  },
+  "zones": [
+    "0-4 M3-cubic",
+    "5-10 M3-cubic",
+  ],
+}
+`;

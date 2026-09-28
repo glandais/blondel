@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@blondel/core": "workspace:*",
-    "@blondel/geometry": "workspace:*"
+    "@blondel/geometry": "workspace:*",
+    "@tarikjabiri/dxf": "^2.9.0"
   }
 }

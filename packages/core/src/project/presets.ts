@@ -13,8 +13,17 @@
  * au-dessus de la ligne de pente serait inférieure à 1 900 mm sous le plancher
  * (`ECHAPPEE_MIN_DTU`), en couvrant l'emmarchement entier.
  *
- * Hypothèses simplificatrices : voir `preset-geometry.ts` (angle vif, ligne de foulée au milieu).
+ * La trémie est calculée sur le **vrai** tracé (`computeLayout`) et les vraies positions et
+ * altitudes des nez (`placeNosings`, `computeRises`) : c'est le rectangle aligné (arrondi vers
+ * l'extérieur au multiple de 10 mm) qui englobe la partie de l'escalier où la ligne de pente
+ * passerait à moins de `ECHAPPEE_MIN_DTU` de la sous-face du plancher (`requiredOpening`).
+ * Les longueurs de volées supposent un jour à angle vif et la ligne de foulée au milieu
+ * (E ≤ 1 200 mm) : |Γ| = ΣL − 2E·(N − 1) + N·(π/2)·(E/2) pour N tournants.
  */
+import { computeLayout } from "../layout/layout.js";
+import { AUTO_GOING_MODULE } from "../layout/resolve.js";
+import { LayoutError } from "../layout/errors.js";
+import { requiredOpening } from "../headroom/required.js";
 import {
   ProjectSchema,
   PROJECT_SCHEMA_VERSION,
@@ -22,17 +31,33 @@ import {
   type Project,
   type ProjectInput,
 } from "../model/project.js";
-import { getRule } from "../rules/table.js";
 import type { Vec2 } from "../model/primitives.js";
-import {
-  boundingRect,
-  buildFrames,
-  requiredOpeningLength,
-  sampleFromArrival,
-  walklineLength,
-  type Rect,
-  type TurnDirection,
-} from "./preset-geometry.js";
+import { getRule } from "../rules/table.js";
+import { SteppingError } from "../stepping/errors.js";
+import { placeNosings } from "../stepping/positions.js";
+import { computeRises } from "../stepping/rises.js";
+
+export type TurnDirection = "left" | "right";
+
+/** Rectangle aligné sur les axes du site (trémie rectangulaire). */
+export interface Rect {
+  readonly x: number;
+  readonly y: number;
+  readonly sizeX: number;
+  readonly sizeY: number;
+}
+
+/** Plus petit rectangle aligné contenant les points, arrondi vers l'extérieur au multiple de `grid` mm. */
+export function boundingRect(points: readonly Vec2[], grid = 10): Rect {
+  const xs = points.map((p) => p.x);
+  const ys = points.map((p) => p.y);
+  const eps = 1e-6;
+  const x0 = Math.floor((Math.min(...xs) + eps) / grid) * grid;
+  const y0 = Math.floor((Math.min(...ys) + eps) / grid) * grid;
+  const x1 = Math.ceil((Math.max(...xs) - eps) / grid) * grid;
+  const y1 = Math.ceil((Math.max(...ys) - eps) / grid) * grid;
+  return { x: x0, y: y0, sizeX: x1 - x0, sizeY: y1 - y0 };
+}
 
 export const PRESET_IDS = [
   "straight",
@@ -64,7 +89,7 @@ function ruleMin(id: string): number {
 export const PRESET_HEADROOM_MIN: number = ruleMin("ECHAPPEE_MIN_DTU");
 /**
  * Emmarchement maximal pour lequel la ligne de foulée est au milieu (`LF_POSITION_DTU_ETROIT` :
- * « E <= 1200 => d_lf = E / 2 ») : hypothèse de la géométrie simplifiée des préréglages.
+ * « E <= 1200 => d_lf = E / 2 ») : hypothèse du calcul des longueurs de volées.
  */
 const WALKLINE_MIDDLE_MAX_WIDTH = 1200;
 /**
@@ -79,8 +104,6 @@ const PRESET_NOSING: number = (() => {
 })();
 /** Valeurs par défaut du réglage des hauteurs, lues dans le schéma (`targetRise` = 175). */
 const STEPPING_DEFAULTS = SteppingSchema.parse({});
-/** Module de la valeur `auto` de `targetGoing` : g = 630 − 2h (voir `SteppingSchema`). */
-const AUTO_GOING_MODULE = 630;
 /** Bornes de `riserCount` dans `SteppingSchema`. */
 const RISER_COUNT_MIN = 2;
 const RISER_COUNT_MAX = 60;
@@ -180,21 +203,14 @@ export function deepMerge<T>(base: T, patch: unknown): T {
   return out as T;
 }
 
-interface Computed {
-  readonly legs: readonly number[];
-  readonly opening: Rect;
-}
-
-/** Tournants balancés : longueurs de volées et trémie par la ligne de foulée. */
-function computeWinders(
+/** Tournants balancés : longueurs de volées pour un giron `going` sur la ligne de foulée. */
+function windersLegs(
   shape: PresetShape,
   width: number,
   turns: readonly TurnDirection[],
   n: number,
-  rise: number,
   going: number,
-  slab: number,
-): Computed {
+): number[] {
   const quarterArc = (Math.PI / 2) * (width / 2);
   const total = (n - 1) * going;
   const middleCount = Math.max(0, turns.length - 1);
@@ -206,67 +222,42 @@ function computeWinders(
       `Hauteur à monter trop faible pour ce préréglage : il manque ${Math.ceil(-lastStraight)} mm de ligne de foulée.`,
     );
   }
-  const legs: number[] = [];
-  if (turns.length === 0) {
-    legs.push(Math.round(total));
-  } else {
-    legs.push(Math.round(firstStraight + width));
-    for (let i = 0; i < middleCount; i++) legs.push(Math.round(shape.middleWell + 2 * width));
-    legs.push(Math.round(lastStraight + width));
-  }
-  const frames = buildFrames(width, legs, turns);
-  const g = walklineLength(frames) / (n - 1);
-  const needed = requiredOpeningLength(PRESET_HEADROOM_MIN, slab, g, rise);
-  const points: Vec2[] = sampleFromArrival(frames, needed).flatMap((s) => [...s.section]);
-  return { legs, opening: boundingRect(points) };
+  if (turns.length === 0) return [Math.round(total)];
+  const legs = [Math.round(firstStraight + width)];
+  for (let i = 0; i < middleCount; i++) legs.push(Math.round(shape.middleWell + 2 * width));
+  legs.push(Math.round(lastStraight + width));
+  return legs;
 }
 
 /**
  * Quart tournant avec palier d'angle : la première volée compte `a` girons, le palier occupe
  * le carré d'angle E × E, la seconde volée compte b = n − 2 − a girons (le palier remplace
- * un giron). Nez de la marche k (1 ≤ k ≤ a) à t = (k − 1)·g dans la première volée ; palier
- * (marche a + 1) à la hauteur (a + 1)·h ; nez de la marche a + 2 au bord du palier (t = E dans
- * la seconde volée). La ligne de pente est à la hauteur z(t) ; la trémie couvre toute section
- * où `H − ep − z < e_min`, dans la seconde volée, sur le palier et dans la première volée.
+ * un giron).
  */
-function computeLanding(
-  shape: PresetShape,
-  width: number,
-  turns: readonly TurnDirection[],
-  n: number,
-  rise: number,
-  going: number,
-  slab: number,
-  height: number,
-): Computed {
+function landingLegs(shape: PresetShape, width: number, n: number, going: number): number[] {
   const a = shape.firstStraightGoings;
   const b = n - 2 - a;
   if (b < 1)
     throw new RangeError("Hauteur à monter trop faible pour un quart tournant avec palier.");
-  const legs = [Math.round(a * going + width), Math.round(b * going + width)];
-  const frames = buildFrames(width, legs, turns);
-  const [first, last] = [frames.legs[0]!, frames.legs[1]!];
-  /** Altitude maximale de la ligne de pente (ou du palier) sans trémie au-dessus. */
-  const zMax = height - slab - PRESET_HEADROOM_MIN;
-  const points: Vec2[] = [];
-  const addSpan = (leg: typeof first, t0: number, t1: number): void => {
-    for (const t of [t0, t1]) {
-      const left = { x: leg.start.x + leg.u.x * t, y: leg.start.y + leg.u.y * t };
-      points.push(left, { x: left.x + leg.r.x * width, y: left.y + leg.r.y * width });
-    }
-  };
-  // Seconde volée : z = (a + 2)·h + (t − E)·h/g pour t ∈ [E ; L2].
-  const g2 = (last.length - width) / b;
-  const t2 = Math.max(width, width + ((zMax - (a + 2) * rise) * g2) / rise);
-  if (t2 < last.length) addSpan(last, t2, last.length);
-  // Palier (carré d'angle) à (a + 1)·h, puis première volée : z = h + t·h/g pour t ∈ [0 ; a·g].
-  if ((a + 1) * rise > zMax) {
-    addSpan(last, 0, width);
-    const g1 = (first.length - width) / a;
-    const t1 = Math.max(0, (zMax / rise - 1) * g1);
-    if (t1 < first.length - width) addSpan(first, t1, first.length - width);
-  }
-  return { legs, opening: boundingRect(points) };
+  return [Math.round(a * going + width), Math.round(b * going + width)];
+}
+
+/**
+ * Trémie rectangulaire minimale (grille de 10 mm) pour que l'échappée verticale au-dessus de
+ * la ligne de pente, sur la ligne de foulée, atteigne `PRESET_HEADROOM_MIN` : calculée sur le
+ * tracé et les nez réels du projet. `null` si aucune trémie n'est nécessaire.
+ */
+function computeOpening(project: Project): Rect | null {
+  const layout = computeLayout(project);
+  const rises = computeRises(project);
+  const positions = placeNosings(project, layout, rises.riserCount);
+  const zMax = project.site.floorToFloor - project.site.upperSlabThickness - PRESET_HEADROOM_MIN;
+  const region = requiredOpening(
+    layout,
+    { s: positions.s, z: rises.z, landings: positions.landingTreads },
+    zMax,
+  );
+  return region ? boundingRect(region.points) : null;
 }
 
 /** Valeur donnée par l'option ou par `patch` ; les deux à la fois doivent concorder. */
@@ -346,10 +337,10 @@ export function createProject(preset: PresetId, options: PresetOptions = {}): Pr
     );
   }
   const turns: TurnDirection[] = shape.turns.map((t) => direction ?? t);
-  const computed =
+  const legs =
     shape.mode === "landing"
-      ? computeLanding(shape, width, turns, n, rise, going, slab, height)
-      : computeWinders(shape, width, turns, n, rise, going, slab);
+      ? landingLegs(shape, width, n, going)
+      : windersLegs(shape, width, turns, n, going);
 
   const input: ProjectInput = {
     schemaVersion: PROJECT_SCHEMA_VERSION,
@@ -357,13 +348,12 @@ export function createProject(preset: PresetId, options: PresetOptions = {}): Pr
     site: {
       floorToFloor: height,
       upperSlabThickness: slab,
-      opening: { kind: "rect", ...computed.opening },
     },
     stair: {
       placement: { origin: { x: 0, y: 0 }, rotation: 0 },
       layout: {
         width,
-        legs: computed.legs.map((length) => ({ length })),
+        legs: legs.map((length) => ({ length })),
         turns: turns.map((direction) => ({
           direction,
           mode: shape.mode,
@@ -374,5 +364,21 @@ export function createProject(preset: PresetId, options: PresetOptions = {}): Pr
     },
   };
   // Copie profonde : voir `parseProject` (objets par défaut partagés par zod 4).
-  return structuredClone(ProjectSchema.parse(deepMerge(input, options.patch)));
+  const project = structuredClone(ProjectSchema.parse(deepMerge(input, options.patch)));
+  // Trémie donnée explicitement : elle remplace le calcul.
+  if (patch?.site?.opening !== undefined) return project;
+  let opening: Rect | null;
+  try {
+    opening = computeOpening(project);
+  } catch (e) {
+    if (e instanceof LayoutError || e instanceof SteppingError) throw new RangeError(e.message);
+    throw e;
+  }
+  if (opening === null) return project;
+  return structuredClone(
+    ProjectSchema.parse({
+      ...project,
+      site: { ...project.site, opening: { kind: "rect", ...opening } },
+    }),
+  );
 }

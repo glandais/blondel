@@ -17,7 +17,7 @@
       "kind": "rect",
       "sizeX": 2800,
       "sizeY": 900,
-      "x": -2251,
+      "x": -2252,
       "y": 380
     },
     "upperFinish": 0,
@@ -37,7 +37,7 @@
           "length": 1280
         },
         {
-          "length": 3051
+          "length": 3052
         }
       ],
       "turns": [

@@ -1,24 +1,26 @@
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
+import { bbox } from "../geom2d/polygon.js";
+import {
+  ceilingOf,
+  coveredIntervals,
+  headroomOnWalkline,
+  openingPolygon,
+} from "../headroom/headroom.js";
+import { computeLayout } from "../layout/layout.js";
 import type { Project } from "../model/project.js";
+import { getRule } from "../rules/table.js";
+import { placeNosings } from "../stepping/positions.js";
+import { computeRises } from "../stepping/rises.js";
 import { parseProject } from "./parse.js";
 import {
   boundingRect,
-  buildFrames,
-  rectContains,
-  requiredOpeningLength,
-  sampleFromArrival,
-  walklineLength,
-  type Rect,
-  type TurnDirection,
-} from "./preset-geometry.js";
-import { getRule } from "../rules/table.js";
-import {
   createProject,
   deepMerge,
   PRESET_HEADROOM_MIN,
   PRESET_IDS,
   type PresetId,
+  type Rect,
 } from "./presets.js";
 
 function numericLegs(p: Project): number[] {
@@ -34,96 +36,43 @@ function openingRect(p: Project): Rect {
   return o;
 }
 
-function framesOf(p: Project) {
-  return buildFrames(
-    p.stair.layout.width,
-    numericLegs(p),
-    p.stair.layout.turns.map((t) => t.direction as TurnDirection),
-  );
-}
-
 /** Nombre de hauteurs `auto` et hauteur nominale. */
 function stepping(p: Project) {
   const n = Math.round(p.site.floorToFloor / 175);
   return { n, rise: p.site.floorToFloor / n };
 }
 
-/** Giron sur la ligne de foulée (balancé) ou dans les volées (palier). */
+/** Tracé réel, nez sur Γ et altitudes. */
+function realGeometry(p: Project) {
+  const layout = computeLayout(p);
+  const rises = computeRises(p);
+  const positions = placeNosings(p, layout, rises.riserCount);
+  return { layout, rises, positions };
+}
+
+/** Giron nominal sur la ligne de foulée (hors palier). */
 function goingOf(p: Project): number {
-  const { n } = stepping(p);
-  const frames = framesOf(p);
-  if (p.stair.layout.turns.some((t) => t.mode === "landing")) {
-    const w = p.stair.layout.width;
-    return numericLegs(p).reduce((acc, l) => acc + l - w, 0) / (n - 2);
-  }
-  return walklineLength(frames) / (n - 1);
+  return realGeometry(p).positions.going;
 }
 
 /**
- * Palier : parcourt la ligne de pente indépendamment de `computeLanding` (nez k à (k − 1)·g dans
- * la première volée, palier à (a + 1)·h, seconde volée depuis le bord du palier) et vérifie que
- * les deux rives et le milieu de chaque section sans échappée suffisante sont sous la trémie.
+ * Échappée sur la ligne de foulée, recalculée sur le tracé réel à partir de la trémie produite
+ * (calcul indépendant de `requiredOpening` : intersections de Γ avec la trémie) : elle atteint
+ * l'échappée minimale partout où Γ est sous la dalle.
  */
-function checkLandingCoverage(p: Project): void {
-  const { n, rise } = stepping(p);
-  const frames = framesOf(p);
-  const w = frames.width;
-  const [first, last] = [frames.legs[0]!, frames.legs[1]!];
-  const a = Math.round((first.length - w) / goingOf(p));
-  const b = n - 2 - a;
-  const rect = openingRect(p);
-  const zMax = p.site.floorToFloor - p.site.upperSlabThickness - PRESET_HEADROOM_MIN;
-  const check = (leg: typeof first, t: number, z: number) => {
-    if (z <= zMax + 1e-6) return;
-    for (const k of [0, 0.5, 1]) {
-      const pt = {
-        x: leg.start.x + leg.u.x * t + leg.r.x * w * k,
-        y: leg.start.y + leg.u.y * t + leg.r.y * w * k,
-      };
-      expect(rectContains(rect, pt, 1e-3), `t=${t} z=${z}`).toBe(true);
-    }
-  };
-  const g1 = (first.length - w) / a;
-  const g2 = (last.length - w) / b;
-  for (let i = 0; i <= 200; i++) {
-    const t = (i / 200) * (first.length - w);
-    check(first, t, rise + (t * rise) / g1);
-    check(last, (i / 200) * w, (a + 1) * rise); // palier
-    const t2 = w + (i / 200) * (last.length - w);
-    check(last, t2, (a + 2) * rise + ((t2 - w) * rise) / g2);
-  }
-}
-
-/** Vérifie que la trémie couvre la ligne de foulée partout où l'échappée l'exige. */
 function checkHeadroomCoverage(p: Project): void {
-  if (p.stair.layout.turns.some((t) => t.mode === "landing")) {
-    checkLandingCoverage(p);
-    return;
-  }
-  const { rise } = stepping(p);
-  const g = goingOf(p);
-  const rect = openingRect(p);
-  const needed = requiredOpeningLength(PRESET_HEADROOM_MIN, p.site.upperSlabThickness, g, rise);
-  const frames = framesOf(p);
-  for (const s of sampleFromArrival(frames, needed * (1 - 1e-9))) {
-    expect(rectContains(rect, s.point, 1e-3)).toBe(true);
-  }
+  const { layout, rises, positions } = realGeometry(p);
+  const opening = openingPolygon(p.site.opening)!;
+  const covered = coveredIntervals(layout.walkline, opening);
+  const profile = { s: positions.s, z: rises.z, landings: positions.landingTreads };
+  const hr = headroomOnWalkline(layout.walkline, profile, ceilingOf(p.site), covered);
+  if (hr) expect(hr.min).toBeGreaterThanOrEqual(PRESET_HEADROOM_MIN - 1e-6);
 }
 
-/** Boîte englobante de l'emprise de l'escalier (volées). */
+/** Boîte englobante de l'emprise réelle de l'escalier. */
 function footprintRect(p: Project): Rect {
-  const frames = framesOf(p);
-  const pts = frames.legs.flatMap((l) => {
-    const r = { x: l.r.x * frames.width, y: l.r.y * frames.width };
-    const end = { x: l.start.x + l.u.x * l.length, y: l.start.y + l.u.y * l.length };
-    return [
-      l.start,
-      end,
-      { x: l.start.x + r.x, y: l.start.y + r.y },
-      { x: end.x + r.x, y: end.y + r.y },
-    ];
-  });
-  return boundingRect(pts, 1);
+  const b = bbox(computeLayout(p).footprint);
+  return boundingRect([b.min, b.max], 1);
 }
 
 describe("createProject", () => {
@@ -232,11 +181,12 @@ describe("createProject", () => {
   it("palier : la trémie couvre aussi le palier et la première volée quand l'échappée l'exige", () => {
     // n = 14, h ≈ 171 : H − ep − h < 1 900 dès la première marche → tout l'escalier sous la trémie.
     const p = createProject("quarter-landing", { floorToFloor: 2400, upperSlabThickness: 350 });
-    checkLandingCoverage(p);
+    checkHeadroomCoverage(p);
     const o = openingRect(p);
     expect(o.y).toBe(0);
     expect(o.x + o.sizeX).toBe(p.stair.layout.width);
-    // Cas courant : palier dégagé (2 700 − 200 − 3 × 180 = 1 960 ≥ 1 900), première volée hors trémie.
+    // Cas courant : palier dégagé (2 700 − 200 − 3 × 180 = 1 960 ≥ 1 900), première volée hors
+    // trémie (sur un palier, la ligne de pente est le dessus du palier).
     const q = createProject("quarter-landing");
     expect(openingRect(q).y).toBe(numericLegs(q)[0]! - q.stair.layout.width);
   });
@@ -301,29 +251,6 @@ describe("createProject", () => {
       ),
       { numRuns: 300 },
     );
-  });
-});
-
-describe("preset-geometry", () => {
-  it("quart tournant : ligne de foulée = ΣL − 2E + πE/4", () => {
-    const f = buildFrames(900, [1400, 3000], ["left"]);
-    expect(walklineLength(f)).toBeCloseTo(4400 - 1800 + (Math.PI * 900) / 4, 9);
-    expect(f.turns[0]?.innerCorner).toEqual({ x: 0, y: 500 });
-    expect(f.turns[0]?.outerCorner).toEqual({ x: 900, y: 1400 });
-    expect(f.legs[1]?.start).toEqual({ x: 900, y: 500 });
-    const r = buildFrames(900, [1400, 3000], ["right"]);
-    expect(r.turns[0]?.innerCorner).toEqual({ x: 900, y: 500 });
-    expect(r.legs[1]?.start).toEqual({ x: 0, y: 1400 });
-  });
-
-  it("l'échantillonnage part de l'arrivée et reste sur la ligne de foulée", () => {
-    const f = buildFrames(900, [1400, 3000], ["left"]);
-    const s = sampleFromArrival(f, 1e9);
-    expect(s[0]?.point).toEqual({ x: -2100, y: 950 });
-    const last = s[s.length - 1]!;
-    expect(last.point.x).toBeCloseTo(450, 9);
-    expect(last.point.y).toBeCloseTo(0, 9);
-    expect(last.fromArrival).toBeCloseTo(walklineLength(f), 6);
   });
 });
 

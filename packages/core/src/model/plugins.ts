@@ -13,6 +13,11 @@ import type { Project } from "./project.js";
  */
 export interface BalancingZone {
   readonly turn: number;
+  /**
+   * Dernier tournant couvert par la zone, quand deux tournants successifs forment une zone
+   * unique (U à volée centrale de moins d'un giron, CHALLENGE G3). Absent : `turn`.
+   */
+  readonly lastTurn?: number;
   readonly from: number;
   readonly to: number;
   /** Côté du jour (collet) de ce tournant. */

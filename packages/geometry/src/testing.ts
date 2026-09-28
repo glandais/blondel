@@ -110,7 +110,19 @@ export const identityFrame: Frame3 = {
 /** Écart relatif. */
 export const rel = (a: number, b: number): number => Math.abs(a - b) / Math.max(1e-12, Math.abs(b));
 
-/** Plus petit produit scalaire entre la normale géométrique d'un triangle et celles de ses sommets. */
+/**
+ * Hauteur minimale (mm) d'un triangle pour que sa normale géométrique, recalculée depuis des
+ * positions float32, soit significative. Les positions sont arrondies à ≈ 5e-4 mm à 5 m de
+ * l'origine : l'erreur angulaire de la normale vaut environ ce pas divisé par la hauteur du
+ * triangle, soit moins de 0,6° (accord > 0,9999) au-delà de 0,05 mm. Les triangles plus
+ * minces (languettes quasi alignées d'earcut) sont invisibles et ignorés.
+ */
+export const NORMAL_CHECK_MIN_HEIGHT = 0.05;
+
+/**
+ * Plus petit produit scalaire entre la normale géométrique d'un triangle et celles de ses
+ * sommets, sur les triangles de hauteur ≥ `NORMAL_CHECK_MIN_HEIGHT`.
+ */
 export function minNormalAgreement(mesh: {
   positions: Float32Array;
   normals: Float32Array;
@@ -132,7 +144,16 @@ export function minNormalAgreement(mesh: {
       fy = uz * vx - ux * vz,
       fz = ux * vy - uy * vx;
     const l = Math.hypot(fx, fy, fz);
-    if (l < 1e-6) continue; // triangle (quasi) dégénéré : normale non significative
+    const wx = p[3 * c]! - p[3 * b]!,
+      wy = p[3 * c + 1]! - p[3 * b + 1]!,
+      wz = p[3 * c + 2]! - p[3 * b + 2]!;
+    const longest = Math.max(
+      Math.hypot(ux, uy, uz),
+      Math.hypot(vx, vy, vz),
+      Math.hypot(wx, wy, wz),
+    );
+    // Hauteur = 2 × aire / plus grand côté : triangle (quasi) dégénéré → normale non significative.
+    if (l < 1e-6 || l / longest < NORMAL_CHECK_MIN_HEIGHT) continue;
     fx /= l;
     fy /= l;
     fz /= l;

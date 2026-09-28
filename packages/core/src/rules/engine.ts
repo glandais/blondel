@@ -6,7 +6,11 @@ import type { ComplianceReport, RuleResult, Severity } from "../model/derived.js
 import type { ComplianceSettings } from "../model/project.js";
 import { STAIR } from "./check.js";
 import { isRuleApplicable, resolveContexts, type ResolvedContexts } from "./contexts.js";
-import { DEFAULT_EVALUATORS, type EvaluatorRegistry } from "./evaluators/index.js";
+import {
+  DEFAULT_EVALUATORS,
+  PARTIAL_MODEL_RULES,
+  type EvaluatorRegistry,
+} from "./evaluators/index.js";
 import { RULES, RULES_VERSION, findRule, type RuleDef } from "./table.js";
 import type { ComplianceInput, Finding } from "./types.js";
 
@@ -81,6 +85,12 @@ export interface ComplianceEvaluation {
   readonly notes: readonly string[];
 }
 
+/** Règle évaluable sur un modèle partiel (voir `ComplianceInput.incomplete`). */
+function evaluableOnPartialModel(ruleId: string, input: ComplianceInput): boolean {
+  if (PARTIAL_MODEL_RULES.project.has(ruleId)) return true;
+  return PARTIAL_MODEL_RULES.rises.has(ruleId) && input.stepping.rises.length > 0;
+}
+
 /** Évaluation complète avec le détail de la résolution des contextes. */
 export function evaluateComplianceDetailed(
   input: ComplianceInput,
@@ -98,6 +108,12 @@ export function evaluateComplianceDetailed(
     );
   }
 
+  if (input.incomplete) {
+    notes.push(
+      `Modèle partiel (${input.incomplete === "layout" ? "tracé" : "découpage"} non calculé) : seules les règles portant sur le projet ou les hauteurs sont évaluées ; les contextes déduits du découpage (ex. tournant) ne sont pas connus.`,
+    );
+  }
+
   // Surcharges inopérantes : signalées plutôt qu'ignorées en silence.
   for (const o of settings.overrides) {
     if (!findRule(o.ruleId)) notes.push(`Surcharge ignorée : règle inconnue « ${o.ruleId} ».`);
@@ -111,7 +127,15 @@ export function evaluateComplianceDetailed(
     const eff = effectiveSeverity(rule, settings);
     const ev = evaluators.get(rule.id);
     let findings: readonly Finding[];
-    if (!ev) {
+    if (ev && input.incomplete && !evaluableOnPartialModel(rule.id, input)) {
+      findings = [
+        {
+          status: "non-evaluee",
+          location: STAIR,
+          message: `Non évaluée : ${input.incomplete === "layout" ? "tracé" : "découpage"} non calculé (modèle partiel, voir les erreurs).`,
+        },
+      ];
+    } else if (!ev) {
       findings = [
         {
           status: "non-evaluee",
@@ -147,6 +171,7 @@ export function evaluateComplianceDetailed(
       profile: settings.profile,
       results,
       summary,
+      ...(notes.length > 0 ? { notes } : {}),
     },
     contexts: resolved,
     notes,

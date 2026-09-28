@@ -4,7 +4,14 @@ import { bbox, checkManifold, signedVolume } from "./analysis.js";
 import { meshExtrusion } from "./extrude.js";
 import { shapeArea } from "./polygon.js";
 import { GeometryError } from "./errors.js";
-import { frame3, identityFrame, minNormalAgreement, rect, shapeWithHoles } from "./testing.js";
+import {
+  NORMAL_CHECK_MIN_HEIGHT,
+  frame3,
+  identityFrame,
+  minNormalAgreement,
+  rect,
+  shapeWithHoles,
+} from "./testing.js";
 
 describe("meshExtrusion", () => {
   it("pavé 1000 × 300 × 40 : volume, boîte, 12 triangles, 24 sommets (arêtes vives)", () => {
@@ -152,5 +159,68 @@ describe("meshExtrusion — entrées invalides ou quelconques (revue)", () => {
       { numRuns: 300 },
     );
     expect(closed).toBeGreaterThan(0);
+  });
+});
+
+describe("meshExtrusion — languette earcut quasi dégénérée (régression de test instable)", () => {
+  it(`normales justes hors triangles de hauteur < ${NORMAL_CHECK_MIN_HEIGHT} mm`, () => {
+    // Contre-exemple de la propriété ci-dessus (≈ 1 tirage sur 50 000) : earcut produit un
+    // triangle de côtés 114,6 / 39,9 / 154,55 mm (hauteur ≈ 1,6 µm) ; en float32 à ≈ 3 000 mm,
+    // sa normale recalculée s'écarte de 3° de la normale (juste) du couvercle.
+    const shape = {
+      outer: [
+        { x: 396.87577797935387, y: 15.593291785560952 },
+        { x: 317.3675722628686, y: 146.30845480765063 },
+        { x: 109.28548570127496, y: 118.22437237020306 },
+        { x: 110.07295604395802, y: 298.36580303725566 },
+        { x: -3.9414547745053343, y: 100.31672282633309 },
+        { x: -43.370767053455225, y: 94.07846638138197 },
+        { x: -175.35892003374775, y: 162.10011830664843 },
+        { x: -169.35224291903918, y: 62.47734090506842 },
+        { x: -180.67920090679576, y: -7.098905137688184 },
+        { x: -214.62819890060354, y: -98.94495494734052 },
+        { x: -83.63065513062143, y: -90.47113301717494 },
+        { x: -58.821459670494505, y: -159.44254321108485 },
+        { x: 15.298220242569686, y: -389.36570571272244 },
+        { x: 103.09738887795977, y: -223.6355243984714 },
+        { x: 78.3908174094977, y: -72.4637262466543 },
+        { x: 192.9186669446689, y: -71.17145373395223 },
+      ],
+      holes: [
+        [
+          { x: 11.83815229764038, y: 32.40513885904259 },
+          { x: 38.16184770235962, y: 32.40513885904259 },
+          { x: 38.16184770235962, y: 17.59486114095741 },
+          { x: 11.83815229764038, y: 17.59486114095741 },
+        ],
+        [
+          { x: -27.59086047444272, y: 34.87677622828902 },
+          { x: -22.40913952555728, y: 34.87677622828902 },
+          { x: -22.40913952555728, y: 15.123223771710983 },
+          { x: -27.59086047444272, y: 15.123223771710983 },
+        ],
+        [
+          { x: 19.928355923531285, y: -30.30578541724247 },
+          { x: 30.071644076468715, y: -30.30578541724247 },
+          { x: 30.071644076468715, y: -19.69421458275753 },
+          { x: 19.928355923531285, y: -19.69421458275753 },
+        ],
+        [
+          { x: -40.348471792991425, y: -18.159810808589196 },
+          { x: -9.651528207008576, y: -18.159810808589196 },
+          { x: -9.651528207008576, y: -31.840189191410804 },
+          { x: -40.348471792991425, y: -31.840189191410804 },
+        ],
+      ],
+    };
+    const frame = {
+      origin: { x: 1.7605688173030769e-273, y: -3.019104685763161e-121, z: 3.715343715783646e-36 },
+      xAxis: { x: 0.9719962102044728, y: 6.332970539213938e-144, z: -0.2349965262469691 },
+      yAxis: { x: 6.332970539213938e-144, y: -0.9999999999999998, z: -7.546799886523913e-145 },
+      zAxis: { x: 0.2349965262469691, y: 7.546799886523913e-145, z: 0.9719962102044726 },
+    };
+    const m = meshExtrusion(frame, shape, -2818.517022758687);
+    expect(checkManifold(m).ok).toBe(true);
+    expect(minNormalAgreement(m)).toBeGreaterThan(0.999);
   });
 });

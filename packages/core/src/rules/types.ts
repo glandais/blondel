@@ -12,6 +12,17 @@ export interface ComplianceInput {
   readonly stepping: Stepping;
   /** Échappée minimale mesurée (absente si non calculée ou sans plancher au-dessus). */
   readonly headroom?: Model["headroom"];
+  /**
+   * Vrai si une trémie existe mais qu'aucun point de la ligne de foulée n'est sous la dalle
+   * haute (échappée non bornée) : l'échappée est alors satisfaite sans mesure.
+   */
+  readonly headroomClear?: boolean;
+  /**
+   * Étape du pipeline en échec (modèle partiel) : `layout` (tracé vide) ou `stepping` (découpage
+   * vide, hauteurs seules si calculables). Seules les règles de `PARTIAL_MODEL_RULES` sont alors
+   * évaluées ; les autres sortent `non-evaluee` au lieu d'un « sans objet » trompeur.
+   */
+  readonly incomplete?: "layout" | "stepping";
 }
 
 /** Contexte passé à chaque évaluateur. */

@@ -228,6 +228,24 @@ export interface ComplianceReport {
   readonly results: readonly RuleResult[];
   /** Synthèse : nombre de violations par sévérité effective. */
   readonly summary: Readonly<Record<Severity, number>>;
+  /**
+   * Remarques de résolution (contextes déduits ou inconnus, régime garde-corps supposé,
+   * version de règles, surcharges inopérantes). Absent : aucune remarque.
+   */
+  readonly notes?: readonly string[];
+}
+
+/**
+ * Échappée sur la largeur des marches (CHALLENGE G4, grandeur (2)) : minimum, sur les segments
+ * de nez Q_k R_k situés sous la dalle haute (hors trémie), de (sous-face − z_k). Donnée pour
+ * avertissement et objectif du pivot K8 ; ce n'est pas l'échappée réglementaire.
+ */
+export interface HeadroomOnWidth {
+  readonly min: Mm;
+  /** Point du segment de nez sous la dalle (à l'altitude du nez z_k). */
+  readonly at: Vec3;
+  /** Indice du nez critique. */
+  readonly nosing: number;
 }
 
 // ------------------------------------------------------------------ Résultat global
@@ -237,8 +255,17 @@ export interface Model {
   readonly stepping: Stepping;
   readonly parts: readonly Part[];
   readonly compliance: ComplianceReport;
-  /** Échappée minimale mesurée (verticale, sur la ligne de foulée) et point critique. */
+  /**
+   * Échappée minimale mesurée (verticale, sur la ligne de foulée, décision Q4) et point critique.
+   * `at` est le point de la **ligne de pente** (x, y sur Γ, z = altitude de la ligne de pente)
+   * où l'échappée est minimale ; le plafond est à `at.z + min`. Absent : pas de trémie, aucun
+   * plafond au-dessus de la ligne de foulée, ou modèle partiel.
+   */
   readonly headroom?: { readonly min: Mm; readonly at: Vec3 };
+  /** Échappée sur la largeur des marches (avertissement, CHALLENGE G4). */
+  readonly headroomWidth?: HeadroomOnWidth;
   /** Erreurs de génération (paramètres impossibles) : le modèle peut être partiel. */
   readonly errors: readonly string[];
+  /** Remarques non bloquantes du pipeline (pièces non générées, hypothèses). */
+  readonly notes?: readonly string[];
 }
