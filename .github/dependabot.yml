@@ -1,0 +1,74 @@
+# Configuration Dependabot (schéma v2).
+# Monorepo pnpm : l'écosystème « npm » lit pnpm-lock.yaml et pnpm-workspace.yaml
+# à la racine et met à jour tous les paquets du workspace.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    target-branch: develop
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Europe/Paris
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: deps
+      prefix-development: deps-dev
+    labels:
+      - dependencies
+    ignore:
+      # r3f (@react-three/fiber 9.8) exige React >= 19 et < 19.4
+      # (docs/SPEC.md §5) : on bloque React et React DOM sous 19.4.
+      - dependency-name: react
+        versions: [">=19.4.0"]
+      - dependency-name: react-dom
+        versions: [">=19.4.0"]
+      # Le dépôt reste volontairement en TypeScript 5.x ; TS 7 (portage Go)
+      # sera évalué à part, hors Dependabot.
+      - dependency-name: typescript
+        update-types: ["version-update:semver-major"]
+    # Le premier groupe qui correspond l'emporte : l'ordre compte.
+    groups:
+      react:
+        patterns:
+          - react
+          - react-dom
+          - "@types/react*"
+      three:
+        patterns:
+          - three
+          - "@types/three"
+          - "@react-three/*"
+      build-test:
+        patterns:
+          - vite
+          - "@vitejs/*"
+          - vitest
+          - typescript
+          - prettier
+          - fast-check
+          - "@types/node"
+      minor-patch:
+        patterns:
+          - "*"
+        update-types:
+          - minor
+          - patch
+
+  - package-ecosystem: github-actions
+    directory: /
+    target-branch: develop
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Europe/Paris
+    commit-message:
+      prefix: ci
+    labels:
+      - dependencies
+    groups:
+      github-actions:
+        patterns:
+          - "*"
