@@ -1,0 +1,1751 @@
+{
+  "version": 1,
+  "date_consultation": "2026-09-28",
+  "pays": "FR",
+  "profils": {
+    "strict": "Sévérité telle qu'indiquée pour toutes les règles (défaut).",
+    "souple": "Les règles `source_secondaire: true` de sévérité `bloquant` sont rétrogradées en `avertissement` ; les autres sont inchangées."
+  },
+  "variables": {
+    "h": "hauteur de marche (mm)",
+    "h_i": "hauteur de la marche i (mm)",
+    "h1": "hauteur de la première marche après pose, par rapport au sol fini (mm)",
+    "h_nom": "hauteur de marche nominale = H / n (mm)",
+    "g": "giron sur la ligne de foulée ou la ligne de mesure (mm)",
+    "g_i": "giron de la marche i (mm)",
+    "g_nom": "giron nominal (mm)",
+    "g_collet": "giron mesuré à la limite intérieure de l'emmarchement (collet), en corde (mm)",
+    "g_ext": "giron mesuré à l'extrémité extérieure de la marche (mm)",
+    "H": "hauteur à monter, sol fini à sol fini (mm)",
+    "n": "nombre de hauteurs de marche (contremarches) de la volée",
+    "E": "emmarchement, entre faces internes des limons (mm)",
+    "L_mc": "largeur libre entre mains courantes (mm)",
+    "L_passage": "largeur de passage (entre parois / garde-corps / mains courantes saillantes > 100 mm) (mm)",
+    "d_lf": "distance de la ligne de foulée à la rive intérieure (jour, noyau ou rampe côté intérieur) (mm)",
+    "e": "échappée : hauteur libre verticale au-dessus de la ligne de pente, sur la ligne de foulée (mm)",
+    "ep": "épaisseur du plancher haut, sol fini à sous-face (mm)",
+    "L_tremie": "longueur de trémie mesurée depuis le nez d'arrivée (mm)",
+    "R": "reculement (mm)",
+    "D_mc": "dégagement entre main courante et paroi (mm)",
+    "H_mc": "hauteur de main courante mesurée à la verticale du nez de marche (mm)",
+    "H_gc": "hauteur du garde-corps au-dessus de la zone d'activité / du nez de marche (mm)",
+    "vide": "plus grande sphère passant dans le remplissage (mm)",
+    "recouvrement": "recouvrement horizontal entre deux marches successives (mm)",
+    "debord_nez": "débord du nez de marche sur la contremarche (mm)",
+    "L_palier": "longueur du palier dans le sens de la marche (mm)",
+    "l_palier": "largeur du palier (mm)",
+    "alpha": "angle de pente de la volée (degrés)",
+    "D_fut": "diamètre du fût central d'un hélicoïdal (mm)"
+  },
+  "contextes": {
+    "bois_dtu": "Escalier (ou partie) en bois ou à base de bois — NF DTU 36.3 (2014)",
+    "logement_interieur": "Escalier intérieur d'un logement neuf (MI ou logement de BHC) — arrêté du 24/12/2015 art. 12",
+    "bhc_parties_communes": "Escalier des parties communes d'un bâtiment d'habitation collectif neuf — arrêté du 24/12/2015 art. 6.1",
+    "erp_neuf": "ERP neuf / IOP — arrêté du 20/04/2017 art. 7-1 et règlement de sécurité ERP",
+    "erp_existant": "ERP situé dans un cadre bâti existant — arrêté du 08/12/2014",
+    "erp_securite": "Tout escalier ERP destiné au public — règlement de sécurité incendie (arrêté du 25/06/1980, CO)",
+    "exterieur": "Escalier extérieur",
+    "tournant": "Volée comportant des marches balancées ou tournantes",
+    "helicoidal": "Escalier hélicoïdal (fût central, à jour ou sur limon)",
+    "gain_de_place": "Escalier gain de place / pas japonais / pas décalés",
+    "echelle_meunier": "Échelle de meunier (hors DTU 36.3) — analogie échelle à marches industrielle",
+    "industriel": "Accès technique / machines — NF EN ISO 14122-3, NF E85-015",
+    "garde_corps_1988": "Garde-corps selon NF P01-012 (1988) — projets antérieurs au 01/06/2025 (PC/DP) ou au 01/01/2026 (marchés)",
+    "garde_corps_2024": "Garde-corps selon NF P01-012 (2024)",
+    "tous": "Tout escalier"
+  },
+  "regles": [
+    {
+      "id": "BLONDEL_DTU",
+      "description": "Module 2h+g sur la ligne de foulée, escaliers bois (logements)",
+      "formule": "580 <= 2*h + g <= 660",
+      "min": 580,
+      "max": 660,
+      "recommande": 630,
+      "unite": "mm",
+      "contexte": [
+        "bois_dtu"
+      ],
+      "nature": "normatif",
+      "source": "NF DTU 36.3 P3 §6.2 via [1][4]",
+      "source_secondaire": true,
+      "confiance": "eleve",
+      "severite": "bloquant"
+    },
+    {
+      "id": "BLONDEL_ERP_BHC",
+      "description": "Module 2h+g en ERP et parties communes de BHC (borne haute 640 contestée, voir A-regles §5) — avertissement uniquement, les deux bornes (décision 2026-09-28)",
+      "formule": "600 <= 2*h + g <= 640",
+      "min": 600,
+      "max": 640,
+      "recommande": 630,
+      "unite": "mm",
+      "contexte": [
+        "erp_neuf",
+        "erp_existant",
+        "bhc_parties_communes"
+      ],
+      "nature": "normatif",
+      "source": "NF DTU 36.3 P3 selon UICB [4] ; AFEB [1] donne seulement min 600",
+      "source_secondaire": true,
+      "confiance": "moyen",
+      "severite": "avertissement"
+    },
+    {
+      "id": "BLONDEL_CONFORT",
+      "description": "Zone de confort du module 2h+g",
+      "formule": "600 <= 2*h + g <= 640",
+      "min": 600,
+      "max": 640,
+      "recommande": 630,
+      "unite": "mm",
+      "contexte": [
+        "tous"
+      ],
+      "nature": "metier",
+      "source": "[4][24][25]",
+      "confiance": "moyen",
+      "severite": "conseil"
+    },
+    {
+      "id": "BLONDEL_INDUSTRIEL",
+      "description": "Module g+2h pour escaliers industriels",
+      "formule": "600 <= 2*h + g <= 660",
+      "min": 600,
+      "max": 660,
+      "recommande": null,
+      "unite": "mm",
+      "contexte": [
+        "industriel"
+      ],
+      "nature": "normatif",
+      "source": "NF EN ISO 14122-3 / NF E85-015 via [18][19][20]",
+      "source_secondaire": true,
+      "confiance": "moyen",
+      "severite": "bloquant"
+    },
+    {
+      "id": "CONFORT_CLASSE",
+      "description": "Classe de confort DTU selon h/g : confortable < 0,78 ; courant 0,78-1 ; raide 1-1,32 ; hors classe > 1,32",
+      "formule": "h / g <= 1.32",
+      "min": null,
+      "max": 1.32,
+      "recommande": 0.78,
+      "unite": "ratio",
+      "contexte": [
+        "bois_dtu"
+      ],
+      "nature": "normatif",
+      "source": "NF DTU 36.3 P3 §6.1 via [1]",
+      "source_secondaire": true,
+      "confiance": "eleve",
+      "severite": "avertissement"
+    },
+    {
+      "id": "H_MAX_DTU",
+      "description": "Hauteur de marche maximale (hors marche de départ), escaliers bois",
+      "formule": "h <= 210",
+      "min": null,
+      "max": 210,
+      "recommande": 175,
+      "unite": "mm",
+      "contexte": [
+        "bois_dtu"
+      ],
+      "nature": "normatif",
+      "source": "NF DTU 36.3 P3 §6.4 via [1][3]",
+      "source_secondaire": true,
+      "confiance": "eleve",
+      "severite": "bloquant"
+    },
+    {
+      "id": "H_TOLERANCE_DTU",
+      "description": "Écart de chaque hauteur de marche par rapport à la valeur nominale",
+      "formule": "abs(h_i - h_nom) <= 5",
+      "min": -5,
+      "max": 5,
+      "recommande": 0,
+      "unite": "mm",
+      "contexte": [
+        "bois_dtu",
+        "logement_interieur",
+        "bhc_parties_communes",
+        "erp_neuf"
+      ],
+      "nature": "normatif",
+      "source": "NF DTU 36.3 via [1][4]",
+      "source_secondaire": true,
+      "confiance": "eleve",
+      "severite": "avertissement"
+    },
+    {
+      "id": "H_PREMIERE_MARCHE_TOL",
+      "description": "Tolérance de la hauteur de la 1re marche après pose par rapport au sol fini",
+      "formule": "-30 <= h1 - h_nom <= 10",
+      "min": -30,
+      "max": 10,
+      "recommande": 0,
+      "unite": "mm",
+      "contexte": [
+        "bois_dtu"
+      ],
+      "nature": "normatif",
+      "source": "NF DTU 36.3 P1-1 §6.5.1 via [1][2][4]",
+      "source_secondaire": true,
+      "confiance": "eleve",
+      "severite": "avertissement"
+    },
+    {
+      "id": "H_MAX_LOGEMENT",
+      "description": "Hauteur de marche maximale, escalier intérieur de logement neuf",
+      "formule": "h <= 180",
+      "min": null,
+      "max": 180,
+      "recommande": null,
+      "unite": "mm",
+      "contexte": [
+        "logement_interieur"
+      ],
+      "nature": "reglementaire",
+      "source": "Arrêté 24/12/2015 art. 12 [8][4]",
+      "confiance": "eleve",
+      "severite": "bloquant"
+    },
+    {
+      "id": "H_MAX_BHC_PC",
+      "description": "Hauteur de marche maximale, parties communes de BHC neufs",
+      "formule": "h <= 170",
+      "min": null,
+      "max": 170,
+      "recommande": null,
+      "unite": "mm",
+      "contexte": [
+        "bhc_parties_communes"
+      ],
+      "nature": "reglementaire",
+      "source": "Arrêté 24/12/2015 art. 6.1 [7][9][4]",
+      "confiance": "eleve",
+      "severite": "bloquant"
+    },
+    {
+      "id": "H_MAX_ERP_NEUF",
+      "description": "Hauteur de marche maximale, ERP neufs",
+      "formule": "h <= 160",
+      "min": null,
+      "max": 160,
+      "recommande": null,
+      "unite": "mm",
+      "contexte": [
+        "erp_neuf"
+      ],
+      "nature": "reglementaire",
+      "source": "Arrêté 20/04/2017 art. 7-1 [5][6]",
+      "confiance": "eleve",
+      "severite": "bloquant"
+    },
+    {
+      "id": "H_MAX_ERP_EXISTANT",
+      "description": "Hauteur de marche maximale, ERP existants",
+      "formule": "h <= 170",
+      "min": null,
+      "max": 170,
+      "recommande": null,
+      "unite": "mm",
+      "contexte": [
+        "erp_existant"
+      ],
+      "nature": "reglementaire",
+      "source": "Arrêté 08/12/2014 art. 7 point 7.1 [31][4] (dimensions initiales conservables sans travaux sur l'escalier)",
+      "confiance": "eleve",
+      "severite": "bloquant"
+    },
+    {
+      "id": "H_MAX_HELICOIDAL_DTU",
+      "description": "Hauteur de marche maximale, escalier hélicoïdal bois (annexe A DTU, non vérifiée)",
+      "formule": "h <= 230",
+      "min": null,
+      "max": 230,
+      "recommande": null,
+      "unite": "mm",
+      "contexte": [
+        "helicoidal"
+      ],
+      "nature": "normatif",
+      "source": "NF DTU 36.3 P3 annexe A selon [24] (source unique)",
+      "source_secondaire": true,
+      "confiance": "faible",
+      "severite": "avertissement"
+    },
+    {
+      "id": "H_MAX_ECHELLE_MARCHES",
+      "description": "Hauteur de marche maximale, échelle à marches (analogie échelle de meunier)",
+      "formule": "h <= 250",
+      "min": null,
+      "max": 250,
+      "recommande": null,
+      "unite": "mm",
+      "contexte": [
+        "echelle_meunier",
+        "industriel"
+      ],
+      "nature": "normatif",
+      "source": "NF EN ISO 14122-3 / NF E85-015 via [18][19][20]",
+      "source_secondaire": true,
+      "confiance": "moyen",
+      "severite": "avertissement"
+    },
+    {
+      "id": "H_CONFORT",
+      "description": "Plage de confort usuelle de la hauteur de marche",
+      "formule": "160 <= h <= 180",
+      "min": 160,
+      "max": 180,
+      "recommande": 170,
+      "unite": "mm",
+      "contexte": [
+        "tous"
+      ],
+      "nature": "metier",
+      "source": "[24]",
+      "confiance": "faible",
+      "severite": "conseil"
+    },
+    {
+      "id": "H_REGULARITE",
+      "description": "Toutes les marches d'une volée ont la même hauteur (hors 1re marche)",
+      "formule": "max(h_i) - min(h_i) <= 10",
+      "min": null,
+      "max": 10,
+      "recommande": 0,
+      "unite": "mm",
+      "contexte": [
+        "tous"
+      ],
+      "nature": "normatif",
+      "source": "Circulaire 2007-53 (fortement recommandé) + tolérance ±5 mm DTU [4][1]",
+      "confiance": "eleve",
+      "severite": "avertissement"
+    },
+    {
+      "id": "G_MIN_DTU",
+      "description": "Giron minimal sur la ligne de foulée, escaliers bois",
+      "formule": "g >= 190",
+      "min": 190,
+      "max": null,
+      "recommande": 250,
+      "unite": "mm",
+      "contexte": [
+        "bois_dtu"
+      ],
+      "nature": "normatif",
+      "source": "NF DTU 36.3 P3 §6.5 via [1]",
+      "source_secondaire": true,
+      "confiance": "eleve",
+      "severite": "bloquant"
+    },
+    {
+      "id": "G_TOL_DROITE",
+      "description": "Tolérance du giron d'une marche droite",
+      "formule": "abs(g_i - g_nom) <= 5",
+      "min": -5,
+      "max": 5,
+      "recommande": 0,
+      "unite": "mm",
+      "contexte": [
+        "bois_dtu"
+      ],
+      "nature": "normatif",
+      "source": "NF DTU 36.3 P3 via [1][4]",
+      "source_secondaire": true,
+      "confiance": "eleve",
+      "severite": "avertissement"
+    },
+    {
+      "id": "G_TOL_BALANCEE",
+      "description": "Tolérance du giron d'une marche balancée (sur la ligne de foulée)",
+      "formule": "abs(g_i - g_nom) <= 10",
+      "min": -10,
+      "max": 10,
+      "recommande": 0,
+      "unite": "mm",
+      "contexte": [
+        "bois_dtu",
+        "tournant"
+      ],
+      "nature": "normatif",
+      "source": "NF DTU 36.3 P3 via [1][4]",
+      "source_secondaire": true,
+      "confiance": "eleve",
+      "severite": "avertissement"
+    },
+    {
+      "id": "G_MIN_LOGEMENT",
+      "description": "Giron minimal (ligne de mesure), escalier intérieur de logement neuf",
+      "formule": "g >= 240",
+      "min": 240,
+      "max": null,
+      "recommande": null,
+      "unite": "mm",
+      "contexte": [
+        "logement_interieur"
+      ],
+      "nature": "reglementaire",
+      "source": "Arrêté 24/12/2015 art. 12 [8][4]",
+      "confiance": "eleve",
+      "severite": "bloquant"
+    },
+    {
+      "id": "G_MIN_BHC_PC",
+      "description": "Giron minimal, parties communes de BHC neufs",
+      "formule": "g >= 280",
+      "min": 280,
+      "max": null,
+      "recommande": null,
+      "unite": "mm",
+      "contexte": [
+        "bhc_parties_communes"
+      ],
+      "nature": "reglementaire",
+      "source": "Arrêté 24/12/2015 art. 6.1 [7][9]",
+      "confiance": "eleve",
+      "severite": "bloquant"
+    },
+    {
+      "id": "G_MIN_ERP_NEUF",
+      "description": "Giron minimal, ERP neufs",
+      "formule": "g >= 280",
+      "min": 280,
+      "max": null,
+      "recommande": null,
+      "unite": "mm",
+      "contexte": [
+        "erp_neuf"
+      ],
+      "nature": "reglementaire",
+      "source": "Arrêté 20/04/2017 art. 7-1 [5][6]",
+      "confiance": "eleve",
+      "severite": "bloquant"
+    },
+    {
+      "id": "G_MIN_ERP_EXISTANT",
+      "description": "Giron minimal, ERP existants",
+      "formule": "g >= 280",
+      "min": 280,
+      "max": null,
+      "recommande": null,
+      "unite": "mm",
+      "contexte": [
+        "erp_existant"
+      ],
+      "nature": "reglementaire",
+      "source": "Arrêté 08/12/2014 art. 7 point 7.1 [31][4] (dimensions initiales conservables sans travaux sur l'escalier)",
+      "confiance": "eleve",
+      "severite": "bloquant"
+    },
+    {
+      "id": "G_EXT_MAX_ERP_TOURNANT",
+      "description": "Giron extérieur maximal des marches d'un escalier tournant d'ERP",
+      "formule": "g_ext < 420",
+      "min": null,
+      "max": 420,
+      "recommande": null,
+      "unite": "mm",
+      "contexte": [
+        "erp_securite",
+        "tournant",
+        "helicoidal"
+      ],
+      "nature": "reglementaire",
+      "source": "Règlement sécurité ERP CO 56 §2 [10]",
+      "confiance": "eleve",
+      "severite": "bloquant"
+    },
+    {
+      "id": "G_COLLET_MIN",
+      "description": "Giron minimal au collet (limite intérieure de l'emmarchement) des marches balancées — usage, pas de valeur normative FR trouvée",
+      "formule": "g_collet >= 100",
+      "min": 100,
+      "max": null,
+      "recommande": 150,
+      "unite": "mm",
+      "contexte": [
+        "tournant",
+        "helicoidal"
+      ],
+      "nature": "metier",
+      "source": "[30] (usage) ; comparaisons ADK 50 mm [21], DIN 18065 50/100 mm [22]",
+      "confiance": "faible",
+      "severite": "avertissement"
+    },
+    {
+      "id": "G_COLLET_MONOTONE",
+      "description": "Les girons au collet décroissent (ou restent constants) vers l'angle du tournant",
+      "formule": "g_collet[i] monotone vers l'angle",
+      "min": null,
+      "max": null,
+      "recommande": null,
+      "unite": "mm",
+      "contexte": [
+        "tournant"
+      ],
+      "nature": "metier",
+      "source": "DIN 18065 (comparaison) [22]",
+      "confiance": "moyen",
+      "severite": "avertissement"
+    },
+    {
+      "id": "G_BALANCE_VS_DROITE",
+      "description": "Giron des marches balancées sur la ligne de foulée au moins égal à celui des marches droites (régularité du pas)",
+      "formule": "g_i(balancée) >= g_nom - 10",
+      "min": null,
+      "max": null,
+      "recommande": null,
+      "unite": "mm",
+      "contexte": [
+        "tournant"
+      ],
+      "nature": "metier",
+      "source": "ADK §1.27 (comparaison) [21] ; tolérance DTU ±10 mm [1]",
+      "confiance": "moyen",
+      "severite": "avertissement"
+    },
+    {
+      "id": "G_PROFONDEUR_ECHELLE",
+      "description": "Profondeur de marche minimale, échelle à marches",
+      "formule": "g >= 80",
+      "min": 80,
+      "max": null,
+      "recommande": null,
+      "unite": "mm",
+      "contexte": [
+        "echelle_meunier",
+        "industriel"
+      ],
+      "nature": "normatif",
+      "source": "NF EN ISO 14122-3 via [18][19]",
+      "source_secondaire": true,
+      "confiance": "moyen",
+      "severite": "avertissement"
+    },
+    {
+      "id": "LF_POSITION_DTU_ETROIT",
+      "description": "Ligne de foulée au milieu de l'emmarchement si E <= 1200 mm",
+      "formule": "E <= 1200 => d_lf = E / 2",
+      "min": null,
+      "max": null,
+      "recommande": null,
+      "unite": "mm",
+      "contexte": [
+        "bois_dtu"
+      ],
+      "nature": "normatif",
+      "source": "NF DTU 36.3 P3 §6.3 via [1][3]",
+      "source_secondaire": true,
+      "confiance": "eleve",
+      "severite": "bloquant"
+    },
+    {
+      "id": "LF_POSITION_DTU_LARGE",
+      "description": "Ligne de foulée à 600 mm de la rampe côté intérieur si E > 1200 mm",
+      "formule": "E > 1200 => d_lf = 600",
+      "min": 600,
+      "max": 600,
+      "recommande": 600,
+      "unite": "mm",
+      "contexte": [
+        "bois_dtu"
+      ],
+      "nature": "normatif",
+      "source": "NF DTU 36.3 P3 §6.3 via [1][3]",
+      "source_secondaire": true,
+      "confiance": "eleve",
+      "severite": "bloquant"
+    },
+    {
+      "id": "LF_POSITION_ERP_TOURNANT",
+      "description": "Mesure de h et g sur la ligne de foulée à 600 mm du noyau ou du vide central (escaliers tournants ERP)",
+      "formule": "d_lf = 600",
+      "min": 600,
+      "max": 600,
+      "recommande": 600,
+      "unite": "mm",
+      "contexte": [
+        "erp_securite",
+        "tournant",
+        "helicoidal"
+      ],
+      "nature": "reglementaire",
+      "source": "Règlement sécurité ERP CO 56 §2 [10]",
+      "confiance": "eleve",
+      "severite": "bloquant"
+    },
+    {
+      "id": "LF_POSITION_ACCESSIBILITE",
+      "description": "Ligne de mesure du giron en accessibilité : milieu si E <= 1200, 600 mm de la rampe intérieure sinon (logement : tolérance entre milieu et 350 mm du mur extérieur)",
+      "formule": "E <= 1200 => d_lf = E/2 ; E > 1200 => d_lf = 600",
+      "min": null,
+      "max": null,
+      "recommande": null,
+      "unite": "mm",
+      "contexte": [
+        "logement_interieur",
+        "bhc_parties_communes",
+        "erp_neuf"
+      ],
+      "nature": "reglementaire",
+      "source": "QR n°81 accessibilite-batiment.fr (classée « ancienne réglementation », reprise par l'UICB en 2020) et DTU 36.3 P3 via [4]",
+      "source_secondaire": true,
+      "note": "Seule la ligne milieu / 600 mm est bloquante ; la tolérance « milieu ↔ 350 mm du mur extérieur » est une option non bloquante (SPEC X8)",
+      "confiance": "moyen",
+      "severite": "bloquant"
+    },
+    {
+      "id": "LF_POSITION_HELICOIDAL",
+      "description": "Ligne de foulée d'un hélicoïdal bois à 600 mm du fût (annexe A DTU, non vérifiée)",
+      "formule": "d_lf = 600",
+      "min": 600,
+      "max": 600,
+      "recommande": 600,
+      "unite": "mm",
+      "contexte": [
+        "helicoidal",
+        "bois_dtu"
+      ],
+      "nature": "normatif",
+      "source": "[24]",
+      "confiance": "faible",
+      "severite": "avertissement"
+    },
+    {
+      "id": "E_MIN_DTU",
+      "description": "Emmarchement minimal (maison individuelle), escaliers bois",
+      "formule": "E >= 700",
+      "min": 700,
+      "max": null,
+      "recommande": 800,
+      "unite": "mm",
+      "contexte": [
+        "bois_dtu"
+      ],
+      "nature": "normatif",
+      "source": "NF DTU 36.3 P3 §6.7 via [1][3]",
+      "source_secondaire": true,
+      "confiance": "eleve",
+      "severite": "bloquant"
+    },
+    {
+      "id": "LARGEUR_MIN_LOGEMENT",
+      "description": "Largeur minimale de passage d'un escalier de logement neuf (à l'aplomb de la main courante si elle empiète > 100 mm)",
+      "formule": "L_passage >= 800",
+      "min": 800,
+      "max": null,
+      "recommande": null,
+      "unite": "mm",
+      "contexte": [
+        "logement_interieur"
+      ],
+      "nature": "reglementaire",
+      "source": "Arrêté 24/12/2015 art. 12 [8][4]",
+      "confiance": "eleve",
+      "severite": "bloquant"
+    },
+    {
+      "id": "LARGEUR_MC_BHC_PC",
+      "description": "Largeur minimale entre mains courantes, parties communes de BHC",
+      "formule": "L_mc >= 1000",
+      "min": 1000,
+      "max": null,
+      "recommande": null,
+      "unite": "mm",
+      "contexte": [
+        "bhc_parties_communes"
+      ],
+      "nature": "reglementaire",
+      "source": "Arrêté 24/12/2015 art. 6.1 [9][4]",
+      "confiance": "eleve",
+      "severite": "bloquant"
+    },
+    {
+      "id": "LARGEUR_MC_ERP_NEUF",
+      "description": "Largeur minimale entre mains courantes, ERP neufs",
+      "formule": "L_mc >= 1200",
+      "min": 1200,
+      "max": null,
+      "recommande": null,
+      "unite": "mm",
+      "contexte": [
+        "erp_neuf"
+      ],
+      "nature": "reglementaire",
+      "source": "Arrêté 20/04/2017 art. 7-1 [5][6]",
+      "confiance": "eleve",
+      "severite": "bloquant"
+    },
+    {
+      "id": "LARGEUR_MC_ERP_EXISTANT",
+      "description": "Largeur minimale entre mains courantes, ERP existants",
+      "formule": "L_mc >= 1000",
+      "min": 1000,
+      "max": null,
+      "recommande": null,
+      "unite": "mm",
+      "contexte": [
+        "erp_existant"
+      ],
+      "nature": "reglementaire",
+      "source": "Arrêté 08/12/2014 art. 7 point 7.1 [31][4] (dimensions initiales conservables sans travaux sur l'escalier)",
+      "confiance": "eleve",
+      "severite": "bloquant"
+    },
+    {
+      "id": "LARGEUR_UP_ERP",
+      "description": "Largeur en unités de passage ERP : 1 UP = 900 ; 2 UP = 1400 ; n UP (n>=3) = n x 600",
+      "formule": "L_passage >= (n_UP == 1 ? 900 : n_UP == 2 ? 1400 : 600 * n_UP)",
+      "min": 900,
+      "max": null,
+      "recommande": null,
+      "unite": "mm",
+      "contexte": [
+        "erp_securite"
+      ],
+      "nature": "reglementaire",
+      "source": "Règlement sécurité ERP CO 36 [11] (relu sur Légifrance)",
+      "confiance": "eleve",
+      "severite": "bloquant"
+    },
+    {
+      "id": "MC_INTERMEDIAIRE_ERP",
+      "description": "Au-delà de 4 UP, mains courantes intermédiaires séparant des nombres entiers d'UP (max 4)",
+      "formule": "n_UP > 4 => mains courantes intermédiaires",
+      "min": null,
+      "max": 4,
+      "recommande": null,
+      "unite": "UP",
+      "contexte": [
+        "erp_securite"
+      ],
+      "nature": "reglementaire",
+      "source": "Règlement sécurité ERP CO 55 §1 [10]",
+      "confiance": "eleve",
+      "severite": "bloquant"
+    },
+    {
+      "id": "LARGEUR_MIN_INDUSTRIEL",
+      "description": "Largeur libre minimale d'un escalier industriel (préférence 800)",
+      "formule": "E >= 600",
+      "min": 600,
+      "max": null,
+      "recommande": 800,
+      "unite": "mm",
+      "contexte": [
+        "industriel"
+      ],
+      "nature": "normatif",
+      "source": "NF EN ISO 14122-3 via [18]",
+      "source_secondaire": true,
+      "confiance": "moyen",
+      "severite": "bloquant"
+    },
+    {
+      "id": "LARGEUR_ECHELLE_MARCHES",
+      "description": "Largeur d'une échelle à marches (analogie échelle de meunier)",
+      "formule": "450 <= E <= 800",
+      "min": 450,
+      "max": 800,
+      "recommande": 600,
+      "unite": "mm",
+      "contexte": [
+        "echelle_meunier",
+        "industriel"
+      ],
+      "nature": "normatif",
+      "source": "NF EN ISO 14122-3 via [19]",
+      "source_secondaire": true,
+      "confiance": "moyen",
+      "severite": "avertissement"
+    },
+    {
+      "id": "ECHAPPEE_MIN_DTU",
+      "description": "Échappée minimale mesurée au-dessus de la ligne de pente sur la ligne de foulée (convention verticale = choix Blondel ; le DTU via AFEB ne précise pas vertical/perpendiculaire, voir A-regles §1.7)",
+      "formule": "e >= 1900",
+      "min": 1900,
+      "max": null,
+      "recommande": 2100,
+      "unite": "mm",
+      "contexte": [
+        "bois_dtu",
+        "logement_interieur"
+      ],
+      "nature": "normatif",
+      "source": "NF DTU 36.3 P1-1 §6.5.2 via [1][3]",
+      "source_secondaire": true,
+      "confiance": "eleve",
+      "severite": "bloquant"
+    },
+    {
+      "id": "ECHAPPEE_RECO_PRIVATIF",
+      "description": "Échappée recommandée en locaux privatifs",
+      "formule": "e >= 2100",
+      "min": 2100,
+      "max": null,
+      "recommande": 2100,
+      "unite": "mm",
+      "contexte": [
+        "logement_interieur",
+        "bois_dtu"
+      ],
+      "nature": "metier",
+      "source": "[3]",
+      "confiance": "moyen",
+      "severite": "conseil"
+    },
+    {
+      "id": "ECHAPPEE_RECO_PUBLIC",
+      "description": "Échappée recommandée en locaux publics",
+      "formule": "e >= 2200",
+      "min": 2200,
+      "max": null,
+      "recommande": 2200,
+      "unite": "mm",
+      "contexte": [
+        "erp_neuf",
+        "erp_existant",
+        "bhc_parties_communes"
+      ],
+      "nature": "metier",
+      "source": "[3]",
+      "confiance": "moyen",
+      "severite": "conseil"
+    },
+    {
+      "id": "ECHAPPEE_INDUSTRIEL",
+      "description": "Hauteur de tête (verticale) minimale, escaliers et échelles à marches industriels ; en outre dégagement perpendiculaire >= 1900 (escalier) / 850 (échelle à marches)",
+      "formule": "e >= 2300",
+      "min": 2300,
+      "max": null,
+      "recommande": null,
+      "unite": "mm",
+      "contexte": [
+        "industriel"
+      ],
+      "nature": "normatif",
+      "source": "NF EN ISO 14122-3 §3.1.4 (définition) [17] ; valeurs via [18][20]",
+      "source_secondaire": true,
+      "confiance": "moyen",
+      "severite": "bloquant"
+    },
+    {
+      "id": "TREMIE_LONGUEUR",
+      "description": "Longueur de trémie minimale pour une volée droite arrivant au bord de trémie (dérivation géométrique, mesure verticale)",
+      "formule": "L_tremie >= (e_min + ep) * g / h",
+      "min": null,
+      "max": null,
+      "recommande": null,
+      "unite": "mm",
+      "contexte": [
+        "tous"
+      ],
+      "nature": "metier",
+      "source": "Dérivation géométrique (A-regles §1.7)",
+      "confiance": "eleve",
+      "severite": "conseil"
+    },
+    {
+      "id": "TREMIE_TOLERANCE",
+      "description": "Tolérance d'implantation et de dimensions des trémies finies (à intégrer comme jeu de conception)",
+      "formule": "0 <= ecart_tremie <= 7",
+      "min": 0,
+      "max": 7,
+      "recommande": null,
+      "unite": "mm",
+      "contexte": [
+        "bois_dtu"
+      ],
+      "nature": "normatif",
+      "source": "NF DTU 36.3 P1-1 §5.2 via [1][2]",
+      "source_secondaire": true,
+      "confiance": "eleve",
+      "severite": "conseil"
+    },
+    {
+      "id": "HAUTEUR_ETAGE_TOLERANCE",
+      "description": "Tolérance sur la hauteur à monter sol fini à sol fini (H <= 3000 : ±7 ; au-delà : intervalle total 10*H_m^(1/3), soit ±5*H_m^(1/3) — interprétation par continuité, voir A-regles §1.7)",
+      "formule": "abs(dH) <= (H <= 3000 ? 7 : 5 * (H/1000)^(1/3))",
+      "min": -7,
+      "max": 7,
+      "recommande": null,
+      "unite": "mm",
+      "contexte": [
+        "bois_dtu"
+      ],
+      "nature": "normatif",
+      "source": "NF DTU 36.3 P1-1 §5.2 via [1][2]",
+      "source_secondaire": true,
+      "confiance": "eleve",
+      "severite": "conseil"
+    },
+    {
+      "id": "RECULEMENT",
+      "description": "Reculement d'une volée droite (donnée calculée, pas de limite normative)",
+      "formule": "R = (n - 1) * g",
+      "min": null,
+      "max": null,
+      "recommande": null,
+      "unite": "mm",
+      "contexte": [
+        "tous"
+      ],
+      "nature": "metier",
+      "source": "Définition géométrique (A-regles §1.8)",
+      "confiance": "eleve",
+      "severite": "conseil"
+    },
+    {
+      "id": "VOLEE_MAX_DTU",
+      "description": "Nombre maximal de marches par volée sans palier, escaliers bois",
+      "formule": "n <= 25",
+      "min": null,
+      "max": 25,
+      "recommande": null,
+      "unite": "marches",
+      "contexte": [
+        "bois_dtu"
+      ],
+      "nature": "normatif",
+      "source": "NF DTU 36.3 P3 §6.6 via [1]",
+      "source_secondaire": true,
+      "confiance": "eleve",
+      "severite": "bloquant"
+    },
+    {
+      "id": "VOLEE_MAX_ERP",
+      "description": "Nombre maximal de marches par volée, escaliers droits ERP (hors gradins)",
+      "formule": "n <= 25",
+      "min": null,
+      "max": 25,
+      "recommande": null,
+      "unite": "marches",
+      "contexte": [
+        "erp_securite"
+      ],
+      "nature": "reglementaire",
+      "source": "Règlement sécurité ERP CO 55 §1 [10]",
+      "confiance": "eleve",
+      "severite": "bloquant"
+    },
+    {
+      "id": "ERP_TOURNANT_BALANCEMENT_CONTINU",
+      "description": "Escaliers tournants ERP à balancement continu, sans palier autre que ceux des étages",
+      "formule": "tournant => aucun palier intermédiaire",
+      "min": null,
+      "max": null,
+      "recommande": null,
+      "unite": null,
+      "contexte": [
+        "erp_securite",
+        "tournant"
+      ],
+      "nature": "reglementaire",
+      "source": "Règlement sécurité ERP CO 56 §1 [10]",
+      "confiance": "eleve",
+      "severite": "bloquant"
+    },
+    {
+      "id": "PALIER_LARGEUR_ERP",
+      "description": "Largeur de palier au moins égale à celle de l'escalier (ERP)",
+      "formule": "l_palier >= L_passage",
+      "min": null,
+      "max": null,
+      "recommande": null,
+      "unite": "mm",
+      "contexte": [
+        "erp_securite"
+      ],
+      "nature": "reglementaire",
+      "source": "Règlement sécurité ERP CO 55 §2 [10]",
+      "confiance": "eleve",
+      "severite": "bloquant"
+    },
+    {
+      "id": "PALIER_LONGUEUR_ERP_NON_CONTRARIE",
+      "description": "Longueur de palier > 1 m entre volées non contrariées (ERP)",
+      "formule": "volees_meme_sens => L_palier > 1000",
+      "min": 1000,
+      "max": null,
+      "recommande": null,
+      "unite": "mm",
+      "contexte": [
+        "erp_securite"
+      ],
+      "nature": "reglementaire",
+      "source": "Règlement sécurité ERP CO 55 §2 [10]",
+      "confiance": "eleve",
+      "severite": "bloquant"
+    },
+    {
+      "id": "PALIER_LONGUEUR_METIER",
+      "description": "Palier intermédiaire au moins aussi long que l'emmarchement",
+      "formule": "L_palier >= E",
+      "min": null,
+      "max": null,
+      "recommande": null,
+      "unite": "mm",
+      "contexte": [
+        "tous"
+      ],
+      "nature": "metier",
+      "source": "Usage ; ADK §1.20 (comparaison) [21]",
+      "confiance": "moyen",
+      "severite": "conseil"
+    },
+    {
+      "id": "PALIER_INDUSTRIEL",
+      "description": "Longueur minimale de palier quand requis (industriel), au moins 800 et au moins la largeur de l'escalier",
+      "formule": "L_palier >= max(800, E)",
+      "min": 800,
+      "max": null,
+      "recommande": null,
+      "unite": "mm",
+      "contexte": [
+        "industriel"
+      ],
+      "nature": "normatif",
+      "source": "NF EN ISO 14122-3 via [18]",
+      "source_secondaire": true,
+      "confiance": "moyen",
+      "severite": "bloquant"
+    },
+    {
+      "id": "VOLEE_HAUTEUR_INDUSTRIEL",
+      "description": "Hauteur maximale d'une volée industrielle (4000 si escalier à volée unique, selon NF E85-015 et ISO 14122-3 via CFST)",
+      "formule": "n * h <= 3000",
+      "min": null,
+      "max": 3000,
+      "recommande": null,
+      "unite": "mm",
+      "contexte": [
+        "industriel",
+        "echelle_meunier"
+      ],
+      "nature": "normatif",
+      "source": "NF EN ISO 14122-3 / NF E85-015 via [18][20]",
+      "source_secondaire": true,
+      "confiance": "moyen",
+      "severite": "avertissement"
+    },
+    {
+      "id": "RECOUVREMENT_ERP_SANS_CM",
+      "description": "Recouvrement minimal entre marches successives sans contremarche (ERP)",
+      "formule": "sans_contremarche => recouvrement >= 50",
+      "min": 50,
+      "max": null,
+      "recommande": null,
+      "unite": "mm",
+      "contexte": [
+        "erp_securite"
+      ],
+      "nature": "reglementaire",
+      "source": "Règlement sécurité ERP CO 51 §1 [10]",
+      "confiance": "eleve",
+      "severite": "bloquant"
+    },
+    {
+      "id": "DEBORD_NEZ_ERP",
+      "description": "Débord du nez de marche sur la contremarche au plus d'une dizaine de mm (ERP neufs)",
+      "formule": "debord_nez <= 10",
+      "min": null,
+      "max": 10,
+      "recommande": null,
+      "unite": "mm",
+      "contexte": [
+        "erp_neuf"
+      ],
+      "nature": "reglementaire",
+      "source": "Arrêté 20/04/2017 art. 7-1 [5][6]",
+      "confiance": "eleve",
+      "severite": "bloquant"
+    },
+    {
+      "id": "DEBORD_NEZ_LOGEMENT",
+      "description": "Débord du nez de marche en logement : <= 10 mm si arête vive, <= 20 mm si arrondie (interprétation guide CRC)",
+      "formule": "debord_nez <= (nez_arrondi ? 20 : 10)",
+      "min": null,
+      "max": 20,
+      "recommande": 10,
+      "unite": "mm",
+      "contexte": [
+        "logement_interieur"
+      ],
+      "nature": "reglementaire",
+      "source": "Guide de contrôle CRC via [4]",
+      "source_secondaire": true,
+      "confiance": "moyen",
+      "severite": "avertissement"
+    },
+    {
+      "id": "DEBORD_NEZ_BHC_PC",
+      "description": "Débord du nez de marche en parties communes de BHC (interprétation guide CRC)",
+      "formule": "debord_nez <= 15",
+      "min": null,
+      "max": 15,
+      "recommande": 10,
+      "unite": "mm",
+      "contexte": [
+        "bhc_parties_communes"
+      ],
+      "nature": "reglementaire",
+      "source": "Guide de contrôle CRC via [4]",
+      "source_secondaire": true,
+      "confiance": "moyen",
+      "severite": "avertissement"
+    },
+    {
+      "id": "CONTREMARCHE_EXTREMES",
+      "description": "1re et dernière marches pourvues d'une contremarche d'au moins 100 mm, contrastée",
+      "formule": "contremarche(1) >= 100 && contremarche(n) >= 100",
+      "min": 100,
+      "max": null,
+      "recommande": null,
+      "unite": "mm",
+      "contexte": [
+        "erp_neuf",
+        "bhc_parties_communes"
+      ],
+      "nature": "reglementaire",
+      "source": "Arrêté 20/04/2017 art. 7-1 [5][6] ; arrêté 24/12/2015 art. 6.1 [9]",
+      "confiance": "eleve",
+      "severite": "bloquant"
+    },
+    {
+      "id": "NEZ_CONTRASTE",
+      "description": "Nez de marche contrastés visuellement sur au moins 30 mm à l'horizontale, non glissants",
+      "formule": "largeur_contraste_nez >= 30",
+      "min": 30,
+      "max": null,
+      "recommande": null,
+      "unite": "mm",
+      "contexte": [
+        "erp_neuf",
+        "bhc_parties_communes"
+      ],
+      "nature": "reglementaire",
+      "source": "Arrêté 20/04/2017 art. 7-1 [5][6] ; arrêté 24/12/2015 art. 6.1 [9]",
+      "confiance": "eleve",
+      "severite": "bloquant"
+    },
+    {
+      "id": "BANDE_EVEIL",
+      "description": "Revêtement d'éveil de vigilance à 500 mm de la 1re marche en haut (réductible à un giron si la configuration l'impose, en ERP comme en BHC)",
+      "formule": "distance_bande_eveil = 500",
+      "min": null,
+      "max": 500,
+      "recommande": 500,
+      "unite": "mm",
+      "contexte": [
+        "erp_neuf",
+        "bhc_parties_communes"
+      ],
+      "nature": "reglementaire",
+      "source": "Arrêté 20/04/2017 art. 7-1 [5][6] ; arrêté 24/12/2015 art. 6.1 [9]",
+      "confiance": "eleve",
+      "severite": "bloquant"
+    },
+    {
+      "id": "RECOUVREMENT_INDUSTRIEL",
+      "description": "Recouvrement minimal : 50 mm sans contremarche, 10 mm avec contremarche (industriel)",
+      "formule": "recouvrement >= (sans_contremarche ? 50 : 10)",
+      "min": 10,
+      "max": null,
+      "recommande": null,
+      "unite": "mm",
+      "contexte": [
+        "industriel",
+        "echelle_meunier"
+      ],
+      "nature": "normatif",
+      "source": "NF E85-015 via [20] ; ISO 14122-3 >= 10 [18]",
+      "source_secondaire": true,
+      "confiance": "faible",
+      "severite": "avertissement"
+    },
+    {
+      "id": "MC_DEUX_COTES",
+      "description": "Une main courante de chaque côté (exception ERP neuf seulement : fût central de diamètre <= 400 mm, une seule ; en BHC « quelle que soit sa conception »)",
+      "formule": "nb_mains_courantes >= 2 || (contexte == erp_neuf && helicoidal && D_fut <= 400)",
+      "min": 2,
+      "max": null,
+      "recommande": null,
+      "unite": "unite",
+      "contexte": [
+        "erp_neuf",
+        "bhc_parties_communes"
+      ],
+      "nature": "reglementaire",
+      "source": "Arrêté 20/04/2017 art. 7-1 [5][6] ; arrêté 24/12/2015 art. 6.1 [9]",
+      "confiance": "eleve",
+      "severite": "bloquant"
+    },
+    {
+      "id": "MC_UP_ERP",
+      "description": "Main courante dès 1 UP ; de chaque côté dès 2 UP ; côté extérieur pour un tournant d'1 UP (ERP)",
+      "formule": "n_UP >= 2 => 2 mains courantes",
+      "min": 1,
+      "max": null,
+      "recommande": null,
+      "unite": "unite",
+      "contexte": [
+        "erp_securite"
+      ],
+      "nature": "reglementaire",
+      "source": "Règlement sécurité ERP CO 51 §2, CO 56 §3 [10]",
+      "confiance": "eleve",
+      "severite": "bloquant"
+    },
+    {
+      "id": "MC_LOGEMENT",
+      "description": "Au moins une main courante entre murs ; côté sans paroi, le garde-corps tient lieu de main courante (logement)",
+      "formule": "nb_mains_courantes >= 1",
+      "min": 1,
+      "max": null,
+      "recommande": null,
+      "unite": "unite",
+      "contexte": [
+        "logement_interieur"
+      ],
+      "nature": "reglementaire",
+      "source": "Arrêté 24/12/2015 art. 12 [8]",
+      "confiance": "eleve",
+      "severite": "bloquant"
+    },
+    {
+      "id": "MC_HAUTEUR",
+      "description": "Hauteur de main courante mesurée à la verticale du nez de marche",
+      "formule": "800 <= H_mc <= 1000",
+      "min": 800,
+      "max": 1000,
+      "recommande": 900,
+      "unite": "mm",
+      "contexte": [
+        "erp_neuf",
+        "bhc_parties_communes"
+      ],
+      "nature": "reglementaire",
+      "source": "Arrêté 20/04/2017 art. 7-1 [5][6] ; arrêté 24/12/2015 art. 6.1 [7][9]",
+      "confiance": "eleve",
+      "severite": "bloquant"
+    },
+    {
+      "id": "MC_HAUTEUR_INDUSTRIEL",
+      "description": "Hauteur de main courante d'escalier industriel depuis le nez de marche",
+      "formule": "900 <= H_mc <= 1000",
+      "min": 900,
+      "max": 1000,
+      "recommande": null,
+      "unite": "mm",
+      "contexte": [
+        "industriel"
+      ],
+      "nature": "normatif",
+      "source": "NF E85-015 via [20]",
+      "source_secondaire": true,
+      "confiance": "faible",
+      "severite": "avertissement"
+    },
+    {
+      "id": "MC_PROLONGEMENT_ERP",
+      "description": "Prolongement horizontal de la main courante d'un giron au-delà des 1re et dernière marches (ERP neufs)",
+      "formule": "prolongement_mc >= g",
+      "min": null,
+      "max": null,
+      "recommande": null,
+      "unite": "mm",
+      "contexte": [
+        "erp_neuf"
+      ],
+      "nature": "reglementaire",
+      "source": "Arrêté 20/04/2017 art. 7-1 [5][6][4]",
+      "confiance": "eleve",
+      "severite": "bloquant"
+    },
+    {
+      "id": "MC_PROLONGEMENT_BHC",
+      "description": "Prolongement horizontal de la main courante d'une marche au-delà des 1re et dernière marches (BHC, logements)",
+      "formule": "prolongement_mc >= g",
+      "min": null,
+      "max": null,
+      "recommande": null,
+      "unite": "mm",
+      "contexte": [
+        "bhc_parties_communes",
+        "logement_interieur"
+      ],
+      "nature": "reglementaire",
+      "source": "Arrêté 24/12/2015 art. 6.1 et 12 via [4][9]",
+      "source_secondaire": true,
+      "confiance": "eleve",
+      "severite": "bloquant"
+    },
+    {
+      "id": "MC_DISCONTINUITE",
+      "description": "Discontinuité de main courante côté mur admise si < 100 mm",
+      "formule": "discontinuite_mc < 100",
+      "min": null,
+      "max": 100,
+      "recommande": 0,
+      "unite": "mm",
+      "contexte": [
+        "erp_neuf",
+        "bhc_parties_communes",
+        "logement_interieur"
+      ],
+      "nature": "reglementaire",
+      "source": "Arrêtés 24/12/2015 et 20/04/2017 via [4]",
+      "source_secondaire": true,
+      "confiance": "eleve",
+      "severite": "bloquant"
+    },
+    {
+      "id": "MC_EPAISSEUR_MAX",
+      "description": "Épaisseur de main courante (préhension) au plus 70 mm (interprétation guide CRC)",
+      "formule": "epaisseur_mc <= 70",
+      "min": null,
+      "max": 70,
+      "recommande": null,
+      "unite": "mm",
+      "contexte": [
+        "erp_neuf",
+        "bhc_parties_communes",
+        "logement_interieur"
+      ],
+      "nature": "reglementaire",
+      "source": "Guide de contrôle CRC via [4]",
+      "source_secondaire": true,
+      "confiance": "moyen",
+      "severite": "avertissement"
+    },
+    {
+      "id": "MC_DEGAGEMENT_MUR",
+      "description": "Dégagement main courante / paroi : >= 30 mm en logement individuel, >= 50 mm dans les autres cas",
+      "formule": "D_mc >= (logement_individuel ? 30 : 50)",
+      "min": 30,
+      "max": null,
+      "recommande": 50,
+      "unite": "mm",
+      "contexte": [
+        "bois_dtu"
+      ],
+      "nature": "normatif",
+      "source": "NF DTU 36.3 CCT (prise de main courante) via [1]",
+      "source_secondaire": true,
+      "confiance": "eleve",
+      "severite": "bloquant"
+    },
+    {
+      "id": "GC_OBLIGATOIRE",
+      "description": "Élément de protection requis dès que la hauteur de chute dépasse 1 m",
+      "formule": "hauteur_chute > 1000 => garde_corps",
+      "min": null,
+      "max": 1000,
+      "recommande": null,
+      "unite": "mm",
+      "contexte": [
+        "garde_corps_1988",
+        "garde_corps_2024"
+      ],
+      "nature": "normatif",
+      "source": "NF P01-012 via [12]",
+      "source_secondaire": true,
+      "confiance": "eleve",
+      "severite": "bloquant"
+    },
+    {
+      "id": "GC_HAUTEUR_RAMPANT_1988",
+      "description": "Hauteur minimale d'une rampe d'escalier au-dessus du nez de marche (1988)",
+      "formule": "H_gc >= 900",
+      "min": 900,
+      "max": null,
+      "recommande": null,
+      "unite": "mm",
+      "contexte": [
+        "garde_corps_1988"
+      ],
+      "nature": "normatif",
+      "source": "NF P01-012:1988 via [14]",
+      "source_secondaire": true,
+      "confiance": "moyen",
+      "severite": "bloquant"
+    },
+    {
+      "id": "GC_HAUTEUR_PALIER_1988",
+      "description": "Hauteur minimale d'un garde-corps de palier / trémie en zone de stationnement normal (1988)",
+      "formule": "H_gc >= 1000",
+      "min": 1000,
+      "max": null,
+      "recommande": null,
+      "unite": "mm",
+      "contexte": [
+        "garde_corps_1988"
+      ],
+      "nature": "normatif",
+      "source": "NF P01-012:1988 via [14]",
+      "source_secondaire": true,
+      "confiance": "moyen",
+      "severite": "bloquant"
+    },
+    {
+      "id": "GC_VIDE_1988_BARREAUX",
+      "description": "Vide maximal entre barreaux verticaux (1988)",
+      "formule": "vide <= 110",
+      "min": null,
+      "max": 110,
+      "recommande": null,
+      "unite": "mm",
+      "contexte": [
+        "garde_corps_1988"
+      ],
+      "nature": "normatif",
+      "source": "NF P01-012:1988 via [14][15]",
+      "source_secondaire": true,
+      "confiance": "moyen",
+      "severite": "bloquant"
+    },
+    {
+      "id": "GC_VIDE_1988_LISSES",
+      "description": "Vide maximal entre lisses horizontales au-dessus de la partie basse (1988)",
+      "formule": "vide <= 180",
+      "min": null,
+      "max": 180,
+      "recommande": null,
+      "unite": "mm",
+      "contexte": [
+        "garde_corps_1988"
+      ],
+      "nature": "normatif",
+      "source": "NF P01-012:1988 via [14]",
+      "source_secondaire": true,
+      "confiance": "moyen",
+      "severite": "bloquant"
+    },
+    {
+      "id": "GC_PARTIE_BASSE_1988",
+      "description": "Partie basse non escaladable de 0 à 450 mm (1988)",
+      "formule": "hauteur_partie_basse_non_escaladable >= 450",
+      "min": 450,
+      "max": null,
+      "recommande": null,
+      "unite": "mm",
+      "contexte": [
+        "garde_corps_1988"
+      ],
+      "nature": "normatif",
+      "source": "NF P01-012:1988 via [14]",
+      "source_secondaire": true,
+      "confiance": "moyen",
+      "severite": "bloquant"
+    },
+    {
+      "id": "GC_HAUTEUR_2024",
+      "description": "Hauteur minimale de protection depuis la zone d'activité selon l'épaisseur E_gc de l'élément (2024) : E<=250:1000 ; <=300:975 ; <=350:950 ; <=400:925 ; <=450:900 ; <=500:850(b) ; >500:800(b) — condition (b) non vérifiée : par défaut ne pas descendre sous 900",
+      "formule": "H_gc >= h_table(E_gc) + appuis + denivele",
+      "min": 800,
+      "max": null,
+      "recommande": 1000,
+      "unite": "mm",
+      "contexte": [
+        "garde_corps_2024"
+      ],
+      "nature": "normatif",
+      "source": "NF P01-012:2024 via APAVE [12]",
+      "source_secondaire": true,
+      "confiance": "eleve",
+      "severite": "bloquant"
+    },
+    {
+      "id": "GC_HAUTEUR_RAMPANT_2024",
+      "description": "Hauteur minimale d'un garde-corps rampant au-dessus du nez de marche (2024) — à confirmer",
+      "formule": "H_gc >= 900",
+      "min": 900,
+      "max": null,
+      "recommande": null,
+      "unite": "mm",
+      "contexte": [
+        "garde_corps_2024"
+      ],
+      "nature": "normatif",
+      "source": "Sources secondaires [15]",
+      "confiance": "faible",
+      "severite": "bloquant"
+    },
+    {
+      "id": "GC_GABARIT_T1_2024",
+      "description": "Garde-corps : la sphère T1 de 110 mm ne passe pas entre la zone d'activité et 800 mm (2024) ; au-delà, T2 s'applique (SPEC X6)",
+      "formule": "vide < 110 sur [0 ; 800]",
+      "min": null,
+      "max": 110,
+      "recommande": null,
+      "unite": "mm",
+      "contexte": [
+        "garde_corps_2024"
+      ],
+      "nature": "normatif",
+      "source": "NF P01-012:2024 via APAVE [12]",
+      "source_secondaire": true,
+      "confiance": "eleve",
+      "severite": "bloquant"
+    },
+    {
+      "id": "GC_GABARIT_T2_2024",
+      "description": "Cas particulier garde-corps : sphère T2 de 180 mm entre 800 mm et H (2024)",
+      "formule": "vide < 180 sur [800 ; H]",
+      "min": null,
+      "max": 180,
+      "recommande": null,
+      "unite": "mm",
+      "contexte": [
+        "garde_corps_2024"
+      ],
+      "nature": "normatif",
+      "source": "NF P01-012:2024 via APAVE [12]",
+      "source_secondaire": true,
+      "confiance": "eleve",
+      "severite": "bloquant"
+    },
+    {
+      "id": "GC_GABARIT_T3_2024",
+      "description": "Remplissages à mailles répétitives : sphère T3 de 50 mm ; discontinuité max de la partie supérieure 50 mm (2024)",
+      "formule": "vide_maille < 50",
+      "min": null,
+      "max": 50,
+      "recommande": null,
+      "unite": "mm",
+      "contexte": [
+        "garde_corps_2024"
+      ],
+      "nature": "normatif",
+      "source": "NF P01-012:2024 via APAVE [12]",
+      "source_secondaire": true,
+      "confiance": "eleve",
+      "severite": "bloquant"
+    },
+    {
+      "id": "GC_GABARIT_B_2024",
+      "description": "Recherche de points d'appui au gabarit B dans la zone basse : si un appui escaladable existe à une hauteur X (100 <= X < 600 mm), la hauteur du garde-corps au-dessus de cet appui doit atteindre 1000 + X (2024). Ce n'est pas une obligation de partie pleine (SPEC X5)",
+      "formule": "pour tout appui a X in [100 ; 600[ : H_gc >= 1000 + X",
+      "min": null,
+      "max": null,
+      "recommande": null,
+      "unite": "mm",
+      "contexte": [
+        "garde_corps_2024"
+      ],
+      "nature": "normatif",
+      "source": "NF P01-012:2024 via APAVE [12] ; fabricant Horizal ; C-structures §3.1",
+      "source_secondaire": true,
+      "confiance": "moyen",
+      "severite": "bloquant"
+    },
+    {
+      "id": "GC_DENIVELES_2024",
+      "description": "Dénivelés au pied du garde-corps (C-G-03b) : prise en compte d'une différence de niveau Y dans la zone d'activité — formule exacte non lue ⚠️",
+      "formule": "⚠️ non vérifié — voir C-structures §3.1",
+      "min": null,
+      "max": null,
+      "recommande": null,
+      "unite": "mm",
+      "contexte": [
+        "garde_corps_2024"
+      ],
+      "nature": "normatif",
+      "source": "NF P01-012:2024 via sources secondaires, C-structures §3.1",
+      "source_secondaire": true,
+      "confiance": "faible",
+      "severite": "avertissement"
+    },
+    {
+      "id": "VIDE_ENTRE_MARCHES",
+      "description": "Escalier sans contremarche en logement : une sphère de 100 mm ne doit pas passer entre deux marches successives (usage britannique, Approved Document K)",
+      "formule": "vide_entre_marches < 100",
+      "min": null,
+      "max": 100,
+      "recommande": null,
+      "unite": "mm",
+      "contexte": [
+        "logement_interieur"
+      ],
+      "nature": "metier",
+      "source": "Approved Document K (Royaume-Uni) [21] ; pas d'équivalent français trouvé",
+      "confiance": "moyen",
+      "severite": "conseil"
+    },
+    {
+      "id": "CHARGE_ESCALIER_A",
+      "description": "Charge d'exploitation escaliers catégorie A (habitation) : qk 2,5 kN/m² ; Qk 2,0 kN (hors marches indépendantes : approche dynamique)",
+      "formule": "qk = 2.5 kN/m2 ; Qk = 2.0 kN",
+      "min": 2.5,
+      "max": null,
+      "recommande": null,
+      "unite": "kN/m2",
+      "contexte": [
+        "logement_interieur",
+        "bhc_parties_communes"
+      ],
+      "nature": "normatif",
+      "source": "NF EN 1991-1-1/NA (NF P06-111-2) tableau 6.2(NF) [16]",
+      "confiance": "eleve",
+      "severite": "bloquant"
+    },
+    {
+      "id": "CHARGE_ESCALIER_AUTRES",
+      "description": "Charges d'exploitation par catégorie (qk kN/m² / Qk kN) : B 2,5/4 ; C1 2,5/3 ; C2 4/4 ; C3 4/4 ; C4 5/7 ; C5 5/4,5 ; D1 5/5 ; D2 5/7 ; catégorie inconnue => D1",
+      "formule": "qk, Qk = table_6_2_NF(categorie)",
+      "min": 2.5,
+      "max": 5,
+      "recommande": null,
+      "unite": "kN/m2",
+      "contexte": [
+        "erp_neuf",
+        "erp_existant"
+      ],
+      "nature": "normatif",
+      "source": "NF P06-111-2 tableau 6.2(NF) [16]",
+      "confiance": "eleve",
+      "severite": "bloquant"
+    },
+    {
+      "id": "CHARGE_GC_HORIZONTALE",
+      "description": "Charge horizontale linéique sur garde-corps, appliquée à 1,0 m du sol fini, selon tableau 6.12(NF) modifié par l'A1 (2009) : A 0,6 ; B 0,6 ; C1-C4 1,0 ; D 1,0 ; C5 3,0 ; E non vérifié (2,0 mini en 2004)",
+      "formule": "qk = table_6_12_NF_A1(categorie)",
+      "min": 0.6,
+      "max": 3,
+      "recommande": null,
+      "unite": "kN/m",
+      "contexte": [
+        "garde_corps_1988",
+        "garde_corps_2024"
+      ],
+      "nature": "normatif",
+      "source": "NF P06-111-2/A1 (mars 2009) via guide PACTE/CTB garde-corps [32][34] ; version 2004 lue [16]",
+      "source_secondaire": true,
+      "confiance": "moyen",
+      "severite": "bloquant"
+    },
+    {
+      "id": "CHARGE_MARCHE_INDUSTRIEL",
+      "description": "Marche : 1,5 kN sur 100x100 mm au nez, milieu d'emmarchement (2 charges à 600 mm d'entraxe si w >= 1200) ; flèche <= L/300 et <= 6 mm",
+      "formule": "fleche_marche <= min(portee / 300, 6)",
+      "min": null,
+      "max": 6,
+      "recommande": null,
+      "unite": "mm",
+      "contexte": [
+        "industriel"
+      ],
+      "nature": "normatif",
+      "source": "ISO 14122-3:2016 §4.2.2 [17]",
+      "confiance": "eleve",
+      "severite": "avertissement"
+    },
+    {
+      "id": "LIMON_EPAISSEUR_MIN_DTU",
+      "description": "Épaisseur minimale d'un limon bois (règles de moyens, escalier <= 1 étage, E <= 1200)",
+      "formule": "epaisseur_limon >= 29",
+      "min": 29,
+      "max": null,
+      "recommande": null,
+      "unite": "mm",
+      "contexte": [
+        "bois_dtu"
+      ],
+      "nature": "normatif",
+      "source": "NF DTU 36.3 P3 via FCBA [2]",
+      "source_secondaire": true,
+      "confiance": "eleve",
+      "severite": "avertissement"
+    },
+    {
+      "id": "CREMAILLERE_REGLE_MOYENS",
+      "description": "Crémaillère bois (paire, droit, 2,70 m, 38°) : distance min fond d'entaille / sous-face selon épaisseur — C30 : 33→179, 44→163, 70→141 ; D40 : 35→177, 44→162, 70→139 ; crémaillère centrale : épaisseurs x2",
+      "formule": "distance_entaille_sous_face >= table_FCBA(essence, epaisseur)",
+      "min": 139,
+      "max": null,
+      "recommande": null,
+      "unite": "mm",
+      "contexte": [
+        "bois_dtu"
+      ],
+      "nature": "normatif",
+      "source": "FCBA [2] tableau 4 (« exemple de résultats de calcul », rattachement exact au P3 non établi)",
+      "confiance": "eleve",
+      "severite": "avertissement"
+    },
+    {
+      "id": "DEFORMATION_CINTRAGE",
+      "description": "Cintrage admissible : marches, contremarches, poteaux, mains courantes, limons 5 mm/m ; balustres 3 mm/m",
+      "formule": "fleche_cintrage <= 5 * L_m (balustres : 3 * L_m)",
+      "min": null,
+      "max": 5,
+      "recommande": null,
+      "unite": "mm/m",
+      "contexte": [
+        "bois_dtu"
+      ],
+      "nature": "normatif",
+      "source": "NF DTU 36.3 via FCBA [2] tableau 2",
+      "source_secondaire": true,
+      "confiance": "eleve",
+      "severite": "conseil"
+    },
+    {
+      "id": "ECHELLE_MEUNIER_HORS_DTU",
+      "description": "L'échelle de meunier est hors domaine du NF DTU 36.3 : aucune règle normative de logement ; appliquer les analogies échelle à marches",
+      "formule": "echelle_meunier => pas de conformité DTU revendicable",
+      "min": null,
+      "max": null,
+      "recommande": null,
+      "unite": null,
+      "contexte": [
+        "echelle_meunier"
+      ],
+      "nature": "normatif",
+      "source": "[1][3]",
+      "confiance": "eleve",
+      "severite": "avertissement"
+    },
+    {
+      "id": "ANGLE_ECHELLE_MARCHES",
+      "description": "Angle d'une échelle à marches 45° à 75° (escalier : 20° à 45°)",
+      "formule": "45 <= alpha <= 75",
+      "min": 45,
+      "max": 75,
+      "recommande": 60,
+      "unite": "deg",
+      "contexte": [
+        "echelle_meunier",
+        "industriel"
+      ],
+      "nature": "normatif",
+      "source": "NF EN ISO 14122-3 via [19] (résumé de recherche)",
+      "source_secondaire": true,
+      "confiance": "moyen",
+      "severite": "avertissement"
+    },
+    {
+      "id": "ECHELLE_MEUNIER_MC",
+      "description": "Deux mains courantes obligatoires sur une échelle à marches",
+      "formule": "nb_mains_courantes >= 2",
+      "min": 2,
+      "max": null,
+      "recommande": null,
+      "unite": "unite",
+      "contexte": [
+        "echelle_meunier",
+        "industriel"
+      ],
+      "nature": "normatif",
+      "source": "NF EN ISO 14122-3 via [18][19]",
+      "source_secondaire": true,
+      "confiance": "moyen",
+      "severite": "avertissement"
+    }
+  ]
+}

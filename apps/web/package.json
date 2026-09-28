@@ -1,0 +1,29 @@
+{
+  "name": "@blondel/web",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -p tsconfig.json --noEmit && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@blondel/core": "workspace:*",
+    "@blondel/geometry": "workspace:*",
+    "@blondel/exports": "workspace:*",
+    "react": "~19.3.0",
+    "react-dom": "~19.3.0",
+    "three": "^0.186.0",
+    "@react-three/fiber": "^9.8.1",
+    "@react-three/drei": "^10.7.9",
+    "zustand": "^5.0.15"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "@types/three": "^0.186.0",
+    "@vitejs/plugin-react": "^6.1.1",
+    "vite": "^8.3.1"
+  }
+}
