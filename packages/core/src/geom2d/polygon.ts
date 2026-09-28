@@ -39,7 +39,9 @@ export function perimeter(poly: Polygon2): Mm {
 
 /** Aire d'une forme à trous (valeur absolue du contour moins celles des trous). */
 export function shapeArea(shape: Shape2): number {
-  return Math.abs(signedArea(shape.outer)) - shape.holes.reduce((s, h) => s + Math.abs(signedArea(h)), 0);
+  return (
+    Math.abs(signedArea(shape.outer)) - shape.holes.reduce((s, h) => s + Math.abs(signedArea(h)), 0)
+  );
 }
 
 export type PointLocation = "inside" | "outside" | "boundary";
@@ -198,7 +200,13 @@ function nearestHit(line: Line2, curve: Curve2): CurveHit | null {
  * l'intersection la plus proche de l'origine de la droite. Renvoie null si une coupe ne
  * rencontre pas l'une des courbes.
  */
-export function cutBand(a: Curve2, b: Curve2, cut0: Line2, cut1: Line2, chordTol: Mm = 0.1): BandCut | null {
+export function cutBand(
+  a: Curve2,
+  b: Curve2,
+  cut0: Line2,
+  cut1: Line2,
+  chordTol: Mm = 0.1,
+): BandCut | null {
   const a0 = nearestHit(cut0, a);
   const a1 = nearestHit(cut1, a);
   const b0 = nearestHit(cut0, b);

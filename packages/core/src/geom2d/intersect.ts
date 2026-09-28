@@ -44,7 +44,10 @@ export interface SegSegHit {
  * près). Segments parallèles ou colinéaires : null (le recouvrement n'est pas un point).
  */
 export function segmentIntersect(a1: Vec2, a2: Vec2, b1: Vec2, b2: Vec2): SegSegHit | null {
-  const hit = intersectLines({ origin: a1, dir: V.sub(a2, a1) }, { origin: b1, dir: V.sub(b2, b1) });
+  const hit = intersectLines(
+    { origin: a1, dir: V.sub(a2, a1) },
+    { origin: b1, dir: V.sub(b2, b1) },
+  );
   if (!hit) return null;
   const la = V.distance(a1, a2);
   const lb = V.distance(b1, b2);
@@ -128,7 +131,11 @@ export function intersectSupports(a: CurveSeg, b: CurveSeg): SupportHit[] {
   } else {
     pts = [];
   }
-  return pts.map((point) => ({ ta: segParamOfPoint(a, point), tb: segParamOfPoint(b, point), point }));
+  return pts.map((point) => ({
+    ta: segParamOfPoint(a, point),
+    tb: segParamOfPoint(b, point),
+    point,
+  }));
 }
 
 // ------------------------------------------------------------------ droite ∩ courbe
@@ -212,4 +219,3 @@ export function projectOnCurve(p: Vec2, curve: Curve2): CurveProjection {
 export function distanceToCurve(p: Vec2, curve: Curve2): Mm {
   return projectOnCurve(p, curve).distance;
 }
-

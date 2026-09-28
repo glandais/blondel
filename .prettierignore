@@ -1,0 +1,7 @@
+node_modules/
+dist/
+pnpm-lock.yaml
+coverage/
+packages/core/src/rules/rules.data.json
+docs/research/
+docs/prompts/

@@ -13,7 +13,13 @@ import {
   type TurnDirection,
 } from "./preset-geometry.js";
 import { getRule } from "../rules/table.js";
-import { createProject, deepMerge, PRESET_HEADROOM_MIN, PRESET_IDS, type PresetId } from "./presets.js";
+import {
+  createProject,
+  deepMerge,
+  PRESET_HEADROOM_MIN,
+  PRESET_IDS,
+  type PresetId,
+} from "./presets.js";
 
 function numericLegs(p: Project): number[] {
   return p.stair.layout.legs.map((l) => {
@@ -70,7 +76,10 @@ function checkLandingCoverage(p: Project): void {
   const check = (leg: typeof first, t: number, z: number) => {
     if (z <= zMax + 1e-6) return;
     for (const k of [0, 0.5, 1]) {
-      const pt = { x: leg.start.x + leg.u.x * t + leg.r.x * w * k, y: leg.start.y + leg.u.y * t + leg.r.y * w * k };
+      const pt = {
+        x: leg.start.x + leg.u.x * t + leg.r.x * w * k,
+        y: leg.start.y + leg.u.y * t + leg.r.y * w * k,
+      };
       expect(rectContains(rect, pt, 1e-3), `t=${t} z=${z}`).toBe(true);
     }
   };
@@ -107,7 +116,12 @@ function footprintRect(p: Project): Rect {
   const pts = frames.legs.flatMap((l) => {
     const r = { x: l.r.x * frames.width, y: l.r.y * frames.width };
     const end = { x: l.start.x + l.u.x * l.length, y: l.start.y + l.u.y * l.length };
-    return [l.start, end, { x: l.start.x + r.x, y: l.start.y + r.y }, { x: end.x + r.x, y: end.y + r.y }];
+    return [
+      l.start,
+      end,
+      { x: l.start.x + r.x, y: l.start.y + r.y },
+      { x: end.x + r.x, y: end.y + r.y },
+    ];
   });
   return boundingRect(pts, 1);
 }
@@ -168,17 +182,25 @@ describe("createProject", () => {
     expect(r.stair.layout.legs).toEqual(l.stair.layout.legs);
     const ol = openingRect(l);
     const or = openingRect(r);
-    expect(or).toEqual({ kind: "rect", x: w - (ol.x + ol.sizeX), y: ol.y, sizeX: ol.sizeX, sizeY: ol.sizeY });
+    expect(or).toEqual({
+      kind: "rect",
+      x: w - (ol.x + ol.sizeX),
+      y: ol.y,
+      sizeX: ol.sizeX,
+      sizeY: ol.sizeY,
+    });
   });
 
   it("l'option de sens et la surcharge libre", () => {
-    expect(createProject("half-turn", { direction: "right" }).stair.layout.turns.map((t) => t.direction)).toEqual([
-      "right",
-      "right",
-    ]);
+    expect(
+      createProject("half-turn", { direction: "right" }).stair.layout.turns.map((t) => t.direction),
+    ).toEqual(["right", "right"]);
     expect(() => createProject("straight", { direction: "left" })).toThrow(RangeError);
     expect(() => createProject("quarter-left", { direction: "right" })).toThrow(RangeError);
-    const p = createProject("straight", { name: "Test", patch: { stair: { treads: { thickness: 50 } } } });
+    const p = createProject("straight", {
+      name: "Test",
+      patch: { stair: { treads: { thickness: 50 } } },
+    });
     expect(p.name).toBe("Test");
     expect(p.stair.treads.thickness).toBe(50);
     expect(p.stair.treads.nosing).toBe(getRule("DEBORD_NEZ_LOGEMENT").recommande);
@@ -188,7 +210,9 @@ describe("createProject", () => {
     expect(() => createProject("straight", { width: 1300 })).toThrow(RangeError);
     expect(() => createProject("half-turn", { floorToFloor: 1200 })).toThrow(/trop faible/);
     for (const floorToFloor of [100, 0, -5, Number.NaN, 2700.5, 12000]) {
-      expect(() => createProject("straight", { floorToFloor }), `H = ${floorToFloor}`).toThrow(RangeError);
+      expect(() => createProject("straight", { floorToFloor }), `H = ${floorToFloor}`).toThrow(
+        RangeError,
+      );
     }
     expect(() => createProject("straight", { width: 850.5 })).toThrow(RangeError);
     expect(() => createProject("straight", { width: 0 })).toThrow(RangeError);
@@ -196,10 +220,13 @@ describe("createProject", () => {
     expect(() => createProject("straight", { upperSlabThickness: -100 })).toThrow(RangeError);
     expect(() => createProject("quarter-landing", { floorToFloor: 700 })).toThrow(RangeError);
     // Même valeur en option et dans `patch` : acceptée ; deux valeurs différentes : refusées.
-    expect(createProject("straight", { floorToFloor: 3000, patch: { site: { floorToFloor: 3000 } } }).site.floorToFloor).toBe(3000);
-    expect(() => createProject("straight", { floorToFloor: 3000, patch: { site: { floorToFloor: 2800 } } })).toThrow(
-      RangeError,
-    );
+    expect(
+      createProject("straight", { floorToFloor: 3000, patch: { site: { floorToFloor: 3000 } } })
+        .site.floorToFloor,
+    ).toBe(3000);
+    expect(() =>
+      createProject("straight", { floorToFloor: 3000, patch: { site: { floorToFloor: 2800 } } }),
+    ).toThrow(RangeError);
   });
 
   it("palier : la trémie couvre aussi le palier et la première volée quand l'échappée l'exige", () => {
@@ -216,9 +243,16 @@ describe("createProject", () => {
 
   it("un patch sur H, E, la dalle ou le réglage des hauteurs garde volées et trémie cohérentes", () => {
     for (const preset of PRESET_IDS) {
-      const viaOption = createProject(preset, { floorToFloor: 3000, width: 850, upperSlabThickness: 250 });
+      const viaOption = createProject(preset, {
+        floorToFloor: 3000,
+        width: 850,
+        upperSlabThickness: 250,
+      });
       const viaPatch = createProject(preset, {
-        patch: { site: { floorToFloor: 3000, upperSlabThickness: 250 }, stair: { layout: { width: 850 } } },
+        patch: {
+          site: { floorToFloor: 3000, upperSlabThickness: 250 },
+          stair: { layout: { width: 850 } },
+        },
       });
       expect(viaPatch).toEqual(viaOption);
     }
@@ -230,7 +264,9 @@ describe("createProject", () => {
     const q = createProject("straight", { patch: { stair: { stepping: { targetGoing: 250 } } } });
     expect(numericLegs(q)).toEqual([14 * 250]);
     // Volées explicites : elles remplacent le calcul.
-    const r = createProject("straight", { patch: { stair: { layout: { legs: [{ length: 4000 }] } } } });
+    const r = createProject("straight", {
+      patch: { stair: { layout: { legs: [{ length: 4000 }] } } },
+    });
     expect(numericLegs(r)).toEqual([4000]);
   });
 

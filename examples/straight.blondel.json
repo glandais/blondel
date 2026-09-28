@@ -1,9 +1,6 @@
 {
   "compliance": {
-    "contexts": [
-      "bois_dtu",
-      "logement_interieur"
-    ],
+    "contexts": ["bois_dtu", "logement_interieur"],
     "overrides": [],
     "profile": "strict"
   },

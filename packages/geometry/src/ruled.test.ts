@@ -8,9 +8,18 @@ import { minNormalAgreement } from "./testing.js";
 
 describe("meshRuled", () => {
   it("limon droit vertical : pavé L × h × e", () => {
-    const a: Vec3[] = [{ x: 0, y: 0, z: 0 }, { x: 3000, y: 0, z: 2000 }];
-    const b: Vec3[] = [{ x: 0, y: 0, z: 300 }, { x: 3000, y: 0, z: 2300 }];
-    const n: Vec2[] = [{ x: 0, y: 1 }, { x: 0, y: 1 }];
+    const a: Vec3[] = [
+      { x: 0, y: 0, z: 0 },
+      { x: 3000, y: 0, z: 2000 },
+    ];
+    const b: Vec3[] = [
+      { x: 0, y: 0, z: 300 },
+      { x: 3000, y: 0, z: 2300 },
+    ];
+    const n: Vec2[] = [
+      { x: 0, y: 1 },
+      { x: 0, y: 1 },
+    ];
     const m = meshRuled(a, b, 40, n);
     expect(checkManifold(m).ok).toBe(true);
     // Parallélogramme de base 3000 (horizontal) et hauteur 300 (verticale), épaisseur 40.
@@ -35,7 +44,7 @@ describe("meshRuled", () => {
           const b: Vec3[] = [];
           const normals: Vec2[] = [];
           for (let i = 0; i < n; i++) {
-            const t = (reverse ? -1 : 1) * (sweep * i) / (n - 1);
+            const t = ((reverse ? -1 : 1) * (sweep * i)) / (n - 1);
             const z = (climb * i) / (n - 1);
             a.push({ x: R * Math.cos(t), y: R * Math.sin(t), z });
             b.push({ x: R * Math.cos(t), y: R * Math.sin(t), z: z + h });
@@ -49,11 +58,14 @@ describe("meshRuled", () => {
           // triangulés selon des diagonales différentes ; l'écart par segment est borné par
           // 2 tétraèdres de volume |dz · sin(dθ)| · e² / 6.
           const dz = Math.abs(climb) / (n - 1);
-          const twist = (n - 1) * dz * Math.sin(sweep / (n - 1)) * e * e / 3;
-          const r1 = R, r2 = outward ? R + e : R - e;
+          const twist = ((n - 1) * dz * Math.sin(sweep / (n - 1)) * e * e) / 3;
+          const r1 = R,
+            r2 = outward ? R + e : R - e;
           const segArea = 0.5 * Math.abs(r2 * r2 - r1 * r1) * Math.sin(sweep / (n - 1));
           expect(signedVolume(m)).toBeGreaterThan(0);
-          expect(Math.abs(signedVolume(m) - segArea * (n - 1) * h)).toBeLessThan(1e-5 * segArea * (n - 1) * h + twist + 1);
+          expect(Math.abs(signedVolume(m) - segArea * (n - 1) * h)).toBeLessThan(
+            1e-5 * segArea * (n - 1) * h + twist + 1,
+          );
           expect(minNormalAgreement(m)).toBeGreaterThan(0.5);
         },
       ),
@@ -63,8 +75,18 @@ describe("meshRuled", () => {
   it("entrées incohérentes : GeometryError", () => {
     const p = { x: 0, y: 0, z: 0 };
     expect(() => meshRuled([p], [p], 10, [{ x: 1, y: 0 }])).toThrow(GeometryError);
-    expect(() => meshRuled([p, p], [p], 10, [{ x: 1, y: 0 }, { x: 1, y: 0 }])).toThrow(GeometryError);
-    expect(() => meshRuled([p, { x: 1, y: 0, z: 0 }], [p, p], 10, [{ x: 0, y: 0 }, { x: 1, y: 0 }])).toThrow(GeometryError);
+    expect(() =>
+      meshRuled([p, p], [p], 10, [
+        { x: 1, y: 0 },
+        { x: 1, y: 0 },
+      ]),
+    ).toThrow(GeometryError);
+    expect(() =>
+      meshRuled([p, { x: 1, y: 0, z: 0 }], [p, p], 10, [
+        { x: 0, y: 0 },
+        { x: 1, y: 0 },
+      ]),
+    ).toThrow(GeometryError);
   });
 });
 
@@ -92,8 +114,20 @@ describe("meshRuled — dégénérescences (revue)", () => {
   });
 
   it("rangées répétées fusionnées : même maillage que sans répétition", () => {
-    const { a, b } = vertical([{ x: 0, y: 0 }, { x: 1000, y: 0 }, { x: 2000, y: 500 }], 0, 250);
-    const n: Vec2[] = [{ x: 0, y: 1 }, { x: -0.2, y: 1 }, { x: -0.45, y: 0.9 }];
+    const { a, b } = vertical(
+      [
+        { x: 0, y: 0 },
+        { x: 1000, y: 0 },
+        { x: 2000, y: 500 },
+      ],
+      0,
+      250,
+    );
+    const n: Vec2[] = [
+      { x: 0, y: 1 },
+      { x: -0.2, y: 1 },
+      { x: -0.45, y: 0.9 },
+    ];
     const ref = meshRuled(a, b, 40, n);
     const dup = meshRuled([a[0]!, ...a], [b[0]!, ...b], 40, [n[0]!, ...n]);
     expect(checkManifold(dup).ok).toBe(true);
@@ -102,26 +136,74 @@ describe("meshRuled — dégénérescences (revue)", () => {
   });
 
   it("section plate (a = b, ou b − a selon la normale) : GeometryError", () => {
-    const p = { x: 0, y: 0, z: 0 }, q = { x: 1000, y: 0, z: 0 };
-    const n: Vec2[] = [{ x: 0, y: 1 }, { x: 0, y: 1 }];
+    const p = { x: 0, y: 0, z: 0 },
+      q = { x: 1000, y: 0, z: 0 };
+    const n: Vec2[] = [
+      { x: 0, y: 1 },
+      { x: 0, y: 1 },
+    ];
     expect(() => meshRuled([p, q], [p, { x: 1000, y: 0, z: 200 }], 40, n)).toThrow(GeometryError);
     // b − a horizontal et parallèle à la normale : parallélogramme d'aire nulle.
-    expect(() => meshRuled([p, q], [{ x: 0, y: 100, z: 0 }, { x: 1000, y: 100, z: 0 }], 40, n)).toThrow(GeometryError);
+    expect(() =>
+      meshRuled(
+        [p, q],
+        [
+          { x: 0, y: 100, z: 0 },
+          { x: 1000, y: 100, z: 0 },
+        ],
+        40,
+        n,
+      ),
+    ).toThrow(GeometryError);
   });
 
   it("normales qui changent de côté, ou chemin qui rebrousse (solide replié) : GeometryError", () => {
-    const { a, b } = vertical([{ x: 0, y: 0 }, { x: 1000, y: 0 }, { x: 2000, y: 0 }], 0, 250);
+    const { a, b } = vertical(
+      [
+        { x: 0, y: 0 },
+        { x: 1000, y: 0 },
+        { x: 2000, y: 0 },
+      ],
+      0,
+      250,
+    );
     const up: Vec2 = { x: 0, y: 1 };
     expect(() => meshRuled(a, b, 40, [up, up, up])).not.toThrow();
     // Épaississement basculé de l'autre côté au dernier point : faces qui se traversent.
     expect(() => meshRuled(a, b, 40, [up, up, { x: 0, y: -1 }])).toThrow(GeometryError);
     // Chemin qui revient en arrière : sections successives d'orientations opposées.
-    const back = vertical([{ x: 0, y: 0 }, { x: 1000, y: 0 }, { x: 500, y: 0 }], 0, 250);
+    const back = vertical(
+      [
+        { x: 0, y: 0 },
+        { x: 1000, y: 0 },
+        { x: 500, y: 0 },
+      ],
+      0,
+      250,
+    );
     expect(() => meshRuled(back.a, back.b, 40, [up, up, up])).toThrow(GeometryError);
   });
 
   it("angle de lissage invalide : GeometryError", () => {
-    const { a, b } = vertical([{ x: 0, y: 0 }, { x: 1000, y: 0 }], 0, 250);
-    expect(() => meshRuled(a, b, 40, [{ x: 0, y: 1 }, { x: 0, y: 1 }], { creaseAngleDeg: 181 })).toThrow(GeometryError);
+    const { a, b } = vertical(
+      [
+        { x: 0, y: 0 },
+        { x: 1000, y: 0 },
+      ],
+      0,
+      250,
+    );
+    expect(() =>
+      meshRuled(
+        a,
+        b,
+        40,
+        [
+          { x: 0, y: 1 },
+          { x: 0, y: 1 },
+        ],
+        { creaseAngleDeg: 181 },
+      ),
+    ).toThrow(GeometryError);
   });
 });

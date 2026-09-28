@@ -13,6 +13,12 @@ export type { PreparedShape } from "./polygon.js";
 export { meshExtrusion } from "./extrude.js";
 export { meshRuled } from "./ruled.js";
 export type { SweepFrame } from "./sweep.js";
-export { meshSweep, parallelTransportFrames, polylineLength, sweepFrames, uprightFrames } from "./sweep.js";
+export {
+  meshSweep,
+  parallelTransportFrames,
+  polylineLength,
+  sweepFrames,
+  uprightFrames,
+} from "./sweep.js";
 export type { PartMesh } from "./solid.js";
 export { meshPart, meshParts, meshSolid } from "./solid.js";

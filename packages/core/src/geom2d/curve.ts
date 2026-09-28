@@ -81,7 +81,8 @@ export function fromPolyline(points: readonly Vec2[], options: PolylineOptions =
     const last = pts[pts.length - 1];
     if (last !== undefined && V.equals(last, p)) return;
     pts.push(p);
-    const r = typeof rOpt === "number" ? rOpt : i >= 1 && i <= points.length - 2 ? (rOpt[i - 1] ?? 0) : 0;
+    const r =
+      typeof rOpt === "number" ? rOpt : i >= 1 && i <= points.length - 2 ? (rOpt[i - 1] ?? 0) : 0;
     if (!(r >= 0)) throw new Error(`fromPolyline : rayon invalide (${r})`);
     radii.push(r);
   });
@@ -351,7 +352,8 @@ export function flattenCurve(curve: Curve2, chordTol: Mm = 0.1): Vec2[] {
   for (const seg of curve.segments) {
     push(segStart(seg));
     if (seg.kind === "arc" && seg.radius > 0 && seg.sweep !== 0) {
-      const maxStep = seg.radius <= chordTol ? Math.PI / 2 : 2 * Math.acos(1 - chordTol / seg.radius);
+      const maxStep =
+        seg.radius <= chordTol ? Math.PI / 2 : 2 * Math.acos(1 - chordTol / seg.radius);
       const n = Math.max(1, Math.ceil(Math.abs(seg.sweep) / Math.min(maxStep, Math.PI / 2)));
       for (let k = 1; k < n; k++) push(segPointAt(seg, k / n));
     }

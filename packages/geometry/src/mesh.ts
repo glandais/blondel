@@ -19,7 +19,11 @@ export interface Mesh {
 
 /** Maillage vide (aucun sommet, aucun triangle). */
 export function emptyMesh(): Mesh {
-  return { positions: new Float32Array(0), normals: new Float32Array(0), indices: new Uint32Array(0) };
+  return {
+    positions: new Float32Array(0),
+    normals: new Float32Array(0),
+    indices: new Uint32Array(0),
+  };
 }
 
 /** Nombre de sommets et de triangles d'un maillage. */

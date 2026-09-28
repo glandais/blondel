@@ -62,8 +62,14 @@ const frenchErrorMap = z.locales.fr().localeError;
 
 /** Carte d'erreurs zod : locale française, précisée pour les unions discriminées. */
 export const projectErrorMap: z.core.$ZodErrorMap = (issue) => {
-  if (issue.code === "invalid_union" && "discriminator" in issue && typeof issue.discriminator === "string") {
-    const options = Array.isArray(issue.options) ? issue.options.map((o) => JSON.stringify(o)).join(", ") : "";
+  if (
+    issue.code === "invalid_union" &&
+    "discriminator" in issue &&
+    typeof issue.discriminator === "string"
+  ) {
+    const options = Array.isArray(issue.options)
+      ? issue.options.map((o) => JSON.stringify(o)).join(", ")
+      : "";
     return `valeur de « ${issue.discriminator} » inconnue (attendu : ${options})`;
   }
   return frenchErrorMap(issue);

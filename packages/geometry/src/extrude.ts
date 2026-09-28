@@ -13,14 +13,21 @@ import { prepareShape, sharpCorners } from "./polygon.js";
  * Faces avant/arrière triangulées (earcut), faces latérales à normales à plat par défaut
  * (arêtes vives). Profondeur nulle : maillage vide.
  */
-export function meshExtrusion(frame: Frame3, profile: Shape2, depth: Mm, options: MeshOptions = {}): Mesh {
+export function meshExtrusion(
+  frame: Frame3,
+  profile: Shape2,
+  depth: Mm,
+  options: MeshOptions = {},
+): Mesh {
   if (!Number.isFinite(depth)) throw new GeometryError("profondeur d'extrusion non finie");
   if (Math.abs(depth) <= 1e-9) return emptyMesh();
   const crease = creaseCos(options, 0);
   const { origin: o, xAxis: X, yAxis: Y, zAxis: Z } = frame;
   checkFrame(frame);
   const shape = prepareShape(profile);
-  const dx = Z.x * depth, dy = Z.y * depth, dz = Z.z * depth;
+  const dx = Z.x * depth,
+    dy = Z.y * depth,
+    dz = Z.z * depth;
   const b = new MeshBuilder();
 
   // Faces latérales : une grille à 2 rangées par anneau.
@@ -28,8 +35,11 @@ export function meshExtrusion(frame: Frame3, profile: Shape2, depth: Mm, options
     const n = r.length / 2;
     const pts = new Float64Array(6 * n);
     for (let j = 0; j < n; j++) {
-      const u = r[2 * j]!, v = r[2 * j + 1]!;
-      const x = o.x + u * X.x + v * Y.x, y = o.y + u * X.y + v * Y.y, z = o.z + u * X.z + v * Y.z;
+      const u = r[2 * j]!,
+        v = r[2 * j + 1]!;
+      const x = o.x + u * X.x + v * Y.x,
+        y = o.y + u * X.y + v * Y.y,
+        z = o.z + u * X.z + v * Y.z;
       pts[3 * j] = x;
       pts[3 * j + 1] = y;
       pts[3 * j + 2] = z;
@@ -46,8 +56,11 @@ export function meshExtrusion(frame: Frame3, profile: Shape2, depth: Mm, options
   const bottom = new Float64Array(3 * m);
   const top = new Float64Array(3 * m);
   for (let k = 0; k < m; k++) {
-    const u = c[2 * k]!, v = c[2 * k + 1]!;
-    const x = o.x + u * X.x + v * Y.x, y = o.y + u * X.y + v * Y.y, z = o.z + u * X.z + v * Y.z;
+    const u = c[2 * k]!,
+      v = c[2 * k + 1]!;
+    const x = o.x + u * X.x + v * Y.x,
+      y = o.y + u * X.y + v * Y.y,
+      z = o.z + u * X.z + v * Y.z;
     bottom[3 * k] = x;
     bottom[3 * k + 1] = y;
     bottom[3 * k + 2] = z;
@@ -56,7 +69,9 @@ export function meshExtrusion(frame: Frame3, profile: Shape2, depth: Mm, options
     top[3 * k + 2] = z + dz;
   }
   // Normale géométrique des triangles CCW du plan XY : X × Y.
-  let nx = X.y * Y.z - X.z * Y.y, ny = X.z * Y.x - X.x * Y.z, nz = X.x * Y.y - X.y * Y.x;
+  let nx = X.y * Y.z - X.z * Y.y,
+    ny = X.z * Y.x - X.x * Y.z,
+    nz = X.x * Y.y - X.y * Y.x;
   const l = Math.hypot(nx, ny, nz);
   nx /= l;
   ny /= l;
@@ -83,10 +98,15 @@ function checkFrame(frame: Frame3): void {
       throw new GeometryError("repère d'extrusion : coordonnée non finie");
     }
   }
-  const nx = X.y * Y.z - X.z * Y.y, ny = X.z * Y.x - X.x * Y.z, nz = X.x * Y.y - X.y * Y.x;
-  const lx = Math.hypot(X.x, X.y, X.z), ly = Math.hypot(Y.x, Y.y, Y.z), lz = Math.hypot(Z.x, Z.y, Z.z);
+  const nx = X.y * Y.z - X.z * Y.y,
+    ny = X.z * Y.x - X.x * Y.z,
+    nz = X.x * Y.y - X.y * Y.x;
+  const lx = Math.hypot(X.x, X.y, X.z),
+    ly = Math.hypot(Y.x, Y.y, Y.z),
+    lz = Math.hypot(Z.x, Z.y, Z.z);
   const ln = Math.hypot(nx, ny, nz);
-  if (!(ln > 1e-9 * lx * ly)) throw new GeometryError("repère d'extrusion dégénéré : axes X et Y colinéaires ou nuls");
+  if (!(ln > 1e-9 * lx * ly))
+    throw new GeometryError("repère d'extrusion dégénéré : axes X et Y colinéaires ou nuls");
   if (!(Math.abs(nx * Z.x + ny * Z.y + nz * Z.z) > 1e-9 * ln * lz)) {
     throw new GeometryError("repère d'extrusion dégénéré : axe Z nul ou dans le plan du profil");
   }

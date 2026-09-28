@@ -5,7 +5,8 @@ import { meshExtrusion } from "./extrude.js";
 import { flipMesh, mergeMeshes, type Mesh } from "./mesh.js";
 import { identityFrame, rect } from "./testing.js";
 
-const box = (x: number, w: number): Mesh => meshExtrusion(identityFrame, { outer: rect(x, 0, w, w), holes: [] }, w);
+const box = (x: number, w: number): Mesh =>
+  meshExtrusion(identityFrame, { outer: rect(x, 0, w, w), holes: [] }, w);
 
 describe("analyses", () => {
   it("bbox, aire, volume d'un cube", () => {
@@ -13,7 +14,13 @@ describe("analyses", () => {
     expect(bbox(m)).toEqual({ min: { x: -5, y: -5, z: 0 }, max: { x: 5, y: 5, z: 10 } });
     expect(surfaceArea(m)).toBeCloseTo(600, 6);
     expect(signedVolume(m)).toBeCloseTo(1000, 6);
-    expect(bbox({ positions: new Float32Array(0), normals: new Float32Array(0), indices: new Uint32Array(0) })).toBeNull();
+    expect(
+      bbox({
+        positions: new Float32Array(0),
+        normals: new Float32Array(0),
+        indices: new Uint32Array(0),
+      }),
+    ).toBeNull();
   });
 
   it("flipMesh : volume opposé, orientation incohérente détectée si un seul triangle est retourné", () => {
@@ -44,15 +51,18 @@ describe("analyses", () => {
 
   it("propriété : fusion = somme des volumes, union des boîtes, variété conservée (solides disjoints)", () => {
     fc.assert(
-      fc.property(fc.array(fc.double({ min: 1, max: 50, noNaN: true }), { minLength: 1, maxLength: 8 }), (sizes) => {
-        const meshes = sizes.map((w, k) => box(100 * k, w));
-        const merged = mergeMeshes(meshes);
-        const vol = sizes.reduce((s, w) => s + w ** 3, 0);
-        expect(Math.abs(signedVolume(merged) - vol)).toBeLessThan(1e-4 * vol);
-        expect(bbox(merged)).toEqual(unionBbox(meshes.map(bbox)));
-        expect(checkManifold(merged).ok).toBe(true);
-        expect(merged.indices.length).toBe(meshes.reduce((s, m) => s + m.indices.length, 0));
-      }),
+      fc.property(
+        fc.array(fc.double({ min: 1, max: 50, noNaN: true }), { minLength: 1, maxLength: 8 }),
+        (sizes) => {
+          const meshes = sizes.map((w, k) => box(100 * k, w));
+          const merged = mergeMeshes(meshes);
+          const vol = sizes.reduce((s, w) => s + w ** 3, 0);
+          expect(Math.abs(signedVolume(merged) - vol)).toBeLessThan(1e-4 * vol);
+          expect(bbox(merged)).toEqual(unionBbox(meshes.map(bbox)));
+          expect(checkManifold(merged).ok).toBe(true);
+          expect(merged.indices.length).toBe(meshes.reduce((s, m) => s + m.indices.length, 0));
+        },
+      ),
     );
   });
 });

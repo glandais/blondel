@@ -30,7 +30,9 @@ const arbProject = fc
 
 describe("stableStringify", () => {
   it("trie les clés récursivement et omet les undefined", () => {
-    expect(stableStringify({ b: 1, a: { d: [{ z: 1, y: 2 }], c: undefined } }, 0)).toBe('{"a":{"d":[{"y":2,"z":1}]},"b":1}');
+    expect(stableStringify({ b: 1, a: { d: [{ z: 1, y: 2 }], c: undefined } }, 0)).toBe(
+      '{"a":{"d":[{"y":2,"z":1}]},"b":1}',
+    );
   });
 });
 
@@ -55,7 +57,7 @@ describe("serializeProject", () => {
     fc.assert(
       fc.property(arbProject, fc.integer(), (p, seed) => {
         let s = seed >>> 0;
-        const rnd = () => ((s = (s * 1664525 + 1013904223) >>> 0) / 2 ** 32);
+        const rnd = () => (s = (s * 1664525 + 1013904223) >>> 0) / 2 ** 32;
         const shuffled = parseProject(shuffleKeys(p, rnd));
         expect(serializeProject(shuffled)).toBe(serializeProject(p));
       }),

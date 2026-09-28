@@ -5,12 +5,23 @@ import fc from "fast-check";
 import type { Frame3, Polygon2, Shape2, Vec2 } from "@blondel/core";
 
 /** Polygone étoilé simple (CCW) autour de l'origine, rayons dans [rMin, rMax]. */
-export function starPolygon(rMin: number, rMax: number, minPts = 3, maxPts = 24): fc.Arbitrary<Polygon2> {
+export function starPolygon(
+  rMin: number,
+  rMax: number,
+  minPts = 3,
+  maxPts = 24,
+): fc.Arbitrary<Polygon2> {
   return fc
-    .array(fc.tuple(fc.double({ min: 0, max: 1, noNaN: true }), fc.double({ min: rMin, max: rMax, noNaN: true })), {
-      minLength: minPts,
-      maxLength: maxPts,
-    })
+    .array(
+      fc.tuple(
+        fc.double({ min: 0, max: 1, noNaN: true }),
+        fc.double({ min: rMin, max: rMax, noNaN: true }),
+      ),
+      {
+        minLength: minPts,
+        maxLength: maxPts,
+      },
+    )
     .map((raw) => {
       const n = raw.length;
       // Angles strictement croissants : un secteur par point, position aléatoire dans le secteur.
@@ -38,9 +49,16 @@ export function rect(cx: number, cy: number, w: number, h: number): Polygon2 {
 export const shapeWithHoles: fc.Arbitrary<Shape2> = fc
   .tuple(
     starPolygon(100, 400, 8), // ≥ 8 points : cercle inscrit de rayon ≥ 76 > 64 (trous inclus)
-    fc.array(fc.tuple(fc.double({ min: 5, max: 40, noNaN: true }), fc.double({ min: 5, max: 40, noNaN: true }), fc.boolean()), {
-      maxLength: 4,
-    }),
+    fc.array(
+      fc.tuple(
+        fc.double({ min: 5, max: 40, noNaN: true }),
+        fc.double({ min: 5, max: 40, noNaN: true }),
+        fc.boolean(),
+      ),
+      {
+        maxLength: 4,
+      },
+    ),
   )
   .map(([outer, holes]) => ({
     outer,
@@ -59,7 +77,11 @@ export const frame3: fc.Arbitrary<Frame3> = fc
     fc.double({ min: -1, max: 1, noNaN: true }),
     fc.double({ min: -1, max: 1, noNaN: true }),
     fc.double({ min: -1, max: 1, noNaN: true }),
-    fc.tuple(fc.double({ min: -5000, max: 5000, noNaN: true }), fc.double({ min: -5000, max: 5000, noNaN: true }), fc.double({ min: -5000, max: 5000, noNaN: true })),
+    fc.tuple(
+      fc.double({ min: -5000, max: 5000, noNaN: true }),
+      fc.double({ min: -5000, max: 5000, noNaN: true }),
+      fc.double({ min: -5000, max: 5000, noNaN: true }),
+    ),
     fc.boolean(),
   )
   .filter(([a, b, c, d]) => Math.hypot(a, b, c, d) > 0.1)
@@ -70,7 +92,12 @@ export const frame3: fc.Arbitrary<Frame3> = fc
     const Y = { x: 2 * (x * y - w * z), y: 1 - 2 * (x * x + z * z), z: 2 * (y * z + w * x) };
     const Z = { x: 2 * (x * z + w * y), y: 2 * (y * z - w * x), z: 1 - 2 * (x * x + y * y) };
     const s = indirect ? -1 : 1;
-    return { origin: { x: ox, y: oy, z: oz }, xAxis: X, yAxis: Y, zAxis: { x: s * Z.x, y: s * Z.y, z: s * Z.z } };
+    return {
+      origin: { x: ox, y: oy, z: oz },
+      xAxis: X,
+      yAxis: Y,
+      zAxis: { x: s * Z.x, y: s * Z.y, z: s * Z.z },
+    };
   });
 
 export const identityFrame: Frame3 = {
@@ -84,18 +111,33 @@ export const identityFrame: Frame3 = {
 export const rel = (a: number, b: number): number => Math.abs(a - b) / Math.max(1e-12, Math.abs(b));
 
 /** Plus petit produit scalaire entre la normale géométrique d'un triangle et celles de ses sommets. */
-export function minNormalAgreement(mesh: { positions: Float32Array; normals: Float32Array; indices: Uint32Array }): number {
-  const p = mesh.positions, n = mesh.normals, idx = mesh.indices;
+export function minNormalAgreement(mesh: {
+  positions: Float32Array;
+  normals: Float32Array;
+  indices: Uint32Array;
+}): number {
+  const p = mesh.positions,
+    n = mesh.normals,
+    idx = mesh.indices;
   let min = 1;
   for (let t = 0; t < idx.length; t += 3) {
     const [a, b, c] = [idx[t]!, idx[t + 1]!, idx[t + 2]!];
-    const ux = p[3 * b]! - p[3 * a]!, uy = p[3 * b + 1]! - p[3 * a + 1]!, uz = p[3 * b + 2]! - p[3 * a + 2]!;
-    const vx = p[3 * c]! - p[3 * a]!, vy = p[3 * c + 1]! - p[3 * a + 1]!, vz = p[3 * c + 2]! - p[3 * a + 2]!;
-    let fx = uy * vz - uz * vy, fy = uz * vx - ux * vz, fz = ux * vy - uy * vx;
+    const ux = p[3 * b]! - p[3 * a]!,
+      uy = p[3 * b + 1]! - p[3 * a + 1]!,
+      uz = p[3 * b + 2]! - p[3 * a + 2]!;
+    const vx = p[3 * c]! - p[3 * a]!,
+      vy = p[3 * c + 1]! - p[3 * a + 1]!,
+      vz = p[3 * c + 2]! - p[3 * a + 2]!;
+    let fx = uy * vz - uz * vy,
+      fy = uz * vx - ux * vz,
+      fz = ux * vy - uy * vx;
     const l = Math.hypot(fx, fy, fz);
     if (l < 1e-6) continue; // triangle (quasi) dégénéré : normale non significative
-    fx /= l; fy /= l; fz /= l;
-    for (const v of [a, b, c]) min = Math.min(min, fx * n[3 * v]! + fy * n[3 * v + 1]! + fz * n[3 * v + 2]!);
+    fx /= l;
+    fy /= l;
+    fz /= l;
+    for (const v of [a, b, c])
+      min = Math.min(min, fx * n[3 * v]! + fy * n[3 * v + 1]! + fz * n[3 * v + 2]!);
   }
   return min;
 }

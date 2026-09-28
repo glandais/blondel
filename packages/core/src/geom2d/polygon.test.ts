@@ -19,18 +19,30 @@ import {
 import * as V from "./vec.js";
 
 const square: Polygon2 = [V.vec(0, 0), V.vec(10, 0), V.vec(10, 10), V.vec(0, 10)];
-const lShape: Polygon2 = [V.vec(0, 0), V.vec(20, 0), V.vec(20, 10), V.vec(10, 10), V.vec(10, 20), V.vec(0, 20)];
+const lShape: Polygon2 = [
+  V.vec(0, 0),
+  V.vec(20, 0),
+  V.vec(20, 10),
+  V.vec(10, 10),
+  V.vec(10, 20),
+  V.vec(0, 20),
+];
 
 /** Polygone régulier à n côtés, d'apothème a, centré en c, tourné de rot. */
 function regular(n: number, a: number, c: Vec2, rot: number): Vec2[] {
   const R = a / Math.cos(Math.PI / n);
-  return Array.from({ length: n }, (_, k) => V.add(c, V.scale(V.fromAngle(rot + (2 * Math.PI * k) / n), R)));
+  return Array.from({ length: n }, (_, k) =>
+    V.add(c, V.scale(V.fromAngle(rot + (2 * Math.PI * k) / n), R)),
+  );
 }
 
 const regularArb = fc.record({
   n: fc.integer({ min: 3, max: 12 }),
   a: fc.double({ min: 50, max: 2000, noNaN: true }),
-  c: fc.record({ x: fc.double({ min: -1e4, max: 1e4, noNaN: true }), y: fc.double({ min: -1e4, max: 1e4, noNaN: true }) }),
+  c: fc.record({
+    x: fc.double({ min: -1e4, max: 1e4, noNaN: true }),
+    y: fc.double({ min: -1e4, max: 1e4, noNaN: true }),
+  }),
   rot: fc.double({ min: -4, max: 4, noNaN: true }),
 });
 
@@ -44,7 +56,9 @@ describe("aire, orientation, périmètre", () => {
     expect(ensureCCW([...square].reverse())).toEqual([...square].reverse().reverse());
     expect(signedArea(lShape)).toBe(300);
     expect(perimeter(square)).toBe(40);
-    expect(shapeArea({ outer: square, holes: [[V.vec(2, 2), V.vec(2, 4), V.vec(4, 4), V.vec(4, 2)]] })).toBe(96);
+    expect(
+      shapeArea({ outer: square, holes: [[V.vec(2, 2), V.vec(2, 4), V.vec(4, 4), V.vec(4, 2)]] }),
+    ).toBe(96);
     expect(isConvex(square)).toBe(true);
     expect(isConvex(lShape)).toBe(false);
   });
@@ -106,12 +120,16 @@ describe("offsetConvexPolygon", () => {
 
   it("polygone régulier : décalé = polygone régulier d'apothème a + d", () => {
     fc.assert(
-      fc.property(regularArb, fc.double({ min: -0.9, max: 3, noNaN: true }), ({ n, a, c, rot }, k) => {
-        const d = k * a;
-        const off = offsetConvexPolygon(regular(n, a, c, rot), d);
-        const expected = n * (a + d) * (a + d) * Math.tan(Math.PI / n);
-        expect(Math.abs(signedArea(off) - expected) / expected).toBeLessThan(1e-8);
-      }),
+      fc.property(
+        regularArb,
+        fc.double({ min: -0.9, max: 3, noNaN: true }),
+        ({ n, a, c, rot }, k) => {
+          const d = k * a;
+          const off = offsetConvexPolygon(regular(n, a, c, rot), d);
+          const expected = n * (a + d) * (a + d) * Math.tan(Math.PI / n);
+          expect(Math.abs(signedArea(off) - expected) / expected).toBeLessThan(1e-8);
+        },
+      ),
     );
   });
 });
@@ -120,12 +138,24 @@ describe("bandes entre deux courbes", () => {
   it("bande droite coupée par deux perpendiculaires : rectangle", () => {
     const a = fromPolyline([V.vec(0, 0), V.vec(3000, 0)]);
     const b = fromPolyline([V.vec(0, 900), V.vec(3000, 900)]);
-    const cut = cutBand(a, b, { origin: V.vec(1000, 450), dir: V.vec(0, 1) }, { origin: V.vec(1250, 450), dir: V.vec(0, 1) });
+    const cut = cutBand(
+      a,
+      b,
+      { origin: V.vec(1000, 450), dir: V.vec(0, 1) },
+      { origin: V.vec(1250, 450), dir: V.vec(0, 1) },
+    );
     expect(cut).not.toBeNull();
     expect(signedArea(cut!.polygon)).toBeCloseTo(250 * 900, 6);
     expect(cut!.sA).toEqual([1000, 1250]);
     expect(curveLength(cut!.curveB)).toBeCloseTo(250, 9);
-    expect(cutBand(a, b, { origin: V.vec(5000, 0), dir: V.vec(0, 1) }, { origin: V.vec(0, 0), dir: V.vec(0, 1) })).toBeNull();
+    expect(
+      cutBand(
+        a,
+        b,
+        { origin: V.vec(5000, 0), dir: V.vec(0, 1) },
+        { origin: V.vec(0, 0), dir: V.vec(0, 1) },
+      ),
+    ).toBeNull();
   });
 
   it("quart tournant : aire de la bande jour ↔ mur = 2 L E + π E²/4", () => {
@@ -163,7 +193,16 @@ describe("isConvex — relecture adverse", () => {
   });
 
   it("sommets alignés et points doublés tolérés", () => {
-    expect(isConvex([V.vec(0, 0), V.vec(5, 0), V.vec(10, 0), V.vec(10, 10), V.vec(10, 10), V.vec(0, 10)])).toBe(true);
+    expect(
+      isConvex([
+        V.vec(0, 0),
+        V.vec(5, 0),
+        V.vec(10, 0),
+        V.vec(10, 10),
+        V.vec(10, 10),
+        V.vec(0, 10),
+      ]),
+    ).toBe(true);
   });
 
   it("polygone régulier CW ou CCW : convexe", () => {

@@ -9,13 +9,16 @@
     "typecheck": "tsc -p tsconfig.json && tsc -p apps/web/tsconfig.json",
     "dev": "pnpm --filter @blondel/web dev",
     "build": "pnpm --filter @blondel/web build",
-    "rules:build": "node scripts/build-rules.mjs"
+    "rules:build": "node scripts/build-rules.mjs",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
   },
   "devDependencies": {
+    "@types/node": "^24.0.0",
+    "fast-check": "^4.10.2",
+    "prettier": "^3.9.9",
     "typescript": "^5.9.0",
     "vitest": "^5.0.2",
-    "fast-check": "^4.10.2",
-    "yaml": "^2.9.1",
-    "@types/node": "^24.0.0"
+    "yaml": "^2.9.1"
   }
 }

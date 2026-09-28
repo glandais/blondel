@@ -11,7 +11,9 @@ import { STAIR_EVALUATORS } from "./stair.js";
 export type EvaluatorRegistry = ReadonlyMap<string, RuleEvaluator>;
 
 /** Construit un registre ; lève une erreur si un identifiant est fourni deux fois. */
-export function createRegistry(...groups: readonly Readonly<Record<string, RuleEvaluator>>[]): EvaluatorRegistry {
+export function createRegistry(
+  ...groups: readonly Readonly<Record<string, RuleEvaluator>>[]
+): EvaluatorRegistry {
   const m = new Map<string, RuleEvaluator>();
   for (const g of groups) {
     for (const [id, ev] of Object.entries(g)) {

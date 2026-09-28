@@ -125,11 +125,41 @@ interface PresetShape {
 
 const SHAPES: Readonly<Record<PresetId, PresetShape>> = {
   straight: { width: 900, turns: [], mode: "winders", firstStraightGoings: 0, middleWell: 0 },
-  "quarter-left": { width: 900, turns: ["left"], mode: "winders", firstStraightGoings: 2, middleWell: 0 },
-  "quarter-right": { width: 900, turns: ["right"], mode: "winders", firstStraightGoings: 2, middleWell: 0 },
-  "two-quarters-u": { width: 850, turns: ["left", "left"], mode: "winders", firstStraightGoings: 1, middleWell: 400 },
-  "half-turn": { width: 800, turns: ["left", "left"], mode: "winders", firstStraightGoings: 1, middleWell: 200 },
-  "quarter-landing": { width: 900, turns: ["left"], mode: "landing", firstStraightGoings: 2, middleWell: 0 },
+  "quarter-left": {
+    width: 900,
+    turns: ["left"],
+    mode: "winders",
+    firstStraightGoings: 2,
+    middleWell: 0,
+  },
+  "quarter-right": {
+    width: 900,
+    turns: ["right"],
+    mode: "winders",
+    firstStraightGoings: 2,
+    middleWell: 0,
+  },
+  "two-quarters-u": {
+    width: 850,
+    turns: ["left", "left"],
+    mode: "winders",
+    firstStraightGoings: 1,
+    middleWell: 400,
+  },
+  "half-turn": {
+    width: 800,
+    turns: ["left", "left"],
+    mode: "winders",
+    firstStraightGoings: 1,
+    middleWell: 200,
+  },
+  "quarter-landing": {
+    width: 900,
+    turns: ["left"],
+    mode: "landing",
+    firstStraightGoings: 2,
+    middleWell: 0,
+  },
 };
 
 function isPlainObject(v: unknown): v is Record<string, unknown> {
@@ -169,7 +199,8 @@ function computeWinders(
   const total = (n - 1) * going;
   const middleCount = Math.max(0, turns.length - 1);
   const firstStraight = turns.length === 0 ? total : shape.firstStraightGoings * going;
-  const lastStraight = total - firstStraight - turns.length * quarterArc - middleCount * shape.middleWell;
+  const lastStraight =
+    total - firstStraight - turns.length * quarterArc - middleCount * shape.middleWell;
   if (turns.length > 0 && lastStraight < 0) {
     throw new RangeError(
       `Hauteur à monter trop faible pour ce préréglage : il manque ${Math.ceil(-lastStraight)} mm de ligne de foulée.`,
@@ -210,7 +241,8 @@ function computeLanding(
 ): Computed {
   const a = shape.firstStraightGoings;
   const b = n - 2 - a;
-  if (b < 1) throw new RangeError("Hauteur à monter trop faible pour un quart tournant avec palier.");
+  if (b < 1)
+    throw new RangeError("Hauteur à monter trop faible pour un quart tournant avec palier.");
   const legs = [Math.round(a * going + width), Math.round(b * going + width)];
   const frames = buildFrames(width, legs, turns);
   const [first, last] = [frames.legs[0]!, frames.legs[1]!];
@@ -238,7 +270,11 @@ function computeLanding(
 }
 
 /** Valeur donnée par l'option ou par `patch` ; les deux à la fois doivent concorder. */
-function pick(label: string, option: number | undefined, patched: number | undefined): number | undefined {
+function pick(
+  label: string,
+  option: number | undefined,
+  patched: number | undefined,
+): number | undefined {
   if (option !== undefined && patched !== undefined && option !== patched) {
     throw new RangeError(`« ${label} » est donné deux fois (option ${option}, patch ${patched}).`);
   }
@@ -247,7 +283,9 @@ function pick(label: string, option: number | undefined, patched: number | undef
 
 function requirePositiveInt(label: string, value: number): void {
   if (!Number.isInteger(value) || value <= 0) {
-    throw new RangeError(`${label} doit être un entier strictement positif en mm (reçu : ${value}).`);
+    throw new RangeError(
+      `${label} doit être un entier strictement positif en mm (reçu : ${value}).`,
+    );
   }
 }
 
@@ -267,7 +305,8 @@ function requirePositiveInt(label: string, value: number): void {
 export function createProject(preset: PresetId, options: PresetOptions = {}): Project {
   const shape = SHAPES[preset];
   const patch = options.patch;
-  const height = pick("floorToFloor", options.floorToFloor, patch?.site?.floorToFloor) ?? DEFAULT_FLOOR_TO_FLOOR;
+  const height =
+    pick("floorToFloor", options.floorToFloor, patch?.site?.floorToFloor) ?? DEFAULT_FLOOR_TO_FLOOR;
   const width = pick("width", options.width, patch?.stair?.layout?.width) ?? shape.width;
   const slab =
     pick("upperSlabThickness", options.upperSlabThickness, patch?.site?.upperSlabThickness) ??
@@ -281,23 +320,30 @@ export function createProject(preset: PresetId, options: PresetOptions = {}): Pr
     );
   }
   const direction = options.direction;
-  const hasFixedDirection = preset === "straight" || preset === "quarter-left" || preset === "quarter-right";
+  const hasFixedDirection =
+    preset === "straight" || preset === "quarter-left" || preset === "quarter-right";
   if (direction !== undefined && hasFixedDirection) {
     throw new RangeError(`Le préréglage « ${preset} » n'accepte pas d'option de sens.`);
   }
   const stepping = patch?.stair?.stepping;
   const targetRise = stepping?.targetRise ?? STEPPING_DEFAULTS.targetRise;
   requirePositiveInt("La hauteur de marche cible", targetRise);
-  const n = typeof stepping?.riserCount === "number" ? stepping.riserCount : Math.round(height / targetRise);
+  const n =
+    typeof stepping?.riserCount === "number"
+      ? stepping.riserCount
+      : Math.round(height / targetRise);
   if (!Number.isInteger(n) || n < RISER_COUNT_MIN || n > RISER_COUNT_MAX) {
     throw new RangeError(
       `Nombre de hauteurs hors domaine : ${n} (attendu entre ${RISER_COUNT_MIN} et ${RISER_COUNT_MAX}).`,
     );
   }
   const rise = height / n;
-  const going = typeof stepping?.targetGoing === "number" ? stepping.targetGoing : AUTO_GOING_MODULE - 2 * rise;
+  const going =
+    typeof stepping?.targetGoing === "number" ? stepping.targetGoing : AUTO_GOING_MODULE - 2 * rise;
   if (!(going > 0)) {
-    throw new RangeError(`Giron calculé non positif (${going.toFixed(1)} mm) : hauteur de marche trop grande.`);
+    throw new RangeError(
+      `Giron calculé non positif (${going.toFixed(1)} mm) : hauteur de marche trop grande.`,
+    );
   }
   const turns: TurnDirection[] = shape.turns.map((t) => direction ?? t);
   const computed =
@@ -318,7 +364,11 @@ export function createProject(preset: PresetId, options: PresetOptions = {}): Pr
       layout: {
         width,
         legs: computed.legs.map((length) => ({ length })),
-        turns: turns.map((direction) => ({ direction, mode: shape.mode, inner: { kind: "sharp" } })),
+        turns: turns.map((direction) => ({
+          direction,
+          mode: shape.mode,
+          inner: { kind: "sharp" },
+        })),
       },
       treads: { nosing: PRESET_NOSING },
     },

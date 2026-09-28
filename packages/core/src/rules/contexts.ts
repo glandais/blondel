@@ -65,7 +65,10 @@ export function guardRailRegime(referenceDate?: string): GuardRailResolution {
       note: `Date de référence illisible (« ${referenceDate} ») : régime garde-corps NF P01-012:2024 supposé.`,
     };
   }
-  return { regime: t < GUARD_RAIL_2024_FROM_UTC ? "garde_corps_1988" : "garde_corps_2024", assumed: false };
+  return {
+    regime: t < GUARD_RAIL_2024_FROM_UTC ? "garde_corps_1988" : "garde_corps_2024",
+    assumed: false,
+  };
 }
 
 export interface ResolvedContexts {
@@ -81,7 +84,10 @@ export interface ResolvedContexts {
 }
 
 /** Contextes actifs pour un projet et son découpage. */
-export function resolveContexts(settings: ComplianceSettings, stepping?: Stepping): ResolvedContexts {
+export function resolveContexts(
+  settings: ComplianceSettings,
+  stepping?: Stepping,
+): ResolvedContexts {
   const known = new Set(RULE_CONTEXTS);
   const active = new Set<string>([ALWAYS_CONTEXT]);
   const unknown: string[] = [];
@@ -104,7 +110,9 @@ export function resolveContexts(settings: ComplianceSettings, stepping?: Steppin
     guardRail = { regime: explicit[0]!, assumed: false };
   } else if (explicit.length === 2) {
     guardRail = { regime: "garde_corps_2024", assumed: false };
-    notes.push("Les deux régimes garde-corps sont activés explicitement : les deux jeux de règles s'appliquent.");
+    notes.push(
+      "Les deux régimes garde-corps sont activés explicitement : les deux jeux de règles s'appliquent.",
+    );
   } else {
     guardRail = guardRailRegime(settings.referenceDate);
     active.add(guardRail.regime);
@@ -121,7 +129,10 @@ export function resolveContexts(settings: ComplianceSettings, stepping?: Steppin
  * - (aucun de ses contextes hors forme, ou au moins un actif) **et** (aucun contexte de forme,
  *   ou au moins un actif) — avec au moins un contexte effectivement actif.
  */
-export function isRuleApplicable(rule: RuleDef, active: ReadonlySet<string> | readonly string[]): boolean {
+export function isRuleApplicable(
+  rule: RuleDef,
+  active: ReadonlySet<string> | readonly string[],
+): boolean {
   const set = active instanceof Set ? active : new Set(active as readonly string[]);
   if (rule.contexte.includes(ALWAYS_CONTEXT)) return true;
   const shape = rule.contexte.filter((c) => SHAPE_CONTEXTS.has(c));

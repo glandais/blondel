@@ -18,7 +18,9 @@ describe("meshExtrusion", () => {
   });
 
   it("profondeur nulle : maillage vide", () => {
-    expect(meshExtrusion(identityFrame, { outer: rect(0, 0, 1, 1), holes: [] }, 0).indices.length).toBe(0);
+    expect(
+      meshExtrusion(identityFrame, { outer: rect(0, 0, 1, 1), holes: [] }, 0).indices.length,
+    ).toBe(0);
   });
 
   it("propriété : fermé, orienté, volume = aire × |profondeur| (trous, repère quelconque, profondeur signée)", () => {
@@ -45,9 +47,14 @@ describe("meshExtrusion", () => {
 
   it("angle de lissage : un cylindre à 64 facettes a des normales latérales lissées", () => {
     const n = 64;
-    const circle = Array.from({ length: n }, (_, i) => ({ x: 50 * Math.cos((2 * Math.PI * i) / n), y: 50 * Math.sin((2 * Math.PI * i) / n) }));
+    const circle = Array.from({ length: n }, (_, i) => ({
+      x: 50 * Math.cos((2 * Math.PI * i) / n),
+      y: 50 * Math.sin((2 * Math.PI * i) / n),
+    }));
     const flat = meshExtrusion(identityFrame, { outer: circle, holes: [] }, 100);
-    const smooth = meshExtrusion(identityFrame, { outer: circle, holes: [] }, 100, { creaseAngleDeg: 30 });
+    const smooth = meshExtrusion(identityFrame, { outer: circle, holes: [] }, 100, {
+      creaseAngleDeg: 30,
+    });
     expect(flat.positions.length / 3).toBe(4 * n + 2 * n);
     expect(smooth.positions.length / 3).toBe(2 * n + 2 * n);
     expect(checkManifold(smooth).ok).toBe(true);
@@ -70,14 +77,20 @@ describe("meshExtrusion — trous alignés (régression earcut)", () => {
 describe("meshExtrusion — propriété, grilles de trous alignés", () => {
   it("fermé et volume exact pour une grille de trous (mortaises, perçages alignés)", () => {
     fc.assert(
-      fc.property(fc.integer({ min: 1, max: 6 }), fc.integer({ min: 1, max: 4 }), fc.double({ min: 2, max: 30, noNaN: true }), (nx, ny, w) => {
-        const holes = [];
-        for (let i = 0; i < nx; i++) for (let j = 0; j < ny; j++) holes.push(rect(100 * i, 80 * j, w, w * 1.5));
-        const shape = { outer: rect(50 * (nx - 1), 40 * (ny - 1), 100 * nx, 80 * ny), holes };
-        const m = meshExtrusion(identityFrame, shape, 25);
-        expect(checkManifold(m).ok).toBe(true);
-        expect(signedVolume(m)).toBeCloseTo(shapeArea(shape) * 25, 0);
-      }),
+      fc.property(
+        fc.integer({ min: 1, max: 6 }),
+        fc.integer({ min: 1, max: 4 }),
+        fc.double({ min: 2, max: 30, noNaN: true }),
+        (nx, ny, w) => {
+          const holes = [];
+          for (let i = 0; i < nx; i++)
+            for (let j = 0; j < ny; j++) holes.push(rect(100 * i, 80 * j, w, w * 1.5));
+          const shape = { outer: rect(50 * (nx - 1), 40 * (ny - 1), 100 * nx, 80 * ny), holes };
+          const m = meshExtrusion(identityFrame, shape, 25);
+          expect(checkManifold(m).ok).toBe(true);
+          expect(signedVolume(m)).toBeCloseTo(shapeArea(shape) * 25, 0);
+        },
+      ),
     );
   });
 });
@@ -88,21 +101,38 @@ describe("meshExtrusion — entrées invalides ou quelconques (revue)", () => {
   it("repère dégénéré ou non fini : GeometryError", () => {
     const X = { x: 1, y: 0, z: 0 };
     expect(() => meshExtrusion({ ...identityFrame, yAxis: X }, square, 10)).toThrow(GeometryError);
-    expect(() => meshExtrusion({ ...identityFrame, zAxis: { x: 0, y: 1, z: 0 } }, square, 10)).toThrow(GeometryError);
-    expect(() => meshExtrusion({ ...identityFrame, zAxis: { x: 0, y: 0, z: 0 } }, square, 10)).toThrow(GeometryError);
-    expect(() => meshExtrusion({ ...identityFrame, origin: { x: Number.NaN, y: 0, z: 0 } }, square, 10)).toThrow(GeometryError);
-    expect(() => meshExtrusion(identityFrame, square, Number.POSITIVE_INFINITY)).toThrow(GeometryError);
+    expect(() =>
+      meshExtrusion({ ...identityFrame, zAxis: { x: 0, y: 1, z: 0 } }, square, 10),
+    ).toThrow(GeometryError);
+    expect(() =>
+      meshExtrusion({ ...identityFrame, zAxis: { x: 0, y: 0, z: 0 } }, square, 10),
+    ).toThrow(GeometryError);
+    expect(() =>
+      meshExtrusion({ ...identityFrame, origin: { x: Number.NaN, y: 0, z: 0 } }, square, 10),
+    ).toThrow(GeometryError);
+    expect(() => meshExtrusion(identityFrame, square, Number.POSITIVE_INFINITY)).toThrow(
+      GeometryError,
+    );
   });
 
   it("angle de lissage hors de [0, 180] : GeometryError", () => {
-    expect(() => meshExtrusion(identityFrame, square, 10, { creaseAngleDeg: 200 })).toThrow(GeometryError);
-    expect(() => meshExtrusion(identityFrame, square, 10, { creaseAngleDeg: -1 })).toThrow(GeometryError);
+    expect(() => meshExtrusion(identityFrame, square, 10, { creaseAngleDeg: 200 })).toThrow(
+      GeometryError,
+    );
+    expect(() => meshExtrusion(identityFrame, square, 10, { creaseAngleDeg: -1 })).toThrow(
+      GeometryError,
+    );
   });
 
   it("propriété : trous quelconques (chevauchants, sortants, jointifs) → GeometryError ou maillage fermé au volume exact", () => {
     // Trous sur une grille de 10 mm : chevauchements, arêtes communes et points alignés fréquents.
     const hole = fc
-      .tuple(fc.integer({ min: -6, max: 6 }), fc.integer({ min: -6, max: 6 }), fc.integer({ min: 1, max: 5 }), fc.integer({ min: 1, max: 5 }))
+      .tuple(
+        fc.integer({ min: -6, max: 6 }),
+        fc.integer({ min: -6, max: 6 }),
+        fc.integer({ min: 1, max: 5 }),
+        fc.integer({ min: 1, max: 5 }),
+      )
       .map(([cx, cy, w, h]) => rect(10 * cx, 10 * cy, 10 * w, 10 * h));
     let closed = 0;
     fc.assert(

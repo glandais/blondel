@@ -2,7 +2,12 @@
  * Utilitaires de projet : lecture (migrations + validation), sérialisation stable, préréglages.
  */
 export { ProjectParseError, formatPath, type ProjectIssue } from "./errors.js";
-export { PROJECT_MIGRATIONS, migrateProjectJson, type JsonObject, type Migration } from "./migrations.js";
+export {
+  PROJECT_MIGRATIONS,
+  migrateProjectJson,
+  type JsonObject,
+  type Migration,
+} from "./migrations.js";
 export { parseProject, parseProjectText, type ParseProjectOptions } from "./parse.js";
 export { serializeProject, stableStringify } from "./serialize.js";
 export {

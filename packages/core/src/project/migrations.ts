@@ -47,7 +47,9 @@ export function migrateProjectJson(
   }
   const version = json["schemaVersion"];
   if (version === undefined) {
-    throw new ProjectParseError("Projet invalide : le champ « schemaVersion » (version du format) est absent.");
+    throw new ProjectParseError(
+      "Projet invalide : le champ « schemaVersion » (version du format) est absent.",
+    );
   }
   if (typeof version !== "number" || !Number.isInteger(version) || version < 0) {
     throw new ProjectParseError(
@@ -65,7 +67,9 @@ export function migrateProjectJson(
     current = structuredClone(json);
   } catch {
     // Valeur non sérialisable (fonction, symbole…) : ce n'est pas un JSON de projet.
-    throw new ProjectParseError("Projet invalide : l'objet fourni n'est pas du JSON (valeur non sérialisable).");
+    throw new ProjectParseError(
+      "Projet invalide : l'objet fourni n'est pas du JSON (valeur non sérialisable).",
+    );
   }
   let v = version;
   while (v < targetVersion) {
@@ -80,10 +84,14 @@ export function migrateProjectJson(
       next = step.migrate(current);
     } catch (cause) {
       const detail = cause instanceof Error ? cause.message : String(cause);
-      throw new ProjectParseError(`Échec de la migration du format ${v} vers ${v + 1} (${step.description}) : ${detail}`);
+      throw new ProjectParseError(
+        `Échec de la migration du format ${v} vers ${v + 1} (${step.description}) : ${detail}`,
+      );
     }
     if (!isJsonObject(next)) {
-      throw new ProjectParseError(`La migration du format ${v} vers ${v + 1} n'a pas produit un objet JSON.`);
+      throw new ProjectParseError(
+        `La migration du format ${v} vers ${v + 1} n'a pas produit un objet JSON.`,
+      );
     }
     v += 1;
     current = { ...next, schemaVersion: v };

@@ -22,7 +22,9 @@ export function meshSolid(desc: SolidDesc, options?: MeshOptions): Mesh {
       // Type de solide inconnu (contrat de @blondel/core étendu sans mise à jour d'ici) :
       // erreur explicite plutôt qu'un maillage `undefined` mis en cache.
       const unknown: never = desc;
-      throw new GeometryError(`type de solide inconnu : ${String((unknown as { kind?: unknown }).kind)}`);
+      throw new GeometryError(
+        `type de solide inconnu : ${String((unknown as { kind?: unknown }).kind)}`,
+      );
     }
   }
 }
@@ -44,7 +46,12 @@ const cache = new WeakMap<SolidDesc, Mesh>();
 
 /** Maille une pièce ; une erreur géométrique donne un maillage vide et un message, sans lever. */
 export function meshPart(part: Part, options?: MeshOptions): PartMesh {
-  const base = { partId: part.id, mark: part.mark, category: part.category, material: part.material };
+  const base = {
+    partId: part.id,
+    mark: part.mark,
+    category: part.category,
+    material: part.material,
+  };
   try {
     let mesh = options ? undefined : cache.get(part.solid);
     if (!mesh) {

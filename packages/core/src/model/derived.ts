@@ -120,7 +120,12 @@ export type MaterialId =
 /** Description analytique d'un solide ; convertie en maillage par @blondel/geometry. */
 export type SolidDesc =
   /** Profil plan (dans le plan XY du repère) extrudé selon +Z du repère sur `depth`. */
-  | { readonly kind: "extrusion"; readonly frame: Frame3; readonly profile: Shape2; readonly depth: Mm }
+  | {
+      readonly kind: "extrusion";
+      readonly frame: Frame3;
+      readonly profile: Shape2;
+      readonly depth: Mm;
+    }
   /** Surface réglée entre deux polylignes 3D de même nombre de points, épaissie (limons courbes). */
   | {
       readonly kind: "ruled";

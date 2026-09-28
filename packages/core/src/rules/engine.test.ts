@@ -2,7 +2,12 @@ import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { isRuleApplicable, resolveContexts } from "./contexts.js";
 import { DEFAULT_EVALUATORS, createRegistry } from "./evaluators/index.js";
-import { effectiveSeverity, evaluateCompliance, evaluateComplianceDetailed, ruleCoverage } from "./engine.js";
+import {
+  effectiveSeverity,
+  evaluateCompliance,
+  evaluateComplianceDetailed,
+  ruleCoverage,
+} from "./engine.js";
 import { FORMULA_CONSTANTS } from "./formula-constants.js";
 import { RULES, RULES_VERSION, findRule, getRule } from "./table.js";
 import { makeInput, makeProject } from "./test-fixtures.js";
@@ -50,7 +55,9 @@ describe("moteur de conformité", () => {
 
   it("profil souple : bloquant + source secondaire → avertissement tracé", () => {
     const strict = evaluateCompliance(makeInput({ stepping: { going: 180 } }));
-    const souple = evaluateCompliance(makeInput({ project: { profile: "souple" }, stepping: { going: 180 } }));
+    const souple = evaluateCompliance(
+      makeInput({ project: { profile: "souple" }, stepping: { going: 180 } }),
+    );
     const gs = strict.results.find((r) => r.ruleId === "G_MIN_DTU" && r.status === "violation");
     const gl = souple.results.find((r) => r.ruleId === "G_MIN_DTU" && r.status === "violation");
     expect(gs?.severity).toBe("bloquant");
@@ -58,7 +65,9 @@ describe("moteur de conformité", () => {
     expect(gl?.declaredSeverity).toBe("bloquant");
     expect(gl?.downgradeReason).toMatch(/souple/);
     // Règle réglementaire (source primaire) : inchangée en profil souple.
-    const gLog = souple.results.find((r) => r.ruleId === "G_MIN_LOGEMENT" && r.status === "violation");
+    const gLog = souple.results.find(
+      (r) => r.ruleId === "G_MIN_LOGEMENT" && r.status === "violation",
+    );
     expect(gLog?.severity).toBe("bloquant");
   });
 
@@ -68,7 +77,11 @@ describe("moteur de conformité", () => {
       ...base,
       project: {
         overrides: [
-          { ruleId: "G_MIN_LOGEMENT", severity: "ignore", justification: "Escalier secondaire de service" },
+          {
+            ruleId: "G_MIN_LOGEMENT",
+            severity: "ignore",
+            justification: "Escalier secondaire de service",
+          },
           { ruleId: "G_MIN_DTU", severity: "conseil", justification: "   " },
         ],
       },
@@ -82,7 +95,11 @@ describe("moteur de conformité", () => {
 
     const eff = effectiveSeverity(
       getRule("G_MIN_DTU"),
-      makeProject({ overrides: [{ ruleId: "G_MIN_DTU", severity: "avertissement", justification: "Validé par le BET" }] }).compliance,
+      makeProject({
+        overrides: [
+          { ruleId: "G_MIN_DTU", severity: "avertissement", justification: "Validé par le BET" },
+        ],
+      }).compliance,
     );
     expect(eff).toMatchObject({ severity: "avertissement", ignored: false });
     expect(eff.downgradeReason).toMatch(/BET/);
@@ -106,7 +123,10 @@ describe("moteur de conformité", () => {
 
   it("remarques : régime supposé, contexte déduit, version de règles différente", () => {
     const e = evaluateComplianceDetailed(
-      makeInput({ project: { rulesVersion: RULES_VERSION + 1 }, stepping: { treads: { 4: { kind: "winder" } } } }),
+      makeInput({
+        project: { rulesVersion: RULES_VERSION + 1 },
+        stepping: { treads: { 4: { kind: "winder" } } },
+      }),
     );
     expect(e.report.contexts).toContain("tournant");
     expect(e.notes.join(" ")).toMatch(/2024 supposé/);
@@ -121,10 +141,21 @@ describe("moteur de conformité", () => {
         fc.integer({ min: 10, max: 22 }),
         fc.integer({ min: 150, max: 320 }),
         fc.integer({ min: 600, max: 1600 }),
-        fc.subarray(["bois_dtu", "logement_interieur", "bhc_parties_communes", "erp_neuf", "erp_securite", "industriel", "echelle_meunier"]),
+        fc.subarray([
+          "bois_dtu",
+          "logement_interieur",
+          "bhc_parties_communes",
+          "erp_neuf",
+          "erp_securite",
+          "industriel",
+          "echelle_meunier",
+        ]),
         fc.constantFrom<"strict" | "souple">("strict", "souple"),
         (H, n, g, E, contexts, profile) => {
-          const input = makeInput({ project: { floorToFloor: H, width: E, contexts, profile }, stepping: { riserCount: n, going: g } });
+          const input = makeInput({
+            project: { floorToFloor: H, width: E, contexts, profile },
+            stepping: { riserCount: n, going: g },
+          });
           const report = evaluateCompliance(input);
           const count = { bloquant: 0, avertissement: 0, conseil: 0 };
           for (const r of report.results) if (r.status === "violation") count[r.severity]++;
@@ -153,9 +184,13 @@ describe("couverture des règles", () => {
   it("liste implémentées / non implémentées", () => {
     const cov = ruleCoverage();
     expect(cov.implemented.length + cov.notImplemented.length).toBe(RULES.length);
-    expect(cov.implemented).toEqual(expect.arrayContaining(["BLONDEL_DTU", "H_MAX_LOGEMENT", "G_COLLET_MIN", "ECHAPPEE_MIN_DTU"]));
+    expect(cov.implemented).toEqual(
+      expect.arrayContaining(["BLONDEL_DTU", "H_MAX_LOGEMENT", "G_COLLET_MIN", "ECHAPPEE_MIN_DTU"]),
+    );
     // Garde-corps, mains courantes, charges : attendent les pièces (jalons 3-4).
-    expect(cov.notImplemented).toEqual(expect.arrayContaining(["GC_HAUTEUR_2024", "MC_HAUTEUR", "CHARGE_ESCALIER_A"]));
+    expect(cov.notImplemented).toEqual(
+      expect.arrayContaining(["GC_HAUTEUR_2024", "MC_HAUTEUR", "CHARGE_ESCALIER_A"]),
+    );
   });
 
   it("les constantes extraites des formules y figurent toujours", () => {
@@ -164,6 +199,8 @@ describe("couverture des règles", () => {
       expect(c.excerpt).toContain(String(c.value));
     }
     // G_BALANCE_VS_DROITE réutilise la tolérance de G_TOL_BALANCEE.
-    expect(getRule("G_BALANCE_VS_DROITE").formule).toContain(`g_nom - ${-(getRule("G_TOL_BALANCEE").min ?? 0)}`);
+    expect(getRule("G_BALANCE_VS_DROITE").formule).toContain(
+      `g_nom - ${-(getRule("G_TOL_BALANCEE").min ?? 0)}`,
+    );
   });
 });

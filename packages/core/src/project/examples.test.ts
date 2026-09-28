@@ -8,7 +8,13 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import type { Project } from "../model/project.js";
 import { parseProjectText } from "./parse.js";
-import { buildFrames, rectContains, requiredOpeningLength, sampleFromArrival, walklineLength } from "./preset-geometry.js";
+import {
+  buildFrames,
+  rectContains,
+  requiredOpeningLength,
+  sampleFromArrival,
+  walklineLength,
+} from "./preset-geometry.js";
 import { createProject, PRESET_HEADROOM_MIN, PRESET_IDS } from "./presets.js";
 import { serializeProject } from "./serialize.js";
 
@@ -25,7 +31,13 @@ const ACCEPTANCE_01 = "acceptance-01-quart-tournant.blondel.json";
  * Trémie alignée sur le bord extérieur (côté mur) de la seconde volée, les 100 mm de plus que
  * E étant côté jour. Poteau d'angle de 100 mm (C §1.9 : 90 à 100 mm, confiance faible).
  */
-export const ACCEPTANCE_01_OPENING = { kind: "rect", x: -2251, y: 380, sizeX: 2800, sizeY: 900 } as const;
+export const ACCEPTANCE_01_OPENING = {
+  kind: "rect",
+  x: -2251,
+  y: 380,
+  sizeX: 2800,
+  sizeY: 900,
+} as const;
 export const ACCEPTANCE_01_LEGS = [1280, 3051] as const;
 
 export function acceptance01(): Project {
@@ -56,7 +68,9 @@ if (process.env["UPDATE_EXAMPLES"] === "1") {
 }
 
 describe("examples/", () => {
-  const files = existsSync(EXAMPLES_DIR) ? readdirSync(EXAMPLES_DIR).filter((f) => f.endsWith(".blondel.json")) : [];
+  const files = existsSync(EXAMPLES_DIR)
+    ? readdirSync(EXAMPLES_DIR).filter((f) => f.endsWith(".blondel.json"))
+    : [];
 
   it("contient un exemple par préréglage et le cas d'acceptation n° 1", () => {
     expect([...files].sort()).toEqual(expect.arrayContaining(Object.keys(expected).sort()));
@@ -79,7 +93,9 @@ describe("examples/", () => {
     expect(p.site.upperSlabThickness).toBe(200);
     expect(p.site.opening).toEqual(ACCEPTANCE_01_OPENING);
     expect(p.stair.layout.width).toBe(800);
-    expect(p.stair.layout.turns).toEqual([{ direction: "left", mode: "winders", inner: { kind: "newel", size: 100 } }]);
+    expect(p.stair.layout.turns).toEqual([
+      { direction: "left", mode: "winders", inner: { kind: "newel", size: 100 } },
+    ]);
     expect(p.compliance.contexts).toEqual(["bois_dtu", "logement_interieur"]);
     const frames = buildFrames(800, ACCEPTANCE_01_LEGS, ["left"]);
     // Quart tournant « bas » : au plus 3 girons droits avant le tournant.

@@ -87,7 +87,11 @@ const continuousWinding: RuleEvaluator = (ctx) => {
  * Dimension d'un palier : largeur minimale de sa surface de marche en plan (pour un palier d'angle
  * carré E × E, vaut E). Utilisée à la fois pour la longueur et la largeur de palier (hypothèse).
  */
-function landingChecks(ctx: EvaluatorContext, min: (ctx: EvaluatorContext) => number, quantity: string): Finding[] {
+function landingChecks(
+  ctx: EvaluatorContext,
+  min: (ctx: EvaluatorContext) => number,
+  quantity: string,
+): Finding[] {
   const landings = treadsOfKind(ctx.stepping, "landing");
   if (landings.length === 0) return [notApplicable("Sans objet : aucun palier intermédiaire.")];
   return checkItems(
@@ -108,14 +112,20 @@ const landingAtLeastWidth: RuleEvaluator = (ctx) =>
   landingChecks(ctx, e, "Dimension minimale du palier (comparée à E)");
 
 const landingIndustrial: RuleEvaluator = (ctx) =>
-  landingChecks(ctx, (c) => Math.max(c.rule.min ?? 0, e(c)), "Dimension minimale du palier industriel");
+  landingChecks(
+    ctx,
+    (c) => Math.max(c.rule.min ?? 0, e(c)),
+    "Dimension minimale du palier industriel",
+  );
 
 /** Volées « non contrariées » : notion non définie pour les tournants à 90° du modèle. */
 const landingNonContrarie: RuleEvaluator = (ctx) => {
   if (treadsOfKind(ctx.stepping, "landing").length === 0)
     return [notApplicable("Sans objet : aucun palier intermédiaire.")];
   return [
-    notEvaluated("Paliers entre volées « non contrariées » : interprétation à préciser pour les tournants à 90°."),
+    notEvaluated(
+      "Paliers entre volées « non contrariées » : interprétation à préciser pour les tournants à 90°.",
+    ),
   ];
 };
 

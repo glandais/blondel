@@ -100,15 +100,20 @@ describe("fromPolyline", () => {
 describe("paramétrage curviligne", () => {
   it("pointAt est 1-lipschitzien (continuité) et tangente unitaire", () => {
     fc.assert(
-      fc.property(curveArb, fc.double({ min: 0, max: 1, noNaN: true }), fc.double({ min: 0, max: 1, noNaN: true }), (c, u, w) => {
-        const L = curveLength(c);
-        const s1 = u * L;
-        const s2 = w * L;
-        const d = V.distance(curvePointAt(c, s1), curvePointAt(c, s2));
-        expect(d).toBeLessThanOrEqual(Math.abs(s1 - s2) + EPS);
-        expect(Math.abs(V.norm(curveTangentAt(c, s1)) - 1)).toBeLessThan(1e-9);
-        expect(V.dot(curveTangentAt(c, s1), curveNormalAt(c, s1))).toBeCloseTo(0, 9);
-      }),
+      fc.property(
+        curveArb,
+        fc.double({ min: 0, max: 1, noNaN: true }),
+        fc.double({ min: 0, max: 1, noNaN: true }),
+        (c, u, w) => {
+          const L = curveLength(c);
+          const s1 = u * L;
+          const s2 = w * L;
+          const d = V.distance(curvePointAt(c, s1), curvePointAt(c, s2));
+          expect(d).toBeLessThanOrEqual(Math.abs(s1 - s2) + EPS);
+          expect(Math.abs(V.norm(curveTangentAt(c, s1)) - 1)).toBeLessThan(1e-9);
+          expect(V.dot(curveTangentAt(c, s1), curveNormalAt(c, s1))).toBeCloseTo(0, 9);
+        },
+      ),
     );
   });
 
@@ -127,14 +132,20 @@ describe("paramétrage curviligne", () => {
 
   it("segments de longueur nulle ignorés (pivot)", () => {
     const pivot = arcSeg(V.vec(100, 0), 0, -Math.PI / 2, Math.PI / 2);
-    const c = makeCurve([lineSeg(V.vec(0, 0), V.vec(100, 0)), pivot, lineSeg(V.vec(100, 0), V.vec(100, 50))]);
+    const c = makeCurve([
+      lineSeg(V.vec(0, 0), V.vec(100, 0)),
+      pivot,
+      lineSeg(V.vec(100, 0), V.vec(100, 50)),
+    ]);
     expect(curveLength(c)).toBe(150);
     expect(segmentAt(c, 100)).toBe(2);
     expect(curveTangentAt(c, 100)).toEqual({ x: 0, y: 1 });
   });
 
   it("makeCurve refuse une discontinuité", () => {
-    expect(() => makeCurve([lineSeg(V.vec(0, 0), V.vec(1, 0)), lineSeg(V.vec(2, 0), V.vec(3, 0))])).toThrow();
+    expect(() =>
+      makeCurve([lineSeg(V.vec(0, 0), V.vec(1, 0)), lineSeg(V.vec(2, 0), V.vec(3, 0))]),
+    ).toThrow();
     expect(() => makeCurve([])).toThrow();
   });
 });
@@ -142,16 +153,21 @@ describe("paramétrage curviligne", () => {
 describe("subCurve / reverseCurve", () => {
   it("longueur = s1 − s0 et extrémités exactes", () => {
     fc.assert(
-      fc.property(curveArb, fc.double({ min: 0, max: 1, noNaN: true }), fc.double({ min: 0, max: 1, noNaN: true }), (c, u, w) => {
-        const L = curveLength(c);
-        const s0 = u * L;
-        const s1 = w * L;
-        const sub = subCurve(c, s0, s1);
-        expect(Math.abs(curveLength(sub) - Math.abs(s1 - s0))).toBeLessThan(1e-6);
-        expect(V.distance(curveStart(sub), curvePointAt(c, s0))).toBeLessThan(1e-6);
-        expect(V.distance(curveEnd(sub), curvePointAt(c, s1))).toBeLessThan(1e-6);
-        expect(isContinuous(sub)).toBe(true);
-      }),
+      fc.property(
+        curveArb,
+        fc.double({ min: 0, max: 1, noNaN: true }),
+        fc.double({ min: 0, max: 1, noNaN: true }),
+        (c, u, w) => {
+          const L = curveLength(c);
+          const s0 = u * L;
+          const s1 = w * L;
+          const sub = subCurve(c, s0, s1);
+          expect(Math.abs(curveLength(sub) - Math.abs(s1 - s0))).toBeLessThan(1e-6);
+          expect(V.distance(curveStart(sub), curvePointAt(c, s0))).toBeLessThan(1e-6);
+          expect(V.distance(curveEnd(sub), curvePointAt(c, s1))).toBeLessThan(1e-6);
+          expect(isContinuous(sub)).toBe(true);
+        },
+      ),
     );
   });
 
@@ -184,7 +200,9 @@ describe("transformations et échantillonnage", () => {
         expect(isContinuous(r, 1e-6)).toBe(true);
         const p = curvePointAt(c, L / 3);
         const q = curvePointAt(r, L / 3);
-        expect(V.distance(V.rotate(V.add(p, V.vec(10, -20)), a, V.vec(3, 4)), q)).toBeLessThan(1e-6);
+        expect(V.distance(V.rotate(V.add(p, V.vec(10, -20)), a, V.vec(3, 4)), q)).toBeLessThan(
+          1e-6,
+        );
       }),
     );
   });

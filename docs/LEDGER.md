@@ -8,16 +8,16 @@ Journal partagé entre l'orchestrateur et les agents. **Chaque agent le lit avan
 
 ## 1. Avancement des jalons
 
-| Jalon | Statut | Commit(s) | Notes |
-|---|---|---|---|
-| 0 Cadrage | fait | 34958d1, a74100d | CHALLENGE.md, ADR 0001-0006, contrats de types |
-| 1 Cœur droit | à faire | | |
-| 2 Tournants | à faire | | |
-| 3 Structures | à faire | | |
-| 4 Garde-corps | à faire | | |
-| 5 Débillardé, hélicoïdal | à faire | | |
-| 6 Rendu et exports | à faire | | |
-| 7 Import de plan | à faire | | |
+| Jalon                    | Statut  | Commit(s)        | Notes                                          |
+| ------------------------ | ------- | ---------------- | ---------------------------------------------- |
+| 0 Cadrage                | fait    | 34958d1, a74100d | CHALLENGE.md, ADR 0001-0006, contrats de types |
+| 1 Cœur droit             | à faire |                  |                                                |
+| 2 Tournants              | à faire |                  |                                                |
+| 3 Structures             | à faire |                  |                                                |
+| 4 Garde-corps            | à faire |                  |                                                |
+| 5 Débillardé, hélicoïdal | à faire |                  |                                                |
+| 6 Rendu et exports       | à faire |                  |                                                |
+| 7 Import de plan         | à faire |                  |                                                |
 
 ## 2. Points en suspens
 
@@ -49,7 +49,7 @@ Format : `- [ ] (Jn) [agent] sujet — contexte — proposition`. Cocher quand r
 - [ ] (J4) [core:rules] Largeurs entre mains courantes / en UP (LARGEUR_MC_*, LARGEUR_UP_ERP) : violation certaine si E < min, sinon `non-evaluee` en attendant les garde-corps ; LARGEUR_MIN_LOGEMENT évaluée sur E (mains courantes saillantes > 100 mm ignorées). — Reprendre avec les pièces de garde-corps.
 - [ ] (J1) [core:rules] PALIER_LONGUEUR_ERP_NON_CONTRARIE : « volées non contrariées » non interprétée pour les tournants à 90° → `non-evaluee` s'il y a un palier. DEBORD_NEZ_LOGEMENT : forme du nez (vive / arrondie) inconnue → borne 20 mm de la table, message au-delà de 10 mm.
 - [ ] (J1) [core:rules] Règles des contextes échelle à marches (LARGEUR_ECHELLE_MARCHES 450–800, H_MAX_ECHELLE_MARCHES, ANGLE_ECHELLE_MARCHES…) rattachées aussi à `industriel` : un escalier industriel de E > 800 mm reçoit un avertissement. — Vérifier la table (A §1.9).
-- [ ] (J1) [core:rules] 38 règles sans évaluateur (`ruleCoverage().notImplemented`) : garde-corps (GC_*), mains courantes (MC_*), charges (CHARGE_*), bois (LIMON_*, CREMAILLERE_*, DEFORMATION_CINTRAGE), NEZ_CONTRASTE, BANDE_EVEIL, TREMIE_LONGUEUR, TREMIE_TOLERANCE, HAUTEUR_ETAGE_TOLERANCE, MC_INTERMEDIAIRE_ERP, ECHELLE_MEUNIER_MC. Elles sortent `non-evaluee` quand leur contexte est actif.
+- [ ] (J1) [core:rules] 38 règles sans évaluateur (`ruleCoverage().notImplemented`) : garde-corps (GC__), mains courantes (MC__), charges (CHARGE__), bois (LIMON__, CREMAILLERE_*, DEFORMATION_CINTRAGE), NEZ_CONTRASTE, BANDE_EVEIL, TREMIE_LONGUEUR, TREMIE_TOLERANCE, HAUTEUR_ETAGE_TOLERANCE, MC_INTERMEDIAIRE_ERP, ECHELLE_MEUNIER_MC. Elles sortent `non-evaluee` quand leur contexte est actif.
 - [ ] (J2) [core:geom2d] `offsetCurve` : raccords **locaux** seulement. Non gérés : auto-intersections globales (courbe qui revient à moins de 2d d'elle-même), demi-tour exact de 180° (erreur levée), courbes fermées. — Suffisant pour jour/mur/ligne de foulée des tracés à 90° ; à reprendre pour l'hélicoïdal ou des contours fermés (utiliser d'ici là `offsetConvexPolygon`).
 - [ ] (J2) [core:geom2d] Décalé du côté concave d'un raccord de rayon r < d : l'arc disparaît et les voisins sont coupés à leur intersection (convention CAO), ce qui s'écarte de la vraie équidistante (points légèrement à plus de d près de l'angle). Sans effet sur la ligne de foulée (côté convexe du jour, B §2.1) ; à signaler si un bord mur est dérivé ainsi.
 - [ ] (J2) [core:geom2d] `cutBand` retient, pour chaque courbe, l'intersection **la plus proche de l'origine** de la droite de coupe : les lignes de nez doivent avoir leur origine sur la ligne de foulée (P_k). Recouvrements colinéaires droite/courbe ignorés par `intersectLineCurve`. Clothoïdes (`ClothoidSeg`, V1) non prises en charge.

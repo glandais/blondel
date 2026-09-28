@@ -13,7 +13,11 @@ export interface ProjectOptions {
   contexts?: string[];
   profile?: "strict" | "souple";
   referenceDate?: string;
-  overrides?: { ruleId: string; severity: "bloquant" | "avertissement" | "conseil" | "ignore"; justification: string }[];
+  overrides?: {
+    ruleId: string;
+    severity: "bloquant" | "avertissement" | "conseil" | "ignore";
+    justification: string;
+  }[];
   nosing?: number;
   risers?: "full" | "open" | "none";
   withOpening?: boolean;
@@ -27,7 +31,9 @@ export function makeProject(o: ProjectOptions = {}): Project {
     site: {
       floorToFloor: o.floorToFloor ?? 2720,
       upperSlabThickness: 200,
-      ...(o.withOpening === false ? {} : { opening: { kind: "rect", x: 0, y: 0, sizeX: 900, sizeY: 3000 } }),
+      ...(o.withOpening === false
+        ? {}
+        : { opening: { kind: "rect", x: 0, y: 0, sizeX: 900, sizeY: 3000 } }),
     },
     stair: {
       placement: { origin: { x: 0, y: 0 } },
@@ -131,7 +137,9 @@ export function makeStepping(o: SteppingOptions = {}): Stepping {
 
 export function makeLayout(o: { width?: number; walklineOffset?: number } = {}): Layout {
   const w = o.width ?? 900;
-  const line = (x: number) => ({ segments: [{ kind: "line" as const, a: { x, y: 0 }, b: { x, y: 4000 } }] });
+  const line = (x: number) => ({
+    segments: [{ kind: "line" as const, a: { x, y: 0 }, b: { x, y: 4000 } }],
+  });
   return {
     inner: line(0),
     outer: line(w),
@@ -144,12 +152,20 @@ export function makeLayout(o: { width?: number; walklineOffset?: number } = {}):
 }
 
 export function makeInput(
-  o: { project?: ProjectOptions; stepping?: SteppingOptions; walklineOffset?: number; headroom?: number | null } = {},
+  o: {
+    project?: ProjectOptions;
+    stepping?: SteppingOptions;
+    walklineOffset?: number;
+    headroom?: number | null;
+  } = {},
 ): ComplianceInput {
   const project = makeProject(o.project);
   const width = project.stair.layout.width;
   const stepping = makeStepping({ width, floorToFloor: project.site.floorToFloor, ...o.stepping });
-  const layout = makeLayout({ width, ...(o.walklineOffset !== undefined ? { walklineOffset: o.walklineOffset } : {}) });
+  const layout = makeLayout({
+    width,
+    ...(o.walklineOffset !== undefined ? { walklineOffset: o.walklineOffset } : {}),
+  });
   const hr = o.headroom === undefined ? 2200 : o.headroom;
   return {
     project,

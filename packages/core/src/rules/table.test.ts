@@ -28,6 +28,7 @@ describe("table des règles", () => {
   });
 
   it("min ≤ max quand les deux bornes existent", () => {
-    for (const r of RULES) if (r.min !== null && r.max !== null) expect(r.min).toBeLessThanOrEqual(r.max);
+    for (const r of RULES)
+      if (r.min !== null && r.max !== null) expect(r.min).toBeLessThanOrEqual(r.max);
   });
 });

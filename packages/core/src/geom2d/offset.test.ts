@@ -1,7 +1,15 @@
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import type { Curve2 } from "../model/primitives.js";
-import { curveEnd, curveLength, curveStart, fromPolyline, isContinuous, makeCurve, sampleCurve } from "./curve.js";
+import {
+  curveEnd,
+  curveLength,
+  curveStart,
+  fromPolyline,
+  isContinuous,
+  makeCurve,
+  sampleCurve,
+} from "./curve.js";
 import { distanceToCurve } from "./intersect.js";
 import { offsetCurve, offsetSegment, type Side } from "./offset.js";
 import { arcSeg, lineSeg } from "./segment.js";
@@ -54,7 +62,11 @@ describe("offsetCurve — équerre (cas de la ligne de foulée, B §2.1)", () =>
 
   it("pivot (arc de rayon nul) : devient un arc de rayon d côté convexe", () => {
     const pivot = arcSeg(V.vec(1000, 0), 0, -Math.PI / 2, Math.PI / 2);
-    const c = makeCurve([lineSeg(V.vec(0, 0), V.vec(1000, 0)), pivot, lineSeg(V.vec(1000, 0), V.vec(1000, 1000))]);
+    const c = makeCurve([
+      lineSeg(V.vec(0, 0), V.vec(1000, 0)),
+      pivot,
+      lineSeg(V.vec(1000, 0), V.vec(1000, 1000)),
+    ]);
     const off = offsetCurve(c, 250, "right");
     expect(off.segments.map((s) => s.kind)).toEqual(["line", "arc", "line"]);
     expect(curveLength(off)).toBeCloseTo(2000 + 125 * Math.PI, 9);
@@ -76,7 +88,9 @@ describe("offsetCurve — arcs", () => {
   });
 
   it("rayon qui s'annule : l'arc disparaît, raccord concave des voisins", () => {
-    const filleted = fromPolyline([V.vec(0, 0), V.vec(1000, 0), V.vec(1000, 1000)], { radius: 100 });
+    const filleted = fromPolyline([V.vec(0, 0), V.vec(1000, 0), V.vec(1000, 1000)], {
+      radius: 100,
+    });
     const sharp = fromPolyline([V.vec(0, 0), V.vec(1000, 0), V.vec(1000, 1000)]);
     const a = offsetCurve(filleted, 300, "left");
     const b = offsetCurve(sharp, 300, "left");
@@ -100,7 +114,11 @@ describe("offsetCurve — arcs", () => {
       expectAtDistance(off, c, 200);
     }
     expect(offsetCurve(c, 200, "left").segments.map((s) => s.kind)).toEqual(["arc", "line"]);
-    expect(offsetCurve(c, 200, "right").segments.map((s) => s.kind)).toEqual(["arc", "arc", "line"]);
+    expect(offsetCurve(c, 200, "right").segments.map((s) => s.kind)).toEqual([
+      "arc",
+      "arc",
+      "line",
+    ]);
   });
 
   it("segment court consommé par deux coupes concaves", () => {
@@ -132,28 +150,38 @@ describe("offsetCurve — arcs", () => {
 describe("offsetCurve — propriétés", () => {
   it("polyligne à angles vifs : tous les points du décalé sont à distance d", () => {
     fc.assert(
-      fc.property(monotonePolyline(), fc.double({ min: 1, max: 150, noNaN: true }), sideArb, (pts, d, side) => {
-        const c = fromPolyline(pts);
-        const off = offsetCurve(c, d, side);
-        expect(isContinuous(off, 1e-6)).toBe(true);
-        expectAtDistance(off, c, d);
-      }),
+      fc.property(
+        monotonePolyline(),
+        fc.double({ min: 1, max: 150, noNaN: true }),
+        sideArb,
+        (pts, d, side) => {
+          const c = fromPolyline(pts);
+          const off = offsetCurve(c, d, side);
+          expect(isContinuous(off, 1e-6)).toBe(true);
+          expectAtDistance(off, c, d);
+        },
+      ),
     );
   });
 
   it("polyligne à angles vifs : longueur = L + Σ convexes d|φ| − Σ concaves 2d tan(|φ|/2)", () => {
     fc.assert(
-      fc.property(monotonePolyline(), fc.double({ min: 1, max: 150, noNaN: true }), sideArb, (pts, d, side) => {
-        const c = fromPolyline(pts);
-        const sg = side === "left" ? 1 : -1;
-        let expected = curveLength(c);
-        for (let i = 1; i + 1 < pts.length; i++) {
-          const phi = V.signedAngle(V.sub(pts[i]!, pts[i - 1]!), V.sub(pts[i + 1]!, pts[i]!));
-          if (Math.abs(phi) * d <= 1e-6) continue;
-          expected += sg * phi < 0 ? d * Math.abs(phi) : -2 * d * Math.tan(Math.abs(phi) / 2);
-        }
-        expect(Math.abs(curveLength(offsetCurve(c, d, side)) - expected)).toBeLessThan(1e-6);
-      }),
+      fc.property(
+        monotonePolyline(),
+        fc.double({ min: 1, max: 150, noNaN: true }),
+        sideArb,
+        (pts, d, side) => {
+          const c = fromPolyline(pts);
+          const sg = side === "left" ? 1 : -1;
+          let expected = curveLength(c);
+          for (let i = 1; i + 1 < pts.length; i++) {
+            const phi = V.signedAngle(V.sub(pts[i]!, pts[i - 1]!), V.sub(pts[i + 1]!, pts[i]!));
+            if (Math.abs(phi) * d <= 1e-6) continue;
+            expected += sg * phi < 0 ? d * Math.abs(phi) : -2 * d * Math.tan(Math.abs(phi) / 2);
+          }
+          expect(Math.abs(curveLength(offsetCurve(c, d, side)) - expected)).toBeLessThan(1e-6);
+        },
+      ),
     );
   });
 
@@ -174,7 +202,9 @@ describe("offsetCurve — propriétés", () => {
           const sg = side === "left" ? 1 : -1;
           let totalTurn = 0;
           for (const s of c.segments) if (s.kind === "arc") totalTurn += s.sweep;
-          expect(Math.abs(curveLength(off) - (curveLength(c) - sg * d * totalTurn))).toBeLessThan(1e-6);
+          expect(Math.abs(curveLength(off) - (curveLength(c) - sg * d * totalTurn))).toBeLessThan(
+            1e-6,
+          );
         },
       ),
     );
@@ -234,7 +264,9 @@ describe("offsetCurve — relecture adverse", () => {
     // Côté convexe, l'arc devient de rayon 150 : aucun problème.
     const off = offsetCurve(c, 100, "right");
     expect(isContinuous(off)).toBe(true);
-    expect(off.segments.some((s) => s.kind === "arc" && Math.abs(s.radius - 150) < 1e-9)).toBe(true);
+    expect(off.segments.some((s) => s.kind === "arc" && Math.abs(s.radius - 150) < 1e-9)).toBe(
+      true,
+    );
   });
 
   it("arc retiré de balayage < 180° : raccord concave (pas d'arc parasite)", () => {
@@ -242,11 +274,16 @@ describe("offsetCurve — relecture adverse", () => {
     const c = fromPolyline([V.vec(0, 0), V.vec(1000, 0), V.vec(1000, 1000)], { radius: 50 });
     const off = offsetCurve(c, 100, "left");
     expect(off.segments.every((s) => s.kind === "line")).toBe(true);
-    expect(V.distance(curveEnd({ segments: [off.segments[0]!] }), V.vec(900, 100))).toBeLessThan(1e-9);
+    expect(V.distance(curveEnd({ segments: [off.segments[0]!] }), V.vec(900, 100))).toBeLessThan(
+      1e-9,
+    );
   });
 
   it("raccord concave droite → arc sans intersection (d < R < 2d) : erreur explicite", () => {
-    const c = makeCurve([lineSeg(V.vec(-1000, 0), V.vec(0, 0)), arcSeg(V.vec(-150, 0), 150, 0, Math.PI / 2)]);
+    const c = makeCurve([
+      lineSeg(V.vec(-1000, 0), V.vec(0, 0)),
+      arcSeg(V.vec(-150, 0), 150, 0, Math.PI / 2),
+    ]);
     expect(() => offsetCurve(c, 100, "left")).toThrow(/sans intersection/);
   });
 });

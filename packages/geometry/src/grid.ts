@@ -56,9 +56,15 @@ export function addGrid(
       if (!same(v00, v11) && !same(v11, v10) && !same(v10, v00)) b.addTriangle(v00, v11, v10);
       // Normale du quadrilatère (produit des diagonales, pondérée par l'aire), répartie
       // également sur ses 4 sommets : symétrique, contrairement à une somme par triangle.
-      const ax = P(v11, 0) - P(v00, 0), ay = P(v11, 1) - P(v00, 1), az = P(v11, 2) - P(v00, 2);
-      const bx = P(v10, 0) - P(v01, 0), by = P(v10, 1) - P(v01, 1), bz = P(v10, 2) - P(v01, 2);
-      const nx = ay * bz - az * by, ny = az * bx - ax * bz, nz = ax * by - ay * bx;
+      const ax = P(v11, 0) - P(v00, 0),
+        ay = P(v11, 1) - P(v00, 1),
+        az = P(v11, 2) - P(v00, 2);
+      const bx = P(v10, 0) - P(v01, 0),
+        by = P(v10, 1) - P(v01, 1),
+        bz = P(v10, 2) - P(v01, 2);
+      const nx = ay * bz - az * by,
+        ny = az * bx - ax * bz,
+        nz = ax * by - ay * bx;
       for (const w of [v00, v01, v10, v11]) {
         n[3 * w] = n[3 * w]! + nx;
         n[3 * w + 1] = n[3 * w + 1]! + ny;
@@ -82,9 +88,12 @@ export function addCap(
 ): void {
   const first = b.vertexCount;
   const [nx, ny, nz] = normal;
-  for (let k = 0; k < pts.length; k += 3) b.addVertex(pts[k]!, pts[k + 1]!, pts[k + 2]!, nx, ny, nz);
+  for (let k = 0; k < pts.length; k += 3)
+    b.addVertex(pts[k]!, pts[k + 1]!, pts[k + 2]!, nx, ny, nz);
   for (let t = 0; t < triangles.length; t += 3) {
-    const a = first + triangles[t]!, c = first + triangles[t + 1]!, d = first + triangles[t + 2]!;
+    const a = first + triangles[t]!,
+      c = first + triangles[t + 1]!,
+      d = first + triangles[t + 2]!;
     if (reverse) b.addTriangle(a, d, c);
     else b.addTriangle(a, c, d);
   }

@@ -34,7 +34,11 @@ describe("valeurs non calculables", () => {
   });
 
   it("propriété : aucun résultat ok/violation ne porte une mesure NaN, et aucun évaluateur ne lève", () => {
-    const num = fc.oneof(fc.constant(Number.NaN), fc.constant(0), fc.double({ min: -500, max: 2000, noNaN: true }));
+    const num = fc.oneof(
+      fc.constant(Number.NaN),
+      fc.constant(0),
+      fc.double({ min: -500, max: 2000, noNaN: true }),
+    );
     fc.assert(
       fc.property(
         fc.array(num, { maxLength: 6 }),
@@ -44,7 +48,16 @@ describe("valeurs non calculables", () => {
         (rises, going, headroom, risers) => {
           const report = evaluateCompliance(
             makeInput({
-              project: { contexts: ["bois_dtu", "logement_interieur", "erp_neuf", "erp_securite", "industriel"], risers },
+              project: {
+                contexts: [
+                  "bois_dtu",
+                  "logement_interieur",
+                  "erp_neuf",
+                  "erp_securite",
+                  "industriel",
+                ],
+                risers,
+              },
               stepping: { rises, going },
               headroom,
             }),
@@ -62,9 +75,18 @@ describe("valeurs non calculables", () => {
 
 describe("date de référence", () => {
   it("date calendaire impossible : illisible, régime 2024 supposé", () => {
-    expect(guardRailRegime("2025-02-30")).toMatchObject({ regime: "garde_corps_2024", assumed: true });
-    expect(guardRailRegime("2025-13-01")).toMatchObject({ regime: "garde_corps_2024", assumed: true });
-    expect(guardRailRegime("2024-02-29")).toMatchObject({ regime: "garde_corps_1988", assumed: false });
+    expect(guardRailRegime("2025-02-30")).toMatchObject({
+      regime: "garde_corps_2024",
+      assumed: true,
+    });
+    expect(guardRailRegime("2025-13-01")).toMatchObject({
+      regime: "garde_corps_2024",
+      assumed: true,
+    });
+    expect(guardRailRegime("2024-02-29")).toMatchObject({
+      regime: "garde_corps_1988",
+      assumed: false,
+    });
   });
 });
 
@@ -72,7 +94,10 @@ describe("H_TOLERANCE_DTU et 1re hauteur", () => {
   const rs = [140, ...Array.from({ length: 15 }, () => (2720 - 140) / 15)];
 
   it("hors DTU (pas de tolérance propre à la 1re marche) : la 1re hauteur est contrôlée à ±5", () => {
-    const v = violations({ project: { contexts: ["logement_interieur"] }, stepping: { rises: rs } }, "H_TOLERANCE_DTU");
+    const v = violations(
+      { project: { contexts: ["logement_interieur"] }, stepping: { rises: rs } },
+      "H_TOLERANCE_DTU",
+    );
     expect(v.map((r) => r.location)).toEqual([{ kind: "nosing", index: 0 }]);
   });
 
@@ -85,7 +110,10 @@ describe("H_TOLERANCE_DTU et 1re hauteur", () => {
 
 describe("VOLEE_MAX_ERP", () => {
   it("escalier droit d'ERP : 26 hauteurs sans palier = violation", () => {
-    expect(violations({ project: erpStraight, stepping: { riserCount: 26 } }, "VOLEE_MAX_ERP")[0]?.measured).toBe(26);
+    expect(
+      violations({ project: erpStraight, stepping: { riserCount: 26 } }, "VOLEE_MAX_ERP")[0]
+        ?.measured,
+    ).toBe(26);
   });
 
   it("escalier tournant d'ERP : non évaluée (CO 56, balancement continu)", () => {

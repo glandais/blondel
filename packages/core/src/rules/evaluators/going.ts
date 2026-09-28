@@ -5,7 +5,15 @@
  * conception diffère de la ligne de mesure réglementaire, les règles LF_POSITION_* le signalent.
  */
 import type { Tread } from "../../model/derived.js";
-import { NUMERIC_EPS, checkItems, fmt, notApplicable, treadLocation, treadsOfKind, type Item } from "../check.js";
+import {
+  NUMERIC_EPS,
+  checkItems,
+  fmt,
+  notApplicable,
+  treadLocation,
+  treadsOfKind,
+  type Item,
+} from "../check.js";
 import { getRule } from "../table.js";
 import type { EvaluatorContext, Finding, RuleEvaluator } from "../types.js";
 
@@ -23,7 +31,11 @@ function walkingTreads(ctx: EvaluatorContext): Tread[] {
 
 /** g ≥ min sur toutes les marches (hors paliers). */
 const goingMin: RuleEvaluator = (ctx) =>
-  checkItems(ctx, goingItems(walkingTreads(ctx), (t) => t.going), "Giron sur la ligne de foulée");
+  checkItems(
+    ctx,
+    goingItems(walkingTreads(ctx), (t) => t.going),
+    "Giron sur la ligne de foulée",
+  );
 
 /** |g_i − g_nom| dans [min ; max] pour un type de marche. */
 function goingTolerance(kind: "straight" | "winder"): RuleEvaluator {
@@ -32,7 +44,9 @@ function goingTolerance(kind: "straight" | "winder"): RuleEvaluator {
       ctx,
       goingItems(treadsOfKind(ctx.stepping, kind), (t) => t.going - ctx.stepping.going),
       kind === "straight" ? "Écart de giron (marche droite)" : "Écart de giron (marche balancée)",
-      { emptyMessage: `Sans objet : aucune marche ${kind === "straight" ? "droite" : "balancée"}.` },
+      {
+        emptyMessage: `Sans objet : aucune marche ${kind === "straight" ? "droite" : "balancée"}.`,
+      },
     );
 }
 
@@ -52,9 +66,14 @@ const winderVsStraight: RuleEvaluator = (ctx) => {
 };
 
 const colletMin: RuleEvaluator = (ctx) =>
-  checkItems(ctx, goingItems(treadsOfKind(ctx.stepping, "winder"), (t) => t.colletChord), "Giron au collet (corde)", {
-    emptyMessage: "Sans objet : aucune marche balancée.",
-  });
+  checkItems(
+    ctx,
+    goingItems(treadsOfKind(ctx.stepping, "winder"), (t) => t.colletChord),
+    "Giron au collet (corde)",
+    {
+      emptyMessage: "Sans objet : aucune marche balancée.",
+    },
+  );
 
 /** Groupes de marches balancées consécutives (par zone balancée si connue). */
 function winderGroups(ctx: EvaluatorContext): Tread[][] {
@@ -62,7 +81,8 @@ function winderGroups(ctx: EvaluatorContext): Tread[][] {
   const zones = ctx.stepping.balancedZones;
   const groups: Tread[][] = [];
   // La marche t est comprise entre le nez t−1 et le nez t.
-  const inZone = (t: Tread, z: (typeof zones)[number]): boolean => t.number - 1 >= z.from && t.number <= z.to;
+  const inZone = (t: Tread, z: (typeof zones)[number]): boolean =>
+    t.number - 1 >= z.from && t.number <= z.to;
   for (const z of zones) {
     const g = winders.filter((t) => inZone(t, z));
     if (g.length > 0) groups.push(g);
@@ -109,15 +129,26 @@ const colletMonotone: RuleEvaluator = (ctx) => {
     }
   });
   if (out.length > 0) return out;
-  return [{ status: "ok", location: { kind: "stair" }, message: `Collets monotones vers l'angle dans ${groups.length} zone(s) balancée(s).` }];
+  return [
+    {
+      status: "ok",
+      location: { kind: "stair" },
+      message: `Collets monotones vers l'angle dans ${groups.length} zone(s) balancée(s).`,
+    },
+  ];
 };
 
 /** G_EXT_MAX_ERP_TOURNANT : g_ext < 420 (inégalité stricte de la formule). */
 const outerGoingMax: RuleEvaluator = (ctx) =>
-  checkItems(ctx, goingItems(treadsOfKind(ctx.stepping, "winder"), (t) => t.goingOuter), "Giron extérieur", {
-    bounds: { min: ctx.rule.min, max: ctx.rule.max, strictMax: true },
-    emptyMessage: "Sans objet : aucune marche balancée.",
-  });
+  checkItems(
+    ctx,
+    goingItems(treadsOfKind(ctx.stepping, "winder"), (t) => t.goingOuter),
+    "Giron extérieur",
+    {
+      bounds: { min: ctx.rule.min, max: ctx.rule.max, strictMax: true },
+      emptyMessage: "Sans objet : aucune marche balancée.",
+    },
+  );
 
 export const GOING_EVALUATORS: Readonly<Record<string, RuleEvaluator>> = {
   G_MIN_DTU: goingMin,

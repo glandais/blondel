@@ -54,7 +54,11 @@ export interface StairFrames {
 }
 
 /** Construit les repères des volées et des tournants (tournants à 90°). */
-export function buildFrames(width: number, legLengths: readonly number[], turns: readonly TurnDirection[]): StairFrames {
+export function buildFrames(
+  width: number,
+  legLengths: readonly number[],
+  turns: readonly TurnDirection[],
+): StairFrames {
   if (legLengths.length !== turns.length + 1) {
     throw new RangeError("Il faut exactement une volée de plus que de tournants.");
   }
@@ -90,7 +94,12 @@ export function buildFrames(width: number, legLengths: readonly number[], turns:
 /** Morceau de ligne de foulée : droit (dans une volée) ou arc (dans un tournant). */
 export type WalkPiece =
   | { readonly kind: "line"; readonly leg: number; readonly t0: number; readonly t1: number }
-  | { readonly kind: "arc"; readonly turn: number; readonly startDir: Vec2; readonly sweep: number };
+  | {
+      readonly kind: "arc";
+      readonly turn: number;
+      readonly startDir: Vec2;
+      readonly sweep: number;
+    };
 
 export function walkPieceLength(frames: StairFrames, piece: WalkPiece): number {
   return piece.kind === "line" ? piece.t1 - piece.t0 : (Math.abs(piece.sweep) * frames.width) / 2;
@@ -107,7 +116,12 @@ export function walkPieces(frames: StairFrames): WalkPiece[] {
     const turn = turns[i];
     if (turn !== undefined) {
       const startDir = turn.direction === "left" ? turn.r : scale(turn.r, -1);
-      pieces.push({ kind: "arc", turn: i, startDir, sweep: turn.direction === "left" ? Math.PI / 2 : -Math.PI / 2 });
+      pieces.push({
+        kind: "arc",
+        turn: i,
+        startDir,
+        sweep: turn.direction === "left" ? Math.PI / 2 : -Math.PI / 2,
+      });
     }
   });
   return pieces;
@@ -130,7 +144,11 @@ export interface WalkSample {
  * Échantillonne la ligne de foulée depuis l'arrivée, sur une distance `maxDistance`
  * (pas ≤ `step`, extrémité exacte incluse).
  */
-export function sampleFromArrival(frames: StairFrames, maxDistance: number, step = 5): WalkSample[] {
+export function sampleFromArrival(
+  frames: StairFrames,
+  maxDistance: number,
+  step = 5,
+): WalkSample[] {
   const { width } = frames;
   const d = width / 2;
   const pieces = walkPieces(frames).reverse();
@@ -149,7 +167,11 @@ export function sampleFromArrival(frames: StairFrames, maxDistance: number, step
         const t = piece.t0 + f * (piece.t1 - piece.t0);
         const left = add(leg.start, scale(leg.u, t));
         const right = add(left, scale(leg.r, width));
-        samples.push({ fromArrival: acc + back, point: add(left, scale(leg.r, d)), section: [left, right] });
+        samples.push({
+          fromArrival: acc + back,
+          point: add(left, scale(leg.r, d)),
+          section: [left, right],
+        });
       } else {
         const turn = frames.turns[piece.turn]!;
         const dir = rotate(piece.startDir, piece.sweep * f);
@@ -189,7 +211,10 @@ export function boundingRect(points: readonly Vec2[], grid = 10): Rect {
 
 export function rectContains(rect: Rect, p: Vec2, tol = 1e-6): boolean {
   return (
-    p.x >= rect.x - tol && p.x <= rect.x + rect.sizeX + tol && p.y >= rect.y - tol && p.y <= rect.y + rect.sizeY + tol
+    p.x >= rect.x - tol &&
+    p.x <= rect.x + rect.sizeX + tol &&
+    p.y >= rect.y - tol &&
+    p.y <= rect.y + rect.sizeY + tol
   );
 }
 
@@ -198,6 +223,11 @@ export function rectContains(rect: Rect, p: Vec2, tol = 1e-6): boolean {
  * la trémie doit s'étendre : `L ≥ (e_min + ep)·g/h` (A §1.7, dérivation géométrique pour une
  * mesure verticale au-dessus de la ligne de pente).
  */
-export function requiredOpeningLength(headroomMin: number, slabThickness: number, going: number, rise: number): number {
+export function requiredOpeningLength(
+  headroomMin: number,
+  slabThickness: number,
+  going: number,
+  rise: number,
+): number {
   return ((headroomMin + slabThickness) * going) / rise;
 }

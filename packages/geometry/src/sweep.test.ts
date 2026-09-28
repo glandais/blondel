@@ -9,10 +9,17 @@ import { minNormalAgreement, rect, rel } from "./testing.js";
 import { cross, dot, length, normalize, sub } from "./vec3.js";
 
 const disc = (r: number, n: number) =>
-  Array.from({ length: n }, (_, i) => ({ x: r * Math.cos((2 * Math.PI * i) / n), y: r * Math.sin((2 * Math.PI * i) / n) }));
+  Array.from({ length: n }, (_, i) => ({
+    x: r * Math.cos((2 * Math.PI * i) / n),
+    y: r * Math.sin((2 * Math.PI * i) / n),
+  }));
 
 const unit = fc
-  .tuple(fc.double({ min: -1, max: 1, noNaN: true }), fc.double({ min: -1, max: 1, noNaN: true }), fc.double({ min: -1, max: 1, noNaN: true }))
+  .tuple(
+    fc.double({ min: -1, max: 1, noNaN: true }),
+    fc.double({ min: -1, max: 1, noNaN: true }),
+    fc.double({ min: -1, max: 1, noNaN: true }),
+  )
   .filter(([x, y, z]) => Math.hypot(x, y, z) > 0.2)
   .map(([x, y, z]) => normalize({ x, y, z }));
 
@@ -23,14 +30,21 @@ const unit = fc
 const gentlePath = fc
   .tuple(
     unit,
-    fc.array(fc.tuple(unit, fc.double({ min: 300, max: 2000, noNaN: true })), { minLength: 1, maxLength: 12 }),
+    fc.array(fc.tuple(unit, fc.double({ min: 300, max: 2000, noNaN: true })), {
+      minLength: 1,
+      maxLength: 12,
+    }),
   )
   .map(([d0, steps]) => {
     const pts: Vec3[] = [{ x: 0, y: 0, z: 0 }];
     let d = d0;
     for (const [perturb, len] of steps) {
       // Nouvelle direction : d + 0,5 · perturbation (angle ≤ 30° environ), renormalisée.
-      d = normalize({ x: d.x + 0.5 * perturb.x, y: d.y + 0.5 * perturb.y, z: d.z + 0.5 * perturb.z });
+      d = normalize({
+        x: d.x + 0.5 * perturb.x,
+        y: d.y + 0.5 * perturb.y,
+        z: d.z + 0.5 * perturb.z,
+      });
       const p = pts[pts.length - 1]!;
       pts.push({ x: p.x + len * d.x, y: p.y + len * d.y, z: p.z + len * d.z });
     }
@@ -63,7 +77,11 @@ describe("parallelTransportFrames", () => {
           if (k > 0) {
             // Transport parallèle : la composante de N selon l'axe de rotation k = T0 × T1 est conservée.
             const prev = frames[k - 1]!;
-            const axis = { x: prev.tangent.y * f.tangent.z - prev.tangent.z * f.tangent.y, y: prev.tangent.z * f.tangent.x - prev.tangent.x * f.tangent.z, z: prev.tangent.x * f.tangent.y - prev.tangent.y * f.tangent.x };
+            const axis = {
+              x: prev.tangent.y * f.tangent.z - prev.tangent.z * f.tangent.y,
+              y: prev.tangent.z * f.tangent.x - prev.tangent.x * f.tangent.z,
+              z: prev.tangent.x * f.tangent.y - prev.tangent.y * f.tangent.x,
+            };
             expect(dot(prev.normal, axis)).toBeCloseTo(dot(f.normal, axis), 9);
           }
         });
@@ -72,13 +90,25 @@ describe("parallelTransportFrames", () => {
   });
 
   it("demi-tour : GeometryError", () => {
-    expect(() => parallelTransportFrames([{ x: 0, y: 0, z: 0 }, { x: 1, y: 0, z: 0 }, { x: 0, y: 0, z: 0 }])).toThrow(GeometryError);
+    expect(() =>
+      parallelTransportFrames([
+        { x: 0, y: 0, z: 0 },
+        { x: 1, y: 0, z: 0 },
+        { x: 0, y: 0, z: 0 },
+      ]),
+    ).toThrow(GeometryError);
   });
 });
 
 describe("meshSweep", () => {
   it("balayage droit d'un rectangle : pavé", () => {
-    const m = meshSweep([{ x: 0, y: 0, z: 0 }, { x: 1000, y: 0, z: 0 }], { outer: rect(0, 0, 40, 60), holes: [] });
+    const m = meshSweep(
+      [
+        { x: 0, y: 0, z: 0 },
+        { x: 1000, y: 0, z: 0 },
+      ],
+      { outer: rect(0, 0, 40, 60), holes: [] },
+    );
     expect(signedVolume(m)).toBeCloseTo(40 * 60 * 1000, 2);
     expect(checkManifold(m).ok).toBe(true);
     // Section « debout » : v = +Z, donc 60 mm en hauteur, 40 mm en largeur (u = −Y pour T = +X).
@@ -89,13 +119,21 @@ describe("meshSweep", () => {
 
   it("propriété : balayage droit, volume = aire × longueur (tube avec trou)", () => {
     fc.assert(
-      fc.property(unit, fc.double({ min: 10, max: 5000, noNaN: true }), fc.integer({ min: 3, max: 40 }), (d, len, n) => {
-        const path = [{ x: 10, y: -20, z: 30 }, { x: 10 + len * d.x, y: -20 + len * d.y, z: 30 + len * d.z }];
-        const section = { outer: disc(25, n), holes: [disc(20, n).reverse()] };
-        const m = meshSweep(path, section);
-        expect(checkManifold(m).ok).toBe(true);
-        expect(rel(signedVolume(m), shapeArea(section) * len)).toBeLessThan(1e-4);
-      }),
+      fc.property(
+        unit,
+        fc.double({ min: 10, max: 5000, noNaN: true }),
+        fc.integer({ min: 3, max: 40 }),
+        (d, len, n) => {
+          const path = [
+            { x: 10, y: -20, z: 30 },
+            { x: 10 + len * d.x, y: -20 + len * d.y, z: 30 + len * d.z },
+          ];
+          const section = { outer: disc(25, n), holes: [disc(20, n).reverse()] };
+          const m = meshSweep(path, section);
+          expect(checkManifold(m).ok).toBe(true);
+          expect(rel(signedVolume(m), shapeArea(section) * len)).toBeLessThan(1e-4);
+        },
+      ),
     );
   });
 
@@ -116,7 +154,11 @@ describe("meshSweep", () => {
     expect(() => meshSweep([p, p], { outer: rect(0, 0, 1, 1), holes: [] })).toThrow(GeometryError);
     const m = meshSweep([p, p, { x: 0, y: 0, z: 100 }], { outer: rect(0, 0, 10, 10), holes: [] });
     expect(signedVolume(m)).toBeCloseTo(10000, 3);
-    expect(length(sub({ x: 0, y: 0, z: 1 }, parallelTransportFrames([p, { x: 0, y: 0, z: 100 }])[0]!.tangent))).toBe(0);
+    expect(
+      length(
+        sub({ x: 0, y: 0, z: 1 }, parallelTransportFrames([p, { x: 0, y: 0, z: 100 }])[0]!.tangent),
+      ),
+    ).toBe(0);
   });
 });
 
@@ -173,9 +215,14 @@ describe("repère de section sur une hélice (main courante d'escalier hélicoï
           // coupé selon une diagonale → volume par défaut, écart relatif ≈ 0,4·ψ (mesuré), borné
           // ici par 0,5·ψ. Le transport parallèle, lui, donne des faces planes et un volume exact.
           const L = polylineLength(path);
-          const psi = (2 * Math.PI * turns * (Math.abs(climb) * turns / L)) / n;
+          const psi = (2 * Math.PI * turns * ((Math.abs(climb) * turns) / L)) / n;
           expect(rel(signedVolume(m), shapeArea(section) * L)).toBeLessThan(0.5 * psi + 1e-6);
-          expect(rel(signedVolume(meshSweep(path, section, { sweepFrame: "parallel" })), shapeArea(section) * L)).toBeLessThan(1e-5);
+          expect(
+            rel(
+              signedVolume(meshSweep(path, section, { sweepFrame: "parallel" })),
+              shapeArea(section) * L,
+            ),
+          ).toBeLessThan(1e-5);
           expect(minNormalAgreement(m)).toBeGreaterThan(0.5);
         },
       ),
@@ -209,11 +256,16 @@ describe("repère de section sur une hélice (main courante d'escalier hélicoï
   });
 
   it("options invalides : GeometryError", () => {
-    const path = [{ x: 0, y: 0, z: 0 }, { x: 100, y: 0, z: 0 }];
+    const path = [
+      { x: 0, y: 0, z: 0 },
+      { x: 100, y: 0, z: 0 },
+    ];
     const section = { outer: rect(0, 0, 10, 10), holes: [] };
     expect(() => meshSweep(path, section, { creaseAngleDeg: -5 })).toThrow(GeometryError);
     expect(() => meshSweep(path, section, { creaseAngleDeg: Number.NaN })).toThrow(GeometryError);
-    expect(() => meshSweep(path, section, { sweepFrame: "frenet" as never })).toThrow(GeometryError);
+    expect(() => meshSweep(path, section, { sweepFrame: "frenet" as never })).toThrow(
+      GeometryError,
+    );
     expect(() => meshSweep(path, section, { maxPathPoints: 1 })).toThrow(GeometryError);
   });
 });

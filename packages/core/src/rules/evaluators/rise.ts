@@ -29,7 +29,11 @@ const riseTolerance: RuleEvaluator = (ctx) => {
   return checkItems(
     ctx,
     ctx.stepping.rises
-      .map((h, i) => ({ value: h - ctx.stepping.rise, location: riseLocation(i), label: `hauteur ${i + 1}` }))
+      .map((h, i) => ({
+        value: h - ctx.stepping.rise,
+        location: riseLocation(i),
+        label: `hauteur ${i + 1}`,
+      }))
       .slice(firstHasOwnTolerance ? 1 : 0),
     "Écart à la hauteur nominale",
   );
@@ -38,10 +42,16 @@ const riseTolerance: RuleEvaluator = (ctx) => {
 const firstRiseTolerance: RuleEvaluator = (ctx) => {
   const h1 = ctx.stepping.rises[0];
   if (h1 === undefined) return [];
-  return [checkValue(ctx, h1 - ctx.stepping.rise, "Écart de la 1re hauteur à la hauteur nominale", { location: riseLocation(0) })];
+  return [
+    checkValue(ctx, h1 - ctx.stepping.rise, "Écart de la 1re hauteur à la hauteur nominale", {
+      location: riseLocation(0),
+    }),
+  ];
 };
 
-const nominalRise: RuleEvaluator = (ctx) => [checkValue(ctx, ctx.stepping.rise, "Hauteur de marche nominale")];
+const nominalRise: RuleEvaluator = (ctx) => [
+  checkValue(ctx, ctx.stepping.rise, "Hauteur de marche nominale"),
+];
 
 /** max(h_i) − min(h_i) par volée, hors 1re hauteur de l'escalier. */
 const riseRegularity: RuleEvaluator = (ctx) => {
@@ -50,11 +60,15 @@ const riseRegularity: RuleEvaluator = (ctx) => {
     const hs = f.riseIndices.filter((i) => i > 0).map((i) => ctx.stepping.rises[i]!);
     if (hs.length < 2) continue;
     const spread = Math.max(...hs) - Math.min(...hs);
-    out.push(checkValue(ctx, spread, `Écart entre hauteurs de la volée ${f.number} (hors 1re marche)`));
+    out.push(
+      checkValue(ctx, spread, `Écart entre hauteurs de la volée ${f.number} (hors 1re marche)`),
+    );
   }
   const bad = out.filter((f) => f.status === "violation");
   if (bad.length > 0) return bad;
-  return out.length > 0 ? [out.reduce((a, b) => ((b.measured ?? 0) > (a.measured ?? 0) ? b : a))] : [];
+  return out.length > 0
+    ? [out.reduce((a, b) => ((b.measured ?? 0) > (a.measured ?? 0) ? b : a))]
+    : [];
 };
 
 export const RISE_EVALUATORS: Readonly<Record<string, RuleEvaluator>> = {

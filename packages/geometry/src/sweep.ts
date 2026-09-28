@@ -72,7 +72,8 @@ export function sweepFrames(path: readonly Vec3[], mode: SweepFrameMode): SweepF
     const T = normalize(sub(path[k + 1]!, path[k]!));
     // Segment (quasi) vertical : plan vertical de la tangente mal défini (< 1 µrad).
     const vertical = Math.hypot(T.x, T.y) <= 1e-6;
-    if (prevT && dot(prevT, T) < -1 + 1e-9) throw new GeometryError("chemin de balayage avec demi-tour");
+    if (prevT && dot(prevT, T) < -1 + 1e-9)
+      throw new GeometryError("chemin de balayage avec demi-tour");
     if (!prevT || (mode === "upright" && !vertical)) {
       const up = vertical ? v3(0, 1, 0) : v3(0, 0, 1);
       B = normalize(sub(up, scale(T, dot(up, T))));
@@ -97,13 +98,18 @@ export function polylineLength(path: readonly Vec3[]): number {
 }
 
 /** Balaye `section` le long de `path`. Chemin d'au moins 2 points distincts. */
-export function meshSweep(pathIn: readonly Vec3[], section: Shape2, options: MeshOptions = {}): Mesh {
+export function meshSweep(
+  pathIn: readonly Vec3[],
+  section: Shape2,
+  options: MeshOptions = {},
+): Mesh {
   const path = dedupePath(pathIn);
   if (path.length < 2) throw new GeometryError("chemin de balayage de moins de 2 points distincts");
   if (path.length > maxPathPoints(options)) throw new GeometryError("chemin de balayage trop long");
   const crease = creaseCos(options, 30);
   const mode = options.sweepFrame ?? "upright";
-  if (mode !== "upright" && mode !== "parallel") throw new GeometryError(`repère de balayage inconnu : ${String(mode)}`);
+  if (mode !== "upright" && mode !== "parallel")
+    throw new GeometryError(`repère de balayage inconnu : ${String(mode)}`);
   const shape = prepareShape(section);
   const frames = sweepFrames(path, mode);
   const m = path.length;
@@ -173,7 +179,8 @@ export function meshSweep(pathIn: readonly Vec3[], section: Shape2, options: Mes
   for (const r of shape.rings) {
     const n = r.length / 2;
     const pts = new Float64Array(3 * m * n);
-    for (let k = 0; k < m; k++) for (let j = 0; j < n; j++) place(k, r[2 * j]!, r[2 * j + 1]!, pts, 3 * (k * n + j));
+    for (let k = 0; k < m; k++)
+      for (let j = 0; j < n; j++) place(k, r[2 * j]!, r[2 * j + 1]!, pts, 3 * (k * n + j));
     addGrid(b, pts, m, n, sharpRow, sharpCorners(r, crease));
   }
   const c = shape.coords;

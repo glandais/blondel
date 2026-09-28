@@ -2,7 +2,15 @@
  * Grandeurs globales de l'escalier : module de Blondel, pente, emmarchement et largeurs,
  * position de la ligne de foulée, échappée.
  */
-import { NUMERIC_EPS, STAIR, checkValue, fmt, notApplicable, notEvaluated, treadsOfKind } from "../check.js";
+import {
+  NUMERIC_EPS,
+  STAIR,
+  checkValue,
+  fmt,
+  notApplicable,
+  notEvaluated,
+  treadsOfKind,
+} from "../check.js";
 import { LF_WIDE_THRESHOLD } from "../formula-constants.js";
 import { getRule } from "../table.js";
 import type { EvaluatorContext, Finding, RuleEvaluator } from "../types.js";
@@ -10,14 +18,24 @@ import type { EvaluatorContext, Finding, RuleEvaluator } from "../types.js";
 // ------------------------------------------------------------------ Blondel et pente
 
 const blondel: RuleEvaluator = (ctx) => [
-  checkValue(ctx, ctx.stepping.blondel, `Module 2h + g (h = ${fmt(ctx.stepping.rise)} mm, g = ${fmt(ctx.stepping.going)} mm)`),
+  checkValue(
+    ctx,
+    ctx.stepping.blondel,
+    `Module 2h + g (h = ${fmt(ctx.stepping.rise)} mm, g = ${fmt(ctx.stepping.going)} mm)`,
+  ),
 ];
 
-const steepness: RuleEvaluator = (ctx) => [checkValue(ctx, ctx.stepping.rise / ctx.stepping.going, "Rapport h / g")];
+const steepness: RuleEvaluator = (ctx) => [
+  checkValue(ctx, ctx.stepping.rise / ctx.stepping.going, "Rapport h / g"),
+];
 
 /** Angle de pente α = atan(h / g), en degrés. */
 const slopeAngle: RuleEvaluator = (ctx) => [
-  checkValue(ctx, (Math.atan2(ctx.stepping.rise, ctx.stepping.going) * 180) / Math.PI, "Angle de pente (degrés)"),
+  checkValue(
+    ctx,
+    (Math.atan2(ctx.stepping.rise, ctx.stepping.going) * 180) / Math.PI,
+    "Angle de pente (degrés)",
+  ),
 ];
 
 // ------------------------------------------------------------------ Emmarchement et largeurs
@@ -36,7 +54,10 @@ const passageWidthLogement: RuleEvaluator = (ctx) => {
   const f = checkValue(ctx, width(ctx), "Largeur de passage (mesurée sur l'emmarchement)");
   return [
     f.status === "ok"
-      ? { ...f, message: `${f.message} Sous réserve de mains courantes saillantes de plus de 100 mm.` }
+      ? {
+          ...f,
+          message: `${f.message} Sous réserve de mains courantes saillantes de plus de 100 mm.`,
+        }
       : f,
   ];
 };
@@ -71,7 +92,11 @@ function walklineAt(ctx: EvaluatorContext, expected: number, label: string): Fin
   const d = ctx.layout.walklineOffset;
   const base = { measured: d, min: expected, max: expected, location: STAIR } as const;
   if (Math.abs(d - expected) <= NUMERIC_EPS) {
-    return { ...base, status: "ok", message: `Ligne de foulée à ${fmt(d)} mm du bord intérieur (${label}).` };
+    return {
+      ...base,
+      status: "ok",
+      message: `Ligne de foulée à ${fmt(d)} mm du bord intérieur (${label}).`,
+    };
   }
   if (treadsOfKind(ctx.stepping, "winder").length === 0) {
     return {
@@ -92,8 +117,10 @@ function dtuWalkline(branch: "narrow" | "wide" | "both"): RuleEvaluator {
   return (ctx) => {
     const e = width(ctx);
     const narrow = e <= LF_WIDE_THRESHOLD.value;
-    if (branch === "narrow" && !narrow) return [notApplicable(`Sans objet : E = ${fmt(e)} mm > ${LF_WIDE_THRESHOLD.value} mm.`)];
-    if (branch === "wide" && narrow) return [notApplicable(`Sans objet : E = ${fmt(e)} mm ≤ ${LF_WIDE_THRESHOLD.value} mm.`)];
+    if (branch === "narrow" && !narrow)
+      return [notApplicable(`Sans objet : E = ${fmt(e)} mm > ${LF_WIDE_THRESHOLD.value} mm.`)];
+    if (branch === "wide" && narrow)
+      return [notApplicable(`Sans objet : E = ${fmt(e)} mm ≤ ${LF_WIDE_THRESHOLD.value} mm.`)];
     if (narrow) return [walklineAt(ctx, e / 2, `milieu de l'emmarchement, E = ${fmt(e)} mm`)];
     const d = branch === "wide" ? ctx.rule.min : wideDistance(ctx);
     if (d === null) return [notEvaluated("Distance de la ligne de mesure absente de la table.")];
@@ -117,7 +144,8 @@ const fixedWalkline: RuleEvaluator = (ctx) => {
 
 const headroom: RuleEvaluator = (ctx) => {
   if (!ctx.headroom) {
-    if (!ctx.project.site.opening) return [notApplicable("Sans objet : pas de trémie (aucun plancher au-dessus).")];
+    if (!ctx.project.site.opening)
+      return [notApplicable("Sans objet : pas de trémie (aucun plancher au-dessus).")];
     return [notEvaluated("Échappée non calculée.")];
   }
   return [

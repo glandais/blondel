@@ -13,10 +13,16 @@ export interface Bbox3 {
 export function bbox(mesh: Mesh): Bbox3 | null {
   const p = mesh.positions;
   if (p.length === 0) return null;
-  let x0 = Infinity, y0 = Infinity, z0 = Infinity;
-  let x1 = -Infinity, y1 = -Infinity, z1 = -Infinity;
+  let x0 = Infinity,
+    y0 = Infinity,
+    z0 = Infinity;
+  let x1 = -Infinity,
+    y1 = -Infinity,
+    z1 = -Infinity;
   for (let k = 0; k < p.length; k += 3) {
-    const x = p[k]!, y = p[k + 1]!, z = p[k + 2]!;
+    const x = p[k]!,
+      y = p[k + 1]!,
+      z = p[k + 2]!;
     if (x < x0) x0 = x;
     if (x > x1) x1 = x;
     if (y < y0) y0 = y;
@@ -34,8 +40,16 @@ export function unionBbox(boxes: readonly (Bbox3 | null)[]): Bbox3 | null {
     if (!b) continue;
     r = r
       ? {
-          min: { x: Math.min(r.min.x, b.min.x), y: Math.min(r.min.y, b.min.y), z: Math.min(r.min.z, b.min.z) },
-          max: { x: Math.max(r.max.x, b.max.x), y: Math.max(r.max.y, b.max.y), z: Math.max(r.max.z, b.max.z) },
+          min: {
+            x: Math.min(r.min.x, b.min.x),
+            y: Math.min(r.min.y, b.min.y),
+            z: Math.min(r.min.z, b.min.z),
+          },
+          max: {
+            x: Math.max(r.max.x, b.max.x),
+            y: Math.max(r.max.y, b.max.y),
+            z: Math.max(r.max.z, b.max.z),
+          },
         }
       : b;
   }
@@ -51,13 +65,23 @@ export function signedVolume(mesh: Mesh): number {
   const p = mesh.positions;
   const idx = mesh.indices;
   if (idx.length === 0) return 0;
-  const ox = p[0]!, oy = p[1]!, oz = p[2]!;
+  const ox = p[0]!,
+    oy = p[1]!,
+    oz = p[2]!;
   let v = 0;
   for (let t = 0; t < idx.length; t += 3) {
-    const a = 3 * idx[t]!, b = 3 * idx[t + 1]!, c = 3 * idx[t + 2]!;
-    const ax = p[a]! - ox, ay = p[a + 1]! - oy, az = p[a + 2]! - oz;
-    const bx = p[b]! - ox, by = p[b + 1]! - oy, bz = p[b + 2]! - oz;
-    const cx = p[c]! - ox, cy = p[c + 1]! - oy, cz = p[c + 2]! - oz;
+    const a = 3 * idx[t]!,
+      b = 3 * idx[t + 1]!,
+      c = 3 * idx[t + 2]!;
+    const ax = p[a]! - ox,
+      ay = p[a + 1]! - oy,
+      az = p[a + 2]! - oz;
+    const bx = p[b]! - ox,
+      by = p[b + 1]! - oy,
+      bz = p[b + 2]! - oz;
+    const cx = p[c]! - ox,
+      cy = p[c + 1]! - oy,
+      cz = p[c + 2]! - oz;
     v += ax * (by * cz - bz * cy) + ay * (bz * cx - bx * cz) + az * (bx * cy - by * cx);
   }
   return v / 6;
@@ -69,9 +93,15 @@ export function surfaceArea(mesh: Mesh): number {
   const idx = mesh.indices;
   let s = 0;
   for (let t = 0; t < idx.length; t += 3) {
-    const a = 3 * idx[t]!, b = 3 * idx[t + 1]!, c = 3 * idx[t + 2]!;
-    const ux = p[b]! - p[a]!, uy = p[b + 1]! - p[a + 1]!, uz = p[b + 2]! - p[a + 2]!;
-    const vx = p[c]! - p[a]!, vy = p[c + 1]! - p[a + 1]!, vz = p[c + 2]! - p[a + 2]!;
+    const a = 3 * idx[t]!,
+      b = 3 * idx[t + 1]!,
+      c = 3 * idx[t + 2]!;
+    const ux = p[b]! - p[a]!,
+      uy = p[b + 1]! - p[a + 1]!,
+      uz = p[b + 2]! - p[a + 2]!;
+    const vx = p[c]! - p[a]!,
+      vy = p[c + 1]! - p[a + 1]!,
+      vz = p[c + 2]! - p[a + 2]!;
     s += Math.hypot(uy * vz - uz * vy, uz * vx - ux * vz, ux * vy - uy * vx);
   }
   return s / 2;
@@ -127,12 +157,18 @@ export function checkManifold(mesh: Mesh, weldTolerance = 1e-3): ManifoldReport 
   let degenerate = 0;
   const idx = mesh.indices;
   for (let t = 0; t < idx.length; t += 3) {
-    const a = weld[idx[t]!]!, b = weld[idx[t + 1]!]!, c = weld[idx[t + 2]!]!;
+    const a = weld[idx[t]!]!,
+      b = weld[idx[t + 1]!]!,
+      c = weld[idx[t + 2]!]!;
     if (a === b || b === c || c === a) {
       degenerate++;
       continue;
     }
-    for (const [u, v] of [[a, b], [b, c], [c, a]] as const) {
+    for (const [u, v] of [
+      [a, b],
+      [b, c],
+      [c, a],
+    ] as const) {
       const key = u < v ? u * n + v : v * n + u;
       count.set(key, (count.get(key) ?? 0) + 1);
       balance.set(key, (balance.get(key) ?? 0) + (u < v ? 1 : -1));

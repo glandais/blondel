@@ -4,7 +4,15 @@
  * Hypothèse : le débord de nez saisi (`treads.nosing`) est aussi le recouvrement horizontal entre
  * deux marches successives, avec ou sans contremarche.
  */
-import { STAIR, checkItems, checkValue, fmt, notApplicable, notEvaluated, riseLocation } from "../check.js";
+import {
+  STAIR,
+  checkItems,
+  checkValue,
+  fmt,
+  notApplicable,
+  notEvaluated,
+  riseLocation,
+} from "../check.js";
 import { INDUSTRIAL_OVERLAP_OPEN } from "../formula-constants.js";
 import type { EvaluatorContext, Finding, RuleEvaluator } from "../types.js";
 
@@ -15,10 +23,20 @@ function spec(ctx: EvaluatorContext) {
 /** Débord de nez sur la contremarche ; sans objet sans contremarche pleine. */
 const nosingOverhang: RuleEvaluator = (ctx) => {
   const t = spec(ctx);
-  if (t.risers !== "full") return [notApplicable("Sans objet : pas de contremarche pleine (voir recouvrement).")];
+  if (t.risers !== "full")
+    return [notApplicable("Sans objet : pas de contremarche pleine (voir recouvrement).")];
   const f = checkValue(ctx, t.nosing, "Débord du nez de marche");
-  if (ctx.rule.id === "DEBORD_NEZ_LOGEMENT" && ctx.rule.recommande !== null && t.nosing > ctx.rule.recommande) {
-    return [{ ...f, message: `${f.message} Au-delà de ${fmt(ctx.rule.recommande)} mm, le nez doit être arrondi.` }];
+  if (
+    ctx.rule.id === "DEBORD_NEZ_LOGEMENT" &&
+    ctx.rule.recommande !== null &&
+    t.nosing > ctx.rule.recommande
+  ) {
+    return [
+      {
+        ...f,
+        message: `${f.message} Au-delà de ${fmt(ctx.rule.recommande)} mm, le nez doit être arrondi.`,
+      },
+    ];
   }
   return [f];
 };
@@ -35,9 +53,14 @@ const overlapIndustrial: RuleEvaluator = (ctx) => {
   const t = spec(ctx);
   const min = t.risers === "full" ? ctx.rule.min : INDUSTRIAL_OVERLAP_OPEN.value;
   return [
-    checkValue(ctx, t.nosing, `Recouvrement entre marches (${t.risers === "full" ? "avec" : "sans"} contremarche)`, {
-      bounds: { min, max: ctx.rule.max },
-    }),
+    checkValue(
+      ctx,
+      t.nosing,
+      `Recouvrement entre marches (${t.risers === "full" ? "avec" : "sans"} contremarche)`,
+      {
+        bounds: { min, max: ctx.rule.max },
+      },
+    ),
   ];
 };
 
@@ -48,13 +71,22 @@ const extremeRisers: RuleEvaluator = (ctx) => {
   if (rises.length === 0) return [notEvaluated("Aucune hauteur de marche dans le découpage.")];
   const ends = rises.length === 1 ? [0] : [0, rises.length - 1];
   if (t.risers === "open") {
-    return [notEvaluated("Contremarches ajourées : hauteur pleine des contremarches extrêmes non connue.")];
+    return [
+      notEvaluated(
+        "Contremarches ajourées : hauteur pleine des contremarches extrêmes non connue.",
+      ),
+    ];
   }
   const out: Finding[] = ends.map((i) => {
     const h = t.risers === "full" ? rises[i]! : 0;
-    const f = checkValue(ctx, h, `Contremarche ${i === 0 ? "de la 1re" : "de la dernière"} marche`, {
-      location: riseLocation(i),
-    });
+    const f = checkValue(
+      ctx,
+      h,
+      `Contremarche ${i === 0 ? "de la 1re" : "de la dernière"} marche`,
+      {
+        location: riseLocation(i),
+      },
+    );
     return f.status === "ok" ? { ...f, message: `${f.message} Contraste visuel non vérifié.` } : f;
   });
   return out.length > 0 ? out : [notApplicable("Sans objet.")];
@@ -68,7 +100,8 @@ const extremeRisers: RuleEvaluator = (ctx) => {
 const gapBetweenTreads: RuleEvaluator = (ctx) => {
   const t = spec(ctx);
   if (t.risers === "full") return [notApplicable("Sans objet : contremarches pleines.")];
-  if (t.risers === "open") return [notEvaluated("Contremarches ajourées : vide dépendant du remplissage, non évalué.")];
+  if (t.risers === "open")
+    return [notEvaluated("Contremarches ajourées : vide dépendant du remplissage, non évalué.")];
   return checkItems(
     ctx,
     ctx.stepping.rises.slice(1).map((h, k) => ({
@@ -99,8 +132,15 @@ export const MISC_EVALUATORS: Readonly<Record<string, RuleEvaluator>> = {
           {
             status: "violation",
             location: STAIR,
-            message: "Échelle de meunier hors domaine du NF DTU 36.3 : le contexte bois_dtu ne peut pas être revendiqué.",
+            message:
+              "Échelle de meunier hors domaine du NF DTU 36.3 : le contexte bois_dtu ne peut pas être revendiqué.",
           },
         ]
-      : [{ status: "ok", location: STAIR, message: "Échelle de meunier : analogies échelle à marches appliquées." }],
+      : [
+          {
+            status: "ok",
+            location: STAIR,
+            message: "Échelle de meunier : analogies échelle à marches appliquées.",
+          },
+        ],
 };

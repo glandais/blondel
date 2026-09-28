@@ -68,7 +68,8 @@ export function checkValue(
   opts: { bounds?: Bounds; location?: Location } = {},
 ): Finding {
   const b = opts.bounds ?? boundsOf(ctx);
-  if (Number.isNaN(value)) return notEvaluated(`${label} : valeur non calculable (NaN).`, opts.location ?? STAIR);
+  if (Number.isNaN(value))
+    return notEvaluated(`${label} : valeur non calculable (NaN).`, opts.location ?? STAIR);
   const ok = within(value, b);
   const unit = ctx.rule.unite;
   const u = unit && unit !== "ratio" ? ` ${unit}` : "";
@@ -101,13 +102,18 @@ export function checkItems(
   opts: { bounds?: Bounds; emptyMessage?: string } = {},
 ): Finding[] {
   const b = opts.bounds ?? boundsOf(ctx);
-  if (items.length === 0) return [notApplicable(opts.emptyMessage ?? `Sans objet : aucun élément concerné (${quantity}).`)];
+  if (items.length === 0)
+    return [
+      notApplicable(opts.emptyMessage ?? `Sans objet : aucun élément concerné (${quantity}).`),
+    ];
   const unit = ctx.rule.unite;
   const u = unit && unit !== "ratio" ? ` ${unit}` : "";
   // Une valeur non calculable (NaN) passerait toutes les comparaisons : elle est signalée à part.
   const nan = items.filter((it) => Number.isNaN(it.value));
   if (nan.length > 0) {
-    return nan.map((it) => notEvaluated(`${quantity}, ${it.label} : valeur non calculable (NaN).`, it.location));
+    return nan.map((it) =>
+      notEvaluated(`${quantity}, ${it.label} : valeur non calculable (NaN).`, it.location),
+    );
   }
   const bad = items.filter((it) => !within(it.value, b));
   if (bad.length > 0) {
@@ -171,13 +177,20 @@ export interface Flight {
  * marche i+1 ; si cette marche est un palier, la volée se termine avec cette hauteur.
  */
 export function flightsOf(stepping: Stepping): Flight[] {
-  const landingNumbers = new Set(stepping.treads.filter((t) => t.kind === "landing").map((t) => t.number));
+  const landingNumbers = new Set(
+    stepping.treads.filter((t) => t.kind === "landing").map((t) => t.number),
+  );
   const flights: Flight[] = [];
   let current: number[] = [];
   const push = (): void => {
     if (current.length === 0) return;
     const height = current.reduce((s, i) => s + (stepping.rises[i] ?? 0), 0);
-    flights.push({ number: flights.length + 1, riseIndices: current, riserCount: current.length, height });
+    flights.push({
+      number: flights.length + 1,
+      riseIndices: current,
+      riserCount: current.length,
+      height,
+    });
     current = [];
   };
   stepping.rises.forEach((_, i) => {
@@ -225,17 +238,22 @@ export function minWidth(poly: Polygon2): number {
 function convexHull(pts: Polygon2): { x: number; y: number }[] {
   const p = [...pts].sort((u, v) => u.x - v.x || u.y - v.y);
   if (p.length < 3) return p;
-  const cross = (o: { x: number; y: number }, a: { x: number; y: number }, b: { x: number; y: number }): number =>
-    (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
+  const cross = (
+    o: { x: number; y: number },
+    a: { x: number; y: number },
+    b: { x: number; y: number },
+  ): number => (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
   const lower: { x: number; y: number }[] = [];
   for (const q of p) {
-    while (lower.length >= 2 && cross(lower[lower.length - 2]!, lower[lower.length - 1]!, q) <= 0) lower.pop();
+    while (lower.length >= 2 && cross(lower[lower.length - 2]!, lower[lower.length - 1]!, q) <= 0)
+      lower.pop();
     lower.push(q);
   }
   const upper: { x: number; y: number }[] = [];
   for (let i = p.length - 1; i >= 0; i--) {
     const q = p[i]!;
-    while (upper.length >= 2 && cross(upper[upper.length - 2]!, upper[upper.length - 1]!, q) <= 0) upper.pop();
+    while (upper.length >= 2 && cross(upper[upper.length - 2]!, upper[upper.length - 1]!, q) <= 0)
+      upper.pop();
     upper.push(q);
   }
   upper.pop();

@@ -27,7 +27,12 @@ describe("parseProject", () => {
   it("complète les valeurs par défaut (y compris les objets par défaut via prefault)", () => {
     const p = parseProject(minimal());
     expect(p.name).toBe("Sans titre");
-    expect(p.stair.stepping).toEqual({ riserCount: "auto", targetRise: 175, targetGoing: "auto", firstRiseOffset: 0 });
+    expect(p.stair.stepping).toEqual({
+      riserCount: "auto",
+      targetRise: 175,
+      targetGoing: "auto",
+      firstRiseOffset: 0,
+    });
     expect(p.stair.balancing.method).toBe("M3");
     expect(p.stair.treads.thickness).toBe(40);
     expect(p.stair.structure).toEqual({ kind: "none", params: {} });
@@ -79,13 +84,21 @@ describe("parseProject", () => {
 
   it("refuse l'absence ou l'invalidité de schemaVersion", () => {
     const { schemaVersion: _omit, ...rest } = minimal();
-    expect(parseError(() => parseProject(rest)).message).toContain("« schemaVersion » (version du format) est absent");
-    expect(parseError(() => parseProject({ ...rest, schemaVersion: "1" })).message).toContain("entier positif");
-    expect(parseError(() => parseProject({ ...rest, schemaVersion: 1.5 })).message).toContain("entier positif");
+    expect(parseError(() => parseProject(rest)).message).toContain(
+      "« schemaVersion » (version du format) est absent",
+    );
+    expect(parseError(() => parseProject({ ...rest, schemaVersion: "1" })).message).toContain(
+      "entier positif",
+    );
+    expect(parseError(() => parseProject({ ...rest, schemaVersion: 1.5 })).message).toContain(
+      "entier positif",
+    );
   });
 
   it("refuse un format plus récent que le logiciel", () => {
-    const err = parseError(() => parseProject({ ...minimal(), schemaVersion: PROJECT_SCHEMA_VERSION + 1 }));
+    const err = parseError(() =>
+      parseProject({ ...minimal(), schemaVersion: PROJECT_SCHEMA_VERSION + 1 }),
+    );
     expect(err.message).toContain("plus récent");
   });
 
@@ -143,7 +156,11 @@ describe("migrations", () => {
   });
 
   it("impose schemaVersion = from + 1 même si la migration l'oublie", () => {
-    const out = migrateProjectJson({ schemaVersion: 1 }, [{ from: 1, description: "rien", migrate: (j) => ({ ...j, schemaVersion: 99 }) }], 2);
+    const out = migrateProjectJson(
+      { schemaVersion: 1 },
+      [{ from: 1, description: "rien", migrate: (j) => ({ ...j, schemaVersion: 99 }) }],
+      2,
+    );
     expect(out["schemaVersion"]).toBe(2);
   });
 
@@ -159,9 +176,9 @@ describe("migrations", () => {
       "Échec de la migration du format 1 vers 2 (casse) : champ introuvable",
     );
     const notObject: Migration = { from: 1, description: "mauvaise", migrate: () => [] as never };
-    expect(parseError(() => migrateProjectJson({ schemaVersion: 1 }, [notObject], 2)).message).toContain(
-      "n'a pas produit un objet JSON",
-    );
+    expect(
+      parseError(() => migrateProjectJson({ schemaVersion: 1 }, [notObject], 2)).message,
+    ).toContain("n'a pas produit un objet JSON");
   });
 });
 

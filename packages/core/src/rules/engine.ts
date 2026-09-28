@@ -29,18 +29,24 @@ export function effectiveSeverity(rule: RuleDef, settings: ComplianceSettings): 
     severity = "avertissement";
     reasons.push("Profil souple : valeur issue d'une source secondaire (norme non lue).");
   }
-  const override = [...settings.overrides].reverse().find((o) => o.ruleId === rule.id && o.justification.trim() !== "");
+  const override = [...settings.overrides]
+    .reverse()
+    .find((o) => o.ruleId === rule.id && o.justification.trim() !== "");
   let ignored = false;
   if (override) {
     if (override.severity === "ignore") {
       ignored = true;
       reasons.push(`Ignorée par l'utilisateur : ${override.justification.trim()}`);
     } else if (override.severity !== severity) {
-      reasons.push(`Surcharge utilisateur (${severity} → ${override.severity}) : ${override.justification.trim()}`);
+      reasons.push(
+        `Surcharge utilisateur (${severity} → ${override.severity}) : ${override.justification.trim()}`,
+      );
       severity = override.severity;
     }
   }
-  return reasons.length > 0 ? { severity, ignored, downgradeReason: reasons.join(" ") } : { severity, ignored };
+  return reasons.length > 0
+    ? { severity, ignored, downgradeReason: reasons.join(" ") }
+    : { severity, ignored };
 }
 
 function toResult(rule: RuleDef, f: Finding, eff: EffectiveSeverity): RuleResult {
@@ -84,7 +90,8 @@ export function evaluateComplianceDetailed(
   const resolved = resolveContexts(settings, input.stepping);
   const active = new Set(resolved.active);
   const notes = [...resolved.notes];
-  if (resolved.derived.length > 0) notes.push(`Contextes déduits : ${resolved.derived.join(", ")}.`);
+  if (resolved.derived.length > 0)
+    notes.push(`Contextes déduits : ${resolved.derived.join(", ")}.`);
   if (input.project.rulesVersion !== RULES_VERSION) {
     notes.push(
       `Le projet référence le jeu de règles v${input.project.rulesVersion} ; rapport établi avec la v${RULES_VERSION}.`,
@@ -94,7 +101,8 @@ export function evaluateComplianceDetailed(
   // Surcharges inopérantes : signalées plutôt qu'ignorées en silence.
   for (const o of settings.overrides) {
     if (!findRule(o.ruleId)) notes.push(`Surcharge ignorée : règle inconnue « ${o.ruleId} ».`);
-    else if (o.justification.trim() === "") notes.push(`Surcharge ignorée sur ${o.ruleId} : justification vide.`);
+    else if (o.justification.trim() === "")
+      notes.push(`Surcharge ignorée sur ${o.ruleId} : justification vide.`);
   }
 
   const results: RuleResult[] = [];
@@ -104,16 +112,27 @@ export function evaluateComplianceDetailed(
     const ev = evaluators.get(rule.id);
     let findings: readonly Finding[];
     if (!ev) {
-      findings = [{ status: "non-evaluee", location: STAIR, message: "Règle applicable sans évaluateur (non implémentée)." }];
+      findings = [
+        {
+          status: "non-evaluee",
+          location: STAIR,
+          message: "Règle applicable sans évaluateur (non implémentée).",
+        },
+      ];
     } else {
       try {
         findings = ev({ ...input, rule, contexts: active });
       } catch (e) {
         findings = [
-          { status: "non-evaluee", location: STAIR, message: `Erreur de l'évaluateur : ${e instanceof Error ? e.message : String(e)}` },
+          {
+            status: "non-evaluee",
+            location: STAIR,
+            message: `Erreur de l'évaluateur : ${e instanceof Error ? e.message : String(e)}`,
+          },
         ];
       }
-      if (findings.length === 0) findings = [{ status: "ok", location: STAIR, message: "Sans objet." }];
+      if (findings.length === 0)
+        findings = [{ status: "ok", location: STAIR, message: "Sans objet." }];
     }
     for (const f of findings) results.push(toResult(rule, f, eff));
   }
@@ -122,7 +141,13 @@ export function evaluateComplianceDetailed(
   for (const r of results) if (r.status === "violation") summary[r.severity]++;
 
   return {
-    report: { rulesVersion: RULES_VERSION, contexts: resolved.active, profile: settings.profile, results, summary },
+    report: {
+      rulesVersion: RULES_VERSION,
+      contexts: resolved.active,
+      profile: settings.profile,
+      results,
+      summary,
+    },
     contexts: resolved,
     notes,
   };
