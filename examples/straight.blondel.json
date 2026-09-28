@@ -1,0 +1,71 @@
+{
+  "compliance": {
+    "contexts": [
+      "bois_dtu",
+      "logement_interieur"
+    ],
+    "overrides": [],
+    "profile": "strict"
+  },
+  "name": "Escalier droit",
+  "rulesVersion": 1,
+  "schemaVersion": 1,
+  "site": {
+    "floorToFloor": 2700,
+    "lowerFinish": 0,
+    "opening": {
+      "kind": "rect",
+      "sizeX": 900,
+      "sizeY": 3150,
+      "x": 0,
+      "y": 630
+    },
+    "upperFinish": 0,
+    "upperSlabThickness": 200,
+    "walls": []
+  },
+  "stair": {
+    "balancing": {
+      "method": "M3",
+      "targetCollet": 100,
+      "variant": "auto",
+      "windersPerSide": "auto"
+    },
+    "layout": {
+      "legs": [
+        {
+          "length": 3780
+        }
+      ],
+      "turns": [],
+      "width": 900
+    },
+    "nosingOverrides": [],
+    "placement": {
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "rotation": 0
+    },
+    "stepping": {
+      "firstRiseOffset": 0,
+      "riserCount": "auto",
+      "targetGoing": "auto",
+      "targetRise": 175
+    },
+    "structure": {
+      "kind": "none",
+      "params": {}
+    },
+    "treads": {
+      "nosing": 10,
+      "riserThickness": 20,
+      "risers": "full",
+      "thickness": 40
+    },
+    "walkline": {
+      "mode": "dtu"
+    }
+  }
+}

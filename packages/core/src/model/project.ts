@@ -168,7 +168,7 @@ export const StairSchema = z.object({
   stepping: SteppingSchema.prefault({}),
   balancing: BalancingSchema.prefault({}),
   treads: TreadSpecSchema.prefault({}),
-  structure: StructureSpecSchema.default({ kind: "none", params: {} }),
+  structure: StructureSpecSchema.prefault({}),
   nosingOverrides: z.array(NosingOverrideSchema).default([]),
 });
 export type Stair = z.infer<typeof StairSchema>;

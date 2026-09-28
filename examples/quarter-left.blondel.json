@@ -1,0 +1,82 @@
+{
+  "compliance": {
+    "contexts": [
+      "bois_dtu",
+      "logement_interieur"
+    ],
+    "overrides": [],
+    "profile": "strict"
+  },
+  "name": "Quart tournant à gauche",
+  "rulesVersion": 1,
+  "schemaVersion": 1,
+  "site": {
+    "floorToFloor": 2700,
+    "lowerFinish": 0,
+    "opening": {
+      "kind": "rect",
+      "sizeX": 3440,
+      "sizeY": 900,
+      "x": -2540,
+      "y": 540
+    },
+    "upperFinish": 0,
+    "upperSlabThickness": 200,
+    "walls": []
+  },
+  "stair": {
+    "balancing": {
+      "method": "M3",
+      "targetCollet": 100,
+      "variant": "auto",
+      "windersPerSide": "auto"
+    },
+    "layout": {
+      "legs": [
+        {
+          "length": 1440
+        },
+        {
+          "length": 3433
+        }
+      ],
+      "turns": [
+        {
+          "direction": "left",
+          "inner": {
+            "kind": "sharp"
+          },
+          "mode": "winders"
+        }
+      ],
+      "width": 900
+    },
+    "nosingOverrides": [],
+    "placement": {
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "rotation": 0
+    },
+    "stepping": {
+      "firstRiseOffset": 0,
+      "riserCount": "auto",
+      "targetGoing": "auto",
+      "targetRise": 175
+    },
+    "structure": {
+      "kind": "none",
+      "params": {}
+    },
+    "treads": {
+      "nosing": 10,
+      "riserThickness": 20,
+      "risers": "full",
+      "thickness": 40
+    },
+    "walkline": {
+      "mode": "dtu"
+    }
+  }
+}

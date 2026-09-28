@@ -1,0 +1,92 @@
+{
+  "compliance": {
+    "contexts": [
+      "bois_dtu",
+      "logement_interieur"
+    ],
+    "overrides": [],
+    "profile": "strict"
+  },
+  "name": "Demi-tournant balancé",
+  "rulesVersion": 1,
+  "schemaVersion": 1,
+  "site": {
+    "floorToFloor": 2700,
+    "lowerFinish": 0,
+    "opening": {
+      "kind": "rect",
+      "sizeX": 1640,
+      "sizeY": 2860,
+      "x": -1000,
+      "y": -1790
+    },
+    "upperFinish": 0,
+    "upperSlabThickness": 200,
+    "walls": []
+  },
+  "stair": {
+    "balancing": {
+      "method": "M3",
+      "targetCollet": 100,
+      "variant": "auto",
+      "windersPerSide": "auto"
+    },
+    "layout": {
+      "legs": [
+        {
+          "length": 1070
+        },
+        {
+          "length": 1800
+        },
+        {
+          "length": 2853
+        }
+      ],
+      "turns": [
+        {
+          "direction": "left",
+          "inner": {
+            "kind": "sharp"
+          },
+          "mode": "winders"
+        },
+        {
+          "direction": "left",
+          "inner": {
+            "kind": "sharp"
+          },
+          "mode": "winders"
+        }
+      ],
+      "width": 800
+    },
+    "nosingOverrides": [],
+    "placement": {
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "rotation": 0
+    },
+    "stepping": {
+      "firstRiseOffset": 0,
+      "riserCount": "auto",
+      "targetGoing": "auto",
+      "targetRise": 175
+    },
+    "structure": {
+      "kind": "none",
+      "params": {}
+    },
+    "treads": {
+      "nosing": 10,
+      "riserThickness": 20,
+      "risers": "full",
+      "thickness": 40
+    },
+    "walkline": {
+      "mode": "dtu"
+    }
+  }
+}
