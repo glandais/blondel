@@ -337,6 +337,15 @@ Contradictions internes déjà corrigées par les vérificateurs (pour mémoire)
 | Q12   | Vide entre marches sans contremarche               | **Oui, en conseil** (`VIDE_ENTRE_MARCHES`, sphère de 100 mm, logement).                                                                                                                                       |
 | X14   | DXF R12 dès le MVP                                 | **Non** : DXF 2007 (AC1021) au MVP, R12 plus tard.                                                                                                                                                            |
 
+Décisions complémentaires du 2026-09-28 issues du challenge de conception (`CHALLENGE.md`) :
+
+| #              | Sujet                    | Décision                                                                                                                                                                                                       |
+| -------------- | ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A1 (challenge) | Unités                   | **Saisies en mm entiers, calcul en float64 (radians en interne), arrondi unique en sortie** par plus fort reste (ADR-0003). Dérogation au prompt 2 §3.                                                         |
+| P3 (challenge) | Nom et portée du rapport | **« Contrôle de conception »** (et non « conformité ») ; nature, confiance, source secondaire affichées ; règles non évaluées listées ; **règles de l'art** (valeurs DTU en avertissement) actives par défaut. |
+| P4 (challenge) | Jalons                   | **Bois d'abord** : J3a bois, J3b métal, J3c profilés + prédimensionnement + nomenclature ; J5a hélicoïdal, J5b débillardé soudé, J5c débillardé bois (V2).                                                     |
+| X14 / P6       | Version DXF              | **R12 maison par défaut pour les pièces**, AC1021 (2007) pour les plans cotés, choix à l'export. Remplace la ligne X14 ci-dessus.                                                                              |
+
 Corrections du §3.3 appliquées à `rules.yaml` : `GC_PARTIE_BASSE_2024` remplacée par `GC_GABARIT_B_2024`, domaine de `GC_GABARIT_T1_2024` ramené à 0–800 mm, ajout de `GC_DENIVELES_2024`, note sur la tolérance QR 81 de `LF_POSITION_ACCESSIBILITE` ; C1 = 1,0 kN/m corrigé dans `C-structures.md`.
 
 ---

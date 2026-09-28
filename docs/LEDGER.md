@@ -23,10 +23,10 @@ Journal partagé entre l'orchestrateur et les agents. **Chaque agent le lit avan
 
 Format : `- [ ] (Jn) [agent] sujet — contexte — proposition`. Cocher quand résolu, avec le commit.
 
-- [ ] (J0) [orchestrateur] ❓ Arbitrage utilisateur : dérogation « mm entiers » → float64 + arrondi en sortie (ADR-0003). Appliquée par défaut.
-- [ ] (J0) [orchestrateur] ❓ Arbitrage utilisateur : renommer « rapport de conformité » en « contrôle de conception » + option « règles de l'art » par défaut (CHALLENGE P3). Appliqué par défaut.
-- [ ] (J0) [orchestrateur] ❓ Arbitrage utilisateur : jalons 3 et 5 redécoupés (J3a bois, J3b métal, J3c profilés/precheck ; J5a hélicoïdal, J5b débillardé soudé, J5c débillardé bois en V2). Persona MVP : bois d'abord (critère n° 1) ; le relecteur produit recommandait le métallier.
-- [ ] (J0) [orchestrateur] ❓ DXF : décision 7bis (AC1021 au MVP) maintenue ; un écrivain R12 minimal (~200 lignes) reste recommandé par le relecteur produit.
+- [x] (J0) [orchestrateur] ✅ Tranché par l'utilisateur le 2026-09-28 : dérogation « mm entiers » → float64 + arrondi en sortie (ADR-0003). Appliquée par défaut.
+- [x] (J0) [orchestrateur] ✅ Tranché par l'utilisateur le 2026-09-28 : renommer « rapport de conformité » en « contrôle de conception » + option « règles de l'art » par défaut (CHALLENGE P3). Appliqué par défaut.
+- [x] (J0) [orchestrateur] ✅ Tranché par l'utilisateur le 2026-09-28 (bois d'abord) : jalons 3 et 5 redécoupés (J3a bois, J3b métal, J3c profilés/precheck ; J5a hélicoïdal, J5b débillardé soudé, J5c débillardé bois en V2). Persona MVP : bois d'abord (critère n° 1) ; le relecteur produit recommandait le métallier.
+- [x] (J0) [orchestrateur] ✅ Tranché par l'utilisateur le 2026-09-28 : DXF **R12 (écrivain maison) par défaut pour les pièces** + AC1021 (2007) pour les plans cotés, version choisie à l'export. Remplace la décision 7bis (X14).
 - [ ] (J2) [orchestrateur] Transition de la ligne de foulée dans un S/Z quand E > 1 200 (DTU muet) — défaut proposé : raccord linéaire de d_f sur la volée intermédiaire, signalé.
 - [ ] (J2) [orchestrateur] Seuil de giron côté mur (K9, g_ext max) absent de rules.yaml — ajouter une règle en avertissement, seuil paramétrable.
 - [ ] (J3) [orchestrateur] Loi de pli (facteur K / DIN 6935 / table) à valider par un plieur pilote ; aucune valeur sourcée dans la recherche.
@@ -72,6 +72,8 @@ Format : `- [ ] (Jn) [agent] sujet — contexte — proposition`. Cocher quand r
 ## 3. Messages entre agents
 
 Format : `- [de → à] message`. Les destinataires sont des rôles (`core`, `geometry`, `exports`, `web`, `review`, `orchestrateur`).
+
+- [orchestrateur → exports, intégration] Décision utilisateur 2026-09-28 : interface `DxfWriter` avec **deux implémentations** — R12 (AC1009) maison, **par défaut pour `exportPartDxf`**, et AC1021 (2007) pour `exportPlanDxf` ; version sélectionnable à l'export.
 
 - [core:project → core] Conventions supposées par les préréglages, à respecter ou à me signaler : volée mesurée sur le bord extérieur, deux volées successives se recouvrent sur le carré d'angle E × E ; nez 0 sur la ligne de départ (0,0)–(E,0), nez d'arrivée au bout de la dernière volée ; ligne de foulée = décalage E/2 du bord intérieur (arc centré sur le coin vif). Les exemples `examples/*.blondel.json` servent de jeux d'essai pour `buildModel`.
 - [core:project → web] `createProject(presetId, { floorToFloor, width, upperSlabThickness, direction, patch })`, `PRESET_IDS`, `PRESET_LABELS`, `parseProjectText`, `serializeProject` et `ProjectParseError.issues` (chemin + message français) sont exportés par `@blondel/core`.
