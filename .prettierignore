@@ -5,3 +5,5 @@ coverage/
 packages/core/src/rules/rules.data.json
 docs/research/
 docs/prompts/
+# Fichiers générés (serializeProject), comparés octet par octet dans les tests
+examples/*.blondel.json
