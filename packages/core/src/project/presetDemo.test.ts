@@ -75,6 +75,15 @@ describe("préréglages de démonstration", () => {
     }
   });
 
+  it.each(["demo-helical-glass", "demo-helical-well"] as const)(
+    "%s : sortie du palier d'arrivée vers la dalle au moins aussi large que l'emmarchement",
+    (id) => {
+      const h = buildModel(createDemoProject(id), { memo: false }).layout!.helical!;
+      const exit = 2 * h.outerRadius * Math.sin(h.landingAngle / 2);
+      expect(exit).toBeGreaterThanOrEqual(h.outerRadius - h.innerRadius);
+    },
+  );
+
   it("les matériaux sont ceux du modèle (masses cohérentes), l'apparence ne règle que les teintes", () => {
     const materials = (id: (typeof DEMO_PRESET_IDS)[number]): Set<string> =>
       new Set(buildModel(createDemoProject(id), { memo: false }).parts.map((p) => p.material));

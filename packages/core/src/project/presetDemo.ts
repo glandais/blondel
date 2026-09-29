@@ -84,8 +84,16 @@ function helicalGlass(): Project {
   const p = createHelicalProject({
     name: DEMO_PRESET_LABELS["demo-helical-glass"],
     floorToFloor: 2750,
-    outerRadius: 950,
-    patch: { stair: { treads: { risers: "none", thickness: 80 } } },
+    // 15 marches par tour (au lieu des 13 du préréglage) : palier d'arrivée de 80° au lieu de
+    // 40° sous la contrainte d'échappée, sortie vers la dalle plus large que l'emmarchement ;
+    // R_e = 1 100 garde le giron au-dessus de G_MIN_LOGEMENT.
+    outerRadius: 1100,
+    patch: {
+      stair: {
+        layout: { sweep: { mode: "treadsPerTurn", count: 15 } },
+        treads: { risers: "none", thickness: 80 },
+      },
+    },
   });
   return withPatch(p, {
     stair: {
