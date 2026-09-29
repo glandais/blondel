@@ -24,14 +24,14 @@ test("hélicoïdal : préréglage, formulaire, plan à arcs, 3D, retour aux vol�
   await expect(structureSelect(page)).toHaveValue("helical-core");
   await expect(page.getByLabel("Emmarchement E")).toHaveCount(0);
   const radius = page.getByLabel("Rayon extérieur R_e");
-  await expect(radius).toHaveValue("900");
+  await expect(radius).toHaveValue("950");
   await expect(page.locator(".errors-bar")).toHaveCount(0);
 
   // Plan : marches en secteur (arcs SVG), palier d'arrivée, cote du rayon.
   await openTab(page, "Plan 2D");
   const plan = page.locator(".svg-export svg");
   await expect(plan.locator("path.landing")).toHaveCount(1);
-  await expect(plan.locator('[data-dimension="radius"] text')).toHaveText("R 900");
+  await expect(plan.locator('[data-dimension="radius"] text')).toHaveText("R 950");
   const d = await plan.locator('path[data-tread="1"]').getAttribute("d");
   expect(d).toMatch(/A/);
 

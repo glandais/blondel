@@ -81,8 +81,18 @@ describe("type de tracé", () => {
   });
 
   it("hauteur sans rotation admissible pour le préréglage : rotation provisoire signalée", () => {
-    const p = createProject("quarter-left", { floorToFloor: 2750 });
-    expect(() => createProject("helical", { floorToFloor: 2750 })).toThrow(RangeError);
+    // n = 17 imposé : aucune rotation du préréglage (R_e = 950) ne donne module et giron.
+    const base = createProject("quarter-left", { floorToFloor: 2750 });
+    const p: Project = ProjectSchema.parse({
+      ...base,
+      stair: { ...base.stair, stepping: { ...base.stair.stepping, riserCount: 17 } },
+    });
+    expect(() =>
+      createProject("helical", {
+        floorToFloor: 2750,
+        patch: { stair: { stepping: p.stair.stepping } },
+      }),
+    ).toThrow(RangeError);
     const s = switchLayoutKind(p, "helical");
     expect(s.note).toMatch(/12 marches par tour/);
     expect(s.project.stair.layout).toMatchObject({
@@ -169,13 +179,13 @@ describe("type de tracé", () => {
     expect(s.project.stair.stepping).toBe(p.stair.stepping);
     expect(s.project.stair.treads).toBe(p.stair.treads);
 
-    // n = 16 imposé : aucune rotation du préréglage ne convient → rotation provisoire signalée
+    // n = 17 imposé : aucune rotation du préréglage ne convient → rotation provisoire signalée
     // (et non une rotation trouvée pour n = 15, silencieusement fausse).
-    const p16: Project = ProjectSchema.parse({
+    const p17: Project = ProjectSchema.parse({
       ...p,
-      stair: { ...p.stair, stepping: { ...p.stair.stepping, riserCount: 16 } },
+      stair: { ...p.stair, stepping: { ...p.stair.stepping, riserCount: 17 } },
     });
-    expect(switchLayoutKind(p16, "helical").note).toMatch(/provisoire/);
+    expect(switchLayoutKind(p17, "helical").note).toMatch(/provisoire/);
   });
 });
 

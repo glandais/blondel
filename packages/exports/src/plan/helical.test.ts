@@ -147,7 +147,7 @@ describe("plan d'un hélicoïdal", () => {
     );
     // Pas de reculement « droit » du premier au dernier collet (ils sont sur le fût).
     expect(d.dimensions.some((x) => x.role === "run")).toBe(false);
-    expect(d.cartouche.some((l) => l.startsWith("Hélicoïdal (à gauche) : R_e = 900 mm"))).toBe(
+    expect(d.cartouche.some((l) => l.startsWith("Hélicoïdal (à gauche) : R_e = 950 mm"))).toBe(
       true,
     );
     expect(d.cartouche.some((l) => l.startsWith("Palier d'arrivée en secteur"))).toBe(true);

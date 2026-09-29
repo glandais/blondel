@@ -3,6 +3,7 @@
  * projection et décalage à onglet (les bords simplifiés des escaliers à 90° n'ont que des
  * virages modérés).
  */
+import { segmentIntersect } from "../geom2d/intersect.js";
 import * as V from "../geom2d/vec.js";
 import type { Mm, Vec2 } from "../model/primitives.js";
 
@@ -121,6 +122,52 @@ export function offset(pts: readonly Vec2[], d: Mm): Vec2[] {
     out.push(V.addScaled(pts[i]!, u, d * k));
   }
   return out;
+}
+
+/**
+ * Décalage à onglet (`offset`) **sans rebroussement** : du côté concave d'un angle dont les
+ * segments voisins (arc facetté) sont plus courts que le décalage, les sommets décalés dépassent
+ * l'angle puis reviennent, et le balayage de la main courante y fait un onglet démesuré. Les
+ * segments décalés de sens opposé à leur segment d'origine sont retirés et leurs voisins
+ * valides raccordés à l'intersection de leurs droites (coupe du sommet concave). Extrémités
+ * conservées ; polyligne inchangée si tout est inversé.
+ */
+export function offsetTrimmed(pts: readonly Vec2[], d: Mm): Vec2[] {
+  let src = pts.slice();
+  let off = offset(src, d);
+  for (let guard = 0; guard < pts.length; guard++) {
+    const m = src.length - 1;
+    const inverted = (k: number): boolean =>
+      V.dot(V.sub(off[k + 1]!, off[k]!), V.sub(src[k + 1]!, src[k]!)) <= 0;
+    let k0 = -1;
+    for (let k = 1; k < m - 1; k++) {
+      if (inverted(k)) {
+        k0 = k;
+        break;
+      }
+    }
+    if (k0 < 0) return off;
+    let k1 = k0;
+    while (k1 + 1 < m - 1 && inverted(k1 + 1)) k1++;
+    // Voisins valides : segments k0 − 1 et k1 + 1 ; leurs droites se coupent au sommet
+    // concave décalé.
+    const a1 = off[k0 - 1]!;
+    const a2 = off[k0]!;
+    const b1 = off[k1 + 1]!;
+    const b2 = off[k1 + 2]!;
+    const da = V.sub(a2, a1);
+    const db = V.sub(b2, b1);
+    const den = V.cross(da, db);
+    const joint =
+      Math.abs(den) > 1e-12
+        ? V.addScaled(a1, da, V.cross(V.sub(b1, a1), db) / den)
+        : V.lerp(a2, b1, 0.5);
+    // Sommets d'origine k0 … k1 + 1 fusionnés en un seul (le sommet de la coupe) ; on recommence
+    // (la coupe peut en révéler une autre).
+    src = [...src.slice(0, k0), src[k0]!, ...src.slice(k1 + 2)];
+    off = [...off.slice(0, k0), joint, ...off.slice(k1 + 2)];
+  }
+  return off;
 }
 
 /**

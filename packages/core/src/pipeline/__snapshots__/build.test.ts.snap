@@ -169,7 +169,7 @@ exports[`buildModel — exemples du dépôt > demo-helical-well.blondel.json : c
     "nosing": 3,
   },
   "n": 16,
-  "parts": 55,
+  "parts": 54,
   "run": 4565.1,
   "treads": "wwwwwwwwwwwwwww",
   "violations": {

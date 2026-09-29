@@ -2,15 +2,20 @@
  * Préréglage **hélicoïdal à fût central** (jalon 5a, `createProject("helical")`).
  *
  * Valeurs par défaut **[choix Blondel, à valider]** (aucune n'est une règle métier) :
- * - R_e = 900 mm (Ø 1 800, dans la gamme courante Ø 1 400 à 3 800 d'un fabricant, C §2.3 [51],
- *   confiance moyenne) et fût de rayon r_f = 70 mm (Ø 140, non sourcé) : E = 830 mm, au-dessus des
+ * - R_e = 950 mm (Ø 1 900, dans la gamme courante Ø 1 400 à 3 800 d'un fabricant, C §2.3 [51],
+ *   confiance moyenne ; 900 mm jusqu'au 2026-09-30, trop juste pour une sortie vers la dalle
+ *   aussi large que l'emmarchement avec un giron d'au moins `G_MIN_LOGEMENT`) et fût de rayon
+ *   r_f = 70 mm (Ø 140, non sourcé) : E = 880 mm, au-dessus des
  *   800 mm de `LARGEUR_MIN_LOGEMENT` ;
  * - ligne de foulée DTU sur l'emmarchement (milieu, B §2.1) : les sources hélicoïdales divergent
  *   (50 ou 60 cm, B §2.2) — voir le ledger ;
  * - nombre de marches par tour N : le **plus petit** (giron le plus grand) pour lequel la règle
  *   dérivée d'échappée sous le tour supérieur (`helicalHeadroomBound`) atteint
- *   `PRESET_HEADROOM_MIN`, le module 2h + g reste dans `BLONDEL_DTU` et le giron atteint
- *   `G_MIN_LOGEMENT` (contexte du préréglage) ;
+ *   `PRESET_HEADROOM_MIN`, le module 2h + g reste dans `BLONDEL_DTU`, le giron atteint
+ *   `G_MIN_LOGEMENT` (contexte du préréglage) **et** le palier d'arrivée ouvre une sortie vers
+ *   la dalle (corde de son arc extérieur) au moins aussi large que l'emmarchement (revu le
+ *   2026-09-30 : le plus grand giron donnait un palier de 35 à 40°, sortie d'environ 0,5 m) ;
+ *   à défaut de sortie assez large, le plus petit N qui passe les autres critères ;
  * - palier d'arrivée : le plus grand secteur, multiple de 5°, d'au plus 90° dont l'échappée
  *   (règle dérivée) reste suffisante ; aucun palier si même 5° ne passe ;
  * - contremarches pleines (revu le 2026-09-30) : sans contremarche, le vide entre marches
@@ -62,7 +67,7 @@ import {
 } from "./presets.js";
 
 /** Rayon extérieur R_e par défaut (mm) — à valider. */
-export const HELICAL_DEFAULT_OUTER_RADIUS = 900;
+export const HELICAL_DEFAULT_OUTER_RADIUS = 950;
 /** Rayon du fût r_f par défaut (mm) — à valider. */
 export const HELICAL_DEFAULT_CORE_RADIUS = 70;
 /** Plus grand palier d'arrivée essayé par le préréglage (degrés) — à valider. */
@@ -183,12 +188,35 @@ export function createHelicalProject(options: PresetOptions = {}): Project {
     nosing: treads.nosing,
   };
 
-  // Nombre de marches par tour : le plus petit qui passe (sauf rotation donnée dans `patch`).
+  // Palier d'arrivée : le plus grand secteur admissible pour un angle par marche donné.
+  const landingFor = (step: number): { angle: number } | undefined => {
+    for (let a = HELICAL_MAX_LANDING_ANGLE; a >= LANDING_ANGLE_STEP; a -= LANDING_ANGLE_STEP) {
+      const bound = helicalHeadroomBound({
+        ...base,
+        stepAngle: step,
+        landingAngle: (a * Math.PI) / 180,
+      });
+      if (bound.landing === null || bound.landing >= PRESET_HEADROOM_MIN) return { angle: a };
+    }
+    return undefined;
+  };
+  const landingGiven = patchedLayout?.landing !== undefined;
+  /** Sortie vers la dalle : corde de l'arc extérieur du palier, au moins l'emmarchement. */
+  const wideExit = (step: number): boolean => {
+    if (landingGiven) return true;
+    const a = landingFor(step);
+    const chord = a ? 2 * outerRadius * Math.sin((a.angle * Math.PI) / 360) : 0;
+    return chord >= outerRadius - coreRadius;
+  };
+
+  // Nombre de marches par tour : le plus petit qui passe et donne une sortie assez large ; à
+  // défaut, le plus petit qui passe (sauf rotation donnée dans `patch`).
   let sweep: HelicalSweep = spec.sweep;
   if (patchedLayout?.sweep === undefined) {
     const blondel = blondelBounds();
     const gMin = minGoing();
     let found: number | null = null;
+    let fallback: number | null = null;
     for (let N = HELICAL_TREADS_PER_TURN_MIN; N <= TREADS_PER_TURN_SEARCH_MAX; N++) {
       const step = (2 * Math.PI) / N;
       const going = walklineRadius * step;
@@ -196,9 +224,13 @@ export function createHelicalProject(options: PresetOptions = {}): Project {
       if (module < blondel.min || module > blondel.max || going < gMin) continue;
       const bound = helicalHeadroomBound({ ...base, stepAngle: step });
       if (bound.treads !== null && bound.treads < PRESET_HEADROOM_MIN) continue;
-      found = N;
-      break;
+      fallback ??= N;
+      if (wideExit(step)) {
+        found = N;
+        break;
+      }
     }
+    found ??= fallback;
     if (found === null) {
       throw new RangeError(
         `Hélicoïdal : aucun nombre de marches par tour (≤ ${TREADS_PER_TURN_SEARCH_MAX}) ne donne à la fois une échappée de ${PRESET_HEADROOM_MIN} mm sous le tour supérieur, un module 2h + g dans les bornes du DTU et un giron d'au moins ${gMin} mm : augmenter le rayon extérieur ou régler le nombre de hauteurs.`,
@@ -209,21 +241,7 @@ export function createHelicalProject(options: PresetOptions = {}): Project {
   const step = computeStepAngle(sweep, n);
 
   // Palier d'arrivée : le plus grand secteur admissible (sauf palier donné dans `patch`).
-  let landing = spec.landing;
-  if (patchedLayout?.landing === undefined) {
-    landing = undefined;
-    for (let a = HELICAL_MAX_LANDING_ANGLE; a >= LANDING_ANGLE_STEP; a -= LANDING_ANGLE_STEP) {
-      const bound = helicalHeadroomBound({
-        ...base,
-        stepAngle: step,
-        landingAngle: (a * Math.PI) / 180,
-      });
-      if (bound.landing === null || bound.landing >= PRESET_HEADROOM_MIN) {
-        landing = { angle: a };
-        break;
-      }
-    }
-  }
+  const landing = landingGiven ? spec.landing : landingFor(step);
 
   const { landing: _previous, ...layoutRest } = spec;
   const shaped = structuredClone(

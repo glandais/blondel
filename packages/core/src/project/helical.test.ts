@@ -165,19 +165,38 @@ describe("préréglage `helical`", () => {
       (r) => r.status === "violation" && r.severity === "bloquant",
     );
     expect(blocking.map((r) => r.ruleId)).toEqual([]);
-    // N minimal : avec une marche de moins par tour, la règle dérivée échoue.
-    const fewer = helicalHeadroomBound({
-      riserCount: st.riserCount,
-      rise: st.rise,
-      stepAngle: (2 * Math.PI) / (h.treadsPerTurn - 1),
-      walklineRadius: h.walklineRadius,
-      treadThickness: p.stair.treads.thickness,
-      nosing: p.stair.treads.nosing,
-    });
-    const going = (h.walklineRadius * 2 * Math.PI) / (h.treadsPerTurn - 1);
+    // Sortie vers la dalle : corde de l'arc extérieur du palier au moins égale à l'emmarchement.
+    const E = h.outerRadius - h.innerRadius;
+    const chord = (angle: number): number => 2 * h.outerRadius * Math.sin(angle / 2);
+    expect(chord(h.landingAngle)).toBeGreaterThanOrEqual(E);
+    // N minimal : avec une marche de moins par tour, une règle échoue ou la sortie est trop
+    // étroite (plus grand palier admissible pour l'échappée).
+    const stepFewer = (2 * Math.PI) / (h.treadsPerTurn - 1);
+    const boundFor = (landingAngle?: number) =>
+      helicalHeadroomBound({
+        riserCount: st.riserCount,
+        rise: st.rise,
+        stepAngle: stepFewer,
+        walklineRadius: h.walklineRadius,
+        treadThickness: p.stair.treads.thickness,
+        nosing: p.stair.treads.nosing,
+        ...(landingAngle !== undefined ? { landingAngle } : {}),
+      });
+    const fewer = boundFor();
+    let landingFewer = 0;
+    for (let a = 90; a >= 5; a -= 5) {
+      const b = boundFor((a * Math.PI) / 180);
+      if (b.landing === null || b.landing >= PRESET_HEADROOM_MIN) {
+        landingFewer = (a * Math.PI) / 180;
+        break;
+      }
+    }
+    const going = h.walklineRadius * stepFewer;
     expect(
       (fewer.treads !== null && fewer.treads < PRESET_HEADROOM_MIN) ||
-        2 * st.rise + going > blondel.max!,
+        2 * st.rise + going > blondel.max! ||
+        going < getRule("G_MIN_LOGEMENT").min! ||
+        chord(landingFewer) < E,
     ).toBe(true);
   });
 
@@ -229,7 +248,7 @@ describe("préréglage `helical`", () => {
     const layout = r.stair.layout;
     if (layout.kind !== "helical") throw new Error("hélicoïdal attendu");
     expect(layout.direction).toBe("right");
-    expect(r.site.opening).toEqual({ kind: "rect", x: -1000, y: -1000, sizeX: 2000, sizeY: 2000 });
+    expect(r.site.opening).toEqual({ kind: "rect", x: -1050, y: -1050, sizeX: 2100, sizeY: 2100 });
     expect(() => createProject("helical", { width: 800 })).toThrow(RangeError);
     expect(() => createProject("straight", { outerRadius: 900 })).toThrow(RangeError);
     expect(() => createProject("helical", { coreRadius: 900, outerRadius: 900 })).toThrow(

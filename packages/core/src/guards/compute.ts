@@ -42,6 +42,7 @@ import {
   cumulative,
   interp,
   offset,
+  offsetTrimmed,
   offsetStations,
   pointAt,
   slice,
@@ -851,7 +852,7 @@ export function computeGuards(
     ? openingChains(poly, stepping, project.site.walls, spec.wallTolerance, alongColumn).map(
         (chain) => ({
           chain,
-          path: offset(chain, -spec.opening.setback),
+          path: offsetTrimmed(chain, -spec.opening.setback),
         }),
       )
     : [];
