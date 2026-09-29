@@ -797,3 +797,63 @@ describe("hélicoïdal : côté intérieur", () => {
     expect(a.parts.some((p) => p.id.startsWith("guard-inner"))).toBe(true);
   });
 });
+
+describe("hélicoïdal : garde-corps de trémie et palier d'arrivée", () => {
+  /** Angle de `p` autour du centre, ramené dans le secteur du palier : `t` ∈ [0 ; 1] dedans. */
+  const sectorParam = (p: Project, pt: { x: number; y: number }): number => {
+    const h = computeLayout(p).helical!;
+    const sign = h.direction === "left" ? 1 : -1;
+    const start = h.startAngle + sign * h.totalAngle;
+    let d = sign * (Math.atan2(pt.y - h.center.y, pt.x - h.center.x) - start);
+    d = ((d % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
+    return d / h.landingAngle;
+  };
+
+  it.each(["column", "well"] as const)(
+    "trémie ronde (%s) : sortie par l'arc du palier, garde-corps sur son bord de fin",
+    (core) => {
+      const p = withGuards(
+        ProjectSchema.parse(
+          core === "well"
+            ? createProject("helical", {
+                patch: { stair: { layout: { core: { kind: "well", radius: 350 } } } },
+              })
+            : createProject("helical"),
+        ),
+        {},
+      );
+      const h = computeLayout(p).helical!;
+      expect(h.landingAngle).toBeGreaterThan(0);
+      const a = analyze(p);
+      const opening = a.runs.filter((r) => r.kind === "opening");
+      expect(opening).toHaveLength(1);
+      const path = opening[0]!.path;
+      const r = (pt: { x: number; y: number }): number => V.distance(pt, h.center);
+      // Aucun sommet au-delà de l'arc extérieur du palier, dans son secteur : la sortie reste libre.
+      for (const pt of path) {
+        const t = sectorParam(p, pt);
+        if (t > 0.15 && t < 0.85) expect(r(pt)).toBeLessThan(h.outerRadius + 10);
+      }
+      // Bord de fin du palier (radial, au-dessus des premières marches) garde : sommets le
+      // long de ce bord, du côté intérieur jusqu'à l'arc extérieur.
+      const sign = h.direction === "left" ? 1 : -1;
+      const endDir = V.fromAngle(h.startAngle + sign * (h.totalAngle + h.landingAngle));
+      const alongEnd = path
+        .filter((pt) => {
+          const rel = V.sub(pt, h.center);
+          return V.dot(rel, endDir) > 0 && Math.abs(Math.abs(V.cross(endDir, rel)) - 50) < 1;
+        })
+        .map((pt) => V.dot(V.sub(pt, h.center), endDir));
+      expect(Math.max(...alongEnd) - Math.min(...alongEnd)).toBeGreaterThan(
+        0.8 * (h.outerRadius - h.innerRadius),
+      );
+      if (core === "well") {
+        // Jour central : l'arc intérieur du palier borde le vide et reçoit le garde-corps.
+        expect(path.some((pt) => Math.abs(r(pt) - (h.innerRadius + 50)) < 1)).toBe(true);
+      } else {
+        // Fût : pas de garde-corps autour du fût (seul le départ du bord de fin s'en approche).
+        expect(path.filter((pt) => r(pt) < h.innerRadius + 60).length).toBeLessThanOrEqual(1);
+      }
+    },
+  );
+});

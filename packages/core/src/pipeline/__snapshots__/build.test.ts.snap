@@ -123,11 +123,11 @@ exports[`buildModel — exemples du dépôt > demo-helical-glass.blondel.json : 
   "h": 171.88,
   "headroom": 1906.1,
   "headroomWidth": {
-    "min": 1982.5,
-    "nosing": 0,
+    "min": 1862.5,
+    "nosing": 3,
   },
   "n": 16,
-  "parts": 47,
+  "parts": 45,
   "run": 3697.4,
   "treads": "wwwwwwwwwwwwwww",
   "violations": {
@@ -169,7 +169,7 @@ exports[`buildModel — exemples du dépôt > demo-helical-well.blondel.json : c
     "nosing": 3,
   },
   "n": 16,
-  "parts": 54,
+  "parts": 55,
   "run": 4565.1,
   "treads": "wwwwwwwwwwwwwww",
   "violations": {

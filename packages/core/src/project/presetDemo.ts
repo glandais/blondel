@@ -85,7 +85,6 @@ function helicalGlass(): Project {
     name: DEMO_PRESET_LABELS["demo-helical-glass"],
     floorToFloor: 2750,
     outerRadius: 950,
-    openingShape: "square",
     patch: { stair: { treads: { risers: "none", thickness: 80 } } },
   });
   return withPatch(p, {
@@ -215,7 +214,6 @@ function helicalWell(): Project {
     name: DEMO_PRESET_LABELS["demo-helical-well"],
     floorToFloor: 2750,
     outerRadius: 1200,
-    openingShape: "square",
     patch: {
       stair: {
         layout: { core: { kind: "well", radius: 350 } },

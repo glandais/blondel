@@ -48,6 +48,7 @@ import {
   tangentAt,
   turnAngleDeg,
 } from "./polyline.js";
+import { openingMinusLanding } from "./landingVoid.js";
 import { analyzeSide, isColumnSide, refAt, wallCover, type SideEdge } from "./sides.js";
 import { GuardsSpecSchema, type GuardInfill, type GuardsSpec } from "./spec.js";
 import type {
@@ -711,12 +712,16 @@ function edgePortion(
   };
 }
 
-/** Côtés libres de la trémie : chaînes de polylignes (CCW) hors arrivée et murs. */
+/**
+ * Côtés libres de la trémie : chaînes de polylignes (CCW) hors arrivée, murs et côtés `blocked`
+ * (entièrement exclus).
+ */
 function openingChains(
   poly: readonly Vec2[],
   stepping: Stepping,
   walls: readonly Wall[],
   tolerance: Mm,
+  blocked: (a: Vec2, b: Vec2) => boolean = () => false,
 ): Vec2[][] {
   const n = poly.length;
   const last = stepping.nosings[stepping.nosings.length - 1];
@@ -732,7 +737,7 @@ function openingChains(
     const L = V.distance(A, B);
     if (L < 1e-6) continue;
     const d = V.scale(V.sub(B, A), 1 / L);
-    const excluded: { from: number; to: number }[] = [];
+    const excluded: { from: number; to: number }[] = blocked(A, B) ? [{ from: 0, to: L }] : [];
     for (const wall of arrival ? [arrival, ...walls] : walls) {
       const c = wallCover(A, B, wall, tolerance, 0);
       if (c) excluded.push({ from: c.from, to: c.to });
@@ -831,13 +836,24 @@ export function computeGuards(
   }
 
   // Côtés libres de la trémie (calculés d'abord : un rampant qui y aboutit se prolonge par eux).
+  // Hélicoïdal dont le palier d'arrivée affleure le nez de dalle : le vide est la trémie privée
+  // du palier (sortie par son arc extérieur, garde-corps sur ses bords libres) ; le long d'un
+  // fût, pas de vide.
   const rawPoly = openingPolygon(project.site.opening);
-  const poly = rawPoly ? withoutCollinearVertices(rawPoly) : rawPoly;
+  const helical = layout.helical;
+  const voidPoly = rawPoly ? openingMinusLanding(rawPoly, helical?.landingOutline) : rawPoly;
+  const poly = voidPoly ? withoutCollinearVertices(voidPoly) : voidPoly;
+  const alongColumn = (a: Vec2, b: Vec2): boolean =>
+    helical?.core === "column" &&
+    V.distance(a, helical.center) <= helical.innerRadius + 1 &&
+    V.distance(b, helical.center) <= helical.innerRadius + 1;
   const openingPaths = poly
-    ? openingChains(poly, stepping, project.site.walls, spec.wallTolerance).map((chain) => ({
-        chain,
-        path: offset(chain, -spec.opening.setback),
-      }))
+    ? openingChains(poly, stepping, project.site.walls, spec.wallTolerance, alongColumn).map(
+        (chain) => ({
+          chain,
+          path: offset(chain, -spec.opening.setback),
+        }),
+      )
     : [];
   /** Longueur du garde-corps de trémie qui prolonge un rampant finissant en `p`, sinon 0. */
   const continuation = (p: Vec2): Mm => {
