@@ -1,7 +1,8 @@
 /**
  * Assemblage du pipeline (ADR-0002) : `buildModel(project) → Model`.
  *
- *   computeLayout → computeStepping → pièces de base → échappée → contrôle de conception
+ *   computeLayout → computeStepping → pièces de base → structure (plugin) → échappée
+ *   → contrôle de conception (+ contrôles du plugin de structure)
  *
  * - **Aucune exception** pour des paramètres impossibles : l'erreur de l'étape (message
  *   français de `LayoutError` / `SteppingError`, ou erreur interne) est ajoutée à
@@ -9,6 +10,14 @@
  *   partiel mais cohérent : tracé vide si le tracé échoue, découpage vide (hauteurs seules si
  *   elles sont calculables) si le découpage échoue, et un contrôle de conception toujours
  *   présent (règles non calculables `non-evaluee`).
+ * - **Structure** (`stair.structure.kind`) : `none` = pièces de base seules ; sinon le plugin
+ *   enregistré (`structures/registry.ts`) est appelé avec ses paramètres par défaut
+ *   (`defaults(ctx)`) surchargés par `structure.params` puis validés par son `paramsSchema`.
+ *   Ses pièces remplacent les pièces de base de même `id` et s'ajoutent aux autres ; ses
+ *   contrôles remplacent le résultat « sans évaluateur » du moteur pour une règle de
+ *   rules.yaml et s'ajoutent sinon ; ses erreurs vont dans `Model.errors`, ses remarques dans
+ *   `Model.notes`. Plugin inconnu : remarque, pièces de base seules. Les pièces bois reçoivent
+ *   les grandeurs de nomenclature normalisées (`structures/quantities.ts`, profil d'atelier).
  * - **Mémoïsation** par identité : le modèle d'un même projet (objet immuable) est rendu tel
  *   quel ; sinon chaque étape réutilise son dernier résultat si ses dépendances (sous-objets du
  *   projet et étapes amont) sont les mêmes objets.
@@ -16,11 +25,24 @@
 import { computeHeadroom, type HeadroomAnalysis } from "../headroom/headroom.js";
 import { computeLayout } from "../layout/layout.js";
 import { LayoutError } from "../layout/errors.js";
-import type { ComplianceReport, Layout, Model, Part, Stepping } from "../model/derived.js";
+import type {
+  ComplianceReport,
+  Layout,
+  Model,
+  Part,
+  RuleResult,
+  Severity,
+  Stepping,
+} from "../model/derived.js";
+import type { StructureContext, StructureKind } from "../model/plugins.js";
 import type { Project } from "../model/project.js";
 import { buildBasicParts } from "../parts/basic.js";
 import { fmt } from "../rules/check.js";
 import { evaluateComplianceDetailed } from "../rules/engine.js";
+import { findRule } from "../rules/table.js";
+import { getStructure, StructureError } from "../structures/index.js";
+import { normalizeWoodQuantities } from "../structures/quantities.js";
+import { resolveWorkshopProfile } from "../workshop/profile.js";
 import { SteppingError } from "../stepping/errors.js";
 import { computeRises } from "../stepping/rises.js";
 import { computeStepping } from "../stepping/stepping.js";
@@ -35,6 +57,7 @@ const STAGE_LABELS = {
   layout: "Tracé",
   stepping: "Découpage",
   parts: "Pièces",
+  structure: "Structure",
   headroom: "Échappée",
   compliance: "Contrôle de conception",
 } as const;
@@ -43,7 +66,8 @@ function attempt<T>(label: string, fn: () => T): Stage<T> {
   try {
     return { value: fn() };
   } catch (e) {
-    if (e instanceof LayoutError || e instanceof SteppingError) return { error: e.message };
+    if (e instanceof LayoutError || e instanceof SteppingError || e instanceof StructureError)
+      return { error: e.message };
     const detail = e instanceof Error ? e.message : String(e);
     return { error: `${label} : erreur interne (${detail}).` };
   }
@@ -92,6 +116,13 @@ interface PartsStage {
   readonly notes: readonly string[];
 }
 
+interface StructureStage {
+  readonly parts: readonly Part[];
+  readonly checks: readonly RuleResult[];
+  readonly notes: readonly string[];
+  readonly errors: readonly string[];
+}
+
 interface ComplianceStage {
   readonly report: ComplianceReport;
 }
@@ -101,6 +132,7 @@ const caches = {
   layout: new LastValueCache<Stage<Layout>>(),
   stepping: new LastValueCache<Stage<Stepping>>(),
   parts: new LastValueCache<Stage<PartsStage>>(),
+  structure: new LastValueCache<Stage<StructureStage>>(),
   headroom: new LastValueCache<Stage<HeadroomAnalysis | null>>(),
   compliance: new LastValueCache<Stage<ComplianceStage>>(),
 };
@@ -126,6 +158,87 @@ export function modelCacheStats(): Readonly<
 export interface BuildModelOptions {
   /** `false` : recalcul complet sans lire ni remplir les caches (mesures). Défaut : `true`. */
   readonly memo?: boolean;
+}
+
+const isRecord = (v: unknown): v is Record<string, unknown> =>
+  typeof v === "object" && v !== null && !Array.isArray(v);
+
+/**
+ * Fusion profonde des objets simples : un sous-objet partiel du projet (ex. `newel: { joint }`)
+ * complète le sous-objet par défaut au lieu de le remplacer ; tableaux et valeurs remplacés.
+ */
+export function deepMerge(
+  base: Readonly<Record<string, unknown>>,
+  over: Readonly<Record<string, unknown>>,
+): Record<string, unknown> {
+  const out: Record<string, unknown> = { ...base };
+  for (const [k, v] of Object.entries(over)) {
+    const b = out[k];
+    out[k] = isRecord(b) && isRecord(v) ? deepMerge(b, v) : v;
+  }
+  return out;
+}
+
+/** Paramètres du plugin : défauts `defaults(ctx)` surchargés par le projet, validés par zod. */
+function resolveStructureParams(
+  plugin: StructureKind<unknown>,
+  ctx: StructureContext,
+  params: Readonly<Record<string, unknown>>,
+): unknown {
+  const defaults = plugin.defaults(ctx);
+  const merged = isRecord(defaults) ? deepMerge(defaults, params) : params;
+  const parsed = plugin.paramsSchema.safeParse(merged);
+  if (!parsed.success) {
+    const issues = parsed.error.issues
+      .map((i) => (i.path.length > 0 ? `${i.path.join(".")} : ${i.message}` : i.message))
+      .join(" ; ");
+    throw new StructureError(`Structure « ${plugin.kind} » : paramètres invalides (${issues}).`);
+  }
+  return parsed.data;
+}
+
+/** Pièces de base remplacées (même `id`) ou complétées par celles du plugin. */
+function mergeParts(base: readonly Part[], extra: readonly Part[]): Part[] {
+  const byId = new Map(extra.map((p) => [p.id, p]));
+  const out = base.map((p) => byId.get(p.id) ?? p);
+  const baseIds = new Set(base.map((p) => p.id));
+  for (const p of extra) if (!baseIds.has(p.id)) out.push(p);
+  return out;
+}
+
+/**
+ * Intègre les contrôles du plugin au rapport : pour une règle de rules.yaml, ils remplacent
+ * (à sa place) le résultat du moteur ; les contrôles propres au plugin sont ajoutés à la fin.
+ */
+export function mergeStructureChecks(
+  report: ComplianceReport,
+  checks: readonly RuleResult[],
+): ComplianceReport {
+  if (checks.length === 0) return report;
+  const byRule = new Map<string, RuleResult[]>();
+  for (const c of checks) {
+    const list = byRule.get(c.ruleId) ?? [];
+    list.push(c);
+    byRule.set(c.ruleId, list);
+  }
+  const replaced = new Set(
+    [...byRule.keys()].filter(
+      (id) => findRule(id) !== undefined && report.results.some((r) => r.ruleId === id),
+    ),
+  );
+  const results: RuleResult[] = [];
+  const inserted = new Set<string>();
+  for (const r of report.results) {
+    if (!replaced.has(r.ruleId)) results.push(r);
+    else if (!inserted.has(r.ruleId)) {
+      results.push(...byRule.get(r.ruleId)!);
+      inserted.add(r.ruleId);
+    }
+  }
+  for (const [id, list] of byRule) if (!inserted.has(id)) results.push(...list);
+  const summary: Record<Severity, number> = { bloquant: 0, avertissement: 0, conseil: 0 };
+  for (const r of results) if (r.status === "violation") summary[r.severity]++;
+  return { ...report, results, summary };
 }
 
 /** Plus grande échappée minimale bloquante des règles d'échappée du rapport (mm). */
@@ -174,22 +287,59 @@ export function buildModel(project: Project, options: BuildModelOptions = {}): M
   const stepping = steppingStage?.value;
   const complete = layout !== undefined && stepping !== undefined;
 
-  // 3. Pièces de base (structure `none` ; plugins de structure au jalon 3).
+  // 3. Pièces de base, puis structure (plugin) et grandeurs de nomenclature.
   let parts: readonly Part[] = [];
+  let structureChecks: readonly RuleResult[] = [];
+  const kind = stair.structure.kind;
+  const plugin = kind !== "none" ? getStructure(kind) : undefined;
+  if (kind !== "none" && !plugin) {
+    notes.push(
+      `Structure « ${kind} » : aucun plugin de structure disponible, seules les marches, contremarches et paliers sont générés.`,
+    );
+  }
   if (complete) {
     const partsStage = run(caches.parts, [layout, stepping, stair.treads], () =>
       attempt(STAGE_LABELS.parts, () => buildBasicParts(project, layout, stepping)),
     );
     if (partsStage.error !== undefined) errors.push(partsStage.error);
     else {
-      parts = partsStage.value.parts;
       notes.push(...partsStage.value.notes);
+      const base = partsStage.value.parts;
+      const structureStage = run(
+        caches.structure,
+        // Sans plugin, les pièces ne dépendent que des pièces de base et du profil d'atelier.
+        plugin
+          ? [base, layout, stepping, plugin, stair, site, project.compliance, project.workshop]
+          : [base, project.workshop],
+        () =>
+          attempt(STAGE_LABELS.structure, (): StructureStage => {
+            const profile = resolveWorkshopProfile(project.workshop);
+            const normalize = (ps: readonly Part[]): Part[] =>
+              ps.map((p) => normalizeWoodQuantities(p, profile));
+            if (!plugin) return { parts: normalize(base), checks: [], notes: [], errors: [] };
+            const ctx: StructureContext = { project, layout, stepping, baseParts: base };
+            const params = resolveStructureParams(plugin, ctx, stair.structure.params);
+            const out = plugin.build(ctx, params);
+            return {
+              parts: normalize(mergeParts(base, out.parts)),
+              checks: out.checks,
+              notes: out.notes,
+              errors: out.errors ?? [],
+            };
+          }),
+      );
+      if (structureStage.error !== undefined) {
+        errors.push(structureStage.error);
+        // Pièces de base seules, avec les grandeurs de nomenclature normalisées.
+        const profile = resolveWorkshopProfile(project.workshop);
+        parts = base.map((p) => normalizeWoodQuantities(p, profile));
+      } else {
+        parts = structureStage.value.parts;
+        structureChecks = structureStage.value.checks;
+        notes.push(...structureStage.value.notes);
+        errors.push(...structureStage.value.errors);
+      }
     }
-  }
-  if (stair.structure.kind !== "none") {
-    notes.push(
-      `Structure « ${stair.structure.kind} » : aucun plugin de structure disponible, seules les marches, contremarches et paliers sont générés.`,
-    );
   }
 
   // 4. Échappée.
@@ -235,7 +385,7 @@ export function buildModel(project: Project, options: BuildModelOptions = {}): M
       results: [],
       summary: { bloquant: 0, avertissement: 0, conseil: 0 },
     };
-  } else compliance = complianceStage.value.report;
+  } else compliance = mergeStructureChecks(complianceStage.value.report, structureChecks);
 
   // Échappée sur la largeur des marches : avertissement (CHALLENGE G4), hors rules.yaml.
   const width = headroom?.width;

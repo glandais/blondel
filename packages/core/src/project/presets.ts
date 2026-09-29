@@ -21,7 +21,7 @@
  * (E ≤ 1 200 mm) : |Γ| = ΣL − 2E·(N − 1) + N·(π/2)·(E/2) pour N tournants.
  */
 import { computeLayout } from "../layout/layout.js";
-import { AUTO_GOING_MODULE } from "../layout/resolve.js";
+import { resolveRiserCount, resolveTargetGoing } from "../layout/resolve.js";
 import { LayoutError } from "../layout/errors.js";
 import { requiredOpening } from "../headroom/required.js";
 import {
@@ -102,11 +102,6 @@ const PRESET_NOSING: number = (() => {
   if (r === null) throw new Error("La règle DEBORD_NEZ_LOGEMENT n'a pas de valeur recommandée.");
   return r;
 })();
-/** Valeurs par défaut du réglage des hauteurs, lues dans le schéma (`targetRise` = 175). */
-const STEPPING_DEFAULTS = SteppingSchema.parse({});
-/** Bornes de `riserCount` dans `SteppingSchema`. */
-const RISER_COUNT_MIN = 2;
-const RISER_COUNT_MAX = 60;
 /** Valeurs par défaut du cahier des charges des préréglages. */
 const DEFAULT_FLOOR_TO_FLOOR = 2700;
 const DEFAULT_SLAB_THICKNESS = 200;
@@ -162,19 +157,23 @@ const SHAPES: Readonly<Record<PresetId, PresetShape>> = {
     firstStraightGoings: 2,
     middleWell: 0,
   },
+  // U et demi-tournant [choix Blondel, à valider] : position du premier tournant et jour
+  // retenus pour que le collet minimal (M3 auto, jour vif) dépasse 100 mm (G_COLLET_MIN) avec
+  // H = 2 700 et reste au-dessus pour H ∈ [2 500 ; 2 900] (balayage : U ≥ 135 mm, demi-tournant
+  // ≥ 143 mm). Avant : premier tournant à 1 giron du départ (collets 90 et 87,6 mm).
   "two-quarters-u": {
     width: 850,
     turns: ["left", "left"],
     mode: "winders",
-    firstStraightGoings: 1,
+    firstStraightGoings: 2,
     middleWell: 400,
   },
   "half-turn": {
     width: 800,
     turns: ["left", "left"],
     mode: "winders",
-    firstStraightGoings: 1,
-    middleWell: 200,
+    firstStraightGoings: 4,
+    middleWell: 180,
   },
   "quarter-landing": {
     width: 900,
@@ -316,25 +315,25 @@ export function createProject(preset: PresetId, options: PresetOptions = {}): Pr
   if (direction !== undefined && hasFixedDirection) {
     throw new RangeError(`Le préréglage « ${preset} » n'accepte pas d'option de sens.`);
   }
-  const stepping = patch?.stair?.stepping;
-  const targetRise = stepping?.targetRise ?? STEPPING_DEFAULTS.targetRise;
-  requirePositiveInt("La hauteur de marche cible", targetRise);
-  const n =
-    typeof stepping?.riserCount === "number"
-      ? stepping.riserCount
-      : Math.round(height / targetRise);
-  if (!Number.isInteger(n) || n < RISER_COUNT_MIN || n > RISER_COUNT_MAX) {
+  // n et g résolus par les fonctions du tracé (`layout/resolve.ts`) : mêmes valeurs `auto`
+  // (n = arrondi(H / targetRise), g = 630 − 2h) que `computeLayout` et le découpage.
+  const parsedStepping = SteppingSchema.safeParse(patch?.stair?.stepping ?? {});
+  if (!parsedStepping.success) {
     throw new RangeError(
-      `Nombre de hauteurs hors domaine : ${n} (attendu entre ${RISER_COUNT_MIN} et ${RISER_COUNT_MAX}).`,
+      `Réglage des hauteurs invalide : ${parsedStepping.error.issues.map((i) => i.message).join(" ; ")}.`,
     );
   }
-  const rise = height / n;
-  const going =
-    typeof stepping?.targetGoing === "number" ? stepping.targetGoing : AUTO_GOING_MODULE - 2 * rise;
-  if (!(going > 0)) {
-    throw new RangeError(
-      `Giron calculé non positif (${going.toFixed(1)} mm) : hauteur de marche trop grande.`,
-    );
+  const stepping = parsedStepping.data;
+  requirePositiveInt("La hauteur de marche cible", stepping.targetRise);
+  let n: number;
+  let going: number;
+  try {
+    const sizing = { site: { floorToFloor: height }, stair: { stepping } };
+    n = resolveRiserCount(sizing);
+    going = resolveTargetGoing(sizing, n);
+  } catch (e) {
+    if (e instanceof LayoutError) throw new RangeError(e.message);
+    throw e;
   }
   const turns: TurnDirection[] = shape.turns.map((t) => direction ?? t);
   const legs =

@@ -10,4 +10,6 @@ export * from "./balancing/index.js";
 export * from "./stepping/index.js";
 export * from "./headroom/index.js";
 export * from "./parts/index.js";
+export * from "./workshop/index.js";
+export * from "./structures/index.js";
 export * from "./pipeline/index.js";

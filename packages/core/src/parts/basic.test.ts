@@ -169,7 +169,11 @@ describe("buildBasicParts — contremarches coupées au nez suivant (relecture)"
   it("U à jour vif : la contremarche dont le nez passe par l'angle ne file pas sous la volée suivante", () => {
     // Régression : dans le préréglage U, la ligne du nez 5 passe par l'angle du jour et est
     // presque parallèle à la 3e volée ; la face de CM6 ne recoupait le jour que 340 mm plus loin.
-    const p = createProject("two-quarters-u");
+    // Volées de l'ancien préréglage U (1 120 / 2 100 / 2 625), figées : le préréglage place
+    // désormais le premier tournant à 2 girons du départ (collet ≥ 100 mm).
+    const p = createProject("two-quarters-u", {
+      patch: { stair: { layout: { legs: [1120, 2100, 2625].map((length) => ({ length })) } } },
+    });
     const { stepping, parts } = partsOf(p);
     checkRisersStayUnderUpperTread(stepping, parts);
     // Avant correction, l'extrémité côté jour de CM6 était en (−400 ; −70), au-delà du nez 6.

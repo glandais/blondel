@@ -75,7 +75,12 @@ describe("buildModel — exemples du dépôt", () => {
   it.each(EXAMPLE_FILES)(
     "%s : le rapport liste toutes les règles applicables, non évaluées comprises",
     (file) => {
-      const report = buildModel(loadExample(file)).compliance;
+      const project = loadExample(file);
+      const report = buildModel(project).compliance;
+      // Un plugin de structure (jalon 3a) évalue certaines règles sans évaluateur du moteur
+      // (limon, crémaillère : `mergeStructureChecks`) ; sans structure, elles restent
+      // « non évaluées ».
+      const withStructure = project.stair.structure.kind !== "none";
       const active = new Set(report.contexts);
       const ids = new Set(report.results.map((r) => r.ruleId));
       const missing = new Set(ruleCoverage().notImplemented);
@@ -85,6 +90,7 @@ describe("buildModel — exemples du dépôt", () => {
         expect(ids.has(rule.id), rule.id).toBe(true);
         if (missing.has(rule.id)) {
           notEvaluated++;
+          if (withStructure) continue;
           for (const r of report.results.filter((x) => x.ruleId === rule.id)) {
             expect(r.status).toBe("non-evaluee");
           }

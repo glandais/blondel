@@ -38,6 +38,7 @@ import { computeRises } from "./rises.js";
 import { developmentInner } from "./development.js";
 import { buildTreads } from "./treads.js";
 import {
+  COLLET_TIE_TOLERANCE,
   evaluateZone,
   groupWinderTurns,
   pickZone,
@@ -133,7 +134,7 @@ export function computeStepping(project: Project, layout: Layout): Stepping {
   }
 
   // ------------------------------------------------------------ zones de balancement
-  const { method, windersPerSide, targetCollet } = project.stair.balancing;
+  const { method, windersPerSide, colletTieTolerance } = project.stair.balancing;
   const variant = resolveM3Variant(project);
   const strategy = getBalancingStrategy(method);
   const groups = groupWinderTurns(layout, positions.s, going, fixed);
@@ -199,7 +200,9 @@ export function computeStepping(project: Project, layout: Layout): Stepping {
       continue;
     }
     const chosen =
-      windersPerSide !== "auto" || method === "M0" ? cands[0]! : pickZone(cands, targetCollet);
+      windersPerSide !== "auto" || method === "M0"
+        ? cands[0]!
+        : pickZone(cands, colletTieTolerance ?? COLLET_TIE_TOLERANCE);
     if (chosen === null || !chosen.ok) {
       const reason = chosen?.reason ?? cands.find((c) => !c.ok)?.reason;
       notes.push(

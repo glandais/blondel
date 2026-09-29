@@ -10,11 +10,15 @@ import { buildModel, clearModelCache, parseProjectText } from "@blondel/core";
 import { describe, expect, it } from "vitest";
 import { CSV_BOM, CUT_LIST_HEADER, exportCutListCsv } from "./csv/cutlist.js";
 import { exportPartDxf } from "./dxf/part.js";
+import { exportPartsDxf } from "./dxf/parts.js";
 import { exportPlanDxf } from "./dxf/plan.js";
 import { exportProjectJson } from "./json.js";
+import { RecordingCanvas } from "./pdf/canvas.js";
+import { COMPLIANCE_DISCLAIMER, exportPdf, renderPdf } from "./pdf/document.js";
 import { renderElevationSvg } from "./svg/elevation.js";
+import { renderFlatPatternSvg } from "./svg/flat.js";
 import { renderPlanSvg } from "./svg/plan.js";
-import { readDxf } from "./testing/dxf-reader.js";
+import { entitiesOn, readDxf } from "./testing/dxf-reader.js";
 import { parseXml } from "./testing/xml.js";
 
 const EXAMPLES_DIR = resolve(dirname(fileURLToPath(import.meta.url)), "../../../examples");
@@ -74,6 +78,33 @@ describe("exports de bout en bout sur examples/", () => {
           expect(dxf, part.id).not.toMatch(NON_FINITE);
           expect(readDxf(dxf).entities.length, part.id).toBeGreaterThan(0);
         }
+      });
+
+      it("DXF de tous les développés et planches SVG", () => {
+        const files = exportPartsDxf(model);
+        const flats = model.parts.filter((p) => p.flat !== undefined);
+        expect(files.reduce((s, f) => s + f.quantity, 0)).toBe(flats.length);
+        for (const f of files) expect(readDxf(f.content).entities.length).toBeGreaterThan(0);
+        for (const part of flats) parseXml(renderFlatPatternSvg(part));
+        // Limons bois (plugin J3a) : chaque segment de mortaise sur le calque MORTAISE, le
+        // repère sur TEXTE. Sans plugin (aucun développé), la boucle est vide.
+        for (const part of flats) {
+          const f = readDxf(exportPartDxf(part, { version: "AC1021" }));
+          const mortises = part.flat!.lines.filter((l) => l.feature === "mortise").length;
+          expect(entitiesOn(f, "LINE", "MORTAISE"), part.id).toHaveLength(mortises);
+          expect(entitiesOn(f, "TEXT", "TEXTE").map((t) => t.value)).toContain(part.mark);
+        }
+      });
+
+      it("dossier PDF : pages prévues, avertissement du contrôle de conception", () => {
+        const pages = renderPdf(new RecordingCanvas(), model, { project });
+        expect(pages.slice(0, 2).map((p) => p.kind)).toEqual(["plan", "elevation"]);
+        const bytes = exportPdf(model, { project, date: "29/09/2026", compress: false });
+        const text = new TextDecoder("latin1").decode(bytes);
+        expect(text.startsWith("%PDF-")).toBe(true);
+        expect(text.match(/\/Type \/Page\b/g)).toHaveLength(pages.length);
+        expect(text).toContain(`(${COMPLIANCE_DISCLAIMER}) Tj`);
+        expect(text).not.toMatch(NON_FINITE);
       });
 
       it("liste de débit : en-tête, une ligne au moins, sans NaN", () => {

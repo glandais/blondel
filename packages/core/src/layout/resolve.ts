@@ -54,10 +54,19 @@ export function resolveWalklineOffset(project: Project): Mm {
 }
 
 /**
+ * Données suffisantes pour résoudre n et g (sous-ensemble structurel de `Project`) : les
+ * préréglages les résolvent avant de connaître les volées.
+ */
+export interface RiserSizing {
+  readonly site: Pick<Project["site"], "floorToFloor">;
+  readonly stair: Pick<Project["stair"], "stepping">;
+}
+
+/**
  * Nombre de hauteurs n : valeur saisie, ou arrondi(H / targetRise).
  * @throws LayoutError si n sort de [2 ; 60].
  */
-export function resolveRiserCount(project: Project): number {
+export function resolveRiserCount(project: RiserSizing): number {
   const s = project.stair.stepping;
   const n =
     s.riserCount === "auto" ? Math.round(project.site.floorToFloor / s.targetRise) : s.riserCount;
@@ -73,7 +82,7 @@ export function resolveRiserCount(project: Project): number {
  * Giron cible : valeur saisie, ou 630 − 2h avec h = H / n (hauteur nominale).
  * @throws LayoutError si le giron calculé n'est pas positif.
  */
-export function resolveTargetGoing(project: Project, riserCount: number): Mm {
+export function resolveTargetGoing(project: RiserSizing, riserCount: number): Mm {
   const s = project.stair.stepping;
   const g =
     s.targetGoing === "auto"

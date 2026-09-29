@@ -3,6 +3,8 @@ import { describe, expect, it } from "vitest";
 import { curveLength, curvePointAt } from "../geom2d/curve.js";
 import { distanceToCurve } from "../geom2d/intersect.js";
 import { pointInPolygon, signedArea } from "../geom2d/polygon.js";
+import * as V from "../geom2d/vec.js";
+import type { Vec2 } from "../model/primitives.js";
 import { computeLayout } from "../layout/layout.js";
 import { findCrossings, monotonyBreaks } from "../balancing/postprocess.js";
 import { computeStepping } from "./stepping.js";
@@ -175,6 +177,66 @@ describe("découpage — propriétés (générateur contraint : quart tournant, 
             expect(inside, `M${t.number} : sommet (${v.x} ; ${v.y})`).toBe(true);
           }
         });
+      }),
+      { numRuns: Math.ceil(RUNS / 2) },
+    );
+  }, 600_000);
+  it("contour de marche inclus dans l'emprise (à 0,2 mm près ; dernière marche : débord au-delà de l'arrivée)", () => {
+    // Emprise = `layout.footprint` (arcs discrétisés à 0,1 mm de flèche, d'où la tolérance).
+    // La dernière marche se prolonge de `treads.nosing` sous le plancher d'arrivée : ses sommets
+    // hors emprise doivent rester à moins du débord du dernier nez Q_{n−1} R_{n−1}.
+    const TOL = 0.2;
+    const distToSegment = (p: Vec2, a: Vec2, b: Vec2): number => {
+      const ab = V.sub(b, a);
+      const t = Math.max(0, Math.min(1, V.dot(V.sub(p, a), ab) / V.dot(ab, ab)));
+      return V.distance(p, V.addScaled(a, ab, t));
+    };
+    fc.assert(
+      fc.property(stairArb(), ({ project }) => {
+        const layout = computeLayout(project);
+        const st = computeStepping(project, layout);
+        const last = st.nosings[st.nosings.length - 1]!;
+        const depth = project.stair.treads.nosing;
+        st.treads.forEach((t, i) => {
+          for (const v of t.outline) {
+            if (pointInPolygon(v, layout.footprint, TOL) !== "outside") continue;
+            const isLast = i === st.treads.length - 1;
+            expect(
+              isLast && distToSegment(v, last.q, last.r) <= depth + TOL,
+              `M${t.number} : sommet (${v.x} ; ${v.y}) hors de l'emprise`,
+            ).toBe(true);
+          }
+        });
+      }),
+      { numRuns: Math.ceil(RUNS / 2) },
+    );
+  }, 600_000);
+
+  it("windersPerSide imposé (1 à 8) : miroir gauche/droite, croisements K5 signalés", () => {
+    // Relecture : les zones imposées n'étaient couvertes par aucune propriété. Avec l'ancienne
+    // extrémité `tangent` pour une borne tombant dans la partie tournante, cette propriété
+    // échouait (zone trouvée d'un côté, aucune zone admissible de l'autre).
+    fc.assert(
+      fc.property(stairArb(), fc.integer({ min: 1, max: 8 }), ({ project }, w) => {
+        const p = ProjectSchema.parse({
+          ...project,
+          stair: {
+            ...project.stair,
+            balancing: { ...project.stair.balancing, windersPerSide: w },
+          },
+        });
+        const st = computeStepping(p, computeLayout(p));
+        const mp = mirrored(p);
+        const sm = computeStepping(mp, computeLayout(mp));
+        const ctx = `${JSON.stringify(p.stair.layout)} H=${p.site.floorToFloor} w=${w} ${p.stair.balancing.method}`;
+        expect(sm.balancedZones, ctx).toEqual(st.balancedZones);
+        // Zone imposée : appliquée même si des lignes se croisent, mais toujours signalée (K5).
+        for (const c of findCrossings(st.nosings)) {
+          expect(
+            st.notes.some((n) => n.startsWith(`K5 : les lignes de nez ${c.i} et ${c.j} `)),
+            ctx,
+          ).toBe(true);
+        }
       }),
       { numRuns: Math.ceil(RUNS / 2) },
     );

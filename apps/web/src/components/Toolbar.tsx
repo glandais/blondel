@@ -1,24 +1,13 @@
 /**
- * Barre d'outils : nom du projet, préréglages, annuler/rétablir, import/export, unité
+ * Barre d'outils : nom du projet, préréglages, annuler/rétablir, import, menu « Exporter », unité
  * d'affichage et thème.
  */
 import { PRESET_IDS, PRESET_LABELS, type PresetId } from "@blondel/core";
 import { useId, useRef, useState } from "react";
 import { appStore, useApp } from "../store/appStore.js";
+import { ExportMenu } from "./ExportMenu.js";
 import { TextField } from "./fields.js";
 import { ThemeToggle } from "./ThemeToggle.js";
-
-function download(filename: string, text: string): void {
-  const blob = new Blob([text], { type: "application/json" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 0);
-}
 
 export function Toolbar() {
   const name = useApp((s) => s.project.name);
@@ -94,15 +83,7 @@ export function Toolbar() {
             st().importText(await file.text());
           }}
         />
-        <button
-          type="button"
-          onClick={() => {
-            const { filename, text } = st().exportFile();
-            download(filename, text);
-          }}
-        >
-          Exporter
-        </button>
+        <ExportMenu />
       </div>
 
       <div className="toolbar__group">

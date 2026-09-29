@@ -64,6 +64,21 @@ export function csvField(value: string): string {
   return /[;"\r\n]|^\s|\s$/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
 }
 
+/**
+ * Neutralise une formule de tableur (injection CSV) : un texte commençant par `=`, `+`, `-`,
+ * `@`, une tabulation ou un retour chariot est préfixé d'une apostrophe, que les tableurs
+ * lisent comme « texte littéral ». Réservé aux champs **texte** (repère, désignation,
+ * matériau, section) : les colonnes numériques, produites par `formatFr`, restent intactes.
+ */
+export function neutralizeFormula(value: string): string {
+  return /^[=+\-@\t\r]/.test(value) ? `'${value}` : value;
+}
+
+/** Champ CSV texte : neutralisé puis mis entre guillemets si nécessaire. */
+export function csvTextField(value: string): string {
+  return csvField(neutralizeFormula(value));
+}
+
 const dec = (v: number | undefined, decimals: number): string =>
   v === undefined || !Number.isFinite(v) ? "" : formatFr(v, { decimals, thousands: "" });
 
@@ -160,10 +175,10 @@ export function exportCutListCsv(
     if (tm === undefined) massKnown = false;
     else mass += tm;
     lines.push([
-      r.mark,
-      r.name,
-      r.material,
-      r.section,
+      neutralizeFormula(r.mark),
+      neutralizeFormula(r.name),
+      neutralizeFormula(r.material),
+      neutralizeFormula(r.section),
       dec(r.length, 1),
       dec(r.width, 1),
       dec(r.thickness, 1),

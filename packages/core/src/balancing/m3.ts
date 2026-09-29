@@ -8,6 +8,7 @@
  * optionnels `startSlope`, `endSlope` (pentes des parties droites, sinon Δz/Δs des marches
  * voisines).
  */
+import { GEOM_EPS } from "../geom2d/tolerance.js";
 import type { BalancingInput, BalancingSolution, BalancingStrategy } from "../model/plugins.js";
 import type { Mm } from "../model/primitives.js";
 import {
@@ -34,7 +35,9 @@ export function zoneProfile(
   const zA = input.z[a];
   const zB = input.z[b];
   if (zA === undefined || zB === undefined) return { reason: "altitudes des nez manquantes" };
-  if (!(delta > 0)) {
+  // Longueur de jour indiscernable de 0 (nez fixes passant tous deux par un angle vif du jour de
+  // développement) : le signe de delta ne tient qu'au bruit d'arrondi, on refuse la zone.
+  if (!(delta > GEOM_EPS)) {
     return { reason: `longueur de jour nulle ou négative entre les nez ${a} et ${b}` };
   }
   const slopes = adjacentSlopes(input);

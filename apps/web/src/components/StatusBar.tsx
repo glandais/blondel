@@ -1,13 +1,15 @@
 /**
  * Barre d'état : grandeurs principales lues dans le modèle (aucun calcul ici) et temps de
- * calcul du pipeline.
+ * calcul, séparés entre le cœur (`buildModel`) et le maillage d'aperçu (vue 3D), ADR-0006.
  */
 import { formatDuration, formatLength } from "../lib/units.js";
 import { useApp, useModel } from "../store/appStore.js";
+import { useMeshTiming } from "../store/perfStore.js";
 
 export function StatusBar() {
   const { model, errors, timeMs } = useModel();
   const unit = useApp((s) => s.displayUnit);
+  const mesh = useMeshTiming();
   const st = model?.stepping;
   const items: [string, string, string][] = [
     ["n", "Nombre de hauteurs", st ? String(st.riserCount) : "–"],
@@ -19,7 +21,18 @@ export function StatusBar() {
       "Échappée minimale (verticale, ligne de foulée)",
       formatLength(model?.headroom?.min, unit),
     ],
-    ["Calcul", "Temps de calcul du modèle", formatDuration(model ? timeMs : undefined)],
+    [
+      "Cœur",
+      "Temps de buildModel (tracé, découpage, pièces, échappée, contrôle) — budget 15 ms (ADR-0006)",
+      formatDuration(model ? timeMs : undefined),
+    ],
+    [
+      "Maillage",
+      mesh
+        ? `Maillage d'aperçu de la vue 3D — budget 30 ms (ADR-0006) ; ${mesh.misses} pièce(s) maillée(s), ${mesh.hits} réutilisée(s)`
+        : "Maillage d'aperçu : mesuré à l'affichage de la vue 3D",
+      formatDuration(mesh?.timeMs),
+    ],
   ];
   return (
     <footer className="statusbar" aria-label="Barre d'état">

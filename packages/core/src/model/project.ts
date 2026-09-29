@@ -4,6 +4,7 @@
  * Voir ADR-0002 (modèle de données) et ADR-0003 (unités).
  */
 import { z } from "zod";
+import { WorkshopProfileSchema } from "../workshop/profile.js";
 
 export const PROJECT_SCHEMA_VERSION = 1 as const;
 
@@ -122,10 +123,22 @@ export const BalancingSchema = z.object({
   method: z.enum(["M0", "M1", "M3"]).default("M3"),
   /** Variante M3 : cubique (C1) ou quintique (C2). `auto` = selon la structure (décision Q7). */
   variant: z.enum(["cubic", "quintic", "auto"]).default("auto"),
-  /** Marches balancées de chaque côté de la marche d'angle ; `auto` = plus petit nombre respectant le collet mini. */
+  /**
+   * Marches balancées de chaque côté de la marche d'angle ; `auto` = zone qui maximise le collet
+   * minimal mesuré en corde (CHALLENGE G3), à `colletTieTolerance` près le moins de marches balancées.
+   */
   windersPerSide: z.union([z.number().int().min(1).max(8), z.literal("auto")]).default("auto"),
-  /** Collet cible pour le choix automatique (corde, mm). */
+  /**
+   * Collet cible (corde, mm). Sans effet sur le choix automatique depuis l'alignement sur
+   * CHALLENGE G3 (le maximum l'atteint dès qu'une zone l'atteint) ; conservé pour compatibilité.
+   */
   targetCollet: mmPos.default(100),
+  /**
+   * Choix automatique de zone : écart de collet (corde, mm) sous lequel deux zones sont jugées
+   * équivalentes, la zone qui balance le moins de nez étant alors retenue. Absent : 1 mm
+   * (`COLLET_TIE_TOLERANCE`, choix Blondel à valider, sans source métier) ; 0 = collet maximal pur.
+   */
+  colletTieTolerance: mmNonNeg.optional(),
 });
 
 export const TreadSpecSchema = z.object({
@@ -201,6 +214,11 @@ export const ProjectSchema = z.object({
   site: SiteSchema,
   stair: StairSchema,
   compliance: ComplianceSettingsSchema.prefault({}),
+  /**
+   * Profil d'atelier partiel (capacités de débit, seuils de fabrication, masses volumiques) ;
+   * absent : profil par défaut (`resolveWorkshopProfile`, valeurs à valider). CHALLENGE A8.
+   */
+  workshop: WorkshopProfileSchema.optional(),
 });
 export type Project = z.infer<typeof ProjectSchema>;
 export type ProjectInput = z.input<typeof ProjectSchema>;

@@ -150,8 +150,26 @@ export interface FlatPattern {
     /** Pli : angle (degrés) et sens. */
     readonly bendAngle?: number;
     readonly bendUp?: boolean;
+    /**
+     * Traçage (`kind: "mark"`) : nature de l'usinage tracé. `mortise` = contour d'une mortaise
+     * ou d'un encastrement de marche / contremarche (limon à la française, B §4.1), `tenon` =
+     * contour d'un tenon. Absent : traçage générique (reports de nez, niveaux, naissances).
+     * Les exports placent les mortaises sur un calque / un style dédiés.
+     */
+    readonly feature?: "mortise" | "tenon";
+    /** Profondeur de l'usinage borgne (mortaise), mm ; annotation seulement. */
+    readonly depth?: Mm;
   }[];
   readonly thickness: Mm;
+  /**
+   * Fibre de référence du développé (CHALLENGE G6) : face tracée (`face`, ex. face intérieure
+   * d'un limon, côté marches) ou fibre neutre (`neutral-fiber`, tôle pliée). `description`
+   * précise le repère (axes, sens de vue). Absent : non déclarée.
+   */
+  readonly reference?: {
+    readonly kind: "face" | "neutral-fiber";
+    readonly description: string;
+  };
 }
 
 export type PartCategory =

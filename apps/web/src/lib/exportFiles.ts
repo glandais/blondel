@@ -1,0 +1,195 @@
+/**
+ * Fichiers proposés par le menu « Exporter » : chaque export est une fonction pure
+ * `(projet, modèle) → fichier(s)` qui appelle `@blondel/exports` (aucune cotation ni règle ici).
+ * Le téléchargement lui-même (Blob + lien) est dans `download.ts`.
+ *
+ * Versions DXF (décision utilisateur du 2026-09-28, CHALLENGE P6) : plans cotés en AC1021
+ * (2007) par défaut, R12 proposé ; pièces en R12.
+ */
+import type { Model, Part, Project } from "@blondel/core";
+import {
+  DEFAULT_PART_DXF_VERSION,
+  DEFAULT_PLAN_DXF_VERSION,
+  createZip,
+  exportCutListCsv,
+  exportPartDxf,
+  exportPartsDxf,
+  exportPlanDxf,
+  exportProjectJson,
+  renderElevationSvg,
+  renderPlanSvg,
+  safeFileStem,
+} from "@blondel/exports";
+import { PROJECT_FILE_SUFFIX, projectFileName } from "../store/persistence.js";
+import { loadExportPdf, type ExportPdfFn, type FileContent } from "./optionalApi.js";
+
+/** Dépendances injectables (tests) : chargement du module PDF. */
+export interface ExportDeps {
+  readonly loadPdf: () => Promise<ExportPdfFn>;
+}
+
+export const DEFAULT_EXPORT_DEPS: ExportDeps = { loadPdf: loadExportPdf };
+
+export interface ExportFile {
+  readonly filename: string;
+  readonly mime: string;
+  readonly content: FileContent;
+}
+
+export type ExportId =
+  | "project-json"
+  | "plan-svg"
+  | "plan-dxf"
+  | "plan-dxf-r12"
+  | "elevation-svg"
+  | "cutlist-csv"
+  | "pdf"
+  | "parts-dxf";
+
+export interface ExportEntry {
+  readonly id: ExportId;
+  readonly label: string;
+  /** Le modèle est-il nécessaire (tous sauf le projet JSON) ? */
+  readonly needsModel: boolean;
+}
+
+export const EXPORT_ENTRIES: readonly ExportEntry[] = [
+  { id: "project-json", label: "Projet (.blondel.json)", needsModel: false },
+  { id: "plan-svg", label: "Plan coté (SVG)", needsModel: true },
+  { id: "plan-dxf", label: "Plan coté (DXF 2007 / AC1021)", needsModel: true },
+  { id: "plan-dxf-r12", label: "Plan coté (DXF R12)", needsModel: true },
+  { id: "elevation-svg", label: "Élévation (SVG)", needsModel: true },
+  { id: "cutlist-csv", label: "Liste de débit (CSV)", needsModel: true },
+  { id: "pdf", label: "Dossier PDF", needsModel: true },
+  { id: "parts-dxf", label: "DXF des pièces (R12)", needsModel: true },
+];
+
+export const MIME = {
+  json: "application/json",
+  svg: "image/svg+xml",
+  dxf: "application/dxf",
+  csv: "text/csv;charset=utf-8",
+  pdf: "application/pdf",
+  zip: "application/zip",
+} as const;
+
+/** Radical de nom de fichier dérivé du nom du projet (sans accents ni espaces). */
+export function fileStem(projectName: string): string {
+  return projectFileName(projectName).slice(0, -PROJECT_FILE_SUFFIX.length);
+}
+
+/** Pièces qui ont un développé à plat (seules exportables en DXF de pièce). */
+export function partsWithFlat(model: Pick<Model, "parts">): readonly Part[] {
+  return model.parts.filter((p) => p.flat !== undefined);
+}
+
+/** Nom de fichier portable d'une pièce (repère, sinon identifiant), règle de `@blondel/exports`. */
+export function partFileStem(part: Part): string {
+  return safeFileStem(part.mark || part.id);
+}
+
+/** DXF R12 d'une seule pièce (lève `RangeError` si elle n'a pas de développé). */
+export function partDxfFile(part: Part, stem: string): ExportFile {
+  return {
+    filename: `${stem}-${partFileStem(part)}.dxf`,
+    mime: MIME.dxf,
+    content: exportPartDxf(part, { version: DEFAULT_PART_DXF_VERSION }),
+  };
+}
+
+/**
+ * DXF R12 de toutes les pièces à développé (`exportPartsDxf` : un fichier par repère, quantité
+ * dans le fichier), regroupés dans une archive ZIP (`createZip`) ; un seul fichier : téléchargé
+ * tel quel. Liste vide : aucune pièce n'a de développé.
+ */
+export function partsDxfFiles(model: Pick<Model, "parts">, stem: string): ExportFile[] {
+  const files = exportPartsDxf(model, { version: DEFAULT_PART_DXF_VERSION });
+  if (files.length === 0) return [];
+  if (files.length === 1) {
+    const f = files[0]!;
+    return [{ filename: `${stem}-${f.filename}`, mime: MIME.dxf, content: f.content }];
+  }
+  const zip = createZip(files.map((f) => ({ name: f.filename, data: f.content })));
+  return [{ filename: `${stem}-pieces-dxf.zip`, mime: MIME.zip, content: zip }];
+}
+
+/** Un export est-il disponible (modèle calculé, pièces à développé) ? Motif sinon. */
+export function exportAvailability(
+  id: ExportId,
+  model: Model | null,
+): { readonly ok: true } | { readonly ok: false; readonly reason: string } {
+  if (id === "project-json") return { ok: true };
+  if (!model) return { ok: false, reason: "Aucun modèle calculé." };
+  if (id === "parts-dxf" && partsWithFlat(model).length === 0) {
+    return {
+      ok: false,
+      reason: "Aucune pièce n'a de développé à plat (choisir une structure qui en produit).",
+    };
+  }
+  return { ok: true };
+}
+
+/**
+ * Produit le ou les fichiers d'un export. Lève si le rendu échoue (l'appelant affiche le
+ * message) ; `pdf` peut être asynchrone.
+ */
+export async function buildExport(
+  id: ExportId,
+  project: Project,
+  model: Model | null,
+  deps: ExportDeps = DEFAULT_EXPORT_DEPS,
+): Promise<ExportFile[]> {
+  const stem = fileStem(project.name);
+  if (id === "project-json") {
+    return [
+      {
+        filename: projectFileName(project.name),
+        mime: MIME.json,
+        content: exportProjectJson(project),
+      },
+    ];
+  }
+  const avail = exportAvailability(id, model);
+  if (!avail.ok) throw new Error(avail.reason);
+  const m = model as Model;
+  const svgOptions = { project, theme: "light" as const, background: true, title: project.name };
+  switch (id) {
+    case "plan-svg":
+      return [
+        { filename: `${stem}-plan.svg`, mime: MIME.svg, content: renderPlanSvg(m, svgOptions) },
+      ];
+    case "elevation-svg":
+      return [
+        {
+          filename: `${stem}-elevation.svg`,
+          mime: MIME.svg,
+          content: renderElevationSvg(m, svgOptions),
+        },
+      ];
+    case "plan-dxf":
+      return [
+        {
+          filename: `${stem}-plan.dxf`,
+          mime: MIME.dxf,
+          content: exportPlanDxf(m, { project, version: DEFAULT_PLAN_DXF_VERSION }),
+        },
+      ];
+    case "plan-dxf-r12":
+      return [
+        {
+          filename: `${stem}-plan-r12.dxf`,
+          mime: MIME.dxf,
+          content: exportPlanDxf(m, { project, version: "R12" }),
+        },
+      ];
+    case "cutlist-csv":
+      return [{ filename: `${stem}-debit.csv`, mime: MIME.csv, content: exportCutListCsv(m) }];
+    case "pdf": {
+      const exportPdf = await deps.loadPdf();
+      const content = await exportPdf(m, { project, title: project.name });
+      return [{ filename: `${stem}.pdf`, mime: MIME.pdf, content }];
+    }
+    case "parts-dxf":
+      return partsDxfFiles(m, stem);
+  }
+}

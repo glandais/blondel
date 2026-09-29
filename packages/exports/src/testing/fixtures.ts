@@ -480,6 +480,85 @@ export function sheetStringerPart(): Part {
   };
 }
 
+export interface WoodStringerOptions {
+  readonly riserCount?: number;
+  readonly rise?: number;
+  readonly going?: number;
+  /** Dépassement au-dessus des nez et sous les nez (mesurés verticalement), mm. */
+  readonly above?: number;
+  readonly below?: number;
+  readonly treadThickness?: number;
+  readonly mortiseDepth?: number;
+  readonly mark?: string;
+}
+
+/**
+ * Limon à la française **synthétique** (développé = élévation, B §4.1) : bande parallélogramme
+ * de pente h/g, une mortaise par marche (dessus, dessous, contremarche, nez : contour fermé de
+ * 4 segments `feature: "mortise"`), reports de nez en traçage générique, un texte. Valeurs de
+ * test seulement, sans valeur métier : le plugin bois (J3a) fournira les vrais développés.
+ */
+export function woodStringerPart(o: WoodStringerOptions = {}): Part {
+  const n = o.riserCount ?? 6;
+  const h = o.rise ?? 175;
+  const g = o.going ?? 250;
+  const above = o.above ?? 50;
+  const below = o.below ?? 250;
+  const em = o.treadThickness ?? 40;
+  const L = (n - 1) * g;
+  // Rive haute v = m·u + above, rive basse v = m·u − below, coupes d'aplomb aux extrémités.
+  const m = h / g;
+  const outer: Vec2[] = [
+    { x: 0, y: -below },
+    { x: L, y: L * m - below },
+    { x: L, y: L * m + above },
+    { x: 0, y: above },
+  ];
+  const lines: NonNullable<Part["flat"]>["lines"][number][] = [];
+  for (let k = 1; k < n - 1; k++) {
+    // Nez de la marche k en (k·g, k·h) sur la ligne des nez v = m·u.
+    const u0 = k * g - 30; // débord de nez (valeur de test)
+    const u1 = (k + 1) * g - 20;
+    const top = k * h;
+    const bottom = top - em;
+    const pts: Vec2[] = [
+      { x: u0, y: bottom },
+      { x: u1, y: bottom },
+      { x: u1, y: top },
+      { x: u0, y: top },
+    ];
+    for (let i = 0; i < 4; i++) {
+      lines.push({
+        kind: "mark",
+        feature: "mortise",
+        a: pts[i]!,
+        b: pts[(i + 1) % 4]!,
+        ...(i === 0 ? { label: `mortaise ${k}`, depth: o.mortiseDepth ?? 15 } : {}),
+      });
+    }
+    lines.push({ kind: "mark", a: { x: k * g, y: k * h - 5 }, b: { x: k * g, y: k * h + 5 } });
+  }
+  lines.push({
+    kind: "text",
+    a: { x: 20, y: above - 20 },
+    b: { x: 120, y: above - 20 + 10 * m },
+    label: "Face jour",
+  });
+  const mark = o.mark ?? "LI1";
+  return {
+    id: `stringer-${mark.toLowerCase()}`,
+    mark,
+    category: "stringer",
+    name: "Limon intérieur à la française",
+    material: "wood-oak",
+    solid: { kind: "extrusion", frame: FRAME, profile: { outer, holes: [] }, depth: 40 },
+    flat: { outline: { outer, holes: [] }, lines, thickness: 40 },
+    section: "40×300",
+    stock: { length: L + 100, width: 350, thickness: 45 },
+    quantities: {},
+  };
+}
+
 export function sampleParts(): Part[] {
   return [
     sheetStringerPart(),

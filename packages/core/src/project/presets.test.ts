@@ -12,6 +12,7 @@ import type { Project } from "../model/project.js";
 import { getRule } from "../rules/table.js";
 import { placeNosings } from "../stepping/positions.js";
 import { computeRises } from "../stepping/rises.js";
+import { computeStepping } from "../stepping/stepping.js";
 import { parseProject } from "./parse.js";
 import {
   boundingRect,
@@ -115,7 +116,7 @@ describe("createProject", () => {
     const u = createProject("two-quarters-u").stair.layout;
     expect(u.turns.map((t) => t.direction)).toEqual(["left", "left"]);
     const half = createProject("half-turn").stair.layout;
-    expect(half.legs[1]?.length).toBe(2 * half.width + 200); // volée centrale = 2E + jour
+    expect(half.legs[1]?.length).toBe(2 * half.width + 180); // volée centrale = 2E + jour
     expect(createProject("quarter-landing").stair.layout.turns[0]?.mode).toBe("landing");
     expect(createProject("quarter-left").stair.layout.turns[0]).toEqual({
       direction: "left",
@@ -176,6 +177,41 @@ describe("createProject", () => {
     expect(() =>
       createProject("straight", { floorToFloor: 3000, patch: { site: { floorToFloor: 2800 } } }),
     ).toThrow(RangeError);
+    // Réglage des hauteurs de `patch` validé par le schéma, puis résolu par `layout/resolve.ts` :
+    // toujours une RangeError, jamais une ZodError ni une LayoutError.
+    for (const stepping of [
+      { riserCount: 1 },
+      { riserCount: 61 },
+      { targetRise: 0 },
+      { targetRise: 17.5 },
+      { targetGoing: -5 },
+      { targetRise: 20 }, // n = 135 > 60 (LayoutError de resolveRiserCount)
+      { targetRise: 1000 }, // n = 3, g = 630 − 1 800 < 0 (LayoutError de resolveTargetGoing)
+    ]) {
+      expect(
+        () => createProject("straight", { patch: { stair: { stepping } } }),
+        JSON.stringify(stepping),
+      ).toThrow(RangeError);
+    }
+  });
+
+  it("U et demi-tournant sans G_COLLET_MIN : collet ≥ 100 mm pour H ∈ [2 500 ; 2 900], deux sens", () => {
+    // Relecture : l'affirmation du ledger (préréglages sans avertissement de collet) n'était
+    // vérifiée par aucun test. Emmarchement par défaut du préréglage seulement : avec E ≠ défaut
+    // la position des tournants n'est pas réajustée (point en suspens du ledger).
+    const colletMin = getRule("G_COLLET_MIN").min!;
+    for (const preset of ["two-quarters-u", "half-turn"] as const) {
+      for (const direction of ["left", "right"] as const) {
+        for (let floorToFloor = 2500; floorToFloor <= 2900; floorToFloor += 100) {
+          const p = createProject(preset, { floorToFloor, direction });
+          const st = computeStepping(p, computeLayout(p));
+          const winders = st.treads.filter((t) => t.kind === "winder");
+          expect(winders.length).toBeGreaterThan(0);
+          const min = Math.min(...winders.map((t) => t.colletChord));
+          expect(min, `${preset} ${direction} H=${floorToFloor}`).toBeGreaterThanOrEqual(colletMin);
+        }
+      }
+    }
   });
 
   it("palier : la trémie couvre aussi le palier et la première volée quand l'échappée l'exige", () => {

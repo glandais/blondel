@@ -5,6 +5,7 @@ export {
   EMPTY_LAYOUT,
   buildModel,
   clearModelCache,
+  mergeStructureChecks,
   modelCacheStats,
   type BuildModelOptions,
 } from "./build.js";

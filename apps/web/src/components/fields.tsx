@@ -1,10 +1,16 @@
 /**
- * Champs de saisie accessibles (label associé, message d'erreur annoncé). Les longueurs se
+ * Champs de saisie accessibles (label associé, message d'erreur annoncé). Les saisies au clavier
+ * sont appliquées à la validation (Entrée ou perte de focus), les choix discrets tout de suite. Les longueurs se
  * saisissent en mm entiers (ADR-0003) ; la validation métier reste celle du schéma du cœur,
  * appliquée par le store (une valeur refusée affiche le message sans modifier le projet).
  */
 import { useEffect, useId, useState, type ReactNode } from "react";
-import { parseIntMm, type IntFieldBounds } from "../lib/units.js";
+import {
+  decideDraft,
+  parseIntMm,
+  type IntFieldBounds,
+  type ParseNumberResult,
+} from "../lib/units.js";
 import { appStore } from "../store/appStore.js";
 import type { UpdateResult } from "../store/projectStore.js";
 
@@ -58,8 +64,20 @@ export interface IntFieldProps extends IntFieldBounds {
   readonly onCommit: (value: number) => UpdateResult;
 }
 
-/** Champ entier (mm par défaut) : validation à la frappe, modification appliquée dès que valide. */
-export function IntField({
+export interface NumberFieldProps extends IntFieldProps {
+  /** Lecture de la saisie (défaut : mm entiers). */
+  readonly parse?: (text: string, bounds: IntFieldBounds) => ParseNumberResult;
+  /** Mise en forme de la valeur dans le champ (défaut : `String`). */
+  readonly format?: (value: number) => string;
+}
+
+/**
+ * Champ numérique appliqué **à la validation** (Entrée ou perte de focus), pas à chaque frappe :
+ * le pipeline n'est jamais appelé sur une valeur intermédiaire (« 2 », « 27 »… en tapant
+ * 2 700) et chaque validation est une seule entrée d'historique. La saisie est vérifiée à la
+ * frappe (message affiché), Échap revient à la valeur du projet.
+ */
+export function NumberField({
   label,
   value,
   unit = "mm",
@@ -68,26 +86,44 @@ export function IntField({
   max,
   disabled,
   onCommit,
-}: IntFieldProps) {
+  parse = parseIntMm,
+  format = String,
+}: NumberFieldProps) {
   const id = useId();
-  const [draft, setDraft] = useState(String(value));
+  const [draft, setDraft] = useState(format(value));
   const [error, setError] = useState<string | null>(null);
   const [focused, setFocused] = useState(false);
-  // Valeur au moment de la prise de focus : la saisie est appliquée à la frappe, Échap doit
-  // donc revenir à cette valeur (et non à la dernière valeur partielle appliquée).
-  const [atFocus, setAtFocus] = useState(value);
 
   // Valeur modifiée ailleurs (annuler, préréglage) : resynchroniser hors saisie.
   useEffect(() => {
-    if (!focused) {
-      setDraft(String(value));
-      setError(null);
-    }
+    if (!focused) setDraft(format(value));
+    // `format` : fonction de présentation, sans effet sur la resynchronisation.
   }, [value, focused]);
 
   const bounds: IntFieldBounds = {
     ...(min === undefined ? {} : { min }),
     ...(max === undefined ? {} : { max }),
+  };
+  const read = (text: string) => parse(text, bounds);
+
+  /** Applique la saisie ; `revert` : revenir à la valeur du projet si elle est refusée. */
+  const validate = (revert: boolean): void => {
+    const d = decideDraft(draft, value, read);
+    if (d.kind === "commit") {
+      const u = onCommit(d.value);
+      endGroup();
+      if (u.ok) {
+        setError(null);
+        return;
+      }
+      setError(u.issues[0] ?? "Valeur refusée.");
+    } else if (d.kind === "invalid") {
+      setError(d.error);
+    } else {
+      setError(null);
+      return;
+    }
+    if (revert) setDraft(format(value));
   };
 
   return (
@@ -96,45 +132,46 @@ export function IntField({
         <input
           id={id}
           type="text"
-          inputMode="numeric"
+          inputMode={parse === parseIntMm ? "numeric" : "decimal"}
           autoComplete="off"
           value={draft}
           disabled={disabled}
           aria-invalid={error ? true : undefined}
           aria-describedby={describedBy(id, hint, error)}
-          onFocus={() => {
-            setFocused(true);
-            setAtFocus(value);
-          }}
+          onFocus={() => setFocused(true)}
           onBlur={() => {
+            validate(true);
             setFocused(false);
-            endGroup();
           }}
           onChange={(e) => {
             const text = e.target.value;
             setDraft(text);
-            const r = parseIntMm(text, bounds);
-            if (!r.ok) {
-              setError(r.error);
-              return;
-            }
-            const u = onCommit(r.value);
-            setError(u.ok ? null : (u.issues[0] ?? "Valeur refusée."));
+            const r = read(text);
+            setError(r.ok ? null : r.error);
           }}
           onKeyDown={(e) => {
-            if (e.key === "Escape") {
-              setDraft(String(atFocus));
+            if (e.key === "Enter") {
+              e.preventDefault();
+              validate(false);
+            } else if (e.key === "Escape") {
+              setDraft(format(value));
               setError(null);
-              if (atFocus !== value) onCommit(atFocus);
             }
           }}
         />
-        <span className="input-unit__unit" aria-hidden="true">
-          {unit}
-        </span>
+        {unit ? (
+          <span className="input-unit__unit" aria-hidden="true">
+            {unit}
+          </span>
+        ) : null}
       </span>
     </FieldShell>
   );
+}
+
+/** Champ entier (mm par défaut), appliqué à la validation. */
+export function IntField(props: IntFieldProps) {
+  return <NumberField {...props} />;
 }
 
 export interface AutoIntFieldProps extends IntFieldBounds {
@@ -273,17 +310,38 @@ export interface TextFieldProps {
 export function TextField({ label, value, type = "text", hint, onCommit }: TextFieldProps) {
   const id = useId();
   const [error, setError] = useState<string | null>(null);
+  const [draft, setDraft] = useState(value);
+  const [focused, setFocused] = useState(false);
+  useEffect(() => {
+    if (!focused) setDraft(value);
+  }, [value, focused]);
+  const commit = (text: string): void => {
+    if (text === value) return;
+    const r = onCommit(text);
+    setError(r.ok ? null : (r.issues[0] ?? "Valeur refusée."));
+    endGroup();
+  };
+  // Texte : appliqué à la validation (Entrée, perte de focus) ; date : choix discret, appliqué
+  // tout de suite.
   return (
     <FieldShell id={id} label={label} hint={hint} error={error}>
       <input
         id={id}
         type={type}
-        value={value}
+        value={draft}
         aria-describedby={describedBy(id, hint, error)}
-        onBlur={endGroup}
+        onFocus={() => setFocused(true)}
+        onBlur={() => {
+          commit(draft);
+          setFocused(false);
+        }}
         onChange={(e) => {
-          const r = onCommit(e.target.value);
-          setError(r.ok ? null : (r.issues[0] ?? "Valeur refusée."));
+          setDraft(e.target.value);
+          if (type === "date") commit(e.target.value);
+        }}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") commit(draft);
+          else if (e.key === "Escape") setDraft(value);
         }}
       />
     </FieldShell>

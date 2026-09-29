@@ -5,40 +5,70 @@
  *
  * Repère : le cœur travaille en mm, Z vers le haut ; la scène three.js en mètres, Y vers le
  * haut → groupe racine tourné de −90° autour de X et mis à l'échelle 1/1000.
+ *
+ * Rendu à la demande (`frameloop="demand"`) : une image n'est dessinée que lorsqu'une prop de la
+ * scène change ou que la caméra bouge (OrbitControls), et non 60 fois par seconde avec ombres
+ * portées — la boucle continue occupait le GPU et le fil principal en permanence.
  */
 import type { MaterialId, Model, Project } from "@blondel/core";
-import { meshParts, type PartMesh } from "@blondel/geometry";
+import type { PartMesh } from "@blondel/geometry";
 import { Grid, OrbitControls } from "@react-three/drei";
 import { Canvas, type ThreeEvent } from "@react-three/fiber";
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { Box3, DoubleSide, MeshStandardMaterial, Vector3, type BufferGeometry } from "three";
 import { isPartSelected } from "../lib/compliance.js";
 import type { Selection } from "../store/projectStore.js";
+import { createMeshCache } from "../model/meshCache.js";
+import { clearMeshTiming, publishMeshTiming } from "../store/perfStore.js";
 import { toBufferGeometry, upperSlabMesh } from "../three/geometry.js";
+import { createGeometryPool, type GeometryPool } from "../three/geometryPool.js";
 import { HIGHLIGHT_COLOR, materialLook } from "../three/materials.js";
 
 const MM = 0.001;
 
 interface PartGeometry {
   readonly part: PartMesh;
+  /** Empreinte du solide. */
+  readonly key: string;
   readonly geometry: BufferGeometry;
 }
 
-/** Géométries des pièces, recréées quand les pièces changent et libérées ensuite. */
+/** Cache de maillage par empreinte de solide, partagé par les montages successifs de la vue. */
+const meshCache = createMeshCache();
+
+/**
+ * Géométries des pièces : maillage mémoïsé par pièce (empreinte du solide), géométries three.js
+ * partagées par empreinte et libérées quand elles ne sont plus affichées. Le temps de maillage
+ * est publié pour la barre d'état.
+ */
 function usePartGeometries(model: Model): {
   parts: readonly PartGeometry[];
   failed: readonly PartMesh[];
 } {
-  const meshes = useMemo(() => meshParts(model.parts), [model.parts]);
-  const geometries = useMemo(
-    () =>
-      meshes
-        .filter((m) => m.mesh.indices.length > 0)
-        .map((part) => ({ part, geometry: toBufferGeometry(part.mesh) })),
-    [meshes],
+  const pool = useRef<GeometryPool | null>(null);
+  if (pool.current === null) pool.current = createGeometryPool();
+  const run = useMemo(() => meshCache.mesh(model.parts), [model.parts]);
+  const geometries = useMemo(() => {
+    const p = pool.current as GeometryPool;
+    return run.parts
+      .filter((m) => m.mesh.mesh.indices.length > 0)
+      .map((m) => ({ part: m.mesh, key: m.key, geometry: p.get(m.key, m.mesh.mesh) }));
+  }, [run]);
+  useEffect(() => {
+    pool.current?.retain(geometries.map((g) => g.key));
+    publishMeshTiming({ timeMs: run.timeMs, hits: run.hits, misses: run.misses });
+  }, [geometries, run]);
+  useEffect(
+    () => () => {
+      pool.current?.disposeAll();
+      clearMeshTiming();
+    },
+    [],
   );
-  useEffect(() => () => geometries.forEach((g) => g.geometry.dispose()), [geometries]);
-  const failed = useMemo(() => meshes.filter((m) => m.error !== undefined), [meshes]);
+  const failed = useMemo(
+    () => run.parts.map((m) => m.mesh).filter((m) => m.error !== undefined),
+    [run],
+  );
   return { parts: geometries, failed };
 }
 
@@ -121,6 +151,12 @@ export interface Viewer3DProps {
 export default function Viewer3D({ model, project, selection, onSelectPart }: Viewer3DProps) {
   const { parts, failed } = usePartGeometries(model);
   const materials = useMaterials();
+  const selectedMesh = parts.find(({ part }) =>
+    isPartSelected(part.partId, selection?.location),
+  )?.part;
+  const selectedName = selectedMesh
+    ? (model.parts.find((p) => p.id === selectedMesh.partId)?.name ?? "")
+    : "";
 
   // Cadrage initial sur l'ensemble des pièces (en mètres, repère three.js).
   const frame = useMemo(() => {
@@ -144,6 +180,7 @@ export default function Viewer3D({ model, project, selection, onSelectPart }: Vi
     <div className="viewer3d">
       <Canvas
         shadows
+        frameloop="demand"
         camera={{ position: frame.position, fov: 40, near: 0.01, far: 200 }}
         onPointerMissed={() => onSelectPart(null)}
         aria-label="Vue 3D de l'escalier"
@@ -203,6 +240,11 @@ export default function Viewer3D({ model, project, selection, onSelectPart }: Vi
         />
         <OrbitControls makeDefault target={frame.target} />
       </Canvas>
+      {selectedMesh ? (
+        <p className="viewer3d__selected" role="status">
+          Sélection : <strong>{selectedMesh.mark}</strong> — {selectedName}
+        </p>
+      ) : null}
       {parts.length === 0 ? (
         <p className="viewer3d__empty muted">Aucune pièce à afficher (structure non renseignée).</p>
       ) : null}

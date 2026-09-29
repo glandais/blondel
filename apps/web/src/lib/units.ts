@@ -76,3 +76,54 @@ export function formatMeasure(
   const txt = twoDecimals.format(value);
   return unit ? `${txt} ${unit}` : txt;
 }
+
+export type ParseNumberResult = ParseIntResult;
+
+const DECIMAL_RE = /^[-+]?(\d+([.,]\d*)?|[.,]\d+)$/;
+
+/**
+ * Lit un nombre décimal saisi au clavier (virgule ou point, espaces ignorés) : paramètres de
+ * plugin non entiers (coefficients, angles). Les longueurs restent en mm entiers (`parseIntMm`).
+ */
+export function parseDecimal(text: string, bounds: IntFieldBounds = {}): ParseNumberResult {
+  const t = text.replace(/[\s  ]/g, "");
+  if (t === "") return { ok: false, error: "Valeur requise." };
+  if (!DECIMAL_RE.test(t)) return { ok: false, error: "Entrer un nombre." };
+  const value = Number(t.replace(",", "."));
+  if (!Number.isFinite(value)) return { ok: false, error: "Nombre invalide." };
+  if (bounds.min !== undefined && value < bounds.min) {
+    return { ok: false, error: `Minimum : ${formatDecimal(bounds.min)}.` };
+  }
+  if (bounds.max !== undefined && value > bounds.max) {
+    return { ok: false, error: `Maximum : ${formatDecimal(bounds.max)}.` };
+  }
+  return { ok: true, value };
+}
+
+const decimalFmt = new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 6, useGrouping: false });
+
+/** Nombre décimal pour un champ de saisie (virgule décimale, sans séparateur de milliers). */
+export function formatDecimal(value: number): string {
+  return decimalFmt.format(value);
+}
+
+/** Décision de validation d'un champ numérique (Entrée ou perte de focus). */
+export type DraftDecision =
+  | { readonly kind: "unchanged" }
+  | { readonly kind: "invalid"; readonly error: string }
+  | { readonly kind: "commit"; readonly value: number };
+
+/**
+ * Saisie appliquée à la validation seulement (pas à chaque frappe) : la valeur n'est appliquée
+ * au projet que si elle est valide **et** différente de la valeur courante ; une saisie invalide
+ * n'est jamais appliquée (le projet garde sa valeur).
+ */
+export function decideDraft(
+  text: string,
+  current: number,
+  parse: (text: string) => ParseNumberResult,
+): DraftDecision {
+  const r = parse(text);
+  if (!r.ok) return { kind: "invalid", error: r.error };
+  return Object.is(r.value, current) ? { kind: "unchanged" } : { kind: "commit", value: r.value };
+}

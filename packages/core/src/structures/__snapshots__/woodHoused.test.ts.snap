@@ -1,0 +1,103 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`wood-housed — cas d'acceptation n° 1 (quart tournant bas, poteau d'angle) > instantané des cotes principales 1`] = `
+{
+  "post": {
+    "height": 875.5,
+    "mortises": [
+      "M2",
+      "M2",
+      "M3",
+      "M3",
+      "M3",
+      "Mortaise LI1",
+      "Mortaise LI2",
+    ],
+    "section": "100 × 100",
+  },
+  "resolved": {
+    "endExtension": 50,
+    "housingDepth": 15,
+    "lowerOffset": {
+      "inner": 360,
+      "outer": 275,
+    },
+    "startExtension": 20,
+    "tenonThickness": 15,
+    "upperOffset": {
+      "inner": 50,
+      "outer": 50,
+    },
+  },
+  "stringers": [
+    {
+      "end": "newel",
+      "housings": "M1 M2",
+      "length": 685,
+      "mark": "LI1",
+      "mirrored": false,
+      "perpendicularWidth": 328,
+      "section": "45 × 342",
+      "start": "floor",
+      "stock": {
+        "length": 705,
+        "thickness": 54,
+        "width": 350,
+      },
+      "tenons": 1,
+      "width": 341.9,
+    },
+    {
+      "end": "corner",
+      "housings": "M1 M2 M3 M4",
+      "length": 1610.7,
+      "mark": "LE1",
+      "mirrored": true,
+      "perpendicularWidth": 260,
+      "section": "45 × 365",
+      "start": "floor",
+      "stock": {
+        "length": 1630.7,
+        "thickness": 54,
+        "width": 400,
+      },
+      "tenons": 0,
+      "width": 364.2,
+    },
+    {
+      "end": "arrival",
+      "housings": "M3 M4 M5 M6 M7 M8 M9 M10 M11 M12 M13 M14 CM15",
+      "length": 3330.9,
+      "mark": "LI2",
+      "mirrored": false,
+      "perpendicularWidth": 275.7,
+      "section": "45 × 396",
+      "start": "newel",
+      "stock": {
+        "length": 3350.9,
+        "thickness": 54,
+        "width": 450,
+      },
+      "tenons": 1,
+      "width": 395.4,
+    },
+    {
+      "end": "arrival",
+      "housings": "M4 M5 M6 M7 M8 M9 M10 M11 M12 M13 M14 CM15",
+      "length": 3808.7,
+      "mark": "LE2",
+      "mirrored": true,
+      "perpendicularWidth": 260,
+      "section": "45 × 376",
+      "start": "corner",
+      "stock": {
+        "length": 3828.7,
+        "thickness": 54,
+        "width": 400,
+      },
+      "tenons": 0,
+      "width": 375.6,
+    },
+  ],
+}
+`;

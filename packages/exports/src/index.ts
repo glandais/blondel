@@ -1,6 +1,11 @@
 /**
- * @blondel/exports : rendus et fichiers dérivés du `Model` (plan et élévation SVG, DXF,
- * liste de débit CSV, projet JSON). Fonctions pures, sans DOM.
+ * @blondel/exports : rendus et fichiers dérivés du `Model` (plan, élévation et développés
+ * SVG, DXF, liste de débit CSV, archive ZIP, projet JSON). Fonctions pures, sans DOM.
+ *
+ * Le dossier PDF (`exportPdf`, dépendance jsPDF d'environ 1 Mo avec ses dépendances) est
+ * exposé **seulement** par `@blondel/exports/pdf`, pour un chargement à la demande par
+ * l'interface (`await import("@blondel/exports/pdf")`) : le réexporter ici ferait entrer
+ * jsPDF dans le paquet principal de l'application et rendrait l'import dynamique inopérant.
  */
 export { formatFr, formatNum, escapeXml, NARROW_NBSP, type FrNumberOptions } from "./format.js";
 export {
@@ -59,7 +64,30 @@ export {
   createDxfWriter,
 } from "./dxf/create.js";
 export { PLAN_LAYERS, exportPlanDxf, type PlanDxfOptions } from "./dxf/plan.js";
-export { PART_LAYERS, engravingPoint, exportPartDxf, type PartDxfOptions } from "./dxf/part.js";
+export {
+  PART_LAYERS,
+  engravingPoint,
+  flatEngravingPoint,
+  exportPartDxf,
+  partLineAnnotation,
+  partLineLayer,
+  type PartDxfOptions,
+} from "./dxf/part.js";
+export {
+  exportPartsDxf,
+  safeFileStem,
+  type PartDxfFile,
+  type PartsDxfOptions,
+} from "./dxf/parts.js";
+export {
+  flatLineStyle,
+  flatPatternExtent,
+  renderFlatPatternSvg,
+  wrapWords,
+  type FlatLineStyle,
+  type FlatPatternSvgOptions,
+} from "./svg/flat.js";
+export { crc32, createZip, type ZipEntry, type ZipOptions } from "./zip.js";
 export {
   CSV_BOM,
   CUT_LIST_HEADER,
@@ -67,7 +95,9 @@ export {
   QUANTITY_MASS,
   QUANTITY_VOLUME,
   csvField,
+  csvTextField,
   cutListRows,
+  neutralizeFormula,
   exportCutListCsv,
   type CutListCsvOptions,
   type CutListRow,

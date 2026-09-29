@@ -7,10 +7,17 @@ import { computeLayout } from "../layout/layout.js";
 import { LayoutError } from "../layout/errors.js";
 import { findCrossings, monotonyBreaks } from "../balancing/postprocess.js";
 import { parseProjectText } from "../project/parse.js";
+import { createProject } from "../project/presets.js";
 import { BalancingSchema } from "../model/project.js";
 import { SteppingError } from "./errors.js";
 import { computeStepping, resolveM3Variant } from "./stepping.js";
-import { WINDERS_PER_SIDE_MAX } from "./zones.js";
+import {
+  COLLET_TIE_TOLERANCE,
+  pickZone,
+  WINDERS_PER_SIDE_MAX,
+  zoneEndConditions,
+  type ZoneEvaluation,
+} from "./zones.js";
 import { makeSteppingProject, type SteppingShape } from "./test-helpers.js";
 
 const EXAMPLES_DIR = new URL("../../../../examples/", import.meta.url);
@@ -182,6 +189,126 @@ describe("quart tournant balancé (M3)", () => {
     expect(low.balancedZones[0]!.from).toBe(0);
   });
 
+  it("choix automatique (CHALLENGE G3) : collet en corde maximal parmi les zones admissibles", () => {
+    // Toute zone symétrique imposée (1 à 8 nez de chaque côté) est un candidat de l'énumération
+    // automatique : le collet retenu en `auto` est au moins aussi grand (à 1 mm près).
+    const minChord = (st: ReturnType<typeof run>["stepping"]) =>
+      Math.min(...st.treads.map((t) => t.colletChord));
+    for (const legs of [
+      [2400, 2400],
+      [1600, 3200],
+    ]) {
+      const auto = run({ width: 800, legs }).stepping;
+      for (let w = 1; w <= WINDERS_PER_SIDE_MAX; w++) {
+        const forced = run({ width: 800, legs, balancing: { windersPerSide: w } }).stepping;
+        const regular = monotonyBreaks(forced.treads.map((t) => t.colletChord)).length === 0;
+        if (!regular || findCrossings(forced.nosings).length > 0) continue;
+        expect(minChord(auto), `${legs} w=${w}`).toBeGreaterThanOrEqual(
+          minChord(forced) - COLLET_TIE_TOLERANCE,
+        );
+      }
+    }
+  });
+
+  it("choix automatique : à collet égal (± 1 mm), le moins de nez balancés", () => {
+    const cand = (from: number, to: number, minChord: number, offCenter = 0): ZoneEvaluation => ({
+      zone: { turn: 0, from, to, collarSide: "left", ends: ["tangent", "tangent"] },
+      ok: true,
+      nosings: [],
+      corrected: [],
+      minChord,
+      minArc: minChord,
+      k5: true,
+      k3: true,
+      winders: to - from - 1,
+      offCenter,
+    });
+    // 131,0 est à moins de 1 mm du maximum 131,8 : 3 nez balancés plutôt que 7.
+    const few = cand(4, 8, 131);
+    const many = cand(2, 10, 131.8);
+    expect(pickZone([many, few, cand(5, 7, 90)])).toBe(few);
+    // Au-delà de 1 mm, le collet maximal l'emporte même avec plus de nez balancés.
+    const more = cand(2, 10, 132.2);
+    expect(pickZone([few, more])).toBe(more);
+    // Collet cible (100) non discriminant : le maximum est retenu même au-dessus de la cible.
+    expect(pickZone([cand(5, 8, 105), cand(3, 10, 140)])!.zone.from).toBe(3);
+    // Candidats non admissibles (K5, collet nul) ignorés ; aucun admissible → null.
+    expect(pickZone([{ ...more, k5: false }, few])).toBe(few);
+    expect(pickZone([{ ...more, minChord: 0, minArc: 0 }])).toBeNull();
+    // Régularité (K3) prioritaire quand un candidat régulier existe.
+    expect(pickZone([{ ...more, k3: false }, few])).toBe(few);
+  });
+
+  it("tolérance d'égalité des collets : paramètre du projet (défaut 1 mm, à valider)", () => {
+    // Relecture : la tolérance était un seuil figé dans le code, sans source métier.
+    const cand = (from: number, to: number, minChord: number): ZoneEvaluation => ({
+      zone: { turn: 0, from, to, collarSide: "left", ends: ["tangent", "tangent"] },
+      ok: true,
+      nosings: [],
+      corrected: [],
+      minChord,
+      minArc: minChord,
+      k5: true,
+      k3: true,
+      winders: to - from - 1,
+      offCenter: 0,
+    });
+    const few = cand(4, 8, 131);
+    const many = cand(2, 10, 131.8);
+    expect(pickZone([many, few])).toBe(few);
+    expect(pickZone([many, few], 0)).toBe(many);
+    expect(pickZone([many, cand(5, 7, 90)], 50)!.winders).toBe(1);
+    expect(() => pickZone([few], -1)).toThrow(RangeError);
+    expect(() => pickZone([few], Number.NaN)).toThrow(RangeError);
+    expect(BalancingSchema.parse({}).colletTieTolerance).toBeUndefined();
+    expect(BalancingSchema.safeParse({ colletTieTolerance: -1 }).success).toBe(false);
+    // Bout en bout (quart médian) : 0 = collet maximal pur ; très grande tolérance = le moins
+    // de nez balancés parmi les zones régulières.
+    const count = (st: ReturnType<typeof run>["stepping"]) =>
+      st.nosings.filter((nl) => nl.balanced).length;
+    const minChord = (st: ReturnType<typeof run>["stepping"]) =>
+      Math.min(...st.treads.map((t) => t.colletChord));
+    const legs = [2400, 2400];
+    const byDefault = run({ width: 800, legs }).stepping;
+    const pure = run({ width: 800, legs, balancing: { colletTieTolerance: 0 } }).stepping;
+    const loose = run({ width: 800, legs, balancing: { colletTieTolerance: 1000 } }).stepping;
+    expect(minChord(pure)).toBeGreaterThanOrEqual(minChord(byDefault) - 1e-6);
+    expect(minChord(byDefault)).toBeGreaterThanOrEqual(minChord(pure) - COLLET_TIE_TOLERANCE);
+    expect(count(loose)).toBeLessThan(count(byDefault));
+  });
+
+  it("borne de zone dans la partie tournante : extrémité libre, sinon tangente", () => {
+    // Quart tournant médian à jour vif (arc de Γ : s ∈ [1 600 ; 2 228], girons de 273,4 mm),
+    // 1 nez de chaque côté : nez fixes 5 (s = 1 367, partie droite → tangente) et 8
+    // (s = 2 188, dans l'arc : aucune partie droite ne continue → libre).
+    const inner = run({ width: 800, legs: [2400, 2400], balancing: { windersPerSide: 1 } });
+    expect(inner.stepping.balancedZones[0]).toMatchObject({ from: 5, to: 8 });
+    expect(inner.stepping.notes.some((n) => n.includes("extrémités tangente/libre"))).toBe(true);
+    // 2 nez de chaque côté : nez fixes 4 et 9 dans les parties droites → tangentes.
+    const outer = run({ width: 800, legs: [2400, 2400], balancing: { windersPerSide: 2 } });
+    expect(outer.stepping.balancedZones[0]).toMatchObject({ from: 4, to: 9 });
+    expect(outer.stepping.notes.some((n) => n.includes("extrémités tangente/tangente"))).toBe(true);
+    // Fonction pure : bornes sur les limites de l'arc (à GEOM_EPS) = tangentes.
+    const seeds = [0, 100, 200, 300, 400].map((s) => ({ s }));
+    const ctx = { seeds, freeNosings: new Set<number>() } as unknown as Parameters<
+      typeof zoneEndConditions
+    >[0];
+    expect(zoneEndConditions(ctx, { sStart: 100, sEnd: 300 }, 1, 3)).toEqual([
+      "tangent",
+      "tangent",
+    ]);
+    expect(zoneEndConditions(ctx, { sStart: 50, sEnd: 350 }, 1, 3)).toEqual(["free", "free"]);
+    expect(zoneEndConditions(ctx, { sStart: 150, sEnd: 250 }, 0, 4)).toEqual([
+      "tangent",
+      "tangent",
+    ]);
+    const withFree = { ...ctx, freeNosings: new Set([0]) };
+    expect(zoneEndConditions(withFree, { sStart: 150, sEnd: 250 }, 0, 4)).toEqual([
+      "free",
+      "tangent",
+    ]);
+  });
+
   it("borne d'énumération = maximum de windersPerSide du schéma", () => {
     expect(BalancingSchema.safeParse({ windersPerSide: WINDERS_PER_SIDE_MAX }).success).toBe(true);
     expect(BalancingSchema.safeParse({ windersPerSide: WINDERS_PER_SIDE_MAX + 1 }).success).toBe(
@@ -199,9 +326,11 @@ describe("quart tournant balancé (M3)", () => {
     expect(high.balancedZones[0]!.to).toBeGreaterThanOrEqual(high.riserCount - 2);
     expect(high.treads[high.treads.length - 1]!.kind).toBe("winder");
     const mid = run({ width: 800, legs: [2400, 2400] }).stepping;
+    // Tournant médian : collet maximal (CHALLENGE G3), la zone encadre le tournant.
     const z = mid.balancedZones[0]!;
-    expect(z.from).toBeGreaterThan(0);
-    expect(z.to).toBeLessThan(mid.riserCount - 1);
+    expect(z.from).toBeLessThan(7);
+    expect(z.to).toBeGreaterThan(7);
+    expect(Math.min(...mid.treads.map((t) => t.colletChord))).toBeGreaterThanOrEqual(100);
     for (const st of [low, high, mid]) {
       expect(findCrossings(st.nosings)).toEqual([]);
       for (const t of st.treads.filter((t) => t.kind === "winder")) {
@@ -235,7 +364,12 @@ describe("quart tournant balancé (M3)", () => {
   });
 
   it("M1 : profil en V, jarret signalé, K3", () => {
-    const st = run({ width: 800, legs: [2400, 2400], balancing: { method: "M1" } }).stepping;
+    // Zone imposée (3 de chaque côté) : extrémités tangentes, donc jarret d'entrée de zone.
+    const st = run({
+      width: 800,
+      legs: [2400, 2400],
+      balancing: { method: "M1", windersPerSide: 3 },
+    }).stepping;
     expect(st.balancedZones[0]!.method).toBe("M1");
     expect(st.notes.some((n) => n.includes("jarret"))).toBe(true);
     const z = st.balancedZones[0]!;
@@ -380,8 +514,12 @@ describe("surcharges du mode expert", () => {
       expect(t.colletChord).toBeCloseTo(left.treads[i]!.colletChord, 6);
       expect(t.goingOuter).toBeCloseTo(left.treads[i]!.goingOuter, 6);
     });
-    // Angle positif : le bout côté mur avance vers l'arrivée, le collet recule.
-    const ref = run(base).stepping;
+    // Angle positif : le bout côté mur avance vers l'arrivée, le collet recule (référence :
+    // la même ligne perpendiculaire à Γ, angle imposé nul).
+    const ref = run({
+      ...base,
+      nosingOverrides: [{ kind: "angle" as const, index: 2, angle: 0 }],
+    }).stepping;
     expect(left.nosings[2]!.sigmaOuter).toBeGreaterThan(ref.nosings[2]!.sigmaOuter);
     expect(left.nosings[2]!.sigmaInner).toBeLessThan(ref.nosings[2]!.sigmaInner);
   });
@@ -466,10 +604,16 @@ describe("contour de marche coupé au nez suivant (intégration)", () => {
     // Régression (ledger §3, [review:pipeline → core:stepping]) : la ligne du nez 5 passe par
     // l'angle vif du jour et est presque parallèle à la 3e volée ; le débord derrière ce nez
     // ne recoupait le jour qu'en (−400 ; −70,7), au-delà du nez 6.
-    const text = readFileSync(new URL("two-quarters-u.blondel.json", EXAMPLES_DIR), "utf8");
-    const project = parseProjectText(text);
+    // Volées de l'ancien préréglage U (1 120 / 2 100 / 2 625), figées : le préréglage place
+    // désormais le premier tournant à 2 girons du départ et n'expose plus ce cas.
+    const project = createProject("two-quarters-u", {
+      patch: { stair: { layout: { legs: [1120, 2100, 2625].map((length) => ({ length })) } } },
+    });
     const layout = computeLayout(project);
     const st = computeStepping(project, layout);
+    // Le cas étudié : nez 5 fixe, par l'angle vif du premier tournant.
+    expect(st.nosings[5]!.balanced).toBe(false);
+    expect(st.nosings[5]!.q.x).toBeCloseTo(-400, 6);
     const m5 = st.treads[4]!;
     const union = [m5.walkingSurface, st.treads[5]!.walkingSurface];
     for (const v of m5.outline) {

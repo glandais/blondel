@@ -30,6 +30,7 @@
  */
 import type { BalancingInput, BalancingSolution, BalancingStrategy } from "../model/plugins.js";
 import type { Mm } from "../model/primitives.js";
+import { GEOM_EPS } from "../geom2d/tolerance.js";
 import type { EndCondition } from "./profile.js";
 import { cornerSigma, zoneEnds } from "./zone.js";
 
@@ -67,7 +68,9 @@ export function vProfileCollets(
 function collets(input: BalancingInput): Mm[] | { reason: string } {
   const { a, b, sigmaA, sigmaB } = zoneEnds(input);
   const L = sigmaB - sigmaA;
-  if (!(L > 0)) return { reason: `longueur de jour nulle entre les nez ${a} et ${b}` };
+  // Longueur de jour indiscernable de 0 (nez fixes passant tous deux par un angle vif du jour de
+  // développement) : le signe de L ne tient qu'au bruit d'arrondi, on refuse la zone.
+  if (!(L > GEOM_EPS)) return { reason: `longueur de jour nulle entre les nez ${a} et ${b}` };
   const ratio = Math.min(1, Math.max(0, (cornerSigma(input) - sigmaA) / L));
   return vProfileCollets(b - a, L, input.going, ratio, input.zone.ends);
 }

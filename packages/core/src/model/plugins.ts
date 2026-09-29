@@ -62,6 +62,12 @@ export interface StructureContext {
   readonly project: Project;
   readonly layout: Layout;
   readonly stepping: Stepping;
+  /**
+   * Pièces de base déjà générées par le pipeline (marches, contremarches, paliers ;
+   * `parts/basic.ts`). Un plugin peut les **remplacer** en rendant des pièces de même `id`
+   * (ex. marches prolongées dans les limons). Absent : le plugin les recalcule s'il en a besoin.
+   */
+  readonly baseParts?: readonly Part[];
 }
 
 /**
@@ -79,9 +85,23 @@ export interface StructureKind<P = unknown> {
 }
 
 export interface StructureOutput {
+  /**
+   * Pièces de la structure. Une pièce de même `id` qu'une pièce de base la remplace dans le
+   * modèle ; les autres s'ajoutent.
+   */
   readonly parts: readonly Part[];
+  /**
+   * Contrôles propres à la structure. Un résultat dont `ruleId` est une règle de rules.yaml
+   * remplace le résultat « sans évaluateur » du moteur pour cette règle ; les autres
+   * (contrôles de fabrication) s'ajoutent au rapport.
+   */
   readonly checks: readonly RuleResult[];
   /** Classe d'exécution EN 1090-2 déduite (métal). */
   readonly executionClass?: "EXC1" | "EXC2";
   readonly notes: readonly string[];
+  /**
+   * Configurations non prises en charge (ex. jour en arc sous un limon à la française) : la
+   * structure est partielle ; messages repris dans `Model.errors`. Absent : aucune.
+   */
+  readonly errors?: readonly string[];
 }

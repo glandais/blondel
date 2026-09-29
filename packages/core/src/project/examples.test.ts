@@ -1,5 +1,6 @@
 /**
- * Exemples `examples/*.blondel.json` : un par préréglage + cas d'acceptation n° 1.
+ * Exemples `examples/*.blondel.json` : un par préréglage + cas d'acceptation n° 1 (sans
+ * structure, et avec la structure bois `wood-housed` du jalon 3a).
  * Régénération : `UPDATE_EXAMPLES=1 pnpm vitest run packages/core/src/project/examples.test.ts`.
  */
 import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -16,6 +17,7 @@ import { serializeProject } from "./serialize.js";
 
 const EXAMPLES_DIR = resolve(dirname(fileURLToPath(import.meta.url)), "../../../../examples");
 const ACCEPTANCE_01 = "acceptance-01-quart-tournant.blondel.json";
+const ACCEPTANCE_01_WOOD = "j3a-acceptance-01-bois.blondel.json";
 
 /**
  * Cas d'acceptation n° 1 (prompt 2 §6, précisé par docs/CHALLENGE.md P1) : quart tournant bas,
@@ -55,9 +57,24 @@ export function acceptance01(): Project {
   });
 }
 
+/**
+ * Jalon 3a : cas d'acceptation n° 1 avec sa structure bois (`wood-housed` : limons à la
+ * française et poteau d'angle). Paramètres vides : défauts du plugin et du profil d'atelier
+ * (à valider), fusionnés par le pipeline.
+ */
+export function acceptance01Wood(): Project {
+  const p = acceptance01();
+  return {
+    ...p,
+    name: "Jalon 3a — cas d'acceptation n° 1, limons à la française",
+    stair: { ...p.stair, structure: { kind: "wood-housed", params: {} } },
+  };
+}
+
 const expected: Readonly<Record<string, () => Project>> = {
   ...Object.fromEntries(PRESET_IDS.map((id) => [`${id}.blondel.json`, () => createProject(id)])),
   [ACCEPTANCE_01]: acceptance01,
+  [ACCEPTANCE_01_WOOD]: acceptance01Wood,
 };
 
 if (process.env["UPDATE_EXAMPLES"] === "1") {

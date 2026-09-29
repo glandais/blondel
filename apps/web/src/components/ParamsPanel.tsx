@@ -16,6 +16,7 @@ import { appStore, useApp, useModel } from "../store/appStore.js";
 import type { Path } from "../store/setIn.js";
 import { addLeg, legAutoAllowed, removeLastLeg } from "../lib/layoutEdit.js";
 import { AutoIntField, CheckField, IntField, SelectField, TextField } from "./fields.js";
+import { StructureSection } from "./StructureSection.js";
 
 const set = (path: Path) => (value: unknown) => appStore.getState().setField(path, value);
 const update = (recipe: (p: Project) => Project, groupKey?: string) =>
@@ -452,6 +453,9 @@ export function ParamsPanel() {
       <SteppingSection />
       <BalancingSection />
       <TreadsSection />
+      <Section title="Structure">
+        <StructureSection />
+      </Section>
       <ComplianceSection />
     </div>
   );

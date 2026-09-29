@@ -1,7 +1,14 @@
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { sampleParts, treadPart } from "../testing/fixtures.js";
-import { CSV_BOM, csvField, cutListRows, exportCutListCsv } from "./cutlist.js";
+import {
+  CSV_BOM,
+  csvField,
+  csvTextField,
+  cutListRows,
+  exportCutListCsv,
+  neutralizeFormula,
+} from "./cutlist.js";
 
 /** Lecture CSV minimale (« ; », guillemets doublés) pour les tests. */
 function parseCsv(text: string): string[][] {
@@ -96,6 +103,39 @@ describe("exportCutListCsv", () => {
         const parsed = parseCsv(exportCutListCsv({ parts }).slice(1));
         expect(parsed).toHaveLength(rows.length + 2);
       }),
+    );
+  });
+
+  it("anti-formule : champs texte commençant par =, +, -, @ neutralisés", () => {
+    expect(neutralizeFormula("=1+1")).toBe("'=1+1");
+    expect(neutralizeFormula("+33")).toBe("'+33");
+    expect(neutralizeFormula("-2")).toBe("'-2");
+    expect(neutralizeFormula("@SUM(A1)")).toBe("'@SUM(A1)");
+    expect(neutralizeFormula("\t=1")).toBe("'\t=1");
+    expect(neutralizeFormula("M1")).toBe("M1");
+    expect(csvTextField('=HYPERLINK("x";"y")')).toBe(`"'=HYPERLINK(""x"";""y"")"`);
+    const evil = { ...treadPart(1, "=cmd|' /C calc'!A0"), name: "+Marche", section: "@x" };
+    const rows = parseCsv(exportCutListCsv({ parts: [evil] }).slice(1));
+    const r = rows[1]!;
+    expect(r[0]).toBe("'=cmd|' /C calc'!A0");
+    expect(r[1]).toBe("'+Marche");
+    expect(r[3]).toBe("'@x");
+    // Colonnes numériques intactes.
+    expect(r[4]).toBe("950,0");
+  });
+
+  it("propriété : aucun champ du CSV ne commence par un caractère de formule", () => {
+    fc.assert(
+      fc.property(
+        fc.array(fc.record({ mark: fc.string(), name: fc.string(), section: fc.string() }), {
+          maxLength: 10,
+        }),
+        (specs) => {
+          const parts = specs.map((s, i) => ({ ...treadPart(1, s.mark), ...s, id: `p${i}` }));
+          const rows = parseCsv(exportCutListCsv({ parts }).slice(1));
+          for (const row of rows) for (const f of row) expect(f).not.toMatch(/^[=+\-@\t\r]/);
+        },
+      ),
     );
   });
 });
