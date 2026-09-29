@@ -2,6 +2,7 @@
  * Assistant d'initialisation (prompt 2 §3, SPEC §2.2, CHALLENGE G8).
  */
 export { LATERAL_STRINGER_STRUCTURES, proposeDesigns, resolveStructureIntent } from "./propose.js";
+export { selectDiverse, shapeKey, type SelectionOptions } from "./select.js";
 export { ASSISTANT_DEFAULTS, DEFAULT_SCORE_WEIGHTS } from "./defaults.js";
 export {
   assistantContexts,

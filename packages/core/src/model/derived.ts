@@ -8,6 +8,8 @@
  * Les solides et développés sont décrits **analytiquement** ici (ADR-0001) ; le package
  * `@blondel/geometry` les convertit en maillages, `@blondel/exports` en fichiers.
  */
+import type { PrecheckedBeam } from "../precheck/checks.js";
+import type { StairLoads } from "../precheck/loads.js";
 import type { Curve2, Frame3, Mm, Polygon2, Rad, Shape2, Vec2, Vec3 } from "./primitives.js";
 
 // ------------------------------------------------------------------ Étape 2 : tracé
@@ -23,6 +25,35 @@ export interface TurnZone {
   /** Intervalle d'abscisse sur la ligne de foulée couvert par le tournant (partie courbe / palier). */
   readonly sStart: Mm;
   readonly sEnd: Mm;
+  /**
+   * Côté du jour (collet) de ce tournant, dans le sens de la montée : égal à `direction` pour un
+   * tournant à 90°. Ajout rétrocompatible (facultatif) : dans un escalier en S ou en Z, le jour
+   * du second tournant est du côté **opposé** à `Layout.innerSide` (son jour est alors porté par
+   * la courbe `Layout.outer`). Absent : `Layout.innerSide`.
+   */
+  readonly collarSide?: "left" | "right";
+}
+
+/**
+ * Transition de la ligne de foulée dans une volée intermédiaire d'escalier en S ou en Z quand
+ * d_f ≠ E/2 (E > 1 200 mm en DTU, ou distance saisie) : la distance au jour change de côté
+ * d'un tournant à l'autre. Raccord linéaire de d_f le long de la partie droite de la volée
+ * (défaut Blondel, point en suspens du ledger) : Γ y est un segment oblique, anguleux à ses
+ * extrémités.
+ */
+export interface WalklineTransition {
+  /** Indice de la volée (0 = première). */
+  readonly leg: number;
+  /** Intervalle d'abscisse sur Γ de la partie oblique. */
+  readonly sStart: Mm;
+  readonly sEnd: Mm;
+  /** Distances de Γ au bord `Layout.inner` au début et à la fin de la partie oblique. */
+  readonly fromOffset: Mm;
+  readonly toOffset: Mm;
+  /** Direction de montée de la volée (unitaire, repère monde) : les nez y restent perpendiculaires. */
+  readonly direction: Vec2;
+  /** Angle (rad, > 0) entre Γ et la direction de la volée. */
+  readonly angle: Rad;
 }
 
 /**
@@ -60,13 +91,26 @@ export interface Layout {
   readonly outer: Curve2;
   /** Ligne de foulée de conception (équipartition des girons). */
   readonly walkline: Curve2;
-  /** Distance ligne de foulée ↔ bord intérieur. */
+  /**
+   * Distance ligne de foulée ↔ bord du jour (d_f). Escalier en S ou en Z : distance au jour du
+   * tournant voisin (côté `TurnZone.collarSide`), égale de part et d'autre ; voir
+   * `walklineTransitions` pour la partie où elle change de côté.
+   */
   readonly walklineOffset: Mm;
   /** Emprise en plan (contour de l'escalier). */
   readonly footprint: Polygon2;
   readonly turns: readonly TurnZone[];
-  /** Côté « intérieur » : gauche si les tournants vont à gauche. Droit : gauche par convention. */
+  /**
+   * Côté « intérieur » : gauche si les tournants vont à gauche. Droit : gauche par convention.
+   * Escalier en S ou en Z : côté du jour du **premier** tournant (`inner` est la courbe de ce
+   * côté sur toute la montée ; le jour d'un tournant de sens opposé est sur `outer`).
+   */
   readonly innerSide: "left" | "right";
+  /**
+   * Transitions de la ligne de foulée (escalier en S ou en Z, d_f ≠ E/2). Ajout rétrocompatible :
+   * absent ou vide, Γ reste à `walklineOffset` du bord `inner` hors tournants de sens opposé.
+   */
+  readonly walklineTransitions?: readonly WalklineTransition[];
   /**
    * Tracé hélicoïdal (jalon 5a) : axe, rayons, angles. Absent : escalier à volées. Un tracé
    * hélicoïdal n'a pas de tournant à 90° (`turns` vide) ; `footprint` est le secteur de couronne
@@ -142,6 +186,11 @@ export interface Stepping {
     to: number;
     method: string;
     ends?: readonly ["tangent" | "free", "tangent" | "free"];
+    /**
+     * M2 (herse) : borne supérieure de l'angle α (degrés) pour cette zone, plus petite
+     * α_eq = arccos(L_c / (m·g)) de ses demi-zones (curseur borné, B §3.4). Ajout facultatif.
+     */
+    herseAlphaMax?: number;
     continuation?: readonly [
       { readonly nosings: readonly number[]; readonly end: "tangent" | "free" } | null,
       { readonly nosings: readonly number[]; readonly end: "tangent" | "free" } | null,
@@ -348,6 +397,23 @@ export interface HeadroomOnWidth {
   readonly nosing: number;
 }
 
+// ------------------------------------------------------------------ Prédimensionnement
+
+/**
+ * Prédimensionnement indicatif des limons (CHALLENGE P5) rendu par le pipeline : **seule
+ * source** du panneau de prédimensionnement et du comparateur. Calculé par le plugin de
+ * structure quand il en fait un (`StructureOutput.precheck`, ex. `steel-profile` qui choisit
+ * sa section avec), sinon par `precheckStringers` sur les pièces du modèle. Les lignes
+ * PRECHECK_* du contrôle de conception, quand elles existent, viennent du même calcul.
+ */
+export interface ModelPrecheck {
+  readonly beams: readonly PrecheckedBeam[];
+  readonly loads: StairLoads;
+  /** Charge permanente répartie en plan (kN/m²). */
+  readonly permanentArea: number;
+  readonly notes: readonly string[];
+}
+
 // ------------------------------------------------------------------ Résultat global
 
 export interface Model {
@@ -369,6 +435,11 @@ export interface Model {
    * SPEC §2.4). Absent : structure sans pièce métal ou pipeline qui ne la reporte pas.
    */
   readonly executionClass?: "EXC1" | "EXC2";
+  /**
+   * Prédimensionnement indicatif des limons (voir `ModelPrecheck`). Absent : modèle incomplet
+   * (tracé ou découpage en erreur) ou calcul en échec.
+   */
+  readonly precheck?: ModelPrecheck;
   /** Erreurs de génération (paramètres impossibles) : le modèle peut être partiel. */
   readonly errors: readonly string[];
   /** Remarques non bloquantes du pipeline (pièces non générées, hypothèses). */

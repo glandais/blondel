@@ -2,19 +2,37 @@
  * Étape 2 du pipeline : le **tracé** (`computeLayout(project) → Layout`).
  *
  * Topologie explicite (docs/CHALLENGE.md G1) : N volées droites reliées par N − 1 tournants à
- * 90°, tous du même sens. Le bord intérieur C_i (jour), le bord extérieur C_e (mur) et la ligne
- * de foulée Γ sont construits **en forme fermée**, tournant par tournant (droite / arc / droite),
- * sans décalage générique de courbe.
+ * 90°, de même sens (quart tournant, U, demi-tournant) ou de sens opposés (S / Z). Les deux
+ * bords et la ligne de foulée Γ sont construits **en forme fermée**, tournant par tournant
+ * (droite / arc / droite), sans décalage générique de courbe.
  *
  * ## Repère local (voir `LayoutSpecSchema`)
  *
  * Départ sur le segment (0,0)–(E,0), montée selon +Y, x = 0 côté gauche. Pour chaque volée on
- * note I son origine côté intérieur (sur sa ligne de départ), u sa direction de montée et n la
- * normale unitaire allant de l'intérieur vers l'extérieur. Un tournant vers l'intérieur donne
- * u' = −n et n' = u. La longueur L d'une volée est mesurée sur le bord **extérieur** : deux
- * volées successives se recouvrent sur le carré d'angle E × E, le coin extérieur (mur) est
- * W = I + E·n + L·u et le coin intérieur (intersection des faces internes des limons) est
- * K = I + (L − E)·u.
+ * note A son origine sur le bord **gauche** (sur sa ligne de départ), u sa direction de montée
+ * et r la normale unitaire gauche → droite. La longueur L d'une volée est mesurée hors tout le
+ * long de u, carrés d'angle compris (c'est la longueur au mur pour un quart tournant ou un U) :
+ * deux volées successives se recouvrent sur le carré d'angle E × E. Tournant à gauche :
+ * u' = −r, coin intérieur K = A + (L − E)·u (bord gauche), coin du mur W = A + L·u + E·r.
+ * Tournant à droite : u' = r, K = A + (L − E)·u + E·r (bord droit), W = A + L·u.
+ *
+ * ## Côtés du jour, S / Z (CHALLENGE G1)
+ *
+ * Chaque tournant a son jour (collet) du côté de son sens (`TurnZone.collarSide`). Chaque bord
+ * porte le raccord de jour des tournants de son côté et l'angle vif du mur des autres.
+ * `Layout.inner` est le bord du côté du jour du **premier** tournant (`innerSide`) et
+ * `Layout.outer` l'autre, sur toute la montée : dans un S / Z, le jour du second tournant est
+ * donc porté par `outer`.
+ *
+ * Ligne de foulée d'un S / Z : d_f est mesurée depuis le jour du tournant voisin. Quand
+ * d_f = E/2 (E ≤ 1 200 mm en DTU), Γ reste au milieu, sans transition. Sinon (E > 1 200 mm :
+ * 600 mm du côté intérieur, ou distance saisie) la position change de côté dans la volée
+ * intermédiaire : **raccord linéaire** de d_f le long de la partie droite de cette volée
+ * [défaut Blondel, DTU muet, point en suspens du ledger] — Γ y est un segment oblique, anguleux
+ * à ses extrémités (`Layout.walklineTransitions`, angle signalé par le découpage). Une volée
+ * intermédiaire sans partie droite de Γ est alors refusée (`LayoutError`) ; une partie droite
+ * de moins d'un giron est refusée par le découpage (CHALLENGE G3 : pas de zone unique à travers
+ * deux jours opposés).
  *
  * ## Raccords de jour (par tournant)
  *
@@ -30,7 +48,7 @@
  *   est ici le centre du poteau. Γ est donc identique au cas `sharp` ; sa distance au poteau
  *   est d_f − a·√2/2 au droit du coin du poteau (on exige d_f > a·√2/2).
  *
- * Le bord extérieur (mur) reste toujours à angle vif en W.
+ * Le bord du mur reste toujours à angle vif en W.
  *
  * ## Palier d'angle (`mode: "landing"`)
  *
@@ -47,7 +65,7 @@
  * arcs discrétisés à 0,1 mm de flèche). Le poteau et les limons (hors emmarchement utile,
  * CHALLENGE A3) n'en font pas partie.
  */
-import type { Layout, TurnZone } from "../model/derived.js";
+import type { Layout, TurnZone, WalklineTransition } from "../model/derived.js";
 import type { Curve2, CurveSeg, Mm, Polygon2, Vec2 } from "../model/primitives.js";
 import type { InnerCorner, Project, Turn } from "../model/project.js";
 import {
@@ -76,12 +94,12 @@ export interface LayoutOptions {
 
 /** Repère d'une volée dans le repère local. */
 interface LegFrame {
-  /** Origine côté intérieur, sur la ligne de départ de la volée. */
-  readonly inner: Vec2;
+  /** Origine sur le bord **gauche** (dans le sens de la montée), sur la ligne de départ. */
+  readonly left: Vec2;
   /** Direction de montée (unitaire). */
   readonly u: Vec2;
-  /** Normale unitaire intérieur → extérieur. */
-  readonly n: Vec2;
+  /** Normale unitaire gauche → droite. */
+  readonly r: Vec2;
   readonly length: Mm;
 }
 
@@ -104,14 +122,16 @@ function walkSetback(inner: InnerCorner): Mm {
 
 const legLabel = (i: number): string => `volée ${i + 1}`;
 
+type Side = "left" | "right";
+
 /**
  * Calcule le tracé (bords, ligne de foulée, tournants, emprise) d'un projet, en repère monde.
  * Un tracé hélicoïdal (`kind: "helical"`) est délégué à `computeHelicalLayout`.
  *
- * @throws LayoutError si la topologie n'est pas prise en charge (tournants de sens opposés,
- *   nombre de tournants incohérent, `auto` hors escalier droit) ou si les cotes sont
- *   impossibles (volée trop courte pour ses raccords, ligne de foulée hors emmarchement ou
- *   traversant un poteau).
+ * @throws LayoutError si la topologie n'est pas prise en charge (nombre de tournants
+ *   incohérent, `auto` hors escalier droit) ou si les cotes sont impossibles (volée trop courte
+ *   pour ses raccords ou pour la transition de la ligne de foulée d'un S, ligne de foulée hors
+ *   emmarchement ou traversant un poteau).
  */
 export function computeLayout(project: Project, options: LayoutOptions = {}): Layout {
   const spec = project.stair.layout;
@@ -138,15 +158,8 @@ export function computeLayout(project: Project, options: LayoutOptions = {}): La
     }
   });
 
-  // Côté intérieur : sens des tournants (tous identiques au MVP).
-  const firstDir = turns[0]?.direction;
-  if (turns.some((t) => t.direction !== firstDir)) {
-    throw new LayoutError(
-      "Tournants de sens opposés (escalier en S ou en Z) : non supporté au MVP.",
-    );
-  }
-  const innerSide = firstDir ?? "left";
-  const turnSign = innerSide === "left" ? 1 : -1;
+  // Côté intérieur : jour du premier tournant (S / Z : le second tournant a son jour en face).
+  const innerSide: Side = turns[0]?.direction ?? "left";
 
   const df = resolveWalklineOffset(project);
   for (const [j, t] of turns.entries()) {
@@ -160,20 +173,29 @@ export function computeLayout(project: Project, options: LayoutOptions = {}): La
     }
   }
 
-  // Repères des volées.
+  // Repères des volées (bord gauche). Tournant à gauche : u' = −r, le coin intérieur K est sur
+  // le bord gauche ; à droite : u' = r, K est sur le bord droit. Dans les deux cas K est à
+  // l'abscisse L − E de la volée entrante et E de la volée sortante.
   const legs: LegFrame[] = [];
   {
-    let inner: Vec2 = innerSide === "left" ? V.vec(0, 0) : V.vec(width, 0);
+    let left: Vec2 = V.vec(0, 0);
     let u: Vec2 = V.vec(0, 1);
-    let n: Vec2 = innerSide === "left" ? V.vec(1, 0) : V.vec(-1, 0);
+    let r: Vec2 = V.vec(1, 0);
     lengths.forEach((length, i) => {
-      legs.push({ inner, u, n, length });
-      if (i < turns.length) {
-        const k = V.addScaled(inner, u, length - width);
-        const u2 = V.scale(n, -1);
-        n = u;
-        u = u2;
-        inner = V.addScaled(k, u, -width);
+      legs.push({ left, u, r, length });
+      const turn = turns[i];
+      if (turn !== undefined) {
+        if (turn.direction === "left") {
+          left = V.addScaled(V.addScaled(left, u, length - width), r, width);
+          const u2 = V.scale(r, -1);
+          r = u;
+          u = u2;
+        } else {
+          left = V.addScaled(left, u, length);
+          const u2 = r;
+          r = V.scale(u, -1);
+          u = u2;
+        }
       }
     });
   }
@@ -190,13 +212,23 @@ export function computeLayout(project: Project, options: LayoutOptions = {}): La
     }
   });
 
-  const cornerOf = (i: number): Vec2 => {
-    const leg = legs[i]!;
-    return V.addScaled(leg.inner, leg.u, leg.length - width);
+  /** Point de la volée i à l'abscisse t (le long de u) et à la distance o du bord gauche. */
+  const at = (leg: LegFrame, t: Mm, o: Mm): Vec2 =>
+    V.addScaled(V.addScaled(leg.left, leg.u, t), leg.r, o);
+  /** Coin intérieur K du tournant j (intersection des faces internes des limons). */
+  const cornerOf = (j: number): Vec2 => {
+    const leg = legs[j]!;
+    return at(leg, leg.length - width, turns[j]!.direction === "left" ? 0 : width);
   };
+  /** Coin extérieur W du tournant j (mur, angle vif). */
+  const wallCornerOf = (j: number): Vec2 => {
+    const leg = legs[j]!;
+    return at(leg, leg.length, turns[j]!.direction === "left" ? width : 0);
+  };
+  /** Normale unitaire jour → mur de la volée entrante du tournant j. */
+  const collarNormal = (j: number): Vec2 =>
+    turns[j]!.direction === "left" ? legs[j]!.r : V.scale(legs[j]!.r, -1);
 
-  // ---------------------------------------------------------------- bord intérieur C_i
-  const innerSegs: CurveSeg[] = [];
   /** Ajoute la droite [a, b] si elle n'est pas dégénérée ; renvoie la longueur ajoutée. */
   const pushLine = (segs: CurveSeg[], a: Vec2, b: Vec2): Mm => {
     const length = V.distance(a, b);
@@ -204,42 +236,81 @@ export function computeLayout(project: Project, options: LayoutOptions = {}): La
     segs.push(lineSeg(a, b));
     return length;
   };
-  legs.forEach((leg, i) => {
-    const t0 = i > 0 ? width + innerSetback(turns[i - 1]!.inner) : 0;
-    const t1 = i < turns.length ? leg.length - width - innerSetback(turns[i]!.inner) : leg.length;
-    pushLine(innerSegs, V.addScaled(leg.inner, leg.u, t0), V.addScaled(leg.inner, leg.u, t1));
-    const turn = turns[i];
-    if (turn !== undefined) innerSegs.push(...innerTurnSegments(turn, cornerOf(i), leg, turnSign));
-  });
+
+  // ---------------------------------------------------------------- bords gauche et droit
+  // Chaque bord est le jour des tournants de son côté (raccord de jour, retraits) et le mur
+  // (angle vif) des tournants de l'autre côté.
+  const edgeSegments = (side: Side): CurveSeg[] => {
+    const segs: CurveSeg[] = [];
+    const offset = side === "left" ? 0 : width;
+    legs.forEach((leg, i) => {
+      const prev = i > 0 ? turns[i - 1]! : undefined;
+      const next = i < turns.length ? turns[i]! : undefined;
+      const t0 =
+        prev === undefined ? 0 : prev.direction === side ? width + innerSetback(prev.inner) : 0;
+      const t1 =
+        next === undefined
+          ? leg.length
+          : next.direction === side
+            ? leg.length - width - innerSetback(next.inner)
+            : leg.length;
+      pushLine(segs, at(leg, t0, offset), at(leg, t1, offset));
+      if (next !== undefined && next.direction === side) {
+        segs.push(...innerTurnSegments(next, cornerOf(i), leg.u, collarNormal(i)));
+      }
+    });
+    return segs;
+  };
+  const leftSegs = edgeSegments("left");
+  const rightSegs = edgeSegments("right");
+  const innerSegs = innerSide === "left" ? leftSegs : rightSegs;
+  const outerSegs = innerSide === "left" ? rightSegs : leftSegs;
 
   // ---------------------------------------------------------------- ligne de foulée Γ
+  // Distance de Γ au bord gauche au droit du tournant j : d_f du côté de son jour.
+  const walkOffsetAt = (j: number): Mm => (turns[j]!.direction === "left" ? df : width - df);
+  const startOffset = turns.length > 0 ? walkOffsetAt(0) : df;
   const walkSegs: CurveSeg[] = [];
   const zones: { sStart: Mm; sEnd: Mm }[] = [];
+  const transitions: { leg: number; sStart: Mm; sEnd: Mm; o0: Mm; o1: Mm; angle: number }[] = [];
   let s = 0;
   legs.forEach((leg, i) => {
-    const t0 = i > 0 ? width + walkSetback(turns[i - 1]!.inner) : 0;
-    const t1 = i < turns.length ? leg.length - width - walkSetback(turns[i]!.inner) : leg.length;
-    const base = V.addScaled(leg.inner, leg.n, df);
+    const prev = i > 0 ? turns[i - 1]! : undefined;
+    const next = i < turns.length ? turns[i]! : undefined;
+    const t0 = prev !== undefined ? width + walkSetback(prev.inner) : 0;
+    const t1 = next !== undefined ? leg.length - width - walkSetback(next.inner) : leg.length;
+    const o0 = prev !== undefined ? walkOffsetAt(i - 1) : startOffset;
+    const o1 = next !== undefined ? walkOffsetAt(i) : o0;
+    if (Math.abs(o1 - o0) > GEOM_EPS && !(t1 - t0 > GEOM_EPS)) {
+      throw new LayoutError(
+        `La ${legLabel(i)} est trop courte pour la transition de la ligne de foulée entre les tournants ${i} et ${i + 1} (sens opposés, ligne de foulée à ${df} mm du jour) : il faut une partie droite.`,
+      );
+    }
     // Abscisse cumulée sur les segments réellement ajoutés : [sStart, sEnd] reste cohérent
     // avec le paramétrage de la courbe même quand une partie droite est dégénérée.
-    s += pushLine(walkSegs, V.addScaled(base, leg.u, t0), V.addScaled(base, leg.u, t1));
-    const turn = turns[i];
-    if (turn !== undefined) {
-      const r = walkSetback(turn.inner);
-      const center = V.sub(V.sub(cornerOf(i), V.scale(leg.n, r)), V.scale(leg.u, r));
+    const sBefore = s;
+    s += pushLine(walkSegs, at(leg, t0, o0), at(leg, t1, o1));
+    if (Math.abs(o1 - o0) > GEOM_EPS) {
+      transitions.push({
+        leg: i,
+        sStart: sBefore,
+        sEnd: s,
+        o0,
+        o1,
+        angle: Math.atan2(Math.abs(o1 - o0), t1 - t0),
+      });
+    }
+    if (next !== undefined) {
+      const r = walkSetback(next.inner);
+      const n = collarNormal(i);
+      const center = V.sub(V.sub(cornerOf(i), V.scale(n, r)), V.scale(leg.u, r));
       const radius = r + df;
-      walkSegs.push(arcSeg(center, radius, V.angleOf(leg.n), (turnSign * Math.PI) / 2));
+      const sign = next.direction === "left" ? 1 : -1;
+      walkSegs.push(arcSeg(center, radius, V.angleOf(n), (sign * Math.PI) / 2));
       const sStart = s;
       s += (radius * Math.PI) / 2;
       zones.push({ sStart, sEnd: s });
     }
-  });
-
-  // ---------------------------------------------------------------- bord extérieur C_e
-  const outerSegs: CurveSeg[] = [];
-  legs.forEach((leg) => {
-    const start = V.addScaled(leg.inner, leg.n, width);
-    pushLine(outerSegs, start, V.addScaled(start, leg.u, leg.length));
   });
 
   // ---------------------------------------------------------------- repère monde
@@ -251,23 +322,33 @@ export function computeLayout(project: Project, options: LayoutOptions = {}): La
   // Jour réduit à un point (quart tournant sans partie droite, angle vif) : courbe de
   // longueur nulle au coin, pour garder un `Curve2` non vide.
   if (innerSegs.length === 0) innerSegs.push(lineSeg(cornerOf(0), cornerOf(0)));
+  if (outerSegs.length === 0) outerSegs.push(lineSeg(cornerOf(0), cornerOf(0)));
   const inner = curveToWorld(makeCurve(innerSegs));
   const outer = curveToWorld(makeCurve(outerSegs));
   const walkline = curveToWorld(makeCurve(walkSegs));
 
-  const turnZones: TurnZone[] = turns.map((t, j) => {
-    const leg = legs[j]!;
-    const outerCorner = V.addScaled(V.addScaled(leg.inner, leg.n, width), leg.u, leg.length);
-    return {
-      index: j,
-      direction: t.direction,
-      mode: t.mode,
-      innerCorner: toWorld(cornerOf(j)),
-      outerCorner: toWorld(outerCorner),
-      sStart: zones[j]!.sStart,
-      sEnd: zones[j]!.sEnd,
-    };
-  });
+  const turnZones: TurnZone[] = turns.map((t, j) => ({
+    index: j,
+    direction: t.direction,
+    mode: t.mode,
+    innerCorner: toWorld(cornerOf(j)),
+    outerCorner: toWorld(wallCornerOf(j)),
+    sStart: zones[j]!.sStart,
+    sEnd: zones[j]!.sEnd,
+    collarSide: t.direction,
+  }));
+
+  // Distances à `inner` (et non au bord gauche) des transitions.
+  const fromInner = (o: Mm): Mm => (innerSide === "left" ? o : width - o);
+  const walklineTransitions: WalklineTransition[] = transitions.map((tr) => ({
+    leg: tr.leg,
+    sStart: tr.sStart,
+    sEnd: tr.sEnd,
+    fromOffset: fromInner(tr.o0),
+    toOffset: fromInner(tr.o1),
+    direction: V.rotate(legs[tr.leg]!.u, angle),
+    angle: tr.angle,
+  }));
 
   return {
     inner,
@@ -277,16 +358,18 @@ export function computeLayout(project: Project, options: LayoutOptions = {}): La
     footprint: footprintOf(inner, outer),
     turns: turnZones,
     innerSide,
+    ...(walklineTransitions.length > 0 ? { walklineTransitions } : {}),
   };
 }
 
 /**
- * Segments de C_i propres au tournant (entre la fin de la partie droite de la volée entrante
- * et le début de celle de la volée sortante), repère local.
+ * Segments du jour propres au tournant (entre la fin de la partie droite de la volée entrante
+ * et le début de celle de la volée sortante), repère local. `u` : direction de la volée
+ * entrante ; `n` : normale unitaire jour → mur de cette volée.
  */
-function innerTurnSegments(turn: Turn, k: Vec2, leg: LegFrame, turnSign: number): CurveSeg[] {
-  const { u, n } = leg;
+function innerTurnSegments(turn: Turn, k: Vec2, u: Vec2, n: Vec2): CurveSeg[] {
   const inner = turn.inner;
+  const turnSign = turn.direction === "left" ? 1 : -1;
   switch (inner.kind) {
     case "sharp":
       return [];
@@ -298,8 +381,8 @@ function innerTurnSegments(turn: Turn, k: Vec2, leg: LegFrame, turnSign: number)
     case "newel": {
       // Coordonnées (α, β) dans la base (n, u) centrée sur K ; poteau |α|, |β| ≤ a/2.
       const h = inner.size / 2;
-      const at = (a: number, b: number): Vec2 => V.add(V.add(k, V.scale(n, a)), V.scale(u, b));
-      const pts = [at(0, -h), at(h, -h), at(h, h), at(-h, h), at(-h, 0)];
+      const pt = (a: number, b: number): Vec2 => V.add(V.add(k, V.scale(n, a)), V.scale(u, b));
+      const pts = [pt(0, -h), pt(h, -h), pt(h, h), pt(-h, h), pt(-h, 0)];
       const segs: CurveSeg[] = [];
       for (let i = 0; i + 1 < pts.length; i++) segs.push(lineSeg(pts[i]!, pts[i + 1]!));
       return segs;

@@ -76,11 +76,21 @@ export const PRESET_IDS = [
   "half-turn",
   "quarter-landing",
 ] as const;
-export type FlightsPresetId = (typeof PRESET_IDS)[number];
+/**
+ * Préréglages à tournants de sens opposés (S / Z), séparés de `PRESET_IDS` : les garde-corps, les
+ * structures et l'interface supposent encore un seul côté de jour (voir le ledger).
+ */
+export const OPPOSITE_TURNS_PRESET_IDS = ["two-quarters-s"] as const;
+export type FlightsPresetId =
+  (typeof PRESET_IDS)[number] | (typeof OPPOSITE_TURNS_PRESET_IDS)[number];
 /** Préréglages hélicoïdaux (jalon 5a, `presetHelical.ts`). */
 export const HELICAL_PRESET_IDS = ["helical"] as const;
 /** Tous les préréglages. */
-export const ALL_PRESET_IDS = [...PRESET_IDS, ...HELICAL_PRESET_IDS] as const;
+export const ALL_PRESET_IDS = [
+  ...PRESET_IDS,
+  ...OPPOSITE_TURNS_PRESET_IDS,
+  ...HELICAL_PRESET_IDS,
+] as const;
 export type PresetId = (typeof ALL_PRESET_IDS)[number];
 
 export const PRESET_LABELS: Readonly<Record<PresetId, string>> = {
@@ -88,6 +98,7 @@ export const PRESET_LABELS: Readonly<Record<PresetId, string>> = {
   "quarter-left": "Quart tournant à gauche",
   "quarter-right": "Quart tournant à droite",
   "two-quarters-u": "Deux quarts tournants (U)",
+  "two-quarters-s": "Deux quarts tournants opposés (S)",
   "half-turn": "Demi-tournant balancé",
   "quarter-landing": "Quart tournant avec palier",
   helical: "Hélicoïdal à fût central",
@@ -146,7 +157,11 @@ export interface PresetOptions {
   readonly width?: number;
   /** Épaisseur du plancher haut (mm), défaut 200. */
   readonly upperSlabThickness?: number;
-  /** Sens des tournants pour `two-quarters-u`, `half-turn`, `quarter-landing` (défaut : gauche). */
+  /**
+   * Sens des tournants pour `two-quarters-u`, `half-turn`, `quarter-landing` (défaut : gauche) ;
+   * sens du **premier** tournant pour `two-quarters-s` (le second est de sens opposé : Z si
+   * `right`).
+   */
   readonly direction?: TurnDirection;
   /**
    * Jeu latéral (mm, entier ≥ 0) ajouté à la trémie calculée sur chaque côté qui longe un bord
@@ -176,6 +191,13 @@ interface PresetShape {
   readonly firstStraightGoings: number;
   /** Longueur intérieure (jour) des volées centrales, mm (volée centrale = 2E + jour). */
   readonly middleWell: number;
+  /**
+   * Longueur droite de ligne de foulée des volées centrales, en girons (remplace `middleWell`).
+   * S / Z : au moins un giron (marche fixe entre les deux balancements, CHALLENGE G3).
+   */
+  readonly middleGoings?: number;
+  /** Tournants alternés : le second de sens opposé au premier (S / Z). */
+  readonly alternate?: boolean;
 }
 
 const SHAPES: Readonly<Record<FlightsPresetId, PresetShape>> = {
@@ -225,6 +247,20 @@ const SHAPES: Readonly<Record<FlightsPresetId, PresetShape>> = {
     firstStraightGoings: 2,
     middleWell: 0,
   },
+  // S (2026-09-29) [choix Blondel, à valider] : premier tournant à 2 girons du départ, partie
+  // droite intermédiaire de 3,5 girons, jour vif, E = 850 (ligne de foulée au milieu : pas de
+  // transition). Balayage E ∈ {800, 850, 900} × premier tournant ∈ {1,5 … 3} girons × partie
+  // intermédiaire ∈ {2 … 4} girons, H ∈ [2 500 ; 2 900] par pas de 25 mm : collet minimal
+  // (M3 auto) ≥ 111 mm, sans rupture K3 (`presets.test.ts`).
+  "two-quarters-s": {
+    width: 850,
+    turns: ["left", "right"],
+    mode: "winders",
+    firstStraightGoings: 2,
+    middleWell: 0,
+    middleGoings: 3.5,
+    alternate: true,
+  },
 };
 
 function isPlainObject(v: unknown): v is Record<string, unknown> {
@@ -256,9 +292,9 @@ function windersLegs(
   const quarterArc = (Math.PI / 2) * (width / 2);
   const total = (n - 1) * going;
   const middleCount = Math.max(0, turns.length - 1);
+  const middle = shape.middleGoings !== undefined ? shape.middleGoings * going : shape.middleWell;
   const firstStraight = turns.length === 0 ? total : shape.firstStraightGoings * going;
-  const lastStraight =
-    total - firstStraight - turns.length * quarterArc - middleCount * shape.middleWell;
+  const lastStraight = total - firstStraight - turns.length * quarterArc - middleCount * middle;
   if (turns.length > 0 && lastStraight < 0) {
     throw new RangeError(
       `Hauteur à monter trop faible pour ce préréglage : il manque ${Math.ceil(-lastStraight)} mm de ligne de foulée.`,
@@ -266,7 +302,7 @@ function windersLegs(
   }
   if (turns.length === 0) return [Math.round(total)];
   const legs = [Math.round(firstStraight + width)];
-  for (let i = 0; i < middleCount; i++) legs.push(Math.round(shape.middleWell + 2 * width));
+  for (let i = 0; i < middleCount; i++) legs.push(Math.round(middle + 2 * width));
   legs.push(Math.round(lastStraight + width));
   return legs;
 }
@@ -460,7 +496,10 @@ export function createProject(preset: PresetId, options: PresetOptions = {}): Pr
     if (e instanceof LayoutError) throw new RangeError(e.message);
     throw e;
   }
-  const turns: TurnDirection[] = shape.turns.map((t) => direction ?? t);
+  const first = direction ?? shape.turns[0];
+  const turns: TurnDirection[] = shape.alternate
+    ? shape.turns.map((_, j) => (j % 2 === 0 ? first! : first === "left" ? "right" : "left"))
+    : shape.turns.map((t) => direction ?? t);
   const legs =
     shape.mode === "landing"
       ? landingLegs(shape, width, n, going)

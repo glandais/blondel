@@ -10,6 +10,7 @@
  */
 import { listStructures } from "@blondel/core";
 import type { Model, Project, StructureKind } from "@blondel/core";
+import type { PdfPages } from "@blondel/exports/pdf";
 
 /** Octets, texte ou `Blob` : toutes les formes de contenu de fichier acceptées. */
 export type FileContent = string | Uint8Array | ArrayBuffer | Blob;
@@ -19,22 +20,8 @@ export type FileContent = string | Uint8Array | ArrayBuffer | Blob;
  * absente = page produite ; format absent = A4. Clonable (requête du worker).
  */
 export interface PdfJobOptions {
-  readonly pages?: Readonly<
-    Partial<
-      Record<
-        | "toc"
-        | "plan"
-        | "elevation"
-        | "installation"
-        | "bom"
-        | "cutsheet"
-        | "compliance"
-        | "flats"
-        | "templates",
-        boolean
-      >
-    >
-  >;
+  /** Liste des pages : type de `@blondel/exports/pdf` (import de type, jsPDF non chargé). */
+  readonly pages?: Readonly<PdfPages>;
   readonly format?: "a4" | "a3";
 }
 

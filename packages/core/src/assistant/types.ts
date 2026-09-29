@@ -74,6 +74,12 @@ export interface ScoreWeights {
   readonly collet: number;
   /** Par mm d'échappée sous l'échappée recommandée. */
   readonly headroom: number;
+  /**
+   * Par mm de marge d'échappée (échappée − échappée minimale bloquante) sous la marge visée
+   * `AssistantLimits.headroomMarginTarget` : un escalier qui passe « tout juste » est pénalisé,
+   * jamais rejeté. Absent des poids fournis : valeur par défaut.
+   */
+  readonly headroomMargin: number;
   /** Par marche balancée. */
   readonly winders: number;
   /** Par mm d'écart maximal des girons sur la ligne de foulée au giron nominal. */
@@ -84,10 +90,29 @@ export interface ScoreWeights {
 
 /** Réglages de l'énumération (tous ont une valeur par défaut, `ASSISTANT_DEFAULTS`). */
 export interface AssistantLimits {
-  /** Nombre maximal de candidats rendus. */
+  /** Nombre maximal de candidats de la liste principale (variantes non comptées). */
   readonly maxCandidates?: number;
-  /** Nombre maximal de candidats rendus par typologie et sens (diversité). */
+  /**
+   * Nombre maximal de modèles acceptés par groupe de construction typologie × sens × position
+   * du tournant (équité de l'étage complet ; fournit aussi les variantes de chaque forme).
+   */
   readonly perGroupLimit?: number;
+  /**
+   * Diversité de la liste principale : au plus ce nombre de candidats par forme (typologie ×
+   * position du tournant, le sens et E n'en font pas partie) ; les suivants de la même forme
+   * sont rendus en `variants` du meilleur. Entier ≥ 1.
+   */
+  readonly perShapeLimit?: number;
+  /**
+   * « Montrer toutes les variantes » : liste principale **à plat**, tous les candidats acceptés
+   * classés par score (sans regroupement ni troncature à `maxCandidates`), `variants` vides.
+   */
+  readonly showAllVariants?: boolean;
+  /**
+   * Marge d'échappée visée (mm, ≥ 0) du terme `headroomMargin` du score : pénalité par mm de
+   * marge en dessous. **[Choix Blondel, à valider]**.
+   */
+  readonly headroomMarginTarget?: Mm;
   /** Nombre maximal de modèles complets construits (`buildModel`). */
   readonly maxBuilds?: number;
   /** Budget de temps indicatif (ms) : au-delà, l'évaluation s'arrête (résultat partiel). */
@@ -178,6 +203,14 @@ export interface DesignCandidate {
   readonly project: Project;
   readonly summary: ModelSummary;
   readonly score: ScoreBreakdown;
+  /** Forme du candidat (diversité) : `typologie|position du tournant` (`-` sans tournant). */
+  readonly shape: string;
+  /**
+   * Variantes de la même forme (autre sens, autre E, autre n…) regroupées sous le meilleur
+   * candidat de la forme, classées par score croissant ; vide pour une variante, pour un
+   * candidat non meilleur de sa forme et avec `showAllVariants`.
+   */
+  readonly variants: readonly DesignCandidate[];
 }
 
 /** Motifs d'élimination. */
@@ -229,7 +262,11 @@ export interface AssistantStats {
 }
 
 export interface AssistantResult {
-  /** Candidats sans bloquant, classés (score croissant). */
+  /**
+   * Liste principale des candidats sans bloquant, classés par score croissant : au plus
+   * `perShapeLimit` par forme, les autres en `variants` du meilleur de leur forme (ou tous à
+   * plat avec `showAllVariants`).
+   */
   readonly candidates: readonly DesignCandidate[];
   /** Diagnostic lisible (français) : bornes utilisées, éliminations, absence de proposition. */
   readonly diagnostics: readonly string[];

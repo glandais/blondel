@@ -7,6 +7,9 @@
   --text: #1d2125;
   --muted: #5f6770;
   --border: #d6dade;
+  /* Limite des champs et boutons : au moins 3:1 sur --panel, --panel-2 et --bg (WCAG 1.4.11) ;
+     --border reste réservé aux séparateurs décoratifs. */
+  --control-border: #7d868f;
   --accent: #2f6fb3;
   --accent-text: #ffffff;
   --focus: #2f6fb3;
@@ -34,6 +37,7 @@
     --text: #e6e8ea;
     --muted: #9aa3ab;
     --border: #353b41;
+    --control-border: #6b747d;
     --accent: #6ea8e6;
     --accent-text: #0e1114;
     --focus: #8fbdf0;
@@ -55,6 +59,7 @@
   --text: #e6e8ea;
   --muted: #9aa3ab;
   --border: #353b41;
+  --control-border: #6b747d;
   --accent: #6ea8e6;
   --accent-text: #0e1114;
   --focus: #8fbdf0;
@@ -99,7 +104,7 @@ input {
 
 button {
   background: var(--panel-2);
-  border: 1px solid var(--border);
+  border: 1px solid var(--control-border);
   border-radius: var(--radius);
   padding: 0.3rem 0.65rem;
   cursor: pointer;
@@ -126,7 +131,7 @@ select,
 input[type="text"],
 input[type="date"] {
   background: var(--panel);
-  border: 1px solid var(--border);
+  border: 1px solid var(--control-border);
   border-radius: var(--radius);
   padding: 0.25rem 0.4rem;
   min-width: 0;
@@ -335,6 +340,11 @@ legend {
   font-size: 0.78rem;
 }
 
+.field__note {
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
 .field--invalid input {
   border-color: var(--danger);
 }
@@ -357,6 +367,28 @@ legend {
   color: var(--muted);
   font-size: 0.8rem;
   min-width: 1.8rem;
+}
+
+.range-field {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.range-field input[type="range"] {
+  flex: 1;
+  min-width: 0;
+}
+
+.range-field__value {
+  font-variant-numeric: tabular-nums;
+  font-size: 0.85rem;
+  white-space: nowrap;
+}
+
+.range-field__reset {
+  font-size: 0.78rem;
+  padding: 0.1rem 0.4rem;
 }
 
 .check,

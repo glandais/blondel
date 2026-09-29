@@ -94,7 +94,8 @@ describe("propriétés de proposeDesigns", () => {
         }
         const poly = openingPolygon(opening)!;
         const wallPolys = walls.map((w) => shrink(wallRect(w), 0.5));
-        for (const c of r.candidates) {
+        // Liste principale et variantes : mêmes garanties.
+        for (const c of r.candidates.flatMap((h) => [h, ...h.variants])) {
           const model = buildModel(c.project, { memo: false });
           expect(model.errors).toEqual([]);
           expect(model.compliance.summary.bloquant).toBe(0);

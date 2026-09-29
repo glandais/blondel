@@ -12,6 +12,7 @@ import {
   type PresetId,
   type PresetOptions,
   type Project,
+  type Turn,
 } from "@blondel/core";
 
 export type LayoutKind = "flights" | "helical";
@@ -144,3 +145,55 @@ export function switchLayoutKind(project: Project, kind: LayoutKind): LayoutSwit
 
 /** Angle proposé quand on ajoute un palier d'arrivée à un hélicoïdal (degrés, repris du cœur). */
 export const DEFAULT_LANDING_ANGLE = HELICAL_MAX_LANDING_ANGLE;
+
+// ------------------------------------------------------------------ Typologie des volées
+
+/** Enchaînement de deux tournants : même sens (U, demi-tournant) ou sens opposés (S / Z). */
+export type TurnSequence = "same" | "opposite";
+
+/** Tracé à volées dont deux tournants consécutifs sont de sens opposés (S / Z). */
+export function hasOppositeTurns(turns: readonly Pick<Turn, "direction">[]): boolean {
+  return turns.some((t, i) => i > 0 && t.direction !== turns[i - 1]!.direction);
+}
+
+const dirLabel = (d: Turn["direction"]): string => (d === "left" ? "à gauche" : "à droite");
+
+/**
+ * Typologie lisible d'un tracé à volées, déduite des tournants saisis (présentation seulement :
+ * le cœur construit le tracé à partir des volées et des tournants, quel que soit ce libellé).
+ */
+export function flightsTypologyLabel(turns: readonly Pick<Turn, "direction" | "mode">[]): string {
+  if (turns.length === 0) return "Escalier droit";
+  const landing = turns.some((t) => t.mode === "landing");
+  const withLanding = landing
+    ? turns.every((t) => t.mode === "landing")
+      ? ", paliers"
+      : ", palier"
+    : "";
+  if (turns.length === 1) {
+    return `Quart tournant ${dirLabel(turns[0]!.direction)}${landing ? " avec palier" : ""}`;
+  }
+  if (turns.length === 2) {
+    const [a, b] = turns as [Pick<Turn, "direction">, Pick<Turn, "direction">];
+    return a.direction === b.direction
+      ? `Deux quarts tournants ${dirLabel(a.direction)} (U)${withLanding}`
+      : `Deux quarts tournants opposés (S / Z : ${dirLabel(a.direction)} puis ${dirLabel(b.direction)})${withLanding}`;
+  }
+  return `${turns.length} tournants${hasOppositeTurns(turns) ? ", sens alternés" : ""}${withLanding}`;
+}
+
+/**
+ * Change l'enchaînement de deux tournants en gardant le sens du premier : `opposite` → le
+ * second tournant prend le sens contraire (S / Z), `same` → le même (U). Sans effet hors
+ * tracé à volées de deux tournants au moins.
+ */
+export function withTurnSequence(project: Project, sequence: TurnSequence): Project {
+  const layout = project.stair.layout;
+  if (layout.kind === "helical" || layout.turns.length < 2) return project;
+  const first = layout.turns[0]!.direction;
+  const other: Turn["direction"] = first === "left" ? "right" : "left";
+  const turns = layout.turns.map((t, i) =>
+    i === 1 ? { ...t, direction: sequence === "same" ? first : other } : t,
+  );
+  return { ...project, stair: { ...project.stair, layout: { ...layout, turns } } };
+}

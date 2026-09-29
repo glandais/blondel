@@ -10,6 +10,7 @@ import { buildModel } from "../pipeline/build.js";
 import { parseProjectText } from "../project/parse.js";
 import { makeSteppingProject } from "../stepping/test-helpers.js";
 import { isSimplePolygon } from "./geom.js";
+import { landingPitchGap } from "./pitch.test-helpers.js";
 import { QUANTITY_MASS_KG, QUANTITY_VOLUME_M3 } from "./quantities.js";
 import { getStructure, listStructures } from "./registry.js";
 import {
@@ -65,6 +66,66 @@ describe("steel-flat — registre", () => {
     const d = SteelFlatParamsSchema.parse({});
     expect(d).toMatchObject({ grade: "S235", thickness: 8, treadKind: "wood" });
     expect(d.folded).toMatchObject({ profile: "Z", thickness: 5 });
+  });
+});
+
+describe("steel-flat — palier (quart tournant avec palier)", () => {
+  it("ligne des nez de niveau sur le palier (rives arasées au-dessus du palier)", () => {
+    const base = loadExample("quarter-landing.blondel.json");
+    const p: Project = {
+      ...base,
+      stair: {
+        ...base.stair,
+        layout: {
+          ...base.stair.layout,
+          turns: base.stair.layout.turns.map((t) => ({
+            ...t,
+            inner: { kind: "newel" as const, size: 100 },
+          })),
+        },
+      },
+    };
+    const { m, r } = run(steel(p));
+    expect(m.errors).toEqual([]);
+    expect(m.stepping.treads.some((t) => t.kind === "landing")).toBe(true);
+    expect(landingPitchGap(m.stepping, r.stringers)).toBeLessThan(1e-6);
+  });
+});
+
+describe("steel-flat — tôle pliée et contremarches pleines", () => {
+  const base = loadExample("j3b-acceptance-01-tole-pliee.blondel.json");
+  const withProfile = (profile: "Z" | "U"): Project => ({
+    ...base,
+    stair: {
+      ...base.stair,
+      structure: {
+        kind: "steel-flat",
+        params: {
+          ...(base.stair.structure.params as Record<string, unknown>),
+          treadKind: "folded-steel",
+          folded: { profile },
+        },
+      },
+    },
+  });
+
+  it("profil Z : contremarche d'arrivée conservée (aucune pièce Z ne la porte)", () => {
+    const { m, r } = run(withProfile("Z"));
+    expect(base.stair.treads.risers).toBe("full");
+    const n = m.stepping.riserCount;
+    const folded = m.parts.filter((p) => p.category === "tread");
+    expect(folded).toHaveLength(n - 1);
+    // Les pièces Z portent les contremarches sous les nez 0 … n − 2 ; celle du nez d'arrivée
+    // (riser-n) reste la contremarche de base.
+    expect(m.parts.filter((p) => p.category === "riser").map((p) => p.id)).toEqual([`riser-${n}`]);
+    expect(r.output.removedBaseParts).toEqual(
+      Array.from({ length: n - 1 }, (_, i) => `riser-${i + 1}`),
+    );
+  });
+
+  it("profil U (claire-voie) : toutes les contremarches de base retirées", () => {
+    const { m } = run(withProfile("U"));
+    expect(m.parts.filter((p) => p.category === "riser")).toEqual([]);
   });
 });
 
@@ -364,9 +425,11 @@ describe("steel-flat — propriétés (tournants à poteau)", () => {
           ...(g.folded ? { treadKind: "folded-steel", folded: { profile: g.folded } } : {}),
           supports: { fixing: g.bolted ? "bolted" : "welded" },
         };
-        const { m } = run(steel(p0, params));
+        const { m, r } = run(steel(p0, params));
         if (m.stepping.nosings.length < 2) return;
         expect(m.errors).toEqual([]);
+        // Paliers : ligne des nez de niveau (profil des garde-corps).
+        expect(landingPitchGap(m.stepping, r.stringers)).toBeLessThan(1e-6);
         for (const part of m.parts) {
           const flat = part.flat;
           if (!flat) continue;

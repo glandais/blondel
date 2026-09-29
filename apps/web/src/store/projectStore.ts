@@ -30,10 +30,12 @@ import {
   type HistoryOptions,
 } from "./history.js";
 import {
+  AUTOSAVE_REJECTED_KEY,
   exportProjectFile,
   importProjectText,
   loadAutosave,
   saveAutosave,
+  type AutosaveLoad,
   type ImportResult,
   type StorageLike,
 } from "./persistence.js";
@@ -78,6 +80,13 @@ export interface AppState {
   } | null;
   /** L'autosauvegarde a-t-elle échoué (stockage indisponible ou plein) ? */
   readonly autosaveFailed: boolean;
+  /**
+   * Autosauvegarde trouvée au démarrage mais refusée par le cœur (format plus récent, projet
+   * invalide) : texte brut à proposer au téléchargement. `preserved` : copie faite sous
+   * `AUTOSAVE_REJECTED_KEY` ; sinon l'autosauvegarde est **suspendue** (elle écraserait
+   * l'original) jusqu'à `dismissRejectedAutosave`.
+   */
+  readonly rejectedAutosave: { readonly text: string; readonly preserved: boolean } | null;
 
   /**
    * Applique une modification du projet. Le résultat est validé par le schéma du cœur : un
@@ -118,6 +127,12 @@ export interface AppState {
   setDisplayUnit(unit: DisplayUnit): void;
   setTheme(theme: ThemeChoice): void;
   clearNotice(): void;
+  /**
+   * L'utilisateur a pris connaissance de l'autosauvegarde refusée (après l'avoir téléchargée ou
+   * pour repartir du projet courant) : la copie de secours est effacée et l'autosauvegarde
+   * reprend.
+   */
+  dismissRejectedAutosave(): void;
   /**
    * Écrit tout de suite l'autosauvegarde différée en attente (fermeture ou masquage de la
    * page) ; sans effet s'il n'y a rien en attente ou pas de stockage.
@@ -173,10 +188,27 @@ export function createProjectStore(options: ProjectStoreOptions = {}): ProjectSt
   const storage = options.storage;
   const historyOptions = options.history ?? DEFAULT_HISTORY_OPTIONS;
   const clock = options.now ?? (() => Date.now());
-  const initial = options.initialProject ?? loadAutosave(storage) ?? createProject(DEFAULT_PRESET);
+  const loaded: AutosaveLoad =
+    options.initialProject === undefined ? loadAutosave(storage) : { kind: "none" };
+  const initial =
+    options.initialProject ??
+    (loaded.kind === "ok" ? loaded.project : createProject(DEFAULT_PRESET));
+  const rejectedNotice: AppState["notice"] =
+    loaded.kind === "rejected"
+      ? {
+          kind: "error",
+          text:
+            `L'autosauvegarde n'a pas pu être rouverte : ${loaded.message} ` +
+            (loaded.preserved
+              ? "Un projet neuf est ouvert ; la sauvegarde refusée est conservée à part et peut être téléchargée."
+              : "Un projet neuf est ouvert ; l'autosauvegarde est suspendue pour ne pas l'écraser : téléchargez-la, puis reprenez l'autosauvegarde."),
+          details: loaded.issues,
+        }
+      : null;
 
   // Remplacé par l'écriture différée réelle quand un stockage est fourni.
   let flush = (): void => {};
+  let resume = (): void => {};
   const store = createStore<AppState>()((set, get) => {
     const apply = (next: Project, groupKey?: string, sticky = false): UpdateResult => {
       const cur = get().history;
@@ -209,8 +241,10 @@ export function createProjectStore(options: ProjectStoreOptions = {}): ProjectSt
       assistantOpen: false,
       displayUnit: "mm",
       theme: "system",
-      notice: null,
+      notice: rejectedNotice,
       autosaveFailed: false,
+      rejectedAutosave:
+        loaded.kind === "rejected" ? { text: loaded.text, preserved: loaded.preserved } : null,
 
       update: (recipe, groupKey, updateOptions) => {
         let next: Project;
@@ -278,6 +312,17 @@ export function createProjectStore(options: ProjectStoreOptions = {}): ProjectSt
       setDisplayUnit: (displayUnit) => set({ displayUnit }),
       setTheme: (theme) => set({ theme }),
       clearNotice: () => set({ notice: null }),
+      dismissRejectedAutosave: () => {
+        if (get().rejectedAutosave === null) return;
+        set({ rejectedAutosave: null });
+        // Copie de secours libérée (elle occupe le quota du stockage).
+        try {
+          storage?.removeItem(AUTOSAVE_REJECTED_KEY);
+        } catch {
+          // stockage inaccessible : rien à libérer
+        }
+        resume();
+      },
       flushAutosave: () => flush(),
     };
   });
@@ -286,10 +331,20 @@ export function createProjectStore(options: ProjectStoreOptions = {}): ProjectSt
   if (storage) {
     const delay = options.autosaveDelayMs ?? 500;
     let timer: ReturnType<typeof setTimeout> | undefined;
+    // Écriture différée faute d'accord (autosauvegarde refusée non copiée) : faite à la reprise.
+    let skipped = false;
     const save = (): void => {
       timer = undefined;
+      if (store.getState().rejectedAutosave?.preserved === false) {
+        skipped = true;
+        return;
+      }
+      skipped = false;
       const ok = saveAutosave(storage, store.getState().project);
       if (ok === store.getState().autosaveFailed) store.setState({ autosaveFailed: !ok });
+    };
+    resume = () => {
+      if (skipped) save();
     };
     flush = () => {
       if (timer === undefined) return;

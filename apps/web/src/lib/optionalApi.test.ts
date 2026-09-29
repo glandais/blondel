@@ -1,5 +1,12 @@
-import { describe, expect, it } from "vitest";
-import { availableStructures, loadExportPdf, pick, resolveOptionalApi } from "./optionalApi.js";
+import type { PdfPages } from "@blondel/exports/pdf";
+import { describe, expect, expectTypeOf, it } from "vitest";
+import {
+  availableStructures,
+  loadExportPdf,
+  pick,
+  resolveOptionalApi,
+  type PdfJobOptions,
+} from "./optionalApi.js";
 
 describe("API facultatives", () => {
   it("ne retient que les fonctions exportées", () => {
@@ -28,5 +35,9 @@ describe("API facultatives", () => {
   it("exportPdf chargé à la demande depuis @blondel/exports/pdf", async () => {
     const exportPdf = await loadExportPdf();
     expect(typeof exportPdf).toBe("function");
+  });
+
+  it("pages du dossier PDF : type de @blondel/exports/pdf (pas de liste recopiée)", () => {
+    expectTypeOf<keyof NonNullable<PdfJobOptions["pages"]>>().toEqualTypeOf<keyof PdfPages>();
   });
 });

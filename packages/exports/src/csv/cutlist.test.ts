@@ -55,7 +55,7 @@ describe("exportCutListCsv", () => {
     const m2 = rows.find((r) => r[0] === "M2")!;
     expect(m2[7]).toBe("2");
     expect(m2[4]).toBe("950,0");
-    expect(m2[8]).toBe("0,0101");
+    expect(m2[8]).toBe("0,010080");
     expect(m2[11]).toBe("14,12");
     const li1 = rows.find((r) => r[0] === "LI1")!;
     expect(li1[1]).toBe('Limon intérieur "jour"; tôle');
@@ -82,6 +82,54 @@ describe("exportCutListCsv", () => {
       ["M4", 1, 1200, "Chêne"],
       ["M4", 1, 950, "Frêne"],
     ]);
+  });
+
+  it("petite pièce : volume non nul affiché (cornière 80,3 × 304 mm² ≈ 2,4e-5 m³)", () => {
+    const angle = {
+      ...treadPart(1, "CR1"),
+      id: "cr1",
+      stock: undefined,
+      quantities: { volume: 80.3 * 304e-9 },
+    };
+    const rows = parseCsv(exportCutListCsv({ parts: [angle] }).slice(1));
+    expect(rows[1]![8]).toBe("0,000024");
+    expect(rows[1]![9]).toBe("0,000024");
+    // Même en deçà du pas affiché, une pièce non vide ne s'affiche pas nulle.
+    const tiny = { ...angle, quantities: { volume: 1e-8 } };
+    expect(parseCsv(exportCutListCsv({ parts: [tiny] }).slice(1))[1]![8]).toBe("0,000001");
+  });
+
+  it("propriété : le total de colonne est la somme des lignes affichées", () => {
+    fc.assert(
+      fc.property(
+        fc.array(
+          fc.record({
+            volume: fc.double({ min: 1e-9, max: 0.5, noNaN: true }),
+            mass: fc.double({ min: 1e-4, max: 500, noNaN: true }),
+          }),
+          { minLength: 1, maxLength: 30 },
+        ),
+        (specs) => {
+          const parts = specs.map((q, i) => ({
+            ...treadPart(i + 1),
+            id: `p${i}`,
+            quantities: q,
+          }));
+          const rows = parseCsv(exportCutListCsv({ parts }).slice(1));
+          const num = (s: string): number => Number(s.replace(",", "."));
+          const body = rows.slice(1, -1);
+          const total = rows[rows.length - 1]!;
+          for (const r of body) {
+            expect(num(r[8]!)).toBeGreaterThan(0);
+            expect(num(r[9]!)).toBeGreaterThan(0);
+          }
+          const sv = body.reduce((a, r) => a + Math.round(num(r[9]!) * 1e6), 0);
+          const sm = body.reduce((a, r) => a + Math.round(num(r[11]!) * 1e2), 0);
+          expect(Math.round(num(total[9]!) * 1e6)).toBe(sv);
+          expect(Math.round(num(total[11]!) * 1e2)).toBe(sm);
+        },
+      ),
+    );
   });
 
   it("options et cas vide", () => {

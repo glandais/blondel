@@ -4,12 +4,12 @@ Vue d'ensemble courte. Les décisions détaillées sont dans `docs/adr/` (ADR 00
 
 ## Paquets
 
-| Paquet              | Rôle                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | Dépend de             |
-| ------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------- |
-| `packages/core`     | Contrats (`model/`), géométrie plane, pipeline de calcul, moteur de règles, projets, profil d'atelier bois et métal (`workshop/`), plugins de structure (`structures/`), catalogue de profilés (`catalog/`), prédimensionnement indicatif (`precheck/`), garde-corps et mains courantes (`guards/`), assistant d'initialisation (`assistant/`), site importé (`site/` : calque DXF par `@blondel/core/dxf`, image calibrée, accroches, trémie polygonale, relevé). **Aucun DOM.** | zod, dxf-parser       |
-| `packages/geometry` | Maillage 3D des `SolidDesc` rendus par le cœur (extrusion, surface réglée, balayage) pour l'aperçu et le glTF ; coordonnées de texture selon le fil (`grainUVMesh`, projection par triangle).                                                                                                                                                                                                                                                                                     | core, earcut          |
-| `packages/exports`  | Fonctions pures `Model → fichier` : plan, élévation et développés SVG, DXF (R12 maison, AC1021 ; plan et pièces), liste de débit CSV, ZIP, JSON, glTF binaire (`gltf/glb.ts`, sans dépendance) ; dossier PDF (sommaire, fiche de pose, fiche de débit, gabarits 1:1 tuilés) par le point d'entrée séparé `@blondel/exports/pdf` (jsPDF).                                                                                                                                          | core, geometry, jspdf |
-| `apps/web`          | Interface React + Vite : édition du projet, de sa structure et de ses garde-corps, vues plan / 3D / élévation / développés, nomenclature, contrôle de conception, prédimensionnement, comparateur de variantes, assistant d'initialisation, mode expert, saisie du site (calque, trémie, murs, relevé), exports ; calcul dans des Web Workers.                                                                                                                                    | core, geometry, exp.  |
+| Paquet              | Rôle                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | Dépend de                                        |
+| ------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------ |
+| `packages/core`     | Contrats (`model/`), géométrie plane, pipeline de calcul, moteur de règles, projets, profil d'atelier bois et métal (`workshop/`), plugins de structure (`structures/`), catalogue de profilés (`catalog/`), prédimensionnement indicatif (`precheck/`), garde-corps et mains courantes (`guards/`), assistant d'initialisation (`assistant/`), site importé (`site/` : calque DXF par `@blondel/core/dxf`, image calibrée, accroches, trémie polygonale, relevé). **Aucun DOM.** | zod, dxf-parser                                  |
+| `packages/geometry` | Maillage 3D des `SolidDesc` rendus par le cœur (extrusion, surface réglée, balayage) pour l'aperçu et le glTF ; coordonnées de texture selon le fil (`grainUVMesh`, projection par triangle).                                                                                                                                                                                                                                                                                     | core, earcut                                     |
+| `packages/exports`  | Fonctions pures `Model → fichier` : plan, élévation et développés SVG, DXF (R12 maison, AC1021 ; plan et pièces), liste de débit CSV, ZIP, JSON, glTF binaire (`gltf/glb.ts`, sans dépendance) ; dossier PDF (sommaire, fiche de pose, fiche de débit, gabarits 1:1 tuilés) par le point d'entrée séparé `@blondel/exports/pdf` (jsPDF).                                                                                                                                          | core, geometry, jspdf, @tarikjabiri/dxf (AC1021) |
+| `apps/web`          | Interface React + Vite : édition du projet, de sa structure et de ses garde-corps, vues plan / 3D / élévation / développés, nomenclature, contrôle de conception, prédimensionnement, comparateur de variantes, assistant d'initialisation, mode expert, saisie du site (calque, trémie, murs, relevé), exports ; calcul dans des Web Workers.                                                                                                                                    | core, geometry, exp.                             |
 
 Les paquets sont consommés **par leurs sources TypeScript** (`main: ./src/index.ts`) : pas d'étape de build entre paquets, Vite et vitest compilent directement.
 
@@ -18,14 +18,22 @@ Les paquets sont consommés **par leurs sources TypeScript** (`main: ./src/index
 ```
 Project (JSON validé par zod, immuable)
   │  buildModel(project)                         packages/core/src/pipeline/build.ts
-  ├─ computeLayout      → Layout                 layout/     C_i (jour), C_e (mur), Γ (ligne de foulée), emprise ;
+  ├─ computeLayout      → Layout                 layout/     `inner` (C_i : jour du **premier** tournant), `outer` (C_e),
+  │                                                          Γ (ligne de foulée), emprise ; S / Z : le jour d'un tournant
+  │                                                          de sens opposé est sur `outer` (`TurnZone.collarSide`),
+  │                                                          transitions de Γ (`walklineTransitions`) ;
   │                                                          hélicoïdal (`kind: "helical"`) : layout/helical.ts
   ├─ computeStepping    → Stepping               stepping/   hauteurs, nez sur Γ, zones et stratégies de balancement ;
-  │                                                          hélicoïdal : nez rayonnants, stepping/helical.ts
-  │                                              balancing/  M0, M1, M3 + post-traitement commun (Q, R, collets, K3/K5)
+  │                                                          hélicoïdal : nez rayonnants, stepping/helical.ts ;
+  │                                                          côté du jour par tournant : stepping/sides.ts (vue
+  │                                                          retournée `flipLayout` quand le jour est sur `outer`)
+  │                                              balancing/  M0, M1, M2 (herse), M3, M6 (rotation paramétrée)
+  │                                                          + post-traitement commun (Q, R, collets, K3/K5)
   ├─ buildBasicParts    → Part[]                 parts/      marches, contremarches, paliers
   ├─ plugin de structure → Part[] + contrôles    structures/ `stair.structure.kind` ≠ none : limons, poteaux, crémaillères,
   │                        + executionClass?                 supports, platines, marches en tôle pliée…
+  │                        + precheck?           precheck/   prédimensionnement indicatif des limons : celui du plugin
+  │                                                          (`StructureOutput.precheck`), sinon `precheckStringers`
   │                        + removedBaseParts?   workshop/   profil d'atelier (débits, encastrement, seuils, masses
   │                                                          volumiques ; métal : presse, lois de pli, formats de tôle)
   ├─ computeGuards      → Part[] + contrôles     guards/     `project.guards` : garde-corps de volée / jour / trémie,
@@ -36,7 +44,8 @@ Project (JSON validé par zod, immuable)
   └─ evaluateCompliance → ComplianceReport       rules/      table rules.yaml + évaluateurs, fusionnés avec les contrôles
                                                              du plugin et des garde-corps
   ▼
-Model { layout, stepping, parts, compliance, headroom?, headroomWidth?, executionClass?, errors, notes? }
+Model { layout, stepping, parts, compliance, headroom?, headroomWidth?, executionClass?, precheck?,
+        errors, notes? }
 ```
 
 En amont du pipeline :
@@ -46,7 +55,7 @@ En amont du pipeline :
 
 - `buildModel` **ne lève jamais** pour des paramètres impossibles : l'erreur de l'étape va dans `Model.errors`, les étapes suivantes reçoivent un résultat vide, et le contrôle de conception n'évalue que les règles encore calculables (`PARTIAL_MODEL_RULES`, les autres sortent `non-evaluee`).
 - Mémoïsation par identité : même objet `Project` → même `Model` ; sinon chaque étape réutilise son dernier résultat si ses entrées sont les mêmes objets. Les clés sont fines : le découpage ne dépend de la structure que par `structure.kind`, si bien que changer un paramètre de structure ne recalcule ni le découpage ni les garde-corps, et changer les garde-corps ne recalcule pas la structure (`pipeline/integration.test.ts`). Budget : environ 5 ms par modèle sur les exemples (ADR-0006).
-- Structure → modèle : une pièce du plugin de même `id` qu'une pièce de base la remplace ; `StructureOutput.removedBaseParts` retire des pièces de base (contremarches bois sous des marches en tôle pliée) ; `StructureOutput.executionClass` (EN 1090-2, métal) est reporté dans `Model.executionClass`.
+- Structure → modèle : une pièce du plugin de même `id` qu'une pièce de base la remplace ; `StructureOutput.removedBaseParts` retire des pièces de base (contremarches bois sous des marches en tôle pliée) ; `StructureOutput.executionClass` (EN 1090-2, métal) est reporté dans `Model.executionClass` (lecture : `executionClassOf(model)`, fonction unique du cœur) ; `StructureOutput.precheck` (prédimensionnement fait par le plugin, ex. `steel-profile` qui choisit sa section avec) est reporté dans `Model.precheck`, sinon le pipeline le calcule par `precheckStringers` : le panneau, le comparateur et les lignes PRECHECK_* du contrôle de conception ont une seule source.
 - Tracé hélicoïdal (jalon 5a) : `LayoutSpec` est une union discriminée rétrocompatible (`kind` absent = volées, jamais sérialisé ; `kind: "helical"` = sens, R_e, fût ou jour central, marches par tour ou angle total, palier d'arrivée en secteur). `Layout.helical` est renseigné et les volées sont vides : le découpage, l'échappée et les plugins testent `layout.helical`. Un plugin réservé aux volées doit rendre une erreur lisible sur un hélicoïdal.
 - Unités : millimètres en float64, arrondi seulement à l'affichage et en sortie (ADR-0003).
 
@@ -71,7 +80,8 @@ saisie ─► store zustand (projectStore) ─► Project canonique (ProjectSche
  Structure : listStructures() (cœur) ─► StructureSection : formulaire générique dérivé de
              paramsSchema + defaults(ctx), libellés lib/paramLabels.ts ─► stair.structure.params
  Garde-corps : GuardsSection (lib/guardsForm.ts) ─► project.guards ; marqueurs 3D (lib/markers.ts)
- Prédim.   : PrecheckPanel (lib/precheck.ts) ─► precheckModel (cœur), Model.executionClass
+ Prédim.   : PrecheckPanel (lib/precheck.ts, mise en forme seule) ─► Model.precheck (calculé dans
+             le worker), executionClassOf (cœur)
  Tracé     : sélecteur « Type de tracé » (lib/layoutKind.ts switchLayoutKind, préréglage du cœur),
              éditeur de volées ou HelicalEditor
  Erreurs   : ErrorsBar ─► suggestFixes (cœur, project/fixes.ts) ─► lib/fixes.ts applyFix (annulable)
@@ -108,8 +118,9 @@ saisie ─► store zustand (projectStore) ─► Project canonique (ProjectSche
 ### une stratégie de balancement
 
 1. Implémenter `BalancingStrategy` (`packages/core/src/model/plugins.ts`) dans `packages/core/src/balancing/<id>.ts` : rendre les abscisses σ des points de collet ou les angles φ des nez de la zone ; le post-traitement commun (`balancing/postprocess.ts`) calcule Q, R, collets et contrôles.
-2. L'enregistrer dans `balancing/registry.ts` et l'ajouter à l'énumération `method` de `BalancingSchema` (`model/project.ts`, évolution rétrocompatible notée au ledger).
-3. Tests : exemples de `docs/research/B-geometrie.md` §3 et propriétés fast-check (K3, K5, collets > 0, miroir gauche/droite).
+2. L'ajouter à l'énumération `method` de `BalancingSchema` (`model/project.ts`, évolution rétrocompatible notée au ledger) : c'est la **liste unique** des identifiants (`BalancingMethod`), dont dérivent `BalancingStrategy.id` et `BalancingMethodId` ; puis l'enregistrer dans `balancing/registry.ts` (le typage exige une stratégie par méthode).
+3. Interface : le sélecteur « Méthode » de `apps/web/src/components/ParamsPanel.tsx` propose **toutes** les méthodes du schéma (`balancingMethodOptions`, `apps/web/src/lib/balancingForm.ts`) ; ajouter le libellé dans `BALANCING_METHOD_LABELS` et, si la méthode a des paramètres, leurs curseurs (`RangeField`, bornes lues dans le schéma et le modèle, comme α de M2 borné par `herseAlphaMax` et λ / p de M6).
+4. Tests : exemples de `docs/research/B-geometrie.md` §3 et propriétés fast-check (K3, K5, collets > 0, miroir gauche/droite).
 
 ### une structure (limons, crémaillère, tôle pliée…)
 

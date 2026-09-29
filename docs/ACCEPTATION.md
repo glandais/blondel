@@ -71,6 +71,7 @@ Preuves (`packages/exports/src/acceptance-criteria.test.ts`) :
 - « critère d'acceptation n° 3 : DXF de limon acier et de marche en tôle pliée » (exemple `j3b-acceptance-01-tole-pliee`) :
   - limons en plat : DXF R12 relus à ±0,01 mm (contour, perçages, traits), fibre de référence et épaisseur dans INFO ;
   - marches en Z : deux plis de 90° sur le calque PLI en tirets, sens (haut / bas) et angle annotés ;
+  - contremarches : celles des marches en Z sont pliées dans la pièce ; la contremarche d'arrivée (`riser-n`, sous le dernier nez, portée par aucune pièce Z) reste une pièce de base depuis la vague G (arbitrage « bois ou tôle » au ledger §2) ;
   - longueur de pli = emmarchement − 2 jeux (cote réelle), développé en fibre neutre ;
   - développés présents dans le PDF.
 - « critère d'acceptation n° 3 : chaque tronçon d'un limon débillardé soudé » (exemple `j5b-debillarde-soude`, **ajouté par cette intégration**) :
@@ -78,7 +79,7 @@ Preuves (`packages/exports/src/acceptance-criteria.test.ts`) :
   - lignes de roulage sur le calque ROULAGE en tirets, rayon intérieur annoté ;
   - un trait de joint par tronçon voisin sur le calque JOINT, qui nomme le repère de ce voisin.
 - Limons bois : mortaises sur le calque MORTAISE relues à ±0,01 mm (critère n° 1 ci-dessus ; propriété dans `packages/exports/src/dxf/parts.test.ts`).
-- `packages/exports/src/examples.test.ts` : sur les 15 exemples, DXF de chaque pièce à plat et de tous les développés relus sans NaN, planches SVG bien formées.
+- `packages/exports/src/examples.test.ts` : sur les 16 exemples (dont `two-quarters-s`, ajouté par la vague G), DXF de chaque pièce à plat et de tous les développés relus sans NaN, planches SVG bien formées.
 - `packages/core/src/structures/steelCurved.test.ts` : longueur roulée = (r_j − e/2)·θ en fibre neutre, lignes de roulage, traits de joint, reports des nez.
 - Gabarits 1:1 du PDF : `packages/exports/src/pdf/tiles.test.ts` (1 mm = 1 mm, tuilage).
 
@@ -117,7 +118,7 @@ Réserves (écarts mineurs, hors composants, dans `apps/web/src/lib/`) :
 Preuves :
 
 - `docs/research/rules.yaml` est la source unique des règles, avec pour chacune sa source, sa confiance et sa nature. `packages/core/src/rules/table.test.ts` vérifie que `rules.data.json` en est la copie à jour.
-- `packages/core/src/rules/traceability.test.ts` (**nouveau**), sur les 15 exemples :
+- `packages/core/src/rules/traceability.test.ts` (**nouveau**), sur les exemples (16 depuis la vague G) :
   - chaque règle de la table a une source ;
   - chaque ligne du contrôle issue de la table affiche la source de `rules.yaml` ;
   - chaque contrôle hors table (fabrication, prédimensionnement, garde-corps) cite `docs/research/` (ou SPEC / CHALLENGE), ou bien déclare une provenance non réglementaire : « Profil d'atelier Blondel (valeur par défaut à valider) », « Géométrie du… » ou « Calcul élastique Blondel ».
@@ -140,3 +141,15 @@ Depuis la racine, le 2026-09-30, sans commit :
 - `BASE_PATH=/blondel/ pnpm --filter @blondel/web build` : OK.
 - `pnpm e2e` : 22 sur 22 verts, sous le budget de 200 ms par tâche.
 - Exemples : les 15 `examples/*.blondel.json` se lisent, se construisent sans erreur et s'exportent en SVG, DXF (plan et pièces), PDF, glTF, CSV et JSON (`packages/exports/src/examples.test.ts`). Dans l'application, l'import d'un exemple est couvert par `apps/web/e2e/project.spec.ts`.
+
+## Vérifications de l'intégration (vague G)
+
+Depuis la racine, le 2026-09-29, sans commit. Aucun critère ne change d'état ; le critère n° 3 précise la contremarche d'arrivée conservée en tôle pliée Z (ci-dessus).
+
+- `pnpm install` : OK.
+- `pnpm typecheck` : vert (paquets, application web, tests e2e).
+- `pnpm test` : vert, 156 fichiers (1 ignoré), 1 823 tests passés et 3 ignorés, trois fois de suite (avec et sans `CI=1`) après correction de l'outil de test `landingPitchGap` (propriété instable de `woodHoused.test.ts`, journal du ledger).
+- `pnpm format:check` : vert.
+- `BASE_PATH=/blondel/ pnpm --filter @blondel/web build` : OK.
+- `pnpm e2e` : 28 sur 28 verts, sous le budget de 200 ms par tâche, dont `typologies.spec.ts` (S / Z, curseurs M2 / M6) et les variantes de l'assistant (`assistant.spec.ts`) ; le parcours « préréglages et structures » de `long-tasks.spec.ts` inclut le préréglage S.
+- Exemples : les 16 `examples/*.blondel.json` se lisent, se construisent sans erreur et s'exportent (`packages/exports/src/examples.test.ts`).

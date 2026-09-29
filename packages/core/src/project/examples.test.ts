@@ -1,5 +1,5 @@
 /**
- * Exemples `examples/*.blondel.json` : un par préréglage + cas d'acceptation n° 1 (sans
+ * Exemples `examples/*.blondel.json` : un par préréglage (S / Z compris) + cas d'acceptation n° 1 (sans
  * structure, avec la structure bois `wood-housed` du jalon 3a, en limons acier des jalons 3b et
  * 3c) + demi-tournant métal avec garde-corps (jalon 4, interactions entre étapes). L'exemple
  * `j4-acceptance-01-garde-corps` a son générateur dans `guards/acceptance.test.ts`.
@@ -14,7 +14,12 @@ import { computeLayout } from "../layout/layout.js";
 import { ProjectSchema, type Project } from "../model/project.js";
 import { computeStepping } from "../stepping/stepping.js";
 import { parseProjectText } from "./parse.js";
-import { createProject, PRESET_HEADROOM_MIN, PRESET_IDS } from "./presets.js";
+import {
+  createProject,
+  OPPOSITE_TURNS_PRESET_IDS,
+  PRESET_HEADROOM_MIN,
+  PRESET_IDS,
+} from "./presets.js";
 import { serializeProject } from "./serialize.js";
 
 const EXAMPLES_DIR = resolve(dirname(fileURLToPath(import.meta.url)), "../../../../examples");
@@ -156,7 +161,12 @@ export function halfTurnSteelGuards(): Project {
 }
 
 const expected: Readonly<Record<string, () => Project>> = {
-  ...Object.fromEntries(PRESET_IDS.map((id) => [`${id}.blondel.json`, () => createProject(id)])),
+  ...Object.fromEntries(
+    [...PRESET_IDS, ...OPPOSITE_TURNS_PRESET_IDS].map((id) => [
+      `${id}.blondel.json`,
+      () => createProject(id),
+    ]),
+  ),
   [ACCEPTANCE_01]: acceptance01,
   [ACCEPTANCE_01_WOOD]: acceptance01Wood,
   [ACCEPTANCE_01_STEEL_FLAT]: acceptance01SteelFlat,

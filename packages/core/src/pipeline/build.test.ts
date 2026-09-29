@@ -66,13 +66,17 @@ describe("buildModel — exemples du dépôt", () => {
     const treadParts = m.parts.filter((p) => p.category === "tread" || p.category === "landing");
     expect(treadParts.map((p) => p.id)).toEqual(m.stepping.treads.map((t) => `tread-${t.number}`));
     // Marches en tôle pliée (steel-flat, contremarches pliées ou claire-voie) : les
-    // contremarches bois de base sont supprimées par le pipeline (`removedBaseParts`).
+    // contremarches bois de base sont supprimées par le pipeline (`removedBaseParts`), sauf
+    // la contremarche d'arrivée en profil Z (aucune pièce Z ne la porte).
     const foldedTreads = m.parts.some(
       (p) => p.category === "tread" && p.material.startsWith("steel"),
     );
-    expect(m.parts.filter((p) => p.category === "riser")).toHaveLength(
-      foldedTreads ? 0 : m.stepping.riserCount,
-    );
+    const risers = m.parts.filter((p) => p.category === "riser");
+    if (foldedTreads) {
+      for (const p of risers) expect(p.id).toBe(`riser-${m.stepping.riserCount}`);
+    } else {
+      expect(risers).toHaveLength(m.stepping.riserCount);
+    }
   });
 
   it.each(EXAMPLE_FILES)("%s : cotes principales (non-régression)", (file) => {
@@ -174,20 +178,19 @@ describe("buildModel — cas d'acceptation n° 1 (CHALLENGE G8)", () => {
 describe("buildModel — paramètres impossibles : modèle partiel, jamais d'exception", () => {
   const base = makeSteppingProject({ width: 900, legs: [2000, 3000] });
 
-  it("tracé impossible (tournants de sens opposés) : tracé vide, hauteurs seules", () => {
+  it("tracé impossible (tournant manquant) : tracé vide, hauteurs seules", () => {
+    // Les tournants de sens opposés (S / Z) sont pris en charge depuis le 2026-09-29 : tracé
+    // impossible = trois volées pour un seul tournant.
     const p = makeSteppingProject({ width: 900, legs: [2000, 2000, 2000] });
     const bad: Project = {
       ...p,
       stair: {
         ...p.stair,
-        layout: {
-          ...p.stair.layout,
-          turns: [p.stair.layout.turns[0]!, { ...p.stair.layout.turns[1]!, direction: "right" }],
-        },
+        layout: { ...p.stair.layout, turns: [p.stair.layout.turns[0]!] },
       },
     };
     const m = buildModel(bad);
-    expect(m.errors).toEqual([expect.stringContaining("non supporté")]);
+    expect(m.errors).toEqual([expect.stringContaining("un tournant de moins")]);
     expect(m.layout).toBe(EMPTY_LAYOUT);
     expect(m.stepping.riserCount).toBe(15);
     expect(m.stepping.rises.reduce((a, b) => a + b, 0)).toBeCloseTo(2700, 9);
@@ -223,10 +226,7 @@ describe("buildModel — paramètres impossibles : modèle partiel, jamais d'exc
       ...p,
       stair: {
         ...p.stair,
-        layout: {
-          ...p.stair.layout,
-          turns: [p.stair.layout.turns[0]!, { ...p.stair.layout.turns[1]!, direction: "right" }],
-        },
+        layout: { ...p.stair.layout, turns: [p.stair.layout.turns[0]!] },
       },
     };
     const badStepping: Project = {

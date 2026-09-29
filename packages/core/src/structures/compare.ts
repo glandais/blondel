@@ -34,9 +34,9 @@ import { buildModel } from "../pipeline/build.js";
 import { fmt } from "../rules/check.js";
 import { isDebillardeStructure } from "../stepping/stepping.js";
 import { minProfileBendRadius } from "../workshop/metal.js";
-import { PRECHECK_RULE_IDS } from "../precheck/checks.js";
+import { PRECHECK_RULE_IDS, precheckResults } from "../precheck/checks.js";
 import { precheckModel } from "../precheck/stringers.js";
-import { PrecheckSettingsSchema, type PrecheckSettings } from "../precheck/settings.js";
+import type { PrecheckSettings } from "../precheck/settings.js";
 import { COST_TIME_FIELDS, type CostRates } from "../workshop/costs.js";
 import { isWoodMaterial, resolveWorkshopProfile } from "../workshop/profile.js";
 import {
@@ -165,20 +165,15 @@ export function variantCost(
 }
 
 /**
- * Réglages du prédimensionnement portés par les paramètres du plugin (`precheck`, ex.
- * `steel-profile`), pour que le comparateur évalue la variante comme le plugin ; `{}` sinon.
+ * Classe d'exécution EN 1090-2 d'un modèle (fonction unique du cœur, reprise par l'interface) :
+ * `Model.executionClass` ; repli (modèle produit sans `executionClass`, ex. structure en
+ * erreur ou modèle antérieur) : ligne EXC_CLASSE_EXECUTION du contrôle de conception. `null`
+ * pour une structure sans acier.
  */
-function pluginPrecheckSettings(
-  params: Readonly<Record<string, unknown>>,
-): Partial<PrecheckSettings> {
-  const parsed = PrecheckSettingsSchema.safeParse(params["precheck"] ?? {});
-  return parsed.success ? parsed.data : {};
-}
-
-function executionClassOf(model: Model): "EXC1" | "EXC2" | null {
+export function executionClassOf(
+  model: Pick<Model, "executionClass" | "compliance">,
+): "EXC1" | "EXC2" | null {
   if (model.executionClass) return model.executionClass;
-  // Repli (modèle produit sans `executionClass`, ex. structure en erreur) : la classe est lue
-  // dans la ligne EXC_CLASSE_EXECUTION du contrôle de conception.
   const line = model.compliance.results.find((r) => r.ruleId === "EXC_CLASSE_EXECUTION");
   const m = line ? /EXC[12]/.exec(line.message) : null;
   return m ? (m[0] as "EXC1" | "EXC2") : null;
@@ -214,7 +209,7 @@ export function summarizeVariant(
   options: Pick<CompareOptions, "precheck"> = {},
 ): VariantSummary {
   const rates = resolveWorkshopProfile(variant.workshop).costs;
-  const { kind, params } = variant.stair.structure;
+  const { kind } = variant.stair.structure;
   const plugin = kind === "none" ? undefined : getStructure(kind);
   const model = buildModel(variant);
   const parts = model.parts;
@@ -247,8 +242,15 @@ export function summarizeVariant(
     if (r.status !== "violation" || PRECHECK_RULE_IDS.has(r.ruleId)) continue;
     violations[r.severity]++;
   }
-  const pc = precheckModel(variant, model, options.precheck ?? pluginPrecheckSettings(params));
-  for (const r of pc.results) if (r.status === "violation") pre[r.severity]++;
+  // Prédimensionnement du modèle (`Model.precheck`, même calcul que le panneau et, pour un
+  // plugin qui en fait un, que les lignes PRECHECK_*) ; recalculé seulement si des réglages
+  // sont imposés.
+  const beams = options.precheck
+    ? precheckModel(variant, model, options.precheck).beams
+    : (model.precheck?.beams ?? []);
+  for (const r of precheckResults(variant, model.stepping, beams)) {
+    if (r.status === "violation") pre[r.severity]++;
+  }
   const uniqueParts = countUniqueParts(parts);
   const cuts = sum(parts, QUANTITY_CUTS);
   const weldMm = sum(parts, QUANTITY_WELD_MM);
@@ -280,7 +282,7 @@ export function summarizeVariant(
     holes,
     executionClass: executionClassOf(model),
     violations,
-    precheck: { beams: pc.beams.length, violations: pre },
+    precheck: { beams: beams.length, violations: pre },
     errors: model.errors,
     cost,
     costMissing: missing,

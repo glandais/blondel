@@ -43,13 +43,58 @@ interface Line {
   readonly before?: number;
 }
 
-function measuredText(r: RuleResult): string | undefined {
+/**
+ * Décimales de base par unité de règle (choix d'affichage, ADR-0003 : l'arrondi n'a lieu qu'à
+ * l'affichage) : 0,1 pour les longueurs et les autres unités, 0,01 pour les grandeurs sans
+ * dimension ou de faible amplitude (ratio, pente mm/m, charges en kN).
+ */
+function baseDecimals(unit: string | undefined): number {
+  if (unit === undefined) return 1;
+  if (unit === "ratio" || unit === "mm/m" || unit.startsWith("kN")) return 2;
+  return 1;
+}
+
+/** Plus petit nombre de décimales (≤ `cap`) qui représente `v` exactement. */
+function exactDecimals(v: number, cap: number): number {
+  for (let d = 0; d < cap; d++) if (Math.abs(Number(v.toFixed(d)) - v) < 1e-9) return d;
+  return cap;
+}
+
+const MAX_DECIMALS = 6;
+const round = (v: number, d: number): number => Number(v.toFixed(d));
+
+/**
+ * Nombre de décimales d'affichage d'un résultat : au moins celles de l'unité et celles qui
+ * représentent exactement les seuils (1,32 ne s'imprime pas « 1,3 ») ; pour une violation dont
+ * la mesure est hors de [min, max], décimales ajoutées jusqu'à ce que la mesure affichée soit
+ * strictement du mauvais côté du seuil affiché (599,96 pour un min de 600 ne s'imprime pas
+ * « 600 »). L'arrondi étant monotone, une mesure dans les bornes le reste à l'affichage.
+ */
+export function measureDecimals(r: RuleResult): number {
+  const min = r.min ?? undefined;
+  const max = r.max ?? undefined;
+  let d = baseDecimals(r.unit);
+  for (const t of [min, max])
+    if (t !== undefined && Number.isFinite(t)) d = Math.max(d, exactDecimals(t, MAX_DECIMALS));
+  const m = r.measured;
+  if (r.status !== "violation" || m === undefined || !Number.isFinite(m)) return d;
+  const below = min !== undefined && Number.isFinite(min) && m < min;
+  const above = max !== undefined && Number.isFinite(max) && m > max;
+  const separated = (k: number): boolean =>
+    (!below || round(m, k) < round(min!, k)) && (!above || round(m, k) > round(max!, k));
+  while (d < MAX_DECIMALS && !separated(d)) d++;
+  return d;
+}
+
+/** Ligne « mesuré … — min … — max … » d'un résultat de règle. */
+export function measuredText(r: RuleResult): string | undefined {
   const u = r.unit !== undefined && r.unit !== "" ? ` ${r.unit}` : "";
+  const d = measureDecimals(r);
   const parts: string[] = [];
   if (r.measured !== undefined && Number.isFinite(r.measured))
-    parts.push(`mesuré ${fr(r.measured, 1)}${u}`);
-  if (r.min !== undefined && r.min !== null) parts.push(`min ${fr(r.min, 1)}${u}`);
-  if (r.max !== undefined && r.max !== null) parts.push(`max ${fr(r.max, 1)}${u}`);
+    parts.push(`mesuré ${fr(r.measured, d)}${u}`);
+  if (r.min !== undefined && r.min !== null) parts.push(`min ${fr(r.min, d)}${u}`);
+  if (r.max !== undefined && r.max !== null) parts.push(`max ${fr(r.max, d)}${u}`);
   return parts.length > 0 ? parts.join(" — ") : undefined;
 }
 

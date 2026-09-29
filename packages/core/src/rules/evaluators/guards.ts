@@ -30,6 +30,7 @@ import {
   GC_LOAD_HOUSING,
   GC_LOAD_PUBLIC,
   GC_T1_ZONE_TOP,
+  MC_CORE_DIAMETER_MAX,
   MC_WALL_CLEARANCE_OTHER,
   UP2_WIDTH,
 } from "../formula-constants.js";
@@ -212,11 +213,13 @@ const mandatory: RuleEvaluator = withGuards((ctx, g) => {
   }
   if (out.length > 0) return out;
   if (oks.length === 0) return [notApplicable("Sans objet : aucun côté vide ni trémie.")];
+  // Chute supérieure au seuil mais protégée : la borne ne s'applique plus à la mesure (la
+  // conformité tient à la présence du garde-corps) ; ne pas afficher « attendu ≤ seuil ».
   return [
     {
       status: "ok",
       measured: worst,
-      max: limit,
+      max: worst <= limit ? limit : null,
       location: g.runs[0] ? partLoc(g.runs[0].primaryPartId) : STAIR,
       message: `Protection contre les chutes : ${oks.join(" ; ")}.`,
     },
@@ -474,10 +477,56 @@ function handrailCount(ctx: EvaluatorContext, g: GuardsAnalysis, min: number | n
 
 const handrailMin: RuleEvaluator = withGuards((ctx, g) => handrailCount(ctx, g, ctx.rule.min));
 
-/** ERP : une main courante dès 1 UP, de chaque côté dès 2 UP (largeur ≥ 1 400 mm). */
+/**
+ * Diamètre du fût central (mm) si l'exception de MC_DEUX_COTES s'applique : ERP neuf (et non
+ * BHC, « quelle que soit sa conception »), hélicoïdal à fût (`core.kind === "column"`) de
+ * diamètre ≤ `MC_CORE_DIAMETER_MAX` ; `null` sinon (jour central : pas d'exception).
+ */
+function smallCoreDiameter(ctx: EvaluatorContext): number | null {
+  const c = ctx.contexts;
+  if (!c.has("erp_neuf") || c.has("bhc_parties_communes") || !c.has("helicoidal")) return null;
+  const layout = ctx.project.stair.layout;
+  if (layout.kind !== "helical" || layout.core.kind !== "column") return null;
+  const d = 2 * layout.core.radius;
+  return d <= MC_CORE_DIAMETER_MAX.value ? d : null;
+}
+
+/** Une main courante de chaque côté, sauf hélicoïdal ERP neuf à fût de Ø ≤ 400 mm (une seule). */
+const handrailBothSides: RuleEvaluator = withGuards((ctx, g) => {
+  const d = smallCoreDiameter(ctx);
+  if (d === null) return handrailCount(ctx, g, ctx.rule.min);
+  return handrailCount(ctx, g, 1).map((f) => ({
+    ...f,
+    message: `${f.message} Exception ERP neuf : hélicoïdal à fût central de Ø ${fmt(d)} mm ≤ ${fmt(MC_CORE_DIAMETER_MAX.value)} mm, une seule main courante exigée.`,
+  }));
+});
+
+/**
+ * ERP : une main courante dès 1 UP, de chaque côté dès 2 UP (largeur ≥ 1 400 mm) ; pour un
+ * tournant (ou un hélicoïdal) d'1 UP, la main courante doit être côté extérieur (CO 56 §3).
+ */
 const handrailUp: RuleEvaluator = withGuards((ctx, g) => {
   const twoUp = ctx.project.stair.layout.width >= UP2_WIDTH.value;
-  return handrailCount(ctx, g, twoUp ? 2 : (ctx.rule.min ?? 1));
+  const count = handrailCount(ctx, g, twoUp ? 2 : (ctx.rule.min ?? 1));
+  const turning = ctx.contexts.has("tournant") || ctx.contexts.has("helicoidal");
+  if (twoUp || !turning || count.some((f) => f.status === "violation")) return count;
+  const outer = flightHandrails(g).find((h) => h.side === "outer");
+  if (outer)
+    return count.map((f) => ({
+      ...f,
+      location: partLoc(outer.partId),
+      message: `${f.message} Tournant d'1 UP : main courante côté extérieur présente.`,
+    }));
+  return [
+    {
+      status: "violation",
+      measured: 0,
+      min: 1,
+      max: null,
+      location: count[0]?.location ?? STAIR,
+      message: `Tournant d'1 UP : main courante exigée côté extérieur (CO 56 §3), aucune n'y est posée (${handrailSides(g)} côté(s) équipé(s) le long de la volée).`,
+    },
+  ];
 });
 
 const handrailHeight: RuleEvaluator = withGuards((ctx, g) => {
@@ -660,7 +709,7 @@ export const GUARD_EVALUATORS: Readonly<Record<string, RuleEvaluator>> = {
   GC_DENIVELES_2024: levels2024,
   CHARGE_GC_HORIZONTALE: horizontalLoad,
   MC_LOGEMENT: handrailMin,
-  MC_DEUX_COTES: handrailMin,
+  MC_DEUX_COTES: handrailBothSides,
   ECHELLE_MEUNIER_MC: handrailMin,
   MC_UP_ERP: handrailUp,
   MC_HAUTEUR: handrailHeight,

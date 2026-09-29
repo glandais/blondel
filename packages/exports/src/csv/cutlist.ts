@@ -7,6 +7,9 @@
  * lignes). Grandeurs lues dans `Part.quantities` : `volume` (m³) et `mass`
  * (kg) ; à défaut de `volume`, volume brut du débit L × l × e (`Part.stock`). Aucune masse
  * n'est inventée : sans `mass`, la colonne reste vide.
+ *
+ * Arrondi d'affichage : volumes au cm³ (6 décimales du m³), masses à 0,01 kg ; une grandeur
+ * non nulle n'est jamais affichée nulle ; les totaux somment les valeurs de ligne affichées.
  */
 import type { Model, Part, PartCategory } from "@blondel/core";
 import { formatFr } from "../format.js";
@@ -81,6 +84,23 @@ export function csvTextField(value: string): string {
 
 const dec = (v: number | undefined, decimals: number): string =>
   v === undefined || !Number.isFinite(v) ? "" : formatFr(v, { decimals, thousands: "" });
+
+/**
+ * Décimales des volumes (m³) : 6, soit le cm³. À 4 décimales (100 cm³), une cornière de
+ * 80 mm affichait 0 m³.
+ */
+export const VOLUME_DECIMALS = 6;
+/** Décimales des masses (kg). */
+export const MASS_DECIMALS = 2;
+
+/**
+ * Valeur arrondie telle qu'affichée ; une grandeur strictement positive n'est jamais affichée
+ * nulle (arrondie au plus petit pas affichable).
+ */
+function displayed(v: number, decimals: number): number {
+  const r = Number(v.toFixed(decimals));
+  return v > 0 && r === 0 ? 10 ** -decimals : r;
+}
 
 /** Comparaison « naturelle » des repères (M2 < M10). */
 function compareMarks(a: string, b: string): number {
@@ -166,9 +186,17 @@ export function exportCutListCsv(
   let mass = 0;
   let volKnown = rows.length > 0;
   let massKnown = rows.length > 0;
+  // Totaux de colonne : somme des valeurs de ligne telles qu'affichées, pour que le total
+  // corresponde à la somme des lignes lue par l'utilisateur.
   for (const r of rows) {
-    const tv = r.unitVolume !== undefined ? r.unitVolume * r.quantity : undefined;
-    const tm = r.unitMass !== undefined ? r.unitMass * r.quantity : undefined;
+    const uv = r.unitVolume !== undefined ? displayed(r.unitVolume, VOLUME_DECIMALS) : undefined;
+    const um = r.unitMass !== undefined ? displayed(r.unitMass, MASS_DECIMALS) : undefined;
+    const tv =
+      r.unitVolume !== undefined
+        ? displayed(r.unitVolume * r.quantity, VOLUME_DECIMALS)
+        : undefined;
+    const tm =
+      r.unitMass !== undefined ? displayed(r.unitMass * r.quantity, MASS_DECIMALS) : undefined;
     qty += r.quantity;
     if (tv === undefined) volKnown = false;
     else vol += tv;
@@ -183,10 +211,10 @@ export function exportCutListCsv(
       dec(r.width, 1),
       dec(r.thickness, 1),
       String(r.quantity),
-      dec(r.unitVolume, 4),
-      dec(tv, 4),
-      dec(r.unitMass, 2),
-      dec(tm, 2),
+      dec(uv, VOLUME_DECIMALS),
+      dec(tv, VOLUME_DECIMALS),
+      dec(um, MASS_DECIMALS),
+      dec(tm, MASS_DECIMALS),
     ]);
   }
   if (options.totals !== false) {
@@ -201,9 +229,9 @@ export function exportCutListCsv(
       "",
       String(qty),
       "",
-      volKnown ? dec(vol, 4) : rows.length > 0 ? "incomplet" : "",
+      volKnown ? dec(vol, VOLUME_DECIMALS) : rows.length > 0 ? "incomplet" : "",
       "",
-      massKnown ? dec(mass, 2) : rows.length > 0 ? "incomplet" : "",
+      massKnown ? dec(mass, MASS_DECIMALS) : rows.length > 0 ? "incomplet" : "",
     ]);
   }
   const body = lines.map((l) => l.map(csvField).join(";")).join("\r\n") + "\r\n";

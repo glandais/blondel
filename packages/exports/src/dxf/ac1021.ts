@@ -31,6 +31,9 @@ export class Ac1021Writer implements DxfWriter {
   constructor(options: DxfWriterOptions = {}) {
     const [d, g] = options.dashPattern ?? [10, 5];
     this.doc.setUnits(Units.Millimeters);
+    // $MEASUREMENT absent vaut 0 (impérial) : AutoCAD prendrait acad.lin / acad.pat au lieu
+    // des fichiers ISO pour les ajouts. Écrit à 1 (métrique), comme l'écrivain R12.
+    this.doc.setVariable("$MEASUREMENT", { 70: 1 });
     this.doc.addLType("DASHED", "Dashed __ __ __", [d, -g]);
     this.doc.addLType("CENTER", "Center ____ _ ____", [2 * d, -g / 2, d / 2, -g / 2]);
   }

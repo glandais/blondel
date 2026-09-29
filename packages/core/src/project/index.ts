@@ -13,6 +13,7 @@ export { serializeProject, stableStringify } from "./serialize.js";
 export {
   ALL_PRESET_IDS,
   HELICAL_PRESET_IDS,
+  OPPOSITE_TURNS_PRESET_IDS,
   PRESET_HEADROOM_MIN,
   PRESET_IDS,
   PRESET_LABELS,

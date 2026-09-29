@@ -5,8 +5,10 @@
  * 2. Nez sur Γ (`positions.ts`) : n nez, n − 1 girons égaux (paliers : nez aux bords).
  * 3. Nez initiaux perpendiculaires à Γ en P_k ; Q_k, R_k = premières intersections avec C_i
  *    et C_e de part et d'autre de P_k (`balancing/postprocess.ts`).
- * 4. Zones de balancement par tournant `winders` (`zones.ts`), stratégie M0, M1 ou M3
- *    (`balancing/`), variante M3 `auto` = cubique sauf structure débillardée (décision Q7).
+ * 4. Zones de balancement par tournant `winders` (`zones.ts`), stratégie M0, M1, M2 (herse),
+ *    M3 ou M6 (rotation paramétrée) (`balancing/`), variante M3 `auto` = cubique sauf structure
+ *    débillardée (décision Q7). M2 : borne de α par zone et saut de collet en entrée de zone
+ *    signalés (décision Q9).
  * 5. Surcharges `angle` (φ imposé en degrés, écart à la perpendiculaire à Γ, positif dans le
  *    sens du tournant — trigonométrique si le jour est à gauche, horaire s'il est à droite :
  *    le bout côté mur avance vers l'arrivée, le collet recule) appliquées avant le
@@ -15,7 +17,12 @@
  *    jour : deux vallées dans une zone unique de 180°) → `notes`.
  * 7. Marches (`treads.ts`).
  *
- * Le côté du collet est `layout.innerSide` (tournants de même sens au MVP).
+ * Côté du collet : celui du jour de chaque tournant (`TurnZone.collarSide`). Escalier en S ou
+ * en Z : les zones d'un tournant dont le jour est sur `layout.outer` sont calculées sur la vue
+ * retournée du tracé (`sides.ts`) ; la volée intermédiaire doit offrir au moins un giron de
+ * partie droite (marche virtuelle fixe entre les deux balancements, CHALLENGE G3), sinon
+ * `SteppingError`. Transition de la ligne de foulée (d_f ≠ E/2) : nez perpendiculaires à la
+ * volée (et non à l'oblique de Γ), signalée dans les notes.
  *
  * Tracé hélicoïdal (`layout.helical`, jalon 5a) : découpage propre, `stepping/helical.ts`.
  */
@@ -23,11 +30,12 @@ import { curvePointAt, curveTangentAt } from "../geom2d/curve.js";
 import { GEOM_EPS } from "../geom2d/tolerance.js";
 import * as V from "../geom2d/vec.js";
 import { getBalancingStrategy } from "../balancing/registry.js";
+import { HERSE_DEFAULT_ANGLE, herseAlphaMax } from "../balancing/m2.js";
+import { ROTATION_DEFAULT_REACH, ROTATION_DEFAULT_STEEPNESS } from "../balancing/m6.js";
 import {
   colletBetween,
   cornerMonotonyBreaks,
   cornerPositions,
-  findCrossings,
   realizeNosing,
   type NosingSeed,
 } from "../balancing/postprocess.js";
@@ -43,6 +51,17 @@ import { developmentInner } from "./development.js";
 import { computeHelicalStepping } from "./helical.js";
 import { buildTreads } from "./treads.js";
 import {
+  collarSideAt,
+  colletOnSide,
+  findCrossingsOnSides,
+  flipLayout,
+  flipNosing,
+  flipSeed,
+  turnCollarSide,
+  type Side,
+} from "./sides.js";
+import {
+  balancingInput,
   COLLET_TIE_TOLERANCE,
   evaluateZone,
   extentLimits,
@@ -145,11 +164,21 @@ export function computeStepping(
   notes.push(...positions.notes);
   const { going } = positions;
 
+  checkOppositeTurns(layout, going);
+  const transitions = layout.walklineTransitions ?? [];
+  for (const tr of transitions) {
+    notes.push(
+      `Volée ${tr.leg + 1} : tournants de sens opposés, la ligne de foulée passe de ${fmt(tr.fromOffset)} à ${fmt(tr.toOffset)} mm du bord ${layout.innerSide === "left" ? "gauche" : "droit"} par un raccord linéaire (Γ oblique de ${fmt((tr.angle * 180) / Math.PI)}° sur ${fmt(tr.sEnd - tr.sStart)} mm, nez perpendiculaires à la volée : le giron de ${fmt(going)} mm mesuré sur Γ n'y donne que ${fmt(going * Math.cos(tr.angle))} mm entre deux nez, g·cos θ) ; transition non normalisée (DTU muet), défaut à valider.`,
+    );
+  }
+
   // ------------------------------------------------------------ nez initiaux perpendiculaires
   const outward = (t: ReturnType<typeof curveTangentAt>) =>
     layout.innerSide === "left" ? V.perpRight(t) : V.perpLeft(t);
   const seeds: NosingSeed[] = positions.s.map((s, k) => {
-    const tangent = curveTangentAt(layout.walkline, s);
+    // Transition S / Z : nez perpendiculaires à la volée, pas à l'oblique de Γ.
+    const tr = transitions.find((t) => s >= t.sStart - GEOM_EPS && s <= t.sEnd + GEOM_EPS);
+    const tangent = tr ? tr.direction : curveTangentAt(layout.walkline, s);
     return {
       index: k,
       s,
@@ -159,8 +188,8 @@ export function computeStepping(
       perpendicular: outward(tangent),
     };
   });
-  const perpendicularOn = (lay: Layout): NosingLine[] =>
-    seeds.map((seed) => {
+  const perpendicularOn = (lay: Layout, from: readonly NosingSeed[] = seeds): NosingLine[] =>
+    from.map((seed) => {
       const res = realizeNosing(lay, seed, { kind: "dir", dir: seed.perpendicular }, false);
       if (!res.ok) {
         throw new SteppingError(`Ligne de nez perpendiculaire impossible : ${res.reason}.`);
@@ -171,6 +200,37 @@ export function computeStepping(
   const devInner = developmentInner(layout, project);
   const devLayout: Layout = devInner === layout.inner ? layout : { ...layout, inner: devInner };
   const devNosings = devLayout === layout ? nosings.slice() : perpendicularOn(devLayout);
+
+  /**
+   * Tracé vu par les stratégies pour un côté du jour : le tracé lui-même, ou (S / Z, jour sur
+   * `layout.outer`) sa vue retournée, avec germes et nez initiaux retournés.
+   */
+  interface SideView {
+    readonly flipped: boolean;
+    readonly layout: Layout;
+    readonly devLayout: Layout;
+    readonly devNosings: readonly NosingLine[];
+    readonly seeds: readonly NosingSeed[];
+  }
+  const mainView: SideView = { flipped: false, layout, devLayout, devNosings, seeds };
+  let flippedView: SideView | null = null;
+  const viewFor = (side: Side): SideView => {
+    if (side === layout.innerSide) return mainView;
+    if (!flippedView) {
+      const fl = flipLayout(layout);
+      const fSeeds = seeds.map(flipSeed);
+      const fDev = developmentInner(fl, project);
+      const fDevLayout: Layout = fDev === fl.inner ? fl : { ...fl, inner: fDev };
+      flippedView = {
+        flipped: true,
+        layout: fl,
+        devLayout: fDevLayout,
+        devNosings: perpendicularOn(fDevLayout, fSeeds),
+        seeds: fSeeds,
+      };
+    }
+    return flippedView;
+  };
 
   // ------------------------------------------------------------ nez fixes et surcharges
   const baseFixed = new Set<number>([0, n - 1]);
@@ -197,8 +257,16 @@ export function computeStepping(
   }
 
   // ------------------------------------------------------------ zones de balancement
-  const { method, windersPerSide, colletTieTolerance, targetCollet, maxBalancedExtent } =
-    project.stair.balancing;
+  const {
+    method,
+    windersPerSide,
+    colletTieTolerance,
+    targetCollet,
+    maxBalancedExtent,
+    herseAngle,
+    rotationReach,
+    rotationSteepness,
+  } = project.stair.balancing;
   const extent = maxBalancedExtent ?? MAX_BALANCED_EXTENT;
   const variant = resolveM3Variant(project);
   const strategy = getBalancingStrategy(method);
@@ -219,13 +287,23 @@ export function computeStepping(
     const free = new Set(baseFree);
     const notes: string[] = [];
     const balancedZones: Stepping["balancedZones"][number][] = [];
-    const zoneRanges: { from: number; to: number; corners: readonly Mm[] }[] = [];
+    const zoneRanges: { from: number; to: number; corners: readonly Mm[]; side: Side }[] = [];
     const groups = groupWinderTurns(layout, positions.s, going, fixed, {
       posts,
       free,
       perAngle: usePosts,
     });
-    const params: Record<string, unknown> = method === "M3" ? { variant } : {};
+    const params: Record<string, unknown> =
+      method === "M3"
+        ? { variant }
+        : method === "M2"
+          ? { alpha: herseAngle ?? HERSE_DEFAULT_ANGLE }
+          : method === "M6"
+            ? {
+                reach: rotationReach ?? ROTATION_DEFAULT_REACH,
+                steepness: rotationSteepness ?? ROTATION_DEFAULT_STEEPNESS,
+              }
+            : {};
 
     for (const group of groups) {
       const turnName =
@@ -236,19 +314,20 @@ export function computeStepping(
       const bounds = zoneBounds(group, positions.s, fixed);
       const maxBefore = Math.min(WINDERS_PER_SIDE_MAX, bounds.kL - bounds.lo);
       const maxAfter = Math.min(WINDERS_PER_SIDE_MAX, bounds.hi - bounds.kR);
+      const view = viewFor(group.side);
       const ctx: ZoneContext = {
-        layout,
-        devLayout,
-        devNosings,
-        seeds,
-        nosings,
+        layout: view.layout,
+        devLayout: view.devLayout,
+        devNosings: view.devNosings,
+        seeds: view.seeds,
+        nosings: view.flipped ? nosings.map(flipNosing) : nosings,
         z,
         rise,
         going,
         strategy,
         params,
         freeNosings: free,
-        collarSide: layout.innerSide,
+        collarSide: group.side,
       };
       const auto = windersPerSide === "auto" && method !== "M0";
       const pairs: [number, number][] = [];
@@ -329,13 +408,14 @@ export function computeStepping(
         );
         continue;
       }
-      for (const nl of chosen.nosings) nosings[nl.index] = nl;
+      for (const nl of chosen.nosings) nosings[nl.index] = view.flipped ? flipNosing(nl) : nl;
       for (const k of chosen.corrected) {
         notes.push(
           `Nez ${k} : la ligne recoupe le jour avant le collet calculé, collet ramené au jour.`,
         );
       }
       const { from, to } = chosen.zone;
+      const alphaMax = method === "M2" ? herseAlphaMax(balancingInput(ctx, chosen.zone)) : null;
       balancedZones.push({
         turn: group.first,
         from,
@@ -345,8 +425,9 @@ export function computeStepping(
         ...(chosen.zone.continuation && method === "M3"
           ? { continuation: chosen.zone.continuation }
           : {}),
+        ...(alphaMax !== null ? { herseAlphaMax: alphaMax } : {}),
       });
-      zoneRanges.push({ from, to, corners: group.corners });
+      zoneRanges.push({ from, to, corners: group.corners, side: group.side });
       notes.push(
         `${turnName} : ${bounds.kL - from} + ${to - bounds.kR} nez balancés (nez fixes ${from} et ${to}, extrémités ${chosen.zone.ends.map((e) => (e === "tangent" ? "tangente" : "libre")).join("/")}), ${variantLabel(method, variant)}, collet minimal ${fmt(chosen.minChord)} mm en corde (${fmt(chosen.minArc)} mm en arc).`,
       );
@@ -360,21 +441,35 @@ export function computeStepping(
           `${turnName} : collet cible de ${fmt(targetCollet)} mm non atteint (${beyondExtent.length > 0 && !beyond ? `étendue de balancement limitée à ${fmt(extent)} ${extent < 2 ? "giron" : "girons"} depuis l'angle` : "aucune zone possible ne l'atteint"}) ; zone de collet maximal retenue.`,
         );
       }
-      if (method === "M1") {
+      if (method === "M2") {
+        notes.push(
+          `${turnName} : herse (M2), α = ${fmt(herseAngle ?? HERSE_DEFAULT_ANGLE)}° dans ]0 ; ${fmt(alphaMax ?? 0)}°[ (au-delà, collets croissants vers l'angle).`,
+        );
+      }
+      if (method === "M6") {
+        notes.push(
+          `${turnName} : rotation paramétrée (M6), portée λ = ${fmt(rotationReach ?? ROTATION_DEFAULT_REACH)} giron(s), raideur p = ${fmt(rotationSteepness ?? ROTATION_DEFAULT_STEEPNESS)}${rotationReach === undefined || rotationSteepness === undefined ? " (réglages par défaut à valider)" : ""}.`,
+        );
+      }
+      if (method === "M1" || method === "M2") {
         const [endA, endB] = chosen.zone.ends;
         const parts: string[] = [];
         if (endA === "tangent") {
           parts.push(
-            `${fmt(going - colletBetween(nosings[from]!, nosings[from + 1]!).arc)} mm en bas`,
+            `${fmt(going - colletOnSide(layout, nosings[from]!, nosings[from + 1]!, group.side).arc)} mm en bas`,
           );
         }
         if (endB === "tangent") {
           parts.push(
-            `${fmt(going - colletBetween(nosings[to - 1]!, nosings[to]!).arc)} mm en haut`,
+            `${fmt(going - colletOnSide(layout, nosings[to - 1]!, nosings[to]!, group.side).arc)} mm en haut`,
           );
         }
         if (parts.length > 0) {
-          notes.push(`${turnName} : jarret d'entrée de zone M1 (g − c) de ${parts.join(" et ")}.`);
+          notes.push(
+            method === "M1"
+              ? `${turnName} : jarret d'entrée de zone M1 (g − c) de ${parts.join(" et ")}.`
+              : `${turnName} : avertissement — saut de collet en entrée de zone M2 (g − c) de ${parts.join(" et ")} : la herse ne raccorde jamais la partie droite (B §3.4).`,
+          );
         }
       }
     }
@@ -389,11 +484,9 @@ export function computeStepping(
    * deux zones régulières).
    */
   const k3BreakCount = (r: ReturnType<typeof runZones>): number => {
-    const ranges: { from: number; to: number; corners: Mm[] }[] = r.zoneRanges.map((zr) => ({
-      from: zr.from,
-      to: zr.to,
-      corners: [...zr.corners],
-    }));
+    const ranges: { from: number; to: number; corners: Mm[]; side: Side }[] = r.zoneRanges.map(
+      (zr) => ({ from: zr.from, to: zr.to, corners: [...zr.corners], side: zr.side }),
+    );
     for (const t of layout.turns) {
       if (t.mode !== "winders") continue;
       let from = 0;
@@ -402,13 +495,20 @@ export function computeStepping(
         if (sk <= t.sStart + GEOM_EPS) from = k;
       });
       for (let k = n - 1; k >= 0; k--) if (positions.s[k]! >= t.sEnd - GEOM_EPS) to = k;
-      if (to > from) ranges.push({ from, to, corners: [(t.sStart + t.sEnd) / 2] });
+      if (to > from) {
+        ranges.push({
+          from,
+          to,
+          corners: [(t.sStart + t.sEnd) / 2],
+          side: turnCollarSide(layout, t.index),
+        });
+      }
     }
     ranges.sort((x, y) => x.from - y.from);
-    const merged: { from: number; to: number; corners: Mm[] }[] = [];
+    const merged: { from: number; to: number; corners: Mm[]; side: Side }[] = [];
     for (const rg of ranges) {
       const prev = merged[merged.length - 1];
-      if (prev && rg.from <= prev.to) {
+      if (prev && rg.from <= prev.to && rg.side === prev.side) {
         prev.to = Math.max(prev.to, rg.to);
         for (const c of rg.corners) if (!prev.corners.includes(c)) prev.corners.push(c);
       } else merged.push({ ...rg, corners: [...rg.corners] });
@@ -416,7 +516,7 @@ export function computeStepping(
     return merged.reduce((acc, zr) => {
       const chords: Mm[] = [];
       for (let k = zr.from; k < zr.to; k++)
-        chords.push(colletBetween(r.nosings[k]!, r.nosings[k + 1]!).chord);
+        chords.push(colletOnSide(layout, r.nosings[k]!, r.nosings[k + 1]!, zr.side).chord);
       const corners = cornerPositions(
         positions.s.slice(zr.from, zr.to + 1),
         zr.corners.sort((x, y) => x - y),
@@ -448,9 +548,9 @@ export function computeStepping(
   // ------------------------------------------------------------ angles imposés
   for (const [k, angle] of angleOverrides) {
     const seed = seeds[k]!;
-    // Sens positif = sens du tournant (trigonométrique si le jour est à gauche, horaire s'il est
-    // à droite) : la surcharge donne des escaliers miroirs pour des tracés miroirs.
-    const turnSign = layout.innerSide === "left" ? 1 : -1;
+    // Sens positif = sens du tournant voisin (trigonométrique si son jour est à gauche, horaire
+    // s'il est à droite) : la surcharge donne des escaliers miroirs pour des tracés miroirs.
+    const turnSign = collarSideAt(layout, seed.s) === "left" ? 1 : -1;
     const dir = V.rotate(seed.perpendicular, (turnSign * angle * Math.PI) / 180);
     const res = realizeNosing(layout, seed, { kind: "dir", dir }, Math.abs(angle) > 0);
     if (!res.ok) {
@@ -464,11 +564,12 @@ export function computeStepping(
   }
 
   // ------------------------------------------------------------ contrôles K5 / K3 / collets
-  for (const c of findCrossings(nosings)) {
+  for (const c of findCrossingsOnSides(layout, nosings)) {
     notes.push(`K5 : les lignes de nez ${c.i} et ${c.j} se croisent entre le jour et le mur.`);
   }
   for (let k = 0; k + 1 < n; k++) {
-    const c = colletBetween(nosings[k]!, nosings[k + 1]!);
+    const side = collarSideAt(layout, (positions.s[k]! + positions.s[k + 1]!) / 2);
+    const c = colletOnSide(layout, nosings[k]!, nosings[k + 1]!, side);
     if (!(c.chord > GEOM_EPS) && !positions.landingTreads.has(k)) {
       notes.push(`Marche ${k + 1} : collet nul (${fmt(c.chord)} mm en corde).`);
     }
@@ -477,7 +578,7 @@ export function computeStepping(
   for (const zr of zoneRanges) {
     const chords: Mm[] = [];
     for (let k = zr.from; k < zr.to; k++)
-      chords.push(colletBetween(nosings[k]!, nosings[k + 1]!).chord);
+      chords.push(colletOnSide(layout, nosings[k]!, nosings[k + 1]!, zr.side).chord);
     const corners = cornerPositions(positions.s.slice(zr.from, zr.to + 1), zr.corners);
     for (const i of cornerMonotonyBreaks(chords, corners)) {
       notes.push(
@@ -509,4 +610,26 @@ export function computeStepping(
     balancedZones,
     notes,
   };
+}
+
+/**
+ * S / Z (CHALLENGE G3) : entre deux tournants balancés de sens opposés, la partie droite de Γ
+ * de la volée intermédiaire doit mesurer au moins un giron, pour y placer la marche virtuelle
+ * fixe qui sépare les deux balancements (une zone unique de 180° n'a pas de sens quand les
+ * jours sont de part et d'autre).
+ * @throws SteppingError sinon.
+ */
+function checkOppositeTurns(layout: Layout, going: Mm): void {
+  for (let j = 0; j + 1 < layout.turns.length; j++) {
+    const a = layout.turns[j]!;
+    const b = layout.turns[j + 1]!;
+    if (a.mode !== "winders" || b.mode !== "winders") continue;
+    if (turnCollarSide(layout, j) === turnCollarSide(layout, j + 1)) continue;
+    const straight = b.sStart - a.sEnd;
+    if (straight < going - GEOM_EPS) {
+      throw new SteppingError(
+        `Tournants ${j + 1} et ${j + 2} de sens opposés (escalier en S ou en Z) : la volée intermédiaire n'offre que ${fmt(straight)} mm de ligne de foulée droite, il faut au moins un giron (${fmt(going)} mm) entre les deux balancements. Allongez la volée ${j + 2} ou remplacez un tournant par un palier.`,
+      );
+    }
+  }
 }

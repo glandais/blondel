@@ -229,7 +229,12 @@ export const SteppingSchema = z.object({
 });
 
 export const BalancingSchema = z.object({
-  method: z.enum(["M0", "M1", "M3"]).default("M3"),
+  /**
+   * Méthode de balancement : M0 rayonnant, M1 progression arithmétique, M2 herse (option V1,
+   * `herseAngle`), M3 développement du limon (défaut), M6 rotation paramétrée (option V1,
+   * `rotationReach`, `rotationSteepness`). Ajout rétrocompatible de M2 et M6.
+   */
+  method: z.enum(["M0", "M1", "M2", "M3", "M6"]).default("M3"),
   /** Variante M3 : cubique (C1) ou quintique (C2). `auto` = selon la structure (décision Q7). */
   variant: z.enum(["cubic", "quintic", "auto"]).default("auto"),
   /**
@@ -258,7 +263,31 @@ export const BalancingSchema = z.object({
    * **allemande**, source secondaire —, reprise faute de valeur française : à valider).
    */
   maxBalancedExtent: z.number().positive().optional(),
+  /**
+   * M2 (herse, B §3.4) : angle α de la ligne inclinée, en degrés. Utile seulement dans
+   * ]0 ; α_eq[, α_eq = arccos(L_c / (m·g)) propre à chaque demi-zone (au-delà, collets
+   * croissants vers l'angle) : hors de cet intervalle, la zone est refusée ; la borne de la
+   * zone retenue est rendue par `Stepping.balancedZones[].herseAlphaMax`. Absent : 20°
+   * (`HERSE_DEFAULT_ANGLE`, usage trepedia [4]).
+   */
+  herseAngle: z.number().gt(0).lt(90).optional(),
+  /**
+   * M6 (rotation paramétrée, B §3.8) : portée λ (girons) de la loi de rotation
+   * w = exp(−(d/λ)^p). Absent : 2 (`ROTATION_DEFAULT_REACH`, choix Blondel à valider).
+   */
+  rotationReach: z.number().positive().max(50).optional(),
+  /**
+   * M6 : raideur p de la loi de rotation. Absent : 2 (`ROTATION_DEFAULT_STEEPNESS`, choix
+   * Blondel à valider).
+   */
+  rotationSteepness: z.number().positive().max(20).optional(),
 });
+
+/**
+ * Identifiant de méthode de balancement : **liste unique** (`BalancingSchema.method`), reprise
+ * par `BalancingStrategy.id` et le registre `balancing/registry.ts`.
+ */
+export type BalancingMethod = z.output<typeof BalancingSchema>["method"];
 
 export const TreadSpecSchema = z.object({
   thickness: mmPos.default(40),

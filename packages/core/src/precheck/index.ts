@@ -49,5 +49,6 @@ export {
   permanentAreaLoad,
   precheckModel,
   precheckStringers,
+  structurePrecheckSettings,
   type StringerPrecheck,
 } from "./stringers.js";

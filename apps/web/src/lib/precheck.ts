@@ -1,15 +1,14 @@
 /**
  * Panneau « Prédimensionnement indicatif » (CHALLENGE P5) et classe d'exécution EN 1090-2 :
- * présentation des résultats du cœur (`precheckModel`, ligne `EXC_CLASSE_EXECUTION`). Aucun
- * critère n'est évalué ici ; les bornes (L/200, L/300, 5 Hz) sont celles de `PRECHECK_LIMITS`.
+ * **présentation seule** des résultats du modèle (`Model.precheck`, calculé dans le worker par
+ * le pipeline — par le plugin de structure quand il en fait un, les lignes PRECHECK_* du
+ * contrôle de conception venant alors du même calcul — et `executionClassOf` du cœur). Aucun
+ * calcul ni critère ici ; les bornes (L/200, L/300, 5 Hz) sont celles de `PRECHECK_LIMITS`.
  */
 import {
   PRECHECK_LIMITS,
-  PrecheckSettingsSchema,
-  precheckModel,
+  executionClassOf,
   type Model,
-  type PrecheckSettings,
-  type Project,
   type RuleResult,
   type StairLoads,
 } from "@blondel/core";
@@ -24,32 +23,21 @@ export interface ExecutionClassInfo {
 }
 
 /**
- * Classe d'exécution du modèle : `Model.executionClass` si le pipeline la reporte, sinon la
- * ligne `EXC_CLASSE_EXECUTION` du contrôle de conception (comme le comparateur du cœur) ;
- * `null` pour une structure sans acier.
+ * Classe d'exécution du modèle (`executionClassOf` du cœur) et sa justification (ligne
+ * `EXC_CLASSE_EXECUTION` du contrôle de conception) ; `null` pour une structure sans acier.
  */
-export function executionClassOf(
+export function executionClassInfo(
   model: Pick<Model, "executionClass" | "compliance"> | null | undefined,
 ): ExecutionClassInfo | null {
   if (!model) return null;
-  const line = model.compliance.results.find((r) => r.ruleId === "EXC_CLASSE_EXECUTION");
-  const parsed = line ? /EXC[12]/.exec(line.message) : null;
-  const value = model.executionClass ?? (parsed ? (parsed[0] as ExecutionClass) : undefined);
+  const value = executionClassOf(model);
   if (!value) return null;
+  const line = model.compliance.results.find((r) => r.ruleId === "EXC_CLASSE_EXECUTION");
   return {
     value,
     ...(line?.message ? { detail: line.message } : {}),
     ...(line ? { location: line.location } : {}),
   };
-}
-
-/** Réglages du prédimensionnement portés par les paramètres du plugin (`precheck`), sinon `{}`. */
-export function projectPrecheckSettings(project: Project): Partial<PrecheckSettings> {
-  const params = project.stair.structure.params;
-  const raw = typeof params === "object" && params !== null ? params["precheck"] : undefined;
-  if (raw === undefined) return {};
-  const parsed = PrecheckSettingsSchema.safeParse(raw);
-  return parsed.success ? parsed.data : {};
 }
 
 export interface PrecheckRow {
@@ -84,48 +72,43 @@ export interface PrecheckSummary {
 }
 
 /**
- * Prédimensionnement des limons du modèle (toutes structures, réglages du plugin s'il en
- * porte) ; `null` sans modèle ou si le calcul échoue.
+ * Mise en forme du prédimensionnement du modèle (`Model.precheck`) ; `null` sans modèle ou
+ * sans prédimensionnement (structure absente, modèle incomplet).
  */
 export function precheckSummary(
-  project: Project,
-  model: Pick<Model, "stepping" | "parts"> | null | undefined,
+  model: Pick<Model, "precheck"> | null | undefined,
 ): PrecheckSummary | null {
-  if (!model) return null;
-  try {
-    const pc = precheckModel(project, model, projectPrecheckSettings(project));
-    const rows = pc.beams.map((b): PrecheckRow => {
-      const r = b.result;
-      const limit = r.length / PRECHECK_LIMITS.deflectionRatio;
-      const adviceLimit = r.length / PRECHECK_LIMITS.deflectionAdvice;
-      return {
-        partId: b.partId,
-        label: b.label,
-        lengthM: r.length / 1000,
-        deflection: r.deflection,
-        limit,
-        adviceLimit,
-        spanRatio: r.spanRatio,
-        stress: r.stress,
-        design: r.design,
-        ratio: r.design > 0 ? (100 * r.stress) / r.design : Number.POSITIVE_INFINITY,
-        frequency: r.frequency,
-        ok: {
-          deflection: r.deflection <= limit + 1e-9,
-          advice: r.deflection <= adviceLimit + 1e-9,
-          stress: r.stress <= r.design + 1e-9,
-          frequency: r.frequency >= PRECHECK_LIMITS.frequency - 1e-9,
-        },
-      };
-    });
+  const pc = model?.precheck;
+  if (!pc) return null;
+  const rows = pc.beams.map((b): PrecheckRow => {
+    const r = b.result;
+    const limit = r.length / PRECHECK_LIMITS.deflectionRatio;
+    const adviceLimit = r.length / PRECHECK_LIMITS.deflectionAdvice;
     return {
-      rows,
-      loads: pc.loads,
-      permanentArea: pc.permanentArea,
-      notes: pc.notes,
-      minFrequency: PRECHECK_LIMITS.frequency,
+      partId: b.partId,
+      label: b.label,
+      lengthM: r.length / 1000,
+      deflection: r.deflection,
+      limit,
+      adviceLimit,
+      spanRatio: r.spanRatio,
+      stress: r.stress,
+      design: r.design,
+      ratio: r.design > 0 ? (100 * r.stress) / r.design : Number.POSITIVE_INFINITY,
+      frequency: r.frequency,
+      ok: {
+        deflection: r.deflection <= limit + 1e-9,
+        advice: r.deflection <= adviceLimit + 1e-9,
+        stress: r.stress <= r.design + 1e-9,
+        frequency: r.frequency >= PRECHECK_LIMITS.frequency - 1e-9,
+      },
     };
-  } catch {
-    return null;
-  }
+  });
+  return {
+    rows,
+    loads: pc.loads,
+    permanentArea: pc.permanentArea,
+    notes: pc.notes,
+    minFrequency: PRECHECK_LIMITS.frequency,
+  };
 }

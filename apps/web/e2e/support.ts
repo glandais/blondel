@@ -44,6 +44,7 @@ export const PRESETS = [
   "Quart tournant à gauche",
   "Quart tournant à droite",
   "Deux quarts tournants (U)",
+  "Deux quarts tournants opposés (S)",
   "Demi-tournant balancé",
   "Quart tournant avec palier",
   "Hélicoïdal à fût central",

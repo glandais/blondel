@@ -35,7 +35,18 @@ function persistedForm(project: Project): unknown {
   return { ...project, stair: { ...project.stair, layout: rest } };
 }
 
-/** Texte d'un fichier `.blondel.json`. */
-export function serializeProject(project: Project): string {
+export interface SerializeOptions {
+  /**
+   * JSON compact (sans indentation ni fin de ligne finale), même contenu et même ordre de clés :
+   * relu à l'identique par `parseProjectText`. Réservé au stockage interne (autosauvegarde
+   * `localStorage`, dont le quota est d'environ 5 M caractères) ; le fichier `.blondel.json`
+   * reste indenté.
+   */
+  readonly compact?: boolean;
+}
+
+/** Texte d'un fichier `.blondel.json` (ou forme compacte, voir `SerializeOptions`). */
+export function serializeProject(project: Project, options: SerializeOptions = {}): string {
+  if (options.compact === true) return stableStringify(persistedForm(project), 0);
   return `${stableStringify(persistedForm(project))}\n`;
 }

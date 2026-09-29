@@ -13,6 +13,11 @@ export interface StorageLike {
 }
 
 export const AUTOSAVE_KEY = "blondel.autosave.project";
+/**
+ * Copie de secours d'une autosauvegarde refusée au démarrage (format plus récent, projet
+ * invalide) : écrite avant que l'autosauvegarde ne l'écrase.
+ */
+export const AUTOSAVE_REJECTED_KEY = "blondel.autosave.rejected";
 export const PROJECT_FILE_SUFFIX = ".blondel.json";
 
 /**
@@ -45,27 +50,75 @@ export function memoryStorage(initial: Record<string, string> = {}): StorageLike
   };
 }
 
-/** Écrit l'autosauvegarde ; renvoie `false` si le stockage refuse (quota, accès bloqué). */
+/**
+ * Écrit l'autosauvegarde en JSON **compact** (le quota `localStorage` est d'environ 5 M
+ * caractères ; l'indentation de l'export `.blondel.json` triplerait la taille d'un calque DXF) ;
+ * renvoie `false` si le stockage refuse (quota, accès bloqué).
+ */
 export function saveAutosave(storage: StorageLike | undefined, project: Project): boolean {
   if (!storage) return false;
   try {
-    storage.setItem(AUTOSAVE_KEY, serializeProject(project));
+    storage.setItem(AUTOSAVE_KEY, autosaveText(project));
     return true;
   } catch {
     return false;
   }
 }
 
-/** Relit l'autosauvegarde ; `undefined` si absente, illisible ou invalide. */
-export function loadAutosave(storage: StorageLike | undefined): Project | undefined {
-  if (!storage) return undefined;
+/** Texte écrit par l'autosauvegarde (JSON compact, relu par `parseProjectText`). */
+export function autosaveText(project: Project): string {
+  return serializeProject(project, { compact: true });
+}
+
+/** Résultat de la lecture de l'autosauvegarde au démarrage. */
+export type AutosaveLoad =
+  | { readonly kind: "none" }
+  | { readonly kind: "ok"; readonly project: Project }
+  | {
+      /** Autosauvegarde présente mais illisible (format plus récent, projet invalide…). */
+      readonly kind: "rejected";
+      /** Message du cœur (première ligne) et détail des erreurs. */
+      readonly message: string;
+      readonly issues: readonly string[];
+      /** Texte brut refusé (pour le télécharger). */
+      readonly text: string;
+      /**
+       * Copie faite sous `AUTOSAVE_REJECTED_KEY` : l'autosauvegarde peut reprendre sans perdre
+       * l'original. Faux si le stockage l'a refusée (quota) : l'autosauvegarde doit alors être
+       * suspendue tant que l'utilisateur n'a pas choisi.
+       */
+      readonly preserved: boolean;
+    };
+
+/**
+ * Relit l'autosauvegarde. Une autosauvegarde refusée n'est **jamais** écartée en silence : son
+ * texte brut est copié sous `AUTOSAVE_REJECTED_KEY` avant tout nouvel enregistrement, et le
+ * message du cœur est rendu.
+ */
+export function loadAutosave(storage: StorageLike | undefined): AutosaveLoad {
+  if (!storage) return { kind: "none" };
+  let text: string | null;
   try {
-    const text = storage.getItem(AUTOSAVE_KEY);
-    if (text === null) return undefined;
-    return parseProjectText(text);
+    text = storage.getItem(AUTOSAVE_KEY);
   } catch {
-    return undefined;
+    return { kind: "none" };
   }
+  if (text === null) return { kind: "none" };
+  const r = importProjectText(text);
+  if (r.ok) return { kind: "ok", project: r.project };
+  let preserved: boolean;
+  try {
+    storage.setItem(AUTOSAVE_REJECTED_KEY, text);
+    preserved = storage.getItem(AUTOSAVE_REJECTED_KEY) === text;
+  } catch {
+    preserved = false;
+  }
+  return { kind: "rejected", message: r.message, issues: r.issues, text, preserved };
+}
+
+/** Fichier proposé au téléchargement pour une autosauvegarde refusée (texte brut, intact). */
+export function rejectedAutosaveFile(text: string): { filename: string; text: string } {
+  return { filename: `autosauvegarde-refusee${PROJECT_FILE_SUFFIX}`, text };
 }
 
 export type ImportResult =

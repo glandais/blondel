@@ -221,13 +221,11 @@ describe("largeurs et ligne de foulée", () => {
     expect(
       status({ project: { width: 1400 }, walklineOffset: 600 }, "LF_POSITION_DTU_LARGE"),
     ).toEqual(["ok"]);
-    expect(
-      run({ project: { width: 1400 }, walklineOffset: 700 }, "LF_POSITION_DTU_LARGE")[0],
-    ).toMatchObject({
-      status: "ok",
-      measured: 700,
-      min: 600,
-    });
+    // Sans incidence (aucune marche balancée) : ni mesure ni bornes, la cible est dans le message.
+    const off = run({ project: { width: 1400 }, walklineOffset: 700 }, "LF_POSITION_DTU_LARGE")[0];
+    expect(off).toMatchObject({ status: "ok", min: null, max: null });
+    expect(off?.measured).toBeUndefined();
+    expect(off?.message).toContain("attendue à 600 mm");
   });
 
   it("ligne de conception décalée avec marches balancées : non évaluée", () => {

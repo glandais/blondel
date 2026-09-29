@@ -36,6 +36,7 @@ import type {
   ComplianceReport,
   Layout,
   Model,
+  ModelPrecheck,
   Part,
   RuleResult,
   Severity,
@@ -44,8 +45,9 @@ import type {
 import type { StructureContext, StructureKind } from "../model/plugins.js";
 import type { Project } from "../model/project.js";
 import { buildBasicParts } from "../parts/basic.js";
+import { precheckStringers, structurePrecheckSettings } from "../precheck/stringers.js";
 import { fmt } from "../rules/check.js";
-import { evaluateComplianceDetailed } from "../rules/engine.js";
+import { evaluateComplianceDetailed, unknownOverrideNote } from "../rules/engine.js";
 import { findRule } from "../rules/table.js";
 import { guardChecks } from "../guards/checks.js";
 import { computeGuards } from "../guards/compute.js";
@@ -140,10 +142,36 @@ interface StructureStage {
   readonly errors: readonly string[];
   /** Classe d'exécution EN 1090-2 déduite par le plugin (métal), reportée dans `Model`. */
   readonly executionClass?: "EXC1" | "EXC2";
+  /** Prédimensionnement indicatif des limons, reporté dans `Model.precheck`. */
+  readonly precheck?: ModelPrecheck;
 }
 
 interface ComplianceStage {
   readonly report: ComplianceReport;
+}
+
+/**
+ * Prédimensionnement des limons d'une structure dont le plugin n'en rend pas
+ * (`StructureOutput.precheck` absent) : `precheckStringers` sur les pièces fusionnées, réglages
+ * de `structure.params.precheck`. Indicatif : un échec n'invalide pas le modèle (absent).
+ */
+function fallbackPrecheck(
+  project: Project,
+  stepping: Stepping,
+  parts: readonly Part[],
+): ModelPrecheck | undefined {
+  try {
+    const settings = structurePrecheckSettings(project.stair.structure.params);
+    const { beams, loads, permanentArea, notes } = precheckStringers(
+      project,
+      stepping,
+      parts,
+      settings,
+    );
+    return { beams, loads, permanentArea, notes };
+  } catch {
+    return undefined;
+  }
 }
 
 /** Caches par étape (dernier résultat). */
@@ -265,7 +293,12 @@ export function mergeStructureChecks(
   for (const [id, list] of byRule) if (!inserted.has(id)) results.push(...list);
   const summary: Record<Severity, number> = { bloquant: 0, avertissement: 0, conseil: 0 };
   for (const r of results) if (r.status === "violation") summary[r.severity]++;
-  return { ...report, results, summary };
+  // Surcharge d'un contrôle de plugin : appliquée par le plugin (`effectiveSeverity`), elle n'est
+  // pas « inconnue » ; seule reste la note des identifiants qu'aucun résultat ne porte.
+  const applied = new Set([...byRule.keys()].map(unknownOverrideNote));
+  const { notes: reportNotes, ...rest } = report;
+  const notes = (reportNotes ?? []).filter((n) => !applied.has(n));
+  return { ...rest, results, summary, ...(notes.length > 0 ? { notes } : {}) };
 }
 
 /** Plus grande échappée minimale bloquante des règles d'échappée du rapport (mm). */
@@ -333,6 +366,7 @@ export function buildModel(project: Project, options: BuildModelOptions = {}): M
   let parts: readonly Part[] = [];
   let structureChecks: readonly RuleResult[] = [];
   let executionClass: "EXC1" | "EXC2" | undefined;
+  let precheck: ModelPrecheck | undefined;
   const kind = stair.structure.kind;
   const plugin = kind !== "none" ? getStructure(kind) : undefined;
   if (kind !== "none" && !plugin) {
@@ -363,12 +397,15 @@ export function buildModel(project: Project, options: BuildModelOptions = {}): M
             const ctx: StructureContext = { project, layout, stepping, baseParts: base };
             const params = resolveStructureParams(plugin, ctx, stair.structure.params);
             const out = plugin.build(ctx, params);
+            const merged = normalize(mergeParts(base, out.parts, out.removedBaseParts));
+            const precheck = out.precheck ?? fallbackPrecheck(project, stepping, merged);
             return {
-              parts: normalize(mergeParts(base, out.parts, out.removedBaseParts)),
+              parts: merged,
               checks: out.checks,
               notes: out.notes,
               errors: out.errors ?? [],
               ...(out.executionClass ? { executionClass: out.executionClass } : {}),
+              ...(precheck ? { precheck } : {}),
             };
           }),
       );
@@ -381,6 +418,7 @@ export function buildModel(project: Project, options: BuildModelOptions = {}): M
         parts = structureStage.value.parts;
         structureChecks = structureStage.value.checks;
         executionClass = structureStage.value.executionClass;
+        precheck = structureStage.value.precheck;
         notes.push(...structureStage.value.notes);
         errors.push(...structureStage.value.errors);
       }
@@ -493,6 +531,7 @@ export function buildModel(project: Project, options: BuildModelOptions = {}): M
     ...(headroomMin ? { headroom: headroomMin } : {}),
     ...(width ? { headroomWidth: width } : {}),
     ...(executionClass ? { executionClass } : {}),
+    ...(precheck ? { precheck } : {}),
     errors,
     ...(notes.length > 0 ? { notes } : {}),
   };

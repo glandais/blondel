@@ -7,10 +7,26 @@ import { AUTO_GOING_MODULE } from "../layout/resolve.js";
 import type { ScoreWeights } from "./types.js";
 
 export const ASSISTANT_DEFAULTS = {
-  /** Candidats rendus. */
+  /** Candidats de la liste principale. */
   maxCandidates: 10,
-  /** Candidats rendus par typologie et sens (diversité de la liste). */
+  /**
+   * Modèles acceptés par groupe de construction typologie × sens × position du tournant
+   * (équité de l'étage complet, réservoir des variantes).
+   */
   perGroupLimit: 3,
+  /**
+   * Candidats par forme (typologie × position du tournant) dans la liste principale ; les
+   * suivants deviennent des variantes du meilleur de la forme.
+   */
+  perShapeLimit: 1,
+  /** Liste principale à plat (toutes les variantes) ; défaut : regroupée. */
+  showAllVariants: false,
+  /**
+   * Marge d'échappée visée (mm) au-dessus du minimum bloquant, terme `headroomMargin` du score.
+   * Aucune source : ordre de grandeur d'un écart d'exécution (revêtement de sol, tolérance de
+   * dalle) supposé **[choix Blondel, à valider]**.
+   */
+  headroomMarginTarget: 50,
   /** Modèles complets construits au plus (≈ 3 à 6 ms chacun, ADR-0006). */
   maxBuilds: 180,
   /** Budget de temps (ms) de l'évaluation : sous les 2 s du cas d'acceptation (G8). */
@@ -58,6 +74,7 @@ export const DEFAULT_SCORE_WEIGHTS: ScoreWeights = {
   blondel: 1,
   collet: 0.2,
   headroom: 0.05,
+  headroomMargin: 0.2,
   winders: 2,
   regularity: 1,
   warnings: 5,

@@ -2,9 +2,9 @@
  * Interfaces d'extension du pipeline (ADR-0002).
  */
 import type { z } from "zod";
-import type { Layout, NosingLine, Part, RuleResult, Stepping } from "./derived.js";
+import type { Layout, ModelPrecheck, NosingLine, Part, RuleResult, Stepping } from "./derived.js";
 import type { Mm } from "./primitives.js";
-import type { Project } from "./project.js";
+import type { BalancingMethod, Project } from "./project.js";
 
 /**
  * Zone de balancement : nez `from` et `to` fixes (exclus), nez intermédiaires réorientés.
@@ -66,7 +66,8 @@ export interface BalancingInput {
  * **post-traitement commun** calcule Q, R, collets (arc et corde) et les contrôles K2/K3/K5.
  */
 export interface BalancingStrategy {
-  readonly id: "M0" | "M1" | "M2" | "M3" | "M6" | "M7";
+  /** Méthode de balancement : liste unique `BalancingSchema.shape.method` (project.ts). */
+  readonly id: BalancingMethod;
   readonly label: string;
   solve(input: BalancingInput): BalancingSolution;
   /** Collet minimal estimé analytiquement (choix rapide de zone, B §3.5). */
@@ -124,6 +125,11 @@ export interface StructureOutput {
   readonly checks: readonly RuleResult[];
   /** Classe d'exécution EN 1090-2 déduite (métal). */
   readonly executionClass?: "EXC1" | "EXC2";
+  /**
+   * Prédimensionnement indicatif fait par le plugin (ex. choix de section) : repris tel quel
+   * dans `Model.precheck`. Absent : le pipeline le calcule par `precheckStringers`.
+   */
+  readonly precheck?: ModelPrecheck;
   /**
    * Identifiants de pièces de base que la structure **supprime** (ex. contremarches bois quand
    * les marches en tôle pliée en Z portent leur contremarche). Absent : aucune.

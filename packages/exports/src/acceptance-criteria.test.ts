@@ -190,12 +190,16 @@ describe("critère d'acceptation n° 3 : DXF de limon acier et de marche en tôl
   const treads = model.parts.filter((p) => p.category === "tread");
   const params = project.stair.structure.params as { folded?: { clearance?: number } };
 
-  it("structure steel-flat en tôle pliée : modèle sans erreur, contremarches bois supprimées", () => {
+  it("structure steel-flat en tôle pliée : modèle sans erreur, contremarches bois supprimées sauf l'arrivée", () => {
     expect(project.stair.structure.kind).toBe("steel-flat");
     expect(model.errors).toEqual([]);
     expect(blocking(model)).toEqual([]);
     expect(model.executionClass).toBe("EXC1");
-    expect(model.parts.filter((p) => p.category === "riser")).toEqual([]);
+    // Contremarches pliées dans les pièces Z ; seule la contremarche d'arrivée (sous le dernier
+    // nez, portée par aucune pièce Z) reste la pièce de base.
+    expect(model.parts.filter((p) => p.category === "riser").map((p) => p.id)).toEqual([
+      `riser-${model.stepping.riserCount}`,
+    ]);
     expect(stringers.map((p) => p.mark).sort()).toEqual(["LE1", "LE2", "LI1", "LI2"]);
     expect(treads).toHaveLength(model.stepping.treads.length);
     for (const p of [...stringers, ...treads]) {

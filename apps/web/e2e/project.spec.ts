@@ -125,3 +125,46 @@ test("autosauvegarde relue au rechargement", async ({ page }) => {
   await expect(page.getByLabel("Hauteur à monter H")).toHaveValue("2850");
   await expect(page.locator("fieldset.turn")).toHaveCount(2);
 });
+
+test("autosauvegarde illisible : message, copie de secours, jamais écrasée en silence", async ({
+  page,
+}) => {
+  await openApp(page);
+  // Autosauvegarde d'une version plus récente de Blondel (format 2).
+  await page.evaluate(() => {
+    const key = "blondel.autosave.project";
+    const json = JSON.parse(localStorage.getItem(key) ?? "{}") as Record<string, unknown>;
+    localStorage.setItem(
+      key,
+      JSON.stringify({ ...json, name: "Mon escalier client", schemaVersion: 2 }),
+    );
+  });
+  await page.reload();
+  await settle(page);
+  const notice = page.locator(".notice--error[role=alert]");
+  await expect(notice).toContainText("n'a pas pu être rouverte");
+  await expect(notice).toContainText("format 2, plus récent");
+  const actions = page.getByRole("group", { name: "Autosauvegarde refusée" });
+  await expect(actions).toBeVisible();
+
+  // Première modification : l'original reste disponible sous la clé de secours.
+  await commitField(page, page.getByLabel("Hauteur à monter H"), "2800");
+  await page.evaluate(() => window.dispatchEvent(new Event("pagehide")));
+  const stored = await page.evaluate(() => ({
+    rejected: localStorage.getItem("blondel.autosave.rejected") ?? "",
+    current: localStorage.getItem("blondel.autosave.project") ?? "",
+  }));
+  expect(stored.rejected).toContain("Mon escalier client");
+  expect(stored.current).not.toContain("Mon escalier client");
+
+  // Téléchargement du texte brut, intact.
+  const pending = page.waitForEvent("download");
+  await actions.getByRole("button", { name: "Télécharger le texte brut" }).click();
+  const file = await pending;
+  expect(file.suggestedFilename()).toBe("autosauvegarde-refusee.blondel.json");
+
+  // Congé explicite : la copie est libérée.
+  await actions.getByRole("button", { name: "Oublier cette sauvegarde" }).click();
+  await expect(actions).toHaveCount(0);
+  expect(await page.evaluate(() => localStorage.getItem("blondel.autosave.rejected"))).toBeNull();
+});

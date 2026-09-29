@@ -981,7 +981,7 @@ regles:
 
   - id: MC_UP_ERP
     description: "Main courante dès 1 UP ; de chaque côté dès 2 UP ; côté extérieur pour un tournant d'1 UP (ERP)"
-    formule: "n_UP >= 2 => 2 mains courantes"
+    formule: "n_UP >= 2 => 2 mains courantes ; n_UP < 2 && (tournant || helicoidal) => main courante côté extérieur"
     min: 1
     max: null
     recommande: null
@@ -1210,6 +1210,7 @@ regles:
     contexte: [garde_corps_2024]
     nature: normatif
     source: "Sources secondaires [15]"
+    source_secondaire: true
     confiance: faible
     severite: bloquant
 

@@ -162,3 +162,55 @@ test("accueil, annulation de la recherche, fermeture", async ({ page }) => {
   await expect(d).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Annuler", exact: true })).toBeDisabled();
 });
+
+test("variantes : repliées sous la carte de chaque forme, avec croquis ; liste à plat sur demande", async ({
+  page,
+}) => {
+  await openApp(page);
+  await page.getByRole("button", { name: "Assistant…" }).click();
+  const d = dialog(page);
+  await d.getByLabel("Longueur de trémie (X)").fill("2800");
+  await d.getByLabel("Largeur de trémie (Y)").fill("900");
+  await d.getByLabel("Quart tournant", { exact: true }).check();
+  await d.getByRole("button", { name: "Proposer", exact: true }).click();
+  await expect(d.locator(".assistant__summary")).toBeVisible({ timeout: 30_000 });
+
+  // Une carte principale par forme (typologie × position du tournant).
+  const shapes = d.locator(".assistant__shape");
+  const n = await shapes.count();
+  expect(n).toBeGreaterThan(0);
+  const keys = await shapes.evaluateAll((els) => els.map((e) => e.getAttribute("data-shape")));
+  expect(new Set(keys).size).toBe(keys.length);
+
+  const withVariants = d.locator(".assistant__shape:has(.assistant__variants)").first();
+  await expect(withVariants).toHaveCount(1);
+  const summary = withVariants.locator(".assistant__variants > summary");
+  await expect(summary).toContainText(/variantes? de cette forme/);
+  const variant = withVariants.locator(".assistant__card--variant").first();
+  await expect(variant).toBeHidden();
+  await summary.click();
+  await expect(variant).toBeVisible();
+  await expect(variant.locator("svg.assistant__sketch")).toHaveCount(1);
+  await expect(
+    variant.getByRole("button", { name: /^Choisir : .*\(variante \d+\.2\)$/ }),
+  ).toBeVisible();
+
+  // « Montrer toutes les variantes » : liste à plat, plus de variantes repliées.
+  await d.getByLabel("Montrer toutes les variantes (liste à plat)").check();
+  await d.getByRole("button", { name: "Proposer", exact: true }).click();
+  await expect(d.locator(".assistant__summary")).toBeVisible({ timeout: 30_000 });
+  await expect
+    .poll(() => d.locator(".assistant__card").count(), { timeout: 30_000 })
+    .toBeGreaterThan(n);
+  await expect(d.locator(".assistant__variants")).toHaveCount(0);
+
+  // Choisir une variante remplace le projet (une entrée d'historique).
+  await d
+    .locator(".assistant__card")
+    .nth(1)
+    .getByRole("button", { name: /^Choisir/ })
+    .click();
+  await expect(d).toHaveCount(0);
+  await settle(page);
+  await expect(page.getByRole("button", { name: "Annuler", exact: true })).toBeEnabled();
+});

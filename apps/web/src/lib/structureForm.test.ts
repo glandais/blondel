@@ -25,7 +25,13 @@ import {
 
 describe("lecture des schémas zod 4", () => {
   it("listes de choix d'un z.enum enveloppé par .default()", () => {
-    expect(enumOptions(fieldSchema(BalancingSchema, "method"))).toEqual(["M0", "M1", "M3"]);
+    expect(enumOptions(fieldSchema(BalancingSchema, "method"))).toEqual([
+      "M0",
+      "M1",
+      "M2",
+      "M3",
+      "M6",
+    ]);
     expect(enumOptions(fieldSchema(TreadSpecSchema, "risers"))).toEqual(["full", "open", "none"]);
     expect(enumOptions(fieldSchema(BalancingSchema, "targetCollet"))).toBeUndefined();
     expect(enumOptions(undefined)).toBeUndefined();

@@ -112,9 +112,13 @@ function walklineAt(ctx: EvaluatorContext, expected: number, label: string): Fin
     };
   }
   if (treadsOfKind(ctx.stepping, "winder").length === 0) {
+    // Sans incidence : la ligne de conception n'est pas soumise à la borne ; ni mesure ni
+    // bornes (sinon « mesuré 650 mm, attendu 600 mm » sur une ligne conforme).
     return {
-      ...base,
       status: "ok",
+      min: null,
+      max: null,
+      location: STAIR,
       message: `Ligne de conception à ${fmt(d)} mm, ligne de mesure attendue à ${fmt(expected)} mm (${label}) : sans incidence, aucune marche balancée.`,
     };
   }

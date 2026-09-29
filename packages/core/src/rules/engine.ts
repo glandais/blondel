@@ -53,6 +53,11 @@ export function effectiveSeverity(rule: RuleDef, settings: ComplianceSettings): 
     : { severity, ignored };
 }
 
+/** Note d'une surcharge portant sur un identifiant absent de rules.yaml. */
+export function unknownOverrideNote(ruleId: string): string {
+  return `Surcharge ignorée : règle inconnue « ${ruleId} ».`;
+}
+
 function toResult(rule: RuleDef, f: Finding, eff: EffectiveSeverity): RuleResult {
   const base: RuleResult = {
     ruleId: rule.id,
@@ -114,11 +119,13 @@ export function evaluateComplianceDetailed(
     );
   }
 
-  // Surcharges inopérantes : signalées plutôt qu'ignorées en silence.
+  // Surcharges inopérantes : signalées plutôt qu'ignorées en silence. Une règle hors table peut
+  // être un contrôle de plugin (FAB_*, HELICOIDAL_*…) : sa note est retirée par
+  // `mergeStructureChecks` si un contrôle fusionné porte cet identifiant.
   for (const o of settings.overrides) {
-    if (!findRule(o.ruleId)) notes.push(`Surcharge ignorée : règle inconnue « ${o.ruleId} ».`);
-    else if (o.justification.trim() === "")
+    if (o.justification.trim() === "")
       notes.push(`Surcharge ignorée sur ${o.ruleId} : justification vide.`);
+    else if (!findRule(o.ruleId)) notes.push(unknownOverrideNote(o.ruleId));
   }
 
   const results: RuleResult[] = [];

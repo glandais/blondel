@@ -1,9 +1,23 @@
 /**
- * Stratégies de balancement (M0, M1, M3) et post-traitement commun.
+ * Stratégies de balancement (M0, M1, M2, M3, M6) et post-traitement commun.
  */
 export { M0_STRATEGY } from "./m0.js";
 export { M1_STRATEGY, vProfileCollets } from "./m1.js";
+export {
+  HERSE_DEFAULT_ANGLE,
+  M2_STRATEGY,
+  herseAlphaBound,
+  herseAlphaMax,
+  herseCollets,
+  herseMap,
+} from "./m2.js";
 export { M3_STRATEGY, zoneProfile } from "./m3.js";
+export {
+  M6_STRATEGY,
+  ROTATION_DEFAULT_REACH,
+  ROTATION_DEFAULT_STEEPNESS,
+  rotationWeight,
+} from "./m6.js";
 export {
   buildProfile,
   evalProfile,
@@ -27,6 +41,7 @@ export {
   monotonyBreaks,
   nosingsCross,
   realizeNosing,
+  type CollarEdge,
   type Collet,
   type Crossing,
   type NosingSeed,

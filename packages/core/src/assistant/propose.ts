@@ -11,11 +11,14 @@
  *    du giron visé (module recommandé − 2h) vers le giron minimal, par pas de 5 mm : le premier
  *    dont l'**échappée exacte sur Γ** (mêmes fonctions que le pipeline) atteint le minimum
  *    bloquant et dont l'emprise hors tout ne heurte aucun mur est retenu.
- * 2. **Étage complet** : `buildModel` sur les survivants, par groupe (typologie × sens) à tour
- *    de rôle et dans l'ordre d'un pré-score, dans la limite d'un budget de constructions et de
- *    temps ; élimination des erreurs de génération, des violations bloquantes (échappée
- *    comprise) et des marches qui traversent la dalle hors trémie ; score détaillé ;
- *    déduplication (même tracé, même placement, même n).
+ * 2. **Étage complet** : `buildModel` sur les survivants, par groupe (typologie × sens ×
+ *    position du tournant) à tour de rôle et dans l'ordre d'un pré-score, dans la limite d'un
+ *    budget de constructions et de temps ; élimination des erreurs de génération, des
+ *    violations bloquantes (échappée comprise) et des marches qui traversent la dalle hors
+ *    trémie ; score détaillé ; déduplication (même tracé, même placement, même n).
+ * 3. **Sélection diversifiée** (`select.ts`) : au plus `perShapeLimit` candidats par forme
+ *    (typologie × position du tournant) dans la liste principale, les autres en variantes du
+ *    meilleur de leur forme ; ou liste à plat avec `showAllVariants`.
  *
  * Fonction pure du point de vue de l'appelant (aucune mémoïsation globale : `memo: false`),
  * appelable dans un Web Worker, annulable par `shouldStop`.
@@ -71,6 +74,7 @@ import {
   type Placement,
 } from "./placement.js";
 import { scoreModel, summarizeModel } from "./score.js";
+import { selectDiverse, shapeKey } from "./select.js";
 import {
   flightLegs,
   flightsLayoutSpec,
@@ -223,6 +227,12 @@ export function inscribedCircle(poly: Polygon2): { center: Vec2; radius: Mm } {
   return { center: c, radius: Number.isFinite(r) ? r : 0 };
 }
 
+/** Copie sans les clés de valeur `undefined` (fusion avec les valeurs par défaut). */
+function definedOnly<T extends object>(o: T | undefined): Partial<T> {
+  if (!o) return {};
+  return Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined)) as Partial<T>;
+}
+
 /** Contrôle des réglages de l'appelant : message d'erreur français, ou `null`. */
 function invalidOptions(input: AssistantInput): string | null {
   const l = input.limits ?? {};
@@ -230,6 +240,13 @@ function invalidOptions(input: AssistantInput): string | null {
   const checks: [string, unknown, (v: number) => boolean, string][] = [
     ["limits.maxCandidates", l.maxCandidates, (v) => isInt(v, 0), "entier ≥ 0"],
     ["limits.perGroupLimit", l.perGroupLimit, (v) => isInt(v, 1), "entier ≥ 1"],
+    ["limits.perShapeLimit", l.perShapeLimit, (v) => isInt(v, 1), "entier ≥ 1"],
+    [
+      "limits.headroomMarginTarget",
+      l.headroomMarginTarget,
+      (v) => Number.isFinite(v) && v >= 0,
+      "≥ 0 mm",
+    ],
     ["limits.maxBuilds", l.maxBuilds, (v) => isInt(v, 0), "entier ≥ 0"],
     ["limits.timeBudgetMs", l.timeBudgetMs, (v) => v >= 0, "≥ 0"],
     ["limits.goingStep", l.goingStep, (v) => Number.isFinite(v) && v > 0, "> 0"],
@@ -245,6 +262,9 @@ function invalidOptions(input: AssistantInput): string | null {
       return `${name} invalide (${String(value)}) : ${expected} attendu.`;
     }
   }
+  if (l.showAllVariants !== undefined && typeof l.showAllVariants !== "boolean") {
+    return `limits.showAllVariants invalide (${String(l.showAllVariants)}) : booléen attendu.`;
+  }
   const d = input.preferences?.direction;
   if (d !== undefined && d !== "left" && d !== "right") {
     return `preferences.direction invalide (${String(d)}) : « left » ou « right » attendu.`;
@@ -258,8 +278,10 @@ function invalidOptions(input: AssistantInput): string | null {
  */
 export function proposeDesigns(input: AssistantInput): AssistantResult {
   const t0 = now();
-  const limits = { ...ASSISTANT_DEFAULTS, ...input.limits };
-  const weights: ScoreWeights = { ...DEFAULT_SCORE_WEIGHTS, ...input.weights };
+  // Une clé présente mais `undefined` (`{ perShapeLimit: undefined }`, admis par le type) garde
+  // la valeur par défaut au lieu de l'écraser (liste vide ou score NaN sinon).
+  const limits = { ...ASSISTANT_DEFAULTS, ...definedOnly(input.limits) };
+  const weights: ScoreWeights = { ...DEFAULT_SCORE_WEIGHTS, ...definedOnly(input.weights) };
   const prefs = input.preferences ?? {};
   const stop = input.shouldStop ?? (() => false);
   const diagnostics: string[] = [];
@@ -661,6 +683,13 @@ export function proposeDesigns(input: AssistantInput): AssistantResult {
                   weights.blondel * Math.abs(2 * rise + going - bounds.blondelTarget) +
                   (headroom !== null && bounds.headroomRecommended !== null
                     ? weights.headroom * Math.max(0, bounds.headroomRecommended - headroom)
+                    : 0) +
+                  (headroom !== null && bounds.headroomMin
+                    ? weights.headroomMargin *
+                      Math.max(
+                        0,
+                        limits.headroomMarginTarget - (headroom - bounds.headroomMin.value),
+                      )
                     : 0);
                 const placement = { origin: pl.origin, rotation: pl.rotation };
                 const spec = st.spec;
@@ -669,7 +698,8 @@ export function proposeDesigns(input: AssistantInput): AssistantResult {
                 survivors.push({
                   id: `${signature}-${pl.key}`,
                   signature,
-                  group: `${typology}|${direction}`,
+                  // Groupe de construction : une forme (typologie × position) et un sens.
+                  group: `${typology}|${direction}|${pos}`,
                   typology,
                   direction,
                   turnPosition: pos,
@@ -874,7 +904,7 @@ export function proposeDesigns(input: AssistantInput): AssistantResult {
       }
       const bounds = boundsFor(shapeContextsOf(s.typology));
       const summary = summarizeModel(project, model, bounds, s.grossWidth, s.fit);
-      const score = scoreModel(model, summary, bounds, weights);
+      const score = scoreModel(model, summary, bounds, weights, limits.headroomMarginTarget);
       accepted.push({
         id: s.id,
         typology: s.typology,
@@ -884,6 +914,8 @@ export function proposeDesigns(input: AssistantInput): AssistantResult {
         project,
         summary,
         score,
+        shape: shapeKey(s.typology, s.turnPosition),
+        variants: [],
       });
       acceptedPerGroup.set(g, (acceptedPerGroup.get(g) ?? 0) + 1);
       acceptedSignatures.add(s.signature);
@@ -900,10 +932,7 @@ export function proposeDesigns(input: AssistantInput): AssistantResult {
     }
   }
 
-  accepted.sort(
-    (x, y) => x.score.total - y.score.total || (x.id < y.id ? -1 : x.id > y.id ? 1 : 0),
-  );
-  const candidates = accepted.slice(0, limits.maxCandidates);
+  const candidates = selectDiverse(accepted, limits);
 
   // ------------------------------------------------------------ diagnostic
   const explored = new Set<string>();

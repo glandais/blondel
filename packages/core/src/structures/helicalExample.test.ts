@@ -13,6 +13,7 @@ import { parseProjectText } from "../project/parse.js";
 import { createProject, PRESET_HEADROOM_MIN } from "../project/presets.js";
 import { serializeProject } from "../project/serialize.js";
 import { withHelicalCore } from "./helicalCore.js";
+import { ruledFlatGap } from "./ruled.test-helpers.js";
 
 const EXAMPLES_DIR = resolve(dirname(fileURLToPath(import.meta.url)), "../../../../examples");
 export const J5A_HELICAL = "j5a-helicoidal.blondel.json";
@@ -75,5 +76,16 @@ describe(`examples/${J5A_HELICAL}`, () => {
     const cantilever = m.compliance.results.find((r) => r.ruleId === "HELICOIDAL_PORTE_A_FAUX");
     expect(cantilever?.status).toBe("violation");
     expect(cantilever?.severity).toBe("avertissement");
+  });
+
+  it("limon hélicoïdal : solide 3D conforme au développé, coin de la coupe au sol compris", () => {
+    // Le coin où la rive basse atteint le sol est une génératrice du solide (sinon 2,35 mm
+    // d'écart ici, 6 mm avec H = 3 000).
+    const project = parseProjectText(text);
+    for (const h of [project.site.floorToFloor, 3000]) {
+      const m = buildModel({ ...project, site: { ...project.site, floorToFloor: h } });
+      const stringer = m.parts.find((p) => p.id === "helical-stringer")!;
+      expect(ruledFlatGap(stringer), `H = ${h}`).toBeLessThan(0.5);
+    }
   });
 });

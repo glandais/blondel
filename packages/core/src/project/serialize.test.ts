@@ -53,6 +53,18 @@ describe("serializeProject", () => {
     );
   });
 
+  it("propriété : la forme compacte est relue à l'identique et ne diffère que par les blancs", () => {
+    fc.assert(
+      fc.property(arbProject, (p) => {
+        const compact = serializeProject(p, { compact: true });
+        expect(compact).not.toContain("\n");
+        expect(parseProjectText(compact)).toEqual(p);
+        expect(compact).toBe(JSON.stringify(JSON.parse(serializeProject(p))));
+      }),
+      { numRuns: 60 },
+    );
+  });
+
   it("propriété : le texte ne dépend pas de l'ordre des clés", () => {
     fc.assert(
       fc.property(arbProject, fc.integer(), (p, seed) => {

@@ -55,6 +55,7 @@ import { CheckCollector, FAB_RULES, flightsOnlyError, pluginRuleDef } from "./ch
 import {
   developStringer,
   flatTransform,
+  nosingPitchLine,
   pitchAtU,
   toFlatPattern,
   type StringerDevelopment,
@@ -610,8 +611,8 @@ export function buildSteelFlat(ctx: StructureContext, params: SteelFlatParams): 
 
   // 3. Faces porteuses : joues des limons (portée de la face) et faces des poteaux.
   const pitch: Record<Side, PiecewiseLinear> = {
-    inner: new PiecewiseLinear(nosings.map((k) => ({ x: k.sigmaInner, y: k.z }))),
-    outer: new PiecewiseLinear(nosings.map((k) => ({ x: k.sigmaOuter, y: k.z }))),
+    inner: nosingPitchLine(nosings, stepping.treads, "inner"),
+    outer: nosingPitchLine(nosings, stepping.treads, "outer"),
   };
   // Platines d'about (poteau, assemblage vissé) et de tête (arrivée) : le limon est raccourci de
   // leur épaisseur (la platine s'intercale entre le bout du limon et la face d'appui).
@@ -1326,13 +1327,21 @@ export function buildSteelFlat(ctx: StructureContext, params: SteelFlatParams): 
       "Solides 3D des marches balancées en tôle pliée : dessus seul (les ailes ne sont dessinées que sur les développés).",
     );
   }
+  // Profil Z : la pièce de la marche t porte la contremarche sous son propre nez (nez t − 1,
+  // contremarche de base `riser-t`) ; seules ces contremarches sont remplacées. La contremarche
+  // d'arrivée (sous le dernier nez), qu'aucune pièce Z ne porte, reste la pièce de base : sans
+  // elle, le dessus de la dernière pièce ne bute contre rien et le vide sous le nez d'arrivée
+  // n'est pas fermé. Profil U (claire-voie) : toutes les contremarches sont retirées.
+  const foldedRisers = new Set(treadDetails.map((d) => `riser-${d.number}`));
   const removedBaseParts =
     folded && bend && project.stair.treads.risers === "full"
-      ? baseParts.filter((p) => /^riser-\d+$/.test(p.id)).map((p) => p.id)
+      ? baseParts
+          .filter((p) => /^riser-\d+$/.test(p.id) && (ft.profile !== "Z" || foldedRisers.has(p.id)))
+          .map((p) => p.id)
       : [];
   if (removedBaseParts.length > 0) {
     notes.push(
-      `Marches en tôle pliée : ${removedBaseParts.length} contremarche(s) bois de base supprimée(s) du modèle (${ft.profile === "Z" ? "contremarches pliées dans les pièces en Z" : "escalier à claire-voie en U"}).`,
+      `Marches en tôle pliée : ${removedBaseParts.length} contremarche(s) bois de base supprimée(s) du modèle (${ft.profile === "Z" ? "contremarches pliées dans les pièces en Z ; contremarche d'arrivée, sous le dernier nez, conservée" : "escalier à claire-voie en U"}).`,
     );
   }
 

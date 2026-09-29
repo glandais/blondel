@@ -17,11 +17,23 @@ import type { Path } from "../store/setIn.js";
 import { addLeg, legAutoAllowed, removeLastLeg } from "../lib/layoutEdit.js";
 import {
   LAYOUT_KIND_LABELS,
+  flightsTypologyLabel,
+  hasOppositeTurns,
   layoutKindOf,
   switchLayoutKind,
+  withTurnSequence,
   type LayoutKind,
+  type TurnSequence,
 } from "../lib/layoutKind.js";
-import { AutoIntField, CheckField, IntField, SelectField, TextField } from "./fields.js";
+import { balancingMethodOptions, herseAngleRange, rotationRanges } from "../lib/balancingForm.js";
+import {
+  AutoIntField,
+  CheckField,
+  IntField,
+  RangeField,
+  SelectField,
+  TextField,
+} from "./fields.js";
 import { GuardsSection } from "./GuardsSection.js";
 import { HelicalEditor } from "./HelicalEditor.js";
 import { StructureSection } from "./StructureSection.js";
@@ -276,13 +288,80 @@ function LayoutSection() {
           label="Distance au jour"
           value={walkline.distance}
           min={1}
+          {...(layout.kind !== "helical" && hasOppositeTurns(layout.turns)
+            ? { hint: "Mesurée depuis le jour du tournant le plus proche (S / Z)" }
+            : {})}
           onCommit={set(["stair", "walkline", "distance"])}
         />
       ) : null}
       {layout.kind === "helical" ? null : (
-        <FlightsEditor legs={legs} turns={layout.turns} run={model?.stepping.run} />
+        <>
+          <TypologyInfo turns={layout.turns} transitions={transitionsOf(model)} />
+          <FlightsEditor legs={legs} turns={layout.turns} run={model?.stepping.run} />
+        </>
       )}
     </Section>
+  );
+}
+
+interface TransitionInfo {
+  readonly leg: number;
+  readonly angle: number;
+}
+
+/** Transitions de la ligne de foulée d'un tracé S / Z (vides ailleurs), lues dans le modèle. */
+function transitionsOf(
+  model: { readonly layout: { readonly walklineTransitions?: readonly TransitionInfo[] } } | null,
+): readonly TransitionInfo[] {
+  return model?.layout.walklineTransitions ?? [];
+}
+
+const deg = (rad: number): string =>
+  ((rad * 180) / Math.PI).toLocaleString("fr-FR", { maximumFractionDigits: 1 });
+
+/**
+ * Typologie du tracé à volées (déduite des tournants) et enchaînement des deux premiers
+ * tournants : même sens (U) ou sens opposés (S / Z).
+ */
+function TypologyInfo({
+  turns,
+  transitions,
+}: {
+  turns: readonly Turn[];
+  transitions: readonly TransitionInfo[];
+}) {
+  const opposite = hasOppositeTurns(turns);
+  return (
+    <div className="typology">
+      <p className="typology__label">
+        Typologie : <strong>{flightsTypologyLabel(turns)}</strong>
+      </p>
+      {turns.length >= 2 ? (
+        <SelectField<TurnSequence>
+          label="Enchaînement des tournants 1 et 2"
+          value={turns[0]!.direction === turns[1]!.direction ? "same" : "opposite"}
+          options={[
+            { value: "same", label: "Même sens (U, demi-tournant)" },
+            { value: "opposite", label: "Sens opposés (S / Z)" },
+          ]}
+          hint="Garde le sens du premier tournant"
+          onCommit={(seq) => update((p) => withTurnSequence(p, seq))}
+        />
+      ) : null}
+      {opposite ? (
+        <p className="muted typology__note">
+          Tournants de sens opposés : le jour change de côté ; la ligne de foulée passe d'un côté à
+          l'autre dans la volée intermédiaire, qui doit garder au moins un giron de partie droite.
+          {transitions.map((t) => (
+            <span key={t.leg}>
+              {" "}
+              Volée {t.leg + 1} : ligne de foulée oblique de {deg(t.angle)}° (profondeur entre nez
+              réduite à g·cos θ).
+            </span>
+          ))}
+        </p>
+      ) : null}
+    </div>
   );
 }
 
@@ -374,6 +453,7 @@ function BalancingSection() {
   const b = useApp((s) => s.project.stair.balancing);
   const hasTurns = useApp((s) => s.project.stair.layout.turns.length > 0);
   const helical = useApp((s) => s.project.stair.layout.kind === "helical");
+  const { model } = useModel();
   return (
     <Section title="Balancement" open={hasTurns}>
       {!hasTurns ? (
@@ -386,23 +466,23 @@ function BalancingSection() {
       <SelectField
         label="Méthode"
         value={b.method}
-        options={[
-          { value: "M3", label: "M3 — développement du limon" },
-          { value: "M1", label: "M1 — progression arithmétique" },
-          { value: "M0", label: "M0 — sans balancement" },
-        ]}
+        options={balancingMethodOptions()}
         onCommit={set(["stair", "balancing", "method"])}
       />
-      <SelectField
-        label="Variante M3"
-        value={b.variant}
-        options={[
-          { value: "auto", label: "Automatique (selon la structure)" },
-          { value: "cubic", label: "Cubique (C1)" },
-          { value: "quintic", label: "Quintique (C2)" },
-        ]}
-        onCommit={set(["stair", "balancing", "variant"])}
-      />
+      {b.method === "M3" ? (
+        <SelectField
+          label="Variante M3"
+          value={b.variant}
+          options={[
+            { value: "auto", label: "Automatique (selon la structure)" },
+            { value: "cubic", label: "Cubique (C1)" },
+            { value: "quintic", label: "Quintique (C2)" },
+          ]}
+          onCommit={set(["stair", "balancing", "variant"])}
+        />
+      ) : null}
+      {b.method === "M2" ? <HerseControls model={model} /> : null}
+      {b.method === "M6" ? <RotationControls /> : null}
       <AutoIntField
         label="Marches balancées par côté"
         unit=""
@@ -419,6 +499,80 @@ function BalancingSection() {
         onCommit={set(["stair", "balancing", "targetCollet"])}
       />
     </Section>
+  );
+}
+
+/** Valeur d'un curseur de balancement (geste continu : une entrée d'historique). */
+const setBalancing =
+  (key: "herseAngle" | "rotationReach" | "rotationSteepness") =>
+  (value: number, groupKey: string) =>
+    appStore
+      .getState()
+      .update(
+        (p) => ({ ...p, stair: { ...p.stair, balancing: { ...p.stair.balancing, [key]: value } } }),
+        groupKey,
+        { sticky: true },
+      );
+
+/** Retire la valeur saisie : le cœur reprend sa valeur par défaut. */
+const resetBalancing = (key: "herseAngle" | "rotationReach" | "rotationSteepness") => () =>
+  update((p) => {
+    const { [key]: _removed, ...balancing } = p.stair.balancing;
+    return { ...p, stair: { ...p.stair, balancing } };
+  });
+
+function HerseControls({ model }: { model: ReturnType<typeof useModel>["model"] }) {
+  const b = useApp((s) => s.project.stair.balancing);
+  const r = herseAngleRange(b, model);
+  return (
+    <RangeField
+      label="Angle α de la herse"
+      unit="°"
+      value={r.value}
+      min={r.min}
+      max={r.max}
+      step={r.step}
+      isDefault={r.isDefault}
+      hint={
+        r.modelBound !== null
+          ? `Borné à ]0 ; ${r.modelBound.toLocaleString("fr-FR", { maximumFractionDigits: 1 })}°[ par la zone retenue (au-delà, collets croissants vers l'angle)`
+          : "Borne de la zone indisponible (aucune zone M2 retenue) : réduire α si le découpage échoue"
+      }
+      onChange={setBalancing("herseAngle")}
+      onReset={resetBalancing("herseAngle")}
+    />
+  );
+}
+
+function RotationControls() {
+  const b = useApp((s) => s.project.stair.balancing);
+  const { reach, steepness } = rotationRanges(b);
+  return (
+    <>
+      <RangeField
+        label="Portée λ de la rotation"
+        unit="girons"
+        value={reach.value}
+        min={reach.min}
+        max={reach.max}
+        step={reach.step}
+        isDefault={reach.isDefault}
+        hint="Défaut du cœur à valider (sans source)"
+        onChange={setBalancing("rotationReach")}
+        onReset={resetBalancing("rotationReach")}
+      />
+      <RangeField
+        label="Raideur p de la rotation"
+        value={steepness.value}
+        min={steepness.min}
+        max={steepness.max}
+        step={steepness.step}
+        isDefault={steepness.isDefault}
+        hint="Défaut du cœur à valider (sans source)"
+        onChange={setBalancing("rotationSteepness")}
+        onReset={resetBalancing("rotationSteepness")}
+      />
+    </>
   );
 }
 

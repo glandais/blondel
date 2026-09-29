@@ -14,11 +14,13 @@ import {
   candidateSketch,
   chosenProject,
   contextsFor,
+  displayedCandidates,
   formFromProject,
   formOpening,
   openingSideLabel,
   summaryFacts,
   usageOf,
+  variantCount,
   wallsAlongOpening,
   type AssistantForm,
 } from "./assistant.js";
@@ -281,5 +283,53 @@ describe("de la proposition au projet", () => {
       "Collet mini",
       "Échappée mini",
     ]);
+  });
+});
+
+describe("variantes de l'assistant", () => {
+  it("« Montrer toutes les variantes » : limits.showAllVariants seulement si coché", () => {
+    const off = assistantInput(acceptanceForm(), straight);
+    const on = assistantInput(acceptanceForm({ showAllVariants: true }), straight);
+    expect(off.ok && on.ok).toBe(true);
+    if (!off.ok || !on.ok) return;
+    expect(off.input.limits).toBeUndefined();
+    expect(on.input.limits).toEqual({ showAllVariants: true });
+    expect(formFromProject(straight).showAllVariants).toBe(false);
+  });
+
+  it("cartes affichées : chaque candidat puis ses variantes, sans doublon", () => {
+    type C = { id: string; variants: C[] };
+    const leaf = (id: string): C => ({ id, variants: [] });
+    const list: C[] = [
+      { id: "a", variants: [leaf("a2"), leaf("a3")] },
+      { id: "b", variants: [] },
+      { id: "c", variants: [leaf("a2"), leaf("c2")] },
+    ];
+    expect(displayedCandidates(list).map((c) => c.id)).toEqual(["a", "a2", "a3", "b", "c", "c2"]);
+    expect(variantCount(list)).toBe(4);
+  });
+
+  it("cœur : variantes regroupées sous la meilleure carte de chaque forme ; à plat sur demande", () => {
+    const grouped = assistantInput(acceptanceForm({ structure: "none" }), straight);
+    const flat = assistantInput(
+      acceptanceForm({ structure: "none", showAllVariants: true }),
+      straight,
+    );
+    if (!grouped.ok || !flat.ok) throw new Error("entrée invalide");
+    const g = proposeDesigns(grouped.input);
+    const f = proposeDesigns(flat.input);
+    expect(g.candidates.length).toBeGreaterThan(0);
+    const shapes = g.candidates.map((c) => c.shape);
+    expect(new Set(shapes).size).toBe(shapes.length);
+    for (const c of g.candidates) {
+      for (const v of c.variants) {
+        expect(v.shape).toBe(c.shape);
+        expect(v.score.total).toBeGreaterThanOrEqual(c.score.total);
+      }
+    }
+    for (const c of f.candidates) expect(c.variants).toEqual([]);
+    if (variantCount(g.candidates) > 0) {
+      expect(f.candidates.length).toBeGreaterThan(g.candidates.length);
+    }
   });
 });

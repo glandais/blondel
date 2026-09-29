@@ -5,7 +5,9 @@
  */
 import { ALL_PRESET_IDS, PRESET_LABELS, type PresetId } from "@blondel/core";
 import { useId, useState } from "react";
+import { downloadFile } from "../lib/download.js";
 import { appStore, useApp } from "../store/appStore.js";
+import { rejectedAutosaveFile } from "../store/persistence.js";
 import { ExportMenu } from "./ExportMenu.js";
 import { TextField } from "./fields.js";
 import { ImportMenu } from "./ImportMenu.js";
@@ -18,6 +20,7 @@ export function Toolbar() {
   const unit = useApp((s) => s.displayUnit);
   const notice = useApp((s) => s.notice);
   const autosaveFailed = useApp((s) => s.autosaveFailed);
+  const rejected = useApp((s) => s.rejectedAutosave);
   const [preset, setPreset] = useState<PresetId>("straight");
   const presetId = useId();
   const unitId = useId();
@@ -95,6 +98,12 @@ export function Toolbar() {
         <ThemeToggle />
       </div>
 
+      {rejected && !rejected.preserved ? (
+        <span className="badge badge--warn" role="status">
+          Autosauvegarde suspendue
+        </span>
+      ) : null}
+
       {autosaveFailed ? (
         <span className="badge badge--warn" role="status">
           Autosauvegarde indisponible
@@ -116,6 +125,32 @@ export function Toolbar() {
           ) : null}
           <button type="button" className="link" onClick={() => st().clearNotice()}>
             Fermer
+          </button>
+        </div>
+      ) : null}
+
+      {rejected ? (
+        <div className="notice notice--error" role="group" aria-label="Autosauvegarde refusée">
+          <span>Autosauvegarde refusée au démarrage :</span>
+          <button
+            type="button"
+            className="link"
+            onClick={() => {
+              const f = rejectedAutosaveFile(rejected.text);
+              downloadFile({ filename: f.filename, mime: "application/json", content: f.text });
+            }}
+          >
+            Télécharger le texte brut
+          </button>
+          <button
+            type="button"
+            className="link"
+            onClick={() => {
+              st().dismissRejectedAutosave();
+              st().clearNotice();
+            }}
+          >
+            {rejected.preserved ? "Oublier cette sauvegarde" : "Reprendre l'autosauvegarde"}
           </button>
         </div>
       ) : null}

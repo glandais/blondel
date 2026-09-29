@@ -6,10 +6,11 @@ import { pointInPolygon, signedArea } from "../geom2d/polygon.js";
 import * as V from "../geom2d/vec.js";
 import type { Vec2 } from "../model/primitives.js";
 import { computeLayout } from "../layout/layout.js";
-import { cornerMonotonyBreaks, cornerPositions, findCrossings } from "../balancing/postprocess.js";
+import { cornerMonotonyBreaks, cornerPositions } from "../balancing/postprocess.js";
+import { findCrossingsOnSides } from "./sides.js";
 import { computeStepping } from "./stepping.js";
 import { ProjectSchema, type Project } from "../model/project.js";
-import { stairArb } from "./test-helpers.js";
+import { ALL_TYPOLOGIES, stairArb } from "./test-helpers.js";
 import { MAX_BALANCED_EXTENT } from "./zones.js";
 
 /** Même projet, tournants en sens inverse (escalier miroir). */
@@ -32,10 +33,10 @@ function mirrored(project: Project): Project {
 
 const RUNS = Number(process.env["STEPPING_RUNS"] ?? 200);
 
-describe("découpage — propriétés (générateur contraint : quart tournant, U, demi-tournant)", () => {
+describe("découpage — propriétés (générateur contraint : quart tournant, U, demi-tournant, S / Z)", () => {
   it("Σh = H à 1e-6, hauteurs positives, dernier nez au plancher", () => {
     fc.assert(
-      fc.property(stairArb(), ({ project }) => {
+      fc.property(stairArb(undefined, ALL_TYPOLOGIES), ({ project }) => {
         const st = computeStepping(project, computeLayout(project));
         const H = project.site.floorToFloor;
         expect(Math.abs(st.rises.reduce((a, b) => a + b, 0) - H)).toBeLessThan(1e-6);
@@ -51,7 +52,7 @@ describe("découpage — propriétés (générateur contraint : quart tournant, 
 
   it("girons égaux sur Γ à 1e-6 ; nez sur Γ ; reculement = |Γ|", () => {
     fc.assert(
-      fc.property(stairArb(), ({ project }) => {
+      fc.property(stairArb(undefined, ALL_TYPOLOGIES), ({ project }) => {
         const layout = computeLayout(project);
         const st = computeStepping(project, layout);
         for (const t of st.treads) expect(Math.abs(t.going - st.going)).toBeLessThan(1e-6);
@@ -72,7 +73,7 @@ describe("découpage — propriétés (générateur contraint : quart tournant, 
 
   it("K5 des deux côtés, collets > 0, collets monotones vers l'angle (K3), σ croissants", () => {
     fc.assert(
-      fc.property(stairArb(), ({ project, typology }) => {
+      fc.property(stairArb(undefined, ALL_TYPOLOGIES), ({ project, typology }) => {
         const layout = computeLayout(project);
         const st = computeStepping(project, layout);
         const ctx = `${typology} ${JSON.stringify(project.stair.layout)} H=${project.site.floorToFloor} ${project.stair.balancing.method}/${project.stair.balancing.variant}\n${st.notes.join("\n")}`;
@@ -81,7 +82,7 @@ describe("découpage — propriétés (générateur contraint : quart tournant, 
         const none = st.notes.some((n) => n.includes("aucun balancement admissible"));
         if (project.stair.balancing.method === "M3") expect(none, ctx).toBe(false);
         fc.pre(!none);
-        expect(findCrossings(st.nosings), ctx).toEqual([]);
+        expect(findCrossingsOnSides(layout, st.nosings), ctx).toEqual([]);
         for (let k = 0; k + 1 < st.nosings.length; k++) {
           expect(st.nosings[k + 1]!.sigmaInner, ctx).toBeGreaterThanOrEqual(
             st.nosings[k]!.sigmaInner - 1e-6,
@@ -128,7 +129,7 @@ describe("découpage — propriétés (générateur contraint : quart tournant, 
 
   it("étendue K7 : zones automatiques à au plus 3,5 girons de l'angle ; cible atteinte ou signalée", () => {
     fc.assert(
-      fc.property(stairArb(), ({ project }) => {
+      fc.property(stairArb(undefined, ALL_TYPOLOGIES), ({ project }) => {
         const layout = computeLayout(project);
         const st = computeStepping(project, layout);
         const reach = MAX_BALANCED_EXTENT * st.going + 1e-6;
@@ -163,7 +164,7 @@ describe("découpage — propriétés (générateur contraint : quart tournant, 
     // pour une cible exigeante (aucun arrêt), faible (arrêt précoce) et une étendue courte (repli).
     fc.assert(
       fc.property(
-        stairArb(),
+        stairArb(undefined, ALL_TYPOLOGIES),
         fc.integer({ min: 20, max: 250 }),
         fc.constantFrom(0.5, 1, 2, 3.5, 6),
         ({ project }, targetCollet, maxBalancedExtent) => {
@@ -186,7 +187,7 @@ describe("découpage — propriétés (générateur contraint : quart tournant, 
 
   it("miroir gauche/droite : mêmes zones et mêmes collets ; recalcul identique après JSON", () => {
     fc.assert(
-      fc.property(stairArb(), ({ project }) => {
+      fc.property(stairArb(undefined, ALL_TYPOLOGIES), ({ project }) => {
         const st = computeStepping(project, computeLayout(project));
         const mp = mirrored(project);
         const sm = computeStepping(mp, computeLayout(mp));
@@ -204,7 +205,7 @@ describe("découpage — propriétés (générateur contraint : quart tournant, 
 
   it("stabilité : H + 1 mm à n fixé ne change pas le nombre de nez balancés de plus d'une unité", () => {
     fc.assert(
-      fc.property(stairArb(), ({ project }) => {
+      fc.property(stairArb(undefined, ALL_TYPOLOGIES), ({ project }) => {
         const st = computeStepping(project, computeLayout(project));
         const bumped = ProjectSchema.parse({
           ...project,
@@ -224,7 +225,7 @@ describe("découpage — propriétés (générateur contraint : quart tournant, 
 
   it("marches : polygones CCW d'aire positive, contour ⊇ surface (aire)", () => {
     fc.assert(
-      fc.property(stairArb(), ({ project }) => {
+      fc.property(stairArb(undefined, ALL_TYPOLOGIES), ({ project }) => {
         const st = computeStepping(project, computeLayout(project));
         for (const t of st.treads) {
           expect(signedArea(t.walkingSurface)).toBeGreaterThan(0);
@@ -237,7 +238,7 @@ describe("découpage — propriétés (générateur contraint : quart tournant, 
 
   it("contour de marche dans sa surface ∪ celle de la marche suivante (débord sous le nez)", () => {
     fc.assert(
-      fc.property(stairArb(), ({ project }) => {
+      fc.property(stairArb(undefined, ALL_TYPOLOGIES), ({ project }) => {
         const st = computeStepping(project, computeLayout(project));
         st.treads.forEach((t, i) => {
           const next = st.treads[i + 1];
@@ -264,7 +265,7 @@ describe("découpage — propriétés (générateur contraint : quart tournant, 
       return V.distance(p, V.addScaled(a, ab, t));
     };
     fc.assert(
-      fc.property(stairArb(), ({ project }) => {
+      fc.property(stairArb(undefined, ALL_TYPOLOGIES), ({ project }) => {
         const layout = computeLayout(project);
         const st = computeStepping(project, layout);
         const last = st.nosings[st.nosings.length - 1]!;
@@ -289,27 +290,32 @@ describe("découpage — propriétés (générateur contraint : quart tournant, 
     // extrémité `tangent` pour une borne tombant dans la partie tournante, cette propriété
     // échouait (zone trouvée d'un côté, aucune zone admissible de l'autre).
     fc.assert(
-      fc.property(stairArb(), fc.integer({ min: 1, max: 8 }), ({ project }, w) => {
-        const p = ProjectSchema.parse({
-          ...project,
-          stair: {
-            ...project.stair,
-            balancing: { ...project.stair.balancing, windersPerSide: w },
-          },
-        });
-        const st = computeStepping(p, computeLayout(p));
-        const mp = mirrored(p);
-        const sm = computeStepping(mp, computeLayout(mp));
-        const ctx = `${JSON.stringify(p.stair.layout)} H=${p.site.floorToFloor} w=${w} ${p.stair.balancing.method}`;
-        expect(sm.balancedZones, ctx).toEqual(st.balancedZones);
-        // Zone imposée : appliquée même si des lignes se croisent, mais toujours signalée (K5).
-        for (const c of findCrossings(st.nosings)) {
-          expect(
-            st.notes.some((n) => n.startsWith(`K5 : les lignes de nez ${c.i} et ${c.j} `)),
-            ctx,
-          ).toBe(true);
-        }
-      }),
+      fc.property(
+        stairArb(undefined, ALL_TYPOLOGIES),
+        fc.integer({ min: 1, max: 8 }),
+        ({ project }, w) => {
+          const p = ProjectSchema.parse({
+            ...project,
+            stair: {
+              ...project.stair,
+              balancing: { ...project.stair.balancing, windersPerSide: w },
+            },
+          });
+          const layout = computeLayout(p);
+          const st = computeStepping(p, layout);
+          const mp = mirrored(p);
+          const sm = computeStepping(mp, computeLayout(mp));
+          const ctx = `${JSON.stringify(p.stair.layout)} H=${p.site.floorToFloor} w=${w} ${p.stair.balancing.method}`;
+          expect(sm.balancedZones, ctx).toEqual(st.balancedZones);
+          // Zone imposée : appliquée même si des lignes se croisent, mais toujours signalée (K5).
+          for (const c of findCrossingsOnSides(layout, st.nosings)) {
+            expect(
+              st.notes.some((n) => n.startsWith(`K5 : les lignes de nez ${c.i} et ${c.j} `)),
+              ctx,
+            ).toBe(true);
+          }
+        },
+      ),
       { numRuns: Math.ceil(RUNS / 2) },
     );
   }, 600_000);

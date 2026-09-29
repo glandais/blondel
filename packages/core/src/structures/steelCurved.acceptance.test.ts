@@ -16,6 +16,7 @@ import { parseProjectText } from "../project/parse.js";
 import { serializeProject } from "../project/serialize.js";
 import { WorkshopProfileSchema } from "../workshop/profile.js";
 import { adaptJour, compareEpure } from "./compare.js";
+import { ruledFlatGap } from "./ruled.test-helpers.js";
 import "./index.js";
 
 const EXAMPLES_DIR = resolve(dirname(fileURLToPath(import.meta.url)), "../../../../examples");
@@ -76,6 +77,20 @@ describe("exemple j5b : limon débillardé soudé", () => {
     const rolled = curved.filter((p) => (p.quantities["rolled_length_mm"] ?? 0) > 0);
     expect(rolled.length).toBeGreaterThan(0);
     for (const p of rolled) expect(p.flat?.lines.some((l) => l.kind === "roll")).toBe(true);
+  });
+
+  it("solide 3D conforme au développé, coin de la coupe de niveau au sol compris", () => {
+    // Le coin où la rive basse croise la coupe de niveau (sol) est une génératrice du solide :
+    // sinon la surface réglée passe en ligne droite par-dessus (≈ 44 mm d'écart sur LD1).
+    const m = buildModel(parseProjectText(text));
+    const curved = m.parts.filter((p) => p.id.startsWith("stringer-inner-curved-"));
+    for (const p of curved) expect(ruledFlatGap(p), p.id).toBeLessThan(0.5);
+    // Même contrôle avec un étage plus bas (coin plus éloigné du départ).
+    const low = parseProjectText(text);
+    const m2 = buildModel({ ...low, site: { ...low.site, floorToFloor: 2300 } });
+    for (const p of m2.parts.filter((q) => q.id.startsWith("stringer-inner-curved-"))) {
+      expect(ruledFlatGap(p), p.id).toBeLessThan(0.5);
+    }
   });
 });
 

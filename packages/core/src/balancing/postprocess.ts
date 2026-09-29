@@ -215,8 +215,19 @@ export interface Crossing {
   readonly j: number;
 }
 
-/** Deux lignes de nez (segments Q R) se croisent-elles (K5) ? Contact aux collets toléré. */
-export function nosingsCross(a: NosingLine, b: NosingLine): boolean {
+/**
+ * Bord portant le jour (collet) pour le contrôle K5 : `inner` (C_i, cas courant), `outer` (C_e :
+ * jour d'un tournant de sens opposé d'un S / Z, vu du tracé principal) ou `none` (couple de nez
+ * de part et d'autre de deux jours opposés : aucun contact toléré).
+ */
+export type CollarEdge = "inner" | "outer" | "none";
+
+/**
+ * Deux lignes de nez (segments Q R) se croisent-elles (K5) ? Contact aux collets toléré : Q
+ * confondus quand le jour est sur C_i (`collar = "inner"`, défaut), R confondus quand il est
+ * sur C_e (`"outer"`). Un contact **au mur** (giron nul côté mur) reste un croisement.
+ */
+export function nosingsCross(a: NosingLine, b: NosingLine, collar: CollarEdge = "inner"): boolean {
   if (b.sigmaInner < a.sigmaInner - GEOM_EPS || b.sigmaOuter < a.sigmaOuter - GEOM_EPS) {
     return true;
   }
@@ -234,8 +245,13 @@ export function nosingsCross(a: NosingLine, b: NosingLine): boolean {
   if (!hit) return false;
   const interior = (t: number): boolean => t > CROSS_PARAM_EPS && t < 1 - CROSS_PARAM_EPS;
   if (interior(hit.t) || interior(hit.u)) return true;
-  // Contact aux extrémités : seul un contact aux collets (Q confondus, collet nul) est toléré.
-  return V.distance(hit.point, a.q) > GEOM_EPS || V.distance(hit.point, b.q) > GEOM_EPS;
+  // Contact aux extrémités : seul un contact aux collets (collet nul) est toléré — Q confondus
+  // si le jour est C_i ; R confondus si c'est C_e (S / Z : jour d'un tournant de sens opposé,
+  // vu du tracé principal). Un contact au mur est un croisement.
+  const at = (p: Vec2): boolean => V.distance(hit.point, p) <= GEOM_EPS;
+  if (collar === "inner") return !(at(a.q) && at(b.q));
+  if (collar === "outer") return !(at(a.r) && at(b.r));
+  return true;
 }
 
 /**
@@ -270,18 +286,25 @@ export function noCrossing(nosings: readonly NosingLine[]): boolean {
   return true;
 }
 
-/** Couples de lignes de nez qui se croisent entre C_i et C_e, indices dans [from ; to]. */
+/**
+ * Couples de lignes de nez qui se croisent entre C_i et C_e, indices dans [from ; to].
+ * `collarAt(k)` : bord du jour au droit du nez k (défaut : C_i) ; un couple dont les deux nez
+ * n'ont pas le même bord de jour ne tolère aucun contact (S / Z, `stepping/sides.ts`).
+ */
 export function findCrossings(
   nosings: readonly NosingLine[],
   from = 0,
   to = nosings.length - 1,
+  collarAt?: (k: number) => "inner" | "outer",
 ): Crossing[] {
   const out: Crossing[] = [];
   const lo = Math.max(0, from);
   const hi = Math.min(nosings.length - 1, to);
   for (let i = lo; i <= hi; i++) {
     for (let j = i + 1; j <= hi; j++) {
-      if (nosingsCross(nosings[i]!, nosings[j]!)) out.push({ i, j });
+      const ci = collarAt?.(i) ?? "inner";
+      const collar: CollarEdge = ci === (collarAt?.(j) ?? "inner") ? ci : "none";
+      if (nosingsCross(nosings[i]!, nosings[j]!, collar)) out.push({ i, j });
     }
   }
   return out;

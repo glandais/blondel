@@ -43,7 +43,7 @@ function proposeUntimed(input: AssistantInput): AssistantResult {
 }
 
 function expectNoBlocking(result: AssistantResult): void {
-  for (const c of result.candidates) {
+  for (const c of result.candidates.flatMap((h) => [h, ...h.variants])) {
     const model = buildModel(c.project, { memo: false });
     expect(model.errors, c.label).toEqual([]);
     expect(model.compliance.summary.bloquant, c.label).toBe(0);
@@ -140,6 +140,7 @@ describe("cas d'acceptation n° 1 (H 2 700, trémie 2 800 × 900, dalle 200)", (
       "blondel",
       "collet",
       "headroom",
+      "headroomMargin",
       "winders",
       "regularity",
       "warnings",
@@ -414,5 +415,97 @@ describe("relecture adverse : régressions", () => {
     expect(inscribedCircle(L).radius).toBe(0);
     const square = openingPolygon({ kind: "rect", x: 0, y: 0, sizeX: 2000, sizeY: 1000 })!;
     expect(inscribedCircle(square)).toEqual({ center: { x: 1000, y: 500 }, radius: 500 });
+  });
+});
+
+describe("diversité des propositions (constat en ligne : H 2 700, trémie 1 100 × 3 150)", () => {
+  const SITE = {
+    floorToFloor: 2700,
+    upperSlabThickness: 200,
+    opening: { kind: "rect", x: 0, y: 0, sizeX: 1100, sizeY: 3150 },
+  } as const;
+  let cached: AssistantResult | null = null;
+  const result = (): AssistantResult => (cached ??= proposeUntimed({ site: SITE }));
+
+  it("une seule proposition par typologie × position du tournant, les autres en variantes", () => {
+    const r = result();
+    // Avant : les six premières étaient toutes « quart tournant avec palier, tournant bas ».
+    const shapes = r.candidates.map((c) => c.shape);
+    expect(new Set(shapes).size).toBe(shapes.length);
+    expect(new Set(r.candidates.slice(0, 6).map((c) => c.typology)).size).toBeGreaterThan(2);
+    const totals = r.candidates.map((c) => c.score.total);
+    expect(totals).toEqual([...totals].sort((a, b) => a - b));
+    const head = r.candidates[0]!;
+    expect(head.shape).toBe("quarter-landing|bas");
+    // Variantes de sens et de E sous le meilleur, triées, même forme.
+    expect(head.variants.length).toBeGreaterThan(0);
+    expect(head.variants.some((v) => v.direction !== head.direction)).toBe(true);
+    let prev = head.score.total;
+    for (const v of head.variants) {
+      expect(v.shape).toBe(head.shape);
+      expect(v.score.total).toBeGreaterThanOrEqual(prev);
+      prev = v.score.total;
+    }
+    // Aucune variante en double avec la liste principale.
+    const ids = r.candidates.flatMap((c) => [c.id, ...c.variants.map((v) => v.id)]);
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  it("« montrer toutes les variantes » : liste à plat, mêmes candidats, triés", () => {
+    const grouped = result();
+    const flat = proposeUntimed({ site: SITE, limits: { showAllVariants: true } });
+    const all = grouped.candidates.flatMap((c) => [c, ...c.variants]).map((c) => c.id);
+    expect(flat.candidates.map((c) => c.id).sort()).toEqual([...all].sort());
+    expect(flat.candidates.every((c) => c.variants.length === 0)).toBe(true);
+    const totals = flat.candidates.map((c) => c.score.total);
+    expect(totals).toEqual([...totals].sort((a, b) => a - b));
+  });
+
+  it("perShapeLimit = 2 : au plus deux par forme en tête", () => {
+    const r = proposeUntimed({ site: SITE, limits: { perShapeLimit: 2 } });
+    const count = new Map<string, number>();
+    for (const c of r.candidates) count.set(c.shape, (count.get(c.shape) ?? 0) + 1);
+    expect(Math.max(...count.values())).toBe(2);
+  });
+
+  it("marge d'échappée nulle : pénalisée au score, pas rejetée", () => {
+    const r = result();
+    const straight = r.candidates.find((c) => c.typology === "straight")!;
+    expect(straight.summary.headroomMargin!).toBeLessThan(1);
+    const t = straight.score.terms.find((x) => x.id === "headroomMargin")!;
+    expect(t.value).toBeCloseTo(50 - straight.summary.headroomMargin!, 6);
+    expect(t.penalty).toBeCloseTo(t.value * 0.2, 9);
+    // Réglage : marge visée nulle → terme nul ; poids nul → terme nul.
+    const zero = proposeUntimed({ site: SITE, limits: { headroomMarginTarget: 0 } });
+    const s0 = zero.candidates.find((c) => c.typology === "straight")!;
+    expect(s0.score.terms.find((x) => x.id === "headroomMargin")!.penalty).toBe(0);
+    expect(s0.score.total).toBeLessThan(straight.score.total);
+  });
+
+  it("réglage présent mais undefined : valeur par défaut (relecture adverse)", () => {
+    // Avant : `{ perShapeLimit: undefined }` écrasait le défaut → liste vide et diagnostic
+    // trompeur ; `headroomMarginTarget` ou un poids `undefined` → scores NaN.
+    const ref = result().candidates.map((c) => [c.id, c.score.total]);
+    for (const extra of [
+      { limits: { perShapeLimit: undefined, maxCandidates: undefined } },
+      { limits: { headroomMarginTarget: undefined, showAllVariants: undefined } },
+      { weights: { headroomMargin: undefined } },
+    ]) {
+      const r = proposeUntimed({ site: SITE, ...extra });
+      expect(r.candidates.map((c) => [c.id, c.score.total])).toEqual(ref);
+    }
+  });
+
+  it("réglages de sélection invalides : diagnostic, pas d'exception", () => {
+    for (const limits of [
+      { perShapeLimit: 0 },
+      { perShapeLimit: 1.5 },
+      { headroomMarginTarget: -1 },
+      { showAllVariants: "oui" as unknown as boolean },
+    ]) {
+      const r = proposeDesigns({ site: SITE, limits });
+      expect(r.candidates).toEqual([]);
+      expect(r.diagnostics[0]).toMatch(/^Aucune proposition : limits\./);
+    }
   });
 });

@@ -282,3 +282,29 @@
     border-bottom: 1px solid var(--border);
   }
 }
+
+.assistant__shape {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.assistant__variants summary {
+  cursor: pointer;
+  font-size: 0.85rem;
+}
+
+.assistant__variant-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  margin-top: 0.4rem;
+}
+
+.assistant__card--variant {
+  background: var(--panel);
+}
+
+.assistant__card--variant .assistant__sketch {
+  height: 7rem;
+}

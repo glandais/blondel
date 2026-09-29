@@ -589,7 +589,14 @@ export function buildHelicalCore(
     const a3: Vec3[] = [];
     const b3: Vec3[] = [];
     const normals: Vec2[] = [];
-    for (const u of us) {
+    // Coin de la coupe de niveau au sol (rive basse = 0) : génératrice ajoutée, sans quoi la
+    // surface réglée passe en ligne droite par-dessus le coin et s'écarte du développé.
+    const uFloor = (spec.height - topStart) / b;
+    const rows =
+      uFloor > 1e-9 && uFloor < total - 1e-9 && !us.some((u) => Math.abs(u - uFloor) < 1e-9)
+        ? [...us, uFloor].sort((x, y) => x - y)
+        : us;
+    for (const u of rows) {
       const angle = helicalAngleAt(h, u);
       const p = helicalPoint(h, spec.faceRadius, angle);
       a3.push({ x: p.x, y: p.y, z: bottomAt(u) });

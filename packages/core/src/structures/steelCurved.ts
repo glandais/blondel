@@ -765,6 +765,12 @@ function buildCurvedStringer(
     const xs = new Set<number>([a, b]);
     // Nœuds presque confondus avec une extrémité (joint) écartés : rangées dégénérées sinon.
     for (const x of pitch.xs) if (x > a + JOINT_TOLERANCE && x < b - JOINT_TOLERANCE) xs.add(x);
+    // Sommets du contour développé (u = σ) : coins des coupes de niveau basse (sol, platine) et
+    // haute (arrivée), où les rives écrêtées ont un coude qui n'est pas un nœud de F. Sans eux,
+    // la surface réglée interpole en ligne droite par-dessus le coin et s'écarte du développé.
+    for (const p of dev.outline) {
+      if (p.x > a + JOINT_TOLERANCE && p.x < b - JOINT_TOLERANCE) xs.add(p.x);
+    }
     for (const p of stepsFace.pieces) {
       if (p.kind !== "arc") continue;
       const lo = Math.max(p.sigma0, a);
@@ -772,7 +778,9 @@ function buildCurvedStringer(
       for (let x = lo; x < hi - JOINT_TOLERANCE; x += step) if (x > a + JOINT_TOLERANCE) xs.add(x);
       if (hi > lo && (hi === b || hi < b - JOINT_TOLERANCE)) xs.add(hi);
     }
-    return [...xs].sort((u, v) => u - v);
+    // Rangées presque confondues (sommet du contour au bruit numérique d'un nœud) fusionnées.
+    const sorted = [...xs].sort((u, v) => u - v);
+    return sorted.filter((x, i) => i === 0 || x - sorted[i - 1]! > JOINT_TOLERANCE || x === b);
   };
   const dev = developStringer({
     pitch,

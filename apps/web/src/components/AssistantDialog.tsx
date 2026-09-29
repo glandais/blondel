@@ -7,7 +7,9 @@
  * 2. « Proposer » : `proposeDesigns` du cœur dans un worker dédié (`model/assistantClient.ts`),
  *    annulable (« Annuler la recherche » termine le worker).
  * 3. Cartes des candidats : croquis en plan, typologie, n, h, g, 2h + g, E, collet, échappée,
- *    score détaillé (pénalités pondérées, plus petit = meilleur), diagnostic du cœur.
+ *    score détaillé (pénalités pondérées, plus petit = meilleur), diagnostic du cœur. Une carte
+ *    par forme (typologie × position du tournant) ; les autres variantes de la forme (sens, E,
+ *    n) sont repliées sous elle, ou toutes à plat avec « Montrer toutes les variantes ».
  * 4. « Choisir » : le projet du candidat remplace le projet courant (une entrée d'historique,
  *    « Annuler » revient au projet précédent).
  */
@@ -30,6 +32,7 @@ import {
   formatScore,
   openingSideLabel,
   summaryFacts,
+  variantCount,
   type AssistantForm,
   type CandidateSketch,
   type OpeningMode,
@@ -197,17 +200,24 @@ function CandidateCard({
   candidate,
   sketch,
   rank,
+  variant = false,
   onChoose,
 }: {
   readonly candidate: DesignCandidate;
   readonly sketch: CandidateSketch | undefined;
-  readonly rank: number;
+  /** Rang affiché : « 3 » pour une proposition, « 3.2 » pour sa deuxième variante. */
+  readonly rank: string;
+  readonly variant?: boolean;
   readonly onChoose: () => void;
 }) {
   const id = useId();
   const s = candidate.summary;
   return (
-    <article className="assistant__card" aria-labelledby={id} data-typology={candidate.typology}>
+    <article
+      className={`assistant__card${variant ? " assistant__card--variant" : ""}`}
+      aria-labelledby={id}
+      data-typology={candidate.typology}
+    >
       {sketch ? <Sketch sketch={sketch} label={candidate.label} /> : null}
       <div className="assistant__card-body">
         <h4 id={id}>
@@ -260,7 +270,7 @@ function CandidateCard({
         <button
           type="button"
           className="assistant__choose"
-          aria-label={`Choisir : ${title(candidate)} (proposition ${rank})`}
+          aria-label={`Choisir : ${title(candidate)} (${variant ? "variante" : "proposition"} ${rank})`}
           onClick={onChoose}
         >
           Choisir
@@ -268,6 +278,102 @@ function CandidateCard({
       </div>
     </article>
   );
+}
+
+/** Carte d'une forme et ses variantes repliées (sens, E, n de la même forme). */
+function ShapeGroup({
+  candidate,
+  sketches,
+  rank,
+  onChoose,
+}: {
+  readonly candidate: DesignCandidate;
+  readonly sketches: Readonly<Record<string, CandidateSketch>>;
+  readonly rank: number;
+  readonly onChoose: (c: DesignCandidate) => void;
+}) {
+  const variants = candidate.variants;
+  return (
+    <div className="assistant__shape" data-shape={candidate.shape}>
+      <CandidateCard
+        candidate={candidate}
+        sketch={sketches[candidate.id]}
+        rank={String(rank)}
+        onChoose={() => onChoose(candidate)}
+      />
+      {variants.length > 0 ? (
+        <details className="assistant__variants">
+          <summary>
+            {variants.length === 1
+              ? "1 autre variante de cette forme"
+              : `${variants.length} autres variantes de cette forme`}{" "}
+            <span className="muted">(sens, emmarchement, nombre de marches)</span>
+          </summary>
+          <div className="assistant__variant-list">
+            {variants.map((v, j) => (
+              <CandidateCard
+                key={v.id}
+                candidate={v}
+                sketch={sketches[v.id]}
+                rank={`${rank}.${j + 2}`}
+                variant
+                onChoose={() => onChoose(v)}
+              />
+            ))}
+          </div>
+        </details>
+      ) : null}
+    </div>
+  );
+}
+
+const FOCUSABLE =
+  'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), summary, [tabindex]:not([tabindex="-1"])';
+
+/** Éléments focalisables visibles de `container`, dans l'ordre du document. */
+function focusables(container: HTMLElement): HTMLElement[] {
+  return [...container.querySelectorAll<HTMLElement>(FOCUSABLE)].filter(
+    (el) => el.getClientRects().length > 0 && el.closest("[inert]") === null,
+  );
+}
+
+/** Tab / Maj+Tab : le focus boucle dans la fenêtre (il ne passe jamais à l'arrière-plan). */
+function trapTab(e: KeyboardEvent, dialog: HTMLElement): void {
+  const items = focusables(dialog);
+  const first = items[0];
+  const last = items[items.length - 1];
+  if (!first || !last) {
+    e.preventDefault();
+    return;
+  }
+  const active = document.activeElement;
+  const inside = active instanceof Node && dialog.contains(active);
+  if (e.shiftKey && (!inside || active === first)) {
+    e.preventDefault();
+    last.focus();
+  } else if (!e.shiftKey && (!inside || active === last)) {
+    e.preventDefault();
+    first.focus();
+  }
+}
+
+/**
+ * Rend inertes les frères de `backdrop` (le reste de l'application) ; renvoie la fonction qui
+ * rétablit leur état d'origine.
+ */
+function makeBackgroundInert(backdrop: Element | null): () => void {
+  const parent = backdrop?.parentElement;
+  if (!backdrop || !parent) return () => {};
+  const changed: HTMLElement[] = [];
+  for (const el of parent.children) {
+    if (el !== backdrop && el instanceof HTMLElement && !el.inert) {
+      el.inert = true;
+      changed.push(el);
+    }
+  }
+  return () => {
+    for (const el of changed) el.inert = false;
+  };
 }
 
 export function AssistantDialog() {
@@ -298,17 +404,28 @@ function AssistantDialogBody() {
   // Fermeture : la recherche en cours est abandonnée au démontage (effet ci-dessous).
   const close = (): void => appStore.getState().setAssistantOpen(false);
 
-  // Focus initial ; Échap ferme la fenêtre où que soit le focus (fenêtre modale).
+  // Fenêtre modale : arrière-plan inerte (ni focus, ni clic, ni lecteur d'écran), focus initial
+  // dans la fenêtre et rendu à l'élément qui l'a ouverte à la fermeture ; Tab / Maj+Tab bouclent
+  // dans la fenêtre ; Échap la ferme où que soit le focus.
   useEffect(() => {
-    root.current?.querySelector<HTMLElement>("input, select, button")?.focus();
+    const dialog = root.current;
+    const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const restoreInert = makeBackgroundInert(dialog?.closest(".assistant__backdrop") ?? null);
+    dialog?.querySelector<HTMLElement>("input, select, button")?.focus();
     const onKey = (e: KeyboardEvent): void => {
       if (e.key === "Escape") {
         e.preventDefault();
         close();
+      } else if (e.key === "Tab" && dialog) {
+        trapTab(e, dialog);
       }
     };
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      restoreInert();
+      if (opener?.isConnected) opener.focus();
+    };
   }, []);
   useEffect(() => {
     if (state.kind !== "running") return;
@@ -564,6 +681,11 @@ function AssistantDialogBody() {
                 checked={form.guards}
                 onChange={(v) => set({ guards: v })}
               />
+              <Check
+                label="Montrer toutes les variantes (liste à plat)"
+                checked={form.showAllVariants}
+                onChange={(v) => set({ showAllVariants: v })}
+              />
             </fieldset>
             {errors.length > 0 ? (
               <ul className="notice notice--error" role="alert">
@@ -611,7 +733,10 @@ function AssistantDialogBody() {
                 <p role="status" className="assistant__summary">
                   {outcome.result.candidates.length === 0
                     ? "Aucune proposition."
-                    : `${outcome.result.candidates.length} proposition(s) sans contrôle bloquant`}{" "}
+                    : `${outcome.result.candidates.length} proposition(s) sans contrôle bloquant`}
+                  {variantCount(outcome.result.candidates) > 0
+                    ? ` (et ${variantCount(outcome.result.candidates)} variante(s) repliée(s))`
+                    : ""}{" "}
                   — {outcome.result.stats.enumerated.toLocaleString("fr-FR")} variantes énumérées,{" "}
                   {outcome.result.stats.built} modèles construits (
                   {Math.round(outcome.timeMs).toLocaleString("fr-FR")} ms).
@@ -619,12 +744,12 @@ function AssistantDialogBody() {
                 </p>
                 <div className="assistant__cards">
                   {outcome.result.candidates.map((c, i) => (
-                    <CandidateCard
+                    <ShapeGroup
                       key={c.id}
                       candidate={c}
-                      sketch={outcome.sketches[c.id]}
+                      sketches={outcome.sketches}
                       rank={i + 1}
-                      onChoose={() => choose(c)}
+                      onChoose={choose}
                     />
                   ))}
                 </div>

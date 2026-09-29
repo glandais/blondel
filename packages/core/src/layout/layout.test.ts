@@ -18,6 +18,7 @@ import { distanceToCurve } from "../geom2d/intersect.js";
 import { offsetCurve } from "../geom2d/offset.js";
 import { signedArea } from "../geom2d/polygon.js";
 import { segStart } from "../geom2d/segment.js";
+import * as V from "../geom2d/vec.js";
 import type { Curve2, Vec2 } from "../model/primitives.js";
 import type { Project } from "../model/project.js";
 import { parseProjectText } from "../project/parse.js";
@@ -348,6 +349,146 @@ describe("computeLayout — deux quarts (U) et demi-tournant", () => {
   });
 });
 
+describe("computeLayout — deux quarts de sens opposés (S / Z)", () => {
+  it("S, E ≤ 1 200 : Γ au milieu, jour du second tournant à droite (sur `outer`)", () => {
+    const layout = computeLayout(
+      makeProject({ width: 800, legs: [2000, 2400, 1500], directions: ["left", "right"] }),
+    );
+    expect(layout.innerSide).toBe("left");
+    expect(layout.turns.map((t) => [t.direction, t.collarSide])).toEqual([
+      ["left", "left"],
+      ["right", "right"],
+    ]);
+    expect(layout.walklineTransitions).toBeUndefined();
+    expect(layout.walklineOffset).toBe(400);
+    // Bord gauche (`inner`) : jour du tournant 1 (K1), mur du tournant 2 (W2).
+    const inner = vertices(layout.inner);
+    expect(inner).toHaveLength(4);
+    expectPoint(inner[0]!, 0, 0);
+    expectPoint(inner[1]!, 0, 1200);
+    expectPoint(inner[2]!, -1600, 1200);
+    expectPoint(inner[3]!, -1600, 2700);
+    // Bord droit (`outer`) : mur du tournant 1 (W1), jour du tournant 2 (K2).
+    const outer = vertices(layout.outer);
+    expectPoint(outer[1]!, 800, 2000);
+    expectPoint(outer[2]!, -800, 2000);
+    expectPoint(outer[3]!, -800, 2700);
+    expectPoint(layout.turns[0]!.innerCorner, 0, 1200);
+    expectPoint(layout.turns[0]!.outerCorner, 800, 2000);
+    expectPoint(layout.turns[1]!.innerCorner, -800, 2000);
+    expectPoint(layout.turns[1]!.outerCorner, -1600, 1200);
+    // Γ : 1 200 + arc (π/2)·400 + 800 + arc + 700 ; second arc centré sur K2, horaire.
+    expect(curveLength(layout.walkline)).toBeCloseTo(2700 + 400 * Math.PI, 9);
+    const t2 = layout.turns[1]!;
+    expectPoint(curvePointAt(layout.walkline, t2.sStart), -800, 1600);
+    expectPoint(
+      curvePointAt(layout.walkline, (t2.sStart + t2.sEnd) / 2),
+      -800 - 400 * Math.SQRT1_2,
+      2000 - 400 * Math.SQRT1_2,
+    );
+    expectPoint(curvePointAt(layout.walkline, t2.sEnd), -1200, 2000);
+    expectPoint(curveTangentAt(layout.walkline, t2.sEnd), 0, 1);
+    expectPoint(curveEnd(layout.walkline), -1200, 2700);
+    expect(isContinuous(layout.walkline)).toBe(true);
+    expect(signedArea(layout.footprint)).toBeCloseTo(800 * 5900 - 2 * 800 * 800, 0);
+  });
+
+  it("Z : image miroir du S", () => {
+    const s = computeLayout(
+      makeProject({ width: 800, legs: [2000, 2400, 1500], directions: ["left", "right"] }),
+    );
+    const z = computeLayout(
+      makeProject({ width: 800, legs: [2000, 2400, 1500], directions: ["right", "left"] }),
+    );
+    expect(z.innerSide).toBe("right");
+    const L = curveLength(s.walkline);
+    expect(curveLength(z.walkline)).toBeCloseTo(L, 9);
+    for (const f of [0, 0.2, 0.45, 0.7, 1]) {
+      const ps = curvePointAt(s.walkline, f * L);
+      expectPoint(curvePointAt(z.walkline, f * L), 800 - ps.x, ps.y);
+    }
+    s.turns.forEach((t, j) => {
+      expectPoint(z.turns[j]!.innerCorner, 800 - t.innerCorner.x, t.innerCorner.y);
+      expect(z.turns[j]!.collarSide).toBe(t.collarSide === "left" ? "right" : "left");
+    });
+  });
+
+  it("S, E > 1 200 : raccord linéaire de d_f sur la volée intermédiaire (Γ oblique)", () => {
+    const layout = computeLayout(
+      makeProject({ width: 1400, legs: [2500, 3800, 2000], directions: ["left", "right"] }),
+    );
+    expect(layout.walklineOffset).toBe(600);
+    const [tr] = layout.walklineTransitions!;
+    expect(layout.walklineTransitions).toHaveLength(1);
+    expect(tr!.leg).toBe(1);
+    expect(tr!.fromOffset).toBe(600);
+    expect(tr!.toOffset).toBe(800);
+    expect(tr!.angle).toBeCloseTo(Math.atan2(200, 1000), 12);
+    expectPoint(tr!.direction, -1, 0);
+    expectPoint(curvePointAt(layout.walkline, tr!.sStart), 0, 1700);
+    expectPoint(curvePointAt(layout.walkline, tr!.sEnd), -1000, 1900);
+    expect(tr!.sEnd - tr!.sStart).toBeCloseTo(Math.hypot(1000, 200), 9);
+    expect(tr!.sStart).toBeCloseTo(layout.turns[0]!.sEnd, 9);
+    expect(tr!.sEnd).toBeCloseTo(layout.turns[1]!.sStart, 9);
+    // d_f = 600 du jour de chaque tournant : au coin K1 (gauche) puis au coin K2 (droite).
+    for (const [j, K] of [
+      [0, { x: 0, y: 1100 }],
+      [1, { x: -1000, y: 2500 }],
+    ] as const) {
+      const t = layout.turns[j]!;
+      expectPoint(t.innerCorner, K.x, K.y);
+      expect(V.distance(curvePointAt(layout.walkline, (t.sStart + t.sEnd) / 2), K)).toBeCloseTo(
+        600,
+        9,
+      );
+    }
+    // Dernière volée : Γ à 600 mm du bord droit (jour du tournant 2), 800 mm du bord gauche.
+    expectPoint(curveEnd(layout.walkline), -1600, 3100);
+    expect(distanceToCurve(curveEnd(layout.walkline), layout.outer)).toBeCloseTo(600, 9);
+    expect(distanceToCurve(curveEnd(layout.walkline), layout.inner)).toBeCloseTo(800, 9);
+    expect(curveLength(layout.walkline)).toBeCloseTo(
+      1100 + 300 * Math.PI + Math.hypot(1000, 200) + 300 * Math.PI + 600,
+      9,
+    );
+  });
+
+  it("S, ligne de foulée saisie (d_f ≠ E/2) : transition aussi, E ≤ 1 200", () => {
+    const layout = computeLayout(
+      makeProject({
+        width: 900,
+        legs: [2000, 2800, 2000],
+        directions: ["left", "right"],
+        walkline: { mode: "fromInner", distance: 350 },
+      }),
+    );
+    const tr = layout.walklineTransitions![0]!;
+    expect([tr.fromOffset, tr.toOffset]).toEqual([350, 550]);
+  });
+
+  it("S à poteaux et jours en arc : courbes continues, jour du tournant 2 sur `outer`", () => {
+    const layout = computeLayout(
+      makeProject({
+        width: 900,
+        legs: [2200, 2600, 2000],
+        directions: ["left", "right"],
+        inner: [
+          { kind: "newel", size: 100 },
+          { kind: "arc", radius: 150 },
+        ],
+      }),
+    );
+    expect(isContinuous(layout.inner)).toBe(true);
+    expect(isContinuous(layout.outer)).toBe(true);
+    expect(isContinuous(layout.walkline)).toBe(true);
+    // Arc de jour du tournant 2 : sur le bord droit (`outer`), aucun arc sur `inner`.
+    expect(layout.outer.segments.filter((g) => g.kind === "arc")).toHaveLength(1);
+    expect(layout.inner.segments.filter((g) => g.kind === "arc")).toHaveLength(0);
+    const t2 = layout.turns[1]!;
+    const mid = curvePointAt(layout.walkline, (t2.sStart + t2.sEnd) / 2);
+    expect(distanceToCurve(mid, layout.outer)).toBeCloseTo(450, 6);
+  });
+});
+
 describe("computeLayout — exemples du dépôt", () => {
   const dir = resolve(dirname(fileURLToPath(import.meta.url)), "../../../../examples");
   const files = readdirSync(dir).filter((f) => f.endsWith(".blondel.json"));
@@ -381,18 +522,12 @@ describe("computeLayout — exemples du dépôt", () => {
 });
 
 describe("computeLayout — erreurs explicites", () => {
-  it("tournants de sens opposés (S/Z) : non supporté au MVP", () => {
-    const p = makeProject({ width: 800, legs: [2000, 2000, 2000] });
-    const turns = p.stair.layout.turns;
-    const bad: Project = {
-      ...p,
-      stair: {
-        ...p.stair,
-        layout: { ...p.stair.layout, turns: [turns[0]!, { ...turns[1]!, direction: "right" }] },
-      },
-    };
-    expect(() => computeLayout(bad)).toThrow(LayoutError);
-    expect(() => computeLayout(bad)).toThrow(/non supporté au MVP/);
+  it("S / Z : volée intermédiaire sans partie droite de Γ alors que d_f change de côté", () => {
+    // E = 1 400 > 1 200 : d_f = 600 du jour, soit 600 puis 800 mm du bord gauche ; volée
+    // centrale de 2E : aucune longueur pour raccorder les deux positions.
+    const p = makeProject({ width: 1400, legs: [2500, 2800, 2000], directions: ["left", "right"] });
+    expect(() => computeLayout(p)).toThrow(LayoutError);
+    expect(() => computeLayout(p)).toThrow(/transition de la ligne de foulée/);
   });
 
   it("nombre de tournants incohérent", () => {

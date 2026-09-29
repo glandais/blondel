@@ -1,7 +1,7 @@
 /**
  * Calcul de l'assistant d'initialisation (worker dédié `assistant.worker.ts`, ou repli sur le
  * fil principal) : `proposeDesigns` du cœur, puis modèle et croquis en plan de chaque
- * candidat. Tout le résultat est clonable (`postMessage`).
+ * candidat et de chacune de ses variantes. Tout le résultat est clonable (`postMessage`).
  */
 import {
   buildModel,
@@ -9,11 +9,14 @@ import {
   type AssistantInput,
   type AssistantResult,
 } from "@blondel/core";
-import { candidateSketch, type CandidateSketch } from "../lib/assistant.js";
+import { candidateSketch, displayedCandidates, type CandidateSketch } from "../lib/assistant.js";
 
 export interface AssistantOutcome {
   readonly result: AssistantResult;
-  /** Croquis par identifiant de candidat (absent si le modèle du candidat a échoué). */
+  /**
+   * Croquis par identifiant de candidat, variantes comprises (absent si le modèle du candidat a
+   * échoué).
+   */
   readonly sketches: Readonly<Record<string, CandidateSketch>>;
   /** Durée totale (énumération, modèles des candidats, croquis), ms. */
   readonly timeMs: number;
@@ -37,7 +40,7 @@ export function runAssistantJob(
     };
   }
   const sketches: Record<string, CandidateSketch> = {};
-  for (const c of result.candidates) {
+  for (const c of displayedCandidates(result.candidates)) {
     try {
       sketches[c.id] = candidateSketch(buildModel(c.project), c.project);
     } catch {

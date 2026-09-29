@@ -12,7 +12,9 @@
  *   coupée par C_i et C_e ou par la ligne de nez k + 2 si elle la rencontre avant ; au-delà des extrémités des bords (dernière marche), prolongement
  *   rectiligne. Débord nul : `outline` = `walkingSurface`.
  * - `going` : giron sur Γ (s_{k+1} − s_k) ; `colletArc` : σ(Q_{k+1}) − σ(Q_k) ; `colletChord` :
- *   |Q_{k+1} − Q_k| ; `goingOuter` : longueur **le long du mur** σ(R_{k+1}) − σ(R_k).
+ *   |Q_{k+1} − Q_k| ; `goingOuter` : longueur **le long du mur** σ(R_{k+1}) − σ(R_k). Escalier
+ *   en S ou en Z : collet et giron côté mur mesurés du côté du jour du tournant le plus proche
+ *   (`sides.ts` : près d'un tournant de sens opposé, le jour est `outer` et le mur `inner`).
  * - `kind` : `landing` pour un palier ; `winder` si la marche appartient à une zone balancée,
  *   si l'un de ses nez est réorienté, ou si elle chevauche la partie courbe d'un tournant
  *   balancé ; `straight` sinon.
@@ -22,7 +24,8 @@ import { intersectLines } from "../geom2d/intersect.js";
 import { ensureCCW } from "../geom2d/polygon.js";
 import { GEOM_EPS } from "../geom2d/tolerance.js";
 import * as V from "../geom2d/vec.js";
-import { colletBetween, firstHit } from "../balancing/postprocess.js";
+import { firstHit } from "../balancing/postprocess.js";
+import { collarSideAt, colletOnSide, wallGoingOnSide } from "./sides.js";
 import type { Layout, NosingLine, Tread, TreadKind } from "../model/derived.js";
 import type { Curve2, Mm, Polygon2, Vec2 } from "../model/primitives.js";
 
@@ -131,7 +134,9 @@ export function buildTreads(ctx: TreadContext): Tread[] {
     ) {
       kind = "winder";
     }
-    const collet = colletBetween(a, b);
+    // Collet du côté du jour du tournant voisin (S / Z : `outer` près du second tournant).
+    const side = collarSideAt(layout, (a.s + b.s) / 2);
+    const collet = colletOnSide(layout, a, b, side);
     treads.push({
       number: k + 1,
       kind,
@@ -141,7 +146,7 @@ export function buildTreads(ctx: TreadContext): Tread[] {
       going: b.s - a.s,
       colletArc: collet.arc,
       colletChord: collet.chord,
-      goingOuter: b.sigmaOuter - a.sigmaOuter,
+      goingOuter: wallGoingOnSide(layout, a, b, side),
     });
   }
   return treads;

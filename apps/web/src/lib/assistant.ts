@@ -130,6 +130,11 @@ export interface AssistantForm {
   readonly width: string;
   /** Ajouter les garde-corps (côtés vides d'après les murs) au projet retenu. */
   readonly guards: boolean;
+  /**
+   * « Montrer toutes les variantes » : liste à plat de tous les candidats acceptés
+   * (`limits.showAllVariants` du cœur) au lieu d'une carte par forme avec ses variantes.
+   */
+  readonly showAllVariants: boolean;
 }
 
 const EMPTY_SURVEY: Readonly<Record<SurveyMeasure, string>> = {
@@ -172,6 +177,7 @@ export function formFromProject(p: Project): AssistantForm {
     direction: "both",
     width: "",
     guards: true,
+    showAllVariants: false,
   };
 }
 
@@ -358,8 +364,35 @@ export function assistantInput(form: AssistantForm, project: Project): FormResul
         ...(width !== undefined ? { width } : {}),
         ...structure,
       },
+      ...(form.showAllVariants ? { limits: { showAllVariants: true } } : {}),
     },
   };
+}
+
+/**
+ * Candidats de la liste principale suivis de leurs variantes (ordre d'affichage), sans doublon
+ * d'identifiant : ce sont les cartes dont l'interface dessine le croquis.
+ */
+export function displayedCandidates<
+  C extends { readonly id: string; readonly variants: readonly C[] },
+>(candidates: readonly C[]): C[] {
+  const seen = new Set<string>();
+  const out: C[] = [];
+  const visit = (c: C): void => {
+    if (seen.has(c.id)) return;
+    seen.add(c.id);
+    out.push(c);
+    for (const v of c.variants) visit(v);
+  };
+  for (const c of candidates) visit(c);
+  return out;
+}
+
+/** Nombre de variantes regroupées sous les candidats de la liste principale. */
+export function variantCount(
+  candidates: readonly { readonly variants: readonly unknown[] }[],
+): number {
+  return candidates.reduce((n, c) => n + c.variants.length, 0);
 }
 
 /**

@@ -12,6 +12,7 @@ import { parseProjectText } from "../project/parse.js";
 import { makeSteppingProject, stairArb } from "../stepping/test-helpers.js";
 import { housingsInside, minCheek } from "./development.js";
 import { area, isSimplePolygon } from "./geom.js";
+import { landingPitchGap } from "./pitch.test-helpers.js";
 import { QUANTITY_MASS_KG, QUANTITY_VOLUME_M3 } from "./quantities.js";
 import {
   EN16481_MIN_HOUSING_DEPTH,
@@ -356,6 +357,75 @@ const housedArb = fc
     },
   }));
 
+describe("wood-housed — palier (quart tournant avec palier)", () => {
+  it("ligne des nez de niveau sur le palier, rive haute arasée au-dessus du palier", () => {
+    const base = loadExample("quarter-landing.blondel.json");
+    const p: Project = {
+      ...base,
+      stair: {
+        ...base.stair,
+        layout: {
+          ...base.stair.layout,
+          turns: base.stair.layout.turns.map((t) => ({
+            ...t,
+            inner: { kind: "newel" as const, size: 100 },
+          })),
+        },
+      },
+    };
+    const { m, r } = housed(p);
+    expect(m.errors).toEqual([]);
+    const landing = m.stepping.treads.find((t) => t.kind === "landing")!;
+    expect(landing).toBeDefined();
+    // Avant correction : la ligne des nez montait en pente à travers le palier (≈ 90 mm).
+    expect(landingPitchGap(m.stepping, r.stringers)).toBeLessThan(1e-6);
+    // Rive haute au-dessus du palier : z_palier + d_h sur toute la partie plate portée.
+    const zLanding = m.stepping.nosings[landing.number - 1]!.z;
+    for (const s of r.stringers) {
+      const dh = r.resolved.upperOffset[s.face.side];
+      const rive = s.development.upperRive;
+      const nos = m.stepping.nosings;
+      const sig = (k: number) =>
+        (s.face.side === "inner" ? nos[k]!.sigmaInner : nos[k]!.sigmaOuter) - s.face.sigmaA;
+      const next = sig(landing.number);
+      const flatEnd = next - (sig(landing.number + 1) - next);
+      for (const q of rive) {
+        if (q.x < sig(landing.number - 1) - 1e-6 || q.x > flatEnd + 1e-6) continue;
+        expect(q.y, s.part.mark).toBeCloseTo(zLanding + dh, 6);
+      }
+    }
+  });
+});
+
+describe("wood-housed — palier sous le nez d'arrivée", () => {
+  it("contre-exemple fast-check (seed -358072578) : pas de partie plate, écart nul", () => {
+    // Palier d'angle à poteau de 90 mm en dernière marche : le nez de sortie est le nez
+    // d'arrivée, aucun giron suivant (convention de `nosingPitchLine` et de `sideEdge`).
+    const p = makeSteppingProject({ width: 700, legs: [3515, 834], floorToFloor: 2200 });
+    const project: Project = {
+      ...p,
+      stair: {
+        ...p.stair,
+        layout: {
+          ...p.stair.layout,
+          turns: p.stair.layout.turns.map((t) => ({
+            ...t,
+            direction: "left" as const,
+            mode: "landing" as const,
+            inner: { kind: "newel" as const, size: 90 },
+          })),
+        },
+        balancing: { ...p.stair.balancing, method: "M1" as const },
+        treads: { ...p.stair.treads, thickness: 30, nosing: 0, risers: "full" as const },
+      },
+    };
+    const { m, r } = housed(project);
+    const treads = m.stepping.treads;
+    expect(treads[treads.length - 1]?.kind).toBe("landing");
+    expect(landingPitchGap(m.stepping, r.stringers)).toBeLessThan(1e-6);
+  });
+});
+
 describe("wood-housed — propriétés des développés", () => {
   it("contour fermé, simple, d'aire > 0 ; mortaises dans le contour ; une mortaise par marche portée", () => {
     fc.assert(
@@ -376,6 +446,8 @@ describe("wood-housed — propriétés des développés", () => {
           expect(withTread.map((h) => h.tread).sort((a, b) => a! - b!)).toEqual(carried);
           expect(withTread.length).toBe(carried.length);
         }
+        // Paliers : ligne des nez de niveau (profil des garde-corps).
+        expect(landingPitchGap(m.stepping, r.stringers)).toBeLessThan(1e-6);
         expect(
           blocking(m).filter((x) => x.ruleId.startsWith("FAB_") || x.ruleId.startsWith("LIMON")),
         ).toEqual([]);

@@ -5,7 +5,8 @@
  *   **marche virtuelle fixe** dans chaque volée intermédiaire qui contient au moins un giron
  *   entier entre deux tournants balancés (le nez le plus proche du milieu de la partie droite).
  *   Si la partie droite intermédiaire est plus courte qu'un giron (U serré, demi-tournant),
- *   les deux tournants forment une **zone unique** de 180°.
+ *   les deux tournants forment une **zone unique** de 180° — jamais entre deux tournants de
+ *   sens opposés (S / Z : jours de part et d'autre, zone séparée par tournant).
  * - Extrémités : `free` au départ (nez 0), à l'arrivée (nez n − 1), aux bords d'un palier, et
  *   quand la borne de zone tombe **dans la partie tournante** de Γ (s_a > début du tournant,
  *   s_b < fin du tournant : aucune partie droite ne continue, pas de pente à raccorder) ;
@@ -40,7 +41,12 @@
  */
 import { GEOM_EPS } from "../geom2d/tolerance.js";
 import type { Layout, NosingLine } from "../model/derived.js";
-import type { BalancingStrategy, BalancingZone, ZoneContinuation } from "../model/plugins.js";
+import type {
+  BalancingInput,
+  BalancingStrategy,
+  BalancingZone,
+  ZoneContinuation,
+} from "../model/plugins.js";
 import type { Mm } from "../model/primitives.js";
 import {
   applySolution,
@@ -73,6 +79,8 @@ export interface TurnGroup {
    * Absent : aucun.
    */
   readonly posts?: readonly number[];
+  /** Côté du jour des tournants du groupe (tous du même côté). */
+  readonly side: "left" | "right";
   /**
    * Un tournant du groupe a un poteau d'angle : le limon est interrompu par le poteau (deux
    * pièces assemblées dans le poteau), la courbe F n'est pas prolongée à travers le tournant
@@ -134,21 +142,47 @@ export function groupWinderTurns(
     post?: number;
     /** Premier segment du tournant (raccord possible avec le groupe précédent). */
     head: boolean;
+    /** Côté du jour du tournant. */
+    side: "left" | "right";
   };
   const segments: Segment[] = [];
   for (const t of winders) {
     const mid = (t.sStart + t.sEnd) / 2;
+    const side = t.collarSide ?? t.direction;
     const kc =
       options.perAngle && options.posts?.has(t.index) ? postNosing(s, t.sStart, t.sEnd) : -1;
     if (kc < 0) {
-      segments.push({ turn: t.index, sStart: t.sStart, sEnd: t.sEnd, corner: mid, head: true });
+      segments.push({
+        turn: t.index,
+        sStart: t.sStart,
+        sEnd: t.sEnd,
+        corner: mid,
+        head: true,
+        side,
+      });
       continue;
     }
     fixed.add(kc);
     options.free?.add(kc);
     const sk = s[kc]!;
-    segments.push({ turn: t.index, sStart: t.sStart, sEnd: sk, corner: mid, post: kc, head: true });
-    segments.push({ turn: t.index, sStart: sk, sEnd: t.sEnd, corner: mid, post: kc, head: false });
+    segments.push({
+      turn: t.index,
+      sStart: t.sStart,
+      sEnd: sk,
+      corner: mid,
+      post: kc,
+      head: true,
+      side,
+    });
+    segments.push({
+      turn: t.index,
+      sStart: sk,
+      sEnd: t.sEnd,
+      corner: mid,
+      post: kc,
+      head: false,
+      side,
+    });
   }
   const groups: {
     first: number;
@@ -160,6 +194,7 @@ export function groupWinderTurns(
     /** Le groupe se termine au nez d'un poteau (segment « après le poteau »). */
     endsAtPost: boolean;
     newel: boolean;
+    side: "left" | "right";
   }[] = [];
   for (const seg of segments) {
     const prev = groups[groups.length - 1];
@@ -172,7 +207,10 @@ export function groupWinderTurns(
       // Entre deux poteaux, le limon intermédiaire est une seule pièce droite, assemblée dans
       // les deux poteaux : une zone entre les deux nez de poteau, sans marche virtuelle fixe.
       const betweenPosts = seg.post !== undefined && prev.endsAtPost;
-      if ((gapEnd - gapStart < going - GEOM_EPS || betweenPosts) && !fixedInside) {
+      // S / Z : jamais de zone unique à travers deux jours opposés (le découpage refuse une
+      // partie droite intermédiaire de moins d'un giron, CHALLENGE G3).
+      const sameSide = seg.side === prev.side;
+      if ((gapEnd - gapStart < going - GEOM_EPS || betweenPosts) && !fixedInside && sameSide) {
         prev.last = seg.turn;
         prev.sEnd = seg.sEnd;
         prev.endsAtPost = false;
@@ -201,6 +239,7 @@ export function groupWinderTurns(
       posts: seg.post !== undefined ? [seg.post] : [],
       endsAtPost: seg.post !== undefined && !seg.head,
       newel: options.posts?.has(seg.turn) ?? false,
+      side: seg.side,
     });
   }
   return groups.map(({ posts, endsAtPost: _endsAtPost, newel, ...g }) => ({
@@ -340,6 +379,19 @@ export function zoneContinuation(
   return before || after ? [before, after] : undefined;
 }
 
+/** Entrée des stratégies pour une zone (tracé de développement, nez initiaux). */
+export function balancingInput(ctx: ZoneContext, zone: BalancingZone): BalancingInput {
+  return {
+    layout: ctx.devLayout,
+    nosings: ctx.devNosings,
+    zone,
+    z: ctx.z,
+    rise: ctx.rise,
+    going: ctx.going,
+    params: ctx.params,
+  };
+}
+
 /**
  * Calcule et mesure une zone candidate [a ; b]. Les collets, K5 et K3 sont mesurés sur toutes
  * les marches comprises entre les nez fixes encadrants [lo ; hi] (les marches du tournant
@@ -384,15 +436,7 @@ export function evaluateZone(
   });
   let solution;
   try {
-    solution = ctx.strategy.solve({
-      layout: ctx.devLayout,
-      nosings: ctx.devNosings,
-      zone,
-      z: ctx.z,
-      rise: ctx.rise,
-      going: ctx.going,
-      params: ctx.params,
-    });
+    solution = ctx.strategy.solve(balancingInput(ctx, zone));
   } catch (e) {
     return fail(e instanceof Error ? e.message : String(e));
   }

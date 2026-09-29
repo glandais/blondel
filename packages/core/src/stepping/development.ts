@@ -17,6 +17,7 @@ import { makeCurve } from "../geom2d/curve.js";
 import { lineSeg, segEnd, segStart } from "../geom2d/segment.js";
 import { GEOM_EPS } from "../geom2d/tolerance.js";
 import * as V from "../geom2d/vec.js";
+import { turnCollarSide } from "./sides.js";
 
 export function developmentInner(layout: Layout, project: Project): Curve2 {
   const turns = project.stair.layout.turns;
@@ -24,6 +25,9 @@ export function developmentInner(layout: Layout, project: Project): Curve2 {
   let changed = false;
   turns.forEach((t, j) => {
     if (t.inner.kind !== "newel") return;
+    // S / Z : seuls les poteaux des tournants dont le jour est sur `layout.inner` (vue retournée
+    // du tracé pour l'autre côté, `sides.ts`).
+    if (turnCollarSide(layout, j) !== layout.innerSide) return;
     const k = layout.turns[j]?.innerCorner;
     if (!k) return;
     // Segments dont les deux extrémités sont sur (ou dans) le poteau : contour à remplacer.

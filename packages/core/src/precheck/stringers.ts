@@ -192,7 +192,25 @@ export function precheckStringers(
   };
 }
 
-/** Raccourci : prédimensionnement des limons d'un modèle construit. */
+/**
+ * Réglages du prédimensionnement portés par les paramètres d'une structure (`params.precheck`,
+ * ex. `steel-profile`) ; `{}` s'ils sont absents ou invalides (défauts du cœur).
+ */
+export function structurePrecheckSettings(params: unknown): Partial<PrecheckSettings> {
+  const raw =
+    typeof params === "object" && params !== null
+      ? (params as Readonly<Record<string, unknown>>)["precheck"]
+      : undefined;
+  if (raw === undefined) return {};
+  const parsed = PrecheckSettingsSchema.safeParse(raw);
+  return parsed.success ? parsed.data : {};
+}
+
+/**
+ * Raccourci : prédimensionnement des limons d'un modèle construit, **recalculé** par
+ * `precheckStringers` (réglages imposés, ex. comparateur). Pour afficher le prédimensionnement
+ * d'un modèle, lire `Model.precheck` (calculé par le pipeline, éventuellement par le plugin).
+ */
 export function precheckModel(
   project: Project,
   model: { readonly stepping: Stepping; readonly parts: readonly Part[] },

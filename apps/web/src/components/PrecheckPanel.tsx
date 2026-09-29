@@ -6,7 +6,7 @@
  */
 import { PRECHECK_LABEL } from "@blondel/core";
 import { useMemo } from "react";
-import { executionClassOf, precheckSummary, type PrecheckRow } from "../lib/precheck.js";
+import { executionClassInfo, precheckSummary, type PrecheckRow } from "../lib/precheck.js";
 import { appStore, useApp, useModel } from "../store/appStore.js";
 
 const dec = (digits: number) =>
@@ -66,13 +66,11 @@ function BeamRow({ row, selected }: { row: PrecheckRow; selected: boolean }) {
 }
 
 export function PrecheckPanel() {
-  const { model, project: modelProject } = useModel();
-  const current = useApp((s) => s.project);
+  const { model } = useModel();
   const selection = useApp((s) => s.selection);
-  // Réglages du modèle affiché (le projet dont il est issu, même pendant un calcul).
-  const project = modelProject ?? current;
-  const summary = useMemo(() => precheckSummary(project, model), [project, model]);
-  const exc = executionClassOf(model);
+  // Lecture du prédimensionnement calculé dans le worker (`Model.precheck`) : aucun calcul ici.
+  const summary = useMemo(() => precheckSummary(model), [model]);
+  const exc = executionClassInfo(model);
   const selectedPart = selection?.location.kind === "part" ? selection.location.partId : null;
 
   if (!model) return null;

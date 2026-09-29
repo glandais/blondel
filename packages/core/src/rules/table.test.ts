@@ -31,4 +31,14 @@ describe("table des règles", () => {
     for (const r of RULES)
       if (r.min !== null && r.max !== null) expect(r.min).toBeLessThanOrEqual(r.max);
   });
+
+  it("une source citée « via » un tiers ou « sources secondaires » implique source_secondaire", () => {
+    // Norme payante non lue (décision 2026-09-28) : la règle doit pouvoir être rétrogradée par
+    // le profil souple (ADR-0004).
+    const secondary = /\bvia\b|sources?\s+secondaires?/i;
+    const missing = RULES.filter((r) => secondary.test(r.source) && !r.source_secondaire).map(
+      (r) => r.id,
+    );
+    expect(missing).toEqual([]);
+  });
 });

@@ -10,6 +10,10 @@
  *   (tracé, découpage, garde-corps, échappée, contrôle, assistant, comparateur, maillage) : le
  *   modèle est calculé dans le worker (`model/`) et les composants le lisent (appel direct ou
  *   import nommé interdits).
+ * - Les fonctions de `lib/` importées (valeurs) par un composant, une vue ou un store tournent sur
+ *   le fil principal : elles n'appellent pas non plus ces étapes, directement ou par une autre
+ *   fonction du même module (ex. `lib/variants.ts` : `runVariants`, qui appelle `compareEpure`,
+ *   n'est importé que par le worker).
  *
  * Ces contrôles ne prouvent pas l'absence de toute formule dans l'interface (les écarts connus
  * sont listés dans docs/ACCEPTATION.md) ; ils empêchent la régression la plus probable.
@@ -65,10 +69,70 @@ const PIPELINE = [
   "compareEpure",
   "compareVariants",
   "precheckModel",
+  "precheckStringers",
+  "summarizeVariant",
   "meshParts",
 ];
 
 const files = sources(SRC);
+
+const escapeRe = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+/**
+ * Déclarations de premier niveau d'un module (fonctions et constantes, exportées ou non) :
+ * nom → corps (jusqu'à la déclaration suivante).
+ */
+function topLevelDeclarations(code: string): Map<string, string> {
+  const re = /^(?:export\s+)?(?:async\s+)?(?:function\*?\s+|const\s+|let\s+)(\w+)/gm;
+  const heads: { name: string; start: number }[] = [];
+  for (let m = re.exec(code); m !== null; m = re.exec(code)) {
+    heads.push({ name: m[1]!, start: m.index });
+  }
+  const out = new Map<string, string>();
+  heads.forEach((h, i) => out.set(h.name, code.slice(h.start, heads[i + 1]?.start ?? code.length)));
+  return out;
+}
+
+/**
+ * Déclarations d'un module qui appellent une étape du pipeline, directement ou par une autre
+ * déclaration du même module (point fixe).
+ */
+function pipelineCallers(code: string, pipeline: readonly string[]): Set<string> {
+  const decls = topLevelDeclarations(code.replace(/"(?:[^"\\\n]|\\.)*"/g, '""'));
+  const tainted = new Set<string>();
+  const calls = (body: string, name: string): boolean =>
+    new RegExp(`\\b${escapeRe(name)}\\s*\\(`).test(body);
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const [name, body] of decls) {
+      if (tainted.has(name)) continue;
+      // Le corps commence par la déclaration : on ignore son propre nom (récursion).
+      const inner = body.slice(body.indexOf(name) + name.length);
+      if ([...pipeline, ...tainted].some((f) => calls(inner, f))) {
+        tainted.add(name);
+        changed = true;
+      }
+    }
+  }
+  return tainted;
+}
+
+/** Noms importés comme valeurs (hors `import type` et `type X`) depuis un module relatif. */
+function valueImports(code: string): { spec: string; names: string[] }[] {
+  const out: { spec: string; names: string[] }[] = [];
+  const re = /import\s+(type\s+)?\{([^}]*)\}\s*from\s*"([^"]+)"/g;
+  for (let m = re.exec(code); m !== null; m = re.exec(code)) {
+    if (m[1]) continue;
+    const names = m[2]!
+      .split(",")
+      .map((n) => n.trim())
+      .filter((n) => n.length > 0 && !n.startsWith("type "))
+      .map((n) => n.split(/\s+as\s+/)[0]!.trim());
+    out.push({ spec: m[3]!, names });
+  }
+  return out;
+}
 
 describe("aucun calcul métier dans les composants UI", () => {
   it("les sources existent", () => {
@@ -99,6 +163,46 @@ describe("aucun calcul métier dans les composants UI", () => {
         const called = new RegExp(`\\b${name}\\s*\\(`).test(withoutStrings);
         const imported = new RegExp(`import[^;]*\\{[^}]*\\b${name}\\b[^}]*\\}`).test(code);
         if (called || imported) bad.push(`${relative(SRC, f)} : ${name}`);
+      }
+    }
+    expect(bad).toEqual([]);
+  });
+
+  it("détection des appels indirects (garde-fou du garde-fou)", () => {
+    const code = [
+      "export function a() { return helper(); }",
+      "function helper() { return precheckModel(p, m); }",
+      "export function b() { return 1; }",
+      'export const c = () => "precheckModel(";',
+    ].join("\n");
+    expect([...pipelineCallers(code, ["precheckModel"])].sort()).toEqual(["a", "helper"]);
+    expect(
+      valueImports('import { a, type B, c as d } from "../lib/x.js";\nimport type { E } from "y";'),
+    ).toEqual([{ spec: "../lib/x.js", names: ["a", "c"] }]);
+  });
+
+  it("fonctions de lib/ utilisées sur le fil principal : aucune étape du pipeline appelée", () => {
+    const mainThread = files.filter((f) => /[/\\](components|views|store)[/\\]/.test(f));
+    const callers = new Map<string, Set<string>>();
+    const callersOf = (file: string): Set<string> => {
+      let set = callers.get(file);
+      if (!set) {
+        set = pipelineCallers(stripComments(readFileSync(file, "utf8")), PIPELINE);
+        callers.set(file, set);
+      }
+      return set;
+    };
+    const bad: string[] = [];
+    for (const f of mainThread) {
+      const code = stripComments(readFileSync(f, "utf8"));
+      for (const { spec, names } of valueImports(code)) {
+        if (!/(^|\/)lib\//.test(spec) || !spec.startsWith(".")) continue;
+        const target = join(dirname(f), spec.replace(/\.js$/, ".ts"));
+        if (!files.includes(target)) continue;
+        const tainted = callersOf(target);
+        for (const n of names) {
+          if (tainted.has(n)) bad.push(`${relative(SRC, f)} → ${relative(SRC, target)} : ${n}`);
+        }
       }
     }
     expect(bad).toEqual([]);

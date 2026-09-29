@@ -7,6 +7,8 @@ export interface StairShape {
   readonly width: number;
   readonly legs: readonly (number | "auto")[];
   readonly direction?: "left" | "right";
+  /** Sens de chaque tournant (prioritaire sur `direction`) : S / Z si deux sens différents. */
+  readonly directions?: readonly ("left" | "right")[];
   readonly mode?: "winders" | "landing";
   readonly inner?: InnerCorner | readonly InnerCorner[];
   readonly walkline?: { mode: "dtu" } | { mode: "fromInner"; distance: number };
@@ -31,7 +33,7 @@ export function makeProject(shape: StairShape): Project {
         width: shape.width,
         legs: shape.legs.map((length) => ({ length })),
         turns: Array.from({ length: turnCount }, (_, j) => ({
-          direction: shape.direction ?? "left",
+          direction: shape.directions?.[j] ?? shape.direction ?? "left",
           mode: shape.mode ?? "winders",
           inner: innerAt(j),
         })),
@@ -49,14 +51,17 @@ export function setbackOf(inner: InnerCorner): number {
 
 /**
  * Générateur CONTRAINT de tracés valides : E ∈ [700 ; 1 500] (DTU milieu et 600 mm), 1 à 3
- * volées de même sens, raccords de jour quelconques compatibles avec d_f, longueurs ≥ minimum
- * requis + marge, placement quelconque. Les volées ne se recoupent pas en plan (≤ 2 tournants).
+ * volées, tournants de même sens (U) ou de sens opposés (S / Z, `opposite`), raccords de jour
+ * quelconques compatibles avec d_f, longueurs ≥ minimum requis + marge (S / Z : partie droite
+ * intermédiaire de Γ ≥ 1 mm quand d_f ≠ E/2, transition de la ligne de foulée), placement
+ * quelconque. Les volées ne se recoupent pas en plan (≤ 2 tournants).
  */
 export const stairShapeArb: fc.Arbitrary<StairShape> = fc
   .record({
     width: fc.integer({ min: 700, max: 1500 }),
     legCount: fc.integer({ min: 1, max: 3 }),
     direction: fc.constantFrom("left" as const, "right" as const),
+    opposite: fc.boolean(),
     mode: fc.constantFrom("winders" as const, "landing" as const),
     innerKinds: fc.array(
       fc.oneof(
@@ -77,15 +82,24 @@ export const stairShapeArb: fc.Arbitrary<StairShape> = fc
   })
   .map((r) => {
     const turns = r.innerKinds.slice(0, r.legCount - 1);
+    const other = r.direction === "left" ? "right" : "left";
+    const directions = turns.map((_, j) => (r.opposite && j === 1 ? other : r.direction));
+    const walkSetback = (t: InnerCorner): number => (t.kind === "arc" ? t.radius : 0);
     const legs = Array.from({ length: r.legCount }, (_, i) => {
       const before = i > 0 ? r.width + setbackOf(turns[i - 1]!) : 0;
       const after = i < turns.length ? r.width + setbackOf(turns[i]!) : 0;
-      return Math.max(1, before + after + r.extras[i]!);
+      // S / Z : partie droite de Γ d'au moins 1 mm dans la volée intermédiaire (transition).
+      const walk =
+        i > 0 && i < turns.length && directions[i - 1] !== directions[i]
+          ? 2 * r.width + walkSetback(turns[i - 1]!) + walkSetback(turns[i]!) + 1
+          : 0;
+      return Math.max(1, before + after + r.extras[i]!, walk + r.extras[i]!);
     });
     const shape: StairShape = {
       width: r.width,
       legs,
       direction: r.direction,
+      directions,
       mode: r.mode,
       inner: turns.length > 0 ? turns : [{ kind: "sharp" }],
       origin: r.origin,

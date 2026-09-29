@@ -159,7 +159,7 @@ exports[`buildModel — exemples du dépôt > j3b-acceptance-01-tole-pliee.blond
     "nosing": 3,
   },
   "n": 15,
-  "parts": 48,
+  "parts": 49,
   "run": 3360.3,
   "treads": "wwwwwsssssssss",
   "violations": {
@@ -262,7 +262,7 @@ exports[`buildModel — exemples du dépôt > j4-demi-tournant-acier-garde-corps
   "headroom": null,
   "headroomWidth": null,
   "n": 15,
-  "parts": 181,
+  "parts": 182,
   "run": 3779.6,
   "treads": "sswwwwwwwwwsss",
   "violations": {
@@ -473,6 +473,46 @@ exports[`buildModel — exemples du dépôt > straight.blondel.json : cotes prin
     "conseil": 1,
   },
   "zones": [],
+}
+`;
+
+exports[`buildModel — exemples du dépôt > two-quarters-s.blondel.json : cotes principales (non-régression) 1`] = `
+{
+  "blondel": 630.01,
+  "colletMin": 114.1,
+  "colletsChord": [
+    144.6,
+    140.1,
+    132.3,
+    123,
+    142.5,
+    178,
+    125.8,
+    114.1,
+    114.7,
+    150,
+  ],
+  "firstRise": 180,
+  "g": 270.01,
+  "h": 180,
+  "headroom": 2026.7,
+  "headroomWidth": {
+    "min": 1780,
+    "nosing": 3,
+  },
+  "n": 15,
+  "parts": 29,
+  "run": 3780.2,
+  "treads": "wwwwwswwwwwsss",
+  "violations": {
+    "avertissement": 0,
+    "bloquant": 0,
+    "conseil": 1,
+  },
+  "zones": [
+    "0-4 M3-cubic",
+    "6-10 M3-cubic",
+  ],
 }
 `;
 

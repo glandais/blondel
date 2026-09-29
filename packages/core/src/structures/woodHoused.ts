@@ -45,6 +45,7 @@ import {
   housingPolygons,
   minCheek,
   minWoodBetween,
+  nosingPitchLine,
   pitchAtU,
   toFlatPattern,
   type Housing,
@@ -556,8 +557,8 @@ export function buildWoodHoused(ctx: StructureContext, params: WoodHousedParams)
 
   // 2. Mortaises provisoires → paramètres `auto`.
   const pitch: Record<Side, PiecewiseLinear> = {
-    inner: new PiecewiseLinear(nosings.map((k) => ({ x: k.sigmaInner, y: k.z }))),
-    outer: new PiecewiseLinear(nosings.map((k) => ({ x: k.sigmaOuter, y: k.z }))),
+    inner: nosingPitchLine(nosings, stepping.treads, "inner"),
+    outer: nosingPitchLine(nosings, stepping.treads, "outer"),
   };
   const need = {
     upper: { inner: profile.wood.minUpperOffset, outer: profile.wood.minUpperOffset },

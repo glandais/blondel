@@ -44,11 +44,20 @@ function isEditable(target: EventTarget | null): boolean {
   );
 }
 
-/** Raccourcis globaux : Ctrl/Cmd+Z annuler, Ctrl/Cmd+Maj+Z ou Ctrl+Y rétablir (hors champs). */
+/** Cible dans une fenêtre modale (l'arrière-plan est alors inerte). */
+function inModal(target: EventTarget | null): boolean {
+  return target instanceof Element && target.closest('[aria-modal="true"]') !== null;
+}
+
+/**
+ * Raccourcis globaux : Ctrl/Cmd+Z annuler, Ctrl/Cmd+Maj+Z ou Ctrl+Y rétablir (hors champs). Sans
+ * effet tant qu'une fenêtre modale est ouverte : le projet ne change pas derrière elle.
+ */
 function useUndoShortcuts(): void {
   useEffect(() => {
     const onKey = (e: globalThis.KeyboardEvent) => {
       if (!(e.ctrlKey || e.metaKey) || isEditable(e.target)) return;
+      if (appStore.getState().assistantOpen || inModal(e.target)) return;
       const k = e.key.toLowerCase();
       if (k === "z" && !e.shiftKey) {
         e.preventDefault();

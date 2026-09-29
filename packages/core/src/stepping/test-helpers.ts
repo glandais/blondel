@@ -7,6 +7,8 @@ export interface SteppingShape {
   readonly width: number;
   readonly legs: readonly (number | "auto")[];
   readonly direction?: "left" | "right";
+  /** Sens de chaque tournant (prioritaire sur `direction`) : S / Z si deux sens différents. */
+  readonly directions?: readonly ("left" | "right")[];
   readonly mode?: "winders" | "landing" | readonly ("winders" | "landing")[];
   readonly inner?: InnerCorner | readonly InnerCorner[];
   readonly floorToFloor?: number;
@@ -33,7 +35,7 @@ export function makeSteppingProject(shape: SteppingShape): Project {
         width: shape.width,
         legs: shape.legs.map((length) => ({ length })),
         turns: Array.from({ length: turnCount }, (_, j) => ({
-          direction: shape.direction ?? "left",
+          direction: shape.directions?.[j] ?? shape.direction ?? "left",
           mode: pick(shape.mode, j, "winders" as const),
           inner: pick<InnerCorner>(shape.inner, j, { kind: "sharp" }),
         })),
@@ -56,7 +58,18 @@ function walkSetback(inner: InnerCorner): number {
   return inner.kind === "arc" ? inner.radius : 0;
 }
 
-export type Typology = "quarter-low" | "quarter-mid" | "quarter-high" | "u" | "half-turn";
+export type Typology = "quarter-low" | "quarter-mid" | "quarter-high" | "u" | "half-turn" | "s";
+
+/** Typologies à tournants de même sens (défaut de `stairArb`, attendu par les structures). */
+export const SAME_SIDE_TYPOLOGIES: readonly Typology[] = [
+  "quarter-low",
+  "quarter-mid",
+  "quarter-high",
+  "u",
+  "half-turn",
+];
+/** Toutes les typologies, S / Z compris (découpage, balancement). */
+export const ALL_TYPOLOGIES: readonly Typology[] = [...SAME_SIDE_TYPOLOGIES, "s"];
 
 export interface GeneratedStair {
   readonly typology: Typology;
@@ -69,11 +82,15 @@ export interface GeneratedStair {
  * Générateur CONTRAINT d'escaliers tournants réalistes (CHALLENGE A7) : H ∈ [2 200 ; 3 500],
  * E ∈ [700 ; 1 200] (ligne de foulée DTU au milieu), n = arrondi(H / 175), giron visé
  * 630 − 2h ± 15 mm ; quart tournant bas / médian / haut, U (volée centrale ≥ 1 giron) et
- * demi-tournant (volée centrale < 1 giron) ; jour vif, poteau (90 à 150 mm) ou arc (50 à
- * 400 mm) ; sens gauche ou droit ; longueurs de volées entières calculées pour que |Γ| ≈ (n − 1)·g.
+ * demi-tournant (volée centrale < 1 giron), deux quarts de sens opposés S / Z (`ALL_TYPOLOGIES`
+ * seulement : les structures et les garde-corps n'ont qu'un côté de jour ; partie droite
+ * centrale de 1 à 3 girons ; E ∈ [700 ; 1 500] : au-delà de 1 200 mm, d_f = 600 mm et
+ * transition de la ligne de foulée) ; jour vif, poteau (90 à 150 mm) ou arc (50 à 400 mm) ;
+ * sens gauche ou droit ; longueurs de volées entières calculées pour que |Γ| ≈ (n − 1)·g.
  */
 export function stairArb(
   methods: readonly ("M1" | "M3")[] = ["M1", "M3"],
+  typologies: readonly Typology[] = SAME_SIDE_TYPOLOGIES,
 ): fc.Arbitrary<GeneratedStair> {
   const corner = fc.oneof(
     fc.constant<InnerCorner>({ kind: "sharp" }),
@@ -84,14 +101,9 @@ export function stairArb(
     .record({
       H: fc.integer({ min: 2200, max: 3500 }),
       E: fc.integer({ min: 700, max: 1200 }),
+      wideE: fc.integer({ min: 700, max: 1500 }),
       goingDelta: fc.integer({ min: -15, max: 15 }),
-      typology: fc.constantFrom<Typology>(
-        "quarter-low",
-        "quarter-mid",
-        "quarter-high",
-        "u",
-        "half-turn",
-      ),
+      typology: fc.constantFrom<Typology>(...typologies),
       position: fc.double({ min: 0, max: 1, noNaN: true }),
       centralRatio: fc.double({ min: 0, max: 1, noNaN: true }),
       corners: fc.array(corner, { minLength: 2, maxLength: 2 }),
@@ -103,7 +115,8 @@ export function stairArb(
     .map((r) => {
       const n = Math.round(r.H / 175);
       const g = 630 - (2 * r.H) / n + r.goingDelta;
-      const df = r.E / 2;
+      const E = r.typology === "s" ? r.wideE : r.E;
+      const df = E <= 1200 ? E / 2 : 600;
       const quarter = r.typology.startsWith("quarter");
       const corners = quarter ? r.corners.slice(0, 1) : r.corners;
       const arcs = corners.reduce((acc, c) => acc + (Math.PI / 2) * (walkSetback(c) + df), 0);
@@ -124,9 +137,12 @@ export function stairArb(
         central =
           r.typology === "u"
             ? g * (1 + 1.5 * r.centralRatio)
-            : 50 + (0.95 * g - 50) * r.centralRatio;
-        central = Math.min(central, total);
-        const rest = total - central;
+            : r.typology === "s"
+              ? g * (1.1 + 2 * r.centralRatio)
+              : 50 + (0.95 * g - 50) * r.centralRatio;
+        // S / Z : partie droite centrale d'au moins un giron conservée (sinon `SteppingError`).
+        if (r.typology !== "s") central = Math.min(central, total);
+        const rest = Math.max(0, total - central);
         const p = 0.2 + 0.6 * r.position;
         straights = [p * rest, central, (1 - p) * rest];
       }
@@ -135,14 +151,15 @@ export function stairArb(
         const before = i > 0 ? corners[i - 1]! : undefined;
         const after = i < corners.length ? corners[i]! : undefined;
         const minStraight = (before ? straightMin(before) : 0) + (after ? straightMin(after) : 0);
-        const extra =
-          (before ? r.E + walkSetback(before) : 0) + (after ? r.E + walkSetback(after) : 0);
+        const extra = (before ? E + walkSetback(before) : 0) + (after ? E + walkSetback(after) : 0);
         return Math.ceil(Math.max(st, minStraight) + extra);
       });
+      const other = r.direction === "left" ? "right" : "left";
       const project = makeSteppingProject({
-        width: r.E,
+        width: E,
         legs,
         direction: r.direction,
+        ...(r.typology === "s" ? { directions: [r.direction, other] } : {}),
         inner: corners,
         floorToFloor: r.H,
         stepping: { firstRiseOffset: r.firstRiseOffset },

@@ -1028,10 +1028,11 @@ export function buildSteelProfile(
     });
   }
   const precheck: readonly RuleResult[] = precheckResults(project, stepping, beams);
+  const precheckNote = `Prédimensionnement indicatif (ne remplace pas une note de calcul) : q_k ${fmt(loads.qk, 1)} kN/m², Q_k ${fmt(loads.Qk, 1)} kN (${loads.source}) ; permanentes ${fmt(permanentArea, 2)} kN/m² ; déversement et torsion (charge excentrée sur l'âme d'un U) non vérifiés.`;
 
   notes.push(
     `Limons en profilés ${s.name} (${grade}), âme verticale, ${s.shape === "U" ? "ailes vers l'extérieur" : "bouts d'ailes côté marches"} ; d_h = ${fmt(params.upperOffset, 0)} mm ; cornières L ${fmt(sup.angleLeg, 0)} × ${fmt(sup.angleLeg, 0)} × ${fmt(sup.angleThickness, 0)} ${effectiveFixing(sup) === "welded" ? "soudées" : "vissées"} ; valeurs par défaut à valider.`,
-    `Prédimensionnement indicatif (ne remplace pas une note de calcul) : q_k ${fmt(loads.qk, 1)} kN/m², Q_k ${fmt(loads.Qk, 1)} kN (${loads.source}) ; permanentes ${fmt(permanentArea, 2)} kN/m² ; déversement et torsion (charge excentrée sur l'âme d'un U) non vérifiés.`,
+    precheckNote,
     `Classe d'exécution EN 1090-2 : ${exc.executionClass}${exc.reasons.length > 0 ? ` (${exc.reasons.join(", ")})` : ""}.`,
     "Limons en profilés : solides 3D à extrémités d'équerre (coupes réelles sur les développés) ; platines de pied et de tête non générées (fixation à définir).",
   );
@@ -1041,6 +1042,9 @@ export function buildSteelProfile(
       parts: [...stringers.map((x) => x.part), ...posts, ...supportMarked],
       checks: [...checks.results, ...precheck],
       executionClass: exc.executionClass,
+      // Même calcul que les lignes PRECHECK_* (portée uHi − uLo, pente de la ligne, cornières
+      // comprises) : seule source de `Model.precheck`.
+      precheck: { beams, loads, permanentArea, notes: [precheckNote] },
       notes,
       ...(errors.length > 0 ? { errors } : {}),
     },

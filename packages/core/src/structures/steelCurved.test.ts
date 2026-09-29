@@ -11,6 +11,7 @@ import { makeSteppingProject } from "../stepping/test-helpers.js";
 import { WorkshopProfileSchema } from "../workshop/profile.js";
 import { fmt } from "../rules/check.js";
 import { isSimplePolygon } from "./geom.js";
+import { ruledFlatGap } from "./ruled.test-helpers.js";
 import { QUANTITY_BUTT_WELD_MM, QUANTITY_WELD_MM } from "./steelCommon.js";
 import {
   QUANTITY_ROLLED_LENGTH_MM,
@@ -628,6 +629,8 @@ describe("propriétés du limon débillardé (générateur contraint)", () => {
             expect(Math.hypot(nx.x - q.x, nx.y - q.y)).toBeGreaterThan(1e-3);
           });
         }
+        // Solide 3D réglé conforme au développé (coins des coupes de niveau compris).
+        for (const s of segs) expect(ruledFlatGap(s.part), s.part.id).toBeLessThan(0.5);
         // Coupe de naissance à moins de δ de la naissance (ou sur l'arc) : toujours signalée.
         for (const j of c.joints) {
           if (j.naissance === undefined) continue;

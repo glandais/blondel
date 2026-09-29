@@ -69,6 +69,16 @@ export const UP2_WIDTH: FormulaConstant = {
   value: 1400,
 };
 
+/**
+ * Diamètre maximal du fût central (mm) d'un hélicoïdal en ERP neuf pour lequel une seule main
+ * courante est admise (exception de MC_DEUX_COTES, arrêté du 20/04/2017 art. 7-1).
+ */
+export const MC_CORE_DIAMETER_MAX: FormulaConstant = {
+  ruleId: "MC_DEUX_COTES",
+  excerpt: "D_fut <= 400",
+  value: 400,
+};
+
 export const FORMULA_CONSTANTS: readonly FormulaConstant[] = [
   LF_WIDE_THRESHOLD,
   { ruleId: "LF_POSITION_DTU_LARGE", excerpt: "E > 1200", value: 1200 },
@@ -81,6 +91,7 @@ export const FORMULA_CONSTANTS: readonly FormulaConstant[] = [
   { ruleId: "GC_GABARIT_T2_2024", excerpt: "[800 ; H]", value: 800 },
   MC_WALL_CLEARANCE_OTHER,
   UP2_WIDTH,
+  MC_CORE_DIAMETER_MAX,
 ];
 
 /**

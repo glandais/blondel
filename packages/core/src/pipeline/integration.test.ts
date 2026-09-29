@@ -60,8 +60,9 @@ describe("intégration : demi-tournant balancé, acier, tôle pliée, garde-corp
     const m = buildModel(load(HALF_TURN));
     const treads = byCategory(m, "tread");
     expect(treads.map((p) => p.id)).toEqual(m.stepping.treads.map((t) => `tread-${t.number}`));
-    // Marches en tôle pliée Z (la contremarche est pliée dans la pièce) : aucune contremarche.
-    expect(byCategory(m, "riser")).toEqual([]);
+    // Marches en tôle pliée Z (la contremarche est pliée dans la pièce) : seule la contremarche
+    // d'arrivée, portée par aucune pièce Z, reste la pièce de base.
+    expect(byCategory(m, "riser").map((p) => p.id)).toEqual([`riser-${m.stepping.riserCount}`]);
     for (const t of treads) {
       expect(t.material, t.id).toBe("steel-painted");
       expect(

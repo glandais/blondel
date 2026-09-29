@@ -10,7 +10,9 @@
  * - **Ligne des nez** : polyligne des points (σ_k, z_k) où les lignes de nez coupent le bord
  *   (C_i ou C_e) ; σ = abscisse le long de ce bord, commune à tous les limons d'un même côté
  *   (rives continues aux angles). Prolongée linéairement avant le premier nez et après le
- *   dernier.
+ *   dernier. Sur un palier (marche `landing` entre les nez k et k + 1), elle reste de niveau à
+ *   z_k jusqu'à un giron avant le nez de sortie, puis monte sur ce giron : même profil que les
+ *   garde-corps (`guards/sides.ts`, `sideEdge`), voir `nosingPitchLine`.
  * - **Rives** : haute z = P(σ) + d_h, basse z = P(σ) − d_b (dépassements verticaux constants,
  *   « arasement », C §1.4) ; largeur perpendiculaire = (d_h + d_b)·cos α par morceau.
  * - **Extrémités** : départ au sol → coupe de niveau z = 0 (tout le limon est découpé par le
@@ -25,7 +27,7 @@
  *   son nez, B §4.1), plus la contremarche d'arrivée ; nez arrondi étiré de 1/sin β.
  */
 import * as V from "../geom2d/vec.js";
-import type { FlatPattern } from "../model/derived.js";
+import type { FlatPattern, NosingLine, Tread } from "../model/derived.js";
 import type { Mm, Polygon2, Vec2 } from "../model/primitives.js";
 import { pointInPolygon } from "../geom2d/polygon.js";
 import {
@@ -173,6 +175,40 @@ export interface StringerDevelopmentInput {
    */
   readonly floorLevel?: Mm;
 }
+
+/**
+ * Ligne des nez d'un côté (σ le long de C_i ou C_e, z) : polyligne des nez, avec un palier de
+ * niveau. Sur une marche `landing` entre les nez k et k + 1, un sommet (σ_{k+1} − g, z_k) est
+ * inséré, g étant le giron suivant sur ce bord (σ_{k+2} − σ_{k+1}, nul à l'arrivée) : la ligne
+ * reste à z_k sur le palier puis monte sur un giron jusqu'au nez de sortie. Convention identique
+ * au profil des garde-corps (`sideEdge`), pour que les rives restent arasées au-dessus du palier.
+ */
+export function nosingPitchLine(
+  nosings: readonly Pick<NosingLine, "sigmaInner" | "sigmaOuter" | "z">[],
+  treads: readonly Pick<Tread, "number" | "kind">[],
+  side: "inner" | "outer",
+): PiecewiseLinear {
+  const sigma = (k: number): Mm =>
+    side === "inner" ? nosings[k]!.sigmaInner : nosings[k]!.sigmaOuter;
+  const landing = new Set(treads.filter((t) => t.kind === "landing").map((t) => t.number));
+  const knots: { x: Mm; y: Mm }[] = [];
+  for (let k = 0; k < nosings.length; k++) {
+    knots.push({ x: sigma(k), y: nosings[k]!.z });
+    // Marche k + 1 (entre les nez k et k + 1) : palier.
+    if (k + 1 < nosings.length && landing.has(k + 1)) {
+      const next = sigma(k + 1);
+      const going = k + 2 < nosings.length ? sigma(k + 2) - next : 0;
+      const flatEnd = Math.max(sigma(k), next - going);
+      if (flatEnd > sigma(k) + LANDING_EPS && flatEnd < next - LANDING_EPS) {
+        knots.push({ x: flatEnd, y: nosings[k]!.z });
+      }
+    }
+  }
+  return new PiecewiseLinear(knots);
+}
+
+/** Écart minimal (mm) entre le sommet de palier inséré et les nez voisins. */
+const LANDING_EPS = 1e-3;
 
 /** Altitude de la ligne des nez à l'abscisse u, zones de niveau comprises. */
 export function pitchAtU(

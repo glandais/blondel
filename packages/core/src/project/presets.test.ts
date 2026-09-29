@@ -20,11 +20,16 @@ import {
   deepMerge,
   growAlongStairEdges,
   PRESET_HEADROOM_MIN,
+  OPPOSITE_TURNS_PRESET_IDS,
   PRESET_IDS,
+  PRESET_LABELS,
   PRESET_OPENING_CLEARANCE,
   type PresetId,
   type Rect,
 } from "./presets.js";
+
+/** Préréglages à volées, S / Z compris. */
+const FLIGHTS = [...PRESET_IDS, ...OPPOSITE_TURNS_PRESET_IDS] as const;
 
 function numericLegs(p: Project): number[] {
   return p.stair.layout.legs.map((l) => {
@@ -79,7 +84,7 @@ function footprintRect(p: Project): Rect {
 }
 
 describe("createProject", () => {
-  it.each(PRESET_IDS)("« %s » est valide, réaliste et reparsable", (preset: PresetId) => {
+  it.each(FLIGHTS)("« %s » est valide, réaliste et reparsable", (preset: PresetId) => {
     const p = createProject(preset);
     expect(parseProject(p)).toEqual(p);
     expect(p.site.floorToFloor).toBe(2700);
@@ -151,7 +156,7 @@ describe("createProject", () => {
   });
 
   it("débord de nez conforme au contexte logement (DEBORD_NEZ_LOGEMENT)", () => {
-    for (const preset of PRESET_IDS) {
+    for (const preset of FLIGHTS) {
       const p = createProject(preset);
       expect(p.compliance.contexts).toContain("logement_interieur");
       expect(p.stair.treads.nosing).toBeLessThanOrEqual(getRule("DEBORD_NEZ_LOGEMENT").max!);
@@ -277,7 +282,7 @@ describe("createProject", () => {
   });
 
   it("un patch sur H, E, la dalle ou le réglage des hauteurs garde volées et trémie cohérentes", () => {
-    for (const preset of PRESET_IDS) {
+    for (const preset of FLIGHTS) {
       const viaOption = createProject(preset, {
         floorToFloor: 3000,
         width: 850,
@@ -315,7 +320,7 @@ describe("createProject", () => {
   it("propriété : trémie cohérente pour toute hauteur, emmarchement et dalle réalistes", () => {
     fc.assert(
       fc.property(
-        fc.constantFrom(...PRESET_IDS),
+        fc.constantFrom(...FLIGHTS),
         fc.integer({ min: 2200, max: 3600 }),
         fc.integer({ min: 600, max: 1200 }),
         fc.integer({ min: 120, max: 350 }),
@@ -336,6 +341,37 @@ describe("createProject", () => {
       ),
       { numRuns: 300 },
     );
+  });
+});
+
+describe("createProject — deux quarts de sens opposés (S / Z)", () => {
+  it("S par défaut (gauche puis droite), Z avec `direction: right`, libellé", () => {
+    const s = createProject("two-quarters-s");
+    expect(s.stair.layout.turns.map((t) => t.direction)).toEqual(["left", "right"]);
+    expect(PRESET_LABELS["two-quarters-s"]).toMatch(/\(S\)/);
+    const z = createProject("two-quarters-s", { direction: "right" });
+    expect(z.stair.layout.turns.map((t) => t.direction)).toEqual(["right", "left"]);
+    expect(z.stair.layout.legs).toEqual(s.stair.layout.legs);
+    expect(PRESET_IDS).not.toContain("two-quarters-s");
+  });
+
+  it("balayage H ∈ [2 500 ; 2 900] : une zone par tournant, collet ≥ 100 mm (G_COLLET_MIN), sans K3 ni K5", () => {
+    for (let H = 2500; H <= 2900; H += 25) {
+      const p = createProject("two-quarters-s", { floorToFloor: H });
+      const st = computeStepping(p, computeLayout(p));
+      const ctx = `H = ${H}\n${st.notes.join("\n")}`;
+      expect(
+        st.balancedZones.map((z) => z.turn),
+        ctx,
+      ).toEqual([0, 1]);
+      expect(Math.min(...st.treads.map((t) => t.colletChord)), ctx).toBeGreaterThanOrEqual(
+        getRule("G_COLLET_MIN").min!,
+      );
+      expect(
+        st.notes.filter((n) => /^K[35] :/.test(n)),
+        ctx,
+      ).toEqual([]);
+    }
   });
 });
 

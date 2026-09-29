@@ -111,6 +111,7 @@ describe("écrivains DXF", () => {
     const f = readDxf(text);
     expect(f.header.get("$ACADVER")?.[0]?.[1]).toBe(version === "R12" ? "AC1009" : "AC1021");
     expect(f.header.get("$INSUNITS")?.[0]).toEqual([70, "4"]);
+    expect(f.header.get("$MEASUREMENT")?.[0]).toEqual([70, "1"]);
     expect(f.layers.get("PLIAGE_E")).toEqual({ color: 1, lineType: "DASHED" });
     const [line] = entitiesOn(f, "LINE");
     expect(line!.layer).toBe("PLIAGE_E");

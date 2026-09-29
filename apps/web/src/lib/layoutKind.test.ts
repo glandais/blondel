@@ -11,10 +11,13 @@ import { normalizeProject } from "../store/projectStore.js";
 import {
   FALLBACK_TREADS_PER_TURN,
   HELICAL_CONTEXT,
+  flightsTypologyLabel,
+  hasOppositeTurns,
   layoutKindOf,
   presetProject,
   structureFitsLayout,
   switchLayoutKind,
+  withTurnSequence,
 } from "./layoutKind.js";
 
 const withStructure = (p: Project, kind: string): Project =>
@@ -173,5 +176,70 @@ describe("type de tracé", () => {
       stair: { ...p.stair, stepping: { ...p.stair.stepping, riserCount: 16 } },
     });
     expect(switchLayoutKind(p16, "helical").note).toMatch(/provisoire/);
+  });
+});
+
+describe("typologie des volées (S / Z)", () => {
+  const turnsOf = (p: Project) => p.stair.layout.turns;
+
+  it("libellés des préréglages à volées", () => {
+    expect(flightsTypologyLabel(turnsOf(createProject("straight")))).toBe("Escalier droit");
+    expect(flightsTypologyLabel(turnsOf(createProject("quarter-left")))).toBe(
+      "Quart tournant à gauche",
+    );
+    expect(flightsTypologyLabel(turnsOf(createProject("quarter-landing")))).toMatch(/avec palier$/);
+    expect(flightsTypologyLabel(turnsOf(createProject("two-quarters-u")))).toMatch(/\(U\)/);
+    const s = turnsOf(createProject("two-quarters-s"));
+    expect(hasOppositeTurns(s)).toBe(true);
+    expect(flightsTypologyLabel(s)).toMatch(/^Deux quarts tournants opposés \(S \/ Z/);
+    expect(hasOppositeTurns(turnsOf(createProject("two-quarters-u")))).toBe(false);
+  });
+
+  it("U ↔ S / Z : sens du premier tournant gardé, modèle construit sans erreur", () => {
+    const u = createProject("two-quarters-u");
+    const s = withTurnSequence(u, "opposite");
+    expect(turnsOf(s)[0]!.direction).toBe(turnsOf(u)[0]!.direction);
+    expect(turnsOf(s)[1]!.direction).not.toBe(turnsOf(u)[1]!.direction);
+    expect(hasOppositeTurns(turnsOf(s))).toBe(true);
+    const n = normalizeProject(s);
+    expect(n.ok).toBe(true);
+    const m = buildModel(s);
+    expect(m.errors).toEqual([]);
+    expect(withTurnSequence(s, "same")).toEqual(u);
+    // Sans objet : escalier droit, un seul tournant, hélicoïdal.
+    for (const id of ["straight", "quarter-left", "helical"] as const) {
+      const p = createProject(id);
+      expect(withTurnSequence(p, "opposite")).toBe(p);
+    }
+  });
+
+  it("propriété : l'enchaînement choisi est celui rendu, les autres tournants sont inchangés", () => {
+    fc.assert(
+      fc.property(
+        fc.array(fc.constantFrom("left" as const, "right" as const), {
+          minLength: 2,
+          maxLength: 4,
+        }),
+        fc.constantFrom("same" as const, "opposite" as const),
+        (dirs, seq) => {
+          const base = createProject("two-quarters-u");
+          const t0 = base.stair.layout.turns[0]!;
+          const p: Project = {
+            ...base,
+            stair: {
+              ...base.stair,
+              layout: {
+                ...base.stair.layout,
+                turns: dirs.map((direction) => ({ ...t0, direction })),
+              },
+            },
+          };
+          const q = turnsOf(withTurnSequence(p, seq));
+          expect(q[0]!.direction === q[1]!.direction).toBe(seq === "same");
+          expect(q[0]).toEqual(turnsOf(p)[0]);
+          expect(q.slice(2)).toEqual(turnsOf(p).slice(2));
+        },
+      ),
+    );
   });
 });

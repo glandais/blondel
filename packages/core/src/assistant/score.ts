@@ -1,7 +1,8 @@
 /**
  * Résumé du modèle d'un candidat et score détaillé (CHALLENGE G8) : somme pondérée et affichée
  * de pénalités — écart |2h + g − module recommandé|, collet minimal en corde sous le collet
- * recommandé, échappée sous l'échappée recommandée, nombre de marches balancées, régularité
+ * recommandé, échappée sous l'échappée recommandée, marge d'échappée (au-dessus du minimum
+ * bloquant) sous une marge visée, nombre de marches balancées, régularité
  * des girons sur la ligne de foulée, avertissements du contrôle de conception. Les cibles sont
  * les valeurs `recommande` des règles actives (`bounds.ts`) ; les poids sont des choix à valider.
  */
@@ -63,6 +64,8 @@ export function goingIrregularity(model: Model): Mm {
   return worst;
 }
 
+const fmtMm = (v: number): string => String(Math.round(v * 10) / 10);
+
 function term(
   id: keyof ScoreWeights,
   label: string,
@@ -79,6 +82,7 @@ export function scoreModel(
   summary: ModelSummary,
   bounds: EnumerationBounds,
   weights: ScoreWeights,
+  headroomMarginTarget: Mm,
 ): ScoreBreakdown {
   const target = bounds.blondelTarget;
   const terms: ScoreTerm[] = [
@@ -104,6 +108,14 @@ export function scoreModel(
       summary.headroom !== null && bounds.headroomRecommended !== null
         ? bounds.headroomRecommended - summary.headroom
         : 0,
+      "mm",
+      weights,
+    ),
+    // Marge nulle admise par la règle (`e >= 1900`) mais pénalisée : pas de rejet (LEDGER §2).
+    term(
+      "headroomMargin",
+      `Marge d'échappée sous ${fmtMm(headroomMarginTarget)} mm`,
+      summary.headroomMargin !== null ? headroomMarginTarget - summary.headroomMargin : 0,
       "mm",
       weights,
     ),

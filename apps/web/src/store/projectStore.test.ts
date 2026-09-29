@@ -8,7 +8,7 @@ import {
   type Project,
 } from "@blondel/core";
 import { describe, expect, it, vi } from "vitest";
-import { AUTOSAVE_KEY, memoryStorage } from "./persistence.js";
+import { AUTOSAVE_KEY, AUTOSAVE_REJECTED_KEY, memoryStorage } from "./persistence.js";
 import { createProjectStore } from "./projectStore.js";
 
 function clock(): { now: () => number; advance: (ms: number) => void } {
@@ -106,11 +106,12 @@ describe("store du projet", () => {
     expect(s2.getState().project).toEqual(s.getState().project);
   });
 
-  it("ignore une autosauvegarde corrompue et survit à un stockage qui lève", () => {
+  it("autosauvegarde corrompue : projet neuf, message, et survit à un stockage qui lève", () => {
     const corrupt = memoryStorage({ [AUTOSAVE_KEY]: "{oups" });
-    expect(createProjectStore({ storage: corrupt }).getState().project.name).toBe(
-      createProject("straight").name,
-    );
+    const c = createProjectStore({ storage: corrupt });
+    expect(c.getState().project.name).toBe(createProject("straight").name);
+    expect(c.getState().notice?.kind).toBe("error");
+    expect(corrupt.getItem(AUTOSAVE_REJECTED_KEY)).toBe("{oups");
     const throwing = {
       getItem: () => {
         throw new Error("SecurityError");
@@ -124,6 +125,67 @@ describe("store du projet", () => {
     s.getState().setField(["name"], "X");
     expect(s.getState().project.name).toBe("X");
     expect(s.getState().autosaveFailed).toBe(true);
+  });
+
+  describe("autosauvegarde refusée au démarrage (jamais écrasée en silence)", () => {
+    const client = (): Project => ({ ...createProject("straight"), name: "Mon escalier client" });
+    const newer = (): string => {
+      const json = JSON.parse(serializeProject(client())) as Record<string, unknown>;
+      return JSON.stringify({ ...json, schemaVersion: 2 });
+    };
+    const invalid = (): string => {
+      const json = JSON.parse(serializeProject(client())) as { site: Record<string, unknown> };
+      return JSON.stringify({ ...json, site: { ...json.site, floorToFloor: -1 } });
+    };
+
+    it.each([
+      ["format plus récent", newer, /format 2, plus récent/],
+      ["projet invalide", invalid, /invalide/i],
+    ])("%s : message du cœur, copie de secours, original conservé", (_, text, message) => {
+      const raw = text();
+      const storage = memoryStorage({ [AUTOSAVE_KEY]: raw });
+      const s = createProjectStore({ storage, autosaveDelayMs: 0 });
+      expect(s.getState().project.name).toBe(createProject("straight").name);
+      expect(s.getState().notice?.kind).toBe("error");
+      expect(s.getState().notice?.text).toMatch(message);
+      expect(s.getState().rejectedAutosave).toEqual({ text: raw, preserved: true });
+      // La première modification écrit l'autosauvegarde, mais l'original reste récupérable.
+      s.getState().setField(["site", "floorToFloor"], 2800);
+      expect(storage.getItem(AUTOSAVE_KEY)).toContain("Escalier droit");
+      expect(storage.getItem(AUTOSAVE_REJECTED_KEY)).toBe(raw);
+      // Congé explicite : la copie est libérée.
+      s.getState().dismissRejectedAutosave();
+      expect(storage.getItem(AUTOSAVE_REJECTED_KEY)).toBeNull();
+      expect(s.getState().rejectedAutosave).toBeNull();
+    });
+
+    it("copie impossible (quota) : autosauvegarde suspendue jusqu'au choix de l'utilisateur", () => {
+      const raw = newer();
+      const inner = memoryStorage({ [AUTOSAVE_KEY]: raw });
+      const storage = {
+        ...inner,
+        setItem: (k: string, v: string) => {
+          if (k === AUTOSAVE_REJECTED_KEY) throw new Error("QuotaExceededError");
+          inner.setItem(k, v);
+        },
+      };
+      const s = createProjectStore({ storage, autosaveDelayMs: 0 });
+      expect(s.getState().rejectedAutosave).toEqual({ text: raw, preserved: false });
+      expect(s.getState().notice?.text).toMatch(/suspendue/);
+      s.getState().setField(["site", "floorToFloor"], 2800);
+      s.getState().flushAutosave();
+      expect(inner.getItem(AUTOSAVE_KEY)).toBe(raw);
+      s.getState().dismissRejectedAutosave();
+      expect(inner.getItem(AUTOSAVE_KEY)).toContain("2800");
+    });
+
+    it("un projet initial fourni ne lit ni ne signale l'autosauvegarde", () => {
+      const storage = memoryStorage({ [AUTOSAVE_KEY]: "{oups" });
+      const s = createProjectStore({ storage, initialProject: client() });
+      expect(s.getState().notice).toBeNull();
+      expect(s.getState().rejectedAutosave).toBeNull();
+      expect(storage.getItem(AUTOSAVE_REJECTED_KEY)).toBeNull();
+    });
   });
 
   it("propriété : tout préréglage survit à l'export puis l'import, et à l'autosauvegarde", () => {
