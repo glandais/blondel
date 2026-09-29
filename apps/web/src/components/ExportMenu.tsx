@@ -25,7 +25,10 @@ export function ExportMenu() {
   const [busy, setBusy] = useState(false);
   const project = useApp((s) => s.project);
   const selection = useApp((s) => s.selection);
-  const { model } = useModel();
+  const view = useModel();
+  // Modèle d'un projet antérieur pendant un calcul : les exports du modèle attendent le résultat.
+  const model = view.project === project ? view.model : null;
+  const computing = view.project !== project;
   const root = useRef<HTMLDivElement>(null);
   const menuId = useId();
   const part = model ? selectedPart(model, selection?.location) : undefined;
@@ -102,7 +105,10 @@ export function ExportMenu() {
       {open ? (
         <div id={menuId} role="menu" className="menu__list" aria-label="Exporter">
           {EXPORT_ENTRIES.map((entry) => {
-            const a = exportAvailability(entry.id, model);
+            const a =
+              computing && entry.id !== "project-json"
+                ? ({ ok: false, reason: "Calcul du modèle en cours…" } as const)
+                : exportAvailability(entry.id, model);
             return (
               <button
                 key={entry.id}

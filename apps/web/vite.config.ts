@@ -6,6 +6,8 @@ export default defineConfig({
   // (fourni par la CI via la variable d'environnement BASE_PATH).
   base: process.env.BASE_PATH ?? "/",
   plugins: [react()],
+  // Web Worker de calcul (src/model/model.worker.ts) : module ES, comme l'application.
+  worker: { format: "es" },
   build: {
     // La vue 3D (three.js, react-three-fiber, drei) est chargée à la demande dans son propre
     // morceau, d'environ 1 Mo non compressé.

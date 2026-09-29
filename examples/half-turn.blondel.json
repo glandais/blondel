@@ -15,10 +15,10 @@
     "lowerFinish": 0,
     "opening": {
       "kind": "rect",
-      "sizeX": 1780,
-      "sizeY": 2070,
-      "x": -980,
-      "y": -190
+      "sizeX": 1840,
+      "sizeY": 2150,
+      "x": -1040,
+      "y": -400
     },
     "upperFinish": 0,
     "upperSlabThickness": 200,
@@ -34,13 +34,13 @@
     "layout": {
       "legs": [
         {
-          "length": 1880
+          "length": 1745
         },
         {
-          "length": 1780
+          "length": 1840
         },
         {
-          "length": 2063
+          "length": 2138
         }
       ],
       "turns": [

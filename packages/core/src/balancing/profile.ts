@@ -51,12 +51,23 @@ function monomialDerivative(i: number, d: number, t: number): number {
   return k * t ** (i - d);
 }
 
-/** Valeur de la dérivée d'ordre d de f en t. */
+/**
+ * Valeur de la dérivée d'ordre d de f en t. Boucle écrite à la main (chemin chaud du choix de
+ * zone : dichotomies d'inversion et extrema de f') ; mêmes opérations, dans le même ordre, que
+ * `c · monomialDerivative(i, d, t)` : résultats identiques au bit près.
+ */
 export function evalProfile(profile: DevelopmentProfile, t: number, d = 0): number {
+  const coeffs = profile.coeffs;
   let v = 0;
-  profile.coeffs.forEach((c, i) => {
-    if (c !== 0) v += c * monomialDerivative(i, d, t);
-  });
+  for (let i = d; i < coeffs.length; i++) {
+    const c = coeffs[i]!;
+    if (c === 0) continue;
+    let k = 1;
+    for (let j = 0; j < d; j++) k *= i - j;
+    const e = i - d;
+    // t⁰ = 1 et t¹ = t exactement ; puissance générale au-delà.
+    v += c * (k * (e === 0 ? 1 : e === 1 ? t : t ** e));
+  }
   return v;
 }
 

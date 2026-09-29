@@ -1,6 +1,8 @@
 /**
  * Exemples `examples/*.blondel.json` : un par préréglage + cas d'acceptation n° 1 (sans
- * structure, et avec la structure bois `wood-housed` du jalon 3a).
+ * structure, avec la structure bois `wood-housed` du jalon 3a, en limons acier des jalons 3b et
+ * 3c) + demi-tournant métal avec garde-corps (jalon 4, interactions entre étapes). L'exemple
+ * `j4-acceptance-01-garde-corps` a son générateur dans `guards/acceptance.test.ts`.
  * Régénération : `UPDATE_EXAMPLES=1 pnpm vitest run packages/core/src/project/examples.test.ts`.
  */
 import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -9,7 +11,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { computeHeadroom } from "../headroom/headroom.js";
 import { computeLayout } from "../layout/layout.js";
-import type { Project } from "../model/project.js";
+import { ProjectSchema, type Project } from "../model/project.js";
 import { computeStepping } from "../stepping/stepping.js";
 import { parseProjectText } from "./parse.js";
 import { createProject, PRESET_HEADROOM_MIN, PRESET_IDS } from "./presets.js";
@@ -18,6 +20,10 @@ import { serializeProject } from "./serialize.js";
 const EXAMPLES_DIR = resolve(dirname(fileURLToPath(import.meta.url)), "../../../../examples");
 const ACCEPTANCE_01 = "acceptance-01-quart-tournant.blondel.json";
 const ACCEPTANCE_01_WOOD = "j3a-acceptance-01-bois.blondel.json";
+const ACCEPTANCE_01_STEEL_FLAT = "j3b-acceptance-01-acier-plat.blondel.json";
+const ACCEPTANCE_01_FOLDED = "j3b-acceptance-01-tole-pliee.blondel.json";
+const ACCEPTANCE_01_PROFILE = "j3c-acceptance-01-upn.blondel.json";
+const HALF_TURN_STEEL_GUARDS = "j4-demi-tournant-acier-garde-corps.blondel.json";
 
 /**
  * Cas d'acceptation n° 1 (prompt 2 §6, précisé par docs/CHALLENGE.md P1) : quart tournant bas,
@@ -71,10 +77,71 @@ export function acceptance01Wood(): Project {
   };
 }
 
+/** Cas d'acceptation n° 1 avec une autre structure (paramètres partiels, défauts à valider). */
+function acceptance01With(name: string, kind: string, params: Record<string, unknown>): Project {
+  const p = acceptance01();
+  return { ...p, name, stair: { ...p.stair, structure: { kind, params } } };
+}
+
+/** Jalon 3b : limons acier en plat découpé laser, marches bois (mixte). */
+export function acceptance01SteelFlat(): Project {
+  return acceptance01With(
+    "Jalon 3b — cas d'acceptation n° 1, limons en plat acier",
+    "steel-flat",
+    {},
+  );
+}
+
+/**
+ * Jalon 3b, critère d'acceptation n° 3 : limons en plat acier et marches en tôle pliée en Z
+ * (contremarches pliées : les contremarches bois de base sont supprimées par le pipeline).
+ */
+export function acceptance01Folded(): Project {
+  return acceptance01With(
+    "Jalon 3b — cas d'acceptation n° 1, marches en tôle pliée",
+    "steel-flat",
+    { treadKind: "folded-steel", folded: { profile: "Z" } },
+  );
+}
+
+/** Jalon 3c : limons en profilés UPN (section `auto` : la plus légère qui passe le precheck). */
+export function acceptance01Profile(): Project {
+  return acceptance01With("Jalon 3c — cas d'acceptation n° 1, limons UPN", "steel-profile", {
+    family: "UPN",
+  });
+}
+
+/**
+ * Jalon 4, interactions entre étapes : demi-tournant balancé (deux quarts, poteaux d'angle de
+ * 100 mm au lieu du jour vif du préréglage, sans lequel les limons de jour ne se rencontrent
+ * pas), limons en plat acier, marches en tôle pliée en Z, garde-corps barreaudé.
+ */
+export function halfTurnSteelGuards(): Project {
+  const p = createProject("half-turn");
+  return ProjectSchema.parse({
+    ...p,
+    name: "Jalon 4 — demi-tournant acier et tôle pliée, garde-corps barreaudé",
+    stair: {
+      ...p.stair,
+      layout: {
+        ...p.stair.layout,
+        turns: p.stair.layout.turns.map((t) => ({ ...t, inner: { kind: "newel", size: 100 } })),
+      },
+      structure: { kind: "steel-flat", params: { treadKind: "folded-steel" } },
+    },
+    compliance: { ...p.compliance, referenceDate: "2026-01-15" },
+    guards: { infill: { kind: "balusters" } },
+  });
+}
+
 const expected: Readonly<Record<string, () => Project>> = {
   ...Object.fromEntries(PRESET_IDS.map((id) => [`${id}.blondel.json`, () => createProject(id)])),
   [ACCEPTANCE_01]: acceptance01,
   [ACCEPTANCE_01_WOOD]: acceptance01Wood,
+  [ACCEPTANCE_01_STEEL_FLAT]: acceptance01SteelFlat,
+  [ACCEPTANCE_01_FOLDED]: acceptance01Folded,
+  [ACCEPTANCE_01_PROFILE]: acceptance01Profile,
+  [HALF_TURN_STEEL_GUARDS]: halfTurnSteelGuards,
 };
 
 if (process.env["UPDATE_EXAMPLES"] === "1") {

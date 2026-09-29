@@ -98,6 +98,11 @@ export interface StructureOutput {
   readonly checks: readonly RuleResult[];
   /** Classe d'exécution EN 1090-2 déduite (métal). */
   readonly executionClass?: "EXC1" | "EXC2";
+  /**
+   * Identifiants de pièces de base que la structure **supprime** (ex. contremarches bois quand
+   * les marches en tôle pliée en Z portent leur contremarche). Absent : aucune.
+   */
+  readonly removedBaseParts?: readonly string[];
   readonly notes: readonly string[];
   /**
    * Configurations non prises en charge (ex. jour en arc sous un limon à la française) : la

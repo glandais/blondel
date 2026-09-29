@@ -1,8 +1,9 @@
 /**
  * Choix de la structure (plugin `StructureKind` de `@blondel/core`, liste `listStructures()`)
- * et formulaire générique de ses paramètres, déduit des défauts et du schéma du plugin. Sans
- * plugin disponible, seule la structure « aucune » (marches, contremarches, paliers) est
- * proposée.
+ * et formulaire de ses paramètres, déduit des défauts et du schéma du plugin, présenté en
+ * français (libellés, unités, groupes : `lib/paramLabels.ts`) ; section des profilés choisie
+ * dans le catalogue du cœur. Sans plugin disponible, seule la structure « aucune » (marches,
+ * contremarches, paliers) est proposée.
  */
 import type { StructureContext, StructureKind } from "@blondel/core";
 import { useMemo, useState } from "react";
@@ -17,10 +18,16 @@ import {
   withDefaults,
   type ParamField,
 } from "../lib/structureForm.js";
+import {
+  afterParamChange,
+  groupLabel,
+  presentFields,
+  type PresentedField,
+} from "../lib/paramLabels.js";
 import { formatDecimal, parseDecimal } from "../lib/units.js";
 import { appStore, useApp, useModel } from "../store/appStore.js";
 import type { UpdateResult } from "../store/projectStore.js";
-import { CheckField, NumberField, SelectField, TextField } from "./fields.js";
+import { AutoIntField, CheckField, NumberField, SelectField, TextField } from "./fields.js";
 
 export const NO_STRUCTURE = "none";
 
@@ -39,10 +46,11 @@ function ParamInput({
   value,
   onCommit,
 }: {
-  field: ParamField;
+  field: PresentedField;
   value: unknown;
   onCommit: (v: unknown) => UpdateResult;
 }) {
+  const hint = field.hint === undefined ? {} : { hint: field.hint };
   switch (field.kind) {
     case "number": {
       const bounds = {
@@ -51,15 +59,39 @@ function ParamInput({
       };
       const n = typeof value === "number" ? value : Number.NaN;
       return field.integer ? (
-        <NumberField label={field.label} value={n} unit="" {...bounds} onCommit={onCommit} />
+        <NumberField
+          label={field.label}
+          value={n}
+          unit={field.unit}
+          {...hint}
+          {...bounds}
+          onCommit={onCommit}
+        />
       ) : (
         <NumberField
           label={field.label}
           value={n}
-          unit=""
+          unit={field.unit}
+          {...hint}
           {...bounds}
           parse={parseDecimal}
           format={formatDecimal}
+          onCommit={onCommit}
+        />
+      );
+    }
+    case "auto-number": {
+      // Sortie du mode automatique : borne minimale du plugin (valeur à saisir, aucune règle).
+      const fallback = Math.max(1, Math.ceil(field.min ?? 1));
+      return (
+        <AutoIntField
+          label={field.label}
+          value={typeof value === "number" ? value : "auto"}
+          fallback={fallback}
+          unit={field.unit}
+          {...hint}
+          {...(field.min === undefined ? {} : { min: field.min })}
+          {...(field.max === undefined ? {} : { max: field.max })}
           onCommit={onCommit}
         />
       );
@@ -69,14 +101,17 @@ function ParamInput({
         <SelectField
           label={field.label}
           value={String(value)}
-          options={field.options.map((o) => ({ value: o, label: o }))}
+          {...hint}
+          options={field.options.map((o) => ({ value: o, label: field.optionLabels?.[o] ?? o }))}
           onCommit={onCommit}
         />
       );
     case "boolean":
       return <CheckField label={field.label} checked={value === true} onCommit={onCommit} />;
     case "text":
-      return <TextField label={field.label} value={String(value ?? "")} onCommit={onCommit} />;
+      return (
+        <TextField label={field.label} value={String(value ?? "")} {...hint} onCommit={onCommit} />
+      );
     case "readonly":
       return (
         <p className="muted">
@@ -84,6 +119,23 @@ function ParamInput({
         </p>
       );
   }
+}
+
+/** Champs regroupés : principaux d'abord, puis un groupe par sous-objet (ordre d'apparition). */
+function groupFields(
+  fields: readonly PresentedField[],
+): { group: string | undefined; fields: PresentedField[] }[] {
+  const out: { group: string | undefined; fields: PresentedField[] }[] = [];
+  for (const f of fields) {
+    let g = out.find((x) => x.group === f.group);
+    if (!g) {
+      g = { group: f.group, fields: [] };
+      if (f.group === undefined) out.unshift(g);
+      else out.push(g);
+    }
+    g.fields.push(f);
+  }
+  return out;
 }
 
 export function StructureSection() {
@@ -98,10 +150,16 @@ export function StructureSection() {
     [model, project],
   );
   const defaults = useMemo(() => (plugin ? safeDefaults(plugin, ctx) : undefined), [plugin, ctx]);
+  const params = useMemo(
+    () => withDefaults(defaults, structure.params),
+    [defaults, structure.params],
+  );
   const fields = useMemo(
     () =>
-      plugin && defaults !== undefined ? deriveParamFields(defaults, plugin.paramsSchema) : [],
-    [plugin, defaults],
+      plugin && defaults !== undefined
+        ? presentFields(plugin.kind, deriveParamFields(defaults, plugin.paramsSchema), params)
+        : [],
+    [plugin, defaults, params],
   );
 
   const options = [
@@ -127,7 +185,11 @@ export function StructureSection() {
     (field: ParamField) =>
     (value: unknown): UpdateResult => {
       if (!plugin) return { ok: false, issues: ["Plugin de structure indisponible."] };
-      const next = setParam(withDefaults(defaults, structure.params), field.path, value);
+      const next = afterParamChange(
+        plugin.kind,
+        field.path,
+        setParam(withDefaults(defaults, structure.params), field.path, value),
+      );
       const invalid = validateParams(plugin, next);
       if (invalid) {
         setError(invalid);
@@ -151,14 +213,24 @@ export function StructureSection() {
       {fields.length > 0 ? (
         <fieldset className="structure-params">
           <legend>Paramètres de {plugin?.label}</legend>
-          {fields.map((f) => (
-            <ParamInput
-              key={f.path.join(".")}
-              field={f}
-              value={getParam(structure.params, f.path) ?? getParam(defaults, f.path)}
-              onCommit={onParam(f)}
-            />
-          ))}
+          {groupFields(fields).map(({ group, fields: gf }) => {
+            const inputs = gf.map((f) => (
+              <ParamInput
+                key={f.path.join(".")}
+                field={f}
+                value={getParam(params, f.path)}
+                onCommit={onParam(f)}
+              />
+            ));
+            return group === undefined ? (
+              inputs
+            ) : (
+              <details key={group} className="structure-params__group">
+                <summary>{groupLabel(group)}</summary>
+                {inputs}
+              </details>
+            );
+          })}
         </fieldset>
       ) : null}
       {error ? (

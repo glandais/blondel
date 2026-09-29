@@ -1,11 +1,16 @@
 /**
- * Plugins de structure (`StructureKind`) : registre et plugins bois du jalon 3a.
+ * Plugins de structure (`StructureKind`) : registre, plugins bois du jalon 3a et métal du
+ * jalon 3b.
  *
  * Plugins intégrés, enregistrés au chargement : `wood-housed` (limons à la française, poteaux
- * d'angle) et `wood-cut` (crémaillères, escalier droit).
+ * d'angle), `wood-cut` (crémaillères, escalier droit), `steel-flat` (limons acier en plat
+ * découpé laser, supports, marches bois ou en tôle pliée Z / U) et `steel-profile` (limons en
+ * profilés du commerce UPN / IPN / IPE / HEA, jalon 3c).
  */
 import { registerStructure, getStructure } from "./registry.js";
 import { WOOD_CUT } from "./woodCut.js";
+import { STEEL_FLAT } from "./steelFlat.js";
+import { STEEL_PROFILE } from "./steelProfile.js";
 import { WOOD_HOUSED } from "./woodHoused.js";
 
 export {
@@ -69,6 +74,89 @@ export {
 } from "./development.js";
 export { extendIntoFaces, pocketInterval } from "./housing.js";
 export { minAreaRect, isSimplePolygon, type OrientedBox } from "./geom.js";
+export {
+  STEEL_FLAT,
+  SteelFlatParamsSchema,
+  buildSteelFlat,
+  steelStringerFaces,
+  type FoldedTreadDetail,
+  type SteelFlatParams,
+  type SteelFlatResult,
+  type SteelStringer,
+} from "./steelFlat.js";
+export {
+  developFoldedTread,
+  flatLength,
+  insetPlate,
+  sectionPolygon,
+  uSection,
+  zSection,
+  type BendLineInfo,
+  type FlangeCheck,
+  type FoldedProfile,
+  type FoldedSection,
+  type FoldedTreadInput,
+  type FoldedTreadResult,
+  type PlanLine,
+  type SectionBend,
+  type SectionStep,
+  type USectionInput,
+  type ZSectionInput,
+} from "./folded.js";
+export {
+  boltCenters,
+  effectiveFixing,
+  supportDepth,
+  supportInterval,
+  supportPart,
+  supportSection,
+  supportSectionArea,
+  type SupportFace,
+  type SupportFixing,
+  type SupportKind,
+  type SupportPlacement,
+  type SupportSpec,
+} from "./supports.js";
+export {
+  IDENTICAL_TOLERANCE,
+  QUANTITY_BENDS,
+  QUANTITY_BEND_LENGTH_MM,
+  QUANTITY_BUTT_WELD_MM,
+  QUANTITY_CUTS,
+  QUANTITY_HOLES,
+  QUANTITY_LASER_CUT_MM,
+  QUANTITY_TREATED_SURFACE_M2,
+  QUANTITY_WELD_MM,
+  STEEL_RULES,
+  deduceExecutionClass,
+  groupIdenticalFlats,
+  holePolygon,
+  plateMeasures,
+  steelMaterial,
+  steelQuantities,
+  type ExecutionClassInput,
+  type SteelFinish,
+  type SteelMeasures,
+} from "./steelCommon.js";
+
+export {
+  PROFILE_RULES,
+  STEEL_PROFILE,
+  SteelProfileParamsSchema,
+  buildSteelProfile,
+  lightestSection,
+  type ProfileStringer,
+  type SteelProfileParams,
+  type SteelProfileResult,
+} from "./steelProfile.js";
+export {
+  cuttingPlan,
+  type BarLayout,
+  type CutPiece,
+  type CuttingPlan,
+} from "./steelProfileCutting.js";
 
 if (!getStructure(WOOD_HOUSED.kind)) registerStructure(WOOD_HOUSED);
 if (!getStructure(WOOD_CUT.kind)) registerStructure(WOOD_CUT);
+if (!getStructure(STEEL_FLAT.kind)) registerStructure(STEEL_FLAT);
+if (!getStructure(STEEL_PROFILE.kind)) registerStructure(STEEL_PROFILE);

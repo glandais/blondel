@@ -1,6 +1,6 @@
 /**
  * Panneau de paramètres : édite le `Project` (site, tracé, découpage, balancement, marches,
- * contexte de contrôle). Aucune valeur n'est calculée ici : les valeurs proposées au sortir
+ * structure, garde-corps, contexte de contrôle). Aucune valeur n'est calculée ici : les valeurs proposées au sortir
  * d'un mode automatique sont lues dans le modèle rendu par le cœur.
  */
 import {
@@ -16,6 +16,7 @@ import { appStore, useApp, useModel } from "../store/appStore.js";
 import type { Path } from "../store/setIn.js";
 import { addLeg, legAutoAllowed, removeLastLeg } from "../lib/layoutEdit.js";
 import { AutoIntField, CheckField, IntField, SelectField, TextField } from "./fields.js";
+import { GuardsSection } from "./GuardsSection.js";
 import { StructureSection } from "./StructureSection.js";
 
 const set = (path: Path) => (value: unknown) => appStore.getState().setField(path, value);
@@ -455,6 +456,9 @@ export function ParamsPanel() {
       <TreadsSection />
       <Section title="Structure">
         <StructureSection />
+      </Section>
+      <Section title="Garde-corps" open={false}>
+        <GuardsSection />
       </Section>
       <ComplianceSection />
     </div>

@@ -7,12 +7,14 @@ import { computeLayout } from "../layout/layout.js";
 import { LayoutError } from "../layout/errors.js";
 import { findCrossings, monotonyBreaks } from "../balancing/postprocess.js";
 import { parseProjectText } from "../project/parse.js";
-import { createProject } from "../project/presets.js";
+import { createProject, PRESET_IDS } from "../project/presets.js";
 import { BalancingSchema } from "../model/project.js";
 import { SteppingError } from "./errors.js";
 import { computeStepping, resolveM3Variant } from "./stepping.js";
 import {
   COLLET_TIE_TOLERANCE,
+  extentLimits,
+  MAX_BALANCED_EXTENT,
   pickZone,
   WINDERS_PER_SIDE_MAX,
   zoneEndConditions,
@@ -189,92 +191,173 @@ describe("quart tournant balancé (M3)", () => {
     expect(low.balancedZones[0]!.from).toBe(0);
   });
 
-  it("choix automatique (CHALLENGE G3) : collet en corde maximal parmi les zones admissibles", () => {
-    // Toute zone symétrique imposée (1 à 8 nez de chaque côté) est un candidat de l'énumération
-    // automatique : le collet retenu en `auto` est au moins aussi grand (à 1 mm près).
+  it("choix automatique (CHALLENGE G3 corrigé) : le moins de nez balancés atteignant la cible", () => {
+    // Toute zone symétrique imposée (w nez de chaque côté) plus petite que la zone retenue en
+    // `auto` n'atteint pas le collet cible avec des collets réguliers et sans croisement (ou
+    // sort de l'étendue K7, ce qui n'est pas testé ici : elle serait alors plus grande).
     const minChord = (st: ReturnType<typeof run>["stepping"]) =>
       Math.min(...st.treads.map((t) => t.colletChord));
+    const count = (st: ReturnType<typeof run>["stepping"]) =>
+      st.nosings.filter((nl) => nl.balanced).length;
     for (const legs of [
       [2400, 2400],
       [1600, 3200],
     ]) {
       const auto = run({ width: 800, legs }).stepping;
-      for (let w = 1; w <= WINDERS_PER_SIDE_MAX; w++) {
+      expect(minChord(auto), `${legs}`).toBeGreaterThanOrEqual(100);
+      for (let w = 1; 2 * w < count(auto); w++) {
         const forced = run({ width: 800, legs, balancing: { windersPerSide: w } }).stepping;
         const regular = monotonyBreaks(forced.treads.map((t) => t.colletChord)).length === 0;
-        if (!regular || findCrossings(forced.nosings).length > 0) continue;
-        expect(minChord(auto), `${legs} w=${w}`).toBeGreaterThanOrEqual(
-          minChord(forced) - COLLET_TIE_TOLERANCE,
-        );
+        const ok = regular && findCrossings(forced.nosings).length === 0;
+        expect(ok && minChord(forced) >= 100, `${legs} w=${w}`).toBe(false);
       }
     }
   });
 
-  it("choix automatique : à collet égal (± 1 mm), le moins de nez balancés", () => {
-    const cand = (from: number, to: number, minChord: number, offCenter = 0): ZoneEvaluation => ({
-      zone: { turn: 0, from, to, collarSide: "left", ends: ["tangent", "tangent"] },
-      ok: true,
-      nosings: [],
-      corrected: [],
-      minChord,
-      minArc: minChord,
-      k5: true,
-      k3: true,
-      winders: to - from - 1,
-      offCenter,
-    });
-    // 131,0 est à moins de 1 mm du maximum 131,8 : 3 nez balancés plutôt que 7.
+  it("choix automatique : collet cible plus exigeant → zone au moins aussi grande", () => {
+    const count = (st: ReturnType<typeof run>["stepping"]) =>
+      st.nosings.filter((nl) => nl.balanced).length;
+    const legs = [2400, 2400];
+    let prev = 0;
+    for (const targetCollet of [1, 60, 100, 140, 180]) {
+      const st = run({ width: 800, legs, balancing: { targetCollet } }).stepping;
+      expect(count(st), `cible ${targetCollet}`).toBeGreaterThanOrEqual(prev);
+      prev = count(st);
+    }
+    // Cible inaccessible : collet maximal dans l'étendue, signalé.
+    const high = run({ width: 800, legs, balancing: { targetCollet: 400 } }).stepping;
+    expect(high.notes.some((n) => n.includes("collet cible de 400 mm non atteint"))).toBe(true);
+    // La note n'invoque l'étendue que si elle a écarté des zones (relecture : message trompeur).
+    expect(high.notes.some((n) => n.includes("étendue de balancement limitée à 3,5 girons"))).toBe(
+      true,
+    );
+    const wide = run({
+      width: 800,
+      legs,
+      balancing: { targetCollet: 400, maxBalancedExtent: 100 },
+    }).stepping;
+    expect(wide.notes.some((n) => n.includes("aucune zone possible ne l'atteint"))).toBe(true);
+    expect(wide.notes.some((n) => n.includes("étendue de balancement limitée"))).toBe(false);
+  });
+
+  const cand = (
+    from: number,
+    to: number,
+    minChord: number,
+    extra: Partial<ZoneEvaluation> = {},
+  ): ZoneEvaluation => ({
+    zone: { turn: 0, from, to, collarSide: "left", ends: ["tangent", "tangent"] },
+    ok: true,
+    nosings: [],
+    corrected: [],
+    minChord,
+    minArc: minChord,
+    k5: true,
+    k3: true,
+    winders: to - from - 1,
+    offCenter: 0,
+    ...extra,
+  });
+
+  it("pickZone : cible atteinte → le moins de nez balancés (réguliers d'abord)", () => {
+    // Régression constatée en ligne : maximiser le collet balançait toute une volée.
+    const few = cand(4, 8, 131);
+    const many = cand(2, 10, 180);
+    expect(pickZone([many, few, cand(5, 7, 90)], 100)).toBe(few);
+    // À nombre égal, le plus grand collet.
+    expect(pickZone([cand(4, 8, 120), cand(3, 7, 150), cand(5, 9, 101)], 100)!.zone.from).toBe(3);
+    // Parmi les candidats qui atteignent la cible, les réguliers (K3) d'abord.
+    expect(pickZone([cand(4, 8, 131, { k3: false }), many], 100)).toBe(many);
+    // Un candidat régulier sous la cible ne l'emporte pas sur un irrégulier qui l'atteint.
+    const irregular = cand(4, 8, 131, { k3: false });
+    expect(pickZone([irregular, cand(2, 10, 95)], 100)).toBe(irregular);
+    // Candidats non admissibles (K5, collet nul, nez corrigé) ignorés ; aucun admissible → null.
+    expect(pickZone([cand(4, 8, 131, { k5: false }), many], 100)).toBe(many);
+    expect(pickZone([cand(4, 8, 131, { corrected: [5] }), many], 100)).toBe(many);
+    expect(pickZone([cand(2, 10, 0)], 100)).toBeNull();
+  });
+
+  it("pickZone : cible non atteinte → collet maximal, la régularité ne sacrifie pas le collet", () => {
+    // Ledger (revue J1-J2) : demi-tournant E = 1 200, zone régulière à 28 mm retenue au lieu
+    // d'une zone irrégulière (K5 respecté) à 83 mm.
+    const regular28 = cand(4, 12, 28);
+    const irregular83 = cand(1, 13, 83, { k3: false });
+    expect(pickZone([regular28, irregular83], 100)).toBe(irregular83);
+    // À `colletTieTolerance` (1 mm) du maximum : réguliers d'abord, puis le moins de nez.
+    const regular825 = cand(2, 12, 82.5);
+    expect(pickZone([regular28, irregular83, regular825], 100)).toBe(regular825);
     const few = cand(4, 8, 131);
     const many = cand(2, 10, 131.8);
-    expect(pickZone([many, few, cand(5, 7, 90)])).toBe(few);
-    // Au-delà de 1 mm, le collet maximal l'emporte même avec plus de nez balancés.
+    expect(pickZone([many, few], 200)).toBe(few);
+    // Au-delà de la tolérance, le collet maximal l'emporte même avec plus de nez balancés.
     const more = cand(2, 10, 132.2);
-    expect(pickZone([few, more])).toBe(more);
-    // Collet cible (100) non discriminant : le maximum est retenu même au-dessus de la cible.
-    expect(pickZone([cand(5, 8, 105), cand(3, 10, 140)])!.zone.from).toBe(3);
-    // Candidats non admissibles (K5, collet nul) ignorés ; aucun admissible → null.
-    expect(pickZone([{ ...more, k5: false }, few])).toBe(few);
-    expect(pickZone([{ ...more, minChord: 0, minArc: 0 }])).toBeNull();
-    // Régularité (K3) prioritaire quand un candidat régulier existe.
-    expect(pickZone([{ ...more, k3: false }, few])).toBe(few);
+    expect(pickZone([few, more], 200)).toBe(more);
   });
 
   it("tolérance d'égalité des collets : paramètre du projet (défaut 1 mm, à valider)", () => {
-    // Relecture : la tolérance était un seuil figé dans le code, sans source métier.
-    const cand = (from: number, to: number, minChord: number): ZoneEvaluation => ({
-      zone: { turn: 0, from, to, collarSide: "left", ends: ["tangent", "tangent"] },
-      ok: true,
-      nosings: [],
-      corrected: [],
-      minChord,
-      minArc: minChord,
-      k5: true,
-      k3: true,
-      winders: to - from - 1,
-      offCenter: 0,
-    });
     const few = cand(4, 8, 131);
     const many = cand(2, 10, 131.8);
-    expect(pickZone([many, few])).toBe(few);
-    expect(pickZone([many, few], 0)).toBe(many);
-    expect(pickZone([many, cand(5, 7, 90)], 50)!.winders).toBe(1);
-    expect(() => pickZone([few], -1)).toThrow(RangeError);
-    expect(() => pickZone([few], Number.NaN)).toThrow(RangeError);
+    expect(pickZone([many, few], 200)).toBe(few);
+    expect(pickZone([many, few], 200, 0)).toBe(many);
+    expect(pickZone([many, cand(5, 7, 90)], 200, 50)!.winders).toBe(1);
+    expect(() => pickZone([few], 200, -1)).toThrow(RangeError);
+    expect(() => pickZone([few], 200, Number.NaN)).toThrow(RangeError);
+    expect(() => pickZone([few], 0)).toThrow(RangeError);
     expect(BalancingSchema.parse({}).colletTieTolerance).toBeUndefined();
     expect(BalancingSchema.safeParse({ colletTieTolerance: -1 }).success).toBe(false);
-    // Bout en bout (quart médian) : 0 = collet maximal pur ; très grande tolérance = le moins
-    // de nez balancés parmi les zones régulières.
+    // Bout en bout (quart médian, cible inaccessible) : 0 = collet maximal pur ; très grande
+    // tolérance = le moins de nez balancés.
     const count = (st: ReturnType<typeof run>["stepping"]) =>
       st.nosings.filter((nl) => nl.balanced).length;
     const minChord = (st: ReturnType<typeof run>["stepping"]) =>
       Math.min(...st.treads.map((t) => t.colletChord));
     const legs = [2400, 2400];
-    const byDefault = run({ width: 800, legs }).stepping;
-    const pure = run({ width: 800, legs, balancing: { colletTieTolerance: 0 } }).stepping;
-    const loose = run({ width: 800, legs, balancing: { colletTieTolerance: 1000 } }).stepping;
+    const balancing = { targetCollet: 400 };
+    const byDefault = run({ width: 800, legs, balancing }).stepping;
+    const pure = run({
+      width: 800,
+      legs,
+      balancing: { ...balancing, colletTieTolerance: 0 },
+    }).stepping;
+    const loose = run({
+      width: 800,
+      legs,
+      balancing: { ...balancing, colletTieTolerance: 1000 },
+    }).stepping;
     expect(minChord(pure)).toBeGreaterThanOrEqual(minChord(byDefault) - 1e-6);
     expect(minChord(byDefault)).toBeGreaterThanOrEqual(minChord(pure) - COLLET_TIE_TOLERANCE);
     expect(count(loose)).toBeLessThan(count(byDefault));
+  });
+
+  it("étendue K7 : paramètre maxBalancedExtent (défaut 3,5 girons depuis l'angle, DIN 18065)", () => {
+    expect(MAX_BALANCED_EXTENT).toBe(3.5);
+    expect(BalancingSchema.parse({}).maxBalancedExtent).toBeUndefined();
+    expect(BalancingSchema.safeParse({ maxBalancedExtent: 0 }).success).toBe(false);
+    // Fonction pure : nez à s = 0, 100, …, 1 000 ; tournant [450 ; 550], kL = 5, kR = 6 ;
+    // giron 100, étendue 2 : nez fixes jusqu'à s = 250 avant et 750 après.
+    const s = Array.from({ length: 11 }, (_, k) => 100 * k);
+    expect(extentLimits({ sStart: 450, sEnd: 550 }, s, { kL: 5, kR: 6 }, 100, 2)).toEqual({
+      before: 2,
+      after: 1,
+    });
+    expect(extentLimits({ sStart: 450, sEnd: 550 }, s, { kL: 5, kR: 6 }, 100, 100)).toEqual({
+      before: 5,
+      after: 4,
+    });
+    // Bout en bout : cible inaccessible, la zone s'étend jusqu'à l'étendue et pas au-delà.
+    const legs = [2400, 2400];
+    for (const maxBalancedExtent of [1.5, 2.5, 3.5, 6]) {
+      const { stepping, layout } = run({
+        width: 800,
+        legs,
+        balancing: { targetCollet: 400, maxBalancedExtent },
+      });
+      const z = stepping.balancedZones[0]!;
+      const turn = layout.turns[0]!;
+      const reach = maxBalancedExtent * stepping.going + 1e-6;
+      expect(turn.sStart - stepping.nosings[z.from]!.s).toBeLessThanOrEqual(reach);
+      expect(stepping.nosings[z.to]!.s - turn.sEnd).toBeLessThanOrEqual(reach);
+    }
   });
 
   it("borne de zone dans la partie tournante : extrémité libre, sinon tangente", () => {
@@ -326,7 +409,7 @@ describe("quart tournant balancé (M3)", () => {
     expect(high.balancedZones[0]!.to).toBeGreaterThanOrEqual(high.riserCount - 2);
     expect(high.treads[high.treads.length - 1]!.kind).toBe("winder");
     const mid = run({ width: 800, legs: [2400, 2400] }).stepping;
-    // Tournant médian : collet maximal (CHALLENGE G3), la zone encadre le tournant.
+    // Tournant médian : collet cible atteint (CHALLENGE G3), la zone encadre le tournant.
     const z = mid.balancedZones[0]!;
     expect(z.from).toBeLessThan(7);
     expect(z.to).toBeGreaterThan(7);
@@ -595,7 +678,11 @@ describe("exemples du dépôt", () => {
     const st = computeStepping(project, computeLayout(project));
     const winders = st.treads.filter((t) => t.kind === "winder");
     expect(Math.min(...winders.map((t) => t.colletChord))).toBeGreaterThanOrEqual(100);
-    expect(monotonyBreaks(winders.map((t) => t.colletChord))).toEqual([]);
+    // Zone minimale atteignant la cible (CHALLENGE G3 corrigé) : nez 0 → 4 (3 nez balancés),
+    // dans l'étendue K7. Poteau d'angle : K3 en corde non garanti (aucun candidat régulier,
+    // la corde de la marche d'angle coupe le poteau ; ledger §2).
+    expect(st.balancedZones.map((z) => [z.from, z.to])).toEqual([[0, 4]]);
+    expect(monotonyBreaks(winders.map((t) => t.colletArc).slice(0, 4))).toEqual([]);
   });
 });
 
@@ -623,5 +710,131 @@ describe("contour de marche coupé au nez suivant (intégration)", () => {
       ).toBe(true);
     }
     expect(Math.min(...m5.outline.map((v) => v.y))).toBeGreaterThan(-1e-6);
+  });
+});
+
+describe("préréglages : étendue du balancement (non-régression, CHALLENGE G3 corrigé)", () => {
+  // Régression constatée en ligne le 2026-09-29 : le quart tournant balançait les nez 2 → 12
+  // (toute la seconde volée). Chaque zone automatique reste dans l'étendue K7 (3,5 girons
+  // depuis l'angle) : nez fixes encadrants à au plus 3,5 girons du début / de la fin de la
+  // partie tournante, et nombre de nez balancés ≤ nombre de nez dans cette étendue.
+  const cases: [string, Parameters<typeof createProject>[1]][] = [];
+  for (const id of PRESET_IDS) {
+    for (const width of [undefined, 700, 1000, 1200]) {
+      for (const floorToFloor of [2500, 2700, 2900]) {
+        cases.push([`${id} E=${width ?? "défaut"} H=${floorToFloor}`, { width, floorToFloor }]);
+      }
+    }
+  }
+  it.each(cases)("%s", (label, options) => {
+    const id = label.split(" ")[0] as (typeof PRESET_IDS)[number];
+    const project = createProject(id, options);
+    const layout = computeLayout(project);
+    const st = computeStepping(project, layout);
+    const reach = MAX_BALANCED_EXTENT * st.going + 1e-6;
+    for (const z of st.balancedZones) {
+      const sFrom = st.nosings[z.from]!.s;
+      const sTo = st.nosings[z.to]!.s;
+      const sStart = layout.turns[z.turn]!.sStart;
+      // Dernier tournant de la zone (zone unique de 180° : le suivant).
+      const sEnd = Math.max(...layout.turns.filter((t) => t.sStart < sTo).map((t) => t.sEnd));
+      expect(sStart - sFrom, label).toBeLessThanOrEqual(reach);
+      expect(sTo - sEnd, label).toBeLessThanOrEqual(reach);
+      const balanced = st.nosings.filter((nl) => nl.index > z.from && nl.index < z.to).length;
+      const bound = st.nosings.filter((nl) => nl.s > sStart - reach && nl.s < sEnd + reach).length;
+      expect(balanced, label).toBeLessThanOrEqual(bound);
+    }
+  });
+
+  it.each(cases)(
+    "%s : arrêt anticipé de l'énumération = énumération complète",
+    (label, options) => {
+      // Relecture : l'équivalence n'était vérifiée que par un test temporaire supprimé.
+      const id = label.split(" ")[0] as (typeof PRESET_IDS)[number];
+      const project = createProject(id, options);
+      const layout = computeLayout(project);
+      expect(computeStepping(project, layout), label).toEqual(
+        computeStepping(project, layout, { exhaustiveZoneSearch: true }),
+      );
+    },
+  );
+
+  it.each(cases.filter(([label]) => label.startsWith("quarter-")))(
+    "%s : aucune zone symétrique plus petite n'atteint la cible (zone minimale G3)",
+    (label, options) => {
+      const id = label.split(" ")[0] as (typeof PRESET_IDS)[number];
+      const project = createProject(id, options);
+      const layout = computeLayout(project);
+      const st = computeStepping(project, layout);
+      const count = st.nosings.filter((nl) => nl.balanced).length;
+      const target = project.stair.balancing.targetCollet;
+      if (Math.min(...st.treads.map((t) => t.colletChord)) < target - 1e-6) return;
+      const reach = MAX_BALANCED_EXTENT * st.going + 1e-6;
+      const turn = layout.turns[0]!;
+      for (let w = 1; 2 * w < count; w++) {
+        const p = {
+          ...project,
+          stair: { ...project.stair, balancing: { ...project.stair.balancing, windersPerSide: w } },
+        };
+        const f = computeStepping(p, layout);
+        const z = f.balancedZones[0];
+        if (!z) continue;
+        const within =
+          turn.sStart - f.nosings[z.from]!.s <= reach && f.nosings[z.to]!.s - turn.sEnd <= reach;
+        const ok =
+          within &&
+          f.nosings.filter((nl) => nl.balanced).length < count &&
+          monotonyBreaks(f.treads.map((t) => t.colletChord)).length === 0 &&
+          monotonyBreaks(f.treads.map((t) => t.colletArc)).length === 0 &&
+          findCrossings(f.nosings).length === 0 &&
+          !f.notes.some((n) => n.includes("recoupe le jour"));
+        expect(
+          ok && Math.min(...f.treads.map((t) => t.colletChord)) >= target - 1e-6,
+          `${label} w=${w}`,
+        ).toBe(false);
+      }
+    },
+  );
+
+  it("aucune zone admissible dans l'étendue K7 : repli au-delà, signalé (pas de nez perpendiculaires)", () => {
+    // Relecture : U à étendue de 0,5 giron — les deux tournants restaient perpendiculaires,
+    // collets nuls (marches 3, 4, 7, 8), alors que des zones plus étendues sont admissibles.
+    for (const maxBalancedExtent of [0.1, 0.5]) {
+      const base = createProject("two-quarters-u");
+      const project = {
+        ...base,
+        stair: { ...base.stair, balancing: { ...base.stair.balancing, maxBalancedExtent } },
+      };
+      const layout = computeLayout(project);
+      const st = computeStepping(project, layout);
+      const ctx = st.notes.join("\n");
+      expect(st.balancedZones, ctx).toHaveLength(2);
+      expect(
+        st.notes.filter((n) => n.includes("étendue dépassée")),
+        ctx,
+      ).toHaveLength(2);
+      expect(
+        st.notes.some((n) => n.includes("aucun balancement admissible")),
+        ctx,
+      ).toBe(false);
+      expect(findCrossings(st.nosings), ctx).toEqual([]);
+      expect(Math.min(...st.treads.map((t) => t.colletChord)), ctx).toBeGreaterThan(0);
+      expect(computeStepping(project, layout, { exhaustiveZoneSearch: true })).toEqual(st);
+    }
+    // Étendue suffisante : pas de repli.
+    const project = createProject("two-quarters-u");
+    const st = computeStepping(project, computeLayout(project));
+    expect(st.notes.some((n) => n.includes("étendue dépassée"))).toBe(false);
+  });
+
+  it("quart tournant gauche / droit (préréglage) : pas toute la seconde volée", () => {
+    for (const id of ["quarter-left", "quarter-right"] as const) {
+      const project = createProject(id);
+      const st = computeStepping(project, computeLayout(project));
+      const balanced = st.nosings.filter((nl) => nl.balanced).length;
+      expect(balanced, id).toBeLessThanOrEqual(6);
+      expect(st.balancedZones[0]!.to, id).toBeLessThanOrEqual(7);
+      expect(Math.min(...st.treads.map((t) => t.colletChord)), id).toBeGreaterThanOrEqual(100);
+    }
   });
 });

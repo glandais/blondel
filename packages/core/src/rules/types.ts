@@ -1,6 +1,7 @@
 /**
  * Types du moteur de conformité : contexte d'évaluation et constats bruts des évaluateurs.
  */
+import type { GuardsAnalysis } from "../guards/types.js";
 import type { Layout, Location, Model, RuleStatus, Stepping } from "../model/derived.js";
 import type { Project } from "../model/project.js";
 import type { RuleDef } from "./table.js";
@@ -23,6 +24,12 @@ export interface ComplianceInput {
    * évaluées ; les autres sortent `non-evaluee` au lieu d'un « sans objet » trompeur.
    */
   readonly incomplete?: "layout" | "stepping";
+  /**
+   * Garde-corps et mains courantes (étape du pipeline, `guards/compute.ts`). Absent : calculés à
+   * la demande par les évaluateurs si le projet a une section `guards` ; `null` : étape en
+   * échec (règles GC_* / MC_* non évaluées).
+   */
+  readonly guards?: GuardsAnalysis | null;
 }
 
 /** Contexte passé à chaque évaluateur. */

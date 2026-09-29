@@ -4,6 +4,7 @@
 import type { RuleEvaluator } from "../types.js";
 import { FLIGHT_EVALUATORS } from "./flights.js";
 import { GOING_EVALUATORS } from "./going.js";
+import { GUARD_EVALUATORS } from "./guards.js";
 import { MISC_EVALUATORS, NOSING_EVALUATORS } from "./nosing.js";
 import { RISE_EVALUATORS } from "./rise.js";
 import { STAIR_EVALUATORS } from "./stair.js";
@@ -24,7 +25,10 @@ export function createRegistry(
   return m;
 }
 
-/** Évaluateurs du cœur (modèle sans pièces : Project + Layout + Stepping + échappée). */
+/**
+ * Évaluateurs du cœur (Project + Layout + Stepping + échappée ; garde-corps et mains courantes
+ * d'après l'analyse de l'étape « garde-corps », `ComplianceInput.guards`).
+ */
 export const DEFAULT_EVALUATORS: EvaluatorRegistry = createRegistry(
   RISE_EVALUATORS,
   GOING_EVALUATORS,
@@ -32,6 +36,7 @@ export const DEFAULT_EVALUATORS: EvaluatorRegistry = createRegistry(
   FLIGHT_EVALUATORS,
   NOSING_EVALUATORS,
   MISC_EVALUATORS,
+  GUARD_EVALUATORS,
 );
 
 /**

@@ -38,4 +38,11 @@ export {
   type EffectiveSeverity,
   type RuleCoverage,
 } from "./engine.js";
+export {
+  GUARD_EVALUATORS,
+  guardHeightTable,
+  handrailClearWidth,
+  requiredGuardHeight2024,
+  type GuardHeightStep,
+} from "./evaluators/guards.js";
 export type { ComplianceInput, EvaluatorContext, Finding, RuleEvaluator } from "./types.js";

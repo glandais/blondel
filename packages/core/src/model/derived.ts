@@ -147,9 +147,14 @@ export interface FlatPattern {
     readonly a: Vec2;
     readonly b: Vec2;
     readonly label?: string;
-    /** Pli : angle (degrés) et sens. */
+    /**
+     * Pli : angle (degrés) et sens. `bendUp` : l'aile se relève vers l'observateur du
+     * développé (face vue = face de référence déclarée par `reference`).
+     */
     readonly bendAngle?: number;
     readonly bendUp?: boolean;
+    /** Pli : rayon intérieur r_int (mm) de l'outillage retenu (loi de pli du profil d'atelier). */
+    readonly bendRadius?: Mm;
     /**
      * Traçage (`kind: "mark"`) : nature de l'usinage tracé. `mortise` = contour d'une mortaise
      * ou d'un encastrement de marche / contremarche (limon à la française, B §4.1), `tenon` =
@@ -282,6 +287,11 @@ export interface Model {
   readonly headroom?: { readonly min: Mm; readonly at: Vec3 };
   /** Échappée sur la largeur des marches (avertissement, CHALLENGE G4). */
   readonly headroomWidth?: HeadroomOnWidth;
+  /**
+   * Classe d'exécution EN 1090-2 déduite par la structure métal (`StructureOutput.executionClass`,
+   * SPEC §2.4). Absent : structure sans pièce métal ou pipeline qui ne la reporte pas.
+   */
+  readonly executionClass?: "EXC1" | "EXC2";
   /** Erreurs de génération (paramètres impossibles) : le modèle peut être partiel. */
   readonly errors: readonly string[];
   /** Remarques non bloquantes du pipeline (pièces non générées, hypothèses). */

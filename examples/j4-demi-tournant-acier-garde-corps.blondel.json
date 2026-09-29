@@ -1,0 +1,141 @@
+{
+  "compliance": {
+    "contexts": [
+      "bois_dtu",
+      "logement_interieur"
+    ],
+    "overrides": [],
+    "profile": "strict",
+    "referenceDate": "2026-01-15"
+  },
+  "guards": {
+    "flight": {
+      "edgeOffset": 30,
+      "enabled": true,
+      "height": 900,
+      "inner": "auto",
+      "outer": "auto"
+    },
+    "handrail": {
+      "extensions": {
+        "bottom": "auto",
+        "top": "auto"
+      },
+      "height": 900,
+      "section": {
+        "diameter": 42,
+        "kind": "round"
+      },
+      "wallClearance": 50,
+      "wallSides": "auto"
+    },
+    "infill": {
+      "bottomGap": 50,
+      "kind": "balusters",
+      "section": {
+        "height": 40,
+        "kind": "rect",
+        "width": 40
+      },
+      "spacing": 140
+    },
+    "material": "wood-oak",
+    "opening": {
+      "enabled": true,
+      "height": 1000,
+      "setback": 50
+    },
+    "posts": {
+      "cornerAngle": 30,
+      "maxSpacing": 1500,
+      "size": 80
+    },
+    "wallTolerance": 100
+  },
+  "name": "Jalon 4 — demi-tournant acier et tôle pliée, garde-corps barreaudé",
+  "rulesVersion": 1,
+  "schemaVersion": 1,
+  "site": {
+    "floorToFloor": 2700,
+    "lowerFinish": 0,
+    "opening": {
+      "kind": "rect",
+      "sizeX": 1840,
+      "sizeY": 2150,
+      "x": -1040,
+      "y": -400
+    },
+    "upperFinish": 0,
+    "upperSlabThickness": 200,
+    "walls": []
+  },
+  "stair": {
+    "balancing": {
+      "method": "M3",
+      "targetCollet": 100,
+      "variant": "auto",
+      "windersPerSide": "auto"
+    },
+    "layout": {
+      "legs": [
+        {
+          "length": 1745
+        },
+        {
+          "length": 1840
+        },
+        {
+          "length": 2138
+        }
+      ],
+      "turns": [
+        {
+          "direction": "left",
+          "inner": {
+            "kind": "newel",
+            "size": 100
+          },
+          "mode": "winders"
+        },
+        {
+          "direction": "left",
+          "inner": {
+            "kind": "newel",
+            "size": 100
+          },
+          "mode": "winders"
+        }
+      ],
+      "width": 800
+    },
+    "nosingOverrides": [],
+    "placement": {
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "rotation": 0
+    },
+    "stepping": {
+      "firstRiseOffset": 0,
+      "riserCount": "auto",
+      "targetGoing": "auto",
+      "targetRise": 175
+    },
+    "structure": {
+      "kind": "steel-flat",
+      "params": {
+        "treadKind": "folded-steel"
+      }
+    },
+    "treads": {
+      "nosing": 10,
+      "riserThickness": 20,
+      "risers": "full",
+      "thickness": 40
+    },
+    "walkline": {
+      "mode": "dtu"
+    }
+  }
+}

@@ -10,6 +10,7 @@ import { findCrossings, monotonyBreaks } from "../balancing/postprocess.js";
 import { computeStepping } from "./stepping.js";
 import { ProjectSchema, type Project } from "../model/project.js";
 import { stairArb } from "./test-helpers.js";
+import { MAX_BALANCED_EXTENT } from "./zones.js";
 
 /** Même projet, tournants en sens inverse (escalier miroir). */
 function mirrored(project: Project): Project {
@@ -91,24 +92,81 @@ describe("découpage — propriétés (générateur contraint : quart tournant, 
           expect(t.colletChord, ctx).toBeGreaterThan(0);
           expect(t.colletArc, ctx).toBeGreaterThan(0);
         }
-        // K3 en arc et en corde. Non garanti (signalé dans les notes, voir le ledger) :
-        // - poteau : le bord réel contourne le poteau (développement sur le jour virtuel) et la
-        //   corde de la marche d'angle le coupe ;
-        // - M1 sur une zone unique de 180° (U serré, demi-tournant) : parfois aucun candidat
-        //   régulier (profil en V inadapté à deux angles).
-        const turns = project.stair.layout.turns;
-        const m1HalfTurn =
-          project.stair.balancing.method === "M1" &&
-          st.notes.some((n) => n.includes("zone unique"));
-        if (turns.every((t) => t.inner.kind !== "newel") && !m1HalfTurn) {
-          for (const z of st.balancedZones) {
-            const zt = st.treads.filter((t) => t.number - 1 >= z.from && t.number <= z.to);
-            expect(monotonyBreaks(zt.map((t) => t.colletArc)), ctx).toEqual([]);
-            expect(monotonyBreaks(zt.map((t) => t.colletChord)), ctx).toEqual([]);
+        // K3 (collets monotones vers l'angle) : depuis CHALLENGE G3 corrigé, c'est une
+        // préférence du choix automatique (parmi les zones qui atteignent la cible, ou à
+        // `colletTieTolerance` du collet maximal), plus un filtre : une zone irrégulière est
+        // retenue quand aucune zone régulière n'atteint la cible (ou le collet maximal). Les
+        // cas sans candidat régulier existent (poteau, zone unique de 180° à deux angles vifs,
+        // départ libre). Propriété : toute rupture K3 en corde dans une zone est signalée.
+        for (const z of st.balancedZones) {
+          const zt = st.treads.filter((t) => t.number - 1 >= z.from && t.number <= z.to);
+          if (monotonyBreaks(zt.map((t) => t.colletChord)).length > 0) {
+            expect(
+              st.notes.some((n) => n.startsWith("K3 :")),
+              ctx,
+            ).toBe(true);
           }
         }
       }),
       { numRuns: RUNS },
+    );
+  }, 600_000);
+
+  it("étendue K7 : zones automatiques à au plus 3,5 girons de l'angle ; cible atteinte ou signalée", () => {
+    fc.assert(
+      fc.property(stairArb(), ({ project }) => {
+        const layout = computeLayout(project);
+        const st = computeStepping(project, layout);
+        const reach = MAX_BALANCED_EXTENT * st.going + 1e-6;
+        const target = project.stair.balancing.targetCollet;
+        const beyond = st.notes.some((n) => n.includes("étendue dépassée"));
+        for (const z of st.balancedZones) {
+          const sTo = st.nosings[z.to]!.s;
+          const sEnd = Math.max(...layout.turns.filter((t) => t.sStart < sTo).map((t) => t.sEnd));
+          // Repli signalé quand aucune zone admissible ne tient dans l'étendue.
+          if (beyond) continue;
+          expect(layout.turns[z.turn]!.sStart - st.nosings[z.from]!.s).toBeLessThanOrEqual(reach);
+          expect(sTo - sEnd).toBeLessThanOrEqual(reach);
+        }
+        const reached = st.treads.every((t) => t.colletChord >= target - 1e-6);
+        if (!reached && st.balancedZones.length > 0) {
+          // Collet sous la cible : soit une zone le signale, soit une marche hors zone (nez
+          // perpendiculaires encadrant la zone) porte le minimum.
+          const signalled = st.notes.some((n) => n.includes("non atteint"));
+          const zoneTreads = st.treads.filter((t) =>
+            st.balancedZones.some((z) => t.number - 1 >= z.from && t.number <= z.to),
+          );
+          const inZones = zoneTreads.every((t) => t.colletChord >= target - 1e-6);
+          expect(signalled || inZones).toBe(true);
+        }
+      }),
+      { numRuns: RUNS },
+    );
+  }, 600_000);
+
+  it("choix automatique : arrêt anticipé de l'énumération = énumération complète (cible et étendue variées)", () => {
+    // Optimisation ADR-0006 : même découpage que l'évaluation de tous les candidats, y compris
+    // pour une cible exigeante (aucun arrêt), faible (arrêt précoce) et une étendue courte (repli).
+    fc.assert(
+      fc.property(
+        stairArb(),
+        fc.integer({ min: 20, max: 250 }),
+        fc.constantFrom(0.5, 1, 2, 3.5, 6),
+        ({ project }, targetCollet, maxBalancedExtent) => {
+          const p = ProjectSchema.parse({
+            ...project,
+            stair: {
+              ...project.stair,
+              balancing: { ...project.stair.balancing, targetCollet, maxBalancedExtent },
+            },
+          });
+          const layout = computeLayout(p);
+          expect(computeStepping(p, layout)).toEqual(
+            computeStepping(p, layout, { exhaustiveZoneSearch: true }),
+          );
+        },
+      ),
+      { numRuns: Math.max(20, Math.round(RUNS / 4)) },
     );
   }, 600_000);
 

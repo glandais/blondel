@@ -65,7 +65,14 @@ describe("buildModel — exemples du dépôt", () => {
     expect(m.stepping.treads).toHaveLength(m.stepping.riserCount - 1);
     const treadParts = m.parts.filter((p) => p.category === "tread" || p.category === "landing");
     expect(treadParts.map((p) => p.id)).toEqual(m.stepping.treads.map((t) => `tread-${t.number}`));
-    expect(m.parts.filter((p) => p.category === "riser")).toHaveLength(m.stepping.riserCount);
+    // Marches en tôle pliée (steel-flat, contremarches pliées ou claire-voie) : les
+    // contremarches bois de base sont supprimées par le pipeline (`removedBaseParts`).
+    const foldedTreads = m.parts.some(
+      (p) => p.category === "tread" && p.material.startsWith("steel"),
+    );
+    expect(m.parts.filter((p) => p.category === "riser")).toHaveLength(
+      foldedTreads ? 0 : m.stepping.riserCount,
+    );
   });
 
   it.each(EXAMPLE_FILES)("%s : cotes principales (non-régression)", (file) => {
@@ -334,9 +341,10 @@ describe("buildModel — échappée et contrôle de conception", () => {
     const m = buildModel(loadExample(ACCEPTANCE_01));
     expect(m.headroomWidth!.min).toBeLessThan(1900);
     expect(m.notes).toEqual([expect.stringContaining("échappée sur la largeur des marches")]);
-    // Nez 4 = dessus de la marche 5 (repère M5) : le message parle de la marche, pas de l'indice.
-    expect(m.headroomWidth!.nosing).toBe(4);
-    expect(m.notes![0]).toContain("au nez de la marche 5");
+    // Nez 3 = dessus de la marche 4 (repère M4) : le message parle de la marche, pas de l'indice.
+    // (Nez 4 / marche 5 avant la correction du choix de zone G3 du 2026-09-29 : zone 0 → 4.)
+    expect(m.headroomWidth!.nosing).toBe(3);
+    expect(m.notes![0]).toContain("au nez de la marche 4");
   });
 
   it("structure sans plugin : remarque, pièces de base seulement", () => {

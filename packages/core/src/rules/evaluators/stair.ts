@@ -13,6 +13,7 @@ import {
 } from "../check.js";
 import { LF_WIDE_THRESHOLD } from "../formula-constants.js";
 import { getRule } from "../table.js";
+import { handrailClearWidth } from "./guards.js";
 import type { EvaluatorContext, Finding, RuleEvaluator } from "../types.js";
 
 // ------------------------------------------------------------------ Blondel et pente
@@ -76,6 +77,18 @@ const upperBoundedByWidth: RuleEvaluator = (ctx) => {
       ),
       measured: width(ctx),
     },
+  ];
+};
+
+/**
+ * Largeur entre mains courantes : emmarchement diminué de l'empiètement des mains courantes
+ * (jalon 4, `handrailClearWidth`) quand les garde-corps sont décrits ; sinon majorant E.
+ */
+const betweenHandrails: RuleEvaluator = (ctx) => {
+  const w = ctx.incomplete ? null : handrailClearWidth(ctx);
+  if (!w) return upperBoundedByWidth(ctx);
+  return [
+    checkValue(ctx, w.width, "Largeur libre entre mains courantes", { location: w.location }),
   ];
 };
 
@@ -174,9 +187,9 @@ export const STAIR_EVALUATORS: Readonly<Record<string, RuleEvaluator>> = {
   LARGEUR_MIN_INDUSTRIEL: stairWidth,
   LARGEUR_ECHELLE_MARCHES: stairWidth,
   LARGEUR_MIN_LOGEMENT: passageWidthLogement,
-  LARGEUR_MC_BHC_PC: upperBoundedByWidth,
-  LARGEUR_MC_ERP_NEUF: upperBoundedByWidth,
-  LARGEUR_MC_ERP_EXISTANT: upperBoundedByWidth,
+  LARGEUR_MC_BHC_PC: betweenHandrails,
+  LARGEUR_MC_ERP_NEUF: betweenHandrails,
+  LARGEUR_MC_ERP_EXISTANT: betweenHandrails,
   LARGEUR_UP_ERP: upperBoundedByWidth,
   LF_POSITION_DTU_ETROIT: dtuWalkline("narrow"),
   LF_POSITION_DTU_LARGE: dtuWalkline("wide"),

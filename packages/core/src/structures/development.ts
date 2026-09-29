@@ -167,6 +167,11 @@ export interface StringerDevelopmentInput {
   readonly levelAfter?: Mm;
   /** Coupe de niveau de la rive haute (altitude maximale du limon), ex. à l'arrivée. */
   readonly topCut?: Mm;
+  /**
+   * Coupe de niveau basse (altitude minimale du limon) ; absent : 0 (sol fini bas). Ex. limon
+   * acier posé sur une platine de pied d'épaisseur e_p : `floorLevel` = e_p.
+   */
+  readonly floorLevel?: Mm;
 }
 
 /** Altitude de la ligne des nez à l'abscisse u, zones de niveau comprises. */
@@ -244,7 +249,7 @@ export function developStringer(input: StringerDevelopmentInput): StringerDevelo
     if (!isNewel || !input.tenon) return [];
     // Le contour est coupé par le sol bas (z ≥ 0) quelle que soit l'origine du limon : un limon
     // qui part d'un poteau proche du sol a aussi sa rive basse sous le sol au droit du poteau.
-    const zb = Math.max(lo + input.tenon.shoulder, 0);
+    const zb = Math.max(lo + input.tenon.shoulder, input.floorLevel ?? 0);
     const zt = hi - input.tenon.shoulder;
     if (!(zt - zb > 1) || !(input.tenon.length > 0)) return [];
     tenons.push({ u, zBottom: zb, zTop: zt, toward });
@@ -261,7 +266,7 @@ export function developStringer(input: StringerDevelopmentInput): StringerDevelo
     ...endEdge(uLo, -1),
   ];
   // Coupe de niveau sur le sol bas, et coupe de niveau haute (arrivée).
-  outline = clipHalfPlane(outline, V.vec(0, 0), V.vec(0, 1));
+  outline = clipHalfPlane(outline, V.vec(0, input.floorLevel ?? 0), V.vec(0, 1));
   if (input.topCut !== undefined)
     outline = clipHalfPlane(outline, V.vec(0, input.topCut), V.vec(0, -1));
   outline = removeCollinear(dedupe(outline));

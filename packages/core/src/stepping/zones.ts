@@ -12,23 +12,30 @@
  *   `tangent` sinon (une partie droite continue).
  * - Nombre de marches balancées : nb nez balancés avant le milieu du tournant sur Γ, na après.
  *   `windersPerSide` numérique : nb = na = valeur (bornée par les nez fixes). `auto` :
- *   énumération de tous les couples (nb, na) ∈ [0 ; 8]² compatibles avec les nez fixes (8 =
- *   maximum de `windersPerSide` dans le schéma) ; chaque candidat est calculé par la stratégie
- *   puis mesuré. Candidats admissibles : solution trouvée, collets > 0 (corde et arc), aucune
+ *   énumération des couples (nb, na) ∈ [0 ; 8]² (8 = maximum de `windersPerSide` dans le
+ *   schéma) compatibles avec les nez fixes et avec l'**étendue maximale** K7
+ *   (`maxBalancedExtent`, défaut `MAX_BALANCED_EXTENT` = 3,5 girons comptés depuis l'angle,
+ *   d'après DIN 18065, source étrangère) ; chaque candidat est calculé par la stratégie puis
+ *   mesuré. Candidats admissibles : solution trouvée, collets > 0 (corde et arc), aucune
  *   ligne de nez croisée (K5), aucune ligne de nez qui recoupe le jour avant son collet.
- *   Choix (CHALLENGE G3 : « retenir la paire qui **maximise** le collet mesuré en corde ») :
- *   0. on ne garde que les candidats « réguliers » s'il en existe : collets monotones vers
- *      l'angle (K3, en corde, et en arc hors poteau) ;
- *   1. on retient le candidat qui **maximise** le collet minimal mesuré en corde ; `targetCollet`
- *      n'est plus un critère de choix (le maximum l'atteint dès qu'un candidat l'atteint) mais
- *      reste le seuil signalé par le contrôle de conception ;
- *   2. à collet égal à `colletTieTolerance` près du maximum (paramètre du projet, défaut
- *      `COLLET_TIE_TOLERANCE` = 1 mm, à valider), le **moins** de nez
- *      balancés (évite de balancer jusqu'à 8 nez de chaque côté pour gagner quelques dixièmes) ;
- *   3. puis le plus grand collet (à 1e-6 mm près), la zone la mieux centrée sur le tournant,
- *      puis le premier candidat de l'énumération — choix déterministe et invariant par miroir.
+ *   Choix (CHALLENGE G3, corrigé le 2026-09-29 : maximiser le collet seul balançait toute une
+ *   volée) :
+ *   1. si des candidats atteignent le collet cible (`targetCollet`, collet minimal en corde) :
+ *      parmi eux, les réguliers (K3 : collets monotones vers l'angle, en corde, et en arc hors
+ *      poteau) s'il en existe, puis le **moins** de nez balancés, puis le plus grand collet ;
+ *   2. sinon : le collet minimal en corde **maximal**, tous candidats admissibles confondus (la
+ *      régularité ne fait pas perdre de collet) ; parmi les candidats à `colletTieTolerance`
+ *      (défaut `COLLET_TIE_TOLERANCE` = 1 mm, à valider) du maximum, les réguliers s'il en
+ *      existe, puis le moins de nez balancés, puis le plus grand collet ;
+ *   3. départages : zone la mieux centrée sur le tournant, puis premier candidat de
+ *      l'énumération — choix déterministe et invariant par miroir.
+ *   Si aucun candidat de l'étendue K7 n'est admissible (étendue courte, jour étroit), le choix
+ *   se fait parmi les zones plus étendues (repli signalé dans les notes) plutôt que de laisser
+ *   les nez perpendiculaires (collet nul, lignes croisées au tournant).
  *   Le collet et K3 sont mesurés sur toutes les marches comprises entre les nez fixes
- *   encadrants.
+ *   encadrants. L'énumération se fait par nombre croissant de nez balancés et s'arrête dès
+ *   qu'un nombre fournit un candidat régulier atteignant la cible (même choix que
+ *   l'énumération complète, ADR-0006).
  * - M0 (rayonnant) en `auto` : la zone couvre exactement les nez situés sur l'arc de Γ.
  */
 import { GEOM_EPS } from "../geom2d/tolerance.js";
@@ -38,8 +45,8 @@ import type { Mm } from "../model/primitives.js";
 import {
   applySolution,
   colletBetween,
-  findCrossings,
   monotonyBreaks,
+  noCrossing,
   type NosingSeed,
 } from "../balancing/postprocess.js";
 
@@ -234,7 +241,7 @@ export function evaluateZone(
   const collets = local.slice(0, -1).map((nl, i) => colletBetween(nl, local[i + 1]!));
   const chords = collets.map((c) => c.chord);
   const arcs = collets.map((c) => c.arc);
-  const k5 = findCrossings(local).length === 0;
+  const k5 = noCrossing(local);
   // K3 sur les cordes (grandeur du contrôle de conception) et, sauf jour de développement
   // virtuel (poteau : l'arc réel contourne le poteau), sur les arcs.
   const virtualJour = ctx.devLayout.inner !== ctx.layout.inner;
@@ -267,9 +274,9 @@ const PICK_EPS: Mm = 1e-6;
 
 /**
  * Valeur par défaut de `BalancingSchema.colletTieTolerance` : écart de collet (mm) en deçà
- * duquel deux candidats sont jugés équivalents pour le choix automatique ; parmi les candidats
- * dont le collet minimal en corde est à moins de cette valeur du maximum, on retient le moins
- * de nez balancés. [Choix Blondel, à valider : valeur donnée par l'orchestrateur, sans source
+ * duquel deux candidats sont jugés équivalents quand aucun candidat n'atteint le collet cible ;
+ * parmi les candidats dont le collet minimal en corde est à moins de cette valeur du maximum,
+ * on retient les réguliers (K3), puis le moins de nez balancés. [Choix Blondel, à valider : valeur donnée par l'orchestrateur, sans source
  * métier ; précision de traçage d'atelier.] Paramètre du projet, pas un seuil figé.
  */
 export const COLLET_TIE_TOLERANCE: Mm = 1;
@@ -287,27 +294,83 @@ function compareCriteria(x: readonly number[], y: readonly number[]): number {
 }
 
 /**
- * Choix parmi les candidats (voir l'en-tête du module, CHALLENGE G3) : collet minimal en corde
- * maximal ; parmi les candidats à `tieTolerance` (défaut `COLLET_TIE_TOLERANCE`) du maximum, le moins de nez balancés,
- * puis le plus grand collet, la zone la mieux centrée sur le tournant (écart |milieu de
- * [s_a ; s_b] − milieu du tournant| sur Γ), puis l'ordre d'énumération (premier candidat).
- * Le seuil de 1 mm est appliqué **par rapport au maximum** (et non de proche en proche), ce qui
- * garde un choix transitif et invariant par miroir. `targetCollet` n'intervient pas :
- * maximiser le collet l'atteint dès qu'un candidat l'atteint.
+ * Choix parmi les candidats (voir l'en-tête du module, CHALLENGE G3 corrigé) : le moins de nez
+ * balancés parmi les candidats qui atteignent `targetCollet` (réguliers K3 d'abord) ; sinon le
+ * collet minimal en corde maximal, à `tieTolerance` près (réguliers d'abord, puis le moins de
+ * nez balancés). Départages : plus grand collet, zone la mieux centrée sur le tournant (écart
+ * |milieu de [s_a ; s_b] − milieu du tournant| sur Γ), puis ordre d'énumération (premier
+ * candidat). La tolérance est appliquée **par rapport au maximum** (et non de proche en
+ * proche), ce qui garde un choix transitif et invariant par miroir.
  */
 export function pickZone(
   cands: readonly ZoneEvaluation[],
+  targetCollet: Mm,
   tieTolerance: Mm = COLLET_TIE_TOLERANCE,
 ): ZoneEvaluation | null {
   if (!(tieTolerance >= 0)) {
     throw new RangeError(`Tolérance d'égalité des collets invalide : ${tieTolerance} mm.`);
   }
+  if (!(targetCollet > 0)) {
+    throw new RangeError(`Collet cible invalide : ${targetCollet} mm.`);
+  }
   const admissible = cands.filter(isAdmissible);
   if (admissible.length === 0) return null;
-  const quality = admissible.filter((e) => e.k3);
-  const pool = quality.length > 0 ? quality : admissible;
-  const best = Math.max(...pool.map((e) => e.minChord));
-  const near = pool.filter((e) => e.minChord >= best - tieTolerance - PICK_EPS);
+  const reaching = admissible.filter((e) => reachesTarget(e, targetCollet));
+  let pool: readonly ZoneEvaluation[];
+  if (reaching.length > 0) pool = reaching;
+  else {
+    const best = Math.max(...admissible.map((e) => e.minChord));
+    pool = admissible.filter((e) => e.minChord >= best - tieTolerance - PICK_EPS);
+  }
+  const regular = pool.filter((e) => e.k3);
+  if (regular.length > 0) pool = regular;
   const key = (e: ZoneEvaluation) => [e.winders, -e.minChord, e.offCenter];
-  return near.reduce((acc, e) => (compareCriteria(key(e), key(acc)) < 0 ? e : acc));
+  return pool.reduce((acc, e) => (compareCriteria(key(e), key(acc)) < 0 ? e : acc));
+}
+
+/** Le collet minimal en corde du candidat atteint-il la cible (à `PICK_EPS` près) ? */
+export function reachesTarget(e: ZoneEvaluation, targetCollet: Mm): boolean {
+  return e.minChord >= targetCollet - PICK_EPS;
+}
+
+/**
+ * Condition d'arrêt de l'énumération par nombre croissant de nez balancés : un candidat
+ * admissible, régulier (K3) et atteignant la cible fixe le choix de `pickZone` à ce nombre.
+ */
+export function settlesChoice(e: ZoneEvaluation, targetCollet: Mm): boolean {
+  return isAdmissible(e) && e.k3 && reachesTarget(e, targetCollet);
+}
+
+/**
+ * Valeur par défaut de `BalancingSchema.maxBalancedExtent` (K7, B §2.4 et §3.1) : étendue
+ * maximale des marches balancées dans une partie droite, en girons comptés depuis l'angle.
+ * **Source étrangère** : DIN 18065 (norme allemande, citée via une source secondaire, confiance
+ * moyenne) limite les marches balancées de la partie droite à 3,5 × a depuis l'angle ; aucune
+ * valeur française trouvée. Valeur par défaut à valider, paramètre du projet.
+ */
+export const MAX_BALANCED_EXTENT = 3.5;
+
+/**
+ * Nombres maximaux de nez balancés avant (nb) et après (na) le milieu du tournant permis par
+ * l'étendue K7 : la marche balancée la plus basse commence au nez fixe a = kL − nb, qui doit
+ * rester à au plus `extent` girons de l'angle (début de la partie tournante de Γ), et de même
+ * pour le nez fixe b = kR + na après la fin de la partie tournante (à `GEOM_EPS` près).
+ */
+export function extentLimits(
+  group: Pick<TurnGroup, "sStart" | "sEnd">,
+  s: readonly Mm[],
+  bounds: Pick<ZoneBounds, "kL" | "kR">,
+  going: Mm,
+  extent: Mm,
+): { before: number; after: number } {
+  const reach = extent * going + GEOM_EPS;
+  let before = 0;
+  while (bounds.kL - before - 1 >= 0 && group.sStart - s[bounds.kL - before - 1]! <= reach) {
+    before++;
+  }
+  let after = 0;
+  while (bounds.kR + after + 1 < s.length && s[bounds.kR + after + 1]! - group.sEnd <= reach) {
+    after++;
+  }
+  return { before, after };
 }

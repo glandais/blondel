@@ -168,12 +168,18 @@ const SHAPES: Readonly<Record<PresetId, PresetShape>> = {
     firstStraightGoings: 2,
     middleWell: 400,
   },
+  // Demi-tournant revu le 2026-09-29 [core:stepping, choix Blondel à valider] avec l'étendue de
+  // balancement bornée à 3,5 girons depuis l'angle (K7, CHALLENGE G3 corrigé) : avec 4 girons
+  // et un jour de 180 mm, le collet tombait à 94 mm (H = 2 500). Avec 3,5 girons et 240 mm
+  // (volée centrale < 1 giron : zone unique de 180° conservée), balayage H ∈ [2 500 ; 2 900]
+  // par pas de 25 mm : collet ≥ 105 mm ; K3 en corde non respecté pour 5 hauteurs sur 17
+  // (deux angles vifs : deux « vallées » de collets, voir le ledger).
   "half-turn": {
     width: 800,
     turns: ["left", "left"],
     mode: "winders",
-    firstStraightGoings: 4,
-    middleWell: 180,
+    firstStraightGoings: 3.5,
+    middleWell: 240,
   },
   "quarter-landing": {
     width: 900,

@@ -33,8 +33,9 @@ describe("moteur de conformité", () => {
 
   it("règle applicable sans évaluateur : non-evaluee", () => {
     const report = evaluateCompliance(makeInput());
-    const mc = report.results.find((r) => r.ruleId === "MC_LOGEMENT");
-    expect(mc?.status).toBe("non-evaluee");
+    const r = report.results.find((x) => x.ruleId === "CHARGE_ESCALIER_A");
+    expect(r?.status).toBe("non-evaluee");
+    expect(r?.message).toMatch(/sans évaluateur/);
   });
 
   it("un évaluateur qui lève une erreur donne non-evaluee", () => {
@@ -187,10 +188,12 @@ describe("couverture des règles", () => {
     expect(cov.implemented).toEqual(
       expect.arrayContaining(["BLONDEL_DTU", "H_MAX_LOGEMENT", "G_COLLET_MIN", "ECHAPPEE_MIN_DTU"]),
     );
-    // Garde-corps, mains courantes, charges : attendent les pièces (jalons 3-4).
-    expect(cov.notImplemented).toEqual(
-      expect.arrayContaining(["GC_HAUTEUR_2024", "MC_HAUTEUR", "CHARGE_ESCALIER_A"]),
+    // Garde-corps et mains courantes : jalon 4 (analyse de l'étape « garde-corps »).
+    expect(cov.implemented).toEqual(
+      expect.arrayContaining(["GC_HAUTEUR_2024", "GC_GABARIT_B_2024", "MC_HAUTEUR"]),
     );
+    // Charges d'exploitation des escaliers : prédimensionnement (J3c).
+    expect(cov.notImplemented).toEqual(expect.arrayContaining(["CHARGE_ESCALIER_A"]));
   });
 
   it("les constantes extraites des formules y figurent toujours", () => {

@@ -14,6 +14,13 @@
 import { z } from "zod";
 import type { MaterialId } from "../model/derived.js";
 import type { Mm } from "../model/primitives.js";
+import {
+  DEFAULT_METAL_PROFILE,
+  MetalProfileInputSchema,
+  resolveMetalProfile,
+  type MetalProfile,
+} from "./metal.js";
+import { CostRatesSchema, type CostRates } from "./costs.js";
 
 /** Essences de bois connues du modèle (`MaterialId` commençant par `wood-`). */
 export const WOOD_MATERIALS = [
@@ -69,6 +76,13 @@ export const WorkshopProfileSchema = z.object({
       densities: z.partialRecord(z.enum(WOOD_MATERIALS), mmPos).optional(),
     })
     .optional(),
+  /** Capacités métal (presse plieuse, lois de pli, formats, laser, masse volumique) : `metal.ts`. */
+  metal: MetalProfileInputSchema.optional(),
+  /**
+   * Barème de coût (taux horaire, temps unitaires, prix matière) : `costs.ts`, aucun défaut ;
+   * absent ou incomplet : pas de chiffrage en euros (CHALLENGE P2).
+   */
+  costs: CostRatesSchema.optional(),
 });
 export type WorkshopProfileInput = z.infer<typeof WorkshopProfileSchema>;
 
@@ -90,6 +104,10 @@ export interface WorkshopProfile {
     readonly minUpperOffset: Mm;
     readonly densities: Readonly<Record<WoodMaterialId, number>>;
   };
+  /** Capacités métal (jalon 3b), voir `metal.ts` et `METAL_PROVENANCE`. */
+  readonly metal: MetalProfile;
+  /** Barème de coût (jalon 3c) : champs absents = non renseignés (aucun défaut). */
+  readonly costs: CostRates;
 }
 
 export type WoodSettingKey = keyof WorkshopProfile["wood"];
@@ -121,6 +139,8 @@ export const DEFAULT_WORKSHOP_PROFILE: WorkshopProfile = {
       "wood-glulam": 450,
     },
   },
+  metal: DEFAULT_METAL_PROFILE,
+  costs: {},
 };
 
 export interface SettingProvenance {
@@ -198,6 +218,8 @@ export function resolveWorkshopProfile(input?: WorkshopProfileInput): WorkshopPr
       minUpperOffset: pick("minUpperOffset"),
       densities: { ...d.wood.densities, ...(w.densities ?? {}) },
     },
+    metal: resolveMetalProfile(input.metal),
+    costs: input.costs ?? d.costs,
   };
 }
 

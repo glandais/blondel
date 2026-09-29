@@ -12,4 +12,8 @@ export * from "./headroom/index.js";
 export * from "./parts/index.js";
 export * from "./workshop/index.js";
 export * from "./structures/index.js";
+export * from "./structures/compare.js";
+export * from "./catalog/index.js";
+export * from "./precheck/index.js";
+export * from "./guards/index.js";
 export * from "./pipeline/index.js";

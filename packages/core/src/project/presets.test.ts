@@ -116,7 +116,7 @@ describe("createProject", () => {
     const u = createProject("two-quarters-u").stair.layout;
     expect(u.turns.map((t) => t.direction)).toEqual(["left", "left"]);
     const half = createProject("half-turn").stair.layout;
-    expect(half.legs[1]?.length).toBe(2 * half.width + 180); // volée centrale = 2E + jour
+    expect(half.legs[1]?.length).toBe(2 * half.width + 240); // volée centrale = 2E + jour
     expect(createProject("quarter-landing").stair.layout.turns[0]?.mode).toBe("landing");
     expect(createProject("quarter-left").stair.layout.turns[0]).toEqual({
       direction: "left",

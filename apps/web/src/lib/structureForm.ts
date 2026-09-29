@@ -24,6 +24,15 @@ export type ParamField =
       readonly label: string;
       readonly options: readonly string[];
     }
+  /** Nombre ou `auto` (union `z.union([z.number(), z.literal("auto")])` du plugin). */
+  | {
+      readonly kind: "auto-number";
+      readonly path: ParamPath;
+      readonly label: string;
+      readonly integer: boolean;
+      readonly min?: number;
+      readonly max?: number;
+    }
   | { readonly kind: "boolean"; readonly path: ParamPath; readonly label: string }
   | { readonly kind: "text"; readonly path: ParamPath; readonly label: string }
   /** Valeur non éditable dans le formulaire générique (tableau, objet vide…). */
@@ -118,6 +127,27 @@ export function numberConstraints(schema: unknown): {
   return out;
 }
 
+/**
+ * Union « nombre ou `auto` » : contraintes du membre numérique, ou `undefined` si le schéma
+ * n'est pas une telle union.
+ */
+export function autoNumberConstraints(
+  schema: unknown,
+): { min?: number; max?: number; integer?: boolean } | undefined {
+  const def = defOf(unwrapSchema(schema));
+  if (def?.type !== "union") return undefined;
+  const opts = (def as { options?: readonly unknown[] }).options ?? [];
+  let auto = false;
+  let num: unknown;
+  for (const o of opts) {
+    const d = defOf(unwrapSchema(o));
+    if (d?.type === "literal" && d.values?.length === 1 && d.values[0] === "auto") auto = true;
+    else if (d?.type === "number") num = o;
+    else return undefined;
+  }
+  return auto && num !== undefined ? numberConstraints(num) : undefined;
+}
+
 // ------------------------------------------------------------------ Champs
 
 /** Libellé lisible d'une clé (`stringerWidth` → « Stringer width »). */
@@ -153,7 +183,20 @@ export function deriveParamFields(
       : humanizeKey(key);
     const sub = fieldSchema(schema, key);
     const options = enumOptions(sub);
-    if (typeof value === "number") {
+    const autoNum =
+      typeof value === "number" || value === "auto" ? autoNumberConstraints(sub) : undefined;
+    if (autoNum) {
+      fields.push({
+        kind: "auto-number",
+        path,
+        label,
+        integer:
+          autoNum.integer === true ||
+          (autoNum.integer === undefined && (value === "auto" || Number.isInteger(value))),
+        ...(autoNum.min === undefined ? {} : { min: autoNum.min }),
+        ...(autoNum.max === undefined ? {} : { max: autoNum.max }),
+      });
+    } else if (typeof value === "number") {
       const c = numberConstraints(sub);
       fields.push({
         kind: "number",

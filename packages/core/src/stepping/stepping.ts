@@ -40,8 +40,11 @@ import { buildTreads } from "./treads.js";
 import {
   COLLET_TIE_TOLERANCE,
   evaluateZone,
+  extentLimits,
   groupWinderTurns,
+  MAX_BALANCED_EXTENT,
   pickZone,
+  settlesChoice,
   WINDERS_PER_SIDE_MAX,
   zoneBounds,
   type ZoneContext,
@@ -69,13 +72,59 @@ const methodLabel = (method: string, variant: M3Variant): string =>
 const variantLabel = (method: string, variant: M3Variant): string =>
   method === "M3" ? `M3 ${variant === "cubic" ? "cubique" : "quintique"}` : method;
 
+/** Options de calcul du découpage (vérification ; sans effet sur le résultat). */
+export interface SteppingOptions {
+  /**
+   * Choix automatique de zone : évaluer **tous** les candidats de l'énumération au lieu de
+   * s'arrêter au premier nombre de nez balancés qui fixe le choix (optimisation ADR-0006).
+   * Le résultat doit être identique : option réservée aux tests de non-régression.
+   */
+  readonly exhaustiveZoneSearch?: boolean;
+}
+
+/**
+ * Évalue les zones [kL − nb ; kR + na] des couples `pairs` (zones d'au moins une marche
+ * balancée) par nombre croissant de nez balancés (b − a − 1). Si `stopTarget` est donné (choix
+ * automatique), arrêt dès qu'un nombre fournit un candidat régulier atteignant la cible :
+ * `pickZone` ne peut plus retenir un nombre supérieur (ADR-0006). Candidats rendus dans l'ordre
+ * d'énumération (nb, na), dernier départage de `pickZone`.
+ */
+function enumerateZones(
+  pairs: readonly (readonly [number, number])[],
+  evaluate: (a: number, b: number) => ZoneEvaluation,
+  bounds: { readonly kL: number; readonly kR: number },
+  stopTarget: Mm | null,
+): ZoneEvaluation[] {
+  const pending = pairs
+    .map(([nb, na], order) => ({ a: bounds.kL - nb, b: bounds.kR + na, order }))
+    .filter(({ a, b }) => b - a >= 2)
+    .sort((x, y) => x.b - x.a - (y.b - y.a) || x.order - y.order);
+  const evaluated: { e: ZoneEvaluation; order: number }[] = [];
+  for (let i = 0; i < pending.length;) {
+    const count = pending[i]!.b - pending[i]!.a;
+    let settled = false;
+    for (; i < pending.length && pending[i]!.b - pending[i]!.a === count; i++) {
+      const { a, b, order } = pending[i]!;
+      const e = evaluate(a, b);
+      evaluated.push({ e, order });
+      if (stopTarget !== null && settlesChoice(e, stopTarget)) settled = true;
+    }
+    if (settled) break;
+  }
+  return evaluated.sort((x, y) => x.order - y.order).map((x) => x.e);
+}
+
 /**
  * Calcule le découpage d'un projet sur un tracé donné (`computeLayout`).
  *
  * @throws LayoutError si n sort du domaine ; SteppingError si les hauteurs ou les paliers
  *   sont impossibles, ou si une ligne de nez perpendiculaire ne rencontre pas les bords.
  */
-export function computeStepping(project: Project, layout: Layout): Stepping {
+export function computeStepping(
+  project: Project,
+  layout: Layout,
+  options: SteppingOptions = {},
+): Stepping {
   const notes: string[] = [];
   const { riserCount: n, rise, rises, z } = computeRises(project);
   const positions = placeNosings(project, layout, n);
@@ -134,7 +183,9 @@ export function computeStepping(project: Project, layout: Layout): Stepping {
   }
 
   // ------------------------------------------------------------ zones de balancement
-  const { method, windersPerSide, colletTieTolerance } = project.stair.balancing;
+  const { method, windersPerSide, colletTieTolerance, targetCollet, maxBalancedExtent } =
+    project.stair.balancing;
+  const extent = maxBalancedExtent ?? MAX_BALANCED_EXTENT;
   const variant = resolveM3Variant(project);
   const strategy = getBalancingStrategy(method);
   const groups = groupWinderTurns(layout, positions.s, going, fixed);
@@ -164,7 +215,10 @@ export function computeStepping(project: Project, layout: Layout): Stepping {
       freeNosings: free,
       collarSide: layout.innerSide,
     };
+    const auto = windersPerSide === "auto" && method !== "M0";
     const pairs: [number, number][] = [];
+    // Choix automatique : couples hors de l'étendue K7, évalués seulement en repli.
+    const beyondExtent: [number, number][] = [];
     if (windersPerSide !== "auto") {
       const nb = Math.min(windersPerSide, bounds.kL - bounds.lo);
       const na = Math.min(windersPerSide, bounds.hi - bounds.kR);
@@ -184,25 +238,47 @@ export function computeStepping(project: Project, layout: Layout): Stepping {
       while (na < maxAfter && inArc(bounds.kR + na)) na++;
       pairs.push([nb, na]);
     } else {
+      // Choix automatique : étendue K7 (`maxBalancedExtent` girons depuis l'angle).
+      const lim = extentLimits(group, positions.s, bounds, going, extent);
       for (let nb = 0; nb <= maxBefore; nb++) {
-        for (let na = 0; na <= maxAfter; na++) pairs.push([nb, na]);
+        for (let na = 0; na <= maxAfter; na++) {
+          (nb <= lim.before && na <= lim.after ? pairs : beyondExtent).push([nb, na]);
+        }
       }
     }
-    const cands: ZoneEvaluation[] = [];
-    for (const [nb, na] of pairs) {
-      const a = bounds.kL - nb;
-      const b = bounds.kR + na;
-      if (b - a < 2) continue;
-      cands.push(evaluateZone(ctx, group, a, b, bounds));
+    const cands = enumerateZones(
+      pairs,
+      (a, b) => evaluateZone(ctx, group, a, b, bounds),
+      bounds,
+      auto && !options.exhaustiveZoneSearch ? targetCollet : null,
+    );
+    let beyond = false;
+    if (
+      auto &&
+      beyondExtent.length > 0 &&
+      pickZone(cands, targetCollet, colletTieTolerance ?? COLLET_TIE_TOLERANCE) === null
+    ) {
+      // Aucune zone admissible dans l'étendue K7 (étendue trop courte, jour étroit) : plutôt
+      // que des nez perpendiculaires (collet nul, lignes croisées au tournant), repli sur les
+      // zones plus étendues, signalé.
+      const more = enumerateZones(
+        beyondExtent,
+        (a, b) => evaluateZone(ctx, group, a, b, bounds),
+        bounds,
+        options.exhaustiveZoneSearch ? null : targetCollet,
+      );
+      if (pickZone(more, targetCollet, colletTieTolerance ?? COLLET_TIE_TOLERANCE) !== null) {
+        cands.splice(0, cands.length, ...more);
+        beyond = true;
+      }
     }
     if (cands.length === 0) {
       notes.push(`${turnName} : aucune marche à balancer (nez fixes encadrant le tournant).`);
       continue;
     }
-    const chosen =
-      windersPerSide !== "auto" || method === "M0"
-        ? cands[0]!
-        : pickZone(cands, colletTieTolerance ?? COLLET_TIE_TOLERANCE);
+    const chosen = auto
+      ? pickZone(cands, targetCollet, colletTieTolerance ?? COLLET_TIE_TOLERANCE)
+      : cands[0]!;
     if (chosen === null || !chosen.ok) {
       const reason = chosen?.reason ?? cands.find((c) => !c.ok)?.reason;
       notes.push(
@@ -222,6 +298,16 @@ export function computeStepping(project: Project, layout: Layout): Stepping {
     notes.push(
       `${turnName} : ${bounds.kL - from} + ${to - bounds.kR} nez balancés (nez fixes ${from} et ${to}, extrémités ${chosen.zone.ends.map((e) => (e === "tangent" ? "tangente" : "libre")).join("/")}), ${variantLabel(method, variant)}, collet minimal ${fmt(chosen.minChord)} mm en corde (${fmt(chosen.minArc)} mm en arc).`,
     );
+    if (beyond) {
+      notes.push(
+        `${turnName} : aucune zone admissible dans l'étendue de balancement de ${fmt(extent)} ${extent < 2 ? "giron" : "girons"} depuis l'angle ; étendue dépassée (nez fixes ${from} et ${to}).`,
+      );
+    }
+    if (auto && chosen.minChord < targetCollet - 1e-6) {
+      notes.push(
+        `${turnName} : collet cible de ${fmt(targetCollet)} mm non atteint (${beyondExtent.length > 0 && !beyond ? `étendue de balancement limitée à ${fmt(extent)} ${extent < 2 ? "giron" : "girons"} depuis l'angle` : "aucune zone possible ne l'atteint"}) ; zone de collet maximal retenue.`,
+      );
+    }
     if (method === "M1") {
       const [endA, endB] = chosen.zone.ends;
       const parts: string[] = [];

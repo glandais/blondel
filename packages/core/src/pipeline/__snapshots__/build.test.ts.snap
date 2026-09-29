@@ -3,39 +3,33 @@
 exports[`buildModel — exemples du dépôt > acceptance-01-quart-tournant.blondel.json : cotes principales (non-régression) 1`] = `
 {
   "blondel": 600.02,
-  "colletMin": 163.6,
+  "colletMin": 120,
   "colletsChord": [
-    227.4,
-    222.6,
-    177.9,
-    169.5,
-    165,
-    163.6,
-    165,
-    169.5,
-    177.9,
-    192.6,
-    219.3,
+    120,
+    120,
+    120,
+    171.1,
+    121.9,
   ],
   "firstRise": 180,
   "g": 240.02,
   "h": 180,
   "headroom": 2035,
   "headroomWidth": {
-    "min": 1600,
-    "nosing": 4,
+    "min": 1780,
+    "nosing": 3,
   },
   "n": 15,
   "parts": 29,
   "run": 3360.3,
-  "treads": "swwwwwwwwwwwss",
+  "treads": "wwwwwsssssssss",
   "violations": {
     "avertissement": 0,
     "bloquant": 0,
     "conseil": 1,
   },
   "zones": [
-    "1-12 M3-cubic",
+    "0-4 M3-cubic",
   ],
 }
 `;
@@ -43,22 +37,19 @@ exports[`buildModel — exemples du dépôt > acceptance-01-quart-tournant.blond
 exports[`buildModel — exemples du dépôt > half-turn.blondel.json : cotes principales (non-régression) 1`] = `
 {
   "blondel": 629.97,
-  "colletMin": 178.7,
+  "colletMin": 117.9,
   "colletsChord": [
-    180.2,
-    180.2,
-    180.2,
-    180.2,
-    180.2,
-    178.9,
-    178.7,
-    180.2,
-    180.2,
-    180.2,
-    180.2,
-    180.2,
-    180.2,
-    180.2,
+    215.4,
+    165.7,
+    145.6,
+    135.3,
+    117.9,
+    123,
+    130.2,
+    135.3,
+    145.6,
+    165.7,
+    215.4,
   ],
   "firstRise": 180,
   "g": 269.97,
@@ -68,14 +59,14 @@ exports[`buildModel — exemples du dépôt > half-turn.blondel.json : cotes pri
   "n": 15,
   "parts": 29,
   "run": 3779.6,
-  "treads": "wwwwwwwwwwwwww",
+  "treads": "swwwwwwwwwwwss",
   "violations": {
     "avertissement": 0,
     "bloquant": 0,
     "conseil": 0,
   },
   "zones": [
-    "0-14 M3-cubic",
+    "1-12 M3-cubic",
   ],
 }
 `;
@@ -83,39 +74,204 @@ exports[`buildModel — exemples du dépôt > half-turn.blondel.json : cotes pri
 exports[`buildModel — exemples du dépôt > j3a-acceptance-01-bois.blondel.json : cotes principales (non-régression) 1`] = `
 {
   "blondel": 600.02,
-  "colletMin": 163.6,
+  "colletMin": 120,
   "colletsChord": [
-    227.4,
-    222.6,
-    177.9,
-    169.5,
-    165,
-    163.6,
-    165,
-    169.5,
-    177.9,
-    192.6,
-    219.3,
+    120,
+    120,
+    120,
+    171.1,
+    121.9,
   ],
   "firstRise": 180,
   "g": 240.02,
   "h": 180,
   "headroom": 2035,
   "headroomWidth": {
-    "min": 1600,
-    "nosing": 4,
+    "min": 1780,
+    "nosing": 3,
   },
   "n": 15,
   "parts": 34,
   "run": 3360.3,
-  "treads": "swwwwwwwwwwwss",
+  "treads": "wwwwwsssssssss",
   "violations": {
     "avertissement": 0,
     "bloquant": 0,
     "conseil": 1,
   },
   "zones": [
-    "1-12 M3-cubic",
+    "0-4 M3-cubic",
+  ],
+}
+`;
+
+exports[`buildModel — exemples du dépôt > j3b-acceptance-01-acier-plat.blondel.json : cotes principales (non-régression) 1`] = `
+{
+  "blondel": 600.02,
+  "colletMin": 120,
+  "colletsChord": [
+    120,
+    120,
+    120,
+    171.1,
+    121.9,
+  ],
+  "firstRise": 180,
+  "g": 240.02,
+  "h": 180,
+  "headroom": 2035,
+  "headroomWidth": {
+    "min": 1780,
+    "nosing": 3,
+  },
+  "n": 15,
+  "parts": 67,
+  "run": 3360.3,
+  "treads": "wwwwwsssssssss",
+  "violations": {
+    "avertissement": 6,
+    "bloquant": 0,
+    "conseil": 1,
+  },
+  "zones": [
+    "0-4 M3-cubic",
+  ],
+}
+`;
+
+exports[`buildModel — exemples du dépôt > j3b-acceptance-01-tole-pliee.blondel.json : cotes principales (non-régression) 1`] = `
+{
+  "blondel": 600.02,
+  "colletMin": 120,
+  "colletsChord": [
+    120,
+    120,
+    120,
+    171.1,
+    121.9,
+  ],
+  "firstRise": 180,
+  "g": 240.02,
+  "h": 180,
+  "headroom": 2035,
+  "headroomWidth": {
+    "min": 1780,
+    "nosing": 3,
+  },
+  "n": 15,
+  "parts": 48,
+  "run": 3360.3,
+  "treads": "wwwwwsssssssss",
+  "violations": {
+    "avertissement": 10,
+    "bloquant": 0,
+    "conseil": 1,
+  },
+  "zones": [
+    "0-4 M3-cubic",
+  ],
+}
+`;
+
+exports[`buildModel — exemples du dépôt > j3c-acceptance-01-upn.blondel.json : cotes principales (non-régression) 1`] = `
+{
+  "blondel": 600.02,
+  "colletMin": 120,
+  "colletsChord": [
+    120,
+    120,
+    120,
+    171.1,
+    121.9,
+  ],
+  "firstRise": 180,
+  "g": 240.02,
+  "h": 180,
+  "headroom": 2035,
+  "headroomWidth": {
+    "min": 1780,
+    "nosing": 3,
+  },
+  "n": 15,
+  "parts": 62,
+  "run": 3360.3,
+  "treads": "wwwwwsssssssss",
+  "violations": {
+    "avertissement": 8,
+    "bloquant": 0,
+    "conseil": 2,
+  },
+  "zones": [
+    "0-4 M3-cubic",
+  ],
+}
+`;
+
+exports[`buildModel — exemples du dépôt > j4-acceptance-01-garde-corps.blondel.json : cotes principales (non-régression) 1`] = `
+{
+  "blondel": 600.02,
+  "colletMin": 120,
+  "colletsChord": [
+    120,
+    120,
+    120,
+    171.1,
+    121.9,
+  ],
+  "firstRise": 180,
+  "g": 240.02,
+  "h": 180,
+  "headroom": 2035,
+  "headroomWidth": {
+    "min": 1780,
+    "nosing": 3,
+  },
+  "n": 15,
+  "parts": 88,
+  "run": 3360.3,
+  "treads": "wwwwwsssssssss",
+  "violations": {
+    "avertissement": 0,
+    "bloquant": 0,
+    "conseil": 1,
+  },
+  "zones": [
+    "0-4 M3-cubic",
+  ],
+}
+`;
+
+exports[`buildModel — exemples du dépôt > j4-demi-tournant-acier-garde-corps.blondel.json : cotes principales (non-régression) 1`] = `
+{
+  "blondel": 629.97,
+  "colletMin": 101.5,
+  "colletsChord": [
+    185.6,
+    130.2,
+    139.7,
+    149.2,
+    124.7,
+    101.5,
+    179,
+    130.2,
+    185.6,
+  ],
+  "firstRise": 180,
+  "g": 269.97,
+  "h": 180,
+  "headroom": null,
+  "headroomWidth": null,
+  "n": 15,
+  "parts": 176,
+  "run": 3779.6,
+  "treads": "sswwwwwwwwwsss",
+  "violations": {
+    "avertissement": 18,
+    "bloquant": 0,
+    "conseil": 0,
+  },
+  "zones": [
+    "2-11 M3-cubic",
   ],
 }
 `;
@@ -149,38 +305,33 @@ exports[`buildModel — exemples du dépôt > quarter-landing.blondel.json : cot
 exports[`buildModel — exemples du dépôt > quarter-left.blondel.json : cotes principales (non-régression) 1`] = `
 {
   "blondel": 629.99,
-  "colletMin": 176.9,
+  "colletMin": 103.1,
   "colletsChord": [
-    241.4,
-    207.3,
-    190.1,
-    180.9,
-    176.9,
-    176.9,
-    180.9,
-    190.1,
-    207.3,
-    241.4,
+    135,
+    135,
+    135,
+    135,
+    103.1,
   ],
   "firstRise": 180,
   "g": 269.99,
   "h": 180,
   "headroom": 1960,
   "headroomWidth": {
-    "min": 1960,
-    "nosing": 2,
+    "min": 1780,
+    "nosing": 3,
   },
   "n": 15,
   "parts": 29,
   "run": 3779.9,
-  "treads": "sswwwwwwwwwwss",
+  "treads": "wwwwwsssssssss",
   "violations": {
     "avertissement": 0,
     "bloquant": 0,
     "conseil": 1,
   },
   "zones": [
-    "2-12 M3-cubic",
+    "0-4 M3-cubic",
   ],
 }
 `;
@@ -188,38 +339,33 @@ exports[`buildModel — exemples du dépôt > quarter-left.blondel.json : cotes 
 exports[`buildModel — exemples du dépôt > quarter-right.blondel.json : cotes principales (non-régression) 1`] = `
 {
   "blondel": 629.99,
-  "colletMin": 176.9,
+  "colletMin": 103.1,
   "colletsChord": [
-    241.4,
-    207.3,
-    190.1,
-    180.9,
-    176.9,
-    176.9,
-    180.9,
-    190.1,
-    207.3,
-    241.4,
+    135,
+    135,
+    135,
+    135,
+    103.1,
   ],
   "firstRise": 180,
   "g": 269.99,
   "h": 180,
   "headroom": 1960,
   "headroomWidth": {
-    "min": 1960,
-    "nosing": 2,
+    "min": 1780,
+    "nosing": 3,
   },
   "n": 15,
   "parts": 29,
   "run": 3779.9,
-  "treads": "sswwwwwwwwwwss",
+  "treads": "wwwwwsssssssss",
   "violations": {
     "avertissement": 0,
     "bloquant": 0,
     "conseil": 1,
   },
   "zones": [
-    "2-12 M3-cubic",
+    "0-4 M3-cubic",
   ],
 }
 `;
@@ -253,7 +399,7 @@ exports[`buildModel — exemples du dépôt > straight.blondel.json : cotes prin
 exports[`buildModel — exemples du dépôt > two-quarters-u.blondel.json : cotes principales (non-régression) 1`] = `
 {
   "blondel": 630.01,
-  "colletMin": 135,
+  "colletMin": 112.4,
   "colletsChord": [
     135,
     135,
@@ -261,14 +407,11 @@ exports[`buildModel — exemples du dépôt > two-quarters-u.blondel.json : cote
     135,
     142.5,
     257.5,
-    188.1,
-    188.1,
-    188.1,
-    188.1,
-    188.1,
-    188.1,
-    188.1,
-    188.1,
+    112.4,
+    116.1,
+    124.9,
+    143.7,
+    197.9,
   ],
   "firstRise": 180,
   "g": 270.01,
@@ -278,7 +421,7 @@ exports[`buildModel — exemples du dépôt > two-quarters-u.blondel.json : cote
   "n": 15,
   "parts": 29,
   "run": 3780.2,
-  "treads": "wwwwwwwwwwwwww",
+  "treads": "wwwwwwwwwwwsss",
   "violations": {
     "avertissement": 0,
     "bloquant": 0,
@@ -286,7 +429,7 @@ exports[`buildModel — exemples du dépôt > two-quarters-u.blondel.json : cote
   },
   "zones": [
     "0-4 M3-cubic",
-    "6-14 M3-cubic",
+    "6-11 M3-cubic",
   ],
 }
 `;

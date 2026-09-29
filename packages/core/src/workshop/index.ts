@@ -1,5 +1,6 @@
 /**
- * Profil d'atelier : capacités de débit et d'usinage, seuils de fabrication (valeurs à valider).
+ * Profil d'atelier : capacités de débit et d'usinage (bois et métal), seuils de fabrication
+ * (valeurs à valider).
  */
 export {
   DEFAULT_WORKSHOP_PROFILE,
@@ -15,3 +16,36 @@ export {
   type WorkshopProfile,
   type WorkshopProfileInput,
 } from "./profile.js";
+export {
+  BENDING_DIRECTIONS,
+  BENDING_FAMILIES,
+  BEND_METHODS,
+  DEFAULT_SAW_KERF,
+  ProfileBendingSchema,
+  minProfileBendRadius,
+  type ProfileBending,
+  BendLawSchema,
+  DEFAULT_K_FACTOR,
+  DEFAULT_METAL_PROFILE,
+  METAL_PROVENANCE,
+  MetalProfileInputSchema,
+  STEEL_GRADES,
+  SheetFormatSchema,
+  bendAllowance,
+  din6935Correction,
+  findBendLaw,
+  minBendRadiusFactor,
+  outsideSetback,
+  resolveBend,
+  resolveMetalProfile,
+  type BendLaw,
+  type BendMethod,
+  type MetalProfile,
+  type MetalProfileInput,
+  type MetalProvenance,
+  type MetalSettingKey,
+  type ResolvedBend,
+  type SheetFormat,
+  type SteelGrade,
+} from "./metal.js";
+export { COST_TIME_FIELDS, CostRatesSchema, type CostRates } from "./costs.js";

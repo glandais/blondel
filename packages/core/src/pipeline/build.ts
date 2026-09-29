@@ -1,8 +1,8 @@
 /**
  * Assemblage du pipeline (ADR-0002) : `buildModel(project) → Model`.
  *
- *   computeLayout → computeStepping → pièces de base → structure (plugin) → échappée
- *   → contrôle de conception (+ contrôles du plugin de structure)
+ *   computeLayout → computeStepping → pièces de base → structure (plugin) → garde-corps
+ *   → échappée → contrôle de conception (+ contrôles du plugin de structure et des garde-corps)
  *
  * - **Aucune exception** pour des paramètres impossibles : l'erreur de l'étape (message
  *   français de `LayoutError` / `SteppingError`, ou erreur interne) est ajoutée à
@@ -18,6 +18,11 @@
  *   rules.yaml et s'ajoutent sinon ; ses erreurs vont dans `Model.errors`, ses remarques dans
  *   `Model.notes`. Plugin inconnu : remarque, pièces de base seules. Les pièces bois reçoivent
  *   les grandeurs de nomenclature normalisées (`structures/quantities.ts`, profil d'atelier).
+ * - **Garde-corps** (`project.guards`, jalon 4, `guards/compute.ts`) : absent = aucune pièce
+ *   ni analyse (règles GC_* / MC_* « non évaluées ») ; présent, lignes de garde-corps de volée
+ *   (côtés vides) et de trémie, mains courantes, pièces ajoutées au modèle ; l'analyse est
+ *   transmise au contrôle de conception (`ComplianceInput.guards`) et ses contrôles hors table
+ *   (câbles) s'ajoutent au rapport. Paramètres impossibles : `GuardError` dans `Model.errors`.
  * - **Mémoïsation** par identité : le modèle d'un même projet (objet immuable) est rendu tel
  *   quel ; sinon chaque étape réutilise son dernier résultat si ses dépendances (sous-objets du
  *   projet et étapes amont) sont les mêmes objets.
@@ -40,6 +45,10 @@ import { buildBasicParts } from "../parts/basic.js";
 import { fmt } from "../rules/check.js";
 import { evaluateComplianceDetailed } from "../rules/engine.js";
 import { findRule } from "../rules/table.js";
+import { guardChecks } from "../guards/checks.js";
+import { computeGuards } from "../guards/compute.js";
+import { GuardError } from "../guards/errors.js";
+import type { GuardsAnalysis } from "../guards/types.js";
 import { getStructure, StructureError } from "../structures/index.js";
 import { normalizeWoodQuantities } from "../structures/quantities.js";
 import { resolveWorkshopProfile } from "../workshop/profile.js";
@@ -58,6 +67,7 @@ const STAGE_LABELS = {
   stepping: "Découpage",
   parts: "Pièces",
   structure: "Structure",
+  guards: "Garde-corps",
   headroom: "Échappée",
   compliance: "Contrôle de conception",
 } as const;
@@ -66,7 +76,12 @@ function attempt<T>(label: string, fn: () => T): Stage<T> {
   try {
     return { value: fn() };
   } catch (e) {
-    if (e instanceof LayoutError || e instanceof SteppingError || e instanceof StructureError)
+    if (
+      e instanceof LayoutError ||
+      e instanceof SteppingError ||
+      e instanceof StructureError ||
+      e instanceof GuardError
+    )
       return { error: e.message };
     const detail = e instanceof Error ? e.message : String(e);
     return { error: `${label} : erreur interne (${detail}).` };
@@ -121,6 +136,8 @@ interface StructureStage {
   readonly checks: readonly RuleResult[];
   readonly notes: readonly string[];
   readonly errors: readonly string[];
+  /** Classe d'exécution EN 1090-2 déduite par le plugin (métal), reportée dans `Model`. */
+  readonly executionClass?: "EXC1" | "EXC2";
 }
 
 interface ComplianceStage {
@@ -133,6 +150,7 @@ const caches = {
   stepping: new LastValueCache<Stage<Stepping>>(),
   parts: new LastValueCache<Stage<PartsStage>>(),
   structure: new LastValueCache<Stage<StructureStage>>(),
+  guards: new LastValueCache<Stage<GuardsAnalysis>>(),
   headroom: new LastValueCache<Stage<HeadroomAnalysis | null>>(),
   compliance: new LastValueCache<Stage<ComplianceStage>>(),
 };
@@ -198,9 +216,16 @@ function resolveStructureParams(
 }
 
 /** Pièces de base remplacées (même `id`) ou complétées par celles du plugin. */
-function mergeParts(base: readonly Part[], extra: readonly Part[]): Part[] {
+function mergeParts(
+  base: readonly Part[],
+  extra: readonly Part[],
+  removed: readonly string[] = [],
+): Part[] {
   const byId = new Map(extra.map((p) => [p.id, p]));
-  const out = base.map((p) => byId.get(p.id) ?? p);
+  // Pièces de base supprimées par la structure (`StructureOutput.removedBaseParts`), sauf si
+  // elle fournit elle-même une pièce de même identifiant (remplacement).
+  const drop = new Set(removed.filter((id) => !byId.has(id)));
+  const out = base.filter((p) => !drop.has(p.id)).map((p) => byId.get(p.id) ?? p);
   const baseIds = new Set(base.map((p) => p.id));
   for (const p of extra) if (!baseIds.has(p.id)) out.push(p);
   return out;
@@ -279,8 +304,23 @@ export function buildModel(project: Project, options: BuildModelOptions = {}): M
 
   // 2. Découpage.
   const steppingStage: Stage<Stepping> | undefined = layout
-    ? run(caches.stepping, [layout, stair, site.floorToFloor], () =>
-        attempt(STAGE_LABELS.stepping, () => computeStepping(project, layout)),
+    ? run(
+        caches.stepping,
+        // Tout `stair` sauf `placement` (porté par `layout`) et les paramètres de structure :
+        // le découpage ne lit que `structure.kind` (variante M3 des débillardés). Changer un
+        // paramètre de structure ne recalcule ni le découpage ni les garde-corps.
+        [
+          layout,
+          stair.layout,
+          stair.walkline,
+          stair.stepping,
+          stair.balancing,
+          stair.treads,
+          stair.nosingOverrides,
+          stair.structure.kind,
+          site.floorToFloor,
+        ],
+        () => attempt(STAGE_LABELS.stepping, () => computeStepping(project, layout)),
       )
     : undefined;
   if (steppingStage?.error !== undefined) errors.push(steppingStage.error);
@@ -290,6 +330,7 @@ export function buildModel(project: Project, options: BuildModelOptions = {}): M
   // 3. Pièces de base, puis structure (plugin) et grandeurs de nomenclature.
   let parts: readonly Part[] = [];
   let structureChecks: readonly RuleResult[] = [];
+  let executionClass: "EXC1" | "EXC2" | undefined;
   const kind = stair.structure.kind;
   const plugin = kind !== "none" ? getStructure(kind) : undefined;
   if (kind !== "none" && !plugin) {
@@ -321,10 +362,11 @@ export function buildModel(project: Project, options: BuildModelOptions = {}): M
             const params = resolveStructureParams(plugin, ctx, stair.structure.params);
             const out = plugin.build(ctx, params);
             return {
-              parts: normalize(mergeParts(base, out.parts)),
+              parts: normalize(mergeParts(base, out.parts, out.removedBaseParts)),
               checks: out.checks,
               notes: out.notes,
               errors: out.errors ?? [],
+              ...(out.executionClass ? { executionClass: out.executionClass } : {}),
             };
           }),
       );
@@ -336,9 +378,30 @@ export function buildModel(project: Project, options: BuildModelOptions = {}): M
       } else {
         parts = structureStage.value.parts;
         structureChecks = structureStage.value.checks;
+        executionClass = structureStage.value.executionClass;
         notes.push(...structureStage.value.notes);
         errors.push(...structureStage.value.errors);
       }
+    }
+  }
+
+  // 3 bis. Garde-corps et mains courantes (après la structure).
+  let guards: GuardsAnalysis | null | undefined;
+  let guardResults: readonly RuleResult[] = [];
+  if (complete && project.guards) {
+    const guardsStage = run(
+      caches.guards,
+      [project.guards, layout, stepping, site, stair.layout, project.workshop],
+      () => attempt(STAGE_LABELS.guards, () => computeGuards(project, layout, stepping)),
+    );
+    if (guardsStage.error !== undefined) {
+      errors.push(guardsStage.error);
+      guards = null;
+    } else {
+      guards = guardsStage.value;
+      parts = [...parts, ...guards.parts];
+      notes.push(...guards.notes);
+      guardResults = guardChecks(project, stepping, guards);
     }
   }
 
@@ -362,7 +425,17 @@ export function buildModel(project: Project, options: BuildModelOptions = {}): M
   const steppingOut = stepping ?? emptyStepping(project);
   const complianceStage = run(
     caches.compliance,
-    [project.compliance, site, stair, project.rulesVersion, layoutOut, steppingOut, headroom],
+    [
+      project.compliance,
+      site,
+      stair,
+      project.rulesVersion,
+      layoutOut,
+      steppingOut,
+      headroom,
+      project.guards,
+      guards,
+    ],
     () =>
       attempt(STAGE_LABELS.compliance, () => ({
         report: evaluateComplianceDetailed({
@@ -372,6 +445,7 @@ export function buildModel(project: Project, options: BuildModelOptions = {}): M
           ...(headroomMin ? { headroom: headroomMin } : {}),
           ...(headroomClear ? { headroomClear } : {}),
           ...(incomplete ? { incomplete } : {}),
+          ...(guards !== undefined ? { guards } : {}),
         }).report,
       })),
   );
@@ -385,7 +459,11 @@ export function buildModel(project: Project, options: BuildModelOptions = {}): M
       results: [],
       summary: { bloquant: 0, avertissement: 0, conseil: 0 },
     };
-  } else compliance = mergeStructureChecks(complianceStage.value.report, structureChecks);
+  } else
+    compliance = mergeStructureChecks(complianceStage.value.report, [
+      ...structureChecks,
+      ...guardResults,
+    ]);
 
   // Échappée sur la largeur des marches : avertissement (CHALLENGE G4), hors rules.yaml.
   const width = headroom?.width;
@@ -410,6 +488,7 @@ export function buildModel(project: Project, options: BuildModelOptions = {}): M
     compliance,
     ...(headroomMin ? { headroom: headroomMin } : {}),
     ...(width ? { headroomWidth: width } : {}),
+    ...(executionClass ? { executionClass } : {}),
     errors,
     ...(notes.length > 0 ? { notes } : {}),
   };

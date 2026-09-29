@@ -1,0 +1,34 @@
+/**
+ * Garde-corps et mains courantes (jalon 4) — API publique.
+ */
+export {
+  FlightGuardSpecSchema,
+  GUARD_MATERIALS,
+  GuardInfillSchema,
+  GuardPostSpecSchema,
+  GuardSectionSchema,
+  GuardSideModeSchema,
+  GuardsSpecSchema,
+  HandrailSpecSchema,
+  OpeningGuardSpecSchema,
+  type GuardInfill,
+  type GuardSection,
+  type GuardSideMode,
+  type GuardsSpec,
+  type GuardsSpecInput,
+  type HandrailSpec,
+} from "./spec.js";
+export { computeGuards } from "./compute.js";
+export { CABLE_SLACK_RULE, guardChecks, SLAB_CLASH_RULE, slabClash } from "./checks.js";
+export { GuardError } from "./errors.js";
+export { WALL_PARALLEL_DEG } from "./sides.js";
+export type {
+  Foothold,
+  GapMeasure,
+  GuardRun,
+  GuardsAnalysis,
+  HandrailRun,
+  SideAnalysis,
+  SideInterval,
+  StairSide,
+} from "./types.js";

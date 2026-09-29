@@ -1,16 +1,19 @@
 /**
  * Mise en page : barre d'outils, paramètres à gauche, vue centrale à onglets (Plan 2D / 3D /
- * Élévation / Développés / Nomenclature), contrôle de conception à droite, barre d'état.
+ * Élévation / Développés / Nomenclature / Comparateur), contrôle de conception et
+ * prédimensionnement indicatif à droite, barre d'état.
  */
 import { Suspense, lazy, useEffect, type KeyboardEvent } from "react";
 import { CompliancePanel } from "./components/CompliancePanel.js";
 import { ParamsPanel } from "./components/ParamsPanel.js";
+import { PrecheckPanel } from "./components/PrecheckPanel.js";
 import { StatusBar } from "./components/StatusBar.js";
 import { Toolbar } from "./components/Toolbar.js";
 import { selectedTreadNumber } from "./lib/compliance.js";
 import { appStore, useApp, useModel } from "./store/appStore.js";
 import type { ViewTab } from "./store/projectStore.js";
 import { BomView } from "./views/BomView.js";
+import { CompareView } from "./views/CompareView.js";
 import { ElevationView } from "./views/ElevationView.js";
 import { FlatPatternView } from "./views/FlatPatternView.js";
 import { PlanView } from "./views/PlanView.js";
@@ -24,6 +27,7 @@ const TABS: readonly { id: ViewTab; label: string }[] = [
   { id: "elevation", label: "Élévation" },
   { id: "flat", label: "Développés" },
   { id: "bom", label: "Nomenclature" },
+  { id: "compare", label: "Comparateur" },
 ];
 
 function isEditable(target: EventTarget | null): boolean {
@@ -92,9 +96,20 @@ function CentralView() {
   const view = useApp((s) => s.view);
   const project = useApp((s) => s.project);
   const selection = useApp((s) => s.selection);
-  const { model, errors } = useModel();
+  const { model, errors, mesh, pending, project: modelProject } = useModel();
+  // Vues qui croisent le modèle et le projet (dalle, trémie) : le projet dont le modèle est issu,
+  // pour rester cohérentes pendant un calcul.
+  const shown = modelProject ?? project;
   let content;
-  if (!model) {
+  if (view === "compare") {
+    content = <CompareView />;
+  } else if (!model && pending) {
+    content = (
+      <div className="empty-view" role="status">
+        <p>Calcul du modèle…</p>
+      </div>
+    );
+  } else if (!model) {
     content = (
       <div className="empty-view" role="status">
         <p>Aucun modèle à afficher.</p>
@@ -112,8 +127,12 @@ function CentralView() {
       <Suspense fallback={<p className="muted">Chargement de la vue 3D…</p>}>
         <Viewer3D
           model={model}
-          project={project}
+          mesh={mesh}
+          project={shown}
           selection={selection}
+          onSelectPoint={(m) =>
+            appStore.getState().select({ location: m.location, ruleId: m.ruleId })
+          }
           onSelectPart={(partId) =>
             appStore
               .getState()
@@ -130,7 +149,7 @@ function CentralView() {
     content = (
       <ElevationView
         model={model}
-        project={project}
+        project={shown}
         selectedTread={selectedTreadNumber(selection?.location)}
       />
     );
@@ -156,6 +175,7 @@ export function App() {
       <CentralView />
       <aside className="right" aria-label="Contrôle de conception">
         <CompliancePanel />
+        <PrecheckPanel />
       </aside>
       <StatusBar />
     </div>

@@ -26,6 +26,8 @@ import type { Curve2, Mm, Vec2 } from "../model/primitives.js";
 
 /** Tolérance relative (sur les paramètres de segment) des contrôles de croisement. */
 const CROSS_PARAM_EPS = 1e-9;
+/** Marge (mm) du rejet rapide par boîtes englobantes dans `nosingsCross`. */
+const BOX_MARGIN: Mm = 1;
 
 /**
  * Première intersection d'une droite (origine P, direction unitaire `dir`) avec une courbe, du
@@ -53,17 +55,23 @@ export function firstHit(
     }
   });
   const hits = all.filter((h) => (side === "back" ? h.t < 0 : h.t > 0));
+  // Départage par la tangente calculé seulement en cas d'égalité des distances (chemin chaud :
+  // une seule intersection du bon côté dans la plupart des cas) ; même choix qu'un calcul
+  // systématique du score.
+  const scoreOf = (h: CurveHit): number => (along ? V.dot(curveTangentAt(curve, h.s), along) : 0);
   let best: CurveHit | null = null;
-  let bestScore = -Infinity;
+  let bestScore: number | undefined;
   for (const h of hits) {
-    const score = along ? V.dot(curveTangentAt(curve, h.s), along) : 0;
-    if (
-      best === null ||
-      Math.abs(h.t) < Math.abs(best.t) - 1e-6 ||
-      (Math.abs(h.t) <= Math.abs(best.t) + 1e-6 && score > bestScore)
-    ) {
+    if (best === null || Math.abs(h.t) < Math.abs(best.t) - 1e-6) {
       best = h;
-      bestScore = score;
+      bestScore = undefined;
+    } else if (Math.abs(h.t) <= Math.abs(best.t) + 1e-6) {
+      bestScore ??= scoreOf(best);
+      const score = scoreOf(h);
+      if (score > bestScore) {
+        best = h;
+        bestScore = score;
+      }
     }
   }
   return best;
@@ -212,12 +220,54 @@ export function nosingsCross(a: NosingLine, b: NosingLine): boolean {
   if (b.sigmaInner < a.sigmaInner - GEOM_EPS || b.sigmaOuter < a.sigmaOuter - GEOM_EPS) {
     return true;
   }
+  // Rejet rapide : boîtes englobantes disjointes (marge de 1 mm, très au-delà de la tolérance
+  // GEOM_EPS de `segmentIntersect`) → pas d'intersection, même résultat.
+  if (
+    Math.min(a.q.x, a.r.x) > Math.max(b.q.x, b.r.x) + BOX_MARGIN ||
+    Math.min(b.q.x, b.r.x) > Math.max(a.q.x, a.r.x) + BOX_MARGIN ||
+    Math.min(a.q.y, a.r.y) > Math.max(b.q.y, b.r.y) + BOX_MARGIN ||
+    Math.min(b.q.y, b.r.y) > Math.max(a.q.y, a.r.y) + BOX_MARGIN
+  ) {
+    return false;
+  }
   const hit = segmentIntersect(a.q, a.r, b.q, b.r);
   if (!hit) return false;
   const interior = (t: number): boolean => t > CROSS_PARAM_EPS && t < 1 - CROSS_PARAM_EPS;
   if (interior(hit.t) || interior(hit.u)) return true;
   // Contact aux extrémités : seul un contact aux collets (Q confondus, collet nul) est toléré.
   return V.distance(hit.point, a.q) > GEOM_EPS || V.distance(hit.point, b.q) > GEOM_EPS;
+}
+
+/**
+ * Résultats de `nosingsCross` déjà calculés, par couple d'objets (les lignes de nez sont
+ * immuables : le résultat ne dépend que des deux objets). Le choix automatique de zone teste
+ * les mêmes couples de nez hors zone pour chaque candidat (ADR-0006).
+ */
+const crossCache = new WeakMap<NosingLine, WeakMap<NosingLine, boolean>>();
+
+/** `nosingsCross` mémoïsé par couple d'objets (même résultat). */
+export function nosingsCrossCached(a: NosingLine, b: NosingLine): boolean {
+  let row = crossCache.get(a);
+  if (!row) {
+    row = new WeakMap();
+    crossCache.set(a, row);
+  }
+  let v = row.get(b);
+  if (v === undefined) {
+    v = nosingsCross(a, b);
+    row.set(b, v);
+  }
+  return v;
+}
+
+/** Vrai si aucun couple de lignes de nez ne se croise (K5) ; arrêt au premier croisement. */
+export function noCrossing(nosings: readonly NosingLine[]): boolean {
+  for (let i = 0; i < nosings.length; i++) {
+    for (let j = i + 1; j < nosings.length; j++) {
+      if (nosingsCrossCached(nosings[i]!, nosings[j]!)) return false;
+    }
+  }
+  return true;
 }
 
 /** Couples de lignes de nez qui se croisent entre C_i et C_e, indices dans [from ; to]. */

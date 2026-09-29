@@ -1,7 +1,10 @@
 /**
- * Onglet 3D : maillages de `@blondel/geometry` (un `BufferGeometry` par pièce, libéré à chaque
- * régénération), un `MeshStandardMaterial` par matériau, dalle haute translucide percée de la
- * trémie, grille, lumières et ombres simples, surlignage de la pièce sélectionnée.
+ * Onglet 3D : maillages de `@blondel/geometry` calculés avec le modèle dans le worker de calcul
+ * (un `BufferGeometry` par empreinte de solide, libéré quand il n'est plus affiché), un
+ * `MeshStandardMaterial` par matériau (bois, acier brut / peint / galvanisé, inox, verre),
+ * garde-corps et mains courantes (balayages) compris ; dalle haute translucide percée de la
+ * trémie, grille, lumières et ombres simples, surlignage de la pièce sélectionnée et marqueurs
+ * du contrôle de conception (pièces teintées selon la sévérité, repères ponctuels).
  *
  * Repère : le cœur travaille en mm, Z vers le haut ; la scène three.js en mètres, Y vers le
  * haut → groupe racine tourné de −90° autour de X et mis à l'échelle 1/1000.
@@ -10,88 +13,97 @@
  * scène change ou que la caméra bouge (OrbitControls), et non 60 fois par seconde avec ombres
  * portées — la boucle continue occupait le GPU et le fil principal en permanence.
  */
-import type { MaterialId, Model, Project } from "@blondel/core";
-import type { PartMesh } from "@blondel/geometry";
+import type { MaterialId, Model, Project, Severity } from "@blondel/core";
 import { Grid, OrbitControls } from "@react-three/drei";
 import { Canvas, type ThreeEvent } from "@react-three/fiber";
-import { useEffect, useMemo, useRef } from "react";
-import { Box3, DoubleSide, MeshStandardMaterial, Vector3, type BufferGeometry } from "three";
-import { isPartSelected } from "../lib/compliance.js";
+import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  Box3,
+  DoubleSide,
+  MeshStandardMaterial,
+  SphereGeometry,
+  Vector3,
+  type BufferGeometry,
+} from "three";
+import { SEVERITY_LABELS, isPartSelected, sameLocation } from "../lib/compliance.js";
+import { controlMarkers, type PointMarker } from "../lib/markers.js";
+import type { MeshSnapshot, MeshedPartData } from "../model/snapshot.js";
 import type { Selection } from "../store/projectStore.js";
-import { createMeshCache } from "../model/meshCache.js";
-import { clearMeshTiming, publishMeshTiming } from "../store/perfStore.js";
 import { toBufferGeometry, upperSlabMesh } from "../three/geometry.js";
 import { createGeometryPool, type GeometryPool } from "../three/geometryPool.js";
-import { HIGHLIGHT_COLOR, materialLook } from "../three/materials.js";
+import { HIGHLIGHT_COLOR, SEVERITY_COLORS, materialLook } from "../three/materials.js";
 
 const MM = 0.001;
+/** Rayon des repères ponctuels du contrôle (mm, présentation). */
+const POINT_MARKER_RADIUS = 45;
 
 interface PartGeometry {
-  readonly part: PartMesh;
+  readonly part: MeshedPartData["mesh"];
   /** Empreinte du solide. */
   readonly key: string;
   readonly geometry: BufferGeometry;
 }
 
-/** Cache de maillage par empreinte de solide, partagé par les montages successifs de la vue. */
-const meshCache = createMeshCache();
-
 /**
- * Géométries des pièces : maillage mémoïsé par pièce (empreinte du solide), géométries three.js
- * partagées par empreinte et libérées quand elles ne sont plus affichées. Le temps de maillage
- * est publié pour la barre d'état.
+ * Géométries des pièces : maillages calculés avec le modèle (worker de calcul), géométries
+ * three.js partagées par empreinte de solide et libérées quand elles ne sont plus affichées.
  */
-function usePartGeometries(model: Model): {
+function usePartGeometries(mesh: MeshSnapshot | null): {
   parts: readonly PartGeometry[];
-  failed: readonly PartMesh[];
+  failed: readonly MeshedPartData["mesh"][];
 } {
   const pool = useRef<GeometryPool | null>(null);
   if (pool.current === null) pool.current = createGeometryPool();
-  const run = useMemo(() => meshCache.mesh(model.parts), [model.parts]);
   const geometries = useMemo(() => {
     const p = pool.current as GeometryPool;
-    return run.parts
+    return (mesh?.parts ?? [])
       .filter((m) => m.mesh.mesh.indices.length > 0)
       .map((m) => ({ part: m.mesh, key: m.key, geometry: p.get(m.key, m.mesh.mesh) }));
-  }, [run]);
+  }, [mesh]);
   useEffect(() => {
     pool.current?.retain(geometries.map((g) => g.key));
-    publishMeshTiming({ timeMs: run.timeMs, hits: run.hits, misses: run.misses });
-  }, [geometries, run]);
-  useEffect(
-    () => () => {
-      pool.current?.disposeAll();
-      clearMeshTiming();
-    },
-    [],
-  );
+  }, [geometries]);
+  useEffect(() => () => pool.current?.disposeAll(), []);
   const failed = useMemo(
-    () => run.parts.map((m) => m.mesh).filter((m) => m.error !== undefined),
-    [run],
+    () => (mesh?.parts ?? []).map((m) => m.mesh).filter((m) => m.error !== undefined),
+    [mesh],
   );
   return { parts: geometries, failed };
 }
 
-/** Matériaux partagés par identifiant, libérés au démontage de la vue. */
-function useMaterials(): {
+interface Materials {
   get: (id: MaterialId) => MeshStandardMaterial;
+  /** Matériau teinté d'une pièce en violation (couleur de la sévérité). */
+  flagged: (id: MaterialId, severity: Severity) => MeshStandardMaterial;
+  marker: (severity: Severity, selected: boolean) => MeshStandardMaterial;
   highlight: MeshStandardMaterial;
   slab: MeshStandardMaterial;
-} {
+  sphere: SphereGeometry;
+}
+
+/** Matériaux partagés par identifiant, libérés au démontage de la vue. */
+function useMaterials(): Materials {
   const value = useMemo(() => {
-    const cache = new Map<MaterialId, MeshStandardMaterial>();
-    const get = (id: MaterialId): MeshStandardMaterial => {
-      let m = cache.get(id);
+    const cache = new Map<string, MeshStandardMaterial>();
+    const make = (id: MaterialId, severity?: Severity): MeshStandardMaterial => {
+      const look = materialLook(id);
+      const transparent = look.opacity !== undefined;
+      return new MeshStandardMaterial({
+        color: look.color,
+        roughness: look.roughness,
+        metalness: look.metalness,
+        transparent,
+        opacity: look.opacity ?? 1,
+        // Verre : visible des deux côtés, sans masquer les pièces situées derrière.
+        ...(transparent ? { depthWrite: false, side: DoubleSide } : {}),
+        ...(severity ? { emissive: SEVERITY_COLORS[severity], emissiveIntensity: 0.55 } : {}),
+      });
+    };
+    const cached = (key: string, create: () => MeshStandardMaterial): MeshStandardMaterial => {
+      let m = cache.get(key);
       if (!m) {
-        const look = materialLook(id);
-        m = new MeshStandardMaterial({
-          color: look.color,
-          roughness: look.roughness,
-          metalness: look.metalness,
-          transparent: look.opacity !== undefined,
-          opacity: look.opacity ?? 1,
-        });
-        cache.set(id, m);
+        m = create();
+        cache.set(key, m);
       }
       return m;
     };
@@ -108,11 +120,28 @@ function useMaterials(): {
       depthWrite: false,
       side: DoubleSide,
     });
+    const sphere = new SphereGeometry(POINT_MARKER_RADIUS, 20, 14);
     return {
-      get,
+      get: (id: MaterialId) => cached(id, () => make(id)),
+      flagged: (id: MaterialId, severity: Severity) =>
+        cached(`${id}|${severity}`, () => make(id, severity)),
+      marker: (severity: Severity, selected: boolean) =>
+        cached(`marker|${severity}|${selected}`, () => {
+          const color = selected ? HIGHLIGHT_COLOR : SEVERITY_COLORS[severity];
+          return new MeshStandardMaterial({
+            color,
+            emissive: color,
+            emissiveIntensity: 0.6,
+            roughness: 0.4,
+          });
+        }),
       highlight,
       slab,
-      dispose: () => [...cache.values(), highlight, slab].forEach((m) => m.dispose()),
+      sphere,
+      dispose: () => {
+        [...cache.values(), highlight, slab].forEach((m) => m.dispose());
+        sphere.dispose();
+      },
     };
   }, []);
   useEffect(() => () => value.dispose(), [value]);
@@ -143,20 +172,71 @@ function Slab({
 
 export interface Viewer3DProps {
   readonly model: Model;
+  /** Maillage des pièces de `model` (calculé avec lui). */
+  readonly mesh: MeshSnapshot | null;
   readonly project: Project;
   readonly selection: Selection | null;
   readonly onSelectPart: (partId: string | null) => void;
+  /** Sélection d'un repère ponctuel du contrôle de conception. */
+  readonly onSelectPoint: (marker: PointMarker) => void;
 }
 
-export default function Viewer3D({ model, project, selection, onSelectPart }: Viewer3DProps) {
-  const { parts, failed } = usePartGeometries(model);
+function PointMarkers({
+  markers,
+  materials,
+  selection,
+  onSelect,
+}: {
+  markers: readonly PointMarker[];
+  materials: Materials;
+  selection: Selection | null;
+  onSelect: (m: PointMarker) => void;
+}) {
+  return (
+    <>
+      {markers.map((m, i) => {
+        const selected =
+          selection !== null &&
+          selection.ruleId === m.ruleId &&
+          sameLocation(selection.location, m.location);
+        return (
+          <mesh
+            key={`${m.ruleId}-${i}`}
+            geometry={materials.sphere}
+            material={materials.marker(m.severity, selected)}
+            position={[m.at.x, m.at.y, m.at.z]}
+            dispose={null}
+            onClick={(e: ThreeEvent<MouseEvent>) => {
+              e.stopPropagation();
+              onSelect(m);
+            }}
+          />
+        );
+      })}
+    </>
+  );
+}
+
+export default function Viewer3D({
+  model,
+  mesh,
+  project,
+  selection,
+  onSelectPart,
+  onSelectPoint,
+}: Viewer3DProps) {
+  const { parts, failed } = usePartGeometries(mesh);
   const materials = useMaterials();
+  const [showControls, setShowControls] = useState(true);
+  const markers = useMemo(() => controlMarkers(model), [model]);
   const selectedMesh = parts.find(({ part }) =>
     isPartSelected(part.partId, selection?.location),
   )?.part;
   const selectedName = selectedMesh
     ? (model.parts.find((p) => p.id === selectedMesh.partId)?.name ?? "")
     : "";
+  const selectedRules = selectedMesh ? markers.rulesByPart.get(selectedMesh.partId) : undefined;
+  const flaggedCount = markers.parts.size + markers.points.length;
 
   // Cadrage initial sur l'ensemble des pièces (en mètres, repère three.js).
   const frame = useMemo(() => {
@@ -203,13 +283,19 @@ export default function Viewer3D({ model, project, selection, onSelectPart }: Vi
         <group rotation={[-Math.PI / 2, 0, 0]} scale={MM}>
           {parts.map(({ part, geometry }) => {
             const selected = isPartSelected(part.partId, selection?.location);
+            const severity = showControls ? markers.parts.get(part.partId) : undefined;
+            const material = selected
+              ? materials.highlight
+              : severity
+                ? materials.flagged(part.material, severity)
+                : materials.get(part.material);
             return (
               <mesh
                 key={part.partId}
                 geometry={geometry}
-                material={selected ? materials.highlight : materials.get(part.material)}
+                material={material}
                 dispose={null}
-                castShadow
+                castShadow={materialLook(part.material).opacity === undefined}
                 receiveShadow
                 onClick={(e: ThreeEvent<MouseEvent>) => {
                   e.stopPropagation();
@@ -218,6 +304,14 @@ export default function Viewer3D({ model, project, selection, onSelectPart }: Vi
               />
             );
           })}
+          {showControls ? (
+            <PointMarkers
+              markers={markers.points}
+              materials={materials}
+              selection={selection}
+              onSelect={onSelectPoint}
+            />
+          ) : null}
           <Slab project={project} model={model} material={materials.slab} />
         </group>
         <mesh
@@ -240,13 +334,43 @@ export default function Viewer3D({ model, project, selection, onSelectPart }: Vi
         />
         <OrbitControls makeDefault target={frame.target} />
       </Canvas>
+      <div className="viewer3d__controls">
+        <label>
+          <input
+            type="checkbox"
+            checked={showControls}
+            onChange={(e) => setShowControls(e.target.checked)}
+          />{" "}
+          Contrôles sur les pièces
+        </label>
+        {showControls && flaggedCount > 0 ? (
+          <ul className="viewer3d__legend" aria-label="Légende des contrôles">
+            {(["bloquant", "avertissement", "conseil"] as const).map((sev) => (
+              <li key={sev}>
+                <span
+                  className="viewer3d__swatch"
+                  style={{ background: SEVERITY_COLORS[sev] }}
+                  aria-hidden="true"
+                />
+                {SEVERITY_LABELS[sev]}
+              </li>
+            ))}
+          </ul>
+        ) : null}
+        {showControls && flaggedCount === 0 ? (
+          <span className="muted">Aucune violation localisée.</span>
+        ) : null}
+      </div>
       {selectedMesh ? (
         <p className="viewer3d__selected" role="status">
           Sélection : <strong>{selectedMesh.mark}</strong> — {selectedName}
+          {selectedRules && selectedRules.length > 0 ? ` · ${selectedRules.join(", ")}` : ""}
         </p>
       ) : null}
       {parts.length === 0 ? (
-        <p className="viewer3d__empty muted">Aucune pièce à afficher (structure non renseignée).</p>
+        <p className="viewer3d__empty muted">
+          {mesh ? "Aucune pièce à afficher (structure non renseignée)." : "Maillage indisponible."}
+        </p>
       ) : null}
       {failed.length > 0 ? (
         <ul className="viewer3d__errors" role="status">

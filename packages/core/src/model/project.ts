@@ -4,6 +4,7 @@
  * Voir ADR-0002 (modèle de données) et ADR-0003 (unités).
  */
 import { z } from "zod";
+import { GuardsSpecSchema } from "../guards/spec.js";
 import { WorkshopProfileSchema } from "../workshop/profile.js";
 
 export const PROJECT_SCHEMA_VERSION = 1 as const;
@@ -32,6 +33,10 @@ export const OpeningSchema = z.discriminatedUnion("kind", [
 ]);
 export type Opening = z.infer<typeof OpeningSchema>;
 
+/**
+ * Mur du site : `a`–`b` est l'**axe** du mur (convention retenue au jalon 4 par les garde-corps,
+ * `guards/sides.ts`), `thickness` son épaisseur totale (nus à ± thickness / 2 de l'axe).
+ */
 export const WallSchema = z.object({
   id: z.string(),
   a: Vec2Schema,
@@ -124,21 +129,31 @@ export const BalancingSchema = z.object({
   /** Variante M3 : cubique (C1) ou quintique (C2). `auto` = selon la structure (décision Q7). */
   variant: z.enum(["cubic", "quintic", "auto"]).default("auto"),
   /**
-   * Marches balancées de chaque côté de la marche d'angle ; `auto` = zone qui maximise le collet
-   * minimal mesuré en corde (CHALLENGE G3), à `colletTieTolerance` près le moins de marches balancées.
+   * Marches balancées de chaque côté de la marche d'angle ; `auto` = choix de zone de
+   * CHALLENGE G3 (corrigé le 2026-09-29) : le **moins** de marches balancées dont le collet
+   * minimal en corde atteint `targetCollet`, sinon le collet maximal ; étendue bornée par
+   * `maxBalancedExtent`.
    */
   windersPerSide: z.union([z.number().int().min(1).max(8), z.literal("auto")]).default("auto"),
   /**
-   * Collet cible (corde, mm). Sans effet sur le choix automatique depuis l'alignement sur
-   * CHALLENGE G3 (le maximum l'atteint dès qu'une zone l'atteint) ; conservé pour compatibilité.
+   * Collet cible (corde, mm) du choix automatique : la zone retenue est la plus petite qui
+   * l'atteint ; à défaut, celle qui maximise le collet.
    */
   targetCollet: mmPos.default(100),
   /**
-   * Choix automatique de zone : écart de collet (corde, mm) sous lequel deux zones sont jugées
-   * équivalentes, la zone qui balance le moins de nez étant alors retenue. Absent : 1 mm
+   * Choix automatique, quand aucune zone n'atteint `targetCollet` : écart de collet (corde, mm)
+   * sous lequel deux zones sont jugées équivalentes au collet maximal (la zone régulière K3,
+   * puis celle qui balance le moins de nez, est alors retenue). Absent : 1 mm
    * (`COLLET_TIE_TOLERANCE`, choix Blondel à valider, sans source métier) ; 0 = collet maximal pur.
    */
   colletTieTolerance: mmNonNeg.optional(),
+  /**
+   * Choix automatique : étendue maximale des marches balancées dans les parties droites, en
+   * girons comptés depuis l'angle (début / fin de la partie tournante de la ligne de foulée),
+   * K7 (B §2.4, §3.1). Absent : 3,5 (`MAX_BALANCED_EXTENT`, valeur de DIN 18065 — norme
+   * **allemande**, source secondaire —, reprise faute de valeur française : à valider).
+   */
+  maxBalancedExtent: z.number().positive().optional(),
 });
 
 export const TreadSpecSchema = z.object({
@@ -219,6 +234,11 @@ export const ProjectSchema = z.object({
    * absent : profil par défaut (`resolveWorkshopProfile`, valeurs à valider). CHALLENGE A8.
    */
   workshop: WorkshopProfileSchema.optional(),
+  /**
+   * Garde-corps et mains courantes (jalon 4, `guards/spec.ts`) ; absent : aucun garde-corps
+   * généré, règles GC_* / MC_* « non évaluées ». Ajout rétrocompatible.
+   */
+  guards: GuardsSpecSchema.optional(),
 });
 export type Project = z.infer<typeof ProjectSchema>;
 export type ProjectInput = z.input<typeof ProjectSchema>;

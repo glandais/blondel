@@ -37,7 +37,7 @@ import {
 } from "./persistence.js";
 import { setIn, type Path } from "./setIn.js";
 
-export type ViewTab = "plan" | "3d" | "elevation" | "flat" | "bom";
+export type ViewTab = "plan" | "3d" | "elevation" | "flat" | "bom" | "compare";
 export type ThemeChoice = "system" | "light" | "dark";
 
 /** Élément surligné (clic sur un résultat du contrôle de conception, ou sur une pièce). */
