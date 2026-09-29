@@ -65,3 +65,47 @@ describe("traitement des requêtes du worker", () => {
     await expect(toBytes(42)).rejects.toThrow("Contenu PDF inattendu");
   });
 });
+
+describe("exports du worker : glTF et options du dossier PDF", () => {
+  it("glTF : octets GLB transférés, en-tête « glTF » version 2", async () => {
+    const out: { message: WorkerResponse; transfer: Transferable[] }[] = [];
+    handleWorkerRequest(
+      createJobRunner(),
+      { id: 3, type: "glb", project: createProject("quarter-left") },
+      (m, t) => out.push({ message: m, transfer: t }),
+    );
+    expect(out).toHaveLength(1);
+    const { message, transfer } = out[0]!;
+    expect(message.type).toBe("glb");
+    if (message.type !== "glb" || !("bytes" in message.result)) throw new Error("glb attendu");
+    const bytes = message.result.bytes;
+    const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    expect(view.getUint32(0, true)).toBe(0x46546c67);
+    expect(view.getUint32(4, true)).toBe(2);
+    expect(view.getUint32(8, true)).toBe(bytes.byteLength);
+    expect(transfer).toEqual([bytes.buffer]);
+  });
+
+  it("glTF : projet sans modèle → erreur rendue, jamais d'exception", () => {
+    const p = createProject("straight");
+    const bad = { ...p, site: { ...p.site, floorToFloor: 10 } };
+    const r = createJobRunner().glb({ type: "glb", project: bad });
+    expect("error" in r || "bytes" in r).toBe(true);
+  });
+
+  it("PDF : pages et format transmis à l'export", async () => {
+    const seen: unknown[] = [];
+    const runner = createJobRunner({
+      loadPdf: async () => (_m, o) => {
+        seen.push(o);
+        return pdfBytes;
+      },
+    });
+    const opts = { pages: { templates: false, toc: false }, format: "a3" as const };
+    await runner.pdf({ type: "pdf", project: createProject("straight"), options: opts });
+    expect(seen[0]).toMatchObject({ pages: opts.pages, format: "a3" });
+    await runner.pdf({ type: "pdf", project: createProject("straight") });
+    expect(seen[1]).not.toHaveProperty("pages");
+    expect(seen[1]).not.toHaveProperty("format");
+  });
+});

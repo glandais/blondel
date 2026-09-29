@@ -48,7 +48,13 @@ import { fmt } from "../rules/check.js";
 import type { Finding } from "../rules/types.js";
 import { findBendLaw } from "../workshop/metal.js";
 import { resolveWorkshopProfile } from "../workshop/profile.js";
-import { CheckCollector, FAB_RULES, pluginRuleDef, type PluginRuleSpec } from "./checks.js";
+import {
+  CheckCollector,
+  FAB_RULES,
+  flightsOnlyError,
+  pluginRuleDef,
+  type PluginRuleSpec,
+} from "./checks.js";
 import { developStringer, type StringerDevelopment } from "./development.js";
 import { insetPlate, type PlanLine } from "./folded.js";
 import { PiecewiseLinear, clipHalfPlane, dedupe, minAreaRect, removeCollinear } from "./geom.js";
@@ -471,7 +477,16 @@ export function buildSteelCurved(
   const e = params.thickness;
   const sup = params.supports;
   const turns = project.stair.layout.turns;
+  const helical = flightsOnlyError("steel-curved", "limon débillardé soudé", layout);
   const flat = buildSteelFlat(ctx, params);
+  if (helical) {
+    return {
+      output: { parts: [], checks: [], notes: [], errors: [helical] },
+      flat,
+      curved: null,
+      executionClass: "EXC1",
+    };
+  }
   const errors: string[] = [...(flat.output.errors ?? []).filter((x) => !/jour en arc/.test(x))];
   const notes: string[] = flat.output.notes.filter((x) => !x.startsWith("Classe d'exécution"));
   const checks = new CheckCollector(project, stepping);
@@ -858,7 +873,9 @@ function buildCurvedStringer(
   // Coupe d'un tronçon : les sommets à moins de JOINT_TOLERANCE d'un trait de coupe sans être
   // dessus (nœud d'échantillonnage des rives presque confondu avec le joint) sont retirés, sinon
   // le contour garde une arête parasite de l'ordre du micron (développé, DXF) ; les sommets de
-  // coupe, calculés sur la même arête pour les deux tronçons voisins, sont conservés.
+  // coupe, calculés sur la même arête pour les deux tronçons voisins, sont conservés. De même,
+  // deux sommets consécutifs à moins de JOINT_TOLERANCE (naissance ou nez presque confondu avec
+  // un nœud d'échantillonnage des rives) sont fusionnés.
   const nearCut = (x: Mm, c: Mm): boolean => {
     const d = Math.abs(x - c);
     return d > 1e-9 && d < JOINT_TOLERANCE;
@@ -871,6 +888,7 @@ function buildCurvedStringer(
           V.vec(x1, 0),
           V.vec(-1, 0),
         ).filter((p) => !nearCut(p.x, x0) && !nearCut(p.x, x1)),
+        JOINT_TOLERANCE,
       ),
     );
   const fits = (length: Mm, width: Mm): boolean =>
@@ -1299,7 +1317,9 @@ function buildCurvedStringer(
     .map((k) => ({
       sigma: k.sigmaInner,
       nosing: k.index,
-      fibers: fibers.map((d) => slopeBreakAt(F.at, d, k.sigmaInner)),
+      // Pas de 0,05 mm : sur une courbe dérivable, l'écart des différences finies unilatérales
+      // (≈ |F''|·h) reste sous le seuil d'affichage de 0,01°.
+      fibers: fibers.map((d) => slopeBreakAt(F.at, d, k.sigmaInner, 0.05)),
     }))
     .filter((kk) => kk.fibers.some((f) => f.degrees >= 0.01));
   const breakFinding = (

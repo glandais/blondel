@@ -19,3 +19,6 @@ export * from "./catalog/index.js";
 export * from "./precheck/index.js";
 export * from "./guards/index.js";
 export * from "./pipeline/index.js";
+// Import de plan (jalon 7) ; lecteur DXF séparé : `@blondel/core/dxf`.
+export * from "./site/index.js";
+export * from "./assistant/index.js";

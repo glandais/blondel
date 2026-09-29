@@ -39,7 +39,7 @@ import {
   smallestAvailable,
   type WorkshopProfile,
 } from "../workshop/profile.js";
-import { CheckCollector, FAB_RULES, pluginRuleDef } from "./checks.js";
+import { CheckCollector, FAB_RULES, flightsOnlyError, pluginRuleDef } from "./checks.js";
 import {
   developStringer,
   housingPolygons,
@@ -523,6 +523,8 @@ export function buildWoodHoused(ctx: StructureContext, params: WoodHousedParams)
       endExtension: Number.NaN,
     },
   });
+  const helical = flightsOnlyError("wood-housed", "limons à la française", layout);
+  if (helical) return empty([helical]);
   if (nosings.length < 2) return empty(["Limons : découpage vide, aucune structure générée."]);
 
   const geo = stairGeometry(project, layout);

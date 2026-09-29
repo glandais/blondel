@@ -11,7 +11,7 @@
  */
 import type { RuleResult, Severity } from "../model/derived.js";
 import type { Project } from "../model/project.js";
-import type { Stepping } from "../model/derived.js";
+import type { Layout, Stepping } from "../model/derived.js";
 import { STAIR, boundsText, fmt, within, type Bounds } from "../rules/check.js";
 import { isRuleApplicable, resolveContexts } from "../rules/contexts.js";
 import { effectiveSeverity } from "../rules/engine.js";
@@ -228,3 +228,13 @@ export const FAB_RULES = {
     unit: "mm",
   },
 } as const satisfies Record<string, PluginRuleSpec>;
+
+/**
+ * Plugin réservé aux escaliers **à volées** appelé sur un tracé hélicoïdal (`layout.helical`) :
+ * message lisible (au lieu d'une erreur de géométrie trompeuse sur les volées vides), `null`
+ * sur un tracé à volées.
+ */
+export function flightsOnlyError(kind: string, label: string, layout: Layout): string | null {
+  if (!layout.helical) return null;
+  return `Structure « ${kind} » (${label}) : réservée aux escaliers à volées ; le tracé est hélicoïdal — choisir la structure « helical-core ».`;
+}

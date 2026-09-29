@@ -1,11 +1,13 @@
 /**
- * `@blondel/exports/pdf` : dossier PDF (plan, élévation, nomenclature, contrôle de conception,
- * développés). Point d'entrée séparé : jsPDF n'est chargé que si l'on exporte en PDF.
+ * `@blondel/exports/pdf` : dossier PDF (sommaire, plan, élévation, fiche de pose, nomenclature,
+ * fiche de débit, contrôle de conception, développés, gabarits 1:1 tuilés). Point d'entrée
+ * séparé : jsPDF n'est chargé que si l'on exporte en PDF.
  */
 export {
   JsPdfCanvas,
   MM_PER_PT,
   RecordingCanvas,
+  helveticaMeasure,
   toWinAnsi,
   type JsPdfCanvasOptions,
   type PaintStyle,
@@ -13,6 +15,7 @@ export {
   type PdfCanvas,
   type RecordedOp,
   type Rgb,
+  type TextMeasure,
   type TextStyle,
 } from "./canvas.js";
 export {
@@ -28,13 +31,36 @@ export {
   type SvgPlacement,
 } from "./svg-draw.js";
 export {
+  clipPath,
+  clipRing,
+  clipSegment,
+  flattenPath,
+  type ClippedPath,
+  type Rect,
+} from "./clip.js";
+export { CONTROL_RULER_MM, contentFrame, type Frame } from "./layout.js";
+export {
+  DEFAULT_TILE_OVERLAP,
+  registrationPoints,
+  templateSheet,
+  templateTiles,
+  tileGrid,
+  tileLabel,
+  tileRect,
+  type TemplateSheet,
+  type TileGrid,
+  type TileInfo,
+} from "./tiles.js";
+export {
   COMPLIANCE_DISCLAIMER,
   STANDARD_SCALES,
   exportPdf,
+  exportPdfDocument,
   renderPdf,
   wrapText,
   type PdfLayoutOptions,
   type PdfOptions,
   type PdfPageInfo,
+  type PdfPageKind,
   type PdfPages,
 } from "./document.js";

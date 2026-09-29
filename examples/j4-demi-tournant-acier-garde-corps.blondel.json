@@ -60,10 +60,10 @@
     "lowerFinish": 0,
     "opening": {
       "kind": "rect",
-      "sizeX": 2040,
-      "sizeY": 2250,
-      "x": -1140,
-      "y": -400
+      "sizeX": 2140,
+      "sizeY": 2150,
+      "x": -1240,
+      "y": -300
     },
     "upperFinish": 0,
     "upperSlabThickness": 200,
@@ -82,10 +82,10 @@
           "length": 1745
         },
         {
-          "length": 1840
+          "length": 1940
         },
         {
-          "length": 2138
+          "length": 2038
         }
       ],
       "turns": [

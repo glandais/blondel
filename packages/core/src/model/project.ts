@@ -5,6 +5,7 @@
  */
 import { z } from "zod";
 import { GuardsSpecSchema } from "../guards/spec.js";
+import { UnderlaySchema } from "../site/schema.js";
 import { WorkshopProfileSchema } from "../workshop/profile.js";
 
 export const PROJECT_SCHEMA_VERSION = 1 as const;
@@ -58,6 +59,11 @@ export const SiteSchema = z.object({
   /** Trémie du plancher haut ; absente = escalier extérieur ou sans plancher au-dessus. */
   opening: OpeningSchema.optional(),
   walls: z.array(WallSchema).default([]),
+  /**
+   * Calque de fond pour la saisie (jalon 7, `site/schema.ts`) : plan DXF simplifié et / ou image
+   * calibrée. Facultatif, jamais lu par le pipeline ; ajout rétrocompatible.
+   */
+  underlay: UnderlaySchema.optional(),
 });
 export type Site = z.infer<typeof SiteSchema>;
 

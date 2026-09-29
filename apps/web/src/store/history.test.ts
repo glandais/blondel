@@ -130,3 +130,25 @@ describe("historique par snapshots", () => {
     );
   });
 });
+
+describe("geste continu (regroupement collant)", () => {
+  it("regroupe un glissement quel que soit le délai, jusqu'à la fin du geste", () => {
+    let h = initHistory(0);
+    h = commit(h, 1, { groupKey: "g", now: 0, sticky: true }, opts);
+    h = commit(h, 2, { groupKey: "g", now: 5000, sticky: true }, opts);
+    h = commit(h, 3, { groupKey: "g", now: 60_000, sticky: true }, opts);
+    expect(h.past).toEqual([0]);
+    expect(h.present).toBe(3);
+    h = endGroup(h);
+    h = commit(h, 4, { groupKey: "g", now: 60_001, sticky: true }, opts);
+    expect(h.past).toEqual([0, 3]);
+    expect(undo(undo(h)).present).toBe(0);
+  });
+
+  it("sans « sticky », le délai de regroupement s'applique toujours", () => {
+    let h = initHistory(0);
+    h = commit(h, 1, { groupKey: "g", now: 0 }, opts);
+    h = commit(h, 2, { groupKey: "g", now: 5000 }, opts);
+    expect(h.past).toEqual([0, 1]);
+  });
+});

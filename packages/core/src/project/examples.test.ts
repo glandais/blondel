@@ -115,18 +115,39 @@ export function acceptance01Profile(): Project {
  * Jalon 4, interactions entre étapes : demi-tournant balancé (deux quarts, poteaux d'angle de
  * 100 mm au lieu du jour vif du préréglage, sans lequel les limons de jour ne se rencontrent
  * pas), limons en plat acier, marches en tôle pliée en Z, garde-corps barreaudé.
+ *
+ * Jour porté de 240 à 340 mm (volée centrale 2E + 340, dernière volée raccourcie de 100 mm :
+ * même giron de 270 mm) [choix Blondel, 2026-09-30] : entre deux poteaux de 100 mm, un jour de
+ * 240 mm ne laisse que 140 mm de limon ; avec les zones par angle (balancement régulier K3
+ * autour des poteaux), le collet tombait à 80 mm (G_COLLET_MIN). Avec 340 mm : collet ≥ 100 mm
+ * et collets monotones vers chaque poteau.
  */
+export const HALF_TURN_NEWEL_JOUR = 340;
+
 export function halfTurnSteelGuards(): Project {
-  const p = createProject("half-turn");
+  const base = createProject("half-turn");
+  const legs = base.stair.layout.legs.map((l) => l.length as number);
+  const width = base.stair.layout.width;
+  const p = createProject("half-turn", {
+    patch: {
+      stair: {
+        layout: {
+          legs: [legs[0]!, 2 * width + HALF_TURN_NEWEL_JOUR, legs[2]! - 100].map((length) => ({
+            length,
+          })),
+          turns: base.stair.layout.turns.map((t) => ({
+            ...t,
+            inner: { kind: "newel" as const, size: 100 },
+          })),
+        },
+      },
+    },
+  });
   return ProjectSchema.parse({
     ...p,
     name: "Jalon 4 — demi-tournant acier et tôle pliée, garde-corps barreaudé",
     stair: {
       ...p.stair,
-      layout: {
-        ...p.stair.layout,
-        turns: p.stair.layout.turns.map((t) => ({ ...t, inner: { kind: "newel", size: 100 } })),
-      },
       structure: { kind: "steel-flat", params: { treadKind: "folded-steel" } },
     },
     compliance: { ...p.compliance, referenceDate: "2026-01-15" },

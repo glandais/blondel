@@ -1,15 +1,18 @@
 /**
  * Mise en page : barre d'outils, paramètres à gauche, vue centrale à onglets (Plan 2D / 3D /
  * Élévation / Développés / Nomenclature / Comparateur), contrôle de conception et
- * prédimensionnement indicatif à droite, barre d'état.
+ * prédimensionnement indicatif à droite, barre d'état ; accueil de la première visite et
+ * assistant d'initialisation (fenêtre modale).
  */
 import { Suspense, lazy, useEffect, type KeyboardEvent } from "react";
+import { AssistantDialog } from "./components/AssistantDialog.js";
 import { CompliancePanel } from "./components/CompliancePanel.js";
 import { ErrorsBar } from "./components/ErrorsBar.js";
 import { ParamsPanel } from "./components/ParamsPanel.js";
 import { PrecheckPanel } from "./components/PrecheckPanel.js";
 import { StatusBar } from "./components/StatusBar.js";
 import { Toolbar } from "./components/Toolbar.js";
+import { Welcome } from "./components/Welcome.js";
 import { selectedTreadNumber } from "./lib/compliance.js";
 import { appStore, useApp, useModel } from "./store/appStore.js";
 import type { ViewTab } from "./store/projectStore.js";
@@ -157,6 +160,7 @@ function CentralView() {
   }
   return (
     <section className="center" aria-label="Vues de l'escalier">
+      <Welcome />
       <ErrorsBar />
       <Tabs />
       <div id="view-panel" role="tabpanel" aria-labelledby={`tab-${view}`} className="view">
@@ -180,6 +184,7 @@ export function App() {
         <PrecheckPanel />
       </aside>
       <StatusBar />
+      <AssistantDialog />
     </div>
   );
 }

@@ -1,0 +1,284 @@
+/* Assistant d'initialisation : fenêtre modale, formulaire, cartes des propositions. */
+
+.assistant__backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  background: color-mix(in srgb, #000 45%, transparent);
+}
+
+.assistant {
+  width: min(1280px, 100%);
+  height: min(900px, 100%);
+  display: flex;
+  flex-direction: column;
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 10px 40px rgb(0 0 0 / 0.35);
+  overflow: hidden;
+}
+
+.assistant__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.5rem 0.9rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.assistant__header h2 {
+  margin: 0;
+  font-size: 1.1rem;
+}
+
+.assistant__body {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 22rem minmax(0, 1fr);
+}
+
+.assistant__form {
+  overflow: auto;
+  padding: 0.6rem 0.8rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  border-right: 1px solid var(--border);
+}
+
+.assistant__form fieldset {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  margin: 0;
+}
+
+.assistant__form fieldset.grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.35rem 0.5rem;
+}
+
+.assistant__wide {
+  grid-column: 1 / -1;
+}
+
+.assistant__typologies {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.assistant__actions {
+  position: sticky;
+  bottom: 0;
+  padding: 0.4rem 0;
+  background: var(--panel);
+}
+
+.assistant__actions button[type="submit"] {
+  background: var(--accent);
+  color: var(--accent-text);
+  border-color: var(--accent);
+}
+
+.assistant__results {
+  overflow: auto;
+  padding: 0.6rem 0.8rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.assistant__cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(17rem, 1fr));
+  gap: 0.6rem;
+}
+
+.assistant__card {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--panel-2);
+  overflow: hidden;
+}
+
+.assistant__card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding: 0.5rem 0.6rem 0.6rem;
+}
+
+.assistant__card h4 {
+  margin: 0;
+  font-size: 0.95rem;
+}
+
+.assistant__rank {
+  color: var(--muted);
+}
+
+.assistant__label {
+  margin: 0;
+  font-size: 0.78rem;
+}
+
+.assistant__facts {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.1rem 0.6rem;
+  margin: 0;
+  font-size: 0.82rem;
+}
+
+.assistant__facts div {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.3rem;
+}
+
+.assistant__facts dt {
+  color: var(--muted);
+}
+
+.assistant__facts dd {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.assistant__warnings {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--warn);
+}
+
+.assistant__score summary {
+  cursor: pointer;
+  font-size: 0.85rem;
+}
+
+.assistant__score table,
+.assistant__diagnostics table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.78rem;
+}
+
+.assistant__score th,
+.assistant__score td,
+.assistant__diagnostics th,
+.assistant__diagnostics td {
+  padding: 0.1rem 0.25rem;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+}
+
+.assistant__choose {
+  align-self: flex-start;
+  background: var(--accent);
+  color: var(--accent-text);
+  border-color: var(--accent);
+}
+
+.assistant__sketch {
+  display: block;
+  width: 100%;
+  height: 10rem;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+}
+
+.assistant__stair {
+  fill: color-mix(in srgb, var(--accent) 15%, transparent);
+  stroke: var(--accent);
+  stroke-width: 1.2px;
+}
+
+.assistant__nosing {
+  stroke: var(--accent);
+  stroke-width: 0.7px;
+}
+
+.assistant__walkline {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 0.8px;
+  stroke-dasharray: 4 3;
+}
+
+.assistant__opening {
+  fill: none;
+  stroke: #6e40c9;
+  stroke-width: 1.5px;
+  stroke-dasharray: 6 3;
+}
+
+.assistant__wall {
+  fill: color-mix(in srgb, var(--text) 30%, transparent);
+  stroke: var(--text);
+  stroke-width: 0.8px;
+}
+
+.assistant__diagnostics summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.assistant__diagnostics ul {
+  font-size: 0.82rem;
+  padding-left: 1.1rem;
+}
+
+.assistant__summary,
+.assistant__running {
+  margin: 0;
+}
+
+/* Accueil (première visite) */
+.welcome {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem;
+  margin: 0.5rem 0.5rem 0;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--accent) 8%, var(--panel));
+}
+
+.welcome h2 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.welcome p {
+  margin: 0;
+  flex: 1 1 20rem;
+  font-size: 0.88rem;
+}
+
+@media (max-width: 900px) {
+  .assistant__body {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto 1fr;
+    overflow: auto;
+  }
+
+  .assistant__form {
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+  }
+}

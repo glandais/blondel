@@ -9,16 +9,18 @@ import { fileURLToPath } from "node:url";
 import { buildModel, clearModelCache, parseProjectText } from "@blondel/core";
 import { describe, expect, it } from "vitest";
 import { CSV_BOM, CUT_LIST_HEADER, exportCutListCsv } from "./csv/cutlist.js";
+import { cutSheet } from "./cutsheet.js";
 import { exportPartDxf } from "./dxf/part.js";
 import { exportPartsDxf } from "./dxf/parts.js";
 import { exportPlanDxf } from "./dxf/plan.js";
 import { exportProjectJson } from "./json.js";
-import { RecordingCanvas } from "./pdf/canvas.js";
-import { COMPLIANCE_DISCLAIMER, exportPdf, renderPdf } from "./pdf/document.js";
+import { exportGlb } from "./gltf/glb.js";
+import { COMPLIANCE_DISCLAIMER, exportPdfDocument } from "./pdf/document.js";
 import { renderElevationSvg } from "./svg/elevation.js";
 import { renderFlatPatternSvg } from "./svg/flat.js";
 import { renderPlanSvg } from "./svg/plan.js";
 import { entitiesOn, readDxf } from "./testing/dxf-reader.js";
+import { readGlb } from "./testing/glb-reader.js";
 import { parseXml } from "./testing/xml.js";
 
 const EXAMPLES_DIR = resolve(dirname(fileURLToPath(import.meta.url)), "../../../examples");
@@ -97,14 +99,50 @@ describe("exports de bout en bout sur examples/", () => {
       });
 
       it("dossier PDF : pages prévues, avertissement du contrôle de conception", () => {
-        const pages = renderPdf(new RecordingCanvas(), model, { project });
-        expect(pages.slice(0, 2).map((p) => p.kind)).toEqual(["plan", "elevation"]);
-        const bytes = exportPdf(model, { project, date: "29/09/2026", compress: false });
+        const { bytes, pages } = exportPdfDocument(model, {
+          project,
+          date: "29/09/2026",
+          compress: false,
+        });
+        expect(pages[0]!.kind).toBe("toc");
+        const kinds = pages.map((p) => p.kind);
+        expect(kinds.filter((k) => k !== "toc").slice(0, 2)).toEqual(["plan", "elevation"]);
+        for (const k of ["installation", "bom", "cutsheet", "compliance"] as const) {
+          expect(kinds, k).toContain(k);
+        }
+        // Un gabarit 1:1 au moins par développé distinct.
+        const flatIds = new Set(
+          pages.filter((p) => p.kind === "flat").map((p) => p.partIds!.join()),
+        );
+        const tplIds = new Set(
+          pages.filter((p) => p.kind === "template").map((p) => p.partIds!.join()),
+        );
+        expect(tplIds).toEqual(flatIds);
         const text = new TextDecoder("latin1").decode(bytes);
         expect(text.startsWith("%PDF-")).toBe(true);
         expect(text.match(/\/Type \/Page\b/g)).toHaveLength(pages.length);
         expect(text).toContain(`(${COMPLIANCE_DISCLAIMER}) Tj`);
         expect(text).not.toMatch(NON_FINITE);
+      });
+
+      it("modèle 3D glTF binaire relu : un nœud par pièce, métadonnées", () => {
+        const r = readGlb(exportGlb(model, { project }));
+        const root = r.doc.nodes[r.doc.scenes[0]!.nodes[0]!]!;
+        expect(root.name).toBe(project.name);
+        expect(root.children).toHaveLength(model.parts.length);
+        root.children!.forEach((ni, k) => {
+          const node = r.doc.nodes[ni]!;
+          expect(node.name).toBe(model.parts[k]!.mark);
+          expect(node.extras?.["id"]).toBe(model.parts[k]!.id);
+          expect(node.mesh, node.name).toBeDefined();
+        });
+      });
+
+      it("fiche de débit : profilés, tubes et ronds acier groupés par section", () => {
+        for (const g of cutSheet(model.parts)) {
+          if (g.material.startsWith("wood-") || g.basis === "section") continue;
+          for (const r of g.rows) expect(r.section).not.toMatch(/^(UPN|IPE|HEA|L |tube|rond)/);
+        }
       });
 
       it("liste de débit : en-tête, une ligne au moins, sans NaN", () => {

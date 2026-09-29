@@ -13,16 +13,25 @@
  *   `G_MIN_LOGEMENT` (contexte du préréglage) ;
  * - palier d'arrivée : le plus grand secteur, multiple de 5°, d'au plus 90° dont l'échappée
  *   (règle dérivée) reste suffisante ; aucun palier si même 5° ne passe ;
- * - marches sans contremarche (usage des hélicoïdaux à fût), débord de nez des préréglages ;
+ * - contremarches pleines (revu le 2026-09-30) : sans contremarche, le vide entre marches
+ *   h − e ≈ 140 mm dépasse la sphère de 100 mm de `VIDE_ENTRE_MARCHES` (conseil sur chaque
+ *   marche) ; débord de nez des préréglages ;
  * - trémie dégageant tout l'escalier : cercle (polygone inscrit) ou carré de rayon / demi-côté
- *   R_e + jeu latéral (`openingClearance`, défaut `PRESET_OPENING_CLEARANCE`). Le palier
- *   d'arrivée (secteur jusqu'à R_e) reste **séparé du nez de dalle par ce jeu** : la liaison
- *   palier / plancher (palier prolongé jusqu'à la trémie, trémie non circulaire côté arrivée)
- *   n'est pas modélisée (ledger §2) ;
- * - contextes `bois_dtu`, `logement_interieur` et `helicoidal` (le contexte de forme
- *   `helicoidal` n'est pas déduit par le moteur de règles, voir le ledger).
+ *   R_e + jeu latéral (`openingClearance`, défaut `PRESET_OPENING_CLEARANCE`). **Sortie vers la
+ *   dalle** (trémie circulaire, revu le 2026-09-30) : au droit du palier d'arrivée, le bord de
+ *   la trémie suit l'arc extérieur du palier, qui affleure donc le nez de dalle (le plancher
+ *   haut prolonge le palier) ; le jeu ne subsiste qu'autour des marches. Trémie carrée : palier
+ *   séparé du nez de dalle par le jeu (liaison non modélisée) ;
+ * - contextes `bois_dtu`, `logement_interieur` et `helicoidal` (ce dernier est aussi déduit du
+ *   découpage par le moteur de règles depuis le 2026-09-30).
+ *
+ * `G_COLLET_MIN` reste en avertissement sur un fût : le collet r_f·Δθ (≈ 37 mm) n'atteint
+ * 100 mm qu'avec un fût de plus de 400 mm de diamètre, hors des valeurs raisonnables (ledger §2 :
+ * application de la règle aux fûts à arbitrer, DIN 18065 admettant 0 mm pour un noyau).
  */
 import { circularOpening, helicalHeadroomBound } from "../headroom/helical.js";
+import { ensureCCW } from "../geom2d/polygon.js";
+import { arcPoints } from "../layout/helical.js";
 import { computeLayout } from "../layout/layout.js";
 import { LayoutError } from "../layout/errors.js";
 import { resolveRiserCount } from "../layout/resolve.js";
@@ -134,7 +143,7 @@ export function createHelicalProject(options: PresetOptions = {}): Project {
         sweep: { mode: "treadsPerTurn", count: 12 },
         startAngle: 0,
       },
-      treads: { nosing: PRESET_NOSING, risers: "none" },
+      treads: { nosing: PRESET_NOSING, risers: "full" },
     },
     compliance: { contexts: [...HELICAL_CONTEXTS] },
   };
@@ -216,19 +225,24 @@ export function createHelicalProject(options: PresetOptions = {}): Project {
     }
   }
 
-  const opening: Opening | undefined =
-    patch?.site?.opening !== undefined
-      ? project.site.opening
-      : helicalOpening(project, outerRadius + clearance, options.openingShape ?? "circle");
   const { landing: _previous, ...layoutRest } = spec;
-  return structuredClone(
+  const shaped = structuredClone(
     ProjectSchema.parse({
       ...project,
-      site: { ...project.site, ...(opening ? { opening } : {}) },
       stair: {
         ...project.stair,
         layout: { ...layoutRest, sweep, ...(landing ? { landing } : {}) },
       },
+    }),
+  );
+  const opening: Opening | undefined =
+    patch?.site?.opening !== undefined
+      ? project.site.opening
+      : helicalOpening(shaped, outerRadius + clearance, options.openingShape ?? "circle");
+  return structuredClone(
+    ProjectSchema.parse({
+      ...shaped,
+      site: { ...shaped.site, ...(opening ? { opening } : {}) },
     }),
   );
 }
@@ -239,10 +253,42 @@ function computeStepAngle(sweep: HelicalSweep, n: number): number {
     : (2 * Math.PI) / sweep.count;
 }
 
-/** Trémie qui dégage l'escalier : cercle (polygone inscrit) ou carré (grille de 10 mm). */
+/**
+ * Trémie qui dégage l'escalier : cercle (polygone inscrit) ou carré (grille de 10 mm) de rayon /
+ * demi-côté R_e + jeu. **Sortie vers la dalle** (trémie circulaire avec palier d'arrivée) : au
+ * droit du secteur du palier, le bord de la trémie suit l'arc extérieur du palier (mêmes sommets
+ * que `Layout.helical.landingOutline`) : le palier affleure le nez de dalle sur ce secteur,
+ * le plancher haut prolonge le palier (la trémie n'est élargie du jeu qu'autour des marches).
+ */
 function helicalOpening(project: Project, radius: number, shape: "circle" | "square"): Opening {
   const c = project.stair.placement.origin;
-  if (shape === "circle") return circularOpening(c, radius);
-  const half = Math.ceil(radius / 10) * 10;
-  return { kind: "rect", x: c.x - half, y: c.y - half, sizeX: 2 * half, sizeY: 2 * half };
+  if (shape === "square") {
+    const half = Math.ceil(radius / 10) * 10;
+    return { kind: "rect", x: c.x - half, y: c.y - half, sizeX: 2 * half, sizeY: 2 * half };
+  }
+  const h = computeLayout(project).helical;
+  if (!h || !(h.landingAngle > 0)) return circularOpening(c, radius);
+  const sign = h.direction === "left" ? 1 : -1;
+  // Mêmes angles que le secteur du palier du tracé (`layout/helical.ts`).
+  const landingStart = h.startAngle + sign * h.totalAngle;
+  const landingSweep = sign * h.landingAngle;
+  const landingEnd = landingStart + landingSweep;
+  const landingArc = arcPoints(h.center, h.outerRadius, landingStart, landingSweep);
+  // Reste du cercle : même pas que `circularOpening` (flèche ≤ 0,5 mm).
+  const restSweep = 2 * Math.PI - h.landingAngle;
+  const maxStep = 2 * Math.acos(1 - 0.5 / radius);
+  const count = Math.max(2, Math.ceil(restSweep / maxStep));
+  const rest = Array.from({ length: count + 1 }, (_, i) => {
+    const a = landingEnd + (sign * restSweep * i) / count;
+    return { x: h.center.x + radius * Math.cos(a), y: h.center.y + radius * Math.sin(a) };
+  });
+  // Reste du cercle au 1/100 mm (comme `circularOpening`) ; arc du palier **exact** (mêmes
+  // flottants que le contour du palier : ses points, dont le nez d'arrivée, sont sur le bord de
+  // la trémie, compté dans la trémie par l'échappée).
+  const round = (v: number): number => Math.round(v * 100) / 100;
+  const points = ensureCCW([
+    ...landingArc,
+    ...rest.map((p) => ({ x: round(p.x), y: round(p.y) })),
+  ]).map((p) => ({ x: p.x, y: p.y }));
+  return { kind: "polygon", points };
 }

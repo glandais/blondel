@@ -14,10 +14,34 @@ import type { Model, Project, StructureKind } from "@blondel/core";
 /** Octets, texte ou `Blob` : toutes les formes de contenu de fichier acceptées. */
 export type FileContent = string | Uint8Array | ArrayBuffer | Blob;
 
+/**
+ * Pages et format d'un dossier PDF (`PdfPages` et `format` de `@blondel/exports/pdf`) : clé
+ * absente = page produite ; format absent = A4. Clonable (requête du worker).
+ */
+export interface PdfJobOptions {
+  readonly pages?: Readonly<
+    Partial<
+      Record<
+        | "toc"
+        | "plan"
+        | "elevation"
+        | "installation"
+        | "bom"
+        | "cutsheet"
+        | "compliance"
+        | "flats"
+        | "templates",
+        boolean
+      >
+    >
+  >;
+  readonly format?: "a4" | "a3";
+}
+
 /** Signature attendue de `exportPdf` (synchrone ou asynchrone). */
 export type ExportPdfFn = (
   model: Model,
-  options?: { readonly project?: Project; readonly title?: string },
+  options?: { readonly project?: Project; readonly title?: string } & PdfJobOptions,
 ) => FileContent | Promise<FileContent>;
 
 export interface OptionalApi {

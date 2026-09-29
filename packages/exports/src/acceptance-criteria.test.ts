@@ -9,6 +9,8 @@
  * - Critère n° 3 (`j3b-acceptance-01-tole-pliee`) : DXF R12 des limons en plat acier et des
  *   marches en tôle pliée relus à ±0,01 mm (contour, perçages, traits), lignes de pli repérées
  *   sur leur calque avec angle et sens, repère de pièce gravé.
+ * - Critère n° 3, limon débillardé (`j5b-debillarde-soude`) : DXF R12 de chaque tronçon relu à
+ *   ±0,01 mm, lignes de roulage (calque ROULAGE, rayon annoté) et joints bout à bout repérés.
  *
  * (« Conçu en moins de 2 minutes » relève de l'interface et n'est pas vérifié ici.)
  */
@@ -277,5 +279,47 @@ describe("critère d'acceptation n° 3 : DXF de limon acier et de marche en tôl
     for (const p of [...stringers, ...treads]) expect(flatIds.has(p.id), p.mark).toBe(true);
     const text = pdfText(model, project);
     for (const p of [...stringers, ...treads]) expect(text, p.mark).toContain(p.mark);
+  });
+});
+
+describe("critère d'acceptation n° 3 : chaque tronçon d'un limon débillardé soudé", () => {
+  const { model } = load("j5b-debillarde-soude.blondel.json");
+  const sections = model.parts.filter((p) => p.id.startsWith("stringer-inner-curved-"));
+
+  it("tronçons développés en fibre neutre, repères distincts", () => {
+    expect(model.errors).toEqual([]);
+    expect(blocking(model)).toEqual([]);
+    expect(sections.length).toBeGreaterThanOrEqual(2);
+    for (const s of sections) expect(s.flat?.reference?.kind, s.id).toBe("neutral-fiber");
+    expect(new Set(sections.map((s) => s.mark)).size).toBe(sections.length);
+  });
+
+  it("DXF R12 de chaque tronçon relu à ±0,01 mm : roulage et joints sur leur calque", () => {
+    let rolled = 0;
+    for (const s of sections) {
+      const f = partDxf(model, s);
+      expectFaithful(f, s);
+      // Lignes de roulage (génératrices) : calque ROULAGE en tirets, rayon annoté.
+      const rolls = s.flat!.lines.filter((l) => l.kind === "roll");
+      expect(entitiesOn(f, "LINE", PART_LAYERS.roll.name), s.mark).toHaveLength(rolls.length);
+      if (rolls.length > 0) {
+        rolled++;
+        expect(f.layers.get(PART_LAYERS.roll.name)?.lineType).toBe("DASHED");
+        expect(
+          textsOn(f, PART_LAYERS.roll.name).some((t) => /Roulage R int \d+ mm/.test(t)),
+          s.mark,
+        ).toBe(true);
+      }
+      // Joints bout à bout : un trait par tronçon voisin, qui nomme le repère du voisin.
+      const joints = s.flat!.lines.filter((l) => l.kind === "joint");
+      expect(joints.length, s.mark).toBeGreaterThanOrEqual(1);
+      expect(entitiesOn(f, "LINE", PART_LAYERS.joint.name), s.mark).toHaveLength(joints.length);
+      const jointTexts = textsOn(f, PART_LAYERS.joint.name);
+      const neighbours = sections.filter(
+        (o) => o !== s && jointTexts.some((t) => t.includes(o.mark)),
+      );
+      expect(neighbours.length, s.mark).toBe(joints.length);
+    }
+    expect(rolled).toBeGreaterThan(0);
   });
 });

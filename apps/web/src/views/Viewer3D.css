@@ -1,0 +1,127 @@
+/* Vue 3D : outils (jalon 6) et surimpression des cotes et mesures. */
+
+.viewer3d canvas {
+  display: block;
+}
+
+/* Barre d'outils 3D (en bas de la vue). */
+.viewer3d__toolbar {
+  position: absolute;
+  left: 50%;
+  bottom: 0.5rem;
+  transform: translateX(-50%);
+  max-width: calc(100% - 1.5rem);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0.3rem 0.8rem;
+  padding: 0.3rem 0.6rem;
+  border-radius: var(--radius);
+  background: var(--panel);
+  border: 1px solid var(--border);
+  font-size: 0.8rem;
+}
+
+.viewer3d__check {
+  display: flex;
+  align-items: center;
+  gap: 0.2rem;
+}
+
+.viewer3d__materials {
+  position: relative;
+}
+
+.viewer3d__materials > summary {
+  cursor: pointer;
+}
+
+.viewer3d__materials-panel {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 0.6rem);
+  width: 19rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  padding: 0.5rem 0.6rem;
+  border-radius: var(--radius);
+  background: var(--panel);
+  border: 1px solid var(--border);
+  box-shadow: 0 4px 16px rgb(0 0 0 / 0.2);
+}
+
+.viewer3d__family {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+.viewer3d__range {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.viewer3d__range input[type="range"] {
+  width: 8rem;
+}
+
+.viewer3d__buttons {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.25rem;
+}
+
+.viewer3d__buttons button[aria-pressed="true"] {
+  background: var(--accent);
+  color: var(--accent-text);
+  border-color: var(--accent);
+}
+
+.viewer3d__measure {
+  font-family: var(--mono);
+  text-align: right;
+}
+
+.viewer3d__overlay {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  overflow: visible;
+}
+
+.viewer3d__overlay polyline {
+  stroke-width: 1.5;
+}
+
+.viewer3d__overlay text {
+  font-family: var(--font);
+  font-size: 12px;
+  paint-order: stroke;
+  stroke: var(--panel);
+  stroke-width: 3px;
+  fill: var(--text);
+}
+
+.viewer3d__annotation--dimension polyline {
+  stroke: var(--accent);
+  stroke-dasharray: 6 3;
+}
+
+.viewer3d__annotation--dimension circle {
+  fill: var(--accent);
+}
+
+.viewer3d__annotation--measure polyline {
+  stroke: var(--selected);
+}
+
+.viewer3d__annotation--measure circle {
+  fill: var(--selected);
+}

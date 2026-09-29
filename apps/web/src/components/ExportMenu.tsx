@@ -1,7 +1,7 @@
 /**
  * Menu « Exporter » de la barre d'outils : projet JSON, plan SVG / DXF, élévation SVG, liste de
- * débit CSV, PDF (si `@blondel/exports` le fournit), DXF des pièces et DXF de la pièce
- * sélectionnée. Menu déroulant non modal ; téléchargement direct (Blob + lien).
+ * débit CSV, dossiers PDF (complet A4 / A3, sans gabarits), fiche de pose PDF, DXF des pièces,
+ * modèle 3D glTF (.glb, calculé dans le worker) et DXF de la pièce sélectionnée. Menu déroulant non modal ; téléchargement direct (Blob + lien).
  */
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
 import { downloadFile, downloadFiles } from "../lib/download.js";
@@ -21,7 +21,8 @@ import { appStore, modelService, useApp, useModel } from "../store/appStore.js";
 /** Dossier PDF mis en page dans le worker de calcul (le fil principal reste disponible). */
 const EXPORT_DEPS: ExportDeps = {
   ...DEFAULT_EXPORT_DEPS,
-  renderPdf: (project) => modelService.exportPdf(project),
+  renderPdf: (project, _model, options) => modelService.exportPdf(project, options),
+  renderGlb: (project) => modelService.exportGlb(project),
 };
 
 function notify(kind: "info" | "error", text: string): void {

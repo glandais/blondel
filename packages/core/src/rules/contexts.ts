@@ -2,7 +2,8 @@
  * Résolution des contextes actifs et applicabilité des règles (ADR-0004, SPEC §3.1).
  *
  * - Contextes **cumulatifs** : toutes les règles des contextes actifs s'appliquent ; `tous` est implicite.
- * - Contextes **déduits** : `tournant` si le découpage contient des marches balancées ; régime
+ * - Contextes **déduits** : `tournant` si le découpage contient des marches balancées,
+ *   `helicoidal` si le découpage est celui d'un tracé hélicoïdal (`Stepping.helical`) ; régime
  *   garde-corps `garde_corps_1988` / `garde_corps_2024` déduit de `referenceDate` si l'utilisateur
  *   n'en a choisi aucun explicitement.
  * - Applicabilité : les contextes de forme (`tournant`, `helicoidal`) **qualifient** les contextes de
@@ -102,6 +103,11 @@ export function resolveContexts(
   if (stepping && stepping.treads.some((t) => t.kind === "winder") && !active.has("tournant")) {
     active.add("tournant");
     derived.push("tournant");
+  }
+  // Tracé hélicoïdal (marches rayonnantes, `Stepping.helical`) : contexte de forme `helicoidal`.
+  if (stepping?.helical && known.has("helicoidal") && !active.has("helicoidal")) {
+    active.add("helicoidal");
+    derived.push("helicoidal");
   }
 
   let guardRail: GuardRailResolution;

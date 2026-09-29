@@ -7,7 +7,10 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
+import { pointInPolygon, signedArea } from "../geom2d/polygon.js";
+import * as V from "../geom2d/vec.js";
 import { helicalHeadroomBound } from "../headroom/helical.js";
+import { isSimplePolygon } from "../structures/geom.js";
 import { computeLayout } from "../layout/layout.js";
 import { PROJECT_SCHEMA_VERSION, ProjectSchema } from "../model/project.js";
 import { buildModel } from "../pipeline/build.js";
@@ -21,6 +24,7 @@ import {
   PRESET_HEADROOM_MIN,
   PRESET_IDS,
   PRESET_LABELS,
+  PRESET_OPENING_CLEARANCE,
 } from "./presets.js";
 import { serializeProject } from "./serialize.js";
 
@@ -176,6 +180,49 @@ describe("préréglage `helical`", () => {
         2 * st.rise + going > blondel.max!,
     ).toBe(true);
   });
+
+  it.each(["left", "right"] as const)(
+    "sortie vers la dalle (%s) : la trémie suit l'arc du palier, jeu autour des marches seulement",
+    (direction) => {
+      const p = createProject("helical", { direction });
+      const layout = computeLayout(p);
+      const h = layout.helical!;
+      const opening = p.site.opening!;
+      if (opening.kind !== "polygon") throw new Error("trémie polygonale attendue");
+      const pts = opening.points;
+      expect(signedArea(pts)).toBeGreaterThan(0);
+      expect(isSimplePolygon(pts)).toBe(true);
+      // L'arc extérieur du palier (sommets à R_e) appartient au bord de la trémie.
+      const outerArc = h.landingOutline!.filter(
+        (q) => Math.abs(V.distance(q, h.center) - h.outerRadius) < 1e-6,
+      );
+      expect(outerArc.length).toBeGreaterThan(2);
+      for (const q of outerArc) {
+        expect(pts.some((o) => V.distance(o, q) < 0.01)).toBe(true);
+      }
+      // Les autres sommets sont à R_e + jeu (inscrits : sur le cercle).
+      const radii = pts.map((o) => V.distance(o, h.center));
+      for (const r of radii) {
+        const onLanding = Math.abs(r - h.outerRadius) < 0.01;
+        const onClearance = Math.abs(r - (h.outerRadius + PRESET_OPENING_CLEARANCE)) < 0.01;
+        expect(onLanding || onClearance).toBe(true);
+      }
+      // Le palier est dans la trémie (bord commun) ; le milieu de chaque marche aussi.
+      for (const q of h.landingOutline!) {
+        expect(pointInPolygon(q, pts, 0.01)).not.toBe("outside");
+      }
+      const m = buildModel(p);
+      expect(m.errors).toEqual([]);
+      expect(m.headroom!.min).toBeGreaterThanOrEqual(PRESET_HEADROOM_MIN);
+      // Contremarches pleines : pas de conseil VIDE_ENTRE_MARCHES.
+      expect(p.stair.treads.risers).toBe("full");
+      expect(
+        m.compliance.results.filter(
+          (r) => r.ruleId === "VIDE_ENTRE_MARCHES" && r.status === "violation",
+        ),
+      ).toEqual([]);
+    },
+  );
 
   it("options : sens, trémie carrée, rayons ; erreurs explicites", () => {
     const r = createProject("helical", { direction: "right", openingShape: "square" });

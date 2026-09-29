@@ -1,0 +1,285 @@
+import fc from "fast-check";
+import {
+  buildModel,
+  createProject,
+  openingPolygon,
+  pointInPolygon,
+  proposeDesigns,
+  type Project,
+  type Vec2,
+} from "@blondel/core";
+import { describe, expect, it } from "vitest";
+import {
+  assistantInput,
+  candidateSketch,
+  chosenProject,
+  contextsFor,
+  formFromProject,
+  formOpening,
+  openingSideLabel,
+  summaryFacts,
+  usageOf,
+  wallsAlongOpening,
+  type AssistantForm,
+} from "./assistant.js";
+
+const straight = createProject("straight");
+
+/** Formulaire du critère n° 1 : H 2 700, dalle 200, trémie 2 800 × 900, bois, logement. */
+function acceptanceForm(patch: Partial<AssistantForm> = {}): AssistantForm {
+  return {
+    ...formFromProject(straight),
+    openingX: "0",
+    openingY: "0",
+    sizeX: "2800",
+    sizeY: "900",
+    ...patch,
+  };
+}
+
+describe("formulaire de l'assistant", () => {
+  it("reprend le site, les contextes et la structure du projet courant", () => {
+    const f = formFromProject(straight);
+    expect(f.floorToFloor).toBe(String(straight.site.floorToFloor));
+    expect(f.upperSlabThickness).toBe(String(straight.site.upperSlabThickness));
+    expect(f.openingMode).toBe("rect");
+    expect(f.usage).toBe("house");
+    expect(f.wood).toBe(true);
+    expect(f.guards).toBe(true);
+  });
+
+  it("usage ↔ contextes : aller-retour", () => {
+    for (const usage of ["house", "collective", "erp-new", "erp-existing", "other"] as const) {
+      for (const wood of [true, false]) {
+        for (const outdoor of [true, false]) {
+          expect(usageOf(contextsFor(usage, wood, outdoor))).toEqual({ usage, wood, outdoor });
+        }
+      }
+    }
+    expect(contextsFor("erp-new", false, false)).toEqual(["erp_neuf", "erp_securite"]);
+  });
+
+  it("construit l'entrée du cœur (préférences, contextes, sans fonction non clonable)", () => {
+    const r = assistantInput(
+      acceptanceForm({ structure: "wood-housed", typologies: ["quarter"], direction: "left" }),
+      straight,
+    );
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.input.site.opening).toEqual({ kind: "rect", x: 0, y: 0, sizeX: 2800, sizeY: 900 });
+    expect(r.input.compliance?.contexts).toEqual(["bois_dtu", "logement_interieur"]);
+    expect(r.input.preferences).toEqual({
+      typologies: ["quarter"],
+      direction: "left",
+      structure: { kind: "wood-housed" },
+    });
+    expect(r.input.shouldStop).toBeUndefined();
+    expect(() => structuredClone(r.input)).not.toThrow();
+  });
+
+  it("refuse des saisies invalides avec des messages lisibles", () => {
+    const r = assistantInput(
+      acceptanceForm({ floorToFloor: "", sizeX: "-3", width: "abc" }),
+      straight,
+    );
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.errors.join("\n")).toMatch(/Hauteur à monter/);
+    expect(r.errors.join("\n")).toMatch(/Dimensions de la trémie/);
+    expect(r.errors.join("\n")).toMatch(/Emmarchement/);
+  });
+
+  it("relevé 4 côtés + 2 diagonales : trémie polygonale ; relevé incohérent refusé", () => {
+    const d = String(Math.round(Math.hypot(2800, 900)));
+    const ok = formOpening(
+      acceptanceForm({
+        openingMode: "survey",
+        survey: { ab: "2800", bc: "900", cd: "2800", da: "900", ac: d, bd: d },
+      }),
+      straight,
+    );
+    expect(ok.ok).toBe(true);
+    if (ok.ok) {
+      expect(ok.opening?.kind).toBe("polygon");
+      const poly = openingPolygon(ok.opening)!;
+      expect(poly).toHaveLength(4);
+    }
+    const bad = formOpening(
+      acceptanceForm({
+        openingMode: "survey",
+        survey: { ab: "2800", bc: "900", cd: "2800", da: "900", ac: d, bd: "2500" },
+      }),
+      straight,
+    );
+    expect(bad.ok).toBe(false);
+    const missing = formOpening(acceptanceForm({ openingMode: "survey" }), straight);
+    expect(missing.ok).toBe(false);
+  });
+
+  it("garde le régime de garde-corps choisi dans le projet, pas les contextes de forme", () => {
+    const current: Project = {
+      ...straight,
+      compliance: {
+        ...straight.compliance,
+        contexts: ["bois_dtu", "logement_interieur", "garde_corps_1988", "helicoidal"],
+      },
+    };
+    const r = assistantInput(acceptanceForm({ usage: "collective" }), current);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.input.compliance?.contexts).toEqual([
+      "bois_dtu",
+      "bhc_parties_communes",
+      "garde_corps_1988",
+    ]);
+  });
+
+  it("relevé : un point A illisible est refusé (pas d'origine 0 implicite)", () => {
+    const d = String(Math.round(Math.hypot(2800, 900)));
+    const r = formOpening(
+      acceptanceForm({
+        openingMode: "survey",
+        openingX: "abc",
+        survey: { ab: "2800", bc: "900", cd: "2800", da: "900", ac: d, bd: d },
+      }),
+      straight,
+    );
+    expect(r).toEqual({ ok: false, error: "Position du point A invalide." });
+  });
+
+  it("sans trémie, des côtés cochés auparavant n'ajoutent ni mur ni erreur d'épaisseur", () => {
+    const r = assistantInput(
+      acceptanceForm({ openingMode: "none", wallSides: [0, 1], wallThickness: "" }),
+      { ...straight, site: { ...straight.site, walls: [] } },
+    );
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.input.site.walls).toEqual([]);
+  });
+
+  it("sans trémie ; trémie du projet", () => {
+    expect(formOpening(acceptanceForm({ openingMode: "none" }), straight)).toEqual({
+      ok: true,
+      opening: undefined,
+    });
+    expect(formOpening(acceptanceForm({ openingMode: "project" }), straight)).toEqual({
+      ok: true,
+      opening: straight.site.opening,
+    });
+  });
+});
+
+describe("murs le long de la trémie", () => {
+  const rect: Vec2[] = [
+    { x: 0, y: 0 },
+    { x: 2800, y: 0 },
+    { x: 2800, y: 900 },
+    { x: 0, y: 900 },
+  ];
+
+  it("nomme les côtés d'un rectangle selon le plan", () => {
+    expect(openingSideLabel(rect, 0)).toMatch(/^Côté b1 \(bas du plan\), 2\s?800 mm$/);
+    expect(openingSideLabel(rect, 1)).toMatch(/droite du plan/);
+    expect(openingSideLabel(rect, 2)).toMatch(/haut du plan/);
+    expect(openingSideLabel(rect, 3)).toMatch(/gauche du plan/);
+  });
+
+  it("propriété : nu du mur sur le côté, corps hors de la trémie, identifiants libres", () => {
+    const poly = fc
+      .tuple(
+        fc.integer({ min: -5000, max: 5000 }),
+        fc.integer({ min: -5000, max: 5000 }),
+        fc.integer({ min: 600, max: 5000 }),
+        fc.integer({ min: 600, max: 5000 }),
+        fc.double({ min: 0, max: 2 * Math.PI, noNaN: true }),
+      )
+      .map(([x, y, w, h, t]) => {
+        const c = Math.cos(t);
+        const s = Math.sin(t);
+        const rot = (p: Vec2): Vec2 => ({ x: x + p.x * c - p.y * s, y: y + p.x * s + p.y * c });
+        return [
+          { x: 0, y: 0 },
+          { x: w, y: 0 },
+          { x: w, y: h },
+          { x: 0, y: h },
+        ].map(rot);
+      });
+    fc.assert(
+      fc.property(
+        poly,
+        fc.subarray([0, 1, 2, 3], { minLength: 1 }),
+        fc.integer({ min: 50, max: 500 }),
+        (pts, sides, t) => {
+          const existing = [
+            { id: "wall-1", a: pts[0]!, b: pts[1]!, thickness: 100, loadBearing: false },
+          ];
+          const walls = wallsAlongOpening(pts, sides, t, existing);
+          expect(walls).toHaveLength(sides.length);
+          const ids = new Set([...existing, ...walls].map((w) => w.id));
+          expect(ids.size).toBe(walls.length + 1);
+          walls.forEach((w, j) => {
+            const i = [...sides].sort((a, b) => a - b)[j]!;
+            const a = pts[i]!;
+            const b = pts[(i + 1) % 4]!;
+            const L = Math.hypot(b.x - a.x, b.y - a.y);
+            // Axe à t/2 du côté, à l'extérieur (le milieu de l'axe hors de la trémie).
+            const mid = { x: (w.a.x + w.b.x) / 2, y: (w.a.y + w.b.y) / 2 };
+            const dist = Math.abs((b.x - a.x) * (a.y - mid.y) - (a.x - mid.x) * (b.y - a.y)) / L;
+            expect(Math.abs(dist - t / 2)).toBeLessThan(0.2);
+            expect(pointInPolygon(mid, pts)).toBe("outside");
+            expect(w.thickness).toBe(t);
+          });
+        },
+      ),
+    );
+  });
+});
+
+describe("de la proposition au projet", () => {
+  // Cas du critère n° 1 (préférence limons à la française, quart tournant).
+  const form = acceptanceForm({ structure: "wood-housed", typologies: ["quarter"] });
+  const r = assistantInput(form, straight);
+  if (!r.ok) throw new Error(r.errors.join("\n"));
+  const result = proposeDesigns({
+    ...r.input,
+    limits: { timeBudgetMs: Number.POSITIVE_INFINITY },
+  });
+
+  it("le projet retenu garde le nom courant, reçoit les garde-corps et reste sans bloquant", () => {
+    expect(result.candidates.length).toBeGreaterThan(0);
+    const c = result.candidates[0]!;
+    const named: Project = { ...straight, name: "Maison Martin" };
+    const p = chosenProject(c, named, { guards: true });
+    expect(p.name).toBe("Maison Martin");
+    expect(p.guards).toBeDefined();
+    expect(p.stair.structure.kind).toBe("wood-housed");
+    const m = buildModel(p);
+    expect(m.errors).toEqual([]);
+    expect(m.compliance.summary.bloquant).toBe(0);
+    expect(m.parts.some((q) => q.category === "baluster")).toBe(true);
+    const bare = chosenProject(c, named, { guards: false });
+    expect(bare.guards).toBeUndefined();
+  });
+
+  it("croquis : emprise, nez et trémie, boîte englobante non vide, clonable", () => {
+    const c = result.candidates[0]!;
+    const sketch = candidateSketch(buildModel(c.project), c.project);
+    expect(sketch.footprint.length).toBeGreaterThan(3);
+    expect(sketch.nosings.length).toBe(c.summary.riserCount);
+    expect(sketch.opening).toHaveLength(4);
+    expect(sketch.box.w).toBeGreaterThan(0);
+    expect(() => structuredClone(sketch)).not.toThrow();
+  });
+
+  it("cotes de la carte", () => {
+    const facts = summaryFacts(result.candidates[0]!);
+    expect(facts.map((f) => f.label)).toEqual([
+      "Hauteurs n",
+      "Hauteur h",
+      "Giron g",
+      "2h + g",
+      "Emmarchement E",
+      "Collet mini",
+      "Échappée mini",
+    ]);
+  });
+});

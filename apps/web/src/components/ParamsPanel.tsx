@@ -128,8 +128,8 @@ function SiteSection() {
       ) : null}
       {o?.kind === "polygon" ? (
         <p className="muted">
-          Trémie polygonale ({o.points.length} sommets) : modifiable par import de fichier
-          seulement.
+          Trémie polygonale ({o.points.length} sommets) : à retracer ou relever dans Plan 2D › «
+          Site et saisie ».
         </p>
       ) : null}
     </Section>

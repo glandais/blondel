@@ -5,6 +5,9 @@
  * - **Bord intérieur** : C_i (jour) mis en polyligne ; le contour d'un poteau d'angle (`newel`)
  *   est remplacé par le coin intérieur K (la ligne de garde-corps s'arrête sur le poteau, qui en
  *   tient lieu). **Bord extérieur** : C_e.
+ * - **Hélicoïdal à fût central** : le bord intérieur longe le fût (pas de vide) : aucune portion,
+ *   donc ni garde-corps ni main courante murale de ce côté (`isColumnSide`). À jour central, le
+ *   bord intérieur est traité comme un jour.
  * - **Côté vide** : à gauche du bord intérieur si `Layout.innerSide = "left"`, à droite sinon ;
  *   l'inverse pour le bord extérieur.
  * - **Murs** (convention : `a`–`b` = axe, nus à ± épaisseur / 2) : une portion de bord est côté
@@ -250,7 +253,15 @@ export function sideFall(
   return at ? { maxFall, at } : { maxFall };
 }
 
-/** Analyse d'un côté (bord, portions, chute). */
+/** Vrai pour le côté intérieur d'un hélicoïdal à fût central (bord = fût, sans vide). */
+export function isColumnSide(side: StairSide, layout: Layout): boolean {
+  return side === "inner" && layout.helical?.core === "column";
+}
+
+/**
+ * Analyse d'un côté (bord, portions, chute). Côté fût d'un hélicoïdal (`isColumnSide`) : aucune
+ * portion (ni vide ni mur).
+ */
 export function analyzeSide(
   side: StairSide,
   layout: Layout,
@@ -260,7 +271,11 @@ export function analyzeSide(
 ): { edge: SideEdge; analysis: SideAnalysis } {
   const edge = sideEdge(side, layout, stepping, project);
   const mode = side === "inner" ? spec.flight.inner : spec.flight.outer;
-  const intervals = sideIntervals(edge, mode, project.site.walls, spec);
+  // Hélicoïdal à fût central : le côté intérieur longe le fût, qui porte les marches ; il n'y a
+  // ni vide (pas de chute, pas de garde-corps) ni mur (pas de main courante murale).
+  const intervals = isColumnSide(side, layout)
+    ? []
+    : sideIntervals(edge, mode, project.site.walls, spec);
   const fall = sideFall(edge, intervals, stepping, 0);
   return {
     edge,

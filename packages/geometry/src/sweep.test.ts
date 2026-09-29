@@ -216,7 +216,9 @@ describe("repère de section sur une hélice (main courante d'escalier hélicoï
           // ici par 0,5·ψ. Le transport parallèle, lui, donne des faces planes et un volume exact.
           const L = polylineLength(path);
           const psi = (2 * Math.PI * turns * ((Math.abs(climb) * turns) / L)) / n;
-          expect(rel(signedVolume(m), shapeArea(section) * L)).toBeLessThan(0.5 * psi + 1e-6);
+          // Plancher de 1e-5 comme en transport parallèle : à pente nulle (ψ = 0), l'arrondi
+          // flottant atteint 1,04e-6 (R ≈ 1 396, un quart de tour).
+          expect(rel(signedVolume(m), shapeArea(section) * L)).toBeLessThan(0.5 * psi + 1e-5);
           expect(
             rel(
               signedVolume(meshSweep(path, section, { sweepFrame: "parallel" })),

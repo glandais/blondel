@@ -1,7 +1,13 @@
 /**
- * Plugin de structure **`helical-core`** (jalon 5a) : escalier hélicoïdal à fût central.
+ * Plugin de structure **`helical-core`** (jalon 5a) : escalier hélicoïdal à fût central ou, depuis
+ * le 2026-09-30, à **jour central** (`core.kind = "well"`).
  *
- * - **Fût** (`helical-column`, repère F1) : tube acier (paroi `column.wallThickness`) ou rond
+ * - **Jour central** : pas de fût ; **limon intérieur hélicoïdal** (`helical-stringer-inner`,
+ *   LI1) en plat roulé, face côté marches au rayon du jour r_j, épaisseur vers l'axe (fibre
+ *   neutre r_j − e/2, rayon de roulage r_j − e), et limon extérieur activé par défaut : les
+ *   marches sont portées des deux côtés (pas de contrôle de porte-à-faux, sauf limon extérieur
+ *   désactivé). Les deux limons se développent **en bande** (parallélogramme exact, B §4.3).
+ * - **Fût** (`helical-column`, repère F1, fût central seulement) : tube acier (paroi `column.wallThickness`) ou rond
  *   bois plein, de rayon r_f du tracé, du sol fini bas au plancher haut (+ `topExtension`).
  * - **Marches en porte-à-faux sur le fût** : bois (pièces de base conservées) ou tôle plane
  *   (`treads.material = "steel"` : les pièces `tread-N` sont remplacées par des tôles de même
@@ -21,8 +27,8 @@
  *   même rayon (B §4.3) ; rayon de cintrage ρ = (r² + b²)/r et torsion τ = b/(r² + b²) en
  *   remarque (réglage de la cintreuse).
  *
- * Valeurs par défaut non sourcées marquées « à valider » (ledger §2). Tracé à jour central
- * (`core.kind = "well"`) ou escalier à volées : erreur explicite, aucune pièce.
+ * Valeurs par défaut non sourcées marquées « à valider » (ledger §2). Escalier à volées : erreur
+ * explicite, aucune pièce.
  */
 import { z } from "zod";
 import { arcPoints, helicalAngleAt, helicalPoint } from "../layout/helical.js";
@@ -96,8 +102,24 @@ export const HelicalCoreParamsSchema = z.object({
       plateThickness: mmPos.default(8),
     })
     .prefault({}),
+  /**
+   * Limon intérieur hélicoïdal d'un hélicoïdal **à jour central** (`core.kind = "well"`) : plat
+   * roulé, face côté marches au rayon du jour r_j, épaisseur vers l'axe. Ignoré sur un fût.
+   * Mêmes valeurs par défaut que le limon extérieur (exemples relevés, à valider).
+   */
+  innerStringer: z
+    .object({
+      /** Hauteur du plat (mm) : exemple relevé de 250 mm (C §2.2 [50], confiance faible). */
+      height: mmPos.default(250),
+      /** Épaisseur (mm) : limons en tôle de 8 mm relevés (C §2.2 [20], exemple à valider). */
+      thickness: mmPos.default(8),
+      /** Rive haute au-dessus de la ligne des nez (mm) — à valider. */
+      topAboveNosing: z.number().default(50),
+    })
+    .prefault({}),
   outerStringer: z
     .object({
+      /** Défaut : non (fût) ; oui sur un jour central (`defaults(ctx)`). */
       enabled: z.boolean().default(false),
       /** Hauteur du plat (mm) : exemple relevé de 250 mm (C §2.2 [50], confiance faible). */
       height: mmPos.default(250),
@@ -225,9 +247,17 @@ function plateStock(outline: Polygon2): { length: Mm; width: Mm } {
 // ------------------------------------------------------------------ limon hélicoïdal
 
 export interface HelicalStringerInput {
-  /** Rayon de la face intérieure (R_e) et épaisseur du plat. */
+  /**
+   * Rayon de la face côté marches (R_e pour le limon extérieur, r_j pour le limon intérieur
+   * d'un hélicoïdal à jour) et épaisseur du plat.
+   */
   readonly innerRadius: Mm;
   readonly thickness: Mm;
+  /**
+   * Côté de l'épaisseur : `outward` (défaut, limon extérieur : plat au-delà de R_e, fibre neutre
+   * R_e + e/2) ou `inward` (limon intérieur : plat vers l'axe, fibre neutre r_j − e/2).
+   */
+  readonly side?: "outward" | "inward";
   /** Angle total développé Θ (rad) et montée par radian b de la ligne des nez. */
   readonly totalAngle: number;
   readonly risePerRadian: number;
@@ -239,7 +269,7 @@ export interface HelicalStringerInput {
 }
 
 export interface HelicalStringerDevelopment {
-  /** Rayon de la fibre neutre r_n = R_e + e/2. */
+  /** Rayon de la fibre neutre r_n = R_e + e/2 (limon intérieur : r_j − e/2). */
   readonly neutralRadius: Mm;
   /** Longueur développée le long de σ : r_n·Θ. */
   readonly span: Mm;
@@ -256,7 +286,7 @@ export interface HelicalStringerDevelopment {
  * la fibre neutre, extrémités verticales (génératrices), coupé au sol s'il y a lieu.
  */
 export function developHelicalStringer(input: HelicalStringerInput): HelicalStringerDevelopment {
-  const rn = input.innerRadius + input.thickness / 2;
+  const rn = input.innerRadius + ((input.side === "inward" ? -1 : 1) * input.thickness) / 2;
   const span = rn * input.totalAngle;
   const rise = input.risePerRadian * input.totalAngle;
   const top0 = input.topStart;
@@ -282,7 +312,10 @@ export function developHelicalStringer(input: HelicalStringerInput): HelicalStri
 /** Résultat détaillé (tests) : sortie du plugin et développé du limon. */
 export interface HelicalCoreResult {
   readonly output: StructureOutput;
+  /** Développé du limon extérieur (s'il est généré). */
   readonly stringer?: HelicalStringerDevelopment;
+  /** Développé du limon intérieur (hélicoïdal à jour central). */
+  readonly innerStringer?: HelicalStringerDevelopment;
 }
 
 function failure(message: string): HelicalCoreResult {
@@ -316,11 +349,8 @@ export function buildHelicalCore(
       "Structure « helical-core » : réservée aux escaliers hélicoïdaux (tracé « helical »).",
     );
   }
-  if (h.core !== "column") {
-    return failure(
-      "Structure « helical-core » : un fût central est requis (hélicoïdal à jour central non pris en charge au jalon 5a).",
-    );
-  }
+  // Jour central : pas de fût ; limon intérieur hélicoïdal (et limon extérieur) porteurs.
+  const well = h.core === "well";
   if (stepping.nosings.length < 2) {
     return failure("Structure « helical-core » : découpage vide.");
   }
@@ -334,7 +364,7 @@ export function buildHelicalCore(
   let usesSteel = false;
 
   // ---------------------------------------------------------------- fût
-  {
+  if (!well) {
     const height = H + params.column.topExtension;
     const outer = circle(h.center, rf);
     const areaOuter = Math.abs(signedArea(outer));
@@ -499,77 +529,93 @@ export function buildHelicalCore(
   const total = h.totalAngle;
   const us = helixSamples(total);
 
-  // ---------------------------------------------------------------- limon extérieur
-  let stringer: HelicalStringerDevelopment | undefined;
-  if (params.outerStringer.enabled) {
+  // ---------------------------------------------------------------- limons hélicoïdaux
+  // Épaisseur réelle des marches reportée sur les limons : tôle ou bois du projet.
+  const treadThickness =
+    params.treads.material === "steel"
+      ? params.treads.plateThickness
+      : project.stair.treads.thickness;
+  const rolling = profile.metal.plateRolling;
+  /**
+   * Limon hélicoïdal en plat roulé (B §4.3), face côté marches au rayon `faceRadius`, épaisseur
+   * vers l'extérieur (limon extérieur) ou vers l'axe (limon intérieur d'un jour central) ;
+   * développé en bande (parallélogramme sur la fibre neutre), contrôles de roulage et de format.
+   */
+  const addStringer = (spec: {
+    readonly id: string;
+    readonly mark: string;
+    readonly name: string;
+    readonly faceRadius: Mm;
+    readonly side: "outward" | "inward";
+    readonly height: Mm;
+    readonly thickness: Mm;
+    readonly topAboveNosing: Mm;
+  }): HelicalStringerDevelopment => {
     usesSteel = true;
-    const s = params.outerStringer;
-    const topStart = z0 + s.topAboveNosing;
+    const topStart = z0 + spec.topAboveNosing;
     const dev = developHelicalStringer({
-      innerRadius: h.outerRadius,
-      thickness: s.thickness,
+      innerRadius: spec.faceRadius,
+      thickness: spec.thickness,
+      side: spec.side,
       totalAngle: total,
       risePerRadian: b,
       topStart,
-      height: s.height,
+      height: spec.height,
       floor: 0,
     });
-    stringer = dev;
     const lines: FlatPattern["lines"][number][] = [];
-    // Épaisseur réelle des marches reportée sur le limon : tôle ou bois du projet.
-    const tt =
-      params.treads.material === "steel"
-        ? params.treads.plateThickness
-        : project.stair.treads.thickness;
     stepping.nosings.forEach((nosing, k) => {
       const sigma = dev.neutralRadius * k * h.stepAngle;
       lines.push({
         kind: "roll",
-        a: { x: sigma, y: Math.max(0, topStart + b * k * h.stepAngle - s.height) },
+        a: { x: sigma, y: Math.max(0, topStart + b * k * h.stepAngle - spec.height) },
         b: { x: sigma, y: topStart + b * k * h.stepAngle },
       });
       if (k + 1 < stepping.nosings.length) {
         lines.push({
           kind: "mark",
-          a: { x: sigma, y: nosing.z - tt },
+          a: { x: sigma, y: nosing.z - treadThickness },
           b: { x: sigma, y: nosing.z },
           label: `M${k + 1}`,
         });
       }
     });
     const shape: Shape2 = { outer: dev.outline, holes: [] };
-    const m = plateMeasures(shape, s.thickness);
+    const m = plateMeasures(shape, spec.thickness);
     const ys = dev.outline.map((p) => p.y);
     const zSpan = Math.max(...ys) - Math.min(...ys);
-    const bottomAt = (u: number): Mm => Math.max(0, topStart + b * u - s.height);
+    const bottomAt = (u: number): Mm => Math.max(0, topStart + b * u - spec.height);
+    const sign = spec.side === "inward" ? -1 : 1;
     const a3: Vec3[] = [];
     const b3: Vec3[] = [];
     const normals: Vec2[] = [];
     for (const u of us) {
       const angle = helicalAngleAt(h, u);
-      const p = helicalPoint(h, h.outerRadius, angle);
+      const p = helicalPoint(h, spec.faceRadius, angle);
       a3.push({ x: p.x, y: p.y, z: bottomAt(u) });
       b3.push({ x: p.x, y: p.y, z: topStart + b * u });
-      normals.push({ x: Math.cos(angle), y: Math.sin(angle) });
+      normals.push({ x: sign * Math.cos(angle), y: sign * Math.sin(angle) });
     }
+    // Rayon intérieur de roulage : face côté marches (extérieur) ou face côté axe (intérieur).
+    const rollRadius = spec.side === "inward" ? spec.faceRadius - spec.thickness : spec.faceRadius;
     parts.push({
-      id: "helical-stringer",
-      mark: "LE1",
+      id: spec.id,
+      mark: spec.mark,
       category: "stringer",
-      name: "Limon extérieur hélicoïdal",
+      name: spec.name,
       material: steel,
-      solid: { kind: "ruled", a: a3, b: b3, thickness: s.thickness, normals },
+      solid: { kind: "ruled", a: a3, b: b3, thickness: spec.thickness, normals },
       flat: {
         outline: shape,
         lines,
-        thickness: s.thickness,
+        thickness: spec.thickness,
         reference: {
           kind: "neutral-fiber",
           description: `Fibre neutre (rayon ${fmt(dev.neutralRadius, 1)} mm) : σ horizontal le long de l'hélice développée depuis le nez de départ, z vertical depuis le sol fini bas ; génératrices de roulage verticales.`,
         },
       },
-      section: `plat ${fmt(s.height, 0)} × ${fmt(s.thickness, 0)} roulé R ${fmt(h.outerRadius, 0)}`,
-      stock: { length: dev.span, width: zSpan, thickness: s.thickness },
+      section: `plat ${fmt(spec.height, 0)} × ${fmt(spec.thickness, 0)} roulé R ${fmt(rollRadius, 0)}`,
+      stock: { length: dev.span, width: zSpan, thickness: spec.thickness },
       quantities: steelQuantities(
         {
           volumeMm3: m.volumeMm3,
@@ -582,45 +628,44 @@ export function buildHelicalCore(
       ),
     });
     notes.push(
-      `Limon hélicoïdal : développé en parallélogramme sur la fibre neutre (rayon ${fmt(dev.neutralRadius)} mm), longueur de rive ${fmt(dev.edgeLength)} mm, pente ${fmt(Math.atan(dev.slope) / DEG)}°.`,
+      `${spec.name} : développé en bande (parallélogramme sur la fibre neutre, rayon ${fmt(dev.neutralRadius)} mm), longueur de rive ${fmt(dev.edgeLength)} mm, pente ${fmt(Math.atan(dev.slope) / DEG)}°.`,
     );
     // Rouleuse et format de tôle.
-    const rolling = profile.metal.plateRolling;
     const rollRule = pluginRuleDef(HELICAL_RULES.rolling);
     const rollFindings: Finding[] = [];
-    const loc = { kind: "part" as const, partId: "helical-stringer" };
-    if (h.outerRadius < rolling.minInnerRadius) {
+    const loc = { kind: "part" as const, partId: spec.id };
+    if (rollRadius < rolling.minInnerRadius) {
       rollFindings.push({
         status: "violation",
-        measured: h.outerRadius,
+        measured: rollRadius,
         min: rolling.minInnerRadius,
         location: loc,
-        message: `Rayon intérieur de roulage ${fmt(h.outerRadius)} mm < ${fmt(rolling.minInnerRadius)} mm (rouleuse).`,
+        message: `${spec.mark} : rayon intérieur de roulage ${fmt(rollRadius)} mm < ${fmt(rolling.minInnerRadius)} mm (rouleuse).`,
       });
     }
-    if (s.height > rolling.rollLength) {
+    if (spec.height > rolling.rollLength) {
       rollFindings.push({
         status: "violation",
-        measured: s.height,
+        measured: spec.height,
         max: rolling.rollLength,
         location: loc,
-        message: `Hauteur du plat le long des génératrices ${fmt(s.height)} mm > ${fmt(rolling.rollLength)} mm de rouleaux.`,
+        message: `${spec.mark} : hauteur du plat le long des génératrices ${fmt(spec.height)} mm > ${fmt(rolling.rollLength)} mm de rouleaux.`,
       });
     }
-    if (s.thickness > rolling.maxThickness) {
+    if (spec.thickness > rolling.maxThickness) {
       rollFindings.push({
         status: "violation",
-        measured: s.thickness,
+        measured: spec.thickness,
         max: rolling.maxThickness,
         location: loc,
-        message: `Épaisseur ${fmt(s.thickness)} mm > ${fmt(rolling.maxThickness)} mm roulables.`,
+        message: `${spec.mark} : épaisseur ${fmt(spec.thickness)} mm > ${fmt(rolling.maxThickness)} mm roulables.`,
       });
     }
     if (rollFindings.length === 0) {
       rollFindings.push({
         status: "ok",
         location: loc,
-        message: `Limon roulable : rayon ${fmt(h.outerRadius)} mm, hauteur ${fmt(s.height)} mm, épaisseur ${fmt(s.thickness)} mm.`,
+        message: `${spec.mark} roulable : rayon ${fmt(rollRadius)} mm, hauteur ${fmt(spec.height)} mm, épaisseur ${fmt(spec.thickness)} mm.`,
       });
     }
     checks.add(rollRule, rollFindings);
@@ -637,15 +682,50 @@ export function buildHelicalCore(
         ? {
             status: "ok",
             location: loc,
-            message: `Développé ${dims} contenu dans un format de tôle.`,
+            message: `${spec.mark} : développé ${dims} contenu dans un format de tôle.`,
           }
         : {
             status: "violation",
             measured: box.length,
             location: loc,
-            message: `Développé ${dims} hors des formats de tôle du profil d'atelier : aboutage à prévoir.`,
+            message: `${spec.mark} : développé ${dims} hors des formats de tôle du profil d'atelier : aboutage à prévoir.`,
           },
     ]);
+    return dev;
+  };
+
+  let stringer: HelicalStringerDevelopment | undefined;
+  let innerStringer: HelicalStringerDevelopment | undefined;
+  if (well) {
+    const s = params.innerStringer;
+    if (!(s.thickness < rf)) {
+      return failure(
+        `Structure « helical-core » : épaisseur du limon intérieur (${fmt(s.thickness)} mm) supérieure ou égale au rayon du jour (${fmt(rf)} mm).`,
+      );
+    }
+    innerStringer = addStringer({
+      id: "helical-stringer-inner",
+      mark: "LI1",
+      name: "Limon intérieur hélicoïdal",
+      faceRadius: rf,
+      side: "inward",
+      height: s.height,
+      thickness: s.thickness,
+      topAboveNosing: s.topAboveNosing,
+    });
+  }
+  if (params.outerStringer.enabled) {
+    const s = params.outerStringer;
+    stringer = addStringer({
+      id: "helical-stringer",
+      mark: "LE1",
+      name: "Limon extérieur hélicoïdal",
+      faceRadius: h.outerRadius,
+      side: "outward",
+      height: s.height,
+      thickness: s.thickness,
+      topAboveNosing: s.topAboveNosing,
+    });
   }
 
   // ---------------------------------------------------------------- main courante
@@ -709,16 +789,28 @@ export function buildHelicalCore(
   }
 
   // ---------------------------------------------------------------- porte-à-faux
-  const justification = params.cantileverJustification.trim();
-  checks.add(pluginRuleDef(HELICAL_RULES.cantilever), [
-    justification === ""
-      ? {
-          status: "violation",
-          message:
-            "Justification requise : marches en porte-à-faux sur le fût, hors règles de moyens du DTU (note de calcul ou avis technique à joindre, paramètre « cantileverJustification »).",
-        }
-      : { status: "ok", message: `Porte-à-faux justifié : ${justification}.` },
-  ]);
+  // Fût : marches en porte-à-faux. Jour central : marches portées par les deux limons, sauf si
+  // le limon extérieur est désactivé (porte-à-faux sur le limon intérieur).
+  const cantileverOn = !well
+    ? "sur le fût"
+    : params.outerStringer.enabled
+      ? null
+      : "sur le limon intérieur (limon extérieur désactivé)";
+  if (cantileverOn !== null) {
+    const justification = params.cantileverJustification.trim();
+    checks.add(pluginRuleDef(HELICAL_RULES.cantilever), [
+      justification === ""
+        ? {
+            status: "violation",
+            message: `Justification requise : marches en porte-à-faux ${cantileverOn}, hors règles de moyens du DTU (note de calcul ou avis technique à joindre, paramètre « cantileverJustification »).`,
+          }
+        : { status: "ok", message: `Porte-à-faux justifié : ${justification}.` },
+    ]);
+  } else {
+    notes.push(
+      "Hélicoïdal à jour central : marches portées par les limons intérieur et extérieur (fixation des marches aux limons non modélisée).",
+    );
+  }
 
   const exc = usesSteel ? deduceExecutionClass({ grade: params.grade, buttWeld: 0 }) : null;
   if (exc) {
@@ -732,15 +824,24 @@ export function buildHelicalCore(
     notes,
     ...(exc ? { executionClass: exc.executionClass } : {}),
   };
-  return { output, ...(stringer ? { stringer } : {}) };
+  return {
+    output,
+    ...(stringer ? { stringer } : {}),
+    ...(innerStringer ? { innerStringer } : {}),
+  };
 }
 
 export const HELICAL_CORE: StructureKind<HelicalCoreParams> = {
   kind: "helical-core",
-  label: "Hélicoïdal à fût central (marches en porte-à-faux, limon et main courante hélicoïdaux)",
+  label:
+    "Hélicoïdal : fût central (marches en porte-à-faux) ou jour central (limons hélicoïdaux intérieur et extérieur), main courante hélicoïdale",
   family: "mixte",
   paramsSchema: HelicalCoreParamsSchema,
-  defaults: () => HelicalCoreParamsSchema.parse({}),
+  // Jour central : limon extérieur activé par défaut (marches portées des deux côtés).
+  defaults: (ctx) =>
+    HelicalCoreParamsSchema.parse(
+      ctx?.layout?.helical?.core === "well" ? { outerStringer: { enabled: true } } : {},
+    ),
   build: (ctx, params) => buildHelicalCore(ctx, params).output,
 };
 

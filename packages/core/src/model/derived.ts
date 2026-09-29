@@ -131,8 +131,22 @@ export interface Stepping {
   readonly run: Mm;
   readonly nosings: readonly NosingLine[];
   readonly treads: readonly Tread[];
-  /** Zones balancées retenues (indices de nez), par tournant. */
-  readonly balancedZones: readonly { turn: number; from: number; to: number; method: string }[];
+  /**
+   * Zones balancées retenues (indices de nez), par tournant. `ends` et `continuation` (ajouts
+   * rétrocompatibles, facultatifs) : conditions aux extrémités et prolongement de la courbe F
+   * retenus par le découpage (`BalancingZone`), pour reconstituer F (limon débillardé).
+   */
+  readonly balancedZones: readonly {
+    turn: number;
+    from: number;
+    to: number;
+    method: string;
+    ends?: readonly ["tangent" | "free", "tangent" | "free"];
+    continuation?: readonly [
+      { readonly nosings: readonly number[]; readonly end: "tangent" | "free" } | null,
+      { readonly nosings: readonly number[]; readonly end: "tangent" | "free" } | null,
+    ];
+  }[];
   /** Diagnostics non bloquants du calcul (ex. « jour trop court, marches ajoutées »). */
   readonly notes: readonly string[];
   /**
@@ -141,6 +155,12 @@ export interface Stepping {
    * hélicoïdal). Absent : aucun auto-recouvrement pris en compte (escaliers à volées).
    */
   readonly soffits?: readonly Soffit[];
+  /**
+   * Découpage d'un tracé **hélicoïdal** (nez rayonnants, `stepping/helical.ts`) : le moteur de
+   * règles en déduit le contexte de forme `helicoidal`. Absent : escalier à volées (ajout
+   * rétrocompatible).
+   */
+  readonly helical?: true;
 }
 
 /**

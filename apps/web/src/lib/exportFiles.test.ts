@@ -158,3 +158,63 @@ describe("exports du menu", () => {
     expect(() => partDxfFile(model.parts[0]!, "x")).toThrow(RangeError);
   });
 });
+
+describe("dossiers PDF, fiche de pose et modèle glTF", () => {
+  it("chaque dossier PDF transmet ses pages et son format, nom de fichier distinct", async () => {
+    const seen: unknown[] = [];
+    const deps: ExportDeps = {
+      loadPdf: async () => () => new Uint8Array(),
+      renderPdf: async (_p, _m, options) => {
+        seen.push(options);
+        return new Uint8Array([1]);
+      },
+    };
+    const names: string[] = [];
+    for (const id of ["pdf", "pdf-a3", "pdf-light", "installation-pdf"] as const) {
+      const [f] = await buildExport(id, project, model, deps);
+      names.push(f!.filename);
+      expect(f!.mime).toBe(MIME.pdf);
+    }
+    expect(new Set(names).size).toBe(4);
+    expect(names).toContain("quart-tournant-a-gauche-fiche-de-pose.pdf");
+    expect(seen[0]).toEqual({});
+    expect(seen[1]).toEqual({ format: "a3" });
+    expect(seen[2]).toEqual({ pages: { templates: false } });
+    const pose = seen[3] as { pages: Record<string, boolean> };
+    expect(pose.pages["installation"]).toBe(true);
+    expect(
+      Object.entries(pose.pages)
+        .filter(([, v]) => v)
+        .map(([k]) => k),
+    ).toEqual(["installation"]);
+  });
+
+  it("fiche de pose réelle : PDF d'une seule section, plus court que le dossier complet", async () => {
+    const [pose] = await buildExport("installation-pdf", project, model);
+    const [full] = await buildExport("pdf-light", project, model);
+    const pages = (c: unknown) =>
+      (new TextDecoder("latin1").decode(c as Uint8Array).match(/\/Type\s*\/Page[^s]/g) ?? [])
+        .length;
+    expect(pages(pose!.content)).toBeGreaterThanOrEqual(1);
+    expect(pages(pose!.content)).toBeLessThan(pages(full!.content));
+  }, 60_000);
+
+  it("glTF : délégué au worker si fourni, sinon calculé sur place (en-tête glTF)", async () => {
+    const [local] = await buildExport("glb", project, model);
+    expect(local).toMatchObject({ filename: "quart-tournant-a-gauche.glb", mime: MIME.glb });
+    expect(new TextDecoder().decode((local!.content as Uint8Array).slice(0, 4))).toBe("glTF");
+    const bytes = new Uint8Array([7]);
+    const [delegated] = await buildExport("glb", project, model, {
+      loadPdf: async () => () => new Uint8Array(),
+      renderGlb: async () => bytes,
+    });
+    expect(delegated!.content).toBe(bytes);
+  });
+
+  it("le menu propose glTF, fiche de pose et PDF complet", () => {
+    const labels = EXPORT_ENTRIES.map((e) => e.label);
+    expect(labels).toContain("Modèle 3D glTF (.glb)");
+    expect(labels).toContain("Fiche de pose (PDF)");
+    expect(labels.some((l) => l.startsWith("Dossier PDF complet"))).toBe(true);
+  });
+});

@@ -35,6 +35,11 @@ export interface CommitOptions {
   readonly groupKey?: string;
   /** Instant de la modification (ms), pour le regroupement. */
   readonly now: number;
+  /**
+   * Geste continu (glisser une poignée) : regroupé avec la modification précédente de même clé
+   * **quel que soit le délai** écoulé, jusqu'à `endGroup` (fin du geste).
+   */
+  readonly sticky?: boolean;
 }
 
 /**
@@ -53,8 +58,8 @@ export function commit<T>(
     key !== undefined &&
     h.group !== null &&
     h.group.key === key &&
-    opts.now - h.group.at <= options.groupWindowMs &&
-    opts.now >= h.group.at;
+    (opts.sticky === true ||
+      (opts.now - h.group.at <= options.groupWindowMs && opts.now >= h.group.at));
   const group = key === undefined ? null : { key, at: opts.now };
   if (grouped) {
     return { past: h.past, present: next, future: [], group };

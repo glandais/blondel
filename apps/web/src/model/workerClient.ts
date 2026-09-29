@@ -7,6 +7,7 @@
 import type { Project } from "@blondel/core";
 import type { CompareOutcome, Variant } from "../lib/variants.js";
 import { createJobRunner, type JobRunner } from "./handler.js";
+import type { PdfJobOptions } from "../lib/optionalApi.js";
 import type { PdfResult, WorkerJob, WorkerRequest, WorkerResponse } from "./protocol.js";
 import type { ModelSnapshot } from "./snapshot.js";
 
@@ -29,7 +30,9 @@ export interface JobExec {
    * Dossier PDF du projet, mis en page dans le worker (repli : fil principal). Rejette avec le
    * message de l'export si celui-ci échoue (sans basculer sur le fil principal).
    */
-  pdf(project: Project): Promise<Uint8Array>;
+  pdf(project: Project, options?: PdfJobOptions): Promise<Uint8Array>;
+  /** Modèle 3D glTF binaire, dans le worker (repli : fil principal) ; rejette si l'export échoue. */
+  glb(project: Project): Promise<Uint8Array>;
   /** Le worker est-il utilisé (sinon : fil principal) ? */
   readonly usesWorker: boolean;
   dispose(): void;
@@ -128,8 +131,8 @@ export function createJobExec(
         },
       );
     },
-    async pdf(project) {
-      const job = { type: "pdf", project } as const;
+    async pdf(project, options) {
+      const job = { type: "pdf", project, ...(options ? { options } : {}) } as const;
       const p = call(job);
       let result: PdfResult;
       if (!p) result = await runLocal().pdf(job);
@@ -139,6 +142,23 @@ export function createJobExec(
           (e: unknown) => {
             if (!broken) fail(e);
             return runLocal().pdf(job);
+          },
+        );
+      }
+      if ("error" in result) throw new Error(result.error);
+      return result.bytes;
+    },
+    async glb(project) {
+      const job = { type: "glb", project } as const;
+      const p = call(job);
+      let result: PdfResult;
+      if (!p) result = runLocal().glb(job);
+      else {
+        result = await p.then(
+          (r) => (r.type === "glb" ? r.result : runLocal().glb(job)),
+          (e: unknown) => {
+            if (!broken) fail(e);
+            return runLocal().glb(job);
           },
         );
       }

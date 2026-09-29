@@ -1,11 +1,13 @@
 import fc from "fast-check";
 import { beforeEach, describe, expect, it } from "vitest";
+import * as V from "../geom2d/vec.js";
 import { computeLayout } from "../layout/layout.js";
 import type { Part } from "../model/derived.js";
 import { ProjectSchema, type Project, type ProjectInput } from "../model/project.js";
 import { buildModel, clearModelCache } from "../pipeline/build.js";
 import { createProject, PRESET_IDS } from "../project/presets.js";
 import { computeStepping } from "../stepping/stepping.js";
+import { makeHelicalProject } from "../layout/helical-test-helpers.js";
 import { makeSteppingProject, stairArb } from "../stepping/test-helpers.js";
 import { computeGuards } from "./compute.js";
 import { GuardError } from "./errors.js";
@@ -312,10 +314,21 @@ describe("computeGuards — propriétés (escaliers tournants générés)", () =
             expect(g.value).toBeLessThanOrEqual(Math.max(target, s.width) + 1e-6);
           }
           // Hauteur mesurée sur le chemin construit : jamais sous H ; au plus une hauteur de
-          // marche de plus près d'un angle concave (stations fusionnées sur l'onglet).
+          // marche de plus près d'un angle concave (stations fusionnées sur l'onglet), ou le
+          // dénivelé jusqu'au plus haut des nez qui aboutissent dans le retrait de l'onglet (jour
+          // vif balancé : plusieurs nez convergent à quelques millimètres du coin).
+          const end = (k: number) => (r.side === "outer" ? st.nosings[k]!.r : st.nosings[k]!.q);
+          const reach = 3 * s.edgeOffset + 1;
           for (const n of r.nosingHeights) {
+            const zk = st.nosings[n.index]!.z;
+            const converging = Math.max(
+              0,
+              ...st.nosings
+                .filter((x) => V.distance(end(x.index), end(n.index)) <= reach)
+                .map((x) => x.z - zk),
+            );
             expect(n.height).toBeGreaterThanOrEqual(s.height - 1e-6);
-            expect(n.height).toBeLessThanOrEqual(s.height + maxRise + 1e-6);
+            expect(n.height).toBeLessThanOrEqual(s.height + converging + maxRise + 1e-6);
           }
           if (r.kind === "rake") expectNoBacktrack(r.path);
         }
@@ -466,5 +479,38 @@ describe("computeGuards — jour plus étroit que la sphère T1", () => {
     }));
     const hn = { ...h, stair: { ...h.stair, layout: { ...h.stair.layout, turns } } };
     expect(jourWidth(computeLayout(hn), turns)).toBeCloseTo(240 - 100, 6);
+  });
+});
+
+describe("hélicoïdal : côté intérieur", () => {
+  const helicalWith = (core: "column" | "well", radius: number): Project =>
+    withGuards(
+      makeHelicalProject({
+        outerRadius: 1000,
+        coreRadius: radius,
+        core,
+        direction: "left",
+        floorToFloor: 2700,
+      }),
+      {},
+    );
+
+  it("fût central : aucun garde-corps ni main courante le long du fût (pas de vide)", () => {
+    const a = analyze(helicalWith("column", 70));
+    const inner = a.sides.find((s) => s.side === "inner")!;
+    expect(inner.intervals).toEqual([]);
+    expect(inner.maxFall).toBe(0);
+    expect(a.parts.some((p) => p.id.startsWith("guard-inner"))).toBe(false);
+    expect(a.parts.some((p) => p.id.startsWith("handrail-wall-inner"))).toBe(false);
+    expect(a.parts.some((p) => p.id.startsWith("guard-outer"))).toBe(true);
+    expect(a.notes.some((n) => /fût central/.test(n))).toBe(true);
+  });
+
+  it("jour central : le côté intérieur est un vide, garde-corps de jour généré", () => {
+    const a = analyze(helicalWith("well", 400));
+    const inner = a.sides.find((s) => s.side === "inner")!;
+    expect(inner.intervals.some((iv) => iv.kind === "void")).toBe(true);
+    expect(inner.maxFall).toBeGreaterThan(0);
+    expect(a.parts.some((p) => p.id.startsWith("guard-inner"))).toBe(true);
   });
 });

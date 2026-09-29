@@ -202,3 +202,132 @@ export function invertProfile(profile: DevelopmentProfile, y: number): number {
   }
   return (lo + hi) / 2;
 }
+
+// ------------------------------------------------------------------ spline prolongée
+
+/** Condition à une extrémité de spline : pente imposée ou conditions naturelles. */
+export type SplineEnd =
+  { readonly kind: "tangent"; readonly slope: number } | { readonly kind: "free" };
+
+export interface SplineSpec {
+  readonly variant: M3Variant;
+  /** Nœuds (t, f) en coordonnées réduites de la zone, t strictement croissants. */
+  readonly knots: readonly { readonly t: number; readonly f: number }[];
+  readonly start: SplineEnd;
+  readonly end: SplineEnd;
+}
+
+export interface SplineProfile {
+  readonly spec: SplineSpec;
+  /** Coefficients du morceau i, polynôme en u = t − t_i (u ∈ [0 ; t_{i+1} − t_i]). */
+  readonly pieces: readonly (readonly number[])[];
+}
+
+/**
+ * Spline de la variante (cubique : minimise ∫f''², raccords C2 ; quintique : minimise ∫f'''²,
+ * raccords C4) passant par les nœuds, avec les conditions données aux deux extrémités
+ * (`tangent` : f' imposée, et f'' = 0 en quintique ; `free` : conditions naturelles f'' = 0 en
+ * cubique, f''' = f'''' = 0 en quintique). Avec deux nœuds, identique à `buildProfile` (deux
+ * extrémités libres : droite).
+ */
+export function buildSpline(spec: SplineSpec): SplineProfile {
+  const { variant, knots } = spec;
+  const p = knots.length - 1;
+  if (p < 1) throw new Error("spline M3 : au moins deux nœuds");
+  const degree = variant === "cubic" ? 3 : 5;
+  if (p === 1 && spec.start.kind === "free" && spec.end.kind === "free") {
+    // Deux nœuds libres : droite (seule courbe d'énergie nulle retenue, comme `buildProfile`).
+    const k0 = knots[0]!;
+    const k1 = knots[1]!;
+    const slope = (k1.f - k0.f) / (k1.t - k0.t);
+    const coeffs = new Array<number>(degree + 1).fill(0);
+    coeffs[0] = k0.f;
+    coeffs[1] = slope;
+    return { spec, pieces: [coeffs] };
+  }
+  const w = degree + 1;
+  const size = p * w;
+  const rows: number[][] = [];
+  const rhs: number[] = [];
+  const row = (): number[] => new Array<number>(size).fill(0);
+  // Terme de la dérivée d'ordre d du morceau i en u.
+  const put = (r: number[], piece: number, d: number, u: number, factor = 1): void => {
+    for (let i = 0; i < w; i++) r[piece * w + i]! += factor * monomialDerivative(i, d, u);
+  };
+  for (let i = 0; i < p; i++) {
+    const h = knots[i + 1]!.t - knots[i]!.t;
+    const r0 = row();
+    put(r0, i, 0, 0);
+    rows.push(r0);
+    rhs.push(knots[i]!.f);
+    const r1 = row();
+    put(r1, i, 0, h);
+    rows.push(r1);
+    rhs.push(knots[i + 1]!.f);
+    if (i + 1 < p) {
+      for (let d = 1; d < degree; d++) {
+        const r = row();
+        put(r, i, d, h);
+        put(r, i + 1, d, 0, -1);
+        rows.push(r);
+        rhs.push(0);
+      }
+    }
+  }
+  const end = (piece: number, u: number, cond: SplineEnd): void => {
+    const add = (d: number, value: number): void => {
+      const r = row();
+      put(r, piece, d, u);
+      rows.push(r);
+      rhs.push(value);
+    };
+    if (cond.kind === "tangent") {
+      add(1, cond.slope);
+      if (variant === "quintic") add(2, 0);
+    } else if (variant === "cubic") {
+      add(2, 0);
+    } else {
+      add(3, 0);
+      add(4, 0);
+    }
+  };
+  end(0, 0, spec.start);
+  end(p - 1, knots[p]!.t - knots[p - 1]!.t, spec.end);
+  const x = solveLinear(rows, rhs);
+  const pieces: number[][] = [];
+  for (let i = 0; i < p; i++) pieces.push(x.slice(i * w, (i + 1) * w));
+  return { spec, pieces };
+}
+
+/** Morceau i de la spline ramené à s ∈ [0 ; 1] (même signe de dérivée), pour ses extrema. */
+export function splinePieceProfile(spline: SplineProfile, i: number): DevelopmentProfile {
+  const h = spline.spec.knots[i + 1]!.t - spline.spec.knots[i]!.t;
+  const coeffs = spline.pieces[i]!.map((c, k) => c * h ** k);
+  return {
+    spec: {
+      variant: spline.spec.variant,
+      ends: ["free", "free"],
+      meanSlope: 0,
+      startSlope: 0,
+      endSlope: 0,
+    },
+    coeffs,
+  };
+}
+
+/** Vrai si chaque morceau de la spline est strictement croissant. */
+export function isSplineStrictlyIncreasing(spline: SplineProfile): boolean {
+  return spline.pieces.every((_, i) => isStrictlyIncreasing(splinePieceProfile(spline, i)));
+}
+
+/** Valeur (ou dérivée d'ordre d, en t) de la spline ; prolongée par ses morceaux extrêmes. */
+export function evalSpline(spline: SplineProfile, t: number, d = 0): number {
+  const knots = spline.spec.knots;
+  let i = 0;
+  while (i + 2 < knots.length && t > knots[i + 1]!.t) i++;
+  const u = t - knots[i]!.t;
+  const coeffs = spline.pieces[i]!;
+  let v = 0;
+  for (let k = d; k < coeffs.length; k++) v += coeffs[k]! * monomialDerivative(k, d, u);
+  return v;
+}

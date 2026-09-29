@@ -2,7 +2,10 @@ import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import {
   buildProfile,
+  buildSpline,
   evalProfile,
+  evalSpline,
+  isSplineStrictlyIncreasing,
   invertProfile,
   isStrictlyIncreasing,
   maxSlope,
@@ -10,6 +13,7 @@ import {
   slopeExtrema,
   type EndCondition,
   type M3Variant,
+  type SplineEnd,
 } from "./profile.js";
 
 /** Collets (mm) d'une zone de B §3.5 : Δ de jour, hauteurs h, pente m, variante. */
@@ -174,5 +178,119 @@ describe("courbe de développement M3 (B §3.5)", () => {
       ),
       { numRuns: 300 },
     );
+  });
+});
+
+describe("spline prolongée (bornes libres dans la partie tournante)", () => {
+  const variantArb = fc.constantFrom<M3Variant>("cubic", "quintic");
+  const endArb = fc.oneof(
+    fc.constant<SplineEnd>({ kind: "free" }),
+    fc
+      .double({ min: 0.3, max: 2, noNaN: true })
+      .map((slope): SplineEnd => ({ kind: "tangent", slope })),
+  );
+  // Nœuds strictement croissants (t, f) contenant [0 ; 1] : pas et pentes sécantes positifs.
+  const knotsArb = fc
+    .tuple(
+      fc.array(fc.double({ min: 0.1, max: 0.8, noNaN: true }), { maxLength: 3 }),
+      fc.array(fc.double({ min: 0.1, max: 0.8, noNaN: true }), { maxLength: 3 }),
+      fc.double({ min: 0.4, max: 2, noNaN: true }),
+    )
+    .map(([before, after, slope]) => {
+      const knots: { t: number; f: number }[] = [
+        { t: 0, f: 0 },
+        { t: 1, f: slope },
+      ];
+      for (const d of before) {
+        const k = knots[0]!;
+        knots.unshift({ t: k.t - d, f: k.f - d * slope * (0.7 + d / 2) });
+      }
+      for (const d of after) {
+        const k = knots[knots.length - 1]!;
+        knots.push({ t: k.t + d, f: k.f + d * slope * (0.7 + d / 2) });
+      }
+      return knots;
+    });
+
+  it("propriété : interpolation, raccords C2 (cubique) / C4 (quintique), conditions aux bouts", () => {
+    fc.assert(
+      fc.property(variantArb, knotsArb, endArb, endArb, (variant, knots, start, end) => {
+        const sp = buildSpline({ variant, knots, start, end });
+        const degree = variant === "cubic" ? 3 : 5;
+        for (const k of knots) expect(evalSpline(sp, k.t)).toBeCloseTo(k.f, 8);
+        // Raccords : dérivées 1 … degré − 1 continues aux nœuds intérieurs.
+        for (let i = 1; i + 1 < knots.length; i++) {
+          const t = knots[i]!.t;
+          const h = knots[i]!.t - knots[i - 1]!.t;
+          for (let d = 1; d < degree; d++) {
+            let left = 0;
+            const c = sp.pieces[i - 1]!;
+            for (let j = d; j < c.length; j++) {
+              let f = 1;
+              for (let q = 0; q < d; q++) f *= j - q;
+              left += c[j]! * f * h ** (j - d);
+            }
+            expect(left).toBeCloseTo(evalSpline(sp, t + 1e-12, d), 5);
+          }
+        }
+        const t0 = knots[0]!.t;
+        const t1 = knots[knots.length - 1]!.t;
+        if (start.kind === "tangent") expect(evalSpline(sp, t0, 1)).toBeCloseTo(start.slope, 8);
+        else expect(evalSpline(sp, t0, variant === "cubic" ? 2 : 3)).toBeCloseTo(0, 6);
+        if (end.kind === "tangent") expect(evalSpline(sp, t1, 1)).toBeCloseTo(end.slope, 6);
+        else expect(evalSpline(sp, t1, variant === "cubic" ? 2 : 3)).toBeCloseTo(0, 6);
+      }),
+      { numRuns: 200 },
+    );
+  });
+
+  it("deux nœuds : identique à buildProfile (mêmes conditions)", () => {
+    for (const variant of ["cubic", "quintic"] as const) {
+      const sp = buildSpline({
+        variant,
+        knots: [
+          { t: 0, f: 0 },
+          { t: 1, f: 1.2 },
+        ],
+        start: { kind: "tangent", slope: 0.7 },
+        end: { kind: "free" },
+      });
+      const p = buildProfile({
+        variant,
+        ends: ["tangent", "free"],
+        meanSlope: 1.2,
+        startSlope: 0.7,
+        endSlope: 0,
+      });
+      for (let i = 0; i <= 10; i++) {
+        expect(evalSpline(sp, i / 10)).toBeCloseTo(evalProfile(p, i / 10), 10);
+      }
+    }
+  });
+
+  it("morceaux strictement croissants détectés (isSplineStrictlyIncreasing)", () => {
+    const ok = buildSpline({
+      variant: "cubic",
+      knots: [
+        { t: 0, f: 0 },
+        { t: 1, f: 1 },
+        { t: 1.5, f: 1.4 },
+      ],
+      start: { kind: "free" },
+      end: { kind: "tangent", slope: 0.8 },
+    });
+    expect(isSplineStrictlyIncreasing(ok)).toBe(true);
+    // Pente d'arrivée imposée négative : le dernier morceau redescend.
+    const bad = buildSpline({
+      variant: "cubic",
+      knots: [
+        { t: 0, f: 0 },
+        { t: 1, f: 1 },
+        { t: 1.5, f: 1.05 },
+      ],
+      start: { kind: "free" },
+      end: { kind: "tangent", slope: -2 },
+    });
+    expect(isSplineStrictlyIncreasing(bad)).toBe(false);
   });
 });

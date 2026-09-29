@@ -2,16 +2,27 @@
  * Conversion des maillages de `@blondel/geometry` en `THREE.BufferGeometry`, et maillage de la
  * dalle haute (site) pour l'aperçu. Les tableaux typés sont partagés (pas de copie) : ils sont
  * immuables côté `@blondel/geometry` (cache).
+ *
+ * Coordonnées de texture (jalon 6) : projetées selon le sens du fil de la pièce (`grainUVMesh`,
+ * UV en mètres), ou selon l'axe principal du maillage sans fil déclaré (sens de brossage).
  */
-import { bbox, ensureCCW, type Polygon2, type Project, type Vec2 } from "@blondel/core";
-import { meshExtrusion, type Mesh } from "@blondel/geometry";
+import { bbox, ensureCCW, type Polygon2, type Project, type Vec2, type Vec3 } from "@blondel/core";
+import { grainUVMesh, meshExtrusion, type Mesh } from "@blondel/geometry";
 import { BufferAttribute, BufferGeometry } from "three";
 import { openingPolygon } from "../lib/opening.js";
 
-export function toBufferGeometry(mesh: Mesh): BufferGeometry {
+/**
+ * Géométrie three.js d'un maillage ; `grain` : sens du fil (UV projetées), `null` : sans UV.
+ */
+export function toBufferGeometry(input: Mesh, grain?: Vec3 | null): BufferGeometry {
   const g = new BufferGeometry();
+  // Projection choisie par triangle, sommets dupliqués aux coutures (surfaces lissées : sans
+  // cela, la texture est écrasée dans les triangles à cheval sur deux projections).
+  const uv = grain !== null && input.positions.length > 0 ? grainUVMesh(input, grain) : undefined;
+  const mesh = uv?.mesh ?? input;
   g.setAttribute("position", new BufferAttribute(mesh.positions, 3));
   g.setAttribute("normal", new BufferAttribute(mesh.normals, 3));
+  if (uv) g.setAttribute("uv", new BufferAttribute(uv.uvs, 2));
   g.setIndex(new BufferAttribute(mesh.indices, 1));
   g.computeBoundingSphere();
   g.computeBoundingBox();

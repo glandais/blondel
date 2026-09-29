@@ -77,7 +77,7 @@ test("critère n° 1 : quart tournant bois à poteau avec garde-corps, PDF et DX
   await expect(page.getByRole("tabpanel")).toContainText(/[Pp]oteau/);
 
   // Exports : dossier PDF (worker de calcul) et plan coté DXF 2007.
-  const pdf = await download(page, /^Dossier PDF/, ix);
+  const pdf = await download(page, /^Dossier PDF complet \(gabarits 1:1 en A4\)/, ix);
   expect(pdf.suggestedFilename()).toMatch(/\.pdf$/);
   const pdfBytes = await bytesOf(pdf);
   expect(pdfBytes.subarray(0, 5).toString("latin1")).toBe("%PDF-");

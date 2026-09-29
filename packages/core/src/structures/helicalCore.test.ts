@@ -211,19 +211,120 @@ describe("plugin helical-core", () => {
     );
   });
 
-  it("tracé à jour central ou à volées : erreur explicite, aucune pièce", () => {
-    const well = makeHelicalProject({
-      outerRadius: 1000,
-      coreRadius: 200,
-      core: "well",
-      direction: "left",
-      floorToFloor: 2700,
-    });
-    expect(buildHelicalCore(context(well), params()).output.errors![0]).toMatch(/fût central/);
+  it("tracé à volées : erreur explicite, aucune pièce", () => {
     const straight = createProject("straight");
     const out = buildHelicalCore(context(straight), params()).output;
     expect(out.parts).toEqual([]);
     expect(out.errors![0]).toMatch(/hélicoïdaux/);
+  });
+
+  describe("hélicoïdal à jour central (limons hélicoïdaux intérieur et extérieur)", () => {
+    const well = (over: Partial<Parameters<typeof makeHelicalProject>[0]> = {}) =>
+      makeHelicalProject({
+        outerRadius: 1000,
+        coreRadius: 200,
+        core: "well",
+        direction: "left",
+        floorToFloor: 2700,
+        ...over,
+      });
+
+    it("pas de fût ; limons LI1 (face r_j, plat vers l'axe) et LE1 (face R_e) ; pas de porte-à-faux", () => {
+      const ctx = context(well());
+      const res = buildHelicalCore(ctx, HELICAL_CORE.defaults(ctx));
+      expect(res.output.errors ?? []).toEqual([]);
+      const ids = res.output.parts.map((p) => p.id);
+      expect(ids).not.toContain("helical-column");
+      expect(ids).toContain("helical-stringer-inner");
+      expect(ids).toContain("helical-stringer");
+      const e = 8;
+      expect(res.innerStringer!.neutralRadius).toBeCloseTo(200 - e / 2, 9);
+      expect(res.stringer!.neutralRadius).toBeCloseTo(1000 + e / 2, 9);
+      // Développé en bande : même montée par radian, pente b / r_n (plus raide à l'intérieur).
+      const h = ctx.layout.helical!;
+      const rise = ctx.stepping.nosings.at(-1)!.z - ctx.stepping.nosings[0]!.z;
+      const b = rise / h.totalAngle;
+      expect(res.innerStringer!.slope).toBeCloseTo(b / (200 - e / 2), 9);
+      expect(res.innerStringer!.span).toBeCloseTo((200 - e / 2) * h.totalAngle, 6);
+      expect(res.innerStringer!.edgeLength).toBeCloseTo(
+        h.totalAngle * Math.hypot(200 - e / 2, b),
+        6,
+      );
+      // Solide : épaississement vers l'axe pour LI1, vers l'extérieur pour LE1.
+      const li = res.output.parts.find((p) => p.id === "helical-stringer-inner")!;
+      const le = res.output.parts.find((p) => p.id === "helical-stringer")!;
+      if (li.solid.kind !== "ruled" || le.solid.kind !== "ruled") throw new Error("ruled");
+      const radial = (solid: typeof li.solid, i: number) => {
+        const p = solid.a[i]!;
+        const d = V.sub({ x: p.x, y: p.y }, h.center);
+        return V.dot(solid.normals[i]!, V.scale(d, 1 / V.norm(d)));
+      };
+      for (let i = 0; i < li.solid.a.length; i += 7) {
+        expect(radial(li.solid, i)).toBeCloseTo(-1, 9);
+        expect(radial(le.solid, i)).toBeCloseTo(1, 9);
+        const p = li.solid.a[i]!;
+        expect(V.distance({ x: p.x, y: p.y }, h.center)).toBeCloseTo(200, 6);
+      }
+      expect(li.flat?.reference?.kind).toBe("neutral-fiber");
+      expect(li.section).toMatch(/roulé R 192/);
+      // Marches portées des deux côtés : pas de contrôle de porte-à-faux.
+      expect(res.output.checks.some((c) => c.ruleId === "HELICOIDAL_PORTE_A_FAUX")).toBe(false);
+      // Rouleuse contrôlée sur les deux limons.
+      const roll = res.output.checks.filter((c) => c.ruleId === "FAB_ROULAGE_LIMON");
+      expect(roll.map((c) => c.location)).toEqual(
+        expect.arrayContaining([
+          { kind: "part", partId: "helical-stringer-inner" },
+          { kind: "part", partId: "helical-stringer" },
+        ]),
+      );
+    });
+
+    it("limon extérieur désactivé : porte-à-faux sur le limon intérieur, justification requise", () => {
+      const ctx = context(well());
+      const res = buildHelicalCore(ctx, params({ outerStringer: { enabled: false } }));
+      const cant = res.output.checks.filter((c) => c.ruleId === "HELICOIDAL_PORTE_A_FAUX");
+      expect(cant).toHaveLength(1);
+      expect(cant[0]!.status).toBe("violation");
+      expect(cant[0]!.message).toMatch(/limon intérieur/);
+    });
+
+    it("jour plus étroit que l'épaisseur du limon : erreur explicite", () => {
+      const ctx = context(well({ coreRadius: 60 }));
+      const out = buildHelicalCore(ctx, params({ innerStringer: { thickness: 60 } })).output;
+      expect(out.parts).toEqual([]);
+      expect(out.errors![0]).toMatch(/limon intérieur/);
+    });
+
+    it("pipeline : jour central, modèle complet sans erreur (défauts du plugin)", () => {
+      const m = buildModel(withHelicalCore(well()));
+      expect(m.errors).toEqual([]);
+      expect(m.parts.filter((p) => p.category === "stringer").map((p) => p.mark)).toEqual([
+        "LI1",
+        "LE1",
+      ]);
+    });
+
+    it("propriété : limon intérieur, bande développée exacte pour r_j, e, N quelconques", () => {
+      fc.assert(
+        fc.property(
+          fc.integer({ min: 150, max: 500 }),
+          fc.integer({ min: 4, max: 12 }),
+          fc.integer({ min: 10, max: 20 }),
+          (rj, e, n) => {
+            const ctx = context(well({ coreRadius: rj, treadsPerTurn: n }));
+            const res = buildHelicalCore(ctx, params({ innerStringer: { thickness: e } }));
+            expect(res.output.errors ?? []).toEqual([]);
+            const dev = res.innerStringer!;
+            const h = ctx.layout.helical!;
+            expect(dev.neutralRadius).toBeCloseTo(rj - e / 2, 9);
+            expect(dev.span).toBeCloseTo((rj - e / 2) * h.totalAngle, 6);
+            expect(Math.abs(signedArea(dev.outline))).toBeGreaterThan(0);
+            for (const p of dev.outline) expect(p.y).toBeGreaterThanOrEqual(-1e-9);
+          },
+        ),
+        { numRuns: 30 },
+      );
+    });
   });
 
   it("pipeline : modèle complet, erreurs du plugin reportées", () => {
@@ -234,4 +335,21 @@ describe("plugin helical-core", () => {
     const bad = buildModel(withHelicalCore(createProject("straight")));
     expect(bad.errors.some((e) => e.includes("helical-core"))).toBe(true);
   });
+});
+
+describe("plugins réservés aux escaliers à volées, sur un tracé hélicoïdal", () => {
+  it.each(["wood-housed", "wood-cut", "steel-flat", "steel-profile", "steel-curved"])(
+    "%s : erreur « réservée aux escaliers à volées », aucune pièce",
+    (kind) => {
+      const p = createProject("helical");
+      const m = buildModel({ ...p, stair: { ...p.stair, structure: { kind, params: {} } } });
+      const errors = m.errors.filter((e) => e.includes(kind));
+      expect(errors).toHaveLength(1);
+      expect(errors[0]).toMatch(/réservée aux escaliers à volées/);
+      expect(errors[0]).toMatch(/helical-core/);
+      expect(m.errors.some((e) => /segment droit par volée|Tracé inattendu/.test(e))).toBe(false);
+      // Pièces de base seulement (marches, contremarches, palier) : aucune pièce du plugin.
+      expect(m.parts.every((x) => ["tread", "riser", "landing"].includes(x.category))).toBe(true);
+    },
+  );
 });

@@ -150,5 +150,6 @@ export function computeHelicalStepping(project: Project, layout: Layout): Steppi
     balancedZones: [],
     notes,
     soffits,
+    helical: true,
   };
 }

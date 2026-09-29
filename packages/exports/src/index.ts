@@ -1,6 +1,10 @@
 /**
  * @blondel/exports : rendus et fichiers dérivés du `Model` (plan, élévation et développés
- * SVG, DXF, liste de débit CSV, archive ZIP, projet JSON). Fonctions pures, sans DOM.
+ * SVG, DXF, liste de débit CSV, archive ZIP, projet JSON, modèle 3D glTF binaire, données de
+ * la fiche de pose et de la fiche de débit). Fonctions pures, sans DOM.
+ *
+ * Pas d'export XLSX (exceljs peu maintenu, SPEC §5 : CSV seulement) ni STEP au MVP (noyau
+ * OCCT sous LGPL, question Q21 ouverte) : voir LEDGER.
  *
  * Le dossier PDF (`exportPdf`, dépendance jsPDF d'environ 1 Mo avec ses dépendances) est
  * exposé **seulement** par `@blondel/exports/pdf`, pour un chargement à la demande par
@@ -109,3 +113,29 @@ export {
   type CutListRow,
 } from "./csv/cutlist.js";
 export { PROJECT_FILE_EXTENSION, exportProjectJson } from "./json.js";
+export {
+  GLB_FILE_EXTENSION,
+  GLB_MIME,
+  buildGltf,
+  exportGlb,
+  packGlb,
+  partExtras,
+  type GlbOptions,
+  type GltfDocument,
+} from "./gltf/glb.js";
+export {
+  MATERIAL_PBR,
+  hexToLinear,
+  pbrLook,
+  srgbToLinear,
+  type PbrLook,
+} from "./gltf/materials.js";
+export { cutSheet, type CutSheetGroup, type CutSheetRow } from "./cutsheet.js";
+export {
+  installationSheet,
+  wallOffset,
+  type InstallationPoint,
+  type InstallationSheet,
+  type OpeningOffset,
+  type WallOffset,
+} from "./installation.js";

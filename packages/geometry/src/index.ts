@@ -22,3 +22,5 @@ export {
 } from "./sweep.js";
 export type { PartMesh } from "./solid.js";
 export { meshPart, meshParts, meshSolid } from "./solid.js";
+export type { GrainFrame, GrainUvOptions, UvFace, UvMesh } from "./uv.js";
+export { grainFrame, grainUVMesh, grainUVs, principalAxis, uvFace } from "./uv.js";

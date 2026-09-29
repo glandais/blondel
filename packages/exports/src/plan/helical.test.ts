@@ -68,7 +68,9 @@ describe("arcs exacts du SVG (repère Y inversé)", () => {
           };
           const expected = toPx(vp, worldMid);
           // Coordonnées arrondies à 0,01 px ; l'arc symétrique passerait à 2 flèches (≥ 2 mm).
-          expect(vec2.distance(svgArcMid(d), expected)).toBeLessThan(0.2);
+          // Près du demi-cercle, le centre reconstruit par SVG amplifie l'arrondi des extrémités
+          // (0,206 px mesuré à 175°, r = 700) : marge de 0,5 px, toujours loin des 2 mm.
+          expect(vec2.distance(svgArcMid(d), expected)).toBeLessThan(0.5);
         },
       ),
       { numRuns: 200 },

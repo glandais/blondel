@@ -138,7 +138,9 @@ test(`saisie de H et export PDF : aucune tâche > ${LONG_TASK_BUDGET_MS} ms`, as
   await measure(page, steps, "export PDF", async () => {
     const download = page.waitForEvent("download");
     await page.getByRole("button", { name: /Exporter/ }).click();
-    await page.getByRole("menuitem", { name: /PDF/ }).click();
+    await page
+      .getByRole("menuitem", { name: /^Dossier PDF complet \(gabarits 1:1 en A4\)/ })
+      .click();
     await download;
     await settle(page);
   });

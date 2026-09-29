@@ -10,8 +10,44 @@ import {
   straightModel,
   woodStringerPart,
 } from "../testing/fixtures.js";
-import { JsPdfCanvas, RecordingCanvas, type RecordedOp } from "./canvas.js";
-import { COMPLIANCE_DISCLAIMER, exportPdf, renderPdf, wrapText } from "./document.js";
+import { JsPdfCanvas, RecordingCanvas, helveticaMeasure, type RecordedOp } from "./canvas.js";
+import {
+  COMPLIANCE_DISCLAIMER,
+  exportPdf,
+  exportPdfDocument,
+  renderPdf,
+  wrapText,
+  type PdfPageKind,
+  type PdfPages,
+} from "./document.js";
+
+/** Pages limitées aux sections nommées. */
+function only(...keys: (keyof PdfPages)[]): PdfPages {
+  const all: (keyof PdfPages)[] = [
+    "toc",
+    "plan",
+    "elevation",
+    "installation",
+    "bom",
+    "cutsheet",
+    "compliance",
+    "flats",
+    "templates",
+  ];
+  return Object.fromEntries(all.map((k) => [k, keys.includes(k)])) as PdfPages;
+}
+
+const ORDER: readonly PdfPageKind[] = [
+  "toc",
+  "plan",
+  "elevation",
+  "installation",
+  "bom",
+  "cutsheet",
+  "compliance",
+  "flat",
+  "template",
+];
 
 function fullModel(): Model {
   const m = straightModel();
@@ -68,38 +104,75 @@ describe("renderPdf (mise en page sur surface enregistrée)", () => {
   const pages = renderPdf(c, model, { project, date: "29/09/2026" });
   const texts = c.pageTexts();
 
-  it("ordre des pages : plan, élévation, nomenclature, contrôle, développés", () => {
-    expect(pages.map((p) => p.kind)).toEqual([
-      "plan",
-      "elevation",
-      "bom",
-      "compliance",
-      // LI1 tôle, M2 (× 2), M1, M10, LI1 bois (même repère, autre développé), LE1.
-      "flat",
-      "flat",
-      "flat",
-      "flat",
-      "flat",
-      "flat",
-    ]);
+  it("ordre des pages : sommaire, plans, pose, nomenclature, débit, contrôle, développés, gabarits", () => {
+    const kinds = pages.map((p) => p.kind);
+    // Sections dans l'ordre, chacune présente.
+    const ranks = kinds.map((k) => ORDER.indexOf(k));
+    expect(ranks).toEqual([...ranks].sort((a, b) => a - b));
+    for (const k of ORDER) expect(kinds, k).toContain(k);
+    expect(kinds.slice(0, 3)).toEqual(["toc", "plan", "elevation"]);
+    // LI1 tôle, M2 (× 2), M1, M10, LI1 bois (même repère, autre développé), LE1.
+    expect(kinds.filter((k) => k === "flat")).toHaveLength(6);
     expect(c.pageCount).toBe(pages.length);
     expect(texts).toHaveLength(pages.length);
-    // Pièces identiques (M2 × 2) : un seul développé.
+    // Pièces identiques (M2 × 2) : un seul développé et un seul gabarit.
     const flats = pages.filter((p) => p.kind === "flat");
     expect(flats.map((p) => p.partIds)).toContainEqual(["tread-2", "tread-3"]);
+    const templates = pages.filter((p) => p.kind === "template");
+    expect(new Set(templates.map((p) => p.partIds!.join(","))).size).toBe(6);
   });
 
-  it("cartouche : projet, date, échelle et pagination sur chaque page", () => {
+  it("sommaire : chaque section avec ses pages", () => {
+    const toc = texts[0]!.join("\n");
+    expect(toc).toContain("Sommaire");
+    for (const s of [
+      "Plan coté",
+      "Élévation développée",
+      "Fiche de pose",
+      "Nomenclature",
+      "Fiche de débit",
+      "Contrôle de conception",
+    ]) {
+      expect(toc).toContain(s);
+    }
+    const first = (k: PdfPageKind): number => pages.findIndex((p) => p.kind === k) + 1;
+    expect(toc).toContain(String(first("plan")));
+    const lastTemplate = pages.length;
+    expect(toc).toMatch(new RegExp(`à ${lastTemplate}\\b`));
+    expect(toc).toMatch(/Gabarit 1:1 LI1/);
+    expect(toc).toMatch(/imprimer à 100 %/);
+  });
+
+  it("cartouche : projet, date, échelle, repère, matériau, épaisseur et pagination", () => {
     texts.forEach((t, i) => {
       expect(t).toContain(project.name);
       expect(t).toContain("29/09/2026");
       expect(t).toContain(`Page ${i + 1} / ${pages.length}`);
       const p = pages[i]!;
       expect(t).toContain(p.scale !== undefined ? `1:${p.scale}` : "—");
+      for (const label of [
+        "Projet",
+        "Document",
+        "Échelle",
+        "Date",
+        "Repère",
+        "Matériau",
+        "Épaisseur",
+      ]) {
+        expect(t).toContain(label);
+      }
+      if (p.kind === "flat" || p.kind === "template") {
+        const part = model.parts.find((q) => q.id === p.partIds![0])!;
+        expect(t).toContain(part.mark);
+        expect(t).toContain(`${part.flat!.thickness} mm`);
+        expect(t.some((s) => ["Chêne", "Acier peint"].includes(s))).toBe(true);
+      }
     });
     for (const p of pages) {
-      if (p.kind === "bom" || p.kind === "compliance") expect(p.scale).toBeUndefined();
-      else expect(p.scale).toBeGreaterThan(0);
+      if (["toc", "bom", "cutsheet", "compliance"].includes(p.kind))
+        expect(p.scale).toBeUndefined();
+      else if (p.kind !== "installation") expect(p.scale).toBeGreaterThan(0);
+      if (p.kind === "template") expect(p.scale).toBe(1);
     }
   });
 
@@ -145,14 +218,14 @@ describe("renderPdf (mise en page sur surface enregistrée)", () => {
     const ok = renderPdf(c2, model, {
       project,
       planScale: 50,
-      pages: { plan: true, elevation: false, bom: false, compliance: false, flats: false },
+      pages: only("plan"),
     });
     expect(ok).toEqual([{ kind: "plan", title: "Plan coté", scale: 50 }]);
     const c3 = new RecordingCanvas();
     const tooBig = renderPdf(c3, model, {
       project,
       planScale: 1,
-      pages: { plan: true, elevation: false, bom: false, compliance: false, flats: false },
+      pages: only("plan"),
     });
     expect(tooBig[0]!.scale).toBeGreaterThan(1);
     expect(tooBig[0]!.scaleNote).toMatch(/trop grande/);
@@ -169,7 +242,7 @@ describe("renderPdf (mise en page sur surface enregistrée)", () => {
     const m = { ...model, compliance: report(many) };
     const c4 = new RecordingCanvas();
     const ps = renderPdf(c4, m, {
-      pages: { plan: false, elevation: false, bom: false, compliance: true, flats: false },
+      pages: only("compliance"),
     });
     expect(ps.length).toBeGreaterThan(1);
     const t = c4.pageTexts();
@@ -191,17 +264,14 @@ describe("renderPdf (mise en page sur surface enregistrée)", () => {
         }),
       );
       const cv = new RecordingCanvas();
-      renderPdf(
-        cv,
-        { ...model, compliance: report(many) },
-        { pages: { plan: false, elevation: false, bom: false, compliance: true, flats: false } },
-      );
+      renderPdf(cv, { ...model, compliance: report(many) }, { pages: only("compliance") });
       // Corps de page : textes entre le filet d'en-tête et le cadre du cartouche.
       let paths = 0;
       for (const op of cv.ops) {
         if (op.type === "page") paths = 0;
         else if (op.type === "path") paths += 1;
-        else if (paths === 1) expect(op.y, op.value).toBeLessThanOrEqual(bottom + 1e-9);
+        else if (op.type === "text" && paths === 1)
+          expect(op.y, op.value).toBeLessThanOrEqual(bottom + 1e-9);
       }
     }
   });
@@ -215,7 +285,7 @@ describe("renderPdf (mise en page sur surface enregistrée)", () => {
         { ...model, parts: [part] },
         {
           ...(flatScale !== undefined ? { flatScale } : {}),
-          pages: { plan: false, elevation: false, bom: false, compliance: false, flats: true },
+          pages: only("flats"),
         },
       );
       const n = page!.scale!;
@@ -239,7 +309,7 @@ describe("renderPdf (mise en page sur surface enregistrée)", () => {
     const cv = new RecordingCanvas();
     renderPdf(cv, model, {
       date: new Date(Number.NaN),
-      pages: { plan: false, elevation: false, bom: true, compliance: false, flats: false },
+      pages: only("bom"),
     });
     expect(cv.pageTexts()[0]).toContain("—");
     expect(cv.pageTexts()[0]!.join(" ")).not.toMatch(/NaN/);
@@ -249,7 +319,16 @@ describe("renderPdf (mise en page sur surface enregistrée)", () => {
   it("modèle vide : pages de texte explicites", () => {
     const c5 = new RecordingCanvas();
     const ps = renderPdf(c5, { ...model, parts: [], compliance: report([]) }, {});
-    expect(ps.map((p) => p.kind)).toEqual(["plan", "elevation", "bom", "compliance"]);
+    expect(ps.map((p) => p.kind)).toEqual([
+      "toc",
+      "plan",
+      "elevation",
+      "installation",
+      "installation",
+      "bom",
+      "cutsheet",
+      "compliance",
+    ]);
     const t = c5.pageTexts().flat();
     expect(t).toContain("Aucune pièce générée.");
     expect(t).toContain("Aucune règle évaluée.");
@@ -275,8 +354,12 @@ describe("renderPdf (mise en page sur surface enregistrée)", () => {
     fc.assert(
       fc.property(fc.oneof(straightArb, quarterArb), (m) => {
         const cv = new RecordingCanvas();
-        const ps = renderPdf(cv, { ...m, parts: [woodStringerPart()] }, {});
-        expect(ps.length).toBeGreaterThanOrEqual(5);
+        const ps = renderPdf(
+          cv,
+          { ...m, parts: [woodStringerPart()] },
+          { pages: { templates: false } },
+        );
+        expect(ps.length).toBeGreaterThanOrEqual(8);
         checkInPage(cv);
       }),
       { numRuns: 15 },
@@ -293,8 +376,9 @@ describe("exportPdf (jsPDF)", () => {
     const text = new TextDecoder("latin1").decode(bytes);
     expect(text.startsWith("%PDF-")).toBe(true);
     expect(text.trimEnd().endsWith("%%EOF")).toBe(true);
-    const pages = renderPdf(new RecordingCanvas(), model, { project });
+    const pages = renderPdf(new RecordingCanvas(297, 210, helveticaMeasure()), model, { project });
     expect(text.match(/\/Type \/Page\b/g)).toHaveLength(pages.length);
+    expect(exportPdfDocument(model, { project }).pages).toEqual(pages);
     // Textes en WinAnsi (é = 0xE9), lisibles dans les flux non compressés.
     expect(text).toContain(
       "(Contrôle de conception indicatif, ne vaut pas attestation de conformité.) Tj",
@@ -315,7 +399,7 @@ describe("exportPdf (jsPDF)", () => {
       project,
       date: new Date(2026, 8, 29),
       compress: false,
-      pages: { plan: false, elevation: false, bom: true, compliance: false, flats: false },
+      pages: only("bom"),
     });
     expect(new TextDecoder("latin1").decode(bytes)).toContain("(29/09/2026) Tj");
   });

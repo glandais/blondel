@@ -3,11 +3,12 @@
  * Web Worker, tests sous Node) : même code, mêmes résultats.
  */
 import type { Project } from "@blondel/core";
+import { exportGlb } from "@blondel/exports";
 import { loadExportPdf, type ExportPdfFn } from "../lib/optionalApi.js";
 import { runVariants, type CompareOutcome } from "../lib/variants.js";
 import { computeModel } from "./buildModel.js";
 import { createMeshCache, type MeshCache } from "./meshCache.js";
-import type { PdfResult, WorkerJob, WorkerRequest, WorkerResponse } from "./protocol.js";
+import type { GlbResult, PdfResult, WorkerJob, WorkerRequest, WorkerResponse } from "./protocol.js";
 import { computeSnapshot, type ModelSnapshot } from "./snapshot.js";
 import { shareUnchanged } from "./structuralShare.js";
 
@@ -20,6 +21,11 @@ export interface JobRunner {
    * dans le worker, elle ne fige plus l'interface. Ne lève jamais.
    */
   pdf(job: Extract<WorkerJob, { type: "pdf" }>): Promise<PdfResult>;
+  /**
+   * Modèle 3D glTF binaire (`exportGlb` de `@blondel/exports` : maillage de toutes les pièces,
+   * plusieurs dizaines de millisecondes) ; ne lève jamais.
+   */
+  glb(job: Extract<WorkerJob, { type: "glb" }>): GlbResult;
 }
 
 export interface JobRunnerOptions {
@@ -66,8 +72,23 @@ export function createJobRunner(options: JobRunnerOptions = {}): JobRunner {
         const { model, errors } = computeModel(project);
         if (!model) return { error: errors[0] ?? "Aucun modèle calculé." };
         const exportPdf = await loadPdf();
-        const content = await exportPdf(model, { project, title: project.name });
+        const content = await exportPdf(model, {
+          project,
+          title: project.name,
+          ...(job.options?.pages ? { pages: job.options.pages } : {}),
+          ...(job.options?.format ? { format: job.options.format } : {}),
+        });
         return { bytes: await toBytes(content) };
+      } catch (e) {
+        return { error: e instanceof Error ? e.message : String(e) };
+      }
+    },
+    glb: (job) => {
+      try {
+        const project = shareUnchanged(lastBuild, job.project);
+        const { model, errors } = computeModel(project);
+        if (!model) return { error: errors[0] ?? "Aucun modèle calculé." };
+        return { bytes: exportGlb(model, { project, title: project.name }) };
       } catch (e) {
         return { error: e instanceof Error ? e.message : String(e) };
       }
@@ -107,6 +128,12 @@ export function handleWorkerRequest(
           ),
         )
         .catch(fail);
+    } else if (req.type === "glb") {
+      const result = runner.glb(req);
+      post(
+        { id: req.id, type: "glb", result },
+        "bytes" in result ? [result.bytes.buffer as ArrayBuffer] : [],
+      );
     } else if (req.type === "build") {
       post({ id: req.id, type: "build", result: runner.build(req) }, []);
     } else {

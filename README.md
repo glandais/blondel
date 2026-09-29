@@ -1,8 +1,22 @@
 # Blondel
 
-Logiciel web de conception paramétrique d'escaliers : tracé (droit, quart tournant, U, demi-tournant, palier, hélicoïdal à fût ou à jour central), balancement des marches, pièces de base, structures bois (limons à la française avec poteau d'angle, crémaillères) et métal (limons en plat découpé laser, marches en tôle pliée Z / U, limons en profilés UPN / IPN / IPE / HEA, limon de jour débillardé soudé en tronçons roulés, hélicoïdal à fût central avec marches en porte-à-faux), garde-corps et mains courantes, échappée (y compris sous le tour supérieur d'un hélicoïdal), contrôle de conception indicatif (DTU 36.3, NF P01-012, garde-corps NF P01-012 régimes 1988 et 2024, ERP…), contrôles de fabrication, prédimensionnement indicatif et classe d'exécution EN 1090-2, corrections proposées pour les erreurs courantes, comparateur de variantes de structure sur la même épure (masse, pièces, cordons, EXC, coût si le barème d'atelier est renseigné), exports (plan, élévation et développés SVG, DXF du plan et des pièces avec lignes de pli et de roulage, liste de débit CSV, dossier PDF, projet JSON).
+Logiciel web de conception paramétrique d'escaliers, pour les menuisiers, les métalliers et les particuliers avertis.
 
-État : jalons 1 (cœur droit), 2 (tournants), 3a (structures bois), 3b (structures métal), 3c (profilés, prédimensionnement, comparateur), 4 (garde-corps), 5a (hélicoïdal) et 5b (débillardé soudé) livrés, à valider avec un atelier pilote : les valeurs du profil d'atelier et des plugins sont des hypothèses marquées « à valider » (voir `docs/LEDGER.md` §2). Les critères d'acceptation n° 1 (quart tournant bois avec poteau et garde-corps, PDF + DXF), n° 2 (comparateur limons UPN contre débillardé soudé sur la même épure : masse, nombre de pièces, coût si barème) et n° 3 (DXF de limon et de marche en tôle pliée) sont vérifiés de bout en bout par des tests ; des tests Playwright parcourent l'application construite. Débillardé bois, structure porteuse d'un hélicoïdal à jour central et import de plan restent à faire.
+**Application en ligne : <https://glandais.github.io/blondel/>** (tout le calcul se fait dans le navigateur ; le projet reste sur le poste, autosauvegardé localement).
+
+## Fonctionnalités
+
+- **Assistant d'initialisation** : à partir de la hauteur à monter, de la trémie (rectangulaire, relevée ou tracée) et des murs, propose les typologies compatibles, classées par score (Blondel, régularité, échappée), avec croquis, cotes et score détaillé ; diagnostic lisible quand rien ne passe.
+- **Tracé** : droit, quart tournant, deux quarts (U), demi-tournant, quart tournant avec palier, hélicoïdal à fût ou à jour central ; jour vif, en arc ou à poteau.
+- **Balancement** des marches (M0, M1, M3 et variante quintique pour les débillardés), contrôle du giron au collet ; **mode expert** dans le plan 2D : angle imposé d'un nez à la poignée ou au clavier, nez fixe, surcharges orphelines signalées.
+- **Site** : niveaux, trémie rectangulaire ou polygonale, murs ; **import de plan** DXF (calque) ou image calibrée, accroches, tracé assisté de la trémie et des murs (à l'axe ou au nu), **relevé** 4 côtés + 2 diagonales avec contrôle de cohérence.
+- **Structures** bois (limons à la française avec poteau d'angle, crémaillères) et métal (limons en plat découpé laser, marches en tôle pliée Z / U, limons en profilés UPN / IPN / IPE / HEA, limon de jour **débillardé soudé** en tronçons roulés, hélicoïdal à fût central avec marches en porte-à-faux) ; **garde-corps** et mains courantes (balustres, lisses, câbles, verre, tôle perforée, panneau plein).
+- **Contrôle de conception** indicatif (DTU 36.3, NF P01-012, garde-corps régimes 1988 et 2024, ERP…), échappée (y compris sous le tour supérieur d'un hélicoïdal), contrôles de fabrication, prédimensionnement indicatif et classe d'exécution EN 1090-2, corrections proposées ; chaque règle renvoie à sa source dans `docs/research/`.
+- **Comparateur de variantes** de structure sur la même épure : masse, pièces, pièces uniques, cordons, plis, EXC, coût si le barème d'atelier est renseigné.
+- **Vues** : plan 2D coté, élévation, développés, nomenclature ; **3D** avec matériaux PBR (essences de bois avec fil orienté, acier brut / peint / galvanisé, inox brossé, verre, béton), vue éclatée, coupe, mesure, isolation d'une pièce, cotes 3D.
+- **Exports** : SVG (plan, élévation, développés), DXF R12 / 2007 du plan et de chaque pièce (calques de découpe, pli, roulage, joints, repères), liste de débit CSV, **modèle 3D glTF** (`.glb`), **dossier PDF** (sommaire, plan, élévation, nomenclature, fiche de débit, fiche de pose, contrôle de conception, développés, gabarits 1:1 tuilés en A4 ou A3), ZIP, projet JSON ; annuler / rétablir, autosauvegarde.
+
+État : jalons 1 à 5b, 6 (rendu et exports) et 7 (import de plan, version simple) livrés, ainsi que l'assistant et le mode expert ; tout est **à valider avec un atelier pilote** : les valeurs du profil d'atelier et des plugins sont des hypothèses marquées « à valider » (voir `docs/LEDGER.md` §2). Bilan des critères d'acceptation, avec leurs tests : [`docs/ACCEPTATION.md`](docs/ACCEPTATION.md). Restent notamment : débillardé bois ou lamellé-collé (V2), exports STEP et XLSX, lien partageable, obstacles (poteaux, fenêtres, portes), détection automatique de la trémie et des murs dans un plan importé.
 
 > Le contrôle de conception est indicatif : il ne vaut pas attestation de conformité.
 
@@ -15,7 +29,7 @@ pnpm install
 pnpm dev          # application web sur http://localhost:5173
 ```
 
-Des projets d'exemple sont dans `examples/*.blondel.json` ; ils s'ouvrent depuis la barre d'outils de l'application (« Importer… »). On y trouve un exemple par préréglage, le cas d'acceptation n° 1 et ses variantes :
+Des projets d'exemple sont dans `examples/*.blondel.json` ; ils s'ouvrent depuis le menu « Importer » de l'application. On y trouve un exemple par préréglage, le cas d'acceptation n° 1 et ses variantes :
 
 | Exemple                              | Contenu                                                                     |
 | ------------------------------------ | --------------------------------------------------------------------------- |
@@ -56,15 +70,17 @@ packages/
               balancement (balancing/), pièces (parts/), échappée (headroom/), règles (rules/),
               projets et préréglages (project/), profil d'atelier bois et métal (workshop/), plugins
               de structure (structures/), catalogue de profilés (catalog/), prédimensionnement
-              (precheck/), garde-corps (guards/), pipeline buildModel (pipeline/) — sans DOM
-  geometry/   maillage 3D des pièces pour l'aperçu
-  exports/    plan, élévation et développés SVG, DXF R12 / AC1021, CSV, ZIP, JSON ;
+              (precheck/), garde-corps (guards/), assistant (assistant/), site importé et relevé
+              (site/), pipeline buildModel (pipeline/) — sans DOM
+  geometry/   maillage 3D des pièces (aperçu, glTF), coordonnées de texture selon le fil
+  exports/    plan, élévation et développés SVG, DXF R12 / AC1021, CSV, ZIP, JSON, glTF ;
               dossier PDF par @blondel/exports/pdf
 apps/
   web/        interface React + Vite (store zustand, calcul en Web Worker, vues plan / 3D /
               élévation / développés, nomenclature, formulaires de tracé (volées, hélicoïdal), de
-              structure et de garde-corps, corrections proposées, prédimensionnement, comparateur,
-              menu d'export) ; tests Playwright dans e2e/
+              structure et de garde-corps, assistant, mode expert, saisie du site, corrections
+              proposées, prédimensionnement, comparateur, menus d'import et d'export) ;
+              tests Playwright dans e2e/
 docs/
   SPEC.md             cahier des charges
   CHALLENGE.md        arbitrages de conception (font foi)
@@ -72,6 +88,7 @@ docs/
   adr/                décisions d'architecture
   research/           recherche métier (règles, géométrie, structures) et rules.yaml
   LEDGER.md           avancement, points en suspens, journal
+  ACCEPTATION.md      critères d'acceptation : état et tests qui les prouvent
 examples/             projets .blondel.json
 scripts/              build-rules.mjs
 ```

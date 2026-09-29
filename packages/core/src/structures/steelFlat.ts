@@ -51,7 +51,7 @@ import {
   type SteelGrade,
 } from "../workshop/metal.js";
 import { resolveWorkshopProfile, type WorkshopProfile } from "../workshop/profile.js";
-import { CheckCollector, FAB_RULES, pluginRuleDef } from "./checks.js";
+import { CheckCollector, FAB_RULES, flightsOnlyError, pluginRuleDef } from "./checks.js";
 import {
   developStringer,
   flatTransform,
@@ -72,6 +72,7 @@ import { newelFaces, stairGeometry, type NewelGeometry, type StairGeometry } fro
 import {
   STEEL_RULES,
   deduceExecutionClass,
+  QUANTITY_WELD_MM,
   groupIdenticalFlats,
   holePolygon,
   plateMeasures,
@@ -445,6 +446,8 @@ export function buildSteelFlat(ctx: StructureContext, params: SteelFlatParams): 
     executionClass: "EXC1",
     treadGroups: [],
   });
+  const helical = flightsOnlyError("steel-flat", "limons acier en plat", layout);
+  if (helical) return empty([helical]);
   if (nosings.length < 2)
     return empty(["Limons acier : découpage vide, aucune structure générée."]);
 
@@ -1161,8 +1164,20 @@ export function buildSteelFlat(ctx: StructureContext, params: SteelFlatParams): 
   const treadParts = treadDetails.map((d) => d.part);
   const treadGroups = groupIdenticalFlats(treadParts);
 
-  // 10. Classe d'exécution.
-  const exc = deduceExecutionClass({ grade, buttWeld: buttWeldTotal });
+  // 10. Classe d'exécution : S355 « soudé » seulement si une pièce porte un cordon (angle ou
+  // bout à bout) ; supports vissés sans cordon ⇒ PC1 (C §2.1).
+  const weldTotal = [
+    ...treadParts,
+    ...stringers.map((s) => s.part),
+    ...posts,
+    ...supportParts,
+    ...platesMarked,
+  ].reduce((acc, p) => acc + (p.quantities[QUANTITY_WELD_MM] ?? 0), 0);
+  const exc = deduceExecutionClass({
+    grade,
+    buttWeld: buttWeldTotal,
+    welded: weldTotal + buttWeldTotal > 1e-9,
+  });
 
   // 11. Contrôles.
   const rule = (spec: (typeof STEEL_RULES)[keyof typeof STEEL_RULES]) => pluginRuleDef(spec);

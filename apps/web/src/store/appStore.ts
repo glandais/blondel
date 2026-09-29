@@ -10,9 +10,21 @@ import { useStore } from "zustand";
 import { availableStructures } from "../lib/optionalApi.js";
 import { variantsFor } from "../lib/variants.js";
 import { browserWorker, createJobExec } from "../model/workerClient.js";
-import { browserStorage } from "./persistence.js";
+import { AUTOSAVE_KEY, browserStorage } from "./persistence.js";
 import { createModelService, type CompareView, type ModelView } from "./modelStore.js";
 import { createProjectStore, type AppState } from "./projectStore.js";
+
+/**
+ * Première visite : aucune autosauvegarde au chargement (lue avant la création du store, qui
+ * ne l'écrit qu'au premier changement). L'accueil propose alors l'assistant.
+ */
+export const firstVisit: boolean = (() => {
+  try {
+    return browserStorage()?.getItem(AUTOSAVE_KEY) === null;
+  } catch {
+    return false;
+  }
+})();
 
 export const appStore = createProjectStore({ storage: browserStorage() });
 

@@ -5,6 +5,7 @@
  * démontage (`disposeAll`). three.js retransfère d'elle-même une géométrie libérée puis
  * réutilisée : un double montage (StrictMode) reste sans effet visible.
  */
+import type { Vec3 } from "@blondel/core";
 import type { Mesh } from "@blondel/geometry";
 import type { BufferGeometry } from "three";
 import { toBufferGeometry } from "./geometry.js";
@@ -16,13 +17,16 @@ export interface Disposable {
 export class GeometryPool<G extends Disposable = BufferGeometry> {
   private readonly map = new Map<string, G>();
 
-  constructor(private readonly create: (mesh: Mesh) => G) {}
+  constructor(private readonly create: (mesh: Mesh, grain?: Vec3) => G) {}
 
-  /** Géométrie de l'empreinte `key`, créée à la première demande. */
-  get(key: string, mesh: Mesh): G {
+  /**
+   * Géométrie de l'empreinte `key`, créée à la première demande. Les UV dépendant du fil, la
+   * clé doit l'inclure (`geometryKey`).
+   */
+  get(key: string, mesh: Mesh, grain?: Vec3): G {
     let g = this.map.get(key);
     if (!g) {
-      g = this.create(mesh);
+      g = this.create(mesh, grain);
       this.map.set(key, g);
     }
     return g;
@@ -52,6 +56,11 @@ export class GeometryPool<G extends Disposable = BufferGeometry> {
   }
 }
 
+/** Clé d'une géométrie : empreinte du solide et sens du fil (UV). */
+export function geometryKey(solidKey: string, grain: Vec3 | undefined): string {
+  return grain ? `${solidKey}|${grain.x},${grain.y},${grain.z}` : solidKey;
+}
+
 export function createGeometryPool(): GeometryPool<BufferGeometry> {
-  return new GeometryPool(toBufferGeometry);
+  return new GeometryPool((mesh, grain) => toBufferGeometry(mesh, grain));
 }

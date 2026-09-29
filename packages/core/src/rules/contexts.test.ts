@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { guardRailRegime, isRuleApplicable, resolveContexts } from "./contexts.js";
+import { makeHelicalProject } from "../layout/helical-test-helpers.js";
+import { buildModel } from "../pipeline/build.js";
 import { getRule } from "./table.js";
 import { makeProject, makeStepping } from "./test-fixtures.js";
 
@@ -46,6 +48,36 @@ describe("résolution des contextes", () => {
     expect(resolveContexts(makeProject().compliance, makeStepping()).active).not.toContain(
       "tournant",
     );
+  });
+  it("déduit `helicoidal` d'un découpage hélicoïdal (et d'aucun autre)", () => {
+    const helical = { ...makeStepping(), helical: true as const };
+    const r = resolveContexts(makeProject().compliance, helical);
+    expect(r.active).toContain("helicoidal");
+    expect(r.derived).toContain("helicoidal");
+    expect(resolveContexts(makeProject().compliance, makeStepping()).active).not.toContain(
+      "helicoidal",
+    );
+    // Déjà choisi par l'utilisateur : pas « déduit ».
+    const explicit = resolveContexts(
+      makeProject({ contexts: ["bois_dtu", "helicoidal"] }).compliance,
+      helical,
+    );
+    expect(explicit.derived).not.toContain("helicoidal");
+  });
+  it("pipeline : hélicoïdal sans contexte `helicoidal` saisi, règles hélicoïdales évaluées", () => {
+    const h = makeHelicalProject({
+      outerRadius: 900,
+      coreRadius: 70,
+      direction: "left",
+      floorToFloor: 2700,
+    });
+    const p = {
+      ...h,
+      compliance: { ...h.compliance, contexts: ["bois_dtu", "logement_interieur"] },
+    };
+    const m = buildModel(p);
+    expect(m.compliance.contexts).toContain("helicoidal");
+    expect(m.compliance.results.some((x) => x.ruleId === "H_MAX_HELICOIDAL_DTU")).toBe(true);
   });
   it("signale et ignore les contextes inconnus", () => {
     const r = resolveContexts(makeProject({ contexts: ["bois_dtu", "martien"] }).compliance);

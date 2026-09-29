@@ -23,6 +23,28 @@ export interface BalancingZone {
   /** Côté du jour (collet) de ce tournant. */
   readonly collarSide: "left" | "right";
   readonly ends: readonly ["tangent" | "free", "tangent" | "free"];
+  /**
+   * Prolongement de la courbe F au-delà d'une extrémité `free` qui tombe **dans la partie
+   * tournante** (nez non balancés qui suivent, jusqu'à la partie droite) : [avant `from`,
+   * après `to`], `null` sans prolongement. M3 construit alors une **spline** (cubique ou
+   * quintique) passant par ces nez fixes, raccordée à la partie droite, au lieu d'imposer
+   * F'' = 0 à la borne : F est dérivable à la borne de zone (ajout rétrocompatible, facultatif).
+   */
+  readonly continuation?: readonly [ZoneContinuation | null, ZoneContinuation | null];
+}
+
+/**
+ * Nez fixes traversés par le prolongement d'une zone (voir `BalancingZone.continuation`).
+ */
+export interface ZoneContinuation {
+  /** Indices des nez, du plus proche au plus éloigné de la zone. */
+  readonly nosings: readonly number[];
+  /**
+   * Condition au dernier nez : `tangent` (il ouvre une partie droite : pente de la marche
+   * suivante sur le développé) ou `free` (départ, arrivée, palier, poteau, nez fixe : conditions
+   * naturelles de la variante).
+   */
+  readonly end: "tangent" | "free";
 }
 
 export interface BalancingInput {
@@ -52,8 +74,12 @@ export interface BalancingStrategy {
 }
 
 export type BalancingSolution =
-  /** Abscisses sur le bord du jour des nez from+1 … to−1. */
-  | { readonly kind: "sigma"; readonly sigma: readonly Mm[] }
+  /**
+   * Abscisses sur le bord du jour des nez from+1 … to−1. `continued` (M3, facultatif) : la
+   * spline prolongée de `BalancingZone.continuation` a été retenue (`false` : repli sur les
+   * conditions naturelles à la borne, spline non strictement croissante).
+   */
+  | { readonly kind: "sigma"; readonly sigma: readonly Mm[]; readonly continued?: boolean }
   /** Angles (rad, repère monde) des lignes de nez from+1 … to−1. */
   | { readonly kind: "phi"; readonly phi: readonly number[] }
   | { readonly kind: "fail"; readonly reason: string };

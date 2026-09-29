@@ -1,47 +1,72 @@
 /**
- * Dossier PDF minimal (SPEC « PDF coté minimal », critère d'acceptation n° 1) :
+ * Dossier PDF complet (SPEC §3 « PDF coté », D §3.4, CHALLENGE P7) :
  *
- * 1. plan coté (`renderPlanSvg`) ;
- * 2. élévation développée (`renderElevationSvg`) ;
- * 3. nomenclature (repère, désignation, matériau, section, débit, quantité), sur autant de
- *    pages que nécessaire ;
- * 4. contrôle de conception : avertissement « indicatif », résultats groupés (violations par
- *    sévérité, non évaluées, respectées) avec nature, confiance, source et source secondaire ;
- * 5. une page par développé (`renderFlatPatternSvg`), à l'échelle indiquée.
+ * 1. sommaire ;
+ * 2. plan coté (`renderPlanSvg`) et élévation développée (`renderElevationSvg`) ;
+ * 3. fiche de pose : plan d'implantation, cotes aux nus des murs et à la trémie, diagonales,
+ *    hauteurs, épure des nez au sol ;
+ * 4. nomenclature (repère, désignation, matériau, section, débit, quantité) ;
+ * 5. fiche de débit (pièces par matériau et épaisseur, longueurs, volumes et masses cumulés) ;
+ * 6. contrôle de conception (avertissement « indicatif », résultats groupés, provenance) ;
+ * 7. une planche par développé distinct, à l'échelle normalisée qui tient dans la page ;
+ * 8. gabarits 1:1 des développés, tuilés sur plusieurs pages (A4 ou A3) avec repères
+ *    d'assemblage et règle de contrôle de 100 mm.
  *
- * Chaque page porte un cartouche (projet, titre de la page, échelle, date, pagination).
- * Les dessins sont posés à une échelle normalisée 1:n (la plus grande qui tient dans le
- * cadre), jamais « ajustés » sans le dire : l'échelle imprimée est l'échelle réelle.
+ * Chaque page porte un cartouche (projet, document, échelle, date, repère, matériau,
+ * épaisseur, pagination). Les dessins sont posés à une échelle normalisée 1:n (la plus grande
+ * qui tient dans le cadre), jamais « ajustés » sans le dire : l'échelle imprimée est l'échelle
+ * réelle.
  *
  * Mise en page écrite sur l'abstraction `PdfCanvas` (tests : `RecordingCanvas`) ;
  * `exportPdf` la réalise avec jsPDF.
  */
-import type { Model, Part, Project, RuleResult, Severity } from "@blondel/core";
-import { cutListRows } from "../csv/cutlist.js";
+import type { Model, Part, Project } from "@blondel/core";
+import { MATERIAL_LABELS, cutListRows } from "../csv/cutlist.js";
+import { cutSheet } from "../cutsheet.js";
 import { formatFr } from "../format.js";
 import { renderElevationSvg } from "../svg/elevation.js";
 import { renderFlatPatternSvg } from "../svg/flat.js";
 import { renderPlanSvg } from "../svg/plan.js";
-import { JsPdfCanvas, type PdfCanvas, type Rgb } from "./canvas.js";
+import { JsPdfCanvas, type PdfCanvas } from "./canvas.js";
+import { compliancePages } from "./compliance.js";
+import { installationPages } from "./installation.js";
+import {
+  MUTED,
+  contentFrame,
+  dateText,
+  drawHeader,
+  drawTitleBlock,
+  fr,
+  tablePages,
+  type Frame,
+  type PageDraft,
+  type TableRow,
+  type TitlePart,
+} from "./layout.js";
 import { drawSvg, parseSvg, svgSize } from "./svg-draw.js";
+import { DEFAULT_TILE_OVERLAP, templatePages, type TileInfo } from "./tiles.js";
 
-/** Avertissement imprimé en tête du contrôle de conception (CHALLENGE P3). */
-export const COMPLIANCE_DISCLAIMER =
-  "Contrôle de conception indicatif, ne vaut pas attestation de conformité.";
+export { COMPLIANCE_DISCLAIMER, complianceLines } from "./compliance.js";
+export { wrapText } from "./layout.js";
 
 /** Échelles normalisées essayées, de la plus grande (1:1) à la plus petite. */
 export const STANDARD_SCALES: readonly number[] = [1, 2, 5, 10, 20, 25, 50, 75, 100, 200, 500];
 
 export interface PdfPages {
+  readonly toc?: boolean;
   readonly plan?: boolean;
   readonly elevation?: boolean;
+  readonly installation?: boolean;
   readonly bom?: boolean;
+  readonly cutsheet?: boolean;
   readonly compliance?: boolean;
   readonly flats?: boolean;
+  /** Gabarits 1:1 tuilés des développés. */
+  readonly templates?: boolean;
 }
 
 export interface PdfLayoutOptions {
-  /** Projet source : nom (cartouche), trémie et plancher haut (plan, élévation). */
+  /** Projet source : nom (cartouche), trémie, murs et plancher haut (plan, élévation, pose). */
   readonly project?: Project;
   /** Nom affiché dans le cartouche (défaut : `project.name`, sinon « Escalier »). */
   readonly title?: string;
@@ -56,214 +81,48 @@ export interface PdfLayoutOptions {
   readonly flatScale?: number;
   /** Échelles candidates (défaut `STANDARD_SCALES`). */
   readonly scales?: readonly number[];
-  /** Pages produites (toutes par défaut). */
+  /** Pages produites (toutes par défaut ; une clé absente vaut vrai). */
   readonly pages?: PdfPages;
   /** Corps des textes des dessins, mm papier (défaut 2,4). */
   readonly drawingTextMm?: number;
   /** Décimales des cotes (défaut : celles des rendus SVG). */
   readonly decimals?: number;
+  /** Recouvrement entre cases des gabarits 1:1, mm (défaut 10). */
+  readonly tileOverlap?: number;
 }
 
 export interface PdfOptions extends PdfLayoutOptions {
-  /** Format de page, paysage (défaut A4). */
+  /** Format de page, paysage (défaut A4) ; les gabarits 1:1 sont tuilés à ce format. */
   readonly format?: "a4" | "a3";
   /** Compression des flux (défaut : vrai ; faux pour inspecter le fichier). */
   readonly compress?: boolean;
 }
 
-/** Résumé d'une page produite (tests, table des matières éventuelle). */
+export type PdfPageKind =
+  | "toc"
+  | "plan"
+  | "elevation"
+  | "installation"
+  | "bom"
+  | "cutsheet"
+  | "compliance"
+  | "flat"
+  | "template";
+
+/** Résumé d'une page produite (tests, sommaire). */
 export interface PdfPageInfo {
-  readonly kind: "plan" | "elevation" | "bom" | "compliance" | "flat";
+  readonly kind: PdfPageKind;
   readonly title: string;
   /** Échelle 1:n du dessin (absent : page de texte). */
   readonly scale?: number;
   /** Échelle imposée non tenue (dessin trop grand) : échelle retenue à la place. */
   readonly scaleNote?: string;
   readonly partIds?: readonly string[];
+  /** Gabarit 1:1 : case de la grille. */
+  readonly tile?: TileInfo;
 }
 
-// ------------------------------------------------------------------ constantes de page
-
-const MARGIN = 10;
-const HEADER = 9;
-const TITLE_BLOCK_H = 20;
-const TITLE_BLOCK_W = 110;
-const INK: Rgb = [31, 35, 40];
-const MUTED: Rgb = [87, 96, 106];
-const RULE: Rgb = [175, 184, 193];
-const BAND: Rgb = [246, 248, 250];
-const SEVERITY_COLOR: Readonly<Record<Severity, Rgb>> = {
-  bloquant: [209, 36, 47],
-  avertissement: [232, 134, 12],
-  conseil: [191, 135, 0],
-};
-
-const NATURE_LABELS: Readonly<Record<string, string>> = {
-  reglementaire: "réglementaire",
-  normatif: "normatif",
-  metier: "métier",
-};
-const CONFIDENCE_LABELS: Readonly<Record<string, string>> = {
-  eleve: "élevée",
-  moyen: "moyenne",
-  faible: "faible",
-};
-
-const fr = (v: number, d = 0): string => formatFr(v, { decimals: d, trimZeros: true });
-
-function dateText(d: string | Date | undefined): string {
-  if (d === undefined) return "—";
-  if (typeof d === "string") return d;
-  if (Number.isNaN(d.getTime())) return "—";
-  const p = (n: number): string => String(n).padStart(2, "0");
-  return `${p(d.getDate())}/${p(d.getMonth() + 1)}/${d.getFullYear()}`;
-}
-
-// ------------------------------------------------------------------ primitives de mise en page
-
-function rect(
-  c: PdfCanvas,
-  x: number,
-  y: number,
-  w: number,
-  h: number,
-  fill?: Rgb,
-  stroke?: Rgb,
-): void {
-  c.path(
-    [
-      { op: "M", x, y },
-      { op: "L", x: x + w, y },
-      { op: "L", x: x + w, y: y + h },
-      { op: "L", x, y: y + h },
-      { op: "Z" },
-    ],
-    { ...(fill ? { fill } : {}), ...(stroke ? { stroke, lineWidth: 0.2 } : {}) },
-  );
-}
-
-function hline(c: PdfCanvas, x0: number, x1: number, y: number, color: Rgb = RULE): void {
-  c.path(
-    [
-      { op: "M", x: x0, y },
-      { op: "L", x: x1, y },
-    ],
-    { stroke: color, lineWidth: 0.2 },
-  );
-}
-
-/** Tronque un texte à une largeur (points de suspension). */
-function fit(c: PdfCanvas, s: string, size: number, width: number, bold = false): string {
-  if (c.textWidth(s, size, bold) <= width) return s;
-  let lo = 0;
-  let hi = s.length;
-  while (lo < hi) {
-    const mid = Math.ceil((lo + hi) / 2);
-    if (c.textWidth(`${s.slice(0, mid)}…`, size, bold) <= width) lo = mid;
-    else hi = mid - 1;
-  }
-  return `${s.slice(0, lo)}…`;
-}
-
-/** Coupe un texte en lignes d'au plus `width` mm (mots entiers, mots trop longs coupés). */
-export function wrapText(
-  c: Pick<PdfCanvas, "textWidth">,
-  s: string,
-  size: number,
-  width: number,
-  bold = false,
-): string[] {
-  const out: string[] = [];
-  for (const para of s.split(/\n/)) {
-    let line = "";
-    for (const word of para.split(/\s+/).filter((w) => w !== "")) {
-      const tryLine = line === "" ? word : `${line} ${word}`;
-      if (c.textWidth(tryLine, size, bold) <= width) {
-        line = tryLine;
-        continue;
-      }
-      if (line !== "") out.push(line);
-      // Mot plus long que la ligne : coupé en morceaux.
-      let rest = word;
-      while (c.textWidth(rest, size, bold) > width && rest.length > 1) {
-        let n = rest.length - 1;
-        while (n > 1 && c.textWidth(rest.slice(0, n), size, bold) > width) n--;
-        out.push(rest.slice(0, n));
-        rest = rest.slice(n);
-      }
-      line = rest;
-    }
-    out.push(line);
-  }
-  return out;
-}
-
-// ------------------------------------------------------------------ pages
-
-interface Frame {
-  readonly x: number;
-  readonly y: number;
-  readonly w: number;
-  readonly h: number;
-}
-
-interface PageSpec extends PdfPageInfo {
-  draw(c: PdfCanvas, frame: Frame): void;
-}
-
-/** Cadre utile d'une page (sous l'en-tête, au-dessus du cartouche). */
-function contentFrame(c: PdfCanvas): Frame {
-  const top = MARGIN + HEADER;
-  return {
-    x: MARGIN,
-    y: top,
-    w: c.pageWidth - 2 * MARGIN,
-    h: c.pageHeight - MARGIN - TITLE_BLOCK_H - 3 - top,
-  };
-}
-
-function drawHeader(c: PdfCanvas, title: string): void {
-  c.text(title, MARGIN, MARGIN + 5, { size: 4.2, bold: true, color: INK });
-  hline(c, MARGIN, c.pageWidth - MARGIN, MARGIN + HEADER - 2, INK);
-}
-
-function drawTitleBlock(
-  c: PdfCanvas,
-  info: {
-    project: string;
-    page: string;
-    scale: string;
-    date: string;
-    index: number;
-    total: number;
-  },
-): void {
-  const w = TITLE_BLOCK_W;
-  const h = TITLE_BLOCK_H;
-  const x = c.pageWidth - MARGIN - w;
-  const y = c.pageHeight - MARGIN - h;
-  rect(c, x, y, w, h, undefined, INK);
-  const rowH = h / 4;
-  for (let i = 1; i < 4; i++) hline(c, x, x + w, y + i * rowH, RULE);
-  const col = x + 22;
-  const rows: [string, string][] = [
-    ["Projet", info.project],
-    ["Document", info.page],
-    ["Échelle", info.scale],
-    ["Date", info.date],
-  ];
-  rows.forEach(([label, value], i) => {
-    const by = y + i * rowH + rowH * 0.68;
-    c.text(label, x + 2, by, { size: 2.6, color: MUTED });
-    c.text(fit(c, value, 3, x + w - 26 - col), col, by, { size: 3, color: INK, bold: i === 0 });
-  });
-  const pg = `Page ${info.index} / ${info.total}`;
-  c.text(pg, x + w - 2 - c.textWidth(pg, 2.6), y + 3 * rowH + rowH * 0.68, {
-    size: 2.6,
-    color: MUTED,
-  });
-  c.text("Blondel", x + 2, y - 1.5, { size: 2.2, color: MUTED });
-}
+type PageSpec = PageDraft<PdfPageInfo>;
 
 /**
  * Plus grande échelle normalisée (1:n, n croissant) à laquelle le dessin tient dans le cadre ;
@@ -325,15 +184,19 @@ function drawingPage(
   scales: readonly number[],
   forced: number | undefined,
   extra: Partial<PdfPageInfo> = {},
+  part?: TitlePart,
 ): PageSpec {
   const chosen = chooseScale(render, frame, scales, forced);
   const svg = parseSvg(chosen.svg);
   return {
-    kind,
-    title,
-    scale: chosen.n,
-    ...(chosen.note !== undefined ? { scaleNote: chosen.note } : {}),
-    ...extra,
+    info: {
+      kind,
+      title,
+      scale: chosen.n,
+      ...(chosen.note !== undefined ? { scaleNote: chosen.note } : {}),
+      ...extra,
+    },
+    ...(part ? { part } : {}),
     draw(c, f) {
       const size = svgSize(svg);
       const w = size.widthMm ?? 0;
@@ -346,246 +209,204 @@ function drawingPage(
   };
 }
 
-// ------------------------------------------------------------------ nomenclature
+// ------------------------------------------------------------------ nomenclature, débit
 
-interface BomColumn {
-  readonly title: string;
-  readonly weight: number;
-  readonly align: "left" | "right";
-}
-
-const BOM_COLUMNS: readonly BomColumn[] = [
-  { title: "Repère", weight: 12, align: "left" },
-  { title: "Désignation", weight: 48, align: "left" },
-  { title: "Matériau", weight: 20, align: "left" },
-  { title: "Section", weight: 22, align: "left" },
-  { title: "Débit L × l × e (mm)", weight: 32, align: "right" },
-  { title: "Qté", weight: 8, align: "right" },
-];
-
-function bomCells(parts: readonly Part[]): string[][] {
-  return cutListRows(parts).map((r) => [
-    r.mark,
-    r.name,
-    r.material,
-    r.section,
-    r.length !== undefined && r.width !== undefined && r.thickness !== undefined
-      ? `${fr(r.length, 1)} × ${fr(r.width, 1)} × ${fr(r.thickness, 1)}`
-      : "—",
-    String(r.quantity),
-  ]);
-}
+const dims = (l?: number, w?: number, t?: number): string =>
+  l !== undefined && w !== undefined && t !== undefined
+    ? `${fr(l, 1)} × ${fr(w, 1)} × ${fr(t, 1)}`
+    : "—";
 
 function bomPages(parts: readonly Part[], frame: Frame): PageSpec[] {
-  const rows = bomCells(parts);
-  const rowH = 5.2;
-  const size = 3;
-  const perPage = Math.max(1, Math.floor((frame.h - rowH * 2) / rowH));
-  const total = rows.reduce((s, r) => s + Number(r[5]), 0);
-  const chunks: string[][][] = [];
-  for (let i = 0; i < rows.length; i += perPage) chunks.push(rows.slice(i, i + perPage));
-  if (chunks.length === 0) chunks.push([]);
-  const weights = BOM_COLUMNS.reduce((s, col) => s + col.weight, 0);
-  return chunks.map((chunk, pi) => ({
-    kind: "bom" as const,
-    title: chunks.length > 1 ? `Nomenclature (${pi + 1}/${chunks.length})` : "Nomenclature",
-    draw(cv, f) {
-      const widths = BOM_COLUMNS.map((col) => (col.weight / weights) * f.w);
-      const xs = widths.map((_, i) => f.x + widths.slice(0, i).reduce((s, w) => s + w, 0));
-      const cell = (text: string, i: number, y: number, bold: boolean): void => {
-        const col = BOM_COLUMNS[i]!;
-        const t = fit(cv, text, size, widths[i]! - 3, bold);
-        const x =
-          col.align === "right"
-            ? xs[i]! + widths[i]! - 1.5 - cv.textWidth(t, size, bold)
-            : xs[i]! + 1.5;
-        cv.text(t, x, y, { size, bold, color: INK });
-      };
-      let y = f.y;
-      rect(cv, f.x, y, f.w, rowH, BAND, undefined);
-      BOM_COLUMNS.forEach((col, i) => cell(col.title, i, y + rowH * 0.7, true));
-      y += rowH;
-      hline(cv, f.x, f.x + f.w, y, INK);
-      if (chunk.length === 0) {
-        cv.text("Aucune pièce générée.", f.x + 1.5, y + rowH * 0.7, { size, color: MUTED });
-      }
-      for (const r of chunk) {
-        r.forEach((v, i) => cell(v, i, y + rowH * 0.7, false));
-        y += rowH;
-        hline(cv, f.x, f.x + f.w, y);
-      }
-      if (pi === chunks.length - 1 && rows.length > 0) {
-        cell("Total", 0, y + rowH * 0.7, true);
-        cell(String(total), 5, y + rowH * 0.7, true);
-      }
+  const rows = cutListRows(parts);
+  const total = rows.reduce((s, r) => s + r.quantity, 0);
+  const draws = tablePages(
+    {
+      columns: [
+        { title: "Repère", weight: 12, align: "left" },
+        { title: "Désignation", weight: 48, align: "left" },
+        { title: "Matériau", weight: 20, align: "left" },
+        { title: "Section", weight: 22, align: "left" },
+        { title: "Débit L × l × e (mm)", weight: 32, align: "right" },
+        { title: "Qté", weight: 8, align: "right" },
+      ],
+      rows: rows.map((r) => ({
+        cells: [
+          r.mark,
+          r.name,
+          r.material,
+          r.section,
+          dims(r.length, r.width, r.thickness),
+          String(r.quantity),
+        ],
+      })),
+      footer: rows.length > 0 ? [{ cells: ["Total", "", "", "", "", String(total)] }] : [],
+      empty: "Aucune pièce générée.",
     },
+    frame,
+  );
+  return draws.map((draw, i) => ({
+    info: {
+      kind: "bom",
+      title: draws.length > 1 ? `Nomenclature (${i + 1}/${draws.length})` : "Nomenclature",
+    },
+    draw,
   }));
 }
 
-// ------------------------------------------------------------------ contrôle de conception
+const dec = (v: number, d: number): string => formatFr(v, { decimals: d });
 
-interface Line {
-  readonly text: string;
-  readonly size: number;
-  readonly bold?: boolean;
-  readonly color?: Rgb;
-  readonly indent?: number;
-  /** Espace avant la ligne, mm. */
-  readonly before?: number;
-}
-
-function measuredText(r: RuleResult): string | undefined {
-  const u = r.unit !== undefined && r.unit !== "" ? ` ${r.unit}` : "";
-  const parts: string[] = [];
-  if (r.measured !== undefined && Number.isFinite(r.measured))
-    parts.push(`mesuré ${fr(r.measured, 1)}${u}`);
-  if (r.min !== undefined && r.min !== null) parts.push(`min ${fr(r.min, 1)}${u}`);
-  if (r.max !== undefined && r.max !== null) parts.push(`max ${fr(r.max, 1)}${u}`);
-  return parts.length > 0 ? parts.join(" — ") : undefined;
-}
-
-function provenance(r: RuleResult): string {
-  const nature = NATURE_LABELS[r.nature] ?? r.nature;
-  const conf = CONFIDENCE_LABELS[r.confidence] ?? r.confidence;
-  return `Nature : ${nature} — confiance : ${conf} — source : ${r.source}${r.secondarySource ? " (source secondaire : norme payante non lue)" : ""}`;
-}
-
-const SEVERITY_TITLES: Readonly<Record<Severity, string>> = {
-  bloquant: "Violations bloquantes",
-  avertissement: "Avertissements",
-  conseil: "Conseils",
-};
-
-/** Lignes du contrôle de conception (avant découpage en pages). */
-export function complianceLines(
-  model: Model,
-  c: Pick<PdfCanvas, "textWidth">,
-  width: number,
-): Line[] {
-  const rep = model.compliance;
-  const body = 3;
-  const small = 2.6;
-  const out: Line[] = [];
-  const push = (text: string, style: Omit<Line, "text">): void => {
-    const indent = style.indent ?? 0;
-    wrapText(c, text, style.size, width - indent, style.bold).forEach((t, i) =>
-      out.push({ ...style, text: t, ...(i > 0 ? { before: 0 } : {}) }),
-    );
-  };
-  push(COMPLIANCE_DISCLAIMER, { size: 3.4, bold: true, color: SEVERITY_COLOR.bloquant });
-  push(
-    `Profil ${rep.profile} — règles v${rep.rulesVersion} — contextes : ${rep.contexts.join(", ") || "—"} — ` +
-      `${rep.summary.bloquant} bloquant(s), ${rep.summary.avertissement} avertissement(s), ${rep.summary.conseil} conseil(s)`,
-    { size: body, color: INK, before: 2 },
+function cutSheetPages(parts: readonly Part[], frame: Frame): PageSpec[] {
+  const groups = cutSheet(parts);
+  const rows: TableRow[] = [];
+  for (const g of groups) {
+    rows.push({
+      heading: true,
+      cells: [
+        g.thickness !== undefined
+          ? `${g.materialLabel} — épaisseur ${fr(g.thickness, 1)} mm`
+          : `${g.materialLabel} — ${g.section !== undefined && g.section !== "" ? `section ${g.section}` : "sans débit"}`,
+      ],
+    });
+    for (const r of g.rows) {
+      rows.push({
+        cells: [
+          r.mark,
+          r.name,
+          r.section,
+          dims(r.length, r.width, r.thickness),
+          r.source === "stock" ? "débit" : r.source === "flat" ? "développé" : "—",
+          String(r.quantity),
+          r.length !== undefined ? dec((r.length * r.quantity) / 1000, 2) : "—",
+          r.unitMass !== undefined ? dec(r.unitMass * r.quantity, 1) : "—",
+        ],
+      });
+    }
+    const t = g.totals;
+    rows.push({
+      bold: true,
+      cells: [
+        "Total",
+        t.volumeM3 !== undefined
+          ? `volume brut ${dec(t.volumeM3, 3)} m³`
+          : g.basis === "section"
+            ? ""
+            : "volume brut incomplet",
+        "",
+        "",
+        "",
+        String(t.quantity),
+        dec(t.lengthM, 2),
+        t.massKg !== undefined ? dec(t.massKg, 1) : "incomplet",
+      ],
+    });
+  }
+  const draws = tablePages(
+    {
+      columns: [
+        { title: "Repère", weight: 10, align: "left" },
+        { title: "Désignation", weight: 44, align: "left" },
+        { title: "Section", weight: 16, align: "left" },
+        { title: "L × l × e (mm)", weight: 28, align: "right" },
+        { title: "Origine", weight: 12, align: "left" },
+        { title: "Qté", weight: 7, align: "right" },
+        { title: "Long. tot. (m)", weight: 14, align: "right" },
+        { title: "Masse (kg)", weight: 12, align: "right" },
+      ],
+      rows,
+      empty: "Aucune pièce générée.",
+      intro: [
+        "Pièces groupées par matériau et épaisseur (plaques, plateaux) ou section (profilés, tubes). Origine : débit brut du cœur (surcotes comprises) ou emprise du développé (flan).",
+        "Masses : seulement celles fournies par le modèle ; un total est « incomplet » si une masse manque.",
+      ],
+    },
+    frame,
   );
-  for (const n of rep.notes ?? []) push(`Remarque : ${n}`, { size: small, color: MUTED });
-  for (const e of model.errors)
-    push(`Erreur de génération : ${e}`, { size: small, color: SEVERITY_COLOR.bloquant });
+  return draws.map((draw, i) => ({
+    info: {
+      kind: "cutsheet",
+      title: draws.length > 1 ? `Fiche de débit (${i + 1}/${draws.length})` : "Fiche de débit",
+    },
+    draw,
+  }));
+}
 
-  const results = rep.results;
-  const block = (r: RuleResult, color: Rgb, detailed: boolean): void => {
-    push(`${r.ruleId} — ${r.description}`, {
-      size: body,
-      bold: true,
-      color,
-      indent: 2,
-      before: 1.5,
-    });
-    if (r.message !== "") push(r.message, { size: body, color: INK, indent: 4 });
-    const m = measuredText(r);
-    if (detailed && m !== undefined) push(m, { size: small, color: INK, indent: 4 });
-    if (r.downgradeReason !== undefined) {
-      push(`Sévérité déclarée ${r.declaredSeverity}, rétrogradée : ${r.downgradeReason}`, {
-        size: small,
-        color: MUTED,
-        indent: 4,
-      });
+// ------------------------------------------------------------------ sommaire
+
+interface TocEntry {
+  readonly title: string;
+  readonly from: number;
+  readonly to: number;
+}
+
+/** Entrées du sommaire : pages consécutives d'une même section regroupées. */
+function tocEntries(pages: readonly PageSpec[], offset: number): TocEntry[] {
+  const out: TocEntry[] = [];
+  const sectionOf = (p: PdfPageInfo): string => {
+    switch (p.kind) {
+      case "installation":
+        return "Fiche de pose";
+      case "bom":
+        return "Nomenclature";
+      case "cutsheet":
+        return "Fiche de débit";
+      case "compliance":
+        return "Contrôle de conception";
+      case "template": {
+        const t = p.tile!;
+        const base = p.title.replace(/ — case .*$/, "").replace(/ \(\d+ pièces\)$/, "");
+        return t.rows * t.cols > 1
+          ? `${base} : ${t.count} case(s), grille ${t.rows} × ${t.cols}`
+          : base;
+      }
+      default:
+        return p.title;
     }
-    push(provenance(r), { size: small, color: MUTED, indent: 4 });
   };
-  for (const s of ["bloquant", "avertissement", "conseil"] as const) {
-    const group = results.filter((r) => r.status === "violation" && r.severity === s);
-    if (group.length === 0) continue;
-    push(`${SEVERITY_TITLES[s]} (${group.length})`, {
-      size: 3.6,
-      bold: true,
-      color: INK,
-      before: 4,
-    });
-    for (const r of group) block(r, SEVERITY_COLOR[s], true);
-  }
-  const pending = results.filter((r) => r.status === "non-evaluee");
-  if (pending.length > 0) {
-    push(`Règles non évaluées (${pending.length})`, {
-      size: 3.6,
-      bold: true,
-      color: INK,
-      before: 4,
-    });
-    for (const r of pending) block(r, MUTED, false);
-  }
-  const ok = results.filter((r) => r.status === "ok");
-  if (ok.length > 0) {
-    push(`Règles respectées (${ok.length})`, { size: 3.6, bold: true, color: INK, before: 4 });
-    for (const r of ok) {
-      const m = measuredText(r);
-      push(`${r.ruleId} — ${r.description}${m !== undefined ? ` (${m})` : ""}`, {
-        size: small,
-        color: INK,
-        indent: 2,
-      });
-      push(provenance(r), { size: 2.2, color: MUTED, indent: 4 });
-    }
-  }
-  if (results.length === 0) push("Aucune règle évaluée.", { size: body, color: MUTED, before: 2 });
+  let key = "";
+  let partKey = "";
+  pages.forEach((p, i) => {
+    const s = sectionOf(p.info);
+    const pk = p.info.partIds?.join(",") ?? "";
+    const last = out[out.length - 1];
+    if (last && s === key && pk === partKey) {
+      out[out.length - 1] = { ...last, to: i + 1 + offset };
+    } else out.push({ title: s, from: i + 1 + offset, to: i + 1 + offset });
+    key = s;
+    partKey = pk;
+  });
   return out;
 }
 
-const lineHeight = (l: Line): number => l.size * 1.35 + (l.before ?? 0);
-
-/** Hauteur réservée à l'avertissement rappelé en tête des pages de suite, mm. */
-const REPEATED_DISCLAIMER_H = 3.4 * 1.35;
-
-function compliancePages(c: PdfCanvas, model: Model, frame: Frame): PageSpec[] {
-  const lines = complianceLines(model, c, frame.w);
-  const chunks: Line[][] = [[]];
-  let used = 0;
-  for (const l of lines) {
-    const h = lineHeight(l);
-    if (used + h > frame.h && chunks[chunks.length - 1]!.length > 0) {
-      chunks.push([]);
-      // Pages de suite : l'avertissement rappelé en tête occupe sa hauteur.
-      used = REPEATED_DISCLAIMER_H;
-    }
-    chunks[chunks.length - 1]!.push(l);
-    used += h;
-  }
-  return chunks.map((chunk, i) => ({
-    kind: "compliance" as const,
-    title:
-      chunks.length > 1
-        ? `Contrôle de conception (${i + 1}/${chunks.length})`
-        : "Contrôle de conception",
-    draw(cv, f) {
-      let y = f.y;
-      // L'avertissement est rappelé en tête de chaque page de suite.
-      if (i > 0) {
-        y += REPEATED_DISCLAIMER_H;
-        cv.text(COMPLIANCE_DISCLAIMER, f.x, y - 1, {
-          size: 2.6,
-          bold: true,
-          color: SEVERITY_COLOR.bloquant,
-        });
-      }
-      for (const l of chunk) {
-        y += lineHeight(l);
-        cv.text(l.text, f.x + (l.indent ?? 0), y - l.size * 0.35, {
-          size: l.size,
-          color: l.color ?? INK,
-          ...(l.bold ? { bold: true } : {}),
-        });
-      }
+function tocPages(
+  pages: readonly PageSpec[],
+  frame: Frame,
+  name: string,
+  date: string,
+): PageSpec[] {
+  const spec = (entries: readonly TocEntry[]) => ({
+    columns: [
+      { title: "Document", weight: 80, align: "left" as const },
+      { title: "Pages", weight: 14, align: "right" as const },
+    ],
+    rows: entries.map((e) => ({
+      cells: [e.title, e.from === e.to ? String(e.from) : `${e.from} à ${e.to}`],
+    })),
+    empty: "Aucune page.",
+    intro: [
+      `Projet : ${name} — date : ${date}.`,
+      "Gabarits 1:1 : imprimer à 100 % (sans « ajuster à la page ») et vérifier la règle de contrôle de 100 mm de chaque page.",
+      "Les cotes d'implantation de la fiche de pose sont données dans le repère du relevé (murs, trémie).",
+    ],
+  });
+  // Nombre de pages du sommaire : il ne dépend que du nombre d'entrées.
+  const count = tablePages(spec(tocEntries(pages, 0)), frame).length;
+  const draws = tablePages(spec(tocEntries(pages, count)), frame);
+  return draws.map((draw, i) => ({
+    info: {
+      kind: "toc",
+      title: draws.length > 1 ? `Sommaire (${i + 1}/${draws.length})` : "Sommaire",
     },
+    draw,
   }));
 }
 
@@ -604,6 +425,15 @@ function flatGroups(parts: readonly Part[]): { part: Part; ids: string[] }[] {
   return [...groups.values()];
 }
 
+function titlePart(part: Part): TitlePart {
+  const thickness = part.flat?.thickness ?? part.stock?.thickness;
+  return {
+    mark: part.mark,
+    material: MATERIAL_LABELS[part.material] ?? part.material,
+    ...(thickness !== undefined ? { thickness } : {}),
+  };
+}
+
 /**
  * Met en page le dossier sur une surface quelconque (la première page existe déjà) et
  * renvoie la liste des pages produites.
@@ -618,11 +448,15 @@ export function renderPdf(
   const frame = contentFrame(c);
   const scales = options.scales ?? STANDARD_SCALES;
   const show: Required<PdfPages> = {
+    toc: true,
     plan: true,
     elevation: true,
+    installation: true,
     bom: true,
+    cutsheet: true,
     compliance: true,
     flats: true,
+    templates: true,
     ...options.pages,
   };
   // Corps des textes des dessins : px CSS (96 dpi) → mm papier.
@@ -633,6 +467,7 @@ export function renderPdf(
     margin: 8,
     ...(project !== undefined ? { project } : {}),
   };
+  const decimals = options.decimals !== undefined ? { decimals: options.decimals } : {};
 
   const pages: PageSpec[] = [];
   if (show.plan) {
@@ -646,7 +481,7 @@ export function renderPdf(
             scale: n,
             background: false,
             title: name,
-            ...(options.decimals !== undefined ? { decimals: options.decimals } : {}),
+            ...decimals,
           }),
         frame,
         scales,
@@ -666,10 +501,13 @@ export function renderPdf(
       ),
     );
   }
+  if (show.installation) pages.push(...installationPages(c, model, project, frame, scales));
   if (show.bom) pages.push(...bomPages(model.parts, frame));
+  if (show.cutsheet) pages.push(...cutSheetPages(model.parts, frame));
   if (show.compliance) pages.push(...compliancePages(c, model, frame));
+  const groups = show.flats || show.templates ? flatGroups(model.parts) : [];
   if (show.flats) {
-    for (const { part, ids } of flatGroups(model.parts)) {
+    for (const { part, ids } of groups) {
       const qty = ids.length > 1 ? ` (${ids.length} pièces identiques)` : "";
       pages.push(
         drawingPage(
@@ -682,36 +520,54 @@ export function renderPdf(
               margin: 8,
               scale: n,
               background: false,
-              ...(options.decimals !== undefined ? { decimals: options.decimals } : {}),
+              ...decimals,
             }),
           frame,
           scales,
           options.flatScale,
           { partIds: ids },
+          titlePart(part),
         ),
+      );
+    }
+  }
+  if (show.templates) {
+    for (const { part, ids } of groups) {
+      pages.push(
+        ...templatePages(c, part, ids, frame, {
+          fontPx,
+          overlap: options.tileOverlap ?? DEFAULT_TILE_OVERLAP,
+          ...decimals,
+        }),
       );
     }
   }
 
   const date = dateText(options.date);
-  pages.forEach((p, i) => {
+  const all = show.toc ? [...tocPages(pages, frame, name, date), ...pages] : pages;
+  all.forEach((p, i) => {
     if (i > 0) c.addPage();
-    drawHeader(c, p.title);
+    const reserved = p.headerRight ? p.headerRight(c) : 0;
+    drawHeader(c, p.info.title, reserved);
     p.draw(c, frame);
     drawTitleBlock(c, {
       project: name,
-      page: p.title,
-      scale: p.scale !== undefined ? `1:${fr(p.scale)}` : "—",
+      page: p.info.title,
+      scale: p.info.scale !== undefined ? `1:${fr(p.info.scale)}` : "—",
       date,
       index: i + 1,
-      total: pages.length,
+      total: all.length,
+      ...(p.part ? { part: p.part } : {}),
     });
   });
-  return pages.map(({ draw: _draw, ...info }) => info);
+  return all.map((p) => p.info);
 }
 
-/** Dossier PDF du modèle (octets). Sortie déterministe (date de création fixe, sauf `date`). */
-export function exportPdf(model: Model, options: PdfOptions = {}): Uint8Array {
+/** Dossier PDF et description de ses pages (mise en page avec la métrique réelle de jsPDF). */
+export function exportPdfDocument(
+  model: Model,
+  options: PdfOptions = {},
+): { bytes: Uint8Array; pages: PdfPageInfo[] } {
   const name = options.title ?? options.project?.name ?? "Escalier";
   const canvas = new JsPdfCanvas({
     format: options.format ?? "a4",
@@ -723,6 +579,11 @@ export function exportPdf(model: Model, options: PdfOptions = {}): Uint8Array {
     title: name,
     subject: "Dossier d'escalier (Blondel)",
   });
-  renderPdf(canvas, model, options);
-  return canvas.output();
+  const pages = renderPdf(canvas, model, options);
+  return { bytes: canvas.output(), pages };
+}
+
+/** Dossier PDF du modèle (octets). Sortie déterministe (date de création fixe, sauf `date`). */
+export function exportPdf(model: Model, options: PdfOptions = {}): Uint8Array {
+  return exportPdfDocument(model, options).bytes;
 }

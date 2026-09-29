@@ -306,9 +306,9 @@ describe("plugin steel-curved : limon débillardé soudé (jalon 5b)", () => {
   });
 
   it("coupe repliée vers la naissance ou sur l'arc : signalée (remarque et avertissement)", () => {
-    // Marge joint / support de 25 mm : zones interdites jointives sur la partie droite basse,
-    // repli vers la naissance (36 mm < δ) ; 21 mm : repli sur l'arc pour la naissance haute.
-    const { m: m2, r: r2 } = run(quarterArc({ params: { curved: { jointSupportMargin: 25 } } }));
+    // Marge joint / support de 21 mm (balancement du 2026-09-30, spline prolongée) : zones
+    // interdites jointives, repli vers une naissance (≈ 11 mm < δ) et sur l'arc pour l'autre.
+    const { m: m2, r: r2 } = run(quarterArc({ params: { curved: { jointSupportMargin: 21 } } }));
     const c2 = r2.curved!;
     const short = c2.joints.filter(
       (j) => j.reason === "naissance" && (j.onArc || j.naissanceOffset! < 100 - 1e-6),
@@ -342,47 +342,57 @@ describe("plugin steel-curved : limon débillardé soudé (jalon 5b)", () => {
     expect(bad.every((x) => x.severity === "avertissement")).toBe(true);
   });
 
-  it("cassures de F aux nez (borne de zone libre) mesurées et affichées, pas seulement aux naissances", () => {
-    // Régression : la zone [0 ; 7] est libre / libre (F droite), puis F suit les nez de la
-    // partie droite : jarret de ≈ 12° au nez 7 sur la rive, absent des contrôles.
-    const nos = m.stepping.nosings;
+  it("courbe des nez F dérivable aux bornes de zone libres (spline prolongée), cassures mesurées", () => {
+    // Régression (relecture j5b) : la zone [0 ; 7] était libre / libre (F droite) puis F suivait
+    // les nez non balancés du tournant : jarret de ≈ 12° au nez 7 et 2,7° au nez 8. La borne
+    // libre située dans la partie tournante est désormais prolongée par une spline passant par
+    // les nez fixes jusqu'à la partie droite : aucune cassure de F aux nez.
     const zone = curved.profile.zones[0]!;
-    expect(zone.ends).toEqual(["free", "free"]);
-    const b = zone.to;
-    const before =
-      (nos[b]!.z - nos[zone.from]!.z) / (nos[b]!.sigmaInner - nos[zone.from]!.sigmaInner);
-    const after = (nos[b + 1]!.z - nos[b]!.z) / (nos[b + 1]!.sigmaInner - nos[b]!.sigmaInner);
-    const expected = (Math.abs(Math.atan(before) - Math.atan(after)) * 180) / Math.PI;
-    expect(expected).toBeGreaterThan(5);
-    const kink = curved.nosingKinks.find((k) => k.nosing === b)!;
-    expect(kink).toBeDefined();
-    expect(kink.fibers[0]!.degrees).toBeCloseTo(expected, 1);
-    // Hors zone : cassure au nez k ⇔ sécantes voisines différentes (F droite par morceaux) ;
-    // partie droite haute (giron constant sur C_i) : aucune.
-    const secant = (i: number) =>
-      Math.atan((nos[i + 1]!.z - nos[i]!.z) / (nos[i + 1]!.sigmaInner - nos[i]!.sigmaInner));
-    for (let k = b + 1; k + 1 < nos.length; k++) {
-      const d = (Math.abs(secant(k) - secant(k - 1)) * 180) / Math.PI;
-      const found = curved.nosingKinks.find((x) => x.nosing === k);
-      if (d < 0.005) expect(found).toBeUndefined();
-      else expect(found!.fibers[0]!.degrees).toBeCloseTo(d, 1);
+    const bz = m.stepping.balancedZones[0]!;
+    expect(zone.kind).toBe("m3");
+    expect(curved.nosingKinks).toEqual([]);
+    expect(
+      m.compliance.results.filter(
+        (x) =>
+          x.ruleId === "FAB_DEBILLARDE_CASSURE_PENTE" && /Courbe des nez F au nez/.test(x.message),
+      ),
+    ).toEqual([]);
+    // Pente de F continue de part et d'autre de chaque nez intérieur au limon (différences
+    // finies centrées, pas de 0,05 mm) ; la reconstitution passe par tous les nez.
+    const F = curved.profile.at;
+    const nos = m.stepping.nosings;
+    for (const k of nos.slice(1, -1)) {
+      const s = k.sigmaInner;
+      const before = (F(s) - F(s - 0.05)) / 0.05;
+      const after = (F(s + 0.05) - F(s)) / 0.05;
+      expect(Math.abs(Math.atan(after) - Math.atan(before)) * (180 / Math.PI)).toBeLessThan(0.01);
+      expect(F(s)).toBeCloseTo(k.z, 3);
     }
-    expect(curved.nosingKinks.every((k) => k.nosing <= b + 1)).toBe(true);
-    const msgs = m.compliance.results.filter(
-      (x) =>
-        x.ruleId === "FAB_DEBILLARDE_CASSURE_PENTE" && /Courbe des nez F au nez/.test(x.message),
-    );
-    expect(msgs.length).toBe(curved.nosingKinks.length);
-    expect((m.notes ?? []).some((n) => /courbe des nez F présente des cassures/.test(n))).toBe(
-      true,
-    );
-    // Seuil : le jarret au nez est en violation alors que les naissances (< 1°) passent.
+    // Le prolongement est déclaré dans le découpage et atteint la partie droite.
+    const cont = bz.continuation!;
+    const ext = [...(cont[0]?.nosings ?? []), ...(cont[1]?.nosings ?? [])];
+    expect(ext.length).toBeGreaterThan(0);
+    // Seuil facultatif : aucune cassure de F aux nez, seules les naissances sont contrôlées.
     const { m: m2 } = run(quarterArc({ params: { curved: { maxSlopeBreak: 5 } } }));
     const res = m2.compliance.results.filter((x) => x.ruleId === "FAB_DEBILLARDE_CASSURE_PENTE");
-    expect(res.some((x) => x.status === "violation" && /au nez 7/.test(x.message))).toBe(true);
+    expect(res.some((x) => /au nez/.test(x.message))).toBe(false);
     expect(res.filter((x) => /^Naissance/.test(x.message)).every((x) => x.status === "ok")).toBe(
       true,
     );
+  });
+
+  it("cassures de F aux nez non balancés du tournant : mesurées (zone imposée, M1 : interpolation)", () => {
+    // Zone M1 : pas de courbe M3, rives par interpolation monotone (C1) : aucune cassure ; zone
+    // imposée courte (un nez de chaque côté) : F droite par morceaux hors zone, cassures aux nez
+    // non balancés de la partie tournante mesurées (non nulles) et reportées.
+    const { m: m2, r: r2 } = run(quarterArc({ windersPerSide: 1 }));
+    const kinks = r2.curved!.nosingKinks;
+    const msgs = m2.compliance.results.filter(
+      (x) =>
+        x.ruleId === "FAB_DEBILLARDE_CASSURE_PENTE" && /Courbe des nez F au nez/.test(x.message),
+    );
+    expect(msgs.length).toBe(kinks.length);
+    for (const kk of kinks) expect(kk.fibers.some((f) => f.degrees >= 0.01)).toBe(true);
   });
 
   it("marches portées des deux côtés (supports tangents côté jour)", () => {
@@ -548,6 +558,32 @@ const curvedStairArb = fc
   });
 
 describe("propriétés du limon débillardé (générateur contraint)", () => {
+  it("régression : aucune arête parasite quand un nez ou une naissance frôle un nœud des rives", () => {
+    // Contre-exemples fast-check (U à jours en arc) : sommets à 2,6e-5 et 3,4e-4 mm.
+    const cases = [
+      { H: 2204, E: 864, legs: [1534, 3067, 1534], r: 535, n: 13 },
+      { H: 2388, E: 988, legs: [1614, 3228, 1614], r: 485, n: 14 },
+    ];
+    for (const x of cases) {
+      const project = makeSteppingProject({
+        width: x.E,
+        legs: x.legs,
+        direction: "left",
+        inner: { kind: "arc", radius: x.r },
+        floorToFloor: x.H,
+        stepping: { riserCount: x.n },
+        structure: { kind: "steel-curved", params: {} },
+      });
+      const c = run(project).r.curved!;
+      for (const s of c.segments) {
+        s.outline.forEach((q, i) => {
+          const nx = s.outline[(i + 1) % s.outline.length]!;
+          expect(Math.hypot(nx.x - q.x, nx.y - q.y), `H ${x.H}`).toBeGreaterThan(1e-3);
+        });
+      }
+    }
+  });
+
   it("F par les nez, tronçons contigus, rives continues, arcs en (r − e/2)·θ, EXC2 ⇔ joint", () => {
     fc.assert(
       fc.property(curvedStairArb, (project) => {
@@ -610,6 +646,20 @@ describe("propriétés du limon débillardé (générateur contraint)", () => {
         for (const sb of c.slopeBreaks) {
           const [, neutral, jour] = sb.fibers;
           expect(jour!.degrees).toBeGreaterThanOrEqual(neutral!.degrees - 1e-9);
+        }
+        // F dérivable aux bornes des zones M3 reconstituées : une borne libre dans la partie
+        // tournante est prolongée par la spline (aucune cassure de F au nez de la borne).
+        for (const z of c.profile.zones) {
+          if (z.kind !== "m3") continue;
+          const bz = m.stepping.balancedZones.find((x) => x.from === z.from && x.to === z.to);
+          const cont = bz?.continuation;
+          for (const [i, k] of [
+            [0, z.from],
+            [1, z.to],
+          ] as const) {
+            if (!cont?.[i]) continue;
+            expect(c.nosingKinks.some((kk) => kk.nosing === k)).toBe(false);
+          }
         }
       }),
       { numRuns: 25 },

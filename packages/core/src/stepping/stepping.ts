@@ -173,11 +173,11 @@ export function computeStepping(
   const devNosings = devLayout === layout ? nosings.slice() : perpendicularOn(devLayout);
 
   // ------------------------------------------------------------ nez fixes et surcharges
-  const fixed = new Set<number>([0, n - 1]);
-  const free = new Set<number>([0, n - 1]);
+  const baseFixed = new Set<number>([0, n - 1]);
+  const baseFree = new Set<number>([0, n - 1]);
   for (const k of positions.landingTreads) {
-    fixed.add(k).add(k + 1);
-    free.add(k).add(k + 1);
+    baseFixed.add(k).add(k + 1);
+    baseFree.add(k).add(k + 1);
   }
   const angleOverrides = new Map<number, number>();
   for (const o of project.stair.nosingOverrides) {
@@ -187,7 +187,7 @@ export function computeStepping(
       );
       continue;
     }
-    if (o.kind === "fixed") fixed.add(o.index);
+    if (o.kind === "fixed") baseFixed.add(o.index);
     else {
       if (angleOverrides.has(o.index)) {
         notes.push(`Nez ${o.index} : plusieurs angles imposés, le dernier est appliqué.`);
@@ -202,142 +202,248 @@ export function computeStepping(
   const extent = maxBalancedExtent ?? MAX_BALANCED_EXTENT;
   const variant = resolveM3Variant(project);
   const strategy = getBalancingStrategy(method);
-  const groups = groupWinderTurns(layout, positions.s, going, fixed);
-  const balancedZones: { turn: number; from: number; to: number; method: string }[] = [];
-  const zoneRanges: { from: number; to: number; corners: readonly Mm[] }[] = [];
-  const params: Record<string, unknown> = method === "M3" ? { variant } : {};
+  // Zones par angle au droit des poteaux d'angle (`groupWinderTurns`, nez de poteau fixe et libre).
+  const posts = new Set<number>();
+  project.stair.layout.turns.forEach((t, j) => {
+    if (t.mode === "winders" && t.inner.kind === "newel") posts.add(j);
+  });
+  const baseNosings = nosings.slice();
+  /**
+   * Zones de balancement pour un regroupement des tournants : classique, ou **par angle** au
+   * droit des poteaux (`usePosts`, voir `groupWinderTurns`). Travaille sur des copies des nez,
+   * des nez fixes / libres et des remarques.
+   */
+  const runZones = (usePosts: boolean) => {
+    const nosings = baseNosings.slice();
+    const fixed = new Set(baseFixed);
+    const free = new Set(baseFree);
+    const notes: string[] = [];
+    const balancedZones: Stepping["balancedZones"][number][] = [];
+    const zoneRanges: { from: number; to: number; corners: readonly Mm[] }[] = [];
+    const groups = groupWinderTurns(layout, positions.s, going, fixed, {
+      posts,
+      free,
+      perAngle: usePosts,
+    });
+    const params: Record<string, unknown> = method === "M3" ? { variant } : {};
 
-  for (const group of groups) {
-    const turnName =
-      group.first === group.last
-        ? `Tournant ${group.first + 1}`
-        : `Tournants ${group.first + 1} et ${group.last + 1} (zone unique)`;
-    const bounds = zoneBounds(group, positions.s, fixed);
-    const maxBefore = Math.min(WINDERS_PER_SIDE_MAX, bounds.kL - bounds.lo);
-    const maxAfter = Math.min(WINDERS_PER_SIDE_MAX, bounds.hi - bounds.kR);
-    const ctx: ZoneContext = {
-      layout,
-      devLayout,
-      devNosings,
-      seeds,
-      nosings,
-      z,
-      rise,
-      going,
-      strategy,
-      params,
-      freeNosings: free,
-      collarSide: layout.innerSide,
-    };
-    const auto = windersPerSide === "auto" && method !== "M0";
-    const pairs: [number, number][] = [];
-    // Choix automatique : couples hors de l'étendue K7, évalués seulement en repli.
-    const beyondExtent: [number, number][] = [];
-    if (windersPerSide !== "auto") {
-      const nb = Math.min(windersPerSide, bounds.kL - bounds.lo);
-      const na = Math.min(windersPerSide, bounds.hi - bounds.kR);
-      if (nb !== windersPerSide || na !== windersPerSide) {
+    for (const group of groups) {
+      const turnName =
+        (group.first === group.last
+          ? `Tournant ${group.first + 1}`
+          : `Tournants ${group.first + 1} et ${group.last + 1} (zone unique)`) +
+        (group.posts ? ` (${group.posts.map((k) => `nez ${k}`).join(" et ")} au poteau)` : "");
+      const bounds = zoneBounds(group, positions.s, fixed);
+      const maxBefore = Math.min(WINDERS_PER_SIDE_MAX, bounds.kL - bounds.lo);
+      const maxAfter = Math.min(WINDERS_PER_SIDE_MAX, bounds.hi - bounds.kR);
+      const ctx: ZoneContext = {
+        layout,
+        devLayout,
+        devNosings,
+        seeds,
+        nosings,
+        z,
+        rise,
+        going,
+        strategy,
+        params,
+        freeNosings: free,
+        collarSide: layout.innerSide,
+      };
+      const auto = windersPerSide === "auto" && method !== "M0";
+      const pairs: [number, number][] = [];
+      // Choix automatique : couples hors de l'étendue K7, évalués seulement en repli.
+      const beyondExtent: [number, number][] = [];
+      if (windersPerSide !== "auto") {
+        const nb = Math.min(windersPerSide, bounds.kL - bounds.lo);
+        const na = Math.min(windersPerSide, bounds.hi - bounds.kR);
+        if (nb !== windersPerSide || na !== windersPerSide) {
+          notes.push(
+            `${turnName} : ${windersPerSide} marches balancées demandées de chaque côté, ${nb} avant et ${na} après possibles (nez fixes).`,
+          );
+        }
+        pairs.push([nb, na]);
+      } else if (method === "M0") {
+        // Rayonnant : zone réduite aux nez situés sur l'arc de Γ.
+        const inArc = (k: number): boolean =>
+          positions.s[k]! > group.sStart + GEOM_EPS && positions.s[k]! < group.sEnd - GEOM_EPS;
+        let nb = 0;
+        while (nb < maxBefore && inArc(bounds.kL - nb)) nb++;
+        let na = 0;
+        while (na < maxAfter && inArc(bounds.kR + na)) na++;
+        pairs.push([nb, na]);
+      } else {
+        // Choix automatique : étendue K7 (`maxBalancedExtent` girons depuis l'angle).
+        const lim = extentLimits(group, positions.s, bounds, going, extent);
+        for (let nb = 0; nb <= maxBefore; nb++) {
+          for (let na = 0; na <= maxAfter; na++) {
+            (nb <= lim.before && na <= lim.after ? pairs : beyondExtent).push([nb, na]);
+          }
+        }
+      }
+      const cands = enumerateZones(
+        pairs,
+        (a, b) => evaluateZone(ctx, group, a, b, bounds),
+        bounds,
+        auto && !options.exhaustiveZoneSearch ? targetCollet : null,
+      );
+      let beyond = false;
+      if (
+        auto &&
+        beyondExtent.length > 0 &&
+        pickZone(cands, targetCollet, colletTieTolerance ?? COLLET_TIE_TOLERANCE) === null
+      ) {
+        // Aucune zone admissible dans l'étendue K7 (étendue trop courte, jour étroit) : plutôt
+        // que des nez perpendiculaires (collet nul, lignes croisées au tournant), repli sur les
+        // zones plus étendues, signalé.
+        const more = enumerateZones(
+          beyondExtent,
+          (a, b) => evaluateZone(ctx, group, a, b, bounds),
+          bounds,
+          options.exhaustiveZoneSearch ? null : targetCollet,
+        );
+        if (pickZone(more, targetCollet, colletTieTolerance ?? COLLET_TIE_TOLERANCE) !== null) {
+          cands.splice(0, cands.length, ...more);
+          beyond = true;
+        }
+      }
+      if (cands.length === 0) {
+        notes.push(`${turnName} : aucune marche à balancer (nez fixes encadrant le tournant).`);
+        continue;
+      }
+      const chosen = auto
+        ? pickZone(cands, targetCollet, colletTieTolerance ?? COLLET_TIE_TOLERANCE)
+        : cands[0]!;
+      if (chosen === null || !chosen.ok) {
+        const reason = chosen?.reason ?? cands.find((c) => !c.ok)?.reason;
+        if (group.posts) {
+          // Côté d'un poteau : les lignes perpendiculaires à Γ (arc centré sur le poteau) sont
+          // rayonnantes vers le poteau et y aboutissent (collets > 0, sans croisement).
+          notes.push(
+            `${turnName} : aucune zone de balancement admissible de ce côté du poteau${reason ? ` (${reason})` : ""} ; nez rayonnants vers le poteau.`,
+          );
+          continue;
+        }
         notes.push(
-          `${turnName} : ${windersPerSide} marches balancées demandées de chaque côté, ${nb} avant et ${na} après possibles (nez fixes).`,
+          `${turnName} : aucun balancement admissible (collets positifs, lignes de nez sans croisement)${reason ? ` ; ${reason}` : ""} ; nez laissés perpendiculaires à la ligne de foulée.`,
+        );
+        continue;
+      }
+      for (const nl of chosen.nosings) nosings[nl.index] = nl;
+      for (const k of chosen.corrected) {
+        notes.push(
+          `Nez ${k} : la ligne recoupe le jour avant le collet calculé, collet ramené au jour.`,
         );
       }
-      pairs.push([nb, na]);
-    } else if (method === "M0") {
-      // Rayonnant : zone réduite aux nez situés sur l'arc de Γ.
-      const inArc = (k: number): boolean =>
-        positions.s[k]! > group.sStart + GEOM_EPS && positions.s[k]! < group.sEnd - GEOM_EPS;
-      let nb = 0;
-      while (nb < maxBefore && inArc(bounds.kL - nb)) nb++;
-      let na = 0;
-      while (na < maxAfter && inArc(bounds.kR + na)) na++;
-      pairs.push([nb, na]);
-    } else {
-      // Choix automatique : étendue K7 (`maxBalancedExtent` girons depuis l'angle).
-      const lim = extentLimits(group, positions.s, bounds, going, extent);
-      for (let nb = 0; nb <= maxBefore; nb++) {
-        for (let na = 0; na <= maxAfter; na++) {
-          (nb <= lim.before && na <= lim.after ? pairs : beyondExtent).push([nb, na]);
+      const { from, to } = chosen.zone;
+      balancedZones.push({
+        turn: group.first,
+        from,
+        to,
+        method: methodLabel(method, variant),
+        ends: chosen.zone.ends,
+        ...(chosen.zone.continuation && method === "M3"
+          ? { continuation: chosen.zone.continuation }
+          : {}),
+      });
+      zoneRanges.push({ from, to, corners: group.corners });
+      notes.push(
+        `${turnName} : ${bounds.kL - from} + ${to - bounds.kR} nez balancés (nez fixes ${from} et ${to}, extrémités ${chosen.zone.ends.map((e) => (e === "tangent" ? "tangente" : "libre")).join("/")}), ${variantLabel(method, variant)}, collet minimal ${fmt(chosen.minChord)} mm en corde (${fmt(chosen.minArc)} mm en arc).`,
+      );
+      if (beyond) {
+        notes.push(
+          `${turnName} : aucune zone admissible dans l'étendue de balancement de ${fmt(extent)} ${extent < 2 ? "giron" : "girons"} depuis l'angle ; étendue dépassée (nez fixes ${from} et ${to}).`,
+        );
+      }
+      if (auto && chosen.minChord < targetCollet - 1e-6) {
+        notes.push(
+          `${turnName} : collet cible de ${fmt(targetCollet)} mm non atteint (${beyondExtent.length > 0 && !beyond ? `étendue de balancement limitée à ${fmt(extent)} ${extent < 2 ? "giron" : "girons"} depuis l'angle` : "aucune zone possible ne l'atteint"}) ; zone de collet maximal retenue.`,
+        );
+      }
+      if (method === "M1") {
+        const [endA, endB] = chosen.zone.ends;
+        const parts: string[] = [];
+        if (endA === "tangent") {
+          parts.push(
+            `${fmt(going - colletBetween(nosings[from]!, nosings[from + 1]!).arc)} mm en bas`,
+          );
+        }
+        if (endB === "tangent") {
+          parts.push(
+            `${fmt(going - colletBetween(nosings[to - 1]!, nosings[to]!).arc)} mm en haut`,
+          );
+        }
+        if (parts.length > 0) {
+          notes.push(`${turnName} : jarret d'entrée de zone M1 (g − c) de ${parts.join(" et ")}.`);
         }
       }
     }
-    const cands = enumerateZones(
-      pairs,
-      (a, b) => evaluateZone(ctx, group, a, b, bounds),
-      bounds,
-      auto && !options.exhaustiveZoneSearch ? targetCollet : null,
-    );
-    let beyond = false;
-    if (
-      auto &&
-      beyondExtent.length > 0 &&
-      pickZone(cands, targetCollet, colletTieTolerance ?? COLLET_TIE_TOLERANCE) === null
-    ) {
-      // Aucune zone admissible dans l'étendue K7 (étendue trop courte, jour étroit) : plutôt
-      // que des nez perpendiculaires (collet nul, lignes croisées au tournant), repli sur les
-      // zones plus étendues, signalé.
-      const more = enumerateZones(
-        beyondExtent,
-        (a, b) => evaluateZone(ctx, group, a, b, bounds),
-        bounds,
-        options.exhaustiveZoneSearch ? null : targetCollet,
+    return { nosings, fixed, notes, balancedZones, zoneRanges };
+  };
+  /**
+   * Ruptures K3 (par angle, en corde) sur chaque **tournant entier** : zones retenues réunies
+   * avec les nez de la partie tournante des tournants balancés (marche du poteau entre deux
+   * zones par angle, côté de poteau sans zone admissible), plages contiguës fusionnées — comme
+   * le contrôle de conception `G_COLLET_MONOTONE`, qui suit les marches balancées consécutives.
+   * Mesurer zone par zone laisserait hors contrôle la marche du poteau (collet effondré entre
+   * deux zones régulières).
+   */
+  const k3BreakCount = (r: ReturnType<typeof runZones>): number => {
+    const ranges: { from: number; to: number; corners: Mm[] }[] = r.zoneRanges.map((zr) => ({
+      from: zr.from,
+      to: zr.to,
+      corners: [...zr.corners],
+    }));
+    for (const t of layout.turns) {
+      if (t.mode !== "winders") continue;
+      let from = 0;
+      let to = n - 1;
+      positions.s.forEach((sk, k) => {
+        if (sk <= t.sStart + GEOM_EPS) from = k;
+      });
+      for (let k = n - 1; k >= 0; k--) if (positions.s[k]! >= t.sEnd - GEOM_EPS) to = k;
+      if (to > from) ranges.push({ from, to, corners: [(t.sStart + t.sEnd) / 2] });
+    }
+    ranges.sort((x, y) => x.from - y.from);
+    const merged: { from: number; to: number; corners: Mm[] }[] = [];
+    for (const rg of ranges) {
+      const prev = merged[merged.length - 1];
+      if (prev && rg.from <= prev.to) {
+        prev.to = Math.max(prev.to, rg.to);
+        for (const c of rg.corners) if (!prev.corners.includes(c)) prev.corners.push(c);
+      } else merged.push({ ...rg, corners: [...rg.corners] });
+    }
+    return merged.reduce((acc, zr) => {
+      const chords: Mm[] = [];
+      for (let k = zr.from; k < zr.to; k++)
+        chords.push(colletBetween(r.nosings[k]!, r.nosings[k + 1]!).chord);
+      const corners = cornerPositions(
+        positions.s.slice(zr.from, zr.to + 1),
+        zr.corners.sort((x, y) => x - y),
       );
-      if (pickZone(more, targetCollet, colletTieTolerance ?? COLLET_TIE_TOLERANCE) !== null) {
-        cands.splice(0, cands.length, ...more);
-        beyond = true;
-      }
-    }
-    if (cands.length === 0) {
-      notes.push(`${turnName} : aucune marche à balancer (nez fixes encadrant le tournant).`);
-      continue;
-    }
-    const chosen = auto
-      ? pickZone(cands, targetCollet, colletTieTolerance ?? COLLET_TIE_TOLERANCE)
-      : cands[0]!;
-    if (chosen === null || !chosen.ok) {
-      const reason = chosen?.reason ?? cands.find((c) => !c.ok)?.reason;
-      notes.push(
-        `${turnName} : aucun balancement admissible (collets positifs, lignes de nez sans croisement)${reason ? ` ; ${reason}` : ""} ; nez laissés perpendiculaires à la ligne de foulée.`,
+      return acc + cornerMonotonyBreaks(chords, corners).length;
+    }, 0);
+  };
+  // Poteaux d'angle : le balancement classique (jour de développement virtuel) peut laisser des
+  // collets irréguliers autour du poteau (K3) ; les zones par angle (nez du poteau fixe, une
+  // zone de chaque côté) sont alors retenues si elles en laissent **moins** sur les tournants
+  // entiers (marche du poteau comprise).
+  let zoneRun = runZones(false);
+  const classicBreaks = posts.size > 0 ? k3BreakCount(zoneRun) : 0;
+  if (classicBreaks > 0) {
+    const perAngle = runZones(true);
+    const perAngleBreaks = k3BreakCount(perAngle);
+    if (perAngleBreaks < classicBreaks) {
+      zoneRun = perAngle;
+      zoneRun.notes.push(
+        `Poteau(x) d'angle : collets irréguliers (K3) avec le balancement d'un seul tenant (${classicBreaks} rupture(s)) ; zones par angle retenues (nez du poteau fixe, une zone de chaque côté du poteau, B §3.1${perAngleBreaks > 0 ? `, ${perAngleBreaks} rupture(s) restante(s)` : ""}).`,
       );
-      continue;
-    }
-    for (const nl of chosen.nosings) nosings[nl.index] = nl;
-    for (const k of chosen.corrected) {
-      notes.push(
-        `Nez ${k} : la ligne recoupe le jour avant le collet calculé, collet ramené au jour.`,
-      );
-    }
-    const { from, to } = chosen.zone;
-    balancedZones.push({ turn: group.first, from, to, method: methodLabel(method, variant) });
-    zoneRanges.push({ from, to, corners: group.corners });
-    notes.push(
-      `${turnName} : ${bounds.kL - from} + ${to - bounds.kR} nez balancés (nez fixes ${from} et ${to}, extrémités ${chosen.zone.ends.map((e) => (e === "tangent" ? "tangente" : "libre")).join("/")}), ${variantLabel(method, variant)}, collet minimal ${fmt(chosen.minChord)} mm en corde (${fmt(chosen.minArc)} mm en arc).`,
-    );
-    if (beyond) {
-      notes.push(
-        `${turnName} : aucune zone admissible dans l'étendue de balancement de ${fmt(extent)} ${extent < 2 ? "giron" : "girons"} depuis l'angle ; étendue dépassée (nez fixes ${from} et ${to}).`,
-      );
-    }
-    if (auto && chosen.minChord < targetCollet - 1e-6) {
-      notes.push(
-        `${turnName} : collet cible de ${fmt(targetCollet)} mm non atteint (${beyondExtent.length > 0 && !beyond ? `étendue de balancement limitée à ${fmt(extent)} ${extent < 2 ? "giron" : "girons"} depuis l'angle` : "aucune zone possible ne l'atteint"}) ; zone de collet maximal retenue.`,
-      );
-    }
-    if (method === "M1") {
-      const [endA, endB] = chosen.zone.ends;
-      const parts: string[] = [];
-      if (endA === "tangent") {
-        parts.push(
-          `${fmt(going - colletBetween(nosings[from]!, nosings[from + 1]!).arc)} mm en bas`,
-        );
-      }
-      if (endB === "tangent") {
-        parts.push(`${fmt(going - colletBetween(nosings[to - 1]!, nosings[to]!).arc)} mm en haut`);
-      }
-      if (parts.length > 0) {
-        notes.push(`${turnName} : jarret d'entrée de zone M1 (g − c) de ${parts.join(" et ")}.`);
-      }
     }
   }
+  nosings.splice(0, nosings.length, ...zoneRun.nosings);
+  notes.push(...zoneRun.notes);
+  const fixed = zoneRun.fixed;
+  const { balancedZones, zoneRanges } = zoneRun;
 
   // ------------------------------------------------------------ angles imposés
   for (const [k, angle] of angleOverrides) {

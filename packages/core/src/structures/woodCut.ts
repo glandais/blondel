@@ -36,7 +36,7 @@ import {
   resolveWorkshopProfile,
   type WoodMaterialId,
 } from "../workshop/profile.js";
-import { CheckCollector, FAB_RULES, pluginRuleDef } from "./checks.js";
+import { CheckCollector, FAB_RULES, flightsOnlyError, pluginRuleDef } from "./checks.js";
 import { CREMAILLERE_RULE_ID, fcbaTable, requiredResidual, type StrengthClass } from "./fcba.js";
 import { area, clipHalfPlane, minAreaRect, pointSegmentDistance, removeCollinear } from "./geom.js";
 import { stairGeometry } from "./legs.js";
@@ -116,6 +116,14 @@ export function buildWoodCut(ctx: StructureContext, params: WoodCutParams): CutR
   const table = fcbaTable();
   const cls = params.strengthClass === "auto" ? AUTO_CLASS[params.material] : params.strengthClass;
 
+  const helical = flightsOnlyError("wood-cut", "crémaillères", layout);
+  if (helical) {
+    return {
+      output: { parts: [], checks: [], notes, errors: [helical] },
+      carriages: [],
+      residual: Number.NaN,
+    };
+  }
   if (project.stair.layout.turns.length > 0) {
     return {
       output: {

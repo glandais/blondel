@@ -10,7 +10,15 @@ describe("qualité du rendu 3D", () => {
       "ANGLE (Microsoft, Microsoft Basic Render Driver Direct3D11 vs_5_0 ps_5_0)",
     ]) {
       expect(isSoftwareRenderer(name), name).toBe(true);
-      expect(qualityFor(name)).toEqual({ software: true, shadows: false, dpr: 1 });
+      expect(qualityFor(name)).toMatchObject({
+        software: true,
+        shadows: false,
+        dpr: 1,
+        environment: false,
+        physical: false,
+        clipping: false,
+      });
+      expect(qualityFor(name).textureSize).toBeLessThan(qualityFor("Apple M2").textureSize);
     }
   });
 
@@ -24,7 +32,7 @@ describe("qualité du rendu 3D", () => {
       undefined,
     ]) {
       expect(isSoftwareRenderer(name), String(name)).toBe(false);
-      expect(qualityFor(name).shadows).toBe(true);
+      expect(qualityFor(name)).toMatchObject({ shadows: true, environment: true, physical: true });
     }
   });
 });

@@ -24,10 +24,13 @@ export const J5A_HELICAL = "j5a-helicoidal.blondel.json";
  * estimée par `RecordingCanvas`), fragilité signalée au ledger (§3, exports).
  */
 export function helicalExample(): Project {
+  // Marches en tôle sans contremarche (usage des hélicoïdaux métalliques ; le préréglage pose des
+  // contremarches pleines depuis le 2026-09-30) : `VIDE_ENTRE_MARCHES` reste en conseil.
   const p = createProject("helical", {
     name: "Jalon 5a — hélicoïdal à fût central",
     floorToFloor: 2750,
     outerRadius: 950,
+    patch: { stair: { treads: { risers: "none" } } },
   });
   return withHelicalCore(p, {
     treads: { material: "steel" },

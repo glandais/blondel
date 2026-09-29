@@ -1,5 +1,6 @@
 /**
- * Fichiers proposés par le menu « Exporter » : chaque export est une fonction pure
+ * Fichiers proposés par le menu « Exporter » (plans, liste de débit, dossiers PDF complet ou sans
+ * gabarits, fiche de pose, DXF des pièces, modèle 3D glTF) : chaque export est une fonction pure
  * `(projet, modèle) → fichier(s)` qui appelle `@blondel/exports` (aucune cotation ni règle ici).
  * Le téléchargement lui-même (Blob + lien) est dans `download.ts`.
  *
@@ -10,7 +11,9 @@ import type { Model, Part, Project } from "@blondel/core";
 import {
   DEFAULT_PART_DXF_VERSION,
   DEFAULT_PLAN_DXF_VERSION,
+  GLB_MIME,
   createZip,
+  exportGlb,
   exportCutListCsv,
   exportPartDxf,
   exportPartsDxf,
@@ -21,7 +24,12 @@ import {
   safeFileStem,
 } from "@blondel/exports";
 import { PROJECT_FILE_SUFFIX, projectFileName } from "../store/persistence.js";
-import { loadExportPdf, type ExportPdfFn, type FileContent } from "./optionalApi.js";
+import {
+  loadExportPdf,
+  type ExportPdfFn,
+  type FileContent,
+  type PdfJobOptions,
+} from "./optionalApi.js";
 
 /** Dépendances injectables : chargement du module PDF, mise en page déléguée (worker). */
 export interface ExportDeps {
@@ -31,7 +39,16 @@ export interface ExportDeps {
    * l'interface, elle remplace `loadPdf` (plusieurs centaines de millisecondes de calcul
    * synchrone sinon, qui figeaient la page).
    */
-  readonly renderPdf?: (project: Project, model: Model) => Promise<FileContent>;
+  readonly renderPdf?: (
+    project: Project,
+    model: Model,
+    options?: PdfJobOptions,
+  ) => Promise<FileContent>;
+  /**
+   * Modèle glTF hors du fil principal (worker de calcul) ; absent : `exportGlb` sur le fil
+   * principal.
+   */
+  readonly renderGlb?: (project: Project, model: Model) => Promise<FileContent>;
 }
 
 export const DEFAULT_EXPORT_DEPS: ExportDeps = { loadPdf: loadExportPdf };
@@ -50,6 +67,10 @@ export type ExportId =
   | "elevation-svg"
   | "cutlist-csv"
   | "pdf"
+  | "pdf-a3"
+  | "pdf-light"
+  | "installation-pdf"
+  | "glb"
   | "parts-dxf";
 
 export interface ExportEntry {
@@ -66,9 +87,44 @@ export const EXPORT_ENTRIES: readonly ExportEntry[] = [
   { id: "plan-dxf-r12", label: "Plan coté (DXF R12)", needsModel: true },
   { id: "elevation-svg", label: "Élévation (SVG)", needsModel: true },
   { id: "cutlist-csv", label: "Liste de débit (CSV)", needsModel: true },
-  { id: "pdf", label: "Dossier PDF", needsModel: true },
+  { id: "pdf", label: "Dossier PDF complet (gabarits 1:1 en A4)", needsModel: true },
+  { id: "pdf-a3", label: "Dossier PDF complet (gabarits 1:1 en A3)", needsModel: true },
+  { id: "pdf-light", label: "Dossier PDF sans gabarits", needsModel: true },
+  { id: "installation-pdf", label: "Fiche de pose (PDF)", needsModel: true },
   { id: "parts-dxf", label: "DXF des pièces (R12)", needsModel: true },
+  { id: "glb", label: "Modèle 3D glTF (.glb)", needsModel: true },
 ];
+
+/**
+ * Pages et format de chaque dossier PDF (`@blondel/exports/pdf`) : complet = toutes les pages,
+ * gabarits 1:1 tuilés en A4 ou A3 ; sans gabarits ; fiche de pose seule.
+ */
+export const PDF_JOBS: Readonly<
+  Record<
+    "pdf" | "pdf-a3" | "pdf-light" | "installation-pdf",
+    { suffix: string; options: PdfJobOptions }
+  >
+> = {
+  pdf: { suffix: "", options: {} },
+  "pdf-a3": { suffix: "-a3", options: { format: "a3" } },
+  "pdf-light": { suffix: "-sans-gabarits", options: { pages: { templates: false } } },
+  "installation-pdf": {
+    suffix: "-fiche-de-pose",
+    options: {
+      pages: {
+        toc: false,
+        plan: false,
+        elevation: false,
+        installation: true,
+        bom: false,
+        cutsheet: false,
+        compliance: false,
+        flats: false,
+        templates: false,
+      },
+    },
+  },
+};
 
 export const MIME = {
   json: "application/json",
@@ -77,6 +133,7 @@ export const MIME = {
   csv: "text/csv;charset=utf-8",
   pdf: "application/pdf",
   zip: "application/zip",
+  glb: GLB_MIME,
 } as const;
 
 /** Radical de nom de fichier dérivé du nom du projet (sans accents ni espaces). */
@@ -190,15 +247,24 @@ export async function buildExport(
       ];
     case "cutlist-csv":
       return [{ filename: `${stem}-debit.csv`, mime: MIME.csv, content: exportCutListCsv(m) }];
-    case "pdf": {
+    case "pdf":
+    case "pdf-a3":
+    case "pdf-light":
+    case "installation-pdf": {
+      const { suffix, options } = PDF_JOBS[id];
+      const filename = `${stem}${suffix}.pdf`;
       if (deps.renderPdf) {
-        return [
-          { filename: `${stem}.pdf`, mime: MIME.pdf, content: await deps.renderPdf(project, m) },
-        ];
+        return [{ filename, mime: MIME.pdf, content: await deps.renderPdf(project, m, options) }];
       }
       const exportPdf = await deps.loadPdf();
-      const content = await exportPdf(m, { project, title: project.name });
-      return [{ filename: `${stem}.pdf`, mime: MIME.pdf, content }];
+      const content = await exportPdf(m, { project, title: project.name, ...options });
+      return [{ filename, mime: MIME.pdf, content }];
+    }
+    case "glb": {
+      const content = deps.renderGlb
+        ? await deps.renderGlb(project, m)
+        : exportGlb(m, { project, title: project.name });
+      return [{ filename: `${stem}.glb`, mime: MIME.glb, content }];
     }
     case "parts-dxf":
       return partsDxfFiles(m, stem);

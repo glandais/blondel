@@ -14,6 +14,7 @@ import {
 } from "@blondel/core";
 import { createStore, type StoreApi } from "zustand/vanilla";
 import { presetProject } from "../lib/layoutKind.js";
+import type { AppearanceOverrides } from "../lib/appearance.js";
 import type { DisplayUnit } from "../lib/units.js";
 import {
   DEFAULT_HISTORY_OPTIONS,
@@ -39,6 +40,8 @@ import {
 import { setIn, type Path } from "./setIn.js";
 
 export type ViewTab = "plan" | "3d" | "elevation" | "flat" | "bom" | "compare";
+/** Mode de l'onglet Plan 2D : plan coté, site et saisie (jalon 7), mode expert des nez. */
+export type PlanMode = "drawing" | "site" | "expert";
 export type ThemeChoice = "system" | "light" | "dark";
 
 /** Élément surligné (clic sur un résultat du contrôle de conception, ou sur une pièce). */
@@ -57,6 +60,14 @@ export interface AppState {
   readonly project: Project;
   readonly selection: Selection | null;
   readonly view: ViewTab;
+  readonly planMode: PlanMode;
+  /**
+   * Apparence 3D choisie par famille de pièces (aperçu de rendu : ne modifie ni le projet ni la
+   * nomenclature ; voir `lib/appearance.ts`).
+   */
+  readonly appearance: AppearanceOverrides;
+  /** Fenêtre de l'assistant d'initialisation ouverte. */
+  readonly assistantOpen: boolean;
   readonly displayUnit: DisplayUnit;
   readonly theme: ThemeChoice;
   /** Dernier message à afficher dans la barre d'outils (import refusé, sauvegarde…). */
@@ -73,7 +84,11 @@ export interface AppState {
    * projet invalide est refusé (l'état ne change pas). `groupKey` regroupe les modifications
    * continues d'un même champ en une seule entrée d'historique.
    */
-  update(recipe: (p: Project) => Project, groupKey?: string): UpdateResult;
+  update(
+    recipe: (p: Project) => Project,
+    groupKey?: string,
+    options?: { readonly sticky?: boolean },
+  ): UpdateResult;
   /** Modifie une valeur par chemin (`["site", "floorToFloor"]`), regroupée par chemin. */
   setField(path: Path, value: unknown): UpdateResult;
   /** Clôt le groupe de modifications en cours (perte de focus). */
@@ -89,9 +104,17 @@ export interface AppState {
   loadPreset(id: PresetId, options?: PresetOptions): UpdateResult;
   /** Remplace le projet par le contenu d'un fichier `.blondel.json` (annulable). */
   importText(text: string): ImportResult;
+  /**
+   * Remplace le projet par un projet complet (proposition de l'assistant) : une entrée
+   * d'historique (annulable), sélection effacée, message `notice` affiché.
+   */
+  replaceProject(project: Project, notice?: string): UpdateResult;
   exportFile(): { filename: string; text: string };
   select(selection: Selection | null): void;
   setView(view: ViewTab): void;
+  setPlanMode(mode: PlanMode): void;
+  setAppearance(appearance: AppearanceOverrides): void;
+  setAssistantOpen(open: boolean): void;
   setDisplayUnit(unit: DisplayUnit): void;
   setTheme(theme: ThemeChoice): void;
   clearNotice(): void;
@@ -155,7 +178,7 @@ export function createProjectStore(options: ProjectStoreOptions = {}): ProjectSt
   // Remplacé par l'écriture différée réelle quand un stockage est fourni.
   let flush = (): void => {};
   const store = createStore<AppState>()((set, get) => {
-    const apply = (next: Project, groupKey?: string): UpdateResult => {
+    const apply = (next: Project, groupKey?: string, sticky = false): UpdateResult => {
       const cur = get().history;
       if (Object.is(next, cur.present)) return { ok: true };
       const normalized = normalizeProject(next);
@@ -168,7 +191,7 @@ export function createProjectStore(options: ProjectStoreOptions = {}): ProjectSt
       ) {
         return { ok: true };
       }
-      const opts = groupKey === undefined ? { now: clock() } : { groupKey, now: clock() };
+      const opts = groupKey === undefined ? { now: clock() } : { groupKey, now: clock(), sticky };
       const history = commit(cur, normalized.project, opts, historyOptions);
       set({ history, project: history.present });
       return { ok: true };
@@ -181,19 +204,22 @@ export function createProjectStore(options: ProjectStoreOptions = {}): ProjectSt
       project: initial,
       selection: null,
       view: "plan",
+      planMode: "drawing",
+      appearance: {},
+      assistantOpen: false,
       displayUnit: "mm",
       theme: "system",
       notice: null,
       autosaveFailed: false,
 
-      update: (recipe, groupKey) => {
+      update: (recipe, groupKey, updateOptions) => {
         let next: Project;
         try {
           next = recipe(get().project);
         } catch (e) {
           return { ok: false, issues: [e instanceof Error ? e.message : String(e)] };
         }
-        return apply(next, groupKey);
+        return apply(next, groupKey, updateOptions?.sticky === true);
       },
       setField: (path, value) => {
         const p = get().project;
@@ -233,9 +259,22 @@ export function createProjectStore(options: ProjectStoreOptions = {}): ProjectSt
         }
         return r;
       },
+      replaceProject: (project, text) => {
+        // Entrée d'historique distincte : un groupe ouvert (saisie en cours) est d'abord clos.
+        const h = get().history;
+        if (h.group !== null) set({ history: endGroup(h) });
+        const r = apply(project);
+        if (r.ok) {
+          set({ selection: null, notice: text ? { kind: "info", text } : null });
+        }
+        return r;
+      },
       exportFile: () => exportProjectFile(get().project),
       select: (selection) => set({ selection }),
       setView: (view) => set({ view }),
+      setPlanMode: (planMode) => set({ planMode }),
+      setAppearance: (appearance) => set({ appearance }),
+      setAssistantOpen: (assistantOpen) => set({ assistantOpen }),
       setDisplayUnit: (displayUnit) => set({ displayUnit }),
       setTheme: (theme) => set({ theme }),
       clearNotice: () => set({ notice: null }),

@@ -61,7 +61,15 @@ export interface PdfCanvas {
   text(value: string, x: number, y: number, style: TextStyle): void;
   /** Largeur du texte, mm. */
   textWidth(value: string, size: number, bold?: boolean): number;
+  /**
+   * Facultatif : exécute `draw` avec un détourage rectangulaire (mm) ; sans cette méthode, les
+   * appelants découpent eux-mêmes leurs tracés (les textes débordants restent visibles).
+   */
+  withClip?(x: number, y: number, w: number, h: number, draw: () => void): void;
 }
+
+/** Mesure de texte (mm) : `(texte, corps, gras) → largeur`. */
+export type TextMeasure = (value: string, size: number, bold: boolean) => number;
 
 export const MM_PER_PT = 25.4 / 72;
 
@@ -112,6 +120,14 @@ export function toWinAnsi(text: string): string {
 
 export type RecordedOp =
   | { readonly type: "page" }
+  | {
+      readonly type: "clip";
+      readonly x: number;
+      readonly y: number;
+      readonly w: number;
+      readonly h: number;
+    }
+  | { readonly type: "unclip" }
   | { readonly type: "path"; readonly ops: readonly PathOp[]; readonly style: PaintStyle }
   | {
       readonly type: "text";
@@ -123,7 +139,8 @@ export type RecordedOp =
 
 /**
  * Surface qui enregistre les opérations (tests, inspection) ; largeur de texte approchée
- * (0,5 em par caractère, 0,55 em en gras).
+ * (0,5 em par caractère, 0,55 em en gras) sauf mesure fournie (`measure`, par exemple
+ * `helveticaMeasure()` pour la métrique exacte de jsPDF).
  */
 export class RecordingCanvas implements PdfCanvas {
   readonly ops: RecordedOp[] = [];
@@ -131,7 +148,16 @@ export class RecordingCanvas implements PdfCanvas {
   constructor(
     readonly pageWidth = 297,
     readonly pageHeight = 210,
+    private readonly measure?: TextMeasure,
   ) {}
+  withClip(x: number, y: number, w: number, h: number, draw: () => void): void {
+    this.ops.push({ type: "clip", x, y, w, h });
+    try {
+      draw();
+    } finally {
+      this.ops.push({ type: "unclip" });
+    }
+  }
   addPage(): void {
     this.pageCount += 1;
     this.ops.push({ type: "page" });
@@ -143,6 +169,7 @@ export class RecordingCanvas implements PdfCanvas {
     this.ops.push({ type: "text", value, x, y, style });
   }
   textWidth(value: string, size: number, bold = false): number {
+    if (this.measure) return this.measure(value, size, bold);
     return value.length * size * (bold ? 0.55 : 0.5);
   }
   /** Textes de chaque page. */
@@ -264,8 +291,36 @@ export class JsPdfCanvas implements PdfCanvas {
     return d.getStringUnitWidth(toWinAnsi(value)) * size;
   }
 
+  withClip(x: number, y: number, w: number, h: number, draw: () => void): void {
+    const d = this.doc;
+    d.saveGraphicsState();
+    d.rect(x, y, w, h, null);
+    d.clip();
+    d.discardPath();
+    try {
+      draw();
+    } finally {
+      d.restoreGraphicsState();
+    }
+  }
+
   /** Octets du document PDF. */
   output(): Uint8Array {
     return new Uint8Array(this.doc.output("arraybuffer"));
   }
+}
+
+let sharedMeasureDoc: jsPDF | undefined;
+
+/**
+ * Mesure de texte exacte des polices standard (Helvetica, WinAnsi) de jsPDF, pour une
+ * `RecordingCanvas` dont la pagination doit être celle du PDF produit.
+ */
+export function helveticaMeasure(): TextMeasure {
+  sharedMeasureDoc ??= new jsPDF({ unit: "mm" });
+  const d = sharedMeasureDoc;
+  return (value, size, bold) => {
+    d.setFont("helvetica", bold ? "bold" : "normal");
+    return d.getStringUnitWidth(toWinAnsi(value)) * size;
+  };
 }

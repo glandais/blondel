@@ -15,7 +15,8 @@
  *   du côté du jour (cas du limon de jour : fibre intérieure plus courte), « + » sinon (B §5.1 :
  *   σ_± = ∫ (1 ∓ κ·e/2) dσ, ici en forme fermée par morceaux).
  */
-import { buildProfile, evalProfile, type DevelopmentProfile } from "../balancing/profile.js";
+import { zoneProfile } from "../balancing/m3.js";
+import { evalProfile, evalSpline } from "../balancing/profile.js";
 import type { EndCondition, M3Variant } from "../balancing/profile.js";
 import { cumulativeLengths, curvePointAt, curveTangentAt } from "../geom2d/curve.js";
 import { GEOM_EPS } from "../geom2d/tolerance.js";
@@ -257,10 +258,13 @@ function monotoneHermite(
 /**
  * Courbe des nez F(σ) sur le développé de C_i (B §5.1) : dans chaque zone balancée en M3, la
  * courbe cubique ou quintique de la stratégie, **reconstituée** à partir de la zone retenue par
- * le découpage (nez fixes a et b, extrémités `tangent` / `free` selon les règles de
- * `stepping/zones.ts`, pentes des marches voisines sur le développé) et vérifiée sur les nez
- * intermédiaires ; hors zone, droite par morceaux entre les nez (parties droites : pente h/g),
- * prolongée linéairement avant le premier et après le dernier nez. Zones M0 / M1, ou courbe
+ * le découpage (nez fixes a et b, extrémités et prolongement de `Stepping.balancedZones`, sinon
+ * règles de `stepping/zones.ts`, pentes des marches voisines sur le développé ; même fonction
+ * `zoneProfile` que la stratégie) et vérifiée sur les nez intermédiaires ; au-delà d'une borne
+ * libre située dans la partie tournante, la spline prolongée à travers les nez fixes jusqu'à la
+ * partie droite (F dérivable à la borne) ; ailleurs, droite par morceaux entre les nez (parties
+ * droites : pente h/g), prolongée linéairement avant le premier et après le dernier nez. Zones
+ * M0 / M1, ou courbe
  * non reconstituée (écart > 0,05 mm) : interpolation cubique monotone (C1) par les nez, signalée.
  */
 export function nosingProfile(layout: Layout, stepping: Stepping): NosingProfile {
@@ -281,6 +285,8 @@ export function nosingProfile(layout: Layout, stepping: Stepping): NosingProfile
     return ds > 0 ? (nj.z - ni.z) / ds : nominal;
   };
   const zones: (ProfileZone & { readonly f: (s: Mm) => Mm })[] = [];
+  /** Prolongements de F hors des zones (spline M3 à travers les nez fixes du tournant). */
+  const extensions: { readonly sigmaA: Mm; readonly sigmaB: Mm; readonly f: (s: Mm) => Mm }[] = [];
   for (const bz of stepping.balancedZones) {
     const a = bz.from;
     const b = bz.to;
@@ -323,8 +329,9 @@ export function nosingProfile(layout: Layout, stepping: Stepping): NosingProfile
       continue;
     }
     const variant = m3[1] as M3Variant;
-    // Extrémités (stepping/zones.ts, `zoneEndConditions`) : libre au départ, à l'arrivée, aux
-    // bords d'un palier, ou dans la partie tournante du groupe de tournants de la zone.
+    // Extrémités retenues par le découpage (`Stepping.balancedZones[].ends`) ; à défaut, règles
+    // de `stepping/zones.ts` (`zoneEndConditions`) : libre au départ, à l'arrivée, aux bords
+    // d'un palier, ou dans la partie tournante du groupe de tournants de la zone.
     const winders = layout.turns.filter((t) => t.mode === "winders");
     const first = winders.find((t) => t.index === bz.turn);
     let last = first;
@@ -332,7 +339,7 @@ export function nosingProfile(layout: Layout, stepping: Stepping): NosingProfile
       if (first && t.index > first.index && t.sStart < nb.s && last && t.index === last.index + 1)
         last = t;
     }
-    const ends: [EndCondition, EndCondition] = [
+    const ends: readonly [EndCondition, EndCondition] = bz.ends ?? [
       a === 0 || landingEdge(a) || (first !== undefined && na.s > first.sStart + GEOM_EPS)
         ? "free"
         : "tangent",
@@ -340,13 +347,32 @@ export function nosingProfile(layout: Layout, stepping: Stepping): NosingProfile
         ? "free"
         : "tangent",
     ];
-    const profile: DevelopmentProfile = buildProfile({
-      variant,
-      ends,
-      meanSlope: (nb.z - na.z) / delta,
-      startSlope,
-      endSlope,
+    // Même construction que la stratégie M3 (`zoneProfile`), prolongement compris : F est la
+    // spline passant par les nez fixes qui suivent une borne libre dans la partie tournante.
+    const built = zoneProfile({
+      layout,
+      nosings,
+      zone: {
+        turn: bz.turn,
+        from: a,
+        to: b,
+        collarSide: layout.innerSide,
+        ends,
+        ...(bz.continuation ? { continuation: bz.continuation } : {}),
+      },
+      z: nosings.map((k) => k.z),
+      rise: stepping.rise,
+      going: stepping.going,
+      params: { variant },
     });
+    if ("reason" in built) {
+      zones.push(interpolated());
+      notes.push(
+        `Zone balancée [${a} ; ${b}] : courbe ${bz.method} non reconstituée (${built.reason}), rives par interpolation monotone des nez.`,
+      );
+      continue;
+    }
+    const { profile, spline } = built;
     const f = (s: Mm): Mm => na.z + delta * evalProfile(profile, (s - sigmaA) / delta);
     const residual = residualOf(f);
     if (residual > 0.05) {
@@ -357,6 +383,15 @@ export function nosingProfile(layout: Layout, stepping: Stepping): NosingProfile
       continue;
     }
     zones.push({ from: a, to: b, sigmaA, sigmaB, kind: "m3", variant, ends, residual, f });
+    // Prolongement (nez fixes de la partie tournante) : morceaux de la spline hors [a ; b].
+    if (spline) {
+      const knots = spline.spec.knots;
+      const g = (s: Mm): Mm => na.z + delta * evalSpline(spline, (s - sigmaA) / delta);
+      const lo = sigmaA + delta * knots[0]!.t;
+      const hi = sigmaA + delta * knots[knots.length - 1]!.t;
+      if (lo < sigmaA - GEOM_EPS) extensions.push({ sigmaA: lo, sigmaB: sigmaA, f: g });
+      if (hi > sigmaB + GEOM_EPS) extensions.push({ sigmaA: sigmaB, sigmaB: hi, f: g });
+    }
   }
   zones.sort((x, y) => x.sigmaA - y.sigmaA);
   const xs = knots.map((k) => k.x);
@@ -377,6 +412,7 @@ export function nosingProfile(layout: Layout, stepping: Stepping): NosingProfile
   };
   const at = (s: Mm): Mm => {
     for (const z of zones) if (s >= z.sigmaA && s <= z.sigmaB) return z.f(s);
+    for (const e of extensions) if (s >= e.sigmaA && s <= e.sigmaB) return e.f(s);
     return linear(s);
   };
   return {

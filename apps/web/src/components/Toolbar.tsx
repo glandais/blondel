@@ -1,12 +1,14 @@
 /**
- * Barre d'outils : nom du projet, préréglages, annuler/rétablir, import, menu « Exporter », unité
- * d'affichage et thème.
+ * Barre d'outils : nom du projet, assistant d'initialisation, préréglages, annuler/rétablir,
+ * menus « Importer » (projet, plan DXF, image de plan) et « Exporter », unité d'affichage et
+ * thème.
  */
 import { ALL_PRESET_IDS, PRESET_LABELS, type PresetId } from "@blondel/core";
-import { useId, useRef, useState } from "react";
+import { useId, useState } from "react";
 import { appStore, useApp } from "../store/appStore.js";
 import { ExportMenu } from "./ExportMenu.js";
 import { TextField } from "./fields.js";
+import { ImportMenu } from "./ImportMenu.js";
 import { ThemeToggle } from "./ThemeToggle.js";
 
 export function Toolbar() {
@@ -17,7 +19,6 @@ export function Toolbar() {
   const notice = useApp((s) => s.notice);
   const autosaveFailed = useApp((s) => s.autosaveFailed);
   const [preset, setPreset] = useState<PresetId>("straight");
-  const fileInput = useRef<HTMLInputElement>(null);
   const presetId = useId();
   const unitId = useId();
   const st = appStore.getState;
@@ -27,6 +28,16 @@ export function Toolbar() {
       <strong className="brand">Blondel</strong>
       <div className="toolbar__name">
         <TextField label="Projet" value={name} onCommit={(v) => st().setField(["name"], v)} />
+      </div>
+
+      <div className="toolbar__group">
+        <button
+          type="button"
+          onClick={() => st().setAssistantOpen(true)}
+          title="Proposer des escaliers à partir du site (H, trémie, murs)"
+        >
+          Assistant…
+        </button>
       </div>
 
       <div className="toolbar__group">
@@ -67,22 +78,7 @@ export function Toolbar() {
       </div>
 
       <div className="toolbar__group">
-        <button type="button" onClick={() => fileInput.current?.click()}>
-          Importer…
-        </button>
-        <input
-          ref={fileInput}
-          type="file"
-          accept=".json,.blondel.json,application/json"
-          hidden
-          aria-label="Fichier de projet à importer"
-          onChange={async (e) => {
-            const file = e.target.files?.[0];
-            e.target.value = "";
-            if (!file) return;
-            st().importText(await file.text());
-          }}
-        />
+        <ImportMenu />
         <ExportMenu />
       </div>
 

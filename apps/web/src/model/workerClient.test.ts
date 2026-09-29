@@ -43,7 +43,9 @@ function fakeWorker(options: { fail?: boolean; answerError?: boolean; unreadable
         const res: WorkerResponse =
           req.type === "build"
             ? { id: req.id, type: "build", result: runner.build(req) }
-            : { id: req.id, type: "compare", result: runner.compare(req) };
+            : req.type === "glb"
+              ? { id: req.id, type: "glb", result: runner.glb(req) }
+              : { id: req.id, type: "compare", result: runner.compare(req) };
         w.onmessage?.({ data: structuredClone(res) });
       }, 0);
     },
@@ -159,4 +161,17 @@ describe("client du worker de calcul", () => {
     expect(exec.usesWorker).toBe(true);
     expect(w.terminated).toBe(false);
   });
+});
+
+describe("export glTF par le worker de calcul", () => {
+  it("dans le worker, repli identique sans worker", async () => {
+    const w = fakeWorker();
+    const exec = createJobExec(() => w);
+    const project = parseProjectText(j4Text);
+    const bytes = await exec.glb(project);
+    expect(w.received.map((r) => r.type)).toEqual(["glb"]);
+    expect(new TextDecoder().decode(bytes.subarray(0, 4))).toBe("glTF");
+    const local = await createJobExec(() => null).glb(project);
+    expect(local.byteLength).toBe(bytes.byteLength);
+  }, 60_000);
 });

@@ -190,7 +190,7 @@ function GuardsEditor({ guards, going }: { guards: GuardsSpec; going: number }) 
         <p className="muted">
           {walls === 0
             ? "Aucun mur dans le site : en automatique, les deux côtés sont vides."
-            : `${walls} mur(s) dans le site (modifiables par import de fichier).`}
+            : `${walls} mur(s) dans le site (à tracer dans Plan 2D › « Site et saisie »).`}
         </p>
         <IntField
           label="Hauteur"

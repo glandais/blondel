@@ -40,7 +40,7 @@
  */
 import { GEOM_EPS } from "../geom2d/tolerance.js";
 import type { Layout, NosingLine } from "../model/derived.js";
-import type { BalancingStrategy, BalancingZone } from "../model/plugins.js";
+import type { BalancingStrategy, BalancingZone, ZoneContinuation } from "../model/plugins.js";
 import type { Mm } from "../model/primitives.js";
 import {
   applySolution,
@@ -64,35 +64,121 @@ export interface TurnGroup {
   readonly sEnd: Mm;
   /**
    * Milieux sur Γ de chaque tournant du groupe (un angle du jour par tournant) : K3 est évalué
-   * **par angle** (`cornerMonotonyBreaks`), une zone unique de 180° ayant deux vallées.
+   * **par angle** (`cornerMonotonyBreaks`), une zone unique de 180° ayant deux vallées (angles
+   * hors de la plage des nez de la zone ignorés, comme dans le contrôle de conception).
    */
   readonly corners: readonly Mm[];
+  /**
+   * Nez fixes « de poteau » qui bornent le groupe (zones par angle, voir `groupWinderTurns`).
+   * Absent : aucun.
+   */
+  readonly posts?: readonly number[];
+  /**
+   * Un tournant du groupe a un poteau d'angle : le limon est interrompu par le poteau (deux
+   * pièces assemblées dans le poteau), la courbe F n'est pas prolongée à travers le tournant
+   * (`zoneContinuation`). Absent : aucun poteau.
+   */
+  readonly newel?: true;
+}
+
+/**
+ * Nez fixe imposé par un poteau d'angle (B §3.1 : « marche imposée par un poteau » ; K6 :
+ * marche d'angle de préférence sur la bissectrice) : nez de la partie tournante de Γ le plus
+ * proche du milieu du tournant. Γ y est un arc centré sur le poteau, la ligne perpendiculaire
+ * vise donc le centre du poteau. `-1` : aucun nez strictement dans la partie tournante.
+ */
+export function postNosing(s: readonly Mm[], sStart: Mm, sEnd: Mm): number {
+  const mid = (sStart + sEnd) / 2;
+  let best = -1;
+  s.forEach((sk, k) => {
+    if (!(sk > sStart + GEOM_EPS && sk < sEnd - GEOM_EPS)) return;
+    if (best < 0 || Math.abs(sk - mid) < Math.abs(s[best]! - mid)) best = k;
+  });
+  return best;
+}
+
+/** Options de `groupWinderTurns`. */
+export interface GroupOptions {
+  /** Indices des tournants à **poteau d'angle** (`inner.kind = "newel"`). */
+  readonly posts?: ReadonlySet<number>;
+  /**
+   * Zones **par angle** au droit des poteaux : le nez du poteau (`postNosing`) devient fixe et
+   * libre (les deux limons sont des pièces distinctes assemblées dans le poteau, B §1 : aucun
+   * raccord de pente à travers le poteau) ; le tournant est balancé par **deux** zones, une de
+   * chaque côté du poteau, et deux poteaux voisins ne forment jamais une zone unique de 180°.
+   */
+  readonly perAngle?: boolean;
+  /** Nez libres (complétés par les nez de poteau). */
+  readonly free?: Set<number>;
 }
 
 /**
  * Regroupe les tournants balancés (zone unique si la partie droite intermédiaire mesure moins
- * d'un giron) et ajoute les marches virtuelles fixes aux nez fixes.
+ * d'un giron) et ajoute les marches virtuelles fixes aux nez fixes. Tournant à poteau
+ * (`options.posts`) : nez du poteau fixe, un groupe de chaque côté du poteau (le groupe d'après
+ * peut fusionner avec celui d'avant le poteau suivant, entre deux nez de poteau).
  */
 export function groupWinderTurns(
   layout: Layout,
   s: readonly Mm[],
   going: Mm,
   fixed: Set<number>,
+  options: GroupOptions = {},
 ): TurnGroup[] {
   const winders = layout.turns.filter((t) => t.mode === "winders");
-  const groups: { first: number; last: number; sStart: Mm; sEnd: Mm; corners: Mm[] }[] = [];
+  type Segment = {
+    turn: number;
+    sStart: Mm;
+    sEnd: Mm;
+    corner: Mm;
+    post?: number;
+    /** Premier segment du tournant (raccord possible avec le groupe précédent). */
+    head: boolean;
+  };
+  const segments: Segment[] = [];
   for (const t of winders) {
+    const mid = (t.sStart + t.sEnd) / 2;
+    const kc =
+      options.perAngle && options.posts?.has(t.index) ? postNosing(s, t.sStart, t.sEnd) : -1;
+    if (kc < 0) {
+      segments.push({ turn: t.index, sStart: t.sStart, sEnd: t.sEnd, corner: mid, head: true });
+      continue;
+    }
+    fixed.add(kc);
+    options.free?.add(kc);
+    const sk = s[kc]!;
+    segments.push({ turn: t.index, sStart: t.sStart, sEnd: sk, corner: mid, post: kc, head: true });
+    segments.push({ turn: t.index, sStart: sk, sEnd: t.sEnd, corner: mid, post: kc, head: false });
+  }
+  const groups: {
+    first: number;
+    last: number;
+    sStart: Mm;
+    sEnd: Mm;
+    corners: Mm[];
+    posts: number[];
+    /** Le groupe se termine au nez d'un poteau (segment « après le poteau »). */
+    endsAtPost: boolean;
+    newel: boolean;
+  }[] = [];
+  for (const seg of segments) {
     const prev = groups[groups.length - 1];
-    if (prev && prev.last === t.index - 1) {
+    if (seg.head && prev && prev.last === seg.turn - 1) {
       const gapStart = prev.sEnd;
-      const gapEnd = t.sStart;
+      const gapEnd = seg.sStart;
       const fixedInside = [...fixed].some(
         (k) => s[k]! > gapStart - GEOM_EPS && s[k]! < gapEnd + GEOM_EPS,
       );
-      if (gapEnd - gapStart < going - GEOM_EPS && !fixedInside) {
-        prev.last = t.index;
-        prev.sEnd = t.sEnd;
-        prev.corners.push((t.sStart + t.sEnd) / 2);
+      // Entre deux poteaux, le limon intermédiaire est une seule pièce droite, assemblée dans
+      // les deux poteaux : une zone entre les deux nez de poteau, sans marche virtuelle fixe.
+      const betweenPosts = seg.post !== undefined && prev.endsAtPost;
+      if ((gapEnd - gapStart < going - GEOM_EPS || betweenPosts) && !fixedInside) {
+        prev.last = seg.turn;
+        prev.sEnd = seg.sEnd;
+        prev.endsAtPost = false;
+        if (options.posts?.has(seg.turn)) prev.newel = true;
+        if (!prev.corners.includes(seg.corner)) prev.corners.push(seg.corner);
+        if (seg.post !== undefined) prev.posts.push(seg.post);
         continue;
       }
       if (!fixedInside) {
@@ -107,14 +193,22 @@ export function groupWinderTurns(
       }
     }
     groups.push({
-      first: t.index,
-      last: t.index,
-      sStart: t.sStart,
-      sEnd: t.sEnd,
-      corners: [(t.sStart + t.sEnd) / 2],
+      first: seg.turn,
+      last: seg.turn,
+      sStart: seg.sStart,
+      sEnd: seg.sEnd,
+      corners: [seg.corner],
+      posts: seg.post !== undefined ? [seg.post] : [],
+      endsAtPost: seg.post !== undefined && !seg.head,
+      newel: options.posts?.has(seg.turn) ?? false,
     });
   }
-  return groups.map((g) => ({ ...g, sMid: (g.sStart + g.sEnd) / 2 }));
+  return groups.map(({ posts, endsAtPost: _endsAtPost, newel, ...g }) => ({
+    ...g,
+    sMid: (g.sStart + g.sEnd) / 2,
+    ...(posts.length > 0 ? { posts } : {}),
+    ...(newel ? { newel: true as const } : {}),
+  }));
 }
 
 export interface ZoneBounds {
@@ -198,6 +292,55 @@ export function zoneEndConditions(
 }
 
 /**
+ * Prolongement de la courbe F au-delà d'une extrémité libre **située dans la partie tournante**
+ * (`BalancingZone.continuation`) : les nez non balancés qui suivent la borne sont des points
+ * fixes du limon développé, que F doit traverser sans cassure. Le prolongement s'arrête au
+ * premier nez de la partie droite (`tangent` : pente de la marche suivante), ou à un nez fixe
+ * (borne encadrante, poteau, départ, arrivée, palier : `free`). Une extrémité libre par nature
+ * (nez libre) n'est pas prolongée.
+ */
+export function zoneContinuation(
+  ctx: Pick<ZoneContext, "seeds" | "freeNosings">,
+  group: Pick<TurnGroup, "sStart" | "sEnd">,
+  a: number,
+  b: number,
+  ends: BalancingZone["ends"],
+  range: { readonly lo: number; readonly hi: number },
+): NonNullable<BalancingZone["continuation"]> | undefined {
+  const n = ctx.seeds.length;
+  const free = ctx.freeNosings;
+  let before: ZoneContinuation | null = null;
+  let after: ZoneContinuation | null = null;
+  if (ends[0] === "free" && !free.has(a) && a > 0) {
+    const list: number[] = [];
+    let end: "tangent" | "free" = "free";
+    for (let k = a - 1; k >= 0; k--) {
+      list.push(k);
+      if (ctx.seeds[k]!.s <= group.sStart + GEOM_EPS) {
+        end = k > 0 && !free.has(k) ? "tangent" : "free";
+        break;
+      }
+      if (free.has(k) || k <= range.lo) break;
+    }
+    before = { nosings: list, end };
+  }
+  if (ends[1] === "free" && !free.has(b) && b < n - 1) {
+    const list: number[] = [];
+    let end: "tangent" | "free" = "free";
+    for (let k = b + 1; k < n; k++) {
+      list.push(k);
+      if (ctx.seeds[k]!.s >= group.sEnd - GEOM_EPS) {
+        end = k < n - 1 && !free.has(k) ? "tangent" : "free";
+        break;
+      }
+      if (free.has(k) || k >= range.hi) break;
+    }
+    after = { nosings: list, end };
+  }
+  return before || after ? [before, after] : undefined;
+}
+
+/**
  * Calcule et mesure une zone candidate [a ; b]. Les collets, K5 et K3 sont mesurés sur toutes
  * les marches comprises entre les nez fixes encadrants [lo ; hi] (les marches du tournant
  * laissées hors de la zone comptent : un nez rayonnant au coin vif donne un collet nul).
@@ -209,13 +352,21 @@ export function evaluateZone(
   b: number,
   range: { readonly lo: number; readonly hi: number },
 ): ZoneEvaluation {
-  const zone: BalancingZone = {
+  const ends = zoneEndConditions(ctx, group, a, b);
+  const continuation = group.newel
+    ? undefined
+    : zoneContinuation(ctx, group, a, b, ends, {
+        lo: Math.min(range.lo, a),
+        hi: Math.max(range.hi, b),
+      });
+  let zone: BalancingZone = {
     turn: group.first,
     ...(group.last !== group.first ? { lastTurn: group.last } : {}),
     from: a,
     to: b,
     collarSide: ctx.collarSide,
-    ends: zoneEndConditions(ctx, group, a, b),
+    ends,
+    ...(continuation ? { continuation } : {}),
   };
   const offCenter = Math.abs((ctx.seeds[a]!.s + ctx.seeds[b]!.s) / 2 - group.sMid);
   const fail = (reason: string): ZoneEvaluation => ({
@@ -244,6 +395,11 @@ export function evaluateZone(
     });
   } catch (e) {
     return fail(e instanceof Error ? e.message : String(e));
+  }
+  // Prolongement abandonné par la stratégie (spline non croissante) : zone déclarée sans.
+  if (zone.continuation && (solution.kind !== "sigma" || solution.continued !== true)) {
+    const { continuation: _dropped, ...plain } = zone;
+    zone = plain;
   }
   const applied = applySolution(ctx.layout, ctx.seeds, zone, solution, ctx.devLayout.inner);
   if (!applied.ok) return fail(applied.reason);

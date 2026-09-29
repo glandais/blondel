@@ -53,13 +53,20 @@ import { fmt } from "../rules/check.js";
 import type { Finding } from "../rules/types.js";
 import { STEEL_GRADES, minProfileBendRadius, type SteelGrade } from "../workshop/metal.js";
 import { resolveWorkshopProfile, type WorkshopProfile } from "../workshop/profile.js";
-import { CheckCollector, FAB_RULES, pluginRuleDef, type PluginRuleSpec } from "./checks.js";
+import {
+  CheckCollector,
+  FAB_RULES,
+  flightsOnlyError,
+  pluginRuleDef,
+  type PluginRuleSpec,
+} from "./checks.js";
 import { clipHalfPlane, dedupe } from "./geom.js";
 import { readPlanExtrusion } from "./housing.js";
 import { newelFaces, stairGeometry, type NewelGeometry } from "./legs.js";
 import {
   STEEL_RULES,
   deduceExecutionClass,
+  QUANTITY_WELD_MM,
   holePolygon,
   steelMaterial,
   steelQuantities,
@@ -286,6 +293,8 @@ export function buildSteelProfile(
     cutting: {},
     executionClass: "EXC1",
   });
+  const helical = flightsOnlyError("steel-profile", "limons en profilés", ctx.layout);
+  if (helical) return empty([helical]);
   if (nosings.length < 2) return empty(["Limons en profilés : découpage vide, aucune structure."]);
 
   const geo = stairGeometry(project, ctx.layout);
@@ -936,8 +945,17 @@ export function buildSteelProfile(
     );
   }
 
-  // 11. Classe d'exécution et contrôles.
-  const exc = deduceExecutionClass({ grade, buttWeld: buttWeldTotal });
+  // 11. Classe d'exécution (S355 « soudé » seulement si une pièce porte un cordon, C §2.1) et
+  // contrôles.
+  const weldTotal = [...stringers.map((x) => x.part), ...posts, ...supportMarked].reduce(
+    (acc, p) => acc + (p.quantities[QUANTITY_WELD_MM] ?? 0),
+    0,
+  );
+  const exc = deduceExecutionClass({
+    grade,
+    buttWeld: buttWeldTotal,
+    welded: weldTotal + buttWeldTotal > 1e-9,
+  });
   const rule = (r: PluginRuleSpec) => pluginRuleDef(r);
   checks.add(rule(STEEL_RULES.executionClass), [
     {

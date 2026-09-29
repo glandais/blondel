@@ -6,8 +6,13 @@
  * la première image avec ombres portées (carte 2048², filtrage PCF) bloquait la page près d'une
  * seconde, et chaque mouvement de caméra autant ; sans ombres, 60 à 130 ms.
  *
- * Choix de présentation (aucune règle métier) : en rendu logiciel, pas d'ombres portées et
- * densité de pixels 1.
+ * Choix de présentation (aucune règle métier) : en rendu logiciel, pas d'ombres portées,
+ * densité de pixels 1, ni environnement d'éclairage (PMREM : une dizaine de passes de flou),
+ * ni matériaux PBR (transmission du verre = seconde passe de la scène, vernis, anisotropie,
+ * et même l'ombrage PBR standard : matériaux diffus `MeshLambertMaterial`), textures procédurales en 256² au lieu de 512², couleur seule (sans carte de
+ * rugosité) et filtrage bilinéaire (ni mipmaps, ni filtrage anisotrope), plan de coupe par
+ * pièces : chaque échantillonnage de texture coûte sur le
+ * processeur à chaque pixel.
  */
 
 export interface RenderQuality {
@@ -16,6 +21,25 @@ export interface RenderQuality {
   readonly shadows: boolean;
   /** Densité de pixels du canevas (`dpr` de react-three-fiber). */
   readonly dpr: number | [number, number];
+  /** Côté de la carte d'ombre (texels). */
+  readonly shadowMapSize: number;
+  /** Environnement d'éclairage procédural (`RoomEnvironment` préfiltré). */
+  readonly environment: boolean;
+  /**
+   * Matériaux PBR (`MeshPhysicalMaterial` : transmission, vernis, anisotropie, carte de
+   * rugosité) ; sinon matériaux diffus simplifiés (`MeshLambertMaterial`, voir `three/pbr.ts`).
+   */
+  readonly physical: boolean;
+  /** Côté des textures procédurales (texels, puissance de 2). */
+  readonly textureSize: number;
+  /** Textures filtrées avec mipmaps (trilinéaire) ; sinon bilinéaire. */
+  readonly mipmaps: boolean;
+  /**
+   * Plan de coupe exact (découpe par fragment, plan toujours attaché aux matériaux) ; sinon
+   * coupe par pièces (pièces du côté retiré masquées) — la découpe par fragment interdit le test
+   * de profondeur anticipé, coûteux en rendu logiciel.
+   */
+  readonly clipping: boolean;
 }
 
 const SOFTWARE = /swiftshader|llvmpipe|softpipe|software|basic render/i;
@@ -27,8 +51,28 @@ export function isSoftwareRenderer(name: string | null | undefined): boolean {
 
 export function qualityFor(rendererName: string | null | undefined): RenderQuality {
   return isSoftwareRenderer(rendererName)
-    ? { software: true, shadows: false, dpr: 1 }
-    : { software: false, shadows: true, dpr: [1, 2] };
+    ? {
+        software: true,
+        shadows: false,
+        dpr: 1,
+        shadowMapSize: 512,
+        environment: false,
+        physical: false,
+        textureSize: 256,
+        mipmaps: false,
+        clipping: false,
+      }
+    : {
+        software: false,
+        shadows: true,
+        dpr: [1, 2],
+        shadowMapSize: 2048,
+        environment: true,
+        physical: true,
+        textureSize: 512,
+        mipmaps: true,
+        clipping: true,
+      };
 }
 
 let cached: RenderQuality | undefined;

@@ -47,7 +47,7 @@ import {
   tangentAt,
   turnAngleDeg,
 } from "./polyline.js";
-import { analyzeSide, refAt, wallCover, type SideEdge } from "./sides.js";
+import { analyzeSide, isColumnSide, refAt, wallCover, type SideEdge } from "./sides.js";
 import { GuardsSpecSchema, type GuardInfill, type GuardsSpec } from "./spec.js";
 import type {
   Foothold,
@@ -648,6 +648,35 @@ function openingChains(
   return chains;
 }
 
+/**
+ * Contour de trémie sans sommets alignés (ni doublons) : un sommet posé sur un côté ne change
+ * pas la géométrie, et ne doit pas couper un côté en deux pour les seuils de 1 mm d'`openingChains`
+ * (sinon le garde-corps de trémie varie d'un millimètre selon la saisie du contour).
+ */
+function withoutCollinearVertices(poly: readonly Vec2[]): Vec2[] {
+  const out = [...poly];
+  let changed = true;
+  while (changed && out.length > 3) {
+    changed = false;
+    for (let i = 0; i < out.length && out.length > 3; i++) {
+      const a = out[(i + out.length - 1) % out.length]!;
+      const b = out[i]!;
+      const c = out[(i + 1) % out.length]!;
+      const ab = V.sub(b, a);
+      const bc = V.sub(c, b);
+      const ac = V.distance(a, c);
+      const duplicate = V.norm(ab) < 1e-6;
+      const aligned = ac > 1e-6 && Math.abs(V.cross(ab, bc)) / ac < 1e-6 && V.dot(ab, bc) > 0;
+      if (duplicate || aligned) {
+        out.splice(i, 1);
+        changed = true;
+        i--;
+      }
+    }
+  }
+  return out;
+}
+
 /** Calcule les garde-corps et mains courantes d'un escalier (voir l'en-tête du module). */
 export function computeGuards(
   project: Project,
@@ -673,9 +702,15 @@ export function computeGuards(
     analyzeSide(s, layout, stepping, project, spec),
   );
   const sides: SideAnalysis[] = sideResults.map((r) => r.analysis);
+  if (isColumnSide("inner", layout)) {
+    notes.push(
+      "Hélicoïdal à fût central : aucun garde-corps ni main courante le long du fût (pas de vide de ce côté).",
+    );
+  }
 
   // Côtés libres de la trémie (calculés d'abord : un rampant qui y aboutit se prolonge par eux).
-  const poly = openingPolygon(project.site.opening);
+  const rawPoly = openingPolygon(project.site.opening);
+  const poly = rawPoly ? withoutCollinearVertices(rawPoly) : rawPoly;
   const openingPaths = poly
     ? openingChains(poly, stepping, project.site.walls, spec.wallTolerance).map((chain) => ({
         chain,

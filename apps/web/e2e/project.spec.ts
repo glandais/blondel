@@ -1,5 +1,5 @@
 /**
- * Projet de bout en bout : import d'un exemple par le bouton « Importer… » (b), annuler /
+ * Projet de bout en bout : import d'un exemple par le menu « Importer » (b), annuler /
  * rétablir par les boutons et les raccourcis clavier (c), autosauvegarde relue au
  * rechargement.
  */
@@ -11,11 +11,12 @@ const EXAMPLE = fileURLToPath(
   new URL("../../../examples/j4-acceptance-01-garde-corps.blondel.json", import.meta.url),
 );
 
-test("import d'un exemple par le bouton Importer", async ({ page }) => {
+test("import d'un exemple par le menu Importer", async ({ page }) => {
   await openApp(page);
-  // Le bouton ouvre le sélecteur de fichiers du champ caché.
+  // Le menu « Importer » ouvre le sélecteur de fichiers du champ caché.
   const chooser = page.waitForEvent("filechooser");
-  await page.getByRole("button", { name: "Importer…" }).click();
+  await page.getByRole("button", { name: /^Importer/ }).click();
+  await page.getByRole("menuitem", { name: "Projet (.blondel.json)…" }).click();
   await (await chooser).setFiles(EXAMPLE);
   await settle(page);
 
@@ -45,9 +46,10 @@ test("fichier invalide : message d'erreur, projet inchangé", async ({ page }) =
   const h = await page.getByLabel("Hauteur à monter H").inputValue();
   const undo = page.getByRole("button", { name: "Annuler", exact: true });
   await expect(undo).toBeDisabled();
-  // Même chemin que l'utilisateur : bouton « Importer… », puis sélecteur de fichiers.
+  // Même chemin que l'utilisateur : menu « Importer », entrée « Projet », sélecteur de fichiers.
   const chooser = page.waitForEvent("filechooser");
-  await page.getByRole("button", { name: "Importer…" }).click();
+  await page.getByRole("button", { name: /^Importer/ }).click();
+  await page.getByRole("menuitem", { name: "Projet (.blondel.json)…" }).click();
   await (
     await chooser
   ).setFiles({

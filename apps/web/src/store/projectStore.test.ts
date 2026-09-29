@@ -246,3 +246,55 @@ describe("store du projet", () => {
     }
   });
 });
+
+describe("remplacement du projet (assistant) et état d'interface", () => {
+  it("remplace le projet en une entrée annulable, efface la sélection et affiche un message", () => {
+    const s = createProjectStore();
+    const p0 = s.getState().project;
+    s.getState().select({ location: { kind: "tread", number: 2 } });
+    // Saisie en cours (groupe ouvert) : le remplacement reste une entrée distincte.
+    s.getState().setField(["site", "floorToFloor"], 2750);
+    const q = createProject("quarter-left");
+    expect(s.getState().replaceProject(q, "Proposition retenue.")).toEqual({ ok: true });
+    expect(s.getState().project).toEqual(q);
+    expect(s.getState().selection).toBeNull();
+    expect(s.getState().notice).toEqual({ kind: "info", text: "Proposition retenue." });
+    s.getState().undo();
+    expect(s.getState().project.site.floorToFloor).toBe(2750);
+    s.getState().undo();
+    expect(s.getState().project).toBe(p0);
+  });
+
+  it("refuse un projet invalide sans rien changer", () => {
+    const s = createProjectStore();
+    const p0 = s.getState().project;
+    const bad = { ...p0, site: { ...p0.site, floorToFloor: -1 } } as Project;
+    expect(s.getState().replaceProject(bad).ok).toBe(false);
+    expect(s.getState().project).toBe(p0);
+  });
+
+  it("geste continu : une seule entrée d'historique quel que soit le délai", () => {
+    const c = clock();
+    const s = createProjectStore({ now: c.now });
+    const p0 = s.getState().project;
+    for (const h of [2710, 2720, 2730]) {
+      s.getState().update((p) => ({ ...p, site: { ...p.site, floorToFloor: h } }), "drag", {
+        sticky: true,
+      });
+      c.advance(5000);
+    }
+    s.getState().endGroup();
+    expect(s.getState().history.past).toHaveLength(1);
+    s.getState().undo();
+    expect(s.getState().project).toBe(p0);
+  });
+
+  it("mode du plan et apparence 3D : état d'interface, hors historique", () => {
+    const s = createProjectStore();
+    s.getState().setPlanMode("expert");
+    s.getState().setAppearance({ treads: "wood-ash" });
+    expect(s.getState().planMode).toBe("expert");
+    expect(s.getState().appearance).toEqual({ treads: "wood-ash" });
+    expect(s.getState().canUndo()).toBe(false);
+  });
+});

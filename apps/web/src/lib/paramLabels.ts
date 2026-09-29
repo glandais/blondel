@@ -35,6 +35,7 @@ export const GROUP_LABELS: Readonly<Record<string, string>> = {
   curved: "Limon de jour débillardé",
   column: "Fût",
   treads: "Marches",
+  innerStringer: "Limon intérieur (jour central)",
   outerStringer: "Limon extérieur",
   handrail: "Main courante",
 };
@@ -235,6 +236,17 @@ const BY_KIND: Readonly<Record<string, Readonly<Record<string, FieldText>>>> = {
     },
     "treads.material": { label: "Matériau", options: { wood: "Bois", steel: "Tôle plane" } },
     "treads.plateThickness": { label: "Épaisseur de la tôle", unit: MM, hint: TO_VALIDATE },
+    "innerStringer.height": {
+      label: "Hauteur du plat",
+      unit: MM,
+      hint: "Exemple relevé (C §2.2), à valider",
+    },
+    "innerStringer.thickness": { label: "Épaisseur", unit: MM, hint: TO_VALIDATE },
+    "innerStringer.topAboveNosing": {
+      label: "Rive haute au-dessus de la ligne des nez",
+      unit: MM,
+      hint: TO_VALIDATE,
+    },
     "outerStringer.enabled": { label: "Limon extérieur hélicoïdal" },
     "outerStringer.height": {
       label: "Hauteur du plat",
