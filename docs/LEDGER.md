@@ -140,6 +140,10 @@ Format : `- [ ] (Jn) [agent] sujet — contexte — proposition`. Cocher quand r
 - [ ] (J3a) [integration] Sur l'exemple bois, le contrôle de conception signale « échappée sur la largeur 1 600 mm au nez 5 » (avertissement CHALLENGE G4, inchangé par la structure) et le plugin note d_b = 360 / 275 mm (jour / mur) : limon de jour LI2 de 45 × 396, cf. point « d_b constant par côté » à arbitrer.
 - [ ] (J3a) [integration] Aucun essai manuel dans un navigateur réel (choix de la structure, onglet Développés, téléchargements PDF / ZIP) : seuls les tests unitaires, le build et `curl` du serveur de dev sont faits. À faire par l'utilisateur, avec un profil de performance si le gel de 30 s réapparaît.
 
+- [ ] (J2) [orchestrateur] RÉGRESSION constatée en ligne le 2026-09-29 : depuis que le choix automatique de zone maximise le collet (G3), le quart tournant gauche balance les nez 2 → 12 (toute la seconde volée). G3 était mal posé : il faut le plus petit nombre de marches balancées atteignant le collet cible, sinon maximiser le collet, avec une étendue bornée (K7 ; DIN : 3,5 girons depuis l'angle, source étrangère → paramètre).
+- [ ] (J1) [orchestrateur] Performance navigateur (build de prod, GitHub Pages) : cœur 40 ms sans structure, 54 ms avec limons bois, pour un budget de 15 ms (ADR-0006) ; Node mesure environ 10 ms. Profiler dans le navigateur ; Web Worker si nécessaire. La barre d'état affiche « Maillage – ».
+- [x] (J1) [orchestrateur] Gel d'environ 30 s au changement de préréglage : non reproduit en ligne après la vague C (commit 3b18ee4).
+
 ## 3. Messages entre agents
 
 Format : `- [de → à] message`. Les destinataires sont des rôles (`core`, `geometry`, `exports`, `web`, `review`, `orchestrateur`).
