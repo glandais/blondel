@@ -137,3 +137,41 @@ describe("G_COLLET_MONOTONE", () => {
     expect(v.map((r) => r.location)).toEqual([{ kind: "tread", number: 11 }]);
   });
 });
+
+describe("G_COLLET_MONOTONE par angle du jour", () => {
+  // Zone unique de 180° (nez 1 à 10) contournant deux angles : milieux des tournants sur Γ au
+  // droit des marches 5 et 7 (nez tous les 250 mm dans les fixtures).
+  const collets = [209, 151, 132, 124, 110, 124, 108, 151, 209];
+  const treads: SteppingOptions["treads"] = Object.fromEntries(
+    collets.map((c, i) => [i + 2, { kind: "winder" as const, colletChord: c }]),
+  );
+  const zones = [{ turn: 0, from: 1, to: 10, method: "M3" }];
+  const turn = (index: number, sMid: number) => ({
+    index,
+    direction: "left" as const,
+    mode: "winders" as const,
+    innerCorner: { x: 0, y: 0 },
+    outerCorner: { x: 0, y: 0 },
+    sStart: sMid - 100,
+    sEnd: sMid + 100,
+  });
+  const input = (turns: ReturnType<typeof turn>[]) => {
+    const i = makeInput({ stepping: { treads, balancedZones: zones } });
+    return { ...i, layout: { ...i.layout, turns } };
+  };
+  const results = (turns: ReturnType<typeof turn>[]) =>
+    evaluateCompliance(input(turns)).results.filter((r) => r.ruleId === "G_COLLET_MONOTONE");
+
+  it("deux vallées autour de deux angles : conforme", () => {
+    const r = results([turn(0, 4.5 * 250), turn(1, 6.5 * 250)]);
+    expect(r.map((x) => x.status)).toEqual(["ok"]);
+    expect(r[0]!.message).toContain("2 angle(s)");
+  });
+
+  it("un seul angle repéré (ou aucun tournant) : vallée unique, rupture signalée", () => {
+    expect(results([turn(0, 4.5 * 250)]).map((x) => x.location)).toEqual([
+      { kind: "tread", number: 7 },
+    ]);
+    expect(results([]).map((x) => x.location)).toEqual([{ kind: "tread", number: 7 }]);
+  });
+});

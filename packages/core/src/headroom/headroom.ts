@@ -14,6 +14,14 @@
  * 2. **Échappée sur la largeur des marches** : e_k = z_p − z_k sur chaque segment de nez
  *    Q_k R_k dont une partie est sous la dalle ; minimum sur k. Donnée pour avertissement
  *    (objectif du pivot K8) ; ce n'est pas la grandeur réglementaire.
+ *
+ * **Auto-recouvrement** (jalon 5a, CHALLENGE G4) : quand le découpage fournit des sous-faces
+ * (`Stepping.soffits`, marches du tour supérieur et palier d'arrivée d'un hélicoïdal), le plafond
+ * en un point est le plus bas des plafonds présents au-dessus de lui : dalle (hors trémie, s'il
+ * y a une trémie) et sous-faces des pièces situées plus loin dans la montée qui le couvrent en
+ * plan (`selfcover.ts`). Le calcul reste exact : Γ et les segments de nez sont coupés aux côtés
+ * de la trémie et des contours des sous-faces, le plafond est constant par morceau et le minimum
+ * de chaque morceau est atteint à sa borne haute. Sans sous-face, le calcul est inchangé.
  */
 import { cumulativeLengths, curveLength, curvePointAt } from "../geom2d/curve.js";
 import { intersectLineCurve, segmentIntersect } from "../geom2d/intersect.js";
@@ -24,6 +32,7 @@ import type { HeadroomOnWidth, Layout, NosingLine, Stepping } from "../model/der
 import type { Curve2, Mm, Polygon2, Vec2, Vec3 } from "../model/primitives.js";
 import type { Opening, Site } from "../model/project.js";
 import { slopeProfileOf, slopeZ, type SlopeProfile } from "./profile.js";
+import { selfCoveredHeadroom } from "./selfcover.js";
 
 /** Échappée réglementaire sur la ligne de foulée. */
 export interface HeadroomOnWalkline {
@@ -37,8 +46,11 @@ export interface HeadroomOnWalkline {
 export interface HeadroomAnalysis {
   /** Altitude de la sous-face de la dalle haute (plafond hors trémie). */
   readonly ceiling: Mm;
-  /** Contour de la trémie (CCW, repère du site). */
-  readonly opening: Polygon2;
+  /**
+   * Contour de la trémie (CCW, repère du site) ; `null` sans trémie (pas de dalle au-dessus :
+   * seules les sous-faces de l'escalier lui-même forment un plafond).
+   */
+  readonly opening: Polygon2 | null;
   /** Intervalles d'abscisse de Γ situés sous la dalle (hors trémie). */
   readonly covered: readonly { readonly s0: Mm; readonly s1: Mm }[];
   /** Échappée sur Γ ; absente si aucun point de Γ n'est sous la dalle. */
@@ -176,6 +188,18 @@ export function computeHeadroom(
   stepping: Stepping,
 ): HeadroomAnalysis | null {
   const opening = openingPolygon(site.opening);
+  const soffits = stepping.soffits ?? [];
+  if (soffits.length > 0) {
+    const ceiling = ceilingOf(site);
+    return selfCoveredHeadroom({
+      layout,
+      stepping,
+      soffits,
+      slab: opening ? { opening, ceiling } : null,
+      ceiling,
+      covered: opening ? coveredIntervals(layout.walkline, opening) : [],
+    });
+  }
   if (!opening) return null;
   const ceiling = ceilingOf(site);
   const profile = slopeProfileOf(stepping);

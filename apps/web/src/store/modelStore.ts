@@ -48,6 +48,8 @@ export interface ModelService {
   request(project: Project): void;
   /** Demande la comparaison des variantes d'un projet. */
   requestCompare(project: Project): void;
+  /** Dossier PDF d'un projet, mis en page dans le worker de calcul (hors du fil principal). */
+  exportPdf(project: Project): Promise<Uint8Array>;
 }
 
 export interface ModelServiceOptions {
@@ -100,5 +102,6 @@ export function createModelService(options: ModelServiceOptions): ModelService {
     store,
     request: (project) => build.submit(project),
     requestCompare: (project) => compare.submit(project),
+    exportPdf: (project) => exec.pdf(project),
   };
 }

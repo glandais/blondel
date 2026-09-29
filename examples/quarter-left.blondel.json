@@ -15,10 +15,10 @@
     "lowerFinish": 0,
     "opening": {
       "kind": "rect",
-      "sizeX": 3440,
-      "sizeY": 900,
+      "sizeX": 3540,
+      "sizeY": 1100,
       "x": -2540,
-      "y": 540
+      "y": 440
     },
     "upperFinish": 0,
     "upperSlabThickness": 200,

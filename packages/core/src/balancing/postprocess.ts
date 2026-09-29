@@ -303,3 +303,79 @@ export function monotonyBreaks(values: readonly number[], eps = 1e-6): number[] 
   }
   return out;
 }
+
+/**
+ * K3 **par angle** : une zone unique de 180° (demi-tournant, U serré) contourne deux angles du
+ * jour et ses collets forment une vallée autour de **chaque** angle, séparées par une crête.
+ * `corners` : positions (indices dans `values`) des marches au droit de chaque angle. La suite
+ * est découpée en tronçons [crête_{j−1} ; crête_j], chaque crête étant prise entre deux angles
+ * consécutifs (crête_j ∈ [c_j ; c_{j+1}]) ; chaque tronçon doit être « en vallée »
+ * (`monotonyBreaks`). Les crêtes retenues minimisent le nombre de ruptures (à égalité : la plus
+ * haute, puis la première), ce qui rend le contrôle insensible au repérage à une marche près de
+ * l'angle. Avec au plus un angle : `monotonyBreaks` sur toute la suite. Renvoie les positions i
+ * (0-based, croissantes, sans doublon) telles que le pas i → i + 1 contredit la monotonie.
+ */
+export function cornerMonotonyBreaks(
+  values: readonly number[],
+  corners: readonly number[],
+  eps = 1e-6,
+): number[] {
+  const last = values.length - 1;
+  const cs = [...new Set(corners.filter((c) => Number.isInteger(c) && c >= 0 && c <= last))].sort(
+    (a, b) => a - b,
+  );
+  if (values.length < 2 || cs.length < 2) return monotonyBreaks(values, eps);
+  const breaksOf = (from: number, to: number): number[] =>
+    monotonyBreaks(values.slice(from, to + 1), eps).map((i) => from + i);
+  // Programmation dynamique sur les crêtes : best[p] = (ruptures, coupes) jusqu'à la crête p.
+  type State = { readonly cost: number; readonly cuts: readonly number[] };
+  let states = new Map<number, State>([[0, { cost: 0, cuts: [0] }]]);
+  for (let j = 0; j + 1 < cs.length; j++) {
+    const next = new Map<number, State>();
+    for (let p = cs[j]!; p <= cs[j + 1]!; p++) {
+      let best: State | null = null;
+      for (const [q, st] of states) {
+        if (q > p) continue;
+        const cost = st.cost + breaksOf(q, p).length;
+        if (best === null || cost < best.cost) best = { cost, cuts: [...st.cuts, p] };
+      }
+      if (best) next.set(p, best);
+    }
+    states = next;
+  }
+  let chosen: State | null = null;
+  let chosenCost = Infinity;
+  for (const [q, st] of states) {
+    const cost = st.cost + breaksOf(q, last).length;
+    const peak = values[q]!;
+    const prevPeak = chosen ? values[chosen.cuts[chosen.cuts.length - 1]!]! : -Infinity;
+    if (cost < chosenCost || (cost === chosenCost && peak > prevPeak + eps)) {
+      chosen = st;
+      chosenCost = cost;
+    }
+  }
+  const cuts = [...chosen!.cuts, last];
+  const out = new Set<number>();
+  for (let j = 0; j + 1 < cuts.length; j++) {
+    for (const i of breaksOf(cuts[j]!, cuts[j + 1]!)) out.add(i);
+  }
+  return [...out].sort((a, b) => a - b);
+}
+
+/**
+ * Positions des angles d'un tronçon de marches pour `cornerMonotonyBreaks` : `nosingS` =
+ * abscisses sur Γ des nez qui bornent les marches (m + 1 nez pour m marches), `cornerS` =
+ * abscisses sur Γ des milieux des tournants. L'angle j est au droit de la marche i telle que
+ * s_i ≤ cornerS_j < s_{i+1} ; les angles hors du tronçon sont ignorés.
+ */
+export function cornerPositions(nosingS: readonly Mm[], cornerS: readonly Mm[]): number[] {
+  const out: number[] = [];
+  const m = nosingS.length - 1;
+  for (const c of cornerS) {
+    if (m < 1 || !(c >= nosingS[0]!) || !(c <= nosingS[m]!)) continue;
+    let i = 0;
+    while (i + 1 < m && nosingS[i + 1]! <= c) i++;
+    out.push(i);
+  }
+  return out;
+}

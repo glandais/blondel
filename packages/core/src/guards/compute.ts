@@ -27,6 +27,7 @@ import type { Project, Wall } from "../model/project.js";
 import { fmt } from "../rules/check.js";
 import { resolveWorkshopProfile } from "../workshop/profile.js";
 import { GuardError } from "./errors.js";
+import { jourWidth, NARROW_JOUR_ERROR_PREFIX, narrowJourThreshold } from "./jour.js";
 import {
   MarkRegistry,
   panelMember,
@@ -659,6 +660,7 @@ export function computeGuards(
     profile: resolveWorkshopProfile(project.workshop),
   };
   const notes: string[] = [];
+  const errors: string[] = [];
   const parts: Part[] = [];
   const runs: GuardRun[] = [];
   const handrails: HandrailRun[] = [];
@@ -694,9 +696,22 @@ export function computeGuards(
     return 0;
   };
 
+  // Jour trop étroit (sous la sphère T1) : pas de garde-corps de jour, erreur de modèle lisible
+  // (les deux rampants décalés vers le vide s'y croiseraient) ; les autres lignes sont calculées.
+  const jour = jourWidth(layout, project.stair.layout.turns);
+  const narrow = narrowJourThreshold();
+  const narrowJour = narrow !== null && jour < narrow;
+
   // Garde-corps de volée.
   for (const { edge, analysis } of sideResults) {
     if (!spec.flight.enabled || stepping.nosings.length === 0) break;
+    const hasVoid = analysis.intervals.some((iv) => iv.kind === "void" && iv.to - iv.from >= 1);
+    if (analysis.side === "inner" && narrowJour && hasVoid) {
+      errors.push(
+        `${NARROW_JOUR_ERROR_PREFIX} : jour de ${fmt(jour, 0)} mm, plus étroit que la sphère T1 (${fmt(narrow, 0)} mm) : les garde-corps des volées qui le bordent (décalés de ${fmt(spec.flight.edgeOffset, 0)} mm vers le vide) n'y sont pas construits. Élargir le jour (volée centrale plus longue) ou régler le côté jour des garde-corps sur « mur » si le jour est fermé.`,
+      );
+      continue;
+    }
     // Portions vides, coupées aux poteaux d'angle du tracé (le garde-corps s'y arrête).
     const voids: SideInterval[] = [];
     for (const iv of analysis.intervals) {
@@ -714,13 +729,16 @@ export function computeGuards(
     for (const iv of voids) {
       rakeNo++;
       const label = `garde-corps de volée ${SIDE_LABEL[analysis.side]}${voids.length > 1 ? ` n° ${rakeNo}` : ""}`;
-      const portion = edgePortion(
-        edge,
-        iv,
-        spec.flight.edgeOffset,
-        stepping,
-        `Garde-corps (${label})`,
-      );
+      let portion: ReturnType<typeof edgePortion>;
+      try {
+        portion = edgePortion(edge, iv, spec.flight.edgeOffset, stepping, `Garde-corps (${label})`);
+      } catch (e) {
+        // Décalage impossible (segment de bord plus court que les retraits des angles) : cette
+        // ligne n'est pas produite, erreur de modèle ; les autres lignes restent calculées.
+        if (!(e instanceof GuardError)) throw e;
+        errors.push(`${e.message} Ligne non générée.`);
+        continue;
+      }
       if (portion.path.length < 2) continue;
       const newelVertices = new Map<number, Mm>();
       for (const nw of edge.newels) {
@@ -930,5 +948,6 @@ export function computeGuards(
     openingFall,
     parts,
     notes: [...new Set(notes)],
+    errors: [...new Set(errors)],
   };
 }

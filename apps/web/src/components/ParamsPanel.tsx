@@ -15,8 +15,15 @@ import { useRef, type ReactNode } from "react";
 import { appStore, useApp, useModel } from "../store/appStore.js";
 import type { Path } from "../store/setIn.js";
 import { addLeg, legAutoAllowed, removeLastLeg } from "../lib/layoutEdit.js";
+import {
+  LAYOUT_KIND_LABELS,
+  layoutKindOf,
+  switchLayoutKind,
+  type LayoutKind,
+} from "../lib/layoutKind.js";
 import { AutoIntField, CheckField, IntField, SelectField, TextField } from "./fields.js";
 import { GuardsSection } from "./GuardsSection.js";
+import { HelicalEditor } from "./HelicalEditor.js";
 import { StructureSection } from "./StructureSection.js";
 
 const set = (path: Path) => (value: unknown) => appStore.getState().setField(path, value);
@@ -46,7 +53,8 @@ function Section({
 
 function SiteSection() {
   const site = useApp((s) => s.project.site);
-  const width = useApp((s) => s.project.stair.layout.width);
+  const layout = useApp((s) => s.project.stair.layout);
+  const origin = useApp((s) => s.project.stair.placement.origin);
   // Dernière trémie retirée : restaurée si l'on réactive la trémie.
   const lastOpening = useRef<Opening | null>(null);
   const o = site.opening;
@@ -86,13 +94,15 @@ function SiteSection() {
             lastOpening.current = o ?? null;
             return set(["site", "opening"])(undefined);
           }
-          // Valeur provisoire à ajuster par l'utilisateur (aucune règle n'est appliquée ici).
+          // Valeur provisoire à ajuster par l'utilisateur (aucune règle n'est appliquée ici) :
+          // carré de côté E au départ, ou carré circonscrit au cercle R_e d'un hélicoïdal.
+          const r = layout.kind === "helical" ? layout.outerRadius : 0;
           const restored: Opening = lastOpening.current ?? {
             kind: "rect",
-            x: 0,
-            y: 0,
-            sizeX: width,
-            sizeY: width,
+            x: layout.kind === "helical" ? Math.round(origin.x) - r : 0,
+            y: layout.kind === "helical" ? Math.round(origin.y) - r : 0,
+            sizeX: layout.kind === "helical" ? 2 * r : layout.width,
+            sizeY: layout.kind === "helical" ? 2 * r : layout.width,
           };
           return set(["site", "opening"])(restored);
         }}
@@ -210,14 +220,39 @@ function LayoutSection() {
   const walkline = useApp((s) => s.project.stair.walkline);
   const { model } = useModel();
   const legs = layout.legs;
+  const kind = useApp((s) => layoutKindOf(s.project));
   return (
     <Section title="Tracé">
-      <IntField
-        label="Emmarchement E"
-        value={layout.width}
-        min={1}
-        onCommit={set(["stair", "layout", "width"])}
+      <SelectField<LayoutKind>
+        label="Type de tracé"
+        value={kind}
+        options={(["flights", "helical"] as const).map((k) => ({
+          value: k,
+          label: LAYOUT_KIND_LABELS[k],
+        }))}
+        hint="Changer de type remplace le tracé et la trémie (préréglage du cœur, annulable)"
+        onCommit={(k) => {
+          let note: string | undefined;
+          const r = update((p) => {
+            const s = switchLayoutKind(p, k);
+            note = s.note;
+            return s.project;
+          });
+          if (r.ok && note !== undefined)
+            appStore.setState({ notice: { kind: "info", text: note } });
+          return r;
+        }}
       />
+      {layout.kind === "helical" ? (
+        <HelicalEditor layout={layout} />
+      ) : (
+        <IntField
+          label="Emmarchement E"
+          value={layout.width}
+          min={1}
+          onCommit={set(["stair", "layout", "width"])}
+        />
+      )}
       <SelectField
         label="Ligne de foulée"
         value={walkline.mode}
@@ -244,18 +279,36 @@ function LayoutSection() {
           onCommit={set(["stair", "walkline", "distance"])}
         />
       ) : null}
+      {layout.kind === "helical" ? null : (
+        <FlightsEditor legs={legs} turns={layout.turns} run={model?.stepping.run} />
+      )}
+    </Section>
+  );
+}
+
+function FlightsEditor({
+  legs,
+  turns,
+  run,
+}: {
+  legs: readonly Leg[];
+  turns: readonly Turn[];
+  run: number | undefined;
+}) {
+  return (
+    <>
       {legs.map((leg: Leg, i: number) => (
         <div key={i} className="leg">
           <AutoIntField
             label={`Volée ${i + 1} (bord extérieur)`}
             value={leg.length}
-            fallback={legFallback(legs, i, model?.stepping.run)}
+            fallback={legFallback(legs, i, run)}
             autoAllowed={legAutoAllowed(legs.length)}
             autoHint="Automatique : escalier droit seulement"
             min={1}
             onCommit={set(["stair", "layout", "legs", i, "length"])}
           />
-          {i < layout.turns.length ? <TurnEditor turn={layout.turns[i] as Turn} index={i} /> : null}
+          {i < turns.length ? <TurnEditor turn={turns[i] as Turn} index={i} /> : null}
         </div>
       ))}
       <div className="button-row">
@@ -266,7 +319,7 @@ function LayoutSection() {
           Retirer la dernière volée
         </button>
       </div>
-    </Section>
+    </>
   );
 }
 
@@ -274,6 +327,7 @@ function LayoutSection() {
 
 function SteppingSection() {
   const st = useApp((s) => s.project.stair.stepping);
+  const helical = useApp((s) => s.project.stair.layout.kind === "helical");
   const { model } = useModel();
   return (
     <Section title="Découpage">
@@ -297,7 +351,11 @@ function SteppingSection() {
         value={st.targetGoing}
         fallback={Math.max(1, Math.round(model?.stepping.going ?? 1))}
         min={1}
-        hint="Utilisé seulement pour une volée de longueur automatique"
+        hint={
+          helical
+            ? "Sans effet sur un hélicoïdal (giron = rayon de la ligne de foulée × angle par marche)"
+            : "Utilisé seulement pour une volée de longueur automatique"
+        }
         onCommit={set(["stair", "stepping", "targetGoing"])}
       />
       <IntField
@@ -315,9 +373,16 @@ function SteppingSection() {
 function BalancingSection() {
   const b = useApp((s) => s.project.stair.balancing);
   const hasTurns = useApp((s) => s.project.stair.layout.turns.length > 0);
+  const helical = useApp((s) => s.project.stair.layout.kind === "helical");
   return (
     <Section title="Balancement" open={hasTurns}>
-      {!hasTurns ? <p className="muted">Sans objet pour un escalier droit.</p> : null}
+      {!hasTurns ? (
+        <p className="muted">
+          {helical
+            ? "Sans objet pour un hélicoïdal (marches rayonnantes, girons égaux)."
+            : "Sans objet pour un escalier droit."}
+        </p>
+      ) : null}
       <SelectField
         label="Méthode"
         value={b.method}

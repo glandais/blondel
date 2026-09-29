@@ -15,6 +15,7 @@ function fakeExec(): JobExec & { resolve: () => void; builds: Project[] } {
       return new Promise((resolve) => queue.push({ p, resolve }));
     },
     compare: () => ({ rows: [], timeMs: 1 }),
+    pdf: () => Promise.resolve(new Uint8Array()),
     resolve() {
       const q = queue.shift();
       q?.resolve({

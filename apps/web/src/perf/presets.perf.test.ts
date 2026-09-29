@@ -4,9 +4,10 @@
  * seuil ×3 (suite parallèle ; `PERF_STRICT=1` : budget strict). Les rendus SVG de l'écran
  * sont chronométrés et bornés au même titre (une image doit rester sous la seconde).
  */
-import { PRESET_IDS, buildModel, createProject, type PresetId } from "@blondel/core";
+import { ALL_PRESET_IDS, buildModel, createProject, type PresetId } from "@blondel/core";
 import { renderElevationSvg, renderPlanSvg } from "@blondel/exports";
 import { describe, expect, it } from "vitest";
+import { presetProject } from "../lib/layoutKind.js";
 import { createMeshCache } from "../model/meshCache.js";
 import { upperSlabMesh } from "../three/geometry.js";
 
@@ -36,7 +37,8 @@ interface Measure {
 }
 
 function measure(id: PresetId): Measure {
-  const project = createProject(id);
+  // Préréglages de l'interface : l'hélicoïdal avec sa structure à fût (fût, main courante).
+  const project = presetProject(id);
   for (let i = 0; i < 5; i++) buildModel(project, { memo: false });
   const core: number[] = [];
   const meshCold: number[] = [];
@@ -66,7 +68,7 @@ function measure(id: PresetId): Measure {
 }
 
 describe("passage de préréglage : cœur, maillage, rendus (ADR-0006)", () => {
-  it.each(PRESET_IDS)(
+  it.each(ALL_PRESET_IDS)(
     "%s",
     (id) => {
       const m = measure(id);

@@ -11,10 +11,13 @@
  *    sens du tournant — trigonométrique si le jour est à gauche, horaire s'il est à droite :
  *    le bout côté mur avance vers l'arrivée, le collet recule) appliquées avant le
  *    post-traitement ; surcharges orphelines signalées.
- * 6. Contrôles communs K5 (croisements) et K3 (monotonie des collets) → `notes`.
+ * 6. Contrôles communs K5 (croisements) et K3 (monotonie des collets vers **chaque** angle du
+ *    jour : deux vallées dans une zone unique de 180°) → `notes`.
  * 7. Marches (`treads.ts`).
  *
  * Le côté du collet est `layout.innerSide` (tournants de même sens au MVP).
+ *
+ * Tracé hélicoïdal (`layout.helical`, jalon 5a) : découpage propre, `stepping/helical.ts`.
  */
 import { curvePointAt, curveTangentAt } from "../geom2d/curve.js";
 import { GEOM_EPS } from "../geom2d/tolerance.js";
@@ -22,8 +25,9 @@ import * as V from "../geom2d/vec.js";
 import { getBalancingStrategy } from "../balancing/registry.js";
 import {
   colletBetween,
+  cornerMonotonyBreaks,
+  cornerPositions,
   findCrossings,
-  monotonyBreaks,
   realizeNosing,
   type NosingSeed,
 } from "../balancing/postprocess.js";
@@ -36,6 +40,7 @@ import { SteppingError } from "./errors.js";
 import { placeNosings } from "./positions.js";
 import { computeRises } from "./rises.js";
 import { developmentInner } from "./development.js";
+import { computeHelicalStepping } from "./helical.js";
 import { buildTreads } from "./treads.js";
 import {
   COLLET_TIE_TOLERANCE,
@@ -52,11 +57,18 @@ import {
 } from "./zones.js";
 
 /**
+ * Plugins de structure débillardés qui ne suivent pas la convention de nommage `debillard*`
+ * (jalon 5b : `steel-curved`, limon porteur débillardé soudé métal).
+ */
+export const DEBILLARDE_STRUCTURE_KINDS: ReadonlySet<string> = new Set(["steel-curved"]);
+
+/**
  * Une structure est « débillardée » si son `kind` commence par `debillard` (convention de
- * nommage des plugins de structure, à respecter par les agents structures).
+ * nommage des plugins de structure, à respecter par les agents structures) ou figure dans
+ * `DEBILLARDE_STRUCTURE_KINDS`.
  */
 export function isDebillardeStructure(kind: string): boolean {
-  return kind.startsWith("debillard");
+  return kind.startsWith("debillard") || DEBILLARDE_STRUCTURE_KINDS.has(kind);
 }
 
 /** Variante M3 effective (décision Q7 : cubique, quintique pour un limon débillardé). */
@@ -125,6 +137,8 @@ export function computeStepping(
   layout: Layout,
   options: SteppingOptions = {},
 ): Stepping {
+  // Tracé hélicoïdal (jalon 5a) : nez rayonnants, sans balancement (`stepping/helical.ts`).
+  if (layout.helical) return computeHelicalStepping(project, layout);
   const notes: string[] = [];
   const { riserCount: n, rise, rises, z } = computeRises(project);
   const positions = placeNosings(project, layout, n);
@@ -190,7 +204,7 @@ export function computeStepping(
   const strategy = getBalancingStrategy(method);
   const groups = groupWinderTurns(layout, positions.s, going, fixed);
   const balancedZones: { turn: number; from: number; to: number; method: string }[] = [];
-  const zoneRanges: { from: number; to: number }[] = [];
+  const zoneRanges: { from: number; to: number; corners: readonly Mm[] }[] = [];
   const params: Record<string, unknown> = method === "M3" ? { variant } : {};
 
   for (const group of groups) {
@@ -294,7 +308,7 @@ export function computeStepping(
     }
     const { from, to } = chosen.zone;
     balancedZones.push({ turn: group.first, from, to, method: methodLabel(method, variant) });
-    zoneRanges.push({ from, to });
+    zoneRanges.push({ from, to, corners: group.corners });
     notes.push(
       `${turnName} : ${bounds.kL - from} + ${to - bounds.kR} nez balancés (nez fixes ${from} et ${to}, extrémités ${chosen.zone.ends.map((e) => (e === "tangent" ? "tangente" : "libre")).join("/")}), ${variantLabel(method, variant)}, collet minimal ${fmt(chosen.minChord)} mm en corde (${fmt(chosen.minArc)} mm en arc).`,
     );
@@ -353,12 +367,13 @@ export function computeStepping(
       notes.push(`Marche ${k + 1} : collet nul (${fmt(c.chord)} mm en corde).`);
     }
   }
+  // K3 par angle : une vallée de collets autour de chaque angle du jour de la zone.
   for (const zr of zoneRanges) {
     const chords: Mm[] = [];
     for (let k = zr.from; k < zr.to; k++)
       chords.push(colletBetween(nosings[k]!, nosings[k + 1]!).chord);
-    const breaks = monotonyBreaks(chords);
-    for (const i of breaks) {
+    const corners = cornerPositions(positions.s.slice(zr.from, zr.to + 1), zr.corners);
+    for (const i of cornerMonotonyBreaks(chords, corners)) {
       notes.push(
         `K3 : collet non monotone vers l'angle, marche ${zr.from + i + 2} (${fmt(chords[i + 1]!)} mm après ${fmt(chords[i]!)} mm).`,
       );

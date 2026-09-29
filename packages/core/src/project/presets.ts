@@ -17,6 +17,9 @@
  * altitudes des nez (`placeNosings`, `computeRises`) : c'est le rectangle aligné (arrondi vers
  * l'extérieur au multiple de 10 mm) qui englobe la partie de l'escalier où la ligne de pente
  * passerait à moins de `ECHAPPEE_MIN_DTU` de la sous-face du plancher (`requiredOpening`).
+ * Les côtés de ce rectangle qui longent un bord de l'escalier sont ensuite élargis d'un jeu
+ * latéral (`openingClearance`, défaut `PRESET_OPENING_CLEARANCE`, à valider) : les garde-corps
+ * de volée, décalés vers le vide, ne passent pas sous la dalle haute (`GC_CONFLIT_DALLE`).
  * Les longueurs de volées supposent un jour à angle vif et la ligne de foulée au milieu
  * (E ≤ 1 200 mm) : |Γ| = ΣL − 2E·(N − 1) + N·(π/2)·(E/2) pour N tournants.
  */
@@ -31,11 +34,13 @@ import {
   type Project,
   type ProjectInput,
 } from "../model/project.js";
+import type { Layout } from "../model/derived.js";
 import type { Vec2 } from "../model/primitives.js";
 import { getRule } from "../rules/table.js";
 import { SteppingError } from "../stepping/errors.js";
 import { placeNosings } from "../stepping/positions.js";
 import { computeRises } from "../stepping/rises.js";
+import { createHelicalProject } from "./presetHelical.js";
 
 export type TurnDirection = "left" | "right";
 
@@ -59,6 +64,10 @@ export function boundingRect(points: readonly Vec2[], grid = 10): Rect {
   return { x: x0, y: y0, sizeX: x1 - x0, sizeY: y1 - y0 };
 }
 
+/**
+ * Préréglages d'escaliers **à volées** (inchangés depuis le jalon 2 : l'interface et ses tests
+ * les parcourent en supposant des volées).
+ */
 export const PRESET_IDS = [
   "straight",
   "quarter-left",
@@ -67,7 +76,12 @@ export const PRESET_IDS = [
   "half-turn",
   "quarter-landing",
 ] as const;
-export type PresetId = (typeof PRESET_IDS)[number];
+export type FlightsPresetId = (typeof PRESET_IDS)[number];
+/** Préréglages hélicoïdaux (jalon 5a, `presetHelical.ts`). */
+export const HELICAL_PRESET_IDS = ["helical"] as const;
+/** Tous les préréglages. */
+export const ALL_PRESET_IDS = [...PRESET_IDS, ...HELICAL_PRESET_IDS] as const;
+export type PresetId = (typeof ALL_PRESET_IDS)[number];
 
 export const PRESET_LABELS: Readonly<Record<PresetId, string>> = {
   straight: "Escalier droit",
@@ -76,6 +90,7 @@ export const PRESET_LABELS: Readonly<Record<PresetId, string>> = {
   "two-quarters-u": "Deux quarts tournants (U)",
   "half-turn": "Demi-tournant balancé",
   "quarter-landing": "Quart tournant avec palier",
+  helical: "Hélicoïdal à fût central",
 };
 
 /** Seuil `min` d'une règle de rules.yaml (erreur de programmation s'il est absent). */
@@ -97,14 +112,24 @@ const WALKLINE_MIDDLE_MAX_WIDTH = 1200;
  * préréglages ciblent le contexte `logement_interieur` et la valeur par défaut du modèle
  * (30 mm) y déclencherait un avertissement.
  */
-const PRESET_NOSING: number = (() => {
+export const PRESET_NOSING: number = (() => {
   const r = getRule("DEBORD_NEZ_LOGEMENT").recommande;
   if (r === null) throw new Error("La règle DEBORD_NEZ_LOGEMENT n'a pas de valeur recommandée.");
   return r;
 })();
 /** Valeurs par défaut du cahier des charges des préréglages. */
-const DEFAULT_FLOOR_TO_FLOOR = 2700;
-const DEFAULT_SLAB_THICKNESS = 200;
+export const DEFAULT_FLOOR_TO_FLOOR = 2700;
+export const DEFAULT_SLAB_THICKNESS = 200;
+/**
+ * Jeu latéral par défaut (mm) entre les bords de l'escalier et la trémie des préréglages
+ * (`PresetOptions.openingClearance`). **[Choix Blondel, à valider]** : aucune valeur sourcée ;
+ * 100 mm couvrent le garde-corps de volée par défaut (`guards.flight.edgeOffset` = 30 mm vers
+ * le vide + demi-poteau de 40 mm, `guards/spec.ts`, eux-mêmes à valider) avec 30 mm de marge,
+ * pour que le rampant et sa main courante ne passent pas sous la dalle haute
+ * (`GC_CONFLIT_DALLE`). Une trémie au nu de l'escalier (jeu nul) oblige à arrêter le
+ * garde-corps sous la dalle ou à le fixer au nez de dalle.
+ */
+export const PRESET_OPENING_CLEARANCE = 100;
 
 /** Objet partiel récursif ; les tableaux sont remplacés en bloc. */
 export type DeepPartial<T> = T extends readonly unknown[]
@@ -124,6 +149,18 @@ export interface PresetOptions {
   /** Sens des tournants pour `two-quarters-u`, `half-turn`, `quarter-landing` (défaut : gauche). */
   readonly direction?: TurnDirection;
   /**
+   * Jeu latéral (mm, entier ≥ 0) ajouté à la trémie calculée sur chaque côté qui longe un bord
+   * de l'escalier (jour ou extérieur), pas du côté de l'arrivée ; défaut
+   * `PRESET_OPENING_CLEARANCE` (à valider). Sans effet si la trémie est donnée dans `patch`.
+   */
+  readonly openingClearance?: number;
+  /** Hélicoïdal : rayon extérieur R_e (mm), défaut 900 (à valider). */
+  readonly outerRadius?: number;
+  /** Hélicoïdal : rayon du fût r_f (mm), défaut 70 (à valider). */
+  readonly coreRadius?: number;
+  /** Hélicoïdal : forme de la trémie qui dégage l'escalier (défaut : circulaire). */
+  readonly openingShape?: "circle" | "square";
+  /**
    * Surcharge libre appliquée en dernier (fusion profonde, tableaux remplacés). H, E, la dalle
    * et le réglage des hauteurs qu'elle contient sont pris en compte dans le calcul des volées et
    * de la trémie ; des volées ou une trémie données explicitement remplacent le calcul.
@@ -141,7 +178,7 @@ interface PresetShape {
   readonly middleWell: number;
 }
 
-const SHAPES: Readonly<Record<PresetId, PresetShape>> = {
+const SHAPES: Readonly<Record<FlightsPresetId, PresetShape>> = {
   straight: { width: 900, turns: [], mode: "winders", firstStraightGoings: 0, middleWell: 0 },
   "quarter-left": {
     width: 900,
@@ -172,8 +209,8 @@ const SHAPES: Readonly<Record<PresetId, PresetShape>> = {
   // balancement bornée à 3,5 girons depuis l'angle (K7, CHALLENGE G3 corrigé) : avec 4 girons
   // et un jour de 180 mm, le collet tombait à 94 mm (H = 2 500). Avec 3,5 girons et 240 mm
   // (volée centrale < 1 giron : zone unique de 180° conservée), balayage H ∈ [2 500 ; 2 900]
-  // par pas de 25 mm : collet ≥ 105 mm ; K3 en corde non respecté pour 5 hauteurs sur 17
-  // (deux angles vifs : deux « vallées » de collets, voir le ledger).
+  // par pas de 25 mm : collet ≥ 105 mm ; K3 évalué par angle du jour (deux angles vifs : deux
+  // « vallées » de collets, `cornerMonotonyBreaks`) : aucune rupture (`stepping/k3.test.ts`).
   "half-turn": {
     width: 800,
     turns: ["left", "left"],
@@ -252,7 +289,7 @@ function landingLegs(shape: PresetShape, width: number, n: number, going: number
  * la ligne de pente, sur la ligne de foulée, atteigne `PRESET_HEADROOM_MIN` : calculée sur le
  * tracé et les nez réels du projet. `null` si aucune trémie n'est nécessaire.
  */
-function computeOpening(project: Project): Rect | null {
+function computeOpening(project: Project, clearance: number): Rect | null {
   const layout = computeLayout(project);
   const rises = computeRises(project);
   const positions = placeNosings(project, layout, rises.riserCount);
@@ -262,11 +299,75 @@ function computeOpening(project: Project): Rect | null {
     { s: positions.s, z: rises.z, landings: positions.landingTreads },
     zMax,
   );
-  return region ? boundingRect(region.points) : null;
+  return region ? growAlongStairEdges(boundingRect(region.points), layout, clearance) : null;
+}
+
+/** Tolérance (mm) de repérage d'un bord d'escalier sur un côté de trémie (grille d'arrondi). */
+const OPENING_EDGE_TOLERANCE = 10;
+
+/**
+ * Élargit les côtés de la trémie `rect` qui longent un bord de l'escalier (segment droit du
+ * jour C_i ou du bord extérieur C_e, parallèle au côté et le chevauchant) : c'est là que
+ * passent les garde-corps de volée, décalés vers le vide. Un côté **au nu** du bord (à moins de
+ * `OPENING_EDGE_TOLERANCE`) recule de `clearance`. Avec `topUp` (corrections proposées,
+ * `suggestFixes`), un côté déjà en retrait d'un bord de d < `clearance` (trémie déjà élargie,
+ * par exemple par un préréglage) recule du complément, arrondi au pas supérieur de
+ * `OPENING_EDGE_TOLERANCE` ; sans `topUp` (préréglages), seuls les côtés au nu bougent. Le côté de l'arrivée (nez de dalle) et le côté
+ * bas de la trémie (où l'échappée redevient suffisante) ne longent aucun bord et restent en place.
+ */
+export function growAlongStairEdges(
+  rect: Rect,
+  layout: Layout,
+  clearance: number,
+  topUp = false,
+): Rect {
+  if (clearance === 0) return rect;
+  const x0 = rect.x;
+  const x1 = rect.x + rect.sizeX;
+  const y0 = rect.y;
+  const y1 = rect.y + rect.sizeY;
+  const tol = OPENING_EDGE_TOLERANCE;
+  const lines = [...layout.inner.segments, ...layout.outer.segments].filter(
+    (seg): seg is Extract<typeof seg, { kind: "line" }> => seg.kind === "line",
+  );
+  const overlaps = (a0: number, a1: number, b0: number, b1: number): boolean =>
+    Math.min(Math.max(a0, a1), b1) - Math.max(Math.min(a0, a1), b0) > tol;
+  /** Recul d'un côté dont le bord d'escalier est à `d` vers l'intérieur de la trémie. */
+  const growth = (d: number): number => {
+    if (d < -tol) return 0;
+    if (d <= tol) return clearance;
+    if (!topUp || d >= clearance) return 0;
+    return Math.ceil((clearance - d) / tol) * tol;
+  };
+  /** Recul du côté x = `x` ; `inward` = +1 si l'intérieur de la trémie est vers les x croissants. */
+  const alongX = (x: number, inward: 1 | -1): number =>
+    Math.max(
+      0,
+      ...lines
+        .filter((l) => Math.abs(l.a.x - l.b.x) <= tol && overlaps(l.a.y, l.b.y, y0, y1))
+        .map((l) => growth(inward * ((l.a.x + l.b.x) / 2 - x))),
+    );
+  const alongY = (y: number, inward: 1 | -1): number =>
+    Math.max(
+      0,
+      ...lines
+        .filter((l) => Math.abs(l.a.y - l.b.y) <= tol && overlaps(l.a.x, l.b.x, x0, x1))
+        .map((l) => growth(inward * ((l.a.y + l.b.y) / 2 - y))),
+    );
+  const left = alongX(x0, 1);
+  const right = alongX(x1, -1);
+  const bottom = alongY(y0, 1);
+  const top = alongY(y1, -1);
+  return {
+    x: x0 - left,
+    y: y0 - bottom,
+    sizeX: rect.sizeX + left + right,
+    sizeY: rect.sizeY + bottom + top,
+  };
 }
 
 /** Valeur donnée par l'option ou par `patch` ; les deux à la fois doivent concorder. */
-function pick(
+export function pick(
   label: string,
   option: number | undefined,
   patched: number | undefined,
@@ -277,7 +378,7 @@ function pick(
   return option ?? patched;
 }
 
-function requirePositiveInt(label: string, value: number): void {
+export function requirePositiveInt(label: string, value: number): void {
   if (!Number.isInteger(value) || value <= 0) {
     throw new RangeError(
       `${label} doit être un entier strictement positif en mm (reçu : ${value}).`,
@@ -299,17 +400,35 @@ function requirePositiveInt(label: string, value: number): void {
  *   E > 1 200, nombre de hauteurs hors [2 ; 60], H trop faible pour la forme).
  */
 export function createProject(preset: PresetId, options: PresetOptions = {}): Project {
+  if (preset === "helical") return createHelicalProject(options);
+  if (
+    options.outerRadius !== undefined ||
+    options.coreRadius !== undefined ||
+    options.openingShape !== undefined
+  ) {
+    throw new RangeError(
+      `Le préréglage « ${preset} » n'accepte pas les options de l'hélicoïdal (rayons, trémie).`,
+    );
+  }
   const shape = SHAPES[preset];
   const patch = options.patch;
   const height =
     pick("floorToFloor", options.floorToFloor, patch?.site?.floorToFloor) ?? DEFAULT_FLOOR_TO_FLOOR;
-  const width = pick("width", options.width, patch?.stair?.layout?.width) ?? shape.width;
+  // Tracé à volées (les préréglages n'en produisent pas d'autre) : `width` de la surcharge.
+  const patchedLayout = patch?.stair?.layout as { readonly width?: number } | undefined;
+  const width = pick("width", options.width, patchedLayout?.width) ?? shape.width;
   const slab =
     pick("upperSlabThickness", options.upperSlabThickness, patch?.site?.upperSlabThickness) ??
     DEFAULT_SLAB_THICKNESS;
   requirePositiveInt("La hauteur à monter", height);
   requirePositiveInt("L'emmarchement", width);
   requirePositiveInt("L'épaisseur du plancher haut", slab);
+  const clearance = options.openingClearance ?? PRESET_OPENING_CLEARANCE;
+  if (!Number.isInteger(clearance) || clearance < 0) {
+    throw new RangeError(
+      `Le jeu latéral de la trémie doit être un entier positif ou nul en mm (reçu : ${clearance}).`,
+    );
+  }
   if (width > WALKLINE_MIDDLE_MAX_WIDTH) {
     throw new RangeError(
       `Les préréglages supposent la ligne de foulée au milieu, donc un emmarchement ≤ ${WALKLINE_MIDDLE_MAX_WIDTH} mm.`,
@@ -374,7 +493,7 @@ export function createProject(preset: PresetId, options: PresetOptions = {}): Pr
   if (patch?.site?.opening !== undefined) return project;
   let opening: Rect | null;
   try {
-    opening = computeOpening(project);
+    opening = computeOpening(project, clearance);
   } catch (e) {
     if (e instanceof LayoutError || e instanceof SteppingError) throw new RangeError(e.message);
     throw e;

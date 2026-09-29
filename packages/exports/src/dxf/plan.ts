@@ -33,6 +33,7 @@ export function exportPlanDxf(model: Model, options: PlanDxfOptions = {}): strin
 
   w.polyline(d.contour.vertices, true, L.contour.name);
   for (const t of d.treads) w.polyline(t.surface.vertices, true, L.treads.name);
+  if (d.landing) w.polyline(d.landing.vertices, true, L.treads.name);
   for (const n of d.nosings) w.line(n.a, n.b, L.nosings.name);
   w.polyline(d.walkline.vertices, false, L.walkline.name);
   w.circle(d.walklineStart.center, d.walklineStart.radius, L.walkline.name);

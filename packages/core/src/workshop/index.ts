@@ -21,6 +21,8 @@ export {
   BENDING_FAMILIES,
   BEND_METHODS,
   DEFAULT_SAW_KERF,
+  DEFAULT_PLATE_ROLLING,
+  type PlateRolling,
   ProfileBendingSchema,
   minProfileBendRadius,
   type ProfileBending,

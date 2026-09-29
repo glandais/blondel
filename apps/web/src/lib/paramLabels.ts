@@ -32,6 +32,11 @@ export const GROUP_LABELS: Readonly<Record<string, string>> = {
   plates: "Platines",
   folded: "Marches en tôle pliée",
   precheck: "Prédimensionnement indicatif",
+  curved: "Limon de jour débillardé",
+  column: "Fût",
+  treads: "Marches",
+  outerStringer: "Limon extérieur",
+  handrail: "Main courante",
 };
 
 const MM = "mm";
@@ -176,6 +181,93 @@ const BY_KIND: Readonly<Record<string, Readonly<Record<string, FieldText>>>> = {
   },
   "steel-flat": {
     thickness: { label: "Épaisseur des limons (plat)", unit: MM, hint: TO_VALIDATE },
+  },
+  "steel-curved": {
+    thickness: {
+      label: "Épaisseur des limons (plat et tôle roulée)",
+      unit: MM,
+      hint: TO_VALIDATE,
+    },
+    "curved.jointOffset": {
+      label: "Décalage joint / naissance δ (partie droite)",
+      unit: MM,
+      hint: TO_VALIDATE,
+    },
+    "curved.jointSupportMargin": {
+      label: "Marge joint / support de marche",
+      unit: MM,
+      hint: TO_VALIDATE,
+    },
+    "curved.minSegmentLength": {
+      label: "Longueur minimale d'un tronçon",
+      unit: MM,
+      hint: TO_VALIDATE,
+    },
+    "curved.sampleStep": {
+      label: "Pas d'échantillonnage des rives Δσ",
+      unit: MM,
+      hint: "B §5.2 : par exemple 5 mm",
+    },
+    "curved.rollLineSpacing": {
+      label: "Espacement des lignes de roulage (développé)",
+      unit: MM,
+      hint: TO_VALIDATE,
+    },
+    "curved.minPerpendicularWidth": {
+      label: "Largeur perpendiculaire minimale du limon",
+      unit: MM,
+      hint: TO_VALIDATE,
+    },
+    "curved.maxSlopeBreak": {
+      label: "Cassure de pente maximale aux naissances",
+      unit: "°",
+      hint: "Aucune valeur sourcée : sans seuil, la cassure est mesurée et affichée",
+    },
+  },
+  "helical-core": {
+    "column.material": { label: "Matériau", options: { steel: "Acier (tube)", wood: "Bois" } },
+    "column.wallThickness": { label: "Paroi du tube acier", unit: MM, hint: TO_VALIDATE },
+    "column.wood": { label: "Essence du fût bois", options: MATERIAL_LABELS },
+    "column.topExtension": {
+      label: "Dépassement au-dessus du plancher haut",
+      unit: MM,
+      hint: TO_VALIDATE,
+    },
+    "treads.material": { label: "Matériau", options: { wood: "Bois", steel: "Tôle plane" } },
+    "treads.plateThickness": { label: "Épaisseur de la tôle", unit: MM, hint: TO_VALIDATE },
+    "outerStringer.enabled": { label: "Limon extérieur hélicoïdal" },
+    "outerStringer.height": {
+      label: "Hauteur du plat",
+      unit: MM,
+      hint: "Exemple relevé (C §2.2), à valider",
+    },
+    "outerStringer.thickness": { label: "Épaisseur", unit: MM, hint: TO_VALIDATE },
+    "outerStringer.topAboveNosing": {
+      label: "Rive haute au-dessus de la ligne des nez",
+      unit: MM,
+      hint: TO_VALIDATE,
+    },
+    "handrail.enabled": { label: "Main courante hélicoïdale" },
+    "handrail.material": { label: "Matériau", options: { steel: "Acier", wood: "Bois" } },
+    "handrail.height": {
+      label: "Hauteur au-dessus de la ligne des nez",
+      unit: MM,
+      hint: "Défaut : minimum de GC_HAUTEUR_RAMPANT_2024",
+    },
+    "handrail.diameter": {
+      label: "Diamètre",
+      unit: MM,
+      hint: "Exemple relevé (C §2.2), à valider",
+    },
+    "handrail.radiusOffset": {
+      label: "Décalage radial de l'axe",
+      unit: MM,
+      hint: "Par rapport au bout des marches (ou à l'axe du limon extérieur)",
+    },
+    cantileverJustification: {
+      label: "Justification du porte-à-faux",
+      hint: "Référence de la note de calcul ou de l'avis technique ; vide : avertissement",
+    },
   },
 };
 

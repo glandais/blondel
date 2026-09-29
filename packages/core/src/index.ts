@@ -12,6 +12,8 @@ export * from "./headroom/index.js";
 export * from "./parts/index.js";
 export * from "./workshop/index.js";
 export * from "./structures/index.js";
+// Plugin hélicoïdal (jalon 5a) : enregistré au chargement de son module.
+export * from "./structures/helicalCore.js";
 export * from "./structures/compare.js";
 export * from "./catalog/index.js";
 export * from "./precheck/index.js";

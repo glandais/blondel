@@ -18,8 +18,10 @@ import {
   boundingRect,
   createProject,
   deepMerge,
+  growAlongStairEdges,
   PRESET_HEADROOM_MIN,
   PRESET_IDS,
+  PRESET_OPENING_CLEARANCE,
   type PresetId,
   type Rect,
 } from "./presets.js";
@@ -91,12 +93,57 @@ describe("createProject", () => {
     expect(blondel).toBeGreaterThan(625);
     expect(blondel).toBeLessThan(635);
     checkHeadroomCoverage(p);
+    // Trémie dans l'emprise, élargie au plus du jeu latéral le long des bords de l'escalier.
     const o = openingRect(p);
     const fp = footprintRect(p);
-    expect(o.x).toBeGreaterThanOrEqual(fp.x - 10);
-    expect(o.y).toBeGreaterThanOrEqual(fp.y - 10);
-    expect(o.x + o.sizeX).toBeLessThanOrEqual(fp.x + fp.sizeX + 10);
-    expect(o.y + o.sizeY).toBeLessThanOrEqual(fp.y + fp.sizeY + 10);
+    const margin = PRESET_OPENING_CLEARANCE + 10;
+    expect(o.x).toBeGreaterThanOrEqual(fp.x - margin);
+    expect(o.y).toBeGreaterThanOrEqual(fp.y - margin);
+    expect(o.x + o.sizeX).toBeLessThanOrEqual(fp.x + fp.sizeX + margin);
+    expect(o.y + o.sizeY).toBeLessThanOrEqual(fp.y + fp.sizeY + margin);
+  });
+
+  it("jeu latéral de trémie : côtés le long de l'escalier élargis, arrivée et bas inchangés", () => {
+    const flush = openingRect(createProject("straight", { openingClearance: 0 }));
+    const p = createProject("straight");
+    const o = openingRect(p);
+    expect(PRESET_OPENING_CLEARANCE).toBe(100);
+    // Droit (x ∈ [0 ; E]) : les deux côtés longent les bords ; bas et arrivée inchangés.
+    expect(flush.x).toBe(0);
+    expect(flush.sizeX).toBe(p.stair.layout.width);
+    expect(o).toMatchObject({
+      x: -PRESET_OPENING_CLEARANCE,
+      y: flush.y,
+      sizeX: flush.sizeX + 2 * PRESET_OPENING_CLEARANCE,
+      sizeY: flush.sizeY,
+    });
+    const q = openingRect(createProject("quarter-left", { openingClearance: 50 }));
+    const q0 = openingRect(createProject("quarter-left", { openingClearance: 0 }));
+    // Quart à gauche : seconde volée vers −X, bords y = L1 − E (jour) et y = L1 (mur), et bord
+    // extérieur x = E de la première volée au droit du tournant ; l'arrivée (x minimal) ne
+    // bouge pas.
+    expect(q0.x + q0.sizeX).toBe(900);
+    expect(q).toEqual({ ...q0, y: q0.y - 50, sizeX: q0.sizeX + 50, sizeY: q0.sizeY + 100 });
+    for (const bad of [-1, 1.5, Number.NaN]) {
+      expect(() => createProject("straight", { openingClearance: bad })).toThrow(RangeError);
+    }
+  });
+
+  it("growAlongStairEdges : côté au nu élargi ; côté en retrait complété seulement avec topUp", () => {
+    const p = createProject("straight", { openingClearance: 0 });
+    const layout = computeLayout(p);
+    const { x, y, sizeX, sizeY } = openingRect(p);
+    const o: Rect = { x, y, sizeX, sizeY };
+    const E = p.stair.layout.width;
+    // Côté gauche déjà en retrait de 40 mm, côté droit au nu (x = E).
+    const r = { ...o, x: -40, sizeX: E + 40 };
+    expect(growAlongStairEdges(r, layout, 100)).toEqual({ ...r, sizeX: E + 140 });
+    // topUp : complément de 60 mm à gauche (40 + 60 = 100), 100 mm à droite.
+    expect(growAlongStairEdges(r, layout, 100, true)).toEqual({ ...r, x: -100, sizeX: E + 200 });
+    // Côté déjà en retrait d'au moins le jeu : inchangé ; complément arrondi à 10 mm.
+    expect(growAlongStairEdges({ ...o, x: -150, sizeX: E + 150 }, layout, 100, true).x).toBe(-150);
+    expect(growAlongStairEdges({ ...o, x: -43, sizeX: E + 43 }, layout, 100, true).x).toBe(-103);
+    expect(growAlongStairEdges(r, layout, 0, true)).toEqual(r);
   });
 
   it("l'échappée minimale est lue dans rules.yaml (ECHAPPEE_MIN_DTU)", () => {
@@ -220,11 +267,13 @@ describe("createProject", () => {
     checkHeadroomCoverage(p);
     const o = openingRect(p);
     expect(o.y).toBe(0);
-    expect(o.x + o.sizeX).toBe(p.stair.layout.width);
+    expect(o.x + o.sizeX).toBe(p.stair.layout.width + PRESET_OPENING_CLEARANCE);
     // Cas courant : palier dégagé (2 700 − 200 − 3 × 180 = 1 960 ≥ 1 900), première volée hors
     // trémie (sur un palier, la ligne de pente est le dessus du palier).
     const q = createProject("quarter-landing");
-    expect(openingRect(q).y).toBe(numericLegs(q)[0]! - q.stair.layout.width);
+    expect(openingRect(q).y).toBe(
+      numericLegs(q)[0]! - q.stair.layout.width - PRESET_OPENING_CLEARANCE,
+    );
   });
 
   it("un patch sur H, E, la dalle ou le réglage des hauteurs garde volées et trémie cohérentes", () => {

@@ -87,11 +87,10 @@ describe("intégration : demi-tournant balancé, acier, tôle pliée, garde-corp
     expect(guards.some((p) => p.category === "baluster")).toBe(true);
     expect(guards.some((p) => p.category === "handrail")).toBe(true);
     for (const p of guards) expect(p.mark, p.id).toMatch(/^(PG|BA|MC)\d+$/);
-    // Trémie du préréglage au ras de l'escalier : le rampant côté extérieur traverse la dalle
-    // haute (point en suspens du ledger), signalé en avertissement seulement.
+    // Trémie du préréglage élargie du jeu latéral (`openingClearance`, 100 mm à valider) le long
+    // des bords de l'escalier : aucun rampant ne traverse la dalle haute.
     const clash = m.compliance.results.filter((r) => r.ruleId === "GC_CONFLIT_DALLE");
-    expect(clash.length).toBeGreaterThan(0);
-    for (const r of clash) expect(r.severity).toBe("avertissement");
+    expect(clash).toEqual([]);
   });
 
   it("mémoïsation : changer les garde-corps ne recalcule ni découpage ni structure", () => {

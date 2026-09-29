@@ -19,8 +19,8 @@ function fieldsOf(kind: string, params: Record<string, unknown> = {}) {
 }
 
 describe("formulaire des structures en français", () => {
-  it("steel-flat et steel-profile : tous les paramètres ont un libellé français", () => {
-    for (const kind of ["steel-flat", "steel-profile"]) {
+  it("steel-flat, steel-profile, steel-curved, helical-core : tous les paramètres ont un libellé français", () => {
+    for (const kind of ["steel-flat", "steel-profile", "steel-curved", "helical-core"]) {
       const fields = fieldsOf(kind);
       expect(fields.length).toBeGreaterThan(10);
       for (const f of fields) {

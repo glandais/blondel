@@ -5,6 +5,7 @@
  */
 import { Suspense, lazy, useEffect, type KeyboardEvent } from "react";
 import { CompliancePanel } from "./components/CompliancePanel.js";
+import { ErrorsBar } from "./components/ErrorsBar.js";
 import { ParamsPanel } from "./components/ParamsPanel.js";
 import { PrecheckPanel } from "./components/PrecheckPanel.js";
 import { StatusBar } from "./components/StatusBar.js";
@@ -156,6 +157,7 @@ function CentralView() {
   }
   return (
     <section className="center" aria-label="Vues de l'escalier">
+      <ErrorsBar />
       <Tabs />
       <div id="view-panel" role="tabpanel" aria-labelledby={`tab-${view}`} className="view">
         {content}

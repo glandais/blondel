@@ -6,15 +6,23 @@
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
 import { downloadFile, downloadFiles } from "../lib/download.js";
 import {
+  DEFAULT_EXPORT_DEPS,
   EXPORT_ENTRIES,
   buildExport,
   exportAvailability,
   fileStem,
   partDxfFile,
+  type ExportDeps,
   type ExportId,
 } from "../lib/exportFiles.js";
 import { selectedPart } from "../lib/parts.js";
-import { appStore, useApp, useModel } from "../store/appStore.js";
+import { appStore, modelService, useApp, useModel } from "../store/appStore.js";
+
+/** Dossier PDF mis en page dans le worker de calcul (le fil principal reste disponible). */
+const EXPORT_DEPS: ExportDeps = {
+  ...DEFAULT_EXPORT_DEPS,
+  renderPdf: (project) => modelService.exportPdf(project),
+};
 
 function notify(kind: "info" | "error", text: string): void {
   appStore.setState({ notice: { kind, text } });
@@ -49,7 +57,7 @@ export function ExportMenu() {
     setOpen(false);
     setBusy(true);
     try {
-      const files = await buildExport(id, project, model);
+      const files = await buildExport(id, project, model, EXPORT_DEPS);
       if (files.length === 0) notify("info", "Aucun fichier à exporter.");
       else {
         downloadFiles(files);

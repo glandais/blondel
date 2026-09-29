@@ -4,11 +4,12 @@ import { computeLayout } from "../layout/layout.js";
 import type { Part } from "../model/derived.js";
 import { ProjectSchema, type Project, type ProjectInput } from "../model/project.js";
 import { buildModel, clearModelCache } from "../pipeline/build.js";
-import { createProject } from "../project/presets.js";
+import { createProject, PRESET_IDS } from "../project/presets.js";
 import { computeStepping } from "../stepping/stepping.js";
 import { makeSteppingProject, stairArb } from "../stepping/test-helpers.js";
 import { computeGuards } from "./compute.js";
 import { GuardError } from "./errors.js";
+import { jourWidth } from "./jour.js";
 import { sectionHeight } from "./parts.js";
 import type { GuardsAnalysis } from "./types.js";
 
@@ -287,11 +288,13 @@ describe("computeGuards — propriétés (escaliers tournants générés)", () =
         try {
           a = analyze(p);
         } catch (e) {
-          // Jour plus étroit que deux décalages : paramètres impossibles, erreur explicite.
+          // Paramètres impossibles (hauteur, entraxe) : erreur explicite.
           expect(e).toBeInstanceOf(GuardError);
-          expect(String(e)).toMatch(/jour trop étroit/);
           return;
         }
+        // Jour plus étroit que la sphère T1 ou que deux décalages : plus d'exception, la ligne
+        // concernée n'est pas produite et l'erreur est lisible (reprise dans Model.errors).
+        for (const err of a.errors ?? []) expect(err).toMatch(/jour/);
         const st = computeStepping(p, computeLayout(p));
         const maxRise = Math.max(
           ...st.nosings.map((n, k) => n.z - (k > 0 ? st.nosings[k - 1]!.z : 0)),
@@ -363,9 +366,10 @@ describe("computeGuards — propriétés (escaliers tournants générés)", () =
 
 describe("computeGuards — conflit avec le plancher haut", () => {
   it("bords d'escalier au nu de la trémie : rampants décalés sous la dalle signalés", () => {
-    // Préréglage droit : trémie de la largeur de l'escalier (x ∈ [0 ; 900]) ; garde-corps à
-    // 30 mm vers le vide, donc sous la dalle ; la main courante traverse la dalle en haut.
-    const m = buildModel(withGuards(createProject("straight"), {}));
+    // Préréglage droit sans jeu latéral : trémie de la largeur de l'escalier (x ∈ [0 ; 900]) ;
+    // garde-corps à 30 mm vers le vide, donc sous la dalle ; la main courante traverse la dalle.
+    const flush = createProject("straight", { openingClearance: 0 });
+    const m = buildModel(withGuards(flush, {}));
     const clashes = m.compliance.results.filter((r) => r.ruleId === "GC_CONFLIT_DALLE");
     expect(clashes.map((r) => r.location)).toEqual([
       { kind: "part", partId: "guard-inner-1-handrail" },
@@ -380,14 +384,14 @@ describe("computeGuards — conflit avec le plancher haut", () => {
 
   it("décalage nul (garde-corps au nu de la trémie) : aucun conflit", () => {
     const m = buildModel(
-      withGuards(createProject("straight"), {
+      withGuards(createProject("straight", { openingClearance: 0 }), {
         flight: { edgeOffset: 0 },
         handrail: { section: { kind: "round", diameter: 42 } },
       }),
     );
     // Axe au nu : la demi-section déborde encore sous la dalle.
     expect(m.compliance.results.some((r) => r.ruleId === "GC_CONFLIT_DALLE")).toBe(true);
-    const wide = createProject("straight");
+    const wide = createProject("straight", { openingClearance: 0 });
     const opening = wide.site.opening!;
     if (opening.kind !== "rect") throw new Error("trémie rectangulaire attendue");
     const m2 = buildModel(
@@ -403,5 +407,64 @@ describe("computeGuards — conflit avec le plancher haut", () => {
       ),
     );
     expect(m2.compliance.results.some((r) => r.ruleId === "GC_CONFLIT_DALLE")).toBe(false);
+  });
+
+  it.each(PRESET_IDS)(
+    "préréglage « %s » (jeu latéral par défaut) avec garde-corps : aucun conflit",
+    (preset) => {
+      for (const floorToFloor of [2500, 2700, 2900]) {
+        const m = buildModel(withGuards(createProject(preset, { floorToFloor }), {}));
+        expect(m.errors).toEqual([]);
+        const clash = m.compliance.results.filter((r) => r.ruleId === "GC_CONFLIT_DALLE");
+        expect(clash, `${preset} H=${floorToFloor}`).toEqual([]);
+      }
+    },
+  );
+});
+
+describe("computeGuards — jour plus étroit que la sphère T1", () => {
+  /** Demi-tournant dont la volée centrale mesure 2E + `well` (jour de `well` mm). */
+  function halfTurn(well: number) {
+    const p = createProject("half-turn");
+    const legs = p.stair.layout.legs.map((l, i) =>
+      i === 1 ? { length: 2 * p.stair.layout.width + well } : l,
+    );
+    return withGuards(p, {}, { stair: { ...p.stair, layout: { ...p.stair.layout, legs } } });
+  }
+
+  it("jour de 20 à 109 mm : erreur de modèle lisible, pas d'exception, autres lignes produites", () => {
+    for (const well of [20, 60, 109]) {
+      const project = halfTurn(well);
+      const layout = computeLayout(project);
+      expect(jourWidth(layout, project.stair.layout.turns)).toBeCloseTo(well, 6);
+      const g = computeGuards(project, layout, computeStepping(project, layout));
+      expect(g.errors).toHaveLength(1);
+      expect(g.errors![0]).toContain(`jour de ${well} mm`);
+      expect(g.runs.some((r) => r.side === "inner")).toBe(false);
+      expect(g.runs.some((r) => r.side === "outer")).toBe(true);
+      const m = buildModel(project);
+      expect(m.errors).toEqual(g.errors);
+      expect(m.parts.some((p) => p.id.startsWith("guard-outer"))).toBe(true);
+    }
+  });
+
+  it("jour de 110 mm et plus : garde-corps de jour produit", () => {
+    const project = halfTurn(150);
+    const layout = computeLayout(project);
+    const g = computeGuards(project, layout, computeStepping(project, layout));
+    expect(g.errors ?? []).toEqual([]);
+    expect(g.runs.some((r) => r.side === "inner")).toBe(true);
+  });
+
+  it("largeur du jour : poteaux d'angle déduits, quart tournant sans jour", () => {
+    const q = createProject("quarter-left");
+    expect(jourWidth(computeLayout(q), q.stair.layout.turns)).toBe(Infinity);
+    const h = createProject("half-turn");
+    const turns = h.stair.layout.turns.map((t) => ({
+      ...t,
+      inner: { kind: "newel" as const, size: 100 },
+    }));
+    const hn = { ...h, stair: { ...h.stair, layout: { ...h.stair.layout, turns } } };
+    expect(jourWidth(computeLayout(hn), turns)).toBeCloseTo(240 - 100, 6);
   });
 });

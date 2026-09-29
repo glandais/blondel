@@ -20,6 +20,8 @@ export {
 export {
   applySolution,
   colletBetween,
+  cornerMonotonyBreaks,
+  cornerPositions,
   findCrossings,
   firstHit,
   monotonyBreaks,

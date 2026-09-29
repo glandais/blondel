@@ -7,6 +7,7 @@
  */
 import type { StructureContext, StructureKind } from "@blondel/core";
 import { useMemo, useState } from "react";
+import { layoutKindOf, structureFitsLayout } from "../lib/layoutKind.js";
 import { availableStructures } from "../lib/optionalApi.js";
 import {
   deriveParamFields,
@@ -162,9 +163,19 @@ export function StructureSection() {
     [plugin, defaults, params],
   );
 
+  const layoutKind = layoutKindOf(project);
   const options = [
     { value: NO_STRUCTURE, label: "Aucune (marches, contremarches, paliers)" },
-    ...kinds.map((k) => ({ value: k.kind, label: `${k.label} (${FAMILY_LABELS[k.family]})` })),
+    ...kinds.map((k) => ({
+      value: k.kind,
+      label: `${k.label} (${FAMILY_LABELS[k.family]})${
+        structureFitsLayout(k.kind, layoutKind)
+          ? ""
+          : layoutKind === "helical"
+            ? " — escaliers à volées seulement"
+            : " — hélicoïdal seulement"
+      }`,
+    })),
     ...(structure.kind !== NO_STRUCTURE && !plugin
       ? [{ value: structure.kind, label: `${structure.kind} (plugin indisponible)` }]
       : []),

@@ -23,7 +23,19 @@ export function stableStringify(value: unknown, indent = 2): string {
   return JSON.stringify(sortKeys(value), null, indent);
 }
 
+/**
+ * Projet tel qu'il est enregistré : les champs **dérivés** d'un tracé hélicoïdal (`width`,
+ * `legs`, `turns`, recalculés à la lecture, voir `HelicalLayoutSpecSchema`) sont retirés. Les
+ * autres projets sont rendus tels quels.
+ */
+function persistedForm(project: Project): unknown {
+  const layout = project.stair.layout;
+  if (layout.kind !== "helical") return project;
+  const { width: _width, legs: _legs, turns: _turns, ...rest } = layout;
+  return { ...project, stair: { ...project.stair, layout: rest } };
+}
+
 /** Texte d'un fichier `.blondel.json`. */
 export function serializeProject(project: Project): string {
-  return `${stableStringify(project)}\n`;
+  return `${stableStringify(persistedForm(project))}\n`;
 }

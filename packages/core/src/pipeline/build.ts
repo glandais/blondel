@@ -22,7 +22,9 @@
  *   ni analyse (règles GC_* / MC_* « non évaluées ») ; présent, lignes de garde-corps de volée
  *   (côtés vides) et de trémie, mains courantes, pièces ajoutées au modèle ; l'analyse est
  *   transmise au contrôle de conception (`ComplianceInput.guards`) et ses contrôles hors table
- *   (câbles) s'ajoutent au rapport. Paramètres impossibles : `GuardError` dans `Model.errors`.
+ *   (câbles) s'ajoutent au rapport. Paramètres impossibles : `GuardError` dans `Model.errors` ;
+ *   ligne isolée impossible (jour plus étroit que la sphère T1) : `GuardsAnalysis.errors` repris
+ *   dans `Model.errors`, les autres lignes sont produites.
  * - **Mémoïsation** par identité : le modèle d'un même projet (objet immuable) est rendu tel
  *   quel ; sinon chaque étape réutilise son dernier résultat si ses dépendances (sous-objets du
  *   projet et étapes amont) sont les mêmes objets.
@@ -401,6 +403,8 @@ export function buildModel(project: Project, options: BuildModelOptions = {}): M
       guards = guardsStage.value;
       parts = [...parts, ...guards.parts];
       notes.push(...guards.notes);
+      // Lignes impossibles (jour trop étroit…) : erreurs lisibles, les autres lignes restent.
+      errors.push(...(guards.errors ?? []));
       guardResults = guardChecks(project, stepping, guards);
     }
   }

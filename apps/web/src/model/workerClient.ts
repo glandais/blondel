@@ -7,7 +7,7 @@
 import type { Project } from "@blondel/core";
 import type { CompareOutcome, Variant } from "../lib/variants.js";
 import { createJobRunner, type JobRunner } from "./handler.js";
-import type { WorkerJob, WorkerRequest, WorkerResponse } from "./protocol.js";
+import type { PdfResult, WorkerJob, WorkerRequest, WorkerResponse } from "./protocol.js";
 import type { ModelSnapshot } from "./snapshot.js";
 
 /** Sous-ensemble de `Worker` utilisé (injectable dans les tests). */
@@ -25,6 +25,11 @@ export type WorkerFactory = () => WorkerLike | null;
 export interface JobExec {
   build(project: Project): ModelSnapshot | Promise<ModelSnapshot>;
   compare(project: Project, variants: readonly Variant[]): CompareOutcome | Promise<CompareOutcome>;
+  /**
+   * Dossier PDF du projet, mis en page dans le worker (repli : fil principal). Rejette avec le
+   * message de l'export si celui-ci échoue (sans basculer sur le fil principal).
+   */
+  pdf(project: Project): Promise<Uint8Array>;
   /** Le worker est-il utilisé (sinon : fil principal) ? */
   readonly usesWorker: boolean;
   dispose(): void;
@@ -122,6 +127,23 @@ export function createJobExec(
           return runLocal().compare(job);
         },
       );
+    },
+    async pdf(project) {
+      const job = { type: "pdf", project } as const;
+      const p = call(job);
+      let result: PdfResult;
+      if (!p) result = await runLocal().pdf(job);
+      else {
+        result = await p.then(
+          (r) => (r.type === "pdf" ? r.result : runLocal().pdf(job)),
+          (e: unknown) => {
+            if (!broken) fail(e);
+            return runLocal().pdf(job);
+          },
+        );
+      }
+      if ("error" in result) throw new Error(result.error);
+      return result.bytes;
     },
     get usesWorker() {
       return !broken && worker !== null;

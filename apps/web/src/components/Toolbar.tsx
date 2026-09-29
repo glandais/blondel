@@ -2,7 +2,7 @@
  * Barre d'outils : nom du projet, préréglages, annuler/rétablir, import, menu « Exporter », unité
  * d'affichage et thème.
  */
-import { PRESET_IDS, PRESET_LABELS, type PresetId } from "@blondel/core";
+import { ALL_PRESET_IDS, PRESET_LABELS, type PresetId } from "@blondel/core";
 import { useId, useRef, useState } from "react";
 import { appStore, useApp } from "../store/appStore.js";
 import { ExportMenu } from "./ExportMenu.js";
@@ -36,7 +36,7 @@ export function Toolbar() {
           value={preset}
           onChange={(e) => setPreset(e.target.value as PresetId)}
         >
-          {PRESET_IDS.map((id) => (
+          {ALL_PRESET_IDS.map((id) => (
             <option key={id} value={id}>
               {PRESET_LABELS[id]}
             </option>

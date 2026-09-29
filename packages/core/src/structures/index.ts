@@ -1,17 +1,20 @@
 /**
- * Plugins de structure (`StructureKind`) : registre, plugins bois du jalon 3a et métal du
- * jalon 3b.
+ * Plugins de structure (`StructureKind`) : registre, plugins bois du jalon 3a et métal des
+ * jalons 3b, 3c et 5b.
  *
  * Plugins intégrés, enregistrés au chargement : `wood-housed` (limons à la française, poteaux
  * d'angle), `wood-cut` (crémaillères, escalier droit), `steel-flat` (limons acier en plat
- * découpé laser, supports, marches bois ou en tôle pliée Z / U) et `steel-profile` (limons en
- * profilés du commerce UPN / IPN / IPE / HEA, jalon 3c).
+ * découpé laser, supports, marches bois ou en tôle pliée Z / U), `steel-profile` (limons en
+ * profilés du commerce UPN / IPN / IPE / HEA, jalon 3c) et `steel-curved` (limon de jour
+ * débillardé soudé, tôle roulée par tronçons, jalon 5b).
  */
 import { registerStructure, getStructure } from "./registry.js";
 import { WOOD_CUT } from "./woodCut.js";
 import { STEEL_FLAT } from "./steelFlat.js";
 import { STEEL_PROFILE } from "./steelProfile.js";
+import { STEEL_CURVED } from "./steelCurved.js";
 import { WOOD_HOUSED } from "./woodHoused.js";
+import { registerHelicalCore } from "./helicalCore.js";
 
 export {
   StructureError,
@@ -150,6 +153,35 @@ export {
   type SteelProfileResult,
 } from "./steelProfile.js";
 export {
+  CURVED_RULES,
+  QUANTITY_ROLLED_LENGTH_MM,
+  STEEL_CURVED,
+  SteelCurvedParamsSchema,
+  buildSteelCurved,
+  type CurvedArcZone,
+  type CurvedJoint,
+  type CurvedSegment,
+  type CurvedStringerResult,
+  type CurvedSupport,
+  type SteelCurvedParams,
+  type SteelCurvedResult,
+} from "./steelCurved.js";
+export {
+  arcFiberLength,
+  fiberDevelopment,
+  jourNormal,
+  naissances,
+  nosingProfile,
+  slopeBreakAt,
+  type FiberDevelopment,
+  type FiberPiece,
+  type JourSide,
+  type Naissance,
+  type NosingProfile,
+  type ProfileZone,
+  type SlopeBreak,
+} from "./steelCurvedGeometry.js";
+export {
   cuttingPlan,
   type BarLayout,
   type CutPiece,
@@ -160,3 +192,6 @@ if (!getStructure(WOOD_HOUSED.kind)) registerStructure(WOOD_HOUSED);
 if (!getStructure(WOOD_CUT.kind)) registerStructure(WOOD_CUT);
 if (!getStructure(STEEL_FLAT.kind)) registerStructure(STEEL_FLAT);
 if (!getStructure(STEEL_PROFILE.kind)) registerStructure(STEEL_PROFILE);
+if (!getStructure(STEEL_CURVED.kind)) registerStructure(STEEL_CURVED);
+// Jalon 5a (hélicoïdal à fût central) : plugin défini et exporté par `helicalCore.ts`.
+registerHelicalCore();

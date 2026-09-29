@@ -1,5 +1,6 @@
 import {
   ProjectSchema,
+  buildModel,
   clearModelCache,
   createProject,
   parseProjectText,
@@ -7,8 +8,9 @@ import {
 } from "@blondel/core";
 import { describe, expect, it } from "vitest";
 import j3aText from "../../../../examples/j3a-acceptance-01-bois.blondel.json?raw";
+import { presetProject } from "./layoutKind.js";
 import { availableStructures } from "./optionalApi.js";
-import { compareLines, runVariants, variantParams, variantsFor } from "./variants.js";
+import { applyVariant, compareLines, runVariants, variantParams, variantsFor } from "./variants.js";
 
 const withStructure = (p: Project, kind: string, params: Record<string, unknown> = {}): Project =>
   ProjectSchema.parse({ ...p, stair: { ...p.stair, structure: { kind, params } } });
@@ -108,5 +110,69 @@ describe("comparateur de variantes", () => {
     expect(rows[0]!.cost?.total).toBeGreaterThan(0);
     const cost = compareLines(rows).find((l) => l.key === "cost")!;
     expect(cost.cells[0]!.text).toMatch(/€/);
+  });
+
+  it("débillardé soudé proposé dès qu'il y a un tournant ; hélicoïdal : fût, marches bois ou tôle", () => {
+    const all = availableStructures();
+    expect(variantsFor(createProject("straight"), all).map((v) => v.id)).not.toContain(
+      "steel-curved",
+    );
+    const quarter = variantsFor(createProject("quarter-left"), all).map((v) => v.id);
+    expect(quarter).toContain("steel-curved");
+    const helical = presetProject("helical");
+    const hv = variantsFor(helical, all);
+    expect(hv.map((v) => v.id)).toEqual(["helical-core-wood", "helical-core-steel"]);
+    // Paramètres imposés fusionnés en profondeur (l'épaisseur de tôle du projet est gardée).
+    const own = withStructure(helical, "helical-core", {
+      treads: { material: "wood", plateThickness: 10 },
+    });
+    expect(variantParams(own, hv[1]!)).toEqual({
+      treads: { material: "steel", plateThickness: 10 },
+    });
+  });
+
+  it("même épure, jour adapté : poteau pour les limons droits, arc roulable pour le débillardé, appliqué avec la variante", () => {
+    clearModelCache();
+    const project = createProject("quarter-left");
+    expect(project.stair.layout.turns[0]!.inner.kind).toBe("sharp");
+    const { rows } = runVariants(project, [
+      { id: "wood-housed", kind: "wood-housed", label: "bois" },
+      { id: "steel-curved", kind: "steel-curved", label: "débillardé" },
+    ]);
+    const [housed, curved] = rows as [(typeof rows)[number], (typeof rows)[number]];
+    expect(housed.adaptations[0]!.to.kind).toBe("newel");
+    expect(curved.adaptations[0]!.to.kind).toBe("arc");
+    expect(curved.signals.join(" ")).toMatch(/débillardé/);
+    // Référence : première variante (la structure du projet n'est pas comparée).
+    expect(housed.reference).toBe(true);
+    expect(curved.deviations.join(" ")).toMatch(/Tournant 1 : jour en arc/);
+    const lines = compareLines(rows);
+    expect(lines.find((l) => l.key === "jour")!.cells[1]!.text).toMatch(/^T1 : arc R /);
+    expect(lines.find((l) => l.key === "deviations")!.cells[0]!.text).toBe("référence");
+    expect(() => structuredClone(rows)).not.toThrow();
+
+    const applied = applyVariant(project, curved);
+    expect(applied.stair.structure.kind).toBe("steel-curved");
+    expect(applied.stair.layout.turns[0]!.inner).toEqual(curved.adaptations[0]!.to);
+    expect(ProjectSchema.safeParse(applied).success).toBe(true);
+    expect(buildModel(applied).errors).toEqual([]);
+  });
+
+  it("hélicoïdal : variante « projet » repérée, aucune adaptation ni écart de jour", () => {
+    clearModelCache();
+    const project = presetProject("helical");
+    const { rows } = runVariants(project, variantsFor(project, availableStructures()));
+    expect(rows.map((r) => r.current)).toEqual([true, false]);
+    expect(rows[0]!.reference).toBe(true);
+    for (const r of rows) {
+      expect(r.adaptations).toEqual([]);
+      expect(r.errors).toEqual([]);
+    }
+    const steel = applyVariant(project, rows[1]!);
+    expect(steel.stair.layout).toBe(project.stair.layout);
+    expect(steel.stair.structure).toEqual({
+      kind: "helical-core",
+      params: { treads: { material: "steel" } },
+    });
   });
 });

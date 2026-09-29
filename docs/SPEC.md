@@ -125,7 +125,7 @@ Enseignements de parcours à reprendre [D §1.2, §1.3] :
 
 **Exigences transverses structure** :
 
-- **Classe d'exécution EN 1090-2 déduite et affichée** : S235 non soudé bout à bout → EXC1 ; soudure bout à bout, S355 ou formage à chaud → EXC2 [C §2.1].
+- **Classe d'exécution EN 1090-2 déduite et affichée** : S235 non soudé bout à bout → EXC1 ; soudure bout à bout, S355 **soudé** ou formage à chaud → EXC2 ; un élément non soudé reste en PC1 / EXC1 quelle que soit la nuance [C §2.1, catégories de production d'après CNC2M N0169] (précisé le 2026-09-29, voir LEDGER).
 - **Tables de capacités par atelier / sous-traitant** (cintrage, roulage, pliage, laser, formats de tôle, longueurs de barres) : ce ne sont **pas des constantes** ; les valeurs de C servent de valeurs d'exemple [C §4.1, §6 Q4].
 - Évents automatiques sur les corps creux si galvanisation [C §2.8].
 - Les critères de flèche et de vibration sont **indicatifs** tant que le DTU P3 (RC 5-2, 5-3) n'est pas lu ; valeurs par défaut EN 16481 : L/200 et f₁ ≥ 5 Hz [C §1.3].

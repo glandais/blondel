@@ -6,7 +6,7 @@ import { pointInPolygon, signedArea } from "../geom2d/polygon.js";
 import * as V from "../geom2d/vec.js";
 import type { Vec2 } from "../model/primitives.js";
 import { computeLayout } from "../layout/layout.js";
-import { findCrossings, monotonyBreaks } from "../balancing/postprocess.js";
+import { cornerMonotonyBreaks, cornerPositions, findCrossings } from "../balancing/postprocess.js";
 import { computeStepping } from "./stepping.js";
 import { ProjectSchema, type Project } from "../model/project.js";
 import { stairArb } from "./test-helpers.js";
@@ -73,7 +73,8 @@ describe("découpage — propriétés (générateur contraint : quart tournant, 
   it("K5 des deux côtés, collets > 0, collets monotones vers l'angle (K3), σ croissants", () => {
     fc.assert(
       fc.property(stairArb(), ({ project, typology }) => {
-        const st = computeStepping(project, computeLayout(project));
+        const layout = computeLayout(project);
+        const st = computeStepping(project, layout);
         const ctx = `${typology} ${JSON.stringify(project.stair.layout)} H=${project.site.floorToFloor} ${project.stair.balancing.method}/${project.stair.balancing.variant}\n${st.notes.join("\n")}`;
         // M1 (option « tracé traditionnel ») peut n'avoir aucune solution admissible sur un
         // demi-tournant large à jour étroit : cas signalé dans les notes (voir le ledger).
@@ -97,10 +98,23 @@ describe("découpage — propriétés (générateur contraint : quart tournant, 
         // `colletTieTolerance` du collet maximal), plus un filtre : une zone irrégulière est
         // retenue quand aucune zone régulière n'atteint la cible (ou le collet maximal). Les
         // cas sans candidat régulier existent (poteau, zone unique de 180° à deux angles vifs,
-        // départ libre). Propriété : toute rupture K3 en corde dans une zone est signalée.
+        // départ libre). Propriété : toute rupture K3 en corde dans une zone est signalée ; K3
+        // est évalué **par angle** (une vallée autour de chaque angle du jour de la zone).
+        const cornerS = layout.turns
+          .filter((t) => t.mode === "winders")
+          .map((t) => (t.sStart + t.sEnd) / 2);
         for (const z of st.balancedZones) {
           const zt = st.treads.filter((t) => t.number - 1 >= z.from && t.number <= z.to);
-          if (monotonyBreaks(zt.map((t) => t.colletChord)).length > 0) {
+          const corners = cornerPositions(
+            st.nosings.slice(z.from, z.to + 1).map((n) => n.s),
+            cornerS,
+          );
+          if (
+            cornerMonotonyBreaks(
+              zt.map((t) => t.colletChord),
+              corners,
+            ).length > 0
+          ) {
             expect(
               st.notes.some((n) => n.startsWith("K3 :")),
               ctx,

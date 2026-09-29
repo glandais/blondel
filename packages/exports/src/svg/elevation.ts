@@ -1,7 +1,8 @@
 /**
  * Élévation développée le long de la ligne de foulée : abscisse = s (mm développés sur la
  * ligne de foulée), ordonnée = altitude z. Profil des marches, nez, ligne de pente, plafond
- * (sous-face du plancher haut hors trémie) et échappée.
+ * (sous-face du plancher haut hors trémie, sous-faces de l'escalier lui-même pour un hélicoïdal)
+ * et échappée.
  */
 import {
   curveLength,
@@ -102,6 +103,85 @@ export function ceilingIntervals(
   return out;
 }
 
+/** Portion de plafond formée par une pièce de l'escalier au-dessus de la ligne de foulée. */
+export interface SoffitInterval {
+  /** Abscisses (s) de début et de fin sur la ligne de foulée. */
+  readonly a: Mm;
+  readonly b: Mm;
+  /** Altitude de la sous-face et du dessus de la pièce. */
+  readonly bottom: Mm;
+  readonly top: Mm;
+  /** Numéro de marche ; absent : palier d'arrivée. */
+  readonly tread?: number;
+}
+
+/**
+ * Sous-faces de l'escalier au-dessus de la ligne de foulée (auto-recouvrement d'un hélicoïdal,
+ * `Stepping.soffits`, CHALLENGE G4) : pour chaque sous-face, intervalles d'abscisse où la ligne
+ * de foulée passe sous la pièce, limités aux points situés **avant** la pièce dans la montée
+ * (s < `sStart`, même convention que le calcul d'échappée). Dessus : dessus de la marche, ou
+ * niveau du plancher haut pour le palier d'arrivée.
+ */
+export function soffitIntervals(model: Model, s0: Mm, s1: Mm, step: Mm = 5): SoffitInterval[] {
+  const soffits = model.stepping.soffits ?? [];
+  if (soffits.length === 0 || !(s1 > s0)) return [];
+  const L = curveLength(model.layout.walkline);
+  const H = model.stepping.rises.reduce((x, y) => x + y, 0);
+  const count = Math.max(1, Math.ceil((s1 - s0) / step));
+  const samples = Array.from({ length: count + 1 }, (_, i) => s0 + ((s1 - s0) * i) / count);
+  const points = samples.map((s) => walklinePointExtended(model, s, L));
+  const out: SoffitInterval[] = [];
+  for (const f of soffits) {
+    const top = f.tread !== undefined ? (model.stepping.treads[f.tread - 1]?.z ?? f.z) : H;
+    // Boîte englobante de la pièce : écarte vite les points qui en sont loin.
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+    for (const v of f.outline) {
+      minX = Math.min(minX, v.x);
+      minY = Math.min(minY, v.y);
+      maxX = Math.max(maxX, v.x);
+      maxY = Math.max(maxY, v.y);
+    }
+    const under = (s: Mm, p: Vec2): boolean =>
+      s < f.sStart &&
+      p.x >= minX &&
+      p.x <= maxX &&
+      p.y >= minY &&
+      p.y <= maxY &&
+      pointInPolygon(p, f.outline) !== "outside";
+    const edge = (a: Mm, b: Mm, ua: boolean): Mm => {
+      for (let i = 0; i < 40 && b - a > 1e-6; i++) {
+        const m = (a + b) / 2;
+        if (under(m, walklinePointExtended(model, m, L)) === ua) a = m;
+        else b = m;
+      }
+      return (a + b) / 2;
+    };
+    let start: Mm | undefined = under(samples[0]!, points[0]!) ? samples[0]! : undefined;
+    let prevU = start !== undefined;
+    for (let i = 1; i < samples.length; i++) {
+      const u = under(samples[i]!, points[i]!);
+      if (u && !prevU) start = edge(samples[i - 1]!, samples[i]!, false);
+      else if (!u && prevU && start !== undefined) {
+        const end = edge(samples[i - 1]!, samples[i]!, true);
+        if (end - start > 1e-6) out.push({ a: start, b: end, bottom: f.z, top, ...tread(f.tread) });
+        start = undefined;
+      }
+      prevU = u;
+    }
+    if (start !== undefined && s1 - start > 1e-6) {
+      out.push({ a: start, b: s1, bottom: f.z, top, ...tread(f.tread) });
+    }
+  }
+  return out;
+}
+
+function tread(n: number | undefined): { tread?: number } {
+  return n === undefined ? {} : { tread: n };
+}
+
 /** Altitude de la ligne de pente (interpolation linéaire entre nez) à l'abscisse s. */
 function slopeZ(pts: readonly Vec2[], s: Mm): Mm {
   const first = pts[0]!;
@@ -158,6 +238,8 @@ export function renderElevationSvg(model: Model, options: ElevationSvgOptions = 
       ? ceilingIntervals(model, options.project, sMin, sMax)
       : [];
   const zCeil = H - (slab ?? 0);
+  // Plafond formé par l'escalier lui-même (hélicoïdal : tour supérieur, palier d'arrivée).
+  const soffits = soffitIntervals(model, sMin, sMax);
 
   // Échappée : mesurée (modèle) et gabarit réglementaire (règles applicables).
   const required = requiredHeadroom(model.compliance);
@@ -227,6 +309,27 @@ export function renderElevationSvg(model: Model, options: ElevationSvgOptions = 
         "fill-opacity": 0.6,
         stroke: theme.edge,
         "stroke-width": 0.8,
+      }),
+    );
+  }
+
+  // Sous-faces de l'escalier (auto-recouvrement) : même aplat que le plafond.
+  for (const f of soffits) {
+    const p = toPx(vp, { x: f.a, y: f.top });
+    const q = toPx(vp, { x: f.b, y: f.bottom });
+    body.push(
+      el("rect", {
+        class: "soffit",
+        x: p.x,
+        y: p.y,
+        width: q.x - p.x,
+        height: q.y - p.y,
+        fill: theme.ceiling,
+        "fill-opacity": 0.6,
+        stroke: theme.edge,
+        "stroke-width": 0.8,
+        "data-tread": f.tread,
+        "data-kind": f.tread === undefined ? "landing" : "tread",
       }),
     );
   }
@@ -420,6 +523,9 @@ export function renderElevationSvg(model: Model, options: ElevationSvgOptions = 
       ...(measured ? [`Échappée minimale mesurée : ${fr(measured.min)} mm`] : []),
       ...(required !== undefined ? [`Échappée exigée (règles actives) : ${fr(required)} mm`] : []),
       ...(slab !== undefined ? [`Plancher haut : ${fr(slab)} mm`] : []),
+      ...(soffits.length > 0
+        ? ["Plafond : sous-faces de l'escalier au-dessus de la ligne de foulée (auto-recouvrement)"]
+        : []),
       `Contrôle de conception : ${s.bloquant} bloquant(s), ${s.avertissement} avertissement(s), ${s.conseil} conseil(s)`,
     ];
     const longest = Math.max(...lines.map((l) => l.length));

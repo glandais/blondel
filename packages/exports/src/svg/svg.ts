@@ -178,8 +178,9 @@ export function pathData(vp: Viewport, path: PlanPath): string {
       const arc = arcFromBulge(a, b, a.bulge);
       const r = arc.radius * vp.k;
       const large = Math.abs(arc.sweep) > Math.PI ? 1 : 0;
-      // Y inversé : un arc trigonométrique (monde) est horaire à l'écran → drapeau 1.
-      const sweepFlag = arc.sweep > 0 ? 1 : 0;
+      // Y inversé : un arc trigonométrique (monde) parcourt des angles **décroissants** dans
+      // le repère écran (Y vers le bas), sens « négatif » du SVG → drapeau 0 (SVG 1.1 F.6.5).
+      const sweepFlag = arc.sweep > 0 ? 0 : 1;
       parts.push(`A${n2(r)} ${n2(r)} 0 ${large} ${sweepFlag} ${n2(pb.x)} ${n2(pb.y)}`);
     }
   }

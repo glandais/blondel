@@ -45,7 +45,13 @@ export {
   type ThemeOption,
 } from "./svg/svg.js";
 export { renderPlanSvg, type PlanSvgLayers, type PlanSvgOptions } from "./svg/plan.js";
-export { ceilingIntervals, renderElevationSvg, type ElevationSvgOptions } from "./svg/elevation.js";
+export {
+  ceilingIntervals,
+  renderElevationSvg,
+  soffitIntervals,
+  type ElevationSvgOptions,
+  type SoffitInterval,
+} from "./svg/elevation.js";
 export {
   declareLayers,
   type DxfLayerDef,

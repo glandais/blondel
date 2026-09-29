@@ -57,6 +57,19 @@ function renderDrawing(
   const out: string[] = [];
   const font = { "font-family": theme.fontFamily, "font-size": fontSize };
 
+  // Palier d'arrivée d'un hélicoïdal (sous les marches : les tours supérieurs le recouvrent).
+  if (d.landing) {
+    out.push(
+      el("path", {
+        class: "landing",
+        d: pathData(vp, d.landing),
+        fill: theme.landingFill,
+        stroke: "none",
+        "data-kind": "landing",
+      }),
+    );
+  }
+
   // Marches (remplissage : balancées, paliers, violations).
   out.push(
     el(

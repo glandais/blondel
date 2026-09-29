@@ -1,0 +1,83 @@
+{
+  "compliance": {
+    "contexts": [
+      "bois_dtu",
+      "logement_interieur"
+    ],
+    "overrides": [],
+    "profile": "strict"
+  },
+  "name": "Jalon 5b — quart tournant balancé à jour en arc, limon débillardé soudé",
+  "rulesVersion": 1,
+  "schemaVersion": 1,
+  "site": {
+    "floorToFloor": 2700,
+    "lowerFinish": 0,
+    "opening": {
+      "kind": "rect",
+      "sizeX": 2830,
+      "sizeY": 1550,
+      "x": -1930,
+      "y": 250
+    },
+    "upperFinish": 0,
+    "upperSlabThickness": 200,
+    "walls": []
+  },
+  "stair": {
+    "balancing": {
+      "method": "M3",
+      "targetCollet": 100,
+      "variant": "auto",
+      "windersPerSide": "auto"
+    },
+    "layout": {
+      "legs": [
+        {
+          "length": 1800
+        },
+        {
+          "length": 2830
+        }
+      ],
+      "turns": [
+        {
+          "direction": "left",
+          "inner": {
+            "kind": "arc",
+            "radius": 250
+          },
+          "mode": "winders"
+        }
+      ],
+      "width": 900
+    },
+    "nosingOverrides": [],
+    "placement": {
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "rotation": 0
+    },
+    "stepping": {
+      "firstRiseOffset": 0,
+      "riserCount": "auto",
+      "targetGoing": "auto",
+      "targetRise": 175
+    },
+    "structure": {
+      "kind": "steel-curved",
+      "params": {}
+    },
+    "treads": {
+      "nosing": 10,
+      "riserThickness": 20,
+      "risers": "full",
+      "thickness": 40
+    },
+    "walkline": {
+      "mode": "dtu"
+    }
+  }
+}

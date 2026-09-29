@@ -134,4 +134,10 @@ export interface GuardsAnalysis {
   readonly openingFall: Mm;
   readonly parts: readonly Part[];
   readonly notes: readonly string[];
+  /**
+   * Lignes de garde-corps impossibles à construire (jour plus étroit que la sphère T1, décalage
+   * impossible) : erreurs lisibles, reprises dans `Model.errors` par le pipeline ; les autres
+   * lignes sont calculées (pas d'exception). Absent : aucune.
+   */
+  readonly errors?: readonly string[];
 }

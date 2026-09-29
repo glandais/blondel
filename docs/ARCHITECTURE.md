@@ -18,8 +18,10 @@ Les paquets sont consommés **par leurs sources TypeScript** (`main: ./src/index
 ```
 Project (JSON validé par zod, immuable)
   │  buildModel(project)                         packages/core/src/pipeline/build.ts
-  ├─ computeLayout      → Layout                 layout/     C_i (jour), C_e (mur), Γ (ligne de foulée), emprise
-  ├─ computeStepping    → Stepping               stepping/   hauteurs, nez sur Γ, zones et stratégies de balancement
+  ├─ computeLayout      → Layout                 layout/     C_i (jour), C_e (mur), Γ (ligne de foulée), emprise ;
+  │                                                          hélicoïdal (`kind: "helical"`) : layout/helical.ts
+  ├─ computeStepping    → Stepping               stepping/   hauteurs, nez sur Γ, zones et stratégies de balancement ;
+  │                                                          hélicoïdal : nez rayonnants, stepping/helical.ts
   │                                              balancing/  M0, M1, M3 + post-traitement commun (Q, R, collets, K3/K5)
   ├─ buildBasicParts    → Part[]                 parts/      marches, contremarches, paliers
   ├─ plugin de structure → Part[] + contrôles    structures/ `stair.structure.kind` ≠ none : limons, poteaux, crémaillères,
@@ -28,7 +30,9 @@ Project (JSON validé par zod, immuable)
   │                                                          volumiques ; métal : presse, lois de pli, formats de tôle)
   ├─ computeGuards      → Part[] + contrôles     guards/     `project.guards` : garde-corps de volée / jour / trémie,
   │                                                          mains courantes, contrôles GC_* / MC_* et GC_CONFLIT_DALLE
-  ├─ computeHeadroom    → échappée               headroom/   ligne de pente, échappée sur Γ et sur la largeur
+  ├─ computeHeadroom    → échappée               headroom/   ligne de pente, échappée sur Γ et sur la largeur ;
+  │                                                          sous-faces de l'escalier lui-même (selfcover.ts) et
+  │                                                          règle dérivée sous le tour supérieur (helical.ts)
   └─ evaluateCompliance → ComplianceReport       rules/      table rules.yaml + évaluateurs, fusionnés avec les contrôles
                                                              du plugin et des garde-corps
   ▼
@@ -38,6 +42,7 @@ Model { layout, stepping, parts, compliance, headroom?, headroomWidth?, executio
 - `buildModel` **ne lève jamais** pour des paramètres impossibles : l'erreur de l'étape va dans `Model.errors`, les étapes suivantes reçoivent un résultat vide, et le contrôle de conception n'évalue que les règles encore calculables (`PARTIAL_MODEL_RULES`, les autres sortent `non-evaluee`).
 - Mémoïsation par identité : même objet `Project` → même `Model` ; sinon chaque étape réutilise son dernier résultat si ses entrées sont les mêmes objets. Les clés sont fines : le découpage ne dépend de la structure que par `structure.kind`, si bien que changer un paramètre de structure ne recalcule ni le découpage ni les garde-corps, et changer les garde-corps ne recalcule pas la structure (`pipeline/integration.test.ts`). Budget : environ 5 ms par modèle sur les exemples (ADR-0006).
 - Structure → modèle : une pièce du plugin de même `id` qu'une pièce de base la remplace ; `StructureOutput.removedBaseParts` retire des pièces de base (contremarches bois sous des marches en tôle pliée) ; `StructureOutput.executionClass` (EN 1090-2, métal) est reporté dans `Model.executionClass`.
+- Tracé hélicoïdal (jalon 5a) : `LayoutSpec` est une union discriminée rétrocompatible (`kind` absent = volées, jamais sérialisé ; `kind: "helical"` = sens, R_e, fût ou jour central, marches par tour ou angle total, palier d'arrivée en secteur). `Layout.helical` est renseigné et les volées sont vides : le découpage, l'échappée et les plugins testent `layout.helical`. Un plugin réservé aux volées doit rendre une erreur lisible sur un hélicoïdal.
 - Unités : millimètres en float64, arrondi seulement à l'affichage et en sortie (ADR-0003).
 
 ## Flux de données dans l'application web
@@ -50,7 +55,8 @@ saisie ─► store zustand (projectStore) ─► Project canonique (ProjectSche
               │         ─► workerClient ─► Web Worker model/model.worker.ts (handler.ts) :
               │            partage structurel du projet reçu (structuralShare.ts) puis
               │            buildModel (cœur, mémoïsé) + meshParts ; comparateur : second worker
-              │            (compareVariants) ; repli sur le fil principal sans worker
+              │            (compareEpure) ; toute erreur, même d'envoi, rend une réponse « error »
+              │            (handleWorkerRequest) ; repli sur le fil principal sans worker
               ▼  ModelView { model, project d'origine, pending }
    ┌──────────┼──────────────┬──────────────────────┬──────────────────┬───────────────────────┐
  Plan 2D   Élévation      Vue 3D                Développés          Nomenclature        Contrôle de conception
@@ -61,7 +67,12 @@ saisie ─► store zustand (projectStore) ─► Project canonique (ProjectSche
              paramsSchema + defaults(ctx), libellés lib/paramLabels.ts ─► stair.structure.params
  Garde-corps : GuardsSection (lib/guardsForm.ts) ─► project.guards ; marqueurs 3D (lib/markers.ts)
  Prédim.   : PrecheckPanel (lib/precheck.ts) ─► precheckModel (cœur), Model.executionClass
- Comparateur : CompareView (lib/variants.ts) ─► compareVariants (cœur, worker dédié)
+ Tracé     : sélecteur « Type de tracé » (lib/layoutKind.ts switchLayoutKind, préréglage du cœur),
+             éditeur de volées ou HelicalEditor
+ Erreurs   : ErrorsBar ─► suggestFixes (cœur, project/fixes.ts) ─► lib/fixes.ts applyFix (annulable)
+ Comparateur : CompareView (lib/variants.ts) ─► compareEpure (cœur, worker dédié) : même épure,
+             raccord de jour adapté par variante et signalé ; « Appliquer » reprend l'adaptation
+ Développés : tronçons et joints d'un débillardé (lib/joints.ts)
  Exporter  : ExportMenu ─► lib/exportFiles.ts ─► SVG, DXF (plan, pièces en ZIP), CSV, JSON ;
              PDF par await import("@blondel/exports/pdf") (morceau séparé)
 ```
@@ -69,6 +80,7 @@ saisie ─► store zustand (projectStore) ─► Project canonique (ProjectSche
 - Le calcul tourne hors du fil principal (ADR-0006) : pendant un calcul, le dernier modèle publié reste affiché avec le projet dont il est issu (`pending`), et les exports sont désactivés tant que le modèle ne correspond pas au projet courant. `postMessage` clone le projet : sans le partage structurel (`apps/web/src/model/structuralShare.ts`), les caches par identité de `buildModel` ne serviraient jamais dans le worker.
 - L'UI **ne fait aucun calcul métier** : elle lit le `Model`. Les SVG de l'écran sont ceux des exports (une seule implémentation de la cotation, ADR-0005).
 - La sélection (marche, pièce, règle) passe par les attributs `data-tread` des SVG et par les identifiants de pièce `tread-N`.
+- Vue 3D : shaders compilés avant la première image (`three/shaderWarmup.ts`, interrompu si le contexte WebGL est perdu), qualité réduite en rendu logiciel (`three/quality.ts`).
 - Les exports (SVG, DXF, CSV, ZIP, JSON, PDF) sont des fonctions pures du `Model` (et du `Project` pour la trémie). Le PDF n'est jamais réexporté par l'index principal de `@blondel/exports` (un test surveille les imports) pour que jsPDF reste hors du paquet principal.
 
 ## Où ajouter…
@@ -88,7 +100,7 @@ saisie ─► store zustand (projectStore) ─► Project canonique (ProjectSche
 
 ### une structure (limons, crémaillère, tôle pliée…)
 
-Les plugins de structure implémentent `StructureKind` (`model/plugins.ts`) et vivent dans `packages/core/src/structures/`. Plugins intégrés : `wood-housed` (limons à la française, poteau d'angle, marches et contremarches encastrées) et `wood-cut` (crémaillères, escalier droit) au jalon 3a ; `steel-flat` (limons en plat découpé laser, supports, platines, poteau tube, marches bois ou en tôle pliée Z / U) au jalon 3b ; `steel-profile` (profilés UPN / IPN / IPE / HEA du catalogue `catalog/`, prédimensionnement `precheck/`, calepinage des barres) au jalon 3c. `compareVariants` (`structures/compare.ts`) construit plusieurs plugins sur la même épure pour le comparateur.
+Les plugins de structure implémentent `StructureKind` (`model/plugins.ts`) et vivent dans `packages/core/src/structures/`. Plugins intégrés : `wood-housed` (limons à la française, poteau d'angle, marches et contremarches encastrées) et `wood-cut` (crémaillères, escalier droit) au jalon 3a ; `steel-flat` (limons en plat découpé laser, supports, platines, poteau tube, marches bois ou en tôle pliée Z / U) au jalon 3b ; `steel-profile` (profilés UPN / IPN / IPE / HEA du catalogue `catalog/`, prédimensionnement `precheck/`, calepinage des barres) au jalon 3c ; `helical-core` (hélicoïdal à fût central : fût, marches bois ou tôle en porte-à-faux, limon et main courante hélicoïdaux, palier d'arrivée) au jalon 5a ; `steel-curved` (limon de jour débillardé soudé : tronçons développés en fibre neutre, lignes de roulage, joints bout à bout repérés, rouleuse `MetalProfile.plateRolling`) au jalon 5b. `compareVariants` et `compareEpure` (`structures/compare.ts`) construisent plusieurs plugins sur la même épure pour le comparateur ; `compareEpure` adapte le raccord de jour à chaque structure (poteau pour des profilés, arc roulable pour un débillardé) et le signale.
 
 1. Écrire le plugin : `kind` unique (≠ `none`), `label`, `family`, schéma zod des paramètres (`paramsSchema`), `defaults(ctx)` et `build(ctx, params) → { parts, checks, notes, errors? }`. `ctx` porte le projet, le tracé, le découpage et les pièces de base (`baseParts`).
 2. Pièces : un `SolidDesc` (maillé par `@blondel/geometry`), un débit `stock`, et pour la découpe un développé `flat` (contour 1:1, traits `mark` avec `feature: "mortise" | "tenon"`, fibre de référence `reference`) ; `exportPartDxf`, `renderFlatPatternSvg` et le PDF le consomment. Une pièce de même `id` qu'une pièce de base la **remplace** (ex. marche prolongée dans les limons).
@@ -96,7 +108,7 @@ Les plugins de structure implémentent `StructureKind` (`model/plugins.ts`) et v
 4. Enregistrer le plugin avec `registerStructure` (`structures/index.ts` le fait au chargement pour les plugins intégrés). L'interface le propose aussitôt : `listStructures()` → formulaire générique dérivé de `paramsSchema` et `defaults(ctx)` (`apps/web/src/lib/structureForm.ts`).
 5. Paramètres : le pipeline fusionne **en profondeur** `defaults(ctx)` et `structure.params` (paramètres partiels ou `{}` acceptés), puis valide par `paramsSchema` ; paramètres invalides → `StructureError` dans `Model.errors`.
 6. Quantités : clés normalisées de `structures/quantities.ts` (`QUANTITY_VOLUME_M3`, `QUANTITY_MASS_KG`…) ; `normalizeWoodQuantities` est appliqué par le pipeline, y compris sur les pièces de base de repli.
-7. Aucune valeur métier non sourcée en dur : paramètre du plugin ou du profil d'atelier, marqué « à valider », et point au ledger §2. Conventions : les plugins débillardés ont un `kind` qui commence par `debillard` (variante M3 quintique automatique).
+7. Aucune valeur métier non sourcée en dur : paramètre du plugin ou du profil d'atelier, marqué « à valider », et point au ledger §2. Conventions : les plugins débillardés ont un `kind` qui commence par `debillard` ou figurent dans `DEBILLARDE_STRUCTURE_KINDS` (`stepping/stepping.ts`, ex. `steel-curved`) : variante M3 quintique automatique.
 8. Tests : `structures/*.test.ts` (propriétés fast-check sur les développés), `pipeline/structures.test.ts`, un exemple `examples/*.blondel.json` qui l'utilise (tous les exports de bout en bout le couvrent alors, `packages/exports/src/examples.test.ts`).
 
 ### des garde-corps
@@ -116,6 +128,7 @@ Les plugins de structure implémentent `StructureKind` (`model/plugins.ts`) et v
 
 - TypeScript strict, imports relatifs avec suffixe `.js`, identifiants en anglais, commentaires et documentation en français.
 - Tests vitest `*.test.ts` à côté du code ; invariants en propriétés fast-check sur générateurs **contraints**.
-- Exemples `examples/*.blondel.json` générés par leurs générateurs de test (`project/examples.test.ts`, `guards/acceptance.test.ts`, `UPDATE_EXAMPLES=1`) ; chacun est couvert de bout en bout par tous les exports (`exports/src/examples.test.ts`). Critères d'acceptation n° 1 et n° 3 : `exports/src/acceptance-criteria.test.ts` ; interactions entre étapes : `core/src/pipeline/integration.test.ts`.
+- Exemples `examples/*.blondel.json` générés par leurs générateurs de test (`project/examples.test.ts`, `guards/acceptance.test.ts`, `structures/helicalExample.test.ts`, `structures/steelCurved.acceptance.test.ts`, `UPDATE_EXAMPLES=1`) ; chacun est couvert de bout en bout par tous les exports (`exports/src/examples.test.ts`) et par un instantané des cotes principales (`pipeline/build.test.ts`). Critères d'acceptation n° 1 et n° 3 : `exports/src/acceptance-criteria.test.ts` ; n° 2 : `core/src/structures/steelCurved.acceptance.test.ts` ; interactions entre étapes : `core/src/pipeline/integration.test.ts`.
+- Tests de bout en bout Playwright (`apps/web/e2e/`, `pnpm e2e`) sur le build : critère n° 1 dans l'interface, hélicoïdal, corrections proposées, comparateur, import / annuler / autosauvegarde, et aucune tâche longue au-delà de 200 ms (`E2E_LONG_TASK_BUDGET_MS`).
 - Prettier (`.prettierrc.json`) ; `pnpm format:check` doit passer.
 - Suivi du travail : `docs/LEDGER.md` (avancement, points en suspens, messages entre agents, journal).

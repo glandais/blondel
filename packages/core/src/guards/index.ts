@@ -21,6 +21,7 @@ export {
 export { computeGuards } from "./compute.js";
 export { CABLE_SLACK_RULE, guardChecks, SLAB_CLASH_RULE, slabClash } from "./checks.js";
 export { GuardError } from "./errors.js";
+export { jourWidth, NARROW_JOUR_ERROR_PREFIX, narrowJourThreshold } from "./jour.js";
 export { WALL_PARALLEL_DEG } from "./sides.js";
 export type {
   Foothold,

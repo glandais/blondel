@@ -15,9 +15,9 @@
     "lowerFinish": 0,
     "opening": {
       "kind": "rect",
-      "sizeX": 1840,
-      "sizeY": 2150,
-      "x": -1040,
+      "sizeX": 2040,
+      "sizeY": 2250,
+      "x": -1140,
       "y": -400
     },
     "upperFinish": 0,

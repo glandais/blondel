@@ -29,11 +29,21 @@ function fakeWorker(options: { fail?: boolean; answerError?: boolean; unreadable
           w.onmessageerror?.(new Error("désérialisation impossible"));
           return;
         }
-        let res: WorkerResponse;
-        if (options.answerError) res = { id: req.id, type: "error", message: "clonage" };
-        else if (req.type === "build")
-          res = { id: req.id, type: "build", result: runner.build(req) };
-        else res = { id: req.id, type: "compare", result: runner.compare(req) };
+        if (options.answerError) {
+          w.onmessage?.({ data: { id: req.id, type: "error", message: "clonage" } });
+          return;
+        }
+        if (req.type === "pdf") {
+          void runner.pdf(req).then((result) => {
+            const res: WorkerResponse = { id: req.id, type: "pdf", result };
+            w.onmessage?.({ data: structuredClone(res) });
+          });
+          return;
+        }
+        const res: WorkerResponse =
+          req.type === "build"
+            ? { id: req.id, type: "build", result: runner.build(req) }
+            : { id: req.id, type: "compare", result: runner.compare(req) };
         w.onmessage?.({ data: structuredClone(res) });
       }, 0);
     },
@@ -112,5 +122,41 @@ describe("client du worker de calcul", () => {
     expect(r.model).not.toBeNull();
     expect(exec.usesWorker).toBe(false);
     expect(w.terminated).toBe(true);
+  });
+
+  it("dossier PDF mis en page dans le worker (octets %PDF), repli identique sans worker", async () => {
+    const w = fakeWorker();
+    const exec = createJobExec(() => w);
+    const project = parseProjectText(j4Text);
+    const bytes = await exec.pdf(project);
+    expect(w.received.map((r) => r.type)).toEqual(["pdf"]);
+    expect(exec.usesWorker).toBe(true);
+    expect(new TextDecoder().decode(bytes.subarray(0, 5))).toBe("%PDF-");
+    const local = await createJobExec(() => null).pdf(project);
+    expect(new TextDecoder().decode(local.subarray(0, 5))).toBe("%PDF-");
+  }, 60_000);
+
+  it("échec de l'export PDF : rejet avec le message, le worker reste utilisé", async () => {
+    // Worker dont `exportPdf` lève : l'échec est celui de l'export, pas une panne du worker.
+    const failing = createJobRunner({
+      loadPdf: async () => () => {
+        throw new Error("rendu impossible");
+      },
+    });
+    const w = fakeWorker();
+    w.postMessage = (message) => {
+      const req = structuredClone(message);
+      w.received.push(req);
+      if (req.type !== "pdf") return;
+      void failing
+        .pdf(req)
+        .then((result) =>
+          w.onmessage?.({ data: structuredClone({ id: req.id, type: "pdf" as const, result }) }),
+        );
+    };
+    const exec = createJobExec(() => w);
+    await expect(exec.pdf(createProject("straight"))).rejects.toThrow("rendu impossible");
+    expect(exec.usesWorker).toBe(true);
+    expect(w.terminated).toBe(false);
   });
 });

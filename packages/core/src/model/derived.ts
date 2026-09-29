@@ -8,7 +8,7 @@
  * Les solides et développés sont décrits **analytiquement** ici (ADR-0001) ; le package
  * `@blondel/geometry` les convertit en maillages, `@blondel/exports` en fichiers.
  */
-import type { Curve2, Frame3, Mm, Polygon2, Shape2, Vec2, Vec3 } from "./primitives.js";
+import type { Curve2, Frame3, Mm, Polygon2, Rad, Shape2, Vec2, Vec3 } from "./primitives.js";
 
 // ------------------------------------------------------------------ Étape 2 : tracé
 
@@ -25,6 +25,35 @@ export interface TurnZone {
   readonly sEnd: Mm;
 }
 
+/**
+ * Géométrie d'un tracé hélicoïdal (jalon 5a, B §1.1, §4.3), repère monde. Angles en radians,
+ * mesurés dans le sens trigonométrique depuis +X du repère monde (rotation du placement
+ * comprise). La ligne de nez k est portée par le rayon d'angle
+ * θ_k = `startAngle` + sens · k · `stepAngle`, sens = +1 pour `left`, −1 pour `right`.
+ */
+export interface HelicalLayout {
+  /** Axe vertical (centre des arcs C_i, C_e et Γ). */
+  readonly center: Vec2;
+  readonly direction: "left" | "right";
+  /** Fût central (`column`) ou jour central (`well`). */
+  readonly core: "column" | "well";
+  /** Rayon de C_i (r_f ou r_j), de C_e (R_e) et de Γ (r_i + d_f). */
+  readonly innerRadius: Mm;
+  readonly outerRadius: Mm;
+  readonly walklineRadius: Mm;
+  /** Angle de la ligne de nez de départ (nez 0). */
+  readonly startAngle: Rad;
+  /** Angle par marche Δθ (> 0). */
+  readonly stepAngle: Rad;
+  /** Nombre de marches par tour 2π / Δθ (non entier si l'angle total est imposé). */
+  readonly treadsPerTurn: number;
+  /** Angle total des marches, du nez 0 au nez d'arrivée : (n − 1)·Δθ. */
+  readonly totalAngle: Rad;
+  /** Palier d'arrivée : secteur de `landingAngle` (> 0) à partir du nez d'arrivée, contour en plan. */
+  readonly landingAngle: Rad;
+  readonly landingOutline?: Polygon2;
+}
+
 export interface Layout {
   /** Bord intérieur (jour) et extérieur (mur), orientés dans le sens de la montée, repère monde. */
   readonly inner: Curve2;
@@ -38,6 +67,12 @@ export interface Layout {
   readonly turns: readonly TurnZone[];
   /** Côté « intérieur » : gauche si les tournants vont à gauche. Droit : gauche par convention. */
   readonly innerSide: "left" | "right";
+  /**
+   * Tracé hélicoïdal (jalon 5a) : axe, rayons, angles. Absent : escalier à volées. Un tracé
+   * hélicoïdal n'a pas de tournant à 90° (`turns` vide) ; `footprint` est le secteur de couronne
+   * des marches et du palier d'arrivée (le disque de rayon R_e au-delà d'un tour).
+   */
+  readonly helical?: HelicalLayout;
 }
 
 // ------------------------------------------------------------------ Étape 3 : découpage
@@ -100,6 +135,28 @@ export interface Stepping {
   readonly balancedZones: readonly { turn: number; from: number; to: number; method: string }[];
   /** Diagnostics non bloquants du calcul (ex. « jour trop court, marches ajoutées »). */
   readonly notes: readonly string[];
+  /**
+   * Sous-faces de l'escalier lui-même qui forment un plafond pour les parties plus basses
+   * (auto-recouvrement, CHALLENGE G4 : marches du tour supérieur et palier d'arrivée d'un
+   * hélicoïdal). Absent : aucun auto-recouvrement pris en compte (escaliers à volées).
+   */
+  readonly soffits?: readonly Soffit[];
+}
+
+/**
+ * Sous-face d'une pièce de l'escalier (marche, palier), plafond pour l'échappée (CHALLENGE G4).
+ * Elle ne compte qu'au-dessus des points de Γ d'abscisse **inférieure** à `sStart` (pièce située
+ * plus loin dans la montée) : la marche sur laquelle on se tient et les précédentes sont exclues.
+ */
+export interface Soffit {
+  /** Contour en plan de la pièce (repère monde). */
+  readonly outline: Polygon2;
+  /** Altitude de la sous-face. */
+  readonly z: Mm;
+  /** Abscisse sur Γ du début de la pièce (nez avant). */
+  readonly sStart: Mm;
+  /** Numéro de marche ; absent : palier d'arrivée. */
+  readonly tread?: number;
 }
 
 // ------------------------------------------------------------------ Étapes 4-6 : pièces

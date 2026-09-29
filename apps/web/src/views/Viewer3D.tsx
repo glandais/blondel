@@ -9,14 +9,23 @@
  * Repère : le cœur travaille en mm, Z vers le haut ; la scène three.js en mètres, Y vers le
  * haut → groupe racine tourné de −90° autour de X et mis à l'échelle 1/1000.
  *
+ * Rendu logiciel (SwiftShader, llvmpipe : navigateur sans accélération matérielle) : sans
+ * ombres portées ni haute densité, sinon chaque image bloque la page près d'une seconde
+ * (`three/quality.ts`).
+ *
  * Rendu à la demande (`frameloop="demand"`) : une image n'est dessinée que lorsqu'une prop de la
  * scène change ou que la caméra bouge (OrbitControls), et non 60 fois par seconde avec ombres
  * portées — la boucle continue occupait le GPU et le fil principal en permanence.
+ *
+ * Programmes de shaders compilés **avant** la première image (`ShaderWarmup`) : sans cela, la
+ * première image attend la compilation et l'édition de liens de chaque programme (lecture
+ * synchrone de `LINK_STATUS`), soit une tâche de 150 à 700 ms du fil principal à chaque
+ * ouverture de l'onglet (mesure e2e, `apps/web/e2e/long-tasks.spec.ts`).
  */
 import type { MaterialId, Model, Project, Severity } from "@blondel/core";
 import { Grid, OrbitControls } from "@react-three/drei";
-import { Canvas, type ThreeEvent } from "@react-three/fiber";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Canvas, useThree, type ThreeEvent } from "@react-three/fiber";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Box3,
   DoubleSide,
@@ -32,6 +41,8 @@ import type { Selection } from "../store/projectStore.js";
 import { toBufferGeometry, upperSlabMesh } from "../three/geometry.js";
 import { createGeometryPool, type GeometryPool } from "../three/geometryPool.js";
 import { HIGHLIGHT_COLOR, SEVERITY_COLORS, materialLook } from "../three/materials.js";
+import { browserRenderQuality } from "../three/quality.js";
+import { warmUpShaders } from "../three/shaderWarmup.js";
 
 const MM = 0.001;
 /** Rayon des repères ponctuels du contrôle (mm, présentation). */
@@ -170,6 +181,35 @@ function Slab({
   return <mesh geometry={geometry} material={material} dispose={null} receiveShadow />;
 }
 
+/**
+ * Compile les shaders de la scène (`warmUpShaders`), puis autorise le rendu (`onReady`) et
+ * demande la première image. Monté en dernier enfant du `Canvas` : les objets de la scène y
+ * sont déjà ajoutés quand l'effet s'exécute.
+ */
+function ShaderWarmup({ ready, onReady }: { ready: boolean; onReady: () => void }) {
+  const gl = useThree((s) => s.gl);
+  const scene = useThree((s) => s.scene);
+  const camera = useThree((s) => s.camera);
+  const invalidate = useThree((s) => s.invalidate);
+  useEffect(() => {
+    if (ready) return;
+    let alive = true;
+    const done = () => {
+      if (alive) onReady();
+    };
+    // Échec ou contexte perdu (`compileAsync` n'aboutirait jamais) : le rendu reprend, quitte à
+    // compiler à la volée.
+    warmUpShaders(gl, scene, camera, () => alive).then(done, done);
+    return () => {
+      alive = false;
+    };
+  }, [gl, scene, camera, ready, onReady]);
+  useEffect(() => {
+    if (ready) invalidate();
+  }, [ready, invalidate]);
+  return null;
+}
+
 export interface Viewer3DProps {
   readonly model: Model;
   /** Maillage des pièces de `model` (calculé avec lui). */
@@ -237,6 +277,9 @@ export default function Viewer3D({
     : "";
   const selectedRules = selectedMesh ? markers.rulesByPart.get(selectedMesh.partId) : undefined;
   const flaggedCount = markers.parts.size + markers.points.length;
+  const quality = useMemo(() => browserRenderQuality(), []);
+  const [shadersReady, setShadersReady] = useState(false);
+  const onShadersReady = useCallback(() => setShadersReady(true), []);
 
   // Cadrage initial sur l'ensemble des pièces (en mètres, repère three.js).
   const frame = useMemo(() => {
@@ -259,8 +302,13 @@ export default function Viewer3D({
   return (
     <div className="viewer3d">
       <Canvas
-        shadows
-        frameloop="demand"
+        // Ombres PCF : three.js (r18x) a retiré PCFSoftShadowMap, que `shadows` demande par
+        // défaut, et la remplace à la volée par PCF — les programmes précompilés (type d'ombre
+        // 2) ne servaient alors jamais et tout était recompilé dans la première image. Rendu
+        // logiciel : ni ombres ni haute densité (`three/quality.ts`).
+        shadows={quality.shadows ? "percentage" : false}
+        dpr={quality.dpr}
+        frameloop={shadersReady ? "demand" : "never"}
         camera={{ position: frame.position, fov: 40, near: 0.01, far: 200 }}
         onPointerMissed={() => onSelectPart(null)}
         aria-label="Vue 3D de l'escalier"
@@ -333,6 +381,7 @@ export default function Viewer3D({
           infiniteGrid
         />
         <OrbitControls makeDefault target={frame.target} />
+        <ShaderWarmup ready={shadersReady} onReady={onShadersReady} />
       </Canvas>
       <div className="viewer3d__controls">
         <label>

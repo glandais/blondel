@@ -62,6 +62,7 @@ import { arcSeg, lineSeg } from "../geom2d/segment.js";
 import { GEOM_EPS } from "../geom2d/tolerance.js";
 import * as V from "../geom2d/vec.js";
 import { LayoutError } from "./errors.js";
+import { computeHelicalLayout } from "./helical.js";
 import { resolveLegLengths, resolveWalklineOffset } from "./resolve.js";
 
 export interface LayoutOptions {
@@ -105,6 +106,7 @@ const legLabel = (i: number): string => `volée ${i + 1}`;
 
 /**
  * Calcule le tracé (bords, ligne de foulée, tournants, emprise) d'un projet, en repère monde.
+ * Un tracé hélicoïdal (`kind: "helical"`) est délégué à `computeHelicalLayout`.
  *
  * @throws LayoutError si la topologie n'est pas prise en charge (tournants de sens opposés,
  *   nombre de tournants incohérent, `auto` hors escalier droit) ou si les cotes sont
@@ -113,6 +115,8 @@ const legLabel = (i: number): string => `volée ${i + 1}`;
  */
 export function computeLayout(project: Project, options: LayoutOptions = {}): Layout {
   const spec = project.stair.layout;
+  // Tracé hélicoïdal (jalon 5a) : forme fermée propre, `layout/helical.ts`.
+  if (spec.kind === "helical") return computeHelicalLayout(project, spec);
   const width = spec.width;
   const turns = spec.turns;
   const legCount = spec.legs.length;

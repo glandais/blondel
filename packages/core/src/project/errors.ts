@@ -44,6 +44,11 @@ const FIELD_LABELS: Readonly<Record<string, string>> = {
   targetGoing: "giron cible",
   thickness: "épaisseur",
   nosing: "débord de nez",
+  outerRadius: "rayon extérieur de l'hélicoïdal",
+  core: "fût ou jour central",
+  sweep: "rotation de l'hélicoïdal",
+  startAngle: "angle de départ",
+  landing: "palier d'arrivée",
 };
 
 /** Convertit un chemin zod en chemin lisible `a.b[0].c`. */
@@ -68,7 +73,11 @@ export const projectErrorMap: z.core.$ZodErrorMap = (issue) => {
     typeof issue.discriminator === "string"
   ) {
     const options = Array.isArray(issue.options)
-      ? issue.options.map((o) => JSON.stringify(o)).join(", ")
+      ? issue.options
+          // Discriminant facultatif (tracé à volées sans `kind`) : valeur absente non listée.
+          .filter((o) => o !== undefined && o !== null)
+          .map((o) => JSON.stringify(o))
+          .join(", ")
       : "";
     return `valeur de « ${issue.discriminator} » inconnue (attendu : ${options})`;
   }

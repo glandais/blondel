@@ -13,6 +13,7 @@ import {
   type Project,
 } from "@blondel/core";
 import { createStore, type StoreApi } from "zustand/vanilla";
+import { presetProject } from "../lib/layoutKind.js";
 import type { DisplayUnit } from "../lib/units.js";
 import {
   DEFAULT_HISTORY_OPTIONS,
@@ -81,7 +82,10 @@ export interface AppState {
   redo(): void;
   canUndo(): boolean;
   canRedo(): boolean;
-  /** Remplace le projet par un préréglage (annulable). */
+  /**
+   * Remplace le projet par un préréglage (annulable) ; l'hélicoïdal reçoit la structure
+   * `helical-core` (`presetProject`).
+   */
   loadPreset(id: PresetId, options?: PresetOptions): UpdateResult;
   /** Remplace le projet par le contenu d'un fichier `.blondel.json` (annulable). */
   importText(text: string): ImportResult;
@@ -206,7 +210,7 @@ export function createProjectStore(options: ProjectStoreOptions = {}): ProjectSt
       loadPreset: (id, presetOptions) => {
         let p: Project;
         try {
-          p = createProject(id, presetOptions);
+          p = presetProject(id, presetOptions);
         } catch (e) {
           const text = e instanceof Error ? e.message : String(e);
           set({ notice: { kind: "error", text } });

@@ -6,12 +6,13 @@
   "scripts": {
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "tsc -p tsconfig.json && tsc -p apps/web/tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json && tsc -p apps/web/tsconfig.json && tsc -p apps/web/e2e/tsconfig.json",
     "dev": "pnpm --filter @blondel/web dev",
     "build": "pnpm --filter @blondel/web build",
     "rules:build": "node scripts/build-rules.mjs",
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "e2e": "pnpm --filter @blondel/web e2e"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",

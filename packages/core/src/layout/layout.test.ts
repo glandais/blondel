@@ -356,14 +356,25 @@ describe("computeLayout — exemples du dépôt", () => {
     const project = parseProjectText(readFileSync(join(dir, file), "utf8"));
     const layout = computeLayout(project);
     const spec = project.stair.layout;
-    // Préréglages : jour vif ou poteau (Γ identique), d_f = E/2 :
-    // |Γ| = ΣL − 2E·(N − 1) + N·(π/2)·(E/2).
+    expect(resolveWalklineOffset(project)).toBe(spec.width / 2);
+    if (spec.kind === "helical") {
+      // Hélicoïdal (jalon 5a) : Γ = arc de rayon r_i + E/2 sur l'angle total des marches.
+      const h = layout.helical!;
+      expect(h.walklineRadius).toBe(spec.core.radius + spec.width / 2);
+      expect(curveLength(layout.walkline)).toBeCloseTo(h.walklineRadius * h.totalAngle, 6);
+      expect(layout.turns).toHaveLength(0);
+      return;
+    }
+    // Jour vif ou poteau (Γ identique), d_f = E/2 : |Γ| = ΣL − 2E·N + N·(π/2)·(E/2) ; un jour en
+    // arc de rayon r retire r de chaque partie droite voisine et donne un arc de rayon r + E/2.
     const legs = resolveLegLengths(project);
     const N = spec.turns.length;
+    const radii = spec.turns.map((t) => (t.inner.kind === "arc" ? t.inner.radius : 0));
     const expected =
-      legs.reduce((a, b) => a + b, 0) - 2 * spec.width * N + N * (Math.PI / 2) * (spec.width / 2);
-    expect(spec.turns.every((t) => t.inner.kind !== "arc")).toBe(true);
-    expect(resolveWalklineOffset(project)).toBe(spec.width / 2);
+      legs.reduce((a, b) => a + b, 0) -
+      2 * spec.width * N -
+      2 * radii.reduce((a, b) => a + b, 0) +
+      radii.reduce((acc, r) => acc + (Math.PI / 2) * (r + spec.width / 2), 0);
     expect(curveLength(layout.walkline)).toBeCloseTo(expected, 6);
     expect(layout.turns).toHaveLength(spec.turns.length);
   });

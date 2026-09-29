@@ -960,3 +960,94 @@ legend {
   color: var(--muted);
   font-weight: normal;
 }
+
+/* ------------------------------------------------------------ Barre d'erreurs */
+
+.errors-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 1.25rem;
+  padding: 0.35rem 0.75rem;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+  font-size: 0.85rem;
+  max-height: 30%;
+  overflow: auto;
+}
+
+.errors-bar ul {
+  margin: 0.15rem 0 0;
+  padding-left: 1.1rem;
+}
+
+.errors-bar__errors {
+  color: var(--danger);
+  flex: 1 1 20rem;
+  min-width: 0;
+}
+
+.errors-bar__fixes {
+  flex: 1 1 20rem;
+  min-width: 0;
+}
+
+.errors-bar__fixes ul {
+  list-style: none;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.errors-bar__fixes li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.2rem 0.5rem;
+}
+
+.errors-bar__fixes button {
+  border-color: var(--accent);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+/* ------------------------------------------------------------ Hélicoïdal, joints */
+
+fieldset.helical {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  margin: 0.4rem 0;
+}
+
+.flat-view__joints {
+  margin: 0.5rem 0;
+  font-size: 0.85rem;
+}
+
+.flat-view__joints table {
+  border-collapse: collapse;
+}
+
+.flat-view__joints th,
+.flat-view__joints td {
+  border-bottom: 1px solid var(--border);
+  padding: 0.15rem 0.5rem;
+  text-align: left;
+}
+
+.flat-view__joints td.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.compare__notes {
+  font-size: 0.8rem;
+  text-align: left;
+  vertical-align: top;
+}
+
+.compare__notes ul {
+  margin: 0;
+  padding-left: 1rem;
+}

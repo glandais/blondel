@@ -114,20 +114,30 @@ export interface ExecutionClassInput {
   /** Longueur de soudures bout à bout (assemblages de continuité), mm. */
   readonly buttWeld: Mm;
   readonly hotForming?: boolean;
+  /**
+   * La structure comporte-t-elle **au moins une soudure** (cordons d'angle compris) ? La nuance
+   * S355 ne fait passer en PC2 que les éléments **soudés** (C §2.1 : « PC1 pour les éléments non
+   * soudés »). Absent : `true` (lecture conservatrice, comportement antérieur).
+   */
+  readonly welded?: boolean;
 }
 
 /**
  * Classe d'exécution EN 1090-2 déduite (C §2.1 d'après CNC2M N0169 [13], SPEC §2.4) : famille B
- * (limons et supports) ⇒ CC1 ; PC2 pour les soudures bout à bout de continuité, les nuances ≥
- * S355 et le formage à chaud, PC1 sinon ; SC1 supposée (un escalier de secours peut relever de
- * SC2, non pris en compte). CC1 + SC1 + PC1 ⇒ EXC1 ; CC1 + SC1 + PC2 ⇒ EXC2.
+ * (limons et supports) ⇒ CC1 ; catégorie de production PC1 pour les éléments **non soudés**
+ * (toutes nuances) ou soudés en nuance < S355 ; PC2 pour les soudures bout à bout de
+ * continuité, les éléments **soudés** en nuance ≥ S355 et le formage à chaud ; SC1 supposée (un
+ * escalier de secours peut relever de SC2, non pris en compte). CC1 + SC1 + PC1 ⇒ EXC1 ;
+ * CC1 + SC1 + PC2 ⇒ EXC2. Un S355 entièrement boulonné reste donc en EXC1 (corrigé le
+ * 2026-09-29 : la synthèse « S355 → EXC2 » de C §2.1 et SPEC §2.4 omet la condition de soudure
+ * que porte le texte source cité en C §2.1).
  */
 export function deduceExecutionClass(input: ExecutionClassInput): {
   readonly executionClass: "EXC1" | "EXC2";
   readonly reasons: readonly string[];
 } {
   const reasons: string[] = [];
-  if (input.grade === "S355") reasons.push("nuance S355");
+  if (input.grade === "S355" && (input.welded ?? true)) reasons.push("nuance S355 soudée");
   if (input.buttWeld > 1e-9)
     reasons.push(`soudures bout à bout (${Math.round(input.buttWeld)} mm de cordon)`);
   if (input.hotForming) reasons.push("formage à chaud");
@@ -142,7 +152,7 @@ export const STEEL_RULES = {
   executionClass: {
     id: "EXC_CLASSE_EXECUTION",
     description:
-      "Classe d'exécution EN 1090-2 déduite (C-M-01) : S235 sans soudure bout à bout → EXC1 ; soudure bout à bout, S355 ou formage à chaud → EXC2",
+      "Classe d'exécution EN 1090-2 déduite (C-M-01) : S235 sans soudure bout à bout ou S355 non soudé → EXC1 ; soudure bout à bout, S355 soudé ou formage à chaud → EXC2",
     source: "CNC2M N0169 (2015), tableaux 3 et 6, via docs/research/C-structures.md §2.1 [13]",
     confidence: "eleve",
     nature: "normatif",

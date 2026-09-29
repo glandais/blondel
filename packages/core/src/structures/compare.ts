@@ -11,12 +11,29 @@
  * galvanisé est présent) ; sinon `cost` vaut `null` et `costMissing` liste les champs manquants.
  * La finition des pièces bois n'est pas chiffrée (non modélisée).
  *
+ * **Même épure, jour adapté** (jalon 5b, critère d'acceptation n° 2, CHALLENGE P2) :
+ * `compareEpure` garde le site, la ligne de foulée et le nombre de marches, mais adapte le
+ * raccord de jour de chaque variante à ce que sa structure sait construire (poteau d'angle pour
+ * les limons droits et les profilés — un UPN ne se cintre pas à petit rayon, C §2.3 —, jour en
+ * arc pour un débillardé, G7) ; le tracé et le balancement sont recalculés par variante (variante
+ * M3 comprise) et les **écarts d'épure** sont listés.
+ *
  * Module non réexporté par `structures/index.ts` (il dépend du pipeline, qui dépend des
  * structures) : il est exporté par l'index du paquet.
  */
-import type { Model, Part, Severity } from "../model/derived.js";
-import type { Project } from "../model/project.js";
+import {
+  findSection,
+  sectionsOf,
+  SECTION_FAMILIES,
+  type SectionFamily,
+} from "../catalog/sections.js";
+import type { Model, Part, Severity, Stepping } from "../model/derived.js";
+import type { Mm } from "../model/primitives.js";
+import type { InnerCorner, Project } from "../model/project.js";
 import { buildModel } from "../pipeline/build.js";
+import { fmt } from "../rules/check.js";
+import { isDebillardeStructure } from "../stepping/stepping.js";
+import { minProfileBendRadius } from "../workshop/metal.js";
 import { PRECHECK_RULE_IDS } from "../precheck/checks.js";
 import { precheckModel } from "../precheck/stringers.js";
 import { PrecheckSettingsSchema, type PrecheckSettings } from "../precheck/settings.js";
@@ -176,9 +193,7 @@ export function compareVariants(
   kinds: readonly string[],
   options: CompareOptions = {},
 ): VariantSummary[] {
-  const rates = resolveWorkshopProfile(project.workshop).costs;
   return kinds.map((kind) => {
-    const plugin = kind === "none" ? undefined : getStructure(kind);
     const params =
       options.params?.[kind] ??
       (kind === project.stair.structure.kind ? project.stair.structure.params : {});
@@ -186,75 +201,364 @@ export function compareVariants(
       ...project,
       stair: { ...project.stair, structure: { kind, params: { ...params } } },
     };
-    const model = buildModel(variant);
-    const parts = model.parts;
-    let massKg = 0;
-    let massUnknown = 0;
-    let steelKg = 0;
-    let woodM3 = 0;
-    let surfaceM2 = 0;
-    let finishedM2 = 0;
-    for (const p of parts) {
-      const mass = p.quantities[QUANTITY_MASS_KG];
-      if (mass === undefined) massUnknown++;
-      else massKg += mass;
-      if (isWoodMaterial(p.material)) {
-        woodM3 += p.quantities[QUANTITY_STOCK_VOLUME_M3] ?? p.quantities[QUANTITY_VOLUME_M3] ?? 0;
-        surfaceM2 += p.quantities[QUANTITY_SURFACE_M2] ?? 0;
-      } else if (p.material.startsWith("steel") || p.material.startsWith("stainless")) {
-        steelKg += mass ?? 0;
-        const treated = p.quantities[QUANTITY_TREATED_SURFACE_M2] ?? 0;
-        surfaceM2 += treated;
-        // Seul l'acier peint ou galvanisé est fini (acier brut, inox : pas de finition tarifée).
-        if (p.material === "steel-painted" || p.material === "steel-galvanized") {
-          finishedM2 += treated;
-        }
+    return summarizeVariant(variant, options);
+  });
+}
+
+/**
+ * Grandeurs d'une variante déjà construite (`variant.stair.structure` = structure comparée) :
+ * modèle, masses, surfaces, pièces, cordons, EXC, violations, prédimensionnement, coût.
+ */
+export function summarizeVariant(
+  variant: Project,
+  options: Pick<CompareOptions, "precheck"> = {},
+): VariantSummary {
+  const rates = resolveWorkshopProfile(variant.workshop).costs;
+  const { kind, params } = variant.stair.structure;
+  const plugin = kind === "none" ? undefined : getStructure(kind);
+  const model = buildModel(variant);
+  const parts = model.parts;
+  let massKg = 0;
+  let massUnknown = 0;
+  let steelKg = 0;
+  let woodM3 = 0;
+  let surfaceM2 = 0;
+  let finishedM2 = 0;
+  for (const p of parts) {
+    const mass = p.quantities[QUANTITY_MASS_KG];
+    if (mass === undefined) massUnknown++;
+    else massKg += mass;
+    if (isWoodMaterial(p.material)) {
+      woodM3 += p.quantities[QUANTITY_STOCK_VOLUME_M3] ?? p.quantities[QUANTITY_VOLUME_M3] ?? 0;
+      surfaceM2 += p.quantities[QUANTITY_SURFACE_M2] ?? 0;
+    } else if (p.material.startsWith("steel") || p.material.startsWith("stainless")) {
+      steelKg += mass ?? 0;
+      const treated = p.quantities[QUANTITY_TREATED_SURFACE_M2] ?? 0;
+      surfaceM2 += treated;
+      // Seul l'acier peint ou galvanisé est fini (acier brut, inox : pas de finition tarifée).
+      if (p.material === "steel-painted" || p.material === "steel-galvanized") {
+        finishedM2 += treated;
       }
     }
-    const violations = zeroes();
-    const pre = zeroes();
-    for (const r of model.compliance.results) {
-      if (r.status !== "violation" || PRECHECK_RULE_IDS.has(r.ruleId)) continue;
-      violations[r.severity]++;
+  }
+  const violations = zeroes();
+  const pre = zeroes();
+  for (const r of model.compliance.results) {
+    if (r.status !== "violation" || PRECHECK_RULE_IDS.has(r.ruleId)) continue;
+    violations[r.severity]++;
+  }
+  const pc = precheckModel(variant, model, options.precheck ?? pluginPrecheckSettings(params));
+  for (const r of pc.results) if (r.status === "violation") pre[r.severity]++;
+  const uniqueParts = countUniqueParts(parts);
+  const cuts = sum(parts, QUANTITY_CUTS);
+  const weldMm = sum(parts, QUANTITY_WELD_MM);
+  const bends = sum(parts, QUANTITY_BENDS);
+  const holes = sum(parts, QUANTITY_HOLES);
+  const { cost, missing } = variantCost(rates, {
+    steelKg,
+    woodM3,
+    surfaceM2: finishedM2,
+    cuts,
+    weldMm,
+    bends,
+    holes,
+    uniqueParts,
+  });
+  return {
+    kind,
+    label: plugin?.label ?? (kind === "none" ? "Sans structure (pièces de base)" : kind),
+    family: plugin?.family ?? null,
+    massKg,
+    massUnknown,
+    surfaceM2,
+    partCount: parts.length,
+    uniqueParts,
+    weldMm,
+    buttWeldMm: sum(parts, QUANTITY_BUTT_WELD_MM),
+    bends,
+    cuts,
+    holes,
+    executionClass: executionClassOf(model),
+    violations,
+    precheck: { beams: pc.beams.length, violations: pre },
+    errors: model.errors,
+    cost,
+    costMissing: missing,
+    model,
+  };
+}
+
+// ------------------------------------------------------------------ Même épure, jour adapté
+
+/** Structures dont le limon de jour exige un poteau d'angle (jour en arc ou vif non construit). */
+export const NEWEL_JOUR_STRUCTURES: ReadonlySet<string> = new Set([
+  "wood-housed",
+  "steel-flat",
+  "steel-profile",
+]);
+
+/**
+ * Côté du poteau d'angle substitué par défaut à un jour en arc : 100 mm, **à valider** (C §1.9 :
+ * poteau bois fini de 90 à 100 mm, confiance faible ; aucune valeur métal sourcée).
+ */
+export const DEFAULT_ADAPTED_NEWEL_SIZE: Mm = 100;
+
+/** Adaptation du raccord de jour d'un tournant pour rendre une structure constructible. */
+export interface JourAdaptation {
+  readonly turn: number;
+  readonly from: InnerCorner;
+  readonly to: InnerCorner;
+  readonly reason: string;
+}
+
+/** Épure effective d'une variante (après adaptation du jour et recalcul). */
+export interface EpureSummary {
+  readonly jours: readonly InnerCorner[];
+  readonly riserCount: number;
+  readonly rise: Mm;
+  readonly going: Mm;
+  readonly run: Mm;
+  /** Méthode de chaque zone balancée (ex. `M3-quintic`). */
+  readonly balancing: readonly string[];
+  readonly balancedZones: Stepping["balancedZones"];
+  /** Collet minimal des marches balancées (corde, arc), mm ; `null` sans marche balancée. */
+  readonly minColletChord: Mm | null;
+  readonly minColletArc: Mm | null;
+}
+
+export interface EpureVariantSpec {
+  readonly kind: string;
+  /** Paramètres du plugin ; défaut : ceux du projet pour sa structure, `{}` sinon. */
+  readonly params?: Readonly<Record<string, unknown>>;
+  /**
+   * `adapt` (défaut) : raccord de jour adapté à la structure ; `keep` : épure inchangée, les
+   * incompatibilités sont seulement signalées (la variante sort alors partielle).
+   */
+  readonly jour?: "adapt" | "keep";
+}
+
+export interface EpureCompareOptions extends Pick<CompareOptions, "precheck"> {
+  /** Côté du poteau d'angle substitué à un jour en arc ou vif (mm). */
+  readonly newelSize?: Mm;
+  /**
+   * Rayon du jour en arc substitué pour un débillardé (mm) ; défaut : rayon intérieur mini de
+   * roulage du profil d'atelier + épaisseur du limon, arrondi aux 10 mm supérieurs (à valider).
+   */
+  readonly arcRadius?: Mm;
+}
+
+export interface EpureVariantSummary extends VariantSummary {
+  readonly epure: EpureSummary;
+  readonly adaptations: readonly JourAdaptation[];
+  /** Incompatibilités de la structure avec l'épure (adaptées ou non). */
+  readonly signals: readonly string[];
+  /** Écarts d'épure par rapport à la première variante (vide pour la première). */
+  readonly deviations: readonly string[];
+}
+
+const jourLabel = (c: InnerCorner): string =>
+  c.kind === "arc"
+    ? `en arc R ${fmt(c.radius, 0)} mm`
+    : c.kind === "newel"
+      ? `poteau ${fmt(c.size, 0)} mm`
+      : "vif";
+
+/** Raison pour laquelle un limon de jour profilé ne suit pas un jour en arc (C §2.3). */
+function profileArcReason(
+  project: Project,
+  params: Readonly<Record<string, unknown>>,
+  radius: Mm,
+): string {
+  const family: SectionFamily = (SECTION_FAMILIES as readonly string[]).includes(
+    params["family"] as string,
+  )
+    ? (params["family"] as SectionFamily)
+    : "UPN";
+  const named = typeof params["section"] === "string" ? findSection(params["section"]) : undefined;
+  const height = named?.h ?? Math.min(...sectionsOf(family).map((x) => x.h));
+  const direction = family === "UPN" ? "flangeIn" : "flat";
+  const dirLabel = direction === "flangeIn" ? "aile intérieure" : "à plat";
+  const metal = resolveWorkshopProfile(project.workshop).metal;
+  const cap = minProfileBendRadius(metal, family, direction, height);
+  if (cap === null) {
+    return `${family} en limon de jour cintré : aucune capacité de cintrage connue (${dirLabel}), à valider chez le cintreur (C §2.3)`;
+  }
+  if ("outOfRange" in cap) {
+    return `${family} en limon de jour cintré : section hors de la capacité du cintreur (${fmt(cap.outOfRange, 0)} mm), C §2.3`;
+  }
+  if (radius < cap.radius) {
+    return `${family} impossible en limon de jour à petit rayon (C §2.3) : r_j ${fmt(radius, 0)} mm < rayon mini de cintrage ${fmt(cap.radius, 0)} mm (${dirLabel})`;
+  }
+  return `${family} cintré possible en plan (r_j ${fmt(radius, 0)} ≥ ${fmt(cap.radius, 0)} mm) mais cintrage hélicoïdal à valider chez le cintreur : limon cintré non généré (C §2.3)`;
+}
+
+/**
+ * Adapte le raccord de jour de l'épure à la structure `spec.kind` : poteau d'angle pour les
+ * structures `NEWEL_JOUR_STRUCTURES` (jour en arc ou vif), jour en arc pour un débillardé (G7),
+ * agrandi si son rayon est sous le rayon roulable (rayon intérieur mini de la rouleuse + e).
+ * Le reste de l'épure (site, volées, ligne de foulée, découpage demandé) est inchangé.
+ */
+export function adaptJour(
+  project: Project,
+  spec: EpureVariantSpec,
+  options: EpureCompareOptions = {},
+): {
+  readonly project: Project;
+  readonly adaptations: readonly JourAdaptation[];
+  readonly signals: readonly string[];
+} {
+  const kind = spec.kind;
+  const params =
+    spec.params ?? (kind === project.stair.structure.kind ? project.stair.structure.params : {});
+  const adapt = spec.jour !== "keep";
+  const adaptations: JourAdaptation[] = [];
+  const signals: string[] = [];
+  const newel: InnerCorner = {
+    kind: "newel",
+    size: options.newelSize ?? DEFAULT_ADAPTED_NEWEL_SIZE,
+  };
+  /** Rayon de jour minimal roulable : rayon intérieur mini de la rouleuse + épaisseur. */
+  const minRollableRadius = (): Mm => {
+    const metal = resolveWorkshopProfile(project.workshop).metal;
+    // Épaisseur du limon : paramètres de la variante complétés par les défauts du plugin (pas
+    // de valeur codée en dur ici).
+    const parsed = getStructure(kind)?.paramsSchema.safeParse(params);
+    const t = parsed?.success ? (parsed.data as Record<string, unknown>)["thickness"] : undefined;
+    return metal.plateRolling.minInnerRadius + (typeof t === "number" ? t : 0);
+  };
+  const arcRadius = (): Mm => options.arcRadius ?? Math.ceil(minRollableRadius() / 10) * 10;
+  const turns = project.stair.layout.turns.map((t, j) => {
+    let target: InnerCorner | null = null;
+    let reason = "";
+    if (NEWEL_JOUR_STRUCTURES.has(kind) && t.inner.kind !== "newel") {
+      target = newel;
+      reason =
+        t.inner.kind === "arc"
+          ? kind === "steel-profile"
+            ? profileArcReason(project, params, t.inner.radius)
+            : `jour en arc non pris en charge par « ${kind} » (limons droits : poteau d'angle requis)`
+          : `jour vif : les limons de jour se rencontreraient en un point, poteau d'angle requis`;
+    } else if (isDebillardeStructure(kind) && t.inner.kind !== "arc") {
+      target = { kind: "arc", radius: arcRadius() };
+      reason = `débillardé ⇒ jour courbe (CHALLENGE G7) : jour ${jourLabel(t.inner)} incompatible`;
+    } else if (
+      isDebillardeStructure(kind) &&
+      t.inner.kind === "arc" &&
+      t.inner.radius < minRollableRadius() - 1e-9
+    ) {
+      // Jour en arc trop serré pour la rouleuse (r_j − e < rayon mini) : arc agrandi.
+      target = { kind: "arc", radius: arcRadius() };
+      reason = `jour en arc R ${fmt(t.inner.radius, 0)} mm sous le rayon de roulage (rayon intérieur mini de la rouleuse + épaisseur, profil d'atelier)`;
     }
-    const pc = precheckModel(variant, model, options.precheck ?? pluginPrecheckSettings(params));
-    for (const r of pc.results) if (r.status === "violation") pre[r.severity]++;
-    const uniqueParts = countUniqueParts(parts);
-    const cuts = sum(parts, QUANTITY_CUTS);
-    const weldMm = sum(parts, QUANTITY_WELD_MM);
-    const bends = sum(parts, QUANTITY_BENDS);
-    const holes = sum(parts, QUANTITY_HOLES);
-    const { cost, missing } = variantCost(rates, {
-      steelKg,
-      woodM3,
-      surfaceM2: finishedM2,
-      cuts,
-      weldMm,
-      bends,
-      holes,
-      uniqueParts,
-    });
+    if (!target) return t;
+    signals.push(
+      `Tournant ${j + 1} : ${reason} ; ${adapt ? `variante adaptée : jour ${jourLabel(target)}.` : "épure conservée, limon de jour non généré."}`,
+    );
+    if (!adapt) return t;
+    adaptations.push({ turn: j, from: t.inner, to: target, reason });
+    return { ...t, inner: target };
+  });
+  const adapted: Project =
+    adaptations.length === 0
+      ? project
+      : {
+          ...project,
+          stair: { ...project.stair, layout: { ...project.stair.layout, turns } },
+        };
+  return { project: adapted, adaptations, signals };
+}
+
+function epureOf(project: Project, model: Model): EpureSummary {
+  const st = model.stepping;
+  const winders = st.treads.filter((t) => t.kind === "winder");
+  return {
+    jours: project.stair.layout.turns.map((t) => t.inner),
+    riserCount: st.riserCount,
+    rise: st.rise,
+    going: st.going,
+    run: st.run,
+    balancing: st.balancedZones.map((z) => z.method),
+    balancedZones: st.balancedZones,
+    minColletChord: winders.length > 0 ? Math.min(...winders.map((t) => t.colletChord)) : null,
+    minColletArc: winders.length > 0 ? Math.min(...winders.map((t) => t.colletArc)) : null,
+  };
+}
+
+/** Écarts d'épure de `e` par rapport à la référence `ref` (textes). */
+export function epureDeviations(ref: EpureSummary, e: EpureSummary): string[] {
+  const out: string[] = [];
+  const signed = (x: number): string => `${x > 0 ? "+" : ""}${fmt(x, 1)}`;
+  e.jours.forEach((j, i) => {
+    const r = ref.jours[i];
+    if (r && jourLabel(r) !== jourLabel(j)) {
+      out.push(`Tournant ${i + 1} : jour ${jourLabel(j)} (référence : ${jourLabel(r)}).`);
+    }
+  });
+  if (e.riserCount !== ref.riserCount) {
+    out.push(`Nombre de hauteurs : ${e.riserCount} (référence : ${ref.riserCount}).`);
+  }
+  if (Math.abs(e.going - ref.going) > 0.05) {
+    out.push(`Giron : ${fmt(e.going, 1)} mm (${signed(e.going - ref.going)} mm).`);
+  }
+  if (Math.abs(e.run - ref.run) > 0.05) {
+    out.push(
+      `Reculement sur la ligne de foulée : ${fmt(e.run, 0)} mm (${signed(e.run - ref.run)} mm).`,
+    );
+  }
+  const zones = (s: EpureSummary): string =>
+    s.balancedZones.map((z) => `[${z.from} ; ${z.to}] ${z.method}`).join(", ") || "aucune";
+  if (zones(e) !== zones(ref)) {
+    out.push(`Balancement : ${zones(e)} (référence : ${zones(ref)}).`);
+  }
+  if (
+    e.minColletChord !== null &&
+    ref.minColletChord !== null &&
+    Math.abs(e.minColletChord - ref.minColletChord) > 0.05
+  ) {
+    out.push(
+      `Collet minimal (corde) : ${fmt(e.minColletChord, 1)} mm (${signed(e.minColletChord - ref.minColletChord)} mm).`,
+    );
+  }
+  return out;
+}
+
+/**
+ * Compare des variantes de structure sur la **même épure** (critère d'acceptation n° 2,
+ * CHALLENGE P2) : même site, même ligne de foulée, même réglage du découpage ; le raccord de
+ * jour est adapté à chaque structure (`adaptJour`), tracé et balancement recalculés, écarts
+ * d'épure par rapport à la première variante listés.
+ */
+export function compareEpure(
+  project: Project,
+  specs: readonly EpureVariantSpec[],
+  options: EpureCompareOptions = {},
+): EpureVariantSummary[] {
+  let ref: EpureSummary | null = null;
+  return specs.map((spec) => {
+    const params =
+      spec.params ??
+      (spec.kind === project.stair.structure.kind ? project.stair.structure.params : {});
+    const adapted = adaptJour(project, spec, options);
+    const variant: Project = {
+      ...adapted.project,
+      stair: {
+        ...adapted.project.stair,
+        structure: { kind: spec.kind, params: { ...params } },
+      },
+    };
+    const summary = summarizeVariant(
+      variant,
+      options.precheck !== undefined ? { precheck: options.precheck } : {},
+    );
+    const epure = epureOf(variant, summary.model);
+    const deviations = ref ? epureDeviations(ref, epure) : [];
+    ref ??= epure;
     return {
-      kind,
-      label: plugin?.label ?? (kind === "none" ? "Sans structure (pièces de base)" : kind),
-      family: plugin?.family ?? null,
-      massKg,
-      massUnknown,
-      surfaceM2,
-      partCount: parts.length,
-      uniqueParts,
-      weldMm,
-      buttWeldMm: sum(parts, QUANTITY_BUTT_WELD_MM),
-      bends,
-      cuts,
-      holes,
-      executionClass: executionClassOf(model),
-      violations,
-      precheck: { beams: pc.beams.length, violations: pre },
-      errors: model.errors,
-      cost,
-      costMissing: missing,
-      model,
+      ...summary,
+      epure,
+      adaptations: adapted.adaptations,
+      signals: adapted.signals,
+      deviations,
     };
   });
 }

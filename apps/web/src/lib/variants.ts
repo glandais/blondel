@@ -1,11 +1,21 @@
 /**
  * Comparateur de variantes de structure (CHALLENGE P2) côté interface : choix des variantes à
  * comparer pour le tracé courant et mise en forme du tableau côte à côte. Le calcul est celui
- * du cœur (`compareVariants`) ; il est lancé dans le Web Worker de comparaison
- * (`model/model.worker.ts`), jamais sur le fil principal de l'application.
+ * du cœur (`compareEpure` : même épure, raccord de jour adapté à chaque structure — poteau
+ * d'angle pour les limons droits et les profilés, jour en arc roulable pour le débillardé
+ * `steel-curved`, critère d'acceptation n° 2) ; il est lancé dans le Web Worker de comparaison
+ * (`model/model.worker.ts`), jamais sur le fil principal de l'application. Les écarts d'épure
+ * sont mesurés par rapport à la variante de la structure du projet (à défaut, la première).
  */
 import {
-  compareVariants,
+  compareEpure,
+  deepMerge,
+  epureDeviations,
+  getStructure,
+  stableStringify,
+  type EpureSummary,
+  type InnerCorner,
+  type JourAdaptation,
   type Project,
   type Severity,
   type StructureKind,
@@ -28,6 +38,16 @@ export type VariantRow = Omit<VariantSummary, "model"> & {
   readonly current: boolean;
   /** Paramètres effectivement comparés (pour « appliquer cette variante »). */
   readonly params: Readonly<Record<string, unknown>>;
+  /** Raccords de jour adaptés à la structure (appliqués avec la variante). */
+  readonly adaptations: readonly JourAdaptation[];
+  /** Incompatibilités de la structure avec l'épure du projet (adaptées ou non). */
+  readonly signals: readonly string[];
+  /** Écarts d'épure par rapport à la variante de référence (structure du projet). */
+  readonly deviations: readonly string[];
+  /** Variante de référence des écarts d'épure. */
+  readonly reference: boolean;
+  /** Épure effective de la variante ; `null` si la comparaison a échoué. */
+  readonly epure: EpureSummary | null;
 };
 
 export interface CompareOutcome {
@@ -38,18 +58,39 @@ export interface CompareOutcome {
 }
 
 /**
- * Variantes proposées pour un projet : limons bois à la française ; crémaillères bois « à
- * l'anglaise » si l'escalier est droit (le plugin refuse les tournants) ; limons en plat découpé
- * laser ; profilés UPN et IPE. Seules les structures enregistrées dans le cœur sont retenues ; la
- * structure courante est ajoutée si elle n'est pas déjà couverte (ex. profilés HEA).
+ * Variantes proposées pour un projet à volées : limons bois à la française ; crémaillères bois
+ * « à l'anglaise » si l'escalier est droit (le plugin refuse les tournants) ; limons en plat
+ * découpé laser ; limon de jour débillardé soudé s'il y a un tournant (jour adapté en arc) ;
+ * profilés UPN et IPE. Hélicoïdal : structure à fût, marches bois ou en tôle. Seules les
+ * structures enregistrées dans le cœur sont retenues ; la structure courante est ajoutée si elle
+ * n'est pas déjà couverte (ex. profilés HEA).
  */
 export function variantsFor(
   project: Project,
   available: readonly Pick<StructureKind, "kind">[],
 ): Variant[] {
   const has = (k: string) => available.some((a) => a.kind === k);
-  const straight = project.stair.layout.turns.length === 0;
   const out: Variant[] = [];
+  if (project.stair.layout.kind === "helical") {
+    if (has("helical-core")) {
+      out.push(
+        {
+          id: "helical-core-wood",
+          kind: "helical-core",
+          label: "Fût acier — marches bois",
+          params: { treads: { material: "wood" } },
+        },
+        {
+          id: "helical-core-steel",
+          kind: "helical-core",
+          label: "Fût acier — marches en tôle",
+          params: { treads: { material: "steel" } },
+        },
+      );
+    }
+    return withCurrent(project, out, has);
+  }
+  const straight = project.stair.layout.turns.length === 0;
   if (has("wood-housed")) {
     out.push({ id: "wood-housed", kind: "wood-housed", label: "Bois — limons à la française" });
   }
@@ -58,6 +99,13 @@ export function variantsFor(
   }
   if (has("steel-flat")) {
     out.push({ id: "steel-flat", kind: "steel-flat", label: "Acier — plat découpé laser" });
+  }
+  if (has("steel-curved") && !straight) {
+    out.push({
+      id: "steel-curved",
+      kind: "steel-curved",
+      label: "Acier — limon de jour débillardé soudé",
+    });
   }
   if (has("steel-profile")) {
     for (const family of ["UPN", "IPE"] as const) {
@@ -69,14 +117,14 @@ export function variantsFor(
       });
     }
   }
+  return withCurrent(project, out, has);
+}
+
+/** Ajoute la structure du projet si aucune variante ne la couvre déjà. */
+function withCurrent(project: Project, out: Variant[], has: (k: string) => boolean): Variant[] {
   const cur = project.stair.structure;
   if (cur.kind !== "none" && has(cur.kind)) {
-    const family = cur.params["family"];
-    const covered = out.some(
-      (v) =>
-        v.kind === cur.kind &&
-        (v.params === undefined || family === undefined || v.params["family"] === family),
-    );
+    const covered = out.some((v) => isCurrent(project, v, variantParams(project, v)));
     if (!covered) {
       out.push({ id: `current-${cur.kind}`, kind: cur.kind, label: "Structure du projet" });
     }
@@ -88,25 +136,43 @@ function isPlainObject(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null && !Array.isArray(v);
 }
 
-/** Paramètres d'une variante : ceux du projet si même structure, complétés des paramètres imposés. */
+/**
+ * Paramètres d'une variante : ceux du projet si même structure, complétés des paramètres imposés
+ * (fusion profonde : un sous-objet imposé ne remplace que ses propres champs).
+ */
 export function variantParams(project: Project, v: Variant): Record<string, unknown> {
   const own = project.stair.structure.kind === v.kind ? project.stair.structure.params : {};
   const base: Record<string, unknown> = isPlainObject(own) ? { ...own } : {};
   if (!v.params) return base;
   // Section du catalogue gardée seulement si la famille ne change pas.
-  const out = { ...base, ...v.params };
+  const out = deepMerge(base, v.params);
   if (v.params["family"] !== undefined && base["family"] === v.params["family"]) {
     if (base["section"] !== undefined) out["section"] = base["section"];
   }
   return out;
 }
 
-/** La variante correspond-elle à la structure du projet (mêmes paramètres) ? */
+/** Paramètres complets (défauts du plugin) ; tels quels si le plugin est absent ou les refuse. */
+function fullParams(kind: string, params: unknown): Record<string, unknown> {
+  const parsed = getStructure(kind)?.paramsSchema.safeParse(params);
+  const out = parsed?.success ? parsed.data : params;
+  return isPlainObject(out) ? out : {};
+}
+
+/**
+ * La variante correspond-elle à la structure du projet ? Même structure et mêmes valeurs (défauts
+ * du plugin compris) pour chaque paramètre que la variante impose — la section d'un profilé
+ * exceptée (`auto` ou choisie, c'est la même famille).
+ */
 function isCurrent(project: Project, v: Variant, params: Record<string, unknown>): boolean {
   const cur = project.stair.structure;
   if (cur.kind !== v.kind) return false;
-  const fam = (p: unknown) => (isPlainObject(p) ? (p["family"] ?? "UPN") : undefined);
-  return v.params === undefined || fam(cur.params) === fam(params);
+  if (v.params === undefined) return true;
+  const mine = fullParams(v.kind, cur.params);
+  const theirs = fullParams(v.kind, params);
+  return Object.keys(v.params).every(
+    (k) => k === "section" || stableStringify(mine[k]) === stableStringify(theirs[k]),
+  );
 }
 
 const now = (): number =>
@@ -114,28 +180,81 @@ const now = (): number =>
     ? performance.now()
     : Date.now();
 
-/** Calcule les variantes (une par appel du comparateur du cœur) ; ne lève jamais. */
+/**
+ * Calcule les variantes sur la même épure (un appel de `compareEpure` par variante, pour qu'un
+ * échec reste local) puis les écarts d'épure par rapport à la variante de la structure du projet
+ * (à défaut, la première calculée) ; ne lève jamais.
+ */
 export function runVariants(project: Project, variants: readonly Variant[]): CompareOutcome {
   const t0 = now();
   const rows: VariantRow[] = [];
   for (const v of variants) {
     const params = variantParams(project, v);
     try {
-      const [summary] = compareVariants(project, [v.kind], { params: { [v.kind]: params } });
+      const [summary] = compareEpure(project, [{ kind: v.kind, params, jour: "adapt" }]);
       if (!summary) continue;
-      const { model: _model, ...rest } = summary;
+      const { model: _model, deviations: _deviations, ...rest } = summary;
       rows.push({
         ...rest,
         id: v.id,
         label: v.label,
         current: isCurrent(project, v, params),
         params,
+        deviations: [],
+        reference: false,
       });
     } catch (e) {
       rows.push(failedRow(v, params, e));
     }
   }
-  return { rows, timeMs: now() - t0 };
+  const ref = rows.find((r) => r.current && r.epure) ?? rows.find((r) => r.epure);
+  const out = rows.map((r) =>
+    r === ref
+      ? { ...r, reference: true }
+      : ref?.epure && r.epure
+        ? { ...r, deviations: epureDeviations(ref.epure, r.epure) }
+        : r,
+  );
+  return { rows: out, timeMs: now() - t0 };
+}
+
+/**
+ * Projet après application d'une variante : sa structure et ses paramètres, et les raccords de
+ * jour adaptés par le comparateur (même épure que celle qui a été comparée).
+ */
+export function applyVariant(
+  project: Project,
+  row: Pick<VariantRow, "kind" | "params" | "adaptations">,
+): Project {
+  const turns = project.stair.layout.turns;
+  const adapted = row.adaptations.filter((a) => a.turn < turns.length);
+  const layout =
+    adapted.length === 0 || project.stair.layout.kind === "helical"
+      ? project.stair.layout
+      : {
+          ...project.stair.layout,
+          turns: turns.map((t, i) => {
+            const a = adapted.find((x) => x.turn === i);
+            return a ? { ...t, inner: a.to } : t;
+          }),
+        };
+  return {
+    ...project,
+    stair: {
+      ...project.stair,
+      layout,
+      structure: { kind: row.kind, params: { ...row.params } },
+    },
+  };
+}
+
+/** Raccord de jour lisible (« poteau 100 mm », « arc R 250 mm », « vif »). */
+export function jourText(c: InnerCorner): string {
+  return c.kind === "arc"
+    ? `arc R ${int.format(c.radius)} mm`
+    : c.kind === "newel"
+      ? `poteau ${int.format(c.size)} mm`
+      : "vif";
 }
 
 const ZERO: Readonly<Record<Severity, number>> = { bloquant: 0, avertissement: 0, conseil: 0 };
@@ -164,6 +283,11 @@ function failedRow(v: Variant, params: Record<string, unknown>, e: unknown): Var
     errors: [`Comparaison impossible : ${e instanceof Error ? e.message : String(e)}`],
     cost: null,
     costMissing: [],
+    adaptations: [],
+    signals: [],
+    deviations: [],
+    reference: false,
+    epure: null,
   };
 }
 
@@ -292,6 +416,24 @@ export function compareLines(rows: readonly VariantRow[]): CompareLine[] {
                 }
               : {}),
           },
+    ),
+    line("jour", "Raccord de jour (épure adaptée)", (r) =>
+      r.adaptations.length > 0
+        ? {
+            text: r.adaptations.map((a) => `T${a.turn + 1} : ${jourText(a.to)}`).join(", "),
+            title: r.signals.join("\n"),
+            tone: "warn",
+          }
+        : r.signals.length > 0
+          ? { text: "non adapté", title: r.signals.join("\n"), tone: "bad" }
+          : { text: "inchangé", tone: "muted" },
+    ),
+    line("deviations", "Écarts d'épure", (r) =>
+      r.reference
+        ? { text: "référence", tone: "muted" }
+        : r.deviations.length > 0
+          ? { text: `${r.deviations.length} écart(s)`, title: r.deviations.join("\n") }
+          : { text: r.epure ? "aucun" : "–", tone: "muted" },
     ),
     line("errors", "Erreurs de génération", (r) =>
       r.errors.length > 0

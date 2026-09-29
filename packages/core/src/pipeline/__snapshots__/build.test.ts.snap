@@ -262,16 +262,95 @@ exports[`buildModel — exemples du dépôt > j4-demi-tournant-acier-garde-corps
   "headroom": null,
   "headroomWidth": null,
   "n": 15,
-  "parts": 176,
+  "parts": 184,
   "run": 3779.6,
   "treads": "sswwwwwwwwwsss",
   "violations": {
-    "avertissement": 18,
+    "avertissement": 15,
     "bloquant": 0,
     "conseil": 0,
   },
   "zones": [
     "2-11 M3-cubic",
+  ],
+}
+`;
+
+exports[`buildModel — exemples du dépôt > j5a-helicoidal.blondel.json : cotes principales (non-régression) 1`] = `
+{
+  "blondel": 590.24,
+  "colletMin": 33.5,
+  "colletsChord": [
+    33.5,
+    33.5,
+    33.5,
+    33.5,
+    33.5,
+    33.5,
+    33.5,
+    33.5,
+    33.5,
+    33.5,
+    33.5,
+    33.5,
+    33.5,
+    33.5,
+    33.5,
+  ],
+  "firstRise": 171.88,
+  "g": 246.49,
+  "h": 171.88,
+  "headroom": 1915.1,
+  "headroomWidth": {
+    "min": 2022.5,
+    "nosing": 0,
+  },
+  "n": 16,
+  "parts": 19,
+  "run": 3697.4,
+  "treads": "wwwwwwwwwwwwwww",
+  "violations": {
+    "avertissement": 17,
+    "bloquant": 0,
+    "conseil": 17,
+  },
+  "zones": [],
+}
+`;
+
+exports[`buildModel — exemples du dépôt > j5b-debillarde-soude.blondel.json : cotes principales (non-régression) 1`] = `
+{
+  "blondel": 604.97,
+  "colletMin": 145.1,
+  "colletsChord": [
+    147.2,
+    147.2,
+    147.2,
+    147.2,
+    146.2,
+    145.1,
+    145.1,
+    222.6,
+  ],
+  "firstRise": 180,
+  "g": 244.97,
+  "h": 180,
+  "headroom": 2136.3,
+  "headroomWidth": {
+    "min": 2140,
+    "nosing": 1,
+  },
+  "n": 15,
+  "parts": 67,
+  "run": 3429.6,
+  "treads": "wwwwwwwwssssss",
+  "violations": {
+    "avertissement": 0,
+    "bloquant": 0,
+    "conseil": 0,
+  },
+  "zones": [
+    "0-7 M3-quintic",
   ],
 }
 `;
@@ -316,7 +395,7 @@ exports[`buildModel — exemples du dépôt > quarter-left.blondel.json : cotes 
   "firstRise": 180,
   "g": 269.99,
   "h": 180,
-  "headroom": 1960,
+  "headroom": 2026.7,
   "headroomWidth": {
     "min": 1780,
     "nosing": 3,
@@ -350,7 +429,7 @@ exports[`buildModel — exemples du dépôt > quarter-right.blondel.json : cotes
   "firstRise": 180,
   "g": 269.99,
   "h": 180,
-  "headroom": 1960,
+  "headroom": 2026.7,
   "headroomWidth": {
     "min": 1780,
     "nosing": 3,

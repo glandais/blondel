@@ -1,17 +1,19 @@
 /**
- * Onglet « Comparateur » : variantes de structure sur le même tracé (bois à la française, bois
- * à l'anglaise si l'escalier est droit, plat découpé laser, profilés UPN et IPE), calculées par
- * `compareVariants` du cœur dans un Web Worker dédié, en tableau côte à côte. Les euros ne sont
- * affichés que si le profil d'atelier porte un barème complet (« profil d'atelier requis »
- * sinon). Une variante peut être appliquée au projet (annulable).
+ * Onglet « Comparateur » : variantes de structure sur la même épure (bois à la française, bois
+ * à l'anglaise si l'escalier est droit, plat découpé laser, limon de jour débillardé soudé s'il y
+ * a un tournant, profilés UPN et IPE ; hélicoïdal : fût avec marches bois ou en tôle), calculées
+ * par `compareEpure` du cœur dans un Web Worker dédié, en tableau côte à côte. Le raccord de jour
+ * est adapté à chaque structure (poteau, arc roulable) et les écarts d'épure sont listés. Les
+ * euros ne sont affichés que si le profil d'atelier porte un barème complet (« profil d'atelier
+ * requis » sinon). Une variante peut être appliquée au projet, jour adapté compris (annulable).
  */
-import { compareLines, type VariantRow } from "../lib/variants.js";
+import { applyVariant, compareLines, type VariantRow } from "../lib/variants.js";
 import { appStore, useApp, useComparison } from "../store/appStore.js";
 
 const time = new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 0 });
 
 function apply(row: VariantRow): void {
-  appStore.getState().setField(["stair", "structure"], { kind: row.kind, params: row.params });
+  appStore.getState().update((p) => applyVariant(p, row));
   appStore.getState().endGroup();
 }
 
@@ -41,7 +43,7 @@ export function CompareView() {
     <div className="compare" aria-busy={stale}>
       <table>
         <caption>
-          Comparaison des structures sur le tracé courant
+          Comparaison des structures sur l'épure courante
           {stale ? " — mise à jour…" : ` (${time.format(outcome.timeMs)} ms)`}
         </caption>
         <thead>
@@ -73,6 +75,25 @@ export function CompareView() {
         </tbody>
         <tfoot>
           <tr>
+            <th scope="row">Adaptations et écarts</th>
+            {rows.map((r) => {
+              const notes = [...r.signals, ...r.deviations];
+              return (
+                <td key={r.id} className="compare__notes">
+                  {notes.length > 0 ? (
+                    <ul>
+                      {notes.map((n) => (
+                        <li key={n}>{n}</li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <span className="muted">–</span>
+                  )}
+                </td>
+              );
+            })}
+          </tr>
+          <tr>
             <th scope="row">Structure</th>
             {rows.map((r) => (
               <td key={r.id}>
@@ -85,7 +106,9 @@ export function CompareView() {
                       ? "Structure actuelle du projet"
                       : stale
                         ? "Comparaison en cours de mise à jour"
-                        : "Remplacer la structure du projet"
+                        : r.adaptations.length > 0
+                          ? "Remplacer la structure du projet et adapter le raccord de jour"
+                          : "Remplacer la structure du projet"
                   }
                 >
                   {r.current ? "Actuelle" : "Appliquer"}
@@ -96,10 +119,11 @@ export function CompareView() {
         </tfoot>
       </table>
       <p className="muted">
-        Grandeurs physiques calculées par le cœur, paramètres par défaut de chaque structure (ceux
-        du projet pour la structure en cours). Coût : barème du profil d'atelier (taux horaire,
-        temps unitaires, prix matière et finition) ; sans barème complet, aucun montant n'est
-        affiché. Prédimensionnement indicatif : ne remplace pas une note de calcul.
+        Grandeurs physiques calculées par le cœur sur la même épure (site, ligne de foulée,
+        découpage), raccord de jour adapté à chaque structure ; paramètres par défaut de chaque
+        structure (ceux du projet pour la structure en cours). Coût : barème du profil d'atelier
+        (taux horaire, temps unitaires, prix matière et finition) ; sans barème complet, aucun
+        montant n'est affiché. Prédimensionnement indicatif : ne remplace pas une note de calcul.
       </p>
     </div>
   );

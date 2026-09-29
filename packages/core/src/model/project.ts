@@ -91,17 +91,115 @@ export const LegSchema = z.object({
 export type Leg = z.infer<typeof LegSchema>;
 
 /**
- * Tracé générique : N volées reliées par N−1 tournants à 90°.
+ * Tracé « à volées » : N volées reliées par N−1 tournants à 90°.
  * Droit = 1 volée ; quart tournant = 2 ; deux quarts (U) / demi-tournant = 3 volées,
  * la volée centrale d'un demi-tournant balancé ayant la longueur 2E + jour.
  * Repère local : départ sur le segment (0,0)–(E,0), montée selon +Y, x = 0 côté gauche.
+ *
+ * `kind` est facultatif (jalon 5a) : les projets antérieurs, sans `kind`, restent des escaliers
+ * à volées ; il n'est jamais ajouté à la lecture, pour que leur sérialisation reste identique.
  */
-export const LayoutSpecSchema = z.object({
+export const FlightsLayoutSpecSchema = z.object({
+  kind: z.literal("flights").optional(),
   width: mmPos,
   legs: z.array(LegSchema).min(1),
   turns: z.array(TurnSchema),
 });
+export type FlightsLayoutSpec = z.infer<typeof FlightsLayoutSpecSchema>;
+
+/**
+ * Bord intérieur d'un hélicoïdal (B §1.1) : fût central de rayon r_f (`column`, marches portées
+ * par le fût) ou jour central de rayon r_j (`well`, limon intérieur hélicoïdal ou vide).
+ */
+export const HelicalCoreSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("column"), radius: mmPos }),
+  z.object({ kind: z.literal("well"), radius: mmPos }),
+]);
+export type HelicalCore = z.infer<typeof HelicalCoreSchema>;
+
+/** Nombre maximal de marches par tour accepté (Δθ ≥ 6°) ; au moins 3 (Δθ < 180°). */
+export const HELICAL_TREADS_PER_TURN_MIN = 3;
+export const HELICAL_TREADS_PER_TURN_MAX = 60;
+
+/**
+ * Rotation de l'hélicoïdal : angle total des marches (degrés, du nez de départ au nez
+ * d'arrivée : Δθ = angle / (n − 1)) **ou** nombre de marches par tour (Δθ = 360° / N).
+ */
+export const HelicalSweepSchema = z.discriminatedUnion("mode", [
+  z.object({ mode: z.literal("angle"), degrees: z.number().positive().max(2160) }),
+  z.object({
+    mode: z.literal("treadsPerTurn"),
+    count: z.number().int().min(HELICAL_TREADS_PER_TURN_MIN).max(HELICAL_TREADS_PER_TURN_MAX),
+  }),
+]);
+export type HelicalSweep = z.infer<typeof HelicalSweepSchema>;
+
+const HelicalLayoutInputSchema = z
+  .object({
+    kind: z.literal("helical"),
+    /** Sens de rotation en montant : `left` = trigonométrique vu de dessus (axe à gauche). */
+    direction: z.enum(["left", "right"]),
+    /** Rayon extérieur R_e (bout des marches, face intérieure du limon extérieur éventuel). */
+    outerRadius: mmPos,
+    core: HelicalCoreSchema,
+    sweep: HelicalSweepSchema,
+    /** Angle (degrés, trigonométrique depuis +X du repère local) de la ligne de nez de départ. */
+    startAngle: z.number().default(0),
+    /**
+     * Palier d'arrivée en secteur, au niveau du plancher haut, à partir du nez d'arrivée
+     * (angle en degrés, < 360). Absent : pas de palier (arrivée directe sur le plancher).
+     */
+    landing: z.object({ angle: z.number().positive().lt(360) }).optional(),
+    /**
+     * Champs dérivés (voir `HelicalLayoutSpecSchema`) : acceptés en entrée pour qu'un projet lu
+     * puisse être relu tel quel, **ignorés** et recalculés.
+     */
+    width: z.number().optional(),
+    legs: z.array(LegSchema).max(0).optional(),
+    turns: z.array(TurnSchema).max(0).optional(),
+  })
+  .superRefine((v, ctx) => {
+    if (!(v.outerRadius > v.core.radius)) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["outerRadius"],
+        message: `le rayon extérieur (${v.outerRadius} mm) doit dépasser le rayon ${v.core.kind === "column" ? "du fût" : "du jour"} (${v.core.radius} mm)`,
+      });
+    }
+  });
+
+/**
+ * Tracé hélicoïdal (jalon 5a, B §1.1, §4.3) : marches rayonnantes autour d'un axe vertical,
+ * sans balancement. Repère local : axe au point (0, 0), placé par `stair.placement`.
+ *
+ * Champs **dérivés** ajoutés à la lecture, pour que le code écrit pour les escaliers à volées
+ * reste valable : `width` = emmarchement utile E = R_e − r (r = rayon du fût ou du jour),
+ * `legs` = [] et `turns` = [] (aucune volée droite ni tournant à 90°). Ils ne sont pas
+ * sérialisés (`serializeProject`) et sont recalculés à chaque lecture.
+ */
+export const HelicalLayoutSpecSchema = HelicalLayoutInputSchema.transform((v) => ({
+  ...v,
+  width: v.outerRadius - v.core.radius,
+  legs: [] as Leg[],
+  turns: [] as Turn[],
+}));
+export type HelicalLayoutSpec = z.infer<typeof HelicalLayoutSpecSchema>;
+export type HelicalLayoutSpecInput = z.input<typeof HelicalLayoutSpecSchema>;
+
+/**
+ * Tracé : union discriminée par `kind` (ADR-0002, jalon 5a), rétrocompatible : sans `kind`,
+ * escalier à volées. Les deux variantes exposent `width`, `legs` et `turns`.
+ */
+export const LayoutSpecSchema = z.discriminatedUnion("kind", [
+  FlightsLayoutSpecSchema,
+  HelicalLayoutSpecSchema,
+]);
 export type LayoutSpec = z.infer<typeof LayoutSpecSchema>;
+
+/** Vrai si le tracé est hélicoïdal. */
+export function isHelicalLayout(spec: LayoutSpec): spec is HelicalLayoutSpec {
+  return spec.kind === "helical";
+}
 
 export const PlacementSchema = z.object({
   origin: Vec2Schema,

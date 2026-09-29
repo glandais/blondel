@@ -21,8 +21,8 @@
  *   Choix (CHALLENGE G3, corrigé le 2026-09-29 : maximiser le collet seul balançait toute une
  *   volée) :
  *   1. si des candidats atteignent le collet cible (`targetCollet`, collet minimal en corde) :
- *      parmi eux, les réguliers (K3 : collets monotones vers l'angle, en corde, et en arc hors
- *      poteau) s'il en existe, puis le **moins** de nez balancés, puis le plus grand collet ;
+ *      parmi eux, les réguliers (K3 : collets monotones vers chaque angle du jour — une vallée
+ *      par angle dans une zone unique de 180° —, en corde, et en arc hors poteau) s'il en existe, puis le **moins** de nez balancés, puis le plus grand collet ;
  *   2. sinon : le collet minimal en corde **maximal**, tous candidats admissibles confondus (la
  *      régularité ne fait pas perdre de collet) ; parmi les candidats à `colletTieTolerance`
  *      (défaut `COLLET_TIE_TOLERANCE` = 1 mm, à valider) du maximum, les réguliers s'il en
@@ -45,7 +45,8 @@ import type { Mm } from "../model/primitives.js";
 import {
   applySolution,
   colletBetween,
-  monotonyBreaks,
+  cornerMonotonyBreaks,
+  cornerPositions,
   noCrossing,
   type NosingSeed,
 } from "../balancing/postprocess.js";
@@ -61,6 +62,11 @@ export interface TurnGroup {
   readonly sMid: Mm;
   readonly sStart: Mm;
   readonly sEnd: Mm;
+  /**
+   * Milieux sur Γ de chaque tournant du groupe (un angle du jour par tournant) : K3 est évalué
+   * **par angle** (`cornerMonotonyBreaks`), une zone unique de 180° ayant deux vallées.
+   */
+  readonly corners: readonly Mm[];
 }
 
 /**
@@ -74,7 +80,7 @@ export function groupWinderTurns(
   fixed: Set<number>,
 ): TurnGroup[] {
   const winders = layout.turns.filter((t) => t.mode === "winders");
-  const groups: { first: number; last: number; sStart: Mm; sEnd: Mm }[] = [];
+  const groups: { first: number; last: number; sStart: Mm; sEnd: Mm; corners: Mm[] }[] = [];
   for (const t of winders) {
     const prev = groups[groups.length - 1];
     if (prev && prev.last === t.index - 1) {
@@ -86,6 +92,7 @@ export function groupWinderTurns(
       if (gapEnd - gapStart < going - GEOM_EPS && !fixedInside) {
         prev.last = t.index;
         prev.sEnd = t.sEnd;
+        prev.corners.push((t.sStart + t.sEnd) / 2);
         continue;
       }
       if (!fixedInside) {
@@ -99,7 +106,13 @@ export function groupWinderTurns(
         if (best >= 0) fixed.add(best);
       }
     }
-    groups.push({ first: t.index, last: t.index, sStart: t.sStart, sEnd: t.sEnd });
+    groups.push({
+      first: t.index,
+      last: t.index,
+      sStart: t.sStart,
+      sEnd: t.sEnd,
+      corners: [(t.sStart + t.sEnd) / 2],
+    });
   }
   return groups.map((g) => ({ ...g, sMid: (g.sStart + g.sEnd) / 2 }));
 }
@@ -242,11 +255,17 @@ export function evaluateZone(
   const chords = collets.map((c) => c.chord);
   const arcs = collets.map((c) => c.arc);
   const k5 = noCrossing(local);
-  // K3 sur les cordes (grandeur du contrôle de conception) et, sauf jour de développement
-  // virtuel (poteau : l'arc réel contourne le poteau), sur les arcs.
+  // K3 **par angle** (une vallée autour de chaque angle du jour) sur les cordes (grandeur du
+  // contrôle de conception) et, sauf jour de développement virtuel (poteau : l'arc réel
+  // contourne le poteau), sur les arcs.
   const virtualJour = ctx.devLayout.inner !== ctx.layout.inner;
+  const corners = cornerPositions(
+    local.map((nl) => nl.s),
+    group.corners,
+  );
   const k3 =
-    monotonyBreaks(chords).length === 0 && (virtualJour || monotonyBreaks(arcs).length === 0);
+    cornerMonotonyBreaks(chords, corners).length === 0 &&
+    (virtualJour || cornerMonotonyBreaks(arcs, corners).length === 0);
   return {
     zone,
     ok: true,

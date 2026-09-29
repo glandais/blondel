@@ -94,6 +94,17 @@ export const MetalProfileInputSchema = z.object({
   profileBending: z.array(ProfileBendingSchema).optional(),
   /** Trait de scie (débit des barres), mm. */
   sawKerf: nonNeg.optional(),
+  /**
+   * Rouleuse à tôle (limon débillardé soudé, jalon 5b, C §2.4) : rayon intérieur minimal de
+   * roulage, longueur utile des rouleaux, épaisseur maximale roulée.
+   */
+  plateRolling: z
+    .object({
+      minInnerRadius: pos.optional(),
+      rollLength: pos.optional(),
+      maxThickness: pos.optional(),
+    })
+    .optional(),
 });
 export type MetalProfileInput = z.input<typeof MetalProfileInputSchema>;
 
@@ -109,7 +120,36 @@ export interface MetalProfile {
   readonly profileBending: readonly ProfileBending[];
   /** Trait de scie pour le débit des barres (jalon 3c), mm. */
   readonly sawKerf: Mm;
+  /** Rouleuse à tôle (jalon 5b) : voir `DEFAULT_PLATE_ROLLING`. */
+  readonly plateRolling: PlateRolling;
 }
+
+/**
+ * Capacités de la rouleuse à tôle (C §2.4, [16]) : la capacité d'une rouleuse se définit pour
+ * une largeur de tôle égale à la longueur des rouleaux et un diamètre de cintrage ≥ 1,3 × D du
+ * rouleau supérieur (r_min ≈ 0,65 D). Blondel contrôle le **rayon intérieur** de la tôle roulée
+ * (face concave), l'étendue du développé le long des génératrices (≤ longueur des rouleaux) et
+ * l'épaisseur.
+ */
+export interface PlateRolling {
+  /** Rayon intérieur minimal de roulage (face concave), mm. */
+  readonly minInnerRadius: Mm;
+  /** Longueur utile des rouleaux : étendue maximale de la tôle le long des génératrices, mm. */
+  readonly rollLength: Mm;
+  /** Épaisseur maximale roulée, mm. */
+  readonly maxThickness: Mm;
+}
+
+/**
+ * Rouleuse par défaut : **valeurs non sourcées, à valider** (C §2.4 ne donne que des rapports :
+ * r_min ≈ 0,65 × Ø du rouleau supérieur ; aucun diamètre ni longueur de rouleaux). 150 mm de
+ * rayon intérieur (rouleau supérieur ≈ Ø 230), 2 000 mm de rouleaux, 12 mm d'épaisseur.
+ */
+export const DEFAULT_PLATE_ROLLING: PlateRolling = {
+  minInnerRadius: 150,
+  rollLength: 2000,
+  maxThickness: 12,
+};
 
 /**
  * Capacités de cintrage relevées chez un cintreur français (C §2.3 [15], confiance moyenne,
@@ -169,6 +209,7 @@ export const DEFAULT_METAL_PROFILE: MetalProfile = {
   defaultK: DEFAULT_K_FACTOR,
   profileBending: DEFAULT_PROFILE_BENDING,
   sawKerf: DEFAULT_SAW_KERF,
+  plateRolling: DEFAULT_PLATE_ROLLING,
 };
 
 export type MetalSettingKey = keyof MetalProfile;
@@ -215,6 +256,10 @@ export const METAL_PROVENANCE: Readonly<Record<MetalSettingKey, MetalProvenance>
     status: "a-valider",
     note: "Trait de scie 3 mm : aucune valeur dans docs/research, à valider.",
   },
+  plateRolling: {
+    status: "a-valider",
+    note: "Rouleuse (jalon 5b) : C §2.4 [16] ne donne que r_min ≈ 0,65 × Ø du rouleau supérieur ; rayon intérieur mini 150 mm, rouleaux de 2 000 mm et 12 mm d'épaisseur à valider par l'atelier.",
+  },
 };
 
 /** Profil métal effectif : défauts surchargés champ par champ (listes remplacées en bloc). */
@@ -236,6 +281,11 @@ export function resolveMetalProfile(
     defaultK: input.defaultK ?? d.defaultK,
     profileBending: input.profileBending ?? d.profileBending,
     sawKerf: input.sawKerf ?? d.sawKerf,
+    plateRolling: {
+      minInnerRadius: input.plateRolling?.minInnerRadius ?? d.plateRolling.minInnerRadius,
+      rollLength: input.plateRolling?.rollLength ?? d.plateRolling.rollLength,
+      maxThickness: input.plateRolling?.maxThickness ?? d.plateRolling.maxThickness,
+    },
   };
 }
 

@@ -36,3 +36,54 @@ jobs:
         run: pnpm --filter @blondel/web build
         env:
           BASE_PATH: /blondel/
+
+  # Parcours de bout en bout (Playwright, Chromium) sur l'application construite pour la
+  # production : critère d'acceptation n° 1, import, annuler / rétablir, budget de tâches longues.
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # Navigateur mis en cache par version de Playwright ; les dépendances système sont
+      # installées à chaque fois (paquets apt, hors cache).
+      - name: Version de Playwright
+        id: playwright
+        run: echo "version=$(pnpm --filter @blondel/web exec playwright --version | awk '{print $2}')" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/cache@v6
+        id: playwright-cache
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}
+
+      - name: Installation de Chromium
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        run: pnpm --filter @blondel/web exec playwright install --with-deps chromium
+
+      - name: Dépendances système de Chromium
+        if: steps.playwright-cache.outputs.cache-hit == 'true'
+        run: pnpm --filter @blondel/web exec playwright install-deps chromium
+
+      # Construit l'application (BASE_PATH=/blondel/), la sert avec vite preview et lance les
+      # parcours (apps/web/playwright.config.ts).
+      - run: pnpm e2e
+
+      - name: Rapport Playwright
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: playwright-report
+          path: |
+            apps/web/playwright-report/
+            apps/web/test-results/
+          retention-days: 7

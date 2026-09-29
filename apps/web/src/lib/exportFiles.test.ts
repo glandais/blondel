@@ -93,6 +93,27 @@ describe("exports du menu", () => {
     expect(loads).toBe(1);
   });
 
+  it("PDF délégué (worker) : `renderPdf` remplace le chargement du module", async () => {
+    const bytes = new Uint8Array([37, 80, 68, 70]);
+    let loads = 0;
+    const seen: unknown[] = [];
+    const deps: ExportDeps = {
+      loadPdf: async () => {
+        loads++;
+        return () => new Uint8Array();
+      },
+      renderPdf: async (p) => {
+        seen.push(p);
+        return bytes;
+      },
+    };
+    const [pdf] = await buildExport("pdf", project, model, deps);
+    expect(loads).toBe(0);
+    expect(seen).toEqual([project]);
+    expect(pdf).toMatchObject({ filename: "quart-tournant-a-gauche.pdf", mime: MIME.pdf });
+    expect(pdf!.content).toBe(bytes);
+  });
+
   it("PDF réel : @blondel/exports/pdf produit un fichier %PDF", async () => {
     const [pdf] = await buildExport("pdf", project, model);
     const c = pdf!.content;

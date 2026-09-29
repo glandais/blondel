@@ -13,3 +13,10 @@ export {
   type HeadroomOnWalkline,
 } from "./headroom.js";
 export { requiredOpening, type RequiredOpening } from "./required.js";
+export { selfCoveredHeadroom, type SelfCoverInput } from "./selfcover.js";
+export {
+  circularOpening,
+  helicalHeadroomBound,
+  type HelicalHeadroomBound,
+  type HelicalHeadroomInput,
+} from "./helical.js";

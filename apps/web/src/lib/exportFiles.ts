@@ -23,9 +23,15 @@ import {
 import { PROJECT_FILE_SUFFIX, projectFileName } from "../store/persistence.js";
 import { loadExportPdf, type ExportPdfFn, type FileContent } from "./optionalApi.js";
 
-/** Dépendances injectables (tests) : chargement du module PDF. */
+/** Dépendances injectables : chargement du module PDF, mise en page déléguée (worker). */
 export interface ExportDeps {
   readonly loadPdf: () => Promise<ExportPdfFn>;
+  /**
+   * Mise en page du dossier PDF hors du fil principal (worker de calcul) : fournie par
+   * l'interface, elle remplace `loadPdf` (plusieurs centaines de millisecondes de calcul
+   * synchrone sinon, qui figeaient la page).
+   */
+  readonly renderPdf?: (project: Project, model: Model) => Promise<FileContent>;
 }
 
 export const DEFAULT_EXPORT_DEPS: ExportDeps = { loadPdf: loadExportPdf };
@@ -185,6 +191,11 @@ export async function buildExport(
     case "cutlist-csv":
       return [{ filename: `${stem}-debit.csv`, mime: MIME.csv, content: exportCutListCsv(m) }];
     case "pdf": {
+      if (deps.renderPdf) {
+        return [
+          { filename: `${stem}.pdf`, mime: MIME.pdf, content: await deps.renderPdf(project, m) },
+        ];
+      }
       const exportPdf = await deps.loadPdf();
       const content = await exportPdf(m, { project, title: project.name });
       return [{ filename: `${stem}.pdf`, mime: MIME.pdf, content }];

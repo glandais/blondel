@@ -14,6 +14,7 @@ import {
   treadsOfKind,
   type Item,
 } from "../check.js";
+import { cornerMonotonyBreaks, cornerPositions } from "../../balancing/postprocess.js";
 import { getRule } from "../table.js";
 import type { EvaluatorContext, Finding, RuleEvaluator } from "../types.js";
 
@@ -103,29 +104,56 @@ function winderGroups(ctx: EvaluatorContext): Tread[][] {
 }
 
 /**
+ * Angles du jour contournés par un groupe de marches : positions (indices dans le groupe) des
+ * marches au droit du milieu de chaque tournant balancé du tracé compris entre le nez bas de la
+ * première marche et le nez haut de la dernière (vide : aucun angle, par exemple des marches
+ * balancées entre deux zones). `null` si les nez manquent (découpage partiel) ou si la suite est
+ * interrompue : le groupe est alors traité comme une seule vallée.
+ */
+function groupCorners(ctx: EvaluatorContext, g: readonly Tread[]): number[] | null {
+  const nosings = ctx.stepping.nosings;
+  const first = g[0]!.number - 1;
+  const last = g[g.length - 1]!.number;
+  const s: number[] = [];
+  for (let k = first; k <= last; k++) {
+    const nl = nosings[k];
+    if (!nl || nl.index !== k || !Number.isFinite(nl.s)) return null;
+    s.push(nl.s);
+  }
+  // Marches non consécutives (suite interrompue) : pas de repérage des angles.
+  if (g.some((t, i) => t.number !== g[0]!.number + i)) return null;
+  const cornerS = ctx.layout.turns
+    .filter((t) => t.mode === "winders")
+    .map((t) => (t.sStart + t.sEnd) / 2);
+  return cornerPositions(s, cornerS);
+}
+
+/**
  * G_COLLET_MONOTONE : dans chaque zone balancée, les collets décroissent (ou restent constants)
- * jusqu'à l'angle puis croissent : la suite est « en vallée ». L'angle est pris au premier minimum.
+ * jusqu'à l'angle puis croissent : la suite est « en vallée » **autour de chaque angle du jour**.
+ * Une zone unique de 180° (demi-tournant, U serré) contourne deux angles : deux vallées
+ * séparées par une crête entre les deux angles (`cornerMonotonyBreaks`). Sans repérage possible
+ * des angles, une seule vallée, prise au premier minimum.
  */
 const colletMonotone: RuleEvaluator = (ctx) => {
   const groups = winderGroups(ctx);
   if (groups.length === 0) return [notApplicable("Sans objet : aucune marche balancée.")];
   const out: Finding[] = [];
+  let corners = 0;
   groups.forEach((g, gi) => {
     const c = g.map((t) => t.colletChord);
-    let m = 0;
-    for (let i = 1; i < c.length; i++) if (c[i]! < c[m]! - NUMERIC_EPS) m = i;
-    for (let i = 0; i + 1 < c.length; i++) {
-      const before = i < m;
-      const broken = before ? c[i + 1]! > c[i]! + NUMERIC_EPS : c[i + 1]! < c[i]! - NUMERIC_EPS;
-      if (broken) {
-        const t = g[i + 1]!;
-        out.push({
-          status: "violation",
-          measured: t.colletChord,
-          location: treadLocation(t),
-          message: `Collet non monotone vers l'angle, zone ${gi + 1}, marche ${t.number} : ${fmt(t.colletChord)} mm après ${fmt(g[i]!.colletChord)} mm (marche ${g[i]!.number}).`,
-        });
-      }
+    const located = groupCorners(ctx, g);
+    // Angles repérés ; repérage impossible : une vallée supposée (un angle).
+    corners += located === null ? 1 : located.length;
+    const at = located ?? [];
+    for (const i of cornerMonotonyBreaks(c, at, NUMERIC_EPS)) {
+      const t = g[i + 1]!;
+      out.push({
+        status: "violation",
+        measured: t.colletChord,
+        location: treadLocation(t),
+        message: `Collet non monotone vers l'angle, zone ${gi + 1}, marche ${t.number} : ${fmt(t.colletChord)} mm après ${fmt(g[i]!.colletChord)} mm (marche ${g[i]!.number}).`,
+      });
     }
   });
   if (out.length > 0) return out;
@@ -133,7 +161,7 @@ const colletMonotone: RuleEvaluator = (ctx) => {
     {
       status: "ok",
       location: { kind: "stair" },
-      message: `Collets monotones vers l'angle dans ${groups.length} zone(s) balancée(s).`,
+      message: `Collets monotones vers l'angle dans ${groups.length} zone(s) balancée(s) (${corners} angle(s) du jour).`,
     },
   ];
 };

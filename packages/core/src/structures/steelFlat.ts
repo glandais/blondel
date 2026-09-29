@@ -332,7 +332,7 @@ function polyAt(line: readonly Vec2[], u: Mm): Mm {
 }
 
 /** Rectangle plein de développé (platines) avec perçages. */
-function rectFlat(
+export function rectFlat(
   length: Mm,
   width: Mm,
   thickness: Mm,
@@ -360,7 +360,7 @@ function rectFlat(
 }
 
 /** Perçages d'une platine L × W : deux rangées à `edge` des grands côtés, `perRow` par rangée. */
-function plateHoles(length: Mm, width: Mm, edge: Mm, perRow: number): Vec2[] {
+export function plateHoles(length: Mm, width: Mm, edge: Mm, perRow: number): Vec2[] {
   const xs =
     perRow <= 1
       ? [length / 2]
@@ -369,7 +369,7 @@ function plateHoles(length: Mm, width: Mm, edge: Mm, perRow: number): Vec2[] {
 }
 
 /** Marque les pièces identiques d'une liste : `${prefix}${rang du groupe}`. */
-function markGroups(parts: Part[], prefix: string, key: (p: Part) => string | null): Part[] {
+export function markGroups(parts: Part[], prefix: string, key: (p: Part) => string | null): Part[] {
   const groups: string[][] = [];
   const flatGroups = groupIdenticalFlats(parts.filter((p) => p.flat));
   for (const g of flatGroups) groups.push(g);
@@ -1351,7 +1351,7 @@ export function buildSteelFlat(ctx: StructureContext, params: SteelFlatParams): 
  * Repère d'une platine verticale perpendiculaire au limon en u (profil : x = altitude depuis
  * `zLo`, y = travers du limon, centrée sur son épaisseur), épaisse vers `toward`·dir.
  */
-function endPlateFrame(
+export function endPlateFrame(
   f: StringerFace,
   u: Mm,
   zLo: Mm,
@@ -1373,7 +1373,7 @@ function endPlateFrame(
   };
 }
 
-interface PlateFrame {
+export interface PlateFrame {
   readonly origin: { x: number; y: number; z: number };
   readonly xAxis: { x: number; y: number; z: number };
   readonly yAxis: { x: number; y: number; z: number };
@@ -1382,7 +1382,7 @@ interface PlateFrame {
 }
 
 /** Platine découpée (développé rectangulaire percé), soudée sur `weld` mm. */
-function plateObject(
+export function plateObject(
   id: string,
   name: string,
   flat: FlatPattern,

@@ -23,11 +23,18 @@ import {
 } from "../annotations.js";
 import { formatFr } from "../format.js";
 import { bandContour, curvePath, pathExtentPoints, polygonPath, type PlanPath } from "../path.js";
+import {
+  helicalCartouche,
+  helicalLabelPoint,
+  helicalLandingPath,
+  helicalTreadPath,
+} from "./helical.js";
 
 /** Fonction d'un élément de dessin (calque DXF, groupe SVG). */
 export type PlanLayer = "CONTOUR" | "MARCHES" | "NEZ" | "FOULEE" | "TREMIE" | "COTES" | "TEXTE";
 
-export type DimensionRole = "width" | "leg" | "run" | "going" | "height";
+/** `radius` : rayon extérieur R_e d'un hélicoïdal (de l'axe au bord extérieur). */
+export type DimensionRole = "width" | "leg" | "run" | "going" | "height" | "radius";
 
 /**
  * Cote linéaire alignée : points mesurés `a` et `b`, ligne de cote décalée de `offset` selon
@@ -64,6 +71,8 @@ export interface PlanDrawing {
   /** Contour de l'escalier (jour, arrivée, mur, départ), arcs exacts. */
   readonly contour: PlanPath;
   readonly treads: readonly PlanTread[];
+  /** Palier d'arrivée d'un hélicoïdal (secteur à arcs exacts) ; absent sinon. */
+  readonly landing?: PlanPath;
   readonly nosings: readonly PlanNosing[];
   /** Ligne de foulée complète, cercle de départ, flèche de montée (triangle fermé). */
   readonly walkline: PlanPath;
@@ -119,6 +128,7 @@ function dimension(
 /** Construit le dessin de plan d'un modèle. */
 export function buildPlanDrawing(model: Model, options: PlanDrawingOptions = {}): PlanDrawing {
   const { layout, stepping } = model;
+  const helical = layout.helical;
   const decimals = options.decimals ?? 0;
   const first = stepping.nosings[0];
   // Emmarchement E : largeur de la ligne de départ (entre bords). Le nez 0 ne convient pas :
@@ -132,13 +142,16 @@ export function buildPlanDrawing(model: Model, options: PlanDrawingOptions = {})
 
   const contour = bandContour(layout.inner, layout.outer);
 
-  // Marches : surface de marche visible, numéro au milieu côté mur.
+  // Marches : surface de marche visible, numéro au milieu côté mur. Hélicoïdal : secteurs à arcs
+  // exacts, numéros sur un anneau par tour (les tours se recouvrent en plan).
   const nosingByIndex = new Map(stepping.nosings.map((n) => [n.index, n]));
   const treads: PlanTread[] = stepping.treads.map((t) => {
     const n0 = nosingByIndex.get(t.number - 1);
     const n1 = nosingByIndex.get(t.number);
     let label: Vec2;
-    if (n0 && n1) {
+    if (helical && n0 && n1) {
+      label = helicalLabelPoint(helical, t.number);
+    } else if (n0 && n1) {
       const m0 = vec2.lerp(n0.p, n0.r, 0.5);
       const m1 = vec2.lerp(n1.p, n1.r, 0.5);
       label = vec2.lerp(m0, m1, 0.5);
@@ -150,7 +163,8 @@ export function buildPlanDrawing(model: Model, options: PlanDrawingOptions = {})
     return {
       number: t.number,
       kind: t.kind,
-      surface: polygonPath(t.walkingSurface),
+      surface:
+        helical && n0 && n1 ? helicalTreadPath(helical, t.number) : polygonPath(t.walkingSurface),
       label,
       ...(severity !== undefined ? { severity } : {}),
     };
@@ -181,6 +195,7 @@ export function buildPlanDrawing(model: Model, options: PlanDrawingOptions = {})
   const arrow = polygonPath([end, vec2.add(back, side), vec2.sub(back, side)]);
 
   const opening = openingPolygon(options.project);
+  const landing = helical ? helicalLandingPath(helical) : undefined;
 
   // ---------------------------------------------------------------- cotes
   const dims: Dimension[] = [];
@@ -201,7 +216,22 @@ export function buildPlanDrawing(model: Model, options: PlanDrawingOptions = {})
     );
   }
   const last = stepping.nosings[stepping.nosings.length - 1];
-  if (first && last && layout.turns.length === 0 && last !== first) {
+  if (helical) {
+    // Rayon extérieur R_e, sur le rayon de départ, au-delà de la cote d'emmarchement.
+    const t0 = curveTangentAt(layout.walkline, 0);
+    dims.push(
+      dimension(
+        "radius",
+        helical.center,
+        departOuter,
+        vec2.scale(t0, -1),
+        2 * dimOffset + textHeight,
+        decimals,
+        "R ",
+      ),
+    );
+  }
+  if (first && last && layout.turns.length === 0 && last !== first && !helical) {
     // Droit : reculement coté côté jour, du premier au dernier nez.
     const t = vec2.normalize(vec2.sub(last.q, first.q));
     const inward = vec2.scale(outwardFromOuter(t, layout.innerSide), -1);
@@ -245,6 +275,7 @@ export function buildPlanDrawing(model: Model, options: PlanDrawingOptions = {})
     `Reculement (ligne de foulée) = ${fmt(stepping.run, 0)} mm`,
     `Emmarchement E = ${fmt(width, 0)} mm`,
   );
+  if (helical) cartouche.push(...helicalCartouche(helical));
   if (model.headroom) cartouche.push(`Échappée minimale = ${fmt(model.headroom.min, 0)} mm`);
   const s = violationSummary(model.compliance);
   cartouche.push(
@@ -257,7 +288,8 @@ export function buildPlanDrawing(model: Model, options: PlanDrawingOptions = {})
 
   // ---------------------------------------------------------------- emprise
   const pts: Vec2[] = [...pathExtentPoints(contour), ...pathExtentPoints(walkline)];
-  for (const t of treads) pts.push(...t.surface.vertices);
+  for (const t of treads) pts.push(...pathExtentPoints(t.surface));
+  if (landing) pts.push(...pathExtentPoints(landing));
   if (opening) pts.push(...opening);
   for (const d of dims) {
     const o = vec2.scale(d.normal, d.offset + 1.5 * textHeight);
@@ -279,6 +311,7 @@ export function buildPlanDrawing(model: Model, options: PlanDrawingOptions = {})
   return {
     contour,
     treads,
+    ...(landing ? { landing } : {}),
     nosings,
     walkline,
     walklineStart: { center: start, radius: textHeight / 2 },
