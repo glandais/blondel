@@ -168,3 +168,45 @@ test("autosauvegarde illisible : message, copie de secours, jamais écrasée en 
   await expect(actions).toHaveCount(0);
   expect(await page.evaluate(() => localStorage.getItem("blondel.autosave.rejected"))).toBeNull();
 });
+
+test("copie de secours d'un démarrage antérieur : bandeau restaurer / exporter / supprimer", async ({
+  page,
+}) => {
+  await openApp(page);
+  // Copie de secours laissée par un démarrage antérieur (format plus récent, illisible ici),
+  // autosauvegarde courante lisible.
+  await page.evaluate(() => {
+    const json = JSON.parse(localStorage.getItem("blondel.autosave.project") ?? "{}") as Record<
+      string,
+      unknown
+    >;
+    localStorage.setItem(
+      "blondel.autosave.rejected",
+      JSON.stringify({ ...json, name: "Mon escalier client", schemaVersion: 2 }),
+    );
+  });
+  await page.reload();
+  await settle(page);
+  const banner = page.getByRole("group", { name: "Copie de secours d'autosauvegarde" });
+  await expect(banner).toBeVisible();
+  // Aucune erreur de démarrage : le projet courant est ouvert normalement.
+  await expect(page.locator(".notice--error[role=alert]")).toHaveCount(0);
+  // Illisible par cette version : pas de restauration (et pas de lecture seule).
+  await expect(banner.getByRole("button", { name: "Restaurer" })).toBeDisabled();
+
+  // Toujours signalée au démarrage suivant.
+  await page.reload();
+  await settle(page);
+  await expect(banner).toBeVisible();
+
+  const pending = page.waitForEvent("download");
+  await banner.getByRole("button", { name: "Exporter" }).click();
+  expect((await pending).suggestedFilename()).toBe("autosauvegarde-refusee.blondel.json");
+
+  await banner.getByRole("button", { name: "Supprimer" }).click();
+  await expect(banner).toHaveCount(0);
+  expect(await page.evaluate(() => localStorage.getItem("blondel.autosave.rejected"))).toBeNull();
+  await page.reload();
+  await settle(page);
+  await expect(banner).toHaveCount(0);
+});

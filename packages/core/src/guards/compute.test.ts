@@ -248,20 +248,303 @@ describe("computeGuards — remplissages", () => {
     expect(m.notes?.some((n) => /Verre \(V1\)/.test(n))).toBe(true);
   });
 
-  it("palier d'angle : partie horizontale du rampant contrôlée comme un palier", () => {
+  it("palier d'angle : partie horizontale du rampant contrôlée comme un palier (rehausse désactivée)", () => {
     const p = withGuards(
       createProject("quarter-landing"),
-      {},
+      { flight: { landing: { raise: false } } },
       {
         compliance: { contexts: ["bois_dtu", "logement_interieur"], referenceDate: "2020-01-01" },
       },
     );
     const a = analyze(p);
     expect(a.runs.some((r) => r.kind === "rake" && r.horizontalLength > 1)).toBe(true);
+    expect(a.runs.every((r) => r.levelHeight === undefined)).toBe(true);
     const m = buildModel(p);
     const palier = m.compliance.results.filter((r) => r.ruleId === "GC_HAUTEUR_PALIER_1988");
     // Rampant de 900 mm sur un palier : 1 000 mm exigés (NF P01-012:1988).
     expect(palier.some((r) => r.status === "violation" && r.measured === 900)).toBe(true);
+  });
+});
+
+describe("computeGuards — rehausse sur palier (QUESTIONS A1)", () => {
+  const regimes = [
+    { referenceDate: "2020-01-01", rule: "GC_HAUTEUR_PALIER_1988" },
+    { referenceDate: "2026-01-01", rule: "GC_HAUTEUR_2024" },
+  ] as const;
+
+  for (const H of [2500, 2700, 2900]) {
+    for (const { referenceDate, rule } of regimes) {
+      it(`quart tournant avec palier, H ${H}, ${rule} : plus de violation bloquante`, () => {
+        const p = withGuards(
+          createProject("quarter-landing", { floorToFloor: H }),
+          {},
+          { compliance: { contexts: ["bois_dtu", "logement_interieur"], referenceDate } },
+        );
+        const m = buildModel(p);
+        const bad = m.compliance.results.filter(
+          (r) => r.status === "violation" && r.severity === "bloquant",
+        );
+        expect(bad.map((r) => r.ruleId)).toEqual([]);
+        const res = m.compliance.results.filter((r) => r.ruleId === rule);
+        expect(res.length).toBeGreaterThan(0);
+        expect(res.every((r) => r.status === "ok")).toBe(true);
+        expect(m.notes?.some((n) => n.includes("rehaussée à 1000 mm sur le palier"))).toBe(true);
+      });
+    }
+  }
+
+  it("profil : 1 000 mm sur le palier, raccord d'un giron, hauteur de volée ailleurs", () => {
+    const p = withGuards(createProject("quarter-landing"), {});
+    const layout = computeLayout(p);
+    const stepping = computeStepping(p, layout);
+    const a = computeGuards(p, layout, stepping);
+    const rake = a.runs.find((r) => r.kind === "rake" && r.horizontalLength > 1)!;
+    expect(rake.levelHeight).toBe(1000);
+    expect(rake.height).toBe(900);
+    const hs = rake.nosingHeights.map((n) => n.height);
+    expect(Math.min(...hs)).toBeGreaterThanOrEqual(900 - 1e-9);
+    expect(Math.max(...hs)).toBeLessThanOrEqual(1000 + 1e-9);
+    expect(hs.some((h) => Math.abs(h - 1000) < 1e-9)).toBe(true);
+    // Main courante : sur le palier à ref + 1 000 − hh/2, et jamais sous ref + 900 − hh/2.
+    const hr = a.parts.find((q) => q.id === rake.handrailPartId)!;
+    expect(hr.solid.kind).toBe("sweep");
+    const hh = sectionHeight(a.spec.handrail.section);
+    const landingZ = rake.ref.find((z, i) => i > 0 && Math.abs(z - rake.ref[i - 1]!) < 1e-9)!;
+    if (hr.solid.kind === "sweep") {
+      const zs = hr.solid.path.map((q) => q.z);
+      expect(zs.some((z) => Math.abs(z - (landingZ + 1000 - hh / 2)) < 1e-6)).toBe(true);
+    }
+    // Balustres et poteaux suivent : le plus haut atteint le dessous de la main courante du palier.
+    const bottomGap = a.spec.infill.bottomGap;
+    const tops = a.parts
+      .filter(
+        (q) => q.id.startsWith(rake.id) && (q.category === "baluster" || q.category === "post"),
+      )
+      .flatMap((q) => {
+        if (q.solid.kind !== "extrusion") return [];
+        const z0 = q.solid.frame.origin.z;
+        const onLanding =
+          Math.abs(z0 - landingZ) < 1e-6 || Math.abs(z0 - landingZ - bottomGap) < 1e-6;
+        return onLanding ? [z0 + q.solid.depth] : [];
+      });
+    expect(tops.length).toBeGreaterThan(0);
+    expect(Math.max(...tops)).toBeCloseTo(landingZ + 1000 - hh, 6);
+  });
+
+  it("lisses et panneaux suivent la rehausse ; vides mesurés au plus grand", () => {
+    for (const infill of [
+      { kind: "rails" as const, count: 6 },
+      { kind: "panel" as const },
+      { kind: "glass" as const },
+    ]) {
+      const on = analyze(withGuards(createProject("quarter-landing"), { infill }));
+      const off = analyze(
+        withGuards(createProject("quarter-landing"), {
+          infill,
+          flight: { landing: { raise: false } },
+        }),
+      );
+      const rakeOn = on.runs.find((r) => r.kind === "rake" && r.horizontalLength > 1)!;
+      const rakeOff = off.runs.find((r) => r.kind === "rake" && r.horizontalLength > 1)!;
+      const maxGap = (r: typeof rakeOn): number =>
+        Math.max(...r.gaps.filter((g) => g.kind === "horizontal").map((g) => g.value), 0);
+      if (infill.kind === "rails") {
+        // Rehausse de 100 mm répartie sur 6 vides : + 100 / 6 au plus.
+        expect(maxGap(rakeOn)).toBeGreaterThan(maxGap(rakeOff));
+        expect(maxGap(rakeOn)).toBeLessThanOrEqual(maxGap(rakeOff) + 100 / 6 + 1e-6);
+      }
+      for (const q of on.parts) expect(finiteSolid(q), q.id).toBe(true);
+    }
+  });
+
+  it("hauteur de palier réglable ; sans effet si elle ne dépasse pas la hauteur de volée", () => {
+    const at = (landing: Record<string, unknown>, height = 900) =>
+      analyze(
+        withGuards(createProject("quarter-landing"), { flight: { height, landing } }),
+      ).runs.find((r) => r.kind === "rake" && r.horizontalLength > 1)!;
+    expect(at({ height: 1100 }).levelHeight).toBe(1100);
+    expect(at({ height: 900 }).levelHeight).toBeUndefined();
+    expect(at({}, 1000).levelHeight).toBeUndefined();
+    // Raccord imposé (mm) : un sommet inséré à 100 mm des extrémités du palier.
+    const r = at({ ramp: 100 });
+    const nPlain = at({}).path.length;
+    expect(r.path.length).toBeGreaterThan(nPlain);
+  });
+});
+
+describe("computeGuards — mains courantes des deux côtés (QUESTIONS A2)", () => {
+  const handrailSides = (p: Project): number => {
+    const m = buildModel(p);
+    const r = m.compliance.results.find((x) => x.ruleId === "MC_DEUX_COTES");
+    return r?.measured ?? Number.NaN;
+  };
+
+  it("ERP neuf : `auto` pose une main courante des deux côtés, MC_DEUX_COTES conforme", () => {
+    const base = createProject("quarter-left");
+    const p = withGuards(base, {}, { compliance: { contexts: ["bois_dtu", "erp_neuf"] } });
+    const m = buildModel(p);
+    const r = m.compliance.results.find((x) => x.ruleId === "MC_DEUX_COTES")!;
+    expect(r.status).toBe("ok");
+    expect(r.measured).toBe(2);
+    expect(m.notes?.some((n) => n.includes("posée des deux côtés"))).toBe(true);
+  });
+
+  it("parties communes de BHC : idem ; logement : une seule main courante (inchangé)", () => {
+    const base = createProject("straight");
+    const walls = {
+      site: {
+        ...base.site,
+        walls: [
+          {
+            id: "w1",
+            a: { x: -100, y: -500 },
+            b: { x: -100, y: 6000 },
+            thickness: 200,
+            loadBearing: true,
+          },
+          {
+            id: "w2",
+            a: { x: base.stair.layout.width + 100, y: -500 },
+            b: { x: base.stair.layout.width + 100, y: 6000 },
+            thickness: 200,
+            loadBearing: true,
+          },
+        ],
+      },
+    };
+    const bhc = withGuards(
+      base,
+      {},
+      { ...walls, compliance: { contexts: ["bois_dtu", "bhc_parties_communes"] } },
+    );
+    const log = withGuards(
+      base,
+      {},
+      { ...walls, compliance: { contexts: ["bois_dtu", "logement_interieur"] } },
+    );
+    expect(
+      analyze(bhc)
+        .handrails.map((h) => h.side)
+        .sort(),
+    ).toEqual(["inner", "outer"]);
+    expect(analyze(log).handrails.length).toBe(1);
+  });
+
+  it("une valeur explicite et une surcharge « ignore » sont respectées", () => {
+    const base = createProject("quarter-left");
+    const explicit = withGuards(
+      base,
+      { handrail: { wallSides: "outer" } },
+      { compliance: { contexts: ["bois_dtu", "erp_neuf"] } },
+    );
+    const ignored = withGuards(
+      base,
+      {},
+      {
+        compliance: {
+          contexts: ["bois_dtu", "erp_neuf"],
+          overrides: [{ ruleId: "MC_DEUX_COTES", severity: "ignore", justification: "essai" }],
+        },
+      },
+    );
+    const auto = withGuards(base, {}, { compliance: { contexts: ["bois_dtu", "erp_neuf"] } });
+    expect(analyze(explicit).handrails.length).toBeLessThanOrEqual(analyze(auto).handrails.length);
+    expect(analyze(ignored).notes.some((n) => n.includes("posée des deux côtés"))).toBe(false);
+    expect(handrailSides(auto)).toBe(2);
+  });
+
+  it("exception ERP neuf : hélicoïdal à fût de Ø ≤ 400 mm, `auto` inchangé (une seule)", () => {
+    const small = withGuards(
+      makeHelicalProject({
+        outerRadius: 1000,
+        coreRadius: 150,
+        core: "column",
+        direction: "left",
+        floorToFloor: 2700,
+      }),
+      {},
+      { compliance: { contexts: ["bois_dtu", "erp_neuf"] } },
+    );
+    expect(analyze(small).notes.some((n) => n.includes("posée des deux côtés"))).toBe(false);
+    const big = withGuards(
+      makeHelicalProject({
+        outerRadius: 1000,
+        coreRadius: 250,
+        core: "column",
+        direction: "left",
+        floorToFloor: 2700,
+      }),
+      {},
+      { compliance: { contexts: ["bois_dtu", "erp_neuf"] } },
+    );
+    // Fût de Ø 500 : pas d'exception, les deux côtés sont demandés ; mais le fût ne reçoit
+    // aucune main courante : la remarque le dit au lieu d'annoncer une pose des deux côtés.
+    const bigA = analyze(big);
+    expect(bigA.notes.some((n) => n.includes("posée des deux côtés"))).toBe(false);
+    expect(
+      bigA.notes.some((n) =>
+        n.includes("MC_DEUX_COTES demande une main courante des deux côtés, mais le côté jour"),
+      ),
+    ).toBe(true);
+    expect(bigA.handrails.map((h) => h.side)).toEqual(["outer"]);
+  });
+
+  it("changer de contexte réglementaire recalcule les mains courantes (cache du pipeline)", () => {
+    // Même objet `guards` (partage structurel d'un magasin d'état) : seul `compliance` change.
+    const base0 = createProject("straight");
+    const wall = (id: string, x: number) => ({
+      id,
+      a: { x, y: -500 },
+      b: { x, y: 6000 },
+      thickness: 200,
+      loadBearing: true,
+    });
+    const log = withGuards(
+      base0,
+      {},
+      {
+        site: {
+          ...base0.site,
+          walls: [wall("w1", -100), wall("w2", base0.stair.layout.width + 100)],
+        },
+        compliance: { contexts: ["bois_dtu", "logement_interieur"] },
+      },
+    );
+    const bhc: Project = {
+      ...log,
+      compliance: { ...log.compliance, contexts: ["bois_dtu", "bhc_parties_communes"] },
+    };
+    clearModelCache();
+    buildModel(log);
+    const r = buildModel(bhc).compliance.results.find((x) => x.ruleId === "MC_DEUX_COTES")!;
+    expect(r.measured).toBe(2);
+    expect(r.status).toBe("ok");
+  });
+});
+
+describe("computeGuards — pièces identiques (QUESTIONS D1)", () => {
+  it("même repère ⇒ même débit et mêmes grandeurs, exactement", () => {
+    const a = analyze(withGuards(createProject("quarter-left"), {}));
+    const byMark = new Map<string, Part>();
+    for (const q of a.parts) {
+      const first = byMark.get(q.mark);
+      if (!first) byMark.set(q.mark, q);
+      else {
+        expect(q.stock, q.id).toEqual(first.stock);
+        expect(q.quantities, q.id).toEqual(first.quantities);
+      }
+    }
+  });
+
+  it("masse renseignée pour toutes les pièces, quel que soit le matériau (QUESTIONS A6)", () => {
+    for (const material of ["wood-oak", "steel-painted", "stainless-brushed"] as const) {
+      for (const infill of [{ kind: "glass" as const }, { kind: "cables" as const }]) {
+        const a = analyze(withGuards(createProject("quarter-left"), { material, infill }));
+        for (const q of a.parts) {
+          expect(q.quantities["mass_kg"], `${material} ${q.id}`).toBeGreaterThan(0);
+        }
+      }
+    }
   });
 });
 

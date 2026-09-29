@@ -135,6 +135,21 @@ export const FlightGuardSpecSchema = z.object({
   height: mmPos.default(900),
   /** Distance du bord de l'emmarchement (C_i / C_e) à l'axe du garde-corps, vers le vide. À valider. */
   edgeOffset: mmNonNeg.default(30),
+  /**
+   * Rehausse sur les paliers (QUESTIONS A1, appliqué par défaut le 2026-09-30, à confirmer) :
+   * sur la partie horizontale d'un palier, le dessus de la main courante passe à `height`
+   * (défaut 1 000 mm, sourcé : GC_HAUTEUR_PALIER_1988, et GC_HAUTEUR_2024 pour E ≤ 250 mm,
+   * valeur la plus exigeante de la table h(E)), avec un raccord incliné de longueur `ramp`
+   * (`auto` = un giron nominal, choix Blondel à valider) de part et d'autre. `raise: false`
+   * rend l'ancien comportement (hauteur de volée conservée sur le palier).
+   */
+  landing: z
+    .object({
+      raise: z.boolean().default(true),
+      height: mmPos.default(1000),
+      ramp: z.union([mmPos, z.literal("auto")]).default("auto"),
+    })
+    .prefault({}),
 });
 
 export const OpeningGuardSpecSchema = z.object({
@@ -153,6 +168,13 @@ export const GuardPostSpecSchema = z.object({
   maxSpacing: mmPos.default(1500),
   /** Déviation en plan (degrés) au-delà de laquelle un sommet reçoit un poteau d'angle. À valider. */
   cornerAngle: z.number().positive().max(180).default(30),
+  /**
+   * Poteau d'angle du tracé (structure) rejoint par un garde-corps de volée : il monte au
+   * moins à cette hauteur au-dessus du dessus de la main courante (QUESTIONS A3, appliqué par
+   * défaut le 2026-09-30, à confirmer ; 50 mm **à valider**, aucune source). `off` : la
+   * hauteur du poteau ne dépend que des éléments qu'il reçoit (ancien comportement).
+   */
+  newelOverrun: z.union([mmNonNeg, z.literal("off")]).default(50),
 });
 
 /** Prolongement horizontal : longueur en mm ou `auto` (= giron nominal, MC_PROLONGEMENT_*). */
@@ -172,8 +194,10 @@ export const HandrailSpecSchema = z.object({
    * `auto` : si l'escalier a un garde-corps de volée, main courante murale seulement sur les
    * portions murales des côtés qui portent un garde-corps (continuité, MC_DISCONTINUITE ;
    * logement : une main courante suffit, MC_LOGEMENT) ; sinon une seule, sur les portions
-   * murales du côté extérieur (du côté intérieur à défaut). ERP / BHC : choisir `both`
-   * (MC_DEUX_COTES).
+   * murales du côté extérieur (du côté intérieur à défaut). Quand MC_DEUX_COTES s'applique
+   * (ERP neuf, parties communes de BHC ; hors exception de l'hélicoïdal ERP à fût de
+   * Ø ≤ 400 mm), `auto` équivaut à `both` (QUESTIONS A2, appliqué par défaut le 2026-09-30, à
+   * confirmer) ; une valeur explicite est toujours respectée.
    */
   wallSides: z.enum(["auto", "none", "inner", "outer", "both"]).default("auto"),
   /** Prolongements horizontaux au-delà de la première et de la dernière marche. */

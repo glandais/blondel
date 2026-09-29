@@ -3,13 +3,18 @@
  * (valeurs à valider).
  */
 export {
+  CARBON_STEEL_MATERIALS,
   DEFAULT_WORKSHOP_PROFILE,
+  OTHER_DENSITY_PROVENANCE,
+  OTHER_MATERIALS,
   WOOD_MATERIALS,
   WORKSHOP_PROVENANCE,
   WorkshopProfileSchema,
   isWoodMaterial,
+  materialDensity,
   resolveWorkshopProfile,
   smallestAvailable,
+  type OtherMaterialId,
   type SettingProvenance,
   type WoodMaterialId,
   type WoodSettingKey,

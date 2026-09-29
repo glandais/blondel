@@ -36,6 +36,24 @@ export function isWoodMaterial(m: MaterialId): m is WoodMaterialId {
   return (WOOD_MATERIALS as readonly string[]).includes(m);
 }
 
+/** Aciers au carbone (masse volumique `metal.density` du profil). */
+export const CARBON_STEEL_MATERIALS = [
+  "steel-raw",
+  "steel-painted",
+  "steel-galvanized",
+] as const satisfies readonly MaterialId[];
+
+/**
+ * Matériaux ni bois ni acier au carbone, dont la masse volumique est portée par
+ * `WorkshopProfile.densities` (QUESTIONS A6 : masse renseignée pour toutes les pièces).
+ */
+export const OTHER_MATERIALS = [
+  "stainless-brushed",
+  "glass",
+  "concrete",
+] as const satisfies readonly MaterialId[];
+export type OtherMaterialId = (typeof OTHER_MATERIALS)[number];
+
 const mmPos = z.number().positive();
 const mmNonNeg = z.number().nonnegative();
 
@@ -79,6 +97,11 @@ export const WorkshopProfileSchema = z.object({
   /** Capacités métal (presse plieuse, lois de pli, formats, laser, masse volumique) : `metal.ts`. */
   metal: MetalProfileInputSchema.optional(),
   /**
+   * Masses volumiques (kg/m³) des matériaux ni bois ni acier au carbone : inox, verre, béton
+   * (QUESTIONS A6). Ajout rétrocompatible ; absent : défauts « à valider ».
+   */
+  densities: z.partialRecord(z.enum(OTHER_MATERIALS), mmPos).optional(),
+  /**
    * Barème de coût (taux horaire, temps unitaires, prix matière) : `costs.ts`, aucun défaut ;
    * absent ou incomplet : pas de chiffrage en euros (CHALLENGE P2).
    */
@@ -106,6 +129,8 @@ export interface WorkshopProfile {
   };
   /** Capacités métal (jalon 3b), voir `metal.ts` et `METAL_PROVENANCE`. */
   readonly metal: MetalProfile;
+  /** Masses volumiques des autres matériaux (kg/m³), voir `OTHER_DENSITY_PROVENANCE`. */
+  readonly densities: Readonly<Record<OtherMaterialId, number>>;
   /** Barème de coût (jalon 3c) : champs absents = non renseignés (aucun défaut). */
   readonly costs: CostRates;
 }
@@ -140,8 +165,44 @@ export const DEFAULT_WORKSHOP_PROFILE: WorkshopProfile = {
     },
   },
   metal: DEFAULT_METAL_PROFILE,
+  densities: {
+    "stainless-brushed": 7900,
+    glass: 2500,
+    concrete: 2400,
+  },
   costs: {},
 };
+
+/**
+ * Provenance des masses volumiques hors bois et acier au carbone : aucune n'est sourcée dans
+ * docs/research ; ordres de grandeur usuels **à valider** (QUESTIONS A6, LEDGER §2).
+ */
+export const OTHER_DENSITY_PROVENANCE: Readonly<Record<OtherMaterialId, SettingProvenance>> = {
+  "stainless-brushed": {
+    status: "a-valider",
+    note: "Inox : 7 900 kg/m³, ordre de grandeur usuel absent de docs/research, à valider.",
+  },
+  glass: {
+    status: "a-valider",
+    note: "Verre : 2 500 kg/m³, ordre de grandeur usuel absent de docs/research, à valider.",
+  },
+  concrete: {
+    status: "a-valider",
+    note: "Béton : 2 400 kg/m³, ordre de grandeur usuel absent de docs/research, à valider.",
+  },
+};
+
+/**
+ * Masse volumique (kg/m³) d'un matériau selon le profil d'atelier : essences de bois
+ * (`wood.densities`), aciers au carbone (`metal.density`), autres matériaux (`densities`).
+ * Toutes ces valeurs sont « à valider » dans le profil par défaut.
+ */
+export function materialDensity(material: MaterialId, profile: WorkshopProfile): number {
+  if (isWoodMaterial(material)) return profile.wood.densities[material];
+  if ((CARBON_STEEL_MATERIALS as readonly string[]).includes(material))
+    return profile.metal.density;
+  return profile.densities[material as OtherMaterialId];
+}
 
 export interface SettingProvenance {
   /** `a-valider` : hypothèse d'atelier sans source ; `source` : valeur tirée de la recherche. */
@@ -219,6 +280,7 @@ export function resolveWorkshopProfile(input?: WorkshopProfileInput): WorkshopPr
       densities: { ...d.wood.densities, ...(w.densities ?? {}) },
     },
     metal: resolveMetalProfile(input.metal),
+    densities: { ...d.densities, ...(input.densities ?? {}) },
     costs: input.costs ?? d.costs,
   };
 }

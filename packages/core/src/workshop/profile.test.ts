@@ -4,8 +4,11 @@ import { serializeProject } from "../project/serialize.js";
 import { makeSteppingProject } from "../stepping/test-helpers.js";
 import {
   DEFAULT_WORKSHOP_PROFILE,
+  OTHER_DENSITY_PROVENANCE,
+  OTHER_MATERIALS,
   WOOD_MATERIALS,
   WORKSHOP_PROVENANCE,
+  materialDensity,
   resolveWorkshopProfile,
   smallestAvailable,
 } from "./profile.js";
@@ -48,5 +51,39 @@ describe("profil d'atelier", () => {
     expect(smallestAvailable([27, 34, 54], 50)).toBe(54);
     expect(smallestAvailable([27, 34], 50)).toBeNull();
     expect(smallestAvailable([], 50)).toBe(50);
+  });
+});
+
+describe("masses volumiques de tous les matériaux (QUESTIONS A6)", () => {
+  const ALL = [
+    ...WOOD_MATERIALS,
+    "steel-raw",
+    "steel-painted",
+    "steel-galvanized",
+    ...OTHER_MATERIALS,
+  ] as const;
+
+  it("chaque matériau du modèle a une masse volumique finie et positive, « à valider »", () => {
+    for (const m of ALL) {
+      expect(materialDensity(m, DEFAULT_WORKSHOP_PROFILE), m).toBeGreaterThan(0);
+    }
+    for (const m of OTHER_MATERIALS) expect(OTHER_DENSITY_PROVENANCE[m].status).toBe("a-valider");
+  });
+
+  it("surcharges du projet : bois, acier et autres matériaux", () => {
+    const p = resolveWorkshopProfile({
+      wood: { densities: { "wood-oak": 720 } },
+      metal: { density: 7800 },
+      densities: { glass: 2600 },
+    });
+    expect(materialDensity("wood-oak", p)).toBe(720);
+    expect(materialDensity("wood-pine", p)).toBe(
+      DEFAULT_WORKSHOP_PROFILE.wood.densities["wood-pine"],
+    );
+    expect(materialDensity("steel-painted", p)).toBe(7800);
+    expect(materialDensity("glass", p)).toBe(2600);
+    expect(materialDensity("stainless-brushed", p)).toBe(
+      DEFAULT_WORKSHOP_PROFILE.densities["stainless-brushed"],
+    );
   });
 });

@@ -52,9 +52,10 @@ import { findRule } from "../rules/table.js";
 import { guardChecks } from "../guards/checks.js";
 import { computeGuards } from "../guards/compute.js";
 import { GuardError } from "../guards/errors.js";
+import { autoHandrailBothSides } from "../guards/handrailSides.js";
 import type { GuardsAnalysis } from "../guards/types.js";
 import { getStructure, StructureError } from "../structures/index.js";
-import { normalizeWoodQuantities } from "../structures/quantities.js";
+import { ensureMass, normalizeWoodQuantities } from "../structures/quantities.js";
 import { resolveWorkshopProfile } from "../workshop/profile.js";
 import { SteppingError } from "../stepping/errors.js";
 import { computeRises } from "../stepping/rises.js";
@@ -174,6 +175,29 @@ function fallbackPrecheck(
   }
 }
 
+type NewelTops = NonNullable<StructureContext["newelHandrailTops"]>;
+let lastNewelTops: NewelTops | undefined;
+
+/**
+ * Dessus de main courante aux poteaux d'angle, à identité stable tant que les valeurs ne
+ * changent pas : régler un garde-corps sans changer ces altitudes ne recalcule pas la structure.
+ */
+function stableNewelTops(tops: NewelTops | undefined): NewelTops | undefined {
+  if (tops === undefined || tops.length === 0) return undefined;
+  const prev = lastNewelTops;
+  if (
+    prev !== undefined &&
+    prev.length === tops.length &&
+    prev.every(
+      (t, i) =>
+        t.turn === tops[i]!.turn && t.top === tops[i]!.top && t.overrun === tops[i]!.overrun,
+    )
+  )
+    return prev;
+  lastNewelTops = tops;
+  return tops;
+}
+
 /** Caches par étape (dernier résultat). */
 const caches = {
   layout: new LastValueCache<Stage<Layout>>(),
@@ -188,6 +212,7 @@ let models = new WeakMap<Project, Model>();
 
 /** Vide les caches (tests, mesures de performance). */
 export function clearModelCache(): void {
+  lastNewelTops = undefined;
   for (const c of Object.values(caches)) c.clear();
   models = new WeakMap();
 }
@@ -362,6 +387,28 @@ export function buildModel(project: Project, options: BuildModelOptions = {}): M
   const stepping = steppingStage?.value;
   const complete = layout !== undefined && stepping !== undefined;
 
+  // 3 (préalable). Garde-corps, calculés avant la structure (ils n'en dépendent pas) : la
+  // structure lit le dessus des mains courantes aux poteaux d'angle (QUESTIONS A3).
+  const guardsStage: Stage<GuardsAnalysis> | undefined =
+    complete && project.guards
+      ? run(
+          caches.guards,
+          [
+            project.guards,
+            layout,
+            stepping,
+            site,
+            stair.layout,
+            project.workshop,
+            // `handrail.wallSides: auto` dépend des contextes réglementaires (QUESTIONS A2) :
+            // sans cette clé, changer de contexte (logement → ERP) rendait l'ancien résultat.
+            autoHandrailBothSides(project, stepping),
+          ],
+          () => attempt(STAGE_LABELS.guards, () => computeGuards(project, layout, stepping)),
+        )
+      : undefined;
+  const newelHandrailTops = stableNewelTops(guardsStage?.value?.newelHandrailTops);
+
   // 3. Pièces de base, puis structure (plugin) et grandeurs de nomenclature.
   let parts: readonly Part[] = [];
   let structureChecks: readonly RuleResult[] = [];
@@ -386,15 +433,32 @@ export function buildModel(project: Project, options: BuildModelOptions = {}): M
         caches.structure,
         // Sans plugin, les pièces ne dépendent que des pièces de base et du profil d'atelier.
         plugin
-          ? [base, layout, stepping, plugin, stair, site, project.compliance, project.workshop]
+          ? [
+              base,
+              layout,
+              stepping,
+              plugin,
+              stair,
+              site,
+              project.compliance,
+              project.workshop,
+              newelHandrailTops,
+            ]
           : [base, project.workshop],
         () =>
           attempt(STAGE_LABELS.structure, (): StructureStage => {
             const profile = resolveWorkshopProfile(project.workshop);
+            // Grandeurs normalisées et masse de toutes les pièces (QUESTIONS A6).
             const normalize = (ps: readonly Part[]): Part[] =>
-              ps.map((p) => normalizeWoodQuantities(p, profile));
+              ps.map((p) => ensureMass(normalizeWoodQuantities(p, profile), profile));
             if (!plugin) return { parts: normalize(base), checks: [], notes: [], errors: [] };
-            const ctx: StructureContext = { project, layout, stepping, baseParts: base };
+            const ctx: StructureContext = {
+              project,
+              layout,
+              stepping,
+              baseParts: base,
+              ...(newelHandrailTops ? { newelHandrailTops } : {}),
+            };
             const params = resolveStructureParams(plugin, ctx, stair.structure.params);
             const out = plugin.build(ctx, params);
             const merged = normalize(mergeParts(base, out.parts, out.removedBaseParts));
@@ -413,7 +477,7 @@ export function buildModel(project: Project, options: BuildModelOptions = {}): M
         errors.push(structureStage.error);
         // Pièces de base seules, avec les grandeurs de nomenclature normalisées.
         const profile = resolveWorkshopProfile(project.workshop);
-        parts = base.map((p) => normalizeWoodQuantities(p, profile));
+        parts = base.map((p) => ensureMass(normalizeWoodQuantities(p, profile), profile));
       } else {
         parts = structureStage.value.parts;
         structureChecks = structureStage.value.checks;
@@ -425,15 +489,10 @@ export function buildModel(project: Project, options: BuildModelOptions = {}): M
     }
   }
 
-  // 3 bis. Garde-corps et mains courantes (après la structure).
+  // 3 bis. Garde-corps et mains courantes (pièces ajoutées après la structure).
   let guards: GuardsAnalysis | null | undefined;
   let guardResults: readonly RuleResult[] = [];
-  if (complete && project.guards) {
-    const guardsStage = run(
-      caches.guards,
-      [project.guards, layout, stepping, site, stair.layout, project.workshop],
-      () => attempt(STAGE_LABELS.guards, () => computeGuards(project, layout, stepping)),
-    );
+  if (guardsStage && stepping) {
     if (guardsStage.error !== undefined) {
       errors.push(guardsStage.error);
       guards = null;

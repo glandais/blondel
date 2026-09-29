@@ -34,6 +34,7 @@ import {
   exportProjectFile,
   importProjectText,
   loadAutosave,
+  loadRejectedCopy,
   saveAutosave,
   type AutosaveLoad,
   type ImportResult,
@@ -86,7 +87,7 @@ export interface AppState {
    * `AUTOSAVE_REJECTED_KEY` ; sinon l'autosauvegarde est **suspendue** (elle écraserait
    * l'original) jusqu'à `dismissRejectedAutosave`.
    */
-  readonly rejectedAutosave: { readonly text: string; readonly preserved: boolean } | null;
+  readonly rejectedAutosave: RejectedAutosave | null;
 
   /**
    * Applique une modification du projet. Le résultat est validé par le schéma du cœur : un
@@ -134,10 +135,31 @@ export interface AppState {
    */
   dismissRejectedAutosave(): void;
   /**
+   * Restaure la copie de secours (remplace le projet courant, annulable) si le cœur sait la
+   * relire (ex. application mise à jour depuis le refus) ; la copie est alors supprimée. Sinon,
+   * rien ne change et le message du cœur est rendu.
+   */
+  restoreRejectedAutosave(): ImportResult;
+  /**
    * Écrit tout de suite l'autosauvegarde différée en attente (fermeture ou masquage de la
    * page) ; sans effet s'il n'y a rien en attente ou pas de stockage.
    */
   flushAutosave(): void;
+}
+
+/** Autosauvegarde refusée, ou copie de secours restante d'un refus antérieur (QUESTIONS A22). */
+export interface RejectedAutosave {
+  readonly text: string;
+  readonly preserved: boolean;
+  /**
+   * `startup` : refusée à ce démarrage ; `earlier` : copie de secours laissée par un démarrage
+   * antérieur (absent : `startup`).
+   */
+  readonly since?: "startup" | "earlier";
+  /** Le cœur sait relire la copie : elle peut être restaurée. */
+  readonly restorable?: boolean;
+  /** Motif du refus (copie non restaurable). */
+  readonly reason?: string;
 }
 
 export interface ProjectStoreOptions {
@@ -150,6 +172,12 @@ export interface ProjectStoreOptions {
   readonly history?: HistoryOptions;
   /** Horloge (ms) pour le regroupement ; injectable dans les tests. */
   readonly now?: () => number;
+  /**
+   * Signaler au démarrage une copie de secours d'autosauvegarde laissée par un démarrage
+   * antérieur (bandeau restaurer / exporter / supprimer tant qu'elle existe). Défaut : vrai
+   * (QUESTIONS A22, à confirmer).
+   */
+  readonly reportBackupCopy?: boolean;
 }
 
 export const DEFAULT_PRESET: PresetId = "straight";
@@ -206,6 +234,24 @@ export function createProjectStore(options: ProjectStoreOptions = {}): ProjectSt
         }
       : null;
 
+  // Copie de secours d'un refus antérieur, restée dans le stockage : signalée à chaque démarrage
+  // tant qu'elle n'est ni restaurée ni supprimée.
+  const earlierCopy: RejectedAutosave | null = (() => {
+    if (
+      loaded.kind === "rejected" ||
+      options.initialProject !== undefined ||
+      options.reportBackupCopy === false
+    ) {
+      return null;
+    }
+    const text = loadRejectedCopy(storage);
+    if (text === null) return null;
+    const r = importProjectText(text);
+    return r.ok
+      ? { text, preserved: true, since: "earlier", restorable: true }
+      : { text, preserved: true, since: "earlier", restorable: false, reason: r.message };
+  })();
+
   // Remplacé par l'écriture différée réelle quand un stockage est fourni.
   let flush = (): void => {};
   let resume = (): void => {};
@@ -244,7 +290,9 @@ export function createProjectStore(options: ProjectStoreOptions = {}): ProjectSt
       notice: rejectedNotice,
       autosaveFailed: false,
       rejectedAutosave:
-        loaded.kind === "rejected" ? { text: loaded.text, preserved: loaded.preserved } : null,
+        loaded.kind === "rejected"
+          ? { text: loaded.text, preserved: loaded.preserved, reason: loaded.message }
+          : earlierCopy,
 
       update: (recipe, groupKey, updateOptions) => {
         let next: Project;
@@ -322,6 +370,40 @@ export function createProjectStore(options: ProjectStoreOptions = {}): ProjectSt
           // stockage inaccessible : rien à libérer
         }
         resume();
+      },
+      restoreRejectedAutosave: () => {
+        const copy = get().rejectedAutosave;
+        if (copy === null) {
+          return { ok: false, message: "Aucune copie de secours à restaurer.", issues: [] };
+        }
+        const r = importProjectText(copy.text);
+        if (!r.ok) {
+          set({
+            notice: {
+              kind: "error",
+              text: `La copie de secours ne peut pas être restaurée : ${r.message}`,
+              details: r.issues,
+            },
+          });
+          return r;
+        }
+        const h = get().history;
+        if (h.group !== null) set({ history: endGroup(h) });
+        const applied = apply(r.project);
+        if (!applied.ok) {
+          const message = "La copie de secours ne peut pas être restaurée.";
+          set({ notice: { kind: "error", text: message, details: applied.issues } });
+          return { ok: false, message, issues: applied.issues };
+        }
+        set({
+          selection: null,
+          notice: {
+            kind: "info",
+            text: `Copie de secours « ${r.project.name} » restaurée (annulable) ; elle est supprimée du stockage.`,
+          },
+        });
+        get().dismissRejectedAutosave();
+        return r;
       },
       flushAutosave: () => flush(),
     };

@@ -51,8 +51,8 @@ export interface SideEdge {
   /** Profil de la ligne des nez : sommets (u, z). */
   readonly profileU: readonly Mm[];
   readonly profileZ: readonly Mm[];
-  /** Sommets du bord qui sont des poteaux d'angle du tracé (côté du carré). */
-  readonly newels: readonly { readonly u: Mm; readonly size: Mm }[];
+  /** Sommets du bord qui sont des poteaux d'angle du tracé (côté du carré, indice du tournant). */
+  readonly newels: readonly { readonly u: Mm; readonly size: Mm; readonly turn: number }[];
 }
 
 /** Bord simplifié et profil d'un côté. */
@@ -64,12 +64,12 @@ export function sideEdge(
 ): SideEdge {
   const curve = side === "inner" ? layout.inner : layout.outer;
   let pts = dedupe(flattenCurve(curve, 0.5));
-  const newelCorners: { k: Vec2; size: number }[] = [];
+  const newelCorners: { k: Vec2; size: number; turn: number }[] = [];
   if (side === "inner") {
     project.stair.layout.turns.forEach((t, i) => {
       const zone = layout.turns[i];
       if (t.inner.kind === "newel" && zone)
-        newelCorners.push({ k: zone.innerCorner, size: t.inner.size });
+        newelCorners.push({ k: zone.innerCorner, size: t.inner.size, turn: i });
     });
     for (const { k, size } of newelCorners) {
       const r = (size / 2) * Math.SQRT2 + 1e-6;
@@ -119,11 +119,11 @@ export function sideEdge(
       (k + 1 < nosingU.length && Math.abs(u - nosingU[k + 1]!) < 1e-3),
   );
   const newels = newelCorners
-    .map(({ k, size }) => {
+    .map(({ k, size, turn }) => {
       const pr = projectOn(pts, cum, k);
-      return pr.distance < 1e-3 ? { u: pr.s, size } : null;
+      return pr.distance < 1e-3 ? { u: pr.s, size, turn } : null;
     })
-    .filter((x): x is { u: number; size: number } => x !== null);
+    .filter((x): x is { u: number; size: number; turn: number } => x !== null);
   return { side, points: pts, cum, voidSign, nosingU, atPost, profileU, profileZ, newels };
 }
 

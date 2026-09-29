@@ -4,7 +4,7 @@
  * CSV) et totaux. Aucune grandeur n'est calculée ici hormis les sommes des quantités rendues.
  */
 import type { Location, Model, Part } from "@blondel/core";
-import { cutListRows, type CutListRow } from "@blondel/exports";
+import { cutListRows, type CutListRow, type MassNote } from "@blondel/exports";
 import { treadPartId } from "./compliance.js";
 
 /** Pièce désignée par la sélection (pièce, ou marche `tread-N`). */
@@ -36,6 +36,8 @@ export interface BomSummary {
   readonly mass?: number;
   /** Nombre de pièces à développé à plat. */
   readonly withFlat: number;
+  /** Remarques de masse présentes dans les lignes (ex. « masse volumique à valider »). */
+  readonly massNotes: readonly string[];
 }
 
 /** Clé d'une ligne de débit, quantité exclue. */
@@ -49,15 +51,16 @@ function rowKey(row: CutListRow | undefined): string {
  * Nomenclature : lignes de la liste de débit, complétées des identifiants de pièces (pour la
  * sélection) et des totaux par ligne et généraux.
  */
-export function bomSummary(parts: readonly Part[]): BomSummary {
-  const rows = cutListRows(parts);
+export function bomSummary(parts: readonly Part[], massNote?: MassNote): BomSummary {
+  const opts = massNote !== undefined ? { massNote } : {};
+  const rows = cutListRows(parts, opts);
   // Rattachement des pièces aux lignes par **ligne de débit identique** (repère, désignation,
   // matériau, section, débit, volume, masse : la ligne que `cutListRows` produit pour la pièce
   // seule), et non par repère seul : deux pièces de même repère mais de débits différents
   // (repère en double, erreur amont) sont sur deux lignes distinctes.
   const pool = new Map<string, Part[]>();
   for (const p of parts) {
-    const key = rowKey(cutListRows([p])[0]);
+    const key = rowKey(cutListRows([p], opts)[0]);
     const list = pool.get(key);
     if (list) list.push(p);
     else pool.set(key, [p]);
@@ -86,5 +89,6 @@ export function bomSummary(parts: readonly Part[]): BomSummary {
     ...(volume === undefined ? {} : { volume }),
     ...(mass === undefined ? {} : { mass }),
     withFlat: parts.filter((p) => p.flat !== undefined).length,
+    massNotes: [...new Set(rows.flatMap((r) => (r.massNote === undefined ? [] : [r.massNote])))],
   };
 }

@@ -6,7 +6,9 @@
  * - Hauteur : du pied (sol bas, ou « poteau pendant » : sous la rive basse la plus basse des
  *   limons reçus et sous le plus bas des encastrements, d'un dépassement paramétré) jusqu'au-dessus du plus haut des éléments reçus
  *   (dessus des marches encastrées dans le poteau, rives hautes des limons au droit du
- *   poteau), d'un dépassement paramétré. Valeurs par défaut à valider.
+ *   poteau), d'un dépassement paramétré, et au moins au-dessus de la main courante d'un
+ *   garde-corps qui le rejoint (QUESTIONS A3, `newelTopWithHandrail`). Valeurs par défaut à
+ *   valider.
  * - Développé : les quatre faces déroulées côte à côte (x = abscisse le long du périmètre,
  *   parcours trigonométrique vu de dessus, y = altitude), avec les mortaises de réception des
  *   tenons des limons et les encastrements des marches qui touchent le poteau.
@@ -15,11 +17,31 @@ import { intersectLines } from "../geom2d/intersect.js";
 import { ensureCCW } from "../geom2d/polygon.js";
 import * as V from "../geom2d/vec.js";
 import type { FlatPattern, NosingLine, Part } from "../model/derived.js";
+import type { StructureContext } from "../model/plugins.js";
 import type { Mm, Polygon2, Vec2 } from "../model/primitives.js";
 import { housingPolygons, type Housing } from "./development.js";
 import { area } from "./geom.js";
 import { pocketInterval, verticalExtrusion } from "./housing.js";
 import { newelFaces, type NewelGeometry } from "./legs.js";
+
+/**
+ * Sommet du poteau d'angle du tournant `turn` : `top` (plus haut élément reçu + dépassement du
+ * plugin), relevé si besoin au-dessus de la main courante de garde-corps qui y aboutit
+ * (`StructureContext.newelHandrailTops`, QUESTIONS A3) : max(top, main courante + dépassement
+ * `posts.newelOverrun` du garde-corps, 50 mm par défaut à valider).
+ */
+export function newelTopWithHandrail(
+  top: Mm,
+  ctx: Pick<StructureContext, "newelHandrailTops">,
+  turn: number,
+): { top: Mm; raisedBy: Mm; overrun: Mm } {
+  const h = ctx.newelHandrailTops?.find((t) => t.turn === turn);
+  if (!h || !Number.isFinite(h.top)) return { top, raisedBy: 0, overrun: 0 };
+  const need = h.top + h.overrun;
+  return need > top
+    ? { top: need, raisedBy: need - top, overrun: h.overrun }
+    : { top, raisedBy: 0, overrun: h.overrun };
+}
 
 /** Pièce encastrée (marche prolongée, contremarche prolongée) avec ses altitudes. */
 export interface HousedPiece {
@@ -59,6 +81,11 @@ export interface NewelOptions {
   readonly foot: "floor" | "hanging";
   readonly bottomExtension: Mm;
   readonly topExtension: Mm;
+  /**
+   * Altitude minimale du sommet (main courante de garde-corps + dépassement, QUESTIONS A3) ;
+   * absente : plus haut élément reçu + `topExtension` seulement.
+   */
+  readonly minTop?: Mm;
 }
 
 export interface NewelResult {
@@ -178,7 +205,10 @@ export function buildNewel(
   const foot =
     o.foot === "floor" || !Number.isFinite(lowest) ? 0 : Math.max(0, lowest - o.bottomExtension);
   const highest = Math.max(highestTread, ...stringers.map((s) => s.upperZ));
-  const top = (Number.isFinite(highest) ? highest : foot) + o.topExtension;
+  const top = Math.max(
+    (Number.isFinite(highest) ? highest : foot) + o.topExtension,
+    o.minTop ?? -Infinity,
+  );
 
   // Mortaises de réception des tenons.
   const mortises: { label: string; polygon: Polygon2 }[] = [];

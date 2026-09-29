@@ -130,8 +130,35 @@ export function Toolbar() {
       ) : null}
 
       {rejected ? (
-        <div className="notice notice--error" role="group" aria-label="Autosauvegarde refusée">
-          <span>Autosauvegarde refusée au démarrage :</span>
+        <div
+          className="notice notice--error"
+          role="group"
+          aria-label={
+            rejected.since === "earlier"
+              ? "Copie de secours d'autosauvegarde"
+              : "Autosauvegarde refusée"
+          }
+        >
+          <span>
+            {rejected.since === "earlier"
+              ? "Une copie de secours d'autosauvegarde refusée est conservée dans ce navigateur :"
+              : "Autosauvegarde refusée au démarrage :"}
+          </span>
+          {rejected.since === "earlier" ? (
+            <button
+              type="button"
+              className="link"
+              disabled={rejected.restorable !== true}
+              title={
+                rejected.restorable === true
+                  ? "Remplacer le projet courant par la copie (annulable)"
+                  : `Copie illisible par cette version : ${rejected.reason ?? "format non reconnu"}`
+              }
+              onClick={() => st().restoreRejectedAutosave()}
+            >
+              Restaurer
+            </button>
+          ) : null}
           <button
             type="button"
             className="link"
@@ -140,7 +167,7 @@ export function Toolbar() {
               downloadFile({ filename: f.filename, mime: "application/json", content: f.text });
             }}
           >
-            Télécharger le texte brut
+            {rejected.since === "earlier" ? "Exporter" : "Télécharger le texte brut"}
           </button>
           <button
             type="button"
@@ -150,7 +177,11 @@ export function Toolbar() {
               st().clearNotice();
             }}
           >
-            {rejected.preserved ? "Oublier cette sauvegarde" : "Reprendre l'autosauvegarde"}
+            {rejected.since === "earlier"
+              ? "Supprimer"
+              : rejected.preserved
+                ? "Oublier cette sauvegarde"
+                : "Reprendre l'autosauvegarde"}
           </button>
         </div>
       ) : null}

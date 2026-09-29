@@ -36,11 +36,24 @@ const byScore = (x: DesignCandidate, y: DesignCandidate): number =>
  * `variants` éventuelles sont ignorées). Chaque candidat accepté figure au plus une fois dans
  * le résultat, en tête ou en variante ; seuls disparaissent ceux d'une forme dont aucun
  * candidat n'entre dans les `maxCandidates` premières places.
+ *
+ * @throws RangeError si `perShapeLimit` n'est pas un entier ≥ 1 ou `maxCandidates` un entier ≥ 0
+ *   (QUESTIONS D1 : les options n'étaient pas validées).
  */
 export function selectDiverse(
   accepted: readonly DesignCandidate[],
   options: SelectionOptions,
 ): DesignCandidate[] {
+  if (!Number.isInteger(options.perShapeLimit) || options.perShapeLimit < 1) {
+    throw new RangeError(
+      `selectDiverse : perShapeLimit doit être un entier ≥ 1 (reçu : ${options.perShapeLimit}).`,
+    );
+  }
+  if (!Number.isInteger(options.maxCandidates) || options.maxCandidates < 0) {
+    throw new RangeError(
+      `selectDiverse : maxCandidates doit être un entier ≥ 0 (reçu : ${options.maxCandidates}).`,
+    );
+  }
   const sorted = [...accepted].sort(byScore);
   if (options.showAllVariants) return sorted.map((c) => ({ ...c, variants: [] }));
   const heads: DesignCandidate[] = [];

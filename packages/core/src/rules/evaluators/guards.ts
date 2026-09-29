@@ -11,6 +11,7 @@
  * - Tolérances : aucune (NF P01-012:2024 : vides +0 mm) ; tolérance numérique seulement.
  */
 import { computeGuards } from "../../guards/compute.js";
+import { smallCoreDiameter } from "../../guards/handrailSides.js";
 import type { GapMeasure, GuardRun, GuardsAnalysis, HandrailRun } from "../../guards/types.js";
 import type { Location, Stepping } from "../../model/derived.js";
 import type { Project } from "../../model/project.js";
@@ -148,7 +149,10 @@ const strictMax = (ctx: EvaluatorContext): Bounds => ({ ...rule(ctx), strictMax:
 const partLoc = (partId: string): Location => ({ kind: "part", partId });
 
 const rakeRuns = (g: GuardsAnalysis): GuardRun[] => g.runs.filter((r) => r.kind === "rake");
-/** Lignes comportant une partie horizontale (trémie, paliers). */
+/**
+ * Lignes comportant une partie horizontale (trémie, paliers) ; leur hauteur de palier est
+ * `levelHeight` (rehausse, QUESTIONS A1), à défaut `height`.
+ */
 const levelRuns = (g: GuardsAnalysis): GuardRun[] =>
   g.runs.filter((r) => r.kind === "opening" || r.horizontalLength > 1);
 
@@ -250,7 +254,7 @@ const levelHeight: RuleEvaluator = withGuards((ctx, g) =>
   checkBounded(
     ctx,
     levelRuns(g).map((r) => ({
-      value: r.height,
+      value: r.levelHeight ?? r.height,
       location: partLoc(r.primaryPartId),
       label: r.label,
       bounds: rule(ctx),
@@ -305,7 +309,7 @@ const height2024: RuleEvaluator = withGuards((ctx, g) => {
     const h = requiredGuardHeight2024(r.thickness);
     if (h === null) return [notEvaluated("Table h(E) de GC_HAUTEUR_2024 non exploitable.")];
     items.push({
-      value: r.height,
+      value: r.levelHeight ?? r.height,
       location: partLoc(r.primaryPartId),
       label: `${r.label}, épaisseur E = ${fmt(r.thickness)} mm, h(E) = ${fmt(h)} mm`,
       bounds: { min: Math.max(h, ctx.rule.min ?? h), max: null },
@@ -477,23 +481,9 @@ function handrailCount(ctx: EvaluatorContext, g: GuardsAnalysis, min: number | n
 
 const handrailMin: RuleEvaluator = withGuards((ctx, g) => handrailCount(ctx, g, ctx.rule.min));
 
-/**
- * Diamètre du fût central (mm) si l'exception de MC_DEUX_COTES s'applique : ERP neuf (et non
- * BHC, « quelle que soit sa conception »), hélicoïdal à fût (`core.kind === "column"`) de
- * diamètre ≤ `MC_CORE_DIAMETER_MAX` ; `null` sinon (jour central : pas d'exception).
- */
-function smallCoreDiameter(ctx: EvaluatorContext): number | null {
-  const c = ctx.contexts;
-  if (!c.has("erp_neuf") || c.has("bhc_parties_communes") || !c.has("helicoidal")) return null;
-  const layout = ctx.project.stair.layout;
-  if (layout.kind !== "helical" || layout.core.kind !== "column") return null;
-  const d = 2 * layout.core.radius;
-  return d <= MC_CORE_DIAMETER_MAX.value ? d : null;
-}
-
 /** Une main courante de chaque côté, sauf hélicoïdal ERP neuf à fût de Ø ≤ 400 mm (une seule). */
 const handrailBothSides: RuleEvaluator = withGuards((ctx, g) => {
-  const d = smallCoreDiameter(ctx);
+  const d = smallCoreDiameter(ctx.contexts, ctx.project);
   if (d === null) return handrailCount(ctx, g, ctx.rule.min);
   return handrailCount(ctx, g, 1).map((f) => ({
     ...f,

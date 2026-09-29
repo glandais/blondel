@@ -101,16 +101,23 @@ export { crc32, createZip, type ZipEntry, type ZipOptions } from "./zip.js";
 export {
   CSV_BOM,
   CUT_LIST_HEADER,
+  MASS_DENSITY_NOTE,
   MATERIAL_LABELS,
   QUANTITY_MASS,
+  QUANTITY_MASS_KG,
   QUANTITY_VOLUME,
   csvField,
   csvTextField,
   cutListRows,
+  defaultMassNote,
+  massNoteFor,
   neutralizeFormula,
   exportCutListCsv,
+  partMassKg,
   type CutListCsvOptions,
   type CutListRow,
+  type CutListRowsOptions,
+  type MassNote,
 } from "./csv/cutlist.js";
 export { PROJECT_FILE_EXTENSION, exportProjectJson } from "./json.js";
 export {
@@ -130,7 +137,12 @@ export {
   srgbToLinear,
   type PbrLook,
 } from "./gltf/materials.js";
-export { cutSheet, type CutSheetGroup, type CutSheetRow } from "./cutsheet.js";
+export {
+  cutSheet,
+  type CutSheetGroup,
+  type CutSheetOptions,
+  type CutSheetRow,
+} from "./cutsheet.js";
 export {
   installationSheet,
   wallOffset,

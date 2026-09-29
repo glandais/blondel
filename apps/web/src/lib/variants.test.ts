@@ -4,13 +4,25 @@ import {
   clearModelCache,
   createProject,
   parseProjectText,
+  getStructure,
+  registerStructure,
+  StructureError,
+  unregisterStructure,
   type Project,
+  type StructureKind,
 } from "@blondel/core";
 import { describe, expect, it } from "vitest";
 import j3aText from "../../../../examples/j3a-acceptance-01-bois.blondel.json?raw";
 import { presetProject } from "./layoutKind.js";
 import { availableStructures } from "./optionalApi.js";
-import { applyVariant, compareLines, runVariants, variantParams, variantsFor } from "./variants.js";
+import {
+  applyVariant,
+  compareLines,
+  markFailedVariants,
+  runVariants,
+  variantParams,
+  variantsFor,
+} from "./variants.js";
 
 const withStructure = (p: Project, kind: string, params: Record<string, unknown> = {}): Project =>
   ProjectSchema.parse({ ...p, stair: { ...p.stair, structure: { kind, params } } });
@@ -174,5 +186,88 @@ describe("comparateur de variantes", () => {
       kind: "helical-core",
       params: { treads: { material: "steel" } },
     });
+  });
+
+  it("variante en échec : « – » pour les grandeurs mesurées, jamais 0 (QUESTIONS A21 c)", () => {
+    const project = createProject("straight");
+    const { rows } = runVariants(project, [
+      { id: "wood-housed", kind: "wood-housed", label: "Bois" },
+    ]);
+    const ok = rows[0]!;
+    expect(ok.failed).toBeUndefined();
+    // Variante en échec synthétique (comparaison levée : grandeurs à zéro, une erreur).
+    const failed = {
+      ...ok,
+      id: "echec",
+      failed: true,
+      massKg: 0,
+      partCount: 0,
+      errors: ["Comparaison impossible : test"],
+    };
+    const lines = compareLines([ok, failed]);
+    const cell = (key: string) => lines.find((l) => l.key === key)!.cells[1]!;
+    for (const key of ["mass", "surface", "parts", "unique", "cuts", "violations", "cost"]) {
+      expect(cell(key).text, key).toBe("–");
+    }
+    expect(cell("errors").text).toBe("1");
+    expect(lines.find((l) => l.key === "mass")!.cells[0]!.text).not.toBe("–");
+  });
+
+  it("structure en échec (pièces de base seules) : variante en échec, « – » et non la masse des marches", () => {
+    // Revue adverse A21 c : quand le plugin lève, le cœur garde les pièces de base (marches,
+    // contremarches) et signale une erreur ; la variante avait des grandeurs non nulles
+    // (masse des marches seules) et paraissait plus légère et moins chère que les autres.
+    const failing: StructureKind<unknown> = {
+      ...getStructure("wood-housed")!,
+      kind: "test-failing-structure",
+      label: "Structure d'essai en échec",
+      build: () => {
+        throw new StructureError("Structure d'essai : échec volontaire.");
+      },
+    };
+    registerStructure(failing);
+    try {
+      clearModelCache();
+      const project = createProject("straight");
+      const { rows } = runVariants(project, [
+        { id: "wood-housed", kind: "wood-housed", label: "Bois" },
+        { id: "failing", kind: "test-failing-structure", label: "Échec" },
+      ]);
+      const [ok, ko] = rows;
+      expect(ko!.partCount).toBeGreaterThan(0); // pièces de base conservées par le cœur
+      expect(ko!.errors.length).toBeGreaterThan(0);
+      expect(ko!.failed).toBe(true);
+      expect(ok!.failed).toBeUndefined();
+      const lines = compareLines(rows);
+      const cell = (key: string, i: number) => lines.find((l) => l.key === key)!.cells[i]!;
+      expect(cell("mass", 1).text).toBe("–");
+      expect(cell("parts", 1).text).toBe("–");
+      expect(cell("mass", 0).text).not.toBe("–");
+    } finally {
+      unregisterStructure(failing.kind);
+      clearModelCache();
+    }
+  });
+
+  it("erreur commune à toutes les variantes (niveau projet) : aucune variante en échec", () => {
+    const { rows } = runVariants(createProject("straight"), [
+      { id: "wood-housed", kind: "wood-housed", label: "Bois" },
+      { id: "steel-flat", kind: "steel-flat", label: "Acier" },
+    ]);
+    const shared = markFailedVariants(
+      rows.map((r) => ({ ...r, errors: ["Garde-corps : erreur commune."] })),
+    );
+    expect(shared.map((r) => r.failed)).toEqual([undefined, undefined]);
+    // Erreur propre à une variante : celle-ci seulement.
+    const own = markFailedVariants([
+      { ...rows[0]!, errors: ["Garde-corps : erreur commune."] },
+      { ...rows[1]!, errors: ["Garde-corps : erreur commune.", "Structure : échec."] },
+    ]);
+    expect(own.map((r) => r.failed)).toEqual([undefined, true]);
+    // Une seule variante : erreur tenue pour commune, sauf modèle vide.
+    expect(markFailedVariants([{ ...rows[0]!, errors: ["x"] }])[0]!.failed).toBeUndefined();
+    expect(markFailedVariants([{ ...rows[0]!, errors: ["x"], partCount: 0 }])[0]!.failed).toBe(
+      true,
+    );
   });
 });

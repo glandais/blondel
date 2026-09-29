@@ -148,7 +148,8 @@ describe("store du projet", () => {
       expect(s.getState().project.name).toBe(createProject("straight").name);
       expect(s.getState().notice?.kind).toBe("error");
       expect(s.getState().notice?.text).toMatch(message);
-      expect(s.getState().rejectedAutosave).toEqual({ text: raw, preserved: true });
+      expect(s.getState().rejectedAutosave).toMatchObject({ text: raw, preserved: true });
+      expect(s.getState().rejectedAutosave?.since).toBeUndefined();
       // La première modification écrit l'autosauvegarde, mais l'original reste récupérable.
       s.getState().setField(["site", "floorToFloor"], 2800);
       expect(storage.getItem(AUTOSAVE_KEY)).toContain("Escalier droit");
@@ -170,13 +171,65 @@ describe("store du projet", () => {
         },
       };
       const s = createProjectStore({ storage, autosaveDelayMs: 0 });
-      expect(s.getState().rejectedAutosave).toEqual({ text: raw, preserved: false });
+      expect(s.getState().rejectedAutosave).toMatchObject({ text: raw, preserved: false });
       expect(s.getState().notice?.text).toMatch(/suspendue/);
       s.getState().setField(["site", "floorToFloor"], 2800);
       s.getState().flushAutosave();
       expect(inner.getItem(AUTOSAVE_KEY)).toBe(raw);
       s.getState().dismissRejectedAutosave();
       expect(inner.getItem(AUTOSAVE_KEY)).toContain("2800");
+    });
+
+    describe("copie de secours laissée par un démarrage antérieur (QUESTIONS A22)", () => {
+      const current = (): string => serializeProject({ ...client(), name: "Projet courant" });
+
+      it("bandeau à chaque démarrage tant que la copie existe ; supprimer la libère", () => {
+        const raw = newer();
+        const storage = memoryStorage({ [AUTOSAVE_KEY]: current(), [AUTOSAVE_REJECTED_KEY]: raw });
+        const s = createProjectStore({ storage, autosaveDelayMs: 0 });
+        // Le projet de l'autosauvegarde est ouvert normalement, sans message d'erreur.
+        expect(s.getState().project.name).toBe("Projet courant");
+        expect(s.getState().notice).toBeNull();
+        expect(s.getState().rejectedAutosave).toMatchObject({
+          text: raw,
+          preserved: true,
+          since: "earlier",
+          restorable: false,
+        });
+        expect(s.getState().rejectedAutosave?.reason).toMatch(/plus récent/);
+        // Pas de restauration d'une copie illisible : message, rien ne change.
+        const before = s.getState().project;
+        expect(s.getState().restoreRejectedAutosave().ok).toBe(false);
+        expect(s.getState().project).toBe(before);
+        expect(storage.getItem(AUTOSAVE_REJECTED_KEY)).toBe(raw);
+        // Démarrage suivant : toujours signalée.
+        const s2 = createProjectStore({ storage });
+        expect(s2.getState().rejectedAutosave?.since).toBe("earlier");
+        s2.getState().dismissRejectedAutosave();
+        expect(storage.getItem(AUTOSAVE_REJECTED_KEY)).toBeNull();
+        expect(createProjectStore({ storage }).getState().rejectedAutosave).toBeNull();
+      });
+
+      it("copie relisible (application mise à jour) : restaurée, annulable, puis supprimée", () => {
+        const raw = serializeProject(client());
+        const storage = memoryStorage({ [AUTOSAVE_KEY]: current(), [AUTOSAVE_REJECTED_KEY]: raw });
+        const s = createProjectStore({ storage, autosaveDelayMs: 0 });
+        expect(s.getState().rejectedAutosave?.restorable).toBe(true);
+        const r = s.getState().restoreRejectedAutosave();
+        expect(r.ok).toBe(true);
+        expect(s.getState().project.name).toBe("Mon escalier client");
+        expect(s.getState().rejectedAutosave).toBeNull();
+        expect(storage.getItem(AUTOSAVE_REJECTED_KEY)).toBeNull();
+        expect(storage.getItem(AUTOSAVE_KEY)).toContain("Mon escalier client");
+        s.getState().undo();
+        expect(s.getState().project.name).toBe("Projet courant");
+      });
+
+      it("paramètre `reportBackupCopy: false` : pas de bandeau", () => {
+        const storage = memoryStorage({ [AUTOSAVE_REJECTED_KEY]: newer() });
+        const s = createProjectStore({ storage, reportBackupCopy: false });
+        expect(s.getState().rejectedAutosave).toBeNull();
+      });
     });
 
     it("un projet initial fourni ne lit ni ne signale l'autosauvegarde", () => {

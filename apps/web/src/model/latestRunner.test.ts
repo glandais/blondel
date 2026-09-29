@@ -118,6 +118,34 @@ describe("exécution « dernier demandé seulement »", () => {
     expect(out).toEqual(["repli : boum", "repli : rejet"]);
   });
 
+  it("un échec n'est pas mis en cache : revenir à l'entrée relance le calcul", async () => {
+    // Revue adverse A21 : un calcul abandonné par le chien de garde (machine chargée, délai
+    // dépassé) restait en cache ; annuler / rétablir vers ce projet republiait l'erreur sans
+    // jamais relancer le calcul.
+    const { calls, exec } = manualExec();
+    const out: string[] = [];
+    const runner = createLatestRunner<object, string>({
+      exec,
+      onResult: (_i, o) => out.push(o),
+      onError: (_i, e) => `repli : ${(e as Error).message}`,
+    });
+    const a = {};
+    const b = {};
+    runner.submit(a);
+    calls[0]!.reject(new Error("délai dépassé"));
+    await flush();
+    expect(out).toEqual(["repli : délai dépassé"]);
+    runner.submit(b);
+    calls[1]!.resolve("B");
+    await flush();
+    runner.submit(a); // pas de republication de l'erreur : nouveau calcul
+    expect(calls).toHaveLength(3);
+    expect(runner.pending).toBe(true);
+    calls[2]!.resolve("A");
+    await flush();
+    expect(out).toEqual(["repli : délai dépassé", "B", "A"]);
+  });
+
   it("propriété : la dernière publication est toujours celle de la dernière demande", async () => {
     await fc.assert(
       fc.asyncProperty(

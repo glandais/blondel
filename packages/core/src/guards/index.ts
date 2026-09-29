@@ -18,7 +18,12 @@ export {
   type GuardsSpecInput,
   type HandrailSpec,
 } from "./spec.js";
-export { computeGuards } from "./compute.js";
+export { computeGuards, landingRaise } from "./compute.js";
+export {
+  autoHandrailBothSides,
+  HANDRAIL_BOTH_SIDES_RULE,
+  smallCoreDiameter,
+} from "./handrailSides.js";
 export { CABLE_SLACK_RULE, guardChecks, SLAB_CLASH_RULE, slabClash } from "./checks.js";
 export { GuardError } from "./errors.js";
 export { jourWidth, NARROW_JOUR_ERROR_PREFIX, narrowJourThreshold } from "./jour.js";
@@ -29,6 +34,7 @@ export type {
   GuardRun,
   GuardsAnalysis,
   HandrailRun,
+  NewelHandrailTop,
   SideAnalysis,
   SideInterval,
   StairSide,

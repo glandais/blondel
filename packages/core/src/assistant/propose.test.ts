@@ -508,4 +508,12 @@ describe("diversité des propositions (constat en ligne : H 2 700, trémie 1 100
       expect(r.diagnostics[0]).toMatch(/^Aucune proposition : limits\./);
     }
   });
+
+  it("maxCandidates = 0 : liste vide par réglage, pas « aucune proposition sans bloquant » (QUESTIONS D1)", () => {
+    const r = proposeUntimed({ site: SITE, limits: { maxCandidates: 0 } });
+    expect(r.candidates).toEqual([]);
+    expect(r.diagnostics[0]).toMatch(/^Liste vide : \d+ proposition\(s\) sans bloquant/);
+    expect(r.diagnostics[0]).toContain("réglé à 0");
+    expect(r.diagnostics.some((d) => d.startsWith("Aucune proposition sans bloquant"))).toBe(false);
+  });
 });

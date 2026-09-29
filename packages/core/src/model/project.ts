@@ -291,8 +291,14 @@ export type BalancingMethod = z.output<typeof BalancingSchema>["method"];
 
 export const TreadSpecSchema = z.object({
   thickness: mmPos.default(40),
-  /** Débord du nez sur la contremarche. */
-  nosing: mmNonNeg.default(30),
+  /**
+   * Débord du nez sur la contremarche. Défaut 10 mm (QUESTIONS A9, appliqué par défaut le
+   * 2026-09-30, à confirmer) : valeur recommandée de `DEBORD_NEZ_LOGEMENT`, déjà celle des
+   * préréglages. L'ancien défaut (30 mm) ne s'appliquait qu'aux projets écrits à la main sans
+   * ce champ : `serializeProject` écrit toujours `treads.nosing`, un projet enregistré par
+   * Blondel n'est donc pas modifié (pas de migration, voir LEDGER).
+   */
+  nosing: mmNonNeg.default(10),
   risers: z.enum(["full", "open", "none"]).default("full"),
   riserThickness: mmPos.default(20),
 });

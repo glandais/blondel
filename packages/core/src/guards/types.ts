@@ -76,6 +76,12 @@ export interface GuardRun {
   /** Hauteur du dessus de la main courante au-dessus du niveau de référence. */
   readonly height: Mm;
   /**
+   * Hauteur du dessus de la main courante sur les parties horizontales (paliers) quand elle
+   * diffère de `height` : rehausse d'un garde-corps de volée sur un palier (QUESTIONS A1).
+   * Absent : `height` partout. Contrôlée par GC_HAUTEUR_PALIER_1988 et GC_HAUTEUR_2024.
+   */
+  readonly levelHeight?: Mm;
+  /**
    * Épaisseur de l'élément de protection (GC_HAUTEUR_2024, h(E)) : largeur de la main courante
    * ou épaisseur d'un panneau continu, sans les poteaux ni les balustres (ponctuels).
    */
@@ -98,6 +104,16 @@ export interface GuardRun {
   readonly postPartIds: readonly string[];
   readonly infillPartIds: readonly string[];
   readonly handrailPartId?: string;
+}
+
+/** Dessus de main courante au droit d'un poteau d'angle du tracé (QUESTIONS A3). */
+export interface NewelHandrailTop {
+  /** Indice du tournant du poteau. */
+  readonly turn: number;
+  /** Altitude absolue du dessus de la main courante (mm). */
+  readonly top: Mm;
+  /** Dépassement exigé du poteau au-dessus (mm, `posts.newelOverrun`). */
+  readonly overrun: Mm;
 }
 
 /** Main courante (sur garde-corps de volée ou murale), le long de l'escalier. */
@@ -133,6 +149,14 @@ export interface GuardsAnalysis {
   /** Hauteur de chute au droit de la trémie (sol haut → sol bas). */
   readonly openingFall: Mm;
   readonly parts: readonly Part[];
+  /**
+   * Dessus de main courante (altitude absolue, mm) au droit de chaque poteau d'angle du tracé
+   * qu'elle rejoint, par indice de tournant (le plus haut des garde-corps qui y aboutissent,
+   * dans l'emprise du poteau), avec le dépassement demandé (`posts.newelOverrun`). Lu par les
+   * structures pour faire monter le poteau au-dessus de la main courante (QUESTIONS A3).
+   * Absent : aucun garde-corps ne rejoint de poteau d'angle, ou `newelOverrun` à `off`.
+   */
+  readonly newelHandrailTops?: readonly NewelHandrailTop[];
   readonly notes: readonly string[];
   /**
    * Lignes de garde-corps impossibles à construire (jour plus étroit que la sphère T1, décalage

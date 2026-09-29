@@ -95,6 +95,19 @@ export interface StructureContext {
    * (ex. marches prolongées dans les limons). Absent : le plugin les recalcule s'il en a besoin.
    */
   readonly baseParts?: readonly Part[];
+  /**
+   * Dessus de main courante de garde-corps (altitude absolue, mm) au droit des poteaux d'angle
+   * du tracé, par indice de tournant (`GuardsAnalysis.newelHandrailTops`). Le plugin fait
+   * monter ses poteaux d'angle au moins à `top + overrun` (QUESTIONS A3). Absent : pas de garde-corps, ou aucun
+   * ne rejoint de poteau d'angle. Ajout rétrocompatible (jalon 4 → 2026-09-30).
+   */
+  readonly newelHandrailTops?: readonly {
+    readonly turn: number;
+    /** Altitude absolue du dessus de la main courante (mm). */
+    readonly top: Mm;
+    /** Dépassement exigé du poteau au-dessus (mm, garde-corps `posts.newelOverrun`). */
+    readonly overrun: Mm;
+  }[];
 }
 
 /**

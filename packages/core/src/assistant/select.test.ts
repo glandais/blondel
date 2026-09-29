@@ -99,6 +99,17 @@ describe("selectDiverse", () => {
     expect(all.every((c) => c.variants.length === 0)).toBe(true);
   });
 
+  it("options invalides : RangeError (QUESTIONS D1)", () => {
+    for (const bad of [
+      { perShapeLimit: 0, maxCandidates: 1 },
+      { perShapeLimit: 1.5, maxCandidates: 1 },
+      { perShapeLimit: 1, maxCandidates: -1 },
+      { perShapeLimit: 1, maxCandidates: Number.NaN },
+    ]) {
+      expect(() => selectDiverse([], { ...bad, showAllVariants: false })).toThrow(RangeError);
+    }
+  });
+
   it("liste principale : triée, au plus N par forme et maxCandidates ; aucun doublon", () => {
     fc.assert(
       fc.property(candidates, options, (list, opt) => {

@@ -14,9 +14,9 @@ Logiciel web de conception paramétrique d'escaliers, pour les menuisiers, les m
 - **Contrôle de conception** indicatif (DTU 36.3, NF P01-012, garde-corps régimes 1988 et 2024, ERP…), échappée (y compris sous le tour supérieur d'un hélicoïdal), contrôles de fabrication, prédimensionnement indicatif et classe d'exécution EN 1090-2, corrections proposées ; chaque règle renvoie à sa source dans `docs/research/`.
 - **Comparateur de variantes** de structure sur la même épure : masse, pièces, pièces uniques, cordons, plis, EXC, coût si le barème d'atelier est renseigné.
 - **Vues** : plan 2D coté, élévation, développés, nomenclature ; **3D** avec matériaux PBR (essences de bois avec fil orienté, acier brut / peint / galvanisé, inox brossé, verre, béton), vue éclatée, coupe, mesure, isolation d'une pièce, cotes 3D.
-- **Exports** : SVG (plan, élévation, développés), DXF R12 / 2007 du plan et de chaque pièce (calques de découpe, pli, roulage, joints, repères), liste de débit CSV, **modèle 3D glTF** (`.glb`), **dossier PDF** (sommaire, plan, élévation, nomenclature, fiche de débit, fiche de pose, contrôle de conception, développés, gabarits 1:1 tuilés en A4 ou A3), ZIP, projet JSON ; annuler / rétablir, autosauvegarde.
+- **Exports** : SVG (plan, élévation, développés), DXF R12 / 2007 du plan et de chaque pièce (calques de découpe, pli, roulage, joints, repères), liste de débit CSV (avec masses et mention « masse volumique à valider »), **modèle 3D glTF** (`.glb`), **dossier PDF** (sommaire, plan, élévation, nomenclature, fiche de débit, fiche de pose, contrôle de conception, développés, gabarits 1:1 tuilés en A4 ou A3), ZIP, projet JSON ; annuler / rétablir, autosauvegarde.
 
-État : jalons 1 à 5b, 6 (rendu et exports) et 7 (import de plan, version simple) livrés, ainsi que l'assistant et le mode expert ; tout est **à valider avec un atelier pilote** : les valeurs du profil d'atelier et des plugins sont des hypothèses marquées « à valider » (voir `docs/LEDGER.md` §2). Bilan des critères d'acceptation, avec leurs tests : [`docs/ACCEPTATION.md`](docs/ACCEPTATION.md). Restent notamment : débillardé bois ou lamellé-collé (V2), exports STEP et XLSX, lien partageable, obstacles (poteaux, fenêtres, portes), détection automatique de la trémie et des murs dans un plan importé.
+État : jalons 1 à 5b, 6 (rendu et exports) et 7 (import de plan, version simple) livrés, ainsi que l'assistant et le mode expert ; tout est **à valider avec un atelier pilote** : les valeurs du profil d'atelier et des plugins sont des hypothèses marquées « à valider ». Les questions ouvertes et les décisions appliquées par défaut en attente de confirmation (rehausse du garde-corps sur palier, main courante des deux côtés en ERP et BHC, poteau d'angle au-dessus de la main courante, masses affichées, débord de nez de 10 mm, chien de garde du calcul…) sont consolidées dans [`docs/QUESTIONS.md`](docs/QUESTIONS.md). Bilan des critères d'acceptation, avec leurs tests : [`docs/ACCEPTATION.md`](docs/ACCEPTATION.md). Restent notamment : débillardé bois ou lamellé-collé (V2), exports STEP et XLSX, lien partageable, obstacles (poteaux, fenêtres, portes), détection automatique de la trémie et des murs dans un plan importé.
 
 > Le contrôle de conception est indicatif : il ne vaut pas attestation de conformité.
 
@@ -89,6 +89,7 @@ docs/
   adr/                décisions d'architecture
   research/           recherche métier (règles, géométrie, structures) et rules.yaml
   LEDGER.md           avancement, points en suspens, journal
+  QUESTIONS.md        questions ouvertes consolidées, décisions appliquées par défaut à confirmer
   ACCEPTATION.md      critères d'acceptation : état et tests qui les prouvent
 examples/             projets .blondel.json
 scripts/              build-rules.mjs

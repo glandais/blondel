@@ -116,6 +116,20 @@ export function loadAutosave(storage: StorageLike | undefined): AutosaveLoad {
   return { kind: "rejected", message: r.message, issues: r.issues, text, preserved };
 }
 
+/**
+ * Copie de secours d'une autosauvegarde refusée lors d'un démarrage **antérieur**, encore dans
+ * le stockage (ni restaurée ni supprimée) : son texte brut, sinon `null`. Signalée par un
+ * bandeau à chaque démarrage tant qu'elle existe (QUESTIONS A22).
+ */
+export function loadRejectedCopy(storage: StorageLike | undefined): string | null {
+  if (!storage) return null;
+  try {
+    return storage.getItem(AUTOSAVE_REJECTED_KEY);
+  } catch {
+    return null;
+  }
+}
+
 /** Fichier proposé au téléchargement pour une autosauvegarde refusée (texte brut, intact). */
 export function rejectedAutosaveFile(text: string): { filename: string; text: string } {
   return { filename: `autosauvegarde-refusee${PROJECT_FILE_SUFFIX}`, text };

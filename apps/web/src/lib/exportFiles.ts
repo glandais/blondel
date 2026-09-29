@@ -15,6 +15,7 @@ import {
   createZip,
   exportGlb,
   exportCutListCsv,
+  massNoteFor,
   exportPartDxf,
   exportPartsDxf,
   exportPlanDxf,
@@ -246,7 +247,13 @@ export async function buildExport(
         },
       ];
     case "cutlist-csv":
-      return [{ filename: `${stem}-debit.csv`, mime: MIME.csv, content: exportCutListCsv(m) }];
+      return [
+        {
+          filename: `${stem}-debit.csv`,
+          mime: MIME.csv,
+          content: exportCutListCsv(m, { massNote: massNoteFor(project.workshop) }),
+        },
+      ];
     case "pdf":
     case "pdf-a3":
     case "pdf-light":

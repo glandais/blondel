@@ -7,7 +7,9 @@
  * - le résultat d'un calcul devenu obsolète (une autre entrée a été demandée entre-temps) est
  *   conservé dans le cache mais **pas** publié ;
  * - cache LRU par identité de l'entrée (projet immuable) : annuler / rétablir republie aussitôt
- *   un résultat déjà calculé, sans solliciter le calcul.
+ *   un résultat déjà calculé, sans solliciter le calcul. Un résultat de repli (`onError` :
+ *   exception, rejet, chien de garde du worker) n'est **pas** mis en cache : la panne peut être
+ *   passagère (machine chargée), revenir à l'entrée relance le calcul.
  *
  * `exec` peut être synchrone (repli sur le fil principal, tests) ou asynchrone (worker).
  */
@@ -67,8 +69,8 @@ export function createLatestRunner<I, O>(options: LatestRunnerOptions<I, O>): La
     }
   };
 
-  const finish = (input: I, output: O): void => {
-    remember(input, output);
+  const finish = (input: I, output: O, cacheable = true): void => {
+    if (cacheable) remember(input, output);
     running = false;
     if (hasTarget && target === input) {
       onResult(input, output);
@@ -87,13 +89,13 @@ export function createLatestRunner<I, O>(options: LatestRunnerOptions<I, O>): La
     try {
       out = exec(input);
     } catch (e) {
-      finish(input, onError(input, e));
+      finish(input, onError(input, e), false);
       return;
     }
     if (isPromise(out)) {
       out.then(
         (o) => finish(input, o),
-        (e: unknown) => finish(input, onError(input, e)),
+        (e: unknown) => finish(input, onError(input, e), false),
       );
     } else {
       finish(input, out);

@@ -27,6 +27,7 @@ import type { Project, Wall } from "../model/project.js";
 import { fmt } from "../rules/check.js";
 import { resolveWorkshopProfile } from "../workshop/profile.js";
 import { GuardError } from "./errors.js";
+import { autoHandrailBothSides } from "./handrailSides.js";
 import { jourWidth, NARROW_JOUR_ERROR_PREFIX, narrowJourThreshold } from "./jour.js";
 import {
   MarkRegistry,
@@ -79,6 +80,12 @@ interface LineArgs {
   readonly path: readonly Vec2[];
   readonly ref: readonly Mm[];
   readonly height: Mm;
+  /**
+   * Hauteur du dessus de la main courante au-dessus de `ref`, à chaque sommet de `path`
+   * (rehausse sur les paliers, QUESTIONS A1) ; interpolée linéairement entre sommets. Absent :
+   * `height` partout.
+   */
+  readonly heights?: readonly Mm[];
   /** Sommets imposés comme poteaux d'angle du tracé (indice de sommet → côté du poteau). */
   readonly newelVertices: ReadonlyMap<number, Mm>;
   readonly extensionBottom?: Mm;
@@ -170,19 +177,28 @@ function slopesIn(w: readonly number[], ref: readonly number[], c0: Mm, c1: Mm):
   return out.length > 0 ? out : [0];
 }
 
-/** Points du chemin (3D, niveau de référence + dz) entre les abscisses c0 < c1. */
+/** Abscisses c0, sommets intérieurs du chemin, c1. */
+function stationsIn(w: readonly number[], c0: Mm, c1: Mm): Mm[] {
+  return [c0, ...w.filter((x) => x > c0 + 1e-6 && x < c1 - 1e-6), c1];
+}
+
+/**
+ * Points du chemin (3D, niveau de référence + dz) entre les abscisses c0 < c1 ; `dz` constant
+ * ou fonction de l'abscisse (hauteur variable, rehausse sur palier).
+ */
 function subPath3(
   path: readonly Vec2[],
   w: readonly number[],
   ref: readonly number[],
   c0: Mm,
   c1: Mm,
-  dz: Mm,
+  dz: Mm | ((x: Mm) => Mm),
 ): { pts: Vec3[]; normals: Vec2[] } {
-  const stations = [c0, ...w.filter((x) => x > c0 + 1e-6 && x < c1 - 1e-6), c1];
+  const stations = stationsIn(w, c0, c1);
+  const dzAt = typeof dz === "number" ? (): Mm => dz : dz;
   const pts = stations.map((x) => {
     const p = pointAt(path, w, x);
-    return { x: p.x, y: p.y, z: interp(w, ref, x) + dz };
+    return { x: p.x, y: p.y, z: interp(w, ref, x) + dzAt(x) };
   });
   const normals = stations.map((x) =>
     V.perpLeft(tangentAt(path, w, Math.min(Math.max(x, c0 + 1e-6), c1 - 1e-6))),
@@ -195,11 +211,16 @@ function buildLine(fctx: PartFactoryContext, spec: GuardsSpec, a: LineArgs): Lin
   const { path, ref, height: H } = a;
   const w = cumulative(path);
   const zr = (x: Mm): Mm => interp(w, ref, x);
+  const heights = a.heights ?? path.map(() => H);
+  /** Hauteur du dessus de la main courante au-dessus de la référence, à l'abscisse x. */
+  const ht = (x: Mm): Mm => interp(w, heights, x);
   const hr = spec.handrail;
   const hh = sectionHeight(hr.section);
   const infill = spec.infill;
   const bottomGap = infill.bottomGap;
-  const infillTop = H - hh;
+  // Haut du remplissage : sous la main courante (hauteur de volée ; variable sur un palier rehaussé).
+  const infillTop = Math.min(H, ...heights) - hh;
+  const infillTopAt = (x: Mm): Mm => ht(x) - hh;
   if (infillTop <= bottomGap) {
     throw new GuardError(
       `Garde-corps ${a.label} : hauteur ${H} mm insuffisante pour la main courante (${hh} mm) et le vide bas (${bottomGap} mm).`,
@@ -231,7 +252,7 @@ function buildLine(fctx: PartFactoryContext, spec: GuardsSpec, a: LineArgs): Lin
         dir,
         postSection,
         zr(p.w),
-        zr(p.w) + infillTop,
+        zr(p.w) + infillTopAt(p.w),
       ),
     );
     postPartIds.push(id);
@@ -239,7 +260,11 @@ function buildLine(fctx: PartFactoryContext, spec: GuardsSpec, a: LineArgs): Lin
   }
 
   // Main courante continue (balayage), prolongée horizontalement aux extrémités de l'escalier.
-  const hPath: Vec3[] = path.map((p, i) => ({ x: p.x, y: p.y, z: ref[i]! + H - hh / 2 }));
+  const hPath: Vec3[] = path.map((p, i) => ({
+    x: p.x,
+    y: p.y,
+    z: ref[i]! + heights[i]! - hh / 2,
+  }));
   if (a.extensionBottom && a.extensionBottom > 0) {
     const t = tangentAt(path, w, 0);
     const p = V.addScaled(path[0]!, t, -a.extensionBottom);
@@ -313,7 +338,7 @@ function buildLine(fctx: PartFactoryContext, spec: GuardsSpec, a: LineArgs): Lin
               tangentAt(path, w, x),
               infill.section,
               zr(x) + bottomGap,
-              zr(x) + infillTop,
+              zr(x) + infillTopAt(x),
             ),
           );
           infillPartIds.push(id);
@@ -345,7 +370,13 @@ function buildLine(fctx: PartFactoryContext, spec: GuardsSpec, a: LineArgs): Lin
             : { kind: "round" as const, diameter: infill.diameter };
         const rh = sectionHeight(section);
         const count = infill.count;
-        const g = (infillTop - bottomGap - count * rh) / count;
+        // Vide entre éléments filants à l'abscisse x (croît sur un palier rehaussé) ; `g` : le
+        // plus petit (hauteur de volée), repris pour les appuis du gabarit B ; `gMax` : le plus
+        // grand de la travée, contrôlé aux vides.
+        const gapAt = (x: Mm): Mm => (infillTopAt(x) - bottomGap - count * rh) / count;
+        const bayStations = stationsIn(w, c0, c1);
+        const g = Math.min(...bayStations.map(gapAt));
+        const gMax = Math.max(...bayStations.map(gapAt));
         if (g < 0) {
           throw new GuardError(
             `${infill.kind === "rails" ? "Lisses" : "Câbles"} : ${count} éléments de ${rh} mm ne tiennent pas entre ${bottomGap} et ${fmt(infillTop)} mm.`,
@@ -355,7 +386,14 @@ function buildLine(fctx: PartFactoryContext, spec: GuardsSpec, a: LineArgs): Lin
         for (let i = 0; i < count; i++) {
           const zb = bottomGap + i * (rh + g);
           const id = `${a.id}-${infill.kind === "rails" ? "rail" : "cable"}-${++pieceNo}`;
-          const { pts } = subPath3(path, w, ref, c0, c1, zb + rh / 2);
+          const { pts } = subPath3(
+            path,
+            w,
+            ref,
+            c0,
+            c1,
+            (x) => bottomGap + i * (rh + gapAt(x)) + rh / 2,
+          );
           parts.push(
             sweptMember(
               fctx,
@@ -387,11 +425,11 @@ function buildLine(fctx: PartFactoryContext, spec: GuardsSpec, a: LineArgs): Lin
           kind: "bottom",
         });
         for (let i = 0; i < count; i++) {
-          const zb = bottomGap + i * (rh + g) + rh;
+          const zb = bottomGap + i * (rh + gMax) + rh;
           gaps.push({
-            value: g * cos,
+            value: gMax * cos,
             zBottom: zb,
-            zTop: zb + g,
+            zTop: zb + gMax,
             location: part(ids[i]!),
             label:
               i + 1 < count
@@ -421,7 +459,7 @@ function buildLine(fctx: PartFactoryContext, spec: GuardsSpec, a: LineArgs): Lin
         }
         const id = `${a.id}-panel-${++pieceNo}`;
         const bottom = subPath3(path, w, ref, q0, q1, bottomGap);
-        const top = subPath3(path, w, ref, q0, q1, infillTop);
+        const top = subPath3(path, w, ref, q0, q1, infillTopAt);
         const names = {
           glass: "Panneau de verre",
           perforated: "Tôle perforée",
@@ -474,12 +512,22 @@ function buildLine(fctx: PartFactoryContext, spec: GuardsSpec, a: LineArgs): Lin
   // Pentes et longueur horizontale de la ligne de référence.
   let maxSlope = 0;
   let horizontal = 0;
+  // Hauteur sur les parties horizontales (paliers) quand elle diffère de `height` (rehausse).
+  let levelHeight: Mm | undefined;
   for (let i = 0; i + 1 < w.length; i++) {
     const len = w[i + 1]! - w[i]!;
     if (len < 1e-9) continue;
     const s = Math.abs(ref[i + 1]! - ref[i]!) / len;
     maxSlope = Math.max(maxSlope, s);
-    if (s < 1e-6) horizontal += len;
+    if (s < 1e-6) {
+      horizontal += len;
+      // Même critère que `landingRaise` (tronçons plats d'au moins 1 mm) : un résidu plat plus
+      // court, non rehaussé, ne doit pas fixer la hauteur de palier contrôlée.
+      if (a.heights && len >= 1) {
+        const hmin = Math.min(heights[i]!, heights[i + 1]!);
+        levelHeight = levelHeight === undefined ? hmin : Math.min(levelHeight, hmin);
+      }
+    }
   }
   // Épaisseur E de l'élément de protection (h(E), GC_HAUTEUR_2024) : éléments **continus** au
   // sommet du garde-corps (main courante, panneau) ; les poteaux et balustres, ponctuels, ne
@@ -497,6 +545,7 @@ function buildLine(fctx: PartFactoryContext, spec: GuardsSpec, a: LineArgs): Lin
       path,
       ref,
       height: H,
+      ...(levelHeight !== undefined ? { levelHeight } : {}),
       thickness,
       maxSlopeDeg: (Math.atan(maxSlope) * 180) / Math.PI,
       horizontalLength: horizontal,
@@ -512,6 +561,75 @@ function buildLine(fctx: PartFactoryContext, spec: GuardsSpec, a: LineArgs): Lin
       handrailPartId: handrailId,
     },
   };
+}
+
+/**
+ * Rehausse d'un garde-corps de volée sur les paliers (QUESTIONS A1, appliqué par défaut le
+ * 2026-09-30, à confirmer) : sur chaque partie horizontale de la ligne de référence (palier
+ * intermédiaire), le dessus de la main courante passe à `landingHeight` ; de part et d'autre, un
+ * raccord incliné le ramène à la hauteur de volée `height` sur `ramp` (un giron par défaut),
+ * mesuré le long du chemin. Des sommets sont insérés aux extrémités des raccords, pour que le
+ * profil soit exact avec une interpolation linéaire entre sommets.
+ *
+ * Rend `null` sans partie horizontale, ou si la hauteur de palier ne dépasse pas celle de volée.
+ * `vertexOf[i]` : nouvel indice de l'ancien sommet i.
+ */
+export function landingRaise(
+  path: readonly Vec2[],
+  ref: readonly Mm[],
+  u: readonly Mm[],
+  height: Mm,
+  landingHeight: Mm,
+  ramp: Mm,
+): {
+  path: Vec2[];
+  ref: Mm[];
+  u: Mm[];
+  heights: Mm[];
+  vertexOf: number[];
+} | null {
+  if (!(landingHeight > height) || path.length < 2) return null;
+  const w = cumulative(path);
+  const W = w[w.length - 1]!;
+  // Parties horizontales (segments consécutifs fusionnés).
+  const flats: { a: Mm; b: Mm }[] = [];
+  for (let i = 0; i + 1 < w.length; i++) {
+    const len = w[i + 1]! - w[i]!;
+    if (len < 1 || Math.abs(ref[i + 1]! - ref[i]!) / len >= 1e-6) continue;
+    const last = flats[flats.length - 1];
+    if (last && Math.abs(last.b - w[i]!) < 1e-6) last.b = w[i + 1]!;
+    else flats.push({ a: w[i]!, b: w[i + 1]! });
+  }
+  if (flats.length === 0) return null;
+  const r = Math.max(ramp, 1e-6);
+  const heightAt = (x: Mm): Mm => {
+    let d = Infinity;
+    for (const f of flats) d = Math.min(d, x < f.a ? f.a - x : x > f.b ? x - f.b : 0);
+    return height + (landingHeight - height) * Math.max(0, 1 - d / r);
+  };
+  // Sommets à insérer : extrémités des raccords, dans le chemin et loin des sommets existants.
+  const extra = flats
+    .flatMap((f) => [f.a - r, f.b + r])
+    .filter((x) => x > 1e-6 && x < W - 1e-6 && w.every((wi) => Math.abs(wi - x) > 1e-3));
+  const xs = [...w.map((x, i) => ({ x, i })), ...extra.map((x) => ({ x, i: -1 }))].sort(
+    (p, q) => p.x - q.x,
+  );
+  const out = { path: [] as Vec2[], ref: [] as Mm[], u: [] as Mm[], heights: [] as Mm[] };
+  const vertexOf: number[] = new Array<number>(path.length).fill(-1);
+  for (const { x, i } of xs) {
+    if (i >= 0) {
+      vertexOf[i] = out.path.length;
+      out.path.push(path[i]!);
+      out.ref.push(ref[i]!);
+      out.u.push(u[i]!);
+    } else {
+      out.path.push(pointAt(path, w, x));
+      out.ref.push(interp(w, ref, x));
+      out.u.push(interp(w, u, x));
+    }
+    out.heights.push(heightAt(x));
+  }
+  return { ...out, vertexOf };
 }
 
 /** Prolongements résolus (`auto` = giron nominal). */
@@ -543,6 +661,8 @@ function edgePortion(
   u: number[];
   nosings: number[];
   nosingRef: (k: number) => Mm;
+  /** Indice du sommet de `path` au droit du nez k. */
+  nosingVertex: (k: number) => number;
   touchesBottom: boolean;
   touchesTop: boolean;
 } {
@@ -570,13 +690,14 @@ function edgePortion(
   edge.nosingU.forEach((uk, k) => {
     if (uk >= iv.from - 1e-6 && uk <= iv.to + 1e-6 && !edge.atPost[k]) nosings.push(k);
   });
-  const nosingRef = (k: number): Mm => {
+  const nosingVertex = (k: number): number => {
     const uk = edge.nosingU[k]!;
     let best = 0;
     for (let j = 1; j < sl.s.length; j++)
       if (Math.abs(sl.s[j]! - uk) < Math.abs(sl.s[best]! - uk)) best = j;
-    return ref[off.group[best]!]!;
+    return off.group[best]!;
   };
+  const nosingRef = (k: number): Mm => ref[nosingVertex(k)]!;
   const n = stepping.nosings.length;
   return {
     path,
@@ -584,6 +705,7 @@ function edgePortion(
     u,
     nosings,
     nosingRef,
+    nosingVertex,
     touchesBottom: n > 0 && iv.from <= edge.nosingU[0]! + 1,
     touchesTop: n > 0 && iv.to >= edge.nosingU[n - 1]! - 1,
   };
@@ -738,6 +860,8 @@ export function computeGuards(
   const narrowJour = narrow !== null && jour < narrow;
 
   // Garde-corps de volée.
+  /** Dessus de main courante au droit des poteaux d'angle du tracé, par tournant. */
+  const newelTops = new Map<number, Mm>();
   for (const { edge, analysis } of sideResults) {
     if (!spec.flight.enabled || stepping.nosings.length === 0) break;
     const hasVoid = analysis.intervals.some((iv) => iv.kind === "void" && iv.to - iv.from >= 1);
@@ -775,17 +899,56 @@ export function computeGuards(
         continue;
       }
       if (portion.path.length < 2) continue;
+      const H = spec.flight.height;
+      const lg = spec.flight.landing;
+      const raised = lg.raise
+        ? landingRaise(
+            portion.path,
+            portion.ref,
+            portion.u,
+            H,
+            lg.height,
+            lg.ramp === "auto" ? (Number.isFinite(stepping.going) ? stepping.going : 0) : lg.ramp,
+          )
+        : null;
+      const path = raised?.path ?? portion.path;
+      const ref = raised?.ref ?? portion.ref;
+      const us = raised?.u ?? portion.u;
+      const vertexAt = (k: number): number => {
+        const v = portion.nosingVertex(k);
+        return raised ? raised.vertexOf[v]! : v;
+      };
       const newelVertices = new Map<number, Mm>();
       for (const nw of edge.newels) {
-        const i = portion.u.findIndex((u) => Math.abs(u - nw.u) < 1e-3);
-        if (i >= 0) newelVertices.set(i, nw.size);
+        const i = us.findIndex((x) => Math.abs(x - nw.u) < 1e-3);
+        if (i < 0) continue;
+        newelVertices.set(i, nw.size);
+        // Dessus de la main courante dans l'emprise du poteau (cercle circonscrit, le long du
+        // chemin) : la main courante y pénètre en montant.
+        const wp = cumulative(path);
+        const reach = (nw.size * Math.SQRT2) / 2;
+        const hts = raised?.heights ?? path.map(() => H);
+        const xs = [
+          wp[i]! - reach,
+          wp[i]! + reach,
+          ...wp.filter((x) => Math.abs(x - wp[i]!) <= reach),
+        ].map((x) => Math.min(Math.max(x, 0), wp[wp.length - 1]!));
+        const top = Math.max(...xs.map((x) => interp(wp, ref, x) + interp(wp, hts, x)));
+        newelTops.set(nw.turn, Math.max(newelTops.get(nw.turn) ?? -Infinity, top));
       }
-      const H = spec.flight.height;
-      const nosingHeights = portion.nosings.map((k) => ({
-        index: k,
-        height: portion.nosingRef(k) + H - stepping.nosings[k]!.z,
-      }));
-      const fall = Math.max(0, ...portion.ref);
+      const nosingHeights = portion.nosings.map((k) => {
+        const v = vertexAt(k);
+        return {
+          index: k,
+          height: ref[v]! + (raised ? raised.heights[v]! : H) - stepping.nosings[k]!.z,
+        };
+      });
+      if (raised) {
+        notes.push(
+          `Garde-corps ${SIDE_LABEL[analysis.side]} : main courante rehaussée à ${fmt(lg.height, 0)} mm sur le palier, raccord incliné sur ${lg.ramp === "auto" ? "un giron" : `${fmt(lg.ramp, 0)} mm`} de part et d'autre (réglage « rehausse sur palier »).`,
+        );
+      }
+      const fall = Math.max(0, ...ref);
       const id = `guard-${analysis.side}-${rakeNo}`;
       // Arrivée sur un garde-corps de trémie : c'est lui qui prolonge la main courante.
       const continued = portion.touchesTop
@@ -801,9 +964,10 @@ export function computeGuards(
         kind: "rake",
         side: analysis.side,
         label,
-        path: portion.path,
-        ref: portion.ref,
+        path,
+        ref,
         height: H,
+        ...(raised ? { heights: raised.heights } : {}),
         newelVertices,
         ...(portion.touchesBottom ? { extensionBottom: ext.bottom } : {}),
         ...(portion.touchesTop && continued === 0 ? { extensionTop: ext.top } : {}),
@@ -836,6 +1000,7 @@ export function computeGuards(
   // Mains courantes murales.
   const hasGuard = runs.length > 0;
   const wallSides = new Set<StairSide>();
+  const autoBoth = hr.wallSides === "auto" && autoHandrailBothSides(project, stepping);
   switch (hr.wallSides) {
     case "inner":
     case "outer":
@@ -845,7 +1010,11 @@ export function computeGuards(
       wallSides.add("inner").add("outer");
       break;
     case "auto":
-      if (!hasGuard) {
+      if (autoBoth) {
+        // QUESTIONS A2 (appliqué par défaut) : MC_DEUX_COTES applicable (ERP neuf, BHC). La
+        // remarque est émise après la pose, selon les côtés réellement équipés.
+        wallSides.add("inner").add("outer");
+      } else if (!hasGuard) {
         const outerWall = sides[1]!.intervals.some((iv) => iv.kind === "wall");
         wallSides.add(outerWall ? "outer" : "inner");
       } else {
@@ -929,6 +1098,18 @@ export function computeGuards(
     }
   }
 
+  if (autoBoth) {
+    // Côtés effectivement équipés (garde-corps ou mur) : un côté sans mur ni garde-corps (fût
+    // d'un hélicoïdal, vide sans garde-corps de volée) ne peut pas recevoir de main courante.
+    const equipped = new Set(handrails.map((h) => h.side));
+    const missing = (["inner", "outer"] as const).filter((s) => !equipped.has(s));
+    notes.push(
+      missing.length === 0
+        ? "Main courante « auto » : posée des deux côtés (MC_DEUX_COTES, ERP neuf ou parties communes de BHC) ; choisir un côté pour revenir à une seule main courante."
+        : `Main courante « auto » : MC_DEUX_COTES demande une main courante des deux côtés, mais le ${missing.map((s) => SIDE_LABEL[s]).join(" et le ")} ${missing.length > 1 ? "n'ont" : "n'a"} ni mur ni garde-corps pour la recevoir.`,
+    );
+  }
+
   // Garde-corps de trémie.
   const unguardedOpeningEdges: { a: Vec2; b: Vec2 }[] = [];
   const openingFall = project.site.floorToFloor;
@@ -982,6 +1163,17 @@ export function computeGuards(
     unguardedOpeningEdges,
     openingFall,
     parts,
+    ...(newelTops.size > 0 && spec.posts.newelOverrun !== "off"
+      ? {
+          newelHandrailTops: [...newelTops]
+            .sort((x, y) => x[0] - y[0])
+            .map(([turn, top]) => ({
+              turn,
+              top,
+              overrun: spec.posts.newelOverrun as Mm,
+            })),
+        }
+      : {}),
     notes: [...new Set(notes)],
     errors: [...new Set(errors)],
   };

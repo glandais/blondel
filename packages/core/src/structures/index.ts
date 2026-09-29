@@ -58,6 +58,7 @@ export {
   QUANTITY_STOCK_VOLUME_M3,
   QUANTITY_SURFACE_M2,
   QUANTITY_VOLUME_M3,
+  ensureMass,
   normalizeWoodQuantities,
   woodQuantities,
   type WoodMeasures,
@@ -195,3 +196,4 @@ if (!getStructure(STEEL_PROFILE.kind)) registerStructure(STEEL_PROFILE);
 if (!getStructure(STEEL_CURVED.kind)) registerStructure(STEEL_CURVED);
 // Jalon 5a (hélicoïdal à fût central) : plugin défini et exporté par `helicalCore.ts`.
 registerHelicalCore();
+export { newelTopWithHandrail } from "./newel.js";

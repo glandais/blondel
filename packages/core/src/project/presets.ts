@@ -120,8 +120,9 @@ export const PRESET_HEADROOM_MIN: number = ruleMin("ECHAPPEE_MIN_DTU");
 const WALKLINE_MIDDLE_MAX_WIDTH = 1200;
 /**
  * Débord de nez des préréglages : valeur recommandée de `DEBORD_NEZ_LOGEMENT` (10 mm), car les
- * préréglages ciblent le contexte `logement_interieur` et la valeur par défaut du modèle
- * (30 mm) y déclencherait un avertissement.
+ * préréglages ciblent le contexte `logement_interieur`. Le défaut du modèle (`TreadSpecSchema`)
+ * vaut aussi 10 mm depuis QUESTIONS A9 (il valait 30 mm et déclenchait un avertissement) ; un
+ * test vérifie que les deux restent égaux.
  */
 export const PRESET_NOSING: number = (() => {
   const r = getRule("DEBORD_NEZ_LOGEMENT").recommande;

@@ -21,6 +21,7 @@ Sur la partie horizontale d'un palier, faut-il rehausser automatiquement la main
 - Proposition : oui, rehausse automatique sur la partie horizontale, avec un raccord incliné sur un giron de part et d'autre.
 - Aujourd'hui : la hauteur du rampant (`flight.height`, 900 mm) est gardée ; le préréglage « quart tournant avec palier » muni de garde-corps sort `GC_HAUTEUR_2024` **bloquant** (vérifié à H 2 500, 2 700 et 2 900).
 - Réf. : l. 158 (J4, core:guards), l. 194 (J4, core:project) ; `guards/compute.ts`.
+- Appliqué par défaut le 2026-09-30 (commit à venir), à confirmer — paramètre : `guards.flight.landing` (`raise`, défaut `true` ; `height`, défaut 1 000 mm, GC_HAUTEUR_PALIER_1988 et h(E ≤ 250) de GC_HAUTEUR_2024 ; `ramp`, défaut `auto` = un giron, à valider). Le préréglage « quart tournant avec palier » avec garde-corps ne sort plus de violation bloquante à H 2 500, 2 700 et 2 900 (régimes 1988 et 2024) ; `raise: false` rend l'ancien comportement.
 
 ### A2. Main courante des deux côtés en ERP et en parties communes
 
@@ -29,6 +30,7 @@ Faut-il que `handrail.wallSides` passe automatiquement à « les deux côtés »
 - Proposition : oui (la valeur `auto` en tient compte ; l'utilisateur garde la main).
 - Aujourd'hui : `auto` ignore le contexte ; tout escalier ERP / BHC sort `MC_DEUX_COTES` en violation tant que l'utilisateur ne choisit pas `both`, y compris depuis l'assistant.
 - Réf. : l. 162 (J4, core:guards) ; `guards/spec.ts`, `guards/compute.ts`, `apps/web/src/lib/assistant.ts`.
+- Appliqué par défaut le 2026-09-30 (commit à venir), à confirmer — paramètre : `guards.handrail.wallSides` ; `auto` pose les deux côtés quand MC_DEUX_COTES s'applique (ERP neuf, parties communes de BHC), sauf exception de l'hélicoïdal ERP neuf à fût de Ø ≤ 400 mm et sauf surcharge « ignore » de la règle ; toute valeur explicite est respectée (`guards/handrailSides.ts`). L'assistant web en hérite : il ajoute `GuardsSpecSchema.parse({})`, donc `wallSides: auto` (`apps/web/src/lib/assistant.ts`, vérifié à l'intégration de la vague H). La remarque « posée des deux côtés » n'est émise que si les deux côtés reçoivent effectivement une main courante (sinon remarque explicite : côté jour sans mur ni garde-corps) ; changer le contexte réglementaire recalcule les mains courantes `auto` (clé de cache du pipeline).
 
 ### A3. Poteau d'angle et main courante
 
@@ -37,6 +39,7 @@ Quand un garde-corps longe le jour, le poteau d'angle doit-il monter au-dessus d
 - Proposition : oui, hauteur du poteau = max(plus haut élément reçu + 150 mm, main courante + 50 mm).
 - Aujourd'hui : aucun lien entre structure et garde-corps ; sur l'exemple bois avec garde-corps, le poteau s'arrête à 1 238 mm et la main courante passe à 1 791 mm, environ 550 mm au-dessus.
 - Réf. : l. 159 (J4, core:guards), l. 135 (J3a, core:structures) ; `structures/newel.ts`, `guards/compute.ts`.
+- Appliqué par défaut le 2026-09-30 (commit à venir), à confirmer — paramètre : `guards.posts.newelOverrun` (défaut 50 mm, à valider ; `off` = ancien comportement) avec le dépassement du plugin (`newel.topExtension`, 150 mm en bois, 0 en acier) : sommet du poteau = max(plus haut élément reçu + `topExtension`, dessus de main courante dans l'emprise du poteau + `newelOverrun`), pour `wood-housed`, `steel-flat` et `steel-profile`. Exemple bois avec garde-corps : poteau monté au-dessus de la main courante (remarque dans le modèle).
 
 ### A4. Jour vif ou poteau par défaut dans les préréglages tournants
 
@@ -61,6 +64,8 @@ Faut-il afficher partout la masse calculée (`mass_kg`), y compris pour le bois 
 - Proposition : oui, dans la liste de débit CSV, la fiche de débit PDF et la nomenclature, avec la mention « masse volumique à valider » pour le bois.
 - Aujourd'hui : seul le comparateur somme `mass_kg`. Les exports lisent la clé `mass`, que plus aucun plugin ne remplit : la colonne masse est vide et le total « incomplet », **y compris pour l'acier**.
 - Réf. : l. 139 (J3a, core:structures), l. 86 (J3, exports), l. 240 (J6, exports:j6) ; `packages/exports/src/csv/cutlist.ts`, `packages/exports/src/cutsheet.ts`, `structures/quantities.ts`.
+- Appliqué par défaut le 2026-09-30 (commit à venir), à confirmer — paramètre : option `massNote` de `cutListRows`, `exportCutListCsv`, `cutSheet` et `renderPdf` / `exportPdf` (`packages/exports/src/csv/cutlist.ts`) ; défaut `massNoteFor(project.workshop)` : mention « masse volumique à valider » pour toute essence de bois dont le profil d'atelier du projet ne renseigne pas la masse volumique (`defaultMassNote` sans projet). Masse lue dans `mass_kg`, à défaut `mass` (`partMassKg`) ; colonne « Remarque masse » ajoutée au CSV, colonne « Masse (kg) » ajoutée à la nomenclature PDF, renvois « * » dans le PDF et la nomenclature de l'interface.
+- Appliqué par défaut le 2026-09-30 (commit à venir), à confirmer, partie cœur — paramètre : masses volumiques du profil d'atelier (`workshop.wood.densities`, `workshop.metal.density`, nouveau `workshop.densities` pour l'inox 7 900, le verre 2 500 et le béton 2 400 kg/m³, tous « à valider ») ; `mass_kg` est renseignée pour toutes les pièces qui ont un volume (`ensureMass` dans le pipeline, pièces de garde-corps en acier, inox et verre comprises). Affichage dans les exports : voir `packages/exports` (agent exports).
 
 ### A7. Échappée sur la largeur des marches
 
@@ -85,6 +90,7 @@ Faut-il ramener le débord de nez par défaut du modèle de 30 mm à 10 mm ?
 - Proposition : oui, 10 mm (valeur recommandée de `DEBORD_NEZ_LOGEMENT`, déjà celle des préréglages et exemples).
 - Aujourd'hui : 30 mm dans le schéma (`treads.nosing`), 10 mm dans les préréglages ; un projet créé sans préréglage sort un avertissement.
 - Réf. : l. 45 (J1, review:project), l. 71 (J1, review:rules) ; `model/project.ts`, `project/presets.ts`.
+- Appliqué par défaut le 2026-09-30 (commit à venir), à confirmer — paramètre : `stair.treads.nosing` (défaut du schéma 10 mm). Sans migration : `serializeProject` écrit toujours `treads.nosing`, tous les exemples et projets enregistrés le portent (30 mm relus tels quels, test `parse.test.ts`) ; seul un JSON écrit à la main sans ce champ prend 10 mm au lieu de 30 mm.
 
 ### A10. Jour étroit et garde-corps de jour
 
@@ -181,6 +187,7 @@ Le dossier PDF « complet » doit-il continuer à inclure les gabarits 1:1 de to
 - Proposition : (a) oui ; (b) oui, 20 s ; (c) oui.
 - Aujourd'hui : (a) modèle précédent et « Calcul… » ; (b) aucun, un calcul bloqué laisse « Calcul… » indéfiniment ; (c) 0 kg, 0 m², 0 pièce.
 - Réf. : l. 184 (J4, web), l. 188 (J4, review:web-j4), l. 189 (J4, review:web-j4) ; `apps/web/src/model/workerClient.ts`, `apps/web/src/lib/variants.ts`.
+- Appliqué par défaut le 2026-09-30 (commit à venir), à confirmer — paramètre : `createJobExec(factory, { watchdogMs, watchdogRetries, watchdogJobs })` (`apps/web/src/model/workerClient.ts`) ; défauts `watchdogMs` = 20 000 ms (`DEFAULT_WATCHDOG_MS`, 0 = désactivé), une relance, demandes `build` et `compare` surveillées (exports PDF et glTF non surveillés). (a) déjà le cas (modèle précédent affiché, « Calcul… ») ; (b) délai dépassé : worker terminé, recréé, demande relancée, puis rejet explicite « Calcul interrompu : aucune réponse en 20 s… » sans repli sur le fil principal ; le délai court à partir du moment où la demande est en tête de file du worker (un calcul demandé pendant un export PDF long n'est pas surveillé avant la fin de l'export) ; un échec n'est pas mis en cache (annuler / rétablir relance le calcul) ; (c) variante en échec (`VariantRow.failed`, `markFailedVariants`) : comparaison levée, modèle vide, ou erreur de génération propre à la variante (structure en échec : le cœur garde les pièces de base, masse et coût partiels) ; « – » pour les grandeurs mesurées (`apps/web/src/lib/variants.ts`), aucun paramètre ; une erreur commune à toutes les variantes ne rend aucune variante en échec.
 
 ### A22. Autosauvegarde refusée
 
@@ -189,6 +196,7 @@ Faut-il signaler au démarrage suivant une copie de secours restante, et ouvrir 
 - Proposition : bandeau au démarrage tant qu'une copie existe ; pas de lecture seule (téléchargement du texte brut seulement).
 - Aujourd'hui : rappel pendant la session du refus seulement ; la copie reste dans le stockage et occupe le quota.
 - Réf. : l. 279 (J7, review-fix:web) ; `apps/web/src/store/persistence.ts`.
+- Appliqué par défaut le 2026-09-30 (commit à venir), à confirmer — paramètre : `createProjectStore({ reportBackupCopy })` (`apps/web/src/store/projectStore.ts`), défaut vrai : bandeau « Copie de secours d'autosauvegarde » à chaque démarrage tant que `blondel.autosave.rejected` existe, avec « Restaurer » (actif seulement si le cœur sait relire la copie, remplacement annulable puis suppression de la copie), « Exporter » (texte brut) et « Supprimer » ; aucune ouverture en lecture seule.
 
 ### A23. Comparateur et marqueurs 3D
 
@@ -396,6 +404,10 @@ Sans objet désormais : Q25 (three.js retenu, ADR-0001) ; Q4 à Q12 tranchées l
 | Assistant : avec `maxCandidates = 0`, message trompeur « Aucune proposition sans bloquant » ; `selectDiverse` ne valide pas ses options                                                               | `assistant/propose.ts`, `assistant/select.ts`               | l. 268        |
 | `G_COLLET_MONOTONE` ne contrôle jamais une marche balancée isolée hors zone déclarée (marche du poteau entre deux zones par angle)                                                                    | `rules/evaluators/going.ts`                                 | l. 252        |
 | Préréglages U et demi-tournant : collet sous 100 mm dès E ≥ 1 000 (position du tournant indépendante de E)                                                                                            | `project/presets.ts`                                        | l. 125        |
+
+- Appliqué par défaut le 2026-09-30 (commit à venir), à confirmer, partie cœur — fiche de débit : les pièces de garde-corps de même repère ont désormais exactement le même débit et les mêmes grandeurs (celles de la première pièce du repère, `guards/parts.ts`), plus d'écart de 2e-13 mm sur `BA1` ; la tolérance de regroupement de la fiche elle-même relève de `packages/exports`. Assistant : avec `maxCandidates = 0`, diagnostic « Liste vide : N proposition(s) sans bloquant trouvée(s) mais non affichée(s) » ; `selectDiverse` valide ses options (`RangeError`). Paramètre : `limits.maxCandidates` (inchangé).
+
+- Import d'un calque quand le modèle est en échec — appliqué par défaut le 2026-09-30 (commit à venir), à confirmer — paramètre : aucun ; la demande reste en file et un message explicite s'affiche à la place de l'attente silencieuse (« … ne peut pas être importé(e) tant que le modèle est en échec… », ou « … sera importé(e) dès la fin du calcul du modèle » pendant un calcul), avec un bouton « Abandonner l'import » ; l'import reprend seul dès que le modèle est rétabli (`queuedImportMessage`, `cancelUnderlayImport` dans `apps/web/src/store/importQueue.ts`, affichage dans `apps/web/src/App.tsx`, au-dessus de toutes les vues, comparateur compris) ; modèle rétabli mais plan « Site et saisie » fermé (autre onglet choisi entre-temps) : message « … sera importé(e) à l'ouverture de l'onglet Plan, mode « Site et saisie » » et bouton pour l'ouvrir.
 
 ### D2. Moteur de règles et `rules.yaml`
 

@@ -4,6 +4,9 @@
  *
  * Repères : pièces identiques (même nature, même section, même longueur et même pente, au
  * millimètre / dixième de degré près) → même repère ; les mains courantes ont chacune le leur.
+ * Des pièces de même repère ont **exactement** le même débit et les mêmes grandeurs (celles de
+ * la première pièce du repère) : sans cela, des écarts d'arrondi (2e-13 mm sur un balustre)
+ * séparaient une même pièce sur plusieurs lignes de la fiche de débit (QUESTIONS D1).
  */
 import * as V from "../geom2d/vec.js";
 import type { MaterialId, Part, PartCategory, SolidDesc } from "../model/derived.js";
@@ -66,10 +69,30 @@ function length3(path: readonly Vec3[]): Mm {
   return l;
 }
 
+/** Débit et grandeurs partagés par les pièces d'un même repère. */
+interface MarkMeasures {
+  readonly stock: { length: Mm; width: Mm; thickness: Mm };
+  readonly quantities: Record<string, number>;
+}
+
 /** Attribution des repères (préfixe + numéro par signature). */
 export class MarkRegistry {
   private readonly byKey = new Map<string, string>();
   private readonly counters = new Map<string, number>();
+  private readonly measures = new Map<string, MarkMeasures>();
+
+  /**
+   * Débit et grandeurs du repère `prefix|signature` : ceux de la première pièce qui l'a reçu
+   * (calculés par `make`), repris tels quels par les suivantes.
+   */
+  measuresOf(prefix: string, signature: string, make: () => MarkMeasures): MarkMeasures {
+    const key = `${prefix}|${signature}`;
+    const found = this.measures.get(key);
+    if (found) return found;
+    const m = make();
+    this.measures.set(key, m);
+    return m;
+  }
 
   mark(prefix: string, signature: string): string {
     const key = `${prefix}|${signature}`;
@@ -105,6 +128,10 @@ function makePart(
   stock: { length: Mm; width: Mm; thickness: Mm },
   section: string,
 ): Part {
+  const shared = ctx.marks.measuresOf(c.prefix, signature, () => ({
+    stock,
+    quantities: woodQuantities(measures, c.material, ctx.profile, stock),
+  }));
   return {
     id: c.id,
     mark: ctx.marks.mark(c.prefix, signature),
@@ -113,8 +140,8 @@ function makePart(
     material: c.material,
     solid,
     section,
-    stock,
-    quantities: woodQuantities(measures, c.material, ctx.profile, stock),
+    stock: { ...shared.stock },
+    quantities: { ...shared.quantities },
   };
 }
 
@@ -221,7 +248,8 @@ export function panelMember(
     lengthPlan += l;
     areaMm2 += (l * (h0 + h1)) / 2;
   }
-  const height = Math.max(...top.map((p, i) => p.z - bottom[i]!.z));
+  const heights = top.map((p, i) => p.z - bottom[i]!.z);
+  const height = Math.max(...heights);
   const first = bottom[0]!;
   const last = bottom[bottom.length - 1]!;
   const slope = (Math.atan2(last.z - first.z, lengthPlan) * 180) / Math.PI;
@@ -229,7 +257,10 @@ export function panelMember(
     ctx,
     c,
     { kind: "ruled", a, b, thickness, normals },
-    `${thickness}|${r0(lengthPlan)}|${r0(height)}|${r1(slope)}`,
+    // Hauteurs aux deux extrémités : un panneau de palier rehaussé (trapèze, QUESTIONS A1) ne
+    // doit pas partager le repère — ni donc le débit et la masse — d'un panneau rectangulaire
+    // de même longueur et de même hauteur maximale.
+    `${thickness}|${r0(lengthPlan)}|${r0(height)}|${r0(heights[0]!)}|${r0(heights[heights.length - 1]!)}|${r1(slope)}|${r0(areaMm2 / 1000)}`,
     { volumeMm3: areaMm2 * thickness, surfaceMm2: areaMm2, length: lengthPlan },
     { length: lengthPlan, width: height, thickness },
     `ép. ${thickness}`,

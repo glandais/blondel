@@ -1,13 +1,16 @@
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
-import { sampleParts, treadPart } from "../testing/fixtures.js";
+import { sampleParts, sheetStringerPart, treadPart } from "../testing/fixtures.js";
 import {
   CSV_BOM,
   csvField,
   csvTextField,
   cutListRows,
   exportCutListCsv,
+  MASS_DENSITY_NOTE,
+  massNoteFor,
   neutralizeFormula,
+  partMassKg,
 } from "./cutlist.js";
 
 /** Lecture CSV minimale (« ; », guillemets doublés) pour les tests. */
@@ -49,7 +52,7 @@ describe("exportCutListCsv", () => {
     expect(csv.startsWith(CSV_BOM)).toBe(true);
     const rows = parseCsv(csv.slice(1));
     expect(rows[0]![0]).toBe("Repère");
-    expect(rows.every((r) => r.length === 12)).toBe(true);
+    expect(rows.every((r) => r.length === 13)).toBe(true);
     // Limon d'abord (catégorie), puis marches en ordre naturel : M1, M2 (×2), M10.
     expect(rows.slice(1, -1).map((r) => r[0])).toEqual(["LI1", "M1", "M2", "M10"]);
     const m2 = rows.find((r) => r[0] === "M2")!;
@@ -106,14 +109,16 @@ describe("exportCutListCsv", () => {
           fc.record({
             volume: fc.double({ min: 1e-9, max: 0.5, noNaN: true }),
             mass: fc.double({ min: 1e-4, max: 500, noNaN: true }),
+            normalized: fc.boolean(),
           }),
           { minLength: 1, maxLength: 30 },
         ),
         (specs) => {
+          // Masse sous la clé normalisée `mass_kg` ou sous la clé historique `mass`.
           const parts = specs.map((q, i) => ({
             ...treadPart(i + 1),
             id: `p${i}`,
-            quantities: q,
+            quantities: { volume: q.volume, [q.normalized ? "mass_kg" : "mass"]: q.mass },
           }));
           const rows = parseCsv(exportCutListCsv({ parts }).slice(1));
           const num = (s: string): number => Number(s.replace(",", "."));
@@ -135,7 +140,7 @@ describe("exportCutListCsv", () => {
   it("options et cas vide", () => {
     const csv = exportCutListCsv({ parts: [] }, { bom: false, totals: false });
     expect(csv).toBe(
-      "Repère;Désignation;Matériau;Section;Longueur (mm);Largeur (mm);Épaisseur (mm);Quantité;Volume unitaire (m³);Volume total (m³);Masse unitaire (kg);Masse totale (kg)\r\n",
+      "Repère;Désignation;Matériau;Section;Longueur (mm);Largeur (mm);Épaisseur (mm);Quantité;Volume unitaire (m³);Volume total (m³);Masse unitaire (kg);Masse totale (kg);Remarque masse\r\n",
     );
     expect(csvField(" a")).toBe('" a"');
     expect(csvField("a\nb")).toBe('"a\nb"');
@@ -185,5 +190,95 @@ describe("exportCutListCsv", () => {
         },
       ),
     );
+  });
+
+  describe("masses (QUESTIONS A6)", () => {
+    const oak = { ...treadPart(1), quantities: { volume: 0.01, mass_kg: 7.5 } };
+    const steel = { ...sheetStringerPart(), quantities: { mass_kg: 18.4 } };
+
+    it("clé normalisée `mass_kg` lue d'abord, clé historique `mass` à défaut", () => {
+      expect(partMassKg({ quantities: { mass_kg: 3, mass: 4 } })).toBe(3);
+      expect(partMassKg({ quantities: { mass: 4 } })).toBe(4);
+      expect(partMassKg({ quantities: {} })).toBeUndefined();
+      expect(partMassKg({ quantities: { mass_kg: Number.NaN } })).toBeUndefined();
+    });
+
+    it("bois : mention « masse volumique à valider » ; acier : aucune", () => {
+      const rows = parseCsv(exportCutListCsv({ parts: [oak, steel] }).slice(1));
+      const m1 = rows.find((r) => r[0] === "M1")!;
+      const li1 = rows.find((r) => r[0] === "LI1")!;
+      expect(m1[11]).toBe("7,50");
+      expect(m1[12]).toBe(MASS_DENSITY_NOTE);
+      expect(li1[11]).toBe("18,40");
+      expect(li1[12]).toBe("");
+      const total = rows[rows.length - 1]!;
+      expect(total[11]).toBe("25,90");
+      expect(total[12]).toBe(MASS_DENSITY_NOTE);
+    });
+
+    it("sans masse : pas de remarque ; total incomplet", () => {
+      const bare = { ...treadPart(2), quantities: { volume: 0.01 } };
+      const rows = parseCsv(exportCutListCsv({ parts: [bare] }).slice(1));
+      expect(rows[1]![12]).toBe("");
+      expect(rows[2]![11]).toBe("incomplet");
+    });
+
+    it("profil d'atelier du projet : essence renseignée par l'atelier sans mention", () => {
+      const note = massNoteFor({ wood: { densities: { "wood-oak": 690 } } });
+      expect(note("wood-oak")).toBeUndefined();
+      expect(note("wood-pine")).toBe(MASS_DENSITY_NOTE);
+      expect(note("steel-raw")).toBeUndefined();
+      expect(massNoteFor(undefined)("wood-oak")).toBe(MASS_DENSITY_NOTE);
+      const rows = cutListRows([oak], { massNote: note });
+      expect(rows[0]!.massNote).toBeUndefined();
+    });
+
+    it("remarque paramétrable (option `massNote`)", () => {
+      const csv = exportCutListCsv(
+        { parts: [oak, steel] },
+        { massNote: (m) => (m.startsWith("steel") ? "=acier estimé" : undefined) },
+      );
+      const rows = parseCsv(csv.slice(1));
+      expect(rows.find((r) => r[0] === "LI1")![12]).toBe("'=acier estimé");
+      expect(rows.find((r) => r[0] === "M1")![12]).toBe("");
+    });
+
+    it("propriété : une masse de bois porte toujours la mention, un autre matériau jamais", () => {
+      const materials = [
+        "wood-oak",
+        "wood-pine",
+        "steel-raw",
+        "stainless-brushed",
+        "glass",
+      ] as const;
+      fc.assert(
+        fc.property(
+          fc.array(
+            fc.record({
+              material: fc.constantFrom(...materials),
+              mass: fc.option(fc.double({ min: 1e-3, max: 300, noNaN: true }), { nil: undefined }),
+            }),
+            { maxLength: 20 },
+          ),
+          (specs) => {
+            const parts = specs.map((s, i) => ({
+              ...treadPart(i + 1),
+              id: `p${i}`,
+              material: s.material,
+              quantities: (s.mass === undefined ? {} : { mass_kg: s.mass }) as Record<
+                string,
+                number
+              >,
+            }));
+            for (const r of cutListRows(parts)) {
+              const wood = parts.find((p) => p.mark === r.mark)!.material.startsWith("wood-");
+              expect(r.massNote).toBe(
+                r.unitMass !== undefined && wood ? MASS_DENSITY_NOTE : undefined,
+              );
+            }
+          },
+        ),
+      );
+    });
   });
 });

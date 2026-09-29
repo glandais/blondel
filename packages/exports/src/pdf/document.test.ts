@@ -187,6 +187,17 @@ describe("renderPdf (mise en page sur surface enregistrée)", () => {
     expect(bom).toContain(String(model.parts.length));
   });
 
+  it("nomenclature et fiche de débit : masses, renvoi « masse volumique à valider » du bois", () => {
+    const bom = texts[pages.findIndex((p) => p.kind === "bom")]!;
+    expect(bom).toContain("Masse (kg)");
+    // M2 : 2 × 7,06 kg de chêne, renvoi « * ».
+    expect(bom).toContain("14,1 *");
+    expect(bom.join("\n")).toContain("* masse volumique à valider.");
+    const sheet = texts[pages.findIndex((p) => p.kind === "cutsheet")]!.join("\n");
+    expect(sheet).toContain("14,1 *");
+    expect(sheet).toContain("* masse volumique à valider.");
+  });
+
   it("contrôle de conception : avertissement, groupes, provenance", () => {
     const text = texts[pages.findIndex((p) => p.kind === "compliance")]!.join("\n");
     expect(text).toContain(COMPLIANCE_DISCLAIMER);

@@ -965,7 +965,12 @@ export function proposeDesigns(input: AssistantInput): AssistantResult {
       diagnostics.push(`${name} : aucune variante retenue.`);
     }
   }
-  if (candidates.length === 0) {
+  if (candidates.length === 0 && accepted.length > 0) {
+    // Liste vide par réglage (`maxCandidates = 0`), pas faute de solution (QUESTIONS D1).
+    diagnostics.unshift(
+      `Liste vide : ${accepted.length} proposition(s) sans bloquant trouvée(s) mais non affichée(s) (nombre maximal de propositions réglé à ${limits.maxCandidates}).`,
+    );
+  } else if (candidates.length === 0) {
     diagnostics.unshift(
       `Aucune proposition sans bloquant pour ce site.${
         opening && !stopped && !truncated ? openingAdvice(opening, [...tallies.values()]) : ""

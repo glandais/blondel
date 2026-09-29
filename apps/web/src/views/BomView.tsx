@@ -1,12 +1,14 @@
 /**
  * Onglet « Nomenclature » : pièces groupées par repère (mêmes lignes que la liste de débit CSV),
- * dimensions de débit, quantités et totaux. Un clic sur une ligne sélectionne la pièce (surlignée
+ * dimensions de débit, quantités, masses (`mass_kg` du cœur ; renvoi « * » pour une masse
+ * calculée avec une masse volumique à valider, QUESTIONS A6) et totaux. Un clic sur une ligne sélectionne la pièce (surlignée
  * en 3D, affichée dans « Développés »).
  */
 import type { Model } from "@blondel/core";
+import { massNoteFor } from "@blondel/exports";
 import { useMemo } from "react";
 import { bomSummary, selectedPart } from "../lib/parts.js";
-import { appStore, useApp } from "../store/appStore.js";
+import { appStore, useApp, useModel } from "../store/appStore.js";
 
 const dec = (digits: number) =>
   new Intl.NumberFormat("fr-FR", { minimumFractionDigits: 0, maximumFractionDigits: digits });
@@ -19,7 +21,16 @@ const fmt = (f: Intl.NumberFormat, v: number | undefined): string =>
 
 export function BomView({ model }: { model: Model }) {
   const selection = useApp((s) => s.selection);
-  const bom = useMemo(() => bomSummary(model.parts), [model.parts]);
+  // Profil d'atelier du projet dont le modèle est issu : une masse volumique renseignée par
+  // l'atelier n'est plus « à valider ».
+  const { project } = useModel();
+  const workshop = project?.workshop;
+  const bom = useMemo(
+    () => bomSummary(model.parts, massNoteFor(workshop)),
+    [model.parts, workshop],
+  );
+  const noteMark = (note: string | undefined): string =>
+    note === undefined ? "" : ` ${"*".repeat(bom.massNotes.indexOf(note) + 1)}`;
   const current = selectedPart(model, selection?.location);
   if (bom.lines.length === 0) {
     return (
@@ -92,7 +103,10 @@ export function BomView({ model }: { model: Model }) {
                 <td className="num">{fmt(mm, l.thickness)}</td>
                 <td className="num">{l.quantity}</td>
                 <td className="num">{fmt(m3, l.totalVolume)}</td>
-                <td className="num">{fmt(kg, l.totalMass)}</td>
+                <td className="num" title={l.massNote}>
+                  {fmt(kg, l.totalMass)}
+                  {l.totalMass === undefined ? "" : noteMark(l.massNote)}
+                </td>
               </tr>
             );
           })}
@@ -104,12 +118,24 @@ export function BomView({ model }: { model: Model }) {
             </th>
             <td className="num">{bom.count}</td>
             <td className="num">{fmt(m3, bom.volume)}</td>
-            <td className="num" title="Masse non renseignée par le cœur : jamais estimée ici">
-              {fmt(kg, bom.mass)}
+            <td
+              className="num"
+              title={
+                bom.mass === undefined
+                  ? "Masse non renseignée par le cœur pour au moins une pièce : jamais estimée ici"
+                  : undefined
+              }
+            >
+              {bom.mass === undefined ? "incomplet" : fmt(kg, bom.mass)}
             </td>
           </tr>
         </tfoot>
       </table>
+      {bom.massNotes.length > 0 ? (
+        <p className="muted bom__notes">
+          {bom.massNotes.map((n, i) => `${"*".repeat(i + 1)} ${n}.`).join(" ")}
+        </p>
+      ) : null}
     </div>
   );
 }

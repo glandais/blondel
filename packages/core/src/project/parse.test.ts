@@ -3,6 +3,8 @@ import { PROJECT_SCHEMA_VERSION } from "../model/project.js";
 import { ProjectParseError } from "./errors.js";
 import { migrateProjectJson, PROJECT_MIGRATIONS, type Migration } from "./migrations.js";
 import { parseProject, parseProjectText } from "./parse.js";
+import { PRESET_NOSING } from "./presets.js";
+import { serializeProject } from "./serialize.js";
 
 const minimal = () => ({
   schemaVersion: 1,
@@ -22,6 +24,29 @@ function parseError(fn: () => unknown): ProjectParseError {
   }
   throw new Error("aucune erreur levée");
 }
+
+describe("débord de nez par défaut (QUESTIONS A9)", () => {
+  it("10 mm quand le champ est absent", () => {
+    expect(parseProject(minimal()).stair.treads.nosing).toBe(10);
+  });
+
+  it("défaut du schéma = valeur recommandée de DEBORD_NEZ_LOGEMENT (celle des préréglages)", () => {
+    expect(parseProject(minimal()).stair.treads.nosing).toBe(PRESET_NOSING);
+  });
+
+  it("un projet enregistré porte toujours `treads.nosing` : pas de changement silencieux", () => {
+    // `serializeProject` écrit le projet complet (défauts appliqués) : l'ancien défaut (30 mm)
+    // d'un projet enregistré est donc relu tel quel, sans migration.
+    const legacy = parseProject({
+      ...minimal(),
+      stair: { ...minimal().stair, treads: { nosing: 30 } },
+    });
+    const text = serializeProject(legacy);
+    expect(JSON.parse(text).stair.treads.nosing).toBe(30);
+    expect(parseProjectText(text).stair.treads.nosing).toBe(30);
+    expect(JSON.parse(serializeProject(parseProject(minimal()))).stair.treads.nosing).toBe(10);
+  });
+});
 
 describe("parseProject", () => {
   it("complète les valeurs par défaut (y compris les objets par défaut via prefault)", () => {

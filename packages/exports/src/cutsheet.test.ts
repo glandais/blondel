@@ -1,6 +1,7 @@
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import type { Part } from "@blondel/core";
+import { MASS_DENSITY_NOTE } from "./csv/cutlist.js";
 import { cutSheet } from "./cutsheet.js";
 import { sampleParts, sheetStringerPart, treadPart, woodStringerPart } from "./testing/fixtures.js";
 
@@ -107,5 +108,23 @@ describe("fiche de débit", () => {
         },
       ),
     );
+  });
+
+  it("masses `mass_kg` cumulées, remarque bois « masse volumique à valider » (QUESTIONS A6)", () => {
+    const oak: Part = { ...treadPart(1), quantities: { mass_kg: 7.5 } };
+    const oak2: Part = { ...treadPart(2), quantities: { mass_kg: 2.5 } };
+    const steel: Part = { ...sheetStringerPart(), quantities: { mass_kg: 18.4 } };
+    const gs = cutSheet([oak, oak2, steel]);
+    const wood = gs.find((g) => g.material === "wood-oak")!;
+    expect(wood.totals.massKg).toBeCloseTo(10, 9);
+    expect(wood.totals.massNotes).toEqual([MASS_DENSITY_NOTE]);
+    expect(wood.rows.every((r) => r.massNote === MASS_DENSITY_NOTE)).toBe(true);
+    const metal = gs.find((g) => g.material === "steel-painted")!;
+    expect(metal.totals.massKg).toBeCloseTo(18.4, 9);
+    expect(metal.totals.massNotes).toEqual([]);
+    expect(metal.rows[0]!.massNote).toBeUndefined();
+    // Remarque paramétrable.
+    const none = cutSheet([oak], { massNote: () => undefined });
+    expect(none[0]!.totals.massNotes).toEqual([]);
   });
 });

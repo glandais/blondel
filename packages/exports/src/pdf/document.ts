@@ -5,7 +5,7 @@
  * 2. plan coté (`renderPlanSvg`) et élévation développée (`renderElevationSvg`) ;
  * 3. fiche de pose : plan d'implantation, cotes aux nus des murs et à la trémie, diagonales,
  *    hauteurs, épure des nez au sol ;
- * 4. nomenclature (repère, désignation, matériau, section, débit, quantité) ;
+ * 4. nomenclature (repère, désignation, matériau, section, débit, quantité, masse) ;
  * 5. fiche de débit (pièces par matériau et épaisseur, longueurs, volumes et masses cumulés) ;
  * 6. contrôle de conception (avertissement « indicatif », résultats groupés, provenance) ;
  * 7. une planche par développé distinct, à l'échelle normalisée qui tient dans la page ;
@@ -21,7 +21,13 @@
  * `exportPdf` la réalise avec jsPDF.
  */
 import type { Model, Part, Project } from "@blondel/core";
-import { MATERIAL_LABELS, cutListRows } from "../csv/cutlist.js";
+import {
+  MATERIAL_LABELS,
+  cutListRows,
+  defaultMassNote,
+  massNoteFor,
+  type MassNote,
+} from "../csv/cutlist.js";
 import { cutSheet } from "../cutsheet.js";
 import { formatFr } from "../format.js";
 import { renderElevationSvg } from "../svg/elevation.js";
@@ -89,6 +95,12 @@ export interface PdfLayoutOptions {
   readonly decimals?: number;
   /** Recouvrement entre cases des gabarits 1:1, mm (défaut 10). */
   readonly tileOverlap?: number;
+  /**
+   * Remarque de masse par matériau (nomenclature, fiche de débit). Défaut : `massNoteFor` du
+   * profil d'atelier du projet (bois non renseigné par l'atelier : « masse volumique à
+   * valider »), sans projet `defaultMassNote`.
+   */
+  readonly massNote?: MassNote;
 }
 
 export interface PdfOptions extends PdfLayoutOptions {
@@ -216,18 +228,41 @@ const dims = (l?: number, w?: number, t?: number): string =>
     ? `${fr(l, 1)} × ${fr(w, 1)} × ${fr(t, 1)}`
     : "—";
 
-function bomPages(parts: readonly Part[], frame: Frame): PageSpec[] {
-  const rows = cutListRows(parts);
+/**
+ * Renvois des remarques de masse : un astérisque par remarque distincte (« * », « ** »…),
+ * dans l'ordre d'apparition ; lignes d'explication pour l'introduction du tableau.
+ */
+function massNoteMarks(notes: Iterable<string | undefined>): {
+  mark: (note: string | undefined) => string;
+  legend: string[];
+} {
+  const order: string[] = [];
+  for (const n of notes) if (n !== undefined && !order.includes(n)) order.push(n);
+  return {
+    mark: (n) => (n === undefined ? "" : ` ${"*".repeat(order.indexOf(n) + 1)}`),
+    legend: order.map((n, i) => `${"*".repeat(i + 1)} ${n}.`),
+  };
+}
+
+function bomPages(parts: readonly Part[], frame: Frame, massNote: MassNote): PageSpec[] {
+  const rows = cutListRows(parts, { massNote });
   const total = rows.reduce((s, r) => s + r.quantity, 0);
+  const notes = massNoteMarks(rows.map((r) => r.massNote));
+  let mass: number | undefined = rows.length > 0 ? 0 : undefined;
+  for (const r of rows) {
+    mass =
+      mass === undefined || r.unitMass === undefined ? undefined : mass + r.unitMass * r.quantity;
+  }
   const draws = tablePages(
     {
       columns: [
         { title: "Repère", weight: 12, align: "left" },
-        { title: "Désignation", weight: 48, align: "left" },
-        { title: "Matériau", weight: 20, align: "left" },
-        { title: "Section", weight: 22, align: "left" },
-        { title: "Débit L × l × e (mm)", weight: 32, align: "right" },
+        { title: "Désignation", weight: 44, align: "left" },
+        { title: "Matériau", weight: 18, align: "left" },
+        { title: "Section", weight: 20, align: "left" },
+        { title: "Débit L × l × e (mm)", weight: 30, align: "right" },
         { title: "Qté", weight: 8, align: "right" },
+        { title: "Masse (kg)", weight: 14, align: "right" },
       ],
       rows: rows.map((r) => ({
         cells: [
@@ -237,10 +272,31 @@ function bomPages(parts: readonly Part[], frame: Frame): PageSpec[] {
           r.section,
           dims(r.length, r.width, r.thickness),
           String(r.quantity),
+          r.unitMass !== undefined
+            ? `${dec(r.unitMass * r.quantity, 1)}${notes.mark(r.massNote)}`
+            : "—",
         ],
       })),
-      footer: rows.length > 0 ? [{ cells: ["Total", "", "", "", "", String(total)] }] : [],
+      footer:
+        rows.length > 0
+          ? [
+              {
+                cells: [
+                  "Total",
+                  "",
+                  "",
+                  "",
+                  "",
+                  String(total),
+                  mass !== undefined ? dec(mass, 1) : "incomplet",
+                ],
+              },
+            ]
+          : [],
       empty: "Aucune pièce générée.",
+      ...(notes.legend.length > 0
+        ? { intro: [`Masses calculées par le modèle. ${notes.legend.join(" ")}`] }
+        : {}),
     },
     frame,
   );
@@ -255,8 +311,9 @@ function bomPages(parts: readonly Part[], frame: Frame): PageSpec[] {
 
 const dec = (v: number, d: number): string => formatFr(v, { decimals: d });
 
-function cutSheetPages(parts: readonly Part[], frame: Frame): PageSpec[] {
-  const groups = cutSheet(parts);
+function cutSheetPages(parts: readonly Part[], frame: Frame, massNote: MassNote): PageSpec[] {
+  const groups = cutSheet(parts, { massNote });
+  const notes = massNoteMarks(groups.flatMap((g) => g.rows.map((r) => r.massNote)));
   const rows: TableRow[] = [];
   for (const g of groups) {
     rows.push({
@@ -277,7 +334,9 @@ function cutSheetPages(parts: readonly Part[], frame: Frame): PageSpec[] {
           r.source === "stock" ? "débit" : r.source === "flat" ? "développé" : "—",
           String(r.quantity),
           r.length !== undefined ? dec((r.length * r.quantity) / 1000, 2) : "—",
-          r.unitMass !== undefined ? dec(r.unitMass * r.quantity, 1) : "—",
+          r.unitMass !== undefined
+            ? `${dec(r.unitMass * r.quantity, 1)}${notes.mark(r.massNote)}`
+            : "—",
         ],
       });
     }
@@ -296,7 +355,9 @@ function cutSheetPages(parts: readonly Part[], frame: Frame): PageSpec[] {
         "",
         String(t.quantity),
         dec(t.lengthM, 2),
-        t.massKg !== undefined ? dec(t.massKg, 1) : "incomplet",
+        t.massKg !== undefined
+          ? `${dec(t.massKg, 1)}${t.massNotes.map((n) => notes.mark(n)).join("")}`
+          : "incomplet",
       ],
     });
   }
@@ -316,7 +377,8 @@ function cutSheetPages(parts: readonly Part[], frame: Frame): PageSpec[] {
       empty: "Aucune pièce générée.",
       intro: [
         "Pièces groupées par matériau et épaisseur (plaques, plateaux) ou section (profilés, tubes). Origine : débit brut du cœur (surcotes comprises) ou emprise du développé (flan).",
-        "Masses : seulement celles fournies par le modèle ; un total est « incomplet » si une masse manque.",
+        "Masses : seulement celles fournies par le modèle ; un total est « incomplet » si une masse manque." +
+          (notes.legend.length > 0 ? ` ${notes.legend.join(" ")}` : ""),
       ],
     },
     frame,
@@ -502,8 +564,10 @@ export function renderPdf(
     );
   }
   if (show.installation) pages.push(...installationPages(c, model, project, frame, scales));
-  if (show.bom) pages.push(...bomPages(model.parts, frame));
-  if (show.cutsheet) pages.push(...cutSheetPages(model.parts, frame));
+  const massNote =
+    options.massNote ?? (project !== undefined ? massNoteFor(project.workshop) : defaultMassNote);
+  if (show.bom) pages.push(...bomPages(model.parts, frame, massNote));
+  if (show.cutsheet) pages.push(...cutSheetPages(model.parts, frame, massNote));
   if (show.compliance) pages.push(...compliancePages(c, model, frame));
   const groups = show.flats || show.templates ? flatGroups(model.parts) : [];
   if (show.flats) {

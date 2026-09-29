@@ -5,9 +5,11 @@
  * Dimensions de débit : `Part.stock` (L × l × e brut) si renseigné, sinon la boîte englobante
  * du développé (`Part.flat`, L ≥ l, e = épaisseur du développé) : flan de tôle ou de plat à
  * découper. Pièce sans l'un ni l'autre : dimensions vides. Aucune surcote n'est ajoutée ici
- * (le débit brut du cœur les porte déjà) ; aucune masse n'est inventée : seule la grandeur
- * `mass` (kg, clé historique lue aussi par la liste de débit CSV) est cumulée, et un total
- * est déclaré incomplet dès qu'une pièce n'en a pas.
+ * (le débit brut du cœur les porte déjà) ; aucune masse n'est inventée : seule la masse du
+ * cœur (`mass_kg`, à défaut clé historique `mass` : `partMassKg`, comme la liste de débit CSV)
+ * est cumulée, et un total est déclaré incomplet dès qu'une pièce n'en a pas. Une masse
+ * calculée avec une masse volumique non validée porte une remarque (`massNote`, défaut : bois
+ * « masse volumique à valider », QUESTIONS A6).
  *
  * Regroupement : par **épaisseur** seulement pour un débit en plaque (tôle, plat, plateau de
  * bois), c.-à-d. quand l'épaisseur de débit est une épaisseur de matière : pièce en bois, ou
@@ -16,7 +18,7 @@
  * **section** et n'ont pas de volume brut (L × l × e serait le volume de leur boîte).
  */
 import { bbox, type MaterialId, type Part } from "@blondel/core";
-import { MATERIAL_LABELS, QUANTITY_MASS } from "./csv/cutlist.js";
+import { MATERIAL_LABELS, defaultMassNote, partMassKg, type MassNote } from "./csv/cutlist.js";
 
 export interface CutSheetRow {
   readonly mark: string;
@@ -31,6 +33,13 @@ export interface CutSheetRow {
   readonly quantity: number;
   /** Masse unitaire (kg), si fournie par le cœur. */
   readonly unitMass?: number;
+  /** Remarque sur la masse (ex. « masse volumique à valider ») ; absente sans masse. */
+  readonly massNote?: string;
+}
+
+export interface CutSheetOptions {
+  /** Remarque de masse par matériau (défaut : `defaultMassNote`). */
+  readonly massNote?: MassNote;
 }
 
 export interface CutSheetGroup {
@@ -51,6 +60,8 @@ export interface CutSheetGroup {
     readonly volumeM3?: number;
     /** Σ masse (kg) ; absent si une masse manque. */
     readonly massKg?: number;
+    /** Remarques de masse des lignes du groupe (sans doublon). */
+    readonly massNotes: readonly string[];
   };
 }
 
@@ -92,7 +103,8 @@ function isSheetStock(p: Part, d: Pick<CutSheetRow, "thickness" | "source">): bo
 }
 
 /** Fiche de débit des pièces : groupes triés par matériau puis épaisseur. */
-export function cutSheet(parts: readonly Part[]): CutSheetGroup[] {
+export function cutSheet(parts: readonly Part[], options: CutSheetOptions = {}): CutSheetGroup[] {
+  const noteOf = options.massNote ?? defaultMassNote;
   // Lignes : pièces identiques (même repère et même débit) regroupées.
   const lines = new Map<
     string,
@@ -100,7 +112,8 @@ export function cutSheet(parts: readonly Part[]): CutSheetGroup[] {
   >();
   for (const p of parts) {
     const d = cutDims(p);
-    const mass = p.quantities[QUANTITY_MASS];
+    const mass = partMassKg(p);
+    const note = mass !== undefined ? noteOf(p.material) : undefined;
     const key = JSON.stringify([
       p.mark,
       p.material,
@@ -123,6 +136,7 @@ export function cutSheet(parts: readonly Part[]): CutSheetGroup[] {
           section: p.section ?? "",
           ...d,
           ...(finite(mass) ? { unitMass: mass } : {}),
+          ...(note !== undefined && note !== "" ? { massNote: note } : {}),
         },
       });
   }
@@ -151,7 +165,9 @@ export function cutSheet(parts: readonly Part[]): CutSheetGroup[] {
     let lengthM = 0;
     let volume: number | undefined = 0;
     let mass: number | undefined = 0;
+    const notes = new Set<string>();
     for (const r of g.rows) {
+      if (r.massNote !== undefined) notes.add(r.massNote);
       quantity += r.quantity;
       if (finite(r.length)) lengthM += (r.length * r.quantity) / 1000;
       if (
@@ -178,6 +194,7 @@ export function cutSheet(parts: readonly Part[]): CutSheetGroup[] {
         lengthM,
         ...(volume !== undefined ? { volumeM3: volume } : {}),
         ...(mass !== undefined ? { massKg: mass } : {}),
+        massNotes: [...notes],
       },
     });
   }

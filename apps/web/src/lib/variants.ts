@@ -48,6 +48,11 @@ export type VariantRow = Omit<VariantSummary, "model"> & {
   readonly reference: boolean;
   /** Épure effective de la variante ; `null` si la comparaison a échoué. */
   readonly epure: EpureSummary | null;
+  /**
+   * Variante en échec (comparaison levée, ou modèle sans pièce avec erreurs de génération) :
+   * ses grandeurs ne sont pas mesurées et s'affichent « – », jamais 0 (QUESTIONS A21 c).
+   */
+  readonly failed?: boolean;
 };
 
 export interface CompareOutcome {
@@ -207,8 +212,9 @@ export function runVariants(project: Project, variants: readonly Variant[]): Com
       rows.push(failedRow(v, params, e));
     }
   }
-  const ref = rows.find((r) => r.current && r.epure) ?? rows.find((r) => r.epure);
-  const out = rows.map((r) =>
+  const marked = markFailedVariants(rows);
+  const ref = marked.find((r) => r.current && r.epure) ?? marked.find((r) => r.epure);
+  const out = marked.map((r) =>
     r === ref
       ? { ...r, reference: true }
       : ref?.epure && r.epure
@@ -216,6 +222,34 @@ export function runVariants(project: Project, variants: readonly Variant[]): Com
         : r,
   );
   return { rows: out, timeMs: now() - t0 };
+}
+
+/**
+ * Variantes en échec (QUESTIONS A21 c) : comparaison levée (déjà marquée), modèle sans pièce
+ * avec erreurs, ou erreur de génération **propre à la variante** (absente d'au moins une autre
+ * variante). Quand le plugin de structure lève, le cœur garde les pièces de base (marches,
+ * contremarches) : la variante aurait une masse et un coût non nuls mais partiels, et paraîtrait
+ * plus légère ou moins chère que les autres. Une erreur commune à toutes les variantes (niveau
+ * projet : tracé, garde-corps…) ne rend aucune variante en échec : leurs grandeurs restent
+ * comparables entre elles.
+ */
+export function markFailedVariants(rows: readonly VariantRow[]): VariantRow[] {
+  const common =
+    rows.length === 0
+      ? new Set<string>()
+      : rows
+          .slice(1)
+          .reduce(
+            (acc, r) => new Set([...acc].filter((e) => r.errors.includes(e))),
+            new Set(rows[0]!.errors),
+          );
+  return rows.map((r) =>
+    r.failed === true ||
+    (r.errors.length > 0 && r.partCount === 0) ||
+    r.errors.some((e) => !common.has(e))
+      ? { ...r, failed: true }
+      : r,
+  );
 }
 
 /**
@@ -288,6 +322,7 @@ function failedRow(v: Variant, params: Record<string, unknown>, e: unknown): Var
     deviations: [],
     reference: false,
     epure: null,
+    failed: true,
   };
 }
 
@@ -341,13 +376,42 @@ export interface CompareLine {
   }[];
 }
 
+/** Lignes des grandeurs mesurées sur le modèle de la variante (« – » si elle est en échec). */
+const MEASURED_LINES: ReadonlySet<string> = new Set([
+  "mass",
+  "surface",
+  "parts",
+  "unique",
+  "weld",
+  "bends",
+  "cuts",
+  "holes",
+  "exc",
+  "violations",
+  "precheck",
+  "cost",
+  "jour",
+]);
+
+const FAILED_CELL: CompareLine["cells"][number] = {
+  text: "–",
+  title: "Variante en échec : grandeur non calculée",
+  tone: "muted",
+};
+
 /** Lignes du tableau côte à côte (une colonne par variante). */
 export function compareLines(rows: readonly VariantRow[]): CompareLine[] {
   const line = (
     key: string,
     label: string,
     cell: (r: VariantRow) => CompareLine["cells"][number],
-  ): CompareLine => ({ key, label, cells: rows.map(cell) });
+  ): CompareLine => ({
+    key,
+    label,
+    // Variante en échec : grandeur non mesurée, « – » (un 0 laisserait croire à une variante
+    // plus légère ou moins chère) ; seules les lignes d'erreurs et d'écarts restent lisibles.
+    cells: rows.map((r) => (r.failed === true && MEASURED_LINES.has(key) ? FAILED_CELL : cell(r))),
+  });
   return [
     line("mass", "Masse", (r) =>
       r.massUnknown > 0

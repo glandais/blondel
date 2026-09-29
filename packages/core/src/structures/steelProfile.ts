@@ -63,6 +63,7 @@ import {
 import { clipHalfPlane, dedupe } from "./geom.js";
 import { readPlanExtrusion } from "./housing.js";
 import { newelFaces, stairGeometry, type NewelGeometry } from "./legs.js";
+import { newelTopWithHandrail } from "./newel.js";
 import {
   STEEL_RULES,
   deduceExecutionClass,
@@ -119,7 +120,10 @@ export const SteelProfileParamsSchema = z.object({
     .object({
       /** Épaisseur de paroi du tube carré a × a (à valider). */
       tubeThickness: mmPos.default(4),
-      /** Dépassement au-dessus du plus haut élément reçu (à valider). */
+      /**
+       * Dépassement au-dessus du plus haut élément reçu (à valider). Le poteau monte aussi
+       * au-dessus de la main courante d'un garde-corps qui le rejoint (`guards.posts.newelOverrun`).
+       */
       topExtension: mmNonNeg.default(0),
     })
     .prefault({}),
@@ -871,7 +875,13 @@ export function buildSteelProfile(
       notes.push(`${nw.mark} : aucun limon ni support reçu, poteau non généré.`);
       continue;
     }
-    const height = topZ + params.newel.topExtension;
+    const raised = newelTopWithHandrail(topZ + params.newel.topExtension, ctx, g.turn);
+    const height = raised.top;
+    if (raised.raisedBy > 0) {
+      notes.push(
+        `${nw.mark} : poteau d'angle monté à ${fmt(height, 0)} mm, ${fmt(raised.overrun, 0)} mm au-dessus de la main courante du garde-corps (garde-corps, poteaux : « dépassement du poteau d'angle »).`,
+      );
+    }
     const h2 = a / 2;
     const at = (x: number, y: number): Vec2 =>
       V.add(V.add(g.center, V.scale(g.n, x)), V.scale(g.u, y));

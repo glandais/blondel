@@ -5,6 +5,7 @@
  * assistant d'initialisation (fenêtre modale).
  */
 import { Suspense, lazy, useEffect, type KeyboardEvent } from "react";
+import { useStore } from "zustand";
 import { AssistantDialog } from "./components/AssistantDialog.js";
 import { CompliancePanel } from "./components/CompliancePanel.js";
 import { ErrorsBar } from "./components/ErrorsBar.js";
@@ -15,6 +16,7 @@ import { Toolbar } from "./components/Toolbar.js";
 import { Welcome } from "./components/Welcome.js";
 import { selectedTreadNumber } from "./lib/compliance.js";
 import { appStore, useApp, useModel } from "./store/appStore.js";
+import { cancelUnderlayImport, importQueue, queuedImportMessage } from "./store/importQueue.js";
 import type { ViewTab } from "./store/projectStore.js";
 import { BomView } from "./views/BomView.js";
 import { CompareView } from "./views/CompareView.js";
@@ -105,10 +107,53 @@ function Tabs() {
   );
 }
 
+/**
+ * Import de calque demandé alors que le modèle est en calcul ou en échec : le plan « Site et
+ * saisie » qui l'accueille n'est pas affiché, la demande attend ; message explicite et bouton
+ * pour l'abandonner (QUESTIONS D1).
+ */
+function QueuedImportNotice({
+  available,
+  computing,
+  hostShown,
+}: {
+  available: boolean;
+  computing: boolean;
+  hostShown: boolean;
+}) {
+  const pending = useStore(importQueue, (s) => s.pending);
+  const message = queuedImportMessage(pending, { available, computing, hostShown });
+  if (!message) return null;
+  return (
+    <div
+      className={`notice notice--${message.kind}`}
+      role={message.kind === "error" ? "alert" : "status"}
+    >
+      <span>{message.text}</span>
+      {message.openHost ? (
+        <button
+          type="button"
+          className="link"
+          onClick={() => {
+            appStore.getState().setView("plan");
+            appStore.getState().setPlanMode("site");
+          }}
+        >
+          Ouvrir « Site et saisie »
+        </button>
+      ) : null}
+      <button type="button" className="link" onClick={() => cancelUnderlayImport()}>
+        Abandonner l'import
+      </button>
+    </div>
+  );
+}
+
 function CentralView() {
   const view = useApp((s) => s.view);
   const project = useApp((s) => s.project);
   const selection = useApp((s) => s.selection);
+  const planMode = useApp((s) => s.planMode);
   const { model, errors, mesh, pending, project: modelProject } = useModel();
   // Vues qui croisent le modèle et le projet (dalle, trémie) : le projet dont le modèle est issu,
   // pour rester cohérentes pendant un calcul.
@@ -172,6 +217,11 @@ function CentralView() {
       <Welcome />
       <ErrorsBar />
       <Tabs />
+      <QueuedImportNotice
+        available={model !== null}
+        computing={pending}
+        hostShown={model !== null && view === "plan" && planMode === "site"}
+      />
       <div id="view-panel" role="tabpanel" aria-labelledby={`tab-${view}`} className="view">
         {content}
       </div>

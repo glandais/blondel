@@ -4,18 +4,62 @@
  *
  * Regroupement : les pièces de même repère (`Part.mark`) sont des pièces identiques ; la
  * quantité est leur nombre (deux pièces de même repère mais de débit différent restent sur deux
- * lignes). Grandeurs lues dans `Part.quantities` : `volume` (m³) et `mass`
- * (kg) ; à défaut de `volume`, volume brut du débit L × l × e (`Part.stock`). Aucune masse
- * n'est inventée : sans `mass`, la colonne reste vide.
+ * lignes). Grandeurs lues dans `Part.quantities` : `volume` (m³) et la masse (kg), clé
+ * normalisée `mass_kg` du cœur, à défaut clé historique `mass` (`partMassKg`) ; à défaut de
+ * `volume`, volume brut du débit L × l × e (`Part.stock`). Aucune masse n'est inventée : sans
+ * masse, la colonne reste vide et le total est « incomplet ».
+ *
+ * Remarque de masse (QUESTIONS A6, appliqué par défaut) : une masse calculée avec une masse
+ * volumique non validée porte la mention « masse volumique à valider » (colonne « Remarque
+ * masse ») ; par défaut toutes les essences de bois (masses volumiques du profil d'atelier à
+ * valider), sauf celles que le profil d'atelier du projet renseigne (`massNoteFor`). Réglable
+ * par l'option `massNote`.
  *
  * Arrondi d'affichage : volumes au cm³ (6 décimales du m³), masses à 0,01 kg ; une grandeur
  * non nulle n'est jamais affichée nulle ; les totaux somment les valeurs de ligne affichées.
  */
-import type { Model, Part, PartCategory } from "@blondel/core";
+import {
+  isWoodMaterial,
+  type MaterialId,
+  type Model,
+  type Part,
+  type PartCategory,
+  type WorkshopProfileInput,
+} from "@blondel/core";
 import { formatFr } from "../format.js";
 
 export const QUANTITY_VOLUME = "volume";
+/** Clé historique de la masse (kg), lue à défaut de `mass_kg`. */
 export const QUANTITY_MASS = "mass";
+/** Clé normalisée de la masse (kg) remplie par le cœur (`structures/quantities.ts`). */
+export const QUANTITY_MASS_KG = "mass_kg";
+
+/** Masse d'une pièce (kg) : `mass_kg`, à défaut `mass` ; `undefined` si absente ou non finie. */
+export function partMassKg(part: Pick<Part, "quantities">): number | undefined {
+  const v = part.quantities[QUANTITY_MASS_KG] ?? part.quantities[QUANTITY_MASS];
+  return v !== undefined && Number.isFinite(v) ? v : undefined;
+}
+
+/** Mention portée par une masse calculée avec une masse volumique non validée. */
+export const MASS_DENSITY_NOTE = "masse volumique à valider";
+
+/** Remarque attachée à la masse d'une pièce selon son matériau (`undefined` : aucune). */
+export type MassNote = (material: MaterialId) => string | undefined;
+
+/** Remarque par défaut : bois (masses volumiques du profil d'atelier par défaut à valider). */
+export const defaultMassNote: MassNote = (material) =>
+  isWoodMaterial(material) ? MASS_DENSITY_NOTE : undefined;
+
+/**
+ * Remarque de masse pour un projet : les essences dont le profil d'atelier du projet renseigne
+ * la masse volumique (valeur de l'atelier) n'ont pas de mention ; les autres essences de bois
+ * gardent « masse volumique à valider ».
+ */
+export function massNoteFor(workshop?: WorkshopProfileInput): MassNote {
+  const own = workshop?.wood?.densities ?? {};
+  return (material) =>
+    isWoodMaterial(material) && own[material] === undefined ? MASS_DENSITY_NOTE : undefined;
+}
 
 export const CSV_BOM = "﻿";
 
@@ -60,6 +104,7 @@ export const CUT_LIST_HEADER = [
   "Volume total (m³)",
   "Masse unitaire (kg)",
   "Masse totale (kg)",
+  "Remarque masse",
 ] as const;
 
 /** Champ CSV : guillemets si nécessaire (séparateur, guillemet, saut de ligne, espaces de bord). */
@@ -119,10 +164,21 @@ export interface CutListRow {
   readonly quantity: number;
   readonly unitVolume?: number;
   readonly unitMass?: number;
+  /** Remarque sur la masse (ex. « masse volumique à valider ») ; absente sans masse. */
+  readonly massNote?: string;
+}
+
+export interface CutListRowsOptions {
+  /** Remarque de masse par matériau (défaut : `defaultMassNote`). */
+  readonly massNote?: MassNote;
 }
 
 /** Lignes de débit regroupées par repère, triées par catégorie puis repère. */
-export function cutListRows(parts: readonly Part[]): CutListRow[] {
+export function cutListRows(
+  parts: readonly Part[],
+  options: CutListRowsOptions = {},
+): CutListRow[] {
+  const noteOf = options.massNote ?? defaultMassNote;
   // Même repère = pièces identiques. Deux pièces de même repère mais de caractéristiques de
   // débit différentes (erreur amont) ne sont jamais fusionnées en silence : une ligne chacune,
   // le repère en double reste visible.
@@ -135,7 +191,7 @@ export function cutListRows(parts: readonly Part[]): CutListRow[] {
       p.section ?? null,
       p.stock ? [p.stock.length, p.stock.width, p.stock.thickness] : null,
       p.quantities[QUANTITY_VOLUME] ?? null,
-      p.quantities[QUANTITY_MASS] ?? null,
+      partMassKg(p) ?? null,
     ]);
     const g = groups.get(key);
     if (g) g.count += 1;
@@ -147,7 +203,8 @@ export function cutListRows(parts: readonly Part[]): CutListRow[] {
     const volume =
       part.quantities[QUANTITY_VOLUME] ??
       (s ? (s.length * s.width * s.thickness) / 1e9 : undefined);
-    const mass = part.quantities[QUANTITY_MASS];
+    const mass = partMassKg(part);
+    const note = mass !== undefined ? noteOf(part.material) : undefined;
     rows.push({
       mark: part.mark,
       name: part.name,
@@ -158,6 +215,7 @@ export function cutListRows(parts: readonly Part[]): CutListRow[] {
       quantity: count,
       ...(volume !== undefined ? { unitVolume: volume } : {}),
       ...(mass !== undefined ? { unitMass: mass } : {}),
+      ...(note !== undefined && note !== "" ? { massNote: note } : {}),
     });
   }
   const rank = (c: PartCategory): number => {
@@ -172,6 +230,8 @@ export interface CutListCsvOptions {
   readonly bom?: boolean;
   /** Ajoute une ligne de total (défaut : vrai). */
   readonly totals?: boolean;
+  /** Remarque de masse par matériau (défaut : `defaultMassNote`, bois à valider). */
+  readonly massNote?: MassNote;
 }
 
 /** Liste de débit du modèle, texte CSV. */
@@ -179,8 +239,12 @@ export function exportCutListCsv(
   model: Pick<Model, "parts">,
   options: CutListCsvOptions = {},
 ): string {
-  const rows = cutListRows(model.parts);
+  const rows = cutListRows(
+    model.parts,
+    options.massNote !== undefined ? { massNote: options.massNote } : {},
+  );
   const lines: string[][] = [[...CUT_LIST_HEADER]];
+  const notes = new Set<string>();
   let qty = 0;
   let vol = 0;
   let mass = 0;
@@ -215,7 +279,9 @@ export function exportCutListCsv(
       dec(tv, VOLUME_DECIMALS),
       dec(um, MASS_DECIMALS),
       dec(tm, MASS_DECIMALS),
+      neutralizeFormula(r.massNote ?? ""),
     ]);
+    if (r.massNote !== undefined) notes.add(r.massNote);
   }
   if (options.totals !== false) {
     // Total partiel signalé plutôt qu'une somme fausse quand une valeur manque.
@@ -232,6 +298,8 @@ export function exportCutListCsv(
       volKnown ? dec(vol, VOLUME_DECIMALS) : rows.length > 0 ? "incomplet" : "",
       "",
       massKnown ? dec(mass, MASS_DECIMALS) : rows.length > 0 ? "incomplet" : "",
+      // Remarques présentes dans les lignes : le total en dépend aussi.
+      neutralizeFormula([...notes].join(" ; ")),
     ]);
   }
   const body = lines.map((l) => l.map(csvField).join(";")).join("\r\n") + "\r\n";

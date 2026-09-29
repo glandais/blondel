@@ -12,6 +12,7 @@ import { describe, expect, it } from "vitest";
 import { computeHeadroom } from "../headroom/headroom.js";
 import { computeLayout } from "../layout/layout.js";
 import { ProjectSchema, type Project } from "../model/project.js";
+import { buildModel } from "../pipeline/build.js";
 import { computeStepping } from "../stepping/stepping.js";
 import { parseProjectText } from "./parse.js";
 import {
@@ -194,6 +195,16 @@ describe("examples/", () => {
     const text = readFileSync(join(EXAMPLES_DIR, file), "utf8");
     const project = parseProjectText(text);
     expect(serializeProject(project)).toBe(text);
+  });
+
+  it.each(files)("%s : masse renseignée pour toutes les pièces (QUESTIONS A6)", (file) => {
+    const p = parseProjectText(readFileSync(join(EXAMPLES_DIR, file), "utf8"));
+    const model = buildModel(p, { memo: false });
+    expect(model.parts.length).toBeGreaterThan(0);
+    for (const part of model.parts) {
+      const m = part.quantities["mass_kg"];
+      expect(m !== undefined && Number.isFinite(m) && m > 0, `${file} ${part.id}`).toBe(true);
+    }
   });
 
   it.each(Object.keys(expected))("%s est à jour avec son générateur", (file) => {

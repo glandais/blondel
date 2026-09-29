@@ -3,11 +3,16 @@
  * (`structuredClone`, comme `postMessage`), repli sur le fil principal.
  */
 import { clearModelCache, createProject, parseProjectText } from "@blondel/core";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import j4Text from "../../../../examples/j4-acceptance-01-garde-corps.blondel.json?raw";
 import { createJobRunner } from "./handler.js";
 import type { WorkerRequest, WorkerResponse } from "./protocol.js";
-import { createJobExec, type WorkerLike } from "./workerClient.js";
+import {
+  DEFAULT_WATCHDOG_MS,
+  WatchdogTimeoutError,
+  createJobExec,
+  type WorkerLike,
+} from "./workerClient.js";
 
 /** Faux worker : exécute le traitement du worker de façon asynchrone, messages clonés. */
 function fakeWorker(options: { fail?: boolean; answerError?: boolean; unreadable?: boolean } = {}) {
@@ -174,4 +179,206 @@ describe("export glTF par le worker de calcul", () => {
     const local = await createJobExec(() => null).glb(project);
     expect(local.byteLength).toBe(bytes.byteLength);
   }, 60_000);
+});
+
+describe("chien de garde du calcul (QUESTIONS A21)", () => {
+  /** Worker piloté à la main : répond seulement sur `answer()`, ou jamais. */
+  function manualWorker() {
+    const runner = createJobRunner();
+    const w: WorkerLike & {
+      received: WorkerRequest[];
+      terminated: boolean;
+      answer: () => void;
+      answerPdf: () => void;
+    } = {
+      received: [],
+      terminated: false,
+      onmessage: null,
+      onerror: null,
+      postMessage(message) {
+        w.received.push(structuredClone(message));
+      },
+      terminate() {
+        w.terminated = true;
+      },
+      answer() {
+        for (const req of w.received.splice(0)) {
+          if (req.type !== "build") continue;
+          w.onmessage?.({ data: { id: req.id, type: "build", result: runner.build(req) } });
+        }
+      },
+      answerPdf() {
+        const i = w.received.findIndex((r) => r.type === "pdf");
+        if (i < 0) return;
+        const [req] = w.received.splice(i, 1);
+        w.onmessage?.({ data: { id: req!.id, type: "pdf", result: { bytes: new Uint8Array(1) } } });
+      },
+    };
+    return w;
+  }
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("délai dépassé : worker terminé, recréé, demande relancée et servie", async () => {
+    vi.useFakeTimers();
+    const workers: ReturnType<typeof manualWorker>[] = [];
+    const exec = createJobExec(() => {
+      const w = manualWorker();
+      workers.push(w);
+      return w;
+    });
+    const p = exec.build(createProject("straight")) as Promise<unknown>;
+    expect(workers).toHaveLength(1);
+    await vi.advanceTimersByTimeAsync(DEFAULT_WATCHDOG_MS - 1);
+    expect(workers[0]!.terminated).toBe(false);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(workers[0]!.terminated).toBe(true);
+    expect(workers).toHaveLength(2);
+    expect(workers[1]!.received.map((r) => r.type)).toEqual(["build"]);
+    // Réponse tardive de l'ancien worker : ignorée ; le nouveau répond.
+    workers[1]!.answer();
+    const snap = (await p) as { model: unknown };
+    expect(snap.model).not.toBeNull();
+    expect(exec.restarts).toBe(1);
+    expect(exec.usesWorker).toBe(true);
+  });
+
+  it("délai dépassé après relance : rejet explicite, jamais de repli sur le fil principal", async () => {
+    vi.useFakeTimers();
+    let created = 0;
+    let fallbackUsed = false;
+    const exec = createJobExec(
+      () => {
+        created++;
+        return manualWorker();
+      },
+      {
+        watchdogMs: 1000,
+        watchdogRetries: 1,
+        fallback: () => {
+          fallbackUsed = true;
+          return createJobRunner();
+        },
+      },
+    );
+    const p = exec.build(createProject("straight")) as Promise<unknown>;
+    const settled = p.then(
+      () => null,
+      (e: unknown) => e,
+    );
+    await vi.advanceTimersByTimeAsync(2000);
+    const err = await settled;
+    expect(err).toBeInstanceOf(WatchdogTimeoutError);
+    expect((err as Error).message).toContain("aucune réponse en 1 s");
+    expect(created).toBe(2);
+    expect(fallbackUsed).toBe(false);
+    // Le worker reste utilisé pour les demandes suivantes (un nouveau est créé à la demande).
+    expect(exec.usesWorker).toBe(true);
+    void exec.build(createProject("straight"));
+    expect(created).toBe(3);
+  });
+
+  it("autres demandes en cours renvoyées au nouveau worker ; exports non surveillés", async () => {
+    vi.useFakeTimers();
+    const workers: ReturnType<typeof manualWorker>[] = [];
+    const exec = createJobExec(
+      () => {
+        const w = manualWorker();
+        workers.push(w);
+        return w;
+      },
+      { watchdogMs: 500 },
+    );
+    // Calcul bloqué en tête, puis un export PDF derrière lui.
+    void exec.build(createProject("straight"));
+    void exec.pdf(createProject("straight")).catch(() => undefined);
+    await vi.advanceTimersByTimeAsync(500);
+    expect(workers).toHaveLength(2);
+    expect(workers[1]!.received.map((r) => r.type)).toEqual(["build", "pdf"]);
+  });
+
+  it("export PDF seul : pas de chien de garde", async () => {
+    vi.useFakeTimers();
+    let created = 0;
+    const exec = createJobExec(
+      () => {
+        created++;
+        return manualWorker();
+      },
+      { watchdogMs: 500 },
+    );
+    void exec.pdf(createProject("straight")).catch(() => undefined);
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(created).toBe(1);
+  });
+
+  it("calcul en file derrière un export long : le délai court depuis la fin de l'export", async () => {
+    // Revue adverse : le délai était armé à l'envoi ; un calcul demandé pendant un export PDF
+    // de plus de 20 s (le worker traite ses messages dans l'ordre) faisait tuer le worker,
+    // recommencer l'export, puis rejeter le calcul sans qu'il ait jamais commencé.
+    vi.useFakeTimers();
+    const workers: ReturnType<typeof manualWorker>[] = [];
+    const exec = createJobExec(
+      () => {
+        const w = manualWorker();
+        workers.push(w);
+        return w;
+      },
+      { watchdogMs: 500 },
+    );
+    const pdf = exec.pdf(createProject("straight"));
+    const build = exec.build(createProject("straight")) as Promise<{ model: unknown }>;
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(workers).toHaveLength(1);
+    expect(exec.restarts).toBe(0);
+    workers[0]!.answerPdf();
+    expect((await pdf).byteLength).toBe(1);
+    // Le calcul a maintenant la tête de file : son délai court à partir d'ici.
+    await vi.advanceTimersByTimeAsync(499);
+    expect(workers).toHaveLength(1);
+    workers[0]!.answer();
+    expect((await build).model).not.toBeNull();
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(exec.restarts).toBe(0);
+  });
+
+  it("calcul en file derrière un export, puis bloqué : worker remplacé après le délai", async () => {
+    vi.useFakeTimers();
+    const workers: ReturnType<typeof manualWorker>[] = [];
+    const exec = createJobExec(
+      () => {
+        const w = manualWorker();
+        workers.push(w);
+        return w;
+      },
+      { watchdogMs: 500 },
+    );
+    void exec.pdf(createProject("straight"));
+    void exec.build(createProject("straight"));
+    await vi.advanceTimersByTimeAsync(2_000);
+    workers[0]!.answerPdf();
+    await vi.advanceTimersByTimeAsync(499);
+    expect(workers).toHaveLength(1);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(workers).toHaveLength(2);
+    expect(workers[1]!.received.map((r) => r.type)).toEqual(["build"]);
+  });
+
+  it("délai nul : chien de garde désactivé", async () => {
+    vi.useFakeTimers();
+    let created = 0;
+    const exec = createJobExec(
+      () => {
+        created++;
+        return manualWorker();
+      },
+      { watchdogMs: 0 },
+    );
+    void exec.build(createProject("straight"));
+    await vi.advanceTimersByTimeAsync(10 * DEFAULT_WATCHDOG_MS);
+    expect(created).toBe(1);
+    expect(exec.restarts).toBe(0);
+  });
 });

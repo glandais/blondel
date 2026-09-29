@@ -70,6 +70,7 @@ import {
 import { PiecewiseLinear, clipHalfPlane, dedupe, minAreaRect } from "./geom.js";
 import { readPlanExtrusion, verticalExtrusion } from "./housing.js";
 import { newelFaces, stairGeometry, type NewelGeometry, type StairGeometry } from "./legs.js";
+import { newelTopWithHandrail } from "./newel.js";
 import {
   STEEL_RULES,
   deduceExecutionClass,
@@ -127,7 +128,10 @@ export const SteelFlatParamsSchema = z.object({
       bolts: mmNonNeg.default(4),
       foot: z.enum(["floor", "hanging"]).default("floor"),
       bottomExtension: mmNonNeg.default(50),
-      /** Dépassement au-dessus du plus haut élément reçu (à valider). */
+      /**
+       * Dépassement au-dessus du plus haut élément reçu (à valider). Le poteau monte aussi
+       * au-dessus de la main courante d'un garde-corps qui le rejoint (`guards.posts.newelOverrun`).
+       */
       topExtension: mmNonNeg.default(0),
     })
     .prefault({}),
@@ -925,6 +929,13 @@ export function buildSteelFlat(ctx: StructureContext, params: SteelFlatParams): 
       continue;
     }
     top += params.newel.topExtension;
+    const raised = newelTopWithHandrail(top, ctx, g.turn);
+    if (raised.raisedBy > 0) {
+      top = raised.top;
+      notes.push(
+        `${nw.mark} : poteau d'angle monté à ${fmt(top, 0)} mm, ${fmt(raised.overrun, 0)} mm au-dessus de la main courante du garde-corps (garde-corps, poteaux : « dépassement du poteau d'angle »).`,
+      );
+    }
     // Pied au sol : le poteau repose sur sa platine de pied (raccourci de son épaisseur).
     const foot =
       params.newel.foot === "floor"

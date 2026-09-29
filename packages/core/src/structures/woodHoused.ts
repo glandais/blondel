@@ -62,7 +62,12 @@ import {
   verticalExtrusion,
 } from "./housing.js";
 import { newelFaces, stairGeometry, type ReceivingFace, type StairGeometry } from "./legs.js";
-import { buildNewel, type HousedPiece, type ReceivedStringer } from "./newel.js";
+import {
+  buildNewel,
+  newelTopWithHandrail,
+  type HousedPiece,
+  type ReceivedStringer,
+} from "./newel.js";
 import { woodQuantities } from "./quantities.js";
 
 /** Entaille marche / limon minimale de la NF EN 16481 § 5.4.2 (C §1.4, confiance élevée). */
@@ -102,7 +107,10 @@ export const WoodHousedParamsSchema = z.object({
       /** Pied du poteau : sol bas, ou pendant sous le plus bas des limons reçus. */
       foot: z.enum(["floor", "hanging"]).default("floor"),
       bottomExtension: mmNonNeg.default(50),
-      /** Dépassement du poteau au-dessus du plus haut élément reçu. */
+      /**
+       * Dépassement du poteau au-dessus du plus haut élément reçu. Le poteau monte aussi au-dessus
+       * de la main courante d'un garde-corps qui le rejoint (`guards.posts.newelOverrun`).
+       */
       topExtension: mmNonNeg.default(150),
     })
     .prefault({}),
@@ -709,6 +717,7 @@ export function buildWoodHoused(ctx: StructureContext, params: WoodHousedParams)
 
   // 4. Poteaux.
   const posts: Part[] = [];
+
   for (const nw of newelList) {
     const received: ReceivedStringer[] = [];
     for (const s of stringers) {
@@ -729,6 +738,9 @@ export function buildWoodHoused(ctx: StructureContext, params: WoodHousedParams)
         ...(tenon ? { tenon: { zBottom: tenon.zBottom, zTop: tenon.zTop } } : {}),
       });
     }
+    // Sommet minimal imposé par la main courante d'un garde-corps (QUESTIONS A3).
+    const rail = newelTopWithHandrail(-Infinity, ctx, nw.geom.turn);
+    const minTop = Number.isFinite(rail.top) ? rail.top : undefined;
     const r = buildNewel(nw.geom, pieces, nosings, received, {
       id: nw.id,
       mark: nw.mark,
@@ -742,7 +754,13 @@ export function buildWoodHoused(ctx: StructureContext, params: WoodHousedParams)
       foot: params.newel.foot,
       bottomExtension: params.newel.bottomExtension,
       topExtension: params.newel.topExtension,
+      ...(minTop !== undefined ? { minTop } : {}),
     });
+    if (minTop !== undefined && minTop === r.top) {
+      notes.push(
+        `${nw.mark} : poteau d'angle monté à ${fmt(r.top, 0)} mm, ${fmt(rail.overrun, 0)} mm au-dessus de la main courante du garde-corps (garde-corps, poteaux : « dépassement du poteau d'angle »).`,
+      );
+    }
     const a = nw.geom.size;
     const height = r.top - r.foot;
     const st = stockOf(height, a, a, profile, profile.wood.postSections);
