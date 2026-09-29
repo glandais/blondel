@@ -4,8 +4,12 @@
  * n'est **pas** stocké : il est dérivé du projet par `buildModel` (voir `model/`).
  */
 import {
+  DEMO_PRESET_DESCRIPTIONS,
+  DEMO_PRESET_LABELS,
   ProjectSchema,
+  createDemoProject,
   createProject,
+  type DemoPresetId,
   stableStringify,
   type Location,
   type PresetId,
@@ -69,6 +73,17 @@ export interface AppState {
    * nomenclature ; voir `lib/appearance.ts`).
    */
   readonly appearance: AppearanceOverrides;
+  /**
+   * Cadrage demandé à la vue 3D (choix d'une démo) : la vue le fait une fois, quand le modèle
+   * affiché est celui de `project` (identité), puis retient `seq`.
+   */
+  readonly frameRequest: FrameRequest | null;
+  /**
+   * Surcouches de la vue 3D (cotes principales, contrôles sur les pièces) : masquées au choix
+   * d'une démo (vitrine), rétablies par tout autre projet chargé (préréglage de base, import,
+   * assistant, copie de secours). Options d'affichage que l'utilisateur réactive à volonté.
+   */
+  readonly overlays: ViewerOverlays;
   /** Fenêtre de l'assistant d'initialisation ouverte. */
   readonly assistantOpen: boolean;
   readonly displayUnit: DisplayUnit;
@@ -112,6 +127,14 @@ export interface AppState {
    * `helical-core` (`presetProject`).
    */
   loadPreset(id: PresetId, options?: PresetOptions): UpdateResult;
+  /**
+   * Remplace le projet par une démo du cœur (`createDemoProject`) : une entrée d'historique,
+   * essais d'apparence par famille effacés (les matériaux et teintes de la démo s'affichent),
+   * onglet 3D et cadrage de trois quarts demandé (`frameRequest`).
+   */
+  loadDemo(id: DemoPresetId): UpdateResult;
+  /** Affiche ou masque les cotes principales ou les contrôles sur les pièces de la vue 3D. */
+  setOverlays(patch: Partial<ViewerOverlays>): void;
   /** Remplace le projet par le contenu d'un fichier `.blondel.json` (annulable). */
   importText(text: string): ImportResult;
   /**
@@ -145,6 +168,24 @@ export interface AppState {
    * page) ; sans effet s'il n'y a rien en attente ou pas de stockage.
    */
   flushAutosave(): void;
+}
+
+/** Surcouches de la vue 3D (voir `AppState.overlays`). */
+export interface ViewerOverlays {
+  readonly showControls: boolean;
+  readonly showDimensions: boolean;
+}
+
+/** Affichage par défaut : cotes principales et contrôles sur les pièces visibles. */
+export const DEFAULT_OVERLAYS: ViewerOverlays = { showControls: true, showDimensions: true };
+
+/** Affichage d'une démo : escalier seul, sans cotes ni teinte des contrôles. */
+export const DEMO_OVERLAYS: ViewerOverlays = { showControls: false, showDimensions: false };
+
+/** Demande de cadrage de la vue 3D sur un projet (voir `AppState.frameRequest`). */
+export interface FrameRequest {
+  readonly project: Project;
+  readonly seq: number;
 }
 
 /** Autosauvegarde refusée, ou copie de secours restante d'un refus antérieur (QUESTIONS A22). */
@@ -284,6 +325,8 @@ export function createProjectStore(options: ProjectStoreOptions = {}): ProjectSt
       view: "plan",
       planMode: "drawing",
       appearance: {},
+      frameRequest: null,
+      overlays: DEFAULT_OVERLAYS,
       assistantOpen: false,
       displayUnit: "mm",
       theme: "system",
@@ -325,7 +368,35 @@ export function createProjectStore(options: ProjectStoreOptions = {}): ProjectSt
           return { ok: false, issues: [text] };
         }
         const r = apply(p);
-        if (r.ok) set({ selection: null, notice: null });
+        if (r.ok) set({ selection: null, notice: null, overlays: DEFAULT_OVERLAYS });
+        return r;
+      },
+      loadDemo: (id) => {
+        let p: Project;
+        try {
+          p = createDemoProject(id);
+        } catch (e) {
+          const text = e instanceof Error ? e.message : String(e);
+          set({ notice: { kind: "error", text } });
+          return { ok: false, issues: [text] };
+        }
+        // Entrée d'historique distincte : un groupe ouvert (saisie en cours) est d'abord clos.
+        const h = get().history;
+        if (h.group !== null) set({ history: endGroup(h) });
+        const r = apply(p);
+        if (r.ok) {
+          set((s) => ({
+            selection: null,
+            appearance: {},
+            view: "3d",
+            overlays: DEMO_OVERLAYS,
+            frameRequest: { project: s.project, seq: (s.frameRequest?.seq ?? 0) + 1 },
+            notice: {
+              kind: "info",
+              text: `Démo « ${DEMO_PRESET_LABELS[id]} » : ${DEMO_PRESET_DESCRIPTIONS[id]}`,
+            },
+          }));
+        }
         return r;
       },
       importText: (text) => {
@@ -334,6 +405,7 @@ export function createProjectStore(options: ProjectStoreOptions = {}): ProjectSt
           apply(r.project);
           set({
             selection: null,
+            overlays: DEFAULT_OVERLAYS,
             notice: { kind: "info", text: `Projet « ${r.project.name} » importé.` },
           });
         } else {
@@ -347,7 +419,11 @@ export function createProjectStore(options: ProjectStoreOptions = {}): ProjectSt
         if (h.group !== null) set({ history: endGroup(h) });
         const r = apply(project);
         if (r.ok) {
-          set({ selection: null, notice: text ? { kind: "info", text } : null });
+          set({
+            selection: null,
+            overlays: DEFAULT_OVERLAYS,
+            notice: text ? { kind: "info", text } : null,
+          });
         }
         return r;
       },
@@ -356,6 +432,7 @@ export function createProjectStore(options: ProjectStoreOptions = {}): ProjectSt
       setView: (view) => set({ view }),
       setPlanMode: (planMode) => set({ planMode }),
       setAppearance: (appearance) => set({ appearance }),
+      setOverlays: (patch) => set((s) => ({ overlays: { ...s.overlays, ...patch } })),
       setAssistantOpen: (assistantOpen) => set({ assistantOpen }),
       setDisplayUnit: (displayUnit) => set({ displayUnit }),
       setTheme: (theme) => set({ theme }),
@@ -397,6 +474,7 @@ export function createProjectStore(options: ProjectStoreOptions = {}): ProjectSt
         }
         set({
           selection: null,
+          overlays: DEFAULT_OVERLAYS,
           notice: {
             kind: "info",
             text: `Copie de secours « ${r.project.name} » restaurée (annulable) ; elle est supprimée du stockage.`,

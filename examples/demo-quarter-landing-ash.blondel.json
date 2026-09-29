@@ -1,0 +1,136 @@
+{
+  "appearance": {
+    "glassTint": "extra-clear",
+    "woodTone": "light"
+  },
+  "compliance": {
+    "contexts": [
+      "bois_dtu",
+      "logement_interieur"
+    ],
+    "overrides": [],
+    "profile": "strict"
+  },
+  "guards": {
+    "flight": {
+      "edgeOffset": 30,
+      "enabled": true,
+      "height": 900,
+      "inner": "auto",
+      "landing": {
+        "height": 1000,
+        "raise": true,
+        "ramp": "auto"
+      },
+      "outer": "auto"
+    },
+    "handrail": {
+      "extensions": {
+        "bottom": "auto",
+        "top": "auto"
+      },
+      "height": 900,
+      "section": {
+        "diameter": 42,
+        "kind": "round"
+      },
+      "wallClearance": 50,
+      "wallSides": "auto"
+    },
+    "infill": {
+      "bottomGap": 50,
+      "kind": "glass",
+      "panelGap": 20,
+      "thickness": 18
+    },
+    "material": "wood-ash",
+    "opening": {
+      "enabled": true,
+      "height": 1000,
+      "setback": 50
+    },
+    "posts": {
+      "cornerAngle": 30,
+      "maxSpacing": 1500,
+      "newelOverrun": 50,
+      "size": 80
+    },
+    "wallTolerance": 100
+  },
+  "name": "Quart tournant à palier, frêne et verre",
+  "rulesVersion": 1,
+  "schemaVersion": 1,
+  "site": {
+    "floorToFloor": 2700,
+    "lowerFinish": 0,
+    "opening": {
+      "kind": "rect",
+      "sizeX": 2970,
+      "sizeY": 1100,
+      "x": -2970,
+      "y": 440
+    },
+    "upperFinish": 0,
+    "upperSlabThickness": 200,
+    "walls": []
+  },
+  "stair": {
+    "balancing": {
+      "method": "M3",
+      "targetCollet": 100,
+      "variant": "auto",
+      "windersPerSide": "auto"
+    },
+    "layout": {
+      "legs": [
+        {
+          "length": 1440
+        },
+        {
+          "length": 3870
+        }
+      ],
+      "turns": [
+        {
+          "direction": "left",
+          "inner": {
+            "kind": "newel",
+            "size": 100
+          },
+          "mode": "landing"
+        }
+      ],
+      "width": 900
+    },
+    "nosingOverrides": [],
+    "placement": {
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "rotation": 0
+    },
+    "stepping": {
+      "firstRiseOffset": 0,
+      "riserCount": "auto",
+      "targetGoing": "auto",
+      "targetRise": 175
+    },
+    "structure": {
+      "kind": "wood-housed",
+      "params": {
+        "material": "wood-ash"
+      }
+    },
+    "treads": {
+      "material": "wood-ash",
+      "nosing": 10,
+      "riserThickness": 20,
+      "risers": "full",
+      "thickness": 40
+    },
+    "walkline": {
+      "mode": "dtu"
+    }
+  }
+}

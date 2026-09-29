@@ -1,11 +1,18 @@
 /**
- * Barre d'outils : nom du projet, assistant d'initialisation, préréglages, annuler/rétablir,
+ * Barre d'outils : nom du projet, assistant d'initialisation, préréglages (deux groupes :
+ * « Basiques », formes nues du cœur, et « Démo », escaliers complets et habillés, avec une ligne
+ * de description ; `lib/presetChoice.ts`), annuler/rétablir,
  * menus « Importer » (projet, plan DXF, image de plan) et « Exporter », unité d'affichage et
  * thème.
  */
-import { ALL_PRESET_IDS, PRESET_LABELS, type PresetId } from "@blondel/core";
 import { useId, useState } from "react";
 import { downloadFile } from "../lib/download.js";
+import {
+  PRESET_GROUPS,
+  applyPresetChoice,
+  presetDescription,
+  type PresetChoice,
+} from "../lib/presetChoice.js";
 import { appStore, useApp } from "../store/appStore.js";
 import { rejectedAutosaveFile } from "../store/persistence.js";
 import { ExportMenu } from "./ExportMenu.js";
@@ -21,8 +28,10 @@ export function Toolbar() {
   const notice = useApp((s) => s.notice);
   const autosaveFailed = useApp((s) => s.autosaveFailed);
   const rejected = useApp((s) => s.rejectedAutosave);
-  const [preset, setPreset] = useState<PresetId>("straight");
+  const [preset, setPreset] = useState<PresetChoice>("straight");
   const presetId = useId();
+  const presetDescId = useId();
+  const description = presetDescription(preset);
   const unitId = useId();
   const st = appStore.getState;
 
@@ -48,18 +57,28 @@ export function Toolbar() {
         <select
           id={presetId}
           value={preset}
-          onChange={(e) => setPreset(e.target.value as PresetId)}
+          onChange={(e) => setPreset(e.target.value as PresetChoice)}
+          aria-describedby={description ? presetDescId : undefined}
         >
-          {ALL_PRESET_IDS.map((id) => (
-            <option key={id} value={id}>
-              {PRESET_LABELS[id]}
-            </option>
+          {PRESET_GROUPS.map((g) => (
+            <optgroup key={g.label} label={g.label}>
+              {g.items.map((item) => (
+                <option key={item.id} value={item.id} title={item.description}>
+                  {item.label}
+                </option>
+              ))}
+            </optgroup>
           ))}
         </select>
-        <button type="button" onClick={() => st().loadPreset(preset)}>
+        <button type="button" onClick={() => applyPresetChoice(st(), preset)}>
           Appliquer
         </button>
       </div>
+      {description ? (
+        <span id={presetDescId} className="toolbar__hint muted">
+          {description}
+        </span>
+      ) : null}
 
       <div className="toolbar__group">
         <button

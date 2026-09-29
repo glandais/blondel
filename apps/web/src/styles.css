@@ -182,6 +182,13 @@ input[type="date"] {
   gap: 0.35rem;
 }
 
+.toolbar__hint {
+  flex: 1 1 16rem;
+  max-width: 28rem;
+  font-size: 0.8rem;
+  line-height: 1.2;
+}
+
 .toolbar__name .field {
   flex-direction: row;
   align-items: center;

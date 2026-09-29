@@ -4,9 +4,9 @@
  * affiché), matériaux PBR par matériau du cœur (`three/pbr.ts` : bois à veinage procédural
  * orienté selon le fil de chaque pièce, acier brut / peint / galvanisé, inox brossé, verre,
  * béton), garde-corps et mains courantes (balayages) compris ; dalle haute translucide percée de
- * la trémie, grille, éclairage d'ambiance procédural (`RoomEnvironment`), ombres, surlignage de
- * la pièce sélectionnée et marqueurs du contrôle de conception (pièces teintées selon la
- * sévérité, repères ponctuels).
+ * la trémie, grille au sol sans scintillement (`three/groundGrid.ts`), éclairage d'ambiance
+ * procédural (`RoomEnvironment`), ombres, surlignage de la pièce sélectionnée et marqueurs du
+ * contrôle de conception (pièces teintées selon la sévérité, repères ponctuels).
  *
  * Outils (jalon 6, `Viewer3DTools`) : vue éclatée (`three/explode.ts`), plan de coupe
  * (`three/section.ts`), mesure point à point (clic sur les pièces), isolation de la pièce
@@ -31,8 +31,8 @@
  * le plan de coupe est toujours attaché aux matériaux (désactivé = rejeté au loin) et les cotes
  * et mesures sont dessinées en SVG, sans nouveau programme.
  */
-import type { MaterialId, Model, Project, Severity, Vec3 } from "@blondel/core";
-import { Grid, OrbitControls } from "@react-three/drei";
+import type { Appearance, MaterialId, Model, Project, Severity, Vec3 } from "@blondel/core";
+import { OrbitControls } from "@react-three/drei";
 import { Canvas, useThree, type ThreeEvent } from "@react-three/fiber";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
@@ -49,7 +49,7 @@ import {
   type Material,
 } from "three";
 import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
-import { displayedMaterial, familiesOf, withAppearance } from "../lib/appearance.js";
+import { displayedMaterial, familiesOf, paintZone, withAppearance } from "../lib/appearance.js";
 import { isPartSelected, sameLocation } from "../lib/compliance.js";
 import { controlMarkers, type PointMarker } from "../lib/markers.js";
 import type { MeshSnapshot, MeshedPartData } from "../model/snapshot.js";
@@ -66,11 +66,26 @@ import {
 import { explodeOffsets } from "../three/explode.js";
 import { toBufferGeometry, upperSlabMesh } from "../three/geometry.js";
 import { createGeometryPool, geometryKey, type GeometryPool } from "../three/geometryPool.js";
-import { HIGHLIGHT_COLOR, SEVERITY_COLORS } from "../three/materials.js";
+import {
+  GROUND_GRID_RENDER_ORDER,
+  SHADOW_PLANE_RENDER_ORDER,
+  cameraClipRange,
+  createGroundGridMaterial,
+  gridFadeDistance,
+} from "../three/groundGrid.js";
+import { flatteringView } from "../three/framing.js";
+import {
+  HIGHLIGHT_COLOR,
+  SEVERITY_COLORS,
+  appearanceKey,
+  paintZoneFor,
+  type PaintZone,
+} from "../three/materials.js";
 import {
   createPartMaterial,
   isTranslucent,
   simpleMaterial,
+  tintPartMaterial,
   type PartMaterial,
 } from "../three/pbr.js";
 import { browserRenderQuality, type RenderQuality } from "../three/quality.js";
@@ -152,20 +167,31 @@ function usePartGeometries(
 type SimpleMaterial = ReturnType<typeof simpleMaterial>;
 
 interface Materials {
-  get: (id: MaterialId) => PartMaterial;
+  /** Matériau partagé ; `zone` : zone de peinture de la pièce (variante de l'acier peint). */
+  get: (id: MaterialId, zone?: PaintZone) => PartMaterial;
   /** Matériau teinté d'une pièce en violation (couleur de la sévérité). */
-  flagged: (id: MaterialId, severity: Severity) => PartMaterial;
+  flagged: (id: MaterialId, severity: Severity, zone?: PaintZone) => PartMaterial;
   marker: (severity: Severity, selected: boolean) => SimpleMaterial;
   highlight: SimpleMaterial;
   slab: SimpleMaterial;
   sphere: SphereGeometry;
   /** Plan de coupe partagé par les matériaux des pièces et de la dalle. */
   clip: Plane;
+  /**
+   * Teintes du projet (`Project.appearance`) appliquées sur place aux matériaux des pièces
+   * (couleur, opacité) : mêmes objets, mêmes programmes de shader. Vrai si elles ont changé.
+   */
+  retint: (appearance: Appearance | undefined) => boolean;
 }
 
-/** Matériaux partagés par identifiant, libérés au démontage de la vue (textures en cache). */
+/**
+ * Matériaux partagés par identifiant, libérés au démontage de la vue (textures en cache). Les
+ * teintes du projet ne les recréent pas (`retint`).
+ */
 function useMaterials(quality: RenderQuality): Materials {
   const value = useMemo(() => {
+    let tints: Appearance | undefined;
+    let tintKey = "";
     const clip = new Plane(new Vector3(...NO_SECTION.normal), NO_SECTION.constant);
     // Plan toujours attaché (programmes stables), seulement pour la coupe exacte.
     const clipped = <M extends Material>(m: M): M => {
@@ -175,6 +201,9 @@ function useMaterials(quality: RenderQuality): Materials {
       return m;
     };
     const cache = new Map<string, Material>();
+    // Clé d'un matériau : identifiant, suivi de la zone de peinture hors ossature (`id~zone`).
+    const keyOf = (id: MaterialId, zone: PaintZone): string =>
+      zone === "structure" ? id : `${id}~${zone}`;
     const cached = <M extends Material>(key: string, create: () => M): M => {
       let m = cache.get(key) as M | undefined;
       if (!m) {
@@ -208,9 +237,30 @@ function useMaterials(quality: RenderQuality): Materials {
     );
     const sphere = new SphereGeometry(POINT_MARKER_RADIUS, 20, 14);
     return {
-      get: (id: MaterialId) => cached(id, () => clipped(createPartMaterial(id, quality))),
-      flagged: (id: MaterialId, severity: Severity) =>
-        cached(`${id}|${severity}`, () => clipped(createPartMaterial(id, quality, { severity }))),
+      get: (id: MaterialId, zone: PaintZone = "structure") => {
+        const z = paintZoneFor(id, zone);
+        return cached(keyOf(id, z), () =>
+          clipped(createPartMaterial(id, quality, { appearance: tints, zone: z })),
+        );
+      },
+      flagged: (id: MaterialId, severity: Severity, zone: PaintZone = "structure") => {
+        const z = paintZoneFor(id, zone);
+        return cached(`${keyOf(id, z)}|${severity}`, () =>
+          clipped(createPartMaterial(id, quality, { severity, appearance: tints, zone: z })),
+        );
+      },
+      retint: (appearance: Appearance | undefined) => {
+        const key = appearanceKey(appearance);
+        if (key === tintKey) return false;
+        tints = appearance;
+        tintKey = key;
+        for (const [k, m] of cache) {
+          if (k.startsWith("marker|")) continue;
+          const [id, zone] = k.split("|")[0]!.split("~") as [MaterialId, PaintZone?];
+          tintPartMaterial(m as PartMaterial, id, quality, tints, zone);
+        }
+        return true;
+      },
       marker: (severity: Severity, selected: boolean) =>
         cached(`marker|${severity}|${selected}`, () => {
           const color = selected ? HIGHLIGHT_COLOR : SEVERITY_COLORS[severity];
@@ -306,6 +356,37 @@ function ProgramProxy({ material }: { material: Material }) {
   );
 }
 
+/** Nom de l'objet de la grille (point d'accès de test : grille masquée ou affichée). */
+const GROUND_GRID_NAME = "blondel-ground-grid";
+
+/**
+ * Grille au sol (y = 0) antialiasée et sans moiré (`three/groundGrid.ts`), recentrée sous la
+ * caméra par son shader.
+ */
+function GroundGrid({ fadeDistance }: { fadeDistance: number }) {
+  const material = useMemo(
+    () =>
+      createGroundGridMaterial({
+        cellColor: "#9aa0a6",
+        sectionColor: "#6b7178",
+        fadeDistance,
+      }),
+    [fadeDistance],
+  );
+  useEffect(() => () => material.dispose(), [material]);
+  return (
+    <mesh
+      name={GROUND_GRID_NAME}
+      material={material}
+      renderOrder={GROUND_GRID_RENDER_ORDER}
+      frustumCulled={false}
+      raycast={() => undefined}
+    >
+      <planeGeometry args={[1, 1]} />
+    </mesh>
+  );
+}
+
 /** Redemande une image quand une texture procédurale est prête. */
 function TextureInvalidator() {
   const invalidate = useThree((s) => s.invalidate);
@@ -321,6 +402,118 @@ function SectionUpdater({ clip, plane }: { clip: Plane; plane: SectionPlane }) {
     clip.constant = plane.constant;
     invalidate();
   }, [clip, plane, invalidate]);
+  return null;
+}
+
+/** Nouvelle image quand les teintes du projet changent (matériaux modifiés sur place). */
+function TintInvalidator({ tintKey }: { tintKey: string }) {
+  const invalidate = useThree((s) => s.invalidate);
+  useEffect(() => invalidate(), [tintKey, invalidate]);
+  return null;
+}
+
+/**
+ * Cadrage de démo (`AppState.frameRequest`) : une fois par demande, quand le modèle affiché est
+ * celui du projet demandé (même objet) et maillé, la caméra passe en vue de trois quarts
+ * plongeante sur tout l'escalier (`three/framing.ts`).
+ */
+function DemoFramer({ project, box, ready }: { project: Project; box: Box3; ready: boolean }) {
+  const request = useApp((s) => s.frameRequest);
+  const camera = useThree((s) => s.camera);
+  const controls = useThree((s) => s.controls) as {
+    target?: Vector3;
+    update?: () => void;
+  } | null;
+  const size = useThree((s) => s.size);
+  const invalidate = useThree((s) => s.invalidate);
+  const done = useRef<number | null>(null);
+  useEffect(() => {
+    if (!request || done.current === request.seq) return;
+    if (request.project !== project || !ready || !controls?.target) return;
+    done.current = request.seq;
+    const fov = "fov" in camera && typeof camera.fov === "number" ? camera.fov : 40;
+    const pose = flatteringView(box, {
+      fovDeg: fov,
+      aspect: size.height > 0 ? size.width / size.height : 1,
+    });
+    controls.target.set(...pose.target);
+    camera.position.set(...pose.position);
+    camera.lookAt(controls.target);
+    controls.update?.();
+    invalidate();
+  }, [request, project, ready, box, camera, controls, size, invalidate]);
+  return null;
+}
+
+/**
+ * Point d'accès de test, installé seulement dans un navigateur piloté (`navigator.webdriver`,
+ * Playwright) : place la caméra en orbite autour de la cible des contrôles, à un azimut et une
+ * élévation (degrés) relatifs à la pose du premier appel, sans passer par la souris — pose
+ * exacte et reproductible pour comparer des images (`apps/web/e2e/grid-flicker.spec.ts`) ;
+ * `showGrid` masque ou affiche la grille au sol (le test vérifie qu'elle est bien dessinée) ;
+ * `pose` rend la position de la caméra et la cible (cadrage des démos).
+ */
+function CameraTestHook({ target }: { target: readonly [number, number, number] }) {
+  const camera = useThree((s) => s.camera);
+  const controls = useThree((s) => s.controls) as { target?: Vector3; update?: () => void } | null;
+  const invalidate = useThree((s) => s.invalidate);
+  const scene = useThree((s) => s.scene);
+  useEffect(() => {
+    if (typeof navigator === "undefined" || !navigator.webdriver) return;
+    let base: { t: Vector3; offset: Vector3 } | null = null;
+    const w = window as Window & { __blondelViewer3D?: unknown };
+    w.__blondelViewer3D = {
+      orbit(azimuthDeg: number, elevationDeg = 0) {
+        if (!base) {
+          const t = controls?.target?.clone() ?? new Vector3(...target);
+          base = { t, offset: camera.position.clone().sub(t) };
+        }
+        const t = base.t;
+        const offset = base.offset.clone();
+        const r = offset.length();
+        const theta = Math.atan2(offset.x, offset.z) + (azimuthDeg * Math.PI) / 180;
+        const phi = Math.acos(offset.y / r) - (elevationDeg * Math.PI) / 180;
+        offset.set(
+          r * Math.sin(phi) * Math.sin(theta),
+          r * Math.cos(phi),
+          r * Math.sin(phi) * Math.cos(theta),
+        );
+        camera.position.copy(t).add(offset);
+        camera.lookAt(t);
+        controls?.update?.();
+        invalidate();
+      },
+      showGrid(visible: boolean) {
+        const grid = scene.getObjectByName(GROUND_GRID_NAME);
+        if (!grid) throw new Error("grille au sol absente de la scène");
+        grid.visible = visible;
+        invalidate();
+      },
+      /** Pose courante (m, repère three.js) : cadrage des démos (`e2e/demos.spec.ts`). */
+      pose() {
+        const t = controls?.target ?? new Vector3(...target);
+        return { position: camera.position.toArray(), target: t.toArray() };
+      },
+      /**
+       * Couleur (sRVB, `#rrggbb`) du matériau de pièce `name` (identifiant du cœur) dessiné dans
+       * la scène, `null` s'il n'y est pas : teintes du projet (`Project.appearance`).
+       */
+      materialColor(name: string) {
+        let hex: string | null = null;
+        scene.traverse((o) => {
+          const m = (o as { material?: { name?: string; color?: { getHexString(): string } } })
+            .material;
+          if (hex === null && o.visible && m?.name === name && m.color) {
+            hex = `#${m.color.getHexString()}`;
+          }
+        });
+        return hex;
+      },
+    };
+    return () => {
+      delete w.__blondelViewer3D;
+    };
+  }, [camera, controls, invalidate, scene, target]);
   return null;
 }
 
@@ -414,11 +607,25 @@ export default function Viewer3D({
   const { parts, failed } = usePartGeometries(mesh, model);
   const quality = useMemo(() => browserRenderQuality(), []);
   const materials = useMaterials(quality);
-  const [tools, setTools] = useState<ToolsState>(INITIAL_TOOLS);
-  const updateTools = useCallback(
-    (patch: Partial<ToolsState>) => setTools((t) => ({ ...t, ...patch })),
-    [],
-  );
+  // Teintes du projet affiché, appliquées sur place avant le rendu des pièces (idempotent : sans
+  // effet si elles n'ont pas changé).
+  const tintKey = appearanceKey(project.appearance);
+  materials.retint(project.appearance);
+  // Cotes principales et contrôles sur les pièces : dans le store (masqués au choix d'une démo,
+  // rétablis par un autre projet, conservés d'un onglet à l'autre) ; le reste, local à la vue.
+  const overlays = useApp((s) => s.overlays);
+  const [localTools, setTools] = useState<ToolsState>(INITIAL_TOOLS);
+  const tools = useMemo<ToolsState>(() => ({ ...localTools, ...overlays }), [localTools, overlays]);
+  const updateTools = useCallback((patch: Partial<ToolsState>) => {
+    const { showControls, showDimensions, ...rest } = patch;
+    if (showControls !== undefined || showDimensions !== undefined) {
+      appStore.getState().setOverlays({
+        ...(showControls !== undefined ? { showControls } : {}),
+        ...(showDimensions !== undefined ? { showDimensions } : {}),
+      });
+    }
+    if (Object.keys(rest).length > 0) setTools((t) => ({ ...t, ...rest }));
+  }, []);
   const [isolated, setIsolated] = useState<string | null>(null);
   const appearance = useApp((s) => s.appearance);
   const families = useMemo(() => familiesOf(parts.map((p) => p.part)), [parts]);
@@ -524,6 +731,8 @@ export default function Viewer3D({
     return { target, position, size };
     // Cadrage calculé seulement au montage : l'utilisateur garde son point de vue.
   }, []);
+  // Plage de profondeur adaptée à la scène (précision de profondeur, `three/groundGrid.ts`).
+  const clip = cameraClipRange(frame.size);
 
   const onPartClick = (partId: string) => (e: ThreeEvent<MouseEvent>) => {
     // Coupe exacte : le lancer de rayons ignore les plans de coupe ; un point de la partie
@@ -549,7 +758,7 @@ export default function Viewer3D({
         dpr={quality.dpr}
         gl={GL_PROPS}
         frameloop={shadersReady ? "demand" : "never"}
-        camera={{ position: frame.position, fov: 40, near: 0.01, far: 200 }}
+        camera={{ position: frame.position, fov: 40, near: clip.near, far: clip.far }}
         onPointerMissed={() => {
           if (!tools.measuring) onSelectPart(null);
         }}
@@ -577,11 +786,12 @@ export default function Viewer3D({
             const selected = isPartSelected(part.partId, selection?.location);
             const severity = tools.showControls ? markers.parts.get(part.partId) : undefined;
             const shown = displayedMaterial(part, appearance);
+            const zone = paintZone(part);
             const material = selected
               ? materials.highlight
               : severity
-                ? materials.flagged(shown, severity)
-                : materials.get(shown);
+                ? materials.flagged(shown, severity, zone)
+                : materials.get(shown, zone);
             const o = offsets.get(part.partId) ?? ZERO;
             return (
               <mesh
@@ -612,23 +822,19 @@ export default function Viewer3D({
         <mesh
           rotation={[-Math.PI / 2, 0, 0]}
           position={[frame.target[0], -0.001, frame.target[2]]}
+          renderOrder={SHADOW_PLANE_RENDER_ORDER}
           receiveShadow
         >
           <planeGeometry args={[40, 40]} />
-          <shadowMaterial opacity={0.18} />
+          {/* Sans écriture de profondeur : aucun conflit avec la grille (`three/groundGrid.ts`). */}
+          <shadowMaterial opacity={0.18} depthWrite={false} />
         </mesh>
-        <Grid
-          args={[20, 20]}
-          position={[frame.target[0], 0, frame.target[2]]}
-          cellSize={0.1}
-          sectionSize={1}
-          cellColor="#9aa0a6"
-          sectionColor="#6b7178"
-          fadeDistance={25}
-          infiniteGrid
-        />
-        <OrbitControls makeDefault target={frame.target} />
+        <GroundGrid fadeDistance={gridFadeDistance(frame.size)} />
+        <OrbitControls makeDefault target={frame.target} maxDistance={clip.far / 2} />
         <TextureInvalidator />
+        <CameraTestHook target={frame.target} />
+        <DemoFramer project={project} box={stairBox} ready={parts.length > 0} />
+        <TintInvalidator tintKey={tintKey} />
         <SectionUpdater clip={materials.clip} plane={plane} />
         <AnnotationProjector annotations={annotations} svgRef={svgRef} />
         <ShaderWarmup ready={shadersReady} onReady={onShadersReady} />

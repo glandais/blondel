@@ -8,7 +8,7 @@
  *   simple) — chaque pixel est ombré par le processeur, et l'ombrage PBR y coûte deux fois plus
  *   (mesure e2e, tâches longues).
  */
-import type { MaterialId, Severity } from "@blondel/core";
+import type { Appearance, MaterialId, Severity } from "@blondel/core";
 import {
   Color,
   DoubleSide,
@@ -17,7 +17,13 @@ import {
   MeshStandardMaterial,
   type MeshStandardMaterialParameters,
 } from "three";
-import { SEVERITY_COLORS, materialLook } from "./materials.js";
+import {
+  SEVERITY_COLORS,
+  materialLook,
+  materialLookFor,
+  type MaterialLook,
+  type PaintZone,
+} from "./materials.js";
 import type { RenderQuality } from "./quality.js";
 import { proceduralTextures } from "./textures.js";
 
@@ -42,6 +48,10 @@ export function simpleMaterial(
 export interface PartMaterialOptions {
   /** Teinte d'une pièce en violation (contrôle de conception). */
   readonly severity?: Severity;
+  /** Teintes enregistrées du projet (peinture, ton du bois, verre) : `materialLookFor`. */
+  readonly appearance?: Appearance;
+  /** Zone de peinture de la pièce (acier peint : ossature, marches, garde-corps). */
+  readonly zone?: PaintZone;
 }
 
 /** Le matériau est-il translucide (sans ombre portée) ? */
@@ -50,13 +60,43 @@ export function isTranslucent(id: MaterialId): boolean {
   return look.opacity !== undefined || look.transmission !== undefined;
 }
 
+/**
+ * Couleur du matériau : blanche sous une texture (qui porte la teinte), sinon la teinte unie ;
+ * multipliée par le ton `tint` éventuel (finition bois du projet).
+ */
+function baseColor(look: MaterialLook, textured: boolean): Color {
+  const c = textured ? new Color("#ffffff") : new Color(look.color);
+  return look.tint ? c.multiply(new Color(...look.tint)) : c;
+}
+
+/**
+ * Applique **sur place** les teintes du projet (`Project.appearance`) à un matériau créé par
+ * `createPartMaterial` pour le même `id` (et la même zone de peinture) : couleur et opacité seulement (uniformes). Aucun
+ * nouveau programme de shader : recréer les matériaux libérerait leurs programmes, recompilés
+ * ensuite de façon synchrone (tâche longue de 150 ms et plus, `e2e/demos.spec.ts`).
+ */
+export function tintPartMaterial(
+  m: PartMaterial,
+  id: MaterialId,
+  quality: Pick<RenderQuality, "physical">,
+  appearance?: Appearance,
+  zone?: PaintZone,
+): void {
+  const look = materialLookFor(id, appearance, zone);
+  const color = baseColor(look, m.map !== null);
+  // Rendu logiciel : même assombrissement des métaux qu'à la création.
+  if (!quality.physical) color.multiplyScalar(1 - 0.35 * look.metalness);
+  m.color.copy(color);
+  if (!quality.physical && look.opacity !== undefined) m.opacity = look.opacity;
+}
+
 /** Matériau three.js d'un matériau du cœur. */
 export function createPartMaterial(
   id: MaterialId,
   quality: Pick<RenderQuality, "physical" | "textureSize" | "mipmaps">,
   options: PartMaterialOptions = {},
 ): PartMaterial {
-  const look = materialLook(id);
+  const look = materialLookFor(id, options.appearance, options.zone);
   const textures = look.texture
     ? proceduralTextures(look.texture, quality.textureSize, {
         mipmaps: quality.mipmaps,
@@ -66,7 +106,7 @@ export function createPartMaterial(
   // Rendu logiciel : carte de couleur seule (chaque échantillonnage coûte sur le processeur).
   const roughnessMap = textures && quality.physical ? textures.roughnessMap : undefined;
   const common = {
-    color: textures ? new Color("#ffffff") : new Color(look.color),
+    color: baseColor(look, textures !== undefined),
     ...(textures ? { map: textures.map } : {}),
     ...(options.severity
       ? { emissive: new Color(SEVERITY_COLORS[options.severity]), emissiveIntensity: 0.55 }

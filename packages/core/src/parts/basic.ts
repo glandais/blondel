@@ -19,7 +19,7 @@
  *   inférieure (sol bas pour k = 0) à la sous-face de la marche supérieure (ou du nez
  *   d'arrivée, supposé de même épaisseur), soit [z_{k−1} − e ; z_k − e]. Repère `CM<k+1>`,
  *   identifiant `riser-<k+1>`.
- * - Matériau par défaut : bois (`wood-oak`, aucune essence imposée par le projet au MVP).
+ * - Matériau : essence `stair.treads.material` du projet, sinon bois par défaut (`wood-oak`).
  * - Fil du bois : **selon le giron**, c'est-à-dire la tangente à Γ au milieu de la marche
  *   (horizontale) ; contremarches : fil horizontal le long de la ligne de nez.
  * - Quantités : `volume` (m³), `surface` (m², dessus de marche ou face de contremarche).
@@ -176,7 +176,7 @@ function treadPart(
  */
 export function buildBasicParts(project: Project, layout: Layout, stepping: Stepping): BasicParts {
   const spec = project.stair.treads;
-  const material = DEFAULT_WOOD_MATERIAL;
+  const material = spec.material ?? DEFAULT_WOOD_MATERIAL;
   const thickness = spec.thickness;
   const nosings = stepping.nosings;
   const parts: Part[] = [];

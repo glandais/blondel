@@ -59,7 +59,8 @@ beforeEach(() => clearModelCache());
 
 describe("buildModel — exemples du dépôt", () => {
   it.each(EXAMPLE_FILES)("%s : modèle complet, sans erreur", (file) => {
-    const m = buildModel(loadExample(file));
+    const project = loadExample(file);
+    const m = buildModel(project);
     expect(m.errors).toEqual([]);
     expect(m.layout).not.toBe(EMPTY_LAYOUT);
     expect(m.stepping.treads).toHaveLength(m.stepping.riserCount - 1);
@@ -74,6 +75,9 @@ describe("buildModel — exemples du dépôt", () => {
     const risers = m.parts.filter((p) => p.category === "riser");
     if (foldedTreads) {
       for (const p of risers) expect(p.id).toBe(`riser-${m.stepping.riserCount}`);
+    } else if (project.stair.treads.risers !== "full") {
+      // Sans contremarche (démos loft et hélicoïdales à marches bois) : aucune pièce.
+      expect(risers).toHaveLength(0);
     } else {
       expect(risers).toHaveLength(m.stepping.riserCount);
     }

@@ -6,7 +6,7 @@
 import { z } from "zod";
 import { GuardsSpecSchema } from "../guards/spec.js";
 import { UnderlaySchema } from "../site/schema.js";
-import { WorkshopProfileSchema } from "../workshop/profile.js";
+import { WOOD_MATERIALS, WorkshopProfileSchema } from "../workshop/profile.js";
 
 export const PROJECT_SCHEMA_VERSION = 1 as const;
 
@@ -307,6 +307,13 @@ export const TreadSpecSchema = z.object({
   nosing: mmNonNeg.default(10),
   risers: z.enum(["full", "open", "none"]).default("full"),
   riserThickness: mmPos.default(20),
+  /**
+   * Essence des marches, contremarches et paliers bois (pièces de base, et marches bois des
+   * plugins qui les reprennent) : masses, débit et chiffrage en dépendent. Absente : chêne
+   * (`DEFAULT_WOOD_MATERIAL`, comportement antérieur). Ajout rétrocompatible (2026-09-30), jamais
+   * ajouté à la lecture : un projet sans ce champ est sérialisé à l'identique.
+   */
+  material: z.enum(WOOD_MATERIALS).optional(),
 });
 
 // ------------------------------------------------------------------ Structure (plugins)
@@ -364,6 +371,40 @@ export const ComplianceSettingsSchema = z.object({
 });
 export type ComplianceSettings = z.infer<typeof ComplianceSettingsSchema>;
 
+// ------------------------------------------------------------------ Apparence
+
+/** Couleur `#rrggbb`. */
+const HexColorSchema = z.string().regex(/^#[0-9a-fA-F]{6}$/, "couleur attendue au format #rrggbb");
+
+/**
+ * Apparence enregistrée du projet (ajout rétrocompatible, 2026-09-30) : **teintes de
+ * présentation** qui ne changent pas le matériau des pièces. L'essence du bois, la finition de
+ * l'acier (brut, peint, galvanisé), l'inox et le verre restent portés par les paramètres de
+ * structure et de garde-corps (`Part.material`), dont dépendent masses, débit et chiffrage ;
+ * `appearance` ne règle que ce qui n'y change rien : couleur de la peinture (thermolaquage),
+ * ton d'une finition bois (huile, teinte), teinte du verre. Absent : rendu par défaut du matériau
+ * (comportement antérieur). Lu par la vue 3D de l'interface, jamais par le pipeline ni les
+ * exports.
+ * Distinct de l'essai d'apparence par famille de pièces de l'interface (QUESTIONS A24), qui
+ * reste un aperçu non enregistré.
+ */
+export const AppearanceSchema = z.object({
+  /** Couleur de l'acier peint (`#rrggbb`), ex. noir RAL 9005 ; absente : gris anthracite. */
+  paintColor: HexColorSchema.optional(),
+  /**
+   * Couleur de l'acier peint des marches, contremarches et paliers (ex. tôle pliée) ; absente :
+   * `paintColor`. Permet de distinguer marches et ossature d'une même finition.
+   */
+  treadPaintColor: HexColorSchema.optional(),
+  /** Couleur de l'acier peint des garde-corps et mains courantes ; absente : `paintColor`. */
+  guardPaintColor: HexColorSchema.optional(),
+  /** Ton de la finition du bois : naturel (défaut), clair (blanchi) ou foncé (teinté). */
+  woodTone: z.enum(["natural", "light", "dark"]).optional(),
+  /** Teinte du verre : clair (défaut), extra-clair ou fumé. */
+  glassTint: z.enum(["clear", "extra-clear", "smoked"]).optional(),
+});
+export type Appearance = z.infer<typeof AppearanceSchema>;
+
 // ------------------------------------------------------------------ Projet
 
 export const ProjectSchema = z.object({
@@ -384,6 +425,11 @@ export const ProjectSchema = z.object({
    * généré, règles GC_* / MC_* « non évaluées ». Ajout rétrocompatible.
    */
   guards: GuardsSpecSchema.optional(),
+  /**
+   * Teintes de présentation (peinture, ton du bois, verre) : voir `AppearanceSchema`. Absent :
+   * rendu par défaut. Ajout rétrocompatible, sans effet sur le modèle.
+   */
+  appearance: AppearanceSchema.optional(),
 });
 export type Project = z.infer<typeof ProjectSchema>;
 export type ProjectInput = z.input<typeof ProjectSchema>;

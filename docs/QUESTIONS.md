@@ -217,6 +217,7 @@ Faut-il laisser choisir les variantes du comparateur, et filtrer les marqueurs 3
 - Proposition : garder tout, sauf le tracé au nu (3e clic).
 - Aujourd'hui : comme décrit.
 - Réf. : l. 285 (vague G, integration:vague-g), l. 245 (J7, web:site), l. 185 (J4, web), l. 259 (J6, web:app), l. 186 (J4, web), l. 82 (J1, web) ; `apps/web/src/lib/balancingForm.ts`, `apps/web/src/views/PlanSiteEditor.tsx`, `apps/web/src/lib/appearance.ts`.
+- Complément du 2026-09-30 (préréglages de démonstration) : le projet peut désormais enregistrer des **teintes de présentation** (`Project.appearance` optionnel : couleur de la peinture, ton du bois, teinte du verre ; vue 3D seulement, sans effet sur les pièces, les masses ni les exports). Ce champ **ne tranche pas** A24 : l'essai d'apparence par famille de pièces reste un aperçu non enregistré, et aucun champ de l'interface ne règle encore `appearance` (réglé par les démos ou un fichier importé). Si l'aperçu par famille devait être enregistré, `appearance` en serait le support naturel. Réf. : `model/project.ts` (`AppearanceSchema`), `project/presetDemo.ts`.
 
 ### A25. Rendu à valider visuellement
 

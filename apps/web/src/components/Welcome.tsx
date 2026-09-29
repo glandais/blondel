@@ -1,11 +1,15 @@
 /**
  * Accueil de la première visite (aucune autosauvegarde) : bandeau non modal au-dessus des vues,
- * qui propose l'assistant d'initialisation, un préréglage ou l'import d'un projet. Masqué dès
+ * qui propose l'assistant d'initialisation, une démo (escalier complet, ouvert en 3D ;
+ * `lib/presetChoice.ts`), un préréglage ou l'import d'un projet. Masqué dès
  * que le projet est modifié, que l'assistant est ouvert ou sur « Fermer » (mémorisé dans le
  * navigateur).
  */
 import { useState } from "react";
+import { DEMO_GROUP_LABEL, PRESET_GROUPS, applyPresetChoice } from "../lib/presetChoice.js";
 import { appStore, firstVisit, useApp } from "../store/appStore.js";
+
+const DEMOS = PRESET_GROUPS.find((g) => g.label === DEMO_GROUP_LABEL)?.items ?? [];
 
 const DISMISSED_KEY = "blondel.welcome.dismissed";
 
@@ -50,6 +54,22 @@ export function Welcome() {
           Fermer
         </button>
       </div>
+      {DEMOS.length > 0 ? (
+        <div className="welcome__demos" role="group" aria-label="Démos">
+          <span className="muted">Ou découvrir une démo :</span>
+          {DEMOS.map((d) => (
+            <button
+              key={d.id}
+              type="button"
+              className="link"
+              title={d.description}
+              onClick={() => applyPresetChoice(appStore.getState(), d.id)}
+            >
+              {d.label}
+            </button>
+          ))}
+        </div>
+      ) : null}
     </section>
   );
 }

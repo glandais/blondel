@@ -7,7 +7,7 @@
  * `color` est la teinte unie (rendu sans texture, repli) ; avec une texture, la couleur du
  * matériau est blanche (la texture porte la teinte) et la rugosité vient de la carte de rugosité.
  */
-import type { MaterialId, Severity } from "@blondel/core";
+import type { Appearance, MaterialId, Severity } from "@blondel/core";
 import type { TextureKind } from "./proceduralTextures.js";
 
 export interface MaterialLook {
@@ -30,6 +30,11 @@ export interface MaterialLook {
   readonly thickness?: number;
   /** Vernis (bois) : couche transparente, 0–1 (matériau physique). */
   readonly clearcoat?: number;
+  /**
+   * Multiplicateur RVB de la texture (ton d'une finition bois, `Project.appearance.woodTone`) :
+   * une composante > 1 éclaircit, < 1 assombrit. Absent : texture telle quelle.
+   */
+  readonly tint?: readonly [number, number, number];
 }
 
 export const MATERIAL_LOOKS: Readonly<Record<MaterialId, MaterialLook>> = {
@@ -104,4 +109,89 @@ export const SEVERITY_COLORS: Readonly<Record<Severity, string>> = {
 
 export function materialLook(id: MaterialId): MaterialLook {
   return MATERIAL_LOOKS[id] ?? { color: "#999999", roughness: 0.7, metalness: 0 };
+}
+
+/**
+ * Tons des finitions bois (`Appearance.woodTone`) : multiplicateurs RVB de la texture.
+ * Présentation seulement (à valider à l'œil, QUESTIONS A25).
+ */
+export const WOOD_TONE_TINTS: Readonly<
+  Record<NonNullable<Appearance["woodTone"]>, readonly [number, number, number] | undefined>
+> = {
+  natural: undefined,
+  light: [1.14, 1.12, 1.08],
+  dark: [0.52, 0.42, 0.36],
+};
+
+/** Teintes du verre (`Appearance.glassTint`) : couleur et opacité du rendu. Présentation. */
+export const GLASS_TINTS: Readonly<
+  Record<NonNullable<Appearance["glassTint"]>, Pick<MaterialLook, "color" | "opacity">>
+> = {
+  clear: { color: MATERIAL_LOOKS.glass.color, opacity: MATERIAL_LOOKS.glass.opacity },
+  "extra-clear": { color: "#eef6f7", opacity: 0.2 },
+  smoked: { color: "#5f686d", opacity: 0.5 },
+};
+
+/**
+ * Zone de peinture d'une pièce : ossature (défaut), marches (`Appearance.treadPaintColor`) ou
+ * garde-corps et mains courantes (`Appearance.guardPaintColor`).
+ */
+export type PaintZone = "structure" | "treads" | "guards";
+
+/** Couleur de peinture d'une zone : sa couleur propre, sinon `paintColor`. */
+function paintColorFor(appearance: Appearance, zone: PaintZone): string | undefined {
+  const own =
+    zone === "treads"
+      ? appearance.treadPaintColor
+      : zone === "guards"
+        ? appearance.guardPaintColor
+        : undefined;
+  return own ?? appearance.paintColor;
+}
+
+/**
+ * Apparence d'un matériau selon les teintes enregistrées du projet (`Project.appearance`) :
+ * couleur de l'acier peint (par zone : ossature, marches, garde-corps), ton du bois, teinte du
+ * verre. Le matériau (et donc la masse, le débit) ne change pas : seule sa présentation. Sans
+ * `appearance`, `materialLook(id)`.
+ */
+export function materialLookFor(
+  id: MaterialId,
+  appearance?: Appearance,
+  zone: PaintZone = "structure",
+): MaterialLook {
+  const look = materialLook(id);
+  if (!appearance) return look;
+  const paint = id === "steel-painted" ? paintColorFor(appearance, zone) : undefined;
+  if (paint) return { ...look, color: paint.toLowerCase() };
+  if (id.startsWith("wood-") && appearance.woodTone) {
+    const tint = WOOD_TONE_TINTS[appearance.woodTone];
+    return tint ? { ...look, tint } : look;
+  }
+  if (id === "glass" && appearance.glassTint) {
+    return { ...look, ...GLASS_TINTS[appearance.glassTint] };
+  }
+  return look;
+}
+
+/** Clé de cache des matériaux pour des teintes données (chaîne vide : rendu par défaut). */
+export function appearanceKey(appearance?: Appearance): string {
+  if (!appearance) return "";
+  return [
+    appearance.paintColor ?? "",
+    appearance.treadPaintColor ?? "",
+    appearance.guardPaintColor ?? "",
+    appearance.woodTone ?? "",
+    appearance.glassTint ?? "",
+  ]
+    .join("|")
+    .toLowerCase();
+}
+
+/**
+ * Zone de peinture distincte pour ce matériau (seul l'acier peint en a), `structure` sinon :
+ * les matériaux partagés de la vue 3D n'en font une variante que pour l'acier peint.
+ */
+export function paintZoneFor(id: MaterialId, zone: PaintZone): PaintZone {
+  return id === "steel-painted" ? zone : "structure";
 }

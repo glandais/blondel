@@ -543,7 +543,10 @@ describe("computeLayout — exemples du dépôt", () => {
     const project = parseProjectText(readFileSync(join(dir, file), "utf8"));
     const layout = computeLayout(project);
     const spec = project.stair.layout;
-    expect(resolveWalklineOffset(project)).toBe(spec.width / 2);
+    // DTU 36.3 : milieu si E ≤ 1 200, sinon 600 mm du jour (démo « grand escalier d'ERP »,
+    // escalier droit de 1 400 mm : |Γ| = ΣL quel que soit d_f).
+    expect(resolveWalklineOffset(project)).toBe(spec.width <= 1200 ? spec.width / 2 : 600);
+    if (spec.width > 1200) expect(spec.turns).toHaveLength(0);
     if (spec.kind === "helical") {
       // Hélicoïdal (jalon 5a) : Γ = arc de rayon r_i + E/2 sur l'angle total des marches.
       const h = layout.helical!;

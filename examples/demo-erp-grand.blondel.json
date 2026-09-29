@@ -1,0 +1,124 @@
+{
+  "appearance": {
+    "glassTint": "clear",
+    "paintColor": "#f2f2ee"
+  },
+  "compliance": {
+    "contexts": [
+      "bois_dtu",
+      "erp_neuf",
+      "erp_securite"
+    ],
+    "overrides": [],
+    "profile": "strict"
+  },
+  "guards": {
+    "flight": {
+      "edgeOffset": 30,
+      "enabled": true,
+      "height": 900,
+      "inner": "auto",
+      "landing": {
+        "height": 1000,
+        "raise": true,
+        "ramp": "auto"
+      },
+      "outer": "auto"
+    },
+    "handrail": {
+      "extensions": {
+        "bottom": "auto",
+        "top": "auto"
+      },
+      "height": 900,
+      "section": {
+        "diameter": 42,
+        "kind": "round"
+      },
+      "wallClearance": 50,
+      "wallSides": "both"
+    },
+    "infill": {
+      "bottomGap": 50,
+      "kind": "glass",
+      "panelGap": 20,
+      "thickness": 18
+    },
+    "material": "stainless-brushed",
+    "opening": {
+      "enabled": true,
+      "height": 1000,
+      "setback": 50
+    },
+    "posts": {
+      "cornerAngle": 30,
+      "maxSpacing": 1500,
+      "newelOverrun": 50,
+      "size": 80
+    },
+    "wallTolerance": 100
+  },
+  "name": "Grand escalier d'ERP",
+  "rulesVersion": 1,
+  "schemaVersion": 1,
+  "site": {
+    "floorToFloor": 2700,
+    "lowerFinish": 0,
+    "opening": {
+      "kind": "rect",
+      "sizeX": 1600,
+      "sizeY": 4140,
+      "x": -100,
+      "y": 860
+    },
+    "upperFinish": 0,
+    "upperSlabThickness": 200,
+    "walls": []
+  },
+  "stair": {
+    "balancing": {
+      "method": "M3",
+      "targetCollet": 100,
+      "variant": "auto",
+      "windersPerSide": "auto"
+    },
+    "layout": {
+      "legs": [
+        {
+          "length": 4998
+        }
+      ],
+      "turns": [],
+      "width": 1400
+    },
+    "nosingOverrides": [],
+    "placement": {
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "rotation": 0
+    },
+    "stepping": {
+      "firstRiseOffset": 0,
+      "riserCount": "auto",
+      "targetGoing": "auto",
+      "targetRise": 160
+    },
+    "structure": {
+      "kind": "steel-profile",
+      "params": {
+        "family": "UPN"
+      }
+    },
+    "treads": {
+      "nosing": 10,
+      "riserThickness": 20,
+      "risers": "full",
+      "thickness": 40
+    },
+    "walkline": {
+      "mode": "dtu"
+    }
+  }
+}

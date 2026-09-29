@@ -34,6 +34,278 @@ exports[`buildModel — exemples du dépôt > acceptance-01-quart-tournant.blond
 }
 `;
 
+exports[`buildModel — exemples du dépôt > demo-erp-grand.blondel.json : cotes principales (non-régression) 1`] = `
+{
+  "blondel": 630.02,
+  "colletMin": null,
+  "colletsChord": [],
+  "firstRise": 158.82,
+  "g": 312.38,
+  "h": 158.82,
+  "headroom": 1903.9,
+  "headroomWidth": {
+    "min": 2023.5,
+    "nosing": 2,
+  },
+  "n": 17,
+  "parts": 109,
+  "run": 4998,
+  "treads": "ssssssssssssssss",
+  "violations": {
+    "avertissement": 0,
+    "bloquant": 0,
+    "conseil": 3,
+  },
+  "zones": [],
+}
+`;
+
+exports[`buildModel — exemples du dépôt > demo-half-turn-industrial.blondel.json : cotes principales (non-régression) 1`] = `
+{
+  "blondel": 629.97,
+  "colletMin": 113.3,
+  "colletsChord": [
+    174,
+    121.5,
+    162.7,
+    153,
+    113.3,
+    156.9,
+    170.9,
+    129.4,
+    181.5,
+  ],
+  "firstRise": 180,
+  "g": 269.97,
+  "h": 180,
+  "headroom": null,
+  "headroomWidth": null,
+  "n": 15,
+  "parts": 209,
+  "run": 3779.6,
+  "treads": "sswwwwwwwwwsss",
+  "violations": {
+    "avertissement": 12,
+    "bloquant": 0,
+    "conseil": 0,
+  },
+  "zones": [
+    "2-5 M3-cubic",
+    "5-8 M3-cubic",
+    "8-11 M3-cubic",
+  ],
+}
+`;
+
+exports[`buildModel — exemples du dépôt > demo-helical-glass.blondel.json : cotes principales (non-régression) 1`] = `
+{
+  "blondel": 590.24,
+  "colletMin": 33.5,
+  "colletsChord": [
+    33.5,
+    33.5,
+    33.5,
+    33.5,
+    33.5,
+    33.5,
+    33.5,
+    33.5,
+    33.5,
+    33.5,
+    33.5,
+    33.5,
+    33.5,
+    33.5,
+    33.5,
+  ],
+  "firstRise": 171.88,
+  "g": 246.49,
+  "h": 171.88,
+  "headroom": 1906.1,
+  "headroomWidth": {
+    "min": 1982.5,
+    "nosing": 0,
+  },
+  "n": 16,
+  "parts": 47,
+  "run": 3697.4,
+  "treads": "wwwwwwwwwwwwwww",
+  "violations": {
+    "avertissement": 16,
+    "bloquant": 0,
+    "conseil": 2,
+  },
+  "zones": [],
+}
+`;
+
+exports[`buildModel — exemples du dépôt > demo-helical-well.blondel.json : cotes principales (non-régression) 1`] = `
+{
+  "blondel": 648.09,
+  "colletMin": 136.6,
+  "colletsChord": [
+    136.6,
+    136.6,
+    136.6,
+    136.6,
+    136.6,
+    136.6,
+    136.6,
+    136.6,
+    136.6,
+    136.6,
+    136.6,
+    136.6,
+    136.6,
+    136.6,
+    136.6,
+  ],
+  "firstRise": 171.88,
+  "g": 304.34,
+  "h": 171.88,
+  "headroom": 1982.5,
+  "headroomWidth": {
+    "min": 1982.5,
+    "nosing": 3,
+  },
+  "n": 16,
+  "parts": 54,
+  "run": 4565.1,
+  "treads": "wwwwwwwwwwwwwww",
+  "violations": {
+    "avertissement": 1,
+    "bloquant": 0,
+    "conseil": 2,
+  },
+  "zones": [],
+}
+`;
+
+exports[`buildModel — exemples du dépôt > demo-quarter-curved.blondel.json : cotes principales (non-régression) 1`] = `
+{
+  "blondel": 604.97,
+  "colletMin": 108,
+  "colletsChord": [
+    190.3,
+    126.1,
+    110.1,
+    108,
+    117.4,
+    143.6,
+    209.1,
+  ],
+  "firstRise": 180,
+  "g": 244.97,
+  "h": 180,
+  "headroom": 1901.2,
+  "headroomWidth": {
+    "min": 1960,
+    "nosing": 2,
+  },
+  "n": 15,
+  "parts": 102,
+  "run": 3429.6,
+  "treads": "sswwwwwwwsssss",
+  "violations": {
+    "avertissement": 1,
+    "bloquant": 0,
+    "conseil": 1,
+  },
+  "zones": [
+    "3-9 M3-quintic",
+  ],
+}
+`;
+
+exports[`buildModel — exemples du dépôt > demo-quarter-landing-ash.blondel.json : cotes principales (non-régression) 1`] = `
+{
+  "blondel": 630,
+  "colletMin": null,
+  "colletsChord": [],
+  "firstRise": 180,
+  "g": 270,
+  "h": 180,
+  "headroom": 1960,
+  "headroomWidth": {
+    "min": 1960,
+    "nosing": 2,
+  },
+  "n": 15,
+  "parts": 72,
+  "run": 4216.9,
+  "treads": "sslsssssssssss",
+  "violations": {
+    "avertissement": 3,
+    "bloquant": 0,
+    "conseil": 1,
+  },
+  "zones": [],
+}
+`;
+
+exports[`buildModel — exemples du dépôt > demo-straight-loft.blondel.json : cotes principales (non-régression) 1`] = `
+{
+  "blondel": 630,
+  "colletMin": null,
+  "colletsChord": [],
+  "firstRise": 180,
+  "g": 270,
+  "h": 180,
+  "headroom": 1900,
+  "headroomWidth": {
+    "min": 1960,
+    "nosing": 2,
+  },
+  "n": 15,
+  "parts": 80,
+  "run": 3780,
+  "treads": "ssssssssssssss",
+  "violations": {
+    "avertissement": 0,
+    "bloquant": 0,
+    "conseil": 15,
+  },
+  "zones": [],
+}
+`;
+
+exports[`buildModel — exemples du dépôt > demo-u-oak.blondel.json : cotes principales (non-régression) 1`] = `
+{
+  "blondel": 630.01,
+  "colletMin": 100,
+  "colletsChord": [
+    158.2,
+    156.9,
+    154.5,
+    100,
+    100,
+    147.9,
+    170.7,
+    128.3,
+    180.5,
+  ],
+  "firstRise": 180,
+  "g": 270.01,
+  "h": 180,
+  "headroom": null,
+  "headroomWidth": null,
+  "n": 15,
+  "parts": 171,
+  "run": 3780.2,
+  "treads": "swwwwwwwwwssss",
+  "violations": {
+    "avertissement": 0,
+    "bloquant": 0,
+    "conseil": 0,
+  },
+  "zones": [
+    "1-3 M3-cubic",
+    "3-7 M3-cubic",
+    "7-10 M3-cubic",
+  ],
+}
+`;
+
 exports[`buildModel — exemples du dépôt > half-turn.blondel.json : cotes principales (non-régression) 1`] = `
 {
   "blondel": 629.97,

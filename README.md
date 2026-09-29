@@ -29,6 +29,28 @@ pnpm install
 pnpm dev          # application web sur http://localhost:5173
 ```
 
+### Préréglages
+
+Le sélecteur « Préréglage » de la barre d'outils présente deux groupes (l'écran d'accueil propose aussi les démos) :
+
+- **Basiques** : les huit tracés de départ (droit, quart tournant à gauche ou à droite, deux quarts en U ou en S, demi-tournant balancé, quart tournant avec palier, hélicoïdal à fût central), réglages par défaut, à compléter pas à pas (structure, garde-corps, matériaux) ;
+- **Démo** : huit escaliers complets, prêts à montrer (structure, marches, garde-corps et teintes), ouverts directement dans l'onglet 3D, cadrés de trois quarts, cotes principales et contrôles sur les pièces masqués (deux cases de la vue 3D, à cocher pour les revoir ; le panneau Contrôle de conception liste toujours les avertissements ; un préréglage de base ou un autre projet les rétablit). Chaque démo est décrite en une ligne sous le sélecteur :
+
+| Démo                                    | Contenu                                                                                      |
+| --------------------------------------- | -------------------------------------------------------------------------------------------- |
+| Hélicoïdal acier, verre et inox         | fût acier noir, marches chêne rayonnantes, garde-corps verre et main courante inox           |
+| Quart tournant débillardé soudé         | limon acier débillardé soudé autour d'un jour en arc, marches chêne, garde-corps verre       |
+| Deux quarts en U, chêne massif          | limons à la française, poteaux d'angle et balustres, tout en chêne huilé                     |
+| Demi-tournant industriel en tôle pliée  | limons en plat laser anthracite, marches en tôle pliée en Z gris clair, barreaudage graphite |
+| Escalier droit loft sur UPN             | limons UPN noirs, marches massives de 80 mm en chêne foncé sans contremarche, verre fumé     |
+| Quart tournant à palier, frêne et verre | limons à la française et poteau en frêne clair, palier d'angle, garde-corps verre            |
+| Grand escalier d'ERP                    | emmarchement de 1 400 mm, mains courantes des deux côtés, contextes ERP neuf                 |
+| Hélicoïdal à jour central               | marches portées par deux limons hélicoïdaux roulés autour d'un jour central                  |
+
+Une démo reste un projet ordinaire : tout se modifie, et une seule entrée d'annulation la retire. Elle peut porter l'essence des marches (`stair.treads.material`, qui compte dans les masses et le débit) et des teintes d'affichage (`appearance` : couleur de la peinture, éventuellement distincte pour les marches et les garde-corps, ton du bois, teinte du verre), propres à la vue 3D : elles ne changent ni les pièces, ni les masses, ni les exports. Chaque démo existe aussi en fichier (`examples/demo-*.blondel.json`).
+
+### Exemples
+
 Des projets d'exemple sont dans `examples/*.blondel.json` ; ils s'ouvrent depuis le menu « Importer » de l'application. On y trouve un exemple par préréglage, le cas d'acceptation n° 1 et ses variantes :
 
 | Exemple                              | Contenu                                                                     |

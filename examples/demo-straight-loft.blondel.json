@@ -1,0 +1,124 @@
+{
+  "appearance": {
+    "glassTint": "smoked",
+    "paintColor": "#1f2328",
+    "woodTone": "dark"
+  },
+  "compliance": {
+    "contexts": [
+      "bois_dtu",
+      "logement_interieur"
+    ],
+    "overrides": [],
+    "profile": "strict"
+  },
+  "guards": {
+    "flight": {
+      "edgeOffset": 30,
+      "enabled": true,
+      "height": 900,
+      "inner": "auto",
+      "landing": {
+        "height": 1000,
+        "raise": true,
+        "ramp": "auto"
+      },
+      "outer": "auto"
+    },
+    "handrail": {
+      "extensions": {
+        "bottom": "auto",
+        "top": "auto"
+      },
+      "height": 900,
+      "section": {
+        "diameter": 42,
+        "kind": "round"
+      },
+      "wallClearance": 50,
+      "wallSides": "auto"
+    },
+    "infill": {
+      "bottomGap": 50,
+      "kind": "glass",
+      "panelGap": 20,
+      "thickness": 18
+    },
+    "material": "steel-painted",
+    "opening": {
+      "enabled": true,
+      "height": 1000,
+      "setback": 50
+    },
+    "posts": {
+      "cornerAngle": 30,
+      "maxSpacing": 1500,
+      "newelOverrun": 50,
+      "size": 80
+    },
+    "wallTolerance": 100
+  },
+  "name": "Escalier droit loft sur UPN",
+  "rulesVersion": 1,
+  "schemaVersion": 1,
+  "site": {
+    "floorToFloor": 2700,
+    "lowerFinish": 0,
+    "opening": {
+      "kind": "rect",
+      "sizeX": 1100,
+      "sizeY": 3150,
+      "x": -100,
+      "y": 630
+    },
+    "upperFinish": 0,
+    "upperSlabThickness": 200,
+    "walls": []
+  },
+  "stair": {
+    "balancing": {
+      "method": "M3",
+      "targetCollet": 100,
+      "variant": "auto",
+      "windersPerSide": "auto"
+    },
+    "layout": {
+      "legs": [
+        {
+          "length": 3780
+        }
+      ],
+      "turns": [],
+      "width": 900
+    },
+    "nosingOverrides": [],
+    "placement": {
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "rotation": 0
+    },
+    "stepping": {
+      "firstRiseOffset": 0,
+      "riserCount": "auto",
+      "targetGoing": "auto",
+      "targetRise": 175
+    },
+    "structure": {
+      "kind": "steel-profile",
+      "params": {
+        "family": "UPN"
+      }
+    },
+    "treads": {
+      "nosing": 10,
+      "riserThickness": 20,
+      "risers": "none",
+      "thickness": 80
+    },
+    "walkline": {
+      "mode": "dtu"
+    }
+  }
+}

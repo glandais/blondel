@@ -6,7 +6,7 @@
  * panneaux Structure et Garde-corps. Choix de présentation, aucune règle métier.
  */
 import type { MaterialId, PartCategory } from "@blondel/core";
-import { MATERIAL_LABELS } from "../three/materials.js";
+import { MATERIAL_LABELS, type PaintZone } from "../three/materials.js";
 
 export type PartFamily = "treads" | "structure" | "guards" | "handrails";
 
@@ -41,6 +41,20 @@ export function partFamily(part: {
   if (part.category === "tread" || part.category === "riser" || part.category === "landing") {
     return "treads";
   }
+  return "structure";
+}
+
+/**
+ * Zone de peinture d'une pièce (teintes enregistrées `Project.appearance`) : marches, garde-corps
+ * (mains courantes comprises) ou ossature.
+ */
+export function paintZone(part: {
+  readonly partId: string;
+  readonly category: PartCategory;
+}): PaintZone {
+  const family = partFamily(part);
+  if (family === "treads") return "treads";
+  if (family === "guards" || family === "handrails") return "guards";
   return "structure";
 }
 

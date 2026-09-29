@@ -515,7 +515,7 @@ export function buildHelicalCore(
       parts.push(
         woodPart(
           { ...base, solid: verticalExtrusion(outline, top - t, t), stock },
-          DEFAULT_WOOD_MATERIAL,
+          project.stair.treads.material ?? DEFAULT_WOOD_MATERIAL,
           area * t,
           area,
           stock.length,

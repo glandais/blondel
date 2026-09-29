@@ -2,7 +2,8 @@
  * Outils de la vue 3D (jalon 6) : contrôles sur les pièces (légende en haut à droite) et **barre
  * d'outils 3D** (en bas) : cotes principales, vue éclatée, plan de coupe, mesure point à point,
  * isolation de la pièce sélectionnée, apparence par famille de pièces (essence, finition ; aperçu
- * de rendu). Composant contrôlé : l'état vit dans `Viewer3D` et, pour l'apparence, dans le store.
+ * de rendu). Composant contrôlé : l'état vit dans `Viewer3D` et, pour l'apparence, les cotes
+ * principales et les contrôles sur les pièces (`AppState.overlays`), dans le store.
  */
 import type { MaterialId, Severity } from "@blondel/core";
 import { useId } from "react";

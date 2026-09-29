@@ -326,7 +326,7 @@ function landingLegs(shape: PresetShape, width: number, n: number, going: number
  * la ligne de pente, sur la ligne de foulée, atteigne `PRESET_HEADROOM_MIN` : calculée sur le
  * tracé et les nez réels du projet. `null` si aucune trémie n'est nécessaire.
  */
-function computeOpening(project: Project, clearance: number): Rect | null {
+export function computeOpening(project: Project, clearance: number): Rect | null {
   const layout = computeLayout(project);
   const rises = computeRises(project);
   const positions = placeNosings(project, layout, rises.riserCount);

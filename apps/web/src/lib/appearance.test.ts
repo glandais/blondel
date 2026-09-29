@@ -4,6 +4,7 @@ import {
   APPEARANCE_MATERIALS,
   displayedMaterial,
   familiesOf,
+  paintZone,
   partFamily,
   withAppearance,
 } from "./appearance.js";
@@ -33,6 +34,15 @@ describe("apparence 3D par famille de pièces", () => {
       "handrails",
     );
     expect(partFamily({ partId: "tread-3", category: "tread" })).toBe("treads");
+  });
+
+  it("zone de peinture : marches, garde-corps (mains courantes comprises), ossature", () => {
+    expect(paintZone({ partId: "tread-3", category: "tread" })).toBe("treads");
+    expect(paintZone({ partId: "landing-1", category: "landing" })).toBe("treads");
+    expect(paintZone({ partId: "guard-outer-1-baluster-2", category: "baluster" })).toBe("guards");
+    expect(paintZone({ partId: "guard-outer-1-handrail", category: "handrail" })).toBe("guards");
+    expect(paintZone({ partId: "post-1", category: "post" })).toBe("structure");
+    expect(paintZone({ partId: "LE1", category: "stringer" })).toBe("structure");
   });
 
   it("liste les familles présentes et leurs matériaux", () => {

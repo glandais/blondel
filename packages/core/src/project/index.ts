@@ -1,5 +1,6 @@
 /**
- * Utilitaires de projet : lecture (migrations + validation), sérialisation stable, préréglages.
+ * Utilitaires de projet : lecture (migrations + validation), sérialisation stable, préréglages
+ * de base et de démonstration.
  */
 export { ProjectParseError, formatPath, type ProjectIssue } from "./errors.js";
 export {
@@ -26,6 +27,14 @@ export {
   type PresetId,
   type PresetOptions,
 } from "./presets.js";
+export {
+  DEMO_PRESET_DESCRIPTIONS,
+  DEMO_PRESET_IDS,
+  DEMO_PRESET_LABELS,
+  createDemoProject,
+  isDemoPresetId,
+  type DemoPresetId,
+} from "./presetDemo.js";
 export {
   HELICAL_DEFAULT_CORE_RADIUS,
   HELICAL_DEFAULT_OUTER_RADIUS,
