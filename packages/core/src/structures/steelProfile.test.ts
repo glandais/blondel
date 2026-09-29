@@ -13,6 +13,7 @@ import { PRECHECK_LABEL } from "../precheck/checks.js";
 import { stairLoads } from "../precheck/loads.js";
 import { DEFAULT_PRECHECK_SETTINGS, steelMaterialOf } from "../precheck/settings.js";
 import { parseProjectText } from "../project/parse.js";
+import { applyStructureChoice } from "../project/structureChoice.js";
 import { makeSteppingProject } from "../stepping/test-helpers.js";
 import { QUANTITY_MASS_KG } from "./quantities.js";
 import { getStructure } from "./registry.js";
@@ -20,6 +21,9 @@ import {
   SteelProfileParamsSchema,
   buildSteelProfile,
   lightestSection,
+  profileFlangeWidth,
+  profileNewel,
+  profileNewelFits,
   type SteelProfileResult,
 } from "./steelProfile.js";
 import { cuttingPlan } from "./steelProfileCutting.js";
@@ -304,6 +308,117 @@ describe("steel-profile — tournants", () => {
       profiled(loadExample("quarter-left.blondel.json"), { miterTolerance: Math.ceil(gap) + 1 }),
     );
     expect(results(loose, "FAB_ONGLET_RACCORD")[0]!.status).toBe("ok");
+  });
+});
+
+describe("steel-profile — poteau élargi des profilés (décision A13)", () => {
+  it("auto : aile + 2 × jeu, décalé vers le jour ; côté imposé ; défauts du plugin", () => {
+    const d = SteelProfileParamsSchema.parse({});
+    expect(d.newel.size).toBe("auto");
+    expect(d.newel.clearance).toBe(20);
+    // UPN 160 : b = 65 → 105 mm, δ = ⌈52,5 − 20⌉ = 33 (débord côté marches 19,5 mm).
+    expect(profileNewel(65, d.newel)).toEqual({ kind: "newel", size: 105, offset: 33 });
+    expect(profileNewel(90, d.newel)).toEqual({ kind: "newel", size: 130, offset: 45 });
+    expect(profileNewel(65, { size: 160, clearance: 20 })).toEqual({
+      kind: "newel",
+      size: 160,
+      offset: 60,
+    });
+    // Côté imposé plus petit que 2 × jeu : poteau centré.
+    expect(profileNewel(65, { size: 30, clearance: 20 })).toEqual({
+      kind: "newel",
+      size: 30,
+      offset: 0,
+    });
+  });
+
+  it("propriété : le poteau auto reçoit l'aile avec le jeu côté jour et n'entame les marches que du jeu", () => {
+    fc.assert(
+      fc.property(
+        fc.integer({ min: 30, max: 320 }),
+        fc.integer({ min: 1, max: 60 }),
+        (b, clearance) => {
+          const n = profileNewel(b, { size: "auto", clearance });
+          const setback = n.size / 2 + n.offset;
+          const protrusion = n.size / 2 - n.offset;
+          return (
+            Number.isInteger(n.size) &&
+            Number.isInteger(n.offset) &&
+            n.offset < n.size / 2 &&
+            setback >= b + clearance - 1e-9 &&
+            protrusion > 0 &&
+            protrusion <= clearance + 0.5 + 1e-9 &&
+            profileNewelFits(n, b, { size: "auto", clearance }) &&
+            // Un poteau posé pour une aile plus large convient encore (pas d'aller-retour).
+            profileNewelFits(n, b - 5, { size: "auto", clearance })
+          );
+        },
+      ),
+    );
+  });
+
+  it("cas n° 1 (j3c) : poteau élargi, limons de jour reçus (FAB_POTEAU_RECEPTION), UPN qui passe", () => {
+    const project = loadExample("j3c-acceptance-01-upn.blondel.json");
+    expect(project.stair.layout.turns[0]!.inner).toEqual({ kind: "newel", size: 125, offset: 43 });
+    const { m, r } = run(project);
+    expect(m.errors).toEqual([]);
+    // Prédimensionnement indicatif et hauteur d'âme : UPN 240 (la hauteur nécessaire pour loger
+    // les cornières sous la corde du limon mural LE2 est la contrainte déterminante).
+    expect(r.section!.name).toBe("UPN 240");
+    expect(r.stringers.every((x) => passesPrecheck(x.precheck))).toBe(true);
+    const reception = results(m, "FAB_POTEAU_RECEPTION");
+    expect(reception.length).toBeGreaterThan(0);
+    expect(reception.every((x) => x.status === "ok")).toBe(true);
+    // Limons de jour reçus en barre droite contre le poteau, coupe d'aplomb.
+    const inner = r.stringers.filter((x) => x.face.side === "inner");
+    expect(inner.map((x) => [x.face.start, x.face.end])).toEqual([
+      ["floor", "newel"],
+      ["newel", "arrival"],
+    ]);
+    for (const x of inner) {
+      expect(x.part.flat!.lines.some((l) => /contre le poteau/.test(l.label ?? ""))).toBe(true);
+    }
+    // Tube 125 × 125 centré en K − 43·(n + u).
+    expect(r.posts[0]!.section).toBe("tube carré 125 × 125 × 4");
+    expect(m.notes?.some((n) => /poteau des profilés attendu/.test(n)) ?? false).toBe(false);
+    expect(profileFlangeWidth(m.parts)).toBe(85);
+  });
+
+  it("cas n° 1 : poteau résolu = aile de la section qu'il produit + 2 × jeu (point fixe exact)", () => {
+    // Revue : la résolution s'arrêtait sur 130 mm (aile de l'UPN 260 obtenu avec le poteau de
+    // 100 mm) alors que ce poteau donne un UPN 240 (aile 85 → 125 mm), qui passe aussi avec
+    // 125 mm : le côté n'était pas « aile de la section retenue + 2 × 20 ».
+    const base = loadExample("acceptance-01-quart-tournant.blondel.json");
+    const { project } = applyStructureChoice(base, "steel-profile", { family: "UPN" });
+    const inner = project.stair.layout.turns[0]!.inner;
+    const m = buildModel(project);
+    const b = profileFlangeWidth(m.parts)!;
+    expect(b).toBe(85);
+    expect(inner).toEqual(profileNewel(b, { size: "auto", clearance: 20 }));
+    expect(inner).toEqual({ kind: "newel", size: 125, offset: 43 });
+    expect(m.errors).toEqual([]);
+  });
+
+  it("poteau de 100 mm centré : FAB_POTEAU_RECEPTION en violation, poteau attendu signalé", () => {
+    const base = loadExample("j3c-acceptance-01-upn.blondel.json");
+    const project: Project = {
+      ...base,
+      stair: {
+        ...base.stair,
+        layout: {
+          ...base.stair.layout,
+          turns: base.stair.layout.turns.map((t) => ({
+            ...t,
+            inner: { kind: "newel" as const, size: 100 },
+          })),
+        },
+      },
+    };
+    const { m } = run(project);
+    const reception = results(m, "FAB_POTEAU_RECEPTION");
+    expect(reception.some((x) => x.status === "violation")).toBe(true);
+    expect(reception.every((x) => x.max === 50)).toBe(true);
+    expect(m.notes?.some((n) => /poteau des profilés attendu : \d+ mm décalé/.test(n))).toBe(true);
   });
 });
 

@@ -9,6 +9,7 @@ import type { StructureContext, StructureKind } from "@blondel/core";
 import { useMemo, useState } from "react";
 import { layoutKindOf, structureFitsLayout } from "../lib/layoutKind.js";
 import { availableStructures } from "../lib/optionalApi.js";
+import { chooseStructure } from "../lib/structureChoice.js";
 import {
   deriveParamFields,
   getParam,
@@ -184,12 +185,20 @@ export function StructureSection() {
   const onKind = (kind: string): UpdateResult => {
     setError(null);
     if (kind === structure.kind) return { ok: true };
-    if (kind === NO_STRUCTURE) return setStructure(NO_STRUCTURE, {});
     const k = kinds.find((x) => x.kind === kind);
     // Paramètres complets du plugin enregistrés au choix (valeurs par défaut du plugin) : le
     // projet reste lisible même si les défauts changent avec le tracé.
-    const d = k ? safeDefaults(k, ctx) : undefined;
-    return setStructure(kind, withDefaults(d, {}));
+    const d = kind === NO_STRUCTURE || !k ? undefined : safeDefaults(k, ctx);
+    const params = kind === NO_STRUCTURE ? {} : withDefaults(d, {});
+    // Structure et jour adapté (poteau d'angle, poteau des profilés) en une seule modification.
+    let notice: string | null = null;
+    const r = appStore.getState().update((p) => {
+      const c = chooseStructure(p, kind, params);
+      notice = c.notice;
+      return c.project;
+    });
+    if (r.ok && notice !== null) appStore.setState({ notice: { kind: "info", text: notice } });
+    return r;
   };
 
   const onParam =

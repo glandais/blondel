@@ -38,3 +38,19 @@ export {
   suggestFixes,
   type FixSuggestion,
 } from "./fixes.js";
+export {
+  DEFAULT_NEWEL,
+  expectedNewel,
+  newelLabel,
+  newelMatches,
+  newelSatisfies,
+  withNewels,
+  type NewelInner,
+} from "./newel.js";
+export {
+  PROFILE_NEWEL_ITERATIONS,
+  applyStructureChoice,
+  resolveProfileNewel,
+  type ResolvedProfileNewel,
+  type StructureChoiceResult,
+} from "./structureChoice.js";

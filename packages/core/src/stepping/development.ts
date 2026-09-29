@@ -17,6 +17,7 @@ import { makeCurve } from "../geom2d/curve.js";
 import { lineSeg, segEnd, segStart } from "../geom2d/segment.js";
 import { GEOM_EPS } from "../geom2d/tolerance.js";
 import * as V from "../geom2d/vec.js";
+import { newelReach } from "../layout/newel.js";
 import { turnCollarSide } from "./sides.js";
 
 export function developmentInner(layout: Layout, project: Project): Curve2 {
@@ -31,7 +32,7 @@ export function developmentInner(layout: Layout, project: Project): Curve2 {
     const k = layout.turns[j]?.innerCorner;
     if (!k) return;
     // Segments dont les deux extrémités sont sur (ou dans) le poteau : contour à remplacer.
-    const reach = (t.inner.size / 2) * Math.SQRT2 + GEOM_EPS;
+    const reach = newelReach(t.inner) + GEOM_EPS;
     const inside = (seg: CurveSeg): boolean =>
       seg.kind === "line" &&
       V.distance(segStart(seg), k) <= reach &&

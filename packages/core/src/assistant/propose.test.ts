@@ -9,6 +9,7 @@ import { ProjectSchema } from "../model/project.js";
 import { buildModel } from "../pipeline/build.js";
 import { parseProjectText } from "../project/parse.js";
 import { serializeProject } from "../project/serialize.js";
+import { applyStructureChoice } from "../project/structureChoice.js";
 import { inscribedCircle, proposeDesigns } from "./propose.js";
 import type { AssistantInput, AssistantResult } from "./types.js";
 
@@ -104,6 +105,25 @@ describe("cas d'acceptation n° 1 (H 2 700, trémie 2 800 × 900, dalle 200)", (
       for (const t of c.project.stair.layout.turns) expect(t.inner.kind).toBe("newel");
     }
     expectNoBlocking(r);
+  });
+
+  it("limons en profilés : poteau élargi des profilés (décision A13) sur chaque proposition", () => {
+    const r = proposeUntimed({
+      site: ACCEPTANCE_SITE,
+      preferences: { structure: { kind: "steel-profile" }, typologies: ["quarter"] },
+    });
+    expect(r.candidates.length).toBeGreaterThan(0);
+    for (const c of r.candidates) {
+      expect(c.project.stair.structure.kind).toBe("steel-profile");
+      for (const t of c.project.stair.layout.turns) {
+        expect(t.inner.kind).toBe("newel");
+        if (t.inner.kind === "newel") expect(t.inner.offset ?? 0).toBeGreaterThan(0);
+      }
+      // Même poteau que le choix de structure dans l'interface (idempotent).
+      expect(
+        applyStructureChoice(c.project, "steel-profile", c.project.stair.structure.params).notes,
+      ).toEqual([]);
+    }
   });
 
   it("budget : ≤ 2 s (appelable dans le Web Worker)", () => {

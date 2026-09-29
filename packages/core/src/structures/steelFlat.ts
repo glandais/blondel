@@ -1320,7 +1320,7 @@ export function buildSteelFlat(ctx: StructureContext, params: SteelFlatParams): 
         pluginRuleDef(FAB_RULES.newelReception),
         receivedChecks.filter((r) => r.label.endsWith(nw.mark)),
         "Épaisseur du limon reçu par le poteau",
-        { min: null, max: nw.geom.size / 2 },
+        { min: null, max: nw.geom.jourExtent },
       );
     }
   }

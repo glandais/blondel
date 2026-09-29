@@ -68,6 +68,11 @@ test("corrections proposées : bouton dans la barre d'erreurs, appliqué puis an
   await openApp(page);
   await applyPreset(page, "Quart tournant à gauche");
   await chooseStructure(page, "wood-housed");
+  // Le choix de la structure pose le poteau (décision A4) : jour remis à angle vif à la main
+  // pour faire apparaître l'erreur et sa correction.
+  await expect(page.getByLabel("Jour", { exact: true })).toHaveValue("newel");
+  await page.getByLabel("Jour", { exact: true }).selectOption("sharp");
+  await settle(page);
   const bar = page.locator(".errors-bar");
   const fix = bar.getByRole("button", { name: /Passer le jour en poteau de 100 mm/ });
   await expect(fix).toBeVisible();

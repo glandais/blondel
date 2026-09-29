@@ -220,8 +220,9 @@ export const FAB_RULES = {
   newelReception: {
     id: "FAB_POTEAU_RECEPTION",
     description:
-      "Le limon de jour s'arrête contre une face du poteau : épaisseur du limon ≤ demi-côté du poteau (poteau centré sur l'intersection des faces internes)",
-    source: "Géométrie du tracé (layout.ts : poteau centré sur le coin intérieur K)",
+      "Le limon de jour s'arrête contre une face du poteau : épaisseur (largeur en plan) du limon ≤ débord du poteau côté jour au-delà de la face interne du limon (demi-côté pour un poteau centré sur l'intersection des faces internes, demi-côté + décalage pour un poteau décalé vers le jour)",
+    source:
+      "Géométrie du tracé (layout.ts et layout/newel.ts : poteau centré sur le coin intérieur K ou décalé vers le jour)",
     confidence: "eleve",
     nature: "metier",
     severity: "avertissement",

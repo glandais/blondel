@@ -282,12 +282,15 @@ export function applyVariant(
   };
 }
 
-/** Raccord de jour lisible (« poteau 100 mm », « arc R 250 mm », « vif »). */
+/**
+ * Raccord de jour lisible (« poteau 100 mm », « poteau 130 mm décalé de 45 mm », « arc R 250
+ * mm », « vif »).
+ */
 export function jourText(c: InnerCorner): string {
   return c.kind === "arc"
     ? `arc R ${int.format(c.radius)} mm`
     : c.kind === "newel"
-      ? `poteau ${int.format(c.size)} mm`
+      ? `poteau ${int.format(c.size)} mm${(c.offset ?? 0) > 0 ? ` décalé de ${int.format(c.offset ?? 0)} mm` : ""}`
       : "vif";
 }
 

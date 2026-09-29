@@ -14,8 +14,8 @@
  * **Même épure, jour adapté** (jalon 5b, critère d'acceptation n° 2, CHALLENGE P2) :
  * `compareEpure` garde le site, la ligne de foulée et le nombre de marches, mais adapte le
  * raccord de jour de chaque variante à ce que sa structure sait construire (poteau d'angle pour
- * les limons droits et les profilés — un UPN ne se cintre pas à petit rayon, C §2.3 —, jour en
- * arc pour un débillardé, G7) ; le tracé et le balancement sont recalculés par variante (variante
+ * les limons droits et les profilés — un UPN ne se cintre pas à petit rayon, C §2.3 ; poteau
+ * élargi pour les profilés, décision A13 —, jour en arc pour un débillardé, G7) ; le tracé et le balancement sont recalculés par variante (variante
  * M3 comprise) et les **écarts d'épure** sont listés.
  *
  * Module non réexporté par `structures/index.ts` (il dépend du pipeline, qui dépend des
@@ -31,6 +31,8 @@ import type { Model, Part, Severity, Stepping } from "../model/derived.js";
 import type { Mm } from "../model/primitives.js";
 import type { InnerCorner, Project } from "../model/project.js";
 import { buildModel } from "../pipeline/build.js";
+import { layoutAccepts, newelLabel, newelSatisfies, withNewels } from "../project/newel.js";
+import { resolveProfileNewel } from "../project/structureChoice.js";
 import { fmt } from "../rules/check.js";
 import { isDebillardeStructure } from "../stepping/stepping.js";
 import { minProfileBendRadius } from "../workshop/metal.js";
@@ -340,7 +342,11 @@ export interface EpureVariantSpec {
 }
 
 export interface EpureCompareOptions extends Pick<CompareOptions, "precheck"> {
-  /** Côté du poteau d'angle substitué à un jour en arc ou vif (mm). */
+  /**
+   * Côté du poteau d'angle (centré) substitué à un jour en arc ou vif (mm). Défaut :
+   * `DEFAULT_ADAPTED_NEWEL_SIZE`, et pour `steel-profile` le **poteau élargi des profilés**
+   * (décision A13, `resolveProfileNewel`), qui remplace aussi un poteau trop étroit.
+   */
   readonly newelSize?: Mm;
   /**
    * Rayon du jour en arc substitué pour un débillardé (mm) ; défaut : rayon intérieur mini de
@@ -362,7 +368,7 @@ const jourLabel = (c: InnerCorner): string =>
   c.kind === "arc"
     ? `en arc R ${fmt(c.radius, 0)} mm`
     : c.kind === "newel"
-      ? `poteau ${fmt(c.size, 0)} mm`
+      ? `poteau ${fmt(c.size, 0)} mm${(c.offset ?? 0) > 0 ? ` décalé de ${fmt(c.offset ?? 0, 0)} mm vers le jour` : ""}`
       : "vif";
 
 /** Raison pour laquelle un limon de jour profilé ne suit pas un jour en arc (C §2.3). */
@@ -415,10 +421,30 @@ export function adaptJour(
   const adapt = spec.jour !== "keep";
   const adaptations: JourAdaptation[] = [];
   const signals: string[] = [];
-  const newel: InnerCorner = {
+  let newel: InnerCorner = {
     kind: "newel",
     size: options.newelSize ?? DEFAULT_ADAPTED_NEWEL_SIZE,
   };
+  // Profilés : poteau élargi (décision A13) résolu sur la variante, section comprise ; il
+  // remplace aussi un poteau existant qui ne reçoit pas l'aile.
+  let unfitNewel: ((c: InnerCorner) => boolean) | null = null;
+  if (kind === "steel-profile" && options.newelSize === undefined && adapt) {
+    const variant: Project = {
+      ...project,
+      stair: { ...project.stair, structure: { kind, params: { ...params } } },
+    };
+    const resolved = resolveProfileNewel(variant, () => true);
+    // Poteau élargi refusé par le tracé (volée centrale trop courte…) : poteau par défaut.
+    if (resolved && !layoutAccepts(withNewels(variant, resolved.newel, () => true))) {
+      signals.push(
+        `${newelLabel(resolved.newel)} (poteau élargi des profilés, décision A13) impossible dans ce tracé : poteau par défaut de ${fmt(newel.size, 0)} mm.`,
+      );
+    } else if (resolved) {
+      newel = resolved.newel;
+      unfitNewel = (c) =>
+        c.kind === "newel" && !newelSatisfies(c, kind, params, resolved.flangeWidth);
+    }
+  }
   /** Rayon de jour minimal roulable : rayon intérieur mini de la rouleuse + épaisseur. */
   const minRollableRadius = (): Mm => {
     const metal = resolveWorkshopProfile(project.workshop).metal;
@@ -432,7 +458,10 @@ export function adaptJour(
   const turns = project.stair.layout.turns.map((t, j) => {
     let target: InnerCorner | null = null;
     let reason = "";
-    if (NEWEL_JOUR_STRUCTURES.has(kind) && t.inner.kind !== "newel") {
+    if (unfitNewel?.(t.inner)) {
+      target = newel;
+      reason = `${jourLabel(t.inner)} trop étroit pour recevoir les profilés : poteau élargi des profilés (largeur d'aile + 2 × jeu, décalé vers le jour, décision A13, à valider)`;
+    } else if (NEWEL_JOUR_STRUCTURES.has(kind) && t.inner.kind !== "newel") {
       target = newel;
       reason =
         t.inner.kind === "arc"

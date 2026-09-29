@@ -26,6 +26,7 @@ Preuves :
 - `packages/core/src/assistant/propose.test.ts`, « cas d'acceptation n° 1 » : quart tournant sans bloquant proposé en tête ; escalier droit rejeté pour l'échappée (ou à marge nulle et classé après) ; limons à la française contenus dans la trémie avec poteau d'angle ; budget ≤ 2 s ; résultats déterministes.
 - `packages/exports/src/acceptance-criteria.test.ts`, « critère d'acceptation n° 1 complet » (exemple `j4-acceptance-01-garde-corps`) : 0 bloquant, 4 limons, poteau, garde-corps (poteaux, balustres, mains courantes). DXF R12 de chaque pièce à plat relu à ±0,01 mm, mortaises sur leur calque, plan DXF AC1021 relu. Dossier PDF avec plan, élévation, nomenclature, contrôle et développés.
 - `apps/web/e2e/acceptance.spec.ts` : même critère par le préréglage plutôt que par l'assistant (11 interactions).
+- `apps/web/e2e/structure-choice.spec.ts` (décision A4, 2026-09-30) : choisir « limons à la française » sur le préréglage quart tournant pose le poteau d'angle de 100 mm (plus d'erreur « jour à angle vif »), message affiché, annulable en une fois ; `packages/core/src/project/structureChoice.test.ts` pour tous les préréglages tournants.
 - `packages/core/src/guards/acceptance.test.ts`, « garde-corps barreaudé côté vide : aucune violation bloquante ».
 
 Réserves :
@@ -42,16 +43,18 @@ Preuves :
 
 - `packages/core/src/structures/steelCurved.acceptance.test.ts`, « critère d'acceptation n° 2 : comparateur sur la même épure » (exemple `j5b-debillarde-soude`, quart tournant M3 quintique) :
   - même nombre de hauteurs et même ligne de foulée ;
-  - UPN impossible sur un jour à petit rayon : variante adaptée (poteau) et signalée ;
+  - UPN impossible sur un jour à petit rayon : variante adaptée et signalée, sur le **poteau élargi des profilés** (décision A13 : aile + 2 × 20 mm, décalé vers le jour, soit 130 mm décalé de 45 mm ; aucun `FAB_POTEAU_RECEPTION` en violation) ;
   - écarts de jour, de giron et de balancement affichés ;
   - masse, pièces, pièces uniques, cordons dont bout à bout, EXC ;
   - coût `null` sans barème (champs manquants listés), et coût = matière + main-d'œuvre + finition pour les deux variantes avec un barème complet.
-- Valeurs actuelles, sans barème :
+- Valeurs actuelles, sans barème (assertées par le test ; 2026-09-30, poteau élargi A13) :
 
-  | Variante         | Masse    | Pièces | Uniques | Cordons   | dont bout à bout | EXC  |
-  | ---------------- | -------- | ------ | ------- | --------- | ---------------- | ---- |
-  | UPN (poteau)     | 529,4 kg | 63     | 41      | 12 992 mm | 0                | EXC1 |
-  | Débillardé soudé | 307,2 kg | 66     | 40      | 15 461 mm | 650 mm           | EXC2 |
+  | Variante                | Masse    | Pièces | Uniques | Cordons   | dont bout à bout | EXC  |
+  | ----------------------- | -------- | ------ | ------- | --------- | ---------------- | ---- |
+  | UPN (poteau élargi 130) | 525,5 kg | 57     | 35      | 11 232 mm | 0                | EXC1 |
+  | Débillardé soudé        | 307,2 kg | 66     | 40      | 15 461 mm | 650 mm           | EXC2 |
+
+  Avant la décision A13 (poteau de 100 mm centré) : UPN 529,4 kg, 63 pièces, 41 uniques, 12 992 mm de cordons.
 
 - `packages/core/src/structures/compare.test.ts` : une ligne par variante sur le même découpage, coût calculé à la main (`variantCost`), pas d'euros si une donnée manque.
 - `apps/web/src/lib/variants.test.ts` : tableau côte à côte, « profil d'atelier requis » sans barème, euros avec un barème complet, jour adapté appliqué avec la variante.
@@ -61,6 +64,7 @@ Réserves :
 
 - Le coût dépend d'un barème (taux horaire, prix matière, finition) que le profil d'atelier par défaut ne renseigne pas. Les euros n'apparaissent donc qu'une fois ce profil rempli (décision P2, ledger §2 « Temps d'atelier »).
 - L'assistant ne propose pas `steel-curved` (jour en arc non énuméré). La comparaison se fait depuis le comparateur.
+- Variante UPN de l'exemple j5b : le poteau élargi reçoit bien les limons de jour, mais la variante reste en erreur « aucune section UPN du catalogue ne passe » : le limon **mural** LE2, barre droite sur la corde des nez à travers le tournant, demande 340 mm d'âme pour loger les cornières (UPN 260 au plus dans le catalogue), alors que le prédimensionnement indicatif passe dès l'UPN 80. La masse UPN porte donc toujours sur une UPN 260 non validée ; le limon coudé par pièce d'angle soudée est prévu en V1 (QUESTIONS A13). Sur le cas d'acceptation n° 1 en profilés (`j3c-acceptance-01-upn`, poteau 125 mm décalé de 43 mm, soit l'aile de l'UPN 240 + 2 × 20 mm), l'UPN 240 passe (hauteur d'âme et prédimensionnement) sans erreur.
 
 ## 3. Développés DXF exploitables en atelier : limon, tronçons de débillardé, tôle pliée
 

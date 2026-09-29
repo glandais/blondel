@@ -23,3 +23,10 @@ export {
   resolveTargetGoing,
   resolveWalklineOffset,
 } from "./resolve.js";
+export {
+  newelOffset,
+  newelProtrusion,
+  newelReach,
+  newelSetback,
+  type NewelCorner,
+} from "./newel.js";

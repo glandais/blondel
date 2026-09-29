@@ -1,8 +1,8 @@
 /**
  * Poteau d'angle (pièce `post`) recevant les limons de jour d'un tournant (C §1.9).
  *
- * - Section : carré de côté a (`InnerCorner.size`), centré sur le coin intérieur K, côtés
- *   parallèles aux volées (convention du tracé).
+ * - Section : carré de côté a (`InnerCorner.size`), centré sur le coin intérieur K (ou décalé
+ *   vers le jour, `InnerCorner.offset`), côtés parallèles aux volées (convention du tracé).
  * - Hauteur : du pied (sol bas, ou « poteau pendant » : sous la rive basse la plus basse des
  *   limons reçus et sous le plus bas des encastrements, d'un dépassement paramétré) jusqu'au-dessus du plus haut des éléments reçus
  *   (dessus des marches encastrées dans le poteau, rives hautes des limons au droit du

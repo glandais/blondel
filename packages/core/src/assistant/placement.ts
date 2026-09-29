@@ -13,6 +13,7 @@
  */
 import { pointInPolygon } from "../geom2d/polygon.js";
 import * as V from "../geom2d/vec.js";
+import { newelProtrusion, newelSetback } from "../layout/newel.js";
 import type { Model } from "../model/derived.js";
 import type { Mm, Polygon2, Vec2 } from "../model/primitives.js";
 import type { FlightsLayoutSpec, Wall } from "../model/project.js";
@@ -92,9 +93,11 @@ export function grossPieces(
     if (turn.inner.kind !== "newel") return;
     const leg = legs[j]!;
     const k = V.addScaled(leg.inner, leg.u, leg.length - spec.width);
-    const h = turn.inner.size / 2;
+    // Poteau [−s ; p]² dans la base (n, u) de K (`layout/newel.ts`).
+    const s = newelSetback(turn.inner);
+    const p = newelProtrusion(turn.inner);
     const at = (a: number, b: number): Vec2 => V.add(V.addScaled(k, leg.n, a), V.scale(leg.u, b));
-    pieces.push([at(-h, -h), at(h, -h), at(h, h), at(-h, h)]);
+    pieces.push([at(-s, -s), at(p, -s), at(p, p), at(-s, p)]);
   });
   return pieces;
 }

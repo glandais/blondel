@@ -206,12 +206,21 @@ function TurnEditor({ turn, index }: { turn: Turn; index: number }) {
         />
       ) : null}
       {inner.kind === "newel" ? (
-        <IntField
-          label="Côté du poteau"
-          value={inner.size}
-          min={1}
-          onCommit={set([...base, "inner", "size"])}
-        />
+        <>
+          <IntField
+            label="Côté du poteau"
+            value={inner.size}
+            min={1}
+            onCommit={set([...base, "inner", "size"])}
+          />
+          <IntField
+            label="Décalage du poteau vers le jour"
+            value={inner.offset ?? 0}
+            min={0}
+            hint="0 : poteau centré sur l'angle du jour ; poteau élargi des profilés décalé vers le jour"
+            onCommit={set([...base, "inner", "offset"])}
+          />
+        </>
       ) : null}
     </fieldset>
   );

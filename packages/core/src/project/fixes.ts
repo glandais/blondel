@@ -7,7 +7,10 @@
  * Corrections actuelles :
  * - **jour à angle vif avec une structure à poteau** (`wood-housed`, `steel-flat`,
  *   `steel-profile` : les limons de jour se rencontreraient en un point et ne sont pas
- *   générés) → passer les jours vifs en poteau d'angle de `DEFAULT_NEWEL_SIZE` ;
+ *   générés) → passer les jours vifs en poteau d'angle de `DEFAULT_NEWEL_SIZE` (poteau élargi
+ *   des profilés pour `steel-profile`, section lue sur le modèle) ;
+ * - **poteau trop étroit pour les profilés** (`steel-profile`, poteau différent du poteau
+ *   élargi attendu, décision A13) → poser le poteau des profilés ;
  * - **garde-corps en conflit avec la dalle haute** (`GC_CONFLIT_DALLE`, trémie rectangulaire au
  *   nu de l'escalier) → élargir la trémie le long des bords de l'escalier ;
  * - **jour trop étroit pour un garde-corps de jour** (erreur des garde-corps) → régler le côté
@@ -15,8 +18,6 @@
  */
 import type { Model } from "../model/derived.js";
 import { ProjectSchema, type Project, type ProjectInput } from "../model/project.js";
-import { LayoutError } from "../layout/errors.js";
-import { computeLayout } from "../layout/layout.js";
 import { GuardsSpecSchema } from "../guards/spec.js";
 import { NARROW_JOUR_ERROR_PREFIX } from "../guards/jour.js";
 import { sectionWidth } from "../guards/parts.js";
@@ -26,11 +27,24 @@ import {
   PRESET_OPENING_CLEARANCE,
   type DeepPartial,
 } from "./presets.js";
+import { profileFlangeWidth } from "../structures/steelProfile.js";
+import {
+  DEFAULT_NEWEL,
+  DEFAULT_NEWEL_SIZE,
+  NEWEL_REQUIRED_STRUCTURES,
+  expectedNewel,
+  layoutAccepts as layoutOk,
+  newelLabel,
+  newelMatches,
+  newelSatisfies,
+} from "./newel.js";
+
+export { DEFAULT_NEWEL_SIZE, NEWEL_REQUIRED_STRUCTURES };
 
 /** Action proposée : libellé affichable, raison, patch à fusionner dans le projet. */
 export interface FixSuggestion {
   /** Identifiant stable de la correction (pour l'UI et les tests). */
-  readonly id: "jour-newel" | "opening-clearance" | "jour-wall";
+  readonly id: "jour-newel" | "newel-profile" | "opening-clearance" | "jour-wall";
   /** Libellé d'action, à l'infinitif (ex. « Passer le jour en poteau de 100 mm »). */
   readonly label: string;
   /** Pourquoi cette correction est proposée. */
@@ -39,39 +53,10 @@ export interface FixSuggestion {
   readonly patch: DeepPartial<ProjectInput>;
 }
 
-/**
- * Structures dont les limons de jour s'assemblent sur un **poteau d'angle** : un jour à angle
- * vif les empêche de se rencontrer (erreur « jour à angle vif » des plugins). Liste tenue ici
- * tant que les plugins ne le déclarent pas eux-mêmes (voir LEDGER §3).
- */
-export const NEWEL_REQUIRED_STRUCTURES: readonly string[] = [
-  "wood-housed",
-  "steel-flat",
-  "steel-profile",
-];
-
-/**
- * Côté du poteau d'angle proposé (mm). **[Valeur d'usage, confiance faible, à valider]** :
- * C §1.9 cite un poteau de 90 à 100 mm sur un escalier à deux quarts tournants [11] ; même
- * valeur que le cas d'acceptation n° 1 (CHALLENGE P1).
- */
-export const DEFAULT_NEWEL_SIZE = 100;
-
-/**
- * Le tracé du projet corrigé est-il constructible ? Un poteau centré sur l'angle doit tenir dans
- * la volée centrale d'un demi-tournant (volée ≥ 2E + côté du poteau) : un jour plus étroit que
- * le poteau rendrait le tracé impossible, la correction n'est alors pas proposée.
- */
+/** Le tracé du projet corrigé par `patch` est-il constructible (`newel.ts`) ? */
 function layoutAccepts(project: Project, patch: DeepPartial<ProjectInput>): boolean {
   const parsed = ProjectSchema.safeParse(deepMerge(project, patch));
-  if (!parsed.success) return false;
-  try {
-    computeLayout(parsed.data);
-    return true;
-  } catch (e) {
-    if (e instanceof LayoutError) return false;
-    throw e;
-  }
+  return parsed.success && layoutOk(parsed.data);
 }
 
 /** Pas d'arrondi (mm) du jeu de trémie proposé. */
@@ -84,35 +69,59 @@ const CLEARANCE_GRID = 10;
  */
 export function suggestFixes(
   project: Project,
-  model?: Pick<Model, "layout" | "compliance" | "errors">,
+  model?: Pick<Model, "layout" | "compliance" | "errors"> & Partial<Pick<Model, "parts">>,
 ): FixSuggestion[] {
   const out: FixSuggestion[] = [];
 
-  // 1. Jour à angle vif avec une structure à poteau d'angle.
+  // 1. Jour à angle vif avec une structure à poteau d'angle ; poteau des profilés (A13).
   const turns = project.stair.layout.turns;
-  const sharp = turns.filter((t) => t.inner.kind === "sharp").length;
-  const newelPatch: DeepPartial<ProjectInput> = {
+  const { kind, params } = project.stair.structure;
+  const flange = model?.parts ? profileFlangeWidth(model.parts) : null;
+  const expected = expectedNewel(kind, params, flange);
+  const target = expected ?? DEFAULT_NEWEL;
+  const patchFor = (
+    which: (inner: (typeof turns)[number]["inner"]) => boolean,
+    to: typeof target = target,
+  ) => ({
     stair: {
       layout: {
-        turns: turns.map((t) =>
-          t.inner.kind === "sharp"
-            ? { ...t, inner: { kind: "newel" as const, size: DEFAULT_NEWEL_SIZE } }
-            : t,
-        ),
+        turns: turns.map((t) => (which(t.inner) ? { ...t, inner: { ...to } } : t)),
       },
     },
-  };
-  if (
-    sharp > 0 &&
-    NEWEL_REQUIRED_STRUCTURES.includes(project.stair.structure.kind) &&
-    layoutAccepts(project, newelPatch)
-  ) {
+  });
+  const sharp = turns.filter((t) => t.inner.kind === "sharp").length;
+  let newelPatch: DeepPartial<ProjectInput> = patchFor((i) => i.kind === "sharp");
+  let sharpTarget = target;
+  // Poteau élargi des profilés refusé par le tracé : poteau par défaut (décision A4), le plugin
+  // signalant la réception (`FAB_POTEAU_RECEPTION`).
+  if (sharp > 0 && !newelMatches(target, DEFAULT_NEWEL) && !layoutAccepts(project, newelPatch)) {
+    sharpTarget = DEFAULT_NEWEL;
+    newelPatch = patchFor((i) => i.kind === "sharp", DEFAULT_NEWEL);
+  }
+  if (sharp > 0 && NEWEL_REQUIRED_STRUCTURES.includes(kind) && layoutAccepts(project, newelPatch)) {
     out.push({
       id: "jour-newel",
-      label: `Passer le jour en poteau de ${DEFAULT_NEWEL_SIZE} mm${sharp > 1 ? ` (${sharp} tournants)` : ""}`,
-      reason: `La structure « ${project.stair.structure.kind} » assemble ses limons de jour sur un poteau d'angle : avec un jour à angle vif, ils se rencontreraient en un point et ne sont pas générés.`,
+      label: `Passer le jour en ${newelLabel(sharpTarget)}${sharp > 1 ? ` (${sharp} tournants)` : ""}`,
+      reason: `La structure « ${kind} » assemble ses limons de jour sur un poteau d'angle : avec un jour à angle vif, ils se rencontreraient en un point et ne sont pas générés.`,
       patch: newelPatch,
     });
+  }
+  // Poteau existant différent du poteau élargi des profilés (section connue seulement).
+  const unfit = (i: (typeof turns)[number]["inner"]): boolean =>
+    i.kind === "newel" && !newelSatisfies(i, kind, params, flange);
+  const mismatched =
+    kind === "steel-profile" && expected ? turns.filter((t) => unfit(t.inner)).length : 0;
+  if (mismatched > 0 && expected) {
+    const patch = patchFor(unfit);
+    if (layoutAccepts(project, patch)) {
+      out.push({
+        id: "newel-profile",
+        label: `Poser le poteau des profilés : ${newelLabel(expected)}${mismatched > 1 ? ` (${mismatched} tournants)` : ""}`,
+        reason:
+          "Les limons en profilés sont reçus en barre droite par un poteau élargi (largeur d'aile + 2 × jeu, décalé vers le jour ; paramètre « côté du poteau pour profilés », à valider) : le poteau actuel ne correspond pas.",
+        patch,
+      });
+    }
   }
   if (!model) return out;
 

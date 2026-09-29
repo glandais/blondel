@@ -9,8 +9,8 @@
  *   t ∈ [t0 ; t1] : t0 = E + retrait du tournant précédent (0 au départ), t1 = L_i − E −
  *   retrait du tournant suivant (L_i à l'arrivée) ; retrait = a/2 pour un poteau de côté a,
  *   r pour un jour en arc, 0 pour un angle vif ;
- * - poteau (`newel`) : carré de côté a centré sur le coin intérieur K du tournant, côtés
- *   parallèles aux volées qu'il relie.
+ * - poteau (`newel`) : carré de côté a centré sur le coin intérieur K du tournant (ou décalé
+ *   vers le jour de δ, `offset`), côtés parallèles aux volées qu'il relie ; retrait = a/2 + δ.
  */
 import { cumulativeLengths } from "../geom2d/curve.js";
 import { projectOnCurve } from "../geom2d/intersect.js";
@@ -18,6 +18,7 @@ import * as V from "../geom2d/vec.js";
 import type { Layout } from "../model/derived.js";
 import type { Mm, Vec2 } from "../model/primitives.js";
 import type { InnerCorner, Project } from "../model/project.js";
+import { newelOffset, newelSetback } from "../layout/newel.js";
 import { StructureError } from "./registry.js";
 
 export interface LegGeometry {
@@ -43,8 +44,16 @@ export interface LegGeometry {
 export interface NewelGeometry {
   /** Indice du tournant. */
   readonly turn: number;
+  /** Centre du poteau (K, ou K − δ·(n + u) pour un poteau décalé vers le jour). */
   readonly center: Vec2;
   readonly size: Mm;
+  /** Décalage δ vers le jour (0 : centré sur K). */
+  readonly offset: Mm;
+  /**
+   * Débord du poteau côté jour au-delà des faces internes des limons, s = a/2 + δ : largeur
+   * disponible pour recevoir un limon de jour (`FAB_POTEAU_RECEPTION`).
+   */
+  readonly jourExtent: Mm;
   /** Axes du carré : normale et direction de montée de la volée entrante. */
   readonly n: Vec2;
   readonly u: Vec2;
@@ -65,7 +74,7 @@ function setback(inner: InnerCorner): Mm {
     case "arc":
       return inner.radius;
     case "newel":
-      return inner.size / 2;
+      return newelSetback(inner);
   }
 }
 
@@ -120,8 +129,18 @@ export function stairGeometry(project: Project, layout: Layout): StairGeometry {
     if (t.inner.kind !== "newel") return;
     const leg = legs[j]!;
     const zone = layout.turns[j];
-    const center = zone ? zone.innerCorner : V.addScaled(leg.innerOrigin, leg.u, leg.length - E);
-    newels.push({ turn: j, center, size: t.inner.size, n: leg.n, u: leg.u });
+    const k = zone ? zone.innerCorner : V.addScaled(leg.innerOrigin, leg.u, leg.length - E);
+    const offset = newelOffset(t.inner);
+    const center = V.sub(k, V.scale(V.add(leg.n, leg.u), offset));
+    newels.push({
+      turn: j,
+      center,
+      size: t.inner.size,
+      offset,
+      jourExtent: newelSetback(t.inner),
+      n: leg.n,
+      u: leg.u,
+    });
   });
   return { legs, newels, width: E, sign };
 }

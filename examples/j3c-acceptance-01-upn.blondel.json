@@ -45,7 +45,8 @@
           "direction": "left",
           "inner": {
             "kind": "newel",
-            "size": 100
+            "offset": 43,
+            "size": 125
           },
           "mode": "winders"
         }

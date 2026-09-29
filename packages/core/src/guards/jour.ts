@@ -10,6 +10,7 @@ import * as V from "../geom2d/vec.js";
 import type { Layout } from "../model/derived.js";
 import type { Mm } from "../model/primitives.js";
 import type { Turn } from "../model/project.js";
+import { newelSetback } from "../layout/newel.js";
 import { findRule } from "../rules/table.js";
 
 /**
@@ -26,9 +27,12 @@ export function narrowJourThreshold(): Mm | null {
   return findRule("GC_GABARIT_T1_2024")?.max ?? null;
 }
 
-/** Débord d'un jour de tournant dans le vide central : demi-côté d'un poteau, 0 sinon. */
+/**
+ * Débord d'un jour de tournant dans le vide central : demi-côté d'un poteau (plus son décalage
+ * vers le jour), 0 sinon.
+ */
 function protrusion(turn: Turn | undefined): Mm {
-  return turn?.inner.kind === "newel" ? turn.inner.size / 2 : 0;
+  return turn?.inner.kind === "newel" ? newelSetback(turn.inner) : 0;
 }
 
 /**

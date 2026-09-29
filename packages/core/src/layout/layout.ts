@@ -47,6 +47,9 @@
  *   dire sur le point d'intersection des faces internes des limons (règle DTU ci-dessus), qui
  *   est ici le centre du poteau. Γ est donc identique au cas `sharp` ; sa distance au poteau
  *   est d_f − a·√2/2 au droit du coin du poteau (on exige d_f > a·√2/2).
+ *   Poteau **décalé vers le jour** de δ (`offset`, poteau élargi des profilés, décision A13) :
+ *   même contour avec des décrochements de s = a/2 + δ le long des faces et un débord de
+ *   p = a/2 − δ côté marches (`newel.ts`) ; on exige δ < a/2 et d_f > p·√2.
  *
  * Le bord du mur reste toujours à angle vif en W.
  *
@@ -80,6 +83,7 @@ import { arcSeg, lineSeg } from "../geom2d/segment.js";
 import { GEOM_EPS } from "../geom2d/tolerance.js";
 import * as V from "../geom2d/vec.js";
 import { LayoutError } from "./errors.js";
+import { newelOffset, newelProtrusion, newelSetback } from "./newel.js";
 import { computeHelicalLayout } from "./helical.js";
 import { resolveLegLengths, resolveWalklineOffset } from "./resolve.js";
 
@@ -111,7 +115,7 @@ function innerSetback(inner: InnerCorner): Mm {
     case "arc":
       return inner.radius;
     case "newel":
-      return inner.size / 2;
+      return newelSetback(inner);
   }
 }
 
@@ -164,7 +168,14 @@ export function computeLayout(project: Project, options: LayoutOptions = {}): La
   const df = resolveWalklineOffset(project);
   for (const [j, t] of turns.entries()) {
     if (t.inner.kind === "newel") {
-      const reach = (t.inner.size * Math.SQRT2) / 2;
+      const offset = newelOffset(t.inner);
+      if (!(offset < t.inner.size / 2)) {
+        throw new LayoutError(
+          `Tournant ${j + 1} : le décalage du poteau vers le jour (${offset} mm) doit rester inférieur à son demi-côté (${t.inner.size / 2} mm).`,
+        );
+      }
+      // Sommet du poteau côté marches (p, p) : le plus proche de Γ (arc de rayon d_f centré en K).
+      const reach = newelProtrusion(t.inner) * Math.SQRT2;
       if (!(df > reach)) {
         throw new LayoutError(
           `Tournant ${j + 1} : la ligne de foulée (${df} mm du jour) traverse le poteau de ${t.inner.size} mm (il faut plus de ${reach.toFixed(1)} mm).`,
@@ -379,10 +390,12 @@ function innerTurnSegments(turn: Turn, k: Vec2, u: Vec2, n: Vec2): CurveSeg[] {
       return [arcSeg(center, r, V.angleOf(n), (turnSign * Math.PI) / 2)];
     }
     case "newel": {
-      // Coordonnées (α, β) dans la base (n, u) centrée sur K ; poteau |α|, |β| ≤ a/2.
-      const h = inner.size / 2;
+      // Coordonnées (α, β) dans la base (n, u) centrée sur K ; poteau α, β ∈ [−s ; p]
+      // (s = a/2 + δ côté jour, p = a/2 − δ côté marches, `newel.ts`).
+      const s = newelSetback(inner);
+      const p = newelProtrusion(inner);
       const pt = (a: number, b: number): Vec2 => V.add(V.add(k, V.scale(n, a)), V.scale(u, b));
-      const pts = [pt(0, -h), pt(h, -h), pt(h, h), pt(-h, h), pt(-h, 0)];
+      const pts = [pt(0, -s), pt(p, -s), pt(p, p), pt(-s, p), pt(-s, 0)];
       const segs: CurveSeg[] = [];
       for (let i = 0; i + 1 < pts.length; i++) segs.push(lineSeg(pts[i]!, pts[i + 1]!));
       return segs;

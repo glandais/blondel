@@ -73,8 +73,14 @@ export type Site = z.infer<typeof SiteSchema>;
 export const InnerCornerSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("sharp") }),
   z.object({ kind: z.literal("arc"), radius: mmPos }),
-  /** Poteau carré de côté `size`, centré sur le coin intérieur. */
-  z.object({ kind: z.literal("newel"), size: mmPos }),
+  /**
+   * Poteau carré de côté `size`, centré sur le coin intérieur K, ou **décalé vers le jour** de
+   * `offset` le long des deux faces (centre en K − offset·(n + u), n : normale jour → mur, u :
+   * sens de montée de la volée entrante). Le poteau déborde alors de `size/2 − offset` côté
+   * marches et de `size/2 + offset` côté jour ; `offset < size/2` (sinon `LayoutError`).
+   * Absent : 0 (poteau centré, contrat d'origine). Poteau élargi des profilés (décision A13).
+   */
+  z.object({ kind: z.literal("newel"), size: mmPos, offset: mmNonNeg.optional() }),
 ]);
 export type InnerCorner = z.infer<typeof InnerCornerSchema>;
 

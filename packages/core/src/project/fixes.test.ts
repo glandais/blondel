@@ -32,7 +32,10 @@ describe("suggestFixes — jour à angle vif et structure à poteau", () => {
           continue;
         }
         expect(sharpError(m).length, `${kind} ${preset}`).toBeGreaterThan(0);
-        expect(fix?.label).toContain(`poteau de ${DEFAULT_NEWEL_SIZE} mm`);
+        // Profilés : poteau élargi (aile de la section du modèle + 2 × jeu, décalé vers le jour).
+        if (kind === "steel-profile")
+          expect(fix?.label).toMatch(/poteau de \d+ mm décalé de \d+ mm vers le jour/);
+        else expect(fix?.label).toContain(`poteau de ${DEFAULT_NEWEL_SIZE} mm`);
         const q = apply(p, fix!.patch);
         expect(q.stair.layout.turns.every((t) => t.inner.kind === "newel")).toBe(true);
         expect(q.stair.layout.turns.map((t) => [t.direction, t.mode])).toEqual(
@@ -58,6 +61,58 @@ describe("suggestFixes — jour à angle vif et structure à poteau", () => {
       },
     });
     expect(suggestFixes(wood).some((f) => f.id === "jour-newel")).toBe(false);
+  });
+});
+
+describe("suggestFixes — poteau des profilés (décision A13)", () => {
+  it("poteau de 100 mm sous des UPN : poteau élargi proposé, qui lève FAB_POTEAU_RECEPTION, stable", () => {
+    const base = createProject("quarter-left");
+    const p = with_(base, {
+      stair: {
+        ...base.stair,
+        structure: { kind: "steel-profile", params: { family: "UPN" } },
+        layout: {
+          ...base.stair.layout,
+          turns: base.stair.layout.turns.map((t) => ({
+            ...t,
+            inner: { kind: "newel", size: DEFAULT_NEWEL_SIZE },
+          })),
+        },
+      },
+    });
+    const m = buildModel(p);
+    const reception = (mm: typeof m) =>
+      mm.compliance.results.filter(
+        (r) => r.ruleId === "FAB_POTEAU_RECEPTION" && r.status === "violation",
+      );
+    expect(reception(m).length).toBeGreaterThan(0);
+    const fixes = suggestFixes(p, m);
+    expect(fixes.some((f) => f.id === "jour-newel")).toBe(false);
+    const fix = fixes.find((f) => f.id === "newel-profile");
+    expect(fix?.label).toMatch(
+      /^Poser le poteau des profilés : poteau de \d+ mm décalé de \d+ mm vers le jour$/,
+    );
+    const q = apply(p, fix!.patch);
+    const inner = q.stair.layout.turns[0]!.inner;
+    expect(inner.kind === "newel" && (inner.offset ?? 0) > 0).toBe(true);
+    const mq = buildModel(q);
+    expect(reception(mq)).toEqual([]);
+    expect(suggestFixes(q, mq).some((f) => f.id === "newel-profile")).toBe(false);
+  });
+
+  it("autres structures : tout poteau convient, rien à proposer", () => {
+    const base = createProject("quarter-left");
+    const p = with_(base, {
+      stair: {
+        ...base.stair,
+        structure: { kind: "wood-housed", params: {} },
+        layout: {
+          ...base.stair.layout,
+          turns: base.stair.layout.turns.map((t) => ({ ...t, inner: { kind: "newel", size: 90 } })),
+        },
+      },
+    });
+    expect(suggestFixes(p, buildModel(p)).map((f) => f.id)).not.toContain("newel-profile");
   });
 });
 

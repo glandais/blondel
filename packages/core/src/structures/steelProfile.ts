@@ -17,7 +17,10 @@
  *   coupe d'aplomb contre sa face ; arrivée = coupe d'aplomb au nez d'arrivée (+ prolongement) ;
  *   angle mural = **coupe d'onglet à 45° en plan**, soudée (le limon qui part de l'angle porte
  *   le cordon).
- * - **Tournants** : poteau → tube carré soudé ; angle vif → erreur explicite ; **jour en arc**
+ * - **Tournants** : poteau → tube carré soudé, **poteau élargi des profilés** (décision A13 :
+ *   côté = aile + 2 × jeu, décalé vers le jour, `profileNewel` ; posé par
+ *   `applyStructureChoice`, sinon signalé) qui reçoit chaque limon de jour en barre droite,
+ *   coupe d'aplomb contre sa face ; angle vif → erreur explicite ; **jour en arc**
  *   → contrôle des rayons de cintrage minimaux par sens (C-M-06 / C-M-07, profil d'atelier :
  *   UPN aile intérieure 650, aile extérieure 500, chant 200 ; IPE / IPN à plat 650, chant 1 400)
  *   → un limon de jour à petit rayon est **exclu** (bloquant) ; au-delà, le cintrage
@@ -118,6 +121,20 @@ export const SteelProfileParamsSchema = z.object({
   splice: z.enum(["welded", "bolted"]).default("welded"),
   newel: z
     .object({
+      /**
+       * Côté du poteau pour profilés (décision A13) : `auto` = largeur d'aile de la section
+       * retenue + 2 × `clearance` ; ou valeur imposée (mm). Le poteau est **décalé vers le jour**
+       * pour ne déborder que de `clearance` côté marches (`profileNewel`). Le poteau du tracé
+       * (`stair.layout.turns[].inner`) est posé à ces cotes au choix de la structure
+       * (`applyStructureChoice`) ou par la correction proposée ; le plugin le signale s'il
+       * diffère. Valeur par défaut **à valider** (aucune source).
+       */
+      size: z.union([z.literal("auto"), mmPos]).default("auto"),
+      /**
+       * Jeu entre l'aile du profilé reçu et le bord de la face du poteau, de chaque côté
+       * (à valider : aucune source ; 20 mm, décision A13 de l'utilisateur).
+       */
+      clearance: mmPos.default(20),
       /** Épaisseur de paroi du tube carré a × a (à valider). */
       tubeThickness: mmPos.default(4),
       /**
@@ -241,6 +258,67 @@ interface TreadZone {
   readonly mark: string;
   readonly zone: Polygon2;
   readonly zUnder: Mm;
+}
+
+/** Poteau d'angle attendu par les profilés (contrat `InnerCornerSchema`). */
+export interface ProfileNewel {
+  readonly kind: "newel";
+  readonly size: Mm;
+  readonly offset: Mm;
+}
+
+/**
+ * Poteau élargi des profilés (décision A13 de l'utilisateur, valeurs à valider) : côté
+ * a = largeur d'aile b + 2 × jeu (ou côté imposé), **décalé vers le jour** de
+ * δ = ⌈a/2 − jeu⌉ (0 si a < 2 × jeu) pour que la face qui reçoit le limon (dont la face côté
+ * marches passe par le coin intérieur K) le déborde du jeu côté marches et d'au moins le jeu
+ * côté jour : le poteau n'entame les marches que du jeu et reçoit chaque volée en barre droite.
+ */
+export function profileNewel(
+  flangeWidth: Mm,
+  newel: { readonly size: "auto" | Mm; readonly clearance: Mm },
+): ProfileNewel {
+  const c = newel.clearance;
+  const size = newel.size === "auto" ? Math.ceil(flangeWidth + 2 * c - 1e-9) : newel.size;
+  const offset = Math.max(0, Math.ceil(size / 2 - c - 1e-9));
+  return { kind: "newel", size, offset };
+}
+
+/**
+ * Le poteau (côté `size`, décalage `offset`) convient-il aux profilés d'aile `flangeWidth` ?
+ * Côté imposé : exactement le poteau `profileNewel`. Côté `auto` : il reçoit l'aile avec au
+ * moins le jeu côté jour (a/2 + δ ≥ b + jeu) et n'entame pas les marches de plus que le jeu
+ * arrondi au mm (a/2 − δ ≤ jeu + 0,5) : un poteau posé pour une section plus large convient
+ * encore (pas d'aller-retour entre deux sections voisines).
+ */
+export function profileNewelFits(
+  newel: { readonly size: Mm; readonly offset?: Mm | undefined },
+  flangeWidth: Mm,
+  params: { readonly size: "auto" | Mm; readonly clearance: Mm },
+): boolean {
+  const offset = newel.offset ?? 0;
+  if (params.size !== "auto") {
+    const want = profileNewel(flangeWidth, params);
+    return newel.size === want.size && offset === want.offset;
+  }
+  const c = params.clearance;
+  return (
+    newel.size / 2 + offset >= flangeWidth + c - 1e-9 && newel.size / 2 - offset <= c + 0.5 + 1e-9
+  );
+}
+
+/**
+ * Plus grande largeur d'aile des limons en profilés d'un modèle (section du catalogue lue sur
+ * `Part.section`, « UPN 160 (S235) »), `null` sans limon profilé.
+ */
+export function profileFlangeWidth(parts: readonly Part[]): Mm | null {
+  let best: Mm | null = null;
+  for (const p of parts) {
+    if (p.category !== "stringer" || !p.section) continue;
+    const sec = findSection(p.section.replace(/\s*\(.*\)\s*$/, ""));
+    if (sec) best = Math.max(best ?? 0, sec.b);
+  }
+  return best;
 }
 
 /** Sens de cintrage d'un limon de jour sur un arc (ailes vers le centre du jour). */
@@ -851,9 +929,15 @@ export function buildSteelProfile(
   // 9. Poteaux (tube carré soudé).
   const posts: Part[] = [];
   const receivedChecks: { value: Mm; label: string; partId: string }[] = [];
+  const expectedNewel = profileNewel(s.b, params.newel);
   for (const nw of newelList) {
     const g: NewelGeometry = nw.geom;
     const a = g.size;
+    if (!profileNewelFits(g, s.b, params.newel)) {
+      notes.push(
+        `${nw.mark} : poteau de ${fmt(a, 0)} mm${g.offset > 0 ? ` décalé de ${fmt(g.offset, 0)} mm vers le jour` : " centré"} ; poteau des profilés attendu : ${fmt(expectedNewel.size, 0)} mm décalé de ${fmt(expectedNewel.offset, 0)} mm vers le jour (${params.newel.size === "auto" ? `aile ${fmt(s.b, 0)} + 2 × ${fmt(params.newel.clearance, 0)} mm` : "côté imposé"}, paramètre « côté du poteau pour profilés », à valider) — correction proposée.`,
+      );
+    }
     const received = stringers.filter(
       (x) =>
         x.face.side === "inner" &&
@@ -1034,7 +1118,7 @@ export function buildSteelProfile(
     if (items.length === 0) continue;
     checks.addItems(pluginRuleDef(FAB_RULES.newelReception), items, "Largeur du profilé reçu", {
       min: null,
-      max: nw.geom.size / 2,
+      max: nw.geom.jourExtent,
     });
   }
   const precheck: readonly RuleResult[] = precheckResults(project, stepping, beams);

@@ -101,11 +101,18 @@ describe("critère d'acceptation n° 2 : comparateur sur la même épure", () =>
     { kind: "steel-curved" },
   ]);
 
-  it("UPN impossible en limon de jour à petit rayon : variante adaptée (poteau) et signalée", () => {
+  it("UPN impossible en limon de jour à petit rayon : variante adaptée (poteau élargi) et signalée", () => {
     expect(upn!.kind).toBe("steel-profile");
     expect(upn!.adaptations).toHaveLength(1);
     expect(upn!.adaptations[0]!.from).toEqual({ kind: "arc", radius: 250 });
-    expect(upn!.adaptations[0]!.to.kind).toBe("newel");
+    // Poteau élargi des profilés (décision A13) : aile de l'UPN retenu + 2 × 20 mm, décalé
+    // vers le jour ; il reçoit chaque limon de jour en barre droite.
+    expect(upn!.adaptations[0]!.to).toEqual({ kind: "newel", size: 130, offset: 45 });
+    expect(
+      upn!.model.compliance.results.filter(
+        (r) => r.ruleId === "FAB_POTEAU_RECEPTION" && r.status === "violation",
+      ),
+    ).toEqual([]);
     expect(upn!.signals[0]).toMatch(/UPN impossible en limon de jour à petit rayon \(C §2\.3\)/);
     expect(upn!.signals[0]).toMatch(/650 mm/);
     // Limon de jour UPN généré contre le poteau (seul le prédimensionnement peut alerter).
@@ -128,7 +135,9 @@ describe("critère d'acceptation n° 2 : comparateur sur la même épure", () =>
     expect(curved!.epure.balancing.every((x) => x === "M3-quintic")).toBe(true);
     expect(upn!.deviations).toEqual([]);
     const text = curved!.deviations.join("\n");
-    expect(text).toMatch(/Tournant 1 : jour en arc R 250 mm \(référence : poteau 100 mm\)/);
+    expect(text).toMatch(
+      /Tournant 1 : jour en arc R 250 mm \(référence : poteau 130 mm décalé de 45 mm vers le jour\)/,
+    );
     expect(text).toMatch(/Giron : /);
     expect(text).toMatch(/Balancement : .*M3-quintic \(référence : .*M3-cubic\)/);
   });
@@ -144,6 +153,17 @@ describe("critère d'acceptation n° 2 : comparateur sur la même épure", () =>
     }
     expect(upn!.buttWeldMm).toBe(0);
     expect(upn!.executionClass).toBe("EXC1");
+    // Valeurs reprises dans docs/ACCEPTATION.md (critère n° 2), sans barème.
+    expect(upn!.massKg).toBeCloseTo(525.5, 0);
+    expect([upn!.partCount, upn!.uniqueParts]).toEqual([57, 35]);
+    expect(Math.round(upn!.weldMm)).toBe(11232);
+    expect(curved!.massKg).toBeCloseTo(307.2, 0);
+    expect([curved!.partCount, curved!.uniqueParts]).toEqual([66, 40]);
+    // Limon mural LE2 en barre droite sur la corde des nez à travers le tournant : aucune
+    // section UPN du catalogue n'y loge les cornières (340 mm d'âme nécessaires), le
+    // prédimensionnement passe dès l'UPN 80 ; limon coudé soudé en V1 (QUESTIONS A13).
+    expect(upn!.errors.join(" ")).toMatch(/aucune section UPN du catalogue ne passe/);
+    expect(upn!.precheck.violations).toEqual({ bloquant: 0, avertissement: 0, conseil: 0 });
     expect(curved!.buttWeldMm).toBeGreaterThan(0);
     expect(curved!.weldMm).toBeGreaterThan(curved!.buttWeldMm);
     expect(curved!.executionClass).toBe("EXC2");

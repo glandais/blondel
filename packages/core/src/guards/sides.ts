@@ -19,6 +19,7 @@
  *   le bord) avant le nez suivant.
  */
 import { flattenCurve } from "../geom2d/curve.js";
+import { newelReach, newelSetback } from "../layout/newel.js";
 import * as V from "../geom2d/vec.js";
 import type { Layout, Stepping } from "../model/derived.js";
 import type { Mm, Vec2, Vec3 } from "../model/primitives.js";
@@ -64,15 +65,22 @@ export function sideEdge(
 ): SideEdge {
   const curve = side === "inner" ? layout.inner : layout.outer;
   let pts = dedupe(flattenCurve(curve, 0.5));
-  const newelCorners: { k: Vec2; size: number; turn: number }[] = [];
+  const newelCorners: { k: Vec2; size: number; reach: number; turn: number }[] = [];
   if (side === "inner") {
     project.stair.layout.turns.forEach((t, i) => {
       const zone = layout.turns[i];
       if (t.inner.kind === "newel" && zone)
-        newelCorners.push({ k: zone.innerCorner, size: t.inner.size, turn: i });
+        newelCorners.push({
+          k: zone.innerCorner,
+          // Poteau décalé vers le jour : côté équivalent d'un poteau centré qui le couvre
+          // côté vide (2 × débord côté jour), pour l'emprise vue par les garde-corps.
+          size: 2 * newelSetback(t.inner),
+          reach: newelReach(t.inner),
+          turn: i,
+        });
     });
-    for (const { k, size } of newelCorners) {
-      const r = (size / 2) * Math.SQRT2 + 1e-6;
+    for (const { k, reach } of newelCorners) {
+      const r = reach + 1e-6;
       const out: Vec2[] = [];
       let replaced = false;
       for (const p of pts) {

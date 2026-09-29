@@ -85,6 +85,16 @@ const COMMON: Readonly<Record<string, FieldText>> = {
   },
   // Poteau
   "newel.section": { label: "Section", options: { tube: "Tube carré", flat: "Carré plein" } },
+  "newel.size": {
+    label: "Côté du poteau pour profilés",
+    unit: MM,
+    hint: "Automatique : largeur d'aile + 2 × jeu, poteau décalé vers le jour (à valider) ; posé au choix de la structure ou par la correction proposée",
+  },
+  "newel.clearance": {
+    label: "Jeu entre l'aile et le bord du poteau",
+    unit: MM,
+    hint: TO_VALIDATE,
+  },
   "newel.tubeThickness": { label: "Épaisseur de paroi du tube", unit: MM, hint: TO_VALIDATE },
   "newel.joint": { label: "Assemblage limon / poteau", options: JOINTS },
   "newel.bolts": { label: "Boulons par assemblage", hint: TO_VALIDATE },

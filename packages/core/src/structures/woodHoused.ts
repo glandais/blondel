@@ -873,7 +873,7 @@ export function buildWoodHoused(ctx: StructureContext, params: WoodHousedParams)
     checks.add(pluginRuleDef(FAB_RULES.stockAvailable), stockFindings);
   }
   for (const nw of newelList) {
-    const half = nw.geom.size / 2;
+    const half = nw.geom.jourExtent;
     checks.addItems(
       pluginRuleDef(FAB_RULES.newelReception),
       stringers

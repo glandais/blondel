@@ -22,6 +22,7 @@ import {
   PRESET_IDS,
 } from "./presets.js";
 import { serializeProject } from "./serialize.js";
+import { applyStructureChoice } from "./structureChoice.js";
 
 const EXAMPLES_DIR = resolve(dirname(fileURLToPath(import.meta.url)), "../../../../examples");
 const ACCEPTANCE_01 = "acceptance-01-quart-tournant.blondel.json";
@@ -110,11 +111,14 @@ export function acceptance01Folded(): Project {
   );
 }
 
-/** Jalon 3c : limons en profilés UPN (section `auto` : la plus légère qui passe le precheck). */
+/**
+ * Jalon 3c : limons en profilés UPN (section `auto` : la plus légère qui passe le precheck),
+ * structure posée par `applyStructureChoice` : poteau élargi des profilés (décision A13, aile +
+ * 2 × 20 mm décalé vers le jour, à valider) au lieu du poteau de 100 mm du cas n° 1.
+ */
 export function acceptance01Profile(): Project {
-  return acceptance01With("Jalon 3c — cas d'acceptation n° 1, limons UPN", "steel-profile", {
-    family: "UPN",
-  });
+  const chosen = applyStructureChoice(acceptance01(), "steel-profile", { family: "UPN" }).project;
+  return { ...chosen, name: "Jalon 3c — cas d'acceptation n° 1, limons UPN" };
 }
 
 /**

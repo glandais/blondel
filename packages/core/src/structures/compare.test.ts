@@ -5,7 +5,9 @@ import { buildModel } from "../pipeline/build.js";
 import { fmt } from "../rules/check.js";
 import { makeSteppingProject } from "../stepping/test-helpers.js";
 import { WorkshopProfileSchema } from "../workshop/profile.js";
-import { compareVariants, variantCost } from "./compare.js";
+import { adaptJour, compareVariants, variantCost } from "./compare.js";
+import { layoutAccepts } from "../project/newel.js";
+import { createProject } from "../project/presets.js";
 import "./index.js";
 
 const base = (): Project =>
@@ -225,5 +227,20 @@ describe("comparateur de variantes (CHALLENGE P2)", () => {
       // Plat mince : déversement non vérifié, signalé.
       expect(pc.notes.some((n) => /déversement/.test(n))).toBe(kind === "steel-flat");
     }
+  });
+});
+
+describe("adaptJour — poteau élargi des profilés refusé par le tracé", () => {
+  it("demi-tournant en IPE : poteau par défaut signalé, variante constructible", () => {
+    // Revue : le poteau élargi (IPE, ~160 mm décalé) ne tient pas dans la volée centrale du
+    // demi-tournant ; il était posé tel quel et la variante tombait en erreur de tracé.
+    const base = createProject("half-turn");
+    const r = adaptJour(base, { kind: "steel-profile", params: { family: "IPE" } });
+    expect(r.adaptations.map((a) => a.to)).toEqual([
+      { kind: "newel", size: 100 },
+      { kind: "newel", size: 100 },
+    ]);
+    expect(r.signals.join(" ")).toMatch(/impossible dans ce tracé : poteau par défaut de 100 mm/);
+    expect(layoutAccepts(r.project)).toBe(true);
   });
 });

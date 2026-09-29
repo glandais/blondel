@@ -46,7 +46,8 @@ import {
   type ProjectInput,
 } from "../model/project.js";
 import { buildModel } from "../pipeline/build.js";
-import { DEFAULT_NEWEL_SIZE, NEWEL_REQUIRED_STRUCTURES } from "../project/fixes.js";
+import { DEFAULT_NEWEL, NEWEL_REQUIRED_STRUCTURES, expectedNewel } from "../project/newel.js";
+import { applyStructureChoice } from "../project/structureChoice.js";
 import { HELICAL_DEFAULT_CORE_RADIUS, createHelicalProject } from "../project/presetHelical.js";
 import { PRESET_NOSING } from "../project/presets.js";
 import { fmt } from "../rules/check.js";
@@ -395,9 +396,18 @@ export function proposeDesigns(input: AssistantInput): AssistantResult {
 
   const typologies = (prefs.typologies ?? TYPOLOGY_IDS).filter((t) => TYPOLOGY_IDS.includes(t));
   const directions: ("left" | "right")[] = prefs.direction ? [prefs.direction] : ["left", "right"];
-  const inner: InnerCorner = NEWEL_REQUIRED_STRUCTURES.includes(intent.kind)
-    ? { kind: "newel", size: DEFAULT_NEWEL_SIZE }
-    : { kind: "sharp" };
+  // Jour des tournants : poteau d'angle pour les structures qui l'exigent (décision A4), poteau
+  // élargi des profilés quand son côté est connu sans modèle (côté imposé ou section nommée) ;
+  // sinon poteau par défaut pendant l'énumération, remplacé par le poteau élargi à la
+  // construction de chaque proposition retenue (`applyStructureChoice`, décision A13).
+  const expected = expectedNewel(intent.kind, intent.params);
+  const inner: InnerCorner =
+    expected ??
+    (NEWEL_REQUIRED_STRUCTURES.includes(intent.kind) ? DEFAULT_NEWEL : { kind: "sharp" });
+  const finalize = (p: Project): Project =>
+    intent.kind === "steel-profile" && !expected
+      ? applyStructureChoice(p, intent.kind, p.stair.structure.params).project
+      : p;
 
   /** Grille d'emmarchement : minimum, recommandé, pas réguliers, plus grand qui tient. */
   const widthGrid = (b: EnumerationBounds): number[] => {
@@ -707,10 +717,11 @@ export function proposeDesigns(input: AssistantInput): AssistantResult {
                   preScore,
                   grossWidth,
                   fit: pl.fit,
-                  make: () => ({
-                    ...withLayout(template, spec, n, placement),
-                    name: `Assistant — ${label}`,
-                  }),
+                  make: () =>
+                    finalize({
+                      ...withLayout(template, spec, n, placement),
+                      name: `Assistant — ${label}`,
+                    }),
                 });
               }
             }

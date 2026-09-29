@@ -222,6 +222,52 @@ describe("computeLayout — quart tournant", () => {
     ).toBeCloseTo(400 - 50 * Math.SQRT2, 9);
   });
 
+  it("poteau décalé vers le jour (A13) : décrochements de a/2 + δ, débord de a/2 − δ côté marches", () => {
+    const sharp = computeLayout(makeProject({ width: 800, legs: [2000, 1500] }));
+    const newel = computeLayout(
+      makeProject({
+        width: 800,
+        legs: [2000, 1500],
+        inner: { kind: "newel", size: 100, offset: 30 },
+      }),
+    );
+    // Γ reste l'arc centré sur K (règle DTU), indépendant du poteau.
+    expect(newel.walkline).toEqual(sharp.walkline);
+    const pts = vertices(newel.inner);
+    const expected: [number, number][] = [
+      [0, 0],
+      [0, 1120],
+      [20, 1120],
+      [20, 1220],
+      [-80, 1220],
+      [-80, 1200],
+      [-700, 1200],
+    ];
+    expect(pts).toHaveLength(expected.length);
+    expected.forEach(([x, y], i) => expectPoint(pts[i]!, x, y));
+    // Décalage nul ou absent : contrat d'origine (poteau centré).
+    const centered = computeLayout(
+      makeProject({
+        width: 800,
+        legs: [2000, 1500],
+        inner: { kind: "newel", size: 100, offset: 0 },
+      }),
+    );
+    expect(vertices(centered.inner)[1]!.y).toBeCloseTo(1150, 9);
+  });
+
+  it("poteau décalé d'au moins son demi-côté : LayoutError explicite", () => {
+    expect(() =>
+      computeLayout(
+        makeProject({
+          width: 800,
+          legs: [2000, 1500],
+          inner: { kind: "newel", size: 100, offset: 50 },
+        }),
+      ),
+    ).toThrow(/décalage du poteau vers le jour \(50 mm\)/);
+  });
+
   it("angle vif : Γ coïncide avec le décalé générique de C_i (offsetCurve)", () => {
     for (const direction of ["left", "right"] as const) {
       const layout = computeLayout(makeProject({ width: 900, legs: [2400, 2000], direction }));
