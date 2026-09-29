@@ -79,6 +79,56 @@ describe("résolution des contextes", () => {
     expect(m.compliance.contexts).toContain("helicoidal");
     expect(m.compliance.results.some((x) => x.ruleId === "H_MAX_HELICOIDAL_DTU")).toBe(true);
   });
+  it("G_COLLET_MIN : écartée sur un hélicoïdal à fût central, appliquée sur un jour central (A5)", () => {
+    const collet = (core: "column" | "well", coreRadius: number) => {
+      const h = makeHelicalProject({
+        outerRadius: 1000,
+        coreRadius,
+        core,
+        direction: "left",
+        floorToFloor: 2700,
+      });
+      const m = buildModel({
+        ...h,
+        compliance: { ...h.compliance, contexts: ["bois_dtu", "logement_interieur"] },
+      });
+      return { m, rs: m.compliance.results.filter((x) => x.ruleId === "G_COLLET_MIN") };
+    };
+    const fut = collet("column", 70);
+    expect(fut.m.compliance.contexts).toContain("helicoidal_fut");
+    expect(fut.rs).toEqual([]);
+    // Jour central de même rayon : collet r_j·Δθ sous 100 mm, la règle s'applique.
+    const jour = collet("well", 70);
+    expect(jour.m.compliance.contexts).not.toContain("helicoidal_fut");
+    expect(jour.rs.some((r) => r.status === "violation")).toBe(true);
+    // Contexte non déduit sans tracé hélicoïdal.
+    expect(
+      resolveContexts(makeProject().compliance, makeStepping(), "column").active,
+    ).not.toContain("helicoidal_fut");
+  });
+  it("helicoidal_fut déclaré à la main : ignoré (déduit seulement), G_COLLET_MIN garde son effet (revue A5)", () => {
+    const h = makeHelicalProject({
+      outerRadius: 1000,
+      coreRadius: 70,
+      core: "well",
+      direction: "left",
+      floorToFloor: 2700,
+    });
+    const m = buildModel({
+      ...h,
+      compliance: {
+        ...h.compliance,
+        contexts: ["bois_dtu", "logement_interieur", "helicoidal_fut"],
+      },
+    });
+    expect(m.compliance.contexts).not.toContain("helicoidal_fut");
+    expect(
+      m.compliance.results.some((r) => r.ruleId === "G_COLLET_MIN" && r.status === "violation"),
+    ).toBe(true);
+    const r = resolveContexts(makeProject({ contexts: ["bois_dtu", "helicoidal_fut"] }).compliance);
+    expect(r.active).not.toContain("helicoidal_fut");
+    expect(r.notes.join(" ")).toMatch(/helicoidal_fut/);
+  });
   it("signale et ignore les contextes inconnus", () => {
     const r = resolveContexts(makeProject({ contexts: ["bois_dtu", "martien"] }).compliance);
     expect(r.unknown).toEqual(["martien"]);
@@ -104,6 +154,11 @@ describe("applicabilité des règles", () => {
       isRuleApplicable(getRule("G_EXT_MAX_ERP_TOURNANT"), act("erp_securite", "helicoidal")),
     ).toBe(true);
     expect(isRuleApplicable(getRule("G_COLLET_MIN"), act("tournant"))).toBe(true);
+    // Contexte exclu (`contexte_exclu`) : écarte la règle même si ses contextes sont actifs.
+    expect(isRuleApplicable(getRule("G_COLLET_MIN"), act("helicoidal"))).toBe(true);
+    expect(
+      isRuleApplicable(getRule("G_COLLET_MIN"), act("tournant", "helicoidal", "helicoidal_fut")),
+    ).toBe(false);
     expect(isRuleApplicable(getRule("G_TOL_BALANCEE"), act("bois_dtu"))).toBe(false);
   });
 });

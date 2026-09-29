@@ -1090,3 +1090,38 @@ fieldset.helical {
   margin: 0;
   padding-left: 1rem;
 }
+
+/* ------------------------------------------------------------ Surcharges de règles (A18 b) */
+
+.override {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.2rem;
+  padding: 0.1rem 0.25rem 0.25rem;
+}
+
+.override__current {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.override-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  width: 100%;
+}
+
+.override-editor textarea {
+  width: 100%;
+  box-sizing: border-box;
+  font: inherit;
+}
+
+.override-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}

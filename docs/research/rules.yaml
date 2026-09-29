@@ -9,6 +9,8 @@
 # Toutes les règles des contextes actifs s'appliquent ; la plus contraignante l'emporte.
 # source_secondaire: true = valeur issue d'une norme payante NON lue (décision 2026-09-28 : pas d'achat),
 #   reprise d'une source secondaire. Traitée selon le profil de conformité du projet (voir `profils`).
+# contexte_exclu (facultatif) : contextes qui écartent la règle même si ses contextes sont actifs
+#   (ex. G_COLLET_MIN hors fût central, décision de l'utilisateur 2026-09-29, QUESTIONS A5).
 
 version: 1
 date_consultation: "2026-09-28"
@@ -59,6 +61,7 @@ contextes:
   exterieur: "Escalier extérieur"
   tournant: "Volée comportant des marches balancées ou tournantes"
   helicoidal: "Escalier hélicoïdal (fût central, à jour ou sur limon)"
+  helicoidal_fut: "Escalier hélicoïdal à fût central (marches portées par le fût) — déduit du tracé, non saisi"
   gain_de_place: "Escalier gain de place / pas japonais / pas décalés"
   echelle_meunier: "Échelle de meunier (hors DTU 36.3) — analogie échelle à marches industrielle"
   industriel: "Accès technique / machines — NF EN ISO 14122-3, NF E85-015"
@@ -403,10 +406,12 @@ regles:
     recommande: 150
     unite: mm
     contexte: [tournant, helicoidal]
+    contexte_exclu: [helicoidal_fut]
     nature: metier
     source: "[30] (usage) ; comparaisons ADK 50 mm [21], DIN 18065 50/100 mm [22]"
     confiance: faible
     severite: avertissement
+    note: "Non appliquée aux hélicoïdaux à fût central : la DIN 18065 et l'ADK admettent 0 mm au noyau (A-regles §1.9) ; appliquée aux hélicoïdaux à jour central (décision de l'utilisateur 2026-09-29, QUESTIONS A5)."
 
   - id: G_COLLET_MONOTONE
     description: "Les girons au collet décroissent (ou restent constants) vers l'angle du tournant"
@@ -693,6 +698,20 @@ regles:
     source_secondaire: true
     confiance: moyen
     severite: bloquant
+
+  - id: ECHAPPEE_LARGEUR
+    description: "Échappée sur la largeur des marches : hauteur libre verticale au-dessus des nez, sur toute la largeur de l'emmarchement sous la dalle haute (grandeur non réglementaire, CHALLENGE G4)"
+    formule: "e_largeur >= max(min des règles ECHAPPEE_* bloquantes actives)"
+    min: null
+    max: null
+    recommande: null
+    unite: mm
+    contexte: [tous]
+    nature: metier
+    source: "docs/CHALLENGE.md G4 (objectif de K8) ; seuil repris des règles ECHAPPEE_* bloquantes actives ; décision de l'utilisateur 2026-09-29 (QUESTIONS A7)"
+    confiance: faible
+    severite: avertissement
+    note: "Pas de seuil propre : le seuil est le plus grand `min` des règles ECHAPPEE_* de sévérité déclarée `bloquant` applicables aux contextes actifs ; sans elles, sans objet."
 
   - id: TREMIE_LONGUEUR
     description: "Longueur de trémie minimale pour une volée droite arrivant au bord de trémie (dérivation géométrique, mesure verticale)"

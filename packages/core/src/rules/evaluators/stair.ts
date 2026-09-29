@@ -12,7 +12,8 @@ import {
   treadsOfKind,
 } from "../check.js";
 import { LF_WIDE_THRESHOLD } from "../formula-constants.js";
-import { getRule } from "../table.js";
+import { isRuleApplicable } from "../contexts.js";
+import { RULES, getRule } from "../table.js";
 import { handrailClearWidth } from "./guards.js";
 import type { EvaluatorContext, Finding, RuleEvaluator } from "../types.js";
 
@@ -180,6 +181,66 @@ const headroom: RuleEvaluator = (ctx) => {
   ];
 };
 
+/** Préfixe des règles d'échappée dont `ECHAPPEE_LARGEUR` reprend le seuil. */
+const HEADROOM_PREFIX = "ECHAPPEE_";
+const HEADROOM_WIDTH_RULE = "ECHAPPEE_LARGEUR";
+
+/**
+ * Seuil de `ECHAPPEE_LARGEUR` : plus grand `min` des règles ECHAPPEE_* de sévérité **déclarée**
+ * `bloquant` applicables aux contextes actifs (QUESTIONS A7) ; `null` sans telle règle. La
+ * sévérité déclarée (et non effective) est retenue : le profil souple ou une surcharge ne
+ * change pas l'exigence reprise.
+ */
+export function headroomWidthThreshold(
+  contexts: ReadonlySet<string>,
+): { min: number; ruleId: string } | null {
+  let best: { min: number; ruleId: string } | null = null;
+  for (const r of RULES) {
+    if (!r.id.startsWith(HEADROOM_PREFIX) || r.id === HEADROOM_WIDTH_RULE) continue;
+    if (r.severite !== "bloquant" || r.min === null || !isRuleApplicable(r, contexts)) continue;
+    if (best === null || r.min > best.min) best = { min: r.min, ruleId: r.id };
+  }
+  return best;
+}
+
+/** ECHAPPEE_LARGEUR : échappée sur la largeur des marches ≥ seuil des ECHAPPEE_* bloquantes. */
+const headroomWidth: RuleEvaluator = (ctx) => {
+  const threshold = headroomWidthThreshold(ctx.contexts);
+  if (threshold === null)
+    return [
+      notApplicable("Sans objet : aucune règle d'échappée bloquante dans les contextes actifs."),
+    ];
+  if (ctx.incomplete)
+    return [notEvaluated("Échappée sur la largeur non calculée (modèle partiel).")];
+  const w = ctx.headroomWidth;
+  if (!w) {
+    if (!ctx.project.site.opening)
+      return [notApplicable("Sans objet : pas de trémie (aucun plancher au-dessus).")];
+    if (!ctx.headroomWidthClear) return [notEvaluated("Échappée sur la largeur non calculée.")];
+    return [
+      {
+        status: "ok",
+        min: threshold.min,
+        message:
+          "Échappée sur la largeur non limitée : aucun nez de marche sous la dalle haute (trémie couvrante).",
+      },
+    ];
+  }
+  // Le nez k porte le dessus de la marche k + 1 ; le dernier est le nez d'arrivée.
+  const where =
+    w.nosing === ctx.stepping.nosings.length - 1
+      ? "au nez d'arrivée"
+      : `au nez de la marche ${w.nosing + 1}`;
+  return [
+    checkValue(
+      ctx,
+      w.min,
+      `Échappée sur la largeur des marches ${where} (seuil repris de ${threshold.ruleId})`,
+      { bounds: { min: threshold.min, max: null }, location: { kind: "point", at: w.at } },
+    ),
+  ];
+};
+
 export const STAIR_EVALUATORS: Readonly<Record<string, RuleEvaluator>> = {
   BLONDEL_DTU: blondel,
   BLONDEL_ERP_BHC: blondel,
@@ -204,4 +265,5 @@ export const STAIR_EVALUATORS: Readonly<Record<string, RuleEvaluator>> = {
   ECHAPPEE_RECO_PRIVATIF: headroom,
   ECHAPPEE_RECO_PUBLIC: headroom,
   ECHAPPEE_INDUSTRIEL: headroom,
+  ECHAPPEE_LARGEUR: headroomWidth,
 };

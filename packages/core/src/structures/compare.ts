@@ -401,6 +401,34 @@ function profileArcReason(
 }
 
 /**
+ * Rayon de jour minimal roulable d'un limon débillardé : rayon intérieur mini de la rouleuse du
+ * profil d'atelier + épaisseur du limon (paramètres `params` du plugin `kind` complétés par ses
+ * défauts ; 0 si le plugin n'a pas d'épaisseur). Aucune valeur codée en dur ici.
+ */
+export function minRollableJourRadius(
+  workshop: Project["workshop"],
+  kind: string,
+  params: Readonly<Record<string, unknown>>,
+): Mm {
+  const metal = resolveWorkshopProfile(workshop).metal;
+  const parsed = getStructure(kind)?.paramsSchema.safeParse(params);
+  const t = parsed?.success ? (parsed.data as Record<string, unknown>)["thickness"] : undefined;
+  return metal.plateRolling.minInnerRadius + (typeof t === "number" ? t : 0);
+}
+
+/**
+ * Rayon de jour en arc proposé pour un débillardé : `minRollableJourRadius` arrondi aux 10 mm
+ * supérieurs (jour adapté du comparateur, jours en arc de l'assistant, décision A17).
+ */
+export function rollableJourRadius(
+  workshop: Project["workshop"],
+  kind: string,
+  params: Readonly<Record<string, unknown>>,
+): Mm {
+  return Math.ceil(minRollableJourRadius(workshop, kind, params) / 10) * 10;
+}
+
+/**
  * Adapte le raccord de jour de l'épure à la structure `spec.kind` : poteau d'angle pour les
  * structures `NEWEL_JOUR_STRUCTURES` (jour en arc ou vif), jour en arc pour un débillardé (G7),
  * agrandi si son rayon est sous le rayon roulable (rayon intérieur mini de la rouleuse + e).
@@ -445,16 +473,9 @@ export function adaptJour(
         c.kind === "newel" && !newelSatisfies(c, kind, params, resolved.flangeWidth);
     }
   }
-  /** Rayon de jour minimal roulable : rayon intérieur mini de la rouleuse + épaisseur. */
-  const minRollableRadius = (): Mm => {
-    const metal = resolveWorkshopProfile(project.workshop).metal;
-    // Épaisseur du limon : paramètres de la variante complétés par les défauts du plugin (pas
-    // de valeur codée en dur ici).
-    const parsed = getStructure(kind)?.paramsSchema.safeParse(params);
-    const t = parsed?.success ? (parsed.data as Record<string, unknown>)["thickness"] : undefined;
-    return metal.plateRolling.minInnerRadius + (typeof t === "number" ? t : 0);
-  };
-  const arcRadius = (): Mm => options.arcRadius ?? Math.ceil(minRollableRadius() / 10) * 10;
+  const minRollableRadius = (): Mm => minRollableJourRadius(project.workshop, kind, params);
+  const arcRadius = (): Mm =>
+    options.arcRadius ?? rollableJourRadius(project.workshop, kind, params);
   const turns = project.stair.layout.turns.map((t, j) => {
     let target: InnerCorner | null = null;
     let reason = "";

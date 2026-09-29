@@ -122,6 +122,35 @@ describe("renderPdf (mise en page sur surface enregistrée)", () => {
     expect(new Set(templates.map((p) => p.partIds!.join(","))).size).toBe(6);
   });
 
+  it("gabarits filtrés par famille (QUESTIONS A20) ; développés et autres pages inchangés", () => {
+    const partsOf = (ps: readonly { kind: PdfPageKind; partIds?: readonly string[] }[]) =>
+      new Set(ps.filter((p) => p.kind === "template").flatMap((p) => p.partIds ?? []));
+    const all = partsOf(pages);
+    const treads = renderPdf(new RecordingCanvas(), model, {
+      project,
+      templateFamilies: ["treads"],
+    });
+    const stringers = renderPdf(new RecordingCanvas(), model, {
+      project,
+      templateFamilies: ["stringers"],
+    });
+    const none = renderPdf(new RecordingCanvas(), model, { project, templateFamilies: [] });
+    const t = partsOf(treads);
+    const s = partsOf(stringers);
+    expect(t.size).toBeGreaterThan(0);
+    expect(s.size).toBeGreaterThan(0);
+    for (const id of t) expect(id).toMatch(/^tread-/);
+    for (const id of s) expect(id).not.toMatch(/^tread-/);
+    // Familles disjointes dont la réunion redonne le dossier complet.
+    expect(new Set([...t, ...s])).toEqual(all);
+    expect(partsOf(none).size).toBe(0);
+    const count = (ps: readonly { kind: PdfPageKind }[], k: PdfPageKind) =>
+      ps.filter((p) => p.kind === k).length;
+    for (const k of ORDER.filter((k) => k !== "template" && k !== "toc")) {
+      expect(count(treads, k), k).toBe(count(pages, k));
+    }
+  });
+
   it("sommaire : chaque section avec ses pages", () => {
     const toc = texts[0]!.join("\n");
     expect(toc).toContain("Sommaire");

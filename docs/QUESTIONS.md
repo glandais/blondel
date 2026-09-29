@@ -58,6 +58,9 @@ La règle `G_COLLET_MIN` (100 mm) doit-elle s'appliquer aux hélicoïdaux à fû
 - Proposition : non pour un fût (la DIN 18065 admet 0 mm au noyau, A §1.9) ; oui pour un hélicoïdal à jour central.
 - Aujourd'hui : avertissement sur toutes les marches du préréglage hélicoïdal (collet ≈ 37 mm ; 100 mm exigerait un fût de plus de Ø 400).
 - Réf. : l. 210 (J5a, core:j5a), l. 249 (J5a, core:project) ; `rules/evaluators/going.ts`.
+- **Décision de l'utilisateur (2026-09-29)** : proposition retenue (G_COLLET_MIN non appliqué sur fût central, appliqué sur jour central).
+- Implémenté le 2026-09-29 — paramètre / comportement : champ `contexte_exclu: [helicoidal_fut]` de `G_COLLET_MIN` dans `rules.yaml` (source DIN 18065 / ADK, A-regles §1.9, en note) ; contexte de forme `helicoidal_fut` déduit d'un tracé hélicoïdal à fût (`layout.core.kind = column`), jamais saisi (`DEDUCED_ONLY_CONTEXTS`, masqué dans le panneau). Fût : plus de `G_COLLET_MIN` (−15 avertissements sur `j5a-helicoidal` et `demo-helical-glass`) ; jour central : règle appliquée. Tests : `rules/contexts.test.ts`.
+- Revue le 2026-09-29 — `helicoidal_fut` déclaré à la main dans `compliance.contexts` est ignoré avec une remarque (sinon il écartait `G_COLLET_MIN` d'un hélicoïdal à jour central) ; test `rules/contexts.test.ts`.
 
 ### A6. Masses affichées
 
@@ -76,6 +79,9 @@ Faut-il une règle `ECHAPPEE_LARGEUR` (avertissement) et un affichage dédié de
 - Proposition : oui ; règle en avertissement avec pour seuil le plus grand minimum des règles `ECHAPPEE_*` bloquantes actives ; barre d'état « Échappée largeur » et « échappée non limitée » quand la trémie couvre tout l'escalier.
 - Aujourd'hui : grandeur calculée (`Model.headroomWidth`) mais seulement citée dans une remarque ; rien n'est affiché quand la trémie couvre la ligne de foulée.
 - Réf. : l. 104 (J2, core:pipeline), l. 105 (J2, core:pipeline), l. 113 (J1, integration), l. 144 (J3a, integration) ; `pipeline/build.ts`, `docs/research/rules.yaml`, `apps/web/src/components/StatusBar.tsx`.
+- **Décision de l'utilisateur (2026-09-29)** : proposition retenue (règle ECHAPPEE_LARGEUR en avertissement, affichage « Échappée largeur » et « échappée non limitée »).
+- Implémenté le 2026-09-29 — paramètre / comportement : règle `ECHAPPEE_LARGEUR` (avertissement, contexte `tous`, sans seuil propre) dans `rules.yaml`, évaluée sur `Model.headroomWidth` avec pour seuil le plus grand `min` des règles `ECHAPPEE_*` de sévérité **déclarée** bloquante applicables (le profil souple ne l'abaisse pas) ; sans telle règle : sans objet. Elle remplace la remarque « Avertissement : échappée sur la largeur… » de `Model.notes`. Nouveau `Model.headroomUnlimited` (`walkline`, `width`) : barre d'état « Échappée largeur » et « non limitée » (Γ et / ou largeur) quand la trémie couvre l'escalier. Tests : `pipeline/build.test.ts`, e2e `headroom-status.spec.ts`.
+- Revue le 2026-09-29 — « non limitée » seulement si le pipeline l'établit (`headroomWidthClear`, repris de `Model.headroomUnlimited.width`) : échappée non calculée (étape en échec) → `ECHAPPEE_LARGEUR` non évaluée, et non plus « ok » ; test `rules/evaluators/evaluators.test.ts`.
 
 ### A8. Marge d'échappée exigée par l'assistant
 
@@ -84,6 +90,8 @@ Une solution dont l'échappée égale exactement le minimum (marge nulle) doit-e
 - Proposition : non, la garder mais pénalisée (comportement actuel), la marge visée de 50 mm étant un réglage. Garder aussi la dalle de 200 mm du cas d'acceptation n° 1.
 - Aujourd'hui : l'escalier droit du cas n° 1 passe à g = 240 avec une marge nulle, classé après les quarts tournants (score 50 contre 27). Avec une dalle de 250 mm il serait rejeté.
 - Réf. : l. 226 (G8, core:assistant), l. 267 (G8, core:assistant), l. 107 (J2, core:pipeline), l. 42 (J1, core:project) ; `assistant/defaults.ts`, `assistant/score.ts`, `examples/acceptance-01-quart-tournant.blondel.json`.
+- **Décision de l'utilisateur (2026-09-29)** : proposition retenue (marge nulle gardée mais pénalisée, marge visée de 50 mm en réglage, dalle de 200 mm du cas n° 1 conservée). Point clos.
+- Vérifié le 2026-09-29 — comportement actuel conforme, rien à coder : `headroomMarginTarget` = 50 mm (`assistant/defaults.ts`, réglage « à valider »), marge nulle pénalisée et non rejetée (`assistant/propose.test.ts`, droit à g = 240 classé après), `upperSlabThickness` = 200 dans `examples/acceptance-01-quart-tournant.blondel.json`.
 
 ### A9. Débord de nez par défaut
 
@@ -101,6 +109,9 @@ Sous 110 mm (sphère T1), le jour exige-t-il encore un garde-corps ? Entre 110 m
 - Proposition : sous 110 mm, pas de garde-corps de jour, `GC_OBLIGATOIRE` en conseil et correction « côté jour → mur » proposée seulement si le jour est fermé ; entre 110 et 140 mm, contrôle de collision des poteaux en avertissement.
 - Aujourd'hui : sous 110 mm, garde-corps non généré, erreur lisible et `GC_OBLIGATOIRE` ; au-dessus, deux garde-corps produits même si leurs poteaux se chevauchent.
 - Réf. : l. 195 (J4, core:guards), l. 175 (J4, review:guards), l. 206 (J4, review:core-fixes) ; `guards/compute.ts`, `guards/jour.ts`, `project/fixes.ts`.
+- **Décision de l'utilisateur (2026-09-29)** : proposition retenue (sous 110 mm : pas de garde-corps de jour, GC_OBLIGATOIRE en conseil, correction « côté jour → mur » seulement si le jour est fermé ; entre 110 et 140 mm : collision des poteaux en avertissement).
+- Implémenté le 2026-09-29 — paramètre / comportement : sous `GC_GABARIT_T1_2024.max` (110 mm), le garde-corps de jour n'est pas construit **sans erreur de modèle** (remarque, `GuardsAnalysis.narrowJour`) et `GC_OBLIGATOIRE` sort en conseil côté jour (`Finding.severity`, raison dans `downgradeReason`). Correction « Jour fermé : régler le côté jour sur « mur » » proposée seulement si le côté jour est en `auto` (pas proposée s'il est déclaré « vide ») : le modèle ne sait pas si le jour est fermé, c'est à l'utilisateur de le confirmer. Au-dessus : contrôle `GC_POTEAUX_JOUR` (avertissement, hors table, constat géométrique sans seuil) sur les poteaux des garde-corps de jour qui se chevauchent en plan et en hauteur (sections carrées orientées) ; avec les défauts de `guards/spec.ts` (décalage 30, poteau 80), collision de 110 à 139 mm. Tests : `guards/compute.test.ts`, `project/fixes.test.ts`.
+- Revue le 2026-09-29 — seule la chute **dans l'emprise du jour** (bande entre les deux volées qui se font face, bornée à la plus courte, `narrowJourZones`) passe en conseil ; la partie du côté jour qui dépasse la volée d'en face borde un vide ouvert : `GC_OBLIGATOIRE` y garde sa sévérité (préréglage demi-tournant : volée 3 plus longue que la volée 1, chute de 2 700 mm à l'arrivée signalée jusque-là en conseil). Le garde-corps n'y est toujours pas construit (tout le côté jour est omis). Une surcharge qui assouplit une règle ne relève plus un constat déjà plus faible. Tests : `guards/compute.test.ts`, `rules/engine.test.ts`.
 
 ### A11. Contremarches et marches en tôle
 
@@ -109,6 +120,8 @@ Avec des marches en tôle, faut-il retirer les contremarches bois de base et, po
 - Proposition : oui aux deux : `helical-core` retire les contremarches bois sous ses tôles (et `VIDE_ENTRE_MARCHES` est alors évalué) ; contremarche d'arrivée des Z en plat plié fixé au chevêtre.
 - Aujourd'hui : `helical-core` laisse les contremarches bois sous les tôles ; en Z, la contremarche d'arrivée reste en bois (seules `riser-1` à `riser-(n−1)` sont retirées).
 - Réf. : l. 250 (J5a, core:structures), l. 275 (J3b, review-fix:geometrie) ; `structures/helicalCore.ts`, `structures/steelFlat.ts`.
+- **Décision de l'utilisateur (2026-09-29)** : proposition retenue (contremarches bois retirées sous les tôles de `helical-core`, contremarche d'arrivée des Z en plat plié fixé au chevêtre).
+- Implémenté le 2026-09-29 — comportement : `helical-core` à marches en tôle (`treads.material = "steel"`) retire toutes les contremarches bois de base (`removedBaseParts`) et réévalue les règles de nez et de contremarche de `rules/evaluators/nosing.ts` (dont `VIDE_ENTRE_MARCHES`, `CONTREMARCHE_EXTREMES`, `RECOUVREMENT_*`, `DEBORD_NEZ_*`) sans contremarche, à l'épaisseur de la tôle (vide h − t_tôle). `steel-flat` en tôle pliée Z : la contremarche d'arrivée `riser-n` devient une tôle pliée en L (contremarche + retour sous la dernière marche, même tôle et même loi de pli que les Z) fixée au chevêtre, avec développé en fibre neutre, ligne de pli, perçages, nomenclature, DXF et contrôles de pliage / laser / format comme les autres tôles pliées ; paramètres « à valider » `folded.arrivalRiser.topOffset` (0 mm, arête haute au niveau du sol fini d'arrivée), `fixings` (3 perçages), `holeDiameter` (11 mm), `holeEdgeDistance` (50 mm) ; retour = `folded.returnLength`. À défaut de développé possible, la contremarche bois est conservée avec une erreur lisible.
 
 ### A12. Porte-à-faux sur le fût sans justification
 
@@ -117,6 +130,8 @@ Un hélicoïdal à marches en porte-à-faux sur le fût, sans justification sais
 - Proposition : non, avertissement avec champ de justification repris dans le dossier (même traitement que le lamellé en plis minces, décision Q10).
 - Aujourd'hui : avertissement `HELICOIDAL_PORTE_A_FAUX` ; C §1.8 propose « bloquant sans justification ».
 - Réf. : l. 211 (J5a, core:j5a), l. 248 (J5a, core:structures) ; `structures/helicalCore.ts`.
+- **Décision de l'utilisateur (2026-09-29)** : proposition retenue (avertissement, champ de justification repris dans le dossier).
+- Implémenté le 2026-09-29 — paramètre / comportement : `HELICOIDAL_PORTE_A_FAUX` reste un avertissement tant que `helical-core.cantileverJustification` (champ texte optionnel des paramètres du plugin, déjà éditable dans le panneau de structure, « Justification du porte-à-faux ») est vide ; saisi, le contrôle est conforme et porte la justification (`Finding.justification` → `RuleResult.justification`, champ optionnel ajouté au contrat) ; le dossier PDF l'imprime sous la règle (« Justification fournie : … », pages du contrôle de conception). Le lamellé en plis minces (Q10) n'a pas encore de contrôle : il réutilisera ce champ.
 
 ### A13. Limons en profilé sur un quart tournant balancé
 
@@ -135,6 +150,9 @@ Faut-il un écran de saisie du profil d'atelier (taux horaire, temps unitaires, 
 - Proposition : oui, panneau « Profil d'atelier » séparé du projet (décision A8 du challenge), sans valeur par défaut ; les euros restent masqués tant qu'il est incomplet.
 - Aujourd'hui : aucun barème par défaut, saisie seulement dans le JSON ; le coût du comparateur n'apparaît donc jamais pour un utilisateur.
 - Réf. : l. 223 (J5, integration:vague-e), l. 266 (tous, integration:vague-f), l. 180 (J3c, core:structures) ; `workshop/costs.ts`, `apps/web/src/views/CompareView.tsx`.
+- **Décision de l'utilisateur (2026-09-29)** : proposition retenue (panneau « Profil d'atelier » séparé du projet, sans valeur par défaut, euros masqués tant que le barème est incomplet).
+- Implémenté le 2026-09-29 — paramètre / comportement : bouton « Atelier… » de la barre d'outils, fenêtre « Profil d'atelier » (`apps/web/src/components/WorkshopDialog.tsx`) : les 9 champs de `CostRates` (taux horaire, 5 temps unitaires, prix de l'acier, du bois, de la finition), vides par défaut, état « Barème incomplet (n / 9) » tant que taux horaire et temps manquent, aucun montant dans le panneau. Barème hors du projet : stockage du navigateur (`blondel.workshop.costs`, `store/workshopStore.ts`), import / export JSON (`bareme-atelier.json`, forme `{ costs }` d'un profil d'atelier ; import d'un profil ou d'un projet accepté), jamais dans l'autosauvegarde, le `.blondel.json` ni l'historique. Le comparateur reçoit une copie du projet dont `workshop.costs` est complété par ce barème (`withWorkshopRates`, champs du panneau prioritaires sur ceux d'un projet importé) : euros affichés par le cœur (`variantCost`) dès que le barème est complet pour la variante.
+- Implémenté le 2026-09-29 (relecture) — comportement : l'état « Barème incomplet (n / 9) » du panneau se lit sur le barème réellement appliqué au comparateur (`effectiveRates` de `apps/web/src/lib/workshopRates.ts`) : si le projet ouvert porte déjà un barème (fichier importé), ses champs repris sont signalés par une note, et le panneau n'annonce plus « coûts masqués » quand le comparateur affiche des euros.
 
 ### A15. Giron côté mur hors ERP (K9)
 
@@ -143,6 +161,8 @@ Faut-il un conseil « giron côté mur trop grand » hors ERP, en reprenant le s
 - Proposition : non ; la seule valeur sourcée est ERP, une règle hors ERP serait inventée (critère d'acceptation n° 5 : toute règle traçable). Clore le point.
 - Aujourd'hui : `G_EXT_MAX_ERP_TOURNANT` évalué en ERP tournant ; rien hors ERP.
 - Réf. : l. 35 (J2, orchestrateur), l. 116 (J2, core:rules) ; `rules/evaluators/going.ts`.
+- **Décision de l'utilisateur (2026-09-29)** : proposition retenue : pas de règle hors ERP. Point clos.
+- Vérifié le 2026-09-29 — comportement actuel conforme, rien à coder : `G_EXT_MAX_ERP_TOURNANT` a pour contextes `[erp_securite, tournant, helicoidal]` (ERP **et** forme, `rules/contexts.test.ts`) ; aucune règle de giron côté mur hors ERP.
 
 ### A16. Ligne de foulée d'un escalier droit large
 
@@ -151,6 +171,8 @@ Pour un escalier droit de plus de 1 200 mm, de quel bord mesurer les 600 mm de l
 - Proposition : du côté de la main courante principale (côté vide s'il y a un garde-corps, sinon côté mur) ; à défaut, bord gauche.
 - Aujourd'hui : toujours le bord gauche (`innerSide = "left"`), ce qui déplace la ligne de mesure de conformité.
 - Réf. : l. 78 (J2, review:layout) ; `layout/layout.ts`, `layout/resolve.ts`.
+- **Décision de l'utilisateur (2026-09-29)** : **choix explicite de l'utilisateur** : réglage gauche / droite dans le formulaire du tracé, valeur par défaut = la proposition (côté de la main courante principale : vide s'il y a un garde-corps, sinon mur ; à défaut, gauche).
+- Implémenté le 2026-09-29 — paramètre / comportement : champ facultatif `stair.walkline.side` (`left` / `right`, absent = automatique), liste « Bord de mesure de la ligne de foulée » (Automatique (gauche / droite résolu), Bord gauche, Bord droit) du formulaire du tracé, affichée pour un escalier droit ; d_f (600 mm si E > 1 200, ou distance imposée) est mesurée depuis ce bord, rendu dans `Layout.walklineSide`. Automatique (`layout/walklineSide.ts`) : nature des côtés d'après `guards.flight.inner` / `outer` imposés, sinon murs du site (mêmes critères que les garde-corps) ; un seul côté vide → ce côté ; deux murs → côté de la main courante murale (`handrail.wallSides` : `inner` → gauche, `auto` / `outer` → droite) ; sinon gauche. `Layout.innerSide` reste `left` (côtés `inner` / `outer` des garde-corps et structures inchangés). Aucun exemple ni instantané modifié (seul escalier droit large, `demo-erp-grand`, sans mur : gauche, comme avant).
 
 ### A17. Typologies proposées par l'assistant
 
@@ -159,6 +181,8 @@ L'assistant doit-il énumérer le S / Z et les jours en arc (seuls à permettre 
 - Proposition : pas le S / Z (il n'a de sens que contre deux murs opposés, accessible par préréglage) ; jours en arc en V1, ce qui donnera des propositions `steel-curved`.
 - Aujourd'hui : ni S / Z ni jour en arc ; seule l'arrivée est calée sur la trémie ; `steel-curved` n'a jamais de proposition.
 - Réf. : l. 287 (vague G, integration:vague-g), l. 228 (G8, core:assistant), l. 229 (G8, core:assistant:relecture) ; `assistant/types.ts`, `assistant/shapes.ts`.
+- **Décision de l'utilisateur (2026-09-29)** : proposition retenue (pas de S / Z ; jours en arc énumérés, donc propositions `steel-curved`).
+- Implémenté le 2026-09-29 — comportement : l'assistant énumère un jour en arc pour les tournants balancés (quart tournant, deux quarts, demi-tournant ; pas les paliers ni les S / Z) quand la structure visée l'accepte : aucune structure (jours vifs **et** en arc) ou limon débillardé (`steel-curved` : jours en arc seulement, qu'il exige). Rayon = rayon roulable du débillardé (rayon intérieur mini de la rouleuse du profil d'atelier + épaisseur du limon, arrondi aux 10 mm : 160 mm par défaut), même fonction que le jour adapté du comparateur (`rollableJourRadius`) ; volée centrale portée à 2r au moins. `steel-curved` compte désormais parmi les structures à limons hors emprise (emprise hors tout E + 2 × e). Cas d'acceptation n° 1 : quart tournant toujours en tête, 447 ms (12 674 variantes, 30 modèles) contre 308 ms avant, sous le budget de 2 s.
 
 ### A18. Recalage et édition dans l'interface
 
@@ -167,6 +191,8 @@ Faut-il (a) un bouton « Recaler volées et trémie » après modification de H,
 - Proposition : (a) oui, via le préréglage du cœur ; (b) oui, justification obligatoire reprise dans le dossier ; (c) V1.
 - Aujourd'hui : (a) ajustement manuel ou assistant ; (b) surcharges comptées, non éditables ; (c) import seulement. Les préréglages n'ont pas de murs (l'assistant en ajoute).
 - Réf. : l. 81 (J1, web), l. 83 (J1, web), l. 43 (J1, core:project) ; `apps/web/src/components/ParamsPanel.tsx`, `project/presets.ts`.
+- **Décision de l'utilisateur (2026-09-29)** : (a) recalage volées et trémie : oui ; (b) édition des surcharges avec justification obligatoire reprise dans le dossier : oui ; (c) placement dans le plan : plus tard (V1).
+- Implémenté le 2026-09-29 — paramètre / comportement : (a) bouton « Recaler volées et trémie » du formulaire du tracé (tracés à volées) : `realignFlightsAndOpening` (`project/realign.ts`) recalcule les longueurs de volées selon les proportions du préréglage de même topologie (droit, quart balancé ou palier, U / demi-tournant, S / Z ; n et g résolus comme le tracé, d_f résolue, jour en arc et transition oblique d'un S / Z pris en compte) et la trémie rectangulaire par `computeOpening` (jeu `PRESET_OPENING_CLEARANCE`, à valider ; pas de trémie ajoutée à un projet qui n'en a pas) ; une seule entrée d'annulation, bandeau d'information (avant → après). Limite : la position des tournants saisie est remplacée par celle du préréglage ; hélicoïdal et autres topologies refusés avec message. (b) Dans le panneau « Contrôle de conception », chaque résultat propose « Surcharger la règle… » (sévérité bloquant / avertissement / conseil / ignorée, justification obligatoire : bouton désactivé tant qu'elle est vide ; `withRuleOverride`, une surcharge par règle), la liste « Surcharges » les reprend toutes (modifier, retirer) ; le dossier PDF imprime une section « Surcharges de règles par l'utilisateur » (sévérité déclarée → retenue, justification). (c) non fait (V1).
 
 ### A19. Angle imposé dans une zone balancée (mode expert)
 
@@ -175,6 +201,7 @@ Un nez à angle imposé doit-il devenir une borne de zone (voisins rebalancés a
 - Proposition : oui en V1, avec l'édition libre de la ligne de foulée ; d'ici là, comportement actuel.
 - Aujourd'hui : angle appliqué après le calcul de la zone, K5 / K3 seulement signalés ; poignée bornée à ± 80° ; remarque « collet minimal » calculée avant les angles imposés ; mode indisponible sur un hélicoïdal.
 - Réf. : l. 101 (J2, review:stepping), l. 260 (J2, web:app), l. 262 (J2, review:web-app) ; `stepping/stepping.ts`, `apps/web/src/lib/expert.ts`.
+- **Décision de l'utilisateur (2026-09-29)** : proposition retenue (plus tard, avec l'édition libre de la ligne de foulée ; comportement actuel conservé d'ici là).
 
 ### A20. Volume du dossier PDF
 
@@ -183,6 +210,8 @@ Le dossier PDF « complet » doit-il continuer à inclure les gabarits 1:1 de to
 - Proposition : oui pour « complet », et ajouter un filtre des gabarits par famille (limons, marches, garde-corps) ; recouvrement des cases fixe à 10 mm, sans réglage dans l'interface.
 - Aujourd'hui : quatre entrées (complet A4, complet A3, sans gabarits, fiche de pose seule), pas de filtre.
 - Réf. : l. 238 (J6, exports:j6), l. 261 (J6, web:app) ; `apps/web/src/lib/exportFiles.ts`.
+- **Décision de l'utilisateur (2026-09-29)** : proposition retenue (« complet » garde tous les gabarits ; filtre des gabarits par famille : limons, marches, garde-corps ; recouvrement fixe de 10 mm).
+- Implémenté le 2026-09-29 — paramètre / comportement : `templateFamilies` de `PdfLayoutOptions` (`@blondel/exports/pdf`, absent = toutes) et `templateFamily(part)` (`@blondel/exports`, `templateFamily.ts` : garde-corps = pièces `guard-…` / `handrail-…`, mains courantes, balustres, remplissages ; marches = marches, contremarches, paliers ; limons et structure = le reste). Menu « Exporter » : trois dossiers A4 « gabarits 1:1 des limons et de la structure / des marches / des garde-corps » (toutes les autres pages, développés à l'échelle compris, inchangées) ; entrée indisponible si aucune pièce de la famille n'a de développé (garde-corps : aucun développé à ce jour). « Complet » A4 / A3 inchangé ; recouvrement fixe `DEFAULT_TILE_OVERLAP` = 10 mm, sans réglage.
 
 ### A21. Comportement pendant un calcul
 
@@ -209,6 +238,8 @@ Faut-il laisser choisir les variantes du comparateur, et filtrer les marqueurs 3
 - Proposition : liste fixe au MVP ; filtre des marqueurs par famille (géométrie, fabrication, garde-corps).
 - Aujourd'hui : variantes fixes ; toute violation localisée teinte sa pièce (ex. `FAB_MARCHE_PORTEE` teinte toutes les marches d'un escalier sans limon de jour).
 - Réf. : l. 187 (J4, web) ; `apps/web/src/lib/variants.ts`.
+- **Décision de l'utilisateur (2026-09-29)** : proposition retenue (variantes du comparateur fixes ; filtre des marqueurs 3D par famille : géométrie, fabrication, garde-corps).
+- Implémenté le 2026-09-29 — paramètre / comportement : `ruleFamily(ruleId)` du cœur (`rules/family.ts`, `RULE_FAMILIES`, `RULE_FAMILY_LABELS`) : garde-corps = `GC_*`, `MC_*`, `ECHELLE_MEUNIER_MC`, `CHARGE_GC_HORIZONTALE` ; fabrication = `FAB_*`, `HELICOIDAL_*`, `LIMON_*`, `CREMAILLERE_*`, `DEFORMATION_*`, `CHARGE_*`, `EXC_*` et tout contrôle de plugin hors table ; géométrie = le reste de la table (et `ECHAPPEE_*`). Vue 3D : cases « Géométrie / Fabrication / Garde-corps (n) » sous « Contrôles sur les pièces » (`Viewer3DTools.tsx`, `controlMarkers(model, hidden)`), toutes cochées par défaut, état local à la vue ; comptes avant filtrage. Variantes du comparateur inchangées.
 
 ### A24. Conventions d'interface mineures
 
@@ -218,6 +249,8 @@ Faut-il laisser choisir les variantes du comparateur, et filtrer les marqueurs 3
 - Aujourd'hui : comme décrit.
 - Réf. : l. 285 (vague G, integration:vague-g), l. 245 (J7, web:site), l. 185 (J4, web), l. 259 (J6, web:app), l. 186 (J4, web), l. 82 (J1, web) ; `apps/web/src/lib/balancingForm.ts`, `apps/web/src/views/PlanSiteEditor.tsx`, `apps/web/src/lib/appearance.ts`.
 - Complément du 2026-09-30 (préréglages de démonstration) : le projet peut désormais enregistrer des **teintes de présentation** (`Project.appearance` optionnel : couleur de la peinture, ton du bois, teinte du verre ; vue 3D seulement, sans effet sur les pièces, les masses ni les exports). Ce champ **ne tranche pas** A24 : l'essai d'apparence par famille de pièces reste un aperçu non enregistré, et aucun champ de l'interface ne règle encore `appearance` (réglé par les démos ou un fichier importé). Si l'aperçu par famille devait être enregistré, `appearance` en serait le support naturel. Réf. : `model/project.ts` (`AppearanceSchema`), `project/presetDemo.ts`.
+- **Décision de l'utilisateur (2026-09-29)** : proposition retenue (tout garder, sauf le tracé des murs « au nu » : 3e clic du côté du mur au lieu de la liste gauche / droite).
+- Implémenté le 2026-09-29 — paramètre / comportement : « Ligne tracée » = « Axe du mur » (deux clics, défaut) ou « Nu du mur (3e clic du côté du mur) » : deux clics sur le nu, aperçu du mur du côté du pointeur, troisième clic de ce côté (`wallClick`, `wallFaceSide`, `faceWallOutline` de `apps/web/src/views/planSiteGeometry.ts` ; axe déduit par `withWall` du cœur, inchangé). Un troisième clic sur la ligne du nu est ignoré avec un message. Le reste de A24 est inchangé.
 
 ### A25. Rendu à valider visuellement
 
@@ -226,6 +259,8 @@ Valider à l'œil : teintes et veinage des essences, lamelles de 40 mm, vernis, 
 - Proposition : valeurs actuelles, sauf l'épaisseur du verre, qui doit suivre celle du remplissage.
 - Aujourd'hui : valeurs fixes de présentation, sans source.
 - Réf. : l. 254 (J6, web:3d), l. 257 (J6, review:web-3d), l. 186 (J4, web), l. 281 (J7, review-fix:web), l. 213 (J4, web:e2e), l. 255 (J6, web:3d) ; `apps/web/src/three/materials.ts`, `apps/web/src/three/proceduralTextures.ts`, `apps/web/src/styles.css`, `apps/web/src/three/quality.ts`.
+- **Décision de l'utilisateur (2026-09-29)** : proposition retenue (valeurs actuelles, sauf l'épaisseur du verre en 3D qui suit celle du remplissage).
+- Implémenté le 2026-09-29 — paramètre / comportement : épaisseur de transmission du verre en 3D = épaisseur des panneaux de verre du modèle (`stock.thickness`, donc `guards.infill.thickness`, 18 mm par défaut) : `glassThicknessOf(model)` (`apps/web/src/three/materials.ts`), appliquée sur place aux matériaux (`setGlassThickness`, sans recompilation) ; repli `GLASS_THICKNESS_MM` lu dans le défaut du schéma du cœur (`GuardInfillSchema`), plus de 10 mm en dur. Le maillage suivait déjà l'épaisseur du remplissage. Autres valeurs de A25 inchangées.
 
 ## B. Validations par un atelier ou un professionnel
 

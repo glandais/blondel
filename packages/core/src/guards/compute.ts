@@ -28,7 +28,13 @@ import { fmt } from "../rules/check.js";
 import { resolveWorkshopProfile } from "../workshop/profile.js";
 import { GuardError } from "./errors.js";
 import { autoHandrailBothSides } from "./handrailSides.js";
-import { jourWidth, NARROW_JOUR_ERROR_PREFIX, narrowJourThreshold } from "./jour.js";
+import {
+  inNarrowJour,
+  jourWidth,
+  NARROW_JOUR_PREFIX,
+  narrowJourThreshold,
+  narrowJourZones,
+} from "./jour.js";
 import {
   MarkRegistry,
   panelMember,
@@ -50,14 +56,16 @@ import {
   turnAngleDeg,
 } from "./polyline.js";
 import { openingMinusLanding } from "./landingVoid.js";
-import { analyzeSide, isColumnSide, refAt, wallCover, type SideEdge } from "./sides.js";
+import { analyzeSide, isColumnSide, refAt, sideFall, wallCover, type SideEdge } from "./sides.js";
 import { GuardsSpecSchema, type GuardInfill, type GuardsSpec } from "./spec.js";
 import type {
   Foothold,
   GapMeasure,
+  GuardPostFootprint,
   GuardRun,
   GuardsAnalysis,
   HandrailRun,
+  NarrowJour,
   SideAnalysis,
   SideInterval,
   StairSide,
@@ -232,6 +240,7 @@ function buildLine(fctx: PartFactoryContext, spec: GuardsSpec, a: LineArgs): Lin
   const posts = postPositions(path, w, spec, a.newelVertices);
   const postSection = { kind: "rect" as const, width: spec.posts.size, height: spec.posts.size };
   const postPartIds: string[] = [];
+  const postFootprints: GuardPostFootprint[] = [];
   const postIdAt = new Map<number, string>();
   let postNo = 0;
   for (const p of posts) {
@@ -258,6 +267,14 @@ function buildLine(fctx: PartFactoryContext, spec: GuardsSpec, a: LineArgs): Lin
       ),
     );
     postPartIds.push(id);
+    postFootprints.push({
+      partId: id,
+      center,
+      dir,
+      size: spec.posts.size,
+      z0: zr(p.w),
+      z1: zr(p.w) + infillTopAt(p.w),
+    });
     postIdAt.set(p.w, id);
   }
 
@@ -559,6 +576,7 @@ function buildLine(fctx: PartFactoryContext, spec: GuardsSpec, a: LineArgs): Lin
       meshOpenings,
       primaryPartId: handrailId,
       postPartIds,
+      posts: postFootprints,
       infillPartIds,
       handrailPartId: handrailId,
     },
@@ -870,8 +888,9 @@ export function computeGuards(
     return 0;
   };
 
-  // Jour trop étroit (sous la sphère T1) : pas de garde-corps de jour, erreur de modèle lisible
-  // (les deux rampants décalés vers le vide s'y croiseraient) ; les autres lignes sont calculées.
+  // Jour plus étroit que la sphère T1 : pas de garde-corps de jour (décision A10 du 2026-09-29),
+  // remarque et GC_OBLIGATOIRE en conseil ; les autres lignes sont calculées.
+  let narrowJourInfo: NarrowJour | undefined;
   const jour = jourWidth(layout, project.stair.layout.turns);
   const narrow = narrowJourThreshold();
   const narrowJour = narrow !== null && jour < narrow;
@@ -883,8 +902,22 @@ export function computeGuards(
     if (!spec.flight.enabled || stepping.nosings.length === 0) break;
     const hasVoid = analysis.intervals.some((iv) => iv.kind === "void" && iv.to - iv.from >= 1);
     if (analysis.side === "inner" && narrowJour && hasVoid) {
-      errors.push(
-        `${NARROW_JOUR_ERROR_PREFIX} : jour de ${fmt(jour, 0)} mm, plus étroit que la sphère T1 (${fmt(narrow, 0)} mm) : les garde-corps des volées qui le bordent (décalés de ${fmt(spec.flight.edgeOffset, 0)} mm vers le vide) n'y sont pas construits. Élargir le jour (volée centrale plus longue) ou régler le côté jour des garde-corps sur « mur » si le jour est fermé.`,
+      // Chute dans l'emprise du jour (conseil) et hors de celle-ci (volée plus longue que celle
+      // d'en face, vide ouvert : GC_OBLIGATOIRE garde sa sévérité, revue A10).
+      const zones = narrowJourZones(layout, project.stair.layout.turns, narrow, edge.points);
+      const inJour = (p: Vec2) => inNarrowJour(p, zones);
+      const jf = sideFall(edge, analysis.intervals, stepping, 0, inJour);
+      const of = sideFall(edge, analysis.intervals, stepping, 0, (p) => !inJour(p));
+      narrowJourInfo = {
+        width: jour,
+        threshold: narrow,
+        jourFall: jf.maxFall,
+        ...(jf.at ? { jourFallAt: jf.at } : {}),
+        outsideFall: of.maxFall,
+        ...(of.at ? { outsideFallAt: of.at } : {}),
+      };
+      notes.push(
+        `${NARROW_JOUR_PREFIX} : jour de ${fmt(jour, 0)} mm, plus étroit que la sphère T1 (${fmt(narrow, 0)} mm) : pas de garde-corps de jour (décision A10), protection contre les chutes côté jour signalée en conseil. Si le jour est fermé, régler le côté jour des garde-corps sur « mur ».`,
       );
       continue;
     }
@@ -1192,6 +1225,7 @@ export function computeGuards(
         }
       : {}),
     notes: [...new Set(notes)],
+    ...(narrowJourInfo ? { narrowJour: narrowJourInfo } : {}),
     errors: [...new Set(errors)],
   };
 }

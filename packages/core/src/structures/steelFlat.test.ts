@@ -21,7 +21,8 @@ import {
   QUANTITY_WELD_MM,
 } from "./steelCommon.js";
 import { SteelFlatParamsSchema, buildSteelFlat, type SteelFlatResult } from "./steelFlat.js";
-import { WorkshopProfileSchema } from "../workshop/profile.js";
+import { bendAllowance, findBendLaw, resolveBend } from "../workshop/metal.js";
+import { WorkshopProfileSchema, resolveWorkshopProfile } from "../workshop/profile.js";
 import "./index.js";
 
 const EXAMPLES_DIR = resolve(dirname(fileURLToPath(import.meta.url)), "../../../../examples");
@@ -109,18 +110,76 @@ describe("steel-flat — tôle pliée et contremarches pleines", () => {
     },
   });
 
-  it("profil Z : contremarche d'arrivée conservée (aucune pièce Z ne la porte)", () => {
+  it("profil Z : contremarche d'arrivée en plat plié en L fixé au chevêtre (décision A11)", () => {
     const { m, r } = run(withProfile("Z"));
     expect(base.stair.treads.risers).toBe("full");
     const n = m.stepping.riserCount;
     const folded = m.parts.filter((p) => p.category === "tread");
     expect(folded).toHaveLength(n - 1);
     // Les pièces Z portent les contremarches sous les nez 0 … n − 2 ; celle du nez d'arrivée
-    // (riser-n) reste la contremarche de base.
-    expect(m.parts.filter((p) => p.category === "riser").map((p) => p.id)).toEqual([`riser-${n}`]);
+    // (riser-n), qu'aucune pièce Z ne porte, est une tôle pliée en L de même identifiant.
+    const risers = m.parts.filter((p) => p.category === "riser");
+    expect(risers.map((p) => p.id)).toEqual([`riser-${n}`]);
     expect(r.output.removedBaseParts).toEqual(
       Array.from({ length: n - 1 }, (_, i) => `riser-${i + 1}`),
     );
+    const arrival = risers[0]!;
+    const t = folded[0]!.flat!.thickness;
+    expect(arrival.material).toBe(folded[0]!.material);
+    expect(arrival.section).toBe(`tôle ${t} pliée L`);
+    const flat = arrival.flat!;
+    expect(flat.thickness).toBe(t);
+    expect(flat.reference?.kind).toBe("neutral-fiber");
+    const bends = flat.lines.filter((l) => l.kind === "bend");
+    expect(bends).toHaveLength(1);
+    expect(bends[0]!.bendAngle).toBeCloseTo(90, 9);
+    // Perçages de fixation au chevêtre (3 par défaut, à valider) et quantités de pliage.
+    expect(flat.outline.holes).toHaveLength(3);
+    expect(arrival.quantities["holes"]).toBe(3);
+    // Largeur développée = ailes droites + un pli : contremarche du nez d'arrivée au dessus
+    // du retour, posé sous la tôle de la dernière marche.
+    const metal = resolveWorkshopProfile(base.workshop).metal;
+    const law = findBendLaw(metal, "S235", t)!;
+    const bend = resolveBend(law, metal.defaultK);
+    const nosings = m.stepping.nosings;
+    const riserDrop = nosings[n - 1]!.z - (nosings[n - 2]!.z - t);
+    const returnLength = SteelFlatParamsSchema.parse({}).folded.returnLength;
+    const expected =
+      riserDrop -
+      bend.innerRadius +
+      bendAllowance(Math.PI / 2, bend.innerRadius, bend.k, t) +
+      returnLength -
+      bend.innerRadius;
+    const ys = flat.outline.outer.map((p) => p.y);
+    expect(Math.max(...ys) - Math.min(...ys)).toBeCloseTo(expected, 6);
+    // Longueur du développé = longueur du solide le long de la ligne du nez d'arrivée.
+    const xs = flat.outline.outer.map((p) => p.x);
+    // Solide : section en L posée sur la ligne du nez d'arrivée, arête haute au niveau d'arrivée.
+    const solid = arrival.solid;
+    expect(solid.kind).toBe("extrusion");
+    if (solid.kind === "extrusion") {
+      const b = nosings[n - 1]!;
+      const o = solid.frame.origin;
+      expect(Math.abs((o.x - b.p.x) * b.dir.y - (o.y - b.p.y) * b.dir.x)).toBeLessThan(1e-6);
+      expect(o.z).toBeCloseTo(b.z, 9);
+      expect(solid.depth).toBeCloseTo(Math.max(...xs) - Math.min(...xs), 6);
+      // Orientation (relecture) : X du repère vers le chevêtre, donc le retour (X < 0) est
+      // sous la dernière marche et non dans la trémie.
+      const last = m.stepping.treads.find((tr) => tr.number === n - 1)!;
+      const pts = last.walkingSurface;
+      const cx = pts.reduce((s, p) => s + p.x, 0) / pts.length;
+      const cy = pts.reduce((s, p) => s + p.y, 0) / pts.length;
+      const ax = solid.frame.xAxis;
+      expect((cx - o.x) * ax.x + (cy - o.y) * ax.y).toBeLessThan(0);
+      // Z = X × Y (repère direct) et extrusion le long de la ligne de nez.
+      const z = solid.frame.zAxis;
+      expect(z.x).toBeCloseTo(ax.y, 9);
+      expect(z.y).toBeCloseTo(-ax.x, 9);
+      const ex = o.x + z.x * solid.depth;
+      const ey = o.y + z.y * solid.depth;
+      expect(Math.abs((ex - b.p.x) * b.dir.y - (ey - b.p.y) * b.dir.x)).toBeLessThan(1e-6);
+    }
+    expect(m.errors).toEqual([]);
   });
 
   it("profil U (claire-voie) : toutes les contremarches de base retirées", () => {

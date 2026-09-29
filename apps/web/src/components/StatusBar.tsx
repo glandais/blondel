@@ -7,10 +7,15 @@
 import { formatDuration, formatLength } from "../lib/units.js";
 import { useApp, useModel } from "../store/appStore.js";
 
+/** Libellé d'une échappée que la dalle haute ne limite pas (trémie couvrante). */
+const UNLIMITED = "non limitée";
+
 export function StatusBar() {
   const { model, errors, timeMs, mesh, meshError, pending } = useModel();
   const unit = useApp((s) => s.displayUnit);
   const st = model?.stepping;
+  // Trémie couvrante : échappée non limitée par la dalle haute (lue dans le modèle, QUESTIONS A7).
+  const unlimited = model?.headroomUnlimited;
   const items: [string, string, string][] = [
     ["n", "Nombre de hauteurs", st ? String(st.riserCount) : "–"],
     ["h", "Hauteur de marche", formatLength(st?.rise, unit)],
@@ -18,8 +23,17 @@ export function StatusBar() {
     ["2h + g", "Module de Blondel", formatLength(st?.blondel, unit)],
     [
       "Échappée min.",
-      "Échappée minimale (verticale, ligne de foulée)",
-      formatLength(model?.headroom?.min, unit),
+      unlimited?.walkline
+        ? "Échappée minimale (verticale, ligne de foulée) : aucun point de la ligne de foulée sous la dalle haute (trémie couvrante)"
+        : "Échappée minimale (verticale, ligne de foulée)",
+      unlimited?.walkline ? UNLIMITED : formatLength(model?.headroom?.min, unit),
+    ],
+    [
+      "Échappée largeur",
+      unlimited?.width
+        ? "Échappée sur la largeur des marches : aucun nez de marche sous la dalle haute (trémie couvrante)"
+        : "Échappée sur la largeur des marches (verticale au-dessus des nez, sous la dalle haute ; règle ECHAPPEE_LARGEUR)",
+      unlimited?.width ? UNLIMITED : formatLength(model?.headroomWidth?.min, unit),
     ],
     [
       "Cœur",

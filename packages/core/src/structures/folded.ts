@@ -33,6 +33,7 @@ import type { Mm, Polygon2, Vec2 } from "../model/primitives.js";
 import { fmt } from "../rules/check.js";
 import { bendAllowance, outsideSetback, type ResolvedBend } from "../workshop/metal.js";
 import { clipHalfPlane, dedupe, isSimplePolygon, removeCollinear } from "./geom.js";
+import { holePolygon } from "./steelCommon.js";
 
 export type FoldedProfile = "Z" | "U";
 
@@ -50,7 +51,8 @@ export interface SectionBend {
 
 /** Section d'une tôle pliée : ailes droites (dans l'ordre) séparées par les plis. */
 export interface FoldedSection {
-  readonly profile: FoldedProfile;
+  /** `L` : contremarche d'arrivée des marches en Z (`arrivalRiserSection`). */
+  readonly profile: FoldedProfile | "L";
   readonly thickness: Mm;
   readonly innerRadius: Mm;
   /** Longueurs droites des ailes (n + 1 pour n plis). */
@@ -111,6 +113,44 @@ export function zSection(i: ZSectionInput): FoldedSection {
       { kind: "arc", turn: 1, angle: QUARTER, radius: rc },
       { kind: "line", length: riser },
       { kind: "arc", turn: -1, angle: QUARTER, radius: rc },
+      { kind: "line", length: ret },
+    ],
+  };
+}
+
+export interface ArrivalRiserSectionInput {
+  /** Distance verticale de l'arête haute de la contremarche au dessus du retour, mm. */
+  readonly riserDrop: Mm;
+  /** Longueur du retour depuis la ligne de nez (face avant de la contremarche), mm. */
+  readonly returnLength: Mm;
+  readonly thickness: Mm;
+  readonly innerRadius: Mm;
+}
+
+/**
+ * Section en L de la contremarche d'arrivée des marches en Z (décision A11 : plat plié fixé au
+ * chevêtre), même repère que `zSection` (X vers l'arrière, Y vers le haut, origine sur la ligne
+ * du nez d'arrivée à l'arête haute) : contremarche verticale, face avant sur la ligne de nez, de
+ * l'arête haute (Y = 0) au dessus du retour (Y = −riserDrop) ; pli vers l'avant ; retour sous le
+ * dessus de la dernière marche, de longueur L_r depuis la ligne de nez. Ailes droites :
+ * riserDrop − r ; L_r − r.
+ */
+export function arrivalRiserSection(i: ArrivalRiserSectionInput): FoldedSection {
+  const { thickness: t, innerRadius: r } = i;
+  const riser = i.riserDrop - r;
+  const ret = i.returnLength - r;
+  return {
+    profile: "L",
+    thickness: t,
+    innerRadius: r,
+    straights: [riser, ret],
+    bends: [{ angle: QUARTER, up: true }],
+    flangeNames: ["contremarche", "retour"],
+    start: V.vec(t / 2, 0),
+    heading: V.vec(0, -1),
+    steps: [
+      { kind: "line", length: riser },
+      { kind: "arc", turn: -1, angle: QUARTER, radius: r + t / 2 },
       { kind: "line", length: ret },
     ],
   };
@@ -608,4 +648,135 @@ export function untangle(poly: Polygon2, maxIter = 32): Polygon2 | null {
     P = candidates.reduce((best, l) => (signedArea(l) > signedArea(best) ? l : best));
   }
   return null;
+}
+
+// ------------------------------------------------------------------ Contremarche d'arrivée (Z)
+
+export interface ArrivalRiserInput {
+  /** Extrémités de la contremarche sur la ligne du nez d'arrivée (jeux latéraux retirés). */
+  readonly start: Vec2;
+  readonly end: Vec2;
+  /** Normale horizontale unitaire de la ligne de nez, vers le haut de l'escalier (chevêtre). */
+  readonly up: Vec2;
+  /** Altitude de l'arête haute, mm. */
+  readonly zTop: Mm;
+  /** Distance verticale de l'arête haute au dessus du retour, mm. */
+  readonly riserDrop: Mm;
+  readonly returnLength: Mm;
+  readonly bend: ResolvedBend;
+  /** Perçages de fixation au chevêtre (dans la contremarche, à mi-hauteur de l'aile droite). */
+  readonly holes: number;
+  readonly holeDiameter: Mm;
+  readonly holeEdgeDistance: Mm;
+  readonly mark: string;
+}
+
+export interface ArrivalRiserResult {
+  readonly flat: FlatPattern;
+  readonly section: FoldedSection;
+  /** Repère du solide (extrusion de la section le long de la ligne de nez). */
+  readonly frame: {
+    readonly origin: { readonly x: number; readonly y: number; readonly z: number };
+    readonly xAxis: { readonly x: number; readonly y: number; readonly z: number };
+    readonly yAxis: { readonly x: number; readonly y: number; readonly z: number };
+    readonly zAxis: { readonly x: number; readonly y: number; readonly z: number };
+  };
+  readonly length: Mm;
+  readonly bendLines: readonly BendLineInfo[];
+  readonly flanges: readonly FlangeCheck[];
+  /** Centres des perçages dans le développé. */
+  readonly holeCenters: readonly Vec2[];
+}
+
+/**
+ * Contremarche d'arrivée des marches pliées en Z (décision A11) : plat plié en L fixé au
+ * chevêtre, section `arrivalRiserSection` extrudée le long de la ligne du nez d'arrivée.
+ * Développé rectangulaire en fibre neutre, vu sur la face avant : x le long de la ligne de nez,
+ * y vers le haut depuis le bord libre du retour ; ligne de pli au milieu de la zone de pli ;
+ * perçages de fixation à mi-hauteur de l'aile droite de la contremarche. Lève une erreur
+ * (message français) si une aile n'a pas de partie droite.
+ */
+export function developArrivalRiser(input: ArrivalRiserInput): ArrivalRiserResult {
+  const { bend } = input;
+  const t = bend.thickness;
+  const r = bend.innerRadius;
+  const section = arrivalRiserSection({
+    riserDrop: input.riserDrop,
+    returnLength: input.returnLength,
+    thickness: t,
+    innerRadius: r,
+  });
+  section.straights.forEach((len, i) => {
+    if (!(len > 0)) {
+      throw new Error(
+        `${input.mark} : aile « ${section.flangeNames[i]} » sans partie droite (${fmt(len, 1)} mm) : cotes incompatibles avec le rayon de pli ${fmt(r, 1)} mm.`,
+      );
+    }
+  });
+  const length = V.distance(input.start, input.end);
+  if (!(length > 1)) throw new Error(`${input.mark} : ligne du nez d'arrivée trop courte.`);
+  const [riser, ret] = section.straights as [Mm, Mm];
+  const ba = bendAllowance(QUARTER, r, bend.k, t);
+  const width = ret + ba + riser;
+  const up = V.normalize(input.up);
+  // Repère direct : X = vers le haut de l'escalier, Y = vertical, Z = X × Y = perpRight(X).
+  const along = V.perpRight(up);
+  const origin = V.dot(V.sub(input.end, input.start), along) >= 0 ? input.start : input.end;
+  const bendY = ret + ba / 2;
+  const bendB = section.bends[0]!;
+  const label = `P1 · ${fmt(deg(bendB.angle), 0)}° vers le ${bendB.up ? "haut" : "bas"} · r_int ${fmt(r, 1)}`;
+  const n = Math.max(0, Math.floor(input.holes));
+  const hy = ret + ba + riser / 2;
+  const e = Math.min(input.holeEdgeDistance, length / 2);
+  const holeCenters =
+    n === 0
+      ? []
+      : n === 1
+        ? [V.vec(length / 2, hy)]
+        : Array.from({ length: n }, (_, i) => V.vec(e + ((length - 2 * e) * i) / (n - 1), hy));
+  const flat: FlatPattern = {
+    outline: {
+      outer: [V.vec(0, 0), V.vec(length, 0), V.vec(length, width), V.vec(0, width)],
+      holes: holeCenters.map((c) => holePolygon(c, input.holeDiameter)),
+    },
+    lines: [
+      {
+        kind: "bend",
+        a: V.vec(0, bendY),
+        b: V.vec(length, bendY),
+        label,
+        bendAngle: deg(bendB.angle),
+        bendUp: bendB.up,
+        bendRadius: r,
+      },
+      {
+        kind: "text",
+        a: V.vec(length / 2 - 20, ret + ba + riser * 0.75),
+        b: V.vec(length / 2 + 20, ret + ba + riser * 0.75),
+        label: input.mark,
+      },
+    ],
+    thickness: t,
+    reference: {
+      kind: "neutral-fiber",
+      description: `Contremarche d'arrivée en tôle pliée en L (fixée au chevêtre), développé en fibre neutre (facteur K ${fmt(bend.k, 3)}, r_int ${fmt(r, 1)} mm, t ${fmt(t, 1)} mm, loi « ${bend.method} ») ; vue sur la face avant ; x le long de la ligne du nez d'arrivée, y vers le haut depuis le bord libre du retour ; ligne de pli au milieu de la zone de pli ; mm, 1:1.`,
+    },
+  };
+  return {
+    flat,
+    section,
+    frame: {
+      origin: { x: origin.x, y: origin.y, z: input.zTop },
+      xAxis: { x: up.x, y: up.y, z: 0 },
+      yAxis: { x: 0, y: 0, z: 1 },
+      zAxis: { x: along.x, y: along.y, z: 0 },
+    },
+    length,
+    bendLines: [{ label, length, angleDeg: deg(bendB.angle), up: bendB.up }],
+    flanges: [
+      { label: "contremarche", atStart: riser + r, atEnd: riser + r },
+      { label: "retour", atStart: ret + r, atEnd: ret + r },
+    ],
+    holeCenters,
+  };
 }

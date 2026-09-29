@@ -34,6 +34,10 @@
  * de moins d'un giron est refusée par le découpage (CHALLENGE G3 : pas de zone unique à travers
  * deux jours opposés).
  *
+ * Escalier droit (décision A16) : d_f est mesurée depuis le bord gauche ou droit
+ * (`stair.walkline.side`, sinon côté de la main courante principale, `walklineSide.ts`),
+ * rendu dans `Layout.walklineSide` ; `innerSide` reste `left`.
+ *
  * ## Raccords de jour (par tournant)
  *
  * - `sharp` : C_i a un angle vif en K ; Γ est l'arc de rayon d_f centré sur K (B §2.1 : « arc
@@ -86,6 +90,7 @@ import { LayoutError } from "./errors.js";
 import { newelOffset, newelProtrusion, newelSetback } from "./newel.js";
 import { computeHelicalLayout } from "./helical.js";
 import { resolveLegLengths, resolveWalklineOffset } from "./resolve.js";
+import { resolveWalklineSide } from "./walklineSide.js";
 
 export interface LayoutOptions {
   /**
@@ -280,7 +285,11 @@ export function computeLayout(project: Project, options: LayoutOptions = {}): La
   // ---------------------------------------------------------------- ligne de foulée Γ
   // Distance de Γ au bord gauche au droit du tournant j : d_f du côté de son jour.
   const walkOffsetAt = (j: number): Mm => (turns[j]!.direction === "left" ? df : width - df);
-  const startOffset = turns.length > 0 ? walkOffsetAt(0) : df;
+  // Escalier droit : d_f mesurée depuis le bord choisi ou automatique (décision A16,
+  // `walklineSide.ts`) ; `innerSide` reste `left`.
+  const walklineSide = turns.length === 0 ? resolveWalklineSide(project, lengths[0]!) : undefined;
+  const startOffset =
+    turns.length > 0 ? walkOffsetAt(0) : walklineSide === "right" ? width - df : df;
   const walkSegs: CurveSeg[] = [];
   const zones: { sStart: Mm; sEnd: Mm }[] = [];
   const transitions: { leg: number; sStart: Mm; sEnd: Mm; o0: Mm; o1: Mm; angle: number }[] = [];
@@ -369,6 +378,7 @@ export function computeLayout(project: Project, options: LayoutOptions = {}): La
     footprint: footprintOf(inner, outer),
     turns: turnZones,
     innerSide,
+    ...(walklineSide !== undefined ? { walklineSide } : {}),
     ...(walklineTransitions.length > 0 ? { walklineTransitions } : {}),
   };
 }

@@ -30,3 +30,10 @@ export {
   newelSetback,
   type NewelCorner,
 } from "./newel.js";
+export {
+  autoWalklineSide,
+  autoWalklineSideKey,
+  resolveWalklineSide,
+  straightSideKinds,
+  type StraightSideKind,
+} from "./walklineSide.js";

@@ -184,7 +184,8 @@ export interface PresetOptions {
   readonly patch?: DeepPartial<ProjectInput>;
 }
 
-interface PresetShape {
+/** Proportions d'un préréglage à volées (reprises par le recalage, `realign.ts`). */
+export interface PresetShape {
   readonly width: number;
   readonly turns: readonly TurnDirection[];
   readonly mode: "winders" | "landing";
@@ -201,7 +202,7 @@ interface PresetShape {
   readonly alternate?: boolean;
 }
 
-const SHAPES: Readonly<Record<FlightsPresetId, PresetShape>> = {
+export const FLIGHTS_PRESET_SHAPES: Readonly<Record<FlightsPresetId, PresetShape>> = {
   straight: { width: 900, turns: [], mode: "winders", firstStraightGoings: 0, middleWell: 0 },
   "quarter-left": {
     width: 900,
@@ -447,7 +448,7 @@ export function createProject(preset: PresetId, options: PresetOptions = {}): Pr
       `Le préréglage « ${preset} » n'accepte pas les options de l'hélicoïdal (rayons, trémie).`,
     );
   }
-  const shape = SHAPES[preset];
+  const shape = FLIGHTS_PRESET_SHAPES[preset];
   const patch = options.patch;
   const height =
     pick("floorToFloor", options.floorToFloor, patch?.site?.floorToFloor) ?? DEFAULT_FLOOR_TO_FLOOR;

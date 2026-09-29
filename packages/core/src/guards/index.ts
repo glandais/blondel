@@ -24,16 +24,30 @@ export {
   HANDRAIL_BOTH_SIDES_RULE,
   smallCoreDiameter,
 } from "./handrailSides.js";
-export { CABLE_SLACK_RULE, guardChecks, SLAB_CLASH_RULE, slabClash } from "./checks.js";
+export {
+  CABLE_SLACK_RULE,
+  guardChecks,
+  JOUR_POSTS_CLASH_RULE,
+  jourPostClashes,
+  SLAB_CLASH_RULE,
+  slabClash,
+} from "./checks.js";
 export { GuardError } from "./errors.js";
-export { jourWidth, NARROW_JOUR_ERROR_PREFIX, narrowJourThreshold } from "./jour.js";
+export {
+  jourWidth,
+  NARROW_JOUR_ERROR_PREFIX,
+  NARROW_JOUR_PREFIX,
+  narrowJourThreshold,
+} from "./jour.js";
 export { WALL_PARALLEL_DEG } from "./sides.js";
 export type {
   Foothold,
   GapMeasure,
+  GuardPostFootprint,
   GuardRun,
   GuardsAnalysis,
   HandrailRun,
+  NarrowJour,
   NewelHandrailTop,
   SideAnalysis,
   SideInterval,

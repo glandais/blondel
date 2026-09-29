@@ -206,3 +206,12 @@
     grid-template-rows: minmax(18rem, 1fr) auto;
   }
 }
+
+/* Mur tracé au nu : aperçu du côté du pointeur avant le troisième clic (QUESTIONS A24). */
+.plan-site__wall-preview {
+  fill: color-mix(in srgb, var(--accent) 25%, transparent);
+  stroke: var(--accent);
+  stroke-width: 1.5px;
+  stroke-dasharray: 4 3;
+  pointer-events: none;
+}

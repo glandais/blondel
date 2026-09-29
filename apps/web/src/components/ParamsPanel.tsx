@@ -4,6 +4,7 @@
  * d'un mode automatique sont lues dans le modèle rendu par le cœur.
  */
 import {
+  DEDUCED_ONLY_CONTEXTS,
   RULE_TABLE,
   type InnerCorner,
   type Leg,
@@ -26,6 +27,14 @@ import {
   type TurnSequence,
 } from "../lib/layoutKind.js";
 import { balancingMethodOptions, herseAngleRange, rotationRanges } from "../lib/balancingForm.js";
+import {
+  realign,
+  WALKLINE_SIDE_HINT,
+  walklineSideApplies,
+  walklineSideChoice,
+  withWalklineSide,
+  type WalklineSideChoice,
+} from "../lib/realign.js";
 import {
   AutoIntField,
   CheckField,
@@ -242,6 +251,9 @@ function LayoutSection() {
   const { model } = useModel();
   const legs = layout.legs;
   const kind = useApp((s) => layoutKindOf(s.project));
+  const sideChoice = useApp((s) => walklineSideChoice(s.project));
+  const sideApplies = useApp((s) => walklineSideApplies(s.project));
+  const side = walkline.side !== undefined ? { side: walkline.side } : {};
   return (
     <Section title="Tracé">
       <SelectField<LayoutKind>
@@ -284,10 +296,11 @@ function LayoutSection() {
         onCommit={(mode) =>
           set(["stair", "walkline"])(
             mode === "dtu"
-              ? { mode: "dtu" }
+              ? { mode: "dtu", ...side }
               : {
                   mode: "fromInner",
                   distance: Math.max(1, Math.round(model?.layout.walklineOffset ?? 1)),
+                  ...side,
                 },
           )
         }
@@ -303,13 +316,61 @@ function LayoutSection() {
           onCommit={set(["stair", "walkline", "distance"])}
         />
       ) : null}
+      {sideApplies ? (
+        <SelectField<WalklineSideChoice>
+          label="Bord de mesure de la ligne de foulée"
+          value={sideChoice}
+          options={[
+            {
+              value: "auto",
+              label: `Automatique${model?.layout.walklineSide === "right" ? " (droite)" : model?.layout.walklineSide === "left" ? " (gauche)" : ""}`,
+            },
+            { value: "left", label: "Bord gauche" },
+            { value: "right", label: "Bord droit" },
+          ]}
+          hint={WALKLINE_SIDE_HINT}
+          onCommit={(choice) => update((p) => withWalklineSide(p, choice))}
+        />
+      ) : null}
       {layout.kind === "helical" ? null : (
         <>
           <TypologyInfo turns={layout.turns} transitions={transitionsOf(model)} />
           <FlightsEditor legs={legs} turns={layout.turns} run={model?.stepping.run} />
+          <RealignButton />
         </>
       )}
     </Section>
+  );
+}
+
+/**
+ * Recalage des volées et de la trémie sur H, E et la dalle (décision A18 (a)) : calcul du cœur
+ * (préréglage de même topologie), une seule entrée d'annulation, message d'information.
+ */
+function RealignButton() {
+  const onClick = () => {
+    let notice = "";
+    const r = update((p) => {
+      const c = realign(p);
+      notice = c.notice;
+      return c.project;
+    });
+    appStore.setState({
+      notice: r.ok
+        ? { kind: "info", text: notice }
+        : { kind: "error", text: `Recalage impossible : ${r.issues.join(" ; ")}` },
+    });
+  };
+  return (
+    <div className="button-row">
+      <button
+        type="button"
+        onClick={onClick}
+        title="Après une modification de H, E ou de l'épaisseur du plancher haut : longueurs de volées et trémie recalculées selon le préréglage de même forme (annulable)"
+      >
+        Recaler volées et trémie
+      </button>
+    </div>
   );
 }
 
@@ -628,7 +689,7 @@ function TreadsSection() {
 // ------------------------------------------------------------------ Contrôle
 
 /** Contextes déduits automatiquement par le moteur de règles (non saisis). */
-const DEDUCED_CONTEXTS = new Set(["tous", "tournant"]);
+const DEDUCED_CONTEXTS = DEDUCED_ONLY_CONTEXTS;
 
 function ComplianceSection() {
   const c = useApp((s) => s.project.compliance);

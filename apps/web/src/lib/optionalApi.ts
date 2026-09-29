@@ -10,6 +10,7 @@
  */
 import { listStructures } from "@blondel/core";
 import type { Model, Project, StructureKind } from "@blondel/core";
+import type { TemplateFamily } from "@blondel/exports";
 import type { PdfPages } from "@blondel/exports/pdf";
 
 /** Octets, texte ou `Blob` : toutes les formes de contenu de fichier acceptées. */
@@ -23,6 +24,8 @@ export interface PdfJobOptions {
   /** Liste des pages : type de `@blondel/exports/pdf` (import de type, jsPDF non chargé). */
   readonly pages?: Readonly<PdfPages>;
   readonly format?: "a4" | "a3";
+  /** Familles des gabarits 1:1 tuilés (QUESTIONS A20) ; absent : toutes. */
+  readonly templateFamilies?: readonly TemplateFamily[];
 }
 
 /** Signature attendue de `exportPdf` (synchrone ou asynchrone). */

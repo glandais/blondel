@@ -1,0 +1,35 @@
+/* Panneau « Profil d'atelier » (QUESTIONS A14) : fenêtre modale native. */
+
+.workshop {
+  width: min(640px, calc(100% - 2rem));
+  max-height: calc(100% - 2rem);
+  padding: 1rem;
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 10px 40px rgb(0 0 0 / 0.35);
+}
+
+.workshop::backdrop {
+  background: color-mix(in srgb, #000 45%, transparent);
+}
+
+.workshop__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.workshop__header h2 {
+  margin: 0;
+  font-size: 1.1rem;
+}
+
+.workshop__fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr));
+  gap: 0.6rem 1rem;
+  margin: 0.75rem 0;
+}

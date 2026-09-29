@@ -5,7 +5,13 @@
  * de rendu). Composant contrôlé : l'état vit dans `Viewer3D` et, pour l'apparence, les cotes
  * principales et les contrôles sur les pièces (`AppState.overlays`), dans le store.
  */
-import type { MaterialId, Severity } from "@blondel/core";
+import {
+  RULE_FAMILIES,
+  RULE_FAMILY_LABELS,
+  type MaterialId,
+  type RuleFamily,
+  type Severity,
+} from "@blondel/core";
 import { useId } from "react";
 import {
   APPEARANCE_MATERIALS,
@@ -27,6 +33,8 @@ export interface ToolsState {
   readonly sectionAt: number;
   readonly sectionFlip: boolean;
   readonly measuring: boolean;
+  /** Familles de règles dont les marqueurs sont masqués (QUESTIONS A23). */
+  readonly hiddenFamilies: readonly RuleFamily[];
 }
 
 export const INITIAL_TOOLS: ToolsState = {
@@ -37,6 +45,7 @@ export const INITIAL_TOOLS: ToolsState = {
   sectionAt: 0.5,
   sectionFlip: false,
   measuring: false,
+  hiddenFamilies: [],
 };
 
 const SECTION_LABELS: Readonly<Record<SectionAxis | "none", string>> = {
@@ -49,8 +58,10 @@ const SECTION_LABELS: Readonly<Record<SectionAxis | "none", string>> = {
 export interface Viewer3DToolsProps {
   readonly tools: ToolsState;
   readonly onChange: (patch: Partial<ToolsState>) => void;
-  /** Violations localisées (légende des contrôles). */
+  /** Violations localisées (légende des contrôles), familles masquées exclues. */
   readonly flaggedCount: number;
+  /** Violations localisées par famille de règles, avant filtrage. */
+  readonly familyCounts: Readonly<Record<RuleFamily, number>>;
   /** Longueur mesurée affichée (ou consigne). */
   readonly measureText: string | null;
   readonly onClearMeasure: () => void;
@@ -105,6 +116,7 @@ export function Viewer3DTools({
   tools,
   onChange,
   flaggedCount,
+  familyCounts,
   measureText,
   onClearMeasure,
   canIsolate,
@@ -127,6 +139,27 @@ export function Viewer3DTools({
           />{" "}
           Contrôles sur les pièces
         </label>
+        {tools.showControls ? (
+          <fieldset className="viewer3d__families">
+            <legend>Familles de règles</legend>
+            {RULE_FAMILIES.map((f) => (
+              <label key={f} className="viewer3d__check">
+                <input
+                  type="checkbox"
+                  checked={!tools.hiddenFamilies.includes(f)}
+                  onChange={(e) =>
+                    onChange({
+                      hiddenFamilies: e.target.checked
+                        ? tools.hiddenFamilies.filter((h) => h !== f)
+                        : [...tools.hiddenFamilies, f],
+                    })
+                  }
+                />{" "}
+                {RULE_FAMILY_LABELS[f]} ({familyCounts[f]})
+              </label>
+            ))}
+          </fieldset>
+        ) : null}
         {tools.showControls && flaggedCount > 0 ? (
           <ul className="viewer3d__legend" aria-label="Légende des contrôles">
             {(["bloquant", "avertissement", "conseil"] as const satisfies readonly Severity[]).map(
@@ -144,7 +177,12 @@ export function Viewer3DTools({
           </ul>
         ) : null}
         {tools.showControls && flaggedCount === 0 ? (
-          <span className="muted">Aucune violation localisée.</span>
+          <span className="muted">
+            {tools.hiddenFamilies.length > 0 &&
+            tools.hiddenFamilies.some((f) => familyCounts[f] > 0)
+              ? "Aucune violation localisée dans les familles affichées."
+              : "Aucune violation localisée."}
+          </span>
         ) : null}
         {tools.measuring && measureText !== null ? (
           <output className="viewer3d__measure" aria-live="polite">

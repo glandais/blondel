@@ -71,6 +71,7 @@ export function toRuleResult(rule: RuleDef, f: Finding, project: Project): RuleR
     ...(f.measured !== undefined ? { measured: f.measured } : {}),
     ...(rule.unite !== null ? { unit: rule.unite } : {}),
     ...(eff.downgradeReason !== undefined ? { downgradeReason: eff.downgradeReason } : {}),
+    ...(f.justification !== undefined ? { justification: f.justification } : {}),
   };
 }
 
@@ -83,7 +84,16 @@ export class CheckCollector {
     private readonly project: Project,
     stepping: Stepping,
   ) {
-    this.active = new Set(resolveContexts(project.compliance, stepping).active);
+    // Mêmes contextes que le moteur (`evaluateComplianceDetailed`), y compris `helicoidal_fut`
+    // déduit du bord intérieur du tracé hélicoïdal (QUESTIONS A5).
+    const lay = project.stair.layout;
+    const core = lay.kind === "helical" ? lay.core.kind : undefined;
+    this.active = new Set(resolveContexts(project.compliance, stepping, core).active);
+  }
+
+  /** Contextes actifs du projet (évaluateurs de rules.yaml réappliqués par un plugin). */
+  get activeContexts(): ReadonlySet<string> {
+    return this.active;
   }
 
   /** Règle de rules.yaml : `null` si inconnue ou si ses contextes ne sont pas actifs. */

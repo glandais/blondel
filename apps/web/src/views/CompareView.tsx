@@ -8,7 +8,7 @@
  * requis » sinon). Une variante peut être appliquée au projet, jour adapté compris (annulable).
  */
 import { applyVariant, compareLines, type VariantRow } from "../lib/variants.js";
-import { appStore, useApp, useComparison } from "../store/appStore.js";
+import { appStore, useComparison } from "../store/appStore.js";
 
 const time = new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 0 });
 
@@ -18,11 +18,11 @@ function apply(row: VariantRow): void {
 }
 
 export function CompareView() {
-  const project = useApp((s) => s.project);
-  const { outcome, pending, project: computedFor } = useComparison();
+  const { outcome, pending, project: computedFor, requested } = useComparison();
   // Résultats d'un projet antérieur (calcul en cours) : affichés, mais non applicables (les
-  // paramètres de la variante reprennent ceux de l'ancien projet).
-  const stale = computedFor !== project || pending;
+  // paramètres de la variante reprennent ceux de l'ancien projet). `requested` : projet courant
+  // augmenté du barème d'atelier (QUESTIONS A14).
+  const stale = computedFor !== requested || pending;
   if (!outcome) {
     return (
       <div className="empty-view" role="status">
@@ -121,9 +121,10 @@ export function CompareView() {
       <p className="muted">
         Grandeurs physiques calculées par le cœur sur la même épure (site, ligne de foulée,
         découpage), raccord de jour adapté à chaque structure ; paramètres par défaut de chaque
-        structure (ceux du projet pour la structure en cours). Coût : barème du profil d'atelier
-        (taux horaire, temps unitaires, prix matière et finition) ; sans barème complet, aucun
-        montant n'est affiché. Prédimensionnement indicatif : ne remplace pas une note de calcul.
+        structure (ceux du projet pour la structure en cours). Coût : barème d'atelier (bouton «
+        Atelier… » de la barre d'outils : taux horaire, temps unitaires, prix matière et finition,
+        gardés dans ce navigateur hors du projet) ; sans barème complet, aucun montant n'est
+        affiché. Prédimensionnement indicatif : ne remplace pas une note de calcul.
       </p>
     </div>
   );

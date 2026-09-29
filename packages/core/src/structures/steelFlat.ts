@@ -61,9 +61,11 @@ import {
   type StringerDevelopment,
 } from "./development.js";
 import {
+  developArrivalRiser,
   developFoldedTread,
   insetPlate,
   sectionPolygon,
+  type ArrivalRiserResult,
   type FoldedTreadResult,
   type PlanLine,
 } from "./folded.js";
@@ -189,6 +191,23 @@ export const SteelFlatParamsSchema = z.object({
       returnLength: mmPos.default(40),
       /** Jeu latéral marche / limon (C §2.3 : ≈ 10 mm de chaque côté [58], confiance faible). */
       clearance: mmNonNeg.default(10),
+      /**
+       * Z : contremarche d'arrivée (sous le nez d'arrivée, qu'aucune pièce Z ne porte) en plat
+       * plié en L fixé au chevêtre (décision A11), même tôle et même loi de pli que les marches,
+       * retour de `returnLength` sous la dernière marche. Cotes non sourcées, **à valider**.
+       */
+      arrivalRiser: z
+        .object({
+          /** Arête haute sous le niveau du sol fini d'arrivée (mm). */
+          topOffset: mmNonNeg.default(0),
+          /** Perçages de fixation au chevêtre, à mi-hauteur de la contremarche. */
+          fixings: mmNonNeg.default(3),
+          /** Diamètre de perçage (M10 : 11 mm, comme les supports vissés). */
+          holeDiameter: mmPos.default(11),
+          /** Distance des perçages extrêmes aux bords latéraux. */
+          holeEdgeDistance: mmPos.default(50),
+        })
+        .prefault({}),
     })
     .prefault({}),
 });
@@ -611,6 +630,81 @@ export function buildSteelFlat(ctx: StructureContext, params: SteelFlatParams): 
         (x) => `Marche en tôle pliée non développée — ${x} Pièce de base conservée.`,
       ),
     );
+  }
+
+  // 2 bis. Profil Z : contremarche d'arrivée en plat plié en L fixé au chevêtre (décision A11),
+  // à la place de la contremarche bois de base de même identifiant.
+  let arrival: { readonly part: Part; readonly result: ArrivalRiserResult } | null = null;
+  const arrivalBase = baseById.get(`riser-${nosings.length}`);
+  const lastTread = stepping.treads.find((tr) => tr.number === nosings.length - 1);
+  if (folded && bend && ft.profile === "Z" && arrivalBase && lastTread) {
+    const a = nosings[nosings.length - 2]!;
+    const b = nosings[nosings.length - 1]!;
+    const t = bend.thickness;
+    const ar = ft.arrivalRiser;
+    try {
+      const plate = insetPlate(lastTread.walkingSurface, [lineOf(a), lineOf(b)], ft.clearance);
+      // Étendue : arête du dessus de la dernière marche portée par la ligne du nez d'arrivée.
+      const dir = V.normalize(b.dir);
+      const onB = (plate ?? []).filter((p) => Math.abs(V.cross(dir, V.sub(p, b.p))) <= 1e-3);
+      if (onB.length < 2)
+        throw new Error(
+          `${arrivalBase.mark} : ligne du nez d'arrivée introuvable sur la dernière marche.`,
+        );
+      const ss = onB.map((p) => V.dot(V.sub(p, b.p), dir));
+      const zTop = b.z - ar.topOffset;
+      const result = developArrivalRiser({
+        start: V.addScaled(b.p, dir, Math.min(...ss)),
+        end: V.addScaled(b.p, dir, Math.max(...ss)),
+        up: upOf(b, lastTread.walkingSurface, -1),
+        zTop,
+        riserDrop: zTop - (a.z - t),
+        returnLength: ft.returnLength,
+        bend,
+        holes: ar.fixings,
+        holeDiameter: ar.holeDiameter,
+        holeEdgeDistance: ar.holeEdgeDistance,
+        mark: arrivalBase.mark,
+      });
+      const meas = plateMeasures(result.flat.outline, t);
+      const box = minAreaRect(result.flat.outline.outer);
+      arrival = {
+        result,
+        part: {
+          id: arrivalBase.id,
+          mark: arrivalBase.mark,
+          category: "riser",
+          name: "Contremarche d'arrivée (tôle pliée L, fixée au chevêtre)",
+          material,
+          solid: {
+            kind: "extrusion",
+            frame: result.frame,
+            profile: { outer: sectionPolygon(result.section), holes: [] },
+            depth: result.length,
+          },
+          flat: result.flat,
+          section: `tôle ${fmt(t, 0)} pliée L`,
+          stock: { length: box.length, width: box.width, thickness: t },
+          quantities: steelQuantities(
+            {
+              volumeMm3: meas.volumeMm3,
+              treatedSurfaceMm2: meas.treatedSurfaceMm2,
+              length: box.length,
+              cuts: 1,
+              laserCut: meas.laserCut,
+              bends: 1,
+              bendLength: result.length,
+              holes: result.holeCenters.length,
+            },
+            profile,
+          ),
+        },
+      };
+    } catch (err) {
+      errors.push(
+        `Contremarche d'arrivée en tôle pliée non développée — ${(err as Error).message} Pièce de base conservée.`,
+      );
+    }
   }
 
   // 3. Faces porteuses : joues des limons (portée de la face) et faces des poteaux.
@@ -1175,11 +1269,29 @@ export function buildSteelFlat(ctx: StructureContext, params: SteelFlatParams): 
   ];
   const treadParts = treadDetails.map((d) => d.part);
   const treadGroups = groupIdenticalFlats(treadParts);
+  /** Tôles pliées : marches et contremarche d'arrivée (contrôles de pliage, laser, format). */
+  const foldedParts = arrival ? [...treadParts, arrival.part] : treadParts;
+  const foldedChecks = [
+    ...treadDetails.map((d) => ({
+      part: d.part,
+      flanges: d.result.flanges,
+      bendLines: d.result.bendLines,
+    })),
+    ...(arrival
+      ? [
+          {
+            part: arrival.part,
+            flanges: arrival.result.flanges,
+            bendLines: arrival.result.bendLines,
+          },
+        ]
+      : []),
+  ];
 
   // 10. Classe d'exécution : S355 « soudé » seulement si une pièce porte un cordon (angle ou
   // bout à bout) ; supports vissés sans cordon ⇒ PC1 (C §2.1).
   const weldTotal = [
-    ...treadParts,
+    ...foldedParts,
     ...stringers.map((s) => s.part),
     ...posts,
     ...supportParts,
@@ -1209,8 +1321,8 @@ export function buildSteelFlat(ctx: StructureContext, params: SteelFlatParams): 
     );
     checks.addItems(
       rule(STEEL_RULES.bendFlange),
-      treadDetails.flatMap((d) =>
-        d.result.flanges.flatMap((fl) => [
+      foldedChecks.flatMap((d) =>
+        d.flanges.flatMap((fl) => [
           {
             value: fl.atStart,
             label: `${d.part.mark}, ${fl.label} (début du pli)`,
@@ -1225,8 +1337,8 @@ export function buildSteelFlat(ctx: StructureContext, params: SteelFlatParams): 
     checks.addItems(
       rule(STEEL_RULES.pressBrake),
       [
-        ...treadDetails.flatMap((d) =>
-          d.result.bendLines.map((l) => ({
+        ...foldedChecks.flatMap((d) =>
+          d.bendLines.map((l) => ({
             value: l.length,
             label: `${d.part.mark}, ${l.label.split(" · ")[0]}`,
             partId: d.part.id,
@@ -1243,14 +1355,14 @@ export function buildSteelFlat(ctx: StructureContext, params: SteelFlatParams): 
       { min: null, max: metal.pressBrake.maxThickness },
     );
   }
-  const laserParts = [...stringers.map((s) => s.part), ...treadParts, ...platesMarked];
+  const laserParts = [...stringers.map((s) => s.part), ...foldedParts, ...platesMarked];
   checks.addItems(
     rule(STEEL_RULES.laser),
     laserParts.map((p) => ({ value: p.flat!.thickness, label: p.mark, partId: p.id })),
     "Épaisseur découpée",
     { min: null, max: metal.laser.maxThickness },
   );
-  for (const p of [...treadParts, ...platesMarked]) {
+  for (const p of [...foldedParts, ...platesMarked]) {
     const box = minAreaRect(p.flat!.outline.outer);
     formatFindings.push(
       fits(box.length, box.width)
@@ -1339,10 +1451,12 @@ export function buildSteelFlat(ctx: StructureContext, params: SteelFlatParams): 
     );
   }
   // Profil Z : la pièce de la marche t porte la contremarche sous son propre nez (nez t − 1,
-  // contremarche de base `riser-t`) ; seules ces contremarches sont remplacées. La contremarche
-  // d'arrivée (sous le dernier nez), qu'aucune pièce Z ne porte, reste la pièce de base : sans
-  // elle, le dessus de la dernière pièce ne bute contre rien et le vide sous le nez d'arrivée
-  // n'est pas fermé. Profil U (claire-voie) : toutes les contremarches sont retirées.
+  // contremarche de base `riser-t`) ; ces contremarches sont retirées. La contremarche
+  // d'arrivée (sous le dernier nez), qu'aucune pièce Z ne porte, est remplacée (même
+  // identifiant) par un plat plié en L fixé au chevêtre (décision A11) ; à défaut (développé
+  // impossible), la pièce de base reste : sans elle, le dessus de la dernière pièce ne bute
+  // contre rien et le vide sous le nez d'arrivée n'est pas fermé. Profil U (claire-voie) :
+  // toutes les contremarches sont retirées.
   const foldedRisers = new Set(treadDetails.map((d) => `riser-${d.number}`));
   const removedBaseParts =
     folded && bend && project.stair.treads.risers === "full"
@@ -1352,14 +1466,14 @@ export function buildSteelFlat(ctx: StructureContext, params: SteelFlatParams): 
       : [];
   if (removedBaseParts.length > 0) {
     notes.push(
-      `Marches en tôle pliée : ${removedBaseParts.length} contremarche(s) bois de base supprimée(s) du modèle (${ft.profile === "Z" ? "contremarches pliées dans les pièces en Z ; contremarche d'arrivée, sous le dernier nez, conservée" : "escalier à claire-voie en U"}).`,
+      `Marches en tôle pliée : ${removedBaseParts.length} contremarche(s) bois de base supprimée(s) du modèle (${ft.profile === "Z" ? `contremarches pliées dans les pièces en Z ; contremarche d'arrivée, sous le dernier nez, ${arrival ? "en tôle pliée en L fixée au chevêtre" : "conservée en bois"}` : "escalier à claire-voie en U"}).`,
     );
   }
 
   return {
     output: {
       parts: [
-        ...treadParts,
+        ...foldedParts,
         ...stringers.map((s) => s.part),
         ...posts,
         ...supportParts,

@@ -23,7 +23,10 @@ import {
   screenToSite,
   segmentPath,
   siteBounds,
+  faceWallOutline,
   viewBoxAttr,
+  wallClick,
+  wallFaceSide,
   wallOutline,
   zoomAt,
 } from "./planSiteGeometry.js";
@@ -178,5 +181,69 @@ describe("réglages d'import", () => {
     expect(1000 * mmPerPx).toBe(9000);
     expect(placement.origin.x + 500 * mmPerPx).toBeCloseTo(500, 9);
     expect(placement.origin.y - 250 * mmPerPx).toBeCloseTo(1500, 9);
+  });
+});
+
+describe("tracé d'un mur au nu par un troisième clic (QUESTIONS A24)", () => {
+  const a = { x: 0, y: 0 };
+  const b = { x: 1000, y: 0 };
+
+  it("à l'axe : deux clics suffisent", () => {
+    const r1 = wallClick([], a, "axis");
+    expect(r1).toEqual({ kind: "draft", draft: [a] });
+    expect(wallClick([a], b, "axis")).toEqual({ kind: "commit", a, b, reference: "axis" });
+  });
+
+  it("au nu : le troisième clic donne le côté du mur", () => {
+    expect(wallClick([a], b, "face")).toEqual({ kind: "draft", draft: [a, b] });
+    expect(wallClick([a, b], { x: 400, y: 300 }, "face")).toEqual({
+      kind: "commit",
+      a,
+      b,
+      reference: "left",
+    });
+    expect(wallClick([a, b], { x: 400, y: -300 }, "face")).toMatchObject({ reference: "right" });
+    // Clic sur la ligne du nu, ou second point confondu : ignorés.
+    expect(wallClick([a, b], { x: 2000, y: 0 }, "face").kind).toBe("ignored");
+    expect(wallClick([a], { x: 0.2, y: 0 }, "face").kind).toBe("ignored");
+  });
+
+  it("le mur enregistré est du côté cliqué, son nu sur la ligne tracée", () => {
+    const base = createProject("straight");
+    for (const [click, sign] of [
+      [{ x: 500, y: 800 }, 1],
+      [{ x: 500, y: -800 }, -1],
+    ] as const) {
+      const r = wallClick([a, b], click, "face");
+      if (r.kind !== "commit") throw new Error("commit attendu");
+      const p = withWall(base, r.a, r.b, 200, false, r.reference);
+      const w = p.site.walls[p.site.walls.length - 1]!;
+      // Axe à une demi-épaisseur du nu, du côté du clic.
+      expect(w.a.y).toBeCloseTo(sign * 100, 6);
+      expect(w.b.y).toBeCloseTo(sign * 100, 6);
+      // L'aperçu couvre la même bande que le mur enregistré.
+      const ys = faceWallOutline(a, b, 200, r.reference === "axis" ? "left" : r.reference).map(
+        (q) => q.y,
+      );
+      const wys = wallOutline(w).map((q) => q.y);
+      expect(Math.min(...ys)).toBeCloseTo(Math.min(...wys), 6);
+      expect(Math.max(...ys)).toBeCloseTo(Math.max(...wys), 6);
+    }
+  });
+
+  it("propriété : le côté est celui du signe de la distance à la droite du tracé", () => {
+    const coord = fc.integer({ min: -5000, max: 5000 });
+    fc.assert(
+      fc.property(coord, coord, coord, coord, coord, coord, (ax, ay, bx, by, px, py) => {
+        const A = { x: ax, y: ay };
+        const B = { x: bx, y: by };
+        const P = { x: px, y: py };
+        const cross = (bx - ax) * (py - ay) - (by - ay) * (px - ax);
+        const side = wallFaceSide(A, B, P);
+        if (ax === bx && ay === by) return side === null;
+        if (cross === 0) return side === null;
+        return side === (cross > 0 ? "left" : "right");
+      }),
+    );
   });
 });

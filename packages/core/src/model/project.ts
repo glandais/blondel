@@ -218,11 +218,26 @@ export const PlacementSchema = z.object({
   rotation: z.number().default(0),
 });
 
+/**
+ * Bord de mesure de la ligne de foulée d'un **escalier droit** (décision A16 de l'utilisateur,
+ * 2026-09-29) : `left` / `right` (bords gauche et droit dans le sens de la montée). Absent :
+ * automatique, côté de la main courante principale (côté vide s'il porte un garde-corps, sinon
+ * côté mur ; à défaut, gauche), voir `layout/walklineSide.ts`. Sans effet sur un tracé à
+ * tournants (d_f est mesurée depuis le jour) ni sur un hélicoïdal. Ajout rétrocompatible.
+ */
+export const WalklineSideSchema = z.enum(["left", "right"]);
+export type WalklineSide = z.infer<typeof WalklineSideSchema>;
+
 export const WalklineSchema = z.discriminatedUnion("mode", [
-  /** DTU 36.3 : milieu si E ≤ 1 200, sinon 600 mm du bord intérieur. */
-  z.object({ mode: z.literal("dtu") }),
-  z.object({ mode: z.literal("fromInner"), distance: mmPos }),
+  /** DTU 36.3 : milieu si E ≤ 1 200, sinon 600 mm du bord intérieur (bord de mesure). */
+  z.object({ mode: z.literal("dtu"), side: WalklineSideSchema.optional() }),
+  z.object({
+    mode: z.literal("fromInner"),
+    distance: mmPos,
+    side: WalklineSideSchema.optional(),
+  }),
 ]);
+export type WalklineSpec = z.infer<typeof WalklineSchema>;
 
 export const SteppingSchema = z.object({
   /** Nombre de hauteurs n ; `auto` = arrondi(H / targetRise). */
@@ -360,6 +375,9 @@ export const RuleOverrideSchema = z.object({
   severity: z.enum(["bloquant", "avertissement", "conseil", "ignore"]),
   justification: z.string().min(1),
 });
+export type RuleOverride = z.infer<typeof RuleOverrideSchema>;
+/** Sévérités proposées par une surcharge de règle (`ignore` : règle sortie des violations). */
+export const RULE_OVERRIDE_SEVERITIES = RuleOverrideSchema.shape.severity.options;
 
 export const ComplianceSettingsSchema = z.object({
   /** Contextes cumulés de rules.yaml (`tous` est implicite). */

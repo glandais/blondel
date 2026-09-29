@@ -242,6 +242,89 @@ export function openingClick(
   return { draft: [...draft, p], closed: false };
 }
 
+/**
+ * Ligne tracée d'un mur (QUESTIONS A24, décision du 2026-09-29) : l'axe (deux clics, défaut,
+ * convention `WallSchema`) ou un nu, dont le côté du mur est donné par un **troisième clic**
+ * (au lieu d'une liste gauche / droite).
+ */
+export type WallTraceMode = "axis" | "face";
+
+/**
+ * Côté du tracé `a` → `b` où se trouve `p` (`left` : à gauche dans le sens du tracé, convention
+ * `WallTraceReference` du cœur) ; `null` si `p` est sur la droite du tracé (à `tolerance` près)
+ * ou si le tracé est de longueur nulle.
+ */
+export function wallFaceSide(a: Vec2, b: Vec2, p: Vec2, tolerance = 1e-6): "left" | "right" | null {
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const L = Math.hypot(dx, dy);
+  if (!(L > 0)) return null;
+  // Distance signée de p à la droite (a, b), positive à gauche.
+  const d = (dx * (p.y - a.y) - dy * (p.x - a.x)) / L;
+  if (Math.abs(d) <= tolerance) return null;
+  return d > 0 ? "left" : "right";
+}
+
+/**
+ * Contour d'un mur tracé au nu `a`–`b`, le corps du mur du côté `side` (aperçu avant le
+ * troisième clic ; l'axe enregistré est déduit par `withWall` du cœur).
+ */
+export function faceWallOutline(
+  a: Vec2,
+  b: Vec2,
+  thickness: number,
+  side: "left" | "right",
+): Vec2[] {
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const L = Math.hypot(dx, dy) || 1;
+  const k = ((side === "left" ? 1 : -1) * thickness) / L;
+  const n = { x: -dy * k, y: dx * k };
+  return [a, b, { x: b.x + n.x, y: b.y + n.y }, { x: a.x + n.x, y: a.y + n.y }];
+}
+
+/** Résultat d'un clic de l'outil « Tracer un mur ». */
+export type WallClick =
+  | { readonly kind: "draft"; readonly draft: Vec2[] }
+  | {
+      readonly kind: "commit";
+      readonly a: Vec2;
+      readonly b: Vec2;
+      readonly reference: "axis" | "left" | "right";
+    }
+  | { readonly kind: "ignored"; readonly draft: Vec2[]; readonly reason: string };
+
+/**
+ * Clic de tracé de mur : à l'axe, deux clics (extrémités) ; au nu, deux clics (extrémités du
+ * nu) puis un troisième du côté du mur. Un point répété, ou un troisième clic sur la ligne du
+ * nu, est ignoré avec un motif.
+ */
+export function wallClick(draft: readonly Vec2[], p: Vec2, mode: WallTraceMode): WallClick {
+  const [a, b] = draft;
+  if (!a) return { kind: "draft", draft: [p] };
+  if (!b) {
+    if (Math.hypot(p.x - a.x, p.y - a.y) < 1) {
+      return {
+        kind: "ignored",
+        draft: [...draft],
+        reason: "Second point confondu avec le premier.",
+      };
+    }
+    return mode === "axis"
+      ? { kind: "commit", a, b: p, reference: "axis" }
+      : { kind: "draft", draft: [a, p] };
+  }
+  const side = wallFaceSide(a, b, p);
+  if (!side) {
+    return {
+      kind: "ignored",
+      draft: [...draft],
+      reason: "Cliquer d'un côté du nu tracé : le côté où se trouve le mur.",
+    };
+  }
+  return { kind: "commit", a, b, reference: side };
+}
+
 // ------------------------------------------------------------------ Réglages d'import
 
 /**

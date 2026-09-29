@@ -11,7 +11,10 @@ import { makeHelicalProject } from "../layout/helical-test-helpers.js";
 import { makeSteppingProject, stairArb } from "../stepping/test-helpers.js";
 import { computeGuards } from "./compute.js";
 import { GuardError } from "./errors.js";
-import { jourWidth } from "./jour.js";
+import { jourPostClashes } from "./checks.js";
+import { jourWidth, NARROW_JOUR_PREFIX } from "./jour.js";
+import { GuardsSpecSchema } from "./spec.js";
+import { getRule } from "../rules/table.js";
 import { sectionHeight } from "./parts.js";
 import type { GuardsAnalysis } from "./types.js";
 
@@ -728,19 +731,32 @@ describe("computeGuards — jour plus étroit que la sphère T1", () => {
     return withGuards(p, {}, { stair: { ...p.stair, layout: { ...p.stair.layout, legs } } });
   }
 
-  it("jour de 20 à 109 mm : erreur de modèle lisible, pas d'exception, autres lignes produites", () => {
+  it("jour de 20 à 109 mm : pas de garde-corps de jour, remarque (pas d'erreur), GC_OBLIGATOIRE en conseil (A10)", () => {
     for (const well of [20, 60, 109]) {
       const project = halfTurn(well);
       const layout = computeLayout(project);
       expect(jourWidth(layout, project.stair.layout.turns)).toBeCloseTo(well, 6);
       const g = computeGuards(project, layout, computeStepping(project, layout));
-      expect(g.errors).toHaveLength(1);
-      expect(g.errors![0]).toContain(`jour de ${well} mm`);
+      expect(g.errors ?? []).toEqual([]);
+      expect(g.narrowJour?.width).toBeCloseTo(well, 6);
+      expect(g.narrowJour?.threshold).toBe(getRule("GC_GABARIT_T1_2024").max);
+      expect(g.notes.filter((n) => n.startsWith(NARROW_JOUR_PREFIX))).toHaveLength(1);
+      expect(g.notes.find((n) => n.startsWith(NARROW_JOUR_PREFIX))).toContain(`jour de ${well} mm`);
       expect(g.runs.some((r) => r.side === "inner")).toBe(false);
       expect(g.runs.some((r) => r.side === "outer")).toBe(true);
       const m = buildModel(project);
-      expect(m.errors).toEqual(g.errors);
+      expect(m.errors).toEqual([]);
       expect(m.parts.some((p) => p.id.startsWith("guard-outer"))).toBe(true);
+      // Constat du jour (conseil) ; la chute hors du jour (volée 3 plus longue) : test suivant.
+      const mandatory = m.compliance.results.filter(
+        (r) =>
+          r.ruleId === "GC_OBLIGATOIRE" && r.status === "violation" && r.severity === "conseil",
+      );
+      expect(mandatory).toHaveLength(1);
+      expect(mandatory[0]!.severity).toBe("conseil");
+      expect(mandatory[0]!.declaredSeverity).toBe("bloquant");
+      expect(mandatory[0]!.downgradeReason).toMatch(/sphère T1/);
+      expect(mandatory[0]!.message).toMatch(/côté jour/);
     }
   });
 
@@ -749,7 +765,74 @@ describe("computeGuards — jour plus étroit que la sphère T1", () => {
     const layout = computeLayout(project);
     const g = computeGuards(project, layout, computeStepping(project, layout));
     expect(g.errors ?? []).toEqual([]);
+    expect(g.narrowJour).toBeUndefined();
     expect(g.runs.some((r) => r.side === "inner")).toBe(true);
+  });
+
+  it("jour étroit : la chute hors du jour (volée qui dépasse celle d'en face) reste bloquante (revue A10)", () => {
+    // Préréglage : volée 3 (2 138 mm au mur) plus longue que la volée 1 (1 745 mm) : son haut
+    // borde un vide ouvert (pas le jour de 60 mm), chute de 2 700 mm à l'arrivée.
+    const m = buildModel(halfTurn(60));
+    const v = m.compliance.results.filter(
+      (r) => r.ruleId === "GC_OBLIGATOIRE" && r.status === "violation",
+    );
+    expect(v.map((r) => r.severity).sort()).toEqual(["bloquant", "conseil"]);
+    const open = v.find((r) => r.severity === "bloquant")!;
+    expect(open.measured).toBeCloseTo(m.stepping.nosings.at(-1)!.z, 6);
+    expect(open.message).toMatch(/hors du jour/);
+    const jour = v.find((r) => r.severity === "conseil")!;
+    expect(jour.measured!).toBeLessThan(open.measured!);
+    // Volées 1 et 3 de même longueur : tout le côté jour borde le jour, conseil seul.
+    const p = halfTurn(60);
+    const legs = p.stair.layout.legs.map((l, i) => (i === 2 ? p.stair.layout.legs[0]! : l));
+    const sym = buildModel({ ...p, stair: { ...p.stair, layout: { ...p.stair.layout, legs } } });
+    expect(
+      sym.compliance.results
+        .filter((r) => r.ruleId === "GC_OBLIGATOIRE" && r.status === "violation")
+        .map((r) => r.severity),
+    ).toEqual(["conseil"]);
+  });
+
+  it("jour de 110 à 139 mm : poteaux de jour en collision, GC_POTEAUX_JOUR en avertissement (A10)", () => {
+    // Défauts : décalage 30 mm, poteaux de 80 mm → collision tant que jour < 2 × (30 + 40) = 140.
+    const spec = GuardsSpecSchema.parse({});
+    const limit = 2 * (spec.flight.edgeOffset + spec.posts.size / 2);
+    for (const well of [110, 125, limit - 1]) {
+      const m = buildModel(halfTurn(well));
+      const r = m.compliance.results.filter((x) => x.ruleId === "GC_POTEAUX_JOUR");
+      expect(r.length, `jour ${well}`).toBeGreaterThan(0);
+      for (const x of r) {
+        expect(x.status).toBe("violation");
+        expect(x.severity).toBe("avertissement");
+        expect(x.measured!).toBeGreaterThan(0);
+        expect(x.location.kind).toBe("part");
+      }
+      // Pénétration en plan = 2 × (décalage + demi-poteau) − jour.
+      expect(Math.max(...r.map((x) => x.measured!))).toBeCloseTo(limit - well, 6);
+    }
+    for (const well of [limit, 150, 240]) {
+      const m = buildModel(halfTurn(well));
+      expect(
+        m.compliance.results.some((x) => x.ruleId === "GC_POTEAUX_JOUR"),
+        `jour ${well}`,
+      ).toBe(false);
+    }
+  });
+
+  it("collision des poteaux : poteaux superposés à des hauteurs disjointes ignorés (hélicoïdal)", () => {
+    // Jour central étroit sur plusieurs tours : poteaux à la verticale les uns des autres, un tour
+    // (2 700 mm) plus haut, sans recouvrement de hauteur.
+    const p = withGuards(
+      makeHelicalProject({
+        outerRadius: 1000,
+        coreRadius: 150,
+        core: "well",
+        direction: "left",
+        floorToFloor: 2700,
+      }),
+      {},
+    );
+    expect(jourPostClashes(analyze(p))).toEqual([]);
   });
 
   it("largeur du jour : poteaux d'angle déduits, quart tournant sans jour", () => {

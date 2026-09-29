@@ -1,8 +1,9 @@
-import { buildModel, createProject, type Model, type Part } from "@blondel/core";
+import { buildModel, createDemoProject, createProject, type Model, type Part } from "@blondel/core";
 import { describe, expect, it } from "vitest";
 import {
   EXPORT_ENTRIES,
   MIME,
+  PDF_JOBS,
   buildExport,
   exportAvailability,
   fileStem,
@@ -187,6 +188,36 @@ describe("dossiers PDF, fiche de pose et modèle glTF", () => {
         .filter(([, v]) => v)
         .map(([k]) => k),
     ).toEqual(["installation"]);
+  });
+
+  it("dossiers filtrés par famille de gabarits (QUESTIONS A20) : A4, une famille chacun", async () => {
+    const seen: unknown[] = [];
+    const deps: ExportDeps = {
+      loadPdf: async () => () => new Uint8Array(),
+      renderPdf: async (_p, _m, options) => {
+        seen.push(options);
+        return new Uint8Array([1]);
+      },
+    };
+    // Démo industrielle (plat découpé, marches en tôle) : limons et marches à développé.
+    const industrial = createDemoProject("demo-half-turn-industrial");
+    const m = buildModel(industrial);
+    const names: string[] = [];
+    for (const id of ["pdf-stringers", "pdf-treads"] as const) {
+      expect(exportAvailability(id, m).ok, id).toBe(true);
+      const [f] = await buildExport(id, industrial, m, deps);
+      names.push(f!.filename);
+    }
+    expect(seen).toEqual([{ templateFamilies: ["stringers"] }, { templateFamilies: ["treads"] }]);
+    expect(names[0]).toMatch(/-gabarits-limons\.pdf$/);
+    expect(names[1]).toMatch(/-gabarits-marches\.pdf$/);
+    // Le dossier complet garde tous les gabarits (aucun filtre transmis).
+    expect(PDF_JOBS.pdf.options.templateFamilies).toBeUndefined();
+    expect(PDF_JOBS["pdf-a3"].options.templateFamilies).toBeUndefined();
+    // Famille sans développé (garde-corps : aucun développé à ce jour) : entrée indisponible.
+    const none = exportAvailability("pdf-guards", m);
+    expect(none.ok).toBe(false);
+    if (!none.ok) expect(none.reason).toMatch(/famille/);
   });
 
   it("fiche de pose réelle : PDF d'une seule section, plus court que le dossier complet", async () => {

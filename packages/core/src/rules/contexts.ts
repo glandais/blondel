@@ -3,7 +3,8 @@
  *
  * - Contextes **cumulatifs** : toutes les règles des contextes actifs s'appliquent ; `tous` est implicite.
  * - Contextes **déduits** : `tournant` si le découpage contient des marches balancées,
- *   `helicoidal` si le découpage est celui d'un tracé hélicoïdal (`Stepping.helical`) ; régime
+ *   `helicoidal` si le découpage est celui d'un tracé hélicoïdal (`Stepping.helical`),
+ *   `helicoidal_fut` si ce tracé est à fût central (projet : `layout.core.kind === "column"`) ; régime
  *   garde-corps `garde_corps_1988` / `garde_corps_2024` déduit de `referenceDate` si l'utilisateur
  *   n'en a choisi aucun explicitement.
  * - Applicabilité : les contextes de forme (`tournant`, `helicoidal`) **qualifient** les contextes de
@@ -22,7 +23,24 @@ export const ALWAYS_CONTEXT = "tous";
  * `[helicoidal, bois_dtu]` « bois **et** hélicoïdal ». Interprétation Blondel (voir LEDGER) : la
  * lecture purement disjonctive imposerait la ligne de foulée hélicoïdale à 600 mm à tout escalier bois.
  */
-export const SHAPE_CONTEXTS: ReadonlySet<string> = new Set(["tournant", "helicoidal"]);
+export const SHAPE_CONTEXTS: ReadonlySet<string> = new Set([
+  "tournant",
+  "helicoidal",
+  "helicoidal_fut",
+]);
+
+/**
+ * Contextes toujours déduits (jamais saisis) : l'interface ne les propose pas. `helicoidal` reste
+ * saisissable (il peut être déclaré explicitement).
+ */
+export const DEDUCED_ONLY_CONTEXTS: ReadonlySet<string> = new Set([
+  ALWAYS_CONTEXT,
+  "tournant",
+  "helicoidal_fut",
+]);
+
+/** Contexte déduit d'un hélicoïdal à fût central (QUESTIONS A5). */
+export const HELICAL_COLUMN_CONTEXT = "helicoidal_fut";
 
 export type GuardRailRegime = "garde_corps_1988" | "garde_corps_2024";
 
@@ -84,21 +102,33 @@ export interface ResolvedContexts {
   readonly notes: readonly string[];
 }
 
-/** Contextes actifs pour un projet et son découpage. */
+/**
+ * Contextes actifs pour un projet et son découpage. `helicalCore` : bord intérieur du tracé
+ * hélicoïdal du projet (`stair.layout.core.kind`), pour déduire `helicoidal_fut`.
+ */
 export function resolveContexts(
   settings: ComplianceSettings,
   stepping?: Stepping,
+  helicalCore?: "column" | "well",
 ): ResolvedContexts {
   const known = new Set(RULE_CONTEXTS);
   const active = new Set<string>([ALWAYS_CONTEXT]);
   const unknown: string[] = [];
   const derived: string[] = [];
   const notes: string[] = [];
+  const declaredDeduced: string[] = [];
   for (const c of settings.contexts) {
-    if (known.has(c)) active.add(c);
+    // `helicoidal_fut` n'est jamais saisi : le déclarer écarterait G_COLLET_MIN d'un jour central
+    // (QUESTIONS A5) ; seul le tracé le déduit.
+    if (c === HELICAL_COLUMN_CONTEXT) declaredDeduced.push(c);
+    else if (known.has(c)) active.add(c);
     else unknown.push(c);
   }
   if (unknown.length > 0) notes.push(`Contextes inconnus ignorés : ${unknown.join(", ")}.`);
+  if (declaredDeduced.length > 0)
+    notes.push(
+      `Contexte déduit du tracé, déclaration ignorée : ${declaredDeduced.join(", ")} (hélicoïdal à fût central).`,
+    );
 
   if (stepping && stepping.treads.some((t) => t.kind === "winder") && !active.has("tournant")) {
     active.add("tournant");
@@ -108,6 +138,16 @@ export function resolveContexts(
   if (stepping?.helical && known.has("helicoidal") && !active.has("helicoidal")) {
     active.add("helicoidal");
     derived.push("helicoidal");
+  }
+  // Hélicoïdal à fût central : écarte les règles qui l'excluent (G_COLLET_MIN, QUESTIONS A5).
+  if (
+    stepping?.helical &&
+    helicalCore === "column" &&
+    known.has(HELICAL_COLUMN_CONTEXT) &&
+    !active.has(HELICAL_COLUMN_CONTEXT)
+  ) {
+    active.add(HELICAL_COLUMN_CONTEXT);
+    derived.push(HELICAL_COLUMN_CONTEXT);
   }
 
   let guardRail: GuardRailResolution;
@@ -133,13 +173,15 @@ export function resolveContexts(
  * Une règle s'applique si :
  * - elle porte `tous`, ou
  * - (aucun de ses contextes hors forme, ou au moins un actif) **et** (aucun contexte de forme,
- *   ou au moins un actif) — avec au moins un contexte effectivement actif.
+ *   ou au moins un actif) — avec au moins un contexte effectivement actif ;
+ * - et aucun de ses contextes exclus (`contexte_exclu`) n'est actif.
  */
 export function isRuleApplicable(
   rule: RuleDef,
   active: ReadonlySet<string> | readonly string[],
 ): boolean {
   const set = active instanceof Set ? active : new Set(active as readonly string[]);
+  if (rule.contexte_exclu?.some((c) => set.has(c))) return false;
   if (rule.contexte.includes(ALWAYS_CONTEXT)) return true;
   const shape = rule.contexte.filter((c) => SHAPE_CONTEXTS.has(c));
   const other = rule.contexte.filter((c) => !SHAPE_CONTEXTS.has(c));

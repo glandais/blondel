@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import type { Model } from "../model/derived.js";
 import { ProjectSchema, type Project } from "../model/project.js";
 import { parseProjectText } from "../project/parse.js";
+import { createProject } from "../project/presets.js";
 import { serializeProject } from "../project/serialize.js";
 import { isRuleApplicable } from "../rules/contexts.js";
 import { ruleCoverage } from "../rules/engine.js";
@@ -341,14 +342,55 @@ describe("buildModel — échappée et contrôle de conception", () => {
     expect(r.message).toMatch(/Sans objet/);
   });
 
-  it("échappée sur la largeur insuffisante : remarque d'avertissement", () => {
+  it("échappée sur la largeur insuffisante : règle ECHAPPEE_LARGEUR en avertissement (A7)", () => {
     const m = buildModel(loadExample(ACCEPTANCE_01));
     expect(m.headroomWidth!.min).toBeLessThan(1900);
-    expect(m.notes).toEqual([expect.stringContaining("échappée sur la largeur des marches")]);
+    // Plus de remarque dans Model.notes : la grandeur est portée par une règle de rules.yaml.
+    expect(m.notes ?? []).not.toContainEqual(expect.stringContaining("échappée sur la largeur"));
+    const rs = m.compliance.results.filter((r) => r.ruleId === "ECHAPPEE_LARGEUR");
+    expect(rs).toHaveLength(1);
+    const r = rs[0]!;
+    expect(r.status).toBe("violation");
+    expect(r.severity).toBe("avertissement");
+    // Seuil repris de ECHAPPEE_MIN_DTU (bloquante, contextes bois_dtu / logement_interieur).
+    expect(r.min).toBe(getRule("ECHAPPEE_MIN_DTU").min);
+    expect(r.measured).toBeCloseTo(m.headroomWidth!.min, 9);
     // Nez 3 = dessus de la marche 4 (repère M4) : le message parle de la marche, pas de l'indice.
     // (Nez 4 / marche 5 avant la correction du choix de zone G3 du 2026-09-29 : zone 0 → 4.)
     expect(m.headroomWidth!.nosing).toBe(3);
-    expect(m.notes![0]).toContain("au nez de la marche 4");
+    expect(r.message).toContain("au nez de la marche 4");
+    expect(m.headroomUnlimited).toBeUndefined();
+  });
+
+  it("ECHAPPEE_LARGEUR : seuil = plus grand minimum des ECHAPPEE_* bloquantes actives", () => {
+    const p = loadExample(ACCEPTANCE_01);
+    const withCtx = (contexts: string[], profile: "strict" | "souple" = "strict") =>
+      buildModel({
+        ...p,
+        compliance: { ...p.compliance, contexts, profile },
+      }).compliance.results.find((r) => r.ruleId === "ECHAPPEE_LARGEUR")!;
+    // Industriel : ECHAPPEE_INDUSTRIEL (2 300) l'emporte sur ECHAPPEE_MIN_DTU (1 900).
+    expect(withCtx(["bois_dtu", "industriel"]).min).toBe(getRule("ECHAPPEE_INDUSTRIEL").min);
+    // Profil souple : la sévérité déclarée compte, le seuil reste celui du DTU.
+    expect(withCtx(["bois_dtu"], "souple").min).toBe(getRule("ECHAPPEE_MIN_DTU").min);
+    // Aucune règle d'échappée bloquante (ERP : recommandation seulement) : sans objet.
+    const erp = withCtx(["erp_neuf"]);
+    expect(erp.status).toBe("ok");
+    expect(erp.message).toMatch(/Sans objet/);
+  });
+
+  it("trémie couvrante : échappée non limitée sur Γ et sur la largeur (A7)", () => {
+    const m = buildModel(createProject("half-turn"));
+    expect(m.headroom).toBeUndefined();
+    expect(m.headroomWidth).toBeUndefined();
+    expect(m.headroomUnlimited).toEqual({ walkline: true, width: true });
+    const r = m.compliance.results.find((x) => x.ruleId === "ECHAPPEE_LARGEUR")!;
+    expect(r.status).toBe("ok");
+    expect(r.message).toMatch(/non limitée/);
+    // Sans trémie : rien de « non limité » (échappée non calculée).
+    expect(
+      buildModel(makeSteppingProject({ width: 900, legs: ["auto"] })).headroomUnlimited,
+    ).toBeUndefined();
   });
 
   it("structure sans plugin : remarque, pièces de base seulement", () => {

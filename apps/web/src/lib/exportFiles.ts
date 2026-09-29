@@ -6,6 +6,11 @@
  *
  * Versions DXF (décision utilisateur du 2026-09-28, CHALLENGE P6) : plans cotés en AC1021
  * (2007) par défaut, R12 proposé ; pièces en R12.
+ *
+ * Dossier PDF (QUESTIONS A20, décision du 2026-09-29) : « complet » garde tous les gabarits
+ * 1:1 ; trois dossiers filtrés ne tuilent que les gabarits d'une famille (limons et structure,
+ * marches, garde-corps : `templateFamily` de `@blondel/exports`) ; recouvrement des cases fixe
+ * (10 mm, `DEFAULT_TILE_OVERLAP`), sans réglage.
  */
 import type { Model, Part, Project } from "@blondel/core";
 import {
@@ -23,6 +28,8 @@ import {
   renderElevationSvg,
   renderPlanSvg,
   safeFileStem,
+  templateFamily,
+  type TemplateFamily,
 } from "@blondel/exports";
 import { PROJECT_FILE_SUFFIX, projectFileName } from "../store/persistence.js";
 import {
@@ -70,6 +77,9 @@ export type ExportId =
   | "pdf"
   | "pdf-a3"
   | "pdf-light"
+  | "pdf-stringers"
+  | "pdf-treads"
+  | "pdf-guards"
   | "installation-pdf"
   | "glb"
   | "parts-dxf";
@@ -90,24 +100,54 @@ export const EXPORT_ENTRIES: readonly ExportEntry[] = [
   { id: "cutlist-csv", label: "Liste de débit (CSV)", needsModel: true },
   { id: "pdf", label: "Dossier PDF complet (gabarits 1:1 en A4)", needsModel: true },
   { id: "pdf-a3", label: "Dossier PDF complet (gabarits 1:1 en A3)", needsModel: true },
+  {
+    id: "pdf-stringers",
+    label: "Dossier PDF, gabarits 1:1 des limons et de la structure (A4)",
+    needsModel: true,
+  },
+  { id: "pdf-treads", label: "Dossier PDF, gabarits 1:1 des marches (A4)", needsModel: true },
+  {
+    id: "pdf-guards",
+    label: "Dossier PDF, gabarits 1:1 des garde-corps (A4)",
+    needsModel: true,
+  },
   { id: "pdf-light", label: "Dossier PDF sans gabarits", needsModel: true },
   { id: "installation-pdf", label: "Fiche de pose (PDF)", needsModel: true },
   { id: "parts-dxf", label: "DXF des pièces (R12)", needsModel: true },
   { id: "glb", label: "Modèle 3D glTF (.glb)", needsModel: true },
 ];
 
+/** Dossiers PDF filtrés par famille de gabarits (QUESTIONS A20). */
+export const PDF_FAMILY_JOBS: Readonly<
+  Record<"pdf-stringers" | "pdf-treads" | "pdf-guards", TemplateFamily>
+> = {
+  "pdf-stringers": "stringers",
+  "pdf-treads": "treads",
+  "pdf-guards": "guards",
+};
+
+type PdfJobId = "pdf" | "pdf-a3" | "pdf-light" | "installation-pdf" | keyof typeof PDF_FAMILY_JOBS;
+
 /**
  * Pages et format de chaque dossier PDF (`@blondel/exports/pdf`) : complet = toutes les pages,
- * gabarits 1:1 tuilés en A4 ou A3 ; sans gabarits ; fiche de pose seule.
+ * gabarits 1:1 tuilés en A4 ou A3 ; gabarits d'une seule famille (A4) ; sans gabarits ; fiche
+ * de pose seule.
  */
-export const PDF_JOBS: Readonly<
-  Record<
-    "pdf" | "pdf-a3" | "pdf-light" | "installation-pdf",
-    { suffix: string; options: PdfJobOptions }
-  >
-> = {
+export const PDF_JOBS: Readonly<Record<PdfJobId, { suffix: string; options: PdfJobOptions }>> = {
   pdf: { suffix: "", options: {} },
   "pdf-a3": { suffix: "-a3", options: { format: "a3" } },
+  "pdf-stringers": {
+    suffix: "-gabarits-limons",
+    options: { templateFamilies: [PDF_FAMILY_JOBS["pdf-stringers"]] },
+  },
+  "pdf-treads": {
+    suffix: "-gabarits-marches",
+    options: { templateFamilies: [PDF_FAMILY_JOBS["pdf-treads"]] },
+  },
+  "pdf-guards": {
+    suffix: "-gabarits-garde-corps",
+    options: { templateFamilies: [PDF_FAMILY_JOBS["pdf-guards"]] },
+  },
   "pdf-light": { suffix: "-sans-gabarits", options: { pages: { templates: false } } },
   "installation-pdf": {
     suffix: "-fiche-de-pose",
@@ -184,6 +224,12 @@ export function exportAvailability(
 ): { readonly ok: true } | { readonly ok: false; readonly reason: string } {
   if (id === "project-json") return { ok: true };
   if (!model) return { ok: false, reason: "Aucun modèle calculé." };
+  if (id === "pdf-stringers" || id === "pdf-treads" || id === "pdf-guards") {
+    const family = PDF_FAMILY_JOBS[id];
+    if (!partsWithFlat(model).some((p) => templateFamily(p) === family)) {
+      return { ok: false, reason: "Aucune pièce de cette famille n'a de développé (gabarit 1:1)." };
+    }
+  }
   if (id === "parts-dxf" && partsWithFlat(model).length === 0) {
     return {
       ok: false,
@@ -257,6 +303,9 @@ export async function buildExport(
     case "pdf":
     case "pdf-a3":
     case "pdf-light":
+    case "pdf-stringers":
+    case "pdf-treads":
+    case "pdf-guards":
     case "installation-pdf": {
       const { suffix, options } = PDF_JOBS[id];
       const filename = `${stem}${suffix}.pdf`;

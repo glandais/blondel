@@ -4,7 +4,9 @@
  *
  * Conventions des préréglages (`project/presets.ts`) : volées mesurées sur le bord extérieur,
  * ligne de foulée à d_f du jour, arc de Γ de rayon d_f dans un tournant balancé (jour vif ou
- * poteau), volée centrale = 2E + jour. Les longueurs sont des mm entiers ; la dernière volée
+ * poteau), volée centrale = 2E + jour. **Jour en arc** de rayon r (décision A17, `layout.ts`) :
+ * arc de Γ de rayon r + d_f, concentrique au jour, parties droites de Γ raccourcies de r de
+ * part et d'autre du coin intérieur K ; volée centrale d'au moins 2r (jour en demi-cercle). Les longueurs sont des mm entiers ; la dernière volée
  * est arrondie **par excès** pour que le giron réel ne tombe pas sous le giron visé (le cas
  * d'acceptation n° 1 a montré qu'un arrondi au plus près pouvait passer sous G_MIN_LOGEMENT).
  */
@@ -21,6 +23,11 @@ export interface FlightsShape {
   readonly direction: "left" | "right" | null;
   /** Girons droits sur Γ avant le premier tournant (position du tournant). */
   readonly firstGoings: number;
+  /**
+   * Rayon du jour en arc des tournants balancés (mm) ; absent ou 0 : jour vif ou poteau (Γ en
+   * arc de rayon d_f centré sur le coin intérieur).
+   */
+  readonly jourRadius?: Mm;
 }
 
 interface TypologyGeometry {
@@ -43,6 +50,25 @@ export function typologyGeometry(t: FlightsTypology): TypologyGeometry {
     case "quarter-landing":
       return { turns: 1, mode: "landing", middleWell: 0 };
   }
+}
+
+/**
+ * Jour de la volée centrale (partie droite intérieure entre les deux coins K, mm) : celui de la
+ * typologie, porté à 2r pour un jour en arc de rayon r (demi-cercle au moins, sinon les deux
+ * arcs se chevauchent).
+ */
+export function middleWellOf(shape: FlightsShape): Mm {
+  return Math.max(typologyGeometry(shape.typology).middleWell, 2 * (shape.jourRadius ?? 0));
+}
+
+/** Longueur de Γ dans la partie tournante (tournants balancés et volée centrale). */
+function turningLength(shape: FlightsShape, walklineOffset: Mm): Mm {
+  const geo = typologyGeometry(shape.typology);
+  const r = shape.jourRadius ?? 0;
+  return (
+    geo.turns * (Math.PI / 2) * (walklineOffset + r) +
+    (geo.turns - 1) * (middleWellOf(shape) - 2 * r)
+  );
 }
 
 /**
@@ -78,14 +104,14 @@ export function flightLegs(
     if (a < 1 || b < 1) return null;
     return [Math.round(a * going + width), Math.ceil(b * going + width - 1e-9)];
   }
-  const df = walklineOffset;
-  const quarterArc = (Math.PI / 2) * df;
+  // Jour en arc : Γ quitte (et rejoint) la partie droite à r du coin intérieur K.
+  const r = shape.jourRadius ?? 0;
   const first = a * going;
-  const last = total - first - geo.turns * quarterArc - (geo.turns - 1) * geo.middleWell;
+  const last = total - first - turningLength(shape, walklineOffset);
   if (a < 0 || last < -1e-9) return null;
-  const legs = [Math.round(first + width)];
-  for (let i = 1; i < geo.turns; i++) legs.push(Math.round(geo.middleWell + 2 * width));
-  legs.push(Math.ceil(Math.max(0, last) + width - 1e-9));
+  const legs = [Math.round(first + width + r)];
+  for (let i = 1; i < geo.turns; i++) legs.push(Math.round(middleWellOf(shape) + 2 * width));
+  legs.push(Math.ceil(Math.max(0, last) + width + r - 1e-9));
   return legs;
 }
 
@@ -110,10 +136,7 @@ export function turnPosition(
   const geo = typologyGeometry(shape.typology);
   if (geo.turns === 0) return null;
   const total = (riserCount - 1) * going;
-  const turning =
-    geo.mode === "landing"
-      ? going
-      : geo.turns * (Math.PI / 2) * walklineOffset + (geo.turns - 1) * geo.middleWell;
+  const turning = geo.mode === "landing" ? going : turningLength(shape, walklineOffset);
   const f = (shape.firstGoings * going + turning / 2) / total;
   return f < 1 / 3 ? "bas" : f > 2 / 3 ? "haut" : "médian";
 }

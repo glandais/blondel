@@ -125,3 +125,21 @@
 .viewer3d__annotation--measure circle {
   fill: var(--selected);
 }
+
+/* Filtre des marqueurs par famille de règles (QUESTIONS A23). */
+.viewer3d__families {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.1rem 0.6rem;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.viewer3d__families legend {
+  float: left;
+  padding: 0;
+  margin-right: 0.3rem;
+  color: var(--muted);
+}

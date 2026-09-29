@@ -77,6 +77,9 @@ export function createJobRunner(options: JobRunnerOptions = {}): JobRunner {
           title: project.name,
           ...(job.options?.pages ? { pages: job.options.pages } : {}),
           ...(job.options?.format ? { format: job.options.format } : {}),
+          ...(job.options?.templateFamilies
+            ? { templateFamilies: job.options.templateFamilies }
+            : {}),
         });
         return { bytes: await toBytes(content) };
       } catch (e) {

@@ -33,6 +33,7 @@ import { formatFr } from "../format.js";
 import { renderElevationSvg } from "../svg/elevation.js";
 import { renderFlatPatternSvg } from "../svg/flat.js";
 import { renderPlanSvg } from "../svg/plan.js";
+import { templateFamily, type TemplateFamily } from "../templateFamily.js";
 import { JsPdfCanvas, type PdfCanvas } from "./canvas.js";
 import { compliancePages } from "./compliance.js";
 import { installationPages } from "./installation.js";
@@ -95,6 +96,12 @@ export interface PdfLayoutOptions {
   readonly decimals?: number;
   /** Recouvrement entre cases des gabarits 1:1, mm (défaut 10). */
   readonly tileOverlap?: number;
+  /**
+   * Familles de pièces dont les gabarits 1:1 sont tuilés (QUESTIONS A20 : limons et structure,
+   * marches, garde-corps ; `templateFamily`). Absent : toutes (dossier complet). Les autres
+   * pages, développés à l'échelle compris, ne sont pas filtrées.
+   */
+  readonly templateFamilies?: readonly TemplateFamily[];
   /**
    * Remarque de masse par matériau (nomenclature, fiche de débit). Défaut : `massNoteFor` du
    * profil d'atelier du projet (bois non renseigné par l'atelier : « masse volumique à
@@ -568,7 +575,8 @@ export function renderPdf(
     options.massNote ?? (project !== undefined ? massNoteFor(project.workshop) : defaultMassNote);
   if (show.bom) pages.push(...bomPages(model.parts, frame, massNote));
   if (show.cutsheet) pages.push(...cutSheetPages(model.parts, frame, massNote));
-  if (show.compliance) pages.push(...compliancePages(c, model, frame));
+  if (show.compliance)
+    pages.push(...compliancePages(c, model, frame, project?.compliance.overrides ?? []));
   const groups = show.flats || show.templates ? flatGroups(model.parts) : [];
   if (show.flats) {
     for (const { part, ids } of groups) {
@@ -596,7 +604,9 @@ export function renderPdf(
     }
   }
   if (show.templates) {
+    const families = options.templateFamilies ? new Set(options.templateFamilies) : null;
     for (const { part, ids } of groups) {
+      if (families && !families.has(templateFamily(part))) continue;
       pages.push(
         ...templatePages(c, part, ids, frame, {
           fontPx,

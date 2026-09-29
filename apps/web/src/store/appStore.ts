@@ -9,10 +9,12 @@ import { useEffect } from "react";
 import { useStore } from "zustand";
 import { availableStructures } from "../lib/optionalApi.js";
 import { variantsFor } from "../lib/variants.js";
+import { withWorkshopRates } from "../lib/workshopRates.js";
 import { browserWorker, createJobExec } from "../model/workerClient.js";
 import { AUTOSAVE_KEY, browserStorage } from "./persistence.js";
 import { createModelService, type CompareView, type ModelView } from "./modelStore.js";
 import { createProjectStore, type AppState } from "./projectStore.js";
+import { createWorkshopStore, type WorkshopState } from "./workshopStore.js";
 
 /**
  * Première visite : aucune autosauvegarde au chargement (lue avant la création du store, qui
@@ -42,6 +44,13 @@ export function useApp<T>(selector: (s: AppState) => T): T {
   return useStore(appStore, selector);
 }
 
+/** Barème d'atelier (QUESTIONS A14) : hors du projet, mémorisé dans le navigateur. */
+export const workshopStore = createWorkshopStore(browserStorage());
+
+export function useWorkshop<T>(selector: (s: WorkshopState) => T): T {
+  return useStore(workshopStore, selector);
+}
+
 /** Calculs du modèle et du comparateur : deux workers distincts (créés à la première demande). */
 export const modelService = createModelService({
   exec: createJobExec(browserWorker),
@@ -63,11 +72,18 @@ export function useModel(): ModelView {
   return useStore(modelService.store, (s) => s.model);
 }
 
-/** Comparaison des variantes du projet courant, calculée tant que le composant est affiché. */
-export function useComparison(): CompareView {
+/**
+ * Comparaison des variantes du projet courant, calculée tant que le composant est affiché, avec
+ * le barème d'atelier (`withWorkshopRates` : copie du projet, le projet lui-même n'est pas
+ * modifié). `requested` : projet effectivement comparé (à rapprocher de `project` du résultat).
+ */
+export function useComparison(): CompareView & { readonly requested: Project } {
   const project = useApp((s) => s.project);
+  const rates = useWorkshop((s) => s.rates);
+  const requested = withWorkshopRates(project, rates);
   useEffect(() => {
-    modelService.requestCompare(project);
-  }, [project]);
-  return useStore(modelService.store, (s) => s.compare);
+    modelService.requestCompare(requested);
+  }, [requested]);
+  const view = useStore(modelService.store, (s) => s.compare);
+  return { ...view, requested };
 }

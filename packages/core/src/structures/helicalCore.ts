@@ -12,9 +12,14 @@
  * - **Marches en porte-à-faux sur le fût** : bois (pièces de base conservées) ou tôle plane
  *   (`treads.material = "steel"` : les pièces `tread-N` sont remplacées par des tôles de même
  *   contour, développé = contour 1:1). Le détail de fixation au fût (bague, platine) n'est pas
- *   modélisé. Le porte-à-faux sort des règles de moyens du DTU (C §1.8) : contrôle
+ *   modélisé. Sous des marches en tôle, **pas de contremarche** (décision A11) : les
+ *   contremarches bois de base sont retirées et les règles de nez / contremarches
+ *   (`VIDE_ENTRE_MARCHES`…) réévaluées sans contremarche, à l'épaisseur de la tôle. Le
+ *   porte-à-faux sort des règles de moyens du DTU (C §1.8) : contrôle
  *   `HELICOIDAL_PORTE_A_FAUX` en avertissement « justification requise » tant que
- *   `cantileverJustification` (référence de note de calcul ou d'avis technique) est vide.
+ *   `cantileverJustification` (référence de note de calcul ou d'avis technique) est vide ; la
+ *   justification saisie est portée par le résultat (`RuleResult.justification`) et reprise
+ *   dans le dossier PDF (décision A12).
  * - **Palier d'arrivée** (`landing-arrival`, PA) : secteur du tracé, dessus au niveau H.
  * - **Limon extérieur hélicoïdal** facultatif (`outerStringer.enabled`, `helical-stringer`, LE1) :
  *   plat roulé, face intérieure au rayon R_e. Développé **exact** (B §4.3) : sur la fibre neutre
@@ -47,6 +52,7 @@ import type { Frame3, Mm, Polygon2, Shape2, Vec2, Vec3 } from "../model/primitiv
 import type { Project } from "../model/project.js";
 import { DEFAULT_WOOD_MATERIAL } from "../parts/basic.js";
 import { fmt } from "../rules/check.js";
+import { NOSING_EVALUATORS } from "../rules/evaluators/nosing.js";
 import { getRule } from "../rules/table.js";
 import type { Finding } from "../rules/types.js";
 import { STEEL_GRADES } from "../workshop/metal.js";
@@ -307,6 +313,48 @@ export function developHelicalStringer(input: HelicalStringerInput): HelicalStri
   };
 }
 
+// ------------------------------------------------------------------ marches en tôle
+
+/**
+ * Règles de rules.yaml qui dépendent des contremarches et de l'épaisseur de marche
+ * (`rules/evaluators/nosing.ts`) réévaluées pour des marches en tôle sans contremarche
+ * (décision A11) : projet effectif `risers = "none"`, épaisseur = tôle. Les résultats du plugin
+ * remplacent ceux du moteur (`mergeStructureChecks`).
+ */
+function reevaluateWithoutRisers(
+  checks: CheckCollector,
+  project: Project,
+  layout: StructureContext["layout"],
+  stepping: Stepping,
+  plateThickness: Mm,
+): void {
+  const effective: Project = {
+    ...project,
+    stair: {
+      ...project.stair,
+      treads: { ...project.stair.treads, risers: "none", thickness: plateThickness },
+    },
+  };
+  for (const [id, evaluate] of Object.entries(NOSING_EVALUATORS)) {
+    const rule = checks.yamlRule(id);
+    if (!rule) continue;
+    const findings = evaluate({
+      project: effective,
+      layout,
+      stepping,
+      rule,
+      contexts: checks.activeContexts,
+    });
+    checks.add(
+      rule,
+      findings.map((f) => ({
+        ...f,
+        message: `Marches en tôle de ${fmt(plateThickness)} mm sans contremarche : ${f.message}`,
+      })),
+    );
+  }
+}
+
 // ------------------------------------------------------------------ construction
 
 /** Résultat détaillé (tests) : sortie du plugin et développé du limon. */
@@ -362,6 +410,7 @@ export function buildHelicalCore(
   const H = project.site.floorToFloor;
   const rf = h.innerRadius;
   let usesSteel = false;
+  const removedBaseParts: string[] = [];
 
   // ---------------------------------------------------------------- fût
   if (!well) {
@@ -468,6 +517,17 @@ export function buildHelicalCore(
         `Marches en tôle de ${fmt(t)} mm : l'échappée est calculée avec l'épaisseur de marche du projet (${fmt(project.stair.treads.thickness)} mm), du côté de la sécurité.`,
       );
     }
+    // Décision A11 (QUESTIONS, 2026-09-29) : pas de contremarche bois sous des marches en tôle
+    // en porte-à-faux. Les contremarches de base sont retirées et les règles de nez, de
+    // recouvrement et de contremarche (dont `VIDE_ENTRE_MARCHES`) sont réévaluées sans
+    // contremarche, avec l'épaisseur de la tôle.
+    if (project.stair.treads.risers === "full") {
+      removedBaseParts.push(...stepping.nosings.map((_, k) => `riser-${k + 1}`));
+      notes.push(
+        `Marches en tôle : ${removedBaseParts.length} contremarche(s) bois de base supprimée(s) du modèle (escalier sans contremarche, décision A11).`,
+      );
+    }
+    reevaluateWithoutRisers(checks, project, layout, stepping, t);
   }
 
   // ---------------------------------------------------------------- palier d'arrivée
@@ -811,7 +871,11 @@ export function buildHelicalCore(
             status: "violation",
             message: `Justification requise : marches en porte-à-faux ${cantileverOn}, hors règles de moyens du DTU (note de calcul ou avis technique à joindre, paramètre « cantileverJustification »).`,
           }
-        : { status: "ok", message: `Porte-à-faux justifié : ${justification}.` },
+        : {
+            status: "ok",
+            message: `Porte-à-faux ${cantileverOn} justifié : ${justification}.`,
+            justification,
+          },
     ]);
   } else {
     notes.push(
@@ -830,6 +894,7 @@ export function buildHelicalCore(
     checks: checks.results as RuleResult[],
     notes,
     ...(exc ? { executionClass: exc.executionClass } : {}),
+    ...(removedBaseParts.length > 0 ? { removedBaseParts } : {}),
   };
   return {
     output,

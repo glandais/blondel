@@ -63,7 +63,8 @@ Preuves :
 Réserves :
 
 - Le coût dépend d'un barème (taux horaire, prix matière, finition) que le profil d'atelier par défaut ne renseigne pas. Les euros n'apparaissent donc qu'une fois ce profil rempli (décision P2, ledger §2 « Temps d'atelier »).
-- L'assistant ne propose pas `steel-curved` (jour en arc non énuméré). La comparaison se fait depuis le comparateur.
+- Depuis la vague I (décision A17), l'assistant énumère des jours en arc sur les tournants balancés et propose donc `steel-curved` (rayon roulable, 160 mm par défaut ; `packages/core/src/assistant/propose.test.ts`). Le cas n° 2 se vérifie toujours depuis le comparateur.
+- Le barème se saisit depuis la vague I dans la fenêtre « Profil d'atelier » (décision A14), hors du projet ; le comparateur affiche les euros dès qu'il est complet (`apps/web/e2e/workshop-and-filters.spec.ts`, `apps/web/src/lib/workshopRates.test.ts`).
 - Variante UPN de l'exemple j5b : le poteau élargi reçoit bien les limons de jour, mais la variante reste en erreur « aucune section UPN du catalogue ne passe » : le limon **mural** LE2, barre droite sur la corde des nez à travers le tournant, demande 340 mm d'âme pour loger les cornières (UPN 260 au plus dans le catalogue), alors que le prédimensionnement indicatif passe dès l'UPN 80. La masse UPN porte donc toujours sur une UPN 260 non validée ; le limon coudé par pièce d'angle soudée est prévu en V1 (QUESTIONS A13). Sur le cas d'acceptation n° 1 en profilés (`j3c-acceptance-01-upn`, poteau 125 mm décalé de 43 mm, soit l'aile de l'UPN 240 + 2 × 20 mm), l'UPN 240 passe (hauteur d'âme et prédimensionnement) sans erreur.
 
 ## 3. Développés DXF exploitables en atelier : limon, tronçons de débillardé, tôle pliée
@@ -75,7 +76,7 @@ Preuves (`packages/exports/src/acceptance-criteria.test.ts`) :
 - « critère d'acceptation n° 3 : DXF de limon acier et de marche en tôle pliée » (exemple `j3b-acceptance-01-tole-pliee`) :
   - limons en plat : DXF R12 relus à ±0,01 mm (contour, perçages, traits), fibre de référence et épaisseur dans INFO ;
   - marches en Z : deux plis de 90° sur le calque PLI en tirets, sens (haut / bas) et angle annotés ;
-  - contremarches : celles des marches en Z sont pliées dans la pièce ; la contremarche d'arrivée (`riser-n`, sous le dernier nez, portée par aucune pièce Z) reste une pièce de base depuis la vague G (arbitrage « bois ou tôle » au ledger §2) ;
+  - contremarches : celles des marches en Z sont pliées dans la pièce ; la contremarche d'arrivée (`riser-n`, sous le dernier nez, portée par aucune pièce Z) est depuis la vague I une tôle pliée en L fixée au chevêtre (décision A11 : développé, ligne de pli, perçages, DXF ; `packages/core/src/structures/folded.test.ts`, `steelFlat.test.ts`), générée quand `treads.risers = "full"` ;
   - longueur de pli = emmarchement − 2 jeux (cote réelle), développé en fibre neutre ;
   - développés présents dans le PDF.
 - « critère d'acceptation n° 3 : chaque tronçon d'un limon débillardé soudé » (exemple `j5b-debillarde-soude`, **ajouté par cette intégration**) :
@@ -157,3 +158,14 @@ Depuis la racine, le 2026-09-29, sans commit. Aucun critère ne change d'état ;
 - `BASE_PATH=/blondel/ pnpm --filter @blondel/web build` : OK.
 - `pnpm e2e` : 28 sur 28 verts, sous le budget de 200 ms par tâche, dont `typologies.spec.ts` (S / Z, curseurs M2 / M6) et les variantes de l'assistant (`assistant.spec.ts`) ; le parcours « préréglages et structures » de `long-tasks.spec.ts` inclut le préréglage S.
 - Exemples : les 16 `examples/*.blondel.json` se lisent, se construisent sans erreur et s'exportent (`packages/exports/src/examples.test.ts`).
+
+## Vérifications de l'intégration (vague I)
+
+Depuis la racine, le 2026-09-29, sans commit. Aucun critère ne change d'état ; les réserves du critère n° 2 (assistant et `steel-curved`, saisie du barème) et le détail du critère n° 3 (contremarche d'arrivée en L) sont mis à jour ci-dessus.
+
+- `pnpm install` : OK.
+- `pnpm typecheck` : vert (paquets, application web, tests e2e).
+- `pnpm test` : vert, 178 fichiers (1 ignoré), 2 209 tests passés et 3 ignorés.
+- `pnpm format:check` : vert.
+- `BASE_PATH=/blondel/ pnpm --filter @blondel/web build` : OK.
+- `pnpm e2e` : 44 sur 44 verts, sous le budget de 200 ms par tâche, après correction de la fenêtre « Profil d'atelier » (contenu monté seulement ouverte : son `.notice` caché faisait échouer 5 specs par violation du mode strict).

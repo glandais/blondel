@@ -13,13 +13,15 @@
  *   élargi attendu, décision A13) → poser le poteau des profilés ;
  * - **garde-corps en conflit avec la dalle haute** (`GC_CONFLIT_DALLE`, trémie rectangulaire au
  *   nu de l'escalier) → élargir la trémie le long des bords de l'escalier ;
- * - **jour trop étroit pour un garde-corps de jour** (erreur des garde-corps) → régler le côté
- *   jour des garde-corps sur « mur ».
+ * - **jour plus étroit que la sphère T1** (pas de garde-corps de jour, remarque des garde-corps,
+ *   décision A10) → régler le côté jour des garde-corps sur « mur », **seulement si le jour est
+ *   fermé** : l'escalier ne le sait pas, la correction est libellée comme telle et n'est pas
+ *   proposée quand l'utilisateur a déclaré le côté jour « vide » (`guards.flight.inner`).
  */
 import type { Model } from "../model/derived.js";
 import { ProjectSchema, type Project, type ProjectInput } from "../model/project.js";
 import { GuardsSpecSchema } from "../guards/spec.js";
-import { NARROW_JOUR_ERROR_PREFIX } from "../guards/jour.js";
+import { NARROW_JOUR_PREFIX } from "../guards/jour.js";
 import { sectionWidth } from "../guards/parts.js";
 import {
   deepMerge,
@@ -69,7 +71,7 @@ const CLEARANCE_GRID = 10;
  */
 export function suggestFixes(
   project: Project,
-  model?: Pick<Model, "layout" | "compliance" | "errors"> & Partial<Pick<Model, "parts">>,
+  model?: Pick<Model, "layout" | "compliance" | "errors"> & Partial<Pick<Model, "parts" | "notes">>,
 ): FixSuggestion[] {
   const out: FixSuggestion[] = [];
 
@@ -152,14 +154,15 @@ export function suggestFixes(
     }
   }
 
-  // 3. Jour trop étroit pour un garde-corps de jour.
-  const narrow = model.errors.some((e) => e.startsWith(NARROW_JOUR_ERROR_PREFIX));
-  if (narrow && project.guards && project.guards.flight.inner !== "wall") {
+  // 3. Jour plus étroit que la sphère T1 (pas de garde-corps de jour, décision A10) : côté jour
+  // « mur » seulement si le jour est fermé. Côté jour déclaré « vide » : jour ouvert, rien à proposer.
+  const narrow = (model.notes ?? []).some((n) => n.startsWith(NARROW_JOUR_PREFIX));
+  if (narrow && project.guards && project.guards.flight.inner === "auto") {
     out.push({
       id: "jour-wall",
-      label: "Régler le côté jour des garde-corps sur « mur »",
+      label: "Jour fermé : régler le côté jour des garde-corps sur « mur »",
       reason:
-        "Le jour est plus étroit que la sphère T1 : aucun garde-corps de jour n'est construit. À retenir seulement si le jour est fermé (sinon, élargir le jour).",
+        "Le jour est plus étroit que la sphère T1 : pas de garde-corps de jour (protection contre les chutes signalée en conseil). À retenir seulement si le jour est fermé (cloison, remplissage) ; jour ouvert : laisser tel quel ou élargir le jour.",
       patch: { guards: { flight: { inner: "wall" } } },
     });
   }

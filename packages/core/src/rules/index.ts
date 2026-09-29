@@ -15,6 +15,8 @@ export {
 } from "./table.js";
 export {
   ALWAYS_CONTEXT,
+  DEDUCED_ONLY_CONTEXTS,
+  HELICAL_COLUMN_CONTEXT,
   SHAPE_CONTEXTS,
   guardRailRegime,
   isRuleApplicable,
@@ -46,3 +48,4 @@ export {
   type GuardHeightStep,
 } from "./evaluators/guards.js";
 export type { ComplianceInput, EvaluatorContext, Finding, RuleEvaluator } from "./types.js";
+export { RULE_FAMILIES, RULE_FAMILY_LABELS, ruleFamily, type RuleFamily } from "./family.js";

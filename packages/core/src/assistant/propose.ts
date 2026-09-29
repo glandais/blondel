@@ -54,7 +54,9 @@ import { fmt } from "../rules/check.js";
 import { SteppingError } from "../stepping/errors.js";
 import { placeNosings } from "../stepping/positions.js";
 import { computeRises } from "../stepping/rises.js";
+import { rollableJourRadius } from "../structures/compare.js";
 import { getStructure } from "../structures/index.js";
+import { isDebillardeStructure } from "../stepping/stepping.js";
 import {
   assistantContexts,
   enumerationBounds,
@@ -80,6 +82,7 @@ import {
   flightLegs,
   flightsLayoutSpec,
   maxFirstGoings,
+  typologyGeometry,
   turnPosition,
   walklineOffsetFor,
   withLayout,
@@ -104,7 +107,12 @@ import {
  * Plugins dont les limons sont **hors** de l'emmarchement utile, côté jour et côté extérieur,
  * d'épaisseur `thickness` (CHALLENGE A3 ; en-têtes de `woodHoused.ts` et `steelFlat.ts`).
  */
-export const LATERAL_STRINGER_STRUCTURES: readonly string[] = ["wood-housed", "steel-flat"];
+export const LATERAL_STRINGER_STRUCTURES: readonly string[] = [
+  "wood-housed",
+  "steel-flat",
+  // Limon de jour débillardé et limons muraux en plat, hors emprise utile (`steelCurved.ts`).
+  "steel-curved",
+];
 
 /** Structures admises pour l'hélicoïdal (plugin dédié ou aucune). */
 const HELICAL_STRUCTURES: readonly string[] = ["none", "helical-core"];
@@ -404,6 +412,37 @@ export function proposeDesigns(input: AssistantInput): AssistantResult {
   const inner: InnerCorner =
     expected ??
     (NEWEL_REQUIRED_STRUCTURES.includes(intent.kind) ? DEFAULT_NEWEL : { kind: "sharp" });
+  // Jours en arc (décision A17) : énumérés pour les tournants balancés quand la structure visée
+  // les accepte — aucune (préréglages) ou limon débillardé, qui les exige (G7). Rayon : rayon
+  // de jour roulable du débillardé (rayon intérieur mini de la rouleuse du profil d'atelier +
+  // épaisseur du limon, arrondi aux 10 mm), celui de `steel-curved` par défaut sans structure ;
+  // mêmes jours que ceux du comparateur (`adaptJour`).
+  const debillarde = isDebillardeStructure(intent.kind);
+  const arcKind = debillarde ? intent.kind : "steel-curved";
+  const arcRadius =
+    debillarde || intent.kind === "none"
+      ? rollableJourRadius(template.workshop, arcKind, debillarde ? intent.params : {})
+      : null;
+  interface JourChoice {
+    readonly inner: InnerCorner;
+    /** Rayon du jour en arc (0 : jour vif ou poteau). */
+    readonly radius: Mm;
+    /** Suffixe d'identifiant et de libellé. */
+    readonly tag: string;
+    readonly label: string;
+  }
+  const baseJour: JourChoice = { inner, radius: 0, tag: "", label: "" };
+  const joursFor = (typology: FlightsTypology): readonly JourChoice[] => {
+    const geo = typologyGeometry(typology);
+    if (arcRadius === null || geo.turns === 0 || geo.mode === "landing") return [baseJour];
+    const arc: JourChoice = {
+      inner: { kind: "arc", radius: arcRadius },
+      radius: arcRadius,
+      tag: `-arc${arcRadius}`,
+      label: `, jour en arc R ${arcRadius} mm`,
+    };
+    return debillarde ? [arc] : [baseJour, arc];
+  };
   const finalize = (p: Project): Project =>
     intent.kind === "steel-profile" && !expected
       ? applyStructureChoice(p, intent.kind, p.stair.structure.params).project
@@ -514,7 +553,7 @@ export function proposeDesigns(input: AssistantInput): AssistantResult {
   // `enumerationGroupFactor` parts égales du temps restant, pour que les derniers ne soient pas
   // privés ; un groupe rapide laisse son temps aux suivants.
   const groupCount = flightTypologies.reduce(
-    (acc, t) => acc + (t === "straight" ? 1 : directions.length),
+    (acc, t) => acc + (t === "straight" ? 1 : directions.length) * joursFor(t).length,
     0,
   );
   const enumerationDeadline = t0 + limits.timeBudgetMs * ASSISTANT_DEFAULTS.enumerationShare;
@@ -525,204 +564,219 @@ export function proposeDesigns(input: AssistantInput): AssistantResult {
     const bounds = boundsFor(shapeContextsOf(typology));
     const ns = riserCountRange(site.floorToFloor, bounds);
     for (const direction of dirs) {
-      const start = now();
-      const groupDeadline = Math.min(
-        enumerationDeadline,
-        start +
-          (Math.max(0, enumerationDeadline - start) * ASSISTANT_DEFAULTS.enumerationGroupFactor) /
-            groupsLeft,
-      );
-      groupsLeft--;
-      group: for (const n of ns) {
-        const rise = site.floorToFloor / n;
-        const goings = goingGrid(rise, bounds);
-        if (!goings) {
-          reject(
-            typology,
-            direction,
-            "bounds",
-            `n = ${n} (h = ${fmt(rise)} mm) : aucun giron entre le minimum et le module maximal.`,
-          );
-          continue;
-        }
-        let rises: ReturnType<typeof computeRises> | null = null;
-        widths: for (const width of widthGrid(bounds)) {
-          const grossWidth = width + intent.inner + intent.outer;
-          let df: Mm;
-          try {
-            df = walklineOffsetFor(template, width);
-          } catch (e) {
-            if (!(e instanceof LayoutError)) throw e;
-            reject(typology, direction, "layout", `E = ${width} mm : ${e.message}`);
+      for (const jour of joursFor(typology)) {
+        const start = now();
+        const groupDeadline = Math.min(
+          enumerationDeadline,
+          start +
+            (Math.max(0, enumerationDeadline - start) * ASSISTANT_DEFAULTS.enumerationGroupFactor) /
+              groupsLeft,
+        );
+        groupsLeft--;
+        group: for (const n of ns) {
+          const rise = site.floorToFloor / n;
+          const goings = goingGrid(rise, bounds);
+          if (!goings) {
+            reject(
+              typology,
+              direction,
+              "bounds",
+              `n = ${n} (h = ${fmt(rise)} mm) : aucun giron entre le minimum et le module maximal.`,
+            );
             continue;
           }
-          const clearance = limits.arrivalClearance ?? width;
-          const maxA = maxFirstGoings({ typology, direction, firstGoings: 0 }, n);
-          for (let a = typology === "quarter-landing" ? 1 : 0; a <= maxA; a++) {
-            if (stop()) {
-              stopped = true;
-              break enumeration;
-            }
-            if (now() > groupDeadline) {
-              truncated = true;
-              partialGroups.push(groupLabel(typology, direction));
-              break group;
-            }
-            const shape: FlightsShape = { typology, direction, firstGoings: a };
-            // Girons du visé au minimal pour lesquels la position du tournant existe : un
-            // préfixe de la liste décroissante (plus le giron est petit, moins il y a de place).
-            const feasible = goings.filter((g) => flightLegs(shape, width, n, g, df) !== null);
-            if (feasible.length === 0) break; // positions suivantes : encore moins de place
-            const prepare = (going: number): Prepared | Failure => {
-              const legs = flightLegs(shape, width, n, going, df)!;
-              const spec = flightsLayoutSpec(shape, width, legs, inner);
-              const local = withLayout(template, spec, n, noOpeningPlacement);
-              let layout: Layout;
-              let positions: ReturnType<typeof placeNosings>;
-              try {
-                layout = computeLayout(local);
-                rises ??= computeRises(local);
-                positions = placeNosings(local, layout, n);
-              } catch (e) {
-                if (e instanceof LayoutError || e instanceof SteppingError) {
-                  return { reason: "layout", example: `n = ${n}, E = ${width} mm : ${e.message}` };
-                }
-                throw e;
-              }
-              const frame = arrivalFrame(spec, layout.walklineOffset, intent.inner, intent.outer);
-              let placements: Placement[] = [noOpeningPlacement];
-              if (opening) {
-                const res = arrivalPlacements(frame, opening, site.walls, tol);
-                placements = res.placements;
-                if (placements.length === 0) {
-                  const m = res.misfit;
-                  return {
-                    reason: "placement",
-                    example: m
-                      ? `E = ${width} mm : largeur hors tout ${fmt(m.needed, 0)} mm pour ${fmt(m.available, 0)} mm au plus long côté de la trémie.`
-                      : `E = ${width} mm : aucun côté de trémie exploitable.`,
-                  };
-                }
-              }
-              // Dégagement au-delà de l'arrivée (largeur hors tout × `clearance`).
-              const beyond = V.scale(frame.dir, clearance);
-              return {
-                spec,
-                layout,
-                placements,
-                arrival: [
-                  frame.grossInner,
-                  frame.grossOuter,
-                  V.add(frame.grossOuter, beyond),
-                  V.add(frame.grossInner, beyond),
-                ],
-                pieces: grossPieces(spec, intent.inner, intent.outer),
-                profile: { s: positions.s, z: rises.z, landings: positions.landingTreads },
-              };
-            };
-            /** Murs et échappée exacte sur Γ d'un calage : échappée (ou null) ou échec. */
-            const check = (
-              st: Prepared,
-              pl: Placement,
-              going: number,
-            ): { headroom: number | null } | Failure => {
-              enumerated++;
-              const world = st.pieces.map((poly) => poly.map((p) => toWorld(p, pl)));
-              const wall = wallCollision(world, site.walls, tol);
-              if (wall) {
-                return {
-                  reason: "walls",
-                  example: `n = ${n}, g = ${going} mm, E = ${width} mm, ${pl.fit} : l'emprise hors tout heurte le mur ${wall.id}.`,
-                };
-              }
-              const exit = wallCollision([st.arrival.map((p) => toWorld(p, pl))], site.walls, tol);
-              if (exit) {
-                return {
-                  reason: "walls",
-                  example: `n = ${n}, g = ${going} mm, E = ${width} mm, ${pl.fit} : l'arrivée débouche sur le mur ${exit.id} (dégagement de ${fmt(clearance, 0)} mm exigé).`,
-                };
-              }
-              if (!opening || !bounds.headroomMin) return { headroom: null };
-              const walk = translateCurve(
-                rotateCurve(st.layout.walkline, (pl.rotation * Math.PI) / 180),
-                pl.origin,
-              );
-              const hr = headroomOnWalkline(
-                walk,
-                st.profile,
-                ceiling,
-                coveredIntervals(walk, opening),
-              );
-              if (hr && hr.min < bounds.headroomMin.value - 1e-6) {
-                return {
-                  reason: "headroom",
-                  example: `n = ${n}, g = ${going} mm, E = ${width} mm, ${pl.fit} : échappée ${fmt(hr.min, 0)} mm < ${fmt(bounds.headroomMin.value, 0)} mm (${bounds.headroomMin.ruleId}).`,
-                };
-              }
-              return { headroom: hr?.min ?? null };
-            };
-            // 1. Crible au plus petit giron : l'échappée et l'emprise y sont les plus
-            //    favorables (escalier le plus court) ; un calage qui y échoue est éliminé.
-            const gFloor = feasible[feasible.length - 1]!;
-            const base = prepare(gFloor);
-            if ("reason" in base) {
-              reject(typology, direction, base.reason, base.example);
-              if (base.reason === "placement") break widths; // ne dépend que de E
+          let rises: ReturnType<typeof computeRises> | null = null;
+          widths: for (const width of widthGrid(bounds)) {
+            const grossWidth = width + intent.inner + intent.outer;
+            let df: Mm;
+            try {
+              df = walklineOffsetFor(template, width);
+            } catch (e) {
+              if (!(e instanceof LayoutError)) throw e;
+              reject(typology, direction, "layout", `E = ${width} mm : ${e.message}`);
               continue;
             }
-            const alive = new Map<string, { headroom: number | null }>();
-            for (const pl of base.placements) {
-              const r = check(base, pl, gFloor);
-              if ("reason" in r) reject(typology, direction, r.reason, r.example);
-              else alive.set(pl.key, r);
-            }
-            // 2. Pour chaque calage retenu, le plus grand giron (du visé vers le minimal) qui passe.
-            for (const going of feasible) {
-              if (alive.size === 0) break;
-              const st = going === gFloor ? base : prepare(going);
-              if ("reason" in st) continue;
-              const pos = turnPosition(shape, width, n, going, df);
-              for (const pl of st.placements) {
-                const floorResult = alive.get(pl.key);
-                if (!floorResult) continue;
-                const r = going === gFloor ? floorResult : check(st, pl, going);
-                if ("reason" in r) continue;
-                alive.delete(pl.key);
-                const headroom = r.headroom;
-                const preScore =
-                  weights.blondel * Math.abs(2 * rise + going - bounds.blondelTarget) +
-                  (headroom !== null && bounds.headroomRecommended !== null
-                    ? weights.headroom * Math.max(0, bounds.headroomRecommended - headroom)
-                    : 0) +
-                  (headroom !== null && bounds.headroomMin
-                    ? weights.headroomMargin *
-                      Math.max(
-                        0,
-                        limits.headroomMarginTarget - (headroom - bounds.headroomMin.value),
-                      )
-                    : 0);
-                const placement = { origin: pl.origin, rotation: pl.rotation };
-                const spec = st.spec;
-                const label = `${TYPOLOGY_LABELS[typology]}${dirLabel(direction)}${pos ? ` (tournant ${pos})` : ""} — ${n} hauteurs de ${fmt(rise)} mm, giron ${going} mm, E ${width} mm`;
-                const signature = `${typology}-${direction ?? "none"}-a${a}-n${n}-E${width}-g${going}`;
-                survivors.push({
-                  id: `${signature}-${pl.key}`,
-                  signature,
-                  // Groupe de construction : une forme (typologie × position) et un sens.
-                  group: `${typology}|${direction}|${pos}`,
-                  typology,
-                  direction,
-                  turnPosition: pos,
-                  label,
-                  preScore,
-                  grossWidth,
-                  fit: pl.fit,
-                  make: () =>
-                    finalize({
-                      ...withLayout(template, spec, n, placement),
-                      name: `Assistant — ${label}`,
-                    }),
-                });
+            const clearance = limits.arrivalClearance ?? width;
+            const maxA = maxFirstGoings({ typology, direction, firstGoings: 0 }, n);
+            for (let a = typology === "quarter-landing" ? 1 : 0; a <= maxA; a++) {
+              if (stop()) {
+                stopped = true;
+                break enumeration;
+              }
+              if (now() > groupDeadline) {
+                truncated = true;
+                partialGroups.push(`${groupLabel(typology, direction)}${jour.label}`);
+                break group;
+              }
+              const shape: FlightsShape = {
+                typology,
+                direction,
+                firstGoings: a,
+                ...(jour.radius > 0 ? { jourRadius: jour.radius } : {}),
+              };
+              // Girons du visé au minimal pour lesquels la position du tournant existe : un
+              // préfixe de la liste décroissante (plus le giron est petit, moins il y a de place).
+              const feasible = goings.filter((g) => flightLegs(shape, width, n, g, df) !== null);
+              if (feasible.length === 0) break; // positions suivantes : encore moins de place
+              const prepare = (going: number): Prepared | Failure => {
+                const legs = flightLegs(shape, width, n, going, df)!;
+                const spec = flightsLayoutSpec(shape, width, legs, jour.inner);
+                const local = withLayout(template, spec, n, noOpeningPlacement);
+                let layout: Layout;
+                let positions: ReturnType<typeof placeNosings>;
+                try {
+                  layout = computeLayout(local);
+                  rises ??= computeRises(local);
+                  positions = placeNosings(local, layout, n);
+                } catch (e) {
+                  if (e instanceof LayoutError || e instanceof SteppingError) {
+                    return {
+                      reason: "layout",
+                      example: `n = ${n}, E = ${width} mm : ${e.message}`,
+                    };
+                  }
+                  throw e;
+                }
+                const frame = arrivalFrame(spec, layout.walklineOffset, intent.inner, intent.outer);
+                let placements: Placement[] = [noOpeningPlacement];
+                if (opening) {
+                  const res = arrivalPlacements(frame, opening, site.walls, tol);
+                  placements = res.placements;
+                  if (placements.length === 0) {
+                    const m = res.misfit;
+                    return {
+                      reason: "placement",
+                      example: m
+                        ? `E = ${width} mm : largeur hors tout ${fmt(m.needed, 0)} mm pour ${fmt(m.available, 0)} mm au plus long côté de la trémie.`
+                        : `E = ${width} mm : aucun côté de trémie exploitable.`,
+                    };
+                  }
+                }
+                // Dégagement au-delà de l'arrivée (largeur hors tout × `clearance`).
+                const beyond = V.scale(frame.dir, clearance);
+                return {
+                  spec,
+                  layout,
+                  placements,
+                  arrival: [
+                    frame.grossInner,
+                    frame.grossOuter,
+                    V.add(frame.grossOuter, beyond),
+                    V.add(frame.grossInner, beyond),
+                  ],
+                  pieces: grossPieces(spec, intent.inner, intent.outer),
+                  profile: { s: positions.s, z: rises.z, landings: positions.landingTreads },
+                };
+              };
+              /** Murs et échappée exacte sur Γ d'un calage : échappée (ou null) ou échec. */
+              const check = (
+                st: Prepared,
+                pl: Placement,
+                going: number,
+              ): { headroom: number | null } | Failure => {
+                enumerated++;
+                const world = st.pieces.map((poly) => poly.map((p) => toWorld(p, pl)));
+                const wall = wallCollision(world, site.walls, tol);
+                if (wall) {
+                  return {
+                    reason: "walls",
+                    example: `n = ${n}, g = ${going} mm, E = ${width} mm, ${pl.fit} : l'emprise hors tout heurte le mur ${wall.id}.`,
+                  };
+                }
+                const exit = wallCollision(
+                  [st.arrival.map((p) => toWorld(p, pl))],
+                  site.walls,
+                  tol,
+                );
+                if (exit) {
+                  return {
+                    reason: "walls",
+                    example: `n = ${n}, g = ${going} mm, E = ${width} mm, ${pl.fit} : l'arrivée débouche sur le mur ${exit.id} (dégagement de ${fmt(clearance, 0)} mm exigé).`,
+                  };
+                }
+                if (!opening || !bounds.headroomMin) return { headroom: null };
+                const walk = translateCurve(
+                  rotateCurve(st.layout.walkline, (pl.rotation * Math.PI) / 180),
+                  pl.origin,
+                );
+                const hr = headroomOnWalkline(
+                  walk,
+                  st.profile,
+                  ceiling,
+                  coveredIntervals(walk, opening),
+                );
+                if (hr && hr.min < bounds.headroomMin.value - 1e-6) {
+                  return {
+                    reason: "headroom",
+                    example: `n = ${n}, g = ${going} mm, E = ${width} mm, ${pl.fit} : échappée ${fmt(hr.min, 0)} mm < ${fmt(bounds.headroomMin.value, 0)} mm (${bounds.headroomMin.ruleId}).`,
+                  };
+                }
+                return { headroom: hr?.min ?? null };
+              };
+              // 1. Crible au plus petit giron : l'échappée et l'emprise y sont les plus
+              //    favorables (escalier le plus court) ; un calage qui y échoue est éliminé.
+              const gFloor = feasible[feasible.length - 1]!;
+              const base = prepare(gFloor);
+              if ("reason" in base) {
+                reject(typology, direction, base.reason, base.example);
+                if (base.reason === "placement") break widths; // ne dépend que de E
+                continue;
+              }
+              const alive = new Map<string, { headroom: number | null }>();
+              for (const pl of base.placements) {
+                const r = check(base, pl, gFloor);
+                if ("reason" in r) reject(typology, direction, r.reason, r.example);
+                else alive.set(pl.key, r);
+              }
+              // 2. Pour chaque calage retenu, le plus grand giron (du visé vers le minimal) qui passe.
+              for (const going of feasible) {
+                if (alive.size === 0) break;
+                const st = going === gFloor ? base : prepare(going);
+                if ("reason" in st) continue;
+                const pos = turnPosition(shape, width, n, going, df);
+                for (const pl of st.placements) {
+                  const floorResult = alive.get(pl.key);
+                  if (!floorResult) continue;
+                  const r = going === gFloor ? floorResult : check(st, pl, going);
+                  if ("reason" in r) continue;
+                  alive.delete(pl.key);
+                  const headroom = r.headroom;
+                  const preScore =
+                    weights.blondel * Math.abs(2 * rise + going - bounds.blondelTarget) +
+                    (headroom !== null && bounds.headroomRecommended !== null
+                      ? weights.headroom * Math.max(0, bounds.headroomRecommended - headroom)
+                      : 0) +
+                    (headroom !== null && bounds.headroomMin
+                      ? weights.headroomMargin *
+                        Math.max(
+                          0,
+                          limits.headroomMarginTarget - (headroom - bounds.headroomMin.value),
+                        )
+                      : 0);
+                  const placement = { origin: pl.origin, rotation: pl.rotation };
+                  const spec = st.spec;
+                  const label = `${TYPOLOGY_LABELS[typology]}${dirLabel(direction)}${pos ? ` (tournant ${pos})` : ""} — ${n} hauteurs de ${fmt(rise)} mm, giron ${going} mm, E ${width} mm${jour.label}`;
+                  const signature = `${typology}-${direction ?? "none"}${jour.tag}-a${a}-n${n}-E${width}-g${going}`;
+                  survivors.push({
+                    id: `${signature}-${pl.key}`,
+                    signature,
+                    // Groupe de construction : une forme (typologie × position), un sens et un
+                    // jour (les jours en arc ne concurrencent pas les jours vifs de même forme).
+                    group: `${typology}|${direction}|${pos}${jour.tag}`,
+                    typology,
+                    direction,
+                    turnPosition: pos,
+                    label,
+                    preScore,
+                    grossWidth,
+                    fit: pl.fit,
+                    make: () =>
+                      finalize({
+                        ...withLayout(template, spec, n, placement),
+                        name: `Assistant — ${label}`,
+                      }),
+                  });
+                }
               }
             }
           }

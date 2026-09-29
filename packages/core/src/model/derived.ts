@@ -92,7 +92,8 @@ export interface Layout {
   /** Ligne de foulée de conception (équipartition des girons). */
   readonly walkline: Curve2;
   /**
-   * Distance ligne de foulée ↔ bord du jour (d_f). Escalier en S ou en Z : distance au jour du
+   * Distance ligne de foulée ↔ bord du jour (d_f) ; escalier droit : ↔ bord `walklineSide`.
+   * Escalier en S ou en Z : distance au jour du
    * tournant voisin (côté `TurnZone.collarSide`), égale de part et d'autre ; voir
    * `walklineTransitions` pour la partie où elle change de côté.
    */
@@ -106,6 +107,12 @@ export interface Layout {
    * côté sur toute la montée ; le jour d'un tournant de sens opposé est sur `outer`).
    */
   readonly innerSide: "left" | "right";
+  /**
+   * Escalier droit seulement : bord depuis lequel `walklineOffset` est mesurée (décision A16,
+   * choix de l'utilisateur ou côté de la main courante principale). `innerSide` n'en dépend
+   * pas. Absent (tournants, hélicoïdal) : d_f est mesurée depuis le jour.
+   */
+  readonly walklineSide?: "left" | "right";
   /**
    * Transitions de la ligne de foulée (escalier en S ou en Z, d_f ≠ E/2). Ajout rétrocompatible :
    * absent ou vide, Γ reste à `walklineOffset` du bord `inner` hors tournants de sens opposé.
@@ -368,6 +375,11 @@ export interface RuleResult {
   /** Raison d'une rétrogradation (profil souple, surcharge avec justification). */
   readonly downgradeReason?: string;
   readonly message: string;
+  /**
+   * Justification saisie par l'utilisateur qui lève un contrôle (note de calcul, avis
+   * technique : porte-à-faux hélicoïdal, décision A12), reprise dans le dossier. Absente : aucune.
+   */
+  readonly justification?: string;
 }
 
 export interface ComplianceReport {
@@ -428,8 +440,15 @@ export interface Model {
    * plafond au-dessus de la ligne de foulée, ou modèle partiel.
    */
   readonly headroom?: { readonly min: Mm; readonly at: Vec3 };
-  /** Échappée sur la largeur des marches (avertissement, CHALLENGE G4). */
+  /** Échappée sur la largeur des marches (règle ECHAPPEE_LARGEUR, CHALLENGE G4). */
   readonly headroomWidth?: HeadroomOnWidth;
+  /**
+   * Échappée non limitée par la dalle haute (trémie couvrante, QUESTIONS A7) : `walkline` si
+   * aucun point de la ligne de foulée n'est sous la dalle (`headroom` absent), `width` si aucun
+   * nez de marche ne l'est (`headroomWidth` absent). Absent : sans trémie ni plafond (échappée
+   * non calculée) ou échappée limitée sur les deux grandeurs. Lu tel quel par l'interface.
+   */
+  readonly headroomUnlimited?: { readonly walkline: boolean; readonly width: boolean };
   /**
    * Classe d'exécution EN 1090-2 déduite par la structure métal (`StructureOutput.executionClass`,
    * SPEC §2.4). Absent : structure sans pièce métal ou pipeline qui ne la reporte pas.

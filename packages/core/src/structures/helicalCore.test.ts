@@ -17,6 +17,7 @@ import {
   HelicalCoreParamsSchema,
   withHelicalCore,
 } from "./helicalCore.js";
+import { CheckCollector } from "./checks.js";
 import { minAreaRect } from "./geom.js";
 import { getStructure } from "./index.js";
 
@@ -123,6 +124,8 @@ describe("plugin helical-core", () => {
     const c = output.checks.find((r) => r.ruleId === "HELICOIDAL_PORTE_A_FAUX")!;
     expect(c.status).toBe("ok");
     expect(c.message).toContain("NC-042");
+    // Justification portée par le résultat (reprise dans le dossier PDF, décision A12).
+    expect(c.justification).toBe("Note de calcul NC-042");
   });
 
   it("main courante : hélice à la hauteur réglée au-dessus de la ligne des nez", () => {
@@ -325,6 +328,51 @@ describe("plugin helical-core", () => {
         { numRuns: 30 },
       );
     });
+  });
+
+  it("marches en tôle (décision A11) : contremarches bois retirées, VIDE_ENTRE_MARCHES évalué", () => {
+    const project = helical();
+    expect(project.stair.treads.risers).toBe("full");
+    // Marches bois : contremarches de base conservées, règle sans objet.
+    const wood = buildModel(withHelicalCore(project), { memo: false });
+    expect(wood.parts.some((p) => p.category === "riser")).toBe(true);
+    const woodGap = wood.compliance.results.filter((r) => r.ruleId === "VIDE_ENTRE_MARCHES");
+    expect(woodGap.every((r) => r.status === "ok" && r.measured === undefined)).toBe(true);
+    // Marches en tôle : plus aucune contremarche, vide h − t_tôle contrôlé marche par marche.
+    const t = 8;
+    const m = buildModel(
+      withHelicalCore(project, { treads: { material: "steel", plateThickness: t } }),
+      { memo: false },
+    );
+    expect(m.errors).toEqual([]);
+    expect(m.parts.filter((p) => p.category === "riser")).toEqual([]);
+    const gaps = m.compliance.results.filter((r) => r.ruleId === "VIDE_ENTRE_MARCHES");
+    expect(gaps).toHaveLength(m.stepping.rises.length - 1);
+    for (const g of gaps) {
+      expect(g.status).toBe("violation");
+      expect(g.measured).toBeCloseTo(m.stepping.rises[1]! - t, 6);
+      expect(g.message).toMatch(/^Marches en tôle de 8 mm sans contremarche/);
+    }
+    // Débord de nez : sans objet sans contremarche (évalué par le plugin, pas par le moteur).
+    const nose = m.compliance.results.filter((r) => r.ruleId.startsWith("DEBORD_NEZ_"));
+    expect(nose.length).toBeGreaterThan(0);
+    for (const r of nose) expect(r.message).toMatch(/Sans objet/);
+    expect((m.notes ?? []).some((n) => /contremarche\(s\) bois de base supprimée/.test(n))).toBe(
+      true,
+    );
+  });
+
+  it("relecture : contextes des contrôles du plugin = ceux du moteur (helicoidal_fut)", () => {
+    // Le plugin réévalue des règles de rules.yaml (décision A11) : ses contextes actifs doivent
+    // être ceux du moteur, y compris le contexte déduit du fût central (QUESTIONS A5).
+    const project = withHelicalCore(helical());
+    expect(project.stair.layout.kind === "helical" && project.stair.layout.core.kind).toBe(
+      "column",
+    );
+    const { stepping } = context(project);
+    const checks = new CheckCollector(project, stepping);
+    expect(checks.activeContexts.has("helicoidal_fut")).toBe(true);
+    expect(checks.yamlRule("G_COLLET_MIN")).toBeNull();
   });
 
   it("pipeline : modèle complet, erreurs du plugin reportées", () => {

@@ -24,6 +24,11 @@ export const RuleDefSchema = z.object({
   recommande: z.number().nullable(),
   unite: z.string().nullable(),
   contexte: z.array(z.string()).min(1),
+  /**
+   * Contextes qui écartent la règle même si ses contextes sont actifs (ex. `G_COLLET_MIN` hors
+   * hélicoïdal à fût central, QUESTIONS A5). Absent : aucune exclusion.
+   */
+  contexte_exclu: z.array(z.string()).optional(),
   nature: z.enum(["reglementaire", "normatif", "metier"]),
   source: z.string(),
   /** Valeur issue d'une norme payante non lue (profil souple : bloquant → avertissement). */

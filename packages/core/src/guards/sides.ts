@@ -236,12 +236,16 @@ export function sideIntervals(
   return out;
 }
 
-/** Hauteur de chute maximale sur les portions vides (nez situés sur une portion vide). */
+/**
+ * Hauteur de chute maximale sur les portions vides (nez situés sur une portion vide) ;
+ * `include` : filtre facultatif sur le point du bord au droit du nez (emprise d'un jour étroit).
+ */
 export function sideFall(
   edge: SideEdge,
   intervals: readonly SideInterval[],
   stepping: Stepping,
   lowerFloor: Mm,
+  include?: (p: Vec2) => boolean,
 ): { maxFall: Mm; at?: Vec3 } {
   let maxFall = 0;
   let at: Vec3 | undefined;
@@ -251,10 +255,11 @@ export function sideFall(
       (iv) => iv.kind === "void" && u >= iv.from - 1e-6 && u <= iv.to + 1e-6,
     );
     if (!inVoid) return;
+    const p = edge.side === "inner" ? n.q : n.r;
+    if (include && !include(p)) return;
     const fall = n.z - lowerFloor;
     if (fall > maxFall) {
       maxFall = fall;
-      const p = edge.side === "inner" ? n.q : n.r;
       at = { x: p.x, y: p.y, z: n.z };
     }
   });

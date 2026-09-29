@@ -107,5 +107,22 @@ describe("exports du worker : glTF et options du dossier PDF", () => {
     await runner.pdf({ type: "pdf", project: createProject("straight") });
     expect(seen[1]).not.toHaveProperty("pages");
     expect(seen[1]).not.toHaveProperty("format");
+    expect(seen[1]).not.toHaveProperty("templateFamilies");
+  });
+
+  it("PDF : familles de gabarits transmises à l'export (QUESTIONS A20)", async () => {
+    const seen: unknown[] = [];
+    const runner = createJobRunner({
+      loadPdf: async () => (_m, o) => {
+        seen.push(o);
+        return pdfBytes;
+      },
+    });
+    await runner.pdf({
+      type: "pdf",
+      project: createProject("straight"),
+      options: { templateFamilies: ["treads"] },
+    });
+    expect(seen[0]).toMatchObject({ templateFamilies: ["treads"] });
   });
 });

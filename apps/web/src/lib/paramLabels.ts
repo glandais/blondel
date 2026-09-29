@@ -140,6 +140,25 @@ const COMMON: Readonly<Record<string, FieldText>> = {
   "folded.rearHeight": { label: "Hauteur de l'aile arrière (U)", unit: MM },
   "folded.returnLength": { label: "Retour depuis la ligne de nez (Z)", unit: MM },
   "folded.clearance": { label: "Jeu latéral marche / limon", unit: MM },
+  "folded.arrivalRiser.topOffset": {
+    label: "Contremarche d'arrivée (Z) : arête haute sous le sol fini",
+    unit: MM,
+    hint: TO_VALIDATE,
+  },
+  "folded.arrivalRiser.fixings": {
+    label: "Contremarche d'arrivée (Z) : perçages de fixation au chevêtre",
+    hint: TO_VALIDATE,
+  },
+  "folded.arrivalRiser.holeDiameter": {
+    label: "Contremarche d'arrivée (Z) : diamètre de perçage",
+    unit: MM,
+    hint: TO_VALIDATE,
+  },
+  "folded.arrivalRiser.holeEdgeDistance": {
+    label: "Contremarche d'arrivée (Z) : distance des perçages aux bords",
+    unit: MM,
+    hint: TO_VALIDATE,
+  },
   // Prédimensionnement
   "precheck.loadSet": {
     label: "Jeu de charges",
@@ -288,7 +307,7 @@ const BY_KIND: Readonly<Record<string, Readonly<Record<string, FieldText>>>> = {
     },
     cantileverJustification: {
       label: "Justification du porte-à-faux",
-      hint: "Référence de la note de calcul ou de l'avis technique ; vide : avertissement",
+      hint: "Référence de la note de calcul ou de l'avis technique, reprise dans le dossier PDF ; vide : avertissement",
     },
   },
 };

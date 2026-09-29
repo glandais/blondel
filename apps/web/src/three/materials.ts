@@ -7,7 +7,13 @@
  * `color` est la teinte unie (rendu sans texture, repli) ; avec une texture, la couleur du
  * matériau est blanche (la texture porte la teinte) et la rugosité vient de la carte de rugosité.
  */
-import type { Appearance, MaterialId, Severity } from "@blondel/core";
+import {
+  GuardInfillSchema,
+  type Appearance,
+  type MaterialId,
+  type Model,
+  type Severity,
+} from "@blondel/core";
 import type { TextureKind } from "./proceduralTextures.js";
 
 export interface MaterialLook {
@@ -23,7 +29,8 @@ export interface MaterialLook {
   /**
    * Transmission (verre, matériau physique) : 0–1, indice de réfraction, épaisseur. L'épaisseur
    * est en unités **locales** du maillage (three.js la multiplie par l'échelle de l'objet) :
-   * des mm ici, le groupe racine de la vue étant à l'échelle 1/1 000.
+   * des mm ici, le groupe racine de la vue étant à l'échelle 1/1 000. Pour le verre, elle suit
+   * celle du remplissage (`glassThicknessOf`, QUESTIONS A25) ; absente : `GLASS_THICKNESS_MM`.
    */
   readonly transmission?: number;
   readonly ior?: number;
@@ -77,8 +84,7 @@ export const MATERIAL_LOOKS: Readonly<Record<MaterialId, MaterialLook>> = {
     opacity: 0.3,
     transmission: 1,
     ior: 1.5,
-    // 10 mm (présentation, à valider) — unités locales, voir `thickness`.
-    thickness: 10,
+    // Épaisseur : celle du remplissage verre du modèle (`glassThicknessOf`), voir `thickness`.
   },
   concrete: { color: "#a19d97", roughness: 0.9, metalness: 0, texture: "concrete" },
 };
@@ -106,6 +112,30 @@ export const SEVERITY_COLORS: Readonly<Record<Severity, string>> = {
   avertissement: "#c07a00",
   conseil: "#2f6fb3",
 };
+
+/**
+ * Épaisseur de verre par défaut (mm, unités locales des maillages) : défaut du remplissage verre
+ * du cœur (`GuardInfillSchema`, `guards/spec.ts`), lu dans le schéma (aucune valeur recopiée).
+ */
+export const GLASS_THICKNESS_MM: number = (() => {
+  const infill = GuardInfillSchema.parse({ kind: "glass" });
+  // Branche inatteignable (le schéma rend un remplissage verre) : pas de valeur recopiée.
+  return infill.kind === "glass" ? infill.thickness : Number.NaN;
+})();
+
+/**
+ * Épaisseur du verre rendu en 3D (QUESTIONS A25, décision du 2026-09-29) : celle des panneaux
+ * de verre du modèle (débit `stock.thickness`, épaisseur du remplissage `guards.infill`), sinon
+ * `GLASS_THICKNESS_MM`. Lecture seule du modèle, aucun calcul.
+ */
+export function glassThicknessOf(model: Pick<Model, "parts"> | null | undefined): number {
+  for (const p of model?.parts ?? []) {
+    if (p.material !== "glass") continue;
+    const t = p.stock?.thickness;
+    if (t !== undefined && Number.isFinite(t) && t > 0) return t;
+  }
+  return GLASS_THICKNESS_MM;
+}
 
 export function materialLook(id: MaterialId): MaterialLook {
   return MATERIAL_LOOKS[id] ?? { color: "#999999", roughness: 0.7, metalness: 0 };

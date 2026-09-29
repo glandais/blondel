@@ -10,7 +10,11 @@ import { buildModel } from "../pipeline/build.js";
 import { parseProjectText } from "../project/parse.js";
 import { serializeProject } from "../project/serialize.js";
 import { applyStructureChoice } from "../project/structureChoice.js";
+import { curveLength } from "../geom2d/curve.js";
+import { computeLayout } from "../layout/layout.js";
+import { createProject } from "../project/presets.js";
 import { inscribedCircle, proposeDesigns } from "./propose.js";
+import { flightLegs, flightsLayoutSpec, walklineOffsetFor, withLayout } from "./shapes.js";
 import type { AssistantInput, AssistantResult } from "./types.js";
 
 /** Cas d'acceptation n° 1 (prompt 2 §6, CHALLENGE P1) : H 2 700, trémie 2 800 × 900, dalle 200. */
@@ -380,17 +384,21 @@ describe("relecture adverse : régressions", () => {
     expectNoBlocking(r);
   });
 
-  it("structure incompatible (débillardé sur jour vif) : le diagnostic ne met pas en cause la trémie", () => {
+  it("structure incompatible (débillardé sur palier à jour vif) : le diagnostic ne met pas en cause la trémie", () => {
+    // Depuis la décision A17, les tournants balancés sont énumérés en jour en arc pour un
+    // débillardé ; le palier d'angle (jour vif) reste incompatible.
     const r = proposeUntimed({
       site: ACCEPTANCE_SITE,
-      preferences: { structure: { kind: "steel-curved" } },
+      preferences: { structure: { kind: "steel-curved" }, typologies: ["quarter-landing"] },
     });
     expect(r.candidates).toEqual([]);
     expect(r.diagnostics[0]).not.toMatch(/trémie est trop petite/);
     expect(r.diagnostics[0]).toMatch(/structure visée ou par le contrôle de conception/);
     // Motif principal par typologie : l'erreur de génération, pas l'échappée des calages écartés.
     expect(
-      r.diagnostics.some((d) => /^Quart tournant à gauche : rejeté — erreur de génération/.test(d)),
+      r.diagnostics.some((d) =>
+        /^Quart tournant avec palier à gauche : rejeté — erreur de génération/.test(d),
+      ),
     ).toBe(true);
   });
 
@@ -535,5 +543,77 @@ describe("diversité des propositions (constat en ligne : H 2 700, trémie 1 100
     expect(r.diagnostics[0]).toMatch(/^Liste vide : \d+ proposition\(s\) sans bloquant/);
     expect(r.diagnostics[0]).toContain("réglé à 0");
     expect(r.diagnostics.some((d) => d.startsWith("Aucune proposition sans bloquant"))).toBe(false);
+  });
+});
+
+describe("jours en arc (décision A17)", () => {
+  it("longueurs de volées : Γ du tracé = (n − 1)·g, jour vif ou en arc", () => {
+    const template = createProject("straight");
+    const width = 800;
+    const df = walklineOffsetFor(template, width);
+    const n = 15;
+    for (const typology of ["quarter", "two-quarters", "half-turn"] as const) {
+      for (const jourRadius of [0, 160, 250]) {
+        for (const going of [240, 255]) {
+          const shape = { typology, direction: "left" as const, firstGoings: 3, jourRadius };
+          const legs = flightLegs(shape, width, n, going, df)!;
+          const inner =
+            jourRadius > 0
+              ? { kind: "arc" as const, radius: jourRadius }
+              : { kind: "sharp" as const };
+          const spec = flightsLayoutSpec(shape, width, legs, inner);
+          const layout = computeLayout(withLayout(template, spec, n, template.stair.placement));
+          // Arrondis des volées aux mm entiers (dernière par excès) : moins de 2 mm d'écart.
+          const gap = curveLength(layout.walkline) - (n - 1) * going;
+          expect(gap, `${typology} r = ${jourRadius} g = ${going}`).toBeGreaterThanOrEqual(-1);
+          expect(gap, `${typology} r = ${jourRadius} g = ${going}`).toBeLessThan(2);
+        }
+      }
+    }
+  });
+
+  it("limon débillardé : propositions steel-curved, jour en arc roulable à chaque tournant", () => {
+    const r = proposeUntimed({
+      site: ACCEPTANCE_SITE,
+      preferences: { structure: { kind: "steel-curved" } },
+    });
+    const all = r.candidates.flatMap((c) => [c, ...c.variants]);
+    const turning = all.filter((c) => c.project.stair.layout.turns.length > 0);
+    expect(turning.length).toBeGreaterThan(0);
+    for (const c of turning) {
+      expect(c.project.stair.structure.kind).toBe("steel-curved");
+      for (const t of c.project.stair.layout.turns) {
+        // Rayon de roulage : rayon intérieur mini de la rouleuse (150) + limon de 8, aux 10 mm.
+        expect(t.inner).toEqual({ kind: "arc", radius: 160 });
+      }
+      expect(c.label).toMatch(/jour en arc R 160 mm/);
+    }
+    expectNoBlocking(r);
+    for (const c of turning) {
+      const m = buildModel(c.project, { memo: false });
+      expect(m.parts.some((p) => p.id.startsWith("curved-") || /débillard/i.test(p.name))).toBe(
+        true,
+      );
+    }
+  });
+
+  it("sans structure : jours vifs et jours en arc énumérés, cas d'acceptation n° 1 inchangé en tête", () => {
+    const r = acceptanceResult();
+    const all = r.candidates.flatMap((c) => [c, ...c.variants]);
+    const jours = new Set(
+      all.flatMap((c) => c.project.stair.layout.turns.map((t) => t.inner.kind)),
+    );
+    expect(jours.has("sharp")).toBe(true);
+    expect(jours.has("arc")).toBe(true);
+    expect(["quarter", "quarter-landing"]).toContain(r.candidates[0]!.typology);
+  });
+
+  it("limons à la française : poteau d'angle seulement, aucun jour en arc", () => {
+    const r = proposeUntimed({
+      site: ACCEPTANCE_SITE,
+      preferences: { structure: { kind: "wood-housed" } },
+    });
+    for (const c of r.candidates.flatMap((x) => [x, ...x.variants]))
+      for (const t of c.project.stair.layout.turns) expect(t.inner.kind).toBe("newel");
   });
 });

@@ -31,6 +31,7 @@
  */
 import { computeHeadroom, type HeadroomAnalysis } from "../headroom/headroom.js";
 import { computeLayout } from "../layout/layout.js";
+import { autoWalklineSideKey } from "../layout/walklineSide.js";
 import { LayoutError } from "../layout/errors.js";
 import type {
   ComplianceReport,
@@ -46,7 +47,6 @@ import type { StructureContext, StructureKind } from "../model/plugins.js";
 import type { Project } from "../model/project.js";
 import { buildBasicParts } from "../parts/basic.js";
 import { precheckStringers, structurePrecheckSettings } from "../precheck/stringers.js";
-import { fmt } from "../rules/check.js";
 import { evaluateComplianceDetailed, unknownOverrideNote } from "../rules/engine.js";
 import { findRule } from "../rules/table.js";
 import { guardChecks } from "../guards/checks.js";
@@ -326,16 +326,6 @@ export function mergeStructureChecks(
   return { ...rest, results, summary, ...(notes.length > 0 ? { notes } : {}) };
 }
 
-/** Plus grande échappée minimale bloquante des règles d'échappée du rapport (mm). */
-function headroomThreshold(report: ComplianceReport): number | null {
-  let best: number | null = null;
-  for (const r of report.results) {
-    if (!r.ruleId.startsWith("ECHAPPEE_") || r.severity !== "bloquant") continue;
-    if (typeof r.min === "number" && (best === null || r.min > best)) best = r.min;
-  }
-  return best;
-}
-
 /**
  * Calcule le modèle dérivé d'un projet. Ne lève pas d'exception pour des paramètres
  * impossibles : voir `Model.errors`.
@@ -356,7 +346,15 @@ export function buildModel(project: Project, options: BuildModelOptions = {}): M
   // 1. Tracé.
   const layoutStage = run(
     caches.layout,
-    [stair.layout, stair.placement, stair.walkline, stair.stepping, site.floorToFloor],
+    // Bord automatique d'un escalier droit (A16) : lit murs et garde-corps, clé par valeur.
+    [
+      stair.layout,
+      stair.placement,
+      stair.walkline,
+      stair.stepping,
+      site.floorToFloor,
+      autoWalklineSideKey(project),
+    ],
     () => attempt(STAGE_LABELS.layout, () => computeLayout(project)),
   );
   if (layoutStage.error !== undefined) errors.push(layoutStage.error);
@@ -519,6 +517,12 @@ export function buildModel(project: Project, options: BuildModelOptions = {}): M
     ? { min: headroom.walkline.min, at: headroom.walkline.at }
     : undefined;
   const headroomClear = headroom !== null && headroom.walkline === undefined;
+  const width = headroom?.width;
+  // Trémie couvrante (QUESTIONS A7) : échappée non limitée sur Γ et / ou sur la largeur.
+  const headroomUnlimited =
+    headroom !== null && (headroomClear || width === undefined)
+      ? { walkline: headroomClear, width: width === undefined }
+      : undefined;
   const incomplete = layout === undefined ? "layout" : stepping === undefined ? "stepping" : null;
 
   // 5. Contrôle de conception (toujours produit, éventuellement sur un modèle partiel).
@@ -545,6 +549,8 @@ export function buildModel(project: Project, options: BuildModelOptions = {}): M
           stepping: steppingOut,
           ...(headroomMin ? { headroom: headroomMin } : {}),
           ...(headroomClear ? { headroomClear } : {}),
+          ...(width ? { headroomWidth: width } : {}),
+          ...(headroomUnlimited?.width ? { headroomWidthClear: true } : {}),
           ...(incomplete ? { incomplete } : {}),
           ...(guards !== undefined ? { guards } : {}),
         }).report,
@@ -566,21 +572,7 @@ export function buildModel(project: Project, options: BuildModelOptions = {}): M
       ...guardResults,
     ]);
 
-  // Échappée sur la largeur des marches : avertissement (CHALLENGE G4), hors rules.yaml.
-  const width = headroom?.width;
-  if (width) {
-    const threshold = headroomThreshold(compliance);
-    if (threshold !== null && width.min < threshold) {
-      // Le nez k porte le dessus de la marche k + 1 (M<k+1>) ; le dernier est le nez d'arrivée.
-      const where =
-        width.nosing === steppingOut.nosings.length - 1
-          ? "au nez d'arrivée"
-          : `au nez de la marche ${width.nosing + 1}`;
-      notes.push(
-        `Avertissement : échappée sur la largeur des marches de ${fmt(width.min)} mm ${where} (< ${fmt(threshold, 0)} mm exigés sur la ligne de foulée) ; grandeur non réglementaire (CHALLENGE G4).`,
-      );
-    }
-  }
+  // Échappée sur la largeur des marches : règle ECHAPPEE_LARGEUR du contrôle (QUESTIONS A7).
 
   const model: Model = {
     layout: layoutOut,
@@ -589,6 +581,7 @@ export function buildModel(project: Project, options: BuildModelOptions = {}): M
     compliance,
     ...(headroomMin ? { headroom: headroomMin } : {}),
     ...(width ? { headroomWidth: width } : {}),
+    ...(headroomUnlimited ? { headroomUnlimited } : {}),
     ...(executionClass ? { executionClass } : {}),
     ...(precheck ? { precheck } : {}),
     errors,

@@ -11,11 +11,18 @@
  *   rampant dont le dessus dépasse la sous-face de la dalle traverse celle-ci : cas d'un bord
  *   d'escalier au nu de la trémie avec un garde-corps décalé vers le vide. Constat géométrique
  *   sur le projet (aucun seuil métier) ; localisé sur la main courante.
+ * - `GC_POTEAUX_JOUR` (avertissement, toujours actif) : collision des poteaux des garde-corps de
+ *   jour (décision de l'utilisateur 2026-09-29, QUESTIONS A10). Au-dessus de la sphère T1
+ *   (110 mm), les garde-corps de jour sont construits ; dans un jour étroit (jusqu'à
+ *   2 × (décalage + demi-poteau), 140 mm avec les défauts de `guards/spec.ts`), les poteaux qui
+ *   se font face peuvent se chevaucher. Constat géométrique (sections carrées orientées, en plan,
+ *   et hauteurs qui se recouvrent) : aucun seuil métier ; localisé sur le premier poteau.
  */
 import * as V from "../geom2d/vec.js";
 import { pointInPolygon } from "../geom2d/polygon.js";
 import { ceilingOf, openingPolygon } from "../headroom/headroom.js";
 import type { RuleResult } from "../model/derived.js";
+import type { Vec2 } from "../model/primitives.js";
 import type { Project } from "../model/project.js";
 import type { Stepping } from "../model/derived.js";
 import { STAIR, fmt } from "../rules/check.js";
@@ -24,7 +31,7 @@ import { effectiveSeverity } from "../rules/engine.js";
 import type { RuleDef } from "../rules/table.js";
 import { sectionWidth } from "./parts.js";
 import { cumulative, interp, pointAt, tangentAt } from "./polyline.js";
-import type { GuardRun, GuardsAnalysis } from "./types.js";
+import type { GuardPostFootprint, GuardRun, GuardsAnalysis } from "./types.js";
 
 export const CABLE_SLACK_RULE: RuleDef = {
   id: "GC_CABLES_DETENTE",
@@ -59,6 +66,83 @@ export const SLAB_CLASH_RULE: RuleDef = {
   confiance: "eleve",
   severite: "avertissement",
 };
+
+export const JOUR_POSTS_CLASH_RULE: RuleDef = {
+  id: "GC_POTEAUX_JOUR",
+  description:
+    "Poteaux des garde-corps de jour en collision : dans un jour étroit, les poteaux des deux garde-corps qui se font face se chevauchent",
+  formule: "",
+  min: null,
+  max: null,
+  recommande: null,
+  unite: "mm",
+  contexte: ["tous"],
+  nature: "metier",
+  source:
+    "Géométrie du projet (Blondel) : lignes et poteaux des garde-corps de jour ; décision de l'utilisateur 2026-09-29 (docs/QUESTIONS.md A10)",
+  source_secondaire: false,
+  confiance: "eleve",
+  severite: "avertissement",
+};
+
+/** Tolérance (mm) de pénétration : deux poteaux jointifs ne sont pas en collision. */
+const POST_CONTACT_EPS = 1e-6;
+
+/** Sommets (plan) de la section carrée d'un poteau. */
+function postCorners(p: GuardPostFootprint): Vec2[] {
+  const u = V.normalize(p.dir);
+  const n = V.perpLeft(u);
+  const h = p.size / 2;
+  return [
+    V.add(V.addScaled(p.center, u, h), V.scale(n, h)),
+    V.add(V.addScaled(p.center, u, -h), V.scale(n, h)),
+    V.add(V.addScaled(p.center, u, -h), V.scale(n, -h)),
+    V.add(V.addScaled(p.center, u, h), V.scale(n, -h)),
+  ];
+}
+
+/**
+ * Pénétration (mm) de deux sections carrées orientées en plan (axes séparateurs) ; 0 si elles
+ * ne se chevauchent pas (ou se touchent seulement).
+ */
+function postOverlap(a: GuardPostFootprint, b: GuardPostFootprint): number {
+  const ca = postCorners(a);
+  const cb = postCorners(b);
+  const axes = [a.dir, V.perpLeft(a.dir), b.dir, V.perpLeft(b.dir)].map((x) => V.normalize(x));
+  let depth = Infinity;
+  for (const ax of axes) {
+    const pa = ca.map((c) => V.dot(c, ax));
+    const pb = cb.map((c) => V.dot(c, ax));
+    const d =
+      Math.min(Math.max(...pa), Math.max(...pb)) - Math.max(Math.min(...pa), Math.min(...pb));
+    if (d <= POST_CONTACT_EPS) return 0;
+    depth = Math.min(depth, d);
+  }
+  return depth;
+}
+
+/**
+ * Paires de poteaux des garde-corps de jour (rampants côté `inner`) qui se chevauchent en plan
+ * et en hauteur, avec la pénétration en plan (mm).
+ */
+export function jourPostClashes(
+  analysis: GuardsAnalysis,
+): { a: GuardPostFootprint; b: GuardPostFootprint; depth: number }[] {
+  const posts = analysis.runs
+    .filter((r) => r.kind === "rake" && r.side === "inner")
+    .flatMap((r) => r.posts ?? []);
+  const out: { a: GuardPostFootprint; b: GuardPostFootprint; depth: number }[] = [];
+  for (let i = 0; i < posts.length; i++) {
+    for (let j = i + 1; j < posts.length; j++) {
+      const a = posts[i]!;
+      const b = posts[j]!;
+      if (Math.min(a.z1, b.z1) - Math.max(a.z0, b.z0) <= POST_CONTACT_EPS) continue;
+      const depth = postOverlap(a, b);
+      if (depth > 0) out.push({ a, b, depth });
+    }
+  }
+  return out;
+}
 
 /** Pas d'échantillonnage (mm) du contrôle de collision avec la dalle (précision géométrique). */
 const CLASH_STEP = 10;
@@ -105,7 +189,35 @@ export function guardChecks(
   stepping: Stepping,
   analysis: GuardsAnalysis,
 ): RuleResult[] {
-  return [...slabClashChecks(project, analysis), ...cableChecks(project, stepping, analysis)];
+  return [
+    ...slabClashChecks(project, analysis),
+    ...jourPostChecks(project, analysis),
+    ...cableChecks(project, stepping, analysis),
+  ];
+}
+
+function jourPostChecks(project: Project, analysis: GuardsAnalysis): RuleResult[] {
+  const rule = JOUR_POSTS_CLASH_RULE;
+  const clashes = jourPostClashes(analysis);
+  if (clashes.length === 0) return [];
+  const eff = effectiveSeverity(rule, project.compliance);
+  return clashes.map(({ a, b, depth }) => ({
+    ruleId: rule.id,
+    description: rule.description,
+    status: eff.ignored ? "non-evaluee" : "violation",
+    severity: eff.severity,
+    declaredSeverity: rule.severite,
+    measured: depth,
+    max: 0,
+    unit: "mm",
+    location: { kind: "part", partId: a.partId },
+    nature: rule.nature,
+    confidence: rule.confiance,
+    source: rule.source,
+    secondarySource: rule.source_secondaire,
+    ...(eff.downgradeReason !== undefined ? { downgradeReason: eff.downgradeReason } : {}),
+    message: `Poteaux ${a.partId} et ${b.partId} des garde-corps de jour : se chevauchent de ${fmt(depth, 0)} mm en plan ; élargir le jour, réduire le décalage des garde-corps vers le vide ou la section des poteaux, ou régler le côté jour sur « mur » si le jour est fermé.`,
+  }));
 }
 
 function slabClashChecks(project: Project, analysis: GuardsAnalysis): RuleResult[] {

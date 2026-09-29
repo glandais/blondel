@@ -1,5 +1,6 @@
 /**
- * Barre d'outils : nom du projet, assistant d'initialisation, préréglages (deux groupes :
+ * Barre d'outils : nom du projet, assistant d'initialisation, profil d'atelier (barème hors
+ * projet, `WorkshopDialog`), préréglages (deux groupes :
  * « Basiques », formes nues du cœur, et « Démo », escaliers complets et habillés, avec une ligne
  * de description ; `lib/presetChoice.ts`), annuler/rétablir,
  * menus « Importer » (projet, plan DXF, image de plan) et « Exporter », unité d'affichage et
@@ -19,6 +20,7 @@ import { ExportMenu } from "./ExportMenu.js";
 import { TextField } from "./fields.js";
 import { ImportMenu } from "./ImportMenu.js";
 import { ThemeToggle } from "./ThemeToggle.js";
+import { WorkshopDialog } from "./WorkshopDialog.js";
 
 export function Toolbar() {
   const name = useApp((s) => s.project.name);
@@ -50,6 +52,7 @@ export function Toolbar() {
         >
           Assistant…
         </button>
+        <WorkshopDialog />
       </div>
 
       <div className="toolbar__group">

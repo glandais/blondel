@@ -1,8 +1,20 @@
 /**
  * Panneau « Contrôle de conception » (CHALLENGE P3) : résultats du cœur groupés par sévérité
  * effective ; un clic sélectionne l'élément concerné (surlignage en plan et en 3D).
+ *
+ * Surcharges de règles (décision A18 (b)) : depuis chaque résultat, l'utilisateur change la
+ * sévérité de la règle (ou l'ignore) avec une justification obligatoire (`withRuleOverride` du
+ * cœur), reprise dans le dossier PDF ; la liste « Surcharges » les reprend toutes.
  */
-import type { RuleResult } from "@blondel/core";
+import {
+  RULE_OVERRIDE_SEVERITIES,
+  ruleOverrideOf,
+  withRuleOverride,
+  withoutRuleOverride,
+  type RuleOverride,
+  type RuleResult,
+} from "@blondel/core";
+import { useId, useState } from "react";
 import {
   SEVERITY_LABELS,
   groupResults,
@@ -21,6 +33,141 @@ function bounds(r: RuleResult, unit: DisplayUnit): string {
   if (min !== null) return `≥ ${formatMeasure(min, r.unit, unit)}`;
   if (max !== null) return `≤ ${formatMeasure(max, r.unit, unit)}`;
   return "";
+}
+
+type OverrideSeverity = RuleOverride["severity"];
+
+const OVERRIDE_LABELS: Readonly<Record<OverrideSeverity, string>> = {
+  ...SEVERITY_LABELS,
+  ignore: "Ignorée",
+};
+
+/** Formulaire d'une surcharge : sévérité et justification obligatoire. */
+function OverrideEditor({
+  ruleId,
+  current,
+  onClose,
+}: {
+  ruleId: string;
+  current: RuleOverride | undefined;
+  onClose: () => void;
+}) {
+  const id = useId();
+  const [severity, setSeverity] = useState<OverrideSeverity>(current?.severity ?? "avertissement");
+  const [justification, setJustification] = useState(current?.justification ?? "");
+  const [error, setError] = useState<string | null>(null);
+  const empty = justification.trim() === "";
+  const save = () => {
+    const r = appStore
+      .getState()
+      .update((p) => withRuleOverride(p, { ruleId, severity, justification }));
+    if (r.ok) onClose();
+    else setError(r.issues.join(" ; "));
+  };
+  const remove = () => {
+    const r = appStore.getState().update((p) => withoutRuleOverride(p, ruleId));
+    if (r.ok) onClose();
+    else setError(r.issues.join(" ; "));
+  };
+  return (
+    <form
+      className="override-editor"
+      aria-label={`Surcharge de ${ruleId}`}
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (!empty) save();
+      }}
+    >
+      <div className="field">
+        <label htmlFor={`${id}-sev`}>Sévérité retenue pour {ruleId}</label>
+        <select
+          id={`${id}-sev`}
+          value={severity}
+          onChange={(e) => setSeverity(e.target.value as OverrideSeverity)}
+        >
+          {RULE_OVERRIDE_SEVERITIES.map((v) => (
+            <option key={v} value={v}>
+              {OVERRIDE_LABELS[v]}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div className={`field${empty ? " field--invalid" : ""}`}>
+        <label htmlFor={`${id}-just`}>Justification (obligatoire, reprise dans le dossier)</label>
+        <textarea
+          id={`${id}-just`}
+          rows={3}
+          value={justification}
+          required
+          onChange={(e) => setJustification(e.target.value)}
+        />
+        {empty ? (
+          <span className="field__hint">Saisir la justification pour enregistrer.</span>
+        ) : null}
+        {error ? (
+          <span className="field__error" role="alert">
+            {error}
+          </span>
+        ) : null}
+      </div>
+      <div className="button-row">
+        <button type="submit" disabled={empty}>
+          Enregistrer la surcharge
+        </button>
+        {current ? (
+          <button type="button" onClick={remove}>
+            Retirer la surcharge
+          </button>
+        ) : null}
+        <button type="button" className="link" onClick={onClose}>
+          Annuler
+        </button>
+      </div>
+    </form>
+  );
+}
+
+/** Surcharge affichée sous un résultat, et bouton d'édition. */
+function OverrideControl({ ruleId }: { ruleId: string }) {
+  const current = useApp((s) => ruleOverrideOf(s.project, ruleId));
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="override">
+      {current ? (
+        <p className="override__current">
+          Surcharge : {OVERRIDE_LABELS[current.severity]} — {current.justification}
+        </p>
+      ) : null}
+      {open ? (
+        <OverrideEditor ruleId={ruleId} current={current} onClose={() => setOpen(false)} />
+      ) : (
+        <button type="button" className="link" onClick={() => setOpen(true)}>
+          {current ? "Modifier la surcharge" : "Surcharger la règle…"}
+        </button>
+      )}
+    </div>
+  );
+}
+
+/** Toutes les surcharges du projet (y compris celles de règles hors des contextes actifs). */
+function OverrideList() {
+  const overrides = useApp((s) => s.project.compliance.overrides);
+  if (overrides.length === 0) return null;
+  return (
+    <details className="sev sev--overrides" open>
+      <summary>
+        Surcharges <span className="count">{overrides.length}</span>
+      </summary>
+      <ul className="results">
+        {overrides.map((o, i) => (
+          <li key={`${o.ruleId}-${i}`} className="override-item">
+            <code>{o.ruleId}</code>
+            <OverrideControl ruleId={o.ruleId} />
+          </li>
+        ))}
+      </ul>
+    </details>
+  );
 }
 
 function ResultItem({ r }: { r: RuleResult }) {
@@ -58,6 +205,7 @@ function ResultItem({ r }: { r: RuleResult }) {
           {r.downgradeReason ? ` · ${r.downgradeReason}` : ""}
         </span>
       </button>
+      <OverrideControl ruleId={r.ruleId} />
     </li>
   );
 }
@@ -108,6 +256,7 @@ export function CompliancePanel() {
         </summary>
         <ResultList results={groups.passed} />
       </details>
+      <OverrideList />
       {notes.length > 0 ? (
         <details className="sev sev--notes" open>
           <summary>

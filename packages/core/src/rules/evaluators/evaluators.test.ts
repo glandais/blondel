@@ -255,6 +255,18 @@ describe("échappée", () => {
     expect(violations({ headroom: 2000 }, "ECHAPPEE_MIN_DTU")).toHaveLength(0);
   });
 
+  it("ECHAPPEE_LARGEUR : non calculée → non évaluée ; non limitée seulement si le pipeline le dit (revue A7)", () => {
+    const width = (extra: object) => {
+      const input = { ...makeInput(), ...extra };
+      return evaluateCompliance(input).results.filter((r) => r.ruleId === "ECHAPPEE_LARGEUR");
+    };
+    // Trémie présente, échappée sur la largeur absente sans indication : pas « non limitée ».
+    expect(width({}).map((r) => r.status)).toEqual(["non-evaluee"]);
+    const clear = width({ headroomWidthClear: true });
+    expect(clear.map((r) => r.status)).toEqual(["ok"]);
+    expect(clear[0]!.message).toMatch(/non limitée/);
+  });
+
   it("non calculée : non évaluée ; sans trémie : sans objet", () => {
     expect(status({ headroom: null }, "ECHAPPEE_MIN_DTU")).toEqual(["non-evaluee"]);
     expect(status({ headroom: null, project: { withOpening: false } }, "ECHAPPEE_MIN_DTU")).toEqual(

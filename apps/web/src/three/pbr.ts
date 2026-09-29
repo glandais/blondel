@@ -18,6 +18,7 @@ import {
   type MeshStandardMaterialParameters,
 } from "three";
 import {
+  GLASS_THICKNESS_MM,
   SEVERITY_COLORS,
   materialLook,
   materialLookFor,
@@ -27,8 +28,7 @@ import {
 import type { RenderQuality } from "./quality.js";
 import { proceduralTextures } from "./textures.js";
 
-/** Épaisseur de verre par défaut (mm, unités locales des maillages ; présentation). */
-export const GLASS_THICKNESS_MM = 10;
+export { GLASS_THICKNESS_MM };
 
 export type PartMaterial = MeshStandardMaterial | MeshPhysicalMaterial | MeshLambertMaterial;
 
@@ -52,6 +52,11 @@ export interface PartMaterialOptions {
   readonly appearance?: Appearance;
   /** Zone de peinture de la pièce (acier peint : ossature, marches, garde-corps). */
   readonly zone?: PaintZone;
+  /**
+   * Épaisseur du verre (mm, transmission du matériau physique) : celle du remplissage du modèle
+   * (`glassThicknessOf`, QUESTIONS A25). Absente : `GLASS_THICKNESS_MM`.
+   */
+  readonly glassThickness?: number;
 }
 
 /** Le matériau est-il translucide (sans ombre portée) ? */
@@ -127,7 +132,7 @@ export function createPartMaterial(
         ? {
             transmission: look.transmission,
             ior: look.ior ?? 1.5,
-            thickness: look.thickness ?? GLASS_THICKNESS_MM,
+            thickness: options.glassThickness ?? look.thickness ?? GLASS_THICKNESS_MM,
             side: DoubleSide,
           }
         : {}),
@@ -149,4 +154,12 @@ export function createPartMaterial(
   }
   m.name = options.severity ? `${id}|${options.severity}` : id;
   return m;
+}
+
+/**
+ * Applique **sur place** l'épaisseur du verre (transmission, uniforme du matériau physique) :
+ * sans effet sur un matériau sans transmission (rendu logiciel, matériau non vitré).
+ */
+export function setGlassThickness(m: PartMaterial, thickness: number): void {
+  if (m instanceof MeshPhysicalMaterial && m.transmission > 0) m.thickness = thickness;
 }

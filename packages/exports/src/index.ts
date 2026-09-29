@@ -151,3 +151,9 @@ export {
   type OpeningOffset,
   type WallOffset,
 } from "./installation.js";
+export {
+  TEMPLATE_FAMILIES,
+  TEMPLATE_FAMILY_LABELS,
+  templateFamily,
+  type TemplateFamily,
+} from "./templateFamily.js";

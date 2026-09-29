@@ -4,7 +4,8 @@
  * calque (extrémités, milieux, intersections, centres) et aux sommets existants.
  *
  * Outils : Déplacer (glisser pour déplacer la vue, molette pour zoomer), Trémie (clic par sommet,
- * clic sur le premier sommet ou Entrée pour fermer), Mur (deux clics : axe du mur), Calibrer
+ * clic sur le premier sommet ou Entrée pour fermer), Mur (deux clics : axe du mur ; au nu, deux
+ * clics sur le nu puis un troisième du côté du mur, QUESTIONS A24), Calibrer
  * (deux points de l'image puis la distance réelle). Échap abandonne le tracé, Retour arrière
  * retire le dernier sommet. Chaque tracé terminé est une entrée d'historique (annulable).
  */
@@ -24,7 +25,6 @@ import {
   type Project,
   type SnapHit,
   type Vec2,
-  type WallTraceReference,
 } from "@blondel/core";
 import {
   memo,
@@ -44,6 +44,7 @@ import { PlanSurveyForm } from "./PlanSurveyForm.js";
 import {
   DEFAULT_WALL_THICKNESS_MM,
   dxfPathData,
+  faceWallOutline,
   fitView,
   openingClick,
   pointsAttr,
@@ -54,10 +55,13 @@ import {
   SNAP_LABELS,
   stairOverlay,
   viewBoxAttr,
+  wallClick,
+  wallFaceSide,
   wallOutline,
   zoomAt,
   type PlanTool,
   type ViewBox,
+  type WallTraceMode,
 } from "./planSiteGeometry.js";
 
 /** Rayon d'accroche à l'écran (pixels). */
@@ -70,7 +74,11 @@ const TOOLS: readonly { id: PlanTool; label: string; title: string }[] = [
     label: "Tracer la trémie",
     title: "Un clic par sommet ; clic sur le premier sommet ou Entrée pour fermer",
   },
-  { id: "wall", label: "Tracer un mur", title: "Deux clics : extrémités de l'axe du mur" },
+  {
+    id: "wall",
+    label: "Tracer un mur",
+    title: "Deux clics : extrémités de l'axe du mur ; au nu, un troisième clic du côté du mur",
+  },
   {
     id: "calibrate",
     label: "Calibrer l'image",
@@ -103,7 +111,7 @@ export function PlanSiteEditor({ model }: { model: Model }) {
   const [snapOn, setSnapOn] = useState(true);
   const [message, setMessage] = useState<{ kind: "info" | "error"; text: string } | null>(null);
   const [wallThickness, setWallThickness] = useState(String(DEFAULT_WALL_THICKNESS_MM));
-  const [wallReference, setWallReference] = useState<WallTraceReference>("axis");
+  const [wallMode, setWallMode] = useState<WallTraceMode>("axis");
   const [calib, setCalib] = useState<{ a: Vec2; b?: Vec2; distance: string } | null>(null);
   const [preview, setPreview] = useState<readonly Vec2[] | null>(null);
   const [size, setSize] = useState({ w: 800, h: 500 });
@@ -204,13 +212,20 @@ export function PlanSiteEditor({ model }: { model: Model }) {
       if (r.closed) closeOpening(r.draft);
       else setDraft(r.draft);
     } else if (tool === "wall") {
-      const a = draft[0];
-      if (!a) {
-        setDraft([p]);
+      const r = wallClick(draft, p, wallMode);
+      if (r.kind === "draft") {
+        setDraft(r.draft);
+        if (r.draft.length === 2) {
+          setMessage({ kind: "info", text: "Nu tracé : cliquer du côté du mur." });
+        }
+        return;
+      }
+      if (r.kind === "ignored") {
+        setMessage({ kind: "info", text: r.reason });
         return;
       }
       const t = Number(wallThickness);
-      const error = commit((prj) => withWall(prj, a, p, t, false, wallReference));
+      const error = commit((prj) => withWall(prj, r.a, r.b, t, false, r.reference));
       setMessage(
         error
           ? { kind: "error", text: `Mur refusé : ${error}` }
@@ -292,6 +307,13 @@ export function PlanSiteEditor({ model }: { model: Model }) {
   };
 
   const target = cursor?.snap?.point ?? cursor?.raw ?? null;
+  // Mur au nu, nu tracé : aperçu du mur du côté du pointeur (troisième clic).
+  const faceDraft = tool === "wall" && wallMode === "face" && draft.length === 2;
+  const faceSide = faceDraft && target ? wallFaceSide(draft[0]!, draft[1]!, target) : null;
+  const facePreview =
+    faceDraft && faceSide && Number(wallThickness) > 0
+      ? faceWallOutline(draft[0]!, draft[1]!, Number(wallThickness), faceSide)
+      : null;
   const markerR = 6 * mmPerPx;
   const img = underlay?.image;
   const opacity = underlay?.opacity ?? 1;
@@ -407,10 +429,19 @@ export function PlanSiteEditor({ model }: { model: Model }) {
                   vectorEffect="non-scaling-stroke"
                 />
               ) : null}
+              {facePreview ? (
+                <polygon
+                  className="plan-site__wall-preview"
+                  points={pointsAttr(facePreview)}
+                  vectorEffect="non-scaling-stroke"
+                />
+              ) : null}
               {draft.length > 0 ? (
                 <polyline
                   className="plan-site__draft"
-                  points={pointsAttr(target && tool !== "pan" ? [...draft, target] : draft)}
+                  points={pointsAttr(
+                    target && tool !== "pan" && !faceDraft ? [...draft, target] : draft,
+                  )}
                   vectorEffect="non-scaling-stroke"
                 />
               ) : null}
@@ -451,6 +482,7 @@ export function PlanSiteEditor({ model }: { model: Model }) {
               ? `${cursor?.snap ? `${SNAP_LABELS[cursor.snap.kind]} — ` : ""}X ${fmt(target.x)} ; Y ${fmt(target.y)} mm`
               : "Survoler le plan : coordonnées du site en mm."}
             {tool === "opening" && draft.length > 0 ? ` — trémie : ${draft.length} sommet(s)` : ""}
+            {faceDraft ? " — cliquer du côté du mur" : ""}
           </p>
         </div>
         <aside className="plan-site__panel" aria-label="Import et saisie du site">
@@ -505,15 +537,19 @@ export function PlanSiteEditor({ model }: { model: Model }) {
               <label htmlFor="plan-site-wall-ref">Ligne tracée</label>
               <select
                 id="plan-site-wall-ref"
-                value={wallReference}
-                onChange={(e) => setWallReference(e.target.value as WallTraceReference)}
+                value={wallMode}
+                onChange={(e) => {
+                  setWallMode(e.target.value === "face" ? "face" : "axis");
+                  setDraft([]);
+                }}
               >
                 <option value="axis">Axe du mur</option>
-                <option value="left">Nu du mur, mur à gauche du tracé</option>
-                <option value="right">Nu du mur, mur à droite du tracé</option>
+                <option value="face">Nu du mur (3e clic du côté du mur)</option>
               </select>
               <small className="field__hint">
-                Gauche et droite dans le sens du tracé (premier clic vers second clic).
+                {wallMode === "axis"
+                  ? "Deux clics : extrémités de l'axe."
+                  : "Deux clics sur le nu, puis un troisième du côté où se trouve le mur."}
               </small>
             </div>
           ) : null}

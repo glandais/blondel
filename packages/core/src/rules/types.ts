@@ -2,7 +2,7 @@
  * Types du moteur de conformité : contexte d'évaluation et constats bruts des évaluateurs.
  */
 import type { GuardsAnalysis } from "../guards/types.js";
-import type { Layout, Location, Model, RuleStatus, Stepping } from "../model/derived.js";
+import type { Layout, Location, Model, RuleStatus, Severity, Stepping } from "../model/derived.js";
 import type { Project } from "../model/project.js";
 import type { RuleDef } from "./table.js";
 
@@ -18,6 +18,18 @@ export interface ComplianceInput {
    * haute (échappée non bornée) : l'échappée est alors satisfaite sans mesure.
    */
   readonly headroomClear?: boolean;
+  /**
+   * Échappée sur la largeur des marches (`Model.headroomWidth`, CHALLENGE G4) : absente si aucun
+   * nez n'est sous la dalle haute ou si l'échappée n'est pas calculée. Évaluée par
+   * `ECHAPPEE_LARGEUR` (QUESTIONS A7).
+   */
+  readonly headroomWidth?: Model["headroomWidth"];
+  /**
+   * Échappée calculée et aucun nez sous la dalle haute (trémie couvrante,
+   * `Model.headroomUnlimited.width`) : `ECHAPPEE_LARGEUR` satisfaite sans mesure. Absent avec
+   * `headroomWidth` absent : échappée non calculée (non évaluée).
+   */
+  readonly headroomWidthClear?: boolean;
   /**
    * Étape du pipeline en échec (modèle partiel) : `layout` (tracé vide) ou `stepping` (découpage
    * vide, hauteurs seules si calculables). Seules les règles de `PARTIAL_MODEL_RULES` sont alors
@@ -53,6 +65,17 @@ export interface Finding {
   /** Par défaut : l'escalier entier. */
   readonly location?: Location;
   readonly message: string;
+  /**
+   * Sévérité propre à ce constat, **plus faible** que celle de la règle (ex. `GC_OBLIGATOIRE` en
+   * conseil au droit d'un jour plus étroit que la sphère T1, QUESTIONS A10), avec sa raison
+   * (`severityReason`, reprise dans `RuleResult.downgradeReason`). Elle remplace la sévérité
+   * déclarée avant le profil et les surcharges de l'utilisateur, qui s'appliquent ensuite.
+   * Ignorée si elle n'est pas plus faible que la sévérité déclarée.
+   */
+  readonly severity?: Severity;
+  readonly severityReason?: string;
+  /** Justification saisie par l'utilisateur (`RuleResult.justification`, décision A12). */
+  readonly justification?: string;
 }
 
 /** Évaluateur d'une règle : renvoie au moins un constat. */

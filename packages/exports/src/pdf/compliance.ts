@@ -3,7 +3,7 @@
  * groupés (violations par sévérité, non évaluées, respectées) avec nature, confiance, source et
  * source secondaire ; l'avertissement est rappelé en tête de chaque page de suite.
  */
-import type { Model, RuleResult, Severity } from "@blondel/core";
+import type { Model, RuleOverride, RuleResult, Severity } from "@blondel/core";
 import type { PdfCanvas, Rgb } from "./canvas.js";
 import { INK, MUTED, fr, wrapText, type Frame, type PageDraft } from "./layout.js";
 
@@ -104,17 +104,44 @@ function provenance(r: RuleResult): string {
   return `Nature : ${nature} — confiance : ${conf} — source : ${r.source}${r.secondarySource ? " (source secondaire : norme payante non lue)" : ""}`;
 }
 
+/**
+ * Justification saisie par l'utilisateur qui lève un contrôle (`RuleResult.justification`,
+ * porte-à-faux hélicoïdal, décision A12) : reprise telle quelle dans le dossier.
+ */
+export function justificationText(justification: string): string {
+  return `Justification fournie : ${justification}`;
+}
+const JUSTIFICATION: Omit<Line, "text"> = { size: 2.6, bold: true, color: INK, indent: 4 };
+
 const SEVERITY_TITLES: Readonly<Record<Severity, string>> = {
   bloquant: "Violations bloquantes",
   avertissement: "Avertissements",
   conseil: "Conseils",
 };
 
-/** Lignes du contrôle de conception (avant découpage en pages). */
+/**
+ * Surcharges de règles du projet (décision A18 (b) : sévérité choisie par l'utilisateur et
+ * justification obligatoire, reprises dans le dossier), une entrée par surcharge.
+ */
+export function overrideText(o: RuleOverride, results: readonly RuleResult[]): string {
+  const declared = results.find((r) => r.ruleId === o.ruleId)?.declaredSeverity;
+  const chosen = o.severity === "ignore" ? "ignorée" : o.severity;
+  const from =
+    declared !== undefined
+      ? `sévérité déclarée ${declared} → ${chosen}`
+      : `${chosen} (règle non évaluée dans les contextes actifs)`;
+  return `${o.ruleId} : ${from}. Justification : ${o.justification}`;
+}
+
+/**
+ * Lignes du contrôle de conception (avant découpage en pages). `overrides` : surcharges de
+ * règles du projet (`project.compliance.overrides`), listées avec leur justification.
+ */
 export function complianceLines(
   model: Model,
   c: Pick<PdfCanvas, "textWidth">,
   width: number,
+  overrides: readonly RuleOverride[] = [],
 ): Line[] {
   const rep = model.compliance;
   const body = 3;
@@ -135,6 +162,16 @@ export function complianceLines(
   for (const n of rep.notes ?? []) push(`Remarque : ${n}`, { size: small, color: MUTED });
   for (const e of model.errors)
     push(`Erreur de génération : ${e}`, { size: small, color: SEVERITY_COLOR.bloquant });
+  if (overrides.length > 0) {
+    push(`Surcharges de règles par l'utilisateur (${overrides.length})`, {
+      size: 3.6,
+      bold: true,
+      color: INK,
+      before: 4,
+    });
+    for (const o of overrides)
+      push(overrideText(o, rep.results), { size: body, color: INK, indent: 2, before: 1 });
+  }
 
   const results = rep.results;
   const block = (r: RuleResult, color: Rgb, detailed: boolean): void => {
@@ -146,6 +183,7 @@ export function complianceLines(
       before: 1.5,
     });
     if (r.message !== "") push(r.message, { size: body, color: INK, indent: 4 });
+    if (r.justification !== undefined) push(justificationText(r.justification), JUSTIFICATION);
     const m = measuredText(r);
     if (detailed && m !== undefined) push(m, { size: small, color: INK, indent: 4 });
     if (r.downgradeReason !== undefined) {
@@ -188,6 +226,7 @@ export function complianceLines(
         color: INK,
         indent: 2,
       });
+      if (r.justification !== undefined) push(justificationText(r.justification), JUSTIFICATION);
       push(provenance(r), { size: 2.2, color: MUTED, indent: 4 });
     }
   }
@@ -204,8 +243,9 @@ export function compliancePages(
   c: Pick<PdfCanvas, "textWidth">,
   model: Model,
   frame: Frame,
+  overrides: readonly RuleOverride[] = [],
 ): PageDraft<CompliancePageInfo>[] {
-  const lines = complianceLines(model, c, frame.w);
+  const lines = complianceLines(model, c, frame.w, overrides);
   const chunks: Line[][] = [[]];
   let used = 0;
   for (const l of lines) {

@@ -78,12 +78,15 @@ import {
   HIGHLIGHT_COLOR,
   SEVERITY_COLORS,
   appearanceKey,
+  glassThicknessOf,
+  GLASS_THICKNESS_MM,
   paintZoneFor,
   type PaintZone,
 } from "../three/materials.js";
 import {
   createPartMaterial,
   isTranslucent,
+  setGlassThickness,
   simpleMaterial,
   tintPartMaterial,
   type PartMaterial,
@@ -182,6 +185,11 @@ interface Materials {
    * (couleur, opacité) : mêmes objets, mêmes programmes de shader. Vrai si elles ont changé.
    */
   retint: (appearance: Appearance | undefined) => boolean;
+  /**
+   * Épaisseur du verre (mm) appliquée sur place aux matériaux vitrés (uniforme de transmission,
+   * QUESTIONS A25) : celle du remplissage du modèle affiché.
+   */
+  setGlassThickness: (mm: number) => void;
 }
 
 /**
@@ -192,6 +200,7 @@ function useMaterials(quality: RenderQuality): Materials {
   const value = useMemo(() => {
     let tints: Appearance | undefined;
     let tintKey = "";
+    let glassThickness = GLASS_THICKNESS_MM;
     const clip = new Plane(new Vector3(...NO_SECTION.normal), NO_SECTION.constant);
     // Plan toujours attaché (programmes stables), seulement pour la coupe exacte.
     const clipped = <M extends Material>(m: M): M => {
@@ -240,13 +249,20 @@ function useMaterials(quality: RenderQuality): Materials {
       get: (id: MaterialId, zone: PaintZone = "structure") => {
         const z = paintZoneFor(id, zone);
         return cached(keyOf(id, z), () =>
-          clipped(createPartMaterial(id, quality, { appearance: tints, zone: z })),
+          clipped(createPartMaterial(id, quality, { appearance: tints, zone: z, glassThickness })),
         );
       },
       flagged: (id: MaterialId, severity: Severity, zone: PaintZone = "structure") => {
         const z = paintZoneFor(id, zone);
         return cached(`${keyOf(id, z)}|${severity}`, () =>
-          clipped(createPartMaterial(id, quality, { severity, appearance: tints, zone: z })),
+          clipped(
+            createPartMaterial(id, quality, {
+              severity,
+              appearance: tints,
+              zone: z,
+              glassThickness,
+            }),
+          ),
         );
       },
       retint: (appearance: Appearance | undefined) => {
@@ -260,6 +276,13 @@ function useMaterials(quality: RenderQuality): Materials {
           tintPartMaterial(m as PartMaterial, id, quality, tints, zone);
         }
         return true;
+      },
+      setGlassThickness: (mm: number) => {
+        if (mm === glassThickness) return;
+        glassThickness = mm;
+        for (const [k, m] of cache) {
+          if (!k.startsWith("marker|")) setGlassThickness(m as PartMaterial, mm);
+        }
       },
       marker: (severity: Severity, selected: boolean) =>
         cached(`marker|${severity}|${selected}`, () => {
@@ -611,6 +634,8 @@ export default function Viewer3D({
   // effet si elles n'ont pas changé).
   const tintKey = appearanceKey(project.appearance);
   materials.retint(project.appearance);
+  // Épaisseur du verre : celle du remplissage du modèle (QUESTIONS A25), idempotent.
+  materials.setGlassThickness(glassThicknessOf(model));
   // Cotes principales et contrôles sur les pièces : dans le store (masqués au choix d'une démo,
   // rétablis par un autre projet, conservés d'un onglet à l'autre) ; le reste, local à la vue.
   const overlays = useApp((s) => s.overlays);
@@ -632,7 +657,11 @@ export default function Viewer3D({
   // Points mesurés : pièce et position réelle (hors vue éclatée) ; la position affichée suit
   // l'éclatement courant.
   const [measure, setMeasure] = useState<readonly PickedPoint[]>([]);
-  const markers = useMemo(() => controlMarkers(model), [model]);
+  const hiddenFamilies = tools.hiddenFamilies;
+  const markers = useMemo(
+    () => controlMarkers(model, new Set(hiddenFamilies)),
+    [model, hiddenFamilies],
+  );
   const selectedMesh = parts.find(({ part }) =>
     isPartSelected(part.partId, selection?.location),
   )?.part;
@@ -847,6 +876,7 @@ export default function Viewer3D({
           updateTools(patch);
         }}
         flaggedCount={flaggedCount}
+        familyCounts={markers.byFamily}
         measureText={measureText}
         onClearMeasure={() => setMeasure([])}
         canIsolate={selectedMesh !== undefined}

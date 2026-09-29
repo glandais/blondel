@@ -186,6 +186,33 @@ const mandatory: RuleEvaluator = withGuards((ctx, g) => {
       oks.push(`${label[side.side]} : chute ${fmt(side.maxFall)} mm ≤ ${fmt(limit)} mm`);
     } else if (runs.length > 0) {
       oks.push(`${label[side.side]} : chute ${fmt(side.maxFall)} mm, garde-corps présent`);
+    } else if (side.side === "inner" && g.narrowJour) {
+      // Jour plus étroit que la sphère T1 : pas de garde-corps de jour, constat en conseil
+      // (décision de l'utilisateur 2026-09-29, QUESTIONS A10) pour la chute dans l'emprise du
+      // jour ; hors de celle-ci (volée plus longue que celle d'en face, vide ouvert), le constat
+      // garde sa sévérité (revue A10).
+      const j = g.narrowJour;
+      const jourText = `jour de ${fmt(j.width, 0)} mm, plus étroit que la sphère T1 (${fmt(j.threshold, 0)} mm)`;
+      if (j.jourFall > limit)
+        out.push({
+          status: "violation",
+          measured: j.jourFall,
+          max: limit,
+          location: j.jourFallAt ? { kind: "point", at: j.jourFallAt } : STAIR,
+          severity: "conseil",
+          severityReason: `Jour de ${fmt(j.width, 0)} mm plus étroit que la sphère T1 (${fmt(j.threshold, 0)} mm) : pas de garde-corps de jour, constat ramené en conseil (décision A10).`,
+          message: `Hauteur de chute ${fmt(j.jourFall)} mm > ${fmt(limit)} mm côté jour sans garde-corps : ${jourText}, pas de garde-corps de jour.`,
+        });
+      if (j.outsideFall > limit)
+        out.push({
+          status: "violation",
+          measured: j.outsideFall,
+          max: limit,
+          location: j.outsideFallAt ? { kind: "point", at: j.outsideFallAt } : STAIR,
+          message: `Hauteur de chute ${fmt(j.outsideFall)} mm > ${fmt(limit)} mm côté jour hors du jour (volée plus longue que celle d'en face, vide ouvert) sans garde-corps : ${jourText}, aucun garde-corps de jour n'est construit.`,
+        });
+      if (j.jourFall <= limit && j.outsideFall <= limit)
+        oks.push(`${label[side.side]} : chute ${fmt(side.maxFall)} mm, ${jourText}`);
     } else {
       out.push({
         status: "violation",

@@ -21,14 +21,34 @@ export interface EffectiveSeverity {
   readonly downgradeReason?: string;
 }
 
+const SEVERITY_RANK: Readonly<Record<Severity, number>> = {
+  conseil: 0,
+  avertissement: 1,
+  bloquant: 2,
+};
+
 /**
  * Sévérité effective d'une règle :
+ * 0. sévérité propre au constat (`Finding.severity`), si elle est plus faible que la sévérité
+ *    déclarée (ex. GC_OBLIGATOIRE au droit d'un jour étroit, QUESTIONS A10) ;
  * 1. profil `souple` : `bloquant` + `source_secondaire` → `avertissement` ;
- * 2. surcharge utilisateur (dernière pour l'id), prise en compte seulement avec une justification non vide.
+ * 2. surcharge utilisateur (dernière pour l'id), prise en compte seulement avec une justification non vide ;
+ *    une surcharge qui assouplit la règle (plus faible que la sévérité déclarée) ne relève jamais
+ *    un constat déjà plus faible qu'elle.
  */
-export function effectiveSeverity(rule: RuleDef, settings: ComplianceSettings): EffectiveSeverity {
+export function effectiveSeverity(
+  rule: RuleDef,
+  settings: ComplianceSettings,
+  finding?: Pick<Finding, "severity" | "severityReason">,
+): EffectiveSeverity {
   let severity: Severity = rule.severite;
   const reasons: string[] = [];
+  if (finding?.severity && SEVERITY_RANK[finding.severity] < SEVERITY_RANK[severity]) {
+    severity = finding.severity;
+    reasons.push(
+      finding.severityReason ?? `Sévérité ramenée à « ${finding.severity} » pour ce constat.`,
+    );
+  }
   if (settings.profile === "souple" && rule.source_secondaire && severity === "bloquant") {
     severity = "avertissement";
     reasons.push("Profil souple : valeur issue d'une source secondaire (norme non lue).");
@@ -41,6 +61,13 @@ export function effectiveSeverity(rule: RuleDef, settings: ComplianceSettings): 
     if (override.severity === "ignore") {
       ignored = true;
       reasons.push(`Ignorée par l'utilisateur : ${override.justification.trim()}`);
+    } else if (
+      severity !== rule.severite &&
+      SEVERITY_RANK[override.severity] < SEVERITY_RANK[rule.severite] &&
+      SEVERITY_RANK[override.severity] >= SEVERITY_RANK[severity]
+    ) {
+      // Surcharge qui assouplit la règle : elle ne relève pas un constat déjà plus faible
+      // (sévérité propre au constat ou profil souple).
     } else if (override.severity !== severity) {
       reasons.push(
         `Surcharge utilisateur (${severity} → ${override.severity}) : ${override.justification.trim()}`,
@@ -80,6 +107,7 @@ function toResult(rule: RuleDef, f: Finding, eff: EffectiveSeverity): RuleResult
     ...(f.measured !== undefined ? { measured: f.measured } : {}),
     ...(rule.unite !== null ? { unit: rule.unite } : {}),
     ...(eff.downgradeReason !== undefined ? { downgradeReason: eff.downgradeReason } : {}),
+    ...(f.justification !== undefined ? { justification: f.justification } : {}),
   };
 }
 
@@ -102,7 +130,7 @@ export function evaluateComplianceDetailed(
   evaluators: EvaluatorRegistry = DEFAULT_EVALUATORS,
 ): ComplianceEvaluation {
   const settings = input.project.compliance;
-  const resolved = resolveContexts(settings, input.stepping);
+  const resolved = resolveContexts(settings, input.stepping, input.layout.helical?.core);
   const active = new Set(resolved.active);
   const notes = [...resolved.notes];
   if (resolved.derived.length > 0)
@@ -165,7 +193,8 @@ export function evaluateComplianceDetailed(
       if (findings.length === 0)
         findings = [{ status: "ok", location: STAIR, message: "Sans objet." }];
     }
-    for (const f of findings) results.push(toResult(rule, f, eff));
+    for (const f of findings)
+      results.push(toResult(rule, f, f.severity ? effectiveSeverity(rule, settings, f) : eff));
   }
 
   const summary: Record<Severity, number> = { bloquant: 0, avertissement: 0, conseil: 0 };

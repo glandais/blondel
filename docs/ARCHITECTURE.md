@@ -21,7 +21,10 @@ Project (JSON validé par zod, immuable)
   ├─ computeLayout      → Layout                 layout/     `inner` (C_i : jour du **premier** tournant), `outer` (C_e),
   │                                                          Γ (ligne de foulée), emprise ; S / Z : le jour d'un tournant
   │                                                          de sens opposé est sur `outer` (`TurnZone.collarSide`),
-  │                                                          transitions de Γ (`walklineTransitions`) ;
+  │                                                          transitions de Γ (`walklineTransitions`) ; escalier droit :
+  │                                                          bord de mesure de Γ (`walklineSide`, layout/walklineSide.ts ;
+  │                                                          automatique : lit murs et garde-corps, clé de cache
+  │                                                          `autoWalklineSideKey`) ;
   │                                                          hélicoïdal (`kind: "helical"`) : layout/helical.ts
   ├─ computeStepping    → Stepping               stepping/   hauteurs, nez sur Γ, zones et stratégies de balancement ;
   │                                                          hélicoïdal : nez rayonnants, stepping/helical.ts ;
@@ -37,25 +40,26 @@ Project (JSON validé par zod, immuable)
   │                        + removedBaseParts?   workshop/   profil d'atelier (débits, encastrement, seuils, masses
   │                                                          volumiques ; métal : presse, lois de pli, formats de tôle)
   ├─ computeGuards      → Part[] + contrôles     guards/     `project.guards` : garde-corps de volée / jour / trémie,
-  │                                                          mains courantes, contrôles GC_* / MC_* et GC_CONFLIT_DALLE
+  │                                                          mains courantes, contrôles GC_* / MC_*, GC_CONFLIT_DALLE
+  │                                                          et GC_POTEAUX_JOUR (collision des poteaux de jour)
   ├─ computeHeadroom    → échappée               headroom/   ligne de pente, échappée sur Γ et sur la largeur ;
   │                                                          sous-faces de l'escalier lui-même (selfcover.ts) et
   │                                                          règle dérivée sous le tour supérieur (helical.ts)
   └─ evaluateCompliance → ComplianceReport       rules/      table rules.yaml + évaluateurs, fusionnés avec les contrôles
                                                              du plugin et des garde-corps
   ▼
-Model { layout, stepping, parts, compliance, headroom?, headroomWidth?, executionClass?, precheck?,
-        errors, notes? }
+Model { layout, stepping, parts, compliance, headroom?, headroomWidth?, headroomUnlimited?,
+        executionClass?, precheck?, errors, notes? }
 ```
 
 En amont du pipeline :
 
-- **Assistant d'initialisation** (`assistant/`, `proposeDesigns(input)`, CHALLENGE G8) : bornes lues dans les règles actives (`bounds.ts`), énumération explicite typologie × sens × position du tournant × n × E × calage de l'arrivée sur la trémie (`shapes.ts`, `placement.ts`), crible analytique (giron, échappée sur Γ, murs, dégagement d'arrivée), puis `buildModel` sur les meilleurs candidats par groupe à tour de rôle, élimination des bloquants, score détaillé (`score.ts`) et diagnostic par typologie. Budget de temps global (`stats.truncated` si dépassé) ; entrées invalides → liste vide et diagnostic, jamais d'exception.
+- **Assistant d'initialisation** (`assistant/`, `proposeDesigns(input)`, CHALLENGE G8) : bornes lues dans les règles actives (`bounds.ts`), énumération explicite typologie × sens × jour (vif, poteau, ou en arc pour les tournants balancés si la structure visée l'accepte : aucune, ou débillardé qui l'exige — rayon roulable du profil d'atelier, décision A17) × position du tournant × n × E × calage de l'arrivée sur la trémie (`shapes.ts`, `placement.ts`), crible analytique (giron, échappée sur Γ, murs, dégagement d'arrivée), puis `buildModel` sur les meilleurs candidats par groupe à tour de rôle, élimination des bloquants, score détaillé (`score.ts`) et diagnostic par typologie. Budget de temps global (`stats.truncated` si dépassé) ; entrées invalides → liste vide et diagnostic, jamais d'exception.
 - **Site importé** (`site/`, jalon 7) : `site.underlay` facultatif (calque DXF lu par `@blondel/core/dxf`, ou image calibrée par deux points et une distance), accroches (`snap.ts`), trémie polygonale validée (`opening.ts`), relevé 4 côtés + 2 diagonales avec seuil de détection par mesure (`survey.ts`), modifications pures du site (`edit.ts` : murs tracés à l'axe ou au nu). Le pipeline ne lit pas le calque : il ne sert qu'à la saisie.
 
 - `buildModel` **ne lève jamais** pour des paramètres impossibles : l'erreur de l'étape va dans `Model.errors`, les étapes suivantes reçoivent un résultat vide, et le contrôle de conception n'évalue que les règles encore calculables (`PARTIAL_MODEL_RULES`, les autres sortent `non-evaluee`).
 - Mémoïsation par identité : même objet `Project` → même `Model` ; sinon chaque étape réutilise son dernier résultat si ses entrées sont les mêmes objets. Les clés sont fines : le découpage ne dépend de la structure que par `structure.kind`, si bien que changer un paramètre de structure ne recalcule ni le découpage ni les garde-corps, et changer les garde-corps ne recalcule pas la structure (`pipeline/integration.test.ts`). Budget : environ 5 ms par modèle sur les exemples (ADR-0006).
-- Structure → modèle : une pièce du plugin de même `id` qu'une pièce de base la remplace ; `StructureOutput.removedBaseParts` retire des pièces de base (contremarches bois sous des marches en tôle pliée) ; `StructureOutput.executionClass` (EN 1090-2, métal) est reporté dans `Model.executionClass` (lecture : `executionClassOf(model)`, fonction unique du cœur) ; `StructureOutput.precheck` (prédimensionnement fait par le plugin, ex. `steel-profile` qui choisit sa section avec) est reporté dans `Model.precheck`, sinon le pipeline le calcule par `precheckStringers` : le panneau, le comparateur et les lignes PRECHECK_* du contrôle de conception ont une seule source.
+- Structure → modèle : une pièce du plugin de même `id` qu'une pièce de base la remplace ; `StructureOutput.removedBaseParts` retire des pièces de base (contremarches bois sous des marches en tôle pliée ou en tôle de `helical-core`, décision A11) ; `StructureOutput.executionClass` (EN 1090-2, métal) est reporté dans `Model.executionClass` (lecture : `executionClassOf(model)`, fonction unique du cœur) ; `StructureOutput.precheck` (prédimensionnement fait par le plugin, ex. `steel-profile` qui choisit sa section avec) est reporté dans `Model.precheck`, sinon le pipeline le calcule par `precheckStringers` : le panneau, le comparateur et les lignes PRECHECK_* du contrôle de conception ont une seule source.
 - Tracé hélicoïdal (jalon 5a) : `LayoutSpec` est une union discriminée rétrocompatible (`kind` absent = volées, jamais sérialisé ; `kind: "helical"` = sens, R_e, fût ou jour central, marches par tour ou angle total, palier d'arrivée en secteur). `Layout.helical` est renseigné et les volées sont vides : le découpage, l'échappée et les plugins testent `layout.helical`. Un plugin réservé aux volées doit rendre une erreur lisible sur un hélicoïdal.
 - Unités : millimètres en float64, arrondi seulement à l'affichage et en sortie (ADR-0003).
 
@@ -79,17 +83,25 @@ saisie ─► store zustand (projectStore) ─► Project canonique (ProjectSche
 
  Structure : listStructures() (cœur) ─► StructureSection : formulaire générique dérivé de
              paramsSchema + defaults(ctx), libellés lib/paramLabels.ts ─► stair.structure.params
- Garde-corps : GuardsSection (lib/guardsForm.ts) ─► project.guards ; marqueurs 3D (lib/markers.ts)
+ Garde-corps : GuardsSection (lib/guardsForm.ts) ─► project.guards ; marqueurs 3D (lib/markers.ts,
+             filtrés par famille de règles : ruleFamily du cœur, rules/family.ts)
  Prédim.   : PrecheckPanel (lib/precheck.ts, mise en forme seule) ─► Model.precheck (calculé dans
              le worker), executionClassOf (cœur)
  Tracé     : sélecteur « Type de tracé » (lib/layoutKind.ts switchLayoutKind, préréglage du cœur),
-             éditeur de volées ou HelicalEditor
+             éditeur de volées ou HelicalEditor ; bord de mesure de Γ d'un escalier droit et
+             « Recaler volées et trémie » (lib/realign.ts ─► realignFlightsAndOpening, cœur,
+             project/realign.ts : une entrée d'historique, bandeau d'information)
+ Contrôle  : CompliancePanel ─► surcharges de règles (withRuleOverride, cœur, project/overrides.ts :
+             justification obligatoire) ─► compliance.overrides, reprises dans le dossier PDF
  Erreurs   : ErrorsBar ─► suggestFixes (cœur, project/fixes.ts) ─► lib/fixes.ts applyFix (annulable)
  Comparateur : CompareView (lib/variants.ts) ─► compareEpure (cœur, worker dédié) : même épure,
-             raccord de jour adapté par variante et signalé ; « Appliquer » reprend l'adaptation
+             raccord de jour adapté par variante et signalé ; « Appliquer » reprend l'adaptation ;
+             barème d'atelier hors projet (WorkshopDialog, store/workshopStore.ts, stockage du
+             navigateur) fusionné dans une copie du projet comparé (lib/workshopRates.ts)
  Développés : tronçons et joints d'un débillardé (lib/joints.ts)
  Exporter  : ExportMenu ─► lib/exportFiles.ts ─► SVG, DXF (plan, pièces en ZIP), CSV, JSON ;
-             glTF (.glb) et PDF (dossier complet A4 / A3, fiche de pose) calculés dans le worker ;
+             glTF (.glb) et PDF (dossier complet A4 / A3, gabarits d'une famille, sans gabarits,
+             fiche de pose) calculés dans le worker ;
              @blondel/exports/pdf chargé à la demande (morceau séparé)
  Assistant : AssistantDialog (lib/assistant.ts) ─► proposeDesigns (cœur) dans un worker dédié
              annulable (model/assistant.worker.ts, assistantClient.ts) ─► cartes (croquis, cotes,
@@ -114,6 +126,9 @@ saisie ─► store zustand (projectStore) ─► Project canonique (ProjectSche
 2. Écrire son évaluateur dans `packages/core/src/rules/evaluators/<famille>.ts` : fonction `RuleEvaluator` enregistrée sous l'identifiant de la règle dans le groupe de la famille. **Aucun seuil en dur** : lire `min` / `max` de la règle (`rules/check.ts`), et isoler les constantes de formule dans `rules/formula-constants.ts`.
 3. Si la règle reste calculable sur un modèle partiel, l'ajouter à `PARTIAL_MODEL_RULES` (`rules/evaluators/index.ts`).
 4. Tests dans `rules/evaluators/*.test.ts`. Une règle sans évaluateur sort `non-evaluee` (`ruleCoverage()` la liste).
+5. Applicabilité : `contexte` (contextes de forme `tournant`, `helicoidal`, `helicoidal_fut` qualifiant les autres, `rules/contexts.ts`) et, au besoin, `contexte_exclu` (contextes qui écartent la règle, ex. `G_COLLET_MIN` sur un hélicoïdal à fût, contexte déduit `helicoidal_fut`). Un contexte seulement déduit s'ajoute à `DEDUCED_ONLY_CONTEXTS` (non proposé dans l'interface).
+6. Un constat peut porter une sévérité **plus faible** que celle de la règle (`Finding.severity` et `severityReason`, repris dans `downgradeReason`) ; le profil et les surcharges s'appliquent ensuite (ex. `GC_OBLIGATOIRE` en conseil au droit d'un jour plus étroit que la sphère T1).
+7. Un constat levé par une justification saisie par l'utilisateur (paramètre de plugin, ex. `helical-core.cantileverJustification` pour `HELICOIDAL_PORTE_A_FAUX`, décision A12) la porte dans `Finding.justification`, reprise dans `RuleResult.justification` et imprimée dans le dossier PDF (« Justification fournie : … »). Un plugin peut aussi réappliquer un évaluateur de `rules.yaml` à un projet effectif (ex. `helical-core` : règles de `nosing.ts` sans contremarche, à l'épaisseur de la tôle) : son résultat remplace celui du moteur.
 
 ### une stratégie de balancement
 
@@ -147,6 +162,7 @@ Les plugins de structure implémentent `StructureKind` (`model/plugins.ts`) et v
 - Métal (`workshop/metal.ts`, `METAL_PROVENANCE`) : presse plieuse, lois de pli par nuance et épaisseur (facteur K, DIN 6935, table), formats de tôle, épaisseur laser maximale, barres du commerce ; mêmes réserves « à valider ».
 - `Project.workshop` (facultatif, partiel) remplace champ par champ le profil par défaut : `resolveWorkshopProfile(project.workshop)`. Un projet sans profil est sérialisé à l'identique.
 - Les plugins lisent le profil résolu (débit au plus petit disponible : `smallestAvailable`) ; le pipeline en dépend pour la mémoïsation de l'étape structure.
+- Barème de coût (`workshop/costs.ts`, aucun défaut) : saisi dans l'interface (« Atelier… », `apps/web/src/components/WorkshopDialog.tsx`), gardé hors du projet (stockage du navigateur, import / export JSON) et fusionné par `withWorkshopRates` (`apps/web/src/lib/workshopRates.ts`) dans une copie du projet envoyée au comparateur ; `Project.workshop.costs` d'un fichier importé reste lu, complété par le barème de l'interface.
 
 ## Conventions de code
 

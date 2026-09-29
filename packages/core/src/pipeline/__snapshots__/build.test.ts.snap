@@ -24,7 +24,7 @@ exports[`buildModel — exemples du dépôt > acceptance-01-quart-tournant.blond
   "run": 3360.3,
   "treads": "wwwwwsssssssss",
   "violations": {
-    "avertissement": 0,
+    "avertissement": 1,
     "bloquant": 0,
     "conseil": 1,
   },
@@ -131,7 +131,7 @@ exports[`buildModel — exemples du dépôt > demo-helical-glass.blondel.json : 
   "run": 3675.7,
   "treads": "wwwwwwwwwwwwwww",
   "violations": {
-    "avertissement": 16,
+    "avertissement": 2,
     "bloquant": 0,
     "conseil": 2,
   },
@@ -367,7 +367,7 @@ exports[`buildModel — exemples du dépôt > j3a-acceptance-01-bois.blondel.jso
   "run": 3360.3,
   "treads": "wwwwwsssssssss",
   "violations": {
-    "avertissement": 0,
+    "avertissement": 1,
     "bloquant": 0,
     "conseil": 1,
   },
@@ -401,7 +401,7 @@ exports[`buildModel — exemples du dépôt > j3b-acceptance-01-acier-plat.blond
   "run": 3360.3,
   "treads": "wwwwwsssssssss",
   "violations": {
-    "avertissement": 6,
+    "avertissement": 7,
     "bloquant": 0,
     "conseil": 1,
   },
@@ -435,7 +435,7 @@ exports[`buildModel — exemples du dépôt > j3b-acceptance-01-tole-pliee.blond
   "run": 3360.3,
   "treads": "wwwwwsssssssss",
   "violations": {
-    "avertissement": 10,
+    "avertissement": 11,
     "bloquant": 0,
     "conseil": 1,
   },
@@ -470,7 +470,7 @@ exports[`buildModel — exemples du dépôt > j3c-acceptance-01-upn.blondel.json
   "run": 3360.3,
   "treads": "wwwwwwssssssss",
   "violations": {
-    "avertissement": 5,
+    "avertissement": 6,
     "bloquant": 0,
     "conseil": 2,
   },
@@ -504,7 +504,7 @@ exports[`buildModel — exemples du dépôt > j4-acceptance-01-garde-corps.blond
   "run": 3360.3,
   "treads": "wwwwwsssssssss",
   "violations": {
-    "avertissement": 0,
+    "avertissement": 1,
     "bloquant": 0,
     "conseil": 1,
   },
@@ -585,7 +585,7 @@ exports[`buildModel — exemples du dépôt > j5a-helicoidal.blondel.json : cote
   "run": 3697.4,
   "treads": "wwwwwwwwwwwwwww",
   "violations": {
-    "avertissement": 17,
+    "avertissement": 3,
     "bloquant": 0,
     "conseil": 17,
   },
@@ -778,7 +778,7 @@ exports[`buildModel — exemples du dépôt > two-quarters-s.blondel.json : cote
   "run": 3780.2,
   "treads": "wwwwwswwwwwsss",
   "violations": {
-    "avertissement": 0,
+    "avertissement": 1,
     "bloquant": 0,
     "conseil": 1,
   },

@@ -3,8 +3,20 @@
  * (garde-corps, main courante, limon, marche…) teinte cette pièce selon sa sévérité la plus
  * grave ; une violation localisée en un point (ex. hauteur de chute d'un côté vide) donne un
  * repère ponctuel. Présentation seulement : les résultats sont ceux du cœur.
+ *
+ * Filtre par famille de règles (QUESTIONS A23) : géométrie, fabrication, garde-corps ; la
+ * famille d'une règle vient du cœur (`ruleFamily`).
  */
-import type { Location, Model, RuleResult, Severity, Vec3 } from "@blondel/core";
+import {
+  RULE_FAMILIES,
+  ruleFamily,
+  type Location,
+  type Model,
+  type RuleFamily,
+  type RuleResult,
+  type Severity,
+  type Vec3,
+} from "@blondel/core";
 import { SEVERITY_ORDER, treadPartId } from "./compliance.js";
 
 export interface PointMarker {
@@ -21,6 +33,11 @@ export interface ControlMarkers {
   /** Règles en violation par pièce (info-bulle). */
   readonly rulesByPart: ReadonlyMap<string, readonly string[]>;
   readonly points: readonly PointMarker[];
+  /**
+   * Violations localisées par famille de règles, **avant** filtrage (libellés du filtre) : une
+   * famille masquée garde son compte.
+   */
+  readonly byFamily: Readonly<Record<RuleFamily, number>>;
 }
 
 const rank = (s: Severity): number => SEVERITY_ORDER.indexOf(s);
@@ -40,19 +57,35 @@ export function locatedPartId(loc: Location, partIds: ReadonlySet<string>): stri
   return undefined;
 }
 
-/** Marqueurs des violations d'un modèle (résultats `violation` seulement). */
+/**
+ * Marqueurs des violations d'un modèle (résultats `violation` seulement) ; `hidden` : familles
+ * de règles masquées (filtre de la vue 3D).
+ */
 export function controlMarkers(
   model: Pick<Model, "parts" | "compliance"> | null | undefined,
+  hidden: ReadonlySet<RuleFamily> = new Set(),
 ): ControlMarkers {
   const parts = new Map<string, Severity>();
   const rulesByPart = new Map<string, string[]>();
   const points: PointMarker[] = [];
-  if (!model) return { parts, rulesByPart, points };
+  const byFamily = Object.fromEntries(RULE_FAMILIES.map((f) => [f, 0])) as Record<
+    RuleFamily,
+    number
+  >;
+  if (!model) return { parts, rulesByPart, points, byFamily };
   const ids = new Set(model.parts.map((p) => p.id));
   const results: readonly RuleResult[] = model.compliance.results;
   for (const r of results) {
     if (r.status !== "violation") continue;
     const partId = locatedPartId(r.location, ids);
+    const located =
+      partId !== undefined ||
+      (r.location.kind === "point" &&
+        [r.location.at.x, r.location.at.y, r.location.at.z].every(Number.isFinite));
+    if (!located) continue;
+    const family = ruleFamily(r.ruleId);
+    byFamily[family]++;
+    if (hidden.has(family)) continue;
     if (partId !== undefined) {
       if (worse(r.severity, parts.get(partId))) parts.set(partId, r.severity);
       const list = rulesByPart.get(partId) ?? [];
@@ -70,5 +103,5 @@ export function controlMarkers(
       });
     }
   }
-  return { parts, rulesByPart, points };
+  return { parts, rulesByPart, points, byFamily };
 }

@@ -102,8 +102,48 @@ export interface GuardRun {
   /** Pièce principale (main courante, sinon premier poteau) : localisation des contrôles. */
   readonly primaryPartId: string;
   readonly postPartIds: readonly string[];
+  /**
+   * Emprise des poteaux de la ligne (pièces `postPartIds`, dans le même ordre) : centre et
+   * direction de la ligne en plan, côté de la section carrée, bas et haut (altitudes absolues).
+   * Sert au contrôle de collision des poteaux de jour (`GC_POTEAUX_JOUR`, QUESTIONS A10).
+   */
+  readonly posts?: readonly GuardPostFootprint[];
   readonly infillPartIds: readonly string[];
   readonly handrailPartId?: string;
+}
+
+/** Emprise d'un poteau de garde-corps (section carrée orientée selon la ligne). */
+export interface GuardPostFootprint {
+  readonly partId: string;
+  readonly center: Vec2;
+  /** Direction unitaire de la ligne au droit du poteau (orientation de la section). */
+  readonly dir: Vec2;
+  readonly size: Mm;
+  readonly z0: Mm;
+  readonly z1: Mm;
+}
+
+/**
+ * Jour plus étroit que la sphère T1 (QUESTIONS A10, décision du 2026-09-29) : pas de
+ * garde-corps de jour, `GC_OBLIGATOIRE` en conseil pour le côté jour.
+ */
+export interface NarrowJour {
+  /** Largeur du jour (mm, `jourWidth`). */
+  readonly width: Mm;
+  /** Seuil : diamètre de la sphère T1 (`GC_GABARIT_T1_2024.max`). */
+  readonly threshold: Mm;
+  /**
+   * Chute maximale côté jour **dans** l'emprise du jour (entre les deux volées qui se font face) :
+   * seule celle-ci passe en conseil. 0 sans nez dans le jour.
+   */
+  readonly jourFall: Mm;
+  readonly jourFallAt?: Vec3;
+  /**
+   * Chute maximale côté jour **hors** de l'emprise du jour (volée plus longue que celle d'en face,
+   * qui borde un vide ouvert) : `GC_OBLIGATOIRE` garde sa sévérité (revue A10). 0 sans tel nez.
+   */
+  readonly outsideFall: Mm;
+  readonly outsideFallAt?: Vec3;
 }
 
 /** Dessus de main courante au droit d'un poteau d'angle du tracé (QUESTIONS A3). */
@@ -159,9 +199,15 @@ export interface GuardsAnalysis {
   readonly newelHandrailTops?: readonly NewelHandrailTop[];
   readonly notes: readonly string[];
   /**
-   * Lignes de garde-corps impossibles à construire (jour plus étroit que la sphère T1, décalage
-   * impossible) : erreurs lisibles, reprises dans `Model.errors` par le pipeline ; les autres
-   * lignes sont calculées (pas d'exception). Absent : aucune.
+   * Jour plus étroit que la sphère T1 dont le garde-corps n'est pas construit (remarque dans
+   * `notes`, pas une erreur). Absent : jour assez large, sans vide côté jour ou garde-corps de
+   * volée désactivés.
+   */
+  readonly narrowJour?: NarrowJour;
+  /**
+   * Lignes de garde-corps impossibles à construire (décalage impossible) : erreurs lisibles,
+   * reprises dans `Model.errors` par le pipeline ; les autres lignes sont calculées (pas
+   * d'exception). Absent : aucune.
    */
   readonly errors?: readonly string[];
 }

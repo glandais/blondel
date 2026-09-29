@@ -1,7 +1,13 @@
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
-import type { RuleResult } from "@blondel/core";
-import { measureDecimals, measuredText } from "./compliance.js";
+import {
+  buildModel,
+  createProject,
+  withHelicalCore,
+  type Model,
+  type RuleResult,
+} from "@blondel/core";
+import { complianceLines, measureDecimals, measuredText } from "./compliance.js";
 
 function result(over: Partial<RuleResult>): RuleResult {
   return {
@@ -98,5 +104,49 @@ describe("measuredText (page de conformité du PDF)", () => {
         },
       ),
     );
+  });
+});
+
+describe("justification saisie (décision A12)", () => {
+  /** Largeur de texte approchée : la coupure des lignes n'est pas en cause ici. */
+  const canvas = { textWidth: (t: string, size: number) => t.length * size * 0.5 };
+  const text = (model: Model): string =>
+    complianceLines(model, canvas, 1e6)
+      .map((l) => l.text)
+      .join("\n");
+
+  it("porte-à-faux hélicoïdal justifié : justification reprise dans le dossier", () => {
+    const base = createProject("helical");
+    const justified = buildModel(
+      withHelicalCore(base, { cantileverJustification: "Note de calcul NC-042 (BET Exemple)" }),
+      { memo: false },
+    );
+    const r = justified.compliance.results.find((x) => x.ruleId === "HELICOIDAL_PORTE_A_FAUX");
+    expect(r?.status).toBe("ok");
+    expect(r?.justification).toBe("Note de calcul NC-042 (BET Exemple)");
+    expect(text(justified)).toContain(
+      "Justification fournie : Note de calcul NC-042 (BET Exemple)",
+    );
+    // Sans justification : avertissement, aucune ligne de justification.
+    const bare = buildModel(withHelicalCore(base), { memo: false });
+    expect(
+      bare.compliance.results.find((x) => x.ruleId === "HELICOIDAL_PORTE_A_FAUX")?.status,
+    ).toBe("violation");
+    expect(text(bare)).not.toContain("Justification fournie");
+  });
+
+  it("violation portant une justification : ligne imprimée sous le message", () => {
+    const model = {
+      errors: [],
+      compliance: {
+        rulesVersion: 1,
+        contexts: [],
+        profile: "strict",
+        summary: { bloquant: 0, avertissement: 1, conseil: 0 },
+        results: [result({ status: "violation", message: "m", justification: "avis AT-7" })],
+      },
+    } as unknown as Model;
+    const lines = text(model).split("\n");
+    expect(lines[lines.indexOf("m") + 1]).toBe("Justification fournie : avis AT-7");
   });
 });

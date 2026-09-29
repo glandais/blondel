@@ -6,6 +6,8 @@ import type { Part } from "../model/derived.js";
 import type { Polygon2, Vec2 } from "../model/primitives.js";
 import type { ResolvedBend } from "../workshop/metal.js";
 import {
+  arrivalRiserSection,
+  developArrivalRiser,
   developFoldedTread,
   flatLength,
   insetPlate,
@@ -289,5 +291,58 @@ describe("tôle pliée — jeu latéral et pièces identiques", () => {
     const e = flatOf({ profile: "U" }, 0, V.ZERO);
     const groups = groupIdenticalFlats([a, b, c, d, e]);
     expect(groups).toEqual([[a.id, b.id, c.id], [d.id], [e.id]]);
+  });
+});
+
+describe("contremarche d'arrivée des marches en Z (décision A11)", () => {
+  const input = {
+    start: V.vec(0, 0),
+    end: V.vec(780, 0),
+    up: V.vec(0, 1),
+    zTop: 2700,
+    riserDrop: 185,
+    returnLength: 40,
+    bend: bendOf(5, 6.5, 0.33),
+    holes: 3,
+    holeDiameter: 11,
+    holeEdgeDistance: 50,
+    mark: "CM15",
+  };
+
+  it("section en L : longueur développée = ailes droites + un pli, contour simple", () => {
+    const section = arrivalRiserSection({
+      riserDrop: 185,
+      returnLength: 40,
+      thickness: 5,
+      innerRadius: 6.5,
+    });
+    expect(section.straights).toEqual([185 - 6.5, 40 - 6.5]);
+    const poly = sectionPolygon(section);
+    expect(isSimplePolygon(poly)).toBe(true);
+    // Face avant sur la ligne de nez (X = 0), arête haute à Y = 0, retour sous Y = −riserDrop.
+    const xs = poly.map((p) => p.x);
+    const ys = poly.map((p) => p.y);
+    expect(Math.max(...xs)).toBeCloseTo(5, 9);
+    expect(Math.min(...xs)).toBeCloseTo(-40, 9);
+    expect(Math.max(...ys)).toBeCloseTo(0, 9);
+    expect(Math.min(...ys)).toBeCloseTo(-185 - 5, 9);
+    const res = developArrivalRiser(input);
+    const ysFlat = res.flat.outline.outer.map((p) => p.y);
+    expect(Math.max(...ysFlat) - Math.min(...ysFlat)).toBeCloseTo(flatLength(section, 0.33), 9);
+    expect(res.length).toBeCloseTo(780, 9);
+    expect(res.holeCenters.map((c) => c.x)).toEqual([50, 390, 730]);
+    expect(res.flat.outline.holes).toHaveLength(3);
+    expect(res.flat.lines.filter((l) => l.kind === "bend")).toHaveLength(1);
+    // Repère direct : X vers le chevêtre, Z le long de la ligne de nez.
+    expect(res.frame.xAxis).toEqual({ x: 0, y: 1, z: 0 });
+    // X × Y (vertical) = Z.
+    expect(res.frame.zAxis.x).toBe(1);
+    expect(Math.abs(res.frame.zAxis.y)).toBe(0);
+  });
+
+  it("aile sans partie droite : erreur lisible", () => {
+    expect(() => developArrivalRiser({ ...input, returnLength: 5 })).toThrow(
+      /CM15 : aile « retour » sans partie droite/,
+    );
   });
 });

@@ -106,6 +106,22 @@ describe("moteur de conformité", () => {
     expect(eff.downgradeReason).toMatch(/BET/);
   });
 
+  it("sévérité propre au constat : une surcharge qui assouplit la règle ne la relève pas (revue A10)", () => {
+    const settings = (severity: "avertissement" | "bloquant") =>
+      makeProject({
+        overrides: [{ ruleId: "GC_OBLIGATOIRE", severity, justification: "Avis du BET" }],
+      }).compliance;
+    const finding = { severity: "conseil" as const, severityReason: "Jour étroit" };
+    // Surcharge « avertissement » (plus faible que « bloquant » déclaré) : le constat reste conseil.
+    expect(
+      effectiveSeverity(getRule("GC_OBLIGATOIRE"), settings("avertissement"), finding).severity,
+    ).toBe("conseil");
+    // Sans constat propre, la surcharge s'applique.
+    expect(effectiveSeverity(getRule("GC_OBLIGATOIRE"), settings("avertissement")).severity).toBe(
+      "avertissement",
+    );
+  });
+
   it("remarques : surcharges inopérantes (règle inconnue, justification vide)", () => {
     const e = evaluateComplianceDetailed(
       makeInput({

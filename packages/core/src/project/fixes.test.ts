@@ -131,22 +131,43 @@ describe("suggestFixes — garde-corps sous la dalle haute", () => {
 });
 
 describe("suggestFixes — jour plus étroit que la sphère T1", () => {
-  it("propose de régler le côté jour sur « mur », ce qui lève l'erreur", () => {
+  const narrowJour = (inner?: "auto" | "void" | "wall") => {
     const base = createProject("half-turn");
     const legs = base.stair.layout.legs.map((l, i) =>
       i === 1 ? { length: 2 * base.stair.layout.width + 60 } : l,
     );
-    const p = with_(base, {
+    return with_(base, {
       stair: { ...base.stair, layout: { ...base.stair.layout, legs } },
-      guards: {},
+      guards: inner ? { flight: { inner } } : {},
     });
+  };
+
+  it("jour fermé : propose de régler le côté jour sur « mur », ce qui lève le conseil GC_OBLIGATOIRE", () => {
+    const p = narrowJour();
     const m = buildModel(p);
-    expect(m.errors).toHaveLength(1);
+    // Pas de garde-corps de jour : plus une erreur (décision A10), une remarque.
+    expect(m.errors).toEqual([]);
+    const conseil = (x: typeof m) =>
+      x.compliance.results.filter((r) => r.ruleId === "GC_OBLIGATOIRE" && r.status === "violation");
+    // Conseil dans le jour ; hors du jour (volée 3 plus longue que la volée 1) : bloquant.
+    expect(conseil(m).map((r) => r.severity)).toContain("conseil");
     const fix = suggestFixes(p, m).find((f) => f.id === "jour-wall");
     expect(fix).toBeDefined();
+    expect(fix!.label).toMatch(/^Jour fermé/);
     const q = apply(p, fix!.patch);
     expect(q.guards?.flight.inner).toBe("wall");
-    expect(buildModel(q).errors).toEqual([]);
+    const mq = buildModel(q);
+    expect(mq.errors).toEqual([]);
+    expect(conseil(mq)).toEqual([]);
+  });
+
+  it("côté jour déclaré « vide » (jour ouvert) : pas de correction « mur »", () => {
+    const p = narrowJour("void");
+    const m = buildModel(p);
+    expect(
+      m.compliance.results.some((r) => r.ruleId === "GC_OBLIGATOIRE" && r.severity === "conseil"),
+    ).toBe(true);
+    expect(suggestFixes(p, m).some((f) => f.id === "jour-wall")).toBe(false);
   });
 });
 
