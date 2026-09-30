@@ -496,13 +496,13 @@ describe("steel-profile : contrôle a posteriori de l'épaisseur hors emprise en
     expect(profileLateralWidthFindings(named, wider!)).toEqual([]);
   });
 
-  it("cas n° 1 (j3c) : UPN 240 retenue, aile 85 mm contre 45 mm comptés → avertissement", () => {
+  it("cas n° 1 (j3c) : UPN 240 retenue, aile 85 mm contre 45 mm comptés → conseil", () => {
     const { m } = run(loadExample("j3c-acceptance-01-upn.blondel.json"));
     const r = results(m, "FAB_PROFILE_AILE_HORS_EMPRISE");
     expect(r).toHaveLength(1);
     expect(r[0]).toMatchObject({
       status: "violation",
-      severity: "avertissement",
+      severity: "conseil",
       measured: 85,
       max: 45,
       unit: "mm",

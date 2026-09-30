@@ -220,7 +220,7 @@ export const PROFILE_RULES = {
       "Géométrie de la structure (aile de la section retenue) et épaisseur déclarée par le plugin (`capabilities.lateralThickness`) ; décision de l'utilisateur 2026-09-30 (docs/QUESTIONS.md D4)",
     confidence: "eleve",
     nature: "metier",
-    severity: "avertissement",
+    severity: "conseil",
     unit: "mm",
   },
 } as const satisfies Record<string, PluginRuleSpec>;
