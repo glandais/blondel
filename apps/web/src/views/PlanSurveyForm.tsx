@@ -83,7 +83,7 @@ export function PlanSurveyForm({ onPreview }: Props) {
   const [angle, setAngle] = useState("0");
   const [orientation, setOrientation] = useState<"ccw" | "cw">("ccw");
   // Remarque d'application : message traduit à l'affichage, ou motif de refus du schéma.
-  const [notice, setNotice] = useState<Message | string | null>(null);
+  const [notice, setNotice] = useState<Message | null>(null);
 
   const measures = useMemo(
     () =>
@@ -222,7 +222,7 @@ export function PlanSurveyForm({ onPreview }: Props) {
       </div>
       {notice ? (
         <p className="muted" role="status">
-          {typeof notice === "string" ? notice : t.t(notice)}
+          {t.t(notice)}
         </p>
       ) : null}
     </details>

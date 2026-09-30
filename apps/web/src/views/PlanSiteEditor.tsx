@@ -39,7 +39,7 @@ import {
 } from "react";
 import { UnderlayImport } from "../components/UnderlayImport.js";
 import { appStore, useApp } from "../store/appStore.js";
-import { msg, type Locale, type Message, type MessageKey } from "@blondel/i18n";
+import { errorMessage, msg, type Locale, type Message, type MessageKey } from "@blondel/i18n";
 import { formatNumber } from "../i18n/locale.js";
 import { useT } from "../i18n/useT.js";
 import "./planSite.css";
@@ -81,8 +81,11 @@ const TOOLS: readonly { id: PlanTool; label: MessageKey; title: MessageKey }[] =
   },
 ];
 
-/** Texte d'une remarque : message à traduire, ou texte brut (motif de refus, exception). */
-type Note = Message | string;
+/**
+ * Texte d'une remarque : message traduit au rendu (motif de refus, exception rendue par
+ * `errorMessage`), qui suit un changement de langue.
+ */
+type Note = Message;
 
 const fmt = (v: number, locale: Locale): string => formatNumber(locale, Math.round(v));
 
@@ -301,7 +304,7 @@ export function PlanSiteEditor({ model }: { model: Model }) {
       );
       setCalib(null);
     } catch (err) {
-      setMessage({ kind: "error", text: err instanceof Error ? err.message : String(err) });
+      setMessage({ kind: "error", text: errorMessage(err) });
     }
   };
 
@@ -498,7 +501,7 @@ export function PlanSiteEditor({ model }: { model: Model }) {
               className={`notice ${message.kind === "error" ? "notice--error" : "notice--info"}`}
               role={message.kind === "error" ? "alert" : "status"}
             >
-              {typeof message.text === "string" ? message.text : tr.t(message.text)}
+              {tr.t(message.text)}
             </p>
           ) : null}
           {tool === "calibrate" ? (

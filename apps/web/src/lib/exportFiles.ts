@@ -33,6 +33,8 @@ import {
 } from "@blondel/exports";
 import {
   DEFAULT_LOCALE,
+  MessageError,
+  msg,
   translatorFor,
   type Locale,
   type MessageKey,
@@ -292,7 +294,8 @@ export async function buildExport(
     ];
   }
   const avail = exportAvailability(id, model);
-  if (!avail.ok) throw new Error(t.t(avail.reason));
+  // `Message` (pas de texte figé) : la notification suit un changement de langue.
+  if (!avail.ok) throw new MessageError(msg(avail.reason));
   const m = model as Model;
   const svgOptions = {
     project,

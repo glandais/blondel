@@ -16,6 +16,7 @@ import {
   type Turn,
 } from "@blondel/core";
 import { msg, textMessage, type Locale, type Message, type MessageKey } from "@blondel/i18n";
+import { listMessages } from "../i18n/text.js";
 import { useMemo, useRef, type ReactNode } from "react";
 import { formatNumber } from "../i18n/locale.js";
 import { useT } from "../i18n/useT.js";
@@ -395,7 +396,9 @@ function RealignButton() {
         ? { kind: "info", msg: notice ?? textMessage("") }
         : {
             kind: "error",
-            msg: msg("ui.params.realign.failed", { issues: r.issues.join(" ; ") }),
+            msg: msg("ui.params.realign.failed", {
+              issues: listMessages(r.issues) ?? msg("ui.common.input.refused"),
+            }),
           },
     });
   };

@@ -67,7 +67,6 @@ describe("formulaire de l'assistant", () => {
     const r = assistantInput(
       acceptanceForm({ structure: "wood-housed", typologies: ["quarter"], direction: "left" }),
       straight,
-      translatorFor("fr"),
     );
     expect(r.ok).toBe(true);
     if (!r.ok) return;
@@ -86,22 +85,17 @@ describe("formulaire de l'assistant", () => {
     const r = assistantInput(
       acceptanceForm({ floorToFloor: "", sizeX: "-3", width: "abc" }),
       straight,
-      translatorFor("fr"),
     );
     expect(r.ok).toBe(false);
     if (r.ok) return;
-    expect(r.errors.join("\n")).toMatch(/Hauteur à monter/);
-    expect(r.errors.join("\n")).toMatch(/Dimensions de la trémie/);
-    expect(r.errors.join("\n")).toMatch(/Emmarchement/);
-    const en = assistantInput(
-      acceptanceForm({ floorToFloor: "", sizeX: "-3", width: "abc" }),
-      straight,
-      translatorFor("en"),
-    );
-    expect(en.ok).toBe(false);
-    if (en.ok) return;
-    expect(en.errors.join("\n")).toMatch(/^Total rise H: positive whole millimetres expected\.$/m);
-    expect(en.errors.join("\n")).not.toMatch(/[àéèù]/);
+    // Mêmes `Message` rendus dans l'une ou l'autre langue (ils suivent un changement de langue).
+    const fr = r.errors.map((m) => translatorFor("fr").t(m)).join("\n");
+    expect(fr).toMatch(/Hauteur à monter/);
+    expect(fr).toMatch(/Dimensions de la trémie/);
+    expect(fr).toMatch(/Emmarchement/);
+    const en = r.errors.map((m) => translatorFor("en").t(m)).join("\n");
+    expect(en).toMatch(/^Total rise H: positive whole millimetres expected\.$/m);
+    expect(en).not.toMatch(/[àéèù]/);
   });
 
   it("relevé 4 côtés + 2 diagonales : trémie polygonale ; relevé incohérent refusé", () => {
@@ -112,7 +106,6 @@ describe("formulaire de l'assistant", () => {
         survey: { ab: "2800", bc: "900", cd: "2800", da: "900", ac: d, bd: d },
       }),
       straight,
-      translatorFor("fr"),
     );
     expect(ok.ok).toBe(true);
     if (ok.ok) {
@@ -126,14 +119,9 @@ describe("formulaire de l'assistant", () => {
         survey: { ab: "2800", bc: "900", cd: "2800", da: "900", ac: d, bd: "2500" },
       }),
       straight,
-      translatorFor("fr"),
     );
     expect(bad.ok).toBe(false);
-    const missing = formOpening(
-      acceptanceForm({ openingMode: "survey" }),
-      straight,
-      translatorFor("fr"),
-    );
+    const missing = formOpening(acceptanceForm({ openingMode: "survey" }), straight);
     expect(missing.ok).toBe(false);
   });
 
@@ -145,7 +133,7 @@ describe("formulaire de l'assistant", () => {
         contexts: ["bois_dtu", "logement_interieur", "garde_corps_1988", "helicoidal"],
       },
     };
-    const r = assistantInput(acceptanceForm({ usage: "collective" }), current, translatorFor("fr"));
+    const r = assistantInput(acceptanceForm({ usage: "collective" }), current);
     expect(r.ok).toBe(true);
     if (!r.ok) return;
     expect(r.input.compliance?.contexts).toEqual([
@@ -164,31 +152,28 @@ describe("formulaire de l'assistant", () => {
         survey: { ab: "2800", bc: "900", cd: "2800", da: "900", ac: d, bd: d },
       }),
       straight,
-      translatorFor("fr"),
     );
-    expect(r).toEqual({ ok: false, error: "Position du point A invalide." });
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.error.key).toBe("ui.lib.assistant.error.pointA");
+    expect(translatorFor("fr").t(r.error)).toBe("Position du point A invalide.");
   });
 
   it("sans trémie, des côtés cochés auparavant n'ajoutent ni mur ni erreur d'épaisseur", () => {
     const r = assistantInput(
       acceptanceForm({ openingMode: "none", wallSides: [0, 1], wallThickness: "" }),
       { ...straight, site: { ...straight.site, walls: [] } },
-      translatorFor("fr"),
     );
     expect(r.ok).toBe(true);
     if (r.ok) expect(r.input.site.walls).toEqual([]);
   });
 
   it("sans trémie ; trémie du projet", () => {
-    expect(
-      formOpening(acceptanceForm({ openingMode: "none" }), straight, translatorFor("fr")),
-    ).toEqual({
+    expect(formOpening(acceptanceForm({ openingMode: "none" }), straight)).toEqual({
       ok: true,
       opening: undefined,
     });
-    expect(
-      formOpening(acceptanceForm({ openingMode: "project" }), straight, translatorFor("fr")),
-    ).toEqual({
+    expect(formOpening(acceptanceForm({ openingMode: "project" }), straight)).toEqual({
       ok: true,
       opening: straight.site.opening,
     });
@@ -272,8 +257,8 @@ describe("murs le long de la trémie", () => {
 describe("de la proposition au projet", () => {
   // Cas du critère n° 1 (préférence limons à la française, quart tournant).
   const form = acceptanceForm({ structure: "wood-housed", typologies: ["quarter"] });
-  const r = assistantInput(form, straight, translatorFor("fr"));
-  if (!r.ok) throw new Error(r.errors.join("\n"));
+  const r = assistantInput(form, straight);
+  if (!r.ok) throw new Error(r.errors.map((m) => translatorFor("fr").t(m)).join("\n"));
   const result = proposeDesigns({
     ...r.input,
     limits: { timeBudgetMs: Number.POSITIVE_INFINITY },
@@ -324,12 +309,8 @@ describe("de la proposition au projet", () => {
 
 describe("variantes de l'assistant", () => {
   it("« Montrer toutes les variantes » : limits.showAllVariants seulement si coché", () => {
-    const off = assistantInput(acceptanceForm(), straight, translatorFor("fr"));
-    const on = assistantInput(
-      acceptanceForm({ showAllVariants: true }),
-      straight,
-      translatorFor("fr"),
-    );
+    const off = assistantInput(acceptanceForm(), straight);
+    const on = assistantInput(acceptanceForm({ showAllVariants: true }), straight);
     expect(off.ok && on.ok).toBe(true);
     if (!off.ok || !on.ok) return;
     expect(off.input.limits).toBeUndefined();
@@ -350,15 +331,10 @@ describe("variantes de l'assistant", () => {
   });
 
   it("cœur : variantes regroupées sous la meilleure carte de chaque forme ; à plat sur demande", () => {
-    const grouped = assistantInput(
-      acceptanceForm({ structure: "none" }),
-      straight,
-      translatorFor("fr"),
-    );
+    const grouped = assistantInput(acceptanceForm({ structure: "none" }), straight);
     const flat = assistantInput(
       acceptanceForm({ structure: "none", showAllVariants: true }),
       straight,
-      translatorFor("fr"),
     );
     if (!grouped.ok || !flat.ok) throw new Error("entrée invalide");
     const g = proposeDesigns(grouped.input);

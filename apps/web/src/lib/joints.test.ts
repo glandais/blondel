@@ -10,7 +10,7 @@ import {
 } from "@blondel/core";
 import { describe, expect, it } from "vitest";
 import j5bText from "../../../../examples/j5b-debillarde-soude.blondel.json?raw";
-import { segmentedParts } from "./joints.js";
+import { segmentedPartName, segmentedParts } from "./joints.js";
 
 const FR = translatorFor("fr");
 
@@ -97,5 +97,21 @@ describe("tronçons et joints (limon de jour débillardé)", () => {
     const groups = segmentedParts(buildModel(wood));
     expect(groups.length).toBeGreaterThan(0);
     for (const g of groups) for (const j of g.joints) expect(j.weldMm).toBeNull();
+    // Nom du groupe : celui du premier tronçon, tel quel.
+    for (const g of groups) expect(segmentedPartName(g)).toBe(g.segments[0]!.part.name);
+  });
+
+  it("nom commun des tronçons : fondé sur la clé du nom, dans chaque langue", () => {
+    const g = segmentedParts(buildModel(parseProjectText(j5bText))).find(
+      (x) => x.base === "stringer-inner-curved",
+    )!;
+    expect(g.segments[0]!.part.name.key).toBe("structure.steelCurved.part.segment");
+    const name = segmentedPartName(g);
+    expect(name.key).toBe("structure.steelCurved.part.outerString");
+    expect(FR.t(name)).toBe(FR.t("structure.steelCurved.part.outerString"));
+    expect(FR.t(name)).not.toMatch(/tronçon/);
+    const EN = translatorFor("en");
+    expect(EN.t(name)).toBe(EN.t("structure.steelCurved.part.outerString"));
+    expect(EN.t(name)).not.toMatch(/segment/i);
   });
 });

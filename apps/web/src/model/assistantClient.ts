@@ -4,7 +4,7 @@
  * se fait sur le fil principal (après une tâche, pour laisser l'interface afficher l'attente) ;
  * l'annulation écarte alors seulement le résultat.
  */
-import { MessageError, msg } from "@blondel/i18n";
+import { MessageError, isMessage, msg, textMessage, type Message } from "@blondel/i18n";
 import type { AssistantInput } from "@blondel/core";
 import type { CandidateSketch } from "../lib/assistant.js";
 import {
@@ -18,11 +18,11 @@ import {
 export type AssistantRequest =
   { readonly input: AssistantInput } | { readonly sketches: readonly SketchRequest[] };
 
-/** Réponse du worker. */
+/** Réponse du worker (erreur : `Message`, traduit à l'affichage). */
 export type AssistantResponse =
   | { readonly outcome: AssistantOutcome }
   | { readonly sketches: Readonly<Record<string, CandidateSketch>> }
-  | { readonly error: string };
+  | { readonly error: Message | string };
 
 /** Sous-ensemble de `Worker` utilisé (injectable dans les tests). */
 export interface AssistantWorkerLike {
@@ -137,6 +137,10 @@ function startJob<T>(
 
 const unexpected = (): Error => new MessageError(msg("ui.worker.assistantUnexpected"));
 
+/** Erreur rendue par le worker : `MessageError` (son `msg` suit la langue de l'interface). */
+const workerError = (e: Message | string): Error =>
+  new MessageError(isMessage(e) ? e : textMessage(e));
+
 export function startAssistant(
   input: AssistantInput,
   options: AssistantClientOptions = {},
@@ -144,7 +148,7 @@ export function startAssistant(
   const local = options.local ?? ((i: AssistantInput) => runAssistantJob(i));
   return startJob(
     { input },
-    (d) => ("outcome" in d ? d.outcome : "error" in d ? new Error(d.error) : unexpected()),
+    (d) => ("outcome" in d ? d.outcome : "error" in d ? workerError(d.error) : unexpected()),
     () => local(input),
     options.factory ?? browserAssistantWorker,
   );
@@ -168,7 +172,7 @@ export function startSketches(
   const local = options.local ?? runSketchJob;
   return startJob(
     { sketches: requests },
-    (d) => ("sketches" in d ? d.sketches : "error" in d ? new Error(d.error) : unexpected()),
+    (d) => ("sketches" in d ? d.sketches : "error" in d ? workerError(d.error) : unexpected()),
     () => local(requests),
     options.factory ?? browserAssistantWorker,
   );

@@ -2,7 +2,7 @@
 
 > 2026-09-30. Consolidation des 250 points non cochés de `docs/LEDGER.md` §2, vérifiés un par un sur le code du commit 861d00d (lecture, recherche, sondes de test), et des questions encore ouvertes de `docs/SPEC.md` §7. Cette liste remplace la lecture du §2 du ledger, qui reste l'historique (ajouts seulement). Les points vérifiés comme résolus y sont cochés « résolu (vérifié 2026-09-30) ».
 
-Bilan de la vérification : 250 points examinés ; 43 résolus ou sans objet (cochés dans le ledger) ; 207 encore ouverts, en tout ou en partie, regroupés ici en 25 décisions (A), 11 thèmes de validation (B), 12 questions de normes ou juridiques (C) et une liste de dette technique (D). Un même point du ledger peut alimenter plusieurs entrées.
+Bilan de la vérification : 250 points examinés ; 43 résolus ou sans objet (cochés dans le ledger) ; 207 encore ouverts, en tout ou en partie, regroupés ici en 25 décisions (A), 11 thèmes de validation (B), 12 questions de normes ou juridiques (C) et une liste de dette technique (D). Un même point du ledger peut alimenter plusieurs entrées. Ajouts du 2026-09-30 après l'internationalisation (ADR-0007) : A26 (termes anglais et textes restés en français) et B12 (relecture du glossaire anglais).
 
 Conventions :
 
@@ -272,6 +272,28 @@ Valider à l'œil : teintes et veinage des essences, lamelles de 40 mm, vernis, 
 - **Décision de l'utilisateur (2026-09-29)** : proposition retenue (valeurs actuelles, sauf l'épaisseur du verre en 3D qui suit celle du remplissage).
 - Implémenté le 2026-09-29 — paramètre / comportement : épaisseur de transmission du verre en 3D = épaisseur des panneaux de verre du modèle (`stock.thickness`, donc `guards.infill.thickness`, 18 mm par défaut) : `glassThicknessOf(model)` (`apps/web/src/three/materials.ts`), appliquée sur place aux matériaux (`setGlassThickness`, sans recompilation) ; repli `GLASS_THICKNESS_MM` lu dans le défaut du schéma du cœur (`GuardInfillSchema`), plus de 10 mm en dur. Le maillage suivait déjà l'épaisseur du remplissage. Autres valeurs de A25 inchangées.
 
+### A26. Terminologie anglaise et textes restés en français
+
+L'interface et les sorties existent en anglais depuis l'internationalisation (ADR-0007). Plusieurs choix de traduction et de périmètre restent à trancher ; le glossaire (`docs/research/glossaire-en.md`) fixe un terme par notion, en anglais britannique.
+
+- Termes à confirmer ou à remplacer :
+  - « Installation sheet » pour la fiche de pose (`pdf.installation.*`, `ui.label.export.installationPdf`) ;
+  - « Sheet » pour le folio du cartouche PDF (`pdf.titleBlock.folio`) ;
+  - « Flat pattern » pour **tous** les développés, alors que le glossaire propose « development » pour un limon bois (`drawing.flat.title`, `pdf.flat.title`, onglet « Flat patterns ») ;
+  - « HR = » pour l'échappée mesurée sur l'élévation (`drawing.elevation.headroomDimension`) ;
+  - « R » employé à la fois pour le rayon et pour la hauteur de marche dans un même cartouche ;
+  - « steel » pour la famille métal (`ui.structure.family.metal`) ;
+  - « building permit » / « planning application (PC/DP) » pour la date de référence des garde-corps (`ui.params.compliance.referenceDate.label`, `compliance.context.garde_corps_1988`) ;
+  - « PDF file » pour le dossier PDF (`ui.label.export.pdf*`).
+- Sources citées des règles, des contrôles de plugin et du catalogue de profilés (`RuleResult.source`, « consulté le … », « Profil d'atelier Blondel (valeur par défaut à valider…) ») : laissées en français dans le contrôle de conception de l'interface et du PDF anglais.
+- Profil (`strict`, `souple`) et contextes du contrôle (`bois_dtu`, `erp`…) : affichés comme des identifiants dans les deux langues.
+- Noms par défaut du cœur (« Sans titre », noms des préréglages) : restent en français quand l'interface ne fournit pas de nom (l'interface nomme déjà le projet neuf, le préréglage, la démo et l'import sans nom dans sa langue).
+- Variante américaine : non proposée (anglais britannique seul, colonne « US » du glossaire pour mémoire).
+
+- Proposition : garder les termes actuels sauf « development » pour les développés de limons bois (glossaire) ; traduire les sources citées en gardant les titres de normes dans leur langue (clé par source dans `rules.yaml`) ; afficher le profil et les contextes par des libellés traduits (les descriptions des contextes existent déjà : `compliance.context.*` ; le profil n'a pas encore de clé) ; pas de variante américaine.
+- Aujourd'hui : comme décrit ; aucun de ces points n'empêche un export.
+- Réf. : `docs/adr/0007-internationalisation.md` (« Restes connus », « Tests » de la vague 3) ; `docs/research/glossaire-en.md` ; `packages/i18n/src/locales/en.json`.
+
 ## B. Validations par un atelier ou un professionnel
 
 Valeurs et conventions « à valider » : toutes sont des paramètres modifiables (profil d'atelier ou paramètres de plugin), jamais des constantes cachées. « Aucune » = aucune source dans `docs/research/`. SPEC §7.3 (Q13 à Q20) reste le cadre : aucune donnée publique de temps d'atelier, capacités machines propres à chaque atelier.
@@ -422,6 +444,18 @@ Valeurs et conventions « à valider » : toutes sont des paramètres modifiable
 | Fiche de pose           | cotes aux nus des murs, diagonales de contrôle, épure des nez ; marge 300 mm                               | `packages/exports/src/pdf/installation.ts`              | aucune (poseur)             | l. 239      |
 | Fiche de débit          | par épaisseur (plaques, tout le bois) ou par section (profilés, tubes)                                     | `packages/exports/src/cutsheet.ts`                      | aucune                      | l. 243      |
 | Arrondis d'affichage    | PDF à 0,01 (ratio, mm/m, kN) ; CSV au cm³ exprimé en m³                                                    | `packages/exports/src/csv/cutlist.ts`                   | aucune (ADR-0003)           | l. 278      |
+
+### B12. Relecture du glossaire anglais
+
+À faire relire par un utilisateur anglophone du métier (menuisier ou serrurier-métallier), idéalement britannique :
+
+- tout `docs/research/glossaire-en.md`, marqué « à valider » ;
+- en priorité les 13 termes marqués « _(usage)_ » (traduction courante sans source lue) : setting-out drawing (épure), top step / landing tread (marche palière), radial winder (marche rayonnante), mono-stringer (limon central), wreathed string et wreathing (limon débillardé, débillardement), soffit chamfering (délardement), knee (jarret), springing point (point de naissance), handrail bolt (boulon d'escalier), fixing lug (patte de fixation), dummy tread (fausse marche) ;
+- les calques DXF anglais (OUTLINE, TREADS, NOSINGS, WALKLINE, OPENING, DIMENSIONS, TEXT, BEND, MARKING, MORTISE, TENON, ROLLING, JOINT, INFO), lus par les FAO des ateliers ;
+- les descriptions anglaises des règles (`rules.<ID>.description`), traduites du texte français de `rules.yaml` ;
+- les termes de A26.
+
+Réf. : `docs/research/glossaire-en.md`, `packages/i18n/src/locales/en.json`, ADR-0007.
 
 ## C. Normes non lues et questions juridiques
 
@@ -582,3 +616,4 @@ Sans objet désormais : Q25 (three.js retenu, ADR-0001) ; Q4 à Q12 tranchées l
 - Soldé le 2026-09-30 — calque DXF : ELLIPSE (arcs compris) discrétisée au pas de 10° ; SPLINE approchée par de Boor (`SPLINE_SAMPLES_PER_SPAN` = 8 points par intervalle de nœuds ; poids des splines rationnelles non lus par `dxf-parser`, supposés égaux ; points de lissage à défaut de nœuds cohérents) ; entités ignorées résumées par famille (`describeSkipped` : textes, cotes, hachures, espace papier, calques exclus, autres types cités) dans le message d'import. HATCH reste ignorée (signalée). Bornes de taille inchangées (le projet ne passe pas encore dans l'URL). Tests : `site/dxf.test.ts`.
 - Soldé le 2026-09-30 — relevé : seuil de détection **exact** (dichotomie sur l'ajustement non linéaire complet, erreur des deux signes, plus petit seuil rendu), à partir du seuil linéarisé ; sur l'exemple du ledger (A (0, 0), B (400, 0), C (165, 546), D (−1 500, 546)), CD vaut 55 mm dans un sens et 84 mm dans l'autre (64 mm linéarisé). `detectable` rend le plus petit des deux sens, `undetectable` le plus grand : c'est l'angle mort que « Limite du contrôle » annonce (relecture [review:pipeline-web] : le plus petit seuil sous-estimait l'angle mort, précisément le défaut signalé l. 264). ≈ 12 ms par relevé. Tests : `site/survey.test.ts` (propriété à ± 5 % sans restriction aux petites erreurs). Calage du relevé sur deux points du DXF : non traité (hors consigne).
 - Soldé le 2026-09-30 — quota `localStorage` mesuré dans Chromium (e2e `storage-quota.spec.ts`) : 5 242 880 caractères clé comprise, soit 242 880 de marge sur le budget d'autosauvegarde de 5 000 000 ; la copie de secours d'une autosauvegarde refusée ne tient donc pas en plus d'une autosauvegarde aux bornes (comportement déjà prévu : autosauvegarde suspendue, message).
+- Ajouté le 2026-09-30 — pluriels « (s) » dans quelques textes anglais (`drawing.common.complianceSummary`, `pdf.compliance.summary`, `pdf.toc.templateTiles`, `stepping.perAngleZones*`) : les passer en `.one` / `.other` demande de transmettre un `count` numérique à ces messages (le français garde sa forme actuelle). Réf. : ADR-0007, « Restes connus ».

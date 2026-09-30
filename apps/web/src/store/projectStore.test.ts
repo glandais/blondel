@@ -1,7 +1,10 @@
 import { textMessage, translatorFor } from "@blondel/i18n";
 import fc from "fast-check";
 import {
+  DEMO_PRESET_IDS,
+  DEMO_PRESET_LABELS,
   PRESET_IDS,
+  PRESET_LABELS,
   ProjectSchema,
   createProject,
   serializeProject,
@@ -407,6 +410,63 @@ describe("remplacement du projet (assistant) et état d'interface", () => {
     expect(s.getState().history.past).toHaveLength(1);
     s.getState().undo();
     expect(s.getState().project).toBe(p0);
+  });
+
+  it("refus d'une modification : motifs en `Message`, qui suivent un changement de langue", () => {
+    const s = createProjectStore();
+    const r = s.getState().setField(["site", "floorToFloor"], 2700.5);
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.issues.length).toBeGreaterThan(0);
+    const EN = translatorFor("en");
+    const fr = FR.t(r.issues[0]!);
+    const en = EN.t(r.issues[0]!);
+    expect(fr).toMatch(/floorToFloor/);
+    expect(en).toMatch(/floorToFloor/);
+    expect(en).not.toBe(fr);
+    // Même résultat quelle que soit la langue au moment du refus (traduit à l'affichage).
+    s.getState().setLocale("en");
+    const again = s.getState().setField(["site", "floorToFloor"], 2700.5);
+    expect(again).toEqual(r);
+  });
+
+  it("projet neuf nommé dans la langue de l'interface (démarrage, préréglage, démo, import)", () => {
+    const EN = translatorFor("en");
+    const s = createProjectStore({ locale: "en" });
+    expect(s.getState().project.name).toBe(EN.t(PRESET_LABELS.straight));
+    expect(s.getState().project.name).not.toBe(createProject("straight").name);
+    s.getState().loadPreset("quarter-left");
+    expect(s.getState().project.name).toBe(EN.t(PRESET_LABELS["quarter-left"]));
+    const demo = DEMO_PRESET_IDS[0]!;
+    s.getState().loadDemo(demo);
+    expect(s.getState().project.name).toBe(EN.t(DEMO_PRESET_LABELS[demo]));
+    // Import d'un fichier sans nom : nom de la langue courante ; avec nom : repris tel quel.
+    const { name: _omitted, ...rest } = JSON.parse(serializeProject(createProject("straight"))) as {
+      name: string;
+    };
+    expect(s.getState().importText(JSON.stringify(rest)).ok).toBe(true);
+    expect(s.getState().project.name).toBe("Untitled");
+    s.getState().setLocale("fr");
+    expect(s.getState().importText(JSON.stringify(rest)).ok).toBe(true);
+    expect(s.getState().project.name).toBe("Sans titre");
+    const named = serializeProject(createProject("straight", { name: "Chalet" }));
+    s.getState().setLocale("en");
+    expect(s.getState().importText(named).ok).toBe(true);
+    expect(s.getState().project.name).toBe("Chalet");
+    // Français : le nom du cœur (inchangé).
+    expect(createProjectStore().getState().project.name).toBe(createProject("straight").name);
+  });
+
+  it("autosauvegarde refusée au démarrage : détails en `Message` (suivent la langue)", () => {
+    const storage = memoryStorage();
+    storage.setItem(AUTOSAVE_KEY, '{"schemaVersion":1,"site":{}}');
+    const s = createProjectStore({ storage, autosaveDelayMs: 0, locale: "en" });
+    const notice = s.getState().notice;
+    expect(notice?.kind).toBe("error");
+    if (!notice) return;
+    for (const d of notice.details ?? []) {
+      expect(FR.t(d)).not.toBe(translatorFor("en").t(d));
+    }
   });
 
   it("mode du plan et apparence 3D : état d'interface, hors historique", () => {

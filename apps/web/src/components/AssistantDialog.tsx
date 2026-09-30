@@ -18,6 +18,7 @@ import {
   TYPOLOGY_IDS,
   TYPOLOGY_LABELS,
   TURN_POSITION_LABELS,
+  errorMessageOf,
   openingPolygon,
   type DesignCandidate,
   type SurveyMeasure,
@@ -66,7 +67,7 @@ type RunState =
   | { readonly kind: "idle" }
   | { readonly kind: "running"; readonly run: AssistantRun; readonly started: number }
   | { readonly kind: "done"; readonly outcome: AssistantOutcome }
-  | { readonly kind: "error"; readonly message: string };
+  | { readonly kind: "error"; readonly message: Message };
 
 function TextInput({
   label,
@@ -440,7 +441,7 @@ function AssistantDialogBody() {
   const project = useApp((s) => s.project);
   const [form, setForm] = useState<AssistantForm>(() => formFromProject(project));
   const [state, setState] = useState<RunState>({ kind: "idle" });
-  const [errors, setErrors] = useState<readonly string[]>([]);
+  const [errors, setErrors] = useState<readonly Message[]>([]);
   const [elapsed, setElapsed] = useState(0);
   const titleId = useId();
   const root = useRef<HTMLDivElement>(null);
@@ -455,7 +456,7 @@ function AssistantDialogBody() {
 
   // Trémie du formulaire (un relevé coûte un ajustement et ses seuils exacts, ≈ 12 ms) : pas
   // recalculée à chaque rendu (minuterie de la recherche, 4 fois par seconde).
-  const opening = useMemo(() => formOpening(form, project, t), [form, project, t]);
+  const opening = useMemo(() => formOpening(form, project), [form, project]);
   const polygon = useMemo(() => (opening.ok ? openingPolygon(opening.opening) : null), [opening]);
 
   // Fermeture : la recherche en cours est abandonnée au démontage (effet ci-dessous).
@@ -526,7 +527,7 @@ function AssistantDialogBody() {
   };
 
   const propose = (): void => {
-    const r = assistantInput(form, project, t);
+    const r = assistantInput(form, project);
     if (!r.ok) {
       setErrors(r.errors);
       return;
@@ -548,7 +549,7 @@ function AssistantDialogBody() {
           s.kind === "running" && s.run === run
             ? e instanceof AssistantCancelled
               ? { kind: "idle" }
-              : { kind: "error", message: e instanceof Error ? e.message : String(e) }
+              : { kind: "error", message: errorMessageOf(e) }
             : s,
         ),
     );
@@ -567,7 +568,7 @@ function AssistantDialogBody() {
       appStore.getState().setAssistantOpen(false);
       appStore.getState().setView("plan");
     } catch (e) {
-      setErrors([e instanceof Error ? e.message : String(e)]);
+      setErrors([errorMessageOf(e)]);
     }
   };
 
@@ -696,7 +697,7 @@ function AssistantDialogBody() {
                 </small>
               ) : null}
               {!opening.ok && form.openingMode !== "none" ? (
-                <small className="field__error assistant__wide">{opening.error}</small>
+                <small className="field__error assistant__wide">{t.t(opening.error)}</small>
               ) : null}
             </fieldset>
             <fieldset>
@@ -801,7 +802,7 @@ function AssistantDialogBody() {
             {errors.length > 0 ? (
               <ul className="notice notice--error" role="alert">
                 {errors.map((e, i) => (
-                  <li key={i}>{e}</li>
+                  <li key={i}>{t.t(e)}</li>
                 ))}
               </ul>
             ) : null}

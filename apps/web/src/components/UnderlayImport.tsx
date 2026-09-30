@@ -30,8 +30,8 @@ import {
   UNIT_CHOICES,
 } from "../views/planSiteGeometry.js";
 
-/** Texte d'un avis : message traduit à l'affichage, ou texte brut (refus de validation du store). */
-type NoticeText = Message | string;
+/** Texte d'un avis : message traduit à l'affichage (il suit un changement de langue). */
+type NoticeText = Message;
 
 type Notice = { readonly kind: "info" | "error"; readonly text: NoticeText } | null;
 
@@ -331,7 +331,7 @@ export function UnderlayImport({
           className={`notice ${notice.kind === "error" ? "notice--error" : "notice--info"}`}
           role={notice.kind === "error" ? "alert" : "status"}
         >
-          {typeof notice.text === "string" ? notice.text : t.t(notice.text)}
+          {t.t(notice.text)}
         </p>
       ) : null}
       {underlay?.dxf ? (

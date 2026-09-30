@@ -12,7 +12,7 @@ import { useMemo } from "react";
 import { useResolvedTheme } from "../components/ThemeToggle.js";
 import { downloadFile } from "../lib/download.js";
 import { fileStem, partDxfFile, partsWithFlat } from "../lib/exportFiles.js";
-import { segmentedParts, type SegmentedPart } from "../lib/joints.js";
+import { segmentedPartName, segmentedParts, type SegmentedPart } from "../lib/joints.js";
 import { selectedPart } from "../lib/parts.js";
 import { numberFormat } from "../i18n/locale.js";
 import { useT } from "../i18n/useT.js";
@@ -26,18 +26,7 @@ const select = (partId: string) =>
 
 const KG: Intl.NumberFormatOptions = { maximumFractionDigits: 1 };
 
-/**
- * Nom commun des tronçons d'une pièce : nom de la pièce entière pour le limon débillardé, sinon
- * nom du premier tronçon sans son suffixe « , tronçon i/n » (« , segment i/n » en anglais).
- */
-function groupName(group: SegmentedPart, t: Translator): string {
-  const first = group.segments[0]?.part.name;
-  if (first === undefined) return group.base;
-  if (first.key === "structure.steelCurved.part.segment") {
-    return t.t("structure.steelCurved.part.outerString");
-  }
-  return t.t(first).replace(/,\s*(tronçon|segment)\b.*$/, "");
-}
+const groupName = (group: SegmentedPart, t: Translator): string => t.t(segmentedPartName(group));
 
 /** Tronçons d'une pièce et joints entre tronçons consécutifs. */
 function SegmentsTable({ group, selected }: { group: SegmentedPart; selected?: string }) {

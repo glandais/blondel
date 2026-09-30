@@ -15,8 +15,8 @@ import { appStore, useApp, useModel } from "../store/appStore.js";
 /** Nombre d'erreurs affichées avant « … et N autres ». */
 const MAX_ERRORS = 4;
 
-/** Motif d'un refus : texte brut (validation du store) ou message traduit à l'affichage. */
-type Failure = string | Message;
+/** Motif d'un refus : message traduit à l'affichage (il suit un changement de langue). */
+type Failure = Message;
 
 function apply(fix: FixSuggestion): Failure | null {
   const r = appStore.getState().update((p) => applyFix(p, fix));
@@ -86,7 +86,7 @@ export function ErrorsBar() {
       {failure ? (
         <p className="field__error" role="alert">
           {t.t("ui.errors.failure", {
-            reason: typeof failure === "string" ? failure : t.t(failure),
+            reason: failure,
           })}{" "}
           <button type="button" className="link" onClick={() => setFailure(null)}>
             {t.t("ui.errors.close")}

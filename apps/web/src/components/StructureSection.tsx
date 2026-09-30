@@ -235,7 +235,7 @@ export function StructureSection() {
   const onParam =
     (field: ParamField) =>
     (value: unknown): UpdateResult => {
-      if (!plugin) return { ok: false, issues: [t.t("ui.structure.pluginUnavailable")] };
+      if (!plugin) return { ok: false, issues: [msg("ui.structure.pluginUnavailable")] };
       const next = afterParamChange(
         plugin.kind,
         field.path,
@@ -244,7 +244,7 @@ export function StructureSection() {
       const invalid = validateParams(plugin, next);
       if (invalid) {
         setError(invalid);
-        return { ok: false, issues: [t.t(invalid)] };
+        return { ok: false, issues: [invalid] };
       }
       setError(null);
       return setStructure(structure.kind, next);

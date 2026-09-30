@@ -4,7 +4,7 @@
  * octets du dossier PDF et du modèle glTF (tampons transférés, sans copie).
  */
 import type { Project } from "@blondel/core";
-import type { Locale } from "@blondel/i18n";
+import type { Locale, Message } from "@blondel/i18n";
 import type { PdfJobOptions } from "../lib/optionalApi.js";
 import type { CompareOutcome, Variant } from "../lib/variants.js";
 import type { ModelSnapshot } from "./snapshot.js";
@@ -35,13 +35,14 @@ export type WorkerRequest =
     };
 
 /**
- * Résultat d'un export PDF : les octets, ou le message d'un échec **de l'export** (modèle
- * incalculable, rendu impossible), déjà traduit dans la langue du job. Un tel échec n'est pas
- * une panne du worker : il est rendu à l'appelant sans repli sur le fil principal.
+ * Résultat d'un export PDF : les octets, ou le motif d'un échec **de l'export** (modèle
+ * incalculable, rendu impossible), en `Message` traduit à l'affichage (il suit un changement de
+ * langue). Un tel échec n'est pas une panne du worker : il est rendu à l'appelant sans repli
+ * sur le fil principal.
  *
  * Le job `build` ne reçoit pas la langue : le `Model` est neutre (ADR-0007).
  */
-export type PdfResult = { readonly bytes: Uint8Array } | { readonly error: string };
+export type PdfResult = { readonly bytes: Uint8Array } | { readonly error: Message };
 
 /** Résultat d'un export glTF binaire (.glb) : mêmes conventions que `PdfResult`. */
 export type GlbResult = PdfResult;

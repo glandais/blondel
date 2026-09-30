@@ -1,4 +1,4 @@
-import { msg, textMessage, type MessageKey } from "@blondel/i18n";
+import { msg, textMessage, translatorFor, type MessageKey } from "@blondel/i18n";
 import { z } from "zod";
 import { frList } from "../i18n.test-helpers.js";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -118,6 +118,12 @@ describe("pipeline — plugins de structure", () => {
     const m = buildModel(withKind(base, "test-probe", { size: -1 }));
     expect(m.errors.map((e) => e.key)).toContain("pipeline.structureParamsInvalid");
     expect(frList(m.errors).join(" ")).toMatch(/test-probe.*paramètres invalides.*size/);
+    // Motif de zod rendu par la carte d'erreurs du cœur : français, puis anglais (ADR-0007).
+    expect(frList(m.errors).join(" ")).toMatch(/size : Trop petit : nombre doit être >0/);
+    const en = translatorFor("en");
+    expect(m.errors.map((e) => en.t(e)).join(" ")).toMatch(
+      /Structure “test-probe”: invalid parameters \(size: .*>0/,
+    );
     expect(seen).toEqual([]);
     expect(m.parts.some((p) => p.category === "tread")).toBe(true);
   });

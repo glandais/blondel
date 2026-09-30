@@ -1,3 +1,4 @@
+import { translatorFor } from "@blondel/i18n";
 import { readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -74,7 +75,12 @@ describe("steel-profile — registre et paramètres", () => {
     });
     expect(SteelProfileParamsSchema.safeParse({ section: "UPN 999" }).success).toBe(false);
     const m = buildModel(straight(15, { section: "UPN 999" }), { memo: false });
-    expect(frList(m.errors).join(" ")).toMatch(/paramètres invalides/);
+    expect(frList(m.errors).join(" ")).toMatch(
+      /paramètres invalides.*section absente du catalogue/,
+    );
+    // Motif propre au schéma : `Message` (params de l'issue), traduit en anglais.
+    const en = translatorFor("en");
+    expect(m.errors.map((e) => en.t(e)).join(" ")).toMatch(/section not in the catalogue/);
   });
 });
 

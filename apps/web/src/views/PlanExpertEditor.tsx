@@ -254,7 +254,13 @@ export function PlanExpertEditor({ model }: { model: Model }) {
       .update((p) => withAngleOverride(p, k, angle), key, { sticky: true });
     appStore.getState().endGroup();
     setDrag(null);
-    setMessage(r.ok ? null : msg("ui.plan.expert.angleRefused", { error: r.issues[0] ?? "" }));
+    setMessage(
+      r.ok
+        ? null
+        : msg("ui.plan.expert.angleRefused", {
+            error: r.issues[0] ?? msg("ui.common.input.refused"),
+          }),
+    );
   };
 
   const onKeyDown = (e: KeyboardEvent<HTMLDivElement>): void => {

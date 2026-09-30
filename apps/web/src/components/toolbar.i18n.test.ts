@@ -4,9 +4,11 @@
  * l'anglais ne laisse passer aucun libellé français de ces composants.
  */
 import { withRuleOverride } from "@blondel/core";
+import { msg, translatorFor } from "@blondel/i18n";
 import { createElement, type FunctionComponent } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it } from "vitest";
+import { listMessages } from "../i18n/text.js";
 import { defaultGuards } from "../lib/guardsForm.js";
 import { appStore } from "../store/appStore.js";
 import { CompliancePanel } from "./CompliancePanel.js";
@@ -186,5 +188,28 @@ describe("UnderlayImport", () => {
     expect(en).toContain("Background layer");
     expect(en).toContain("Import a DXF plan…");
     expect(en).not.toContain("Calque");
+  });
+});
+
+describe("notification d'un refus (motifs en `Message`)", () => {
+  it("suit un changement de langue après le refus", () => {
+    const r = appStore.getState().setField(["site", "floorToFloor"], 2700.5);
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    appStore.setState({
+      notice: {
+        kind: "error",
+        msg: msg("ui.params.realign.failed", { issues: listMessages(r.issues)! }),
+        details: r.issues,
+      },
+    });
+    const escape = (s: string): string => s.replace(/'/g, "&#x27;");
+    const fr = render("fr", Toolbar);
+    expect(fr).toContain("Recalage impossible");
+    expect(fr).toContain(escape(translatorFor("fr").t(r.issues[0]!)));
+    const en = render("en", Toolbar);
+    expect(en).toContain("Realignment impossible");
+    expect(en).toContain(escape(translatorFor("en").t(r.issues[0]!)));
+    expect(en).not.toContain("Recalage");
   });
 });

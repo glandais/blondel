@@ -18,14 +18,7 @@ import {
   type Project,
   errorMessageOf,
 } from "@blondel/core";
-import {
-  DEFAULT_LOCALE,
-  createTranslator,
-  msg,
-  textMessage,
-  type Locale,
-  type Message,
-} from "@blondel/i18n";
+import { DEFAULT_LOCALE, createTranslator, msg, type Locale, type Message } from "@blondel/i18n";
 import { createStore, type StoreApi } from "zustand/vanilla";
 import { presetProject } from "../lib/layoutKind.js";
 import type { AppearanceOverrides } from "../lib/appearance.js";
@@ -79,8 +72,12 @@ export interface Notice {
   readonly details?: readonly Message[];
 }
 
+/**
+ * Résultat d'une modification : motifs du refus en `Message` (« chemin (libellé) : motif »),
+ * traduits à l'affichage (un changement de langue les retraduit).
+ */
 export type UpdateResult =
-  { readonly ok: true } | { readonly ok: false; readonly issues: readonly string[] };
+  { readonly ok: true } | { readonly ok: false; readonly issues: readonly Message[] };
 
 export interface AppState {
   readonly history: History<Project>;
@@ -332,11 +329,7 @@ export function createProjectStore(options: ProjectStoreOptions = {}): ProjectSt
       const cur = get().history;
       if (Object.is(next, cur.present)) return { ok: true };
       const normalized = normalizeProject(next);
-      if (!normalized.ok) {
-        // Motifs traduits dans la langue du moment (message transitoire du champ refusé).
-        const t = createTranslator(get().locale);
-        return { ok: false, issues: normalized.issues.map((m) => t.t(m)) };
-      }
+      if (!normalized.ok) return { ok: false, issues: normalized.issues };
       // Forme canonique identique à l'état présent (ex. valeur par défaut rétablie) : rien à
       // enregistrer, pas d'entrée d'historique vide.
       if (
@@ -378,7 +371,7 @@ export function createProjectStore(options: ProjectStoreOptions = {}): ProjectSt
         try {
           next = recipe(get().project);
         } catch (e) {
-          return { ok: false, issues: [createTranslator(get().locale).t(errorMessageOf(e))] };
+          return { ok: false, issues: [errorMessageOf(e)] };
         }
         return apply(next, groupKey, updateOptions?.sticky === true);
       },
@@ -406,7 +399,7 @@ export function createProjectStore(options: ProjectStoreOptions = {}): ProjectSt
         } catch (e) {
           const message = errorMessageOf(e);
           set({ notice: { kind: "error", msg: message } });
-          return { ok: false, issues: [t.t(message)] };
+          return { ok: false, issues: [message] };
         }
         const r = apply(p);
         if (r.ok) set({ selection: null, notice: null, overlays: DEFAULT_OVERLAYS });
@@ -420,7 +413,7 @@ export function createProjectStore(options: ProjectStoreOptions = {}): ProjectSt
         } catch (e) {
           const message = errorMessageOf(e);
           set({ notice: { kind: "error", msg: message } });
-          return { ok: false, issues: [t.t(message)] };
+          return { ok: false, issues: [message] };
         }
         // Entrée d'historique distincte : un groupe ouvert (saisie en cours) est d'abord clos.
         const h = get().history;
@@ -445,7 +438,9 @@ export function createProjectStore(options: ProjectStoreOptions = {}): ProjectSt
         return r;
       },
       importText: (text) => {
-        const r = importProjectText(text);
+        // Projet sans nom : nommé dans la langue de l'interface (le cœur le nomme en français).
+        const untitledName = createTranslator(get().locale).t("ui.lib.project.untitled");
+        const r = importProjectText(text, { untitledName });
         if (r.ok) {
           apply(r.project);
           set({
@@ -519,8 +514,7 @@ export function createProjectStore(options: ProjectStoreOptions = {}): ProjectSt
         const applied = apply(r.project);
         if (!applied.ok) {
           const message = msg("ui.notice.backup.refused");
-          // Motifs déjà traduits par `apply` dans la langue du moment.
-          const issues = applied.issues.map(textMessage);
+          const issues = applied.issues;
           set({ notice: { kind: "error", msg: message, details: issues } });
           return { ok: false, message, issues };
         }

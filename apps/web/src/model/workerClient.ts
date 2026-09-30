@@ -292,7 +292,7 @@ export function createJobExec(
           (e: unknown) => recover(e, () => runLocal().pdf(job)),
         );
       }
-      if ("error" in result) throw new Error(result.error);
+      if ("error" in result) throw new MessageError(result.error);
       return result.bytes;
     },
     async glb(project, locale) {
@@ -306,7 +306,7 @@ export function createJobExec(
           (e: unknown) => recover(e, () => runLocal().glb(job)),
         );
       }
-      if ("error" in result) throw new Error(result.error);
+      if ("error" in result) throw new MessageError(result.error);
       return result.bytes;
     },
     get usesWorker() {

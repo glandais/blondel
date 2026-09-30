@@ -113,6 +113,9 @@ const mmInt = z.number().int();
 const mmPos = mmInt.positive();
 const mmNonNeg = mmInt.nonnegative();
 
+/** Motif du refus d'une section hors catalogue (paramètre `section`). */
+const UNKNOWN_SECTION: Message = msg("structure.steelProfile.issue.unknownSection");
+
 export const SteelProfileParamsSchema = z.object({
   grade: z.enum(STEEL_GRADES).default("S235"),
   finish: z.enum(["raw", "painted", "galvanized"]).default("painted"),
@@ -122,8 +125,10 @@ export const SteelProfileParamsSchema = z.object({
   section: z
     .union([
       z.literal("auto"),
+      // Texte français pour zod, `Message` dans `params` (lu par `zodIssueMessage`, ADR-0007).
       z.string().refine((s) => findSection(s) !== undefined, {
-        message: "section absente du catalogue",
+        message: translatorFor(DEFAULT_LOCALE).t(UNKNOWN_SECTION),
+        params: { message: UNKNOWN_SECTION },
       }),
     ])
     .default("auto"),

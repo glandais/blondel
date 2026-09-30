@@ -193,7 +193,7 @@ describe("dossier PDF en anglais sur examples/", () => {
     const tiled = en.pages.filter((p) => p.kind === "template" && p.tile!.count > 1);
     expect(tiled.length).toBeGreaterThan(0);
     expect(tiled[0]!.title).toMatch(/^1:1 template \S+ — tile [A-Z]+\d+ \(1\/\d+\)/);
-    expect(all).toMatch(/1:1 template \S+: \d+ tile\(s\), grid \d+ × \d+/);
+    expect(all).toMatch(/1:1 template \S+: grid of \d+ × \d+ tiles \(\d+ printed\)/);
     expect(all).toContain("2026-01-02");
   });
 

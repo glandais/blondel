@@ -4,7 +4,7 @@
  * saisissent en mm entiers (ADR-0003) ; la validation métier reste celle du schéma du cœur,
  * appliquée par le store (une valeur refusée affiche le message sans modifier le projet).
  */
-import { msg, textMessage, type Message, type Translator } from "@blondel/i18n";
+import { msg, type Message, type Translator } from "@blondel/i18n";
 import { useEffect, useId, useState, type ReactNode } from "react";
 import { numberFormat } from "../i18n/locale.js";
 import { useT } from "../i18n/useT.js";
@@ -74,10 +74,9 @@ export function revertedNote(error: Message, t: Translator): string {
   return t.t("ui.common.input.reverted", { error: t.t(error).replace(/\.$/, "") });
 }
 
-/** Premier motif de refus du store (texte brut du schéma), ou « Valeur refusée. ». */
-function refusal(issues: readonly string[]): Message {
-  const first = issues[0];
-  return first === undefined ? msg("ui.common.input.refused") : textMessage(first);
+/** Premier motif de refus du store (traduit à l'affichage), ou « Valeur refusée. ». */
+function refusal(issues: readonly Message[]): Message {
+  return issues[0] ?? msg("ui.common.input.refused");
 }
 
 export interface IntFieldProps extends IntFieldBounds {

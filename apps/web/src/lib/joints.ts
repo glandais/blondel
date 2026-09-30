@@ -12,7 +12,14 @@ import {
   type Model,
   type Part,
 } from "@blondel/core";
-import { DEFAULT_LOCALE, msg, translatorFor, type Message } from "@blondel/i18n";
+import {
+  DEFAULT_LOCALE,
+  msg,
+  textMessage,
+  translatorFor,
+  type Message,
+  type MessageKey,
+} from "@blondel/i18n";
 
 export interface SegmentRow {
   readonly part: Part;
@@ -135,4 +142,24 @@ export function segmentedParts(model: Pick<Model, "parts">): SegmentedPart[] {
     out.push({ base, segments, joints });
   }
   return out;
+}
+
+/**
+ * Clés du nom d'un tronçon (« …, tronçon i/n ») → nom de la pièce entière. Choisi sur la clé du
+ * `Message` (`Part.name`), jamais sur le texte rendu : indépendant de la langue d'affichage.
+ */
+const WHOLE_PART_NAME: Readonly<Partial<Record<MessageKey, MessageKey>>> = {
+  "structure.steelCurved.part.segment": "structure.steelCurved.part.outerString",
+};
+
+/**
+ * Nom commun des tronçons d'une pièce (traduit à l'affichage) : nom de la pièce entière quand le
+ * nom du tronçon est une clé de tronçon connue (limon débillardé), sinon nom du premier tronçon
+ * tel quel ; identifiant de base à défaut de tronçon.
+ */
+export function segmentedPartName(group: SegmentedPart): Message {
+  const first = group.segments[0]?.part.name;
+  if (first === undefined) return textMessage(group.base);
+  const whole = WHOLE_PART_NAME[first.key];
+  return whole !== undefined ? msg(whole) : first;
 }

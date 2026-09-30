@@ -1,4 +1,5 @@
 import { PRESET_IDS, buildModel, createProject } from "@blondel/core";
+import { MessageError, msg, textMessage } from "@blondel/i18n";
 import { describe, expect, it } from "vitest";
 import { renderElevationForScreen, renderPlanForScreen, renderWith } from "./planSvg.js";
 
@@ -9,7 +10,12 @@ describe("rendus SVG pour l'écran", () => {
       renderWith(() => {
         throw new Error("cote impossible");
       }),
-    ).toEqual({ error: "cote impossible" });
+    ).toEqual({ error: textMessage("cote impossible") });
+    // Exception métier : son `Message`, rendu dans la langue d'affichage.
+    const failed = renderWith(() => {
+      throw new MessageError(msg("ui.label.export.noModel"));
+    });
+    expect("error" in failed && failed.error.key).toBe("ui.label.export.noModel");
   });
 
   it("plan et élévation réels sur chaque préréglage, avec une cible data-tread par marche", () => {

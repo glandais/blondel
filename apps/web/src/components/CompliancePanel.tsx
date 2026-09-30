@@ -26,6 +26,7 @@ import {
   sameLocation,
 } from "../lib/compliance.js";
 import { msg, type Message, type MessageKey, type Translator } from "@blondel/i18n";
+import { listMessages } from "../i18n/text.js";
 import { useT } from "../i18n/useT.js";
 import { formatMeasure, type DisplayUnit } from "../lib/units.js";
 import { appStore, useApp, useModel } from "../store/appStore.js";
@@ -74,11 +75,11 @@ function OverrideEditor({
   const t = useT();
   const [severity, setSeverity] = useState<OverrideSeverity>(current?.severity ?? "avertissement");
   const [justification, setJustification] = useState(current?.justification ?? "");
-  const [error, setError] = useState<string | null>(null);
+  // Motifs du refus (`Message`), traduits au rendu : ils suivent un changement de langue.
+  const [error, setError] = useState<Message | null>(null);
   const empty = justification.trim() === "";
-  // Refus de validation du store : textes bruts du schéma (ou messages, traduits ici).
-  const issuesText = (issues: readonly (string | Message)[]): string =>
-    issues.map((i) => (typeof i === "string" ? i : t.t(i))).join(" ; ");
+  const issuesText = (issues: readonly Message[]): Message =>
+    listMessages(issues) ?? msg("ui.common.input.refused");
   const save = () => {
     const r = appStore
       .getState()
@@ -128,7 +129,7 @@ function OverrideEditor({
         ) : null}
         {error ? (
           <span className="field__error" role="alert">
-            {error}
+            {t.t(error)}
           </span>
         ) : null}
       </div>

@@ -51,6 +51,7 @@ import type {
 import type { StructureContext, StructureKind } from "../model/plugins.js";
 import type { Project } from "../model/project.js";
 import { buildBasicParts } from "../parts/basic.js";
+import { issuesFromZod, projectErrorMap, projectIssueMessage } from "../project/errors.js";
 import { checkSolids } from "../parts/solidChecks.js";
 import { precheckStringers, structurePrecheckSettings } from "../precheck/stringers.js";
 import { evaluateComplianceDetailed, unknownOverrideNote } from "../rules/engine.js";
@@ -329,13 +330,25 @@ function resolveStructureParams(
 ): unknown {
   const defaults = plugin.defaults(ctx);
   const merged = isRecord(defaults) ? deepMerge(defaults, params) : params;
-  const parsed = plugin.paramsSchema.safeParse(merged);
+  // Carte d'erreurs du cœur et valeurs reçues conservées : chaque problème devient un `Message`
+  // (« chemin (libellé) : motif », `project/errors.ts`), traduit à l'affichage (ADR-0007).
+  const parsed = plugin.paramsSchema.safeParse(merged, {
+    error: projectErrorMap,
+    reportInput: true,
+  });
   if (!parsed.success) {
-    // Messages de zod tels quels (langue de zod, `project/errors.ts`) : texte brut.
-    const issues = parsed.error.issues
-      .map((i) => (i.path.length > 0 ? `${i.path.join(".")} : ${i.message}` : i.message))
-      .join(" ; ");
-    throw new StructureError(msg("pipeline.structureParamsInvalid", { kind: plugin.kind, issues }));
+    const issues = issuesFromZod(parsed.error)
+      .map(projectIssueMessage)
+      .reduceRight<Message | null>(
+        (rest, part) => (rest === null ? part : msg("common.list", { first: part, rest })),
+        null,
+      );
+    throw new StructureError(
+      msg("pipeline.structureParamsInvalid", {
+        kind: plugin.kind,
+        issues: issues ?? msg("project.issue.invalid"),
+      }),
+    );
   }
   return parsed.data;
 }

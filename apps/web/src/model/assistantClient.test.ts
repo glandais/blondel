@@ -1,4 +1,5 @@
 import { createProject, textMessage, type AssistantInput } from "@blondel/core";
+import { isMessageError, msg, translatorFor } from "@blondel/i18n";
 import { describe, expect, it, vi } from "vitest";
 import { runAssistantJob, runSketchJob, type AssistantOutcome } from "./assistantJob.js";
 import {
@@ -130,5 +131,16 @@ describe("client de l'assistant", () => {
     const run = startAssistant(input, { factory: () => w });
     w.onmessage?.({ data: { error: "boum" } });
     await expect(run.promise).rejects.toThrow("boum");
+  });
+
+  it("erreur structurée du worker : `MessageError` dont le message suit la langue", async () => {
+    const w = fakeWorker();
+    const run = startAssistant(input, { factory: () => w });
+    w.onmessage?.({ data: { error: msg("ui.worker.assistantUnexpected") } });
+    const e: unknown = await run.promise.catch((x: unknown) => x);
+    expect(isMessageError(e)).toBe(true);
+    if (!isMessageError(e)) return;
+    expect(e.msg.key).toBe("ui.worker.assistantUnexpected");
+    expect(translatorFor("en").t(e.msg)).not.toBe(translatorFor("fr").t(e.msg));
   });
 });

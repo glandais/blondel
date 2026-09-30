@@ -18,10 +18,22 @@ export function toMessage(text: Text): Message {
  * notification) : un seul `Message`, traduit dans la langue d'affichage. Liste vide : `null`.
  */
 export function joinMessages(messages: readonly Message[]): Message | null {
+  return chain(messages, "ui.common.join");
+}
+
+/**
+ * Énumération de messages séparés par « ; » (motifs d'un refus) : un seul `Message`, traduit
+ * dans la langue d'affichage. Liste vide : `null`.
+ */
+export function listMessages(messages: readonly Message[]): Message | null {
+  return chain(messages, "ui.common.joinList");
+}
+
+function chain(messages: readonly Message[], key: MessageKey): Message | null {
   if (messages.length === 0) return null;
   let out = messages[messages.length - 1]!;
   for (let i = messages.length - 2; i >= 0; i--) {
-    out = msg("ui.common.join", { first: messages[i]!, rest: out });
+    out = msg(key, { first: messages[i]!, rest: out });
   }
   return out;
 }

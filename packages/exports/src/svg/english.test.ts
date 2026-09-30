@@ -71,7 +71,7 @@ describe("dessins en anglais (locale « en »)", () => {
         expect(texts.some((t) => /^Plan — \d+ rises$/.test(t))).toBe(true);
         expect(texts.some((t) => /^Total rise H = [\d,]+ mm$/.test(t))).toBe(true);
         expect(texts.some((t) => /^2R \+ G = \d+\.\d mm$/.test(t))).toBe(true);
-        expect(texts.some((t) => t.startsWith("Design check: "))).toBe(true);
+        expect(texts.some((t) => t.startsWith("Design check — blocking: "))).toBe(true);
       });
 
       it("élévation SVG en anglais", () => {

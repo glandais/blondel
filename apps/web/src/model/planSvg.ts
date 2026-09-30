@@ -5,9 +5,13 @@
  */
 import type { Model, Project } from "@blondel/core";
 import { renderElevationSvg, renderPlanSvg } from "@blondel/exports";
-import type { Locale } from "@blondel/i18n";
+import { errorMessage, type Locale, type Message } from "@blondel/i18n";
 
-export type SvgRenderResult = { readonly svg: string } | { readonly error: string };
+/**
+ * SVG rendu, ou motif de l'échec (`Message` d'une exception métier des exports, sinon texte brut
+ * de l'exception), traduit à l'affichage.
+ */
+export type SvgRenderResult = { readonly svg: string } | { readonly error: Message };
 
 /**
  * Options communes de l'écran : fond transparent (thème de la page), titre du projet, langue
@@ -24,7 +28,7 @@ export function renderWith(render: () => string): SvgRenderResult {
   try {
     return { svg: render() };
   } catch (e) {
-    return { error: e instanceof Error ? e.message : String(e) };
+    return { error: errorMessage(e) };
   }
 }
 

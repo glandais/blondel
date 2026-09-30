@@ -4,6 +4,7 @@
  * lu qu'à la fin). Chargé par `new Worker(new URL("./assistant.worker.ts", import.meta.url))`.
  */
 import type { AssistantInput } from "@blondel/core";
+import { errorMessage, type Message } from "@blondel/i18n";
 import type { CandidateSketch } from "../lib/assistant.js";
 import {
   runAssistantJob,
@@ -16,7 +17,7 @@ type Request = { readonly input: AssistantInput } | { readonly sketches: readonl
 type Response =
   | { readonly outcome: AssistantOutcome }
   | { readonly sketches: Readonly<Record<string, CandidateSketch>> }
-  | { readonly error: string };
+  | { readonly error: Message };
 
 interface Scope {
   onmessage: ((e: MessageEvent<Request>) => void) | null;
@@ -34,6 +35,7 @@ scope.onmessage = (e) => {
         : { outcome: runAssistantJob(data.input) },
     );
   } catch (err) {
-    scope.postMessage({ error: err instanceof Error ? err.message : String(err) });
+    // `Message` (clonable) : traduit à l'affichage, dans la langue courante.
+    scope.postMessage({ error: errorMessage(err) });
   }
 };

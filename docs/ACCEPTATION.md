@@ -13,6 +13,7 @@ Légende des preuves : chemins relatifs à la racine du dépôt, nom du test ent
 | 3   | Développés DXF d'un limon (dont chaque tronçon de débillardé) et d'une tôle pliée exploitables          | atteint |
 | 4   | Aucun calcul métier dans les composants UI                                                              | atteint |
 | 5   | Toute règle de conformité traçable jusqu'à sa source dans `docs/research/`                              | atteint |
+| 6   | Interface et sorties en français ou en anglais (ADR-0007, ajouté le 2026-09-30)                         | atteint |
 
 « Atteint » veut dire vérifié automatiquement, pas validé par un atelier : les valeurs du profil d'atelier et des plugins restent des hypothèses « à valider » (`docs/LEDGER.md` §2). Les réserves de chaque critère sont listées plus bas.
 
@@ -135,6 +136,27 @@ Réserves :
 - Depuis la vague J, 95 règles sur 103 ont un évaluateur dans le moteur (dont `LIMON_EPAISSEUR_MIN_DTU`, `CREMAILLERE_REGLE_MOYENS` et `LIMON_ENTAILLE_MIN`, dont le résultat d'attente est remplacé par celui de la structure). Les 8 autres sortent `non-evaluee` avec un motif exigé par test (`rules/evaluators/unevaluable.ts`) : contraste des nez, bande d'éveil, trois charges, cintrage, tolérances de trémie et d'étage. `GC_CABLES_DETENTE` et `LIMON_ENTAILLE_MIN` sont passées de contrôles hors table à la table ; les constantes des formules sont des champs structurés (`parametres`, `tables`), plus lues dans le texte.
 - Les contrôles de fabrication tirés du profil d'atelier sont traçables au profil, pas à une norme. C'est voulu : ce sont des capacités d'atelier à valider.
 
+## 6. Interface et sorties en français ou en anglais
+
+**Atteint** (critère ajouté le 2026-09-30 avec l'internationalisation, ADR-0007). Définition retenue : l'interface, les messages du modèle (erreurs, remarques, constats du contrôle de conception, noms de pièces) et toutes les sorties (SVG, DXF, CSV, glTF, PDF) existent en français et en anglais ; la langue de l'interface vient du navigateur puis du choix de l'utilisateur ; changer de langue ne relance aucun calcul et retraduit tout ce qui est affiché ; le français reste identique à l'octet près (exemples et instantanés inchangés).
+
+Preuves :
+
+- `packages/i18n/src/keys.test.ts`, « dictionnaires » et « clés employées dans le code » : mêmes clés en français et en anglais, mêmes paramètres `{…}`, aucune valeur vide, clés triées et bien formées, variante `.other` de tout pluriel, toute clé littérale du code présente dans `fr.json`, aucune clé orpheline.
+- `packages/i18n/src/translator.test.ts` : détection de la langue du navigateur, interpolation, pluriels français et anglais, nombres (« français : virgule et espace fine insécable (comme l'ancien formatFr des exports) », « anglais : point décimal et virgule des milliers »), dates, tri, repli sur la clé sans exception, `Message` intact après `structuredClone` (passage par le worker).
+- `packages/core/src/rules/messages.test.ts` : « chaque règle de rules.yaml a sa description, en français identique à la table », « chaque description est traduite en anglais », constats (séries, rétrogradation, remarques du moteur, modèle partiel) en anglais sans reste français. `pipeline/structures.test.ts` et `structures/steelProfile.test.ts` : paramètres de structure refusés et section hors catalogue dans les deux langues.
+- `packages/exports/src/i18n.test.ts`, « exports en anglais sur tous les exemples : aucun texte français restant » : pour chaque exemple de `examples/`, plan et élévation SVG, développés SVG, plan et développés DXF R12 et 2007 (textes et calques), CSV et fiche de débit, fiche de pose, glTF, dossier PDF ; ni texte français, ni clé brute, ni paramètre non rempli (heuristique `src/testing/french.ts`).
+- `packages/exports/src/svg/english.test.ts` (calques DXF traduits, noms français historiques inchangés), `data.en.test.ts` (CSV anglais : « , » et point décimal ; « fr » explicite = défaut), `pdf/locale.test.ts` (dossier PDF anglais : même découpage en pages qu'en français, métadonnées, unités accordées).
+- `apps/web/src/architecture.test.ts`, « aucun texte visible en dur dans l'interface (ADR-0007) » : aucun texte JSX ni attribut `title` / `aria-label` / `placeholder` / `alt` littéral dans `components/`, `views/` et `App.tsx` (avec auto-test du détecteur), aucun format `fr` écrit en dur.
+- `apps/web/src/components/toolbar.i18n.test.ts` et `paramsPanel.i18n.test.ts` : barre d'outils, barre d'état, contrôle de conception, garde-corps, calque, paramètres, hélicoïdal et assistant en français (libellés inchangés) et en anglais (aucune clé brute) ; « notification traduite à l'affichage (changer de langue la retraduit) ». `apps/web/src/store/projectStore.test.ts` : refus d'une modification et autosauvegarde refusée qui suivent un changement de langue, projet neuf nommé dans la langue de l'interface.
+- `apps/web/e2e/i18n.spec.ts` : navigateur `en-US` sans choix mémorisé → interface anglaise et `html[lang=en]`, constat du contrôle de conception et export CSV en anglais, passage au français par le sélecteur, choix mémorisé au rechargement, sous le budget de 200 ms. Les autres specs imposent le français (`openApp`) et vérifient les libellés d'avant la migration.
+
+Réserves :
+
+- La terminologie anglaise suit `docs/research/glossaire-en.md` et reste **à valider** par un professionnel anglophone du métier (`docs/QUESTIONS.md` A26 et B12).
+- Restent en français : sources citées des règles, des contrôles de plugin et du catalogue de profilés, noms par défaut du cœur quand l'interface n'en fournit pas, messages d'erreurs de programmation (toujours en paramètre d'un message traduit). Le profil et les contextes du contrôle s'affichent comme des identifiants. Quelques textes anglais gardent un pluriel « (s) ». Détail : ADR-0007, « Restes connus ».
+- Deux langues seulement ; ajouter une langue : `docs/ARCHITECTURE.md`, « une langue ».
+
 ## Vérifications de l'intégration (vague F)
 
 Depuis la racine, le 2026-09-30, sans commit :
@@ -181,3 +203,14 @@ Depuis la racine, le 2026-09-30, sans commit. Aucun critère ne change d'état ;
 - `BASE_PATH=/blondel/ pnpm --filter @blondel/web build` : OK.
 - `pnpm e2e` : 46 sur 46 verts, sous le budget de 200 ms par tâche, dont `storage-quota.spec.ts` (nouveau) et les onglets mesurés avec `steel-flat`, `steel-profile` et `steel-curved`. Au premier passage complet, `demos.spec.ts` a dépassé le budget (209 puis 232 ms, deux démos hélicoïdales différentes, charge machine 7 à 9) ; relancé seul deux fois : vert.
 - Exemples : les 24 `examples/*.blondel.json` se lisent, se construisent sans erreur et s'exportent (`packages/exports/src/examples.test.ts`) ; aucun exemple ni instantané modifié par la vague.
+
+## Vérifications de l'intégration (internationalisation)
+
+Dans le worktree `feat-i18n`, le 2026-09-30, sans commit. Nouveau critère n° 6 (atteint) ; les autres critères ne changent pas d'état.
+
+- `pnpm typecheck` : vert (paquets, application web, tests e2e).
+- `pnpm test` : vert, 201 fichiers (1 ignoré), 2 696 tests passés et 3 ignorés (après la revue de complétude).
+- `pnpm format:check` : vert.
+- `BASE_PATH=/blondel/ pnpm --filter @blondel/web build` : OK, sans avertissement de taille (dictionnaires dans leur propre morceau `i18n-locales`) ; vérifié avant la revue de complétude, qui n'a touché que core, `lib/exportFiles.ts` et les dictionnaires.
+- `pnpm e2e` : 47 sur 47 verts, sous le budget de 200 ms par tâche, dont `i18n.spec.ts` (nouveau) ; même réserve.
+- Exemples : `examples/*.blondel.json` et instantanés français inchangés octet par octet ; variantes anglaises testées à part (`packages/exports/src/i18n.test.ts`).

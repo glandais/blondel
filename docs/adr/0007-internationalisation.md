@@ -127,9 +127,31 @@ Préfixes : `ui.common.*`, `ui.label.*`, `ui.param.*`, `ui.language.*` (socle) ;
 - Tests de rendu anglais : `components/paramsPanel.i18n.test.ts`, `components/toolbar.i18n.test.ts` (aucune clé brute affichée).
 - e2e : `openApp` (`e2e/support.ts`) impose le français (`startInLanguage`, contexte `fr-FR`) : les specs existantes vérifient les libellés français, identiques à ceux d'avant la migration. `e2e/i18n.spec.ts` démarre avec un navigateur `en-US` sans ce forçage : interface anglaise et `html[lang=en]`, passage en français par le sélecteur, persistance au rechargement, constat du contrôle de conception et export CSV en anglais.
 
+### Restes traités (vague 5)
+
+- **Plus aucun texte figé dans la langue du moment** : tout motif conservé dans un état (store, `useState`, notification) est un `Message`, traduit au rendu ; un changement de langue le retraduit.
+  - `UpdateResult.issues` : `readonly Message[]` (« chemin (libellé) : motif », `projectIssueMessage`) ; les champs (`fields.tsx`), `PlanSiteEditor`, `PlanSurveyForm`, `PlanExpertEditor`, `UnderlayImport`, `ErrorsBar`, `CompliancePanel` (surcharge refusée) et `StructureSection` gardent le `Message`. Plusieurs motifs : `listMessages` (`i18n/text.ts`, clé `ui.common.joinList`, « a ; b » / « a; b »), ex. recalage refusé (`ui.params.realign.failed`).
+  - Assistant : `formOpening` et `assistantInput` rendent des `Message` (plus de paramètre `Translator`) ; la fenêtre garde `Message[]` et l'échec de la recherche en `Message` (`errorMessageOf`). Le worker de l'assistant poste `error: Message` (`errorMessage`, clonable) ; le client lève une `MessageError`.
+  - Worker de calcul : `PdfResult.error` / `GlbResult.error` sont des `Message` (plus traduits dans la langue du job) ; `workerClient` lève une `MessageError`, que `ExportMenu` affiche par `errorMessage(e)`.
+  - Autosauvegarde refusée et copie de secours : `reason` / `details` en `Message` ; la restauration refusée reprend les `Message` d'`apply` (plus de `textMessage` d'un texte déjà traduit).
+  - Rendus SVG de l'écran (`renderWith`) et calibrage du calque : `errorMessage(e)` (le `Message` d'une exception métier, sinon le texte brut de l'exception en paramètre d'une clé traduite).
+  - Restent en texte brut (`textMessage`) : repères, désignations (« UPN 200 », « Ø42 »), saisies, identifiants inconnus (repli), notation technique des zones balancées, texte d'une exception JavaScript inattendue (toujours en paramètre d'une clé traduite, ex. « Erreur de l'assistant : {detail} »).
+- Nom commun des tronçons (`FlatPatternView`) : `segmentedPartName` (`lib/joints.ts`) choisit sur la **clé** du `Part.name` (`structure.steelCurved.part.segment` → `structure.steelCurved.part.outerString`), plus d'expression sur le texte français ou anglais.
+- Nom d'un projet neuf dans la langue de l'interface : démarrage sans autosauvegarde, préréglage (`loadPreset`), démo (`loadDemo`) ; import d'un fichier **sans** `name` : `ui.lib.project.untitled` (« Sans titre » / « Untitled », option `untitledName` d'`importProjectText`). L'assistant et le changement de type de tracé gardent le nom courant. Le cœur garde ses noms français par défaut (`examples/` inchangés).
+- Taille du bloc principal : les dictionnaires (`packages/i18n/src/locales/*.json`, ≈ 450 ko minifiés) sont dans leur propre morceau `i18n-locales` (`build.rolldownOptions.output.codeSplitting.groups`, `apps/web/vite.config.ts`), chargé au démarrage ; limite d'avertissement inchangée (1 200 ko). Les workers (bundles séparés) embarquent toujours leurs dictionnaires.
+- Textes français **volontairement changés** par la migration (plus lisibles, conservés) : le refus d'une modification se lit « chemin (libellé) : motif » au lieu du message zod brut ; la ligne méta d'une règle du contrôle de conception affiche « réglementaire · confiance élevée » (libellés traduits) au lieu des identifiants bruts. Aucun test e2e ni unitaire ne dépend de l'ancienne forme (vérifié : les e2e contrôlent la présence de l'alerte ou des libellés de champ, pas le texte zod).
+
+- Revue de complétude : paramètres d'un plugin refusés par son schéma (`resolveStructureParams`, `pipeline/build.ts`) analysés avec la carte d'erreurs du cœur (`projectErrorMap`, `reportInput`) et rendus en `Message` (« chemin (libellé) : motif », joints par `common.list`), au lieu des textes anglais bruts de zod ; section hors catalogue de `steel-profile` : `structure.steelProfile.issue.unknownSection` (dans `params.message` de l'issue) ; export indisponible (`buildExport`) : `MessageError` au lieu d'un texte traduit à la levée ; « R int » (abréviation française) retiré des libellés anglais du débillardé (« inner R »).
+
+### Documentation
+
+`docs/ARCHITECTURE.md` (section « Internationalisation » et point d'extension « une langue »), `CLAUDE.md` (invariant : aucun texte affiché écrit en dur), `docs/ACCEPTATION.md` (critère n° 6) et `docs/QUESTIONS.md` (A26 : termes anglais et textes restés en français ; B12 : relecture du glossaire ; D6 : pluriels « (s) »).
+
 ### Restes connus
 
-- Textes mis en chaîne au moment de l'action, qui ne suivent pas un changement de langue ultérieur : refus de schéma (`UpdateResult.issues`, `string[]` traduit au refus : `PlanSiteEditor`, `PlanSurveyForm`), erreurs de l'assistant et motifs de recalage, motifs d'une copie de sauvegarde refusée, erreurs brutes du worker de l'assistant.
-- Le refus de schéma se lit désormais « chemin (libellé) : motif » en français au lieu du message zod brut ; la ligne méta d'une règle du contrôle de conception affiche « réglementaire · confiance élevée » (libellés traduits) au lieu des identifiants bruts.
-- Restent affichés tels quels : profil et contextes du contrôle (identifiants), messages d'exception bruts du rendu des plans (`rendered.error`) et du calibrage.
-- Termes anglais **à valider** : « steel » (famille métal), « building permit » (référence PC/DP), « PDF file » (dossier).
+Restent, suivis dans `docs/QUESTIONS.md` :
+
+- Affichés comme des identifiants : profil et contextes du contrôle de conception (A26).
+- En français : sources citées des règles, des contrôles de plugin et du catalogue de profilés (`RuleResult.source`, « consulté le … », « Profil d'atelier Blondel (valeur par défaut à valider…) »), dans le contrôle de conception de l'interface et du PDF ; noms par défaut du cœur (« Sans titre », préréglages) quand l'interface ne fournit pas de nom (A26). Messages d'erreurs de programmation (`RangeError` / `Error` internes de core, geometry, exports, du worker et de `main.tsx`) : voulu, ils n'atteignent l'utilisateur qu'en paramètre d'une clé traduite (« Export impossible : {error} »).
+- Pluriels « (s) » dans quelques textes anglais : `drawing.common.complianceSummary`, `pdf.compliance.summary`, `pdf.toc.templateTiles`, `stepping.perAngleZones*` (D6).
+- Termes anglais **à valider** : tout le glossaire, dont « Installation sheet », « Sheet » (folio), « Flat pattern » pour tous les développés (« development » proposé pour un limon bois), « HR = », « R » rayon et hauteur de marche, « steel », « building permit », « PDF file » (A26, B12).

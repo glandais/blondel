@@ -1,4 +1,4 @@
-import { translatorFor } from "@blondel/i18n";
+import { isMessageError, translatorFor, type MessageError } from "@blondel/i18n";
 import { buildModel, createDemoProject, createProject, type Model, type Part } from "@blondel/core";
 import { describe, expect, it } from "vitest";
 import {
@@ -95,6 +95,14 @@ describe("exports du menu", () => {
     // Le projet JSON ne charge pas le module PDF.
     await buildExport("project-json", project, null, deps);
     expect(loads).toBe(1);
+  });
+
+  it("export indisponible : `MessageError` (motif traduit à l'affichage, pas figé)", async () => {
+    const error = await buildExport("plan-svg", project, null, undefined, "en").catch(
+      (e: unknown) => e,
+    );
+    expect(isMessageError(error)).toBe(true);
+    expect((error as MessageError).msg.key).toBe("ui.label.export.noModel");
   });
 
   it("PDF délégué (worker) : `renderPdf` remplace le chargement du module", async () => {

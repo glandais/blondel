@@ -2,7 +2,7 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-Blondel est un logiciel web de conception paramétrique d'escaliers (bois, métal, mixte) : tracé, balancement, structures, garde-corps, développés de fabrication, contrôle de conception, exports. Tout tourne dans le navigateur. Le dépôt, la documentation, les commentaires et les libellés sont **en français** (accents corrects) ; les identifiants de code sont en anglais.
+Blondel est un logiciel web de conception paramétrique d'escaliers (bois, métal, mixte) : tracé, balancement, structures, garde-corps, développés de fabrication, contrôle de conception, exports. Tout tourne dans le navigateur. Le dépôt, la documentation et les commentaires sont **en français** (accents corrects) ; les identifiants de code sont en anglais. L'interface et les sorties existent en français (référence) et en anglais (ADR-0007).
 
 ## Commandes
 
@@ -19,6 +19,7 @@ pnpm format:check                 # Prettier (pnpm format pour corriger)
 BASE_PATH=/blondel/ pnpm --filter @blondel/web build   # build tel que déployé
 pnpm e2e                          # Playwright (build + vite preview, Chromium)
 pnpm rules:build                  # rules.yaml -> packages/core/src/rules/rules.data.json
+pnpm i18n:sort                    # trie les clés de packages/i18n/src/locales/*.json
 ```
 
 - Avant un commit : `typecheck`, `test`, `format:check`, build web, et `e2e` si `apps/web` a changé. Vérifier l'absence d'échec, pas seulement la ligne de synthèse.
@@ -28,15 +29,17 @@ pnpm rules:build                  # rules.yaml -> packages/core/src/rules/rules.
 
 ## Architecture
 
-Détail complet et points d'extension (règle, stratégie de balancement, structure, garde-corps, profil d'atelier) : `docs/ARCHITECTURE.md`. À retenir :
+Détail complet et points d'extension (règle, stratégie de balancement, structure, garde-corps, profil d'atelier, langue) : `docs/ARCHITECTURE.md`. À retenir :
 
 - `packages/core` (**sans DOM**) : contrats dans `src/model/` (`Project` zod, sorties `Model`, interfaces `BalancingStrategy` et `StructureKind`) et pipeline `buildModel(project)` (`src/pipeline/build.ts`) : `computeLayout` → `computeStepping` (+ `balancing/`) → pièces de base → plugin de structure → `computeGuards` → échappée → contrôle de conception (`rules/`). Assistant (`assistant/`) et site importé (`site/`) sont en amont.
 - `packages/geometry` : `SolidDesc` → maillages (aperçu 3D, glTF). `packages/exports` : fonctions pures `Model → fichier` (SVG, DXF R12/AC1021, CSV, glTF, ZIP) ; le PDF est sur l'entrée séparée `@blondel/exports/pdf` (jsPDF, jamais réexporté par l'index).
+- `packages/i18n` (**sans DOM**) : `Message` neutres (`msg`, `num`, `textMessage`, `MessageError`), dictionnaires, `createTranslator(locale)`. Le `Model` ne contient que des `Message` : on traduit à l'affichage et dans les exports.
 - `apps/web` : React 19 + react-three-fiber + zustand. L'UI édite le `Project` et affiche le `Model` calculé dans un Web Worker ; les SVG affichés sont ceux des exports.
 
 Invariants à respecter :
 
 - **Aucun calcul métier dans l'UI** (vérifié par `apps/web/src/architecture.test.ts`).
+- **Aucun texte affiché écrit en dur** (UI, core, exports ; vérifié pour l'UI par `architecture.test.ts`) : libellés dans `packages/i18n/src/locales/{fr,en}.json`, un JSON plat par langue, clés triées ; `fr.json` fait foi (`MessageKey` en dérive, clé inconnue = erreur de type), parité fr / en et clés orphelines vérifiées par `packages/i18n/src/keys.test.ts`. Clés toujours en littéral, jamais construites par gabarit. Un texte gardé dans un état (store, notification) est un `Message`, pas une chaîne traduite. Le texte français des clés existantes est la référence des e2e (`openApp` force le français) : le changer casse les specs. Exports : option `locale` (français par défaut, `examples/` et instantanés restent en français) ; termes anglais selon `docs/research/glossaire-en.md`.
 - `buildModel` **ne lève jamais** : erreurs dans `Model.errors`, modèle partiel, règles non calculables en `non-evaluee`. Les plugins rendent `errors`, pas d'exception.
 - Mémoïsation par identité d'objet : le `Project` est immuable ; le worker applique un partage structurel (`apps/web/src/model/structuralShare.ts`) pour que les caches servent.
 - Unités : saisies en mm entiers, calcul en float64 (mm, radians), arrondi seulement à l'affichage et en sortie (ADR-0003).

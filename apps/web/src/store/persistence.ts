@@ -152,10 +152,39 @@ export type ImportResult =
   | { readonly ok: true; readonly project: Project }
   | { readonly ok: false; readonly message: Message; readonly issues: readonly Message[] };
 
-/** Lit le texte d'un fichier `.blondel.json` ; les erreurs sont rendues, jamais levées. */
-export function importProjectText(text: string): ImportResult {
+export interface ImportOptions {
+  /**
+   * Nom donné à un projet importé **sans nom** (le schéma du cœur le nomme « Sans titre ») : nom
+   * dans la langue de l'interface. Absent : nom du cœur.
+   */
+  readonly untitledName?: string;
+}
+
+/** Le fichier nomme-t-il le projet (champ `name` textuel à la racine) ? */
+function hasName(text: string): boolean {
   try {
-    return { ok: true, project: parseProjectText(text) };
+    const json: unknown = JSON.parse(text);
+    return (
+      typeof json === "object" &&
+      json !== null &&
+      typeof (json as { readonly name?: unknown }).name === "string"
+    );
+  } catch {
+    return true;
+  }
+}
+
+/** Lit le texte d'un fichier `.blondel.json` ; les erreurs sont rendues, jamais levées. */
+export function importProjectText(text: string, options: ImportOptions = {}): ImportResult {
+  try {
+    const project = parseProjectText(text);
+    return {
+      ok: true,
+      project:
+        options.untitledName !== undefined && !hasName(text)
+          ? { ...project, name: options.untitledName }
+          : project,
+    };
   } catch (e) {
     if (e instanceof ProjectParseError) {
       return {

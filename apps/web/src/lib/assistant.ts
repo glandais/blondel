@@ -26,13 +26,7 @@ import {
   type Vec2,
   type Wall,
 } from "@blondel/core";
-import {
-  createTranslator,
-  msg,
-  type Locale,
-  type MessageKey,
-  type Translator,
-} from "@blondel/i18n";
+import { createTranslator, msg, type Locale, type Message, type MessageKey } from "@blondel/i18n";
 import { formatNumber } from "../i18n/locale.js";
 import { SCHEMA_PARSE_OPTIONS, schemaIssues } from "./schemaIssues.js";
 import { DEFAULT_WALL_THICKNESS_MM, stairOverlay } from "../views/planSiteGeometry.js";
@@ -206,15 +200,14 @@ export function parseInt10(text: string): number | null {
 
 /**
  * Trémie saisie : rectangle, relevé 4 côtés + 2 diagonales (quadrilatère du cœur, A au point
- * saisi, AB selon +X), trémie du projet, ou aucune. Erreur lisible sinon.
+ * saisi, AB selon +X), trémie du projet, ou aucune. Sinon, erreur (`Message` traduit à l'affichage).
  */
 export function formOpening(
   form: AssistantForm,
   project: Project,
-  t: Translator,
 ):
   | { readonly ok: true; readonly opening: Opening | undefined }
-  | { readonly ok: false; readonly error: string } {
+  | { readonly ok: false; readonly error: Message } {
   const x = parseInt10(form.openingX);
   const y = parseInt10(form.openingY);
   switch (form.openingMode) {
@@ -223,21 +216,21 @@ export function formOpening(
     case "project":
       return project.site.opening
         ? { ok: true, opening: project.site.opening }
-        : { ok: false, error: t.t("ui.lib.assistant.error.noOpening") };
+        : { ok: false, error: msg("ui.lib.assistant.error.noOpening") };
     case "rect": {
       const sx = parseInt10(form.sizeX);
       const sy = parseInt10(form.sizeY);
       if (x === null || y === null) {
-        return { ok: false, error: t.t("ui.lib.assistant.error.openingPosition") };
+        return { ok: false, error: msg("ui.lib.assistant.error.openingPosition") };
       }
       if (sx === null || sy === null || sx <= 0 || sy <= 0) {
-        return { ok: false, error: t.t("ui.lib.assistant.error.openingSize") };
+        return { ok: false, error: msg("ui.lib.assistant.error.openingSize") };
       }
       return { ok: true, opening: { kind: "rect", x, y, sizeX: sx, sizeY: sy } };
     }
     case "survey": {
       if (x === null || y === null) {
-        return { ok: false, error: t.t("ui.lib.assistant.error.pointA") };
+        return { ok: false, error: msg("ui.lib.assistant.error.pointA") };
       }
       const m: Partial<Record<SurveyMeasure, number>> = {};
       for (const k of Object.keys(EMPTY_SURVEY) as SurveyMeasure[]) {
@@ -245,7 +238,7 @@ export function formOpening(
         if (v === null || v <= 0) {
           return {
             ok: false,
-            error: t.t("ui.lib.assistant.error.surveyMissing", { measure: k.toUpperCase() }),
+            error: msg("ui.lib.assistant.error.surveyMissing", { measure: k.toUpperCase() }),
           };
         }
         m[k] = v;
@@ -254,13 +247,13 @@ export function formOpening(
       if (!r.ok) {
         return {
           ok: false,
-          error: t.t("ui.lib.assistant.error.surveyInvalid", { reason: r.reason }),
+          error: msg("ui.lib.assistant.error.surveyInvalid", { reason: r.reason }),
         };
       }
       if (!r.consistent) {
         return {
           ok: false,
-          error: t.t("ui.lib.assistant.error.surveyResidual", {
+          error: msg("ui.lib.assistant.error.surveyResidual", {
             residual: String(Math.round(r.maxResidual)),
           }),
         };
@@ -268,7 +261,7 @@ export function formOpening(
       try {
         return { ok: true, opening: polygonOpening(r.points) };
       } catch (e) {
-        return { ok: false, error: t.t(errorMessageOf(e)) };
+        return { ok: false, error: errorMessageOf(e) };
       }
     }
   }
@@ -367,32 +360,32 @@ export function openingWallLabel(polygon: readonly Vec2[], i: number, locale: Lo
 
 export type FormResult =
   | { readonly ok: true; readonly input: AssistantInput }
-  | { readonly ok: false; readonly errors: readonly string[] };
+  | { readonly ok: false; readonly errors: readonly Message[] };
 
 /**
  * Entrée de `proposeDesigns` : site (validé par le schéma du cœur), contextes, profil d'atelier
  * et date de référence du projet courant, préférences. Sans `shouldStop` (non clonable : le
  * worker est interrompu par l'interface).
  */
-export function assistantInput(form: AssistantForm, project: Project, t: Translator): FormResult {
-  const errors: string[] = [];
+export function assistantInput(form: AssistantForm, project: Project): FormResult {
+  const errors: Message[] = [];
   const H = parseInt10(form.floorToFloor);
   const slab = parseInt10(form.upperSlabThickness);
-  if (H === null || H <= 0) errors.push(t.t("ui.lib.assistant.error.floorToFloor"));
-  if (slab === null || slab <= 0) errors.push(t.t("ui.lib.assistant.error.slab"));
-  const opening = formOpening(form, project, t);
+  if (H === null || H <= 0) errors.push(msg("ui.lib.assistant.error.floorToFloor"));
+  if (slab === null || slab <= 0) errors.push(msg("ui.lib.assistant.error.slab"));
+  const opening = formOpening(form, project);
   if (!opening.ok) errors.push(opening.error);
   const thickness = parseInt10(form.wallThickness);
   const polygon = opening.ok ? openingPolygon(opening.opening) : null;
   // Murs le long de la trémie : seulement s'il y a une trémie (cases masquées sinon).
   const wallSides = polygon ? form.wallSides.filter((i) => i >= 0 && i < polygon.length) : [];
   if (wallSides.length > 0 && (thickness === null || thickness <= 0)) {
-    errors.push(t.t("ui.lib.assistant.error.wallThickness"));
+    errors.push(msg("ui.lib.assistant.error.wallThickness"));
   }
   let width: number | undefined;
   if (form.width.trim() !== "") {
     const w = parseInt10(form.width);
-    if (w === null || w <= 0) errors.push(t.t("ui.lib.assistant.error.width"));
+    if (w === null || w <= 0) errors.push(msg("ui.lib.assistant.error.width"));
     else width = w;
   }
   if (errors.length > 0) return { ok: false, errors };
@@ -412,8 +405,8 @@ export function assistantInput(form: AssistantForm, project: Project, t: Transla
   if (!parsed.success) {
     return {
       ok: false,
-      // Chemin relatif au site (`walls.0.thickness`), message du schéma dans la langue.
-      errors: schemaIssues(parsed.error).map((m) => t.t(m)),
+      // Chemin relatif au site (`walls.0.thickness`), message du schéma traduit à l'affichage.
+      errors: schemaIssues(parsed.error),
     };
   }
   const structure = form.structure !== "none" ? { structure: { kind: form.structure } } : {};

@@ -6,6 +6,7 @@ Logiciel web de conception paramétrique d'escaliers, pour les menuisiers, les m
 
 ## Fonctionnalités
 
+- **Français ou anglais** : l'interface démarre dans la langue du navigateur (anglais si elle commence par `en`, sinon français), un sélecteur de la barre d'outils la change à tout moment sans relancer de calcul, et tous les exports (SVG, DXF, CSV, glTF, PDF) sortent dans la langue choisie : nombres, dates, séparateur CSV et calques DXF compris. Terminologie anglaise britannique, **à valider** ([`docs/research/glossaire-en.md`](docs/research/glossaire-en.md)).
 - **Assistant d'initialisation** : à partir de la hauteur à monter, de la trémie (rectangulaire, relevée ou tracée) et des murs, propose les typologies compatibles, classées par score (Blondel, régularité, échappée et marge d'échappée), une carte par forme avec croquis, cotes et score détaillé, les autres variantes de la forme (sens, emmarchement, nombre de marches) repliées sous la carte ou toutes à plat sur demande ; diagnostic lisible quand rien ne passe.
 - **Tracé** : droit, quart tournant, deux quarts (U), deux quarts opposés (S / Z, la ligne de foulée change de côté dans la volée intermédiaire), demi-tournant, quart tournant avec palier, hélicoïdal à fût ou à jour central ; jour vif, en arc ou à poteau.
 - **Balancement** des marches (M0, M1, M3 et variante quintique pour les débillardés ; M2 herse avec curseur d'angle borné par le modèle, M6 rotation paramétrée avec curseurs de portée et de raideur), contrôle du giron au collet ; **mode expert** dans le plan 2D : angle imposé d'un nez à la poignée ou au clavier, nez fixe, surcharges orphelines signalées.
@@ -80,6 +81,7 @@ Le type de tracé (volées ou hélicoïdal) se choisit en tête du panneau des p
 | `pnpm e2e`                          | Tests de bout en bout Playwright sur l'application construite (Chromium ; budget de tâches longues de 200 ms, `E2E_LONG_TASK_BUDGET_MS`). |
 | `pnpm format` / `pnpm format:check` | Formatage Prettier / vérification.                                                                                                        |
 | `pnpm rules:build`                  | Régénère `rules.data.json` depuis `docs/research/rules.yaml`.                                                                             |
+| `pnpm i18n:sort`                    | Trie les clés des dictionnaires `packages/i18n/src/locales/*.json`.                                                                       |
 
 Régénérer `examples/` : `UPDATE_EXAMPLES=1 pnpm vitest run packages/core/src/project/examples.test.ts packages/core/src/guards/acceptance.test.ts packages/core/src/structures/helicalExample.test.ts packages/core/src/structures/steelCurved.acceptance.test.ts`.
 
@@ -89,6 +91,8 @@ Variables de test utiles : `STEPPING_RUNS=1000` (tirages des propriétés du dé
 
 ```
 packages/
+  i18n/       messages neutres, dictionnaires fr.json / en.json, traducteur (nombres, dates,
+              pluriels) — sans DOM ni dépendance
   core/       contrats (model/), géométrie plane (geom2d/), tracé (layout/), découpage (stepping/),
               balancement (balancing/), pièces (parts/), échappée (headroom/), règles (rules/),
               projets et préréglages (project/), profil d'atelier bois et métal (workshop/), plugins
@@ -117,4 +121,4 @@ examples/             projets .blondel.json
 scripts/              build-rules.mjs
 ```
 
-Voir [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) pour le pipeline et les points d'extension (règle, stratégie de balancement, structure, garde-corps, profil d'atelier).
+Voir [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) pour le pipeline et les points d'extension (règle, stratégie de balancement, structure, garde-corps, profil d'atelier, langue).
