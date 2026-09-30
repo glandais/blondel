@@ -10,6 +10,8 @@
     "dev": "pnpm --filter @blondel/web dev",
     "build": "pnpm --filter @blondel/web build",
     "rules:build": "node scripts/build-rules.mjs",
+    "i18n:sort": "node scripts/sort-locales.mjs",
+    "i18n:merge": "node scripts/sort-locales.mjs --merge",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "e2e": "pnpm --filter @blondel/web e2e"

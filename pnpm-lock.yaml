@@ -38,6 +38,9 @@ importers:
       '@blondel/geometry':
         specifier: workspace:*
         version: link:../../packages/geometry
+      '@blondel/i18n':
+        specifier: workspace:*
+        version: link:../../packages/i18n
       '@react-three/drei':
         specifier: ^10.7.9
         version: 10.7.9(@react-three/fiber@9.8.1(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(three@0.186.1))(@types/react@19.3.0)(@types/three@0.186.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(three@0.186.1)
@@ -78,6 +81,9 @@ importers:
 
   packages/core:
     dependencies:
+      '@blondel/i18n':
+        specifier: workspace:*
+        version: link:../i18n
       dxf-parser:
         specifier: ^1.1.2
         version: 1.1.2
@@ -93,6 +99,9 @@ importers:
       '@blondel/geometry':
         specifier: workspace:*
         version: link:../geometry
+      '@blondel/i18n':
+        specifier: workspace:*
+        version: link:../i18n
       '@tarikjabiri/dxf':
         specifier: ^2.9.0
         version: 2.9.0
@@ -105,9 +114,14 @@ importers:
       '@blondel/core':
         specifier: workspace:*
         version: link:../core
+      '@blondel/i18n':
+        specifier: workspace:*
+        version: link:../i18n
       earcut:
         specifier: ^3.2.4
         version: 3.2.4
+
+  packages/i18n: {}
 
 packages:
 

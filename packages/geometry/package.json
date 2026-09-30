@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@blondel/core": "workspace:*",
+    "@blondel/i18n": "workspace:*",
     "earcut": "^3.2.4"
   }
 }

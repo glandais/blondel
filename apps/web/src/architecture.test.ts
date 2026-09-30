@@ -4,7 +4,7 @@
  *
  * - L'application ne consomme les paquets que par leurs points d'entrée publics
  *   (`@blondel/core`, `@blondel/core/dxf`, `@blondel/geometry`, `@blondel/exports`,
- *   `@blondel/exports/pdf`) : aucun chemin vers `packages/…/src`, aucune lecture directe de la
+ *   `@blondel/exports/pdf`, `@blondel/i18n`) : aucun chemin vers `packages/…/src`, aucune lecture directe de la
  *   table des règles (`rules.data.json`, `rules.yaml`).
  * - Les composants React (`components/`, `views/`) n'appellent aucune étape du pipeline du cœur
  *   (tracé, découpage, garde-corps, échappée, contrôle, assistant, comparateur, maillage) : le
@@ -53,6 +53,7 @@ const PUBLIC_ENTRIES = new Set([
   "@blondel/geometry",
   "@blondel/exports",
   "@blondel/exports/pdf",
+  "@blondel/i18n",
 ]);
 
 /** Étapes du pipeline et calculs du cœur réservés au worker (`model/`). */
