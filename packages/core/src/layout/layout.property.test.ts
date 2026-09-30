@@ -70,6 +70,21 @@ const inTransition = (layout: Layout, s: number, margin = 0): boolean =>
   (layout.walklineTransitions ?? []).some((t) => s > t.sStart - margin && s < t.sEnd + margin);
 
 describe("computeLayout — propriétés", () => {
+  it("tracés valides du générateur (≤ 2 tournants, marge) : aucune emprise dégénérée signalée", () => {
+    fc.assert(
+      fc.property(stairShapeArb, (shape) => {
+        const layout = computeLayout(makeProject(shape));
+        const jourNul =
+          shape.legs.length === 3 &&
+          (shape.directions?.[0] ?? shape.direction) ===
+            (shape.directions?.[1] ?? shape.direction) &&
+          shape.legs[1] === 2 * shape.width;
+        if (!jourNul) expect(layout.errors).toBeUndefined();
+      }),
+      { numRuns: 300 },
+    );
+  });
+
   it("C_i, C_e et Γ sont continues (G0) ; Γ est tangente-continue (G1) hors transitions S / Z", () => {
     fc.assert(
       fc.property(stairShapeArb, (shape) => {

@@ -15,12 +15,7 @@ import {
   type TreadKind,
   type Vec2,
 } from "@blondel/core";
-import {
-  locateViolations,
-  openingPolygon,
-  violationSummary,
-  worstSeverity,
-} from "../annotations.js";
+import { locateViolations, modelOpening, violationSummary, worstSeverity } from "../annotations.js";
 import { formatFr } from "../format.js";
 import { bandContour, curvePath, pathExtentPoints, polygonPath, type PlanPath } from "../path.js";
 import {
@@ -94,7 +89,10 @@ export interface PlanDrawing {
 }
 
 export interface PlanDrawingOptions {
-  /** Projet source : fournit la trémie (optionnel, le `Model` ne la porte pas). */
+  /**
+   * Projet source, en repli : la trémie est lue dans `Model.upperFloor` (pipeline) ; le projet
+   * ne sert qu'à un modèle construit hors pipeline, qui ne la porte pas.
+   */
   readonly project?: Project;
   /** Distance entre l'élément coté et la ligne de cote (mm). Défaut : 3 × hauteur de texte. */
   readonly dimensionOffset?: Mm;
@@ -194,7 +192,7 @@ export function buildPlanDrawing(model: Model, options: PlanDrawingOptions = {})
   const side = vec2.scale(vec2.perpLeft(tEnd), arrowLen / 3);
   const arrow = polygonPath([end, vec2.add(back, side), vec2.sub(back, side)]);
 
-  const opening = openingPolygon(options.project);
+  const opening = modelOpening(model, options.project);
   const landing = helical ? helicalLandingPath(helical) : undefined;
 
   // ---------------------------------------------------------------- cotes

@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { ProjectSchema, type Project, type ProjectInput } from "../model/project.js";
 import { buildModel, clearModelCache } from "../pipeline/build.js";
-import { DEFAULT_NEWEL_SIZE, NEWEL_REQUIRED_STRUCTURES, suggestFixes } from "./fixes.js";
+import { DEFAULT_NEWEL_SIZE, suggestFixes } from "./fixes.js";
+import { newelRequiredStructures } from "./newel.js";
 import { createProject, deepMerge, PRESET_IDS } from "./presets.js";
 
 beforeEach(() => clearModelCache());
@@ -18,7 +19,7 @@ const sharpError = (m: { errors: readonly string[] }) =>
   m.errors.filter((e) => e.includes("jour à angle vif"));
 
 describe("suggestFixes — jour à angle vif et structure à poteau", () => {
-  it.each(NEWEL_REQUIRED_STRUCTURES)(
+  it.each(newelRequiredStructures())(
     "%s sur les préréglages tournants : « passer le jour en poteau » supprime l'erreur",
     (kind) => {
       for (const preset of PRESET_IDS) {
@@ -131,10 +132,19 @@ describe("suggestFixes — garde-corps sous la dalle haute", () => {
 });
 
 describe("suggestFixes — jour plus étroit que la sphère T1", () => {
-  const narrowJour = (inner?: "auto" | "void" | "wall") => {
+  /**
+   * Demi-tournant à jour de 60 mm ; `symmetric` : volée 3 de même longueur que la volée 1 (tout
+   * le côté jour borde le jour), sinon volée 3 du préréglage, plus longue (vide ouvert hors du
+   * jour, garde-corps partiel, décision A10 du 2026-09-30).
+   */
+  const narrowJour = (inner?: "auto" | "void" | "wall", symmetric = true) => {
     const base = createProject("half-turn");
     const legs = base.stair.layout.legs.map((l, i) =>
-      i === 1 ? { length: 2 * base.stair.layout.width + 60 } : l,
+      i === 1
+        ? { length: 2 * base.stair.layout.width + 60 }
+        : i === 2 && symmetric
+          ? base.stair.layout.legs[0]!
+          : l,
     );
     return with_(base, {
       stair: { ...base.stair, layout: { ...base.stair.layout, legs } },
@@ -149,8 +159,7 @@ describe("suggestFixes — jour plus étroit que la sphère T1", () => {
     expect(m.errors).toEqual([]);
     const conseil = (x: typeof m) =>
       x.compliance.results.filter((r) => r.ruleId === "GC_OBLIGATOIRE" && r.status === "violation");
-    // Conseil dans le jour ; hors du jour (volée 3 plus longue que la volée 1) : bloquant.
-    expect(conseil(m).map((r) => r.severity)).toContain("conseil");
+    expect(conseil(m).map((r) => r.severity)).toEqual(["conseil"]);
     const fix = suggestFixes(p, m).find((f) => f.id === "jour-wall");
     expect(fix).toBeDefined();
     expect(fix!.label).toMatch(/^Jour fermé/);
@@ -159,6 +168,16 @@ describe("suggestFixes — jour plus étroit que la sphère T1", () => {
     const mq = buildModel(q);
     expect(mq.errors).toEqual([]);
     expect(conseil(mq)).toEqual([]);
+  });
+
+  it("garde-corps partiel hors du jour (volée 3 plus longue) : pas de correction « mur », qui le supprimerait (revue A10, 2026-09-30)", () => {
+    // Avant la relecture : « côté jour → mur » proposé, et appliqué il retirait le garde-corps
+    // partiel qui protège le vide ouvert au-delà de la volée 1 (chute de H à l'arrivée), sans
+    // aucun constat restant. Un jour fermé ne ferme pas ce vide.
+    const p = narrowJour("auto", false);
+    const m = buildModel(p);
+    expect(m.parts.some((x) => x.id.startsWith("guard-inner"))).toBe(true);
+    expect(suggestFixes(p, m).some((f) => f.id === "jour-wall")).toBe(false);
   });
 
   it("côté jour déclaré « vide » (jour ouvert) : pas de correction « mur »", () => {

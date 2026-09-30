@@ -31,7 +31,7 @@
  * le plan de coupe est toujours attaché aux matériaux (désactivé = rejeté au loin) et les cotes
  * et mesures sont dessinées en SVG, sans nouveau programme.
  */
-import type { Appearance, MaterialId, Model, Project, Severity, Vec3 } from "@blondel/core";
+import type { Appearance, MaterialId, Model, Part, Project, Severity, Vec3 } from "@blondel/core";
 import { OrbitControls } from "@react-three/drei";
 import { Canvas, useThree, type ThreeEvent } from "@react-three/fiber";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -60,6 +60,7 @@ import {
   measureAnnotation,
   pickPoint,
   pickedToMeasure,
+  snapToVertex,
   type Annotation,
   type PickedPoint,
 } from "../three/annotations.js";
@@ -116,8 +117,11 @@ const GL_PROPS = {
 } as const;
 const ZERO: Vec3 = { x: 0, y: 0, z: 0 };
 
+/** Maillage d'une pièce et sa famille / son numéro de marche (champs explicites du cœur). */
+type ShownPart = MeshedPartData["mesh"] & Pick<Part, "family" | "treadNumber">;
+
 interface PartGeometry {
-  readonly part: MeshedPartData["mesh"];
+  readonly part: ShownPart;
   /** Empreinte du solide et sens du fil. */
   readonly key: string;
   readonly geometry: BufferGeometry;
@@ -139,9 +143,9 @@ function usePartGeometries(
 } {
   const pool = useRef<GeometryPool | null>(null);
   if (pool.current === null) pool.current = createGeometryPool();
-  const grains = useMemo(() => {
-    const m = new Map<string, Vec3 | undefined>();
-    for (const p of model.parts) m.set(p.id, p.grain);
+  const byId = useMemo(() => {
+    const m = new Map<string, Part>();
+    for (const p of model.parts) m.set(p.id, p);
     return m;
   }, [model]);
   const geometries = useMemo(() => {
@@ -149,13 +153,19 @@ function usePartGeometries(
     return (mesh?.parts ?? [])
       .filter((m) => m.mesh.mesh.indices.length > 0)
       .map((m) => {
-        const grain = grains.get(m.mesh.partId);
+        const source = byId.get(m.mesh.partId);
+        const grain = source?.grain;
         const key = geometryKey(m.key, grain);
         const geometry = p.get(key, m.mesh.mesh, grain);
         const c = geometry.boundingBox?.getCenter(new Vector3()) ?? new Vector3();
-        return { part: m.mesh, key, geometry, center: { x: c.x, y: c.y, z: c.z } };
+        const part: ShownPart = {
+          ...m.mesh,
+          ...(source?.family !== undefined ? { family: source.family } : {}),
+          ...(source?.treadNumber !== undefined ? { treadNumber: source.treadNumber } : {}),
+        };
+        return { part, key, geometry, center: { x: c.x, y: c.y, z: c.z } };
       });
-  }, [mesh, grains]);
+  }, [mesh, byId]);
   useEffect(() => {
     pool.current?.retain(geometries.map((g) => g.key));
   }, [geometries]);
@@ -619,6 +629,31 @@ function PointMarkers({
 /** Point de la scène (m, Y vers le haut) → repère du cœur (mm, Z vers le haut). */
 const fromScene = (p: Vector3): Vec3 => ({ x: p.x / MM, y: -p.z / MM, z: p.y / MM });
 
+/**
+ * Point de mesure d'un clic (repère de la scène) : sommet du triangle touché le plus proche à
+ * l'écran (`snapToVertex`, rayon `SNAP_RADIUS_PX`), sinon le point touché.
+ */
+function snappedPoint(e: ThreeEvent<MouseEvent>): Vector3 {
+  const face = e.face;
+  const position = (e.object as { geometry?: BufferGeometry }).geometry?.getAttribute("position");
+  const canvas = e.nativeEvent.target;
+  if (!face || !position || !(canvas instanceof Element)) return e.point;
+  const rect = canvas.getBoundingClientRect();
+  const toScreen = (v: Vector3): { x: number; y: number } => {
+    const n = v.clone().project(e.camera);
+    return { x: ((n.x + 1) / 2) * rect.width, y: ((1 - n.y) / 2) * rect.height };
+  };
+  const vertices = [face.a, face.b, face.c].map((i) =>
+    new Vector3().fromBufferAttribute(position, i).applyMatrix4(e.object.matrixWorld),
+  );
+  const s = snapToVertex(
+    { x: e.point.x, y: e.point.y, z: e.point.z },
+    toScreen(e.point),
+    vertices.map((v) => ({ point: { x: v.x, y: v.y, z: v.z }, screen: toScreen(v) })),
+  );
+  return s.snapped ? new Vector3(s.point.x, s.point.y, s.point.z) : e.point;
+}
+
 export default function Viewer3D({
   model,
   mesh,
@@ -662,9 +697,7 @@ export default function Viewer3D({
     () => controlMarkers(model, new Set(hiddenFamilies)),
     [model, hiddenFamilies],
   );
-  const selectedMesh = parts.find(({ part }) =>
-    isPartSelected(part.partId, selection?.location),
-  )?.part;
+  const selectedMesh = parts.find(({ part }) => isPartSelected(part, selection?.location))?.part;
   const selectedName = selectedMesh
     ? (model.parts.find((p) => p.id === selectedMesh.partId)?.name ?? "")
     : "";
@@ -772,7 +805,7 @@ export default function Viewer3D({
       onSelectPart(partId);
       return;
     }
-    const point = pickPoint(partId, fromScene(e.point), offsets);
+    const point = pickPoint(partId, fromScene(snappedPoint(e)), offsets);
     setMeasure((m) => (m.length >= 2 ? [point] : [...m, point]));
   };
 
@@ -812,7 +845,7 @@ export default function Viewer3D({
         />
         <group rotation={[-Math.PI / 2, 0, 0]} scale={MM}>
           {visibleParts.map(({ part, geometry }) => {
-            const selected = isPartSelected(part.partId, selection?.location);
+            const selected = isPartSelected(part, selection?.location);
             const severity = tools.showControls ? markers.parts.get(part.partId) : undefined;
             const shown = displayedMaterial(part, appearance);
             const zone = paintZone(part);

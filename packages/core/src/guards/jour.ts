@@ -14,6 +14,7 @@ import type { Mm, Vec2 } from "../model/primitives.js";
 import type { Turn } from "../model/project.js";
 import { newelSetback } from "../layout/newel.js";
 import { findRule } from "../rules/table.js";
+import { pointAt } from "./polyline.js";
 
 /**
  * Début de la remarque (`Model.notes`) d'un garde-corps de jour non généré (jour plus étroit
@@ -131,4 +132,60 @@ export function inNarrowJour(p: Vec2, zones: readonly NarrowJourZone[]): boolean
     const len = V.distance(z.a, z.b);
     return s >= -z.tol && s <= len + z.tol && t >= -z.tol && t <= z.length + 1e-6;
   });
+}
+
+/** Pas d'échantillonnage (mm) du bord pour repérer l'entrée et la sortie d'un jour étroit. */
+const SPLIT_SAMPLE_STEP = 5;
+/** Précision (mm) de la recherche par dichotomie de la limite du jour le long du bord. */
+const SPLIT_PRECISION = 1e-4;
+
+/**
+ * Parties de la portion [from ; to] du bord (polyligne `points`, abscisses cumulées `cum`) qui
+ * sont **hors** de l'emprise des jours étroits `zones` (décision A10 du 2026-09-30 : garde-corps
+ * partiel sur l'intervalle de la volée qui borde un vide hors du jour). Le bord est échantillonné
+ * tous les `SPLIT_SAMPLE_STEP` mm, chaque changement étant affiné par dichotomie. Rend les
+ * sous-intervalles dans l'ordre ; vide si toute la portion est dans le jour.
+ */
+export function outsideNarrowJour(
+  points: readonly Vec2[],
+  cum: readonly number[],
+  from: Mm,
+  to: Mm,
+  zones: readonly NarrowJourZone[],
+): { from: Mm; to: Mm }[] {
+  const out = (u: Mm): boolean => !inNarrowJour(pointAt(points, cum, u), zones);
+  const boundary = (a: Mm, b: Mm): Mm => {
+    // out(a) ≠ out(b) : dichotomie.
+    const oa = out(a);
+    let lo = a;
+    let hi = b;
+    while (hi - lo > SPLIT_PRECISION) {
+      const mid = (lo + hi) / 2;
+      if (out(mid) === oa) lo = mid;
+      else hi = mid;
+    }
+    return (lo + hi) / 2;
+  };
+  const result: { from: Mm; to: Mm }[] = [];
+  if (!(to > from)) return result;
+  const steps = Math.max(1, Math.ceil((to - from) / SPLIT_SAMPLE_STEP));
+  let prevU = from;
+  let prevOut = out(from);
+  let start: Mm | null = prevOut ? from : null;
+  for (let i = 1; i <= steps; i++) {
+    const u = i === steps ? to : from + ((to - from) * i) / steps;
+    const o = out(u);
+    if (o !== prevOut) {
+      const x = boundary(prevU, u);
+      if (o) start = x;
+      else if (start !== null) {
+        result.push({ from: start, to: x });
+        start = null;
+      }
+    }
+    prevU = u;
+    prevOut = o;
+  }
+  if (start !== null) result.push({ from: start, to });
+  return result;
 }

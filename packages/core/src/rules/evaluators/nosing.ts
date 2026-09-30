@@ -13,7 +13,7 @@ import {
   notEvaluated,
   riseLocation,
 } from "../check.js";
-import { INDUSTRIAL_OVERLAP_OPEN } from "../formula-constants.js";
+import { INDUSTRIAL_OVERLAP_OPEN } from "../params.js";
 import type { EvaluatorContext, Finding, RuleEvaluator } from "../types.js";
 
 function spec(ctx: EvaluatorContext) {

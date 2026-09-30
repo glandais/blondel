@@ -1,6 +1,7 @@
 /**
- * Décisions A16 et A18 de l'utilisateur (2026-09-29) : bord de mesure de la ligne de foulée
- * d'un escalier droit, bouton « Recaler volées et trémie » (une seule entrée d'annulation) et
+ * Décisions A16 et A18 de l'utilisateur (2026-09-29, A18 (a) précisée le 2026-09-30) : bord de
+ * mesure de la ligne de foulée d'un escalier droit, bouton « Recaler volées et trémie » (une
+ * seule entrée d'annulation, position des tournants conservée, désactivé avec explication) et
  * édition des surcharges de règles avec justification obligatoire depuis le contrôle de
  * conception.
  */
@@ -24,9 +25,11 @@ test("recaler volées et trémie après modification de H, annulable en une fois
 
   await page.getByRole("button", { name: "Recaler volées et trémie" }).click();
   await settle(page);
-  const notice = page.locator(".notice", { hasText: "Volées recalées" });
+  const notice = page.locator(".notice", { hasText: "Dernière volée recalée" });
   await expect(notice).toBeVisible();
   await expect(notice).toContainText("Trémie recalée");
+  // Position du tournant saisie conservée (A18 a, 2026-09-30) : seule la dernière volée change.
+  await expect(leg1).toHaveValue(before[0]!);
   await expect(leg2).not.toHaveValue(before[1]!);
   await expect(page.locator(".statusbar__errors")).toHaveCount(0);
 
@@ -36,6 +39,17 @@ test("recaler volées et trémie après modification de H, annulable en une fois
   await expect(leg1).toHaveValue(before[0]!);
   await expect(leg2).toHaveValue(before[1]!);
   await expect(page.getByLabel("Hauteur à monter H")).toHaveValue("2900");
+});
+
+test("recalage impossible : bouton désactivé avec la raison rendue par le cœur", async ({
+  page,
+}) => {
+  await openApp(page);
+  await applyPreset(page, "Quart tournant avec palier");
+  await commitField(page, page.getByLabel("Hauteur à monter H"), "2900");
+  const button = page.getByRole("button", { name: "Recaler volées et trémie" });
+  await expect(button).toBeDisabled();
+  await expect(page.getByTestId("realign-reason")).toContainText("nombre entier de girons");
 });
 
 test("escalier droit large : bord de mesure de la ligne de foulée réglable", async ({ page }) => {

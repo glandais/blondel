@@ -53,6 +53,8 @@ import {
   type ProjectInput,
 } from "../model/project.js";
 import { getRule } from "../rules/table.js";
+import { getStructure } from "../structures/registry.js";
+import "../structures/index.js"; // enregistrement des plugins intégrés (`helical-core`)
 import {
   DEFAULT_FLOOR_TO_FLOOR,
   DEFAULT_SLAB_THICKNESS,
@@ -76,6 +78,8 @@ export const HELICAL_MAX_LANDING_ANGLE = 90;
 const LANDING_ANGLE_STEP = 5;
 /** Plus grand nombre de marches par tour essayé par le préréglage. */
 const TREADS_PER_TURN_SEARCH_MAX = 30;
+/** Plugin de structure posé par le préréglage (fût, marches rayonnantes, main courante). */
+const HELICAL_CORE_KIND = "helical-core";
 /** Contextes du préréglage : bois, logement, forme hélicoïdale. */
 const HELICAL_CONTEXTS = ["bois_dtu", "logement_interieur", "helicoidal"] as const;
 
@@ -232,7 +236,7 @@ export function createHelicalProject(options: PresetOptions = {}): Project {
     }
     found ??= fallback;
     if (found === null) {
-      throw new RangeError(
+      throw new HelicalSweepError(
         `Hélicoïdal : aucun nombre de marches par tour (≤ ${TREADS_PER_TURN_SEARCH_MAX}) ne donne à la fois une échappée de ${PRESET_HEADROOM_MIN} mm sous le tour supérieur, un module 2h + g dans les bornes du DTU et un giron d'au moins ${gMin} mm : augmenter le rayon extérieur ou régler le nombre de hauteurs.`,
       );
     }
@@ -257,12 +261,98 @@ export function createHelicalProject(options: PresetOptions = {}): Project {
     patch?.site?.opening !== undefined
       ? project.site.opening
       : helicalOpening(shaped, outerRadius + clearance, options.openingShape ?? "circle");
+  // Structure (dette D4) : `helical-core` (fût, marches rayonnantes, main courante) quand le
+  // plugin est enregistré et que `patch` n'impose pas de structure ; sans elle, un hélicoïdal
+  // n'a que des marches flottantes.
+  const structure =
+    patch?.stair?.structure === undefined && getStructure(HELICAL_CORE_KIND)
+      ? { structure: { kind: HELICAL_CORE_KIND, params: {} } }
+      : {};
   return structuredClone(
     ProjectSchema.parse({
       ...shaped,
       site: { ...shaped.site, ...(opening ? { opening } : {}) },
+      stair: { ...shaped.stair, ...structure },
     }),
   );
+}
+
+/** a < b dans l'ordre lexicographique (même longueur). */
+function lexLess(a: readonly number[], b: readonly number[]): boolean {
+  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return a[i]! < b[i]!;
+  return false;
+}
+
+/** Aucun nombre de marches par tour ne satisfait les critères du préréglage hélicoïdal. */
+export class HelicalSweepError extends RangeError {
+  override readonly name = "HelicalSweepError";
+}
+
+/** Préréglage hélicoïdal avec repli (`createHelicalProjectWithFallback`). */
+export interface HelicalPresetResult {
+  readonly project: Project;
+  /** Repli retenu (aucun N ne satisfait tous les critères) : message à afficher. */
+  readonly note?: string;
+}
+
+/**
+ * `createHelicalProject`, avec un **repli** quand aucun nombre de marches par tour ne satisfait
+ * à la fois l'échappée sous le tour supérieur, le module et le giron (`HelicalSweepError`) :
+ * N est alors choisi parmi les valeurs essayées par le préréglage, sans valeur ajoutée —
+ * d'abord celles qui respectent module et giron, la plus grande échappée (règle dérivée) ; à
+ * défaut, celle dont le module s'écarte le moins des bornes du DTU (puis le plus grand giron).
+ * Le contrôle de conception signale ce qui ne passe pas ; `note` l'annonce. Les autres
+ * incohérences d'options lèvent toujours `RangeError`.
+ */
+export function createHelicalProjectWithFallback(options: PresetOptions = {}): HelicalPresetResult {
+  try {
+    return { project: createHelicalProject(options) };
+  } catch (e) {
+    if (!(e instanceof HelicalSweepError)) throw e;
+    const probe = createHelicalProject({
+      ...options,
+      patch: deepMerge(options.patch ?? {}, {
+        stair: { layout: { sweep: { mode: "treadsPerTurn", count: HELICAL_TREADS_PER_TURN_MIN } } },
+      }),
+    });
+    const n = resolveRiserCount(probe);
+    const rise = probe.site.floorToFloor / n;
+    const walklineRadius = computeLayout(probe).helical!.walklineRadius;
+    const { thickness, nosing } = probe.stair.treads;
+    const blondel = blondelBounds();
+    const gMin = minGoing();
+    let best: { N: number; key: readonly number[] } | undefined;
+    for (let N = HELICAL_TREADS_PER_TURN_MIN; N <= TREADS_PER_TURN_SEARCH_MAX; N++) {
+      const step = (2 * Math.PI) / N;
+      const going = walklineRadius * step;
+      const module = 2 * rise + going;
+      const moduleGap = Math.max(0, blondel.min - module, module - blondel.max);
+      const goingGap = Math.max(0, gMin - going);
+      const bound = helicalHeadroomBound({
+        riserCount: n,
+        rise,
+        walklineRadius,
+        treadThickness: thickness,
+        nosing,
+        stepAngle: step,
+      });
+      // Clé lexicographique à minimiser : écarts de module et de giron, puis échappée la plus
+      // grande (aucun recouvrement : meilleure), puis plus grand giron (plus petit N).
+      const key = [moduleGap + goingGap, -(bound.treads ?? Infinity), N];
+      if (!best || lexLess(key, best.key)) best = { N, key };
+    }
+    const count = best!.N;
+    const project = createHelicalProject({
+      ...options,
+      patch: deepMerge(options.patch ?? {}, {
+        stair: { layout: { sweep: { mode: "treadsPerTurn", count } } },
+      }),
+    });
+    return {
+      project,
+      note: `${e.message} Repli : ${count} marches par tour (meilleur compromis parmi les rotations essayées) ; le contrôle de conception signale ce qui ne passe pas, à ajuster (rayon extérieur, nombre de hauteurs).`,
+    };
+  }
 }
 
 function computeStepAngle(sweep: HelicalSweep, n: number): number {
@@ -278,7 +368,11 @@ function computeStepAngle(sweep: HelicalSweep, n: number): number {
  * que `Layout.helical.landingOutline`) : le palier affleure le nez de dalle sur ce secteur,
  * le plancher haut prolonge le palier (la trémie n'est élargie du jeu qu'autour des marches).
  */
-function helicalOpening(project: Project, radius: number, shape: "circle" | "square"): Opening {
+export function helicalOpening(
+  project: Project,
+  radius: number,
+  shape: "circle" | "square",
+): Opening {
   const c = project.stair.placement.origin;
   if (shape === "square") {
     const half = Math.ceil(radius / 10) * 10;

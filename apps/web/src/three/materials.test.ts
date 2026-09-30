@@ -1,4 +1,5 @@
 import type { MaterialId } from "@blondel/core";
+import { MATERIAL_PBR } from "@blondel/exports";
 import { describe, expect, it } from "vitest";
 import { MATERIAL_LABELS, MATERIAL_LOOKS, SEVERITY_COLORS, materialLook } from "./materials.js";
 
@@ -28,6 +29,16 @@ describe("apparence des matériaux", () => {
       expect(MATERIAL_LABELS[id], id).toBeTruthy();
     }
     expect(Object.keys(MATERIAL_LOOKS).sort()).toEqual([...ALL].sort());
+  });
+
+  it("table PBR unique : la vue 3D reprend celle du glTF (QUESTIONS D6)", () => {
+    for (const id of ALL) {
+      const { color, roughness, metalness, opacity } = MATERIAL_LOOKS[id];
+      expect({ color, roughness, metalness, opacity }, id).toEqual({
+        opacity: undefined,
+        ...MATERIAL_PBR[id],
+      });
+    }
   });
 
   it("acier : brut, peint et galvanisé distincts ; inox et acier métalliques ; seul le verre est translucide", () => {

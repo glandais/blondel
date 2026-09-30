@@ -206,4 +206,17 @@ describe("meshRuled — dégénérescences (revue)", () => {
       ),
     ).toThrow(GeometryError);
   });
+
+  it("épaisseur nulle : GeometryError (plus de maillage vide muet)", () => {
+    const a: Vec3[] = [
+      { x: 0, y: 0, z: 0 },
+      { x: 1000, y: 0, z: 500 },
+    ];
+    const b: Vec3[] = a.map((p) => ({ ...p, z: p.z + 300 }));
+    const n: Vec2[] = [
+      { x: 0, y: 1 },
+      { x: 0, y: 1 },
+    ];
+    expect(() => meshRuled(a, b, 0, n)).toThrow(/épaisseur nulle/);
+  });
 });

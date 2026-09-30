@@ -464,3 +464,17 @@ describe("débit sur barres (calepinage 1D)", () => {
     expect(findSection("UPN 160")).toBeDefined();
   });
 });
+
+describe("steel-profile : charge permanente après rognage des cornières (dette D4)", () => {
+  it("la charge permanente du choix de section est celle des cornières finales (rognées à l'âme)", async () => {
+    const { permanentAreaLoad } = await import("../precheck/stringers.js");
+    const { resolveWorkshopProfile } = await import("../workshop/profile.js");
+    // UPN 100 : âme basse, cornières rognées (une partie de la marche hors de l'âme).
+    for (const section of ["UPN 100", "auto"]) {
+      const p = straight(16, { section });
+      const m = buildModel(p, { memo: false });
+      const final = permanentAreaLoad(m.parts, m.stepping, resolveWorkshopProfile(p.workshop));
+      expect(m.precheck?.permanentArea).toBeCloseTo(final, 9);
+    }
+  });
+});

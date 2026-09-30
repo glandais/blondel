@@ -167,6 +167,8 @@ function treadPart(
       [QUANTITY_SURFACE]: area / MM2_PER_M2,
     },
     grain: horizontal(grain),
+    family: "treads",
+    treadNumber: tread.number,
   };
 }
 
@@ -231,6 +233,7 @@ export function buildBasicParts(project: Project, layout: Layout, stepping: Step
           [QUANTITY_SURFACE]: (V.distance(qf, rf) * height) / MM2_PER_M2,
         },
         grain: horizontal(nosing.dir),
+        family: "treads",
       });
     }
   }

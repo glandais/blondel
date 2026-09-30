@@ -8,6 +8,7 @@ import {
   openingPolygon,
 } from "../headroom/headroom.js";
 import { computeLayout } from "../layout/layout.js";
+import { resolveRiserCount, resolveTargetGoing } from "../layout/resolve.js";
 import type { Project } from "../model/project.js";
 import { getRule } from "../rules/table.js";
 import { placeNosings } from "../stepping/positions.js";
@@ -18,6 +19,7 @@ import {
   boundingRect,
   createProject,
   deepMerge,
+  FLIGHTS_PRESET_SHAPES,
   growAlongStairEdges,
   PRESET_HEADROOM_MIN,
   OPPOSITE_TURNS_PRESET_IDS,
@@ -380,5 +382,50 @@ describe("createProject — isolation", () => {
     const a = createProject("straight");
     const b = createProject("straight");
     expect(a.stair.structure.params).not.toBe(b.stair.structure.params);
+  });
+});
+
+describe("U et demi-tournant : position du premier tournant fonction de E (QUESTIONS D1)", () => {
+  const colletMin = getRule("G_COLLET_MIN").min!;
+  const minCollet = (p: Project): number => {
+    const st = computeStepping(p, computeLayout(p));
+    return Math.min(...st.treads.filter((t) => t.kind === "winder").map((t) => t.colletChord));
+  };
+
+  it.each([
+    ["two-quarters-u", 1000],
+    ["two-quarters-u", 1100],
+    ["half-turn", 1000],
+  ] as const)("%s, E = %i, H ∈ [2 500 ; 2 900], deux sens : collet ≥ G_COLLET_MIN", (id, width) => {
+    for (let floorToFloor = 2500; floorToFloor <= 2900; floorToFloor += 50) {
+      for (const direction of ["left", "right"] as const) {
+        const p = createProject(id, { width, floorToFloor, direction });
+        expect(
+          minCollet(p),
+          `${id} E=${width} H=${floorToFloor} ${direction}`,
+        ).toBeGreaterThanOrEqual(colletMin - 1e-6);
+      }
+    }
+  });
+
+  it("emmarchement par défaut : position du préréglage inchangée", () => {
+    for (const id of ["two-quarters-u", "half-turn"] as const) {
+      const shape = FLIGHTS_PRESET_SHAPES[id];
+      const p = createProject(id);
+      const n = resolveRiserCount(p);
+      const g = resolveTargetGoing(p, n);
+      expect(p.stair.layout.legs[0]).toEqual({
+        length: Math.round(shape.firstStraightGoings * g + shape.width),
+      });
+    }
+  });
+
+  it("volées données dans la surcharge : conservées telles quelles", () => {
+    const legs = [{ length: 1300 }, { length: 2400 }, { length: 2600 }];
+    const p = createProject("two-quarters-u", {
+      width: 1000,
+      patch: { stair: { layout: { legs } } },
+    });
+    expect(p.stair.layout.legs).toEqual(legs);
   });
 });

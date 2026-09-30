@@ -26,7 +26,7 @@ import {
   presentFields,
   type PresentedField,
 } from "../lib/paramLabels.js";
-import { formatDecimal, parseDecimal } from "../lib/units.js";
+import { formatDecimal, parseDecimal, parseIntMm } from "../lib/units.js";
 import { appStore, useApp, useModel } from "../store/appStore.js";
 import type { UpdateResult } from "../store/projectStore.js";
 import { AutoIntField, CheckField, NumberField, SelectField, TextField } from "./fields.js";
@@ -60,6 +60,25 @@ function ParamInput({
         ...(field.max === undefined ? {} : { max: field.max }),
       };
       const n = typeof value === "number" ? value : Number.NaN;
+      if (field.optional) {
+        // Facultatif sans défaut : vide = paramètre absent (NaN dans le champ, `undefined` au
+        // projet), sinon nombre lu comme le champ non facultatif.
+        const read = field.integer ? parseIntMm : parseDecimal;
+        return (
+          <NumberField
+            label={field.label}
+            value={n}
+            unit={field.unit}
+            hint={field.hint ?? "Facultatif : laisser vide pour le comportement par défaut."}
+            {...bounds}
+            parse={(text, b) =>
+              text.trim() === "" ? { ok: true, value: Number.NaN } : read(text, b)
+            }
+            format={(v) => (Number.isNaN(v) ? "" : field.integer ? String(v) : formatDecimal(v))}
+            onCommit={(v) => onCommit(Number.isNaN(v) ? undefined : v)}
+          />
+        );
+      }
       return field.integer ? (
         <NumberField
           label={field.label}

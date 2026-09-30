@@ -17,6 +17,7 @@ import {
   MAX_BALANCED_EXTENT,
   pickZone,
   WINDERS_PER_SIDE_MAX,
+  groupWinderTurns,
   zoneEndConditions,
   type ZoneEvaluation,
 } from "./zones.js";
@@ -390,6 +391,31 @@ describe("quart tournant balancé (M3)", () => {
       "free",
       "tangent",
     ]);
+    // Zone unique de 180° : une borne dans la courte partie droite intermédiaire [180 ; 220]
+    // n'est pas dans la partie tournante, une partie droite continue → tangente (D3).
+    const u = { sStart: 50, sEnd: 350, straights: [{ sStart: 180, sEnd: 220 }] };
+    expect(zoneEndConditions(ctx, u, 2, 3)).toEqual(["tangent", "free"]);
+    expect(zoneEndConditions(ctx, u, 1, 2)).toEqual(["free", "tangent"]);
+    expect(zoneEndConditions(ctx, u, 1, 3)).toEqual(["free", "free"]);
+  });
+
+  it("zone unique de 180° : la partie droite intermédiaire est déclarée dans le groupe (D3)", () => {
+    const layout = computeLayout(
+      makeSteppingProject({ width: 800, legs: [2400, 1700, 2400], floorToFloor: 3000 }),
+    );
+    const [t0, t1] = layout.turns;
+    const groups = groupWinderTurns(layout, [], 250, new Set());
+    expect(groups).toHaveLength(1);
+    expect(groups[0]!.straights).toHaveLength(1);
+    expect(groups[0]!.straights![0]!.sStart).toBeCloseTo(t0!.sEnd, 9);
+    expect(groups[0]!.straights![0]!.sEnd).toBeCloseTo(t1!.sStart, 9);
+    // Tournants éloignés (partie droite ≥ un giron) : deux groupes, aucune partie droite.
+    const far = computeLayout(
+      makeSteppingProject({ width: 800, legs: [2400, 2400, 2400], floorToFloor: 3000 }),
+    );
+    const apart = groupWinderTurns(far, [], 250, new Set());
+    expect(apart).toHaveLength(2);
+    expect(apart.every((g) => g.straights === undefined)).toBe(true);
   });
 
   it("borne d'énumération = maximum de windersPerSide du schéma", () => {

@@ -1,7 +1,7 @@
 import { ProjectSchema, buildModel, parseProjectText, type Model } from "@blondel/core";
 import { describe, expect, it } from "vitest";
 import j4Text from "../../../../examples/j4-acceptance-01-garde-corps.blondel.json?raw";
-import { controlMarkers, locatedPartId, worse } from "./markers.js";
+import { controlMarkers, locatedPartId, partLookup, worse } from "./markers.js";
 
 const base = parseProjectText(j4Text);
 
@@ -36,16 +36,20 @@ describe("marqueurs du contrôle de conception en 3D", () => {
     for (const p of obl) expect(Number.isFinite(p.at.z)).toBe(true);
   });
 
-  it("sévérité la plus grave retenue ; marches désignées par `tread-N`", () => {
+  it("sévérité la plus grave retenue ; marches désignées par `Part.treadNumber`", () => {
     expect(worse("bloquant", "conseil")).toBe(true);
     expect(worse("conseil", "avertissement")).toBe(false);
     expect(worse("conseil", undefined)).toBe(true);
-    const ids = new Set(["tread-3"]);
-    expect(locatedPartId({ kind: "tread", number: 3 }, ids)).toBe("tread-3");
-    expect(locatedPartId({ kind: "tread", number: 4 }, ids)).toBeUndefined();
-    expect(locatedPartId({ kind: "part", partId: "zz" }, ids)).toBeUndefined();
+    const lookup = partLookup([{ id: "tread-3", treadNumber: 3 }, { id: "tread-4" }]);
+    expect(locatedPartId({ kind: "tread", number: 3 }, lookup)).toBe("tread-3");
+    // Pièce `tread-4` sans numéro de marche : plus de convention d'identifiant (QUESTIONS D6).
+    expect(locatedPartId({ kind: "tread", number: 4 }, lookup)).toBeUndefined();
+    expect(locatedPartId({ kind: "part", partId: "zz" }, lookup)).toBeUndefined();
+    expect(
+      locatedPartId({ kind: "tread", number: 5 }, partLookup([{ id: "Z5", treadNumber: 5 }])),
+    ).toBe("Z5");
     const fake = {
-      parts: [{ id: "tread-3" }],
+      parts: [{ id: "tread-3", treadNumber: 3 }],
       compliance: {
         results: [
           {
@@ -77,7 +81,7 @@ describe("marqueurs du contrôle de conception en 3D", () => {
 
   it("filtre par famille de règles (QUESTIONS A23) : famille lue dans le cœur", () => {
     const fake = {
-      parts: [{ id: "tread-1" }, { id: "guard-1" }, { id: "stringer-1" }],
+      parts: [{ id: "tread-1", treadNumber: 1 }, { id: "guard-1" }, { id: "stringer-1" }],
       compliance: {
         results: [
           {

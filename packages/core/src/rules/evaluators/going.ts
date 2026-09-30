@@ -76,6 +76,50 @@ const colletMin: RuleEvaluator = (ctx) =>
     },
   );
 
+/**
+ * Suites de marches balancées de numéros consécutifs (sans égard aux zones déclarées), dans
+ * l'ordre de la montée.
+ */
+function consecutiveWinderRuns(ctx: EvaluatorContext): Tread[][] {
+  const runs: Tread[][] = [];
+  let cur: Tread[] = [];
+  for (const t of treadsOfKind(ctx.stepping, "winder")) {
+    const last = cur[cur.length - 1];
+    if (last && t.number !== last.number + 1) {
+      runs.push(cur);
+      cur = [];
+    }
+    cur.push(t);
+  }
+  if (cur.length > 0) runs.push(cur);
+  return runs;
+}
+
+/**
+ * Numéros des marches au droit d'un poteau d'angle : marche dont les nez encadrent le milieu
+ * d'un tournant balancé à poteau (`inner.kind = "newel"`). Leur collet suit le contour du
+ * poteau (≈ 170 à 240 mm contre ≈ 120 mm aux marches voisines) ; faut-il les exclure de K3 ?
+ * Question ouverte (QUESTIONS B1, « Collet et K3 au droit d'un poteau ») : le contrôle des
+ * marches hors zone ne conclut pas sur une marche hors zone qui est, ou jouxte, une telle marche.
+ */
+function newelTreadNumbers(ctx: EvaluatorContext): Set<number> {
+  const out = new Set<number>();
+  const layout = ctx.project.stair.layout;
+  if (layout.kind === "helical") return out;
+  const nosings = ctx.stepping.nosings;
+  for (const turn of ctx.layout.turns) {
+    if (turn.mode !== "winders" || layout.turns[turn.index]?.inner.kind !== "newel") continue;
+    const mid = (turn.sStart + turn.sEnd) / 2;
+    for (const t of ctx.stepping.treads) {
+      const a = nosings[t.number - 1];
+      const b = nosings[t.number];
+      if (!a || !b || !Number.isFinite(a.s) || !Number.isFinite(b.s)) continue;
+      if (a.s <= mid && mid < b.s) out.add(t.number);
+    }
+  }
+  return out;
+}
+
 /** Groupes de marches balancées consécutives (par zone balancée si connue). */
 function winderGroups(ctx: EvaluatorContext): Tread[][] {
   const winders = treadsOfKind(ctx.stepping, "winder");
@@ -133,7 +177,9 @@ function groupCorners(ctx: EvaluatorContext, g: readonly Tread[]): number[] | nu
  * jusqu'à l'angle puis croissent : la suite est « en vallée » **autour de chaque angle du jour**.
  * Une zone unique de 180° (demi-tournant, U serré) contourne deux angles : deux vallées
  * séparées par une crête entre les deux angles (`cornerMonotonyBreaks`). Sans repérage possible
- * des angles, une seule vallée, prise au premier minimum.
+ * des angles, une seule vallée, prise au premier minimum. Une marche balancée hors zone déclarée
+ * est contrôlée localement, par rapport aux angles de la suite de marches balancées
+ * consécutives qui la contient.
  */
 const colletMonotone: RuleEvaluator = (ctx) => {
   const groups = winderGroups(ctx);
@@ -156,6 +202,94 @@ const colletMonotone: RuleEvaluator = (ctx) => {
       });
     }
   });
+  // Marches balancées hors de toute zone déclarée (marche entre deux zones par angle, QUESTIONS
+  // D1) : seules, elles ne forment jamais de rupture. Chacune est située par rapport aux angles
+  // du jour de la suite de marches balancées consécutives qui la contient (zones voisines
+  // comprises) et comparée à ses voisines : avant le premier angle, les collets décroissent ;
+  // après le dernier, ils croissent ; au droit d'un angle, pas de crête ; entre deux angles, pas
+  // de creux. Contrôle local : les ruptures internes aux zones restent celles du contrôle par
+  // zone ci-dessus (aucun doublon, aucun report d'une rupture de zone sur la marche hors zone).
+  // Sans angle repéré dans la suite, pas de conclusion sur ces marches.
+  const zones = ctx.stepping.balancedZones;
+  if (zones.length > 0) {
+    const newelTreads = newelTreadNumbers(ctx);
+    const outside = (t: Tread): boolean =>
+      !zones.some((z) => t.number - 1 >= z.from && t.number <= z.to);
+    const reported = new Set(
+      out.map((f) => (f.location?.kind === "tread" ? f.location.number : -1)),
+    );
+    for (const run of consecutiveWinderRuns(ctx)) {
+      if (run.length < 2 || !run.some(outside)) continue;
+      const cs = groupCorners(ctx, run);
+      if (cs === null || cs.length === 0) continue;
+      const c = run.map((t) => t.colletChord);
+      const push = (t: Tread, message: string): void => {
+        if (reported.has(t.number)) return;
+        reported.add(t.number);
+        out.push({
+          status: "violation",
+          measured: t.colletChord,
+          location: treadLocation(t),
+          message,
+        });
+      };
+      /** Pas i₀ → i₁ contraire au sens attendu : constat sur la marche i₁. */
+      const flag = (i1: number, i0: number): void => {
+        const t = run[i1]!;
+        const a = run[i0]!;
+        push(
+          t,
+          `Collet non monotone vers l'angle, marche balancée hors zone déclarée, marche ${t.number} : ${fmt(t.colletChord)} mm après ${fmt(a.colletChord)} mm (marche ${a.number}).`,
+        );
+      };
+      /** Extremum local mal placé (crête au droit d'un angle, creux entre deux angles). */
+      const extremum = (i: number, what: string): void => {
+        const t = run[i]!;
+        push(
+          t,
+          `Collet non monotone vers l'angle, marche balancée hors zone déclarée, marche ${t.number} : ${what} de ${fmt(t.colletChord)} mm entre ${fmt(run[i - 1]!.colletChord)} mm (marche ${run[i - 1]!.number}) et ${fmt(run[i + 1]!.colletChord)} mm (marche ${run[i + 1]!.number}).`,
+        );
+      };
+      run.forEach((t, i) => {
+        if (!outside(t)) return;
+        // Marche au droit d'un poteau (ou voisine) : collet sur le contour du poteau, à arbitrer
+        // (QUESTIONS B1) : pas de conclusion.
+        const near = [run[i - 1], t, run[i + 1]].filter((x): x is Tread => x !== undefined);
+        if (near.some((x) => newelTreads.has(x.number))) return;
+        const prev = i > 0 ? c[i - 1]! : undefined;
+        const next = i + 1 < c.length ? c[i + 1]! : undefined;
+        const v = c[i]!;
+        const first = cs[0]!;
+        const last = cs[cs.length - 1]!;
+        if (i < first) {
+          // Vers le premier angle : décroissant.
+          if (prev !== undefined && v > prev + NUMERIC_EPS) flag(i, i - 1);
+          else if (next !== undefined && next > v + NUMERIC_EPS) flag(i + 1, i);
+        } else if (i > last) {
+          // Au-delà du dernier angle : croissant.
+          if (prev !== undefined && v < prev - NUMERIC_EPS) flag(i, i - 1);
+          else if (next !== undefined && next < v - NUMERIC_EPS) flag(i + 1, i);
+        } else if (cs.includes(i)) {
+          // Au droit d'un angle : pas de crête.
+          if (
+            prev !== undefined &&
+            next !== undefined &&
+            v > prev + NUMERIC_EPS &&
+            v > next + NUMERIC_EPS
+          )
+            extremum(i, "crête au droit de l'angle");
+        } else if (
+          prev !== undefined &&
+          next !== undefined &&
+          v < prev - NUMERIC_EPS &&
+          v < next - NUMERIC_EPS
+        ) {
+          // Entre deux angles : pas de creux.
+          extremum(i, "creux entre deux angles");
+        }
+      });
+    }
+  }
   if (out.length > 0) return out;
   return [
     {

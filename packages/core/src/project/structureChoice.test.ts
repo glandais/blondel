@@ -3,7 +3,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Project } from "../model/project.js";
 import { buildModel, clearModelCache } from "../pipeline/build.js";
 import { profileNewelFits } from "../structures/steelProfile.js";
-import { DEFAULT_NEWEL_SIZE, NEWEL_REQUIRED_STRUCTURES, suggestFixes } from "./fixes.js";
+import { DEFAULT_NEWEL_SIZE, suggestFixes } from "./fixes.js";
+import { newelRequiredStructures } from "./newel.js";
 import { createProject, PRESET_IDS } from "./presets.js";
 import { applyStructureChoice, resolveProfileNewel } from "./structureChoice.js";
 
@@ -91,7 +92,7 @@ describe("applyStructureChoice — poteau automatique (décision A4)", () => {
     fc.assert(
       fc.property(
         fc.constantFrom(...TURNING),
-        fc.constantFrom(...NEWEL_REQUIRED_STRUCTURES, "none"),
+        fc.constantFrom(...newelRequiredStructures(), "none"),
         (preset, kind) => {
           const base = createProject(preset);
           const once = applyStructureChoice(base, kind);
@@ -102,7 +103,7 @@ describe("applyStructureChoice — poteau automatique (décision A4)", () => {
           expect(once.project.stair.layout.turns.map((t) => [t.direction, t.mode])).toEqual(
             base.stair.layout.turns.map((t) => [t.direction, t.mode]),
           );
-          const required = NEWEL_REQUIRED_STRUCTURES.includes(kind);
+          const required = newelRequiredStructures().includes(kind);
           for (const t of once.project.stair.layout.turns) {
             expect(t.inner.kind).toBe(required ? "newel" : "sharp");
           }

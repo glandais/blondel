@@ -11,7 +11,7 @@
 import type { Stepping } from "../model/derived.js";
 import type { Project } from "../model/project.js";
 import { isRuleApplicable, resolveContexts } from "../rules/contexts.js";
-import { MC_CORE_DIAMETER_MAX } from "../rules/formula-constants.js";
+import { MC_CORE_DIAMETER_MAX } from "../rules/params.js";
 import { findRule } from "../rules/table.js";
 
 /** Identifiant de la règle « une main courante de chaque côté ». */

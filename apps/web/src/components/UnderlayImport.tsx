@@ -116,7 +116,7 @@ export function UnderlayImport({
   const loadDxf = async (name: string, text: string, unitScale?: number): Promise<void> => {
     setBusy(true);
     try {
-      const { readDxfUnderlay } = await import("@blondel/core/dxf");
+      const { readDxfUnderlay, describeSkipped } = await import("@blondel/core/dxf");
       const r = readDxfUnderlay(text, unitScale !== undefined ? { unitScale } : {});
       if (r.needsScale) {
         setPending({ name, text });
@@ -130,7 +130,7 @@ export function UnderlayImport({
       if (r.entities.length === 0) {
         setNotice({
           kind: "error",
-          text: `« ${name} » : aucune ligne, polyligne, arc ou cercle lisible.`,
+          text: `« ${name} » : aucune ligne, polyligne, arc, cercle, ellipse ou spline lisible.`,
         });
         return;
       }
@@ -141,7 +141,8 @@ export function UnderlayImport({
         entities: r.entities as UnderlayEntity[],
       };
       const error = commit((p) => withDxfUnderlay(p, dxf));
-      const skipped = Object.values(r.skipped).reduce((s, v) => s + v, 0);
+      // Entités ignorées détaillées par famille (textes, cotes, hachures…), lues dans le cœur.
+      const skipped = describeSkipped(r.skipped);
       setNotice(
         error
           ? { kind: "error", text: error }
@@ -152,7 +153,7 @@ export function UnderlayImport({
                 (r.unitName
                   ? ` (unité : ${r.unitName})`
                   : ` (échelle ${r.unitScale} mm par unité)`) +
-                (skipped > 0 ? `, ${skipped} ignorées (textes, cotes, hachures…)` : "") +
+                (skipped !== "" ? ` ; ignorées : ${skipped}` : "") +
                 (r.truncated ? " ; plan tronqué (trop d'entités)" : "") +
                 ".",
             },

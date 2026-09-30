@@ -5,7 +5,8 @@
  * tournants à ce qu'elle sait construire, en une seule modification (une seule entrée
  * d'annulation dans l'interface) accompagnée de remarques :
  *
- * - structure de `NEWEL_REQUIRED_STRUCTURES` (limons à la française, plat laser, profilés) et
+ * - structure qui exige un poteau (`capabilities.requiresNewel` : limons à la française, plat
+ *   laser, profilés) et
  *   jour à angle vif → **poteau d'angle** de `DEFAULT_NEWEL_SIZE` (correction `jour-newel`,
  *   décision A4) ; sans structure (ou autre structure), le jour vif reste le défaut ;
  * - `steel-profile` → **poteau élargi des profilés** (décision A13) : côté = largeur d'aile de
@@ -26,9 +27,9 @@ import { buildModel } from "../pipeline/build.js";
 import { profileFlangeWidth } from "../structures/steelProfile.js";
 import {
   DEFAULT_NEWEL,
-  NEWEL_REQUIRED_STRUCTURES,
   expectedNewel,
   layoutAccepts,
+  structureRequiresNewel,
   newelLabel,
   newelMatches,
   newelSatisfies,
@@ -116,7 +117,7 @@ export function applyStructureChoice(
   params: Readonly<Record<string, unknown>> = {},
 ): StructureChoiceResult {
   const chosen = withStructure(project, kind, params);
-  if (!NEWEL_REQUIRED_STRUCTURES.includes(kind)) return { project: chosen, notes: [] };
+  if (!structureRequiresNewel(kind)) return { project: chosen, notes: [] };
   const turns = chosen.stair.layout.turns;
   const profile = kind === "steel-profile";
   // Tournants à adapter : jours vifs ; pour les profilés, aussi les poteaux différents du poteau

@@ -307,7 +307,7 @@ const BY_KIND: Readonly<Record<string, Readonly<Record<string, FieldText>>>> = {
     },
     cantileverJustification: {
       label: "Justification du porte-à-faux",
-      hint: "Référence de la note de calcul ou de l'avis technique, reprise dans le dossier PDF ; vide : avertissement",
+      hint: "Référence de la note de calcul ou de l'avis technique, jointe à l'avertissement (qui reste affiché) et reprise dans le dossier PDF",
     },
   },
 };

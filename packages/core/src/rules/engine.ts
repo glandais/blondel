@@ -3,7 +3,6 @@
  * effective (profil, surcharges) → rapport.
  */
 import type { ComplianceReport, RuleResult, Severity } from "../model/derived.js";
-import type { ComplianceSettings } from "../model/project.js";
 import { STAIR } from "./check.js";
 import { isRuleApplicable, resolveContexts, type ResolvedContexts } from "./contexts.js";
 import {
@@ -11,74 +10,13 @@ import {
   PARTIAL_MODEL_RULES,
   type EvaluatorRegistry,
 } from "./evaluators/index.js";
+import { UNEVALUATED_REASONS } from "./evaluators/unevaluable.js";
+import { effectiveSeverity, type EffectiveSeverity } from "./severity.js";
 import { RULES, RULES_VERSION, findRule, type RuleDef } from "./table.js";
 import type { ComplianceInput, Finding } from "./types.js";
 
-export interface EffectiveSeverity {
-  readonly severity: Severity;
-  /** Vrai si l'utilisateur a choisi d'ignorer la règle (justification obligatoire). */
-  readonly ignored: boolean;
-  readonly downgradeReason?: string;
-}
-
-const SEVERITY_RANK: Readonly<Record<Severity, number>> = {
-  conseil: 0,
-  avertissement: 1,
-  bloquant: 2,
-};
-
-/**
- * Sévérité effective d'une règle :
- * 0. sévérité propre au constat (`Finding.severity`), si elle est plus faible que la sévérité
- *    déclarée (ex. GC_OBLIGATOIRE au droit d'un jour étroit, QUESTIONS A10) ;
- * 1. profil `souple` : `bloquant` + `source_secondaire` → `avertissement` ;
- * 2. surcharge utilisateur (dernière pour l'id), prise en compte seulement avec une justification non vide ;
- *    une surcharge qui assouplit la règle (plus faible que la sévérité déclarée) ne relève jamais
- *    un constat déjà plus faible qu'elle.
- */
-export function effectiveSeverity(
-  rule: RuleDef,
-  settings: ComplianceSettings,
-  finding?: Pick<Finding, "severity" | "severityReason">,
-): EffectiveSeverity {
-  let severity: Severity = rule.severite;
-  const reasons: string[] = [];
-  if (finding?.severity && SEVERITY_RANK[finding.severity] < SEVERITY_RANK[severity]) {
-    severity = finding.severity;
-    reasons.push(
-      finding.severityReason ?? `Sévérité ramenée à « ${finding.severity} » pour ce constat.`,
-    );
-  }
-  if (settings.profile === "souple" && rule.source_secondaire && severity === "bloquant") {
-    severity = "avertissement";
-    reasons.push("Profil souple : valeur issue d'une source secondaire (norme non lue).");
-  }
-  const override = [...settings.overrides]
-    .reverse()
-    .find((o) => o.ruleId === rule.id && o.justification.trim() !== "");
-  let ignored = false;
-  if (override) {
-    if (override.severity === "ignore") {
-      ignored = true;
-      reasons.push(`Ignorée par l'utilisateur : ${override.justification.trim()}`);
-    } else if (
-      severity !== rule.severite &&
-      SEVERITY_RANK[override.severity] < SEVERITY_RANK[rule.severite] &&
-      SEVERITY_RANK[override.severity] >= SEVERITY_RANK[severity]
-    ) {
-      // Surcharge qui assouplit la règle : elle ne relève pas un constat déjà plus faible
-      // (sévérité propre au constat ou profil souple).
-    } else if (override.severity !== severity) {
-      reasons.push(
-        `Surcharge utilisateur (${severity} → ${override.severity}) : ${override.justification.trim()}`,
-      );
-      severity = override.severity;
-    }
-  }
-  return reasons.length > 0
-    ? { severity, ignored, downgradeReason: reasons.join(" ") }
-    : { severity, ignored };
-}
+// Sévérité effective : `rules/severity.ts` (sans dépendance aux évaluateurs, lisible par eux).
+export { effectiveSeverity, type EffectiveSeverity };
 
 /** Note d'une surcharge portant sur un identifiant absent de rules.yaml. */
 export function unknownOverrideNote(ruleId: string): string {
@@ -171,13 +109,17 @@ export function evaluateComplianceDetailed(
         },
       ];
     } else if (!ev) {
-      findings = [
-        {
-          status: "non-evaluee",
-          location: STAIR,
-          message: "Règle applicable sans évaluateur (non implémentée).",
-        },
-      ];
+      // Règle non évaluable sur le modèle : motif précis (donnée absente, hors conception).
+      const reason = UNEVALUATED_REASONS[rule.id];
+      let message = "Règle applicable sans évaluateur (non implémentée).";
+      if (reason) {
+        try {
+          message = reason({ ...input, rule, contexts: active });
+        } catch (e) {
+          message = `Non évaluée : ${e instanceof Error ? e.message : String(e)}`;
+        }
+      }
+      findings = [{ status: "non-evaluee", location: STAIR, message }];
     } else {
       try {
         findings = ev({ ...input, rule, contexts: active });
@@ -225,12 +167,16 @@ export function evaluateCompliance(
 export interface RuleCoverage {
   readonly total: number;
   readonly implemented: readonly string[];
+  /** Règles sans évaluateur (toujours `non-evaluee`). */
   readonly notImplemented: readonly string[];
+  /** Parmi elles, celles dont le motif de non-évaluation est déclaré (`UNEVALUATED_REASONS`). */
+  readonly withReason: readonly string[];
 }
 
 /** Couverture de la table par les évaluateurs (critère « toute règle traçable »). */
 export function ruleCoverage(evaluators: EvaluatorRegistry = DEFAULT_EVALUATORS): RuleCoverage {
   const implemented = RULES.filter((r) => evaluators.has(r.id)).map((r) => r.id);
   const notImplemented = RULES.filter((r) => !evaluators.has(r.id)).map((r) => r.id);
-  return { total: RULES.length, implemented, notImplemented };
+  const withReason = notImplemented.filter((id) => UNEVALUATED_REASONS[id] !== undefined);
+  return { total: RULES.length, implemented, notImplemented, withReason };
 }

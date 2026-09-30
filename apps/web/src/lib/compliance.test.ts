@@ -61,12 +61,25 @@ describe("regroupement du contrôle de conception", () => {
   });
 
   it("relie localisations et pièces", () => {
-    expect(isPartSelected("tread-3", { kind: "tread", number: 3 })).toBe(true);
-    expect(isPartSelected("tread-3", { kind: "tread", number: 4 })).toBe(false);
-    expect(isPartSelected("LI1", { kind: "part", partId: "LI1" })).toBe(true);
-    expect(isPartSelected("x", null)).toBe(false);
-    expect(selectedTreadNumber({ kind: "part", partId: "tread-12" })).toBe(12);
-    expect(selectedTreadNumber({ kind: "nosing", index: 1 })).toBeUndefined();
+    const t3 = { partId: "tread-3", treadNumber: 3 };
+    expect(isPartSelected(t3, { kind: "tread", number: 3 })).toBe(true);
+    expect(isPartSelected(t3, { kind: "tread", number: 4 })).toBe(false);
+    expect(isPartSelected({ partId: "LI1" }, { kind: "part", partId: "LI1" })).toBe(true);
+    expect(isPartSelected({ partId: "x" }, null)).toBe(false);
+    // Champ explicite du cœur (QUESTIONS D6) : l'identifiant ne sert plus à trouver la marche.
+    expect(isPartSelected({ partId: "tread-4" }, { kind: "tread", number: 4 })).toBe(false);
+    expect(isPartSelected({ partId: "Z7", treadNumber: 7 }, { kind: "tread", number: 7 })).toBe(
+      true,
+    );
+    const parts = [
+      { id: "tread-12", treadNumber: 12 },
+      { id: "tread-13" },
+      { id: "Z5", treadNumber: 5 },
+    ];
+    expect(selectedTreadNumber({ kind: "part", partId: "tread-12" }, parts)).toBe(12);
+    expect(selectedTreadNumber({ kind: "part", partId: "tread-13" }, parts)).toBeUndefined();
+    expect(selectedTreadNumber({ kind: "part", partId: "Z5" }, parts)).toBe(5);
+    expect(selectedTreadNumber({ kind: "nosing", index: 1 }, parts)).toBeUndefined();
     expect(sameLocation({ kind: "tread", number: 2 }, { kind: "tread", number: 2 })).toBe(true);
     expect(sameLocation({ kind: "tread", number: 2 }, { kind: "nosing", index: 2 })).toBe(false);
   });
@@ -111,6 +124,9 @@ describe("treadPartId", () => {
   it("désigne une pièce réelle du pipeline pour chaque marche", () => {
     const model = buildModel(createProject("quarter-left"));
     const ids = new Set(model.parts.map((p) => p.id));
-    for (const t of model.stepping.treads) expect(ids.has(treadPartId(t.number))).toBe(true);
+    for (const t of model.stepping.treads) {
+      const id = treadPartId(model.parts, t.number);
+      expect(id !== undefined && ids.has(id)).toBe(true);
+    }
   });
 });

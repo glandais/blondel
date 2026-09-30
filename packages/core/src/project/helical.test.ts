@@ -12,7 +12,11 @@ import * as V from "../geom2d/vec.js";
 import { helicalHeadroomBound } from "../headroom/helical.js";
 import { isSimplePolygon } from "../structures/geom.js";
 import { computeLayout } from "../layout/layout.js";
-import { PROJECT_SCHEMA_VERSION, ProjectSchema } from "../model/project.js";
+import {
+  HELICAL_TREADS_PER_TURN_MIN,
+  PROJECT_SCHEMA_VERSION,
+  ProjectSchema,
+} from "../model/project.js";
 import { buildModel } from "../pipeline/build.js";
 import { getRule } from "../rules/table.js";
 import { computeStepping } from "../stepping/stepping.js";
@@ -27,6 +31,11 @@ import {
   PRESET_OPENING_CLEARANCE,
 } from "./presets.js";
 import { serializeProject } from "./serialize.js";
+import {
+  HelicalSweepError,
+  createHelicalProject,
+  createHelicalProjectWithFallback,
+} from "./presetHelical.js";
 
 const EXAMPLES_DIR = resolve(dirname(fileURLToPath(import.meta.url)), "../../../../examples");
 
@@ -261,5 +270,41 @@ describe("préréglage `helical`", () => {
       mode: "treadsPerTurn",
       count: 16,
     });
+  });
+});
+
+describe("préréglage `helical` : structure et repli (dette D4)", () => {
+  it("le cœur pose `helical-core` ; une structure imposée par `patch` est conservée", () => {
+    const p = createProject("helical");
+    expect(p.stair.structure.kind).toBe("helical-core");
+    const ids = buildModel(p).parts.map((x) => x.id);
+    expect(ids).toEqual(expect.arrayContaining(["helical-column", "helical-handrail"]));
+    const none = createProject("helical", {
+      patch: { stair: { structure: { kind: "none", params: {} } } },
+    });
+    expect(none.stair.structure.kind).toBe("none");
+  });
+
+  it("aucun N ne passe : HelicalSweepError ; repli du cœur parmi les N essayés, annoncé", () => {
+    const opts = {
+      floorToFloor: 2750,
+      patch: { stair: { stepping: { riserCount: 17 } } },
+    } as const;
+    expect(() => createHelicalProject(opts)).toThrow(HelicalSweepError);
+    const r = createHelicalProjectWithFallback(opts);
+    expect(r.note).toMatch(/Repli : \d+ marches par tour/);
+    const sweep = r.project.stair.layout.kind === "helical" ? r.project.stair.layout.sweep : null;
+    expect(sweep?.mode).toBe("treadsPerTurn");
+    const count = sweep?.mode === "treadsPerTurn" ? sweep.count : 0;
+    expect(count).toBeGreaterThanOrEqual(HELICAL_TREADS_PER_TURN_MIN);
+    expect(r.project.stair.structure.kind).toBe("helical-core");
+    // Modèle calculable (le contrôle de conception signale ce qui ne passe pas).
+    expect(buildModel(r.project).errors).toEqual([]);
+    // Sans difficulté : même projet que le préréglage, sans note.
+    const ok = createHelicalProjectWithFallback({ floorToFloor: 2700 });
+    expect(ok.note).toBeUndefined();
+    expect(ok.project).toEqual(createProject("helical", { floorToFloor: 2700 }));
+    // Autres incohérences : toujours RangeError, sans repli.
+    expect(() => createHelicalProjectWithFallback({ width: 900 })).toThrow(RangeError);
   });
 });

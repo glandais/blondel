@@ -228,9 +228,15 @@ describe("largeurs et ligne de foulée", () => {
     expect(off?.message).toContain("attendue à 600 mm");
   });
 
-  it("ligne de conception décalée avec marches balancées : non évaluée", () => {
+  it("ligne de conception décalée avec marches balancées : girons contrôlés sur la ligne de mesure (X9)", () => {
+    // Données synthétiques : nez parallèles, girons identiques sur toute ligne (voir
+    // rules/measurementLine.test.ts pour un vrai tournant).
     const o: Opts = { walklineOffset: 400, stepping: { treads: { 5: { kind: "winder" } } } };
-    expect(status(o, "LF_POSITION_DTU_ETROIT")).toEqual(["non-evaluee"]);
+    const r = run(o, "LF_POSITION_DTU_ETROIT");
+    expect(r.map((x) => x.status)).toEqual(["ok"]);
+    expect(r[0]!.message).toMatch(
+      /ligne de mesure à 450 mm .* conformes à G_MIN_DTU, G_TOL_BALANCEE/,
+    );
     expect(status({ walklineOffset: 400 }, "LF_POSITION_DTU_ETROIT")).toEqual(["ok"]);
   });
 
@@ -243,7 +249,8 @@ describe("largeurs et ligne de foulée", () => {
       },
       "LF_POSITION_ACCESSIBILITE",
     );
-    expect(r[0]).toMatchObject({ status: "non-evaluee", min: 600 });
+    expect(r[0]!.status).toBe("ok");
+    expect(r[0]!.message).toMatch(/ligne de mesure à 600 mm/);
   });
 });
 

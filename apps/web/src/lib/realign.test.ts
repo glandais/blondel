@@ -2,6 +2,8 @@ import { buildModel, createProject } from "@blondel/core";
 import { describe, expect, it } from "vitest";
 import {
   realign,
+  realignDisabledReason,
+  REALIGN_HINT,
   WALKLINE_SIDE_HINT,
   walklineSideApplies,
   walklineSideChoice,
@@ -9,19 +11,27 @@ import {
 } from "./realign.js";
 
 describe("recalage des volées et de la trémie (A18 a)", () => {
-  it("H modifié : volées et trémie du préréglage, message", () => {
+  it("H modifié : dernière volée et trémie recalées, position du tournant conservée", () => {
     const p = createProject("quarter-left");
     const edited = { ...p, site: { ...p.site, floorToFloor: 2900 } };
     const r = realign(edited);
-    const expected = createProject("quarter-left", { floorToFloor: 2900 });
-    expect(r.project.stair.layout.legs).toEqual(expected.stair.layout.legs);
-    expect(r.project.site.opening).toEqual(expected.site.opening);
-    expect(r.notice).toMatch(/Volées recalées/);
+    expect(r.project.stair.layout.legs[0]).toEqual(p.stair.layout.legs[0]);
+    expect(r.project.stair.layout.legs[1]).not.toEqual(p.stair.layout.legs[1]);
+    expect(r.notice).toMatch(/Dernière volée recalée/);
     expect(r.notice).toMatch(/Trémie recalée/);
+    expect(realignDisabledReason(edited)).toBeNull();
   });
 
-  it("hélicoïdal : refus explicite", () => {
+  it("hélicoïdal : refus explicite, bouton désactivé avec la raison du cœur", () => {
     expect(() => realign(createProject("helical"))).toThrow(/hélicoïdal/);
+    expect(realignDisabledReason(createProject("helical"))).toMatch(/hélicoïdal/);
+  });
+
+  it("palier hors d'un nombre entier de girons : bouton désactivé, longueur proposée", () => {
+    const p = createProject("quarter-landing");
+    const edited = { ...p, site: { ...p.site, floorToFloor: 2900 } };
+    expect(realignDisabledReason(edited)).toMatch(/saisir .* mm pour la volée 1/);
+    expect(REALIGN_HINT).toMatch(/position des tournants saisie conservée/);
   });
 });
 

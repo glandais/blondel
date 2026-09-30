@@ -75,3 +75,21 @@ describe("checkManifold — paramètres (revue)", () => {
     expect(() => checkManifold(m, Number.NaN)).toThrow(RangeError);
   });
 });
+
+describe("mergeMeshes — repères locaux", () => {
+  it("garde l'origine du premier maillage et y ramène les autres", () => {
+    const shape = { outer: rect(0, 0, 10, 10), holes: [] };
+    const a = meshExtrusion({ ...identityFrame, origin: { x: 5000, y: 0, z: 0 } }, shape, 10, {
+      localOrigin: true,
+    });
+    const b = meshExtrusion({ ...identityFrame, origin: { x: 0, y: 3000, z: 0 } }, shape, 10, {
+      localOrigin: true,
+    });
+    const m = mergeMeshes([a, b]);
+    expect(m.origin).toEqual(a.origin);
+    const box = bbox(m)!;
+    expect(box.min.x).toBeCloseTo(-5, 3);
+    expect(box.max.x).toBeCloseTo(5005, 3);
+    expect(box.max.y).toBeCloseTo(3005, 3);
+  });
+});

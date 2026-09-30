@@ -23,26 +23,29 @@ describe("apparence 3D par famille de pièces", () => {
     partId: p.id,
     category: p.category,
     material: p.material,
+    family: p.family,
   }));
 
   it("classe chaque pièce dans une famille, garde-corps compris", () => {
     const families = new Set(parts.map(partFamily));
     expect(families).toEqual(new Set(["treads", "structure", "guards", "handrails"]));
-    expect(partFamily({ partId: "guard-outer-1-post-1", category: "post" })).toBe("guards");
-    expect(partFamily({ partId: "post-1", category: "post" })).toBe("structure");
-    expect(partFamily({ partId: "guard-outer-1-handrail", category: "handrail" })).toBe(
-      "handrails",
-    );
-    expect(partFamily({ partId: "tread-3", category: "tread" })).toBe("treads");
+    expect(partFamily({ family: "guards", category: "post" })).toBe("guards");
+    expect(partFamily({ family: "structure", category: "post" })).toBe("structure");
+    expect(partFamily({ family: "guards", category: "handrail" })).toBe("handrails");
+    expect(partFamily({ family: "treads", category: "tread" })).toBe("treads");
+    // Famille explicite du cœur, plus de convention d'identifiant (QUESTIONS D6) : une pièce de
+    // garde-corps est reconnue quel que soit son identifiant, une marche d'un plugin aussi.
+    expect(partFamily({ family: "treads", category: "support" })).toBe("treads");
+    expect(partFamily({ category: "post" })).toBe("structure");
   });
 
   it("zone de peinture : marches, garde-corps (mains courantes comprises), ossature", () => {
-    expect(paintZone({ partId: "tread-3", category: "tread" })).toBe("treads");
-    expect(paintZone({ partId: "landing-1", category: "landing" })).toBe("treads");
-    expect(paintZone({ partId: "guard-outer-1-baluster-2", category: "baluster" })).toBe("guards");
-    expect(paintZone({ partId: "guard-outer-1-handrail", category: "handrail" })).toBe("guards");
-    expect(paintZone({ partId: "post-1", category: "post" })).toBe("structure");
-    expect(paintZone({ partId: "LE1", category: "stringer" })).toBe("structure");
+    expect(paintZone({ family: "treads", category: "tread" })).toBe("treads");
+    expect(paintZone({ family: "treads", category: "landing" })).toBe("treads");
+    expect(paintZone({ family: "guards", category: "baluster" })).toBe("guards");
+    expect(paintZone({ family: "guards", category: "handrail" })).toBe("guards");
+    expect(paintZone({ family: "structure", category: "post" })).toBe("structure");
+    expect(paintZone({ family: "structure", category: "stringer" })).toBe("structure");
   });
 
   it("liste les familles présentes et leurs matériaux", () => {

@@ -86,6 +86,41 @@ export interface PickedPoint {
 
 const NO_OFFSET: Vec3 = { x: 0, y: 0, z: 0 };
 
+/**
+ * Rayon d'accrochage de la mesure aux sommets (pixels à l'écran) : choix de présentation, de
+ * l'ordre de la précision d'un clic (QUESTIONS D6).
+ */
+export const SNAP_RADIUS_PX = 12;
+
+/** Sommet candidat à l'accrochage : position (mm) et projection à l'écran (pixels). */
+export interface SnapCandidate {
+  readonly point: Vec3;
+  readonly screen: { readonly x: number; readonly y: number };
+}
+
+/**
+ * Accrochage de la mesure : sommet du triangle cliqué le plus proche du clic à l'écran, s'il
+ * est à moins de `radiusPx` ; sinon le point cliqué. Les sommets du maillage sont ceux du
+ * solide (arêtes vives, coins de pièces), d'où une mesure juste d'arête à arête.
+ */
+export function snapToVertex(
+  hit: Vec3,
+  hitScreen: { readonly x: number; readonly y: number },
+  candidates: readonly SnapCandidate[],
+  radiusPx: number = SNAP_RADIUS_PX,
+): { readonly point: Vec3; readonly snapped: boolean } {
+  let best: SnapCandidate | undefined;
+  let bestD = radiusPx;
+  for (const c of candidates) {
+    const d = Math.hypot(c.screen.x - hitScreen.x, c.screen.y - hitScreen.y);
+    if (d <= bestD) {
+      bestD = d;
+      best = c;
+    }
+  }
+  return best ? { point: best.point, snapped: true } : { point: hit, snapped: false };
+}
+
 /** Point cliqué sur la pièce `partId` (position affichée) → position réelle de la pièce. */
 export function pickPoint(
   partId: string,

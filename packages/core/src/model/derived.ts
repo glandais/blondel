@@ -100,6 +100,18 @@ export interface Layout {
   readonly walklineOffset: Mm;
   /** Emprise en plan (contour de l'escalier). */
   readonly footprint: Polygon2;
+  /**
+   * Trous de l'emprise (ajout rétrocompatible) : hélicoïdal de plus d'un tour, disque du jour
+   * central de rayon R_i (fût ou jour), que `footprint` (disque de R_e) ne peut pas exclure.
+   * Absent : aucun trou.
+   */
+  readonly footprintHoles?: readonly Polygon2[];
+  /**
+   * Anomalies du tracé qui ne l'empêchent pas d'être calculé (emprise dégénérée : volées qui se
+   * touchent ou se superposent en plan, bord intérieur de longueur nulle), reprises dans
+   * `Model.errors`. Absent : aucune.
+   */
+  readonly errors?: readonly string[];
   readonly turns: readonly TurnZone[];
   /**
    * Côté « intérieur » : gauche si les tournants vont à gauche. Droit : gauche par convention.
@@ -121,7 +133,8 @@ export interface Layout {
   /**
    * Tracé hélicoïdal (jalon 5a) : axe, rayons, angles. Absent : escalier à volées. Un tracé
    * hélicoïdal n'a pas de tournant à 90° (`turns` vide) ; `footprint` est le secteur de couronne
-   * des marches et du palier d'arrivée (le disque de rayon R_e au-delà d'un tour).
+   * des marches et du palier d'arrivée (le disque de rayon R_e au-delà d'un tour, avec le trou
+   * du jour central dans `footprintHoles`).
    */
   readonly helical?: HelicalLayout;
 }
@@ -250,16 +263,24 @@ export type MaterialId =
   | "glass"
   | "concrete";
 
-/** Description analytique d'un solide ; convertie en maillage par @blondel/geometry. */
+/**
+ * Description analytique d'un solide ; convertie en maillage par @blondel/geometry. Solides
+ * dégénérés (profondeur ou épaisseur nulle, section plate, balayage auto-intersecté) : signalés
+ * dans `Model.errors` (`parts/solidChecks.ts`) et non maillés (message de maillage).
+ */
 export type SolidDesc =
-  /** Profil plan (dans le plan XY du repère) extrudé selon +Z du repère sur `depth`. */
+  /** Profil plan (dans le plan XY du repère) extrudé selon +Z du repère sur `depth` (≠ 0). */
   | {
       readonly kind: "extrusion";
       readonly frame: Frame3;
       readonly profile: Shape2;
       readonly depth: Mm;
     }
-  /** Surface réglée entre deux polylignes 3D de même nombre de points, épaissie (limons courbes). */
+  /**
+   * Surface réglée entre deux polylignes 3D de même nombre de points, épaissie (limons courbes).
+   * Chaque section (a[i], b[i], b[i] + e·n, a[i] + e·n) doit avoir une aire non nulle, extrémités
+   * comprises : un limon qui finit « en pointe » s'arrête sur une section de hauteur non nulle.
+   */
   | {
       readonly kind: "ruled";
       readonly a: readonly Vec3[];
@@ -268,8 +289,25 @@ export type SolidDesc =
       /** Direction d'épaississement par point (normale horizontale). */
       readonly normals: readonly Vec2[];
     }
-  /** Balayage d'une section le long d'une polyligne 3D (main courante, tube). */
-  | { readonly kind: "sweep"; readonly path: readonly Vec3[]; readonly section: Shape2 };
+  /**
+   * Balayage d'une section le long d'une polyligne 3D (main courante, tube).
+   *
+   * Orientation de la section (u, v) : v est « le haut » de la section, u = v × tangente (à
+   * gauche dans le sens de parcours). Repère `upright` (défaut) : v = verticale +Z projetée sur
+   * le plan normal au segment (section d'aplomb, sans dévers : main courante) ; segment vertical,
+   * repère transporté du précédent (v = +Y pour un premier segment vertical). `parallel` :
+   * transport parallèle depuis le premier segment (rotation minimale ; sur une hélice, la
+   * section tourne autour de la tangente). Aux sommets, coupe d'onglet dans le plan bissecteur ;
+   * les onglets d'un même segment ne doivent pas se croiser (virage trop serré pour la section
+   * ou proche de 180°), ni deux parties éloignées du chemin se toucher.
+   */
+  | {
+      readonly kind: "sweep";
+      readonly path: readonly Vec3[];
+      readonly section: Shape2;
+      /** Repère de section (défaut : `upright`, ou l'option de maillage). */
+      readonly frame?: "upright" | "parallel";
+    };
 
 /** Développé à plat pour la fabrication (découpe, pliage, gabarit). Coordonnées en mm, 1:1. */
 export interface FlatPattern {
@@ -323,8 +361,18 @@ export type PartCategory =
   | "landing"
   | "fixing";
 
+/**
+ * Famille d'une pièce, selon l'étape qui l'a produite (QUESTIONS D6) : marches, contremarches et
+ * paliers (pièces de base, ou pièces d'un plugin qui les remplacent) ; ossature (pièces propres
+ * au plugin de structure) ; garde-corps et mains courantes (`computeGuards`).
+ */
+export type PartFamilyId = "treads" | "structure" | "guards";
+
 export interface Part {
-  /** Identifiant stable dans le projet (ex. `tread-5`, `stringer-inner-1`). */
+  /**
+   * Identifiant stable dans le projet (ex. `tread-5`, `stringer-inner-1`). Ne pas en déduire la
+   * famille ni le numéro de marche : voir `family` et `treadNumber`.
+   */
   readonly id: string;
   /** Repère de fabrication affiché et gravé (ex. `M5`, `LI1`). */
   readonly mark: string;
@@ -341,6 +389,17 @@ export interface Part {
   readonly quantities: Readonly<Record<string, number>>;
   /** Direction du fil (bois) dans le repère du solide, pour les textures. */
   readonly grain?: Vec3;
+  /**
+   * Famille de la pièce, renseignée par le pipeline (`buildModel`) pour toutes les pièces du
+   * `Model` ; facultative pour les pièces rendues directement par une étape (plugin, tests).
+   */
+  readonly family?: PartFamilyId;
+  /**
+   * Numéro de la marche (ou du palier) que la pièce matérialise (`Tread.number`) : dessus de
+   * marche ou de palier seulement (surlignage marche ↔ pièce). Une pièce de plugin qui remplace
+   * une marche de base en hérite. Absent : pièce qui n'est pas une marche.
+   */
+  readonly treadNumber?: number;
 }
 
 // ------------------------------------------------------------------ Conformité
@@ -376,8 +435,9 @@ export interface RuleResult {
   readonly downgradeReason?: string;
   readonly message: string;
   /**
-   * Justification saisie par l'utilisateur qui lève un contrôle (note de calcul, avis
-   * technique : porte-à-faux hélicoïdal, décision A12), reprise dans le dossier. Absente : aucune.
+   * Justification saisie par l'utilisateur, jointe au contrôle sans le lever (note de calcul,
+   * avis technique : porte-à-faux hélicoïdal, décision A12 du 2026-09-30), reprise dans le
+   * dossier. Absente : aucune.
    */
   readonly justification?: string;
 }
@@ -459,8 +519,24 @@ export interface Model {
    * (tracé ou découpage en erreur) ou calcul en échec.
    */
   readonly precheck?: ModelPrecheck;
+  /**
+   * Plancher haut repris du site (QUESTIONS D5) : les exports (plan, élévation, DXF, notice de
+   * pose) le lisent ici plutôt que dans le projet. Absent : modèle construit hors pipeline.
+   */
+  readonly upperFloor?: ModelUpperFloor;
   /** Erreurs de génération (paramètres impossibles) : le modèle peut être partiel. */
   readonly errors: readonly string[];
   /** Remarques non bloquantes du pipeline (pièces non générées, hypothèses). */
   readonly notes?: readonly string[];
+}
+
+/** Plancher haut et trémie, dans le repère du site (celui du tracé, `placement` appliqué). */
+export interface ModelUpperFloor {
+  /** Épaisseur du plancher haut, sol fini → sous-face (`site.upperSlabThickness`). */
+  readonly slabThickness: Mm;
+  /**
+   * Contour de la trémie, dans l'ordre de saisie (rectangle : coin min puis sens trigonométrique).
+   * Absent : pas de trémie (escalier extérieur ou sans plancher au-dessus).
+   */
+  readonly opening?: Polygon2;
 }

@@ -11,6 +11,29 @@
 #   reprise d'une source secondaire. Traitée selon le profil de conformité du projet (voir `profils`).
 # contexte_exclu (facultatif) : contextes qui écartent la règle même si ses contextes sont actifs
 #   (ex. G_COLLET_MIN hors fût central, décision de l'utilisateur 2026-09-29, QUESTIONS A5).
+#
+# Sémantique de la liste `contexte` d'une règle (interprétation Blondel, ADR-0004, LEDGER l. 47) :
+# - `tous` dans la liste : la règle s'applique toujours (hors `contexte_exclu`) ;
+# - sinon la liste se découpe en deux groupes : les contextes de FORME (liste `contextes_forme`
+#   ci-dessous : tournant, helicoidal, helicoidal_fut) et les autres (destination, matériau,
+#   régime garde-corps…). Chaque groupe est une DISJONCTION (« ou ») et les deux groupes se
+#   combinent par une CONJONCTION (« et ») ; un groupe vide est satisfait.
+#   Exemples : [bois_dtu] = bois ; [erp_neuf, erp_existant] = ERP neuf ou existant ;
+#   [erp_securite, tournant, helicoidal] = ERP et (tournant ou hélicoïdal) ;
+#   [helicoidal, bois_dtu] = hélicoïdal et bois ; [tournant, helicoidal] = tournant ou hélicoïdal.
+#   (La lecture purement disjonctive imposerait LF_POSITION_HELICOIDAL à tout escalier bois.)
+#
+# Champs structurés facultatifs (lus par les évaluateurs ; les champs `formule` et `description`
+# restent documentaires et ne sont jamais évalués ; un test vérifie que chaque valeur structurée
+# figure aussi dans la formule ou la description) :
+# - parametres : constantes numériques nommées autres que min / max / recommande (seuil
+#   d'emmarchement des lignes de foulée, recouvrement sans contremarche, zones des gabarits…) ;
+# - tables : tableaux de valeurs (lignes de nombres ou de libellés), ex. table h(E) des
+#   garde-corps, tableau FCBA des crémaillères, charges par catégorie ;
+# - regles_mesurees (règles LF_POSITION_*) : règles de giron contrôlées aussi sur la ligne de
+#   mesure réglementaire quand elle diffère de la ligne de conception (SPEC X9) ; seules celles
+#   dont les contextes sont actifs s'appliquent. Appariement = convention Blondel à valider
+#   (B-geometrie §2.2 K1 / K9, A-regles §1.4 et §2.1).
 
 version: 1
 date_consultation: "2026-09-28"
@@ -68,6 +91,10 @@ contextes:
   garde_corps_1988: "Garde-corps selon NF P01-012 (1988) — projets antérieurs au 01/06/2025 (PC/DP) ou au 01/01/2026 (marchés)"
   garde_corps_2024: "Garde-corps selon NF P01-012 (2024)"
   tous: "Tout escalier"
+
+# Contextes de forme : dans la liste `contexte` d'une règle, ils qualifient les autres contextes
+# (voir la sémantique en tête de fichier).
+contextes_forme: [tournant, helicoidal, helicoidal_fut]
 
 regles:
 
@@ -467,6 +494,9 @@ regles:
     source_secondaire: true
     confiance: eleve
     severite: bloquant
+    parametres:
+      E_seuil: 1200
+    regles_mesurees: [G_MIN_DTU, G_TOL_BALANCEE]
 
   - id: LF_POSITION_DTU_LARGE
     description: "Ligne de foulée à 600 mm de la rampe côté intérieur si E > 1200 mm"
@@ -481,6 +511,9 @@ regles:
     source_secondaire: true
     confiance: eleve
     severite: bloquant
+    parametres:
+      E_seuil: 1200
+    regles_mesurees: [G_MIN_DTU, G_TOL_BALANCEE]
 
   - id: LF_POSITION_ERP_TOURNANT
     description: "Mesure de h et g sur la ligne de foulée à 600 mm du noyau ou du vide central (escaliers tournants ERP)"
@@ -494,6 +527,7 @@ regles:
     source: "Règlement sécurité ERP CO 56 §2 [10]"
     confiance: eleve
     severite: bloquant
+    regles_mesurees: [G_MIN_ERP_NEUF, G_MIN_ERP_EXISTANT]
 
   - id: LF_POSITION_ACCESSIBILITE
     description: "Ligne de mesure du giron en accessibilité : milieu si E <= 1200, 600 mm de la rampe intérieure sinon (logement : tolérance entre milieu et 350 mm du mur extérieur)"
@@ -509,6 +543,9 @@ regles:
     note: "Seule la ligne milieu / 600 mm est bloquante ; la tolérance « milieu ↔ 350 mm du mur extérieur » est une option non bloquante (SPEC X8)"
     confiance: moyen
     severite: bloquant
+    parametres:
+      E_seuil: 1200
+    regles_mesurees: [G_MIN_LOGEMENT, G_MIN_BHC_PC, G_MIN_ERP_NEUF]
 
   - id: LF_POSITION_HELICOIDAL
     description: "Ligne de foulée d'un hélicoïdal bois à 600 mm du fût (annexe A DTU, non vérifiée)"
@@ -522,6 +559,7 @@ regles:
     source: "[24]"
     confiance: faible
     severite: avertissement
+    regles_mesurees: [G_MIN_DTU, G_TOL_BALANCEE]
 
   # ---------------------------------------------------------------- Emmarchement / largeur
   - id: E_MIN_DTU
@@ -550,6 +588,8 @@ regles:
     source: "Arrêté 24/12/2015 art. 12 [8][4]"
     confiance: eleve
     severite: bloquant
+    parametres:
+      saillie_mc_max: 100
 
   - id: LARGEUR_MC_BHC_PC
     description: "Largeur minimale entre mains courantes, parties communes de BHC"
@@ -591,7 +631,7 @@ regles:
     severite: bloquant
 
   - id: LARGEUR_UP_ERP
-    description: "Largeur en unités de passage ERP : 1 UP = 900 ; 2 UP = 1400 ; n UP (n>=3) = n x 600"
+    description: "Largeur en unités de passage ERP : 1 UP = 900 ; 2 UP = 1400 ; n UP (n>=3) = n x 600 ; L_passage mesurée entre parois, ou à l'aplomb des mains courantes saillantes de plus de 100 mm (variable L_passage, A-regles L3)"
     formule: "L_passage >= (n_UP == 1 ? 900 : n_UP == 2 ? 1400 : 600 * n_UP)"
     min: 900
     max: null
@@ -602,6 +642,11 @@ regles:
     source: "Règlement sécurité ERP CO 36 [11] (relu sur Légifrance)"
     confiance: eleve
     severite: bloquant
+    parametres:
+      largeur_1UP: 900
+      largeur_2UP: 1400
+      largeur_par_UP: 600
+      saillie_mc_max: 100
 
   - id: MC_INTERMEDIAIRE_ERP
     description: "Au-delà de 4 UP, mains courantes intermédiaires séparant des nombres entiers d'UP (max 4)"
@@ -753,6 +798,9 @@ regles:
     source_secondaire: true
     confiance: eleve
     severite: conseil
+    parametres:
+      H_seuil: 3000
+      coefficient_au_dela: 5
 
   # ---------------------------------------------------------------- Reculement
   - id: RECULEMENT
@@ -983,6 +1031,8 @@ regles:
     source_secondaire: true
     confiance: faible
     severite: avertissement
+    parametres:
+      min_sans_contremarche: 50
 
   # ---------------------------------------------------------------- Mains courantes
   - id: MC_DEUX_COTES
@@ -997,6 +1047,8 @@ regles:
     source: "Arrêté 20/04/2017 art. 7-1 [5][6] ; arrêté 24/12/2015 art. 6.1 [9]"
     confiance: eleve
     severite: bloquant
+    parametres:
+      D_fut_max: 400
 
   - id: MC_UP_ERP
     description: "Main courante dès 1 UP ; de chaque côté dès 2 UP ; côté extérieur pour un tournant d'1 UP (ERP)"
@@ -1119,6 +1171,8 @@ regles:
     source_secondaire: true
     confiance: eleve
     severite: bloquant
+    parametres:
+      min_hors_logement: 50
 
   # ---------------------------------------------------------------- Garde-corps
   - id: GC_OBLIGATOIRE
@@ -1218,6 +1272,17 @@ regles:
     source_secondaire: true
     confiance: eleve
     severite: bloquant
+    parametres:
+      H_plancher_condition_b: 900
+    tables:
+      h_E:
+        - { E_max: 250, H: 1000 }
+        - { E_max: 300, H: 975 }
+        - { E_max: 350, H: 950 }
+        - { E_max: 400, H: 925 }
+        - { E_max: 450, H: 900 }
+        - { E_max: 500, H: 850, condition_b: true }
+        - { E_max: null, H: 800, condition_b: true }
 
   - id: GC_HAUTEUR_RAMPANT_2024
     description: "Hauteur minimale d'un garde-corps rampant au-dessus du nez de marche (2024) — à confirmer"
@@ -1246,6 +1311,8 @@ regles:
     source_secondaire: true
     confiance: eleve
     severite: bloquant
+    parametres:
+      z_haut: 800
 
   - id: GC_GABARIT_T2_2024
     description: "Cas particulier garde-corps : sphère T2 de 180 mm entre 800 mm et H (2024)"
@@ -1260,6 +1327,8 @@ regles:
     source_secondaire: true
     confiance: eleve
     severite: bloquant
+    parametres:
+      z_bas: 800
 
   - id: GC_GABARIT_T3_2024
     description: "Remplissages à mailles répétitives : sphère T3 de 50 mm ; discontinuité max de la partie supérieure 50 mm (2024)"
@@ -1288,6 +1357,10 @@ regles:
     source_secondaire: true
     confiance: moyen
     severite: bloquant
+    parametres:
+      X_min: 100
+      X_max: 600
+      H_base: 1000
 
   - id: GC_DENIVELES_2024
     description: "Dénivelés au pied du garde-corps (C-G-03b) : prise en compte d'une différence de niveau Y dans la zone d'activité — formule exacte non lue ⚠️"
@@ -1301,6 +1374,20 @@ regles:
     source: "NF P01-012:2024 via sources secondaires, C-structures §3.1"
     source_secondaire: true
     confiance: faible
+    severite: avertissement
+
+  - id: GC_CABLES_DETENTE
+    description: "Câbles de garde-corps : les vides ne doivent pas augmenter dans le temps (détente des câbles) ; câbles traités comme des lisses, prévoir une retension"
+    formule: "remplissage == cables => avertissement de détente"
+    min: null
+    max: null
+    recommande: null
+    unite: null
+    contexte: [garde_corps_1988, garde_corps_2024]
+    nature: normatif
+    source: "NF P01-012:2024 via APAVE [12] (durabilité des vides, C-structures §3.1) ; SPEC X12"
+    source_secondaire: true
+    confiance: eleve
     severite: avertissement
 
   - id: VIDE_ENTRE_MARCHES
@@ -1329,6 +1416,9 @@ regles:
     source: "NF EN 1991-1-1/NA (NF P06-111-2) tableau 6.2(NF) [16]"
     confiance: eleve
     severite: bloquant
+    parametres:
+      qk: 2.5
+      Qk: 2.0
 
   - id: CHARGE_ESCALIER_AUTRES
     description: "Charges d'exploitation par catégorie (qk kN/m² / Qk kN) : B 2,5/4 ; C1 2,5/3 ; C2 4/4 ; C3 4/4 ; C4 5/7 ; C5 5/4,5 ; D1 5/5 ; D2 5/7 ; catégorie inconnue => D1"
@@ -1342,6 +1432,16 @@ regles:
     source: "NF P06-111-2 tableau 6.2(NF) [16]"
     confiance: eleve
     severite: bloquant
+    tables:
+      categories:
+        - { categorie: B, qk: 2.5, Qk: 4 }
+        - { categorie: C1, qk: 2.5, Qk: 3 }
+        - { categorie: C2, qk: 4, Qk: 4 }
+        - { categorie: C3, qk: 4, Qk: 4 }
+        - { categorie: C4, qk: 5, Qk: 7 }
+        - { categorie: C5, qk: 5, Qk: 4.5 }
+        - { categorie: D1, qk: 5, Qk: 5 }
+        - { categorie: D2, qk: 5, Qk: 7 }
 
   - id: CHARGE_GC_HORIZONTALE
     description: "Charge horizontale linéique sur garde-corps, appliquée à 1,0 m du sol fini, selon tableau 6.12(NF) modifié par l'A1 (2009) : A 0,6 ; B 0,6 ; C1-C4 1,0 ; D 1,0 ; C5 3,0 ; E non vérifié (2,0 mini en 2004)"
@@ -1356,6 +1456,13 @@ regles:
     source_secondaire: true
     confiance: moyen
     severite: bloquant
+    tables:
+      categories:
+        - { categorie: A, qk: 0.6 }
+        - { categorie: B, qk: 0.6 }
+        - { categorie: C1-C4, qk: 1.0 }
+        - { categorie: D, qk: 1.0 }
+        - { categorie: C5, qk: 3.0 }
 
   - id: CHARGE_MARCHE_INDUSTRIEL
     description: "Marche : 1,5 kN sur 100x100 mm au nez, milieu d'emmarchement (2 charges à 600 mm d'entraxe si w >= 1200) ; flèche <= L/300 et <= 6 mm"
@@ -1369,6 +1476,9 @@ regles:
     source: "ISO 14122-3:2016 §4.2.2 [17]"
     confiance: eleve
     severite: avertissement
+    parametres:
+      charge_nez: 1.5
+      portee_sur_fleche: 300
 
   # ---------------------------------------------------------------- Bois : règles de moyens
   - id: LIMON_EPAISSEUR_MIN_DTU
@@ -1384,9 +1494,26 @@ regles:
     source_secondaire: true
     confiance: eleve
     severite: avertissement
+    parametres:
+      E_max: 1200
+
+  - id: LIMON_ENTAILLE_MIN
+    description: "Profondeur d'entaille (encastrement) marche / limon bois >= 14 mm : hypothèse de modèle de la NF EN 16481 (assemblage résistant en flexion pour une marche avec renfort, semi-rigide sans renfort) et torsion réputée vérifiée ; autre valeur admise si démontrée"
+    formule: "profondeur_entaille >= 14"
+    min: 14
+    max: null
+    recommande: null
+    unite: mm
+    contexte: [bois_dtu]
+    nature: normatif
+    source: "NF EN 16481 § 5.4.2 et 7.3.1 (texte relu, docs/research/C-structures.md §1.4 et C-B-04, réf. [3] de C-structures)"
+    source_secondaire: false
+    confiance: eleve
+    severite: avertissement
+    note: "Évaluée par les structures à limons bois encastrés (wood-housed). Section résiduelle sous entailles (100 / 80 mm) non retenue : source non identifiée (C-structures §1.4)."
 
   - id: CREMAILLERE_REGLE_MOYENS
-    description: "Crémaillère bois (paire, droit, 2,70 m, 38°) : distance min fond d'entaille / sous-face selon épaisseur — C30 : 33→179, 44→163, 70→141 ; D40 : 35→177, 44→162, 70→139 ; crémaillère centrale : épaisseurs x2"
+    description: "Crémaillère bois (paire, droit, hauteur d'étage 2,70 m soit 2700 mm, 38°) : distance min fond d'entaille / sous-face selon épaisseur — C30 : 33→179, 44→163, 70→141 ; D40 : 35→177, 44→162, 70→139 ; crémaillère centrale : épaisseurs x2"
     formule: "distance_entaille_sous_face >= table_FCBA(essence, epaisseur)"
     min: 139
     max: null
@@ -1397,6 +1524,19 @@ regles:
     source: "FCBA [2] tableau 4 (« exemple de résultats de calcul », rattachement exact au P3 non établi)"
     confiance: eleve
     severite: avertissement
+    parametres:
+      hauteur_etage: 2700
+      pente: 38
+      facteur_centrale: 2
+    tables:
+      C30:
+        - { epaisseur: 33, distance: 179 }
+        - { epaisseur: 44, distance: 163 }
+        - { epaisseur: 70, distance: 141 }
+      D40:
+        - { epaisseur: 35, distance: 177 }
+        - { epaisseur: 44, distance: 162 }
+        - { epaisseur: 70, distance: 139 }
 
   - id: DEFORMATION_CINTRAGE
     description: "Cintrage admissible : marches, contremarches, poteaux, mains courantes, limons 5 mm/m ; balustres 3 mm/m"
@@ -1411,6 +1551,8 @@ regles:
     source_secondaire: true
     confiance: eleve
     severite: conseil
+    parametres:
+      max_balustres: 3
 
   # ---------------------------------------------------------------- Échelle de meunier / hélicoïdal
   - id: ECHELLE_MEUNIER_HORS_DTU

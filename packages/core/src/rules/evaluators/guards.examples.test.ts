@@ -11,7 +11,7 @@ import type { Model, RuleResult } from "../../model/derived.js";
 import type { Project } from "../../model/project.js";
 import { buildModel } from "../../pipeline/build.js";
 import { parseProjectText } from "../../project/parse.js";
-import { MC_CORE_DIAMETER_MAX } from "../formula-constants.js";
+import { MC_CORE_DIAMETER_MAX } from "../params.js";
 
 const EXAMPLES_DIR = resolve(dirname(fileURLToPath(import.meta.url)), "../../../../../examples");
 

@@ -8,7 +8,9 @@
  *   conserve l'orientation des triangles ;
  * - un nœud par pièce, nommé par son **repère** (`Part.mark`), sous un nœud racine au nom du
  *   projet ; la translation du nœud est le centre de la boîte englobante de la pièce et les
- *   sommets sont relatifs à ce centre (précision float32 locale) ;
+ *   sommets sont relatifs à ce centre (précision float32 locale) : les maillages sont demandés
+ *   en repère local (`MeshOptions.localOrigin`, origine en float64), la position monde n'est
+ *   jamais arrondie en float32 (sinon ≈ 0,25 mm à 5 m de l'origine) ;
  * - un maillage par solide (partagé quand deux pièces ont le même `SolidDesc` et le même
  *   matériau), une primitive
  *   triangulée : `POSITION` (avec `min` / `max`), `NORMAL`, indices `UNSIGNED_SHORT` ou
@@ -43,7 +45,10 @@ export interface GlbOptions {
   readonly project?: Project;
   /** Nom de la scène (défaut : `project.name`, sinon « Escalier »). */
   readonly title?: string;
-  /** Options de maillage (`@blondel/geometry`) ; absentes : maillages en cache. */
+  /**
+   * Options de maillage (`@blondel/geometry`) ; absentes : maillages en cache. Toujours en
+   * repère local (`localOrigin` forcé).
+   */
   readonly meshOptions?: MeshOptions;
   /** Filtre des pièces exportées (défaut : toutes). */
   readonly filter?: (part: Part) => boolean;
@@ -194,10 +199,12 @@ function convertMesh(mesh: Mesh): {
   const lo = [Infinity, Infinity, Infinity];
   const hi = [-Infinity, -Infinity, -Infinity];
   const conv = new Float64Array(3 * n);
+  // Origine locale du maillage (float64) : positions monde reconstituées sans perte.
+  const o = mesh.origin ?? { x: 0, y: 0, z: 0 };
   for (let i = 0; i < n; i++) {
-    const x = mesh.positions[3 * i]! * MM_TO_M;
-    const y = mesh.positions[3 * i + 1]! * MM_TO_M;
-    const z = mesh.positions[3 * i + 2]! * MM_TO_M;
+    const x = (o.x + mesh.positions[3 * i]!) * MM_TO_M;
+    const y = (o.y + mesh.positions[3 * i + 1]!) * MM_TO_M;
+    const z = (o.z + mesh.positions[3 * i + 2]!) * MM_TO_M;
     const p = [x, z, -y];
     for (let k = 0; k < 3; k++) {
       conv[3 * i + k] = p[k]!;
@@ -323,7 +330,7 @@ export function buildGltf(
       nodes[0]!.children!.push(nodes.length - 1);
       continue;
     }
-    const pm = meshPart(part, options.meshOptions);
+    const pm = meshPart(part, { ...options.meshOptions, localOrigin: true });
     const vertexCount = pm.mesh.positions.length / 3;
     if (pm.error !== undefined || vertexCount === 0 || pm.mesh.indices.length === 0) {
       nodes.push({

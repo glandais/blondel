@@ -2,6 +2,7 @@ import {
   ALL_PRESET_IDS,
   ProjectSchema,
   buildModel,
+  createHelicalProjectWithFallback,
   createProject,
   type Project,
 } from "@blondel/core";
@@ -9,7 +10,6 @@ import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { normalizeProject } from "../store/projectStore.js";
 import {
-  FALLBACK_TREADS_PER_TURN,
   HELICAL_CONTEXT,
   flightsTypologyLabel,
   hasOppositeTurns,
@@ -80,7 +80,7 @@ describe("type de tracé", () => {
     expect(buildModel(f).errors).toEqual([]);
   });
 
-  it("hauteur sans rotation admissible pour le préréglage : rotation provisoire signalée", () => {
+  it("hauteur sans rotation admissible pour le préréglage : repli du cœur signalé", () => {
     // n = 17 imposé : aucune rotation du préréglage (R_e = 950) ne donne module et giron.
     const base = createProject("quarter-left", { floorToFloor: 2750 });
     const p: Project = ProjectSchema.parse({
@@ -94,10 +94,19 @@ describe("type de tracé", () => {
       }),
     ).toThrow(RangeError);
     const s = switchLayoutKind(p, "helical");
-    expect(s.note).toMatch(/12 marches par tour/);
+    expect(s.note).toMatch(/Repli : \d+ marches par tour/);
+    // Repli fourni par le cœur (dette D4), plus de rotation provisoire propre à l'interface.
+    const core = createHelicalProjectWithFallback({
+      floorToFloor: 2750,
+      upperSlabThickness: p.site.upperSlabThickness,
+      patch: {
+        stair: { stepping: p.stair.stepping, treads: p.stair.treads, walkline: p.stair.walkline },
+      },
+    });
+    expect(s.project.stair.layout).toEqual(core.project.stair.layout);
     expect(s.project.stair.layout).toMatchObject({
       kind: "helical",
-      sweep: { mode: "treadsPerTurn", count: FALLBACK_TREADS_PER_TURN },
+      sweep: { mode: "treadsPerTurn" },
     });
     expect(normalizeProject(s.project).ok).toBe(true);
   });
@@ -137,10 +146,10 @@ describe("type de tracé", () => {
           const other = layoutKindOf(p) === "helical" ? "flights" : "helical";
           const s = switchLayoutKind(p, other);
           const q = s.project;
-          // Rotation provisoire seulement quand le préréglage du cœur n'a rien trouvé.
+          // Repli seulement quand le préréglage du cœur n'a rien trouvé.
           if (s.note !== undefined) {
             expect(other).toBe("helical");
-            expect(s.note).toMatch(/provisoire/);
+            expect(s.note).toMatch(/Repli/);
           }
           expect(normalizeProject(q).ok).toBe(true);
           expect(layoutKindOf(q)).toBe(other);
@@ -179,13 +188,13 @@ describe("type de tracé", () => {
     expect(s.project.stair.stepping).toBe(p.stair.stepping);
     expect(s.project.stair.treads).toBe(p.stair.treads);
 
-    // n = 17 imposé : aucune rotation du préréglage ne convient → rotation provisoire signalée
+    // n = 17 imposé : aucune rotation du préréglage ne convient → repli du cœur signalé
     // (et non une rotation trouvée pour n = 15, silencieusement fausse).
     const p17: Project = ProjectSchema.parse({
       ...p,
       stair: { ...p.stair, stepping: { ...p.stair.stepping, riserCount: 17 } },
     });
-    expect(switchLayoutKind(p17, "helical").note).toMatch(/provisoire/);
+    expect(switchLayoutKind(p17, "helical").note).toMatch(/Repli/);
   });
 });
 

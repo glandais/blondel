@@ -2,7 +2,9 @@
  * Contrôles produits par les plugins de structure (`StructureOutput.checks`).
  *
  * Deux sortes de règles :
- * - règles de `rules.yaml` (ex. LIMON_EPAISSEUR_MIN_DTU) : seuils lus dans la table, contextes
+ * - règles de `rules.yaml` (ex. LIMON_EPAISSEUR_MIN_DTU, LIMON_ENTAILLE_MIN,
+ *   CREMAILLERE_REGLE_MOYENS) : seuils et domaines lus dans la table (`min` / `max`,
+ *   `parametres`, `tables`), contextes
  *   et sévérité effective (profil, surcharges) appliqués comme dans le moteur ; le pipeline
  *   remplace le résultat « sans évaluateur » du moteur par celui du plugin ;
  * - contrôles de fabrication propres au plugin (préfixe `FAB_`, ou règle sourcée absente de
@@ -15,7 +17,7 @@ import type { Layout, Stepping } from "../model/derived.js";
 import { STAIR, boundsText, fmt, within, type Bounds } from "../rules/check.js";
 import { isRuleApplicable, resolveContexts } from "../rules/contexts.js";
 import { effectiveSeverity } from "../rules/engine.js";
-import { findRule, type RuleDef } from "../rules/table.js";
+import { findRule, ruleParam, type RuleDef } from "../rules/table.js";
 import type { Finding } from "../rules/types.js";
 
 /** Définition d'un contrôle de plugin hors rules.yaml. */
@@ -166,21 +168,23 @@ export class CheckCollector {
   }
 }
 
+/**
+ * Domaine des règles de moyens des limons bois (LIMON_EPAISSEUR_MIN_DTU : escalier d'un étage au
+ * plus, emmarchement ≤ `parametres.E_max`, C §1.4) : message « hors domaine » si l'emmarchement
+ * le dépasse, `null` sinon.
+ */
+export function stringerRulesOutOfDomain(rule: RuleDef, width: number): string | null {
+  const max = ruleParam(rule, "E_max");
+  return width > max
+    ? `Hors domaine des règles de moyens (emmarchement ${fmt(width, 0)} mm > ${fmt(max, 0)} mm)`
+    : null;
+}
+
 // ------------------------------------------------------------------ Contrôles de fabrication
 
 const WORKSHOP_SOURCE = "Profil d'atelier Blondel (valeur par défaut à valider, LEDGER §2)";
 
 export const FAB_RULES = {
-  housingDepth: {
-    id: "LIMON_ENTAILLE_MIN",
-    description:
-      "Profondeur d'entaille marche / limon ≥ 14 mm (hypothèse de modèle et vérification de torsion de la NF EN 16481)",
-    source: "NF EN 16481 § 5.4.2 et 7.3.1 via docs/research/C-structures.md §1.4 et C-B-04 [3]",
-    confidence: "eleve",
-    nature: "normatif",
-    severity: "avertissement",
-    unit: "mm",
-  },
   perpendicularWidth: {
     id: "FAB_LIMON_LARGEUR_PERP_MIN",
     description: "Largeur du limon mesurée perpendiculairement à ses rives (CHALLENGE G6)",

@@ -1,7 +1,8 @@
 /**
  * Apparence PBR (metallicRoughness, glTF 2.0 §3.9.2) de base par matériau. Valeurs
- * **d'aperçu** reprises des teintes de la vue 3D de l'application (`apps/web/src/three/
- * materials.ts`) : ce sont des choix de présentation, pas des données métier.
+ * **d'aperçu** (choix de présentation, pas des données métier), **table unique** : la vue 3D de
+ * l'application (`apps/web/src/three/materials.ts`) la lit et n'y ajoute que ses textures et
+ * effets propres (QUESTIONS D6).
  */
 import type { MaterialId } from "@blondel/core";
 

@@ -18,7 +18,7 @@ import {
   type Vec2,
   type Wall,
 } from "@blondel/core";
-import { openingPolygon } from "./annotations.js";
+import { modelOpening } from "./annotations.js";
 
 export interface InstallationPoint {
   readonly id: "start-inner" | "start-outer" | "start-walkline" | "end-inner" | "end-outer";
@@ -188,7 +188,7 @@ export function installationSheet(model: Model, project?: Project): Installation
     }
   }
 
-  const poly = openingPolygon(project);
+  const poly = modelOpening(model, project);
   const opening =
     poly !== undefined && poly.length >= 3
       ? {

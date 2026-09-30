@@ -8,8 +8,10 @@ export interface MeshOptions {
   /**
    * Angle de lissage (degrés, dans [0, 180]) : au-delà, l'arête entre deux facettes est vive
    * (sommets dupliqués, normales à plat) ; en deçà, les normales sont moyennées (surface courbe).
-   * Défauts : 0 pour les extrusions (faces latérales à plat, arêtes vives), 30 pour les
-   * balayages et surfaces réglées (mains courantes, limons courbes).
+   * Défauts : 30 pour les balayages et surfaces réglées (mains courantes, limons courbes) ;
+   * pour les extrusions, 0 (faces latérales à plat, arêtes vives) sauf pour un contour
+   * « rond » (`ROUND_RING_CREASE_DEG` : tous ses angles de virage sous 30°, poteau ou tube
+   * rond discrétisé), lissé à 30°.
    */
   readonly creaseAngleDeg?: number;
   /**
@@ -27,7 +29,17 @@ export interface MeshOptions {
    *   tangente (≈ 2π·sin(pente) par tour), jusqu'à se retourner.
    */
   readonly sweepFrame?: SweepFrameMode;
+  /**
+   * Maillage en repère local (`Mesh.origin` = centre de la boîte englobante, positions
+   * relatives à cette origine, soustraite en float64 avant la conversion en float32) : précision
+   * du float32 conservée loin de l'origine du monde (export glTF, translation de nœud).
+   * Défaut : `false` (positions dans le repère monde).
+   */
+  readonly localOrigin?: boolean;
 }
+
+/** Angle de lissage (degrés) des contours ronds d'une extrusion (voir `creaseAngleDeg`). */
+export const ROUND_RING_CREASE_DEG = 30;
 
 export const DEG = Math.PI / 180;
 

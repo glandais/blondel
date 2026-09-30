@@ -649,3 +649,49 @@ describe("computeLayout — erreurs explicites", () => {
     expect(() => computeLayout(p)).toThrow(/hors domaine/);
   });
 });
+
+describe("computeLayout — emprises dégénérées signalées (D3)", () => {
+  it("demi-tournant à jour nul (volée centrale = 2E, angle vif) : volées qui se touchent", () => {
+    const p = makeProject({ width: 900, legs: [2400, 1800, 2400] });
+    const layout = computeLayout(p);
+    expect(layout.errors).toHaveLength(1);
+    expect(layout.errors![0]).toMatch(/ne laisse aucun jour/);
+    // Jour de 100 mm : rien à signaler.
+    expect(computeLayout(makeProject({ width: 900, legs: [2400, 1900, 2400] })).errors).toBe(
+      undefined,
+    );
+    // Poteau : la volée centrale fait au moins 2E + a, jamais de jour nul.
+    const newel = makeProject({
+      width: 900,
+      legs: [2400, 1900, 2400],
+      inner: { kind: "newel", size: 100 },
+    });
+    expect(computeLayout(newel).errors).toBeUndefined();
+  });
+
+  it("quart tournant sans partie droite (L1 = L2 = E, angle vif) : bord du jour de longueur nulle", () => {
+    const layout = computeLayout(makeProject({ width: 900, legs: [900, 900] }));
+    expect(layout.errors).toEqual([expect.stringMatching(/Bord du jour de longueur nulle/)]);
+    expect(curveLength(layout.inner)).toBe(0);
+  });
+
+  it("trois tournants de même sens qui se superposent en plan", () => {
+    const layout = computeLayout(
+      makeProject({ width: 900, legs: [3000, 2000, 2000, 3000], floorToFloor: 4000 }),
+    );
+    const overlaps = (layout.errors ?? []).filter((e) => /se superposent/.test(e));
+    expect(overlaps).toEqual([expect.stringMatching(/volée 1 et volée 4.*900 × 900 mm/)]);
+    // Trois tournants sans superposition (volée 4 courte) : rien.
+    const ok = computeLayout(
+      makeProject({ width: 900, legs: [3000, 2000, 2000, 1000], floorToFloor: 4000 }),
+    );
+    expect(ok.errors).toBeUndefined();
+  });
+
+  it("S à volée intermédiaire de 2E : volées 1 et 3 côte à côte, pas une anomalie", () => {
+    const layout = computeLayout(
+      makeProject({ width: 900, legs: [2400, 1800, 2400], directions: ["left", "right"] }),
+    );
+    expect(layout.errors).toBeUndefined();
+  });
+});

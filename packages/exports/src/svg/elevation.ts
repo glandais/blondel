@@ -18,7 +18,8 @@ import {
 } from "@blondel/core";
 import {
   locateViolations,
-  openingPolygon,
+  modelOpening,
+  modelSlabThickness,
   requiredHeadroom,
   violationSummary,
 } from "../annotations.js";
@@ -41,7 +42,10 @@ import {
 } from "./svg.js";
 
 export interface ElevationSvgOptions extends SvgScaleOptions {
-  /** Projet source : épaisseur du plancher haut et trémie (plafond). */
+  /**
+   * Projet source, en repli : épaisseur du plancher haut et trémie sont lues dans
+   * `Model.upperFloor` (pipeline), le projet ne sert qu'à un modèle qui ne les porte pas.
+   */
   readonly project?: Project;
   readonly theme?: ThemeOption;
   readonly fontSize?: number;
@@ -65,12 +69,13 @@ function walklinePointExtended(model: Model, s: Mm, L: Mm): Vec2 {
 /** Intervalles d'abscisse (s) où la ligne de foulée passe sous le plancher haut (hors trémie). */
 export function ceilingIntervals(
   model: Model,
-  project: Project,
+  project: Project | undefined,
   s0: Mm,
   s1: Mm,
   step: Mm = 5,
 ): [Mm, Mm][] {
-  const opening = openingPolygon(project);
+  // Trémie du modèle (`Model.upperFloor`), celle du projet en repli.
+  const opening = modelOpening(model, project);
   if (opening === undefined) return [];
   const L = curveLength(model.layout.walkline);
   const under = (s: Mm): boolean =>
@@ -232,11 +237,8 @@ export function renderElevationSvg(model: Model, options: ElevationSvgOptions = 
   profile.push({ x: sMax, y: zPrev });
 
   // Plafond : sous-face du plancher haut hors trémie.
-  const slab = options.project?.site.upperSlabThickness;
-  const ceilings =
-    options.project && slab !== undefined
-      ? ceilingIntervals(model, options.project, sMin, sMax)
-      : [];
+  const slab = modelSlabThickness(model, options.project);
+  const ceilings = slab !== undefined ? ceilingIntervals(model, options.project, sMin, sMax) : [];
   const zCeil = H - (slab ?? 0);
   // Plafond formé par l'escalier lui-même (hélicoïdal : tour supérieur, palier d'arrivée).
   const soffits = soffitIntervals(model, sMin, sMax);

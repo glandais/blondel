@@ -82,6 +82,13 @@ export interface TurnGroup {
   /** Côté du jour des tournants du groupe (tous du même côté). */
   readonly side: "left" | "right";
   /**
+   * Parties droites intermédiaires d'un groupe de plusieurs tournants (zone unique de 180°,
+   * partie droite de moins d'un giron entre les deux tournants), abscisses sur Γ. Une borne de
+   * zone qui y tombe n'est pas dans la partie tournante : une partie droite continue (`tangent`,
+   * `zoneEndConditions`). Absent : aucune.
+   */
+  readonly straights?: readonly { readonly sStart: Mm; readonly sEnd: Mm }[];
+  /**
    * Un tournant du groupe a un poteau d'angle : le limon est interrompu par le poteau (deux
    * pièces assemblées dans le poteau), la courbe F n'est pas prolongée à travers le tournant
    * (`zoneContinuation`). Absent : aucun poteau.
@@ -195,6 +202,7 @@ export function groupWinderTurns(
     endsAtPost: boolean;
     newel: boolean;
     side: "left" | "right";
+    straights: { sStart: Mm; sEnd: Mm }[];
   }[] = [];
   for (const seg of segments) {
     const prev = groups[groups.length - 1];
@@ -211,6 +219,7 @@ export function groupWinderTurns(
       // partie droite intermédiaire de moins d'un giron, CHALLENGE G3).
       const sameSide = seg.side === prev.side;
       if ((gapEnd - gapStart < going - GEOM_EPS || betweenPosts) && !fixedInside && sameSide) {
+        if (gapEnd - gapStart > GEOM_EPS) prev.straights.push({ sStart: gapStart, sEnd: gapEnd });
         prev.last = seg.turn;
         prev.sEnd = seg.sEnd;
         prev.endsAtPost = false;
@@ -240,12 +249,14 @@ export function groupWinderTurns(
       endsAtPost: seg.post !== undefined && !seg.head,
       newel: options.posts?.has(seg.turn) ?? false,
       side: seg.side,
+      straights: [],
     });
   }
-  return groups.map(({ posts, endsAtPost: _endsAtPost, newel, ...g }) => ({
+  return groups.map(({ posts, endsAtPost: _endsAtPost, newel, straights, ...g }) => ({
     ...g,
     sMid: (g.sStart + g.sEnd) / 2,
     ...(posts.length > 0 ? { posts } : {}),
+    ...(straights.length > 0 ? { straights } : {}),
     ...(newel ? { newel: true as const } : {}),
   }));
 }
@@ -314,19 +325,23 @@ export interface ZoneEvaluation {
  * Conditions aux extrémités d'une zone [a ; b] : `free` si le nez est un nez libre (départ,
  * arrivée, bord de palier) ou s'il tombe **dans la partie tournante** du groupe (strictement
  * après le début du tournant pour a, strictement avant sa fin pour b) : aucune partie droite
- * ne continue au-delà, il n'y a donc pas de pente de limon à raccorder. `tangent` sinon.
+ * ne continue au-delà, il n'y a donc pas de pente de limon à raccorder. `tangent` sinon, y
+ * compris pour une borne dans la **partie droite intermédiaire** d'une zone unique de 180°
+ * (`TurnGroup.straights`, bornes comprises) : une partie droite y continue.
  */
 export function zoneEndConditions(
   ctx: Pick<ZoneContext, "seeds" | "freeNosings">,
-  group: Pick<TurnGroup, "sStart" | "sEnd">,
+  group: Pick<TurnGroup, "sStart" | "sEnd" | "straights">,
   a: number,
   b: number,
 ): BalancingZone["ends"] {
   const sa = ctx.seeds[a]!.s;
   const sb = ctx.seeds[b]!.s;
+  const straight = (sk: Mm): boolean =>
+    (group.straights ?? []).some((g) => sk > g.sStart - GEOM_EPS && sk < g.sEnd + GEOM_EPS);
   return [
-    ctx.freeNosings.has(a) || sa > group.sStart + GEOM_EPS ? "free" : "tangent",
-    ctx.freeNosings.has(b) || sb < group.sEnd - GEOM_EPS ? "free" : "tangent",
+    ctx.freeNosings.has(a) || (sa > group.sStart + GEOM_EPS && !straight(sa)) ? "free" : "tangent",
+    ctx.freeNosings.has(b) || (sb < group.sEnd - GEOM_EPS && !straight(sb)) ? "free" : "tangent",
   ];
 }
 

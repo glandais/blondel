@@ -25,7 +25,7 @@ Preuves :
 - `apps/web/e2e/assistant.spec.ts`, « critère n° 1 par l'assistant : quart tournant bois conforme, PDF et DXF ». Depuis une page vierge : assistant, trémie 2 800 × 900, structure visée « limons à la française », typologie « Quart tournant », E = 800, « Proposer », « Choisir », puis export du dossier PDF et du plan DXF 2007. Soit **12 interactions** (plafond 20) et une durée totale sous 120 s (assertion ; ≈ 4 s en exécution automatisée). Le test vérifie aussi : E = 800 sur la carte retenue, structure `wood-housed`, jour « poteau », **0 bloquant**, aucune erreur de génération, balustres et poteau dans la nomenclature, aucune tâche longue au-delà de 200 ms, et le choix annulable en une seule fois.
 - `packages/core/src/assistant/propose.test.ts`, « cas d'acceptation n° 1 » : quart tournant sans bloquant proposé en tête ; escalier droit rejeté pour l'échappée (ou à marge nulle et classé après) ; limons à la française contenus dans la trémie avec poteau d'angle ; budget ≤ 2 s ; résultats déterministes.
 - `packages/exports/src/acceptance-criteria.test.ts`, « critère d'acceptation n° 1 complet » (exemple `j4-acceptance-01-garde-corps`) : 0 bloquant, 4 limons, poteau, garde-corps (poteaux, balustres, mains courantes). DXF R12 de chaque pièce à plat relu à ±0,01 mm, mortaises sur leur calque, plan DXF AC1021 relu. Dossier PDF avec plan, élévation, nomenclature, contrôle et développés.
-- `apps/web/e2e/acceptance.spec.ts` : même critère par le préréglage plutôt que par l'assistant (11 interactions).
+- `apps/web/e2e/acceptance.spec.ts` : même critère par le préréglage plutôt que par l'assistant (10 interactions, côtés des garde-corps laissés en automatique : deux garde-corps, aucun mur imposé).
 - `apps/web/e2e/structure-choice.spec.ts` (décision A4, 2026-09-30) : choisir « limons à la française » sur le préréglage quart tournant pose le poteau d'angle de 100 mm (plus d'erreur « jour à angle vif »), message affiché, annulable en une fois ; `packages/core/src/project/structureChoice.test.ts` pour tous les préréglages tournants.
 - `packages/core/src/guards/acceptance.test.ts`, « garde-corps barreaudé côté vide : aucune violation bloquante ».
 
@@ -132,7 +132,7 @@ Preuves :
 
 Réserves :
 
-- 88 règles sur 100 ont un évaluateur dans le moteur. Les 12 autres sortent `non-evaluee` ou sont remplacées par un contrôle de plugin : charges, contraste des nez, bande d'éveil, tolérances de trémie et d'étage, épaisseur de limon DTU, cintrage…
+- Depuis la vague J, 95 règles sur 103 ont un évaluateur dans le moteur (dont `LIMON_EPAISSEUR_MIN_DTU`, `CREMAILLERE_REGLE_MOYENS` et `LIMON_ENTAILLE_MIN`, dont le résultat d'attente est remplacé par celui de la structure). Les 8 autres sortent `non-evaluee` avec un motif exigé par test (`rules/evaluators/unevaluable.ts`) : contraste des nez, bande d'éveil, trois charges, cintrage, tolérances de trémie et d'étage. `GC_CABLES_DETENTE` et `LIMON_ENTAILLE_MIN` sont passées de contrôles hors table à la table ; les constantes des formules sont des champs structurés (`parametres`, `tables`), plus lues dans le texte.
 - Les contrôles de fabrication tirés du profil d'atelier sont traçables au profil, pas à une norme. C'est voulu : ce sont des capacités d'atelier à valider.
 
 ## Vérifications de l'intégration (vague F)
@@ -169,3 +169,15 @@ Depuis la racine, le 2026-09-29, sans commit. Aucun critère ne change d'état ;
 - `pnpm format:check` : vert.
 - `BASE_PATH=/blondel/ pnpm --filter @blondel/web build` : OK.
 - `pnpm e2e` : 44 sur 44 verts, sous le budget de 200 ms par tâche, après correction de la fenêtre « Profil d'atelier » (contenu monté seulement ouverte : son `.notice` caché faisait échouer 5 specs par violation du mode strict).
+
+## Vérifications de l'intégration (vague J)
+
+Depuis la racine, le 2026-09-30, sans commit. Aucun critère ne change d'état ; la réserve du critère n° 5 (règles évaluées) et la preuve e2e du critère n° 1 (côtés des garde-corps en automatique) sont mises à jour ci-dessus.
+
+- `pnpm install` : OK.
+- `pnpm typecheck` : vert (paquets, application web, tests e2e).
+- `pnpm test` : vert, 185 fichiers (1 ignoré), 2 322 tests passés et 3 ignorés, après correction d'une propriété instable de `site/survey.test.ts` (journal du ledger).
+- `pnpm format:check` : vert.
+- `BASE_PATH=/blondel/ pnpm --filter @blondel/web build` : OK.
+- `pnpm e2e` : 46 sur 46 verts, sous le budget de 200 ms par tâche, dont `storage-quota.spec.ts` (nouveau) et les onglets mesurés avec `steel-flat`, `steel-profile` et `steel-curved`. Au premier passage complet, `demos.spec.ts` a dépassé le budget (209 puis 232 ms, deux démos hélicoïdales différentes, charge machine 7 à 9) ; relancé seul deux fois : vert.
+- Exemples : les 24 `examples/*.blondel.json` se lisent, se construisent sans erreur et s'exportent (`packages/exports/src/examples.test.ts`) ; aucun exemple ni instantané modifié par la vague.

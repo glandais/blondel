@@ -17,6 +17,7 @@ export { selfCoveredHeadroom, type SelfCoverInput } from "./selfcover.js";
 export {
   circularOpening,
   helicalHeadroomBound,
+  openingCircle,
   type HelicalHeadroomBound,
   type HelicalHeadroomInput,
 } from "./helical.js";

@@ -39,7 +39,12 @@ import {
   type UsageId,
 } from "../lib/assistant.js";
 import { availableStructures } from "../lib/optionalApi.js";
-import { AssistantCancelled, startAssistant, type AssistantRun } from "../model/assistantClient.js";
+import {
+  AssistantCancelled,
+  startAssistant,
+  startSketches,
+  type AssistantRun,
+} from "../model/assistantClient.js";
 import type { AssistantOutcome } from "../model/assistantJob.js";
 import { appStore, useApp } from "../store/appStore.js";
 import "./assistant.css";
@@ -286,11 +291,14 @@ function ShapeGroup({
   sketches,
   rank,
   onChoose,
+  onShowVariants,
 }: {
   readonly candidate: DesignCandidate;
   readonly sketches: Readonly<Record<string, CandidateSketch>>;
   readonly rank: number;
   readonly onChoose: (c: DesignCandidate) => void;
+  /** Dépliage des variantes : leurs croquis sont demandés à ce moment (QUESTIONS D5). */
+  readonly onShowVariants: (variants: readonly DesignCandidate[]) => void;
 }) {
   const variants = candidate.variants;
   return (
@@ -302,7 +310,12 @@ function ShapeGroup({
         onChoose={() => onChoose(candidate)}
       />
       {variants.length > 0 ? (
-        <details className="assistant__variants">
+        <details
+          className="assistant__variants"
+          onToggle={(e) => {
+            if (e.currentTarget.open) onShowVariants(variants);
+          }}
+        >
           <summary>
             {variants.length === 1
               ? "1 autre variante de cette forme"
@@ -398,8 +411,10 @@ function AssistantDialogBody() {
   );
   const set = (patch: Partial<AssistantForm>) => setForm((f) => ({ ...f, ...patch }));
 
-  const opening = formOpening(form, project);
-  const polygon = opening.ok ? openingPolygon(opening.opening) : null;
+  // Trémie du formulaire (un relevé coûte un ajustement et ses seuils exacts, ≈ 12 ms) : pas
+  // recalculée à chaque rendu (minuterie de la recherche, 4 fois par seconde).
+  const opening = useMemo(() => formOpening(form, project), [form, project]);
+  const polygon = useMemo(() => (opening.ok ? openingPolygon(opening.opening) : null), [opening]);
 
   // Fermeture : la recherche en cours est abandonnée au démontage (effet ci-dessous).
   const close = (): void => appStore.getState().setAssistantOpen(false);
@@ -437,6 +452,37 @@ function AssistantDialogBody() {
   running.current = state.kind === "running" ? state.run : null;
   useEffect(() => () => running.current?.cancel(), []);
 
+  // Croquis des variantes repliées, calculés au dépliage (worker dédié) ; oubliés à chaque
+  // nouvelle recherche, abandonnés à la fermeture.
+  const [variantSketches, setVariantSketches] = useState<Readonly<Record<string, CandidateSketch>>>(
+    {},
+  );
+  const sketchJobs = useRef(new Set<{ cancel(): void }>());
+  const requested = useRef(new Set<string>());
+  useEffect(() => {
+    const jobs = sketchJobs.current;
+    return () => {
+      for (const j of jobs) j.cancel();
+    };
+  }, []);
+  const showVariants = (variants: readonly DesignCandidate[]): void => {
+    const missing = variants.filter((v) => !requested.current.has(v.id));
+    if (missing.length === 0) return;
+    for (const v of missing) requested.current.add(v.id);
+    const job = startSketches(missing.map((v) => ({ id: v.id, project: v.project })));
+    sketchJobs.current.add(job);
+    job.promise.then(
+      (sketches) => {
+        sketchJobs.current.delete(job);
+        setVariantSketches((s) => ({ ...s, ...sketches }));
+      },
+      () => {
+        sketchJobs.current.delete(job);
+        for (const v of missing) requested.current.delete(v.id);
+      },
+    );
+  };
+
   const propose = (): void => {
     const r = assistantInput(form, project);
     if (!r.ok) {
@@ -445,6 +491,10 @@ function AssistantDialogBody() {
     }
     setErrors([]);
     if (state.kind === "running") state.run.cancel();
+    for (const j of sketchJobs.current) j.cancel();
+    sketchJobs.current.clear();
+    requested.current.clear();
+    setVariantSketches({});
     const run = startAssistant(r.input);
     setElapsed(0);
     setState({ kind: "running", run, started: performance.now() });
@@ -490,6 +540,10 @@ function AssistantDialogBody() {
     set({ wallSides: on ? [...form.wallSides, i] : form.wallSides.filter((x) => x !== i) });
 
   const outcome = state.kind === "done" ? state.outcome : null;
+  const sketches = useMemo(
+    () => (outcome ? { ...outcome.sketches, ...variantSketches } : variantSketches),
+    [outcome, variantSketches],
+  );
   const openingModes: { value: OpeningMode; label: string }[] = [
     { value: "rect", label: "Rectangulaire" },
     { value: "survey", label: "Relevé (4 côtés + 2 diagonales)" },
@@ -747,9 +801,10 @@ function AssistantDialogBody() {
                     <ShapeGroup
                       key={c.id}
                       candidate={c}
-                      sketches={outcome.sketches}
+                      sketches={sketches}
                       rank={i + 1}
                       onChoose={choose}
+                      onShowVariants={showVariants}
                     />
                   ))}
                 </div>

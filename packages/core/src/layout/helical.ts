@@ -136,10 +136,12 @@ export function computeHelicalLayout(project: Project, spec: HelicalLayoutSpec):
   // Emprise : marches **et** palier d'arrivée (partie de l'escalier, comme les paliers des
   // escaliers à volées).
   const covered = total + landingAngle;
-  const footprint =
-    covered < 2 * Math.PI - 1e-9
-      ? sectorRing(center, rIn, rOut, start, sign * covered)
-      : disc(center, rOut);
+  // Au-delà d'un tour, disque de R_e troué du jour central de R_i (`footprintHoles`, D3).
+  const partial = covered < 2 * Math.PI - 1e-9;
+  const footprint = partial
+    ? sectorRing(center, rIn, rOut, start, sign * covered)
+    : disc(center, rOut);
+  const footprintHoles = !partial && rIn > 0 ? [disc(center, rIn)] : undefined;
 
   const helical: HelicalLayout = {
     center,
@@ -161,6 +163,7 @@ export function computeHelicalLayout(project: Project, spec: HelicalLayoutSpec):
     walkline,
     walklineOffset: df,
     footprint,
+    ...(footprintHoles ? { footprintHoles } : {}),
     turns: [],
     innerSide: spec.direction,
     helical,

@@ -39,14 +39,13 @@ export {
   HELICAL_DEFAULT_CORE_RADIUS,
   HELICAL_DEFAULT_OUTER_RADIUS,
   HELICAL_MAX_LANDING_ANGLE,
+  HelicalSweepError,
   createHelicalProject,
+  createHelicalProjectWithFallback,
+  type HelicalPresetResult,
 } from "./presetHelical.js";
-export {
-  DEFAULT_NEWEL_SIZE,
-  NEWEL_REQUIRED_STRUCTURES,
-  suggestFixes,
-  type FixSuggestion,
-} from "./fixes.js";
+export { defaultOpening } from "./defaultOpening.js";
+export { DEFAULT_NEWEL_SIZE, suggestFixes, type FixSuggestion } from "./fixes.js";
 export {
   DEFAULT_NEWEL,
   expectedNewel,
@@ -65,6 +64,7 @@ export {
 } from "./structureChoice.js";
 export {
   matchingFlightsPreset,
+  realignBlocker,
   realignFlightsAndOpening,
   type RealignOptions,
   type RealignResult,

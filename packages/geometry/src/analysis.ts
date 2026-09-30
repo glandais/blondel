@@ -9,7 +9,7 @@ export interface Bbox3 {
   readonly max: Vec3;
 }
 
-/** Boîte englobante alignée sur les axes ; `null` pour un maillage sans sommet. */
+/** Boîte englobante alignée sur les axes, repère monde ; `null` pour un maillage sans sommet. */
 export function bbox(mesh: Mesh): Bbox3 | null {
   const p = mesh.positions;
   if (p.length === 0) return null;
@@ -30,7 +30,12 @@ export function bbox(mesh: Mesh): Bbox3 | null {
     if (z < z0) z0 = z;
     if (z > z1) z1 = z;
   }
-  return { min: { x: x0, y: y0, z: z0 }, max: { x: x1, y: y1, z: z1 } };
+  // Maillage en repère local : boîte ramenée au repère monde (float64).
+  const o = mesh.origin ?? { x: 0, y: 0, z: 0 };
+  return {
+    min: { x: o.x + x0, y: o.y + y0, z: o.z + z0 },
+    max: { x: o.x + x1, y: o.y + y1, z: o.z + z1 },
+  };
 }
 
 /** Union de boîtes englobantes (`null` ignorés). */

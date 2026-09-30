@@ -7,6 +7,7 @@ import {
   mainDimensions,
   measureAnnotation,
   pickPoint,
+  snapToVertex,
   pickedToMeasure,
   polylineMidpoint,
 } from "./annotations.js";
@@ -93,5 +94,27 @@ describe("cotes et mesure : cas limites", () => {
         expect(Math.abs(len - distance(pa, pb))).toBeLessThan(1e-6);
       }),
     );
+  });
+});
+
+describe("accrochage de la mesure aux sommets (QUESTIONS D6)", () => {
+  const hit = { x: 10, y: 20, z: 30 };
+  const corner = { x: 0, y: 0, z: 0 };
+  const far = { x: 100, y: 0, z: 0 };
+  it("sommet le plus proche à l'écran sous le rayon, sinon le point cliqué", () => {
+    const candidates = [
+      { point: far, screen: { x: 130, y: 100 } },
+      { point: corner, screen: { x: 108, y: 105 } },
+    ];
+    expect(snapToVertex(hit, { x: 100, y: 100 }, candidates)).toEqual({
+      point: corner,
+      snapped: true,
+    });
+    expect(snapToVertex(hit, { x: 200, y: 200 }, candidates)).toEqual({
+      point: hit,
+      snapped: false,
+    });
+    expect(snapToVertex(hit, { x: 100, y: 100 }, candidates, 5).snapped).toBe(false);
+    expect(snapToVertex(hit, { x: 100, y: 100 }, []).point).toBe(hit);
   });
 });

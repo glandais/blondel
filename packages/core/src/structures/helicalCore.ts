@@ -16,10 +16,11 @@
  *   contremarches bois de base sont retirées et les règles de nez / contremarches
  *   (`VIDE_ENTRE_MARCHES`…) réévaluées sans contremarche, à l'épaisseur de la tôle. Le
  *   porte-à-faux sort des règles de moyens du DTU (C §1.8) : contrôle
- *   `HELICOIDAL_PORTE_A_FAUX` en avertissement « justification requise » tant que
- *   `cantileverJustification` (référence de note de calcul ou d'avis technique) est vide ; la
- *   justification saisie est portée par le résultat (`RuleResult.justification`) et reprise
- *   dans le dossier PDF (décision A12).
+ *   `HELICOIDAL_PORTE_A_FAUX` en avertissement : « justification requise » tant que
+ *   `cantileverJustification` (référence de note de calcul ou d'avis technique) est vide ;
+ *   saisie, l'avertissement **reste** (une justification n'est pas une vérification) et la
+ *   justification est portée par le résultat (`RuleResult.justification`) et reprise dans le
+ *   dossier PDF (décision A12, 2026-09-30).
  * - **Palier d'arrivée** (`landing-arrival`, PA) : secteur du tracé, dessus au niveau H.
  * - **Limon extérieur hélicoïdal** facultatif (`outerStringer.enabled`, `helical-stringer`, LE1) :
  *   plat roulé, face intérieure au rayon R_e. Développé **exact** (B §4.3) : sur la fibre neutre
@@ -73,7 +74,8 @@ import {
   steelQuantities,
 } from "./steelCommon.js";
 
-const mmPos = z.number().positive();
+/** Cote en mm entiers (ADR-0003) : le formulaire générique la saisit en entier (QUESTIONS D6). */
+const mmPos = z.number().int().positive();
 const DEG = Math.PI / 180;
 /** Pas angulaire maximal d'échantillonnage des hélices 3D (limon, main courante). */
 const HELIX_STEP = 5 * DEG;
@@ -97,7 +99,7 @@ export const HelicalCoreParamsSchema = z.object({
       /** Essence du fût bois. */
       wood: z.enum(WOOD_MATERIALS).default("wood-oak"),
       /** Dépassement au-dessus du plancher haut (mm) — à valider. */
-      topExtension: z.number().nonnegative().default(0),
+      topExtension: z.number().int().nonnegative().default(0),
     })
     .prefault({}),
   treads: z
@@ -120,7 +122,7 @@ export const HelicalCoreParamsSchema = z.object({
       /** Épaisseur (mm) : limons en tôle de 8 mm relevés (C §2.2 [20], exemple à valider). */
       thickness: mmPos.default(8),
       /** Rive haute au-dessus de la ligne des nez (mm) — à valider. */
-      topAboveNosing: z.number().default(50),
+      topAboveNosing: z.number().int().default(50),
     })
     .prefault({}),
   outerStringer: z
@@ -132,7 +134,7 @@ export const HelicalCoreParamsSchema = z.object({
       /** Épaisseur (mm) : limons en tôle de 8 mm relevés (C §2.2 [20], exemple à valider). */
       thickness: mmPos.default(8),
       /** Rive haute au-dessus de la ligne des nez (mm) — à valider. */
-      topAboveNosing: z.number().default(50),
+      topAboveNosing: z.number().int().default(50),
     })
     .prefault({}),
   handrail: z
@@ -144,12 +146,13 @@ export const HelicalCoreParamsSchema = z.object({
       /** Diamètre (mm) : Ø 42 relevé (C §2.2 [50], confiance faible). */
       diameter: mmPos.default(42),
       /** Décalage radial de l'axe par rapport au bout des marches (ou à l'axe du limon), mm. */
-      radiusOffset: z.number().default(0),
+      radiusOffset: z.number().int().default(0),
     })
     .prefault({}),
   /**
    * Référence de la justification du porte-à-faux (note de calcul, avis technique) ; vide :
-   * avertissement « justification requise » (C §1.8).
+   * avertissement « justification requise » (C §1.8) ; saisie : l'avertissement reste, la
+   * justification lui est jointe (décision A12).
    */
   cantileverJustification: z.string().default(""),
 });
@@ -872,8 +875,10 @@ export function buildHelicalCore(
             message: `Justification requise : marches en porte-à-faux ${cantileverOn}, hors règles de moyens du DTU (note de calcul ou avis technique à joindre, paramètre « cantileverJustification »).`,
           }
         : {
-            status: "ok",
-            message: `Porte-à-faux ${cantileverOn} justifié : ${justification}.`,
+            // Décision A12 (2026-09-30) : une justification n'est pas une vérification ;
+            // l'avertissement reste affiché, justification jointe au résultat et au dossier.
+            status: "violation",
+            message: `Marches en porte-à-faux ${cantileverOn}, hors règles de moyens du DTU : justification jointe (non vérifiée par Blondel) : ${justification}.`,
             justification,
           },
     ]);
@@ -915,6 +920,15 @@ export const HELICAL_CORE: StructureKind<HelicalCoreParams> = {
       ctx?.layout?.helical?.core === "well" ? { outerStringer: { enabled: true } } : {},
     ),
   build: (ctx, params) => buildHelicalCore(ctx, params).output,
+  // Capacités (dette D4) : tracé hélicoïdal seulement ; limon extérieur facultatif au-delà de
+  // R_e (hors emprise), limon intérieur dans le jour.
+  capabilities: {
+    layouts: ["helical"],
+    lateralThickness: (p) => ({
+      inner: 0,
+      outer: p.outerStringer.enabled ? p.outerStringer.thickness : 0,
+    }),
+  },
 };
 
 /** Enregistrement (appelé au chargement de `structures/index.ts`, comme les autres plugins). */

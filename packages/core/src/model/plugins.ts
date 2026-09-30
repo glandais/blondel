@@ -122,6 +122,33 @@ export interface StructureKind<P = unknown> {
   /** Paramètres par défaut raisonnables. */
   defaults(ctx: StructureContext): P;
   build(ctx: StructureContext, params: P): StructureOutput;
+  /**
+   * Capacités déclarées (dette D4), lues sans construire de modèle par les corrections
+   * proposées, le choix de structure, l'assistant, le comparateur et l'interface. Absent :
+   * tracés à volées seulement, pas de poteau exigé, aucune épaisseur hors emprise.
+   */
+  readonly capabilities?: StructureCapabilities<P>;
+}
+
+/** Type de tracé accepté par une structure (`ProjectSchema` : volées ou hélicoïdal). */
+export type StructureLayoutKind = "flights" | "helical";
+
+/** Capacités d'un plugin de structure (`StructureKind.capabilities`). */
+export interface StructureCapabilities<P = unknown> {
+  /** Types de tracé acceptés. Défaut : `["flights"]`. */
+  readonly layouts?: readonly StructureLayoutKind[];
+  /**
+   * Les limons de jour s'assemblent sur un **poteau d'angle** : un jour à angle vif les empêche
+   * de se rencontrer (erreur « jour à angle vif » du plugin). Défaut : non.
+   */
+  readonly requiresNewel?: boolean;
+  /**
+   * Épaisseurs des limons **hors** de l'emmarchement utile (CHALLENGE A3), côté jour et côté
+   * extérieur, pour des paramètres complets (défauts appliqués). Emprise hors tout = E + inner +
+   * outer. Section choisie par le plugin au calcul (`auto`) : valeur de la première essayée
+   * (borne basse, documentée par le plugin). Absent : 0 mm des deux côtés.
+   */
+  lateralThickness?(params: P): { readonly inner: Mm; readonly outer: Mm };
 }
 
 export interface StructureOutput {

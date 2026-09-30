@@ -8,7 +8,7 @@ import {
   evaluateComplianceDetailed,
   ruleCoverage,
 } from "./engine.js";
-import { FORMULA_CONSTANTS } from "./formula-constants.js";
+import { RULE_CONSTANTS } from "./params.js";
 import { RULES, RULES_VERSION, findRule, getRule } from "./table.js";
 import { makeInput, makeProject } from "./test-fixtures.js";
 
@@ -31,11 +31,23 @@ describe("moteur de conformité", () => {
     expect(new Set(report.results.map((r) => r.ruleId))).toEqual(new Set(expected));
   });
 
-  it("règle applicable sans évaluateur : non-evaluee", () => {
+  it("règle applicable sans évaluateur : non-evaluee, avec son motif s'il est déclaré", () => {
     const report = evaluateCompliance(makeInput());
     const r = report.results.find((x) => x.ruleId === "CHARGE_ESCALIER_A");
     expect(r?.status).toBe("non-evaluee");
-    expect(r?.message).toMatch(/sans évaluateur/);
+    // Motif précis (charges de la table, résistance hors contrôle), plus « sans évaluateur ».
+    expect(r?.message).not.toMatch(/sans évaluateur/);
+    expect(r?.message).toMatch(/q_k = 2,5 kN\/m², Q_k = 2 kN \(catégorie A/);
+    // Sans motif déclaré : message générique.
+    const bare = evaluateCompliance(makeInput(), createRegistry()).results.find(
+      (x) => x.ruleId === "BLONDEL_DTU",
+    );
+    expect(bare?.message).toMatch(/sans évaluateur/);
+  });
+
+  it("toute règle sans évaluateur a un motif de non-évaluation déclaré", () => {
+    const cov = ruleCoverage();
+    expect(cov.notImplemented.filter((id) => !cov.withReason.includes(id))).toEqual([]);
   });
 
   it("un évaluateur qui lève une erreur donne non-evaluee", () => {
@@ -212,10 +224,14 @@ describe("couverture des règles", () => {
     expect(cov.notImplemented).toEqual(expect.arrayContaining(["CHARGE_ESCALIER_A"]));
   });
 
-  it("les constantes extraites des formules y figurent toujours", () => {
-    for (const c of FORMULA_CONSTANTS) {
-      expect(getRule(c.ruleId).formule).toContain(c.excerpt);
-      expect(c.excerpt).toContain(String(c.value));
+  it("constantes nommées : lues dans les champs structurés de rules.yaml", () => {
+    for (const c of RULE_CONSTANTS) {
+      const r = getRule(c.ruleId);
+      const fromParams = r.parametres?.[c.param];
+      const fromTables = Object.values(r.tables ?? {})
+        .flat()
+        .find((row) => row["categorie"] === c.param)?.["qk"];
+      expect(fromParams ?? fromTables, `${c.ruleId}.${c.param}`).toBe(c.value);
     }
     // G_BALANCE_VS_DROITE réutilise la tolérance de G_TOL_BALANCEE.
     expect(getRule("G_BALANCE_VS_DROITE").formule).toContain(

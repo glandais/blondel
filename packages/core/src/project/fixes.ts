@@ -33,15 +33,15 @@ import { profileFlangeWidth } from "../structures/steelProfile.js";
 import {
   DEFAULT_NEWEL,
   DEFAULT_NEWEL_SIZE,
-  NEWEL_REQUIRED_STRUCTURES,
   expectedNewel,
   layoutAccepts as layoutOk,
+  structureRequiresNewel,
   newelLabel,
   newelMatches,
   newelSatisfies,
 } from "./newel.js";
 
-export { DEFAULT_NEWEL_SIZE, NEWEL_REQUIRED_STRUCTURES };
+export { DEFAULT_NEWEL_SIZE };
 
 /** Action proposée : libellé affichable, raison, patch à fusionner dans le projet. */
 export interface FixSuggestion {
@@ -100,7 +100,7 @@ export function suggestFixes(
     sharpTarget = DEFAULT_NEWEL;
     newelPatch = patchFor((i) => i.kind === "sharp", DEFAULT_NEWEL);
   }
-  if (sharp > 0 && NEWEL_REQUIRED_STRUCTURES.includes(kind) && layoutAccepts(project, newelPatch)) {
+  if (sharp > 0 && structureRequiresNewel(kind) && layoutAccepts(project, newelPatch)) {
     out.push({
       id: "jour-newel",
       label: `Passer le jour en ${newelLabel(sharpTarget)}${sharp > 1 ? ` (${sharp} tournants)` : ""}`,
@@ -156,8 +156,11 @@ export function suggestFixes(
 
   // 3. Jour plus étroit que la sphère T1 (pas de garde-corps de jour, décision A10) : côté jour
   // « mur » seulement si le jour est fermé. Côté jour déclaré « vide » : jour ouvert, rien à proposer.
+  // Garde-corps partiel côté jour (vide ouvert hors du jour, décision A10 du 2026-09-30) : un
+  // jour fermé ne ferme pas ce vide, « mur » supprimerait ce garde-corps : pas de proposition.
   const narrow = (model.notes ?? []).some((n) => n.startsWith(NARROW_JOUR_PREFIX));
-  if (narrow && project.guards && project.guards.flight.inner === "auto") {
+  const partialGuard = (model.parts ?? []).some((p) => p.id.startsWith("guard-inner-"));
+  if (narrow && !partialGuard && project.guards && project.guards.flight.inner === "auto") {
     out.push({
       id: "jour-wall",
       label: "Jour fermé : régler le côté jour des garde-corps sur « mur »",

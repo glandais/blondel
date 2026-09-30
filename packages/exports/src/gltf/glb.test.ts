@@ -150,6 +150,28 @@ describe("exportGlb", () => {
     });
   });
 
+  it("pièce à 8 m de l'origine : sommets exacts au 1e-5 mm (repère local, pas de float32 monde)", () => {
+    // Près de 8 000 mm, le float32 monde a un pas de 4,9e-4 mm (erreur jusqu'à 2,4e-4 mm).
+    const x0 = 7999.8765;
+    const y0 = -7999.4321;
+    const z0 = 2999.1234;
+    const box = boxPart(0, x0, y0, z0, 0.3, 0.2, 0.1);
+    const r = readGlb(exportGlb({ parts: [box] }));
+    const world = worldPositions(r, 1);
+    const near = (v: number, targets: number[]): number =>
+      Math.min(...targets.map((t) => Math.abs(v - t)));
+    let worst = 0;
+    for (const p of world) {
+      worst = Math.max(
+        worst,
+        near(p.x, [x0, x0 + 0.3]),
+        near(p.y, [y0, y0 + 0.2]),
+        near(p.z, [z0, z0 + 0.1]),
+      );
+    }
+    expect(worst).toBeLessThan(1e-5);
+  });
+
   it("déterministe ; solide partagé = maillage partagé", () => {
     expect(exportGlb({ parts }, { project })).toEqual(bytes);
     const a = boxPart(0, 0, 0, 0, 100, 100, 10);

@@ -30,7 +30,16 @@ export const OpeningSchema = z.discriminatedUnion("kind", [
     /** Dimension selon Y. */
     sizeY: mmPos,
   }),
-  z.object({ kind: z.literal("polygon"), points: z.array(Vec2Schema).min(3) }),
+  z.object({
+    kind: z.literal("polygon"),
+    points: z.array(Vec2Schema).min(3),
+    /**
+     * Trémie circulaire (ajout rétrocompatible, dette D3) : cercle exact dont `points` est le
+     * polygone inscrit (`circularOpening`, flèche ≤ 0,5 mm), seul lu par les consommateurs qui ne
+     * connaissent pas le cercle. Ignoré s'il ne correspond plus aux points (`openingCircle`).
+     */
+    circle: z.object({ center: Vec2Schema, radius: z.number().positive() }).optional(),
+  }),
 ]);
 export type Opening = z.infer<typeof OpeningSchema>;
 

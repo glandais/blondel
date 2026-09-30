@@ -5,8 +5,10 @@
  *
  * Interactions comptées (voir `Interactions`, journal joint au rapport) : choix et application
  * du préréglage (2), jour « Poteau » (1), structure (1), ouverture du panneau « Garde-corps »
- * (1), activation des garde-corps (1), côté extérieur contre un mur (1), menu « Exporter » et
- * entrée PDF (2), menu et entrée DXF (2) : 11.
+ * (1), activation des garde-corps (1), menu « Exporter » et entrée PDF (2), menu et entrée DXF
+ * (2) : 10. Les côtés restent en « automatique » (QUESTIONS D5) : le préréglage n'a pas de mur,
+ * les deux côtés sont vides et reçoivent un garde-corps ; le côté extérieur n'est plus forcé
+ * sur « Mur ».
  */
 import { readFile } from "node:fs/promises";
 import { expect, test, type Download, type Page } from "@playwright/test";
@@ -54,15 +56,14 @@ test("critère n° 1 : quart tournant bois à poteau avec garde-corps, PDF et DX
   // Structure bois : limons à la française.
   await chooseStructure(page, "wood-housed", ix);
 
-  // Garde-corps : côté jour vide (automatique, aucun mur), côté extérieur contre un mur.
+  // Garde-corps : côtés automatiques (aucun mur au préréglage : deux côtés vides, garde-corps
+  // des deux côtés).
   await page.locator("summary", { hasText: "Garde-corps" }).click();
   ix.count("panneau Garde-corps");
   await page.getByLabel("Garde-corps et mains courantes").check();
   ix.count("garde-corps activés");
   await settle(page);
-  await page.getByLabel("Côté extérieur").selectOption("wall");
-  ix.count("côté extérieur : mur");
-  await settle(page);
+  await expect(page.getByLabel("Côté extérieur")).toHaveValue("auto");
 
   // Conception conforme : aucun contrôle bloquant, pièces de garde-corps dans la nomenclature.
   const blocking = await blockingCount(page);

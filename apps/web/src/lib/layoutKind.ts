@@ -6,8 +6,10 @@
  */
 import {
   HELICAL_MAX_LANDING_ANGLE,
+  createHelicalProjectWithFallback,
   createProject,
   getStructure,
+  structureAcceptsLayout,
   withHelicalCore,
   type PresetId,
   type PresetOptions,
@@ -28,21 +30,16 @@ export const HELICAL_CONTEXT = "helicoidal";
 /** Plugin de structure propre aux hélicoïdaux (fût, marches rayonnantes, main courante). */
 export const HELICAL_STRUCTURE = "helical-core";
 
-/**
- * Structures qui acceptent un tracé hélicoïdal. Les autres sont réservées aux escaliers à
- * volées (le cœur rend une erreur explicite sur un hélicoïdal) ; « none » convient aux deux.
- * Liste tenue ici tant que `StructureKind` ne déclare pas les tracés qu'il accepte (LEDGER §3).
- */
-export const HELICAL_STRUCTURES: ReadonlySet<string> = new Set([HELICAL_STRUCTURE]);
-
 export function layoutKindOf(project: Project): LayoutKind {
   return project.stair.layout.kind === "helical" ? "helical" : "flights";
 }
 
-/** La structure `kind` sait-elle construire un tracé de ce type ? */
+/**
+ * La structure `kind` sait-elle construire un tracé de ce type ? Déclaré par le plugin
+ * (`StructureKind.capabilities.layouts`, dette D4) ; « none » convient aux deux.
+ */
 export function structureFitsLayout(kind: string, layout: LayoutKind): boolean {
-  if (kind === "none") return true;
-  return layout === "helical" ? HELICAL_STRUCTURES.has(kind) : !HELICAL_STRUCTURES.has(kind);
+  return structureAcceptsLayout(kind, layout);
 }
 
 /**
@@ -65,10 +62,10 @@ function withContext(contexts: readonly string[], kind: LayoutKind): string[] {
 }
 
 /**
- * Marches par tour de l'hélicoïdal quand le préréglage du cœur ne trouve aucun nombre de marches
- * par tour satisfaisant ses critères pour la hauteur du projet (échappée sous le tour supérieur,
- * module, giron) : **valeur provisoire de présentation**, sans source métier, à ajuster par
- * l'utilisateur (le contrôle de conception signale ce qui ne passe pas ; LEDGER §2).
+ * Marches par tour proposées quand on passe la rotation d'un hélicoïdal en « nombre de marches
+ * par tour » sans modèle calculé (`HelicalEditor`) : **valeur de présentation**, sans source
+ * métier, à ajuster. Le passage volées → hélicoïdal utilise le repli du cœur
+ * (`createHelicalProjectWithFallback`, dette D4).
  */
 export const FALLBACK_TREADS_PER_TURN = 12;
 
@@ -79,7 +76,8 @@ export interface LayoutSwitch {
 }
 
 /**
- * Préréglage du nouveau type pour les H et dalle du projet (repli : rotation provisoire). Pour
+ * Préréglage du nouveau type pour les H et dalle du projet (repli du cœur quand aucune rotation
+ * ne satisfait tous ses critères, `createHelicalProjectWithFallback`). Pour
  * l'hélicoïdal, le découpage, les marches et la ligne de foulée **conservés** du projet sont
  * transmis au préréglage : sa recherche du nombre de marches par tour et du palier (module,
  * giron, échappée sous le tour supérieur) porte ainsi sur l'escalier qui sera réellement calculé.
@@ -92,19 +90,10 @@ function basePreset(project: Project, kind: LayoutKind): LayoutSwitch {
   if (kind === "flights") return { project: presetProject("straight", options) };
   const { stepping, treads, walkline } = project.stair;
   const kept = { stepping, treads, walkline };
-  try {
-    return { project: presetProject("helical", { ...options, patch: { stair: kept } }) };
-  } catch (e) {
-    if (!(e instanceof RangeError)) throw e;
-    const sweep = { mode: "treadsPerTurn" as const, count: FALLBACK_TREADS_PER_TURN };
-    return {
-      project: presetProject("helical", {
-        ...options,
-        patch: { stair: { ...kept, layout: { sweep } } },
-      }),
-      note: `${e.message} Rotation provisoire de ${FALLBACK_TREADS_PER_TURN} marches par tour : à ajuster (rayon extérieur, marches par tour).`,
-    };
-  }
+  const helical = createHelicalProjectWithFallback({ ...options, patch: { stair: kept } });
+  return helical.note === undefined
+    ? { project: helical.project }
+    : { project: helical.project, note: helical.note };
 }
 
 /**

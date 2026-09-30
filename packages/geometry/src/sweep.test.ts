@@ -270,4 +270,23 @@ describe("repère de section sur une hélice (main courante d'escalier hélicoï
     );
     expect(() => meshSweep(path, section, { maxPathPoints: 1 })).toThrow(GeometryError);
   });
+
+  it("repère local : même maillage translaté, origine au centre de la boîte", () => {
+    const path = [
+      { x: 4000, y: 5000, z: 3000 },
+      { x: 4800, y: 5000, z: 3400 },
+      { x: 4800, y: 5900, z: 3800 },
+    ];
+    const section = { outer: disc(20, 16), holes: [] };
+    const w = meshSweep(path, section);
+    const l = meshSweep(path, section, { localOrigin: true });
+    expect(l.origin).toBeDefined();
+    expect(l.indices).toEqual(w.indices);
+    expect(bbox(l)!.min.x).toBeCloseTo(bbox(w)!.min.x, 2);
+    expect(Math.abs(signedVolume(l) / signedVolume(w) - 1)).toBeLessThan(1e-4);
+    for (let i = 0; i < w.positions.length; i++) {
+      const o = [l.origin!.x, l.origin!.y, l.origin!.z][i % 3]!;
+      expect(Math.abs(l.positions[i]! + o - w.positions[i]!)).toBeLessThan(1e-3);
+    }
+  });
 });

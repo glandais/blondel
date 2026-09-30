@@ -5,16 +5,28 @@
  * l'annulation écarte alors seulement le résultat.
  */
 import type { AssistantInput } from "@blondel/core";
-import { runAssistantJob, type AssistantOutcome } from "./assistantJob.js";
+import type { CandidateSketch } from "../lib/assistant.js";
+import {
+  runAssistantJob,
+  runSketchJob,
+  type AssistantOutcome,
+  type SketchRequest,
+} from "./assistantJob.js";
+
+/** Message au worker : recherche complète, ou croquis de variantes dépliées. */
+export type AssistantRequest =
+  { readonly input: AssistantInput } | { readonly sketches: readonly SketchRequest[] };
+
+/** Réponse du worker. */
+export type AssistantResponse =
+  | { readonly outcome: AssistantOutcome }
+  | { readonly sketches: Readonly<Record<string, CandidateSketch>> }
+  | { readonly error: string };
 
 /** Sous-ensemble de `Worker` utilisé (injectable dans les tests). */
 export interface AssistantWorkerLike {
-  postMessage(message: { readonly input: AssistantInput }): void;
-  onmessage:
-    | ((e: {
-        readonly data: { readonly outcome: AssistantOutcome } | { readonly error: string };
-      }) => void)
-    | null;
+  postMessage(message: AssistantRequest): void;
+  onmessage: ((e: { readonly data: AssistantResponse }) => void) | null;
   onerror: ((e: unknown) => void) | null;
   terminate(): void;
 }
@@ -29,13 +41,16 @@ export class AssistantCancelled extends Error {
   }
 }
 
-export interface AssistantRun {
-  readonly promise: Promise<AssistantOutcome>;
-  /** Annule la recherche (worker terminé) ; la promesse est rejetée par `AssistantCancelled`. */
+/** Calcul annulable, dans un worker dédié ou sur le fil principal. */
+export interface Job<T> {
+  readonly promise: Promise<T>;
+  /** Annule le calcul (worker terminé) ; la promesse est rejetée par `AssistantCancelled`. */
   cancel(): void;
   /** Le calcul tourne-t-il dans un worker ? */
   readonly usesWorker: boolean;
 }
+
+export type AssistantRun = Job<AssistantOutcome>;
 
 export interface AssistantClientOptions {
   readonly factory?: AssistantWorkerFactory;
@@ -43,16 +58,20 @@ export interface AssistantClientOptions {
   readonly local?: (input: AssistantInput) => AssistantOutcome;
 }
 
-export function startAssistant(
-  input: AssistantInput,
-  options: AssistantClientOptions = {},
-): AssistantRun {
-  const factory = options.factory ?? browserAssistantWorker;
-  const local = options.local ?? ((i: AssistantInput) => runAssistantJob(i));
+/**
+ * Lance `message` dans un worker dédié (terminé à la réponse ou à l'annulation) ; sans worker ou
+ * s'il ne se charge pas, `local` sur le fil principal, après une tâche.
+ */
+function startJob<T>(
+  message: AssistantRequest,
+  read: (data: AssistantResponse) => T | Error,
+  local: () => T,
+  factory: AssistantWorkerFactory,
+): Job<T> {
   let settled = false;
   let reject!: (e: unknown) => void;
-  let resolve!: (o: AssistantOutcome) => void;
-  const promise = new Promise<AssistantOutcome>((res, rej) => {
+  let resolve!: (o: T) => void;
+  const promise = new Promise<T>((res, rej) => {
     resolve = (o) => {
       if (settled) return;
       settled = true;
@@ -69,7 +88,7 @@ export function startAssistant(
     setTimeout(() => {
       if (settled) return;
       try {
-        resolve(local(input));
+        resolve(local());
       } catch (e) {
         reject(e);
       }
@@ -86,8 +105,9 @@ export function startAssistant(
     const w = worker;
     w.onmessage = (e) => {
       w.terminate();
-      if ("outcome" in e.data) resolve(e.data.outcome);
-      else reject(new Error(e.data.error));
+      const r = read(e.data);
+      if (r instanceof Error) reject(r);
+      else resolve(r);
     };
     w.onerror = () => {
       // Worker introuvable ou en panne : repli sur le fil principal.
@@ -95,7 +115,7 @@ export function startAssistant(
       runLocal();
     };
     try {
-      w.postMessage({ input });
+      w.postMessage(message);
     } catch {
       w.terminate();
       runLocal();
@@ -112,6 +132,45 @@ export function startAssistant(
       reject(new AssistantCancelled());
     },
   };
+}
+
+const unexpected = (): Error => new Error("Réponse inattendue du worker de l'assistant.");
+
+export function startAssistant(
+  input: AssistantInput,
+  options: AssistantClientOptions = {},
+): AssistantRun {
+  const local = options.local ?? ((i: AssistantInput) => runAssistantJob(i));
+  return startJob(
+    { input },
+    (d) => ("outcome" in d ? d.outcome : "error" in d ? new Error(d.error) : unexpected()),
+    () => local(input),
+    options.factory ?? browserAssistantWorker,
+  );
+}
+
+export interface SketchClientOptions {
+  readonly factory?: AssistantWorkerFactory;
+  readonly local?: (
+    requests: readonly SketchRequest[],
+  ) => Readonly<Record<string, CandidateSketch>>;
+}
+
+/**
+ * Croquis des variantes d'une forme, demandés à son dépliage (QUESTIONS D5) : un worker dédié,
+ * comme la recherche, pour ne pas construire de modèle sur le fil principal.
+ */
+export function startSketches(
+  requests: readonly SketchRequest[],
+  options: SketchClientOptions = {},
+): Job<Readonly<Record<string, CandidateSketch>>> {
+  const local = options.local ?? runSketchJob;
+  return startJob(
+    { sketches: requests },
+    (d) => ("sketches" in d ? d.sketches : "error" in d ? new Error(d.error) : unexpected()),
+    () => local(requests),
+    options.factory ?? browserAssistantWorker,
+  );
 }
 
 /**

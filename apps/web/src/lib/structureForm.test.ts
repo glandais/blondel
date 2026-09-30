@@ -22,6 +22,7 @@ import {
   validateParams,
   withDefaults,
 } from "./structureForm.js";
+import { availableStructures } from "./optionalApi.js";
 
 describe("lecture des schémas zod 4", () => {
   it("listes de choix d'un z.enum enveloppé par .default()", () => {
@@ -78,12 +79,71 @@ describe("champs déduits des défauts", () => {
       ["number", "stringer.width"],
       ["number", "stringer.thickness"],
       ["readonly", "list"],
+      // Nombres facultatifs sans défaut du schéma, proposés vides (QUESTIONS D6).
+      ["number", "colletTieTolerance"],
+      ["number", "maxBalancedExtent"],
+      ["number", "herseAngle"],
+      ["number", "rotationReach"],
+      ["number", "rotationSteepness"],
     ]);
     const k = fields.find((f) => f.path.join(".") === "kFactor");
     expect(k).toMatchObject({ kind: "number", integer: false, label: "K factor" });
+    expect(fields.find((f) => f.path.join(".") === "targetCollet")).toMatchObject({
+      integer: true,
+    });
+    expect(fields.find((f) => f.path.join(".") === "colletTieTolerance")).toMatchObject({
+      integer: true,
+      optional: true,
+      min: 0,
+    });
+    expect(fields.find((f) => f.path.join(".") === "herseAngle")).toMatchObject({
+      integer: false,
+      optional: true,
+    });
     expect(fields.find((f) => f.path.join(".") === "stringer.width")?.label).toBe(
       "Stringer › width",
     );
+  });
+
+  it("entier seulement si le schéma le déclare, jamais d'après le défaut (QUESTIONS D6)", () => {
+    // `herseAngle` : réel (`z.number().gt(0).lt(90)`) dont le défaut vaudrait un entier.
+    const fields = deriveParamFields({ herseAngle: 20, targetCollet: 100 }, BalancingSchema);
+    const byPath = Object.fromEntries(fields.map((f) => [f.path.join("."), f]));
+    expect(byPath["herseAngle"]).toMatchObject({ kind: "number", integer: false });
+    expect(byPath["targetCollet"]).toMatchObject({ kind: "number", integer: true });
+    // Sans schéma lisible : décimal (aucune supposition).
+    expect(deriveParamFields({ a: 3 }, undefined)[0]).toMatchObject({ integer: false });
+  });
+
+  it("cotes en mm de helical-core saisies en entiers (schéma `.int()`, ADR-0003)", () => {
+    const helical = availableStructures().find((p) => p.kind === "helical-core");
+    expect(helical).toBeDefined();
+    const project = createProject("helical");
+    const defaults = safeDefaults(helical!, structureContext(project, buildModel(project)));
+    const fields = deriveParamFields(defaults, helical!.paramsSchema);
+    const decimals = fields
+      .filter((f) => f.kind === "number" && !f.integer)
+      .map((f) => f.path.join("."));
+    expect(decimals).toEqual([]);
+  });
+
+  it("champ facultatif sans défaut du plugin steel-curved : maxSlopeBreak proposé", () => {
+    const curved = availableStructures().find((p) => p.kind === "steel-curved");
+    expect(curved).toBeDefined();
+    const project = createProject("quarter-left");
+    const model = buildModel(project);
+    const ctx = structureContext(project, model);
+    const defaults = safeDefaults(curved!, ctx);
+    const fields = deriveParamFields(defaults, curved!.paramsSchema);
+    const f = fields.find((x) => x.path.join(".") === "curved.maxSlopeBreak");
+    expect(f).toMatchObject({ kind: "number", optional: true });
+    // Vider le champ retire la clé ; la valeur saisie est validée par le plugin.
+    const withValue = setParam(defaults as Record<string, unknown>, f!.path, 3);
+    expect(getParam(withValue, f!.path)).toBe(3);
+    expect(validateParams(curved!, withValue)).toBeNull();
+    const cleared = setParam(withValue, f!.path, undefined);
+    expect(Object.hasOwn(getParam(cleared, ["curved"]) as object, "maxSlopeBreak")).toBe(false);
+    expect(validateParams(curved!, cleared)).toBeNull();
   });
 
   it("défauts absents ou non objets : aucun champ", () => {

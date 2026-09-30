@@ -742,7 +742,11 @@ describe("computeGuards — jour plus étroit que la sphère T1", () => {
       expect(g.narrowJour?.threshold).toBe(getRule("GC_GABARIT_T1_2024").max);
       expect(g.notes.filter((n) => n.startsWith(NARROW_JOUR_PREFIX))).toHaveLength(1);
       expect(g.notes.find((n) => n.startsWith(NARROW_JOUR_PREFIX))).toContain(`jour de ${well} mm`);
-      expect(g.runs.some((r) => r.side === "inner")).toBe(false);
+      // Dans l'emprise du jour, aucun garde-corps : seul le garde-corps partiel hors du jour
+      // (volée 3 plus longue que la volée 1, décision A10 du 2026-09-30) est construit.
+      const inner = g.runs.filter((r) => r.side === "inner");
+      expect(inner).toHaveLength(1);
+      expect(g.narrowJour?.partialGuards).toBe(1);
       expect(g.runs.some((r) => r.side === "outer")).toBe(true);
       const m = buildModel(project);
       expect(m.errors).toEqual([]);
@@ -769,19 +773,33 @@ describe("computeGuards — jour plus étroit que la sphère T1", () => {
     expect(g.runs.some((r) => r.side === "inner")).toBe(true);
   });
 
-  it("jour étroit : la chute hors du jour (volée qui dépasse celle d'en face) reste bloquante (revue A10)", () => {
+  it("jour étroit : garde-corps partiel sur la volée qui dépasse celle d'en face, GC_OBLIGATOIRE respecté hors du jour (A10, 2026-09-30)", () => {
     // Préréglage : volée 3 (2 138 mm au mur) plus longue que la volée 1 (1 745 mm) : son haut
-    // borde un vide ouvert (pas le jour de 60 mm), chute de 2 700 mm à l'arrivée.
-    const m = buildModel(halfTurn(60));
+    // borde un vide ouvert (pas le jour de 60 mm), chute de 2 700 mm à l'arrivée. Avant la
+    // décision du 2026-09-30 : aucun garde-corps côté jour, constat bloquant « hors du jour ».
+    const project = halfTurn(60);
+    const layout = computeLayout(project);
+    const stepping = computeStepping(project, layout);
+    const g = computeGuards(project, layout, stepping);
+    const partial = g.runs.filter((r) => r.side === "inner");
+    expect(partial).toHaveLength(1);
+    expect(g.narrowJour).toMatchObject({ partialGuards: 1, outsideFall: 0 });
+    expect(g.narrowJour!.guardedFall).toBeCloseTo(stepping.nosings.at(-1)!.z, 6);
+    // Le garde-corps partiel ne pénètre pas dans l'emprise du jour : il commence au droit du
+    // départ de la volée 1 (y = 0 dans le repère des préréglages) et ne va pas au-delà.
+    const handrail = g.handrails.find((h) => h.side === "inner")!;
+    expect(handrail.to - handrail.from).toBeGreaterThan(stepping.going);
+    for (const p of partial[0]!.path) expect(p.y).toBeLessThanOrEqual(1e-6);
+    const m = buildModel(project);
+    expect(m.errors).toEqual([]);
     const v = m.compliance.results.filter(
       (r) => r.ruleId === "GC_OBLIGATOIRE" && r.status === "violation",
     );
-    expect(v.map((r) => r.severity).sort()).toEqual(["bloquant", "conseil"]);
-    const open = v.find((r) => r.severity === "bloquant")!;
-    expect(open.measured).toBeCloseTo(m.stepping.nosings.at(-1)!.z, 6);
-    expect(open.message).toMatch(/hors du jour/);
-    const jour = v.find((r) => r.severity === "conseil")!;
-    expect(jour.measured!).toBeLessThan(open.measured!);
+    // Seul le constat du jour (conseil) reste.
+    expect(v.map((r) => r.severity)).toEqual(["conseil"]);
+    const jour = v[0]!;
+    expect(jour.measured!).toBeLessThan(stepping.nosings.at(-1)!.z);
+    expect(m.parts.some((p) => p.id.startsWith("guard-inner"))).toBe(true);
     // Volées 1 et 3 de même longueur : tout le côté jour borde le jour, conseil seul.
     const p = halfTurn(60);
     const legs = p.stair.layout.legs.map((l, i) => (i === 2 ? p.stair.layout.legs[0]! : l));
@@ -791,6 +809,50 @@ describe("computeGuards — jour plus étroit que la sphère T1", () => {
         .filter((r) => r.ruleId === "GC_OBLIGATOIRE" && r.status === "violation")
         .map((r) => r.severity),
     ).toEqual(["conseil"]);
+  });
+
+  it("jour étroit : portion hors du jour plus courte que la sphère T1 rattachée au jour, pas de garde-corps de quelques mm (revue A10, 2026-09-30)", () => {
+    // Volée 3 plus longue de 1 à 20 mm que la volée 1 : la portion hors du jour mesure quelques
+    // mm. Avant la relecture : garde-corps partiel de 1 à 20 mm (main courante auto-intersectée,
+    // erreur de modèle). Une portion plus courte que la sphère T1 n'ouvre pas de passage de
+    // 110 mm le long du bord : elle est traitée avec le jour (conseil), sans garde-corps.
+    const T1 = getRule("GC_GABARIT_T1_2024").max!;
+    for (const H of [2700, 2800]) {
+      for (const extra of [1, 5, 20, T1 - 1]) {
+        const base = halfTurn(60);
+        const legs = base.stair.layout.legs.map((l, i) =>
+          i === 2 ? { length: (base.stair.layout.legs[0]!.length as number) + extra } : l,
+        );
+        const project = ProjectSchema.parse({
+          ...base,
+          stair: { ...base.stair, layout: { ...base.stair.layout, legs } },
+          site: { ...base.site, floorToFloor: H },
+        });
+        const g = analyze(project);
+        expect(
+          g.runs.filter((r) => r.side === "inner"),
+          `H ${H} +${extra}`,
+        ).toEqual([]);
+        expect(g.narrowJour?.partialGuards).toBeUndefined();
+        expect(g.narrowJour?.outsideFall).toBe(0);
+        const m = buildModel(project);
+        expect(m.errors, `H ${H} +${extra}`).toEqual([]);
+        const v = m.compliance.results.filter(
+          (r) => r.ruleId === "GC_OBLIGATOIRE" && r.status === "violation",
+        );
+        expect(v.map((r) => r.severity)).toEqual(["conseil"]);
+      }
+    }
+    // À partir de la sphère T1, garde-corps partiel construit.
+    const base = halfTurn(60);
+    const legs = base.stair.layout.legs.map((l, i) =>
+      i === 2 ? { length: (base.stair.layout.legs[0]!.length as number) + T1 + 50 } : l,
+    );
+    const g = analyze({
+      ...base,
+      stair: { ...base.stair, layout: { ...base.stair.layout, legs } },
+    });
+    expect(g.narrowJour?.partialGuards).toBe(1);
   });
 
   it("jour de 110 à 139 mm : poteaux de jour en collision, GC_POTEAUX_JOUR en avertissement (A10)", () => {

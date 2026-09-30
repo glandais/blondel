@@ -11,7 +11,7 @@
  */
 import type { Mm } from "../model/primitives.js";
 import type { Project } from "../model/project.js";
-import { LF_WIDE_THRESHOLD } from "../rules/formula-constants.js";
+import { LF_WIDE_THRESHOLD } from "../rules/params.js";
 import { getRule } from "../rules/table.js";
 import { LayoutError } from "./errors.js";
 

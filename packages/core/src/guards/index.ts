@@ -25,7 +25,6 @@ export {
   smallCoreDiameter,
 } from "./handrailSides.js";
 export {
-  CABLE_SLACK_RULE,
   guardChecks,
   JOUR_POSTS_CLASH_RULE,
   jourPostClashes,

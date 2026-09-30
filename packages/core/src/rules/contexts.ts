@@ -12,22 +12,20 @@
  */
 import type { Stepping } from "../model/derived.js";
 import type { ComplianceSettings } from "../model/project.js";
-import { RULE_CONTEXTS, type RuleDef } from "./table.js";
+import { RULE_CONTEXTS, RULE_TABLE, type RuleDef } from "./table.js";
 
 /** Contexte implicite, toujours actif. */
 export const ALWAYS_CONTEXT = "tous";
 
 /**
- * Contextes de **forme** de l'escalier. Dans une règle, ils qualifient les autres contextes :
- * `[erp_securite, tournant, helicoidal]` se lit « ERP **et** (tournant **ou** hélicoïdal) »,
- * `[helicoidal, bois_dtu]` « bois **et** hélicoïdal ». Interprétation Blondel (voir LEDGER) : la
- * lecture purement disjonctive imposerait la ligne de foulée hélicoïdale à 600 mm à tout escalier bois.
+ * Contextes de **forme** de l'escalier (`contextes_forme` de rules.yaml). Dans une règle, ils
+ * qualifient les autres contextes : `[erp_securite, tournant, helicoidal]` se lit « ERP **et**
+ * (tournant **ou** hélicoïdal) », `[helicoidal, bois_dtu]` « bois **et** hélicoïdal ».
+ * Interprétation Blondel (LEDGER l. 47, écrite en tête de rules.yaml et dans ADR-0004) : la
+ * lecture purement disjonctive imposerait la ligne de foulée hélicoïdale à 600 mm à tout
+ * escalier bois.
  */
-export const SHAPE_CONTEXTS: ReadonlySet<string> = new Set([
-  "tournant",
-  "helicoidal",
-  "helicoidal_fut",
-]);
+export const SHAPE_CONTEXTS: ReadonlySet<string> = new Set(RULE_TABLE.contextes_forme);
 
 /**
  * Contextes toujours déduits (jamais saisis) : l'interface ne les propose pas. `helicoidal` reste
@@ -170,11 +168,11 @@ export function resolveContexts(
 }
 
 /**
- * Une règle s'applique si :
+ * Une règle s'applique si aucun de ses contextes exclus (`contexte_exclu`) n'est actif et si :
  * - elle porte `tous`, ou
  * - (aucun de ses contextes hors forme, ou au moins un actif) **et** (aucun contexte de forme,
- *   ou au moins un actif) — avec au moins un contexte effectivement actif ;
- * - et aucun de ses contextes exclus (`contexte_exclu`) n'est actif.
+ *   ou au moins un actif). Chaque groupe est une disjonction, les deux groupes une conjonction
+ *   (sémantique écrite en tête de rules.yaml et dans ADR-0004).
  */
 export function isRuleApplicable(
   rule: RuleDef,

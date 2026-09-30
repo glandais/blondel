@@ -36,9 +36,12 @@ import {
 } from "../model/project.js";
 import type { Layout } from "../model/derived.js";
 import type { Vec2 } from "../model/primitives.js";
+import { LF_WIDE_THRESHOLD } from "../rules/params.js";
 import { getRule } from "../rules/table.js";
 import { SteppingError } from "../stepping/errors.js";
 import { placeNosings } from "../stepping/positions.js";
+import { computeStepping } from "../stepping/stepping.js";
+import { MAX_BALANCED_EXTENT } from "../stepping/zones.js";
 import { computeRises } from "../stepping/rises.js";
 import { createHelicalProject } from "./presetHelical.js";
 
@@ -115,9 +118,10 @@ function ruleMin(id: string): number {
 export const PRESET_HEADROOM_MIN: number = ruleMin("ECHAPPEE_MIN_DTU");
 /**
  * Emmarchement maximal pour lequel la ligne de foulée est au milieu (`LF_POSITION_DTU_ETROIT` :
- * « E <= 1200 => d_lf = E / 2 ») : hypothèse du calcul des longueurs de volées.
+ * « E <= 1200 => d_lf = E / 2 ») : hypothèse du calcul des longueurs de volées. Lu dans
+ * rules.yaml (`parametres.E_seuil`).
  */
-const WALKLINE_MIDDLE_MAX_WIDTH = 1200;
+const WALKLINE_MIDDLE_MAX_WIDTH = LF_WIDE_THRESHOLD.value;
 /**
  * Débord de nez des préréglages : valeur recommandée de `DEBORD_NEZ_LOGEMENT` (10 mm), car les
  * préréglages ciblent le contexte `logement_interieur`. Le défaut du modèle (`TreadSpecSchema`)
@@ -307,6 +311,84 @@ function windersLegs(
   for (let i = 0; i < middleCount; i++) legs.push(Math.round(middle + 2 * width));
   legs.push(Math.round(lastStraight + width));
   return legs;
+}
+
+/** Préréglages dont la position du premier tournant s'adapte à E (QUESTIONS D1). */
+const ADAPTIVE_FIRST_TURN_PRESETS: ReadonlySet<PresetId> = new Set(["two-quarters-u", "half-turn"]);
+
+/**
+ * Pas de recherche de la position du premier tournant, en girons : résolution de la recherche
+ * (pas une valeur métier ; les longueurs sont de toute façon arrondies au mm).
+ */
+const FIRST_TURN_SEARCH_STEP = 0.25;
+
+/** Collet minimal (corde) des marches balancées et présence d'une rupture K3 signalée. */
+function steppingScore(project: Project): { collet: number; k3: boolean } | null {
+  try {
+    const st = computeStepping(project, computeLayout(project));
+    const winders = st.treads.filter((t) => t.kind === "winder");
+    const collet = winders.length > 0 ? Math.min(...winders.map((t) => t.colletChord)) : Infinity;
+    return { collet, k3: st.notes.some((note) => note.startsWith("K3 :")) };
+  } catch (e) {
+    if (e instanceof LayoutError || e instanceof SteppingError) return null;
+    throw e;
+  }
+}
+
+/**
+ * Position du premier tournant d'un U ou d'un demi-tournant **fonction de E** (QUESTIONS D1) :
+ * la position du préréglage (`firstStraightGoings`, réglée pour l'emmarchement par défaut)
+ * est gardée si le collet minimal y atteint `G_COLLET_MIN.min` (rules.yaml) sans rupture K3 ;
+ * sinon, aucune valeur n'étant inventée, elle est **dérivée de la géométrie** : chaque position
+ * de 1 giron jusqu'à l'étendue de balancement K7 (`balancing.maxBalancedExtent`, défaut
+ * `MAX_BALANCED_EXTENT`), par pas de `FIRST_TURN_SEARCH_STEP` girons, est découpée comme le
+ * pipeline (`computeStepping`, choix automatique du balancement) et la meilleure est retenue :
+ * sans rupture K3 d'abord, puis au plus grand collet minimal (à égalité, la plus proche de la
+ * position du préréglage). La volée intermédiaire (jour du préréglage) est inchangée. Le
+ * collet peut rester sous le minimum si aucune position ne l'atteint (U ou demi-tournant très
+ * large à certaines hauteurs) : le contrôle de conception le signale.
+ */
+function adaptFirstTurn(
+  project: Project,
+  shape: PresetShape,
+  turns: readonly TurnDirection[],
+  width: number,
+  n: number,
+  going: number,
+): Project {
+  const target = getRule("G_COLLET_MIN").min;
+  const withLegs = (legs: readonly number[]): Project => ({
+    ...project,
+    stair: {
+      ...project.stair,
+      layout: { ...project.stair.layout, legs: legs.map((length) => ({ length })) },
+    },
+  });
+  const current = steppingScore(project);
+  if (target === null || current === null) return project;
+  if (!current.k3 && current.collet >= target) return project;
+  const extent = project.stair.balancing.maxBalancedExtent ?? MAX_BALANCED_EXTENT;
+  let best = { project, score: current, distance: 0 };
+  const better = (s: { collet: number; k3: boolean }, distance: number): boolean =>
+    s.k3 !== best.score.k3
+      ? !s.k3
+      : s.collet > best.score.collet + 1e-9 ||
+        (Math.abs(s.collet - best.score.collet) <= 1e-9 && distance < best.distance);
+  for (let f = 1; f <= extent + 1e-9; f += FIRST_TURN_SEARCH_STEP) {
+    if (Math.abs(f - shape.firstStraightGoings) < 1e-9) continue;
+    let legs: number[];
+    try {
+      legs = windersLegs({ ...shape, firstStraightGoings: f }, width, turns, n, going);
+    } catch (e) {
+      if (e instanceof RangeError) continue;
+      throw e;
+    }
+    const candidate = withLegs(legs);
+    const score = steppingScore(candidate);
+    const distance = Math.abs(f - shape.firstStraightGoings);
+    if (score !== null && better(score, distance)) best = { project: candidate, score, distance };
+  }
+  return best.project;
 }
 
 /**
@@ -529,7 +611,16 @@ export function createProject(preset: PresetId, options: PresetOptions = {}): Pr
     },
   };
   // Copie profonde : voir `parseProject` (objets par défaut partagés par zod 4).
-  const project = structuredClone(ProjectSchema.parse(deepMerge(input, options.patch)));
+  const parsed = structuredClone(ProjectSchema.parse(deepMerge(input, options.patch)));
+  // U et demi-tournant : position du premier tournant adaptée à E si celle du préréglage
+  // laisse le collet sous G_COLLET_MIN (QUESTIONS D1).
+  const project =
+    shape.mode === "winders" &&
+    ADAPTIVE_FIRST_TURN_PRESETS.has(preset) &&
+    patch?.stair?.layout?.legs === undefined &&
+    patch?.stair?.layout?.turns === undefined
+      ? adaptFirstTurn(parsed, shape, turns, width, n, going)
+      : parsed;
   // Trémie donnée explicitement : elle remplace le calcul.
   if (patch?.site?.opening !== undefined) return project;
   let opening: Rect | null;

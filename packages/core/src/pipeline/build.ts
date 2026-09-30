@@ -38,7 +38,9 @@ import type {
   Layout,
   Model,
   ModelPrecheck,
+  ModelUpperFloor,
   Part,
+  PartFamilyId,
   RuleResult,
   Severity,
   Stepping,
@@ -46,6 +48,7 @@ import type {
 import type { StructureContext, StructureKind } from "../model/plugins.js";
 import type { Project } from "../model/project.js";
 import { buildBasicParts } from "../parts/basic.js";
+import { checkSolids } from "../parts/solidChecks.js";
 import { precheckStringers, structurePrecheckSettings } from "../precheck/stringers.js";
 import { evaluateComplianceDetailed, unknownOverrideNote } from "../rules/engine.js";
 import { findRule } from "../rules/table.js";
@@ -198,6 +201,62 @@ function stableNewelTops(tops: NewelTops | undefined): NewelTops | undefined {
   return tops;
 }
 
+/**
+ * Clés de mémoïsation du site : chaque champ (nom, valeur) **sauf le calque de fond**
+ * (`site.underlay`), qu'aucune étape ne lit. Régler le calque ne recalcule ni la structure, ni
+ * les garde-corps, ni l'échappée, ni le contrôle (QUESTIONS D5). Liste générique : un champ
+ * ajouté au site est une dépendance par défaut.
+ */
+function siteKeys(site: Project["site"]): unknown[] {
+  const out: unknown[] = [];
+  const record = site as unknown as Readonly<Record<string, unknown>>;
+  for (const k of Object.keys(record).sort()) if (k !== "underlay") out.push(k, record[k]);
+  return out;
+}
+
+let lastUpperFloor:
+  | {
+      readonly site: Pick<Project["site"], "opening" | "upperSlabThickness">;
+      readonly value: ModelUpperFloor;
+    }
+  | undefined;
+
+/**
+ * Plancher haut du modèle (`Model.upperFloor`, QUESTIONS D5) : épaisseur et contour de la trémie
+ * (ordre de saisie, rectangle converti), à identité stable tant que la trémie et l'épaisseur sont
+ * les mêmes.
+ */
+function upperFloorOf(site: Project["site"]): ModelUpperFloor {
+  const prev = lastUpperFloor;
+  if (
+    prev !== undefined &&
+    prev.site.opening === site.opening &&
+    prev.site.upperSlabThickness === site.upperSlabThickness
+  )
+    return prev.value;
+  const o = site.opening;
+  const opening =
+    o === undefined
+      ? undefined
+      : o.kind === "polygon"
+        ? o.points.map((p) => ({ x: p.x, y: p.y }))
+        : [
+            { x: o.x, y: o.y },
+            { x: o.x + o.sizeX, y: o.y },
+            { x: o.x + o.sizeX, y: o.y + o.sizeY },
+            { x: o.x, y: o.y + o.sizeY },
+          ];
+  const value: ModelUpperFloor = {
+    slabThickness: site.upperSlabThickness,
+    ...(opening ? { opening } : {}),
+  };
+  lastUpperFloor = {
+    site: { opening: site.opening, upperSlabThickness: site.upperSlabThickness },
+    value,
+  };
+  return value;
+}
+
 /** Caches par étape (dernier résultat). */
 const caches = {
   layout: new LastValueCache<Stage<Layout>>(),
@@ -213,6 +272,7 @@ let models = new WeakMap<Project, Model>();
 /** Vide les caches (tests, mesures de performance). */
 export function clearModelCache(): void {
   lastNewelTops = undefined;
+  lastUpperFloor = undefined;
   for (const c of Object.values(caches)) c.clear();
   models = new WeakMap();
 }
@@ -270,6 +330,29 @@ function resolveStructureParams(
   return parsed.data;
 }
 
+/** Famille par défaut d'une pièce propre au plugin : marche, contremarche, palier, sinon ossature. */
+function pluginFamily(p: Part): PartFamilyId {
+  return p.category === "tread" || p.category === "riser" || p.category === "landing"
+    ? "treads"
+    : "structure";
+}
+
+/**
+ * Pièce de plugin qui remplace une pièce de base : elle en hérite la famille et le numéro de
+ * marche (QUESTIONS D6) si elle ne les porte pas elle-même.
+ */
+function inheritFrom(base: Part, p: Part): Part {
+  const family = p.family ?? base.family ?? pluginFamily(p);
+  const treadNumber = p.treadNumber ?? base.treadNumber;
+  if (p.family === family && p.treadNumber === treadNumber) return p;
+  return { ...p, family, ...(treadNumber !== undefined ? { treadNumber } : {}) };
+}
+
+/** Pièce propre au plugin, avec sa famille (`family` du plugin, sinon selon la catégorie). */
+function withFamily(p: Part, family: PartFamilyId = pluginFamily(p)): Part {
+  return p.family !== undefined ? p : { ...p, family };
+}
+
 /** Pièces de base remplacées (même `id`) ou complétées par celles du plugin. */
 function mergeParts(
   base: readonly Part[],
@@ -280,9 +363,14 @@ function mergeParts(
   // Pièces de base supprimées par la structure (`StructureOutput.removedBaseParts`), sauf si
   // elle fournit elle-même une pièce de même identifiant (remplacement).
   const drop = new Set(removed.filter((id) => !byId.has(id)));
-  const out = base.filter((p) => !drop.has(p.id)).map((p) => byId.get(p.id) ?? p);
+  const out = base
+    .filter((p) => !drop.has(p.id))
+    .map((p) => {
+      const r = byId.get(p.id);
+      return r ? inheritFrom(p, r) : p;
+    });
   const baseIds = new Set(base.map((p) => p.id));
-  for (const p of extra) if (!baseIds.has(p.id)) out.push(p);
+  for (const p of extra) if (!baseIds.has(p.id)) out.push(withFamily(p));
   return out;
 }
 
@@ -340,6 +428,7 @@ export function buildModel(project: Project, options: BuildModelOptions = {}): M
     memo ? cache.get(keys, fn) : fn();
 
   const { site, stair } = project;
+  const siteKey = siteKeys(site);
   const errors: string[] = [];
   const notes: string[] = [];
 
@@ -359,6 +448,8 @@ export function buildModel(project: Project, options: BuildModelOptions = {}): M
   );
   if (layoutStage.error !== undefined) errors.push(layoutStage.error);
   const layout = layoutStage.value;
+  // Emprise dégénérée (volées qui se touchent ou se superposent, jour de longueur nulle, D3).
+  if (layout?.errors) errors.push(...layout.errors);
 
   // 2. Découpage.
   const steppingStage: Stage<Stepping> | undefined = layout
@@ -373,7 +464,10 @@ export function buildModel(project: Project, options: BuildModelOptions = {}): M
           stair.walkline,
           stair.stepping,
           stair.balancing,
-          stair.treads,
+          // Des marches, le découpage ne lit que le débord (bord arrière des marches) et
+          // l'épaisseur (hélicoïdal) : contremarches et essence ne le recalculent pas (D5).
+          stair.treads.nosing,
+          stair.treads.thickness,
           stair.nosingOverrides,
           stair.structure.kind,
           site.floorToFloor,
@@ -395,14 +489,19 @@ export function buildModel(project: Project, options: BuildModelOptions = {}): M
             project.guards,
             layout,
             stepping,
-            site,
+            ...siteKey,
             stair.layout,
             project.workshop,
             // `handrail.wallSides: auto` dépend des contextes réglementaires (QUESTIONS A2) :
             // sans cette clé, changer de contexte (logement → ERP) rendait l'ancien résultat.
             autoHandrailBothSides(project, stepping),
           ],
-          () => attempt(STAGE_LABELS.guards, () => computeGuards(project, layout, stepping)),
+          () =>
+            attempt(STAGE_LABELS.guards, (): GuardsAnalysis => {
+              const g = computeGuards(project, layout, stepping);
+              // Famille explicite des pièces de garde-corps (QUESTIONS D6).
+              return { ...g, parts: g.parts.map((p) => withFamily(p, "guards")) };
+            }),
         )
       : undefined;
   const newelHandrailTops = stableNewelTops(guardsStage?.value?.newelHandrailTops);
@@ -437,7 +536,7 @@ export function buildModel(project: Project, options: BuildModelOptions = {}): M
               stepping,
               plugin,
               stair,
-              site,
+              ...siteKey,
               project.compliance,
               project.workshop,
               newelHandrailTops,
@@ -503,11 +602,14 @@ export function buildModel(project: Project, options: BuildModelOptions = {}): M
       guardResults = guardChecks(project, stepping, guards);
     }
   }
+  // Solides dégénérés (dette D3 : profondeur nulle, section plate, balayage auto-intersecté),
+  // contrôle mémoïsé par solide (`parts/solidChecks.ts`).
+  errors.push(...checkSolids(parts));
 
   // 4. Échappée.
   let headroom: HeadroomAnalysis | null = null;
   if (complete) {
-    const headroomStage = run(caches.headroom, [layout, stepping, site], () =>
+    const headroomStage = run(caches.headroom, [layout, stepping, ...siteKey], () =>
       attempt(STAGE_LABELS.headroom, () => computeHeadroom(site, layout, stepping)),
     );
     if (headroomStage.error !== undefined) errors.push(headroomStage.error);
@@ -532,7 +634,7 @@ export function buildModel(project: Project, options: BuildModelOptions = {}): M
     caches.compliance,
     [
       project.compliance,
-      site,
+      ...siteKey,
       stair,
       project.rulesVersion,
       layoutOut,
@@ -584,6 +686,7 @@ export function buildModel(project: Project, options: BuildModelOptions = {}): M
     ...(headroomUnlimited ? { headroomUnlimited } : {}),
     ...(executionClass ? { executionClass } : {}),
     ...(precheck ? { precheck } : {}),
+    upperFloor: upperFloorOf(site),
     errors,
     ...(notes.length > 0 ? { notes } : {}),
   };

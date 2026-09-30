@@ -6,7 +6,7 @@ import type { Mm, Vec2, Vec3 } from "@blondel/core";
 import { signedVolume } from "./analysis.js";
 import { GeometryError } from "./errors.js";
 import { addCap, addGrid } from "./grid.js";
-import { MeshBuilder, emptyMesh, flipMesh, type Mesh } from "./mesh.js";
+import { MeshBuilder, flipMesh, type Mesh } from "./mesh.js";
 import { creaseCos, maxPathPoints, type MeshOptions } from "./options.js";
 import { EPS } from "./polygon.js";
 import { add, cross, dot, length, normalize, scale, sub, v3 } from "./vec3.js";
@@ -37,7 +37,7 @@ export function meshRuled(
   if (m > maxPathPoints(options)) throw new GeometryError("surface réglée trop longue");
   if (!Number.isFinite(thickness)) throw new GeometryError("épaisseur non finie");
   const crease = creaseCos(options, 30);
-  if (Math.abs(thickness) <= 1e-9) return emptyMesh();
+  if (Math.abs(thickness) <= 1e-9) throw new GeometryError("surface réglée d'épaisseur nulle");
   const rows: number[][] = [];
   for (let i = 0; i < m; i++) {
     const n = normals[i]!;
@@ -126,6 +126,6 @@ export function meshRuled(
     const s = reverse ? -1 : 1;
     addCap(mb, cap, quad, [s * n.x, s * n.y, s * n.z], reverse);
   }
-  const mesh = mb.build();
+  const mesh = mb.build(options.localOrigin === true);
   return signedVolume(mesh) < 0 ? flipMesh(mesh) : mesh;
 }

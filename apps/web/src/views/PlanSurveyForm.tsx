@@ -37,16 +37,20 @@ export function parseMm(text: string): number {
 }
 
 /**
- * Limite du contrôle par la sixième mesure : plus grande erreur isolée qui passerait inaperçue
- * (voir `detectable` dans `openingFromSurvey`).
+ * Limite du contrôle par la sixième mesure : plus grande erreur isolée qui passerait inaperçue,
+ * dans le sens défavorable (`undetectable` de `openingFromSurvey`, et non `detectable`, plus
+ * petit des deux sens, qui sous-estimerait l'angle mort sur un quadrilatère mal conditionné).
  */
-export function blindSpot(detectable: Readonly<Record<SurveyMeasure, number>>): string {
+export function blindSpot(
+  result: Pick<Extract<SurveyResult, { ok: true }>, "undetectable">,
+): string {
+  const blind = result.undetectable;
   let worst: SurveyMeasure = SURVEY_MEASURES[0]!;
-  for (const k of SURVEY_MEASURES) if (detectable[k] > detectable[worst]) worst = k;
-  const t = detectable[worst];
+  for (const k of SURVEY_MEASURES) if (blind[k] > blind[worst]) worst = k;
+  const t = blind[worst];
   const label = LABELS[worst].toLowerCase();
   return Number.isFinite(t)
-    ? `Limite du contrôle : une erreur isolée de moins de ${fmt(t)} mm sur la mesure « ${label} » ne serait pas détectée ; la vérifier deux fois.`
+    ? `Limite du contrôle : une erreur isolée allant jusqu'à ${fmt(t)} mm sur la mesure « ${label} » peut ne pas être détectée ; la vérifier deux fois.`
     : `Limite du contrôle : une erreur sur la mesure « ${label} » ne peut pas être détectée ; la vérifier deux fois.`;
 }
 
@@ -194,7 +198,7 @@ export function PlanSurveyForm({ onPreview }: Props) {
             Angles A, B, C, D : {result.angles.map((a) => `${fmt(a, 1)}°`).join(", ")}
             {result.convex ? "" : " (trémie non convexe)"}.
           </span>
-          <span>{blindSpot(result.detectable)}</span>
+          <span>{blindSpot(result)}</span>
         </div>
       )}
       <div className="button-row">

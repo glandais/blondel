@@ -125,6 +125,79 @@ describe("intégration : demi-tournant balancé, acier, tôle pliée, garde-corp
     expect(byCategory(m, "tread").every((t) => t.material.startsWith("wood-"))).toBe(true);
   });
 
+  it("mémoïsation : régler le calque ne recalcule ni structure, ni garde-corps, ni échappée", () => {
+    const p = load(HALF_TURN);
+    const first = buildModel(p);
+    const before = modelCacheStats();
+    // Calque de fond : jamais lu par le pipeline (QUESTIONS D5).
+    const q = { ...p, site: { ...p.site, underlay: { opacity: 0.3 } } };
+    const second = buildModel(q);
+    const after = modelCacheStats();
+    expect(after.stepping.hits).toBe(before.stepping.hits + 1);
+    expect(after.structure.hits).toBe(before.structure.hits + 1);
+    expect(after.guards.hits).toBe(before.guards.hits + 1);
+    expect(after.headroom.hits).toBe(before.headroom.hits + 1);
+    expect(after.compliance.hits).toBe(before.compliance.hits + 1);
+    expect(second.parts).toEqual(first.parts);
+    expect(second.compliance).toEqual(first.compliance);
+    expect(second).toEqual(buildModel(q, { memo: false }));
+  });
+
+  it("mémoïsation : l'épaisseur de contremarche ne recalcule pas le découpage", () => {
+    const p = load(HALF_TURN);
+    const first = buildModel(p);
+    const before = modelCacheStats();
+    const q = {
+      ...p,
+      stair: { ...p.stair, treads: { ...p.stair.treads, riserThickness: 25 } },
+    };
+    const second = buildModel(q);
+    const after = modelCacheStats();
+    expect(after.stepping.hits).toBe(before.stepping.hits + 1);
+    expect(second.stepping).toBe(first.stepping);
+    expect(after.parts.misses).toBe(before.parts.misses + 1);
+    // Résultat identique à un recalcul complet.
+    expect(second).toEqual(buildModel(q, { memo: false }));
+  });
+
+  it("pièces : famille et numéro de marche explicites (sans convention d'identifiant)", () => {
+    const m = buildModel(load(HALF_TURN));
+    for (const p of m.parts) expect(p.family, p.id).toBeDefined();
+    const guards = m.parts.filter((p) => p.family === "guards");
+    expect(guards.length).toBeGreaterThan(0);
+    expect(guards.some((p) => p.category === "handrail")).toBe(true);
+    expect(m.parts.some((p) => p.family === "structure" && p.category === "stringer")).toBe(true);
+    // Une pièce par marche (tôle pliée du plugin comprise), repérée par son numéro.
+    for (const t of m.stepping.treads) {
+      const own = m.parts.filter((p) => p.treadNumber === t.number);
+      expect(own, `marche ${t.number}`).toHaveLength(1);
+      expect(own[0]!.family).toBe("treads");
+    }
+    expect(m.parts.filter((p) => p.category === "riser").every((p) => p.family === "treads")).toBe(
+      true,
+    );
+  });
+
+  it("Model.upperFloor : trémie et dalle reprises du site, identité stable", () => {
+    const p = load(HALF_TURN);
+    const a = buildModel(p);
+    expect(a.upperFloor?.slabThickness).toBe(p.site.upperSlabThickness);
+    const o = p.site.opening;
+    expect(o?.kind).toBe("rect");
+    if (o?.kind !== "rect") return;
+    expect(a.upperFloor?.opening).toEqual([
+      { x: o.x, y: o.y },
+      { x: o.x + o.sizeX, y: o.y },
+      { x: o.x + o.sizeX, y: o.y + o.sizeY },
+      { x: o.x, y: o.y + o.sizeY },
+    ]);
+    const b = buildModel({ ...p, name: "autre" });
+    expect(b.upperFloor).toBe(a.upperFloor);
+    const { opening: _, ...noOpening } = p.site;
+    const c = buildModel({ ...p, site: noOpening });
+    expect(c.upperFloor).toEqual({ slabThickness: p.site.upperSlabThickness });
+  });
+
   it("structure bois (sans métal) : pas de classe d'exécution", () => {
     const m = buildModel(load("j3a-acceptance-01-bois.blondel.json"));
     expect(m.executionClass).toBeUndefined();

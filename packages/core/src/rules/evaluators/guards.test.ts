@@ -6,7 +6,7 @@ import { computeStepping } from "../../stepping/stepping.js";
 import { createProject } from "../../project/presets.js";
 import { makeSteppingProject } from "../../stepping/test-helpers.js";
 import { evaluateCompliance } from "../engine.js";
-import { DESCRIPTION_CONSTANTS } from "../formula-constants.js";
+import { GC_LOAD_HOUSING, GC_LOAD_PUBLIC } from "../params.js";
 import { getRule } from "../table.js";
 import { guardHeightTable, requiredGuardHeight2024 } from "./guards.js";
 
@@ -38,7 +38,7 @@ function evaluate(p: Project, id: string): RuleResult[] {
 const statuses = (rs: readonly RuleResult[]): string[] => rs.map((r) => r.status);
 
 describe("table h(E) de GC_HAUTEUR_2024", () => {
-  it("lue dans la description, valeurs à condition (b) plafonnées à 900 mm", () => {
+  it("valeurs à condition (b) plafonnées à 900 mm", () => {
     const t = guardHeightTable();
     expect(t?.steps).toHaveLength(7);
     expect(t?.floorB).toBe(900);
@@ -50,11 +50,13 @@ describe("table h(E) de GC_HAUTEUR_2024", () => {
     expect(requiredGuardHeight2024(600)).toBe(900); // 800 (b) → 900
   });
 
-  it("les constantes lues dans les descriptions y figurent toujours", () => {
-    for (const c of DESCRIPTION_CONSTANTS) {
-      expect(getRule(c.ruleId).description).toContain(c.excerpt);
-      expect(c.excerpt).toContain(String(c.value).replace(".", ","));
-    }
+  it("lue dans le champ structuré `tables.h_E`, pas dans la description", () => {
+    const rule = getRule("GC_HAUTEUR_2024");
+    expect(rule.tables?.["h_E"]).toHaveLength(7);
+    expect(rule.parametres?.["H_plancher_condition_b"]).toBe(900);
+    // Charges horizontales par catégorie : champ structuré de CHARGE_GC_HORIZONTALE.
+    expect(GC_LOAD_HOUSING.value).toBe(0.6);
+    expect(GC_LOAD_PUBLIC.value).toBe(1);
   });
 });
 

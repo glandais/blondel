@@ -69,6 +69,12 @@ describe("meshPart / meshParts", () => {
     });
     expect(meshPart(p).mesh).toBe(a.mesh);
     expect(meshPart(p, { creaseAngleDeg: 10 }).mesh).not.toBe(a.mesh);
+    // Repère local : cache distinct, même géométrie ramenée au monde.
+    const l = meshPart(p, { localOrigin: true });
+    expect(l.mesh).not.toBe(a.mesh);
+    expect(meshPart(p, { localOrigin: true }).mesh).toBe(l.mesh);
+    expect(meshPart(p, { localOrigin: false }).mesh).toBe(a.mesh);
+    expect(l.mesh.origin).toBeDefined();
   });
 
   it("une pièce invalide donne un maillage vide et un message, sans interrompre les autres", () => {
@@ -107,5 +113,25 @@ describe("meshSolid — robustesse (revue)", () => {
     expect(r1.error).toMatch(/inconnu/);
     expect(r1.mesh.indices.length).toBe(0);
     expect(meshPart(p).error).toMatch(/inconnu/);
+  });
+});
+
+describe("meshSolid — repère de section déclaré", () => {
+  it("`sweep.frame` prime sur l'option de maillage (hélice : `parallel` fait tourner la section)", () => {
+    const path = Array.from({ length: 49 }, (_, i) => {
+      const a = (i / 48) * 2 * Math.PI;
+      return { x: 600 * Math.cos(a), y: 600 * Math.sin(a), z: (3000 * i) / 48 };
+    });
+    const section = { outer: rect(0, 0, 60, 20), holes: [] };
+    const upright = meshSolid({ kind: "sweep", path, section });
+    const declared = meshSolid({ kind: "sweep", path, section, frame: "parallel" });
+    const viaOption = meshSolid({ kind: "sweep", path, section }, { sweepFrame: "parallel" });
+    expect(Array.from(declared.positions)).toEqual(Array.from(viaOption.positions));
+    expect(Array.from(declared.positions)).not.toEqual(Array.from(upright.positions));
+    const forced = meshSolid(
+      { kind: "sweep", path, section, frame: "upright" },
+      { sweepFrame: "parallel" },
+    );
+    expect(Array.from(forced.positions)).toEqual(Array.from(upright.positions));
   });
 });

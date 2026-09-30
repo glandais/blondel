@@ -30,6 +30,7 @@ import { GuardError } from "./errors.js";
 import { autoHandrailBothSides } from "./handrailSides.js";
 import {
   inNarrowJour,
+  outsideNarrowJour,
   jourWidth,
   NARROW_JOUR_PREFIX,
   narrowJourThreshold,
@@ -901,29 +902,64 @@ export function computeGuards(
   for (const { edge, analysis } of sideResults) {
     if (!spec.flight.enabled || stepping.nosings.length === 0) break;
     const hasVoid = analysis.intervals.some((iv) => iv.kind === "void" && iv.to - iv.from >= 1);
+    let sourceIntervals: readonly SideInterval[] = analysis.intervals;
+    /** Jour étroit : clôture de la ligne (chute hors du jour restée sans garde-corps). */
+    let finishNarrow:
+      ((unguarded: readonly SideInterval[], built: readonly SideInterval[]) => void) | null = null;
     if (analysis.side === "inner" && narrowJour && hasVoid) {
-      // Chute dans l'emprise du jour (conseil) et hors de celle-ci (volée plus longue que celle
-      // d'en face, vide ouvert : GC_OBLIGATOIRE garde sa sévérité, revue A10).
+      // Chute dans l'emprise du jour (conseil, pas de garde-corps de jour) ; hors de celle-ci
+      // (volée plus longue que celle d'en face, vide ouvert), garde-corps **partiel** sur
+      // l'intervalle qui borde ce vide (décision A10 du 2026-09-30) : GC_OBLIGATOIRE y est
+      // respecté ; une partie hors du jour restée sans garde-corps garde sa sévérité.
       const zones = narrowJourZones(layout, project.stair.layout.turns, narrow, edge.points);
       const inJour = (p: Vec2) => inNarrowJour(p, zones);
-      const jf = sideFall(edge, analysis.intervals, stepping, 0, inJour);
-      const of = sideFall(edge, analysis.intervals, stepping, 0, (p) => !inJour(p));
-      narrowJourInfo = {
-        width: jour,
-        threshold: narrow,
-        jourFall: jf.maxFall,
-        ...(jf.at ? { jourFallAt: jf.at } : {}),
-        outsideFall: of.maxFall,
-        ...(of.at ? { outsideFallAt: of.at } : {}),
+      const outside: SideInterval[] = [];
+      // Portion hors du jour plus courte que la sphère T1 (`narrow`) le long du bord : elle
+      // n'ouvre pas de passage de la sphère et prolonge le jour ; rattachée au jour (conseil),
+      // sans garde-corps (un garde-corps de quelques mm donnait une main courante
+      // auto-intersectée, revue A10 du 2026-09-30).
+      const absorbed: SideInterval[] = [];
+      for (const iv of analysis.intervals) {
+        if (iv.kind !== "void") continue;
+        for (const part of outsideNarrowJour(edge.points, edge.cum, iv.from, iv.to, zones)) {
+          if (part.to - part.from >= narrow) outside.push({ ...iv, ...part });
+          else absorbed.push({ ...iv, ...part });
+        }
+      }
+      sourceIntervals = outside;
+      const jfIn = sideFall(edge, analysis.intervals, stepping, 0, inJour);
+      const jfAbsorbed = sideFall(edge, absorbed, stepping, 0);
+      const jf = jfAbsorbed.maxFall > jfIn.maxFall ? jfAbsorbed : jfIn;
+      const jourNote = `${NARROW_JOUR_PREFIX} : jour de ${fmt(jour, 0)} mm, plus étroit que la sphère T1 (${fmt(narrow, 0)} mm) : pas de garde-corps de jour (décision A10), protection contre les chutes côté jour signalée en conseil. Si le jour est fermé, régler le côté jour des garde-corps sur « mur ».`;
+      finishNarrow = (unguarded, built) => {
+        // Chute hors du jour : nez des portions restées sans garde-corps (ligne non générée).
+        const of = sideFall(edge, unguarded, stepping, 0, (p) => !inJour(p));
+        const guardedFall = sideFall(edge, built, stepping, 0, (p) => !inJour(p));
+        narrowJourInfo = {
+          width: jour,
+          threshold: narrow,
+          jourFall: jf.maxFall,
+          ...(jf.at ? { jourFallAt: jf.at } : {}),
+          outsideFall: of.maxFall,
+          ...(of.at ? { outsideFallAt: of.at } : {}),
+          ...(built.length > 0
+            ? {
+                partialGuards: built.length,
+                guardedFall: guardedFall.maxFall,
+              }
+            : {}),
+        };
+        notes.push(
+          built.length > 0
+            ? `${jourNote} Garde-corps de jour partiel sur ${built.length > 1 ? `${built.length} portions` : "la portion"} de la volée qui borde un vide hors du jour (${built.map((b) => `${fmt(b.to - b.from, 0)} mm`).join(", ")}).`
+            : jourNote,
+        );
       };
-      notes.push(
-        `${NARROW_JOUR_PREFIX} : jour de ${fmt(jour, 0)} mm, plus étroit que la sphère T1 (${fmt(narrow, 0)} mm) : pas de garde-corps de jour (décision A10), protection contre les chutes côté jour signalée en conseil. Si le jour est fermé, régler le côté jour des garde-corps sur « mur ».`,
-      );
-      continue;
     }
     // Portions vides, coupées aux poteaux d'angle du tracé (le garde-corps s'y arrête).
     const voids: SideInterval[] = [];
-    for (const iv of analysis.intervals) {
+    const builtIntervals: SideInterval[] = [];
+    for (const iv of sourceIntervals) {
       if (iv.kind !== "void" || iv.to - iv.from < 1) continue;
       let from = iv.from;
       for (const nw of edge.newels) {
@@ -1044,7 +1080,12 @@ export function computeGuards(
           `Garde-corps ${SIDE_LABEL[analysis.side]} : le poteau d'angle du tracé tient lieu de poteau de garde-corps (aucune pièce ajoutée).`,
         );
       }
+      builtIntervals.push(iv);
     }
+    finishNarrow?.(
+      voids.filter((v) => !builtIntervals.includes(v)),
+      builtIntervals,
+    );
   }
 
   // Mains courantes murales.

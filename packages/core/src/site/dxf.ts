@@ -1,7 +1,7 @@
 /**
  * Lecture d'un plan de masse DXF (jalon 7) en calque de fond : entités LINE, LWPOLYLINE,
- * POLYLINE (2D), ARC et CIRCLE de l'espace objet, blocs (INSERT) développés, converties en
- * entités simplifiées **en mm** (`UnderlayEntity`).
+ * POLYLINE (2D), ARC, CIRCLE, ELLIPSE et SPLINE de l'espace objet, blocs (INSERT) développés,
+ * converties en entités simplifiées **en mm** (`UnderlayEntity`).
  *
  * Point d'entrée séparé (`@blondel/core/dxf`) : le lecteur `dxf-parser` n'est chargé qu'à la
  * demande par l'interface et n'alourdit ni le paquet principal ni le worker de calcul.
@@ -12,9 +12,15 @@
  *
  * Simplifications (calque de saisie, pas de relecture fidèle) : coordonnées arrondies au
  * centième de mm ; les arcs soumis à une transformation non conforme (bloc à échelles x ≠ y)
- * sont discrétisés en polylignes (pas angulaire `ARC_TESSELLATION_STEP_DEG`) ; élévations et
- * cotes Z ignorées (projection en plan) ; textes, cotes, hachures, splines, ellipses ignorés et
- * comptés dans `skipped`. Le nombre d'entités et de sommets est borné (`UNDERLAY_MAX_*`).
+ * sont discrétisés en polylignes (pas angulaire `ARC_TESSELLATION_STEP_DEG`) ; ellipses
+ * (arcs d'ellipse compris) discrétisées au même pas de paramètre, dans le plan XY (extrusion
+ * supposée +Z, non lue par `dxf-parser`) ; splines **approchées** par une polyligne
+ * (`SPLINE_SAMPLES_PER_SPAN` points par intervalle de nœuds, algorithme de de Boor ; poids des
+ * splines rationnelles non lus par `dxf-parser`, donc supposés égaux ; spline sans points de
+ * contrôle : polyligne de ses points de lissage) ; élévations et cotes Z ignorées (projection en
+ * plan) ; textes, cotes, hachures ignorés et comptés dans `skipped`, résumés en français par
+ * `describeSkipped` pour l'utilisateur. Le nombre d'entités et de sommets est borné
+ * (`UNDERLAY_MAX_*`).
  */
 import DxfParser from "dxf-parser";
 import * as V from "../geom2d/vec.js";
@@ -47,6 +53,11 @@ export const INSUNITS_MM: Readonly<Record<number, { readonly mm: number; readonl
 
 /** Pas angulaire (degrés) de discrétisation des arcs déformés par un bloc. */
 export const ARC_TESSELLATION_STEP_DEG = 10;
+/**
+ * Points d'une spline approchée par intervalle de nœuds non vide (calque de saisie, choix de
+ * présentation : flèche de l'ordre du millimètre sur des courbes de plan de masse).
+ */
+export const SPLINE_SAMPLES_PER_SPAN = 8;
 /** Profondeur maximale d'imbrication des blocs développés. */
 export const MAX_INSERT_DEPTH = 8;
 /** Nombre maximal de copies d'un bloc en réseau (colonnes × lignes). */
@@ -175,6 +186,15 @@ interface RawEntity {
   rowCount?: number;
   columnSpacing?: number;
   rowSpacing?: number;
+  // ELLIPSE
+  majorAxisEndPoint?: RawPoint;
+  axisRatio?: number;
+  // SPLINE
+  controlPoints?: RawPoint[];
+  fitPoints?: RawPoint[];
+  knotValues?: number[];
+  degreeOfSplineCurve?: number;
+  closed?: boolean;
 }
 
 interface RawBlock {
@@ -204,6 +224,134 @@ function arcPoints(center: Vec2, r: number, start: number, sweep: number): Vec2[
     out.push({ x: center.x + r * Math.cos(t), y: center.y + r * Math.sin(t) });
   }
   return out;
+}
+
+/**
+ * Point d'une B-spline non rationnelle de degré `p` (algorithme de de Boor) au paramètre `u`,
+ * dans l'intervalle de nœuds `k` (knots[k] ≤ u ≤ knots[k + 1]).
+ */
+function deBoor(
+  k: number,
+  u: number,
+  knots: readonly number[],
+  ctrl: readonly Vec2[],
+  p: number,
+): Vec2 {
+  const d: Vec2[] = [];
+  for (let j = 0; j <= p; j++) d.push(ctrl[j + k - p]!);
+  for (let r = 1; r <= p; r++) {
+    for (let j = p; j >= r; j--) {
+      const i = j + k - p;
+      const den = knots[i + 1 + p - r]! - knots[i]!;
+      const a = den > 0 ? (u - knots[i]!) / den : 0;
+      d[j] = { x: (1 - a) * d[j - 1]!.x + a * d[j]!.x, y: (1 - a) * d[j - 1]!.y + a * d[j]!.y };
+    }
+  }
+  return d[p]!;
+}
+
+/**
+ * Polyligne approchant une spline DXF : points de contrôle, nœuds et degré cohérents
+ * (nœuds = contrôles + degré + 1, non décroissants) ; sinon points de lissage ; sinon `null`.
+ */
+export function splinePoints(
+  ctrl: readonly Vec2[],
+  knots: readonly number[],
+  degree: number,
+  fit: readonly Vec2[] = [],
+): Vec2[] | null {
+  const p = Math.floor(degree);
+  const n = ctrl.length;
+  const valid =
+    p >= 1 &&
+    n > p &&
+    knots.length === n + p + 1 &&
+    knots.every((v, i) => Number.isFinite(v) && (i === 0 || v >= knots[i - 1]!));
+  if (!valid) return fit.length >= 2 ? [...fit] : null;
+  const out: Vec2[] = [];
+  for (let k = p; k < n; k++) {
+    const u0 = knots[k]!;
+    const u1 = knots[k + 1]!;
+    if (!(u1 > u0)) continue;
+    const first = out.length === 0 ? 0 : 1;
+    for (let i = first; i <= SPLINE_SAMPLES_PER_SPAN; i++) {
+      out.push(deBoor(k, u0 + ((u1 - u0) * i) / SPLINE_SAMPLES_PER_SPAN, knots, ctrl, p));
+    }
+  }
+  return out.length >= 2 ? out : null;
+}
+
+/**
+ * Points d'une ellipse (ou d'un arc d'ellipse) : centre, extrémité du grand axe relative au
+ * centre, rapport petit / grand axe, paramètres de début et de fin (radians, sens direct).
+ */
+export function ellipsePoints(
+  center: Vec2,
+  major: Vec2,
+  ratio: number,
+  start: number,
+  end: number,
+): { readonly points: Vec2[]; readonly full: boolean } {
+  let sweep = end - start;
+  const full = Math.abs(Math.abs(sweep) - 2 * Math.PI) < 1e-9 || sweep === 0;
+  if (full) sweep = 2 * Math.PI;
+  else {
+    sweep %= 2 * Math.PI;
+    if (sweep <= 0) sweep += 2 * Math.PI;
+  }
+  const minor = { x: -major.y * ratio, y: major.x * ratio };
+  const steps = Math.max(
+    full ? 8 : 2,
+    Math.ceil(sweep / ((ARC_TESSELLATION_STEP_DEG * Math.PI) / 180)),
+  );
+  const points: Vec2[] = [];
+  for (let i = 0; i <= steps; i++) {
+    if (full && i === steps) break;
+    const t = start + (sweep * i) / steps;
+    const c = Math.cos(t);
+    const sn = Math.sin(t);
+    points.push({
+      x: center.x + c * major.x + sn * minor.x,
+      y: center.y + c * major.y + sn * minor.y,
+    });
+  }
+  return { points, full };
+}
+
+/** Familles d'entités ignorées, pour le message à l'utilisateur (`describeSkipped`). */
+const SKIPPED_FAMILIES: readonly {
+  readonly label: string;
+  readonly test: (t: string) => boolean;
+}[] = [
+  { label: "texte(s)", test: (t) => ["TEXT", "MTEXT", "ATTRIB", "ATTDEF"].includes(t) },
+  { label: "cote(s)", test: (t) => t === "DIMENSION" || t === "LEADER" || t === "MULTILEADER" },
+  { label: "hachure(s)", test: (t) => t === "HATCH" || t === "SOLID" },
+  { label: "entité(s) de l'espace papier", test: (t) => t === "paperSpace" },
+  { label: "entité(s) hors des calques choisis", test: (t) => t.startsWith("calque:") },
+];
+
+/**
+ * Résumé français des entités ignorées (`DxfReadResult.skipped`), par famille : textes, cotes,
+ * hachures, espace papier, calques exclus, autres (types cités). Vide si rien n'est ignoré.
+ * Ex. : « 3 texte(s), 1 cote(s), 2 autre(s) (IMAGE, POINT) ».
+ */
+export function describeSkipped(skipped: Readonly<Record<string, number>>): string {
+  const counts = SKIPPED_FAMILIES.map(() => 0);
+  let others = 0;
+  const otherTypes = new Set<string>();
+  for (const [type, n] of Object.entries(skipped)) {
+    const i = SKIPPED_FAMILIES.findIndex((f) => f.test(type));
+    if (i >= 0) counts[i]! += n;
+    else {
+      others += n;
+      otherTypes.add(type.split(":")[0]!);
+    }
+  }
+  const parts = SKIPPED_FAMILIES.flatMap((f, i) =>
+    counts[i]! > 0 ? [`${counts[i]} ${f.label}`] : [],
+  );
+  if (others > 0) parts.push(`${others} autre(s) (${[...otherTypes].sort().join(", ")})`);
+  return parts.join(", ");
 }
 
 class Collector {
@@ -352,6 +500,38 @@ function emit(
       const pts = arcPoints(c, r, s0, sweep).map((p) => rp(apply(mm, p)));
       if (full) pts.pop();
       out.push({ kind: "polyline", ...L, points: pts, ...(full ? { closed: true } : {}) });
+      return;
+    }
+    case "ELLIPSE": {
+      const ratio = num(raw.axisRatio);
+      const major = pt(raw.majorAxisEndPoint);
+      if (!(ratio > 0) || !(V.norm(major) > 0)) return out.skip(type);
+      const e = ellipsePoints(
+        pt(raw.center),
+        major,
+        ratio,
+        num(raw.startAngle),
+        num(raw.endAngle, 2 * Math.PI),
+      );
+      out.push({
+        kind: "polyline",
+        ...L,
+        points: e.points.map((p) => rp(apply(m, p))),
+        ...(e.full ? { closed: true } : {}),
+      });
+      return;
+    }
+    case "SPLINE": {
+      const finite = (p: RawPoint): boolean => Number.isFinite(p.x) && Number.isFinite(p.y);
+      const ctrl = (raw.controlPoints ?? []).filter(finite).map(pt);
+      const fit = (raw.fitPoints ?? []).filter(finite).map(pt);
+      const pts = splinePoints(ctrl, raw.knotValues ?? [], num(raw.degreeOfSplineCurve, 3), fit);
+      if (!pts) return out.skip(type);
+      const mapped = pts.map((p) => rp(apply(m, p)));
+      const closed =
+        raw.closed === true && mapped.length > 2 && V.distance(mapped[0]!, mapped.at(-1)!) < 0.01;
+      if (closed) mapped.pop();
+      out.push({ kind: "polyline", ...L, points: mapped, ...(closed ? { closed: true } : {}) });
       return;
     }
     case "INSERT": {

@@ -1,8 +1,11 @@
 /**
  * Formulaire générique des paramètres d'un plugin de structure (`StructureKind`) : les champs
  * sont déduits des valeurs par défaut du plugin (`defaults(ctx)`) et, quand il est lisible, du
- * schéma `paramsSchema` (zod 4 : listes de choix, bornes numériques). Aucune valeur métier ici :
- * les défauts et la validation sont ceux du plugin.
+ * schéma `paramsSchema` (zod 4 : listes de choix, bornes numériques, entiers). Un nombre est
+ * saisi en **entier seulement si le schéma le déclare** (`.int()`), jamais d'après son défaut ;
+ * un champ numérique facultatif sans défaut (ex. `steel-curved.curved.maxSlopeBreak`) est
+ * proposé vide (QUESTIONS D6). Aucune valeur métier ici : les défauts et la validation sont
+ * ceux du plugin.
  */
 import type { Model, Project, StructureContext, StructureKind } from "@blondel/core";
 
@@ -13,10 +16,15 @@ export type ParamField =
       readonly kind: "number";
       readonly path: ParamPath;
       readonly label: string;
-      /** Entier (défaut entier et schéma sans décimale) : saisie en mm entiers. */
+      /** Entier déclaré par le schéma du plugin (`.int()`) : saisie en mm entiers. */
       readonly integer: boolean;
       readonly min?: number;
       readonly max?: number;
+      /**
+       * Champ facultatif sans défaut (`z.number().optional()`) : vide = paramètre absent (le
+       * plugin applique son comportement par défaut).
+       */
+      readonly optional?: boolean;
     }
   | {
       readonly kind: "enum";
@@ -68,6 +76,24 @@ export function unwrapSchema(schema: unknown): unknown {
     s = def.innerType;
   }
   return s;
+}
+
+/** Le schéma accepte-t-il l'absence de valeur (`optional` parmi ses enveloppes) ? */
+export function isOptionalSchema(schema: unknown): boolean {
+  let s = schema;
+  for (let i = 0; i < 16; i++) {
+    const def = defOf(s);
+    if (!def || !WRAPPERS.has(def.type ?? "") || def.innerType === undefined) return false;
+    if (def.type === "optional") return true;
+    s = def.innerType;
+  }
+  return false;
+}
+
+/** Clés d'un schéma d'objet (ordre de déclaration), vide si ce n'est pas un objet. */
+function schemaKeys(schema: unknown): readonly string[] {
+  const def = defOf(unwrapSchema(schema));
+  return def?.type === "object" && def.shape ? Object.keys(def.shape) : [];
 }
 
 /** Sous-schéma d'un champ d'objet (ou `undefined`). */
@@ -190,9 +216,7 @@ export function deriveParamFields(
         kind: "auto-number",
         path,
         label,
-        integer:
-          autoNum.integer === true ||
-          (autoNum.integer === undefined && (value === "auto" || Number.isInteger(value))),
+        integer: autoNum.integer === true,
         ...(autoNum.min === undefined ? {} : { min: autoNum.min }),
         ...(autoNum.max === undefined ? {} : { max: autoNum.max }),
       });
@@ -202,7 +226,7 @@ export function deriveParamFields(
         kind: "number",
         path,
         label,
-        integer: c.integer === true || (c.integer === undefined && Number.isInteger(value)),
+        integer: c.integer === true,
         ...(c.min === undefined ? {} : { min: c.min }),
         ...(c.max === undefined ? {} : { max: c.max }),
       });
@@ -215,6 +239,22 @@ export function deriveParamFields(
     } else {
       fields.push({ kind: "readonly", path, label });
     }
+  }
+  // Champs numériques facultatifs sans défaut : absents des défauts, lus dans le schéma.
+  for (const key of schemaKeys(schema)) {
+    if (Object.hasOwn(defaults, key)) continue;
+    const sub = fieldSchema(schema, key);
+    if (!isOptionalSchema(sub) || defOf(unwrapSchema(sub))?.type !== "number") continue;
+    const c = numberConstraints(sub);
+    fields.push({
+      kind: "number",
+      path: [...prefix, key],
+      label: labelPrefix ? `${labelPrefix} › ${humanizeKey(key).toLowerCase()}` : humanizeKey(key),
+      integer: c.integer === true,
+      optional: true,
+      ...(c.min === undefined ? {} : { min: c.min }),
+      ...(c.max === undefined ? {} : { max: c.max }),
+    });
   }
   return fields;
 }
@@ -229,7 +269,10 @@ export function getParam(params: unknown, path: ParamPath): unknown {
   return cur;
 }
 
-/** Copie de `params` avec la valeur remplacée au chemin (objets intermédiaires créés). */
+/**
+ * Copie de `params` avec la valeur remplacée au chemin (objets intermédiaires créés) ;
+ * `undefined` retire la clé (champ facultatif vidé).
+ */
 export function setParam(
   params: Readonly<Record<string, unknown>>,
   path: ParamPath,
@@ -237,7 +280,11 @@ export function setParam(
 ): Record<string, unknown> {
   const [head, ...rest] = path;
   if (head === undefined) return { ...params };
-  if (rest.length === 0) return { ...params, [head]: value };
+  if (rest.length === 0) {
+    if (value !== undefined) return { ...params, [head]: value };
+    const { [head]: _removed, ...others } = params;
+    return others;
+  }
   const child = params[head];
   return { ...params, [head]: setParam(isPlainObject(child) ? child : {}, rest, value) };
 }

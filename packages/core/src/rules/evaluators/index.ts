@@ -8,6 +8,7 @@ import { GUARD_EVALUATORS } from "./guards.js";
 import { MISC_EVALUATORS, NOSING_EVALUATORS } from "./nosing.js";
 import { RISE_EVALUATORS } from "./rise.js";
 import { STAIR_EVALUATORS } from "./stair.js";
+import { STRUCTURE_EVALUATORS } from "./structure.js";
 
 export type EvaluatorRegistry = ReadonlyMap<string, RuleEvaluator>;
 
@@ -37,6 +38,7 @@ export const DEFAULT_EVALUATORS: EvaluatorRegistry = createRegistry(
   NOSING_EVALUATORS,
   MISC_EVALUATORS,
   GUARD_EVALUATORS,
+  STRUCTURE_EVALUATORS,
 );
 
 /**

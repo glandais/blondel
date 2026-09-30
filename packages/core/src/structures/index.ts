@@ -20,7 +20,12 @@ export {
   StructureError,
   getStructure,
   listStructures,
+  newelRequiredStructures,
   registerStructure,
+  structureAcceptsLayout,
+  structureLateralThickness,
+  structureLayouts,
+  structureRequiresNewel,
   unregisterStructure,
 } from "./registry.js";
 export {

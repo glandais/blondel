@@ -3,7 +3,8 @@
  * fonctions pures, sans calcul de modèle, partagées par les corrections proposées
  * (`fixes.ts`), le choix de structure (`structureChoice.ts`), l'assistant et le comparateur.
  *
- * - Structures de `NEWEL_REQUIRED_STRUCTURES` : limons de jour assemblés sur un poteau d'angle.
+ * - Structures qui exigent un poteau (`StructureKind.capabilities.requiresNewel`, dette D4) :
+ *   limons de jour assemblés sur un poteau d'angle.
  * - Poteau par défaut : `DEFAULT_NEWEL_SIZE`, centré sur le coin intérieur.
  * - `steel-profile` : poteau élargi des profilés (`profileNewel` du plugin : aile + 2 × jeu,
  *   décalé vers le jour), qui dépend de la section retenue.
@@ -13,6 +14,7 @@ import { LayoutError } from "../layout/errors.js";
 import { computeLayout } from "../layout/layout.js";
 import type { Mm } from "../model/primitives.js";
 import { ProjectSchema, type InnerCorner, type Project, type Turn } from "../model/project.js";
+import { newelRequiredStructures, structureRequiresNewel } from "../structures/index.js";
 import {
   SteelProfileParamsSchema,
   profileNewel,
@@ -25,14 +27,10 @@ export type NewelInner = Extract<InnerCorner, { kind: "newel" }>;
 
 /**
  * Structures dont les limons de jour s'assemblent sur un **poteau d'angle** : un jour à angle
- * vif les empêche de se rencontrer (erreur « jour à angle vif » des plugins). Liste tenue ici
- * tant que les plugins ne le déclarent pas eux-mêmes (voir LEDGER §3).
+ * vif les empêche de se rencontrer (erreur « jour à angle vif » des plugins). Déclaré par les
+ * plugins (`capabilities.requiresNewel`, dette D4) ; plus de liste tenue ici.
  */
-export const NEWEL_REQUIRED_STRUCTURES: readonly string[] = [
-  "wood-housed",
-  "steel-flat",
-  "steel-profile",
-];
+export { newelRequiredStructures, structureRequiresNewel };
 
 /**
  * Côté du poteau d'angle proposé (mm). **[Valeur d'usage, confiance faible, à valider]** :
@@ -55,7 +53,7 @@ export function expectedNewel(
   params: Readonly<Record<string, unknown>>,
   flangeWidth?: Mm | null,
 ): NewelInner | null {
-  if (!NEWEL_REQUIRED_STRUCTURES.includes(kind)) return null;
+  if (!structureRequiresNewel(kind)) return null;
   if (kind !== "steel-profile") return DEFAULT_NEWEL;
   const p = profileParams(params);
   if (p.newel.size !== "auto") return profileNewel(0, p.newel);
@@ -86,7 +84,7 @@ export function newelSatisfies(
   params: Readonly<Record<string, unknown>>,
   flangeWidth?: Mm | null,
 ): boolean {
-  if (!NEWEL_REQUIRED_STRUCTURES.includes(kind)) return true;
+  if (!structureRequiresNewel(kind)) return true;
   if (inner.kind !== "newel") return false;
   if (kind !== "steel-profile") return true;
   const p = profileParams(params);

@@ -90,6 +90,14 @@ test(`chargement et onglets : aucune tâche > ${LONG_TASK_BUDGET_MS} ms`, async 
     await openTab(page, "Comparateur");
     await openTab(page, "3D");
   });
+  // Structures métal (QUESTIONS D5 : onglets mesurés jusque-là avec `wood-housed` seulement) :
+  // chaque onglet hors Comparateur (mesuré ci-dessus, indépendant de la structure affichée).
+  for (const kind of ["steel-flat", "steel-profile", "steel-curved"]) {
+    await measure(page, steps, `structure ${kind}`, () => chooseStructure(page, kind));
+    for (const tab of TABS.filter((t) => t !== "Comparateur")) {
+      await measure(page, steps, `${kind} : onglet ${tab}`, () => openTab(page, tab));
+    }
+  }
   // Hélicoïdal (fût, main courante hélicoïdale, auto-recouvrement) : chaque onglet.
   await measure(page, steps, "préréglage Hélicoïdal à fût central (3D)", () =>
     applyPreset(page, "Hélicoïdal à fût central"),

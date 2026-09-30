@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DxfImportError, readDxfUnderlay } from "./dxf.js";
+import { describeSkipped, DxfImportError, readDxfUnderlay } from "./dxf.js";
 import { DxfUnderlaySchema, type UnderlayEntity } from "./schema.js";
 import { entitySegments, segmentsBounds } from "./underlay.js";
 
@@ -345,5 +345,103 @@ describe("readDxfUnderlay — repère d'objet (OCS) à extrusion (0, 0, −1)", 
     const b = segmentsBounds(entitySegments(p!))!;
     near(b.min, { x: -50, y: 0 });
     near(b.max, { x: 0, y: 100 });
+  });
+});
+
+describe("ELLIPSE, SPLINE et entités ignorées signalées (QUESTIONS D6)", () => {
+  const ellipse = (a0: number, a1: number): string[] =>
+    g(
+      0,
+      "ELLIPSE",
+      8,
+      "E",
+      10,
+      1000,
+      20,
+      500,
+      30,
+      0,
+      11,
+      400,
+      21,
+      0,
+      31,
+      0,
+      40,
+      0.5,
+      41,
+      a0,
+      42,
+      a1,
+    );
+
+  it("ELLIPSE entière : polyligne fermée sur l'ellipse (demi-axes 400 et 200)", () => {
+    const r = readDxfUnderlay(dxf({ insUnits: 4, entities: [ellipse(0, 2 * Math.PI)] }));
+    expect(r.skipped).toEqual({});
+    const [p] = only(r.entities, "polyline");
+    expect(p!.closed).toBe(true);
+    for (const q of p!.points) {
+      const u = (q.x - 1000) / 400;
+      const v = (q.y - 500) / 200;
+      expect(u * u + v * v).toBeCloseTo(1, 3);
+    }
+    expect(r.bounds!.min.x).toBeCloseTo(600, 1);
+    expect(r.bounds!.max.y).toBeCloseTo(700, 1);
+  });
+
+  it("arc d'ellipse : extrémités aux paramètres de début et de fin, polyligne ouverte", () => {
+    const r = readDxfUnderlay(dxf({ insUnits: 5, entities: [ellipse(0, Math.PI / 2)] }));
+    const [p] = only(r.entities, "polyline");
+    expect(p!.closed).toBeUndefined();
+    // Unité : centimètre (× 10).
+    near(p!.points[0]!, { x: 14000, y: 5000 });
+    near(p!.points.at(-1)!, { x: 10000, y: 7000 });
+  });
+
+  it("SPLINE : approchée par de Boor (Bézier quadratique), extrémités exactes", () => {
+    // Nœuds 0 0 0 1 1 1 : Bézier de (0,0), (100,200), (200,0) ; sommet en (100, 100).
+    const spline = [
+      ...g(0, "SPLINE", 8, "S", 70, 8, 71, 2, 72, 6, 73, 3, 74, 0),
+      ...g(40, 0, 40, 0, 40, 0, 40, 1, 40, 1, 40, 1),
+      ...g(10, 0, 20, 0, 30, 0, 10, 100, 20, 200, 30, 0, 10, 200, 20, 0, 30, 0),
+    ];
+    const r = readDxfUnderlay(dxf({ insUnits: 4, entities: [spline] }));
+    expect(r.skipped).toEqual({});
+    const [p] = only(r.entities, "polyline");
+    expect(p!.points).toHaveLength(9);
+    near(p!.points[0]!, { x: 0, y: 0 });
+    near(p!.points[4]!, { x: 100, y: 100 });
+    near(p!.points.at(-1)!, { x: 200, y: 0 });
+    // Chaque point est sur la parabole y = 2x(200 − x) / 200.
+    for (const q of p!.points) expect(q.y).toBeCloseTo((2 * q.x * (200 - q.x)) / 200, 1);
+  });
+
+  it("SPLINE sans nœuds cohérents : points de lissage, sinon ignorée et comptée", () => {
+    const fitOnly = [
+      ...g(0, "SPLINE", 8, "S", 70, 8, 71, 3, 72, 0, 73, 0, 74, 3),
+      ...g(11, 0, 21, 0, 31, 0, 11, 50, 21, 10, 31, 0, 11, 100, 21, 0, 31, 0),
+    ];
+    const broken = [
+      ...g(0, "SPLINE", 8, "S", 70, 8, 71, 3, 72, 0, 73, 1),
+      ...g(10, 0, 20, 0, 30, 0),
+    ];
+    const r = readDxfUnderlay(dxf({ insUnits: 4, entities: [fitOnly, broken] }));
+    const [p] = only(r.entities, "polyline");
+    expect(p!.points.map((q) => [q.x, q.y])).toEqual([
+      [0, 0],
+      [50, 10],
+      [100, 0],
+    ]);
+    expect(r.skipped).toEqual({ SPLINE: 1 });
+  });
+
+  it("describeSkipped : textes, cotes, hachures et autres détaillés pour l'utilisateur", () => {
+    expect(describeSkipped({})).toBe("");
+    expect(
+      describeSkipped({ TEXT: 2, MTEXT: 1, DIMENSION: 4, HATCH: 1, POINT: 2, "INSERT:réseau": 1 }),
+    ).toBe("3 texte(s), 4 cote(s), 1 hachure(s), 3 autre(s) (INSERT, POINT)");
+    expect(describeSkipped({ paperSpace: 1, "calque:COTES": 5 })).toBe(
+      "1 entité(s) de l'espace papier, 5 entité(s) hors des calques choisis",
+    );
   });
 });

@@ -13,7 +13,7 @@ import { applyStructureChoice } from "../project/structureChoice.js";
 import { curveLength } from "../geom2d/curve.js";
 import { computeLayout } from "../layout/layout.js";
 import { createProject } from "../project/presets.js";
-import { inscribedCircle, proposeDesigns } from "./propose.js";
+import { inscribedCircle, proposeDesigns, resolveStructureIntent } from "./propose.js";
 import { flightLegs, flightsLayoutSpec, walklineOffsetFor, withLayout } from "./shapes.js";
 import type { AssistantInput, AssistantResult } from "./types.js";
 
@@ -615,5 +615,44 @@ describe("jours en arc (décision A17)", () => {
     });
     for (const c of r.candidates.flatMap((x) => [x, ...x.variants]))
       for (const t of c.project.stair.layout.turns) expect(t.inner.kind).toBe("newel");
+  });
+});
+
+describe("intention de structure : épaisseurs hors emprise déclarées par les plugins (dette D4)", () => {
+  const resolved = (kind: string, params: Record<string, unknown> = {}) => {
+    const r = resolveStructureIntent({ kind, params });
+    if ("error" in r) throw new Error(r.error);
+    return r;
+  };
+
+  it("profilés et limon extérieur hélicoïdal ne comptent plus 0 mm", () => {
+    expect(resolved("steel-profile", { section: "UPN 160" })).toMatchObject({
+      inner: 65,
+      outer: 65,
+    });
+    expect(resolved("steel-profile")).toMatchObject({ inner: 45, outer: 45 });
+    expect(
+      resolved("helical-core", { outerStringer: { enabled: true, thickness: 10 } }),
+    ).toMatchObject({ inner: 0, outer: 10 });
+    expect(resolved("helical-core").note).toMatch(/aucun limon hors emprise utile, 0 mm/);
+    // Inchangé pour les limons latéraux déjà déduits.
+    expect(resolved("wood-housed")).toMatchObject({ inner: 45, outer: 45 });
+    expect(resolved("wood-housed").note).toMatch(/de 45 mm hors emprise utile/);
+    // Saisie explicite prioritaire.
+    const r = resolveStructureIntent({
+      kind: "steel-profile",
+      innerThickness: 0,
+      outerThickness: 0,
+    });
+    expect(r).toMatchObject({ inner: 0, outer: 0 });
+  });
+
+  it("hélicoïdal refusé pour une structure qui ne déclare pas ce tracé", () => {
+    const r = proposeUntimed({
+      site: ACCEPTANCE_SITE,
+      preferences: { structure: { kind: "wood-housed" }, typologies: ["helical"] },
+    });
+    expect(r.candidates).toHaveLength(0);
+    expect(JSON.stringify(r.rejections ?? r)).toMatch(/ne s'applique pas à un hélicoïdal/);
   });
 });

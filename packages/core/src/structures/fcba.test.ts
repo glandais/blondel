@@ -3,7 +3,7 @@ import { getRule } from "../rules/table.js";
 import { CREMAILLERE_RULE_ID, fcbaTable, parseFcbaTable, requiredResidual } from "./fcba.js";
 
 describe("tableau FCBA des crémaillères (rules.yaml)", () => {
-  it("extrait les six couples et le domaine publié de la description de la règle", () => {
+  it("six couples et domaine publié lus dans rules.yaml", () => {
     const t = fcbaTable();
     expect(t.rows.C30).toEqual([
       { thickness: 33, residual: 179 },
@@ -30,7 +30,12 @@ describe("tableau FCBA des crémaillères (rules.yaml)", () => {
     expect(requiredResidual(t, "C30", 30)).toBeNull();
   });
 
-  it("lève une erreur si le format de la description change", () => {
-    expect(() => parseFcbaTable("sans tableau")).toThrow(/C30/);
+  it("lu dans les champs structurés (tables C30 / D40), erreur si la table manque", () => {
+    const rule = getRule(CREMAILLERE_RULE_ID);
+    expect(parseFcbaTable(rule)).toEqual(fcbaTable());
+    const { tables: _t, ...withoutTables } = rule;
+    expect(() => parseFcbaTable(withoutTables)).toThrow(/C30/);
+    // La description ne sert plus : la modifier ne change pas le tableau.
+    expect(parseFcbaTable({ ...rule, description: "sans tableau" })).toEqual(fcbaTable());
   });
 });

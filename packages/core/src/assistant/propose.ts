@@ -46,7 +46,7 @@ import {
   type ProjectInput,
 } from "../model/project.js";
 import { buildModel } from "../pipeline/build.js";
-import { DEFAULT_NEWEL, NEWEL_REQUIRED_STRUCTURES, expectedNewel } from "../project/newel.js";
+import { DEFAULT_NEWEL, expectedNewel } from "../project/newel.js";
 import { applyStructureChoice } from "../project/structureChoice.js";
 import { HELICAL_DEFAULT_CORE_RADIUS, createHelicalProject } from "../project/presetHelical.js";
 import { PRESET_NOSING } from "../project/presets.js";
@@ -55,7 +55,12 @@ import { SteppingError } from "../stepping/errors.js";
 import { placeNosings } from "../stepping/positions.js";
 import { computeRises } from "../stepping/rises.js";
 import { rollableJourRadius } from "../structures/compare.js";
-import { getStructure } from "../structures/index.js";
+import {
+  getStructure,
+  structureAcceptsLayout,
+  structureLateralThickness,
+  structureRequiresNewel,
+} from "../structures/index.js";
 import { isDebillardeStructure } from "../stepping/stepping.js";
 import {
   assistantContexts,
@@ -103,19 +108,8 @@ import {
   type TypologyId,
 } from "./types.js";
 
-/**
- * Plugins dont les limons sont **hors** de l'emmarchement utile, côté jour et côté extérieur,
- * d'épaisseur `thickness` (CHALLENGE A3 ; en-têtes de `woodHoused.ts` et `steelFlat.ts`).
- */
-export const LATERAL_STRINGER_STRUCTURES: readonly string[] = [
-  "wood-housed",
-  "steel-flat",
-  // Limon de jour débillardé et limons muraux en plat, hors emprise utile (`steelCurved.ts`).
-  "steel-curved",
-];
-
-/** Structures admises pour l'hélicoïdal (plugin dédié ou aucune). */
-const HELICAL_STRUCTURES: readonly string[] = ["none", "helical-core"];
+// Épaisseurs hors emprise utile (CHALLENGE A3), poteau exigé et tracés admis : déclarés par
+// les plugins (`StructureKind.capabilities`, dette D4), plus de liste tenue ici.
 
 interface ResolvedIntent {
   readonly kind: string;
@@ -131,24 +125,26 @@ export function resolveStructureIntent(
 ): ResolvedIntent | { readonly error: string } {
   const kind = intent?.kind ?? "none";
   const params = { ...(intent?.params ?? {}) };
-  let deduced = 0;
+  let deducedInner = 0;
+  let deducedOuter = 0;
   let how = "aucune structure latérale";
   if (kind !== "none") {
     const plugin = getStructure(kind);
     if (!plugin) return { error: `Structure « ${kind} » inconnue : aucun plugin enregistré.` };
-    if (LATERAL_STRINGER_STRUCTURES.includes(kind)) {
-      const parsed = plugin.paramsSchema.safeParse(params);
-      const t = parsed.success ? (parsed.data as { thickness?: unknown }).thickness : undefined;
-      if (typeof t === "number") {
-        deduced = t;
-        how = `limons « ${plugin.label} » de ${fmt(t, 0)} mm hors emprise utile`;
-      }
-    } else {
-      how = `« ${plugin.label} » : épaisseur hors emprise non déduite, 0 mm supposé`;
+    const lateral = structureLateralThickness(kind, params);
+    if (lateral && (lateral.inner > 0 || lateral.outer > 0)) {
+      deducedInner = lateral.inner;
+      deducedOuter = lateral.outer;
+      how =
+        lateral.inner === lateral.outer
+          ? `limons « ${plugin.label} » de ${fmt(lateral.inner, 0)} mm hors emprise utile`
+          : `limons « ${plugin.label} » hors emprise utile : ${fmt(lateral.inner, 0)} mm côté jour, ${fmt(lateral.outer, 0)} mm côté extérieur`;
+    } else if (lateral) {
+      how = `« ${plugin.label} » : aucun limon hors emprise utile, 0 mm`;
     }
   }
-  const inner = intent?.innerThickness ?? deduced;
-  const outer = intent?.outerThickness ?? deduced;
+  const inner = intent?.innerThickness ?? deducedInner;
+  const outer = intent?.outerThickness ?? deducedOuter;
   for (const [label, v] of [
     ["côté jour", inner],
     ["côté extérieur", outer],
@@ -410,8 +406,7 @@ export function proposeDesigns(input: AssistantInput): AssistantResult {
   // construction de chaque proposition retenue (`applyStructureChoice`, décision A13).
   const expected = expectedNewel(intent.kind, intent.params);
   const inner: InnerCorner =
-    expected ??
-    (NEWEL_REQUIRED_STRUCTURES.includes(intent.kind) ? DEFAULT_NEWEL : { kind: "sharp" });
+    expected ?? (structureRequiresNewel(intent.kind) ? DEFAULT_NEWEL : { kind: "sharp" });
   // Jours en arc (décision A17) : énumérés pour les tournants balancés quand la structure visée
   // les accepte — aucune (préréglages) ou limon débillardé, qui les exige (G7). Rayon : rayon
   // de jour roulable du débillardé (rayon intérieur mini de la rouleuse du profil d'atelier +
@@ -789,7 +784,7 @@ export function proposeDesigns(input: AssistantInput): AssistantResult {
   if (!stopped && typologies.includes("helical")) {
     const bounds = boundsFor(["helicoidal"]);
     for (const direction of directions) {
-      if (!HELICAL_STRUCTURES.includes(intent.kind)) {
+      if (!structureAcceptsLayout(intent.kind, "helical")) {
         reject(
           "helical",
           direction,

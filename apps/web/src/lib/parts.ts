@@ -7,15 +7,19 @@ import type { Location, Model, Part } from "@blondel/core";
 import { cutListRows, type CutListRow, type MassNote } from "@blondel/exports";
 import { treadPartId } from "./compliance.js";
 
-/** Pièce désignée par la sélection (pièce, ou marche `tread-N`). */
+/** Pièce désignée par la sélection (pièce, ou pièce de la marche : `Part.treadNumber`). */
 export function selectedPart(
   model: Pick<Model, "parts">,
   loc: Location | undefined | null,
 ): Part | undefined {
   if (!loc) return undefined;
   const id =
-    loc.kind === "part" ? loc.partId : loc.kind === "tread" ? treadPartId(loc.number) : null;
-  return id === null ? undefined : model.parts.find((p) => p.id === id);
+    loc.kind === "part"
+      ? loc.partId
+      : loc.kind === "tread"
+        ? treadPartId(model.parts, loc.number)
+        : undefined;
+  return id === undefined ? undefined : model.parts.find((p) => p.id === id);
 }
 
 export interface BomLine extends CutListRow {

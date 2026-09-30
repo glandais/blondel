@@ -122,7 +122,9 @@ describe("justification saisie (décision A12)", () => {
       { memo: false },
     );
     const r = justified.compliance.results.find((x) => x.ruleId === "HELICOIDAL_PORTE_A_FAUX");
-    expect(r?.status).toBe("ok");
+    // Décision A12 (2026-09-30) : l'avertissement reste, la justification lui est jointe.
+    expect(r?.status).toBe("violation");
+    expect(r?.severity).toBe("avertissement");
     expect(r?.justification).toBe("Note de calcul NC-042 (BET Exemple)");
     expect(text(justified)).toContain(
       "Justification fournie : Note de calcul NC-042 (BET Exemple)",

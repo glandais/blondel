@@ -22,7 +22,7 @@ function DimensionedPlan({ model }: { model: Model }) {
   const project = useApp((s) => s.project);
   const selection = useApp((s) => s.selection);
   const theme = useResolvedTheme();
-  const selectedTread = selectedTreadNumber(selection?.location);
+  const selectedTread = selectedTreadNumber(selection?.location, model.parts);
   const rendered = useMemo(
     () => renderPlanForScreen(model, { project, theme }),
     [model, project, theme],

@@ -2,7 +2,7 @@
  * Données annexes des dessins : localisation des violations du contrôle de conception,
  * trémie lue dans le projet, échappée réglementaire lue dans le rapport.
  */
-import type { ComplianceReport, Mm, Polygon2, Project, Severity, Vec2 } from "@blondel/core";
+import type { ComplianceReport, Mm, Model, Polygon2, Project, Severity, Vec2 } from "@blondel/core";
 
 const RANK: Record<Severity, number> = { bloquant: 3, avertissement: 2, conseil: 1 };
 
@@ -51,6 +51,29 @@ export function violationSummary(report: ComplianceReport): Record<Severity, num
     avertissement: report.summary.avertissement ?? 0,
     conseil: report.summary.conseil ?? 0,
   };
+}
+
+/**
+ * Trémie du plancher haut d'un modèle : `Model.upperFloor` (pipeline, QUESTIONS D5), sinon celle
+ * du projet en repli (modèle construit hors pipeline). Contour tel que saisi, repère du site.
+ */
+export function modelOpening(
+  model: Pick<Model, "upperFloor">,
+  project?: Project,
+): Polygon2 | undefined {
+  if (model.upperFloor) return model.upperFloor.opening;
+  return openingPolygon(project);
+}
+
+/**
+ * Épaisseur du plancher haut d'un modèle (`Model.upperFloor`), sinon celle du projet en repli ;
+ * `undefined` si ni l'un ni l'autre ne la donne.
+ */
+export function modelSlabThickness(
+  model: Pick<Model, "upperFloor">,
+  project?: Project,
+): Mm | undefined {
+  return model.upperFloor?.slabThickness ?? project?.site.upperSlabThickness;
 }
 
 /** Contour de la trémie du plancher haut (repère du site = repère monde), CCW ou tel que saisi. */

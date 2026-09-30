@@ -4,14 +4,16 @@
 import type { Frame3, Mm, Shape2 } from "@blondel/core";
 import { GeometryError } from "./errors.js";
 import { addCap, addGrid } from "./grid.js";
-import { MeshBuilder, emptyMesh, flipMesh, type Mesh } from "./mesh.js";
-import { creaseCos, type MeshOptions } from "./options.js";
+import { MeshBuilder, flipMesh, type Mesh } from "./mesh.js";
+import { ROUND_RING_CREASE_DEG, creaseCos, type MeshOptions } from "./options.js";
 import { prepareShape, sharpCorners } from "./polygon.js";
 
 /**
  * Extrude `profile` (plan XY du repère) selon +Z du repère sur `depth` (négatif : selon −Z).
  * Faces avant/arrière triangulées (earcut), faces latérales à normales à plat par défaut
- * (arêtes vives). Profondeur nulle : maillage vide.
+ * (arêtes vives) ; un contour rond (tous ses angles de virage sous `ROUND_RING_CREASE_DEG`)
+ * est lissé à cet angle, sauf `creaseAngleDeg` explicite. Profondeur nulle (|depth| ≤ 1e-9 mm) :
+ * `GeometryError` (pièce plate, invisible sinon sans message).
  */
 export function meshExtrusion(
   frame: Frame3,
@@ -20,8 +22,10 @@ export function meshExtrusion(
   options: MeshOptions = {},
 ): Mesh {
   if (!Number.isFinite(depth)) throw new GeometryError("profondeur d'extrusion non finie");
-  if (Math.abs(depth) <= 1e-9) return emptyMesh();
+  if (Math.abs(depth) <= 1e-9) throw new GeometryError("extrusion de profondeur nulle");
   const crease = creaseCos(options, 0);
+  const roundCrease = creaseCos(options, ROUND_RING_CREASE_DEG);
+  const explicit = options.creaseAngleDeg !== undefined;
   const { origin: o, xAxis: X, yAxis: Y, zAxis: Z } = frame;
   checkFrame(frame);
   const shape = prepareShape(profile);
@@ -47,7 +51,10 @@ export function meshExtrusion(
       pts[3 * (n + j) + 1] = y + dy;
       pts[3 * (n + j) + 2] = z + dz;
     }
-    addGrid(b, pts, 2, n, [true, true], sharpCorners(r, crease));
+    const corners = sharpCorners(r, crease);
+    // Contour rond : aucun angle de virage au-delà de l'angle de lissage des sections rondes.
+    const round = !explicit && sharpCorners(r, roundCrease).every((sharp) => !sharp);
+    addGrid(b, pts, 2, n, [true, true], round ? corners.map(() => false) : corners);
   }
 
   // Bouchons : même calcul de positions que les faces latérales (soudure exacte).
@@ -79,7 +86,7 @@ export function meshExtrusion(
   addCap(b, bottom, shape.triangles, [-nx, -ny, -nz], true);
   addCap(b, top, shape.triangles, [nx, ny, nz], false);
 
-  const mesh = b.build();
+  const mesh = b.build(options.localOrigin === true);
   // Repère indirect ou profondeur négative : orientation retournée.
   const det = nx * Z.x + ny * Z.y + nz * Z.z;
   return det * depth < 0 ? flipMesh(mesh) : mesh;

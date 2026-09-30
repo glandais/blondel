@@ -13,6 +13,11 @@
  * le volume vaut alors exactement aire × longueur du chemin quand le centre de gravité de la
  * section est à l'origine (théorème de Guldin appliqué segment par segment), en mode
  * `"parallel"` ; en mode `"upright"`, à la légère torsion près sur un chemin gauche.
+ *
+ * Auto-intersection (onglets d'un même segment qui se croisent : virage trop serré pour la
+ * section, ou proche de 180°, l'onglet s'allongeant de 1 / cos(θ/2) ; spires qui se touchent) :
+ * non vérifiée ici, le maillage est produit tel quel (replié localement) ; le cœur la signale
+ * dans `Model.errors` (`parts/solidChecks.ts`). Seul le demi-tour exact lève `GeometryError`.
  */
 import type { Shape2, Vec3 } from "@blondel/core";
 import { GeometryError } from "./errors.js";
@@ -195,5 +200,5 @@ export function meshSweep(
   const t1 = frames[frames.length - 1]!.tangent;
   addCap(b, start, shape.triangles, [-t0.x, -t0.y, -t0.z], true);
   addCap(b, end, shape.triangles, [t1.x, t1.y, t1.z], false);
-  return b.build();
+  return b.build(options.localOrigin === true);
 }

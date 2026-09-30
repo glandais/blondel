@@ -105,8 +105,9 @@ function provenance(r: RuleResult): string {
 }
 
 /**
- * Justification saisie par l'utilisateur qui lève un contrôle (`RuleResult.justification`,
- * porte-à-faux hélicoïdal, décision A12) : reprise telle quelle dans le dossier.
+ * Justification saisie par l'utilisateur, jointe au contrôle sans le lever
+ * (`RuleResult.justification`, porte-à-faux hélicoïdal, décision A12) : reprise telle quelle
+ * dans le dossier.
  */
 export function justificationText(justification: string): string {
   return `Justification fournie : ${justification}`;

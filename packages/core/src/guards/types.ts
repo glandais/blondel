@@ -124,8 +124,9 @@ export interface GuardPostFootprint {
 }
 
 /**
- * Jour plus étroit que la sphère T1 (QUESTIONS A10, décision du 2026-09-29) : pas de
- * garde-corps de jour, `GC_OBLIGATOIRE` en conseil pour le côté jour.
+ * Jour plus étroit que la sphère T1 (QUESTIONS A10, décisions des 2026-09-29 et 2026-09-30) :
+ * pas de garde-corps dans l'emprise du jour (`GC_OBLIGATOIRE` en conseil), garde-corps partiel
+ * sur les portions du côté jour qui bordent un vide hors du jour.
  */
 export interface NarrowJour {
   /** Largeur du jour (mm, `jourWidth`). */
@@ -144,6 +145,14 @@ export interface NarrowJour {
    */
   readonly outsideFall: Mm;
   readonly outsideFallAt?: Vec3;
+  /**
+   * Nombre de garde-corps partiels construits côté jour sur les portions qui bordent un vide
+   * hors du jour (décision A10 du 2026-09-30). Absent : aucun. `outsideFall` ne compte alors que
+   * les portions hors du jour restées sans garde-corps.
+   */
+  readonly partialGuards?: number;
+  /** Chute maximale au droit des garde-corps partiels (protégée), avec `partialGuards`. */
+  readonly guardedFall?: Mm;
 }
 
 /** Dessus de main courante au droit d'un poteau d'angle du tracé (QUESTIONS A3). */

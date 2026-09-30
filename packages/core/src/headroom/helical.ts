@@ -75,8 +75,8 @@ export function helicalHeadroomBound(input: HelicalHeadroomInput): HelicalHeadro
  * Trémie circulaire de centre `center` et de rayon `radius`, représentée par le polygone
  * **inscrit** (`kind: "polygon"`) dont la flèche ne dépasse pas `sagitta` mm : la trémie
  * modélisée est un peu plus petite que le cercle, ce qui place l'échappée du côté de la sécurité.
- * Coordonnées arrondies au 0,01 mm. Le modèle n'a pas (encore) de trémie `circle` : voir le
- * ledger (§3, message aux exports et à l'interface).
+ * Coordonnées arrondies au 0,01 mm. Le cercle exact est déclaré dans `circle` (dette D3) pour
+ * les consommateurs qui savent le tracer (`openingCircle`).
  */
 export function circularOpening(center: Vec2, radius: Mm, sagitta: Mm = 0.5): Opening {
   const maxStep = radius <= sagitta ? Math.PI / 2 : 2 * Math.acos(1 - sagitta / radius);
@@ -86,5 +86,31 @@ export function circularOpening(center: Vec2, radius: Mm, sagitta: Mm = 0.5): Op
     const a = (2 * Math.PI * i) / count;
     return { x: round(center.x + radius * Math.cos(a)), y: round(center.y + radius * Math.sin(a)) };
   });
-  return { kind: "polygon", points };
+  return { kind: "polygon", points, circle: { center: { x: center.x, y: center.y }, radius } };
+}
+
+/**
+ * Cercle exact d'une trémie circulaire, s'il est déclaré **et** cohérent avec ses points : tous
+ * sur le cercle au 0,01 mm d'arrondi près et côtés égaux (polygone inscrit régulier de
+ * `circularOpening`). Un polygone modifié ensuite (point déplacé ou supprimé) n'est plus un
+ * cercle : `undefined`.
+ */
+export function openingCircle(
+  opening: Opening | undefined,
+): { readonly center: Vec2; readonly radius: Mm } | undefined {
+  if (opening?.kind !== "polygon" || !opening.circle) return undefined;
+  const { center, radius } = opening.circle;
+  const pts = opening.points;
+  const ok = pts.every((p) => {
+    const d = Math.hypot(p.x - center.x, p.y - center.y);
+    return Math.abs(d - radius) <= 0.01;
+  });
+  // Polygone **régulier** (côtés égaux à l'arrondi près) : un point supprimé laisse tous les
+  // autres sur le cercle, mais la trémie modélisée n'est plus le polygone inscrit du cercle.
+  const sides = pts.map((p, i) => {
+    const q = pts[(i + 1) % pts.length]!;
+    return Math.hypot(q.x - p.x, q.y - p.y);
+  });
+  const regular = Math.max(...sides) - Math.min(...sides) <= 0.03;
+  return ok && regular ? opening.circle : undefined;
 }

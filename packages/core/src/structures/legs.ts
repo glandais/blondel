@@ -81,14 +81,21 @@ function setback(inner: InnerCorner): Mm {
 /**
  * Volées et poteaux du tracé.
  *
- * @throws StructureError si C_e ne compte pas un segment droit par volée (tracé incohérent
- *   avec les conventions de `computeLayout`).
+ * @throws StructureError sur un S / Z (tournants de sens opposés : deux côtés de jour) ou si
+ *   C_e ne compte pas un segment droit par volée (tracé incohérent avec `computeLayout`).
  */
 export function stairGeometry(project: Project, layout: Layout): StairGeometry {
   const spec = project.stair.layout;
   const E = spec.width;
   const turns = spec.turns;
   const segs = layout.outer.segments;
+  // S / Z : le jour du second tournant est porté par C_e (`layout.ts`) ; les limons sont
+  // reconstruits ici avec un seul côté de jour (C_e = mur à angle vif) : non pris en charge.
+  if (turns.some((t, j) => j > 0 && t.direction !== turns[j - 1]!.direction)) {
+    throw new StructureError(
+      "Escalier en S / Z (tournants de sens opposés) : limons non pris en charge par cette structure (un seul côté de jour) ; seules les marches, contremarches et paliers sont générés.",
+    );
+  }
   if (segs.length !== spec.legs.length || segs.some((s) => s.kind !== "line")) {
     throw new StructureError(
       "Tracé inattendu : le bord extérieur doit compter un segment droit par volée.",

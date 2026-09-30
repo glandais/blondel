@@ -24,10 +24,75 @@ describe("meshExtrusion", () => {
     expect(minNormalAgreement(m)).toBeGreaterThan(0.9999);
   });
 
-  it("profondeur nulle : maillage vide", () => {
-    expect(
-      meshExtrusion(identityFrame, { outer: rect(0, 0, 1, 1), holes: [] }, 0).indices.length,
-    ).toBe(0);
+  it("profondeur nulle : GeometryError (pièce plate signalée, plus de maillage vide muet)", () => {
+    expect(() => meshExtrusion(identityFrame, { outer: rect(0, 0, 1, 1), holes: [] }, 0)).toThrow(
+      GeometryError,
+    );
+    expect(() =>
+      meshExtrusion(identityFrame, { outer: rect(0, 0, 1, 1), holes: [] }, 1e-10),
+    ).toThrow(/profondeur nulle/);
+  });
+
+  it("contour rond (poteau Ø 60 à 32 côtés) lissé à 30° ; rectangle et octogone gardent leurs arêtes vives", () => {
+    const circle = Array.from({ length: 32 }, (_, i) => ({
+      x: 30 * Math.cos((2 * Math.PI * i) / 32),
+      y: 30 * Math.sin((2 * Math.PI * i) / 32),
+    }));
+    const round = meshExtrusion(identityFrame, { outer: circle, holes: [] }, 1000);
+    // Faces latérales : 2 × 32 sommets partagés (lissés) au lieu de 2 × 2 × 32 (arêtes vives).
+    const capVertices = 2 * 32;
+    expect(round.positions.length / 3 - capVertices).toBe(2 * 32);
+    // Normales latérales (premiers sommets) radiales, lissées : direction = position.
+    expect(Math.hypot(round.normals[0]!, round.normals[1]!)).toBeCloseTo(1, 6);
+    expect(round.normals[0]!).toBeCloseTo(1, 6);
+    const box = meshExtrusion(identityFrame, { outer: rect(0, 0, 60, 60), holes: [] }, 1000);
+    expect(box.positions.length / 3).toBe(24);
+    const octagon = Array.from({ length: 8 }, (_, i) => ({
+      x: 30 * Math.cos((2 * Math.PI * i) / 8),
+      y: 30 * Math.sin((2 * Math.PI * i) / 8),
+    }));
+    // Octogone : virages de 45° > 30°, arêtes vives.
+    const oct = meshExtrusion(identityFrame, { outer: octagon, holes: [] }, 1000);
+    expect(oct.positions.length / 3).toBe(2 * 8 + 2 * 2 * 8);
+    // Angle explicite : prioritaire (0 → facettes même sur un contour rond).
+    const flat = meshExtrusion(identityFrame, { outer: circle, holes: [] }, 1000, {
+      creaseAngleDeg: 0,
+    });
+    expect(flat.positions.length / 3).toBe(capVertices + 4 * 32);
+  });
+
+  it("repère local : positions relatives à l'origine, précises au 1e-3 mm à 5 m (float32 monde : ≈ 0,25 mm)", () => {
+    const far = { ...identityFrame, origin: { x: 5000.123456, y: -4999.987654, z: 3000.4321 } };
+    const shape = { outer: rect(0.3, 0.2, 0.6, 0.4), holes: [] };
+    const local = meshExtrusion(far, shape, 0.7, { localOrigin: true });
+    const world = meshExtrusion(far, shape, 0.7);
+    expect(local.origin).toBeDefined();
+    expect(world.origin).toBeUndefined();
+    const o = local.origin!;
+    // Sommet exact attendu : coin (0, 0) du rectangle, bas.
+    let bestLocal = Infinity;
+    let bestWorld = Infinity;
+    for (let i = 0; i < local.positions.length; i += 3) {
+      const d = Math.hypot(
+        o.x + local.positions[i]! - 5000.123456,
+        o.y + local.positions[i + 1]! + 4999.987654,
+        o.z + local.positions[i + 2]! - 3000.4321,
+      );
+      bestLocal = Math.min(bestLocal, d);
+      const dw = Math.hypot(
+        world.positions[i]! - 5000.123456,
+        world.positions[i + 1]! + 4999.987654,
+        world.positions[i + 2]! - 3000.4321,
+      );
+      bestWorld = Math.min(bestWorld, dw);
+    }
+    expect(bestLocal).toBeLessThan(1e-6);
+    expect(bestWorld).toBeGreaterThan(1e-5);
+    // Volume identique (invariant par translation), boîte ramenée au monde.
+    expect(signedVolume(local)).toBeCloseTo(signedVolume(world), 3);
+    const b = bbox(local)!;
+    expect(b.min.x).toBeCloseTo(5000.123456, 6);
+    expect(b.max.z).toBeCloseTo(3000.4321 + 0.7, 6);
   });
 
   it("propriété : fermé, orienté, volume = aire × |profondeur| (trous, repère quelconque, profondeur signée)", () => {
@@ -52,13 +117,18 @@ describe("meshExtrusion", () => {
     );
   });
 
-  it("angle de lissage : un cylindre à 64 facettes a des normales latérales lissées", () => {
+  it("angle de lissage : un cylindre à 64 facettes a des normales latérales lissées (défaut depuis D3 : contour rond)", () => {
     const n = 64;
     const circle = Array.from({ length: n }, (_, i) => ({
       x: 50 * Math.cos((2 * Math.PI * i) / n),
       y: 50 * Math.sin((2 * Math.PI * i) / n),
     }));
-    const flat = meshExtrusion(identityFrame, { outer: circle, holes: [] }, 100);
+    const flat = meshExtrusion(identityFrame, { outer: circle, holes: [] }, 100, {
+      creaseAngleDeg: 0,
+    });
+    expect(
+      meshExtrusion(identityFrame, { outer: circle, holes: [] }, 100).positions.length / 3,
+    ).toBe(2 * n + 2 * n);
     const smooth = meshExtrusion(identityFrame, { outer: circle, holes: [] }, 100, {
       creaseAngleDeg: 30,
     });

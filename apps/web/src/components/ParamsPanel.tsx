@@ -5,6 +5,8 @@
  */
 import {
   DEDUCED_ONLY_CONTEXTS,
+  DEFAULT_NEWEL_SIZE,
+  defaultOpening,
   RULE_TABLE,
   type InnerCorner,
   type Leg,
@@ -12,7 +14,7 @@ import {
   type Project,
   type Turn,
 } from "@blondel/core";
-import { useRef, type ReactNode } from "react";
+import { useMemo, useRef, type ReactNode } from "react";
 import { appStore, useApp, useModel } from "../store/appStore.js";
 import type { Path } from "../store/setIn.js";
 import { addLeg, legAutoAllowed, removeLastLeg } from "../lib/layoutEdit.js";
@@ -29,6 +31,8 @@ import {
 import { balancingMethodOptions, herseAngleRange, rotationRanges } from "../lib/balancingForm.js";
 import {
   realign,
+  realignDisabledReason,
+  REALIGN_HINT,
   WALKLINE_SIDE_HINT,
   walklineSideApplies,
   walklineSideChoice,
@@ -115,16 +119,19 @@ function SiteSection() {
             lastOpening.current = o ?? null;
             return set(["site", "opening"])(undefined);
           }
-          // Valeur provisoire à ajuster par l'utilisateur (aucune règle n'est appliquée ici) :
+          // Trémie précédente de la session, sinon celle que proposerait le préréglage
+          // (`defaultOpening` du cœur : échappée et jeu latéral des préréglages). Si le cœur
+          // n'en propose pas (dalle assez haute, tracé impossible), valeur provisoire à ajuster :
           // carré de côté E au départ, ou carré circonscrit au cercle R_e d'un hélicoïdal.
           const r = layout.kind === "helical" ? layout.outerRadius : 0;
-          const restored: Opening = lastOpening.current ?? {
-            kind: "rect",
-            x: layout.kind === "helical" ? Math.round(origin.x) - r : 0,
-            y: layout.kind === "helical" ? Math.round(origin.y) - r : 0,
-            sizeX: layout.kind === "helical" ? 2 * r : layout.width,
-            sizeY: layout.kind === "helical" ? 2 * r : layout.width,
-          };
+          const restored: Opening = lastOpening.current ??
+            defaultOpening(appStore.getState().project) ?? {
+              kind: "rect",
+              x: layout.kind === "helical" ? Math.round(origin.x) - r : 0,
+              y: layout.kind === "helical" ? Math.round(origin.y) - r : 0,
+              sizeX: layout.kind === "helical" ? 2 * r : layout.width,
+              sizeY: layout.kind === "helical" ? 2 * r : layout.width,
+            };
           return set(["site", "opening"])(restored);
         }}
       />
@@ -196,7 +203,11 @@ function TurnEditor({ turn, index }: { turn: Turn; index: number }) {
         onCommit={(kind) => {
           if (kind === inner.kind) return { ok: true };
           const size =
-            inner.kind === "arc" ? inner.radius : inner.kind === "newel" ? inner.size : 100;
+            inner.kind === "arc"
+              ? inner.radius
+              : inner.kind === "newel"
+                ? inner.size
+                : DEFAULT_NEWEL_SIZE;
           const next: InnerCorner =
             kind === "sharp"
               ? { kind: "sharp" }
@@ -344,10 +355,14 @@ function LayoutSection() {
 }
 
 /**
- * Recalage des volées et de la trémie sur H, E et la dalle (décision A18 (a)) : calcul du cœur
- * (préréglage de même topologie), une seule entrée d'annulation, message d'information.
+ * Recalage des volées et de la trémie sur H, E et la dalle (décision A18 (a), précisée le
+ * 2026-09-30) : calcul du cœur (dernière volée seulement, position des tournants et trémie
+ * polygonale conservées), une seule entrée d'annulation, message d'information. Recalage
+ * impossible : bouton désactivé, raison rendue par le cœur affichée sous le bouton.
  */
 function RealignButton() {
+  const project = useApp((s) => s.project);
+  const reason = useMemo(() => realignDisabledReason(project), [project]);
   const onClick = () => {
     let notice = "";
     const r = update((p) => {
@@ -366,10 +381,17 @@ function RealignButton() {
       <button
         type="button"
         onClick={onClick}
-        title="Après une modification de H, E ou de l'épaisseur du plancher haut : longueurs de volées et trémie recalculées selon le préréglage de même forme (annulable)"
+        disabled={reason !== null}
+        title={reason ?? REALIGN_HINT}
+        aria-describedby={reason !== null ? "realign-reason" : undefined}
       >
         Recaler volées et trémie
       </button>
+      {reason !== null ? (
+        <p className="muted" id="realign-reason" data-testid="realign-reason">
+          {reason}
+        </p>
+      ) : null}
     </div>
   );
 }

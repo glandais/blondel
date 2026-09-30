@@ -33,13 +33,20 @@ import type { Mm, Vec2 } from "../model/primitives.js";
 import type { StructureContext, StructureKind, StructureOutput } from "../model/plugins.js";
 import { buildBasicParts } from "../parts/basic.js";
 import { fmt } from "../rules/check.js";
+import { getRule } from "../rules/table.js";
 import {
   WOOD_MATERIALS,
   resolveWorkshopProfile,
   smallestAvailable,
   type WorkshopProfile,
 } from "../workshop/profile.js";
-import { CheckCollector, FAB_RULES, flightsOnlyError, pluginRuleDef } from "./checks.js";
+import {
+  CheckCollector,
+  FAB_RULES,
+  flightsOnlyError,
+  pluginRuleDef,
+  stringerRulesOutOfDomain,
+} from "./checks.js";
 import {
   developStringer,
   housingPolygons,
@@ -70,8 +77,11 @@ import {
 } from "./newel.js";
 import { woodQuantities } from "./quantities.js";
 
-/** Entaille marche / limon minimale de la NF EN 16481 § 5.4.2 (C §1.4, confiance élevée). */
-export const EN16481_MIN_HOUSING_DEPTH: Mm = 14;
+/**
+ * Entaille marche / limon minimale de la NF EN 16481 § 5.4.2 (C §1.4, confiance élevée), lue
+ * dans rules.yaml (`LIMON_ENTAILLE_MIN.min`).
+ */
+export const EN16481_MIN_HOUSING_DEPTH: Mm = getRule("LIMON_ENTAILLE_MIN").min ?? Number.NaN;
 
 const mmInt = z.number().int();
 const mmPos = mmInt.positive();
@@ -790,12 +800,12 @@ export function buildWoodHoused(ctx: StructureContext, params: WoodHousedParams)
   const partLoc = (id: string) => ({ partId: id });
   const thicknessRule = checks.yamlRule("LIMON_EPAISSEUR_MIN_DTU");
   if (thicknessRule && stringers.length > 0) {
-    const E = project.stair.layout.width;
-    if (E > 1200) {
+    const outside = stringerRulesOutOfDomain(thicknessRule, project.stair.layout.width);
+    if (outside !== null) {
       checks.add(thicknessRule, [
         {
           status: "non-evaluee",
-          message: `Hors domaine des règles de moyens (emmarchement ${fmt(E, 0)} mm > 1 200 mm) : justification par le calcul (C §1.4).`,
+          message: `${outside} : justification par le calcul (C §1.4).`,
         },
       ]);
     } else {
@@ -807,13 +817,16 @@ export function buildWoodHoused(ctx: StructureContext, params: WoodHousedParams)
       );
     }
   }
-  if (stringers.length > 0) {
+  const housingRule = checks.yamlRule("LIMON_ENTAILLE_MIN");
+  if (housingRule && stringers.length > 0) {
     checks.addItems(
-      pluginRuleDef(FAB_RULES.housingDepth),
+      housingRule,
       [{ value: depth, label: "profondeur d'encastrement" }],
       "Entaille marche / limon",
-      { min: EN16481_MIN_HOUSING_DEPTH, max: null },
+      { min: housingRule.min, max: housingRule.max },
     );
+  }
+  if (stringers.length > 0) {
     checks.addItems(
       pluginRuleDef(FAB_RULES.perpendicularWidth),
       stringers.map((s) => ({
@@ -913,4 +926,10 @@ export const WOOD_HOUSED: StructureKind<WoodHousedParams> = {
   paramsSchema: WoodHousedParamsSchema,
   defaults: () => WoodHousedParamsSchema.parse({}),
   build: (ctx, params) => buildWoodHoused(ctx, params).output,
+  capabilities: {
+    // Limons de jour assemblés sur un poteau d'angle (jour vif refusé).
+    requiresNewel: true,
+    // Limons hors emprise utile, côté jour et côté mur (CHALLENGE A3).
+    lateralThickness: (p) => ({ inner: p.thickness, outer: p.thickness }),
+  },
 };

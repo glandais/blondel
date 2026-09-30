@@ -231,6 +231,9 @@ export function computeLayout(project: Project, options: LayoutOptions = {}): La
   /** Point de la volée i à l'abscisse t (le long de u) et à la distance o du bord gauche. */
   const at = (leg: LegFrame, t: Mm, o: Mm): Vec2 =>
     V.addScaled(V.addScaled(leg.left, leg.u, t), leg.r, o);
+
+  // Emprises dégénérées (dette D3), signalées sans bloquer le calcul (`Layout.errors`).
+  const layoutErrors = degenerateFootprint(legs, turns, width, at);
   /** Coin intérieur K du tournant j (intersection des faces internes des limons). */
   const cornerOf = (j: number): Vec2 => {
     const leg = legs[j]!;
@@ -341,7 +344,12 @@ export function computeLayout(project: Project, options: LayoutOptions = {}): La
 
   // Jour réduit à un point (quart tournant sans partie droite, angle vif) : courbe de
   // longueur nulle au coin, pour garder un `Curve2` non vide.
-  if (innerSegs.length === 0) innerSegs.push(lineSeg(cornerOf(0), cornerOf(0)));
+  if (innerSegs.length === 0) {
+    layoutErrors.push(
+      "Bord du jour de longueur nulle (tournant sans partie droite de part et d'autre, jour à angle vif) : les limons et garde-corps de jour n'ont pas d'appui ; allonger une volée ou prévoir un poteau.",
+    );
+    innerSegs.push(lineSeg(cornerOf(0), cornerOf(0)));
+  }
   if (outerSegs.length === 0) outerSegs.push(lineSeg(cornerOf(0), cornerOf(0)));
   const inner = curveToWorld(makeCurve(innerSegs));
   const outer = curveToWorld(makeCurve(outerSegs));
@@ -377,6 +385,7 @@ export function computeLayout(project: Project, options: LayoutOptions = {}): La
     walklineOffset: df,
     footprint: footprintOf(inner, outer),
     turns: turnZones,
+    ...(layoutErrors.length > 0 ? { errors: layoutErrors } : {}),
     innerSide,
     ...(walklineSide !== undefined ? { walklineSide } : {}),
     ...(walklineTransitions.length > 0 ? { walklineTransitions } : {}),
@@ -411,6 +420,58 @@ function innerTurnSegments(turn: Turn, k: Vec2, u: Vec2, n: Vec2): CurveSeg[] {
       return segs;
     }
   }
+}
+
+/**
+ * Emprises dégénérées d'un tracé à volées (repère local, volées alignées sur les axes) :
+ * - deux tournants successifs de même sens (U, demi-tournant) dont la volée intermédiaire ne
+ *   laisse aucun jour (L = 2E, jour à angle vif) : les volées qui se font face se touchent et
+ *   le bord du jour revient sur lui-même (emprise « à fente », polygone non simple) ;
+ * - deux volées non consécutives qui se superposent en plan (trois tournants ou plus de même
+ *   sens) : recouvrement d'aire non nulle de leurs rectangles hors tout ; l'emprise n'est pas un
+ *   polygone simple et l'échappée sous la volée supérieure n'est pas calculée (`Stepping.soffits`
+ *   ne porte que l'hélicoïdal).
+ * Constats géométriques, sans seuil.
+ */
+function degenerateFootprint(
+  legs: readonly LegFrame[],
+  turns: readonly Turn[],
+  width: Mm,
+  at: (leg: LegFrame, t: Mm, o: Mm) => Vec2,
+): string[] {
+  const out: string[] = [];
+  for (let i = 0; i + 1 < turns.length; i++) {
+    if (turns[i]!.direction !== turns[i + 1]!.direction) continue;
+    const jour = legs[i + 1]!.length - 2 * width;
+    if (jour <= GEOM_EPS) {
+      out.push(
+        `Tournants ${i + 1} et ${i + 2} : la ${legLabel(i + 1)} (${legs[i + 1]!.length} mm, deux fois l'emmarchement) ne laisse aucun jour, les ${legLabel(i)} et ${legLabel(i + 2)} se touchent (emprise dégénérée) ; allonger la ${legLabel(i + 1)} ou prévoir un poteau.`,
+      );
+    }
+  }
+  const box = (leg: LegFrame): { lo: Vec2; hi: Vec2 } => {
+    const a = at(leg, 0, 0);
+    const b = at(leg, leg.length, width);
+    return {
+      lo: V.vec(Math.min(a.x, b.x), Math.min(a.y, b.y)),
+      hi: V.vec(Math.max(a.x, b.x), Math.max(a.y, b.y)),
+    };
+  };
+  const boxes = legs.map(box);
+  for (let i = 0; i < legs.length; i++) {
+    for (let j = i + 2; j < legs.length; j++) {
+      const a = boxes[i]!;
+      const b = boxes[j]!;
+      const ox = Math.min(a.hi.x, b.hi.x) - Math.max(a.lo.x, b.lo.x);
+      const oy = Math.min(a.hi.y, b.hi.y) - Math.max(a.lo.y, b.lo.y);
+      if (ox > GEOM_EPS && oy > GEOM_EPS) {
+        out.push(
+          `Les ${legLabel(i)} et ${legLabel(j)} se superposent en plan (${Math.round(ox)} × ${Math.round(oy)} mm) : emprise non simple, et l'échappée de l'une sous l'autre n'est pas contrôlée (auto-recouvrement calculé pour l'hélicoïdal seulement).`,
+        );
+      }
+    }
+  }
+  return out;
 }
 
 /** Emprise : C_e à l'endroit puis C_i à l'envers, polygone CCW sans points doublés. */

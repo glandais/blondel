@@ -5,7 +5,7 @@
  * masses et les exports gardent le matériau du modèle (`Part.material`), choisi dans les
  * panneaux Structure et Garde-corps. Choix de présentation, aucune règle métier.
  */
-import type { MaterialId, PartCategory } from "@blondel/core";
+import type { MaterialId, PartCategory, PartFamilyId } from "@blondel/core";
 import { MATERIAL_LABELS, type PaintZone } from "../three/materials.js";
 
 export type PartFamily = "treads" | "structure" | "guards" | "handrails";
@@ -27,20 +27,21 @@ export const APPEARANCE_MATERIALS: readonly MaterialId[] = Object.keys(
   MATERIAL_LABELS,
 ) as MaterialId[];
 
-/**
- * Famille d'une pièce : mains courantes par catégorie ; pièces des garde-corps par leur
- * identifiant (`guard-…`, `handrail-wall-…`, convention de `guards/compute.ts` du cœur) ;
- * marches, contremarches et paliers ; tout le reste = structure.
- */
-export function partFamily(part: {
-  readonly partId: string;
+/** Pièce vue par l'apparence : catégorie et famille rendues par le cœur (`Part.family`). */
+export interface AppearancePart {
   readonly category: PartCategory;
-}): PartFamily {
+  readonly family?: PartFamilyId | undefined;
+}
+
+/**
+ * Famille d'une pièce : mains courantes par catégorie ; sinon famille explicite du cœur
+ * (`Part.family`, QUESTIONS D6 : garde-corps, marches, ossature), sans convention d'identifiant.
+ * Pièce sans famille (modèle construit hors pipeline) : ossature.
+ */
+export function partFamily(part: AppearancePart): PartFamily {
   if (part.category === "handrail") return "handrails";
-  if (part.partId.startsWith("guard-") || part.partId.startsWith("handrail-")) return "guards";
-  if (part.category === "tread" || part.category === "riser" || part.category === "landing") {
-    return "treads";
-  }
+  if (part.family === "guards") return "guards";
+  if (part.family === "treads") return "treads";
   return "structure";
 }
 
@@ -48,10 +49,7 @@ export function partFamily(part: {
  * Zone de peinture d'une pièce (teintes enregistrées `Project.appearance`) : marches, garde-corps
  * (mains courantes comprises) ou ossature.
  */
-export function paintZone(part: {
-  readonly partId: string;
-  readonly category: PartCategory;
-}): PaintZone {
+export function paintZone(part: AppearancePart): PaintZone {
   const family = partFamily(part);
   if (family === "treads") return "treads";
   if (family === "guards" || family === "handrails") return "guards";
@@ -60,7 +58,7 @@ export function paintZone(part: {
 
 /** Matériau affiché d'une pièce : surcharge de sa famille, sinon matériau du modèle. */
 export function displayedMaterial(
-  part: { readonly partId: string; readonly category: PartCategory; readonly material: MaterialId },
+  part: AppearancePart & { readonly material: MaterialId },
   overrides: AppearanceOverrides,
 ): MaterialId {
   return overrides[partFamily(part)] ?? part.material;
@@ -71,11 +69,7 @@ export function displayedMaterial(
  * « matériau du projet : Chêne » dans la liste).
  */
 export function familiesOf(
-  parts: readonly {
-    readonly partId: string;
-    readonly category: PartCategory;
-    readonly material: MaterialId;
-  }[],
+  parts: readonly (AppearancePart & { readonly material: MaterialId })[],
 ): readonly { readonly family: PartFamily; readonly materials: readonly MaterialId[] }[] {
   const found = new Map<PartFamily, Set<MaterialId>>();
   for (const p of parts) {

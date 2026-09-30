@@ -2,10 +2,9 @@
  * Contrôles propres aux garde-corps, hors rules.yaml, ajoutés au rapport par le pipeline
  * (comme les contrôles de fabrication des structures, `mergeStructureChecks`).
  *
- * - `GC_CABLES_DETENTE` (avertissement) : remplissage à câbles. NF P01-012:2024 : les vides ne
- *   doivent pas augmenter dans le temps (« attention aux câbles qui se détendent ») [A §3.2,
- *   C §3.1] ; SPEC X12 : câbles traités comme des lisses **avec un avertissement de détente**.
- *   Actif avec un régime garde-corps (1988 ou 2024), comme les règles GC_*.
+ * `GC_CABLES_DETENTE` (câbles qui se détendent) n'est plus un contrôle hors table : c'est une
+ * règle de rules.yaml évaluée par le moteur (`rules/evaluators/guards.ts`).
+ *
  * - `GC_CONFLIT_DALLE` (avertissement, toujours actif) : collision géométrique d'un garde-corps
  *   rampant avec le plancher haut. Hors de la trémie (sous la dalle), la main courante d'un
  *   rampant dont le dessus dépasse la sous-face de la dalle traverse celle-ci : cas d'un bord
@@ -25,30 +24,12 @@ import type { RuleResult } from "../model/derived.js";
 import type { Vec2 } from "../model/primitives.js";
 import type { Project } from "../model/project.js";
 import type { Stepping } from "../model/derived.js";
-import { STAIR, fmt } from "../rules/check.js";
-import { resolveContexts } from "../rules/contexts.js";
+import { fmt } from "../rules/check.js";
 import { effectiveSeverity } from "../rules/engine.js";
 import type { RuleDef } from "../rules/table.js";
 import { sectionWidth } from "./parts.js";
 import { cumulative, interp, pointAt, tangentAt } from "./polyline.js";
 import type { GuardPostFootprint, GuardRun, GuardsAnalysis } from "./types.js";
-
-export const CABLE_SLACK_RULE: RuleDef = {
-  id: "GC_CABLES_DETENTE",
-  description:
-    "Câbles de garde-corps : les vides ne doivent pas augmenter dans le temps (détente des câbles) ; prévoir une retension",
-  formule: "",
-  min: null,
-  max: null,
-  recommande: null,
-  unite: null,
-  contexte: ["garde_corps_1988", "garde_corps_2024"],
-  nature: "normatif",
-  source: "NF P01-012:2024 via APAVE [12] (durabilité des vides) ; SPEC X12",
-  source_secondaire: true,
-  confiance: "eleve",
-  severite: "avertissement",
-};
 
 export const SLAB_CLASH_RULE: RuleDef = {
   id: "GC_CONFLIT_DALLE",
@@ -186,14 +167,10 @@ export function slabClash(
 /** Contrôles hors table des garde-corps (vide si rien à signaler). */
 export function guardChecks(
   project: Project,
-  stepping: Stepping,
+  _stepping: Stepping,
   analysis: GuardsAnalysis,
 ): RuleResult[] {
-  return [
-    ...slabClashChecks(project, analysis),
-    ...jourPostChecks(project, analysis),
-    ...cableChecks(project, stepping, analysis),
-  ];
+  return [...slabClashChecks(project, analysis), ...jourPostChecks(project, analysis)];
 }
 
 function jourPostChecks(project: Project, analysis: GuardsAnalysis): RuleResult[] {
@@ -246,27 +223,4 @@ function slabClashChecks(project: Project, analysis: GuardsAnalysis): RuleResult
     });
   }
   return out;
-}
-
-function cableChecks(project: Project, stepping: Stepping, analysis: GuardsAnalysis): RuleResult[] {
-  const cableRuns = analysis.runs.filter((r) => r.infill === "cables");
-  if (cableRuns.length === 0) return [];
-  const active = new Set(resolveContexts(project.compliance, stepping).active);
-  if (!CABLE_SLACK_RULE.contexte.some((c) => active.has(c))) return [];
-  const rule = CABLE_SLACK_RULE;
-  const eff = effectiveSeverity(rule, project.compliance);
-  return cableRuns.map((run) => ({
-    ruleId: rule.id,
-    description: rule.description,
-    status: eff.ignored ? "non-evaluee" : "violation",
-    severity: eff.severity,
-    declaredSeverity: rule.severite,
-    location: run.infillPartIds[0] ? { kind: "part", partId: run.infillPartIds[0] } : STAIR,
-    nature: rule.nature,
-    confidence: rule.confiance,
-    source: rule.source,
-    secondarySource: rule.source_secondaire,
-    ...(eff.downgradeReason !== undefined ? { downgradeReason: eff.downgradeReason } : {}),
-    message: `Câbles du ${run.label} : traités comme des lisses (SPEC X12) ; la détente des câbles augmente les vides dans le temps, prévoir un dispositif de retension et un contrôle périodique.`,
-  }));
 }

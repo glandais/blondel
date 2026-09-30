@@ -1,8 +1,10 @@
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { guardRailRegime, isRuleApplicable, resolveContexts } from "./contexts.js";
+import { SHAPE_CONTEXTS, guardRailRegime, isRuleApplicable, resolveContexts } from "./contexts.js";
 import { makeHelicalProject } from "../layout/helical-test-helpers.js";
 import { buildModel } from "../pipeline/build.js";
-import { getRule } from "./table.js";
+import { RULE_CONTEXTS, RULE_TABLE, getRule, type RuleDef } from "./table.js";
 import { makeProject, makeStepping } from "./test-fixtures.js";
 
 describe("régime garde-corps", () => {
@@ -160,5 +162,48 @@ describe("applicabilité des règles", () => {
       isRuleApplicable(getRule("G_COLLET_MIN"), act("tournant", "helicoidal", "helicoidal_fut")),
     ).toBe(false);
     expect(isRuleApplicable(getRule("G_TOL_BALANCEE"), act("bois_dtu"))).toBe(false);
+  });
+});
+
+describe("sémantique des listes de contextes (rules.yaml, ADR-0004)", () => {
+  const rule = (contexte: string[], contexte_exclu?: string[]): RuleDef => ({
+    ...getRule("H_CONFORT"),
+    contexte,
+    ...(contexte_exclu ? { contexte_exclu } : {}),
+  });
+  const act = (...c: string[]) => new Set(["tous", ...c]);
+
+  it("contextes de forme lus dans rules.yaml (`contextes_forme`)", () => {
+    expect([...SHAPE_CONTEXTS].sort()).toEqual([...RULE_TABLE.contextes_forme].sort());
+    expect([...SHAPE_CONTEXTS].sort()).toEqual(["helicoidal", "helicoidal_fut", "tournant"]);
+    for (const c of SHAPE_CONTEXTS) expect(RULE_CONTEXTS).toContain(c);
+  });
+
+  it("table de vérité : disjonction dans chaque groupe, conjonction entre les groupes", () => {
+    // Groupe « autres » seul : disjonction.
+    expect(isRuleApplicable(rule(["erp_neuf", "erp_existant"]), act("erp_existant"))).toBe(true);
+    expect(isRuleApplicable(rule(["erp_neuf", "erp_existant"]), act("bois_dtu"))).toBe(false);
+    // Groupe « forme » seul : disjonction.
+    expect(isRuleApplicable(rule(["tournant", "helicoidal"]), act("helicoidal"))).toBe(true);
+    expect(isRuleApplicable(rule(["tournant", "helicoidal"]), act("bois_dtu"))).toBe(false);
+    // Les deux groupes : conjonction.
+    const both = rule(["erp_securite", "tournant", "helicoidal"]);
+    expect(isRuleApplicable(both, act("erp_securite", "tournant"))).toBe(true);
+    expect(isRuleApplicable(both, act("erp_securite"))).toBe(false);
+    expect(isRuleApplicable(both, act("tournant", "helicoidal"))).toBe(false);
+    // `tous` : toujours, sauf contexte exclu.
+    expect(isRuleApplicable(rule(["tous"]), act())).toBe(true);
+    expect(isRuleApplicable(rule(["tous"], ["helicoidal_fut"]), act("helicoidal_fut"))).toBe(false);
+  });
+
+  it("la sémantique est écrite en tête de rules.yaml et dans ADR-0004", () => {
+    const root = fileURLToPath(new URL("../../../../", import.meta.url));
+    const yaml = readFileSync(root + "docs/research/rules.yaml", "utf8");
+    const adr = readFileSync(root + "docs/adr/0004-moteur-de-regles.md", "utf8");
+    for (const doc of [yaml, adr]) {
+      expect(doc).toMatch(/DISJONCTION|disjonction/);
+      expect(doc).toMatch(/CONJONCTION|conjonction/);
+      expect(doc).toMatch(/contextes_forme/);
+    }
   });
 });

@@ -116,13 +116,16 @@ describe("plugin helical-core", () => {
     expect(output.executionClass).toBe("EXC1");
   });
 
-  it("justification fournie : contrôle conforme", () => {
+  it("justification fournie : l'avertissement reste, justification jointe (A12)", () => {
     const { output } = buildHelicalCore(
       context(helical()),
       params({ cantileverJustification: "Note de calcul NC-042" }),
     );
     const c = output.checks.find((r) => r.ruleId === "HELICOIDAL_PORTE_A_FAUX")!;
-    expect(c.status).toBe("ok");
+    // Décision A12 (2026-09-30) : une justification n'est pas une vérification.
+    expect(c.status).toBe("violation");
+    expect(c.severity).toBe("avertissement");
+    expect(c.message).not.toMatch(/Justification requise/);
     expect(c.message).toContain("NC-042");
     // Justification portée par le résultat (reprise dans le dossier PDF, décision A12).
     expect(c.justification).toBe("Note de calcul NC-042");

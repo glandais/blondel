@@ -12,12 +12,13 @@ import {
   ruleFamily,
   type Location,
   type Model,
+  type Part,
   type RuleFamily,
   type RuleResult,
   type Severity,
   type Vec3,
 } from "@blondel/core";
-import { SEVERITY_ORDER, treadPartId } from "./compliance.js";
+import { SEVERITY_ORDER } from "./compliance.js";
 
 export interface PointMarker {
   readonly at: Vec3;
@@ -47,13 +48,24 @@ export function worse(a: Severity, b: Severity | undefined): boolean {
   return b === undefined || rank(a) < rank(b);
 }
 
-/** Pièce désignée par une localisation (`part`, ou marche `tread-N` si elle existe). */
-export function locatedPartId(loc: Location, partIds: ReadonlySet<string>): string | undefined {
-  if (loc.kind === "part") return partIds.has(loc.partId) ? loc.partId : undefined;
-  if (loc.kind === "tread") {
-    const id = treadPartId(loc.number);
-    return partIds.has(id) ? id : undefined;
-  }
+/** Index des pièces d'un modèle : identifiants et pièce de chaque marche (`Part.treadNumber`). */
+export interface PartLookup {
+  readonly ids: ReadonlySet<string>;
+  readonly byTread: ReadonlyMap<number, string>;
+}
+
+export function partLookup(parts: readonly Pick<Part, "id" | "treadNumber">[]): PartLookup {
+  const byTread = new Map<number, string>();
+  for (const p of parts)
+    if (p.treadNumber !== undefined && !byTread.has(p.treadNumber))
+      byTread.set(p.treadNumber, p.id);
+  return { ids: new Set(parts.map((p) => p.id)), byTread };
+}
+
+/** Pièce désignée par une localisation (`part`, ou pièce de la marche si elle existe). */
+export function locatedPartId(loc: Location, lookup: PartLookup): string | undefined {
+  if (loc.kind === "part") return lookup.ids.has(loc.partId) ? loc.partId : undefined;
+  if (loc.kind === "tread") return lookup.byTread.get(loc.number);
   return undefined;
 }
 
@@ -73,11 +85,11 @@ export function controlMarkers(
     number
   >;
   if (!model) return { parts, rulesByPart, points, byFamily };
-  const ids = new Set(model.parts.map((p) => p.id));
+  const lookup = partLookup(model.parts);
   const results: readonly RuleResult[] = model.compliance.results;
   for (const r of results) {
     if (r.status !== "violation") continue;
-    const partId = locatedPartId(r.location, ids);
+    const partId = locatedPartId(r.location, lookup);
     const located =
       partId !== undefined ||
       (r.location.kind === "point" &&

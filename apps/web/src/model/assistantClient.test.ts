@@ -1,7 +1,12 @@
 import { createProject, type AssistantInput } from "@blondel/core";
 import { describe, expect, it, vi } from "vitest";
-import { runAssistantJob, type AssistantOutcome } from "./assistantJob.js";
-import { AssistantCancelled, startAssistant, type AssistantWorkerLike } from "./assistantClient.js";
+import { runAssistantJob, runSketchJob, type AssistantOutcome } from "./assistantJob.js";
+import {
+  AssistantCancelled,
+  startAssistant,
+  startSketches,
+  type AssistantWorkerLike,
+} from "./assistantClient.js";
 
 const site = createProject("straight").site;
 const input: AssistantInput = {
@@ -43,6 +48,16 @@ describe("calcul de l'assistant", () => {
     expect(o.result.candidates.length).toBeGreaterThan(0);
     for (const c of o.result.candidates) expect(o.sketches[c.id]).toBeDefined();
     expect(() => structuredClone(o)).not.toThrow();
+  });
+
+  it("croquis à la demande : variantes repliées sans croquis, calculés par runSketchJob (D5)", () => {
+    const o = runAssistantJob({ ...input, limits: { ...input.limits, perGroupLimit: 4 } });
+    const variants = o.result.candidates.flatMap((c) => c.variants);
+    expect(variants.length).toBeGreaterThan(0);
+    for (const v of variants) expect(o.sketches[v.id]).toBeUndefined();
+    const lazy = runSketchJob(variants.map((v) => ({ id: v.id, project: v.project })));
+    for (const v of variants) expect(lazy[v.id]).toBeDefined();
+    expect(() => structuredClone(lazy)).not.toThrow();
   });
 
   it("ne lève jamais : erreur rendue en diagnostic", () => {
@@ -89,6 +104,25 @@ describe("client de l'assistant", () => {
     const b = startAssistant(input, { factory: () => null, local });
     b.cancel();
     await expect(b.promise).rejects.toBeInstanceOf(AssistantCancelled);
+  });
+
+  it("croquis des variantes : worker dédié, message `sketches`, annulable", async () => {
+    const w = fakeWorker();
+    const requests = [{ id: "v1", project: createProject("quarter-left") }];
+    const job = startSketches(requests, { factory: () => w });
+    expect(w.posted).toEqual([{ sketches: requests }]);
+    const sketches = runSketchJob(requests);
+    w.onmessage?.({ data: { sketches } });
+    await expect(job.promise).resolves.toBe(sketches);
+    expect(w.terminated).toBe(true);
+    const w2 = fakeWorker();
+    const cancelled = startSketches(requests, { factory: () => w2 });
+    cancelled.cancel();
+    expect(w2.terminated).toBe(true);
+    await expect(cancelled.promise).rejects.toBeInstanceOf(AssistantCancelled);
+    // Sans worker : fil principal.
+    const local = startSketches(requests, { factory: () => null });
+    expect(Object.keys(await local.promise)).toEqual(["v1"]);
   });
 
   it("réponse d'erreur du worker : promesse rejetée avec le message", async () => {

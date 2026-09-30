@@ -14,6 +14,7 @@ import {
   type Model,
   type Severity,
 } from "@blondel/core";
+import { MATERIAL_PBR, type PbrLook } from "@blondel/exports";
 import type { TextureKind } from "./proceduralTextures.js";
 
 export interface MaterialLook {
@@ -44,50 +45,32 @@ export interface MaterialLook {
   readonly tint?: readonly [number, number, number];
 }
 
-export const MATERIAL_LOOKS: Readonly<Record<MaterialId, MaterialLook>> = {
-  "wood-oak": {
-    color: "#b8895a",
-    roughness: 0.7,
-    metalness: 0,
-    texture: "oak",
-    clearcoat: 0.15,
-  },
-  "wood-beech": {
-    color: "#d2a77c",
-    roughness: 0.7,
-    metalness: 0,
-    texture: "beech",
-    clearcoat: 0.15,
-  },
-  "wood-ash": { color: "#dcc8a4", roughness: 0.7, metalness: 0, texture: "ash", clearcoat: 0.15 },
-  "wood-pine": { color: "#e2c28c", roughness: 0.75, metalness: 0, texture: "pine" },
-  "wood-glulam": { color: "#d6b27e", roughness: 0.7, metalness: 0, texture: "glulam" },
-  "steel-raw": { color: "#5d6166", roughness: 0.55, metalness: 0.8, texture: "steel-raw" },
-  "steel-painted": { color: "#3a3f45", roughness: 0.6, metalness: 0.25, clearcoat: 0.3 },
-  "steel-galvanized": {
-    color: "#a3a9ad",
-    roughness: 0.45,
-    metalness: 0.85,
-    texture: "galvanized",
-  },
-  "stainless-brushed": {
-    color: "#c3c7ca",
-    roughness: 0.3,
-    metalness: 0.9,
-    texture: "brushed",
-    anisotropy: 0.75,
-  },
-  glass: {
-    color: "#bcd8e0",
-    roughness: 0.05,
-    metalness: 0,
-    opacity: 0.3,
-    transmission: 1,
-    ior: 1.5,
-    // Épaisseur : celle du remplissage verre du modèle (`glassThicknessOf`), voir `thickness`.
-  },
-  concrete: { color: "#a19d97", roughness: 0.9, metalness: 0, texture: "concrete" },
+/**
+ * Compléments de la vue 3D (textures procédurales, anisotropie, transmission, vernis) : couleur,
+ * rugosité, métal et opacité viennent de la table **unique** `MATERIAL_PBR` de
+ * `@blondel/exports`, partagée avec le glTF (QUESTIONS D6).
+ */
+const VIEW_EXTRAS: Readonly<Record<MaterialId, Omit<MaterialLook, keyof PbrLook>>> = {
+  "wood-oak": { texture: "oak", clearcoat: 0.15 },
+  "wood-beech": { texture: "beech", clearcoat: 0.15 },
+  "wood-ash": { texture: "ash", clearcoat: 0.15 },
+  "wood-pine": { texture: "pine" },
+  "wood-glulam": { texture: "glulam" },
+  "steel-raw": { texture: "steel-raw" },
+  "steel-painted": { clearcoat: 0.3 },
+  "steel-galvanized": { texture: "galvanized" },
+  "stainless-brushed": { texture: "brushed", anisotropy: 0.75 },
+  // Épaisseur : celle du remplissage verre du modèle (`glassThicknessOf`), voir `thickness`.
+  glass: { transmission: 1, ior: 1.5 },
+  concrete: { texture: "concrete" },
 };
+
+export const MATERIAL_LOOKS: Readonly<Record<MaterialId, MaterialLook>> = Object.fromEntries(
+  (Object.keys(VIEW_EXTRAS) as MaterialId[]).map((id) => [
+    id,
+    { ...MATERIAL_PBR[id], ...VIEW_EXTRAS[id] },
+  ]),
+) as Record<MaterialId, MaterialLook>;
 
 /** Libellés français des matériaux. */
 export const MATERIAL_LABELS: Readonly<Record<MaterialId, string>> = {

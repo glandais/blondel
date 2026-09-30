@@ -208,7 +208,7 @@ function CentralView() {
       <ElevationView
         model={model}
         project={shown}
-        selectedTread={selectedTreadNumber(selection?.location)}
+        selectedTread={selectedTreadNumber(selection?.location, model.parts)}
       />
     );
   }

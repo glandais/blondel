@@ -47,7 +47,7 @@ import { buildBasicParts } from "../parts/basic.js";
 import { fmt } from "../rules/check.js";
 import type { Finding } from "../rules/types.js";
 import { findBendLaw } from "../workshop/metal.js";
-import { resolveWorkshopProfile } from "../workshop/profile.js";
+import { resolveWorkshopProfile, type WorkshopProfile } from "../workshop/profile.js";
 import {
   CheckCollector,
   FAB_RULES,
@@ -697,7 +697,6 @@ function buildCurvedStringer(
   const jour: JourSide = layout.innerSide;
   const curve = layout.inner;
   const cum = cumulativeLengths(curve);
-  const rule = (spec: PluginRuleSpec) => pluginRuleDef(spec);
   const P = (s: Mm): Vec2 => pointAtExtended(curve, cum, s);
   const T = (s: Mm): Vec2 => tangentAtExtended(curve, cum, s);
   const N = (s: Mm): Vec2 => jourNormal(T(s), jour);
@@ -720,33 +719,10 @@ function buildCurvedStringer(
 
   // 1. Supports côté jour (cornières tangentes à la joue).
   const depthSup = supportDepth(sup);
-  const raw: { zone: TreadZone; s0: Mm; s1: Mm }[] = [];
-  const shortSupports: { value: Mm; label: string }[] = [];
-  for (const zn of zones) {
-    const a = nosings[zn.tread.number - 1]!;
-    const b = nosings[zn.tread.number]!;
-    const lo = Math.max(uLo, Math.min(a.sigmaInner, b.sigmaInner) - 150);
-    const hi = Math.min(uHi, Math.max(a.sigmaInner, b.sigmaInner) + 150);
-    if (!(hi > lo)) continue;
-    const inside = (s: Mm): boolean =>
-      pointInPolygon(V.addScaled(P(s), N(s), -zn.probe), zn.zone, 1e-6) !== "outside";
-    const iv = curveInterval(inside, lo, hi, 5);
-    if (!iv) continue;
-    const len = iv.s1 - iv.s0;
-    shortSupports.push({ value: len, label: `${zn.mark} sur le limon de jour` });
-    if (len < sup.minLength) continue;
-    raw.push({ zone: zn, s0: iv.s0, s1: iv.s1 });
-  }
+  const { raw, shortSupports } = curvedRawSupports(zones, nosings, uLo, uHi, P, N, sup);
 
   // 2. Rive basse automatique : supports sur la joue à `edgeMargin` de la rive basse.
-  let need = 0;
-  for (const r of raw) {
-    for (const s of [r.s0, r.s1, (r.s0 + r.s1) / 2]) {
-      need = Math.max(need, F.at(s) - (r.zone.zUnder - depthSup - sup.edgeMargin));
-    }
-  }
-  const lowerOffset =
-    params.lowerOffset === "auto" ? ceil5(Math.max(need, params.upperOffset)) : params.lowerOffset;
+  const lowerOffset = curvedLowerOffset(raw, F, depthSup, params);
 
   // 3. Développement (face côté marches, u = σ) : F échantillonnée au pas Δσ.
   // Hors zones balancées, F est affine entre deux nez : seuls les nez, les naissances et les
@@ -760,28 +736,7 @@ function buildCurvedStringer(
     knotSet.add(z.sigmaB);
   }
   const pitch = new PiecewiseLinear([...knotSet].map((s) => ({ x: s, y: F.at(s) })));
-  /** Abscisses d'échantillonnage du solide sur [a ; b] : nœuds de F et arcs au pas Δσ. */
-  const solidRows = (a: Mm, b: Mm): Mm[] => {
-    const xs = new Set<number>([a, b]);
-    // Nœuds presque confondus avec une extrémité (joint) écartés : rangées dégénérées sinon.
-    for (const x of pitch.xs) if (x > a + JOINT_TOLERANCE && x < b - JOINT_TOLERANCE) xs.add(x);
-    // Sommets du contour développé (u = σ) : coins des coupes de niveau basse (sol, platine) et
-    // haute (arrivée), où les rives écrêtées ont un coude qui n'est pas un nœud de F. Sans eux,
-    // la surface réglée interpole en ligne droite par-dessus le coin et s'écarte du développé.
-    for (const p of dev.outline) {
-      if (p.x > a + JOINT_TOLERANCE && p.x < b - JOINT_TOLERANCE) xs.add(p.x);
-    }
-    for (const p of stepsFace.pieces) {
-      if (p.kind !== "arc") continue;
-      const lo = Math.max(p.sigma0, a);
-      const hi = Math.min(p.sigma1, b);
-      for (let x = lo; x < hi - JOINT_TOLERANCE; x += step) if (x > a + JOINT_TOLERANCE) xs.add(x);
-      if (hi > lo && (hi === b || hi < b - JOINT_TOLERANCE)) xs.add(hi);
-    }
-    // Rangées presque confondues (sommet du contour au bruit numérique d'un nœud) fusionnées.
-    const sorted = [...xs].sort((u, v) => u - v);
-    return sorted.filter((x, i) => i === 0 || x - sorted[i - 1]! > JOINT_TOLERANCE || x === b);
-  };
+  const solidRows = (a: Mm, b: Mm): Mm[] => curvedSolidRows(pitch, dev, stepsFace, step, a, b);
   const dev = developStringer({
     pitch,
     sigmaA: 0,
@@ -799,6 +754,240 @@ function buildCurvedStringer(
   const zHighAt = (s: Mm): Mm => polyAt(dev.upperRive, s);
 
   // 4. Joints : naissances ± δ (dans la partie droite), hors supports ; puis format de tôle.
+  const { cuts, outlineN, upperN, lowerN, clipX, fits } = placeCurvedJoints(
+    { raw, births, uLo, uHi, cp, neutral, stepsFace, dev, metal },
+    notes,
+  );
+  const intervals = (): { a: Mm; b: Mm }[] => {
+    const xs = [uLo, ...cuts.map((c) => c.sigma), uHi];
+    return xs.slice(0, -1).map((a, i) => ({ a, b: xs[i + 1]! }));
+  };
+
+  // 5. Pièces : tronçons.
+  const mirrored = jour === "right";
+  const ivs = intervals();
+  const segCount = ivs.length;
+  const idOf = (i: number): string => `stringer-inner-curved-${i + 1}`;
+  const markOf = (i: number): string => `LD${i + 1}`;
+  const g: CurvedGeometry = {
+    params,
+    cp,
+    e,
+    sup,
+    material,
+    profile,
+    metal,
+    nosings,
+    layout,
+    P,
+    T,
+    N,
+    stepsFace,
+    neutral,
+    jourFace,
+    births,
+    F,
+    dev,
+    zLowAt,
+    zHighAt,
+    s0,
+    sN,
+    uLo,
+    uHi,
+    floorLevel,
+    topCut,
+    depthSup,
+    step,
+    lowerOffset,
+    outlineN,
+    upperN,
+    lowerN,
+    clipX,
+    fits,
+    mirrored,
+    idOf,
+    markOf,
+    solidRows,
+  };
+  const supports = curvedSupportsOf(g, raw, ivs);
+  const joints = curvedJointsOf(g, cuts, raw);
+  const buttWeld = joints.reduce((s, j) => s + j.weld, 0);
+  const segments: CurvedSegment[] = ivs.map((iv, i) =>
+    curvedSegment(g, iv, i, segCount, supports, joints),
+  );
+
+  // 6. Platines de pied et de tête du limon de jour.
+  const plates = curvedPlates(g, segCount);
+
+  // 7. Contrôles.
+  const { minPerp, slopeBreaks, nosingKinks } = addCurvedChecks(g, checks, notes, {
+    joints,
+    segments,
+    supports,
+    shortSupports,
+  });
+
+  // 8. Remarques.
+  const maxGap = supports.reduce((m, s) => Math.max(m, s.gap), 0);
+  const zonesText = F.zones
+    .map(
+      (zn) =>
+        `[${zn.from} ; ${zn.to}] ${zn.kind === "m3" ? `M3 ${zn.variant === "quintic" ? "quintique" : "cubique"} (${zn.ends?.map((x) => (x === "tangent" ? "tangente" : "libre")).join("/")})` : "interpolée"}`,
+    )
+    .join(", ");
+  notes.push(
+    `Limon de jour débillardé : tôle ${fmt(e, 0)} mm (${params.grade}) roulée, d_h = ${fmt(params.upperOffset, 0)} mm, d_b = ${fmt(lowerOffset, 0)} mm ; rives z = F(σ) ± d sur C_i, F = courbe des nez ${zonesText || "sans zone balancée"} ; développé en fibre neutre ; ${segCount} tronçon(s), ${joints.length} joint(s) soudé(s) bout à bout (${fmt(buttWeld, 0)} mm de cordon).`,
+  );
+  if (maxGap > 0.05) {
+    notes.push(
+      `Supports côté jour : cornières droites tangentes à la joue courbe, écart maximal ${fmt(maxGap, 1)} mm aux extrémités (à reprendre au montage ou support cintré).`,
+    );
+  }
+  if (segments.some((s) => !s.fits)) {
+    errors.push(
+      `Limon débillardé : ${segments.filter((s) => !s.fits).length} tronçon(s) hors des formats de tôle malgré les coupes au milieu de l'arc (supports trop rapprochés ou tronçon trop court à recouper).`,
+    );
+  }
+  return {
+    jour,
+    thickness: e,
+    profile: F,
+    development: dev,
+    neutral,
+    jourFace,
+    stepsFace,
+    naissances: births,
+    slopeBreaks,
+    nosingKinks,
+    joints,
+    segments,
+    supports,
+    plates,
+    lowerOffset,
+    minPerpendicularWidth: minPerp,
+    buttWeld,
+  };
+}
+
+// ------------------------------------------------------------------ étapes de buildCurvedStringer
+
+/** Étape 1 : supports côté jour (cornières tangentes à la joue), portées sur C_i. */
+function curvedRawSupports(
+  zones: readonly TreadZone[],
+  nosings: readonly NosingLine[],
+  uLo: Mm,
+  uHi: Mm,
+  P: (s: Mm) => Vec2,
+  N: (s: Mm) => Vec2,
+  sup: SteelCurvedParams["supports"],
+): { raw: CurvedRawSupport[]; shortSupports: { value: Mm; label: string }[] } {
+  const raw: CurvedRawSupport[] = [];
+  const shortSupports: { value: Mm; label: string }[] = [];
+  for (const zn of zones) {
+    const a = nosings[zn.tread.number - 1]!;
+    const b = nosings[zn.tread.number]!;
+    const lo = Math.max(uLo, Math.min(a.sigmaInner, b.sigmaInner) - 150);
+    const hi = Math.min(uHi, Math.max(a.sigmaInner, b.sigmaInner) + 150);
+    if (!(hi > lo)) continue;
+    const inside = (s: Mm): boolean =>
+      pointInPolygon(V.addScaled(P(s), N(s), -zn.probe), zn.zone, 1e-6) !== "outside";
+    const iv = curveInterval(inside, lo, hi, 5);
+    if (!iv) continue;
+    const len = iv.s1 - iv.s0;
+    shortSupports.push({ value: len, label: `${zn.mark} sur le limon de jour` });
+    if (len < sup.minLength) continue;
+    raw.push({ zone: zn, s0: iv.s0, s1: iv.s1 });
+  }
+  return { raw, shortSupports };
+}
+
+/** Étape 2 : rive basse automatique, supports sur la joue à `edgeMargin` de la rive basse. */
+function curvedLowerOffset(
+  raw: readonly CurvedRawSupport[],
+  F: NosingProfile,
+  depthSup: Mm,
+  params: SteelCurvedParams,
+): Mm {
+  const sup = params.supports;
+  let need = 0;
+  for (const r of raw) {
+    for (const s of [r.s0, r.s1, (r.s0 + r.s1) / 2]) {
+      need = Math.max(need, F.at(s) - (r.zone.zUnder - depthSup - sup.edgeMargin));
+    }
+  }
+  const lowerOffset =
+    params.lowerOffset === "auto" ? ceil5(Math.max(need, params.upperOffset)) : params.lowerOffset;
+  return lowerOffset;
+}
+
+/**
+ * Abscisses d'échantillonnage du solide sur [a ; b] : nœuds de F (`pitch`), sommets du contour
+ * développé et arcs (face côté marches) au pas Δσ (`step`).
+ */
+function curvedSolidRows(
+  pitch: PiecewiseLinear,
+  dev: StringerDevelopment,
+  stepsFace: FiberDevelopment,
+  step: Mm,
+  a: Mm,
+  b: Mm,
+): Mm[] {
+  const xs = new Set<number>([a, b]);
+  // Nœuds presque confondus avec une extrémité (joint) écartés : rangées dégénérées sinon.
+  for (const x of pitch.xs) if (x > a + JOINT_TOLERANCE && x < b - JOINT_TOLERANCE) xs.add(x);
+  // Sommets du contour développé (u = σ) : coins des coupes de niveau basse (sol, platine) et
+  // haute (arrivée), où les rives écrêtées ont un coude qui n'est pas un nœud de F. Sans eux,
+  // la surface réglée interpole en ligne droite par-dessus le coin et s'écarte du développé.
+  for (const p of dev.outline) {
+    if (p.x > a + JOINT_TOLERANCE && p.x < b - JOINT_TOLERANCE) xs.add(p.x);
+  }
+  for (const p of stepsFace.pieces) {
+    if (p.kind !== "arc") continue;
+    const lo = Math.max(p.sigma0, a);
+    const hi = Math.min(p.sigma1, b);
+    for (let x = lo; x < hi - JOINT_TOLERANCE; x += step) if (x > a + JOINT_TOLERANCE) xs.add(x);
+    if (hi > lo && (hi === b || hi < b - JOINT_TOLERANCE)) xs.add(hi);
+  }
+  // Rangées presque confondues (sommet du contour au bruit numérique d'un nœud) fusionnées.
+  const sorted = [...xs].sort((u, v) => u - v);
+  return sorted.filter((x, i) => i === 0 || x - sorted[i - 1]! > JOINT_TOLERANCE || x === b);
+}
+
+/** Coupe retenue sur le limon (naissance décalée de δ ou format de tôle). */
+interface CurvedCut {
+  sigma: Mm;
+  reason: "naissance" | "format";
+  naissance?: Mm;
+  onArc?: boolean;
+}
+
+/**
+ * Étape 4 : joints — naissances ± δ (dans la partie droite), hors supports ; puis coupes au
+ * milieu de l'arc tant qu'un tronçon ne tient dans aucun format de tôle. Contour en fibre
+ * neutre et découpe par tronçons (`clipX`).
+ */
+function placeCurvedJoints(
+  input: {
+    readonly raw: readonly CurvedRawSupport[];
+    readonly births: readonly Naissance[];
+    readonly uLo: Mm;
+    readonly uHi: Mm;
+    readonly cp: SteelCurvedParams["curved"];
+    readonly neutral: FiberDevelopment;
+    readonly stepsFace: FiberDevelopment;
+    readonly dev: StringerDevelopment;
+    readonly metal: WorkshopProfile["metal"];
+  },
+  notes: string[],
+): {
+  cuts: CurvedCut[];
+  outlineN: Vec2[];
+  upperN: Vec2[];
+  lowerN: Vec2[];
+  clipX: (poly: readonly Vec2[], x0: Mm, x1: Mm) => Vec2[];
+  fits: (length: Mm, width: Mm) => boolean;
+} {
+  const { raw, births, uLo, uHi, cp, neutral, stepsFace, dev, metal } = input;
   const margin = cp.jointSupportMargin;
   const forbidden = raw.map((r) => ({ lo: r.s0 - margin, hi: r.s1 + margin }));
   const minSeg = cp.minSegmentLength;
@@ -826,7 +1015,7 @@ function buildCurvedStringer(
     if (b === null) return a;
     return Math.abs(a - s) <= Math.abs(b - s) ? a : b;
   };
-  const cuts: { sigma: Mm; reason: "naissance" | "format"; naissance?: Mm; onArc?: boolean }[] = [];
+  const cuts: CurvedCut[] = [];
   const accept = (
     s: Mm,
     reason: "naissance" | "format",
@@ -930,15 +1119,66 @@ function buildCurvedStringer(
     const s = nearestFree(mid, bad.a + minSeg, bad.b - minSeg);
     if (s === null || !accept(s, "format")) unsplittable.add(`${bad.a}|${bad.b}`);
   }
+  return { cuts, outlineN, upperN, lowerN, clipX, fits };
+}
 
-  // 5. Pièces : tronçons.
-  const mirrored = jour === "right";
-  const ivs = intervals();
-  const segCount = ivs.length;
-  const idOf = (i: number): string => `stringer-inner-curved-${i + 1}`;
-  const markOf = (i: number): string => `LD${i + 1}`;
-  // Supports : tronçon porteur (milieu de la portée), repère, face tangente.
-  const supports: CurvedSupport[] = raw.map((r) => {
+/** Géométrie commune aux étapes du limon débillardé (après développement et découpe). */
+interface CurvedGeometry {
+  readonly params: SteelCurvedParams;
+  readonly cp: SteelCurvedParams["curved"];
+  readonly e: Mm;
+  readonly sup: SteelCurvedParams["supports"];
+  readonly material: Part["material"];
+  readonly profile: WorkshopProfile;
+  readonly metal: WorkshopProfile["metal"];
+  readonly nosings: readonly NosingLine[];
+  readonly layout: StructureContext["layout"];
+  readonly P: (s: Mm) => Vec2;
+  readonly T: (s: Mm) => Vec2;
+  readonly N: (s: Mm) => Vec2;
+  readonly stepsFace: FiberDevelopment;
+  readonly neutral: FiberDevelopment;
+  readonly jourFace: FiberDevelopment;
+  readonly births: readonly Naissance[];
+  readonly F: NosingProfile;
+  readonly dev: StringerDevelopment;
+  readonly zLowAt: (s: Mm) => Mm;
+  readonly zHighAt: (s: Mm) => Mm;
+  readonly s0: Mm;
+  readonly sN: Mm;
+  readonly uLo: Mm;
+  readonly uHi: Mm;
+  readonly floorLevel: Mm;
+  readonly topCut: Mm;
+  readonly depthSup: Mm;
+  readonly step: Mm;
+  readonly lowerOffset: Mm;
+  readonly outlineN: readonly Vec2[];
+  readonly upperN: readonly Vec2[];
+  readonly lowerN: readonly Vec2[];
+  readonly clipX: (poly: readonly Vec2[], x0: Mm, x1: Mm) => Vec2[];
+  readonly fits: (length: Mm, width: Mm) => boolean;
+  readonly mirrored: boolean;
+  readonly idOf: (i: number) => string;
+  readonly markOf: (i: number) => string;
+  readonly solidRows: (a: Mm, b: Mm) => Mm[];
+}
+
+/** Portée d'un support côté jour sur C_i, avant découpe en tronçons. */
+interface CurvedRawSupport {
+  zone: TreadZone;
+  s0: Mm;
+  s1: Mm;
+}
+
+/** Supports côté jour : tronçon porteur (milieu de la portée), repère, face tangente. */
+function curvedSupportsOf(
+  g: CurvedGeometry,
+  raw: readonly CurvedRawSupport[],
+  ivs: readonly { a: Mm; b: Mm }[],
+): CurvedSupport[] {
+  const { P, T, N, sup, material, profile, idOf, markOf } = g;
+  return raw.map((r) => {
     const mid = (r.s0 + r.s1) / 2;
     const owner = Math.max(
       0,
@@ -979,8 +1219,16 @@ function buildCurvedStringer(
       part: supportPart(placement, sup, "S", material, profile),
     };
   });
+}
 
-  const joints: CurvedJoint[] = cuts.map((c) => {
+/** Joints soudés bout à bout (cordon, dégagement aux supports, naissance). */
+function curvedJointsOf(
+  g: CurvedGeometry,
+  cuts: readonly CurvedCut[],
+  raw: readonly CurvedRawSupport[],
+): CurvedJoint[] {
+  const { neutral, zHighAt, zLowAt } = g;
+  return cuts.map((c) => {
     const clearance = raw.reduce(
       (m, r) => Math.min(m, c.sigma < r.s0 ? r.s0 - c.sigma : c.sigma > r.s1 ? c.sigma - r.s1 : 0),
       Infinity,
@@ -1000,207 +1248,220 @@ function buildCurvedStringer(
         : {}),
     };
   });
-  const buttWeld = joints.reduce((s, j) => s + j.weld, 0);
+}
 
-  const segments: CurvedSegment[] = ivs.map((iv, i) => {
-    const x0 = neutral.toFiber(iv.a);
-    const x1 = neutral.toFiber(iv.b);
-    const outline = clipX(outlineN, x0, x1);
-    const box = minAreaRect(outline);
-    let xMin = Infinity;
-    let xMax = -Infinity;
-    for (const p of outline) {
-      xMin = Math.min(xMin, p.x);
-      xMax = Math.max(xMax, p.x);
+/** Tronçon i du limon débillardé : développé en fibre neutre, traçages, perçages, solide. */
+function curvedSegment(
+  g: CurvedGeometry,
+  iv: { readonly a: Mm; readonly b: Mm },
+  i: number,
+  segCount: number,
+  supports: readonly CurvedSupport[],
+  joints: readonly CurvedJoint[],
+): CurvedSegment {
+  const { e, cp, sup, material, profile, params, nosings, layout, neutral, depthSup } = g;
+  const { outlineN, upperN, lowerN, clipX, fits, floorLevel, topCut, mirrored } = g;
+  const { idOf, markOf, solidRows, zLowAt, zHighAt, P, N } = g;
+  const x0 = neutral.toFiber(iv.a);
+  const x1 = neutral.toFiber(iv.b);
+  const outline = clipX(outlineN, x0, x1);
+  const box = minAreaRect(outline);
+  let xMin = Infinity;
+  let xMax = -Infinity;
+  for (const p of outline) {
+    xMin = Math.min(xMin, p.x);
+    xMax = Math.max(xMax, p.x);
+  }
+  const toFlat = (p: Vec2): Vec2 => (mirrored ? V.vec(xMax - p.x, p.y) : V.vec(p.x - xMin, p.y));
+  const riveAt = (line: readonly Vec2[], x: Mm): Mm => polyAt(line, x);
+  const vertical = (x: Mm): [Vec2, Vec2] | null => {
+    const lo = Math.max(riveAt(lowerN, x), floorLevel);
+    const hi = Math.min(riveAt(upperN, x), topCut);
+    return hi > lo ? [toFlat(V.vec(x, lo)), toFlat(V.vec(x, hi))] : null;
+  };
+  const lines: FlatPattern["lines"][number][] = [];
+  // Lignes de roulage (génératrices) et naissances.
+  const arcs: CurvedArcZone[] = [];
+  for (const p of neutral.pieces) {
+    if (p.kind !== "arc") continue;
+    const lo = Math.max(p.fiber0, x0);
+    const hi = Math.min(p.fiber1, x1);
+    if (!(hi - lo > 1e-6)) continue;
+    const faceR = p.faceRadius!;
+    const innerR = p.concave ? faceR - e : faceR;
+    const neutralR = p.fiberRadius!;
+    let zMin = Infinity;
+    let zMax = -Infinity;
+    for (const q of outline) {
+      if (q.x < lo - 1e-6 || q.x > hi + 1e-6) continue;
+      zMin = Math.min(zMin, q.y);
+      zMax = Math.max(zMax, q.y);
     }
-    const toFlat = (p: Vec2): Vec2 => (mirrored ? V.vec(xMax - p.x, p.y) : V.vec(p.x - xMin, p.y));
-    const riveAt = (line: readonly Vec2[], x: Mm): Mm => polyAt(line, x);
-    const vertical = (x: Mm): [Vec2, Vec2] | null => {
-      const lo = Math.max(riveAt(lowerN, x), floorLevel);
-      const hi = Math.min(riveAt(upperN, x), topCut);
-      return hi > lo ? [toFlat(V.vec(x, lo)), toFlat(V.vec(x, hi))] : null;
-    };
-    const lines: FlatPattern["lines"][number][] = [];
-    // Lignes de roulage (génératrices) et naissances.
-    const arcs: CurvedArcZone[] = [];
-    for (const p of neutral.pieces) {
-      if (p.kind !== "arc") continue;
-      const lo = Math.max(p.fiber0, x0);
-      const hi = Math.min(p.fiber1, x1);
-      if (!(hi - lo > 1e-6)) continue;
-      const faceR = p.faceRadius!;
-      const innerR = p.concave ? faceR - e : faceR;
-      const neutralR = p.fiberRadius!;
-      let zMin = Infinity;
-      let zMax = -Infinity;
-      for (const q of outline) {
-        if (q.x < lo - 1e-6 || q.x > hi + 1e-6) continue;
-        zMin = Math.min(zMin, q.y);
-        zMax = Math.max(zMax, q.y);
-      }
-      for (const x of [lo, hi]) {
-        zMin = Math.min(zMin, Math.max(riveAt(lowerN, x), floorLevel));
-        zMax = Math.max(zMax, Math.min(riveAt(upperN, x), topCut));
-      }
-      arcs.push({
-        faceRadius: faceR,
-        innerRadius: innerR,
-        neutralRadius: neutralR,
-        sigma0: neutral.toFace(lo),
-        sigma1: neutral.toFace(hi),
-        neutral0: lo,
-        neutral1: hi,
-        generatrixExtent: zMax - zMin,
+    for (const x of [lo, hi]) {
+      zMin = Math.min(zMin, Math.max(riveAt(lowerN, x), floorLevel));
+      zMax = Math.max(zMax, Math.min(riveAt(upperN, x), topCut));
+    }
+    arcs.push({
+      faceRadius: faceR,
+      innerRadius: innerR,
+      neutralRadius: neutralR,
+      sigma0: neutral.toFace(lo),
+      sigma1: neutral.toFace(hi),
+      neutral0: lo,
+      neutral1: hi,
+      generatrixExtent: zMax - zMin,
+    });
+    const count = Math.max(1, Math.floor((hi - lo) / cp.rollLineSpacing));
+    for (let k = 0; k <= count; k++) {
+      const x = lo + ((hi - lo) * k) / count;
+      const seg = vertical(x);
+      if (!seg) continue;
+      lines.push({
+        kind: "roll",
+        a: seg[0],
+        b: seg[1],
+        ...(k === 0
+          ? {
+              label: `Roulage R int ${fmt(innerR, 0)} mm (fibre neutre ${fmt(neutralR, 0)} mm), génératrices verticales`,
+            }
+          : {}),
       });
-      const count = Math.max(1, Math.floor((hi - lo) / cp.rollLineSpacing));
-      for (let k = 0; k <= count; k++) {
-        const x = lo + ((hi - lo) * k) / count;
-        const seg = vertical(x);
-        if (!seg) continue;
-        lines.push({
-          kind: "roll",
-          a: seg[0],
-          b: seg[1],
-          ...(k === 0
-            ? {
-                label: `Roulage R int ${fmt(innerR, 0)} mm (fibre neutre ${fmt(neutralR, 0)} mm), génératrices verticales`,
-              }
-            : {}),
-        });
-      }
-      for (const x of [p.fiber0, p.fiber1]) {
-        if (x <= x0 + 1e-6 || x >= x1 - 1e-6) continue;
-        const seg = vertical(x);
-        if (seg) lines.push({ kind: "mark", a: seg[0], b: seg[1], label: "Naissance" });
-      }
     }
-    // Traits de joint.
-    const jointAt = (s: Mm, other: number): void => {
-      const seg = vertical(neutral.toFiber(s));
-      if (seg) {
-        lines.push({
-          kind: "joint",
-          a: seg[0],
-          b: seg[1],
-          label: `Joint soudé bout à bout avec ${markOf(other)} (chanfrein à définir, EXC2)`,
-        });
-      }
-    };
-    if (i > 0) jointAt(iv.a, i - 1);
-    if (i < segCount - 1) jointAt(iv.b, i + 1);
-    // Reports des nez.
-    for (const k of nosings) {
-      if (k.sigmaInner < iv.a - 1e-6 || k.sigmaInner > iv.b + 1e-6) continue;
-      const seg = vertical(neutral.toFiber(k.sigmaInner));
-      if (seg) lines.push({ kind: "mark", a: seg[0], b: seg[1], label: `N${k.index}` });
+    for (const x of [p.fiber0, p.fiber1]) {
+      if (x <= x0 + 1e-6 || x >= x1 - 1e-6) continue;
+      const seg = vertical(x);
+      if (seg) lines.push({ kind: "mark", a: seg[0], b: seg[1], label: "Naissance" });
     }
-    // Supports (position de soudage / de pose) et perçages.
-    const holes: Vec2[][] = [];
-    for (const s of supports) {
-      if (s.placement.face.owner !== idOf(i)) continue;
-      const zt = s.placement.zTop;
-      const zb = zt - depthSup;
-      const xa = neutral.toFiber(s.sigma0);
-      const xb = neutral.toFiber(s.sigma1);
-      const rect = [V.vec(xa, zb), V.vec(xb, zb), V.vec(xb, zt), V.vec(xa, zt)].map(toFlat);
-      rect.forEach((a, q) =>
-        lines.push({
-          kind: "mark",
-          a,
-          b: rect[(q + 1) % 4]!,
-          ...(q === 0 ? { label: `Support ${s.placement.treadMark}` } : {}),
-        }),
+  }
+  // Traits de joint.
+  const jointAt = (s: Mm, other: number): void => {
+    const seg = vertical(neutral.toFiber(s));
+    if (seg) {
+      lines.push({
+        kind: "joint",
+        a: seg[0],
+        b: seg[1],
+        label: `Joint soudé bout à bout avec ${markOf(other)} (chanfrein à définir, EXC2)`,
+      });
+    }
+  };
+  if (i > 0) jointAt(iv.a, i - 1);
+  if (i < segCount - 1) jointAt(iv.b, i + 1);
+  // Reports des nez.
+  for (const k of nosings) {
+    if (k.sigmaInner < iv.a - 1e-6 || k.sigmaInner > iv.b + 1e-6) continue;
+    const seg = vertical(neutral.toFiber(k.sigmaInner));
+    if (seg) lines.push({ kind: "mark", a: seg[0], b: seg[1], label: `N${k.index}` });
+  }
+  // Supports (position de soudage / de pose) et perçages.
+  const holes: Vec2[][] = [];
+  for (const s of supports) {
+    if (s.placement.face.owner !== idOf(i)) continue;
+    const zt = s.placement.zTop;
+    const zb = zt - depthSup;
+    const xa = neutral.toFiber(s.sigma0);
+    const xb = neutral.toFiber(s.sigma1);
+    const rect = [V.vec(xa, zb), V.vec(xb, zb), V.vec(xb, zt), V.vec(xa, zt)].map(toFlat);
+    rect.forEach((a, q) =>
+      lines.push({
+        kind: "mark",
+        a,
+        b: rect[(q + 1) % 4]!,
+        ...(q === 0 ? { label: `Support ${s.placement.treadMark}` } : {}),
+      }),
+    );
+    for (const c of boltCenters(s.placement, sup)) {
+      const pt = V.addScaled(s.placement.face.a, s.placement.face.dir, c.x);
+      const sigma = projectOnCurve(pt, layout.inner).s;
+      const ring = holePolygon(
+        toFlat(V.vec(neutral.toFiber(sigma), c.y)),
+        sup.holeDiameter,
+        sup.slotLength,
+        V.vec(1, 0),
       );
-      for (const c of boltCenters(s.placement, sup)) {
-        const pt = V.addScaled(s.placement.face.a, s.placement.face.dir, c.x);
-        const sigma = projectOnCurve(pt, layout.inner).s;
-        const ring = holePolygon(
-          toFlat(V.vec(neutral.toFiber(sigma), c.y)),
-          sup.holeDiameter,
-          sup.slotLength,
-          V.vec(1, 0),
-        );
-        holes.push(signedArea(ring) > 0 ? ring.reverse() : ring);
-      }
+      holes.push(signedArea(ring) > 0 ? ring.reverse() : ring);
     }
-    // Repère gravé.
-    const xm = (x0 + x1) / 2;
-    const ym =
-      (Math.max(riveAt(lowerN, xm), floorLevel) + Math.min(riveAt(upperN, xm), topCut)) / 2;
-    const la = toFlat(V.vec(xm - 20, ym));
-    const lb = toFlat(V.vec(xm + 20, ym));
-    const [ta, tb] = mirrored ? [lb, la] : [la, lb];
-    lines.push({ kind: "text", a: ta, b: tb, label: markOf(i) });
-    let outer = outline.map(toFlat);
-    if (mirrored) outer = outer.reverse();
-    const flat: FlatPattern = {
-      outline: { outer, holes },
-      lines,
-      thickness: e,
-      reference: {
-        kind: "neutral-fiber",
-        description: `Fibre neutre (mi-épaisseur) du limon de jour débillardé, tronçon ${i + 1}/${segCount}, développée pour le roulage, vue depuis les marches ; x = abscisse développée sur la fibre neutre (σ sur les droites, (r_j − e/2)·θ sur les arcs ; ${mirrored ? "la montée va vers les x décroissants" : "la montée va vers les x croissants"}), y = altitude (sol fini bas = 0), mm, 1:1. Rouler face côté jour à l'intérieur.`,
-      },
-    };
-    // Solide : surface réglée (face côté marches) épaissie vers le jour.
-    const rows = solidRows(iv.a, iv.b);
-    const lower: Vec3[] = [];
-    const upper: Vec3[] = [];
-    const normals: Vec2[] = [];
-    for (const s of rows) {
-      const zl = zLowAt(s);
-      const zh = zHighAt(s);
-      if (!(zh - zl > 0.1)) continue;
-      const p = P(s);
-      lower.push({ x: p.x, y: p.y, z: zl });
-      upper.push({ x: p.x, y: p.y, z: zh });
-      normals.push(N(s));
-    }
-    const meas = plateMeasures(flat.outline, e);
-    const rolled = arcs.reduce((s, a) => s + (a.neutral1 - a.neutral0), 0);
-    const endWeld = i < segCount - 1 ? (joints[i]?.weld ?? 0) : 0;
-    const part: Part = {
-      id: idOf(i),
-      mark: markOf(i),
-      category: "stringer",
-      name: `Limon de jour débillardé, tronçon ${i + 1}/${segCount}`,
-      material,
-      solid: { kind: "ruled", a: lower, b: upper, thickness: e, normals },
-      flat,
-      section: `tôle ${fmt(e, 0)} (${params.grade}) roulée, largeur ${fmt(Math.ceil(box.width), 0)}`,
-      stock: { length: box.length, width: box.width, thickness: e },
-      quantities: {
-        ...steelQuantities(
-          {
-            volumeMm3: meas.volumeMm3,
-            treatedSurfaceMm2: meas.treatedSurfaceMm2,
-            length: box.length,
-            weld: endWeld,
-            buttWeld: endWeld,
-            cuts: 1,
-            laserCut: meas.laserCut,
-            holes: holes.length,
-          },
-          profile,
-        ),
-        [QUANTITY_ROLLED_LENGTH_MM]: rolled,
-      },
-    };
-    return {
-      index: i,
-      sigma0: iv.a,
-      sigma1: iv.b,
-      neutral0: x0,
-      neutral1: x1,
-      outline,
-      box,
-      fits: fits(box.length, box.width),
-      arcs,
-      part,
-    };
-  });
+  }
+  // Repère gravé.
+  const xm = (x0 + x1) / 2;
+  const ym = (Math.max(riveAt(lowerN, xm), floorLevel) + Math.min(riveAt(upperN, xm), topCut)) / 2;
+  const la = toFlat(V.vec(xm - 20, ym));
+  const lb = toFlat(V.vec(xm + 20, ym));
+  const [ta, tb] = mirrored ? [lb, la] : [la, lb];
+  lines.push({ kind: "text", a: ta, b: tb, label: markOf(i) });
+  let outer = outline.map(toFlat);
+  if (mirrored) outer = outer.reverse();
+  const flat: FlatPattern = {
+    outline: { outer, holes },
+    lines,
+    thickness: e,
+    reference: {
+      kind: "neutral-fiber",
+      description: `Fibre neutre (mi-épaisseur) du limon de jour débillardé, tronçon ${i + 1}/${segCount}, développée pour le roulage, vue depuis les marches ; x = abscisse développée sur la fibre neutre (σ sur les droites, (r_j − e/2)·θ sur les arcs ; ${mirrored ? "la montée va vers les x décroissants" : "la montée va vers les x croissants"}), y = altitude (sol fini bas = 0), mm, 1:1. Rouler face côté jour à l'intérieur.`,
+    },
+  };
+  // Solide : surface réglée (face côté marches) épaissie vers le jour.
+  const rows = solidRows(iv.a, iv.b);
+  const lower: Vec3[] = [];
+  const upper: Vec3[] = [];
+  const normals: Vec2[] = [];
+  for (const s of rows) {
+    const zl = zLowAt(s);
+    const zh = zHighAt(s);
+    if (!(zh - zl > 0.1)) continue;
+    const p = P(s);
+    lower.push({ x: p.x, y: p.y, z: zl });
+    upper.push({ x: p.x, y: p.y, z: zh });
+    normals.push(N(s));
+  }
+  const meas = plateMeasures(flat.outline, e);
+  const rolled = arcs.reduce((s, a) => s + (a.neutral1 - a.neutral0), 0);
+  const endWeld = i < segCount - 1 ? (joints[i]?.weld ?? 0) : 0;
+  const part: Part = {
+    id: idOf(i),
+    mark: markOf(i),
+    category: "stringer",
+    name: `Limon de jour débillardé, tronçon ${i + 1}/${segCount}`,
+    material,
+    solid: { kind: "ruled", a: lower, b: upper, thickness: e, normals },
+    flat,
+    section: `tôle ${fmt(e, 0)} (${params.grade}) roulée, largeur ${fmt(Math.ceil(box.width), 0)}`,
+    stock: { length: box.length, width: box.width, thickness: e },
+    quantities: {
+      ...steelQuantities(
+        {
+          volumeMm3: meas.volumeMm3,
+          treatedSurfaceMm2: meas.treatedSurfaceMm2,
+          length: box.length,
+          weld: endWeld,
+          buttWeld: endWeld,
+          cuts: 1,
+          laserCut: meas.laserCut,
+          holes: holes.length,
+        },
+        profile,
+      ),
+      [QUANTITY_ROLLED_LENGTH_MM]: rolled,
+    },
+  };
+  return {
+    index: i,
+    sigma0: iv.a,
+    sigma1: iv.b,
+    neutral0: x0,
+    neutral1: x1,
+    outline,
+    box,
+    fits: fits(box.length, box.width),
+    arcs,
+    part,
+  };
+}
 
-  // 6. Platines de pied et de tête du limon de jour.
+/** Étape 6 : platines de pied et de tête du limon de jour. */
+function curvedPlates(g: CurvedGeometry, segCount: number): Part[] {
+  const { params, dev, floorLevel, idOf, markOf, P, T, N, uHi, e, material, profile } = g;
+  const { zLowAt, zHighAt } = g;
   const plates: Part[] = [];
   const pl = params.plates;
   const pseudoFace = (s: Mm): StringerFace => {
@@ -1288,8 +1549,32 @@ function buildCurvedStringer(
       );
     }
   }
+  return plates;
+}
 
-  // 7. Contrôles.
+/**
+ * Étape 7 : contrôles du limon débillardé (largeur perpendiculaire, cassures de pente aux
+ * naissances et aux nez, joints, format de tôle, laser, rouleuse, supports).
+ */
+function addCurvedChecks(
+  g: CurvedGeometry,
+  checks: CheckCollector,
+  notes: string[],
+  input: {
+    readonly joints: readonly CurvedJoint[];
+    readonly segments: readonly CurvedSegment[];
+    readonly supports: readonly CurvedSupport[];
+    readonly shortSupports: { value: Mm; label: string }[];
+  },
+): {
+  minPerp: Mm;
+  slopeBreaks: CurvedStringerResult["slopeBreaks"];
+  nosingKinks: CurvedStringerResult["nosingKinks"];
+} {
+  const { s0, sN, uLo, uHi, step, jourFace, F, params, lowerOffset, idOf, cp } = g;
+  const { stepsFace, neutral, births, nosings, e, metal, sup, depthSup, dev } = g;
+  const { joints, segments, supports, shortSupports } = input;
+  const rule = (spec: PluginRuleSpec) => pluginRuleDef(spec);
   const minSigma = Math.min(s0, uLo);
   const maxSigma = Math.max(sN, uHi);
   // Largeur perpendiculaire sur la face côté jour (pente développée la plus forte).
@@ -1456,47 +1741,7 @@ function buildCurvedStringer(
     "Marge support / rive",
     { min: -1e-6, max: null },
   );
-
-  // 8. Remarques.
-  const maxGap = supports.reduce((m, s) => Math.max(m, s.gap), 0);
-  const zonesText = F.zones
-    .map(
-      (zn) =>
-        `[${zn.from} ; ${zn.to}] ${zn.kind === "m3" ? `M3 ${zn.variant === "quintic" ? "quintique" : "cubique"} (${zn.ends?.map((x) => (x === "tangent" ? "tangente" : "libre")).join("/")})` : "interpolée"}`,
-    )
-    .join(", ");
-  notes.push(
-    `Limon de jour débillardé : tôle ${fmt(e, 0)} mm (${params.grade}) roulée, d_h = ${fmt(params.upperOffset, 0)} mm, d_b = ${fmt(lowerOffset, 0)} mm ; rives z = F(σ) ± d sur C_i, F = courbe des nez ${zonesText || "sans zone balancée"} ; développé en fibre neutre ; ${segCount} tronçon(s), ${joints.length} joint(s) soudé(s) bout à bout (${fmt(buttWeld, 0)} mm de cordon).`,
-  );
-  if (maxGap > 0.05) {
-    notes.push(
-      `Supports côté jour : cornières droites tangentes à la joue courbe, écart maximal ${fmt(maxGap, 1)} mm aux extrémités (à reprendre au montage ou support cintré).`,
-    );
-  }
-  if (segments.some((s) => !s.fits)) {
-    errors.push(
-      `Limon débillardé : ${segments.filter((s) => !s.fits).length} tronçon(s) hors des formats de tôle malgré les coupes au milieu de l'arc (supports trop rapprochés ou tronçon trop court à recouper).`,
-    );
-  }
-  return {
-    jour,
-    thickness: e,
-    profile: F,
-    development: dev,
-    neutral,
-    jourFace,
-    stepsFace,
-    naissances: births,
-    slopeBreaks,
-    nosingKinks,
-    joints,
-    segments,
-    supports,
-    plates,
-    lowerOffset,
-    minPerpendicularWidth: minPerp,
-    buttWeld,
-  };
+  return { minPerp, slopeBreaks, nosingKinks };
 }
 
 export const STEEL_CURVED: StructureKind<SteelCurvedParams> = {
@@ -1506,4 +1751,9 @@ export const STEEL_CURVED: StructureKind<SteelCurvedParams> = {
   paramsSchema: SteelCurvedParamsSchema,
   defaults: () => SteelCurvedParamsSchema.parse({}),
   build: (ctx, params) => buildSteelCurved(ctx, params).output,
+  capabilities: {
+    // Limon de jour débillardé et limons muraux en plat, hors emprise utile (jour en arc exigé,
+    // pas de poteau).
+    lateralThickness: (p) => ({ inner: p.thickness, outer: p.thickness }),
+  },
 };

@@ -138,6 +138,85 @@ describe("G_COLLET_MONOTONE", () => {
   });
 });
 
+describe("G_COLLET_MONOTONE : marche balancée isolée hors zone déclarée (QUESTIONS D1)", () => {
+  // Nez tous les 250 mm dans les fixtures : la marche k va de s = (k − 1)·250 à k·250 ; un
+  // tournant dont le milieu est à (k − 0,5)·250 est au droit de la marche k. Marche 4 hors
+  // zone, entre les zones nez 0 → 3 et 4 → 7.
+  const zones = [
+    { turn: 0, from: 0, to: 3, method: "M3" },
+    { turn: 1, from: 4, to: 7, method: "M3" },
+  ];
+  const collets = (c4: number, others = [150, 120, 100, 150]): SteppingOptions["treads"] => ({
+    2: { kind: "winder", colletChord: others[0]! },
+    3: { kind: "winder", colletChord: others[1]! },
+    4: { kind: "winder", colletChord: c4 },
+    5: { kind: "winder", colletChord: others[2]! },
+    6: { kind: "winder", colletChord: others[3]! },
+  });
+  const results = (
+    treads: SteppingOptions["treads"],
+    cornersAt: readonly number[],
+    inner: "newel" | "sharp" = "sharp",
+  ): RuleResult[] => {
+    const i = makeInput({ stepping: { treads, balancedZones: zones } });
+    const turns = cornersAt.map((k, index) => ({
+      index,
+      direction: "left" as const,
+      mode: "winders" as const,
+      innerCorner: { x: 0, y: 0 },
+      outerCorner: { x: 0, y: 0 },
+      sStart: (k - 0.5) * 250 - 50,
+      sEnd: (k - 0.5) * 250 + 50,
+    }));
+    const stairLayout = {
+      ...i.project.stair.layout,
+      kind: "flights",
+      turns: turns.map(() => ({
+        inner: inner === "newel" ? { kind: "newel", size: 100 } : { kind: "sharp" },
+      })),
+    };
+    const project = {
+      ...i.project,
+      stair: { ...i.project.stair, layout: stairLayout },
+    } as unknown as typeof i.project;
+    return evaluateCompliance({
+      ...i,
+      project,
+      layout: { ...i.layout, turns },
+    }).results.filter((r) => r.ruleId === "G_COLLET_MONOTONE");
+  };
+  const flagged = (r: RuleResult[]) =>
+    r.filter((x) => x.status === "violation").map((x) => x.location);
+
+  it("avant l'angle : la marche hors zone remonte (150, 120, 130 → 100) → violation", () => {
+    const r = results(collets(130), [5]);
+    expect(flagged(r)).toEqual([{ kind: "tread", number: 4 }]);
+    expect(r[0]!.message).toMatch(/hors zone déclarée/);
+    // Dans la vallée : conforme.
+    expect(results(collets(110), [5]).map((x) => x.status)).toEqual(["ok"]);
+  });
+
+  it("au droit de l'angle : crête → violation ; au droit d'un poteau : pas de conclusion (B1)", () => {
+    const crest = results(collets(130), [4]);
+    expect(flagged(crest)).toEqual([{ kind: "tread", number: 4 }]);
+    expect(crest[0]!.message).toMatch(/crête au droit de l'angle/);
+    expect(results(collets(130), [4], "newel").map((x) => x.status)).toEqual(["ok"]);
+  });
+
+  it("entre deux angles : creux → violation, crête → conforme", () => {
+    // Angles au droit des marches 2 et 6 : 150 (angle), 160, [x], 170, 100 (angle).
+    const around = [100, 160, 170, 100];
+    const dip = results(collets(120, around), [2, 6]);
+    expect(flagged(dip)).toEqual([{ kind: "tread", number: 4 }]);
+    expect(dip[0]!.message).toMatch(/creux entre deux angles/);
+    expect(results(collets(200, around), [2, 6]).map((x) => x.status)).toEqual(["ok"]);
+  });
+
+  it("sans angle repéré : pas de conclusion sur la marche hors zone", () => {
+    expect(results(collets(130), []).map((x) => x.status)).toEqual(["ok"]);
+  });
+});
+
 describe("G_COLLET_MONOTONE par angle du jour", () => {
   // Zone unique de 180° (nez 1 à 10) contournant deux angles : milieux des tournants sur Γ au
   // droit des marches 5 et 7 (nez tous les 250 mm dans les fixtures).

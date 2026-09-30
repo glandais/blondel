@@ -36,7 +36,13 @@ import {
   resolveWorkshopProfile,
   type WoodMaterialId,
 } from "../workshop/profile.js";
-import { CheckCollector, FAB_RULES, flightsOnlyError, pluginRuleDef } from "./checks.js";
+import {
+  CheckCollector,
+  FAB_RULES,
+  flightsOnlyError,
+  pluginRuleDef,
+  stringerRulesOutOfDomain,
+} from "./checks.js";
 import { CREMAILLERE_RULE_ID, fcbaTable, requiredResidual, type StrengthClass } from "./fcba.js";
 import { area, clipHalfPlane, minAreaRect, pointSegmentDistance, removeCollinear } from "./geom.js";
 import { stairGeometry } from "./legs.js";
@@ -331,14 +337,9 @@ export function buildWoodCut(ctx: StructureContext, params: WoodCutParams): CutR
   }
   const thicknessRule = checks.yamlRule("LIMON_EPAISSEUR_MIN_DTU");
   if (thicknessRule && carriages.length > 0) {
-    const E = project.stair.layout.width;
-    if (E > 1200) {
-      checks.add(thicknessRule, [
-        {
-          status: "non-evaluee",
-          message: `Hors domaine des règles de moyens (emmarchement ${fmt(E, 0)} mm > 1 200 mm).`,
-        },
-      ]);
+    const outside = stringerRulesOutOfDomain(thicknessRule, project.stair.layout.width);
+    if (outside !== null) {
+      checks.add(thicknessRule, [{ status: "non-evaluee", message: `${outside}.` }]);
     } else {
       checks.addItems(
         thicknessRule,

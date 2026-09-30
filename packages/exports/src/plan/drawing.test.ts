@@ -2,7 +2,7 @@ import { pointInPolygon, vec2, type Model, type Vec2 } from "@blondel/core";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { layoutArb } from "../testing/arbitraries.js";
-import { layoutModel, layoutProject } from "../testing/fixtures.js";
+import { layoutModel, layoutProject, sampleProject, straightModel } from "../testing/fixtures.js";
 import { buildPlanDrawing, dimensionGeometry } from "./drawing.js";
 
 /** Milieu de la ligne de cote (après décalage). */
@@ -109,5 +109,27 @@ describe("buildPlanDrawing sur des tracés réels (computeLayout)", () => {
         expect(Math.sign(side)).toBe(Math.sign(dim.offset));
       }
     }
+  });
+});
+
+describe("buildPlanDrawing : trémie du modèle (QUESTIONS D5)", () => {
+  it("trémie lue dans Model.upperFloor sans option project, projet en repli", () => {
+    const m = straightModel({});
+    const opening = [
+      { x: 0, y: 1000 },
+      { x: 900, y: 1000 },
+      { x: 900, y: 3000 },
+      { x: 0, y: 3000 },
+    ];
+    expect(buildPlanDrawing(m).opening).toBeUndefined();
+    const withFloor = buildPlanDrawing({ ...m, upperFloor: { slabThickness: 200, opening } });
+    expect(withFloor.opening).toBeDefined();
+    const fromProject = buildPlanDrawing(m, { project: sampleProject() });
+    expect(fromProject.opening).toBeDefined();
+    // Modèle sans trémie : le projet n'est pas relu (le modèle fait foi).
+    expect(
+      buildPlanDrawing({ ...m, upperFloor: { slabThickness: 200 } }, { project: sampleProject() })
+        .opening,
+    ).toBeUndefined();
   });
 });

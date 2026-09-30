@@ -13,7 +13,7 @@ import {
   headroomOnWalkline,
   openingPolygon,
 } from "./headroom.js";
-import { circularOpening, helicalHeadroomBound } from "./helical.js";
+import { circularOpening, helicalHeadroomBound, openingCircle } from "./helical.js";
 import { slopeProfileOf } from "./profile.js";
 
 const E_MIN = 1900;
@@ -193,5 +193,29 @@ describe("échappée d'un hélicoïdal sous lui-même (CHALLENGE G4)", () => {
     for (const p of o.points) expect(V.distance(p, { x: 100, y: -50 })).toBeCloseTo(1000, 1);
     const step = (2 * Math.PI) / o.points.length;
     expect(1000 * (1 - Math.cos(step / 2))).toBeLessThanOrEqual(0.5);
+  });
+
+  it("trémie circulaire : cercle exact déclaré (D3), relu du schéma, ignoré s'il ne correspond plus aux points", async () => {
+    const { OpeningSchema } = await import("../model/project.js");
+    const o = circularOpening({ x: 100, y: -50 }, 1000);
+    expect(o.kind === "polygon" && o.circle).toEqual({ center: { x: 100, y: -50 }, radius: 1000 });
+    const parsed = OpeningSchema.parse(JSON.parse(JSON.stringify(o)));
+    expect(openingCircle(parsed)).toEqual({ center: { x: 100, y: -50 }, radius: 1000 });
+    // Rétrocompatible : polygone sans cercle, rectangle.
+    expect(
+      OpeningSchema.safeParse({ kind: "polygon", points: o.kind === "polygon" ? o.points : [] })
+        .success,
+    ).toBe(true);
+    expect(openingCircle({ kind: "rect", x: 0, y: 0, sizeX: 10, sizeY: 10 })).toBeUndefined();
+    expect(openingCircle(undefined)).toBeUndefined();
+    // Point édité : ce n'est plus un cercle.
+    if (o.kind !== "polygon") return;
+    const edited = {
+      ...o,
+      points: o.points.map((p, i) => (i === 0 ? { x: p.x + 50, y: p.y } : p)),
+    };
+    expect(openingCircle(edited)).toBeUndefined();
+    // [review] Point supprimé : les autres restent sur le cercle, mais ce n'est plus lui.
+    expect(openingCircle({ ...o, points: o.points.slice(1) })).toBeUndefined();
   });
 });

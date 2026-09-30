@@ -61,6 +61,32 @@ describe("renderElevationSvg", () => {
     expect(ceilingIntervals(m, noOpening, 0, 100)).toEqual([]);
   });
 
+  it("plafond lu dans Model.upperFloor, sans option project (QUESTIONS D5)", () => {
+    const m = straightModel({ floorToFloor: 2700, riserCount: 15, going: 250, width: 900 });
+    const upperFloor = {
+      slabThickness: 200,
+      opening: [
+        { x: -1000, y: 1000 },
+        { x: 2000, y: 1000 },
+        { x: 2000, y: 3600 },
+        { x: -1000, y: 3600 },
+      ],
+    };
+    const withFloor = { ...m, upperFloor };
+    const ceilingsOf = (svg: string) =>
+      findAll(parseXml(svg), "rect").filter((r) => r.attrs.class === "ceiling");
+    // Sans trémie dans le modèle ni projet : pas de plafond (comportement antérieur).
+    expect(ceilingsOf(renderElevationSvg(m))).toHaveLength(0);
+    expect(ceilingsOf(renderElevationSvg(withFloor))).toHaveLength(2);
+    // Le modèle prime sur le projet ; le projet sert de repli.
+    expect(renderElevationSvg(withFloor)).toBe(renderElevationSvg(withFloor, { project }));
+    const iv = ceilingIntervals(withFloor, undefined, -500, 4000);
+    expect(iv[0]![1]).toBeCloseTo(1000, 4);
+    expect(ceilingIntervals({ ...m, upperFloor: { slabThickness: 200 } }, project, 0, 100)).toEqual(
+      [],
+    );
+  });
+
   it("échappée mesurée et gabarit réglementaire lu dans le rapport", () => {
     const base = straightModel({ headroom: { min: 1850, at: { x: 450, y: 1000, z: 0 } } });
     const m = {

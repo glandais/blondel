@@ -486,37 +486,312 @@ export function buildSteelFlat(ctx: StructureContext, params: SteelFlatParams): 
 
   // 1. Loi de pli (marches en tôle pliée).
   const ft = params.folded;
-  let bend: ResolvedBend | null = null;
-  if (folded) {
-    const law = findBendLaw(metal, grade, ft.thickness);
-    if (!law) {
-      errors.push(
-        `Marches en tôle pliée : aucune loi de pli pour ${grade} en ${fmt(ft.thickness, 1)} mm dans le profil d'atelier ; marches bois conservées.`,
-      );
-      checks.add(pluginRuleDef(STEEL_RULES.bendLaw), [
-        {
-          status: "violation",
-          measured: ft.thickness,
-          message: `Aucune loi de pli (outillage, méthode) pour ${grade}, t = ${fmt(ft.thickness, 1)} mm.`,
-        },
-      ]);
-    } else {
-      try {
-        bend = resolveBend(law, metal.defaultK);
-        checks.add(pluginRuleDef(STEEL_RULES.bendLaw), [
-          {
-            status: "ok",
-            measured: ft.thickness,
-            message: `Loi de pli ${grade}, t = ${fmt(ft.thickness, 1)} mm : r_int ${fmt(bend.innerRadius, 1)} mm, méthode « ${bend.method} », facteur K ${fmt(bend.k, 3)} (à valider, CHALLENGE G5).`,
-          },
-        ]);
-      } catch (err) {
-        errors.push(`Marches en tôle pliée : ${(err as Error).message}`);
-      }
-    }
-  }
+  const bendLaw = folded ? resolveFoldedBend(ft.thickness, metal, grade, checks) : null;
+  const bend: ResolvedBend | null = bendLaw?.bend ?? null;
+  errors.push(...(bendLaw?.errors ?? []));
 
   // 2. Marches : dessus (tôle pliée) ou pièces de base (bois), zones d'appui.
+  const { treadDetails, zones, foldedErrors } = flatTreadZones(
+    project,
+    stepping,
+    params,
+    baseById,
+    folded ? bend : null,
+    material,
+    profile,
+  );
+  if (foldedErrors.length > 0) {
+    errors.push(
+      ...foldedErrors.map(
+        (x) => `Marche en tôle pliée non développée — ${x} Pièce de base conservée.`,
+      ),
+    );
+  }
+
+  // 2 bis. Profil Z : contremarche d'arrivée en plat plié en L fixé au chevêtre (décision A11),
+  // à la place de la contremarche bois de base de même identifiant.
+  const arrivalRes = arrivalRiserPart(
+    stepping,
+    params,
+    baseById,
+    folded ? bend : null,
+    material,
+    profile,
+  );
+  const arrival = arrivalRes.arrival;
+  if (arrivalRes.error !== undefined) errors.push(arrivalRes.error);
+
+  // 3. Faces porteuses : joues des limons (portée de la face) et faces des poteaux.
+  const pitch: Record<Side, PiecewiseLinear> = {
+    inner: nosingPitchLine(nosings, stepping.treads, "inner"),
+    outer: nosingPitchLine(nosings, stepping.treads, "outer"),
+  };
+  // Platines d'about (poteau, assemblage vissé) et de tête (arrivée) : le limon est raccourci de
+  // leur épaisseur (la platine s'intercale entre le bout du limon et la face d'appui).
+  const endPlateT = params.newel.joint === "bolted" ? params.plates.thickness : 0;
+  const headPlateT = params.plates.head ? params.plates.thickness : 0;
+  const { windows, supportFaces, newelList } = flatSupportFaces(
+    faces,
+    geo,
+    nosings,
+    params,
+    endPlateT,
+    headPlateT,
+  );
+  // 4. Supports.
+  const { placements, shortSupports, carried } = placeSupports(zones, supportFaces, sup);
+  const depthSup = supportDepth(sup);
+
+  // 5. d_b automatique : chaque support sur la joue, à `edgeMargin` de la rive basse.
+  const lowerOffset = autoLowerOffset(placements, faces, pitch, depthSup, params);
+
+  // 6. Limons.
+  const stringers: SteelStringer[] = [];
+  let buttWeldTotal = 0;
+  const formatFindings: Finding[] = [];
+  const sc: FlatStringerContext = {
+    params,
+    nosings,
+    metal,
+    profile,
+    material,
+    grade,
+    pitch,
+    windows,
+    lowerOffset,
+    placements,
+    depthSup,
+    endPlateT,
+  };
+  for (const f of faces) {
+    const built = buildFlatStringer(sc, f);
+    formatFindings.push(built.formatFinding);
+    buttWeldTotal += built.buttWeld;
+    stringers.push(built.stringer);
+  }
+
+  // 7. Poteaux.
+  const newelOut = flatNewelPosts(
+    ctx,
+    newelList,
+    stringers,
+    placements,
+    depthSup,
+    params,
+    material,
+    profile,
+  );
+  const posts = newelOut.posts;
+  const plates: Part[] = [...newelOut.plates];
+  const receivedChecks = newelOut.received;
+  notes.push(...newelOut.notes);
+
+  // 8. Platines de pied et de tête des limons.
+  plates.push(...stringerPlates(stringers, params, material, profile));
+
+  // 9. Pièces supports (marques par groupe de pièces identiques).
+  const supportParts = markGroups(
+    placements.map((p) => supportPart(p, sup, "S", material, profile)),
+    sup.kind === "angle" ? "CR" : "PS",
+    (p) =>
+      `${p.section}|${Math.round((p.stock?.length ?? 0) / IDENTICAL_TOLERANCE)}|${p.quantities["holes"]}`,
+  );
+  const platesMarked = [
+    ...markGroups(
+      plates.filter((p) => p.id.startsWith("plate-foot-")),
+      "PF",
+      () => null,
+    ),
+    ...markGroups(
+      plates.filter((p) => p.id.startsWith("plate-head-")),
+      "PH",
+      () => null,
+    ),
+    ...markGroups(
+      plates.filter((p) => p.id.startsWith("plate-post-")),
+      "PP",
+      () => null,
+    ),
+    ...markGroups(
+      plates.filter((p) => p.id.startsWith("plate-end-")),
+      "PA",
+      () => null,
+    ),
+  ];
+  const treadParts = treadDetails.map((d) => d.part);
+  const treadGroups = groupIdenticalFlats(treadParts);
+  /** Tôles pliées : marches et contremarche d'arrivée (contrôles de pliage, laser, format). */
+  const foldedParts = arrival ? [...treadParts, arrival.part] : treadParts;
+  const foldedChecks = [
+    ...treadDetails.map((d) => ({
+      part: d.part,
+      flanges: d.result.flanges,
+      bendLines: d.result.bendLines,
+    })),
+    ...(arrival
+      ? [
+          {
+            part: arrival.part,
+            flanges: arrival.result.flanges,
+            bendLines: arrival.result.bendLines,
+          },
+        ]
+      : []),
+  ];
+
+  // 10. Classe d'exécution : S355 « soudé » seulement si une pièce porte un cordon (angle ou
+  // bout à bout) ; supports vissés sans cordon ⇒ PC1 (C §2.1).
+  const weldTotal = [
+    ...foldedParts,
+    ...stringers.map((s) => s.part),
+    ...posts,
+    ...supportParts,
+    ...platesMarked,
+  ].reduce((acc, p) => acc + (p.quantities[QUANTITY_WELD_MM] ?? 0), 0);
+  const exc = deduceExecutionClass({
+    grade,
+    buttWeld: buttWeldTotal,
+    welded: weldTotal + buttWeldTotal > 1e-9,
+  });
+
+  // 11. Contrôles.
+  addFlatChecks(checks, {
+    exc,
+    grade,
+    bend: folded ? bend : null,
+    metal,
+    foldedChecks,
+    stringers,
+    foldedParts,
+    platesMarked,
+    formatFindings,
+    supportParts,
+    posts,
+    depthSup,
+    shortSupports,
+    sup,
+    zones,
+    carried,
+    receivedChecks,
+    newelList,
+  });
+
+  // 12. Remarques.
+  notes.push(
+    `Limons acier en plat ${fmt(e, 0)} mm (${grade}) : d_h = ${fmt(params.upperOffset, 0)} mm, d_b = ${fmt(lowerOffset.inner, 0)} / ${fmt(lowerOffset.outer, 0)} mm (jour / mur) ; supports ${sup.kind === "angle" ? "cornières" : "plats"} ${effectiveFixing(sup) === "welded" ? "soudés" : "vissés"} ; valeurs par défaut à valider.`,
+    `Classe d'exécution EN 1090-2 : ${exc.executionClass}${exc.reasons.length > 0 ? ` (${exc.reasons.join(", ")})` : ` (${grade}, aucune soudure bout à bout)`}.`,
+  );
+  if (folded && treadParts.length > 0) {
+    notes.push(
+      `Marches en tôle pliée ${ft.profile} : ${treadParts.length} pièce(s), ${treadGroups.length} pièce(s) unique(s) (tolérance ${fmt(IDENTICAL_TOLERANCE, 1)} mm) ; développés en fibre neutre, loi de pli à valider (CHALLENGE G5).`,
+    );
+    notes.push(
+      "Solides 3D des marches balancées en tôle pliée : dessus seul (les ailes ne sont dessinées que sur les développés).",
+    );
+  }
+  // Profil Z : la pièce de la marche t porte la contremarche sous son propre nez (nez t − 1,
+  // contremarche de base `riser-t`) ; ces contremarches sont retirées. La contremarche
+  // d'arrivée (sous le dernier nez), qu'aucune pièce Z ne porte, est remplacée (même
+  // identifiant) par un plat plié en L fixé au chevêtre (décision A11) ; à défaut (développé
+  // impossible), la pièce de base reste : sans elle, le dessus de la dernière pièce ne bute
+  // contre rien et le vide sous le nez d'arrivée n'est pas fermé. Profil U (claire-voie) :
+  // toutes les contremarches sont retirées.
+  const foldedRisers = new Set(treadDetails.map((d) => `riser-${d.number}`));
+  const removedBaseParts =
+    folded && bend && project.stair.treads.risers === "full"
+      ? baseParts
+          .filter((p) => /^riser-\d+$/.test(p.id) && (ft.profile !== "Z" || foldedRisers.has(p.id)))
+          .map((p) => p.id)
+      : [];
+  if (removedBaseParts.length > 0) {
+    notes.push(
+      `Marches en tôle pliée : ${removedBaseParts.length} contremarche(s) bois de base supprimée(s) du modèle (${ft.profile === "Z" ? `contremarches pliées dans les pièces en Z ; contremarche d'arrivée, sous le dernier nez, ${arrival ? "en tôle pliée en L fixée au chevêtre" : "conservée en bois"}` : "escalier à claire-voie en U"}).`,
+    );
+  }
+
+  return {
+    output: {
+      parts: [
+        ...foldedParts,
+        ...stringers.map((s) => s.part),
+        ...posts,
+        ...supportParts,
+        ...platesMarked,
+      ],
+      checks: checks.results,
+      executionClass: exc.executionClass,
+      notes,
+      ...(errors.length > 0 ? { errors } : {}),
+      ...(removedBaseParts.length > 0 ? { removedBaseParts } : {}),
+    },
+    stringers,
+    posts,
+    supports: placements.map((placement, i) => ({ placement, part: supportParts[i]! })),
+    plates: platesMarked,
+    treads: treadDetails,
+    lowerOffset,
+    executionClass: exc.executionClass,
+    treadGroups,
+  };
+}
+
+// ------------------------------------------------------------------ étapes de buildSteelFlat
+
+/** Étape 1 : loi de pli des marches en tôle pliée (profil d'atelier), contrôle `FAB_LOI_PLI`. */
+function resolveFoldedBend(
+  thickness: Mm,
+  metal: WorkshopProfile["metal"],
+  grade: SteelGrade,
+  checks: CheckCollector,
+): { bend: ResolvedBend | null; errors: string[] } {
+  const errors: string[] = [];
+  let bend: ResolvedBend | null = null;
+  const law = findBendLaw(metal, grade, thickness);
+  if (!law) {
+    errors.push(
+      `Marches en tôle pliée : aucune loi de pli pour ${grade} en ${fmt(thickness, 1)} mm dans le profil d'atelier ; marches bois conservées.`,
+    );
+    checks.add(pluginRuleDef(STEEL_RULES.bendLaw), [
+      {
+        status: "violation",
+        measured: thickness,
+        message: `Aucune loi de pli (outillage, méthode) pour ${grade}, t = ${fmt(thickness, 1)} mm.`,
+      },
+    ]);
+  } else {
+    try {
+      bend = resolveBend(law, metal.defaultK);
+      checks.add(pluginRuleDef(STEEL_RULES.bendLaw), [
+        {
+          status: "ok",
+          measured: thickness,
+          message: `Loi de pli ${grade}, t = ${fmt(thickness, 1)} mm : r_int ${fmt(bend.innerRadius, 1)} mm, méthode « ${bend.method} », facteur K ${fmt(bend.k, 3)} (à valider, CHALLENGE G5).`,
+        },
+      ]);
+    } catch (err) {
+      errors.push(`Marches en tôle pliée : ${(err as Error).message}`);
+    }
+  }
+  return { bend, errors };
+}
+
+/**
+ * Étape 2 : marches en tôle pliée développées (dessus, développé, repère) ou pièces de base
+ * (bois), et leurs zones d'appui ; erreurs de développement (pièce de base conservée).
+ */
+function flatTreadZones(
+  project: StructureContext["project"],
+  stepping: StructureContext["stepping"],
+  params: SteelFlatParams,
+  baseById: ReadonlyMap<string, Part>,
+  bend: ResolvedBend | null,
+  material: Part["material"],
+  profile: WorkshopProfile,
+): { treadDetails: FoldedTreadDetail[]; zones: TreadZone[]; foldedErrors: string[] } {
+  const nosings = stepping.nosings;
+  const folded = params.treadKind === "folded-steel";
+  const ft = params.folded;
+  const sup = params.supports;
   const treadDetails: FoldedTreadDetail[] = [];
   const zones: TreadZone[] = [];
   const foldedErrors: string[] = [];
@@ -624,16 +899,28 @@ export function buildSteelFlat(ctx: StructureContext, params: SteelFlatParams): 
     zone = clipHalfPlane(zone, V.addScaled(b.p, upB, spec.nosing - m), V.scale(upB, -1));
     zones.push({ tread, mark: base.mark, zone: dedupe(zone), zUnder: ex.zBottom, band: 1 });
   }
-  if (foldedErrors.length > 0) {
-    errors.push(
-      ...foldedErrors.map(
-        (x) => `Marche en tôle pliée non développée — ${x} Pièce de base conservée.`,
-      ),
-    );
-  }
+  return { treadDetails, zones, foldedErrors };
+}
 
-  // 2 bis. Profil Z : contremarche d'arrivée en plat plié en L fixé au chevêtre (décision A11),
-  // à la place de la contremarche bois de base de même identifiant.
+/**
+ * Étape 2 bis : contremarche d'arrivée en plat plié en L fixé au chevêtre (profil Z, décision
+ * A11), à la place de la contremarche bois de base de même identifiant.
+ */
+function arrivalRiserPart(
+  stepping: StructureContext["stepping"],
+  params: SteelFlatParams,
+  baseById: ReadonlyMap<string, Part>,
+  bend: ResolvedBend | null,
+  material: Part["material"],
+  profile: WorkshopProfile,
+): {
+  arrival: { readonly part: Part; readonly result: ArrivalRiserResult } | null;
+  error?: string;
+} {
+  const nosings = stepping.nosings;
+  const folded = params.treadKind === "folded-steel";
+  const ft = params.folded;
+  let error: string | undefined;
   let arrival: { readonly part: Part; readonly result: ArrivalRiserResult } | null = null;
   const arrivalBase = baseById.get(`riser-${nosings.length}`);
   const lastTread = stepping.treads.find((tr) => tr.number === nosings.length - 1);
@@ -701,21 +988,34 @@ export function buildSteelFlat(ctx: StructureContext, params: SteelFlatParams): 
         },
       };
     } catch (err) {
-      errors.push(
-        `Contremarche d'arrivée en tôle pliée non développée — ${(err as Error).message} Pièce de base conservée.`,
-      );
+      error = `Contremarche d'arrivée en tôle pliée non développée — ${(err as Error).message} Pièce de base conservée.`;
     }
   }
+  return error === undefined ? { arrival } : { arrival, error };
+}
 
-  // 3. Faces porteuses : joues des limons (portée de la face) et faces des poteaux.
-  const pitch: Record<Side, PiecewiseLinear> = {
-    inner: nosingPitchLine(nosings, stepping.treads, "inner"),
-    outer: nosingPitchLine(nosings, stepping.treads, "outer"),
-  };
-  // Platines d'about (poteau, assemblage vissé) et de tête (arrivée) : le limon est raccourci de
-  // leur épaisseur (la platine s'intercale entre le bout du limon et la face d'appui).
-  const endPlateT = params.newel.joint === "bolted" ? params.plates.thickness : 0;
-  const headPlateT = params.plates.head ? params.plates.thickness : 0;
+/** Coupe basse d'un limon partant du sol : dessus de la platine de pied (0 sans platine). */
+function floorLevel(f: StringerFace, params: SteelFlatParams): Mm {
+  return f.start === "floor" && params.plates.foot ? params.plates.thickness : 0;
+}
+
+/**
+ * Étape 3 : fenêtres des limons (raccourcis des platines d'about et de tête) et faces porteuses
+ * des supports (joues des limons, faces des poteaux d'angle).
+ */
+function flatSupportFaces(
+  faces: readonly StringerFace[],
+  geo: ReturnType<typeof stairGeometry>,
+  nosings: readonly NosingLine[],
+  params: SteelFlatParams,
+  endPlateT: Mm,
+  headPlateT: Mm,
+): {
+  windows: Map<string, { uLo: Mm; uHi: Mm }>;
+  supportFaces: SupportFace[];
+  newelList: { geom: NewelGeometry; id: string; mark: string }[];
+} {
+  const e = params.thickness;
   const windows = new Map(
     faces.map((f) => {
       const w = windowOf(f, nosings, params.startExtension, params.endExtension, e);
@@ -728,9 +1028,6 @@ export function buildSteelFlat(ctx: StructureContext, params: SteelFlatParams): 
       ];
     }),
   );
-  /** Coupe basse des limons partant du sol : dessus de la platine de pied. */
-  const floorLevelOf = (f: StringerFace): Mm =>
-    f.start === "floor" && params.plates.foot ? params.plates.thickness : 0;
   const supportFaces: SupportFace[] = faces.map((f) => {
     const w = windows.get(f.id)!;
     return {
@@ -768,8 +1065,19 @@ export function buildSteelFlat(ctx: StructureContext, params: SteelFlatParams): 
       });
     });
   }
+  return { windows, supportFaces, newelList };
+}
 
-  // 4. Supports.
+/** Étape 4 : supports (marche × face porteuse) d'au moins `minLength`, côtés portés. */
+function placeSupports(
+  zones: readonly TreadZone[],
+  supportFaces: readonly SupportFace[],
+  sup: SteelFlatParams["supports"],
+): {
+  placements: SupportPlacement[];
+  shortSupports: { value: Mm; label: string }[];
+  carried: Map<number, Set<Side>>;
+} {
   const placements: SupportPlacement[] = [];
   const shortSupports: { value: Mm; label: string }[] = [];
   const carried = new Map<number, Set<Side>>();
@@ -794,9 +1102,18 @@ export function buildSteelFlat(ctx: StructureContext, params: SteelFlatParams): 
       carried.set(z.tread.number, set);
     }
   }
-  const depthSup = supportDepth(sup);
+  return { placements, shortSupports, carried };
+}
 
-  // 5. d_b automatique : chaque support sur la joue, à `edgeMargin` de la rive basse.
+/** Étape 5 : d_b automatique, chaque support sur la joue à `edgeMargin` de la rive basse. */
+function autoLowerOffset(
+  placements: readonly SupportPlacement[],
+  faces: readonly StringerFace[],
+  pitch: Record<Side, PiecewiseLinear>,
+  depthSup: Mm,
+  params: SteelFlatParams,
+): Record<Side, Mm> {
+  const sup = params.supports;
   const need: Record<Side, Mm> = { inner: 0, outer: 0 };
   const faceById = new Map(faces.map((f) => [f.id, f]));
   for (const p of placements) {
@@ -823,171 +1140,384 @@ export function buildSteelFlat(ctx: StructureContext, params: SteelFlatParams): 
         ? ceil5(Math.max(need.outer, params.upperOffset))
         : params.lowerOffset,
   };
+  return lowerOffset;
+}
 
-  // 6. Limons.
-  const stringers: SteelStringer[] = [];
-  const supportsOn = (id: string): SupportPlacement[] =>
-    placements.filter((p) => p.face.kind === "stringer" && p.face.owner === id);
-  let buttWeldTotal = 0;
-  const formatFindings: Finding[] = [];
-  const fits = (length: Mm, width: Mm): boolean =>
-    metal.sheetFormats.some(
-      (f) =>
-        (length <= f.length + 1e-6 && width <= f.width + 1e-6) ||
-        (length <= f.width + 1e-6 && width <= f.length + 1e-6),
+/** Étape 11 : contrôles de fabrication de `steel-flat` (ordre des résultats conservé). */
+function addFlatChecks(
+  checks: CheckCollector,
+  input: {
+    readonly exc: ReturnType<typeof deduceExecutionClass>;
+    readonly grade: SteelGrade;
+    /** Loi de pli des marches en tôle pliée (`null` : marches bois ou loi absente). */
+    readonly bend: ResolvedBend | null;
+    readonly metal: WorkshopProfile["metal"];
+    readonly foldedChecks: readonly {
+      readonly part: Part;
+      readonly flanges: FoldedTreadResult["flanges"];
+      readonly bendLines: FoldedTreadResult["bendLines"];
+    }[];
+    readonly stringers: readonly SteelStringer[];
+    readonly foldedParts: readonly Part[];
+    readonly platesMarked: readonly Part[];
+    /** Constats de format des limons, complétés ici par ceux des tôles pliées et platines. */
+    readonly formatFindings: Finding[];
+    readonly supportParts: readonly Part[];
+    readonly posts: readonly Part[];
+    readonly depthSup: Mm;
+    readonly shortSupports: { value: Mm; label: string }[];
+    readonly sup: SteelFlatParams["supports"];
+    readonly zones: readonly TreadZone[];
+    readonly carried: ReadonlyMap<number, Set<Side>>;
+    readonly receivedChecks: readonly { value: Mm; label: string; partId: string }[];
+    readonly newelList: readonly { geom: NewelGeometry; id: string; mark: string }[];
+  },
+): void {
+  const { exc, grade, bend, metal, foldedChecks, stringers, foldedParts, platesMarked } = input;
+  const { formatFindings, supportParts, posts, depthSup, shortSupports, sup, zones } = input;
+  const { carried, receivedChecks, newelList } = input;
+  const rule = (spec: (typeof STEEL_RULES)[keyof typeof STEEL_RULES]) => pluginRuleDef(spec);
+  checks.add(rule(STEEL_RULES.executionClass), [
+    {
+      status: "ok",
+      message: `Classe d'exécution déduite : ${exc.executionClass} (${exc.reasons.length > 0 ? exc.reasons.join(", ") : `${grade}, aucune soudure bout à bout`} ; famille B → CC1, SC1 supposée : un escalier de secours peut relever de SC2).`,
+    },
+  ]);
+  if (bend) {
+    const factor = minBendRadiusFactor(grade);
+    checks.addItems(
+      rule(STEEL_RULES.bendRadius),
+      [{ value: bend.innerRadius, label: `${grade}, t = ${fmt(bend.thickness, 1)} mm` }],
+      "Rayon intérieur de pli",
+      { min: factor * bend.thickness - 1e-9, max: null },
     );
-  for (const f of faces) {
-    const { uLo, uHi } = windows.get(f.id)!;
-    const dev = developStringer({
-      pitch: pitch[f.side],
-      sigmaA: f.sigmaA,
-      uLo,
-      uHi,
-      start: f.start,
-      end: f.end,
-      upperOffset: params.upperOffset,
-      lowerOffset: lowerOffset[f.side],
-      ...levelZones(f),
-      ...(f.end === "arrival"
-        ? { topCut: nosings[nosings.length - 1]!.z + params.upperOffset }
-        : {}),
-      floorLevel: floorLevelOf(f),
-      housings: [],
-    });
-    const mirrored = V.dot(V.perpRight(f.into), f.dir) < 0;
-    const span = {
-      lo: f.start === "corner" ? Math.max(uLo, 0) : uLo,
-      hi: f.end === "corner" ? Math.min(uHi, f.faceLength) : uHi,
-    };
-    const noses = nosings
-      .map((k) => ({ u: sigmaOf(k, f.side) - f.sigmaA, z: k.z, index: k.index }))
-      .filter((k) => k.u >= span.lo - 1e-6 && k.u <= span.hi + 1e-6);
-    const joints: { u: Mm; label: string }[] = [];
-    if (f.start === "corner") joints.push({ u: 0, label: "Angle mural (soudure d'angle)" });
-    if (f.end === "corner")
-      joints.push({ u: f.faceLength, label: "Angle mural (soudure d'angle)" });
-    const newelJoint = endPlateT > 0 ? "Platine d'about (poteau)" : "Face du poteau";
-    if (f.start === "newel") joints.push({ u: uLo, label: newelJoint });
-    if (f.end === "newel") joints.push({ u: uHi, label: newelJoint });
-    const sideLabel = f.side === "inner" ? "limon de jour" : "limon mural";
-    const base = toFlatPattern(dev, {
-      mirrored,
-      thickness: e,
-      depth: 0,
-      mark: f.mark,
-      referenceDescription: `Face intérieure du ${sideLabel} (côté marches), vue depuis les marches ; x = abscisse horizontale le long du limon (${mirrored ? "la montée va vers les x décroissants" : "la montée va vers les x croissants"}), y = altitude (sol fini bas = 0), mm, 1:1.`,
-      noses,
-      joints,
-    });
-    const T = flatTransform(dev, mirrored);
-    const mine = supportsOn(f.id);
-    const holes: Vec2[][] = [];
-    const extra: FlatPattern["lines"][number][] = [];
-    for (const p of mine) {
-      for (const c of boltCenters(p, sup)) {
-        const ring = holePolygon(T(c), sup.holeDiameter, sup.slotLength, V.vec(1, 0));
-        holes.push(signedArea(ring) > 0 ? ring.reverse() : ring);
-      }
-      const zb = p.zTop - depthSup;
-      const rect = [V.vec(p.u0, zb), V.vec(p.u1, zb), V.vec(p.u1, p.zTop), V.vec(p.u0, p.zTop)].map(
-        T,
-      );
-      rect.forEach((a, i) => {
-        extra.push({
-          kind: "mark",
-          a,
-          b: rect[(i + 1) % 4]!,
-          ...(i === 0 ? { label: `Support ${p.treadMark}` } : {}),
-        });
-      });
-    }
-    const flat: FlatPattern = {
-      ...base,
-      outline: { outer: base.outline.outer, holes },
-      lines: [...base.lines, ...extra],
-    };
-    const meas = plateMeasures(flat.outline, e);
-    const box = dev.box;
-    // Aboutages (format de tôle).
-    let splices = 0;
-    if (!fits(box.length, box.width)) {
-      const maxLen = Math.max(
-        0,
-        ...metal.sheetFormats.filter((s) => s.width >= box.width - 1e-6).map((s) => s.length),
-      );
-      splices = maxLen > 0 ? Math.ceil(box.length / maxLen) - 1 : Number.NaN;
-      formatFindings.push({
-        status: "violation",
-        measured: box.length,
-        location: { kind: "part", partId: f.id },
-        message: Number.isFinite(splices)
-          ? `${f.mark} : développé ${fmt(box.length, 0)} × ${fmt(box.width, 0)} mm hors des formats de tôle ; ${splices} aboutage(s) ${params.splice === "welded" ? "soudé(s) bout à bout" : "éclissé(s)"} à placer hors des supports.`
-          : `${f.mark} : largeur de développé ${fmt(box.width, 0)} mm hors de tout format de tôle.`,
-      });
-    } else {
-      formatFindings.push({
-        status: "ok",
-        measured: box.length,
-        location: { kind: "part", partId: f.id },
-        message: `${f.mark} : développé ${fmt(box.length, 0)} × ${fmt(box.width, 0)} mm dans un format de tôle.`,
-      });
-    }
-    const buttWeld =
-      params.splice === "welded" && Number.isFinite(splices)
-        ? splices * dev.minPerpendicularWidth
-        : 0;
-    buttWeldTotal += buttWeld;
-    // Soudure d'angle mural : comptée sur le limon qui part de l'angle (deux cordons).
-    const cornerWeld =
-      f.start === "corner"
-        ? 2 * Math.max(0, polyAt(dev.upperRive, 0) - Math.max(polyAt(dev.lowerRive, 0), 0))
-        : 0;
-    const xDir = mirrored ? V.scale(f.dir, -1) : f.dir;
-    let uMin = Infinity;
-    let uMax = -Infinity;
-    for (const p of dev.outline) {
-      uMin = Math.min(uMin, p.x);
-      uMax = Math.max(uMax, p.x);
-    }
-    const originPlan = V.addScaled(f.a, f.dir, mirrored ? uMax : uMin);
-    const part: Part = {
-      id: f.id,
-      mark: f.mark,
-      category: "stringer",
-      name: f.name,
-      material,
-      solid: {
-        kind: "extrusion",
-        frame: {
-          origin: { x: originPlan.x, y: originPlan.y, z: 0 },
-          xAxis: { x: xDir.x, y: xDir.y, z: 0 },
-          yAxis: { x: 0, y: 0, z: 1 },
-          zAxis: { x: f.into.x, y: f.into.y, z: 0 },
-        },
-        profile: flat.outline,
-        depth: e,
-      },
-      flat,
-      section: `tôle ${fmt(e, 0)} (${grade}), largeur ${fmt(Math.ceil(box.width), 0)}`,
-      stock: { length: box.length, width: box.width, thickness: e },
-      quantities: steelQuantities(
-        {
-          volumeMm3: meas.volumeMm3,
-          treatedSurfaceMm2: meas.treatedSurfaceMm2,
-          length: box.length,
-          weld: buttWeld + cornerWeld,
-          buttWeld,
-          cuts: 1,
-          laserCut: meas.laserCut,
-          holes: holes.length,
-        },
-        profile,
+    checks.addItems(
+      rule(STEEL_RULES.bendFlange),
+      foldedChecks.flatMap((d) =>
+        d.flanges.flatMap((fl) => [
+          {
+            value: fl.atStart,
+            label: `${d.part.mark}, ${fl.label} (début du pli)`,
+            partId: d.part.id,
+          },
+          { value: fl.atEnd, label: `${d.part.mark}, ${fl.label} (fin du pli)`, partId: d.part.id },
+        ]),
       ),
-    };
-    stringers.push({ face: f, development: dev, part, mirrored, supports: mine, splices });
+      "Longueur intérieure d'aile",
+      { min: bend.minFlange - 1e-9, max: null },
+    );
+    checks.addItems(
+      rule(STEEL_RULES.pressBrake),
+      [
+        ...foldedChecks.flatMap((d) =>
+          d.bendLines.map((l) => ({
+            value: l.length,
+            label: `${d.part.mark}, ${l.label.split(" · ")[0]}`,
+            partId: d.part.id,
+          })),
+        ),
+      ],
+      "Longueur de pli",
+      { min: null, max: metal.pressBrake.maxLength },
+    );
+    checks.addItems(
+      rule(STEEL_RULES.pressBrake),
+      [{ value: bend.thickness, label: "épaisseur de tôle pliée" }],
+      "Épaisseur pliée",
+      { min: null, max: metal.pressBrake.maxThickness },
+    );
   }
+  const laserParts = [...stringers.map((s) => s.part), ...foldedParts, ...platesMarked];
+  checks.addItems(
+    rule(STEEL_RULES.laser),
+    laserParts.map((p) => ({ value: p.flat!.thickness, label: p.mark, partId: p.id })),
+    "Épaisseur découpée",
+    { min: null, max: metal.laser.maxThickness },
+  );
+  for (const p of [...foldedParts, ...platesMarked]) {
+    const box = minAreaRect(p.flat!.outline.outer);
+    formatFindings.push(
+      fitsSheet(metal, box.length, box.width)
+        ? {
+            status: "ok",
+            measured: box.length,
+            location: { kind: "part", partId: p.id },
+            message: `${p.mark} : développé ${fmt(box.length, 0)} × ${fmt(box.width, 0)} mm dans un format de tôle.`,
+          }
+        : {
+            status: "violation",
+            measured: box.length,
+            location: { kind: "part", partId: p.id },
+            message: `${p.mark} : développé ${fmt(box.length, 0)} × ${fmt(box.width, 0)} mm hors des formats de tôle du profil d'atelier.`,
+          },
+    );
+  }
+  if (formatFindings.length > 0) checks.add(rule(STEEL_RULES.sheetFormat), formatFindings);
+  const bars = [...supportParts, ...posts];
+  checks.addItems(
+    rule(STEEL_RULES.barLength),
+    bars.map((p) => ({ value: p.stock!.length, label: p.mark, partId: p.id })),
+    "Longueur de barre",
+    { min: null, max: Math.max(...metal.barLengths) },
+  );
+  checks.addItems(
+    rule(STEEL_RULES.supportInStringer),
+    stringers.flatMap((s) =>
+      s.supports.map((p) => {
+        const zb = p.zTop - depthSup;
+        const margin = Math.min(
+          zb - polyAt(s.development.lowerRive, p.u0),
+          zb - polyAt(s.development.lowerRive, p.u1),
+          polyAt(s.development.upperRive, p.u0) - p.zTop,
+        );
+        return { value: margin, label: `${p.treadMark} sur ${s.face.mark}`, partId: s.part.id };
+      }),
+    ),
+    "Marge support / rive",
+    { min: -1e-6, max: null },
+  );
+  checks.addItems(rule(STEEL_RULES.supportLength), shortSupports, "Longueur d'appui", {
+    min: sup.minLength,
+    max: null,
+  });
+  checks.add(
+    rule(STEEL_RULES.treadCarried),
+    zones.map((z): Finding => {
+      const set = carried.get(z.tread.number) ?? new Set<Side>();
+      const missing = (["inner", "outer"] as const).filter((sd) => !set.has(sd));
+      return missing.length === 0
+        ? {
+            status: "ok",
+            location: { kind: "tread", number: z.tread.number },
+            message: `${z.mark} portée des deux côtés.`,
+          }
+        : {
+            status: "violation",
+            location: { kind: "tread", number: z.tread.number },
+            message: `${z.mark} sans support côté ${missing.map((m) => (m === "inner" ? "jour" : "mur")).join(" et ")}.`,
+          };
+    }),
+  );
+  if (receivedChecks.length > 0) {
+    for (const nw of newelList) {
+      checks.addItems(
+        pluginRuleDef(FAB_RULES.newelReception),
+        receivedChecks.filter((r) => r.label.endsWith(nw.mark)),
+        "Épaisseur du limon reçu par le poteau",
+        { min: null, max: nw.geom.jourExtent },
+      );
+    }
+  }
+}
 
-  // 7. Poteaux.
+/** Données communes à la construction des limons en plat (étape 6). */
+interface FlatStringerContext {
+  readonly params: SteelFlatParams;
+  readonly nosings: readonly NosingLine[];
+  readonly metal: WorkshopProfile["metal"];
+  readonly profile: WorkshopProfile;
+  readonly material: Part["material"];
+  readonly grade: SteelGrade;
+  readonly pitch: Record<Side, PiecewiseLinear>;
+  readonly windows: ReadonlyMap<string, { uLo: Mm; uHi: Mm }>;
+  readonly lowerOffset: Record<Side, Mm>;
+  readonly placements: readonly SupportPlacement[];
+  readonly depthSup: Mm;
+  readonly endPlateT: Mm;
+}
+
+/** Le développé L × l tient-il dans un format de tôle du profil d'atelier (dans un sens) ? */
+function fitsSheet(metal: WorkshopProfile["metal"], length: Mm, width: Mm): boolean {
+  return metal.sheetFormats.some(
+    (f) =>
+      (length <= f.length + 1e-6 && width <= f.width + 1e-6) ||
+      (length <= f.width + 1e-6 && width <= f.length + 1e-6),
+  );
+}
+
+/**
+ * Étape 6 : un limon en plat (développé, perçages et traçage des supports, format de tôle et
+ * aboutages, soudures, solide extrudé).
+ */
+function buildFlatStringer(
+  sc: FlatStringerContext,
+  f: StringerFace,
+): { stringer: SteelStringer; formatFinding: Finding; buttWeld: Mm } {
+  const { params, nosings, metal, profile, material, grade, pitch, windows, lowerOffset } = sc;
+  const { placements, depthSup, endPlateT } = sc;
+  const e = params.thickness;
+  const sup = params.supports;
+  const floorLevelOf = (face: StringerFace): Mm => floorLevel(face, params);
+  const { uLo, uHi } = windows.get(f.id)!;
+  const dev = developStringer({
+    pitch: pitch[f.side],
+    sigmaA: f.sigmaA,
+    uLo,
+    uHi,
+    start: f.start,
+    end: f.end,
+    upperOffset: params.upperOffset,
+    lowerOffset: lowerOffset[f.side],
+    ...levelZones(f),
+    ...(f.end === "arrival" ? { topCut: nosings[nosings.length - 1]!.z + params.upperOffset } : {}),
+    floorLevel: floorLevelOf(f),
+    housings: [],
+  });
+  const mirrored = V.dot(V.perpRight(f.into), f.dir) < 0;
+  const span = {
+    lo: f.start === "corner" ? Math.max(uLo, 0) : uLo,
+    hi: f.end === "corner" ? Math.min(uHi, f.faceLength) : uHi,
+  };
+  const noses = nosings
+    .map((k) => ({ u: sigmaOf(k, f.side) - f.sigmaA, z: k.z, index: k.index }))
+    .filter((k) => k.u >= span.lo - 1e-6 && k.u <= span.hi + 1e-6);
+  const joints: { u: Mm; label: string }[] = [];
+  if (f.start === "corner") joints.push({ u: 0, label: "Angle mural (soudure d'angle)" });
+  if (f.end === "corner") joints.push({ u: f.faceLength, label: "Angle mural (soudure d'angle)" });
+  const newelJoint = endPlateT > 0 ? "Platine d'about (poteau)" : "Face du poteau";
+  if (f.start === "newel") joints.push({ u: uLo, label: newelJoint });
+  if (f.end === "newel") joints.push({ u: uHi, label: newelJoint });
+  const sideLabel = f.side === "inner" ? "limon de jour" : "limon mural";
+  const base = toFlatPattern(dev, {
+    mirrored,
+    thickness: e,
+    depth: 0,
+    mark: f.mark,
+    referenceDescription: `Face intérieure du ${sideLabel} (côté marches), vue depuis les marches ; x = abscisse horizontale le long du limon (${mirrored ? "la montée va vers les x décroissants" : "la montée va vers les x croissants"}), y = altitude (sol fini bas = 0), mm, 1:1.`,
+    noses,
+    joints,
+  });
+  const T = flatTransform(dev, mirrored);
+  const mine = placements.filter((p) => p.face.kind === "stringer" && p.face.owner === f.id);
+  const holes: Vec2[][] = [];
+  const extra: FlatPattern["lines"][number][] = [];
+  for (const p of mine) {
+    for (const c of boltCenters(p, sup)) {
+      const ring = holePolygon(T(c), sup.holeDiameter, sup.slotLength, V.vec(1, 0));
+      holes.push(signedArea(ring) > 0 ? ring.reverse() : ring);
+    }
+    const zb = p.zTop - depthSup;
+    const rect = [V.vec(p.u0, zb), V.vec(p.u1, zb), V.vec(p.u1, p.zTop), V.vec(p.u0, p.zTop)].map(
+      T,
+    );
+    rect.forEach((a, i) => {
+      extra.push({
+        kind: "mark",
+        a,
+        b: rect[(i + 1) % 4]!,
+        ...(i === 0 ? { label: `Support ${p.treadMark}` } : {}),
+      });
+    });
+  }
+  const flat: FlatPattern = {
+    ...base,
+    outline: { outer: base.outline.outer, holes },
+    lines: [...base.lines, ...extra],
+  };
+  const meas = plateMeasures(flat.outline, e);
+  const box = dev.box;
+  // Aboutages (format de tôle).
+  let splices = 0;
+  let formatFinding: Finding;
+  if (!fitsSheet(metal, box.length, box.width)) {
+    const maxLen = Math.max(
+      0,
+      ...metal.sheetFormats.filter((s) => s.width >= box.width - 1e-6).map((s) => s.length),
+    );
+    splices = maxLen > 0 ? Math.ceil(box.length / maxLen) - 1 : Number.NaN;
+    formatFinding = {
+      status: "violation",
+      measured: box.length,
+      location: { kind: "part", partId: f.id },
+      message: Number.isFinite(splices)
+        ? `${f.mark} : développé ${fmt(box.length, 0)} × ${fmt(box.width, 0)} mm hors des formats de tôle ; ${splices} aboutage(s) ${params.splice === "welded" ? "soudé(s) bout à bout" : "éclissé(s)"} à placer hors des supports.`
+        : `${f.mark} : largeur de développé ${fmt(box.width, 0)} mm hors de tout format de tôle.`,
+    };
+  } else {
+    formatFinding = {
+      status: "ok",
+      measured: box.length,
+      location: { kind: "part", partId: f.id },
+      message: `${f.mark} : développé ${fmt(box.length, 0)} × ${fmt(box.width, 0)} mm dans un format de tôle.`,
+    };
+  }
+  const buttWeld =
+    params.splice === "welded" && Number.isFinite(splices)
+      ? splices * dev.minPerpendicularWidth
+      : 0;
+  // Soudure d'angle mural : comptée sur le limon qui part de l'angle (deux cordons).
+  const cornerWeld =
+    f.start === "corner"
+      ? 2 * Math.max(0, polyAt(dev.upperRive, 0) - Math.max(polyAt(dev.lowerRive, 0), 0))
+      : 0;
+  const xDir = mirrored ? V.scale(f.dir, -1) : f.dir;
+  let uMin = Infinity;
+  let uMax = -Infinity;
+  for (const p of dev.outline) {
+    uMin = Math.min(uMin, p.x);
+    uMax = Math.max(uMax, p.x);
+  }
+  const originPlan = V.addScaled(f.a, f.dir, mirrored ? uMax : uMin);
+  const part: Part = {
+    id: f.id,
+    mark: f.mark,
+    category: "stringer",
+    name: f.name,
+    material,
+    solid: {
+      kind: "extrusion",
+      frame: {
+        origin: { x: originPlan.x, y: originPlan.y, z: 0 },
+        xAxis: { x: xDir.x, y: xDir.y, z: 0 },
+        yAxis: { x: 0, y: 0, z: 1 },
+        zAxis: { x: f.into.x, y: f.into.y, z: 0 },
+      },
+      profile: flat.outline,
+      depth: e,
+    },
+    flat,
+    section: `tôle ${fmt(e, 0)} (${grade}), largeur ${fmt(Math.ceil(box.width), 0)}`,
+    stock: { length: box.length, width: box.width, thickness: e },
+    quantities: steelQuantities(
+      {
+        volumeMm3: meas.volumeMm3,
+        treatedSurfaceMm2: meas.treatedSurfaceMm2,
+        length: box.length,
+        weld: buttWeld + cornerWeld,
+        buttWeld,
+        cuts: 1,
+        laserCut: meas.laserCut,
+        holes: holes.length,
+      },
+      profile,
+    ),
+  };
+  return {
+    stringer: { face: f, development: dev, part, mirrored, supports: mine, splices },
+    formatFinding,
+    buttWeld,
+  };
+}
+
+/** Étape 7 : poteaux d'angle (tube ou plein), platines d'about et de pied des poteaux. */
+function flatNewelPosts(
+  ctx: StructureContext,
+  newelList: readonly { geom: NewelGeometry; id: string; mark: string }[],
+  stringers: readonly SteelStringer[],
+  placements: readonly SupportPlacement[],
+  depthSup: Mm,
+  params: SteelFlatParams,
+  material: Part["material"],
+  profile: WorkshopProfile,
+): {
+  posts: Part[];
+  plates: Part[];
+  received: { value: Mm; label: string; partId: string }[];
+  notes: string[];
+} {
+  const e = params.thickness;
+  const sup = params.supports;
+  const notes: string[] = [];
   const posts: Part[] = [];
   const plates: Part[] = [];
   const receivedChecks: { value: Mm; label: string; partId: string }[] = [];
@@ -1162,9 +1692,20 @@ export function buildSteelFlat(ctx: StructureContext, params: SteelFlatParams): 
       );
     }
   }
+  return { posts, plates, received: receivedChecks, notes };
+}
 
-  // 8. Platines de pied et de tête des limons.
+/** Étape 8 : platines de pied (sol) et de tête (arrivée) des limons. */
+function stringerPlates(
+  stringers: readonly SteelStringer[],
+  params: SteelFlatParams,
+  material: Part["material"],
+  profile: WorkshopProfile,
+): Part[] {
+  const e = params.thickness;
   const pl = params.plates;
+  const plates: Part[] = [];
+  const floorLevelOf = (face: StringerFace): Mm => floorLevel(face, params);
   for (const s of stringers) {
     const f = s.face;
     const dev = s.development;
@@ -1237,263 +1778,7 @@ export function buildSteelFlat(ctx: StructureContext, params: SteelFlatParams): 
       }
     }
   }
-
-  // 9. Pièces supports (marques par groupe de pièces identiques).
-  const supportParts = markGroups(
-    placements.map((p) => supportPart(p, sup, "S", material, profile)),
-    sup.kind === "angle" ? "CR" : "PS",
-    (p) =>
-      `${p.section}|${Math.round((p.stock?.length ?? 0) / IDENTICAL_TOLERANCE)}|${p.quantities["holes"]}`,
-  );
-  const platesMarked = [
-    ...markGroups(
-      plates.filter((p) => p.id.startsWith("plate-foot-")),
-      "PF",
-      () => null,
-    ),
-    ...markGroups(
-      plates.filter((p) => p.id.startsWith("plate-head-")),
-      "PH",
-      () => null,
-    ),
-    ...markGroups(
-      plates.filter((p) => p.id.startsWith("plate-post-")),
-      "PP",
-      () => null,
-    ),
-    ...markGroups(
-      plates.filter((p) => p.id.startsWith("plate-end-")),
-      "PA",
-      () => null,
-    ),
-  ];
-  const treadParts = treadDetails.map((d) => d.part);
-  const treadGroups = groupIdenticalFlats(treadParts);
-  /** Tôles pliées : marches et contremarche d'arrivée (contrôles de pliage, laser, format). */
-  const foldedParts = arrival ? [...treadParts, arrival.part] : treadParts;
-  const foldedChecks = [
-    ...treadDetails.map((d) => ({
-      part: d.part,
-      flanges: d.result.flanges,
-      bendLines: d.result.bendLines,
-    })),
-    ...(arrival
-      ? [
-          {
-            part: arrival.part,
-            flanges: arrival.result.flanges,
-            bendLines: arrival.result.bendLines,
-          },
-        ]
-      : []),
-  ];
-
-  // 10. Classe d'exécution : S355 « soudé » seulement si une pièce porte un cordon (angle ou
-  // bout à bout) ; supports vissés sans cordon ⇒ PC1 (C §2.1).
-  const weldTotal = [
-    ...foldedParts,
-    ...stringers.map((s) => s.part),
-    ...posts,
-    ...supportParts,
-    ...platesMarked,
-  ].reduce((acc, p) => acc + (p.quantities[QUANTITY_WELD_MM] ?? 0), 0);
-  const exc = deduceExecutionClass({
-    grade,
-    buttWeld: buttWeldTotal,
-    welded: weldTotal + buttWeldTotal > 1e-9,
-  });
-
-  // 11. Contrôles.
-  const rule = (spec: (typeof STEEL_RULES)[keyof typeof STEEL_RULES]) => pluginRuleDef(spec);
-  checks.add(rule(STEEL_RULES.executionClass), [
-    {
-      status: "ok",
-      message: `Classe d'exécution déduite : ${exc.executionClass} (${exc.reasons.length > 0 ? exc.reasons.join(", ") : `${grade}, aucune soudure bout à bout`} ; famille B → CC1, SC1 supposée : un escalier de secours peut relever de SC2).`,
-    },
-  ]);
-  if (folded && bend) {
-    const factor = minBendRadiusFactor(grade);
-    checks.addItems(
-      rule(STEEL_RULES.bendRadius),
-      [{ value: bend.innerRadius, label: `${grade}, t = ${fmt(bend.thickness, 1)} mm` }],
-      "Rayon intérieur de pli",
-      { min: factor * bend.thickness - 1e-9, max: null },
-    );
-    checks.addItems(
-      rule(STEEL_RULES.bendFlange),
-      foldedChecks.flatMap((d) =>
-        d.flanges.flatMap((fl) => [
-          {
-            value: fl.atStart,
-            label: `${d.part.mark}, ${fl.label} (début du pli)`,
-            partId: d.part.id,
-          },
-          { value: fl.atEnd, label: `${d.part.mark}, ${fl.label} (fin du pli)`, partId: d.part.id },
-        ]),
-      ),
-      "Longueur intérieure d'aile",
-      { min: bend.minFlange - 1e-9, max: null },
-    );
-    checks.addItems(
-      rule(STEEL_RULES.pressBrake),
-      [
-        ...foldedChecks.flatMap((d) =>
-          d.bendLines.map((l) => ({
-            value: l.length,
-            label: `${d.part.mark}, ${l.label.split(" · ")[0]}`,
-            partId: d.part.id,
-          })),
-        ),
-      ],
-      "Longueur de pli",
-      { min: null, max: metal.pressBrake.maxLength },
-    );
-    checks.addItems(
-      rule(STEEL_RULES.pressBrake),
-      [{ value: bend.thickness, label: "épaisseur de tôle pliée" }],
-      "Épaisseur pliée",
-      { min: null, max: metal.pressBrake.maxThickness },
-    );
-  }
-  const laserParts = [...stringers.map((s) => s.part), ...foldedParts, ...platesMarked];
-  checks.addItems(
-    rule(STEEL_RULES.laser),
-    laserParts.map((p) => ({ value: p.flat!.thickness, label: p.mark, partId: p.id })),
-    "Épaisseur découpée",
-    { min: null, max: metal.laser.maxThickness },
-  );
-  for (const p of [...foldedParts, ...platesMarked]) {
-    const box = minAreaRect(p.flat!.outline.outer);
-    formatFindings.push(
-      fits(box.length, box.width)
-        ? {
-            status: "ok",
-            measured: box.length,
-            location: { kind: "part", partId: p.id },
-            message: `${p.mark} : développé ${fmt(box.length, 0)} × ${fmt(box.width, 0)} mm dans un format de tôle.`,
-          }
-        : {
-            status: "violation",
-            measured: box.length,
-            location: { kind: "part", partId: p.id },
-            message: `${p.mark} : développé ${fmt(box.length, 0)} × ${fmt(box.width, 0)} mm hors des formats de tôle du profil d'atelier.`,
-          },
-    );
-  }
-  if (formatFindings.length > 0) checks.add(rule(STEEL_RULES.sheetFormat), formatFindings);
-  const bars = [...supportParts, ...posts];
-  checks.addItems(
-    rule(STEEL_RULES.barLength),
-    bars.map((p) => ({ value: p.stock!.length, label: p.mark, partId: p.id })),
-    "Longueur de barre",
-    { min: null, max: Math.max(...metal.barLengths) },
-  );
-  checks.addItems(
-    rule(STEEL_RULES.supportInStringer),
-    stringers.flatMap((s) =>
-      s.supports.map((p) => {
-        const zb = p.zTop - depthSup;
-        const margin = Math.min(
-          zb - polyAt(s.development.lowerRive, p.u0),
-          zb - polyAt(s.development.lowerRive, p.u1),
-          polyAt(s.development.upperRive, p.u0) - p.zTop,
-        );
-        return { value: margin, label: `${p.treadMark} sur ${s.face.mark}`, partId: s.part.id };
-      }),
-    ),
-    "Marge support / rive",
-    { min: -1e-6, max: null },
-  );
-  checks.addItems(rule(STEEL_RULES.supportLength), shortSupports, "Longueur d'appui", {
-    min: sup.minLength,
-    max: null,
-  });
-  checks.add(
-    rule(STEEL_RULES.treadCarried),
-    zones.map((z): Finding => {
-      const set = carried.get(z.tread.number) ?? new Set<Side>();
-      const missing = (["inner", "outer"] as const).filter((sd) => !set.has(sd));
-      return missing.length === 0
-        ? {
-            status: "ok",
-            location: { kind: "tread", number: z.tread.number },
-            message: `${z.mark} portée des deux côtés.`,
-          }
-        : {
-            status: "violation",
-            location: { kind: "tread", number: z.tread.number },
-            message: `${z.mark} sans support côté ${missing.map((m) => (m === "inner" ? "jour" : "mur")).join(" et ")}.`,
-          };
-    }),
-  );
-  if (receivedChecks.length > 0) {
-    for (const nw of newelList) {
-      checks.addItems(
-        pluginRuleDef(FAB_RULES.newelReception),
-        receivedChecks.filter((r) => r.label.endsWith(nw.mark)),
-        "Épaisseur du limon reçu par le poteau",
-        { min: null, max: nw.geom.jourExtent },
-      );
-    }
-  }
-
-  // 12. Remarques.
-  notes.push(
-    `Limons acier en plat ${fmt(e, 0)} mm (${grade}) : d_h = ${fmt(params.upperOffset, 0)} mm, d_b = ${fmt(lowerOffset.inner, 0)} / ${fmt(lowerOffset.outer, 0)} mm (jour / mur) ; supports ${sup.kind === "angle" ? "cornières" : "plats"} ${effectiveFixing(sup) === "welded" ? "soudés" : "vissés"} ; valeurs par défaut à valider.`,
-    `Classe d'exécution EN 1090-2 : ${exc.executionClass}${exc.reasons.length > 0 ? ` (${exc.reasons.join(", ")})` : ` (${grade}, aucune soudure bout à bout)`}.`,
-  );
-  if (folded && treadParts.length > 0) {
-    notes.push(
-      `Marches en tôle pliée ${ft.profile} : ${treadParts.length} pièce(s), ${treadGroups.length} pièce(s) unique(s) (tolérance ${fmt(IDENTICAL_TOLERANCE, 1)} mm) ; développés en fibre neutre, loi de pli à valider (CHALLENGE G5).`,
-    );
-    notes.push(
-      "Solides 3D des marches balancées en tôle pliée : dessus seul (les ailes ne sont dessinées que sur les développés).",
-    );
-  }
-  // Profil Z : la pièce de la marche t porte la contremarche sous son propre nez (nez t − 1,
-  // contremarche de base `riser-t`) ; ces contremarches sont retirées. La contremarche
-  // d'arrivée (sous le dernier nez), qu'aucune pièce Z ne porte, est remplacée (même
-  // identifiant) par un plat plié en L fixé au chevêtre (décision A11) ; à défaut (développé
-  // impossible), la pièce de base reste : sans elle, le dessus de la dernière pièce ne bute
-  // contre rien et le vide sous le nez d'arrivée n'est pas fermé. Profil U (claire-voie) :
-  // toutes les contremarches sont retirées.
-  const foldedRisers = new Set(treadDetails.map((d) => `riser-${d.number}`));
-  const removedBaseParts =
-    folded && bend && project.stair.treads.risers === "full"
-      ? baseParts
-          .filter((p) => /^riser-\d+$/.test(p.id) && (ft.profile !== "Z" || foldedRisers.has(p.id)))
-          .map((p) => p.id)
-      : [];
-  if (removedBaseParts.length > 0) {
-    notes.push(
-      `Marches en tôle pliée : ${removedBaseParts.length} contremarche(s) bois de base supprimée(s) du modèle (${ft.profile === "Z" ? `contremarches pliées dans les pièces en Z ; contremarche d'arrivée, sous le dernier nez, ${arrival ? "en tôle pliée en L fixée au chevêtre" : "conservée en bois"}` : "escalier à claire-voie en U"}).`,
-    );
-  }
-
-  return {
-    output: {
-      parts: [
-        ...foldedParts,
-        ...stringers.map((s) => s.part),
-        ...posts,
-        ...supportParts,
-        ...platesMarked,
-      ],
-      checks: checks.results,
-      executionClass: exc.executionClass,
-      notes,
-      ...(errors.length > 0 ? { errors } : {}),
-      ...(removedBaseParts.length > 0 ? { removedBaseParts } : {}),
-    },
-    stringers,
-    posts,
-    supports: placements.map((placement, i) => ({ placement, part: supportParts[i]! })),
-    plates: platesMarked,
-    treads: treadDetails,
-    lowerOffset,
-    executionClass: exc.executionClass,
-    treadGroups,
-  };
+  return plates;
 }
 
 /**
@@ -1587,4 +1872,10 @@ export const STEEL_FLAT: StructureKind<SteelFlatParams> = {
   paramsSchema: SteelFlatParamsSchema,
   defaults: () => SteelFlatParamsSchema.parse({}),
   build: (ctx, params) => buildSteelFlat(ctx, params).output,
+  capabilities: {
+    // Limons de jour assemblés sur un poteau d'angle (jour vif refusé).
+    requiresNewel: true,
+    // Limons hors emprise utile, côté jour et côté mur (CHALLENGE A3).
+    lateralThickness: (p) => ({ inner: p.thickness, outer: p.thickness }),
+  },
 };

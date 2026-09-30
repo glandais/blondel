@@ -4,6 +4,7 @@
  * modifiables par `AssistantInput.limits` / `weights`.
  */
 import { AUTO_GOING_MODULE } from "../layout/resolve.js";
+import { LF_WIDE_THRESHOLD } from "../rules/params.js";
 import type { ScoreWeights } from "./types.js";
 
 export const ASSISTANT_DEFAULTS = {
@@ -51,8 +52,11 @@ export const ASSISTANT_DEFAULTS = {
    * égales du temps restant (les groupes rapides laissent leur temps aux suivants).
    */
   enumerationGroupFactor: 3,
-  /** Emmarchement maximal exploré : ligne de foulée au milieu (`LF_POSITION_DTU_ETROIT`). */
-  widthMax: 1200,
+  /**
+   * Emmarchement maximal exploré : ligne de foulée au milieu (`LF_POSITION_DTU_ETROIT`, seuil
+   * `parametres.E_seuil` de rules.yaml).
+   */
+  widthMax: LF_WIDE_THRESHOLD.value,
   /**
    * Jour (partie droite intérieure) de la volée centrale : deux quarts tournants (U) et
    * demi-tournant. Mêmes valeurs que les préréglages `two-quarters-u` et `half-turn`

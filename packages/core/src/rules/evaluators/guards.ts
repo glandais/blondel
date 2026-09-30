@@ -31,11 +31,12 @@ import {
   GC_LOAD_HOUSING,
   GC_LOAD_PUBLIC,
   GC_T1_ZONE_TOP,
+  GC_T2_ZONE_BOTTOM,
   MC_CORE_DIAMETER_MAX,
   MC_WALL_CLEARANCE_OTHER,
   UP2_WIDTH,
-} from "../formula-constants.js";
-import { getRule } from "../table.js";
+} from "../params.js";
+import { numberCell, ruleParam, ruleTable } from "../table.js";
 import type { EvaluatorContext, Finding, RuleEvaluator } from "../types.js";
 
 // ------------------------------------------------------------------ Analyse des garde-corps
@@ -184,8 +185,6 @@ const mandatory: RuleEvaluator = withGuards((ctx, g) => {
     const runs = g.runs.filter((r) => r.side === side.side);
     if (side.maxFall <= limit) {
       oks.push(`${label[side.side]} : chute ${fmt(side.maxFall)} mm ≤ ${fmt(limit)} mm`);
-    } else if (runs.length > 0) {
-      oks.push(`${label[side.side]} : chute ${fmt(side.maxFall)} mm, garde-corps présent`);
     } else if (side.side === "inner" && g.narrowJour) {
       // Jour plus étroit que la sphère T1 : pas de garde-corps de jour, constat en conseil
       // (décision de l'utilisateur 2026-09-29, QUESTIONS A10) pour la chute dans l'emprise du
@@ -209,10 +208,17 @@ const mandatory: RuleEvaluator = withGuards((ctx, g) => {
           measured: j.outsideFall,
           max: limit,
           location: j.outsideFallAt ? { kind: "point", at: j.outsideFallAt } : STAIR,
-          message: `Hauteur de chute ${fmt(j.outsideFall)} mm > ${fmt(limit)} mm côté jour hors du jour (volée plus longue que celle d'en face, vide ouvert) sans garde-corps : ${jourText}, aucun garde-corps de jour n'est construit.`,
+          message: `Hauteur de chute ${fmt(j.outsideFall)} mm > ${fmt(limit)} mm côté jour hors du jour (volée plus longue que celle d'en face, vide ouvert) sans garde-corps : ${jourText}, ${j.partialGuards ? "garde-corps partiel non généré sur cette portion" : "aucun garde-corps de jour n'est construit"}.`,
         });
-      if (j.jourFall <= limit && j.outsideFall <= limit)
+      // Garde-corps partiel hors du jour (décision A10 du 2026-09-30) : chute protégée.
+      if (j.partialGuards && j.guardedFall !== undefined && j.guardedFall > limit)
+        oks.push(
+          `${label[side.side]} hors du jour : chute ${fmt(j.guardedFall)} mm, garde-corps partiel présent`,
+        );
+      if (j.jourFall <= limit && j.outsideFall <= limit && !(j.partialGuards && runs.length > 0))
         oks.push(`${label[side.side]} : chute ${fmt(side.maxFall)} mm, ${jourText}`);
+    } else if (runs.length > 0) {
+      oks.push(`${label[side.side]} : chute ${fmt(side.maxFall)} mm, garde-corps présent`);
     } else {
       out.push({
         status: "violation",
@@ -301,24 +307,32 @@ export interface GuardHeightStep {
 }
 
 /**
- * Table h(E) de GC_HAUTEUR_2024, lue dans sa description (« E<=250:1000 ; <=300:975 ; … ;
- * >500:800(b) ») et plancher des valeurs à condition (b) (« ne pas descendre sous 900 »).
+ * Table h(E) de GC_HAUTEUR_2024, lue dans son champ structuré `tables.h_E` (lignes
+ * `{ E_max, H, condition_b }`, `E_max: null` pour la dernière tranche « E > … ») et plancher des
+ * valeurs à condition (b) (`parametres.H_plancher_condition_b`, « ne pas descendre sous 900 »).
  * `null` si la table n'est pas exploitable.
  */
 export function guardHeightTable(): { steps: GuardHeightStep[]; floorB: number } | null {
-  const d = getRule("GC_HAUTEUR_2024").description;
-  const steps: GuardHeightStep[] = [];
-  for (const m of d.matchAll(/(<=|>)\s*(\d+)\s*:\s*(\d+)\s*(\(b\))?/g)) {
-    steps.push({
-      op: m[1] === "<=" ? "le" : "gt",
-      e: Number(m[2]),
-      h: Number(m[3]),
-      conditional: m[4] !== undefined,
-    });
+  try {
+    const rows = ruleTable("GC_HAUTEUR_2024", "h_E");
+    const steps: GuardHeightStep[] = [];
+    let previous: number | null = null;
+    for (const row of rows) {
+      const eMax = row["E_max"];
+      const h = numberCell(row, "H");
+      const conditional = row["condition_b"] === true;
+      if (typeof eMax === "number") {
+        steps.push({ op: "le", e: eMax, h, conditional });
+        previous = eMax;
+      } else if (eMax === null && previous !== null) {
+        steps.push({ op: "gt", e: previous, h, conditional });
+      } else return null;
+    }
+    if (steps.length === 0) return null;
+    return { steps, floorB: ruleParam("GC_HAUTEUR_2024", "H_plancher_condition_b") };
+  } catch {
+    return null;
   }
-  const floor = /ne pas descendre sous (\d+)/.exec(d);
-  if (steps.length === 0 || !floor) return null;
-  return { steps, floorB: Number(floor[1]) };
 }
 
 /** Hauteur minimale h(E) (mm) pour une épaisseur E (mm) de l'élément de protection. */
@@ -393,9 +407,9 @@ const t1: RuleEvaluator = withGuards((ctx, g) =>
 const t2: RuleEvaluator = withGuards((ctx, g) =>
   checkBounded(
     ctx,
-    gapItems(g, (gap) => gap.zTop > GC_T1_ZONE_TOP.value, strictMax(ctx)),
-    `Vide (gabarit T2, au-dessus de ${GC_T1_ZONE_TOP.value} mm)`,
-    `Sans objet : aucun vide au-dessus de ${GC_T1_ZONE_TOP.value} mm.`,
+    gapItems(g, (gap) => gap.zTop > GC_T2_ZONE_BOTTOM.value, strictMax(ctx)),
+    `Vide (gabarit T2, au-dessus de ${GC_T2_ZONE_BOTTOM.value} mm)`,
+    `Sans objet : aucun vide au-dessus de ${GC_T2_ZONE_BOTTOM.value} mm.`,
   ),
 );
 
@@ -482,6 +496,21 @@ const horizontalLoad: RuleEvaluator = withGuards((ctx, g) => {
       message: `Information : charge horizontale de ${fmt(q.value, 2)} kN/m (${publicUse ? "catégories C1 à C4, établissement recevant du public" : "catégorie A, habitation"}) appliquée à 1 m du sol fini, à reprendre par les poteaux et leurs fixations ; résistance non vérifiée par Blondel.`,
     },
   ];
+});
+
+/**
+ * GC_CABLES_DETENTE : remplissage à câbles. NF P01-012:2024 : les vides ne doivent pas augmenter
+ * dans le temps (« attention aux câbles qui se détendent ») [C §3.1] ; SPEC X12 : câbles traités
+ * comme des lisses **avec un avertissement de détente**. Un constat par garde-corps à câbles.
+ */
+const cableSlack: RuleEvaluator = withGuards((_ctx, g) => {
+  const runs = g.runs.filter((r) => r.infill === "cables");
+  if (runs.length === 0) return [notApplicable("Sans objet : aucun remplissage à câbles.")];
+  return runs.map((run) => ({
+    status: "violation" as const,
+    location: run.infillPartIds[0] ? partLoc(run.infillPartIds[0]) : STAIR,
+    message: `Câbles du ${run.label} : traités comme des lisses (SPEC X12) ; la détente des câbles augmente les vides dans le temps, prévoir un dispositif de retension et un contrôle périodique.`,
+  }));
 });
 
 // ------------------------------------------------------------------ Mains courantes
@@ -724,6 +753,7 @@ export const GUARD_EVALUATORS: Readonly<Record<string, RuleEvaluator>> = {
   GC_GABARIT_T3_2024: t3,
   GC_GABARIT_B_2024: templateB,
   GC_DENIVELES_2024: levels2024,
+  GC_CABLES_DETENTE: cableSlack,
   CHARGE_GC_HORIZONTALE: horizontalLoad,
   MC_LOGEMENT: handrailMin,
   MC_DEUX_COTES: handrailBothSides,

@@ -217,23 +217,84 @@ describe("openingFromSurvey — relevé 4 côtés + 2 diagonales (CHALLENGE P7)"
     }
   });
 
-  it("propriété : le seuil de détection rendu est celui observé (erreur isolée ± 25 %)", () => {
+  it("seuil exact sur un quadrilatère mal conditionné (ledger l. 264, QUESTIONS D6)", () => {
+    // Seuil linéarisé : 64 mm sur CD, alors qu'une erreur de 1,33 × 64 mm restait « cohérente ».
+    const P = [
+      { x: 0, y: 0 },
+      { x: 400, y: 0 },
+      { x: 165, y: 546 },
+      { x: -1500, y: 546 },
+    ];
+    const m = measure(P);
+    const exact = openingFromSurvey(m);
+    expect(exact.ok).toBe(true);
+    if (!exact.ok) return;
+    for (const k of SURVEY_MEASURES) {
+      const t = exact.detectable[k];
+      expect(Number.isFinite(t), k).toBe(true);
+      for (const sign of [1, -1]) {
+        const below = openingFromSurvey({ ...m, [k]: m[k] + sign * 0.98 * t });
+        expect(below.ok && below.consistent, `${k} ${sign * 0.98} × seuil`).toBe(true);
+      }
+      const above = [1, -1].map((sign) => openingFromSurvey({ ...m, [k]: m[k] + sign * 1.02 * t }));
+      expect(
+        above.some((r) => r.ok && !r.consistent),
+        `${k} 1,02 × seuil`,
+      ).toBe(true);
+    }
+  });
+
+  it("angle mort : plus grande erreur isolée encore « cohérente », quel que soit son sens", () => {
+    // Ledger l. 264 : sur CD, une erreur de 1,33 × 64 mm ≈ 85 mm restait « cohérente » ; le
+    // seuil `detectable` (plus petit des deux sens, 55 mm) ne doit pas servir d'angle mort.
+    const P = [
+      { x: 0, y: 0 },
+      { x: 400, y: 0 },
+      { x: 165, y: 546 },
+      { x: -1500, y: 546 },
+    ];
+    const m = measure(P);
+    const r = openingFromSurvey(m);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.undetectable.cd).toBeGreaterThan(80);
+    for (const k of SURVEY_MEASURES) {
+      const u = r.undetectable[k];
+      expect(u, k).toBeGreaterThanOrEqual(r.detectable[k]);
+      const below = [1, -1].map((s) => openingFromSurvey({ ...m, [k]: m[k] + s * 0.98 * u }));
+      expect(
+        below.some((x) => x.ok && x.consistent),
+        `${k} 0,98 × angle mort`,
+      ).toBe(true);
+      for (const s of [1, -1]) {
+        const above = openingFromSurvey({ ...m, [k]: m[k] + s * 1.02 * u });
+        expect(!above.ok || !above.consistent, `${k} ${s * 1.02} × angle mort`).toBe(true);
+      }
+    }
+  });
+
+  it("propriété : le seuil de détection rendu est celui observé (erreur isolée, ± 5 %)", () => {
     fc.assert(
       fc.property(quadArb, fc.constantFrom(...SURVEY_MEASURES), (q, k) => {
         const m = measure(q);
         const exact = openingFromSurvey(m);
         if (!exact.ok) return;
         const t = exact.detectable[k];
-        // Seuil linéarisé : valable tant que l'erreur reste petite devant la trémie. Au-delà
-        // (≈ 1 tirage sur 6 500 avec t = 64 mm sur un côté de 400 mm), la non-linéarité décale le
-        // seuil réel de plus de 25 % (ledger §2).
-        const shortest = Math.min(...SURVEY_MEASURES.map((x) => m[x]));
-        fc.pre(Number.isFinite(t) && t < 200 && t < 0.1 * shortest);
-        const below = openingFromSurvey({ ...m, [k]: m[k] + 0.75 * t });
-        if (below.ok) expect(below.consistent).toBe(true);
-        const above = openingFromSurvey({ ...m, [k]: m[k] + 1.33 * t });
-        if (above.ok) expect(above.consistent).toBe(false);
+        // Seuil exact (dichotomie sur l'ajustement non linéaire) : plus de restriction aux petites
+        // erreurs, seule la borne « erreur de l'ordre de la plus grande mesure » est exclue.
+        fc.pre(Number.isFinite(t));
+        for (const sign of [1, -1]) {
+          const below = openingFromSurvey({ ...m, [k]: m[k] + sign * 0.95 * t });
+          if (below.ok) expect(below.consistent).toBe(true);
+        }
+        const above = [1, -1].map((sign) =>
+          openingFromSurvey({ ...m, [k]: m[k] + sign * 1.05 * t }),
+        );
+        // Détectée : relevé incohérent, ou refusé (mesure devenue nulle ou négative, quadrilatère
+        // impossible), comme dans `exactThreshold`.
+        expect(above.some((r) => !r.ok || !r.consistent)).toBe(true);
       }),
+      { numRuns: 60 },
     );
   });
 });

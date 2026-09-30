@@ -15,7 +15,12 @@
  * 4. seuil de détection par mesure (`detectable`) : une seule mesure est redondante, l'erreur
  *    d'une mesure se répartit donc sur les six écarts ; sur une trémie allongée, une erreur de
  *    plusieurs centimètres sur un petit côté reste « cohérente ». Le seuil est rendu pour que
- *    l'interface le dise (« cohérent » ne veut pas dire « juste »).
+ *    l'interface le dise (« cohérent » ne veut pas dire « juste »). Il est **exact** (QUESTIONS
+ *    D6) : estimation linéarisée, puis dichotomie sur l'ajustement non linéaire, erreur des deux
+ *    signes ; `detectable` rend le plus petit des deux seuils, `undetectable` le plus grand
+ *    (angle mort annoncé à l'utilisateur) ; sur un quadrilatère mal conditionné, le seuil
+ *    linéarisé s'écartait du seuil réel de plus de 25 % et les deux sens diffèrent (CD : 55 et
+ *    84 mm sur l'exemple du ledger).
  *
  * La tolérance de cohérence n'est pas sourcée : paramètre, valeur par défaut « à valider »
  * (`SURVEY_TOLERANCE_DEFAULT`). Placement dans le site : A sur `origin`, AB selon `angle`.
@@ -68,11 +73,18 @@ export type SurveyResult =
       /** Vrai si `maxResidual` ≤ tolérance. */
       readonly consistent: boolean;
       /**
-       * Seuil de détection (mm) par mesure : une erreur isolée plus petite sur cette mesure
-       * laisse le relevé « cohérent » (voir `detectionThresholds`). Le contrôle par la sixième
+       * Seuil de détection (mm) par mesure : une erreur isolée plus petite, dans un sens comme
+       * dans l'autre, laisse le relevé « cohérent » (seuil exact, plus petit des deux sens ; voir
+       * `exactThreshold`). Le contrôle par la sixième
        * mesure est d'autant plus faible que ce seuil est grand.
        */
       readonly detectable: Readonly<Record<SurveyMeasure, Mm>>;
+      /**
+       * Angle mort (mm) par mesure : plus grande erreur isolée, dans le sens défavorable, qui
+       * laisse encore le relevé « cohérent » (≥ `detectable`, le seuil n'étant pas symétrique
+       * sur un quadrilatère mal conditionné). C'est la limite à annoncer à l'utilisateur.
+       */
+      readonly undetectable: Readonly<Record<SurveyMeasure, Mm>>;
       readonly convex: boolean;
       /** Angles intérieurs (degrés) en A, B, C, D. */
       readonly angles: readonly [Deg, Deg, Deg, Deg];
@@ -177,7 +189,8 @@ function jacobian(pts: readonly Vec2[]): number[][] {
 }
 
 /**
- * Seuil de détection par mesure (linéarisé à la solution) : plus petite erreur isolée sur cette
+ * Seuil de détection par mesure **linéarisé** à la solution (point de départ de
+ * `exactThreshold`) : plus petite erreur isolée sur cette
  * mesure qui porte l'écart maximal ajusté à `tolerance`. Avec une seule mesure redondante,
  * l'erreur se répartit sur toutes les mesures : sur une trémie allongée, une erreur sur un petit
  * côté est très peu visible (seuil de plusieurs centimètres), ce qu'il faut dire à l'utilisateur.
@@ -196,6 +209,59 @@ function detectionThresholds(pts: readonly Vec2[], tolerance: Mm): number[] {
     const worst = Math.max(...col.map(Math.abs));
     return worst > 1e-9 ? tolerance / worst : Number.POSITIVE_INFINITY;
   });
+}
+
+/** Précision relative de la dichotomie du seuil de détection exact. */
+const THRESHOLD_REL_PRECISION = 1e-3;
+
+/**
+ * Seuils de détection **exacts** d'une mesure (QUESTIONS D6), dans chaque sens : erreur isolée
+ * sur la mesure `k` d'un relevé cohérent (`pts`, distances exactes) qui porte l'écart maximal de
+ * l'ajustement non linéaire à `tolerance`. `min` : plus petit des deux sens (toute erreur plus
+ * petite passe inaperçue) ; `max` : plus grand (angle mort : une erreur jusqu'à cette valeur,
+ * dans le sens défavorable, passe inaperçue). Départ : seuil linéarisé `lin` ; encadrement par
+ * doublement puis dichotomie. `Infinity` si, dans ce sens, aucune erreur plus petite que la plus
+ * grande mesure n'est détectée.
+ */
+function exactThreshold(
+  pts: readonly Vec2[],
+  k: SurveyMeasure,
+  lin: number,
+  tolerance: Mm,
+): { readonly min: number; readonly max: number } {
+  const base = Object.fromEntries(
+    SURVEY_MEASURES.map((x) => {
+      const [i, j] = PAIRS[x];
+      return [x, V.distance(pts[i]!, pts[j]!)];
+    }),
+  ) as Record<SurveyMeasure, Mm>;
+  const cap = Math.max(...SURVEY_MEASURES.map((x) => base[x]));
+  // Écart maximal du relevé erroné, par le même calcul que `openingFromSurvey` (départ par les
+  // triangles, ajustement) ; relevé refusé (quadrilatère impossible) : erreur détectée.
+  const worst = (t: number): number => {
+    const m = { ...base, [k]: base[k] + t };
+    if (!(m[k] > 0)) return Number.POSITIVE_INFINITY;
+    const fitted = fitSurvey(m, tolerance);
+    if (!fitted.ok) return Number.POSITIVE_INFINITY;
+    return Math.max(...residualsOf(fitted.local, m).map(Math.abs));
+  };
+  const bySign = ([1, -1] as const).map((sign): number => {
+    let lo = 0;
+    let hi = Number.isFinite(lin) && lin > 0 ? Math.min(lin, cap) : cap / 64;
+    while (worst(sign * hi) <= tolerance) {
+      lo = hi;
+      hi *= 2;
+      if (hi > cap) return Number.POSITIVE_INFINITY;
+    }
+    for (let i = 0; i < 60 && hi - lo > THRESHOLD_REL_PRECISION * hi; i++) {
+      const mid = (lo + hi) / 2;
+      if (worst(sign * mid) <= tolerance) lo = mid;
+      else hi = mid;
+    }
+    // Plus grande erreur encore « cohérente » (borne basse de l'encadrement).
+    return lo;
+  });
+  return { min: Math.min(...bySign), max: Math.max(...bySign) };
 }
 
 /** Ajustement de Levenberg-Marquardt des 5 inconnues sur les 6 mesures. */
@@ -249,15 +315,20 @@ function interiorAngle(prev: Vec2, p: Vec2, next: Vec2, ccw: boolean): Deg {
   return (t * 180) / Math.PI;
 }
 
-/** Déduit la trémie d'un relevé 4 côtés + 2 diagonales (voir l'en-tête du module). */
-export function openingFromSurvey(m: OpeningSurvey, options: SurveyOptions = {}): SurveyResult {
+/**
+ * Ajustement d'un relevé (étapes 1 à 3 de l'en-tête) : quadrilatère A, B, C, D dans le repère
+ * local (A à l'origine, B sur +X), ou raison de l'échec.
+ */
+function fitSurvey(
+  m: OpeningSurvey,
+  tolerance: Mm,
+): { readonly ok: true; readonly local: Vec2[] } | { readonly ok: false; readonly reason: string } {
   for (const k of SURVEY_MEASURES) {
     const v = m[k];
     if (!(typeof v === "number" && Number.isFinite(v) && v > 0)) {
       return { ok: false, reason: `mesure ${LABEL[k]} manquante ou non positive` };
     }
   }
-  const tolerance = options.tolerance ?? SURVEY_TOLERANCE_DEFAULT;
   const A: Vec2 = { x: 0, y: 0 };
   const B: Vec2 = { x: m.ab, y: 0 };
   // C à gauche de AB (angle en B saillant) ou à droite (angle rentrant en B, trémie en
@@ -292,19 +363,32 @@ export function openingFromSurvey(m: OpeningSurvey, options: SurveyOptions = {})
       err: Math.abs(V.distance(B, pts[3]!) - m.bd),
     }))
     .sort((x, y) => Number(y.valid) - Number(x.valid) || x.err - y.err);
-  let local = refine(starts[0]!.pts, m);
+  const local = refine(starts[0]!.pts, m);
   if (isSelfIntersecting(local) || !(signedArea(local) > 0)) {
     return { ok: false, reason: "les mesures ne décrivent pas un quadrilatère simple A, B, C, D" };
   }
+  return { ok: true, local };
+}
+
+/** Déduit la trémie d'un relevé 4 côtés + 2 diagonales (voir l'en-tête du module). */
+export function openingFromSurvey(m: OpeningSurvey, options: SurveyOptions = {}): SurveyResult {
+  const tolerance = options.tolerance ?? SURVEY_TOLERANCE_DEFAULT;
+  const fitted = fitSurvey(m, tolerance);
+  if (!fitted.ok) return fitted;
+  let local = fitted.local;
   const residuals = residualsOf(local, m);
   const maxResidual = Math.max(...residuals.map(Math.abs));
   const res = Object.fromEntries(SURVEY_MEASURES.map((k, i) => [k, residuals[i]!])) as Record<
     SurveyMeasure,
     Mm
   >;
-  const thresholds = detectionThresholds(local, tolerance);
+  const linear = detectionThresholds(local, tolerance);
+  const thresholds = SURVEY_MEASURES.map((k, i) => exactThreshold(local, k, linear[i]!, tolerance));
   const detectable = Object.fromEntries(
-    SURVEY_MEASURES.map((k, i) => [k, thresholds[i]!]),
+    SURVEY_MEASURES.map((k, i) => [k, thresholds[i]!.min]),
+  ) as Record<SurveyMeasure, Mm>;
+  const undetectable = Object.fromEntries(
+    SURVEY_MEASURES.map((k, i) => [k, thresholds[i]!.max]),
   ) as Record<SurveyMeasure, Mm>;
   const ccw = (options.orientation ?? "ccw") === "ccw";
   if (!ccw) local = local.map((p) => ({ x: p.x, y: -p.y }));
@@ -321,6 +405,7 @@ export function openingFromSurvey(m: OpeningSurvey, options: SurveyOptions = {})
     maxResidual,
     consistent: maxResidual <= tolerance,
     detectable,
+    undetectable,
     convex: angles.every((a) => a < 180),
     angles,
   };

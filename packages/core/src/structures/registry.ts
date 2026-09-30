@@ -5,7 +5,8 @@
  * `structures/index.ts`. `none` n'est pas un plugin : c'est l'absence de structure (pièces de
  * base seules) et ne peut pas être enregistré.
  */
-import type { StructureKind } from "../model/plugins.js";
+import type { Mm } from "../model/primitives.js";
+import type { StructureKind, StructureLayoutKind } from "../model/plugins.js";
 
 /** Erreur de configuration non prise en charge par un plugin (message français). */
 export class StructureError extends Error {
@@ -47,4 +48,47 @@ export function getStructure(kind: string): StructureKind<unknown> | undefined {
 /** Plugins enregistrés, dans l'ordre d'enregistrement. */
 export function listStructures(): readonly StructureKind<unknown>[] {
   return [...registry.values()];
+}
+
+// ------------------------------------------------------------------ capacités (dette D4)
+
+/** Types de tracé acceptés par `kind` (`none` : tous ; plugin inconnu : aucun). */
+export function structureLayouts(kind: string): readonly StructureLayoutKind[] {
+  if (kind === "none") return ["flights", "helical"];
+  const plugin = registry.get(kind);
+  if (!plugin) return [];
+  return plugin.capabilities?.layouts ?? ["flights"];
+}
+
+/** La structure `kind` accepte-t-elle ce type de tracé ? */
+export function structureAcceptsLayout(kind: string, layout: StructureLayoutKind): boolean {
+  return structureLayouts(kind).includes(layout);
+}
+
+/** Les limons de jour de `kind` exigent-ils un poteau d'angle ? */
+export function structureRequiresNewel(kind: string): boolean {
+  return registry.get(kind)?.capabilities?.requiresNewel === true;
+}
+
+/** Structures enregistrées qui exigent un poteau d'angle (ordre d'enregistrement). */
+export function newelRequiredStructures(): string[] {
+  return [...registry.values()].filter((p) => p.capabilities?.requiresNewel).map((p) => p.kind);
+}
+
+/**
+ * Épaisseurs hors emprise utile déclarées par `kind` pour `params` (défauts du plugin
+ * appliqués par son schéma) ; `null` si les paramètres sont invalides ou le plugin inconnu ;
+ * `none` ou plugin sans déclaration : 0 / 0.
+ */
+export function structureLateralThickness(
+  kind: string,
+  params: unknown,
+): { readonly inner: Mm; readonly outer: Mm } | null {
+  if (kind === "none") return { inner: 0, outer: 0 };
+  const plugin = registry.get(kind);
+  if (!plugin) return null;
+  const f = plugin.capabilities?.lateralThickness;
+  if (!f) return { inner: 0, outer: 0 };
+  const parsed = plugin.paramsSchema.safeParse(params ?? {});
+  return parsed.success ? f(parsed.data) : null;
 }

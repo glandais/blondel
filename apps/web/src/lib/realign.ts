@@ -4,7 +4,12 @@
  * fait par le cœur (`realignFlightsAndOpening`) ; l'interface applique le projet rendu en une
  * seule modification (une seule entrée d'annulation) et affiche les remarques du cœur.
  */
-import { realignFlightsAndOpening, type Project, type WalklineSide } from "@blondel/core";
+import {
+  realignBlocker,
+  realignFlightsAndOpening,
+  type Project,
+  type WalklineSide,
+} from "@blondel/core";
 
 /** Choix du formulaire : bord imposé, ou automatique (champ absent du projet). */
 export type WalklineSideChoice = WalklineSide | "auto";
@@ -20,6 +25,19 @@ export function realign(project: Project): RealignChoice {
   const r = realignFlightsAndOpening(project);
   return { project: r.project, notice: r.notes.join(" ") };
 }
+
+/**
+ * Raison pour laquelle le bouton « Recaler volées et trémie » est désactivé (message du cœur :
+ * position des tournants saisie incompatible avec H, palier hors d'un nombre entier de girons,
+ * hélicoïdal…), ou `null` s'il est actif (décision A18 (a) du 2026-09-30).
+ */
+export function realignDisabledReason(project: Project): string | null {
+  return realignBlocker(project);
+}
+
+/** Infobulle du bouton de recalage actif. */
+export const REALIGN_HINT =
+  "Après une modification de H, E ou de l'épaisseur du plancher haut : longueur de la dernière volée recalculée (position des tournants saisie conservée) et trémie rectangulaire recalculée ; une trémie polygonale est conservée (annulable)";
 
 /**
  * Aide du réglage du bord de mesure. Sans valeur chiffrée : le seuil d'emmarchement et la

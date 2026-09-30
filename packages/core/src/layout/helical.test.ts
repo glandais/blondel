@@ -34,8 +34,11 @@ describe("computeLayout — hélicoïdal", () => {
     // Départ sur l'axe +X, montée dans le sens trigonométrique.
     expect(curveStart(layout.walkline).x).toBeCloseTo(485, 9);
     expect(curvePointAt(layout.walkline, 10).y).toBeGreaterThan(0);
-    // Plus d'un tour : emprise = disque de R_e.
+    // Plus d'un tour : emprise = disque de R_e, troué du fût de R_i (D3).
     expect(Math.abs(signedArea(layout.footprint))).toBeCloseTo(Math.PI * 900 * 900, -3);
+    expect(layout.footprintHoles).toHaveLength(1);
+    expect(Math.abs(signedArea(layout.footprintHoles![0]!))).toBeCloseTo(Math.PI * 70 * 70, -2);
+    expect(pointInPolygon(layout.helical!.center, layout.footprintHoles![0]!)).toBe("inside");
     // Arcs élémentaires d'au plus 90°.
     for (const c of [layout.inner, layout.outer, layout.walkline]) {
       for (const seg of c.segments) {
@@ -95,6 +98,8 @@ describe("computeLayout — hélicoïdal", () => {
       const h = layout.helical!;
       const ring = ((1000 ** 2 - 100 ** 2) * (Math.PI + Math.PI / 2)) / 2;
       expect(Math.abs(signedArea(layout.footprint))).toBeCloseTo(ring, -3);
+      // Moins d'un tour : secteur de couronne, déjà troué, sans `footprintHoles`.
+      expect(layout.footprintHoles).toBeUndefined();
       // Milieu du palier (angle Θ + Λ/2 dans le sens de la montée) dans l'emprise.
       const a = h.startAngle + (direction === "left" ? 1 : -1) * (Math.PI + Math.PI / 4);
       const mid = V.addScaled(h.center, V.fromAngle(a), 550);
@@ -112,6 +117,7 @@ describe("computeLayout — hélicoïdal", () => {
       makeHelicalProject({ ...base, direction: "left", totalAngle: 300, landingAngle: 90 }),
     );
     expect(Math.abs(signedArea(full.footprint))).toBeCloseTo(Math.PI * 1000 ** 2, -3);
+    expect(full.footprintHoles).toHaveLength(1);
   });
 
   it("propriété : Γ, C_i et C_e concentriques, continus, dans le sens de la montée", () => {

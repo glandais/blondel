@@ -146,14 +146,19 @@ test("accueil, annulation de la recherche, fermeture", async ({ page }) => {
   await expect(d.getByRole("alert")).toContainText("Hauteur à monter H");
   await d.getByLabel("Hauteur à monter H").fill("2700");
 
-  // Toutes les typologies : recherche plus longue, annulable tant qu'elle tourne.
+  // Annulation déterministe (QUESTIONS D5) : le worker de l'assistant est remplacé par un
+  // worker qui ne répond jamais, la recherche tourne donc tant qu'on ne l'annule pas.
+  const workerUrl = /assistant\.worker/;
+  await page.route(workerUrl, (route) =>
+    route.fulfill({ contentType: "text/javascript", body: "self.onmessage = () => {};" }),
+  );
   await d.getByRole("button", { name: "Proposer", exact: true }).click();
-  const cancel = d.getByRole("button", { name: "Annuler la recherche" });
-  if (await cancel.isVisible().catch(() => false)) {
-    await cancel.click().catch(() => undefined);
-  }
+  await expect(d.getByText("Recherche en cours")).toBeVisible();
+  await d.getByRole("button", { name: "Annuler la recherche" }).click();
   await expect(d.getByText("Recherche en cours")).toHaveCount(0);
+  await expect(d.locator(".assistant__summary")).toHaveCount(0);
   await expect(d.getByRole("button", { name: "Proposer", exact: true })).toBeEnabled();
+  await page.unroute(workerUrl);
 
   // Nouvelle recherche menée à terme, puis fermeture par Échap : projet inchangé.
   await d.getByRole("button", { name: "Proposer", exact: true }).click();
@@ -188,6 +193,8 @@ test("variantes : repliées sous la carte de chaque forme, avec croquis ; liste 
   await expect(summary).toContainText(/variantes? de cette forme/);
   const variant = withVariants.locator(".assistant__card--variant").first();
   await expect(variant).toBeHidden();
+  // Croquis des variantes calculés au dépliage seulement (QUESTIONS D5).
+  await expect(variant.locator("svg.assistant__sketch")).toHaveCount(0);
   await summary.click();
   await expect(variant).toBeVisible();
   await expect(variant.locator("svg.assistant__sketch")).toHaveCount(1);

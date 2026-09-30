@@ -55,6 +55,11 @@
     "garde_corps_2024": "Garde-corps selon NF P01-012 (2024)",
     "tous": "Tout escalier"
   },
+  "contextes_forme": [
+    "tournant",
+    "helicoidal",
+    "helicoidal_fut"
+  ],
   "regles": [
     {
       "id": "BLONDEL_DTU",
@@ -547,7 +552,14 @@
       "source": "NF DTU 36.3 P3 §6.3 via [1][3]",
       "source_secondaire": true,
       "confiance": "eleve",
-      "severite": "bloquant"
+      "severite": "bloquant",
+      "parametres": {
+        "E_seuil": 1200
+      },
+      "regles_mesurees": [
+        "G_MIN_DTU",
+        "G_TOL_BALANCEE"
+      ]
     },
     {
       "id": "LF_POSITION_DTU_LARGE",
@@ -564,7 +576,14 @@
       "source": "NF DTU 36.3 P3 §6.3 via [1][3]",
       "source_secondaire": true,
       "confiance": "eleve",
-      "severite": "bloquant"
+      "severite": "bloquant",
+      "parametres": {
+        "E_seuil": 1200
+      },
+      "regles_mesurees": [
+        "G_MIN_DTU",
+        "G_TOL_BALANCEE"
+      ]
     },
     {
       "id": "LF_POSITION_ERP_TOURNANT",
@@ -582,7 +601,11 @@
       "nature": "reglementaire",
       "source": "Règlement sécurité ERP CO 56 §2 [10]",
       "confiance": "eleve",
-      "severite": "bloquant"
+      "severite": "bloquant",
+      "regles_mesurees": [
+        "G_MIN_ERP_NEUF",
+        "G_MIN_ERP_EXISTANT"
+      ]
     },
     {
       "id": "LF_POSITION_ACCESSIBILITE",
@@ -602,7 +625,15 @@
       "source_secondaire": true,
       "note": "Seule la ligne milieu / 600 mm est bloquante ; la tolérance « milieu ↔ 350 mm du mur extérieur » est une option non bloquante (SPEC X8)",
       "confiance": "moyen",
-      "severite": "bloquant"
+      "severite": "bloquant",
+      "parametres": {
+        "E_seuil": 1200
+      },
+      "regles_mesurees": [
+        "G_MIN_LOGEMENT",
+        "G_MIN_BHC_PC",
+        "G_MIN_ERP_NEUF"
+      ]
     },
     {
       "id": "LF_POSITION_HELICOIDAL",
@@ -619,7 +650,11 @@
       "nature": "normatif",
       "source": "[24]",
       "confiance": "faible",
-      "severite": "avertissement"
+      "severite": "avertissement",
+      "regles_mesurees": [
+        "G_MIN_DTU",
+        "G_TOL_BALANCEE"
+      ]
     },
     {
       "id": "E_MIN_DTU",
@@ -652,7 +687,10 @@
       "nature": "reglementaire",
       "source": "Arrêté 24/12/2015 art. 12 [8][4]",
       "confiance": "eleve",
-      "severite": "bloquant"
+      "severite": "bloquant",
+      "parametres": {
+        "saillie_mc_max": 100
+      }
     },
     {
       "id": "LARGEUR_MC_BHC_PC",
@@ -704,7 +742,7 @@
     },
     {
       "id": "LARGEUR_UP_ERP",
-      "description": "Largeur en unités de passage ERP : 1 UP = 900 ; 2 UP = 1400 ; n UP (n>=3) = n x 600",
+      "description": "Largeur en unités de passage ERP : 1 UP = 900 ; 2 UP = 1400 ; n UP (n>=3) = n x 600 ; L_passage mesurée entre parois, ou à l'aplomb des mains courantes saillantes de plus de 100 mm (variable L_passage, A-regles L3)",
       "formule": "L_passage >= (n_UP == 1 ? 900 : n_UP == 2 ? 1400 : 600 * n_UP)",
       "min": 900,
       "max": null,
@@ -716,7 +754,13 @@
       "nature": "reglementaire",
       "source": "Règlement sécurité ERP CO 36 [11] (relu sur Légifrance)",
       "confiance": "eleve",
-      "severite": "bloquant"
+      "severite": "bloquant",
+      "parametres": {
+        "largeur_1UP": 900,
+        "largeur_2UP": 1400,
+        "largeur_par_UP": 600,
+        "saillie_mc_max": 100
+      }
     },
     {
       "id": "MC_INTERMEDIAIRE_ERP",
@@ -904,7 +948,11 @@
       "source": "NF DTU 36.3 P1-1 §5.2 via [1][2]",
       "source_secondaire": true,
       "confiance": "eleve",
-      "severite": "conseil"
+      "severite": "conseil",
+      "parametres": {
+        "H_seuil": 3000,
+        "coefficient_au_dela": 5
+      }
     },
     {
       "id": "RECULEMENT",
@@ -1188,7 +1236,10 @@
       "source": "NF E85-015 via [20] ; ISO 14122-3 >= 10 [18]",
       "source_secondaire": true,
       "confiance": "faible",
-      "severite": "avertissement"
+      "severite": "avertissement",
+      "parametres": {
+        "min_sans_contremarche": 50
+      }
     },
     {
       "id": "MC_DEUX_COTES",
@@ -1205,7 +1256,10 @@
       "nature": "reglementaire",
       "source": "Arrêté 20/04/2017 art. 7-1 [5][6] ; arrêté 24/12/2015 art. 6.1 [9]",
       "confiance": "eleve",
-      "severite": "bloquant"
+      "severite": "bloquant",
+      "parametres": {
+        "D_fut_max": 400
+      }
     },
     {
       "id": "MC_UP_ERP",
@@ -1360,7 +1414,10 @@
       "source": "NF DTU 36.3 CCT (prise de main courante) via [1]",
       "source_secondaire": true,
       "confiance": "eleve",
-      "severite": "bloquant"
+      "severite": "bloquant",
+      "parametres": {
+        "min_hors_logement": 50
+      }
     },
     {
       "id": "GC_OBLIGATOIRE",
@@ -1480,7 +1537,44 @@
       "source": "NF P01-012:2024 via APAVE [12]",
       "source_secondaire": true,
       "confiance": "eleve",
-      "severite": "bloquant"
+      "severite": "bloquant",
+      "parametres": {
+        "H_plancher_condition_b": 900
+      },
+      "tables": {
+        "h_E": [
+          {
+            "E_max": 250,
+            "H": 1000
+          },
+          {
+            "E_max": 300,
+            "H": 975
+          },
+          {
+            "E_max": 350,
+            "H": 950
+          },
+          {
+            "E_max": 400,
+            "H": 925
+          },
+          {
+            "E_max": 450,
+            "H": 900
+          },
+          {
+            "E_max": 500,
+            "H": 850,
+            "condition_b": true
+          },
+          {
+            "E_max": null,
+            "H": 800,
+            "condition_b": true
+          }
+        ]
+      }
     },
     {
       "id": "GC_HAUTEUR_RAMPANT_2024",
@@ -1514,7 +1608,10 @@
       "source": "NF P01-012:2024 via APAVE [12]",
       "source_secondaire": true,
       "confiance": "eleve",
-      "severite": "bloquant"
+      "severite": "bloquant",
+      "parametres": {
+        "z_haut": 800
+      }
     },
     {
       "id": "GC_GABARIT_T2_2024",
@@ -1531,7 +1628,10 @@
       "source": "NF P01-012:2024 via APAVE [12]",
       "source_secondaire": true,
       "confiance": "eleve",
-      "severite": "bloquant"
+      "severite": "bloquant",
+      "parametres": {
+        "z_bas": 800
+      }
     },
     {
       "id": "GC_GABARIT_T3_2024",
@@ -1565,7 +1665,12 @@
       "source": "NF P01-012:2024 via APAVE [12] ; fabricant Horizal ; C-structures §3.1",
       "source_secondaire": true,
       "confiance": "moyen",
-      "severite": "bloquant"
+      "severite": "bloquant",
+      "parametres": {
+        "X_min": 100,
+        "X_max": 600,
+        "H_base": 1000
+      }
     },
     {
       "id": "GC_DENIVELES_2024",
@@ -1582,6 +1687,24 @@
       "source": "NF P01-012:2024 via sources secondaires, C-structures §3.1",
       "source_secondaire": true,
       "confiance": "faible",
+      "severite": "avertissement"
+    },
+    {
+      "id": "GC_CABLES_DETENTE",
+      "description": "Câbles de garde-corps : les vides ne doivent pas augmenter dans le temps (détente des câbles) ; câbles traités comme des lisses, prévoir une retension",
+      "formule": "remplissage == cables => avertissement de détente",
+      "min": null,
+      "max": null,
+      "recommande": null,
+      "unite": null,
+      "contexte": [
+        "garde_corps_1988",
+        "garde_corps_2024"
+      ],
+      "nature": "normatif",
+      "source": "NF P01-012:2024 via APAVE [12] (durabilité des vides, C-structures §3.1) ; SPEC X12",
+      "source_secondaire": true,
+      "confiance": "eleve",
       "severite": "avertissement"
     },
     {
@@ -1615,7 +1738,11 @@
       "nature": "normatif",
       "source": "NF EN 1991-1-1/NA (NF P06-111-2) tableau 6.2(NF) [16]",
       "confiance": "eleve",
-      "severite": "bloquant"
+      "severite": "bloquant",
+      "parametres": {
+        "qk": 2.5,
+        "Qk": 2
+      }
     },
     {
       "id": "CHARGE_ESCALIER_AUTRES",
@@ -1632,7 +1759,51 @@
       "nature": "normatif",
       "source": "NF P06-111-2 tableau 6.2(NF) [16]",
       "confiance": "eleve",
-      "severite": "bloquant"
+      "severite": "bloquant",
+      "tables": {
+        "categories": [
+          {
+            "categorie": "B",
+            "qk": 2.5,
+            "Qk": 4
+          },
+          {
+            "categorie": "C1",
+            "qk": 2.5,
+            "Qk": 3
+          },
+          {
+            "categorie": "C2",
+            "qk": 4,
+            "Qk": 4
+          },
+          {
+            "categorie": "C3",
+            "qk": 4,
+            "Qk": 4
+          },
+          {
+            "categorie": "C4",
+            "qk": 5,
+            "Qk": 7
+          },
+          {
+            "categorie": "C5",
+            "qk": 5,
+            "Qk": 4.5
+          },
+          {
+            "categorie": "D1",
+            "qk": 5,
+            "Qk": 5
+          },
+          {
+            "categorie": "D2",
+            "qk": 5,
+            "Qk": 7
+          }
+        ]
+      }
     },
     {
       "id": "CHARGE_GC_HORIZONTALE",
@@ -1650,7 +1821,31 @@
       "source": "NF P06-111-2/A1 (mars 2009) via guide PACTE/CTB garde-corps [32][34] ; version 2004 lue [16]",
       "source_secondaire": true,
       "confiance": "moyen",
-      "severite": "bloquant"
+      "severite": "bloquant",
+      "tables": {
+        "categories": [
+          {
+            "categorie": "A",
+            "qk": 0.6
+          },
+          {
+            "categorie": "B",
+            "qk": 0.6
+          },
+          {
+            "categorie": "C1-C4",
+            "qk": 1
+          },
+          {
+            "categorie": "D",
+            "qk": 1
+          },
+          {
+            "categorie": "C5",
+            "qk": 3
+          }
+        ]
+      }
     },
     {
       "id": "CHARGE_MARCHE_INDUSTRIEL",
@@ -1666,7 +1861,11 @@
       "nature": "normatif",
       "source": "ISO 14122-3:2016 §4.2.2 [17]",
       "confiance": "eleve",
-      "severite": "avertissement"
+      "severite": "avertissement",
+      "parametres": {
+        "charge_nez": 1.5,
+        "portee_sur_fleche": 300
+      }
     },
     {
       "id": "LIMON_EPAISSEUR_MIN_DTU",
@@ -1683,11 +1882,32 @@
       "source": "NF DTU 36.3 P3 via FCBA [2]",
       "source_secondaire": true,
       "confiance": "eleve",
-      "severite": "avertissement"
+      "severite": "avertissement",
+      "parametres": {
+        "E_max": 1200
+      }
+    },
+    {
+      "id": "LIMON_ENTAILLE_MIN",
+      "description": "Profondeur d'entaille (encastrement) marche / limon bois >= 14 mm : hypothèse de modèle de la NF EN 16481 (assemblage résistant en flexion pour une marche avec renfort, semi-rigide sans renfort) et torsion réputée vérifiée ; autre valeur admise si démontrée",
+      "formule": "profondeur_entaille >= 14",
+      "min": 14,
+      "max": null,
+      "recommande": null,
+      "unite": "mm",
+      "contexte": [
+        "bois_dtu"
+      ],
+      "nature": "normatif",
+      "source": "NF EN 16481 § 5.4.2 et 7.3.1 (texte relu, docs/research/C-structures.md §1.4 et C-B-04, réf. [3] de C-structures)",
+      "source_secondaire": false,
+      "confiance": "eleve",
+      "severite": "avertissement",
+      "note": "Évaluée par les structures à limons bois encastrés (wood-housed). Section résiduelle sous entailles (100 / 80 mm) non retenue : source non identifiée (C-structures §1.4)."
     },
     {
       "id": "CREMAILLERE_REGLE_MOYENS",
-      "description": "Crémaillère bois (paire, droit, 2,70 m, 38°) : distance min fond d'entaille / sous-face selon épaisseur — C30 : 33→179, 44→163, 70→141 ; D40 : 35→177, 44→162, 70→139 ; crémaillère centrale : épaisseurs x2",
+      "description": "Crémaillère bois (paire, droit, hauteur d'étage 2,70 m soit 2700 mm, 38°) : distance min fond d'entaille / sous-face selon épaisseur — C30 : 33→179, 44→163, 70→141 ; D40 : 35→177, 44→162, 70→139 ; crémaillère centrale : épaisseurs x2",
       "formule": "distance_entaille_sous_face >= table_FCBA(essence, epaisseur)",
       "min": 139,
       "max": null,
@@ -1699,7 +1919,42 @@
       "nature": "normatif",
       "source": "FCBA [2] tableau 4 (« exemple de résultats de calcul », rattachement exact au P3 non établi)",
       "confiance": "eleve",
-      "severite": "avertissement"
+      "severite": "avertissement",
+      "parametres": {
+        "hauteur_etage": 2700,
+        "pente": 38,
+        "facteur_centrale": 2
+      },
+      "tables": {
+        "C30": [
+          {
+            "epaisseur": 33,
+            "distance": 179
+          },
+          {
+            "epaisseur": 44,
+            "distance": 163
+          },
+          {
+            "epaisseur": 70,
+            "distance": 141
+          }
+        ],
+        "D40": [
+          {
+            "epaisseur": 35,
+            "distance": 177
+          },
+          {
+            "epaisseur": 44,
+            "distance": 162
+          },
+          {
+            "epaisseur": 70,
+            "distance": 139
+          }
+        ]
+      }
     },
     {
       "id": "DEFORMATION_CINTRAGE",
@@ -1716,7 +1971,10 @@
       "source": "NF DTU 36.3 via FCBA [2] tableau 2",
       "source_secondaire": true,
       "confiance": "eleve",
-      "severite": "conseil"
+      "severite": "conseil",
+      "parametres": {
+        "max_balustres": 3
+      }
     },
     {
       "id": "ECHELLE_MEUNIER_HORS_DTU",

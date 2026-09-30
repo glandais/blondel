@@ -2,7 +2,7 @@
  * Présentation du contrôle de conception (CHALLENGE P3) : regroupement des résultats rendus
  * par le cœur. Aucune règle n'est évaluée ici.
  */
-import type { ComplianceReport, Location, Model, RuleResult, Severity } from "@blondel/core";
+import type { ComplianceReport, Location, Model, Part, RuleResult, Severity } from "@blondel/core";
 
 export const SEVERITY_ORDER: readonly Severity[] = ["bloquant", "avertissement", "conseil"];
 
@@ -74,30 +74,39 @@ export function sameLocation(a: Location, b: Location): boolean {
   }
 }
 
+/** Pièce vue par la sélection : identifiant et numéro de marche (`Part.treadNumber` du cœur). */
+export interface SelectablePart {
+  readonly partId: string;
+  readonly treadNumber?: number | undefined;
+}
+
 /**
- * Identifiant de pièce correspondant à une marche. Convention de `Part.id` (derived.ts :
- * « ex. `tread-5` ») ; à remplacer par un champ explicite si le cœur en ajoute un.
+ * Identifiant de la pièce qui matérialise la marche `number` : champ explicite
+ * `Part.treadNumber` du cœur (QUESTIONS D6), sans convention d'identifiant.
  */
-export function treadPartId(number: number): string {
-  return `tread-${number}`;
+export function treadPartId(
+  parts: readonly Pick<Part, "id" | "treadNumber">[],
+  number: number,
+): string | undefined {
+  return parts.find((p) => p.treadNumber === number)?.id;
 }
 
 /** Une pièce est-elle désignée par la localisation sélectionnée ? */
-export function isPartSelected(partId: string, loc: Location | undefined | null): boolean {
+export function isPartSelected(part: SelectablePart, loc: Location | undefined | null): boolean {
   if (!loc) return false;
-  if (loc.kind === "part") return loc.partId === partId;
-  if (loc.kind === "tread") return partId === treadPartId(loc.number);
+  if (loc.kind === "part") return loc.partId === part.partId;
+  if (loc.kind === "tread") return part.treadNumber === loc.number;
   return false;
 }
 
-/** Numéro de marche désigné par la localisation (marche, ou pièce `tread-N`). */
-export function selectedTreadNumber(loc: Location | undefined | null): number | undefined {
+/** Numéro de marche désigné par la localisation (marche, ou pièce qui matérialise une marche). */
+export function selectedTreadNumber(
+  loc: Location | undefined | null,
+  parts: readonly Pick<Part, "id" | "treadNumber">[],
+): number | undefined {
   if (!loc) return undefined;
   if (loc.kind === "tread") return loc.number;
-  if (loc.kind === "part") {
-    const m = /^tread-(\d+)$/.exec(loc.partId);
-    if (m) return Number(m[1]);
-  }
+  if (loc.kind === "part") return parts.find((p) => p.id === loc.partId)?.treadNumber;
   return undefined;
 }
 
