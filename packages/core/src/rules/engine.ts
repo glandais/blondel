@@ -68,7 +68,12 @@ export function evaluateComplianceDetailed(
   evaluators: EvaluatorRegistry = DEFAULT_EVALUATORS,
 ): ComplianceEvaluation {
   const settings = input.project.compliance;
-  const resolved = resolveContexts(settings, input.stepping, input.layout.helical?.core);
+  const resolved = resolveContexts(
+    settings,
+    input.stepping,
+    input.layout.helical?.core,
+    input.project.stair.structure.kind,
+  );
   const active = new Set(resolved.active);
   const notes = [...resolved.notes];
   if (resolved.derived.length > 0)

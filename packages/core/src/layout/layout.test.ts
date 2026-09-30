@@ -671,7 +671,9 @@ describe("computeLayout — emprises dégénérées signalées (D3)", () => {
 
   it("quart tournant sans partie droite (L1 = L2 = E, angle vif) : bord du jour de longueur nulle", () => {
     const layout = computeLayout(makeProject({ width: 900, legs: [900, 900] }));
-    expect(layout.errors).toEqual([expect.stringMatching(/Bord du jour de longueur nulle/)]);
+    // Décrit par le tracé, signalé par le pipeline sauf contre un mur (`zeroLengthJour.test.ts`).
+    expect(layout.errors).toBeUndefined();
+    expect(layout.zeroLengthInner).toHaveLength(1);
     expect(curveLength(layout.inner)).toBe(0);
   });
 

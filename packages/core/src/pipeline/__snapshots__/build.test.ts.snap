@@ -52,7 +52,7 @@ exports[`buildModel — exemples du dépôt > demo-erp-grand.blondel.json : cote
   "run": 4998,
   "treads": "ssssssssssssssss",
   "violations": {
-    "avertissement": 0,
+    "avertissement": 1,
     "bloquant": 0,
     "conseil": 3,
   },
@@ -261,7 +261,7 @@ exports[`buildModel — exemples du dépôt > demo-straight-loft.blondel.json : 
   "run": 3780,
   "treads": "ssssssssssssss",
   "violations": {
-    "avertissement": 0,
+    "avertissement": 1,
     "bloquant": 0,
     "conseil": 15,
   },
@@ -470,7 +470,7 @@ exports[`buildModel — exemples du dépôt > j3c-acceptance-01-upn.blondel.json
   "run": 3360.3,
   "treads": "wwwwwwssssssss",
   "violations": {
-    "avertissement": 6,
+    "avertissement": 7,
     "bloquant": 0,
     "conseil": 2,
   },

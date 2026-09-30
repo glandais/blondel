@@ -1,7 +1,13 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { SHAPE_CONTEXTS, guardRailRegime, isRuleApplicable, resolveContexts } from "./contexts.js";
+import {
+  DEDUCED_ONLY_CONTEXTS,
+  SHAPE_CONTEXTS,
+  guardRailRegime,
+  isRuleApplicable,
+  resolveContexts,
+} from "./contexts.js";
 import { makeHelicalProject } from "../layout/helical-test-helpers.js";
 import { buildModel } from "../pipeline/build.js";
 import { RULE_CONTEXTS, RULE_TABLE, getRule, type RuleDef } from "./table.js";
@@ -130,6 +136,31 @@ describe("résolution des contextes", () => {
     const r = resolveContexts(makeProject({ contexts: ["bois_dtu", "helicoidal_fut"] }).compliance);
     expect(r.active).not.toContain("helicoidal_fut");
     expect(r.notes.join(" ")).toMatch(/helicoidal_fut/);
+  });
+  it("déduit `limon_bois_encastre` de la structure wood-housed seulement (QUESTIONS D2)", () => {
+    const compliance = makeProject({ contexts: ["erp_neuf"] }).compliance;
+    const r = resolveContexts(compliance, makeStepping(), undefined, "wood-housed");
+    expect(r.active).toContain("limon_bois_encastre");
+    expect(r.derived).toContain("limon_bois_encastre");
+    for (const k of [undefined, "none", "wood-cut", "steel-profile"])
+      expect(resolveContexts(compliance, makeStepping(), undefined, k).active).not.toContain(
+        "limon_bois_encastre",
+      );
+    // Contexte de structure, jamais saisi : une déclaration à la main est ignorée.
+    const declared = resolveContexts(
+      makeProject({ contexts: ["erp_neuf", "limon_bois_encastre"] }).compliance,
+      makeStepping(),
+      undefined,
+      "wood-cut",
+    );
+    expect(declared.active).not.toContain("limon_bois_encastre");
+    expect(declared.notes.join(" ")).toMatch(/limon_bois_encastre/);
+    expect(DEDUCED_ONLY_CONTEXTS.has("limon_bois_encastre")).toBe(true);
+    // LIMON_ENTAILLE_MIN : bois_dtu ou limons bois encastrés.
+    const entaille = getRule("LIMON_ENTAILLE_MIN");
+    expect(isRuleApplicable(entaille, ["tous", "erp_neuf", "limon_bois_encastre"])).toBe(true);
+    expect(isRuleApplicable(entaille, ["tous", "bois_dtu"])).toBe(true);
+    expect(isRuleApplicable(entaille, ["tous", "erp_neuf"])).toBe(false);
   });
   it("signale et ignore les contextes inconnus", () => {
     const r = resolveContexts(makeProject({ contexts: ["bois_dtu", "martien"] }).compliance);

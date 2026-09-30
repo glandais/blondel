@@ -33,6 +33,7 @@ import { computeHeadroom, type HeadroomAnalysis } from "../headroom/headroom.js"
 import { computeLayout } from "../layout/layout.js";
 import { autoWalklineSideKey } from "../layout/walklineSide.js";
 import { LayoutError } from "../layout/errors.js";
+import { zeroLengthJourError } from "../layout/zeroLengthJour.js";
 import type {
   ComplianceReport,
   Layout,
@@ -450,6 +451,10 @@ export function buildModel(project: Project, options: BuildModelOptions = {}): M
   const layout = layoutStage.value;
   // Emprise dégénérée (volées qui se touchent ou se superposent, jour de longueur nulle, D3).
   if (layout?.errors) errors.push(...layout.errors);
+  // Bord du jour de longueur nulle : erreur sauf contre un mur (décision du 2026-09-30). Lit
+  // les murs du site hors de l'étape « tracé » (calcul léger, non mémoïsé).
+  const zeroJour = layout ? zeroLengthJourError(project, layout) : undefined;
+  if (zeroJour !== undefined) errors.push(zeroJour);
 
   // 2. Découpage.
   const steppingStage: Stage<Stepping> | undefined = layout

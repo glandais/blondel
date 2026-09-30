@@ -252,6 +252,25 @@ describe("wood-housed — paramètres et configurations", () => {
     expect(res.min).toBe(EN16481_MIN_HOUSING_DEPTH);
   });
 
+  it("encastrement sous 14 mm hors contexte bois_dtu : contrôlé dès wood-housed (QUESTIONS D2)", () => {
+    const base = loadExample("straight.blondel.json");
+    const erp: Project = {
+      ...base,
+      compliance: { ...base.compliance, contexts: ["erp_neuf", "erp_securite"] },
+    };
+    const { m } = housed(erp, { housingDepth: 10 });
+    expect(m.compliance.contexts).not.toContain("bois_dtu");
+    expect(m.compliance.contexts).toContain("limon_bois_encastre");
+    const res = m.compliance.results.filter((x) => x.ruleId === "LIMON_ENTAILLE_MIN");
+    expect(res.map((x) => x.status)).toEqual(["violation"]);
+    expect(res[0]!.min).toBe(EN16481_MIN_HOUSING_DEPTH);
+    expect(res[0]!.measured).toBe(10);
+    // Sans wood-housed ni bois_dtu : règle non applicable, absente du rapport.
+    const cut = buildModel(withStructure(erp, {}, "wood-cut"), { memo: false });
+    expect(cut.compliance.contexts).not.toContain("limon_bois_encastre");
+    expect(cut.compliance.results.some((x) => x.ruleId === "LIMON_ENTAILLE_MIN")).toBe(false);
+  });
+
   it("paramètres invalides : erreur de modèle, pièces de base conservées, aucune exception", () => {
     const p = withStructure(loadExample("straight.blondel.json"), { thickness: -3 });
     const m = buildModel(p, { memo: false });

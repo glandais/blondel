@@ -22,6 +22,9 @@
 #   [erp_securite, tournant, helicoidal] = ERP et (tournant ou hélicoïdal) ;
 #   [helicoidal, bois_dtu] = hélicoïdal et bois ; [tournant, helicoidal] = tournant ou hélicoïdal.
 #   (La lecture purement disjonctive imposerait LF_POSITION_HELICOIDAL à tout escalier bois.)
+# - contextes déduits de la structure (`contextes_structure` ci-dessous, ex. limon_bois_encastre
+#   pour wood-housed) : contextes « autres », actifs dès que la structure est choisie ;
+#   [bois_dtu, limon_bois_encastre] = bois ou limons bois encastrés.
 #
 # Champs structurés facultatifs (lus par les évaluateurs ; les champs `formule` et `description`
 # restent documentaires et ne sont jamais évalués ; un test vérifie que chaque valeur structurée
@@ -90,11 +93,18 @@ contextes:
   industriel: "Accès technique / machines — NF EN ISO 14122-3, NF E85-015"
   garde_corps_1988: "Garde-corps selon NF P01-012 (1988) — projets antérieurs au 01/06/2025 (PC/DP) ou au 01/01/2026 (marchés)"
   garde_corps_2024: "Garde-corps selon NF P01-012 (2024)"
+  limon_bois_encastre: "Structure à limons bois, marches encastrées (structure `wood-housed`) — déduit de la structure, non saisi"
   tous: "Tout escalier"
 
 # Contextes de forme : dans la liste `contexte` d'une règle, ils qualifient les autres contextes
 # (voir la sémantique en tête de fichier).
 contextes_forme: [tournant, helicoidal, helicoidal_fut]
+
+# Contextes déduits de la structure choisie (`stair.structure.kind` → contextes actifs), jamais
+# saisis : une règle portée par une structure s'applique dès que cette structure est utilisée,
+# quel que soit le contexte déclaré (décision de l'utilisateur 2026-09-30, QUESTIONS D2).
+contextes_structure:
+  wood-housed: [limon_bois_encastre]
 
 regles:
 
@@ -1504,13 +1514,13 @@ regles:
     max: null
     recommande: null
     unite: mm
-    contexte: [bois_dtu]
+    contexte: [bois_dtu, limon_bois_encastre]
     nature: normatif
     source: "NF EN 16481 § 5.4.2 et 7.3.1 (texte relu, docs/research/C-structures.md §1.4 et C-B-04, réf. [3] de C-structures)"
     source_secondaire: false
     confiance: eleve
     severite: avertissement
-    note: "Évaluée par les structures à limons bois encastrés (wood-housed). Section résiduelle sous entailles (100 / 80 mm) non retenue : source non identifiée (C-structures §1.4)."
+    note: "Évaluée par les structures à limons bois encastrés (wood-housed), dès que cette structure est utilisée (contexte déduit `limon_bois_encastre`, décision de l'utilisateur 2026-09-30, QUESTIONS D2), bois_dtu ou non. Section résiduelle sous entailles (100 / 80 mm) non retenue : source non identifiée (C-structures §1.4)."
 
   - id: CREMAILLERE_REGLE_MOYENS
     description: "Crémaillère bois (paire, droit, hauteur d'étage 2,70 m soit 2700 mm, 38°) : distance min fond d'entaille / sous-face selon épaisseur — C30 : 33→179, 44→163, 70→141 ; D40 : 35→177, 44→162, 70→139 ; crémaillère centrale : épaisseurs x2"

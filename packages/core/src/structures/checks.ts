@@ -90,7 +90,9 @@ export class CheckCollector {
     // déduit du bord intérieur du tracé hélicoïdal (QUESTIONS A5).
     const lay = project.stair.layout;
     const core = lay.kind === "helical" ? lay.core.kind : undefined;
-    this.active = new Set(resolveContexts(project.compliance, stepping, core).active);
+    this.active = new Set(
+      resolveContexts(project.compliance, stepping, core, project.stair.structure.kind).active,
+    );
   }
 
   /** Contextes actifs du projet (évaluateurs de rules.yaml réappliqués par un plugin). */

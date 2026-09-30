@@ -72,7 +72,12 @@
  * arcs discrétisés à 0,1 mm de flèche). Le poteau et les limons (hors emmarchement utile,
  * CHALLENGE A3) n'en font pas partie.
  */
-import type { Layout, TurnZone, WalklineTransition } from "../model/derived.js";
+import type {
+  Layout,
+  TurnZone,
+  WalklineTransition,
+  ZeroLengthInnerCorner,
+} from "../model/derived.js";
 import type { Curve2, CurveSeg, Mm, Polygon2, Vec2 } from "../model/primitives.js";
 import type { InnerCorner, Project, Turn } from "../model/project.js";
 import {
@@ -344,10 +349,20 @@ export function computeLayout(project: Project, options: LayoutOptions = {}): La
 
   // Jour réduit à un point (quart tournant sans partie droite, angle vif) : courbe de
   // longueur nulle au coin, pour garder un `Curve2` non vide.
+  // Le signalement dépend des murs du site (aucune erreur si ce côté est un mur, décision de
+  // l'utilisateur du 2026-09-30) : décrit ici, signalé par le pipeline (`zeroLengthJour.ts`),
+  // pour que le tracé ne lise pas les murs (clés de mémoïsation de l'étape inchangées).
+  let zeroLengthInner: ZeroLengthInnerCorner[] | undefined;
   if (innerSegs.length === 0) {
-    layoutErrors.push(
-      "Bord du jour de longueur nulle (tournant sans partie droite de part et d'autre, jour à angle vif) : les limons et garde-corps de jour n'ont pas d'appui ; allonger une volée ou prévoir un poteau.",
-    );
+    zeroLengthInner = [];
+    turns.forEach((t, j) => {
+      if (t.direction !== innerSide) return;
+      zeroLengthInner!.push({
+        corner: toWorld(cornerOf(j)),
+        incoming: V.rotate(legs[j]!.u, angle),
+        outgoing: V.rotate(legs[j + 1]!.u, angle),
+      });
+    });
     innerSegs.push(lineSeg(cornerOf(0), cornerOf(0)));
   }
   if (outerSegs.length === 0) outerSegs.push(lineSeg(cornerOf(0), cornerOf(0)));
@@ -386,6 +401,7 @@ export function computeLayout(project: Project, options: LayoutOptions = {}): La
     footprint: footprintOf(inner, outer),
     turns: turnZones,
     ...(layoutErrors.length > 0 ? { errors: layoutErrors } : {}),
+    ...(zeroLengthInner !== undefined ? { zeroLengthInner } : {}),
     innerSide,
     ...(walklineSide !== undefined ? { walklineSide } : {}),
     ...(walklineTransitions.length > 0 ? { walklineTransitions } : {}),

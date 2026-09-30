@@ -37,3 +37,8 @@ export {
   straightSideKinds,
   type StraightSideKind,
 } from "./walklineSide.js";
+export {
+  ZERO_LENGTH_JOUR_ERROR,
+  zeroLengthJourAgainstWall,
+  zeroLengthJourError,
+} from "./zeroLengthJour.js";

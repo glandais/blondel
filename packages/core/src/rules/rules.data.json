@@ -53,6 +53,7 @@
     "industriel": "Accès technique / machines — NF EN ISO 14122-3, NF E85-015",
     "garde_corps_1988": "Garde-corps selon NF P01-012 (1988) — projets antérieurs au 01/06/2025 (PC/DP) ou au 01/01/2026 (marchés)",
     "garde_corps_2024": "Garde-corps selon NF P01-012 (2024)",
+    "limon_bois_encastre": "Structure à limons bois, marches encastrées (structure `wood-housed`) — déduit de la structure, non saisi",
     "tous": "Tout escalier"
   },
   "contextes_forme": [
@@ -60,6 +61,11 @@
     "helicoidal",
     "helicoidal_fut"
   ],
+  "contextes_structure": {
+    "wood-housed": [
+      "limon_bois_encastre"
+    ]
+  },
   "regles": [
     {
       "id": "BLONDEL_DTU",
@@ -1896,14 +1902,15 @@
       "recommande": null,
       "unite": "mm",
       "contexte": [
-        "bois_dtu"
+        "bois_dtu",
+        "limon_bois_encastre"
       ],
       "nature": "normatif",
       "source": "NF EN 16481 § 5.4.2 et 7.3.1 (texte relu, docs/research/C-structures.md §1.4 et C-B-04, réf. [3] de C-structures)",
       "source_secondaire": false,
       "confiance": "eleve",
       "severite": "avertissement",
-      "note": "Évaluée par les structures à limons bois encastrés (wood-housed). Section résiduelle sous entailles (100 / 80 mm) non retenue : source non identifiée (C-structures §1.4)."
+      "note": "Évaluée par les structures à limons bois encastrés (wood-housed), dès que cette structure est utilisée (contexte déduit `limon_bois_encastre`, décision de l'utilisateur 2026-09-30, QUESTIONS D2), bois_dtu ou non. Section résiduelle sous entailles (100 / 80 mm) non retenue : source non identifiée (C-structures §1.4)."
     },
     {
       "id": "CREMAILLERE_REGLE_MOYENS",

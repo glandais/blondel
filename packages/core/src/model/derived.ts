@@ -85,6 +85,15 @@ export interface HelicalLayout {
   readonly landingOutline?: Polygon2;
 }
 
+/** Coin d'un bord du jour de longueur nulle (`Layout.zeroLengthInner`), repère monde. */
+export interface ZeroLengthInnerCorner {
+  /** Coin intérieur K du tournant (le bord du jour réduit à ce point). */
+  readonly corner: Vec2;
+  /** Direction de montée de la volée entrante et de la volée sortante. */
+  readonly incoming: Vec2;
+  readonly outgoing: Vec2;
+}
+
 export interface Layout {
   /** Bord intérieur (jour) et extérieur (mur), orientés dans le sens de la montée, repère monde. */
   readonly inner: Curve2;
@@ -109,9 +118,18 @@ export interface Layout {
   /**
    * Anomalies du tracé qui ne l'empêchent pas d'être calculé (emprise dégénérée : volées qui se
    * touchent ou se superposent en plan, bord intérieur de longueur nulle), reprises dans
-   * `Model.errors`. Absent : aucune.
+   * `Model.errors`. Absent : aucune. Le bord du jour de longueur nulle n'y figure pas : il est
+   * décrit par `zeroLengthInner` et signalé par le pipeline selon les murs du site.
    */
   readonly errors?: readonly string[];
+  /**
+   * Bord intérieur (jour) de longueur nulle (tournants à angle vif sans partie droite de part et
+   * d'autre, QUESTIONS D3) : coins intérieurs K des tournants du côté du jour, avec les
+   * directions (unitaires, repère monde) des volées entrante et sortante. Le pipeline le signale
+   * dans `Model.errors` sauf si ce côté est un mur (`layout/zeroLengthJour.ts`, décision de
+   * l'utilisateur du 2026-09-30). Absent : bord intérieur non dégénéré.
+   */
+  readonly zeroLengthInner?: readonly ZeroLengthInnerCorner[];
   readonly turns: readonly TurnZone[];
   /**
    * Côté « intérieur » : gauche si les tournants vont à gauche. Droit : gauche par convention.

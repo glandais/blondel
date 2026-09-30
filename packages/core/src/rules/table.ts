@@ -65,6 +65,11 @@ export const RuleTableSchema = z.object({
   contextes: z.record(z.string(), z.string()),
   /** Contextes de forme, qui qualifient les autres contextes d'une règle (ADR-0004). */
   contextes_forme: z.array(z.string()),
+  /**
+   * Contextes déduits de la structure choisie (`stair.structure.kind` → contextes), jamais saisis
+   * (QUESTIONS D2, décision du 2026-09-30).
+   */
+  contextes_structure: z.record(z.string(), z.array(z.string())).default({}),
   regles: z.array(RuleDefSchema),
 });
 export type RuleTable = z.infer<typeof RuleTableSchema>;

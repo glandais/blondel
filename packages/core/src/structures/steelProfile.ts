@@ -212,6 +212,17 @@ export const PROFILE_RULES = {
     severity: "conseil",
     unit: "mm",
   },
+  lateralWidth: {
+    id: "FAB_PROFILE_AILE_HORS_EMPRISE",
+    description:
+      "Section automatique : aile de la section retenue au plus égale à l'épaisseur de limon comptée hors emprise utile avant le choix de section (aile de la plus légère de la famille) ; au-delà, emprise hors tout, largeur utile, trémie et murs sont à revoir avec la section retenue",
+    source:
+      "Géométrie de la structure (aile de la section retenue) et épaisseur déclarée par le plugin (`capabilities.lateralThickness`) ; décision de l'utilisateur 2026-09-30 (docs/QUESTIONS.md D4)",
+    confidence: "eleve",
+    nature: "metier",
+    severity: "avertissement",
+    unit: "mm",
+  },
 } as const satisfies Record<string, PluginRuleSpec>;
 
 export interface ProfileStringer {
@@ -1388,6 +1399,8 @@ function addProfileChecks(
       },
     );
   }
+  const lateral = profileLateralWidthFindings(params, s);
+  if (lateral.length > 0) checks.add(rule(PROFILE_RULES.lateralWidth), lateral);
   if (input.miterItems.length > 0) {
     checks.addItems(rule(PROFILE_RULES.miter), input.miterItems, "Écart de rive haute à l'onglet", {
       min: null,
@@ -1480,4 +1493,32 @@ export function profileLateralWidth(p: SteelProfileParams): Mm {
   const named = p.section === "auto" ? undefined : findSection(p.section);
   if (named) return named.b;
   return sectionsOf(p.family)[0]?.b ?? 0;
+}
+
+/**
+ * Contrôle a posteriori de l'épaisseur hors emprise en section `auto` (décision de l'utilisateur
+ * 2026-09-30, QUESTIONS D4) : l'épaisseur déclarée avant le choix de section
+ * (`profileLateralWidth`, borne basse) est comparée à l'aile b de la section retenue. Comme
+ * `GC_CONFLIT_DALLE`, un constat seulement si elle est dépassée (constat géométrique, aucun
+ * seuil métier) ; rien pour une section nommée (épaisseur déclarée = son aile) ni pour une
+ * section retenue égale à la borne basse.
+ */
+export function profileLateralWidthFindings(
+  params: SteelProfileParams,
+  section: SteelSection,
+): Finding[] {
+  if (params.section !== "auto") return [];
+  const counted = profileLateralWidth(params);
+  const excess = section.b - counted;
+  if (!(excess > 1e-9)) return [];
+  const lightest = sectionsOf(params.family)[0];
+  return [
+    {
+      status: "violation",
+      measured: section.b,
+      min: null,
+      max: counted,
+      message: `Section automatique ${section.name} : aile de ${fmt(section.b, 0)} mm, au-delà des ${fmt(counted, 0)} mm comptés hors emprise utile avant le choix de section (aile de ${lightest?.name ?? "la plus légère de la famille"}, borne basse) : ${fmt(excess, 0)} mm de plus de chaque côté ; vérifier l'emprise hors tout, la largeur utile, la trémie et les murs avec la section retenue, ou imposer la section.`,
+    },
+  ];
 }

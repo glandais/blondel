@@ -4,7 +4,9 @@
  * - Contextes **cumulatifs** : toutes les règles des contextes actifs s'appliquent ; `tous` est implicite.
  * - Contextes **déduits** : `tournant` si le découpage contient des marches balancées,
  *   `helicoidal` si le découpage est celui d'un tracé hélicoïdal (`Stepping.helical`),
- *   `helicoidal_fut` si ce tracé est à fût central (projet : `layout.core.kind === "column"`) ; régime
+ *   `helicoidal_fut` si ce tracé est à fût central (projet : `layout.core.kind === "column"`) ;
+ *   contextes de structure (`contextes_structure` de rules.yaml, ex. `limon_bois_encastre` pour
+ *   `wood-housed`, QUESTIONS D2) si la structure choisie en porte ; régime
  *   garde-corps `garde_corps_1988` / `garde_corps_2024` déduit de `referenceDate` si l'utilisateur
  *   n'en a choisi aucun explicitement.
  * - Applicabilité : les contextes de forme (`tournant`, `helicoidal`) **qualifient** les contextes de
@@ -28,17 +30,31 @@ export const ALWAYS_CONTEXT = "tous";
 export const SHAPE_CONTEXTS: ReadonlySet<string> = new Set(RULE_TABLE.contextes_forme);
 
 /**
+ * Contextes déduits de la structure choisie (`contextes_structure` de rules.yaml) : une règle
+ * portée par une structure (ex. `LIMON_ENTAILLE_MIN` pour `wood-housed`) s'applique dès que la
+ * structure est utilisée, quel que soit le contexte déclaré (QUESTIONS D2, 2026-09-30).
+ */
+export const STRUCTURE_CONTEXTS: Readonly<Record<string, readonly string[]>> =
+  RULE_TABLE.contextes_structure;
+
+/** Contextes de structure, jamais saisis : une déclaration à la main est ignorée. */
+const STRUCTURE_ONLY_CONTEXTS: ReadonlySet<string> = new Set(
+  Object.values(STRUCTURE_CONTEXTS).flat(),
+);
+
+/** Contexte déduit d'un hélicoïdal à fût central (QUESTIONS A5). */
+export const HELICAL_COLUMN_CONTEXT = "helicoidal_fut";
+
+/**
  * Contextes toujours déduits (jamais saisis) : l'interface ne les propose pas. `helicoidal` reste
  * saisissable (il peut être déclaré explicitement).
  */
 export const DEDUCED_ONLY_CONTEXTS: ReadonlySet<string> = new Set([
   ALWAYS_CONTEXT,
   "tournant",
-  "helicoidal_fut",
+  HELICAL_COLUMN_CONTEXT,
+  ...STRUCTURE_ONLY_CONTEXTS,
 ]);
-
-/** Contexte déduit d'un hélicoïdal à fût central (QUESTIONS A5). */
-export const HELICAL_COLUMN_CONTEXT = "helicoidal_fut";
 
 export type GuardRailRegime = "garde_corps_1988" | "garde_corps_2024";
 
@@ -102,12 +118,14 @@ export interface ResolvedContexts {
 
 /**
  * Contextes actifs pour un projet et son découpage. `helicalCore` : bord intérieur du tracé
- * hélicoïdal du projet (`stair.layout.core.kind`), pour déduire `helicoidal_fut`.
+ * hélicoïdal du projet (`stair.layout.core.kind`), pour déduire `helicoidal_fut` ;
+ * `structureKind` : structure choisie (`stair.structure.kind`), pour les contextes de structure.
  */
 export function resolveContexts(
   settings: ComplianceSettings,
   stepping?: Stepping,
   helicalCore?: "column" | "well",
+  structureKind?: string,
 ): ResolvedContexts {
   const known = new Set(RULE_CONTEXTS);
   const active = new Set<string>([ALWAYS_CONTEXT]);
@@ -117,15 +135,16 @@ export function resolveContexts(
   const declaredDeduced: string[] = [];
   for (const c of settings.contexts) {
     // `helicoidal_fut` n'est jamais saisi : le déclarer écarterait G_COLLET_MIN d'un jour central
-    // (QUESTIONS A5) ; seul le tracé le déduit.
-    if (c === HELICAL_COLUMN_CONTEXT) declaredDeduced.push(c);
+    // (QUESTIONS A5) ; seul le tracé le déduit. De même, les contextes de structure ne sont
+    // déduits que de la structure choisie (QUESTIONS D2).
+    if (c === HELICAL_COLUMN_CONTEXT || STRUCTURE_ONLY_CONTEXTS.has(c)) declaredDeduced.push(c);
     else if (known.has(c)) active.add(c);
     else unknown.push(c);
   }
   if (unknown.length > 0) notes.push(`Contextes inconnus ignorés : ${unknown.join(", ")}.`);
   if (declaredDeduced.length > 0)
     notes.push(
-      `Contexte déduit du tracé, déclaration ignorée : ${declaredDeduced.join(", ")} (hélicoïdal à fût central).`,
+      `Contexte déduit du tracé ou de la structure, déclaration ignorée : ${declaredDeduced.join(", ")}.`,
     );
 
   if (stepping && stepping.treads.some((t) => t.kind === "winder") && !active.has("tournant")) {
@@ -146,6 +165,15 @@ export function resolveContexts(
   ) {
     active.add(HELICAL_COLUMN_CONTEXT);
     derived.push(HELICAL_COLUMN_CONTEXT);
+  }
+  // Structure choisie : contextes qu'elle porte (ex. `limon_bois_encastre` pour `wood-housed`).
+  if (structureKind !== undefined && Object.hasOwn(STRUCTURE_CONTEXTS, structureKind)) {
+    for (const c of STRUCTURE_CONTEXTS[structureKind]!) {
+      if (known.has(c) && !active.has(c)) {
+        active.add(c);
+        derived.push(c);
+      }
+    }
   }
 
   let guardRail: GuardRailResolution;

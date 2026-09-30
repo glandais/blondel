@@ -91,7 +91,7 @@ describe("table des règles", () => {
     expect(getRule("LIMON_ENTAILLE_MIN")).toMatchObject({
       min: 14,
       severite: "avertissement",
-      contexte: ["bois_dtu"],
+      contexte: ["bois_dtu", "limon_bois_encastre"],
     });
     expect(getRule("LIMON_ENTAILLE_MIN").source).toMatch(/NF EN 16481/);
     expect(getRule("GC_CABLES_DETENTE")).toMatchObject({

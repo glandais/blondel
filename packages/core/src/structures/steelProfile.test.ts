@@ -22,6 +22,8 @@ import {
   buildSteelProfile,
   lightestSection,
   profileFlangeWidth,
+  profileLateralWidth,
+  profileLateralWidthFindings,
   profileNewel,
   profileNewelFits,
   type SteelProfileResult,
@@ -476,5 +478,40 @@ describe("steel-profile : charge permanente après rognage des cornières (dette
       const final = permanentAreaLoad(m.parts, m.stepping, resolveWorkshopProfile(p.workshop));
       expect(m.precheck?.permanentArea).toBeCloseTo(final, 9);
     }
+  });
+});
+
+describe("steel-profile : contrôle a posteriori de l'épaisseur hors emprise en section auto (D4)", () => {
+  const auto = SteelProfileParamsSchema.parse({ family: "UPN" });
+
+  it("section retenue plus large que la borne basse : constat ; section égale : rien", () => {
+    const [lightest, wider] = sectionsOf("UPN");
+    expect(profileLateralWidth(auto)).toBe(lightest!.b);
+    expect(profileLateralWidthFindings(auto, lightest!)).toEqual([]);
+    const f = profileLateralWidthFindings(auto, wider!);
+    expect(f).toHaveLength(1);
+    expect(f[0]).toMatchObject({ status: "violation", measured: wider!.b, max: lightest!.b });
+    // Section nommée : l'épaisseur déclarée est son aile, rien à contrôler.
+    const named = SteelProfileParamsSchema.parse({ section: wider!.name });
+    expect(profileLateralWidthFindings(named, wider!)).toEqual([]);
+  });
+
+  it("cas n° 1 (j3c) : UPN 240 retenue, aile 85 mm contre 45 mm comptés → avertissement", () => {
+    const { m } = run(loadExample("j3c-acceptance-01-upn.blondel.json"));
+    const r = results(m, "FAB_PROFILE_AILE_HORS_EMPRISE");
+    expect(r).toHaveLength(1);
+    expect(r[0]).toMatchObject({
+      status: "violation",
+      severity: "avertissement",
+      measured: 85,
+      max: 45,
+      unit: "mm",
+    });
+    expect(r[0]!.message).toMatch(/UPN 240.*40 mm de plus/);
+  });
+
+  it("section imposée : aucun constat sur le modèle construit", () => {
+    const m = buildModel(straight(15, { section: "UPN 200" }), { memo: false });
+    expect(results(m, "FAB_PROFILE_AILE_HORS_EMPRISE")).toEqual([]);
   });
 });
