@@ -8,7 +8,8 @@
     "build": "tsc -p tsconfig.json --noEmit && vite build",
     "preview": "vite preview",
     "e2e": "playwright test",
-    "pwa:icons": "rsvg-convert -w 192 -h 192 public/favicon.svg -o public/pwa-192.png && rsvg-convert -w 512 -h 512 public/favicon.svg -o public/pwa-512.png && rsvg-convert -w 180 -h 180 public/favicon.svg -o public/apple-touch-icon.png"
+    "pwa:icons": "rsvg-convert -w 192 -h 192 public/favicon.svg -o public/pwa-192.png && rsvg-convert -w 512 -h 512 public/favicon.svg -o public/pwa-512.png && rsvg-convert -w 180 -h 180 public/favicon.svg -o public/apple-touch-icon.png",
+    "ux:captures": "playwright test -c playwright.captures.config.ts"
   },
   "dependencies": {
     "@blondel/core": "workspace:*",
