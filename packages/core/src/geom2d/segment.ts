@@ -6,6 +6,7 @@
  * aux raccords de décalage. Pour un arc, `θ(t) = startAngle + t·sweep`.
  */
 import type { ArcSeg, CurveSeg, LineSeg, Mm, Rad, Vec2 } from "../model/primitives.js";
+import { MessageError, msg } from "@blondel/i18n";
 import { GEOM_EPS } from "./tolerance.js";
 import * as V from "./vec.js";
 
@@ -15,7 +16,7 @@ export function lineSeg(a: Vec2, b: Vec2): LineSeg {
 
 export function arcSeg(center: Vec2, radius: Mm, startAngle: Rad, sweep: Rad): ArcSeg {
   if (!(radius >= 0)) {
-    throw new Error(`arcSeg : rayon négatif ou invalide (${radius})`);
+    throw new MessageError(msg("error.geom2d.arcSeg.invalidRadius", { radius: String(radius) }));
   }
   return { kind: "arc", center, radius, startAngle, sweep };
 }

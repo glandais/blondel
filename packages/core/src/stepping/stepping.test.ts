@@ -22,6 +22,7 @@ import {
   type ZoneEvaluation,
 } from "./zones.js";
 import { makeSteppingProject, type SteppingShape } from "./test-helpers.js";
+import { frList } from "../i18n.test-helpers.js";
 
 const EXAMPLES_DIR = new URL("../../../../examples/", import.meta.url);
 
@@ -188,7 +189,7 @@ describe("quart tournant balancé (M3)", () => {
     const z = st.balancedZones[0]!;
     expect(z.to - z.from - 1).toBe(4);
     const low = run({ width: 900, legs: [1000, 3900], balancing: { windersPerSide: 5 } }).stepping;
-    expect(low.notes.some((n) => n.includes("5 marches balancées demandées"))).toBe(true);
+    expect(frList(low.notes).some((n) => n.includes("5 marches balancées demandées"))).toBe(true);
     expect(low.balancedZones[0]!.from).toBe(0);
   });
 
@@ -227,18 +228,24 @@ describe("quart tournant balancé (M3)", () => {
     }
     // Cible inaccessible : collet maximal dans l'étendue, signalé.
     const high = run({ width: 800, legs, balancing: { targetCollet: 400 } }).stepping;
-    expect(high.notes.some((n) => n.includes("collet cible de 400 mm non atteint"))).toBe(true);
-    // La note n'invoque l'étendue que si elle a écarté des zones (relecture : message trompeur).
-    expect(high.notes.some((n) => n.includes("étendue de balancement limitée à 3,5 girons"))).toBe(
+    expect(frList(high.notes).some((n) => n.includes("collet cible de 400 mm non atteint"))).toBe(
       true,
     );
+    // La note n'invoque l'étendue que si elle a écarté des zones (relecture : message trompeur).
+    expect(
+      frList(high.notes).some((n) => n.includes("étendue de balancement limitée à 3,5 girons")),
+    ).toBe(true);
     const wide = run({
       width: 800,
       legs,
       balancing: { targetCollet: 400, maxBalancedExtent: 100 },
     }).stepping;
-    expect(wide.notes.some((n) => n.includes("aucune zone possible ne l'atteint"))).toBe(true);
-    expect(wide.notes.some((n) => n.includes("étendue de balancement limitée"))).toBe(false);
+    expect(frList(wide.notes).some((n) => n.includes("aucune zone possible ne l'atteint"))).toBe(
+      true,
+    );
+    expect(frList(wide.notes).some((n) => n.includes("étendue de balancement limitée"))).toBe(
+      false,
+    );
   });
 
   const cand = (
@@ -367,11 +374,15 @@ describe("quart tournant balancé (M3)", () => {
     // (s = 2 188, dans l'arc : aucune partie droite ne continue → libre).
     const inner = run({ width: 800, legs: [2400, 2400], balancing: { windersPerSide: 1 } });
     expect(inner.stepping.balancedZones[0]).toMatchObject({ from: 5, to: 8 });
-    expect(inner.stepping.notes.some((n) => n.includes("extrémités tangente/libre"))).toBe(true);
+    expect(frList(inner.stepping.notes).some((n) => n.includes("extrémités tangente/libre"))).toBe(
+      true,
+    );
     // 2 nez de chaque côté : nez fixes 4 et 9 dans les parties droites → tangentes.
     const outer = run({ width: 800, legs: [2400, 2400], balancing: { windersPerSide: 2 } });
     expect(outer.stepping.balancedZones[0]).toMatchObject({ from: 4, to: 9 });
-    expect(outer.stepping.notes.some((n) => n.includes("extrémités tangente/tangente"))).toBe(true);
+    expect(
+      frList(outer.stepping.notes).some((n) => n.includes("extrémités tangente/tangente")),
+    ).toBe(true);
     // Fonction pure : bornes sur les limites de l'arc (à GEOM_EPS) = tangentes.
     const seeds = [0, 100, 200, 300, 400].map((s) => ({ s }));
     const ctx = { seeds, freeNosings: new Set<number>() } as unknown as Parameters<
@@ -469,7 +480,7 @@ describe("quart tournant balancé (M3)", () => {
 
   it("M0 à angle vif : collet nul signalé", () => {
     const st = run({ width: 800, legs: [2400, 2400], balancing: { method: "M0" } }).stepping;
-    expect(st.notes.some((n) => n.includes("collet nul"))).toBe(true);
+    expect(frList(st.notes).some((n) => n.includes("collet nul"))).toBe(true);
   });
 
   it("M1 : profil en V, jarret signalé, K3", () => {
@@ -480,7 +491,7 @@ describe("quart tournant balancé (M3)", () => {
       balancing: { method: "M1", windersPerSide: 3 },
     }).stepping;
     expect(st.balancedZones[0]!.method).toBe("M1");
-    expect(st.notes.some((n) => n.includes("jarret"))).toBe(true);
+    expect(frList(st.notes).some((n) => n.includes("jarret"))).toBe(true);
     const z = st.balancedZones[0]!;
     const c = st.treads.filter((t) => t.number - 1 >= z.from && t.number <= z.to);
     expect(monotonyBreaks(c.map((t) => t.colletArc))).toEqual([]);
@@ -505,7 +516,7 @@ describe("quart tournant balancé (M3)", () => {
       );
       expect(d).toBeLessThan(1e-6);
     }
-    expect(stepping.notes.some((n) => n.includes("recoupe le jour"))).toBe(false);
+    expect(frList(stepping.notes).some((n) => n.includes("recoupe le jour"))).toBe(false);
   });
 });
 
@@ -523,7 +534,7 @@ describe("U et demi-tournant", () => {
   it("demi-tournant (volée centrale < 1 giron) : zone unique de 180°", () => {
     const st = run({ width: 800, legs: [1600, 1800, 1600], floorToFloor: 2700 }).stepping;
     expect(st.balancedZones).toHaveLength(1);
-    expect(st.notes.some((n) => n.includes("zone unique"))).toBe(true);
+    expect(frList(st.notes).some((n) => n.includes("zone unique"))).toBe(true);
     expect(findCrossings(st.nosings)).toEqual([]);
     for (const t of st.treads.filter((t) => t.kind === "winder")) {
       expect(t.colletChord).toBeGreaterThan(0);
@@ -566,7 +577,7 @@ describe("paliers", () => {
       mode: "landing",
       floorToFloor: 2700,
     });
-    expect(stepping.notes.some((n) => n.startsWith("Paliers :"))).toBe(true);
+    expect(frList(stepping.notes).some((n) => n.startsWith("Paliers :"))).toBe(true);
     const goings = stepping.treads.filter((t) => t.kind !== "landing").map((t) => t.going);
     expect(Math.max(...goings) - Math.min(...goings)).toBeGreaterThan(1);
     expect(stepping.run).toBeCloseTo(stepping.nosings[14]!.s, 9);
@@ -636,7 +647,7 @@ describe("surcharges du mode expert", () => {
   it("angle imposé qui croise la ligne voisine : K5 signalé", () => {
     const st = run({ ...base, nosingOverrides: [{ kind: "angle", index: 3, angle: 60 }] }).stepping;
     expect(findCrossings(st.nosings).length).toBeGreaterThan(0);
-    expect(st.notes.some((n) => n.startsWith("K5 :"))).toBe(true);
+    expect(frList(st.notes).some((n) => n.startsWith("K5 :"))).toBe(true);
   });
 
   it("surcharges orphelines : signalées, non appliquées", () => {
@@ -647,7 +658,7 @@ describe("surcharges du mode expert", () => {
         { kind: "angle", index: 42, angle: 3 },
       ],
     }).stepping;
-    expect(st.notes.filter((n) => n.startsWith("Surcharge orpheline"))).toHaveLength(2);
+    expect(frList(st.notes).filter((n) => n.startsWith("Surcharge orpheline"))).toHaveLength(2);
     // Bornes : le nez n − 1 existe (non orphelin), le nez n n'existe pas.
     const n = st.riserCount;
     const edge = run({
@@ -657,7 +668,7 @@ describe("surcharges du mode expert", () => {
         { kind: "fixed", index: n },
       ],
     }).stepping;
-    const orphans = edge.notes.filter((m) => m.startsWith("Surcharge orpheline"));
+    const orphans = frList(edge.notes).filter((m) => m.startsWith("Surcharge orpheline"));
     expect(orphans).toHaveLength(1);
     expect(orphans[0]).toContain(`nez ${n} `);
     expect(st.balancedZones).toEqual(run(base).stepping.balancedZones);
@@ -813,7 +824,7 @@ describe("préréglages : étendue du balancement (non-régression, CHALLENGE G3
           monotonyBreaks(f.treads.map((t) => t.colletChord)).length === 0 &&
           monotonyBreaks(f.treads.map((t) => t.colletArc)).length === 0 &&
           findCrossings(f.nosings).length === 0 &&
-          !f.notes.some((n) => n.includes("recoupe le jour"));
+          !frList(f.notes).some((n) => n.includes("recoupe le jour"));
         expect(
           ok && Math.min(...f.treads.map((t) => t.colletChord)) >= target - 1e-6,
           `${label} w=${w}`,
@@ -833,14 +844,14 @@ describe("préréglages : étendue du balancement (non-régression, CHALLENGE G3
       };
       const layout = computeLayout(project);
       const st = computeStepping(project, layout);
-      const ctx = st.notes.join("\n");
+      const ctx = frList(st.notes).join("\n");
       expect(st.balancedZones, ctx).toHaveLength(2);
       expect(
-        st.notes.filter((n) => n.includes("étendue dépassée")),
+        frList(st.notes).filter((n) => n.includes("étendue dépassée")),
         ctx,
       ).toHaveLength(2);
       expect(
-        st.notes.some((n) => n.includes("aucun balancement admissible")),
+        frList(st.notes).some((n) => n.includes("aucun balancement admissible")),
         ctx,
       ).toBe(false);
       expect(findCrossings(st.nosings), ctx).toEqual([]);
@@ -850,7 +861,7 @@ describe("préréglages : étendue du balancement (non-régression, CHALLENGE G3
     // Étendue suffisante : pas de repli.
     const project = createProject("two-quarters-u");
     const st = computeStepping(project, computeLayout(project));
-    expect(st.notes.some((n) => n.includes("étendue dépassée"))).toBe(false);
+    expect(frList(st.notes).some((n) => n.includes("étendue dépassée"))).toBe(false);
   });
 
   it("quart tournant gauche / droit (préréglage) : pas toute la seconde volée", () => {

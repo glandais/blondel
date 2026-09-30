@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { fr } from "../../i18n.test-helpers.js";
 import { computeLayout } from "../../layout/layout.js";
 import type { RuleResult } from "../../model/derived.js";
 import { ProjectSchema, type Project, type ProjectInput } from "../../model/project.js";
@@ -129,9 +130,9 @@ describe("évaluateurs garde-corps et mains courantes", () => {
   it("CHARGE_GC_HORIZONTALE : information, jamais une violation", () => {
     const housing = evaluate(project({}), "CHARGE_GC_HORIZONTALE");
     expect(statuses(housing)).toEqual(["non-evaluee"]);
-    expect(housing[0]!.message).toMatch(/0,6 kN\/m/);
+    expect(fr(housing[0]!.message)).toMatch(/0,6 kN\/m/);
     const erp = evaluate(project({}, { contexts: ["erp_neuf"] }), "CHARGE_GC_HORIZONTALE");
-    expect(erp[0]!.message).toMatch(/1 kN\/m/);
+    expect(fr(erp[0]!.message)).toMatch(/1 kN\/m/);
   });
 
   it("sans section guards : règles non évaluées avec explication", () => {
@@ -144,7 +145,7 @@ describe("évaluateurs garde-corps et mains courantes", () => {
     expect(r.length).toBeGreaterThan(0);
     for (const x of r) {
       expect(x.status).toBe("non-evaluee");
-      expect(x.message).toMatch(/non décrits/);
+      expect(fr(x.message)).toMatch(/non décrits/);
     }
   });
 });
@@ -160,7 +161,7 @@ describe("GC_HAUTEUR_2024 — épaisseur E de l'élément de protection", () => 
     });
     const rs = evaluate(p, "GC_HAUTEUR_2024");
     expect(rs.map((r) => [r.status, r.measured, r.min])).toEqual([["violation", 980, 1000]]);
-    expect(rs[0]!.message).toMatch(/E = 42 mm/);
+    expect(fr(rs[0]!.message)).toMatch(/E = 42 mm/);
   });
 
   it("panneau plein épais : E = épaisseur du panneau", () => {

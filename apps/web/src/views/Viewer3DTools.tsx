@@ -13,6 +13,7 @@ import {
   type Severity,
 } from "@blondel/core";
 import { useId } from "react";
+import { trKey } from "../i18n/fr.js";
 import {
   APPEARANCE_MATERIALS,
   FAMILY_LABELS,
@@ -155,7 +156,7 @@ export function Viewer3DTools({
                     })
                   }
                 />{" "}
-                {RULE_FAMILY_LABELS[f]} ({familyCounts[f]})
+                {trKey(RULE_FAMILY_LABELS[f])} ({familyCounts[f]})
               </label>
             ))}
           </fieldset>

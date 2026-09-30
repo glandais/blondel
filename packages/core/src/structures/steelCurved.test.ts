@@ -1,4 +1,5 @@
 import fc from "fast-check";
+import { dec, msg } from "@blondel/i18n";
 import { describe, expect, it } from "vitest";
 import { lineSeg, arcSeg } from "../geom2d/segment.js";
 import { makeCurve } from "../geom2d/curve.js";
@@ -9,7 +10,6 @@ import { buildModel } from "../pipeline/build.js";
 import { resolveM3Variant } from "../stepping/stepping.js";
 import { makeSteppingProject } from "../stepping/test-helpers.js";
 import { WorkshopProfileSchema } from "../workshop/profile.js";
-import { fmt } from "../rules/check.js";
 import { isSimplePolygon } from "./geom.js";
 import { ruledFlatGap } from "./ruled.test-helpers.js";
 import { QUANTITY_BUTT_WELD_MM, QUANTITY_WELD_MM } from "./steelCommon.js";
@@ -21,8 +21,9 @@ import {
 } from "./steelCurved.js";
 import { arcFiberLength, fiberDevelopment } from "./steelCurvedGeometry.js";
 import "./index.js";
+import { fr, frList } from "../i18n.test-helpers.js";
 
-const fmtMm = (x: number): string => fmt(x, 0);
+const fmtMm = (x: number): string => fr(msg("common.text", { text: dec(x, 0) }));
 
 /** Quart tournant balancé à jour en arc (épure du critère n° 2), limon débillardé. */
 function quarterArc(
@@ -231,10 +232,10 @@ describe("plugin steel-curved : limon débillardé soudé (jalon 5b)", () => {
     const rolls = lines.filter((l) => l.kind === "roll");
     expect(rolls.length).toBeGreaterThan(2);
     for (const l of rolls) expect(l.a.x).toBeCloseTo(l.b.x, 9); // génératrices ⟂ σ
-    expect(rolls[0]!.label).toMatch(/R int 242 mm/);
-    expect(lines.some((l) => l.kind === "joint" && /bout à bout/.test(l.label ?? ""))).toBe(true);
-    expect(lines.some((l) => l.kind === "mark" && /^N\d+$/.test(l.label ?? ""))).toBe(true);
-    expect(lines.some((l) => l.kind === "text" && l.label === withArc.part.mark)).toBe(true);
+    expect(fr(rolls[0]!.label)).toMatch(/R int 242 mm/);
+    expect(lines.some((l) => l.kind === "joint" && /bout à bout/.test(fr(l.label)))).toBe(true);
+    expect(lines.some((l) => l.kind === "mark" && /^N\d+$/.test(fr(l.label)))).toBe(true);
+    expect(lines.some((l) => l.kind === "text" && fr(l.label) === withArc.part.mark)).toBe(true);
     expect(withArc.part.solid.kind).toBe("ruled");
   });
 
@@ -281,7 +282,7 @@ describe("plugin steel-curved : limon débillardé soudé (jalon 5b)", () => {
     expect(r.executionClass).toBe("EXC2");
     expect(m.executionClass).toBe("EXC2");
     const exc = m.compliance.results.find((x) => x.ruleId === "EXC_CLASSE_EXECUTION")!;
-    expect(exc.message).toMatch(/EXC2 \(soudures bout à bout/);
+    expect(fr(exc.message)).toMatch(/EXC2 \(soudures bout à bout/);
     const butt = m.parts.reduce((s, p) => s + (p.quantities[QUANTITY_BUTT_WELD_MM] ?? 0), 0);
     expect(butt).toBeCloseTo(curved.buttWeld, 6);
     expect(butt).toBeGreaterThan(0);
@@ -303,7 +304,7 @@ describe("plugin steel-curved : limon débillardé soudé (jalon 5b)", () => {
     }
     const joint = m.compliance.results.filter((x) => x.ruleId === "FAB_DEBILLARDE_JOINT");
     expect(joint.every((x) => x.status === "ok")).toBe(true);
-    expect(joint.some((x) => /Décalage joint \/ naissance/.test(x.message))).toBe(true);
+    expect(joint.some((x) => /Décalage joint \/ naissance/.test(fr(x.message)))).toBe(true);
   });
 
   it("coupe repliée vers la naissance ou sur l'arc : signalée (remarque et avertissement)", () => {
@@ -324,12 +325,12 @@ describe("plugin steel-curved : limon débillardé soudé (jalon 5b)", () => {
         (x) =>
           x.ruleId === "FAB_DEBILLARDE_JOINT" &&
           x.status === "violation" &&
-          /sur l'arc/.test(x.message),
+          /sur l'arc/.test(fr(x.message)),
       ),
     ).toBe(true);
     for (const j of short) {
       expect(
-        (m2.notes ?? []).some(
+        frList(m2.notes).some(
           (n) =>
             n.includes(`naissance σ = ${Math.round(j.naissance!)}`) &&
             /sur l'arc|seulement de la naissance/.test(n),
@@ -339,7 +340,7 @@ describe("plugin steel-curved : limon débillardé soudé (jalon 5b)", () => {
     const bad = m2.compliance.results.filter(
       (x) => x.ruleId === "FAB_DEBILLARDE_JOINT" && x.status === "violation",
     );
-    expect(bad.some((x) => /naissance/.test(x.message))).toBe(true);
+    expect(bad.some((x) => /naissance/.test(fr(x.message)))).toBe(true);
     expect(bad.every((x) => x.severity === "avertissement")).toBe(true);
   });
 
@@ -355,7 +356,8 @@ describe("plugin steel-curved : limon débillardé soudé (jalon 5b)", () => {
     expect(
       m.compliance.results.filter(
         (x) =>
-          x.ruleId === "FAB_DEBILLARDE_CASSURE_PENTE" && /Courbe des nez F au nez/.test(x.message),
+          x.ruleId === "FAB_DEBILLARDE_CASSURE_PENTE" &&
+          /Courbe des nez F au nez/.test(fr(x.message)),
       ),
     ).toEqual([]);
     // Pente de F continue de part et d'autre de chaque nez intérieur au limon (différences
@@ -376,10 +378,10 @@ describe("plugin steel-curved : limon débillardé soudé (jalon 5b)", () => {
     // Seuil facultatif : aucune cassure de F aux nez, seules les naissances sont contrôlées.
     const { m: m2 } = run(quarterArc({ params: { curved: { maxSlopeBreak: 5 } } }));
     const res = m2.compliance.results.filter((x) => x.ruleId === "FAB_DEBILLARDE_CASSURE_PENTE");
-    expect(res.some((x) => /au nez/.test(x.message))).toBe(false);
-    expect(res.filter((x) => /^Naissance/.test(x.message)).every((x) => x.status === "ok")).toBe(
-      true,
-    );
+    expect(res.some((x) => /au nez/.test(fr(x.message)))).toBe(false);
+    expect(
+      res.filter((x) => /^Naissance/.test(fr(x.message))).every((x) => x.status === "ok"),
+    ).toBe(true);
   });
 
   it("cassures de F aux nez non balancés du tournant : mesurées (zone imposée, M1 : interpolation)", () => {
@@ -390,7 +392,8 @@ describe("plugin steel-curved : limon débillardé soudé (jalon 5b)", () => {
     const kinks = r2.curved!.nosingKinks;
     const msgs = m2.compliance.results.filter(
       (x) =>
-        x.ruleId === "FAB_DEBILLARDE_CASSURE_PENTE" && /Courbe des nez F au nez/.test(x.message),
+        x.ruleId === "FAB_DEBILLARDE_CASSURE_PENTE" &&
+        /Courbe des nez F au nez/.test(fr(x.message)),
     );
     expect(msgs.length).toBe(kinks.length);
     for (const kk of kinks) expect(kk.fibers.some((f) => f.degrees >= 0.01)).toBe(true);
@@ -419,13 +422,13 @@ describe("plugin steel-curved : limon débillardé soudé (jalon 5b)", () => {
       expect(ids.has(id), id).toBe(true);
     }
     const breaks = m.compliance.results.filter(
-      (x) => x.ruleId === "FAB_DEBILLARDE_CASSURE_PENTE" && /^Naissance/.test(x.message),
+      (x) => x.ruleId === "FAB_DEBILLARDE_CASSURE_PENTE" && /^Naissance/.test(fr(x.message)),
     );
     expect(breaks).toHaveLength(2);
     for (const b of breaks) {
       expect(b.status).toBe("ok");
       expect(b.measured).toBeGreaterThan(0);
-      expect(b.message).toMatch(/fibre neutre .*face côté jour/);
+      expect(fr(b.message)).toMatch(/fibre neutre .*face côté jour/);
     }
     // Cassure analytique sur une fibre décalée de d (F de classe C1 à la naissance) :
     // atan(F'·r/(r − d)) − atan(F').
@@ -469,7 +472,7 @@ describe("plugin steel-curved : limon débillardé soudé (jalon 5b)", () => {
       curved.segments.map((s) => expect.closeTo(s.neutral1 - s.neutral0, 6)),
     );
     const f = c.segments[0]!.part.flat!;
-    expect(f.reference?.description).toMatch(/x décroissants/);
+    expect(fr(f.reference?.description)).toMatch(/x décroissants/);
   });
 });
 
@@ -478,7 +481,7 @@ describe("préconditions (CHALLENGE G7)", () => {
     for (const inner of [{ kind: "newel", size: 100 }, { kind: "sharp" }] satisfies InnerCorner[]) {
       const { m, r } = run(quarterArc({ inner }));
       expect(r.curved).toBeNull();
-      expect(m.errors.some((x) => /débillardé ⇒ jour en arc/.test(x))).toBe(true);
+      expect(frList(m.errors).some((x) => /débillardé ⇒ jour en arc/.test(x))).toBe(true);
       expect(m.parts.some((p) => p.id.startsWith("stringer-inner-curved"))).toBe(false);
       const jour = m.compliance.results.filter((x) => x.ruleId === "FAB_DEBILLARDE_JOUR");
       expect(jour.some((x) => x.status === "violation")).toBe(true);
@@ -490,7 +493,7 @@ describe("préconditions (CHALLENGE G7)", () => {
       quarterArc({ workshop: { metal: { plateRolling: { minInnerRadius: 300 } } } }),
     );
     expect(r.curved).toBeNull();
-    expect(m.errors.some((x) => /rayon mini de la rouleuse 300 mm/.test(x))).toBe(true);
+    expect(frList(m.errors).some((x) => /rayon mini de la rouleuse 300 mm/.test(x))).toBe(true);
     const radius = m.compliance.results.filter((x) => x.ruleId === "FAB_ROULAGE_RAYON_MIN");
     expect(radius.some((x) => x.status === "violation" && x.severity === "bloquant")).toBe(true);
   });
@@ -505,7 +508,7 @@ describe("préconditions (CHALLENGE G7)", () => {
     });
     const { m, r } = run(p);
     expect(r.curved).toBeNull();
-    expect(m.errors.some((x) => /sans tournant/.test(x))).toBe(true);
+    expect(frList(m.errors).some((x) => /sans tournant/.test(x))).toBe(true);
   });
 });
 
@@ -591,7 +594,7 @@ describe("propriétés du limon débillardé (générateur contraint)", () => {
         const { m, r } = run(project);
         if (m.layout.turns.length === 0 || m.stepping.nosings.length < 2) return;
         const c = r.curved;
-        expect(c, m.errors.join(" | ")).not.toBeNull();
+        expect(c, frList(m.errors).join(" | ")).not.toBeNull();
         if (!c) return;
         for (const k of m.stepping.nosings) {
           expect(Math.abs(c.profile.at(k.sigmaInner) - k.z)).toBeLessThan(0.05);
@@ -642,7 +645,7 @@ describe("propriétés du limon débillardé (générateur contraint)", () => {
               (x) =>
                 x.ruleId === "FAB_DEBILLARDE_JOINT" &&
                 x.status === "violation" &&
-                x.message.includes(`naissance σ = ${fmtMm(j.naissance!)}`),
+                fr(x.message).includes(`naissance σ = ${fmtMm(j.naissance!)}`),
             ),
           ).toBe(true);
         }

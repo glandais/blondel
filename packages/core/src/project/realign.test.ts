@@ -1,5 +1,7 @@
 import fc from "fast-check";
+import { translatorFor } from "@blondel/i18n";
 import { describe, expect, it } from "vitest";
+import { fr, frList } from "../i18n.test-helpers.js";
 import { curveLength } from "../geom2d/curve.js";
 import { computeLayout } from "../layout/layout.js";
 import { resolveRiserCount, resolveTargetGoing } from "../layout/resolve.js";
@@ -67,7 +69,7 @@ describe("realignFlightsAndOpening (A18 a, précisé le 2026-09-30)", () => {
         // Trémie rectangulaire recalculée sur le tracé recalé.
         const { x, y, sizeX, sizeY } = computeOpening(r.project, PRESET_OPENING_CLEARANCE)!;
         expect(r.project.site.opening).toEqual({ kind: "rect", x, y, sizeX, sizeY });
-        expect(r.notes.join(" ")).toMatch(
+        expect(frList(r.notes).join(" ")).toMatch(
           /Dernière volée recalée.*position des tournants conservée/,
         );
         const m = buildModel(r.project);
@@ -140,14 +142,18 @@ describe("realignFlightsAndOpening (A18 a, précisé le 2026-09-30)", () => {
     const withPolygon = { ...p, site: { ...p.site, opening: polygon } } as Project;
     const r = realignFlightsAndOpening(edited(withPolygon, { floorToFloor: 2900 }));
     expect(r.project.site.opening).toBe(withPolygon.site.opening);
-    expect(r.notes.join(" ")).toMatch(/Trémie polygonale conservée/);
+    expect(frList(r.notes).join(" ")).toMatch(/Trémie polygonale conservée/);
   });
 
   it("quart tournant avec palier : partie droite hors d'un nombre entier de girons → refus expliqué, puis recalage après correction", () => {
     const before = edited(createProject("quarter-landing"), { floorToFloor: 2900 });
     expect(() => realignFlightsAndOpening(before)).toThrow(/nombre entier de girons/);
-    const reason = realignBlocker(before)!;
+    const reason = fr(realignBlocker(before)!);
     const m = /saisir ([\d\s\u202f\u00a0]+) mm pour la volée 1/.exec(reason);
+    // Anglais : même longueur proposée, séparateur de milliers anglais.
+    expect(translatorFor("en").t(realignBlocker(before)!)).toMatch(
+      /^Realignment impossible .*; enter [\d,]+ mm for flight 1 \(\d+ goings?\) then realign\.$/,
+    );
     expect(m).not.toBeNull();
     const suggested = Number(m![1]!.replace(/[\s\u202f\u00a0]/g, ""));
     const fixed: Project = {
@@ -196,7 +202,7 @@ describe("realignFlightsAndOpening (A18 a, précisé le 2026-09-30)", () => {
     expect(r.stair.layout.legs[0]).toEqual({ length: E });
     expectOnTarget(r);
     expect(buildModel(r).errors).toEqual([]);
-    const reason = realignBlocker(withFirst(E + 30))!;
+    const reason = fr(realignBlocker(withFirst(E + 30))!);
     expect(reason).toMatch(new RegExp(`saisir ${E.toLocaleString("fr-FR")} mm pour la volée 1`));
   });
 
@@ -213,7 +219,7 @@ describe("realignFlightsAndOpening (A18 a, précisé le 2026-09-30)", () => {
     const p = createProject("quarter-left");
     const r = realignFlightsAndOpening(p);
     expect(r.project).toBe(p);
-    expect(r.notes).toContain("Volées et trémie déjà calées.");
+    expect(frList(r.notes)).toContain("Volées et trémie déjà calées.");
     expect(realignBlocker(p)).toBeNull();
   });
 
@@ -231,7 +237,7 @@ describe("realignFlightsAndOpening (A18 a, précisé le 2026-09-30)", () => {
     const { opening: _o, ...site } = p.site;
     const r = realignFlightsAndOpening(edited({ ...p, site }, { floorToFloor: 2900 }));
     expect(r.project.site.opening).toBeUndefined();
-    expect(r.notes.join(" ")).toContain("aucune trémie ajoutée");
+    expect(frList(r.notes).join(" ")).toContain("aucune trémie ajoutée");
   });
 
   it("jour en arc et E > 1 200 : la ligne de foulée mesure (n − 1)·g", () => {
@@ -285,10 +291,10 @@ describe("realignFlightsAndOpening (A18 a, précisé le 2026-09-30)", () => {
   it("refus explicites (bouton désactivé avec la raison du cœur) : hélicoïdal, H trop faible, volée devenue trop courte", () => {
     const helical = createProject("helical");
     expect(() => realignFlightsAndOpening(helical)).toThrow(RangeError);
-    expect(realignBlocker(helical)).toMatch(/hélicoïdal/);
+    expect(fr(realignBlocker(helical)!)).toMatch(/hélicoïdal/);
     const low = edited(createProject("half-turn"), { floorToFloor: 1200 });
     expect(() => realignFlightsAndOpening(low)).toThrow(RangeError);
-    expect(realignBlocker(low)).toMatch(
+    expect(fr(realignBlocker(low)!)).toMatch(
       /il manque \d+ mm de ligne de foulée après le dernier tournant/,
     );
     // E élargi : la première volée saisie ne reçoit plus le tournant (message du tracé).
@@ -304,7 +310,7 @@ describe("realignFlightsAndOpening (A18 a, précisé le 2026-09-30)", () => {
         },
       },
     };
-    expect(realignBlocker(wide)).toMatch(/volée 1 est trop courte/);
+    expect(fr(realignBlocker(wide)!)).toMatch(/volée 1 est trop courte/);
   });
 
   it("propriété : recalage possible → modèle sans erreur au giron cible ; sinon raison lisible", () => {
@@ -318,7 +324,7 @@ describe("realignFlightsAndOpening (A18 a, précisé le 2026-09-30)", () => {
           const p = edited(createProject(id), { floorToFloor: h, width: e, slab });
           const reason = realignBlocker(p);
           if (reason !== null) {
-            expect(reason.length).toBeGreaterThan(10);
+            expect(fr(reason).length).toBeGreaterThan(10);
             expect(() => realignFlightsAndOpening(p)).toThrow(RangeError);
             return;
           }

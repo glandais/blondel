@@ -27,6 +27,7 @@ import {
   type WorkshopProfileInput,
 } from "@blondel/core";
 import { formatFr } from "../format.js";
+import { tr, trOpt } from "../i18n.js";
 
 export const QUANTITY_VOLUME = "volume";
 /** Clé historique de la masse (kg), lue à défaut de `mass_kg`. */
@@ -188,7 +189,7 @@ export function cutListRows(
       p.mark,
       p.category,
       p.material,
-      p.section ?? null,
+      trOpt(p.section) ?? null,
       p.stock ? [p.stock.length, p.stock.width, p.stock.thickness] : null,
       p.quantities[QUANTITY_VOLUME] ?? null,
       partMassKg(p) ?? null,
@@ -207,10 +208,10 @@ export function cutListRows(
     const note = mass !== undefined ? noteOf(part.material) : undefined;
     rows.push({
       mark: part.mark,
-      name: part.name,
+      name: tr(part.name),
       category: part.category,
       material: MATERIAL_LABELS[part.material] ?? part.material,
-      section: part.section ?? "",
+      section: trOpt(part.section) ?? "",
       ...(s ? { length: s.length, width: s.width, thickness: s.thickness } : {}),
       quantity: count,
       ...(volume !== undefined ? { unitVolume: volume } : {}),

@@ -1,4 +1,6 @@
+import { msg, textMessage, type MessageKey } from "@blondel/i18n";
 import { z } from "zod";
+import { frList } from "../i18n.test-helpers.js";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { ComplianceReport, Part, RuleResult } from "../model/derived.js";
 import type { StructureKind } from "../model/plugins.js";
@@ -20,7 +22,6 @@ const result = (
   severity: RuleResult["severity"] = "avertissement",
 ): RuleResult => ({
   ruleId,
-  description: ruleId,
   status,
   severity,
   declaredSeverity: severity,
@@ -29,8 +30,11 @@ const result = (
   confidence: "faible",
   source: "essai",
   secondarySource: false,
-  message: ruleId,
+  message: textMessage(ruleId),
 });
+
+/** Libellé de plugin de test (clé absente des dictionnaires). */
+const testLabel = (name: string): MessageKey => `test.structure.${name}` as MessageKey;
 
 beforeEach(() => clearModelCache());
 
@@ -38,7 +42,7 @@ describe("pipeline — plugins de structure", () => {
   const seen: unknown[] = [];
   const probe: StructureKind<{ size: number; label: string }> = {
     kind: "test-probe",
-    label: "Sonde",
+    labelKey: testLabel("probe"),
     family: "bois",
     paramsSchema: z.object({ size: z.number().int().positive(), label: z.string() }),
     defaults: () => ({ size: 10, label: "défaut" }),
@@ -50,19 +54,19 @@ describe("pipeline — plugins de structure", () => {
         id: "probe-1",
         mark: "S1",
         category: "support",
-        name: "Sonde",
+        name: textMessage("Sonde"),
       };
       return {
-        parts: [{ ...tread, name: "Marche remplacée" }, extra],
+        parts: [{ ...tread, name: textMessage("Marche remplacée") }, extra],
         checks: [result("LIMON_EPAISSEUR_MIN_DTU", "violation"), result("FAB_PROBE", "ok")],
-        notes: ["note de la sonde"],
-        errors: ["erreur de la sonde"],
+        notes: [textMessage("note de la sonde")],
+        errors: [textMessage("erreur de la sonde")],
       };
     },
   };
   const failing: StructureKind<Record<string, never>> = {
     kind: "test-failing",
-    label: "Échec",
+    labelKey: testLabel("failing"),
     family: "bois",
     paramsSchema: z.object({}),
     defaults: () => ({}),
@@ -73,7 +77,7 @@ describe("pipeline — plugins de structure", () => {
 
   const nested: StructureKind<{ sub: { a: number; b: number } }> = {
     kind: "test-nested",
-    label: "Imbriqué",
+    labelKey: testLabel("nested"),
     family: "bois",
     // Sous-objet sans défaut dans le schéma : les défauts viennent de `defaults(ctx)`.
     paramsSchema: z.object({ sub: z.object({ a: z.number(), b: z.number() }) }),
@@ -99,11 +103,11 @@ describe("pipeline — plugins de structure", () => {
   it("défauts surchargés par le projet, pièces remplacées par id ou ajoutées, contrôles et messages fusionnés", () => {
     const m = buildModel(withKind(base, "test-probe", { label: "projet" }));
     expect(seen).toEqual([{ size: 10, label: "projet" }]);
-    expect(m.parts.find((p) => p.id === "tread-1")!.name).toBe("Marche remplacée");
+    expect(m.parts.find((p) => p.id === "tread-1")!.name).toEqual(textMessage("Marche remplacée"));
     expect(m.parts.filter((p) => p.id === "tread-1")).toHaveLength(1);
     expect(m.parts.at(-1)!.id).toBe("probe-1");
-    expect(m.notes).toContain("note de la sonde");
-    expect(m.errors).toContain("erreur de la sonde");
+    expect(m.notes).toContainEqual(textMessage("note de la sonde"));
+    expect(m.errors).toContainEqual(textMessage("erreur de la sonde"));
     const thick = m.compliance.results.filter((r) => r.ruleId === "LIMON_EPAISSEUR_MIN_DTU");
     expect(thick.map((r) => r.status)).toEqual(["violation"]);
     expect(m.compliance.results.at(-1)!.ruleId).toBe("FAB_PROBE");
@@ -112,14 +116,21 @@ describe("pipeline — plugins de structure", () => {
 
   it("paramètres refusés par le schéma du plugin : erreur, pièces de base", () => {
     const m = buildModel(withKind(base, "test-probe", { size: -1 }));
-    expect(m.errors.join(" ")).toMatch(/test-probe.*paramètres invalides.*size/);
+    expect(m.errors.map((e) => e.key)).toContain("pipeline.structureParamsInvalid");
+    expect(frList(m.errors).join(" ")).toMatch(/test-probe.*paramètres invalides.*size/);
     expect(seen).toEqual([]);
     expect(m.parts.some((p) => p.category === "tread")).toBe(true);
   });
 
   it("exception du plugin : erreur interne, aucune exception", () => {
     const m = buildModel(withKind(base, "test-failing"));
-    expect(m.errors.join(" ")).toMatch(/Structure : erreur interne \(boum\)/);
+    expect(m.errors).toContainEqual(
+      msg("pipeline.internalError", {
+        stage: msg("pipeline.stage.structure"),
+        detail: textMessage("boum"),
+      }),
+    );
+    expect(frList(m.errors).join(" ")).toMatch(/Structure : erreur interne \(boum\)/);
     expect(m.parts.length).toBeGreaterThan(0);
     // Relecture : les pièces de base de repli portent aussi les grandeurs normalisées.
     for (const p of m.parts) expect(p.quantities[QUANTITY_VOLUME_M3], p.id).toBeGreaterThan(0);

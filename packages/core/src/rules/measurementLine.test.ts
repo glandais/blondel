@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import { fr } from "../i18n.test-helpers.js";
 import type { Project } from "../model/project.js";
 import { buildModel } from "../pipeline/build.js";
 import { parseProjectText } from "../project/index.js";
@@ -73,7 +74,7 @@ describe("girons sur la ligne de mesure (SPEC X9)", () => {
     expect(violations.length).toBe(bad.length);
     for (const v of violations) {
       expect(v.location.kind).toBe("tread");
-      expect(v.message).toMatch(/G_TOL_BALANCEE/);
+      expect(fr(v.message)).toMatch(/G_TOL_BALANCEE/);
     }
   });
 
@@ -98,9 +99,9 @@ describe("girons sur la ligne de mesure (SPEC X9)", () => {
       (r) => r.ruleId === "LF_POSITION_DTU_ETROIT",
     );
     expect(ignored.filter((r) => r.status === "violation")).toEqual([]);
-    expect(ignored.some((r) => /G_TOL_BALANCEE/.test(r.message) && /ignorée/.test(r.message))).toBe(
-      true,
-    );
+    expect(
+      ignored.some((r) => /G_TOL_BALANCEE/.test(fr(r.message)) && /ignorée/.test(fr(r.message))),
+    ).toBe(true);
     // Assouplie en conseil : les constats suivent la sévérité effective de G_TOL_BALANCEE.
     const soft = lf(withOverride("conseil"));
     expect(soft.length).toBe(lf(base).length);
@@ -115,7 +116,7 @@ describe("girons sur la ligne de mesure (SPEC X9)", () => {
     const width = h.outerRadius - h.innerRadius;
     const out = goingsOnMeasurementLine(m.layout, m.stepping, width + 50);
     expect(out.ok).toBe(false);
-    if (!out.ok) expect(out.reason).toMatch(/hors de l'emmarchement/);
+    if (!out.ok) expect(fr(out.reason)).toMatch(/hors de l'emmarchement/);
     expect(goingsOnMeasurementLine(m.layout, m.stepping, width - 1).ok).toBe(true);
   });
 });

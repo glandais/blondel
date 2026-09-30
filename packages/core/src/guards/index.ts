@@ -32,12 +32,7 @@ export {
   slabClash,
 } from "./checks.js";
 export { GuardError } from "./errors.js";
-export {
-  jourWidth,
-  NARROW_JOUR_ERROR_PREFIX,
-  NARROW_JOUR_PREFIX,
-  narrowJourThreshold,
-} from "./jour.js";
+export { isNarrowJourNote, jourWidth, NARROW_JOUR_NOTE_KEYS, narrowJourThreshold } from "./jour.js";
 export { WALL_PARALLEL_DEG } from "./sides.js";
 export type {
   Foothold,

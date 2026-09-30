@@ -1,9 +1,13 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import { translatorFor } from "@blondel/i18n";
+import { frList } from "../i18n.test-helpers.js";
 import {
+  CONTEXT_LABEL_KEYS,
   DEDUCED_ONLY_CONTEXTS,
   SHAPE_CONTEXTS,
+  contextLabel,
   guardRailRegime,
   isRuleApplicable,
   resolveContexts,
@@ -30,6 +34,28 @@ describe("régime garde-corps", () => {
     expect(r).toMatchObject({ regime: "garde_corps_2024", assumed: true });
     expect(r.note).toBeDefined();
     expect(guardRailRegime("demain")).toMatchObject({ regime: "garde_corps_2024", assumed: true });
+  });
+});
+
+describe("libellés des contextes (ADR-0007)", () => {
+  it("une clé par contexte de rules.yaml, français identique à la table", () => {
+    expect(Object.keys(CONTEXT_LABEL_KEYS).sort()).toEqual([...RULE_CONTEXTS].sort());
+    const t = translatorFor("fr");
+    for (const [id, text] of Object.entries(RULE_TABLE.contextes))
+      expect(t.t(contextLabel(id))).toBe(text);
+  });
+  it("anglais traduit ; contexte inconnu rendu par son identifiant", () => {
+    const en = translatorFor("en");
+    expect(en.t(contextLabel("exterieur"))).toBe("External stair");
+    expect(en.t(contextLabel("tous"))).toBe("Any stair");
+    expect(en.t(contextLabel("contexte_inconnu"))).toBe("contexte_inconnu");
+  });
+  it("remarque de régime supposé : texte français historique, anglais traduit", () => {
+    const note = guardRailRegime(undefined).note!;
+    expect(frList([note])[0]).toBe(
+      "Date de dépôt PC/DP ou de marché absente : régime garde-corps NF P01-012:2024 supposé.",
+    );
+    expect(translatorFor("en").t(note)).toMatch(/^No planning application .* assumed\.$/);
   });
 });
 
@@ -135,7 +161,7 @@ describe("résolution des contextes", () => {
     ).toBe(true);
     const r = resolveContexts(makeProject({ contexts: ["bois_dtu", "helicoidal_fut"] }).compliance);
     expect(r.active).not.toContain("helicoidal_fut");
-    expect(r.notes.join(" ")).toMatch(/helicoidal_fut/);
+    expect(frList(r.notes).join(" ")).toMatch(/helicoidal_fut/);
   });
   it("déduit `limon_bois_encastre` de la structure wood-housed seulement (QUESTIONS D2)", () => {
     const compliance = makeProject({ contexts: ["erp_neuf"] }).compliance;
@@ -154,7 +180,7 @@ describe("résolution des contextes", () => {
       "wood-cut",
     );
     expect(declared.active).not.toContain("limon_bois_encastre");
-    expect(declared.notes.join(" ")).toMatch(/limon_bois_encastre/);
+    expect(frList(declared.notes).join(" ")).toMatch(/limon_bois_encastre/);
     expect(DEDUCED_ONLY_CONTEXTS.has("limon_bois_encastre")).toBe(true);
     // LIMON_ENTAILLE_MIN : bois_dtu ou limons bois encastrés.
     const entaille = getRule("LIMON_ENTAILLE_MIN");

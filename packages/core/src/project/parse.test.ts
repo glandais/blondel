@@ -1,6 +1,15 @@
+import { translatorFor } from "@blondel/i18n";
 import { describe, expect, it } from "vitest";
-import { PROJECT_SCHEMA_VERSION } from "../model/project.js";
-import { ProjectParseError } from "./errors.js";
+import { z } from "zod";
+import { fr } from "../i18n.test-helpers.js";
+import { PROJECT_SCHEMA_VERSION, ProjectSchema } from "../model/project.js";
+import {
+  ProjectParseError,
+  issuesFromZod,
+  projectErrorMap,
+  projectIssueMessage,
+  zodIssueMessage,
+} from "./errors.js";
 import { migrateProjectJson, PROJECT_MIGRATIONS, type Migration } from "./migrations.js";
 import { parseProject, parseProjectText } from "./parse.js";
 import { PRESET_NOSING } from "./presets.js";
@@ -85,12 +94,21 @@ describe("parseProject", () => {
     const err = parseError(() => parseProject(json));
     expect(err.message.startsWith("Projet invalide :")).toBe(true);
     const paths = err.issues.map((i) => i.path);
-    expect(paths).toContain("site.floorToFloor (hauteur à monter)");
-    expect(paths).toContain("site.upperSlabThickness (épaisseur du plancher haut)");
+    expect(paths).toContain("site.floorToFloor");
+    expect(paths).toContain("site.upperSlabThickness");
     expect(paths.some((p) => p.startsWith("stair.layout.legs[0].length"))).toBe(true);
+    const lines = err.issues.map((i) => fr(projectIssueMessage(i)));
+    expect(lines.some((l) => l.startsWith("site.floorToFloor (hauteur à monter) : "))).toBe(true);
+    expect(
+      lines.some((l) => l.startsWith("site.upperSlabThickness (épaisseur du plancher haut) : ")),
+    ).toBe(true);
     const floor = err.issues.find((i) => i.path.startsWith("site.floorToFloor"));
-    expect(floor?.message).toMatch(/trop petit|attendu/i);
+    expect(fr(floor?.message)).toMatch(/trop petit|attendu/i);
     expect(err.message).toContain("- site.floorToFloor (hauteur à monter) : ");
+    // Anglais : libellé du champ et message traduits.
+    expect(translatorFor("en").t(projectIssueMessage(floor!))).toBe(
+      "site.floorToFloor (total rise): Too small: number must be >0",
+    );
   });
 
   it("explique une valeur de discriminant inconnue", () => {
@@ -98,7 +116,8 @@ describe("parseProject", () => {
     json.site["opening"] = { kind: "circle", radius: 3 };
     const err = parseError(() => parseProject(json));
     const issue = err.issues.find((i) => i.path.startsWith("site.opening"));
-    expect(issue?.message).toBe('valeur de « kind » inconnue (attendu : "rect", "polygon")');
+    expect(fr(issue?.message)).toBe('valeur de « kind » inconnue (attendu : "rect", "polygon")');
+    expect(issue?.message.key).toBe("project.issue.unknownDiscriminator");
   });
 
   it("refuse une racine qui n'est pas un objet", () => {
@@ -237,5 +256,88 @@ describe("parseProject — isolation", () => {
     (a.stair.structure.params as Record<string, unknown>)["x"] = 1;
     expect(b.stair.structure.params).toEqual({});
     expect(parseProject(minimal()).stair.structure.params).toEqual({});
+  });
+});
+
+/** Carte d'erreurs d'avant l'internationalisation : locale française de zod + unions discriminées. */
+const legacyFrenchMap: z.core.$ZodErrorMap = (issue) => {
+  if (
+    issue.code === "invalid_union" &&
+    "discriminator" in issue &&
+    typeof issue.discriminator === "string"
+  ) {
+    const options = Array.isArray(issue.options)
+      ? issue.options
+          .filter((o) => o !== undefined && o !== null)
+          .map((o) => JSON.stringify(o))
+          .join(", ")
+      : "";
+    return `valeur de « ${issue.discriminator} » inconnue (attendu : ${options})`;
+  }
+  return z.locales.fr().localeError(issue);
+};
+
+describe("messages des issues zod (ADR-0007)", () => {
+  const bads: unknown[] = [
+    { ...minimal(), site: { floorToFloor: -5, upperSlabThickness: 200.5 } },
+    { ...minimal(), site: { floorToFloor: "haut", upperSlabThickness: null } },
+    { ...minimal(), site: { floorToFloor: 2700, upperSlabThickness: 200, opening: { kind: "x" } } },
+    { ...minimal(), stair: { ...minimal().stair, layout: { width: 0, legs: [], turns: [{}] } } },
+    { ...minimal(), stair: { ...minimal().stair, treads: { material: "papier" } } },
+    { ...minimal(), appearance: { paintColor: "rouge" } },
+    { ...minimal(), name: "x".repeat(5000), compliance: { contexts: "logement" } },
+    {
+      ...minimal(),
+      site: {
+        floorToFloor: 2700,
+        upperSlabThickness: 200,
+        underlay: {
+          image: { dataUrl: "pas une image", widthPx: 1.5, heightPx: 0, mmPerPx: 1, placement: {} },
+          opacity: 2,
+        },
+      },
+    },
+  ];
+
+  it("texte français identique à la locale française de zod (carte d'avant)", () => {
+    let compared = 0;
+    for (const bad of bads) {
+      const before = ProjectSchema.safeParse(bad, { error: legacyFrenchMap });
+      const after = ProjectSchema.safeParse(bad, { error: projectErrorMap, reportInput: true });
+      expect(before.success).toBe(false);
+      expect(after.success).toBe(false);
+      if (before.success || after.success) continue;
+      expect(after.error.issues.map((i) => i.message)).toEqual(
+        before.error.issues.map((i) => i.message),
+      );
+      expect(issuesFromZod(after.error).map((i) => fr(i.message))).toEqual(
+        before.error.issues.map((i) => i.message),
+      );
+      compared += before.error.issues.length;
+    }
+    expect(compared).toBeGreaterThan(10);
+  });
+
+  it("messages propres aux schémas retrouvés par leur clé", () => {
+    const r = ProjectSchema.safeParse(bads[5], { error: projectErrorMap, reportInput: true });
+    expect(r.success).toBe(false);
+    if (r.success) return;
+    const keys = r.error.issues.map((i) => zodIssueMessage(i).key);
+    expect(keys).toContain("project.issue.hexColor");
+    const u = ProjectSchema.safeParse(bads[7], { error: projectErrorMap, reportInput: true });
+    expect(u.success).toBe(false);
+    if (u.success) return;
+    expect(u.error.issues.map((i) => zodIssueMessage(i).key)).toContain(
+      "site.underlay.imageDataUrl",
+    );
+  });
+
+  it("anglais sans reste de français", () => {
+    const err = parseError(() => parseProject(bads[1]));
+    const en = err.issues.map((i) => translatorFor("en").t(projectIssueMessage(i)));
+    expect(en.length).toBeGreaterThan(0);
+    for (const line of en) expect(line).not.toMatch(/attendu|reçu|chaîne|nombre|invalide/);
+    expect(en.join("\n")).toContain("Invalid input: expected number, received string");
+    expect(translatorFor("en").t(err.msg)).toBe("Invalid project:");
   });
 });

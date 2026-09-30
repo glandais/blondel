@@ -32,6 +32,7 @@ import {
   resolveWalklineOffset,
 } from "./resolve.js";
 import { makeProject } from "./test-helpers.js";
+import { fr, frList } from "../i18n.test-helpers.js";
 
 const EPS = 1e-6;
 const expectPoint = (p: Vec2, x: number, y: number, tol = EPS): void => {
@@ -655,7 +656,7 @@ describe("computeLayout — emprises dégénérées signalées (D3)", () => {
     const p = makeProject({ width: 900, legs: [2400, 1800, 2400] });
     const layout = computeLayout(p);
     expect(layout.errors).toHaveLength(1);
-    expect(layout.errors![0]).toMatch(/ne laisse aucun jour/);
+    expect(fr(layout.errors![0])).toMatch(/ne laisse aucun jour/);
     // Jour de 100 mm : rien à signaler.
     expect(computeLayout(makeProject({ width: 900, legs: [2400, 1900, 2400] })).errors).toBe(
       undefined,
@@ -681,7 +682,7 @@ describe("computeLayout — emprises dégénérées signalées (D3)", () => {
     const layout = computeLayout(
       makeProject({ width: 900, legs: [3000, 2000, 2000, 3000], floorToFloor: 4000 }),
     );
-    const overlaps = (layout.errors ?? []).filter((e) => /se superposent/.test(e));
+    const overlaps = frList(layout.errors).filter((e) => /se superposent/.test(e));
     expect(overlaps).toEqual([expect.stringMatching(/volée 1 et volée 4.*900 × 900 mm/)]);
     // Trois tournants sans superposition (volée 4 courte) : rien.
     const ok = computeLayout(

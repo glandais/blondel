@@ -21,6 +21,7 @@ export {
   REJECTION_LABELS,
   TYPOLOGY_IDS,
   TYPOLOGY_LABELS,
+  TURN_POSITION_LABELS,
   type AssistantInput,
   type AssistantLimits,
   type AssistantPreferences,

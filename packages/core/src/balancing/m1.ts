@@ -28,6 +28,7 @@
  *
  * Paramètre optionnel `cornerSigma` (σ_A imposé, sinon déduit du tracé).
  */
+import { msg, type Message } from "@blondel/i18n";
 import type { BalancingInput, BalancingSolution, BalancingStrategy } from "../model/plugins.js";
 import type { Mm } from "../model/primitives.js";
 import { GEOM_EPS } from "../geom2d/tolerance.js";
@@ -41,10 +42,10 @@ export function vProfileCollets(
   going: Mm,
   cornerRatio: number,
   ends: readonly [EndCondition, EndCondition] = ["tangent", "tangent"],
-): Mm[] | { reason: string } {
+): Mm[] | { reason: Message } {
   const N = count;
   if (!(N >= 1) || !(length > 0) || !(going > 0)) {
-    return { reason: "zone M1 dégénérée" };
+    return { reason: msg("balancing.m1.fail.degenerateZone") };
   }
   const alpha = Math.min(N, Math.max(1, (N + 1) * cornerRatio));
   const w = Array.from({ length: N }, (_, i) => {
@@ -59,18 +60,18 @@ export function vProfileCollets(
   const min = Math.min(...c);
   if (!(min > 0)) {
     return {
-      reason: `collet nul ou négatif (${min.toFixed(1)} mm) : jour trop court pour ${N} marches`,
+      reason: msg("balancing.m1.fail.nonPositiveCollet", { collet: min.toFixed(1), count: N }),
     };
   }
   return c;
 }
 
-function collets(input: BalancingInput): Mm[] | { reason: string } {
+function collets(input: BalancingInput): Mm[] | { reason: Message } {
   const { a, b, sigmaA, sigmaB } = zoneEnds(input);
   const L = sigmaB - sigmaA;
   // Longueur de jour indiscernable de 0 (nez fixes passant tous deux par un angle vif du jour de
   // développement) : le signe de L ne tient qu'au bruit d'arrondi, on refuse la zone.
-  if (!(L > GEOM_EPS)) return { reason: `longueur de jour nulle entre les nez ${a} et ${b}` };
+  if (!(L > GEOM_EPS)) return { reason: msg("balancing.fail.zeroWellLength", { a, b }) };
   const ratio = Math.min(1, Math.max(0, (cornerSigma(input) - sigmaA) / L));
   return vProfileCollets(b - a, L, input.going, ratio, input.zone.ends);
 }
@@ -95,7 +96,7 @@ function estimateMinCollet(input: BalancingInput): Mm {
 
 export const M1_STRATEGY: BalancingStrategy = {
   id: "M1",
-  label: "Progression arithmétique des collets (M1)",
+  labelKey: "balancing.m1.label",
   solve,
   estimateMinCollet,
 };

@@ -12,6 +12,7 @@ import {
   type Model,
   type Part,
 } from "@blondel/core";
+import { tr } from "../i18n/fr.js";
 
 export interface SegmentRow {
   readonly part: Part;
@@ -66,7 +67,7 @@ function escapeRegExp(s: string): string {
 /** Traits de joint de `p` dont le libellé nomme le repère `mark` (mot entier : LD1 ≠ LD10). */
 function namingLines(p: Part, mark: string): FlatLine[] {
   const re = new RegExp(`(^|[^\\p{L}\\p{N}])${escapeRegExp(mark)}($|[^\\p{L}\\p{N}])`, "u");
-  return jointLines(p).filter((l) => l.label !== undefined && re.test(l.label));
+  return jointLines(p).filter((l) => l.label !== undefined && re.test(tr(l.label)));
 }
 
 /**
@@ -125,7 +126,7 @@ export function segmentedParts(model: Pick<Model, "parts">): SegmentedPart[] {
         from,
         to,
         weldMm: welded(from) || welded(to) ? length : null,
-        label: line?.label ?? "Joint",
+        label: line?.label !== undefined ? tr(line.label) : "Joint",
       });
     }
     out.push({ base, segments, joints });

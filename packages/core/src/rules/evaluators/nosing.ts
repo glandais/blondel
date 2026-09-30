@@ -4,11 +4,11 @@
  * Hypothèse : le débord de nez saisi (`treads.nosing`) est aussi le recouvrement horizontal entre
  * deux marches successives, avec ou sans contremarche.
  */
+import { dec, msg } from "@blondel/i18n";
 import {
   STAIR,
   checkItems,
   checkValue,
-  fmt,
   notApplicable,
   notEvaluated,
   riseLocation,
@@ -23,9 +23,8 @@ function spec(ctx: EvaluatorContext) {
 /** Débord de nez sur la contremarche ; sans objet sans contremarche pleine. */
 const nosingOverhang: RuleEvaluator = (ctx) => {
   const t = spec(ctx);
-  if (t.risers !== "full")
-    return [notApplicable("Sans objet : pas de contremarche pleine (voir recouvrement).")];
-  const f = checkValue(ctx, t.nosing, "Débord du nez de marche");
+  if (t.risers !== "full") return [notApplicable(msg("compliance.nosing.noFullRiser"))];
+  const f = checkValue(ctx, t.nosing, msg("compliance.nosing.overhang"));
   if (
     ctx.rule.id === "DEBORD_NEZ_LOGEMENT" &&
     ctx.rule.recommande !== null &&
@@ -34,7 +33,10 @@ const nosingOverhang: RuleEvaluator = (ctx) => {
     return [
       {
         ...f,
-        message: `${f.message} Au-delà de ${fmt(ctx.rule.recommande)} mm, le nez doit être arrondi.`,
+        message: msg("rules.DEBORD_NEZ_LOGEMENT.rounded", {
+          message: f.message,
+          recommended: dec(ctx.rule.recommande),
+        }),
       },
     ];
   }
@@ -44,8 +46,8 @@ const nosingOverhang: RuleEvaluator = (ctx) => {
 /** ERP : recouvrement ≥ min sans contremarche. */
 const overlapWithoutRiser: RuleEvaluator = (ctx) => {
   const t = spec(ctx);
-  if (t.risers === "full") return [notApplicable("Sans objet : contremarches pleines.")];
-  return [checkValue(ctx, t.nosing, "Recouvrement entre marches (sans contremarche)")];
+  if (t.risers === "full") return [notApplicable(msg("compliance.nosing.fullRisers"))];
+  return [checkValue(ctx, t.nosing, msg("rules.RECOUVREMENT_ERP_SANS_CM.label"))];
 };
 
 /** Industriel : recouvrement ≥ 50 sans contremarche (formule), ≥ min de la règle avec. */
@@ -56,7 +58,11 @@ const overlapIndustrial: RuleEvaluator = (ctx) => {
     checkValue(
       ctx,
       t.nosing,
-      `Recouvrement entre marches (${t.risers === "full" ? "avec" : "sans"} contremarche)`,
+      msg(
+        t.risers === "full"
+          ? "rules.RECOUVREMENT_INDUSTRIEL.withRiser"
+          : "rules.RECOUVREMENT_INDUSTRIEL.withoutRiser",
+      ),
       {
         bounds: { min, max: ctx.rule.max },
       },
@@ -68,28 +74,29 @@ const overlapIndustrial: RuleEvaluator = (ctx) => {
 const extremeRisers: RuleEvaluator = (ctx) => {
   const t = spec(ctx);
   const rises = ctx.stepping.rises;
-  if (rises.length === 0) return [notEvaluated("Aucune hauteur de marche dans le découpage.")];
+  if (rises.length === 0) return [notEvaluated(msg("rules.CONTREMARCHE_EXTREMES.noRises"))];
   const ends = rises.length === 1 ? [0] : [0, rises.length - 1];
   if (t.risers === "open") {
-    return [
-      notEvaluated(
-        "Contremarches ajourées : hauteur pleine des contremarches extrêmes non connue.",
-      ),
-    ];
+    return [notEvaluated(msg("rules.CONTREMARCHE_EXTREMES.open"))];
   }
   const out: Finding[] = ends.map((i) => {
     const h = t.risers === "full" ? rises[i]! : 0;
     const f = checkValue(
       ctx,
       h,
-      `Contremarche ${i === 0 ? "de la 1re" : "de la dernière"} marche`,
+      msg(i === 0 ? "rules.CONTREMARCHE_EXTREMES.first" : "rules.CONTREMARCHE_EXTREMES.last"),
       {
         location: riseLocation(i),
       },
     );
-    return f.status === "ok" ? { ...f, message: `${f.message} Contraste visuel non vérifié.` } : f;
+    return f.status === "ok"
+      ? {
+          ...f,
+          message: msg("rules.CONTREMARCHE_EXTREMES.contrastNotChecked", { message: f.message }),
+        }
+      : f;
   });
-  return out.length > 0 ? out : [notApplicable("Sans objet.")];
+  return out.length > 0 ? out : [notApplicable(msg("compliance.notApplicable"))];
 };
 
 /**
@@ -99,17 +106,16 @@ const extremeRisers: RuleEvaluator = (ctx) => {
  */
 const gapBetweenTreads: RuleEvaluator = (ctx) => {
   const t = spec(ctx);
-  if (t.risers === "full") return [notApplicable("Sans objet : contremarches pleines.")];
-  if (t.risers === "open")
-    return [notEvaluated("Contremarches ajourées : vide dépendant du remplissage, non évalué.")];
+  if (t.risers === "full") return [notApplicable(msg("compliance.nosing.fullRisers"))];
+  if (t.risers === "open") return [notEvaluated(msg("rules.VIDE_ENTRE_MARCHES.open"))];
   return checkItems(
     ctx,
     ctx.stepping.rises.slice(1).map((h, k) => ({
       value: h - t.thickness,
       location: riseLocation(k + 1),
-      label: `entre les marches ${k + 1} et ${k + 2}`,
+      label: msg("rules.VIDE_ENTRE_MARCHES.item", { lower: k + 1, upper: k + 2 }),
     })),
-    "Vide vertical entre marches",
+    msg("rules.VIDE_ENTRE_MARCHES.quantity"),
     { bounds: { min: ctx.rule.min, max: ctx.rule.max, strictMax: true } },
   );
 };
@@ -132,15 +138,14 @@ export const MISC_EVALUATORS: Readonly<Record<string, RuleEvaluator>> = {
           {
             status: "violation",
             location: STAIR,
-            message:
-              "Échelle de meunier hors domaine du NF DTU 36.3 : le contexte bois_dtu ne peut pas être revendiqué.",
+            message: msg("rules.ECHELLE_MEUNIER_HORS_DTU.violation"),
           },
         ]
       : [
           {
             status: "ok",
             location: STAIR,
-            message: "Échelle de meunier : analogies échelle à marches appliquées.",
+            message: msg("rules.ECHELLE_MEUNIER_HORS_DTU.ok"),
           },
         ],
 };

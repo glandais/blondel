@@ -8,6 +8,7 @@ import { bbox, type Part, type Vec2 } from "@blondel/core";
 import { MATERIAL_LABELS } from "../csv/cutlist.js";
 import { flatEngravingPoint, partLineAnnotation, referenceText } from "../dxf/part.js";
 import { formatFr } from "../format.js";
+import { tr } from "../i18n.js";
 import { polygonPath } from "../path.js";
 import { dimensionGeometry, type Dimension } from "../plan/drawing.js";
 import {
@@ -168,7 +169,7 @@ export function renderFlatPatternSvg(part: Part, options: FlatPatternSvgOptions 
   }
   const infoY = minY - 1.2 * th;
   const t = formatFr(flat.thickness, { decimals: 1, trimZeros: true, thousands: "" });
-  const info = `${part.mark} — ${part.name} — ${MATERIAL_LABELS[part.material] ?? part.material} — épaisseur ${t} mm${part.section !== undefined ? ` — ${part.section}` : ""}`;
+  const info = `${part.mark} — ${tr(part.name)} — ${MATERIAL_LABELS[part.material] ?? part.material} — épaisseur ${t} mm${part.section !== undefined ? ` — ${tr(part.section)}` : ""}`;
   const ref = referenceText(flat);
   const infoText = ref !== undefined ? `${info} — ${ref}` : info;
   // Ligne d'information repliée à la largeur du dessin (au moins INFO_MIN_CHARS caractères) :
@@ -228,7 +229,7 @@ export function renderFlatPatternSvg(part: Part, options: FlatPatternSvgOptions 
             fill: theme.text,
             "data-kind": "text",
           },
-          l.label,
+          tr(l.label),
         ),
       );
       continue;

@@ -9,6 +9,7 @@
  * Domaine publié (FCBA) : crémaillères **par paire**, non fixées au mur, escalier **droit**,
  * hauteur d'étage **2,70 m**, pente **38°**.
  */
+import { MessageError, msg } from "@blondel/i18n";
 import { numberCell, ruleParam, ruleTable, getRule, type RuleDef } from "../rules/table.js";
 
 export const CREMAILLERE_RULE_ID = "CREMAILLERE_REGLE_MOYENS";
@@ -33,7 +34,8 @@ export function parseFcbaTable(rule: RuleDef): FcbaTable {
       thickness: numberCell(r, "epaisseur"),
       residual: numberCell(r, "distance"),
     }));
-    if (pairs.length === 0) throw new Error(`Tableau FCBA : aucune valeur pour ${cls}.`);
+    if (pairs.length === 0)
+      throw new MessageError(msg("structure.woodCut.fcba.tableEmpty", { cls }));
     rows[cls] = [...pairs].sort((a, b) => a.thickness - b.thickness);
   }
   return {

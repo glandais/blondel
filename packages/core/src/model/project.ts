@@ -3,6 +3,7 @@
  * C'est la **seule** entrée du pipeline : tout le reste est dérivé (fonctions pures).
  * Voir ADR-0002 (modèle de données) et ADR-0003 (unités).
  */
+import { msg, translatorFor } from "@blondel/i18n";
 import { z } from "zod";
 import { GuardsSpecSchema } from "../guards/spec.js";
 import { UnderlaySchema } from "../site/schema.js";
@@ -181,10 +182,19 @@ const HelicalLayoutInputSchema = z
   })
   .superRefine((v, ctx) => {
     if (!(v.outerRadius > v.core.radius)) {
+      // Texte français pour zod (`issue.message`), `Message` dans `params` (ADR-0007, lu par
+      // `zodIssueMessage` de `project/errors.ts`).
+      const message = msg(
+        v.core.kind === "column"
+          ? "model.helical.outerRadiusTooSmall.column"
+          : "model.helical.outerRadiusTooSmall.well",
+        { outer: String(v.outerRadius), core: String(v.core.radius) },
+      );
       ctx.addIssue({
         code: "custom",
         path: ["outerRadius"],
-        message: `le rayon extérieur (${v.outerRadius} mm) doit dépasser le rayon ${v.core.kind === "column" ? "du fût" : "du jour"} (${v.core.radius} mm)`,
+        message: translatorFor("fr").t(message),
+        params: { message },
       });
     }
   });

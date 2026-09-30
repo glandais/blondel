@@ -18,6 +18,7 @@
  * cubique f = m(t − 2t² + t³) + S(3t² − 2t³) + m(t³ − t²), quintique
  * f = m·t + (S − m)(10t³ − 15t⁴ + 6t⁵).
  */
+import { MessageError, msg } from "@blondel/i18n";
 
 export type EndCondition = "tangent" | "free";
 export type M3Variant = "cubic" | "quintic";
@@ -78,7 +79,8 @@ function solveLinear(a: number[][], b: number[]): number[] {
   for (let col = 0; col < n; col++) {
     let piv = col;
     for (let r = col + 1; r < n; r++) if (Math.abs(m[r]![col]!) > Math.abs(m[piv]![col]!)) piv = r;
-    if (Math.abs(m[piv]![col]!) < 1e-12) throw new Error("profil M3 : système singulier");
+    if (Math.abs(m[piv]![col]!) < 1e-12)
+      throw new MessageError(msg("balancing.error.singularSystem"));
     [m[col], m[piv]] = [m[piv]!, m[col]!];
     for (let r = 0; r < n; r++) {
       if (r === col) continue;
@@ -233,7 +235,7 @@ export interface SplineProfile {
 export function buildSpline(spec: SplineSpec): SplineProfile {
   const { variant, knots } = spec;
   const p = knots.length - 1;
-  if (p < 1) throw new Error("spline M3 : au moins deux nœuds");
+  if (p < 1) throw new MessageError(msg("balancing.error.splineTooFewKnots"));
   const degree = variant === "cubic" ? 3 : 5;
   if (p === 1 && spec.start.kind === "free" && spec.end.kind === "free") {
     // Deux nœuds libres : droite (seule courbe d'énergie nulle retenue, comme `buildProfile`).

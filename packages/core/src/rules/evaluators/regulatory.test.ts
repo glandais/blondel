@@ -5,7 +5,9 @@
  */
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import { translatorFor } from "@blondel/i18n";
 import { describe, expect, it } from "vitest";
+import { fr } from "../../i18n.test-helpers.js";
 import { computeLayout } from "../../layout/layout.js";
 import type { RuleResult } from "../../model/derived.js";
 import { ProjectSchema, type Project, type ProjectInput } from "../../model/project.js";
@@ -71,13 +73,13 @@ describe("largeur de passage : mains courantes saillantes de plus de 100 mm", ()
     // Saillie de 92 mm (dégagement 50) : non déduite, largeur = E.
     const ok = evaluate(project(walled(50)), "LARGEUR_MIN_LOGEMENT");
     expect(ok[0]).toMatchObject({ status: "ok", measured: 900 });
-    expect(ok[0]!.message).toMatch(/aucune main courante saillante de plus de 100 mm/);
+    expect(fr(ok[0]!.message)).toMatch(/aucune main courante saillante de plus de 100 mm/);
   });
 
   it("LARGEUR_MIN_LOGEMENT sans garde-corps décrits : emmarchement, sous réserve", () => {
     const r = evaluate(project(undefined), "LARGEUR_MIN_LOGEMENT");
     expect(r[0]).toMatchObject({ status: "ok", measured: 900 });
-    expect(r[0]!.message).toMatch(/Sous réserve/);
+    expect(fr(r[0]!.message)).toMatch(/Sous réserve/);
   });
 
   it("LARGEUR_UP_ERP : évaluée sur la largeur de passage (non évaluée avant)", () => {
@@ -86,7 +88,8 @@ describe("largeur de passage : mains courantes saillantes de plus de 100 mm", ()
     expect(narrow[0]!.measured).toBeCloseTo(1000 - 2 * 122, 6);
     const wide = evaluate(project(walled(50), { width: 1400, contexts: ERP }), "LARGEUR_UP_ERP");
     expect(wide[0]).toMatchObject({ status: "ok", measured: 1400 });
-    expect(wide[0]!.message).toMatch(/2 unité\(s\) de passage/);
+    expect(fr(wide[0]!.message)).toMatch(/2 unité\(s\) de passage/);
+    expect(translatorFor("en").t(wide[0]!.message)).toMatch(/Width of 2 exit units \(UP\)/);
     // Sans garde-corps : majorant E, comme avant.
     const bare = evaluate(project(undefined, { width: 1400, contexts: ERP }), "LARGEUR_UP_ERP");
     expect(bare[0]!.status).toBe("non-evaluee");
@@ -146,18 +149,18 @@ describe("TREMIE_LONGUEUR (dérivation géométrique, volée droite)", () => {
       (x) => x.ruleId === "TREMIE_LONGUEUR",
     )!;
     expect(turn.status).toBe("non-evaluee");
-    expect(turn.message).toMatch(/Tournant/);
+    expect(fr(turn.message)).toMatch(/Tournant/);
     const helical = buildModel(load("j5a-helicoidal")).compliance.results.find(
       (x) => x.ruleId === "TREMIE_LONGUEUR",
     )!;
-    expect(helical.message).toMatch(/Hélicoïdal/);
+    expect(fr(helical.message)).toMatch(/Hélicoïdal/);
     const p = load("straight");
     const { opening: _o, ...site } = p.site;
     const none = buildModel({ ...p, site }).compliance.results.find(
       (x) => x.ruleId === "TREMIE_LONGUEUR",
     )!;
     expect(none).toMatchObject({ status: "ok" });
-    expect(none.message).toMatch(/pas de trémie/);
+    expect(fr(none.message)).toMatch(/pas de trémie/);
   });
 });
 
@@ -185,13 +188,13 @@ describe("règles évaluées par une structure (limons et crémaillères bois)",
         none.map((r) => r.status),
         id,
       ).toEqual(["non-evaluee"]);
-      expect(none[0]!.message).toMatch(/Aucune structure choisie/);
+      expect(fr(none[0]!.message)).toMatch(/Aucune structure choisie/);
       const steel = result(load("demo-straight-loft"), id);
       expect(
         steel.map((r) => r.status),
         id,
       ).toEqual(["ok"]);
-      expect(steel[0]!.message).toMatch(/Sans objet/);
+      expect(fr(steel[0]!.message)).toMatch(/Sans objet/);
     }
   });
 
@@ -200,7 +203,7 @@ describe("règles évaluées par une structure (limons et crémaillères bois)",
     for (const id of ["LIMON_EPAISSEUR_MIN_DTU", "LIMON_ENTAILLE_MIN"]) {
       const rs = m.compliance.results.filter((r) => r.ruleId === id);
       expect(rs.length, id).toBeGreaterThan(0);
-      for (const r of rs) expect(r.message).not.toMatch(/Contrôle porté par la structure/);
+      for (const r of rs) expect(fr(r.message)).not.toMatch(/Contrôle porté par la structure/);
     }
     const entaille = m.compliance.results.find((r) => r.ruleId === "LIMON_ENTAILLE_MIN")!;
     expect(entaille.source).toMatch(/NF EN 16481/);
@@ -219,16 +222,18 @@ describe("règles évaluées par une structure (limons et crémaillères bois)",
 describe("motifs de non-évaluation", () => {
   it("NEZ_CONTRASTE, BANDE_EVEIL (ERP neuf) : donnée de finition absente", () => {
     const p = project(undefined, { contexts: ERP });
-    expect(evaluate(p, "NEZ_CONTRASTE")[0]!.message).toMatch(/finition/);
-    expect(evaluate(p, "BANDE_EVEIL")[0]!.message).toMatch(/palier haut/);
+    expect(fr(evaluate(p, "NEZ_CONTRASTE")[0]!.message)).toMatch(/finition/);
+    expect(fr(evaluate(p, "BANDE_EVEIL")[0]!.message)).toMatch(/palier haut/);
   });
 
   it("HAUTEUR_ETAGE_TOLERANCE : tolérance admissible calculée (± 7 mm, puis ± 5 · H^(1/3))", () => {
-    expect(evaluate(project(undefined), "HAUTEUR_ETAGE_TOLERANCE")[0]!.message).toMatch(/± 7 mm/);
+    expect(fr(evaluate(project(undefined), "HAUTEUR_ETAGE_TOLERANCE")[0]!.message)).toMatch(
+      /± 7 mm/,
+    );
     const tall = evaluate(project(undefined, { floorToFloor: 3375 }), "HAUTEUR_ETAGE_TOLERANCE");
     expect(tall[0]!.status).toBe("non-evaluee");
     // 5 · 3,375^(1/3) = 7,5 mm.
-    expect(tall[0]!.message).toMatch(/± 7,5 mm/);
+    expect(fr(tall[0]!.message)).toMatch(/± 7,5 mm/);
   });
 });
 

@@ -19,17 +19,33 @@
  * seulement. `@blondel/geometry` maille quand même un balayage auto-intersecté (replié) et refuse
  * les autres cas (message de maillage).
  */
+import { msg, type Message, type MessageKey } from "@blondel/i18n";
 import type { Part, SolidDesc } from "../model/derived.js";
 import type { Shape2, Vec2, Vec3 } from "../model/primitives.js";
 import { GEOM_EPS } from "../geom2d/tolerance.js";
 
-const cache = new WeakMap<SolidDesc, string | null>();
+const cache = new WeakMap<SolidDesc, Message | null>();
 
 /** Au-delà (garde-fou de `@blondel/geometry`), la recherche de contact est omise. */
 const MAX_CONTACT_POINTS = 10_000;
 
+/**
+ * Clés des balayages auto-intersectés : maillés quand même par `@blondel/geometry` (replié), à
+ * la différence des autres problèmes (pièce non maillée).
+ */
+const SELF_INTERSECTION_KEYS: readonly MessageKey[] = [
+  "part.solid.sweepSelfIntersectingEnd",
+  "part.solid.sweepSelfIntersecting",
+  "part.solid.sweepSegmentsTouch",
+];
+
+/** Vrai si le problème est un balayage auto-intersecté (maillé replié sur lui-même). */
+export function isSelfIntersection(problem: Message): boolean {
+  return SELF_INTERSECTION_KEYS.includes(problem.key);
+}
+
 /** Problème du solide, ou `undefined` s'il est maillable. Mémoïsé par identité. */
-export function solidProblem(desc: SolidDesc): string | undefined {
+export function solidProblem(desc: SolidDesc): Message | undefined {
   const hit = cache.get(desc);
   if (hit !== undefined) return hit ?? undefined;
   const problem = computeProblem(desc);
@@ -38,28 +54,29 @@ export function solidProblem(desc: SolidDesc): string | undefined {
 }
 
 /** Messages lisibles des pièces dont le solide est dégénéré (ordre des pièces). */
-export function checkSolids(parts: readonly Part[]): string[] {
-  const out: string[] = [];
+export function checkSolids(parts: readonly Part[]): Message[] {
+  const out: Message[] = [];
   for (const part of parts) {
     const problem = solidProblem(part.solid);
     if (problem !== undefined) {
       // Balayage auto-intersecté : maillé tel quel (replié) ; autres cas : non maillés.
-      const effect =
-        part.solid.kind === "sweep" && problem.startsWith("balayage auto-intersecté")
-          ? "aperçu 3D replié sur lui-même"
-          : "pièce absente de l'aperçu 3D";
-      out.push(`Pièce ${part.mark} (${part.name}) : ${problem} (${effect}).`);
+      const effect = msg(
+        part.solid.kind === "sweep" && isSelfIntersection(problem)
+          ? "part.solid.effectFolded"
+          : "part.solid.effectMissing",
+      );
+      out.push(msg("part.solid.problem", { mark: part.mark, name: part.name, problem, effect }));
     }
   }
   return out;
 }
 
-function computeProblem(desc: SolidDesc): string | undefined {
+function computeProblem(desc: SolidDesc): Message | undefined {
   switch (desc.kind) {
     case "extrusion":
       return Number.isFinite(desc.depth) && Math.abs(desc.depth) > 1e-9
         ? undefined
-        : "extrusion de profondeur nulle";
+        : msg("part.solid.extrusionZeroDepth");
     case "ruled":
       return ruledProblem(desc.a, desc.b, desc.thickness, desc.normals);
     case "sweep":
@@ -88,23 +105,26 @@ function ruledProblem(
   b: readonly Vec3[],
   thickness: number,
   normals: readonly Vec2[],
-): string | undefined {
+): Message | undefined {
   if (a.length < 2 || b.length !== a.length || normals.length !== a.length) {
-    return "surface réglée incohérente (polylignes et normales de longueurs différentes)";
+    return msg("part.solid.ruledInconsistent");
   }
   if (!(Number.isFinite(thickness) && Math.abs(thickness) > 1e-9)) {
-    return "surface réglée d'épaisseur nulle";
+    return msg("part.solid.ruledZeroThickness");
   }
   for (let i = 0; i < a.length; i++) {
     const n = normals[i]!;
     const l = Math.hypot(n.x, n.y);
-    if (!(l > 0 && Number.isFinite(l))) return `surface réglée : normale nulle au point ${i + 1}`;
+    if (!(l > 0 && Number.isFinite(l))) {
+      return msg("part.solid.ruledZeroNormal", { point: String(i + 1) });
+    }
     const ab = sub(b[i]!, a[i]!);
     const off: Vec3 = { x: (n.x / l) * thickness, y: (n.y / l) * thickness, z: 0 };
     const lab = norm(ab);
     if (lab <= GEOM_EPS || norm(cross(ab, off)) <= 1e-9 * lab * Math.abs(thickness)) {
-      const where = i === 0 || i === a.length - 1 ? "en extrémité" : `au point ${i + 1}`;
-      return `surface réglée à section plate ${where} (hauteur nulle, ou parallèle à l'épaisseur)`;
+      return i === 0 || i === a.length - 1
+        ? msg("part.solid.ruledFlatSectionEnd")
+        : msg("part.solid.ruledFlatSection", { point: String(i + 1) });
     }
   }
   return undefined;
@@ -164,28 +184,32 @@ function segmentDistance(p1: Vec3, q1: Vec3, p2: Vec3, q2: Vec3): number {
   return norm(sub(add(p1, scale(d1, s)), add(p2, scale(d2, t))));
 }
 
-function sweepProblem(pathIn: readonly Vec3[], section: Shape2): string | undefined {
+/** Coordonnées arrondies au millimètre d'un point (paramètres x, y, z des messages). */
+function pointParams(p: Vec3): { x: string; y: string; z: string } {
+  return { x: String(Math.round(p.x)), y: String(Math.round(p.y)), z: String(Math.round(p.z)) };
+}
+
+function sweepProblem(pathIn: readonly Vec3[], section: Shape2): Message | undefined {
   const path: Vec3[] = [];
   for (const p of pathIn) {
     if (!Number.isFinite(p.x) || !Number.isFinite(p.y) || !Number.isFinite(p.z)) {
-      return "balayage à coordonnée non finie";
+      return msg("part.solid.sweepNonFinite");
     }
     const last = path[path.length - 1];
     if (!last || norm(sub(p, last)) > GEOM_EPS) path.push(p);
   }
-  if (path.length < 2) return "balayage de moins de deux points distincts";
+  if (path.length < 2) return msg("part.solid.sweepTooFewPoints");
   const r = inradius(section);
   // Plis locaux : un segment plus court que ses onglets (virages rapprochés) est fusionné en
   // son milieu tant que la fusion résout le croisement ; il ne reste que les plis irréductibles.
   for (let guard = path.length; guard > 0; guard--) {
     const k = crossedSegment(path, r);
     if (k === undefined) break;
-    if (k < 0) return `balayage avec demi-tour au point ${-k}`;
+    if (k < 0) return msg("part.solid.sweepUTurn", { point: String(-k) });
     const P = path[k]!;
     const W = k === 0 ? path[1]! : P; // sommet du virage (intérieur au chemin)
-    const at = `(${Math.round(W.x)} ; ${Math.round(W.y)} ; ${Math.round(W.z)})`;
     if (k === 0 || k === path.length - 2) {
-      return `balayage auto-intersecté près du point ${at} : coupes d'onglet croisées sur un segment d'extrémité (virage trop serré pour la section ou proche du demi-tour)`;
+      return msg("part.solid.sweepSelfIntersectingEnd", pointParams(W));
     }
     const merged = scale(add(P, path[k + 1]!), 0.5);
     path.splice(k, 2, merged);
@@ -194,8 +218,7 @@ function sweepProblem(pathIn: readonly Vec3[], section: Shape2): string | undefi
     // chemin, dont les fusions successives effaceraient la trace : faux négatif).
     const again = crossedSegment(path, r, [k - 1, k]);
     if (again !== undefined) {
-      const c = `(${Math.round(merged.x)} ; ${Math.round(merged.y)} ; ${Math.round(merged.z)})`;
-      return `balayage auto-intersecté près du point ${c} : coupes d'onglet croisées (virage trop serré pour la section ou proche du demi-tour)`;
+      return msg("part.solid.sweepSelfIntersecting", pointParams(merged));
     }
   }
   const m = path.length;
@@ -205,8 +228,12 @@ function sweepProblem(pathIn: readonly Vec3[], section: Shape2): string | undefi
   // séparés, le long du chemin, de plus de π·r_in (en deçà, voisinage d'un même virage).
   if (r > 0 && m <= MAX_CONTACT_POINTS) {
     const hit = contact(path, L, r);
-    if (hit)
-      return `balayage auto-intersecté : les segments ${hit[0] + 1} et ${hit[1] + 1} se touchent`;
+    if (hit) {
+      return msg("part.solid.sweepSegmentsTouch", {
+        a: String(hit[0] + 1),
+        b: String(hit[1] + 1),
+      });
+    }
   }
   return undefined;
 }

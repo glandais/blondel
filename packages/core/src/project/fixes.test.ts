@@ -1,4 +1,6 @@
+import { translatorFor, type Message } from "@blondel/i18n";
 import { beforeEach, describe, expect, it } from "vitest";
+import { fr } from "../i18n.test-helpers.js";
 import { ProjectSchema, type Project, type ProjectInput } from "../model/project.js";
 import { buildModel, clearModelCache } from "../pipeline/build.js";
 import { DEFAULT_NEWEL_SIZE, suggestFixes } from "./fixes.js";
@@ -15,8 +17,8 @@ function apply(p: Project, patch: unknown): Project {
   return ProjectSchema.parse(deepMerge(p, patch));
 }
 
-const sharpError = (m: { errors: readonly string[] }) =>
-  m.errors.filter((e) => e.includes("jour à angle vif"));
+const sharpError = (m: { errors: readonly Message[] }) =>
+  m.errors.filter((e) => fr(e).includes("jour à angle vif"));
 
 describe("suggestFixes — jour à angle vif et structure à poteau", () => {
   it.each(newelRequiredStructures())(
@@ -35,8 +37,8 @@ describe("suggestFixes — jour à angle vif et structure à poteau", () => {
         expect(sharpError(m).length, `${kind} ${preset}`).toBeGreaterThan(0);
         // Profilés : poteau élargi (aile de la section du modèle + 2 × jeu, décalé vers le jour).
         if (kind === "steel-profile")
-          expect(fix?.label).toMatch(/poteau de \d+ mm décalé de \d+ mm vers le jour/);
-        else expect(fix?.label).toContain(`poteau de ${DEFAULT_NEWEL_SIZE} mm`);
+          expect(fr(fix?.label)).toMatch(/poteau de \d+ mm décalé de \d+ mm vers le jour/);
+        else expect(fr(fix?.label)).toContain(`poteau de ${DEFAULT_NEWEL_SIZE} mm`);
         const q = apply(p, fix!.patch);
         expect(q.stair.layout.turns.every((t) => t.inner.kind === "newel")).toBe(true);
         expect(q.stair.layout.turns.map((t) => [t.direction, t.mode])).toEqual(
@@ -90,7 +92,7 @@ describe("suggestFixes — poteau des profilés (décision A13)", () => {
     const fixes = suggestFixes(p, m);
     expect(fixes.some((f) => f.id === "jour-newel")).toBe(false);
     const fix = fixes.find((f) => f.id === "newel-profile");
-    expect(fix?.label).toMatch(
+    expect(fr(fix?.label)).toMatch(
       /^Poser le poteau des profilés : poteau de \d+ mm décalé de \d+ mm vers le jour$/,
     );
     const q = apply(p, fix!.patch);
@@ -123,7 +125,10 @@ describe("suggestFixes — garde-corps sous la dalle haute", () => {
     const m = buildModel(p);
     expect(m.compliance.results.some((r) => r.ruleId === "GC_CONFLIT_DALLE")).toBe(true);
     const fix = suggestFixes(p, m).find((f) => f.id === "opening-clearance");
-    expect(fix?.label).toBe("Élargir la trémie de 100 mm le long de l'escalier");
+    expect(fr(fix?.label)).toBe("Élargir la trémie de 100 mm le long de l'escalier");
+    expect(translatorFor("en").t(fix!.label)).toBe(
+      "Widen the stairwell opening by 100 mm along the stair",
+    );
     const q = apply(p, fix!.patch);
     const mq = buildModel(q);
     expect(mq.compliance.results.some((r) => r.ruleId === "GC_CONFLIT_DALLE")).toBe(false);
@@ -162,7 +167,7 @@ describe("suggestFixes — jour plus étroit que la sphère T1", () => {
     expect(conseil(m).map((r) => r.severity)).toEqual(["conseil"]);
     const fix = suggestFixes(p, m).find((f) => f.id === "jour-wall");
     expect(fix).toBeDefined();
-    expect(fix!.label).toMatch(/^Jour fermé/);
+    expect(fr(fix!.label)).toMatch(/^Jour fermé/);
     const q = apply(p, fix!.patch);
     expect(q.guards?.flight.inner).toBe("wall");
     const mq = buildModel(q);

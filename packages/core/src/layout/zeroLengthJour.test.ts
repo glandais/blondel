@@ -1,3 +1,4 @@
+import { messageEquals, type Message } from "@blondel/i18n";
 import { describe, expect, it } from "vitest";
 import * as V from "../geom2d/vec.js";
 import type { Vec2 } from "../model/primitives.js";
@@ -37,8 +38,8 @@ function withSite(p: Project, walls: readonly Wall[], guards?: unknown): Project
   });
 }
 
-const zeroJourErrors = (p: Project): string[] =>
-  buildModel(p).errors.filter((e) => e === ZERO_LENGTH_JOUR_ERROR);
+const zeroJourErrors = (p: Project): Message[] =>
+  buildModel(p).errors.filter((e) => messageEquals(e, ZERO_LENGTH_JOUR_ERROR));
 
 describe("bord du jour de longueur nulle contre un mur (D3, décision du 2026-09-30)", () => {
   it("le tracé décrit le bord dégénéré (coin et directions) sans le signaler lui-même", () => {

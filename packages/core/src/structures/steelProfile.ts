@@ -32,6 +32,7 @@
  *
  * Valeurs par défaut non sourcées : paramètres **à valider** (LEDGER §2).
  */
+import { dec, DEFAULT_LOCALE, msg, textMessage, translatorFor, type Message } from "@blondel/i18n";
 import { z } from "zod";
 import { signedArea } from "../geom2d/polygon.js";
 import * as V from "../geom2d/vec.js";
@@ -52,7 +53,6 @@ import { precheckResults, type PrecheckedBeam } from "../precheck/checks.js";
 import { stairLoads } from "../precheck/loads.js";
 import { PrecheckSettingsSchema, steelMaterialOf } from "../precheck/settings.js";
 import { activeContexts, permanentAreaLoad } from "../precheck/stringers.js";
-import { fmt } from "../rules/check.js";
 import type { Finding } from "../rules/types.js";
 import { STEEL_GRADES, minProfileBendRadius, type SteelGrade } from "../workshop/metal.js";
 import { resolveWorkshopProfile, type WorkshopProfile } from "../workshop/profile.js";
@@ -70,12 +70,14 @@ import { newelTopWithHandrail } from "./newel.js";
 import {
   STEEL_RULES,
   deduceExecutionClass,
+  executionClassReasons,
+  joinMessages,
   QUANTITY_WELD_MM,
   holePolygon,
   steelMaterial,
   steelQuantities,
 } from "./steelCommon.js";
-import { steelStringerFaces } from "./steelFlat.js";
+import { ascentDirection, steelStringerFaces, supportOn, treadNotCarried } from "./steelFlat.js";
 import { cuttingPlan, type CutPiece, type CuttingPlan } from "./steelProfileCutting.js";
 import {
   boltCenters,
@@ -88,6 +90,24 @@ import {
   type SupportSpec,
 } from "./supports.js";
 import type { StringerFace } from "./woodHoused.js";
+
+/** Élément d'un contrôle par élément (`CheckCollector.addItems`). */
+interface CheckItem {
+  readonly value: Mm;
+  readonly label: Message;
+  readonly partId?: string;
+}
+
+/** Élément rattaché à une pièce. */
+interface PartCheckItem extends CheckItem {
+  readonly partId: string;
+}
+
+/** Largeur de profilé reçue par un poteau d'angle (contrôle `FAB_POTEAU_RECEPTION`). */
+interface ReceivedCheck extends PartCheckItem {
+  /** Repère du poteau récepteur. */
+  readonly newelMark: string;
+}
 
 const mmInt = z.number().int();
 const mmPos = mmInt.positive();
@@ -173,8 +193,6 @@ type Side = "inner" | "outer";
 export const PROFILE_RULES = {
   bending: {
     id: "FAB_CINTRAGE_PROFILE",
-    description:
-      "Cintrage d'un profilé : rayon ≥ rayon minimal du profil d'atelier pour la famille et le sens (C-M-06 UPN : aile extérieure 500, aile intérieure 650, chant 200 ; C-M-07 IPE / IPN : chant 1 400, à plat 650)",
     source:
       "docs/research/C-structures.md §2.3 et §4.1 [15] (capacités d'un cintreur, confiance moyenne, paramétrables)",
     confidence: "moyen",
@@ -184,8 +202,6 @@ export const PROFILE_RULES = {
   },
   sectionHeight: {
     id: "FAB_PROFILE_HAUTEUR",
-    description:
-      "Hauteur de profilé suffisante pour loger les supports de marche dans l'âme (marge de rive comprise)",
     source: "Géométrie de la structure (supports générés) ; marges à valider",
     confidence: "faible",
     nature: "metier",
@@ -194,8 +210,6 @@ export const PROFILE_RULES = {
   },
   supportBearing: {
     id: "FAB_SUPPORT_DEBORD",
-    description:
-      "Profilé en I : aile horizontale de la cornière au-delà des bouts d'ailes ≥ appui mini (paramètre)",
     source: "Profil d'atelier Blondel (valeur par défaut à valider, LEDGER §2)",
     confidence: "faible",
     nature: "metier",
@@ -204,8 +218,6 @@ export const PROFILE_RULES = {
   },
   miter: {
     id: "FAB_ONGLET_RACCORD",
-    description:
-      "Angle mural en onglet : écart d'altitude des rives hautes des deux limons au droit de l'angle (corde de chaque volée) ; au-delà de la tolérance, pièce de raccord ou limon coudé à prévoir (non généré)",
     source: "Géométrie de la structure ; tolérance à valider (ISO 13920 non appliquée)",
     confidence: "faible",
     nature: "metier",
@@ -214,8 +226,6 @@ export const PROFILE_RULES = {
   },
   lateralWidth: {
     id: "FAB_PROFILE_AILE_HORS_EMPRISE",
-    description:
-      "Section automatique : aile de la section retenue au plus égale à l'épaisseur de limon comptée hors emprise utile avant le choix de section (aile de la plus légère de la famille) ; au-delà, emprise hors tout, largeur utile, trémie et murs sont à revoir avec la section retenue",
     source:
       "Géométrie de la structure (aile de la section retenue) et épaisseur déclarée par le plugin (`capabilities.lateralThickness`) ; décision de l'utilisateur 2026-09-30 (docs/QUESTIONS.md D4)",
     confidence: "eleve",
@@ -330,13 +340,15 @@ export function profileNewelFits(
 
 /**
  * Plus grande largeur d'aile des limons en profilés d'un modèle (section du catalogue lue sur
- * `Part.section`, « UPN 160 (S235) »), `null` sans limon profilé.
+ * `Part.section`, « UPN 160 (S235) », paramètre `section`), `null` sans limon profilé.
  */
 export function profileFlangeWidth(parts: readonly Part[]): Mm | null {
   let best: Mm | null = null;
   for (const p of parts) {
     if (p.category !== "stringer" || !p.section) continue;
-    const sec = findSection(p.section.replace(/\s*\(.*\)\s*$/, ""));
+    const name =
+      p.section.key === "structure.steelProfile.section" ? p.section.params?.["section"] : null;
+    const sec = typeof name === "string" ? findSection(name) : undefined;
     if (sec) best = Math.max(best ?? 0, sec.b);
   }
   return best;
@@ -369,8 +381,8 @@ export function buildSteelProfile(
   const profile: WorkshopProfile = resolveWorkshopProfile(project.workshop);
   const metal = profile.metal;
   const nosings = stepping.nosings;
-  const notes: string[] = [];
-  const errors: string[] = [];
+  const notes: Message[] = [];
+  const errors: Message[] = [];
   const grade: SteelGrade = params.grade;
   const material = steelMaterial(params.finish);
   const sup = {
@@ -386,7 +398,7 @@ export function buildSteelProfile(
     holeEdgeDistance: params.supports.holeEdgeDistance,
     treadScrews: params.supports.treadScrews,
   };
-  const empty = (errs: string[]): SteelProfileResult => ({
+  const empty = (errs: Message[]): SteelProfileResult => ({
     output: { parts: [], checks: [], notes, errors: errs },
     section: null,
     requiredHeight: Number.NaN,
@@ -396,16 +408,20 @@ export function buildSteelProfile(
     cutting: {},
     executionClass: "EXC1",
   });
-  const helical = flightsOnlyError("steel-profile", "limons en profilés", ctx.layout);
+  const helical = flightsOnlyError(
+    "steel-profile",
+    msg("structure.steelProfile.shortLabel"),
+    ctx.layout,
+  );
   if (helical) return empty([helical]);
-  if (nosings.length < 2) return empty(["Limons en profilés : découpage vide, aucune structure."]);
+  if (nosings.length < 2) return empty([msg("structure.steelProfile.error.emptyStepping")]);
 
   const geo = stairGeometry(project, ctx.layout);
   const turns = project.stair.layout.turns;
   const faceInfo = steelStringerFaces(ctx, geo);
   notes.push(...faceInfo.notes);
   // Jour en arc : message propre (cintrage des profilés), les autres erreurs sont reprises.
-  errors.push(...faceInfo.errors.filter((e) => !/jour en arc/.test(e)));
+  errors.push(...faceInfo.errors.filter((e) => e.key !== "structure.steel.error.arcWell"));
   const faces = faceInfo.faces;
   const baseParts = ctx.baseParts ?? buildBasicParts(project, ctx.layout, stepping).parts;
   const baseById = new Map(baseParts.map((p) => [p.id, p]));
@@ -527,25 +543,31 @@ export function buildSteelProfile(
       section = candidates[candidates.length - 1] ?? null;
       if (section) {
         errors.push(
-          `Limons en profilés : aucune section ${params.family} du catalogue ne passe le prédimensionnement indicatif et la hauteur d'âme ; ${section.name} retenue (la plus lourde), à reprendre (famille plus raide, limon intermédiaire, note de calcul).`,
+          msg("structure.steelProfile.error.noSectionPasses", {
+            family: params.family,
+            section: section.name,
+          }),
         );
       }
     } else {
       notes.push(
-        `Section automatique : ${section.name} (plus légère de la famille ${params.family} qui loge les supports et passe le prédimensionnement indicatif : L/200, contrainte, f₁ ≥ 5 Hz).`,
+        msg("structure.steelProfile.note.autoSection", {
+          section: section.name,
+          family: params.family,
+        }),
       );
     }
   } else {
     section = findSection(params.section)!;
   }
-  if (!section) return empty(["Limons en profilés : catalogue vide pour la famille choisie."]);
+  if (!section) return empty([msg("structure.steelProfile.error.emptyCatalog")]);
   const s = section;
   const requiredHeight = heightNeed(s);
   const permanentArea = permanentAreaOf(s);
 
   // Supports définitifs : sur les limons, rognés à la partie qui tient dans l'âme.
   const placements: SupportPlacement[] = [];
-  const shortSupports: { value: Mm; label: string }[] = [];
+  const shortSupports: CheckItem[] = [];
   const carried = new Map<number, Set<Side>>();
   const mineOf = new Map<string, SupportPlacement[]>();
   const preByFace = new Map(pres.map((p) => [p.face.id, p]));
@@ -558,7 +580,7 @@ export function buildSteelProfile(
       pl = { ...c, u0: fit.u0, u1: fit.u1 };
     }
     const len = pl.u1 - pl.u0;
-    shortSupports.push({ value: len, label: `${c.treadMark} sur ${c.face.ownerMark}` });
+    shortSupports.push({ value: len, label: supportOn(c.treadMark, c.face.ownerMark) });
     if (len < minLen - 1e-9) continue;
     placements.push(pl);
     const set = carried.get(c.tread) ?? new Set<Side>();
@@ -579,9 +601,9 @@ export function buildSteelProfile(
   // 7. Limons.
   const stringers: ProfileStringer[] = [];
   const beams: PrecheckedBeam[] = [];
-  const heightFindings: { value: Mm; label: string; partId: string }[] = [];
-  const bearingItems: { value: Mm; label: string; partId?: string }[] = [];
-  const supportMargins: { value: Mm; label: string; partId: string }[] = [];
+  const heightFindings: PartCheckItem[] = [];
+  const bearingItems: CheckItem[] = [];
+  const supportMargins: PartCheckItem[] = [];
   let buttWeldTotal = 0;
   const shift = s.shape === "I" ? (s.b - s.tw) / 2 : 0;
   const sctx: ProfileStringerContext = {
@@ -667,13 +689,37 @@ export function buildSteelProfile(
     receivedChecks,
   });
   const precheck: readonly RuleResult[] = precheckResults(project, stepping, beams);
-  const precheckNote = `Prédimensionnement indicatif (ne remplace pas une note de calcul) : q_k ${fmt(loads.qk, 1)} kN/m², Q_k ${fmt(loads.Qk, 1)} kN (${loads.source}) ; permanentes ${fmt(permanentArea, 2)} kN/m² ; déversement et torsion (charge excentrée sur l'âme d'un U) non vérifiés.`;
+  const precheckNote = msg("structure.steelProfile.note.precheck", {
+    qk: dec(loads.qk, 1),
+    Qk: dec(loads.Qk, 1),
+    source: loads.source,
+    permanent: dec(permanentArea, 2),
+  });
+  const reasons = joinMessages(exc.reasons);
 
   notes.push(
-    `Limons en profilés ${s.name} (${grade}), âme verticale, ${s.shape === "U" ? "ailes vers l'extérieur" : "bouts d'ailes côté marches"} ; d_h = ${fmt(params.upperOffset, 0)} mm ; cornières L ${fmt(sup.angleLeg, 0)} × ${fmt(sup.angleLeg, 0)} × ${fmt(sup.angleThickness, 0)} ${effectiveFixing(sup) === "welded" ? "soudées" : "vissées"} ; valeurs par défaut à valider.`,
+    msg("structure.steelProfile.note.summary", {
+      section: s.name,
+      grade,
+      flanges: msg(
+        s.shape === "U"
+          ? "structure.steelProfile.note.flangesOutward"
+          : "structure.steelProfile.note.flangeTipsTreadSide",
+      ),
+      upperOffset: dec(params.upperOffset, 0),
+      leg: dec(sup.angleLeg, 0),
+      angleThickness: dec(sup.angleThickness, 0),
+      fixing: msg(
+        effectiveFixing(sup) === "welded"
+          ? "structure.steelProfile.note.anglesWelded"
+          : "structure.steelProfile.note.anglesBolted",
+      ),
+    }),
     precheckNote,
-    `Classe d'exécution EN 1090-2 : ${exc.executionClass}${exc.reasons.length > 0 ? ` (${exc.reasons.join(", ")})` : ""}.`,
-    "Limons en profilés : solides 3D à extrémités d'équerre (coupes réelles sur les développés) ; platines de pied et de tête non générées (fixation à définir).",
+    reasons
+      ? msg("structure.steel.exc.note", { executionClass: exc.executionClass, reasons })
+      : msg("structure.steel.exc.noteBare", { executionClass: exc.executionClass }),
+    msg("structure.steelProfile.note.squareEnds"),
   );
 
   return {
@@ -825,9 +871,9 @@ function profileBearingLines(
   windows: ReadonlyMap<string, StringerWindow>,
   stepping: StructureContext["stepping"],
   candidates: readonly SupportPlacement[],
-): { pres: Pre[]; notes: string[] } {
+): { pres: Pre[]; notes: Message[] } {
   const nosings = stepping.nosings;
-  const notes: string[] = [];
+  const notes: Message[] = [];
   const pres: Pre[] = [];
   for (const f of faces) {
     const { uLo, uHi } = windows.get(f.id)!;
@@ -835,7 +881,7 @@ function profileBearingLines(
       .map((k) => ({ u: sigmaOf(k, f.side) - f.sigmaA, z: k.z }))
       .filter((k) => k.u >= uLo - 1e-6 && k.u <= uHi + 1e-6);
     if (noses.length === 0) {
-      notes.push(`${f.mark} : aucun nez dans la portée du limon, limon non généré.`);
+      notes.push(msg("structure.steelProfile.note.noNosing", { mark: f.mark }));
       continue;
     }
     // Corde du premier au dernier nez de la portée. Ancrer la corde au droit d'un angle mural
@@ -863,28 +909,45 @@ function profileBendFindings(
   turns: StructureContext["project"]["stair"]["layout"]["turns"],
   s: SteelSection,
   metal: WorkshopProfile["metal"],
-): { findings: Finding[]; errors: string[] } {
+): { findings: Finding[]; errors: Message[] } {
   const bendFindings: Finding[] = [];
-  const errors: string[] = [];
+  const errors: Message[] = [];
   turns.forEach((t, j) => {
     if (t.inner.kind !== "arc") return;
     const r = t.inner.radius;
     const dir = bendDirection(s.family);
     const cap = minProfileBendRadius(metal, s.family, dir, s.h);
-    const dirLabel = dir === "flangeIn" ? "aile intérieure" : "à plat";
-    const label = `Tournant ${j + 1}, limon de jour ${s.name} cintré ${dirLabel}, rayon ${fmt(r, 0)} mm`;
+    const direction = msg(
+      dir === "flangeIn"
+        ? "structure.steelProfile.bend.flangeIn"
+        : "structure.steelProfile.bend.flat",
+    );
+    const label = msg("structure.steelProfile.bend.label", {
+      turn: j + 1,
+      section: s.name,
+      direction,
+      radius: dec(r, 0),
+    });
     if (cap === null) {
       bendFindings.push({
         status: "non-evaluee",
         measured: r,
-        message: `${label} : aucune capacité de cintrage connue pour ${s.family} (${dirLabel}) dans le profil d'atelier — à valider chez le cintreur.`,
+        message: msg("structure.steelProfile.check.bendUnknown", {
+          label,
+          family: s.family,
+          direction,
+        }),
       });
     } else if ("outOfRange" in cap) {
       bendFindings.push({
         status: "violation",
         measured: s.h,
         max: cap.outOfRange,
-        message: `${label} : section plus haute (${fmt(s.h, 0)} mm) que la capacité du cintreur (${fmt(cap.outOfRange, 0)} mm) — limon de jour exclu.`,
+        message: msg("structure.steelProfile.check.bendOutOfRange", {
+          label,
+          height: dec(s.h, 0),
+          max: dec(cap.outOfRange, 0),
+        }),
       });
     } else {
       const ok = r >= cap.radius - 1e-9;
@@ -894,12 +957,22 @@ function profileBendFindings(
         min: cap.radius,
         max: null,
         message: ok
-          ? `${label} ≥ ${fmt(cap.radius, 0)} mm : cintrage possible en plan ; cintrage hélicoïdal (plan + pente) à valider chez le cintreur (C §2.3).`
-          : `${label} < ${fmt(cap.radius, 0)} mm (rayon minimal ${s.family} ${dirLabel}) : limon de jour en profilé **exclu** (limon débillardé en plat, jalon 5).`,
+          ? msg("structure.steelProfile.check.bendOk", { label, radius: dec(cap.radius, 0) })
+          : msg("structure.steelProfile.check.bendTooTight", {
+              label,
+              radius: dec(cap.radius, 0),
+              family: s.family,
+              direction,
+            }),
       });
     }
     errors.push(
-      `Tournant ${j + 1} : jour en arc — limon de jour cintré en ${s.name} non généré (${bendFindings[bendFindings.length - 1]!.status === "ok" ? "cintrage hélicoïdal à valider, jalon 5" : "rayon de cintrage insuffisant ou inconnu"}) ; limons de jour des volées ${j + 1} et ${j + 2} absents.`,
+      msg(
+        bendFindings[bendFindings.length - 1]!.status === "ok"
+          ? "structure.steelProfile.error.arcWellHelical"
+          : "structure.steelProfile.error.arcWellRadius",
+        { turn: j + 1, section: s.name, flight: j + 1, nextFlight: j + 2 },
+      ),
     );
   });
   return { findings: bendFindings, errors };
@@ -924,13 +997,13 @@ interface ProfileStringerContext {
 /** Limon construit (étape 7) et ses constats ; `stringer` absent : limon non généré. */
 interface BuiltProfileStringer {
   readonly stringer?: ProfileStringer;
-  readonly notes: string[];
-  readonly supportMargins: { value: Mm; label: string; partId: string }[];
+  readonly notes: Message[];
+  readonly supportMargins: PartCheckItem[];
   readonly buttWeld: Mm;
   readonly beam: PrecheckedBeam;
-  readonly height: { value: Mm; label: string; partId: string };
-  readonly bearing: { value: Mm; label: string; partId?: string }[];
-  readonly spliceNote?: string;
+  readonly height: PartCheckItem;
+  readonly bearing: CheckItem[];
+  readonly spliceNote?: Message;
 }
 
 /**
@@ -941,11 +1014,11 @@ function buildProfileStringer(
   sc: ProfileStringerContext,
   p: Pre,
   mine: readonly SupportPlacement[],
-): BuiltProfileStringer | { readonly stringer?: undefined; readonly notes: string[] } {
+): BuiltProfileStringer | { readonly stringer?: undefined; readonly notes: Message[] } {
   const { s, sup, depthSup, params, profile, material, grade, shift } = sc;
   const metal = profile.metal;
   const tfBand = s.shape === "I" ? s.tf : 0;
-  const supportMargins: { value: Mm; label: string; partId: string }[] = [];
+  const supportMargins: PartCheckItem[] = [];
   const f = p.face;
   const alpha = Math.atan(p.line.slope);
   const c = Math.cos(alpha);
@@ -967,7 +1040,7 @@ function buildProfileStringer(
   ];
   outline = clipHalfPlane(outline, V.vec(0, 0), V.vec(0, 1));
   if (outline.length < 3) {
-    return { notes: [`${f.mark} : limon entièrement sous le sol, non généré.`] };
+    return { notes: [msg("structure.steelProfile.note.underFloor", { mark: f.mark })] };
   }
   // Repère de la barre : x le long de l'axe, y perpendiculaire (0 = rive basse).
   const O = V.vec(uLoW, lower(uLoW));
@@ -1011,30 +1084,37 @@ function buildProfileStringer(
         kind: "mark",
         a,
         b: rect[(i + 1) % 4]!,
-        ...(i === 0 ? { label: `Support ${sp.treadMark}` } : {}),
+        ...(i === 0
+          ? { label: msg("structure.steel.flatLine.support", { mark: sp.treadMark }) }
+          : {}),
       }),
     );
     for (const u of [sp.u0, sp.u1]) {
       supportMargins.push({
         value: Math.min(zb - (lower(u) + tfBand), upper(u) - tfBand - sp.zTop),
-        label: `${sp.treadMark} sur ${f.mark}`,
+        label: supportOn(sp.treadMark, f.mark),
         partId: f.id,
       });
     }
   }
   // Coupes d'extrémité (libellés sur le développé).
-  const endLabel = (which: "start" | "end"): string => {
+  const endLabel = (which: "start" | "end"): Message => {
     const kind = which === "start" ? f.start : f.end;
-    const aDeg = fmt((alpha * 180) / Math.PI, 1);
+    const angle = { angle: dec((alpha * 180) / Math.PI, 1) };
     switch (kind) {
       case "floor":
-        return `Départ : coupe de niveau (sol) et coupe d'aplomb (${aDeg}° sur l'axe)`;
+        return msg("structure.steelProfile.joint.floor", angle);
       case "arrival":
-        return `Arrivée : coupe d'aplomb (${aDeg}° sur l'axe)`;
+        return msg("structure.steelProfile.joint.arrival", angle);
       case "newel":
-        return `Coupe d'aplomb contre le poteau (${aDeg}° sur l'axe), soudée`;
+        return msg("structure.steelProfile.joint.newel", angle);
       case "corner":
-        return `Angle mural : coupe d'onglet 45° en plan, d'aplomb (${aDeg}° sur l'axe)${which === "start" ? ", soudée" : ""}`;
+        return msg(
+          which === "start"
+            ? "structure.steelProfile.joint.cornerWelded"
+            : "structure.steelProfile.joint.corner",
+          angle,
+        );
     }
   };
   for (const which of ["start", "end"] as const) {
@@ -1047,7 +1127,7 @@ function buildProfileStringer(
     kind: "text",
     a: V.vec(barLength / 2 - 20, s.h / 2),
     b: V.vec(barLength / 2 + 20, s.h / 2),
-    label: f.mark,
+    label: textMessage(f.mark),
   });
   const flat: FlatPattern = {
     outline: { outer: barPts, holes },
@@ -1055,7 +1135,12 @@ function buildProfileStringer(
     thickness: s.tw,
     reference: {
       kind: "face",
-      description: `Âme dépliée du ${f.side === "inner" ? "limon de jour" : "limon mural"} ${s.name}, vue depuis les marches ; x le long de l'axe de la barre (${mirrored ? "la montée va vers les x décroissants" : "la montée va vers les x croissants"}), y perpendiculaire à l'axe (0 = rive basse, ${fmt(s.h, 0)} = rive haute), mm, 1:1.`,
+      description: msg(
+        f.side === "inner"
+          ? "structure.steelProfile.reference.outerStringWeb"
+          : "structure.steelProfile.reference.wallStringWeb",
+        { section: s.name, ascent: ascentDirection(mirrored), height: dec(s.h, 0) },
+      ),
     },
   };
   // Débit : onglet d'angle mural (+ b en plan de chaque côté concerné, depuis la face côté
@@ -1097,7 +1182,12 @@ function buildProfileStringer(
     id: f.id,
     mark: f.mark,
     category: "stringer",
-    name: `${f.side === "inner" ? "Limon de jour" : "Limon mural"} ${s.name}, volée ${f.leg + 1}`,
+    name: msg(
+      f.side === "inner"
+        ? "structure.steelProfile.part.outerString"
+        : "structure.steelProfile.part.wallString",
+      { section: s.name, flight: f.leg + 1 },
+    ),
     material,
     solid: {
       kind: "extrusion",
@@ -1106,7 +1196,7 @@ function buildProfileStringer(
       depth: barLength,
     },
     flat,
-    section: `${s.name} (${grade})`,
+    section: msg("structure.steelProfile.section", { section: s.name, grade }),
     stock: { length: cutLength, width: s.h, thickness: s.b },
     quantities: steelQuantities(
       {
@@ -1122,12 +1212,12 @@ function buildProfileStringer(
     ),
   };
   const beam = sc.analyze(p, s);
-  const bearing: { value: Mm; label: string; partId?: string }[] = [];
+  const bearing: CheckItem[] = [];
   if (s.shape === "I") {
     for (const sp of mine) {
       bearing.push({
         value: sup.angleLeg - shift,
-        label: `${sp.treadMark} sur ${f.mark}`,
+        label: supportOn(sp.treadMark, f.mark),
         partId: f.id,
       });
     }
@@ -1147,22 +1237,30 @@ function buildProfileStringer(
     notes: [],
     supportMargins,
     buttWeld,
-    beam: { partId: f.id, label: `${f.mark}, ${s.name} ${grade}`, result: beam },
-    height: { value: s.h - sc.needOfPre(p, s), label: f.mark, partId: f.id },
+    beam: { partId: f.id, label: textMessage(`${f.mark}, ${s.name} ${grade}`), result: beam },
+    height: { value: s.h - sc.needOfPre(p, s), label: textMessage(f.mark), partId: f.id },
     bearing,
     ...(splices > 0
       ? {
-          spliceNote: `${f.mark} : longueur de débit ${fmt(cutLength, 0)} mm > barre de ${fmt(maxBar, 0)} mm, ${splices} aboutage(s) ${params.splice === "welded" ? "soudé(s) bout à bout (EXC2)" : "éclissé(s)"}.`,
+          spliceNote: msg(
+            params.splice === "welded"
+              ? "structure.steelProfile.note.weldedSplices"
+              : "structure.steelProfile.note.boltedSplices",
+            {
+              mark: f.mark,
+              length: dec(cutLength, 0),
+              bar: dec(maxBar, 0),
+              count: splices,
+            },
+          ),
         }
       : {}),
   };
 }
 
 /** Écarts de rive haute des limons muraux au droit des onglets d'angle (FAB_ONGLET_RACCORD). */
-function profileMiterItems(
-  stringers: readonly ProfileStringer[],
-): { value: Mm; label: string; partId: string }[] {
-  const miterItems: { value: Mm; label: string; partId: string }[] = [];
+function profileMiterItems(stringers: readonly ProfileStringer[]): PartCheckItem[] {
+  const miterItems: PartCheckItem[] = [];
   for (const a of stringers) {
     if (a.face.end !== "corner") continue;
     const b = stringers.find((x) => x.face.side === "outer" && x.face.leg === a.face.leg + 1);
@@ -1171,7 +1269,7 @@ function profileMiterItems(
     const zb = b.line.z0 + b.line.slope * (0 - b.line.u0);
     miterItems.push({
       value: Math.abs(za - zb),
-      label: `${a.face.mark} / ${b.face.mark}`,
+      label: textMessage(`${a.face.mark} / ${b.face.mark}`),
       partId: b.face.id,
     });
   }
@@ -1196,7 +1294,7 @@ function profileSupportParts(
     return supportPart({ ...p, face }, sup, "S", material, profile);
   });
   const groupKey = (p: Part): string =>
-    `${p.section}|${Math.round((p.stock?.length ?? 0) / 0.5)}|${p.quantities["holes"]}`;
+    `${JSON.stringify(p.section)}|${Math.round((p.stock?.length ?? 0) / 0.5)}|${p.quantities["holes"]}`;
   const groupIds = new Map<string, number>();
   return supportParts.map((p) => {
     const k = groupKey(p);
@@ -1222,17 +1320,35 @@ function profileNewelPosts(
   params: SteelProfileParams,
   material: Part["material"],
   profile: WorkshopProfile,
-): { posts: Part[]; received: { value: Mm; label: string; partId: string }[]; notes: string[] } {
-  const notes: string[] = [];
+): { posts: Part[]; received: ReceivedCheck[]; notes: Message[] } {
+  const notes: Message[] = [];
   const posts: Part[] = [];
-  const receivedChecks: { value: Mm; label: string; partId: string }[] = [];
+  const receivedChecks: ReceivedCheck[] = [];
   const expectedNewel = profileNewel(s.b, params.newel);
   for (const nw of newelList) {
     const g: NewelGeometry = nw.geom;
     const a = g.size;
     if (!profileNewelFits(g, s.b, params.newel)) {
       notes.push(
-        `${nw.mark} : poteau de ${fmt(a, 0)} mm${g.offset > 0 ? ` décalé de ${fmt(g.offset, 0)} mm vers le jour` : " centré"} ; poteau des profilés attendu : ${fmt(expectedNewel.size, 0)} mm décalé de ${fmt(expectedNewel.offset, 0)} mm vers le jour (${params.newel.size === "auto" ? `aile ${fmt(s.b, 0)} + 2 × ${fmt(params.newel.clearance, 0)} mm` : "côté imposé"}, paramètre « côté du poteau pour profilés », à valider) — correction proposée.`,
+        msg(
+          g.offset > 0
+            ? "structure.steelProfile.note.newelMismatchOffset"
+            : "structure.steelProfile.note.newelMismatchCentered",
+          {
+            mark: nw.mark,
+            size: dec(a, 0),
+            offset: dec(g.offset, 0),
+            expectedSize: dec(expectedNewel.size, 0),
+            expectedOffset: dec(expectedNewel.offset, 0),
+            basis:
+              params.newel.size === "auto"
+                ? msg("structure.steelProfile.note.newelBasisAuto", {
+                    flange: dec(s.b, 0),
+                    clearance: dec(params.newel.clearance, 0),
+                  })
+                : msg("structure.steelProfile.note.newelBasisImposed"),
+          },
+        ),
       );
     }
     const received = stringers.filter(
@@ -1247,20 +1363,25 @@ function profileNewelPosts(
       topZ = Math.max(topZ, x.line.z0 + x.line.slope * (u - x.line.u0) + params.upperOffset);
       receivedChecks.push({
         value: s.b,
-        label: `${x.face.mark} sur ${nw.mark}`,
+        label: supportOn(x.face.mark, nw.mark),
         partId: x.face.id,
+        newelMark: nw.mark,
       });
     }
     for (const p of placements.filter((q) => q.face.owner === nw.id)) topZ = Math.max(topZ, p.zTop);
     if (!Number.isFinite(topZ)) {
-      notes.push(`${nw.mark} : aucun limon ni support reçu, poteau non généré.`);
+      notes.push(msg("structure.steel.note.newelNothingReceived", { mark: nw.mark }));
       continue;
     }
     const raised = newelTopWithHandrail(topZ + params.newel.topExtension, ctx, g.turn);
     const height = raised.top;
     if (raised.raisedBy > 0) {
       notes.push(
-        `${nw.mark} : poteau d'angle monté à ${fmt(height, 0)} mm, ${fmt(raised.overrun, 0)} mm au-dessus de la main courante du garde-corps (garde-corps, poteaux : « dépassement du poteau d'angle »).`,
+        msg("structure.steel.note.newelRaised", {
+          mark: nw.mark,
+          top: dec(height, 0),
+          overrun: dec(raised.overrun, 0),
+        }),
       );
     }
     const h2 = a / 2;
@@ -1280,7 +1401,7 @@ function profileNewelPosts(
       id: nw.id,
       mark: nw.mark,
       category: "post",
-      name: `Poteau d'angle acier, tournant ${g.turn + 1}`,
+      name: msg("structure.steel.part.newel", { turn: g.turn + 1 }),
       material,
       solid: {
         kind: "extrusion",
@@ -1293,7 +1414,10 @@ function profileNewelPosts(
         profile: { outer: outer.map(rel), holes: [inner.map(rel)] },
         depth: height,
       },
-      section: `tube carré ${fmt(a, 0)} × ${fmt(a, 0)} × ${fmt(tt, 0)}`,
+      section: msg("structure.steel.section.squareTube", {
+        size: dec(a, 0),
+        thickness: dec(tt, 0),
+      }),
       stock: { length: height, width: a, thickness: a },
       quantities: steelQuantities(
         {
@@ -1315,33 +1439,53 @@ function profileCutting(
   stringers: readonly ProfileStringer[],
   others: readonly Part[],
   metal: WorkshopProfile["metal"],
-): { cutting: Record<string, CuttingPlan>; notes: string[] } {
-  const notes: string[] = [];
+): { cutting: Record<string, CuttingPlan>; notes: Message[] } {
+  const notes: Message[] = [];
   const kerf = metal.sawKerf;
   const cutting: Record<string, CuttingPlan> = {};
-  const addPlan = (key: string, pieces: CutPiece[]): void => {
-    if (pieces.length > 0) cutting[key] = cuttingPlan(pieces, metal.barLengths, kerf);
+  /** Désignation affichée de chaque plan de débit. */
+  const labels = new Map<string, Message>();
+  const addPlan = (key: string, label: Message, pieces: CutPiece[]): void => {
+    if (pieces.length === 0) return;
+    cutting[key] = cuttingPlan(pieces, metal.barLengths, kerf);
+    labels.set(key, label);
   };
   addPlan(
     s.name,
+    textMessage(s.name),
     stringers.map((x) => ({ id: x.part.id, mark: x.part.mark, length: x.cutLength })),
   );
-  const bySection = new Map<string, CutPiece[]>();
+  // Clé de débit : désignation de la section dans la langue de référence (identifiant stable
+  // de `SteelProfileResult.cutting`, « L 40 × 40 × 4 »), jamais affichée telle quelle.
+  const sectionKey = (section: Message): string => translatorFor(DEFAULT_LOCALE).t(section);
+  const bySection = new Map<string, { label: Message; pieces: CutPiece[] }>();
   for (const p of others) {
-    const list = bySection.get(p.section ?? p.id) ?? [];
-    list.push({ id: p.id, mark: p.mark, length: p.stock?.length ?? 0 });
-    bySection.set(p.section ?? p.id, list);
+    const key = p.section ? sectionKey(p.section) : p.id;
+    const entry = bySection.get(key) ?? { label: p.section ?? textMessage(p.id), pieces: [] };
+    entry.pieces.push({ id: p.id, mark: p.mark, length: p.stock?.length ?? 0 });
+    bySection.set(key, entry);
   }
-  for (const [k, v] of bySection) addPlan(k, v);
+  for (const [k, v] of bySection) addPlan(k, v.label, v.pieces);
   for (const [k, plan] of Object.entries(cutting)) {
     const byLen = new Map<number, number>();
     for (const b of plan.bars) byLen.set(b.barLength, (byLen.get(b.barLength) ?? 0) + 1);
     const bars = [...byLen.entries()]
       .sort((x, y) => x[0] - y[0])
-      .map(([l, n]) => `${n} × ${fmt(l / 1000, 0)} m`)
+      .map(([l, n]) => `${n} × ${Math.round(l / 1000)} m`)
       .join(" + ");
     notes.push(
-      `Débit ${k} : ${bars || "aucune barre"}, utilisation ${fmt(plan.utilization * 100, 0)} % (trait de scie ${fmt(kerf, 0)} mm, à valider)${plan.oversize.length > 0 ? ` ; ${plan.oversize.length} pièce(s) plus longue(s) que la plus grande barre (aboutage)` : ""}.`,
+      msg(
+        plan.oversize.length > 0
+          ? "structure.steelProfile.note.cuttingOversize"
+          : "structure.steelProfile.note.cutting",
+        {
+          section: labels.get(k)!,
+          bars: bars ? textMessage(bars) : msg("structure.steelProfile.note.noBar"),
+          utilization: dec(plan.utilization * 100, 0),
+          kerf: dec(kerf, 0),
+          count: plan.oversize.length,
+        },
+      ),
     );
   }
   return { cutting, notes };
@@ -1357,17 +1501,17 @@ function addProfileChecks(
     readonly params: SteelProfileParams;
     readonly metal: WorkshopProfile["metal"];
     readonly bendFindings: readonly Finding[];
-    readonly heightFindings: { value: Mm; label: string; partId: string }[];
-    readonly bearingItems: { value: Mm; label: string; partId?: string }[];
-    readonly miterItems: { value: Mm; label: string; partId: string }[];
+    readonly heightFindings: PartCheckItem[];
+    readonly bearingItems: CheckItem[];
+    readonly miterItems: PartCheckItem[];
     readonly stringers: readonly ProfileStringer[];
     readonly others: readonly Part[];
-    readonly supportMargins: { value: Mm; label: string; partId: string }[];
-    readonly shortSupports: { value: Mm; label: string }[];
+    readonly supportMargins: PartCheckItem[];
+    readonly shortSupports: CheckItem[];
     readonly zones: readonly TreadZone[];
     readonly carried: ReadonlyMap<number, Set<Side>>;
     readonly newelList: readonly ProfileNewelEntry[];
-    readonly receivedChecks: readonly { value: Mm; label: string; partId: string }[];
+    readonly receivedChecks: readonly ReceivedCheck[];
   },
 ): void {
   const { exc, grade, s, params, metal } = input;
@@ -1375,14 +1519,17 @@ function addProfileChecks(
   checks.add(rule(STEEL_RULES.executionClass), [
     {
       status: "ok",
-      message: `Classe d'exécution déduite : ${exc.executionClass} (${exc.reasons.length > 0 ? exc.reasons.join(", ") : `${grade}, aucune soudure bout à bout`} ; profilés sur cornières soudées d'angle, famille B → CC1, SC1 supposée).`,
+      message: msg("structure.steelProfile.exc.check", {
+        executionClass: exc.executionClass,
+        reasons: executionClassReasons(exc, grade),
+      }),
     },
   ]);
   if (input.bendFindings.length > 0) checks.add(rule(PROFILE_RULES.bending), input.bendFindings);
   checks.addItems(
     rule(PROFILE_RULES.sectionHeight),
     input.heightFindings,
-    "Réserve de hauteur d'âme",
+    msg("structure.steelProfile.quantity.webHeightReserve"),
     {
       min: -1e-6,
       max: null,
@@ -1392,7 +1539,7 @@ function addProfileChecks(
     checks.addItems(
       rule(PROFILE_RULES.supportBearing),
       input.bearingItems,
-      "Appui au-delà des ailes",
+      msg("structure.steelProfile.quantity.bearingBeyondFlanges"),
       {
         min: params.supports.minBearing,
         max: null,
@@ -1402,41 +1549,45 @@ function addProfileChecks(
   const lateral = profileLateralWidthFindings(params, s);
   if (lateral.length > 0) checks.add(rule(PROFILE_RULES.lateralWidth), lateral);
   if (input.miterItems.length > 0) {
-    checks.addItems(rule(PROFILE_RULES.miter), input.miterItems, "Écart de rive haute à l'onglet", {
-      min: null,
-      max: params.miterTolerance,
-    });
+    checks.addItems(
+      rule(PROFILE_RULES.miter),
+      input.miterItems,
+      msg("structure.steelProfile.quantity.miterTopEdgeGap"),
+      { min: null, max: params.miterTolerance },
+    );
   }
   checks.addItems(
     rule(STEEL_RULES.barLength),
     [
       ...input.stringers.map((x) => ({
         value: x.cutLength,
-        label: x.part.mark,
+        label: textMessage(x.part.mark),
         partId: x.part.id,
       })),
       ...input.others.map((p) => ({
         value: p.stock!.length,
-        label: p.mark,
+        label: textMessage(p.mark),
         partId: p.id,
       })),
     ],
-    "Longueur de barre",
+    msg("structure.steel.quantity.barLength"),
     { min: null, max: Math.max(...metal.barLengths) },
   );
   checks.addItems(
     rule(STEEL_RULES.supportInStringer),
     input.supportMargins,
-    "Marge support / rive",
+    msg("structure.steel.quantity.supportEdgeMargin"),
     {
       min: -1e-6,
       max: null,
     },
   );
-  checks.addItems(rule(STEEL_RULES.supportLength), input.shortSupports, "Longueur d'appui", {
-    min: params.supports.minLength,
-    max: null,
-  });
+  checks.addItems(
+    rule(STEEL_RULES.supportLength),
+    input.shortSupports,
+    msg("structure.steel.quantity.bearingLength"),
+    { min: params.supports.minLength, max: null },
+  );
   checks.add(
     rule(STEEL_RULES.treadCarried),
     input.zones.map((z): Finding => {
@@ -1446,28 +1597,30 @@ function addProfileChecks(
         ? {
             status: "ok",
             location: { kind: "tread", number: z.tread.number },
-            message: `${z.mark} portée des deux côtés.`,
+            message: msg("structure.steel.check.treadCarried", { mark: z.mark }),
           }
         : {
             status: "violation",
             location: { kind: "tread", number: z.tread.number },
-            message: `${z.mark} sans support côté ${missing.map((x) => (x === "inner" ? "jour" : "mur")).join(" et ")}.`,
+            message: treadNotCarried(z.mark, missing),
           };
     }),
   );
   for (const nw of input.newelList) {
-    const items = input.receivedChecks.filter((r) => r.label.endsWith(nw.mark));
+    const items = input.receivedChecks.filter((r) => r.newelMark === nw.mark);
     if (items.length === 0) continue;
-    checks.addItems(pluginRuleDef(FAB_RULES.newelReception), items, "Largeur du profilé reçu", {
-      min: null,
-      max: nw.geom.jourExtent,
-    });
+    checks.addItems(
+      pluginRuleDef(FAB_RULES.newelReception),
+      items,
+      msg("structure.steelProfile.quantity.receivedSectionWidth"),
+      { min: null, max: nw.geom.jourExtent },
+    );
   }
 }
 
 export const STEEL_PROFILE: StructureKind<SteelProfileParams> = {
   kind: "steel-profile",
-  label: "Limons acier en profilés du commerce (UPN, IPN, IPE, HEA), marches bois",
+  labelKey: "structure.steelProfile.label",
   family: "metal",
   paramsSchema: SteelProfileParamsSchema,
   defaults: () => SteelProfileParamsSchema.parse({}),
@@ -1518,7 +1671,13 @@ export function profileLateralWidthFindings(
       measured: section.b,
       min: null,
       max: counted,
-      message: `Section automatique ${section.name} : aile de ${fmt(section.b, 0)} mm, au-delà des ${fmt(counted, 0)} mm comptés hors emprise utile avant le choix de section (aile de ${lightest?.name ?? "la plus légère de la famille"}, borne basse) : ${fmt(excess, 0)} mm de plus de chaque côté ; vérifier l'emprise hors tout, la largeur utile, la trémie et les murs avec la section retenue, ou imposer la section.`,
+      message: msg("structure.steelProfile.check.lateralWidth", {
+        section: section.name,
+        flange: dec(section.b, 0),
+        counted: dec(counted, 0),
+        lightest: lightest?.name ?? msg("structure.steelProfile.check.lightestOfFamily"),
+        excess: dec(excess, 0),
+      }),
     },
   ];
 }

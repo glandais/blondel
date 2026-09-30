@@ -11,6 +11,7 @@
  * `bend_length_mm` (longueur cumulée des lignes de pli), `holes` (perçages et lumières),
  * `length_mm`.
  */
+import { dec, msg, type Message } from "@blondel/i18n";
 import { signedArea } from "../geom2d/polygon.js";
 import * as V from "../geom2d/vec.js";
 import type { FlatPattern, MaterialId, Part } from "../model/derived.js";
@@ -134,25 +135,46 @@ export interface ExecutionClassInput {
  */
 export function deduceExecutionClass(input: ExecutionClassInput): {
   readonly executionClass: "EXC1" | "EXC2";
-  readonly reasons: readonly string[];
+  readonly reasons: readonly Message[];
 } {
-  const reasons: string[] = [];
-  if (input.grade === "S355" && (input.welded ?? true)) reasons.push("nuance S355 soudée");
+  const reasons: Message[] = [];
+  if (input.grade === "S355" && (input.welded ?? true))
+    reasons.push(msg("structure.steel.exc.reason.s355Welded"));
   if (input.buttWeld > 1e-9)
-    reasons.push(`soudures bout à bout (${Math.round(input.buttWeld)} mm de cordon)`);
-  if (input.hotForming) reasons.push("formage à chaud");
+    reasons.push(msg("structure.steel.exc.reason.buttWeld", { length: dec(input.buttWeld, 0) }));
+  if (input.hotForming) reasons.push(msg("structure.steel.exc.reason.hotForming"));
   return { executionClass: reasons.length > 0 ? "EXC2" : "EXC1", reasons };
+}
+
+/** Liste de messages séparés par des virgules (« a, b, c ») ; `null` pour une liste vide. */
+export function joinMessages(items: readonly Message[]): Message | null {
+  if (items.length === 0) return null;
+  let out = items[items.length - 1]!;
+  for (let i = items.length - 2; i >= 0; i--) {
+    out = msg("structure.steel.list", { head: items[i]!, tail: out });
+  }
+  return out;
+}
+
+/**
+ * Raisons de la classe d'exécution (« nuance S355 soudée, … ») ou, sans raison, « S235, aucune
+ * soudure bout à bout ».
+ */
+export function executionClassReasons(
+  exc: { readonly reasons: readonly Message[] },
+  grade: SteelGrade,
+): Message {
+  return joinMessages(exc.reasons) ?? msg("structure.steel.exc.noButtWeld", { grade });
 }
 
 // ------------------------------------------------------------------ Contrôles métal
 
 const WORKSHOP_SOURCE = "Profil d'atelier Blondel (valeur par défaut à valider, LEDGER §2)";
 
+/** Contrôles métal ; descriptions : `rules.<id>.description` (ADR-0007). */
 export const STEEL_RULES = {
   executionClass: {
     id: "EXC_CLASSE_EXECUTION",
-    description:
-      "Classe d'exécution EN 1090-2 déduite (C-M-01) : S235 sans soudure bout à bout ou S355 non soudé → EXC1 ; soudure bout à bout, S355 soudé ou formage à chaud → EXC2",
     source: "CNC2M N0169 (2015), tableaux 3 et 6, via docs/research/C-structures.md §2.1 [13]",
     confidence: "eleve",
     nature: "normatif",
@@ -161,7 +183,6 @@ export const STEEL_RULES = {
   },
   bendRadius: {
     id: "FAB_PLI_RAYON_MIN",
-    description: "Pli de tôle : rayon intérieur ≥ t en S235, ≥ 1,5 t en S355 normalisé (C-M-02)",
     source: "docs/research/C-structures.md §2.6 et §4.1 [17][19] (usage, confiance moyenne)",
     confidence: "moyen",
     nature: "metier",
@@ -170,8 +191,6 @@ export const STEEL_RULES = {
   },
   bendFlange: {
     id: "FAB_PLI_BORD_MIN",
-    description:
-      "Pli de tôle : longueur intérieure d'aile ≥ L_int mini de la loi de pli, aux deux extrémités de chaque ligne de pli (C-M-03)",
     source:
       "docs/research/C-structures.md §2.6 et §4.1 [17] (usage, confiance moyenne) ; table du profil d'atelier",
     confidence: "moyen",
@@ -181,8 +200,6 @@ export const STEEL_RULES = {
   },
   pressBrake: {
     id: "FAB_PRESSE_PLIEUSE",
-    description:
-      "Presse plieuse : longueur de pli et épaisseur dans les capacités du profil d'atelier (C-M-04)",
     source:
       "docs/research/C-structures.md §2.6 et §4.1 [18] (capacité d'un sous-traitant, paramétrable)",
     confidence: "moyen",
@@ -192,7 +209,6 @@ export const STEEL_RULES = {
   },
   bendLaw: {
     id: "FAB_LOI_DE_PLI",
-    description: "Loi de pli disponible dans le profil d'atelier pour la nuance et l'épaisseur",
     source: WORKSHOP_SOURCE,
     confidence: "faible",
     nature: "metier",
@@ -201,7 +217,6 @@ export const STEEL_RULES = {
   },
   laser: {
     id: "FAB_LASER_EPAISSEUR",
-    description: "Épaisseur des pièces découpées ≤ épaisseur maximale de découpe laser",
     source: WORKSHOP_SOURCE,
     confidence: "faible",
     nature: "metier",
@@ -210,8 +225,6 @@ export const STEEL_RULES = {
   },
   sheetFormat: {
     id: "FAB_FORMAT_TOLE",
-    description:
-      "Développé contenu dans un format de tôle du profil d'atelier (sinon aboutage à prévoir)",
     source: "docs/research/C-structures.md §4.3 (formats à confirmer par l'atelier)",
     confidence: "faible",
     nature: "metier",
@@ -220,7 +233,6 @@ export const STEEL_RULES = {
   },
   barLength: {
     id: "FAB_BARRE_LONGUEUR",
-    description: "Longueur de débit des barres ≤ longueur de barre du commerce (C-M-08)",
     source: "docs/research/C-structures.md §4.1 et §4.3 [46] (usage, confiance moyenne)",
     confidence: "moyen",
     nature: "metier",
@@ -229,8 +241,6 @@ export const STEEL_RULES = {
   },
   supportInStringer: {
     id: "FAB_SUPPORT_DANS_LIMON",
-    description:
-      "Support de marche (cornière, plat) entièrement sur la joue du limon, à la marge de rive près",
     source: WORKSHOP_SOURCE,
     confidence: "faible",
     nature: "metier",
@@ -239,7 +249,6 @@ export const STEEL_RULES = {
   },
   supportLength: {
     id: "FAB_SUPPORT_LONGUEUR_MIN",
-    description: "Longueur d'appui d'une marche sur son support ≥ longueur mini (paramètre)",
     source: WORKSHOP_SOURCE,
     confidence: "faible",
     nature: "metier",
@@ -248,7 +257,6 @@ export const STEEL_RULES = {
   },
   treadCarried: {
     id: "FAB_MARCHE_PORTEE",
-    description: "Chaque marche est portée des deux côtés (limon ou poteau)",
     source: "Géométrie de la structure (supports générés)",
     confidence: "eleve",
     nature: "metier",

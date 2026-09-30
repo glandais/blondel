@@ -3,6 +3,7 @@
  * au constat). Module sans dépendance aux évaluateurs : ils peuvent le lire (ligne de mesure,
  * `evaluators/stair.ts`) sans cycle d'import avec `engine.ts`, qui le réexporte.
  */
+import { msg, type Message, type MessageKey } from "@blondel/i18n";
 import type { Severity } from "../model/derived.js";
 import type { ComplianceSettings } from "../model/project.js";
 import type { RuleDef } from "./table.js";
@@ -12,7 +13,7 @@ export interface EffectiveSeverity {
   readonly severity: Severity;
   /** Vrai si l'utilisateur a choisi d'ignorer la règle (justification obligatoire). */
   readonly ignored: boolean;
-  readonly downgradeReason?: string;
+  readonly downgradeReason?: Message;
 }
 
 export const SEVERITY_RANK: Readonly<Record<Severity, number>> = {
@@ -20,6 +21,23 @@ export const SEVERITY_RANK: Readonly<Record<Severity, number>> = {
   avertissement: 1,
   bloquant: 2,
 };
+
+/** Clé du libellé de chaque sévérité (l'identifiant du modèle reste français). */
+export const SEVERITY_LABEL_KEYS: Readonly<Record<Severity, MessageKey>> = {
+  bloquant: "compliance.severityName.bloquant",
+  avertissement: "compliance.severityName.avertissement",
+  conseil: "compliance.severityName.conseil",
+};
+
+/** Libellé traduisible d'une sévérité (« bloquant », « avertissement », « conseil »). */
+export function severityLabel(severity: Severity): Message {
+  return msg(SEVERITY_LABEL_KEYS[severity]);
+}
+
+/** Messages successifs réunis en un seul, séparés par une espace. */
+export function joinWithSpace(messages: readonly Message[]): Message {
+  return messages.reduce((first, next) => msg("compliance.join.space", { first, next }));
+}
 
 /**
  * Sévérité effective d'une règle :
@@ -36,16 +54,17 @@ export function effectiveSeverity(
   finding?: Pick<Finding, "severity" | "severityReason">,
 ): EffectiveSeverity {
   let severity: Severity = rule.severite;
-  const reasons: string[] = [];
+  const reasons: Message[] = [];
   if (finding?.severity && SEVERITY_RANK[finding.severity] < SEVERITY_RANK[severity]) {
     severity = finding.severity;
     reasons.push(
-      finding.severityReason ?? `Sévérité ramenée à « ${finding.severity} » pour ce constat.`,
+      finding.severityReason ??
+        msg("compliance.severity.findingDowngrade", { severity: severityLabel(finding.severity) }),
     );
   }
   if (settings.profile === "souple" && rule.source_secondaire && severity === "bloquant") {
     severity = "avertissement";
-    reasons.push("Profil souple : valeur issue d'une source secondaire (norme non lue).");
+    reasons.push(msg("compliance.severity.softProfile"));
   }
   const override = [...settings.overrides]
     .reverse()
@@ -54,7 +73,11 @@ export function effectiveSeverity(
   if (override) {
     if (override.severity === "ignore") {
       ignored = true;
-      reasons.push(`Ignorée par l'utilisateur : ${override.justification.trim()}`);
+      reasons.push(
+        msg("compliance.severity.ignoredByUser", {
+          justification: override.justification.trim(),
+        }),
+      );
     } else if (
       severity !== rule.severite &&
       SEVERITY_RANK[override.severity] < SEVERITY_RANK[rule.severite] &&
@@ -64,12 +87,16 @@ export function effectiveSeverity(
       // (sévérité propre au constat ou profil souple).
     } else if (override.severity !== severity) {
       reasons.push(
-        `Surcharge utilisateur (${severity} → ${override.severity}) : ${override.justification.trim()}`,
+        msg("compliance.severity.userOverride", {
+          from: severityLabel(severity),
+          to: severityLabel(override.severity),
+          justification: override.justification.trim(),
+        }),
       );
       severity = override.severity;
     }
   }
   return reasons.length > 0
-    ? { severity, ignored, downgradeReason: reasons.join(" ") }
+    ? { severity, ignored, downgradeReason: joinWithSpace(reasons) }
     : { severity, ignored };
 }

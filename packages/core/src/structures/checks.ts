@@ -11,19 +11,23 @@
  *   rules.yaml) : définis ici avec leur source et leur confiance, seuils lus dans le profil
  *   d'atelier ou les paramètres du plugin (valeurs « à valider »).
  */
+import { dec, msg, type Message } from "@blondel/i18n";
 import type { RuleResult, Severity } from "../model/derived.js";
 import type { Project } from "../model/project.js";
 import type { Layout, Stepping } from "../model/derived.js";
-import { STAIR, boundsText, fmt, within, type Bounds } from "../rules/check.js";
+import { STAIR, boundsText, within, type Bounds } from "../rules/check.js";
 import { isRuleApplicable, resolveContexts } from "../rules/contexts.js";
 import { effectiveSeverity } from "../rules/engine.js";
 import { findRule, ruleParam, type RuleDef } from "../rules/table.js";
 import type { Finding } from "../rules/types.js";
 
-/** Définition d'un contrôle de plugin hors rules.yaml. */
+/**
+ * Définition d'un contrôle de plugin hors rules.yaml. Sa description n'est pas ici : elle est la
+ * clé `rules.<id>.description` des dictionnaires (`ruleDescription(id)`, ADR-0007), comme pour
+ * les règles de rules.yaml.
+ */
 export interface PluginRuleSpec {
   readonly id: string;
-  readonly description: string;
   readonly source: string;
   readonly confidence: RuleDef["confiance"];
   readonly nature: RuleDef["nature"];
@@ -35,7 +39,8 @@ export interface PluginRuleSpec {
 export function pluginRuleDef(spec: PluginRuleSpec): RuleDef {
   return {
     id: spec.id,
-    description: spec.description,
+    // Description dans les dictionnaires (`rules.<id>.description`), pas dans la RuleDef.
+    description: "",
     formule: "",
     min: null,
     max: null,
@@ -55,7 +60,6 @@ export function toRuleResult(rule: RuleDef, f: Finding, project: Project): RuleR
   const eff = effectiveSeverity(rule, project.compliance);
   const base: RuleResult = {
     ruleId: rule.id,
-    description: rule.description,
     status: eff.ignored && f.status !== "non-evaluee" ? "non-evaluee" : f.status,
     severity: eff.severity,
     declaredSeverity: rule.severite,
@@ -113,18 +117,22 @@ export class CheckCollector {
 
   /**
    * Contrôle d'une valeur mesurée par élément : un constat par élément non conforme, sinon un
-   * constat `ok` portant l'élément le plus défavorable.
+   * constat `ok` portant l'élément le plus défavorable. `quantity` : grandeur contrôlée (début
+   * de phrase) ; `label` de chaque élément : repère ou désignation (`textMessage(mark)` pour un
+   * repère seul).
    */
   addItems(
     rule: RuleDef,
-    items: readonly { value: number; label: string; partId?: string }[],
-    quantity: string,
+    items: readonly { value: number; label: Message; partId?: string }[],
+    quantity: Message,
     bounds: Bounds,
   ): void {
     const unit = rule.unite;
     const u = unit ? ` ${unit}` : "";
     if (items.length === 0) {
-      this.add(rule, [{ status: "ok", message: `Sans objet (${quantity}).` }]);
+      this.add(rule, [
+        { status: "ok", message: msg("structure.common.check.noItems", { quantity }) },
+      ]);
       return;
     }
     const nan = items.filter((it) => !Number.isFinite(it.value));
@@ -132,7 +140,7 @@ export class CheckCollector {
     const findings: Finding[] = nan.map((it) => ({
       status: "non-evaluee" as const,
       location: it.partId ? { kind: "part" as const, partId: it.partId } : STAIR,
-      message: `${quantity}, ${it.label} : valeur non calculable.`,
+      message: msg("structure.common.check.itemNotComputable", { quantity, item: it.label }),
     }));
     const bad = valid.filter((it) => !within(it.value, bounds));
     for (const it of bad) {
@@ -142,7 +150,13 @@ export class CheckCollector {
         min: bounds.min,
         max: bounds.max,
         location: it.partId ? { kind: "part", partId: it.partId } : STAIR,
-        message: `${quantity}, ${it.label} : ${fmt(it.value, 1)}${u} (attendu ${boundsText(bounds, unit)}).`,
+        message: msg("compliance.check.item", {
+          quantity,
+          item: it.label,
+          value: dec(it.value, 1),
+          unit: u,
+          bounds: boundsText(bounds, unit),
+        }),
       });
     }
     if (bad.length === 0 && valid.length > 0) {
@@ -163,7 +177,14 @@ export class CheckCollector {
         measured: worst.value,
         min: bounds.min,
         max: bounds.max,
-        message: `${quantity} conforme sur ${valid.length} élément(s) ; valeur la plus défavorable ${fmt(worst.value, 1)}${u} (${worst.label}), attendu ${boundsText(bounds, unit)}.`,
+        message: msg("compliance.check.itemsOk", {
+          quantity,
+          count: dec(valid.length, 0),
+          value: dec(worst.value, 1),
+          unit: u,
+          item: worst.label,
+          bounds: boundsText(bounds, unit),
+        }),
       });
     }
     this.add(rule, findings);
@@ -175,10 +196,10 @@ export class CheckCollector {
  * plus, emmarchement ≤ `parametres.E_max`, C §1.4) : message « hors domaine » si l'emmarchement
  * le dépasse, `null` sinon.
  */
-export function stringerRulesOutOfDomain(rule: RuleDef, width: number): string | null {
+export function stringerRulesOutOfDomain(rule: RuleDef, width: number): Message | null {
   const max = ruleParam(rule, "E_max");
   return width > max
-    ? `Hors domaine des règles de moyens (emmarchement ${fmt(width, 0)} mm > ${fmt(max, 0)} mm)`
+    ? msg("structure.common.outOfMeansDomain", { width: dec(width, 0), max: dec(max, 0) })
     : null;
 }
 
@@ -186,10 +207,10 @@ export function stringerRulesOutOfDomain(rule: RuleDef, width: number): string |
 
 const WORKSHOP_SOURCE = "Profil d'atelier Blondel (valeur par défaut à valider, LEDGER §2)";
 
+/** Contrôles de fabrication communs ; descriptions : `rules.<id>.description`. */
 export const FAB_RULES = {
   perpendicularWidth: {
     id: "FAB_LIMON_LARGEUR_PERP_MIN",
-    description: "Largeur du limon mesurée perpendiculairement à ses rives (CHALLENGE G6)",
     source: WORKSHOP_SOURCE,
     confidence: "faible",
     nature: "metier",
@@ -198,7 +219,6 @@ export const FAB_RULES = {
   },
   woodBetweenHousings: {
     id: "FAB_LIMON_BOIS_ENTRE_MORTAISES",
-    description: "Bois entre deux encastrements de marche successifs (CHALLENGE G6)",
     source: WORKSHOP_SOURCE,
     confidence: "faible",
     nature: "metier",
@@ -207,7 +227,6 @@ export const FAB_RULES = {
   },
   cheek: {
     id: "FAB_LIMON_JOUE_MIN",
-    description: "Joue : bois entre un encastrement et une rive du limon",
     source: WORKSHOP_SOURCE,
     confidence: "faible",
     nature: "metier",
@@ -216,7 +235,6 @@ export const FAB_RULES = {
   },
   boardLength: {
     id: "FAB_PLATEAU_LONGUEUR_MAX",
-    description: "Longueur de débit ≤ longueur maximale de plateau du profil d'atelier",
     source: WORKSHOP_SOURCE,
     confidence: "faible",
     nature: "metier",
@@ -225,8 +243,6 @@ export const FAB_RULES = {
   },
   stockAvailable: {
     id: "FAB_DEBIT_DISPONIBLE",
-    description:
-      "Épaisseur et largeur de débit disponibles dans le profil d'atelier (surcote de corroyage comprise)",
     source: WORKSHOP_SOURCE,
     confidence: "faible",
     nature: "metier",
@@ -235,8 +251,6 @@ export const FAB_RULES = {
   },
   newelReception: {
     id: "FAB_POTEAU_RECEPTION",
-    description:
-      "Le limon de jour s'arrête contre une face du poteau : épaisseur (largeur en plan) du limon ≤ débord du poteau côté jour au-delà de la face interne du limon (demi-côté pour un poteau centré sur l'intersection des faces internes, demi-côté + décalage pour un poteau décalé vers le jour)",
     source:
       "Géométrie du tracé (layout.ts et layout/newel.ts : poteau centré sur le coin intérieur K ou décalé vers le jour)",
     confidence: "eleve",
@@ -249,9 +263,9 @@ export const FAB_RULES = {
 /**
  * Plugin réservé aux escaliers **à volées** appelé sur un tracé hélicoïdal (`layout.helical`) :
  * message lisible (au lieu d'une erreur de géométrie trompeuse sur les volées vides), `null`
- * sur un tracé à volées.
+ * sur un tracé à volées. `label` : désignation courte de la structure (« crémaillères »).
  */
-export function flightsOnlyError(kind: string, label: string, layout: Layout): string | null {
+export function flightsOnlyError(kind: string, label: Message, layout: Layout): Message | null {
   if (!layout.helical) return null;
-  return `Structure « ${kind} » (${label}) : réservée aux escaliers à volées ; le tracé est hélicoïdal — choisir la structure « helical-core ».`;
+  return msg("structure.common.flightsOnly", { kind, label });
 }

@@ -16,12 +16,12 @@
  *   rapportée à l'aire en plan des marches, plus `extraPermanent`.
  * Les crémaillères (`carriage`) ne sont pas prédimensionnées (section entaillée : table FCBA).
  */
+import { DEFAULT_LOCALE, dec, msg, translatorFor, type Message } from "@blondel/i18n";
 import { signedArea } from "../geom2d/polygon.js";
 import type { Part, RuleResult, Stepping } from "../model/derived.js";
 import type { Mm } from "../model/primitives.js";
 import type { Project } from "../model/project.js";
 import { resolveContexts } from "../rules/contexts.js";
-import { fmt } from "../rules/check.js";
 import { findSection, sectionInLabel } from "../catalog/sections.js";
 import { minAreaRect } from "../structures/geom.js";
 import { QUANTITY_MASS_KG, normalizeWoodQuantities } from "../structures/quantities.js";
@@ -42,6 +42,8 @@ import {
   type BeamMaterial,
   type PrecheckSettings,
 } from "./settings.js";
+
+const FR = translatorFor(DEFAULT_LOCALE);
 
 const PERMANENT_CATEGORIES = new Set<Part["category"]>(["tread", "riser", "landing", "support"]);
 
@@ -81,7 +83,7 @@ export interface StringerPrecheck {
   readonly results: readonly RuleResult[];
   readonly loads: StairLoads;
   readonly permanentArea: number;
-  readonly notes: readonly string[];
+  readonly notes: readonly Message[];
 }
 
 function xExtent(part: Part): number {
@@ -131,21 +133,24 @@ export function precheckStringers(
   const cos = Math.cos(Math.atan(slope));
   const tributaryWidth = project.stair.layout.width / 2;
   const beams: PrecheckedBeam[] = [];
-  const notes: string[] = [];
+  const notes: Message[] = [];
   let steelPlates = false;
   for (const p of parts) {
     if (p.category !== "stringer" || !p.flat) continue;
-    const catalog = sectionInLabel(p.section) ?? (p.section ? findSection(p.section) : undefined);
+    // Désignation de la section lue dans son texte français (« UPN 200 (S355) … »), stable.
+    const sectionText = p.section ? FR.t(p.section) : undefined;
+    const catalog =
+      sectionInLabel(sectionText) ?? (sectionText ? findSection(sectionText) : undefined);
     let section: BeamSection;
     let spanH: number;
     let material: BeamMaterial;
-    let label: string;
+    let label: Message;
     if (catalog) {
       section = { area: catalog.area, i: catalog.iy, w: catalog.wy };
       spanH = profileSpanH(p, catalog.h, cos);
-      const grade = gradeInLabel(p.section);
+      const grade = gradeInLabel(sectionText);
       material = steelMaterialOf(grade, settings, profile.metal.density);
-      label = `${p.mark}, ${catalog.name} ${grade}`;
+      label = msg("precheck.beam.profile", { mark: p.mark, section: catalog.name, grade });
     } else {
       const b = p.flat.thickness;
       const h = minAreaRect(p.flat.outline.outer).width;
@@ -154,11 +159,16 @@ export function precheckStringers(
       if (isWoodMaterial(p.material)) {
         material = woodMaterialOf(settings, profile.wood.densities[p.material]);
       } else {
-        const grade = gradeInLabel(p.section);
+        const grade = gradeInLabel(sectionText);
         material = steelMaterialOf(grade, settings, profile.metal.density);
         steelPlates = true;
       }
-      label = `${p.mark}, section brute ${fmt(b, 0)} × ${fmt(h, 0)} ${material.label}`;
+      label = msg("precheck.beam.rough", {
+        mark: p.mark,
+        b: dec(b, 0),
+        h: dec(h, 0),
+        material: material.label,
+      });
     }
     if (!(spanH > 1)) continue;
     const result = analyzeInclinedBeam({
@@ -175,13 +185,16 @@ export function precheckStringers(
   }
   if (beams.length > 0) {
     notes.push(
-      `Prédimensionnement indicatif (ne remplace pas une note de calcul) : q_k ${fmt(loads.qk, 1)} kN/m², Q_k ${fmt(loads.Qk, 1)} kN (${loads.source}) ; permanentes ${fmt(permanentArea, 2)} kN/m² ; poutres inclinées sur deux appuis, pente nominale ; coefficients et classes de matériau à valider.`,
+      msg("precheck.note.loads", {
+        qk: dec(loads.qk, 1),
+        Qk: dec(loads.Qk, 1),
+        source: loads.source,
+        permanent: dec(permanentArea, 2),
+      }),
     );
   }
   if (steelPlates && beams.length > 0) {
-    notes.push(
-      "Limons en plat : déversement et torsion non vérifiés par le prédimensionnement ; pour un plat mince, ils gouvernent (C §2.3, flèche indicative) — note de calcul EC3 indispensable.",
-    );
+    notes.push(msg("precheck.note.plates"));
   }
   return {
     beams,

@@ -30,6 +30,7 @@
  * Paramètres (`BalancingInput.params`) : `alpha` (degrés, défaut `HERSE_DEFAULT_ANGLE`) ;
  * `cornerSigma` (σ_A imposé, zone à un seul angle).
  */
+import { msg } from "@blondel/i18n";
 import { curvePointAt } from "../geom2d/curve.js";
 import { projectOnCurve } from "../geom2d/intersect.js";
 import type { BalancingInput, BalancingSolution, BalancingStrategy } from "../model/plugins.js";
@@ -143,7 +144,10 @@ function solve(input: BalancingInput): BalancingSolution {
   const { a, b } = zoneEnds(input);
   const alpha = alphaOf(input);
   if (!(alpha > 0 && alpha < Math.PI / 2)) {
-    return { kind: "fail", reason: `angle de herse invalide (${alpha / DEG}°)` };
+    return {
+      kind: "fail",
+      reason: msg("balancing.m2.fail.invalidAngle", { angle: String(alpha / DEG) }),
+    };
   }
   const pts = breakpoints(input);
   const maps: ((s: Mm) => Mm)[] = [];
@@ -157,7 +161,7 @@ function solve(input: BalancingInput): BalancingSolution {
       continue;
     }
     if (!(lc > 0)) {
-      return { kind: "fail", reason: `longueur de jour nulle entre les nez ${a} et ${b}` };
+      return { kind: "fail", reason: msg("balancing.fail.zeroWellLength", { a, b }) };
     }
     const bound = herseAlphaBound(lc, w);
     if (!(alpha < bound)) {
@@ -165,8 +169,11 @@ function solve(input: BalancingInput): BalancingSolution {
         kind: "fail",
         reason:
           bound > 0
-            ? `angle de herse ${(alpha / DEG).toFixed(1)}° hors de ]0 ; ${(bound / DEG).toFixed(1)}°[ (au-delà, collets croissants vers l'angle)`
-            : "jour plus long que la ligne de foulée : herse sans objet",
+            ? msg("balancing.m2.fail.angleOutOfRange", {
+                angle: (alpha / DEG).toFixed(1),
+                max: (bound / DEG).toFixed(1),
+              })
+            : msg("balancing.m2.fail.wellLongerThanWalkline"),
       };
     }
     if (q.corner && !p.corner) {
@@ -192,6 +199,6 @@ function solve(input: BalancingInput): BalancingSolution {
 
 export const M2_STRATEGY: BalancingStrategy = {
   id: "M2",
-  label: "Herse (M2)",
+  labelKey: "balancing.m2.label",
   solve,
 };

@@ -2,6 +2,7 @@
  * Polygones plans (`Polygon2` : sommets sans répétition du premier) et bandes entre courbes.
  */
 import type { Curve2, Mm, Polygon2, Shape2, Vec2 } from "../model/primitives.js";
+import { MessageError, msg } from "@blondel/i18n";
 import { flattenCurve, subCurve } from "./curve.js";
 import { intersectLineCurve, intersectLines, type CurveHit, type Line2 } from "./intersect.js";
 import { GEOM_EPS } from "./tolerance.js";
@@ -74,7 +75,7 @@ export interface BBox {
 
 /** Boîte englobante d'un ensemble de points (lève une erreur si vide). */
 export function bbox(points: readonly Vec2[]): BBox {
-  if (points.length === 0) throw new Error("bbox : aucun point");
+  if (points.length === 0) throw new MessageError(msg("error.geom2d.bbox.noPoints"));
   let minX = Infinity;
   let minY = Infinity;
   let maxX = -Infinity;
@@ -128,7 +129,7 @@ export function isConvex(poly: Polygon2): boolean {
  * convexe ou si un décalage intérieur fait disparaître une arête.
  */
 export function offsetConvexPolygon(poly: Polygon2, d: Mm): Polygon2 {
-  if (!isConvex(poly)) throw new Error("offsetConvexPolygon : polygone non convexe");
+  if (!isConvex(poly)) throw new MessageError(msg("error.geom2d.offsetConvexPolygon.notConvex"));
   const p = ensureCCW(poly);
   const n = p.length;
   const lines: Line2[] = [];
@@ -152,7 +153,7 @@ export function offsetConvexPolygon(poly: Polygon2, d: Mm): Polygon2 {
   // Une arête dont le sens s'inverse a « traversé » le polygone : décalage intérieur trop grand.
   const flipped = lines.some((l, i) => V.dot(V.sub(res[(i + 1) % m]!, res[i]!), l.dir) <= 0);
   if (flipped || orientation(res) !== "ccw" || !isConvex(res)) {
-    throw new Error("offsetConvexPolygon : décalage intérieur trop grand");
+    throw new MessageError(msg("error.geom2d.offsetConvexPolygon.insetTooLarge"));
   }
   return res;
 }

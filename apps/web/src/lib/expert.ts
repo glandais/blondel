@@ -20,6 +20,7 @@ import {
   type Project,
   type Vec2,
 } from "@blondel/core";
+import { trList } from "../i18n/fr.js";
 
 /**
  * Écart maximal accepté par la poignée (degrés) : borne d'interface seulement (une ligne de nez
@@ -183,7 +184,7 @@ export function orphanOverrides(
  * collets, collet nul), pour que l'effet d'une rotation soit visible à côté du plan.
  */
 export function overrideNotes(model: Pick<Model, "stepping">): readonly string[] {
-  return model.stepping.notes.filter(
+  return trList(model.stepping.notes).filter(
     (t) =>
       /^Surcharge/.test(t) ||
       /^Nez \d+ : (angle imposé|plusieurs angles)/.test(t) ||

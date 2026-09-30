@@ -6,6 +6,7 @@
  */
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
+import { fr } from "../i18n.test-helpers.js";
 import { pointInPolygon } from "../geom2d/polygon.js";
 import { ceilingOf, openingPolygon } from "../headroom/headroom.js";
 import type { Polygon2, Vec2 } from "../model/primitives.js";
@@ -90,7 +91,7 @@ describe("propriétés de proposeDesigns", () => {
           limits: { maxBuilds: 40, maxCandidates: 6, timeBudgetMs: Number.POSITIVE_INFINITY },
         });
         if (r.candidates.length === 0) {
-          expect(r.diagnostics[0]).toMatch(/^Aucune proposition/);
+          expect(fr(r.diagnostics[0])).toMatch(/^Aucune proposition/);
         }
         const poly = openingPolygon(opening)!;
         const wallPolys = walls.map((w) => shrink(wallRect(w), 0.5));

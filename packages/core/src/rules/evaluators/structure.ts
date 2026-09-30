@@ -8,6 +8,7 @@
  * - aucune structure choisie : `non-evaluee` (donnée inconnue) ;
  * - autre structure (acier, hélicoïdal à fût) : sans objet (pas de limon bois).
  */
+import { msg, type Message, type MessageKey } from "@blondel/i18n";
 import { notApplicable, notEvaluated } from "../check.js";
 import type { RuleEvaluator } from "../types.js";
 
@@ -18,35 +19,31 @@ export const STRUCTURE_EVALUATED_RULES: Readonly<Record<string, readonly string[
   CREMAILLERE_REGLE_MOYENS: ["wood-cut"],
 };
 
-const SUBJECT: Readonly<Record<string, string>> = {
-  LIMON_EPAISSEUR_MIN_DTU: "épaisseur des limons ou crémaillères bois",
-  LIMON_ENTAILLE_MIN: "profondeur d'entaille des marches dans les limons bois",
-  CREMAILLERE_REGLE_MOYENS: "reste de bois sous les entailles des crémaillères",
+/** Grandeur contrôlée par chaque règle (complément de « inconnue(s) »). */
+const SUBJECT: Readonly<Record<string, MessageKey>> = {
+  LIMON_EPAISSEUR_MIN_DTU: "rules.LIMON_EPAISSEUR_MIN_DTU.subject",
+  LIMON_ENTAILLE_MIN: "rules.LIMON_ENTAILLE_MIN.subject",
+  CREMAILLERE_REGLE_MOYENS: "rules.CREMAILLERE_REGLE_MOYENS.subject",
 };
+
+/** « « wood-housed » ou « wood-cut » » : identifiants de structure entre guillemets. */
+function kindNames(kinds: readonly string[]): Message {
+  return kinds
+    .map((kind) => msg("compliance.structureRule.kindName", { kind }))
+    .reduce((first, next) => msg("compliance.join.or", { first, next }));
+}
 
 function structureRule(ruleId: string): RuleEvaluator {
   const kinds = STRUCTURE_EVALUATED_RULES[ruleId]!;
-  const subject = SUBJECT[ruleId]!;
-  const names = kinds.map((k) => `« ${k} »`).join(" ou ");
+  const subject = msg(SUBJECT[ruleId]!);
+  const names = kindNames(kinds);
   return (ctx) => {
     const kind = ctx.project.stair.structure.kind;
     if (kinds.includes(kind))
-      return [
-        notEvaluated(
-          `Contrôle porté par la structure « ${kind} », qui n'a rendu aucun résultat (voir les erreurs du modèle).`,
-        ),
-      ];
+      return [notEvaluated(msg("compliance.structureRule.noResult", { kind }))];
     if (kind === "none")
-      return [
-        notEvaluated(
-          `Aucune structure choisie : ${subject} inconnue(s) ; contrôle évalué par la structure ${names}.`,
-        ),
-      ];
-    return [
-      notApplicable(
-        `Sans objet : la structure « ${kind} » n'a pas de limon bois (contrôle des structures ${names}).`,
-      ),
-    ];
+      return [notEvaluated(msg("compliance.structureRule.noStructure", { subject, names }))];
+    return [notApplicable(msg("compliance.structureRule.otherStructure", { kind, names }))];
   };
 }
 

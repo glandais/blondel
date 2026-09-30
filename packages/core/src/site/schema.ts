@@ -17,7 +17,14 @@
  * 50 000 sommets au plus pour le DXF, data URL de 1 500 000 caractères au plus pour l'image
  * (environ 1,1 Mo d'image encodée ; l'interface réduit l'image avant de l'enregistrer).
  */
+import { DEFAULT_LOCALE, msg, translatorFor, type Message } from "@blondel/i18n";
 import { z } from "zod";
+
+/**
+ * Texte français d'un message de validation : zod ne garde que du texte ; la clé est retrouvée
+ * par `zodIssueMessage` (`project/errors.ts`) grâce à `params.message` ou à ce texte.
+ */
+const frText = (m: Message): string => translatorFor(DEFAULT_LOCALE).t(m);
 
 /** Nombre maximal d'entités DXF conservées dans le projet. */
 export const UNDERLAY_MAX_ENTITIES = 5_000;
@@ -98,18 +105,25 @@ export const DxfUnderlaySchema = z
     let count = 0;
     for (const e of v.entities) count += entityVertexCount(e);
     if (count > UNDERLAY_MAX_VERTICES) {
+      const message = msg("site.underlay.tooManyVertices", {
+        count: String(count),
+        max: String(UNDERLAY_MAX_VERTICES),
+      });
       ctx.addIssue({
         code: "custom",
         path: ["entities"],
-        message: `calque DXF trop lourd : ${count} sommets (au plus ${UNDERLAY_MAX_VERTICES})`,
+        message: frText(message),
+        params: { message },
       });
     }
     v.entities.forEach((e, i) => {
       if (e.kind === "polyline" && e.bulges && e.bulges.length !== e.points.length) {
+        const message = msg("site.underlay.bulgePerVertex");
         ctx.addIssue({
           code: "custom",
           path: ["entities", i, "bulges"],
-          message: "un renflement par sommet attendu",
+          message: frText(message),
+          params: { message },
         });
       }
     });
@@ -125,7 +139,10 @@ export const ImageUnderlaySchema = z.object({
   dataUrl: z
     .string()
     .max(UNDERLAY_IMAGE_MAX_CHARS)
-    .regex(/^data:image\/(png|jpeg);base64,[A-Za-z0-9+/=]+$/, "data URL PNG ou JPEG attendue"),
+    .regex(
+      /^data:image\/(png|jpeg);base64,[A-Za-z0-9+/=]+$/,
+      frText(msg("site.underlay.imageDataUrl")),
+    ),
   /** Dimensions de l'image en pixels. */
   widthPx: z.number().int().positive(),
   heightPx: z.number().int().positive(),

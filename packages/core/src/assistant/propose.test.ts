@@ -2,7 +2,9 @@
  * Assistant d'initialisation (CHALLENGE G8) : cas d'acceptation n° 1 de bout en bout, trémie
  * trop petite, préférences, annulation et budget de temps.
  */
+import { translatorFor } from "@blondel/i18n";
 import { describe, expect, it } from "vitest";
+import { fr, frList } from "../i18n.test-helpers.js";
 import { pointInPolygon } from "../geom2d/polygon.js";
 import { openingPolygon } from "../headroom/headroom.js";
 import { ProjectSchema } from "../model/project.js";
@@ -50,8 +52,8 @@ function proposeUntimed(input: AssistantInput): AssistantResult {
 function expectNoBlocking(result: AssistantResult): void {
   for (const c of result.candidates.flatMap((h) => [h, ...h.variants])) {
     const model = buildModel(c.project, { memo: false });
-    expect(model.errors, c.label).toEqual([]);
-    expect(model.compliance.summary.bloquant, c.label).toBe(0);
+    expect(model.errors, fr(c.label)).toEqual([]);
+    expect(model.compliance.summary.bloquant, fr(c.label)).toBe(0);
   }
 }
 
@@ -91,7 +93,7 @@ describe("cas d'acceptation n° 1 (H 2 700, trémie 2 800 × 900, dalle 200)", (
     const r = proposeUntimed({ site: { ...ACCEPTANCE_SITE, upperSlabThickness: 250 } });
     expect(r.candidates.some((c) => c.typology === "straight")).toBe(false);
     expect(
-      r.diagnostics.some((d) => /^Escalier droit : rejeté — échappée insuffisante/.test(d)),
+      frList(r.diagnostics).some((d) => /^Escalier droit : rejeté — échappée insuffisante/.test(d)),
     ).toBe(true);
     expect(r.candidates[0]?.typology).toMatch(/^quarter/);
   });
@@ -185,10 +187,10 @@ describe("trémie trop petite", () => {
       },
     });
     expect(r.candidates).toEqual([]);
-    expect(r.diagnostics[0]).toMatch(/^Aucune proposition sans bloquant pour ce site\./);
-    expect(r.diagnostics[0]).toMatch(/trémie est trop petite/);
-    expect(r.diagnostics[0]).toMatch(/TREMIE_LONGUEUR/);
-    expect(r.diagnostics.some((d) => /^Hélicoïdal à gauche : rejeté/.test(d))).toBe(true);
+    expect(frList(r.diagnostics)[0]).toMatch(/^Aucune proposition sans bloquant pour ce site\./);
+    expect(frList(r.diagnostics)[0]).toMatch(/trémie est trop petite/);
+    expect(frList(r.diagnostics)[0]).toMatch(/TREMIE_LONGUEUR/);
+    expect(frList(r.diagnostics).some((d) => /^Hélicoïdal à gauche : rejeté/.test(d))).toBe(true);
   });
 
   it("trop étroite pour l'emmarchement : diagnostic de largeur", () => {
@@ -200,8 +202,8 @@ describe("trémie trop petite", () => {
       },
     });
     expect(r.candidates).toEqual([]);
-    expect(r.diagnostics[0]).toMatch(/largeur hors tout/);
-    expect(r.diagnostics[0]).toMatch(/LARGEUR_MIN_LOGEMENT/);
+    expect(frList(r.diagnostics)[0]).toMatch(/largeur hors tout/);
+    expect(frList(r.diagnostics)[0]).toMatch(/LARGEUR_MIN_LOGEMENT/);
   });
 });
 
@@ -230,7 +232,7 @@ describe("préférences, annulation, données invalides", () => {
     const r = proposeUntimed({ site: ACCEPTANCE_SITE, shouldStop: () => true });
     expect(r.stats.stopped).toBe(true);
     expect(r.candidates).toEqual([]);
-    expect(r.diagnostics).toContain("Recherche interrompue : résultat partiel.");
+    expect(frList(r.diagnostics)).toContain("Recherche interrompue : résultat partiel.");
   });
 
   it("annulation en cours de construction : résultat partiel sans bloquant", () => {
@@ -254,13 +256,13 @@ describe("préférences, annulation, données invalides", () => {
   it("données invalides et structure inconnue : diagnostic, aucune exception", () => {
     const bad = proposeUntimed({ site: { floorToFloor: -1, upperSlabThickness: 200 } });
     expect(bad.candidates).toEqual([]);
-    expect(bad.diagnostics[0]).toMatch(/données du site invalides/);
+    expect(frList(bad.diagnostics)[0]).toMatch(/données du site invalides/);
     const unknown = proposeUntimed({
       site: ACCEPTANCE_SITE,
       preferences: { structure: { kind: "inconnue" } },
     });
     expect(unknown.candidates).toEqual([]);
-    expect(unknown.diagnostics[0]).toMatch(/Structure « inconnue » inconnue/);
+    expect(frList(unknown.diagnostics)[0]).toMatch(/Structure « inconnue » inconnue/);
   });
 
   it("sans trémie : escaliers placés à l'origine, sans contrainte d'échappée", () => {
@@ -305,8 +307,8 @@ describe("relecture adverse : régressions", () => {
     for (const [input, re] of cases) {
       const r = proposeUntimed(input);
       expect(r.candidates).toEqual([]);
-      expect(r.diagnostics[0]).toMatch(/^Aucune proposition : /);
-      expect(r.diagnostics[0]).toMatch(re);
+      expect(frList(r.diagnostics)[0]).toMatch(/^Aucune proposition : /);
+      expect(frList(r.diagnostics)[0]).toMatch(re);
     }
   });
 
@@ -349,10 +351,10 @@ describe("relecture adverse : régressions", () => {
     const elapsed = performance.now() - t0;
     expect(elapsed).toBeLessThanOrEqual(BUDGET_MS * FACTOR);
     expect(r.stats.truncated).toBe(true);
-    expect(r.diagnostics.some((d) => /Budget de temps de l'énumération atteint/.test(d))).toBe(
-      true,
-    );
-    expect(r.diagnostics.some((d) => /trémie est trop petite/.test(d))).toBe(false);
+    expect(
+      frList(r.diagnostics).some((d) => /Budget de temps de l'énumération atteint/.test(d)),
+    ).toBe(true);
+    expect(frList(r.diagnostics).some((d) => /trémie est trop petite/.test(d))).toBe(false);
   });
 
   it("grande trémie entre trois murs (bois_dtu) : l'énumération n'épuise pas le budget des modèles", () => {
@@ -380,7 +382,7 @@ describe("relecture adverse : régressions", () => {
     });
     // Même sous charge, l'énumération (≤ 80 % du budget) laisse le temps de construire.
     expect(r.stats.built).toBeGreaterThan(0);
-    expect(r.diagnostics.some((d) => /trémie est trop petite/.test(d))).toBe(false);
+    expect(frList(r.diagnostics).some((d) => /trémie est trop petite/.test(d))).toBe(false);
     expectNoBlocking(r);
   });
 
@@ -392,11 +394,11 @@ describe("relecture adverse : régressions", () => {
       preferences: { structure: { kind: "steel-curved" }, typologies: ["quarter-landing"] },
     });
     expect(r.candidates).toEqual([]);
-    expect(r.diagnostics[0]).not.toMatch(/trémie est trop petite/);
-    expect(r.diagnostics[0]).toMatch(/structure visée ou par le contrôle de conception/);
+    expect(frList(r.diagnostics)[0]).not.toMatch(/trémie est trop petite/);
+    expect(frList(r.diagnostics)[0]).toMatch(/structure visée ou par le contrôle de conception/);
     // Motif principal par typologie : l'erreur de génération, pas l'échappée des calages écartés.
     expect(
-      r.diagnostics.some((d) =>
+      frList(r.diagnostics).some((d) =>
         /^Quart tournant avec palier à gauche : rejeté — erreur de génération/.test(d),
       ),
     ).toBe(true);
@@ -420,14 +422,14 @@ describe("relecture adverse : régressions", () => {
     });
     expect(r.candidates).toEqual([]);
     // TREMIE_LONGUEUR demande 2 800 mm, le côté en fait 3 000 : la taille n'est pas en cause.
-    expect(r.diagnostics[0]).not.toMatch(/trop petite/);
-    expect(r.diagnostics[0]).toMatch(/échappée et les murs/);
+    expect(frList(r.diagnostics)[0]).not.toMatch(/trop petite/);
+    expect(frList(r.diagnostics)[0]).toMatch(/échappée et les murs/);
   });
 
   it("emmarchement imposé trop large : le diagnostic cite l'emmarchement demandé", () => {
     const r = proposeUntimed({ site: ACCEPTANCE_SITE, preferences: { width: 3000 } });
     expect(r.candidates).toEqual([]);
-    expect(r.diagnostics[0]).toMatch(/E ≥ 3000 mm, emmarchement demandé/);
+    expect(frList(r.diagnostics)[0]).toMatch(/E ≥ 3000 mm, emmarchement demandé/);
   });
 
   it("trémie en L : l'axe de l'hélicoïdal n'est pas posé hors de la trémie", () => {
@@ -533,16 +535,18 @@ describe("diversité des propositions (constat en ligne : H 2 700, trémie 1 100
     ]) {
       const r = proposeDesigns({ site: SITE, limits });
       expect(r.candidates).toEqual([]);
-      expect(r.diagnostics[0]).toMatch(/^Aucune proposition : limits\./);
+      expect(frList(r.diagnostics)[0]).toMatch(/^Aucune proposition : limits\./);
     }
   });
 
   it("maxCandidates = 0 : liste vide par réglage, pas « aucune proposition sans bloquant » (QUESTIONS D1)", () => {
     const r = proposeUntimed({ site: SITE, limits: { maxCandidates: 0 } });
     expect(r.candidates).toEqual([]);
-    expect(r.diagnostics[0]).toMatch(/^Liste vide : \d+ proposition\(s\) sans bloquant/);
-    expect(r.diagnostics[0]).toContain("réglé à 0");
-    expect(r.diagnostics.some((d) => d.startsWith("Aucune proposition sans bloquant"))).toBe(false);
+    expect(frList(r.diagnostics)[0]).toMatch(/^Liste vide : \d+ proposition\(s\) sans bloquant/);
+    expect(frList(r.diagnostics)[0]).toContain("réglé à 0");
+    expect(
+      frList(r.diagnostics).some((d) => d.startsWith("Aucune proposition sans bloquant")),
+    ).toBe(false);
   });
 });
 
@@ -586,12 +590,12 @@ describe("jours en arc (décision A17)", () => {
         // Rayon de roulage : rayon intérieur mini de la rouleuse (150) + limon de 8, aux 10 mm.
         expect(t.inner).toEqual({ kind: "arc", radius: 160 });
       }
-      expect(c.label).toMatch(/jour en arc R 160 mm/);
+      expect(fr(c.label)).toMatch(/jour en arc R 160 mm/);
     }
     expectNoBlocking(r);
     for (const c of turning) {
       const m = buildModel(c.project, { memo: false });
-      expect(m.parts.some((p) => p.id.startsWith("curved-") || /débillard/i.test(p.name))).toBe(
+      expect(m.parts.some((p) => p.id.startsWith("curved-") || /débillard/i.test(fr(p.name)))).toBe(
         true,
       );
     }
@@ -621,7 +625,7 @@ describe("jours en arc (décision A17)", () => {
 describe("intention de structure : épaisseurs hors emprise déclarées par les plugins (dette D4)", () => {
   const resolved = (kind: string, params: Record<string, unknown> = {}) => {
     const r = resolveStructureIntent({ kind, params });
-    if ("error" in r) throw new Error(r.error);
+    if ("error" in r) throw new Error(fr(r.error));
     return r;
   };
 
@@ -634,10 +638,10 @@ describe("intention de structure : épaisseurs hors emprise déclarées par les 
     expect(
       resolved("helical-core", { outerStringer: { enabled: true, thickness: 10 } }),
     ).toMatchObject({ inner: 0, outer: 10 });
-    expect(resolved("helical-core").note).toMatch(/aucun limon hors emprise utile, 0 mm/);
+    expect(fr(resolved("helical-core").note)).toMatch(/aucun limon hors emprise utile, 0 mm/);
     // Inchangé pour les limons latéraux déjà déduits.
     expect(resolved("wood-housed")).toMatchObject({ inner: 45, outer: 45 });
-    expect(resolved("wood-housed").note).toMatch(/de 45 mm hors emprise utile/);
+    expect(fr(resolved("wood-housed").note)).toMatch(/de 45 mm hors emprise utile/);
     // Saisie explicite prioritaire.
     const r = resolveStructureIntent({
       kind: "steel-profile",
@@ -653,6 +657,36 @@ describe("intention de structure : épaisseurs hors emprise déclarées par les 
       preferences: { structure: { kind: "wood-housed" }, typologies: ["helical"] },
     });
     expect(r.candidates).toHaveLength(0);
-    expect(JSON.stringify(r.rejections ?? r)).toMatch(/ne s'applique pas à un hélicoïdal/);
+    expect(r.rejections.map((x) => fr(x.example)).join(" ")).toMatch(
+      /ne s'applique pas à un hélicoïdal/,
+    );
+  });
+});
+
+describe("assistant : messages traduits (ADR-0007)", () => {
+  const EN = translatorFor("en");
+
+  it("libellés, calages, termes du score et diagnostic en anglais sans reste de français", () => {
+    const r = acceptanceResult();
+    const c = r.candidates[0]!;
+    expect(fr(c.label)).toMatch(/ — \d+ hauteurs de [\d,]+ mm, giron \d+ mm, E \d+ mm/);
+    expect(EN.t(c.label)).toMatch(/ — \d+ risers of [\d.]+ mm, going \d+ mm, W \d+ mm/);
+    expect(EN.t(c.summary.fit)).toMatch(/^arrival on the .* of the stairwell opening, /);
+    const french = /\b(hauteurs|giron|trémie|échappée|rejeté|proposition|côté|mur|aucune?)\b/;
+    for (const t of c.score.terms) expect(EN.t(t.label)).not.toMatch(french);
+    for (const d of r.diagnostics) expect(EN.t(d)).not.toMatch(french);
+    // Nom du projet proposé : français par défaut (texte enregistré dans le projet).
+    expect(c.project.name).toBe(`Assistant — ${fr(c.label)}`);
+  });
+
+  it("noms des projets dans la langue demandée", () => {
+    const r = proposeUntimed({
+      site: ACCEPTANCE_SITE,
+      locale: "en",
+      preferences: { typologies: ["quarter"], direction: "left" },
+      limits: { maxBuilds: 4, maxCandidates: 1 },
+    });
+    const c = r.candidates[0]!;
+    expect(c.project.name).toBe(`Wizard — ${EN.t(c.label)}`);
   });
 });

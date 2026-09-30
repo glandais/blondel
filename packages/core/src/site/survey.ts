@@ -25,6 +25,7 @@
  * La tolérance de cohérence n'est pas sourcée : paramètre, valeur par défaut « à valider »
  * (`SURVEY_TOLERANCE_DEFAULT`). Placement dans le site : A sur `origin`, AB selon `angle`.
  */
+import { msg, type Message } from "@blondel/i18n";
 import { signedArea } from "../geom2d/polygon.js";
 import * as V from "../geom2d/vec.js";
 import type { Deg, Mm, Vec2 } from "../model/primitives.js";
@@ -89,7 +90,7 @@ export type SurveyResult =
       /** Angles intérieurs (degrés) en A, B, C, D. */
       readonly angles: readonly [Deg, Deg, Deg, Deg];
     }
-  | { readonly ok: false; readonly reason: string };
+  | { readonly ok: false; readonly reason: Message };
 
 const PAIRS: Readonly<Record<SurveyMeasure, readonly [number, number]>> = {
   ab: [0, 1],
@@ -322,11 +323,12 @@ function interiorAngle(prev: Vec2, p: Vec2, next: Vec2, ccw: boolean): Deg {
 function fitSurvey(
   m: OpeningSurvey,
   tolerance: Mm,
-): { readonly ok: true; readonly local: Vec2[] } | { readonly ok: false; readonly reason: string } {
+):
+  { readonly ok: true; readonly local: Vec2[] } | { readonly ok: false; readonly reason: Message } {
   for (const k of SURVEY_MEASURES) {
     const v = m[k];
     if (!(typeof v === "number" && Number.isFinite(v) && v > 0)) {
-      return { ok: false, reason: `mesure ${LABEL[k]} manquante ou non positive` };
+      return { ok: false, reason: msg("site.survey.missingMeasure", { measure: LABEL[k] }) };
     }
   }
   const A: Vec2 = { x: 0, y: 0 };
@@ -339,7 +341,11 @@ function fitSurvey(
   if (Cs.length === 0) {
     return {
       ok: false,
-      reason: `triangle ABC impossible : AB + BC doit dépasser AC (AB ${m.ab}, BC ${m.bc}, AC ${m.ac})`,
+      reason: msg("site.survey.triangleAbc", {
+        ab: String(m.ab),
+        bc: String(m.bc),
+        ac: String(m.ac),
+      }),
     };
   }
   const quads = Cs.flatMap((C) =>
@@ -351,7 +357,11 @@ function fitSurvey(
   if (quads.length === 0) {
     return {
       ok: false,
-      reason: `triangle ACD impossible : CD + DA doit dépasser AC (CD ${m.cd}, DA ${m.da}, AC ${m.ac})`,
+      reason: msg("site.survey.triangleAcd", {
+        cd: String(m.cd),
+        da: String(m.da),
+        ac: String(m.ac),
+      }),
     };
   }
   // Départ : quadrilatère simple parcouru dans le sens trigonométrique dont la diagonale BD
@@ -365,7 +375,7 @@ function fitSurvey(
     .sort((x, y) => Number(y.valid) - Number(x.valid) || x.err - y.err);
   const local = refine(starts[0]!.pts, m);
   if (isSelfIntersecting(local) || !(signedArea(local) > 0)) {
-    return { ok: false, reason: "les mesures ne décrivent pas un quadrilatère simple A, B, C, D" };
+    return { ok: false, reason: msg("site.survey.notSimple") };
   }
   return { ok: true, local };
 }

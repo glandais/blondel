@@ -104,6 +104,7 @@ import { warmUpShaders } from "../three/shaderWarmup.js";
 import { onTextureReady } from "../three/textures.js";
 import { AnnotationOverlay, AnnotationProjector } from "./Viewer3DOverlay.js";
 import { INITIAL_TOOLS, Viewer3DTools, type ToolsState } from "./Viewer3DTools.js";
+import { tr, trOpt } from "../i18n/fr.js";
 import "./Viewer3D.css";
 
 const MM = 0.001;
@@ -699,7 +700,7 @@ export default function Viewer3D({
   );
   const selectedMesh = parts.find(({ part }) => isPartSelected(part, selection?.location))?.part;
   const selectedName = selectedMesh
-    ? (model.parts.find((p) => p.id === selectedMesh.partId)?.name ?? "")
+    ? (trOpt(model.parts.find((p) => p.id === selectedMesh.partId)?.name) ?? "")
     : "";
   const selectedRules = selectedMesh ? markers.rulesByPart.get(selectedMesh.partId) : undefined;
   const flaggedCount = markers.parts.size + markers.points.length;
@@ -939,7 +940,7 @@ export default function Viewer3D({
         <ul className="viewer3d__errors" role="status">
           {failed.map((f) => (
             <li key={f.partId}>
-              {f.mark} : {f.error}
+              {f.mark} : {f.error !== undefined ? tr(f.error) : ""}
             </li>
           ))}
         </ul>

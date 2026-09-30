@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { describe, expect, it } from "vitest";
+import { translatorFor, type MessageKey } from "@blondel/i18n";
 import type { StructureKind } from "../model/plugins.js";
 import { findSection, sectionsOf } from "../catalog/sections.js";
 import {
@@ -16,7 +17,7 @@ import {
 
 const dummy: StructureKind<{ a: number }> = {
   kind: "test-dummy",
-  label: "Essai",
+  labelKey: "test.dummy" as MessageKey,
   family: "bois",
   paramsSchema: z.object({ a: z.number().default(1) }),
   defaults: () => ({ a: 1 }),
@@ -38,6 +39,15 @@ describe("registre des structures", () => {
     expect(() => registerStructure({ ...dummy, kind: "none" })).toThrow(/réservé/);
     expect(unregisterStructure("test-dummy")).toBe(true);
     expect(getStructure("test-dummy")).toBeUndefined();
+  });
+
+  it("libellés des plugins bois : clés traduites en français et en anglais", () => {
+    const fr = translatorFor("fr");
+    const en = translatorFor("en");
+    const housed = getStructure("wood-housed")!;
+    expect(fr.t(housed.labelKey)).toBe("Limons bois à la française (marches encastrées)");
+    expect(en.t(housed.labelKey)).toBe("Timber closed strings (housed treads)");
+    expect(en.t(getStructure("wood-cut")!.labelKey)).toBe("Timber cut strings");
   });
 });
 

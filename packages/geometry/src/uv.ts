@@ -22,6 +22,7 @@
  * **par triangle** et duplique les sommets aux coutures : c'est elle que la vue 3D utilise.
  */
 import type { Mm, Vec3 } from "@blondel/core";
+import { msg } from "@blondel/i18n";
 import { GeometryError } from "./errors.js";
 import type { Mesh } from "./mesh.js";
 import { cross, dot, length, normalize, v3 } from "./vec3.js";
@@ -53,7 +54,13 @@ const EPS = 1e-9;
 export function grainFrame(grain: Vec3): GrainFrame {
   const l = length(grain);
   if (!Number.isFinite(l) || l < EPS) {
-    throw new GeometryError(`direction de fil invalide : (${grain.x}, ${grain.y}, ${grain.z})`);
+    throw new GeometryError(
+      msg("geometry.uv.invalidGrain", {
+        x: String(grain.x),
+        y: String(grain.y),
+        z: String(grain.z),
+      }),
+    );
   }
   const along = normalize(grain);
   const h = cross(along, Z);
@@ -103,7 +110,7 @@ export function uvFace(frame: GrainFrame, normal: Vec3): UvFace {
 export function grainUVs(mesh: Mesh, grain?: Vec3, options: GrainUvOptions = {}): Float32Array {
   const period = options.period ?? 1000;
   if (!Number.isFinite(period) || period <= 0) {
-    throw new GeometryError(`période de texture invalide : ${period}`);
+    throw new GeometryError(msg("geometry.uv.invalidPeriod", { period: String(period) }));
   }
   const frame = grainFrame(grain ?? principalAxis(mesh));
   const { along: g, across: a, third: b } = frame;
@@ -150,7 +157,7 @@ const FACE_CODE: Readonly<Record<UvFace, number>> = { end: 0, across: 1, third: 
 export function grainUVMesh(mesh: Mesh, grain?: Vec3, options: GrainUvOptions = {}): UvMesh {
   const period = options.period ?? 1000;
   if (!Number.isFinite(period) || period <= 0) {
-    throw new GeometryError(`période de texture invalide : ${period}`);
+    throw new GeometryError(msg("geometry.uv.invalidPeriod", { period: String(period) }));
   }
   const frame = grainFrame(grain ?? principalAxis(mesh));
   const { along: g, across: a, third: b } = frame;

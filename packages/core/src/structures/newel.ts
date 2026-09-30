@@ -13,6 +13,7 @@
  *   parcours trigonométrique vu de dessus, y = altitude), avec les mortaises de réception des
  *   tenons des limons et les encastrements des marches qui touchent le poteau.
  */
+import { msg, textMessage, type Message } from "@blondel/i18n";
 import { intersectLines } from "../geom2d/intersect.js";
 import { ensureCCW } from "../geom2d/polygon.js";
 import * as V from "../geom2d/vec.js";
@@ -71,7 +72,7 @@ export interface ReceivedStringer {
 export interface NewelOptions {
   readonly id: string;
   readonly mark: string;
-  readonly name: string;
+  readonly name: Message;
   readonly material: Part["material"];
   readonly housingDepth: Mm;
   readonly clearance: Mm;
@@ -94,7 +95,7 @@ export interface NewelResult {
   readonly top: Mm;
   readonly housings: readonly Housing[];
   /** Mortaises de réception des tenons, en (x, y) du développé. */
-  readonly mortises: readonly { label: string; polygon: Polygon2 }[];
+  readonly mortises: readonly { label: Message; polygon: Polygon2 }[];
   readonly flat: FlatPattern;
   readonly solid: Part["solid"];
   /** Volume fini (mm³) et surface des faces (mm²). */
@@ -152,7 +153,7 @@ export function buildNewel(
       housings.push(
         housingPolygons(
           {
-            label: t.mark,
+            label: textMessage(t.mark),
             tread: t.number,
             ...(tp
               ? {
@@ -186,7 +187,7 @@ export function buildNewel(
       housings.push(
         housingPolygons(
           {
-            label: riser.mark,
+            label: textMessage(riser.mark),
             riserPocket: { ...shift(rp), zBottom: riser.zBottom, zTop: riser.zTop },
           },
           o.noseRadius,
@@ -211,7 +212,7 @@ export function buildNewel(
   );
 
   // Mortaises de réception des tenons.
-  const mortises: { label: string; polygon: Polygon2 }[] = [];
+  const mortises: { label: Message; polygon: Polygon2 }[] = [];
   for (const s of stringers) {
     if (!s.tenon) continue;
     const center = V.addScaled(s.endPoint, s.into, s.thickness / 2);
@@ -232,7 +233,7 @@ export function buildNewel(
     const y0 = Math.max(s.tenon.zBottom - o.clearance, foot);
     const y1 = Math.min(s.tenon.zTop + o.clearance, top);
     mortises.push({
-      label: `Mortaise ${s.mark}`,
+      label: msg("structure.woodHoused.newel.mortise", { mark: s.mark }),
       polygon: [
         V.vec(xc - half, y0),
         V.vec(xc + half, y0),
@@ -249,7 +250,7 @@ export function buildNewel(
       kind: "mark",
       a: V.vec(k * a, foot),
       b: V.vec(k * a, top),
-      ...(k === 1 ? { label: "Arêtes" } : {}),
+      ...(k === 1 ? { label: msg("structure.woodHoused.newel.edges") } : {}),
     });
   }
   for (const h of housings) {
@@ -279,7 +280,12 @@ export function buildNewel(
     });
   }
   const ym = (foot + top) / 2;
-  lines.push({ kind: "text", a: V.vec(a / 2 - 10, ym), b: V.vec(a / 2 + 10, ym), label: o.mark });
+  lines.push({
+    kind: "text",
+    a: V.vec(a / 2 - 10, ym),
+    b: V.vec(a / 2 + 10, ym),
+    label: textMessage(o.mark),
+  });
 
   const plan = ensureCCW(faces.map((f) => f.a));
   const pocketVolume =
@@ -298,8 +304,7 @@ export function buildNewel(
       thickness: a,
       reference: {
         kind: "face",
-        description:
-          "Faces du poteau déroulées côte à côte, vues de l'extérieur, dans le sens trigonométrique vu de dessus ; x = abscisse le long du périmètre (mm), y = altitude (sol fini bas = 0).",
+        description: msg("structure.woodHoused.newel.flatReference"),
       },
     },
     solid: verticalExtrusion(plan, foot, height),

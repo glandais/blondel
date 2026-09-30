@@ -1,6 +1,7 @@
 /**
  * Hauteurs de marche : maxima par contexte, tolérances, première marche, régularité, confort.
  */
+import { msg } from "@blondel/i18n";
 import { checkItems, checkValue, flightsOf, riseLocation, type Item } from "../check.js";
 import { isRuleApplicable } from "../contexts.js";
 import { getRule } from "../table.js";
@@ -8,16 +9,21 @@ import type { EvaluatorContext, Finding, RuleEvaluator } from "../types.js";
 
 function riseItems(ctx: EvaluatorContext, fromIndex: number): Item[] {
   return ctx.stepping.rises
-    .map((h, i) => ({ value: h, location: riseLocation(i), label: `hauteur ${i + 1}` }))
+    .map((h, i) => ({
+      value: h,
+      location: riseLocation(i),
+      label: msg("compliance.item.rise", { n: i + 1 }),
+    }))
     .slice(fromIndex);
 }
 
 /** h ≤ max sur toutes les hauteurs. */
-const allRisesMax: RuleEvaluator = (ctx) => checkItems(ctx, riseItems(ctx, 0), "Hauteur de marche");
+const allRisesMax: RuleEvaluator = (ctx) =>
+  checkItems(ctx, riseItems(ctx, 0), msg("compliance.rise.quantity"));
 
 /** H_MAX_DTU : « hors marche de départ » (la 1re hauteur a sa propre tolérance). */
 const risesMaxExceptFirst: RuleEvaluator = (ctx) =>
-  checkItems(ctx, riseItems(ctx, 1), "Hauteur de marche (hors marche de départ)");
+  checkItems(ctx, riseItems(ctx, 1), msg("rules.H_MAX_DTU.quantity"));
 
 /**
  * Écart h_i − h_nom de chaque hauteur. La 1re hauteur n'en est exclue que si elle relève de sa
@@ -32,10 +38,10 @@ const riseTolerance: RuleEvaluator = (ctx) => {
       .map((h, i) => ({
         value: h - ctx.stepping.rise,
         location: riseLocation(i),
-        label: `hauteur ${i + 1}`,
+        label: msg("compliance.item.rise", { n: i + 1 }),
       }))
       .slice(firstHasOwnTolerance ? 1 : 0),
-    "Écart à la hauteur nominale",
+    msg("rules.H_TOLERANCE_DTU.quantity"),
   );
 };
 
@@ -43,14 +49,14 @@ const firstRiseTolerance: RuleEvaluator = (ctx) => {
   const h1 = ctx.stepping.rises[0];
   if (h1 === undefined) return [];
   return [
-    checkValue(ctx, h1 - ctx.stepping.rise, "Écart de la 1re hauteur à la hauteur nominale", {
+    checkValue(ctx, h1 - ctx.stepping.rise, msg("rules.H_PREMIERE_MARCHE_TOL.label"), {
       location: riseLocation(0),
     }),
   ];
 };
 
 const nominalRise: RuleEvaluator = (ctx) => [
-  checkValue(ctx, ctx.stepping.rise, "Hauteur de marche nominale"),
+  checkValue(ctx, ctx.stepping.rise, msg("rules.H_CONFORT.label")),
 ];
 
 /** max(h_i) − min(h_i) par volée, hors 1re hauteur de l'escalier. */
@@ -60,9 +66,7 @@ const riseRegularity: RuleEvaluator = (ctx) => {
     const hs = f.riseIndices.filter((i) => i > 0).map((i) => ctx.stepping.rises[i]!);
     if (hs.length < 2) continue;
     const spread = Math.max(...hs) - Math.min(...hs);
-    out.push(
-      checkValue(ctx, spread, `Écart entre hauteurs de la volée ${f.number} (hors 1re marche)`),
-    );
+    out.push(checkValue(ctx, spread, msg("rules.H_REGULARITE.label", { flight: f.number })));
   }
   const bad = out.filter((f) => f.status === "violation");
   if (bad.length > 0) return bad;

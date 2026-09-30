@@ -1,3 +1,4 @@
+import { textMessage } from "@blondel/i18n";
 import type { Model, Part } from "@blondel/core";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
@@ -36,7 +37,7 @@ function plate(w: number, h: number, mark = "PL1"): Part {
     id: `plate-${mark}`,
     mark,
     category: "support",
-    name: "Platine",
+    name: textMessage("Platine"),
     material: "steel-painted",
     solid: { kind: "extrusion", frame: FRAME3, profile: { outer, holes: [] }, depth: 5 },
     flat: { outline: { outer, holes: [] }, lines: [], thickness: 5 },

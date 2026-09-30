@@ -29,6 +29,7 @@
  * Les solides sont décrits dans un repère local centré sur la pièce (origine = premier sommet
  * du contour à l'altitude du dessous), pour la précision des maillages en float32.
  */
+import { dec, msg, type Message } from "@blondel/i18n";
 import { firstHit } from "../balancing/postprocess.js";
 import { curveTangentAt } from "../geom2d/curve.js";
 import { intersectLines } from "../geom2d/intersect.js";
@@ -46,7 +47,6 @@ import type {
 } from "../model/derived.js";
 import type { Frame3, Mm, Polygon2, Vec2, Vec3 } from "../model/primitives.js";
 import type { Project } from "../model/project.js";
-import { fmt } from "../rules/check.js";
 
 /** Clé de `Part.quantities` : volume de matière (m³). */
 export const QUANTITY_VOLUME = "volume";
@@ -61,7 +61,7 @@ const MM2_PER_M2 = 1e6;
 export interface BasicParts {
   readonly parts: readonly Part[];
   /** Remarques (pièces non générées). */
-  readonly notes: readonly string[];
+  readonly notes: readonly Message[];
 }
 
 /** Extrusion verticale d'un contour du plan XY monde, de `zBottom` sur `depth`. */
@@ -158,7 +158,7 @@ function treadPart(
     id: `tread-${tread.number}`,
     mark,
     category: landing ? "landing" : "tread",
-    name: landing ? `Palier (marche ${tread.number})` : `Marche ${tread.number}`,
+    name: msg(landing ? "part.landing.name" : "part.tread.name", { n: tread.number }),
     material,
     solid: verticalExtrusion(outline, tread.z - thickness, thickness),
     stock: { length: extent(outline, across), width: extent(outline, along), thickness },
@@ -182,7 +182,7 @@ export function buildBasicParts(project: Project, layout: Layout, stepping: Step
   const thickness = spec.thickness;
   const nosings = stepping.nosings;
   const parts: Part[] = [];
-  const notes: string[] = [];
+  const notes: Message[] = [];
 
   let landingRank = 0;
   for (const tread of stepping.treads) {
@@ -190,7 +190,7 @@ export function buildBasicParts(project: Project, layout: Layout, stepping: Step
     const back = nosings[tread.number];
     if (!front || !back) continue;
     if (!(Math.abs(signedArea(tread.outline)) > GEOM_EPS)) {
-      notes.push(`Marche ${tread.number} : contour dégénéré, pièce non générée.`);
+      notes.push(msg("part.note.treadDegenerate", { n: tread.number }));
       continue;
     }
     const mark = tread.kind === "landing" ? `P${++landingRank}` : `M${tread.number}`;
@@ -206,7 +206,11 @@ export function buildBasicParts(project: Project, layout: Layout, stepping: Step
       const height = top - bottom;
       if (!(height > GEOM_EPS)) {
         notes.push(
-          `Contremarche ${k + 1} : hauteur nulle ou négative (${fmt(height)} mm, marche de ${fmt(thickness)} mm plus épaisse que la hauteur de marche), pièce non générée.`,
+          msg("part.note.riserNoHeight", {
+            n: k + 1,
+            height: dec(height),
+            thickness: dec(thickness),
+          }),
         );
         continue;
       }
@@ -217,14 +221,14 @@ export function buildBasicParts(project: Project, layout: Layout, stepping: Step
       const area = Math.abs(signedArea(outline));
       const length = Math.max(V.distance(qf, rf), V.distance(qb, rb));
       if (!(area > GEOM_EPS) || !(length > GEOM_EPS)) {
-        notes.push(`Contremarche ${k + 1} : contour dégénéré, pièce non générée.`);
+        notes.push(msg("part.note.riserDegenerate", { n: k + 1 }));
         continue;
       }
       parts.push({
         id: `riser-${k + 1}`,
         mark: `CM${k + 1}`,
         category: "riser",
-        name: `Contremarche ${k + 1}`,
+        name: msg("part.riser.name", { n: k + 1 }),
         material,
         solid: verticalExtrusion(outline, bottom, height),
         stock: { length, width: height, thickness: riserThickness },

@@ -19,20 +19,26 @@
  * spécification (`spec.ts`, défauts sourcés ou « à valider ») ; les seuils de contrôle sont lus
  * dans rules.yaml par les évaluateurs.
  */
+import { dec, msg, type Message } from "@blondel/i18n";
 import * as V from "../geom2d/vec.js";
 import { openingPolygon } from "../headroom/headroom.js";
 import type { Layout, Location, MaterialId, Part, Stepping } from "../model/derived.js";
 import type { Mm, Vec2, Vec3 } from "../model/primitives.js";
 import type { Project, Wall } from "../model/project.js";
-import { fmt } from "../rules/check.js";
 import { resolveWorkshopProfile } from "../workshop/profile.js";
 import { GuardError } from "./errors.js";
 import { autoHandrailBothSides } from "./handrailSides.js";
 import {
+  flightRunLabel,
+  lengthList,
+  openingRunLabel,
+  sideLabel,
+  uniqueMessages,
+} from "./labels.js";
+import {
   inNarrowJour,
   outsideNarrowJour,
   jourWidth,
-  NARROW_JOUR_PREFIX,
   narrowJourThreshold,
   narrowJourZones,
 } from "./jour.js";
@@ -72,8 +78,6 @@ import type {
   StairSide,
 } from "./types.js";
 
-const SIDE_LABEL: Record<StairSide, string> = { inner: "côté jour", outer: "côté extérieur" };
-
 const part = (partId: string): Location => ({ kind: "part", partId });
 
 interface PostPos {
@@ -87,7 +91,7 @@ interface LineArgs {
   readonly id: string;
   readonly kind: GuardRun["kind"];
   readonly side?: StairSide;
-  readonly label: string;
+  readonly label: Message;
   readonly path: readonly Vec2[];
   readonly ref: readonly Mm[];
   readonly height: Mm;
@@ -234,7 +238,12 @@ function buildLine(fctx: PartFactoryContext, spec: GuardsSpec, a: LineArgs): Lin
   const infillTopAt = (x: Mm): Mm => ht(x) - hh;
   if (infillTop <= bottomGap) {
     throw new GuardError(
-      `Garde-corps ${a.label} : hauteur ${H} mm insuffisante pour la main courante (${hh} mm) et le vide bas (${bottomGap} mm).`,
+      msg("guard.error.heightTooLow", {
+        run: a.label,
+        height: String(H),
+        handrail: String(hh),
+        bottomGap: String(bottomGap),
+      }),
     );
   }
   const parts: Part[] = [];
@@ -257,7 +266,7 @@ function buildLine(fctx: PartFactoryContext, spec: GuardsSpec, a: LineArgs): Lin
           id,
           prefix: "PG",
           category: "post",
-          name: "Poteau de garde-corps",
+          name: msg("part.guardPost.name"),
           material: spec.material,
         },
         center,
@@ -303,7 +312,7 @@ function buildLine(fctx: PartFactoryContext, spec: GuardsSpec, a: LineArgs): Lin
         id: handrailId,
         prefix: "MC",
         category: "handrail",
-        name: a.kind === "rake" ? "Main courante de garde-corps" : "Main courante de trémie",
+        name: msg(a.kind === "rake" ? "part.guardHandrail.name" : "part.openingHandrail.name"),
         material: spec.material,
       },
       hPath,
@@ -326,7 +335,7 @@ function buildLine(fctx: PartFactoryContext, spec: GuardsSpec, a: LineArgs): Lin
     const c1 = p1.w - p1.size / 2;
     const clear = c1 - c0;
     if (clear <= 1e-6) continue;
-    const bay = `${a.label}, travée ${k + 1}`;
+    const bay = msg("guard.bay", { run: a.label, n: k + 1 });
     const minSlope = Math.min(...slopesIn(w, ref, c0, c1));
     const cos = 1 / Math.sqrt(1 + minSlope * minSlope);
     const postLoc = part(postIdAt.get(p0.w) ?? postIdAt.get(p1.w) ?? handrailId);
@@ -336,7 +345,10 @@ function buildLine(fctx: PartFactoryContext, spec: GuardsSpec, a: LineArgs): Lin
         const target = infill.spacing - b;
         if (target <= 0) {
           throw new GuardError(
-            `Balustres : entraxe ${infill.spacing} mm inférieur ou égal à la section (${b} mm).`,
+            msg("guard.error.balusterSpacing", {
+              spacing: String(infill.spacing),
+              section: String(b),
+            }),
           );
         }
         // Plus petit nombre respectant l'entraxe, borné à ce qui tient dans la travée.
@@ -353,7 +365,13 @@ function buildLine(fctx: PartFactoryContext, spec: GuardsSpec, a: LineArgs): Lin
           parts.push(
             verticalMember(
               fctx,
-              { id, prefix: "BA", category: "baluster", name: "Balustre", material },
+              {
+                id,
+                prefix: "BA",
+                category: "baluster",
+                name: msg("part.baluster.name"),
+                material,
+              },
               pointAt(path, w, x),
               tangentAt(path, w, x),
               infill.section,
@@ -369,7 +387,7 @@ function buildLine(fctx: PartFactoryContext, spec: GuardsSpec, a: LineArgs): Lin
           zBottom: bottomGap,
           zTop: infillTop,
           location: loc,
-          label: `entre balustres, ${bay}`,
+          label: msg("guard.gap.betweenBalusters", { bay }),
           kind: "vertical",
         });
         gaps.push({
@@ -377,7 +395,7 @@ function buildLine(fctx: PartFactoryContext, spec: GuardsSpec, a: LineArgs): Lin
           zBottom: 0,
           zTop: bottomGap,
           location: loc,
-          label: `sous les balustres, ${bay}`,
+          label: msg("guard.gap.underBalusters", { bay }),
           kind: "bottom",
         });
         break;
@@ -399,7 +417,15 @@ function buildLine(fctx: PartFactoryContext, spec: GuardsSpec, a: LineArgs): Lin
         const gMax = Math.max(...bayStations.map(gapAt));
         if (g < 0) {
           throw new GuardError(
-            `${infill.kind === "rails" ? "Lisses" : "Câbles"} : ${count} éléments de ${rh} mm ne tiennent pas entre ${bottomGap} et ${fmt(infillTop)} mm.`,
+            msg(
+              infill.kind === "rails" ? "guard.error.railsDoNotFit" : "guard.error.cablesDoNotFit",
+              {
+                n: String(count),
+                size: String(rh),
+                bottom: String(bottomGap),
+                top: dec(infillTop),
+              },
+            ),
           );
         }
         const ids: string[] = [];
@@ -421,7 +447,7 @@ function buildLine(fctx: PartFactoryContext, spec: GuardsSpec, a: LineArgs): Lin
                 id,
                 prefix: infill.kind === "rails" ? "LS" : "CA",
                 category: "infill",
-                name: infill.kind === "rails" ? "Lisse" : "Câble",
+                name: msg(infill.kind === "rails" ? "part.rail.name" : "part.cable.name"),
                 material,
               },
               pts,
@@ -433,7 +459,10 @@ function buildLine(fctx: PartFactoryContext, spec: GuardsSpec, a: LineArgs): Lin
           footholds.push({
             x: zb + rh,
             location: part(id),
-            label: `${infill.kind === "rails" ? "lisse" : "câble"} ${i + 1}, ${bay}`,
+            label: msg(infill.kind === "rails" ? "guard.foothold.rail" : "guard.foothold.cable", {
+              n: i + 1,
+              bay,
+            }),
           });
         }
         gaps.push({
@@ -441,7 +470,10 @@ function buildLine(fctx: PartFactoryContext, spec: GuardsSpec, a: LineArgs): Lin
           zBottom: 0,
           zTop: bottomGap,
           location: part(ids[0]!),
-          label: `sous la première ${infill.kind === "rails" ? "lisse" : "file de câble"}, ${bay}`,
+          label: msg(
+            infill.kind === "rails" ? "guard.gap.underFirstRail" : "guard.gap.underFirstCable",
+            { bay },
+          ),
           kind: "bottom",
         });
         for (let i = 0; i < count; i++) {
@@ -453,8 +485,20 @@ function buildLine(fctx: PartFactoryContext, spec: GuardsSpec, a: LineArgs): Lin
             location: part(ids[i]!),
             label:
               i + 1 < count
-                ? `entre ${infill.kind === "rails" ? "lisses" : "câbles"} ${i + 1} et ${i + 2}, ${bay}`
-                : `entre ${infill.kind === "rails" ? "la dernière lisse" : "le dernier câble"} et la main courante, ${bay}`,
+                ? msg(
+                    infill.kind === "rails" ? "guard.gap.betweenRails" : "guard.gap.betweenCables",
+                    {
+                      a: i + 1,
+                      b: i + 2,
+                      bay,
+                    },
+                  )
+                : msg(
+                    infill.kind === "rails"
+                      ? "guard.gap.lastRailToHandrail"
+                      : "guard.gap.lastCableToHandrail",
+                    { bay },
+                  ),
             kind: "horizontal",
           });
         }
@@ -472,7 +516,7 @@ function buildLine(fctx: PartFactoryContext, spec: GuardsSpec, a: LineArgs): Lin
             zBottom: bottomGap,
             zTop: infillTop,
             location: postLoc,
-            label: `entre poteaux, ${bay}`,
+            label: msg("guard.gap.betweenPosts", { bay }),
             kind: "vertical",
           });
           break;
@@ -481,9 +525,9 @@ function buildLine(fctx: PartFactoryContext, spec: GuardsSpec, a: LineArgs): Lin
         const bottom = subPath3(path, w, ref, q0, q1, bottomGap);
         const top = subPath3(path, w, ref, q0, q1, infillTopAt);
         const names = {
-          glass: "Panneau de verre",
-          perforated: "Tôle perforée",
-          panel: "Panneau plein",
+          glass: msg("part.glassPanel.name"),
+          perforated: msg("part.perforatedSheet.name"),
+          panel: msg("part.solidPanel.name"),
         };
         parts.push(
           panelMember(
@@ -496,13 +540,13 @@ function buildLine(fctx: PartFactoryContext, spec: GuardsSpec, a: LineArgs): Lin
           ),
         );
         infillPartIds.push(id);
-        for (const side of ["début", "fin"]) {
+        for (const key of ["guard.gap.panelToPostStart", "guard.gap.panelToPostEnd"] as const) {
           gaps.push({
             value: g,
             zBottom: bottomGap,
             zTop: infillTop,
             location: part(id),
-            label: `entre panneau et poteau (${side}), ${bay}`,
+            label: msg(key, { bay }),
             kind: "vertical",
           });
         }
@@ -511,7 +555,7 @@ function buildLine(fctx: PartFactoryContext, spec: GuardsSpec, a: LineArgs): Lin
           zBottom: 0,
           zTop: bottomGap,
           location: part(id),
-          label: `sous le panneau, ${bay}`,
+          label: msg("guard.gap.underPanel", { bay }),
           kind: "bottom",
         });
         if (infill.kind === "perforated") {
@@ -520,7 +564,7 @@ function buildLine(fctx: PartFactoryContext, spec: GuardsSpec, a: LineArgs): Lin
             zBottom: bottomGap,
             zTop: infillTop,
             location: part(id),
-            label: `perforations, ${bay}`,
+            label: msg("guard.gap.perforations", { bay }),
             kind: "vertical",
           });
         }
@@ -675,7 +719,7 @@ function edgePortion(
   iv: SideInterval,
   offsetDistance: Mm,
   stepping: Stepping,
-  label: string,
+  label: Message,
 ): {
   path: Vec2[];
   ref: number[];
@@ -693,7 +737,7 @@ function edgePortion(
   const off = offsetStations(sl.points, d);
   if (!off) {
     throw new GuardError(
-      `${label} : décalage de ${fmt(Math.abs(offsetDistance))} mm impossible, un segment du bord est plus court que les retraits des angles (jour trop étroit ?) ; réduire le décalage ou déclarer ce côté « mur ».`,
+      msg("guard.error.offsetImpossible", { line: label, offset: dec(Math.abs(offsetDistance)) }),
     );
   }
   const last = sl.s.length - 1;
@@ -835,8 +879,8 @@ export function computeGuards(
     marks: new MarkRegistry(),
     profile: resolveWorkshopProfile(project.workshop),
   };
-  const notes: string[] = [];
-  const errors: string[] = [];
+  const notes: Message[] = [];
+  const errors: Message[] = [];
   const parts: Part[] = [];
   const runs: GuardRun[] = [];
   const handrails: HandrailRun[] = [];
@@ -850,9 +894,7 @@ export function computeGuards(
   );
   const sides: SideAnalysis[] = sideResults.map((r) => r.analysis);
   if (isColumnSide("inner", layout)) {
-    notes.push(
-      "Hélicoïdal à fût central : aucun garde-corps ni main courante le long du fût (pas de vide de ce côté).",
-    );
+    notes.push(msg("guard.note.helicalColumn"));
   }
 
   // Côtés libres de la trémie (calculés d'abord : un rampant qui y aboutit se prolonge par eux).
@@ -930,7 +972,10 @@ export function computeGuards(
       const jfIn = sideFall(edge, analysis.intervals, stepping, 0, inJour);
       const jfAbsorbed = sideFall(edge, absorbed, stepping, 0);
       const jf = jfAbsorbed.maxFall > jfIn.maxFall ? jfAbsorbed : jfIn;
-      const jourNote = `${NARROW_JOUR_PREFIX} : jour de ${fmt(jour, 0)} mm, plus étroit que la sphère T1 (${fmt(narrow, 0)} mm) : pas de garde-corps de jour (décision A10), protection contre les chutes côté jour signalée en conseil. Si le jour est fermé, régler le côté jour des garde-corps sur « mur ».`;
+      const jourNote = msg("guard.narrowJour.note", {
+        width: dec(jour, 0),
+        threshold: dec(narrow, 0),
+      });
       finishNarrow = (unguarded, built) => {
         // Chute hors du jour : nez des portions restées sans garde-corps (ligne non générée).
         const of = sideFall(edge, unguarded, stepping, 0, (p) => !inJour(p));
@@ -951,7 +996,11 @@ export function computeGuards(
         };
         notes.push(
           built.length > 0
-            ? `${jourNote} Garde-corps de jour partiel sur ${built.length > 1 ? `${built.length} portions` : "la portion"} de la volée qui borde un vide hors du jour (${built.map((b) => `${fmt(b.to - b.from, 0)} mm`).join(", ")}).`
+            ? msg("guard.narrowJour.partial", {
+                note: jourNote,
+                count: built.length,
+                lengths: lengthList(built.map((b) => b.to - b.from)),
+              })
             : jourNote,
         );
       };
@@ -973,15 +1022,21 @@ export function computeGuards(
     let rakeNo = 0;
     for (const iv of voids) {
       rakeNo++;
-      const label = `garde-corps de volée ${SIDE_LABEL[analysis.side]}${voids.length > 1 ? ` n° ${rakeNo}` : ""}`;
+      const label = flightRunLabel(analysis.side, voids.length > 1 ? rakeNo : undefined);
       let portion: ReturnType<typeof edgePortion>;
       try {
-        portion = edgePortion(edge, iv, spec.flight.edgeOffset, stepping, `Garde-corps (${label})`);
+        portion = edgePortion(
+          edge,
+          iv,
+          spec.flight.edgeOffset,
+          stepping,
+          msg("guard.line.flightGuard", { run: label }),
+        );
       } catch (e) {
         // Décalage impossible (segment de bord plus court que les retraits des angles) : cette
         // ligne n'est pas produite, erreur de modèle ; les autres lignes restent calculées.
         if (!(e instanceof GuardError)) throw e;
-        errors.push(`${e.message} Ligne non générée.`);
+        errors.push(msg("guard.error.lineNotGenerated", { detail: e.msg }));
         continue;
       }
       if (portion.path.length < 2) continue;
@@ -1031,7 +1086,16 @@ export function computeGuards(
       });
       if (raised) {
         notes.push(
-          `Garde-corps ${SIDE_LABEL[analysis.side]} : main courante rehaussée à ${fmt(lg.height, 0)} mm sur le palier, raccord incliné sur ${lg.ramp === "auto" ? "un giron" : `${fmt(lg.ramp, 0)} mm`} de part et d'autre (réglage « rehausse sur palier »).`,
+          lg.ramp === "auto"
+            ? msg("guard.note.landingRaiseGoing", {
+                side: sideLabel(analysis.side),
+                height: dec(lg.height, 0),
+              })
+            : msg("guard.note.landingRaise", {
+                side: sideLabel(analysis.side),
+                height: dec(lg.height, 0),
+                ramp: dec(lg.ramp, 0),
+              }),
         );
       }
       const fall = Math.max(0, ...ref);
@@ -1042,7 +1106,10 @@ export function computeGuards(
         : 0;
       if (continued > 0) {
         notes.push(
-          `Garde-corps ${SIDE_LABEL[analysis.side]} : prolongé à l'arrivée par le garde-corps de trémie (${fmt(continued, 0)} mm), sans prolongement propre de la main courante.`,
+          msg("guard.note.continuedByOpening", {
+            side: sideLabel(analysis.side),
+            length: dec(continued, 0),
+          }),
         );
       }
       const out = buildLine(fctx, spec, {
@@ -1076,9 +1143,7 @@ export function computeGuards(
         intrusion: Math.max(0, hw / 2 - spec.flight.edgeOffset),
       });
       if (newelVertices.size > 0) {
-        notes.push(
-          `Garde-corps ${SIDE_LABEL[analysis.side]} : le poteau d'angle du tracé tient lieu de poteau de garde-corps (aucune pièce ajoutée).`,
-        );
+        notes.push(msg("guard.note.newelAsPost", { side: sideLabel(analysis.side) }));
       }
       builtIntervals.push(iv);
     }
@@ -1130,7 +1195,7 @@ export function computeGuards(
         iv,
         axis,
         stepping,
-        `Main courante murale ${SIDE_LABEL[analysis.side]}`,
+        msg("guard.line.wallHandrail", { side: sideLabel(analysis.side) }),
       );
       if (portion.path.length < 2) continue;
       const path3: Vec3[] = portion.path.map((p, i) => ({
@@ -1156,7 +1221,7 @@ export function computeGuards(
             id,
             prefix: "MC",
             category: "handrail",
-            name: "Main courante murale",
+            name: msg("part.wallHandrail.name"),
             material: spec.material,
           },
           path3,
@@ -1182,9 +1247,7 @@ export function computeGuards(
         intrusion: Math.max(0, hr.wallClearance + hw - face),
       });
       if (iv.wallId === undefined) {
-        notes.push(
-          `Main courante murale ${SIDE_LABEL[analysis.side]} : mur imposé sans mur du site, nu du mur supposé au bord de l'emmarchement.`,
-        );
+        notes.push(msg("guard.note.wallHandrailAssumedWall", { side: sideLabel(analysis.side) }));
       }
     }
   }
@@ -1196,8 +1259,13 @@ export function computeGuards(
     const missing = (["inner", "outer"] as const).filter((s) => !equipped.has(s));
     notes.push(
       missing.length === 0
-        ? "Main courante « auto » : posée des deux côtés (MC_DEUX_COTES, ERP neuf ou parties communes de BHC) ; choisir un côté pour revenir à une seule main courante."
-        : `Main courante « auto » : MC_DEUX_COTES demande une main courante des deux côtés, mais le ${missing.map((s) => SIDE_LABEL[s]).join(" et le ")} ${missing.length > 1 ? "n'ont" : "n'a"} ni mur ni garde-corps pour la recevoir.`,
+        ? msg("guard.note.autoBothSides")
+        : missing.length === 1
+          ? msg("guard.note.autoBothMissingOne", { side: sideLabel(missing[0]!) })
+          : msg("guard.note.autoBothMissingTwo", {
+              first: sideLabel(missing[0]!),
+              second: sideLabel(missing[1]!),
+            }),
     );
   }
 
@@ -1216,7 +1284,7 @@ export function computeGuards(
       const out = buildLine(fctx, spec, {
         id: `guard-opening-${openingNo}`,
         kind: "opening",
-        label: `garde-corps de trémie${openingPaths.length > 1 ? ` n° ${openingNo}` : ""}`,
+        label: openingRunLabel(openingPaths.length > 1 ? openingNo : undefined),
         path,
         ref: path.map(() => project.site.floorToFloor),
         height: spec.opening.height,
@@ -1233,18 +1301,21 @@ export function computeGuards(
   if (runs.length > 0 || handrails.length > 0) {
     const count = (c: Part["category"]): number => parts.filter((p) => p.category === c).length;
     notes.push(
-      `Garde-corps : ${runs.length} ligne(s), ${count("post")} poteau(x), ${count("baluster") + count("infill")} élément(s) de remplissage, ${count("handrail")} main(s) courante(s) ; sections, entraxes, jeux et reculs par défaut à valider (voir LEDGER).`,
+      msg("guard.note.summary", {
+        runs: msg("guard.count.lines", { count: dec(runs.length, 0) }),
+        posts: msg("guard.count.posts", { count: dec(count("post"), 0) }),
+        infill: msg("guard.count.infill", {
+          count: dec(count("baluster") + count("infill"), 0),
+        }),
+        handrails: msg("guard.count.handrails", { count: dec(count("handrail"), 0) }),
+      }),
     );
   }
   if (spec.infill.kind === "cables" && runs.length > 0) {
-    notes.push(
-      "Câbles : traités comme des lisses (SPEC X12) ; leurs vides ne doivent pas augmenter dans le temps (détente, NF P01-012:2024) — prévoir un dispositif de retension.",
-    );
+    notes.push(msg("guard.note.cables"));
   }
   if (spec.infill.kind === "glass" && runs.length > 0) {
-    notes.push(
-      "Verre (V1) : seuls les jeux et vides sont contrôlés ; produit (feuilleté 1B1, NF DTU 39 P5), pinces et essais NF P01-013 non vérifiés.",
-    );
+    notes.push(msg("guard.note.glass"));
   }
   return {
     spec,
@@ -1265,8 +1336,8 @@ export function computeGuards(
             })),
         }
       : {}),
-    notes: [...new Set(notes)],
+    notes: uniqueMessages(notes),
     ...(narrowJourInfo ? { narrowJour: narrowJourInfo } : {}),
-    errors: [...new Set(errors)],
+    errors: uniqueMessages(errors),
   };
 }

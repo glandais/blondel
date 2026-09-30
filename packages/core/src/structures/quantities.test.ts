@@ -1,5 +1,6 @@
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
+import { textMessage } from "@blondel/i18n";
 import type { MaterialId, Part } from "../model/derived.js";
 import { DEFAULT_WORKSHOP_PROFILE, materialDensity } from "../workshop/profile.js";
 import { ensureMass, QUANTITY_MASS_KG, QUANTITY_VOLUME_M3, woodQuantities } from "./quantities.js";
@@ -22,7 +23,7 @@ const part = (material: MaterialId, quantities: Record<string, number>): Part =>
   id: "p",
   mark: "P1",
   category: "infill",
-  name: "Pièce",
+  name: textMessage("Pièce"),
   material,
   solid: { kind: "sweep", path: [], section: { outer: [], holes: [] } },
   quantities,

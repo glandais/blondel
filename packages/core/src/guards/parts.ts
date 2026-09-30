@@ -8,6 +8,7 @@
  * la première pièce du repère) : sans cela, des écarts d'arrondi (2e-13 mm sur un balustre)
  * séparaient une même pièce sur plusieurs lignes de la fiche de débit (QUESTIONS D1).
  */
+import { msg, textMessage, type Message } from "@blondel/i18n";
 import * as V from "../geom2d/vec.js";
 import type { MaterialId, Part, PartCategory, SolidDesc } from "../model/derived.js";
 import type { Mm, Shape2, Vec2, Vec3 } from "../model/primitives.js";
@@ -115,7 +116,7 @@ interface Common {
   readonly id: string;
   readonly prefix: string;
   readonly category: PartCategory;
-  readonly name: string;
+  readonly name: Message;
   readonly material: MaterialId;
 }
 
@@ -126,7 +127,7 @@ function makePart(
   signature: string,
   measures: { volumeMm3: number; surfaceMm2: number; length: Mm },
   stock: { length: Mm; width: Mm; thickness: Mm },
-  section: string,
+  section: Message,
 ): Part {
   const shared = ctx.marks.measuresOf(c.prefix, signature, () => ({
     stock,
@@ -148,8 +149,14 @@ function makePart(
 const r1 = (x: number): string => (Math.round(x * 10) / 10).toFixed(1);
 const r0 = (x: number): string => String(Math.round(x));
 
+/** Désignation de la section (« Ø42 », « 40×40 ») : signature des repères, sans traduction. */
 export function sectionLabel(s: GuardSection): string {
   return s.kind === "round" ? `Ø${s.diameter}` : `${s.width}×${s.height}`;
+}
+
+/** Section d'une pièce (`Part.section`) : désignation seule, non traduite. */
+function sectionMessage(s: GuardSection): Message {
+  return textMessage(sectionLabel(s));
 }
 
 /**
@@ -189,7 +196,7 @@ export function verticalMember(
     `${section.kind}${sectionLabel(section)}|${r0(depth)}`,
     { volumeMm3: area * depth, surfaceMm2: area, length: depth },
     { length: depth, width: Math.max(w, h), thickness: Math.min(w, h) },
-    sectionLabel(section),
+    sectionMessage(section),
   );
 }
 
@@ -216,7 +223,7 @@ export function sweptMember(
     `${section.kind}${sectionLabel(section)}|${r0(length)}|${r1(slope)}|${path.length}${signatureExtra}`,
     { volumeMm3: area * length, surfaceMm2: w * length, length },
     { length, width: Math.max(w, h), thickness: Math.min(w, h) },
-    sectionLabel(section),
+    sectionMessage(section),
   );
 }
 
@@ -263,6 +270,6 @@ export function panelMember(
     `${thickness}|${r0(lengthPlan)}|${r0(height)}|${r0(heights[0]!)}|${r0(heights[heights.length - 1]!)}|${r1(slope)}|${r0(areaMm2 / 1000)}`,
     { volumeMm3: areaMm2 * thickness, surfaceMm2: areaMm2, length: lengthPlan },
     { length: lengthPlan, width: height, thickness },
-    `ép. ${thickness}`,
+    msg("part.section.thickness", { thickness: String(thickness) }),
   );
 }

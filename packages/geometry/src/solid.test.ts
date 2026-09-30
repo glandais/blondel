@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Part, SolidDesc } from "@blondel/core";
+import { textMessage, translatorFor } from "@blondel/i18n";
 import { checkManifold, signedVolume } from "./analysis.js";
 import { meshPart, meshParts, meshSolid } from "./solid.js";
 import { identityFrame, rect } from "./testing.js";
@@ -8,7 +9,7 @@ const part = (id: string, solid: SolidDesc): Part => ({
   id,
   mark: id.toUpperCase(),
   category: "tread",
-  name: id,
+  name: textMessage(id),
   material: "wood-oak",
   solid,
   quantities: {},
@@ -85,7 +86,8 @@ describe("meshPart / meshParts", () => {
     });
     const res = meshParts([part("ok", tread(0)), bad]);
     expect(res[0]!.error).toBeUndefined();
-    expect(res[1]!.error).toMatch(/chemin/);
+    expect(res[1]!.error?.key).toBe("geometry.sweep.tooFewPoints");
+    expect(translatorFor("fr").t(res[1]!.error!)).toMatch(/chemin/);
     expect(res[1]!.mesh.indices.length).toBe(0);
   });
 
@@ -110,9 +112,11 @@ describe("meshSolid — robustesse (revue)", () => {
     expect(() => meshSolid(weird)).toThrow(/inconnu/);
     const p = part("weird", weird);
     const r1 = meshPart(p);
-    expect(r1.error).toMatch(/inconnu/);
+    expect(r1.error?.key).toBe("geometry.solid.unknownKind");
+    expect(translatorFor("fr").t(r1.error!)).toBe("type de solide inconnu : loft");
+    expect(translatorFor("en").t(r1.error!)).toBe("unknown solid type: loft");
     expect(r1.mesh.indices.length).toBe(0);
-    expect(meshPart(p).error).toMatch(/inconnu/);
+    expect(meshPart(p).error?.key).toBe("geometry.solid.unknownKind");
   });
 });
 

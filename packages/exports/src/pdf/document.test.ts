@@ -1,3 +1,4 @@
+import { textMessage } from "@blondel/i18n";
 import { bbox, type Model } from "@blondel/core";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
@@ -68,7 +69,7 @@ function fullModel(): Model {
         nature: "normatif",
         confidence: "moyen",
         source: "NF DTU 36.3",
-        downgradeReason: "profil souple",
+        downgradeReason: textMessage("profil souple"),
         declaredSeverity: "bloquant",
       }),
       ruleResult("CONSEIL_X", { kind: "stair" }, "conseil"),
@@ -276,7 +277,7 @@ describe("renderPdf (mise en page sur surface enregistrée)", () => {
   it("contrôle de conception long : réparti sur plusieurs pages, avertissement répété", () => {
     const many = Array.from({ length: 80 }, (_, i) =>
       ruleResult(`R${i}`, { kind: "stair" }, "avertissement", {
-        message: "Un message assez long ".repeat(8),
+        message: textMessage("Un message assez long ".repeat(8)),
       }),
     );
     const m = { ...model, compliance: report(many) };
@@ -300,7 +301,7 @@ describe("renderPdf (mise en page sur surface enregistrée)", () => {
     for (const count of [60, 120, 200]) {
       const many = Array.from({ length: count }, (_, i) =>
         ruleResult(`R${i}`, { kind: "stair" }, "avertissement", {
-          message: "Un message ".repeat((i % 7) + 1),
+          message: textMessage("Un message ".repeat((i % 7) + 1)),
         }),
       );
       const cv = new RecordingCanvas();

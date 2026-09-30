@@ -15,6 +15,7 @@
  *   du côté du jour (cas du limon de jour : fibre intérieure plus courte), « + » sinon (B §5.1 :
  *   σ_± = ∫ (1 ∓ κ·e/2) dσ, ici en forme fermée par morceaux).
  */
+import { msg, MessageError, type Message } from "@blondel/i18n";
 import { zoneProfile } from "../balancing/m3.js";
 import { evalProfile, evalSpline } from "../balancing/profile.js";
 import type { EndCondition, M3Variant } from "../balancing/profile.js";
@@ -107,8 +108,11 @@ export function fiberDevelopment(curve: Curve2, offset: Mm, jour: JourSide): Fib
       const concave = seg.sweep > 0 === (jour === "left");
       const fiberRadius = concave ? seg.radius - offset : seg.radius + offset;
       if (!(fiberRadius >= 0) && len > GEOM_EPS) {
-        throw new Error(
-          `fibre décalée de ${offset} mm au-delà du centre d'un arc de rayon ${seg.radius} mm`,
+        throw new MessageError(
+          msg("structure.steelCurved.error.fiberBeyondCenter", {
+            offset: String(offset),
+            radius: String(seg.radius),
+          }),
         );
       }
       const flen = fiberRadius * angle;
@@ -210,7 +214,7 @@ export interface NosingProfile {
   readonly zones: readonly ProfileZone[];
   /** Nœuds (σ_k, z_k) des nez, σ croissants. */
   readonly knots: readonly Vec2[];
-  readonly notes: readonly string[];
+  readonly notes: readonly Message[];
 }
 
 /** Hermite cubique monotone (Fritsch–Carlson) avec pentes d'extrémité imposées. */
@@ -270,7 +274,7 @@ function monotoneHermite(
 export function nosingProfile(layout: Layout, stepping: Stepping): NosingProfile {
   const nosings = stepping.nosings;
   const n = nosings.length;
-  const notes: string[] = [];
+  const notes: Message[] = [];
   const knots = nosings.map((k) => V.vec(k.sigmaInner, k.z));
   const nominal = stepping.rise / stepping.going;
   const landingEdge = (k: number): boolean =>
@@ -324,7 +328,7 @@ export function nosingProfile(layout: Layout, stepping: Stepping): NosingProfile
     if (!m3) {
       zones.push(interpolated());
       notes.push(
-        `Zone balancée [${a} ; ${b}] (${bz.method}) : pas de courbe M3, rives par interpolation monotone des nez.`,
+        msg("structure.steelCurved.note.zoneNotM3", { from: a, to: b, method: bz.method }),
       );
       continue;
     }
@@ -368,7 +372,12 @@ export function nosingProfile(layout: Layout, stepping: Stepping): NosingProfile
     if ("reason" in built) {
       zones.push(interpolated());
       notes.push(
-        `Zone balancée [${a} ; ${b}] : courbe ${bz.method} non reconstituée (${built.reason}), rives par interpolation monotone des nez.`,
+        msg("structure.steelCurved.note.zoneNotRebuilt", {
+          from: a,
+          to: b,
+          method: bz.method,
+          reason: built.reason,
+        }),
       );
       continue;
     }
@@ -378,7 +387,12 @@ export function nosingProfile(layout: Layout, stepping: Stepping): NosingProfile
     if (residual > 0.05) {
       zones.push(interpolated());
       notes.push(
-        `Zone balancée [${a} ; ${b}] : courbe ${bz.method} non reconstituée (écart ${residual.toFixed(2)} mm aux nez), rives par interpolation monotone des nez.`,
+        msg("structure.steelCurved.note.zoneResidual", {
+          from: a,
+          to: b,
+          method: bz.method,
+          residual: residual.toFixed(2),
+        }),
       );
       continue;
     }

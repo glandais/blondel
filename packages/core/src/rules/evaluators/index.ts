@@ -1,6 +1,7 @@
 /**
  * Registre des évaluateurs par identifiant de règle.
  */
+import { MessageError, msg } from "@blondel/i18n";
 import type { RuleEvaluator } from "../types.js";
 import { FLIGHT_EVALUATORS } from "./flights.js";
 import { GOING_EVALUATORS } from "./going.js";
@@ -19,7 +20,8 @@ export function createRegistry(
   const m = new Map<string, RuleEvaluator>();
   for (const g of groups) {
     for (const [id, ev] of Object.entries(g)) {
-      if (m.has(id)) throw new Error(`Évaluateur en double : ${id}`);
+      if (m.has(id))
+        throw new MessageError(msg("compliance.engine.duplicateEvaluator", { ruleId: id }));
       m.set(id, ev);
     }
   }

@@ -43,7 +43,7 @@ import type { M3Variant } from "../balancing/profile.js";
 import type { Layout, NosingLine, Stepping } from "../model/derived.js";
 import type { Mm } from "../model/primitives.js";
 import type { Project } from "../model/project.js";
-import { fmt } from "../rules/check.js";
+import { dec, msg, type Message, type MessageKey, type MessageParam } from "@blondel/i18n";
 import { SteppingError } from "./errors.js";
 import { placeNosings } from "./positions.js";
 import { computeRises } from "./rises.js";
@@ -100,8 +100,22 @@ export function resolveM3Variant(project: Project): M3Variant {
 const methodLabel = (method: string, variant: M3Variant): string =>
   method === "M3" ? `M3-${variant}` : method;
 
-const variantLabel = (method: string, variant: M3Variant): string =>
-  method === "M3" ? `M3 ${variant === "cubic" ? "cubique" : "quintique"}` : method;
+const variantLabel = (method: string, variant: M3Variant): MessageParam =>
+  method === "M3"
+    ? msg(variant === "cubic" ? "stepping.method.m3Cubic" : "stepping.method.m3Quintic")
+    : method;
+
+/** « a et b et c » : liste de fragments de phrase (au moins un). */
+const andList = (items: readonly MessageParam[]): MessageParam =>
+  items.slice(1).reduce((acc, x) => msg("stepping.list.and", { a: acc, b: x }), items[0]!);
+
+/** Libellé d'une surcharge de nez (« nez fixe », « angle imposé »). */
+const overrideKind = (kind: "fixed" | "angle"): Message =>
+  msg(kind === "fixed" ? "stepping.override.fixed" : "stepping.override.angle");
+
+/** Clé du libellé d'une extrémité de zone (« tangente », « libre »). */
+const zoneEndKey = (end: "tangent" | "free"): MessageKey =>
+  end === "tangent" ? "stepping.zoneEnd.tangent" : "stepping.zoneEnd.free";
 
 /** Options de calcul du découpage (vérification ; sans effet sur le résultat). */
 export interface SteppingOptions {
@@ -158,7 +172,7 @@ export function computeStepping(
 ): Stepping {
   // Tracé hélicoïdal (jalon 5a) : nez rayonnants, sans balancement (`stepping/helical.ts`).
   if (layout.helical) return computeHelicalStepping(project, layout);
-  const notes: string[] = [];
+  const notes: Message[] = [];
   const { riserCount: n, rise, rises, z } = computeRises(project);
   const positions = placeNosings(project, layout, n);
   notes.push(...positions.notes);
@@ -168,7 +182,20 @@ export function computeStepping(
   const transitions = layout.walklineTransitions ?? [];
   for (const tr of transitions) {
     notes.push(
-      `Volée ${tr.leg + 1} : tournants de sens opposés, la ligne de foulée passe de ${fmt(tr.fromOffset)} à ${fmt(tr.toOffset)} mm du bord ${layout.innerSide === "left" ? "gauche" : "droit"} par un raccord linéaire (Γ oblique de ${fmt((tr.angle * 180) / Math.PI)}° sur ${fmt(tr.sEnd - tr.sStart)} mm, nez perpendiculaires à la volée : le giron de ${fmt(going)} mm mesuré sur Γ n'y donne que ${fmt(going * Math.cos(tr.angle))} mm entre deux nez, g·cos θ) ; transition non normalisée (DTU muet), défaut à valider.`,
+      msg(
+        layout.innerSide === "left"
+          ? "stepping.walklineTransition.fromLeft"
+          : "stepping.walklineTransition.fromRight",
+        {
+          flight: tr.leg + 1,
+          from: dec(tr.fromOffset),
+          to: dec(tr.toOffset),
+          angle: dec((tr.angle * 180) / Math.PI),
+          length: dec(tr.sEnd - tr.sStart),
+          going: dec(going),
+          effective: dec(going * Math.cos(tr.angle)),
+        },
+      ),
     );
   }
 
@@ -192,7 +219,9 @@ export function computeStepping(
     from.map((seed) => {
       const res = realizeNosing(lay, seed, { kind: "dir", dir: seed.perpendicular }, false);
       if (!res.ok) {
-        throw new SteppingError(`Ligne de nez perpendiculaire impossible : ${res.reason}.`);
+        throw new SteppingError(
+          msg("stepping.perpendicularNosingImpossible", { reason: res.reason }),
+        );
       }
       return res.nosing;
     });
@@ -243,14 +272,14 @@ export function computeStepping(
   for (const o of project.stair.nosingOverrides) {
     if (o.index >= n) {
       notes.push(
-        `Surcharge orpheline (${o.kind === "fixed" ? "nez fixe" : "angle imposé"}) : le nez ${o.index} n'existe pas (${n} nez), surcharge non appliquée.`,
+        msg("stepping.override.orphan", { kind: overrideKind(o.kind), nosing: o.index, total: n }),
       );
       continue;
     }
     if (o.kind === "fixed") baseFixed.add(o.index);
     else {
       if (angleOverrides.has(o.index)) {
-        notes.push(`Nez ${o.index} : plusieurs angles imposés, le dernier est appliqué.`);
+        notes.push(msg("stepping.override.multipleAngles", { nosing: o.index }));
       }
       angleOverrides.set(o.index, o.angle);
     }
@@ -285,7 +314,7 @@ export function computeStepping(
     const nosings = baseNosings.slice();
     const fixed = new Set(baseFixed);
     const free = new Set(baseFree);
-    const notes: string[] = [];
+    const notes: Message[] = [];
     const balancedZones: Stepping["balancedZones"][number][] = [];
     const zoneRanges: { from: number; to: number; corners: readonly Mm[]; side: Side }[] = [];
     const groups = groupWinderTurns(layout, positions.s, going, fixed, {
@@ -306,11 +335,16 @@ export function computeStepping(
             : {};
 
     for (const group of groups) {
-      const turnName =
-        (group.first === group.last
-          ? `Tournant ${group.first + 1}`
-          : `Tournants ${group.first + 1} et ${group.last + 1} (zone unique)`) +
-        (group.posts ? ` (${group.posts.map((k) => `nez ${k}`).join(" et ")} au poteau)` : "");
+      const turnLabel =
+        group.first === group.last
+          ? msg("stepping.turnName.single", { turn: group.first + 1 })
+          : msg("stepping.turnName.group", { first: group.first + 1, last: group.last + 1 });
+      const turnName = group.posts
+        ? msg("stepping.turnName.atPost", {
+            turn: turnLabel,
+            nosings: andList(group.posts.map((k) => msg("stepping.nosingRef", { nosing: k }))),
+          })
+        : turnLabel;
       const bounds = zoneBounds(group, positions.s, fixed);
       const maxBefore = Math.min(WINDERS_PER_SIDE_MAX, bounds.kL - bounds.lo);
       const maxAfter = Math.min(WINDERS_PER_SIDE_MAX, bounds.hi - bounds.kR);
@@ -338,7 +372,12 @@ export function computeStepping(
         const na = Math.min(windersPerSide, bounds.hi - bounds.kR);
         if (nb !== windersPerSide || na !== windersPerSide) {
           notes.push(
-            `${turnName} : ${windersPerSide} marches balancées demandées de chaque côté, ${nb} avant et ${na} après possibles (nez fixes).`,
+            msg("stepping.windersPerSideLimited", {
+              turn: turnName,
+              count: windersPerSide,
+              before: nb,
+              after: na,
+            }),
           );
         }
         pairs.push([nb, na]);
@@ -387,7 +426,7 @@ export function computeStepping(
         }
       }
       if (cands.length === 0) {
-        notes.push(`${turnName} : aucune marche à balancer (nez fixes encadrant le tournant).`);
+        notes.push(msg("stepping.noWinders", { turn: turnName }));
         continue;
       }
       const chosen = auto
@@ -399,20 +438,22 @@ export function computeStepping(
           // Côté d'un poteau : les lignes perpendiculaires à Γ (arc centré sur le poteau) sont
           // rayonnantes vers le poteau et y aboutissent (collets > 0, sans croisement).
           notes.push(
-            `${turnName} : aucune zone de balancement admissible de ce côté du poteau${reason ? ` (${reason})` : ""} ; nez rayonnants vers le poteau.`,
+            reason
+              ? msg("stepping.noZoneAtPostWithReason", { turn: turnName, reason })
+              : msg("stepping.noZoneAtPost", { turn: turnName }),
           );
           continue;
         }
         notes.push(
-          `${turnName} : aucun balancement admissible (collets positifs, lignes de nez sans croisement)${reason ? ` ; ${reason}` : ""} ; nez laissés perpendiculaires à la ligne de foulée.`,
+          reason
+            ? msg("stepping.noBalancingWithReason", { turn: turnName, reason })
+            : msg("stepping.noBalancing", { turn: turnName }),
         );
         continue;
       }
       for (const nl of chosen.nosings) nosings[nl.index] = view.flipped ? flipNosing(nl) : nl;
       for (const k of chosen.corrected) {
-        notes.push(
-          `Nez ${k} : la ligne recoupe le jour avant le collet calculé, collet ramené au jour.`,
-        );
+        notes.push(msg("stepping.colletClampedToWell", { nosing: k }));
       }
       const { from, to } = chosen.zone;
       const alphaMax = method === "M2" ? herseAlphaMax(balancingInput(ctx, chosen.zone)) : null;
@@ -429,46 +470,86 @@ export function computeStepping(
       });
       zoneRanges.push({ from, to, corners: group.corners, side: group.side });
       notes.push(
-        `${turnName} : ${bounds.kL - from} + ${to - bounds.kR} nez balancés (nez fixes ${from} et ${to}, extrémités ${chosen.zone.ends.map((e) => (e === "tangent" ? "tangente" : "libre")).join("/")}), ${variantLabel(method, variant)}, collet minimal ${fmt(chosen.minChord)} mm en corde (${fmt(chosen.minArc)} mm en arc).`,
+        msg("stepping.zoneSummary", {
+          turn: turnName,
+          before: bounds.kL - from,
+          after: to - bounds.kR,
+          from,
+          to,
+          endA: msg(zoneEndKey(chosen.zone.ends[0])),
+          endB: msg(zoneEndKey(chosen.zone.ends[1])),
+          method: variantLabel(method, variant),
+          minChord: dec(chosen.minChord),
+          minArc: dec(chosen.minArc),
+        }),
       );
       if (beyond) {
         notes.push(
-          `${turnName} : aucune zone admissible dans l'étendue de balancement de ${fmt(extent)} ${extent < 2 ? "giron" : "girons"} depuis l'angle ; étendue dépassée (nez fixes ${from} et ${to}).`,
+          msg("stepping.extentExceeded", { turn: turnName, count: dec(extent), from, to }),
         );
       }
       if (auto && chosen.minChord < targetCollet - 1e-6) {
         notes.push(
-          `${turnName} : collet cible de ${fmt(targetCollet)} mm non atteint (${beyondExtent.length > 0 && !beyond ? `étendue de balancement limitée à ${fmt(extent)} ${extent < 2 ? "giron" : "girons"} depuis l'angle` : "aucune zone possible ne l'atteint"}) ; zone de collet maximal retenue.`,
+          msg("stepping.targetColletMissed", {
+            turn: turnName,
+            target: dec(targetCollet),
+            cause:
+              beyondExtent.length > 0 && !beyond
+                ? msg("stepping.colletMissedCause.extentLimited", { count: dec(extent) })
+                : msg("stepping.colletMissedCause.unreachable"),
+          }),
         );
       }
       if (method === "M2") {
         notes.push(
-          `${turnName} : herse (M2), α = ${fmt(herseAngle ?? HERSE_DEFAULT_ANGLE)}° dans ]0 ; ${fmt(alphaMax ?? 0)}°[ (au-delà, collets croissants vers l'angle).`,
+          msg("stepping.herseNote", {
+            turn: turnName,
+            alpha: dec(herseAngle ?? HERSE_DEFAULT_ANGLE),
+            alphaMax: dec(alphaMax ?? 0),
+          }),
         );
       }
       if (method === "M6") {
         notes.push(
-          `${turnName} : rotation paramétrée (M6), portée λ = ${fmt(rotationReach ?? ROTATION_DEFAULT_REACH)} giron(s), raideur p = ${fmt(rotationSteepness ?? ROTATION_DEFAULT_STEEPNESS)}${rotationReach === undefined || rotationSteepness === undefined ? " (réglages par défaut à valider)" : ""}.`,
+          msg(
+            rotationReach === undefined || rotationSteepness === undefined
+              ? "stepping.rotationNoteDefaults"
+              : "stepping.rotationNote",
+            {
+              turn: turnName,
+              count: dec(rotationReach ?? ROTATION_DEFAULT_REACH),
+              steepness: dec(rotationSteepness ?? ROTATION_DEFAULT_STEEPNESS),
+            },
+          ),
         );
       }
       if (method === "M1" || method === "M2") {
         const [endA, endB] = chosen.zone.ends;
-        const parts: string[] = [];
+        const parts: Message[] = [];
         if (endA === "tangent") {
           parts.push(
-            `${fmt(going - colletOnSide(layout, nosings[from]!, nosings[from + 1]!, group.side).arc)} mm en bas`,
+            msg("stepping.jumpBottom", {
+              value: dec(
+                going - colletOnSide(layout, nosings[from]!, nosings[from + 1]!, group.side).arc,
+              ),
+            }),
           );
         }
         if (endB === "tangent") {
           parts.push(
-            `${fmt(going - colletOnSide(layout, nosings[to - 1]!, nosings[to]!, group.side).arc)} mm en haut`,
+            msg("stepping.jumpTop", {
+              value: dec(
+                going - colletOnSide(layout, nosings[to - 1]!, nosings[to]!, group.side).arc,
+              ),
+            }),
           );
         }
         if (parts.length > 0) {
           notes.push(
-            method === "M1"
-              ? `${turnName} : jarret d'entrée de zone M1 (g − c) de ${parts.join(" et ")}.`
-              : `${turnName} : avertissement — saut de collet en entrée de zone M2 (g − c) de ${parts.join(" et ")} : la herse ne raccorde jamais la partie droite (B §3.4).`,
+            msg(method === "M1" ? "stepping.m1EntryKnee" : "stepping.m2EntryJump", {
+              turn: turnName,
+              values: andList(parts),
+            }),
           );
         }
       }
@@ -536,7 +617,14 @@ export function computeStepping(
     if (perAngleBreaks < classicBreaks) {
       zoneRun = perAngle;
       zoneRun.notes.push(
-        `Poteau(x) d'angle : collets irréguliers (K3) avec le balancement d'un seul tenant (${classicBreaks} rupture(s)) ; zones par angle retenues (nez du poteau fixe, une zone de chaque côté du poteau, B §3.1${perAngleBreaks > 0 ? `, ${perAngleBreaks} rupture(s) restante(s)` : ""}).`,
+        perAngleBreaks > 0
+          ? msg("stepping.perAngleZonesWithBreaks", {
+              breaks: msg("stepping.breakCount", { count: classicBreaks }),
+              remaining: msg("stepping.remainingBreakCount", { count: perAngleBreaks }),
+            })
+          : msg("stepping.perAngleZones", {
+              breaks: msg("stepping.breakCount", { count: classicBreaks }),
+            }),
       );
     }
   }
@@ -554,24 +642,30 @@ export function computeStepping(
     const dir = V.rotate(seed.perpendicular, (turnSign * angle * Math.PI) / 180);
     const res = realizeNosing(layout, seed, { kind: "dir", dir }, Math.abs(angle) > 0);
     if (!res.ok) {
-      notes.push(`Nez ${k} : angle imposé de ${fmt(angle)}° inapplicable (${res.reason}).`);
+      notes.push(
+        msg("stepping.override.angleInapplicable", {
+          nosing: k,
+          angle: dec(angle),
+          reason: res.reason,
+        }),
+      );
       continue;
     }
     nosings[k] = res.nosing;
     if (fixed.has(k) && Math.abs(angle) > 0) {
-      notes.push(`Nez ${k} : angle imposé de ${fmt(angle)}° sur un nez fixe (borne de zone).`);
+      notes.push(msg("stepping.override.angleOnFixed", { nosing: k, angle: dec(angle) }));
     }
   }
 
   // ------------------------------------------------------------ contrôles K5 / K3 / collets
   for (const c of findCrossingsOnSides(layout, nosings)) {
-    notes.push(`K5 : les lignes de nez ${c.i} et ${c.j} se croisent entre le jour et le mur.`);
+    notes.push(msg("stepping.k5Crossing", { a: c.i, b: c.j }));
   }
   for (let k = 0; k + 1 < n; k++) {
     const side = collarSideAt(layout, (positions.s[k]! + positions.s[k + 1]!) / 2);
     const c = colletOnSide(layout, nosings[k]!, nosings[k + 1]!, side);
     if (!(c.chord > GEOM_EPS) && !positions.landingTreads.has(k)) {
-      notes.push(`Marche ${k + 1} : collet nul (${fmt(c.chord)} mm en corde).`);
+      notes.push(msg("stepping.zeroCollet", { tread: k + 1, chord: dec(c.chord) }));
     }
   }
   // K3 par angle : une vallée de collets autour de chaque angle du jour de la zone.
@@ -582,7 +676,11 @@ export function computeStepping(
     const corners = cornerPositions(positions.s.slice(zr.from, zr.to + 1), zr.corners);
     for (const i of cornerMonotonyBreaks(chords, corners)) {
       notes.push(
-        `K3 : collet non monotone vers l'angle, marche ${zr.from + i + 2} (${fmt(chords[i + 1]!)} mm après ${fmt(chords[i]!)} mm).`,
+        msg("stepping.k3NotMonotone", {
+          tread: zr.from + i + 2,
+          collet: dec(chords[i + 1]!),
+          previous: dec(chords[i]!),
+        }),
       );
     }
   }
@@ -628,7 +726,13 @@ function checkOppositeTurns(layout: Layout, going: Mm): void {
     const straight = b.sStart - a.sEnd;
     if (straight < going - GEOM_EPS) {
       throw new SteppingError(
-        `Tournants ${j + 1} et ${j + 2} de sens opposés (escalier en S ou en Z) : la volée intermédiaire n'offre que ${fmt(straight)} mm de ligne de foulée droite, il faut au moins un giron (${fmt(going)} mm) entre les deux balancements. Allongez la volée ${j + 2} ou remplacez un tournant par un palier.`,
+        msg("stepping.oppositeTurnsTooClose", {
+          turnA: j + 1,
+          turnB: j + 2,
+          straight: dec(straight),
+          going: dec(going),
+          flight: j + 2,
+        }),
       );
     }
   }

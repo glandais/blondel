@@ -11,6 +11,7 @@
  * (LEDGER §2). Un projet peut porter un profil partiel (`Project.workshop`) : ses champs
  * remplacent ceux du profil par défaut (`resolveWorkshopProfile`).
  */
+import { msg, textMessage, type Message } from "@blondel/i18n";
 import { z } from "zod";
 import type { MaterialId } from "../model/derived.js";
 import type { Mm } from "../model/primitives.js";
@@ -111,7 +112,8 @@ export type WorkshopProfileInput = z.infer<typeof WorkshopProfileSchema>;
 
 /** Profil d'atelier complet (après fusion avec le profil par défaut). */
 export interface WorkshopProfile {
-  readonly name: string;
+  /** Nom du profil : saisi (texte brut) ou nom du profil par défaut (traduit). */
+  readonly name: Message;
   readonly wood: {
     readonly thicknesses: readonly Mm[];
     readonly widths: readonly Mm[];
@@ -142,7 +144,7 @@ export type WoodSettingKey = keyof WorkshopProfile["wood"];
  * voir `WORKSHOP_PROVENANCE`.
  */
 export const DEFAULT_WORKSHOP_PROFILE: WorkshopProfile = {
-  name: "Profil par défaut (valeurs à valider)",
+  name: msg("workshop.defaultProfileName"),
   wood: {
     thicknesses: [27, 34, 41, 54, 65, 80],
     widths: [150, 200, 250, 300, 350, 400, 450, 500],
@@ -180,15 +182,15 @@ export const DEFAULT_WORKSHOP_PROFILE: WorkshopProfile = {
 export const OTHER_DENSITY_PROVENANCE: Readonly<Record<OtherMaterialId, SettingProvenance>> = {
   "stainless-brushed": {
     status: "a-valider",
-    note: "Inox : 7 900 kg/m³, ordre de grandeur usuel absent de docs/research, à valider.",
+    note: msg("workshop.provenance.density.stainlessBrushed"),
   },
   glass: {
     status: "a-valider",
-    note: "Verre : 2 500 kg/m³, ordre de grandeur usuel absent de docs/research, à valider.",
+    note: msg("workshop.provenance.density.glass"),
   },
   concrete: {
     status: "a-valider",
-    note: "Béton : 2 400 kg/m³, ordre de grandeur usuel absent de docs/research, à valider.",
+    note: msg("workshop.provenance.density.concrete"),
   },
 };
 
@@ -207,7 +209,7 @@ export function materialDensity(material: MaterialId, profile: WorkshopProfile):
 export interface SettingProvenance {
   /** `a-valider` : hypothèse d'atelier sans source ; `source` : valeur tirée de la recherche. */
   readonly status: "a-valider" | "source";
-  readonly note: string;
+  readonly note: Message;
 }
 
 /**
@@ -216,42 +218,42 @@ export interface SettingProvenance {
  * RC 10 du DTU 36.3 non lu) ; seule la borne basse de la profondeur d'encastrement l'est.
  */
 export const WORKSHOP_PROVENANCE: Readonly<Record<WoodSettingKey, SettingProvenance>> = {
-  thicknesses: { status: "a-valider", note: "Plateaux usuels du négoce, non sourcés." },
-  widths: { status: "a-valider", note: "Largeurs de débit usuelles, non sourcées." },
-  maxBoardLength: { status: "a-valider", note: "Longueur de plateau, non sourcée." },
+  thicknesses: { status: "a-valider", note: msg("workshop.provenance.wood.thicknesses") },
+  widths: { status: "a-valider", note: msg("workshop.provenance.wood.widths") },
+  maxBoardLength: { status: "a-valider", note: msg("workshop.provenance.wood.maxBoardLength") },
   postSections: {
     status: "a-valider",
-    note: "Sections de poteau non sourcées (C §1.9 cite un poteau fini de 90 à 100 mm, confiance faible).",
+    note: msg("workshop.provenance.wood.postSections"),
   },
-  planingAllowance: { status: "a-valider", note: "Surcote de corroyage, non sourcée." },
+  planingAllowance: { status: "a-valider", note: msg("workshop.provenance.wood.planingAllowance") },
   lengthAllowance: {
     status: "a-valider",
-    note: "Surlongueur de débit (C §1.6 la cite comme paramètre, sans valeur).",
+    note: msg("workshop.provenance.wood.lengthAllowance"),
   },
   housingDepth: {
     status: "a-valider",
-    note: "15 mm à valider ; borne basse sourcée : entaille ≥ 14 mm (NF EN 16481 § 5.4.2, C §1.4).",
+    note: msg("workshop.provenance.wood.housingDepth"),
   },
   clearance: {
     status: "a-valider",
-    note: "Jeux d'assemblage du DTU 36.3 (RC 10) non trouvés en accès libre (C §1.1).",
+    note: msg("workshop.provenance.wood.clearance"),
   },
-  minCheek: { status: "a-valider", note: "Joue mini d'atelier, non sourcée." },
+  minCheek: { status: "a-valider", note: msg("workshop.provenance.wood.minCheek") },
   minPerpendicularWidth: {
     status: "a-valider",
-    note: "Largeur perpendiculaire mini (CHALLENGE G6), sans valeur sourcée.",
+    note: msg("workshop.provenance.wood.minPerpendicularWidth"),
   },
   minWoodBetweenHousings: {
     status: "a-valider",
-    note: "Bois entre mortaises (CHALLENGE G6), sans valeur sourcée.",
+    note: msg("workshop.provenance.wood.minWoodBetweenHousings"),
   },
   minUpperOffset: {
     status: "a-valider",
-    note: "Dépassement d_h (B §4.1 : « paramètre d'atelier »), sans valeur sourcée.",
+    note: msg("workshop.provenance.wood.minUpperOffset"),
   },
   densities: {
     status: "a-valider",
-    note: "Aucune masse volumique dans docs/research : ordres de grandeur à valider.",
+    note: msg("workshop.provenance.wood.densities"),
   },
 };
 
@@ -263,7 +265,7 @@ export function resolveWorkshopProfile(input?: WorkshopProfileInput): WorkshopPr
   const pick = <K extends Exclude<WoodSettingKey, "densities">>(k: K): WorkshopProfile["wood"][K] =>
     (w[k] ?? d.wood[k]) as WorkshopProfile["wood"][K];
   return {
-    name: input.name ?? d.name,
+    name: input.name !== undefined ? textMessage(input.name) : d.name,
     wood: {
       thicknesses: pick("thicknesses"),
       widths: pick("widths"),

@@ -7,6 +7,7 @@
  */
 import type { StructureContext, StructureKind } from "@blondel/core";
 import { useMemo, useState } from "react";
+import { trKey } from "../i18n/fr.js";
 import { layoutKindOf, structureFitsLayout } from "../lib/layoutKind.js";
 import { availableStructures } from "../lib/optionalApi.js";
 import { chooseStructure } from "../lib/structureChoice.js";
@@ -188,7 +189,7 @@ export function StructureSection() {
     { value: NO_STRUCTURE, label: "Aucune (marches, contremarches, paliers)" },
     ...kinds.map((k) => ({
       value: k.kind,
-      label: `${k.label} (${FAMILY_LABELS[k.family]})${
+      label: `${trKey(k.labelKey)} (${FAMILY_LABELS[k.family]})${
         structureFitsLayout(k.kind, layoutKind)
           ? ""
           : layoutKind === "helical"
@@ -251,7 +252,7 @@ export function StructureSection() {
       ) : null}
       {fields.length > 0 ? (
         <fieldset className="structure-params">
-          <legend>Paramètres de {plugin?.label}</legend>
+          <legend>Paramètres de {plugin ? trKey(plugin.labelKey) : undefined}</legend>
           {groupFields(fields).map(({ group, fields: gf }) => {
             const inputs = gf.map((f) => (
               <ParamInput

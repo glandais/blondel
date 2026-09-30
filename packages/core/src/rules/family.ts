@@ -9,16 +9,18 @@
  * nommées, puis les préfixes ; une règle hors table (`rules.yaml`) est un contrôle de plugin de
  * structure, donc de fabrication ; sinon, géométrie.
  */
+import type { MessageKey } from "@blondel/i18n";
 import { findRule } from "./table.js";
 
 export type RuleFamily = "geometrie" | "fabrication" | "garde-corps";
 
 export const RULE_FAMILIES: readonly RuleFamily[] = ["geometrie", "fabrication", "garde-corps"];
 
-export const RULE_FAMILY_LABELS: Readonly<Record<RuleFamily, string>> = {
-  geometrie: "Géométrie",
-  fabrication: "Fabrication",
-  "garde-corps": "Garde-corps",
+/** Clé du libellé de chaque famille (ADR-0007) : `t(RULE_FAMILY_LABELS[f])`. */
+export const RULE_FAMILY_LABELS: Readonly<Record<RuleFamily, MessageKey>> = {
+  geometrie: "compliance.family.geometrie",
+  fabrication: "compliance.family.fabrication",
+  "garde-corps": "compliance.family.gardeCorps",
 };
 
 /** Règles dont le préfixe ne dit pas la famille. */

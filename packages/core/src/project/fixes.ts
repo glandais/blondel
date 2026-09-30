@@ -18,10 +18,11 @@
  *   fermé** : l'escalier ne le sait pas, la correction est libellée comme telle et n'est pas
  *   proposée quand l'utilisateur a déclaré le côté jour « vide » (`guards.flight.inner`).
  */
+import { msg, type Message } from "@blondel/i18n";
 import type { Model } from "../model/derived.js";
 import { ProjectSchema, type Project, type ProjectInput } from "../model/project.js";
 import { GuardsSpecSchema } from "../guards/spec.js";
-import { NARROW_JOUR_PREFIX } from "../guards/jour.js";
+import { isNarrowJourNote } from "../guards/jour.js";
 import { sectionWidth } from "../guards/parts.js";
 import {
   deepMerge,
@@ -48,9 +49,9 @@ export interface FixSuggestion {
   /** Identifiant stable de la correction (pour l'UI et les tests). */
   readonly id: "jour-newel" | "newel-profile" | "opening-clearance" | "jour-wall";
   /** Libellé d'action, à l'infinitif (ex. « Passer le jour en poteau de 100 mm »). */
-  readonly label: string;
+  readonly label: Message;
   /** Pourquoi cette correction est proposée. */
-  readonly reason: string;
+  readonly reason: Message;
   /** Patch de projet (fusion profonde, tableaux remplacés en bloc). */
   readonly patch: DeepPartial<ProjectInput>;
 }
@@ -103,8 +104,14 @@ export function suggestFixes(
   if (sharp > 0 && structureRequiresNewel(kind) && layoutAccepts(project, newelPatch)) {
     out.push({
       id: "jour-newel",
-      label: `Passer le jour en ${newelLabel(sharpTarget)}${sharp > 1 ? ` (${sharp} tournants)` : ""}`,
-      reason: `La structure « ${kind} » assemble ses limons de jour sur un poteau d'angle : avec un jour à angle vif, ils se rencontreraient en un point et ne sont pas générés.`,
+      label:
+        sharp > 1
+          ? msg("project.fix.jourNewel.labelMany", {
+              newel: newelLabel(sharpTarget),
+              count: String(sharp),
+            })
+          : msg("project.fix.jourNewel.label", { newel: newelLabel(sharpTarget) }),
+      reason: msg("project.fix.jourNewel.reason", { kind }),
       patch: newelPatch,
     });
   }
@@ -118,9 +125,14 @@ export function suggestFixes(
     if (layoutAccepts(project, patch)) {
       out.push({
         id: "newel-profile",
-        label: `Poser le poteau des profilés : ${newelLabel(expected)}${mismatched > 1 ? ` (${mismatched} tournants)` : ""}`,
-        reason:
-          "Les limons en profilés sont reçus en barre droite par un poteau élargi (largeur d'aile + 2 × jeu, décalé vers le jour ; paramètre « côté du poteau pour profilés », à valider) : le poteau actuel ne correspond pas.",
+        label:
+          mismatched > 1
+            ? msg("project.fix.newelProfile.labelMany", {
+                newel: newelLabel(expected),
+                count: String(mismatched),
+              })
+            : msg("project.fix.newelProfile.label", { newel: newelLabel(expected) }),
+        reason: msg("project.fix.newelProfile.reason"),
         patch,
       });
     }
@@ -146,9 +158,8 @@ export function suggestFixes(
     if (grown.sizeX !== opening.sizeX || grown.sizeY !== opening.sizeY) {
       out.push({
         id: "opening-clearance",
-        label: `Élargir la trémie de ${clearance} mm le long de l'escalier`,
-        reason:
-          "Un garde-corps rampant passe sous la dalle haute (trémie au nu de l'escalier) : sa main courante traverserait le plancher.",
+        label: msg("project.fix.openingClearance.label", { clearance: String(clearance) }),
+        reason: msg("project.fix.openingClearance.reason"),
         patch: { site: { opening: { kind: "rect", ...grown } } },
       });
     }
@@ -158,14 +169,13 @@ export function suggestFixes(
   // « mur » seulement si le jour est fermé. Côté jour déclaré « vide » : jour ouvert, rien à proposer.
   // Garde-corps partiel côté jour (vide ouvert hors du jour, décision A10 du 2026-09-30) : un
   // jour fermé ne ferme pas ce vide, « mur » supprimerait ce garde-corps : pas de proposition.
-  const narrow = (model.notes ?? []).some((n) => n.startsWith(NARROW_JOUR_PREFIX));
+  const narrow = (model.notes ?? []).some(isNarrowJourNote);
   const partialGuard = (model.parts ?? []).some((p) => p.id.startsWith("guard-inner-"));
   if (narrow && !partialGuard && project.guards && project.guards.flight.inner === "auto") {
     out.push({
       id: "jour-wall",
-      label: "Jour fermé : régler le côté jour des garde-corps sur « mur »",
-      reason:
-        "Le jour est plus étroit que la sphère T1 : pas de garde-corps de jour (protection contre les chutes signalée en conseil). À retenir seulement si le jour est fermé (cloison, remplissage) ; jour ouvert : laisser tel quel ou élargir le jour.",
+      label: msg("project.fix.jourWall.label"),
+      reason: msg("project.fix.jourWall.reason"),
       patch: { guards: { flight: { inner: "wall" } } },
     });
   }

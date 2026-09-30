@@ -6,6 +6,7 @@
  *
  * Collet d'un tournant circulaire : c = g·r_j / r_f (nul pour un angle vif).
  */
+import { msg } from "@blondel/i18n";
 import { curvePointAt } from "../geom2d/curve.js";
 import * as V from "../geom2d/vec.js";
 import type { BalancingInput, BalancingSolution, BalancingStrategy } from "../model/plugins.js";
@@ -24,7 +25,8 @@ function solve(input: BalancingInput): BalancingSolution {
     for (const t of turns) if (Math.abs(t.mid - s) < Math.abs(best.mid - s)) best = t;
     const p = curvePointAt(input.layout.walkline, s);
     const v = V.sub(p, best.center);
-    if (V.norm(v) <= 1e-9) return { kind: "fail", reason: `nez ${k} confondu avec le centre` };
+    if (V.norm(v) <= 1e-9)
+      return { kind: "fail", reason: msg("balancing.m0.fail.nosingAtCentre", { nosing: k }) };
     phi.push(V.angleOf(v));
   }
   return { kind: "phi", phi };
@@ -32,6 +34,6 @@ function solve(input: BalancingInput): BalancingSolution {
 
 export const M0_STRATEGY: BalancingStrategy = {
   id: "M0",
-  label: "Rayonnant (M0)",
+  labelKey: "balancing.m0.label",
   solve,
 };

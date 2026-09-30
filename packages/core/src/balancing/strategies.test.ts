@@ -9,6 +9,7 @@ import { M0_STRATEGY } from "./m0.js";
 import { M1_STRATEGY, vProfileCollets } from "./m1.js";
 import { M3_STRATEGY, zoneProfile } from "./m3.js";
 import { evalProfile } from "./profile.js";
+import { fr } from "../i18n.test-helpers.js";
 
 /**
  * Cas synthétique de B §3.5 : nez tous les 250 mm sur Γ, hauteurs de 180 mm ; zone [1 ; 7]
@@ -86,12 +87,12 @@ describe("M3 (développement du limon)", () => {
       nosings: input.nosings.map((n) => (n.index === 0 ? { ...n, sigmaInner: -100 } : n)),
     };
     const built = zoneProfile(bent);
-    if ("reason" in built) throw new Error(built.reason);
+    if ("reason" in built) throw new Error(fr(built.reason));
     expect(evalProfile(built.profile, 0, 1)).toBeCloseTo(1.8, 12);
     expect(evalProfile(built.profile, 1, 1)).toBeCloseTo(0.72, 12);
     // Partie droite : Δσ = Δs, on retrouve m = h/g.
     const straight = zoneProfile(input);
-    if ("reason" in straight) throw new Error(straight.reason);
+    if ("reason" in straight) throw new Error(fr(straight.reason));
     expect(evalProfile(straight.profile, 0, 1)).toBeCloseTo(0.72, 12);
   });
 
@@ -117,14 +118,14 @@ describe("M1 (profil de collets en V)", () => {
 
   it("cas symétrique impair : T = (p + 1)², δ = (N·g − L)/T", () => {
     const c = vProfileCollets(5, 900, 250, 0.5);
-    if (!Array.isArray(c)) throw new Error(c.reason);
+    if (!Array.isArray(c)) throw new Error(fr(c.reason));
     const delta = (5 * 250 - 900) / 9;
     [1, 2, 3, 2, 1].forEach((w, i) => expect(c[i]).toBeCloseTo(250 - delta * w, 9));
   });
 
   it("cas asymétrique : somme = L, V dont l'apex suit le point d'angle", () => {
     const c = vProfileCollets(6, 900, 250, 0.25);
-    if (!Array.isArray(c)) throw new Error(c.reason);
+    if (!Array.isArray(c)) throw new Error(fr(c.reason));
     expect(c.reduce((a, b) => a + b, 0)).toBeCloseTo(900, 9);
     const iMin = c.indexOf(Math.min(...c));
     expect(iMin).toBeLessThanOrEqual(2);
@@ -135,7 +136,7 @@ describe("M1 (profil de collets en V)", () => {
 
   it("extrémité libre : palier de collets égaux jusqu'à l'apex ; deux libres = équipartition", () => {
     const c = vProfileCollets(6, 900, 250, 0.5, ["free", "tangent"]);
-    if (!Array.isArray(c)) throw new Error(c.reason);
+    if (!Array.isArray(c)) throw new Error(fr(c.reason));
     expect(c.reduce((a, b) => a + b, 0)).toBeCloseTo(900, 9);
     expect(c[0]).toBeCloseTo(c[1]!, 9);
     expect(c[1]).toBeCloseTo(c[2]!, 9);

@@ -1,3 +1,4 @@
+import { msg } from "@blondel/i18n";
 import { GeometryError } from "./errors.js";
 
 /** Repère de section d'un balayage (voir `meshSweep`). */
@@ -47,7 +48,7 @@ export const DEG = Math.PI / 180;
 export function creaseCos(options: MeshOptions, defaultDeg: number): number {
   const deg = options.creaseAngleDeg ?? defaultDeg;
   if (!Number.isFinite(deg) || deg < 0 || deg > 180) {
-    throw new GeometryError(`angle de lissage invalide : ${deg} (attendu dans [0, 180] degrés)`);
+    throw new GeometryError(msg("geometry.options.invalidCreaseAngle", { angle: String(deg) }));
   }
   return Math.cos(deg * DEG) - 1e-9;
 }
@@ -55,6 +56,7 @@ export function creaseCos(options: MeshOptions, defaultDeg: number): number {
 /** Nombre maximal de points de chemin, après validation. */
 export function maxPathPoints(options: MeshOptions): number {
   const n = options.maxPathPoints ?? 10_000;
-  if (!(n >= 2)) throw new GeometryError(`maxPathPoints invalide : ${n}`);
+  if (!(n >= 2))
+    throw new GeometryError(msg("geometry.options.invalidMaxPathPoints", { value: String(n) }));
   return n;
 }

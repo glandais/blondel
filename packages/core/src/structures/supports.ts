@@ -10,10 +10,10 @@
  * le retour de la pièce suivante (Z : L_r + marge ; U : t + r + marge ; bois : marge). Dessus
  * du support = dessous de la marche ; aile verticale contre la face, vers le bas.
  */
+import { dec, msg, type Message } from "@blondel/i18n";
 import * as V from "../geom2d/vec.js";
 import type { Part } from "../model/derived.js";
 import type { Frame3, Mm, Polygon2, Vec2 } from "../model/primitives.js";
-import { fmt } from "../rules/check.js";
 import type { WorkshopProfile } from "../workshop/profile.js";
 import { pocketInterval } from "./housing.js";
 import { steelQuantities } from "./steelCommon.js";
@@ -81,10 +81,17 @@ export function supportSectionArea(spec: SupportSpec): number {
     : spec.plateWidth * spec.plateThickness;
 }
 
-export function supportSection(spec: SupportSpec): string {
+/** Désignation de la section (« L 40 × 40 × 4 », « plat 60 × 8 »). */
+export function supportSection(spec: SupportSpec): Message {
   return spec.kind === "angle"
-    ? `L ${fmt(spec.angleLeg, 0)} × ${fmt(spec.angleLeg, 0)} × ${fmt(spec.angleThickness, 0)}`
-    : `plat ${fmt(spec.plateWidth, 0)} × ${fmt(spec.plateThickness, 0)}`;
+    ? msg("structure.common.section.angle", {
+        leg: dec(spec.angleLeg, 0),
+        thickness: dec(spec.angleThickness, 0),
+      })
+    : msg("structure.common.section.flat", {
+        width: dec(spec.plateWidth, 0),
+        thickness: dec(spec.plateThickness, 0),
+      });
 }
 
 /** Fixation effective (un plat posé à plat sous la marche ne peut être que soudé). */
@@ -161,13 +168,19 @@ export function supportPart(
   const areaS = supportSectionArea(spec);
   const kindLabel =
     spec.kind === "angle"
-      ? `Cornière ${fixing === "welded" ? "soudée" : "vissée"}`
-      : "Plat support soudé";
+      ? fixing === "welded"
+        ? msg("structure.common.support.angleWelded")
+        : msg("structure.common.support.angleBolted")
+      : msg("structure.common.support.plateWelded");
   return {
     id: `support-${p.tread}-${p.face.key}`,
     mark,
     category: "support",
-    name: `${kindLabel} sous ${p.treadMark} (${p.face.ownerMark})`,
+    name: msg("structure.common.support.name", {
+      kind: kindLabel,
+      tread: p.treadMark,
+      owner: p.face.ownerMark,
+    }),
     material,
     solid: { kind: "extrusion", frame, profile: { outer, holes: [] }, depth: L },
     section: supportSection(spec),

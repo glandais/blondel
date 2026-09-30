@@ -5,6 +5,7 @@
  * Ne remplace pas une note de calcul.
  */
 import { PRECHECK_LABEL } from "@blondel/core";
+import { tr } from "../i18n/fr.js";
 import { useMemo } from "react";
 import { executionClassInfo, precheckSummary, type PrecheckRow } from "../lib/precheck.js";
 import { appStore, useApp, useModel } from "../store/appStore.js";
@@ -135,7 +136,7 @@ export function PrecheckPanel() {
           ) : null}
         </>
       ) : null}
-      <p className="disclaimer">{PRECHECK_LABEL}.</p>
+      <p className="disclaimer">{tr(PRECHECK_LABEL)}.</p>
     </section>
   );
 }

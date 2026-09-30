@@ -16,6 +16,7 @@ import {
 } from "@blondel/core";
 import { MATERIAL_LABELS } from "../csv/cutlist.js";
 import { formatFr } from "../format.js";
+import { tr } from "../i18n.js";
 import { polygonPath } from "../path.js";
 import { DEFAULT_PART_DXF_VERSION, createDxfWriter } from "./create.js";
 import { declareLayers, type DxfLayerDef, type DxfVersion } from "./writer.js";
@@ -69,13 +70,14 @@ export function machinedSegments(flat: NonNullable<Part["flat"]>): [Vec2, Vec2][
 export function referenceText(flat: NonNullable<Part["flat"]>): string | undefined {
   const r = flat.reference;
   if (r === undefined) return undefined;
-  return `Référence : ${r.kind === "face" ? "face tracée" : "fibre neutre"}${r.description !== "" ? ` (${r.description})` : ""}`;
+  const description = tr(r.description);
+  return `Référence : ${r.kind === "face" ? "face tracée" : "fibre neutre"}${description !== "" ? ` (${description})` : ""}`;
 }
 
 /** Annotation d'une ligne : libellé, angle et sens de pli, profondeur d'usinage. */
 export function partLineAnnotation(l: FlatLine): string | undefined {
   const out: string[] = [];
-  if (l.label !== undefined) out.push(l.label);
+  if (l.label !== undefined) out.push(tr(l.label));
   if (l.kind === "bend" && l.bendAngle !== undefined) {
     const sense = l.bendUp === undefined ? "" : l.bendUp ? " haut" : " bas";
     out.push(`${formatFr(l.bendAngle, { decimals: 1, trimZeros: true, thousands: "" })}°${sense}`);
@@ -230,7 +232,8 @@ export function exportPartDxf(part: Part, options: PartDxfOptions = {}): string 
     const layer = partLineLayer(l);
     const angle = (Math.atan2(l.b.y - l.a.y, l.b.x - l.a.x) * 180) / Math.PI;
     if (l.kind === "text") {
-      if (l.label !== undefined) w.text(l.a, markH * 0.5, l.label, layer, { rotationDeg: angle });
+      if (l.label !== undefined)
+        w.text(l.a, markH * 0.5, tr(l.label), layer, { rotationDeg: angle });
       continue;
     }
     w.line(l.a, l.b, layer);
@@ -254,8 +257,8 @@ export function exportPartDxf(part: Part, options: PartDxfOptions = {}): string 
   // Informations hors pièce.
   const t = formatFr(flat.thickness, { decimals: 1, trimZeros: true, thousands: "" });
   const info = [
-    `${part.mark} - ${part.name}`,
-    `Matériau ${MATERIAL_LABELS[part.material] ?? part.material} - épaisseur ${t} mm${part.section !== undefined ? ` - ${part.section}` : ""}`,
+    `${part.mark} - ${tr(part.name)}`,
+    `Matériau ${MATERIAL_LABELS[part.material] ?? part.material} - épaisseur ${t} mm${part.section !== undefined ? ` - ${tr(part.section)}` : ""}`,
   ];
   const ref = referenceText(flat);
   if (ref !== undefined) info.push(ref);

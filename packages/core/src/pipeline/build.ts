@@ -4,12 +4,13 @@
  *   computeLayout → computeStepping → pièces de base → structure (plugin) → garde-corps
  *   → échappée → contrôle de conception (+ contrôles du plugin de structure et des garde-corps)
  *
- * - **Aucune exception** pour des paramètres impossibles : l'erreur de l'étape (message
- *   français de `LayoutError` / `SteppingError`, ou erreur interne) est ajoutée à
- *   `Model.errors` et les étapes suivantes reçoivent un résultat vide. Le modèle rendu est
- *   partiel mais cohérent : tracé vide si le tracé échoue, découpage vide (hauteurs seules si
- *   elles sont calculables) si le découpage échoue, et un contrôle de conception toujours
- *   présent (règles non calculables `non-evaluee`).
+ * - **Aucune exception** pour des paramètres impossibles : l'erreur de l'étape (`Message` porté
+ *   par `LayoutError` / `SteppingError` / `StructureError` / `GuardError`, ou
+ *   `pipeline.internalError` pour toute autre exception) est ajoutée à `Model.errors` et les
+ *   étapes suivantes reçoivent un résultat vide. Le modèle rendu est partiel mais cohérent :
+ *   tracé vide si le tracé échoue, découpage vide (hauteurs seules si elles sont calculables)
+ *   si le découpage échoue, et un contrôle de conception toujours présent (règles non
+ *   calculables `non-evaluee`).
  * - **Structure** (`stair.structure.kind`) : `none` = pièces de base seules ; sinon le plugin
  *   enregistré (`structures/registry.ts`) est appelé avec ses paramètres par défaut
  *   (`defaults(ctx)`) surchargés par `structure.params` puis validés par son `paramsSchema`.
@@ -29,6 +30,7 @@
  *   quel ; sinon chaque étape réutilise son dernier résultat si ses dépendances (sous-objets du
  *   projet et étapes amont) sont les mêmes objets.
  */
+import { errorMessage, messageEquals, msg, type Message } from "@blondel/i18n";
 import { computeHeadroom, type HeadroomAnalysis } from "../headroom/headroom.js";
 import { computeLayout } from "../layout/layout.js";
 import { autoWalklineSideKey } from "../layout/walklineSide.js";
@@ -69,19 +71,26 @@ import { LastValueCache } from "./memo.js";
 /** Résultat d'une étape : valeur ou message d'erreur. */
 type Stage<T> =
   | { readonly value: T; readonly error?: undefined }
-  | { readonly value?: undefined; readonly error: string };
+  | { readonly value?: undefined; readonly error: Message };
 
+/** Nom de chaque étape, repris dans le message d'erreur interne (`pipeline.internalError`). */
 const STAGE_LABELS = {
-  layout: "Tracé",
-  stepping: "Découpage",
-  parts: "Pièces",
-  structure: "Structure",
-  guards: "Garde-corps",
-  headroom: "Échappée",
-  compliance: "Contrôle de conception",
+  layout: msg("pipeline.stage.layout"),
+  stepping: msg("pipeline.stage.stepping"),
+  parts: msg("pipeline.stage.parts"),
+  structure: msg("pipeline.stage.structure"),
+  guards: msg("pipeline.stage.guards"),
+  headroom: msg("pipeline.stage.headroom"),
+  compliance: msg("pipeline.stage.compliance"),
 } as const;
 
-function attempt<T>(label: string, fn: () => T): Stage<T> {
+/**
+ * Exécute une étape. Erreur métier de l'étape (`LayoutError`, `SteppingError`,
+ * `StructureError`, `GuardError`) : son `Message` tel quel. Toute autre exception (y compris
+ * une `MessageError` de géométrie, invariant violé) : `pipeline.internalError`, avec l'étape et
+ * le détail (`Message` de l'exception, ou son texte brut).
+ */
+function attempt<T>(stage: Message, fn: () => T): Stage<T> {
   try {
     return { value: fn() };
   } catch (e) {
@@ -91,9 +100,8 @@ function attempt<T>(label: string, fn: () => T): Stage<T> {
       e instanceof StructureError ||
       e instanceof GuardError
     )
-      return { error: e.message };
-    const detail = e instanceof Error ? e.message : String(e);
-    return { error: `${label} : erreur interne (${detail}).` };
+      return { error: e.msg };
+    return { error: msg("pipeline.internalError", { stage, detail: errorMessage(e) }) };
   }
 }
 
@@ -137,14 +145,14 @@ function emptyStepping(project: Project): Stepping {
 
 interface PartsStage {
   readonly parts: readonly Part[];
-  readonly notes: readonly string[];
+  readonly notes: readonly Message[];
 }
 
 interface StructureStage {
   readonly parts: readonly Part[];
   readonly checks: readonly RuleResult[];
-  readonly notes: readonly string[];
-  readonly errors: readonly string[];
+  readonly notes: readonly Message[];
+  readonly errors: readonly Message[];
   /** Classe d'exécution EN 1090-2 déduite par le plugin (métal), reportée dans `Model`. */
   readonly executionClass?: "EXC1" | "EXC2";
   /** Prédimensionnement indicatif des limons, reporté dans `Model.precheck`. */
@@ -323,10 +331,11 @@ function resolveStructureParams(
   const merged = isRecord(defaults) ? deepMerge(defaults, params) : params;
   const parsed = plugin.paramsSchema.safeParse(merged);
   if (!parsed.success) {
+    // Messages de zod tels quels (langue de zod, `project/errors.ts`) : texte brut.
     const issues = parsed.error.issues
       .map((i) => (i.path.length > 0 ? `${i.path.join(".")} : ${i.message}` : i.message))
       .join(" ; ");
-    throw new StructureError(`Structure « ${plugin.kind} » : paramètres invalides (${issues}).`);
+    throw new StructureError(msg("pipeline.structureParamsInvalid", { kind: plugin.kind, issues }));
   }
   return parsed.data;
 }
@@ -409,9 +418,9 @@ export function mergeStructureChecks(
   for (const r of results) if (r.status === "violation") summary[r.severity]++;
   // Surcharge d'un contrôle de plugin : appliquée par le plugin (`effectiveSeverity`), elle n'est
   // pas « inconnue » ; seule reste la note des identifiants qu'aucun résultat ne porte.
-  const applied = new Set([...byRule.keys()].map(unknownOverrideNote));
+  const applied = [...byRule.keys()].map(unknownOverrideNote);
   const { notes: reportNotes, ...rest } = report;
-  const notes = (reportNotes ?? []).filter((n) => !applied.has(n));
+  const notes = (reportNotes ?? []).filter((n) => !applied.some((a) => messageEquals(a, n)));
   return { ...rest, results, summary, ...(notes.length > 0 ? { notes } : {}) };
 }
 
@@ -430,8 +439,8 @@ export function buildModel(project: Project, options: BuildModelOptions = {}): M
 
   const { site, stair } = project;
   const siteKey = siteKeys(site);
-  const errors: string[] = [];
-  const notes: string[] = [];
+  const errors: Message[] = [];
+  const notes: Message[] = [];
 
   // 1. Tracé.
   const layoutStage = run(
@@ -519,9 +528,7 @@ export function buildModel(project: Project, options: BuildModelOptions = {}): M
   const kind = stair.structure.kind;
   const plugin = kind !== "none" ? getStructure(kind) : undefined;
   if (kind !== "none" && !plugin) {
-    notes.push(
-      `Structure « ${kind} » : aucun plugin de structure disponible, seules les marches, contremarches et paliers sont générés.`,
-    );
+    notes.push(msg("pipeline.unknownStructure", { kind }));
   }
   if (complete) {
     const partsStage = run(caches.parts, [layout, stepping, stair.treads], () =>

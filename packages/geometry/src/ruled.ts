@@ -4,6 +4,7 @@
  */
 import type { Mm, Vec2, Vec3 } from "@blondel/core";
 import { signedVolume } from "./analysis.js";
+import { msg } from "@blondel/i18n";
 import { GeometryError } from "./errors.js";
 import { addCap, addGrid } from "./grid.js";
 import { MeshBuilder, flipMesh, type Mesh } from "./mesh.js";
@@ -30,43 +31,40 @@ export function meshRuled(
 ): Mesh {
   let m = a.length;
   if (m < 2 || b.length !== m || normals.length !== m) {
-    throw new GeometryError(
-      "surface réglée : polylignes a, b et normales de même longueur (≥ 2) attendues",
-    );
+    throw new GeometryError(msg("geometry.ruled.inconsistentInputs"));
   }
-  if (m > maxPathPoints(options)) throw new GeometryError("surface réglée trop longue");
-  if (!Number.isFinite(thickness)) throw new GeometryError("épaisseur non finie");
+  if (m > maxPathPoints(options)) throw new GeometryError(msg("geometry.ruled.tooLong"));
+  if (!Number.isFinite(thickness))
+    throw new GeometryError(msg("geometry.ruled.thicknessNotFinite"));
   const crease = creaseCos(options, 30);
-  if (Math.abs(thickness) <= 1e-9) throw new GeometryError("surface réglée d'épaisseur nulle");
+  if (Math.abs(thickness) <= 1e-9) throw new GeometryError(msg("geometry.ruled.zeroThickness"));
   const rows: number[][] = [];
   for (let i = 0; i < m; i++) {
     const n = normals[i]!;
     const l = Math.hypot(n.x, n.y);
     if (!(l > 0) || !Number.isFinite(l))
-      throw new GeometryError(`surface réglée : normale nulle au point ${i}`);
+      throw new GeometryError(msg("geometry.ruled.zeroNormal", { point: String(i) }));
     const ox = (n.x / l) * thickness,
       oy = (n.y / l) * thickness;
     const A = a[i]!,
       B = b[i]!;
     const row = [A.x, A.y, A.z, B.x, B.y, B.z, B.x + ox, B.y + oy, B.z, A.x + ox, A.y + oy, A.z];
     for (const c of row)
-      if (!Number.isFinite(c)) throw new GeometryError("surface réglée : coordonnée non finie");
+      if (!Number.isFinite(c)) throw new GeometryError(msg("geometry.ruled.nonFiniteCoordinate"));
     // Section plate : aire du parallélogramme |(b − a) × e·n| nulle.
     const ab = v3(B.x - A.x, B.y - A.y, B.z - A.z);
     if (
       length(ab) <= EPS ||
       length(cross(ab, v3(ox, oy, 0))) <= 1e-9 * length(ab) * Math.abs(thickness)
     ) {
-      throw new GeometryError(
-        `surface réglée : section plate au point ${i} (a = b ou b − a parallèle à la normale)`,
-      );
+      throw new GeometryError(msg("geometry.ruled.flatSection", { point: String(i) }));
     }
     const prev = rows[rows.length - 1];
     if (prev && row.every((c, k) => Math.abs(c - prev[k]!) <= EPS)) continue; // rangée répétée
     rows.push(row);
   }
   m = rows.length;
-  if (m < 2) throw new GeometryError("surface réglée : moins de 2 sections distinctes");
+  if (m < 2) throw new GeometryError(msg("geometry.ruled.tooFewSections"));
   const pts = new Float64Array(3 * 4 * m);
   rows.forEach((row, i) => pts.set(row, 12 * i));
   const pt = (i: number, j: number): Vec3 =>
@@ -94,9 +92,7 @@ export function meshRuled(
     const s = dot(add(sectionNormal(i), sectionNormal(i + 1)), sub(centroid(i + 1), centroid(i)));
     const si = s > 0 ? 1 : s < 0 ? -1 : 0;
     if (si === 0 || (sign !== 0 && si !== sign)) {
-      throw new GeometryError(
-        `surface réglée repliée entre les points ${i} et ${i + 1} (normales incohérentes ?)`,
-      );
+      throw new GeometryError(msg("geometry.ruled.folded", { a: String(i), b: String(i + 1) }));
     }
     sign = si;
   }

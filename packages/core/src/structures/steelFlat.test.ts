@@ -24,6 +24,7 @@ import { SteelFlatParamsSchema, buildSteelFlat, type SteelFlatResult } from "./s
 import { bendAllowance, findBendLaw, resolveBend } from "../workshop/metal.js";
 import { WorkshopProfileSchema, resolveWorkshopProfile } from "../workshop/profile.js";
 import "./index.js";
+import { fr, frList } from "../i18n.test-helpers.js";
 
 const EXAMPLES_DIR = resolve(dirname(fileURLToPath(import.meta.url)), "../../../../examples");
 const loadExample = (file: string): Project =>
@@ -126,7 +127,7 @@ describe("steel-flat — tôle pliée et contremarches pleines", () => {
     const arrival = risers[0]!;
     const t = folded[0]!.flat!.thickness;
     expect(arrival.material).toBe(folded[0]!.material);
-    expect(arrival.section).toBe(`tôle ${t} pliée L`);
+    expect(fr(arrival.section)).toBe(`tôle ${t} pliée L`);
     const flat = arrival.flat!;
     expect(flat.thickness).toBe(t);
     expect(flat.reference?.kind).toBe("neutral-fiber");
@@ -218,8 +219,8 @@ describe("steel-flat — quart tournant à poteau (cas n° 1) en acier", () => {
         expect(r.executionClass).toBe("EXC1");
         const exc = results(m, "EXC_CLASSE_EXECUTION");
         expect(exc).toHaveLength(1);
-        expect(exc[0]!.message).toMatch(/EXC1/);
-        expect(m.notes!.join(" ")).toMatch(/Classe d'exécution EN 1090-2 : EXC1/);
+        expect(fr(exc[0]!.message)).toMatch(/EXC1/);
+        expect(frList(m.notes).join(" ")).toMatch(/Classe d'exécution EN 1090-2 : EXC1/);
       });
 
       it("chaque marche a un support côté mur ; supports sur la joue des limons", () => {
@@ -286,7 +287,7 @@ describe("steel-flat — quart tournant à poteau (cas n° 1) en acier", () => {
         expect(flange.every((x) => x.status === "ok")).toBe(true);
         expect(results(m, "FAB_PLI_RAYON_MIN")[0]!.status).toBe("ok");
         expect(results(m, "FAB_PRESSE_PLIEUSE").every((x) => x.status === "ok")).toBe(true);
-        expect(m.notes!.join(" ")).toMatch(/pièce\(s\) unique\(s\)/);
+        expect(frList(m.notes).join(" ")).toMatch(/pièce\(s\) unique\(s\)/);
       });
     });
   }
@@ -297,7 +298,7 @@ describe("steel-flat — configurations et classes d'exécution", () => {
     const { m } = run(steel(loadExample("quarter-left.blondel.json")));
     const quarter = loadExample("quarter-left.blondel.json");
     expect(quarter.stair.layout.turns[0]!.inner.kind).toBe("sharp");
-    expect(m.errors.join(" ")).toMatch(/angle vif.*poteau/);
+    expect(frList(m.errors).join(" ")).toMatch(/angle vif.*poteau/);
     const marks = m.parts.filter((p) => p.category === "stringer").map((p) => p.mark);
     expect(marks.sort()).toEqual(["LE1", "LE2"]);
   });
@@ -342,7 +343,7 @@ describe("steel-flat — configurations et classes d'exécution", () => {
     const press = results(short.m, "FAB_PRESSE_PLIEUSE");
     expect(press.some((x) => x.status === "violation")).toBe(true);
     const missing = run(steel(p0, { treadKind: "folded-steel", folded: { thickness: 7 } }));
-    expect(missing.m.errors.join(" ")).toMatch(/aucune loi de pli/);
+    expect(frList(missing.m.errors).join(" ")).toMatch(/aucune loi de pli/);
     expect(results(missing.m, "FAB_LOI_DE_PLI")[0]!.status).toBe("violation");
     expect(missing.r.treads).toEqual([]);
   });
@@ -363,7 +364,7 @@ describe("steel-flat — configurations et classes d'exécution", () => {
       ),
     );
     const k = (0.65 + 0.5 * Math.log10(6.5 / 5)) / 2;
-    expect(r.treads[0]!.part.flat!.reference!.description).toContain(
+    expect(fr(r.treads[0]!.part.flat!.reference!.description)).toContain(
       `facteur K ${k.toFixed(3).replace(".", ",")}`,
     );
   });

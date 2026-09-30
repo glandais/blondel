@@ -5,6 +5,7 @@
  * utilisable pour éditer, sauvegarder et exporter le projet).
  */
 import { buildModel, type Model, type Project } from "@blondel/core";
+import { trList } from "../i18n/fr.js";
 
 export type BuildModelFn = (project: Project) => Model;
 
@@ -27,7 +28,7 @@ export function computeModel(project: Project, build: BuildModelFn = buildModel)
   const t0 = now();
   try {
     const model = build(project);
-    return { model, errors: model.errors, timeMs: now() - t0 };
+    return { model, errors: trList(model.errors), timeMs: now() - t0 };
   } catch (e) {
     const detail = e instanceof Error ? e.message : String(e);
     return { model: null, errors: [`Erreur du calcul : ${detail}`], timeMs: now() - t0 };

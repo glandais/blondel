@@ -2,7 +2,9 @@
  * Géométrie du calque de fond (jalon 7) : entités DXF simplifiées → segments du repère du site,
  * emprise, placement et calibration de l'image. Fonctions pures, sans DOM.
  */
+import { msg } from "@blondel/i18n";
 import { arcSeg, lineSeg, segEnd, segStart } from "../geom2d/segment.js";
+import { MessageRangeError } from "../project/errors.js";
 import * as V from "../geom2d/vec.js";
 import type { BBox } from "../geom2d/polygon.js";
 import type { CurveSeg, Mm, Vec2 } from "../model/primitives.js";
@@ -180,7 +182,7 @@ export function imageCorners(img: ImageUnderlay): Vec2[] {
 }
 
 /** Erreur de calibration (points confondus, distance invalide). */
-export class CalibrationError extends RangeError {
+export class CalibrationError extends MessageRangeError {
   override name = "CalibrationError";
 }
 
@@ -199,10 +201,10 @@ export function calibrateImage<T extends ImageUnderlay>(
 ): T {
   const px = V.distance(a, b);
   if (!(px >= 1)) {
-    throw new CalibrationError("calibration : les deux points doivent être distincts (≥ 1 pixel)");
+    throw new CalibrationError(msg("site.calibration.samePoints"));
   }
   if (!(distance > 0) || !Number.isFinite(distance)) {
-    throw new CalibrationError("calibration : la distance doit être un nombre positif (mm)");
+    throw new CalibrationError(msg("site.calibration.invalidDistance"));
   }
   const mmPerPx = distance / px;
   const fixed = anchor ?? imagePixelToSite(img, a);

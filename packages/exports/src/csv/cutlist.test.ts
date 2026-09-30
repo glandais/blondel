@@ -1,3 +1,4 @@
+import { textMessage } from "@blondel/i18n";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { sampleParts, sheetStringerPart, treadPart } from "../testing/fixtures.js";
@@ -167,7 +168,11 @@ describe("exportCutListCsv", () => {
     expect(neutralizeFormula("\t=1")).toBe("'\t=1");
     expect(neutralizeFormula("M1")).toBe("M1");
     expect(csvTextField('=HYPERLINK("x";"y")')).toBe(`"'=HYPERLINK(""x"";""y"")"`);
-    const evil = { ...treadPart(1, "=cmd|' /C calc'!A0"), name: "+Marche", section: "@x" };
+    const evil = {
+      ...treadPart(1, "=cmd|' /C calc'!A0"),
+      name: textMessage("+Marche"),
+      section: textMessage("@x"),
+    };
     const rows = parseCsv(exportCutListCsv({ parts: [evil] }).slice(1));
     const r = rows[1]!;
     expect(r[0]).toBe("'=cmd|' /C calc'!A0");
@@ -184,7 +189,13 @@ describe("exportCutListCsv", () => {
           maxLength: 10,
         }),
         (specs) => {
-          const parts = specs.map((s, i) => ({ ...treadPart(1, s.mark), ...s, id: `p${i}` }));
+          const parts = specs.map((s, i) => ({
+            ...treadPart(1, s.mark),
+            mark: s.mark,
+            name: textMessage(s.name),
+            section: textMessage(s.section),
+            id: `p${i}`,
+          }));
           const rows = parseCsv(exportCutListCsv({ parts }).slice(1));
           for (const row of rows) for (const f of row) expect(f).not.toMatch(/^[=+\-@\t\r]/);
         },

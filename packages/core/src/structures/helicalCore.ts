@@ -36,6 +36,7 @@
  * Valeurs par défaut non sourcées marquées « à valider » (ledger §2). Escalier à volées : erreur
  * explicite, aucune pièce.
  */
+import { dec, msg, textMessage, type Message } from "@blondel/i18n";
 import { z } from "zod";
 import { arcPoints, helicalAngleAt, helicalPoint } from "../layout/helical.js";
 import { ensureCCW, signedArea } from "../geom2d/polygon.js";
@@ -52,7 +53,6 @@ import type { StructureContext, StructureKind, StructureOutput } from "../model/
 import type { Frame3, Mm, Polygon2, Shape2, Vec2, Vec3 } from "../model/primitives.js";
 import type { Project } from "../model/project.js";
 import { DEFAULT_WOOD_MATERIAL } from "../parts/basic.js";
-import { fmt } from "../rules/check.js";
 import { NOSING_EVALUATORS } from "../rules/evaluators/nosing.js";
 import { getRule } from "../rules/table.js";
 import type { Finding } from "../rules/types.js";
@@ -68,6 +68,7 @@ import { woodQuantities } from "./quantities.js";
 import { getStructure, registerStructure } from "./registry.js";
 import {
   deduceExecutionClass,
+  joinMessages,
   plateMeasures,
   STEEL_RULES,
   steelMaterial,
@@ -162,8 +163,6 @@ export type HelicalCoreParams = z.output<typeof HelicalCoreParamsSchema>;
 export const HELICAL_RULES = {
   cantilever: {
     id: "HELICOIDAL_PORTE_A_FAUX",
-    description:
-      "Marches en porte-à-faux sur le fût : hors règles de moyens du NF DTU 36.3, justification (note de calcul ou avis technique) requise",
     source:
       "docs/research/C-structures.md §1.8 [48] (porte-à-faux et escaliers suspendus hors règles de moyens)",
     confidence: "moyen",
@@ -173,8 +172,6 @@ export const HELICAL_RULES = {
   },
   rolling: {
     id: "FAB_ROULAGE_LIMON",
-    description:
-      "Limon hélicoïdal roulé : rayon intérieur, hauteur le long des génératrices et épaisseur dans les capacités de la rouleuse du profil d'atelier",
     source:
       "Profil d'atelier Blondel, rouleuse (C §2.4 [16], valeurs par défaut à valider, LEDGER §2)",
     confidence: "faible",
@@ -352,7 +349,10 @@ function reevaluateWithoutRisers(
       rule,
       findings.map((f) => ({
         ...f,
-        message: `Marches en tôle de ${fmt(plateThickness)} mm sans contremarche : ${f.message}`,
+        message: msg("structure.helicalCore.check.withoutRisers", {
+          thickness: dec(plateThickness),
+          detail: f.message,
+        }),
       })),
     );
   }
@@ -369,7 +369,7 @@ export interface HelicalCoreResult {
   readonly innerStringer?: HelicalStringerDevelopment;
 }
 
-function failure(message: string): HelicalCoreResult {
+function failure(message: Message): HelicalCoreResult {
   return { output: { parts: [], checks: [], notes: [], errors: [message] } };
 }
 
@@ -396,19 +396,17 @@ export function buildHelicalCore(
   const { project, layout, stepping } = ctx;
   const h = layout.helical;
   if (!h) {
-    return failure(
-      "Structure « helical-core » : réservée aux escaliers hélicoïdaux (tracé « helical »).",
-    );
+    return failure(msg("structure.helicalCore.error.helicalOnly"));
   }
   // Jour central : pas de fût ; limon intérieur hélicoïdal (et limon extérieur) porteurs.
   const well = h.core === "well";
   if (stepping.nosings.length < 2) {
-    return failure("Structure « helical-core » : découpage vide.");
+    return failure(msg("structure.helicalCore.error.emptyStepping"));
   }
   const profile = resolveWorkshopProfile(project.workshop);
   const steel = steelMaterial(params.finish);
   const parts: Part[] = [];
-  const notes: string[] = [];
+  const notes: Message[] = [];
   const checks = new CheckCollector(project, stepping);
   const H = project.site.floorToFloor;
   const rf = h.innerRadius;
@@ -424,7 +422,7 @@ export function buildHelicalCore(
       const wall = params.column.wallThickness;
       if (!(wall < rf)) {
         return failure(
-          `Structure « helical-core » : paroi du fût (${fmt(wall)} mm) supérieure ou égale à son rayon (${fmt(rf)} mm).`,
+          msg("structure.helicalCore.error.columnWall", { wall: dec(wall), radius: dec(rf) }),
         );
       }
       const inner = circle(h.center, rf - wall);
@@ -434,10 +432,13 @@ export function buildHelicalCore(
         id: "helical-column",
         mark: "F1",
         category: "post",
-        name: "Fût central",
+        name: msg("structure.helicalCore.part.column"),
         material: steel,
         solid: verticalExtrusion(outer, 0, height, [[...inner].reverse()]),
-        section: `tube Ø${fmt(2 * rf, 1)} × ${fmt(wall, 1)}`,
+        section: msg("structure.helicalCore.section.tube", {
+          diameter: dec(2 * rf, 1),
+          wall: dec(wall, 1),
+        }),
         stock: { length: height, width: 2 * rf, thickness: wall },
         quantities: steelQuantities(
           {
@@ -458,9 +459,9 @@ export function buildHelicalCore(
             id: "helical-column",
             mark: "F1",
             category: "post",
-            name: "Fût central",
+            name: msg("structure.helicalCore.part.column"),
             solid: verticalExtrusion(outer, 0, height),
-            section: `rond Ø${fmt(2 * rf, 1)}`,
+            section: msg("structure.helicalCore.section.round", { diameter: dec(2 * rf, 1) }),
             stock,
             grain: { x: 0, y: 0, z: 1 },
           },
@@ -490,18 +491,18 @@ export function buildHelicalCore(
         thickness: t,
         reference: {
           kind: "face",
-          description: "Dessus de marche vu de dessus, repère du plan décalé au premier sommet.",
+          description: msg("structure.helicalCore.reference.tread"),
         },
       };
       parts.push({
         id: `tread-${tread.number}`,
         mark: `M${tread.number}`,
         category: "tread",
-        name: `Marche ${tread.number} (tôle)`,
+        name: msg("structure.helicalCore.part.tread", { n: tread.number }),
         material: steel,
         solid: verticalExtrusion(outline, tread.z - t, t),
         flat,
-        section: `tôle ${fmt(t, 1)}`,
+        section: msg("structure.steel.section.plate", { thickness: dec(t, 1) }),
         stock: { ...plateStock(outline), thickness: t },
         quantities: steelQuantities(
           {
@@ -517,7 +518,10 @@ export function buildHelicalCore(
     }
     if (t < project.stair.treads.thickness) {
       notes.push(
-        `Marches en tôle de ${fmt(t)} mm : l'échappée est calculée avec l'épaisseur de marche du projet (${fmt(project.stair.treads.thickness)} mm), du côté de la sécurité.`,
+        msg("structure.helicalCore.note.headroomThickness", {
+          thickness: dec(t),
+          projectThickness: dec(project.stair.treads.thickness),
+        }),
       );
     }
     // Décision A11 (QUESTIONS, 2026-09-29) : pas de contremarche bois sous des marches en tôle
@@ -527,7 +531,9 @@ export function buildHelicalCore(
     if (project.stair.treads.risers === "full") {
       removedBaseParts.push(...stepping.nosings.map((_, k) => `riser-${k + 1}`));
       notes.push(
-        `Marches en tôle : ${removedBaseParts.length} contremarche(s) bois de base supprimée(s) du modèle (escalier sans contremarche, décision A11).`,
+        msg("structure.helicalCore.note.removedRisers", {
+          count: removedBaseParts.length,
+        }),
       );
     }
     reevaluateWithoutRisers(checks, project, layout, stepping, t);
@@ -544,7 +550,7 @@ export function buildHelicalCore(
       id: "landing-arrival",
       mark: "PA",
       category: "support" as const,
-      name: "Palier d'arrivée (plateau)",
+      name: msg("structure.helicalCore.part.landing"),
     };
     if (params.treads.material === "steel") {
       const t = params.treads.plateThickness;
@@ -559,7 +565,7 @@ export function buildHelicalCore(
         material: steel,
         solid: verticalExtrusion(outline, top - t, t),
         flat: { outline: shape, lines: [], thickness: t },
-        section: `tôle ${fmt(t, 1)}`,
+        section: msg("structure.steel.section.plate", { thickness: dec(t, 1) }),
         stock: { ...plateStock(outline), thickness: t },
         quantities: steelQuantities(
           {
@@ -607,7 +613,7 @@ export function buildHelicalCore(
   const addStringer = (spec: {
     readonly id: string;
     readonly mark: string;
-    readonly name: string;
+    readonly name: Message;
     readonly faceRadius: Mm;
     readonly side: "outward" | "inward";
     readonly height: Mm;
@@ -639,7 +645,7 @@ export function buildHelicalCore(
           kind: "mark",
           a: { x: sigma, y: nosing.z - treadThickness },
           b: { x: sigma, y: nosing.z },
-          label: `M${k + 1}`,
+          label: textMessage(`M${k + 1}`),
         });
       }
     });
@@ -681,10 +687,16 @@ export function buildHelicalCore(
         thickness: spec.thickness,
         reference: {
           kind: "neutral-fiber",
-          description: `Fibre neutre (rayon ${fmt(dev.neutralRadius, 1)} mm) : σ horizontal le long de l'hélice développée depuis le nez de départ, z vertical depuis le sol fini bas ; génératrices de roulage verticales.`,
+          description: msg("structure.helicalCore.reference.stringer", {
+            radius: dec(dev.neutralRadius, 1),
+          }),
         },
       },
-      section: `plat ${fmt(spec.height, 0)} × ${fmt(spec.thickness, 0)} roulé R ${fmt(rollRadius, 0)}`,
+      section: msg("structure.helicalCore.section.rolledFlat", {
+        height: dec(spec.height, 0),
+        thickness: dec(spec.thickness, 0),
+        radius: dec(rollRadius, 0),
+      }),
       stock: { length: dev.span, width: zSpan, thickness: spec.thickness },
       quantities: steelQuantities(
         {
@@ -698,7 +710,12 @@ export function buildHelicalCore(
       ),
     });
     notes.push(
-      `${spec.name} : développé en bande (parallélogramme sur la fibre neutre, rayon ${fmt(dev.neutralRadius)} mm), longueur de rive ${fmt(dev.edgeLength)} mm, pente ${fmt(Math.atan(dev.slope) / DEG)}°.`,
+      msg("structure.helicalCore.note.stringerDevelopment", {
+        name: spec.name,
+        radius: dec(dev.neutralRadius),
+        edge: dec(dev.edgeLength),
+        pitch: dec(Math.atan(dev.slope) / DEG),
+      }),
     );
     // Rouleuse et format de tôle.
     const rollRule = pluginRuleDef(HELICAL_RULES.rolling);
@@ -710,7 +727,11 @@ export function buildHelicalCore(
         measured: rollRadius,
         min: rolling.minInnerRadius,
         location: loc,
-        message: `${spec.mark} : rayon intérieur de roulage ${fmt(rollRadius)} mm < ${fmt(rolling.minInnerRadius)} mm (rouleuse).`,
+        message: msg("structure.helicalCore.check.rollRadius", {
+          mark: spec.mark,
+          radius: dec(rollRadius),
+          min: dec(rolling.minInnerRadius),
+        }),
       });
     }
     if (spec.height > rolling.rollLength) {
@@ -719,7 +740,11 @@ export function buildHelicalCore(
         measured: spec.height,
         max: rolling.rollLength,
         location: loc,
-        message: `${spec.mark} : hauteur du plat le long des génératrices ${fmt(spec.height)} mm > ${fmt(rolling.rollLength)} mm de rouleaux.`,
+        message: msg("structure.helicalCore.check.rollLength", {
+          mark: spec.mark,
+          height: dec(spec.height),
+          max: dec(rolling.rollLength),
+        }),
       });
     }
     if (spec.thickness > rolling.maxThickness) {
@@ -728,14 +753,23 @@ export function buildHelicalCore(
         measured: spec.thickness,
         max: rolling.maxThickness,
         location: loc,
-        message: `${spec.mark} : épaisseur ${fmt(spec.thickness)} mm > ${fmt(rolling.maxThickness)} mm roulables.`,
+        message: msg("structure.helicalCore.check.rollThickness", {
+          mark: spec.mark,
+          thickness: dec(spec.thickness),
+          max: dec(rolling.maxThickness),
+        }),
       });
     }
     if (rollFindings.length === 0) {
       rollFindings.push({
         status: "ok",
         location: loc,
-        message: `${spec.mark} roulable : rayon ${fmt(rollRadius)} mm, hauteur ${fmt(spec.height)} mm, épaisseur ${fmt(spec.thickness)} mm.`,
+        message: msg("structure.helicalCore.check.rollable", {
+          mark: spec.mark,
+          radius: dec(rollRadius),
+          height: dec(spec.height),
+          thickness: dec(spec.thickness),
+        }),
       });
     }
     checks.add(rollRule, rollFindings);
@@ -746,19 +780,19 @@ export function buildHelicalCore(
         (box.length <= f.length && box.width <= f.width) ||
         (box.length <= f.width && box.width <= f.length),
     );
-    const dims = `${fmt(box.length)} × ${fmt(box.width)} mm`;
+    const dims = { mark: spec.mark, length: dec(box.length), width: dec(box.width) };
     checks.add(pluginRuleDef(STEEL_RULES.sheetFormat), [
       fits
         ? {
             status: "ok",
             location: loc,
-            message: `${spec.mark} : développé ${dims} contenu dans un format de tôle.`,
+            message: msg("structure.helicalCore.check.inSheetFormat", dims),
           }
         : {
             status: "violation",
             measured: box.length,
             location: loc,
-            message: `${spec.mark} : développé ${dims} hors des formats de tôle du profil d'atelier : aboutage à prévoir.`,
+            message: msg("structure.helicalCore.check.outOfSheetFormats", dims),
           },
     ]);
     return dev;
@@ -770,13 +804,16 @@ export function buildHelicalCore(
     const s = params.innerStringer;
     if (!(s.thickness < rf)) {
       return failure(
-        `Structure « helical-core » : épaisseur du limon intérieur (${fmt(s.thickness)} mm) supérieure ou égale au rayon du jour (${fmt(rf)} mm).`,
+        msg("structure.helicalCore.error.innerStringerThickness", {
+          thickness: dec(s.thickness),
+          radius: dec(rf),
+        }),
       );
     }
     innerStringer = addStringer({
       id: "helical-stringer-inner",
       mark: "LI1",
-      name: "Limon intérieur hélicoïdal",
+      name: msg("structure.helicalCore.part.innerStringer"),
       faceRadius: rf,
       side: "inward",
       height: s.height,
@@ -789,7 +826,7 @@ export function buildHelicalCore(
     stringer = addStringer({
       id: "helical-stringer",
       mark: "LE1",
-      name: "Limon extérieur hélicoïdal",
+      name: msg("structure.helicalCore.part.outerStringer"),
       faceRadius: h.outerRadius,
       side: "outward",
       height: s.height,
@@ -806,7 +843,7 @@ export function buildHelicalCore(
       (params.outerStringer.enabled ? params.outerStringer.thickness / 2 : 0) +
       hr.radiusOffset;
     if (!(radius > 0)) {
-      return failure("Structure « helical-core » : rayon de main courante non positif.");
+      return failure(msg("structure.helicalCore.error.handrailRadius"));
     }
     const path: Vec3[] = us.map((u) => {
       const p = helicalPoint(h, radius, helicalAngleAt(h, u));
@@ -821,9 +858,9 @@ export function buildHelicalCore(
       id: "helical-handrail",
       mark: "MC1",
       category: "handrail" as const,
-      name: "Main courante hélicoïdale",
+      name: msg("structure.helicalCore.part.handrail"),
       solid: { kind: "sweep" as const, path, section },
-      section: `rond Ø${fmt(hr.diameter, 0)}`,
+      section: msg("structure.helicalCore.section.round", { diameter: dec(hr.diameter, 0) }),
       stock: { length, width: hr.diameter, thickness: hr.diameter },
     };
     if (hr.material === "steel") {
@@ -854,7 +891,12 @@ export function buildHelicalCore(
       );
     }
     notes.push(
-      `Main courante hélicoïdale : rayon ${fmt(radius)} mm, longueur développée ${fmt(length)} mm, rayon de cintrage ρ = (r² + b²)/r = ${fmt(rho)} mm, torsion τ = ${fmt(tau * 1000, 3)} rad/m (B §4.3, avant correction du retour élastique).`,
+      msg("structure.helicalCore.note.handrail", {
+        radius: dec(radius),
+        length: dec(length),
+        rho: dec(rho),
+        tau: dec(tau * 1000, 3),
+      }),
     );
   }
 
@@ -862,36 +904,40 @@ export function buildHelicalCore(
   // Fût : marches en porte-à-faux. Jour central : marches portées par les deux limons, sauf si
   // le limon extérieur est désactivé (porte-à-faux sur le limon intérieur).
   const cantileverOn = !well
-    ? "sur le fût"
+    ? msg("structure.helicalCore.cantilever.onColumn")
     : params.outerStringer.enabled
       ? null
-      : "sur le limon intérieur (limon extérieur désactivé)";
+      : msg("structure.helicalCore.cantilever.onInnerStringer");
   if (cantileverOn !== null) {
     const justification = params.cantileverJustification.trim();
     checks.add(pluginRuleDef(HELICAL_RULES.cantilever), [
       justification === ""
         ? {
             status: "violation",
-            message: `Justification requise : marches en porte-à-faux ${cantileverOn}, hors règles de moyens du DTU (note de calcul ou avis technique à joindre, paramètre « cantileverJustification »).`,
+            message: msg("structure.helicalCore.check.cantileverRequired", { on: cantileverOn }),
           }
         : {
             // Décision A12 (2026-09-30) : une justification n'est pas une vérification ;
             // l'avertissement reste affiché, justification jointe au résultat et au dossier.
             status: "violation",
-            message: `Marches en porte-à-faux ${cantileverOn}, hors règles de moyens du DTU : justification jointe (non vérifiée par Blondel) : ${justification}.`,
+            message: msg("structure.helicalCore.check.cantileverJustified", {
+              on: cantileverOn,
+              justification,
+            }),
             justification,
           },
     ]);
   } else {
-    notes.push(
-      "Hélicoïdal à jour central : marches portées par les limons intérieur et extérieur (fixation des marches aux limons non modélisée).",
-    );
+    notes.push(msg("structure.helicalCore.note.wellCarried"));
   }
 
   const exc = usesSteel ? deduceExecutionClass({ grade: params.grade, buttWeld: 0 }) : null;
   if (exc) {
+    const reasons = joinMessages(exc.reasons);
     notes.push(
-      `Classe d'exécution ${exc.executionClass}${exc.reasons.length > 0 ? ` (${exc.reasons.join(", ")})` : ""}.`,
+      reasons
+        ? msg("structure.helicalCore.exc.note", { executionClass: exc.executionClass, reasons })
+        : msg("structure.helicalCore.exc.noteBare", { executionClass: exc.executionClass }),
     );
   }
   const output: StructureOutput = {
@@ -910,8 +956,7 @@ export function buildHelicalCore(
 
 export const HELICAL_CORE: StructureKind<HelicalCoreParams> = {
   kind: "helical-core",
-  label:
-    "Hélicoïdal : fût central (marches en porte-à-faux) ou jour central (limons hélicoïdaux intérieur et extérieur), main courante hélicoïdale",
+  labelKey: "structure.helicalCore.label",
   family: "mixte",
   paramsSchema: HelicalCoreParamsSchema,
   // Jour central : limon extérieur activé par défaut (marches portées des deux côtés).

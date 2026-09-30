@@ -9,6 +9,7 @@
  */
 import {
   RULE_FAMILIES,
+  ruleDescription,
   ruleFamily,
   type Location,
   type Model,
@@ -18,6 +19,7 @@ import {
   type Severity,
   type Vec3,
 } from "@blondel/core";
+import { tr, trOpt } from "../i18n/fr.js";
 import { SEVERITY_ORDER } from "./compliance.js";
 
 export interface PointMarker {
@@ -110,7 +112,7 @@ export function controlMarkers(
         at: r.location.at,
         severity: r.severity,
         ruleId: r.ruleId,
-        message: r.message || r.description,
+        message: trOpt(r.message) || tr(ruleDescription(r.ruleId)),
         location: r.location,
       });
     }

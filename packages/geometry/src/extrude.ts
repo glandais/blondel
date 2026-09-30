@@ -2,6 +2,7 @@
  * Extrusion d'un profil plan (contour + trous) dans un repère 3D.
  */
 import type { Frame3, Mm, Shape2 } from "@blondel/core";
+import { msg } from "@blondel/i18n";
 import { GeometryError } from "./errors.js";
 import { addCap, addGrid } from "./grid.js";
 import { MeshBuilder, flipMesh, type Mesh } from "./mesh.js";
@@ -21,8 +22,8 @@ export function meshExtrusion(
   depth: Mm,
   options: MeshOptions = {},
 ): Mesh {
-  if (!Number.isFinite(depth)) throw new GeometryError("profondeur d'extrusion non finie");
-  if (Math.abs(depth) <= 1e-9) throw new GeometryError("extrusion de profondeur nulle");
+  if (!Number.isFinite(depth)) throw new GeometryError(msg("geometry.extrusion.depthNotFinite"));
+  if (Math.abs(depth) <= 1e-9) throw new GeometryError(msg("geometry.extrusion.zeroDepth"));
   const crease = creaseCos(options, 0);
   const roundCrease = creaseCos(options, ROUND_RING_CREASE_DEG);
   const explicit = options.creaseAngleDeg !== undefined;
@@ -102,7 +103,7 @@ function checkFrame(frame: Frame3): void {
   const { origin: o, xAxis: X, yAxis: Y, zAxis: Z } = frame;
   for (const v of [o, X, Y, Z]) {
     if (!Number.isFinite(v.x) || !Number.isFinite(v.y) || !Number.isFinite(v.z)) {
-      throw new GeometryError("repère d'extrusion : coordonnée non finie");
+      throw new GeometryError(msg("geometry.extrusion.frameNonFinite"));
     }
   }
   const nx = X.y * Y.z - X.z * Y.y,
@@ -112,9 +113,8 @@ function checkFrame(frame: Frame3): void {
     ly = Math.hypot(Y.x, Y.y, Y.z),
     lz = Math.hypot(Z.x, Z.y, Z.z);
   const ln = Math.hypot(nx, ny, nz);
-  if (!(ln > 1e-9 * lx * ly))
-    throw new GeometryError("repère d'extrusion dégénéré : axes X et Y colinéaires ou nuls");
+  if (!(ln > 1e-9 * lx * ly)) throw new GeometryError(msg("geometry.extrusion.frameDegenerateXY"));
   if (!(Math.abs(nx * Z.x + ny * Z.y + nz * Z.z) > 1e-9 * ln * lz)) {
-    throw new GeometryError("repère d'extrusion dégénéré : axe Z nul ou dans le plan du profil");
+    throw new GeometryError(msg("geometry.extrusion.frameDegenerateZ"));
   }
 }

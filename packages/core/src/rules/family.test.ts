@@ -1,3 +1,4 @@
+import { translatorFor } from "@blondel/i18n";
 import { describe, expect, it } from "vitest";
 import { RULE_FAMILIES, RULE_FAMILY_LABELS, ruleFamily } from "./family.js";
 import { RULES } from "./table.js";
@@ -6,6 +7,21 @@ describe("familles de règles (QUESTIONS A23)", () => {
   it("chaque règle de la table a une famille connue", () => {
     for (const r of RULES) expect(RULE_FAMILIES).toContain(ruleFamily(r.id));
     for (const f of RULE_FAMILIES) expect(RULE_FAMILY_LABELS[f]).toBeTruthy();
+  });
+
+  it("libellés traduits (ADR-0007)", () => {
+    const fr = translatorFor("fr");
+    const en = translatorFor("en");
+    expect(RULE_FAMILIES.map((f) => fr.t(RULE_FAMILY_LABELS[f]))).toEqual([
+      "Géométrie",
+      "Fabrication",
+      "Garde-corps",
+    ]);
+    expect(RULE_FAMILIES.map((f) => en.t(RULE_FAMILY_LABELS[f]))).toEqual([
+      "Geometry",
+      "Fabrication",
+      "Guarding",
+    ]);
   });
 
   it("garde-corps et mains courantes, fabrication, géométrie", () => {

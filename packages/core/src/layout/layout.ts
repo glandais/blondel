@@ -91,6 +91,7 @@ import { ensureCCW } from "../geom2d/polygon.js";
 import { arcSeg, lineSeg } from "../geom2d/segment.js";
 import { GEOM_EPS } from "../geom2d/tolerance.js";
 import * as V from "../geom2d/vec.js";
+import { msg, type Message } from "@blondel/i18n";
 import { LayoutError } from "./errors.js";
 import { newelOffset, newelProtrusion, newelSetback } from "./newel.js";
 import { computeHelicalLayout } from "./helical.js";
@@ -134,8 +135,6 @@ function walkSetback(inner: InnerCorner): Mm {
   return inner.kind === "arc" ? inner.radius : 0;
 }
 
-const legLabel = (i: number): string => `volée ${i + 1}`;
-
 type Side = "left" | "right";
 
 /**
@@ -156,19 +155,17 @@ export function computeLayout(project: Project, options: LayoutOptions = {}): La
   const legCount = spec.legs.length;
 
   if (turns.length !== legCount - 1) {
-    throw new LayoutError(
-      `Le tracé doit compter exactement un tournant de moins que de volées (${legCount} volées, ${turns.length} tournants).`,
-    );
+    throw new LayoutError(msg("layout.turnCountMismatch", { legs: legCount, turns: turns.length }));
   }
   const lengths = options.legLengths ? [...options.legLengths] : resolveLegLengths(project);
   if (lengths.length !== legCount) {
     throw new LayoutError(
-      `${lengths.length} longueurs de volées fournies pour ${legCount} volées.`,
+      msg("layout.legLengthCountMismatch", { given: lengths.length, legs: legCount }),
     );
   }
   lengths.forEach((l, i) => {
     if (!(Number.isFinite(l) && l > 0)) {
-      throw new LayoutError(`Longueur de la ${legLabel(i)} invalide (${l} mm).`);
+      throw new LayoutError(msg("layout.invalidLegLength", { flight: i + 1, length: String(l) }));
     }
   });
 
@@ -181,14 +178,23 @@ export function computeLayout(project: Project, options: LayoutOptions = {}): La
       const offset = newelOffset(t.inner);
       if (!(offset < t.inner.size / 2)) {
         throw new LayoutError(
-          `Tournant ${j + 1} : le décalage du poteau vers le jour (${offset} mm) doit rester inférieur à son demi-côté (${t.inner.size / 2} mm).`,
+          msg("layout.newelOffsetTooLarge", {
+            turn: j + 1,
+            offset: String(offset),
+            halfSize: String(t.inner.size / 2),
+          }),
         );
       }
       // Sommet du poteau côté marches (p, p) : le plus proche de Γ (arc de rayon d_f centré en K).
       const reach = newelProtrusion(t.inner) * Math.SQRT2;
       if (!(df > reach)) {
         throw new LayoutError(
-          `Tournant ${j + 1} : la ligne de foulée (${df} mm du jour) traverse le poteau de ${t.inner.size} mm (il faut plus de ${reach.toFixed(1)} mm).`,
+          msg("layout.walklineCrossesNewel", {
+            turn: j + 1,
+            offset: String(df),
+            size: String(t.inner.size),
+            required: reach.toFixed(1),
+          }),
         );
       }
     }
@@ -228,7 +234,11 @@ export function computeLayout(project: Project, options: LayoutOptions = {}): La
     const required = before + after;
     if (leg.length < required - GEOM_EPS) {
       throw new LayoutError(
-        `La ${legLabel(i)} est trop courte : ${leg.length} mm mesurés au mur, il faut au moins ${required} mm (emmarchement et raccords de jour).`,
+        msg("layout.legTooShort", {
+          flight: i + 1,
+          length: String(leg.length),
+          required: String(required),
+        }),
       );
     }
   });
@@ -311,7 +321,12 @@ export function computeLayout(project: Project, options: LayoutOptions = {}): La
     const o1 = next !== undefined ? walkOffsetAt(i) : o0;
     if (Math.abs(o1 - o0) > GEOM_EPS && !(t1 - t0 > GEOM_EPS)) {
       throw new LayoutError(
-        `La ${legLabel(i)} est trop courte pour la transition de la ligne de foulée entre les tournants ${i} et ${i + 1} (sens opposés, ligne de foulée à ${df} mm du jour) : il faut une partie droite.`,
+        msg("layout.legTooShortForTransition", {
+          flight: i + 1,
+          turnA: i,
+          turnB: i + 1,
+          offset: String(df),
+        }),
       );
     }
     // Abscisse cumulée sur les segments réellement ajoutés : [sStart, sEnd] reste cohérent
@@ -454,14 +469,21 @@ function degenerateFootprint(
   turns: readonly Turn[],
   width: Mm,
   at: (leg: LegFrame, t: Mm, o: Mm) => Vec2,
-): string[] {
-  const out: string[] = [];
+): Message[] {
+  const out: Message[] = [];
   for (let i = 0; i + 1 < turns.length; i++) {
     if (turns[i]!.direction !== turns[i + 1]!.direction) continue;
     const jour = legs[i + 1]!.length - 2 * width;
     if (jour <= GEOM_EPS) {
       out.push(
-        `Tournants ${i + 1} et ${i + 2} : la ${legLabel(i + 1)} (${legs[i + 1]!.length} mm, deux fois l'emmarchement) ne laisse aucun jour, les ${legLabel(i)} et ${legLabel(i + 2)} se touchent (emprise dégénérée) ; allonger la ${legLabel(i + 1)} ou prévoir un poteau.`,
+        msg("layout.flightsTouch", {
+          turnA: i + 1,
+          turnB: i + 2,
+          flight: i + 2,
+          length: String(legs[i + 1]!.length),
+          before: i + 1,
+          after: i + 3,
+        }),
       );
     }
   }
@@ -482,7 +504,12 @@ function degenerateFootprint(
       const oy = Math.min(a.hi.y, b.hi.y) - Math.max(a.lo.y, b.lo.y);
       if (ox > GEOM_EPS && oy > GEOM_EPS) {
         out.push(
-          `Les ${legLabel(i)} et ${legLabel(j)} se superposent en plan (${Math.round(ox)} × ${Math.round(oy)} mm) : emprise non simple, et l'échappée de l'une sous l'autre n'est pas contrôlée (auto-recouvrement calculé pour l'hélicoïdal seulement).`,
+          msg("layout.flightsOverlap", {
+            flightA: i + 1,
+            flightB: j + 1,
+            x: String(Math.round(ox)),
+            y: String(Math.round(oy)),
+          }),
         );
       }
     }

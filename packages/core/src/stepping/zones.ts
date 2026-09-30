@@ -39,6 +39,7 @@
  *   l'énumération complète, ADR-0006).
  * - M0 (rayonnant) en `auto` : la zone couvre exactement les nez situés sur l'arc de Γ.
  */
+import { errorMessage, type Message } from "@blondel/i18n";
 import { GEOM_EPS } from "../geom2d/tolerance.js";
 import type { Layout, NosingLine } from "../model/derived.js";
 import type {
@@ -308,7 +309,7 @@ export interface ZoneContext {
 export interface ZoneEvaluation {
   readonly zone: BalancingZone;
   readonly ok: boolean;
-  readonly reason?: string;
+  readonly reason?: Message;
   /** Lignes des nez from+1 … to−1. */
   readonly nosings: readonly NosingLine[];
   readonly corrected: readonly number[];
@@ -436,7 +437,7 @@ export function evaluateZone(
     ...(continuation ? { continuation } : {}),
   };
   const offCenter = Math.abs((ctx.seeds[a]!.s + ctx.seeds[b]!.s) / 2 - group.sMid);
-  const fail = (reason: string): ZoneEvaluation => ({
+  const fail = (reason: Message): ZoneEvaluation => ({
     zone,
     ok: false,
     reason,
@@ -453,7 +454,7 @@ export function evaluateZone(
   try {
     solution = ctx.strategy.solve(balancingInput(ctx, zone));
   } catch (e) {
-    return fail(e instanceof Error ? e.message : String(e));
+    return fail(errorMessage(e));
   }
   // Prolongement abandonné par la stratégie (spline non croissante) : zone déclarée sans.
   if (zone.continuation && (solution.kind !== "sigma" || solution.continued !== true)) {

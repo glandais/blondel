@@ -17,6 +17,7 @@
  *   se font face peuvent se chevaucher. Constat géométrique (sections carrées orientées, en plan,
  *   et hauteurs qui se recouvrent) : aucun seuil métier ; localisé sur le premier poteau.
  */
+import { dec, msg } from "@blondel/i18n";
 import * as V from "../geom2d/vec.js";
 import { pointInPolygon } from "../geom2d/polygon.js";
 import { ceilingOf, openingPolygon } from "../headroom/headroom.js";
@@ -24,17 +25,20 @@ import type { RuleResult } from "../model/derived.js";
 import type { Vec2 } from "../model/primitives.js";
 import type { Project } from "../model/project.js";
 import type { Stepping } from "../model/derived.js";
-import { fmt } from "../rules/check.js";
 import { effectiveSeverity } from "../rules/engine.js";
 import type { RuleDef } from "../rules/table.js";
+import { runTitle } from "./labels.js";
 import { sectionWidth } from "./parts.js";
 import { cumulative, interp, pointAt, tangentAt } from "./polyline.js";
 import type { GuardPostFootprint, GuardRun, GuardsAnalysis } from "./types.js";
 
+/**
+ * Contrôles hors rules.yaml : leur description est la clé `rules.<id>.description` des
+ * dictionnaires (`ruleDescription(id)`, ADR-0007), pas la `RuleDef` (vide, jamais affichée).
+ */
 export const SLAB_CLASH_RULE: RuleDef = {
   id: "GC_CONFLIT_DALLE",
-  description:
-    "Garde-corps rampant en conflit avec le plancher haut : hors de la trémie, la main courante dépasse la sous-face de la dalle",
+  description: "",
   formule: "",
   min: null,
   max: null,
@@ -50,8 +54,7 @@ export const SLAB_CLASH_RULE: RuleDef = {
 
 export const JOUR_POSTS_CLASH_RULE: RuleDef = {
   id: "GC_POTEAUX_JOUR",
-  description:
-    "Poteaux des garde-corps de jour en collision : dans un jour étroit, les poteaux des deux garde-corps qui se font face se chevauchent",
+  description: "",
   formule: "",
   min: null,
   max: null,
@@ -180,7 +183,6 @@ function jourPostChecks(project: Project, analysis: GuardsAnalysis): RuleResult[
   const eff = effectiveSeverity(rule, project.compliance);
   return clashes.map(({ a, b, depth }) => ({
     ruleId: rule.id,
-    description: rule.description,
     status: eff.ignored ? "non-evaluee" : "violation",
     severity: eff.severity,
     declaredSeverity: rule.severite,
@@ -193,7 +195,7 @@ function jourPostChecks(project: Project, analysis: GuardsAnalysis): RuleResult[
     source: rule.source,
     secondarySource: rule.source_secondaire,
     ...(eff.downgradeReason !== undefined ? { downgradeReason: eff.downgradeReason } : {}),
-    message: `Poteaux ${a.partId} et ${b.partId} des garde-corps de jour : se chevauchent de ${fmt(depth, 0)} mm en plan ; élargir le jour, réduire le décalage des garde-corps vers le vide ou la section des poteaux, ou régler le côté jour sur « mur » si le jour est fermé.`,
+    message: msg("guard.check.jourPostsClash", { a: a.partId, b: b.partId, depth: dec(depth, 0) }),
   }));
 }
 
@@ -206,7 +208,6 @@ function slabClashChecks(project: Project, analysis: GuardsAnalysis): RuleResult
     if (!clash) continue;
     out.push({
       ruleId: rule.id,
-      description: rule.description,
       status: eff.ignored ? "non-evaluee" : "violation",
       severity: eff.severity,
       declaredSeverity: rule.severite,
@@ -219,7 +220,10 @@ function slabClashChecks(project: Project, analysis: GuardsAnalysis): RuleResult
       source: rule.source,
       secondarySource: rule.source_secondaire,
       ...(eff.downgradeReason !== undefined ? { downgradeReason: eff.downgradeReason } : {}),
-      message: `${run.label[0]!.toUpperCase()}${run.label.slice(1)} : traverse le plancher haut sur ${fmt(clash.length, 0)} mm en plan (hors trémie, dessus du garde-corps au-dessus de la sous-face de la dalle) ; élargir la trémie, réduire le décalage du garde-corps ou déclarer ce côté « mur ».`,
+      message: msg("guard.check.slabClash", {
+        run: runTitle(run.label),
+        length: dec(clash.length, 0),
+      }),
     });
   }
   return out;

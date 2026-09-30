@@ -10,6 +10,7 @@ import {
   type Project,
   type WalklineSide,
 } from "@blondel/core";
+import { tr, trList } from "../i18n/fr.js";
 
 /** Choix du formulaire : bord imposé, ou automatique (champ absent du projet). */
 export type WalklineSideChoice = WalklineSide | "auto";
@@ -23,7 +24,7 @@ export interface RealignChoice {
 /** Projet recalé et message ; lève `RangeError` (message du cœur) si le recalage est impossible. */
 export function realign(project: Project): RealignChoice {
   const r = realignFlightsAndOpening(project);
-  return { project: r.project, notice: r.notes.join(" ") };
+  return { project: r.project, notice: trList(r.notes).join(" ") };
 }
 
 /**
@@ -32,7 +33,8 @@ export function realign(project: Project): RealignChoice {
  * hélicoïdal…), ou `null` s'il est actif (décision A18 (a) du 2026-09-30).
  */
 export function realignDisabledReason(project: Project): string | null {
-  return realignBlocker(project);
+  const reason = realignBlocker(project);
+  return reason === null ? null : tr(reason);
 }
 
 /** Infobulle du bouton de recalage actif. */

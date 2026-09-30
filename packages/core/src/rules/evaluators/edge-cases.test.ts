@@ -3,7 +3,9 @@
  * DTU, volées d'ERP tournant, marches balancées hors zone déclarée).
  */
 import fc from "fast-check";
+import { translatorFor } from "@blondel/i18n";
 import { describe, expect, it } from "vitest";
+import { fr } from "../../i18n.test-helpers.js";
 import type { RuleResult } from "../../model/derived.js";
 import { guardRailRegime } from "../contexts.js";
 import { evaluateCompliance } from "../engine.js";
@@ -64,7 +66,7 @@ describe("valeurs non calculables", () => {
           );
           for (const r of report.results) {
             if (r.status !== "non-evaluee") expect(Number.isNaN(r.measured ?? 0)).toBe(false);
-            expect(r.message).not.toMatch(/^Erreur de l'évaluateur/);
+            expect(fr(r.message)).not.toMatch(/^Erreur de l'évaluateur/);
           }
         },
       ),
@@ -191,7 +193,7 @@ describe("G_COLLET_MONOTONE : marche balancée isolée hors zone déclarée (QUE
   it("avant l'angle : la marche hors zone remonte (150, 120, 130 → 100) → violation", () => {
     const r = results(collets(130), [5]);
     expect(flagged(r)).toEqual([{ kind: "tread", number: 4 }]);
-    expect(r[0]!.message).toMatch(/hors zone déclarée/);
+    expect(fr(r[0]!.message)).toMatch(/hors zone déclarée/);
     // Dans la vallée : conforme.
     expect(results(collets(110), [5]).map((x) => x.status)).toEqual(["ok"]);
   });
@@ -199,7 +201,7 @@ describe("G_COLLET_MONOTONE : marche balancée isolée hors zone déclarée (QUE
   it("au droit de l'angle : crête → violation ; au droit d'un poteau : pas de conclusion (B1)", () => {
     const crest = results(collets(130), [4]);
     expect(flagged(crest)).toEqual([{ kind: "tread", number: 4 }]);
-    expect(crest[0]!.message).toMatch(/crête au droit de l'angle/);
+    expect(fr(crest[0]!.message)).toMatch(/crête au droit de l'angle/);
     expect(results(collets(130), [4], "newel").map((x) => x.status)).toEqual(["ok"]);
   });
 
@@ -208,7 +210,7 @@ describe("G_COLLET_MONOTONE : marche balancée isolée hors zone déclarée (QUE
     const around = [100, 160, 170, 100];
     const dip = results(collets(120, around), [2, 6]);
     expect(flagged(dip)).toEqual([{ kind: "tread", number: 4 }]);
-    expect(dip[0]!.message).toMatch(/creux entre deux angles/);
+    expect(fr(dip[0]!.message)).toMatch(/creux entre deux angles/);
     expect(results(collets(200, around), [2, 6]).map((x) => x.status)).toEqual(["ok"]);
   });
 
@@ -244,7 +246,9 @@ describe("G_COLLET_MONOTONE par angle du jour", () => {
   it("deux vallées autour de deux angles : conforme", () => {
     const r = results([turn(0, 4.5 * 250), turn(1, 6.5 * 250)]);
     expect(r.map((x) => x.status)).toEqual(["ok"]);
-    expect(r[0]!.message).toContain("2 angle(s)");
+    expect(fr(r[0]!.message)).toContain("2 angle(s)");
+    // Anglais : vrai pluriel (ADR-0007).
+    expect(translatorFor("en").t(r[0]!.message)).toMatch(/\(2 well corners\)\.$/);
   });
 
   it("un seul angle repéré (ou aucun tournant) : vallée unique, rupture signalée", () => {

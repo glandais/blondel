@@ -1,6 +1,7 @@
 import fc from "fast-check";
 import { beforeEach, describe, expect, it } from "vitest";
 import * as V from "../geom2d/vec.js";
+import { fr, frList } from "../i18n.test-helpers.js";
 import { computeLayout } from "../layout/layout.js";
 import type { Part } from "../model/derived.js";
 import { ProjectSchema, type Project, type ProjectInput } from "../model/project.js";
@@ -12,7 +13,7 @@ import { makeSteppingProject, stairArb } from "../stepping/test-helpers.js";
 import { computeGuards } from "./compute.js";
 import { GuardError } from "./errors.js";
 import { jourPostClashes } from "./checks.js";
-import { jourWidth, NARROW_JOUR_PREFIX } from "./jour.js";
+import { isNarrowJourNote, jourWidth } from "./jour.js";
 import { GuardsSpecSchema } from "./spec.js";
 import { getRule } from "../rules/table.js";
 import { sectionHeight } from "./parts.js";
@@ -132,7 +133,7 @@ describe("computeGuards — escalier droit", () => {
       expect(outer.intervals[i]!.from).toBeCloseTo(outer.intervals[i - 1]!.to, 6);
     expect(outer.intervals[outer.intervals.length - 1]!.to).toBeCloseTo(outer.length, 6);
     // Deux garde-corps côté extérieur, numérotés.
-    const labels = a.runs.filter((r) => r.side === "outer").map((r) => r.label);
+    const labels = a.runs.filter((r) => r.side === "outer").map((r) => fr(r.label));
     expect(labels).toEqual([
       "garde-corps de volée côté extérieur n° 1",
       "garde-corps de volée côté extérieur n° 2",
@@ -183,7 +184,7 @@ describe("computeGuards — escalier droit", () => {
     expect(a.runs).toEqual([]);
     // Aucun garde-corps : main courante murale automatique d'un côté.
     expect(a.handrails.map((h) => [h.side, h.onGuard])).toEqual([["outer", false]]);
-    expect(a.notes.some((n) => /mur imposé/.test(n))).toBe(true);
+    expect(frList(a.notes).some((n) => /mur imposé/.test(n))).toBe(true);
   });
 });
 
@@ -210,7 +211,7 @@ describe("computeGuards — angles concaves du jour", () => {
     const base = createProject("half-turn");
     // Décalage de 130 mm de part et d'autre d'un jour de 240 mm : les deux rampants se croisent.
     const m = buildModel(withGuards(base, { flight: { edgeOffset: 130 } }));
-    expect(m.errors).toEqual([expect.stringMatching(/jour trop étroit/)]);
+    expect(frList(m.errors)).toEqual([expect.stringMatching(/jour trop étroit/)]);
   });
 });
 
@@ -220,7 +221,7 @@ describe("computeGuards — paramètres impossibles", () => {
       infill: { kind: "balusters", spacing: 30, section: { kind: "rect", width: 40, height: 40 } },
     });
     const m = buildModel(p);
-    expect(m.errors).toEqual([expect.stringMatching(/entraxe 30 mm/)]);
+    expect(frList(m.errors)).toEqual([expect.stringMatching(/entraxe 30 mm/)]);
     expect(m.parts.some((x) => x.id.startsWith("guard-"))).toBe(false);
     const gc = m.compliance.results.find((r) => r.ruleId === "GC_OBLIGATOIRE");
     expect(gc?.status).toBe("non-evaluee");
@@ -228,7 +229,7 @@ describe("computeGuards — paramètres impossibles", () => {
 
   it("lisses trop nombreuses : erreur explicite", () => {
     const p = withGuards(straight(), { infill: { kind: "rails", count: 30 } });
-    expect(buildModel(p).errors).toEqual([expect.stringMatching(/Lisses : 30 éléments/)]);
+    expect(frList(buildModel(p).errors)).toEqual([expect.stringMatching(/Lisses : 30 éléments/)]);
   });
 });
 
@@ -240,7 +241,7 @@ describe("computeGuards — remplissages", () => {
     expect(t3.length).toBeGreaterThan(0);
     expect(t3.every((r) => r.status === "violation")).toBe(true);
     const id = t3[0]!.location.kind === "part" ? t3[0]!.location.partId : "";
-    expect(m.parts.find((x) => x.id === id)?.name).toBe("Tôle perforée");
+    expect(fr(m.parts.find((x) => x.id === id)?.name)).toBe("Tôle perforée");
   });
 
   it("verre : panneaux en surface réglée, remarque sur le produit non vérifié", () => {
@@ -248,7 +249,7 @@ describe("computeGuards — remplissages", () => {
     const panels = m.parts.filter((x) => x.material === "glass");
     expect(panels.length).toBeGreaterThan(0);
     expect(panels.every((x) => x.solid.kind === "ruled")).toBe(true);
-    expect(m.notes?.some((n) => /Verre \(V1\)/.test(n))).toBe(true);
+    expect(frList(m.notes).some((n) => /Verre \(V1\)/.test(n))).toBe(true);
   });
 
   it("palier d'angle : partie horizontale du rampant contrôlée comme un palier (rehausse désactivée)", () => {
@@ -291,7 +292,9 @@ describe("computeGuards — rehausse sur palier (QUESTIONS A1)", () => {
         const res = m.compliance.results.filter((r) => r.ruleId === rule);
         expect(res.length).toBeGreaterThan(0);
         expect(res.every((r) => r.status === "ok")).toBe(true);
-        expect(m.notes?.some((n) => n.includes("rehaussée à 1000 mm sur le palier"))).toBe(true);
+        expect(frList(m.notes).some((n) => n.includes("rehaussée à 1000 mm sur le palier"))).toBe(
+          true,
+        );
       });
     }
   }
@@ -389,7 +392,7 @@ describe("computeGuards — mains courantes des deux côtés (QUESTIONS A2)", ()
     const r = m.compliance.results.find((x) => x.ruleId === "MC_DEUX_COTES")!;
     expect(r.status).toBe("ok");
     expect(r.measured).toBe(2);
-    expect(m.notes?.some((n) => n.includes("posée des deux côtés"))).toBe(true);
+    expect(frList(m.notes).some((n) => n.includes("posée des deux côtés"))).toBe(true);
   });
 
   it("parties communes de BHC : idem ; logement : une seule main courante (inchangé)", () => {
@@ -452,7 +455,9 @@ describe("computeGuards — mains courantes des deux côtés (QUESTIONS A2)", ()
     );
     const auto = withGuards(base, {}, { compliance: { contexts: ["bois_dtu", "erp_neuf"] } });
     expect(analyze(explicit).handrails.length).toBeLessThanOrEqual(analyze(auto).handrails.length);
-    expect(analyze(ignored).notes.some((n) => n.includes("posée des deux côtés"))).toBe(false);
+    expect(frList(analyze(ignored).notes).some((n) => n.includes("posée des deux côtés"))).toBe(
+      false,
+    );
     expect(handrailSides(auto)).toBe(2);
   });
 
@@ -468,7 +473,9 @@ describe("computeGuards — mains courantes des deux côtés (QUESTIONS A2)", ()
       {},
       { compliance: { contexts: ["bois_dtu", "erp_neuf"] } },
     );
-    expect(analyze(small).notes.some((n) => n.includes("posée des deux côtés"))).toBe(false);
+    expect(frList(analyze(small).notes).some((n) => n.includes("posée des deux côtés"))).toBe(
+      false,
+    );
     const big = withGuards(
       makeHelicalProject({
         outerRadius: 1000,
@@ -483,9 +490,9 @@ describe("computeGuards — mains courantes des deux côtés (QUESTIONS A2)", ()
     // Fût de Ø 500 : pas d'exception, les deux côtés sont demandés ; mais le fût ne reçoit
     // aucune main courante : la remarque le dit au lieu d'annoncer une pose des deux côtés.
     const bigA = analyze(big);
-    expect(bigA.notes.some((n) => n.includes("posée des deux côtés"))).toBe(false);
+    expect(frList(bigA.notes).some((n) => n.includes("posée des deux côtés"))).toBe(false);
     expect(
-      bigA.notes.some((n) =>
+      frList(bigA.notes).some((n) =>
         n.includes("MC_DEUX_COTES demande une main courante des deux côtés, mais le côté jour"),
       ),
     ).toBe(true);
@@ -582,7 +589,7 @@ describe("computeGuards — propriétés (escaliers tournants générés)", () =
         }
         // Jour plus étroit que la sphère T1 ou que deux décalages : plus d'exception, la ligne
         // concernée n'est pas produite et l'erreur est lisible (reprise dans Model.errors).
-        for (const err of a.errors ?? []) expect(err).toMatch(/jour/);
+        for (const err of a.errors ?? []) expect(fr(err)).toMatch(/jour/);
         const st = computeStepping(p, computeLayout(p));
         const maxRise = Math.max(
           ...st.nosings.map((n, k) => n.z - (k > 0 ? st.nosings[k - 1]!.z : 0)),
@@ -740,8 +747,8 @@ describe("computeGuards — jour plus étroit que la sphère T1", () => {
       expect(g.errors ?? []).toEqual([]);
       expect(g.narrowJour?.width).toBeCloseTo(well, 6);
       expect(g.narrowJour?.threshold).toBe(getRule("GC_GABARIT_T1_2024").max);
-      expect(g.notes.filter((n) => n.startsWith(NARROW_JOUR_PREFIX))).toHaveLength(1);
-      expect(g.notes.find((n) => n.startsWith(NARROW_JOUR_PREFIX))).toContain(`jour de ${well} mm`);
+      expect(g.notes.filter(isNarrowJourNote)).toHaveLength(1);
+      expect(fr(g.notes.find(isNarrowJourNote))).toContain(`jour de ${well} mm`);
       // Dans l'emprise du jour, aucun garde-corps : seul le garde-corps partiel hors du jour
       // (volée 3 plus longue que la volée 1, décision A10 du 2026-09-30) est construit.
       const inner = g.runs.filter((r) => r.side === "inner");
@@ -759,8 +766,8 @@ describe("computeGuards — jour plus étroit que la sphère T1", () => {
       expect(mandatory).toHaveLength(1);
       expect(mandatory[0]!.severity).toBe("conseil");
       expect(mandatory[0]!.declaredSeverity).toBe("bloquant");
-      expect(mandatory[0]!.downgradeReason).toMatch(/sphère T1/);
-      expect(mandatory[0]!.message).toMatch(/côté jour/);
+      expect(fr(mandatory[0]!.downgradeReason)).toMatch(/sphère T1/);
+      expect(fr(mandatory[0]!.message)).toMatch(/côté jour/);
     }
   });
 
@@ -931,7 +938,7 @@ describe("hélicoïdal : côté intérieur", () => {
     expect(a.parts.some((p) => p.id.startsWith("guard-inner"))).toBe(false);
     expect(a.parts.some((p) => p.id.startsWith("handrail-wall-inner"))).toBe(false);
     expect(a.parts.some((p) => p.id.startsWith("guard-outer"))).toBe(true);
-    expect(a.notes.some((n) => /fût central/.test(n))).toBe(true);
+    expect(frList(a.notes).some((n) => /fût central/.test(n))).toBe(true);
   });
 
   it("jour central : le côté intérieur est un vide, garde-corps de jour généré", () => {

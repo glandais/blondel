@@ -19,6 +19,7 @@
  */
 import { bbox, type MaterialId, type Part } from "@blondel/core";
 import { MATERIAL_LABELS, defaultMassNote, partMassKg, type MassNote } from "./csv/cutlist.js";
+import { tr, trOpt } from "./i18n.js";
 
 export interface CutSheetRow {
   readonly mark: string;
@@ -117,7 +118,7 @@ export function cutSheet(parts: readonly Part[], options: CutSheetOptions = {}):
     const key = JSON.stringify([
       p.mark,
       p.material,
-      p.section ?? null,
+      trOpt(p.section) ?? null,
       d.length ?? null,
       d.width ?? null,
       d.thickness ?? null,
@@ -132,8 +133,8 @@ export function cutSheet(parts: readonly Part[], options: CutSheetOptions = {}):
         count: 1,
         row: {
           mark: p.mark,
-          name: p.name,
-          section: p.section ?? "",
+          name: tr(p.name),
+          section: trOpt(p.section) ?? "",
           ...d,
           ...(finite(mass) ? { unitMass: mass } : {}),
           ...(note !== undefined && note !== "" ? { massNote: note } : {}),

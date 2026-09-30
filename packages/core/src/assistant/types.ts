@@ -6,6 +6,7 @@
  * facultatives, il propose des escaliers complets (`Project`), chacun accompagné d'un résumé du
  * modèle calculé et d'un score détaillé (pénalités pondérées, plus petit = meilleur).
  */
+import type { Locale, Message, MessageKey } from "@blondel/i18n";
 import type { Mm, Vec2 } from "../model/primitives.js";
 import type { Project, ProjectInput } from "../model/project.js";
 
@@ -22,14 +23,21 @@ export const TYPOLOGY_IDS: readonly TypologyId[] = [
   "helical",
 ];
 
-/** Libellés français des typologies. */
-export const TYPOLOGY_LABELS: Readonly<Record<TypologyId, string>> = {
-  straight: "Escalier droit",
-  quarter: "Quart tournant",
-  "two-quarters": "Deux quarts tournants (U)",
-  "half-turn": "Demi-tournant balancé",
-  "quarter-landing": "Quart tournant avec palier",
-  helical: "Hélicoïdal",
+/** Clés des libellés des typologies. */
+export const TYPOLOGY_LABELS: Readonly<Record<TypologyId, MessageKey>> = {
+  straight: "assistant.typology.straight",
+  quarter: "assistant.typology.quarter",
+  "two-quarters": "assistant.typology.twoQuarters",
+  "half-turn": "assistant.typology.halfTurn",
+  "quarter-landing": "assistant.typology.quarterLanding",
+  helical: "assistant.typology.helical",
+};
+
+/** Clés des positions du tournant (`bas`, `médian`, `haut` : identifiants). */
+export const TURN_POSITION_LABELS: Readonly<Record<"bas" | "médian" | "haut", MessageKey>> = {
+  bas: "assistant.turnPosition.low",
+  médian: "assistant.turnPosition.middle",
+  haut: "assistant.turnPosition.high",
 };
 
 /**
@@ -140,12 +148,17 @@ export interface AssistantInput {
   readonly limits?: AssistantLimits;
   /** Annulation coopérative : consultée régulièrement ; `true` arrête l'énumération. */
   readonly shouldStop?: () => boolean;
+  /**
+   * Langue des noms des projets proposés (`Project.name`, texte enregistré dans le projet) ;
+   * défaut : français. Les libellés et diagnostics du résultat sont des `Message`.
+   */
+  readonly locale?: Locale;
 }
 
 /** Terme du score (affiché). */
 export interface ScoreTerm {
   readonly id: keyof ScoreWeights;
-  readonly label: string;
+  readonly label: Message;
   /** Grandeur mesurée (mm ou nombre). */
   readonly value: number;
   readonly unit: "mm" | "nb";
@@ -188,7 +201,7 @@ export interface ModelSummary {
   /** Placement retenu (repère du site). */
   readonly placement: { readonly origin: Vec2; readonly rotation: number };
   /** Calage : côté de trémie d'arrivée et alignement latéral. */
-  readonly fit: string;
+  readonly fit: Message;
 }
 
 export interface DesignCandidate {
@@ -198,8 +211,7 @@ export interface DesignCandidate {
   readonly direction: "left" | "right" | null;
   /** Position du tournant : `bas`, `médian`, `haut` ; `null` sans tournant. */
   readonly turnPosition: "bas" | "médian" | "haut" | null;
-  /** Libellé français. */
-  readonly label: string;
+  readonly label: Message;
   readonly project: Project;
   readonly summary: ModelSummary;
   readonly score: ScoreBreakdown;
@@ -226,17 +238,18 @@ export type RejectionReason =
   | "structure"
   | "budget";
 
-export const REJECTION_LABELS: Readonly<Record<RejectionReason, string>> = {
-  bounds: "aucune hauteur ni aucun giron admissibles par les règles actives",
-  layout: "tracé impossible",
-  placement: "calage impossible dans la trémie",
-  headroom: "échappée insuffisante",
-  walls: "collision avec un mur",
-  slab: "passage à travers la dalle haute hors trémie",
-  generation: "erreur de génération du modèle",
-  blocking: "violation bloquante du contrôle de conception",
-  structure: "structure visée incompatible",
-  budget: "non évalué (budget atteint)",
+/** Clés des libellés des motifs d'élimination. */
+export const REJECTION_LABELS: Readonly<Record<RejectionReason, MessageKey>> = {
+  bounds: "assistant.rejection.bounds",
+  layout: "assistant.rejection.layout",
+  placement: "assistant.rejection.placement",
+  headroom: "assistant.rejection.headroom",
+  walls: "assistant.rejection.walls",
+  slab: "assistant.rejection.slab",
+  generation: "assistant.rejection.generation",
+  blocking: "assistant.rejection.blocking",
+  structure: "assistant.rejection.structure",
+  budget: "assistant.rejection.budget",
 };
 
 /** Éliminations d'un groupe (typologie × sens) pour un motif. */
@@ -245,8 +258,8 @@ export interface RejectionTally {
   readonly direction: "left" | "right" | null;
   readonly reason: RejectionReason;
   readonly count: number;
-  /** Premier exemple rencontré (message lisible). */
-  readonly example: string;
+  /** Premier exemple rencontré. */
+  readonly example: Message;
 }
 
 export interface AssistantStats {
@@ -268,8 +281,8 @@ export interface AssistantResult {
    * plat avec `showAllVariants`).
    */
   readonly candidates: readonly DesignCandidate[];
-  /** Diagnostic lisible (français) : bornes utilisées, éliminations, absence de proposition. */
-  readonly diagnostics: readonly string[];
+  /** Diagnostic : bornes utilisées, éliminations, absence de proposition. */
+  readonly diagnostics: readonly Message[];
   readonly rejections: readonly RejectionTally[];
   readonly stats: AssistantStats;
 }

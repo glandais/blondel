@@ -7,6 +7,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { translatorFor } from "@blondel/i18n";
 import { describe, expect, it } from "vitest";
 import "../structures/index.js";
 import { ProjectSchema } from "../model/project.js";
@@ -31,6 +32,9 @@ if (process.env["UPDATE_EXAMPLES"] === "1") {
   }
 }
 
+const FR = translatorFor("fr");
+const EN = translatorFor("en");
+
 describe("préréglages de démonstration", () => {
   it("identifiants distincts des préréglages de base, libellés et descriptions renseignés", () => {
     expect(DEMO_PRESET_IDS.length).toBeGreaterThanOrEqual(6);
@@ -39,9 +43,10 @@ describe("préréglages de démonstration", () => {
       expect(id.startsWith("demo-")).toBe(true);
       expect(isDemoPresetId(id)).toBe(true);
       expect((ALL_PRESET_IDS as readonly string[]).includes(id)).toBe(false);
-      expect(DEMO_PRESET_LABELS[id].length).toBeGreaterThan(0);
-      expect(DEMO_PRESET_DESCRIPTIONS[id]).toMatch(/^[A-ZÉ].+\.$/);
-      expect(DEMO_PRESET_DESCRIPTIONS[id]).not.toContain("\n");
+      expect(FR.t(DEMO_PRESET_LABELS[id]).length).toBeGreaterThan(0);
+      expect(FR.t(DEMO_PRESET_DESCRIPTIONS[id])).toMatch(/^[A-ZÉ].+\.$/);
+      expect(FR.t(DEMO_PRESET_DESCRIPTIONS[id])).not.toContain("\n");
+      expect(EN.t(DEMO_PRESET_DESCRIPTIONS[id])).toMatch(/^[A-Z0-9].+\.$/);
     }
     for (const id of ALL_PRESET_IDS) expect(isDemoPresetId(id)).toBe(false);
     expect(new Set(Object.values(DEMO_PRESET_LABELS)).size).toBe(DEMO_PRESET_IDS.length);
@@ -51,14 +56,14 @@ describe("préréglages de démonstration", () => {
     for (const id of ALL_PRESET_IDS) {
       const p = createProject(id);
       expect(p.appearance).toBeUndefined();
-      expect(p.name).toBe(PRESET_LABELS[id]);
+      expect(p.name).toBe(FR.t(PRESET_LABELS[id]));
       expect(serializeProject(p)).not.toContain('"appearance"');
     }
   });
 
   it.each(DEMO_PRESET_IDS)("%s : modèle complet, aucune erreur ni violation bloquante", (id) => {
     const p = createDemoProject(id);
-    expect(p.name).toBe(DEMO_PRESET_LABELS[id]);
+    expect(p.name).toBe(FR.t(DEMO_PRESET_LABELS[id]));
     expect(p.stair.structure.kind).not.toBe("none");
     expect(p.guards).toBeDefined();
     expect(p.appearance).toBeDefined();

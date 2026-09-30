@@ -20,6 +20,7 @@
  *
  * Fonction pure (les modèles intermédiaires sont calculés sans mémoïsation).
  */
+import { msg, type Message } from "@blondel/i18n";
 import type { Model } from "../model/derived.js";
 import type { Mm } from "../model/primitives.js";
 import type { Project, Turn } from "../model/project.js";
@@ -44,7 +45,7 @@ export interface StructureChoiceResult {
   /** Projet avec la structure choisie et, si besoin, le jour adapté. */
   readonly project: Project;
   /** Remarques à afficher (modifications du jour, jour conservé et pourquoi). */
-  readonly notes: readonly string[];
+  readonly notes: readonly Message[];
 }
 
 /** Projet dont la structure est `kind` de paramètres `params`. */
@@ -128,16 +129,15 @@ export function applyStructureChoice(
 
   let target: NewelInner = DEFAULT_NEWEL;
   let flange: Mm | null = null;
-  let why = `structure « ${kind} » : limons de jour assemblés sur un poteau d'angle, décision A4, côté à valider`;
+  let why: Message = msg("project.structureChoice.why.cornerNewel", { kind });
   if (profile) {
     const resolved = resolveProfileNewel(chosen, candidate);
     if (resolved) {
       target = resolved.newel;
       flange = resolved.flangeWidth;
-      why =
-        "poteau élargi des profilés : largeur d'aile + 2 × jeu, décalé vers le jour, qui reçoit chaque limon de jour en barre droite ; décision A13, paramètre « côté du poteau pour profilés », à valider";
+      why = msg("project.structureChoice.why.profileNewel");
     } else {
-      why += " ; poteau des profilés indéterminé (section inconnue) : poteau par défaut";
+      why = msg("project.structureChoice.why.cornerNewelUnknownProfile", { kind });
     }
   }
   const which = (t: Turn): boolean =>
@@ -145,12 +145,18 @@ export function applyStructureChoice(
     (profile && t.inner.kind === "newel" && !newelSatisfies(t.inner, kind, params, flange));
   const indices = turns.map((t, j) => (which(t) ? j : -1)).filter((j) => j >= 0);
   if (indices.length === 0) return { project: chosen, notes: [] };
-  const list = (js: readonly number[]): string =>
-    `Tournant${js.length > 1 ? "s" : ""} ${js.map((j) => j + 1).join(", ")}`;
+  const list = (js: readonly number[]): Message =>
+    msg("project.structureChoice.turns", {
+      count: js.length > 1 ? 2 : 1,
+      turns: js.map((j) => j + 1).join(", "),
+    });
   const adapted = withNewels(chosen, target, which);
   if (layoutAccepts(adapted))
     return { project: adapted, notes: changeNotes(turns, indices, target, why) };
-  const refused = `${list(indices)} : ${newelLabel(target)} impossible dans ce tracé (volée trop courte ou ligne de foulée trop proche du jour)`;
+  const refused = msg("project.structureChoice.refused", {
+    turns: list(indices),
+    newel: newelLabel(target),
+  });
   // Poteau élargi des profilés refusé : les jours vifs reçoivent au moins le poteau par défaut
   // (décision A4), les poteaux existants sont conservés ; le plugin signale la réception.
   if (profile && !newelMatches(target, DEFAULT_NEWEL)) {
@@ -161,18 +167,18 @@ export function applyStructureChoice(
       return {
         project: fallback,
         notes: [
-          `${refused} ; poteau par défaut posé à la place (limon de jour reçu sans le jeu de la décision A13 : voir FAB_POTEAU_RECEPTION).`,
+          msg("project.structureChoice.refusedDefaultNewel", { refused }),
           ...changeNotes(
             turns,
             sharpIdx,
             DEFAULT_NEWEL,
-            `structure « ${kind} » : limons de jour assemblés sur un poteau d'angle, décision A4, côté à valider`,
+            msg("project.structureChoice.why.cornerNewel", { kind }),
           ),
         ],
       };
     }
   }
-  return { project: chosen, notes: [`${refused} ; jour conservé.`] };
+  return { project: chosen, notes: [msg("project.structureChoice.refusedKept", { refused })] };
 }
 
 /** Remarques « Tournant j : ancien jour → nouveau poteau (pourquoi) ». */
@@ -180,11 +186,19 @@ function changeNotes(
   turns: readonly Turn[],
   indices: readonly number[],
   target: NewelInner,
-  why: string,
-): string[] {
+  why: Message,
+): Message[] {
   return indices.map((j) => {
     const from = turns[j]!.inner;
-    const was = from.kind === "sharp" ? "jour vif" : newelLabel(from as NewelInner);
-    return `Tournant ${j + 1} : ${was} → ${newelLabel(target)} (${why}). Modification annulable.`;
+    const was =
+      from.kind === "sharp"
+        ? msg("project.structureChoice.sharpJour")
+        : newelLabel(from as NewelInner);
+    return msg("project.structureChoice.change", {
+      turn: j + 1,
+      was,
+      newel: newelLabel(target),
+      why,
+    });
   });
 }

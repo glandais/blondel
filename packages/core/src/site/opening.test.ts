@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { fr } from "../i18n.test-helpers.js";
 import { signedArea } from "../geom2d/polygon.js";
 import {
   isSelfIntersecting,
@@ -55,13 +56,25 @@ describe("trémie polygonale saisie", () => {
   });
 
   it("moins de 3 sommets ou aire nulle : défauts lisibles ; polygonOpening lève", () => {
-    expect(validateOpeningPolygon(square.slice(0, 2))[0]).toMatch(/au moins 3/);
+    expect(fr(validateOpeningPolygon(square.slice(0, 2))[0])).toMatch(/au moins 3/);
+    expect(() => polygonOpening(square.slice(0, 2))).toThrow(
+      "trémie : au moins 3 sommets distincts (2 saisis)",
+    );
     expect(
       validateOpeningPolygon([
         { x: 0, y: 0 },
         { x: 1, y: 0 },
         { x: 2, y: 0 },
-      ])[0],
+      ]).map((m) => m.key),
+    ).toEqual(["site.opening.zeroArea"]);
+    expect(
+      fr(
+        validateOpeningPolygon([
+          { x: 0, y: 0 },
+          { x: 1, y: 0 },
+          { x: 2, y: 0 },
+        ])[0],
+      ),
     ).toMatch(/aire nulle/);
     expect(() => polygonOpening(square.slice(0, 2))).toThrow(OpeningInputError);
     expect(polygonOpening(square)).toMatchObject({ kind: "polygon" });
@@ -78,7 +91,7 @@ describe("trémie polygonale saisie", () => {
       { x: 0, y: 1000 },
     ];
     expect(isSelfIntersecting(slit)).toBe(true);
-    expect(validateOpeningPolygon(slit)[0]).toMatch(/se recoupe/);
+    expect(fr(validateOpeningPolygon(slit)[0])).toMatch(/se recoupe/);
     // Sommets alignés sur un même côté (non adjacents mais disjoints) : toujours acceptés.
     const collinear = [
       { x: 0, y: 0 },

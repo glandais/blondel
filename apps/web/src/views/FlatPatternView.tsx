@@ -13,6 +13,7 @@ import { downloadFile } from "../lib/download.js";
 import { fileStem, partDxfFile, partsWithFlat } from "../lib/exportFiles.js";
 import { segmentedParts, type SegmentedPart } from "../lib/joints.js";
 import { selectedPart } from "../lib/parts.js";
+import { tr } from "../i18n/fr.js";
 import { formatLength } from "../lib/units.js";
 import { renderWith } from "../model/planSvg.js";
 import { appStore, useApp } from "../store/appStore.js";
@@ -25,7 +26,11 @@ const kg = new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 1 });
 
 /** Tronçons d'une pièce et joints entre tronçons consécutifs. */
 function SegmentsTable({ group, selected }: { group: SegmentedPart; selected?: string }) {
-  const name = group.segments[0]?.part.name.replace(/,\s*tronçon.*$/, "") ?? group.base;
+  const name =
+    (group.segments[0] ? tr(group.segments[0].part.name) : undefined)?.replace(
+      /,\s*tronçon.*$/,
+      "",
+    ) ?? group.base;
   return (
     <section className="flat-view__joints" aria-label={`Tronçons et joints — ${name}`}>
       <table>
@@ -91,7 +96,7 @@ export function FlatPatternView({ model }: { model: Model }) {
             renderFlatPatternSvg(part, {
               theme,
               background: false,
-              title: `${part.mark} — ${part.name}`,
+              title: `${part.mark} — ${tr(part.name)}`,
             }),
           )
         : undefined,
@@ -121,7 +126,7 @@ export function FlatPatternView({ model }: { model: Model }) {
                 className={p.id === part?.id ? "is-selected" : undefined}
                 onClick={() => select(p.id)}
               >
-                <strong>{p.mark}</strong> <span className="muted">{p.name}</span>
+                <strong>{p.mark}</strong> <span className="muted">{tr(p.name)}</span>
               </button>
             </li>
           ))}
@@ -137,7 +142,7 @@ export function FlatPatternView({ model }: { model: Model }) {
           <>
             <div className="flat-view__head">
               <span>
-                <strong>{part.mark}</strong> — {part.name} · ép.{" "}
+                <strong>{part.mark}</strong> — {tr(part.name)} · ép.{" "}
                 {formatLength(part.flat?.thickness, "mm")}
               </span>
               <button

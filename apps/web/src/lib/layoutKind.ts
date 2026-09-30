@@ -16,6 +16,7 @@ import {
   type Project,
   type Turn,
 } from "@blondel/core";
+import { tr } from "../i18n/fr.js";
 
 export type LayoutKind = "flights" | "helical";
 
@@ -93,7 +94,7 @@ function basePreset(project: Project, kind: LayoutKind): LayoutSwitch {
   const helical = createHelicalProjectWithFallback({ ...options, patch: { stair: kept } });
   return helical.note === undefined
     ? { project: helical.project }
-    : { project: helical.project, note: helical.note };
+    : { project: helical.project, note: tr(helical.note) };
 }
 
 /**

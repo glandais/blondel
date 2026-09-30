@@ -1,5 +1,6 @@
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
+import { fr } from "../../i18n.test-helpers.js";
 import type { RuleResult } from "../../model/derived.js";
 import { minWidth, flightsOf } from "../check.js";
 import { evaluateCompliance } from "../engine.js";
@@ -201,7 +202,7 @@ describe("largeurs et ligne de foulée", () => {
   it("E_MIN_DTU et LARGEUR_MIN_LOGEMENT", () => {
     expect(violations({ project: { width: 690 } }, "E_MIN_DTU")).toHaveLength(1);
     expect(violations({ project: { width: 750 } }, "LARGEUR_MIN_LOGEMENT")).toHaveLength(1);
-    expect(run({ project: { width: 900 } }, "LARGEUR_MIN_LOGEMENT")[0]?.message).toMatch(
+    expect(fr(run({ project: { width: 900 } }, "LARGEUR_MIN_LOGEMENT")[0]?.message)).toMatch(
       /mains courantes/,
     );
   });
@@ -217,7 +218,7 @@ describe("largeurs et ligne de foulée", () => {
 
   it("LF_POSITION_DTU : milieu si E ≤ 1200, 600 mm au-delà", () => {
     expect(status({}, "LF_POSITION_DTU_ETROIT")).toEqual(["ok"]);
-    expect(run({}, "LF_POSITION_DTU_LARGE")[0]?.message).toMatch(/Sans objet/);
+    expect(fr(run({}, "LF_POSITION_DTU_LARGE")[0]?.message)).toMatch(/Sans objet/);
     expect(
       status({ project: { width: 1400 }, walklineOffset: 600 }, "LF_POSITION_DTU_LARGE"),
     ).toEqual(["ok"]);
@@ -225,7 +226,7 @@ describe("largeurs et ligne de foulée", () => {
     const off = run({ project: { width: 1400 }, walklineOffset: 700 }, "LF_POSITION_DTU_LARGE")[0];
     expect(off).toMatchObject({ status: "ok", min: null, max: null });
     expect(off?.measured).toBeUndefined();
-    expect(off?.message).toContain("attendue à 600 mm");
+    expect(fr(off?.message)).toContain("attendue à 600 mm");
   });
 
   it("ligne de conception décalée avec marches balancées : girons contrôlés sur la ligne de mesure (X9)", () => {
@@ -234,7 +235,7 @@ describe("largeurs et ligne de foulée", () => {
     const o: Opts = { walklineOffset: 400, stepping: { treads: { 5: { kind: "winder" } } } };
     const r = run(o, "LF_POSITION_DTU_ETROIT");
     expect(r.map((x) => x.status)).toEqual(["ok"]);
-    expect(r[0]!.message).toMatch(
+    expect(fr(r[0]!.message)).toMatch(
       /ligne de mesure à 450 mm .* conformes à G_MIN_DTU, G_TOL_BALANCEE/,
     );
     expect(status({ walklineOffset: 400 }, "LF_POSITION_DTU_ETROIT")).toEqual(["ok"]);
@@ -250,7 +251,7 @@ describe("largeurs et ligne de foulée", () => {
       "LF_POSITION_ACCESSIBILITE",
     );
     expect(r[0]!.status).toBe("ok");
-    expect(r[0]!.message).toMatch(/ligne de mesure à 600 mm/);
+    expect(fr(r[0]!.message)).toMatch(/ligne de mesure à 600 mm/);
   });
 });
 
@@ -271,7 +272,7 @@ describe("échappée", () => {
     expect(width({}).map((r) => r.status)).toEqual(["non-evaluee"]);
     const clear = width({ headroomWidthClear: true });
     expect(clear.map((r) => r.status)).toEqual(["ok"]);
-    expect(clear[0]!.message).toMatch(/non limitée/);
+    expect(fr(clear[0]!.message)).toMatch(/non limitée/);
   });
 
   it("non calculée : non évaluée ; sans trémie : sans objet", () => {
@@ -309,7 +310,7 @@ describe("volées et paliers", () => {
         "PALIER_LONGUEUR_METIER",
       ),
     ).toEqual(["ok"]);
-    expect(run({}, "PALIER_LONGUEUR_METIER")[0]?.message).toMatch(/Sans objet/);
+    expect(fr(run({}, "PALIER_LONGUEUR_METIER")[0]?.message)).toMatch(/Sans objet/);
   });
 
   it("ERP tournant : palier intermédiaire interdit", () => {

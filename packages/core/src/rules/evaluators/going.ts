@@ -4,11 +4,11 @@
  * Les girons sont ceux de la **ligne de foulée de conception** (`Tread.going`). Quand la ligne de
  * conception diffère de la ligne de mesure réglementaire, les règles LF_POSITION_* le signalent.
  */
+import { dec, msg, type Message } from "@blondel/i18n";
 import type { Tread } from "../../model/derived.js";
 import {
   NUMERIC_EPS,
   checkItems,
-  fmt,
   notApplicable,
   treadLocation,
   treadsOfKind,
@@ -22,9 +22,14 @@ function goingItems(treads: readonly Tread[], value: (t: Tread) => number): Item
   return treads.map((t) => ({
     value: value(t),
     location: treadLocation(t),
-    label: `marche ${t.number}${t.kind === "winder" ? " (balancée)" : ""}`,
+    label: msg(t.kind === "winder" ? "compliance.item.winderTread" : "compliance.item.tread", {
+      n: t.number,
+    }),
   }));
 }
+
+/** « Sans objet : aucune marche balancée. » */
+const noWinder = (): Message => msg("compliance.going.noWinder");
 
 function walkingTreads(ctx: EvaluatorContext): Tread[] {
   return ctx.stepping.treads.filter((t) => t.kind !== "landing");
@@ -35,7 +40,7 @@ const goingMin: RuleEvaluator = (ctx) =>
   checkItems(
     ctx,
     goingItems(walkingTreads(ctx), (t) => t.going),
-    "Giron sur la ligne de foulée",
+    msg("compliance.going.walkline"),
   );
 
 /** |g_i − g_nom| dans [min ; max] pour un type de marche. */
@@ -44,9 +49,9 @@ function goingTolerance(kind: "straight" | "winder"): RuleEvaluator {
     checkItems(
       ctx,
       goingItems(treadsOfKind(ctx.stepping, kind), (t) => t.going - ctx.stepping.going),
-      kind === "straight" ? "Écart de giron (marche droite)" : "Écart de giron (marche balancée)",
+      msg(kind === "straight" ? "rules.G_TOL_DROITE.quantity" : "rules.G_TOL_BALANCEE.quantity"),
       {
-        emptyMessage: `Sans objet : aucune marche ${kind === "straight" ? "droite" : "balancée"}.`,
+        emptyMessage: kind === "straight" ? msg("rules.G_TOL_DROITE.none") : noWinder(),
       },
     );
 }
@@ -61,8 +66,8 @@ const winderVsStraight: RuleEvaluator = (ctx) => {
   return checkItems(
     ctx,
     goingItems(treadsOfKind(ctx.stepping, "winder"), (t) => t.going),
-    "Giron balancé comparé au giron droit",
-    { bounds: { min, max: null }, emptyMessage: "Sans objet : aucune marche balancée." },
+    msg("rules.G_BALANCE_VS_DROITE.quantity"),
+    { bounds: { min, max: null }, emptyMessage: noWinder() },
   );
 };
 
@@ -70,9 +75,9 @@ const colletMin: RuleEvaluator = (ctx) =>
   checkItems(
     ctx,
     goingItems(treadsOfKind(ctx.stepping, "winder"), (t) => t.colletChord),
-    "Giron au collet (corde)",
+    msg("rules.G_COLLET_MIN.quantity"),
     {
-      emptyMessage: "Sans objet : aucune marche balancée.",
+      emptyMessage: noWinder(),
     },
   );
 
@@ -183,7 +188,7 @@ function groupCorners(ctx: EvaluatorContext, g: readonly Tread[]): number[] | nu
  */
 const colletMonotone: RuleEvaluator = (ctx) => {
   const groups = winderGroups(ctx);
-  if (groups.length === 0) return [notApplicable("Sans objet : aucune marche balancée.")];
+  if (groups.length === 0) return [notApplicable(noWinder())];
   const out: Finding[] = [];
   let corners = 0;
   groups.forEach((g, gi) => {
@@ -198,7 +203,13 @@ const colletMonotone: RuleEvaluator = (ctx) => {
         status: "violation",
         measured: t.colletChord,
         location: treadLocation(t),
-        message: `Collet non monotone vers l'angle, zone ${gi + 1}, marche ${t.number} : ${fmt(t.colletChord)} mm après ${fmt(g[i]!.colletChord)} mm (marche ${g[i]!.number}).`,
+        message: msg("rules.G_COLLET_MONOTONE.zoneBreak", {
+          zone: gi + 1,
+          tread: t.number,
+          collet: dec(t.colletChord),
+          previous: dec(g[i]!.colletChord),
+          previousTread: g[i]!.number,
+        }),
       });
     }
   });
@@ -223,7 +234,7 @@ const colletMonotone: RuleEvaluator = (ctx) => {
       const cs = groupCorners(ctx, run);
       if (cs === null || cs.length === 0) continue;
       const c = run.map((t) => t.colletChord);
-      const push = (t: Tread, message: string): void => {
+      const push = (t: Tread, message: Message): void => {
         if (reported.has(t.number)) return;
         reported.add(t.number);
         out.push({
@@ -239,15 +250,28 @@ const colletMonotone: RuleEvaluator = (ctx) => {
         const a = run[i0]!;
         push(
           t,
-          `Collet non monotone vers l'angle, marche balancée hors zone déclarée, marche ${t.number} : ${fmt(t.colletChord)} mm après ${fmt(a.colletChord)} mm (marche ${a.number}).`,
+          msg("rules.G_COLLET_MONOTONE.outsideBreak", {
+            tread: t.number,
+            collet: dec(t.colletChord),
+            previous: dec(a.colletChord),
+            previousTread: a.number,
+          }),
         );
       };
       /** Extremum local mal placé (crête au droit d'un angle, creux entre deux angles). */
-      const extremum = (i: number, what: string): void => {
+      const extremum = (i: number, what: Message): void => {
         const t = run[i]!;
         push(
           t,
-          `Collet non monotone vers l'angle, marche balancée hors zone déclarée, marche ${t.number} : ${what} de ${fmt(t.colletChord)} mm entre ${fmt(run[i - 1]!.colletChord)} mm (marche ${run[i - 1]!.number}) et ${fmt(run[i + 1]!.colletChord)} mm (marche ${run[i + 1]!.number}).`,
+          msg("rules.G_COLLET_MONOTONE.outsideExtremum", {
+            tread: t.number,
+            what,
+            collet: dec(t.colletChord),
+            before: dec(run[i - 1]!.colletChord),
+            beforeTread: run[i - 1]!.number,
+            after: dec(run[i + 1]!.colletChord),
+            afterTread: run[i + 1]!.number,
+          }),
         );
       };
       run.forEach((t, i) => {
@@ -277,7 +301,7 @@ const colletMonotone: RuleEvaluator = (ctx) => {
             v > prev + NUMERIC_EPS &&
             v > next + NUMERIC_EPS
           )
-            extremum(i, "crête au droit de l'angle");
+            extremum(i, msg("rules.G_COLLET_MONOTONE.crest"));
         } else if (
           prev !== undefined &&
           next !== undefined &&
@@ -285,7 +309,7 @@ const colletMonotone: RuleEvaluator = (ctx) => {
           v < next - NUMERIC_EPS
         ) {
           // Entre deux angles : pas de creux.
-          extremum(i, "creux entre deux angles");
+          extremum(i, msg("rules.G_COLLET_MONOTONE.dip"));
         }
       });
     }
@@ -295,7 +319,10 @@ const colletMonotone: RuleEvaluator = (ctx) => {
     {
       status: "ok",
       location: { kind: "stair" },
-      message: `Collets monotones vers l'angle dans ${groups.length} zone(s) balancée(s) (${corners} angle(s) du jour).`,
+      message: msg("rules.G_COLLET_MONOTONE.ok", {
+        count: groups.length,
+        corners: msg("rules.G_COLLET_MONOTONE.corners", { count: corners }),
+      }),
     },
   ];
 };
@@ -305,10 +332,10 @@ const outerGoingMax: RuleEvaluator = (ctx) =>
   checkItems(
     ctx,
     goingItems(treadsOfKind(ctx.stepping, "winder"), (t) => t.goingOuter),
-    "Giron extérieur",
+    msg("rules.G_EXT_MAX_ERP_TOURNANT.quantity"),
     {
       bounds: { min: ctx.rule.min, max: ctx.rule.max, strictMax: true },
-      emptyMessage: "Sans objet : aucune marche balancée.",
+      emptyMessage: noWinder(),
     },
   );
 

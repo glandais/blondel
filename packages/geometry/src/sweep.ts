@@ -20,6 +20,7 @@
  * dans `Model.errors` (`parts/solidChecks.ts`). Seul le demi-tour exact lève `GeometryError`.
  */
 import type { Shape2, Vec3 } from "@blondel/core";
+import { msg } from "@blondel/i18n";
 import { GeometryError } from "./errors.js";
 import { addCap, addGrid } from "./grid.js";
 import { MeshBuilder, type Mesh } from "./mesh.js";
@@ -39,7 +40,7 @@ export function dedupePath(path: readonly Vec3[]): Vec3[] {
   const out: Vec3[] = [];
   for (const p of path) {
     if (!Number.isFinite(p.x) || !Number.isFinite(p.y) || !Number.isFinite(p.z)) {
-      throw new GeometryError("coordonnée non finie dans un chemin de balayage");
+      throw new GeometryError(msg("geometry.sweep.nonFiniteCoordinate"));
     }
     const last = out[out.length - 1];
     if (!last || length(sub(p, last)) > EPS) out.push(p);
@@ -77,8 +78,7 @@ export function sweepFrames(path: readonly Vec3[], mode: SweepFrameMode): SweepF
     const T = normalize(sub(path[k + 1]!, path[k]!));
     // Segment (quasi) vertical : plan vertical de la tangente mal défini (< 1 µrad).
     const vertical = Math.hypot(T.x, T.y) <= 1e-6;
-    if (prevT && dot(prevT, T) < -1 + 1e-9)
-      throw new GeometryError("chemin de balayage avec demi-tour");
+    if (prevT && dot(prevT, T) < -1 + 1e-9) throw new GeometryError(msg("geometry.sweep.uTurn"));
     if (!prevT || (mode === "upright" && !vertical)) {
       const up = vertical ? v3(0, 1, 0) : v3(0, 0, 1);
       B = normalize(sub(up, scale(T, dot(up, T))));
@@ -109,12 +109,12 @@ export function meshSweep(
   options: MeshOptions = {},
 ): Mesh {
   const path = dedupePath(pathIn);
-  if (path.length < 2) throw new GeometryError("chemin de balayage de moins de 2 points distincts");
-  if (path.length > maxPathPoints(options)) throw new GeometryError("chemin de balayage trop long");
+  if (path.length < 2) throw new GeometryError(msg("geometry.sweep.tooFewPoints"));
+  if (path.length > maxPathPoints(options)) throw new GeometryError(msg("geometry.sweep.tooLong"));
   const crease = creaseCos(options, 30);
   const mode = options.sweepFrame ?? "upright";
   if (mode !== "upright" && mode !== "parallel")
-    throw new GeometryError(`repère de balayage inconnu : ${String(mode)}`);
+    throw new GeometryError(msg("geometry.sweep.unknownFrame", { mode: String(mode) }));
   const shape = prepareShape(section);
   const frames = sweepFrames(path, mode);
   const m = path.length;

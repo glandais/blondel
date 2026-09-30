@@ -8,4 +8,4 @@ export {
   buildBasicParts,
   type BasicParts,
 } from "./basic.js";
-export { checkSolids, solidProblem } from "./solidChecks.js";
+export { checkSolids, isSelfIntersection, solidProblem } from "./solidChecks.js";

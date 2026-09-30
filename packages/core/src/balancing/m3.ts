@@ -8,6 +8,7 @@
  * optionnels `startSlope`, `endSlope` (pentes des parties droites, sinon Δz/Δs des marches
  * voisines).
  */
+import { msg, type Message } from "@blondel/i18n";
 import { GEOM_EPS } from "../geom2d/tolerance.js";
 import type { BalancingInput, BalancingSolution, BalancingStrategy } from "../model/plugins.js";
 import type { Mm } from "../model/primitives.js";
@@ -105,16 +106,17 @@ export function zoneProfile(
   input: BalancingInput,
 ):
   | { profile: DevelopmentProfile; delta: Mm; zA: Mm; spline: SplineProfile | null }
-  | { reason: string } {
+  | { reason: Message } {
   const { a, b, sigmaA, sigmaB } = zoneEnds(input);
   const delta = sigmaB - sigmaA;
   const zA = input.z[a];
   const zB = input.z[b];
-  if (zA === undefined || zB === undefined) return { reason: "altitudes des nez manquantes" };
+  if (zA === undefined || zB === undefined)
+    return { reason: msg("balancing.m3.fail.missingAltitudes") };
   // Longueur de jour indiscernable de 0 (nez fixes passant tous deux par un angle vif du jour de
   // développement) : le signe de delta ne tient qu'au bruit d'arrondi, on refuse la zone.
   if (!(delta > GEOM_EPS)) {
-    return { reason: `longueur de jour nulle ou négative entre les nez ${a} et ${b}` };
+    return { reason: msg("balancing.m3.fail.nonPositiveWellLength", { a, b }) };
   }
   const slopes = adjacentSlopes(input);
   const variant = variantOf(input);
@@ -150,7 +152,7 @@ function solve(input: BalancingInput): BalancingSolution {
   if (!isStrictlyIncreasing(profile)) {
     return {
       kind: "fail",
-      reason: "courbe de développement non strictement croissante (jour trop long pour la zone)",
+      reason: msg("balancing.m3.fail.notIncreasing"),
     };
   }
   const { a, b, sigmaA } = zoneEnds(input);
@@ -165,7 +167,7 @@ function solve(input: BalancingInput): BalancingSolution {
     last !== undefined &&
     Math.abs(zA + delta * evalProfile(profile, (last - sigmaA) / delta) - input.z[b - 1]!) > 1e-6
   ) {
-    return { kind: "fail", reason: "inversion de F non convergée" };
+    return { kind: "fail", reason: msg("balancing.m3.fail.inversionNotConverged") };
   }
   return input.zone.continuation
     ? { kind: "sigma", sigma, continued: built.spline !== null }
@@ -182,7 +184,7 @@ function estimateMinCollet(input: BalancingInput): Mm {
 
 export const M3_STRATEGY: BalancingStrategy = {
   id: "M3",
-  label: "Développement du limon (M3)",
+  labelKey: "balancing.m3.label",
   solve,
   estimateMinCollet,
 };

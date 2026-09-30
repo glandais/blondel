@@ -2,6 +2,7 @@
  * Intersections et projections : droites, segments, cercles, courbes composées.
  */
 import type { Curve2, CurveSeg, Mm, Vec2 } from "../model/primitives.js";
+import { MessageError, msg } from "@blondel/i18n";
 import { cumulativeLengths } from "./curve.js";
 import { segClosestPoint, segLength, segParamOfPoint, segPointAt } from "./segment.js";
 import { ANGLE_EPS, GEOM_EPS } from "./tolerance.js";
@@ -157,7 +158,7 @@ export function intersectLineCurve(line: Line2, curve: Curve2): CurveHit[] {
   const cum = cumulativeLengths(curve);
   const hits: CurveHit[] = [];
   const d2 = V.normSq(line.dir);
-  if (d2 === 0) throw new Error("intersectLineCurve : direction nulle");
+  if (d2 === 0) throw new MessageError(msg("error.geom2d.intersectLineCurve.zeroDirection"));
   const tOnLine = (p: Vec2): number => V.dot(V.sub(p, line.origin), line.dir) / d2;
   curve.segments.forEach((seg, i) => {
     const len = segLength(seg);
@@ -211,7 +212,7 @@ export function projectOnCurve(p: Vec2, curve: Curve2): CurveProjection {
       best = { s: cum[i]! + t * segLength(seg), point, distance: dist, index: i };
     }
   }
-  if (best === null) throw new Error("projectOnCurve : courbe vide");
+  if (best === null) throw new MessageError(msg("error.geom2d.projectOnCurve.emptyCurve"));
   return best;
 }
 

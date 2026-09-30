@@ -24,6 +24,7 @@
  */
 import type { Model, Part, Project } from "@blondel/core";
 import { meshPart, type Mesh, type MeshOptions } from "@blondel/geometry";
+import { tr } from "../i18n.js";
 import { hexToLinear, pbrLook } from "./materials.js";
 
 export const GLB_MAGIC = 0x46546c67; // « glTF »
@@ -175,9 +176,9 @@ export function partExtras(part: Part): Record<string, unknown> {
     id: part.id,
     mark: part.mark,
     category: part.category,
-    name: part.name,
+    name: tr(part.name),
     material: part.material,
-    ...(part.section !== undefined ? { section: part.section } : {}),
+    ...(part.section !== undefined ? { section: tr(part.section) } : {}),
     ...(part.stock !== undefined ? { stockMm: part.stock } : {}),
     quantities: part.quantities,
     ...(part.flat !== undefined ? { flatThicknessMm: part.flat.thickness } : {}),
@@ -335,7 +336,7 @@ export function buildGltf(
     if (pm.error !== undefined || vertexCount === 0 || pm.mesh.indices.length === 0) {
       nodes.push({
         name: part.mark,
-        extras: { ...extras, meshError: pm.error ?? "maillage vide" },
+        extras: { ...extras, meshError: pm.error !== undefined ? tr(pm.error) : "maillage vide" },
       });
       nodes[0]!.children!.push(nodes.length - 1);
       continue;

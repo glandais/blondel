@@ -8,6 +8,7 @@ import { buildModel } from "../pipeline/build.js";
 import { createProject } from "../project/presets.js";
 import "./index.js";
 import { deduceExecutionClass, QUANTITY_WELD_MM } from "./steelCommon.js";
+import { frList } from "../i18n.test-helpers.js";
 
 describe("deduceExecutionClass", () => {
   it("S235 sans soudure bout à bout : EXC1 ; soudure bout à bout ou formage à chaud : EXC2", () => {
@@ -21,7 +22,7 @@ describe("deduceExecutionClass", () => {
   it("S355 soudé : EXC2 ; S355 sans aucune soudure : EXC1 (PC1, éléments non soudés)", () => {
     const welded = deduceExecutionClass({ grade: "S355", buttWeld: 0, welded: true });
     expect(welded.executionClass).toBe("EXC2");
-    expect(welded.reasons).toEqual(["nuance S355 soudée"]);
+    expect(frList(welded.reasons)).toEqual(["nuance S355 soudée"]);
     const bolted = deduceExecutionClass({ grade: "S355", buttWeld: 0, welded: false });
     expect(bolted).toEqual({ executionClass: "EXC1", reasons: [] });
     // Sans l'information : lecture conservatrice (soudé).

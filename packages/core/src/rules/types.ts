@@ -1,6 +1,7 @@
 /**
  * Types du moteur de conformité : contexte d'évaluation et constats bruts des évaluateurs.
  */
+import type { Message } from "@blondel/i18n";
 import type { GuardsAnalysis } from "../guards/types.js";
 import type { Layout, Location, Model, RuleStatus, Severity, Stepping } from "../model/derived.js";
 import type { Project } from "../model/project.js";
@@ -64,7 +65,8 @@ export interface Finding {
   readonly max?: number | null;
   /** Par défaut : l'escalier entier. */
   readonly location?: Location;
-  readonly message: string;
+  /** Constat (`RuleResult.message`) : `Message` de `@blondel/i18n` (ADR-0007). */
+  readonly message: Message;
   /**
    * Sévérité propre à ce constat, **plus faible** que celle de la règle (ex. `GC_OBLIGATOIRE` en
    * conseil au droit d'un jour plus étroit que la sphère T1, QUESTIONS A10), avec sa raison
@@ -73,7 +75,7 @@ export interface Finding {
    * Ignorée si elle n'est pas plus faible que la sévérité déclarée.
    */
   readonly severity?: Severity;
-  readonly severityReason?: string;
+  readonly severityReason?: Message;
   /** Justification saisie par l'utilisateur (`RuleResult.justification`, décision A12). */
   readonly justification?: string;
 }

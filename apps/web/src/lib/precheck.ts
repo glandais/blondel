@@ -12,6 +12,7 @@ import {
   type RuleResult,
   type StairLoads,
 } from "@blondel/core";
+import { tr, trList } from "../i18n/fr.js";
 
 export type ExecutionClass = "EXC1" | "EXC2";
 
@@ -35,7 +36,7 @@ export function executionClassInfo(
   const line = model.compliance.results.find((r) => r.ruleId === "EXC_CLASSE_EXECUTION");
   return {
     value,
-    ...(line?.message ? { detail: line.message } : {}),
+    ...(line && tr(line.message) ? { detail: tr(line.message) } : {}),
     ...(line ? { location: line.location } : {}),
   };
 }
@@ -86,7 +87,7 @@ export function precheckSummary(
     const adviceLimit = r.length / PRECHECK_LIMITS.deflectionAdvice;
     return {
       partId: b.partId,
-      label: b.label,
+      label: tr(b.label),
       lengthM: r.length / 1000,
       deflection: r.deflection,
       limit,
@@ -108,7 +109,7 @@ export function precheckSummary(
     rows,
     loads: pc.loads,
     permanentArea: pc.permanentArea,
-    notes: pc.notes,
+    notes: trList(pc.notes),
     minFrequency: PRECHECK_LIMITS.frequency,
   };
 }

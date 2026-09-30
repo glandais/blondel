@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { fr } from "../i18n.test-helpers.js";
 import { buildModel } from "../pipeline/build.js";
 import { ProjectSchema } from "../model/project.js";
 import { parseProject } from "./parse.js";
@@ -43,6 +44,6 @@ describe("surcharges de règles (A18 b)", () => {
     const r = buildModel(p).compliance.results.find((x) => x.ruleId === r0.ruleId)!;
     expect(r.severity).toBe("conseil");
     if (r0.declaredSeverity !== "conseil")
-      expect(r.downgradeReason).toContain("Validé par le bureau d'études");
+      expect(fr(r.downgradeReason)).toContain("Validé par le bureau d'études");
   });
 });

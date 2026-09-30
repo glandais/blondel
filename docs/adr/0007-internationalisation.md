@@ -32,3 +32,34 @@ On veut l'interface et toutes les sorties (page, PDF, DXF, SVG, CSV, glTF) en fr
 - Les exceptions métier portent un `Message` (base `BlondelError`) ; `buildModel` continue de ne jamais lever et rend des `Message` dans `Model.errors`.
 - Les comparaisons de texte dans le code (`startsWith("…")`) comparent désormais des clés.
 - Le volume de clés (de 1 500 à 2 500) impose une migration par vagues : pendant la migration, des clés peuvent être déclarées en attente (`PENDING_KEYS`), liste vidée à la fin. Pendant une vague parallèle, chaque domaine écrit ses clés dans un fragment `locales/_wip/<domaine>.{fr,en}.json`, déclaré dans `locales/wip.ts` avant le lancement des agents : ses clés sont alors typées, traduites et contrôlées comme les autres ; `pnpm i18n:merge` les fusionne ensuite dans `fr.json` / `en.json`.
+
+## Mise en œuvre dans core (vague 2)
+
+### Types du `Model`
+
+| Emplacement                                                                                                                                                                                                            | Type                                                                              |
+| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| `Model.errors` / `notes`, `Layout.errors`, `Stepping.notes`, `ComplianceReport.notes`, `ModelPrecheck.notes`, `StructureOutput.notes` / `errors`                                                                       | `readonly Message[]`                                                              |
+| `Part.name`, `Part.section`, `FlatPattern.lines[].label`, `FlatPattern.reference.description`, `RuleResult.message` / `downgradeReason`, `Finding.message` / `severityReason`, `fail.reason` d'une `BalancingSolution` | `Message` (`textMessage(s)` pour un texte brut : repère, désignation « UPN 200 ») |
+| `StructureKind.labelKey`, `BalancingStrategy.labelKey`                                                                                                                                                                 | `MessageKey` (`structure.<kind>.label`, `balancing.<méthode>.label`)              |
+
+`RuleResult.description` et `PluginRuleSpec.description` n'existent plus : la description d'une règle est `ruleDescription(ruleId)` (clé `rules.<id>.description`). Restent des `string` : identifiants, repères (`Part.mark`), unités (`RuleResult.unit`), sources citées (`RuleResult.source`, `PluginRuleSpec.source`, non traduites pour l'instant) et textes saisis. `RuleDef.description` (rules.yaml) reste le texte français de référence ; pour un contrôle de plugin il vaut `""` et ne s'affiche jamais.
+
+### Exceptions
+
+`LayoutError`, `SteppingError`, `GuardError`, `StructureError`, `GeometryError` étendent `MessageError` : `.msg` est la donnée, `.message` la traduction française (les `toThrow(/texte fr/)` restent valables). `errorMessage(e)` rend le `.msg` d'une `MessageError`, sinon `textMessage(e.message)`. Les comparaisons de texte sont remplacées par des comparaisons de clés ou `messageEquals(a, b)` (égalité structurelle).
+
+### Nombres dans les paramètres
+
+- `dec(x, digits = 1)` remplace l'ancien `fmt` : rendu français identique à l'octet près (arrondi, zéros inutiles supprimés, sans séparateur de milliers) ; `dec(n, 0)` sert aussi de `count` d'un pluriel sans séparateur.
+- `num(x, digits?, unit?)` : nombre localisé avec séparateur de milliers (remplace `toLocaleString("fr-FR")`).
+- `x.toFixed(d)` ou `String(x)` passés en texte : rendu neutre inchangé. Un `count` passé en texte ne déclenche pas le pluriel.
+- Pluriel : sous-clés `.one` / `.other` ; tant que le français doit rester identique, ses deux variantes gardent l'ancienne forme « (s) ».
+
+### Préfixes de clés par domaine
+
+`common.*`, `error.*`, `model.*`, `pipeline.*` (socle) ; `layout.*`, `stepping.*`, `balancing.*`, `headroom.*` ; `rules.*`, `compliance.*`, `ruleFamily.*` (dont `compliance.check.*`, boîte à outils des constats) ; `structure.<kind>.*`, `structure.common.*`, `structure.steel.*` ; `guard.*`, `part.*`, `catalog.*`, `geometry.*` ; `assistant.*`, `site.*`, `project.*`, `precheck.*`, `workshop.*`, `preset.*`. Les contrôles de plugin déclarent `rules.<ID>.description` (et leurs autres textes `rules.<ID>.*`).
+
+### Tests
+
+`packages/core/src/i18n.test-helpers.ts` fournit `fr(m)` et `frList(ms)` (traduction française) pour conserver les assertions textuelles ; on vérifie en plus la clé (`expect(m.key).toBe(…)`, `toContainEqual(msg(…))`) et au moins un rendu anglais (`translatorFor("en").t(m)`).

@@ -22,6 +22,7 @@
  * figurent (confiance moyenne, machines d'un sous-traitant), sinon des hypothèses **à valider**
  * (LEDGER §2) ; voir `METAL_PROVENANCE`.
  */
+import { MessageError, msg, type Message } from "@blondel/i18n";
 import { z } from "zod";
 import type { Mm } from "../model/primitives.js";
 
@@ -216,49 +217,49 @@ export type MetalSettingKey = keyof MetalProfile;
 
 export interface MetalProvenance {
   readonly status: "a-valider" | "source";
-  readonly note: string;
+  readonly note: Message;
 }
 
 export const METAL_PROVENANCE: Readonly<Record<MetalSettingKey, MetalProvenance>> = {
   density: {
     status: "a-valider",
-    note: "7 850 kg/m³ : valeur usuelle de l'acier (EN 1991-1-1 annexe A, non lue), absente de docs/research.",
+    note: msg("workshop.provenance.metal.density"),
   },
   pressBrake: {
     status: "source",
-    note: "C-M-04 : 2 980 mm et 8 mm, sous-traitant en ligne S235 (C §2.6 [18], confiance moyenne) ; valeurs d'exemple à remplacer par la presse de l'atelier.",
+    note: msg("workshop.provenance.metal.pressBrake"),
   },
   laser: {
     status: "a-valider",
-    note: "Épaisseur maximale de découpe laser : aucune valeur dans docs/research ; 20 mm à valider.",
+    note: msg("workshop.provenance.metal.laser"),
   },
   sheetFormats: {
     status: "a-valider",
-    note: "C §4.3 : 3 000 × 1 500, 4 000 × 2 000, 6 000 × 2 000 « courants dans le métier, à confirmer » (aucune source fiable).",
+    note: msg("workshop.provenance.metal.sheetFormats"),
   },
   barLengths: {
     status: "source",
-    note: "C-M-08 / C §4.3 : barres de 6 m ou 12 m ([46], confiance moyenne).",
+    note: msg("workshop.provenance.metal.barLengths"),
   },
   bendLaws: {
     status: "source",
-    note: "Rayons et ailes mini : « valeurs classiques » acier Rm 40–45 daN/mm² (C §2.6 [17], confiance moyenne) ; méthode et facteur K à valider (CHALLENGE G5).",
+    note: msg("workshop.provenance.metal.bendLaws"),
   },
   defaultK: {
     status: "a-valider",
-    note: "Facteur K 0,33 non sourcé (CHALLENGE G5) : à valider par un plieur pilote.",
+    note: msg("workshop.provenance.metal.defaultK"),
   },
   profileBending: {
     status: "source",
-    note: "C-M-06 / C-M-07 : rayons de cintrage d'un cintreur (C §2.3 [15], confiance moyenne, propres aux machines) ; aucune donnée pour les HEA.",
+    note: msg("workshop.provenance.metal.profileBending"),
   },
   sawKerf: {
     status: "a-valider",
-    note: "Trait de scie 3 mm : aucune valeur dans docs/research, à valider.",
+    note: msg("workshop.provenance.metal.sawKerf"),
   },
   plateRolling: {
     status: "a-valider",
-    note: "Rouleuse (jalon 5b) : C §2.4 [16] ne donne que r_min ≈ 0,65 × Ø du rouleau supérieur ; rayon intérieur mini 150 mm, rouleaux de 2 000 mm et 12 mm d'épaisseur à valider par l'atelier.",
+    note: msg("workshop.provenance.metal.plateRolling"),
   },
 };
 
@@ -334,8 +335,8 @@ export interface ResolvedBend {
 }
 
 /**
- * Facteur K équivalent d'une loi de pli (voir l'en-tête du module). Lève une erreur (message
- * français) si la loi est incomplète ou si K sort de [0 ; 1].
+ * Facteur K équivalent d'une loi de pli (voir l'en-tête du module). Lève une `MessageError` si
+ * la loi est incomplète ou si K sort de [0 ; 1].
  */
 export function resolveBend(law: BendLaw, defaultK: number): ResolvedBend {
   const t = law.thickness;
@@ -350,9 +351,7 @@ export function resolveBend(law: BendLaw, defaultK: number): ResolvedBend {
       break;
     case "table": {
       if (law.deduction90 === undefined) {
-        throw new Error(
-          `Loi de pli « table » (t = ${t} mm) sans déduction de pli à 90° (deduction90).`,
-        );
+        throw new MessageError(msg("workshop.bend.missingDeduction", { thickness: String(t) }));
       }
       const ba90 = 2 * (r + t) - law.deduction90;
       k = (ba90 / (Math.PI / 2) - r) / t;
@@ -360,7 +359,9 @@ export function resolveBend(law: BendLaw, defaultK: number): ResolvedBend {
     }
   }
   if (!(k >= 0 && k <= 1)) {
-    throw new Error(`Loi de pli (t = ${t} mm, ${law.method}) : facteur K ${k} hors de [0 ; 1].`);
+    throw new MessageError(
+      msg("workshop.bend.kOutOfRange", { thickness: String(t), method: law.method, k: String(k) }),
+    );
   }
   return { thickness: t, innerRadius: r, k, minFlange: law.minFlange, method: law.method };
 }

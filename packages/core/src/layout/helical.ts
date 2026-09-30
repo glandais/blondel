@@ -29,6 +29,7 @@ import { flattenCurve, makeCurve } from "../geom2d/curve.js";
 import { ensureCCW } from "../geom2d/polygon.js";
 import { arcSeg } from "../geom2d/segment.js";
 import * as V from "../geom2d/vec.js";
+import { msg } from "@blondel/i18n";
 import { LayoutError } from "./errors.js";
 import { resolveRiserCount, resolveWalklineOffset } from "./resolve.js";
 
@@ -93,7 +94,7 @@ export function helicalStepAngle(spec: HelicalLayoutSpec, riserCount: number): R
       : (2 * Math.PI) / spec.sweep.count;
   if (!(step > 0 && step < Math.PI)) {
     throw new LayoutError(
-      `Angle par marche de l'hélicoïdal impossible (${(step / DEG).toFixed(1)}°) : il doit être compris entre 0 et 180°.`,
+      msg("layout.helical.invalidStepAngle", { angle: (step / DEG).toFixed(1) }),
     );
   }
   return step;
@@ -110,7 +111,12 @@ export function computeHelicalLayout(project: Project, spec: HelicalLayoutSpec):
   const rOut = spec.outerRadius;
   if (!(rOut > rIn)) {
     throw new LayoutError(
-      `Le rayon extérieur de l'hélicoïdal (${rOut} mm) doit dépasser le rayon ${spec.core.kind === "column" ? "du fût" : "du jour"} (${rIn} mm).`,
+      msg(
+        spec.core.kind === "column"
+          ? "layout.helical.outerRadiusBelowColumn"
+          : "layout.helical.outerRadiusBelowWell",
+        { outer: String(rOut), inner: String(rIn) },
+      ),
     );
   }
   const df = resolveWalklineOffset(project);

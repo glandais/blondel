@@ -11,6 +11,7 @@
  * - vides entre éléments filants (lisses, câbles, bas du remplissage) : distance libre
  *   **perpendiculaire à la pente** (= vide vertical × cos α) ; sur l'horizontale, vide vertical.
  */
+import type { Message } from "@blondel/i18n";
 import type { Location, Part } from "../model/derived.js";
 import type { Mm, Vec2, Vec3 } from "../model/primitives.js";
 import type { GuardInfill, GuardsSpec } from "./spec.js";
@@ -49,8 +50,8 @@ export interface GapMeasure {
   readonly zBottom: Mm;
   readonly zTop: Mm;
   readonly location: Location;
-  /** Libellé français (« entre balustres, travée 2 »). */
-  readonly label: string;
+  /** Libellé (« entre balustres, travée 2 »), traduit à l'affichage. */
+  readonly label: Message;
   /** Nature : entre éléments verticaux, entre éléments filants, sous le remplissage. */
   readonly kind: "vertical" | "horizontal" | "bottom";
 }
@@ -59,7 +60,8 @@ export interface GapMeasure {
 export interface Foothold {
   readonly x: Mm;
   readonly location: Location;
-  readonly label: string;
+  /** Libellé (« lisse 1, travée 2 »). */
+  readonly label: Message;
 }
 
 /** Ligne de garde-corps (rampant le long d'un côté vide, ou horizontal autour de la trémie). */
@@ -67,8 +69,11 @@ export interface GuardRun {
   readonly id: string;
   readonly kind: "rake" | "opening";
   readonly side?: StairSide;
-  /** Libellé français. */
-  readonly label: string;
+  /**
+   * Libellé en cours de phrase (« garde-corps de volée côté jour ») ; `runTitle(label)` en donne
+   * la forme de début de phrase.
+   */
+  readonly label: Message;
   /** Axe du garde-corps en plan. */
   readonly path: readonly Vec2[];
   /** Niveau de référence à chaque sommet de `path`. */
@@ -206,7 +211,7 @@ export interface GuardsAnalysis {
    * Absent : aucun garde-corps ne rejoint de poteau d'angle, ou `newelOverrun` à `off`.
    */
   readonly newelHandrailTops?: readonly NewelHandrailTop[];
-  readonly notes: readonly string[];
+  readonly notes: readonly Message[];
   /**
    * Jour plus étroit que la sphère T1 dont le garde-corps n'est pas construit (remarque dans
    * `notes`, pas une erreur). Absent : jour assez large, sans vide côté jour ou garde-corps de
@@ -218,5 +223,5 @@ export interface GuardsAnalysis {
    * reprises dans `Model.errors` par le pipeline ; les autres lignes sont calculées (pas
    * d'exception). Absent : aucune.
    */
-  readonly errors?: readonly string[];
+  readonly errors?: readonly Message[];
 }

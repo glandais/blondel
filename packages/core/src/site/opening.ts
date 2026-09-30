@@ -2,6 +2,7 @@
  * Trémie polygonale saisie (jalon 7) : validation (polygone simple, aire non nulle) et forme
  * canonique enregistrée (sommets arrondis, doublons retirés, sens trigonométrique).
  */
+import { MessageError, msg, type Message } from "@blondel/i18n";
 import { segmentIntersect } from "../geom2d/intersect.js";
 import { ensureCCW, signedArea } from "../geom2d/polygon.js";
 import * as V from "../geom2d/vec.js";
@@ -80,26 +81,32 @@ export function isSelfIntersecting(poly: Polygon2): boolean {
 }
 
 /** Défauts d'un contour de trémie saisi ; `[]` s'il est acceptable. */
-export function validateOpeningPolygon(points: readonly Vec2[]): string[] {
-  const issues: string[] = [];
+export function validateOpeningPolygon(points: readonly Vec2[]): Message[] {
+  const issues: Message[] = [];
   if (points.length < 3) {
-    issues.push(`trémie : au moins 3 sommets distincts (${points.length} saisis)`);
+    issues.push(msg("site.opening.tooFewPoints", { count: String(points.length) }));
     return issues;
   }
   if (points.some((p) => !Number.isFinite(p.x) || !Number.isFinite(p.y))) {
-    issues.push("trémie : coordonnées non numériques");
+    issues.push(msg("site.opening.notNumeric"));
     return issues;
   }
-  if (!(Math.abs(signedArea(points)) > 1)) issues.push("trémie : aire nulle (sommets alignés)");
-  else if (isSelfIntersecting(points)) issues.push("trémie : le contour se recoupe");
+  if (!(Math.abs(signedArea(points)) > 1)) issues.push(msg("site.opening.zeroArea"));
+  else if (isSelfIntersecting(points)) issues.push(msg("site.opening.selfIntersecting"));
   return issues;
 }
 
-/** Erreur de saisie d'une trémie polygonale. */
-export class OpeningInputError extends Error {
+/** Erreur de saisie d'une trémie polygonale ; message : défauts séparés par « ; ». */
+export class OpeningInputError extends MessageError {
   override name = "OpeningInputError";
-  constructor(readonly issues: readonly string[]) {
-    super(issues.join(" ; "));
+  constructor(readonly issues: readonly Message[]) {
+    super(
+      issues.reduceRight<Message | null>(
+        (rest, issue) =>
+          rest === null ? issue : msg("site.opening.issueList", { first: issue, rest }),
+        null,
+      ) ?? msg("site.opening.invalid"),
+    );
   }
 }
 

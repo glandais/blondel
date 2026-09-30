@@ -1,5 +1,6 @@
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
+import { fr } from "../i18n.test-helpers.js";
 import { pointInPolygon } from "../geom2d/polygon.js";
 import * as V from "../geom2d/vec.js";
 import { openingPolygon } from "../headroom/headroom.js";
@@ -33,7 +34,7 @@ describe("calage sur la trémie", () => {
     const frame = arrivalFrame(ACCEPTANCE_SPEC, 400, 0, 0);
     const { placements } = arrivalPlacements(frame, ACCEPTANCE_OPENING, [], 0.5);
     const found = placements.find((p) => p.rotation === 0 && p.origin.x === 0 && p.origin.y === 0);
-    expect(found?.fit).toMatch(/côté x min/);
+    expect(fr(found?.fit)).toMatch(/côté x min/);
   });
 
   it("largeur hors tout trop grande : aucun placement, écart signalé", () => {
@@ -49,7 +50,7 @@ describe("calage sur la trémie", () => {
     const opening = openingPolygon({ kind: "rect", x: 0, y: 0, sizeX: 1200, sizeY: 3000 })!;
     const wall = { id: "M", a: { x: 1300, y: -2000 }, b: { x: 1300, y: 4000 }, thickness: 200 };
     const { placements } = arrivalPlacements(frame, opening, [{ ...wall, loadBearing: true }], 0.5);
-    const along = placements.filter((p) => p.fit.includes("mur M"));
+    const along = placements.filter((p) => fr(p.fit).includes("mur M"));
     expect(along.length).toBeGreaterThan(0);
     for (const p of along) {
       const pieces = grossPieces({ width: 800, legs: [{ length: 3000 }], turns: [] }, 0, 0).map(

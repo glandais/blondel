@@ -8,6 +8,8 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import fc from "fast-check";
 import { beforeEach, describe, expect, it } from "vitest";
+import { translatorFor } from "@blondel/i18n";
+import { frList } from "../i18n.test-helpers.js";
 import type { Model, Part } from "../model/derived.js";
 import type { Project } from "../model/project.js";
 import { buildModel, clearModelCache } from "../pipeline/build.js";
@@ -80,8 +82,12 @@ describe("poteau d'angle et main courante (QUESTIONS A3)", () => {
     const near = handrailTopOver(m, post);
     expect(Number.isFinite(near)).toBe(true);
     expect(top).toBeGreaterThanOrEqual(near + NEWEL_HANDRAIL_OVERRUN_DEFAULT - 1e-6);
-    expect(m.notes?.some((n) => n.includes("au-dessus de la main courante du garde-corps"))).toBe(
-      true,
+    expect(
+      frList(m.notes).some((n) => n.includes("au-dessus de la main courante du garde-corps")),
+    ).toBe(true);
+    const raised = m.notes!.find((n) => n.key === "structure.woodHoused.newelRaised")!;
+    expect(translatorFor("en").t(raised)).toMatch(
+      /^PT\d+: corner newel raised to \d+ mm, 50 mm above the guarding handrail \(guarding, posts: “corner newel overrun”\)\.$/,
     );
     // Masse et débit suivent la nouvelle hauteur.
     expect(post.stock!.length).toBeGreaterThan(1500);

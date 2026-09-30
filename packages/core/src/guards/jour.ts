@@ -8,6 +8,7 @@
  * conseil) ; au-dessus, la collision des poteaux des deux garde-corps de jour est contrôlée
  * (`GC_POTEAUX_JOUR`, avertissement).
  */
+import type { Message, MessageKey } from "@blondel/i18n";
 import * as V from "../geom2d/vec.js";
 import type { Layout } from "../model/derived.js";
 import type { Mm, Vec2 } from "../model/primitives.js";
@@ -17,12 +18,19 @@ import { findRule } from "../rules/table.js";
 import { pointAt } from "./polyline.js";
 
 /**
- * Début de la remarque (`Model.notes`) d'un garde-corps de jour non généré (jour plus étroit
- * que la sphère T1) : repère stable pour `suggestFixes` (correction « côté jour → mur »).
+ * Clés de la remarque (`Model.notes`) d'un garde-corps de jour non généré (jour plus étroit que
+ * la sphère T1), seule ou suivie du garde-corps partiel : repère stable pour `suggestFixes`
+ * (correction « côté jour → mur »), à tester par `isNarrowJourNote`.
  */
-export const NARROW_JOUR_PREFIX = "Garde-corps de volée côté jour non généré";
-/** @deprecated Ancien nom (remarque, plus une erreur depuis la décision A10) : `NARROW_JOUR_PREFIX`. */
-export const NARROW_JOUR_ERROR_PREFIX = NARROW_JOUR_PREFIX;
+export const NARROW_JOUR_NOTE_KEYS: readonly MessageKey[] = [
+  "guard.narrowJour.note",
+  "guard.narrowJour.partial",
+];
+
+/** Vrai si `m` est la remarque d'un garde-corps de jour non généré (voir `NARROW_JOUR_NOTE_KEYS`). */
+export function isNarrowJourNote(m: Message): boolean {
+  return NARROW_JOUR_NOTE_KEYS.includes(m.key);
+}
 
 /**
  * Seuil (mm) sous lequel le jour est jugé trop étroit pour un garde-corps de jour : diamètre de

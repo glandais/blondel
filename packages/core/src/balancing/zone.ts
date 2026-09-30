@@ -1,6 +1,7 @@
 /**
  * Grandeurs communes aux stratégies de balancement, lues dans `BalancingInput`.
  */
+import { MessageError, msg } from "@blondel/i18n";
 import { curvePointAt, locate } from "../geom2d/curve.js";
 import { projectOnCurve } from "../geom2d/intersect.js";
 import type { Layout } from "../model/derived.js";
@@ -21,7 +22,7 @@ export function zoneEnds(input: BalancingInput): ZoneEnds {
   const na = input.nosings[a];
   const nb = input.nosings[b];
   if (!na || !nb || b - a < 2) {
-    throw new Error(`zone de balancement invalide [${a} ; ${b}]`);
+    throw new MessageError(msg("balancing.error.invalidZone", { a, b }));
   }
   return { a, b, sigmaA: na.sigmaInner, sigmaB: nb.sigmaInner };
 }
@@ -75,16 +76,20 @@ export function zoneTurns(input: BalancingInput): number[] {
 export function zoneMidS(layout: Layout, first: number, last: number): Mm {
   const t0 = layout.turns[first];
   const t1 = layout.turns[last];
-  if (!t0 || !t1) throw new Error(`tournant inconnu (${first}, ${last})`);
+  if (!t0 || !t1) {
+    throw new MessageError(msg("balancing.error.unknownTurns", { first, last }));
+  }
   return (t0.sStart + t1.sEnd) / 2;
 }
 
 /** Centre de l'arc de Γ du tournant j (centre du rayonnement M0). */
 export function turnCenter(layout: Layout, j: number): Vec2 {
   const t = layout.turns[j];
-  if (!t) throw new Error(`tournant inconnu (${j})`);
+  if (!t) throw new MessageError(msg("balancing.error.unknownTurn", { turn: j }));
   const seg = layout.walkline.segments[locate(layout.walkline, (t.sStart + t.sEnd) / 2).index];
-  if (!seg || seg.kind !== "arc") throw new Error(`tournant ${j + 1} : Γ n'y est pas un arc`);
+  if (!seg || seg.kind !== "arc") {
+    throw new MessageError(msg("balancing.error.walklineNotArc", { turn: j + 1 }));
+  }
   return seg.center;
 }
 

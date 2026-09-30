@@ -7,6 +7,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import { fr, frList } from "../../i18n.test-helpers.js";
 import type { Model, RuleResult } from "../../model/derived.js";
 import type { Project } from "../../model/project.js";
 import { buildModel } from "../../pipeline/build.js";
@@ -53,7 +54,7 @@ describe("MC_DEUX_COTES — exception ERP neuf, hélicoïdal à fût de diamètr
     const r = results(build(helical(["erp_neuf", "helicoidal"])), "MC_DEUX_COTES");
     expect(statuses(r)).toEqual(["ok"]);
     expect(r[0]!.min).toBe(1);
-    expect(r[0]!.message).toContain("fût");
+    expect(fr(r[0]!.message)).toContain("fût");
   });
 
   it("fût de diamètre 500 mm : deux mains courantes exigées", () => {
@@ -94,7 +95,7 @@ describe("MC_UP_ERP — tournant d'1 UP : main courante côté extérieur (CO 56
   it("seule la main courante du garde-corps côté jour : violation", () => {
     const r = results(build(j4("none")), "MC_UP_ERP");
     expect(statuses(r)).toContain("violation");
-    expect(r.find((x) => x.status === "violation")!.message).toContain("côté extérieur");
+    expect(fr(r.find((x) => x.status === "violation")!.message)).toContain("côté extérieur");
   });
 
   it("main courante murale côté extérieur : conforme", () => {
@@ -122,7 +123,7 @@ describe("surcharges de contrôles hors table (plugins)", () => {
     const fab = results(m, "FAB_FORMAT_TOLE");
     expect(fab.length).toBeGreaterThan(0);
     expect(fab.every((r) => r.severity === "conseil")).toBe(true);
-    const notes = m.compliance.notes ?? [];
+    const notes = frList(m.compliance.notes);
     expect(notes.some((n) => n.includes("FAB_FORMAT_TOLE"))).toBe(false);
     expect(notes).toContain("Surcharge ignorée : règle inconnue « INEXISTANTE ».");
   });
@@ -133,7 +134,7 @@ describe("surcharges de contrôles hors table (plugins)", () => {
         { ruleId: "FAB_FORMAT_TOLE", severity: "conseil", justification: "  " },
       ];
     });
-    const notes = build(p).compliance.notes ?? [];
+    const notes = frList(build(p).compliance.notes);
     expect(notes).toContain("Surcharge ignorée sur FAB_FORMAT_TOLE : justification vide.");
     expect(notes.some((n) => n.includes("règle inconnue"))).toBe(false);
   });

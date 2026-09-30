@@ -1,5 +1,7 @@
 import fc from "fast-check";
+import { translatorFor, type Message } from "@blondel/i18n";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { fr, frList } from "../i18n.test-helpers.js";
 import type { Project } from "../model/project.js";
 import { buildModel, clearModelCache } from "../pipeline/build.js";
 import { profileNewelFits } from "../structures/steelProfile.js";
@@ -11,8 +13,8 @@ import { applyStructureChoice, resolveProfileNewel } from "./structureChoice.js"
 beforeEach(() => clearModelCache());
 
 const TURNING = PRESET_IDS.filter((id) => createProject(id).stair.layout.turns.length > 0);
-const sharpError = (m: { errors: readonly string[] }) =>
-  m.errors.filter((e) => e.includes("jour à angle vif"));
+const sharpError = (m: { errors: readonly Message[] }) =>
+  m.errors.filter((e) => fr(e).includes("jour à angle vif"));
 
 function withStructure(p: Project, family: string): Project {
   return { ...p, stair: { ...p.stair, structure: { kind: "steel-profile", params: { family } } } };
@@ -47,7 +49,10 @@ describe("applyStructureChoice — poteau automatique (décision A4)", () => {
           base.stair.layout.turns.map((t) => [t.direction, t.mode]),
         );
         expect(notes).toHaveLength(turns.length);
-        expect(notes[0]).toMatch(/Tournant 1 : jour vif → poteau de 100 mm .*décision A4/);
+        expect(fr(notes[0])).toMatch(/Tournant 1 : jour vif → poteau de 100 mm .*décision A4/);
+        expect(translatorFor("en").t(notes[0]!)).toMatch(
+          /^Turn 1: sharp-cornered well → 100 mm newel post \(.*decision A4.*\)\. This change can be undone\.$/,
+        );
         expect(sharpError(buildModel(project)), `${kind} ${preset}`).toEqual([]);
         // Plus rien à corriger côté jour.
         expect(suggestFixes(project).some((f) => f.id === "jour-newel")).toBe(false);
@@ -85,7 +90,7 @@ describe("applyStructureChoice — poteau automatique (décision A4)", () => {
     };
     const { project, notes } = applyStructureChoice(narrow, "wood-housed");
     expect(project.stair.layout).toEqual(narrow.stair.layout);
-    expect(notes[0]).toMatch(/impossible dans ce tracé .*jour conservé/);
+    expect(fr(notes[0])).toMatch(/impossible dans ce tracé .*jour conservé/);
   });
 
   it("propriété : idempotent, sens et types de tournants inchangés, structure posée", () => {
@@ -122,7 +127,7 @@ describe("applyStructureChoice — poteau élargi des profilés (décision A13)"
     expect(inner.kind).toBe("newel");
     if (inner.kind !== "newel") return;
     expect(inner.offset).toBeGreaterThan(0);
-    expect(notes[0]).toMatch(/jour vif → poteau de \d+ mm décalé de \d+ mm vers le jour .*A13/);
+    expect(fr(notes[0])).toMatch(/jour vif → poteau de \d+ mm décalé de \d+ mm vers le jour .*A13/);
     const m = buildModel(project);
     expect(sharpError(m)).toEqual([]);
     const reception = m.compliance.results.filter((r) => r.ruleId === "FAB_POTEAU_RECEPTION");
@@ -141,7 +146,7 @@ describe("applyStructureChoice — poteau élargi des profilés (décision A13)"
     const base = withTurns(createProject("quarter-left"), { kind: "newel", size: 100 });
     const { project, notes } = applyStructureChoice(base, "steel-profile", { family: "UPN" });
     expect(project.stair.layout.turns[0]!.inner).not.toEqual({ kind: "newel", size: 100 });
-    expect(notes[0]).toMatch(/Tournant 1 : poteau de 100 mm → poteau de \d+ mm décalé/);
+    expect(fr(notes[0])).toMatch(/Tournant 1 : poteau de 100 mm → poteau de \d+ mm décalé/);
   });
 
   it("poteau élargi refusé par le tracé (demi-tournant, IPE / HEA) : poteau par défaut, pas de jour vif", () => {
@@ -152,15 +157,15 @@ describe("applyStructureChoice — poteau élargi des profilés (décision A13)"
       expect(project.stair.layout.turns.map((t) => t.inner)).toEqual(
         base.stair.layout.turns.map(() => ({ kind: "newel", size: DEFAULT_NEWEL_SIZE })),
       );
-      expect(notes[0]).toMatch(/impossible dans ce tracé .*poteau par défaut posé/);
-      expect(notes.slice(1).join(" ")).toMatch(/jour vif → poteau de 100 mm/);
+      expect(fr(notes[0])).toMatch(/impossible dans ce tracé .*poteau par défaut posé/);
+      expect(frList(notes.slice(1)).join(" ")).toMatch(/jour vif → poteau de 100 mm/);
       expect(sharpError(buildModel(project)), family).toEqual([]);
       // La correction proposée reste le poteau par défaut, qui est accepté.
       // Avec le modèle (section lue sur les pièces) : le poteau élargi est refusé par le tracé.
       const profiled = withStructure(base, family);
       const fixes = suggestFixes(profiled, buildModel(profiled));
       const fix = fixes.find((f) => f.id === "jour-newel");
-      expect(fix?.label).toMatch(/poteau de 100 mm/);
+      expect(fr(fix?.label)).toMatch(/poteau de 100 mm/);
     }
   });
 

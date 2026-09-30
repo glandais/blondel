@@ -1,4 +1,4 @@
-import { createProject, type AssistantInput } from "@blondel/core";
+import { createProject, textMessage, type AssistantInput } from "@blondel/core";
 import { describe, expect, it, vi } from "vitest";
 import { runAssistantJob, runSketchJob, type AssistantOutcome } from "./assistantJob.js";
 import {
@@ -18,7 +18,7 @@ const input: AssistantInput = {
 const EMPTY: AssistantOutcome = {
   result: {
     candidates: [],
-    diagnostics: ["vide"],
+    diagnostics: [textMessage("vide")],
     rejections: [],
     stats: { enumerated: 0, built: 0, elapsedMs: 0, stopped: false, truncated: false },
   },

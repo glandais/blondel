@@ -8,6 +8,7 @@
  * Les champs `formule` sont **documentaires** : ils ne sont jamais évalués. Les seuils sont lus
  * dans `min` / `max` par les évaluateurs.
  */
+import { MessageError, msg, type MessageKey } from "@blondel/i18n";
 import { z } from "zod";
 import raw from "./rules.data.json" with { type: "json" };
 import type { Severity } from "../model/derived.js";
@@ -54,6 +55,20 @@ export const RuleDefSchema = z.object({
   regles_mesurees: z.array(z.string()).optional(),
 });
 export type RuleDef = z.infer<typeof RuleDefSchema>;
+
+/** Clé du libellé de la nature d'une règle (`RuleDef.nature`, `RuleResult.nature`). */
+export const NATURE_LABEL_KEYS: Readonly<Record<RuleDef["nature"], MessageKey>> = {
+  reglementaire: "compliance.nature.reglementaire",
+  normatif: "compliance.nature.normatif",
+  metier: "compliance.nature.metier",
+};
+
+/** Clé du libellé du niveau de confiance d'une règle (`RuleDef.confiance`). */
+export const CONFIDENCE_LABEL_KEYS: Readonly<Record<RuleDef["confiance"], MessageKey>> = {
+  eleve: "compliance.confidence.eleve",
+  moyen: "compliance.confidence.moyen",
+  faible: "compliance.confidence.faible",
+};
 export type TableRow = Readonly<Record<string, TableCell>>;
 
 export const RuleTableSchema = z.object({
@@ -90,7 +105,7 @@ const byId = new Map<string, RuleDef>(RULES.map((r) => [r.id, r]));
 /** Règle par identifiant ; lève une erreur si l'identifiant est inconnu (erreur de programmation). */
 export function getRule(id: string): RuleDef {
   const r = byId.get(id);
-  if (!r) throw new Error(`Règle inconnue : ${id}`);
+  if (!r) throw new MessageError(msg("compliance.table.unknownRule", { ruleId: id }));
   return r;
 }
 
@@ -110,7 +125,8 @@ function ruleOf(rule: RuleDef | string): RuleDef {
 export function ruleParam(rule: RuleDef | string, name: string): number {
   const r = ruleOf(rule);
   const v = r.parametres?.[name];
-  if (v === undefined) throw new Error(`Paramètre « ${name} » absent de la règle ${r.id}.`);
+  if (v === undefined)
+    throw new MessageError(msg("compliance.table.missingParam", { name, ruleId: r.id }));
   return v;
 }
 
@@ -118,14 +134,16 @@ export function ruleParam(rule: RuleDef | string, name: string): number {
 export function ruleTable(rule: RuleDef | string, name: string): readonly TableRow[] {
   const r = ruleOf(rule);
   const t = r.tables?.[name];
-  if (t === undefined) throw new Error(`Table « ${name} » absente de la règle ${r.id}.`);
+  if (t === undefined)
+    throw new MessageError(msg("compliance.table.missingTable", { name, ruleId: r.id }));
   return t;
 }
 
 /** Cellule numérique d'une ligne de table ; lève une erreur si elle n'est pas un nombre. */
 export function numberCell(row: TableRow, key: string): number {
   const v = row[key];
-  if (typeof v !== "number") throw new Error(`Cellule « ${key} » non numérique.`);
+  if (typeof v !== "number")
+    throw new MessageError(msg("compliance.table.nonNumericCell", { key }));
   return v;
 }
 

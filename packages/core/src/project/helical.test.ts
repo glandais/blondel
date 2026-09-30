@@ -6,7 +6,9 @@ import { readdirSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import fc from "fast-check";
+import { msg, translatorFor } from "@blondel/i18n";
 import { describe, expect, it } from "vitest";
+import { fr, frList } from "../i18n.test-helpers.js";
 import { pointInPolygon, signedArea } from "../geom2d/polygon.js";
 import * as V from "../geom2d/vec.js";
 import { helicalHeadroomBound } from "../headroom/helical.js";
@@ -152,7 +154,7 @@ describe("préréglage `helical`", () => {
   it("n'est pas dans PRESET_IDS (volées) mais dans ALL_PRESET_IDS, avec un libellé", () => {
     expect(PRESET_IDS).not.toContain("helical");
     expect(ALL_PRESET_IDS).toContain("helical");
-    expect(PRESET_LABELS.helical).toMatch(/Hélicoïdal/);
+    expect(fr(msg(PRESET_LABELS.helical))).toMatch(/Hélicoïdal/);
   });
 
   it("défauts : échappée, Blondel, giron logement, palier, trémie qui dégage l'escalier", () => {
@@ -292,7 +294,10 @@ describe("préréglage `helical` : structure et repli (dette D4)", () => {
     } as const;
     expect(() => createHelicalProject(opts)).toThrow(HelicalSweepError);
     const r = createHelicalProjectWithFallback(opts);
-    expect(r.note).toMatch(/Repli : \d+ marches par tour/);
+    expect(fr(r.note)).toMatch(/Repli : \d+ marches par tour/);
+    expect(translatorFor("en").t(r.note!)).toMatch(
+      /^Spiral stair: no number of treads per turn .* Fallback: \d+ treads per turn /,
+    );
     const sweep = r.project.stair.layout.kind === "helical" ? r.project.stair.layout.sweep : null;
     expect(sweep?.mode).toBe("treadsPerTurn");
     const count = sweep?.mode === "treadsPerTurn" ? sweep.count : 0;

@@ -3,6 +3,7 @@
  * distances entre polygones, simplicité, rectangle englobant orienté minimal, polyligne
  * fonctionnelle (ligne des nez développée).
  */
+import { MessageError, msg } from "@blondel/i18n";
 import { signedArea } from "../geom2d/polygon.js";
 import * as V from "../geom2d/vec.js";
 import type { Mm, Polygon2, Vec2 } from "../model/primitives.js";
@@ -286,7 +287,7 @@ export class PiecewiseLinear {
       xs.push(k.x);
       ys.push(k.y);
     }
-    if (xs.length === 0) throw new Error("PiecewiseLinear : aucun nœud");
+    if (xs.length === 0) throw new MessageError(msg("structure.common.error.piecewiseNoKnot"));
     this.xs = xs;
     this.ys = ys;
   }

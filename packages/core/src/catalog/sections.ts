@@ -20,6 +20,7 @@
  * recoupée serait marquée `verified: false` (« à vérifier »). Les rayons de congé et la pente
  * des ailes (IPN, UPN) ne sont pas modélisés : les solides 3D sont dessinés à ailes parallèles.
  */
+import { isMessage, translatorFor, type Message } from "@blondel/i18n";
 import type { Mm } from "../model/primitives.js";
 
 export const SECTION_FAMILIES = ["UPN", "IPN", "IPE", "HEA"] as const;
@@ -154,11 +155,13 @@ export function sectionsOf(family: SectionFamily): SteelSection[] {
 
 /**
  * Désignation d'une section repérée dans un libellé de pièce (ex. `UPN 160 (S235)`), ou
- * `undefined`.
+ * `undefined`. Un `Message` (`Part.section`) est lu dans sa traduction française : les
+ * désignations commerciales ne sont pas traduites.
  */
-export function sectionInLabel(label: string | undefined): SteelSection | undefined {
-  if (!label) return undefined;
-  const m = /\b(UPN|IPN|IPE|HEA)\s*(\d{2,3})\b/i.exec(label);
+export function sectionInLabel(label: string | Message | undefined): SteelSection | undefined {
+  const text = isMessage(label) ? translatorFor("fr").t(label) : label;
+  if (!text) return undefined;
+  const m = /\b(UPN|IPN|IPE|HEA)\s*(\d{2,3})\b/i.exec(text);
   return m ? findSection(`${m[1]} ${m[2]}`) : undefined;
 }
 

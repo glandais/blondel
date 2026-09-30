@@ -1,6 +1,10 @@
 /**
  * Outils communs aux évaluateurs : comparaison aux bornes, agrégation par élément, volées.
+ *
+ * Constats en `Message` (ADR-0007, clés `compliance.check.*`) ; les nombres passent par
+ * `dec()` de `@blondel/i18n` (rendu français identique à l'ancien `fmt`, supprimé).
  */
+import { dec, msg, type Message } from "@blondel/i18n";
 import type { Location, Stepping, Tread } from "../model/derived.js";
 import type { Polygon2 } from "../model/primitives.js";
 import type { EvaluatorContext, Finding } from "./types.js";
@@ -12,13 +16,6 @@ import type { EvaluatorContext, Finding } from "./types.js";
 export const NUMERIC_EPS = 1e-6;
 
 export const STAIR: Location = { kind: "stair" };
-
-/** Formatage français d'une grandeur (1 décimale au plus, virgule décimale). */
-export function fmt(x: number, digits = 1): string {
-  const f = 10 ** digits;
-  const r = Math.round(x * f) / f;
-  return String(r).replace(".", ",");
-}
 
 export interface Bounds {
   readonly min: number | null;
@@ -52,34 +49,66 @@ export function excess(v: number, b: Bounds): number {
   return e;
 }
 
-export function boundsText(b: Bounds, unit: string | null): string {
-  const u = unit && unit !== "ratio" ? ` ${unit}` : "";
-  if (b.min !== null && b.max !== null) return `entre ${fmt(b.min, 2)} et ${fmt(b.max, 2)}${u}`;
-  if (b.min !== null) return `${b.strictMin ? ">" : "≥"} ${fmt(b.min, 2)}${u}`;
-  if (b.max !== null) return `${b.strictMax ? "<" : "≤"} ${fmt(b.max, 2)}${u}`;
-  return "sans borne";
+/**
+ * Suffixe d'unité d'un constat : « mm » précédé d'une espace simple (texte historique), rien
+ * pour `ratio` ou sans unité. Paramètre `unit` des clés `compliance.check.*`.
+ */
+export function unitSuffix(unit: string | null): string {
+  return unit && unit !== "ratio" ? ` ${unit}` : "";
 }
 
-/** Contrôle d'une valeur unique. */
+/** Bornes attendues (« entre 170 et 210 mm », « ≥ 1900 mm », « sans borne »). */
+export function boundsText(b: Bounds, unit: string | null): Message {
+  const u = unitSuffix(unit);
+  if (b.min !== null && b.max !== null)
+    return msg("compliance.check.bounds.between", {
+      min: dec(b.min, 2),
+      max: dec(b.max, 2),
+      unit: u,
+    });
+  if (b.min !== null)
+    return msg(
+      b.strictMin ? "compliance.check.bounds.aboveStrict" : "compliance.check.bounds.above",
+      {
+        min: dec(b.min, 2),
+        unit: u,
+      },
+    );
+  if (b.max !== null)
+    return msg(
+      b.strictMax ? "compliance.check.bounds.belowStrict" : "compliance.check.bounds.below",
+      {
+        max: dec(b.max, 2),
+        unit: u,
+      },
+    );
+  return msg("compliance.check.bounds.none");
+}
+
+/** Contrôle d'une valeur unique ; `label` : grandeur contrôlée (début de phrase). */
 export function checkValue(
   ctx: EvaluatorContext,
   value: number,
-  label: string,
+  label: Message,
   opts: { bounds?: Bounds; location?: Location } = {},
 ): Finding {
   const b = opts.bounds ?? boundsOf(ctx);
   if (Number.isNaN(value))
-    return notEvaluated(`${label} : valeur non calculable (NaN).`, opts.location ?? STAIR);
+    return notEvaluated(msg("compliance.check.valueNaN", { label }), opts.location ?? STAIR);
   const ok = within(value, b);
   const unit = ctx.rule.unite;
-  const u = unit && unit !== "ratio" ? ` ${unit}` : "";
   return {
     status: ok ? "ok" : "violation",
     measured: value,
     min: b.min,
     max: b.max,
     location: opts.location ?? STAIR,
-    message: `${label} : ${fmt(value, 2)}${u} (attendu ${boundsText(b, unit)}).`,
+    message: msg("compliance.check.value", {
+      label,
+      value: dec(value, 2),
+      unit: unitSuffix(unit),
+      bounds: boundsText(b, unit),
+    }),
   };
 }
 
@@ -87,32 +116,30 @@ export interface Item {
   readonly value: number;
   readonly location: Location;
   /** Libellé de l'élément (ex. « marche 3 »). */
-  readonly label: string;
+  readonly label: Message;
 }
 
 /**
  * Contrôle d'une série d'éléments : un constat `violation` par élément non conforme, ou un seul
  * constat `ok` à l'échelle de l'escalier portant la valeur la plus défavorable.
- * Série vide : un constat `ok` « sans objet ».
+ * Série vide : un constat `ok` « sans objet ». `quantity` : grandeur contrôlée (début de phrase).
  */
 export function checkItems(
   ctx: EvaluatorContext,
   items: readonly Item[],
-  quantity: string,
-  opts: { bounds?: Bounds; emptyMessage?: string } = {},
+  quantity: Message,
+  opts: { bounds?: Bounds; emptyMessage?: Message } = {},
 ): Finding[] {
   const b = opts.bounds ?? boundsOf(ctx);
   if (items.length === 0)
-    return [
-      notApplicable(opts.emptyMessage ?? `Sans objet : aucun élément concerné (${quantity}).`),
-    ];
+    return [notApplicable(opts.emptyMessage ?? msg("compliance.check.noItems", { quantity }))];
   const unit = ctx.rule.unite;
-  const u = unit && unit !== "ratio" ? ` ${unit}` : "";
+  const u = unitSuffix(unit);
   // Une valeur non calculable (NaN) passerait toutes les comparaisons : elle est signalée à part.
   const nan = items.filter((it) => Number.isNaN(it.value));
   if (nan.length > 0) {
     return nan.map((it) =>
-      notEvaluated(`${quantity}, ${it.label} : valeur non calculable (NaN).`, it.location),
+      notEvaluated(msg("compliance.check.itemNaN", { quantity, item: it.label }), it.location),
     );
   }
   const bad = items.filter((it) => !within(it.value, b));
@@ -123,7 +150,13 @@ export function checkItems(
       min: b.min,
       max: b.max,
       location: it.location,
-      message: `${quantity}, ${it.label} : ${fmt(it.value, 2)}${u} (attendu ${boundsText(b, unit)}).`,
+      message: msg("compliance.check.item", {
+        quantity,
+        item: it.label,
+        value: dec(it.value, 2),
+        unit: u,
+        bounds: boundsText(b, unit),
+      }),
     }));
   }
   // Élément le plus proche d'une borne.
@@ -146,18 +179,25 @@ export function checkItems(
       min: b.min,
       max: b.max,
       location: STAIR,
-      message: `${quantity} conforme sur ${items.length} élément(s) ; valeur la plus défavorable ${fmt(worst.value, 2)}${u} (${worst.label}), attendu ${boundsText(b, unit)}.`,
+      message: msg("compliance.check.itemsOk", {
+        quantity,
+        count: dec(items.length, 0),
+        value: dec(worst.value, 2),
+        unit: u,
+        item: worst.label,
+        bounds: boundsText(b, unit),
+      }),
     },
   ];
 }
 
 /** Constat « sans objet » : la règle est applicable mais la situation ne se présente pas. */
-export function notApplicable(message: string): Finding {
+export function notApplicable(message: Message): Finding {
   return { status: "ok", location: STAIR, message };
 }
 
 /** Constat « non évalué » avec explication (donnée manquante, contrôle partiel). */
-export function notEvaluated(message: string, location: Location = STAIR): Finding {
+export function notEvaluated(message: Message, location: Location = STAIR): Finding {
   return { status: "non-evaluee", location, message };
 }
 

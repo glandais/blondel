@@ -1,3 +1,4 @@
+import { msg, textMessage } from "@blondel/i18n";
 import { describe, expect, it } from "vitest";
 import {
   SECTION_FAMILIES,
@@ -70,6 +71,8 @@ describe("catalogue des profilés", () => {
     expect(s.wy).toBe(116e3);
     expect(s.massPerMeter).toBeCloseTo(18.8, 6);
     expect(sectionInLabel("UPN 160 (S235)")?.name).toBe("UPN 160");
+    expect(sectionInLabel(textMessage("IPE 200"))?.name).toBe("IPE 200");
+    expect(sectionInLabel(msg("part.section.thickness", { thickness: "8" }))).toBeUndefined();
     expect(sectionInLabel("tôle 8 (S235)")).toBeUndefined();
   });
 });

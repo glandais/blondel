@@ -5,12 +5,15 @@
 import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { translatorFor } from "@blondel/i18n";
 import { describe, expect, it } from "vitest";
+import { fr, frList } from "../i18n.test-helpers.js";
+import { ruleDescription } from "../model/messages.js";
 import type { Project } from "../model/project.js";
 import { buildModel } from "../pipeline/build.js";
 import { parseProjectText } from "../project/parse.js";
 import "../structures/index.js";
-import { PRECHECK_RULE_IDS, precheckResults } from "./checks.js";
+import { PRECHECK_LABEL, PRECHECK_RULE_IDS, precheckResults } from "./checks.js";
 import { precheckModel, structurePrecheckSettings } from "./stringers.js";
 
 const EXAMPLES_DIR = resolve(dirname(fileURLToPath(import.meta.url)), "../../../../examples");
@@ -68,5 +71,31 @@ describe("structurePrecheckSettings", () => {
     expect(structurePrecheckSettings({ precheck: { category: 12 } })).toEqual({});
     expect(structurePrecheckSettings(undefined)).toEqual({});
     expect(structurePrecheckSettings({})).toEqual({});
+  });
+});
+
+describe("prédimensionnement : messages traduits (ADR-0007)", () => {
+  it("libellés, remarques et constats : français d'avant, anglais sans reste de français", () => {
+    const EN = translatorFor("en");
+    const p = withStructure(load("quarter-left.blondel.json"), "steel-flat");
+    const pc = precheckModel(p, buildModel(p));
+    expect(pc.beams.length).toBeGreaterThan(0);
+    for (const b of pc.beams) {
+      expect(fr(b.label)).toMatch(/^[A-Z]+\d*, section brute \d+ × \d+ S235$/);
+      expect(EN.t(b.label)).toMatch(/^[A-Z]+\d*, rough section \d+ × \d+ S235$/);
+    }
+    expect(frList(pc.notes)[0]).toMatch(
+      /^Prédimensionnement indicatif \(ne remplace pas une note de calcul\) : q_k [\d,]+ kN\/m², /,
+    );
+    expect(frList(pc.notes)[1]).toMatch(/^Limons en plat : déversement et torsion/);
+    for (const r of pc.results) {
+      expect(fr(r.message)).toMatch(new RegExp(`^${fr(PRECHECK_LABEL)} — `));
+      expect(EN.t(r.message)).toMatch(/^Preliminary sizing for guidance only, /);
+      expect(EN.t(r.message)).not.toMatch(/flèche|taux|section brute/);
+      expect(EN.t(ruleDescription(r.ruleId))).toMatch(
+        /^Preliminary sizing for guidance only, does not replace a structural calculation: /,
+      );
+    }
+    for (const n of pc.notes) expect(EN.t(n)).not.toMatch(/limon|poutres|permanentes/);
   });
 });

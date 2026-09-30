@@ -1,3 +1,4 @@
+import { textMessage } from "@blondel/i18n";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import {
@@ -12,7 +13,6 @@ import { complianceLines, measureDecimals, measuredText } from "./compliance.js"
 function result(over: Partial<RuleResult>): RuleResult {
   return {
     ruleId: "R",
-    description: "règle",
     status: "ok",
     severity: "avertissement",
     declaredSeverity: "avertissement",
@@ -21,7 +21,7 @@ function result(over: Partial<RuleResult>): RuleResult {
     confidence: "moyen",
     source: "test",
     secondarySource: false,
-    message: "",
+    message: textMessage(""),
     ...over,
   };
 }
@@ -145,7 +145,9 @@ describe("justification saisie (décision A12)", () => {
         contexts: [],
         profile: "strict",
         summary: { bloquant: 0, avertissement: 1, conseil: 0 },
-        results: [result({ status: "violation", message: "m", justification: "avis AT-7" })],
+        results: [
+          result({ status: "violation", message: textMessage("m"), justification: "avis AT-7" }),
+        ],
       },
     } as unknown as Model;
     const lines = text(model).split("\n");

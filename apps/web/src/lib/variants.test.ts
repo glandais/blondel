@@ -7,8 +7,10 @@ import {
   getStructure,
   registerStructure,
   StructureError,
+  textMessage,
   unregisterStructure,
   type Project,
+  type MessageKey,
   type StructureKind,
 } from "@blondel/core";
 import { describe, expect, it } from "vitest";
@@ -220,9 +222,9 @@ describe("comparateur de variantes", () => {
     const failing: StructureKind<unknown> = {
       ...getStructure("wood-housed")!,
       kind: "test-failing-structure",
-      label: "Structure d'essai en échec",
+      labelKey: "test.failingStructure" as MessageKey,
       build: () => {
-        throw new StructureError("Structure d'essai : échec volontaire.");
+        throw new StructureError(textMessage("Structure d'essai : échec volontaire."));
       },
     };
     registerStructure(failing);

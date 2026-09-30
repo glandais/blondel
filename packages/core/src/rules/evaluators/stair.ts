@@ -2,6 +2,7 @@
  * Grandeurs globales de l'escalier : module de Blondel, pente, emmarchement et largeurs,
  * position de la ligne de foulée, échappée.
  */
+import { MessageError, dec, msg, type Message } from "@blondel/i18n";
 import { pointInPolygon } from "../../geom2d/polygon.js";
 import { curvePointAt } from "../../geom2d/curve.js";
 import { coveredIntervals, openingPolygon } from "../../headroom/headroom.js";
@@ -10,7 +11,6 @@ import {
   NUMERIC_EPS,
   STAIR,
   checkValue,
-  fmt,
   notApplicable,
   notEvaluated,
   treadLocation,
@@ -32,12 +32,15 @@ const blondel: RuleEvaluator = (ctx) => [
   checkValue(
     ctx,
     ctx.stepping.blondel,
-    `Module 2h + g (h = ${fmt(ctx.stepping.rise)} mm, g = ${fmt(ctx.stepping.going)} mm)`,
+    msg("compliance.stair.blondel", {
+      rise: dec(ctx.stepping.rise),
+      going: dec(ctx.stepping.going),
+    }),
   ),
 ];
 
 const steepness: RuleEvaluator = (ctx) => [
-  checkValue(ctx, ctx.stepping.rise / ctx.stepping.going, "Rapport h / g"),
+  checkValue(ctx, ctx.stepping.rise / ctx.stepping.going, msg("rules.CONFORT_CLASSE.label")),
 ];
 
 /** Angle de pente α = atan(h / g), en degrés. */
@@ -45,7 +48,7 @@ const slopeAngle: RuleEvaluator = (ctx) => [
   checkValue(
     ctx,
     (Math.atan2(ctx.stepping.rise, ctx.stepping.going) * 180) / Math.PI,
-    "Angle de pente (degrés)",
+    msg("rules.ANGLE_ECHELLE_MARCHES.label"),
   ),
 ];
 
@@ -55,7 +58,9 @@ function width(ctx: EvaluatorContext): number {
   return ctx.project.stair.layout.width;
 }
 
-const stairWidth: RuleEvaluator = (ctx) => [checkValue(ctx, width(ctx), "Emmarchement E")];
+const stairWidth: RuleEvaluator = (ctx) => [
+  checkValue(ctx, width(ctx), msg("compliance.stair.width")),
+];
 
 /**
  * Largeur de passage L_passage (variable de rules.yaml, A-regles L3) : emmarchement diminué de
@@ -85,10 +90,11 @@ export function passageWidth(
   return { width: w, location, deducted, limit };
 }
 
-function passageLabel(p: { deducted: number; limit: number }): string {
-  return p.deducted > 0
-    ? `Largeur de passage (à l'aplomb des mains courantes saillantes de plus de ${fmt(p.limit, 0)} mm)`
-    : `Largeur de passage (aucune main courante saillante de plus de ${fmt(p.limit, 0)} mm)`;
+function passageLabel(p: { deducted: number; limit: number }): Message {
+  return msg(
+    p.deducted > 0 ? "compliance.stair.passageAtHandrails" : "compliance.stair.passageNoHandrail",
+    { limit: dec(p.limit, 0) },
+  );
 }
 
 /**
@@ -98,12 +104,15 @@ function passageLabel(p: { deducted: number; limit: number }): string {
 const passageWidthLogement: RuleEvaluator = (ctx) => {
   const p = passageWidth(ctx);
   if (p) return [checkValue(ctx, p.width, passageLabel(p), { location: p.location })];
-  const f = checkValue(ctx, width(ctx), "Largeur de passage (mesurée sur l'emmarchement)");
+  const f = checkValue(ctx, width(ctx), msg("rules.LARGEUR_MIN_LOGEMENT.onWidth"));
   return [
     f.status === "ok"
       ? {
           ...f,
-          message: `${f.message} Sous réserve de mains courantes saillantes de plus de ${fmt(ruleParam(ctx.rule, "saillie_mc_max"), 0)} mm (garde-corps non décrits).`,
+          message: msg("rules.LARGEUR_MIN_LOGEMENT.reservation", {
+            message: f.message,
+            limit: dec(ruleParam(ctx.rule, "saillie_mc_max"), 0),
+          }),
         }
       : f,
   ];
@@ -121,7 +130,7 @@ const passageWidthUp: RuleEvaluator = (ctx) => {
   return [
     {
       ...f,
-      message: `${f.message} Largeur de ${n} unité(s) de passage ; le nombre d'UP exigé dépend de l'effectif, non saisi.`,
+      message: msg("rules.LARGEUR_UP_ERP.units", { message: f.message, count: n }),
     },
   ];
 };
@@ -133,18 +142,21 @@ const passageWidthUp: RuleEvaluator = (ctx) => {
  */
 const intermediateHandrails: RuleEvaluator = (ctx) => {
   const max = ctx.rule.max;
-  if (max === null) return [notEvaluated("Nombre d'UP maximal absent de la table.")];
+  if (max === null) return [notEvaluated(msg("rules.MC_INTERMEDIAIRE_ERP.noMax"))];
   const p = passageWidth({ ...ctx, rule: getRule("LARGEUR_UP_ERP") });
   const w = p ? p.width : width(ctx);
   const n = upCount(w);
-  const what = p ? "largeur de passage" : "emmarchement";
   const base = { measured: n, min: null, max, location: p?.location ?? STAIR } as const;
+  const params = { count: n, width: dec(w, 0), max: String(max) };
   if (n <= max)
     return [
       {
         ...base,
         status: "ok",
-        message: `${n} unité(s) de passage (${what} ${fmt(w, 0)} mm) ≤ ${max} : pas de main courante intermédiaire exigée.`,
+        message: msg(
+          p ? "rules.MC_INTERMEDIAIRE_ERP.okPassage" : "rules.MC_INTERMEDIAIRE_ERP.okWidth",
+          params,
+        ),
       },
     ];
   if (!p)
@@ -152,14 +164,14 @@ const intermediateHandrails: RuleEvaluator = (ctx) => {
       {
         ...base,
         status: "non-evaluee",
-        message: `Emmarchement ${fmt(w, 0)} mm, soit ${n} UP > ${max} : mains courantes intermédiaires probablement exigées (CO 55 §1) ; à vérifier avec les garde-corps.`,
+        message: msg("rules.MC_INTERMEDIAIRE_ERP.probable", params),
       },
     ];
   return [
     {
       ...base,
       status: "violation",
-      message: `${n} unités de passage (largeur de passage ${fmt(w, 0)} mm) > ${max} : mains courantes intermédiaires exigées (CO 55 §1), non modélisées par Blondel.`,
+      message: msg("rules.MC_INTERMEDIAIRE_ERP.violation", params),
     },
   ];
 };
@@ -169,13 +181,11 @@ const intermediateHandrails: RuleEvaluator = (ctx) => {
  * E < min ⇒ violation certaine ; sinon la vérification attend les mains courantes (garde-corps).
  */
 const upperBoundedByWidth: RuleEvaluator = (ctx) => {
-  const f = checkValue(ctx, width(ctx), "Emmarchement (majorant de la largeur exigée)");
+  const f = checkValue(ctx, width(ctx), msg("compliance.stair.upperBound"));
   if (f.status === "violation") return [f];
   return [
     {
-      ...notEvaluated(
-        `Emmarchement ${fmt(width(ctx))} mm suffisant ; largeur entre mains courantes ou en unités de passage à vérifier avec les garde-corps.`,
-      ),
+      ...notEvaluated(msg("compliance.stair.upperBoundPending", { width: dec(width(ctx)) })),
       measured: width(ctx),
     },
   ];
@@ -189,7 +199,9 @@ const betweenHandrails: RuleEvaluator = (ctx) => {
   const w = ctx.incomplete ? null : handrailClearWidth(ctx);
   if (!w) return upperBoundedByWidth(ctx);
   return [
-    checkValue(ctx, w.width, "Largeur libre entre mains courantes", { location: w.location }),
+    checkValue(ctx, w.width, msg("compliance.stair.betweenHandrails"), {
+      location: w.location,
+    }),
   ];
 };
 
@@ -202,7 +214,7 @@ const betweenHandrails: RuleEvaluator = (ctx) => {
  * - distinctes sans marche balancée : ok (les girons droits sont identiques sur toute ligne) ;
  * - distinctes avec marches balancées : non évaluée (lignes de mesure séparées non implémentées).
  */
-function walklineAt(ctx: EvaluatorContext, expected: number, label: string): Finding[] {
+function walklineAt(ctx: EvaluatorContext, expected: number, label: Message): Finding[] {
   const d = ctx.layout.walklineOffset;
   const base = { measured: d, min: expected, max: expected, location: STAIR } as const;
   if (Math.abs(d - expected) <= NUMERIC_EPS) {
@@ -210,7 +222,7 @@ function walklineAt(ctx: EvaluatorContext, expected: number, label: string): Fin
       {
         ...base,
         status: "ok",
-        message: `Ligne de foulée à ${fmt(d)} mm du bord intérieur (${label}).`,
+        message: msg("compliance.walkline.at", { distance: dec(d), label }),
       },
     ];
   }
@@ -223,7 +235,11 @@ function walklineAt(ctx: EvaluatorContext, expected: number, label: string): Fin
         min: null,
         max: null,
         location: STAIR,
-        message: `Ligne de conception à ${fmt(d)} mm, ligne de mesure attendue à ${fmt(expected)} mm (${label}) : sans incidence, aucune marche balancée.`,
+        message: msg("compliance.walkline.noWinder", {
+          distance: dec(d),
+          expected: dec(expected),
+          label,
+        }),
       },
     ];
   }
@@ -250,15 +266,19 @@ const MEASURED_QUANTITY: Readonly<Record<string, "going" | "deviation">> = {
 function measurementLineFindings(
   ctx: EvaluatorContext,
   expected: number,
-  label: string,
+  label: Message,
 ): Finding[] {
   const d = ctx.layout.walklineOffset;
-  const head = `Ligne de conception à ${fmt(d)} mm, ligne de mesure à ${fmt(expected)} mm (${label})`;
+  const head = msg("compliance.walkline.head", {
+    distance: dec(d),
+    expected: dec(expected),
+    label,
+  });
   const res = goingsOnMeasurementLine(ctx.layout, ctx.stepping, expected);
   if (!res.ok)
     return [
       {
-        ...notEvaluated(`${head} : girons balancés non mesurés (${res.reason}).`),
+        ...notEvaluated(msg("compliance.walkline.notMeasured", { head, reason: res.reason })),
         measured: d,
         min: expected,
         max: expected,
@@ -266,12 +286,13 @@ function measurementLineFindings(
     ];
   // Règles de giron applicables, avec leur sévérité effective (profil, surcharges de
   // l'utilisateur) : une règle ignorée par l'utilisateur n'est pas reportée sur cette ligne.
-  const rules: { rule: RuleDef; severity: Severity; reason?: string }[] = [];
+  const rules: { rule: RuleDef; severity: Severity; reason?: Message }[] = [];
   const ignored: string[] = [];
   for (const id of ctx.rule.regles_mesurees ?? []) {
     const r = findRule(id);
-    if (!r) throw new Error(`Règle mesurée inconnue : ${id}.`);
-    if (!MEASURED_QUANTITY[id]) throw new Error(`Grandeur mesurée inconnue pour ${id}.`);
+    if (!r) throw new MessageError(msg("compliance.walkline.unknownMeasuredRule", { ruleId: id }));
+    if (!MEASURED_QUANTITY[id])
+      throw new MessageError(msg("compliance.walkline.unknownMeasuredQuantity", { ruleId: id }));
     if (!isRuleApplicable(r, ctx.contexts)) continue;
     const eff = effectiveSeverity(r, ctx.project.compliance);
     if (eff.ignored) ignored.push(id);
@@ -282,12 +303,11 @@ function measurementLineFindings(
         ...(eff.downgradeReason !== undefined ? { reason: eff.downgradeReason } : {}),
       });
   }
-  const ignoredText =
-    ignored.length > 0 ? ` ; ${ignored.join(", ")} ignorée(s) par l'utilisateur` : "";
+  const ignoredParam = { ignored: ignored.join(", ") };
   const goings = res.goings.map((g) => g.going);
   const lo = Math.min(...goings);
   const hi = Math.max(...goings);
-  const range = `girons balancés de ${fmt(lo)} à ${fmt(hi)} mm sur la ligne de mesure`;
+  const range = msg("compliance.walkline.range", { lo: dec(lo), hi: dec(hi) });
   if (rules.length === 0)
     return [
       {
@@ -296,7 +316,10 @@ function measurementLineFindings(
         min: null,
         max: null,
         location: STAIR,
-        message: `${head} : ${range} ; aucune règle de giron applicable à cette ligne dans les contextes actifs${ignoredText}.`,
+        message: msg(
+          ignored.length > 0 ? "compliance.walkline.noRuleIgnored" : "compliance.walkline.noRule",
+          { head, range, ...ignoredParam },
+        ),
       },
     ];
   // Giron nominal de la ligne de mesure : celui des marches droites (identique sur toute ligne) ;
@@ -311,19 +334,31 @@ function measurementLineFindings(
       const v = deviation ? going - nominal : going;
       if (within(v, b)) continue;
       const expectedText = deviation
-        ? `écart au giron nominal ${fmt(nominal)} mm dans [${fmt(r.min ?? -Infinity)} ; ${fmt(r.max ?? Infinity)}] mm`
-        : `giron ≥ ${fmt(r.min ?? 0)} mm`;
+        ? msg("compliance.walkline.expectedDeviation", {
+            nominal: dec(nominal),
+            min: dec(r.min ?? -Infinity),
+            max: dec(r.max ?? Infinity),
+          })
+        : msg("compliance.walkline.expectedGoing", { min: dec(r.min ?? 0) });
       out.push({
         status: "violation",
         measured: v,
         min: r.min,
         max: r.max,
         location: treadLocation(tread),
-        message: `${head} : marche ${tread.number} (balancée), giron ${fmt(going)} mm sur la ligne de mesure (${r.id} : ${expectedText}).`,
+        message: msg("compliance.walkline.violation", {
+          head,
+          tread: tread.number,
+          going: dec(going),
+          ruleId: r.id,
+          expected: expectedText,
+        }),
         ...(weaker
           ? {
               severity,
-              severityReason: `Sévérité de ${r.id}, contrôlée sur la ligne de mesure${reason ? ` (${reason})` : ""}.`,
+              severityReason: reason
+                ? msg("compliance.walkline.severityReasonWith", { ruleId: r.id, reason })
+                : msg("compliance.walkline.severityReason", { ruleId: r.id }),
             }
           : {}),
       });
@@ -337,7 +372,10 @@ function measurementLineFindings(
       min: null,
       max: null,
       location: STAIR,
-      message: `${head} : ${range}, conformes à ${rules.map((r) => r.rule.id).join(", ")}${ignoredText}.`,
+      message: msg(
+        ignored.length > 0 ? "compliance.walkline.conformIgnored" : "compliance.walkline.conform",
+        { head, range, rules: rules.map((r) => r.rule.id).join(", "), ...ignoredParam },
+      ),
     },
   ];
 }
@@ -349,14 +387,15 @@ function dtuWalkline(branch: "narrow" | "wide" | "both"): RuleEvaluator {
     // Seuil de la règle évaluée (`parametres.E_seuil`), à défaut celui des règles DTU.
     const threshold = ctx.rule.parametres?.["E_seuil"] ?? LF_WIDE_THRESHOLD.value;
     const narrow = e <= threshold;
+    const params = { width: dec(e), threshold: String(threshold) };
     if (branch === "narrow" && !narrow)
-      return [notApplicable(`Sans objet : E = ${fmt(e)} mm > ${threshold} mm.`)];
+      return [notApplicable(msg("compliance.walkline.wideNotApplicable", params))];
     if (branch === "wide" && narrow)
-      return [notApplicable(`Sans objet : E = ${fmt(e)} mm ≤ ${threshold} mm.`)];
-    if (narrow) return walklineAt(ctx, e / 2, `milieu de l'emmarchement, E = ${fmt(e)} mm`);
+      return [notApplicable(msg("compliance.walkline.narrowNotApplicable", params))];
+    if (narrow) return walklineAt(ctx, e / 2, msg("compliance.walkline.labelMiddle", params));
     const d = branch === "wide" ? ctx.rule.min : wideDistance(ctx);
-    if (d === null) return [notEvaluated("Distance de la ligne de mesure absente de la table.")];
-    return walklineAt(ctx, d, `E = ${fmt(e)} mm > ${threshold} mm`);
+    if (d === null) return [notEvaluated(msg("compliance.walkline.noDistance"))];
+    return walklineAt(ctx, d, msg("compliance.walkline.labelWide", params));
   };
 }
 
@@ -368,28 +407,27 @@ function wideDistance(ctx: EvaluatorContext): number | null {
 /** d_lf = min (= max) de la règle. */
 const fixedWalkline: RuleEvaluator = (ctx) => {
   const d = ctx.rule.min ?? ctx.rule.max;
-  if (d === null) return [notEvaluated("Distance de la ligne de mesure absente de la table.")];
-  return walklineAt(ctx, d, "distance réglementaire au bord intérieur");
+  if (d === null) return [notEvaluated(msg("compliance.walkline.noDistance"))];
+  return walklineAt(ctx, d, msg("compliance.walkline.labelRegulatory"));
 };
 
 // ------------------------------------------------------------------ Échappée
 
 const headroom: RuleEvaluator = (ctx) => {
   if (!ctx.headroom) {
-    if (!ctx.project.site.opening)
-      return [notApplicable("Sans objet : pas de trémie (aucun plancher au-dessus).")];
+    if (!ctx.project.site.opening) return [notApplicable(msg("compliance.headroom.noOpening"))];
     if (ctx.headroomClear) {
       return [
         {
           status: "ok",
-          message: "Aucun point de la ligne de foulée sous la dalle haute (trémie couvrante).",
+          message: msg("compliance.headroom.clear"),
         },
       ];
     }
-    return [notEvaluated("Échappée non calculée.")];
+    return [notEvaluated(msg("compliance.headroom.notComputed"))];
   }
   return [
-    checkValue(ctx, ctx.headroom.min, "Échappée minimale (verticale, sur la ligne de foulée)", {
+    checkValue(ctx, ctx.headroom.min, msg("compliance.headroom.quantity"), {
       location: { kind: "point", at: ctx.headroom.at },
     }),
   ];
@@ -420,38 +458,33 @@ export function headroomWidthThreshold(
 /** ECHAPPEE_LARGEUR : échappée sur la largeur des marches ≥ seuil des ECHAPPEE_* bloquantes. */
 const headroomWidth: RuleEvaluator = (ctx) => {
   const threshold = headroomWidthThreshold(ctx.contexts);
-  if (threshold === null)
-    return [
-      notApplicable("Sans objet : aucune règle d'échappée bloquante dans les contextes actifs."),
-    ];
-  if (ctx.incomplete)
-    return [notEvaluated("Échappée sur la largeur non calculée (modèle partiel).")];
+  if (threshold === null) return [notApplicable(msg("compliance.headroom.noBlockingRule"))];
+  if (ctx.incomplete) return [notEvaluated(msg("rules.ECHAPPEE_LARGEUR.partial"))];
   const w = ctx.headroomWidth;
   if (!w) {
-    if (!ctx.project.site.opening)
-      return [notApplicable("Sans objet : pas de trémie (aucun plancher au-dessus).")];
-    if (!ctx.headroomWidthClear) return [notEvaluated("Échappée sur la largeur non calculée.")];
+    if (!ctx.project.site.opening) return [notApplicable(msg("compliance.headroom.noOpening"))];
+    if (!ctx.headroomWidthClear) return [notEvaluated(msg("rules.ECHAPPEE_LARGEUR.notComputed"))];
     return [
       {
         status: "ok",
         min: threshold.min,
-        message:
-          "Échappée sur la largeur non limitée : aucun nez de marche sous la dalle haute (trémie couvrante).",
+        message: msg("rules.ECHAPPEE_LARGEUR.unlimited"),
       },
     ];
   }
   // Le nez k porte le dessus de la marche k + 1 ; le dernier est le nez d'arrivée.
-  const where =
+  const label =
     w.nosing === ctx.stepping.nosings.length - 1
-      ? "au nez d'arrivée"
-      : `au nez de la marche ${w.nosing + 1}`;
+      ? msg("rules.ECHAPPEE_LARGEUR.atArrival", { ruleId: threshold.ruleId })
+      : msg("rules.ECHAPPEE_LARGEUR.atNosing", {
+          tread: w.nosing + 1,
+          ruleId: threshold.ruleId,
+        });
   return [
-    checkValue(
-      ctx,
-      w.min,
-      `Échappée sur la largeur des marches ${where} (seuil repris de ${threshold.ruleId})`,
-      { bounds: { min: threshold.min, max: null }, location: { kind: "point", at: w.at } },
-    ),
+    checkValue(ctx, w.min, label, {
+      bounds: { min: threshold.min, max: null },
+      location: { kind: "point", at: w.at },
+    }),
   ];
 };
 
@@ -467,32 +500,20 @@ const headroomWidth: RuleEvaluator = (ctx) => {
  */
 const openingLength: RuleEvaluator = (ctx) => {
   const poly = openingPolygon(ctx.project.site.opening);
-  if (!poly) return [notApplicable("Sans objet : pas de trémie (aucun plancher au-dessus).")];
+  if (!poly) return [notApplicable(msg("compliance.headroom.noOpening"))];
   const threshold = headroomWidthThreshold(ctx.contexts);
-  if (threshold === null)
-    return [
-      notApplicable("Sans objet : aucune règle d'échappée bloquante dans les contextes actifs."),
-    ];
+  if (threshold === null) return [notApplicable(msg("compliance.headroom.noBlockingRule"))];
   const nosings = ctx.stepping.nosings;
   if (ctx.incomplete || nosings.length < 2)
-    return [notEvaluated("Découpage non calculé (modèle partiel).")];
-  if (ctx.layout.helical)
-    return [
-      notEvaluated(
-        "Hélicoïdal : la longueur de trémie (volée droite) ne s'applique pas ; échappée contrôlée par les règles ECHAPPEE_*.",
-      ),
-    ];
+    return [notEvaluated(msg("rules.TREMIE_LONGUEUR.partial"))];
+  if (ctx.layout.helical) return [notEvaluated(msg("rules.TREMIE_LONGUEUR.helical"))];
   const ep = ctx.project.site.upperSlabThickness;
   const { rise: h, going: g } = ctx.stepping;
   const required = ((threshold.min + ep) * g) / h;
   const arrival = nosings[nosings.length - 1]!;
   const sA = arrival.s;
   if (pointInPolygon(arrival.p, poly) === "outside")
-    return [
-      notApplicable(
-        "Sans objet : l'arrivée (nez d'arrivée sur la ligne de foulée) n'est pas dans la trémie.",
-      ),
-    ];
+    return [notApplicable(msg("rules.TREMIE_LONGUEUR.arrivalOutside"))];
   // Dernier passage sous la dalle avant l'arrivée : la trémie s'étend de sa sortie à l'arrivée.
   const covered = coveredIntervals(ctx.layout.walkline, poly).filter(
     (c) => c.s1 <= sA + NUMERIC_EPS,
@@ -508,7 +529,7 @@ const openingLength: RuleEvaluator = (ctx) => {
   if (curved)
     return [
       notEvaluated(
-        `Tournant dans les ${fmt(Math.max(required, length), 0)} mm de ligne de foulée avant l'arrivée : dérivation pour une volée droite, échappée contrôlée par les règles ECHAPPEE_*.`,
+        msg("rules.TREMIE_LONGUEUR.turn", { length: dec(Math.max(required, length), 0) }),
       ),
     ];
   const p = curvePointAt(ctx.layout.walkline, edge);
@@ -516,7 +537,13 @@ const openingLength: RuleEvaluator = (ctx) => {
     checkValue(
       ctx,
       length,
-      `Longueur de trémie sur la ligne de foulée depuis le nez d'arrivée ((e + ep) · g / h avec e = ${fmt(threshold.min, 0)} mm de ${threshold.ruleId}, ep = ${fmt(ep, 0)} mm, g = ${fmt(g)} mm, h = ${fmt(h)} mm)`,
+      msg("rules.TREMIE_LONGUEUR.quantity", {
+        headroom: dec(threshold.min, 0),
+        ruleId: threshold.ruleId,
+        slab: dec(ep, 0),
+        going: dec(g),
+        rise: dec(h),
+      }),
       {
         bounds: { min: required, max: null },
         location: { kind: "point", at: { x: p.x, y: p.y, z: ctx.project.site.floorToFloor } },

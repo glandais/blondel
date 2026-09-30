@@ -6,6 +6,7 @@
  * longueur nulle (pivots) sont ignorés par la localisation.
  */
 import type { Curve2, CurveSeg, Mm, Rad, Vec2 } from "../model/primitives.js";
+import { MessageError, msg } from "@blondel/i18n";
 import {
   arcSeg,
   lineSeg,
@@ -45,12 +46,14 @@ export function isContinuous(curve: Curve2, tol: Mm = GEOM_EPS): boolean {
 
 /** Construit une courbe en vérifiant la continuité (lève une erreur sinon). */
 export function makeCurve(segments: readonly CurveSeg[], tol: Mm = GEOM_EPS): Curve2 {
-  if (segments.length === 0) throw new Error("makeCurve : courbe vide");
+  if (segments.length === 0) throw new MessageError(msg("error.geom2d.makeCurve.emptyCurve"));
   const curve: Curve2 = { segments: [...segments] };
   const gaps = continuityGaps(curve, tol);
   if (gaps.length > 0) {
     const g = gaps[0]!;
-    throw new Error(`makeCurve : discontinuité de ${g.gap} mm après le segment ${g.index}`);
+    throw new MessageError(
+      msg("error.geom2d.makeCurve.gap", { gap: String(g.gap), index: String(g.index) }),
+    );
   }
   return curve;
 }
@@ -73,8 +76,11 @@ export function fromPolyline(points: readonly Vec2[], options: PolylineOptions =
   const radii: Mm[] = [];
   const rOpt = options.radius ?? 0;
   if (typeof rOpt !== "number" && rOpt.length !== Math.max(0, points.length - 2)) {
-    throw new Error(
-      `fromPolyline : ${rOpt.length} rayons fournis pour ${Math.max(0, points.length - 2)} sommets intérieurs`,
+    throw new MessageError(
+      msg("error.geom2d.fromPolyline.radiusCount", {
+        given: String(rOpt.length),
+        vertices: String(Math.max(0, points.length - 2)),
+      }),
     );
   }
   points.forEach((p, i) => {
@@ -83,10 +89,11 @@ export function fromPolyline(points: readonly Vec2[], options: PolylineOptions =
     pts.push(p);
     const r =
       typeof rOpt === "number" ? rOpt : i >= 1 && i <= points.length - 2 ? (rOpt[i - 1] ?? 0) : 0;
-    if (!(r >= 0)) throw new Error(`fromPolyline : rayon invalide (${r})`);
+    if (!(r >= 0))
+      throw new MessageError(msg("error.geom2d.fromPolyline.invalidRadius", { radius: String(r) }));
     radii.push(r);
   });
-  if (pts.length < 2) throw new Error("fromPolyline : au moins deux points distincts requis");
+  if (pts.length < 2) throw new MessageError(msg("error.geom2d.fromPolyline.tooFewPoints"));
 
   // Raccords : pour chaque sommet intérieur, points tangents P1 (entrée) et P2 (sortie).
   interface Fillet {
@@ -102,7 +109,7 @@ export function fromPolyline(points: readonly Vec2[], options: PolylineOptions =
     const t2 = V.normalize(V.sub(pts[i + 1]!, v));
     const phi = V.signedAngle(t1, t2);
     if (Math.abs(Math.abs(phi) - Math.PI) < ANGLE_EPS) {
-      throw new Error(`fromPolyline : demi-tour au sommet ${i}`);
+      throw new MessageError(msg("error.geom2d.fromPolyline.uTurn", { index: String(i) }));
     }
     const r = radii[i]!;
     if (r * Math.abs(phi) <= GEOM_EPS || Math.abs(phi) < ANGLE_EPS) {
@@ -122,7 +129,9 @@ export function fromPolyline(points: readonly Vec2[], options: PolylineOptions =
   for (let i = 0; i + 1 < pts.length; i++) {
     const len = V.distance(pts[i]!, pts[i + 1]!);
     if (tangentLen[i]! + tangentLen[i + 1]! > len + GEOM_EPS) {
-      throw new Error(`fromPolyline : raccords trop grands pour le segment ${i} (${len} mm)`);
+      throw new MessageError(
+        msg("error.geom2d.fromPolyline.filletsTooLarge", { index: String(i), length: String(len) }),
+      );
     }
   }
 
@@ -175,10 +184,10 @@ export interface CurveLocation {
 /** Localise l'abscisse s (bornée à [0, L]) sur un segment. */
 export function locate(curve: Curve2, s: Mm): CurveLocation {
   const segs = curve.segments;
-  if (segs.length === 0) throw new Error("locate : courbe vide");
+  if (segs.length === 0) throw new MessageError(msg("error.geom2d.locate.emptyCurve"));
   const cum = cumulativeLengths(curve);
   const L = cum[cum.length - 1]!;
-  if (Number.isNaN(s)) throw new Error("locate : abscisse invalide (NaN)");
+  if (Number.isNaN(s)) throw new MessageError(msg("error.geom2d.locate.nanAbscissa"));
   const sc = Math.min(L, Math.max(0, s));
   // Recherche dichotomique du dernier début de segment ≤ sc.
   let lo = 0;
@@ -311,7 +320,8 @@ export interface CurveSample {
  * jonctions entre segments (pour que la polyligne passe exactement par les angles vifs).
  */
 export function sampleCurve(curve: Curve2, step: Mm): CurveSample[] {
-  if (!(step > 0)) throw new Error(`sampleCurve : pas invalide (${step})`);
+  if (!(step > 0))
+    throw new MessageError(msg("error.geom2d.sampleCurve.invalidStep", { step: String(step) }));
   const cum = cumulativeLengths(curve);
   const L = cum[cum.length - 1]!;
   // Jonctions et extrémités d'abord : un pas régulier tombant à moins de GEOM_EPS d'une
@@ -343,7 +353,10 @@ export function sampleCurve(curve: Curve2, step: Mm): CurveSample[] {
  * Les segments droits sont exacts. Les doublons consécutifs sont supprimés.
  */
 export function flattenCurve(curve: Curve2, chordTol: Mm = 0.1): Vec2[] {
-  if (!(chordTol > 0)) throw new Error(`flattenCurve : tolérance invalide (${chordTol})`);
+  if (!(chordTol > 0))
+    throw new MessageError(
+      msg("error.geom2d.flattenCurve.invalidTolerance", { tolerance: String(chordTol) }),
+    );
   const out: Vec2[] = [];
   const push = (p: Vec2): void => {
     const last = out[out.length - 1];

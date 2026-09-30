@@ -9,12 +9,17 @@ import * as V from "../geom2d/vec.js";
 import { curveLength } from "../geom2d/curve.js";
 import { findCrossings, nosingsCross } from "../balancing/postprocess.js";
 import type { NosingLine } from "../model/derived.js";
-import { fmt } from "../rules/check.js";
+import { translatorFor } from "@blondel/i18n";
 import { computeLayout } from "../layout/layout.js";
 import { SteppingError } from "./errors.js";
 import { findCrossingsOnSides } from "./sides.js";
 import { computeStepping } from "./stepping.js";
 import { makeSteppingProject, type SteppingShape } from "./test-helpers.js";
+import { frList } from "../i18n.test-helpers.js";
+
+/** Rendu français d'un `dec(x)` (ancien `fmt`). */
+const fmt = (x: number): string =>
+  translatorFor("fr").num(Math.round(x * 10) / 10, { digits: 1, trimZeros: true, thousands: "" });
 
 const S = (
   shape: Omit<SteppingShape, "directions">,
@@ -87,11 +92,13 @@ describe("découpage — S / Z", () => {
     const lay = computeLayout(p);
     const sw = computeStepping(p, lay);
     const tr = lay.walklineTransitions![0]!;
-    expect(sw.notes.some((n) => /raccord linéaire.*défaut à valider/.test(n))).toBe(true);
+    expect(frList(sw.notes).some((n) => /raccord linéaire.*défaut à valider/.test(n))).toBe(true);
     // Nez parallèles, Γ oblique : profondeur réelle entre deux nez = g·cos θ, signalée.
     const g = sw.treads[0]!.going;
     const depth = fmt(g * Math.cos(tr.angle));
-    expect(sw.notes.some((n) => n.includes(`n'y donne que ${depth} mm entre deux nez`))).toBe(true);
+    expect(
+      frList(sw.notes).some((n) => n.includes(`n'y donne que ${depth} mm entre deux nez`)),
+    ).toBe(true);
     for (let k = 0; k + 1 < sw.nosings.length; k++) {
       const a = sw.nosings[k]!;
       const b = sw.nosings[k + 1]!;
@@ -173,7 +180,7 @@ describe("K5 — contact toléré au seul collet, du côté du jour", () => {
     const lay = computeLayout(p);
     const st = computeStepping(p, lay);
     expect(findCrossingsOnSides(lay, st.nosings)).toEqual([]);
-    expect(st.notes.some((n) => n.startsWith("K5"))).toBe(false);
+    expect(frList(st.notes).some((n) => n.startsWith("K5"))).toBe(false);
     // Le second jour est sur C_e : vu comme C_i, le contact au coin K2 serait un croisement.
     expect(findCrossings(st.nosings).length).toBeGreaterThan(0);
   });

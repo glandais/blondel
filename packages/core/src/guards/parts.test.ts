@@ -1,3 +1,4 @@
+import { msg } from "@blondel/i18n";
 import { describe, expect, it } from "vitest";
 import { DEFAULT_WORKSHOP_PROFILE } from "../workshop/profile.js";
 import { MarkRegistry, panelMember, type PartFactoryContext } from "./parts.js";
@@ -6,7 +7,7 @@ const common = (id: string) => ({
   id,
   prefix: "PV",
   category: "infill" as const,
-  name: "Panneau de verre",
+  name: msg("part.glassPanel.name"),
   material: "glass" as const,
 });
 

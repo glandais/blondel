@@ -1,3 +1,4 @@
+import { textMessage } from "@blondel/i18n";
 import type { Model } from "@blondel/core";
 import { describe, expect, it } from "vitest";
 import { exportPlanDxf } from "./dxf/plan.js";
@@ -28,7 +29,7 @@ describe("modèle partiel", () => {
       treads: [],
       balancedZones: [],
     },
-    errors: ["Nombre de hauteurs impossible"],
+    errors: [textMessage("Nombre de hauteurs impossible")],
   };
 
   it("plan SVG : bords seuls, sans NaN", () => {

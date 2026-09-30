@@ -1,3 +1,4 @@
+import { textMessage } from "@blondel/i18n";
 import { pointInPolygon, vec2, type Part, type Vec2 } from "@blondel/core";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
@@ -72,7 +73,7 @@ describe("exportPartDxf : limon bois à la française (développé synthétique)
     expect(dist(spot.at)).toBeGreaterThan(dist(naive.at));
     const withRef: Part = {
       ...part,
-      flat: { ...flat, reference: { kind: "face", description: "face côté marches" } },
+      flat: { ...flat, reference: { kind: "face", description: textMessage("face côté marches") } },
     };
     const f = readDxf(exportPartDxf(withRef, { version: "AC1021" }));
     expect(entitiesOn(f, "TEXT", "INFO").map((t) => t.value)).toContain(

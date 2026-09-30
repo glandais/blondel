@@ -34,6 +34,7 @@
  * 100 mm qu'avec un fût de plus de 400 mm de diamètre, hors des valeurs raisonnables (ledger §2 :
  * application de la règle aux fûts à arbitrer, DIN 18065 admettant 0 mm pour un noyau).
  */
+import { msg, type Message } from "@blondel/i18n";
 import { circularOpening, helicalHeadroomBound } from "../headroom/helical.js";
 import { ensureCCW } from "../geom2d/polygon.js";
 import { arcPoints } from "../layout/helical.js";
@@ -64,9 +65,12 @@ import {
   PRESET_LABELS,
   PRESET_NOSING,
   PRESET_OPENING_CLEARANCE,
+  defaultPresetName,
+  requireOpeningClearance,
   requirePositiveInt,
   type PresetOptions,
 } from "./presets.js";
+import { MessageRangeError } from "./errors.js";
 
 /** Rayon extérieur R_e par défaut (mm) — à valider. */
 export const HELICAL_DEFAULT_OUTER_RADIUS = 950;
@@ -103,9 +107,7 @@ function blondelBounds(): { min: number; max: number } {
  */
 export function createHelicalProject(options: PresetOptions = {}): Project {
   if (options.width !== undefined) {
-    throw new RangeError(
-      "Hélicoïdal : l'emmarchement se déduit des rayons (options « outerRadius » et « coreRadius »).",
-    );
+    throw new MessageRangeError(msg("project.helical.noWidth"));
   }
   const patch = options.patch;
   const patchedLayout = patch?.stair?.layout as Partial<HelicalLayoutSpecInput> | undefined;
@@ -120,26 +122,25 @@ export function createHelicalProject(options: PresetOptions = {}): Project {
   const coreRadius =
     pick("coreRadius", options.coreRadius, patchedLayout?.core?.radius) ??
     HELICAL_DEFAULT_CORE_RADIUS;
-  requirePositiveInt("La hauteur à monter", height);
-  requirePositiveInt("L'épaisseur du plancher haut", slab);
-  requirePositiveInt("Le rayon extérieur", outerRadius);
-  requirePositiveInt("Le rayon du fût", coreRadius);
+  requirePositiveInt(msg("project.preset.field.floorToFloor"), height);
+  requirePositiveInt(msg("project.preset.field.upperSlabThickness"), slab);
+  requirePositiveInt(msg("project.preset.field.outerRadius"), outerRadius);
+  requirePositiveInt(msg("project.preset.field.coreRadius"), coreRadius);
   if (!(outerRadius > coreRadius)) {
-    throw new RangeError(
-      `Le rayon extérieur (${outerRadius} mm) doit dépasser le rayon du fût (${coreRadius} mm).`,
+    throw new MessageRangeError(
+      msg("project.helical.radiiOrder", {
+        outer: String(outerRadius),
+        core: String(coreRadius),
+      }),
     );
   }
   const clearance = options.openingClearance ?? PRESET_OPENING_CLEARANCE;
-  if (!Number.isInteger(clearance) || clearance < 0) {
-    throw new RangeError(
-      `Le jeu latéral de la trémie doit être un entier positif ou nul en mm (reçu : ${clearance}).`,
-    );
-  }
+  requireOpeningClearance(clearance);
   const direction = options.direction ?? "left";
 
   const input: ProjectInput = {
     schemaVersion: PROJECT_SCHEMA_VERSION,
-    name: options.name ?? PRESET_LABELS.helical,
+    name: options.name ?? defaultPresetName(PRESET_LABELS.helical),
     site: { floorToFloor: height, upperSlabThickness: slab },
     stair: {
       placement: { origin: { x: 0, y: 0 }, rotation: 0 },
@@ -161,15 +162,16 @@ export function createHelicalProject(options: PresetOptions = {}): Project {
     project = structuredClone(ProjectSchema.parse(deepMerge(input, patch)));
   } catch (e) {
     if (e instanceof Error && e.name === "ZodError") {
-      throw new RangeError(`Préréglage hélicoïdal invalide : ${e.message}`);
+      // Message de zod (JSON des issues) repris tel quel : détail technique.
+      throw new MessageRangeError(msg("project.helical.invalid", { detail: e.message }), {
+        cause: e,
+      });
     }
     throw e;
   }
   const spec = project.stair.layout;
   if (spec.kind !== "helical") {
-    throw new RangeError(
-      "Le préréglage hélicoïdal n'accepte pas de tracé à volées dans « patch ».",
-    );
+    throw new MessageRangeError(msg("project.helical.flightsPatch"));
   }
 
   let n: number;
@@ -178,7 +180,7 @@ export function createHelicalProject(options: PresetOptions = {}): Project {
     n = resolveRiserCount(project);
     walklineRadius = computeLayout(project).helical!.walklineRadius;
   } catch (e) {
-    if (e instanceof LayoutError) throw new RangeError(e.message);
+    if (e instanceof LayoutError) throw new MessageRangeError(e.msg, { cause: e });
     throw e;
   }
   const rise = height / n;
@@ -237,7 +239,11 @@ export function createHelicalProject(options: PresetOptions = {}): Project {
     found ??= fallback;
     if (found === null) {
       throw new HelicalSweepError(
-        `Hélicoïdal : aucun nombre de marches par tour (≤ ${TREADS_PER_TURN_SEARCH_MAX}) ne donne à la fois une échappée de ${PRESET_HEADROOM_MIN} mm sous le tour supérieur, un module 2h + g dans les bornes du DTU et un giron d'au moins ${gMin} mm : augmenter le rayon extérieur ou régler le nombre de hauteurs.`,
+        msg("project.helical.noSweep", {
+          max: String(TREADS_PER_TURN_SEARCH_MAX),
+          headroom: String(PRESET_HEADROOM_MIN),
+          going: String(gMin),
+        }),
       );
     }
     sweep = { mode: "treadsPerTurn", count: found };
@@ -284,7 +290,7 @@ function lexLess(a: readonly number[], b: readonly number[]): boolean {
 }
 
 /** Aucun nombre de marches par tour ne satisfait les critères du préréglage hélicoïdal. */
-export class HelicalSweepError extends RangeError {
+export class HelicalSweepError extends MessageRangeError {
   override readonly name = "HelicalSweepError";
 }
 
@@ -292,7 +298,7 @@ export class HelicalSweepError extends RangeError {
 export interface HelicalPresetResult {
   readonly project: Project;
   /** Repli retenu (aucun N ne satisfait tous les critères) : message à afficher. */
-  readonly note?: string;
+  readonly note?: Message;
 }
 
 /**
@@ -350,7 +356,7 @@ export function createHelicalProjectWithFallback(options: PresetOptions = {}): H
     });
     return {
       project,
-      note: `${e.message} Repli : ${count} marches par tour (meilleur compromis parmi les rotations essayées) ; le contrôle de conception signale ce qui ne passe pas, à ajuster (rayon extérieur, nombre de hauteurs).`,
+      note: msg("project.helical.fallback", { reason: e.msg, count: String(count) }),
     };
   }
 }

@@ -17,6 +17,7 @@ import {
   type Project,
 } from "@blondel/core";
 import { createStore, type StoreApi } from "zustand/vanilla";
+import { trKey } from "../i18n/fr.js";
 import { presetProject } from "../lib/layoutKind.js";
 import type { AppearanceOverrides } from "../lib/appearance.js";
 import type { DisplayUnit } from "../lib/units.js";
@@ -393,7 +394,7 @@ export function createProjectStore(options: ProjectStoreOptions = {}): ProjectSt
             frameRequest: { project: s.project, seq: (s.frameRequest?.seq ?? 0) + 1 },
             notice: {
               kind: "info",
-              text: `Démo « ${DEMO_PRESET_LABELS[id]} » : ${DEMO_PRESET_DESCRIPTIONS[id]}`,
+              text: `Démo « ${trKey(DEMO_PRESET_LABELS[id])} » : ${trKey(DEMO_PRESET_DESCRIPTIONS[id])}`,
             },
           }));
         }

@@ -12,6 +12,7 @@
  * - poteau (`newel`) : carré de côté a centré sur le coin intérieur K du tournant (ou décalé
  *   vers le jour de δ, `offset`), côtés parallèles aux volées qu'il relie ; retrait = a/2 + δ.
  */
+import { msg } from "@blondel/i18n";
 import { cumulativeLengths } from "../geom2d/curve.js";
 import { projectOnCurve } from "../geom2d/intersect.js";
 import * as V from "../geom2d/vec.js";
@@ -92,19 +93,16 @@ export function stairGeometry(project: Project, layout: Layout): StairGeometry {
   // S / Z : le jour du second tournant est porté par C_e (`layout.ts`) ; les limons sont
   // reconstruits ici avec un seul côté de jour (C_e = mur à angle vif) : non pris en charge.
   if (turns.some((t, j) => j > 0 && t.direction !== turns[j - 1]!.direction)) {
-    throw new StructureError(
-      "Escalier en S / Z (tournants de sens opposés) : limons non pris en charge par cette structure (un seul côté de jour) ; seules les marches, contremarches et paliers sont générés.",
-    );
+    throw new StructureError(msg("structure.common.legs.oppositeTurns"));
   }
   if (segs.length !== spec.legs.length || segs.some((s) => s.kind !== "line")) {
-    throw new StructureError(
-      "Tracé inattendu : le bord extérieur doit compter un segment droit par volée.",
-    );
+    throw new StructureError(msg("structure.common.legs.unexpectedOuterEdge"));
   }
   const sign: 1 | -1 = layout.innerSide === "left" ? 1 : -1;
   const cum = cumulativeLengths(layout.outer);
   const legs: LegGeometry[] = segs.map((seg, i) => {
-    if (seg.kind !== "line") throw new StructureError("Segment de mur non droit.");
+    if (seg.kind !== "line")
+      throw new StructureError(msg("structure.common.legs.wallSegmentNotStraight"));
     const d = V.sub(seg.b, seg.a);
     const length = V.norm(d);
     const u = V.normalize(d);

@@ -23,6 +23,15 @@
  * Fonction pure du point de vue de l'appelant (aucune mémoïsation globale : `memo: false`),
  * appelable dans un Web Worker, annulable par `shouldStop`.
  */
+import {
+  DEFAULT_LOCALE,
+  dec,
+  msg,
+  translatorFor,
+  type Message,
+  type MessageKey,
+  type MessageParam,
+} from "@blondel/i18n";
 import { rotateCurve, translateCurve } from "../geom2d/curve.js";
 import { pointInPolygon } from "../geom2d/polygon.js";
 import * as V from "../geom2d/vec.js";
@@ -49,8 +58,8 @@ import { buildModel } from "../pipeline/build.js";
 import { DEFAULT_NEWEL, expectedNewel } from "../project/newel.js";
 import { applyStructureChoice } from "../project/structureChoice.js";
 import { HELICAL_DEFAULT_CORE_RADIUS, createHelicalProject } from "../project/presetHelical.js";
+import { errorMessageOf } from "../project/errors.js";
 import { PRESET_NOSING } from "../project/presets.js";
-import { fmt } from "../rules/check.js";
 import { SteppingError } from "../stepping/errors.js";
 import { placeNosings } from "../stepping/positions.js";
 import { computeRises } from "../stepping/rises.js";
@@ -96,6 +105,7 @@ import {
 } from "./shapes.js";
 import {
   REJECTION_LABELS,
+  TURN_POSITION_LABELS,
   TYPOLOGY_IDS,
   TYPOLOGY_LABELS,
   type AssistantInput,
@@ -116,41 +126,49 @@ interface ResolvedIntent {
   readonly params: Record<string, unknown>;
   readonly inner: Mm;
   readonly outer: Mm;
-  readonly note: string;
+  readonly note: Message;
 }
 
 /** Intention de structure résolue : plugin, paramètres et épaisseurs hors emprise utile. */
 export function resolveStructureIntent(
   intent: StructureIntent | undefined,
-): ResolvedIntent | { readonly error: string } {
+): ResolvedIntent | { readonly error: Message } {
   const kind = intent?.kind ?? "none";
   const params = { ...(intent?.params ?? {}) };
   let deducedInner = 0;
   let deducedOuter = 0;
-  let how = "aucune structure latérale";
+  let how: Message = msg("assistant.intent.how.none");
   if (kind !== "none") {
     const plugin = getStructure(kind);
-    if (!plugin) return { error: `Structure « ${kind} » inconnue : aucun plugin enregistré.` };
+    if (!plugin) return { error: msg("assistant.intent.unknownStructure", { kind }) };
+    const structure = msg(plugin.labelKey);
     const lateral = structureLateralThickness(kind, params);
     if (lateral && (lateral.inner > 0 || lateral.outer > 0)) {
       deducedInner = lateral.inner;
       deducedOuter = lateral.outer;
       how =
         lateral.inner === lateral.outer
-          ? `limons « ${plugin.label} » de ${fmt(lateral.inner, 0)} mm hors emprise utile`
-          : `limons « ${plugin.label} » hors emprise utile : ${fmt(lateral.inner, 0)} mm côté jour, ${fmt(lateral.outer, 0)} mm côté extérieur`;
+          ? msg("assistant.intent.how.symmetric", {
+              structure,
+              thickness: dec(lateral.inner, 0),
+            })
+          : msg("assistant.intent.how.asymmetric", {
+              structure,
+              inner: dec(lateral.inner, 0),
+              outer: dec(lateral.outer, 0),
+            });
     } else if (lateral) {
-      how = `« ${plugin.label} » : aucun limon hors emprise utile, 0 mm`;
+      how = msg("assistant.intent.how.noStringers", { structure });
     }
   }
   const inner = intent?.innerThickness ?? deducedInner;
   const outer = intent?.outerThickness ?? deducedOuter;
-  for (const [label, v] of [
-    ["côté jour", inner],
-    ["côté extérieur", outer],
+  for (const [key, v] of [
+    ["assistant.intent.invalidInner", inner],
+    ["assistant.intent.invalidOuter", outer],
   ] as const) {
     if (!(Number.isFinite(v) && v >= 0)) {
-      return { error: `Épaisseur hors emprise ${label} invalide (${v} mm).` };
+      return { error: msg(key, { value: String(v) }) };
     }
   }
   const explicit = intent?.innerThickness !== undefined || intent?.outerThickness !== undefined;
@@ -159,14 +177,19 @@ export function resolveStructureIntent(
     params,
     inner,
     outer,
-    note: `Intention de structure : ${kind === "none" ? "aucune" : kind} (${explicit ? "épaisseurs données" : how}) ; emprise hors tout = E + ${fmt(inner, 0)} mm côté jour + ${fmt(outer, 0)} mm côté extérieur.`,
+    note: msg("assistant.intent.note", {
+      kind: kind === "none" ? msg("assistant.intent.kindNone") : kind,
+      how: explicit ? msg("assistant.intent.how.given") : how,
+      inner: dec(inner, 0),
+      outer: dec(outer, 0),
+    }),
   };
 }
 
 /** Échec d'une variante à l'étage analytique. */
 interface Failure {
   readonly reason: RejectionReason;
-  readonly example: string;
+  readonly example: Message;
 }
 
 /** Variante préparée (tracé local, calages, emprise, ligne de pente). */
@@ -192,20 +215,42 @@ interface Survivor {
   readonly typology: TypologyId;
   readonly direction: "left" | "right" | null;
   readonly turnPosition: "bas" | "médian" | "haut" | null;
-  readonly label: string;
+  readonly label: Message;
   readonly preScore: number;
   readonly grossWidth: Mm;
-  readonly fit: string;
+  readonly fit: Message;
   readonly make: () => Project;
   /** Emprise hors tout d'un hélicoïdal (disque) pour le contrôle des murs. */
   readonly disc?: { readonly center: Vec2; readonly radius: Mm };
 }
 
-const dirLabel = (d: "left" | "right" | null): string =>
-  d === null ? "" : d === "left" ? " à gauche" : " à droite";
+/** Typologie et sens : « Quart tournant à gauche ». */
+const groupLabel = (t: TypologyId, d: "left" | "right" | null): Message => {
+  const typology = msg(TYPOLOGY_LABELS[t]);
+  if (d === null) return typology;
+  return msg(d === "left" ? "assistant.shape.left" : "assistant.shape.right", { typology });
+};
 
-const groupLabel = (t: TypologyId, d: "left" | "right" | null): string =>
-  `${TYPOLOGY_LABELS[t]}${dirLabel(d)}`;
+/** Forme d'un candidat : typologie, sens, position du tournant. */
+const shapeLabel = (
+  t: TypologyId,
+  d: "left" | "right" | null,
+  pos: "bas" | "médian" | "haut" | null,
+): Message =>
+  pos
+    ? msg("assistant.shape.withTurn", {
+        shape: groupLabel(t, d),
+        position: msg(TURN_POSITION_LABELS[pos]),
+      })
+    : groupLabel(t, d);
+
+/** Liste « a ; b ; c » (clé `{first} ; {rest}`) ou « a, b, c » de messages ; `null` si vide. */
+function joinMessages(parts: readonly Message[], key: MessageKey): Message | null {
+  return parts.reduceRight<Message | null>(
+    (rest, first) => (rest === null ? first : msg(key, { first, rest })),
+    null,
+  );
+}
 
 const now = (): number => (typeof performance !== "undefined" ? performance.now() : Date.now());
 
@@ -238,41 +283,63 @@ function definedOnly<T extends object>(o: T | undefined): Partial<T> {
   return Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined)) as Partial<T>;
 }
 
-/** Contrôle des réglages de l'appelant : message d'erreur français, ou `null`. */
-function invalidOptions(input: AssistantInput): string | null {
+/** Contrôle des réglages de l'appelant : message d'erreur, ou `null`. */
+function invalidOptions(input: AssistantInput): Message | null {
   const l = input.limits ?? {};
   const isInt = (v: number, min: number): boolean => Number.isInteger(v) && v >= min;
-  const checks: [string, unknown, (v: number) => boolean, string][] = [
-    ["limits.maxCandidates", l.maxCandidates, (v) => isInt(v, 0), "entier ≥ 0"],
-    ["limits.perGroupLimit", l.perGroupLimit, (v) => isInt(v, 1), "entier ≥ 1"],
-    ["limits.perShapeLimit", l.perShapeLimit, (v) => isInt(v, 1), "entier ≥ 1"],
+  const invalid = (name: string, value: unknown, expected: MessageKey): Message =>
+    msg("assistant.options.invalid", { name, value: String(value), expected: msg(expected) });
+  const checks: [string, unknown, (v: number) => boolean, MessageKey][] = [
+    ["limits.maxCandidates", l.maxCandidates, (v) => isInt(v, 0), "assistant.options.intGe0"],
+    ["limits.perGroupLimit", l.perGroupLimit, (v) => isInt(v, 1), "assistant.options.intGe1"],
+    ["limits.perShapeLimit", l.perShapeLimit, (v) => isInt(v, 1), "assistant.options.intGe1"],
     [
       "limits.headroomMarginTarget",
       l.headroomMarginTarget,
       (v) => Number.isFinite(v) && v >= 0,
-      "≥ 0 mm",
+      "assistant.options.geZeroMm",
     ],
-    ["limits.maxBuilds", l.maxBuilds, (v) => isInt(v, 0), "entier ≥ 0"],
-    ["limits.timeBudgetMs", l.timeBudgetMs, (v) => v >= 0, "≥ 0"],
-    ["limits.goingStep", l.goingStep, (v) => Number.isFinite(v) && v > 0, "> 0"],
-    ["limits.arrivalClearance", l.arrivalClearance, (v) => Number.isFinite(v) && v >= 0, "≥ 0 mm"],
-    ["preferences.width", input.preferences?.width, (v) => isInt(v, 1), "entier > 0 (mm)"],
+    ["limits.maxBuilds", l.maxBuilds, (v) => isInt(v, 0), "assistant.options.intGe0"],
+    ["limits.timeBudgetMs", l.timeBudgetMs, (v) => v >= 0, "assistant.options.geZero"],
+    [
+      "limits.goingStep",
+      l.goingStep,
+      (v) => Number.isFinite(v) && v > 0,
+      "assistant.options.gtZero",
+    ],
+    [
+      "limits.arrivalClearance",
+      l.arrivalClearance,
+      (v) => Number.isFinite(v) && v >= 0,
+      "assistant.options.geZeroMm",
+    ],
+    [
+      "preferences.width",
+      input.preferences?.width,
+      (v) => isInt(v, 1),
+      "assistant.options.positiveIntMm",
+    ],
   ];
   for (const [k, v] of Object.entries(input.weights ?? {})) {
-    checks.push([`weights.${k}`, v, (x) => Number.isFinite(x) && x >= 0, "fini et ≥ 0"]);
+    checks.push([
+      `weights.${k}`,
+      v,
+      (x) => Number.isFinite(x) && x >= 0,
+      "assistant.options.finiteGeZero",
+    ]);
   }
   for (const [name, value, ok, expected] of checks) {
     if (value === undefined) continue;
     if (typeof value !== "number" || Number.isNaN(value) || !ok(value)) {
-      return `${name} invalide (${String(value)}) : ${expected} attendu.`;
+      return invalid(name, value, expected);
     }
   }
   if (l.showAllVariants !== undefined && typeof l.showAllVariants !== "boolean") {
-    return `limits.showAllVariants invalide (${String(l.showAllVariants)}) : booléen attendu.`;
+    return invalid("limits.showAllVariants", l.showAllVariants, "assistant.options.boolean");
   }
   const d = input.preferences?.direction;
   if (d !== undefined && d !== "left" && d !== "right") {
-    return `preferences.direction invalide (${String(d)}) : « left » ou « right » attendu.`;
+    return invalid("preferences.direction", d, "assistant.options.leftOrRight");
   }
   return null;
 }
@@ -289,7 +356,10 @@ export function proposeDesigns(input: AssistantInput): AssistantResult {
   const weights: ScoreWeights = { ...DEFAULT_SCORE_WEIGHTS, ...definedOnly(input.weights) };
   const prefs = input.preferences ?? {};
   const stop = input.shouldStop ?? (() => false);
-  const diagnostics: string[] = [];
+  // Noms des projets proposés (texte enregistré dans le projet) : langue demandée, français par défaut.
+  const names = translatorFor(input.locale ?? DEFAULT_LOCALE);
+  const projectName = (label: Message): string => names.t(msg("assistant.projectName", { label }));
+  const diagnostics: Message[] = [];
   const tallies = new Map<string, RejectionTally>();
   let enumerated = 0;
   let built = 0;
@@ -307,7 +377,7 @@ export function proposeDesigns(input: AssistantInput): AssistantResult {
     typology: TypologyId,
     direction: "left" | "right" | null,
     reason: RejectionReason,
-    example: string,
+    example: Message,
     count = 1,
   ): void => {
     const key = `${typology}|${direction}|${reason}`;
@@ -323,17 +393,17 @@ export function proposeDesigns(input: AssistantInput): AssistantResult {
   // ------------------------------------------------------------ gabarit et intention
   const invalid = invalidOptions(input);
   if (invalid) {
-    diagnostics.push(`Aucune proposition : ${invalid}`);
+    diagnostics.push(msg("assistant.diag.none", { reason: invalid }));
     return finish([]);
   }
   const intent = resolveStructureIntent(prefs.structure);
   if ("error" in intent) {
-    diagnostics.push(`Aucune proposition : ${intent.error}`);
+    diagnostics.push(msg("assistant.diag.none", { reason: intent.error }));
     return finish([]);
   }
   const templateInput: ProjectInput = {
     schemaVersion: PROJECT_SCHEMA_VERSION,
-    name: "Proposition de l'assistant",
+    name: names.t("assistant.templateName"),
     site: input.site,
     stair: {
       placement: { origin: { x: 0, y: 0 }, rotation: 0 },
@@ -349,7 +419,10 @@ export function proposeDesigns(input: AssistantInput): AssistantResult {
     const issues = parsed.error.issues
       .map((i) => (i.path.length > 0 ? `${i.path.join(".")} : ${i.message}` : i.message))
       .join(" ; ");
-    diagnostics.push(`Aucune proposition : données du site invalides (${issues}).`);
+    // Messages de zod (sans carte d'erreurs) repris tels quels : détail technique.
+    diagnostics.push(
+      msg("assistant.diag.none", { reason: msg("assistant.diag.invalidSite", { issues }) }),
+    );
     return finish([]);
   }
   const template: Project = structuredClone(parsed.data);
@@ -380,22 +453,48 @@ export function proposeDesigns(input: AssistantInput): AssistantResult {
     const b = baseBounds;
     const ns = riserCountRange(site.floorToFloor, b);
     const parts = [
-      `n de ${ns[0]} à ${ns[ns.length - 1]} (h_max = ${fmt(b.riseMax.value, 0)} mm, ${b.riseMax.ruleId} ; h_min = ${fmt(b.riseMin.value, 0)} mm, ${b.riseMin.ruleId})`,
-      b.goingMin ? `g ≥ ${fmt(b.goingMin.value, 0)} mm (${b.goingMin.ruleId})` : null,
-      b.blondelMin && b.blondelMax
-        ? `2h + g entre ${b.blondelMin.value} et ${b.blondelMax.value} mm, visé ${b.blondelTarget} mm`
+      msg("assistant.bounds.risers", {
+        from: String(ns[0]),
+        to: String(ns[ns.length - 1]),
+        riseMax: dec(b.riseMax.value, 0),
+        riseMaxRule: b.riseMax.ruleId,
+        riseMin: dec(b.riseMin.value, 0),
+        riseMinRule: b.riseMin.ruleId,
+      }),
+      b.goingMin
+        ? msg("assistant.bounds.going", {
+            value: dec(b.goingMin.value, 0),
+            rule: b.goingMin.ruleId,
+          })
         : null,
-      b.widthMin ? `E ≥ ${fmt(b.widthMin.value, 0)} mm (${b.widthMin.ruleId})` : null,
+      b.blondelMin && b.blondelMax
+        ? msg("assistant.bounds.blondel", {
+            min: String(b.blondelMin.value),
+            max: String(b.blondelMax.value),
+            target: String(b.blondelTarget),
+          })
+        : null,
+      b.widthMin
+        ? msg("assistant.bounds.width", {
+            value: dec(b.widthMin.value, 0),
+            rule: b.widthMin.ruleId,
+          })
+        : null,
       b.headroomMin
-        ? `échappée ≥ ${fmt(b.headroomMin.value, 0)} mm (${b.headroomMin.ruleId})`
-        : "aucune échappée bloquante",
-    ].filter((s): s is string => s !== null);
-    diagnostics.push(`Bornes des règles actives : ${parts.join(" ; ")}.`);
+        ? msg("assistant.bounds.headroom", {
+            value: dec(b.headroomMin.value, 0),
+            rule: b.headroomMin.ruleId,
+          })
+        : msg("assistant.bounds.noHeadroom"),
+    ].filter((s): s is Message => s !== null);
+    diagnostics.push(
+      msg("assistant.diag.bounds", {
+        bounds: joinMessages(parts, "assistant.list.semicolon")!,
+      }),
+    );
   }
   if (!opening) {
-    diagnostics.push(
-      "Sans trémie : escaliers placés à l'origine du site, aucune contrainte d'échappée ni de calage.",
-    );
+    diagnostics.push(msg("assistant.diag.noOpening"));
   }
 
   const typologies = (prefs.typologies ?? TYPOLOGY_IDS).filter((t) => TYPOLOGY_IDS.includes(t));
@@ -422,9 +521,10 @@ export function proposeDesigns(input: AssistantInput): AssistantResult {
     readonly inner: InnerCorner;
     /** Rayon du jour en arc (0 : jour vif ou poteau). */
     readonly radius: Mm;
-    /** Suffixe d'identifiant et de libellé. */
+    /** Suffixe d'identifiant. */
     readonly tag: string;
-    readonly label: string;
+    /** Suffixe de libellé (« , jour en arc R … mm ») ou `""`. */
+    readonly label: MessageParam;
   }
   const baseJour: JourChoice = { inner, radius: 0, tag: "", label: "" };
   const joursFor = (typology: FlightsTypology): readonly JourChoice[] => {
@@ -434,7 +534,7 @@ export function proposeDesigns(input: AssistantInput): AssistantResult {
       inner: { kind: "arc", radius: arcRadius },
       radius: arcRadius,
       tag: `-arc${arcRadius}`,
-      label: `, jour en arc R ${arcRadius} mm`,
+      label: msg("assistant.candidate.arcJour", { radius: String(arcRadius) }),
     };
     return debillarde ? [arc] : [baseJour, arc];
   };
@@ -483,21 +583,27 @@ export function proposeDesigns(input: AssistantInput): AssistantResult {
     return out;
   };
 
-  /** Explication « trémie trop petite » quand aucune typologie ne passe. */
-  const openingAdvice = (poly: Polygon2, all: readonly RejectionTally[]): string => {
+  /** Explication « trémie trop petite » quand aucune typologie ne passe (`null` : aucune). */
+  const openingAdvice = (poly: Polygon2, all: readonly RejectionTally[]): Message | null => {
     let longest = 0;
     for (let i = 0; i < poly.length; i++) {
       longest = Math.max(longest, V.distance(poly[i]!, poly[(i + 1) % poly.length]!));
     }
     const flights = all.filter((r) => r.typology !== "helical");
     const w = prefs.width ?? baseBounds.widthMin?.value ?? 0;
-    const wSource =
+    const wSource: MessageParam =
       prefs.width !== undefined
-        ? "emmarchement demandé"
-        : (baseBounds.widthMin?.ruleId ?? "aucune règle");
+        ? msg("assistant.advice.requestedWidth")
+        : (baseBounds.widthMin?.ruleId ?? msg("assistant.advice.noRule"));
     const structure = intent.inner + intent.outer;
     if (flights.length > 0 && flights.every((r) => r.reason === "placement")) {
-      return ` La trémie est trop petite : l'arrivée demande au moins ${fmt(w + structure, 0)} mm de largeur hors tout (E ≥ ${fmt(w, 0)} mm, ${wSource}, plus ${fmt(structure, 0)} mm de structure) sur un côté de trémie, plus grand côté ${fmt(longest, 0)} mm.`;
+      return msg("assistant.advice.openingTooSmall", {
+        gross: dec(w + structure, 0),
+        width: dec(w, 0),
+        source: wSource,
+        structure: dec(structure, 0),
+        longest: dec(longest, 0),
+      });
     }
     // La trémie n'est en cause que si toutes les éliminations sont géométriques : sinon la
     // structure visée ou le contrôle de conception écartent des variantes qui y tiennent.
@@ -510,10 +616,10 @@ export function proposeDesigns(input: AssistantInput): AssistantResult {
       "slab",
     ];
     if (flights.some((r) => !geometric.includes(r.reason))) {
-      return " Des variantes tiennent dans la trémie mais sont écartées par la structure visée ou par le contrôle de conception : voir le détail par typologie ci-dessous.";
+      return msg("assistant.advice.rejectedByStructure");
     }
     const head = baseBounds.headroomMin;
-    if (!head || !flights.some((r) => r.reason === "headroom")) return "";
+    if (!head || !flights.some((r) => r.reason === "headroom")) return null;
     // Longueur de trémie d'une volée droite (TREMIE_LONGUEUR : (e + ep)·g/h), au mieux sur n.
     let best: { length: number; n: number; g: number } | null = null;
     for (const n of riserCountRange(site.floorToFloor, baseBounds)) {
@@ -523,20 +629,27 @@ export function proposeDesigns(input: AssistantInput): AssistantResult {
       const length = ((head.value + site.upperSlabThickness) * r.lo) / h;
       if (best === null || length < best.length) best = { length, n, g: r.lo };
     }
-    if (!best) return "";
+    if (!best) return null;
     // Côté assez long pour une volée droite : ce n'est pas la taille de la trémie qui manque
     // (murs, calage, forme) — ne pas l'affirmer.
     if (best.length <= longest + tol) {
-      return " Aucun calage sur la trémie ne passe à la fois l'échappée et les murs : voir le détail par typologie ci-dessous.";
+      return msg("assistant.advice.noFit");
     }
-    return ` La trémie est trop petite pour l'échappée : une volée droite demande une trémie d'au moins ${fmt(best.length, 0)} mm de long (TREMIE_LONGUEUR, (e + ep)·g/h avec e = ${fmt(head.value, 0)} mm, ep = ${fmt(site.upperSlabThickness, 0)} mm, n = ${best.n}, g = ${fmt(best.g, 0)} mm) ; les tournants la réduisent sans suffire ici (plus grand côté ${fmt(longest, 0)} mm).`;
+    return msg("assistant.advice.headroom", {
+      length: dec(best.length, 0),
+      e: dec(head.value, 0),
+      ep: dec(site.upperSlabThickness, 0),
+      n: String(best.n),
+      g: dec(best.g, 0),
+      longest: dec(longest, 0),
+    });
   };
 
   const survivors: Survivor[] = [];
   const noOpeningPlacement: Placement = {
     origin: { x: 0, y: 0 },
     rotation: 0,
-    fit: "placé à l'origine (sans trémie)",
+    fit: msg("assistant.fit.origin"),
     key: "origin",
   };
 
@@ -552,7 +665,7 @@ export function proposeDesigns(input: AssistantInput): AssistantResult {
     0,
   );
   const enumerationDeadline = t0 + limits.timeBudgetMs * ASSISTANT_DEFAULTS.enumerationShare;
-  const partialGroups: string[] = [];
+  const partialGroups: Message[] = [];
   let groupsLeft = groupCount;
   enumeration: for (const typology of flightTypologies) {
     const dirs = typology === "straight" ? [null] : directions;
@@ -576,7 +689,7 @@ export function proposeDesigns(input: AssistantInput): AssistantResult {
               typology,
               direction,
               "bounds",
-              `n = ${n} (h = ${fmt(rise)} mm) : aucun giron entre le minimum et le module maximal.`,
+              msg("assistant.reject.noGoing", { n: String(n), rise: dec(rise) }),
             );
             continue;
           }
@@ -588,7 +701,12 @@ export function proposeDesigns(input: AssistantInput): AssistantResult {
               df = walklineOffsetFor(template, width);
             } catch (e) {
               if (!(e instanceof LayoutError)) throw e;
-              reject(typology, direction, "layout", `E = ${width} mm : ${e.message}`);
+              reject(
+                typology,
+                direction,
+                "layout",
+                msg("assistant.reject.layoutWidth", { width: String(width), detail: e.msg }),
+              );
               continue;
             }
             const clearance = limits.arrivalClearance ?? width;
@@ -600,7 +718,12 @@ export function proposeDesigns(input: AssistantInput): AssistantResult {
               }
               if (now() > groupDeadline) {
                 truncated = true;
-                partialGroups.push(`${groupLabel(typology, direction)}${jour.label}`);
+                partialGroups.push(
+                  msg("assistant.groupWithJour", {
+                    group: groupLabel(typology, direction),
+                    jour: jour.label,
+                  }),
+                );
                 break group;
               }
               const shape: FlightsShape = {
@@ -627,7 +750,11 @@ export function proposeDesigns(input: AssistantInput): AssistantResult {
                   if (e instanceof LayoutError || e instanceof SteppingError) {
                     return {
                       reason: "layout",
-                      example: `n = ${n}, E = ${width} mm : ${e.message}`,
+                      example: msg("assistant.reject.layout", {
+                        n: String(n),
+                        width: String(width),
+                        detail: e.msg,
+                      }),
                     };
                   }
                   throw e;
@@ -642,8 +769,12 @@ export function proposeDesigns(input: AssistantInput): AssistantResult {
                     return {
                       reason: "placement",
                       example: m
-                        ? `E = ${width} mm : largeur hors tout ${fmt(m.needed, 0)} mm pour ${fmt(m.available, 0)} mm au plus long côté de la trémie.`
-                        : `E = ${width} mm : aucun côté de trémie exploitable.`,
+                        ? msg("assistant.reject.misfit", {
+                            width: String(width),
+                            needed: dec(m.needed, 0),
+                            available: dec(m.available, 0),
+                          })
+                        : msg("assistant.reject.noEdge", { width: String(width) }),
                     };
                   }
                 }
@@ -675,7 +806,10 @@ export function proposeDesigns(input: AssistantInput): AssistantResult {
                 if (wall) {
                   return {
                     reason: "walls",
-                    example: `n = ${n}, g = ${going} mm, E = ${width} mm, ${pl.fit} : l'emprise hors tout heurte le mur ${wall.id}.`,
+                    example: msg("assistant.reject.wall", {
+                      variant: variantText(n, going, width, pl.fit),
+                      wall: wall.id,
+                    }),
                   };
                 }
                 const exit = wallCollision(
@@ -686,7 +820,11 @@ export function proposeDesigns(input: AssistantInput): AssistantResult {
                 if (exit) {
                   return {
                     reason: "walls",
-                    example: `n = ${n}, g = ${going} mm, E = ${width} mm, ${pl.fit} : l'arrivée débouche sur le mur ${exit.id} (dégagement de ${fmt(clearance, 0)} mm exigé).`,
+                    example: msg("assistant.reject.exitWall", {
+                      variant: variantText(n, going, width, pl.fit),
+                      wall: exit.id,
+                      clearance: dec(clearance, 0),
+                    }),
                   };
                 }
                 if (!opening || !bounds.headroomMin) return { headroom: null };
@@ -703,7 +841,12 @@ export function proposeDesigns(input: AssistantInput): AssistantResult {
                 if (hr && hr.min < bounds.headroomMin.value - 1e-6) {
                   return {
                     reason: "headroom",
-                    example: `n = ${n}, g = ${going} mm, E = ${width} mm, ${pl.fit} : échappée ${fmt(hr.min, 0)} mm < ${fmt(bounds.headroomMin.value, 0)} mm (${bounds.headroomMin.ruleId}).`,
+                    example: msg("assistant.reject.headroom", {
+                      variant: variantText(n, going, width, pl.fit),
+                      headroom: dec(hr.min, 0),
+                      min: dec(bounds.headroomMin.value, 0),
+                      rule: bounds.headroomMin.ruleId,
+                    }),
                   };
                 }
                 return { headroom: hr?.min ?? null };
@@ -750,7 +893,14 @@ export function proposeDesigns(input: AssistantInput): AssistantResult {
                       : 0);
                   const placement = { origin: pl.origin, rotation: pl.rotation };
                   const spec = st.spec;
-                  const label = `${TYPOLOGY_LABELS[typology]}${dirLabel(direction)}${pos ? ` (tournant ${pos})` : ""} — ${n} hauteurs de ${fmt(rise)} mm, giron ${going} mm, E ${width} mm${jour.label}`;
+                  const label = msg("assistant.candidate.flights", {
+                    shape: shapeLabel(typology, direction, pos),
+                    n: String(n),
+                    rise: dec(rise),
+                    going: String(going),
+                    width: String(width),
+                    jour: jour.label,
+                  });
                   const signature = `${typology}-${direction ?? "none"}${jour.tag}-a${a}-n${n}-E${width}-g${going}`;
                   survivors.push({
                     id: `${signature}-${pl.key}`,
@@ -768,7 +918,7 @@ export function proposeDesigns(input: AssistantInput): AssistantResult {
                     make: () =>
                       finalize({
                         ...withLayout(template, spec, n, placement),
-                        name: `Assistant — ${label}`,
+                        name: projectName(label),
                       }),
                   });
                 }
@@ -789,12 +939,12 @@ export function proposeDesigns(input: AssistantInput): AssistantResult {
           "helical",
           direction,
           "structure",
-          `La structure « ${intent.kind} » ne s'applique pas à un hélicoïdal (plugin « helical-core » ou aucune).`,
+          msg("assistant.reject.helicalStructure", { kind: intent.kind }),
         );
         continue;
       }
       if (!opening) {
-        reject("helical", direction, "placement", "Hélicoïdal : trémie nécessaire au calage.");
+        reject("helical", direction, "placement", msg("assistant.reject.helicalNoOpening"));
         continue;
       }
       const circle = inscribedCircle(opening);
@@ -807,7 +957,18 @@ export function proposeDesigns(input: AssistantInput): AssistantResult {
           "helical",
           direction,
           "placement",
-          `Hélicoïdal : rayon inscrit dans la trémie ${fmt(circle.radius, 0)} mm, emmarchement possible ${fmt(Math.max(0, width), 0)} mm < ${fmt(wMin, 0)} mm${bounds.widthMin ? ` (${bounds.widthMin.ruleId})` : ""}.`,
+          bounds.widthMin
+            ? msg("assistant.reject.helicalTooSmallRule", {
+                radius: dec(circle.radius, 0),
+                width: dec(Math.max(0, width), 0),
+                min: dec(wMin, 0),
+                rule: bounds.widthMin.ruleId,
+              })
+            : msg("assistant.reject.helicalTooSmall", {
+                radius: dec(circle.radius, 0),
+                width: dec(Math.max(0, width), 0),
+                min: dec(wMin, 0),
+              }),
         );
         continue;
       }
@@ -839,13 +1000,24 @@ export function proposeDesigns(input: AssistantInput): AssistantResult {
           });
         } catch (e) {
           if (e instanceof RangeError) {
-            reject("helical", direction, "layout", `n = ${n} : ${e.message}`);
+            reject(
+              "helical",
+              direction,
+              "layout",
+              msg("assistant.reject.helicalLayout", { n: String(n), detail: errorMessageOf(e) }),
+            );
             continue;
           }
           throw e;
         }
-        const label = `${TYPOLOGY_LABELS.helical}${dirLabel(direction)} — ${n} hauteurs de ${fmt(site.floorToFloor / n)} mm, R ${outerRadius} mm, E ${width} mm`;
-        const named = { ...project, name: `Assistant — ${label}` };
+        const label = msg("assistant.candidate.helical", {
+          shape: groupLabel("helical", direction),
+          n: String(n),
+          rise: dec(site.floorToFloor / n),
+          radius: String(outerRadius),
+          width: String(width),
+        });
+        const named = { ...project, name: projectName(label) };
         survivors.push({
           id: `helical-${direction}-n${n}-R${outerRadius}`,
           signature: `helical-${direction}-n${n}-R${outerRadius}`,
@@ -856,7 +1028,7 @@ export function proposeDesigns(input: AssistantInput): AssistantResult {
           label,
           preScore: 0,
           grossWidth: width + intent.inner + intent.outer,
-          fit: `axe au centre de la trémie (rayon inscrit ${fmt(circle.radius, 0)} mm)`,
+          fit: msg("assistant.fit.helical", { radius: dec(circle.radius, 0) }),
           make: () => named,
           disc: { center: circle.center, radius: outerRadius + intent.outer },
         });
@@ -916,7 +1088,10 @@ export function proposeDesigns(input: AssistantInput): AssistantResult {
           s.typology,
           s.direction,
           "generation",
-          `${s.label} : projet invalide (${valid.error.issues[0]?.message ?? "?"}).`,
+          msg("assistant.reject.invalidProject", {
+            label: s.label,
+            detail: valid.error.issues[0]?.message ?? "?",
+          }),
         );
         continue;
       }
@@ -924,7 +1099,12 @@ export function proposeDesigns(input: AssistantInput): AssistantResult {
       built++;
       const model = buildModel(project, { memo: false });
       if (model.errors.length > 0) {
-        reject(s.typology, s.direction, "generation", `${s.label} : ${model.errors[0]}`);
+        reject(
+          s.typology,
+          s.direction,
+          "generation",
+          msg("assistant.reject.modelError", { label: s.label, detail: model.errors[0]! }),
+        );
         continue;
       }
       const blocking = model.compliance.results.filter(
@@ -936,7 +1116,15 @@ export function proposeDesigns(input: AssistantInput): AssistantResult {
           s.typology,
           s.direction,
           onlyHeadroom ? "headroom" : "blocking",
-          `${s.label} : ${blocking.map((r) => `${r.ruleId} (${r.message})`).join(" ; ")}`,
+          msg("assistant.reject.blocking", {
+            label: s.label,
+            rules: joinMessages(
+              blocking.map((r) =>
+                msg("assistant.reject.blockingRule", { rule: r.ruleId, message: r.message }),
+              ),
+              "assistant.list.semicolon",
+            )!,
+          }),
         );
         continue;
       }
@@ -947,7 +1135,11 @@ export function proposeDesigns(input: AssistantInput): AssistantResult {
             s.typology,
             s.direction,
             "slab",
-            `${s.label} : la marche ${t} dépasse la sous-face de la dalle (${fmt(ceiling, 0)} mm) hors trémie.`,
+            msg("assistant.reject.slab", {
+              label: s.label,
+              tread: String(t),
+              ceiling: dec(ceiling, 0),
+            }),
           );
           continue;
         }
@@ -958,7 +1150,12 @@ export function proposeDesigns(input: AssistantInput): AssistantResult {
           discOverlap(disc.center, disc.radius, wallPolygon(w), tol),
         );
         if (wall) {
-          reject(s.typology, s.direction, "walls", `${s.label} : heurte le mur ${wall.id}.`);
+          reject(
+            s.typology,
+            s.direction,
+            "walls",
+            msg("assistant.reject.helicalWall", { label: s.label, wall: wall.id }),
+          );
           continue;
         }
       }
@@ -988,7 +1185,13 @@ export function proposeDesigns(input: AssistantInput): AssistantResult {
     const rest = list.length - (cursor.get(g) ?? 0);
     if (rest > 0 && !done && (truncated || stopped)) {
       const s = list[0]!;
-      reject(s.typology, s.direction, "budget", `${rest} variante(s) non construite(s).`, rest);
+      reject(
+        s.typology,
+        s.direction,
+        "budget",
+        msg("assistant.reject.budget", { count: dec(rest, 0) }),
+        rest,
+      );
     }
   }
 
@@ -1015,40 +1218,62 @@ export function proposeDesigns(input: AssistantInput): AssistantResult {
       .sort((x, y) => rank(x) - rank(y) || y.count - x.count);
     const name = groupLabel(t, direction);
     if (count > 0) {
-      diagnostics.push(`${name} : ${count} proposition(s) sans bloquant.`);
+      diagnostics.push(msg("assistant.diag.groupAccepted", { group: name, count: dec(count, 0) }));
     } else if (reasons.length > 0) {
       const main = reasons[0]!;
       diagnostics.push(
-        `${name} : rejeté — ${REJECTION_LABELS[main.reason]} (${main.count} variante(s) ; ex. ${main.example})`,
+        msg("assistant.diag.groupRejected", {
+          group: name,
+          reason: msg(REJECTION_LABELS[main.reason]),
+          count: dec(main.count, 0),
+          example: main.example,
+        }),
       );
     } else {
-      diagnostics.push(`${name} : aucune variante retenue.`);
+      diagnostics.push(msg("assistant.diag.groupNone", { group: name }));
     }
   }
   if (candidates.length === 0 && accepted.length > 0) {
     // Liste vide par réglage (`maxCandidates = 0`), pas faute de solution (QUESTIONS D1).
     diagnostics.unshift(
-      `Liste vide : ${accepted.length} proposition(s) sans bloquant trouvée(s) mais non affichée(s) (nombre maximal de propositions réglé à ${limits.maxCandidates}).`,
+      msg("assistant.diag.hidden", {
+        count: dec(accepted.length, 0),
+        max: String(limits.maxCandidates),
+      }),
     );
   } else if (candidates.length === 0) {
+    const advice =
+      opening && !stopped && !truncated ? openingAdvice(opening, [...tallies.values()]) : null;
     diagnostics.unshift(
-      `Aucune proposition sans bloquant pour ce site.${
-        opening && !stopped && !truncated ? openingAdvice(opening, [...tallies.values()]) : ""
-      }`,
+      advice
+        ? msg("assistant.diag.noCandidateAdvice", { advice })
+        : msg("assistant.diag.noCandidate"),
     );
   }
-  if (stopped) diagnostics.push("Recherche interrompue : résultat partiel.");
+  if (stopped) diagnostics.push(msg("assistant.diag.stopped"));
   else if (truncated) {
     if (partialGroups.length > 0) {
       diagnostics.push(
-        `Budget de temps de l'énumération atteint : exploration partielle de ${partialGroups.join(", ")}.`,
+        msg("assistant.diag.enumerationBudget", {
+          groups: joinMessages(partialGroups, "assistant.list.comma")!,
+        }),
       );
     }
     diagnostics.push(
-      `Budget atteint (${built} modèles construits, ${fmt(now() - t0, 0)} ms) : variantes restantes non évaluées.`,
+      msg("assistant.diag.budget", { built: String(built), elapsed: dec(now() - t0, 0) }),
     );
   }
   return finish(candidates);
+}
+
+/** Début d'un exemple d'élimination : « n = 15, g = 250 mm, E = 800 mm, <calage> ». */
+function variantText(n: number, going: number, width: number, fit: Message): Message {
+  return msg("assistant.reject.variant", {
+    n: String(n),
+    going: String(going),
+    width: String(width),
+    fit,
+  });
 }
 
 /** Contextes de forme ajoutés pour les bornes d'une typologie. */

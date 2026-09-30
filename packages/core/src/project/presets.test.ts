@@ -1,5 +1,7 @@
 import fc from "fast-check";
+import { msg, translatorFor } from "@blondel/i18n";
 import { describe, expect, it } from "vitest";
+import { fr, frList } from "../i18n.test-helpers.js";
 import { bbox } from "../geom2d/polygon.js";
 import {
   ceilingOf,
@@ -350,7 +352,12 @@ describe("createProject — deux quarts de sens opposés (S / Z)", () => {
   it("S par défaut (gauche puis droite), Z avec `direction: right`, libellé", () => {
     const s = createProject("two-quarters-s");
     expect(s.stair.layout.turns.map((t) => t.direction)).toEqual(["left", "right"]);
-    expect(PRESET_LABELS["two-quarters-s"]).toMatch(/\(S\)/);
+    expect(fr(msg(PRESET_LABELS["two-quarters-s"]))).toMatch(/\(S\)/);
+    expect(s.name).toBe("Deux quarts tournants opposés (S)");
+    expect(translatorFor("en").t(PRESET_LABELS["two-quarters-s"])).toBe(
+      "Two opposite quarter-turns (S)",
+    );
+    expect(createProject("two-quarters-s", { name: "Chantier" }).name).toBe("Chantier");
     const z = createProject("two-quarters-s", { direction: "right" });
     expect(z.stair.layout.turns.map((t) => t.direction)).toEqual(["right", "left"]);
     expect(z.stair.layout.legs).toEqual(s.stair.layout.legs);
@@ -361,7 +368,7 @@ describe("createProject — deux quarts de sens opposés (S / Z)", () => {
     for (let H = 2500; H <= 2900; H += 25) {
       const p = createProject("two-quarters-s", { floorToFloor: H });
       const st = computeStepping(p, computeLayout(p));
-      const ctx = `H = ${H}\n${st.notes.join("\n")}`;
+      const ctx = `H = ${H}\n${frList(st.notes).join("\n")}`;
       expect(
         st.balancedZones.map((z) => z.turn),
         ctx,
@@ -370,7 +377,7 @@ describe("createProject — deux quarts de sens opposés (S / Z)", () => {
         getRule("G_COLLET_MIN").min!,
       );
       expect(
-        st.notes.filter((n) => /^K[35] :/.test(n)),
+        frList(st.notes).filter((n) => /^K[35] :/.test(n)),
         ctx,
       ).toEqual([]);
     }

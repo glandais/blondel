@@ -23,6 +23,7 @@
  * crémaillère ≤ celle de l'exemple (2,70 m / tan 38°) : moment de flexion d'une poutre
  * rampante ∝ portée horizontale², donc exemple du côté de la sécurité.
  */
+import { dec, msg, textMessage, type Message } from "@blondel/i18n";
 import { z } from "zod";
 import { intersectLines } from "../geom2d/intersect.js";
 import { ensureCCW } from "../geom2d/polygon.js";
@@ -30,7 +31,6 @@ import * as V from "../geom2d/vec.js";
 import type { FlatPattern, NosingLine, Part } from "../model/derived.js";
 import type { Mm, Polygon2, Vec2 } from "../model/primitives.js";
 import type { StructureContext, StructureKind, StructureOutput } from "../model/plugins.js";
-import { fmt } from "../rules/check.js";
 import {
   WOOD_MATERIALS,
   resolveWorkshopProfile,
@@ -97,7 +97,7 @@ export interface CutResult {
   readonly carriages: readonly CarriageDetail[];
   readonly residual: Mm;
   /** Raison pour laquelle le tableau FCBA n'est pas exploitable (absent : exploitable). */
-  readonly fcbaUnusable?: string;
+  readonly fcbaUnusable?: Message;
 }
 
 /** Point de la ligne de nez décalée de d vers le haut qui coupe la droite (a, dir). */
@@ -114,7 +114,7 @@ function crossing(nosing: NosingLine, climb: Vec2, d: Mm, a: Vec2, dir: Vec2): M
 export function buildWoodCut(ctx: StructureContext, params: WoodCutParams): CutResult {
   const { project, layout, stepping } = ctx;
   const profile = resolveWorkshopProfile(project.workshop);
-  const notes: string[] = [];
+  const notes: Message[] = [];
   const nosings = stepping.nosings;
   const n = nosings.length;
   const e = params.thickness;
@@ -122,7 +122,7 @@ export function buildWoodCut(ctx: StructureContext, params: WoodCutParams): CutR
   const table = fcbaTable();
   const cls = params.strengthClass === "auto" ? AUTO_CLASS[params.material] : params.strengthClass;
 
-  const helical = flightsOnlyError("wood-cut", "crémaillères", layout);
+  const helical = flightsOnlyError("wood-cut", msg("structure.woodCut.shortLabel"), layout);
   if (helical) {
     return {
       output: { parts: [], checks: [], notes, errors: [helical] },
@@ -136,18 +136,21 @@ export function buildWoodCut(ctx: StructureContext, params: WoodCutParams): CutR
         parts: [],
         checks: [],
         notes,
-        errors: [
-          "Crémaillères (limon à l'anglaise) : escalier tournant non supporté au jalon 3a (escalier droit seulement).",
-        ],
+        errors: [msg("structure.woodCut.turningUnsupported")],
       },
       carriages: [],
       residual: Number.NaN,
-      fcbaUnusable: "escalier tournant",
+      fcbaUnusable: msg("structure.woodCut.fcba.turning"),
     };
   }
   if (n < 2) {
     return {
-      output: { parts: [], checks: [], notes, errors: ["Crémaillères : découpage vide."] },
+      output: {
+        parts: [],
+        checks: [],
+        notes,
+        errors: [msg("structure.woodCut.emptyStepping")],
+      },
       carriages: [],
       residual: Number.NaN,
     };
@@ -158,18 +161,28 @@ export function buildWoodCut(ctx: StructureContext, params: WoodCutParams): CutR
   const H = project.site.floorToFloor;
   const run = Math.abs(nosings[n - 1]!.s - nosings[0]!.s);
   const maxRun = table.floorToFloor / Math.tan((table.pitchDeg * Math.PI) / 180);
-  let fcbaUnusable: string | undefined;
+  let fcbaUnusable: Message | undefined;
   let required: number | null = null;
-  if (cls === "unknown")
-    fcbaUnusable = "classe de résistance inconnue (lamellé-collé ou non précisée)";
+  if (cls === "unknown") fcbaUnusable = msg("structure.woodCut.fcba.unknownClass");
   else {
     required = requiredResidual(table, cls, e);
     if (required === null)
-      fcbaUnusable = `épaisseur ${fmt(e, 0)} mm inférieure à la plus petite épaisseur du tableau (${cls})`;
+      fcbaUnusable = msg("structure.woodCut.fcba.belowSmallestThickness", {
+        thickness: dec(e, 0),
+        cls,
+      });
     else if (H > table.floorToFloor)
-      fcbaUnusable = `hauteur à monter ${fmt(H, 0)} mm > ${fmt(table.floorToFloor, 0)} mm (exemple FCBA)`;
+      fcbaUnusable = msg("structure.woodCut.fcba.totalRise", {
+        rise: dec(H, 0),
+        max: dec(table.floorToFloor, 0),
+      });
     else if (run > maxRun + 1e-6)
-      fcbaUnusable = `projection horizontale ${fmt(run, 0)} mm > ${fmt(maxRun, 0)} mm (exemple FCBA : ${fmt(table.floorToFloor, 0)} mm à ${fmt(table.pitchDeg, 0)}°)`;
+      fcbaUnusable = msg("structure.woodCut.fcba.run", {
+        run: dec(run, 0),
+        max: dec(maxRun, 0),
+        floorToFloor: dec(table.floorToFloor, 0),
+        pitch: dec(table.pitchDeg, 0),
+      });
   }
   const residual =
     params.residual !== "auto"
@@ -183,6 +196,8 @@ export function buildWoodCut(ctx: StructureContext, params: WoodCutParams): CutR
   const carriages: CarriageDetail[] = [];
   const stocks = new Map<string, ReturnType<typeof stockOf>>();
   for (const side of ["inner", "outer"] as const) {
+    const sideName =
+      side === "inner" ? msg("structure.woodCut.side.inner") : msg("structure.woodCut.side.outer");
     const edgeStart = side === "inner" ? leg.innerOrigin : leg.outerStart;
     const inward = side === "inner" ? leg.n : V.scale(leg.n, -1);
     const a = V.addScaled(edgeStart, inward, params.inset + e);
@@ -195,9 +210,7 @@ export function buildWoodCut(ctx: StructureContext, params: WoodCutParams): CutR
       us.push(u);
     }
     if (us.length !== n) {
-      notes.push(
-        `Crémaillère ${side === "inner" ? "côté jour" : "côté mur"} : lignes de nez parallèles à la crémaillère, non générée.`,
-      );
+      notes.push(msg("structure.woodCut.parallelNosings", { side: sideName }));
       continue;
     }
     const z = nosings.map((k) => k.z);
@@ -223,9 +236,7 @@ export function buildWoodCut(ctx: StructureContext, params: WoodCutParams): CutR
       removeCollinear(clipHalfPlane(ensureCCW(raw), V.vec(0, 0), V.vec(0, 1))),
     );
     if (outline.length < 3 || area(outline) <= 0) {
-      notes.push(
-        `Crémaillère ${side === "inner" ? "côté jour" : "côté mur"} : contour dégénéré, non générée.`,
-      );
+      notes.push(msg("structure.woodCut.degenerateOutline", { side: sideName }));
       continue;
     }
     const measured = Math.min(
@@ -244,28 +255,32 @@ export function buildWoodCut(ctx: StructureContext, params: WoodCutParams): CutR
     const flatOuter = mirrored ? outline.map(T).reverse() : outline.map(T);
     const id = side === "inner" ? "carriage-inner-1" : "carriage-outer-1";
     const mark = side === "inner" ? "CI1" : "CE1";
-    const sideName = side === "inner" ? "côté jour" : "côté mur";
     const lines: FlatPattern["lines"][number][] = [];
     if (notches.length >= 2) {
       lines.push({
         kind: "mark",
         a: T(notches[0]!),
         b: T(notches[notches.length - 1]!),
-        label: "Fond des entailles",
+        label: msg("structure.woodCut.flat.notchBottom"),
       });
     }
     const mid = (uMin + uMax) / 2;
     const yMid = Math.max(riveAt(mid), 0) + residual / 2;
     const la = T(V.vec(mid - 20, yMid));
     const lb = T(V.vec(mid + 20, yMid));
-    lines.push({ kind: "text", a: mirrored ? lb : la, b: mirrored ? la : lb, label: mark });
+    lines.push({
+      kind: "text",
+      a: mirrored ? lb : la,
+      b: mirrored ? la : lb,
+      label: textMessage(mark),
+    });
     const flat: FlatPattern = {
       outline: { outer: flatOuter, holes: [] },
       lines,
       thickness: e,
       reference: {
         kind: "face",
-        description: `Face intérieure de la crémaillère ${sideName} (côté milieu de l'escalier), vue depuis le milieu de l'escalier ; x horizontal le long de la crémaillère, y = altitude (sol fini bas = 0), mm, 1:1.`,
+        description: msg("structure.woodCut.flat.reference", { side: sideName }),
       },
     };
     const box = minAreaRect(outline);
@@ -279,7 +294,7 @@ export function buildWoodCut(ctx: StructureContext, params: WoodCutParams): CutR
       id,
       mark,
       category: "carriage",
-      name: `Crémaillère ${sideName}`,
+      name: msg("structure.woodCut.part.carriage", { side: sideName }),
       material: params.material,
       solid: {
         kind: "extrusion",
@@ -293,7 +308,10 @@ export function buildWoodCut(ctx: StructureContext, params: WoodCutParams): CutR
         depth: e,
       },
       flat,
-      section: `${fmt(e, 0)} × ${fmt(Math.ceil(box.width), 0)}`,
+      section: msg("structure.common.section.rect", {
+        thickness: dec(e, 0),
+        width: dec(Math.ceil(box.width), 0),
+      }),
       stock: st.stock,
       quantities: woodQuantities(
         { volumeMm3: devArea * e, surfaceMm2: devArea, length: box.length },
@@ -323,14 +341,20 @@ export function buildWoodCut(ctx: StructureContext, params: WoodCutParams): CutR
       checks.add(cremaillere, [
         {
           status: "non-evaluee",
-          message: `Tableau FCBA non exploitable : ${fcbaUnusable ?? "valeur absente"} ; justification par le calcul.`,
+          message: msg("structure.woodCut.check.fcbaUnusable", {
+            reason: fcbaUnusable ?? msg("structure.woodCut.fcba.missingValue"),
+          }),
         },
       ]);
     } else {
       checks.addItems(
         cremaillere,
-        carriages.map((c) => ({ value: c.residual, label: c.part.mark, ...loc(c.part) })),
-        `Reste sous entaille (${cls}, épaisseur ${fmt(e, 0)} mm)`,
+        carriages.map((c) => ({
+          value: c.residual,
+          label: textMessage(c.part.mark),
+          ...loc(c.part),
+        })),
+        msg("structure.woodCut.check.residual", { cls, thickness: dec(e, 0) }),
         { min: required, max: null },
       );
     }
@@ -339,12 +363,17 @@ export function buildWoodCut(ctx: StructureContext, params: WoodCutParams): CutR
   if (thicknessRule && carriages.length > 0) {
     const outside = stringerRulesOutOfDomain(thicknessRule, project.stair.layout.width);
     if (outside !== null) {
-      checks.add(thicknessRule, [{ status: "non-evaluee", message: `${outside}.` }]);
+      checks.add(thicknessRule, [
+        {
+          status: "non-evaluee",
+          message: msg("structure.woodCut.check.outOfDomain", { detail: outside }),
+        },
+      ]);
     } else {
       checks.addItems(
         thicknessRule,
-        carriages.map((c) => ({ value: e, label: c.part.mark, ...loc(c.part) })),
-        "Épaisseur de crémaillère",
+        carriages.map((c) => ({ value: e, label: textMessage(c.part.mark), ...loc(c.part) })),
+        msg("structure.woodCut.check.thickness"),
         { min: thicknessRule.min, max: thicknessRule.max },
       );
     }
@@ -352,8 +381,12 @@ export function buildWoodCut(ctx: StructureContext, params: WoodCutParams): CutR
   if (carriages.length > 0) {
     checks.addItems(
       pluginRuleDef(FAB_RULES.boardLength),
-      carriages.map((c) => ({ value: c.part.stock!.length, label: c.part.mark, ...loc(c.part) })),
-      "Longueur de débit",
+      carriages.map((c) => ({
+        value: c.part.stock!.length,
+        label: textMessage(c.part.mark),
+        ...loc(c.part),
+      })),
+      msg("structure.common.check.boardLength"),
       { min: null, max: profile.wood.maxBoardLength },
     );
     checks.add(
@@ -366,20 +399,29 @@ export function buildWoodCut(ctx: StructureContext, params: WoodCutParams): CutR
           measured: st.need.w,
           location: { kind: "part" as const, partId: c.part.id },
           message: ok
-            ? `${c.part.mark} : débit brut ${fmt(st.stock.width, 0)} × ${fmt(st.stock.thickness, 0)} mm disponible.`
-            : `${c.part.mark} : débit brut nécessaire ${fmt(st.need.w, 0)} × ${fmt(st.need.t, 0)} mm indisponible dans le profil d'atelier.`,
+            ? msg("structure.common.check.stockAvailable", {
+                mark: c.part.mark,
+                width: dec(st.stock.width, 0),
+                thickness: dec(st.stock.thickness, 0),
+              })
+            : msg("structure.woodCut.check.stockMissing", {
+                mark: c.part.mark,
+                width: dec(st.need.w, 0),
+                thickness: dec(st.need.t, 0),
+              }),
         };
       }),
     );
   }
   notes.push(
-    `Crémaillères : reste sous entaille ${fmt(residual, 0)} mm (${
-      params.residual !== "auto"
-        ? "saisi"
-        : fcbaUnusable === undefined
-          ? `tableau FCBA, ${cls}`
-          : `valeur de repli à valider — tableau FCBA non exploitable : ${fcbaUnusable}`
-    }).`,
+    params.residual !== "auto"
+      ? msg("structure.woodCut.summary.entered", { residual: dec(residual, 0) })
+      : fcbaUnusable === undefined
+        ? msg("structure.woodCut.summary.fcba", { residual: dec(residual, 0), cls })
+        : msg("structure.woodCut.summary.fallback", {
+            residual: dec(residual, 0),
+            reason: fcbaUnusable,
+          }),
   );
 
   return {
@@ -392,7 +434,7 @@ export function buildWoodCut(ctx: StructureContext, params: WoodCutParams): CutR
 
 export const WOOD_CUT: StructureKind<WoodCutParams> = {
   kind: "wood-cut",
-  label: "Limons bois à l'anglaise (crémaillères)",
+  labelKey: "structure.woodCut.label",
   family: "bois",
   paramsSchema: WoodCutParamsSchema,
   defaults: (_ctx: StructureContext) => WoodCutParamsSchema.parse({}),

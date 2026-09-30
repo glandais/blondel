@@ -2,19 +2,22 @@
  * Résultats du prédimensionnement en `RuleResult` (contrôle de conception). Chaque ligne porte
  * le libellé « prédimensionnement indicatif, ne remplace pas une note de calcul » (CHALLENGE P5).
  */
+import { dec, msg, type Message } from "@blondel/i18n";
 import type { Location, RuleResult, Stepping } from "../model/derived.js";
 import type { Project } from "../model/project.js";
-import { fmt } from "../rules/check.js";
 import type { Finding } from "../rules/types.js";
 import { CheckCollector, pluginRuleDef, type PluginRuleSpec } from "../structures/checks.js";
 import { PRECHECK_LIMITS, type InclinedBeamResult } from "./beam.js";
 
-export const PRECHECK_LABEL = "Prédimensionnement indicatif, ne remplace pas une note de calcul";
+/**
+ * Libellé de tout résultat du prédimensionnement. Les descriptions des règles
+ * (`rules.PRECHECK_*.description`) commencent par ce même texte.
+ */
+export const PRECHECK_LABEL: Message = msg("precheck.label");
 
 export const PRECHECK_RULES = {
   deflection: {
     id: "PRECHECK_FLECHE",
-    description: `${PRECHECK_LABEL} : flèche du limon (poutre inclinée sur deux appuis) ≤ L/200, combinaisons w_G + w_q et w_G + w_Q`,
     source:
       "NF EN 16481 § 6.2 via docs/research/C-structures.md §1.3 et C-B-05 [3] ; SPEC X17 (L/200 bloquant si calcul) ; modèle de poutre Blondel",
     confidence: "moyen",
@@ -24,7 +27,6 @@ export const PRECHECK_RULES = {
   },
   deflectionAdvice: {
     id: "PRECHECK_FLECHE_CONSEIL",
-    description: `${PRECHECK_LABEL} : flèche du limon ≤ L/300 (usage résidentiel)`,
     source: "docs/research/C-structures.md §1.3 [52] (usage, confiance faible) ; SPEC X17",
     confidence: "faible",
     nature: "metier",
@@ -33,7 +35,6 @@ export const PRECHECK_RULES = {
   },
   stress: {
     id: "PRECHECK_CONTRAINTE",
-    description: `${PRECHECK_LABEL} : contrainte de flexion ELU ≤ résistance de calcul (f_y / γ_M0 acier, k_mod·f_m,k / γ_M bois)`,
     source:
       "Calcul élastique Blondel ; f_y = 235 / 355 MPa (nuance) ; coefficients partiels et classes de bois à valider (EN 1990, EC3, EC5, EN 338 non lus)",
     confidence: "faible",
@@ -43,7 +44,6 @@ export const PRECHECK_RULES = {
   },
   frequency: {
     id: "PRECHECK_FREQUENCE",
-    description: `${PRECHECK_LABEL} : fréquence propre f₁ ≥ 5 Hz sous la masse M_k,2 = 1 kN`,
     source: "NF EN 16481 § 6.3 via docs/research/C-structures.md §1.3 et C-B-06 [3]",
     confidence: "moyen",
     nature: "normatif",
@@ -59,7 +59,7 @@ export const PRECHECK_RULE_IDS: ReadonlySet<string> = new Set(
 /** Poutre analysée : pièce, libellé (repère, section, matériau) et résultat. */
 export interface PrecheckedBeam {
   readonly partId: string;
-  readonly label: string;
+  readonly label: Message;
   readonly result: InclinedBeamResult;
 }
 
@@ -75,7 +75,11 @@ function findings(
   for (const b of beams) {
     const r = b.result;
     const location: Location = { kind: "part", partId: b.partId };
-    const head = `${PRECHECK_LABEL} — ${b.label}, L = ${fmt(r.length / 1000, 2)} m`;
+    const head = msg("precheck.finding.head", {
+      label: PRECHECK_LABEL,
+      beam: b.label,
+      length: dec(r.length / 1000, 2),
+    });
     for (const [key, ratio] of [
       ["deflection", PRECHECK_LIMITS.deflectionRatio],
       ["deflectionAdvice", PRECHECK_LIMITS.deflectionAdvice],
@@ -88,7 +92,14 @@ function findings(
         min: null,
         max,
         location,
-        message: `${head} : flèche ${fmt(r.deflection, 1)} mm ${ok ? "≤" : ">"} L/${ratio} = ${fmt(max, 1)} mm (L/${fmt(r.spanRatio, 0)}).`,
+        message: msg("precheck.finding.deflection", {
+          head,
+          deflection: dec(r.deflection, 1),
+          relation: ok ? "≤" : ">",
+          ratio: String(ratio),
+          max: dec(max, 1),
+          spanRatio: dec(r.spanRatio, 0),
+        }),
       });
     }
     const okS = r.stress <= r.design + 1e-9;
@@ -98,7 +109,13 @@ function findings(
       min: null,
       max: r.design,
       location,
-      message: `${head} : σ_Ed ${fmt(r.stress, 1)} MPa ${okS ? "≤" : ">"} f_d ${fmt(r.design, 1)} MPa (taux ${fmt((100 * r.stress) / r.design, 0)} %).`,
+      message: msg("precheck.finding.stress", {
+        head,
+        stress: dec(r.stress, 1),
+        relation: okS ? "≤" : ">",
+        design: dec(r.design, 1),
+        rate: dec((100 * r.stress) / r.design, 0),
+      }),
     });
     const okF = r.frequency >= PRECHECK_LIMITS.frequency - 1e-9;
     out.frequency.push({
@@ -107,7 +124,12 @@ function findings(
       min: PRECHECK_LIMITS.frequency,
       max: null,
       location,
-      message: `${head} : f₁ ${fmt(r.frequency, 1)} Hz ${okF ? "≥" : "<"} ${PRECHECK_LIMITS.frequency} Hz.`,
+      message: msg("precheck.finding.frequency", {
+        head,
+        frequency: dec(r.frequency, 1),
+        relation: okF ? "≥" : "<",
+        min: String(PRECHECK_LIMITS.frequency),
+      }),
     });
   }
   return out;

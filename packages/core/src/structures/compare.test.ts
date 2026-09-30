@@ -1,14 +1,20 @@
+import { dec, isMessage, translatorFor, type Message } from "@blondel/i18n";
 import { describe, expect, it } from "vitest";
+import { fr } from "../i18n.test-helpers.js";
 import type { Project } from "../model/project.js";
 import { precheckModel } from "../precheck/stringers.js";
 import { buildModel } from "../pipeline/build.js";
-import { fmt } from "../rules/check.js";
 import { makeSteppingProject } from "../stepping/test-helpers.js";
 import { WorkshopProfileSchema } from "../workshop/profile.js";
 import { adaptJour, compareVariants, variantCost } from "./compare.js";
 import { layoutAccepts } from "../project/newel.js";
 import { createProject } from "../project/presets.js";
 import "./index.js";
+
+const FR = translatorFor("fr");
+
+/** Texte français d'un libellé ou d'un message (le prédimensionnement peut rendre l'un ou l'autre). */
+const text = (x: string | Message): string => (isMessage(x) ? fr(x) : x);
 
 const base = (): Project =>
   makeSteppingProject({
@@ -210,7 +216,9 @@ describe("comparateur de variantes (CHALLENGE P2)", () => {
       const line = plugin.find((x) => x.location.kind === "part" && x.location.partId === b.partId);
       expect(Math.abs(b.result.deflection - line!.measured!) / line!.measured!).toBeLessThan(0.01);
       const st = row!.model.parts.find((x) => x.id === b.partId)!;
-      expect(line!.message).toContain(`L = ${fmt(b.result.length / 1000, 2)} m`);
+      expect(fr(line!.message)).toContain(
+        `L = ${FR.t("common.text", { text: dec(b.result.length / 1000, 2) })} m`,
+      );
       expect(st.category).toBe("stringer");
     }
   });
@@ -223,9 +231,9 @@ describe("comparateur de variantes (CHALLENGE P2)", () => {
       expect(pc.beams.length, kind).toBe(2);
       expect(pc.results.filter((r) => r.ruleId === "PRECHECK_FLECHE").length).toBe(2);
       const label = pc.beams[0]!.label;
-      expect(label).toMatch(kind === "wood-housed" ? /C24/ : /S235/);
+      expect(text(label)).toMatch(kind === "wood-housed" ? /C24/ : /S235/);
       // Plat mince : déversement non vérifié, signalé.
-      expect(pc.notes.some((n) => /déversement/.test(n))).toBe(kind === "steel-flat");
+      expect(pc.notes.some((n) => /déversement/.test(text(n)))).toBe(kind === "steel-flat");
     }
   });
 });
@@ -240,7 +248,15 @@ describe("adaptJour — poteau élargi des profilés refusé par le tracé", () 
       { kind: "newel", size: 100 },
       { kind: "newel", size: 100 },
     ]);
-    expect(r.signals.join(" ")).toMatch(/impossible dans ce tracé : poteau par défaut de 100 mm/);
+    expect(r.signals.map(fr).join(" ")).toMatch(
+      /impossible dans ce tracé : poteau par défaut de 100 mm/,
+    );
+    const refused = r.signals.find((s) => s.key === "structure.common.compare.wideNewelRefused");
+    expect(refused).toBeDefined();
+    // Anglais : aucun reste de français.
+    const en = translatorFor("en").t(refused!);
+    expect(en).toMatch(/not possible in this layout: default newel of 100 mm\.$/);
+    expect(en).not.toMatch(/poteau|tracé|décision/);
     expect(layoutAccepts(r.project)).toBe(true);
   });
 });

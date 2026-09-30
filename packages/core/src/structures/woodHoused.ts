@@ -25,6 +25,7 @@
  * pour que toutes les mortaises gardent la joue mini du profil d'atelier ; profondeur
  * d'encastrement et épaisseur de tenon : profil d'atelier / tiers de l'épaisseur (à valider).
  */
+import { dec, msg, textMessage, type Message } from "@blondel/i18n";
 import { z } from "zod";
 import { intersectLines } from "../geom2d/intersect.js";
 import * as V from "../geom2d/vec.js";
@@ -32,7 +33,6 @@ import type { NosingLine, Part } from "../model/derived.js";
 import type { Mm, Vec2 } from "../model/primitives.js";
 import type { StructureContext, StructureKind, StructureOutput } from "../model/plugins.js";
 import { buildBasicParts } from "../parts/basic.js";
-import { fmt } from "../rules/check.js";
 import { getRule } from "../rules/table.js";
 import {
   WOOD_MATERIALS,
@@ -143,7 +143,7 @@ type Side = "inner" | "outer";
 export interface StringerFace {
   readonly id: string;
   readonly mark: string;
-  readonly name: string;
+  readonly name: Message;
   readonly side: Side;
   readonly leg: number;
   /** Point u = 0 de la face (début de la face, plan). */
@@ -182,19 +182,23 @@ const sigmaOf = (k: NosingLine, side: Side): Mm => (side === "inner" ? k.sigmaIn
 export function stringerFaces(
   ctx: StructureContext,
   geo: StairGeometry,
-): { faces: StringerFace[]; errors: string[]; notes: string[] } {
+): { faces: StringerFace[]; errors: Message[]; notes: Message[] } {
   const turns = ctx.project.stair.layout.turns;
   const faces: StringerFace[] = [];
-  const errors: string[] = [];
-  const notes: string[] = [];
+  const errors: Message[] = [];
+  const notes: Message[] = [];
   turns.forEach((t, j) => {
     if (t.inner.kind === "arc") {
       errors.push(
-        `Tournant ${j + 1} : jour en arc — limon de jour continu (débillardé) non supporté au jalon 3a (jalon 5) ; limons de jour des volées ${j + 1} et ${j + 2} non générés.`,
+        msg("structure.woodHoused.arcJourUnsupported", {
+          turn: j + 1,
+          flight: j + 1,
+          nextFlight: j + 2,
+        }),
       );
     } else if (t.inner.kind === "sharp") {
       errors.push(
-        `Tournant ${j + 1} : jour à angle vif — les limons de jour se rencontreraient en un point ; choisir un poteau d'angle (jour « poteau ») ; limons de jour des volées ${j + 1} et ${j + 2} non générés.`,
+        msg("structure.woodHoused.sharpJour", { turn: j + 1, flight: j + 1, nextFlight: j + 2 }),
       );
     }
   });
@@ -211,7 +215,7 @@ export function stringerFaces(
         faces.push({
           id: `stringer-inner-${i + 1}`,
           mark: `LI${i + 1}`,
-          name: `Limon de jour, volée ${i + 1}`,
+          name: msg("structure.woodHoused.part.innerStringer", { flight: i + 1 }),
           side: "inner",
           leg: i,
           a: V.addScaled(leg.innerOrigin, leg.u, leg.innerT0),
@@ -223,13 +227,13 @@ export function stringerFaces(
           end,
         });
       } else {
-        notes.push(`Volée ${i + 1} sans partie droite côté jour : pas de limon de jour.`);
+        notes.push(msg("structure.woodHoused.noInnerStraight", { flight: i + 1 }));
       }
     }
     faces.push({
       id: `stringer-outer-${i + 1}`,
       mark: `LE${i + 1}`,
-      name: `Limon mural, volée ${i + 1}`,
+      name: msg("structure.woodHoused.part.outerStringer", { flight: i + 1 }),
       side: "outer",
       leg: i,
       a: leg.outerStart,
@@ -336,7 +340,9 @@ function housingsOn(
     out.push(
       housingPolygons(
         {
-          label: carried ? t.mark : `${t.mark} (angle)`,
+          label: carried
+            ? textMessage(t.mark)
+            : msg("structure.woodHoused.cornerHousing", { mark: t.mark }),
           ...(carried ? { tread: t.number } : {}),
           ...(tp
             ? {
@@ -371,7 +377,10 @@ function housingsOn(
     if (!rp) continue;
     out.push(
       housingPolygons(
-        { label: riser.mark, riserPocket: { ...rp, zBottom: riser.zBottom, zTop: riser.zTop } },
+        {
+          label: textMessage(riser.mark),
+          riserPocket: { ...rp, zBottom: riser.zBottom, zTop: riser.zTop },
+        },
         noseRadius,
       ),
     );
@@ -434,7 +443,7 @@ function extendPieces(
   faces: readonly ReceivingFace[],
   depth: Mm,
   profile: WorkshopProfile,
-  notes: string[],
+  notes: Message[],
 ): { pieces: HousedPiece[]; replaced: Part[] } {
   const pieces: HousedPiece[] = [];
   const replaced: Part[] = [];
@@ -453,8 +462,8 @@ function extendPieces(
       );
       notes.push(
         extended
-          ? `${part.mark} : non encastrée dans le poteau (contour prolongé non simple).`
-          : `${part.mark} : prolongement dans les limons impossible (contour non simple), pièce laissée telle quelle.`,
+          ? msg("structure.woodHoused.notHousedInNewel", { mark: part.mark })
+          : msg("structure.woodHoused.extensionImpossible", { mark: part.mark }),
       );
     }
     const outline = extended ?? ex.outline;
@@ -517,19 +526,23 @@ function extentBox(
   return { length: ext(across), width: ext(along) };
 }
 
+/** Libellé d'un élément contrôlé : « LI1 (M3 / M4) ». */
+const itemWithDetail = (mark: string, detail: Message): Message =>
+  msg("structure.common.check.itemWithDetail", { mark, detail });
+
 /** Construction complète (détails compris). */
 export function buildWoodHoused(ctx: StructureContext, params: WoodHousedParams): HousedResult {
   const { project, layout, stepping } = ctx;
   const profile = resolveWorkshopProfile(project.workshop);
   const nosings = stepping.nosings;
-  const notes: string[] = [];
+  const notes: Message[] = [];
   const e = params.thickness;
   const depth = params.housingDepth === "auto" ? profile.wood.housingDepth : params.housingDepth;
   const tenonThickness =
     params.newel.tenonThickness === "auto" ? Math.round(e / 3) : params.newel.tenonThickness;
   const clearance = profile.wood.clearance;
   const cheek = profile.wood.minCheek;
-  const empty = (errors: string[]): HousedResult => ({
+  const empty = (errors: Message[]): HousedResult => ({
     output: { parts: [], checks: [], notes, errors },
     stringers: [],
     posts: [],
@@ -542,9 +555,9 @@ export function buildWoodHoused(ctx: StructureContext, params: WoodHousedParams)
       endExtension: Number.NaN,
     },
   });
-  const helical = flightsOnlyError("wood-housed", "limons à la française", layout);
+  const helical = flightsOnlyError("wood-housed", msg("structure.woodHoused.shortLabel"), layout);
   if (helical) return empty([helical]);
-  if (nosings.length < 2) return empty(["Limons : découpage vide, aucune structure générée."]);
+  if (nosings.length < 2) return empty([msg("structure.woodHoused.emptyStepping")]);
 
   const geo = stairGeometry(project, layout);
   const { faces, errors, notes: faceNotes } = stringerFaces(ctx, geo);
@@ -660,20 +673,28 @@ export function buildWoodHoused(ctx: StructureContext, params: WoodHousedParams)
     const noses = nosings
       .map((k) => ({ u: sigmaOf(k, f.side) - f.sigmaA, z: k.z, index: k.index }))
       .filter((k) => k.u >= span.lo - 1e-6 && k.u <= span.hi + 1e-6);
-    const joints: { u: Mm; label: string }[] = [];
+    const joints: { u: Mm; label: Message }[] = [];
     // Angle mural : trait à l'angle intérieur (face du limon voisin) ; au-delà, zone des queues.
-    if (f.start === "corner") joints.push({ u: 0, label: "Angle mural (assemblage à queues)" });
-    if (f.end === "corner")
-      joints.push({ u: f.faceLength, label: "Angle mural (assemblage à queues)" });
-    if (f.start === "newel") joints.push({ u: uLo, label: "Face du poteau" });
-    if (f.end === "newel") joints.push({ u: uHi, label: "Face du poteau" });
-    const sideLabel = f.side === "inner" ? "limon de jour" : "limon mural";
+    const wallCorner = msg("structure.woodHoused.joint.wallCorner");
+    const newelFace = msg("structure.common.joint.newelFace");
+    if (f.start === "corner") joints.push({ u: 0, label: wallCorner });
+    if (f.end === "corner") joints.push({ u: f.faceLength, label: wallCorner });
+    if (f.start === "newel") joints.push({ u: uLo, label: newelFace });
+    if (f.end === "newel") joints.push({ u: uHi, label: newelFace });
     const flat = toFlatPattern(dev, {
       mirrored,
       thickness: e,
       depth,
       mark: f.mark,
-      referenceDescription: `Face intérieure du ${sideLabel} (côté marches), vue depuis les marches ; x = abscisse horizontale le long du limon (${mirrored ? "la montée va vers les x décroissants" : "la montée va vers les x croissants"}), y = altitude (sol fini bas = 0), mm, 1:1.`,
+      referenceDescription: msg("structure.common.flat.stringerReference", {
+        side:
+          f.side === "inner"
+            ? msg("structure.common.flat.side.inner")
+            : msg("structure.common.flat.side.outer"),
+        direction: mirrored
+          ? msg("structure.common.flat.riseTowardsDecreasingX")
+          : msg("structure.common.flat.riseTowardsIncreasingX"),
+      }),
       noses,
       joints,
     });
@@ -708,7 +729,10 @@ export function buildWoodHoused(ctx: StructureContext, params: WoodHousedParams)
         depth: e,
       },
       flat,
-      section: `${fmt(e, 0)} × ${fmt(Math.ceil(box.width), 0)}`,
+      section: msg("structure.common.section.rect", {
+        thickness: dec(e, 0),
+        width: dec(Math.ceil(box.width), 0),
+      }),
       stock: st.stock,
       quantities: woodQuantities(
         { volumeMm3: devArea * e - pocketArea * depth, surfaceMm2: devArea, length: box.length },
@@ -754,7 +778,7 @@ export function buildWoodHoused(ctx: StructureContext, params: WoodHousedParams)
     const r = buildNewel(nw.geom, pieces, nosings, received, {
       id: nw.id,
       mark: nw.mark,
-      name: `Poteau d'angle, tournant ${nw.geom.turn + 1}`,
+      name: msg("structure.woodHoused.part.newel", { turn: nw.geom.turn + 1 }),
       material: params.material,
       housingDepth: depth,
       clearance,
@@ -768,7 +792,11 @@ export function buildWoodHoused(ctx: StructureContext, params: WoodHousedParams)
     });
     if (minTop !== undefined && minTop === r.top) {
       notes.push(
-        `${nw.mark} : poteau d'angle monté à ${fmt(r.top, 0)} mm, ${fmt(rail.overrun, 0)} mm au-dessus de la main courante du garde-corps (garde-corps, poteaux : « dépassement du poteau d'angle »).`,
+        msg("structure.woodHoused.newelRaised", {
+          mark: nw.mark,
+          top: dec(r.top, 0),
+          overrun: dec(rail.overrun, 0),
+        }),
       );
     }
     const a = nw.geom.size;
@@ -779,11 +807,11 @@ export function buildWoodHoused(ctx: StructureContext, params: WoodHousedParams)
       id: nw.id,
       mark: nw.mark,
       category: "post",
-      name: `Poteau d'angle, tournant ${nw.geom.turn + 1}`,
+      name: msg("structure.woodHoused.part.newel", { turn: nw.geom.turn + 1 }),
       material: params.material,
       solid: r.solid,
       flat: r.flat,
-      section: `${fmt(a, 0)} × ${fmt(a, 0)}`,
+      section: msg("structure.common.section.rect", { thickness: dec(a, 0), width: dec(a, 0) }),
       stock: st.stock,
       quantities: woodQuantities(
         { volumeMm3: r.volumeMm3, surfaceMm2: r.surfaceMm2, length: height },
@@ -805,14 +833,18 @@ export function buildWoodHoused(ctx: StructureContext, params: WoodHousedParams)
       checks.add(thicknessRule, [
         {
           status: "non-evaluee",
-          message: `${outside} : justification par le calcul (C §1.4).`,
+          message: msg("structure.woodHoused.check.outOfDomain", { detail: outside }),
         },
       ]);
     } else {
       checks.addItems(
         thicknessRule,
-        stringers.map((s) => ({ value: e, label: s.face.mark, ...partLoc(s.face.id) })),
-        "Épaisseur de limon",
+        stringers.map((s) => ({
+          value: e,
+          label: textMessage(s.face.mark),
+          ...partLoc(s.face.id),
+        })),
+        msg("structure.woodHoused.check.thickness"),
         { min: thicknessRule.min, max: thicknessRule.max },
       );
     }
@@ -821,8 +853,8 @@ export function buildWoodHoused(ctx: StructureContext, params: WoodHousedParams)
   if (housingRule && stringers.length > 0) {
     checks.addItems(
       housingRule,
-      [{ value: depth, label: "profondeur d'encastrement" }],
-      "Entaille marche / limon",
+      [{ value: depth, label: msg("structure.woodHoused.check.housingDepth") }],
+      msg("structure.woodHoused.check.housing"),
       { min: housingRule.min, max: housingRule.max },
     );
   }
@@ -831,39 +863,50 @@ export function buildWoodHoused(ctx: StructureContext, params: WoodHousedParams)
       pluginRuleDef(FAB_RULES.perpendicularWidth),
       stringers.map((s) => ({
         value: s.development.minPerpendicularWidth,
-        label: s.face.mark,
+        label: textMessage(s.face.mark),
         ...partLoc(s.face.id),
       })),
-      "Largeur perpendiculaire",
+      msg("structure.woodHoused.check.perpendicularWidth"),
       { min: profile.wood.minPerpendicularWidth, max: null },
     );
     const between = stringers.flatMap((s) => {
       const w = minWoodBetween(s.development);
       return w
-        ? [{ value: w.value, label: `${s.face.mark} (${w.label})`, ...partLoc(s.face.id) }]
+        ? [{ value: w.value, label: itemWithDetail(s.face.mark, w.label), ...partLoc(s.face.id) }]
         : [];
     });
-    checks.addItems(pluginRuleDef(FAB_RULES.woodBetweenHousings), between, "Bois entre mortaises", {
-      min: profile.wood.minWoodBetweenHousings,
-      max: null,
-    });
+    checks.addItems(
+      pluginRuleDef(FAB_RULES.woodBetweenHousings),
+      between,
+      msg("structure.woodHoused.check.woodBetweenHousings"),
+      { min: profile.wood.minWoodBetweenHousings, max: null },
+    );
     const cheeks = stringers.flatMap((s) => {
       const c = minCheek(s.development);
       return c
-        ? [{ value: c.value, label: `${s.face.mark} (${c.label})`, ...partLoc(s.face.id) }]
+        ? [{ value: c.value, label: itemWithDetail(s.face.mark, c.label), ...partLoc(s.face.id) }]
         : [];
     });
-    checks.addItems(pluginRuleDef(FAB_RULES.cheek), cheeks, "Joue", {
-      min: profile.wood.minCheek - 1e-6,
-      max: null,
-    });
+    checks.addItems(
+      pluginRuleDef(FAB_RULES.cheek),
+      cheeks,
+      msg("structure.woodHoused.check.cheek"),
+      {
+        min: profile.wood.minCheek - 1e-6,
+        max: null,
+      },
+    );
   }
   const allParts = [...stringers.map((s) => s.part), ...posts];
   if (allParts.length > 0) {
     checks.addItems(
       pluginRuleDef(FAB_RULES.boardLength),
-      allParts.map((p) => ({ value: p.stock!.length, label: p.mark, ...partLoc(p.id) })),
-      "Longueur de débit",
+      allParts.map((p) => ({
+        value: p.stock!.length,
+        label: textMessage(p.mark),
+        ...partLoc(p.id),
+      })),
+      msg("structure.common.check.boardLength"),
       { min: null, max: profile.wood.maxBoardLength },
     );
     const stockFindings = allParts.map((p) => {
@@ -874,13 +917,24 @@ export function buildWoodHoused(ctx: StructureContext, params: WoodHousedParams)
             status: "ok" as const,
             measured: st.need.w,
             location: loc,
-            message: `${p.mark} : débit brut ${fmt(st.stock.width, 0)} × ${fmt(st.stock.thickness, 0)} mm disponible.`,
+            message: msg("structure.common.check.stockAvailable", {
+              mark: p.mark,
+              width: dec(st.stock.width, 0),
+              thickness: dec(st.stock.thickness, 0),
+            }),
           }
         : {
             status: "violation" as const,
             measured: st.need.w,
             location: loc,
-            message: `${p.mark} : débit brut nécessaire ${fmt(st.need.w, 0)} × ${fmt(st.need.t, 0)} mm${st.thicknessOk ? "" : " (épaisseur indisponible)"}${st.widthOk ? "" : " (largeur indisponible)"} dans le profil d'atelier.`,
+            message: msg(
+              !st.thicknessOk && !st.widthOk
+                ? "structure.woodHoused.check.stockMissing.both"
+                : !st.thicknessOk
+                  ? "structure.woodHoused.check.stockMissing.thickness"
+                  : "structure.woodHoused.check.stockMissing.width",
+              { mark: p.mark, width: dec(st.need.w, 0), thickness: dec(st.need.t, 0) },
+            ),
           };
     });
     checks.add(pluginRuleDef(FAB_RULES.stockAvailable), stockFindings);
@@ -896,14 +950,24 @@ export function buildWoodHoused(ctx: StructureContext, params: WoodHousedParams)
             ((s.face.end === "newel" && s.face.leg === nw.geom.turn) ||
               (s.face.start === "newel" && s.face.leg === nw.geom.turn + 1)),
         )
-        .map((s) => ({ value: e, label: `${s.face.mark} sur ${nw.mark}`, ...partLoc(s.face.id) })),
-      "Épaisseur du limon reçu par le poteau",
+        .map((s) => ({
+          value: e,
+          label: msg("structure.woodHoused.check.newelItem", { mark: s.face.mark, newel: nw.mark }),
+          ...partLoc(s.face.id),
+        })),
+      msg("structure.woodHoused.check.newelReception"),
       { min: null, max: half },
     );
   }
 
   notes.push(
-    `Limons à la française : d_h = ${fmt(resolved.upperOffset.inner, 0)} / ${fmt(resolved.upperOffset.outer, 0)} mm, d_b = ${fmt(resolved.lowerOffset.inner, 0)} / ${fmt(resolved.lowerOffset.outer, 0)} mm (jour / mur), encastrement ${fmt(depth, 0)} mm ; valeurs par défaut du profil d'atelier à valider.`,
+    msg("structure.woodHoused.summary", {
+      upperInner: dec(resolved.upperOffset.inner, 0),
+      upperOuter: dec(resolved.upperOffset.outer, 0),
+      lowerInner: dec(resolved.lowerOffset.inner, 0),
+      lowerOuter: dec(resolved.lowerOffset.outer, 0),
+      depth: dec(depth, 0),
+    }),
   );
 
   return {
@@ -921,7 +985,7 @@ export function buildWoodHoused(ctx: StructureContext, params: WoodHousedParams)
 
 export const WOOD_HOUSED: StructureKind<WoodHousedParams> = {
   kind: "wood-housed",
-  label: "Limons bois à la française (marches encastrées)",
+  labelKey: "structure.woodHoused.label",
   family: "bois",
   paramsSchema: WoodHousedParamsSchema,
   defaults: () => WoodHousedParamsSchema.parse({}),

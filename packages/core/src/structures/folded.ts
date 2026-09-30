@@ -25,12 +25,12 @@
  * dépasse jamais le jeu latéral. Les lignes de pli sont tracées au **milieu** de la zone de
  * pli (longueur θ·(r + K·t)). Pas de dégagement de pli (entaille de décharge) dessiné.
  */
+import { dec, msg, MessageError, textMessage, type Message } from "@blondel/i18n";
 import { segmentIntersect } from "../geom2d/intersect.js";
 import { ensureCCW, signedArea } from "../geom2d/polygon.js";
 import * as V from "../geom2d/vec.js";
 import type { FlatPattern } from "../model/derived.js";
 import type { Mm, Polygon2, Vec2 } from "../model/primitives.js";
-import { fmt } from "../rules/check.js";
 import { bendAllowance, outsideSetback, type ResolvedBend } from "../workshop/metal.js";
 import { clipHalfPlane, dedupe, isSimplePolygon, removeCollinear } from "./geom.js";
 import { holePolygon } from "./steelCommon.js";
@@ -59,7 +59,7 @@ export interface FoldedSection {
   readonly straights: readonly Mm[];
   readonly bends: readonly SectionBend[];
   /** Nom des ailes, dans l'ordre. */
-  readonly flangeNames: readonly string[];
+  readonly flangeNames: readonly Message[];
   /** Ligne moyenne (départ, direction, éléments) dans le repère de section. */
   readonly start: Vec2;
   readonly heading: Vec2;
@@ -77,6 +77,36 @@ export function flatLength(section: FoldedSection, k: number): Mm {
 }
 
 const QUARTER = Math.PI / 2;
+
+/** Noms des ailes (développés, messages d'erreur, contrôles de pliage). */
+const FLANGE = {
+  top: msg("structure.steel.folded.flange.top"),
+  riser: msg("structure.steel.folded.flange.riser"),
+  return: msg("structure.steel.folded.flange.return"),
+  nose: msg("structure.steel.folded.flange.nose"),
+  rearReturn: msg("structure.steel.folded.flange.rearReturn"),
+} as const;
+
+/** Libellé d'une ligne de pli : « P1 · 90° vers le bas · r_int 6,5 ». */
+function bendLabel(n: number, angle: number, up: boolean, r: Mm): Message {
+  return msg(up ? "structure.steel.folded.bendLine.up" : "structure.steel.folded.bendLine.down", {
+    n,
+    angle: dec(deg(angle), 0),
+    radius: dec(r, 1),
+  });
+}
+
+/** Aile sans partie droite (cotes incompatibles avec le rayon de pli). */
+function flangeError(mark: string, flange: Message, length: Mm, r: Mm): MessageError {
+  return new MessageError(
+    msg("structure.steel.folded.error.flangeNoStraight", {
+      mark,
+      flange,
+      length: dec(length, 1),
+      radius: dec(r, 1),
+    }),
+  );
+}
 
 export interface ZSectionInput {
   /** Profondeur du dessus D (nez → bord arrière), mm. */
@@ -105,7 +135,7 @@ export function zSection(i: ZSectionInput): FoldedSection {
       { angle: QUARTER, up: false },
       { angle: QUARTER, up: true },
     ],
-    flangeNames: ["dessus", "contremarche", "retour"],
+    flangeNames: [FLANGE.top, FLANGE.riser, FLANGE.return],
     start: V.vec(i.depth, -t / 2),
     heading: V.vec(-1, 0),
     steps: [
@@ -145,7 +175,7 @@ export function arrivalRiserSection(i: ArrivalRiserSectionInput): FoldedSection 
     innerRadius: r,
     straights: [riser, ret],
     bends: [{ angle: QUARTER, up: true }],
-    flangeNames: ["contremarche", "retour"],
+    flangeNames: [FLANGE.riser, FLANGE.return],
     start: V.vec(t / 2, 0),
     heading: V.vec(0, -1),
     steps: [
@@ -181,7 +211,7 @@ export function uSection(i: USectionInput): FoldedSection {
       { angle: QUARTER, up: false },
       { angle: QUARTER, up: false },
     ],
-    flangeNames: ["nez", "dessus", "retour arrière"],
+    flangeNames: [FLANGE.nose, FLANGE.top, FLANGE.rearReturn],
     start: V.vec(t / 2, -i.noseHeight),
     heading: V.vec(0, 1),
     steps: [
@@ -259,7 +289,9 @@ export interface FoldedTreadInput {
 
 /** Ligne de pli en plan (monde) et dans le développé. */
 export interface BendLineInfo {
-  readonly label: string;
+  /** Repère de la ligne de pli (« P1 »). */
+  readonly mark: string;
+  readonly label: Message;
   readonly length: Mm;
   readonly angleDeg: number;
   readonly up: boolean;
@@ -267,7 +299,7 @@ export interface BendLineInfo {
 
 /** Longueur intérieure d'une aile aux deux extrémités de la ligne de pli voisine. */
 export interface FlangeCheck {
-  readonly label: string;
+  readonly label: Message;
   readonly atStart: Mm;
   readonly atEnd: Mm;
 }
@@ -400,11 +432,15 @@ export function developFoldedTread(input: FoldedTreadInput): FoldedTreadResult {
     clipped = clipHalfPlane(clipped, V.addScaled(input.rear.p, inR, setback), inR);
   }
   clipped = ensureCCW(removeCollinear(dedupe(clipped)));
-  if (clipped.length < 3) throw new Error(`${input.mark} : dessus trop court pour le pliage.`);
+  if (clipped.length < 3) {
+    throw new MessageError(msg("structure.steel.folded.error.topTooShort", { mark: input.mark }));
+  }
 
   const fr = stripRange(plate, clipped, input.front, inF, setback);
   if (!fr || !(fr.s1 - fr.s0 > 1)) {
-    throw new Error(`${input.mark} : ligne de pli du nez introuvable ou trop courte.`);
+    throw new MessageError(
+      msg("structure.steel.folded.error.noseBendLineNotFound", { mark: input.mark }),
+    );
   }
   const mid = V.addScaled(fr.origin, fr.along, (fr.s0 + fr.s1) / 2);
   const moldMid = V.addScaled(mid, inF, -setback);
@@ -429,9 +465,7 @@ export function developFoldedTread(input: FoldedTreadInput): FoldedTreadResult {
   const fixed = input.profile === "Z" ? [1, 2] : [0, 2];
   for (const i of fixed) {
     if (!(section.straights[i]! > 0)) {
-      throw new Error(
-        `${input.mark} : aile « ${section.flangeNames[i]} » sans partie droite (${fmt(section.straights[i]!, 1)} mm) : cotes incompatibles avec le rayon de pli ${fmt(r, 1)} mm.`,
-      );
+      throw flangeError(input.mark, section.flangeNames[i]!, section.straights[i]!, r);
     }
   }
 
@@ -447,7 +481,7 @@ export function developFoldedTread(input: FoldedTreadInput): FoldedTreadResult {
     b: SectionBend,
     n: number,
   ): void => {
-    const label = `P${n} · ${fmt(deg(b.angle), 0)}° vers le ${b.up ? "haut" : "bas"} · r_int ${fmt(r, 1)}`;
+    const label = bendLabel(n, b.angle, b.up, r);
     const pa = V.addScaled(V.addScaled(o, along, s0), inward, -dist);
     const pb = V.addScaled(V.addScaled(o, along, s1), inward, -dist);
     lines.push({
@@ -459,7 +493,7 @@ export function developFoldedTread(input: FoldedTreadInput): FoldedTreadResult {
       bendUp: b.up,
       bendRadius: r,
     });
-    bendLines.push({ label, length: s1 - s0, angleDeg: deg(b.angle), up: b.up });
+    bendLines.push({ mark: `P${n}`, label, length: s1 - s0, angleDeg: deg(b.angle), up: b.up });
   };
 
   let outline: Polygon2 | null = clipped;
@@ -483,9 +517,9 @@ export function developFoldedTread(input: FoldedTreadInput): FoldedTreadResult {
     addBend(fr.origin, fr.along, inF, fr.s0, fr.s1, ba / 2, section.bends[0]!, 1);
     addBend(fr.origin, fr.along, inF, fr.s0, fr.s1, ba + riser + ba / 2, section.bends[1]!, 2);
     flanges.push(
-      { label: "dessus", atStart: d0 - t, atEnd: d1 - t },
-      { label: "contremarche", atStart: riser + r, atEnd: riser + r },
-      { label: "retour", atStart: ret + r, atEnd: ret + r },
+      { label: FLANGE.top, atStart: d0 - t, atEnd: d1 - t },
+      { label: FLANGE.riser, atStart: riser + r, atEnd: riser + r },
+      { label: FLANGE.return, atStart: ret + r, atEnd: ret + r },
     );
   } else {
     const [nose, , rear] = section.straights as [Mm, Mm, Mm];
@@ -500,7 +534,9 @@ export function developFoldedTread(input: FoldedTreadInput): FoldedTreadResult {
     addBend(fr.origin, fr.along, inF, fr.s0, fr.s1, ba / 2, section.bends[0]!, 1);
     const rr = stripRange(plate, clipped, input.rear, inR, setback);
     if (!rr || !(rr.s1 - rr.s0 > 1) || !outline) {
-      throw new Error(`${input.mark} : ligne de pli arrière introuvable ou trop courte.`);
+      throw new MessageError(
+        msg("structure.steel.folded.error.rearBendLineNotFound", { mark: input.mark }),
+      );
     }
     outline = spliceStrip(outline, {
       tangentOrigin: rr.origin,
@@ -512,14 +548,20 @@ export function developFoldedTread(input: FoldedTreadInput): FoldedTreadResult {
     });
     addBend(rr.origin, rr.along, inR, rr.s0, rr.s1, ba / 2, section.bends[1]!, 2);
     flanges.push(
-      { label: "nez", atStart: nose + r, atEnd: nose + r },
-      { label: "dessus", atStart: d0 - 2 * t - r, atEnd: d1 - 2 * t - r },
-      { label: "retour arrière", atStart: rear + r, atEnd: rear + r },
+      { label: FLANGE.nose, atStart: nose + r, atEnd: nose + r },
+      { label: FLANGE.top, atStart: d0 - 2 * t - r, atEnd: d1 - 2 * t - r },
+      { label: FLANGE.rearReturn, atStart: rear + r, atEnd: rear + r },
     );
   }
-  if (!outline) throw new Error(`${input.mark} : arête de pli introuvable sur le contour.`);
+  if (!outline) {
+    throw new MessageError(
+      msg("structure.steel.folded.error.bendEdgeNotFound", { mark: input.mark }),
+    );
+  }
   outline = ensureCCW(removeCollinear(dedupe(outline)));
-  if (!isSimplePolygon(outline)) throw new Error(`${input.mark} : développé non simple.`);
+  if (!isSimplePolygon(outline)) {
+    throw new MessageError(msg("structure.steel.folded.error.notSimple", { mark: input.mark }));
+  }
   const worldOutline = outline;
 
   // Mise à plat locale : x le long de la ligne de pli avant, y vers l'arrière, minimum à 0.
@@ -545,7 +587,7 @@ export function developFoldedTread(input: FoldedTreadInput): FoldedTreadResult {
     kind: "text",
     a: V.vec(centroid.x - 20, centroid.y),
     b: V.vec(centroid.x + 20, centroid.y),
-    label: input.mark,
+    label: textMessage(input.mark),
   });
 
   const parallel =
@@ -557,7 +599,13 @@ export function developFoldedTread(input: FoldedTreadInput): FoldedTreadResult {
       thickness: t,
       reference: {
         kind: "neutral-fiber",
-        description: `Tôle pliée en ${input.profile}, développé en fibre neutre (facteur K ${fmt(k, 3)}, r_int ${fmt(r, 1)} mm, t ${fmt(t, 1)} mm, loi « ${bend.method} ») ; vue sur la face supérieure (dessus de marche) ; x le long du pli du nez, y vers l'arrière de la marche ; lignes de pli au milieu des zones de pli ; mm, 1:1.`,
+        description: msg("structure.steel.folded.reference.tread", {
+          profile: input.profile,
+          k: dec(k, 3),
+          radius: dec(r, 1),
+          thickness: dec(t, 1),
+          method: bend.method,
+        }),
       },
     },
     worldOutline,
@@ -708,13 +756,15 @@ export function developArrivalRiser(input: ArrivalRiserInput): ArrivalRiserResul
   });
   section.straights.forEach((len, i) => {
     if (!(len > 0)) {
-      throw new Error(
-        `${input.mark} : aile « ${section.flangeNames[i]} » sans partie droite (${fmt(len, 1)} mm) : cotes incompatibles avec le rayon de pli ${fmt(r, 1)} mm.`,
-      );
+      throw flangeError(input.mark, section.flangeNames[i]!, len, r);
     }
   });
   const length = V.distance(input.start, input.end);
-  if (!(length > 1)) throw new Error(`${input.mark} : ligne du nez d'arrivée trop courte.`);
+  if (!(length > 1)) {
+    throw new MessageError(
+      msg("structure.steel.folded.error.arrivalNosingTooShort", { mark: input.mark }),
+    );
+  }
   const [riser, ret] = section.straights as [Mm, Mm];
   const ba = bendAllowance(QUARTER, r, bend.k, t);
   const width = ret + ba + riser;
@@ -724,7 +774,7 @@ export function developArrivalRiser(input: ArrivalRiserInput): ArrivalRiserResul
   const origin = V.dot(V.sub(input.end, input.start), along) >= 0 ? input.start : input.end;
   const bendY = ret + ba / 2;
   const bendB = section.bends[0]!;
-  const label = `P1 · ${fmt(deg(bendB.angle), 0)}° vers le ${bendB.up ? "haut" : "bas"} · r_int ${fmt(r, 1)}`;
+  const label = bendLabel(1, bendB.angle, bendB.up, r);
   const n = Math.max(0, Math.floor(input.holes));
   const hy = ret + ba + riser / 2;
   const e = Math.min(input.holeEdgeDistance, length / 2);
@@ -753,13 +803,18 @@ export function developArrivalRiser(input: ArrivalRiserInput): ArrivalRiserResul
         kind: "text",
         a: V.vec(length / 2 - 20, ret + ba + riser * 0.75),
         b: V.vec(length / 2 + 20, ret + ba + riser * 0.75),
-        label: input.mark,
+        label: textMessage(input.mark),
       },
     ],
     thickness: t,
     reference: {
       kind: "neutral-fiber",
-      description: `Contremarche d'arrivée en tôle pliée en L (fixée au chevêtre), développé en fibre neutre (facteur K ${fmt(bend.k, 3)}, r_int ${fmt(r, 1)} mm, t ${fmt(t, 1)} mm, loi « ${bend.method} ») ; vue sur la face avant ; x le long de la ligne du nez d'arrivée, y vers le haut depuis le bord libre du retour ; ligne de pli au milieu de la zone de pli ; mm, 1:1.`,
+      description: msg("structure.steel.folded.reference.arrivalRiser", {
+        k: dec(bend.k, 3),
+        radius: dec(r, 1),
+        thickness: dec(t, 1),
+        method: bend.method,
+      }),
     },
   };
   return {
@@ -772,10 +827,10 @@ export function developArrivalRiser(input: ArrivalRiserInput): ArrivalRiserResul
       zAxis: { x: along.x, y: along.y, z: 0 },
     },
     length,
-    bendLines: [{ label, length, angleDeg: deg(bendB.angle), up: bendB.up }],
+    bendLines: [{ mark: "P1", label, length, angleDeg: deg(bendB.angle), up: bendB.up }],
     flanges: [
-      { label: "contremarche", atStart: riser + r, atEnd: riser + r },
-      { label: "retour", atStart: ret + r, atEnd: ret + r },
+      { label: FLANGE.riser, atStart: riser + r, atEnd: riser + r },
+      { label: FLANGE.return, atStart: ret + r, atEnd: ret + r },
     ],
     holeCenters,
   };

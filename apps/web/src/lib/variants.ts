@@ -21,6 +21,7 @@ import {
   type StructureKind,
   type VariantSummary,
 } from "@blondel/core";
+import { trList } from "../i18n/fr.js";
 
 /** Variante à comparer : une structure et, éventuellement, des paramètres imposés. */
 export interface Variant {
@@ -32,7 +33,11 @@ export interface Variant {
 }
 
 /** Résultat d'une variante sans son `Model` (inutile à l'affichage, coûteux à transmettre). */
-export type VariantRow = Omit<VariantSummary, "model"> & {
+export type VariantRow = Omit<VariantSummary, "model" | "label" | "errors"> & {
+  /** Libellé de la variante. */
+  readonly label: string;
+  /** Erreurs de génération (texte français, vague 2 de l'i18n). */
+  readonly errors: readonly string[];
   readonly id: string;
   /** Variante identique à la structure du projet (paramètres compris). */
   readonly current: boolean;
@@ -198,9 +203,11 @@ export function runVariants(project: Project, variants: readonly Variant[]): Com
     try {
       const [summary] = compareEpure(project, [{ kind: v.kind, params, jour: "adapt" }]);
       if (!summary) continue;
-      const { model: _model, deviations: _deviations, ...rest } = summary;
+      const { model: _model, deviations: _deviations, errors, signals, ...rest } = summary;
       rows.push({
         ...rest,
+        errors: trList(errors),
+        signals: trList(signals),
         id: v.id,
         label: v.label,
         current: isCurrent(project, v, params),
@@ -218,7 +225,7 @@ export function runVariants(project: Project, variants: readonly Variant[]): Com
     r === ref
       ? { ...r, reference: true }
       : ref?.epure && r.epure
-        ? { ...r, deviations: epureDeviations(ref.epure, r.epure) }
+        ? { ...r, deviations: trList(epureDeviations(ref.epure, r.epure)) }
         : r,
   );
   return { rows: out, timeMs: now() - t0 };

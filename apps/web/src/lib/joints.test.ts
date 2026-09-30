@@ -1,4 +1,5 @@
 import {
+  textMessage,
   ProjectSchema,
   buildModel,
   createProject,
@@ -42,7 +43,7 @@ describe("tronçons et joints (limon de jour débillardé)", () => {
       id,
       mark: id,
       category: "stringer",
-      name: id,
+      name: textMessage(id),
       material: "steel-raw",
       solid: { kind: "sweep", path: [], section: { outer: [], holes: [] } },
       flat: {

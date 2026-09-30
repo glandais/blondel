@@ -8,6 +8,7 @@
  * Une table incohérente (paramètre absent) lève une erreur au chargement : `table.test.ts` et
  * `params.test.ts` la détectent.
  */
+import { MessageError, msg } from "@blondel/i18n";
 import { numberCell, ruleParam, ruleTable } from "./table.js";
 
 export interface RuleConstant {
@@ -74,7 +75,10 @@ function guardLoad(category: string): RuleConstant {
   const row = ruleTable("CHARGE_GC_HORIZONTALE", "categories").find(
     (r) => r["categorie"] === category,
   );
-  if (!row) throw new Error(`CHARGE_GC_HORIZONTALE : catégorie ${category} absente.`);
+  if (!row)
+    throw new MessageError(
+      msg("compliance.table.missingCategory", { ruleId: "CHARGE_GC_HORIZONTALE", category }),
+    );
   return { ruleId: "CHARGE_GC_HORIZONTALE", param: category, value: numberCell(row, "qk") };
 }
 

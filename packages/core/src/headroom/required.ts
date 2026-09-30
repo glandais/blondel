@@ -8,6 +8,7 @@
  * par cette section et par les bords C_i et C_e au-delà (arcs discrétisés à 0,1 mm de flèche).
  * Pour une volée droite, on retrouve L = (e_min + ep)·g/h mesurée depuis l'arrivée (A §1.7).
  */
+import { MessageError, msg } from "@blondel/i18n";
 import { firstHit } from "../balancing/postprocess.js";
 import {
   curveLength,
@@ -49,7 +50,7 @@ export function requiredOpening(
   const q = firstHit(p, outward, layout.inner, "back", tangent);
   const r = firstHit(p, outward, layout.outer, "forward", tangent);
   if (!q || !r) {
-    throw new Error(`Section de l'escalier introuvable en s = ${sStart.toFixed(1)} mm.`);
+    throw new MessageError(msg("headroom.error.sectionNotFound", { s: sStart.toFixed(1) }));
   }
   const inner = flattenCurve(subCurve(layout.inner, q.s, curveLength(layout.inner)), CHORD_TOL);
   const outer = flattenCurve(subCurve(layout.outer, r.s, curveLength(layout.outer)), CHORD_TOL);

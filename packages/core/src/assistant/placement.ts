@@ -11,6 +11,7 @@
  * - **Emprise hors tout** en repère local : un rectangle par volée (E + épaisseurs, longueur de
  *   la volée) et le carré de chaque poteau d'angle — reconstruits comme `computeLayout`.
  */
+import { msg, type Message } from "@blondel/i18n";
 import { pointInPolygon } from "../geom2d/polygon.js";
 import * as V from "../geom2d/vec.js";
 import { newelProtrusion, newelSetback } from "../layout/newel.js";
@@ -107,8 +108,8 @@ export interface Placement {
   readonly origin: Vec2;
   /** Degrés. */
   readonly rotation: number;
-  /** Description française du calage. */
-  readonly fit: string;
+  /** Description du calage. */
+  readonly fit: Message;
   /** Clé de calage (côté, alignement) stable d'un giron à l'autre. */
   readonly key: string;
 }
@@ -122,13 +123,13 @@ export interface PlacementMisfit {
 const snap = (v: number): number => (Math.abs(v - Math.round(v)) < 1e-6 ? Math.round(v) : v);
 
 /** Nom d'un côté de trémie d'après sa normale sortante. */
-function edgeName(normal: Vec2, index: number): string {
+function edgeName(normal: Vec2, index: number): Message {
   const eps = 1e-9;
-  if (Math.abs(normal.x + 1) < eps) return "côté x min";
-  if (Math.abs(normal.x - 1) < eps) return "côté x max";
-  if (Math.abs(normal.y + 1) < eps) return "côté y min";
-  if (Math.abs(normal.y - 1) < eps) return "côté y max";
-  return `côté ${index + 1}`;
+  if (Math.abs(normal.x + 1) < eps) return msg("assistant.edge.xMin");
+  if (Math.abs(normal.x - 1) < eps) return msg("assistant.edge.xMax");
+  if (Math.abs(normal.y + 1) < eps) return msg("assistant.edge.yMin");
+  if (Math.abs(normal.y - 1) < eps) return msg("assistant.edge.yMax");
+  return msg("assistant.edge.index", { index: index + 1 });
 }
 
 /**
@@ -170,20 +171,21 @@ export function arrivalPlacements(
     const on = -V.dot(V.rotate(frame.walkPoint, theta), out);
     const name = edgeName(out, i);
     // Au nu d'un mur d'abord : à position égale, le libellé du mur l'emporte (dédoublonnage).
-    const targets: { lo: number; label: string; key: string }[] = [];
+    const targets: { lo: number; label: Message; key: string }[] = [];
     for (const wall of walls) {
       const wd = V.sub(wall.b, wall.a);
       const wl = V.norm(wd);
       if (!(wl > 0) || Math.abs(V.cross(V.scale(wd, 1 / wl), out)) > 1e-6) continue;
       const c = V.dot(V.sub(wall.a, a), u);
       const half = wall.thickness / 2;
-      targets.push({ lo: c + half, label: `au nu du mur ${wall.id}`, key: `wall-${wall.id}+` });
-      targets.push({ lo: c - half - w, label: `au nu du mur ${wall.id}`, key: `wall-${wall.id}-` });
+      const label = msg("assistant.align.wall", { wall: wall.id });
+      targets.push({ lo: c + half, label, key: `wall-${wall.id}+` });
+      targets.push({ lo: c - half - w, label, key: `wall-${wall.id}-` });
     }
     targets.push(
-      { lo: 0, label: "calé au début du côté", key: "start" },
-      { lo: len - w, label: "calé à la fin du côté", key: "end" },
-      { lo: Math.floor((len - w) / 2), label: "centré", key: "center" },
+      { lo: 0, label: msg("assistant.align.start"), key: "start" },
+      { lo: len - w, label: msg("assistant.align.end"), key: "end" },
+      { lo: Math.floor((len - w) / 2), label: msg("assistant.align.center"), key: "center" },
     );
     for (const t of targets) {
       if (t.lo < -tol || t.lo + w > len + tol) continue;
@@ -196,7 +198,7 @@ export function arrivalPlacements(
       placements.push({
         origin: o,
         rotation: deg,
-        fit: `arrivée sur le ${name} de la trémie, ${t.label}`,
+        fit: msg("assistant.fit.arrival", { edge: name, alignment: t.label }),
         key: `${i}:${t.key}`,
       });
     }

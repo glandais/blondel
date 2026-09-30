@@ -35,6 +35,15 @@
  *
  * Valeurs par défaut non sourcées : paramètres « à valider » (LEDGER §2).
  */
+import {
+  dec,
+  errorMessage,
+  msg,
+  textMessage,
+  type Message,
+  type MessageKey,
+  type MessageParam,
+} from "@blondel/i18n";
 import { z } from "zod";
 import { cumulativeLengths } from "../geom2d/curve.js";
 import { projectOnCurve } from "../geom2d/intersect.js";
@@ -44,7 +53,6 @@ import type { FlatPattern, NosingLine, Part, Tread } from "../model/derived.js";
 import type { Mm, Polygon2, Vec2, Vec3 } from "../model/primitives.js";
 import type { StructureContext, StructureKind, StructureOutput } from "../model/plugins.js";
 import { buildBasicParts } from "../parts/basic.js";
-import { fmt } from "../rules/check.js";
 import type { Finding } from "../rules/types.js";
 import { findBendLaw } from "../workshop/metal.js";
 import { resolveWorkshopProfile, type WorkshopProfile } from "../workshop/profile.js";
@@ -65,7 +73,9 @@ import {
   QUANTITY_WELD_MM,
   STEEL_RULES,
   deduceExecutionClass,
+  executionClassReasons,
   holePolygon,
+  joinMessages,
   plateMeasures,
   steelMaterial,
   steelQuantities,
@@ -73,12 +83,16 @@ import {
 } from "./steelCommon.js";
 import {
   SteelFlatParamsSchema,
+  ascentDirection,
   buildSteelFlat,
   endPlateFrame,
   markGroups,
   plateHoles,
   plateObject,
   rectFlat,
+  sheetFormatMessage,
+  supportOn,
+  treadNotCarried,
   type SteelFlatResult,
 } from "./steelFlat.js";
 import {
@@ -145,8 +159,6 @@ const WORKSHOP_SOURCE = "Profil d'atelier Blondel (valeur par défaut à valider
 export const CURVED_RULES = {
   jour: {
     id: "FAB_DEBILLARDE_JOUR",
-    description:
-      "Limon débillardé : jour courbe (arc) à chaque tournant (CHALLENGE G7 : débillardé ⇒ jour en arc ou clothoïde)",
     source: "docs/CHALLENGE.md G7 ; docs/research/B-geometrie.md §5.1",
     confidence: "eleve",
     nature: "metier",
@@ -155,8 +167,6 @@ export const CURVED_RULES = {
   },
   rollingRadius: {
     id: "FAB_ROULAGE_RAYON_MIN",
-    description:
-      "Tôle roulée : rayon intérieur (face concave, r_j − e) ≥ rayon mini de la rouleuse du profil d'atelier",
     source: `docs/research/C-structures.md §2.4 [16] (r_min ≈ 0,65 × Ø du rouleau supérieur) ; ${WORKSHOP_SOURCE}`,
     confidence: "faible",
     nature: "metier",
@@ -165,7 +175,6 @@ export const CURVED_RULES = {
   },
   rollingThickness: {
     id: "FAB_ROULAGE_EPAISSEUR",
-    description: "Tôle roulée : épaisseur ≤ épaisseur maximale de la rouleuse",
     source: WORKSHOP_SOURCE,
     confidence: "faible",
     nature: "metier",
@@ -174,8 +183,6 @@ export const CURVED_RULES = {
   },
   rollLength: {
     id: "FAB_ROULAGE_LONGUEUR_ROULEAUX",
-    description:
-      "Tôle roulée : étendue du développé le long des génératrices roulées ≤ longueur utile des rouleaux",
     source: `docs/research/C-structures.md §2.4 [16] ; ${WORKSHOP_SOURCE}`,
     confidence: "faible",
     nature: "metier",
@@ -184,8 +191,6 @@ export const CURVED_RULES = {
   },
   slopeBreak: {
     id: "FAB_DEBILLARDE_CASSURE_PENTE",
-    description:
-      "Cassure de pente résiduelle des rives aux naissances et aux nez où la courbe des nez F n'est pas dérivable (« jarret »), mesurée sur la face côté marches, la fibre neutre et la face côté jour",
     source: "docs/research/B-geometrie.md §5.3 [ANALYSE] (aucun seuil sourcé)",
     confidence: "moyen",
     nature: "metier",
@@ -194,8 +199,6 @@ export const CURVED_RULES = {
   },
   jointPlacement: {
     id: "FAB_DEBILLARDE_JOINT",
-    description:
-      "Joints soudés bout à bout des tronçons hors des zones de support de marche (marge comprise) et décalés d'au moins δ de la naissance dans la partie droite",
     source:
       "docs/research/C-structures.md §2.4 et B §5.4 (recommandation de conception non sourcée, à valider)",
     confidence: "faible",
@@ -477,7 +480,7 @@ export function buildSteelCurved(
   const e = params.thickness;
   const sup = params.supports;
   const turns = project.stair.layout.turns;
-  const helical = flightsOnlyError("steel-curved", "limon débillardé soudé", layout);
+  const helical = flightsOnlyError("steel-curved", msg("structure.steelCurved.shortLabel"), layout);
   const flat = buildSteelFlat(ctx, params);
   if (helical) {
     return {
@@ -487,8 +490,11 @@ export function buildSteelCurved(
       executionClass: "EXC1",
     };
   }
-  const errors: string[] = [...(flat.output.errors ?? []).filter((x) => !/jour en arc/.test(x))];
-  const notes: string[] = flat.output.notes.filter((x) => !x.startsWith("Classe d'exécution"));
+  const errors: Message[] = [
+    ...(flat.output.errors ?? []).filter((x) => x.key !== "structure.steel.error.arcWell"),
+  ];
+  // Classe d'exécution : recalculée ici (joints du débillardé), celle de `steel-flat` est retirée.
+  const notes: Message[] = flat.output.notes.filter((x) => x.key !== "structure.steel.exc.note");
   const checks = new CheckCollector(project, stepping);
   const rule = (spec: PluginRuleSpec) => pluginRuleDef(spec);
 
@@ -497,58 +503,73 @@ export function buildSteelCurved(
   let curvedOk = stepping.nosings.length >= 2;
   if (turns.length === 0) {
     curvedOk = false;
-    errors.push(
-      "Limon débillardé : escalier sans tournant à volées (droit ou hélicoïdal) — pas de jour courbe entre volées (CHALLENGE G7) ; choisir des limons en plat droit (steel-flat). Limon de jour non généré.",
-    );
+    errors.push(msg("structure.steelCurved.error.noTurn"));
     jourFindings.push({
       status: "violation",
-      message: "Escalier sans tournant : pas de limon débillardé (jour courbe requis).",
+      message: msg("structure.steelCurved.check.noTurn"),
     });
   }
   turns.forEach((t, j) => {
     if (t.inner.kind !== "arc") {
       curvedOk = false;
-      const what = t.inner.kind === "sharp" ? "à angle vif" : "à poteau";
-      errors.push(
-        `Tournant ${j + 1} : jour ${what} — un limon débillardé suppose un jour courbe (CHALLENGE G7 : débillardé ⇒ jour en arc) ; choisir un jour en arc (rayon ≥ rayon de roulage + épaisseur). Limon de jour non généré.`,
+      const what = msg(
+        t.inner.kind === "sharp"
+          ? "structure.steelCurved.well.sharp"
+          : "structure.steelCurved.well.newel",
       );
+      errors.push(msg("structure.steelCurved.error.wellNotArc", { turn: j + 1, well: what }));
       jourFindings.push({
         status: "violation",
-        message: `Tournant ${j + 1} : jour ${what}, jour en arc requis.`,
+        message: msg("structure.steelCurved.check.wellNotArc", { turn: j + 1, well: what }),
       });
     } else {
       jourFindings.push({
         status: "ok",
         measured: t.inner.radius,
-        message: `Tournant ${j + 1} : jour en arc de rayon ${fmt(t.inner.radius, 0)} mm.`,
+        message: msg("structure.steelCurved.check.arcWell", {
+          turn: j + 1,
+          radius: dec(t.inner.radius, 0),
+        }),
       });
     }
   });
   checks.add(rule(CURVED_RULES.jour), jourFindings);
   const rolling = metal.plateRolling;
-  const radiusItems: { value: Mm; label: string }[] = [];
+  const radiusItems: { value: Mm; label: Message }[] = [];
   turns.forEach((t, j) => {
     if (t.inner.kind !== "arc") return;
     const inner = t.inner.radius - e;
     radiusItems.push({
       value: inner,
-      label: `tournant ${j + 1} (r_j ${fmt(t.inner.radius, 0)} − e ${fmt(e, 0)})`,
+      label: msg("structure.steelCurved.check.rollingRadiusItem", {
+        turn: j + 1,
+        radius: dec(t.inner.radius, 0),
+        thickness: dec(e, 0),
+      }),
     });
     if (inner < rolling.minInnerRadius - 1e-9) {
       curvedOk = false;
       errors.push(
-        `Tournant ${j + 1} : rayon intérieur de roulage r_j − e = ${fmt(inner, 0)} mm < rayon mini de la rouleuse ${fmt(rolling.minInnerRadius, 0)} mm (profil d'atelier, à valider) — limon débillardé impossible à rouler ; agrandir le jour ou changer de rouleuse. Limon de jour non généré.`,
+        msg("structure.steelCurved.error.rollingRadius", {
+          turn: j + 1,
+          inner: dec(inner, 0),
+          min: dec(rolling.minInnerRadius, 0),
+        }),
       );
     }
   });
-  checks.addItems(rule(CURVED_RULES.rollingRadius), radiusItems, "Rayon intérieur de roulage", {
-    min: rolling.minInnerRadius - 1e-9,
-    max: null,
-  });
+  checks.addItems(
+    rule(CURVED_RULES.rollingRadius),
+    radiusItems,
+    msg("structure.steelCurved.quantity.rollingInnerRadius"),
+    { min: rolling.minInnerRadius - 1e-9, max: null },
+  );
   checks.addItems(
     rule(CURVED_RULES.rollingThickness),
-    radiusItems.length > 0 ? [{ value: e, label: "tôle du limon débillardé" }] : [],
-    "Épaisseur roulée",
+    radiusItems.length > 0
+      ? [{ value: e, label: msg("structure.steelCurved.check.wreathedPlate") }]
+      : [],
+    msg("structure.steelCurved.quantity.rolledThickness"),
     { min: null, max: rolling.maxThickness },
   );
 
@@ -560,7 +581,7 @@ export function buildSteelCurved(
       curved = buildCurvedStringer(ctx, params, zones, checks, notes, errors);
       innerSupports = [...curved.supports];
     } catch (err) {
-      errors.push(`Limon débillardé non généré : ${(err as Error).message}`);
+      errors.push(msg("structure.steelCurved.error.notGenerated", { detail: errorMessage(err) }));
       curved = null;
     }
   }
@@ -572,7 +593,7 @@ export function buildSteelCurved(
     [...flat.supports.map((s) => s.part), ...innerSupports.map((s) => s.part)],
     sup.kind === "angle" ? "CR" : "PS",
     (p) =>
-      `${p.section}|${Math.round((p.stock?.length ?? 0) / IDENTICAL_TOLERANCE)}|${p.quantities["holes"]}`,
+      `${JSON.stringify(p.section)}|${Math.round((p.stock?.length ?? 0) / IDENTICAL_TOLERANCE)}|${p.quantities["holes"]}`,
   );
   const plates = [...flat.plates, ...(curved?.plates ?? [])];
   const byPrefix = (prefix: string, mark: string): Part[] =>
@@ -606,12 +627,12 @@ export function buildSteelCurved(
         ? {
             status: "ok",
             location: { kind: "tread", number: zn.tread.number },
-            message: `${zn.mark} portée des deux côtés.`,
+            message: msg("structure.steel.check.treadCarried", { mark: zn.mark }),
           }
         : {
             status: "violation",
             location: { kind: "tread", number: zn.tread.number },
-            message: `${zn.mark} sans support côté ${missing.map((m) => (m === "inner" ? "jour" : "mur")).join(" et ")}.`,
+            message: treadNotCarried(zn.mark, missing),
           };
     }),
   );
@@ -635,11 +656,17 @@ export function buildSteelCurved(
   checks.add(rule(STEEL_RULES.executionClass), [
     {
       status: "ok",
-      message: `Classe d'exécution déduite : ${exc.executionClass} (${exc.reasons.length > 0 ? exc.reasons.join(", ") : `${params.grade}, aucune soudure bout à bout`} ; famille B → CC1, SC1 supposée : un escalier de secours peut relever de SC2).`,
+      message: msg("structure.steel.exc.check", {
+        executionClass: exc.executionClass,
+        reasons: executionClassReasons(exc, params.grade),
+      }),
     },
   ]);
   notes.push(
-    `Classe d'exécution EN 1090-2 : ${exc.executionClass}${exc.reasons.length > 0 ? ` (${exc.reasons.join(", ")})` : ` (${params.grade}, aucune soudure bout à bout)`}.`,
+    msg("structure.steel.exc.note", {
+      executionClass: exc.executionClass,
+      reasons: executionClassReasons(exc, params.grade),
+    }),
   );
 
   const flatChecks = flat.output.checks.filter(
@@ -683,8 +710,8 @@ function buildCurvedStringer(
   params: SteelCurvedParams,
   zones: readonly TreadZone[],
   checks: CheckCollector,
-  notes: string[],
-  errors: string[],
+  notes: Message[],
+  errors: Message[],
 ): CurvedStringerResult {
   const { project, layout, stepping } = ctx;
   const profile = resolveWorkshopProfile(project.workshop);
@@ -829,23 +856,49 @@ function buildCurvedStringer(
 
   // 8. Remarques.
   const maxGap = supports.reduce((m, s) => Math.max(m, s.gap), 0);
-  const zonesText = F.zones
-    .map(
-      (zn) =>
-        `[${zn.from} ; ${zn.to}] ${zn.kind === "m3" ? `M3 ${zn.variant === "quintic" ? "quintique" : "cubique"} (${zn.ends?.map((x) => (x === "tangent" ? "tangente" : "libre")).join("/")})` : "interpolée"}`,
-    )
-    .join(", ");
+  const endText = (x: string): Message =>
+    msg(x === "tangent" ? "structure.steelCurved.zone.tangent" : "structure.steelCurved.zone.free");
+  const zonesText = joinMessages(
+    F.zones.map((zn) =>
+      zn.kind === "m3"
+        ? msg("structure.steelCurved.zone.m3", {
+            from: zn.from,
+            to: zn.to,
+            variant: msg(
+              zn.variant === "quintic"
+                ? "structure.steelCurved.zone.quintic"
+                : "structure.steelCurved.zone.cubic",
+            ),
+            ends: zn.ends
+              ? msg("structure.steelCurved.zone.ends", {
+                  start: endText(zn.ends[0]),
+                  end: endText(zn.ends[1]),
+                })
+              : "",
+          })
+        : msg("structure.steelCurved.zone.interpolated", { from: zn.from, to: zn.to }),
+    ),
+  );
   notes.push(
-    `Limon de jour débillardé : tôle ${fmt(e, 0)} mm (${params.grade}) roulée, d_h = ${fmt(params.upperOffset, 0)} mm, d_b = ${fmt(lowerOffset, 0)} mm ; rives z = F(σ) ± d sur C_i, F = courbe des nez ${zonesText || "sans zone balancée"} ; développé en fibre neutre ; ${segCount} tronçon(s), ${joints.length} joint(s) soudé(s) bout à bout (${fmt(buttWeld, 0)} mm de cordon).`,
+    msg("structure.steelCurved.note.summary", {
+      thickness: dec(e, 0),
+      grade: params.grade,
+      upperOffset: dec(params.upperOffset, 0),
+      lowerOffset: dec(lowerOffset, 0),
+      zones: zonesText ?? msg("structure.steelCurved.zone.none"),
+      segments: msg("structure.steelCurved.count.segments", { count: segCount }),
+      joints: msg("structure.steelCurved.count.buttJoints", { count: joints.length }),
+      weld: dec(buttWeld, 0),
+    }),
   );
   if (maxGap > 0.05) {
-    notes.push(
-      `Supports côté jour : cornières droites tangentes à la joue courbe, écart maximal ${fmt(maxGap, 1)} mm aux extrémités (à reprendre au montage ou support cintré).`,
-    );
+    notes.push(msg("structure.steelCurved.note.supportGap", { gap: dec(maxGap, 1) }));
   }
   if (segments.some((s) => !s.fits)) {
     errors.push(
-      `Limon débillardé : ${segments.filter((s) => !s.fits).length} tronçon(s) hors des formats de tôle malgré les coupes au milieu de l'arc (supports trop rapprochés ou tronçon trop court à recouper).`,
+      msg("structure.steelCurved.error.segmentsOutOfFormats", {
+        count: segments.filter((s) => !s.fits).length,
+      }),
     );
   }
   return {
@@ -880,9 +933,9 @@ function curvedRawSupports(
   P: (s: Mm) => Vec2,
   N: (s: Mm) => Vec2,
   sup: SteelCurvedParams["supports"],
-): { raw: CurvedRawSupport[]; shortSupports: { value: Mm; label: string }[] } {
+): { raw: CurvedRawSupport[]; shortSupports: { value: Mm; label: Message }[] } {
   const raw: CurvedRawSupport[] = [];
-  const shortSupports: { value: Mm; label: string }[] = [];
+  const shortSupports: { value: Mm; label: Message }[] = [];
   for (const zn of zones) {
     const a = nosings[zn.tread.number - 1]!;
     const b = nosings[zn.tread.number]!;
@@ -894,7 +947,10 @@ function curvedRawSupports(
     const iv = curveInterval(inside, lo, hi, 5);
     if (!iv) continue;
     const len = iv.s1 - iv.s0;
-    shortSupports.push({ value: len, label: `${zn.mark} sur le limon de jour` });
+    shortSupports.push({
+      value: len,
+      label: msg("structure.steelCurved.check.onOuterString", { mark: zn.mark }),
+    });
     if (len < sup.minLength) continue;
     raw.push({ zone: zn, s0: iv.s0, s1: iv.s1 });
   }
@@ -978,7 +1034,7 @@ function placeCurvedJoints(
     readonly dev: StringerDevelopment;
     readonly metal: WorkshopProfile["metal"];
   },
-  notes: string[],
+  notes: Message[],
 ): {
   cuts: CurvedCut[];
   outlineN: Vec2[];
@@ -1047,17 +1103,27 @@ function placeCurvedJoints(
     const arcArc = b.before === "arc" && b.after === "arc";
     if (s === null || !accept(s, "naissance", { naissance: b.sigma, onArc })) {
       notes.push(
-        `Limon débillardé : naissance à σ = ${fmt(b.sigma, 0)} mm sans coupe (partie droite trop courte, supports ou tronçon voisin à moins de ${fmt(minSeg, 0)} mm) ; tronçon continu à travers la naissance.`,
+        msg("structure.steelCurved.note.springingNoCut", {
+          sigma: dec(b.sigma, 0),
+          minSegment: dec(minSeg, 0),
+        }),
       );
     } else if (onArc) {
       notes.push(
-        `Limon débillardé : coupe de la naissance σ = ${fmt(b.sigma, 0)} mm placée sur l'arc (σ = ${fmt(s, 0)} mm), la partie droite étant occupée par des supports.`,
+        msg("structure.steelCurved.note.springingCutOnArc", {
+          sigma: dec(b.sigma, 0),
+          cut: dec(s, 0),
+        }),
       );
     } else if (!arcArc && Math.abs(s - b.sigma) < cp.jointOffset - 1e-6) {
       // Repli vers la naissance : le décalage δ (méplats d'extrémité de roulage, B §5.5) n'est
       // pas tenu ; signalé (et contrôlé, `FAB_DEBILLARDE_JOINT`).
       notes.push(
-        `Limon débillardé : coupe de la naissance σ = ${fmt(b.sigma, 0)} mm à ${fmt(Math.abs(s - b.sigma), 0)} mm seulement de la naissance (δ = ${fmt(cp.jointOffset, 0)} mm), la partie droite au-delà étant occupée par des supports.`,
+        msg("structure.steelCurved.note.springingCutClose", {
+          sigma: dec(b.sigma, 0),
+          distance: dec(Math.abs(s - b.sigma), 0),
+          offset: dec(cp.jointOffset, 0),
+        }),
       );
     }
   }
@@ -1322,7 +1388,10 @@ function curvedSegment(
         b: seg[1],
         ...(k === 0
           ? {
-              label: `Roulage R int ${fmt(innerR, 0)} mm (fibre neutre ${fmt(neutralR, 0)} mm), génératrices verticales`,
+              label: msg("structure.steelCurved.flatLine.rolling", {
+                inner: dec(innerR, 0),
+                neutral: dec(neutralR, 0),
+              }),
             }
           : {}),
       });
@@ -1330,7 +1399,14 @@ function curvedSegment(
     for (const x of [p.fiber0, p.fiber1]) {
       if (x <= x0 + 1e-6 || x >= x1 - 1e-6) continue;
       const seg = vertical(x);
-      if (seg) lines.push({ kind: "mark", a: seg[0], b: seg[1], label: "Naissance" });
+      if (seg) {
+        lines.push({
+          kind: "mark",
+          a: seg[0],
+          b: seg[1],
+          label: msg("structure.steelCurved.flatLine.springing"),
+        });
+      }
     }
   }
   // Traits de joint.
@@ -1341,7 +1417,7 @@ function curvedSegment(
         kind: "joint",
         a: seg[0],
         b: seg[1],
-        label: `Joint soudé bout à bout avec ${markOf(other)} (chanfrein à définir, EXC2)`,
+        label: msg("structure.steelCurved.flatLine.joint", { mark: markOf(other) }),
       });
     }
   };
@@ -1351,7 +1427,7 @@ function curvedSegment(
   for (const k of nosings) {
     if (k.sigmaInner < iv.a - 1e-6 || k.sigmaInner > iv.b + 1e-6) continue;
     const seg = vertical(neutral.toFiber(k.sigmaInner));
-    if (seg) lines.push({ kind: "mark", a: seg[0], b: seg[1], label: `N${k.index}` });
+    if (seg) lines.push({ kind: "mark", a: seg[0], b: seg[1], label: textMessage(`N${k.index}`) });
   }
   // Supports (position de soudage / de pose) et perçages.
   const holes: Vec2[][] = [];
@@ -1367,7 +1443,9 @@ function curvedSegment(
         kind: "mark",
         a,
         b: rect[(q + 1) % 4]!,
-        ...(q === 0 ? { label: `Support ${s.placement.treadMark}` } : {}),
+        ...(q === 0
+          ? { label: msg("structure.steel.flatLine.support", { mark: s.placement.treadMark }) }
+          : {}),
       }),
     );
     for (const c of boltCenters(s.placement, sup)) {
@@ -1388,7 +1466,7 @@ function curvedSegment(
   const la = toFlat(V.vec(xm - 20, ym));
   const lb = toFlat(V.vec(xm + 20, ym));
   const [ta, tb] = mirrored ? [lb, la] : [la, lb];
-  lines.push({ kind: "text", a: ta, b: tb, label: markOf(i) });
+  lines.push({ kind: "text", a: ta, b: tb, label: textMessage(markOf(i)) });
   let outer = outline.map(toFlat);
   if (mirrored) outer = outer.reverse();
   const flat: FlatPattern = {
@@ -1397,7 +1475,11 @@ function curvedSegment(
     thickness: e,
     reference: {
       kind: "neutral-fiber",
-      description: `Fibre neutre (mi-épaisseur) du limon de jour débillardé, tronçon ${i + 1}/${segCount}, développée pour le roulage, vue depuis les marches ; x = abscisse développée sur la fibre neutre (σ sur les droites, (r_j − e/2)·θ sur les arcs ; ${mirrored ? "la montée va vers les x décroissants" : "la montée va vers les x croissants"}), y = altitude (sol fini bas = 0), mm, 1:1. Rouler face côté jour à l'intérieur.`,
+      description: msg("structure.steelCurved.reference.segment", {
+        segment: i + 1,
+        segments: segCount,
+        ascent: ascentDirection(mirrored),
+      }),
     },
   };
   // Solide : surface réglée (face côté marches) épaissie vers le jour.
@@ -1421,11 +1503,15 @@ function curvedSegment(
     id: idOf(i),
     mark: markOf(i),
     category: "stringer",
-    name: `Limon de jour débillardé, tronçon ${i + 1}/${segCount}`,
+    name: msg("structure.steelCurved.part.segment", { segment: i + 1, segments: segCount }),
     material,
     solid: { kind: "ruled", a: lower, b: upper, thickness: e, normals },
     flat,
-    section: `tôle ${fmt(e, 0)} (${params.grade}) roulée, largeur ${fmt(Math.ceil(box.width), 0)}`,
+    section: msg("structure.steelCurved.section.rolledPlate", {
+      thickness: dec(e, 0),
+      grade: params.grade,
+      width: dec(Math.ceil(box.width), 0),
+    }),
     stock: { length: box.length, width: box.width, thickness: e },
     quantities: {
       ...steelQuantities(
@@ -1469,7 +1555,7 @@ function curvedPlates(g: CurvedGeometry, segCount: number): Part[] {
     return {
       id: idOf(0),
       mark: markOf(0),
-      name: "Limon de jour débillardé",
+      name: msg("structure.steelCurved.part.outerString"),
       side: "inner",
       leg: 0,
       a: V.addScaled(P(s), dir, -s),
@@ -1495,14 +1581,14 @@ function curvedPlates(g: CurvedGeometry, segCount: number): Part[] {
         holesAt,
         pl.holeDiameter,
         "PF",
-        `Platine de pied de ${markOf(0)}, vue de dessus, mm, 1:1.`,
+        msg("structure.steel.reference.footPlate", { mark: markOf(0) }),
       );
       const o = V.add(V.addScaled(f.a, f.dir, mid - L / 2), V.scale(f.into, -(pl.width - e) / 2));
       const sgn = V.cross(f.dir, f.into) > 0 ? 1 : -1;
       plates.push(
         plateObject(
           `plate-foot-${idOf(0)}`,
-          `Platine de pied de ${markOf(0)}`,
+          msg("structure.steel.part.footPlate", { mark: markOf(0) }),
           pf,
           pl.thickness,
           2 * L,
@@ -1533,12 +1619,12 @@ function curvedPlates(g: CurvedGeometry, segCount: number): Part[] {
         holesAt,
         pl.holeDiameter,
         "PH",
-        `Platine de tête de ${markOf(last)}, vue de face, mm, 1:1.`,
+        msg("structure.steel.reference.headPlate", { mark: markOf(last) }),
       );
       plates.push(
         plateObject(
           `plate-head-${idOf(last)}`,
-          `Platine de tête de ${markOf(last)}`,
+          msg("structure.steel.part.headPlate", { mark: markOf(last) }),
           ph,
           pl.thickness,
           2 * H,
@@ -1559,12 +1645,12 @@ function curvedPlates(g: CurvedGeometry, segCount: number): Part[] {
 function addCurvedChecks(
   g: CurvedGeometry,
   checks: CheckCollector,
-  notes: string[],
+  notes: Message[],
   input: {
     readonly joints: readonly CurvedJoint[];
     readonly segments: readonly CurvedSegment[];
     readonly supports: readonly CurvedSupport[];
-    readonly shortSupports: { value: Mm; label: string }[];
+    readonly shortSupports: { value: Mm; label: Message }[];
   },
 ): {
   minPerp: Mm;
@@ -1588,13 +1674,18 @@ function addCurvedChecks(
   if (!Number.isFinite(minPerp)) minPerp = params.upperOffset + lowerOffset;
   checks.addItems(
     rule(FAB_RULES.perpendicularWidth),
-    [{ value: minPerp, label: "limon de jour débillardé (face côté jour)", partId: idOf(0) }],
-    "Largeur perpendiculaire",
+    [
+      {
+        value: minPerp,
+        label: msg("structure.steelCurved.check.outerStringWellFace"),
+        partId: idOf(0),
+      },
+    ],
+    msg("structure.steelCurved.quantity.perpendicularWidth"),
     { min: cp.minPerpendicularWidth, max: null },
   );
   // Cassure de pente résiduelle aux naissances.
   const fibers = [stepsFace, neutral, jourFace];
-  const fiberLabel = ["face côté marches", "fibre neutre", "face côté jour"];
   const slopeBreaks = births
     .filter((b) => b.sigma > uLo && b.sigma < uHi)
     .map((b) => ({ sigma: b.sigma, fibers: fibers.map((d) => slopeBreakAt(F.at, d, b.sigma)) }));
@@ -1615,10 +1706,11 @@ function addCurvedChecks(
       fibers: fibers.map((d) => slopeBreakAt(F.at, d, k.sigmaInner, 0.05)),
     }))
     .filter((kk) => kk.fibers.some((f) => f.degrees >= 0.01));
+  /** Cassure de pente sur les trois fibres (face côté marches, fibre neutre, face côté jour). */
   const breakFinding = (
-    where: string,
+    key: MessageKey,
+    params: Readonly<Record<string, MessageParam>>,
     fibersAt: readonly SlopeBreak[],
-    remedy: string,
   ): Finding => {
     const worst = Math.max(...fibersAt.map((f) => f.degrees));
     const bad = cp.maxSlopeBreak !== undefined && worst > cp.maxSlopeBreak;
@@ -1626,48 +1718,64 @@ function addCurvedChecks(
       status: bad ? "violation" : "ok",
       measured: worst,
       ...(cp.maxSlopeBreak !== undefined ? { max: cp.maxSlopeBreak } : {}),
-      message: `${where} : cassure de pente ${fibersAt.map((f, q) => `${fiberLabel[q]} ${fmt(f.degrees, 2)}°`).join(", ")}${cp.maxSlopeBreak !== undefined ? ` (seuil ${fmt(cp.maxSlopeBreak, 2)}°)` : " (mesurée, sans seuil sourcé)"} ; ${remedy}`,
+      message: msg(key, {
+        ...params,
+        fibers: msg("structure.steelCurved.check.fiberBreaks", {
+          steps: dec(fibersAt[0]!.degrees, 2),
+          neutral: dec(fibersAt[1]!.degrees, 2),
+          well: dec(fibersAt[2]!.degrees, 2),
+        }),
+        threshold:
+          cp.maxSlopeBreak !== undefined
+            ? msg("structure.steelCurved.check.threshold", { max: dec(cp.maxSlopeBreak, 2) })
+            : msg("structure.steelCurved.check.noThreshold"),
+      }),
     };
   };
   checks.add(
     rule(CURVED_RULES.slopeBreak),
     nosingKinks.map((kk) =>
       breakFinding(
-        `Courbe des nez F au nez ${kk.nosing} (σ = ${fmt(kk.sigma, 0)} mm)`,
+        "structure.steelCurved.check.nosingKink",
+        { nosing: kk.nosing, sigma: dec(kk.sigma, 0) },
         kk.fibers,
-        "F n'est pas dérivable en ce nez (borne de zone balancée à extrémité libre ou nez non balancé), la rive présente un jarret ; élargir la zone balancée ou reprendre à la cerce (B §5.3).",
       ),
     ),
   );
   if (nosingKinks.length > 0) {
     const worst = nosingKinks.reduce((m, kk) => Math.max(m, ...kk.fibers.map((f) => f.degrees)), 0);
     notes.push(
-      `Limon débillardé : la courbe des nez F présente des cassures de pente aux nez ${nosingKinks.map((kk) => kk.nosing).join(", ")} (jusqu'à ${fmt(worst, 1)}°), reportées sur les rives (B §5.3).`,
+      msg("structure.steelCurved.note.nosingKinks", {
+        nosings: nosingKinks.map((kk) => kk.nosing).join(", "),
+        worst: dec(worst, 1),
+      }),
     );
   }
   checks.add(
     rule(CURVED_RULES.slopeBreak),
     slopeBreaks.length === 0
-      ? [{ status: "ok", message: "Aucune naissance sur le limon." }]
-      : slopeBreaks.map((sb): Finding => {
-          const worst = Math.max(...sb.fibers.map((f) => f.degrees));
-          const bad = cp.maxSlopeBreak !== undefined && worst > cp.maxSlopeBreak;
-          return {
-            status: bad ? "violation" : "ok",
-            measured: worst,
-            ...(cp.maxSlopeBreak !== undefined ? { max: cp.maxSlopeBreak } : {}),
-            message: `Naissance σ = ${fmt(sb.sigma, 0)} mm : cassure de pente ${sb.fibers.map((f, q) => `${fiberLabel[q]} ${fmt(f.degrees, 2)}°`).join(", ")}${cp.maxSlopeBreak !== undefined ? ` (seuil ${fmt(cp.maxSlopeBreak, 2)}°)` : " (mesurée, sans seuil sourcé)"} ; reprise à la cerce ou raccord à courbure continue (B §5.3).`,
-          };
-        }),
+      ? [{ status: "ok", message: msg("structure.steelCurved.check.noSpringing") }]
+      : slopeBreaks.map((sb): Finding =>
+          breakFinding(
+            "structure.steelCurved.check.springingBreak",
+            { sigma: dec(sb.sigma, 0) },
+            sb.fibers,
+          ),
+        ),
   );
   // Joints.
   checks.addItems(
     rule(CURVED_RULES.jointPlacement),
     joints.map((j) => ({
       value: Number.isFinite(j.supportClearance) ? j.supportClearance : 1e6,
-      label: `joint σ = ${fmt(j.sigma, 0)} mm (${j.reason === "naissance" ? "naissance" : "format de tôle"})`,
+      label: msg(
+        j.reason === "naissance"
+          ? "structure.steelCurved.check.jointSpringing"
+          : "structure.steelCurved.check.jointFormat",
+        { sigma: dec(j.sigma, 0) },
+      ),
     })),
-    "Distance joint / support",
+    msg("structure.steelCurved.quantity.jointSupportDistance"),
     { min: cp.jointSupportMargin - JOINT_TOLERANCE, max: null },
   );
   // Décalage δ des coupes de naissance dans la partie droite (hors naissance arc / arc).
@@ -1683,9 +1791,14 @@ function addCurvedChecks(
       rule(CURVED_RULES.jointPlacement),
       offsetJoints.map((j) => ({
         value: j.onArc ? -j.naissanceOffset! : j.naissanceOffset!,
-        label: `joint σ = ${fmt(j.sigma, 0)} mm, naissance σ = ${fmt(j.naissance!, 0)} mm${j.onArc ? " (sur l'arc : décalage compté négatif)" : ""}`,
+        label: msg(
+          j.onArc
+            ? "structure.steelCurved.check.jointOffsetOnArc"
+            : "structure.steelCurved.check.jointOffset",
+          { sigma: dec(j.sigma, 0), springing: dec(j.naissance!, 0) },
+        ),
       })),
-      "Décalage joint / naissance dans la partie droite",
+      msg("structure.steelCurved.quantity.jointSpringingOffset"),
       { min: cp.jointOffset - 1e-6, max: null },
     );
   }
@@ -1696,13 +1809,19 @@ function addCurvedChecks(
       status: sg.fits ? "ok" : "violation",
       measured: sg.box.length,
       location: { kind: "part", partId: sg.part.id },
-      message: `${sg.part.mark} : développé ${fmt(sg.box.length, 0)} × ${fmt(sg.box.width, 0)} mm ${sg.fits ? "dans un format de tôle" : "hors des formats de tôle du profil d'atelier (coupe supplémentaire impossible hors des supports)"}.`,
+      message: sheetFormatMessage(
+        sg.fits
+          ? "structure.steel.check.inSheetFormat"
+          : "structure.steelCurved.check.outOfSheetFormats",
+        sg.part.mark,
+        sg.box,
+      ),
     })),
   );
   checks.addItems(
     rule(STEEL_RULES.laser),
-    segments.map((sg) => ({ value: e, label: sg.part.mark, partId: sg.part.id })),
-    "Épaisseur découpée",
+    segments.map((sg) => ({ value: e, label: textMessage(sg.part.mark), partId: sg.part.id })),
+    msg("structure.steel.quantity.cutThickness"),
     { min: null, max: metal.laser.maxThickness },
   );
   checks.addItems(
@@ -1710,17 +1829,22 @@ function addCurvedChecks(
     segments.flatMap((sg) =>
       sg.arcs.map((a) => ({
         value: a.generatrixExtent,
-        label: `${sg.part.mark}, arc R int ${fmt(a.innerRadius, 0)} mm`,
+        label: msg("structure.steelCurved.check.arcItem", {
+          mark: sg.part.mark,
+          radius: dec(a.innerRadius, 0),
+        }),
         partId: sg.part.id,
       })),
     ),
-    "Étendue le long des génératrices",
+    msg("structure.steelCurved.quantity.generatrixExtent"),
     { min: null, max: metal.plateRolling.rollLength },
   );
-  checks.addItems(rule(STEEL_RULES.supportLength), shortSupports, "Longueur d'appui", {
-    min: sup.minLength,
-    max: null,
-  });
+  checks.addItems(
+    rule(STEEL_RULES.supportLength),
+    shortSupports,
+    msg("structure.steel.quantity.bearingLength"),
+    { min: sup.minLength, max: null },
+  );
   checks.addItems(
     rule(STEEL_RULES.supportInStringer),
     supports.map((s) => {
@@ -1734,11 +1858,11 @@ function addCurvedChecks(
       );
       return {
         value,
-        label: `${s.placement.treadMark} sur ${s.placement.face.ownerMark}`,
+        label: supportOn(s.placement.treadMark, s.placement.face.ownerMark),
         partId: s.placement.face.owner,
       };
     }),
-    "Marge support / rive",
+    msg("structure.steel.quantity.supportEdgeMargin"),
     { min: -1e-6, max: null },
   );
   return { minPerp, slopeBreaks, nosingKinks };
@@ -1746,7 +1870,7 @@ function addCurvedChecks(
 
 export const STEEL_CURVED: StructureKind<SteelCurvedParams> = {
   kind: "steel-curved",
-  label: "Limon de jour débillardé soudé (tôle roulée par tronçons), limons muraux en plat",
+  labelKey: "structure.steelCurved.label",
   family: "metal",
   paramsSchema: SteelCurvedParamsSchema,
   defaults: () => SteelCurvedParamsSchema.parse({}),

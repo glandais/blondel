@@ -11,6 +11,7 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { beforeEach, describe, expect, it } from "vitest";
+import { fr } from "../i18n.test-helpers.js";
 import type { Model, RuleResult } from "../model/derived.js";
 import { ProjectSchema, type Project, type ProjectInput } from "../model/project.js";
 import { buildModel, clearModelCache } from "../pipeline/build.js";
@@ -137,7 +138,7 @@ describe("jalon 4 — cas d'acceptation n° 1 (garde-corps)", () => {
       const partId = r.location.kind === "part" ? r.location.partId : "";
       expect(m.parts.find((x) => x.id === partId)?.category).toBe("baluster");
       expect(r.measured).toBeGreaterThanOrEqual(110);
-      expect(r.message).toMatch(/entre balustres|sous les balustres/);
+      expect(fr(r.message)).toMatch(/entre balustres|sous les balustres/);
     }
   });
 
@@ -150,7 +151,7 @@ describe("jalon 4 — cas d'acceptation n° 1 (garde-corps)", () => {
     for (const r of bad) {
       expect(r.location.kind).toBe("part");
       const partId = r.location.kind === "part" ? r.location.partId : "";
-      expect(m.parts.find((x) => x.id === partId)?.name).toBe("Lisse");
+      expect(fr(m.parts.find((x) => x.id === partId)?.name)).toBe("Lisse");
       // H ≥ 1 000 + X avec X ∈ [100 ; 600[.
       expect(r.min).toBeGreaterThanOrEqual(1100);
       expect(r.min).toBeLessThan(1600);
@@ -200,9 +201,9 @@ describe("jalon 4 — cas d'acceptation n° 1 (garde-corps)", () => {
     );
     // Contrôlés comme des lisses (gabarit B, T1 / T2).
     expect(results(m, "GC_GABARIT_B_2024").length).toBeGreaterThan(0);
-    expect(m.parts.some((x) => x.name === "Câble" && x.material === "stainless-brushed")).toBe(
-      true,
-    );
+    expect(
+      m.parts.some((x) => x.name.key === "part.cable.name" && x.material === "stainless-brushed"),
+    ).toBe(true);
   });
 
   it("sans section guards : aucune pièce de garde-corps, règles non évaluées", () => {
@@ -224,7 +225,7 @@ describe("jalon 4 — cas d'acceptation n° 1 (garde-corps)", () => {
     const v = results(m, "GC_OBLIGATOIRE").filter((r) => r.status === "violation");
     expect(v.length).toBeGreaterThanOrEqual(2);
     expect(v.every((r) => r.location.kind === "point")).toBe(true);
-    expect(v.some((r) => /côté jour/.test(r.message))).toBe(true);
-    expect(v.some((r) => /trémie/.test(r.message))).toBe(true);
+    expect(v.some((r) => /côté jour/.test(fr(r.message)))).toBe(true);
+    expect(v.some((r) => /trémie/.test(fr(r.message)))).toBe(true);
   });
 });

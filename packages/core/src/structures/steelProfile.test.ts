@@ -30,6 +30,8 @@ import {
 } from "./steelProfile.js";
 import { cuttingPlan } from "./steelProfileCutting.js";
 import "./index.js";
+import { fr, frList } from "../i18n.test-helpers.js";
+import { ruleDescription } from "../model/messages.js";
 
 const EXAMPLES_DIR = resolve(dirname(fileURLToPath(import.meta.url)), "../../../../examples");
 const loadExample = (file: string): Project =>
@@ -72,7 +74,7 @@ describe("steel-profile — registre et paramètres", () => {
     });
     expect(SteelProfileParamsSchema.safeParse({ section: "UPN 999" }).success).toBe(false);
     const m = buildModel(straight(15, { section: "UPN 999" }), { memo: false });
-    expect(m.errors.join(" ")).toMatch(/paramètres invalides/);
+    expect(frList(m.errors).join(" ")).toMatch(/paramètres invalides/);
   });
 });
 
@@ -124,10 +126,10 @@ describe("steel-profile — escalier droit", () => {
       expect(Math.max(...xs) - Math.min(...xs)).toBeCloseTo(st.cutLength, 6);
       // Départ au sol : coupe de niveau + coupe d'aplomb (5 sommets), arrivée d'aplomb.
       expect(f.outline.outer.length).toBe(5);
-      const joints = f.lines.filter((l) => l.kind === "joint").map((l) => l.label);
-      expect(joints.some((l) => /coupe de niveau/.test(l!))).toBe(true);
-      expect(joints.some((l) => /Arrivée : coupe d'aplomb/.test(l!))).toBe(true);
-      expect(st.part.section).toBe(`${s.name} (S235)`);
+      const joints = f.lines.filter((l) => l.kind === "joint").map((l) => fr(l.label));
+      expect(joints.some((l) => /coupe de niveau/.test(l))).toBe(true);
+      expect(joints.some((l) => /Arrivée : coupe d'aplomb/.test(l))).toBe(true);
+      expect(fr(st.part.section)).toBe(`${s.name} (S235)`);
       expect(st.part.stock).toMatchObject({ width: s.h, thickness: s.b });
       // Masse = A × L × 7 850 ≈ masse linéique du catalogue × L.
       const mass = st.part.quantities[QUANTITY_MASS_KG]!;
@@ -140,7 +142,7 @@ describe("steel-profile — escalier droit", () => {
     for (const x of results(m, "FAB_SUPPORT_DANS_LIMON")) expect(x.status).toBe("ok");
     for (const x of results(m, "FAB_MARCHE_PORTEE")) expect(x.status).toBe("ok");
     expect(r.executionClass).toBe("EXC1");
-    expect(results(m, "EXC_CLASSE_EXECUTION")[0]!.message).toMatch(/EXC1/);
+    expect(fr(results(m, "EXC_CLASSE_EXECUTION")[0]!.message)).toMatch(/EXC1/);
   });
 
   it("prédimensionnement dans le contrôle de conception, libellé « indicatif »", () => {
@@ -148,8 +150,8 @@ describe("steel-profile — escalier droit", () => {
       const list = results(m, id);
       expect(list.length, id).toBe(2);
       for (const x of list) {
-        expect(x.description).toContain(PRECHECK_LABEL);
-        expect(x.message).toContain(PRECHECK_LABEL);
+        expect(fr(ruleDescription(x.ruleId))).toContain(fr(PRECHECK_LABEL));
+        expect(fr(x.message)).toContain(fr(PRECHECK_LABEL));
         expect(x.status).toBe("ok");
       }
     }
@@ -255,14 +257,14 @@ describe("steel-profile — tournants", () => {
     expect(bend[0]!.severity).toBe("bloquant");
     expect(bend[0]!.min).toBe(650);
     expect(r.stringers.every((s) => s.face.side === "outer")).toBe(true);
-    expect(m.errors.join(" ")).toMatch(/jour en arc/);
+    expect(frList(m.errors).join(" ")).toMatch(/jour en arc/);
   });
 
   it("jour en arc de grand rayon : cintrage possible, limon cintré non généré (jalon 5)", () => {
     const { m } = run(arc(700));
     const bend = results(m, "FAB_CINTRAGE_PROFILE");
     expect(bend[0]!.status).toBe("ok");
-    expect(bend[0]!.message).toMatch(/hélicoïdal/);
+    expect(fr(bend[0]!.message)).toMatch(/hélicoïdal/);
   });
 
   it("angle mural en onglet, profilé en I : l'âme du développé dépasse l'angle de (b − t_w)/2", () => {
@@ -299,7 +301,7 @@ describe("steel-profile — tournants", () => {
 
   it("jour à angle vif : erreur explicite, limons muraux générés", () => {
     const { m, r } = run(profiled(loadExample("quarter-left.blondel.json")));
-    expect(m.errors.join(" ")).toMatch(/angle vif/);
+    expect(frList(m.errors).join(" ")).toMatch(/angle vif/);
     expect(r.stringers.length).toBe(2);
     const miter = results(m, "FAB_ONGLET_RACCORD");
     expect(miter.length).toBe(1);
@@ -378,11 +380,11 @@ describe("steel-profile — poteau élargi des profilés (décision A13)", () =>
       ["newel", "arrival"],
     ]);
     for (const x of inner) {
-      expect(x.part.flat!.lines.some((l) => /contre le poteau/.test(l.label ?? ""))).toBe(true);
+      expect(x.part.flat!.lines.some((l) => /contre le poteau/.test(fr(l.label)))).toBe(true);
     }
     // Tube 125 × 125 centré en K − 43·(n + u).
-    expect(r.posts[0]!.section).toBe("tube carré 125 × 125 × 4");
-    expect(m.notes?.some((n) => /poteau des profilés attendu/.test(n)) ?? false).toBe(false);
+    expect(fr(r.posts[0]!.section)).toBe("tube carré 125 × 125 × 4");
+    expect(frList(m.notes).some((n) => /poteau des profilés attendu/.test(n)) ?? false).toBe(false);
     expect(profileFlangeWidth(m.parts)).toBe(85);
   });
 
@@ -420,7 +422,9 @@ describe("steel-profile — poteau élargi des profilés (décision A13)", () =>
     const reception = results(m, "FAB_POTEAU_RECEPTION");
     expect(reception.some((x) => x.status === "violation")).toBe(true);
     expect(reception.every((x) => x.max === 50)).toBe(true);
-    expect(m.notes?.some((n) => /poteau des profilés attendu : \d+ mm décalé/.test(n))).toBe(true);
+    expect(frList(m.notes).some((n) => /poteau des profilés attendu : \d+ mm décalé/.test(n))).toBe(
+      true,
+    );
   });
 });
 
@@ -507,7 +511,7 @@ describe("steel-profile : contrôle a posteriori de l'épaisseur hors emprise en
       max: 45,
       unit: "mm",
     });
-    expect(r[0]!.message).toMatch(/UPN 240.*40 mm de plus/);
+    expect(fr(r[0]!.message)).toMatch(/UPN 240.*40 mm de plus/);
   });
 
   it("section imposée : aucun constat sur le modèle construit", () => {

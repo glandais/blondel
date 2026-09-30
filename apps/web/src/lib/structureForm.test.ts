@@ -6,6 +6,7 @@ import {
   createProject,
   TreadSpecSchema,
   type StructureContext,
+  type MessageKey,
   type StructureKind,
 } from "@blondel/core";
 import { describe, expect, it } from "vitest";
@@ -196,7 +197,7 @@ describe("chemins de paramètres", () => {
 describe("plugin de structure", () => {
   const plugin: StructureKind<{ method: string; targetCollet: number }> = {
     kind: "fake",
-    label: "Factice",
+    labelKey: "test.fake" as MessageKey,
     family: "bois",
     paramsSchema: BalancingSchema as never,
     defaults: () => ({ method: "M3", targetCollet: 100 }),

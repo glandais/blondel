@@ -2,6 +2,23 @@ export * from "./model/primitives.js";
 export * from "./model/project.js";
 export * from "./model/derived.js";
 export * from "./model/plugins.js";
+export * from "./model/messages.js";
+// Textes du modèle (ADR-0007) : types et constructeurs de `@blondel/i18n` utiles aux plugins et
+// aux consommateurs du `Model` (la traduction elle-même se fait à l'affichage).
+export {
+  MessageError,
+  errorMessage,
+  isMessage,
+  isMessageError,
+  messageEquals,
+  msg,
+  num,
+  textMessage,
+  type Message,
+  type MessageKey,
+  type MessageParam,
+  type NumberParam,
+} from "@blondel/i18n";
 export * from "./geom2d/index.js";
 export * from "./project/index.js";
 export * from "./rules/index.js";

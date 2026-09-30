@@ -6,6 +6,8 @@ export {
   RULES_VERSION,
   RULE_CONTEXTS,
   RULE_TABLE,
+  CONFIDENCE_LABEL_KEYS,
+  NATURE_LABEL_KEYS,
   RuleDefSchema,
   RuleTableSchema,
   findRule,
@@ -15,7 +17,9 @@ export {
 } from "./table.js";
 export {
   ALWAYS_CONTEXT,
+  CONTEXT_LABEL_KEYS,
   DEDUCED_ONLY_CONTEXTS,
+  contextLabel,
   HELICAL_COLUMN_CONTEXT,
   SHAPE_CONTEXTS,
   guardRailRegime,
@@ -47,5 +51,6 @@ export {
   requiredGuardHeight2024,
   type GuardHeightStep,
 } from "./evaluators/guards.js";
+export { SEVERITY_LABEL_KEYS, severityLabel } from "./severity.js";
 export type { ComplianceInput, EvaluatorContext, Finding, RuleEvaluator } from "./types.js";
 export { RULE_FAMILIES, RULE_FAMILY_LABELS, ruleFamily, type RuleFamily } from "./family.js";

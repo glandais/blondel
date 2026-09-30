@@ -25,6 +25,7 @@ import {
   type Vec2,
   type Wall,
 } from "@blondel/core";
+import { tr } from "../i18n/fr.js";
 import { DEFAULT_WALL_THICKNESS_MM, stairOverlay } from "../views/planSiteGeometry.js";
 
 // ------------------------------------------------------------------ Usage → contextes
@@ -228,7 +229,7 @@ export function formOpening(
         m[k] = v;
       }
       const r = openingFromSurvey(m as OpeningSurvey, { origin: { x, y } });
-      if (!r.ok) return { ok: false, error: `Relevé incohérent : ${r.reason}` };
+      if (!r.ok) return { ok: false, error: `Relevé incohérent : ${tr(r.reason)}` };
       if (!r.consistent) {
         return {
           ok: false,

@@ -18,6 +18,7 @@ import {
 } from "@blondel/core";
 import { useEffect, useId, useRef, useState, type ChangeEvent } from "react";
 import { useStore } from "zustand";
+import { tr } from "../i18n/fr.js";
 import { appStore, useApp } from "../store/appStore.js";
 import { importQueue, takeUnderlayImport } from "../store/importQueue.js";
 import {
@@ -151,9 +152,9 @@ export function UnderlayImport({
               text:
                 `« ${name} » importé : ${r.entities.length} entités` +
                 (r.unitName
-                  ? ` (unité : ${r.unitName})`
+                  ? ` (unité : ${tr(r.unitName)})`
                   : ` (échelle ${r.unitScale} mm par unité)`) +
-                (skipped !== "" ? ` ; ignorées : ${skipped}` : "") +
+                (skipped !== null ? ` ; ignorées : ${tr(skipped)}` : "") +
                 (r.truncated ? " ; plan tronqué (trop d'entités)" : "") +
                 ".",
             },

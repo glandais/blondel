@@ -6,6 +6,7 @@
  * des girons sur la ligne de foulée, avertissements du contrôle de conception. Les cibles sont
  * les valeurs `recommande` des règles actives (`bounds.ts`) ; les poids sont des choix à valider.
  */
+import { msg, type Message } from "@blondel/i18n";
 import type { Model } from "../model/derived.js";
 import type { Mm } from "../model/primitives.js";
 import type { Project } from "../model/project.js";
@@ -17,7 +18,7 @@ export function summarizeModel(
   model: Model,
   bounds: EnumerationBounds,
   grossWidth: Mm,
-  fit: string,
+  fit: Message,
 ): ModelSummary {
   const st = model.stepping;
   const winders = st.treads.filter((t) => t.kind === "winder");
@@ -68,7 +69,7 @@ const fmtMm = (v: number): string => String(Math.round(v * 10) / 10);
 
 function term(
   id: keyof ScoreWeights,
-  label: string,
+  label: Message,
   value: number,
   unit: "mm" | "nb",
   weights: ScoreWeights,
@@ -88,14 +89,14 @@ export function scoreModel(
   const terms: ScoreTerm[] = [
     term(
       "blondel",
-      `Écart du module 2h + g à ${target} mm`,
+      msg("assistant.score.blondel", { target: String(target) }),
       Math.abs(summary.blondel - target),
       "mm",
       weights,
     ),
     term(
       "collet",
-      `Collet minimal (corde) sous ${bounds.colletRecommended ?? "—"} mm`,
+      msg("assistant.score.collet", { value: String(bounds.colletRecommended ?? "—") }),
       summary.minCollet !== null && bounds.colletRecommended !== null
         ? bounds.colletRecommended - summary.minCollet
         : 0,
@@ -104,7 +105,7 @@ export function scoreModel(
     ),
     term(
       "headroom",
-      `Échappée sous ${bounds.headroomRecommended ?? "—"} mm`,
+      msg("assistant.score.headroom", { value: String(bounds.headroomRecommended ?? "—") }),
       summary.headroom !== null && bounds.headroomRecommended !== null
         ? bounds.headroomRecommended - summary.headroom
         : 0,
@@ -114,20 +115,20 @@ export function scoreModel(
     // Marge nulle admise par la règle (`e >= 1900`) mais pénalisée : pas de rejet (LEDGER §2).
     term(
       "headroomMargin",
-      `Marge d'échappée sous ${fmtMm(headroomMarginTarget)} mm`,
+      msg("assistant.score.headroomMargin", { value: fmtMm(headroomMarginTarget) }),
       summary.headroomMargin !== null ? headroomMarginTarget - summary.headroomMargin : 0,
       "mm",
       weights,
     ),
-    term("winders", "Marches balancées", summary.winderCount, "nb", weights),
+    term("winders", msg("assistant.score.winders"), summary.winderCount, "nb", weights),
+    term("regularity", msg("assistant.score.regularity"), goingIrregularity(model), "mm", weights),
     term(
-      "regularity",
-      "Écart maximal des girons au giron nominal",
-      goingIrregularity(model),
-      "mm",
+      "warnings",
+      msg("assistant.score.warnings"),
+      summary.violations.avertissement,
+      "nb",
       weights,
     ),
-    term("warnings", "Avertissements du contrôle", summary.violations.avertissement, "nb", weights),
   ];
   return { total: terms.reduce((acc, t) => acc + t.penalty, 0), terms };
 }

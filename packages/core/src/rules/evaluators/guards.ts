@@ -10,6 +10,7 @@
  *   moteur depuis `referenceDate` (`rules/contexts.ts`).
  * - Tolérances : aucune (NF P01-012:2024 : vides +0 mm) ; tolérance numérique seulement.
  */
+import { dec, isMessage, msg, textMessage, type Message } from "@blondel/i18n";
 import { computeGuards } from "../../guards/compute.js";
 import { smallCoreDiameter } from "../../guards/handrailSides.js";
 import type { GapMeasure, GuardRun, GuardsAnalysis, HandrailRun } from "../../guards/types.js";
@@ -18,9 +19,9 @@ import type { Project } from "../../model/project.js";
 import {
   STAIR,
   boundsText,
-  fmt,
   notApplicable,
   notEvaluated,
+  unitSuffix,
   within,
   type Bounds,
 } from "../check.js";
@@ -72,43 +73,58 @@ export function guardsOf(ctx: EvaluatorContext): GuardsAnalysis | null | undefin
 function withGuards(fn: (ctx: EvaluatorContext, g: GuardsAnalysis) => Finding[]): RuleEvaluator {
   return (ctx) => {
     const g = guardsOf(ctx);
-    if (g === undefined)
-      return [
-        notEvaluated(
-          "Garde-corps et mains courantes non décrits dans le projet (section « guards » absente).",
-        ),
-      ];
-    if (g === null) return [notEvaluated("Garde-corps non calculés (voir les erreurs du modèle).")];
+    if (g === undefined) return [notEvaluated(msg("compliance.guards.notDescribed"))];
+    if (g === null) return [notEvaluated(msg("compliance.guards.notComputed"))];
     return fn(ctx, g);
   };
 }
 
 // ------------------------------------------------------------------ Outils
 
+/**
+ * Libellé d'un élément de l'analyse des garde-corps (ligne, vide, appui) : `Message` du domaine
+ * garde-corps, ou texte brut tant qu'il n'est pas traduit.
+ */
+function labelOf(label: string | Message): Message {
+  return isMessage(label) ? label : textMessage(label);
+}
+
+/** Côté de l'escalier dans un libellé (« côté jour », « côté extérieur »). */
+function sideLabel(side: "inner" | "outer"): Message {
+  return msg(side === "inner" ? "compliance.guards.side.inner" : "compliance.guards.side.outer");
+}
+
+/** « Sans objet : aucun garde-corps. » */
+const noGuard = (): Message => msg("compliance.guards.noGuard");
+
 interface BoundedItem {
   readonly value: number;
   readonly location: Location;
-  readonly label: string;
+  readonly label: Message;
   readonly bounds: Bounds;
 }
 
 /**
  * Série d'éléments à bornes individuelles : un constat par élément non conforme, sinon un
- * constat `ok` portant l'élément le plus défavorable (localisé sur sa pièce).
+ * constat `ok` portant l'élément le plus défavorable (localisé sur sa pièce). `empty` : constat
+ * d'une série vide (par défaut « Sans objet. »).
  */
 function checkBounded(
   ctx: EvaluatorContext,
   items: readonly BoundedItem[],
-  quantity: string,
-  empty: string,
+  quantity: Message,
+  empty: Message = msg("compliance.notApplicable"),
 ): Finding[] {
   if (items.length === 0) return [notApplicable(empty)];
   const unit = ctx.rule.unite;
-  const u = unit && unit !== "ratio" ? ` ${unit}` : "";
+  const u = unitSuffix(unit);
   const nan = items.filter((it) => !Number.isFinite(it.value));
   if (nan.length > 0)
     return nan.map((it) =>
-      notEvaluated(`${quantity}, ${it.label} : valeur non calculable.`, it.location),
+      notEvaluated(
+        msg("structure.common.check.itemNotComputable", { quantity, item: it.label }),
+        it.location,
+      ),
     );
   const bad = items.filter((it) => !within(it.value, it.bounds));
   if (bad.length > 0) {
@@ -118,7 +134,13 @@ function checkBounded(
       min: it.bounds.min,
       max: it.bounds.max,
       location: it.location,
-      message: `${quantity}, ${it.label} : ${fmt(it.value, 2)}${u} (attendu ${boundsText(it.bounds, unit)}).`,
+      message: msg("compliance.check.item", {
+        quantity,
+        item: it.label,
+        value: dec(it.value, 2),
+        unit: u,
+        bounds: boundsText(it.bounds, unit),
+      }),
     }));
   }
   let worst = items[0]!;
@@ -140,7 +162,14 @@ function checkBounded(
       min: worst.bounds.min,
       max: worst.bounds.max,
       location: worst.location,
-      message: `${quantity} conforme sur ${items.length} élément(s) ; valeur la plus défavorable ${fmt(worst.value, 2)}${u} (${worst.label}), attendu ${boundsText(worst.bounds, unit)}.`,
+      message: msg("compliance.check.itemsOk", {
+        quantity,
+        count: String(items.length),
+        value: dec(worst.value, 2),
+        unit: u,
+        item: worst.label,
+        bounds: boundsText(worst.bounds, unit),
+      }),
     },
   ];
 }
@@ -166,7 +195,12 @@ function gapItems(
   for (const run of g.runs)
     for (const gap of run.gaps)
       if (filter(gap, run))
-        out.push({ value: gap.value, location: gap.location, label: gap.label, bounds });
+        out.push({
+          value: gap.value,
+          location: gap.location,
+          label: labelOf(gap.label),
+          bounds,
+        });
   return out;
 }
 
@@ -174,24 +208,31 @@ function gapItems(
 
 const mandatory: RuleEvaluator = withGuards((ctx, g) => {
   const limit = ctx.rule.max;
-  if (limit === null) return [notEvaluated("Seuil de hauteur de chute absent de la table.")];
+  if (limit === null) return [notEvaluated(msg("rules.GC_OBLIGATOIRE.noThreshold"))];
   const out: Finding[] = [];
-  const oks: string[] = [];
+  const oks: Message[] = [];
   let worst = 0;
-  const label = { inner: "côté jour", outer: "côté extérieur" } as const;
   for (const side of g.sides) {
     if (!side.intervals.some((iv) => iv.kind === "void")) continue;
     worst = Math.max(worst, side.maxFall);
     const runs = g.runs.filter((r) => r.side === side.side);
+    const where = sideLabel(side.side);
     if (side.maxFall <= limit) {
-      oks.push(`${label[side.side]} : chute ${fmt(side.maxFall)} mm ≤ ${fmt(limit)} mm`);
+      oks.push(
+        msg("rules.GC_OBLIGATOIRE.okBelow", {
+          side: where,
+          fall: dec(side.maxFall),
+          limit: dec(limit),
+        }),
+      );
     } else if (side.side === "inner" && g.narrowJour) {
       // Jour plus étroit que la sphère T1 : pas de garde-corps de jour, constat en conseil
       // (décision de l'utilisateur 2026-09-29, QUESTIONS A10) pour la chute dans l'emprise du
       // jour ; hors de celle-ci (volée plus longue que celle d'en face, vide ouvert), le constat
       // garde sa sévérité (revue A10).
       const j = g.narrowJour;
-      const jourText = `jour de ${fmt(j.width, 0)} mm, plus étroit que la sphère T1 (${fmt(j.threshold, 0)} mm)`;
+      const jourSize = { width: dec(j.width, 0), threshold: dec(j.threshold, 0) };
+      const jour = msg("rules.GC_OBLIGATOIRE.narrowJour", jourSize);
       if (j.jourFall > limit)
         out.push({
           status: "violation",
@@ -199,8 +240,12 @@ const mandatory: RuleEvaluator = withGuards((ctx, g) => {
           max: limit,
           location: j.jourFallAt ? { kind: "point", at: j.jourFallAt } : STAIR,
           severity: "conseil",
-          severityReason: `Jour de ${fmt(j.width, 0)} mm plus étroit que la sphère T1 (${fmt(j.threshold, 0)} mm) : pas de garde-corps de jour, constat ramené en conseil (décision A10).`,
-          message: `Hauteur de chute ${fmt(j.jourFall)} mm > ${fmt(limit)} mm côté jour sans garde-corps : ${jourText}, pas de garde-corps de jour.`,
+          severityReason: msg("rules.GC_OBLIGATOIRE.narrowJourReason", jourSize),
+          message: msg("rules.GC_OBLIGATOIRE.jourFall", {
+            fall: dec(j.jourFall),
+            limit: dec(limit),
+            jour,
+          }),
         });
       if (j.outsideFall > limit)
         out.push({
@@ -208,24 +253,37 @@ const mandatory: RuleEvaluator = withGuards((ctx, g) => {
           measured: j.outsideFall,
           max: limit,
           location: j.outsideFallAt ? { kind: "point", at: j.outsideFallAt } : STAIR,
-          message: `Hauteur de chute ${fmt(j.outsideFall)} mm > ${fmt(limit)} mm côté jour hors du jour (volée plus longue que celle d'en face, vide ouvert) sans garde-corps : ${jourText}, ${j.partialGuards ? "garde-corps partiel non généré sur cette portion" : "aucun garde-corps de jour n'est construit"}.`,
+          message: msg(
+            j.partialGuards
+              ? "rules.GC_OBLIGATOIRE.outsideFallPartial"
+              : "rules.GC_OBLIGATOIRE.outsideFall",
+            { fall: dec(j.outsideFall), limit: dec(limit), jour },
+          ),
         });
       // Garde-corps partiel hors du jour (décision A10 du 2026-09-30) : chute protégée.
       if (j.partialGuards && j.guardedFall !== undefined && j.guardedFall > limit)
-        oks.push(
-          `${label[side.side]} hors du jour : chute ${fmt(j.guardedFall)} mm, garde-corps partiel présent`,
-        );
+        oks.push(msg("rules.GC_OBLIGATOIRE.okPartial", { side: where, fall: dec(j.guardedFall) }));
       if (j.jourFall <= limit && j.outsideFall <= limit && !(j.partialGuards && runs.length > 0))
-        oks.push(`${label[side.side]} : chute ${fmt(side.maxFall)} mm, ${jourText}`);
+        oks.push(
+          msg("rules.GC_OBLIGATOIRE.okNarrowJour", {
+            side: where,
+            fall: dec(side.maxFall),
+            jour,
+          }),
+        );
     } else if (runs.length > 0) {
-      oks.push(`${label[side.side]} : chute ${fmt(side.maxFall)} mm, garde-corps présent`);
+      oks.push(msg("rules.GC_OBLIGATOIRE.okGuarded", { side: where, fall: dec(side.maxFall) }));
     } else {
       out.push({
         status: "violation",
         measured: side.maxFall,
         max: limit,
         location: side.maxFallAt ? { kind: "point", at: side.maxFallAt } : STAIR,
-        message: `Hauteur de chute ${fmt(side.maxFall)} mm > ${fmt(limit)} mm ${label[side.side]} sans garde-corps.`,
+        message: msg("rules.GC_OBLIGATOIRE.unguarded", {
+          fall: dec(side.maxFall),
+          limit: dec(limit),
+          side: where,
+        }),
       });
     }
   }
@@ -239,17 +297,20 @@ const mandatory: RuleEvaluator = withGuards((ctx, g) => {
           kind: "point",
           at: { x: (e.a.x + e.b.x) / 2, y: (e.a.y + e.b.y) / 2, z: g.openingFall },
         },
-        message: `Côté libre de trémie sans garde-corps : hauteur de chute ${fmt(g.openingFall)} mm > ${fmt(limit)} mm.`,
+        message: msg("rules.GC_OBLIGATOIRE.openingEdge", {
+          fall: dec(g.openingFall),
+          limit: dec(limit),
+        }),
       });
     }
   }
   const openingRuns = g.runs.filter((r) => r.kind === "opening");
   if (openingRuns.length > 0) {
     worst = Math.max(worst, g.openingFall);
-    oks.push(`trémie : chute ${fmt(g.openingFall)} mm, garde-corps présent`);
+    oks.push(msg("rules.GC_OBLIGATOIRE.okOpening", { fall: dec(g.openingFall) }));
   }
   if (out.length > 0) return out;
-  if (oks.length === 0) return [notApplicable("Sans objet : aucun côté vide ni trémie.")];
+  if (oks.length === 0) return [notApplicable(msg("rules.GC_OBLIGATOIRE.none"))];
   // Chute supérieure au seuil mais protégée : la borne ne s'applique plus à la mesure (la
   // conformité tient à la présence du garde-corps) ; ne pas afficher « attendu ≤ seuil ».
   return [
@@ -258,7 +319,9 @@ const mandatory: RuleEvaluator = withGuards((ctx, g) => {
       measured: worst,
       max: worst <= limit ? limit : null,
       location: g.runs[0] ? partLoc(g.runs[0].primaryPartId) : STAIR,
-      message: `Protection contre les chutes : ${oks.join(" ; ")}.`,
+      message: msg("rules.GC_OBLIGATOIRE.ok", {
+        list: oks.reduce((first, next) => msg("compliance.join.semicolon", { first, next })),
+      }),
     },
   ];
 });
@@ -274,11 +337,11 @@ const rakeHeight: RuleEvaluator = withGuards((ctx, g) =>
       .map((r) => ({
         value: Math.min(...r.nosingHeights.map((n) => n.height)),
         location: partLoc(r.primaryPartId),
-        label: `${r.label} (à la verticale des nez)`,
+        label: msg("compliance.guards.rake.item", { run: labelOf(r.label) }),
         bounds: rule(ctx),
       })),
-    "Hauteur du garde-corps rampant",
-    "Sans objet : aucun garde-corps rampant.",
+    msg("compliance.guards.rake.quantity"),
+    msg("compliance.guards.rake.none"),
   ),
 );
 
@@ -289,11 +352,11 @@ const levelHeight: RuleEvaluator = withGuards((ctx, g) =>
     levelRuns(g).map((r) => ({
       value: r.levelHeight ?? r.height,
       location: partLoc(r.primaryPartId),
-      label: r.label,
+      label: labelOf(r.label),
       bounds: rule(ctx),
     })),
-    "Hauteur du garde-corps horizontal",
-    "Sans objet : aucun garde-corps horizontal (trémie, palier).",
+    msg("rules.GC_HAUTEUR_PALIER_1988.quantity"),
+    msg("rules.GC_HAUTEUR_PALIER_1988.none"),
   ),
 );
 
@@ -348,25 +411,29 @@ const height2024: RuleEvaluator = withGuards((ctx, g) => {
   const items: BoundedItem[] = [];
   for (const r of levelRuns(g)) {
     const h = requiredGuardHeight2024(r.thickness);
-    if (h === null) return [notEvaluated("Table h(E) de GC_HAUTEUR_2024 non exploitable.")];
+    if (h === null) return [notEvaluated(msg("rules.GC_HAUTEUR_2024.tableUnusable"))];
     items.push({
       value: r.levelHeight ?? r.height,
       location: partLoc(r.primaryPartId),
-      label: `${r.label}, épaisseur E = ${fmt(r.thickness)} mm, h(E) = ${fmt(h)} mm`,
+      label: msg("rules.GC_HAUTEUR_2024.item", {
+        run: labelOf(r.label),
+        thickness: dec(r.thickness),
+        height: dec(h),
+      }),
       bounds: { min: Math.max(h, ctx.rule.min ?? h), max: null },
     });
   }
   return checkBounded(
     ctx,
     items,
-    "Hauteur de protection depuis la zone d'activité",
-    "Sans objet : aucun garde-corps horizontal (trémie, palier) ; rampants : GC_HAUTEUR_RAMPANT_2024.",
+    msg("rules.GC_HAUTEUR_2024.quantity"),
+    msg("rules.GC_HAUTEUR_2024.none"),
   );
 });
 
 /** Gabarit B : un appui à X ∈ [100 ; 600[ exige H ≥ 1 000 + X. */
 const templateB: RuleEvaluator = withGuards((ctx, g) => {
-  if (g.runs.length === 0) return [notApplicable("Sans objet : aucun garde-corps.")];
+  if (g.runs.length === 0) return [notApplicable(noGuard())];
   const items: BoundedItem[] = [];
   for (const r of g.runs) {
     const inZone = r.footholds.filter(
@@ -377,7 +444,12 @@ const templateB: RuleEvaluator = withGuards((ctx, g) => {
     items.push({
       value: r.height,
       location: top.location,
-      label: `${r.label}, appui à X = ${fmt(top.x)} mm (${top.label}) : H ≥ ${fmt(GC_B_BASE.value)} + X`,
+      label: msg("rules.GC_GABARIT_B_2024.item", {
+        run: labelOf(r.label),
+        x: dec(top.x),
+        foothold: labelOf(top.label),
+        base: dec(GC_B_BASE.value),
+      }),
       bounds: { min: GC_B_BASE.value + top.x, max: null },
     });
   }
@@ -385,12 +457,15 @@ const templateB: RuleEvaluator = withGuards((ctx, g) => {
     return [
       {
         ...notApplicable(
-          `Aucun appui (élément filant) entre ${GC_B_ZONE_MIN.value} et ${GC_B_ZONE_MAX.value} mm au-dessus de la zone d'activité.`,
+          msg("rules.GC_GABARIT_B_2024.noFoothold", {
+            min: String(GC_B_ZONE_MIN.value),
+            max: String(GC_B_ZONE_MAX.value),
+          }),
         ),
         location: partLoc(g.runs[0]!.primaryPartId),
       },
     ];
-  return checkBounded(ctx, items, "Hauteur au-dessus d'un appui (gabarit B)", "");
+  return checkBounded(ctx, items, msg("rules.GC_GABARIT_B_2024.quantity"));
 });
 
 // ------------------------------------------------------------------ Vides
@@ -399,8 +474,8 @@ const t1: RuleEvaluator = withGuards((ctx, g) =>
   checkBounded(
     ctx,
     gapItems(g, (gap) => gap.zBottom < GC_T1_ZONE_TOP.value, strictMax(ctx)),
-    `Vide (gabarit T1, de 0 à ${GC_T1_ZONE_TOP.value} mm)`,
-    "Sans objet : aucun garde-corps.",
+    msg("rules.GC_GABARIT_T1_2024.quantity", { top: String(GC_T1_ZONE_TOP.value) }),
+    noGuard(),
   ),
 );
 
@@ -408,8 +483,8 @@ const t2: RuleEvaluator = withGuards((ctx, g) =>
   checkBounded(
     ctx,
     gapItems(g, (gap) => gap.zTop > GC_T2_ZONE_BOTTOM.value, strictMax(ctx)),
-    `Vide (gabarit T2, au-dessus de ${GC_T2_ZONE_BOTTOM.value} mm)`,
-    `Sans objet : aucun vide au-dessus de ${GC_T2_ZONE_BOTTOM.value} mm.`,
+    msg("rules.GC_GABARIT_T2_2024.quantity", { bottom: String(GC_T2_ZONE_BOTTOM.value) }),
+    msg("rules.GC_GABARIT_T2_2024.none", { bottom: String(GC_T2_ZONE_BOTTOM.value) }),
   ),
 );
 
@@ -420,12 +495,12 @@ const t3: RuleEvaluator = withGuards((ctx, g) =>
       r.meshOpenings.map((m) => ({
         value: m.value,
         location: m.location,
-        label: m.label,
+        label: labelOf(m.label),
         bounds: strictMax(ctx),
       })),
     ),
-    "Maille du remplissage (gabarit T3)",
-    "Sans objet : aucun remplissage à mailles répétitives (tôle perforée).",
+    msg("rules.GC_GABARIT_T3_2024.quantity"),
+    msg("rules.GC_GABARIT_T3_2024.none"),
   ),
 );
 
@@ -440,8 +515,8 @@ const gap1988Bars: RuleEvaluator = withGuards((ctx, g) =>
         (gap.kind === "bottom" && run.infill !== "rails" && run.infill !== "cables"),
       rule(ctx),
     ),
-    "Vide entre éléments verticaux",
-    "Sans objet : aucun garde-corps.",
+    msg("rules.GC_VIDE_1988_BARREAUX.quantity"),
+    noGuard(),
   ),
 );
 
@@ -450,8 +525,8 @@ const gap1988Rails: RuleEvaluator = withGuards((ctx, g) =>
   checkBounded(
     ctx,
     gapItems(g, (gap) => gap.kind === "horizontal", rule(ctx)),
-    "Vide entre lisses",
-    "Sans objet : aucune lisse ni câble.",
+    msg("rules.GC_VIDE_1988_LISSES.quantity"),
+    msg("rules.GC_VIDE_1988_LISSES.none"),
   ),
 );
 
@@ -464,21 +539,26 @@ const lowPart1988: RuleEvaluator = withGuards((ctx, g) =>
       return {
         value: low ? low.x : r.height,
         location: low ? low.location : partLoc(r.primaryPartId),
-        label: low ? `${r.label}, ${low.label}` : `${r.label}, sans élément filant`,
+        label: low
+          ? msg("rules.GC_PARTIE_BASSE_1988.item", {
+              run: labelOf(r.label),
+              foothold: labelOf(low.label),
+            })
+          : msg("rules.GC_PARTIE_BASSE_1988.itemNoFoothold", { run: labelOf(r.label) }),
         bounds: rule(ctx),
       };
     }),
-    "Partie basse non escaladable",
-    "Sans objet : aucun garde-corps.",
+    msg("rules.GC_PARTIE_BASSE_1988.quantity"),
+    noGuard(),
   ),
 );
 
 const levels2024: RuleEvaluator = withGuards((_ctx, g) =>
   g.runs.length === 0
-    ? [notApplicable("Sans objet : aucun garde-corps.")]
+    ? [notApplicable(noGuard())]
     : [
         notEvaluated(
-          "Dénivelés au pied du garde-corps : formule de la NF P01-012:2024 non vérifiée (C §3.1) et dénivelés de la zone d'activité non décrits.",
+          msg("rules.GC_DENIVELES_2024.notEvaluated"),
           partLoc(g.runs[0]!.primaryPartId),
         ),
       ],
@@ -486,14 +566,21 @@ const levels2024: RuleEvaluator = withGuards((_ctx, g) =>
 
 /** Information de dimensionnement : charge horizontale à reprendre (non vérifiée). */
 const horizontalLoad: RuleEvaluator = withGuards((ctx, g) => {
-  if (g.runs.length === 0) return [notApplicable("Sans objet : aucun garde-corps.")];
+  if (g.runs.length === 0) return [notApplicable(noGuard())];
   const publicUse = ["erp_neuf", "erp_existant", "erp_securite"].some((c) => ctx.contexts.has(c));
   const q = publicUse ? GC_LOAD_PUBLIC : GC_LOAD_HOUSING;
   return [
     {
       status: "non-evaluee",
       location: partLoc(g.runs[0]!.primaryPartId),
-      message: `Information : charge horizontale de ${fmt(q.value, 2)} kN/m (${publicUse ? "catégories C1 à C4, établissement recevant du public" : "catégorie A, habitation"}) appliquée à 1 m du sol fini, à reprendre par les poteaux et leurs fixations ; résistance non vérifiée par Blondel.`,
+      message: msg("rules.CHARGE_GC_HORIZONTALE.info", {
+        load: dec(q.value, 2),
+        category: msg(
+          publicUse
+            ? "rules.CHARGE_GC_HORIZONTALE.categoryPublic"
+            : "rules.CHARGE_GC_HORIZONTALE.categoryHousing",
+        ),
+      }),
     },
   ];
 });
@@ -505,11 +592,11 @@ const horizontalLoad: RuleEvaluator = withGuards((ctx, g) => {
  */
 const cableSlack: RuleEvaluator = withGuards((_ctx, g) => {
   const runs = g.runs.filter((r) => r.infill === "cables");
-  if (runs.length === 0) return [notApplicable("Sans objet : aucun remplissage à câbles.")];
+  if (runs.length === 0) return [notApplicable(msg("rules.GC_CABLES_DETENTE.none"))];
   return runs.map((run) => ({
     status: "violation" as const,
     location: run.infillPartIds[0] ? partLoc(run.infillPartIds[0]) : STAIR,
-    message: `Câbles du ${run.label} : traités comme des lisses (SPEC X12) ; la détente des câbles augmente les vides dans le temps, prévoir un dispositif de retension et un contrôle périodique.`,
+    message: msg("rules.GC_CABLES_DETENTE.warning", { run: labelOf(run.label) }),
   }));
 });
 
@@ -530,7 +617,10 @@ function handrailCount(ctx: EvaluatorContext, g: GuardsAnalysis, min: number | n
       min,
       max: null,
       location: first ? partLoc(first.partId) : STAIR,
-      message: `Mains courantes le long de la volée : ${n} côté(s) équipé(s) (attendu ${boundsText(b, ctx.rule.unite)}).`,
+      message: msg("compliance.handrails.count", {
+        count: n,
+        bounds: boundsText(b, ctx.rule.unite),
+      }),
     },
   ];
 }
@@ -543,7 +633,11 @@ const handrailBothSides: RuleEvaluator = withGuards((ctx, g) => {
   if (d === null) return handrailCount(ctx, g, ctx.rule.min);
   return handrailCount(ctx, g, 1).map((f) => ({
     ...f,
-    message: `${f.message} Exception ERP neuf : hélicoïdal à fût central de Ø ${fmt(d)} mm ≤ ${fmt(MC_CORE_DIAMETER_MAX.value)} mm, une seule main courante exigée.`,
+    message: msg("rules.MC_DEUX_COTES.exception", {
+      message: f.message,
+      diameter: dec(d),
+      max: dec(MC_CORE_DIAMETER_MAX.value),
+    }),
   }));
 });
 
@@ -561,7 +655,7 @@ const handrailUp: RuleEvaluator = withGuards((ctx, g) => {
     return count.map((f) => ({
       ...f,
       location: partLoc(outer.partId),
-      message: `${f.message} Tournant d'1 UP : main courante côté extérieur présente.`,
+      message: msg("rules.MC_UP_ERP.outerPresent", { message: f.message }),
     }));
   return [
     {
@@ -570,7 +664,7 @@ const handrailUp: RuleEvaluator = withGuards((ctx, g) => {
       min: 1,
       max: null,
       location: count[0]?.location ?? STAIR,
-      message: `Tournant d'1 UP : main courante exigée côté extérieur (CO 56 §3), aucune n'y est posée (${handrailSides(g)} côté(s) équipé(s) le long de la volée).`,
+      message: msg("rules.MC_UP_ERP.outerMissing", { count: handrailSides(g) }),
     },
   ];
 });
@@ -580,34 +674,34 @@ const handrailHeight: RuleEvaluator = withGuards((ctx, g) => {
   for (const h of flightHandrails(g)) {
     if (h.nosingHeights.length === 0) continue;
     const vs = h.nosingHeights.map((n) => n.height);
-    const label = h.onGuard
-      ? `main courante du garde-corps (${h.side === "inner" ? "côté jour" : "côté extérieur"})`
-      : `main courante murale (${h.side === "inner" ? "côté jour" : "côté extérieur"})`;
+    const handrail = msg(
+      h.onGuard ? "compliance.handrails.onGuardSide" : "compliance.handrails.wallSide",
+      { side: sideLabel(h.side) },
+    );
     items.push({
       value: Math.min(...vs),
       location: partLoc(h.partId),
-      label: `${label}, minimum`,
+      label: msg("compliance.handrails.minimum", { handrail }),
       bounds: rule(ctx),
     });
     items.push({
       value: Math.max(...vs),
       location: partLoc(h.partId),
-      label: `${label}, maximum`,
+      label: msg("compliance.handrails.maximum", { handrail }),
       bounds: rule(ctx),
     });
   }
   return checkBounded(
     ctx,
     items,
-    "Hauteur de main courante à la verticale du nez",
-    "Sans objet : aucune main courante le long de la volée.",
+    msg("compliance.handrails.heightQuantity"),
+    msg("compliance.handrails.noFlightHandrail"),
   );
 });
 
 const handrailExtension: RuleEvaluator = withGuards((ctx, g) => {
   const hs = flightHandrails(g);
-  if (hs.length === 0)
-    return [notApplicable("Sans objet : aucune main courante le long de la volée.")];
+  if (hs.length === 0) return [notApplicable(msg("compliance.handrails.noFlightHandrail"))];
   const going = ctx.stepping.going;
   const b: Bounds = { min: going, max: null };
   const items: BoundedItem[] = [];
@@ -617,35 +711,34 @@ const handrailExtension: RuleEvaluator = withGuards((ctx, g) => {
     items.push({
       value: h.extensionBottom!,
       location: partLoc(h.partId),
-      label: "prolongement bas (avant la 1re marche)",
+      label: msg("compliance.handrails.extensionBottom"),
       bounds: b,
     });
   for (const h of tops)
     items.push({
       value: h.extensionTop!,
       location: partLoc(h.partId),
-      label: "prolongement haut (après la dernière marche)",
+      label: msg("compliance.handrails.extensionTop"),
       bounds: b,
     });
   if (bottoms.length === 0)
     items.push({
       value: 0,
       location: partLoc(hs[0]!.partId),
-      label: "aucune main courante au départ de l'escalier",
+      label: msg("compliance.handrails.noneAtStart"),
       bounds: b,
     });
   if (tops.length === 0)
     items.push({
       value: 0,
       location: partLoc(hs[0]!.partId),
-      label: "aucune main courante à l'arrivée de l'escalier",
+      label: msg("compliance.handrails.noneAtArrival"),
       bounds: b,
     });
   return checkBounded(
     ctx,
     items,
-    `Prolongement horizontal de la main courante (≥ giron ${fmt(going)} mm)`,
-    "",
+    msg("compliance.handrails.extensionQuantity", { going: dec(going) }),
   );
 });
 
@@ -673,15 +766,15 @@ const handrailDiscontinuity: RuleEvaluator = withGuards((ctx, g) => {
     items.push({
       value: gap,
       location: partLoc(at.partId),
-      label: side === "inner" ? "côté jour" : "côté extérieur",
+      label: sideLabel(side),
       bounds: strictMax(ctx),
     });
   }
   return checkBounded(
     ctx,
     items,
-    "Discontinuité de main courante côté mur",
-    "Sans objet : aucun côté à la fois mural et équipé d'une main courante.",
+    msg("rules.MC_DISCONTINUITE.quantity"),
+    msg("rules.MC_DISCONTINUITE.none"),
   );
 });
 
@@ -691,11 +784,11 @@ const handrailThickness: RuleEvaluator = withGuards((ctx, g) =>
     flightHandrails(g).map((h) => ({
       value: h.sectionWidth,
       location: partLoc(h.partId),
-      label: h.onGuard ? "main courante de garde-corps" : "main courante murale",
+      label: msg(h.onGuard ? "compliance.handrails.onGuard" : "compliance.handrails.wall"),
       bounds: rule(ctx),
     })),
-    "Épaisseur de main courante",
-    "Sans objet : aucune main courante.",
+    msg("rules.MC_EPAISSEUR_MAX.quantity"),
+    msg("rules.MC_EPAISSEUR_MAX.none"),
   ),
 );
 
@@ -708,11 +801,11 @@ const handrailClearance: RuleEvaluator = withGuards((ctx, g) => {
       .map((h) => ({
         value: h.wallClearance!,
         location: partLoc(h.partId),
-        label: `main courante murale (${h.side === "inner" ? "côté jour" : "côté extérieur"})`,
+        label: msg("compliance.handrails.wallSide", { side: sideLabel(h.side) }),
         bounds: { min, max: null },
       })),
-    "Dégagement entre main courante et paroi",
-    "Sans objet : aucune main courante murale.",
+    msg("rules.MC_DEGAGEMENT_MUR.quantity"),
+    msg("rules.MC_DEGAGEMENT_MUR.none"),
   );
 });
 

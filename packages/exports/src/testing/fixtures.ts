@@ -8,6 +8,7 @@
  */
 import {
   ProjectSchema,
+  textMessage,
   bandPolygon,
   computeLayout,
   curveLength,
@@ -46,7 +47,6 @@ export function ruleResult(
 ): RuleResult {
   return {
     ruleId,
-    description: `Règle ${ruleId}`,
     status: "violation",
     severity,
     declaredSeverity: severity,
@@ -55,7 +55,7 @@ export function ruleResult(
     confidence: "eleve",
     source: "test",
     secondarySource: false,
-    message: `Violation ${ruleId}`,
+    message: textMessage(`Violation ${ruleId}`),
     ...extra,
   };
 }
@@ -423,18 +423,23 @@ export function treadPart(number: number, mark = `M${number}`): Part {
     id: `tread-${number}`,
     mark,
     category: "tread",
-    name: `Marche ${number}`,
+    name: textMessage(`Marche ${number}`),
     material: "wood-oak",
     solid: { kind: "extrusion", frame: FRAME, profile: outline, depth: 40 },
     flat: {
       outline,
       lines: [
-        { kind: "mark", a: { x: 0, y: 30 }, b: { x: 900, y: 30 }, label: "nez" },
-        { kind: "text", a: { x: 450, y: 200 }, b: { x: 550, y: 200 }, label: "Dessus" },
+        { kind: "mark", a: { x: 0, y: 30 }, b: { x: 900, y: 30 }, label: textMessage("nez") },
+        {
+          kind: "text",
+          a: { x: 450, y: 200 },
+          b: { x: 550, y: 200 },
+          label: textMessage("Dessus"),
+        },
       ],
       thickness: 40,
     },
-    section: "40×300",
+    section: textMessage("40×300"),
     stock: { length: 950, width: 300, thickness: 45 },
     quantities: { volume: 0.9 * 0.28 * 0.04, mass: 7.06 },
     grain: { x: 1, y: 0, z: 0 },
@@ -454,7 +459,7 @@ export function sheetStringerPart(): Part {
     id: "stringer-inner-1",
     mark: "LI1",
     category: "stringer",
-    name: 'Limon intérieur "jour"; tôle',
+    name: textMessage('Limon intérieur "jour"; tôle'),
     material: "steel-painted",
     solid: { kind: "extrusion", frame: FRAME, profile: { outer, holes: [] }, depth: 5 },
     flat: {
@@ -467,7 +472,7 @@ export function sheetStringerPart(): Part {
           b: { x: 3250.5, y: 140.25 },
           bendAngle: 90,
           bendUp: false,
-          label: "P2",
+          label: textMessage("P2"),
         },
         { kind: "mark", a: { x: 500, y: 40 }, b: { x: 500, y: 140.25 } },
         { kind: "roll", a: { x: 1000, y: 0 }, b: { x: 1000, y: 180.25 } },
@@ -475,7 +480,7 @@ export function sheetStringerPart(): Part {
       ],
       thickness: 5,
     },
-    section: "tôle 5 mm",
+    section: textMessage("tôle 5 mm"),
     quantities: { mass: 18.4 },
   };
 }
@@ -533,7 +538,7 @@ export function woodStringerPart(o: WoodStringerOptions = {}): Part {
         feature: "mortise",
         a: pts[i]!,
         b: pts[(i + 1) % 4]!,
-        ...(i === 0 ? { label: `mortaise ${k}`, depth: o.mortiseDepth ?? 15 } : {}),
+        ...(i === 0 ? { label: textMessage(`mortaise ${k}`), depth: o.mortiseDepth ?? 15 } : {}),
       });
     }
     lines.push({ kind: "mark", a: { x: k * g, y: k * h - 5 }, b: { x: k * g, y: k * h + 5 } });
@@ -542,18 +547,18 @@ export function woodStringerPart(o: WoodStringerOptions = {}): Part {
     kind: "text",
     a: { x: 20, y: above - 20 },
     b: { x: 120, y: above - 20 + 10 * m },
-    label: "Face jour",
+    label: textMessage("Face jour"),
   });
   const mark = o.mark ?? "LI1";
   return {
     id: `stringer-${mark.toLowerCase()}`,
     mark,
     category: "stringer",
-    name: "Limon intérieur à la française",
+    name: textMessage("Limon intérieur à la française"),
     material: "wood-oak",
     solid: { kind: "extrusion", frame: FRAME, profile: { outer, holes: [] }, depth: 40 },
     flat: { outline: { outer, holes: [] }, lines, thickness: 40 },
-    section: "40×300",
+    section: textMessage("40×300"),
     stock: { length: L + 100, width: 350, thickness: 45 },
     quantities: {},
   };

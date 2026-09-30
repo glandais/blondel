@@ -1,5 +1,6 @@
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
+import { fr } from "../i18n.test-helpers.js";
 import { signedArea } from "../geom2d/polygon.js";
 import * as V from "../geom2d/vec.js";
 import type { Vec2 } from "../model/primitives.js";
@@ -102,7 +103,7 @@ describe("openingFromSurvey — relevé 4 côtés + 2 diagonales (CHALLENGE P7)"
   it("mesures impossibles : raison lisible, pas d'exception", () => {
     const bad = openingFromSurvey({ ab: 1000, bc: 500, cd: 1000, da: 500, ac: 3000, bd: 1100 });
     expect(bad).toMatchObject({ ok: false });
-    if (!bad.ok) expect(bad.reason).toMatch(/triangle ABC/);
+    if (!bad.ok) expect(fr(bad.reason)).toMatch(/triangle ABC/);
     const missing = openingFromSurvey({ ab: 1000, bc: 0, cd: 1000, da: 500, ac: 1100, bd: 1100 });
     expect(missing).toMatchObject({ ok: false });
   });

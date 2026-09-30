@@ -4,6 +4,7 @@
  * migrations comprises) ; ici, seulement la plomberie et les messages.
  */
 import { ProjectParseError, parseProjectText, serializeProject, type Project } from "@blondel/core";
+import { tr } from "../i18n/fr.js";
 
 /** Sous-ensemble de l'API `Storage` utilisé (injectable dans les tests). */
 export interface StorageLike {
@@ -149,7 +150,7 @@ export function importProjectText(text: string): ImportResult {
       return {
         ok: false,
         message: summary,
-        issues: e.issues.map((i) => `${i.path === "" ? "(racine)" : i.path} : ${i.message}`),
+        issues: e.issues.map((i) => `${i.path === "" ? "(racine)" : i.path} : ${tr(i.message)}`),
       };
     }
     return {

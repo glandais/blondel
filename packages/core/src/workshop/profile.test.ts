@@ -1,4 +1,6 @@
+import { translatorFor } from "@blondel/i18n";
 import { describe, expect, it } from "vitest";
+import { fr } from "../i18n.test-helpers.js";
 import { ProjectSchema } from "../model/project.js";
 import { serializeProject } from "../project/serialize.js";
 import { makeSteppingProject } from "../stepping/test-helpers.js";
@@ -28,7 +30,12 @@ describe("profil d'atelier", () => {
       name: "Atelier pilote",
       wood: { maxBoardLength: 5000, densities: { "wood-oak": 750 } },
     });
-    expect(p.name).toBe("Atelier pilote");
+    expect(fr(p.name)).toBe("Atelier pilote");
+    expect(translatorFor("en").t(p.name)).toBe("Atelier pilote");
+    expect(fr(resolveWorkshopProfile().name)).toBe("Profil par défaut (valeurs à valider)");
+    expect(translatorFor("en").t(resolveWorkshopProfile().name)).toBe(
+      "Default profile (values to be validated)",
+    );
     expect(p.wood.maxBoardLength).toBe(5000);
     expect(p.wood.housingDepth).toBe(DEFAULT_WORKSHOP_PROFILE.wood.housingDepth);
     expect(p.wood.densities["wood-oak"]).toBe(750);

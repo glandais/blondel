@@ -3,6 +3,7 @@
  */
 import earcut from "earcut";
 import type { Polygon2, Shape2 } from "@blondel/core";
+import { msg } from "@blondel/i18n";
 import { GeometryError } from "./errors.js";
 
 /** Tolérance de longueur (mm) pour la fusion de points consécutifs (ADR-0003). */
@@ -45,7 +46,7 @@ export function cleanRing(poly: Polygon2): Ring | null {
   let pts: number[] = [];
   for (const p of poly) {
     if (!Number.isFinite(p.x) || !Number.isFinite(p.y))
-      throw new GeometryError("coordonnée non finie dans un profil");
+      throw new GeometryError(msg("geometry.profile.nonFiniteCoordinate"));
     pts.push(p.x, p.y);
   }
   let changed = true;
@@ -114,7 +115,7 @@ export interface PreparedShape {
  */
 export function prepareShape(shape: Shape2): PreparedShape {
   let outer = cleanRing(shape.outer);
-  if (!outer) throw new GeometryError("contour de profil dégénéré (moins de 3 points distincts)");
+  if (!outer) throw new GeometryError(msg("geometry.profile.degenerateOutline"));
   if (ringArea(outer) < 0) outer = reversed(outer);
   const rings: Ring[] = [outer];
   let area = ringArea(outer);
@@ -151,9 +152,7 @@ export function prepareShape(shape: Shape2): PreparedShape {
     triArea += Math.abs(s) / 2;
   }
   if (area <= 0 || Math.abs(triArea - area) > 1e-9 * Math.max(1, area)) {
-    throw new GeometryError(
-      "profil invalide : triangulation incohérente (auto-intersection ou trou hors contour ?)",
-    );
+    throw new GeometryError(msg("geometry.profile.inconsistentTriangulation"));
   }
   return { rings, coords, ringStart, triangles: tris, area };
 }
@@ -230,9 +229,7 @@ function repairTJunctions(
     if (!split) out.push(tri[0], tri[1], tri[2]);
   }
   if (!isClosedTriangulation(out, rings, ringStart, nPts)) {
-    throw new GeometryError(
-      "profil invalide : triangulation non réparable (trous qui se touchent ou se chevauchent ?)",
-    );
+    throw new GeometryError(msg("geometry.profile.unrepairableTriangulation"));
   }
   return out;
 }

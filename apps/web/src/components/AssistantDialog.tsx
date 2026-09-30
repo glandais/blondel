@@ -39,6 +39,7 @@ import {
   type UsageId,
 } from "../lib/assistant.js";
 import { availableStructures } from "../lib/optionalApi.js";
+import { tr, trKey } from "../i18n/fr.js";
 import {
   AssistantCancelled,
   startAssistant,
@@ -198,7 +199,7 @@ function Sketch({ sketch, label }: { readonly sketch: CandidateSketch; readonly 
 function title(c: DesignCandidate): string {
   const dir = c.direction === "left" ? " à gauche" : c.direction === "right" ? " à droite" : "";
   const pos = c.turnPosition ? `, tournant ${c.turnPosition}` : "";
-  return `${TYPOLOGY_LABELS[c.typology]}${dir}${pos}`;
+  return `${trKey(TYPOLOGY_LABELS[c.typology])}${dir}${pos}`;
 }
 
 function CandidateCard({
@@ -223,12 +224,12 @@ function CandidateCard({
       aria-labelledby={id}
       data-typology={candidate.typology}
     >
-      {sketch ? <Sketch sketch={sketch} label={candidate.label} /> : null}
+      {sketch ? <Sketch sketch={sketch} label={tr(candidate.label)} /> : null}
       <div className="assistant__card-body">
         <h4 id={id}>
           <span className="assistant__rank">{rank}.</span> {title(candidate)}
         </h4>
-        <p className="assistant__label muted">{candidate.label}</p>
+        <p className="assistant__label muted">{tr(candidate.label)}</p>
         <dl className="assistant__facts">
           {summaryFacts(candidate).map((f) => (
             <div key={f.label}>
@@ -260,7 +261,7 @@ function CandidateCard({
             <tbody>
               {candidate.score.terms.map((t) => (
                 <tr key={t.id}>
-                  <th scope="row">{t.label}</th>
+                  <th scope="row">{tr(t.label)}</th>
                   <td>
                     {formatScore(t.value)} {t.unit === "mm" ? "mm" : ""}
                   </td>
@@ -405,7 +406,7 @@ function AssistantDialogBody() {
   const structures = useMemo(
     () => [
       { value: "none", label: "Sans préférence (aucune structure)" },
-      ...availableStructures().map((s) => ({ value: s.kind, label: s.label })),
+      ...availableStructures().map((s) => ({ value: s.kind, label: trKey(s.labelKey) })),
     ],
     [],
   );
@@ -708,7 +709,7 @@ function AssistantDialogBody() {
                 {TYPOLOGY_IDS.map((t) => (
                   <Check
                     key={t}
-                    label={TYPOLOGY_LABELS[t]}
+                    label={trKey(TYPOLOGY_LABELS[t])}
                     checked={form.typologies.includes(t)}
                     onChange={(v) => toggleTypology(t, v)}
                   />
@@ -815,7 +816,7 @@ function AssistantDialogBody() {
                   <summary>Diagnostic de l'assistant</summary>
                   <ul>
                     {outcome.result.diagnostics.map((d) => (
-                      <li key={d}>{d}</li>
+                      <li key={tr(d)}>{tr(d)}</li>
                     ))}
                   </ul>
                   {outcome.result.rejections.length > 0 ? (
@@ -830,16 +831,16 @@ function AssistantDialogBody() {
                       </thead>
                       <tbody>
                         {outcome.result.rejections.map((t, i) => (
-                          <tr key={i} title={t.example}>
+                          <tr key={i} title={tr(t.example)}>
                             <td>
-                              {TYPOLOGY_LABELS[t.typology]}
+                              {trKey(TYPOLOGY_LABELS[t.typology])}
                               {t.direction === "left"
                                 ? " (gauche)"
                                 : t.direction === "right"
                                   ? " (droite)"
                                   : ""}
                             </td>
-                            <td>{REJECTION_LABELS[t.reason]}</td>
+                            <td>{trKey(REJECTION_LABELS[t.reason])}</td>
                             <td>{t.count.toLocaleString("fr-FR")}</td>
                           </tr>
                         ))}

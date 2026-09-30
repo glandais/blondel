@@ -2,7 +2,9 @@ import { readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import fc from "fast-check";
+import { textMessage, translatorFor } from "@blondel/i18n";
 import { describe, expect, it } from "vitest";
+import { fr, frList } from "../i18n.test-helpers.js";
 import { pointInPolygon, signedArea } from "../geom2d/polygon.js";
 import * as V from "../geom2d/vec.js";
 import type { Model, Part, Tread } from "../model/derived.js";
@@ -86,7 +88,7 @@ describe("wood-housed — cas d'acceptation n° 1 (quart tournant bas, poteau d'
     const thick = m.compliance.results.filter((x) => x.ruleId === "LIMON_EPAISSEUR_MIN_DTU");
     expect(thick).toHaveLength(1);
     expect(thick[0]!.status).toBe("ok");
-    expect(thick[0]!.message).not.toMatch(/sans évaluateur/);
+    expect(fr(thick[0]!.message)).not.toMatch(/sans évaluateur/);
     const ids = new Set(m.compliance.results.map((x) => x.ruleId));
     for (const id of [
       "LIMON_ENTAILLE_MIN",
@@ -107,7 +109,7 @@ describe("wood-housed — cas d'acceptation n° 1 (quart tournant bas, poteau d'
   it("marches portées : chaque marche est encastrée côté mur et côté jour (limon ou poteau)", () => {
     const post = m.parts.find((p) => p.category === "post")!;
     const postLabels = new Set(
-      post.flat!.lines.filter((l) => l.feature === "mortise" && l.label).map((l) => l.label!),
+      post.flat!.lines.filter((l) => l.feature === "mortise" && l.label).map((l) => fr(l.label)),
     );
     for (const t of m.stepping.treads) {
       const mark = m.parts.find((p) => p.id === `tread-${t.number}`)!.mark;
@@ -139,21 +141,21 @@ describe("wood-housed — cas d'acceptation n° 1 (quart tournant bas, poteau d'
         length: r1(s.development.box.length),
         width: r1(s.development.box.width),
         perpendicularWidth: r1(s.development.minPerpendicularWidth),
-        housings: s.development.housings.map((h) => h.label).join(" "),
+        housings: s.development.housings.map((h) => fr(h.label)).join(" "),
         tenons: s.development.tenons.length,
         stock: {
           length: r1(s.part.stock!.length),
           width: r1(s.part.stock!.width),
           thickness: s.part.stock!.thickness,
         },
-        section: s.part.section,
+        section: fr(s.part.section),
       })),
       post: {
-        section: post.section,
+        section: fr(post.section),
         height: r1(post.stock!.length),
         mortises: post
           .flat!.lines.filter((l) => l.feature === "mortise" && l.label)
-          .map((l) => l.label),
+          .map((l) => fr(l.label)),
       },
     }).toMatchSnapshot();
   });
@@ -178,7 +180,8 @@ describe("wood-housed — cas d'acceptation n° 1 (quart tournant bas, poteau d'
         for (const q of [l.a, l.b])
           expect(pointInPolygon(q, flat.outline.outer, 1e-3)).not.toBe("outside");
       }
-      expect(flat.lines.some((l) => l.kind === "text" && l.label === p.mark)).toBe(true);
+      expect(flat.lines.some((l) => l.kind === "text" && fr(l.label) === p.mark)).toBe(true);
+      expect(flat.lines).toContainEqual(expect.objectContaining({ label: textMessage(p.mark) }));
     }
   });
 
@@ -274,14 +277,20 @@ describe("wood-housed — paramètres et configurations", () => {
   it("paramètres invalides : erreur de modèle, pièces de base conservées, aucune exception", () => {
     const p = withStructure(loadExample("straight.blondel.json"), { thickness: -3 });
     const m = buildModel(p, { memo: false });
-    expect(m.errors.join(" ")).toMatch(/paramètres invalides/);
+    expect(frList(m.errors).join(" ")).toMatch(/paramètres invalides/);
     expect(m.parts.some((x) => x.category === "tread")).toBe(true);
     expect(m.parts.some((x) => x.category === "stringer")).toBe(false);
   });
 
   it("jour à angle vif et jour en arc : erreur explicite, limons muraux seuls", () => {
     const sharp = housed(loadExample("quarter-left.blondel.json"));
-    expect(sharp.m.errors.join(" ")).toMatch(/angle vif/);
+    expect(frList(sharp.m.errors).join(" ")).toMatch(/angle vif/);
+    expect(sharp.m.errors[0]!.key).toBe("structure.woodHoused.sharpJour");
+    // Anglais : aucun reste de français.
+    const en = translatorFor("en").t(sharp.m.errors[0]!);
+    expect(en).toBe(
+      "Turn 1: sharp-cornered well — the outer strings would meet at a single point; choose a corner newel (“newel” well); outer strings of flights 1 and 2 not generated.",
+    );
     expect(sharp.r.stringers.map((s) => s.part.mark)).toEqual(["LE1", "LE2"]);
     const arcProject = makeSteppingProject({
       width: 900,
@@ -289,7 +298,7 @@ describe("wood-housed — paramètres et configurations", () => {
       inner: { kind: "arc", radius: 200 },
     });
     const arc = housed(arcProject);
-    expect(arc.m.errors.join(" ")).toMatch(/jalon 5/);
+    expect(frList(arc.m.errors).join(" ")).toMatch(/jalon 5/);
     expect(arc.r.stringers.every((s) => s.face.side === "outer")).toBe(true);
     expect(blocking(arc.m)).toEqual([]);
   });
@@ -299,7 +308,7 @@ describe("wood-housed — paramètres et configurations", () => {
     const { r } = housed(p, { newel: { joint: "butt", foot: "hanging" } });
     expect(r.stringers.every((s) => s.development.tenons.length === 0)).toBe(true);
     const post = r.posts[0]!;
-    expect(post.flat!.lines.some((l) => l.label?.startsWith("Mortaise"))).toBe(false);
+    expect(post.flat!.lines.some((l) => fr(l.label).startsWith("Mortaise"))).toBe(false);
     const ex = post.solid.kind === "extrusion" ? post.solid.frame.origin.z : Number.NaN;
     expect(ex).toBeGreaterThanOrEqual(0);
   });
@@ -555,7 +564,7 @@ describe("wood-housed — relecture (poteaux)", () => {
         for (const q of [l.a, l.b])
           expect(
             pointInPolygon(q, part.flat!.outline.outer, 1e-3),
-            `${part.id} ${l.label}`,
+            `${part.id} ${fr(l.label)}`,
           ).not.toBe("outside");
     }
   };

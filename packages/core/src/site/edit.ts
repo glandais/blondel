@@ -3,7 +3,9 @@
  * calque de fond. Chaque fonction rend un nouveau projet (copie sur écriture), sans valider le
  * schéma complet (le store de l'interface le fait).
  */
+import { msg } from "@blondel/i18n";
 import * as V from "../geom2d/vec.js";
+import { MessageRangeError } from "../project/errors.js";
 import type { Mm, Vec2 } from "../model/primitives.js";
 import type { Project, Wall } from "../model/project.js";
 import { polygonOpening } from "./opening.js";
@@ -46,9 +48,9 @@ export function withWall(
   reference: WallTraceReference = "axis",
 ): Project {
   const L = V.distance(a, b);
-  if (!(L >= 1)) throw new RangeError("mur : axe de longueur nulle");
+  if (!(L >= 1)) throw new MessageRangeError(msg("site.wall.zeroLength"));
   if (!(Number.isInteger(thickness) && thickness > 0)) {
-    throw new RangeError("mur : épaisseur en mm entiers positifs attendue");
+    throw new MessageRangeError(msg("site.wall.invalidThickness"));
   }
   // Axe = ligne tracée décalée d'une demi-épaisseur vers le corps du mur.
   const shift =

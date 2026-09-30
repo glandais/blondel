@@ -2,7 +2,17 @@
  * Utilitaires de projet : lecture (migrations + validation), sérialisation stable, préréglages
  * de base et de démonstration.
  */
-export { ProjectParseError, formatPath, type ProjectIssue } from "./errors.js";
+export {
+  MessageRangeError,
+  ProjectParseError,
+  errorMessageOf,
+  fieldLabel,
+  formatPath,
+  issuesFromZod,
+  projectIssueMessage,
+  zodIssueMessage,
+  type ProjectIssue,
+} from "./errors.js";
 export {
   PROJECT_MIGRATIONS,
   migrateProjectJson,
@@ -21,6 +31,7 @@ export {
   PRESET_OPENING_CLEARANCE,
   createProject,
   deepMerge,
+  defaultPresetName,
   growAlongStairEdges,
   type DeepPartial,
   type FlightsPresetId,

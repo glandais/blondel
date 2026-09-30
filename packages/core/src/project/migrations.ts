@@ -6,6 +6,7 @@
  * Les migrations travaillent sur du JSON **non validé** : elles doivent être tolérantes
  * (champ absent, type inattendu) et laisser la validation finale à zod.
  */
+import { errorMessage, msg } from "@blondel/i18n";
 import { PROJECT_SCHEMA_VERSION } from "../model/project.js";
 import { ProjectParseError } from "./errors.js";
 
@@ -43,23 +44,23 @@ export function migrateProjectJson(
   targetVersion: number = PROJECT_SCHEMA_VERSION,
 ): JsonObject {
   if (!isJsonObject(json)) {
-    throw new ProjectParseError("Projet invalide : un objet JSON est attendu à la racine.");
+    throw new ProjectParseError(msg("project.parse.rootNotObject"));
   }
   const version = json["schemaVersion"];
   if (version === undefined) {
-    throw new ProjectParseError(
-      "Projet invalide : le champ « schemaVersion » (version du format) est absent.",
-    );
+    throw new ProjectParseError(msg("project.parse.missingVersion"));
   }
   if (typeof version !== "number" || !Number.isInteger(version) || version < 0) {
     throw new ProjectParseError(
-      `Projet invalide : « schemaVersion » doit être un entier positif ou nul (reçu : ${JSON.stringify(version)}).`,
+      msg("project.parse.invalidVersion", { received: String(JSON.stringify(version)) }),
     );
   }
   if (version > targetVersion) {
     throw new ProjectParseError(
-      `Ce projet a été enregistré au format ${version}, plus récent que celui de cette version de Blondel ` +
-        `(format ${targetVersion}). Mettez Blondel à jour pour l'ouvrir.`,
+      msg("project.parse.newerVersion", {
+        version: String(version),
+        target: String(targetVersion),
+      }),
     );
   }
   let current: JsonObject;
@@ -67,30 +68,32 @@ export function migrateProjectJson(
     current = structuredClone(json);
   } catch {
     // Valeur non sérialisable (fonction, symbole…) : ce n'est pas un JSON de projet.
-    throw new ProjectParseError(
-      "Projet invalide : l'objet fourni n'est pas du JSON (valeur non sérialisable).",
-    );
+    throw new ProjectParseError(msg("project.parse.notSerializable"));
   }
   let v = version;
   while (v < targetVersion) {
     const step = migrations.find((m) => m.from === v);
     if (step === undefined) {
       throw new ProjectParseError(
-        `Aucune migration disponible du format ${v} vers le format ${v + 1} : ce projet ne peut pas être ouvert.`,
+        msg("project.parse.missingMigration", { from: String(v), to: String(v + 1) }),
       );
     }
     let next: unknown;
     try {
       next = step.migrate(current);
     } catch (cause) {
-      const detail = cause instanceof Error ? cause.message : String(cause);
       throw new ProjectParseError(
-        `Échec de la migration du format ${v} vers ${v + 1} (${step.description}) : ${detail}`,
+        msg("project.parse.migrationFailed", {
+          from: String(v),
+          to: String(v + 1),
+          description: step.description,
+          detail: errorMessage(cause),
+        }),
       );
     }
     if (!isJsonObject(next)) {
       throw new ProjectParseError(
-        `La migration du format ${v} vers ${v + 1} n'a pas produit un objet JSON.`,
+        msg("project.parse.migrationNotObject", { from: String(v), to: String(v + 1) }),
       );
     }
     v += 1;

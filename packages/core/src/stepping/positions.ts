@@ -27,7 +27,7 @@ import type { Project } from "../model/project.js";
 import { curveLength } from "../geom2d/curve.js";
 import { GEOM_EPS } from "../geom2d/tolerance.js";
 import { resolveTargetGoing } from "../layout/resolve.js";
-import { fmt } from "../rules/check.js";
+import { dec, MessageError, msg, type Message, type MessageParam } from "@blondel/i18n";
 import { SteppingError } from "./errors.js";
 
 export interface WalkPositions {
@@ -39,7 +39,7 @@ export interface WalkPositions {
   readonly landingTreads: ReadonlySet<number>;
   /** Tournant (indice) de chaque marche palière. */
   readonly landingTurnOf: ReadonlyMap<number, number>;
-  readonly notes: readonly string[];
+  readonly notes: readonly Message[];
 }
 
 type Piece =
@@ -50,7 +50,7 @@ export function placeNosings(project: Project, layout: Layout, riserCount: numbe
   const n = riserCount;
   const L = curveLength(layout.walkline);
   const landings = layout.turns.filter((t) => t.mode === "landing");
-  const notes: string[] = [];
+  const notes: Message[] = [];
 
   if (landings.length === 0) {
     let g = L / (n - 1);
@@ -77,7 +77,7 @@ export function placeNosings(project: Project, layout: Layout, riserCount: numbe
   const straightLength = straights.reduce((acc, p) => acc + p.length, 0);
   if (straightGoings < 1 || !(straightLength > GEOM_EPS)) {
     throw new SteppingError(
-      `Pas assez de hauteurs (${n}) pour ${landings.length} palier(s) : aucun giron droit possible.`,
+      msg("stepping.tooFewRisersForLandings", { risers: n, count: landings.length }),
     );
   }
   const g = straightLength / straightGoings;
@@ -115,17 +115,25 @@ export function placeNosings(project: Project, layout: Layout, riserCount: numbe
   // Partie droite finale sans giron : le dernier palier s'étend jusqu'à l'arrivée.
   if (s[s.length - 1]! < L) s[s.length - 1] = L;
   if (s.length !== n) {
-    throw new Error(`placeNosings : ${s.length} nez placés pour ${n} hauteurs`);
+    throw new MessageError(
+      msg("stepping.error.placedNosingCount", { placed: s.length, risers: n }),
+    );
   }
   if (goings.some((gj) => Math.abs(gj - g) > GEOM_EPS)) {
     notes.push(
-      `Paliers : les parties droites ne sont pas des multiples du giron nominal (${fmt(g)} mm) ; girons par partie droite : ${goings.map((x) => fmt(x)).join(" / ")} mm.`,
+      msg("stepping.landings.unevenGoings", {
+        going: dec(g),
+        goings: goings
+          .slice(1)
+          .reduce<MessageParam>(
+            (acc, x) => msg("stepping.list.slash", { a: acc, b: dec(x) }),
+            dec(goings[0]!),
+          ),
+      }),
     );
   }
   if (straights.some((p) => p.count === 0 && p.length > GEOM_EPS)) {
-    notes.push(
-      "Paliers : une partie droite trop courte pour un giron est rattachée au palier voisin.",
-    );
+    notes.push(msg("stepping.landings.shortStraightMerged"));
   }
   return { going: g, s, landingTreads, landingTurnOf, notes };
 }

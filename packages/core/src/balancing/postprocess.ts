@@ -15,6 +15,7 @@
  *   développement distinct du bord réel (poteau, voir `stepping/development.ts`), σ_k est lu
  *   sur ce jour virtuel et Q_k est toujours la première intersection avec le bord réel.
  */
+import { msg, type Message } from "@blondel/i18n";
 import { cumulativeLengths, curvePointAt, curveTangentAt } from "../geom2d/curve.js";
 import { segEnd, segStart } from "../geom2d/segment.js";
 import { intersectLineCurve, segmentIntersect, type CurveHit } from "../geom2d/intersect.js";
@@ -94,7 +95,7 @@ export type NosingSpec =
 
 export type RealizedNosing =
   | { readonly ok: true; readonly nosing: NosingLine; readonly corrected: boolean }
-  | { readonly ok: false; readonly reason: string };
+  | { readonly ok: false; readonly reason: Message };
 
 /** Construit la ligne de nez d'orientation donnée (σ du collet ou direction). */
 export function realizeNosing(
@@ -113,7 +114,7 @@ export function realizeNosing(
     const q0 = curvePointAt(development, spec.sigma);
     const v = V.sub(p, q0);
     if (V.norm(v) <= GEOM_EPS) {
-      return { ok: false, reason: `nez ${seed.index} : collet confondu avec la ligne de foulée` };
+      return { ok: false, reason: msg("balancing.fail.colletOnWalkline", { nosing: seed.index }) };
     }
     dir = V.normalize(v);
     q = q0;
@@ -122,7 +123,7 @@ export function realizeNosing(
     if (development !== layout.inner) {
       // Jour de développement virtuel (poteau) : Q est toujours pris sur le bord réel.
       if (!hit)
-        return { ok: false, reason: `nez ${seed.index} : la ligne ne rencontre pas le jour` };
+        return { ok: false, reason: msg("balancing.fail.missesWell", { nosing: seed.index }) };
       q = hit.point;
       sigmaInner = hit.s;
     } else if (hit && Math.abs(hit.t) < V.norm(v) - 1e-6) {
@@ -133,12 +134,13 @@ export function realizeNosing(
   } else {
     dir = V.normalize(spec.dir);
     const hit = firstHit(p, dir, layout.inner, "back", seed.tangent);
-    if (!hit) return { ok: false, reason: `nez ${seed.index} : la ligne ne rencontre pas le jour` };
+    if (!hit)
+      return { ok: false, reason: msg("balancing.fail.missesWell", { nosing: seed.index }) };
     q = hit.point;
     sigmaInner = hit.s;
   }
   const out = firstHit(p, dir, layout.outer, "forward", seed.tangent);
-  if (!out) return { ok: false, reason: `nez ${seed.index} : la ligne ne rencontre pas le mur` };
+  if (!out) return { ok: false, reason: msg("balancing.fail.missesWall", { nosing: seed.index }) };
   return {
     ok: true,
     corrected,
@@ -167,14 +169,14 @@ export function applySolution(
   zone: BalancingZone,
   solution: BalancingSolution,
   development: Curve2 = layout.inner,
-): { ok: true; nosings: NosingLine[]; corrected: number[] } | { ok: false; reason: string } {
+): { ok: true; nosings: NosingLine[]; corrected: number[] } | { ok: false; reason: Message } {
   if (solution.kind === "fail") return { ok: false, reason: solution.reason };
   const count = zone.to - zone.from - 1;
   const values = solution.kind === "sigma" ? solution.sigma : solution.phi;
   if (values.length !== count) {
     return {
       ok: false,
-      reason: `la stratégie a rendu ${values.length} valeurs pour ${count} nez`,
+      reason: msg("balancing.fail.valueCount", { values: values.length, nosings: count }),
     };
   }
   const out: NosingLine[] = [];
@@ -183,7 +185,7 @@ export function applySolution(
     const seed = seeds[zone.from + 1 + i]!;
     const v = values[i]!;
     if (!Number.isFinite(v))
-      return { ok: false, reason: `valeur invalide pour le nez ${seed.index}` };
+      return { ok: false, reason: msg("balancing.fail.invalidValue", { nosing: seed.index }) };
     const spec: NosingSpec =
       solution.kind === "sigma"
         ? { kind: "sigma", sigma: v }

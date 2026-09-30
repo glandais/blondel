@@ -1,5 +1,7 @@
 import fc from "fast-check";
+import { isMessageError, textMessage, translatorFor, type MessageError } from "@blondel/i18n";
 import { describe, expect, it } from "vitest";
+import { fr } from "../i18n.test-helpers.js";
 import { pointInPolygon, signedArea } from "../geom2d/polygon.js";
 import * as V from "../geom2d/vec.js";
 import type { Part } from "../model/derived.js";
@@ -103,10 +105,11 @@ describe("tôle pliée — développé en fibre neutre (CHALLENGE G5)", () => {
     expect(yNose).toBeCloseTo(ret + ba + riser + ba / 2, 9);
     expect(bends[0]!).toMatchObject({ bendAngle: 90, bendUp: false, bendRadius: r });
     expect(bends[1]!).toMatchObject({ bendAngle: 90, bendUp: true, bendRadius: r });
-    expect(bends[0]!.label).toMatch(/^P1 · 90° vers le bas · r_int 6,5/);
+    expect(fr(bends[0]!.label)).toMatch(/^P1 · 90° vers le bas · r_int 6,5/);
+    expect(translatorFor("en").t(bends[0]!.label!)).toBe("P1 · 90° down · r_int 6.5");
     expect(res.flat.reference?.kind).toBe("neutral-fiber");
     // Ailes intérieures : dessus D − t, contremarche droite + r, retour L_r.
-    expect(res.flanges.map((f) => [f.label, f.atStart])).toEqual([
+    expect(res.flanges.map((f) => [fr(f.label), f.atStart])).toEqual([
       ["dessus", 245],
       ["contremarche", riser + r],
       ["retour", 40],
@@ -273,7 +276,7 @@ describe("tôle pliée — jeu latéral et pièces identiques", () => {
         id: `p${Math.random()}`,
         mark: "M",
         category: "tread",
-        name: "M",
+        name: textMessage("M"),
         material: "steel-painted",
         solid: { kind: "sweep", path: [], section: { outer: [], holes: [] } },
         flat: {
@@ -344,5 +347,13 @@ describe("contremarche d'arrivée des marches en Z (décision A11)", () => {
     expect(() => developArrivalRiser({ ...input, returnLength: 5 })).toThrow(
       /CM15 : aile « retour » sans partie droite/,
     );
+    try {
+      developArrivalRiser({ ...input, returnLength: 5 });
+    } catch (e) {
+      expect(isMessageError(e)).toBe(true);
+      const en = translatorFor("en").t((e as MessageError).msg);
+      expect(en).toMatch(/^CM15: flange “return” has no straight part \(-1\.5 mm\)/);
+      expect(en).not.toMatch(/aile|sans|retour|cotes/);
+    }
   });
 });

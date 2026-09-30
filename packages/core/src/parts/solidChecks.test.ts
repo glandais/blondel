@@ -1,7 +1,15 @@
 import { describe, expect, it } from "vitest";
 import type { Part, SolidDesc } from "../model/derived.js";
 import type { Shape2, Vec3 } from "../model/primitives.js";
-import { checkSolids, solidProblem } from "./solidChecks.js";
+import { textMessage, translatorFor } from "@blondel/i18n";
+import { fr, frList } from "../i18n.test-helpers.js";
+import { checkSolids, isSelfIntersection, solidProblem } from "./solidChecks.js";
+
+/** Problème du solide, en français (`undefined` s'il est maillable). */
+const problemText = (desc: SolidDesc): string | undefined => {
+  const m = solidProblem(desc);
+  return m === undefined ? undefined : fr(m);
+};
 
 const frame = {
   origin: { x: 0, y: 0, z: 0 },
@@ -28,7 +36,7 @@ const round = (r: number, n = 16): Shape2 => ({
 const part = (solid: SolidDesc): Part => ({
   id: "p",
   mark: "P1",
-  name: "Pièce",
+  name: textMessage("Pièce"),
   category: "handrail",
   material: "wood-oak",
   solid,
@@ -42,10 +50,10 @@ const helix = (radius: number, pitch: number, turns: number, perTurn = 48): Vec3
 
 describe("solidProblem", () => {
   it("extrusion de profondeur nulle", () => {
-    expect(solidProblem({ kind: "extrusion", frame, profile: square, depth: 0 })).toMatch(
+    expect(problemText({ kind: "extrusion", frame, profile: square, depth: 0 })).toMatch(
       /profondeur nulle/,
     );
-    expect(solidProblem({ kind: "extrusion", frame, profile: square, depth: 40 })).toBeUndefined();
+    expect(problemText({ kind: "extrusion", frame, profile: square, depth: 40 })).toBeUndefined();
   });
 
   it("surface réglée : épaisseur nulle, section plate en extrémité (limon en pointe)", () => {
@@ -58,12 +66,12 @@ describe("solidProblem", () => {
       { x: 0, y: 1 },
     ];
     const ok = a.map((p) => ({ ...p, z: p.z + 250 }));
-    expect(solidProblem({ kind: "ruled", a, b: ok, thickness: 40, normals: n })).toBeUndefined();
-    expect(solidProblem({ kind: "ruled", a, b: ok, thickness: 0, normals: n })).toMatch(
+    expect(problemText({ kind: "ruled", a, b: ok, thickness: 40, normals: n })).toBeUndefined();
+    expect(problemText({ kind: "ruled", a, b: ok, thickness: 0, normals: n })).toMatch(
       /épaisseur nulle/,
     );
     const pointe = [ok[0]!, a[1]!];
-    expect(solidProblem({ kind: "ruled", a, b: pointe, thickness: 40, normals: n })).toMatch(
+    expect(problemText({ kind: "ruled", a, b: pointe, thickness: 40, normals: n })).toMatch(
       /section plate en extrémité/,
     );
   });
@@ -75,7 +83,7 @@ describe("solidProblem", () => {
       { x: 500, y: 0, z: 900 },
       { x: 500 + 500 * Math.cos(t), y: 500 * Math.sin(t), z: 900 },
     ];
-    expect(solidProblem({ kind: "sweep", path, section: round(21) })).toMatch(
+    expect(problemText({ kind: "sweep", path, section: round(21) })).toMatch(
       /auto-intersecté près du point \(500 ; 0 ; 900\).*segment d.extrémité/,
     );
     // Deux virages de 90° séparés de 20 mm, section Ø 60 : onglets croisés.
@@ -85,10 +93,10 @@ describe("solidProblem", () => {
       { x: 1000, y: mid, z: 0 },
       { x: 0, y: mid, z: 0 },
     ];
-    expect(solidProblem({ kind: "sweep", path: zig(20), section: round(30) })).toMatch(
+    expect(problemText({ kind: "sweep", path: zig(20), section: round(30) })).toMatch(
       /près du point \(1000 ; 10 ; 0\)/,
     );
-    expect(solidProblem({ kind: "sweep", path: zig(200), section: round(30) })).toBeUndefined();
+    expect(problemText({ kind: "sweep", path: zig(200), section: round(30) })).toBeUndefined();
   });
 
   it("balayage : pli local réductible (coude franc suivi d'un segment court presque aligné) non signalé", () => {
@@ -102,13 +110,13 @@ describe("solidProblem", () => {
       { x: 72, y: 600, z: 200 },
     ];
     expect(
-      solidProblem({
+      problemText({
         kind: "sweep",
         path: path.slice(0, 3).concat([{ x: 600, y: 1, z: 200 }]),
         section: round(21),
       }),
     ).toBeUndefined();
-    expect(solidProblem({ kind: "sweep", path, section: round(21) })).toBeUndefined();
+    expect(problemText({ kind: "sweep", path, section: round(21) })).toBeUndefined();
   });
 
   it("balayage : épingle de 179° au milieu du chemin, bras longs → signalée (fusion non résolutive)", () => {
@@ -123,16 +131,16 @@ describe("solidProblem", () => {
       D,
       { x: D.x, y: 1000, z: 900 },
     ];
-    expect(solidProblem({ kind: "sweep", path, section: round(21) })).toMatch(
+    expect(problemText({ kind: "sweep", path, section: round(21) })).toMatch(
       /auto-intersecté près du point \(1500 ; 0 ; 900\) : coupes d'onglet croisées/,
     );
   });
 
   it("balayage : spires qui se touchent (pas < diamètre) ; hélice de main courante usuelle conforme", () => {
     expect(
-      solidProblem({ kind: "sweep", path: helix(600, 3000, 1.5), section: round(21) }),
+      problemText({ kind: "sweep", path: helix(600, 3000, 1.5), section: round(21) }),
     ).toBeUndefined();
-    expect(solidProblem({ kind: "sweep", path: helix(600, 30, 1.5), section: round(21) })).toMatch(
+    expect(problemText({ kind: "sweep", path: helix(600, 30, 1.5), section: round(21) })).toMatch(
       /se touchent/,
     );
   });
@@ -142,11 +150,9 @@ describe("solidProblem", () => {
       outer: square.outer.map((p) => ({ x: p.x + 200, y: p.y })),
       holes: [],
     };
+    expect(problemText({ kind: "sweep", path: helix(600, 30, 1.5), section: off })).toBeUndefined();
     expect(
-      solidProblem({ kind: "sweep", path: helix(600, 30, 1.5), section: off }),
-    ).toBeUndefined();
-    expect(
-      solidProblem({
+      problemText({
         kind: "sweep",
         path: [
           { x: 0, y: 0, z: 0 },
@@ -159,13 +165,29 @@ describe("solidProblem", () => {
   });
 
   it("checkSolids : message lisible par pièce, effet sur l'aperçu", () => {
-    const msgs = checkSolids([
-      part({ kind: "extrusion", frame, profile: square, depth: 0 }),
-      part({ kind: "sweep", path: helix(600, 30, 1.5), section: round(21) }),
-      part({ kind: "extrusion", frame, profile: square, depth: 10 }),
-    ]);
+    const msgs = frList(
+      checkSolids([
+        part({ kind: "extrusion", frame, profile: square, depth: 0 }),
+        part({ kind: "sweep", path: helix(600, 30, 1.5), section: round(21) }),
+        part({ kind: "extrusion", frame, profile: square, depth: 10 }),
+      ]),
+    );
     expect(msgs).toHaveLength(2);
     expect(msgs[0]).toMatch(/^Pièce P1 \(Pièce\) : extrusion de profondeur nulle \(pièce absente/);
     expect(msgs[1]).toMatch(/aperçu 3D replié/);
+  });
+
+  it("balayage auto-intersecté reconnu par sa clé ; messages en anglais sans reste de français", () => {
+    const folded = solidProblem({ kind: "sweep", path: helix(600, 30, 1.5), section: round(21) });
+    expect(folded?.key).toBe("part.solid.sweepSegmentsTouch");
+    expect(isSelfIntersection(folded!)).toBe(true);
+    const flat = solidProblem({ kind: "extrusion", frame, profile: square, depth: 0 })!;
+    expect(isSelfIntersection(flat)).toBe(false);
+    const en = translatorFor("en");
+    const [missing] = checkSolids([part({ kind: "extrusion", frame, profile: square, depth: 0 })]);
+    expect(
+      en.t({ ...missing!, params: { ...missing!.params, name: textMessage("Tread 1") } }),
+    ).toBe("Part P1 (Tread 1): zero-depth extrusion (part missing from the 3D preview).");
+    expect(en.t(folded!)).toMatch(/^self-intersecting sweep: segments \d+ and \d+ touch$/);
   });
 });

@@ -23,6 +23,7 @@
  * Les longueurs de volées supposent un jour à angle vif et la ligne de foulée au milieu
  * (E ≤ 1 200 mm) : |Γ| = ΣL − 2E·(N − 1) + N·(π/2)·(E/2) pour N tournants.
  */
+import { DEFAULT_LOCALE, msg, translatorFor, type Message, type MessageKey } from "@blondel/i18n";
 import { computeLayout } from "../layout/layout.js";
 import { resolveRiserCount, resolveTargetGoing } from "../layout/resolve.js";
 import { LayoutError } from "../layout/errors.js";
@@ -44,6 +45,7 @@ import { computeStepping } from "../stepping/stepping.js";
 import { MAX_BALANCED_EXTENT } from "../stepping/zones.js";
 import { computeRises } from "../stepping/rises.js";
 import { createHelicalProject } from "./presetHelical.js";
+import { MessageRangeError } from "./errors.js";
 
 export type TurnDirection = "left" | "right";
 
@@ -96,16 +98,25 @@ export const ALL_PRESET_IDS = [
 ] as const;
 export type PresetId = (typeof ALL_PRESET_IDS)[number];
 
-export const PRESET_LABELS: Readonly<Record<PresetId, string>> = {
-  straight: "Escalier droit",
-  "quarter-left": "Quart tournant à gauche",
-  "quarter-right": "Quart tournant à droite",
-  "two-quarters-u": "Deux quarts tournants (U)",
-  "two-quarters-s": "Deux quarts tournants opposés (S)",
-  "half-turn": "Demi-tournant balancé",
-  "quarter-landing": "Quart tournant avec palier",
-  helical: "Hélicoïdal à fût central",
+/** Clés des libellés des préréglages (nom du projet créé, sélecteur de l'interface). */
+export const PRESET_LABELS: Readonly<Record<PresetId, MessageKey>> = {
+  straight: "preset.straight.label",
+  "quarter-left": "preset.quarterLeft.label",
+  "quarter-right": "preset.quarterRight.label",
+  "two-quarters-u": "preset.twoQuartersU.label",
+  "two-quarters-s": "preset.twoQuartersS.label",
+  "half-turn": "preset.halfTurn.label",
+  "quarter-landing": "preset.quarterLanding.label",
+  helical: "preset.helical.label",
 };
+
+/**
+ * Nom par défaut d'un projet créé par un préréglage : libellé en **français**, quelle que soit
+ * la langue d'affichage (projets et exemples stables ; l'interface peut fournir `name`).
+ */
+export function defaultPresetName(key: MessageKey): string {
+  return translatorFor(DEFAULT_LOCALE).t(key);
+}
 
 /** Seuil `min` d'une règle de rules.yaml (erreur de programmation s'il est absent). */
 function ruleMin(id: string): number {
@@ -302,8 +313,8 @@ function windersLegs(
   const firstStraight = turns.length === 0 ? total : shape.firstStraightGoings * going;
   const lastStraight = total - firstStraight - turns.length * quarterArc - middleCount * middle;
   if (turns.length > 0 && lastStraight < 0) {
-    throw new RangeError(
-      `Hauteur à monter trop faible pour ce préréglage : il manque ${Math.ceil(-lastStraight)} mm de ligne de foulée.`,
+    throw new MessageRangeError(
+      msg("project.preset.heightTooLow", { missing: String(Math.ceil(-lastStraight)) }),
     );
   }
   if (turns.length === 0) return [Math.round(total)];
@@ -328,7 +339,9 @@ function steppingScore(project: Project): { collet: number; k3: boolean } | null
     const st = computeStepping(project, computeLayout(project));
     const winders = st.treads.filter((t) => t.kind === "winder");
     const collet = winders.length > 0 ? Math.min(...winders.map((t) => t.colletChord)) : Infinity;
-    return { collet, k3: st.notes.some((note) => note.startsWith("K3 :")) };
+    // Rupture K3 : remarque `stepping.k3NotMonotone` du découpage.
+    const k3 = st.notes.some((note) => (note.key as string) === "stepping.k3NotMonotone");
+    return { collet, k3 };
   } catch (e) {
     if (e instanceof LayoutError || e instanceof SteppingError) return null;
     throw e;
@@ -399,8 +412,7 @@ function adaptFirstTurn(
 function landingLegs(shape: PresetShape, width: number, n: number, going: number): number[] {
   const a = shape.firstStraightGoings;
   const b = n - 2 - a;
-  if (b < 1)
-    throw new RangeError("Hauteur à monter trop faible pour un quart tournant avec palier.");
+  if (b < 1) throw new MessageRangeError(msg("project.preset.heightTooLowLanding"));
   return [Math.round(a * going + width), Math.round(b * going + width)];
 }
 
@@ -493,15 +505,31 @@ export function pick(
   patched: number | undefined,
 ): number | undefined {
   if (option !== undefined && patched !== undefined && option !== patched) {
-    throw new RangeError(`« ${label} » est donné deux fois (option ${option}, patch ${patched}).`);
+    throw new MessageRangeError(
+      msg("project.preset.givenTwice", {
+        option: label,
+        value: String(option),
+        patched: String(patched),
+      }),
+    );
   }
   return option ?? patched;
 }
 
-export function requirePositiveInt(label: string, value: number): void {
+/** `label` : désignation du champ en début de phrase (« La hauteur à monter »). */
+export function requirePositiveInt(label: Message, value: number): void {
   if (!Number.isInteger(value) || value <= 0) {
-    throw new RangeError(
-      `${label} doit être un entier strictement positif en mm (reçu : ${value}).`,
+    throw new MessageRangeError(
+      msg("project.preset.notPositiveInt", { label, value: String(value) }),
+    );
+  }
+}
+
+/** Jeu latéral de la trémie des préréglages et du recalage : entier ≥ 0 (mm). */
+export function requireOpeningClearance(clearance: number): void {
+  if (!Number.isInteger(clearance) || clearance < 0) {
+    throw new MessageRangeError(
+      msg("project.preset.invalidClearance", { clearance: String(clearance) }),
     );
   }
 }
@@ -526,9 +554,7 @@ export function createProject(preset: PresetId, options: PresetOptions = {}): Pr
     options.coreRadius !== undefined ||
     options.openingShape !== undefined
   ) {
-    throw new RangeError(
-      `Le préréglage « ${preset} » n'accepte pas les options de l'hélicoïdal (rayons, trémie).`,
-    );
+    throw new MessageRangeError(msg("project.preset.noHelicalOptions", { preset }));
   }
   const shape = FLIGHTS_PRESET_SHAPES[preset];
   const patch = options.patch;
@@ -540,36 +566,35 @@ export function createProject(preset: PresetId, options: PresetOptions = {}): Pr
   const slab =
     pick("upperSlabThickness", options.upperSlabThickness, patch?.site?.upperSlabThickness) ??
     DEFAULT_SLAB_THICKNESS;
-  requirePositiveInt("La hauteur à monter", height);
-  requirePositiveInt("L'emmarchement", width);
-  requirePositiveInt("L'épaisseur du plancher haut", slab);
+  requirePositiveInt(msg("project.preset.field.floorToFloor"), height);
+  requirePositiveInt(msg("project.preset.field.width"), width);
+  requirePositiveInt(msg("project.preset.field.upperSlabThickness"), slab);
   const clearance = options.openingClearance ?? PRESET_OPENING_CLEARANCE;
-  if (!Number.isInteger(clearance) || clearance < 0) {
-    throw new RangeError(
-      `Le jeu latéral de la trémie doit être un entier positif ou nul en mm (reçu : ${clearance}).`,
-    );
-  }
+  requireOpeningClearance(clearance);
   if (width > WALKLINE_MIDDLE_MAX_WIDTH) {
-    throw new RangeError(
-      `Les préréglages supposent la ligne de foulée au milieu, donc un emmarchement ≤ ${WALKLINE_MIDDLE_MAX_WIDTH} mm.`,
+    throw new MessageRangeError(
+      msg("project.preset.widthTooLarge", { max: String(WALKLINE_MIDDLE_MAX_WIDTH) }),
     );
   }
   const direction = options.direction;
   const hasFixedDirection =
     preset === "straight" || preset === "quarter-left" || preset === "quarter-right";
   if (direction !== undefined && hasFixedDirection) {
-    throw new RangeError(`Le préréglage « ${preset} » n'accepte pas d'option de sens.`);
+    throw new MessageRangeError(msg("project.preset.noDirection", { preset }));
   }
   // n et g résolus par les fonctions du tracé (`layout/resolve.ts`) : mêmes valeurs `auto`
   // (n = arrondi(H / targetRise), g = 630 − 2h) que `computeLayout` et le découpage.
   const parsedStepping = SteppingSchema.safeParse(patch?.stair?.stepping ?? {});
   if (!parsedStepping.success) {
-    throw new RangeError(
-      `Réglage des hauteurs invalide : ${parsedStepping.error.issues.map((i) => i.message).join(" ; ")}.`,
+    // Messages de zod (sans carte d'erreurs) repris tels quels : détail technique.
+    throw new MessageRangeError(
+      msg("project.preset.invalidStepping", {
+        detail: parsedStepping.error.issues.map((i) => i.message).join(" ; "),
+      }),
     );
   }
   const stepping = parsedStepping.data;
-  requirePositiveInt("La hauteur de marche cible", stepping.targetRise);
+  requirePositiveInt(msg("project.preset.field.targetRise"), stepping.targetRise);
   let n: number;
   let going: number;
   try {
@@ -577,7 +602,7 @@ export function createProject(preset: PresetId, options: PresetOptions = {}): Pr
     n = resolveRiserCount(sizing);
     going = resolveTargetGoing(sizing, n);
   } catch (e) {
-    if (e instanceof LayoutError) throw new RangeError(e.message);
+    if (e instanceof LayoutError) throw new MessageRangeError(e.msg, { cause: e });
     throw e;
   }
   const first = direction ?? shape.turns[0];
@@ -591,7 +616,7 @@ export function createProject(preset: PresetId, options: PresetOptions = {}): Pr
 
   const input: ProjectInput = {
     schemaVersion: PROJECT_SCHEMA_VERSION,
-    name: options.name ?? PRESET_LABELS[preset],
+    name: options.name ?? defaultPresetName(PRESET_LABELS[preset]),
     site: {
       floorToFloor: height,
       upperSlabThickness: slab,
@@ -627,7 +652,8 @@ export function createProject(preset: PresetId, options: PresetOptions = {}): Pr
   try {
     opening = computeOpening(project, clearance);
   } catch (e) {
-    if (e instanceof LayoutError || e instanceof SteppingError) throw new RangeError(e.message);
+    if (e instanceof LayoutError || e instanceof SteppingError)
+      throw new MessageRangeError(e.msg, { cause: e });
     throw e;
   }
   if (opening === null) return project;

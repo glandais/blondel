@@ -15,6 +15,7 @@
  * exact (180°) non géré. Courbes ouvertes uniquement.
  */
 import type { Curve2, CurveSeg, Mm } from "../model/primitives.js";
+import { MessageError, msg } from "@blondel/i18n";
 import { intersectSupports } from "./intersect.js";
 import { arcSeg, lineSeg, segEnd, segLength, segStart, segSub, segTangentAt } from "./segment.js";
 import { ANGLE_EPS, GEOM_EPS } from "./tolerance.js";
@@ -50,7 +51,10 @@ export interface OffsetOptions {
 }
 
 export function offsetCurve(curve: Curve2, d: Mm, side: Side, options: OffsetOptions = {}): Curve2 {
-  if (!(d >= 0)) throw new Error(`offsetCurve : distance invalide (${d})`);
+  if (!(d >= 0))
+    throw new MessageError(
+      msg("error.geom2d.offsetCurve.invalidDistance", { distance: String(d) }),
+    );
   const joinTol = options.joinTol ?? 10 * GEOM_EPS;
   const sg = sideSign(side);
   // Un arc dont le rayon décalé est exactement nul est retiré : ses voisins se rejoignent au
@@ -74,12 +78,12 @@ export function offsetCurve(curve: Curve2, d: Mm, side: Side, options: OffsetOpt
       continue;
     }
     if (raw.length > 0 && Math.abs(turnAcc) >= Math.PI - ANGLE_EPS) {
-      throw new Error("offsetCurve : virage ≥ 180° entre deux décalés (demi-tour) non géré");
+      throw new MessageError(msg("error.geom2d.offsetCurve.turnOver180"));
     }
     raw.push(o);
     turnAcc = 0;
   }
-  if (raw.length === 0) throw new Error("offsetCurve : décalé entièrement dégénéré");
+  if (raw.length === 0) throw new MessageError(msg("error.geom2d.offsetCurve.degenerate"));
 
   const out: CurveSeg[] = [];
   for (const seg of raw) {
@@ -105,7 +109,7 @@ export function offsetCurve(curve: Curve2, d: Mm, side: Side, options: OffsetOpt
       const t2 = segTangentAt(cur, 0);
       const turn = V.signedAngle(t1, t2);
       if (Math.abs(Math.abs(turn) - Math.PI) < ANGLE_EPS) {
-        throw new Error("offsetCurve : demi-tour (180°) non géré");
+        throw new MessageError(msg("error.geom2d.offsetCurve.halfTurn"));
       }
       if (sg * turn < 0) {
         // Sommet convexe côté décalage : arc de rayon d centré sur le sommet d'origine.
@@ -119,7 +123,7 @@ export function offsetCurve(curve: Curve2, d: Mm, side: Side, options: OffsetOpt
       const mid = V.lerp(pe, cs, 0.5);
       const hits = intersectSupports(prev, cur);
       if (hits.length === 0) {
-        throw new Error("offsetCurve : raccord concave sans intersection");
+        throw new MessageError(msg("error.geom2d.offsetCurve.concaveNoIntersection"));
       }
       let best = hits[0]!;
       for (const h of hits) if (V.distance(h.point, mid) < V.distance(best.point, mid)) best = h;

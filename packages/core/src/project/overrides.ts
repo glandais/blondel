@@ -11,7 +11,9 @@
  *
  * Fonctions pures.
  */
+import { msg } from "@blondel/i18n";
 import type { Project, RuleOverride } from "../model/project.js";
+import { MessageRangeError } from "./errors.js";
 
 /** Surcharge en vigueur pour la règle `ruleId` (la dernière, comme le moteur), ou `undefined`. */
 export function ruleOverrideOf(project: Project, ruleId: string): RuleOverride | undefined {
@@ -26,9 +28,9 @@ export function ruleOverrideOf(project: Project, ruleId: string): RuleOverride |
 export function withRuleOverride(project: Project, override: RuleOverride): Project {
   const ruleId = override.ruleId.trim();
   const justification = override.justification.trim();
-  if (ruleId === "") throw new RangeError("Surcharge sans identifiant de règle.");
+  if (ruleId === "") throw new MessageRangeError(msg("project.override.noRule"));
   if (justification === "") {
-    throw new RangeError(`Surcharge de ${ruleId} : la justification est obligatoire.`);
+    throw new MessageRangeError(msg("project.override.noJustification", { ruleId }));
   }
   const entry: RuleOverride = { ruleId, severity: override.severity, justification };
   const current = project.compliance.overrides;

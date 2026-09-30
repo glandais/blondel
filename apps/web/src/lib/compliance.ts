@@ -3,6 +3,7 @@
  * par le cœur. Aucune règle n'est évaluée ici.
  */
 import type { ComplianceReport, Location, Model, Part, RuleResult, Severity } from "@blondel/core";
+import { trList } from "../i18n/fr.js";
 
 export const SEVERITY_ORDER: readonly Severity[] = ["bloquant", "avertissement", "conseil"];
 
@@ -128,5 +129,5 @@ export function treadNumberFromAttribute(attr: string | null | undefined): numbe
 export function modelNotes(model: Model | null | undefined): readonly string[] {
   if (!model) return [];
   const all = [...model.stepping.notes, ...(model.notes ?? []), ...(model.compliance.notes ?? [])];
-  return [...new Set(all)];
+  return [...new Set(trList(all))];
 }

@@ -13,6 +13,7 @@
  * Seules les marches balancées sont mesurées : les nez d'une marche droite sont parallèles, son
  * giron est le même sur toute ligne parallèle aux bords.
  */
+import { errorMessage, msg, type Message } from "@blondel/i18n";
 import { intersectLineCurve } from "../geom2d/intersect.js";
 import { offsetCurve } from "../geom2d/offset.js";
 import * as V from "../geom2d/vec.js";
@@ -28,7 +29,7 @@ export interface MeasuredGoing {
 
 export type MeasurementResult =
   | { readonly ok: true; readonly goings: readonly MeasuredGoing[] }
-  | { readonly ok: false; readonly reason: string };
+  | { readonly ok: false; readonly reason: Message };
 
 /** Tolérance relative des intersections sur le segment de nez Q → R. */
 const T_EPS = 1e-6;
@@ -70,7 +71,7 @@ export function goingsOnMeasurementLine(
     const radius = helical.walklineRadius + shift;
     // Le cercle de mesure doit couper les marches (entre le bord intérieur et le bord extérieur).
     if (!(radius > 0) || radius < helical.innerRadius - 1e-9 || radius > helical.outerRadius + 1e-9)
-      return { ok: false, reason: "ligne de mesure hors de l'emmarchement" };
+      return { ok: false, reason: msg("compliance.measurementLine.outsideWidth") };
     return {
       ok: true,
       goings: stepping.treads
@@ -98,7 +99,11 @@ export function goingsOnMeasurementLine(
     if (t.kind !== "winder") continue;
     const a = stepping.nosings[t.number - 1];
     const b = stepping.nosings[t.number];
-    if (!a || !b) return { ok: false, reason: `nez de la marche ${t.number} absents` };
+    if (!a || !b)
+      return {
+        ok: false,
+        reason: msg("compliance.measurementLine.missingNosings", { tread: t.number }),
+      };
     const side = collarSideAt(layout, (a.s + b.s) / 2);
     let curve: Curve2;
     try {
@@ -106,7 +111,7 @@ export function goingsOnMeasurementLine(
     } catch (e) {
       return {
         ok: false,
-        reason: `ligne de mesure non constructible (${e instanceof Error ? e.message : String(e)})`,
+        reason: msg("compliance.measurementLine.notConstructible", { detail: errorMessage(e) }),
       };
     }
     const jourAtQ = side === layout.innerSide;
@@ -115,7 +120,7 @@ export function goingsOnMeasurementLine(
     if (sa === null || sb === null)
       return {
         ok: false,
-        reason: `ligne de nez de la marche ${t.number} sans intersection avec la ligne de mesure`,
+        reason: msg("compliance.measurementLine.noIntersection", { tread: t.number }),
       };
     goings.push({ tread: t, going: sb - sa });
   }

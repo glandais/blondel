@@ -22,6 +22,7 @@
  * `describeSkipped` pour l'utilisateur. Le nombre d'entités et de sommets est borné
  * (`UNDERLAY_MAX_*`).
  */
+import { MessageError, dec, msg, textMessage, type Message, type MessageKey } from "@blondel/i18n";
 import DxfParser from "dxf-parser";
 import * as V from "../geom2d/vec.js";
 import type { BBox } from "../geom2d/polygon.js";
@@ -35,21 +36,22 @@ import {
 import { entitySegments, segmentsBounds } from "./underlay.js";
 
 /** Millimètres par unité de dessin, par code `$INSUNITS` (unités usuelles seulement). */
-export const INSUNITS_MM: Readonly<Record<number, { readonly mm: number; readonly name: string }>> =
-  {
-    1: { mm: 25.4, name: "pouce" },
-    2: { mm: 304.8, name: "pied" },
-    4: { mm: 1, name: "millimètre" },
-    5: { mm: 10, name: "centimètre" },
-    6: { mm: 1000, name: "mètre" },
-    7: { mm: 1_000_000, name: "kilomètre" },
-    9: { mm: 0.0254, name: "mil" },
-    10: { mm: 914.4, name: "yard" },
-    13: { mm: 0.001, name: "micromètre" },
-    14: { mm: 100, name: "décimètre" },
-    15: { mm: 10_000, name: "décamètre" },
-    16: { mm: 100_000, name: "hectomètre" },
-  };
+export const INSUNITS_MM: Readonly<
+  Record<number, { readonly mm: number; readonly name: MessageKey }>
+> = {
+  1: { mm: 25.4, name: "site.dxf.unit.inch" },
+  2: { mm: 304.8, name: "site.dxf.unit.foot" },
+  4: { mm: 1, name: "site.dxf.unit.millimetre" },
+  5: { mm: 10, name: "site.dxf.unit.centimetre" },
+  6: { mm: 1000, name: "site.dxf.unit.metre" },
+  7: { mm: 1_000_000, name: "site.dxf.unit.kilometre" },
+  9: { mm: 0.0254, name: "site.dxf.unit.mil" },
+  10: { mm: 914.4, name: "site.dxf.unit.yard" },
+  13: { mm: 0.001, name: "site.dxf.unit.micrometre" },
+  14: { mm: 100, name: "site.dxf.unit.decimetre" },
+  15: { mm: 10_000, name: "site.dxf.unit.decametre" },
+  16: { mm: 100_000, name: "site.dxf.unit.hectometre" },
+};
 
 /** Pas angulaire (degrés) de discrétisation des arcs déformés par un bloc. */
 export const ARC_TESSELLATION_STEP_DEG = 10;
@@ -63,7 +65,7 @@ export const MAX_INSERT_DEPTH = 8;
 /** Nombre maximal de copies d'un bloc en réseau (colonnes × lignes). */
 const MAX_INSERT_ARRAY = 1_000;
 
-export class DxfImportError extends Error {
+export class DxfImportError extends MessageError {
   override name = "DxfImportError";
 }
 
@@ -84,8 +86,8 @@ export interface DxfReadResult {
   readonly entities: UnderlayEntity[];
   /** Code `$INSUNITS` lu (null si absent). */
   readonly insUnits: number | null;
-  /** Nom français de l'unité reconnue, sinon null. */
-  readonly unitName: string | null;
+  /** Nom de l'unité reconnue, sinon null. */
+  readonly unitName: Message | null;
   /** Échelle appliquée (mm par unité de dessin). */
   readonly unitScale: number;
   /** Vrai si l'unité est inconnue et qu'aucune échelle n'a été fournie. */
@@ -320,22 +322,29 @@ export function ellipsePoints(
 
 /** Familles d'entités ignorées, pour le message à l'utilisateur (`describeSkipped`). */
 const SKIPPED_FAMILIES: readonly {
-  readonly label: string;
+  /** Message « {count} texte(s) ». */
+  readonly label: MessageKey;
   readonly test: (t: string) => boolean;
 }[] = [
-  { label: "texte(s)", test: (t) => ["TEXT", "MTEXT", "ATTRIB", "ATTDEF"].includes(t) },
-  { label: "cote(s)", test: (t) => t === "DIMENSION" || t === "LEADER" || t === "MULTILEADER" },
-  { label: "hachure(s)", test: (t) => t === "HATCH" || t === "SOLID" },
-  { label: "entité(s) de l'espace papier", test: (t) => t === "paperSpace" },
-  { label: "entité(s) hors des calques choisis", test: (t) => t.startsWith("calque:") },
+  {
+    label: "site.dxf.skipped.texts",
+    test: (t) => ["TEXT", "MTEXT", "ATTRIB", "ATTDEF"].includes(t),
+  },
+  {
+    label: "site.dxf.skipped.dimensions",
+    test: (t) => t === "DIMENSION" || t === "LEADER" || t === "MULTILEADER",
+  },
+  { label: "site.dxf.skipped.hatches", test: (t) => t === "HATCH" || t === "SOLID" },
+  { label: "site.dxf.skipped.paperSpace", test: (t) => t === "paperSpace" },
+  { label: "site.dxf.skipped.otherLayers", test: (t) => t.startsWith("calque:") },
 ];
 
 /**
- * Résumé français des entités ignorées (`DxfReadResult.skipped`), par famille : textes, cotes,
- * hachures, espace papier, calques exclus, autres (types cités). Vide si rien n'est ignoré.
- * Ex. : « 3 texte(s), 1 cote(s), 2 autre(s) (IMAGE, POINT) ».
+ * Résumé des entités ignorées (`DxfReadResult.skipped`), par famille : textes, cotes,
+ * hachures, espace papier, calques exclus, autres (types cités). `null` si rien n'est ignoré.
+ * Ex. (fr) : « 3 texte(s), 1 cote(s), 2 autre(s) (IMAGE, POINT) ».
  */
-export function describeSkipped(skipped: Readonly<Record<string, number>>): string {
+export function describeSkipped(skipped: Readonly<Record<string, number>>): Message | null {
   const counts = SKIPPED_FAMILIES.map(() => 0);
   let others = 0;
   const otherTypes = new Set<string>();
@@ -347,11 +356,22 @@ export function describeSkipped(skipped: Readonly<Record<string, number>>): stri
       otherTypes.add(type.split(":")[0]!);
     }
   }
-  const parts = SKIPPED_FAMILIES.flatMap((f, i) =>
-    counts[i]! > 0 ? [`${counts[i]} ${f.label}`] : [],
+  const parts: Message[] = SKIPPED_FAMILIES.flatMap((f, i) =>
+    counts[i]! > 0 ? [msg(f.label, { count: dec(counts[i]!, 0) })] : [],
   );
-  if (others > 0) parts.push(`${others} autre(s) (${[...otherTypes].sort().join(", ")})`);
-  return parts.join(", ");
+  if (others > 0) {
+    parts.push(
+      msg("site.dxf.skipped.others", {
+        count: dec(others, 0),
+        types: [...otherTypes].sort().join(", "),
+      }),
+    );
+  }
+  // Liste « a, b, c » : messages imbriqués de droite à gauche.
+  return parts.reduceRight<Message | null>(
+    (rest, part) => (rest === null ? part : msg("site.dxf.skipped.list", { first: part, rest })),
+    null,
+  );
 }
 
 class Collector {
@@ -579,11 +599,15 @@ export function readDxfUnderlay(text: string, options: DxfReadOptions = {}): Dxf
   try {
     dxf = new DxfParser().parseSync(text) as typeof dxf;
   } catch (e) {
+    // Message de la bibliothèque de lecture : détail technique non traduit.
     throw new DxfImportError(
-      `Fichier DXF illisible : ${e instanceof Error ? e.message : String(e)}`,
+      msg("site.dxf.unreadable", {
+        detail: textMessage(e instanceof Error ? e.message : String(e)),
+      }),
+      { cause: e },
     );
   }
-  if (!dxf) throw new DxfImportError("Fichier DXF illisible : contenu vide.");
+  if (!dxf) throw new DxfImportError(msg("site.dxf.empty"));
   const rawUnits = dxf.header?.["$INSUNITS"];
   const insUnits = typeof rawUnits === "number" && Number.isFinite(rawUnits) ? rawUnits : null;
   const known = insUnits !== null ? INSUNITS_MM[insUnits] : undefined;
@@ -591,7 +615,7 @@ export function readDxfUnderlay(text: string, options: DxfReadOptions = {}): Dxf
     options.unitScale !== undefined &&
     !(options.unitScale > 0 && Number.isFinite(options.unitScale))
   ) {
-    throw new DxfImportError(`Échelle invalide : ${options.unitScale} mm par unité.`);
+    throw new DxfImportError(msg("site.dxf.invalidScale", { scale: String(options.unitScale) }));
   }
   const unitScale = options.unitScale ?? known?.mm ?? 1;
   const needsScale = options.unitScale === undefined && known === undefined;
@@ -610,7 +634,7 @@ export function readDxfUnderlay(text: string, options: DxfReadOptions = {}): Dxf
   return {
     entities: out.entities,
     insUnits,
-    unitName: known?.name ?? null,
+    unitName: known ? msg(known.name) : null,
     unitScale,
     needsScale,
     bounds,

@@ -2,6 +2,7 @@
  * Moteur de conformité (ADR-0004) : contextes → règles applicables → évaluateurs → sévérité
  * effective (profil, surcharges) → rapport.
  */
+import { errorMessage, msg, type Message } from "@blondel/i18n";
 import type { ComplianceReport, RuleResult, Severity } from "../model/derived.js";
 import { STAIR } from "./check.js";
 import { isRuleApplicable, resolveContexts, type ResolvedContexts } from "./contexts.js";
@@ -19,14 +20,20 @@ import type { ComplianceInput, Finding } from "./types.js";
 export { effectiveSeverity, type EffectiveSeverity };
 
 /** Note d'une surcharge portant sur un identifiant absent de rules.yaml. */
-export function unknownOverrideNote(ruleId: string): string {
-  return `Surcharge ignorée : règle inconnue « ${ruleId} ».`;
+export function unknownOverrideNote(ruleId: string): Message {
+  return msg("compliance.engine.unknownOverride", { ruleId });
+}
+
+/** Étape en échec d'un modèle partiel, en minuscules dans une phrase (« tracé », « découpage »). */
+function incompleteStage(stage: "layout" | "stepping"): Message {
+  return msg(
+    stage === "layout" ? "compliance.engine.stage.layout" : "compliance.engine.stage.stepping",
+  );
 }
 
 function toResult(rule: RuleDef, f: Finding, eff: EffectiveSeverity): RuleResult {
   const base: RuleResult = {
     ruleId: rule.id,
-    description: rule.description,
     // Une règle ignorée garde sa mesure mais sort des violations (traçabilité conservée).
     status: eff.ignored && f.status !== "non-evaluee" ? "non-evaluee" : f.status,
     severity: eff.severity,
@@ -53,7 +60,7 @@ export interface ComplianceEvaluation {
   readonly report: ComplianceReport;
   readonly contexts: ResolvedContexts;
   /** Remarques (contextes déduits ou inconnus, régime supposé, version de règles…). */
-  readonly notes: readonly string[];
+  readonly notes: readonly Message[];
 }
 
 /** Règle évaluable sur un modèle partiel (voir `ComplianceInput.incomplete`). */
@@ -75,19 +82,20 @@ export function evaluateComplianceDetailed(
     input.project.stair.structure.kind,
   );
   const active = new Set(resolved.active);
-  const notes = [...resolved.notes];
+  const notes: Message[] = [...resolved.notes];
   if (resolved.derived.length > 0)
-    notes.push(`Contextes déduits : ${resolved.derived.join(", ")}.`);
+    notes.push(msg("compliance.engine.derivedContexts", { contexts: resolved.derived.join(", ") }));
   if (input.project.rulesVersion !== RULES_VERSION) {
     notes.push(
-      `Le projet référence le jeu de règles v${input.project.rulesVersion} ; rapport établi avec la v${RULES_VERSION}.`,
+      msg("compliance.engine.rulesVersionMismatch", {
+        projectVersion: String(input.project.rulesVersion),
+        version: String(RULES_VERSION),
+      }),
     );
   }
 
   if (input.incomplete) {
-    notes.push(
-      `Modèle partiel (${input.incomplete === "layout" ? "tracé" : "découpage"} non calculé) : seules les règles portant sur le projet ou les hauteurs sont évaluées ; les contextes déduits du découpage (ex. tournant) ne sont pas connus.`,
-    );
+    notes.push(msg("compliance.engine.partialModel", { stage: incompleteStage(input.incomplete) }));
   }
 
   // Surcharges inopérantes : signalées plutôt qu'ignorées en silence. Une règle hors table peut
@@ -95,7 +103,7 @@ export function evaluateComplianceDetailed(
   // `mergeStructureChecks` si un contrôle fusionné porte cet identifiant.
   for (const o of settings.overrides) {
     if (o.justification.trim() === "")
-      notes.push(`Surcharge ignorée sur ${o.ruleId} : justification vide.`);
+      notes.push(msg("compliance.engine.emptyJustification", { ruleId: o.ruleId }));
     else if (!findRule(o.ruleId)) notes.push(unknownOverrideNote(o.ruleId));
   }
 
@@ -110,18 +118,20 @@ export function evaluateComplianceDetailed(
         {
           status: "non-evaluee",
           location: STAIR,
-          message: `Non évaluée : ${input.incomplete === "layout" ? "tracé" : "découpage"} non calculé (modèle partiel, voir les erreurs).`,
+          message: msg("compliance.engine.partialNotEvaluated", {
+            stage: incompleteStage(input.incomplete),
+          }),
         },
       ];
     } else if (!ev) {
       // Règle non évaluable sur le modèle : motif précis (donnée absente, hors conception).
       const reason = UNEVALUATED_REASONS[rule.id];
-      let message = "Règle applicable sans évaluateur (non implémentée).";
+      let message: Message = msg("compliance.engine.noEvaluator");
       if (reason) {
         try {
           message = reason({ ...input, rule, contexts: active });
         } catch (e) {
-          message = `Non évaluée : ${e instanceof Error ? e.message : String(e)}`;
+          message = msg("compliance.engine.reasonError", { detail: errorMessage(e) });
         }
       }
       findings = [{ status: "non-evaluee", location: STAIR, message }];
@@ -133,12 +143,12 @@ export function evaluateComplianceDetailed(
           {
             status: "non-evaluee",
             location: STAIR,
-            message: `Erreur de l'évaluateur : ${e instanceof Error ? e.message : String(e)}`,
+            message: msg("compliance.engine.evaluatorError", { detail: errorMessage(e) }),
           },
         ];
       }
       if (findings.length === 0)
-        findings = [{ status: "ok", location: STAIR, message: "Sans objet." }];
+        findings = [{ status: "ok", location: STAIR, message: msg("compliance.notApplicable") }];
     }
     for (const f of findings)
       results.push(toResult(rule, f, f.severity ? effectiveSeverity(rule, settings, f) : eff));

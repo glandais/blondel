@@ -1,4 +1,5 @@
 import {
+  textMessage,
   buildModel,
   createProject,
   type ComplianceReport,
@@ -19,7 +20,6 @@ import {
 function result(partial: Partial<RuleResult>): RuleResult {
   return {
     ruleId: "R",
-    description: "",
     status: "violation",
     severity: "avertissement",
     declaredSeverity: "avertissement",
@@ -28,7 +28,7 @@ function result(partial: Partial<RuleResult>): RuleResult {
     confidence: "eleve",
     source: "",
     secondarySource: false,
-    message: "",
+    message: textMessage(""),
     ...partial,
   };
 }

@@ -8,6 +8,7 @@
  */
 import {
   RULE_OVERRIDE_SEVERITIES,
+  ruleDescription,
   ruleOverrideOf,
   withRuleOverride,
   withoutRuleOverride,
@@ -22,6 +23,7 @@ import {
   modelNotes,
   sameLocation,
 } from "../lib/compliance.js";
+import { tr } from "../i18n/fr.js";
 import { formatMeasure, type DisplayUnit } from "../lib/units.js";
 import { appStore, useApp, useModel } from "../store/appStore.js";
 
@@ -192,7 +194,7 @@ function ResultItem({ r }: { r: RuleResult }) {
           <code>{r.ruleId}</code>
           <span className="result__loc">{locationLabel(r.location)}</span>
         </span>
-        <span className="result__msg">{r.message || r.description}</span>
+        <span className="result__msg">{tr(r.message) || tr(ruleDescription(r.ruleId))}</span>
         {r.measured !== undefined ? (
           <span className="result__measure">
             Mesuré : {formatMeasure(r.measured, r.unit, unit)}
@@ -202,7 +204,7 @@ function ResultItem({ r }: { r: RuleResult }) {
         <span className="result__meta">
           {r.nature} · confiance {r.confidence}
           {r.secondarySource ? " · source secondaire" : ""}
-          {r.downgradeReason ? ` · ${r.downgradeReason}` : ""}
+          {r.downgradeReason ? ` · ${tr(r.downgradeReason)}` : ""}
         </span>
       </button>
       <OverrideControl ruleId={r.ruleId} />

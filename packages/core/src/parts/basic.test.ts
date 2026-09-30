@@ -1,6 +1,8 @@
 import fc from "fast-check";
+import { translatorFor } from "@blondel/i18n";
 import { describe, expect, it } from "vitest";
 import { orientation, pointInPolygon, signedArea } from "../geom2d/polygon.js";
+import { fr, frList } from "../i18n.test-helpers.js";
 import * as V from "../geom2d/vec.js";
 import { computeLayout } from "../layout/layout.js";
 import type { Part, Stepping } from "../model/derived.js";
@@ -110,7 +112,14 @@ describe("buildBasicParts — escalier droit", () => {
     const marks = res.parts.filter((x) => x.category === "riser").map((x) => x.mark);
     expect(marks).not.toContain("CM1");
     expect(marks).toContain("CM2");
-    expect(res.notes).toEqual([expect.stringContaining("Contremarche 1 : hauteur nulle")]);
+    expect(frList(res.notes)).toEqual([
+      "Contremarche 1 : hauteur nulle ou négative (-20 mm, marche de 200 mm plus épaisse que la hauteur de marche), pièce non générée.",
+    ]);
+    expect(translatorFor("en").t(res.notes[0]!)).toBe(
+      "Riser 1: zero or negative height (-20 mm, tread of 200 mm thicker than the rise), part not generated.",
+    );
+    expect(res.parts.map((x) => fr(x.name))).toContain("Contremarche 2");
+    expect(res.parts.map((x) => fr(x.name))).toContain("Marche 1");
   });
 });
 

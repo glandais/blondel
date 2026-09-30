@@ -5,6 +5,7 @@
  * de noms courts (`add`, `scale`…) dans l'API publique du cœur.
  */
 import type { Rad, Vec2 } from "../model/primitives.js";
+import { MessageError, msg } from "@blondel/i18n";
 import { GEOM_EPS } from "./tolerance.js";
 
 export function vec(x: number, y: number): Vec2 {
@@ -51,7 +52,7 @@ export function normSq(a: Vec2): number {
 export function normalize(a: Vec2): Vec2 {
   const n = norm(a);
   if (n < GEOM_EPS * GEOM_EPS) {
-    throw new Error("vec2.normalize : vecteur nul");
+    throw new MessageError(msg("error.geom2d.normalize.zeroVector"));
   }
   return { x: a.x / n, y: a.y / n };
 }

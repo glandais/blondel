@@ -22,6 +22,15 @@
  * structures) : il est exporté par l'index du paquet.
  */
 import {
+  dec,
+  messageEquals,
+  msg,
+  textMessage,
+  translatorFor,
+  type Message,
+  type MessageParam,
+} from "@blondel/i18n";
+import {
   findSection,
   sectionsOf,
   SECTION_FAMILIES,
@@ -33,7 +42,6 @@ import type { InnerCorner, Project } from "../model/project.js";
 import { buildModel } from "../pipeline/build.js";
 import { layoutAccepts, newelLabel, newelSatisfies, withNewels } from "../project/newel.js";
 import { resolveProfileNewel } from "../project/structureChoice.js";
-import { fmt } from "../rules/check.js";
 import { isDebillardeStructure } from "../stepping/stepping.js";
 import { minProfileBendRadius } from "../workshop/metal.js";
 import { PRECHECK_RULE_IDS, precheckResults } from "../precheck/checks.js";
@@ -71,7 +79,8 @@ export interface VariantCost {
 
 export interface VariantSummary {
   readonly kind: string;
-  readonly label: string;
+  /** Libellé de la structure (`structure.<kind>.label`), identifiant brut pour un plugin inconnu. */
+  readonly label: Message;
   readonly family: "bois" | "metal" | "mixte" | null;
   /** Masse totale (kg) ; pièces sans masse connue ignorées (`massUnknown`). */
   readonly massKg: number;
@@ -95,7 +104,7 @@ export interface VariantSummary {
     readonly beams: number;
     readonly violations: Readonly<Record<Severity, number>>;
   };
-  readonly errors: readonly string[];
+  readonly errors: readonly Message[];
   /** Coût en € HT si le barème de l'atelier est complet, sinon `null`. */
   readonly cost: VariantCost | null;
   /** Champs du barème manquants pour chiffrer cette variante. */
@@ -123,8 +132,9 @@ export function countUniqueParts(parts: readonly Part[]): number {
   const r = (x: number | undefined): number => Math.round((x ?? 0) / IDENTICAL_TOLERANCE);
   for (const p of parts) {
     if (p.flat) continue;
+    // Section : `Message` sérialisé (mêmes clé et paramètres arrondis ⇒ même désignation).
     keys.add(
-      `${p.category}|${p.material}|${p.section ?? ""}|${r(p.stock?.length)}|${r(p.stock?.width)}|${r(p.stock?.thickness)}|${p.quantities[QUANTITY_HOLES] ?? 0}`,
+      `${p.category}|${p.material}|${p.section ? JSON.stringify(p.section) : ""}|${r(p.stock?.length)}|${r(p.stock?.width)}|${r(p.stock?.thickness)}|${p.quantities[QUANTITY_HOLES] ?? 0}`,
     );
   }
   return flatGroups + keys.size;
@@ -177,7 +187,9 @@ export function executionClassOf(
 ): "EXC1" | "EXC2" | null {
   if (model.executionClass) return model.executionClass;
   const line = model.compliance.results.find((r) => r.ruleId === "EXC_CLASSE_EXECUTION");
-  const m = line ? /EXC[12]/.exec(line.message) : null;
+  // La classe (identifiant « EXC1 » / « EXC2 ») figure dans le texte du constat, quelle que soit
+  // la langue : lecture sur sa traduction de référence.
+  const m = line ? /EXC[12]/.exec(translatorFor("fr").t(line.message)) : null;
   return m ? (m[0] as "EXC1" | "EXC2") : null;
 }
 
@@ -270,7 +282,11 @@ export function summarizeVariant(
   });
   return {
     kind,
-    label: plugin?.label ?? (kind === "none" ? "Sans structure (pièces de base)" : kind),
+    label: plugin
+      ? msg(plugin.labelKey)
+      : kind === "none"
+        ? msg("structure.common.compare.noneLabel")
+        : textMessage(kind),
     family: plugin?.family ?? null,
     massKg,
     massUnknown,
@@ -312,7 +328,7 @@ export interface JourAdaptation {
   readonly turn: number;
   readonly from: InnerCorner;
   readonly to: InnerCorner;
-  readonly reason: string;
+  readonly reason: Message;
 }
 
 /** Épure effective d'une variante (après adaptation du jour et recalcul). */
@@ -359,24 +375,29 @@ export interface EpureVariantSummary extends VariantSummary {
   readonly epure: EpureSummary;
   readonly adaptations: readonly JourAdaptation[];
   /** Incompatibilités de la structure avec l'épure (adaptées ou non). */
-  readonly signals: readonly string[];
+  readonly signals: readonly Message[];
   /** Écarts d'épure par rapport à la première variante (vide pour la première). */
-  readonly deviations: readonly string[];
+  readonly deviations: readonly Message[];
 }
 
-const jourLabel = (c: InnerCorner): string =>
+const jourLabel = (c: InnerCorner): Message =>
   c.kind === "arc"
-    ? `en arc R ${fmt(c.radius, 0)} mm`
+    ? msg("structure.common.compare.jour.arc", { radius: dec(c.radius, 0) })
     : c.kind === "newel"
-      ? `poteau ${fmt(c.size, 0)} mm${(c.offset ?? 0) > 0 ? ` décalé de ${fmt(c.offset ?? 0, 0)} mm vers le jour` : ""}`
-      : "vif";
+      ? (c.offset ?? 0) > 0
+        ? msg("structure.common.compare.jour.newelOffset", {
+            size: dec(c.size, 0),
+            offset: dec(c.offset ?? 0, 0),
+          })
+        : msg("structure.common.compare.jour.newel", { size: dec(c.size, 0) })
+      : msg("structure.common.compare.jour.sharp");
 
 /** Raison pour laquelle un limon de jour profilé ne suit pas un jour en arc (C §2.3). */
 function profileArcReason(
   project: Project,
   params: Readonly<Record<string, unknown>>,
   radius: Mm,
-): string {
+): Message {
   const family: SectionFamily = (SECTION_FAMILIES as readonly string[]).includes(
     params["family"] as string,
   )
@@ -385,19 +406,34 @@ function profileArcReason(
   const named = typeof params["section"] === "string" ? findSection(params["section"]) : undefined;
   const height = named?.h ?? Math.min(...sectionsOf(family).map((x) => x.h));
   const direction = family === "UPN" ? "flangeIn" : "flat";
-  const dirLabel = direction === "flangeIn" ? "aile intérieure" : "à plat";
+  const dirLabel =
+    direction === "flangeIn"
+      ? msg("structure.common.compare.bendDirection.flangeIn")
+      : msg("structure.common.compare.bendDirection.flat");
   const metal = resolveWorkshopProfile(project.workshop).metal;
   const cap = minProfileBendRadius(metal, family, direction, height);
   if (cap === null) {
-    return `${family} en limon de jour cintré : aucune capacité de cintrage connue (${dirLabel}), à valider chez le cintreur (C §2.3)`;
+    return msg("structure.common.compare.profileArc.noCapacity", { family, direction: dirLabel });
   }
   if ("outOfRange" in cap) {
-    return `${family} en limon de jour cintré : section hors de la capacité du cintreur (${fmt(cap.outOfRange, 0)} mm), C §2.3`;
+    return msg("structure.common.compare.profileArc.outOfRange", {
+      family,
+      height: dec(cap.outOfRange, 0),
+    });
   }
   if (radius < cap.radius) {
-    return `${family} impossible en limon de jour à petit rayon (C §2.3) : r_j ${fmt(radius, 0)} mm < rayon mini de cintrage ${fmt(cap.radius, 0)} mm (${dirLabel})`;
+    return msg("structure.common.compare.profileArc.tooTight", {
+      family,
+      radius: dec(radius, 0),
+      min: dec(cap.radius, 0),
+      direction: dirLabel,
+    });
   }
-  return `${family} cintré possible en plan (r_j ${fmt(radius, 0)} ≥ ${fmt(cap.radius, 0)} mm) mais cintrage hélicoïdal à valider chez le cintreur : limon cintré non généré (C §2.3)`;
+  return msg("structure.common.compare.profileArc.helical", {
+    family,
+    radius: dec(radius, 0),
+    min: dec(cap.radius, 0),
+  });
 }
 
 /**
@@ -441,14 +477,14 @@ export function adaptJour(
 ): {
   readonly project: Project;
   readonly adaptations: readonly JourAdaptation[];
-  readonly signals: readonly string[];
+  readonly signals: readonly Message[];
 } {
   const kind = spec.kind;
   const params =
     spec.params ?? (kind === project.stair.structure.kind ? project.stair.structure.params : {});
   const adapt = spec.jour !== "keep";
   const adaptations: JourAdaptation[] = [];
-  const signals: string[] = [];
+  const signals: Message[] = [];
   let newel: InnerCorner = {
     kind: "newel",
     size: options.newelSize ?? DEFAULT_ADAPTED_NEWEL_SIZE,
@@ -465,7 +501,10 @@ export function adaptJour(
     // Poteau élargi refusé par le tracé (volée centrale trop courte…) : poteau par défaut.
     if (resolved && !layoutAccepts(withNewels(variant, resolved.newel, () => true))) {
       signals.push(
-        `${newelLabel(resolved.newel)} (poteau élargi des profilés, décision A13) impossible dans ce tracé : poteau par défaut de ${fmt(newel.size, 0)} mm.`,
+        msg("structure.common.compare.wideNewelRefused", {
+          newel: newelLabel(resolved.newel),
+          size: dec(newel.size, 0),
+        }),
       );
     } else if (resolved) {
       newel = resolved.newel;
@@ -478,21 +517,23 @@ export function adaptJour(
     options.arcRadius ?? rollableJourRadius(project.workshop, kind, params);
   const turns = project.stair.layout.turns.map((t, j) => {
     let target: InnerCorner | null = null;
-    let reason = "";
+    let reason: Message | null = null;
     if (unfitNewel?.(t.inner)) {
       target = newel;
-      reason = `${jourLabel(t.inner)} trop étroit pour recevoir les profilés : poteau élargi des profilés (largeur d'aile + 2 × jeu, décalé vers le jour, décision A13, à valider)`;
+      reason = msg("structure.common.compare.reason.newelTooNarrow", { jour: jourLabel(t.inner) });
     } else if (NEWEL_JOUR_STRUCTURES.has(kind) && t.inner.kind !== "newel") {
       target = newel;
       reason =
         t.inner.kind === "arc"
           ? kind === "steel-profile"
             ? profileArcReason(project, params, t.inner.radius)
-            : `jour en arc non pris en charge par « ${kind} » (limons droits : poteau d'angle requis)`
-          : `jour vif : les limons de jour se rencontreraient en un point, poteau d'angle requis`;
+            : msg("structure.common.compare.reason.arcUnsupported", { kind })
+          : msg("structure.common.compare.reason.sharp");
     } else if (isDebillardeStructure(kind) && t.inner.kind !== "arc") {
       target = { kind: "arc", radius: arcRadius() };
-      reason = `débillardé ⇒ jour courbe (CHALLENGE G7) : jour ${jourLabel(t.inner)} incompatible`;
+      reason = msg("structure.common.compare.reason.wreathedNeedsArc", {
+        jour: jourLabel(t.inner),
+      });
     } else if (
       isDebillardeStructure(kind) &&
       t.inner.kind === "arc" &&
@@ -500,11 +541,19 @@ export function adaptJour(
     ) {
       // Jour en arc trop serré pour la rouleuse (r_j − e < rayon mini) : arc agrandi.
       target = { kind: "arc", radius: arcRadius() };
-      reason = `jour en arc R ${fmt(t.inner.radius, 0)} mm sous le rayon de roulage (rayon intérieur mini de la rouleuse + épaisseur, profil d'atelier)`;
+      reason = msg("structure.common.compare.reason.belowRollingRadius", {
+        radius: dec(t.inner.radius, 0),
+      });
     }
-    if (!target) return t;
+    if (!target || !reason) return t;
     signals.push(
-      `Tournant ${j + 1} : ${reason} ; ${adapt ? `variante adaptée : jour ${jourLabel(target)}.` : "épure conservée, limon de jour non généré."}`,
+      adapt
+        ? msg("structure.common.compare.signal.adapted", {
+            turn: j + 1,
+            reason,
+            jour: jourLabel(target),
+          })
+        : msg("structure.common.compare.signal.kept", { turn: j + 1, reason }),
     );
     if (!adapt) return t;
     adaptations.push({ turn: j, from: t.inner, to: target, reason });
@@ -536,31 +585,57 @@ function epureOf(project: Project, model: Model): EpureSummary {
   };
 }
 
-/** Écarts d'épure de `e` par rapport à la référence `ref` (textes). */
-export function epureDeviations(ref: EpureSummary, e: EpureSummary): string[] {
-  const out: string[] = [];
-  const signed = (x: number): string => `${x > 0 ? "+" : ""}${fmt(x, 1)}`;
+/** Écarts d'épure de `e` par rapport à la référence `ref`. */
+export function epureDeviations(ref: EpureSummary, e: EpureSummary): Message[] {
+  const out: Message[] = [];
+  // Écart signé : « +3,5 », « -2 », « 0 ».
+  const signed = (x: number): MessageParam =>
+    x > 0 ? msg("structure.common.compare.positive", { value: dec(x, 1) }) : dec(x, 1);
   e.jours.forEach((j, i) => {
     const r = ref.jours[i];
-    if (r && jourLabel(r) !== jourLabel(j)) {
-      out.push(`Tournant ${i + 1} : jour ${jourLabel(j)} (référence : ${jourLabel(r)}).`);
+    if (r && !messageEquals(jourLabel(r), jourLabel(j))) {
+      out.push(
+        msg("structure.common.compare.deviation.jour", {
+          turn: i + 1,
+          jour: jourLabel(j),
+          ref: jourLabel(r),
+        }),
+      );
     }
   });
   if (e.riserCount !== ref.riserCount) {
-    out.push(`Nombre de hauteurs : ${e.riserCount} (référence : ${ref.riserCount}).`);
+    out.push(
+      msg("structure.common.compare.deviation.riserCount", {
+        value: String(e.riserCount),
+        ref: String(ref.riserCount),
+      }),
+    );
   }
   if (Math.abs(e.going - ref.going) > 0.05) {
-    out.push(`Giron : ${fmt(e.going, 1)} mm (${signed(e.going - ref.going)} mm).`);
+    out.push(
+      msg("structure.common.compare.deviation.going", {
+        value: dec(e.going, 1),
+        delta: signed(e.going - ref.going),
+      }),
+    );
   }
   if (Math.abs(e.run - ref.run) > 0.05) {
     out.push(
-      `Reculement sur la ligne de foulée : ${fmt(e.run, 0)} mm (${signed(e.run - ref.run)} mm).`,
+      msg("structure.common.compare.deviation.run", {
+        value: dec(e.run, 0),
+        delta: signed(e.run - ref.run),
+      }),
     );
   }
-  const zones = (s: EpureSummary): string =>
-    s.balancedZones.map((z) => `[${z.from} ; ${z.to}] ${z.method}`).join(", ") || "aucune";
-  if (zones(e) !== zones(ref)) {
-    out.push(`Balancement : ${zones(e)} (référence : ${zones(ref)}).`);
+  // Zones balancées en notation technique (« [3 ; 6] M3-quintic »), non traduite.
+  const zoneText = (s: EpureSummary): string =>
+    s.balancedZones.map((z) => `[${z.from} ; ${z.to}] ${z.method}`).join(", ");
+  const zones = (s: EpureSummary): Message =>
+    zoneText(s) === "" ? msg("structure.common.compare.zonesNone") : textMessage(zoneText(s));
+  if (zoneText(e) !== zoneText(ref)) {
+    out.push(
+      msg("structure.common.compare.deviation.balancing", { zones: zones(e), ref: zones(ref) }),
+    );
   }
   if (
     e.minColletChord !== null &&
@@ -568,7 +643,10 @@ export function epureDeviations(ref: EpureSummary, e: EpureSummary): string[] {
     Math.abs(e.minColletChord - ref.minColletChord) > 0.05
   ) {
     out.push(
-      `Collet minimal (corde) : ${fmt(e.minColletChord, 1)} mm (${signed(e.minColletChord - ref.minColletChord)} mm).`,
+      msg("structure.common.compare.deviation.minCollet", {
+        value: dec(e.minColletChord, 1),
+        delta: signed(e.minColletChord - ref.minColletChord),
+      }),
     );
   }
   return out;

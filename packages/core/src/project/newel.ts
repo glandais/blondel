@@ -9,6 +9,7 @@
  * - `steel-profile` : poteau élargi des profilés (`profileNewel` du plugin : aile + 2 × jeu,
  *   décalé vers le jour), qui dépend de la section retenue.
  */
+import { msg, type Message } from "@blondel/i18n";
 import { findSection } from "../catalog/sections.js";
 import { LayoutError } from "../layout/errors.js";
 import { computeLayout } from "../layout/layout.js";
@@ -103,8 +104,10 @@ export function newelMatches(inner: InnerCorner, target: NewelInner): boolean {
 }
 
 /** Libellé d'un poteau (« poteau de 106 mm décalé de 33 mm vers le jour »). */
-export function newelLabel(n: NewelInner): string {
-  return `poteau de ${n.size} mm${(n.offset ?? 0) > 0 ? ` décalé de ${n.offset} mm vers le jour` : ""}`;
+export function newelLabel(n: NewelInner): Message {
+  return (n.offset ?? 0) > 0
+    ? msg("project.newel.labelOffset", { size: String(n.size), offset: String(n.offset) })
+    : msg("project.newel.label", { size: String(n.size) });
 }
 
 /** Projet dont les tournants `which` reçoivent le jour `target`. */

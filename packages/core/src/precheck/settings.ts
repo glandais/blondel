@@ -15,6 +15,7 @@
  *   (E = 11 000 MPa, f_m,k = 24 MPa) et f_m,k des C30 / D40, part de la charge ponctuelle et de
  *   la masse de vibration reprise par un limon (1 : tout sur un limon, sécuritaire).
  */
+import { msg, type Message } from "@blondel/i18n";
 import { z } from "zod";
 import type { SteelGrade } from "../workshop/metal.js";
 
@@ -53,23 +54,23 @@ export const DEFAULT_PRECHECK_SETTINGS: PrecheckSettings = PrecheckSettingsSchem
 
 export interface PrecheckProvenance {
   readonly status: "source" | "a-valider";
-  readonly note: string;
+  readonly note: Message;
 }
 
 export const PRECHECK_PROVENANCE: Readonly<Record<keyof PrecheckSettings, PrecheckProvenance>> = {
-  loadSet: { status: "source", note: "SPEC X16 : l'AN prime ; EN 16481 § 4.2 conservée." },
-  category: { status: "source", note: "Tableau 6.2(NF), A §3.6 ; catégorie inconnue ⇒ D1." },
-  extraPermanent: { status: "a-valider", note: "Charge de finition saisie par l'utilisateur." },
+  loadSet: { status: "source", note: msg("precheck.provenance.loadSet") },
+  category: { status: "source", note: msg("precheck.provenance.category") },
+  extraPermanent: { status: "a-valider", note: msg("precheck.provenance.extraPermanent") },
   pointLoadShare: {
     status: "a-valider",
-    note: "Répartition de Q_k entre limons non sourcée : 1 (tout sur un limon, sécuritaire).",
+    note: msg("precheck.provenance.pointLoadShare"),
   },
-  gammaG: { status: "a-valider", note: "1,35 : EN 1990 non lue." },
-  gammaQ: { status: "a-valider", note: "1,5 : EN 1990 non lue." },
-  gammaM0: { status: "a-valider", note: "1,0 : EC3 et son AN non lus." },
-  gammaMWood: { status: "a-valider", note: "1,3 : EC5 et son AN non lus." },
-  kmod: { status: "a-valider", note: "0,8 : EC5 non lu (classe de service et durée supposées)." },
-  woodClass: { status: "a-valider", note: "C24 par défaut ; EN 338 non lue." },
+  gammaG: { status: "a-valider", note: msg("precheck.provenance.gammaG") },
+  gammaQ: { status: "a-valider", note: msg("precheck.provenance.gammaQ") },
+  gammaM0: { status: "a-valider", note: msg("precheck.provenance.gammaM0") },
+  gammaMWood: { status: "a-valider", note: msg("precheck.provenance.gammaMWood") },
+  kmod: { status: "a-valider", note: msg("precheck.provenance.kmod") },
+  woodClass: { status: "a-valider", note: msg("precheck.provenance.woodClass") },
 };
 
 /** Matériau d'une poutre : module, résistance de calcul, masse volumique. */
@@ -99,11 +100,11 @@ export function steelYield(grade: SteelGrade): number {
  * tout le reste **à valider** (EN 338 non lue).
  */
 export const WOOD_CLASS_PROPERTIES: Readonly<
-  Record<WoodClass, { readonly e: number; readonly fmk: number; readonly sourced: string }>
+  Record<WoodClass, { readonly e: number; readonly fmk: number; readonly sourced: Message }>
 > = {
-  C24: { e: 11_000, fmk: 24, sourced: "E et f_m,k à valider (EN 338 non lue)" },
-  C30: { e: 12_000, fmk: 30, sourced: "E : C §1.4 [1] ; f_m,k à valider" },
-  D40: { e: 13_000, fmk: 40, sourced: "E : C §1.4 [1] ; f_m,k à valider" },
+  C24: { e: 11_000, fmk: 24, sourced: msg("precheck.woodClass.C24") },
+  C30: { e: 12_000, fmk: 30, sourced: msg("precheck.woodClass.C30") },
+  D40: { e: 13_000, fmk: 40, sourced: msg("precheck.woodClass.D40") },
 };
 
 export function steelMaterialOf(

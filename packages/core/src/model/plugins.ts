@@ -1,6 +1,11 @@
 /**
  * Interfaces d'extension du pipeline (ADR-0002).
+ *
+ * Textes (ADR-0007) : les libellés des plugins sont des **clés** de dictionnaire (`labelKey`,
+ * `structure.<kind>.label`, `balancing.<method>.label`) ; leurs sorties (erreurs, remarques,
+ * constats, raisons d'échec) sont des `Message` de `@blondel/i18n`, jamais du texte.
  */
+import type { Message, MessageKey } from "@blondel/i18n";
 import type { z } from "zod";
 import type { Layout, ModelPrecheck, NosingLine, Part, RuleResult, Stepping } from "./derived.js";
 import type { Mm } from "./primitives.js";
@@ -68,7 +73,8 @@ export interface BalancingInput {
 export interface BalancingStrategy {
   /** Méthode de balancement : liste unique `BalancingSchema.shape.method` (project.ts). */
   readonly id: BalancingMethod;
-  readonly label: string;
+  /** Libellé de la méthode (clé `balancing.<method>.label`). */
+  readonly labelKey: MessageKey;
   solve(input: BalancingInput): BalancingSolution;
   /** Collet minimal estimé analytiquement (choix rapide de zone, B §3.5). */
   estimateMinCollet?(input: BalancingInput): Mm;
@@ -83,7 +89,7 @@ export type BalancingSolution =
   | { readonly kind: "sigma"; readonly sigma: readonly Mm[]; readonly continued?: boolean }
   /** Angles (rad, repère monde) des lignes de nez from+1 … to−1. */
   | { readonly kind: "phi"; readonly phi: readonly number[] }
-  | { readonly kind: "fail"; readonly reason: string };
+  | { readonly kind: "fail"; readonly reason: Message };
 
 export interface StructureContext {
   readonly project: Project;
@@ -116,7 +122,8 @@ export interface StructureContext {
  */
 export interface StructureKind<P = unknown> {
   readonly kind: string;
-  readonly label: string;
+  /** Libellé de la structure (clé `structure.<kind>.label`). */
+  readonly labelKey: MessageKey;
   readonly family: "bois" | "metal" | "mixte";
   readonly paramsSchema: z.ZodType<P>;
   /** Paramètres par défaut raisonnables. */
@@ -175,10 +182,11 @@ export interface StructureOutput {
    * les marches en tôle pliée en Z portent leur contremarche). Absent : aucune.
    */
   readonly removedBaseParts?: readonly string[];
-  readonly notes: readonly string[];
+  /** Remarques non bloquantes, reprises dans `Model.notes`. */
+  readonly notes: readonly Message[];
   /**
    * Configurations non prises en charge (ex. jour en arc sous un limon à la française) : la
    * structure est partielle ; messages repris dans `Model.errors`. Absent : aucune.
    */
-  readonly errors?: readonly string[];
+  readonly errors?: readonly Message[];
 }

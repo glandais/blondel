@@ -5,12 +5,16 @@
  * `structures/index.ts`. `none` n'est pas un plugin : c'est l'absence de structure (pièces de
  * base seules) et ne peut pas être enregistré.
  */
+import { MessageError, msg, type Message } from "@blondel/i18n";
 import type { Mm } from "../model/primitives.js";
 import type { StructureKind, StructureLayoutKind } from "../model/plugins.js";
 
-/** Erreur de configuration non prise en charge par un plugin (message français). */
-export class StructureError extends Error {
-  constructor(message: string) {
+/**
+ * Erreur de configuration non prise en charge par un plugin. Porte un `Message` (ADR-0007),
+ * repris tel quel dans `Model.errors` ; `message` en est la traduction française.
+ */
+export class StructureError extends MessageError {
+  constructor(message: Message) {
     super(message);
     this.name = "StructureError";
   }
@@ -28,10 +32,10 @@ export function registerStructure<P>(
 ): void {
   const kind = plugin.kind;
   if (kind.trim() === "" || kind === "none") {
-    throw new Error(`Identifiant de structure réservé ou vide : « ${kind} ».`);
+    throw new MessageError(msg("structure.common.error.reservedKind", { kind }));
   }
   if (registry.has(kind) && !options.replace) {
-    throw new Error(`Structure « ${kind} » déjà enregistrée.`);
+    throw new MessageError(msg("structure.common.error.duplicateKind", { kind }));
   }
   registry.set(kind, plugin as StructureKind<unknown>);
 }

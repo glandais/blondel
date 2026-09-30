@@ -1,11 +1,11 @@
 /**
  * Volées et paliers : nombre de marches et hauteur par volée, reculement, paliers.
  */
+import { dec, msg, type Message } from "@blondel/i18n";
 import {
   STAIR,
   checkItems,
   flightsOf,
-  fmt,
   minWidth,
   notApplicable,
   notEvaluated,
@@ -20,9 +20,9 @@ const risersPerFlight: RuleEvaluator = (ctx) =>
     flightsOf(ctx.stepping).map((f) => ({
       value: f.riserCount,
       location: STAIR,
-      label: `volée ${f.number}`,
+      label: msg("compliance.item.flight", { n: f.number }),
     })),
-    "Nombre de hauteurs de marche par volée",
+    msg("compliance.flights.risersPerFlight"),
   );
 
 /**
@@ -31,11 +31,7 @@ const risersPerFlight: RuleEvaluator = (ctx) =>
  */
 const risersPerFlightStraightErp: RuleEvaluator = (ctx) => {
   if (ctx.contexts.has("tournant") || ctx.contexts.has("helicoidal")) {
-    return [
-      notEvaluated(
-        "Escalier tournant d'ERP : la limite de marches par volée (escaliers droits, CO 55) ne s'applique pas telle quelle (CO 56, balancement continu).",
-      ),
-    ];
+    return [notEvaluated(msg("rules.VOLEE_MAX_ERP.turning"))];
   }
   return risersPerFlight(ctx);
 };
@@ -46,20 +42,20 @@ const flightHeight: RuleEvaluator = (ctx) =>
     flightsOf(ctx.stepping).map((f) => ({
       value: f.height,
       location: STAIR,
-      label: `volée ${f.number}`,
+      label: msg("compliance.item.flight", { n: f.number }),
     })),
-    "Hauteur de volée",
+    msg("rules.VOLEE_HAUTEUR_INDUSTRIEL.quantity"),
   );
 
 /** Reculement : donnée calculée, sans limite (règle informative). */
 const run: RuleEvaluator = (ctx) => [
   Number.isNaN(ctx.stepping.run)
-    ? notEvaluated("Reculement non calculable (NaN).")
+    ? notEvaluated(msg("rules.RECULEMENT.nan"))
     : {
         status: "ok",
         measured: ctx.stepping.run,
         location: STAIR,
-        message: `Reculement sur la ligne de foulée : ${fmt(ctx.stepping.run)} mm.`,
+        message: msg("rules.RECULEMENT.value", { run: dec(ctx.stepping.run) }),
       },
 ];
 
@@ -72,14 +68,14 @@ const continuousWinding: RuleEvaluator = (ctx) => {
         status: "ok",
         measured: 0,
         location: STAIR,
-        message: "Aucun palier intermédiaire.",
+        message: msg("rules.ERP_TOURNANT_BALANCEMENT_CONTINU.noLanding"),
       },
     ];
   return landings.map((t) => ({
     status: "violation" as const,
     measured: landings.length,
     location: treadLocation(t),
-    message: `Palier intermédiaire (marche ${t.number}) dans un escalier tournant d'ERP : balancement continu exigé.`,
+    message: msg("rules.ERP_TOURNANT_BALANCEMENT_CONTINU.landing", { tread: t.number }),
   }));
 };
 
@@ -90,16 +86,16 @@ const continuousWinding: RuleEvaluator = (ctx) => {
 function landingChecks(
   ctx: EvaluatorContext,
   min: (ctx: EvaluatorContext) => number,
-  quantity: string,
+  quantity: Message,
 ): Finding[] {
   const landings = treadsOfKind(ctx.stepping, "landing");
-  if (landings.length === 0) return [notApplicable("Sans objet : aucun palier intermédiaire.")];
+  if (landings.length === 0) return [notApplicable(msg("compliance.landing.none"))];
   return checkItems(
     ctx,
     landings.map((t) => ({
       value: minWidth(t.walkingSurface),
       location: treadLocation(t),
-      label: `palier ${t.number}`,
+      label: msg("compliance.item.landing", { n: t.number }),
     })),
     quantity,
     { bounds: { min: min(ctx), max: null } },
@@ -109,24 +105,20 @@ function landingChecks(
 const e = (ctx: EvaluatorContext): number => ctx.project.stair.layout.width;
 
 const landingAtLeastWidth: RuleEvaluator = (ctx) =>
-  landingChecks(ctx, e, "Dimension minimale du palier (comparée à E)");
+  landingChecks(ctx, e, msg("compliance.landing.atLeastWidth"));
 
 const landingIndustrial: RuleEvaluator = (ctx) =>
   landingChecks(
     ctx,
     (c) => Math.max(c.rule.min ?? 0, e(c)),
-    "Dimension minimale du palier industriel",
+    msg("rules.PALIER_INDUSTRIEL.quantity"),
   );
 
 /** Volées « non contrariées » : notion non définie pour les tournants à 90° du modèle. */
 const landingNonContrarie: RuleEvaluator = (ctx) => {
   if (treadsOfKind(ctx.stepping, "landing").length === 0)
-    return [notApplicable("Sans objet : aucun palier intermédiaire.")];
-  return [
-    notEvaluated(
-      "Paliers entre volées « non contrariées » : interprétation à préciser pour les tournants à 90°.",
-    ),
-  ];
+    return [notApplicable(msg("compliance.landing.none"))];
+  return [notEvaluated(msg("rules.PALIER_LONGUEUR_ERP_NON_CONTRARIE.notEvaluated"))];
 };
 
 export const FLIGHT_EVALUATORS: Readonly<Record<string, RuleEvaluator>> = {

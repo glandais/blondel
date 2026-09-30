@@ -3,6 +3,8 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import fc from "fast-check";
 import { beforeEach, describe, expect, it } from "vitest";
+import { isMessage } from "@blondel/i18n";
+import { fr, frList } from "../i18n.test-helpers.js";
 import type { Model } from "../model/derived.js";
 import { ProjectSchema, type Project } from "../model/project.js";
 import { parseProjectText } from "../project/parse.js";
@@ -195,7 +197,7 @@ describe("buildModel — paramètres impossibles : modèle partiel, jamais d'exc
       },
     };
     const m = buildModel(bad);
-    expect(m.errors).toEqual([expect.stringContaining("un tournant de moins")]);
+    expect(frList(m.errors)).toEqual([expect.stringContaining("un tournant de moins")]);
     expect(m.layout).toBe(EMPTY_LAYOUT);
     expect(m.stepping.riserCount).toBe(15);
     expect(m.stepping.rises.reduce((a, b) => a + b, 0)).toBeCloseTo(2700, 9);
@@ -207,7 +209,7 @@ describe("buildModel — paramètres impossibles : modèle partiel, jamais d'exc
 
   it("volée trop courte : erreur du tracé", () => {
     const m = buildModel(makeSteppingProject({ width: 900, legs: [500, 3000] }));
-    expect(m.errors).toEqual([expect.stringContaining("trop courte")]);
+    expect(frList(m.errors)).toEqual([expect.stringContaining("trop courte")]);
     expect(m.parts).toEqual([]);
   });
 
@@ -217,7 +219,7 @@ describe("buildModel — paramètres impossibles : modèle partiel, jamais d'exc
       stair: { ...base.stair, stepping: { ...base.stair.stepping, firstRiseOffset: -500 } },
     };
     const m = buildModel(p);
-    expect(m.errors).toEqual([expect.stringContaining("Hauteurs de marche impossibles")]);
+    expect(frList(m.errors)).toEqual([expect.stringContaining("Hauteurs de marche impossibles")]);
     expect(m.layout.walkline.segments.length).toBeGreaterThan(0);
     expect(m.stepping.riserCount).toBe(0);
     expect(m.compliance.results.length).toBeGreaterThan(0);
@@ -244,7 +246,7 @@ describe("buildModel — paramètres impossibles : modèle partiel, jamais d'exc
     ] as const) {
       const m = buildModel(project, { memo: false });
       expect(m.errors).toHaveLength(1);
-      expect(m.compliance.notes).toEqual(
+      expect(frList(m.compliance.notes)).toEqual(
         expect.arrayContaining([expect.stringContaining(`Modèle partiel (${stage} non calculé)`)]),
       );
       for (const r of m.compliance.results) {
@@ -295,8 +297,8 @@ describe("buildModel — paramètres impossibles : modèle partiel, jamais d'exc
           balancing: { method: r.method },
         });
         const m = buildModel(p, { memo: false });
-        for (const e of m.errors) expect(typeof e).toBe("string");
-        expect(m.errors.some((e) => e.includes("erreur interne"))).toBe(false);
+        for (const e of m.errors) expect(isMessage(e)).toBe(true);
+        expect(m.errors.some((e) => e.key === "pipeline.internalError")).toBe(false);
         if (m.errors.length === 0) {
           expect(m.stepping.treads).toHaveLength(m.stepping.riserCount - 1);
         }
@@ -339,14 +341,14 @@ describe("buildModel — échappée et contrôle de conception", () => {
     const m = buildModel(makeSteppingProject({ width: 900, legs: ["auto"] }));
     expect(m.headroom).toBeUndefined();
     const r = m.compliance.results.find((x) => x.ruleId === "ECHAPPEE_MIN_DTU")!;
-    expect(r.message).toMatch(/Sans objet/);
+    expect(fr(r.message)).toMatch(/Sans objet/);
   });
 
   it("échappée sur la largeur insuffisante : règle ECHAPPEE_LARGEUR en avertissement (A7)", () => {
     const m = buildModel(loadExample(ACCEPTANCE_01));
     expect(m.headroomWidth!.min).toBeLessThan(1900);
     // Plus de remarque dans Model.notes : la grandeur est portée par une règle de rules.yaml.
-    expect(m.notes ?? []).not.toContainEqual(expect.stringContaining("échappée sur la largeur"));
+    expect(frList(m.notes)).not.toContainEqual(expect.stringContaining("échappée sur la largeur"));
     const rs = m.compliance.results.filter((r) => r.ruleId === "ECHAPPEE_LARGEUR");
     expect(rs).toHaveLength(1);
     const r = rs[0]!;
@@ -358,7 +360,7 @@ describe("buildModel — échappée et contrôle de conception", () => {
     // Nez 3 = dessus de la marche 4 (repère M4) : le message parle de la marche, pas de l'indice.
     // (Nez 4 / marche 5 avant la correction du choix de zone G3 du 2026-09-29 : zone 0 → 4.)
     expect(m.headroomWidth!.nosing).toBe(3);
-    expect(r.message).toContain("au nez de la marche 4");
+    expect(fr(r.message)).toContain("au nez de la marche 4");
     expect(m.headroomUnlimited).toBeUndefined();
   });
 
@@ -376,7 +378,7 @@ describe("buildModel — échappée et contrôle de conception", () => {
     // Aucune règle d'échappée bloquante (ERP : recommandation seulement) : sans objet.
     const erp = withCtx(["erp_neuf"]);
     expect(erp.status).toBe("ok");
-    expect(erp.message).toMatch(/Sans objet/);
+    expect(fr(erp.message)).toMatch(/Sans objet/);
   });
 
   it("trémie couvrante : échappée non limitée sur Γ et sur la largeur (A7)", () => {
@@ -386,7 +388,7 @@ describe("buildModel — échappée et contrôle de conception", () => {
     expect(m.headroomUnlimited).toEqual({ walkline: true, width: true });
     const r = m.compliance.results.find((x) => x.ruleId === "ECHAPPEE_LARGEUR")!;
     expect(r.status).toBe("ok");
-    expect(r.message).toMatch(/non limitée/);
+    expect(fr(r.message)).toMatch(/non limitée/);
     // Sans trémie : rien de « non limité » (échappée non calculée).
     expect(
       buildModel(makeSteppingProject({ width: 900, legs: ["auto"] })).headroomUnlimited,
@@ -400,7 +402,10 @@ describe("buildModel — échappée et contrôle de conception", () => {
       stair: { ...p.stair, structure: { kind: "limon-francaise", params: {} } },
     });
     const m = buildModel(q);
-    expect(m.notes).toEqual([expect.stringContaining("aucun plugin de structure")]);
+    expect(m.notes).toEqual([
+      { key: "pipeline.unknownStructure", params: { kind: "limon-francaise" } },
+    ]);
+    expect(frList(m.notes)).toEqual([expect.stringContaining("aucun plugin de structure")]);
     expect(m.parts.length).toBe(buildModel(p).parts.length);
   });
 });

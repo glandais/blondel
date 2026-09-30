@@ -9,6 +9,8 @@
  * principale comme dans chaque groupe de variantes. Avec `showAllVariants`, la liste est rendue
  * à plat (tous les candidats, sans regroupement ni troncature).
  */
+import { msg } from "@blondel/i18n";
+import { MessageRangeError } from "../project/errors.js";
 import type { DesignCandidate, TypologyId } from "./types.js";
 
 /** Clé de forme : `typologie|position du tournant` (`-` sans tournant). */
@@ -45,13 +47,13 @@ export function selectDiverse(
   options: SelectionOptions,
 ): DesignCandidate[] {
   if (!Number.isInteger(options.perShapeLimit) || options.perShapeLimit < 1) {
-    throw new RangeError(
-      `selectDiverse : perShapeLimit doit être un entier ≥ 1 (reçu : ${options.perShapeLimit}).`,
+    throw new MessageRangeError(
+      msg("assistant.select.perShapeLimit", { value: String(options.perShapeLimit) }),
     );
   }
   if (!Number.isInteger(options.maxCandidates) || options.maxCandidates < 0) {
-    throw new RangeError(
-      `selectDiverse : maxCandidates doit être un entier ≥ 0 (reçu : ${options.maxCandidates}).`,
+    throw new MessageRangeError(
+      msg("assistant.select.maxCandidates", { value: String(options.maxCandidates) }),
     );
   }
   const sorted = [...accepted].sort(byScore);

@@ -32,6 +32,15 @@
  *
  * Toutes les cotes par défaut non sourcées sont des paramètres **à valider** (LEDGER §2).
  */
+import {
+  dec,
+  errorMessage,
+  msg,
+  MessageError,
+  textMessage,
+  type Message,
+  type MessageKey,
+} from "@blondel/i18n";
 import { z } from "zod";
 import { signedArea } from "../geom2d/polygon.js";
 import * as V from "../geom2d/vec.js";
@@ -39,7 +48,6 @@ import type { FlatPattern, NosingLine, Part, Tread } from "../model/derived.js";
 import type { Mm, Polygon2, Vec2 } from "../model/primitives.js";
 import type { StructureContext, StructureKind, StructureOutput } from "../model/plugins.js";
 import { buildBasicParts } from "../parts/basic.js";
-import { fmt } from "../rules/check.js";
 import type { Finding } from "../rules/types.js";
 import {
   STEEL_GRADES,
@@ -76,6 +84,7 @@ import { newelTopWithHandrail } from "./newel.js";
 import {
   STEEL_RULES,
   deduceExecutionClass,
+  executionClassReasons,
   QUANTITY_WELD_MM,
   groupIdenticalFlats,
   holePolygon,
@@ -247,24 +256,77 @@ export interface SteelFlatResult {
 const ceil5 = (x: Mm): Mm => Math.ceil(x / 5 - 1e-9) * 5;
 const sigmaOf = (k: NosingLine, side: Side): Mm => (side === "inner" ? k.sigmaInner : k.sigmaOuter);
 
+/** Épaisseur de limon reçue par un poteau d'angle (contrôle `FAB_POTEAU_RECEPTION`). */
+interface ReceivedCheck {
+  readonly value: Mm;
+  readonly label: Message;
+  readonly partId: string;
+  /** Repère du poteau récepteur. */
+  readonly newelMark: string;
+}
+
+/** Libellé « M3 sur LI1 » (support d'une marche sur une face porteuse, limon reçu par un poteau). */
+export function supportOn(mark: string, on: string): Message {
+  return msg("structure.steel.check.supportOn", { mark, on });
+}
+
+/** Sens de la montée sur un développé vu depuis les marches. */
+export function ascentDirection(mirrored: boolean): Message {
+  return msg(
+    mirrored
+      ? "structure.common.flat.riseTowardsDecreasingX"
+      : "structure.common.flat.riseTowardsIncreasingX",
+  );
+}
+
+/** Constat de format de tôle d'un développé (« LE1 : développé 3200 × 300 mm … »). */
+export function sheetFormatMessage(
+  key: MessageKey,
+  mark: string,
+  box: { readonly length: Mm; readonly width: Mm },
+): Message {
+  return msg(key, { mark, length: dec(box.length, 0), width: dec(box.width, 0) });
+}
+
+/** Marche sans support d'un côté ou des deux (contrôle `FAB_MARCHE_PORTEE`). */
+export function treadNotCarried(mark: string, missing: readonly Side[]): Message {
+  const inner = missing.includes("inner");
+  const outer = missing.includes("outer");
+  return msg(
+    inner && outer
+      ? "structure.steel.check.treadNotCarried.both"
+      : inner
+        ? "structure.steel.check.treadNotCarried.well"
+        : "structure.steel.check.treadNotCarried.wall",
+    { mark },
+  );
+}
+
+/** Désignation des supports de marche (« cornières soudés »). */
+function supportsText(kind: SteelFlatParams["supports"]["kind"], fixing: string): Message {
+  const welded = fixing === "welded";
+  return kind === "angle"
+    ? msg(
+        welded ? "structure.steel.supports.weldedAngles" : "structure.steel.supports.boltedAngles",
+      )
+    : msg(welded ? "structure.steel.supports.weldedFlats" : "structure.steel.supports.boltedFlats");
+}
+
 /** Faces de référence des limons acier (mêmes règles que les limons bois, messages propres). */
 export function steelStringerFaces(
   ctx: StructureContext,
   geo: StairGeometry,
-): { faces: StringerFace[]; errors: string[]; notes: string[] } {
+): { faces: StringerFace[]; errors: Message[]; notes: Message[] } {
   const turns = ctx.project.stair.layout.turns;
   const faces: StringerFace[] = [];
-  const errors: string[] = [];
-  const notes: string[] = [];
+  const errors: Message[] = [];
+  const notes: Message[] = [];
   turns.forEach((t, j) => {
+    const params = { turn: j + 1, flight: j + 1, nextFlight: j + 2 };
     if (t.inner.kind === "arc") {
-      errors.push(
-        `Tournant ${j + 1} : jour en arc — limon de jour débillardé métal non supporté (jalon 5) ; limons de jour des volées ${j + 1} et ${j + 2} non générés.`,
-      );
+      errors.push(msg("structure.steel.error.arcWell", params));
     } else if (t.inner.kind === "sharp") {
-      errors.push(
-        `Tournant ${j + 1} : jour à angle vif — les limons de jour se rencontreraient en un point ; choisir un poteau d'angle (jour « poteau ») ; limons de jour des volées ${j + 1} et ${j + 2} non générés.`,
-      );
+      errors.push(msg("structure.steel.error.sharpWell", params));
     }
   });
   const last = geo.legs.length - 1;
@@ -280,7 +342,7 @@ export function steelStringerFaces(
         faces.push({
           id: `stringer-inner-${i + 1}`,
           mark: `LI${i + 1}`,
-          name: `Limon de jour acier, volée ${i + 1}`,
+          name: msg("structure.steel.part.outerString", { flight: i + 1 }),
           side: "inner",
           leg: i,
           a: V.addScaled(leg.innerOrigin, leg.u, leg.innerT0),
@@ -292,13 +354,13 @@ export function steelStringerFaces(
           end,
         });
       } else {
-        notes.push(`Volée ${i + 1} sans partie droite côté jour : pas de limon de jour.`);
+        notes.push(msg("structure.steel.note.noOuterString", { flight: i + 1 }));
       }
     }
     faces.push({
       id: `stringer-outer-${i + 1}`,
       mark: `LE${i + 1}`,
-      name: `Limon mural acier, volée ${i + 1}`,
+      name: msg("structure.steel.part.wallString", { flight: i + 1 }),
       side: "outer",
       leg: i,
       a: leg.outerStart,
@@ -364,7 +426,7 @@ export function rectFlat(
   holes: readonly Vec2[],
   holeDiameter: Mm,
   mark: string,
-  description: string,
+  description: Message,
 ): FlatPattern {
   return {
     outline: {
@@ -376,7 +438,7 @@ export function rectFlat(
         kind: "text",
         a: V.vec(length / 2 - 20, width / 2),
         b: V.vec(length / 2 + 20, width / 2),
-        label: mark,
+        label: textMessage(mark),
       },
     ],
     thickness,
@@ -414,7 +476,9 @@ export function markGroups(parts: Part[], prefix: string, key: (p: Part) => stri
     const flat = p.flat
       ? {
           ...p.flat,
-          lines: p.flat.lines.map((l) => (l.kind === "text" ? { ...l, label: mark } : l)),
+          lines: p.flat.lines.map((l) =>
+            l.kind === "text" ? { ...l, label: textMessage(mark) } : l,
+          ),
         }
       : undefined;
     return { ...p, mark, ...(flat ? { flat } : {}) };
@@ -452,14 +516,14 @@ export function buildSteelFlat(ctx: StructureContext, params: SteelFlatParams): 
   const profile = resolveWorkshopProfile(project.workshop);
   const metal = profile.metal;
   const nosings = stepping.nosings;
-  const notes: string[] = [];
-  const errors: string[] = [];
+  const notes: Message[] = [];
+  const errors: Message[] = [];
   const e = params.thickness;
   const grade: SteelGrade = params.grade;
   const material = steelMaterial(params.finish);
   const sup = params.supports;
   const folded = params.treadKind === "folded-steel";
-  const empty = (errs: string[]): SteelFlatResult => ({
+  const empty = (errs: Message[]): SteelFlatResult => ({
     output: { parts: [], checks: [], notes, errors: errs },
     stringers: [],
     posts: [],
@@ -470,10 +534,9 @@ export function buildSteelFlat(ctx: StructureContext, params: SteelFlatParams): 
     executionClass: "EXC1",
     treadGroups: [],
   });
-  const helical = flightsOnlyError("steel-flat", "limons acier en plat", layout);
+  const helical = flightsOnlyError("steel-flat", msg("structure.steelFlat.shortLabel"), layout);
   if (helical) return empty([helical]);
-  if (nosings.length < 2)
-    return empty(["Limons acier : découpage vide, aucune structure générée."]);
+  if (nosings.length < 2) return empty([msg("structure.steelFlat.error.emptyStepping")]);
 
   const geo = stairGeometry(project, layout);
   const faceInfo = steelStringerFaces(ctx, geo);
@@ -502,8 +565,8 @@ export function buildSteelFlat(ctx: StructureContext, params: SteelFlatParams): 
   );
   if (foldedErrors.length > 0) {
     errors.push(
-      ...foldedErrors.map(
-        (x) => `Marche en tôle pliée non développée — ${x} Pièce de base conservée.`,
+      ...foldedErrors.map((detail) =>
+        msg("structure.steelFlat.error.foldedTreadNotDeveloped", { detail }),
       ),
     );
   }
@@ -594,7 +657,7 @@ export function buildSteelFlat(ctx: StructureContext, params: SteelFlatParams): 
     placements.map((p) => supportPart(p, sup, "S", material, profile)),
     sup.kind === "angle" ? "CR" : "PS",
     (p) =>
-      `${p.section}|${Math.round((p.stock?.length ?? 0) / IDENTICAL_TOLERANCE)}|${p.quantities["holes"]}`,
+      `${JSON.stringify(p.section)}|${Math.round((p.stock?.length ?? 0) / IDENTICAL_TOLERANCE)}|${p.quantities["holes"]}`,
   );
   const platesMarked = [
     ...markGroups(
@@ -678,16 +741,29 @@ export function buildSteelFlat(ctx: StructureContext, params: SteelFlatParams): 
 
   // 12. Remarques.
   notes.push(
-    `Limons acier en plat ${fmt(e, 0)} mm (${grade}) : d_h = ${fmt(params.upperOffset, 0)} mm, d_b = ${fmt(lowerOffset.inner, 0)} / ${fmt(lowerOffset.outer, 0)} mm (jour / mur) ; supports ${sup.kind === "angle" ? "cornières" : "plats"} ${effectiveFixing(sup) === "welded" ? "soudés" : "vissés"} ; valeurs par défaut à valider.`,
-    `Classe d'exécution EN 1090-2 : ${exc.executionClass}${exc.reasons.length > 0 ? ` (${exc.reasons.join(", ")})` : ` (${grade}, aucune soudure bout à bout)`}.`,
+    msg("structure.steelFlat.note.summary", {
+      thickness: dec(e, 0),
+      grade,
+      upperOffset: dec(params.upperOffset, 0),
+      lowerOffsetInner: dec(lowerOffset.inner, 0),
+      lowerOffsetOuter: dec(lowerOffset.outer, 0),
+      supports: supportsText(sup.kind, effectiveFixing(sup)),
+    }),
+    msg("structure.steel.exc.note", {
+      executionClass: exc.executionClass,
+      reasons: executionClassReasons(exc, grade),
+    }),
   );
   if (folded && treadParts.length > 0) {
     notes.push(
-      `Marches en tôle pliée ${ft.profile} : ${treadParts.length} pièce(s), ${treadGroups.length} pièce(s) unique(s) (tolérance ${fmt(IDENTICAL_TOLERANCE, 1)} mm) ; développés en fibre neutre, loi de pli à valider (CHALLENGE G5).`,
+      msg("structure.steelFlat.note.foldedTreads", {
+        profile: ft.profile,
+        parts: msg("structure.steelFlat.count.parts", { count: treadParts.length }),
+        unique: msg("structure.steelFlat.count.uniqueParts", { count: treadGroups.length }),
+        tolerance: dec(IDENTICAL_TOLERANCE, 1),
+      }),
     );
-    notes.push(
-      "Solides 3D des marches balancées en tôle pliée : dessus seul (les ailes ne sont dessinées que sur les développés).",
-    );
+    notes.push(msg("structure.steelFlat.note.foldedSolids"));
   }
   // Profil Z : la pièce de la marche t porte la contremarche sous son propre nez (nez t − 1,
   // contremarche de base `riser-t`) ; ces contremarches sont retirées. La contremarche
@@ -705,7 +781,16 @@ export function buildSteelFlat(ctx: StructureContext, params: SteelFlatParams): 
       : [];
   if (removedBaseParts.length > 0) {
     notes.push(
-      `Marches en tôle pliée : ${removedBaseParts.length} contremarche(s) bois de base supprimée(s) du modèle (${ft.profile === "Z" ? `contremarches pliées dans les pièces en Z ; contremarche d'arrivée, sous le dernier nez, ${arrival ? "en tôle pliée en L fixée au chevêtre" : "conservée en bois"}` : "escalier à claire-voie en U"}).`,
+      msg("structure.steelFlat.note.removedRisers", {
+        count: removedBaseParts.length,
+        detail: msg(
+          ft.profile !== "Z"
+            ? "structure.steelFlat.note.removedRisersDetail.openU"
+            : arrival
+              ? "structure.steelFlat.note.removedRisersDetail.zFoldedArrival"
+              : "structure.steelFlat.note.removedRisersDetail.zTimberArrival",
+        ),
+      }),
     );
   }
 
@@ -743,19 +828,22 @@ function resolveFoldedBend(
   metal: WorkshopProfile["metal"],
   grade: SteelGrade,
   checks: CheckCollector,
-): { bend: ResolvedBend | null; errors: string[] } {
-  const errors: string[] = [];
+): { bend: ResolvedBend | null; errors: Message[] } {
+  const errors: Message[] = [];
   let bend: ResolvedBend | null = null;
   const law = findBendLaw(metal, grade, thickness);
   if (!law) {
     errors.push(
-      `Marches en tôle pliée : aucune loi de pli pour ${grade} en ${fmt(thickness, 1)} mm dans le profil d'atelier ; marches bois conservées.`,
+      msg("structure.steelFlat.error.noBendLaw", { grade, thickness: dec(thickness, 1) }),
     );
     checks.add(pluginRuleDef(STEEL_RULES.bendLaw), [
       {
         status: "violation",
         measured: thickness,
-        message: `Aucune loi de pli (outillage, méthode) pour ${grade}, t = ${fmt(thickness, 1)} mm.`,
+        message: msg("structure.steelFlat.check.noBendLaw", {
+          grade,
+          thickness: dec(thickness, 1),
+        }),
       },
     ]);
   } else {
@@ -765,11 +853,17 @@ function resolveFoldedBend(
         {
           status: "ok",
           measured: thickness,
-          message: `Loi de pli ${grade}, t = ${fmt(thickness, 1)} mm : r_int ${fmt(bend.innerRadius, 1)} mm, méthode « ${bend.method} », facteur K ${fmt(bend.k, 3)} (à valider, CHALLENGE G5).`,
+          message: msg("structure.steelFlat.check.bendLaw", {
+            grade,
+            thickness: dec(thickness, 1),
+            radius: dec(bend.innerRadius, 1),
+            method: bend.method,
+            k: dec(bend.k, 3),
+          }),
         },
       ]);
     } catch (err) {
-      errors.push(`Marches en tôle pliée : ${(err as Error).message}`);
+      errors.push(msg("structure.steelFlat.error.bendLaw", { detail: errorMessage(err) }));
     }
   }
   return { bend, errors };
@@ -787,14 +881,14 @@ function flatTreadZones(
   bend: ResolvedBend | null,
   material: Part["material"],
   profile: WorkshopProfile,
-): { treadDetails: FoldedTreadDetail[]; zones: TreadZone[]; foldedErrors: string[] } {
+): { treadDetails: FoldedTreadDetail[]; zones: TreadZone[]; foldedErrors: Message[] } {
   const nosings = stepping.nosings;
   const folded = params.treadKind === "folded-steel";
   const ft = params.folded;
   const sup = params.supports;
   const treadDetails: FoldedTreadDetail[] = [];
   const zones: TreadZone[] = [];
-  const foldedErrors: string[] = [];
+  const foldedErrors: Message[] = [];
   for (const tread of stepping.treads) {
     const a = nosings[tread.number - 1];
     const b = nosings[tread.number];
@@ -807,7 +901,7 @@ function flatTreadZones(
       const r = bend.innerRadius;
       const plate = insetPlate(tread.walkingSurface, [lineOf(a), lineOf(b)], ft.clearance);
       if (!plate) {
-        foldedErrors.push(`${base.mark} : dessus de tôle dégénéré après jeu latéral.`);
+        foldedErrors.push(msg("structure.steelFlat.error.degenerateTop", { mark: base.mark }));
       } else {
         const prevZ = tread.number >= 2 ? nosings[tread.number - 2]!.z : null;
         const riserDrop = prevZ === null ? tread.z - t : tread.z - (prevZ - t);
@@ -851,11 +945,17 @@ function flatTreadZones(
             id: base.id,
             mark: base.mark,
             category: base.category,
-            name: `${base.name} (tôle pliée ${ft.profile})`,
+            name: msg("structure.steelFlat.part.foldedTread", {
+              name: base.name,
+              profile: ft.profile,
+            }),
             material,
             solid,
             flat: res.flat,
-            section: `tôle ${fmt(t, 0)} pliée ${ft.profile}`,
+            section: msg("structure.steel.section.foldedPlate", {
+              thickness: dec(t, 0),
+              profile: ft.profile,
+            }),
             stock: { length: box.length, width: box.width, thickness: t },
             quantities: steelQuantities(
               {
@@ -885,7 +985,7 @@ function flatTreadZones(
           });
           continue;
         } catch (err) {
-          foldedErrors.push((err as Error).message);
+          foldedErrors.push(errorMessage(err));
         }
       }
     }
@@ -915,12 +1015,12 @@ function arrivalRiserPart(
   profile: WorkshopProfile,
 ): {
   arrival: { readonly part: Part; readonly result: ArrivalRiserResult } | null;
-  error?: string;
+  error?: Message;
 } {
   const nosings = stepping.nosings;
   const folded = params.treadKind === "folded-steel";
   const ft = params.folded;
-  let error: string | undefined;
+  let error: Message | undefined;
   let arrival: { readonly part: Part; readonly result: ArrivalRiserResult } | null = null;
   const arrivalBase = baseById.get(`riser-${nosings.length}`);
   const lastTread = stepping.treads.find((tr) => tr.number === nosings.length - 1);
@@ -935,8 +1035,8 @@ function arrivalRiserPart(
       const dir = V.normalize(b.dir);
       const onB = (plate ?? []).filter((p) => Math.abs(V.cross(dir, V.sub(p, b.p))) <= 1e-3);
       if (onB.length < 2)
-        throw new Error(
-          `${arrivalBase.mark} : ligne du nez d'arrivée introuvable sur la dernière marche.`,
+        throw new MessageError(
+          msg("structure.steelFlat.error.arrivalNosingNotFound", { mark: arrivalBase.mark }),
         );
       const ss = onB.map((p) => V.dot(V.sub(p, b.p), dir));
       const zTop = b.z - ar.topOffset;
@@ -961,7 +1061,7 @@ function arrivalRiserPart(
           id: arrivalBase.id,
           mark: arrivalBase.mark,
           category: "riser",
-          name: "Contremarche d'arrivée (tôle pliée L, fixée au chevêtre)",
+          name: msg("structure.steelFlat.part.arrivalRiser"),
           material,
           solid: {
             kind: "extrusion",
@@ -970,7 +1070,10 @@ function arrivalRiserPart(
             depth: result.length,
           },
           flat: result.flat,
-          section: `tôle ${fmt(t, 0)} pliée L`,
+          section: msg("structure.steel.section.foldedPlate", {
+            thickness: dec(t, 0),
+            profile: "L",
+          }),
           stock: { length: box.length, width: box.width, thickness: t },
           quantities: steelQuantities(
             {
@@ -988,7 +1091,9 @@ function arrivalRiserPart(
         },
       };
     } catch (err) {
-      error = `Contremarche d'arrivée en tôle pliée non développée — ${(err as Error).message} Pièce de base conservée.`;
+      error = msg("structure.steelFlat.error.arrivalRiserNotDeveloped", {
+        detail: errorMessage(err),
+      });
     }
   }
   return error === undefined ? { arrival } : { arrival, error };
@@ -1075,18 +1180,18 @@ function placeSupports(
   sup: SteelFlatParams["supports"],
 ): {
   placements: SupportPlacement[];
-  shortSupports: { value: Mm; label: string }[];
+  shortSupports: { value: Mm; label: Message }[];
   carried: Map<number, Set<Side>>;
 } {
   const placements: SupportPlacement[] = [];
-  const shortSupports: { value: Mm; label: string }[] = [];
+  const shortSupports: { value: Mm; label: Message }[] = [];
   const carried = new Map<number, Set<Side>>();
   for (const z of zones) {
     for (const face of supportFaces) {
       const iv = supportInterval(z.zone, face, z.band);
       if (!iv) continue;
       const len = iv.u1 - iv.u0;
-      const label = `${z.mark} sur ${face.ownerMark}`;
+      const label = supportOn(z.mark, face.ownerMark);
       shortSupports.push({ value: len, label });
       if (len < sup.minLength) continue;
       placements.push({
@@ -1165,11 +1270,11 @@ function addFlatChecks(
     readonly supportParts: readonly Part[];
     readonly posts: readonly Part[];
     readonly depthSup: Mm;
-    readonly shortSupports: { value: Mm; label: string }[];
+    readonly shortSupports: { value: Mm; label: Message }[];
     readonly sup: SteelFlatParams["supports"];
     readonly zones: readonly TreadZone[];
     readonly carried: ReadonlyMap<number, Set<Side>>;
-    readonly receivedChecks: readonly { value: Mm; label: string; partId: string }[];
+    readonly receivedChecks: readonly ReceivedCheck[];
     readonly newelList: readonly { geom: NewelGeometry; id: string; mark: string }[];
   },
 ): void {
@@ -1180,15 +1285,26 @@ function addFlatChecks(
   checks.add(rule(STEEL_RULES.executionClass), [
     {
       status: "ok",
-      message: `Classe d'exécution déduite : ${exc.executionClass} (${exc.reasons.length > 0 ? exc.reasons.join(", ") : `${grade}, aucune soudure bout à bout`} ; famille B → CC1, SC1 supposée : un escalier de secours peut relever de SC2).`,
+      message: msg("structure.steel.exc.check", {
+        executionClass: exc.executionClass,
+        reasons: executionClassReasons(exc, grade),
+      }),
     },
   ]);
   if (bend) {
     const factor = minBendRadiusFactor(grade);
     checks.addItems(
       rule(STEEL_RULES.bendRadius),
-      [{ value: bend.innerRadius, label: `${grade}, t = ${fmt(bend.thickness, 1)} mm` }],
-      "Rayon intérieur de pli",
+      [
+        {
+          value: bend.innerRadius,
+          label: msg("structure.steel.check.gradeThickness", {
+            grade,
+            thickness: dec(bend.thickness, 1),
+          }),
+        },
+      ],
+      msg("structure.steel.quantity.bendInnerRadius"),
       { min: factor * bend.thickness - 1e-9, max: null },
     );
     checks.addItems(
@@ -1197,13 +1313,23 @@ function addFlatChecks(
         d.flanges.flatMap((fl) => [
           {
             value: fl.atStart,
-            label: `${d.part.mark}, ${fl.label} (début du pli)`,
+            label: msg("structure.steel.check.flangeBendStart", {
+              mark: d.part.mark,
+              flange: fl.label,
+            }),
             partId: d.part.id,
           },
-          { value: fl.atEnd, label: `${d.part.mark}, ${fl.label} (fin du pli)`, partId: d.part.id },
+          {
+            value: fl.atEnd,
+            label: msg("structure.steel.check.flangeBendEnd", {
+              mark: d.part.mark,
+              flange: fl.label,
+            }),
+            partId: d.part.id,
+          },
         ]),
       ),
-      "Longueur intérieure d'aile",
+      msg("structure.steel.quantity.innerFlangeLength"),
       { min: bend.minFlange - 1e-9, max: null },
     );
     checks.addItems(
@@ -1212,26 +1338,30 @@ function addFlatChecks(
         ...foldedChecks.flatMap((d) =>
           d.bendLines.map((l) => ({
             value: l.length,
-            label: `${d.part.mark}, ${l.label.split(" · ")[0]}`,
+            label: textMessage(`${d.part.mark}, ${l.mark}`),
             partId: d.part.id,
           })),
         ),
       ],
-      "Longueur de pli",
+      msg("structure.steel.quantity.bendLength"),
       { min: null, max: metal.pressBrake.maxLength },
     );
     checks.addItems(
       rule(STEEL_RULES.pressBrake),
-      [{ value: bend.thickness, label: "épaisseur de tôle pliée" }],
-      "Épaisseur pliée",
+      [{ value: bend.thickness, label: msg("structure.steel.check.foldedPlateThickness") }],
+      msg("structure.steel.quantity.foldedThickness"),
       { min: null, max: metal.pressBrake.maxThickness },
     );
   }
   const laserParts = [...stringers.map((s) => s.part), ...foldedParts, ...platesMarked];
   checks.addItems(
     rule(STEEL_RULES.laser),
-    laserParts.map((p) => ({ value: p.flat!.thickness, label: p.mark, partId: p.id })),
-    "Épaisseur découpée",
+    laserParts.map((p) => ({
+      value: p.flat!.thickness,
+      label: textMessage(p.mark),
+      partId: p.id,
+    })),
+    msg("structure.steel.quantity.cutThickness"),
     { min: null, max: metal.laser.maxThickness },
   );
   for (const p of [...foldedParts, ...platesMarked]) {
@@ -1242,13 +1372,13 @@ function addFlatChecks(
             status: "ok",
             measured: box.length,
             location: { kind: "part", partId: p.id },
-            message: `${p.mark} : développé ${fmt(box.length, 0)} × ${fmt(box.width, 0)} mm dans un format de tôle.`,
+            message: sheetFormatMessage("structure.steel.check.inSheetFormat", p.mark, box),
           }
         : {
             status: "violation",
             measured: box.length,
             location: { kind: "part", partId: p.id },
-            message: `${p.mark} : développé ${fmt(box.length, 0)} × ${fmt(box.width, 0)} mm hors des formats de tôle du profil d'atelier.`,
+            message: sheetFormatMessage("structure.steel.check.outOfSheetFormats", p.mark, box),
           },
     );
   }
@@ -1256,8 +1386,8 @@ function addFlatChecks(
   const bars = [...supportParts, ...posts];
   checks.addItems(
     rule(STEEL_RULES.barLength),
-    bars.map((p) => ({ value: p.stock!.length, label: p.mark, partId: p.id })),
-    "Longueur de barre",
+    bars.map((p) => ({ value: p.stock!.length, label: textMessage(p.mark), partId: p.id })),
+    msg("structure.steel.quantity.barLength"),
     { min: null, max: Math.max(...metal.barLengths) },
   );
   checks.addItems(
@@ -1270,16 +1400,18 @@ function addFlatChecks(
           zb - polyAt(s.development.lowerRive, p.u1),
           polyAt(s.development.upperRive, p.u0) - p.zTop,
         );
-        return { value: margin, label: `${p.treadMark} sur ${s.face.mark}`, partId: s.part.id };
+        return { value: margin, label: supportOn(p.treadMark, s.face.mark), partId: s.part.id };
       }),
     ),
-    "Marge support / rive",
+    msg("structure.steel.quantity.supportEdgeMargin"),
     { min: -1e-6, max: null },
   );
-  checks.addItems(rule(STEEL_RULES.supportLength), shortSupports, "Longueur d'appui", {
-    min: sup.minLength,
-    max: null,
-  });
+  checks.addItems(
+    rule(STEEL_RULES.supportLength),
+    shortSupports,
+    msg("structure.steel.quantity.bearingLength"),
+    { min: sup.minLength, max: null },
+  );
   checks.add(
     rule(STEEL_RULES.treadCarried),
     zones.map((z): Finding => {
@@ -1289,12 +1421,12 @@ function addFlatChecks(
         ? {
             status: "ok",
             location: { kind: "tread", number: z.tread.number },
-            message: `${z.mark} portée des deux côtés.`,
+            message: msg("structure.steel.check.treadCarried", { mark: z.mark }),
           }
         : {
             status: "violation",
             location: { kind: "tread", number: z.tread.number },
-            message: `${z.mark} sans support côté ${missing.map((m) => (m === "inner" ? "jour" : "mur")).join(" et ")}.`,
+            message: treadNotCarried(z.mark, missing),
           };
     }),
   );
@@ -1302,8 +1434,8 @@ function addFlatChecks(
     for (const nw of newelList) {
       checks.addItems(
         pluginRuleDef(FAB_RULES.newelReception),
-        receivedChecks.filter((r) => r.label.endsWith(nw.mark)),
-        "Épaisseur du limon reçu par le poteau",
+        receivedChecks.filter((r) => r.newelMark === nw.mark),
+        msg("structure.steel.quantity.receivedStringThickness"),
         { min: null, max: nw.geom.jourExtent },
       );
     }
@@ -1371,19 +1503,26 @@ function buildFlatStringer(
   const noses = nosings
     .map((k) => ({ u: sigmaOf(k, f.side) - f.sigmaA, z: k.z, index: k.index }))
     .filter((k) => k.u >= span.lo - 1e-6 && k.u <= span.hi + 1e-6);
-  const joints: { u: Mm; label: string }[] = [];
-  if (f.start === "corner") joints.push({ u: 0, label: "Angle mural (soudure d'angle)" });
-  if (f.end === "corner") joints.push({ u: f.faceLength, label: "Angle mural (soudure d'angle)" });
-  const newelJoint = endPlateT > 0 ? "Platine d'about (poteau)" : "Face du poteau";
+  const joints: { u: Mm; label: Message }[] = [];
+  const cornerJoint = msg("structure.steel.joint.wallCorner");
+  if (f.start === "corner") joints.push({ u: 0, label: cornerJoint });
+  if (f.end === "corner") joints.push({ u: f.faceLength, label: cornerJoint });
+  const newelJoint = msg(
+    endPlateT > 0 ? "structure.steel.joint.newelEndPlate" : "structure.common.joint.newelFace",
+  );
   if (f.start === "newel") joints.push({ u: uLo, label: newelJoint });
   if (f.end === "newel") joints.push({ u: uHi, label: newelJoint });
-  const sideLabel = f.side === "inner" ? "limon de jour" : "limon mural";
   const base = toFlatPattern(dev, {
     mirrored,
     thickness: e,
     depth: 0,
     mark: f.mark,
-    referenceDescription: `Face intérieure du ${sideLabel} (côté marches), vue depuis les marches ; x = abscisse horizontale le long du limon (${mirrored ? "la montée va vers les x décroissants" : "la montée va vers les x croissants"}), y = altitude (sol fini bas = 0), mm, 1:1.`,
+    referenceDescription: msg(
+      f.side === "inner"
+        ? "structure.steel.reference.outerStringFace"
+        : "structure.steel.reference.wallStringFace",
+      { ascent: ascentDirection(mirrored) },
+    ),
     noses,
     joints,
   });
@@ -1405,7 +1544,9 @@ function buildFlatStringer(
         kind: "mark",
         a,
         b: rect[(i + 1) % 4]!,
-        ...(i === 0 ? { label: `Support ${p.treadMark}` } : {}),
+        ...(i === 0
+          ? { label: msg("structure.steel.flatLine.support", { mark: p.treadMark }) }
+          : {}),
       });
     });
   }
@@ -1430,15 +1571,28 @@ function buildFlatStringer(
       measured: box.length,
       location: { kind: "part", partId: f.id },
       message: Number.isFinite(splices)
-        ? `${f.mark} : développé ${fmt(box.length, 0)} × ${fmt(box.width, 0)} mm hors des formats de tôle ; ${splices} aboutage(s) ${params.splice === "welded" ? "soudé(s) bout à bout" : "éclissé(s)"} à placer hors des supports.`
-        : `${f.mark} : largeur de développé ${fmt(box.width, 0)} mm hors de tout format de tôle.`,
+        ? msg(
+            params.splice === "welded"
+              ? "structure.steelFlat.check.weldedSplices"
+              : "structure.steelFlat.check.boltedSplices",
+            {
+              mark: f.mark,
+              length: dec(box.length, 0),
+              width: dec(box.width, 0),
+              count: splices,
+            },
+          )
+        : msg("structure.steelFlat.check.widthOutOfSheetFormats", {
+            mark: f.mark,
+            width: dec(box.width, 0),
+          }),
     };
   } else {
     formatFinding = {
       status: "ok",
       measured: box.length,
       location: { kind: "part", partId: f.id },
-      message: `${f.mark} : développé ${fmt(box.length, 0)} × ${fmt(box.width, 0)} mm dans un format de tôle.`,
+      message: sheetFormatMessage("structure.steel.check.inSheetFormat", f.mark, box),
     };
   }
   const buttWeld =
@@ -1476,7 +1630,11 @@ function buildFlatStringer(
       depth: e,
     },
     flat,
-    section: `tôle ${fmt(e, 0)} (${grade}), largeur ${fmt(Math.ceil(box.width), 0)}`,
+    section: msg("structure.steel.section.stringPlate", {
+      thickness: dec(e, 0),
+      grade,
+      width: dec(Math.ceil(box.width), 0),
+    }),
     stock: { length: box.length, width: box.width, thickness: e },
     quantities: steelQuantities(
       {
@@ -1512,15 +1670,15 @@ function flatNewelPosts(
 ): {
   posts: Part[];
   plates: Part[];
-  received: { value: Mm; label: string; partId: string }[];
-  notes: string[];
+  received: ReceivedCheck[];
+  notes: Message[];
 } {
   const e = params.thickness;
   const sup = params.supports;
-  const notes: string[] = [];
+  const notes: Message[] = [];
   const posts: Part[] = [];
   const plates: Part[] = [];
-  const receivedChecks: { value: Mm; label: string; partId: string }[] = [];
+  const receivedChecks: ReceivedCheck[] = [];
   for (const nw of newelList) {
     const g: NewelGeometry = nw.geom;
     const a = g.size;
@@ -1542,14 +1700,19 @@ function flatNewelPosts(
       top = Math.max(top, up);
       bottom = Math.min(bottom, lo);
       endHeights.push(up - Math.max(lo, 0));
-      receivedChecks.push({ value: e, label: `${s.face.mark} sur ${nw.mark}`, partId: s.face.id });
+      receivedChecks.push({
+        value: e,
+        label: supportOn(s.face.mark, nw.mark),
+        partId: s.face.id,
+        newelMark: nw.mark,
+      });
     }
     for (const p of onPost) {
       top = Math.max(top, p.zTop);
       bottom = Math.min(bottom, p.zTop - depthSup);
     }
     if (!Number.isFinite(top)) {
-      notes.push(`${nw.mark} : aucun limon ni support reçu, poteau non généré.`);
+      notes.push(msg("structure.steel.note.newelNothingReceived", { mark: nw.mark }));
       continue;
     }
     top += params.newel.topExtension;
@@ -1557,7 +1720,11 @@ function flatNewelPosts(
     if (raised.raisedBy > 0) {
       top = raised.top;
       notes.push(
-        `${nw.mark} : poteau d'angle monté à ${fmt(top, 0)} mm, ${fmt(raised.overrun, 0)} mm au-dessus de la main courante du garde-corps (garde-corps, poteaux : « dépassement du poteau d'angle »).`,
+        msg("structure.steel.note.newelRaised", {
+          mark: nw.mark,
+          top: dec(top, 0),
+          overrun: dec(raised.overrun, 0),
+        }),
       );
     }
     // Pied au sol : le poteau repose sur sa platine de pied (raccourci de son épaisseur).
@@ -1591,7 +1758,7 @@ function flatNewelPosts(
       id: nw.id,
       mark: nw.mark,
       category: "post",
-      name: `Poteau d'angle acier, tournant ${g.turn + 1}`,
+      name: msg("structure.steel.part.newel", { turn: g.turn + 1 }),
       material,
       solid: {
         kind: "extrusion",
@@ -1605,8 +1772,8 @@ function flatNewelPosts(
         depth: height,
       },
       section: tube
-        ? `tube carré ${fmt(a, 0)} × ${fmt(a, 0)} × ${fmt(tt, 0)}`
-        : `plein ${fmt(a, 0)} × ${fmt(a, 0)}`,
+        ? msg("structure.steel.section.squareTube", { size: dec(a, 0), thickness: dec(tt, 0) })
+        : msg("structure.steel.section.solidSquare", { size: dec(a, 0) }),
       stock: { length: height, width: a, thickness: a },
       quantities: steelQuantities(
         {
@@ -1639,7 +1806,7 @@ function flatNewelPosts(
           holesAt,
           pl.holeDiameter,
           "PA",
-          `Platine d'about ${s.face.mark} / ${nw.mark}, vue de face, mm, 1:1.`,
+          msg("structure.steel.reference.endPlate", { string: s.face.mark, newel: nw.mark }),
         );
         const atEnd = s.face.end === "newel" && s.face.leg === g.turn;
         const u = atEnd ? s.development.uHi : s.development.uLo;
@@ -1647,7 +1814,7 @@ function flatNewelPosts(
         plates.push(
           plateObject(
             `plate-end-${s.face.id}`,
-            `Platine d'about ${s.face.mark} / ${nw.mark}`,
+            msg("structure.steel.part.endPlate", { string: s.face.mark, newel: nw.mark }),
             flat,
             pl.thickness,
             2 * hgt,
@@ -1669,13 +1836,13 @@ function flatNewelPosts(
         holesAt,
         pl.holeDiameter,
         "PP",
-        `Platine de pied du poteau ${nw.mark}, vue de dessus, mm, 1:1.`,
+        msg("structure.steel.reference.newelFootPlate", { mark: nw.mark }),
       );
       const corner = at(-side / 2, -side / 2);
       plates.push(
         plateObject(
           `plate-post-${g.turn + 1}`,
-          `Platine de pied du poteau ${nw.mark}`,
+          msg("structure.steel.part.newelFootPlate", { mark: nw.mark }),
           flat,
           pl.thickness,
           4 * a,
@@ -1724,14 +1891,14 @@ function stringerPlates(
           holesAt,
           pl.holeDiameter,
           "PF",
-          `Platine de pied de ${f.mark}, vue de dessus, mm, 1:1.`,
+          msg("structure.steel.reference.footPlate", { mark: f.mark }),
         );
         const o = V.add(V.addScaled(f.a, f.dir, mid - L / 2), across(pl.width));
         const sgn = V.cross(f.dir, f.into) > 0 ? 1 : -1;
         plates.push(
           plateObject(
             `plate-foot-${f.id}`,
-            `Platine de pied de ${f.mark}`,
+            msg("structure.steel.part.footPlate", { mark: f.mark }),
             flat,
             pl.thickness,
             2 * L,
@@ -1761,12 +1928,12 @@ function stringerPlates(
           holesAt,
           pl.holeDiameter,
           "PH",
-          `Platine de tête de ${f.mark}, vue de face, mm, 1:1.`,
+          msg("structure.steel.reference.headPlate", { mark: f.mark }),
         );
         plates.push(
           plateObject(
             `plate-head-${f.id}`,
-            `Platine de tête de ${f.mark}`,
+            msg("structure.steel.part.headPlate", { mark: f.mark }),
             flat,
             pl.thickness,
             2 * H,
@@ -1818,7 +1985,7 @@ export interface PlateFrame {
 /** Platine découpée (développé rectangulaire percé), soudée sur `weld` mm. */
 export function plateObject(
   id: string,
-  name: string,
+  name: Message,
   flat: FlatPattern,
   thickness: Mm,
   weld: Mm,
@@ -1848,7 +2015,7 @@ export function plateObject(
       depth: frame.depth,
     },
     flat,
-    section: `tôle ${fmt(thickness, 0)}`,
+    section: msg("structure.steel.section.plate", { thickness: dec(thickness, 0) }),
     stock: { length: box.length, width: box.width, thickness },
     quantities: steelQuantities(
       {
@@ -1867,7 +2034,7 @@ export function plateObject(
 
 export const STEEL_FLAT: StructureKind<SteelFlatParams> = {
   kind: "steel-flat",
-  label: "Limons acier en plat découpé laser (marches bois ou tôle pliée)",
+  labelKey: "structure.steelFlat.label",
   family: "metal",
   paramsSchema: SteelFlatParamsSchema,
   defaults: () => SteelFlatParamsSchema.parse({}),

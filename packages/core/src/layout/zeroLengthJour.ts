@@ -16,6 +16,7 @@
  *   le long de la volée sortante), son axe arrivant à au plus `wallTolerance` de K. Aucun seuil
  *   nouveau : tolérances de détection des garde-corps.
  */
+import { msg, type Message } from "@blondel/i18n";
 import * as V from "../geom2d/vec.js";
 import { POLY_EPS } from "../guards/polyline.js";
 import { WALL_PARALLEL_DEG } from "../guards/sides.js";
@@ -25,8 +26,7 @@ import type { Mm, Vec2 } from "../model/primitives.js";
 import type { Project, Wall } from "../model/project.js";
 
 /** Message de `Model.errors` quand le bord du jour de longueur nulle n'est pas contre un mur. */
-export const ZERO_LENGTH_JOUR_ERROR =
-  "Bord du jour de longueur nulle (tournant sans partie droite de part et d'autre, jour à angle vif) : les limons et garde-corps de jour n'ont pas d'appui ; allonger une volée ou prévoir un poteau.";
+export const ZERO_LENGTH_JOUR_ERROR: Message = msg("layout.zeroLengthJour");
 
 /** Tolérance de détection des murs quand le projet n'a pas de garde-corps (défaut du schéma). */
 const DEFAULT_WALL_TOLERANCE: Mm = GuardsSpecSchema.parse({}).wallTolerance;
@@ -92,7 +92,7 @@ export function zeroLengthJourAgainstWall(project: Project, layout: Layout): boo
 /**
  * Erreur du bord du jour de longueur nulle, ou `undefined` (bord non dégénéré, ou contre un mur).
  */
-export function zeroLengthJourError(project: Project, layout: Layout): string | undefined {
+export function zeroLengthJourError(project: Project, layout: Layout): Message | undefined {
   if (layout.zeroLengthInner === undefined) return undefined;
   return zeroLengthJourAgainstWall(project, layout) ? undefined : ZERO_LENGTH_JOUR_ERROR;
 }

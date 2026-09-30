@@ -12,6 +12,7 @@ import { computeStepping } from "./stepping.js";
 import { ProjectSchema, type Project } from "../model/project.js";
 import { ALL_TYPOLOGIES, stairArb } from "./test-helpers.js";
 import { MAX_BALANCED_EXTENT } from "./zones.js";
+import { frList } from "../i18n.test-helpers.js";
 
 /** Même projet, tournants en sens inverse (escalier miroir). */
 function mirrored(project: Project): Project {
@@ -76,10 +77,10 @@ describe("découpage — propriétés (générateur contraint : quart tournant, 
       fc.property(stairArb(undefined, ALL_TYPOLOGIES), ({ project, typology }) => {
         const layout = computeLayout(project);
         const st = computeStepping(project, layout);
-        const ctx = `${typology} ${JSON.stringify(project.stair.layout)} H=${project.site.floorToFloor} ${project.stair.balancing.method}/${project.stair.balancing.variant}\n${st.notes.join("\n")}`;
+        const ctx = `${typology} ${JSON.stringify(project.stair.layout)} H=${project.site.floorToFloor} ${project.stair.balancing.method}/${project.stair.balancing.variant}\n${frList(st.notes).join("\n")}`;
         // M1 (option « tracé traditionnel ») peut n'avoir aucune solution admissible sur un
         // demi-tournant large à jour étroit : cas signalé dans les notes (voir le ledger).
-        const none = st.notes.some((n) => n.includes("aucun balancement admissible"));
+        const none = frList(st.notes).some((n) => n.includes("aucun balancement admissible"));
         if (project.stair.balancing.method === "M3") expect(none, ctx).toBe(false);
         fc.pre(!none);
         expect(findCrossingsOnSides(layout, st.nosings), ctx).toEqual([]);
@@ -117,7 +118,7 @@ describe("découpage — propriétés (générateur contraint : quart tournant, 
             ).length > 0
           ) {
             expect(
-              st.notes.some((n) => n.startsWith("K3 :")),
+              frList(st.notes).some((n) => n.startsWith("K3 :")),
               ctx,
             ).toBe(true);
           }
@@ -134,7 +135,7 @@ describe("découpage — propriétés (générateur contraint : quart tournant, 
         const st = computeStepping(project, layout);
         const reach = MAX_BALANCED_EXTENT * st.going + 1e-6;
         const target = project.stair.balancing.targetCollet;
-        const beyond = st.notes.some((n) => n.includes("étendue dépassée"));
+        const beyond = frList(st.notes).some((n) => n.includes("étendue dépassée"));
         for (const z of st.balancedZones) {
           const sTo = st.nosings[z.to]!.s;
           const sEnd = Math.max(...layout.turns.filter((t) => t.sStart < sTo).map((t) => t.sEnd));
@@ -147,7 +148,7 @@ describe("découpage — propriétés (générateur contraint : quart tournant, 
         if (!reached && st.balancedZones.length > 0) {
           // Collet sous la cible : soit une zone le signale, soit une marche hors zone (nez
           // perpendiculaires encadrant la zone) porte le minimum.
-          const signalled = st.notes.some((n) => n.includes("non atteint"));
+          const signalled = frList(st.notes).some((n) => n.includes("non atteint"));
           const zoneTreads = st.treads.filter((t) =>
             st.balancedZones.some((z) => t.number - 1 >= z.from && t.number <= z.to),
           );
@@ -310,7 +311,9 @@ describe("découpage — propriétés (générateur contraint : quart tournant, 
           // Zone imposée : appliquée même si des lignes se croisent, mais toujours signalée (K5).
           for (const c of findCrossingsOnSides(layout, st.nosings)) {
             expect(
-              st.notes.some((n) => n.startsWith(`K5 : les lignes de nez ${c.i} et ${c.j} `)),
+              frList(st.notes).some((n) =>
+                n.startsWith(`K5 : les lignes de nez ${c.i} et ${c.j} `),
+              ),
               ctx,
             ).toBe(true);
           }

@@ -14,6 +14,7 @@ import {
   type Vec2,
 } from "@blondel/core";
 import { useEffect, useId, useMemo, useState } from "react";
+import { tr } from "../i18n/fr.js";
 import { appStore, useApp } from "../store/appStore.js";
 
 const LABELS: Readonly<Record<SurveyMeasure, string>> = {
@@ -182,7 +183,7 @@ export function PlanSurveyForm({ onPreview }: Props) {
         <p className="muted">Saisir les six mesures.</p>
       ) : !result.ok ? (
         <p className="notice notice--error" role="alert">
-          Relevé impossible : {result.reason}.
+          Relevé impossible : {tr(result.reason)}.
         </p>
       ) : (
         <div

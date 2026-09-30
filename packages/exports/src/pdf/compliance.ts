@@ -3,7 +3,14 @@
  * groupés (violations par sévérité, non évaluées, respectées) avec nature, confiance, source et
  * source secondaire ; l'avertissement est rappelé en tête de chaque page de suite.
  */
-import type { Model, RuleOverride, RuleResult, Severity } from "@blondel/core";
+import {
+  ruleDescription,
+  type Model,
+  type RuleOverride,
+  type RuleResult,
+  type Severity,
+} from "@blondel/core";
+import { tr } from "../i18n.js";
 import type { PdfCanvas, Rgb } from "./canvas.js";
 import { INK, MUTED, fr, wrapText, type Frame, type PageDraft } from "./layout.js";
 
@@ -160,9 +167,9 @@ export function complianceLines(
       `${rep.summary.bloquant} bloquant(s), ${rep.summary.avertissement} avertissement(s), ${rep.summary.conseil} conseil(s)`,
     { size: body, color: INK, before: 2 },
   );
-  for (const n of rep.notes ?? []) push(`Remarque : ${n}`, { size: small, color: MUTED });
+  for (const n of rep.notes ?? []) push(`Remarque : ${tr(n)}`, { size: small, color: MUTED });
   for (const e of model.errors)
-    push(`Erreur de génération : ${e}`, { size: small, color: SEVERITY_COLOR.bloquant });
+    push(`Erreur de génération : ${tr(e)}`, { size: small, color: SEVERITY_COLOR.bloquant });
   if (overrides.length > 0) {
     push(`Surcharges de règles par l'utilisateur (${overrides.length})`, {
       size: 3.6,
@@ -176,19 +183,20 @@ export function complianceLines(
 
   const results = rep.results;
   const block = (r: RuleResult, color: Rgb, detailed: boolean): void => {
-    push(`${r.ruleId} — ${r.description}`, {
+    push(`${r.ruleId} — ${tr(ruleDescription(r.ruleId))}`, {
       size: body,
       bold: true,
       color,
       indent: 2,
       before: 1.5,
     });
-    if (r.message !== "") push(r.message, { size: body, color: INK, indent: 4 });
+    const message = tr(r.message);
+    if (message !== "") push(message, { size: body, color: INK, indent: 4 });
     if (r.justification !== undefined) push(justificationText(r.justification), JUSTIFICATION);
     const m = measuredText(r);
     if (detailed && m !== undefined) push(m, { size: small, color: INK, indent: 4 });
     if (r.downgradeReason !== undefined) {
-      push(`Sévérité déclarée ${r.declaredSeverity}, rétrogradée : ${r.downgradeReason}`, {
+      push(`Sévérité déclarée ${r.declaredSeverity}, rétrogradée : ${tr(r.downgradeReason)}`, {
         size: small,
         color: MUTED,
         indent: 4,
@@ -222,7 +230,7 @@ export function complianceLines(
     push(`Règles respectées (${ok.length})`, { size: 3.6, bold: true, color: INK, before: 4 });
     for (const r of ok) {
       const m = measuredText(r);
-      push(`${r.ruleId} — ${r.description}${m !== undefined ? ` (${m})` : ""}`, {
+      push(`${r.ruleId} — ${tr(ruleDescription(r.ruleId))}${m !== undefined ? ` (${m})` : ""}`, {
         size: small,
         color: INK,
         indent: 2,

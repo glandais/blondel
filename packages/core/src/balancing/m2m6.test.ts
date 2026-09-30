@@ -13,6 +13,7 @@ import { findCrossingsOnSides } from "../stepping/sides.js";
 import { findCrossings, monotonyBreaks } from "./postprocess.js";
 import { herseAlphaBound, herseCollets, herseMap } from "./m2.js";
 import { rotationWeight } from "./m6.js";
+import { frList } from "../i18n.test-helpers.js";
 
 const DEG = Math.PI / 180;
 const round = (xs: readonly number[]) => xs.map((x) => Math.round(x));
@@ -104,9 +105,11 @@ describe("M2 et M6 dans le découpage (post-traitement commun)", () => {
     expect(findCrossings(st.nosings)).toEqual([]);
     const chords = st.treads.slice(z.from, z.to).map((t) => t.colletChord);
     expect(monotonyBreaks(chords)).toEqual([]);
-    expect(st.notes.some((n) => /herse \(M2\), α = 20°/.test(n))).toBe(true);
+    expect(frList(st.notes).some((n) => /herse \(M2\), α = 20°/.test(n))).toBe(true);
     if (z.ends!.includes("tangent")) {
-      expect(st.notes.some((n) => /saut de collet en entrée de zone M2/.test(n))).toBe(true);
+      expect(frList(st.notes).some((n) => /saut de collet en entrée de zone M2/.test(n))).toBe(
+        true,
+      );
     }
     // Invariant B §3.1 : chaque nez pivote autour de son point sur Γ.
     for (const n of st.nosings) {
@@ -117,9 +120,9 @@ describe("M2 et M6 dans le découpage (post-traitement commun)", () => {
   it("M2 : α au-delà de la borne → zone refusée avec la borne dans le message", () => {
     const { st } = quarter({ method: "M2", herseAngle: 89, windersPerSide: 3 });
     expect(st.balancedZones).toEqual([]);
-    expect(st.notes.some((n) => /angle de herse 89\.0° hors de \]0 ; \d+\.\d°\[/.test(n))).toBe(
-      true,
-    );
+    expect(
+      frList(st.notes).some((n) => /angle de herse 89\.0° hors de \]0 ; \d+\.\d°\[/.test(n)),
+    ).toBe(true);
   });
 
   it("M2 : un α plus grand aplatit la progression (collet minimal plus grand)", () => {
@@ -134,7 +137,9 @@ describe("M2 et M6 dans le découpage (post-traitement commun)", () => {
     expect(st.balancedZones).toHaveLength(1);
     expect(st.balancedZones[0]!.method).toBe("M6");
     expect(findCrossings(st.nosings)).toEqual([]);
-    expect(st.notes.some((n) => /rotation paramétrée \(M6\).*à valider/.test(n))).toBe(true);
+    expect(frList(st.notes).some((n) => /rotation paramétrée \(M6\).*à valider/.test(n))).toBe(
+      true,
+    );
     const z = st.balancedZones[0]!;
     // Angles des nez strictement croissants de φ_a à φ_b (au plus 90° pour un quart tournant).
     const ang = st.nosings.slice(z.from, z.to + 1).map((n) => Math.atan2(n.dir.y, n.dir.x));
@@ -177,7 +182,9 @@ describe("M2 et M6 — propriétés (générateur contraint, S / Z compris)", ()
           }
           for (const c of findCrossingsOnSides(layout, st.nosings)) {
             expect(
-              st.notes.some((n) => n.startsWith(`K5 : les lignes de nez ${c.i} et ${c.j} `)),
+              frList(st.notes).some((n) =>
+                n.startsWith(`K5 : les lignes de nez ${c.i} et ${c.j} `),
+              ),
             ).toBe(true);
           }
           for (const z of st.balancedZones) {

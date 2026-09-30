@@ -7,6 +7,7 @@ import { helicalShapeArb, makeHelicalProject } from "../layout/helical-test-help
 import { computeLayout } from "../layout/layout.js";
 import { SteppingError } from "./errors.js";
 import { computeStepping } from "./stepping.js";
+import { frList } from "../i18n.test-helpers.js";
 
 const TOL = 1e-6;
 
@@ -145,8 +146,8 @@ describe("computeStepping — hélicoïdal", () => {
     const plain = computeStepping(p, computeLayout(p));
     expect(plain.notes).toHaveLength(1);
     const st = computeStepping(q, computeLayout(q));
-    expect(st.notes.some((n) => /Giron cible \(250 mm\) sans effet/.test(n))).toBe(true);
-    expect(st.notes.some((n) => /nez 3 non appliquée/.test(n))).toBe(true);
+    expect(frList(st.notes).some((n) => /Giron cible \(250 mm\) sans effet/.test(n))).toBe(true);
+    expect(frList(st.notes).some((n) => /nez 3 non appliquée/.test(n))).toBe(true);
     expect(st.nosings.map((n) => n.p)).toEqual(plain.nosings.map((n) => n.p));
   });
 

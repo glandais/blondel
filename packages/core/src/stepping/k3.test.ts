@@ -14,6 +14,7 @@ import { parseProjectText } from "../project/parse.js";
 import { ProjectSchema, type Project } from "../model/project.js";
 import { computeStepping } from "./stepping.js";
 import { postNosing } from "./zones.js";
+import { fr, frList } from "../i18n.test-helpers.js";
 
 describe("cornerMonotonyBreaks", () => {
   it("deux vallées autour de deux angles : aucune rupture (une seule vallée : rupture)", () => {
@@ -103,7 +104,7 @@ describe("K3 par angle sur les préréglages demi-tournant et U", () => {
         for (const direction of ["left", "right"] as const) {
           const p = createProject(preset, { floorToFloor, direction });
           const st = computeStepping(p, computeLayout(p));
-          const k3 = st.notes.filter((n) => n.startsWith("K3 :"));
+          const k3 = frList(st.notes).filter((n) => n.startsWith("K3 :"));
           expect(k3, `${preset} H=${floorToFloor} ${direction}`).toEqual([]);
         }
       }
@@ -126,7 +127,7 @@ describe("G_COLLET_MONOTONE (contrôle de conception) sur les préréglages demi
           ).toEqual(["ok"]);
           // Deux tournants : deux angles du jour, quelle que soit la découpe en zones (une
           // marche isolée entre deux zones n'ajoute pas d'angle).
-          expect(r[0]!.message, tag).toContain("(2 angle(s) du jour)");
+          expect(fr(r[0]!.message), tag).toContain("(2 angle(s) du jour)");
         }
       }
     },
@@ -158,7 +159,7 @@ describe("poteaux d'angle : zones par angle (G_COLLET_MONOTONE corrigé par le b
         );
         const r = m.compliance.results.filter((x) => x.ruleId === "G_COLLET_MONOTONE");
         expect(
-          r.filter((x) => x.status === "violation").map((x) => x.message),
+          r.filter((x) => x.status === "violation").map((x) => fr(x.message)),
           tag,
         ).toEqual([]);
         const winders = m.stepping.treads.filter((t) => t.kind === "winder");
@@ -166,7 +167,7 @@ describe("poteaux d'angle : zones par angle (G_COLLET_MONOTONE corrigé par le b
           100 - 1e-6,
         );
         expect(
-          m.stepping.notes.filter((n) => n.startsWith("K3 :")),
+          frList(m.stepping.notes).filter((n) => n.startsWith("K3 :")),
           tag,
         ).toEqual([]);
       }
@@ -180,7 +181,7 @@ describe("poteaux d'angle : zones par angle (G_COLLET_MONOTONE corrigé par le b
       const layout = computeLayout(p);
       const st = computeStepping(p, layout);
       const tag = `H=${floorToFloor}`;
-      const note = st.notes.find((n) => /zones par angle retenues/.test(n));
+      const note = frList(st.notes).find((n) => /zones par angle retenues/.test(n));
       if (!note) continue;
       retained++;
       // Retenues parce qu'elles réduisent le nombre de ruptures mesurées sur les tournants
@@ -239,7 +240,7 @@ describe("poteaux d'angle : zones par angle (G_COLLET_MONOTONE corrigé par le b
       compliance: { contexts: ["bois_dtu", "logement_interieur"], profile: "strict" },
     });
     const st = computeStepping(p, computeLayout(p));
-    expect(st.notes.some((n) => /zones par angle retenues/.test(n))).toBe(false);
+    expect(frList(st.notes).some((n) => /zones par angle retenues/.test(n))).toBe(false);
     // Marches du 1er tournant (nez 0 à 6) : aucun collet effondré au droit du poteau.
     const chords = st.treads.slice(0, 6).map((t) => t.colletChord);
     expect(Math.min(...chords)).toBeGreaterThan(90);
@@ -252,8 +253,8 @@ describe("poteaux d'angle : zones par angle (G_COLLET_MONOTONE corrigé par le b
     );
     const p = parseProjectText(text);
     const st = computeStepping(p, computeLayout(p));
-    expect(st.notes.filter((n) => n.startsWith("K3 :"))).toEqual([]);
-    expect(st.notes.some((n) => /au poteau|zones par angle/.test(n))).toBe(false);
+    expect(frList(st.notes).filter((n) => n.startsWith("K3 :"))).toEqual([]);
+    expect(frList(st.notes).some((n) => /au poteau|zones par angle/.test(n))).toBe(false);
     expect(st.balancedZones.map((z) => [z.from, z.to])).toEqual([[0, 4]]);
   });
 });

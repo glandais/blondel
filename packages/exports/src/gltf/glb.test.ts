@@ -1,3 +1,4 @@
+import { textMessage, translatorFor } from "@blondel/i18n";
 import type { Frame3, Part } from "@blondel/core";
 import { meshPart } from "@blondel/geometry";
 import fc from "fast-check";
@@ -43,7 +44,7 @@ function boxPart(
     id: `box-${i}`,
     mark: `B${i}`,
     category: "tread",
-    name: `Pavé ${i}`,
+    name: textMessage(`Pavé ${i}`),
     material: i % 2 === 0 ? "wood-oak" : "steel-painted",
     solid: { kind: "extrusion", frame: frameAt(x, y, z), profile: { outer, holes: [] }, depth: h },
     quantities: { volume: (w * d * h) / 1e9 },
@@ -101,7 +102,7 @@ describe("exportGlb", () => {
         id: p.id,
         mark: p.mark,
         category: p.category,
-        name: p.name,
+        name: translatorFor("fr").t(p.name),
         material: p.material,
       });
       expect(n.mesh).toBeDefined();

@@ -20,6 +20,7 @@ import {
 import { CheckCollector } from "./checks.js";
 import { minAreaRect } from "./geom.js";
 import { getStructure } from "./index.js";
+import { fr, frList } from "../i18n.test-helpers.js";
 
 function context(project: Project): StructureContext {
   const layout = computeLayout(project);
@@ -112,7 +113,7 @@ describe("plugin helical-core", () => {
     const cantilever = output.checks.find((c) => c.ruleId === "HELICOIDAL_PORTE_A_FAUX")!;
     expect(cantilever.status).toBe("violation");
     expect(cantilever.severity).toBe("avertissement");
-    expect(cantilever.message).toMatch(/Justification requise/);
+    expect(fr(cantilever.message)).toMatch(/Justification requise/);
     expect(output.executionClass).toBe("EXC1");
   });
 
@@ -125,8 +126,8 @@ describe("plugin helical-core", () => {
     // Décision A12 (2026-09-30) : une justification n'est pas une vérification.
     expect(c.status).toBe("violation");
     expect(c.severity).toBe("avertissement");
-    expect(c.message).not.toMatch(/Justification requise/);
-    expect(c.message).toContain("NC-042");
+    expect(fr(c.message)).not.toMatch(/Justification requise/);
+    expect(fr(c.message)).toContain("NC-042");
     // Justification portée par le résultat (reprise dans le dossier PDF, décision A12).
     expect(c.justification).toBe("Note de calcul NC-042");
   });
@@ -221,7 +222,7 @@ describe("plugin helical-core", () => {
     const straight = createProject("straight");
     const out = buildHelicalCore(context(straight), params()).output;
     expect(out.parts).toEqual([]);
-    expect(out.errors![0]).toMatch(/hélicoïdaux/);
+    expect(fr(out.errors![0])).toMatch(/hélicoïdaux/);
   });
 
   describe("hélicoïdal à jour central (limons hélicoïdaux intérieur et extérieur)", () => {
@@ -272,7 +273,7 @@ describe("plugin helical-core", () => {
         expect(V.distance({ x: p.x, y: p.y }, h.center)).toBeCloseTo(200, 6);
       }
       expect(li.flat?.reference?.kind).toBe("neutral-fiber");
-      expect(li.section).toMatch(/roulé R 192/);
+      expect(fr(li.section)).toMatch(/roulé R 192/);
       // Marches portées des deux côtés : pas de contrôle de porte-à-faux.
       expect(res.output.checks.some((c) => c.ruleId === "HELICOIDAL_PORTE_A_FAUX")).toBe(false);
       // Rouleuse contrôlée sur les deux limons.
@@ -291,14 +292,14 @@ describe("plugin helical-core", () => {
       const cant = res.output.checks.filter((c) => c.ruleId === "HELICOIDAL_PORTE_A_FAUX");
       expect(cant).toHaveLength(1);
       expect(cant[0]!.status).toBe("violation");
-      expect(cant[0]!.message).toMatch(/limon intérieur/);
+      expect(fr(cant[0]!.message)).toMatch(/limon intérieur/);
     });
 
     it("jour plus étroit que l'épaisseur du limon : erreur explicite", () => {
       const ctx = context(well({ coreRadius: 60 }));
       const out = buildHelicalCore(ctx, params({ innerStringer: { thickness: 60 } })).output;
       expect(out.parts).toEqual([]);
-      expect(out.errors![0]).toMatch(/limon intérieur/);
+      expect(fr(out.errors![0])).toMatch(/limon intérieur/);
     });
 
     it("pipeline : jour central, modèle complet sans erreur (défauts du plugin)", () => {
@@ -354,13 +355,13 @@ describe("plugin helical-core", () => {
     for (const g of gaps) {
       expect(g.status).toBe("violation");
       expect(g.measured).toBeCloseTo(m.stepping.rises[1]! - t, 6);
-      expect(g.message).toMatch(/^Marches en tôle de 8 mm sans contremarche/);
+      expect(fr(g.message)).toMatch(/^Marches en tôle de 8 mm sans contremarche/);
     }
     // Débord de nez : sans objet sans contremarche (évalué par le plugin, pas par le moteur).
     const nose = m.compliance.results.filter((r) => r.ruleId.startsWith("DEBORD_NEZ_"));
     expect(nose.length).toBeGreaterThan(0);
-    for (const r of nose) expect(r.message).toMatch(/Sans objet/);
-    expect((m.notes ?? []).some((n) => /contremarche\(s\) bois de base supprimée/.test(n))).toBe(
+    for (const r of nose) expect(fr(r.message)).toMatch(/Sans objet/);
+    expect(frList(m.notes).some((n) => /contremarche\(s\) bois de base supprimée/.test(n))).toBe(
       true,
     );
   });
@@ -384,7 +385,7 @@ describe("plugin helical-core", () => {
     expect(m.executionClass).toBe("EXC1");
     expect(m.parts.some((p) => p.id === "helical-column")).toBe(true);
     const bad = buildModel(withHelicalCore(createProject("straight")));
-    expect(bad.errors.some((e) => e.includes("helical-core"))).toBe(true);
+    expect(frList(bad.errors).some((e) => e.includes("helical-core"))).toBe(true);
   });
 });
 
@@ -394,11 +395,13 @@ describe("plugins réservés aux escaliers à volées, sur un tracé hélicoïda
     (kind) => {
       const p = createProject("helical");
       const m = buildModel({ ...p, stair: { ...p.stair, structure: { kind, params: {} } } });
-      const errors = m.errors.filter((e) => e.includes(kind));
+      const errors = frList(m.errors).filter((e) => e.includes(kind));
       expect(errors).toHaveLength(1);
       expect(errors[0]).toMatch(/réservée aux escaliers à volées/);
       expect(errors[0]).toMatch(/helical-core/);
-      expect(m.errors.some((e) => /segment droit par volée|Tracé inattendu/.test(e))).toBe(false);
+      expect(frList(m.errors).some((e) => /segment droit par volée|Tracé inattendu/.test(e))).toBe(
+        false,
+      );
       // Pièces de base seulement (marches, contremarches, palier) : aucune pièce du plugin.
       expect(m.parts.every((x) => ["tread", "riser", "landing"].includes(x.category))).toBe(true);
     },

@@ -8,6 +8,7 @@
 import {
   buildModel,
   proposeDesigns,
+  textMessage,
   type AssistantInput,
   type AssistantResult,
   type Project,
@@ -37,7 +38,9 @@ export function runAssistantJob(
   } catch (e) {
     result = {
       candidates: [],
-      diagnostics: [`Erreur de l'assistant : ${e instanceof Error ? e.message : String(e)}`],
+      diagnostics: [
+        textMessage(`Erreur de l'assistant : ${e instanceof Error ? e.message : String(e)}`),
+      ],
       rejections: [],
       stats: { enumerated: 0, built: 0, elapsedMs: 0, stopped: false, truncated: false },
     };

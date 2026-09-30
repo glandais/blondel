@@ -26,6 +26,7 @@
  * - **Mortaises** : une par marche (encastrement de la marche et de la contremarche placée sous
  *   son nez, B §4.1), plus la contremarche d'arrivée ; nez arrondi étiré de 1/sin β.
  */
+import { msg, textMessage, type Message } from "@blondel/i18n";
 import * as V from "../geom2d/vec.js";
 import type { FlatPattern, NosingLine, Tread } from "../model/derived.js";
 import type { Mm, Polygon2, Vec2 } from "../model/primitives.js";
@@ -47,7 +48,8 @@ export type StringerEnd = "arrival" | "newel" | "corner";
 
 /** Encastrement d'une marche (dessus/dessous) et de sa contremarche, en (u, z). */
 export interface HousingSpec {
-  readonly label: string;
+  /** Libellé de la mortaise (repère de la marche : `textMessage(mark)`). */
+  readonly label: Message;
   /** Numéro de la marche portée (absent : contremarche d'arrivée seule). */
   readonly tread?: number;
   readonly treadPocket?: {
@@ -69,7 +71,7 @@ export interface HousingSpec {
 }
 
 export interface Housing {
-  readonly label: string;
+  readonly label: Message;
   readonly tread?: number;
   /** Contour(s) de la mortaise, (u, z). */
   readonly polygons: readonly Polygon2[];
@@ -353,8 +355,8 @@ function polylineAt(line: readonly Vec2[], u: Mm): Mm {
  * **négative** si un sommet sort de la bande comprise entre les rives (mortaise débouchante :
  * dépassement d_h ou d_b saisi trop petit).
  */
-export function minCheek(dev: StringerDevelopment): { value: Mm; label: string } | null {
-  let best: { value: Mm; label: string } | null = null;
+export function minCheek(dev: StringerDevelopment): { value: Mm; label: Message } | null {
+  let best: { value: Mm; label: Message } | null = null;
   for (const h of dev.housings) {
     for (const poly of h.polygons) {
       for (const p of poly) {
@@ -374,17 +376,21 @@ export function minCheek(dev: StringerDevelopment): { value: Mm; label: string }
 }
 
 /** Bois minimal entre deux encastrements de marche successifs. */
-export function minWoodBetween(dev: StringerDevelopment): { value: Mm; label: string } | null {
+export function minWoodBetween(dev: StringerDevelopment): { value: Mm; label: Message } | null {
   const rects = dev.housings
     .filter((h) => h.treadRect !== undefined && h.tread !== undefined)
     .sort((a, b) => a.tread! - b.tread!);
-  let best: { value: Mm; label: string } | null = null;
+  let best: { value: Mm; label: Message } | null = null;
   for (let i = 0; i + 1 < rects.length; i++) {
     const a = rects[i]!;
     const b = rects[i + 1]!;
     if (b.tread! !== a.tread! + 1) continue;
     const d = polygonDistance(a.treadRect!, b.treadRect!);
-    if (best === null || d < best.value) best = { value: d, label: `${a.label} / ${b.label}` };
+    if (best === null || d < best.value)
+      best = {
+        value: d,
+        label: msg("structure.common.housingPair", { first: a.label, second: b.label }),
+      };
   }
   return best;
 }
@@ -403,11 +409,12 @@ export interface FlatOptions {
   readonly thickness: Mm;
   readonly depth: Mm;
   readonly mark: string;
-  readonly referenceDescription: string;
+  /** Description de la face de référence (`FlatPattern.reference.description`). */
+  readonly referenceDescription: Message;
   /** Abscisses u des nez (traits de report) avec leur z. */
   readonly noses: readonly { u: Mm; z: Mm; index: number }[];
   /** Traits de joint aux extrémités (angle mural, poteau). */
-  readonly joints: readonly { u: Mm; label: string }[];
+  readonly joints: readonly { u: Mm; label: Message }[];
 }
 
 /** Changement de repère (u, z) → (x, y) du `FlatPattern`. */
@@ -454,7 +461,7 @@ export function toFlatPattern(dev: StringerDevelopment, opts: FlatOptions): Flat
       a: T(V.vec(t.u, t.zBottom)),
       b: T(V.vec(t.u, t.zTop)),
       feature: "tenon",
-      label: "Tenon",
+      label: msg("structure.common.flat.tenon"),
     });
   }
   // Ligne des nez.
@@ -463,7 +470,7 @@ export function toFlatPattern(dev: StringerDevelopment, opts: FlatOptions): Flat
       kind: "mark",
       a: T(dev.pitchLine[i]!),
       b: T(dev.pitchLine[i + 1]!),
-      ...(i === 0 ? { label: "Ligne des nez" } : {}),
+      ...(i === 0 ? { label: msg("structure.common.flat.nosingLine") } : {}),
     });
   }
   // Traits de report des nez (aplomb, entre les rives).
@@ -485,7 +492,8 @@ export function toFlatPattern(dev: StringerDevelopment, opts: FlatOptions): Flat
       kind: "mark",
       a: T(V.vec(nose.u, lo)),
       b: T(V.vec(nose.u, hi)),
-      label: `N${nose.index}`,
+      // Repère du nez (non traduit).
+      label: textMessage(`N${nose.index}`),
     });
   }
   for (const j of opts.joints) {
@@ -500,7 +508,7 @@ export function toFlatPattern(dev: StringerDevelopment, opts: FlatOptions): Flat
   const la = T(V.vec(mid - 20, yMid));
   const lb = T(V.vec(mid + 20, yMid));
   const [ta, tb] = opts.mirrored ? [lb, la] : [la, lb];
-  lines.push({ kind: "text", a: ta, b: tb, label: opts.mark });
+  lines.push({ kind: "text", a: ta, b: tb, label: textMessage(opts.mark) });
   return {
     outline: { outer, holes: [] },
     lines,

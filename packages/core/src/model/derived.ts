@@ -7,7 +7,14 @@
  * Chaque étape est une fonction pure `(entrée, étapes précédentes) → sortie`.
  * Les solides et développés sont décrits **analytiquement** ici (ADR-0001) ; le package
  * `@blondel/geometry` les convertit en maillages, `@blondel/exports` en fichiers.
+ *
+ * Textes (ADR-0007) : tout texte destiné à l'utilisateur (erreurs, remarques, constats, noms et
+ * sections de pièces, libellés de développé) est un `Message` neutre (`{ key, params }` de
+ * `@blondel/i18n`), traduit à l'affichage et dans les exports. Restent des `string` : les
+ * identifiants, les repères (`Part.mark`), les unités, les sources citées (titres de normes,
+ * dans leur langue d'origine) et les textes saisis par l'utilisateur (`justification`).
  */
+import type { Message } from "@blondel/i18n";
 import type { PrecheckedBeam } from "../precheck/checks.js";
 import type { StairLoads } from "../precheck/loads.js";
 import type { Curve2, Frame3, Mm, Polygon2, Rad, Shape2, Vec2, Vec3 } from "./primitives.js";
@@ -121,7 +128,7 @@ export interface Layout {
    * `Model.errors`. Absent : aucune. Le bord du jour de longueur nulle n'y figure pas : il est
    * décrit par `zeroLengthInner` et signalé par le pipeline selon les murs du site.
    */
-  readonly errors?: readonly string[];
+  readonly errors?: readonly Message[];
   /**
    * Bord intérieur (jour) de longueur nulle (tournants à angle vif sans partie droite de part et
    * d'autre, QUESTIONS D3) : coins intérieurs K des tournants du côté du jour, avec les
@@ -235,7 +242,7 @@ export interface Stepping {
     ];
   }[];
   /** Diagnostics non bloquants du calcul (ex. « jour trop court, marches ajoutées »). */
-  readonly notes: readonly string[];
+  readonly notes: readonly Message[];
   /**
    * Sous-faces de l'escalier lui-même qui forment un plafond pour les parties plus basses
    * (auto-recouvrement, CHALLENGE G4 : marches du tour supérieur et palier d'arrivée d'un
@@ -335,7 +342,11 @@ export interface FlatPattern {
     readonly kind: "bend" | "mark" | "roll" | "joint" | "text";
     readonly a: Vec2;
     readonly b: Vec2;
-    readonly label?: string;
+    /**
+     * Texte tracé (`kind: "text"`) ou libellé d'une ligne (« Mortaise M5 »). Un repère seul
+     * passe par `textMessage(mark)` (non traduit).
+     */
+    readonly label?: Message;
     /**
      * Pli : angle (degrés) et sens. `bendUp` : l'aile se relève vers l'observateur du
      * développé (face vue = face de référence déclarée par `reference`).
@@ -362,7 +373,7 @@ export interface FlatPattern {
    */
   readonly reference?: {
     readonly kind: "face" | "neutral-fiber";
-    readonly description: string;
+    readonly description: Message;
   };
 }
 
@@ -395,12 +406,17 @@ export interface Part {
   /** Repère de fabrication affiché et gravé (ex. `M5`, `LI1`). */
   readonly mark: string;
   readonly category: PartCategory;
-  readonly name: string;
+  /** Désignation de la pièce (ex. « Marche 5 », « Limon de jour »), traduite à l'affichage. */
+  readonly name: Message;
   readonly material: MaterialId;
   readonly solid: SolidDesc;
   readonly flat?: FlatPattern;
-  /** Section commerciale éventuelle (ex. `UPN 200`, `plat 250×10`, `40×300`). */
-  readonly section?: string;
+  /**
+   * Section commerciale éventuelle (ex. « UPN 200 », « plat 250×10 », « tôle 5 mm », « 40×300 ») :
+   * `Message`, car elle contient des mots traduits (« plat », « tôle ») ; une désignation
+   * normalisée seule (`UPN 200`) passe par `textMessage`.
+   */
+  readonly section?: Message;
   /** Débit : dimensions brutes de la pièce (L × l × e) en mm. */
   readonly stock?: { readonly length: Mm; readonly width: Mm; readonly thickness: Mm };
   /** Grandeurs de coût/nomenclature (masse kg, volume m³, cordons mm, plis, coupes…). */
@@ -432,9 +448,13 @@ export type Location =
   | { readonly kind: "part"; readonly partId: string }
   | { readonly kind: "point"; readonly at: Vec3 };
 
+/**
+ * Résultat d'une règle du contrôle de conception. La description de la règle n'est plus portée
+ * par le résultat (ADR-0007) : elle se lit par la clé `rules.<ruleId>.description`
+ * (`ruleDescription(ruleId)`, règles de rules.yaml et contrôles de plugins `PluginRuleSpec`).
+ */
 export interface RuleResult {
   readonly ruleId: string;
-  readonly description: string;
   readonly status: RuleStatus;
   /** Sévérité effective (après profil souple et surcharges utilisateur). */
   readonly severity: Severity;
@@ -450,8 +470,9 @@ export interface RuleResult {
   readonly source: string;
   readonly secondarySource: boolean;
   /** Raison d'une rétrogradation (profil souple, surcharge avec justification). */
-  readonly downgradeReason?: string;
-  readonly message: string;
+  readonly downgradeReason?: Message;
+  /** Constat (valeur mesurée, bornes, élément concerné). */
+  readonly message: Message;
   /**
    * Justification saisie par l'utilisateur, jointe au contrôle sans le lever (note de calcul,
    * avis technique : porte-à-faux hélicoïdal, décision A12 du 2026-09-30), reprise dans le
@@ -471,7 +492,7 @@ export interface ComplianceReport {
    * Remarques de résolution (contextes déduits ou inconnus, régime garde-corps supposé,
    * version de règles, surcharges inopérantes). Absent : aucune remarque.
    */
-  readonly notes?: readonly string[];
+  readonly notes?: readonly Message[];
 }
 
 /**
@@ -501,7 +522,7 @@ export interface ModelPrecheck {
   readonly loads: StairLoads;
   /** Charge permanente répartie en plan (kN/m²). */
   readonly permanentArea: number;
-  readonly notes: readonly string[];
+  readonly notes: readonly Message[];
 }
 
 // ------------------------------------------------------------------ Résultat global
@@ -543,9 +564,9 @@ export interface Model {
    */
   readonly upperFloor?: ModelUpperFloor;
   /** Erreurs de génération (paramètres impossibles) : le modèle peut être partiel. */
-  readonly errors: readonly string[];
+  readonly errors: readonly Message[];
   /** Remarques non bloquantes du pipeline (pièces non générées, hypothèses). */
-  readonly notes?: readonly string[];
+  readonly notes?: readonly Message[];
 }
 
 /** Plancher haut et trémie, dans le repère du site (celui du tracé, `placement` appliqué). */

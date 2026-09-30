@@ -9,6 +9,7 @@
  * Toutes les valeurs propres aux démos (rayons, épaisseurs, jour, teintes) sont des **choix de
  * présentation Blondel, à valider** : aucune n'est une règle métier.
  */
+import { DEFAULT_LOCALE, translatorFor, type MessageKey } from "@blondel/i18n";
 import { ProjectSchema, type Project, type ProjectInput } from "../model/project.js";
 import { createHelicalProject } from "./presetHelical.js";
 import {
@@ -33,33 +34,28 @@ export const DEMO_PRESET_IDS = [
 ] as const;
 export type DemoPresetId = (typeof DEMO_PRESET_IDS)[number];
 
-export const DEMO_PRESET_LABELS: Readonly<Record<DemoPresetId, string>> = {
-  "demo-helical-glass": "Hélicoïdal acier, verre et inox",
-  "demo-quarter-curved": "Quart tournant débillardé soudé",
-  "demo-u-oak": "Deux quarts en U, chêne massif",
-  "demo-half-turn-industrial": "Demi-tournant industriel en tôle pliée",
-  "demo-straight-loft": "Escalier droit loft sur UPN",
-  "demo-quarter-landing-ash": "Quart tournant à palier, frêne et verre",
-  "demo-erp-grand": "Grand escalier d'ERP",
-  "demo-helical-well": "Hélicoïdal à jour central",
+/** Clés des libellés des démos (nom du projet créé, sélecteur de l'interface). */
+export const DEMO_PRESET_LABELS: Readonly<Record<DemoPresetId, MessageKey>> = {
+  "demo-helical-glass": "preset.demo.helicalGlass.label",
+  "demo-quarter-curved": "preset.demo.quarterCurved.label",
+  "demo-u-oak": "preset.demo.uOak.label",
+  "demo-half-turn-industrial": "preset.demo.halfTurnIndustrial.label",
+  "demo-straight-loft": "preset.demo.straightLoft.label",
+  "demo-quarter-landing-ash": "preset.demo.quarterLandingAsh.label",
+  "demo-erp-grand": "preset.demo.erpGrand.label",
+  "demo-helical-well": "preset.demo.helicalWell.label",
 };
 
-/** Description d'une ligne de chaque démo (sélecteur de l'interface). */
-export const DEMO_PRESET_DESCRIPTIONS: Readonly<Record<DemoPresetId, string>> = {
-  "demo-helical-glass":
-    "Fût acier noir, marches chêne rayonnantes, garde-corps verre et main courante inox.",
-  "demo-quarter-curved":
-    "Limon acier débillardé soudé autour d'un jour en arc, marches chêne, garde-corps verre.",
-  "demo-u-oak": "Limons à la française, poteaux d'angle et balustres, tout en chêne huilé.",
-  "demo-half-turn-industrial":
-    "Limons en plat laser anthracite, marches en tôle pliée en Z gris clair, barreaudage graphite.",
-  "demo-straight-loft":
-    "Limons UPN noirs, marches massives de 80 mm en chêne foncé sans contremarche, verre fumé.",
-  "demo-quarter-landing-ash":
-    "Limons à la française et poteau en frêne clair, palier d'angle, garde-corps verre.",
-  "demo-erp-grand": "Emmarchement de 1 400 mm, mains courantes des deux côtés, contextes ERP neuf.",
-  "demo-helical-well":
-    "Marches portées par deux limons hélicoïdaux roulés autour d'un jour central.",
+/** Clés des descriptions d'une ligne de chaque démo (sélecteur de l'interface). */
+export const DEMO_PRESET_DESCRIPTIONS: Readonly<Record<DemoPresetId, MessageKey>> = {
+  "demo-helical-glass": "preset.demo.helicalGlass.description",
+  "demo-quarter-curved": "preset.demo.quarterCurved.description",
+  "demo-u-oak": "preset.demo.uOak.description",
+  "demo-half-turn-industrial": "preset.demo.halfTurnIndustrial.description",
+  "demo-straight-loft": "preset.demo.straightLoft.description",
+  "demo-quarter-landing-ash": "preset.demo.quarterLandingAsh.description",
+  "demo-erp-grand": "preset.demo.erpGrand.description",
+  "demo-helical-well": "preset.demo.helicalWell.description",
 };
 
 /** Garde-corps vitré à main courante inox (commun à plusieurs démos). */
@@ -80,9 +76,9 @@ function withOpening(project: Project): Project {
   return withPatch(project, { site: { opening: { kind: "rect", ...opening } } });
 }
 
-function helicalGlass(): Project {
+function helicalGlass(name: string): Project {
   const p = createHelicalProject({
-    name: DEMO_PRESET_LABELS["demo-helical-glass"],
+    name,
     floorToFloor: 2750,
     // 15 marches par tour (au lieu des 13 du préréglage) : palier d'arrivée de 80° au lieu de
     // 40° sous la contrainte d'échappée, sortie vers la dalle plus large que l'emmarchement ;
@@ -107,10 +103,10 @@ function helicalGlass(): Project {
   });
 }
 
-function quarterCurved(): Project {
+function quarterCurved(name: string): Project {
   const [l1, l2] = [1800, 2830];
   const p = createProject("quarter-left", {
-    name: DEMO_PRESET_LABELS["demo-quarter-curved"],
+    name,
     width: 900,
     patch: {
       stair: {
@@ -128,8 +124,8 @@ function quarterCurved(): Project {
   });
 }
 
-function uOak(): Project {
-  const base = createProject("two-quarters-u", { name: DEMO_PRESET_LABELS["demo-u-oak"] });
+function uOak(name: string): Project {
+  const base = createProject("two-quarters-u", { name });
   const chosen = applyStructureChoice(base, "wood-housed", { material: "wood-oak" }).project;
   return withPatch(chosen, {
     guards: { infill: { kind: "balusters" }, material: "wood-oak" },
@@ -137,12 +133,12 @@ function uOak(): Project {
   });
 }
 
-function halfTurnIndustrial(): Project {
+function halfTurnIndustrial(name: string): Project {
   const base = createProject("half-turn");
   const legs = base.stair.layout.legs.map((l) => l.length as number);
   const width = base.stair.layout.width;
   const p = createProject("half-turn", {
-    name: DEMO_PRESET_LABELS["demo-half-turn-industrial"],
+    name,
     patch: {
       stair: {
         layout: {
@@ -173,9 +169,9 @@ function halfTurnIndustrial(): Project {
   });
 }
 
-function straightLoft(): Project {
+function straightLoft(name: string): Project {
   const p = createProject("straight", {
-    name: DEMO_PRESET_LABELS["demo-straight-loft"],
+    name,
     patch: { stair: { treads: { thickness: 80, risers: "none" } } },
   });
   return withPatch(applyStructureChoice(p, "steel-profile", { family: "UPN" }).project, {
@@ -184,9 +180,9 @@ function straightLoft(): Project {
   });
 }
 
-function quarterLandingAsh(): Project {
+function quarterLandingAsh(name: string): Project {
   const base = createProject("quarter-landing", {
-    name: DEMO_PRESET_LABELS["demo-quarter-landing-ash"],
+    name,
   });
   const chosen = applyStructureChoice(base, "wood-housed", { material: "wood-ash" }).project;
   return withPatch(chosen, {
@@ -196,9 +192,9 @@ function quarterLandingAsh(): Project {
   });
 }
 
-function erpGrand(): Project {
+function erpGrand(name: string): Project {
   const p = createProject("straight", {
-    name: DEMO_PRESET_LABELS["demo-erp-grand"],
+    name,
     width: 1200,
     patch: { stair: { stepping: { targetRise: 160 } } },
   });
@@ -217,9 +213,9 @@ function erpGrand(): Project {
   });
 }
 
-function helicalWell(): Project {
+function helicalWell(name: string): Project {
   const p = createHelicalProject({
-    name: DEMO_PRESET_LABELS["demo-helical-well"],
+    name,
     floorToFloor: 2750,
     outerRadius: 1200,
     patch: {
@@ -241,7 +237,7 @@ function helicalWell(): Project {
   });
 }
 
-const BUILDERS: Readonly<Record<DemoPresetId, () => Project>> = {
+const BUILDERS: Readonly<Record<DemoPresetId, (name: string) => Project>> = {
   "demo-helical-glass": helicalGlass,
   "demo-quarter-curved": quarterCurved,
   "demo-u-oak": uOak,
@@ -257,7 +253,13 @@ export function isDemoPresetId(id: string): id is DemoPresetId {
   return (DEMO_PRESET_IDS as readonly string[]).includes(id);
 }
 
-/** Projet complet d'une démo (tracé, structure, garde-corps, apparence). */
-export function createDemoProject(id: DemoPresetId): Project {
-  return BUILDERS[id]();
+/**
+ * Projet complet d'une démo (tracé, structure, garde-corps, apparence). Nom du projet : `name`,
+ * sinon le libellé de la démo en français (projet stable, indépendant de la langue d'affichage).
+ */
+export function createDemoProject(
+  id: DemoPresetId,
+  options: { readonly name?: string } = {},
+): Project {
+  return BUILDERS[id](options.name ?? translatorFor(DEFAULT_LOCALE).t(DEMO_PRESET_LABELS[id]));
 }

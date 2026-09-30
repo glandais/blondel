@@ -14,6 +14,7 @@
  */
 import type { Part } from "@blondel/core";
 import { MATERIAL_LABELS } from "../csv/cutlist.js";
+import { tr } from "../i18n.js";
 import { renderFlatPatternSvg } from "../svg/flat.js";
 import { RecordingCanvas, type PathOp, type PdfCanvas, type RecordedOp } from "./canvas.js";
 import { clipPath, rectsIntersect, translateOps, type Rect } from "./clip.js";
@@ -358,7 +359,7 @@ export function templatePages(
     info: {
       kind: "template",
       title: single
-        ? `Gabarit 1:1 ${part.mark} — ${part.name}${qty}`
+        ? `Gabarit 1:1 ${part.mark} — ${tr(part.name)}${qty}`
         : `Gabarit 1:1 ${part.mark} — case ${tile.label} (${tile.index}/${tile.count})${qty}`,
       scale: 1,
       partIds: ids,

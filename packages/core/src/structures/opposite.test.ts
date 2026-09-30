@@ -5,6 +5,7 @@
  * base et garde-corps produits ; sur le U équivalent, modèle sans erreur.
  */
 import { describe, expect, it } from "vitest";
+import { fr, frList } from "../i18n.test-helpers.js";
 import { buildModel } from "../pipeline/build.js";
 import { ProjectSchema, type Project } from "../model/project.js";
 import { createProject } from "../project/presets.js";
@@ -30,8 +31,9 @@ describe("S / Z à poteaux : structures et garde-corps", () => {
       expect(project.stair.layout.turns.map((t) => t.inner.kind)).toEqual(["newel", "newel"]);
       const m = buildModel(project);
       expect(m.errors).toHaveLength(1);
-      expect(m.errors[0]).toMatch(SZ_ERROR);
-      expect(m.errors[0]).not.toMatch(/Tracé inattendu/);
+      expect(m.errors[0]!.key).toBe("structure.common.legs.oppositeTurns");
+      expect(fr(m.errors[0])).toMatch(SZ_ERROR);
+      expect(fr(m.errors[0])).not.toMatch(/Tracé inattendu/);
       expect(m.parts.filter((x) => x.category === "tread")).toHaveLength(m.stepping.treads.length);
       // Garde-corps des deux côtés de jour (poteaux d'angle compris), sans erreur propre.
       expect(count(project, "handrail")).toBeGreaterThanOrEqual(3);
@@ -41,7 +43,7 @@ describe("S / Z à poteaux : structures et garde-corps", () => {
 
   it.each(newelRequiredStructures())("%s : U à poteaux équivalent, sans erreur", (kind) => {
     const { project } = applyStructureChoice(withGuards(createProject("two-quarters-u")), kind, {});
-    const errors = buildModel(project).errors.filter((e) => !/prédimensionnement/.test(e));
+    const errors = buildModel(project).errors.filter((e) => !/prédimensionnement/.test(fr(e)));
     expect(errors).toEqual([]);
   });
 
@@ -62,7 +64,7 @@ describe("S / Z à poteaux : structures et garde-corps", () => {
       },
     });
     const m = buildModel(p);
-    expect(m.errors).toEqual([expect.stringMatching(SZ_ERROR)]);
+    expect(frList(m.errors)).toEqual([expect.stringMatching(SZ_ERROR)]);
     expect(count(p, "handrail")).toBeGreaterThan(0);
   });
 });

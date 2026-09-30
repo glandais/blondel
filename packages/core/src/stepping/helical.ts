@@ -30,7 +30,7 @@ import type { Mm, Polygon2, Rad } from "../model/primitives.js";
 import type { Project } from "../model/project.js";
 import { ensureCCW } from "../geom2d/polygon.js";
 import * as V from "../geom2d/vec.js";
-import { fmt } from "../rules/check.js";
+import { dec, msg, type Message } from "@blondel/i18n";
 import { SteppingError } from "./errors.js";
 import { computeRises } from "./rises.js";
 
@@ -87,13 +87,18 @@ export function helicalTreadOutline(h: HelicalLayout, u0: Rad, u1: Rad, depth: M
  */
 export function computeHelicalStepping(project: Project, layout: Layout): Stepping {
   const h = layout.helical;
-  if (!h) throw new SteppingError("Découpage hélicoïdal demandé sur un tracé à volées.");
+  if (!h) throw new SteppingError(msg("stepping.helical.flightLayout"));
   const { riserCount: n, rise, rises, z } = computeRises(project);
   const depth = project.stair.treads.nosing;
   const thickness = project.stair.treads.thickness;
   if (!(depth < h.innerRadius)) {
     throw new SteppingError(
-      `Débord de nez (${depth} mm) supérieur ou égal au rayon ${h.core === "column" ? "du fût" : "du jour"} (${h.innerRadius} mm) : contour de marche impossible.`,
+      msg(
+        h.core === "column"
+          ? "stepping.helical.nosingReachesColumn"
+          : "stepping.helical.nosingReachesWell",
+        { depth: String(depth), radius: String(h.innerRadius) },
+      ),
     );
   }
   const step = h.stepAngle;
@@ -123,19 +128,32 @@ export function computeHelicalStepping(project: Project, layout: Layout): Steppi
     soffits.push({ outline: h.landingOutline, z: last.z - thickness, sStart: last.s });
   }
 
-  const notes: string[] = [
-    `Hélicoïdal : ${fmt(step / DEG)}° par marche (${fmt(h.treadsPerTurn)} marches par tour), angle total ${fmt(h.totalAngle / DEG)}°, giron ${fmt(going)} mm sur la ligne de foulée (rayon ${fmt(h.walklineRadius)} mm), collet ${fmt(h.innerRadius * step)} mm en arc.`,
+  const notes: Message[] = [
+    msg("stepping.helical.summary", {
+      stepAngle: dec(step / DEG),
+      treadsPerTurn: dec(h.treadsPerTurn),
+      totalAngle: dec(h.totalAngle / DEG),
+      going: dec(going),
+      walklineRadius: dec(h.walklineRadius),
+      collet: dec(h.innerRadius * step),
+    }),
   ];
   // Réglages propres aux escaliers à volées : jamais ignorés en silence (CHALLENGE A4).
   const { targetGoing } = project.stair.stepping;
   if (targetGoing !== "auto") {
     notes.push(
-      `Giron cible (${fmt(targetGoing)} mm) sans effet sur un hélicoïdal : le giron vaut r_w·Δθ = ${fmt(going)} mm (réglage « rotation »).`,
+      msg("stepping.helical.targetGoingIgnored", {
+        target: dec(targetGoing),
+        going: dec(going),
+      }),
     );
   }
   for (const o of project.stair.nosingOverrides) {
     notes.push(
-      `Surcharge ${o.kind === "fixed" ? "nez fixe" : "angle imposé"} du nez ${o.index} non appliquée : les lignes de nez d'un hélicoïdal sont rayonnantes (aucun balancement).`,
+      msg("stepping.helical.overrideIgnored", {
+        kind: msg(o.kind === "fixed" ? "stepping.override.fixed" : "stepping.override.angle"),
+        nosing: o.index,
+      }),
     );
   }
   return {

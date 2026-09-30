@@ -10,6 +10,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import { fr, frList } from "../i18n.test-helpers.js";
 import { ProjectSchema, PROJECT_SCHEMA_VERSION, type Project } from "../model/project.js";
 import { buildModel } from "../pipeline/build.js";
 import { parseProjectText } from "../project/parse.js";
@@ -113,10 +114,12 @@ describe("critère d'acceptation n° 2 : comparateur sur la même épure", () =>
         (r) => r.ruleId === "FAB_POTEAU_RECEPTION" && r.status === "violation",
       ),
     ).toEqual([]);
-    expect(upn!.signals[0]).toMatch(/UPN impossible en limon de jour à petit rayon \(C §2\.3\)/);
-    expect(upn!.signals[0]).toMatch(/650 mm/);
+    expect(fr(upn!.signals[0])).toMatch(
+      /UPN impossible en limon de jour à petit rayon \(C §2\.3\)/,
+    );
+    expect(fr(upn!.signals[0])).toMatch(/650 mm/);
     // Limon de jour UPN généré contre le poteau (seul le prédimensionnement peut alerter).
-    expect(upn!.errors.filter((x) => /jour|poteau/i.test(x))).toEqual([]);
+    expect(frList(upn!.errors).filter((x) => /jour|poteau/i.test(x))).toEqual([]);
     expect(upn!.model.parts.some((p) => p.id.startsWith("stringer-inner-"))).toBe(true);
     expect(upn!.epure.jours[0]!.kind).toBe("newel");
     // Le débillardé garde le jour en arc de l'épure.
@@ -134,7 +137,7 @@ describe("critère d'acceptation n° 2 : comparateur sur la même épure", () =>
     expect(upn!.epure.balancing.every((x) => x === "M3-cubic")).toBe(true);
     expect(curved!.epure.balancing.every((x) => x === "M3-quintic")).toBe(true);
     expect(upn!.deviations).toEqual([]);
-    const text = curved!.deviations.join("\n");
+    const text = frList(curved!.deviations).join("\n");
     expect(text).toMatch(
       /Tournant 1 : jour en arc R 250 mm \(référence : poteau 130 mm décalé de 45 mm vers le jour\)/,
     );
@@ -162,7 +165,7 @@ describe("critère d'acceptation n° 2 : comparateur sur la même épure", () =>
     // Limon mural LE2 en barre droite sur la corde des nez à travers le tournant : aucune
     // section UPN du catalogue n'y loge les cornières (340 mm d'âme nécessaires), le
     // prédimensionnement passe dès l'UPN 80 ; limon coudé soudé en V1 (QUESTIONS A13).
-    expect(upn!.errors.join(" ")).toMatch(/aucune section UPN du catalogue ne passe/);
+    expect(frList(upn!.errors).join(" ")).toMatch(/aucune section UPN du catalogue ne passe/);
     expect(upn!.precheck.violations).toEqual({ bloquant: 0, avertissement: 0, conseil: 0 });
     expect(curved!.buttWeldMm).toBeGreaterThan(0);
     expect(curved!.weldMm).toBeGreaterThan(curved!.buttWeldMm);
@@ -210,8 +213,8 @@ describe("critère d'acceptation n° 2 : comparateur sur la même épure", () =>
       { kind: "steel-profile", params: { family: "UPN" }, jour: "keep" },
     ]);
     expect(kept!.adaptations).toEqual([]);
-    expect(kept!.signals[0]).toMatch(/UPN impossible .* épure conservée/);
-    expect(kept!.errors.some((x) => /jour en arc/.test(x))).toBe(true);
+    expect(fr(kept!.signals[0])).toMatch(/UPN impossible .* épure conservée/);
+    expect(frList(kept!.errors).some((x) => /jour en arc/.test(x))).toBe(true);
   });
 
   it("débillardé : jour en arc trop serré pour la rouleuse agrandi, épaisseur du plugin", () => {
@@ -228,7 +231,7 @@ describe("critère d'acceptation n° 2 : comparateur sur la même épure", () =>
     // r_j − e = 150 − 8 < 150 : arc agrandi à 160 (150 + e = 8 du plugin, arrondi à 10 mm).
     const [c] = compareEpure(withArc(150), [{ kind: "steel-curved" }]);
     expect(c!.adaptations[0]!.to).toEqual({ kind: "arc", radius: 160 });
-    expect(c!.signals[0]).toMatch(/sous le rayon de roulage/);
+    expect(fr(c!.signals[0])).toMatch(/sous le rayon de roulage/);
     expect(c!.errors).toEqual([]);
     // r_j = 158 = 150 + 8 : roulable, épure conservée.
     expect(adaptJour(withArc(158), { kind: "steel-curved" }).adaptations).toEqual([]);
@@ -250,7 +253,7 @@ describe("critère d'acceptation n° 2 : comparateur sur la même épure", () =>
     };
     const [c] = compareEpure(withNewel, [{ kind: "steel-curved" }]);
     expect(c!.adaptations[0]!.to).toEqual({ kind: "arc", radius: 160 });
-    expect(c!.signals[0]).toMatch(/débillardé ⇒ jour courbe/);
+    expect(fr(c!.signals[0])).toMatch(/débillardé ⇒ jour courbe/);
     expect(c!.errors).toEqual([]);
   });
 });

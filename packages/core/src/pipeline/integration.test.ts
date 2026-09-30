@@ -9,6 +9,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { beforeEach, describe, expect, it } from "vitest";
+import { fr } from "../i18n.test-helpers.js";
 import type { Model } from "../model/derived.js";
 import { ProjectSchema, type Project } from "../model/project.js";
 import { parseProjectText } from "../project/parse.js";
@@ -78,7 +79,7 @@ describe("intégration : demi-tournant balancé, acier, tôle pliée, garde-corp
     // Classe d'exécution reportée par le pipeline, cohérente avec la ligne du contrôle.
     expect(m.executionClass).toBe("EXC1");
     const exc = m.compliance.results.find((r) => r.ruleId === "EXC_CLASSE_EXECUTION");
-    expect(exc?.message).toContain("EXC1");
+    expect(fr(exc?.message)).toContain("EXC1");
   });
 
   it("garde-corps : côté jour et côté extérieur, sur les hauteurs du découpage", () => {
@@ -107,7 +108,7 @@ describe("intégration : demi-tournant balancé, acier, tôle pliée, garde-corp
     // Mêmes pièces de structure (identité), garde-corps différents.
     const structural = (m: Model) => m.parts.filter((x) => !x.id.startsWith("guard-"));
     expect(structural(second)).toEqual(structural(first));
-    expect(second.parts.some((x) => x.name === "Lisse")).toBe(true);
+    expect(second.parts.some((x) => fr(x.name) === "Lisse")).toBe(true);
     expect(second.executionClass).toBe("EXC1");
   });
 

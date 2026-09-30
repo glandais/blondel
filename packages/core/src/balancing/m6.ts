@@ -24,6 +24,7 @@
  * Paramètres (`BalancingInput.params`) : `reach` (λ, girons, défaut `ROTATION_DEFAULT_REACH`),
  * `steepness` (p, défaut `ROTATION_DEFAULT_STEEPNESS`).
  */
+import { msg } from "@blondel/i18n";
 import { wrapPi } from "../geom2d/segment.js";
 import * as V from "../geom2d/vec.js";
 import type { BalancingInput, BalancingSolution, BalancingStrategy } from "../model/plugins.js";
@@ -46,7 +47,10 @@ function solve(input: BalancingInput): BalancingSolution {
   if (!(reach > 0) || !(steepness > 0)) {
     return {
       kind: "fail",
-      reason: `réglages de rotation invalides (λ = ${reach}, p = ${steepness})`,
+      reason: msg("balancing.m6.fail.invalidSettings", {
+        reach: String(reach),
+        steepness: String(steepness),
+      }),
     };
   }
   const { layout, going } = input;
@@ -68,7 +72,7 @@ function solve(input: BalancingInput): BalancingSolution {
   }
   const sum = weights.reduce((x, y) => x + y, 0);
   if (!(sum > 0)) {
-    return { kind: "fail", reason: "poids de rotation nuls (portée trop courte pour la zone)" };
+    return { kind: "fail", reason: msg("balancing.m6.fail.zeroWeights") };
   }
   const phi: number[] = [];
   let acc = phiA;
@@ -81,6 +85,6 @@ function solve(input: BalancingInput): BalancingSolution {
 
 export const M6_STRATEGY: BalancingStrategy = {
   id: "M6",
-  label: "Rotation paramétrée (M6)",
+  labelKey: "balancing.m6.label",
   solve,
 };

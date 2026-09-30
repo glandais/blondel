@@ -1,3 +1,4 @@
+import { textMessage } from "@blondel/i18n";
 import { bbox, pointInPolygon, type Part } from "@blondel/core";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
@@ -82,7 +83,7 @@ describe("renderFlatPatternSvg", () => {
     const a = { x: 0, y: 0 };
     expect(flatLineStyle({ kind: "mark", a, b: a, feature: "mortise" })).toBe("mortise");
     expect(flatLineStyle({ kind: "mark", a, b: a })).toBe("mark");
-    expect(flatLineStyle({ kind: "text", a, b: a, label: "x" })).toBeUndefined();
+    expect(flatLineStyle({ kind: "text", a, b: a, label: textMessage("x") })).toBeUndefined();
   });
 
   it("propriété : SVG bien formé, repère dans la matière, cotes = boîte englobante", () => {

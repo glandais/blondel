@@ -30,6 +30,7 @@ import {
 } from "../csv/cutlist.js";
 import { cutSheet } from "../cutsheet.js";
 import { formatFr } from "../format.js";
+import { tr } from "../i18n.js";
 import { renderElevationSvg } from "../svg/elevation.js";
 import { renderFlatPatternSvg } from "../svg/flat.js";
 import { renderPlanSvg } from "../svg/plan.js";
@@ -584,7 +585,7 @@ export function renderPdf(
       pages.push(
         drawingPage(
           "flat",
-          `Développé ${part.mark} — ${part.name}${qty}`,
+          `Développé ${part.mark} — ${tr(part.name)}${qty}`,
           (n) =>
             renderFlatPatternSvg(part, {
               theme: "light",

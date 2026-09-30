@@ -2,6 +2,7 @@
  * Point d'entrée : conversion des `SolidDesc` / `Part` du cœur en maillages.
  */
 import type { MaterialId, Part, PartCategory, SolidDesc } from "@blondel/core";
+import { errorMessage, msg, type Message } from "@blondel/i18n";
 import { GeometryError } from "./errors.js";
 import { meshExtrusion } from "./extrude.js";
 import { emptyMesh, type Mesh } from "./mesh.js";
@@ -27,7 +28,9 @@ export function meshSolid(desc: SolidDesc, options?: MeshOptions): Mesh {
       // erreur explicite plutôt qu'un maillage `undefined` mis en cache.
       const unknown: never = desc;
       throw new GeometryError(
-        `type de solide inconnu : ${String((unknown as { kind?: unknown }).kind)}`,
+        msg("geometry.solid.unknownKind", {
+          kind: String((unknown as { kind?: unknown }).kind),
+        }),
       );
     }
   }
@@ -41,7 +44,7 @@ export interface PartMesh {
   readonly material: MaterialId;
   readonly mesh: Mesh;
   /** Message si le solide n'a pas pu être maillé (maillage vide dans ce cas). */
-  readonly error?: string;
+  readonly error?: Message;
 }
 
 // Cache par identité du `SolidDesc` (le modèle dérivé est immuable, ADR-0002) : une
@@ -77,7 +80,7 @@ export function meshPart(part: Part, options?: MeshOptions): PartMesh {
     }
     return { ...base, mesh };
   } catch (e) {
-    return { ...base, mesh: emptyMesh(), error: e instanceof Error ? e.message : String(e) };
+    return { ...base, mesh: emptyMesh(), error: errorMessage(e) };
   }
 }
 

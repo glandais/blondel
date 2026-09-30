@@ -33,6 +33,7 @@
  *
  * Fonction pure.
  */
+import { dec, msg, num, type Message, type NumberParam } from "@blondel/i18n";
 import { curveLength } from "../geom2d/curve.js";
 import { computeLayout } from "../layout/layout.js";
 import { LayoutError } from "../layout/errors.js";
@@ -41,7 +42,13 @@ import type { Mm } from "../model/primitives.js";
 import type { Layout } from "../model/derived.js";
 import type { Opening, Project, Turn } from "../model/project.js";
 import { SteppingError } from "../stepping/errors.js";
-import { computeOpening, PRESET_OPENING_CLEARANCE, type FlightsPresetId } from "./presets.js";
+import { errorMessageOf, MessageRangeError } from "./errors.js";
+import {
+  computeOpening,
+  PRESET_OPENING_CLEARANCE,
+  requireOpeningClearance,
+  type FlightsPresetId,
+} from "./presets.js";
 
 export interface RealignOptions {
   /** Jeu latéral de la trémie (mm, entier ≥ 0) ; défaut `PRESET_OPENING_CLEARANCE`. */
@@ -52,10 +59,11 @@ export interface RealignResult {
   /** Projet recalé (le projet d'entrée, inchangé, s'il était déjà calé). */
   readonly project: Project;
   /** Remarques à afficher : préréglage suivi, volées et trémie avant → après. */
-  readonly notes: readonly string[];
+  readonly notes: readonly Message[];
 }
 
-const fmt = (v: number): string => Math.round(v).toLocaleString("fr-FR");
+/** Longueur arrondie au mm, avec séparateur de milliers de la langue. */
+const mm = (v: number): NumberParam => num(Math.round(v), 0);
 
 /** Retrait de la partie droite de Γ de part et d'autre du coin intérieur (rayon du jour). */
 const walkSetback = (t: Turn): Mm => (t.inner.kind === "arc" ? t.inner.radius : 0);
@@ -65,7 +73,8 @@ function guarded<T>(f: () => T): T {
   try {
     return f();
   } catch (e) {
-    if (e instanceof LayoutError || e instanceof SteppingError) throw new RangeError(e.message);
+    if (e instanceof LayoutError || e instanceof SteppingError)
+      throw new MessageRangeError(e.msg, { cause: e });
     throw e;
   }
 }
@@ -119,12 +128,16 @@ function realignedLegs(project: Project, layout: Layout, n: number, g: Mm): Mm[]
     const gap = count * g - straight;
     if (Math.abs(gap) > LANDING_STRAIGHT_TOLERANCE) {
       const leg = legs[t.index]!.length;
-      const fix =
+      const params = { turn: t.index + 1, straight: mm(straight), going: mm(g) };
+      throw new MessageRangeError(
         leg === "auto"
-          ? ""
-          : ` ; saisir ${fmt(leg + gap)} mm pour la volée ${t.index + 1} (${count} giron(s)) puis recaler`;
-      throw new RangeError(
-        `Recalage impossible en gardant la position du palier du tournant ${t.index + 1} : la partie droite qui le précède (${fmt(straight)} mm) ne contient pas un nombre entier de girons cible (${fmt(g)} mm)${fix}.`,
+          ? msg("project.realign.landingNotWhole", params)
+          : msg("project.realign.landingNotWholeFix", {
+              ...params,
+              length: mm(leg + gap),
+              flight: t.index + 1,
+              count: dec(count, 0),
+            }),
       );
     }
   }
@@ -134,8 +147,8 @@ function realignedLegs(project: Project, layout: Layout, n: number, g: Mm): Mm[]
   const lastTurn = layout.turns[layout.turns.length - 1];
   const lastStraight = L - (lastTurn?.sEnd ?? 0) + delta;
   if (lastStraight < 0) {
-    throw new RangeError(
-      `Recalage impossible en gardant la position des tournants : il manque ${fmt(Math.ceil(-lastStraight))} mm de ligne de foulée après le dernier tournant (H trop faible pour les volées saisies) ; raccourcir une volée avant un tournant, ou ajuster à la main ou par l'assistant.`,
+    throw new MessageRangeError(
+      msg("project.realign.heightTooLow", { missing: mm(Math.ceil(-lastStraight)) }),
     );
   }
   const out = legs.map((l) => l.length as Mm);
@@ -143,10 +156,15 @@ function realignedLegs(project: Project, layout: Layout, n: number, g: Mm): Mm[]
   return out;
 }
 
-const openingText = (o: Opening): string =>
+const openingText = (o: Opening): Message =>
   o.kind === "rect"
-    ? `${fmt(o.sizeX)} × ${fmt(o.sizeY)} mm au coin (${fmt(o.x)} ; ${fmt(o.y)})`
-    : `polygone de ${o.points.length} sommets`;
+    ? msg("project.realign.openingRect", {
+        sizeX: mm(o.sizeX),
+        sizeY: mm(o.sizeY),
+        x: mm(o.x),
+        y: mm(o.y),
+      })
+    : msg("project.realign.openingPolygon", { count: String(o.points.length) });
 
 /**
  * Recale les volées et la trémie sur H, E, la dalle et le réglage des hauteurs (voir l'en-tête).
@@ -160,20 +178,14 @@ export function realignFlightsAndOpening(
 ): RealignResult {
   const spec = project.stair.layout;
   if (spec.kind === "helical") {
-    throw new RangeError(
-      "Recalage sans objet pour un hélicoïdal : ses marches suivent H (angle par marche) ; recalculer la trémie depuis le préréglage hélicoïdal.",
-    );
+    throw new MessageRangeError(msg("project.realign.helical"));
   }
   const clearance = options.openingClearance ?? PRESET_OPENING_CLEARANCE;
-  if (!Number.isInteger(clearance) || clearance < 0) {
-    throw new RangeError(
-      `Le jeu latéral de la trémie doit être un entier positif ou nul en mm (reçu : ${clearance}).`,
-    );
-  }
+  requireOpeningClearance(clearance);
   const n = guarded(() => resolveRiserCount(project));
   const g = guarded(() => resolveTargetGoing(project, n));
   const current = guarded(() => computeLayout(project));
-  const notes: string[] = [];
+  const notes: Message[] = [];
   const lengths = realignedLegs(project, current, n, g);
   const legsChanged = lengths !== null && lengths.some((l, i) => spec.legs[i]?.length !== l);
   const flights: Project =
@@ -191,37 +203,44 @@ export function realignFlightsAndOpening(
   if (legsChanged) {
     const last = spec.legs.length;
     notes.push(
-      `Dernière volée recalée (${n} hauteurs, giron cible ${fmt(g)} mm), position des tournants conservée : volée ${last} ${fmt(spec.legs[last - 1]!.length as Mm)} → ${fmt(lengths![last - 1]!)} mm.`,
+      msg("project.realign.lastFlight", {
+        risers: String(n),
+        going: mm(g),
+        flight: last,
+        from: mm(spec.legs[last - 1]!.length as Mm),
+        to: mm(lengths![last - 1]!),
+      }),
     );
   }
 
   let next = flights;
   const opening = project.site.opening;
   if (opening === undefined) {
-    notes.push("Pas de trémie dans le projet : aucune trémie ajoutée.");
+    notes.push(msg("project.realign.noOpening"));
   } else if (opening.kind !== "rect") {
-    notes.push(
-      `Trémie polygonale conservée (${openingText(opening)}) : vérifier l'échappée dans le contrôle de conception.`,
-    );
+    notes.push(msg("project.realign.polygonKept", { opening: openingText(opening) }));
   } else {
     const rect = guarded(() => computeOpening(flights, clearance));
     if (rect === null) {
-      notes.push("Aucune trémie n'est nécessaire à l'échappée : trémie conservée.");
+      notes.push(msg("project.realign.openingNotNeeded"));
     } else {
       const computed: Opening = { kind: "rect", ...rect };
       if (JSON.stringify(computed) !== JSON.stringify(opening)) {
         next = { ...flights, site: { ...flights.site, opening: computed } };
         notes.push(
-          `Trémie recalée (jeu latéral ${fmt(clearance)} mm, à valider) : ${openingText(opening)} → ${openingText(computed)}.`,
+          msg("project.realign.openingRealigned", {
+            clearance: mm(clearance),
+            from: openingText(opening),
+            to: openingText(computed),
+          }),
         );
       }
     }
   }
-  if (next === project) return { project, notes: [...notes, "Volées et trémie déjà calées."] };
+  if (next === project)
+    return { project, notes: [...notes, msg("project.realign.alreadyAligned")] };
   if (legsChanged && project.stair.nosingOverrides.length > 0) {
-    notes.push(
-      "Surcharges du mode expert (nez fixes, angles imposés) conservées par indice : à vérifier.",
-    );
+    notes.push(msg("project.realign.overridesKept"));
   }
   return { project: next, notes };
 }
@@ -230,12 +249,11 @@ export function realignFlightsAndOpening(
  * Raison pour laquelle le recalage est impossible (message du cœur, à afficher à côté du bouton
  * désactivé), ou `null` s'il est possible (y compris « déjà calé »).
  */
-export function realignBlocker(project: Project, options: RealignOptions = {}): string | null {
+export function realignBlocker(project: Project, options: RealignOptions = {}): Message | null {
   try {
     realignFlightsAndOpening(project, options);
     return null;
   } catch (e) {
-    if (e instanceof RangeError) return e.message;
-    return e instanceof Error ? e.message : String(e);
+    return errorMessageOf(e);
   }
 }

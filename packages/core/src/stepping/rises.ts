@@ -10,6 +10,7 @@
 import { resolveRiserCount } from "../layout/resolve.js";
 import type { Mm } from "../model/primitives.js";
 import type { Project } from "../model/project.js";
+import { msg } from "@blondel/i18n";
 import { SteppingError } from "./errors.js";
 
 export interface RiseSchedule {
@@ -32,7 +33,7 @@ export function computeRises(project: Project): RiseSchedule {
   const other = (H - first) / (n - 1);
   if (!(first > 0) || !(other > 0)) {
     throw new SteppingError(
-      `Hauteurs de marche impossibles : première hauteur ${first.toFixed(1)} mm, suivantes ${other.toFixed(1)} mm (correction de première marche trop forte).`,
+      msg("stepping.impossibleRises", { first: first.toFixed(1), other: other.toFixed(1) }),
     );
   }
   const rises: Mm[] = [first];

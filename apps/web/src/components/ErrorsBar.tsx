@@ -7,6 +7,7 @@
  */
 import type { FixSuggestion } from "@blondel/core";
 import { useMemo, useState } from "react";
+import { tr } from "../i18n/fr.js";
 import { applyFix, fixesFor } from "../lib/fixes.js";
 import { appStore, useApp, useModel } from "../store/appStore.js";
 
@@ -20,7 +21,7 @@ function apply(fix: FixSuggestion): string | null {
   appStore.setState({
     notice: {
       kind: "info",
-      text: `Correction appliquée : ${fix.label}. « Annuler » (Ctrl+Z) pour revenir en arrière.`,
+      text: `Correction appliquée : ${tr(fix.label)}. « Annuler » (Ctrl+Z) pour revenir en arrière.`,
     },
   });
   return null;
@@ -67,12 +68,12 @@ export function ErrorsBar() {
                 <button
                   type="button"
                   data-fix={f.id}
-                  title={f.reason}
+                  title={tr(f.reason)}
                   onClick={() => setFailure(apply(f))}
                 >
-                  {f.label}
+                  {tr(f.label)}
                 </button>
-                <small className="muted">{f.reason}</small>
+                <small className="muted">{tr(f.reason)}</small>
               </li>
             ))}
           </ul>

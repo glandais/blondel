@@ -50,6 +50,11 @@ export interface NumberParam {
   readonly unit?: string;
   /** Supprime les zéros décimaux inutiles. */
   readonly trimZeros?: boolean;
+  /**
+   * `false` : aucun séparateur de milliers (« 1900 » au lieu de « 1 900 » / « 1,900 »). Défaut :
+   * séparateur de la langue.
+   */
+  readonly grouping?: boolean;
 }
 
 /**
@@ -76,6 +81,26 @@ export function msg(key: MessageKey, params?: Readonly<Record<string, MessagePar
 export function num(x: number, digits?: number, unit?: string): NumberParam {
   const p: { num: number; digits?: number; unit?: string } = { num: x };
   if (digits !== undefined) p.digits = digits;
+  if (unit !== undefined) p.unit = unit;
+  return p;
+}
+
+/**
+ * Nombre « décimal court », rendu exactement comme l'ancien `fmt(x, digits)` de core : arrondi à
+ * `digits` décimales (défaut 1) par `Math.round`, zéros inutiles supprimés, sans séparateur de
+ * milliers (fr : « 1900,5 », en : « 1900.5 »). L'unité éventuelle suit les règles de `num`
+ * (espace insécable en français) : pour garder une espace simple, la mettre dans le texte.
+ */
+export function dec(x: number, digits = 1, unit?: string): NumberParam {
+  const f = 10 ** digits;
+  const rounded = Number.isFinite(x) ? Math.round(x * f) / f : x;
+  const p: {
+    num: number;
+    digits: number;
+    trimZeros: true;
+    grouping: false;
+    unit?: string;
+  } = { num: rounded, digits, trimZeros: true, grouping: false };
   if (unit !== undefined) p.unit = unit;
   return p;
 }
@@ -261,10 +286,12 @@ export function createTranslatorFrom(locale: Locale, messages: Messages): Transl
     if (typeof p === "string") return p;
     if (typeof p === "number") return numFn(p, { digits: RAW_NUMBER_DIGITS, trimZeros: true });
     if (isNumberParam(p)) {
-      const options: { digits?: number; trimZeros?: boolean; unit?: string } = {};
+      const options: { digits?: number; trimZeros?: boolean; unit?: string; thousands?: string } =
+        {};
       if (p.digits !== undefined) options.digits = p.digits;
       if (p.trimZeros !== undefined) options.trimZeros = p.trimZeros;
       if (p.unit !== undefined) options.unit = p.unit;
+      if (p.grouping === false) options.thousands = "";
       return numFn(p.num, options);
     }
     if (isMessage(p)) return t(p);
@@ -316,4 +343,78 @@ export function createTranslator(locale: Locale): Translator {
 /** Traducteur de la langue donnée, français par défaut (tests, exports sans option `locale`). */
 export function translatorFor(locale: Locale = DEFAULT_LOCALE): Translator {
   return createTranslator(locale);
+}
+
+// ------------------------------------------------------------------ Messages et exceptions
+
+/**
+ * Texte brut sans traduction (repère de pièce, texte saisi, détail technique d'une erreur
+ * interne) là où un `Message` est attendu : clé `common.text` = « {text} ».
+ */
+export function textMessage(text: string): Message {
+  return msg("common.text", { text });
+}
+
+/** Égalité structurelle de deux paramètres de message (nombres, textes, messages imbriqués). */
+function paramEquals(a: MessageParam, b: MessageParam): boolean {
+  if (typeof a !== "object" || typeof b !== "object") return Object.is(a, b);
+  if (isNumberParam(a) || isNumberParam(b)) {
+    if (!isNumberParam(a) || !isNumberParam(b)) return false;
+    return (
+      Object.is(a.num, b.num) &&
+      a.digits === b.digits &&
+      a.unit === b.unit &&
+      a.trimZeros === b.trimZeros &&
+      a.grouping === b.grouping
+    );
+  }
+  return messageEquals(a, b);
+}
+
+/**
+ * Égalité structurelle de deux messages (même clé, mêmes paramètres, récursivement). Remplace la
+ * comparaison des anciens messages en texte (`===`, `includes`, `Set<string>`).
+ */
+export function messageEquals(a: Message, b: Message): boolean {
+  if (a === b) return true;
+  if (a.key !== b.key) return false;
+  const pa = a.params ?? {};
+  const pb = b.params ?? {};
+  const ka = Object.keys(pa);
+  if (ka.length !== Object.keys(pb).length) return false;
+  return ka.every((k) => k in pb && paramEquals(pa[k]!, pb[k]!));
+}
+
+/**
+ * Exception métier portant un `Message` (ADR-0007). `msg` est la donnée, reprise telle quelle
+ * dans `Model.errors` (le modèle ne contient jamais l'objet exception) ; `message` en est la
+ * traduction **française** (journaux, débogage, assertions `toThrow(/texte/)` des tests). Les
+ * erreurs métier des étapes (`LayoutError`, `SteppingError`, `StructureError`, `GuardError`…)
+ * en héritent.
+ */
+export class MessageError extends Error {
+  readonly msg: Message;
+
+  constructor(message: Message, options?: { readonly cause?: unknown }) {
+    super(
+      translatorFor(DEFAULT_LOCALE).t(message),
+      options?.cause !== undefined ? { cause: options.cause } : undefined,
+    );
+    this.name = "MessageError";
+    this.msg = message;
+  }
+}
+
+/** Vrai pour une `MessageError` (ou une sous-classe). */
+export function isMessageError(value: unknown): value is MessageError {
+  return value instanceof MessageError;
+}
+
+/**
+ * `Message` d'une exception quelconque : `msg` d'une `MessageError`, sinon le texte brut de
+ * l'erreur (`textMessage`, non traduit : erreur interne, bibliothèque tierce).
+ */
+export function errorMessage(error: unknown): Message {
+  if (isMessageError(error)) return error.msg;
+  return textMessage(error instanceof Error ? error.message : String(error));
 }

@@ -1,3 +1,4 @@
+import { textMessage } from "@blondel/i18n";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import type { Part } from "@blondel/core";
@@ -60,9 +61,9 @@ describe("fiche de débit", () => {
       id: "column",
       mark: "F1",
       category: "post",
-      name: "Fût",
+      name: textMessage("Fût"),
       material: "steel-painted",
-      section: "tube Ø140 × 5",
+      section: textMessage("tube Ø140 × 5"),
       stock: { length: 2700, width: 140, thickness: 5 },
       quantities: { mass: 44.6 },
     };
@@ -71,7 +72,7 @@ describe("fiche de débit", () => {
       ...tube,
       id: "upn",
       mark: "LE1",
-      section: "UPN 260 (S235)",
+      section: textMessage("UPN 260 (S235)"),
       stock: { length: 3000, width: 260, thickness: 90 },
     };
     const gs = cutSheet([sheetStringerPart(), tube, upn]);

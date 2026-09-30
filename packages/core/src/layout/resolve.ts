@@ -13,6 +13,7 @@ import type { Mm } from "../model/primitives.js";
 import type { Project } from "../model/project.js";
 import { LF_WIDE_THRESHOLD } from "../rules/params.js";
 import { getRule } from "../rules/table.js";
+import { MessageError, msg } from "@blondel/i18n";
 import { LayoutError } from "./errors.js";
 
 /** Module de la valeur `auto` de `targetGoing` : g = 630 − 2h (commentaire de `SteppingSchema`). */
@@ -27,7 +28,11 @@ export const RISER_COUNT_MAX = 60;
  */
 const DTU_WIDE_OFFSET: Mm = (() => {
   const min = getRule("LF_POSITION_DTU_LARGE").min;
-  if (min === null) throw new Error("La règle LF_POSITION_DTU_LARGE n'a pas de seuil.");
+  if (min === null) {
+    throw new MessageError(
+      msg("layout.error.ruleWithoutThreshold", { rule: "LF_POSITION_DTU_LARGE" }),
+    );
+  }
   return min;
 })();
 
@@ -47,7 +52,7 @@ export function resolveWalklineOffset(project: Project): Mm {
         : DTU_WIDE_OFFSET;
   if (!(d > 0 && d < width)) {
     throw new LayoutError(
-      `La ligne de foulée (${d} mm du jour) doit être strictement comprise dans l'emmarchement (${width} mm).`,
+      msg("layout.walklineOutsideWidth", { offset: String(d), width: String(width) }),
     );
   }
   return d;
@@ -72,7 +77,11 @@ export function resolveRiserCount(project: RiserSizing): number {
     s.riserCount === "auto" ? Math.round(project.site.floorToFloor / s.targetRise) : s.riserCount;
   if (!Number.isInteger(n) || n < RISER_COUNT_MIN || n > RISER_COUNT_MAX) {
     throw new LayoutError(
-      `Nombre de hauteurs hors domaine : ${n} (attendu entre ${RISER_COUNT_MIN} et ${RISER_COUNT_MAX}).`,
+      msg("layout.riserCountOutOfRange", {
+        count: String(n),
+        min: RISER_COUNT_MIN,
+        max: RISER_COUNT_MAX,
+      }),
     );
   }
   return n;
@@ -89,9 +98,7 @@ export function resolveTargetGoing(project: RiserSizing, riserCount: number): Mm
       ? AUTO_GOING_MODULE - (2 * project.site.floorToFloor) / riserCount
       : s.targetGoing;
   if (!(g > 0)) {
-    throw new LayoutError(
-      `Giron cible non positif (${g.toFixed(1)} mm) : hauteur de marche trop grande.`,
-    );
+    throw new LayoutError(msg("layout.targetGoingNotPositive", { going: g.toFixed(1) }));
   }
   return g;
 }
@@ -111,9 +118,7 @@ export function resolveLegLengths(project: Project): Mm[] {
   const hasAuto = legs.some((l) => l.length === "auto");
   if (!hasAuto) return legs.map((l) => l.length as Mm);
   if (legs.length !== 1) {
-    throw new LayoutError(
-      "La longueur « auto » n'est possible que pour un escalier droit (une seule volée).",
-    );
+    throw new LayoutError(msg("layout.autoLengthStraightOnly"));
   }
   return [resolveStraightRun(project)];
 }

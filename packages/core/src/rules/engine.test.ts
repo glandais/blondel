@@ -1,5 +1,7 @@
+import { textMessage, translatorFor } from "@blondel/i18n";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
+import { fr, frList } from "../i18n.test-helpers.js";
 import { isRuleApplicable, resolveContexts } from "./contexts.js";
 import { DEFAULT_EVALUATORS, createRegistry } from "./evaluators/index.js";
 import {
@@ -36,13 +38,13 @@ describe("moteur de conformité", () => {
     const r = report.results.find((x) => x.ruleId === "CHARGE_ESCALIER_A");
     expect(r?.status).toBe("non-evaluee");
     // Motif précis (charges de la table, résistance hors contrôle), plus « sans évaluateur ».
-    expect(r?.message).not.toMatch(/sans évaluateur/);
-    expect(r?.message).toMatch(/q_k = 2,5 kN\/m², Q_k = 2 kN \(catégorie A/);
+    expect(fr(r?.message)).not.toMatch(/sans évaluateur/);
+    expect(fr(r?.message)).toMatch(/q_k = 2,5 kN\/m², Q_k = 2 kN \(catégorie A/);
     // Sans motif déclaré : message générique.
     const bare = evaluateCompliance(makeInput(), createRegistry()).results.find(
       (x) => x.ruleId === "BLONDEL_DTU",
     );
-    expect(bare?.message).toMatch(/sans évaluateur/);
+    expect(fr(bare?.message)).toMatch(/sans évaluateur/);
   });
 
   it("toute règle sans évaluateur a un motif de non-évaluation déclaré", () => {
@@ -58,7 +60,7 @@ describe("moteur de conformité", () => {
     });
     const r = evaluateCompliance(makeInput(), reg).results.find((x) => x.ruleId === "H_CONFORT");
     expect(r?.status).toBe("non-evaluee");
-    expect(r?.message).toContain("boum");
+    expect(fr(r?.message)).toContain("boum");
   });
 
   it("registre : identifiant en double refusé", () => {
@@ -76,7 +78,7 @@ describe("moteur de conformité", () => {
     expect(gs?.severity).toBe("bloquant");
     expect(gl?.severity).toBe("avertissement");
     expect(gl?.declaredSeverity).toBe("bloquant");
-    expect(gl?.downgradeReason).toMatch(/souple/);
+    expect(fr(gl?.downgradeReason)).toMatch(/souple/);
     // Règle réglementaire (source primaire) : inchangée en profil souple.
     const gLog = souple.results.find(
       (r) => r.ruleId === "G_MIN_LOGEMENT" && r.status === "violation",
@@ -102,7 +104,7 @@ describe("moteur de conformité", () => {
     const report = evaluateCompliance(input);
     const ignored = report.results.filter((r) => r.ruleId === "G_MIN_LOGEMENT");
     expect(ignored.every((r) => r.status === "non-evaluee")).toBe(true);
-    expect(ignored[0]?.downgradeReason).toMatch(/Escalier secondaire/);
+    expect(fr(ignored[0]?.downgradeReason)).toMatch(/Escalier secondaire/);
     const dtu = report.results.find((r) => r.ruleId === "G_MIN_DTU" && r.status === "violation");
     expect(dtu?.severity).toBe("bloquant");
 
@@ -115,7 +117,7 @@ describe("moteur de conformité", () => {
       }).compliance,
     );
     expect(eff).toMatchObject({ severity: "avertissement", ignored: false });
-    expect(eff.downgradeReason).toMatch(/BET/);
+    expect(fr(eff.downgradeReason)).toMatch(/BET/);
   });
 
   it("sévérité propre au constat : une surcharge qui assouplit la règle ne la relève pas (revue A10)", () => {
@@ -123,7 +125,7 @@ describe("moteur de conformité", () => {
       makeProject({
         overrides: [{ ruleId: "GC_OBLIGATOIRE", severity, justification: "Avis du BET" }],
       }).compliance;
-    const finding = { severity: "conseil" as const, severityReason: "Jour étroit" };
+    const finding = { severity: "conseil" as const, severityReason: textMessage("Jour étroit") };
     // Surcharge « avertissement » (plus faible que « bloquant » déclaré) : le constat reste conseil.
     expect(
       effectiveSeverity(getRule("GC_OBLIGATOIRE"), settings("avertissement"), finding).severity,
@@ -145,7 +147,7 @@ describe("moteur de conformité", () => {
         },
       }),
     );
-    const notes = e.notes.join(" ");
+    const notes = frList(e.notes).join(" ");
     expect(notes).toMatch(/REGLE_FANTOME/);
     expect(notes).toMatch(/G_MIN_DTU : justification vide/);
   });
@@ -158,9 +160,9 @@ describe("moteur de conformité", () => {
       }),
     );
     expect(e.report.contexts).toContain("tournant");
-    expect(e.notes.join(" ")).toMatch(/2024 supposé/);
-    expect(e.notes.join(" ")).toMatch(/tournant/);
-    expect(e.notes.join(" ")).toMatch(/v2/);
+    expect(frList(e.notes).join(" ")).toMatch(/2024 supposé/);
+    expect(frList(e.notes).join(" ")).toMatch(/tournant/);
+    expect(frList(e.notes).join(" ")).toMatch(/v2/);
   });
 
   it("propriété : la synthèse compte les violations par sévérité effective ; toute règle applicable est tracée", () => {
@@ -196,7 +198,7 @@ describe("moteur de conformité", () => {
           }
           for (const r of report.results) {
             if (profile === "strict") expect(r.severity).toBe(r.declaredSeverity);
-            if (r.status === "violation") expect(r.message.length).toBeGreaterThan(0);
+            if (r.status === "violation") expect(fr(r.message).length).toBeGreaterThan(0);
           }
         },
       ),

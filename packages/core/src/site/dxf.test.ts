@@ -1,4 +1,6 @@
+import { translatorFor } from "@blondel/i18n";
 import { describe, expect, it } from "vitest";
+import { fr } from "../i18n.test-helpers.js";
 import { describeSkipped, DxfImportError, readDxfUnderlay } from "./dxf.js";
 import { DxfUnderlaySchema, type UnderlayEntity } from "./schema.js";
 import { entitySegments, segmentsBounds } from "./underlay.js";
@@ -136,7 +138,8 @@ describe("readDxfUnderlay — plan de masse écrit par le test", () => {
 
   it("lit $INSUNITS = 6 (mètre) : entités converties en mm", () => {
     expect(r.insUnits).toBe(6);
-    expect(r.unitName).toBe("mètre");
+    expect(fr(r.unitName ?? undefined)).toBe("mètre");
+    expect(translatorFor("en").t(r.unitName!)).toBe("metre");
     expect(r.unitScale).toBe(1000);
     expect(r.needsScale).toBe(false);
     const lines = only(r.entities, "line");
@@ -436,11 +439,20 @@ describe("ELLIPSE, SPLINE et entités ignorées signalées (QUESTIONS D6)", () =
   });
 
   it("describeSkipped : textes, cotes, hachures et autres détaillés pour l'utilisateur", () => {
-    expect(describeSkipped({})).toBe("");
-    expect(
-      describeSkipped({ TEXT: 2, MTEXT: 1, DIMENSION: 4, HATCH: 1, POINT: 2, "INSERT:réseau": 1 }),
-    ).toBe("3 texte(s), 4 cote(s), 1 hachure(s), 3 autre(s) (INSERT, POINT)");
-    expect(describeSkipped({ paperSpace: 1, "calque:COTES": 5 })).toBe(
+    expect(describeSkipped({})).toBeNull();
+    const many = describeSkipped({
+      TEXT: 2,
+      MTEXT: 1,
+      DIMENSION: 4,
+      HATCH: 1,
+      POINT: 2,
+      "INSERT:réseau": 1,
+    })!;
+    expect(fr(many)).toBe("3 texte(s), 4 cote(s), 1 hachure(s), 3 autre(s) (INSERT, POINT)");
+    expect(translatorFor("en").t(many)).toBe(
+      "3 texts, 4 dimensions, 1 hatch, 3 others (INSERT, POINT)",
+    );
+    expect(fr(describeSkipped({ paperSpace: 1, "calque:COTES": 5 })!)).toBe(
       "1 entité(s) de l'espace papier, 5 entité(s) hors des calques choisis",
     );
   });

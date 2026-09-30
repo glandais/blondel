@@ -12,12 +12,47 @@
  * - Applicabilité : les contextes de forme (`tournant`, `helicoidal`) **qualifient** les contextes de
  *   destination/matériau d'une règle (voir `isRuleApplicable`).
  */
+import { msg, textMessage, type Message, type MessageKey } from "@blondel/i18n";
 import type { Stepping } from "../model/derived.js";
 import type { ComplianceSettings } from "../model/project.js";
 import { RULE_CONTEXTS, RULE_TABLE, type RuleDef } from "./table.js";
 
 /** Contexte implicite, toujours actif. */
 export const ALWAYS_CONTEXT = "tous";
+
+/**
+ * Clé du libellé de chaque contexte de rules.yaml (`contextes`, texte français de référence dans
+ * la table). Liste explicite : un test vérifie qu'elle couvre exactement les contextes de la
+ * table et que le français est celui de rules.yaml.
+ */
+export const CONTEXT_LABEL_KEYS: Readonly<Record<string, MessageKey>> = {
+  bois_dtu: "compliance.context.bois_dtu",
+  logement_interieur: "compliance.context.logement_interieur",
+  bhc_parties_communes: "compliance.context.bhc_parties_communes",
+  erp_neuf: "compliance.context.erp_neuf",
+  erp_existant: "compliance.context.erp_existant",
+  erp_securite: "compliance.context.erp_securite",
+  exterieur: "compliance.context.exterieur",
+  tournant: "compliance.context.tournant",
+  helicoidal: "compliance.context.helicoidal",
+  helicoidal_fut: "compliance.context.helicoidal_fut",
+  gain_de_place: "compliance.context.gain_de_place",
+  echelle_meunier: "compliance.context.echelle_meunier",
+  industriel: "compliance.context.industriel",
+  garde_corps_1988: "compliance.context.garde_corps_1988",
+  garde_corps_2024: "compliance.context.garde_corps_2024",
+  limon_bois_encastre: "compliance.context.limon_bois_encastre",
+  tous: "compliance.context.tous",
+};
+
+/**
+ * Libellé d'un contexte (description de rules.yaml, traduite) ; un contexte inconnu des
+ * dictionnaires est rendu par son identifiant.
+ */
+export function contextLabel(context: string): Message {
+  const key = Object.hasOwn(CONTEXT_LABEL_KEYS, context) ? CONTEXT_LABEL_KEYS[context] : undefined;
+  return key !== undefined ? msg(key) : textMessage(context);
+}
 
 /**
  * Contextes de **forme** de l'escalier (`contextes_forme` de rules.yaml). Dans une règle, ils
@@ -69,7 +104,7 @@ export interface GuardRailResolution {
   readonly regime: GuardRailRegime;
   /** Vrai si le régime a été supposé (date absente ou illisible). */
   readonly assumed: boolean;
-  readonly note?: string;
+  readonly note?: Message;
 }
 
 /** Régime garde-corps déduit de la date de référence du projet (ISO `AAAA-MM-JJ`). */
@@ -78,7 +113,7 @@ export function guardRailRegime(referenceDate?: string): GuardRailResolution {
     return {
       regime: "garde_corps_2024",
       assumed: true,
-      note: "Date de dépôt PC/DP ou de marché absente : régime garde-corps NF P01-012:2024 supposé.",
+      note: msg("compliance.contexts.noReferenceDate"),
     };
   }
   const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(referenceDate.trim());
@@ -95,7 +130,7 @@ export function guardRailRegime(referenceDate?: string): GuardRailResolution {
     return {
       regime: "garde_corps_2024",
       assumed: true,
-      note: `Date de référence illisible (« ${referenceDate} ») : régime garde-corps NF P01-012:2024 supposé.`,
+      note: msg("compliance.contexts.unreadableReferenceDate", { date: referenceDate }),
     };
   }
   return {
@@ -113,7 +148,7 @@ export interface ResolvedContexts {
   readonly unknown: readonly string[];
   readonly guardRail: GuardRailResolution;
   /** Remarques à afficher avec le rapport. */
-  readonly notes: readonly string[];
+  readonly notes: readonly Message[];
 }
 
 /**
@@ -131,7 +166,7 @@ export function resolveContexts(
   const active = new Set<string>([ALWAYS_CONTEXT]);
   const unknown: string[] = [];
   const derived: string[] = [];
-  const notes: string[] = [];
+  const notes: Message[] = [];
   const declaredDeduced: string[] = [];
   for (const c of settings.contexts) {
     // `helicoidal_fut` n'est jamais saisi : le déclarer écarterait G_COLLET_MIN d'un jour central
@@ -141,10 +176,11 @@ export function resolveContexts(
     else if (known.has(c)) active.add(c);
     else unknown.push(c);
   }
-  if (unknown.length > 0) notes.push(`Contextes inconnus ignorés : ${unknown.join(", ")}.`);
+  if (unknown.length > 0)
+    notes.push(msg("compliance.contexts.unknown", { contexts: unknown.join(", ") }));
   if (declaredDeduced.length > 0)
     notes.push(
-      `Contexte déduit du tracé ou de la structure, déclaration ignorée : ${declaredDeduced.join(", ")}.`,
+      msg("compliance.contexts.declaredDeduced", { contexts: declaredDeduced.join(", ") }),
     );
 
   if (stepping && stepping.treads.some((t) => t.kind === "winder") && !active.has("tournant")) {
@@ -182,9 +218,7 @@ export function resolveContexts(
     guardRail = { regime: explicit[0]!, assumed: false };
   } else if (explicit.length === 2) {
     guardRail = { regime: "garde_corps_2024", assumed: false };
-    notes.push(
-      "Les deux régimes garde-corps sont activés explicitement : les deux jeux de règles s'appliquent.",
-    );
+    notes.push(msg("compliance.contexts.bothGuardRegimes"));
   } else {
     guardRail = guardRailRegime(settings.referenceDate);
     active.add(guardRail.regime);
