@@ -5,10 +5,9 @@
  * l'export PDF (une page par développé, à l'échelle indiquée).
  */
 import { bbox, type Part, type Vec2 } from "@blondel/core";
-import { MATERIAL_LABELS } from "../csv/cutlist.js";
-import { flatEngravingPoint, partLineAnnotation, referenceText } from "../dxf/part.js";
-import { formatFr } from "../format.js";
-import { tr } from "../i18n.js";
+import { checkedFlat, flatEngravingPoint, partLineAnnotation, referenceText } from "../dxf/part.js";
+import { formatIn } from "../format.js";
+import { materialLabel, translatorOf, tr, type LocaleOption } from "../i18n.js";
 import { polygonPath } from "../path.js";
 import { dimensionGeometry, type Dimension } from "../plan/drawing.js";
 import {
@@ -27,7 +26,7 @@ import {
   type Viewport,
 } from "./svg.js";
 
-export interface FlatPatternSvgOptions extends SvgScaleOptions {
+export interface FlatPatternSvgOptions extends SvgScaleOptions, LocaleOption {
   readonly theme?: ThemeOption;
   /** Taille des textes (px, défaut 12). */
   readonly fontSize?: number;
@@ -104,13 +103,8 @@ export function flatPatternExtent(part: Part): { width: number; height: number }
  * (comme `exportPartDxf`). Coordonnées du développé en mm, Y vers le haut.
  */
 export function renderFlatPatternSvg(part: Part, options: FlatPatternSvgOptions = {}): string {
-  const flat = part.flat;
-  if (flat === undefined) {
-    throw new RangeError(`La pièce ${part.mark} (${part.id}) n'a pas de développé à plat.`);
-  }
-  if (flat.outline.outer.length < 3) {
-    throw new RangeError(`Le développé de la pièce ${part.mark} n'a pas de contour.`);
-  }
+  const tx = translatorOf(options);
+  const flat = checkedFlat(part, tx);
   const k = resolvePxPerMm({ pxPerMm: 0.5, ...options });
   const theme = resolveTheme(options.theme);
   const fontSize = options.fontSize ?? 12;
@@ -123,7 +117,7 @@ export function renderFlatPatternSvg(part: Part, options: FlatPatternSvgOptions 
   const box = bbox(flat.outline.outer);
   const w0 = box.max.x - box.min.x;
   const h0 = box.max.y - box.min.y;
-  const fmt = (v: number): string => formatFr(v, { decimals, trimZeros: true });
+  const fmt = (v: number): string => formatIn(tx, v, { decimals, trimZeros: true });
 
   // Cotes hors-tout : longueur sous la pièce, hauteur à gauche.
   const off = 2.5 * th;
@@ -168,9 +162,15 @@ export function renderFlatPatternSvg(part: Part, options: FlatPatternSvgOptions 
     minY -= off + 2 * th;
   }
   const infoY = minY - 1.2 * th;
-  const t = formatFr(flat.thickness, { decimals: 1, trimZeros: true, thousands: "" });
-  const info = `${part.mark} — ${tr(part.name)} — ${MATERIAL_LABELS[part.material] ?? part.material} — épaisseur ${t} mm${part.section !== undefined ? ` — ${tr(part.section)}` : ""}`;
-  const ref = referenceText(flat);
+  const t = formatIn(tx, flat.thickness, { decimals: 1, trimZeros: true, thousands: "" });
+  const info = [
+    part.mark,
+    tr(tx, part.name),
+    materialLabel(tx, part.material),
+    tx.t("drawing.flat.thickness", { value: t }),
+    ...(part.section !== undefined ? [tr(tx, part.section)] : []),
+  ].join(" — ");
+  const ref = referenceText(flat, tx);
   const infoText = ref !== undefined ? `${info} — ${ref}` : info;
   // Ligne d'information repliée à la largeur du dessin (au moins INFO_MIN_CHARS caractères) :
   // sur une seule ligne, sa largeur physique ne dépend pas de l'échelle et une planche longue
@@ -229,7 +229,7 @@ export function renderFlatPatternSvg(part: Part, options: FlatPatternSvgOptions 
             fill: theme.text,
             "data-kind": "text",
           },
-          tr(l.label),
+          tr(tx, l.label),
         ),
       );
       continue;
@@ -242,7 +242,7 @@ export function renderFlatPatternSvg(part: Part, options: FlatPatternSvgOptions 
         "data-feature": l.feature,
       }),
     );
-    const annotation = partLineAnnotation(l);
+    const annotation = partLineAnnotation(l, tx);
     if (annotation !== undefined) {
       const mid = toPx(vp, { x: (l.a.x + l.b.x) / 2, y: (l.a.y + l.b.y) / 2 });
       let a = (Math.atan2(l.b.y - l.a.y, l.b.x - l.a.x) * 180) / Math.PI;
@@ -334,7 +334,7 @@ export function renderFlatPatternSvg(part: Part, options: FlatPatternSvgOptions 
       : undefined;
   return svgDocument(width, height, body, {
     ...(physical ? { physicalMm: physical } : {}),
-    title: options.title ?? `Développé ${part.mark}`,
+    title: options.title ?? tx.t("drawing.flat.title", { mark: part.mark }),
     className: "blondel-flat",
   });
 }

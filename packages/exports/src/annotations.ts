@@ -3,6 +3,15 @@
  * trémie lue dans le projet, échappée réglementaire lue dans le rapport.
  */
 import type { ComplianceReport, Mm, Model, Polygon2, Project, Severity, Vec2 } from "@blondel/core";
+import type { Translator } from "./i18n.js";
+
+/**
+ * Séparateur de milliers des cotes et cartouches des dessins : espace simple en français (rendu
+ * historique des plans, « 2 700 »), celui de la langue ailleurs (anglais : « 2,700 »).
+ */
+export function drawingThousands(t: Translator): string {
+  return t.locale === "fr" ? " " : t.num(1000, { digits: 0 }).replace(/\d/g, "");
+}
 
 const RANK: Record<Severity, number> = { bloquant: 3, avertissement: 2, conseil: 1 };
 

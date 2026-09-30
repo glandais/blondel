@@ -4,6 +4,7 @@
  */
 import type { Mm, Severity, Vec2 } from "@blondel/core";
 import { escapeXml, formatNum } from "../format.js";
+import { translatorOf, type LocaleOption } from "../i18n.js";
 import { arcFromBulge, type PlanPath } from "../path.js";
 
 export interface SvgTheme {
@@ -105,13 +106,18 @@ export interface SvgScaleOptions {
   readonly margin?: number;
 }
 
-export function resolvePxPerMm(o: SvgScaleOptions): number {
+/** Pixels par millimètre ; `RangeError` (dans la langue de `o.locale`) si l'échelle est invalide. */
+export function resolvePxPerMm(o: SvgScaleOptions & LocaleOption): number {
   if (o.scale !== undefined) {
-    if (!(o.scale > 0)) throw new RangeError(`Échelle invalide : 1:${o.scale}`);
+    if (!(o.scale > 0)) {
+      throw new RangeError(translatorOf(o).t("drawing.error.scale", { scale: String(o.scale) }));
+    }
     return (o.dpi ?? 96) / 25.4 / o.scale;
   }
   const k = o.pxPerMm ?? 0.15;
-  if (!(k > 0) || !Number.isFinite(k)) throw new RangeError(`pxPerMm invalide : ${k}`);
+  if (!(k > 0) || !Number.isFinite(k)) {
+    throw new RangeError(translatorOf(o).t("drawing.error.pxPerMm", { value: String(k) }));
+  }
   return k;
 }
 

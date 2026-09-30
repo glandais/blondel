@@ -4,6 +4,7 @@
  * des points de traçage, diagonales de contrôle, hauteurs, puis épure des nez au sol en tableau.
  */
 import type { Model, Project, Vec2 } from "@blondel/core";
+import { localeOption, translatorOf, type Translator } from "../i18n.js";
 import { installationSheet, type InstallationSheet } from "../installation.js";
 import type { PathOp, PdfCanvas, Rgb } from "./canvas.js";
 import { clipPath, type Rect } from "./clip.js";
@@ -16,6 +17,7 @@ import {
   fit,
   fr,
   line,
+  pagedTitle,
   tablePages,
   wrapText,
   type Frame,
@@ -97,6 +99,7 @@ function drawPlan(
   model: Model,
   project: Project | undefined,
   v: View,
+  t: Translator,
 ): void {
   // Murs (bandes entre les deux nus).
   for (const w of project?.site.walls ?? []) {
@@ -150,7 +153,7 @@ function drawPlan(
         m.y >= v.rect.y &&
         m.y <= v.rect.y + v.rect.h
       ) {
-        c.text(openingEdgeLabel(i), m.x + 0.6, m.y - 0.6, { size: 2.2, color: OPENING });
+        c.text(openingEdgeLabel(i, t), m.x + 0.6, m.y - 0.6, { size: 2.2, color: OPENING });
       }
     });
   }
@@ -175,7 +178,7 @@ function drawPlan(
     for (const e of [a, b]) {
       line(c, e.x - 0.8, e.y - 0.8, e.x + 0.8, e.y + 0.8, GUIDE, 0.25);
     }
-    c.text(fr(best.distance), (a.x + b.x) / 2 + 0.8, (a.y + b.y) / 2 - 0.8, {
+    c.text(fr(t, best.distance), (a.x + b.x) / 2 + 0.8, (a.y + b.y) / 2 - 0.8, {
       size: 2.4,
       color: GUIDE,
       bold: true,
@@ -199,56 +202,92 @@ function drawPlan(
 }
 
 /** Écart signé : « +10 », « −30 », « 0 ». */
-const signed = (v: number): string => (v > 0 ? `+${fr(v)}` : fr(v));
+const signed = (t: Translator, v: number): string => (v > 0 ? `+${fr(t, v)}` : fr(t, v));
 
 /** Repère d'un bord de trémie (bord i : du sommet i au sommet i + 1 du contour). */
-export const openingEdgeLabel = (edge: number): string => `b${edge + 1}`;
+export const openingEdgeLabel = (edge: number, t: Translator = translatorOf()): string =>
+  t.t("pdf.installation.opening.edge", { edge: String(edge + 1) });
 
 /** Lignes de texte de la colonne de droite. */
 export function installationLines(
   sheet: InstallationSheet,
+  t: Translator = translatorOf(),
 ): { text: string; bold?: boolean; muted?: boolean }[] {
   const out: { text: string; bold?: boolean; muted?: boolean }[] = [];
-  out.push({ text: "Points de traçage (repère du site, mm)", bold: true });
+  out.push({ text: t.t("pdf.installation.points"), bold: true });
   sheet.points.forEach((p, i) =>
-    out.push({ text: `${i + 1}. ${p.label} : X ${fr(p.at.x, 1)} ; Y ${fr(p.at.y, 1)}` }),
+    out.push({
+      text: t.t("pdf.installation.point", {
+        index: String(i + 1),
+        label: p.label,
+        x: fr(t, p.at.x, 1),
+        y: fr(t, p.at.y, 1),
+      }),
+    }),
   );
   if (sheet.startWidth !== undefined)
-    out.push({ text: `Largeur de la ligne de départ (1-2) : ${fr(sheet.startWidth, 1)} mm` });
+    out.push({
+      text: t.t("pdf.installation.startWidth", { width: fr(t, sheet.startWidth, 1) }),
+    });
   for (const d of sheet.diagonals)
-    out.push({ text: `Diagonale ${d.from} → ${d.to} : ${fr(d.length, 1)} mm` });
-  out.push({ text: "Cotes aux nus des murs (mm)", bold: true });
-  if (!sheet.hasSite)
-    out.push({ text: "Projet non fourni : murs et trémie inconnus.", muted: true });
+    out.push({
+      text: t.t("pdf.installation.diagonal", {
+        from: d.from,
+        to: d.to,
+        length: fr(t, d.length, 1),
+      }),
+    });
+  out.push({ text: t.t("pdf.installation.walls"), bold: true });
+  if (!sheet.hasSite) out.push({ text: t.t("pdf.installation.noSite"), muted: true });
   else if (sheet.wallIds.length === 0)
-    out.push({ text: "Aucun mur saisi dans le relevé.", muted: true });
+    out.push({ text: t.t("pdf.installation.noWalls"), muted: true });
   sheet.points.forEach((p, i) => {
     const ws = sheet.walls.filter((w) => w.pointId === p.id);
     if (ws.length === 0) return;
-    const parts = ws.map((w) => `${w.wallId} ${fr(w.distance)}${w.onWall ? "" : "*"}`);
-    out.push({ text: `${i + 1}. ${parts.join(" ; ")}` });
+    const parts = ws.map((w) => `${w.wallId} ${fr(t, w.distance)}${w.onWall ? "" : "*"}`);
+    out.push({
+      text: t.t("pdf.installation.walls.point", {
+        index: String(i + 1),
+        walls: parts.join(t.t("pdf.installation.walls.separator")),
+      }),
+    });
   });
   if (sheet.walls.some((w) => !w.onWall))
-    out.push({ text: "* pied de la perpendiculaire sur le prolongement du mur.", muted: true });
+    out.push({ text: t.t("pdf.installation.walls.offWall"), muted: true });
   if (sheet.opening) {
-    out.push({ text: "Trémie : distance au bord le plus proche (mm)", bold: true });
+    out.push({ text: t.t("pdf.installation.opening"), bold: true });
     for (const o of sheet.opening.offsets) {
       const i = sheet.points.findIndex((p) => p.id === o.pointId);
+      const params = {
+        index: String(i + 1),
+        edge: openingEdgeLabel(o.edge, t),
+        distance: fr(t, o.distance),
+      };
       out.push({
-        text: `${i + 1}. bord ${openingEdgeLabel(o.edge)} : ${fr(o.distance)}${o.inside ? " (à l'aplomb de la trémie)" : ""}`,
+        text: o.inside
+          ? t.t("pdf.installation.opening.offsetInside", params)
+          : t.t("pdf.installation.opening.offset", params),
       });
     }
   }
   const h = sheet.heights;
-  out.push({ text: "Hauteurs", bold: true });
+  out.push({ text: t.t("pdf.installation.heights"), bold: true });
   out.push({
-    text: `Hauteur à monter H : ${fr(h.total, 1)} mm en ${h.count} hauteurs de ${fr(h.nominal, 2)} mm`,
+    text: t.t("pdf.installation.heights.total", {
+      total: fr(t, h.total, 1),
+      count: String(h.count),
+      riser: fr(t, h.nominal, 2),
+    }),
   });
   if (h.first !== undefined)
-    out.push({ text: `1re hauteur (sol fini → dessus de la 1re marche) : ${fr(h.first, 1)} mm` });
+    out.push({ text: t.t("pdf.installation.heights.first", { height: fr(t, h.first, 1) }) });
   if (h.firstTolerance) {
     out.push({
-      text: `Tolérance de la 1re marche après pose (écart à la hauteur nominale) : ${signed(h.firstTolerance.min)} / ${signed(h.firstTolerance.max)} mm (${h.firstTolerance.source})`,
+      text: t.t("pdf.installation.heights.firstTolerance", {
+        min: signed(t, h.firstTolerance.min),
+        max: signed(t, h.firstTolerance.max),
+        source: h.firstTolerance.source,
+      }),
       muted: true,
     });
   }
@@ -262,34 +301,44 @@ export function installationPages(
   project: Project | undefined,
   frame: Frame,
   scales: readonly number[],
+  t: Translator = translatorOf(),
 ): PageDraft<InstallationPageInfo>[] {
-  const sheet = installationSheet(model, project);
+  const sheet = installationSheet(model, project, localeOption(t));
   const planW = frame.w * 0.56;
   const area: Frame = { x: frame.x, y: frame.y + 4, w: planW - 4, h: frame.h - 4 };
   const view = chooseView(sheet, model, area, scales);
   const textX = frame.x + planW + 2;
   const textW = frame.w - planW - 2;
-  const lines = installationLines(sheet).flatMap((l) =>
-    wrapText(measure, l.text, 2.8, textW, l.bold).map((t) => ({ ...l, text: t })),
+  const lines = installationLines(sheet, t).flatMap((l) =>
+    wrapText(measure, l.text, 2.8, textW, l.bold).map((text) => ({ ...l, text })),
   );
+  // Entrée du sommaire commune aux pages de la fiche de pose.
+  const tocTitle = t.t("pdf.installation.title");
   const pages: PageDraft<InstallationPageInfo>[] = [
     {
       info: {
         kind: "installation",
-        title: "Fiche de pose — implantation",
+        title: t.t("pdf.installation.plan.title"),
         ...(view ? { scale: view.n } : {}),
       },
+      tocTitle,
       draw(c, f) {
-        c.text("Plan d'implantation (vue de dessus)", f.x, f.y + 2.5, { size: 3, color: MUTED });
-        if (view) drawPlan(c, sheet, model, project, view);
+        c.text(t.t("pdf.installation.plan.caption"), f.x, f.y + 2.5, { size: 3, color: MUTED });
+        if (view) drawPlan(c, sheet, model, project, view, t);
         else
-          c.text("Tracé indisponible (modèle partiel).", f.x, f.y + 10, { size: 3, color: MUTED });
+          c.text(t.t("pdf.installation.plan.unavailable"), f.x, f.y + 10, {
+            size: 3,
+            color: MUTED,
+          });
         line(c, textX - 2, f.y, textX - 2, f.y + f.h, RULE);
         let y = f.y;
         for (const l of lines) {
           const step = l.bold ? 5 : 3.8;
           if (y + step > f.y + f.h) {
-            c.text("… (suite : épure des nez)", textX, f.y + f.h, { size: 2.6, color: MUTED });
+            c.text(t.t("pdf.installation.moreLines"), textX, f.y + f.h, {
+              size: 2.6,
+              color: MUTED,
+            });
             break;
           }
           y += step;
@@ -308,7 +357,10 @@ export function installationPages(
           ],
           { stroke: ACCENT, lineWidth: 0.6 },
         );
-        c.text("départ", f.x + 7, ly + 0.9, { size: 2.2, color: MUTED });
+        c.text(t.t("pdf.installation.legend.start"), f.x + 7, ly + 0.9, {
+          size: 2.2,
+          color: MUTED,
+        });
         c.path(
           [
             { op: "M", x: f.x + 20, y: ly },
@@ -316,7 +368,10 @@ export function installationPages(
           ],
           { stroke: OPENING, lineWidth: 0.3, dash: [2, 1] },
         );
-        c.text("trémie", f.x + 27, ly + 0.9, { size: 2.2, color: MUTED });
+        c.text(t.t("pdf.installation.legend.opening"), f.x + 27, ly + 0.9, {
+          size: 2.2,
+          color: MUTED,
+        });
         c.path(
           [
             { op: "M", x: f.x + 40, y: ly - 1 },
@@ -327,37 +382,40 @@ export function installationPages(
           ],
           { fill: WALL_FILL, stroke: INK, lineWidth: 0.2 },
         );
-        c.text("mur (entre nus)", f.x + 47, ly + 0.9, { size: 2.2, color: MUTED });
+        c.text(t.t("pdf.installation.legend.wall"), f.x + 47, ly + 0.9, {
+          size: 2.2,
+          color: MUTED,
+        });
       },
     },
   ];
   const rows = sheet.nosings.map((n) => ({
     cells: [
       String(n.index),
-      fr(n.q.x, 1),
-      fr(n.q.y, 1),
-      fr(n.r.x, 1),
-      fr(n.r.y, 1),
-      fr(Math.hypot(n.r.x - n.q.x, n.r.y - n.q.y), 1),
-      fr(n.z, 1),
+      fr(t, n.q.x, 1),
+      fr(t, n.q.y, 1),
+      fr(t, n.r.x, 1),
+      fr(t, n.r.y, 1),
+      fr(t, Math.hypot(n.r.x - n.q.x, n.r.y - n.q.y), 1),
+      fr(t, n.z, 1),
     ],
   }));
   const table = tablePages(
     {
       columns: [
-        { title: "Nez", weight: 8, align: "right" },
-        { title: "Q x (jour)", weight: 16, align: "right" },
-        { title: "Q y (jour)", weight: 16, align: "right" },
-        { title: "R x (extérieur)", weight: 16, align: "right" },
-        { title: "R y (extérieur)", weight: 16, align: "right" },
-        { title: "Longueur QR", weight: 14, align: "right" },
-        { title: "Altitude du nez", weight: 14, align: "right" },
+        { title: t.t("pdf.installation.nosings.col.index"), weight: 8, align: "right" },
+        { title: t.t("pdf.installation.nosings.col.qx"), weight: 16, align: "right" },
+        { title: t.t("pdf.installation.nosings.col.qy"), weight: 16, align: "right" },
+        { title: t.t("pdf.installation.nosings.col.rx"), weight: 16, align: "right" },
+        { title: t.t("pdf.installation.nosings.col.ry"), weight: 16, align: "right" },
+        { title: t.t("pdf.installation.nosings.col.length"), weight: 14, align: "right" },
+        { title: t.t("pdf.installation.nosings.col.altitude"), weight: 14, align: "right" },
       ],
       rows,
-      empty: "Aucune ligne de nez (modèle partiel).",
+      empty: t.t("pdf.installation.nosings.empty"),
       intro: [
-        "Épure au sol : report des lignes de nez (Q côté jour, R côté extérieur) dans le repère du site, mm.",
-        "Altitude : dessus de marche en sol fini, depuis le sol fini bas.",
+        t.t("pdf.installation.nosings.intro.layout"),
+        t.t("pdf.installation.nosings.intro.altitude"),
       ],
     },
     frame,
@@ -366,11 +424,9 @@ export function installationPages(
     pages.push({
       info: {
         kind: "installation",
-        title:
-          table.length > 1
-            ? `Fiche de pose — épure des nez (${i + 1}/${table.length})`
-            : "Fiche de pose — épure des nez",
+        title: pagedTitle(t, t.t("pdf.installation.nosings.title"), i + 1, table.length),
       },
+      tocTitle,
       draw,
     }),
   );

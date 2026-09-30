@@ -4,7 +4,8 @@
  * Calques : CONTOUR (contour extérieur et intérieurs, polylignes fermées), PLI, TRACAGE,
  * MORTAISE et TENON (traçages `feature` « mortise » / « tenon » des limons bois), ROULAGE,
  * JOINT (lignes du `FlatPattern`), TEXTE (repère gravé et textes du développé), INFO
- * (désignation, matériau, épaisseur, hors pièce, non gravée).
+ * (désignation, matériau, épaisseur, hors pièce, non gravée). Noms de calques traduits dans la
+ * langue de l'export (`partLayers`, clés `dxf.layer.*`), noms français ci-dessus par défaut.
  */
 import {
   bbox,
@@ -14,26 +15,37 @@ import {
   type Shape2,
   type Vec2,
 } from "@blondel/core";
-import { MATERIAL_LABELS } from "../csv/cutlist.js";
-import { formatFr } from "../format.js";
-import { tr } from "../i18n.js";
+import { formatIn } from "../format.js";
+import { materialLabel, translatorOf, tr, type LocaleOption, type Translator } from "../i18n.js";
 import { polygonPath } from "../path.js";
 import { DEFAULT_PART_DXF_VERSION, createDxfWriter } from "./create.js";
-import { declareLayers, type DxfLayerDef, type DxfVersion } from "./writer.js";
+import { localizedLayers, type LayerSpec } from "./layers.js";
+import { declareLayers, type DxfVersion } from "./writer.js";
 
-export const PART_LAYERS = {
-  contour: { name: "CONTOUR", color: 7 },
-  bend: { name: "PLI", color: 1, lineType: "DASHED" },
-  mark: { name: "TRACAGE", color: 3 },
-  mortise: { name: "MORTAISE", color: 6 },
-  tenon: { name: "TENON", color: 30 },
-  roll: { name: "ROULAGE", color: 5, lineType: "DASHED" },
-  joint: { name: "JOINT", color: 4 },
-  text: { name: "TEXTE", color: 2 },
-  info: { name: "INFO", color: 8 },
-} as const satisfies Record<string, DxfLayerDef>;
+/** Calques du développé : clé du nom (`dxf.layer.*`), couleur, type de ligne. */
+const PART_LAYER_SPECS = {
+  contour: { key: "dxf.layer.contour", color: 7 },
+  bend: { key: "dxf.layer.bend", color: 1, lineType: "DASHED" },
+  mark: { key: "dxf.layer.mark", color: 3 },
+  mortise: { key: "dxf.layer.mortise", color: 6 },
+  tenon: { key: "dxf.layer.tenon", color: 30 },
+  roll: { key: "dxf.layer.roll", color: 5, lineType: "DASHED" },
+  joint: { key: "dxf.layer.joint", color: 4 },
+  text: { key: "dxf.layer.text", color: 2 },
+  info: { key: "dxf.layer.info", color: 8 },
+} as const satisfies Record<string, LayerSpec>;
 
-export interface PartDxfOptions {
+export type PartLayerId = keyof typeof PART_LAYER_SPECS;
+
+/** Calques du développé dans la langue du traducteur (noms passés par `sanitizeLayerName`). */
+export function partLayers(t: Translator = translatorOf()) {
+  return localizedLayers(PART_LAYER_SPECS, t);
+}
+
+/** Calques du développé en français (noms historiques : CONTOUR, PLI, TRACAGE…). */
+export const PART_LAYERS = partLayers();
+
+export interface PartDxfOptions extends LocaleOption {
   /** Défaut : R12 (`DEFAULT_PART_DXF_VERSION`). */
   readonly version?: DxfVersion;
   /** Hauteur du repère gravé (mm). Défaut : ¼ de la plus petite dimension, borné à [5 ; 30]. */
@@ -42,21 +54,14 @@ export interface PartDxfOptions {
   readonly quantity?: number;
 }
 
-const LINE_LAYER = {
-  bend: PART_LAYERS.bend.name,
-  mark: PART_LAYERS.mark.name,
-  roll: PART_LAYERS.roll.name,
-  joint: PART_LAYERS.joint.name,
-  text: PART_LAYERS.text.name,
-} as const;
-
 type FlatLine = NonNullable<Part["flat"]>["lines"][number];
 
 /** Calque d'une ligne du développé : les traçages de mortaise et de tenon ont le leur. */
-export function partLineLayer(l: FlatLine): string {
-  if (l.kind === "mark" && l.feature === "mortise") return PART_LAYERS.mortise.name;
-  if (l.kind === "mark" && l.feature === "tenon") return PART_LAYERS.tenon.name;
-  return LINE_LAYER[l.kind];
+export function partLineLayer(l: FlatLine, t: Translator = translatorOf()): string {
+  const layers = partLayers(t);
+  if (l.kind === "mark" && l.feature === "mortise") return layers.mortise.name;
+  if (l.kind === "mark" && l.feature === "tenon") return layers.tenon.name;
+  return layers[l.kind].name;
 }
 
 /** Segments usinés (mortaises, tenons) à éviter pour le repère gravé. */
@@ -67,24 +72,36 @@ export function machinedSegments(flat: NonNullable<Part["flat"]>): [Vec2, Vec2][
 }
 
 /** Ligne d'information sur la fibre de référence du développé (CHALLENGE G6), si déclarée. */
-export function referenceText(flat: NonNullable<Part["flat"]>): string | undefined {
+export function referenceText(flat: NonNullable<Part["flat"]>, t: Translator): string | undefined {
   const r = flat.reference;
   if (r === undefined) return undefined;
-  const description = tr(r.description);
-  return `Référence : ${r.kind === "face" ? "face tracée" : "fibre neutre"}${description !== "" ? ` (${description})` : ""}`;
+  const description = tr(t, r.description);
+  const kind = t.t(
+    r.kind === "face" ? "drawing.flat.referenceFace" : "drawing.flat.referenceNeutral",
+  );
+  return description !== ""
+    ? t.t("drawing.flat.referenceDescribed", { kind, description })
+    : t.t("drawing.flat.reference", { kind });
 }
 
 /** Annotation d'une ligne : libellé, angle et sens de pli, profondeur d'usinage. */
-export function partLineAnnotation(l: FlatLine): string | undefined {
+export function partLineAnnotation(l: FlatLine, t: Translator): string | undefined {
   const out: string[] = [];
-  if (l.label !== undefined) out.push(tr(l.label));
+  if (l.label !== undefined) out.push(tr(t, l.label));
   if (l.kind === "bend" && l.bendAngle !== undefined) {
-    const sense = l.bendUp === undefined ? "" : l.bendUp ? " haut" : " bas";
-    out.push(`${formatFr(l.bendAngle, { decimals: 1, trimZeros: true, thousands: "" })}°${sense}`);
+    const angle = formatIn(t, l.bendAngle, { decimals: 1, trimZeros: true, thousands: "" });
+    const key =
+      l.bendUp === undefined
+        ? "drawing.flat.bend"
+        : l.bendUp
+          ? "drawing.flat.bendUp"
+          : "drawing.flat.bendDown";
+    out.push(t.t(key, { angle }));
   }
   // Profondeur annotée seulement sur une ligne libellée (évite de la répéter sur chaque côté).
   if (l.label !== undefined && l.depth !== undefined && Number.isFinite(l.depth)) {
-    out.push(`prof. ${formatFr(l.depth, { decimals: 1, trimZeros: true, thousands: "" })}`);
+    const value = formatIn(t, l.depth, { decimals: 1, trimZeros: true, thousands: "" });
+    out.push(t.t("drawing.flat.depth", { value }));
   }
   return out.length > 0 ? out.join(" ") : undefined;
 }
@@ -205,15 +222,26 @@ export function flatEngravingPoint(flat: FlatPattern): { at: Vec2; clearance: nu
   return spot;
 }
 
-/** Exporte le développé d'une pièce ; lève une erreur si la pièce n'a pas de développé. */
-export function exportPartDxf(part: Part, options: PartDxfOptions = {}): string {
+/**
+ * Développé d'une pièce, ou `RangeError` (message dans la langue du traducteur) si la pièce
+ * n'en a pas ou si son contour est dégénéré.
+ */
+export function checkedFlat(part: Part, t: Translator): FlatPattern {
   const flat = part.flat;
   if (flat === undefined) {
-    throw new RangeError(`La pièce ${part.mark} (${part.id}) n'a pas de développé à plat.`);
+    throw new RangeError(t.t("drawing.flat.noFlat", { mark: part.mark, id: part.id }));
   }
   if (flat.outline.outer.length < 3) {
-    throw new RangeError(`Le développé de la pièce ${part.mark} n'a pas de contour.`);
+    throw new RangeError(t.t("drawing.flat.noOutline", { mark: part.mark }));
   }
+  return flat;
+}
+
+/** Exporte le développé d'une pièce ; lève une erreur si la pièce n'a pas de développé. */
+export function exportPartDxf(part: Part, options: PartDxfOptions = {}): string {
+  const tx = translatorOf(options);
+  const flat = checkedFlat(part, tx);
+  const layers = partLayers(tx);
   const box = bbox(flat.outline.outer);
   const w0 = box.max.x - box.min.x;
   const h0 = box.max.y - box.min.y;
@@ -221,23 +249,23 @@ export function exportPartDxf(part: Part, options: PartDxfOptions = {}): string 
   const w = createDxfWriter(options.version ?? DEFAULT_PART_DXF_VERSION, {
     dashPattern: [markH * 0.6, markH * 0.3],
   });
-  declareLayers(w, Object.values(PART_LAYERS));
+  declareLayers(w, Object.values(layers));
 
-  w.polyline(polygonPath(flat.outline.outer).vertices, true, PART_LAYERS.contour.name);
+  w.polyline(polygonPath(flat.outline.outer).vertices, true, layers.contour.name);
   for (const hole of flat.outline.holes) {
-    if (hole.length >= 3) w.polyline(polygonPath(hole).vertices, true, PART_LAYERS.contour.name);
+    if (hole.length >= 3) w.polyline(polygonPath(hole).vertices, true, layers.contour.name);
   }
 
   for (const l of flat.lines) {
-    const layer = partLineLayer(l);
+    const layer = partLineLayer(l, tx);
     const angle = (Math.atan2(l.b.y - l.a.y, l.b.x - l.a.x) * 180) / Math.PI;
     if (l.kind === "text") {
       if (l.label !== undefined)
-        w.text(l.a, markH * 0.5, tr(l.label), layer, { rotationDeg: angle });
+        w.text(l.a, markH * 0.5, tr(tx, l.label), layer, { rotationDeg: angle });
       continue;
     }
     w.line(l.a, l.b, layer);
-    const annotation = partLineAnnotation(l);
+    const annotation = partLineAnnotation(l, tx);
     if (annotation !== undefined) {
       const mid = { x: (l.a.x + l.b.x) / 2, y: (l.a.y + l.b.y) / 2 };
       const upright = angle > 90 || angle <= -90 ? angle - 180 * Math.sign(angle) : angle;
@@ -252,20 +280,23 @@ export function exportPartDxf(part: Part, options: PartDxfOptions = {}): string 
   const spot = flatEngravingPoint(flat);
   // Hauteur par défaut réduite si la matière est étroite à cet endroit.
   const engraveH = options.markHeight ?? Math.max(1, Math.min(markH, 1.6 * spot.clearance));
-  w.text(spot.at, engraveH, part.mark, PART_LAYERS.text.name, { align: "center", middle: true });
+  w.text(spot.at, engraveH, part.mark, layers.text.name, { align: "center", middle: true });
 
   // Informations hors pièce.
-  const t = formatFr(flat.thickness, { decimals: 1, trimZeros: true, thousands: "" });
+  const t = formatIn(tx, flat.thickness, { decimals: 1, trimZeros: true, thousands: "" });
   const info = [
-    `${part.mark} - ${tr(part.name)}`,
-    `Matériau ${MATERIAL_LABELS[part.material] ?? part.material} - épaisseur ${t} mm${part.section !== undefined ? ` - ${tr(part.section)}` : ""}`,
+    `${part.mark} - ${tr(tx, part.name)}`,
+    tx.t("dxf.part.material", { material: materialLabel(tx, part.material), thickness: t }) +
+      (part.section !== undefined ? ` - ${tr(tx, part.section)}` : ""),
   ];
-  const ref = referenceText(flat);
+  const ref = referenceText(flat, tx);
   if (ref !== undefined) info.push(ref);
-  if (options.quantity !== undefined) info.push(`Quantité ${options.quantity}`);
+  if (options.quantity !== undefined) {
+    info.push(tx.t("dxf.part.quantity", { count: String(options.quantity) }));
+  }
   let y = box.min.y - 1.5 * markH;
   for (const line of info) {
-    w.text({ x: box.min.x, y }, markH * 0.4, line, PART_LAYERS.info.name);
+    w.text({ x: box.min.x, y }, markH * 0.4, line, layers.info.name);
     y -= markH * 0.6;
   }
   return w.toString();

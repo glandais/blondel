@@ -18,8 +18,16 @@
  * **section** et n'ont pas de volume brut (L × l × e serait le volume de leur boîte).
  */
 import { bbox, type MaterialId, type Part } from "@blondel/core";
-import { MATERIAL_LABELS, defaultMassNote, partMassKg, type MassNote } from "./csv/cutlist.js";
-import { tr, trOpt } from "./i18n.js";
+import { defaultMassNote, partMassKg, type MassNote } from "./csv/cutlist.js";
+import {
+  compareMarks,
+  compareText,
+  materialLabel,
+  translatorOf,
+  tr,
+  trOpt,
+  type LocaleOption,
+} from "./i18n.js";
 
 export interface CutSheetRow {
   readonly mark: string;
@@ -38,7 +46,7 @@ export interface CutSheetRow {
   readonly massNote?: string;
 }
 
-export interface CutSheetOptions {
+export interface CutSheetOptions extends LocaleOption {
   /** Remarque de masse par matériau (défaut : `defaultMassNote`). */
   readonly massNote?: MassNote;
 }
@@ -64,10 +72,6 @@ export interface CutSheetGroup {
     /** Remarques de masse des lignes du groupe (sans doublon). */
     readonly massNotes: readonly string[];
   };
-}
-
-function compareMarks(a: string, b: string): number {
-  return a.localeCompare(b, "fr", { numeric: true, sensitivity: "base" });
 }
 
 function cutDims(p: Part): Pick<CutSheetRow, "length" | "width" | "thickness" | "source"> {
@@ -105,6 +109,7 @@ function isSheetStock(p: Part, d: Pick<CutSheetRow, "thickness" | "source">): bo
 
 /** Fiche de débit des pièces : groupes triés par matériau puis épaisseur. */
 export function cutSheet(parts: readonly Part[], options: CutSheetOptions = {}): CutSheetGroup[] {
+  const tx = translatorOf(options);
   const noteOf = options.massNote ?? defaultMassNote;
   // Lignes : pièces identiques (même repère et même débit) regroupées.
   const lines = new Map<
@@ -114,11 +119,11 @@ export function cutSheet(parts: readonly Part[], options: CutSheetOptions = {}):
   for (const p of parts) {
     const d = cutDims(p);
     const mass = partMassKg(p);
-    const note = mass !== undefined ? noteOf(p.material) : undefined;
+    const note = mass !== undefined ? noteOf(p.material, tx) : undefined;
     const key = JSON.stringify([
       p.mark,
       p.material,
-      trOpt(p.section) ?? null,
+      trOpt(tx, p.section) ?? null,
       d.length ?? null,
       d.width ?? null,
       d.thickness ?? null,
@@ -133,8 +138,8 @@ export function cutSheet(parts: readonly Part[], options: CutSheetOptions = {}):
         count: 1,
         row: {
           mark: p.mark,
-          name: tr(p.name),
-          section: trOpt(p.section) ?? "",
+          name: tr(tx, p.name),
+          section: trOpt(tx, p.section) ?? "",
           ...d,
           ...(finite(mass) ? { unitMass: mass } : {}),
           ...(note !== undefined && note !== "" ? { massNote: note } : {}),
@@ -161,7 +166,7 @@ export function cutSheet(parts: readonly Part[], options: CutSheetOptions = {}):
   }
   const out: CutSheetGroup[] = [];
   for (const g of groups.values()) {
-    g.rows.sort((a, b) => compareMarks(a.mark, b.mark));
+    g.rows.sort((a, b) => compareMarks(tx, a.mark, b.mark));
     let quantity = 0;
     let lengthM = 0;
     let volume: number | undefined = 0;
@@ -185,7 +190,7 @@ export function cutSheet(parts: readonly Part[], options: CutSheetOptions = {}):
     }
     out.push({
       material: g.material,
-      materialLabel: MATERIAL_LABELS[g.material] ?? g.material,
+      materialLabel: materialLabel(tx, g.material),
       basis: g.thickness !== undefined ? "thickness" : "section",
       ...(g.thickness !== undefined ? { thickness: g.thickness } : {}),
       ...(g.section !== undefined ? { section: g.section } : {}),
@@ -201,8 +206,8 @@ export function cutSheet(parts: readonly Part[], options: CutSheetOptions = {}):
   }
   return out.sort(
     (a, b) =>
-      a.materialLabel.localeCompare(b.materialLabel, "fr") ||
+      compareText(tx, a.materialLabel, b.materialLabel) ||
       (a.thickness ?? Infinity) - (b.thickness ?? Infinity) ||
-      (a.section ?? "").localeCompare(b.section ?? "", "fr"),
+      compareText(tx, a.section ?? "", b.section ?? ""),
   );
 }

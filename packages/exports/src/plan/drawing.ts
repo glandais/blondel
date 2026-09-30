@@ -15,8 +15,16 @@ import {
   type TreadKind,
   type Vec2,
 } from "@blondel/core";
-import { locateViolations, modelOpening, violationSummary, worstSeverity } from "../annotations.js";
-import { formatFr } from "../format.js";
+import {
+  drawingThousands,
+  locateViolations,
+  modelOpening,
+  violationSummary,
+  worstSeverity,
+} from "../annotations.js";
+import { formatIn } from "../format.js";
+import type { MessageKey } from "@blondel/i18n";
+import { translatorOf, type LocaleOption, type Translator } from "../i18n.js";
 import { bandContour, curvePath, pathExtentPoints, polygonPath, type PlanPath } from "../path.js";
 import {
   helicalCartouche,
@@ -88,7 +96,7 @@ export interface PlanDrawing {
   readonly textHeight: Mm;
 }
 
-export interface PlanDrawingOptions {
+export interface PlanDrawingOptions extends LocaleOption {
   /**
    * Projet source, en repli : la trémie est lue dans `Model.upperFloor` (pipeline) ; le projet
    * ne sert qu'à un modèle construit hors pipeline, qui ne la porte pas.
@@ -102,8 +110,8 @@ export interface PlanDrawingOptions {
   readonly decimals?: number;
 }
 
-const fmt = (v: number, decimals: number): string =>
-  formatFr(v, { decimals, thousands: " ", trimZeros: false });
+const fmt = (tx: Translator, v: number, decimals: number): string =>
+  formatIn(tx, v, { decimals, thousands: drawingThousands(tx), trimZeros: false });
 
 /** Normale unitaire vers l'extérieur du mur (côté opposé au jour) pour une tangente donnée. */
 function outwardFromOuter(tangent: Vec2, innerSide: "left" | "right"): Vec2 {
@@ -111,20 +119,41 @@ function outwardFromOuter(tangent: Vec2, innerSide: "left" | "right"): Vec2 {
 }
 
 function dimension(
+  tx: Translator,
   role: DimensionRole,
   a: Vec2,
   b: Vec2,
   normal: Vec2,
   offset: Mm,
   decimals: number,
-  prefix = "",
+  label?: MessageKey,
 ): Dimension {
   const value = vec2.distance(a, b);
-  return { role, a, b, normal, offset, value, text: `${prefix}${fmt(value, decimals)}` };
+  const shown = fmt(tx, value, decimals);
+  return {
+    role,
+    a,
+    b,
+    normal,
+    offset,
+    value,
+    text: label === undefined ? shown : tx.t(label, { value: shown }),
+  };
+}
+
+/** Ligne de synthèse du contrôle de conception (cartouches du plan et de l'élévation). */
+export function complianceSummaryLine(tx: Translator, model: Pick<Model, "compliance">): string {
+  const s = violationSummary(model.compliance);
+  return tx.t("drawing.common.complianceSummary", {
+    blocking: String(s.bloquant),
+    warning: String(s.avertissement),
+    advice: String(s.conseil),
+  });
 }
 
 /** Construit le dessin de plan d'un modèle. */
 export function buildPlanDrawing(model: Model, options: PlanDrawingOptions = {}): PlanDrawing {
+  const tx = translatorOf(options);
   const { layout, stepping } = model;
   const helical = layout.helical;
   const decimals = options.decimals ?? 0;
@@ -200,7 +229,7 @@ export function buildPlanDrawing(model: Model, options: PlanDrawingOptions = {})
   if (width > 0) {
     const t0 = curveTangentAt(layout.walkline, 0);
     dims.push(
-      dimension("width", departInner, departOuter, vec2.scale(t0, -1), dimOffset, decimals),
+      dimension(tx, "width", departInner, departOuter, vec2.scale(t0, -1), dimOffset, decimals),
     );
   }
   // Longueurs de volées : tronçons droits du bord extérieur (mesure de `LegSchema.length`).
@@ -210,7 +239,15 @@ export function buildPlanDrawing(model: Model, options: PlanDrawingOptions = {})
     if (len < 1) continue;
     const t = vec2.normalize(vec2.sub(seg.b, seg.a));
     dims.push(
-      dimension("leg", seg.a, seg.b, outwardFromOuter(t, layout.innerSide), dimOffset, decimals),
+      dimension(
+        tx,
+        "leg",
+        seg.a,
+        seg.b,
+        outwardFromOuter(t, layout.innerSide),
+        dimOffset,
+        decimals,
+      ),
     );
   }
   const last = stepping.nosings[stepping.nosings.length - 1];
@@ -219,13 +256,14 @@ export function buildPlanDrawing(model: Model, options: PlanDrawingOptions = {})
     const t0 = curveTangentAt(layout.walkline, 0);
     dims.push(
       dimension(
+        tx,
         "radius",
         helical.center,
         departOuter,
         vec2.scale(t0, -1),
         2 * dimOffset + textHeight,
         decimals,
-        "R ",
+        "drawing.dimension.radius",
       ),
     );
   }
@@ -233,7 +271,7 @@ export function buildPlanDrawing(model: Model, options: PlanDrawingOptions = {})
     // Droit : reculement coté côté jour, du premier au dernier nez.
     const t = vec2.normalize(vec2.sub(last.q, first.q));
     const inward = vec2.scale(outwardFromOuter(t, layout.innerSide), -1);
-    const run = dimension("run", first.q, last.q, inward, dimOffset, decimals);
+    const run = dimension(tx, "run", first.q, last.q, inward, dimOffset, decimals);
     // Reculement égal à la longueur de volée : une seule cote (celle de la volée).
     if (!dims.some((d) => d.role === "leg" && Math.abs(d.value - run.value) < 0.5)) dims.push(run);
   }
@@ -246,7 +284,18 @@ export function buildPlanDrawing(model: Model, options: PlanDrawingOptions = {})
     const t = vec2.normalize(vec2.sub(n1.p, n0.p));
     const inward = vec2.scale(outwardFromOuter(t, layout.innerSide), -1);
     const off = Math.min(layout.walklineOffset / 2, dimOffset);
-    dims.push(dimension("going", n0.p, n1.p, inward, off, Math.max(decimals, 1), "g = "));
+    dims.push(
+      dimension(
+        tx,
+        "going",
+        n0.p,
+        n1.p,
+        inward,
+        off,
+        Math.max(decimals, 1),
+        "drawing.dimension.going",
+      ),
+    );
     break;
   }
 
@@ -259,29 +308,35 @@ export function buildPlanDrawing(model: Model, options: PlanDrawingOptions = {})
   // ---------------------------------------------------------------- cartouche
   const H = stepping.rises.reduce((a, b) => a + b, 0);
   const n = stepping.riserCount;
+  const v = (x: number, d: number): { value: string } => ({ value: fmt(tx, x, d) });
   const cartouche: string[] = [
-    `Hauteur à monter H = ${fmt(H, 0)} mm`,
-    `${n} hauteurs de h = ${fmt(stepping.rise, 1)} mm`,
+    tx.t("drawing.plan.totalRise", v(H, 0)),
+    tx.t("drawing.plan.rises", { count: n, ...v(stepping.rise, 1) }),
   ];
   const r0 = stepping.rises[0];
   if (r0 !== undefined && Math.abs(r0 - stepping.rise) > 0.05) {
-    cartouche.push(`1re hauteur h1 = ${fmt(r0, 1)} mm`);
+    cartouche.push(tx.t("drawing.plan.firstRise", v(r0, 1)));
   }
   cartouche.push(
-    `Giron g = ${fmt(stepping.going, 1)} mm`,
-    `2h + g = ${fmt(stepping.blondel, 1)} mm`,
-    `Reculement (ligne de foulée) = ${fmt(stepping.run, 0)} mm`,
-    `Emmarchement E = ${fmt(width, 0)} mm`,
+    tx.t("drawing.plan.going", v(stepping.going, 1)),
+    tx.t("drawing.plan.blondel", v(stepping.blondel, 1)),
+    tx.t("drawing.plan.run", v(stepping.run, 0)),
+    tx.t("drawing.plan.width", v(width, 0)),
   );
-  if (helical) cartouche.push(...helicalCartouche(helical));
-  if (model.headroom) cartouche.push(`Échappée minimale = ${fmt(model.headroom.min, 0)} mm`);
-  const s = violationSummary(model.compliance);
-  cartouche.push(
-    `Contrôle de conception : ${s.bloquant} bloquant(s), ${s.avertissement} avertissement(s), ${s.conseil} conseil(s)`,
-  );
+  if (helical) cartouche.push(...helicalCartouche(helical, tx));
+  if (model.headroom) cartouche.push(tx.t("drawing.plan.headroom", v(model.headroom.min, 0)));
+  cartouche.push(complianceSummaryLine(tx, model));
   if (stepping.balancedZones.length > 0) {
-    const zones = stepping.balancedZones.map((z) => `${z.method} nez ${z.from}→${z.to}`).join(", ");
-    cartouche.push(`Balancement : ${zones}`);
+    const zones = stepping.balancedZones
+      .map((z) =>
+        tx.t("drawing.plan.balancingZone", {
+          method: z.method,
+          from: String(z.from),
+          to: String(z.to),
+        }),
+      )
+      .join(", ");
+    cartouche.push(tx.t("drawing.plan.balancing", { zones }));
   }
 
   // ---------------------------------------------------------------- emprise

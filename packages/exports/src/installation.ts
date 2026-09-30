@@ -18,7 +18,9 @@ import {
   type Vec2,
   type Wall,
 } from "@blondel/core";
+import { msg } from "@blondel/i18n";
 import { modelOpening } from "./annotations.js";
+import { translatorOf, type LocaleOption } from "./i18n.js";
 
 export interface InstallationPoint {
   readonly id: "start-inner" | "start-outer" | "start-walkline" | "end-inner" | "end-outer";
@@ -144,24 +146,63 @@ function nearestEdge(
   return best;
 }
 
-/** Données de la fiche de pose. `project` absent : ni murs ni trémie. */
-export function installationSheet(model: Model, project?: Project): InstallationSheet {
+/** Options de la fiche de pose. */
+export type InstallationSheetOptions = LocaleOption;
+
+/**
+ * Données de la fiche de pose. `project` absent : ni murs ni trémie. `options.locale` : langue
+ * des libellés des points (défaut « fr »).
+ */
+export function installationSheet(
+  model: Model,
+  project?: Project,
+  options: InstallationSheetOptions = {},
+): InstallationSheet {
+  // Libellés des points et des diagonales dans la langue de l'option `locale`.
+  const t = translatorOf(options);
   const { layout, stepping } = model;
-  const side = layout.innerSide === "left" ? "gauche" : "droite";
-  const other = layout.innerSide === "left" ? "droite" : "gauche";
+  const side = msg(
+    layout.innerSide === "left" ? "installation.side.left" : "installation.side.right",
+  );
+  const other = msg(
+    layout.innerSide === "left" ? "installation.side.right" : "installation.side.left",
+  );
   const points: InstallationPoint[] = [];
   const ends = (c: typeof layout.inner): [Vec2, Vec2] | undefined =>
     c.segments.length > 0 ? [curvePointAt(c, 0), curvePointAt(c, curveLength(c))] : undefined;
   const inner = ends(layout.inner);
   const outer = ends(layout.outer);
   const walk = ends(layout.walkline);
-  if (inner) points.push({ id: "start-inner", label: `Départ, rive ${side} (jour)`, at: inner[0] });
+  if (inner)
+    points.push({
+      id: "start-inner",
+      label: t.t("installation.point.startInner", { side }),
+      at: inner[0],
+    });
   if (outer)
-    points.push({ id: "start-outer", label: `Départ, rive ${other} (extérieur)`, at: outer[0] });
-  if (walk) points.push({ id: "start-walkline", label: "Départ, ligne de foulée", at: walk[0] });
-  if (inner) points.push({ id: "end-inner", label: `Arrivée, rive ${side} (jour)`, at: inner[1] });
+    points.push({
+      id: "start-outer",
+      label: t.t("installation.point.startOuter", { side: other }),
+      at: outer[0],
+    });
+  if (walk)
+    points.push({
+      id: "start-walkline",
+      label: t.t("installation.point.startWalkline"),
+      at: walk[0],
+    });
+  if (inner)
+    points.push({
+      id: "end-inner",
+      label: t.t("installation.point.endInner", { side }),
+      at: inner[1],
+    });
   if (outer)
-    points.push({ id: "end-outer", label: `Arrivée, rive ${other} (extérieur)`, at: outer[1] });
+    points.push({
+      id: "end-outer",
+      label: t.t("installation.point.endOuter", { side: other }),
+      at: outer[1],
+    });
   const byId = new Map(points.map((p) => [p.id, p]));
 
   const diagonals: { from: string; to: string; length: number }[] = [];
@@ -175,8 +216,18 @@ export function installationSheet(model: Model, project?: Project): Installation
     const pb = byId.get(b);
     if (pa && pb) diagonals.push({ from, to, length: vec2.distance(pa.at, pb.at) });
   };
-  diag("start-inner", "end-outer", "départ jour", "arrivée extérieur");
-  diag("start-outer", "end-inner", "départ extérieur", "arrivée jour");
+  diag(
+    "start-inner",
+    "end-outer",
+    t.t("installation.diagonal.startInner"),
+    t.t("installation.diagonal.endOuter"),
+  );
+  diag(
+    "start-outer",
+    "end-inner",
+    t.t("installation.diagonal.startOuter"),
+    t.t("installation.diagonal.endInner"),
+  );
 
   const walls: WallOffset[] = [];
   const siteWalls = project?.site.walls ?? [];

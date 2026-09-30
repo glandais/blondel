@@ -9,15 +9,33 @@
  * crémaillères, poteaux, supports, platines) = limons et structure.
  */
 import type { Part } from "@blondel/core";
+import type { MessageKey } from "@blondel/i18n";
+import { translatorOf, type Translator } from "./i18n.js";
 
 export type TemplateFamily = "stringers" | "treads" | "guards";
 
 export const TEMPLATE_FAMILIES: readonly TemplateFamily[] = ["stringers", "treads", "guards"];
 
+/** Clé du libellé de chaque famille de gabarits (`template.family.*`). */
+export const TEMPLATE_FAMILY_KEYS: Readonly<Record<TemplateFamily, MessageKey>> = {
+  stringers: "template.family.stringers",
+  treads: "template.family.treads",
+  guards: "template.family.guards",
+};
+
+/** Libellé d'une famille de gabarits dans la langue du traducteur (défaut : français). */
+export function templateFamilyLabel(
+  family: TemplateFamily,
+  t: Translator = translatorOf(),
+): string {
+  return t.t(TEMPLATE_FAMILY_KEYS[family]);
+}
+
+/** Libellés français (compatibilité) : `templateFamilyLabel(f)` en français. */
 export const TEMPLATE_FAMILY_LABELS: Readonly<Record<TemplateFamily, string>> = {
-  stringers: "Limons et structure",
-  treads: "Marches",
-  guards: "Garde-corps",
+  stringers: templateFamilyLabel("stringers"),
+  treads: templateFamilyLabel("treads"),
+  guards: templateFamilyLabel("guards"),
 };
 
 /** Famille de gabarit d'une pièce. */

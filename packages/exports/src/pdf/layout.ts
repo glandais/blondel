@@ -5,7 +5,8 @@
  * Choix de mise en page (non sourcés, à valider avec un atelier pilote, LEDGER §2) : marges de
  * 10 mm, cartouche de 150 × 20 mm en bas à droite, corps des textes de 2,2 à 4,2 mm.
  */
-import { formatFr } from "../format.js";
+import { formatIn } from "../format.js";
+import type { Translator } from "../i18n.js";
 import type { PdfCanvas, Rgb } from "./canvas.js";
 
 export const MARGIN = 10;
@@ -22,14 +23,22 @@ export const BAND: Rgb = [246, 248, 250];
 export const ACCENT: Rgb = [209, 36, 47];
 export const GUIDE: Rgb = [9, 105, 218];
 
-export const fr = (v: number, d = 0): string => formatFr(v, { decimals: d, trimZeros: true });
+/** Nombre affiché dans la langue du traducteur, zéros inutiles supprimés (défaut : entier). */
+export const fr = (t: Translator, v: number, d = 0): string =>
+  formatIn(t, v, { decimals: d, trimZeros: true });
 
-export function dateText(d: string | Date | undefined): string {
+/** Titre d'une page d'une section paginée : « Titre (i/n) » s'il y a plusieurs pages. */
+export function pagedTitle(t: Translator, title: string, index: number, count: number): string {
+  return count > 1
+    ? t.t("pdf.common.paged", { title, index: String(index), count: String(count) })
+    : title;
+}
+
+/** Date du cartouche au format de la langue (texte fourni repris tel quel). */
+export function dateText(d: string | Date | undefined, t: Translator): string {
   if (d === undefined) return "—";
   if (typeof d === "string") return d;
-  if (Number.isNaN(d.getTime())) return "—";
-  const p = (n: number): string => String(n).padStart(2, "0");
-  return `${p(d.getDate())}/${p(d.getMonth() + 1)}/${d.getFullYear()}`;
+  return t.date(d);
 }
 
 export interface Frame {
@@ -53,6 +62,11 @@ export interface PageDraft<Info> {
   draw(c: PdfCanvas, frame: Frame): void;
   /** Dessin à droite de l'en-tête ; renvoie la largeur occupée (mm). */
   readonly headerRight?: (c: PdfCanvas) => number;
+  /**
+   * Titre de l'entrée du sommaire (déjà traduit), si elle diffère du titre de la page : les
+   * pages consécutives de même entrée sont regroupées.
+   */
+  readonly tocTitle?: string;
 }
 
 export function rect(
@@ -191,7 +205,7 @@ export interface TitleBlockInfo {
  * Cartouche en deux colonnes : projet, document, échelle, date | repère, matériau,
  * épaisseur, pagination.
  */
-export function drawTitleBlock(c: PdfCanvas, info: TitleBlockInfo): void {
+export function drawTitleBlock(c: PdfCanvas, info: TitleBlockInfo, t: Translator): void {
   const w = TITLE_BLOCK_W;
   const h = TITLE_BLOCK_H;
   const x = c.pageWidth - MARGIN - w;
@@ -216,21 +230,29 @@ export function drawTitleBlock(c: PdfCanvas, info: TitleBlockInfo): void {
   };
   const leftW = split - x;
   const rightW = x + w - split;
-  cell("Projet", info.project, x, leftW, 0, true);
-  cell("Document", info.page, x, leftW, 1);
-  cell("Échelle", info.scale, x, leftW, 2);
-  cell("Date", info.date, x, leftW, 3);
+  cell(t.t("pdf.titleBlock.project"), info.project, x, leftW, 0, true);
+  cell(t.t("pdf.titleBlock.document"), info.page, x, leftW, 1);
+  cell(t.t("pdf.titleBlock.scale"), info.scale, x, leftW, 2);
+  cell(t.t("pdf.titleBlock.date"), info.date, x, leftW, 3);
   const p = info.part;
-  cell("Repère", p?.mark ?? "—", split, rightW, 0, p !== undefined);
-  cell("Matériau", p?.material ?? "—", split, rightW, 1);
+  cell(t.t("pdf.titleBlock.mark"), p?.mark ?? "—", split, rightW, 0, p !== undefined);
+  cell(t.t("pdf.titleBlock.material"), p?.material ?? "—", split, rightW, 1);
   cell(
-    "Épaisseur",
-    p?.thickness !== undefined && Number.isFinite(p.thickness) ? `${fr(p.thickness, 1)} mm` : "—",
+    t.t("pdf.titleBlock.thickness"),
+    p?.thickness !== undefined && Number.isFinite(p.thickness)
+      ? `${fr(t, p.thickness, 1)} mm`
+      : "—",
     split,
     rightW,
     2,
   );
-  cell("Folio", `Page ${info.index} / ${info.total}`, split, rightW, 3);
+  cell(
+    t.t("pdf.titleBlock.folio"),
+    t.t("pdf.titleBlock.page", { index: String(info.index), total: String(info.total) }),
+    split,
+    rightW,
+    3,
+  );
   c.text("Blondel", x + 2, y - 1.5, { size: 2.2, color: MUTED });
 }
 

@@ -21,16 +21,17 @@
  * `exportPdf` la réalise avec jsPDF.
  */
 import type { Model, Part, Project } from "@blondel/core";
-import {
-  MATERIAL_LABELS,
-  cutListRows,
-  defaultMassNote,
-  massNoteFor,
-  type MassNote,
-} from "../csv/cutlist.js";
+import { cutListRows, defaultMassNote, massNoteFor, type MassNote } from "../csv/cutlist.js";
 import { cutSheet } from "../cutsheet.js";
-import { formatFr } from "../format.js";
-import { tr } from "../i18n.js";
+import { formatIn } from "../format.js";
+import {
+  localeOption,
+  materialLabel,
+  translatorOf,
+  tr,
+  type LocaleOption,
+  type Translator,
+} from "../i18n.js";
 import { renderElevationSvg } from "../svg/elevation.js";
 import { renderFlatPatternSvg } from "../svg/flat.js";
 import { renderPlanSvg } from "../svg/plan.js";
@@ -45,6 +46,7 @@ import {
   drawHeader,
   drawTitleBlock,
   fr,
+  pagedTitle,
   tablePages,
   type Frame,
   type PageDraft,
@@ -54,7 +56,7 @@ import {
 import { drawSvg, parseSvg, svgSize } from "./svg-draw.js";
 import { DEFAULT_TILE_OVERLAP, templatePages, type TileInfo } from "./tiles.js";
 
-export { COMPLIANCE_DISCLAIMER, complianceLines } from "./compliance.js";
+export { COMPLIANCE_DISCLAIMER, complianceDisclaimer, complianceLines } from "./compliance.js";
 export { wrapText } from "./layout.js";
 
 /** Échelles normalisées essayées, de la plus grande (1:1) à la plus petite. */
@@ -73,13 +75,14 @@ export interface PdfPages {
   readonly templates?: boolean;
 }
 
-export interface PdfLayoutOptions {
+export interface PdfLayoutOptions extends LocaleOption {
   /** Projet source : nom (cartouche), trémie, murs et plancher haut (plan, élévation, pose). */
   readonly project?: Project;
   /** Nom affiché dans le cartouche (défaut : `project.name`, sinon « Escalier »). */
   readonly title?: string;
   /**
-   * Date du cartouche : texte libre ou `Date` (affichée JJ/MM/AAAA). Absente : « — ». Jamais
+   * Date du cartouche : texte libre ou `Date` (au format de la langue : JJ/MM/AAAA en
+   * français, AAAA-MM-JJ en anglais). Absente : « — ». Jamais
    * lue dans l'horloge : deux exports du même modèle sont identiques.
    */
   readonly date?: string | Date;
@@ -153,6 +156,7 @@ function chooseScale(
   frame: Frame,
   scales: readonly number[],
   forced: number | undefined,
+  t: Translator,
 ): { n: number; svg: string; note?: string } {
   const fits = (svg: string): boolean => {
     const s = svgSize(parseSvg(svg));
@@ -160,7 +164,7 @@ function chooseScale(
   };
   if (forced !== undefined) {
     if (!(forced > 0) || !Number.isFinite(forced)) {
-      throw new RangeError(`Échelle imposée invalide : 1:${forced}`);
+      throw new RangeError(t.t("pdf.scale.invalid", { scale: String(forced) }));
     }
     const svg = render(forced);
     if (fits(svg)) return { n: forced, svg };
@@ -171,7 +175,7 @@ function chooseScale(
     if (fits(svg)) {
       return forced === undefined
         ? { n, svg }
-        : { n, svg, note: `échelle 1:${fr(forced)} demandée trop grande pour le format` };
+        : { n, svg, note: t.t("pdf.scale.forcedTooLarge", { scale: fr(t, forced) }) };
     }
   }
   // Aucune échelle de la liste : n entier croissant à partir de la plus petite.
@@ -193,7 +197,7 @@ function chooseScale(
     svg = nextSvg;
     size = nextSize;
   }
-  return { n, svg, note: "échelle non normalisée (dessin trop grand)" };
+  return { n, svg, note: t.t("pdf.scale.nonStandard") };
 }
 
 function drawingPage(
@@ -203,10 +207,11 @@ function drawingPage(
   frame: Frame,
   scales: readonly number[],
   forced: number | undefined,
+  t: Translator,
   extra: Partial<PdfPageInfo> = {},
   part?: TitlePart,
 ): PageSpec {
-  const chosen = chooseScale(render, frame, scales, forced);
+  const chosen = chooseScale(render, frame, scales, forced, t);
   const svg = parseSvg(chosen.svg);
   return {
     info: {
@@ -223,7 +228,10 @@ function drawingPage(
       const h = size.heightMm ?? 0;
       drawSvg(c, svg, { x: f.x + Math.max(0, (f.w - w) / 2), y: f.y + Math.max(0, (f.h - h) / 2) });
       if (chosen.note !== undefined) {
-        c.text(`Remarque : ${chosen.note}.`, f.x, f.y + f.h + 2, { size: 2.4, color: MUTED });
+        c.text(t.t("pdf.scale.note", { note: chosen.note }), f.x, f.y + f.h + 2, {
+          size: 2.4,
+          color: MUTED,
+        });
       }
     },
   };
@@ -231,9 +239,9 @@ function drawingPage(
 
 // ------------------------------------------------------------------ nomenclature, débit
 
-const dims = (l?: number, w?: number, t?: number): string =>
-  l !== undefined && w !== undefined && t !== undefined
-    ? `${fr(l, 1)} × ${fr(w, 1)} × ${fr(t, 1)}`
+const dims = (tx: Translator, l?: number, w?: number, e?: number): string =>
+  l !== undefined && w !== undefined && e !== undefined
+    ? `${fr(tx, l, 1)} × ${fr(tx, w, 1)} × ${fr(tx, e, 1)}`
     : "—";
 
 /**
@@ -252,8 +260,13 @@ function massNoteMarks(notes: Iterable<string | undefined>): {
   };
 }
 
-function bomPages(parts: readonly Part[], frame: Frame, massNote: MassNote): PageSpec[] {
-  const rows = cutListRows(parts, { massNote });
+function bomPages(
+  parts: readonly Part[],
+  frame: Frame,
+  massNote: MassNote,
+  t: Translator,
+): PageSpec[] {
+  const rows = cutListRows(parts, { ...localeOption(t), massNote });
   const total = rows.reduce((s, r) => s + r.quantity, 0);
   const notes = massNoteMarks(rows.map((r) => r.massNote));
   let mass: number | undefined = rows.length > 0 ? 0 : undefined;
@@ -264,13 +277,13 @@ function bomPages(parts: readonly Part[], frame: Frame, massNote: MassNote): Pag
   const draws = tablePages(
     {
       columns: [
-        { title: "Repère", weight: 12, align: "left" },
-        { title: "Désignation", weight: 44, align: "left" },
-        { title: "Matériau", weight: 18, align: "left" },
-        { title: "Section", weight: 20, align: "left" },
-        { title: "Débit L × l × e (mm)", weight: 30, align: "right" },
-        { title: "Qté", weight: 8, align: "right" },
-        { title: "Masse (kg)", weight: 14, align: "right" },
+        { title: t.t("pdf.bom.col.mark"), weight: 12, align: "left" },
+        { title: t.t("pdf.bom.col.designation"), weight: 44, align: "left" },
+        { title: t.t("pdf.bom.col.material"), weight: 18, align: "left" },
+        { title: t.t("pdf.bom.col.section"), weight: 20, align: "left" },
+        { title: t.t("pdf.bom.col.stock"), weight: 30, align: "right" },
+        { title: t.t("pdf.bom.col.quantity"), weight: 8, align: "right" },
+        { title: t.t("pdf.bom.col.mass"), weight: 14, align: "right" },
       ],
       rows: rows.map((r) => ({
         cells: [
@@ -278,10 +291,10 @@ function bomPages(parts: readonly Part[], frame: Frame, massNote: MassNote): Pag
           r.name,
           r.material,
           r.section,
-          dims(r.length, r.width, r.thickness),
+          dims(t, r.length, r.width, r.thickness),
           String(r.quantity),
           r.unitMass !== undefined
-            ? `${dec(r.unitMass * r.quantity, 1)}${notes.mark(r.massNote)}`
+            ? `${dec(t, r.unitMass * r.quantity, 1)}${notes.mark(r.massNote)}`
             : "—",
         ],
       })),
@@ -290,37 +303,41 @@ function bomPages(parts: readonly Part[], frame: Frame, massNote: MassNote): Pag
           ? [
               {
                 cells: [
-                  "Total",
+                  t.t("pdf.common.total"),
                   "",
                   "",
                   "",
                   "",
                   String(total),
-                  mass !== undefined ? dec(mass, 1) : "incomplet",
+                  mass !== undefined ? dec(t, mass, 1) : t.t("pdf.common.incomplete"),
                 ],
               },
             ]
           : [],
-      empty: "Aucune pièce générée.",
+      empty: t.t("pdf.common.noParts"),
       ...(notes.legend.length > 0
-        ? { intro: [`Masses calculées par le modèle. ${notes.legend.join(" ")}`] }
+        ? { intro: [t.t("pdf.bom.intro", { legend: notes.legend.join(" ") })] }
         : {}),
     },
     frame,
   );
+  const title = t.t("pdf.bom.title");
   return draws.map((draw, i) => ({
-    info: {
-      kind: "bom",
-      title: draws.length > 1 ? `Nomenclature (${i + 1}/${draws.length})` : "Nomenclature",
-    },
+    info: { kind: "bom", title: pagedTitle(t, title, i + 1, draws.length) },
+    tocTitle: title,
     draw,
   }));
 }
 
-const dec = (v: number, d: number): string => formatFr(v, { decimals: d });
+const dec = (t: Translator, v: number, d: number): string => formatIn(t, v, { decimals: d });
 
-function cutSheetPages(parts: readonly Part[], frame: Frame, massNote: MassNote): PageSpec[] {
-  const groups = cutSheet(parts, { massNote });
+function cutSheetPages(
+  parts: readonly Part[],
+  frame: Frame,
+  massNote: MassNote,
+  t: Translator,
+): PageSpec[] {
+  const groups = cutSheet(parts, { ...localeOption(t), massNote });
   const notes = massNoteMarks(groups.flatMap((g) => g.rows.map((r) => r.massNote)));
   const rows: TableRow[] = [];
   for (const g of groups) {
@@ -328,8 +345,13 @@ function cutSheetPages(parts: readonly Part[], frame: Frame, massNote: MassNote)
       heading: true,
       cells: [
         g.thickness !== undefined
-          ? `${g.materialLabel} — épaisseur ${fr(g.thickness, 1)} mm`
-          : `${g.materialLabel} — ${g.section !== undefined && g.section !== "" ? `section ${g.section}` : "sans débit"}`,
+          ? t.t("pdf.cutsheet.group.thickness", {
+              material: g.materialLabel,
+              thickness: fr(t, g.thickness, 1),
+            })
+          : g.section !== undefined && g.section !== ""
+            ? t.t("pdf.cutsheet.group.section", { material: g.materialLabel, section: g.section })
+            : t.t("pdf.cutsheet.group.noStock", { material: g.materialLabel }),
       ],
     });
     for (const r of g.rows) {
@@ -338,64 +360,67 @@ function cutSheetPages(parts: readonly Part[], frame: Frame, massNote: MassNote)
           r.mark,
           r.name,
           r.section,
-          dims(r.length, r.width, r.thickness),
-          r.source === "stock" ? "débit" : r.source === "flat" ? "développé" : "—",
+          dims(t, r.length, r.width, r.thickness),
+          r.source === "stock"
+            ? t.t("pdf.cutsheet.source.stock")
+            : r.source === "flat"
+              ? t.t("pdf.cutsheet.source.flat")
+              : "—",
           String(r.quantity),
-          r.length !== undefined ? dec((r.length * r.quantity) / 1000, 2) : "—",
+          r.length !== undefined ? dec(t, (r.length * r.quantity) / 1000, 2) : "—",
           r.unitMass !== undefined
-            ? `${dec(r.unitMass * r.quantity, 1)}${notes.mark(r.massNote)}`
+            ? `${dec(t, r.unitMass * r.quantity, 1)}${notes.mark(r.massNote)}`
             : "—",
         ],
       });
     }
-    const t = g.totals;
+    const tot = g.totals;
     rows.push({
       bold: true,
       cells: [
-        "Total",
-        t.volumeM3 !== undefined
-          ? `volume brut ${dec(t.volumeM3, 3)} m³`
+        t.t("pdf.common.total"),
+        tot.volumeM3 !== undefined
+          ? t.t("pdf.cutsheet.volume", { volume: dec(t, tot.volumeM3, 3) })
           : g.basis === "section"
             ? ""
-            : "volume brut incomplet",
+            : t.t("pdf.cutsheet.volumeIncomplete"),
         "",
         "",
         "",
-        String(t.quantity),
-        dec(t.lengthM, 2),
-        t.massKg !== undefined
-          ? `${dec(t.massKg, 1)}${t.massNotes.map((n) => notes.mark(n)).join("")}`
-          : "incomplet",
+        String(tot.quantity),
+        dec(t, tot.lengthM, 2),
+        tot.massKg !== undefined
+          ? `${dec(t, tot.massKg, 1)}${tot.massNotes.map((n) => notes.mark(n)).join("")}`
+          : t.t("pdf.common.incomplete"),
       ],
     });
   }
   const draws = tablePages(
     {
       columns: [
-        { title: "Repère", weight: 10, align: "left" },
-        { title: "Désignation", weight: 44, align: "left" },
-        { title: "Section", weight: 16, align: "left" },
-        { title: "L × l × e (mm)", weight: 28, align: "right" },
-        { title: "Origine", weight: 12, align: "left" },
-        { title: "Qté", weight: 7, align: "right" },
-        { title: "Long. tot. (m)", weight: 14, align: "right" },
-        { title: "Masse (kg)", weight: 12, align: "right" },
+        { title: t.t("pdf.cutsheet.col.mark"), weight: 10, align: "left" },
+        { title: t.t("pdf.cutsheet.col.designation"), weight: 44, align: "left" },
+        { title: t.t("pdf.cutsheet.col.section"), weight: 16, align: "left" },
+        { title: t.t("pdf.cutsheet.col.dims"), weight: 28, align: "right" },
+        { title: t.t("pdf.cutsheet.col.source"), weight: 12, align: "left" },
+        { title: t.t("pdf.cutsheet.col.quantity"), weight: 7, align: "right" },
+        { title: t.t("pdf.cutsheet.col.length"), weight: 14, align: "right" },
+        { title: t.t("pdf.cutsheet.col.mass"), weight: 12, align: "right" },
       ],
       rows,
-      empty: "Aucune pièce générée.",
+      empty: t.t("pdf.common.noParts"),
       intro: [
-        "Pièces groupées par matériau et épaisseur (plaques, plateaux) ou section (profilés, tubes). Origine : débit brut du cœur (surcotes comprises) ou emprise du développé (flan).",
-        "Masses : seulement celles fournies par le modèle ; un total est « incomplet » si une masse manque." +
+        t.t("pdf.cutsheet.intro.grouping"),
+        t.t("pdf.cutsheet.intro.masses") +
           (notes.legend.length > 0 ? ` ${notes.legend.join(" ")}` : ""),
       ],
     },
     frame,
   );
+  const title = t.t("pdf.cutsheet.title");
   return draws.map((draw, i) => ({
-    info: {
-      kind: "cutsheet",
-      title: draws.length > 1 ? `Fiche de débit (${i + 1}/${draws.length})` : "Fiche de débit",
-    },
+    info: { kind: "cutsheet", title: pagedTitle(t, title, i + 1, draws.length) },
+    tocTitle: title,
     draw,
   }));
 }
@@ -408,34 +433,16 @@ interface TocEntry {
   readonly to: number;
 }
 
-/** Entrées du sommaire : pages consécutives d'une même section regroupées. */
+/**
+ * Entrées du sommaire : pages consécutives d'une même section regroupées. Le titre d'entrée
+ * d'une page est son `tocTitle` (sections paginées, gabarits), sinon son titre.
+ */
 function tocEntries(pages: readonly PageSpec[], offset: number): TocEntry[] {
   const out: TocEntry[] = [];
-  const sectionOf = (p: PdfPageInfo): string => {
-    switch (p.kind) {
-      case "installation":
-        return "Fiche de pose";
-      case "bom":
-        return "Nomenclature";
-      case "cutsheet":
-        return "Fiche de débit";
-      case "compliance":
-        return "Contrôle de conception";
-      case "template": {
-        const t = p.tile!;
-        const base = p.title.replace(/ — case .*$/, "").replace(/ \(\d+ pièces\)$/, "");
-        return t.rows * t.cols > 1
-          ? `${base} : ${t.count} case(s), grille ${t.rows} × ${t.cols}`
-          : base;
-      }
-      default:
-        return p.title;
-    }
-  };
   let key = "";
   let partKey = "";
   pages.forEach((p, i) => {
-    const s = sectionOf(p.info);
+    const s = p.tocTitle ?? p.info.title;
     const pk = p.info.partIds?.join(",") ?? "";
     const last = out[out.length - 1];
     if (last && s === key && pk === partKey) {
@@ -452,20 +459,26 @@ function tocPages(
   frame: Frame,
   name: string,
   date: string,
+  t: Translator,
 ): PageSpec[] {
   const spec = (entries: readonly TocEntry[]) => ({
     columns: [
-      { title: "Document", weight: 80, align: "left" as const },
-      { title: "Pages", weight: 14, align: "right" as const },
+      { title: t.t("pdf.toc.col.document"), weight: 80, align: "left" as const },
+      { title: t.t("pdf.toc.col.pages"), weight: 14, align: "right" as const },
     ],
     rows: entries.map((e) => ({
-      cells: [e.title, e.from === e.to ? String(e.from) : `${e.from} à ${e.to}`],
+      cells: [
+        e.title,
+        e.from === e.to
+          ? String(e.from)
+          : t.t("pdf.toc.range", { from: String(e.from), to: String(e.to) }),
+      ],
     })),
-    empty: "Aucune page.",
+    empty: t.t("pdf.toc.empty"),
     intro: [
-      `Projet : ${name} — date : ${date}.`,
-      "Gabarits 1:1 : imprimer à 100 % (sans « ajuster à la page ») et vérifier la règle de contrôle de 100 mm de chaque page.",
-      "Les cotes d'implantation de la fiche de pose sont données dans le repère du relevé (murs, trémie).",
+      t.t("pdf.toc.intro.project", { name, date }),
+      t.t("pdf.toc.intro.templates"),
+      t.t("pdf.toc.intro.installation"),
     ],
   });
   // Nombre de pages du sommaire : il ne dépend que du nombre d'entrées.
@@ -474,7 +487,7 @@ function tocPages(
   return draws.map((draw, i) => ({
     info: {
       kind: "toc",
-      title: draws.length > 1 ? `Sommaire (${i + 1}/${draws.length})` : "Sommaire",
+      title: pagedTitle(t, t.t("pdf.toc.title"), i + 1, draws.length),
     },
     draw,
   }));
@@ -495,11 +508,11 @@ function flatGroups(parts: readonly Part[]): { part: Part; ids: string[] }[] {
   return [...groups.values()];
 }
 
-function titlePart(part: Part): TitlePart {
+function titlePart(part: Part, t: Translator): TitlePart {
   const thickness = part.flat?.thickness ?? part.stock?.thickness;
   return {
     mark: part.mark,
-    material: MATERIAL_LABELS[part.material] ?? part.material,
+    material: materialLabel(t, part.material),
     ...(thickness !== undefined ? { thickness } : {}),
   };
 }
@@ -513,8 +526,9 @@ export function renderPdf(
   model: Model,
   options: PdfLayoutOptions = {},
 ): PdfPageInfo[] {
+  const t = translatorOf(options);
   const project = options.project;
-  const name = options.title ?? project?.name ?? "Escalier";
+  const name = options.title ?? project?.name ?? t.t("export.common.defaultName");
   const frame = contentFrame(c);
   const scales = options.scales ?? STANDARD_SCALES;
   const show: Required<PdfPages> = {
@@ -532,6 +546,7 @@ export function renderPdf(
   // Corps des textes des dessins : px CSS (96 dpi) → mm papier.
   const fontPx = ((options.drawingTextMm ?? 2.4) * 96) / 25.4;
   const common = {
+    ...localeOption(t),
     theme: "light" as const,
     fontSize: fontPx,
     margin: 8,
@@ -544,7 +559,7 @@ export function renderPdf(
     pages.push(
       drawingPage(
         "plan",
-        "Plan coté",
+        t.t("pdf.plan.title"),
         (n) =>
           renderPlanSvg(model, {
             ...common,
@@ -556,6 +571,7 @@ export function renderPdf(
         frame,
         scales,
         options.planScale,
+        t,
       ),
     );
   }
@@ -563,31 +579,35 @@ export function renderPdf(
     pages.push(
       drawingPage(
         "elevation",
-        "Élévation développée",
+        t.t("pdf.elevation.title"),
         (n) => renderElevationSvg(model, { ...common, scale: n, background: false, title: name }),
         frame,
         scales,
         options.elevationScale,
+        t,
       ),
     );
   }
-  if (show.installation) pages.push(...installationPages(c, model, project, frame, scales));
+  if (show.installation) pages.push(...installationPages(c, model, project, frame, scales, t));
   const massNote =
     options.massNote ?? (project !== undefined ? massNoteFor(project.workshop) : defaultMassNote);
-  if (show.bom) pages.push(...bomPages(model.parts, frame, massNote));
-  if (show.cutsheet) pages.push(...cutSheetPages(model.parts, frame, massNote));
+  if (show.bom) pages.push(...bomPages(model.parts, frame, massNote, t));
+  if (show.cutsheet) pages.push(...cutSheetPages(model.parts, frame, massNote, t));
   if (show.compliance)
-    pages.push(...compliancePages(c, model, frame, project?.compliance.overrides ?? []));
+    pages.push(...compliancePages(c, model, frame, project?.compliance.overrides ?? [], t));
   const groups = show.flats || show.templates ? flatGroups(model.parts) : [];
   if (show.flats) {
     for (const { part, ids } of groups) {
-      const qty = ids.length > 1 ? ` (${ids.length} pièces identiques)` : "";
+      const title = t.t("pdf.flat.title", { mark: part.mark, name: tr(t, part.name) });
       pages.push(
         drawingPage(
           "flat",
-          `Développé ${part.mark} — ${tr(part.name)}${qty}`,
+          ids.length > 1
+            ? t.t("pdf.flat.withQuantity", { title, count: String(ids.length) })
+            : title,
           (n) =>
             renderFlatPatternSvg(part, {
+              ...localeOption(t),
               theme: "light",
               fontSize: fontPx,
               margin: 8,
@@ -598,8 +618,9 @@ export function renderPdf(
           frame,
           scales,
           options.flatScale,
+          t,
           { partIds: ids },
-          titlePart(part),
+          titlePart(part, t),
         ),
       );
     }
@@ -610,6 +631,7 @@ export function renderPdf(
       if (families && !families.has(templateFamily(part))) continue;
       pages.push(
         ...templatePages(c, part, ids, frame, {
+          ...localeOption(t),
           fontPx,
           overlap: options.tileOverlap ?? DEFAULT_TILE_OVERLAP,
           ...decimals,
@@ -618,22 +640,26 @@ export function renderPdf(
     }
   }
 
-  const date = dateText(options.date);
-  const all = show.toc ? [...tocPages(pages, frame, name, date), ...pages] : pages;
+  const date = dateText(options.date, t);
+  const all = show.toc ? [...tocPages(pages, frame, name, date, t), ...pages] : pages;
   all.forEach((p, i) => {
     if (i > 0) c.addPage();
     const reserved = p.headerRight ? p.headerRight(c) : 0;
     drawHeader(c, p.info.title, reserved);
     p.draw(c, frame);
-    drawTitleBlock(c, {
-      project: name,
-      page: p.info.title,
-      scale: p.info.scale !== undefined ? `1:${fr(p.info.scale)}` : "—",
-      date,
-      index: i + 1,
-      total: all.length,
-      ...(p.part ? { part: p.part } : {}),
-    });
+    drawTitleBlock(
+      c,
+      {
+        project: name,
+        page: p.info.title,
+        scale: p.info.scale !== undefined ? `1:${fr(t, p.info.scale)}` : "—",
+        date,
+        index: i + 1,
+        total: all.length,
+        ...(p.part ? { part: p.part } : {}),
+      },
+      t,
+    );
   });
   return all.map((p) => p.info);
 }
@@ -643,7 +669,8 @@ export function exportPdfDocument(
   model: Model,
   options: PdfOptions = {},
 ): { bytes: Uint8Array; pages: PdfPageInfo[] } {
-  const name = options.title ?? options.project?.name ?? "Escalier";
+  const t = translatorOf(options);
+  const name = options.title ?? options.project?.name ?? t.t("export.common.defaultName");
   const canvas = new JsPdfCanvas({
     format: options.format ?? "a4",
     orientation: "landscape",
@@ -652,7 +679,7 @@ export function exportPdfDocument(
       ? { creationDate: options.date }
       : {}),
     title: name,
-    subject: "Dossier d'escalier (Blondel)",
+    subject: t.t("pdf.document.subject"),
   });
   const pages = renderPdf(canvas, model, options);
   return { bytes: canvas.output(), pages };

@@ -3,19 +3,32 @@
  * TREMIE, COTES, TEXTE. Même dessin que le plan SVG (`buildPlanDrawing`).
  */
 import type { Model } from "@blondel/core";
+import { translatorOf, type Translator } from "../i18n.js";
 import { buildPlanDrawing, dimensionGeometry, type PlanDrawingOptions } from "../plan/drawing.js";
 import { DEFAULT_PLAN_DXF_VERSION, createDxfWriter } from "./create.js";
-import { declareLayers, type DxfLayerDef, type DxfVersion } from "./writer.js";
+import { localizedLayers, type LayerSpec } from "./layers.js";
+import { declareLayers, type DxfVersion } from "./writer.js";
 
-export const PLAN_LAYERS = {
-  contour: { name: "CONTOUR", color: 7 },
-  treads: { name: "MARCHES", color: 8 },
-  nosings: { name: "NEZ", color: 4 },
-  walkline: { name: "FOULEE", color: 1, lineType: "CENTER" },
-  opening: { name: "TREMIE", color: 6, lineType: "DASHED" },
-  dimensions: { name: "COTES", color: 3 },
-  text: { name: "TEXTE", color: 7 },
-} as const satisfies Record<string, DxfLayerDef>;
+/** Calques du plan : clé du nom (`dxf.layer.*`), couleur, type de ligne. */
+const PLAN_LAYER_SPECS = {
+  contour: { key: "dxf.layer.contour", color: 7 },
+  treads: { key: "dxf.layer.treads", color: 8 },
+  nosings: { key: "dxf.layer.nosings", color: 4 },
+  walkline: { key: "dxf.layer.walkline", color: 1, lineType: "CENTER" },
+  opening: { key: "dxf.layer.opening", color: 6, lineType: "DASHED" },
+  dimensions: { key: "dxf.layer.dimensions", color: 3 },
+  text: { key: "dxf.layer.text", color: 7 },
+} as const satisfies Record<string, LayerSpec>;
+
+export type PlanLayerId = keyof typeof PLAN_LAYER_SPECS;
+
+/** Calques du plan dans la langue du traducteur (noms passés par `sanitizeLayerName`). */
+export function planLayers(t: Translator = translatorOf()) {
+  return localizedLayers(PLAN_LAYER_SPECS, t);
+}
+
+/** Calques du plan en français (noms historiques : CONTOUR, MARCHES, NEZ…). */
+export const PLAN_LAYERS = planLayers();
 
 export interface PlanDxfOptions extends PlanDrawingOptions {
   /** Défaut : AC1021 (`DEFAULT_PLAN_DXF_VERSION`). */
@@ -28,7 +41,7 @@ export function exportPlanDxf(model: Model, options: PlanDxfOptions = {}): strin
   const w = createDxfWriter(options.version ?? DEFAULT_PLAN_DXF_VERSION, {
     dashPattern: [th * 1.2, th * 0.6],
   });
-  const L = PLAN_LAYERS;
+  const L = planLayers(translatorOf(options));
   declareLayers(w, Object.values(L));
 
   w.polyline(d.contour.vertices, true, L.contour.name);

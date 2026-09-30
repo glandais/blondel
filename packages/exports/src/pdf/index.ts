@@ -54,6 +54,7 @@ export {
 export {
   COMPLIANCE_DISCLAIMER,
   STANDARD_SCALES,
+  complianceDisclaimer,
   exportPdf,
   exportPdfDocument,
   renderPdf,

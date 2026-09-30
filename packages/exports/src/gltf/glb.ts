@@ -24,7 +24,7 @@
  */
 import type { Model, Part, Project } from "@blondel/core";
 import { meshPart, type Mesh, type MeshOptions } from "@blondel/geometry";
-import { tr } from "../i18n.js";
+import { translatorOf, tr, type LocaleOption, type Translator } from "../i18n.js";
 import { hexToLinear, pbrLook } from "./materials.js";
 
 export const GLB_MAGIC = 0x46546c67; // « glTF »
@@ -41,7 +41,7 @@ export const GL_TRIANGLES = 4;
 /** Millimètres → mètres. */
 const MM_TO_M = 1e-3;
 
-export interface GlbOptions {
+export interface GlbOptions extends LocaleOption {
   /** Projet (nom de la scène et du nœud racine). */
   readonly project?: Project;
   /** Nom de la scène (défaut : `project.name`, sinon « Escalier »). */
@@ -171,14 +171,14 @@ function jsonSafe(v: unknown): unknown {
 }
 
 /** Métadonnées d'une pièce (`extras` du nœud). */
-export function partExtras(part: Part): Record<string, unknown> {
+export function partExtras(part: Part, t: Translator = translatorOf()): Record<string, unknown> {
   return jsonSafe({
     id: part.id,
     mark: part.mark,
     category: part.category,
-    name: tr(part.name),
+    name: tr(t, part.name),
     material: part.material,
-    ...(part.section !== undefined ? { section: tr(part.section) } : {}),
+    ...(part.section !== undefined ? { section: tr(t, part.section) } : {}),
     ...(part.stock !== undefined ? { stockMm: part.stock } : {}),
     quantities: part.quantities,
     ...(part.flat !== undefined ? { flatThicknessMm: part.flat.thickness } : {}),
@@ -277,7 +277,8 @@ export function buildGltf(
   model: Pick<Model, "parts">,
   options: GlbOptions = {},
 ): { doc: GltfDocument; bin: Uint8Array } {
-  const name = options.title ?? options.project?.name ?? "Escalier";
+  const t = translatorOf(options);
+  const name = options.title ?? options.project?.name ?? t.t("export.common.defaultName");
   const parts = options.filter ? model.parts.filter(options.filter) : model.parts;
   const bin = new BinWriter();
   const accessors: GltfAccessor[] = [];
@@ -324,7 +325,7 @@ export function buildGltf(
   };
 
   for (const part of parts) {
-    const extras = partExtras(part);
+    const extras = partExtras(part, t);
     const cached = cacheGet(part);
     if (cached) {
       nodes.push({ name: part.mark, mesh: cached.mesh, translation: cached.center, extras });
@@ -336,7 +337,10 @@ export function buildGltf(
     if (pm.error !== undefined || vertexCount === 0 || pm.mesh.indices.length === 0) {
       nodes.push({
         name: part.mark,
-        extras: { ...extras, meshError: pm.error !== undefined ? tr(pm.error) : "maillage vide" },
+        extras: {
+          ...extras,
+          meshError: pm.error !== undefined ? tr(t, pm.error) : t.t("gltf.meshEmpty"),
+        },
       });
       nodes[0]!.children!.push(nodes.length - 1);
       continue;
@@ -394,7 +398,7 @@ export function buildGltf(
           project: name,
           units: "m",
           upAxis: "Y",
-          source: "Blondel : mm, Z vers le haut ; (x, y, z) -> (x, z, -y) / 1000",
+          source: t.t("gltf.sourceAxes"),
           partCount: parts.length,
         },
       },

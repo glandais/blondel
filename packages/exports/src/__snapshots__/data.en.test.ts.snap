@@ -1,0 +1,53 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`exports de données en anglais > instantané anglais de la liste de débit (demo-u-oak) 1`] = `
+"﻿Mark,Description,Material,Section,Length (mm),Width (mm),Thickness (mm),Quantity,Unit volume (m³),Total volume (m³),Unit mass (kg),Total mass (kg),Mass note
+LE1,"Wall string, flight 1",Oak,45 × 359,1676.5,400.0,54.0,1,0.019148,0.019148,13.40,13.40,density to be validated
+LE2,"Wall string, flight 2",Oak,45 × 351,2424.0,400.0,54.0,1,0.029382,0.029382,20.57,20.57,density to be validated
+LE3,"Wall string, flight 3",Oak,45 × 438,2894.7,450.0,54.0,1,0.032769,0.032769,22.94,22.94,density to be validated
+LI1,"Outer string, flight 1",Oak,45 × 338,836.3,350.0,54.0,1,0.007932,0.007932,5.55,5.55,density to be validated
+LI2,"Outer string, flight 2",Oak,45 × 247,886.9,300.0,54.0,1,0.005789,0.005789,4.05,4.05,density to be validated
+LI3,"Outer string, flight 3",Oak,45 × 405,2153.6,450.0,54.0,1,0.025488,0.025488,17.84,17.84,density to be validated
+M1,Tread 1,Oak,,880.0,280.0,40.0,1,0.009856,0.009856,6.90,6.90,density to be validated
+M2,Tread 2,Oak,,880.0,396.2,40.0,1,0.009868,0.009868,6.91,6.91,density to be validated
+M3,Tread 3,Oak,,1046.0,516.8,40.0,1,0.011358,0.011358,7.95,7.95,density to be validated
+M4,Tread 4,Oak,,1314.9,477.0,40.0,1,0.014402,0.014402,10.08,10.08,density to be validated
+M5,Tread 5,Oak,,1057.2,414.1,40.0,1,0.010164,0.010164,7.11,7.11,density to be validated
+M6,Tread 6,Oak,,902.0,452.3,40.0,1,0.009870,0.009870,6.91,6.91,density to be validated
+M7,Tread 7,Oak,,1054.1,542.8,40.0,1,0.011619,0.011619,8.13,8.13,density to be validated
+M8,Tread 8,Oak,,1330.7,460.1,40.0,1,0.014198,0.014198,9.94,9.94,density to be validated
+M9,Tread 9,Oak,,1074.3,385.3,40.0,1,0.010121,0.010121,7.08,7.08,density to be validated
+M10,Tread 10,Oak,,937.9,364.7,40.0,1,0.009856,0.009856,6.90,6.90,density to be validated
+M11,Tread 11,Oak,,880.0,280.0,40.0,1,0.009856,0.009856,6.90,6.90,density to be validated
+M12,Tread 12,Oak,,880.0,280.0,40.0,1,0.009856,0.009856,6.90,6.90,density to be validated
+M13,Tread 13,Oak,,880.0,280.0,40.0,1,0.009856,0.009856,6.90,6.90,density to be validated
+M14,Tread 14,Oak,,880.0,280.0,40.0,1,0.009856,0.009856,6.90,6.90,density to be validated
+CM1,Riser 1,Oak,,880.0,140.0,20.0,1,0.002464,0.002464,1.72,1.72,density to be validated
+CM2,Riser 2,Oak,,880.0,180.0,20.0,1,0.003168,0.003168,2.22,2.22,density to be validated
+CM3,Riser 3,Oak,,915.2,180.0,20.0,1,0.003276,0.003276,2.29,2.29,density to be validated
+CM4,Riser 4,Oak,,1053.3,180.0,20.0,1,0.003719,0.003719,2.60,2.60,density to be validated
+CM5,Riser 5,Oak,,1017.9,180.0,20.0,1,0.003624,0.003624,2.54,2.54,density to be validated
+CM6,Riser 6,Oak,,890.7,180.0,20.0,1,0.003197,0.003197,2.24,2.24,density to be validated
+CM7,Riser 7,Oak,,915.6,180.0,20.0,1,0.003277,0.003277,2.29,2.29,density to be validated
+CM8,Riser 8,Oak,,1104.0,180.0,20.0,1,0.003900,0.003900,2.73,2.73,density to be validated
+CM9,Riser 9,Oak,,1020.3,180.0,20.0,1,0.003633,0.003633,2.54,2.54,density to be validated
+CM10,Riser 10,Oak,,903.5,180.0,20.0,1,0.003237,0.003237,2.27,2.27,density to be validated
+CM11,Riser 11,Oak,,880.0,180.0,20.0,1,0.003168,0.003168,2.22,2.22,density to be validated
+CM12,Riser 12,Oak,,880.0,180.0,20.0,1,0.003168,0.003168,2.22,2.22,density to be validated
+CM13,Riser 13,Oak,,880.0,180.0,20.0,1,0.003168,0.003168,2.22,2.22,density to be validated
+CM14,Riser 14,Oak,,880.0,180.0,20.0,1,0.003168,0.003168,2.22,2.22,density to be validated
+CM15,Riser 15,Oak,,880.0,180.0,20.0,1,0.003168,0.003168,2.22,2.22,density to be validated
+PG1,Guard post,Oak,80×80,858.0,80.0,80.0,9,0.005491,0.049421,3.84,34.59,density to be validated
+PG2,Guard post,Oak,80×80,958.0,80.0,80.0,9,0.006131,0.055181,4.29,38.63,density to be validated
+PT1,"Corner newel, turn 1",Oak,100 × 100,1817.3,120.0,120.0,1,0.017288,0.017288,12.10,12.10,density to be validated
+PT2,"Corner newel, turn 2",Oak,100 × 100,2519.6,120.0,120.0,1,0.024233,0.024233,16.96,16.96,density to be validated
+MC1,Guard handrail,Oak,Ø42,1046.0,42.0,42.0,1,0.001412,0.001412,0.99,0.99,density to be validated
+MC2,Guard handrail,Oak,Ø42,823.7,42.0,42.0,1,0.001112,0.001112,0.78,0.78,density to be validated
+MC3,Guard handrail,Oak,Ø42,1988.2,42.0,42.0,1,0.002684,0.002684,1.88,1.88,density to be validated
+MC4,Guard handrail,Oak,Ø42,6798.9,42.0,42.0,1,0.009179,0.009179,6.43,6.43,density to be validated
+MC5,Stairwell opening handrail,Oak,Ø42,9070.0,42.0,42.0,1,0.012245,0.012245,8.57,8.57,density to be validated
+BA1,Baluster,Oak,40×40,808.0,40.0,40.0,54,0.001293,0.069811,0.90,48.87,density to be validated
+BA2,Baluster,Oak,40×40,908.0,40.0,40.0,57,0.001453,0.082810,1.02,57.97,density to be validated
+Total,,,,,,,171,,0.645955,,452.17,density to be validated
+"
+`;

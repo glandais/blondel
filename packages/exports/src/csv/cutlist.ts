@@ -1,6 +1,7 @@
 /**
- * Liste de débit CSV (usage français) : séparateur « ; », décimale « , », BOM UTF-8, fins de
- * ligne CRLF (ouverture directe dans un tableur réglé en français).
+ * Liste de débit CSV. En français (défaut) : séparateur « ; », décimale « , », BOM UTF-8, fins
+ * de ligne CRLF (ouverture directe dans un tableur réglé en français). En anglais
+ * (`locale: "en"`) : séparateur « , », point décimal, BOM et CRLF conservés.
  *
  * Regroupement : les pièces de même repère (`Part.mark`) sont des pièces identiques ; la
  * quantité est leur nombre (deux pièces de même repère mais de débit différent restent sur deux
@@ -26,8 +27,17 @@ import {
   type PartCategory,
   type WorkshopProfileInput,
 } from "@blondel/core";
-import { formatFr } from "../format.js";
-import { tr, trOpt } from "../i18n.js";
+import type { Locale, MessageKey } from "@blondel/i18n";
+import { formatIn } from "../format.js";
+import {
+  compareMarks,
+  materialLabel,
+  translatorOf,
+  tr,
+  trOpt,
+  type LocaleOption,
+  type Translator,
+} from "../i18n.js";
 
 export const QUANTITY_VOLUME = "volume";
 /** Clé historique de la masse (kg), lue à défaut de `mass_kg`. */
@@ -41,15 +51,27 @@ export function partMassKg(part: Pick<Part, "quantities">): number | undefined {
   return v !== undefined && Number.isFinite(v) ? v : undefined;
 }
 
-/** Mention portée par une masse calculée avec une masse volumique non validée. */
-export const MASS_DENSITY_NOTE = "masse volumique à valider";
+/**
+ * Mention portée par une masse calculée avec une masse volumique non validée, dans la langue du
+ * traducteur (défaut : français).
+ */
+export function massDensityNote(t: Translator = translatorOf()): string {
+  return t.t("csv.massDensityNote");
+}
 
-/** Remarque attachée à la masse d'une pièce selon son matériau (`undefined` : aucune). */
-export type MassNote = (material: MaterialId) => string | undefined;
+/** Mention française (compatibilité) : `massDensityNote()` en français. */
+export const MASS_DENSITY_NOTE = massDensityNote();
+
+/**
+ * Remarque attachée à la masse d'une pièce selon son matériau (`undefined` : aucune). `t` :
+ * langue de la remarque, transmise par `cutListRows` / `cutSheet` (défaut : français) ; une
+ * remarque personnalisée peut l'ignorer.
+ */
+export type MassNote = (material: MaterialId, t?: Translator) => string | undefined;
 
 /** Remarque par défaut : bois (masses volumiques du profil d'atelier par défaut à valider). */
-export const defaultMassNote: MassNote = (material) =>
-  isWoodMaterial(material) ? MASS_DENSITY_NOTE : undefined;
+export const defaultMassNote: MassNote = (material, t) =>
+  isWoodMaterial(material) ? massDensityNote(t) : undefined;
 
 /**
  * Remarque de masse pour un projet : les essences dont le profil d'atelier du projet renseigne
@@ -58,25 +80,11 @@ export const defaultMassNote: MassNote = (material) =>
  */
 export function massNoteFor(workshop?: WorkshopProfileInput): MassNote {
   const own = workshop?.wood?.densities ?? {};
-  return (material) =>
-    isWoodMaterial(material) && own[material] === undefined ? MASS_DENSITY_NOTE : undefined;
+  return (material, t) =>
+    isWoodMaterial(material) && own[material] === undefined ? massDensityNote(t) : undefined;
 }
 
 export const CSV_BOM = "﻿";
-
-export const MATERIAL_LABELS: Readonly<Record<Part["material"], string>> = {
-  "wood-oak": "Chêne",
-  "wood-beech": "Hêtre",
-  "wood-ash": "Frêne",
-  "wood-pine": "Pin",
-  "wood-glulam": "Lamellé-collé",
-  "steel-raw": "Acier brut",
-  "steel-painted": "Acier peint",
-  "steel-galvanized": "Acier galvanisé",
-  "stainless-brushed": "Inox brossé",
-  glass: "Verre",
-  concrete: "Béton",
-};
 
 const CATEGORY_ORDER: readonly PartCategory[] = [
   "stringer",
@@ -92,44 +100,73 @@ const CATEGORY_ORDER: readonly PartCategory[] = [
   "fixing",
 ];
 
-export const CUT_LIST_HEADER = [
-  "Repère",
-  "Désignation",
-  "Matériau",
-  "Section",
-  "Longueur (mm)",
-  "Largeur (mm)",
-  "Épaisseur (mm)",
-  "Quantité",
-  "Volume unitaire (m³)",
-  "Volume total (m³)",
-  "Masse unitaire (kg)",
-  "Masse totale (kg)",
-  "Remarque masse",
-] as const;
+/** Clés des en-têtes de colonnes de la liste de débit, dans l'ordre des colonnes. */
+const CUT_LIST_HEADER_KEYS: readonly MessageKey[] = [
+  "csv.header.mark",
+  "csv.header.name",
+  "csv.header.material",
+  "csv.header.section",
+  "csv.header.length",
+  "csv.header.width",
+  "csv.header.thickness",
+  "csv.header.quantity",
+  "csv.header.unitVolume",
+  "csv.header.totalVolume",
+  "csv.header.unitMass",
+  "csv.header.totalMass",
+  "csv.header.massNote",
+];
 
-/** Champ CSV : guillemets si nécessaire (séparateur, guillemet, saut de ligne, espaces de bord). */
-export function csvField(value: string): string {
-  return /[;"\r\n]|^\s|\s$/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
+/** En-têtes de colonnes de la liste de débit dans la langue du traducteur (défaut : français). */
+export function cutListHeader(t: Translator = translatorOf()): readonly string[] {
+  return CUT_LIST_HEADER_KEYS.map((k) => t.t(k));
+}
+
+/** En-têtes français (compatibilité) : `cutListHeader()` en français. */
+export const CUT_LIST_HEADER: readonly string[] = cutListHeader();
+
+/** Séparateur de champs du CSV. */
+export type CsvSeparator = ";" | ",";
+
+/**
+ * Séparateur de champs du CSV selon la langue : « ; » en français (la virgule y est la
+ * décimale), « , » en anglais (point décimal). Type fermé : `fields.map(csvField)` (indice passé
+ * en séparateur) ne compile pas.
+ */
+export function csvSeparator(locale: Locale = "fr"): CsvSeparator {
+  return locale === "en" ? "," : ";";
+}
+
+/**
+ * Champ CSV : guillemets si nécessaire (séparateur `separator`, défaut « ; », guillemet, saut de
+ * ligne, espaces de bord).
+ */
+export function csvField(value: string, separator: CsvSeparator = csvSeparator()): string {
+  const special =
+    value.includes(separator) ||
+    value.includes('"') ||
+    /[\r\n]/.test(value) ||
+    /^\s|\s$/.test(value);
+  return special ? `"${value.replace(/"/g, '""')}"` : value;
 }
 
 /**
  * Neutralise une formule de tableur (injection CSV) : un texte commençant par `=`, `+`, `-`,
  * `@`, une tabulation ou un retour chariot est préfixé d'une apostrophe, que les tableurs
  * lisent comme « texte littéral ». Réservé aux champs **texte** (repère, désignation,
- * matériau, section) : les colonnes numériques, produites par `formatFr`, restent intactes.
+ * matériau, section) : les colonnes numériques, produites par `formatIn`, restent intactes.
  */
 export function neutralizeFormula(value: string): string {
   return /^[=+\-@\t\r]/.test(value) ? `'${value}` : value;
 }
 
 /** Champ CSV texte : neutralisé puis mis entre guillemets si nécessaire. */
-export function csvTextField(value: string): string {
-  return csvField(neutralizeFormula(value));
+export function csvTextField(value: string, separator: CsvSeparator = csvSeparator()): string {
+  return csvField(neutralizeFormula(value), separator);
 }
 
-const dec = (v: number | undefined, decimals: number): string =>
-  v === undefined || !Number.isFinite(v) ? "" : formatFr(v, { decimals, thousands: "" });
+const dec = (t: Translator, v: number | undefined, decimals: number): string =>
+  v === undefined || !Number.isFinite(v) ? "" : formatIn(t, v, { decimals, thousands: "" });
 
 /**
  * Décimales des volumes (m³) : 6, soit le cm³. À 4 décimales (100 cm³), une cornière de
@@ -148,11 +185,6 @@ function displayed(v: number, decimals: number): number {
   return v > 0 && r === 0 ? 10 ** -decimals : r;
 }
 
-/** Comparaison « naturelle » des repères (M2 < M10). */
-function compareMarks(a: string, b: string): number {
-  return a.localeCompare(b, "fr", { numeric: true, sensitivity: "base" });
-}
-
 export interface CutListRow {
   readonly mark: string;
   readonly name: string;
@@ -169,7 +201,7 @@ export interface CutListRow {
   readonly massNote?: string;
 }
 
-export interface CutListRowsOptions {
+export interface CutListRowsOptions extends LocaleOption {
   /** Remarque de masse par matériau (défaut : `defaultMassNote`). */
   readonly massNote?: MassNote;
 }
@@ -179,6 +211,7 @@ export function cutListRows(
   parts: readonly Part[],
   options: CutListRowsOptions = {},
 ): CutListRow[] {
+  const t = translatorOf(options);
   const noteOf = options.massNote ?? defaultMassNote;
   // Même repère = pièces identiques. Deux pièces de même repère mais de caractéristiques de
   // débit différentes (erreur amont) ne sont jamais fusionnées en silence : une ligne chacune,
@@ -189,7 +222,7 @@ export function cutListRows(
       p.mark,
       p.category,
       p.material,
-      trOpt(p.section) ?? null,
+      trOpt(t, p.section) ?? null,
       p.stock ? [p.stock.length, p.stock.width, p.stock.thickness] : null,
       p.quantities[QUANTITY_VOLUME] ?? null,
       partMassKg(p) ?? null,
@@ -205,13 +238,13 @@ export function cutListRows(
       part.quantities[QUANTITY_VOLUME] ??
       (s ? (s.length * s.width * s.thickness) / 1e9 : undefined);
     const mass = partMassKg(part);
-    const note = mass !== undefined ? noteOf(part.material) : undefined;
+    const note = mass !== undefined ? noteOf(part.material, t) : undefined;
     rows.push({
       mark: part.mark,
-      name: tr(part.name),
+      name: tr(t, part.name),
       category: part.category,
-      material: MATERIAL_LABELS[part.material] ?? part.material,
-      section: trOpt(part.section) ?? "",
+      material: materialLabel(t, part.material),
+      section: trOpt(t, part.section) ?? "",
       ...(s ? { length: s.length, width: s.width, thickness: s.thickness } : {}),
       quantity: count,
       ...(volume !== undefined ? { unitVolume: volume } : {}),
@@ -223,10 +256,12 @@ export function cutListRows(
     const i = CATEGORY_ORDER.indexOf(c);
     return i < 0 ? CATEGORY_ORDER.length : i;
   };
-  return rows.sort((a, b) => rank(a.category) - rank(b.category) || compareMarks(a.mark, b.mark));
+  return rows.sort(
+    (a, b) => rank(a.category) - rank(b.category) || compareMarks(t, a.mark, b.mark),
+  );
 }
 
-export interface CutListCsvOptions {
+export interface CutListCsvOptions extends LocaleOption {
   /** Ajoute le BOM UTF-8 (défaut : vrai, nécessaire à Excel pour les accents). */
   readonly bom?: boolean;
   /** Ajoute une ligne de total (défaut : vrai). */
@@ -240,11 +275,12 @@ export function exportCutListCsv(
   model: Pick<Model, "parts">,
   options: CutListCsvOptions = {},
 ): string {
-  const rows = cutListRows(
-    model.parts,
-    options.massNote !== undefined ? { massNote: options.massNote } : {},
-  );
-  const lines: string[][] = [[...CUT_LIST_HEADER]];
+  const t = translatorOf(options);
+  const rows = cutListRows(model.parts, {
+    locale: t.locale,
+    ...(options.massNote !== undefined ? { massNote: options.massNote } : {}),
+  });
+  const lines: string[][] = [[...cutListHeader(t)]];
   const notes = new Set<string>();
   let qty = 0;
   let vol = 0;
@@ -272,22 +308,23 @@ export function exportCutListCsv(
       neutralizeFormula(r.name),
       neutralizeFormula(r.material),
       neutralizeFormula(r.section),
-      dec(r.length, 1),
-      dec(r.width, 1),
-      dec(r.thickness, 1),
+      dec(t, r.length, 1),
+      dec(t, r.width, 1),
+      dec(t, r.thickness, 1),
       String(r.quantity),
-      dec(uv, VOLUME_DECIMALS),
-      dec(tv, VOLUME_DECIMALS),
-      dec(um, MASS_DECIMALS),
-      dec(tm, MASS_DECIMALS),
+      dec(t, uv, VOLUME_DECIMALS),
+      dec(t, tv, VOLUME_DECIMALS),
+      dec(t, um, MASS_DECIMALS),
+      dec(t, tm, MASS_DECIMALS),
       neutralizeFormula(r.massNote ?? ""),
     ]);
     if (r.massNote !== undefined) notes.add(r.massNote);
   }
   if (options.totals !== false) {
+    const incomplete = t.t("csv.incomplete");
     // Total partiel signalé plutôt qu'une somme fausse quand une valeur manque.
     lines.push([
-      "Total",
+      t.t("csv.total"),
       "",
       "",
       "",
@@ -296,13 +333,14 @@ export function exportCutListCsv(
       "",
       String(qty),
       "",
-      volKnown ? dec(vol, VOLUME_DECIMALS) : rows.length > 0 ? "incomplet" : "",
+      volKnown ? dec(t, vol, VOLUME_DECIMALS) : rows.length > 0 ? incomplete : "",
       "",
-      massKnown ? dec(mass, MASS_DECIMALS) : rows.length > 0 ? "incomplet" : "",
+      massKnown ? dec(t, mass, MASS_DECIMALS) : rows.length > 0 ? incomplete : "",
       // Remarques présentes dans les lignes : le total en dépend aussi.
-      neutralizeFormula([...notes].join(" ; ")),
+      neutralizeFormula([...notes].join(t.t("csv.noteSeparator"))),
     ]);
   }
-  const body = lines.map((l) => l.map(csvField).join(";")).join("\r\n") + "\r\n";
+  const sep = csvSeparator(t.locale);
+  const body = lines.map((l) => l.map((f) => csvField(f, sep)).join(sep)).join("\r\n") + "\r\n";
   return (options.bom === false ? "" : CSV_BOM) + body;
 }

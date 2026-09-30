@@ -10,13 +10,18 @@ import {
   type RuleResult,
   type Severity,
 } from "@blondel/core";
-import { tr } from "../i18n.js";
+import type { MessageKey } from "@blondel/i18n";
+import { translatorOf, tr, type Translator } from "../i18n.js";
 import type { PdfCanvas, Rgb } from "./canvas.js";
-import { INK, MUTED, fr, wrapText, type Frame, type PageDraft } from "./layout.js";
+import { INK, MUTED, fr, pagedTitle, wrapText, type Frame, type PageDraft } from "./layout.js";
 
-/** Avertissement imprimé en tête du contrôle de conception (CHALLENGE P3). */
-export const COMPLIANCE_DISCLAIMER =
-  "Contrôle de conception indicatif, ne vaut pas attestation de conformité.";
+/** Avertissement imprimé en tête du contrôle de conception (CHALLENGE P3), dans la langue. */
+export function complianceDisclaimer(t: Translator = translatorOf()): string {
+  return t.t("pdf.compliance.disclaimer");
+}
+
+/** Avertissement en français (compatibilité : `complianceDisclaimer(t)` pour une autre langue). */
+export const COMPLIANCE_DISCLAIMER = complianceDisclaimer();
 
 export const SEVERITY_COLOR: Readonly<Record<Severity, Rgb>> = {
   bloquant: [209, 36, 47],
@@ -24,16 +29,27 @@ export const SEVERITY_COLOR: Readonly<Record<Severity, Rgb>> = {
   conseil: [191, 135, 0],
 };
 
-const NATURE_LABELS: Readonly<Record<string, string>> = {
-  reglementaire: "réglementaire",
-  normatif: "normatif",
-  metier: "métier",
+const NATURE_KEYS: Readonly<Record<string, MessageKey>> = {
+  reglementaire: "compliance.nature.reglementaire",
+  normatif: "compliance.nature.normatif",
+  metier: "compliance.nature.metier",
 };
-const CONFIDENCE_LABELS: Readonly<Record<string, string>> = {
-  eleve: "élevée",
-  moyen: "moyenne",
-  faible: "faible",
+const CONFIDENCE_KEYS: Readonly<Record<string, MessageKey>> = {
+  eleve: "compliance.confidence.eleve",
+  moyen: "compliance.confidence.moyen",
+  faible: "compliance.confidence.faible",
 };
+const SEVERITY_NAME_KEYS: Readonly<Record<string, MessageKey>> = {
+  bloquant: "compliance.severityName.bloquant",
+  avertissement: "compliance.severityName.avertissement",
+  conseil: "compliance.severityName.conseil",
+};
+
+/** Libellé d'une table de clés (identifiant brut s'il est inconnu). */
+function label(t: Translator, keys: Readonly<Record<string, MessageKey>>, id: string): string {
+  const key = keys[id];
+  return key === undefined ? id : t.t(key);
+}
 
 export interface CompliancePageInfo {
   readonly kind: "compliance";
@@ -93,22 +109,43 @@ export function measureDecimals(r: RuleResult): number {
   return d;
 }
 
+/**
+ * Unités de règle écrites en mots (`rules.yaml`), traduites à l'affichage et accordées à la
+ * valeur (« 1 unit », « 2 units ») ; les symboles restent tels quels.
+ */
+const UNIT_WORD_KEYS: Readonly<Record<string, MessageKey>> = {
+  marches: "pdf.compliance.unit.marches",
+  unite: "pdf.compliance.unit.unite",
+};
+
+/** Valeur suivie de son unité (« 630 mm », « 15 steps »), dans la langue. */
+function valueWithUnit(t: Translator, v: number, d: number, unit: string | undefined): string {
+  const text = fr(t, v, d);
+  if (unit === undefined || unit === "") return text;
+  const key = UNIT_WORD_KEYS[unit];
+  return `${text} ${key === undefined ? unit : t.t(key, { count: Number(v.toFixed(d)) })}`;
+}
+
 /** Ligne « mesuré … — min … — max … » d'un résultat de règle. */
-export function measuredText(r: RuleResult): string | undefined {
-  const u = r.unit !== undefined && r.unit !== "" ? ` ${r.unit}` : "";
+export function measuredText(r: RuleResult, t: Translator = translatorOf()): string | undefined {
   const d = measureDecimals(r);
   const parts: string[] = [];
   if (r.measured !== undefined && Number.isFinite(r.measured))
-    parts.push(`mesuré ${fr(r.measured, d)}${u}`);
-  if (r.min !== undefined && r.min !== null) parts.push(`min ${fr(r.min, d)}${u}`);
-  if (r.max !== undefined && r.max !== null) parts.push(`max ${fr(r.max, d)}${u}`);
+    parts.push(t.t("pdf.compliance.measured", { value: valueWithUnit(t, r.measured, d, r.unit) }));
+  if (r.min !== undefined && r.min !== null)
+    parts.push(t.t("pdf.compliance.min", { value: valueWithUnit(t, r.min, d, r.unit) }));
+  if (r.max !== undefined && r.max !== null)
+    parts.push(t.t("pdf.compliance.max", { value: valueWithUnit(t, r.max, d, r.unit) }));
   return parts.length > 0 ? parts.join(" — ") : undefined;
 }
 
-function provenance(r: RuleResult): string {
-  const nature = NATURE_LABELS[r.nature] ?? r.nature;
-  const conf = CONFIDENCE_LABELS[r.confidence] ?? r.confidence;
-  return `Nature : ${nature} — confiance : ${conf} — source : ${r.source}${r.secondarySource ? " (source secondaire : norme payante non lue)" : ""}`;
+function provenance(r: RuleResult, t: Translator): string {
+  const text = t.t("pdf.compliance.provenance", {
+    nature: label(t, NATURE_KEYS, r.nature),
+    confidence: label(t, CONFIDENCE_KEYS, r.confidence),
+    source: r.source,
+  });
+  return r.secondarySource ? t.t("pdf.compliance.provenanceSecondary", { text }) : text;
 }
 
 /**
@@ -116,29 +153,43 @@ function provenance(r: RuleResult): string {
  * (`RuleResult.justification`, porte-à-faux hélicoïdal, décision A12) : reprise telle quelle
  * dans le dossier.
  */
-export function justificationText(justification: string): string {
-  return `Justification fournie : ${justification}`;
+export function justificationText(justification: string, t: Translator = translatorOf()): string {
+  return t.t("pdf.compliance.justification", { text: justification });
 }
 const JUSTIFICATION: Omit<Line, "text"> = { size: 2.6, bold: true, color: INK, indent: 4 };
 
-const SEVERITY_TITLES: Readonly<Record<Severity, string>> = {
-  bloquant: "Violations bloquantes",
-  avertissement: "Avertissements",
-  conseil: "Conseils",
+const SEVERITY_TITLE_KEYS: Readonly<Record<Severity, MessageKey>> = {
+  bloquant: "pdf.compliance.severity.bloquant",
+  avertissement: "pdf.compliance.severity.avertissement",
+  conseil: "pdf.compliance.severity.conseil",
 };
 
 /**
  * Surcharges de règles du projet (décision A18 (b) : sévérité choisie par l'utilisateur et
  * justification obligatoire, reprises dans le dossier), une entrée par surcharge.
  */
-export function overrideText(o: RuleOverride, results: readonly RuleResult[]): string {
+export function overrideText(
+  o: RuleOverride,
+  results: readonly RuleResult[],
+  t: Translator = translatorOf(),
+): string {
   const declared = results.find((r) => r.ruleId === o.ruleId)?.declaredSeverity;
-  const chosen = o.severity === "ignore" ? "ignorée" : o.severity;
+  const chosen =
+    o.severity === "ignore"
+      ? t.t("pdf.compliance.override.ignored")
+      : label(t, SEVERITY_NAME_KEYS, o.severity);
   const from =
     declared !== undefined
-      ? `sévérité déclarée ${declared} → ${chosen}`
-      : `${chosen} (règle non évaluée dans les contextes actifs)`;
-  return `${o.ruleId} : ${from}. Justification : ${o.justification}`;
+      ? t.t("pdf.compliance.override.declared", {
+          declared: label(t, SEVERITY_NAME_KEYS, declared),
+          chosen,
+        })
+      : t.t("pdf.compliance.override.notEvaluated", { chosen });
+  return t.t("pdf.compliance.override.line", {
+    ruleId: o.ruleId,
+    from,
+    justification: o.justification,
+  });
 }
 
 /**
@@ -150,6 +201,7 @@ export function complianceLines(
   c: Pick<PdfCanvas, "textWidth">,
   width: number,
   overrides: readonly RuleOverride[] = [],
+  t: Translator = translatorOf(),
 ): Line[] {
   const rep = model.compliance;
   const body = 3;
@@ -161,53 +213,65 @@ export function complianceLines(
       out.push({ ...style, text: t, ...(i > 0 ? { before: 0 } : {}) }),
     );
   };
-  push(COMPLIANCE_DISCLAIMER, { size: 3.4, bold: true, color: SEVERITY_COLOR.bloquant });
+  push(complianceDisclaimer(t), { size: 3.4, bold: true, color: SEVERITY_COLOR.bloquant });
   push(
-    `Profil ${rep.profile} — règles v${rep.rulesVersion} — contextes : ${rep.contexts.join(", ") || "—"} — ` +
-      `${rep.summary.bloquant} bloquant(s), ${rep.summary.avertissement} avertissement(s), ${rep.summary.conseil} conseil(s)`,
+    t.t("pdf.compliance.summary", {
+      profile: rep.profile,
+      version: String(rep.rulesVersion),
+      contexts: rep.contexts.join(", ") || "—",
+      bloquant: String(rep.summary.bloquant),
+      avertissement: String(rep.summary.avertissement),
+      conseil: String(rep.summary.conseil),
+    }),
     { size: body, color: INK, before: 2 },
   );
-  for (const n of rep.notes ?? []) push(`Remarque : ${tr(n)}`, { size: small, color: MUTED });
+  for (const n of rep.notes ?? [])
+    push(t.t("pdf.compliance.note", { text: tr(t, n) }), { size: small, color: MUTED });
   for (const e of model.errors)
-    push(`Erreur de génération : ${tr(e)}`, { size: small, color: SEVERITY_COLOR.bloquant });
+    push(t.t("pdf.compliance.generationError", { text: tr(t, e) }), {
+      size: small,
+      color: SEVERITY_COLOR.bloquant,
+    });
   if (overrides.length > 0) {
-    push(`Surcharges de règles par l'utilisateur (${overrides.length})`, {
+    push(t.t("pdf.compliance.overrides", { count: String(overrides.length) }), {
       size: 3.6,
       bold: true,
       color: INK,
       before: 4,
     });
     for (const o of overrides)
-      push(overrideText(o, rep.results), { size: body, color: INK, indent: 2, before: 1 });
+      push(overrideText(o, rep.results, t), { size: body, color: INK, indent: 2, before: 1 });
   }
 
   const results = rep.results;
   const block = (r: RuleResult, color: Rgb, detailed: boolean): void => {
-    push(`${r.ruleId} — ${tr(ruleDescription(r.ruleId))}`, {
+    push(`${r.ruleId} — ${tr(t, ruleDescription(r.ruleId))}`, {
       size: body,
       bold: true,
       color,
       indent: 2,
       before: 1.5,
     });
-    const message = tr(r.message);
+    const message = tr(t, r.message);
     if (message !== "") push(message, { size: body, color: INK, indent: 4 });
-    if (r.justification !== undefined) push(justificationText(r.justification), JUSTIFICATION);
-    const m = measuredText(r);
+    if (r.justification !== undefined) push(justificationText(r.justification, t), JUSTIFICATION);
+    const m = measuredText(r, t);
     if (detailed && m !== undefined) push(m, { size: small, color: INK, indent: 4 });
     if (r.downgradeReason !== undefined) {
-      push(`Sévérité déclarée ${r.declaredSeverity}, rétrogradée : ${tr(r.downgradeReason)}`, {
-        size: small,
-        color: MUTED,
-        indent: 4,
-      });
+      push(
+        t.t("pdf.compliance.downgraded", {
+          declared: label(t, SEVERITY_NAME_KEYS, r.declaredSeverity),
+          reason: tr(t, r.downgradeReason),
+        }),
+        { size: small, color: MUTED, indent: 4 },
+      );
     }
-    push(provenance(r), { size: small, color: MUTED, indent: 4 });
+    push(provenance(r, t), { size: small, color: MUTED, indent: 4 });
   };
   for (const s of ["bloquant", "avertissement", "conseil"] as const) {
     const group = results.filter((r) => r.status === "violation" && r.severity === s);
     if (group.length === 0) continue;
-    push(`${SEVERITY_TITLES[s]} (${group.length})`, {
+    push(`${t.t(SEVERITY_TITLE_KEYS[s])} (${group.length})`, {
       size: 3.6,
       bold: true,
       color: INK,
@@ -217,7 +281,7 @@ export function complianceLines(
   }
   const pending = results.filter((r) => r.status === "non-evaluee");
   if (pending.length > 0) {
-    push(`Règles non évaluées (${pending.length})`, {
+    push(t.t("pdf.compliance.pending", { count: String(pending.length) }), {
       size: 3.6,
       bold: true,
       color: INK,
@@ -227,19 +291,25 @@ export function complianceLines(
   }
   const ok = results.filter((r) => r.status === "ok");
   if (ok.length > 0) {
-    push(`Règles respectées (${ok.length})`, { size: 3.6, bold: true, color: INK, before: 4 });
+    push(t.t("pdf.compliance.ok", { count: String(ok.length) }), {
+      size: 3.6,
+      bold: true,
+      color: INK,
+      before: 4,
+    });
     for (const r of ok) {
-      const m = measuredText(r);
-      push(`${r.ruleId} — ${tr(ruleDescription(r.ruleId))}${m !== undefined ? ` (${m})` : ""}`, {
+      const m = measuredText(r, t);
+      push(`${r.ruleId} — ${tr(t, ruleDescription(r.ruleId))}${m !== undefined ? ` (${m})` : ""}`, {
         size: small,
         color: INK,
         indent: 2,
       });
-      if (r.justification !== undefined) push(justificationText(r.justification), JUSTIFICATION);
-      push(provenance(r), { size: 2.2, color: MUTED, indent: 4 });
+      if (r.justification !== undefined) push(justificationText(r.justification, t), JUSTIFICATION);
+      push(provenance(r, t), { size: 2.2, color: MUTED, indent: 4 });
     }
   }
-  if (results.length === 0) push("Aucune règle évaluée.", { size: body, color: MUTED, before: 2 });
+  if (results.length === 0)
+    push(t.t("pdf.compliance.noRules"), { size: body, color: MUTED, before: 2 });
   return out;
 }
 
@@ -253,8 +323,10 @@ export function compliancePages(
   model: Model,
   frame: Frame,
   overrides: readonly RuleOverride[] = [],
+  t: Translator = translatorOf(),
 ): PageDraft<CompliancePageInfo>[] {
-  const lines = complianceLines(model, c, frame.w, overrides);
+  const lines = complianceLines(model, c, frame.w, overrides, t);
+  const disclaimer = complianceDisclaimer(t);
   const chunks: Line[][] = [[]];
   let used = 0;
   for (const l of lines) {
@@ -267,20 +339,19 @@ export function compliancePages(
     chunks[chunks.length - 1]!.push(l);
     used += h;
   }
+  const title = t.t("pdf.compliance.title");
   return chunks.map((chunk, i) => ({
     info: {
       kind: "compliance" as const,
-      title:
-        chunks.length > 1
-          ? `Contrôle de conception (${i + 1}/${chunks.length})`
-          : "Contrôle de conception",
+      title: pagedTitle(t, title, i + 1, chunks.length),
     },
+    tocTitle: title,
     draw(cv, f) {
       let y = f.y;
       // L'avertissement est rappelé en tête de chaque page de suite.
       if (i > 0) {
         y += REPEATED_DISCLAIMER_H;
-        cv.text(COMPLIANCE_DISCLAIMER, f.x, y - 1, {
+        cv.text(disclaimer, f.x, y - 1, {
           size: 2.6,
           bold: true,
           color: SEVERITY_COLOR.bloquant,

@@ -17,14 +17,15 @@ import {
   type Vec2,
 } from "@blondel/core";
 import {
+  drawingThousands,
   locateViolations,
   modelOpening,
   modelSlabThickness,
   requiredHeadroom,
-  violationSummary,
 } from "../annotations.js";
-import { formatFr } from "../format.js";
-import { dimensionGeometry, type Dimension } from "../plan/drawing.js";
+import { formatIn } from "../format.js";
+import { translatorOf, type LocaleOption, type Translator } from "../i18n.js";
+import { complianceSummaryLine, dimensionGeometry, type Dimension } from "../plan/drawing.js";
 import { renderCartouche } from "./plan.js";
 import {
   el,
@@ -41,7 +42,7 @@ import {
   type Viewport,
 } from "./svg.js";
 
-export interface ElevationSvgOptions extends SvgScaleOptions {
+export interface ElevationSvgOptions extends SvgScaleOptions, LocaleOption {
   /**
    * Projet source, en repli : épaisseur du plancher haut et trémie sont lues dans
    * `Model.upperFloor` (pipeline), le projet ne sert qu'à un modèle qui ne les porte pas.
@@ -56,7 +57,8 @@ export interface ElevationSvgOptions extends SvgScaleOptions {
   readonly cartouche?: boolean;
 }
 
-const fr = (v: number, d = 0): string => formatFr(v, { decimals: d, thousands: " " });
+const fr = (tx: Translator, v: number, d = 0): string =>
+  formatIn(tx, v, { decimals: d, thousands: drawingThousands(tx) });
 
 /** Point de la ligne de foulée prolongée par ses tangentes au-delà de [0, L]. */
 function walklinePointExtended(model: Model, s: Mm, L: Mm): Vec2 {
@@ -207,6 +209,7 @@ function slopeZ(pts: readonly Vec2[], s: Mm): Mm {
 }
 
 export function renderElevationSvg(model: Model, options: ElevationSvgOptions = {}): string {
+  const tx = translatorOf(options);
   const { stepping } = model;
   const k = resolvePxPerMm(options);
   const theme = resolveTheme(options.theme);
@@ -269,7 +272,7 @@ export function renderElevationSvg(model: Model, options: ElevationSvgOptions = 
       { x: sFirst, y: H },
       { x: -1, y: 0 },
       ext + 2 * th,
-      `H = ${fr(H)}`,
+      tx.t("drawing.elevation.heightDimension", { value: fr(tx, H) }),
       "height",
     );
   }
@@ -279,7 +282,7 @@ export function renderElevationSvg(model: Model, options: ElevationSvgOptions = 
       { x: sLast, y: 0 },
       { x: 0, y: -1 },
       3 * th,
-      fr(sLast - sFirst),
+      fr(tx, sLast - sFirst),
       "run",
     );
   }
@@ -381,7 +384,7 @@ export function renderElevationSvg(model: Model, options: ElevationSvgOptions = 
             fill: theme.headroom,
             "data-value": n2(required),
           },
-          `Échappée exigée ${fr(required)} mm`,
+          tx.t("drawing.elevation.gauge", { value: fr(tx, required) }),
         ),
       ]),
     );
@@ -404,7 +407,7 @@ export function renderElevationSvg(model: Model, options: ElevationSvgOptions = 
             stroke: "none",
             "data-value": n2(measured.min),
           },
-          `e = ${fr(measured.min)}`,
+          tx.t("drawing.elevation.headroomDimension", { value: fr(tx, measured.min) }),
         ),
       ]),
     );
@@ -460,7 +463,7 @@ export function renderElevationSvg(model: Model, options: ElevationSvgOptions = 
     for (const n of nosings) {
       const p = toPx(vp, { x: n.s, y: (z0 + n.z) / 2 });
       // À droite de la contremarche, sous la marche : hors de la ligne de pente.
-      labels.push(text({ x: p.x + 4, y: p.y }, fr(n.z - z0, 1)));
+      labels.push(text({ x: p.x + 4, y: p.y }, fr(tx, n.z - z0, 1)));
       z0 = n.z;
     }
     body.push(
@@ -517,18 +520,27 @@ export function renderElevationSvg(model: Model, options: ElevationSvgOptions = 
   let cartouche = "";
   if (options.cartouche !== false) {
     const slopeDeg = (Math.atan2(stepping.rise, stepping.going) * 180) / Math.PI;
-    const s = violationSummary(model.compliance);
     const lines = [
-      `Élévation développée sur la ligne de foulée`,
-      `H = ${fr(H)} mm — ${stepping.riserCount} × h = ${fr(stepping.rise, 1)} mm — g = ${fr(stepping.going, 1)} mm`,
-      `2h + g = ${fr(stepping.blondel, 1)} mm — pente ${fr(slopeDeg, 1)}°`,
-      ...(measured ? [`Échappée minimale mesurée : ${fr(measured.min)} mm`] : []),
-      ...(required !== undefined ? [`Échappée exigée (règles actives) : ${fr(required)} mm`] : []),
-      ...(slab !== undefined ? [`Plancher haut : ${fr(slab)} mm`] : []),
-      ...(soffits.length > 0
-        ? ["Plafond : sous-faces de l'escalier au-dessus de la ligne de foulée (auto-recouvrement)"]
+      tx.t("drawing.elevation.heading"),
+      tx.t("drawing.elevation.rises", {
+        total: fr(tx, H),
+        count: String(stepping.riserCount),
+        rise: fr(tx, stepping.rise, 1),
+        going: fr(tx, stepping.going, 1),
+      }),
+      tx.t("drawing.elevation.blondel", {
+        value: fr(tx, stepping.blondel, 1),
+        pitch: fr(tx, slopeDeg, 1),
+      }),
+      ...(measured
+        ? [tx.t("drawing.elevation.measuredHeadroom", { value: fr(tx, measured.min) })]
         : []),
-      `Contrôle de conception : ${s.bloquant} bloquant(s), ${s.avertissement} avertissement(s), ${s.conseil} conseil(s)`,
+      ...(required !== undefined
+        ? [tx.t("drawing.elevation.requiredHeadroom", { value: fr(tx, required) })]
+        : []),
+      ...(slab !== undefined ? [tx.t("drawing.elevation.upperSlab", { value: fr(tx, slab) })] : []),
+      ...(soffits.length > 0 ? [tx.t("drawing.elevation.soffits")] : []),
+      complianceSummaryLine(tx, model),
     ];
     const longest = Math.max(...lines.map((l) => l.length));
     const cw = Math.max(wDraw - 2 * margin, longest * fontSize * 0.55 + fontSize * 1.2);
@@ -550,7 +562,7 @@ export function renderElevationSvg(model: Model, options: ElevationSvgOptions = 
       : undefined;
   return svgDocument(width, height, all, {
     ...(physical ? { physicalMm: physical } : {}),
-    title: options.title ?? "Élévation développée",
+    title: options.title ?? tx.t("drawing.elevation.title"),
     className: "blondel-elevation",
   });
 }

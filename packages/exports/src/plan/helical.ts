@@ -11,7 +11,9 @@ import {
   type Mm,
   type Vec2,
 } from "@blondel/core";
-import { formatFr } from "../format.js";
+import { drawingThousands } from "../annotations.js";
+import { formatIn } from "../format.js";
+import type { Translator } from "../i18n.js";
 import type { PathVertex, PlanPath } from "../path.js";
 
 /** Balayage maximal d'un tronçon d'arc des chemins produits ici (SVG : pas de grand arc). */
@@ -102,16 +104,27 @@ export function helicalLabelPoint(h: HelicalLayout, number: number): Vec2 {
   return helicalPoint(h, radius, helicalAngleAt(h, u));
 }
 
-const fr = (v: number, d = 0): string => formatFr(v, { decimals: d, thousands: " " });
+const fr = (t: Translator, v: number, d = 0): string =>
+  formatIn(t, v, { decimals: d, thousands: drawingThousands(t) });
 
 /** Lignes du cartouche propres à l'hélicoïdal. */
-export function helicalCartouche(h: HelicalLayout): string[] {
-  const core = h.core === "column" ? "fût" : "jour central";
+export function helicalCartouche(h: HelicalLayout, t: Translator): string[] {
   const lines = [
-    `Hélicoïdal (${h.direction === "left" ? "à gauche" : "à droite"}) : R_e = ${fr(h.outerRadius)} mm, ${core} r = ${fr(h.innerRadius)} mm, ligne de foulée à r = ${fr(h.walklineRadius, 1)} mm`,
-    `Angle par marche ${fr(h.stepAngle * DEG, 1)}° (${fr(h.treadsPerTurn, 1)} marches par tour), rotation des marches ${fr(h.totalAngle * DEG, 1)}°`,
+    t.t("drawing.helical.summary", {
+      direction: t.t(h.direction === "left" ? "drawing.helical.left" : "drawing.helical.right"),
+      outer: fr(t, h.outerRadius),
+      core: t.t(h.core === "column" ? "drawing.helical.coreColumn" : "drawing.helical.coreWell"),
+      inner: fr(t, h.innerRadius),
+      walkline: fr(t, h.walklineRadius, 1),
+    }),
+    t.t("drawing.helical.steps", {
+      step: fr(t, h.stepAngle * DEG, 1),
+      perTurn: fr(t, h.treadsPerTurn, 1),
+      total: fr(t, h.totalAngle * DEG, 1),
+    }),
   ];
-  if (h.landingAngle > 0)
-    lines.push(`Palier d'arrivée en secteur de ${fr(h.landingAngle * DEG, 1)}°`);
+  if (h.landingAngle > 0) {
+    lines.push(t.t("drawing.helical.landing", { angle: fr(t, h.landingAngle * DEG, 1) }));
+  }
   return lines;
 }

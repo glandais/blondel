@@ -63,3 +63,38 @@ On veut l'interface et toutes les sorties (page, PDF, DXF, SVG, CSV, glTF) en fr
 ### Tests
 
 `packages/core/src/i18n.test-helpers.ts` fournit `fr(m)` et `frList(ms)` (traduction française) pour conserver les assertions textuelles ; on vérifie en plus la clé (`expect(m.key).toBe(…)`, `toContainEqual(msg(…))`) et au moins un rendu anglais (`translatorFor("en").t(m)`).
+
+## Mise en œuvre dans exports (vague 3)
+
+### Langue d'un export
+
+- Toutes les options publiques étendent `LocaleOption` (`locale?: Locale`, français par défaut) : `PlanDrawingOptions` (donc `PlanSvgOptions`, `PlanDxfOptions`), `ElevationSvgOptions`, `FlatPatternSvgOptions`, `PartDxfOptions` / `PartsDxfOptions`, `CutListRowsOptions`, `CutListCsvOptions`, `CutSheetOptions`, `InstallationSheetOptions`, `GlbOptions`, `PdfLayoutOptions` (donc `PdfOptions`), `TemplateSheetOptions`. `ZipOptions` et `exportProjectJson` n'ont pas de texte visible.
+- `src/i18n.ts` : `translatorOf(options)` en tête de chaque export public (`tx` quand `t` est déjà pris), paramètre `t: Translator` obligatoire dans les fonctions internes (un oubli ne compile pas), `...localeOption(t)` pour transmettre la langue à un export appelé (PDF → plan, élévation, développés, débit, fiche de pose ; `exportPartsDxf` → `exportPartDxf` ; `exportCutListCsv` → `cutListRows`). `tr` / `trOpt` traduisent les `Message` du `Model` (`Part.name`, `section`, libellés du développé, constats) ; `materialLabel` / `MATERIAL_KEYS` les matériaux ; `compareText` / `compareMarks` remplacent `localeCompare(…, "fr")`.
+- Clés littérales dans le code (le test des clés orphelines scanne les littéraux) : tables `Record<…, MessageKey>` écrites en clair, jamais de clé construite par gabarit.
+- Préfixes : `export.common.*` (dont `export.common.defaultName`, « Escalier » / « Staircase »), `material.*`, `pdf.*`, `drawing.*` (plan, élévation, développé, cartouche, annotations), `dxf.*` (dont `dxf.layer.*`), `csv.*`, `installation.*`, `gltf.*`, `template.family.*` (`templateFamily.*` est refusé : pas de majuscule dans le premier segment d'une clé).
+
+### Nombres et formats
+
+- `formatIn(t, v, { decimals, thousands, trimZeros })` remplace `formatFr` (rendu français identique ; `formatFr` reste un alias français pour compatibilité, à ne plus appeler dans les exports). `formatNum` (format machine SVG/DXF) est inchangé.
+- Dessins (cotes, cartouches) : `drawingThousands(t)` garde l'espace simple historique en français (« 2 700 ») et prend le séparateur de la langue ailleurs (« 2,700 ») ; pas de séparateur de milliers dans les développés.
+- CSV : `csvSeparator(locale)` (`CsvSeparator = ";" | ","`) ; anglais = `,` et point décimal, français inchangé (`;`, virgule, BOM, CRLF). `csvField` / `csvTextField` citent le séparateur de la langue (type fermé : `fields.map(csvField)` ne compile pas).
+- Dates : `t.date` (JJ/MM/AAAA, AAAA-MM-JJ en anglais ; « — » pour une date invalide).
+
+### Constantes publiques françaises
+
+Les constantes historiques restent, en français, pour les appelants existants (tests, `apps/web`), à côté d'une fonction de la langue : `PLAN_LAYERS` / `planLayers(t)`, `PART_LAYERS` / `partLayers(t)` (noms traduits puis passés par `sanitizeLayerName`, mémoïsés par langue ; anglais OUTLINE, TREADS, NOSINGS, WALKLINE, OPENING, DIMENSIONS, TEXT, BEND, MARKING, MORTISE, TENON, ROLLING, JOINT, INFO), `CUT_LIST_HEADER` / `cutListHeader(t)`, `MASS_DENSITY_NOTE` / `massDensityNote(t)`, `TEMPLATE_FAMILY_LABELS` / `templateFamilyLabel(f, t)`, `COMPLIANCE_DISCLAIMER` / `complianceDisclaimer(t)`. Une `MassNote` reçoit le traducteur en second argument (une remarque personnalisée qui l'ignore reste dans sa langue).
+
+### glTF et PDF
+
+- glTF : nom de scène par défaut `export.common.defaultName` (le titre ou le nom du projet, s'il est donné, est repris tel quel), `extras` textuels traduits ; noms de nœuds = repères, inchangés.
+- PDF : titres de pages, sommaire, cartouche, métadonnée `subject`, notes d'échelle, fiche de pose et contrôle de conception traduits ; unités en mots des règles (`marches`, `unite`) accordées par valeur en anglais (`.one` / `.other`, français inchangé). Les lignes de débit et libellés de points de pose arrivent déjà traduits des exports de données.
+
+### Restent tels quels
+
+Textes saisis (nom du projet, identifiants de murs), sources citées des règles (`RuleResult.source`), identifiants du contrôle de conception (profil, contextes, identifiants de règles), méthode de balancement (identifiant brut), messages `RangeError` internes (`zip.ts`, « Version DXF inconnue », branche inatteignable), symboles `√` / `∞` de `toWinAnsi`.
+
+### Tests
+
+- Français : instantanés, `examples/` et tests existants inchangés octet par octet ; `locale: "fr"` explicite = défaut.
+- Anglais : `svg/english.test.ts` (dessins, DXF, calques), `data.en.test.ts` (CSV, débit, pose, glTF, instantané anglais de la liste de débit), `pdf/locale.test.ts` (dossier PDF) et `i18n.test.ts`, test transversal : chaque exemple de `examples/` × chaque format en anglais, sans texte français, clé brute, paramètre non rempli ni « [object Object] ». Heuristique partagée : `src/testing/french.ts` (`residualFrench`, lettres accentuées, mots outils en minuscules, vocabulaire du métier), textes repris exclus.
+- Termes anglais **à valider** (glossaire) : « Installation sheet », « Sheet » (folio), « Flat pattern » pour tous les développés (le glossaire propose « development » pour un limon bois), « HR = » (échappée mesurée), « R » à la fois rayon et hauteur de marche dans un même cartouche.

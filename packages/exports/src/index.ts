@@ -11,7 +11,25 @@
  * l'interface (`await import("@blondel/exports/pdf")`) : le réexporter ici ferait entrer
  * jsPDF dans le paquet principal de l'application et rendrait l'import dynamique inopérant.
  */
-export { formatFr, formatNum, escapeXml, NARROW_NBSP, type FrNumberOptions } from "./format.js";
+export {
+  formatFr,
+  formatIn,
+  formatNum,
+  escapeXml,
+  NARROW_NBSP,
+  type FrNumberOptions,
+} from "./format.js";
+export {
+  MATERIAL_KEYS,
+  compareMarks,
+  compareText,
+  localeOption,
+  materialLabel,
+  translatorOf,
+  type Locale,
+  type LocaleOption,
+  type Translator,
+} from "./i18n.js";
 export {
   arcFromBulge,
   bandContour,
@@ -73,15 +91,23 @@ export {
   DEFAULT_PLAN_DXF_VERSION,
   createDxfWriter,
 } from "./dxf/create.js";
-export { PLAN_LAYERS, exportPlanDxf, type PlanDxfOptions } from "./dxf/plan.js";
+export {
+  PLAN_LAYERS,
+  exportPlanDxf,
+  planLayers,
+  type PlanDxfOptions,
+  type PlanLayerId,
+} from "./dxf/plan.js";
 export {
   PART_LAYERS,
+  partLayers,
   engravingPoint,
   flatEngravingPoint,
   exportPartDxf,
   partLineAnnotation,
   partLineLayer,
   type PartDxfOptions,
+  type PartLayerId,
 } from "./dxf/part.js";
 export {
   exportPartsDxf,
@@ -102,18 +128,21 @@ export {
   CSV_BOM,
   CUT_LIST_HEADER,
   MASS_DENSITY_NOTE,
-  MATERIAL_LABELS,
   QUANTITY_MASS,
   QUANTITY_MASS_KG,
   QUANTITY_VOLUME,
   csvField,
+  csvSeparator,
   csvTextField,
+  cutListHeader,
   cutListRows,
   defaultMassNote,
+  massDensityNote,
   massNoteFor,
   neutralizeFormula,
   exportCutListCsv,
   partMassKg,
+  type CsvSeparator,
   type CutListCsvOptions,
   type CutListRow,
   type CutListRowsOptions,
@@ -146,6 +175,7 @@ export {
 export {
   installationSheet,
   wallOffset,
+  type InstallationSheetOptions,
   type InstallationPoint,
   type InstallationSheet,
   type OpeningOffset,
@@ -153,7 +183,9 @@ export {
 } from "./installation.js";
 export {
   TEMPLATE_FAMILIES,
+  TEMPLATE_FAMILY_KEYS,
   TEMPLATE_FAMILY_LABELS,
   templateFamily,
+  templateFamilyLabel,
   type TemplateFamily,
 } from "./templateFamily.js";

@@ -3,7 +3,7 @@
  * texte SVG) et par les exports (fichier SVG, puis PDF).
  */
 import type { Model } from "@blondel/core";
-import { formatFr } from "../format.js";
+import { translatorOf } from "../i18n.js";
 import {
   buildPlanDrawing,
   dimensionGeometry,
@@ -298,6 +298,7 @@ export function renderPlanSvg(model: Model, options: PlanSvgOptions = {}): strin
     opening: true,
     ...options.show,
   };
+  const tx = translatorOf(options);
   const drawing = buildPlanDrawing(model, { ...options, textHeight: fontSize / k });
   const { min, max } = drawing.bounds;
   const vp: Viewport = { k, minX: min.x, maxY: max.y, margin };
@@ -329,8 +330,7 @@ export function renderPlanSvg(model: Model, options: PlanSvgOptions = {}): strin
       : undefined;
   return svgDocument(width, height, body, {
     ...(physical ? { physicalMm: physical } : {}),
-    title:
-      options.title ?? `Plan — ${formatFr(model.stepping.riserCount, { decimals: 0 })} hauteurs`,
+    title: options.title ?? tx.t("drawing.plan.title", { count: model.stepping.riserCount }),
     className: "blondel-plan",
   });
 }

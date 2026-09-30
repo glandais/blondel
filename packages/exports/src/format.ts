@@ -4,6 +4,7 @@
  * Arrondi (ADR-0003) : les grandeurs restent en float64 jusqu'ici ; l'arrondi n'a lieu qu'à
  * l'affichage (0,1 mm pour les cotes de fabrication, 1 mm pour l'implantation).
  */
+import { translatorFor, type Translator } from "@blondel/i18n";
 
 /** Espace insécable fine (séparateur de milliers typographique français). */
 export const NARROW_NBSP = " ";
@@ -11,28 +12,32 @@ export const NARROW_NBSP = " ";
 export interface FrNumberOptions {
   /** Nombre de décimales affichées (défaut 1). */
   readonly decimals?: number;
-  /** Séparateur de milliers (défaut : espace insécable fine ; "" pour aucun). */
+  /** Séparateur de milliers (défaut : celui de la langue, espace fine insécable en français ; "" pour aucun). */
   readonly thousands?: string;
   /** Supprime les zéros décimaux inutiles (« 250 » au lieu de « 250,0 »). Défaut : false. */
   readonly trimZeros?: boolean;
 }
 
 /**
- * Nombre au format français : virgule décimale, séparateur de milliers paramétrable.
+ * Nombre affiché dans la langue du traducteur (`Translator.num`) : virgule et espace fine
+ * insécable en français, point et virgule en anglais ; séparateur de milliers paramétrable.
  * `-0` est affiché « 0 ». Les valeurs non finies donnent « — ».
  */
+export function formatIn(t: Translator, value: number, options: FrNumberOptions = {}): string {
+  const o: { digits?: number; thousands?: string; trimZeros?: boolean } = {
+    digits: options.decimals ?? 1,
+  };
+  if (options.thousands !== undefined) o.thousands = options.thousands;
+  if (options.trimZeros !== undefined) o.trimZeros = options.trimZeros;
+  return t.num(value, o);
+}
+
+/**
+ * Nombre au format français : alias de `formatIn` en français (compatibilité). Les exports
+ * passent par `formatIn` avec le traducteur de leur option `locale`.
+ */
 export function formatFr(value: number, options: FrNumberOptions = {}): string {
-  if (!Number.isFinite(value)) return "—";
-  const decimals = options.decimals ?? 1;
-  const thousands = options.thousands ?? NARROW_NBSP;
-  let text = value.toFixed(decimals);
-  if (/^-0(\.0*)?$/.test(text)) text = text.slice(1);
-  let [int = "0", frac = ""] = text.split(".");
-  if (options.trimZeros === true) frac = frac.replace(/0+$/, "");
-  const negative = int.startsWith("-");
-  const digits = negative ? int.slice(1) : int;
-  const grouped = thousands === "" ? digits : digits.replace(/\B(?=(\d{3})+(?!\d))/g, thousands);
-  return `${negative ? "-" : ""}${grouped}${frac !== "" ? `,${frac}` : ""}`;
+  return formatIn(translatorFor("fr"), value, options);
 }
 
 /**

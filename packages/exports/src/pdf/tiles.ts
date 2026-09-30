@@ -13,8 +13,14 @@
  * le plan d'assemblage les laisse vides.
  */
 import type { Part } from "@blondel/core";
-import { MATERIAL_LABELS } from "../csv/cutlist.js";
-import { tr } from "../i18n.js";
+import {
+  localeOption,
+  materialLabel,
+  translatorOf,
+  tr,
+  type LocaleOption,
+  type Translator,
+} from "../i18n.js";
 import { renderFlatPatternSvg } from "../svg/flat.js";
 import { RecordingCanvas, type PathOp, type PdfCanvas, type RecordedOp } from "./canvas.js";
 import { clipPath, rectsIntersect, translateOps, type Rect } from "./clip.js";
@@ -64,9 +70,10 @@ export function tileGrid(
   tileW: number,
   tileH: number,
   overlap = DEFAULT_TILE_OVERLAP,
+  t: Translator = translatorOf(),
 ): TileGrid {
   if (!(overlap >= 0) || !(overlap < tileW / 2) || !(overlap < tileH / 2)) {
-    throw new RangeError(`Recouvrement de case invalide : ${overlap} mm`);
+    throw new RangeError(t.t("pdf.template.overlapInvalid", { overlap: String(overlap) }));
   }
   const stepX = tileW - overlap;
   const stepY = tileH - overlap;
@@ -127,7 +134,7 @@ export interface TemplateSheet {
   readonly ops: readonly DrawnOp[];
 }
 
-export interface TemplateSheetOptions {
+export interface TemplateSheetOptions extends LocaleOption {
   /** Corps des textes du dessin, px SVG (voir `renderFlatPatternSvg`). */
   readonly fontPx: number;
   readonly decimals?: number;
@@ -139,8 +146,10 @@ export function templateSheet(
   part: Part,
   options: TemplateSheetOptions,
 ): TemplateSheet {
+  const tx = translatorOf(options);
   const svg = parseSvg(
     renderFlatPatternSvg(part, {
+      ...localeOption(tx),
       theme: "light",
       fontSize: options.fontPx,
       margin: 8,
@@ -294,6 +303,7 @@ function drawAssemblyMap(
   tile: TileInfo,
   present: ReadonlySet<string>,
   aspect: number,
+  t: Translator,
 ): number {
   const ch = Math.min(3.2, MAP_MAX_H / tile.rows, MAP_MAX_W / tile.cols / aspect);
   const cw = ch * aspect;
@@ -317,7 +327,7 @@ function drawAssemblyMap(
       );
     }
   }
-  const label = "Assemblage";
+  const label = t.t("pdf.template.assembly");
   c.text(label, x0 - 1.5 - c.textWidth(label, 2.2), y0 + 2.4, { size: 2.2, color: MUTED });
   return w + 2 + c.textWidth(label, 2.2);
 }
@@ -341,6 +351,7 @@ export function templatePages(
   frame: Frame,
   options: TemplateSheetOptions & { readonly overlap?: number },
 ): PageDraft<TemplatePageInfo>[] {
+  const tx = translatorOf(options);
   const sheet = templateSheet(measure, part, options);
   const grid = tileGrid(
     sheet.width,
@@ -348,26 +359,48 @@ export function templatePages(
     frame.w,
     frame.h,
     options.overlap ?? DEFAULT_TILE_OVERLAP,
+    tx,
   );
   const tiles = templateTiles(sheet, grid);
   const present = new Set(tiles.map((t) => t.label));
   const marks = registrationPoints(grid);
-  const qty = ids.length > 1 ? ` (${ids.length} pièces)` : "";
+  const withQty = (title: string): string =>
+    ids.length > 1
+      ? tx.t("pdf.template.withQuantity", { title, count: String(ids.length) })
+      : title;
   const single = grid.cols === 1 && grid.rows === 1;
   const thickness = part.flat?.thickness;
+  const singleTitle = tx.t("pdf.template.title", { mark: part.mark, name: tr(tx, part.name) });
+  // Entrée du sommaire : gabarit d'une page, ou toutes les cases d'une grille regroupées.
+  const tocTitle = single
+    ? singleTitle
+    : tx.t("pdf.toc.templateTiles", {
+        title: tx.t("pdf.template.titleBase", { mark: part.mark }),
+        count: String(tiles.length),
+        rows: String(grid.rows),
+        cols: String(grid.cols),
+      });
   return tiles.map((tile) => ({
     info: {
       kind: "template",
-      title: single
-        ? `Gabarit 1:1 ${part.mark} — ${tr(part.name)}${qty}`
-        : `Gabarit 1:1 ${part.mark} — case ${tile.label} (${tile.index}/${tile.count})${qty}`,
+      title: withQty(
+        single
+          ? singleTitle
+          : tx.t("pdf.template.titleTile", {
+              mark: part.mark,
+              label: tile.label,
+              index: String(tile.index),
+              count: String(tile.count),
+            }),
+      ),
       scale: 1,
       partIds: ids,
       tile,
     },
+    tocTitle,
     part: {
       mark: part.mark,
-      material: MATERIAL_LABELS[part.material] ?? part.material,
+      material: materialLabel(tx, part.material),
       ...(thickness !== undefined ? { thickness } : {}),
     },
     draw(c, f) {
@@ -417,25 +450,40 @@ export function templatePages(
       const small = { size: 2.2, color: GUIDE };
       if (left) {
         line(c, f.x + o, f.y, f.x + o, f.y + f.h, GUIDE, 0.15, dash);
-        c.text(`recouvrement ${left}`, f.x + o / 2 + 0.8, f.y + f.h * 0.35, {
+        c.text(tx.t("pdf.template.overlap", { tile: left }), f.x + o / 2 + 0.8, f.y + f.h * 0.35, {
           ...small,
           angle: 90,
         });
       }
       if (right) {
         line(c, f.x + f.w - o, f.y, f.x + f.w - o, f.y + f.h, GUIDE, 0.15, dash);
-        c.text(`recouvrement ${right}`, f.x + f.w - o / 2 + 0.8, f.y + f.h * 0.35, {
-          ...small,
-          angle: 90,
-        });
+        c.text(
+          tx.t("pdf.template.overlap", { tile: right }),
+          f.x + f.w - o / 2 + 0.8,
+          f.y + f.h * 0.35,
+          {
+            ...small,
+            angle: 90,
+          },
+        );
       }
       if (up) {
         line(c, f.x, f.y + o, f.x + f.w, f.y + o, GUIDE, 0.15, dash);
-        c.text(`recouvrement ${up}`, f.x + f.w * 0.2, f.y + o / 2 + 0.8, small);
+        c.text(
+          tx.t("pdf.template.overlap", { tile: up }),
+          f.x + f.w * 0.2,
+          f.y + o / 2 + 0.8,
+          small,
+        );
       }
       if (down) {
         line(c, f.x, f.y + f.h - o, f.x + f.w, f.y + f.h - o, GUIDE, 0.15, dash);
-        c.text(`recouvrement ${down}`, f.x + f.w * 0.2, f.y + f.h - o / 2 + 0.8, small);
+        c.text(
+          tx.t("pdf.template.overlap", { tile: down }),
+          f.x + f.w * 0.2,
+          f.y + f.h - o / 2 + 0.8,
+          small,
+        );
       }
       for (const m of marks) {
         if (m.x >= r.x && m.x <= r.x + r.w && m.y >= r.y && m.y <= r.y + r.h) {
@@ -446,10 +494,17 @@ export function templatePages(
       const band = footerBand(c);
       drawControlRuler(c, band.x + 1, band.y + 6);
       const notes = [
-        "Imprimer à 100 % (sans « ajuster à la page ») : la règle doit mesurer 100 mm.",
+        tx.t("pdf.template.note.print"),
         single
-          ? "Gabarit sur une seule page."
-          : `Case ${tile.label} : ligne ${rowLetters(tile.row)}, colonne ${tile.col + 1} — grille ${grid.rows} × ${grid.cols}, recouvrement ${fr(o)} mm ; superposer les mires.`,
+          ? tx.t("pdf.template.note.single")
+          : tx.t("pdf.template.note.tile", {
+              label: tile.label,
+              row: rowLetters(tile.row),
+              col: String(tile.col + 1),
+              rows: String(grid.rows),
+              cols: String(grid.cols),
+              overlap: fr(tx, o),
+            }),
       ];
       notes.forEach((t, i) => {
         c.text(fit(c, t, 2.4, band.w - 2), band.x + 1, band.y + 12 + i * 3.4, {
@@ -460,6 +515,8 @@ export function templatePages(
     },
     ...(single
       ? {}
-      : { headerRight: (c: PdfCanvas) => drawAssemblyMap(c, tile, present, frame.w / frame.h) }),
+      : {
+          headerRight: (c: PdfCanvas) => drawAssemblyMap(c, tile, present, frame.w / frame.h, tx),
+        }),
   }));
 }
