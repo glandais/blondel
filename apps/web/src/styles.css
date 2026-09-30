@@ -198,6 +198,9 @@ input[type="date"] {
 
 .left,
 .right {
+  /* Bloc conteneur des descendants en position absolue (.visually-hidden) :
+     sinon ils se placent par rapport à la page et l'agrandissent. */
+  position: relative;
   overflow: auto;
   background: var(--panel);
   padding: 0.5rem 0.75rem;

@@ -76,6 +76,13 @@ test(`chaque démo : onglet 3D, aucun bloquant, une entrée d'annulation (tâche
     await expect(page.locator(".statusbar__errors")).toHaveCount(0);
     expect(await blockingCount(page), label).toBe(0);
     await expect(page.locator(".notice")).toContainText(label);
+    // La page tient dans la fenêtre : seuls les panneaux défilent (régression :
+    // `.visually-hidden` du panneau de droite agrandissait le document).
+    const overflow = await page.evaluate(() => {
+      const de = document.documentElement;
+      return { x: de.scrollWidth - de.clientWidth, y: de.scrollHeight - de.clientHeight };
+    });
+    expect(overflow, `${label} : débordement du document`).toEqual({ x: 0, y: 0 });
     await settle(page);
     const tasks = await takeLongTasks(page);
     const over = overBudget(tasks);
