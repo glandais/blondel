@@ -1,6 +1,6 @@
 import { ProjectSchema, buildModel, createProject, type Project } from "@blondel/core";
 import { describe, expect, it } from "vitest";
-import { tr } from "../i18n/fr.js";
+import { translatorFor } from "@blondel/i18n";
 import { createProjectStore } from "../store/projectStore.js";
 import { applyFix, fixesFor } from "./fixes.js";
 
@@ -15,7 +15,7 @@ describe("corrections proposées", () => {
     const fixes = fixesFor(project, model);
     const fix = fixes.find((f) => f.id === "jour-newel");
     expect(fix).toBeDefined();
-    expect(tr(fix!.label)).toMatch(/poteau/);
+    expect(translatorFor("fr").t(fix!.label)).toMatch(/poteau/);
     const fixed = applyFix(project, fix!);
     expect(fixed.stair.layout.turns[0]!.inner.kind).toBe("newel");
     // Plus de correction « jour » une fois appliquée.

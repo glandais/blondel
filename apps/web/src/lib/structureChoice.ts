@@ -5,12 +5,13 @@
  * entrée d'annulation) ; les remarques du cœur deviennent le message affiché.
  */
 import { applyStructureChoice, type Project } from "@blondel/core";
-import { trList } from "../i18n/fr.js";
+import type { Message } from "@blondel/i18n";
+import { joinMessages } from "../i18n/text.js";
 
 export interface StructureChoice {
   readonly project: Project;
   /** Message d'information (modifications du jour), `null` s'il n'y en a pas. */
-  readonly notice: string | null;
+  readonly notice: Message | null;
 }
 
 /** Projet avec la structure `kind` (paramètres `params`) et le jour adapté. */
@@ -20,5 +21,5 @@ export function chooseStructure(
   params: Readonly<Record<string, unknown>>,
 ): StructureChoice {
   const r = applyStructureChoice(project, kind, params);
-  return { project: r.project, notice: r.notes.length > 0 ? trList(r.notes).join(" ") : null };
+  return { project: r.project, notice: joinMessages(r.notes) };
 }

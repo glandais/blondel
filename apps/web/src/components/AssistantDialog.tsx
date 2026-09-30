@@ -17,11 +17,13 @@ import {
   REJECTION_LABELS,
   TYPOLOGY_IDS,
   TYPOLOGY_LABELS,
+  TURN_POSITION_LABELS,
   openingPolygon,
   type DesignCandidate,
   type SurveyMeasure,
   type TypologyId,
 } from "@blondel/core";
+import { msg, type Message, type MessageKey, type Translator } from "@blondel/i18n";
 import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   USAGES,
@@ -39,7 +41,8 @@ import {
   type UsageId,
 } from "../lib/assistant.js";
 import { availableStructures } from "../lib/optionalApi.js";
-import { tr, trKey } from "../i18n/fr.js";
+import { formatNumber } from "../i18n/locale.js";
+import { useT } from "../i18n/useT.js";
 import {
   AssistantCancelled,
   startAssistant,
@@ -50,13 +53,13 @@ import type { AssistantOutcome } from "../model/assistantJob.js";
 import { appStore, useApp } from "../store/appStore.js";
 import "./assistant.css";
 
-const SURVEY_LABELS: readonly [SurveyMeasure, string][] = [
-  ["ab", "AB"],
-  ["bc", "BC"],
-  ["cd", "CD"],
-  ["da", "DA"],
-  ["ac", "Diagonale AC"],
-  ["bd", "Diagonale BD"],
+const SURVEY_LABELS: readonly [SurveyMeasure, MessageKey][] = [
+  ["ab", "ui.assistant.survey.ab"],
+  ["bc", "ui.assistant.survey.bc"],
+  ["cd", "ui.assistant.survey.cd"],
+  ["da", "ui.assistant.survey.da"],
+  ["ac", "ui.assistant.survey.ac"],
+  ["bd", "ui.assistant.survey.bd"],
 ];
 
 type RunState =
@@ -140,8 +143,14 @@ function Check({
   );
 }
 
+/** Première lettre en minuscule (« Côté b1 » → « côté b1 » au milieu d'une phrase). */
+function lowerFirst(text: string, t: Translator): string {
+  return text.charAt(0).toLocaleLowerCase(t.locale) + text.slice(1);
+}
+
 /** Croquis en plan d'un candidat (repère du site, y vers le haut). */
 function Sketch({ sketch, label }: { readonly sketch: CandidateSketch; readonly label: string }) {
+  const t = useT();
   const { box } = sketch;
   const m = Math.max(box.w, box.h) * 0.06;
   const pts = (ps: readonly { x: number; y: number }[]) => ps.map((p) => `${p.x},${p.y}`).join(" ");
@@ -150,7 +159,7 @@ function Sketch({ sketch, label }: { readonly sketch: CandidateSketch; readonly 
       className="assistant__sketch"
       viewBox={`${box.x - m} ${-(box.y + box.h) - m} ${box.w + 2 * m} ${box.h + 2 * m}`}
       role="img"
-      aria-label={`Croquis en plan : ${label}`}
+      aria-label={t.t("ui.assistant.sketch", { label })}
     >
       <g transform="scale(1,-1)">
         {sketch.walls.map((w, i) => (
@@ -196,10 +205,21 @@ function Sketch({ sketch, label }: { readonly sketch: CandidateSketch; readonly 
   );
 }
 
-function title(c: DesignCandidate): string {
-  const dir = c.direction === "left" ? " à gauche" : c.direction === "right" ? " à droite" : "";
-  const pos = c.turnPosition ? `, tournant ${c.turnPosition}` : "";
-  return `${trKey(TYPOLOGY_LABELS[c.typology])}${dir}${pos}`;
+/** Titre d'une carte : typologie, sens, position du tournant (traduit à l'affichage). */
+function title(c: DesignCandidate): Message {
+  const typology = msg(TYPOLOGY_LABELS[c.typology]);
+  const shape =
+    c.direction === "left"
+      ? msg("assistant.shape.left", { typology })
+      : c.direction === "right"
+        ? msg("assistant.shape.right", { typology })
+        : typology;
+  return c.turnPosition
+    ? msg("ui.assistant.candidate.withTurn", {
+        shape,
+        position: msg(TURN_POSITION_LABELS[c.turnPosition]),
+      })
+    : shape;
 }
 
 function CandidateCard({
@@ -217,6 +237,7 @@ function CandidateCard({
   readonly onChoose: () => void;
 }) {
   const id = useId();
+  const t = useT();
   const s = candidate.summary;
   return (
     <article
@@ -224,15 +245,15 @@ function CandidateCard({
       aria-labelledby={id}
       data-typology={candidate.typology}
     >
-      {sketch ? <Sketch sketch={sketch} label={tr(candidate.label)} /> : null}
+      {sketch ? <Sketch sketch={sketch} label={t.t(candidate.label)} /> : null}
       <div className="assistant__card-body">
         <h4 id={id}>
-          <span className="assistant__rank">{rank}.</span> {title(candidate)}
+          <span className="assistant__rank">{rank}.</span> {t.t(title(candidate))}
         </h4>
-        <p className="assistant__label muted">{tr(candidate.label)}</p>
+        <p className="assistant__label muted">{t.t(candidate.label)}</p>
         <dl className="assistant__facts">
-          {summaryFacts(candidate).map((f) => (
-            <div key={f.label}>
+          {summaryFacts(candidate, t.locale).map((f, i) => (
+            <div key={i}>
               <dt>{f.label}</dt>
               <dd>{f.value}</dd>
             </div>
@@ -240,46 +261,66 @@ function CandidateCard({
         </dl>
         <p className="assistant__warnings">
           {s.violations.avertissement === 0 && s.violations.conseil === 0
-            ? "Aucun avertissement du contrôle de conception."
-            : `${s.violations.avertissement} avertissement(s), ${s.violations.conseil} conseil(s)` +
-              (s.warningRules.length > 0 ? ` : ${s.warningRules.join(", ")}` : "")}
+            ? t.t("ui.assistant.warnings.none")
+            : t.t(
+                s.warningRules.length > 0
+                  ? "ui.assistant.warnings.withRules"
+                  : "ui.assistant.warnings.summary",
+                {
+                  warnings: msg("ui.assistant.warnings.warningCount", {
+                    count: s.violations.avertissement,
+                  }),
+                  advice: msg("ui.assistant.warnings.adviceCount", {
+                    count: s.violations.conseil,
+                  }),
+                  rules: s.warningRules.join(", "),
+                },
+              )}
         </p>
         <details className="assistant__score">
           <summary>
-            Score {formatScore(candidate.score.total)}{" "}
-            <span className="muted">(pénalités, plus petit = meilleur)</span>
+            {t.t("ui.assistant.score.label", {
+              score: formatScore(candidate.score.total, t.locale),
+            })}{" "}
+            <span className="muted">{t.t("ui.assistant.score.note")}</span>
           </summary>
           <table>
             <thead>
               <tr>
-                <th scope="col">Terme</th>
-                <th scope="col">Valeur</th>
-                <th scope="col">Poids</th>
-                <th scope="col">Pénalité</th>
+                <th scope="col">{t.t("ui.assistant.score.term")}</th>
+                <th scope="col">{t.t("ui.assistant.score.value")}</th>
+                <th scope="col">{t.t("ui.assistant.score.weight")}</th>
+                <th scope="col">{t.t("ui.assistant.score.penalty")}</th>
               </tr>
             </thead>
             <tbody>
-              {candidate.score.terms.map((t) => (
-                <tr key={t.id}>
-                  <th scope="row">{tr(t.label)}</th>
+              {candidate.score.terms.map((term) => (
+                <tr key={term.id}>
+                  <th scope="row">{t.t(term.label)}</th>
                   <td>
-                    {formatScore(t.value)} {t.unit === "mm" ? "mm" : ""}
+                    {formatScore(term.value, t.locale)} {term.unit === "mm" ? "mm" : ""}
                   </td>
-                  <td>{t.weight.toLocaleString("fr-FR")}</td>
-                  <td>{formatScore(t.penalty)}</td>
+                  <td>{formatNumber(t.locale, term.weight)}</td>
+                  <td>{formatScore(term.penalty, t.locale)}</td>
                 </tr>
               ))}
             </tbody>
           </table>
-          <p className="field__hint">Poids choisis par Blondel, à valider (aucune source).</p>
+          <p className="field__hint">{t.t("ui.assistant.score.weightsHint")}</p>
         </details>
         <button
           type="button"
           className="assistant__choose"
-          aria-label={`Choisir : ${title(candidate)} (${variant ? "variante" : "proposition"} ${rank})`}
+          aria-label={t.t(
+            variant ? "ui.assistant.choose.variant" : "ui.assistant.choose.proposal",
+            {
+              title: title(candidate),
+              rank,
+            },
+          )}
           onClick={onChoose}
         >
-          Choisir
+          {t.t("ui.assistant.choose.button")}
         </button>
       </div>
     </article>
@@ -302,6 +343,7 @@ function ShapeGroup({
   readonly onShowVariants: (variants: readonly DesignCandidate[]) => void;
 }) {
   const variants = candidate.variants;
+  const t = useT();
   return (
     <div className="assistant__shape" data-shape={candidate.shape}>
       <CandidateCard
@@ -318,10 +360,8 @@ function ShapeGroup({
           }}
         >
           <summary>
-            {variants.length === 1
-              ? "1 autre variante de cette forme"
-              : `${variants.length} autres variantes de cette forme`}{" "}
-            <span className="muted">(sens, emmarchement, nombre de marches)</span>
+            {t.t("ui.assistant.variants.count", { count: variants.length })}{" "}
+            <span className="muted">{t.t("ui.assistant.variants.note")}</span>
           </summary>
           <div className="assistant__variant-list">
             {variants.map((v, j) => (
@@ -396,6 +436,7 @@ export function AssistantDialog() {
 }
 
 function AssistantDialogBody() {
+  const t = useT();
   const project = useApp((s) => s.project);
   const [form, setForm] = useState<AssistantForm>(() => formFromProject(project));
   const [state, setState] = useState<RunState>({ kind: "idle" });
@@ -405,16 +446,16 @@ function AssistantDialogBody() {
   const root = useRef<HTMLDivElement>(null);
   const structures = useMemo(
     () => [
-      { value: "none", label: "Sans préférence (aucune structure)" },
-      ...availableStructures().map((s) => ({ value: s.kind, label: trKey(s.labelKey) })),
+      { value: "none", label: t.t("ui.assistant.structure.none") },
+      ...availableStructures().map((s) => ({ value: s.kind, label: t.t(s.labelKey) })),
     ],
-    [],
+    [t],
   );
   const set = (patch: Partial<AssistantForm>) => setForm((f) => ({ ...f, ...patch }));
 
   // Trémie du formulaire (un relevé coûte un ajustement et ses seuils exacts, ≈ 12 ms) : pas
   // recalculée à chaque rendu (minuterie de la recherche, 4 fois par seconde).
-  const opening = useMemo(() => formOpening(form, project), [form, project]);
+  const opening = useMemo(() => formOpening(form, project, t), [form, project, t]);
   const polygon = useMemo(() => (opening.ok ? openingPolygon(opening.opening) : null), [opening]);
 
   // Fermeture : la recherche en cours est abandonnée au démontage (effet ci-dessous).
@@ -445,8 +486,8 @@ function AssistantDialogBody() {
   }, []);
   useEffect(() => {
     if (state.kind !== "running") return;
-    const t = setInterval(() => setElapsed(performance.now() - state.started), 250);
-    return () => clearInterval(t);
+    const timer = setInterval(() => setElapsed(performance.now() - state.started), 250);
+    return () => clearInterval(timer);
   }, [state]);
   // Recherche en cours abandonnée au démontage (fenêtre fermée).
   const running = useRef<AssistantRun | null>(null);
@@ -485,7 +526,7 @@ function AssistantDialogBody() {
   };
 
   const propose = (): void => {
-    const r = assistantInput(form, project);
+    const r = assistantInput(form, project, t);
     if (!r.ok) {
       setErrors(r.errors);
       return;
@@ -518,10 +559,7 @@ function AssistantDialogBody() {
       const p = chosenProject(c, project, { guards: form.guards });
       const r = appStore
         .getState()
-        .replaceProject(
-          p,
-          `Proposition de l'assistant retenue : ${title(c)}. « Annuler » (Ctrl+Z) revient au projet précédent.`,
-        );
+        .replaceProject(p, msg("ui.assistant.chosen", { title: title(c) }));
       if (!r.ok) {
         setErrors(r.issues);
         return;
@@ -533,9 +571,11 @@ function AssistantDialogBody() {
     }
   };
 
-  const toggleTypology = (t: TypologyId, on: boolean) =>
+  const toggleTypology = (typology: TypologyId, on: boolean) =>
     set({
-      typologies: on ? [...form.typologies, t] : form.typologies.filter((x) => x !== t),
+      typologies: on
+        ? [...form.typologies, typology]
+        : form.typologies.filter((x) => x !== typology),
     });
   const toggleSide = (i: number, on: boolean) =>
     set({ wallSides: on ? [...form.wallSides, i] : form.wallSides.filter((x) => x !== i) });
@@ -546,12 +586,12 @@ function AssistantDialogBody() {
     [outcome, variantSketches],
   );
   const openingModes: { value: OpeningMode; label: string }[] = [
-    { value: "rect", label: "Rectangulaire" },
-    { value: "survey", label: "Relevé (4 côtés + 2 diagonales)" },
+    { value: "rect", label: t.t("ui.assistant.opening.rect") },
+    { value: "survey", label: t.t("ui.assistant.opening.survey") },
     ...(project.site.opening?.kind === "polygon"
-      ? [{ value: "project" as const, label: "Trémie polygonale du projet" }]
+      ? [{ value: "project" as const, label: t.t("ui.assistant.opening.project") }]
       : []),
-    { value: "none", label: "Aucune (pas de plancher au-dessus)" },
+    { value: "none", label: t.t("ui.assistant.opening.none") },
   ];
 
   return (
@@ -564,40 +604,40 @@ function AssistantDialogBody() {
         aria-labelledby={titleId}
       >
         <header className="assistant__header">
-          <h2 id={titleId}>Assistant d'initialisation</h2>
-          <button type="button" onClick={close} aria-label="Fermer l'assistant">
-            Fermer
+          <h2 id={titleId}>{t.t("ui.assistant.title")}</h2>
+          <button type="button" onClick={close} aria-label={t.t("ui.assistant.close.label")}>
+            {t.t("ui.assistant.close.button")}
           </button>
         </header>
         <div className="assistant__body">
           <form
             className="assistant__form"
-            aria-label="Site et préférences"
+            aria-label={t.t("ui.assistant.form")}
             onSubmit={(e) => {
               e.preventDefault();
               propose();
             }}
           >
             <fieldset className="grid-2">
-              <legend>Niveaux</legend>
+              <legend>{t.t("ui.assistant.levels.legend")}</legend>
               <TextInput
-                label="Hauteur à monter H"
+                label={t.t("ui.assistant.levels.floorToFloor.label")}
                 value={form.floorToFloor}
                 onChange={(v) => set({ floorToFloor: v })}
-                hint="Sol fini à sol fini."
+                hint={t.t("ui.assistant.levels.floorToFloor.hint")}
               />
               <TextInput
-                label="Épaisseur de dalle"
+                label={t.t("ui.assistant.levels.slab.label")}
                 value={form.upperSlabThickness}
                 onChange={(v) => set({ upperSlabThickness: v })}
-                hint="Sol fini haut → sous-face."
+                hint={t.t("ui.assistant.levels.slab.hint")}
               />
             </fieldset>
             <fieldset className="grid-2">
-              <legend>Trémie</legend>
+              <legend>{t.t("ui.assistant.opening.legend")}</legend>
               <div className="assistant__wide">
                 <Select
-                  label="Trémie"
+                  label={t.t("ui.assistant.opening.label")}
                   value={form.openingMode}
                   options={openingModes}
                   // Les côtés cochés désignent les côtés de l'ancienne trémie : décochés.
@@ -607,12 +647,20 @@ function AssistantDialogBody() {
               {form.openingMode === "rect" || form.openingMode === "survey" ? (
                 <>
                   <TextInput
-                    label={form.openingMode === "rect" ? "Coin X" : "Point A, X"}
+                    label={t.t(
+                      form.openingMode === "rect"
+                        ? "ui.assistant.opening.cornerX"
+                        : "ui.assistant.opening.pointAX",
+                    )}
                     value={form.openingX}
                     onChange={(v) => set({ openingX: v })}
                   />
                   <TextInput
-                    label={form.openingMode === "rect" ? "Coin Y" : "Point A, Y"}
+                    label={t.t(
+                      form.openingMode === "rect"
+                        ? "ui.assistant.opening.cornerY"
+                        : "ui.assistant.opening.pointAY",
+                    )}
                     value={form.openingY}
                     onChange={(v) => set({ openingY: v })}
                   />
@@ -621,12 +669,12 @@ function AssistantDialogBody() {
               {form.openingMode === "rect" ? (
                 <>
                   <TextInput
-                    label="Longueur de trémie (X)"
+                    label={t.t("ui.assistant.opening.sizeX")}
                     value={form.sizeX}
                     onChange={(v) => set({ sizeX: v })}
                   />
                   <TextInput
-                    label="Largeur de trémie (Y)"
+                    label={t.t("ui.assistant.opening.sizeY")}
                     value={form.sizeY}
                     onChange={(v) => set({ sizeY: v })}
                   />
@@ -636,7 +684,7 @@ function AssistantDialogBody() {
                 ? SURVEY_LABELS.map(([k, label]) => (
                     <TextInput
                       key={k}
-                      label={`Relevé ${label}`}
+                      label={t.t(label)}
                       value={form.survey[k]}
                       onChange={(v) => set({ survey: { ...form.survey, [k]: v } })}
                     />
@@ -644,7 +692,7 @@ function AssistantDialogBody() {
                 : null}
               {form.openingMode === "survey" ? (
                 <small className="field__hint assistant__wide">
-                  A, B, C, D dans le sens trigonométrique vu de dessus, AB selon +X.
+                  {t.t("ui.assistant.opening.surveyHint")}
                 </small>
               ) : null}
               {!opening.ok && form.openingMode !== "none" ? (
@@ -652,9 +700,9 @@ function AssistantDialogBody() {
               ) : null}
             </fieldset>
             <fieldset>
-              <legend>Murs</legend>
+              <legend>{t.t("ui.assistant.walls.legend")}</legend>
               <Check
-                label={`Garder les murs du projet (${project.site.walls.length})`}
+                label={t.t("ui.assistant.walls.keep", { count: project.site.walls.length })}
                 checked={form.keepWalls}
                 onChange={(v) => set({ keepWalls: v })}
               />
@@ -662,7 +710,9 @@ function AssistantDialogBody() {
                 ? polygon.map((_, i) => (
                     <Check
                       key={i}
-                      label={`Mur le long du ${openingSideLabel(polygon, i).replace(/^Côté/, "côté")}`}
+                      label={t.t("ui.assistant.walls.along", {
+                        side: lowerFirst(openingSideLabel(polygon, i, t.locale), t),
+                      })}
                       checked={form.wallSides.includes(i)}
                       onChange={(v) => toggleSide(i, v)}
                     />
@@ -670,132 +720,147 @@ function AssistantDialogBody() {
                 : null}
               {form.wallSides.length > 0 ? (
                 <TextInput
-                  label="Épaisseur des murs ajoutés"
+                  label={t.t("ui.assistant.walls.thickness.label")}
                   value={form.wallThickness}
                   onChange={(v) => set({ wallThickness: v })}
-                  hint="Nu du mur au bord de la trémie. Valeur proposée, à valider."
+                  hint={t.t("ui.assistant.walls.thickness.hint")}
                 />
               ) : null}
             </fieldset>
             <fieldset>
-              <legend>Contexte</legend>
+              <legend>{t.t("ui.assistant.context.legend")}</legend>
               <Select<UsageId>
-                label="Usage"
+                label={t.t("ui.assistant.context.usage")}
                 value={form.usage}
-                options={USAGES.map((u) => ({ value: u.id, label: u.label }))}
+                options={USAGES.map((u) => ({ value: u.id, label: t.t(u.labelKey) }))}
                 onChange={(v) => set({ usage: v })}
               />
               <Check
-                label="Escalier en bois (NF DTU 36.3)"
+                label={t.t("ui.assistant.context.wood")}
                 checked={form.wood}
                 onChange={(v) => set({ wood: v })}
               />
               <Check
-                label="Escalier extérieur"
+                label={t.t("compliance.context.exterieur")}
                 checked={form.outdoor}
                 onChange={(v) => set({ outdoor: v })}
               />
             </fieldset>
             <fieldset>
-              <legend>Préférences</legend>
+              <legend>{t.t("ui.assistant.preferences.legend")}</legend>
               <Select
-                label="Structure visée"
+                label={t.t("ui.assistant.preferences.structure")}
                 value={form.structure}
                 options={structures}
                 onChange={(v) => set({ structure: v })}
               />
-              <div className="assistant__typologies" role="group" aria-label="Typologies">
-                <span className="field__hint">Typologies (aucune cochée : toutes)</span>
-                {TYPOLOGY_IDS.map((t) => (
+              <div
+                className="assistant__typologies"
+                role="group"
+                aria-label={t.t("ui.assistant.preferences.typologies.label")}
+              >
+                <span className="field__hint">
+                  {t.t("ui.assistant.preferences.typologies.hint")}
+                </span>
+                {TYPOLOGY_IDS.map((typology) => (
                   <Check
-                    key={t}
-                    label={trKey(TYPOLOGY_LABELS[t])}
-                    checked={form.typologies.includes(t)}
-                    onChange={(v) => toggleTypology(t, v)}
+                    key={typology}
+                    label={t.t(TYPOLOGY_LABELS[typology])}
+                    checked={form.typologies.includes(typology)}
+                    onChange={(v) => toggleTypology(typology, v)}
                   />
                 ))}
               </div>
               <Select
-                label="Sens des tournants"
+                label={t.t("ui.assistant.preferences.direction.label")}
                 value={form.direction}
                 options={[
-                  { value: "both", label: "Les deux" },
-                  { value: "left", label: "À gauche" },
-                  { value: "right", label: "À droite" },
+                  { value: "both", label: t.t("ui.assistant.preferences.direction.both") },
+                  { value: "left", label: t.t("ui.params.turn.left") },
+                  { value: "right", label: t.t("ui.params.turn.right") },
                 ]}
                 onChange={(v) => set({ direction: v })}
               />
               <TextInput
-                label="Emmarchement imposé"
+                label={t.t("ui.assistant.preferences.width.label")}
                 value={form.width}
                 onChange={(v) => set({ width: v })}
-                hint="Vide : emmarchements explorés par l'assistant."
+                hint={t.t("ui.assistant.preferences.width.hint")}
               />
               <Check
-                label="Ajouter les garde-corps (côtés vides d'après les murs)"
+                label={t.t("ui.assistant.preferences.guards")}
                 checked={form.guards}
                 onChange={(v) => set({ guards: v })}
               />
               <Check
-                label="Montrer toutes les variantes (liste à plat)"
+                label={t.t("ui.assistant.preferences.showAllVariants")}
                 checked={form.showAllVariants}
                 onChange={(v) => set({ showAllVariants: v })}
               />
             </fieldset>
             {errors.length > 0 ? (
               <ul className="notice notice--error" role="alert">
-                {errors.map((e) => (
-                  <li key={e}>{e}</li>
+                {errors.map((e, i) => (
+                  <li key={i}>{e}</li>
                 ))}
               </ul>
             ) : null}
             <div className="button-row assistant__actions">
               <button type="submit" className="primary" disabled={state.kind === "running"}>
-                Proposer
+                {t.t("ui.assistant.propose")}
               </button>
               {state.kind === "running" ? (
                 <button type="button" onClick={() => state.run.cancel()}>
-                  Annuler la recherche
+                  {t.t("ui.assistant.cancel")}
                 </button>
               ) : null}
             </div>
           </form>
           <section
             className="assistant__results"
-            aria-label="Propositions"
+            aria-label={t.t("ui.assistant.results.label")}
             aria-busy={state.kind === "running"}
           >
             {state.kind === "idle" ? (
-              <p className="muted">
-                Renseigner le site puis « Proposer » : l'assistant énumère les typologies, sens,
-                positions de tournant, nombres de marches et girons, écarte les propositions
-                bloquées par le contrôle de conception ou par l'échappée, et classe les autres.
-              </p>
+              <p className="muted">{t.t("ui.assistant.results.idle")}</p>
             ) : null}
             {state.kind === "running" ? (
               <p role="status" className="assistant__running">
-                Recherche en cours…{" "}
-                {(elapsed / 1000).toLocaleString("fr-FR", { maximumFractionDigits: 1 })} s
+                {t.t("ui.assistant.results.running", {
+                  seconds: formatNumber(t.locale, elapsed / 1000, { maximumFractionDigits: 1 }),
+                })}
               </p>
             ) : null}
             {state.kind === "error" ? (
               <p className="notice notice--error" role="alert">
-                Assistant indisponible : {state.message}
+                {t.t("ui.assistant.results.error", { error: state.message })}
               </p>
             ) : null}
             {outcome ? (
               <>
                 <p role="status" className="assistant__summary">
                   {outcome.result.candidates.length === 0
-                    ? "Aucune proposition."
-                    : `${outcome.result.candidates.length} proposition(s) sans contrôle bloquant`}
+                    ? t.t("ui.assistant.results.none")
+                    : t.t("ui.assistant.results.count", {
+                        count: outcome.result.candidates.length,
+                      })}
                   {variantCount(outcome.result.candidates) > 0
-                    ? ` (et ${variantCount(outcome.result.candidates)} variante(s) repliée(s))`
+                    ? ` ${t.t("ui.assistant.results.folded", { count: variantCount(outcome.result.candidates) })}`
                     : ""}{" "}
-                  — {outcome.result.stats.enumerated.toLocaleString("fr-FR")} variantes énumérées,{" "}
-                  {outcome.result.stats.built} modèles construits (
-                  {Math.round(outcome.timeMs).toLocaleString("fr-FR")} ms).
-                  {outcome.result.stats.truncated ? " Exploration partielle : budget atteint." : ""}
+                  {t.t("ui.assistant.results.stats", {
+                    enumerated: msg("ui.assistant.results.enumerated", {
+                      count: outcome.result.stats.enumerated,
+                      value: formatNumber(t.locale, outcome.result.stats.enumerated),
+                    }),
+                    built: msg("ui.assistant.results.built", {
+                      count: outcome.result.stats.built,
+                      value: String(outcome.result.stats.built),
+                    }),
+                    ms: formatNumber(t.locale, Math.round(outcome.timeMs)),
+                  })}
+                  {outcome.result.stats.truncated
+                    ? ` ${t.t("ui.assistant.results.truncated")}`
+                    : ""}
                 </p>
                 <div className="assistant__cards">
                   {outcome.result.candidates.map((c, i) => (
@@ -813,35 +878,37 @@ function AssistantDialogBody() {
                   className="assistant__diagnostics"
                   open={outcome.result.candidates.length === 0}
                 >
-                  <summary>Diagnostic de l'assistant</summary>
+                  <summary>{t.t("ui.assistant.diagnostics.title")}</summary>
                   <ul>
-                    {outcome.result.diagnostics.map((d) => (
-                      <li key={tr(d)}>{tr(d)}</li>
+                    {outcome.result.diagnostics.map((d, i) => (
+                      <li key={i}>{t.t(d)}</li>
                     ))}
                   </ul>
                   {outcome.result.rejections.length > 0 ? (
                     <table>
-                      <caption>Variantes écartées</caption>
+                      <caption>{t.t("ui.assistant.diagnostics.rejected")}</caption>
                       <thead>
                         <tr>
-                          <th scope="col">Typologie</th>
-                          <th scope="col">Motif</th>
-                          <th scope="col">Nombre</th>
+                          <th scope="col">{t.t("ui.assistant.diagnostics.typology")}</th>
+                          <th scope="col">{t.t("ui.assistant.diagnostics.reason")}</th>
+                          <th scope="col">{t.t("ui.assistant.diagnostics.count")}</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {outcome.result.rejections.map((t, i) => (
-                          <tr key={i} title={tr(t.example)}>
+                        {outcome.result.rejections.map((rej, i) => (
+                          <tr key={i} title={t.t(rej.example)}>
                             <td>
-                              {trKey(TYPOLOGY_LABELS[t.typology])}
-                              {t.direction === "left"
-                                ? " (gauche)"
-                                : t.direction === "right"
-                                  ? " (droite)"
-                                  : ""}
+                              {rej.direction === "left" || rej.direction === "right"
+                                ? t.t(
+                                    rej.direction === "left"
+                                      ? "ui.assistant.diagnostics.left"
+                                      : "ui.assistant.diagnostics.right",
+                                    { typology: msg(TYPOLOGY_LABELS[rej.typology]) },
+                                  )
+                                : t.t(TYPOLOGY_LABELS[rej.typology])}
                             </td>
-                            <td>{trKey(REJECTION_LABELS[t.reason])}</td>
-                            <td>{t.count.toLocaleString("fr-FR")}</td>
+                            <td>{t.t(REJECTION_LABELS[rej.reason])}</td>
+                            <td>{formatNumber(t.locale, rej.count)}</td>
                           </tr>
                         ))}
                       </tbody>

@@ -7,14 +7,16 @@
 import type { Model } from "@blondel/core";
 import { massNoteFor } from "@blondel/exports";
 import { useMemo } from "react";
+import { numberFormat } from "../i18n/locale.js";
+import { msg } from "@blondel/i18n";
+import { useT } from "../i18n/useT.js";
 import { bomSummary, selectedPart } from "../lib/parts.js";
 import { appStore, useApp, useModel } from "../store/appStore.js";
 
-const dec = (digits: number) =>
-  new Intl.NumberFormat("fr-FR", { minimumFractionDigits: 0, maximumFractionDigits: digits });
-const mm = dec(1);
-const m3 = dec(4);
-const kg = dec(1);
+const dec = (digits: number): Intl.NumberFormatOptions => ({
+  minimumFractionDigits: 0,
+  maximumFractionDigits: digits,
+});
 
 const fmt = (f: Intl.NumberFormat, v: number | undefined): string =>
   v === undefined || !Number.isFinite(v) ? "–" : f.format(v);
@@ -25,9 +27,14 @@ export function BomView({ model }: { model: Model }) {
   // l'atelier n'est plus « à valider ».
   const { project } = useModel();
   const workshop = project?.workshop;
+  const t = useT();
+  const locale = t.locale;
+  const mm = numberFormat(locale, dec(1));
+  const m3 = numberFormat(locale, dec(4));
+  const kg = numberFormat(locale, dec(1));
   const bom = useMemo(
-    () => bomSummary(model.parts, massNoteFor(workshop)),
-    [model.parts, workshop],
+    () => bomSummary(model.parts, locale, massNoteFor(workshop)),
+    [model.parts, locale, workshop],
   );
   const noteMark = (note: string | undefined): string =>
     note === undefined ? "" : ` ${"*".repeat(bom.massNotes.indexOf(note) + 1)}`;
@@ -35,7 +42,7 @@ export function BomView({ model }: { model: Model }) {
   if (bom.lines.length === 0) {
     return (
       <div className="empty-view" role="status">
-        <p>Aucune pièce dans le modèle.</p>
+        <p>{t.t("ui.bom.empty")}</p>
       </div>
     );
   }
@@ -43,32 +50,35 @@ export function BomView({ model }: { model: Model }) {
     <div className="bom">
       <table>
         <caption>
-          Nomenclature : {bom.count} pièce(s), {bom.lines.length} repère(s)
-          {bom.withFlat > 0 ? `, ${bom.withFlat} à développé` : ""}
+          {t.t("ui.bom.caption", {
+            parts: msg("ui.bom.parts", { count: bom.count }),
+            marks: msg("ui.bom.marks", { count: bom.lines.length }),
+            flat: bom.withFlat > 0 ? msg("ui.bom.withFlat", { count: bom.withFlat }) : "",
+          })}
         </caption>
         <thead>
           <tr>
-            <th scope="col">Repère</th>
-            <th scope="col">Désignation</th>
-            <th scope="col">Matériau</th>
-            <th scope="col">Section</th>
+            <th scope="col">{t.t("pdf.bom.col.mark")}</th>
+            <th scope="col">{t.t("pdf.bom.col.designation")}</th>
+            <th scope="col">{t.t("pdf.bom.col.material")}</th>
+            <th scope="col">{t.t("pdf.bom.col.section")}</th>
             <th scope="col" className="num">
-              L (mm)
+              {t.t("ui.bom.col.length")}
             </th>
             <th scope="col" className="num">
-              l (mm)
+              {t.t("ui.bom.col.width")}
             </th>
             <th scope="col" className="num">
-              e (mm)
+              {t.t("ui.bom.col.thickness")}
             </th>
             <th scope="col" className="num">
-              Qté
+              {t.t("pdf.bom.col.quantity")}
             </th>
             <th scope="col" className="num">
-              Volume (m³)
+              {t.t("ui.bom.col.volume")}
             </th>
             <th scope="col" className="num">
-              Masse (kg)
+              {t.t("pdf.bom.col.mass")}
             </th>
           </tr>
         </thead>
@@ -114,19 +124,15 @@ export function BomView({ model }: { model: Model }) {
         <tfoot>
           <tr>
             <th scope="row" colSpan={7}>
-              Total
+              {t.t("pdf.common.total")}
             </th>
             <td className="num">{bom.count}</td>
             <td className="num">{fmt(m3, bom.volume)}</td>
             <td
               className="num"
-              title={
-                bom.mass === undefined
-                  ? "Masse non renseignée par le cœur pour au moins une pièce : jamais estimée ici"
-                  : undefined
-              }
+              title={bom.mass === undefined ? t.t("ui.bom.massMissing.title") : undefined}
             >
-              {bom.mass === undefined ? "incomplet" : fmt(kg, bom.mass)}
+              {bom.mass === undefined ? t.t("ui.bom.massMissing") : fmt(kg, bom.mass)}
             </td>
           </tr>
         </tfoot>

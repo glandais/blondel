@@ -12,14 +12,14 @@ import {
   type RuleResult,
   type StairLoads,
 } from "@blondel/core";
-import { tr, trList } from "../i18n/fr.js";
+import type { Message } from "@blondel/i18n";
 
 export type ExecutionClass = "EXC1" | "EXC2";
 
 export interface ExecutionClassInfo {
   readonly value: ExecutionClass;
   /** Justification rendue par le plugin (ex. « nuance S355 »), si disponible. */
-  readonly detail?: string;
+  readonly detail?: Message;
   readonly location?: RuleResult["location"];
 }
 
@@ -36,14 +36,14 @@ export function executionClassInfo(
   const line = model.compliance.results.find((r) => r.ruleId === "EXC_CLASSE_EXECUTION");
   return {
     value,
-    ...(line && tr(line.message) ? { detail: tr(line.message) } : {}),
+    ...(line?.message !== undefined ? { detail: line.message } : {}),
     ...(line ? { location: line.location } : {}),
   };
 }
 
 export interface PrecheckRow {
   readonly partId: string;
-  readonly label: string;
+  readonly label: Message;
   /** Longueur d'axe (m). */
   readonly lengthM: number;
   readonly deflection: number;
@@ -68,7 +68,7 @@ export interface PrecheckSummary {
   readonly rows: readonly PrecheckRow[];
   readonly loads: StairLoads;
   readonly permanentArea: number;
-  readonly notes: readonly string[];
+  readonly notes: readonly Message[];
   readonly minFrequency: number;
 }
 
@@ -87,7 +87,7 @@ export function precheckSummary(
     const adviceLimit = r.length / PRECHECK_LIMITS.deflectionAdvice;
     return {
       partId: b.partId,
-      label: tr(b.label),
+      label: b.label,
       lengthM: r.length / 1000,
       deflection: r.deflection,
       limit,
@@ -109,7 +109,7 @@ export function precheckSummary(
     rows,
     loads: pc.loads,
     permanentArea: pc.permanentArea,
-    notes: trList(pc.notes),
+    notes: pc.notes,
     minFrequency: PRECHECK_LIMITS.frequency,
   };
 }

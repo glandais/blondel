@@ -2,7 +2,15 @@
  * Traitement des calculs du worker, partagé avec le repli sur le fil principal (navigateur sans
  * Web Worker, tests sous Node) : même code, mêmes résultats.
  */
-import type { Project } from "@blondel/core";
+import { errorMessageOf, type Project } from "@blondel/core";
+import {
+  DEFAULT_LOCALE,
+  MessageError,
+  msg,
+  translatorFor,
+  type Locale,
+  type Message,
+} from "@blondel/i18n";
 import { exportGlb } from "@blondel/exports";
 import { loadExportPdf, type ExportPdfFn } from "../lib/optionalApi.js";
 import { runVariants, type CompareOutcome } from "../lib/variants.js";
@@ -28,6 +36,20 @@ export interface JobRunner {
   glb(job: Extract<WorkerJob, { type: "glb" }>): GlbResult;
 }
 
+/** Motif d'un export sans modèle, traduit dans la langue du job. */
+function noModel(errors: readonly Message[], locale: Locale): string {
+  const t = translatorFor(locale);
+  return errors[0] !== undefined ? t.t(errors[0]) : t.t("ui.label.export.noModel");
+}
+
+/**
+ * Motif d'un export en échec, traduit dans la langue du job (exception métier du cœur ou des
+ * exports : son `Message` ; autre exception : son texte brut).
+ */
+function failureText(e: unknown, locale: Locale | undefined): string {
+  return translatorFor(locale ?? DEFAULT_LOCALE).t(errorMessageOf(e));
+}
+
 export interface JobRunnerOptions {
   readonly meshCache?: MeshCache;
   /** Chargement de `exportPdf` (injectable dans les tests). */
@@ -42,7 +64,7 @@ export async function toBytes(content: unknown): Promise<Uint8Array> {
   if (typeof Blob !== "undefined" && content instanceof Blob) {
     return new Uint8Array(await content.arrayBuffer());
   }
-  throw new Error("Contenu PDF inattendu.");
+  throw new MessageError(msg("ui.worker.unexpectedPdf"));
 }
 
 /**
@@ -69,12 +91,14 @@ export function createJobRunner(options: JobRunnerOptions = {}): JobRunner {
         // Le projet exporté est en général celui du dernier modèle calculé : le partage
         // structurel retrouve les identités, et `buildModel` (mémoïsé) rend son modèle.
         const project = shareUnchanged(lastBuild, job.project);
+        const locale = job.locale ?? DEFAULT_LOCALE;
         const { model, errors } = computeModel(project);
-        if (!model) return { error: errors[0] ?? "Aucun modèle calculé." };
+        if (!model) return { error: noModel(errors, locale) };
         const exportPdf = await loadPdf();
         const content = await exportPdf(model, {
           project,
           title: project.name,
+          locale,
           ...(job.options?.pages ? { pages: job.options.pages } : {}),
           ...(job.options?.format ? { format: job.options.format } : {}),
           ...(job.options?.templateFamilies
@@ -83,17 +107,18 @@ export function createJobRunner(options: JobRunnerOptions = {}): JobRunner {
         });
         return { bytes: await toBytes(content) };
       } catch (e) {
-        return { error: e instanceof Error ? e.message : String(e) };
+        return { error: failureText(e, job.locale) };
       }
     },
     glb: (job) => {
       try {
         const project = shareUnchanged(lastBuild, job.project);
+        const locale = job.locale ?? DEFAULT_LOCALE;
         const { model, errors } = computeModel(project);
-        if (!model) return { error: errors[0] ?? "Aucun modèle calculé." };
-        return { bytes: exportGlb(model, { project, title: project.name }) };
+        if (!model) return { error: noModel(errors, locale) };
+        return { bytes: exportGlb(model, { project, title: project.name, locale }) };
       } catch (e) {
-        return { error: e instanceof Error ? e.message : String(e) };
+        return { error: failureText(e, job.locale) };
       }
     },
   };

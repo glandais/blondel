@@ -20,6 +20,8 @@ import {
   switchSection,
 } from "../lib/guardsForm.js";
 import { formatDecimal, parseDecimal } from "../lib/units.js";
+import { useT } from "../i18n/useT.js";
+import type { MessageKey, Translator } from "@blondel/i18n";
 import { appStore, useApp, useModel } from "../store/appStore.js";
 import type { Path } from "../store/setIn.js";
 import { AutoIntField, CheckField, IntField, NumberField, SelectField } from "./fields.js";
@@ -27,10 +29,11 @@ import { AutoIntField, CheckField, IntField, NumberField, SelectField } from "./
 const set = (path: Path) => (value: unknown) => appStore.getState().setField(path, value);
 const G: Path = ["guards"];
 
-const options = <K extends string>(labels: Readonly<Record<K, string>>) =>
-  (Object.entries(labels) as [K, string][]).map(([value, label]) => ({ value, label }));
-
-const TO_VALIDATE = "Valeur par défaut à valider";
+const options = <K extends string>(labels: Readonly<Record<K, MessageKey>>, t: Translator) =>
+  (Object.entries(labels) as [K, MessageKey][]).map(([value, label]) => ({
+    value,
+    label: t.t(label),
+  }));
 
 function SectionEditor({
   legend,
@@ -41,18 +44,19 @@ function SectionEditor({
   section: GuardSection;
   path: Path;
 }) {
+  const t = useT();
   return (
     <fieldset className="grid-2">
       <legend>{legend}</legend>
       <SelectField
-        label="Forme"
+        label={t.t("ui.guards.section.shape")}
         value={section.kind}
-        options={options(SECTION_KIND_LABELS)}
+        options={options(SECTION_KIND_LABELS, t)}
         onCommit={(kind) => set(path)(switchSection(section, kind))}
       />
       {section.kind === "round" ? (
         <IntField
-          label="Diamètre"
+          label={t.t("ui.guards.section.diameter")}
           value={section.diameter}
           min={1}
           onCommit={set([...path, "diameter"])}
@@ -60,13 +64,13 @@ function SectionEditor({
       ) : (
         <>
           <IntField
-            label="Largeur"
+            label={t.t("ui.guards.section.width")}
             value={section.width}
             min={1}
             onCommit={set([...path, "width"])}
           />
           <IntField
-            label="Hauteur"
+            label={t.t("ui.guards.section.height")}
             value={section.height}
             min={1}
             onCommit={set([...path, "height"])}
@@ -79,19 +83,21 @@ function SectionEditor({
 
 function InfillEditor({ infill }: { infill: GuardInfill }) {
   const base: Path = [...G, "infill"];
+  const t = useT();
+  const toValidate = t.t("ui.guards.toValidate");
   return (
     <fieldset>
-      <legend>Remplissage</legend>
+      <legend>{t.t("ui.guards.infill.legend")}</legend>
       <SelectField
-        label="Type"
+        label={t.t("ui.guards.infill.kind")}
         value={infill.kind}
-        options={INFILL_KINDS.map((k) => ({ value: k, label: INFILL_LABELS[k] }))}
+        options={INFILL_KINDS.map((k) => ({ value: k, label: t.t(INFILL_LABELS[k]) }))}
         onCommit={(kind) => set(base)(switchInfill(infill, kind))}
       />
       {infill.kind === "balusters" ? (
         <IntField
-          label="Entraxe maximal des balustres"
-          hint={TO_VALIDATE}
+          label={t.t("ui.guards.infill.balusterSpacing")}
+          hint={toValidate}
           value={infill.spacing}
           min={1}
           onCommit={set([...base, "spacing"])}
@@ -99,7 +105,11 @@ function InfillEditor({ infill }: { infill: GuardInfill }) {
       ) : null}
       {infill.kind === "rails" || infill.kind === "cables" ? (
         <IntField
-          label={infill.kind === "rails" ? "Nombre de lisses" : "Nombre de câbles"}
+          label={
+            infill.kind === "rails"
+              ? t.t("ui.guards.infill.railCount")
+              : t.t("ui.guards.infill.cableCount")
+          }
           unit=""
           value={infill.count}
           min={1}
@@ -109,7 +119,7 @@ function InfillEditor({ infill }: { infill: GuardInfill }) {
       ) : null}
       {infill.kind === "cables" ? (
         <IntField
-          label="Diamètre des câbles"
+          label={t.t("ui.guards.infill.cableDiameter")}
           value={infill.diameter}
           min={1}
           onCommit={set([...base, "diameter"])}
@@ -117,7 +127,11 @@ function InfillEditor({ infill }: { infill: GuardInfill }) {
       ) : null}
       {infillHasSection(infill) ? (
         <SectionEditor
-          legend={infill.kind === "balusters" ? "Section des balustres" : "Section des lisses"}
+          legend={
+            infill.kind === "balusters"
+              ? t.t("ui.guards.infill.balusterSection")
+              : t.t("ui.guards.infill.railSection")
+          }
           section={infill.section}
           path={[...base, "section"]}
         />
@@ -125,14 +139,18 @@ function InfillEditor({ infill }: { infill: GuardInfill }) {
       {infillIsPanel(infill) ? (
         <>
           <IntField
-            label={infill.kind === "glass" ? "Épaisseur du verre" : "Épaisseur du panneau"}
-            hint={TO_VALIDATE}
+            label={
+              infill.kind === "glass"
+                ? t.t("ui.guards.infill.glassThickness")
+                : t.t("ui.guards.infill.panelThickness")
+            }
+            hint={toValidate}
             value={infill.thickness}
             min={1}
             onCommit={set([...base, "thickness"])}
           />
           <IntField
-            label="Jeu entre panneaux et poteaux"
+            label={t.t("ui.guards.infill.panelGap")}
             value={infill.panelGap}
             min={0}
             onCommit={set([...base, "panelGap"])}
@@ -141,23 +159,21 @@ function InfillEditor({ infill }: { infill: GuardInfill }) {
       ) : null}
       {infill.kind === "perforated" ? (
         <IntField
-          label="Diamètre des perforations"
+          label={t.t("ui.guards.infill.holeDiameter")}
           value={infill.holeDiameter}
           min={1}
           onCommit={set([...base, "holeDiameter"])}
         />
       ) : null}
       <IntField
-        label="Vide sous le remplissage"
-        hint="Au-dessus de la ligne des nez (volée) ou du sol fini (trémie)"
+        label={t.t("ui.guards.infill.bottomGap.label")}
+        hint={t.t("ui.guards.infill.bottomGap.hint")}
         value={infill.bottomGap}
         min={0}
         onCommit={set([...base, "bottomGap"])}
       />
       {infill.kind === "glass" ? (
-        <p className="muted">
-          Verre : produit (feuilleté, NF DTU 39 P5) et fixations non vérifiés par Blondel.
-        </p>
+        <p className="muted">{t.t("ui.guards.infill.glassNote")}</p>
       ) : null}
     </fieldset>
   );
@@ -166,64 +182,66 @@ function InfillEditor({ infill }: { infill: GuardInfill }) {
 function GuardsEditor({ guards, going }: { guards: GuardsSpec; going: number }) {
   const { flight, opening, posts, handrail } = guards;
   const walls = useApp((s) => s.project.site.walls.length);
+  const t = useT();
+  const toValidate = t.t("ui.guards.toValidate");
   return (
     <>
       <fieldset>
-        <legend>Garde-corps de volée</legend>
+        <legend>{t.t("ui.guards.flight.legend")}</legend>
         <CheckField
-          label="Garde-corps côté vide"
+          label={t.t("ui.guards.flight.enabled")}
           checked={flight.enabled}
           onCommit={set([...G, "flight", "enabled"])}
         />
         <SelectField
-          label="Côté jour"
+          label={t.t("ui.guards.flight.inner")}
           value={flight.inner}
-          options={options(SIDE_MODE_LABELS)}
+          options={options(SIDE_MODE_LABELS, t)}
           onCommit={set([...G, "flight", "inner"])}
         />
         <SelectField
-          label="Côté extérieur"
+          label={t.t("ui.guards.flight.outer")}
           value={flight.outer}
-          options={options(SIDE_MODE_LABELS)}
+          options={options(SIDE_MODE_LABELS, t)}
           onCommit={set([...G, "flight", "outer"])}
         />
         <p className="muted">
           {walls === 0
-            ? "Aucun mur dans le site : en automatique, les deux côtés sont vides."
-            : `${walls} mur(s) dans le site (à tracer dans Plan 2D › « Site et saisie »).`}
+            ? t.t("ui.guards.flight.noWalls")
+            : t.t("ui.guards.flight.walls", { count: walls })}
         </p>
         <IntField
-          label="Hauteur"
-          hint="Au-dessus de la ligne des nez, à la verticale du nez"
+          label={t.t("ui.guards.flight.height.label")}
+          hint={t.t("ui.guards.flight.height.hint")}
           value={flight.height}
           min={1}
           onCommit={set([...G, "flight", "height"])}
         />
         <IntField
-          label="Axe depuis le bord de l'emmarchement"
-          hint={TO_VALIDATE}
+          label={t.t("ui.guards.flight.edgeOffset")}
+          hint={toValidate}
           value={flight.edgeOffset}
           min={0}
           onCommit={set([...G, "flight", "edgeOffset"])}
         />
       </fieldset>
       <fieldset>
-        <legend>Garde-corps de trémie</legend>
+        <legend>{t.t("ui.guards.opening.legend")}</legend>
         <CheckField
-          label="Garde-corps sur les côtés libres de la trémie"
+          label={t.t("ui.guards.opening.enabled")}
           checked={opening.enabled}
           onCommit={set([...G, "opening", "enabled"])}
         />
         <IntField
-          label="Hauteur"
-          hint="Au-dessus du sol fini haut"
+          label={t.t("ui.guards.opening.height.label")}
+          hint={t.t("ui.guards.opening.height.hint")}
           value={opening.height}
           min={1}
           onCommit={set([...G, "opening", "height"])}
         />
         <IntField
-          label="Recul depuis le nu de la trémie"
-          hint={TO_VALIDATE}
+          label={t.t("ui.guards.opening.setback")}
+          hint={toValidate}
           value={opening.setback}
           min={0}
           onCommit={set([...G, "opening", "setback"])}
@@ -231,86 +249,86 @@ function GuardsEditor({ guards, going }: { guards: GuardsSpec; going: number }) 
       </fieldset>
       <InfillEditor infill={guards.infill} />
       <fieldset>
-        <legend>Poteaux</legend>
+        <legend>{t.t("ui.guards.posts.legend")}</legend>
         <IntField
-          label="Côté du poteau carré"
-          hint={TO_VALIDATE}
+          label={t.t("ui.guards.posts.size")}
+          hint={toValidate}
           value={posts.size}
           min={1}
           onCommit={set([...G, "posts", "size"])}
         />
         <IntField
-          label="Entraxe maximal"
-          hint={TO_VALIDATE}
+          label={t.t("ui.guards.posts.maxSpacing")}
+          hint={toValidate}
           value={posts.maxSpacing}
           min={1}
           onCommit={set([...G, "posts", "maxSpacing"])}
         />
         <NumberField
-          label="Déviation pour un poteau d'angle"
+          label={t.t("ui.guards.posts.cornerAngle")}
           unit="°"
-          hint={TO_VALIDATE}
+          hint={toValidate}
           value={posts.cornerAngle}
           min={0}
           max={180}
           parse={parseDecimal}
-          format={formatDecimal}
+          format={(v) => formatDecimal(v, t.locale)}
           onCommit={set([...G, "posts", "cornerAngle"])}
         />
       </fieldset>
       <fieldset>
-        <legend>Main courante</legend>
+        <legend>{t.t("ui.guards.handrail.legend")}</legend>
         <SectionEditor
-          legend="Section"
+          legend={t.t("ui.guards.handrail.section")}
           section={handrail.section}
           path={[...G, "handrail", "section"]}
         />
         <IntField
-          label="Hauteur (main courante murale)"
-          hint="Dessus au-dessus du nez ; sur un garde-corps : hauteur du garde-corps"
+          label={t.t("ui.guards.handrail.height.label")}
+          hint={t.t("ui.guards.handrail.height.hint")}
           value={handrail.height}
           min={1}
           onCommit={set([...G, "handrail", "height"])}
         />
         <SelectField
-          label="Mains courantes murales"
+          label={t.t("ui.guards.handrail.wallSides")}
           value={handrail.wallSides}
-          options={options(WALL_SIDES_LABELS)}
+          options={options(WALL_SIDES_LABELS, t)}
           onCommit={set([...G, "handrail", "wallSides"])}
         />
         <AutoIntField
-          label="Prolongement en bas"
+          label={t.t("ui.guards.handrail.extensionBottom")}
           value={handrail.extensions.bottom}
           fallback={going}
-          hint="Automatique : un giron"
+          hint={t.t("ui.guards.handrail.extensionHint")}
           min={0}
           onCommit={set([...G, "handrail", "extensions", "bottom"])}
         />
         <AutoIntField
-          label="Prolongement en haut"
+          label={t.t("ui.guards.handrail.extensionTop")}
           value={handrail.extensions.top}
           fallback={going}
-          hint="Automatique : un giron"
+          hint={t.t("ui.guards.handrail.extensionHint")}
           min={0}
           onCommit={set([...G, "handrail", "extensions", "top"])}
         />
         <IntField
-          label="Dégagement au mur"
+          label={t.t("ui.guards.handrail.wallClearance")}
           value={handrail.wallClearance}
           min={0}
           onCommit={set([...G, "handrail", "wallClearance"])}
         />
       </fieldset>
       <SelectField
-        label="Matériau"
-        hint={TO_VALIDATE}
+        label={t.t("ui.guards.material")}
+        hint={toValidate}
         value={guards.material}
-        options={GUARD_MATERIAL_OPTIONS}
+        options={GUARD_MATERIAL_OPTIONS.map((o) => ({ value: o.value, label: t.t(o.label) }))}
         onCommit={set([...G, "material"])}
       />
       <IntField
-        label="Tolérance de détection des murs"
-        hint={TO_VALIDATE}
+        label={t.t("ui.guards.wallTolerance")}
+        hint={toValidate}
         value={guards.wallTolerance}
         min={0}
         onCommit={set([...G, "wallTolerance"])}
@@ -320,6 +338,7 @@ function GuardsEditor({ guards, going }: { guards: GuardsSpec; going: number }) 
 }
 
 export function GuardsSection() {
+  const t = useT();
   const guards = useApp((s) => s.project.guards);
   const { model } = useModel();
   // Derniers garde-corps retirés : restaurés si on les réactive.
@@ -328,7 +347,7 @@ export function GuardsSection() {
   return (
     <>
       <CheckField
-        label="Garde-corps et mains courantes"
+        label={t.t("ui.guards.enabled")}
         checked={guards !== undefined}
         onCommit={(checked) => {
           if (!checked) {
@@ -341,10 +360,7 @@ export function GuardsSection() {
       {guards ? (
         <GuardsEditor guards={guards} going={Number.isFinite(going) ? going : 0} />
       ) : (
-        <p className="muted">
-          Aucun garde-corps décrit : les règles de garde-corps et de main courante ne sont pas
-          évaluées.
-        </p>
+        <p className="muted">{t.t("ui.guards.none")}</p>
       )}
     </>
   );

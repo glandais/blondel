@@ -2,6 +2,7 @@
  * Client du worker de calcul : routage des réponses, clonage réel des messages
  * (`structuredClone`, comme `postMessage`), repli sur le fil principal.
  */
+import { translatorFor } from "@blondel/i18n";
 import { clearModelCache, createProject, parseProjectText } from "@blondel/core";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import j4Text from "../../../../examples/j4-acceptance-01-garde-corps.blondel.json?raw";
@@ -272,6 +273,9 @@ describe("chien de garde du calcul (QUESTIONS A21)", () => {
     const err = await settled;
     expect(err).toBeInstanceOf(WatchdogTimeoutError);
     expect((err as Error).message).toContain("aucune réponse en 1 s");
+    expect(translatorFor("en").t((err as WatchdogTimeoutError).msg)).toContain(
+      "no response within 1 s",
+    );
     expect(created).toBe(2);
     expect(fallbackUsed).toBe(false);
     // Le worker reste utilisé pour les demandes suivantes (un nouveau est créé à la demande).

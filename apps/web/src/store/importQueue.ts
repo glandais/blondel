@@ -9,6 +9,7 @@
  * `queuedImportMessage` dit pourquoi (QUESTIONS D1) ; elle est prise en charge dès que le
  * modèle est rétabli, ou abandonnée par `cancelUnderlayImport`.
  */
+import { msg, type Message } from "@blondel/i18n";
 import { createStore } from "zustand/vanilla";
 
 export type UnderlayImportKind = "dxf" | "image";
@@ -57,26 +58,18 @@ export function queuedImportMessage(
     readonly computing: boolean;
     readonly hostShown?: boolean;
   },
-): { readonly kind: "info" | "error"; readonly text: string; readonly openHost?: true } | null {
+): { readonly kind: "info" | "error"; readonly text: Message; readonly openHost?: true } | null {
   if (!pending) return null;
   const hostShown = model.hostShown ?? model.available;
   if (model.available && hostShown) return null;
-  const what = `${pending.kind === "dxf" ? "Le plan DXF" : "L'image"} « ${pending.file.name} »`;
+  const what = msg(pending.kind === "dxf" ? "ui.lib.import.what.dxf" : "ui.lib.import.what.image", {
+    name: pending.file.name,
+  });
   if (model.available) {
-    return {
-      kind: "info",
-      text: `${what} sera importé(e) à l'ouverture de l'onglet Plan, mode « Site et saisie ».`,
-      openHost: true,
-    };
+    return { kind: "info", text: msg("ui.lib.import.queued.onPlan", { what }), openHost: true };
   }
   if (model.computing) {
-    return { kind: "info", text: `${what} sera importé(e) dès la fin du calcul du modèle.` };
+    return { kind: "info", text: msg("ui.lib.import.queued.computing", { what }) };
   }
-  return {
-    kind: "error",
-    text:
-      `${what} ne peut pas être importé(e) tant que le modèle est en échec : corrigez les ` +
-      "erreurs ci-dessous (ou annulez la dernière modification) ; l'import reprendra alors " +
-      "automatiquement.",
-  };
+  return { kind: "error", text: msg("ui.lib.import.queued.failed", { what }) };
 }

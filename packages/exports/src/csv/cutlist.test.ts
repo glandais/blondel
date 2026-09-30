@@ -8,7 +8,7 @@ import {
   csvTextField,
   cutListRows,
   exportCutListCsv,
-  MASS_DENSITY_NOTE,
+  massDensityNote,
   massNoteFor,
   neutralizeFormula,
   partMassKg,
@@ -219,12 +219,12 @@ describe("exportCutListCsv", () => {
       const m1 = rows.find((r) => r[0] === "M1")!;
       const li1 = rows.find((r) => r[0] === "LI1")!;
       expect(m1[11]).toBe("7,50");
-      expect(m1[12]).toBe(MASS_DENSITY_NOTE);
+      expect(m1[12]).toBe(massDensityNote());
       expect(li1[11]).toBe("18,40");
       expect(li1[12]).toBe("");
       const total = rows[rows.length - 1]!;
       expect(total[11]).toBe("25,90");
-      expect(total[12]).toBe(MASS_DENSITY_NOTE);
+      expect(total[12]).toBe(massDensityNote());
     });
 
     it("sans masse : pas de remarque ; total incomplet", () => {
@@ -237,9 +237,9 @@ describe("exportCutListCsv", () => {
     it("profil d'atelier du projet : essence renseignée par l'atelier sans mention", () => {
       const note = massNoteFor({ wood: { densities: { "wood-oak": 690 } } });
       expect(note("wood-oak")).toBeUndefined();
-      expect(note("wood-pine")).toBe(MASS_DENSITY_NOTE);
+      expect(note("wood-pine")).toBe(massDensityNote());
       expect(note("steel-raw")).toBeUndefined();
-      expect(massNoteFor(undefined)("wood-oak")).toBe(MASS_DENSITY_NOTE);
+      expect(massNoteFor(undefined)("wood-oak")).toBe(massDensityNote());
       const rows = cutListRows([oak], { massNote: note });
       expect(rows[0]!.massNote).toBeUndefined();
     });
@@ -284,7 +284,7 @@ describe("exportCutListCsv", () => {
             for (const r of cutListRows(parts)) {
               const wood = parts.find((p) => p.mark === r.mark)!.material.startsWith("wood-");
               expect(r.massNote).toBe(
-                r.unitMass !== undefined && wood ? MASS_DENSITY_NOTE : undefined,
+                r.unitMass !== undefined && wood ? massDensityNote() : undefined,
               );
             }
           },

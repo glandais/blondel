@@ -11,6 +11,7 @@ import {
   compareEpure,
   deepMerge,
   epureDeviations,
+  errorMessageOf,
   getStructure,
   stableStringify,
   type EpureSummary,
@@ -21,23 +22,32 @@ import {
   type StructureKind,
   type VariantSummary,
 } from "@blondel/core";
-import { trList } from "../i18n/fr.js";
+import {
+  createTranslator,
+  msg,
+  type Locale,
+  type Message,
+  type MessageKey,
+  type Translator,
+} from "@blondel/i18n";
+import { numberFormat } from "../i18n/locale.js";
 
 /** Variante à comparer : une structure et, éventuellement, des paramètres imposés. */
 export interface Variant {
   readonly id: string;
   readonly kind: string;
-  readonly label: string;
+  /** Libellé (message neutre : les variantes sont calculées dans le worker, sans langue). */
+  readonly label: Message;
   /** Paramètres imposés (fusionnés sur ceux du projet quand la structure est la même). */
   readonly params?: Readonly<Record<string, unknown>>;
 }
 
 /** Résultat d'une variante sans son `Model` (inutile à l'affichage, coûteux à transmettre). */
 export type VariantRow = Omit<VariantSummary, "model" | "label" | "errors"> & {
-  /** Libellé de la variante. */
-  readonly label: string;
-  /** Erreurs de génération (texte français, vague 2 de l'i18n). */
-  readonly errors: readonly string[];
+  /** Libellé de la variante (traduit à l'affichage). */
+  readonly label: Message;
+  /** Erreurs de génération (messages neutres, traduits à l'affichage). */
+  readonly errors: readonly Message[];
   readonly id: string;
   /** Variante identique à la structure du projet (paramètres compris). */
   readonly current: boolean;
@@ -46,9 +56,9 @@ export type VariantRow = Omit<VariantSummary, "model" | "label" | "errors"> & {
   /** Raccords de jour adaptés à la structure (appliqués avec la variante). */
   readonly adaptations: readonly JourAdaptation[];
   /** Incompatibilités de la structure avec l'épure du projet (adaptées ou non). */
-  readonly signals: readonly string[];
+  readonly signals: readonly Message[];
   /** Écarts d'épure par rapport à la variante de référence (structure du projet). */
-  readonly deviations: readonly string[];
+  readonly deviations: readonly Message[];
   /** Variante de référence des écarts d'épure. */
   readonly reference: boolean;
   /** Épure effective de la variante ; `null` si la comparaison a échoué. */
@@ -64,7 +74,7 @@ export interface CompareOutcome {
   readonly rows: readonly VariantRow[];
   readonly timeMs: number;
   /** Échec du calcul de la comparaison elle-même (worker et repli), message affiché. */
-  readonly error?: string;
+  readonly error?: Message;
 }
 
 /**
@@ -87,13 +97,13 @@ export function variantsFor(
         {
           id: "helical-core-wood",
           kind: "helical-core",
-          label: "Fût acier — marches bois",
+          label: msg("ui.lib.variant.helicalWood"),
           params: { treads: { material: "wood" } },
         },
         {
           id: "helical-core-steel",
           kind: "helical-core",
-          label: "Fût acier — marches en tôle",
+          label: msg("ui.lib.variant.helicalSteel"),
           params: { treads: { material: "steel" } },
         },
       );
@@ -102,19 +112,19 @@ export function variantsFor(
   }
   const straight = project.stair.layout.turns.length === 0;
   if (has("wood-housed")) {
-    out.push({ id: "wood-housed", kind: "wood-housed", label: "Bois — limons à la française" });
+    out.push({ id: "wood-housed", kind: "wood-housed", label: msg("ui.lib.variant.woodHoused") });
   }
   if (has("wood-cut") && straight) {
-    out.push({ id: "wood-cut", kind: "wood-cut", label: "Bois — crémaillères à l'anglaise" });
+    out.push({ id: "wood-cut", kind: "wood-cut", label: msg("ui.lib.variant.woodCut") });
   }
   if (has("steel-flat")) {
-    out.push({ id: "steel-flat", kind: "steel-flat", label: "Acier — plat découpé laser" });
+    out.push({ id: "steel-flat", kind: "steel-flat", label: msg("ui.lib.variant.steelFlat") });
   }
   if (has("steel-curved") && !straight) {
     out.push({
       id: "steel-curved",
       kind: "steel-curved",
-      label: "Acier — limon de jour débillardé soudé",
+      label: msg("ui.lib.variant.steelCurved"),
     });
   }
   if (has("steel-profile")) {
@@ -122,7 +132,7 @@ export function variantsFor(
       out.push({
         id: `steel-profile-${family}`,
         kind: "steel-profile",
-        label: `Acier — profilés ${family}`,
+        label: msg("ui.lib.variant.steelProfile", { family }),
         params: { family, section: "auto" },
       });
     }
@@ -136,7 +146,7 @@ function withCurrent(project: Project, out: Variant[], has: (k: string) => boole
   if (cur.kind !== "none" && has(cur.kind)) {
     const covered = out.some((v) => isCurrent(project, v, variantParams(project, v)));
     if (!covered) {
-      out.push({ id: `current-${cur.kind}`, kind: cur.kind, label: "Structure du projet" });
+      out.push({ id: `current-${cur.kind}`, kind: cur.kind, label: msg("ui.lib.variant.current") });
     }
   }
   return out;
@@ -206,8 +216,8 @@ export function runVariants(project: Project, variants: readonly Variant[]): Com
       const { model: _model, deviations: _deviations, errors, signals, ...rest } = summary;
       rows.push({
         ...rest,
-        errors: trList(errors),
-        signals: trList(signals),
+        errors,
+        signals,
         id: v.id,
         label: v.label,
         current: isCurrent(project, v, params),
@@ -225,7 +235,7 @@ export function runVariants(project: Project, variants: readonly Variant[]): Com
     r === ref
       ? { ...r, reference: true }
       : ref?.epure && r.epure
-        ? { ...r, deviations: trList(epureDeviations(ref.epure, r.epure)) }
+        ? { ...r, deviations: epureDeviations(ref.epure, r.epure) }
         : r,
   );
   return { rows: out, timeMs: now() - t0 };
@@ -241,19 +251,22 @@ export function runVariants(project: Project, variants: readonly Variant[]): Com
  * comparables entre elles.
  */
 export function markFailedVariants(rows: readonly VariantRow[]): VariantRow[] {
+  // Messages comparés par leur forme canonique (clé et paramètres), indépendante de la langue.
+  const keysOf = (r: VariantRow): string[] => r.errors.map((e) => stableStringify(e));
   const common =
     rows.length === 0
       ? new Set<string>()
-      : rows
-          .slice(1)
-          .reduce(
-            (acc, r) => new Set([...acc].filter((e) => r.errors.includes(e))),
-            new Set(rows[0]!.errors),
-          );
+      : rows.slice(1).reduce(
+          (acc, r) => {
+            const own = keysOf(r);
+            return new Set([...acc].filter((e) => own.includes(e)));
+          },
+          new Set(keysOf(rows[0]!)),
+        );
   return rows.map((r) =>
     r.failed === true ||
     (r.errors.length > 0 && r.partCount === 0) ||
-    r.errors.some((e) => !common.has(e))
+    keysOf(r).some((e) => !common.has(e))
       ? { ...r, failed: true }
       : r,
   );
@@ -293,12 +306,19 @@ export function applyVariant(
  * Raccord de jour lisible (« poteau 100 mm », « poteau 130 mm décalé de 45 mm », « arc R 250
  * mm », « vif »).
  */
-export function jourText(c: InnerCorner): string {
+export function jourText(c: InnerCorner, locale: Locale): string {
+  const t = createTranslator(locale);
+  const int = numberFormat(locale, INT);
   return c.kind === "arc"
-    ? `arc R ${int.format(c.radius)} mm`
+    ? t.t("ui.lib.jour.arc", { radius: int.format(c.radius) })
     : c.kind === "newel"
-      ? `poteau ${int.format(c.size)} mm${(c.offset ?? 0) > 0 ? ` décalé de ${int.format(c.offset ?? 0)} mm` : ""}`
-      : "vif";
+      ? (c.offset ?? 0) > 0
+        ? t.t("ui.lib.jour.newelOffset", {
+            size: int.format(c.size),
+            offset: int.format(c.offset ?? 0),
+          })
+        : t.t("ui.lib.jour.newel", { size: int.format(c.size) })
+      : t.t("ui.lib.jour.sharp");
 }
 
 const ZERO: Readonly<Record<Severity, number>> = { bloquant: 0, avertissement: 0, conseil: 0 };
@@ -324,7 +344,7 @@ function failedRow(v: Variant, params: Record<string, unknown>, e: unknown): Var
     executionClass: null,
     violations: ZERO,
     precheck: { beams: 0, violations: ZERO },
-    errors: [`Comparaison impossible : ${e instanceof Error ? e.message : String(e)}`],
+    errors: [msg("ui.lib.variant.compareFailed", { detail: errorMessageOf(e) })],
     cost: null,
     costMissing: [],
     adaptations: [],
@@ -338,40 +358,45 @@ function failedRow(v: Variant, params: Record<string, unknown>, e: unknown): Var
 
 // ------------------------------------------------------------------ Mise en forme
 
-const nf = (digits: number) =>
-  new Intl.NumberFormat("fr-FR", { minimumFractionDigits: digits, maximumFractionDigits: digits });
-const kg = nf(1);
-const m2 = nf(2);
-const int = nf(0);
-const m = nf(2);
-const eur = new Intl.NumberFormat("fr-FR", {
+const fixed = (digits: number): Intl.NumberFormatOptions => ({
+  minimumFractionDigits: digits,
+  maximumFractionDigits: digits,
+});
+const INT = fixed(0);
+const EUR: Intl.NumberFormatOptions = {
   style: "currency",
   currency: "EUR",
   maximumFractionDigits: 0,
-});
-
-/** Libellés français des champs du barème (profil d'atelier, `costs`). */
-export const COST_FIELD_LABELS: Readonly<Record<string, string>> = {
-  hourlyRate: "taux horaire",
-  minutesPerCut: "temps par coupe",
-  minutesPerWeldMeter: "temps par mètre de cordon",
-  minutesPerBend: "temps par pli",
-  minutesPerHole: "temps par perçage",
-  minutesPerUniquePart: "temps par pièce unique",
-  steelPricePerKg: "prix de l'acier",
-  woodPricePerM3: "prix du bois",
-  finishPricePerM2: "prix de finition",
 };
 
-function severities(v: Readonly<Record<Severity, number>>): string {
+/** Clés des libellés des champs du barème (profil d'atelier, `costs`). */
+export const COST_FIELD_LABELS: Readonly<Record<string, MessageKey>> = {
+  hourlyRate: "ui.label.costField.hourlyRate",
+  minutesPerCut: "ui.label.costField.minutesPerCut",
+  minutesPerWeldMeter: "ui.label.costField.minutesPerWeldMeter",
+  minutesPerBend: "ui.label.costField.minutesPerBend",
+  minutesPerHole: "ui.label.costField.minutesPerHole",
+  minutesPerUniquePart: "ui.label.costField.minutesPerUniquePart",
+  steelPricePerKg: "ui.label.costField.steelPricePerKg",
+  woodPricePerM3: "ui.label.costField.woodPricePerM3",
+  finishPricePerM2: "ui.label.costField.finishPricePerM2",
+};
+
+/** Libellé d'un champ du barème (identifiant brut s'il est inconnu). */
+export function costFieldLabel(field: string, t: Translator): string {
+  const key = COST_FIELD_LABELS[field];
+  return key === undefined ? field : t.t(key);
+}
+
+function severities(v: Readonly<Record<Severity, number>>, t: Translator): string {
   const total = v.bloquant + v.avertissement + v.conseil;
-  if (total === 0) return "aucune";
+  if (total === 0) return t.t("ui.lib.compare.none");
   const parts: string[] = [];
-  if (v.bloquant > 0) parts.push(`${v.bloquant} bloquante${v.bloquant > 1 ? "s" : ""}`);
+  if (v.bloquant > 0) parts.push(t.t("ui.lib.compare.blocking", { count: v.bloquant }));
   if (v.avertissement > 0) {
-    parts.push(`${v.avertissement} avertissement${v.avertissement > 1 ? "s" : ""}`);
+    parts.push(t.t("ui.lib.compare.warning", { count: v.avertissement }));
   }
-  if (v.conseil > 0) parts.push(`${v.conseil} conseil${v.conseil > 1 ? "s" : ""}`);
+  if (v.conseil > 0) parts.push(t.t("ui.lib.compare.advice", { count: v.conseil }));
   return parts.join(", ");
 }
 
@@ -403,116 +428,148 @@ const MEASURED_LINES: ReadonlySet<string> = new Set([
   "jour",
 ]);
 
-const FAILED_CELL: CompareLine["cells"][number] = {
-  text: "–",
-  title: "Variante en échec : grandeur non calculée",
-  tone: "muted",
-};
-
 /** Lignes du tableau côte à côte (une colonne par variante). */
-export function compareLines(rows: readonly VariantRow[]): CompareLine[] {
+export function compareLines(rows: readonly VariantRow[], t: Translator): CompareLine[] {
+  const kg = numberFormat(t.locale, fixed(1));
+  const m2 = numberFormat(t.locale, fixed(2));
+  const int = numberFormat(t.locale, INT);
+  const m = numberFormat(t.locale, fixed(2));
+  const eur = numberFormat(t.locale, EUR);
+  const lines = (ms: readonly Message[]): string => ms.map((x) => t.t(x)).join("\n");
+  const failedCell: CompareLine["cells"][number] = {
+    text: "–",
+    title: t.t("ui.lib.compare.failedCell"),
+    tone: "muted",
+  };
   const line = (
     key: string,
-    label: string,
+    label: MessageKey,
     cell: (r: VariantRow) => CompareLine["cells"][number],
   ): CompareLine => ({
     key,
-    label,
+    label: t.t(label),
     // Variante en échec : grandeur non mesurée, « – » (un 0 laisserait croire à une variante
     // plus légère ou moins chère) ; seules les lignes d'erreurs et d'écarts restent lisibles.
-    cells: rows.map((r) => (r.failed === true && MEASURED_LINES.has(key) ? FAILED_CELL : cell(r))),
+    cells: rows.map((r) => (r.failed === true && MEASURED_LINES.has(key) ? failedCell : cell(r))),
   });
   return [
-    line("mass", "Masse", (r) =>
+    line("mass", "ui.lib.compare.line.mass", (r) =>
       r.massUnknown > 0
         ? {
             text: `${kg.format(r.massKg)} kg`,
-            title: `${r.massUnknown} pièce(s) sans masse connue, non comptée(s)`,
+            title: t.t("ui.lib.compare.massUnknown", { count: r.massUnknown }),
             tone: "warn",
           }
         : { text: `${kg.format(r.massKg)} kg` },
     ),
-    line("surface", "Surface (traitée ou de référence)", (r) => ({
+    line("surface", "ui.lib.compare.line.surface", (r) => ({
       text: `${m2.format(r.surfaceM2)} m²`,
     })),
-    line("parts", "Pièces", (r) => ({ text: int.format(r.partCount) })),
-    line("unique", "Pièces uniques", (r) => ({ text: int.format(r.uniqueParts) })),
-    line("weld", "Cordons de soudure", (r) =>
+    line("parts", "ui.lib.compare.line.parts", (r) => ({ text: int.format(r.partCount) })),
+    line("unique", "ui.lib.compare.line.unique", (r) => ({ text: int.format(r.uniqueParts) })),
+    line("weld", "ui.lib.compare.line.weld", (r) =>
       r.weldMm > 0
         ? {
             text: `${m.format(r.weldMm / 1000)} m`,
             ...(r.buttWeldMm > 0
-              ? { title: `dont ${m.format(r.buttWeldMm / 1000)} m bout à bout` }
+              ? { title: t.t("ui.lib.compare.buttWeld", { length: m.format(r.buttWeldMm / 1000) }) }
               : {}),
           }
         : { text: "–", tone: "muted" },
     ),
-    line("bends", "Plis", (r) =>
+    line("bends", "ui.lib.compare.line.bends", (r) =>
       r.bends > 0 ? { text: int.format(r.bends) } : { text: "–", tone: "muted" },
     ),
-    line("cuts", "Coupes", (r) => ({ text: int.format(r.cuts) })),
-    line("holes", "Perçages", (r) =>
+    line("cuts", "ui.lib.compare.line.cuts", (r) => ({ text: int.format(r.cuts) })),
+    line("holes", "ui.lib.compare.line.holes", (r) =>
       r.holes > 0 ? { text: int.format(r.holes) } : { text: "–", tone: "muted" },
     ),
-    line("exc", "Classe d'exécution", (r) =>
+    line("exc", "ui.lib.compare.line.exc", (r) =>
       r.executionClass
         ? { text: r.executionClass, ...(r.executionClass === "EXC2" ? { tone: "warn" } : {}) }
-        : { text: r.family === "metal" ? "non déterminée" : "sans objet", tone: "muted" },
+        : {
+            text: t.t(
+              r.family === "metal"
+                ? "ui.lib.compare.excUndetermined"
+                : "ui.lib.compare.notApplicable",
+            ),
+            tone: "muted",
+          },
     ),
-    line("violations", "Violations (contrôle de conception)", (r) => ({
-      text: severities(r.violations),
+    line("violations", "ui.lib.compare.line.violations", (r) => ({
+      text: severities(r.violations, t),
       ...(r.violations.bloquant > 0
         ? { tone: "bad" }
         : r.violations.avertissement > 0
           ? { tone: "warn" }
           : {}),
     })),
-    line("precheck", "Prédimensionnement indicatif", (r) =>
+    line("precheck", "ui.lib.compare.line.precheck", (r) =>
       r.precheck.beams === 0
-        ? { text: "aucun limon évalué", tone: "muted" }
+        ? { text: t.t("ui.lib.compare.noBeam"), tone: "muted" }
         : {
-            text: `${r.precheck.beams} limon(s) : ${severities(r.precheck.violations)}`,
+            text: t.t("ui.lib.compare.beams", {
+              count: r.precheck.beams,
+              severities: severities(r.precheck.violations, t),
+            }),
             ...(r.precheck.violations.bloquant > 0 ? { tone: "bad" } : {}),
           },
     ),
-    line("cost", "Coût estimé (€ HT)", (r) =>
+    line("cost", "ui.lib.compare.line.cost", (r) =>
       r.cost
         ? {
             text: eur.format(r.cost.total),
-            title: `matière ${eur.format(r.cost.material)}, main-d'œuvre ${eur.format(r.cost.labour)} (${m.format(r.cost.hours)} h), finition ${eur.format(r.cost.finish)}`,
+            title: t.t("ui.lib.compare.costDetail", {
+              material: eur.format(r.cost.material),
+              labour: eur.format(r.cost.labour),
+              hours: m.format(r.cost.hours),
+              finish: eur.format(r.cost.finish),
+            }),
           }
         : {
-            text: "profil d'atelier requis",
+            text: t.t("ui.lib.compare.costNeedsProfile"),
             tone: "muted",
             ...(r.costMissing.length > 0
               ? {
-                  title: `Barème incomplet : ${r.costMissing.map((f) => COST_FIELD_LABELS[f] ?? f).join(", ")}`,
+                  title: t.t("ui.lib.compare.costMissing", {
+                    fields: r.costMissing.map((f) => costFieldLabel(f, t)).join(", "),
+                  }),
                 }
               : {}),
           },
     ),
-    line("jour", "Raccord de jour (épure adaptée)", (r) =>
+    line("jour", "ui.lib.compare.line.jour", (r) =>
       r.adaptations.length > 0
         ? {
-            text: r.adaptations.map((a) => `T${a.turn + 1} : ${jourText(a.to)}`).join(", "),
-            title: r.signals.join("\n"),
+            text: r.adaptations
+              .map((a) =>
+                t.t("ui.lib.compare.jourTurn", {
+                  turn: String(a.turn + 1),
+                  jour: jourText(a.to, t.locale),
+                }),
+              )
+              .join(", "),
+            title: lines(r.signals),
             tone: "warn",
           }
         : r.signals.length > 0
-          ? { text: "non adapté", title: r.signals.join("\n"), tone: "bad" }
-          : { text: "inchangé", tone: "muted" },
+          ? { text: t.t("ui.lib.compare.jourNotAdapted"), title: lines(r.signals), tone: "bad" }
+          : { text: t.t("ui.lib.compare.jourUnchanged"), tone: "muted" },
     ),
-    line("deviations", "Écarts d'épure", (r) =>
+    line("deviations", "ui.lib.compare.line.deviations", (r) =>
       r.reference
-        ? { text: "référence", tone: "muted" }
+        ? { text: t.t("ui.lib.compare.reference"), tone: "muted" }
         : r.deviations.length > 0
-          ? { text: `${r.deviations.length} écart(s)`, title: r.deviations.join("\n") }
-          : { text: r.epure ? "aucun" : "–", tone: "muted" },
+          ? {
+              text: t.t("ui.lib.compare.deviations", { count: r.deviations.length }),
+              title: lines(r.deviations),
+            }
+          : { text: r.epure ? t.t("ui.lib.compare.noDeviation") : "–", tone: "muted" },
     ),
-    line("errors", "Erreurs de génération", (r) =>
+    line("errors", "ui.lib.compare.line.errors", (r) =>
       r.errors.length > 0
-        ? { text: `${r.errors.length}`, title: r.errors.join("\n"), tone: "bad" }
-        : { text: "aucune", tone: "muted" },
+        ? { text: int.format(r.errors.length), title: lines(r.errors), tone: "bad" }
+        : { text: t.t("ui.lib.compare.none"), tone: "muted" },
     ),
   ];
 }

@@ -7,7 +7,6 @@ import {
   serializeProject,
 } from "@blondel/core";
 import { describe, expect, it, vi } from "vitest";
-import { trKey } from "../i18n/fr.js";
 import { DEFAULT_OVERLAYS, DEMO_OVERLAYS, createProjectStore } from "../store/projectStore.js";
 import {
   BASIC_GROUP_LABEL,
@@ -22,7 +21,7 @@ describe("choix d'un préréglage : Basiques et Démo", () => {
     expect(PRESET_GROUPS.map((g) => g.label)).toEqual([BASIC_GROUP_LABEL, DEMO_GROUP_LABEL]);
     expect(PRESET_GROUPS[0]!.items.map((i) => i.id)).toEqual([...ALL_PRESET_IDS]);
     expect(PRESET_GROUPS[0]!.items.map((i) => i.label)).toEqual(
-      ALL_PRESET_IDS.map((id) => trKey(PRESET_LABELS[id])),
+      ALL_PRESET_IDS.map((id) => PRESET_LABELS[id]),
     );
     expect(PRESET_GROUPS[1]!.items.map((i) => i.id)).toEqual([...DEMO_PRESET_IDS]);
     for (const item of PRESET_GROUPS[1]!.items) expect(item.description).toBeTruthy();
@@ -32,7 +31,7 @@ describe("choix d'un préréglage : Basiques et Démo", () => {
   it("description d'une ligne pour les démos seulement", () => {
     expect(presetDescription("straight")).toBeUndefined();
     for (const id of DEMO_PRESET_IDS) {
-      expect(presetDescription(id)).toBe(trKey(DEMO_PRESET_DESCRIPTIONS[id]));
+      expect(presetDescription(id)).toBe(DEMO_PRESET_DESCRIPTIONS[id]);
     }
   });
 

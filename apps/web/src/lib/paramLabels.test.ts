@@ -9,13 +9,19 @@ import {
   presentFields,
 } from "./paramLabels.js";
 import { deriveParamFields, withDefaults } from "./structureForm.js";
+import { translatorFor } from "@blondel/i18n";
 
 /** Défauts des plugins qui ne dépendent pas du contexte (`defaults()` sans tracé). */
 function fieldsOf(kind: string, params: Record<string, unknown> = {}) {
   const plugin = availableStructures().find((p) => p.kind === kind)!;
   const defaults = plugin.defaults(undefined as never);
   const values = withDefaults(defaults, params);
-  return presentFields(kind, deriveParamFields(defaults, plugin.paramsSchema), values);
+  return presentFields(
+    kind,
+    deriveParamFields(defaults, plugin.paramsSchema),
+    values,
+    translatorFor("fr"),
+  );
 }
 
 describe("formulaire des structures en français", () => {
@@ -34,7 +40,7 @@ describe("formulaire des structures en français", () => {
       }
       // Sous-objets regroupés.
       const groups = new Set(fields.map((f) => f.group).filter(Boolean));
-      for (const g of groups) expect(groupLabel(g!)).not.toBe(g);
+      for (const g of groups) expect(groupLabel(g!, translatorFor("fr"))).not.toBe(g);
     }
   });
 
@@ -87,7 +93,7 @@ describe("formulaire des structures en français", () => {
       thickness: "number",
       "newel.tenonThickness": "auto-number",
     });
-    const presented = presentFields("wood-housed", fields, {});
+    const presented = presentFields("wood-housed", fields, {}, translatorFor("fr"));
     expect(presented.find((f) => f.path[0] === "upperOffset")?.label).toMatch(/Dépassement haut/);
   });
 });

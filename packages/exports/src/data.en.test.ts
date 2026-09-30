@@ -11,13 +11,11 @@ import { buildModel, parseProjectText } from "@blondel/core";
 import { describe, expect, it } from "vitest";
 import {
   CSV_BOM,
-  CUT_LIST_HEADER,
-  MASS_DENSITY_NOTE,
-  csvField,
   cutListHeader,
+  massDensityNote,
+  csvField,
   cutListRows,
   exportCutListCsv,
-  massDensityNote,
   massNoteFor,
 } from "./csv/cutlist.js";
 import { cutSheet } from "./cutsheet.js";
@@ -25,11 +23,7 @@ import { buildGltf, exportGlb } from "./gltf/glb.js";
 import { translatorOf } from "./i18n.js";
 import { installationSheet } from "./installation.js";
 import { residualFrench } from "./testing/french.js";
-import {
-  TEMPLATE_FAMILIES,
-  TEMPLATE_FAMILY_LABELS,
-  templateFamilyLabel,
-} from "./templateFamily.js";
+import { TEMPLATE_FAMILIES, templateFamilyLabel } from "./templateFamily.js";
 
 const EXAMPLES_DIR = resolve(dirname(fileURLToPath(import.meta.url)), "../../../examples");
 const EXAMPLES = [
@@ -52,17 +46,17 @@ function load(file: string) {
 
 describe("exports de données en anglais", () => {
   it("en-têtes, remarque de masse et familles : français par défaut, anglais sur demande", () => {
-    expect(cutListHeader()).toEqual(CUT_LIST_HEADER);
-    expect(CUT_LIST_HEADER[0]).toBe("Repère");
-    expect(MASS_DENSITY_NOTE).toBe("masse volumique à valider");
+    expect(cutListHeader()).toEqual(cutListHeader(translatorOf({ locale: "fr" })));
+    expect(cutListHeader()[0]).toBe("Repère");
+    expect(massDensityNote()).toBe("masse volumique à valider");
     expect(massDensityNote(en)).toBe("density to be validated");
     for (const f of TEMPLATE_FAMILIES) {
-      expect(templateFamilyLabel(f)).toBe(TEMPLATE_FAMILY_LABELS[f]);
+      expect(templateFamilyLabel(f)).toBe(templateFamilyLabel(f, translatorOf({ locale: "fr" })));
       expectEnglish(templateFamilyLabel(f, en));
     }
     expectEnglish(cutListHeader(en).join(" "));
     expect(massNoteFor(undefined)("wood-oak", en)).toBe("density to be validated");
-    expect(massNoteFor(undefined)("wood-oak")).toBe(MASS_DENSITY_NOTE);
+    expect(massNoteFor(undefined)("wood-oak")).toBe(massDensityNote());
   });
 
   it("csvField cite le séparateur de la langue", () => {
@@ -92,7 +86,7 @@ describe("exports de données en anglais", () => {
         expect(csv).not.toContain(";");
         // Même nombre de colonnes que l'en-tête sur chaque ligne sans guillemets.
         for (const l of lines.slice(0, -1)) {
-          if (!l.includes('"')) expect(l.split(",")).toHaveLength(CUT_LIST_HEADER.length);
+          if (!l.includes('"')) expect(l.split(",")).toHaveLength(cutListHeader().length);
         }
         expectEnglish(csv);
         // L'heuristique détecte bien le français.

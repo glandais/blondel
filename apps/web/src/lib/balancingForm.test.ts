@@ -18,6 +18,7 @@ import {
   rotationRanges,
 } from "./balancingForm.js";
 import { enumOptions, fieldSchema } from "./structureForm.js";
+import { translatorFor } from "@blondel/i18n";
 
 const withBalancing = (p: Project, b: Partial<Project["stair"]["balancing"]>): Project => ({
   ...p,
@@ -40,14 +41,15 @@ const zones = (...bounds: (number | undefined)[]): Pick<Model, "stepping"> =>
 
 describe("méthodes de balancement", () => {
   it("toutes les méthodes du schéma du cœur sont proposées, M3 (défaut) en tête, M2 et M6 compris", () => {
-    const values = balancingMethodOptions().map((o) => o.value);
+    const values = balancingMethodOptions(translatorFor("fr")).map((o) => o.value);
     expect([...values].sort()).toEqual(
       [...(enumOptions(fieldSchema(BalancingSchema, "method")) ?? [])].sort(),
     );
     expect(values[0]).toBe("M3");
     expect(values).toContain("M2");
     expect(values).toContain("M6");
-    for (const o of balancingMethodOptions()) expect(o.label).toMatch(new RegExp(`^${o.value} — `));
+    for (const o of balancingMethodOptions(translatorFor("fr")))
+      expect(o.label).toMatch(new RegExp(`^${o.value} — `));
   });
 });
 

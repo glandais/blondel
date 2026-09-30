@@ -8,14 +8,14 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { buildModel, clearModelCache, parseProjectText } from "@blondel/core";
 import { describe, expect, it } from "vitest";
-import { CSV_BOM, CUT_LIST_HEADER, exportCutListCsv } from "./csv/cutlist.js";
+import { CSV_BOM, cutListHeader, exportCutListCsv } from "./csv/cutlist.js";
 import { cutSheet } from "./cutsheet.js";
 import { exportPartDxf } from "./dxf/part.js";
 import { exportPartsDxf } from "./dxf/parts.js";
 import { exportPlanDxf } from "./dxf/plan.js";
 import { exportProjectJson } from "./json.js";
 import { exportGlb } from "./gltf/glb.js";
-import { COMPLIANCE_DISCLAIMER, exportPdfDocument } from "./pdf/document.js";
+import { complianceDisclaimer, exportPdfDocument } from "./pdf/document.js";
 import { renderElevationSvg } from "./svg/elevation.js";
 import { renderFlatPatternSvg } from "./svg/flat.js";
 import { renderPlanSvg } from "./svg/plan.js";
@@ -121,7 +121,7 @@ describe("exports de bout en bout sur examples/", () => {
         const text = new TextDecoder("latin1").decode(bytes);
         expect(text.startsWith("%PDF-")).toBe(true);
         expect(text.match(/\/Type \/Page\b/g)).toHaveLength(pages.length);
-        expect(text).toContain(`(${COMPLIANCE_DISCLAIMER}) Tj`);
+        expect(text).toContain(`(${complianceDisclaimer()}) Tj`);
         expect(text).not.toMatch(NON_FINITE);
       });
 
@@ -148,7 +148,7 @@ describe("exports de bout en bout sur examples/", () => {
       it("liste de débit : en-tête, une ligne au moins, sans NaN", () => {
         const csv = exportCutListCsv(model);
         expect(csv.startsWith(CSV_BOM)).toBe(true);
-        expect(csv).toContain(CUT_LIST_HEADER[0]);
+        expect(csv).toContain(cutListHeader()[0]);
         expect(csv).not.toMatch(NON_FINITE);
         expect(csv.trim().split(/\r?\n/).length).toBeGreaterThan(1);
       });

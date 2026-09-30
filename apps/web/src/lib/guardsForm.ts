@@ -1,5 +1,5 @@
 /**
- * Panneau « Garde-corps » : libellés français et transitions d'édition de `Project.guards`
+ * Panneau « Garde-corps » : clés des libellés et transitions d'édition de `Project.guards`
  * (jalon 4). Aucune valeur métier ici : les valeurs par défaut sont celles du schéma du cœur
  * (`GuardsSpecSchema`, `GuardInfillSchema`, `GuardSectionSchema`), obtenues par analyse d'un
  * objet minimal ; la validation reste celle du store (schéma du projet).
@@ -14,6 +14,7 @@ import {
   type GuardsSpec,
   type MaterialId,
 } from "@blondel/core";
+import type { MessageKey } from "@blondel/i18n";
 import { MATERIAL_LABELS } from "../three/materials.js";
 
 export type InfillKind = GuardInfill["kind"];
@@ -27,36 +28,37 @@ export const INFILL_KINDS: readonly InfillKind[] = [
   "panel",
 ];
 
-export const INFILL_LABELS: Readonly<Record<InfillKind, string>> = {
-  balusters: "Barreaudage vertical (balustres)",
-  rails: "Lisses",
-  cables: "Câbles tendus",
-  glass: "Verre",
-  perforated: "Tôle perforée",
-  panel: "Panneau plein",
+export const INFILL_LABELS: Readonly<Record<InfillKind, MessageKey>> = {
+  balusters: "ui.label.infill.balusters",
+  rails: "ui.label.infill.rails",
+  cables: "ui.label.infill.cables",
+  glass: "ui.label.infill.glass",
+  perforated: "ui.label.infill.perforated",
+  panel: "ui.label.infill.panel",
 };
 
-export const SIDE_MODE_LABELS: Readonly<Record<GuardSideMode, string>> = {
-  auto: "Automatique (murs du site)",
-  void: "Vide (garde-corps)",
-  wall: "Mur",
+export const SIDE_MODE_LABELS: Readonly<Record<GuardSideMode, MessageKey>> = {
+  auto: "ui.label.sideMode.auto",
+  void: "ui.label.sideMode.void",
+  wall: "ui.label.sideMode.wall",
 };
 
-export const WALL_SIDES_LABELS: Readonly<Record<GuardsSpec["handrail"]["wallSides"], string>> = {
-  auto: "Automatique",
-  none: "Aucune",
-  inner: "Côté jour",
-  outer: "Côté extérieur",
-  both: "Des deux côtés",
+export const WALL_SIDES_LABELS: Readonly<Record<GuardsSpec["handrail"]["wallSides"], MessageKey>> =
+  {
+    auto: "ui.label.wallSides.auto",
+    none: "ui.label.wallSides.none",
+    inner: "ui.label.wallSides.inner",
+    outer: "ui.label.wallSides.outer",
+    both: "ui.label.wallSides.both",
+  };
+
+export const SECTION_KIND_LABELS: Readonly<Record<GuardSection["kind"], MessageKey>> = {
+  round: "ui.label.sectionKind.round",
+  rect: "ui.label.sectionKind.rect",
 };
 
-export const SECTION_KIND_LABELS: Readonly<Record<GuardSection["kind"], string>> = {
-  round: "Ronde",
-  rect: "Rectangulaire",
-};
-
-/** Matériaux proposés pour les garde-corps (liste du cœur), libellés français. */
-export const GUARD_MATERIAL_OPTIONS: readonly { value: MaterialId; label: string }[] =
+/** Matériaux proposés pour les garde-corps (liste du cœur), clés de leurs libellés. */
+export const GUARD_MATERIAL_OPTIONS: readonly { value: MaterialId; label: MessageKey }[] =
   GUARD_MATERIALS.map((m) => ({ value: m, label: MATERIAL_LABELS[m] }));
 
 /** Spécification par défaut du cœur (garde-corps activés, valeurs du schéma). */

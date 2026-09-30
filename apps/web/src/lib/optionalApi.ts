@@ -11,6 +11,7 @@
 import { listStructures } from "@blondel/core";
 import type { Model, Project, StructureKind } from "@blondel/core";
 import type { TemplateFamily } from "@blondel/exports";
+import type { Locale } from "@blondel/i18n";
 import type { PdfPages } from "@blondel/exports/pdf";
 
 /** Octets, texte ou `Blob` : toutes les formes de contenu de fichier acceptées. */
@@ -31,7 +32,12 @@ export interface PdfJobOptions {
 /** Signature attendue de `exportPdf` (synchrone ou asynchrone). */
 export type ExportPdfFn = (
   model: Model,
-  options?: { readonly project?: Project; readonly title?: string } & PdfJobOptions,
+  options?: {
+    readonly project?: Project;
+    readonly title?: string;
+    /** Langue du dossier (défaut : français). */
+    readonly locale?: Locale;
+  } & PdfJobOptions,
 ) => FileContent | Promise<FileContent>;
 
 export interface OptionalApi {

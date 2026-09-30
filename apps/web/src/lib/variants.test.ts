@@ -25,9 +25,12 @@ import {
   variantParams,
   variantsFor,
 } from "./variants.js";
+import { translatorFor } from "@blondel/i18n";
 
 const withStructure = (p: Project, kind: string, params: Record<string, unknown> = {}): Project =>
   ProjectSchema.parse({ ...p, stair: { ...p.stair, structure: { kind, params } } });
+
+const FR = translatorFor("fr");
 
 describe("comparateur de variantes", () => {
   it("variantes proposées : bois à l'anglaise seulement pour un escalier droit", () => {
@@ -68,7 +71,7 @@ describe("comparateur de variantes", () => {
       section: "auto",
       upperOffset: 60,
     });
-    expect(variantParams(p, { id: "x", kind: "wood-housed", label: "x" })).toEqual({});
+    expect(variantParams(p, { id: "x", kind: "wood-housed", label: textMessage("x") })).toEqual({});
   });
 
   it("tableau côte à côte sur le cas d'acceptation n° 1 : grandeurs du cœur, coût « profil d'atelier requis »", () => {
@@ -88,13 +91,25 @@ describe("comparateur de variantes", () => {
       expect(r.cost).toBeNull();
       expect("model" in r).toBe(false);
     }
-    const lines = compareLines(rows);
+    const lines = compareLines(rows, translatorFor("fr"));
     const cost = lines.find((l) => l.key === "cost")!;
     expect(cost.cells.every((c) => c.text === "profil d'atelier requis")).toBe(true);
     expect(cost.cells[0]!.title).toMatch(/taux horaire/);
     const exc = lines.find((l) => l.key === "exc")!;
     expect(exc.cells[rows.indexOf(housed)]!.text).toBe("sans objet");
     for (const l of lines) expect(l.cells).toHaveLength(rows.length);
+    expect(FR.t(housed.label)).toBe("Bois — limons à la française");
+    // Même tableau en anglais : libellés, cellules et variantes dans la langue.
+    const en = translatorFor("en");
+    const linesEn = compareLines(rows, en);
+    expect(linesEn.find((l) => l.key === "mass")!.label).toBe("Mass");
+    expect(linesEn.find((l) => l.key === "cost")!.cells[0]!.text).toBe("workshop profile required");
+    expect(linesEn.find((l) => l.key === "exc")!.cells[rows.indexOf(housed)]!.text).toBe(
+      "not applicable",
+    );
+    expect(en.t(housed.label)).toMatch(/^Timber — /);
+    for (const l of linesEn)
+      expect(`${l.label} ${l.cells.map((c) => c.text).join(" ")}`).not.toMatch(/[àéèù]/);
     // Résultat transmissible par postMessage.
     expect(() => structuredClone(rows)).not.toThrow();
   });
@@ -119,10 +134,10 @@ describe("comparateur de variantes", () => {
       },
     });
     const { rows } = runVariants(project, [
-      { id: "steel-flat", kind: "steel-flat", label: "plat" },
+      { id: "steel-flat", kind: "steel-flat", label: textMessage("plat") },
     ]);
     expect(rows[0]!.cost?.total).toBeGreaterThan(0);
-    const cost = compareLines(rows).find((l) => l.key === "cost")!;
+    const cost = compareLines(rows, translatorFor("fr")).find((l) => l.key === "cost")!;
     expect(cost.cells[0]!.text).toMatch(/€/);
   });
 
@@ -150,17 +165,17 @@ describe("comparateur de variantes", () => {
     const project = createProject("quarter-left");
     expect(project.stair.layout.turns[0]!.inner.kind).toBe("sharp");
     const { rows } = runVariants(project, [
-      { id: "wood-housed", kind: "wood-housed", label: "bois" },
-      { id: "steel-curved", kind: "steel-curved", label: "débillardé" },
+      { id: "wood-housed", kind: "wood-housed", label: textMessage("bois") },
+      { id: "steel-curved", kind: "steel-curved", label: textMessage("débillardé") },
     ]);
     const [housed, curved] = rows as [(typeof rows)[number], (typeof rows)[number]];
     expect(housed.adaptations[0]!.to.kind).toBe("newel");
     expect(curved.adaptations[0]!.to.kind).toBe("arc");
-    expect(curved.signals.join(" ")).toMatch(/débillardé/);
+    expect(curved.signals.map((m) => FR.t(m)).join(" ")).toMatch(/débillardé/);
     // Référence : première variante (la structure du projet n'est pas comparée).
     expect(housed.reference).toBe(true);
-    expect(curved.deviations.join(" ")).toMatch(/Tournant 1 : jour en arc/);
-    const lines = compareLines(rows);
+    expect(curved.deviations.map((m) => FR.t(m)).join(" ")).toMatch(/Tournant 1 : jour en arc/);
+    const lines = compareLines(rows, translatorFor("fr"));
     expect(lines.find((l) => l.key === "jour")!.cells[1]!.text).toMatch(/^T1 : arc R /);
     expect(lines.find((l) => l.key === "deviations")!.cells[0]!.text).toBe("référence");
     expect(() => structuredClone(rows)).not.toThrow();
@@ -193,7 +208,7 @@ describe("comparateur de variantes", () => {
   it("variante en échec : « – » pour les grandeurs mesurées, jamais 0 (QUESTIONS A21 c)", () => {
     const project = createProject("straight");
     const { rows } = runVariants(project, [
-      { id: "wood-housed", kind: "wood-housed", label: "Bois" },
+      { id: "wood-housed", kind: "wood-housed", label: textMessage("Bois") },
     ]);
     const ok = rows[0]!;
     expect(ok.failed).toBeUndefined();
@@ -204,9 +219,9 @@ describe("comparateur de variantes", () => {
       failed: true,
       massKg: 0,
       partCount: 0,
-      errors: ["Comparaison impossible : test"],
+      errors: [textMessage("Comparaison impossible : test")],
     };
-    const lines = compareLines([ok, failed]);
+    const lines = compareLines([ok, failed], translatorFor("fr"));
     const cell = (key: string) => lines.find((l) => l.key === key)!.cells[1]!;
     for (const key of ["mass", "surface", "parts", "unique", "cuts", "violations", "cost"]) {
       expect(cell(key).text, key).toBe("–");
@@ -232,15 +247,15 @@ describe("comparateur de variantes", () => {
       clearModelCache();
       const project = createProject("straight");
       const { rows } = runVariants(project, [
-        { id: "wood-housed", kind: "wood-housed", label: "Bois" },
-        { id: "failing", kind: "test-failing-structure", label: "Échec" },
+        { id: "wood-housed", kind: "wood-housed", label: textMessage("Bois") },
+        { id: "failing", kind: "test-failing-structure", label: textMessage("Échec") },
       ]);
       const [ok, ko] = rows;
       expect(ko!.partCount).toBeGreaterThan(0); // pièces de base conservées par le cœur
       expect(ko!.errors.length).toBeGreaterThan(0);
       expect(ko!.failed).toBe(true);
       expect(ok!.failed).toBeUndefined();
-      const lines = compareLines(rows);
+      const lines = compareLines(rows, translatorFor("fr"));
       const cell = (key: string, i: number) => lines.find((l) => l.key === key)!.cells[i]!;
       expect(cell("mass", 1).text).toBe("–");
       expect(cell("parts", 1).text).toBe("–");
@@ -253,23 +268,28 @@ describe("comparateur de variantes", () => {
 
   it("erreur commune à toutes les variantes (niveau projet) : aucune variante en échec", () => {
     const { rows } = runVariants(createProject("straight"), [
-      { id: "wood-housed", kind: "wood-housed", label: "Bois" },
-      { id: "steel-flat", kind: "steel-flat", label: "Acier" },
+      { id: "wood-housed", kind: "wood-housed", label: textMessage("Bois") },
+      { id: "steel-flat", kind: "steel-flat", label: textMessage("Acier") },
     ]);
     const shared = markFailedVariants(
-      rows.map((r) => ({ ...r, errors: ["Garde-corps : erreur commune."] })),
+      rows.map((r) => ({ ...r, errors: [textMessage("Garde-corps : erreur commune.")] })),
     );
     expect(shared.map((r) => r.failed)).toEqual([undefined, undefined]);
     // Erreur propre à une variante : celle-ci seulement.
     const own = markFailedVariants([
-      { ...rows[0]!, errors: ["Garde-corps : erreur commune."] },
-      { ...rows[1]!, errors: ["Garde-corps : erreur commune.", "Structure : échec."] },
+      { ...rows[0]!, errors: [textMessage("Garde-corps : erreur commune.")] },
+      {
+        ...rows[1]!,
+        errors: [textMessage("Garde-corps : erreur commune."), textMessage("Structure : échec.")],
+      },
     ]);
     expect(own.map((r) => r.failed)).toEqual([undefined, true]);
     // Une seule variante : erreur tenue pour commune, sauf modèle vide.
-    expect(markFailedVariants([{ ...rows[0]!, errors: ["x"] }])[0]!.failed).toBeUndefined();
-    expect(markFailedVariants([{ ...rows[0]!, errors: ["x"], partCount: 0 }])[0]!.failed).toBe(
-      true,
-    );
+    expect(
+      markFailedVariants([{ ...rows[0]!, errors: [textMessage("x")] }])[0]!.failed,
+    ).toBeUndefined();
+    expect(
+      markFailedVariants([{ ...rows[0]!, errors: [textMessage("x")], partCount: 0 }])[0]!.failed,
+    ).toBe(true);
   });
 });

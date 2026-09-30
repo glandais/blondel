@@ -4,16 +4,19 @@
  * la mesure du temps de calcul et la capture d'une exception inattendue (l'application reste
  * utilisable pour éditer, sauvegarder et exporter le projet).
  */
-import { buildModel, type Model, type Project } from "@blondel/core";
-import { trList } from "../i18n/fr.js";
+import { buildModel, errorMessageOf, type Model, type Project } from "@blondel/core";
+import { msg, type Message } from "@blondel/i18n";
 
 export type BuildModelFn = (project: Project) => Model;
 
 export interface ModelResult {
   /** Modèle dérivé, ou `null` si le pipeline a levé une exception. */
   readonly model: Model | null;
-  /** Erreurs à afficher (erreurs du modèle + exception éventuelle). */
-  readonly errors: readonly string[];
+  /**
+   * Erreurs à afficher (erreurs du modèle + exception éventuelle) : messages neutres, traduits
+   * à l'affichage (ADR-0007).
+   */
+  readonly errors: readonly Message[];
   /** Durée de calcul de `buildModel` (ms). */
   readonly timeMs: number;
 }
@@ -28,10 +31,13 @@ export function computeModel(project: Project, build: BuildModelFn = buildModel)
   const t0 = now();
   try {
     const model = build(project);
-    return { model, errors: trList(model.errors), timeMs: now() - t0 };
+    return { model, errors: model.errors, timeMs: now() - t0 };
   } catch (e) {
-    const detail = e instanceof Error ? e.message : String(e);
-    return { model: null, errors: [`Erreur du calcul : ${detail}`], timeMs: now() - t0 };
+    return {
+      model: null,
+      errors: [msg("ui.worker.buildFailed", { detail: errorMessageOf(e) })],
+      timeMs: now() - t0,
+    };
   }
 }
 

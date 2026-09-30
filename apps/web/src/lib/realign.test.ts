@@ -1,14 +1,17 @@
+import { translatorFor } from "@blondel/i18n";
 import { buildModel, createProject } from "@blondel/core";
 import { describe, expect, it } from "vitest";
 import {
   realign,
   realignDisabledReason,
-  REALIGN_HINT,
-  WALKLINE_SIDE_HINT,
+  REALIGN_HINT_KEY,
+  WALKLINE_SIDE_HINT_KEY,
   walklineSideApplies,
   walklineSideChoice,
   withWalklineSide,
 } from "./realign.js";
+
+const FR = translatorFor("fr");
 
 describe("recalage des volées et de la trémie (A18 a)", () => {
   it("H modifié : dernière volée et trémie recalées, position du tournant conservée", () => {
@@ -17,21 +20,21 @@ describe("recalage des volées et de la trémie (A18 a)", () => {
     const r = realign(edited);
     expect(r.project.stair.layout.legs[0]).toEqual(p.stair.layout.legs[0]);
     expect(r.project.stair.layout.legs[1]).not.toEqual(p.stair.layout.legs[1]);
-    expect(r.notice).toMatch(/Dernière volée recalée/);
-    expect(r.notice).toMatch(/Trémie recalée/);
+    expect(FR.t(r.notice!)).toMatch(/Dernière volée recalée/);
+    expect(FR.t(r.notice!)).toMatch(/Trémie recalée/);
     expect(realignDisabledReason(edited)).toBeNull();
   });
 
   it("hélicoïdal : refus explicite, bouton désactivé avec la raison du cœur", () => {
     expect(() => realign(createProject("helical"))).toThrow(/hélicoïdal/);
-    expect(realignDisabledReason(createProject("helical"))).toMatch(/hélicoïdal/);
+    expect(FR.t(realignDisabledReason(createProject("helical"))!)).toMatch(/hélicoïdal/);
   });
 
   it("palier hors d'un nombre entier de girons : bouton désactivé, longueur proposée", () => {
     const p = createProject("quarter-landing");
     const edited = { ...p, site: { ...p.site, floorToFloor: 2900 } };
-    expect(realignDisabledReason(edited)).toMatch(/saisir .* mm pour la volée 1/);
-    expect(REALIGN_HINT).toMatch(/position des tournants saisie conservée/);
+    expect(FR.t(realignDisabledReason(edited)!)).toMatch(/saisir .* mm pour la volée 1/);
+    expect(FR.t(REALIGN_HINT_KEY)).toMatch(/position des tournants saisie conservée/);
   });
 });
 
@@ -52,7 +55,8 @@ describe("bord de mesure de la ligne de foulée (A16)", () => {
 
 describe("aide du bord de mesure (relecture adverse)", () => {
   it("aucun seuil en dur : ni 600 mm ni 1 200 mm recopiés de rules.yaml", () => {
-    expect(WALKLINE_SIDE_HINT).not.toMatch(/\d/);
-    expect(WALKLINE_SIDE_HINT).toMatch(/main courante principale/);
+    expect(FR.t(WALKLINE_SIDE_HINT_KEY)).not.toMatch(/\d/);
+    expect(translatorFor("en").t(WALKLINE_SIDE_HINT_KEY)).not.toMatch(/\d/);
+    expect(FR.t(WALKLINE_SIDE_HINT_KEY)).toMatch(/main courante principale/);
   });
 });

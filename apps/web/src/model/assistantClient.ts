@@ -4,6 +4,7 @@
  * se fait sur le fil principal (après une tâche, pour laisser l'interface afficher l'attente) ;
  * l'annulation écarte alors seulement le résultat.
  */
+import { MessageError, msg } from "@blondel/i18n";
 import type { AssistantInput } from "@blondel/core";
 import type { CandidateSketch } from "../lib/assistant.js";
 import {
@@ -34,9 +35,9 @@ export interface AssistantWorkerLike {
 export type AssistantWorkerFactory = () => AssistantWorkerLike | null;
 
 /** Recherche annulée par l'utilisateur. */
-export class AssistantCancelled extends Error {
+export class AssistantCancelled extends MessageError {
   constructor() {
-    super("Recherche annulée.");
+    super(msg("ui.worker.assistantCancelled"));
     this.name = "AssistantCancelled";
   }
 }
@@ -134,7 +135,7 @@ function startJob<T>(
   };
 }
 
-const unexpected = (): Error => new Error("Réponse inattendue du worker de l'assistant.");
+const unexpected = (): Error => new MessageError(msg("ui.worker.assistantUnexpected"));
 
 export function startAssistant(
   input: AssistantInput,

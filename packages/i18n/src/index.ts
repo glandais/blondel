@@ -200,7 +200,7 @@ function safeDigits(digits: number | undefined): number {
 }
 
 /**
- * Mise en forme d'un nombre. Reprend exactement `formatFr` de `@blondel/exports` pour le
+ * Mise en forme d'un nombre. Rend exactement l'ancien `formatFr` de `@blondel/exports` pour le
  * français (virgule, espace fine insécable, `-0` → `0`, non fini → « — »).
  */
 function formatNumber(value: number, format: LocaleFormat, options: NumOptions = {}): string {

@@ -47,10 +47,10 @@ describe("parseDecimal", () => {
     expect(parseDecimal("5", { max: 4 }).ok).toBe(false);
   });
 
-  it("aller-retour formatDecimal → parseDecimal", () => {
+  it("aller-retour formatDecimal → parseDecimal, en français et en anglais", () => {
     fc.assert(
-      fc.property(fc.double({ min: -1e6, max: 1e6, noNaN: true }), (v) => {
-        const r = parseDecimal(formatDecimal(v));
+      fc.property(fc.double({ min: -1e6, max: 1e6, noNaN: true }), fc.boolean(), (v, en) => {
+        const r = parseDecimal(formatDecimal(v, en ? "en" : "fr"));
         expect(r.ok).toBe(true);
         if (r.ok)
           expect(Math.abs(r.value - v)).toBeLessThanOrEqual(1e-6 * Math.max(1, Math.abs(v)));

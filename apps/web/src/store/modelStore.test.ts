@@ -1,3 +1,5 @@
+import { translatorFor } from "@blondel/i18n";
+import { textMessage } from "@blondel/i18n";
 import { createProject, type Project } from "@blondel/core";
 import { describe, expect, it } from "vitest";
 import type { ModelSnapshot } from "../model/snapshot.js";
@@ -21,7 +23,7 @@ function fakeExec(): JobExec & { resolve: () => void; builds: Project[] } {
       const q = queue.shift();
       q?.resolve({
         model: null,
-        errors: [q.p.name],
+        errors: [textMessage(q.p.name)],
         timeMs: 2,
         mesh: null,
       });
@@ -31,6 +33,8 @@ function fakeExec(): JobExec & { resolve: () => void; builds: Project[] } {
 }
 
 const flush = () => new Promise((r) => setTimeout(r, 0));
+
+const FR = translatorFor("fr");
 
 describe("modèle calculé hors du fil principal", () => {
   it("garde le dernier modèle affiché pendant le calcul et publie le projet d'origine", async () => {
@@ -44,7 +48,7 @@ describe("modèle calculé hors du fil principal", () => {
     exec.resolve();
     await flush();
     let m = svc.store.getState().model;
-    expect(m.errors).toEqual(["A"]);
+    expect(m.errors.map((e) => FR.t(e))).toEqual(["A"]);
     expect(m.project).toBe(a);
     expect(m.pending).toBe(false);
     svc.request(b);
@@ -91,6 +95,6 @@ describe("modèle calculé hors du fil principal", () => {
     svc.requestCompare(createProject("straight"));
     const outcome = svc.store.getState().compare.outcome;
     expect(outcome?.rows).toEqual([]);
-    expect(outcome?.error).toMatch(/panne/);
+    expect(FR.t(outcome!.error!)).toMatch(/panne/);
   });
 });

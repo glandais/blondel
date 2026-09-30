@@ -5,6 +5,7 @@
  *
  * Points en mm dans le repère du cœur ; la projection à l'écran est faite par la vue.
  */
+import type { Locale, Translator } from "@blondel/i18n";
 import { curvePointAt, type Model, type Vec3 } from "@blondel/core";
 import { formatLength } from "../lib/units.js";
 
@@ -23,13 +24,14 @@ export const RUN_SAMPLES = 48;
 
 export const distance = (a: Vec3, b: Vec3): number => Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z);
 
-/** Libellé d'une longueur en mm (arrondi au dixième). */
-export function mmLabel(prefix: string, mm: number): string {
-  return `${prefix} ${formatLength(mm, "mm")}`;
+/** Libellé d'une longueur en mm (arrondi au dixième), nombre dans la langue d'affichage. */
+export function mmLabel(prefix: string, mm: number, locale: Locale): string {
+  return `${prefix} ${formatLength(mm, "mm", locale)}`;
 }
 
-/** Cotes principales du modèle (vide sans nez). */
-export function mainDimensions(model: Model): Annotation[] {
+/** Cotes principales du modèle (vide sans nez), libellées dans la langue du traducteur. */
+export function mainDimensions(model: Model, t: Translator): Annotation[] {
+  const locale = t.locale;
   const { nosings, rises, run } = model.stepping;
   const first = nosings[0];
   const last = nosings[nosings.length - 1];
@@ -47,7 +49,7 @@ export function mainDimensions(model: Model): Annotation[] {
       { ...foot, z: 0 },
       { ...foot, z: H },
     ],
-    label: mmLabel("H =", H),
+    label: mmLabel(t.t("ui.three.dim.height"), H, locale),
   });
   // Emmarchement : largeur mesurée sur une ligne de nez **non balancée** (perpendiculaire aux
   // bords ou radiale) ; un nez balancé est oblique et Q–R y dépasse la largeur.
@@ -58,7 +60,7 @@ export function mainDimensions(model: Model): Annotation[] {
     id: "dim-E",
     kind: "dimension",
     points: [q, r],
-    label: mmLabel("E =", distance(q, r)),
+    label: mmLabel(t.t("ui.three.dim.width"), distance(q, r), locale),
   });
   if (last.s > first.s) {
     const pts: Vec3[] = [];
@@ -67,7 +69,12 @@ export function mainDimensions(model: Model): Annotation[] {
       const p = curvePointAt(model.layout.walkline, s);
       pts.push({ x: p.x, y: p.y, z: 0 });
     }
-    out.push({ id: "dim-run", kind: "dimension", points: pts, label: mmLabel("Reculement", run) });
+    out.push({
+      id: "dim-run",
+      kind: "dimension",
+      points: pts,
+      label: mmLabel(t.t("ui.three.dim.run"), run, locale),
+    });
   }
   return out;
 }
@@ -144,7 +151,10 @@ export function pickedToMeasure(p: PickedPoint, offsets: ReadonlyMap<string, Vec
  * Mesure point à point : segment affiché entre les points montrés, longueur **réelle** (hors
  * déplacement de la vue éclatée). Un seul point : repère sans longueur.
  */
-export function measureAnnotation(points: readonly MeasurePoint[]): Annotation | undefined {
+export function measureAnnotation(
+  points: readonly MeasurePoint[],
+  locale: Locale,
+): Annotation | undefined {
   const [a, b] = points;
   if (!a) return undefined;
   if (!b) return { id: "measure", kind: "measure", points: [a.shown, a.shown], label: "" };
@@ -152,7 +162,7 @@ export function measureAnnotation(points: readonly MeasurePoint[]): Annotation |
     id: "measure",
     kind: "measure",
     points: [a.shown, b.shown],
-    label: formatLength(distance(a.real, b.real), "mm"),
+    label: formatLength(distance(a.real, b.real), "mm", locale),
   };
 }
 

@@ -3,25 +3,26 @@
  * orphelines (`keys.test.ts`).
  *
  * Le scan cherche chaque clé de `fr.json` écrite en littéral dans les sources (hors tests). Une
- * clé que le code construit par gabarit (`` `rules.${id}.description` ``,
- * `` `common.language.${locale}` ``) n'y figure pas : son préfixe doit être déclaré ici, avec le
- * fichier qui la construit. Garder la liste courte et précise : un préfixe trop large masque de
- * vraies clés orphelines.
+ * clé que le code construit par gabarit (`` `rules.${id}.description` ``) n'y figure pas : sa
+ * forme doit être déclarée ici, avec le fichier qui la construit. Garder la liste courte et
+ * précise : une forme trop large masque de vraies clés orphelines.
  */
-export const DYNAMIC_KEY_PREFIXES: readonly string[] = [
-  // Nom de chaque langue, construit par `common.language.${locale}` (sélecteur de langue, UI).
-  "common.language.",
-  // Descriptions et messages des règles, indexés par l'identifiant de la règle (rules.yaml).
-  "rules.",
+export interface DynamicKeyFamily {
+  /** Forme exacte des clés construites (ancrée). */
+  readonly pattern: RegExp;
+  /** Code qui construit la clé. */
+  readonly builtBy: string;
+}
+
+export const DYNAMIC_KEYS: readonly DynamicKeyFamily[] = [
+  {
+    // Description de chaque règle de rules.yaml, indexée par son identifiant.
+    pattern: /^rules\.[A-Z][A-Z0-9_]*\.description$/,
+    builtBy: "packages/core/src/model/messages.ts (ruleDescription)",
+  },
 ];
 
-/**
- * Clés ajoutées avant le code qui les emploie, pendant la migration par vagues (ADR-0007).
- * Doit être vide à la fin de la migration (vague 5).
- */
-export const PENDING_KEYS: readonly string[] = ["common.notAvailable"];
-
-/** La clé est-elle couverte par un préfixe dynamique ou en attente d'emploi ? */
-export function isDynamicOrPending(key: string): boolean {
-  return PENDING_KEYS.includes(key) || DYNAMIC_KEY_PREFIXES.some((p) => key.startsWith(p));
+/** La clé est-elle construite dynamiquement (famille déclarée) ? */
+export function isDynamic(key: string): boolean {
+  return DYNAMIC_KEYS.some((f) => f.pattern.test(key));
 }

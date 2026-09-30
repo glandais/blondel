@@ -1,4 +1,5 @@
 import { openingFromSurvey, type OpeningSurvey } from "@blondel/core";
+import { translatorFor } from "@blondel/i18n";
 import { describe, expect, it } from "vitest";
 import { blindSpot } from "./PlanSurveyForm.js";
 
@@ -24,12 +25,15 @@ describe("limite du contrôle du relevé (QUESTIONS D6, ledger l. 264)", () => {
     const r = openingFromSurvey(m);
     expect(r.ok).toBe(true);
     if (!r.ok) return;
-    const text = blindSpot(r);
+    const text = blindSpot(r, translatorFor("fr"));
     expect(text).toContain("« côté cd »");
     const mm = Number(/jusqu'à (\d+) mm/.exec(text.replace(/\s/g, " "))?.[1]);
     expect(mm).toBeGreaterThan(80);
     const again = openingFromSurvey({ ...m, cd: m.cd + 0.97 * mm });
     const other = openingFromSurvey({ ...m, cd: m.cd - 0.97 * mm });
     expect((again.ok && again.consistent) || (other.ok && other.consistent)).toBe(true);
+    const en = blindSpot(r, translatorFor("en"));
+    expect(en).toContain("“side cd”");
+    expect(en).toMatch(/^Check limit: an isolated error of up to \d+ mm/);
   });
 });

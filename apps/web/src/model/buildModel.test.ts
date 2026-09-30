@@ -1,8 +1,11 @@
+import { translatorFor } from "@blondel/i18n";
 import { PRESET_IDS, createProject, type Model } from "@blondel/core";
 import { describe, expect, it } from "vitest";
 import { computeModel, createModelCache } from "./buildModel.js";
 
 const fakeModel = { errors: ["e1"] } as unknown as Model;
+
+const FR = translatorFor("fr");
 
 describe("accès au pipeline buildModel", () => {
   it("utilise le buildModel réel du cœur sur chaque préréglage", () => {
@@ -20,7 +23,7 @@ describe("accès au pipeline buildModel", () => {
       throw new Error("boum");
     });
     expect(r.model).toBeNull();
-    expect(r.errors[0]).toContain("boum");
+    expect(FR.t(r.errors[0]!)).toContain("boum");
   });
 
   it("rend le modèle, ses erreurs et la durée ; mémoïse par identité du projet", () => {

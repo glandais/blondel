@@ -1,6 +1,6 @@
 import type { PartCategory } from "@blondel/core";
 import { describe, expect, it } from "vitest";
-import { TEMPLATE_FAMILIES, TEMPLATE_FAMILY_LABELS, templateFamily } from "./templateFamily.js";
+import { TEMPLATE_FAMILIES, templateFamily, templateFamilyLabel } from "./templateFamily.js";
 
 const part = (id: string, category: PartCategory) => ({ id, category });
 
@@ -16,6 +16,6 @@ describe("familles de gabarits (QUESTIONS A20)", () => {
     expect(templateFamily(part("guard-opening-1-panel-1", "infill"))).toBe("guards");
     expect(templateFamily(part("handrail-wall-left-1", "handrail"))).toBe("guards");
     expect(templateFamily(part("x", "baluster"))).toBe("guards");
-    for (const f of TEMPLATE_FAMILIES) expect(TEMPLATE_FAMILY_LABELS[f]).toBeTruthy();
+    for (const f of TEMPLATE_FAMILIES) expect(templateFamilyLabel(f)).toBeTruthy();
   });
 });

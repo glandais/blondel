@@ -4,7 +4,7 @@
  * Arrondi (ADR-0003) : les grandeurs restent en float64 jusqu'ici ; l'arrondi n'a lieu qu'à
  * l'affichage (0,1 mm pour les cotes de fabrication, 1 mm pour l'implantation).
  */
-import { translatorFor, type Translator } from "@blondel/i18n";
+import type { Translator } from "@blondel/i18n";
 
 /** Espace insécable fine (séparateur de milliers typographique français). */
 export const NARROW_NBSP = " ";
@@ -30,14 +30,6 @@ export function formatIn(t: Translator, value: number, options: FrNumberOptions 
   if (options.thousands !== undefined) o.thousands = options.thousands;
   if (options.trimZeros !== undefined) o.trimZeros = options.trimZeros;
   return t.num(value, o);
-}
-
-/**
- * Nombre au format français : alias de `formatIn` en français (compatibilité). Les exports
- * passent par `formatIn` avec le traducteur de leur option `locale`.
- */
-export function formatFr(value: number, options: FrNumberOptions = {}): string {
-  return formatIn(translatorFor("fr"), value, options);
 }
 
 /**

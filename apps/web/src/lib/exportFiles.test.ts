@@ -1,3 +1,4 @@
+import { translatorFor } from "@blondel/i18n";
 import { buildModel, createDemoProject, createProject, type Model, type Part } from "@blondel/core";
 import { describe, expect, it } from "vitest";
 import {
@@ -38,6 +39,8 @@ const text = (c: unknown): string => {
   if (typeof c !== "string") throw new Error("texte attendu");
   return c;
 };
+
+const FR = translatorFor("fr");
 
 describe("exports du menu", () => {
   it("nom de fichier dérivé du projet", () => {
@@ -217,7 +220,7 @@ describe("dossiers PDF, fiche de pose et modèle glTF", () => {
     // Famille sans développé (garde-corps : aucun développé à ce jour) : entrée indisponible.
     const none = exportAvailability("pdf-guards", m);
     expect(none.ok).toBe(false);
-    if (!none.ok) expect(none.reason).toMatch(/famille/);
+    if (!none.ok) expect(FR.t(none.reason)).toMatch(/famille/);
   });
 
   it("fiche de pose réelle : PDF d'une seule section, plus court que le dossier complet", async () => {
@@ -243,7 +246,7 @@ describe("dossiers PDF, fiche de pose et modèle glTF", () => {
   });
 
   it("le menu propose glTF, fiche de pose et PDF complet", () => {
-    const labels = EXPORT_ENTRIES.map((e) => e.label);
+    const labels = EXPORT_ENTRIES.map((e) => FR.t(e.label));
     expect(labels).toContain("Modèle 3D glTF (.glb)");
     expect(labels).toContain("Fiche de pose (PDF)");
     expect(labels.some((l) => l.startsWith("Dossier PDF complet"))).toBe(true);

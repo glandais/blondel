@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 import { entitiesOn, polylines, readDxf } from "../testing/dxf-reader.js";
 import { sampleParts, treadPart, woodStringerPart } from "../testing/fixtures.js";
 import {
-  PART_LAYERS,
+  partLayers,
   closedLoops,
   engravingPoint,
   exportPartDxf,
@@ -21,7 +21,7 @@ describe("exportPartDxf : limon bois à la française (développé synthétique)
     it(`${version} : mortaises sur MORTAISE, reports sur TRACAGE, repère sur TEXTE`, () => {
       const part = woodStringerPart();
       const f = readDxf(exportPartDxf(part, { version }));
-      expect(f.layers.has(PART_LAYERS.mortise.name)).toBe(true);
+      expect(f.layers.has(partLayers().mortise.name)).toBe(true);
       const flat = part.flat!;
       const mortises = flat.lines.filter((l) => l.feature === "mortise");
       const generic = flat.lines.filter((l) => l.kind === "mark" && l.feature === undefined);

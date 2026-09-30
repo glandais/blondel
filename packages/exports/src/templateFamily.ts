@@ -31,13 +31,6 @@ export function templateFamilyLabel(
   return t.t(TEMPLATE_FAMILY_KEYS[family]);
 }
 
-/** Libellés français (compatibilité) : `templateFamilyLabel(f)` en français. */
-export const TEMPLATE_FAMILY_LABELS: Readonly<Record<TemplateFamily, string>> = {
-  stringers: templateFamilyLabel("stringers"),
-  treads: templateFamilyLabel("treads"),
-  guards: templateFamilyLabel("guards"),
-};
-
 /** Famille de gabarit d'une pièce. */
 export function templateFamily(part: Pick<Part, "id" | "category">): TemplateFamily {
   if (

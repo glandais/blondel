@@ -39,6 +39,9 @@ import {
 } from "react";
 import { UnderlayImport } from "../components/UnderlayImport.js";
 import { appStore, useApp } from "../store/appStore.js";
+import { msg, type Locale, type Message, type MessageKey } from "@blondel/i18n";
+import { formatNumber } from "../i18n/locale.js";
+import { useT } from "../i18n/useT.js";
 import "./planSite.css";
 import { PlanSurveyForm } from "./PlanSurveyForm.js";
 import {
@@ -67,31 +70,26 @@ import {
 /** Rayon d'accroche à l'écran (pixels). */
 const SNAP_RADIUS_PX = 12;
 
-const TOOLS: readonly { id: PlanTool; label: string; title: string }[] = [
-  { id: "pan", label: "Déplacer", title: "Glisser pour déplacer la vue, molette pour zoomer" },
-  {
-    id: "opening",
-    label: "Tracer la trémie",
-    title: "Un clic par sommet ; clic sur le premier sommet ou Entrée pour fermer",
-  },
-  {
-    id: "wall",
-    label: "Tracer un mur",
-    title: "Deux clics : extrémités de l'axe du mur ; au nu, un troisième clic du côté du mur",
-  },
+const TOOLS: readonly { id: PlanTool; label: MessageKey; title: MessageKey }[] = [
+  { id: "pan", label: "ui.plan.site.tool.pan", title: "ui.plan.site.tool.pan.title" },
+  { id: "opening", label: "ui.plan.site.tool.opening", title: "ui.plan.site.tool.opening.title" },
+  { id: "wall", label: "ui.plan.site.tool.wall", title: "ui.plan.site.tool.wall.title" },
   {
     id: "calibrate",
-    label: "Calibrer l'image",
-    title: "Deux points de l'image, puis leur distance réelle",
+    label: "ui.plan.site.tool.calibrate",
+    title: "ui.plan.site.tool.calibrate.title",
   },
 ];
 
-const fmt = (v: number): string => Math.round(v).toLocaleString("fr-FR");
+/** Texte d'une remarque : message à traduire, ou texte brut (motif de refus, exception). */
+type Note = Message | string;
 
-function commit(recipe: (p: Project) => Project): string | null {
+const fmt = (v: number, locale: Locale): string => formatNumber(locale, Math.round(v));
+
+function commit(recipe: (p: Project) => Project): Note | null {
   const r = appStore.getState().update(recipe);
   appStore.getState().endGroup();
-  return r.ok ? null : (r.issues[0] ?? "Modification refusée.");
+  return r.ok ? null : (r.issues[0] ?? msg("ui.plan.site.refused"));
 }
 
 /** Couche du calque DXF (mémoïsée : un seul chemin, recalculé seulement si le calque change). */
@@ -102,6 +100,7 @@ const DxfLayer = memo(function DxfLayer({ d, opacity }: { d: string; opacity: nu
 });
 
 export function PlanSiteEditor({ model }: { model: Model }) {
+  const tr = useT();
   const project = useApp((s) => s.project);
   const site = project.site;
   const underlay = site.underlay;
@@ -109,7 +108,7 @@ export function PlanSiteEditor({ model }: { model: Model }) {
   const [draft, setDraft] = useState<Vec2[]>([]);
   const [cursor, setCursor] = useState<{ raw: Vec2; snap: SnapHit | null } | null>(null);
   const [snapOn, setSnapOn] = useState(true);
-  const [message, setMessage] = useState<{ kind: "info" | "error"; text: string } | null>(null);
+  const [message, setMessage] = useState<{ kind: "info" | "error"; text: Note } | null>(null);
   const [wallThickness, setWallThickness] = useState(String(DEFAULT_WALL_THICKNESS_MM));
   const [wallMode, setWallMode] = useState<WallTraceMode>("axis");
   const [calib, setCalib] = useState<{ a: Vec2; b?: Vec2; distance: string } | null>(null);
@@ -197,10 +196,10 @@ export function PlanSiteEditor({ model }: { model: Model }) {
     const error = commit((p) => withOpeningPolygon(p, points));
     setMessage(
       error
-        ? { kind: "error", text: `Trémie refusée : ${error}` }
+        ? { kind: "error", text: msg("ui.plan.site.opening.refused", { error }) }
         : {
             kind: "info",
-            text: `Trémie polygonale de ${points.length} sommets enregistrée (annulable).`,
+            text: msg("ui.plan.site.opening.saved", { count: points.length }),
           },
     );
     setDraft([]);
@@ -216,20 +215,20 @@ export function PlanSiteEditor({ model }: { model: Model }) {
       if (r.kind === "draft") {
         setDraft(r.draft);
         if (r.draft.length === 2) {
-          setMessage({ kind: "info", text: "Nu tracé : cliquer du côté du mur." });
+          setMessage({ kind: "info", text: msg("ui.plan.site.wall.faceDrawn") });
         }
         return;
       }
       if (r.kind === "ignored") {
-        setMessage({ kind: "info", text: r.reason });
+        setMessage({ kind: "info", text: msg(r.reason) });
         return;
       }
       const t = Number(wallThickness);
       const error = commit((prj) => withWall(prj, r.a, r.b, t, false, r.reference));
       setMessage(
         error
-          ? { kind: "error", text: `Mur refusé : ${error}` }
-          : { kind: "info", text: "Mur ajouté (annulable)." },
+          ? { kind: "error", text: msg("ui.plan.site.wall.refused", { error }) }
+          : { kind: "info", text: msg("ui.plan.site.wall.added") },
       );
       setDraft([]);
     } else if (tool === "calibrate") {
@@ -298,7 +297,7 @@ export function PlanSiteEditor({ model }: { model: Model }) {
       setMessage(
         error
           ? { kind: "error", text: error }
-          : { kind: "info", text: "Image calibrée (annulable)." },
+          : { kind: "info", text: msg("ui.plan.site.calibrated") },
       );
       setCalib(null);
     } catch (err) {
@@ -321,34 +320,38 @@ export function PlanSiteEditor({ model }: { model: Model }) {
 
   return (
     <div className="plan-site" onKeyDown={onKeyDown}>
-      <div className="plan-site__toolbar" role="toolbar" aria-label="Outils de saisie du plan">
+      <div
+        className="plan-site__toolbar"
+        role="toolbar"
+        aria-label={tr.t("ui.plan.site.toolbar.label")}
+      >
         {TOOLS.map((t) => (
           <button
             key={t.id}
             type="button"
             aria-pressed={tool === t.id}
-            title={t.title}
+            title={tr.t(t.title)}
             disabled={t.id === "calibrate" && !img}
             onClick={() => chooseTool(t.id)}
           >
-            {t.label}
+            {tr.t(t.label)}
           </button>
         ))}
         <label className="check">
           <input type="checkbox" checked={snapOn} onChange={(e) => setSnapOn(e.target.checked)} />
-          Accroches
+          {tr.t("ui.plan.site.snap")}
         </label>
-        <button type="button" onClick={() => setView(null)} title="Cadrer tout le plan">
-          Recadrer
+        <button type="button" onClick={() => setView(null)} title={tr.t("ui.plan.site.fit.title")}>
+          {tr.t("ui.plan.site.fit")}
         </button>
         {tool === "opening" && draft.length >= 3 ? (
           <button type="button" onClick={() => closeOpening(draft)}>
-            Fermer la trémie
+            {tr.t("ui.plan.site.opening.close")}
           </button>
         ) : null}
         {draft.length > 0 || calib ? (
           <button type="button" onClick={reset}>
-            Abandonner le tracé
+            {tr.t("ui.plan.site.cancelDraft")}
           </button>
         ) : null}
       </div>
@@ -359,7 +362,7 @@ export function PlanSiteEditor({ model }: { model: Model }) {
             className={`plan-site__svg plan-site__svg--${tool}`}
             viewBox={viewBoxAttr(v, aspect)}
             role="img"
-            aria-label="Plan du site : calque de fond, murs, trémie et escalier"
+            aria-label={tr.t("ui.plan.site.svg.label")}
             tabIndex={0}
             onPointerDown={onPointerDown}
             onPointerMove={onPointerMove}
@@ -385,7 +388,9 @@ export function PlanSiteEditor({ model }: { model: Model }) {
                   points={pointsAttr(wallOutline(w))}
                   vectorEffect="non-scaling-stroke"
                 >
-                  <title>{`Mur ${w.id} : ${w.thickness} mm`}</title>
+                  <title>
+                    {tr.t("ui.plan.site.wall.title", { id: w.id, thickness: String(w.thickness) })}
+                  </title>
                 </polygon>
               ))}
               {stair.footprint.length > 0 ? (
@@ -419,7 +424,7 @@ export function PlanSiteEditor({ model }: { model: Model }) {
                   points={pointsAttr(opening)}
                   vectorEffect="non-scaling-stroke"
                 >
-                  <title>Trémie</title>
+                  <title>{tr.t("ui.plan.site.opening")}</title>
                 </polygon>
               ) : null}
               {preview ? (
@@ -479,33 +484,39 @@ export function PlanSiteEditor({ model }: { model: Model }) {
           </svg>
           <p className="plan-site__status" aria-live="polite">
             {target
-              ? `${cursor?.snap ? `${SNAP_LABELS[cursor.snap.kind]} — ` : ""}X ${fmt(target.x)} ; Y ${fmt(target.y)} mm`
-              : "Survoler le plan : coordonnées du site en mm."}
-            {tool === "opening" && draft.length > 0 ? ` — trémie : ${draft.length} sommet(s)` : ""}
-            {faceDraft ? " — cliquer du côté du mur" : ""}
+              ? `${cursor?.snap ? tr.t("ui.plan.site.status.snap", { snap: msg(SNAP_LABELS[cursor.snap.kind]) }) : ""}${tr.t("ui.plan.site.status.coords", { x: fmt(target.x, tr.locale), y: fmt(target.y, tr.locale) })}`
+              : tr.t("ui.plan.site.status.hover")}
+            {tool === "opening" && draft.length > 0
+              ? tr.t("ui.plan.site.status.opening", { count: draft.length })
+              : ""}
+            {faceDraft ? tr.t("ui.plan.site.status.faceSide") : ""}
           </p>
         </div>
-        <aside className="plan-site__panel" aria-label="Import et saisie du site">
+        <aside className="plan-site__panel" aria-label={tr.t("ui.plan.site.panel.label")}>
           {message ? (
             <p
               className={`notice ${message.kind === "error" ? "notice--error" : "notice--info"}`}
               role={message.kind === "error" ? "alert" : "status"}
             >
-              {message.text}
+              {typeof message.text === "string" ? message.text : tr.t(message.text)}
             </p>
           ) : null}
           {tool === "calibrate" ? (
             <div className="plan-site__group">
               <p className="muted">
-                {!calib
-                  ? "Cliquer le premier point de l'image."
-                  : !calib.b
-                    ? "Cliquer le second point."
-                    : "Distance réelle entre les deux points :"}
+                {tr.t(
+                  !calib
+                    ? "ui.plan.site.calib.first"
+                    : !calib.b
+                      ? "ui.plan.site.calib.second"
+                      : "ui.plan.site.calib.distance",
+                )}
               </p>
               {calib?.b ? (
                 <div className="field">
-                  <label htmlFor="plan-site-calib">Distance réelle (mm)</label>
+                  <label htmlFor="plan-site-calib">
+                    {tr.t("ui.plan.site.calib.distance.label")}
+                  </label>
                   <input
                     id="plan-site-calib"
                     type="text"
@@ -516,7 +527,7 @@ export function PlanSiteEditor({ model }: { model: Model }) {
                   />
                   <div className="button-row">
                     <button type="button" onClick={applyCalibration}>
-                      Calibrer
+                      {tr.t("ui.plan.site.calib.apply")}
                     </button>
                   </div>
                 </div>
@@ -525,7 +536,7 @@ export function PlanSiteEditor({ model }: { model: Model }) {
           ) : null}
           {tool === "wall" ? (
             <div className="field">
-              <label htmlFor="plan-site-wall">Épaisseur du mur tracé (mm)</label>
+              <label htmlFor="plan-site-wall">{tr.t("ui.plan.site.wall.thickness")}</label>
               <input
                 id="plan-site-wall"
                 type="text"
@@ -533,8 +544,8 @@ export function PlanSiteEditor({ model }: { model: Model }) {
                 value={wallThickness}
                 onChange={(e) => setWallThickness(e.target.value)}
               />
-              <small className="field__hint">Valeur proposée, à valider.</small>
-              <label htmlFor="plan-site-wall-ref">Ligne tracée</label>
+              <small className="field__hint">{tr.t("ui.plan.site.wall.thickness.hint")}</small>
+              <label htmlFor="plan-site-wall-ref">{tr.t("ui.plan.site.wall.reference")}</label>
               <select
                 id="plan-site-wall-ref"
                 value={wallMode}
@@ -543,36 +554,41 @@ export function PlanSiteEditor({ model }: { model: Model }) {
                   setDraft([]);
                 }}
               >
-                <option value="axis">Axe du mur</option>
-                <option value="face">Nu du mur (3e clic du côté du mur)</option>
+                <option value="axis">{tr.t("ui.plan.site.wall.reference.axis")}</option>
+                <option value="face">{tr.t("ui.plan.site.wall.reference.face")}</option>
               </select>
               <small className="field__hint">
-                {wallMode === "axis"
-                  ? "Deux clics : extrémités de l'axe."
-                  : "Deux clics sur le nu, puis un troisième du côté où se trouve le mur."}
+                {tr.t(
+                  wallMode === "axis"
+                    ? "ui.plan.site.wall.reference.axis.hint"
+                    : "ui.plan.site.wall.reference.face.hint",
+                )}
               </small>
             </div>
           ) : null}
           <UnderlayImport stairBounds={stairBounds} />
           <PlanSurveyForm onPreview={setPreview} />
           <details className="plan-site__group">
-            <summary>Murs ({site.walls.length})</summary>
+            <summary>{tr.t("ui.plan.site.walls", { count: site.walls.length })}</summary>
             {site.walls.length === 0 ? (
-              <p className="muted">Aucun mur : outil « Tracer un mur ».</p>
+              <p className="muted">{tr.t("ui.plan.site.walls.none")}</p>
             ) : null}
             <ul className="plan-site__walls">
               {site.walls.map((w) => (
                 <li key={w.id}>
                   <span>
-                    {w.id} : {fmt(Math.hypot(w.b.x - w.a.x, w.b.y - w.a.y))} mm, ép. {w.thickness}{" "}
-                    mm
+                    {tr.t("ui.plan.site.walls.item", {
+                      id: w.id,
+                      length: fmt(Math.hypot(w.b.x - w.a.x, w.b.y - w.a.y), tr.locale),
+                      thickness: String(w.thickness),
+                    })}
                   </span>
                   <button
                     type="button"
                     onClick={() => commit((p) => withoutWall(p, w.id))}
-                    aria-label={`Supprimer le mur ${w.id}`}
+                    aria-label={tr.t("ui.plan.site.walls.delete.label", { id: w.id })}
                   >
-                    Supprimer
+                    {tr.t("ui.plan.site.walls.delete")}
                   </button>
                 </li>
               ))}

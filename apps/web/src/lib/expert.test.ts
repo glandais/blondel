@@ -1,4 +1,5 @@
 import fc from "fast-check";
+import { translatorFor } from "@blondel/i18n";
 import { ProjectSchema, buildModel, createProject, vec2, type Project } from "@blondel/core";
 import { describe, expect, it } from "vitest";
 import {
@@ -21,6 +22,8 @@ const quarterLeft = createProject("quarter-left");
 const quarterRight = createProject("quarter-right");
 const modelLeft = buildModel(quarterLeft);
 const modelRight = buildModel(quarterRight);
+
+const FR = translatorFor("fr");
 
 describe("géométrie des nez (mode expert)", () => {
   it("la perpendiculaire est unitaire, orthogonale à Γ et dirigée vers le mur (côté R)", () => {
@@ -127,7 +130,7 @@ describe("surcharges des nez", () => {
     const k = modelLeft.stepping.nosings.find((n) => n.balanced)!.index;
     expect(overrideNotes(modelLeft)).toEqual([]);
     const m = buildModel(ProjectSchema.parse(withAngleOverride(quarterLeft, k, 30)));
-    expect(overrideNotes(m).some((t) => t.startsWith("K3 : "))).toBe(true);
+    expect(overrideNotes(m).some((t) => FR.t(t).startsWith("K3 : "))).toBe(true);
   });
 
   it("surcharge orpheline : listée, signalée par le cœur, jamais appliquée", () => {
@@ -135,7 +138,7 @@ describe("surcharges des nez", () => {
     const p = ProjectSchema.parse(withFixedOverride(quarterLeft, n + 2, true));
     const m = buildModel(p);
     expect(orphanOverrides(p, m)).toEqual([{ kind: "fixed", index: n + 2 }]);
-    expect(overrideNotes(m).some((t) => t.includes("orpheline"))).toBe(true);
+    expect(overrideNotes(m).some((t) => FR.t(t).includes("orpheline"))).toBe(true);
     expect(orphanOverrides(p, { stepping: { ...m.stepping, nosings: [] } })).toEqual([]);
   });
 });

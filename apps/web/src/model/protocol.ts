@@ -4,6 +4,7 @@
  * octets du dossier PDF et du modèle glTF (tampons transférés, sans copie).
  */
 import type { Project } from "@blondel/core";
+import type { Locale } from "@blondel/i18n";
 import type { PdfJobOptions } from "../lib/optionalApi.js";
 import type { CompareOutcome, Variant } from "../lib/variants.js";
 import type { ModelSnapshot } from "./snapshot.js";
@@ -22,13 +23,23 @@ export type WorkerRequest =
       readonly project: Project;
       /** Pages et format du dossier (absent : dossier complet, A4). */
       readonly options?: PdfJobOptions;
+      /** Langue du dossier (absent : français). */
+      readonly locale?: Locale;
     }
-  | { readonly id: number; readonly type: "glb"; readonly project: Project };
+  | {
+      readonly id: number;
+      readonly type: "glb";
+      readonly project: Project;
+      /** Langue des noms du modèle glTF (absent : français). */
+      readonly locale?: Locale;
+    };
 
 /**
  * Résultat d'un export PDF : les octets, ou le message d'un échec **de l'export** (modèle
- * incalculable, rendu impossible). Un tel échec n'est pas une panne du worker : il est rendu à
- * l'appelant sans repli sur le fil principal.
+ * incalculable, rendu impossible), déjà traduit dans la langue du job. Un tel échec n'est pas
+ * une panne du worker : il est rendu à l'appelant sans repli sur le fil principal.
+ *
+ * Le job `build` ne reçoit pas la langue : le `Model` est neutre (ADR-0007).
  */
 export type PdfResult = { readonly bytes: Uint8Array } | { readonly error: string };
 
@@ -46,5 +57,10 @@ export type WorkerResponse =
 export type WorkerJob =
   | { readonly type: "build"; readonly project: Project }
   | { readonly type: "compare"; readonly project: Project; readonly variants: readonly Variant[] }
-  | { readonly type: "pdf"; readonly project: Project; readonly options?: PdfJobOptions }
-  | { readonly type: "glb"; readonly project: Project };
+  | {
+      readonly type: "pdf";
+      readonly project: Project;
+      readonly options?: PdfJobOptions;
+      readonly locale?: Locale;
+    }
+  | { readonly type: "glb"; readonly project: Project; readonly locale?: Locale };

@@ -104,7 +104,7 @@ import { warmUpShaders } from "../three/shaderWarmup.js";
 import { onTextureReady } from "../three/textures.js";
 import { AnnotationOverlay, AnnotationProjector } from "./Viewer3DOverlay.js";
 import { INITIAL_TOOLS, Viewer3DTools, type ToolsState } from "./Viewer3DTools.js";
-import { tr, trOpt } from "../i18n/fr.js";
+import { useT } from "../i18n/useT.js";
 import "./Viewer3D.css";
 
 const MM = 0.001;
@@ -663,6 +663,7 @@ export default function Viewer3D({
   onSelectPart,
   onSelectPoint,
 }: Viewer3DProps) {
+  const tr = useT();
   const { parts, failed } = usePartGeometries(mesh, model);
   const quality = useMemo(() => browserRenderQuality(), []);
   const materials = useMaterials(quality);
@@ -699,9 +700,10 @@ export default function Viewer3D({
     [model, hiddenFamilies],
   );
   const selectedMesh = parts.find(({ part }) => isPartSelected(part, selection?.location))?.part;
-  const selectedName = selectedMesh
-    ? (trOpt(model.parts.find((p) => p.id === selectedMesh.partId)?.name) ?? "")
-    : "";
+  const selectedPartName = selectedMesh
+    ? model.parts.find((p) => p.id === selectedMesh.partId)?.name
+    : undefined;
+  const selectedName = selectedPartName ? tr.t(selectedPartName) : "";
   const selectedRules = selectedMesh ? markers.rulesByPart.get(selectedMesh.partId) : undefined;
   const flaggedCount = markers.parts.size + markers.points.length;
   const [shadersReady, setShadersReady] = useState(false);
@@ -765,21 +767,28 @@ export default function Viewer3D({
 
   const annotations = useMemo(() => {
     const out: Annotation[] = [];
-    if (tools.showDimensions && !isolatedShown) out.push(...mainDimensions(model));
+    if (tools.showDimensions && !isolatedShown) out.push(...mainDimensions(model, tr));
     if (tools.measuring) {
-      const m = measureAnnotation(measurePoints);
+      const m = measureAnnotation(measurePoints, tr.locale);
       if (m) out.push(m);
     }
     return out;
-  }, [tools.showDimensions, tools.measuring, isolatedShown, model, measurePoints]);
+  }, [tools.showDimensions, tools.measuring, isolatedShown, model, measurePoints, tr]);
 
   const measureText = !tools.measuring
     ? null
     : measure.length < 2
       ? measure.length === 0
-        ? "Cliquez un premier point sur une pièce."
-        : "Cliquez un second point."
-      : `Distance : ${measureAnnotation(measurePoints)?.label ?? ""}${tools.explode > 0 ? " (pièces en place)" : ""}`;
+        ? tr.t("ui.viewer3d.measure.first")
+        : tr.t("ui.viewer3d.measure.second")
+      : tr.t(
+          tools.explode > 0
+            ? "ui.viewer3d.measure.distance.inPlace"
+            : "ui.viewer3d.measure.distance",
+          {
+            distance: measureAnnotation(measurePoints, tr.locale)?.label ?? "",
+          },
+        );
 
   // Cadrage initial sur l'ensemble des pièces (en mètres, repère three.js).
   const frame = useMemo(() => {
@@ -825,7 +834,7 @@ export default function Viewer3D({
         onPointerMissed={() => {
           if (!tools.measuring) onSelectPart(null);
         }}
-        aria-label="Vue 3D de l'escalier"
+        aria-label={tr.t("ui.viewer3d.label")}
       >
         <SceneEnvironment enabled={quality.environment} />
         <hemisphereLight args={["#ffffff", "#8a8f99", quality.environment ? 0.25 : 0.6]} />
@@ -927,20 +936,25 @@ export default function Viewer3D({
       />
       {selectedMesh ? (
         <p className="viewer3d__selected" role="status">
-          Sélection : <strong>{selectedMesh.mark}</strong> — {selectedName}
+          {tr.t("ui.viewer3d.selection")}
+          <strong>{selectedMesh.mark}</strong>
+          {tr.t("ui.viewer3d.selection.name", { name: selectedName })}
           {selectedRules && selectedRules.length > 0 ? ` · ${selectedRules.join(", ")}` : ""}
         </p>
       ) : null}
       {parts.length === 0 ? (
         <p className="viewer3d__empty muted">
-          {mesh ? "Aucune pièce à afficher (structure non renseignée)." : "Maillage indisponible."}
+          {tr.t(mesh ? "ui.viewer3d.noParts" : "ui.viewer3d.noMesh")}
         </p>
       ) : null}
       {failed.length > 0 ? (
         <ul className="viewer3d__errors" role="status">
           {failed.map((f) => (
             <li key={f.partId}>
-              {f.mark} : {f.error !== undefined ? tr(f.error) : ""}
+              {tr.t("ui.viewer3d.partError", {
+                mark: f.mark,
+                error: f.error !== undefined ? tr.t(f.error) : "",
+              })}
             </li>
           ))}
         </ul>

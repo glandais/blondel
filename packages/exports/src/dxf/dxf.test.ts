@@ -22,7 +22,7 @@ import {
 import { arcFromBulge } from "../path.js";
 import { createDxfWriter } from "./create.js";
 import { exportPartDxf } from "./part.js";
-import { PLAN_LAYERS, exportPlanDxf } from "./plan.js";
+import { planLayers, exportPlanDxf } from "./plan.js";
 import { encodeDxfText, sanitizeLayerName } from "./r12.js";
 import type { DxfVersion } from "./writer.js";
 
@@ -41,7 +41,7 @@ function checkClosedContours(f: DxfFile, layer: string): void {
 
 function checkPlan(m: Model, f: DxfFile): void {
   // Calques par fonction.
-  for (const l of Object.values(PLAN_LAYERS)) expect(f.layers.has(l.name)).toBe(true);
+  for (const l of Object.values(planLayers())) expect(f.layers.has(l.name)).toBe(true);
   for (const e of f.entities) expect(e.layer === "0" || f.layers.has(e.layer)).toBe(true);
   checkClosedContours(f, "CONTOUR");
   checkClosedContours(f, "MARCHES");

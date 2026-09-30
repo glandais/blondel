@@ -14,45 +14,46 @@ import {
   type DemoPresetId,
   type PresetId,
 } from "@blondel/core";
-import { trKey } from "../i18n/fr.js";
+import type { MessageKey } from "@blondel/i18n";
 import type { AppState, UpdateResult } from "../store/projectStore.js";
 
 export type PresetChoice = PresetId | DemoPresetId;
 
+/** Élément du choix : textes en clés, à traduire par `t(…)`. */
 export interface PresetItem {
   readonly id: PresetChoice;
-  readonly label: string;
+  readonly label: MessageKey;
   /** Une ligne (démos seulement). */
-  readonly description?: string;
+  readonly description?: MessageKey;
 }
 
 export interface PresetGroup {
-  readonly label: string;
+  readonly label: MessageKey;
   readonly items: readonly PresetItem[];
 }
 
-export const BASIC_GROUP_LABEL = "Basiques";
-export const DEMO_GROUP_LABEL = "Démo";
+export const BASIC_GROUP_LABEL: MessageKey = "ui.label.presetGroup.basic";
+export const DEMO_GROUP_LABEL: MessageKey = "ui.label.presetGroup.demo";
 
 /** Les deux groupes du sélecteur, dans l'ordre d'affichage. */
 export const PRESET_GROUPS: readonly PresetGroup[] = [
   {
     label: BASIC_GROUP_LABEL,
-    items: ALL_PRESET_IDS.map((id) => ({ id, label: trKey(PRESET_LABELS[id]) })),
+    items: ALL_PRESET_IDS.map((id) => ({ id, label: PRESET_LABELS[id] })),
   },
   {
     label: DEMO_GROUP_LABEL,
     items: DEMO_PRESET_IDS.map((id) => ({
       id,
-      label: trKey(DEMO_PRESET_LABELS[id]),
-      description: trKey(DEMO_PRESET_DESCRIPTIONS[id]),
+      label: DEMO_PRESET_LABELS[id],
+      description: DEMO_PRESET_DESCRIPTIONS[id],
     })),
   },
 ];
 
 /** Description d'une ligne du choix (démo), `undefined` pour un préréglage de base. */
-export function presetDescription(id: PresetChoice): string | undefined {
-  return isDemoPresetId(id) ? trKey(DEMO_PRESET_DESCRIPTIONS[id]) : undefined;
+export function presetDescription(id: PresetChoice): MessageKey | undefined {
+  return isDemoPresetId(id) ? DEMO_PRESET_DESCRIPTIONS[id] : undefined;
 }
 
 /**

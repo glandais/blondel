@@ -11,7 +11,7 @@ import {
   placeholderProblems,
   sortProblems,
 } from "./consistency";
-import { DYNAMIC_KEY_PREFIXES, PENDING_KEYS, isDynamicOrPending } from "./dynamicKeys";
+import { DYNAMIC_KEYS, isDynamic } from "./dynamicKeys";
 import { LOCALES, messagesFor } from "./index";
 import frFile from "./locales/fr.json" with { type: "json" };
 import enFile from "./locales/en.json" with { type: "json" };
@@ -167,23 +167,26 @@ describe("clés employées dans le code", () => {
     expect(missing).toEqual([]);
   });
 
-  it("aucune clé orpheline (hors préfixes dynamiques et clés en attente déclarés)", () => {
+  it("aucune clé orpheline : chaque clé est écrite en littéral ou construite (dynamicKeys.ts)", () => {
     const corpus = SOURCES.map((s) => s.text).join("\n");
     const used = (key: string): boolean =>
       ['"', "'", "`"].some((q) => corpus.includes(`${q}${key}${q}`));
     const orphans = Object.keys(fr).filter((key) => {
       const base = key.replace(/\.(zero|one|two|few|many|other)$/, "");
-      return !used(key) && !used(base) && !isDynamicOrPending(key);
+      return !used(key) && !used(base) && !isDynamic(key);
     });
     expect(orphans).toEqual([]);
   });
 
-  it("les clés en attente et préfixes dynamiques correspondent à des clés existantes", () => {
-    expect(PENDING_KEYS.filter((k) => !(k in fr))).toEqual([]);
+  it("chaque famille de clés dynamiques couvre des clés et cite un fichier qui la construit", () => {
     const keys = Object.keys(fr);
-    // Un préfixe sans aucune clé est tolérable pendant la migration (« rules. » arrive en
-    // vague 2) ; mais un préfixe doit finir par un point pour ne pas couvrir des voisins.
-    expect(DYNAMIC_KEY_PREFIXES.filter((p) => !p.endsWith("."))).toEqual([]);
-    expect(keys.length).toBeGreaterThan(0);
+    expect(DYNAMIC_KEYS.filter((f) => !keys.some((k) => f.pattern.test(k)))).toEqual([]);
+    for (const f of DYNAMIC_KEYS) {
+      const file = f.builtBy.split(" ")[0]!;
+      expect(
+        SOURCES.some((s) => s.path.endsWith(file)),
+        file,
+      ).toBe(true);
+    }
   });
 });

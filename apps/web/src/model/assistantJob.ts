@@ -8,11 +8,12 @@
 import {
   buildModel,
   proposeDesigns,
-  textMessage,
+  errorMessageOf,
   type AssistantInput,
   type AssistantResult,
   type Project,
 } from "@blondel/core";
+import { msg } from "@blondel/i18n";
 import { candidateSketch, type CandidateSketch } from "../lib/assistant.js";
 
 export interface AssistantOutcome {
@@ -38,9 +39,7 @@ export function runAssistantJob(
   } catch (e) {
     result = {
       candidates: [],
-      diagnostics: [
-        textMessage(`Erreur de l'assistant : ${e instanceof Error ? e.message : String(e)}`),
-      ],
+      diagnostics: [msg("ui.worker.assistantFailed", { detail: errorMessageOf(e) })],
       rejections: [],
       stats: { enumerated: 0, built: 0, elapsedMs: 0, stopped: false, truncated: false },
     };

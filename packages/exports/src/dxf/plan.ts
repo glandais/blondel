@@ -27,9 +27,6 @@ export function planLayers(t: Translator = translatorOf()) {
   return localizedLayers(PLAN_LAYER_SPECS, t);
 }
 
-/** Calques du plan en français (noms historiques : CONTOUR, MARCHES, NEZ…). */
-export const PLAN_LAYERS = planLayers();
-
 export interface PlanDxfOptions extends PlanDrawingOptions {
   /** Défaut : AC1021 (`DEFAULT_PLAN_DXF_VERSION`). */
   readonly version?: DxfVersion;

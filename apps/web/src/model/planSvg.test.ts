@@ -17,8 +17,8 @@ describe("rendus SVG pour l'écran", () => {
       const project = createProject(id);
       const model = buildModel(project);
       for (const theme of ["light", "dark"] as const) {
-        const plan = renderPlanForScreen(model, { project, theme });
-        const elev = renderElevationForScreen(model, { project, theme });
+        const plan = renderPlanForScreen(model, { project, theme, locale: "fr" });
+        const elev = renderElevationForScreen(model, { project, theme, locale: "fr" });
         if (!("svg" in plan) || !("svg" in elev)) throw new Error(`${id} : rendu en échec`);
         expect(plan.svg, id).toMatch(/^<svg/);
         expect(plan.svg, id).not.toContain("NaN");

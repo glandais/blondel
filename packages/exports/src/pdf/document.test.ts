@@ -13,7 +13,7 @@ import {
 } from "../testing/fixtures.js";
 import { JsPdfCanvas, RecordingCanvas, helveticaMeasure, type RecordedOp } from "./canvas.js";
 import {
-  COMPLIANCE_DISCLAIMER,
+  complianceDisclaimer,
   exportPdf,
   exportPdfDocument,
   renderPdf,
@@ -230,7 +230,7 @@ describe("renderPdf (mise en page sur surface enregistrée)", () => {
 
   it("contrôle de conception : avertissement, groupes, provenance", () => {
     const text = texts[pages.findIndex((p) => p.kind === "compliance")]!.join("\n");
-    expect(text).toContain(COMPLIANCE_DISCLAIMER);
+    expect(text).toContain(complianceDisclaimer());
     expect(text).toContain("Violations bloquantes (1)");
     expect(text).toContain("Avertissements (1)");
     expect(text).toContain("Conseils (1)");
@@ -287,7 +287,7 @@ describe("renderPdf (mise en page sur surface enregistrée)", () => {
     });
     expect(ps.length).toBeGreaterThan(1);
     const t = c4.pageTexts();
-    t.forEach((page) => expect(page.some((s) => s.includes(COMPLIANCE_DISCLAIMER))).toBe(true));
+    t.forEach((page) => expect(page.some((s) => s.includes(complianceDisclaimer()))).toBe(true));
     checkInPage(c4);
     // Chaque règle apparaît une fois.
     const all = t.flat().join("\n");

@@ -11,6 +11,7 @@
 import {
   GuardsSpecSchema,
   ProjectSchema,
+  errorMessageOf,
   openingFromSurvey,
   openingPolygon,
   polygonOpening,
@@ -25,7 +26,15 @@ import {
   type Vec2,
   type Wall,
 } from "@blondel/core";
-import { tr } from "../i18n/fr.js";
+import {
+  createTranslator,
+  msg,
+  type Locale,
+  type MessageKey,
+  type Translator,
+} from "@blondel/i18n";
+import { formatNumber } from "../i18n/locale.js";
+import { SCHEMA_PARSE_OPTIONS, schemaIssues } from "./schemaIssues.js";
 import { DEFAULT_WALL_THICKNESS_MM, stairOverlay } from "../views/planSiteGeometry.js";
 
 // ------------------------------------------------------------------ Usage → contextes
@@ -38,22 +47,27 @@ export type UsageId = "house" | "collective" | "erp-new" | "erp-existing" | "oth
  */
 export const USAGES: readonly {
   readonly id: UsageId;
-  readonly label: string;
+  /** Clé du libellé, traduite à l'affichage (`t.t(u.labelKey)`). */
+  readonly labelKey: MessageKey;
   readonly contexts: readonly string[];
 }[] = [
-  {
-    id: "house",
-    label: "Maison individuelle ou intérieur d'un logement",
-    contexts: ["logement_interieur"],
-  },
+  { id: "house", labelKey: "ui.lib.assistant.usage.house", contexts: ["logement_interieur"] },
   {
     id: "collective",
-    label: "Logement collectif — parties communes",
+    labelKey: "ui.lib.assistant.usage.collective",
     contexts: ["bhc_parties_communes"],
   },
-  { id: "erp-new", label: "ERP neuf", contexts: ["erp_neuf", "erp_securite"] },
-  { id: "erp-existing", label: "ERP existant", contexts: ["erp_existant", "erp_securite"] },
-  { id: "other", label: "Autre (règles générales seulement)", contexts: [] },
+  {
+    id: "erp-new",
+    labelKey: "ui.lib.assistant.usage.erpNew",
+    contexts: ["erp_neuf", "erp_securite"],
+  },
+  {
+    id: "erp-existing",
+    labelKey: "ui.lib.assistant.usage.erpExisting",
+    contexts: ["erp_existant", "erp_securite"],
+  },
+  { id: "other", labelKey: "ui.lib.assistant.usage.other", contexts: [] },
 ];
 
 /** Contextes cumulés : usage, bois (NF DTU 36.3), extérieur. */
@@ -197,6 +211,7 @@ export function parseInt10(text: string): number | null {
 export function formOpening(
   form: AssistantForm,
   project: Project,
+  t: Translator,
 ):
   | { readonly ok: true; readonly opening: Opening | undefined }
   | { readonly ok: false; readonly error: string } {
@@ -208,38 +223,52 @@ export function formOpening(
     case "project":
       return project.site.opening
         ? { ok: true, opening: project.site.opening }
-        : { ok: false, error: "Le projet n'a pas de trémie." };
+        : { ok: false, error: t.t("ui.lib.assistant.error.noOpening") };
     case "rect": {
       const sx = parseInt10(form.sizeX);
       const sy = parseInt10(form.sizeY);
-      if (x === null || y === null) return { ok: false, error: "Position de la trémie invalide." };
+      if (x === null || y === null) {
+        return { ok: false, error: t.t("ui.lib.assistant.error.openingPosition") };
+      }
       if (sx === null || sy === null || sx <= 0 || sy <= 0) {
-        return { ok: false, error: "Dimensions de la trémie : mm entiers positifs attendus." };
+        return { ok: false, error: t.t("ui.lib.assistant.error.openingSize") };
       }
       return { ok: true, opening: { kind: "rect", x, y, sizeX: sx, sizeY: sy } };
     }
     case "survey": {
-      if (x === null || y === null) return { ok: false, error: "Position du point A invalide." };
+      if (x === null || y === null) {
+        return { ok: false, error: t.t("ui.lib.assistant.error.pointA") };
+      }
       const m: Partial<Record<SurveyMeasure, number>> = {};
       for (const k of Object.keys(EMPTY_SURVEY) as SurveyMeasure[]) {
         const v = parseInt10(form.survey[k]);
         if (v === null || v <= 0) {
-          return { ok: false, error: `Relevé : mesure « ${k.toUpperCase()} » manquante.` };
+          return {
+            ok: false,
+            error: t.t("ui.lib.assistant.error.surveyMissing", { measure: k.toUpperCase() }),
+          };
         }
         m[k] = v;
       }
       const r = openingFromSurvey(m as OpeningSurvey, { origin: { x, y } });
-      if (!r.ok) return { ok: false, error: `Relevé incohérent : ${tr(r.reason)}` };
+      if (!r.ok) {
+        return {
+          ok: false,
+          error: t.t("ui.lib.assistant.error.surveyInvalid", { reason: r.reason }),
+        };
+      }
       if (!r.consistent) {
         return {
           ok: false,
-          error: `Relevé incohérent : écart de ${Math.round(r.maxResidual)} mm entre les mesures ; les vérifier.`,
+          error: t.t("ui.lib.assistant.error.surveyResidual", {
+            residual: String(Math.round(r.maxResidual)),
+          }),
         };
       }
       try {
         return { ok: true, opening: polygonOpening(r.points) };
       } catch (e) {
-        return { ok: false, error: e instanceof Error ? e.message : String(e) };
+        return { ok: false, error: t.t(errorMessageOf(e)) };
       }
     }
   }
@@ -284,19 +313,56 @@ export function wallsAlongOpening(
   return out;
 }
 
-/** Nom lisible d'un côté de trémie (rectangle : orientation sur le plan ; sinon b1…bn). */
-export function openingSideLabel(polygon: readonly Vec2[], i: number): string {
+type SideWhere = "bottom" | "top" | "right" | "left";
+
+const SIDE_WHERE_KEYS: Readonly<Record<SideWhere, MessageKey>> = {
+  bottom: "ui.lib.assistant.side.where.bottom",
+  top: "ui.lib.assistant.side.where.top",
+  right: "ui.lib.assistant.side.where.right",
+  left: "ui.lib.assistant.side.where.left",
+};
+
+/**
+ * Désignation d'un côté de trémie : numéro b1…bn, orientation sur le plan (rectangle
+ * seulement) et longueur, dans le gabarit `keys` (sans ou avec orientation).
+ */
+function sideText(
+  polygon: readonly Vec2[],
+  i: number,
+  locale: Locale,
+  keys: { readonly plain: MessageKey; readonly located: MessageKey },
+): string {
   const a = polygon[i]!;
   const b = polygon[(i + 1) % polygon.length]!;
   const L = Math.round(Math.hypot(b.x - a.x, b.y - a.y));
   const dx = b.x - a.x;
   const dy = b.y - a.y;
-  let where = "";
+  let where: SideWhere | null = null;
   if (polygon.length === 4) {
-    if (Math.abs(dy) < 1e-6) where = dx > 0 ? " (bas du plan)" : " (haut du plan)";
-    else if (Math.abs(dx) < 1e-6) where = dy > 0 ? " (droite du plan)" : " (gauche du plan)";
+    if (Math.abs(dy) < 1e-6) where = dx > 0 ? "bottom" : "top";
+    else if (Math.abs(dx) < 1e-6) where = dy > 0 ? "right" : "left";
   }
-  return `Côté b${i + 1}${where}, ${L.toLocaleString("fr-FR")} mm`;
+  const t = createTranslator(locale);
+  const params = { index: String(i + 1), length: formatNumber(locale, L) };
+  return where === null
+    ? t.t(keys.plain, params)
+    : t.t(keys.located, { ...params, where: msg(SIDE_WHERE_KEYS[where]) });
+}
+
+/** Nom lisible d'un côté de trémie (rectangle : orientation sur le plan ; sinon b1…bn). */
+export function openingSideLabel(polygon: readonly Vec2[], i: number, locale: Locale): string {
+  return sideText(polygon, i, locale, {
+    plain: "ui.lib.assistant.side.plain",
+    located: "ui.lib.assistant.side.located",
+  });
+}
+
+/** Libellé de la case « mur le long du côté … » (même désignation que `openingSideLabel`). */
+export function openingWallLabel(polygon: readonly Vec2[], i: number, locale: Locale): string {
+  return sideText(polygon, i, locale, {
+    plain: "ui.lib.assistant.wallAlong.plain",
+    located: "ui.lib.assistant.wallAlong.located",
+  });
 }
 
 export type FormResult =
@@ -308,25 +374,25 @@ export type FormResult =
  * et date de référence du projet courant, préférences. Sans `shouldStop` (non clonable : le
  * worker est interrompu par l'interface).
  */
-export function assistantInput(form: AssistantForm, project: Project): FormResult {
+export function assistantInput(form: AssistantForm, project: Project, t: Translator): FormResult {
   const errors: string[] = [];
   const H = parseInt10(form.floorToFloor);
   const slab = parseInt10(form.upperSlabThickness);
-  if (H === null || H <= 0) errors.push("Hauteur à monter H : mm entiers positifs attendus.");
-  if (slab === null || slab <= 0) errors.push("Épaisseur de dalle : mm entiers positifs attendus.");
-  const opening = formOpening(form, project);
+  if (H === null || H <= 0) errors.push(t.t("ui.lib.assistant.error.floorToFloor"));
+  if (slab === null || slab <= 0) errors.push(t.t("ui.lib.assistant.error.slab"));
+  const opening = formOpening(form, project, t);
   if (!opening.ok) errors.push(opening.error);
   const thickness = parseInt10(form.wallThickness);
   const polygon = opening.ok ? openingPolygon(opening.opening) : null;
   // Murs le long de la trémie : seulement s'il y a une trémie (cases masquées sinon).
   const wallSides = polygon ? form.wallSides.filter((i) => i >= 0 && i < polygon.length) : [];
   if (wallSides.length > 0 && (thickness === null || thickness <= 0)) {
-    errors.push("Épaisseur des murs : mm entiers positifs attendus.");
+    errors.push(t.t("ui.lib.assistant.error.wallThickness"));
   }
   let width: number | undefined;
   if (form.width.trim() !== "") {
     const w = parseInt10(form.width);
-    if (w === null || w <= 0) errors.push("Emmarchement imposé : mm entiers positifs attendus.");
+    if (w === null || w <= 0) errors.push(t.t("ui.lib.assistant.error.width"));
     else width = w;
   }
   if (errors.length > 0) return { ok: false, errors };
@@ -342,11 +408,12 @@ export function assistantInput(form: AssistantForm, project: Project): FormResul
     ...(opening.ok && opening.opening ? { opening: opening.opening } : {}),
     walls: [...kept, ...added],
   };
-  const parsed = ProjectSchema.shape.site.safeParse(site);
+  const parsed = ProjectSchema.shape.site.safeParse(site, SCHEMA_PARSE_OPTIONS);
   if (!parsed.success) {
     return {
       ok: false,
-      errors: parsed.error.issues.map((i) => `${i.path.join(".")} : ${i.message}`),
+      // Chemin relatif au site (`walls.0.thickness`), message du schéma dans la langue.
+      errors: schemaIssues(parsed.error).map((m) => t.t(m)),
     };
   }
   const structure = form.structure !== "none" ? { structure: { kind: form.structure } } : {};
@@ -468,32 +535,42 @@ export function candidateSketch(model: Model, project: Project): CandidateSketch
 
 // ------------------------------------------------------------------ Affichage
 
-const n0 = (v: number): string => Math.round(v).toLocaleString("fr-FR");
-const n1 = (v: number): string =>
-  v.toLocaleString("fr-FR", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+const n0 = (v: number, locale: Locale): string => formatNumber(locale, Math.round(v));
+const n1 = (v: number, locale: Locale): string =>
+  formatNumber(locale, v, { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 
 /** Cotes principales d'une carte : n, h, g, 2h + g, E, collet, échappée. */
 export function summaryFacts(
   c: Pick<DesignCandidate, "summary">,
+  locale: Locale,
 ): readonly { readonly label: string; readonly value: string }[] {
   const s = c.summary;
+  const t = createTranslator(locale);
   return [
-    { label: "Hauteurs n", value: String(s.riserCount) },
-    { label: "Hauteur h", value: `${n1(s.rise)} mm` },
-    { label: "Giron g", value: `${n1(s.going)} mm` },
-    { label: "2h + g", value: `${n1(s.blondel)} mm` },
-    { label: "Emmarchement E", value: `${n0(s.width)} mm` },
-    { label: "Collet mini", value: s.minCollet === null ? "—" : `${n0(s.minCollet)} mm` },
+    { label: t.t("ui.lib.assistant.fact.risers"), value: String(s.riserCount) },
+    { label: t.t("ui.lib.assistant.fact.rise"), value: `${n1(s.rise, locale)} mm` },
+    { label: t.t("ui.lib.assistant.fact.going"), value: `${n1(s.going, locale)} mm` },
+    { label: t.t("ui.lib.assistant.fact.blondel"), value: `${n1(s.blondel, locale)} mm` },
+    { label: t.t("ui.lib.assistant.fact.width"), value: `${n0(s.width, locale)} mm` },
     {
-      label: "Échappée mini",
+      label: t.t("ui.lib.assistant.fact.collet"),
+      value: s.minCollet === null ? "—" : `${n0(s.minCollet, locale)} mm`,
+    },
+    {
+      label: t.t("ui.lib.assistant.fact.headroom"),
       value:
         s.headroom === null
           ? "—"
-          : `${n0(s.headroom)} mm${s.headroomMargin !== null ? ` (marge ${n0(s.headroomMargin)})` : ""}`,
+          : s.headroomMargin === null
+            ? `${n0(s.headroom, locale)} mm`
+            : t.t("ui.lib.assistant.fact.headroomMargin", {
+                value: n0(s.headroom, locale),
+                margin: n0(s.headroomMargin, locale),
+              }),
     },
   ];
 }
 
-export function formatScore(v: number): string {
-  return n1(v);
+export function formatScore(v: number, locale: Locale): string {
+  return n1(v, locale);
 }

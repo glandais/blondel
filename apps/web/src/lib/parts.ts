@@ -5,6 +5,7 @@
  */
 import type { Location, Model, Part } from "@blondel/core";
 import { cutListRows, type CutListRow, type MassNote } from "@blondel/exports";
+import type { Locale } from "@blondel/i18n";
 import { treadPartId } from "./compliance.js";
 
 /** Pièce désignée par la sélection (pièce, ou pièce de la marche : `Part.treadNumber`). */
@@ -52,11 +53,16 @@ function rowKey(row: CutListRow | undefined): string {
 }
 
 /**
- * Nomenclature : lignes de la liste de débit, complétées des identifiants de pièces (pour la
- * sélection) et des totaux par ligne et généraux.
+ * Nomenclature : lignes de la liste de débit dans la langue `locale` (désignations, matériaux,
+ * remarques), complétées des identifiants de pièces (pour la sélection) et des totaux par ligne
+ * et généraux.
  */
-export function bomSummary(parts: readonly Part[], massNote?: MassNote): BomSummary {
-  const opts = massNote !== undefined ? { massNote } : {};
+export function bomSummary(
+  parts: readonly Part[],
+  locale: Locale,
+  massNote?: MassNote,
+): BomSummary {
+  const opts = massNote !== undefined ? { massNote, locale } : { locale };
   const rows = cutListRows(parts, opts);
   // Rattachement des pièces aux lignes par **ligne de débit identique** (repère, désignation,
   // matériau, section, débit, volume, masse : la ligne que `cutListRows` produit pour la pièce

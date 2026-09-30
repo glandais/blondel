@@ -7,10 +7,12 @@
  * euros ne sont affichés que si le profil d'atelier porte un barème complet (« profil d'atelier
  * requis » sinon). Une variante peut être appliquée au projet, jour adapté compris (annulable).
  */
+import { numberFormat } from "../i18n/locale.js";
+import { useT } from "../i18n/useT.js";
 import { applyVariant, compareLines, type VariantRow } from "../lib/variants.js";
 import { appStore, useComparison } from "../store/appStore.js";
 
-const time = new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 0 });
+const TIME: Intl.NumberFormatOptions = { maximumFractionDigits: 0 };
 
 function apply(row: VariantRow): void {
   appStore.getState().update((p) => applyVariant(p, row));
@@ -18,6 +20,7 @@ function apply(row: VariantRow): void {
 }
 
 export function CompareView() {
+  const t = useT();
   const { outcome, pending, project: computedFor, requested } = useComparison();
   // Résultats d'un projet antérieur (calcul en cours) : affichés, mais non applicables (les
   // paramètres de la variante reprennent ceux de l'ancien projet). `requested` : projet courant
@@ -26,7 +29,7 @@ export function CompareView() {
   if (!outcome) {
     return (
       <div className="empty-view" role="status">
-        <p>{pending ? "Comparaison des variantes en cours…" : "Aucune variante à comparer."}</p>
+        <p>{t.t(pending ? "ui.compare.pending" : "ui.compare.none")}</p>
       </div>
     );
   }
@@ -34,25 +37,31 @@ export function CompareView() {
   if (rows.length === 0) {
     return (
       <div className="empty-view" role="status">
-        <p>{outcome.error ?? "Aucune structure disponible dans le cœur pour la comparaison."}</p>
+        <p>{outcome.error ? t.t(outcome.error) : t.t("ui.compare.noStructure")}</p>
       </div>
     );
   }
-  const lines = compareLines(rows);
+  const lines = compareLines(rows, t);
   return (
     <div className="compare" aria-busy={stale}>
       <table>
         <caption>
-          Comparaison des structures sur l'épure courante
-          {stale ? " — mise à jour…" : ` (${time.format(outcome.timeMs)} ms)`}
+          {t.t("ui.compare.caption")}
+          {stale
+            ? t.t("ui.compare.updating")
+            : t.t("ui.compare.time", {
+                time: numberFormat(t.locale, TIME).format(outcome.timeMs),
+              })}
         </caption>
         <thead>
           <tr>
-            <th scope="col">Grandeur</th>
+            <th scope="col">{t.t("ui.compare.quantity")}</th>
             {rows.map((r) => (
               <th key={r.id} scope="col" className={r.current ? "is-current" : undefined}>
-                {r.label}
-                {r.current ? <small className="compare__badge"> (projet)</small> : null}
+                {t.t(r.label)}
+                {r.current ? (
+                  <small className="compare__badge">{t.t("ui.compare.projectBadge")}</small>
+                ) : null}
               </th>
             ))}
           </tr>
@@ -75,15 +84,15 @@ export function CompareView() {
         </tbody>
         <tfoot>
           <tr>
-            <th scope="row">Adaptations et écarts</th>
+            <th scope="row">{t.t("ui.compare.notes")}</th>
             {rows.map((r) => {
               const notes = [...r.signals, ...r.deviations];
               return (
                 <td key={r.id} className="compare__notes">
                   {notes.length > 0 ? (
                     <ul>
-                      {notes.map((n) => (
-                        <li key={n}>{n}</li>
+                      {notes.map((n, i) => (
+                        <li key={i}>{t.t(n)}</li>
                       ))}
                     </ul>
                   ) : (
@@ -94,38 +103,31 @@ export function CompareView() {
             })}
           </tr>
           <tr>
-            <th scope="row">Structure</th>
+            <th scope="row">{t.t("ui.compare.structure")}</th>
             {rows.map((r) => (
               <td key={r.id}>
                 <button
                   type="button"
                   disabled={r.current || stale}
                   onClick={() => apply(r)}
-                  title={
+                  title={t.t(
                     r.current
-                      ? "Structure actuelle du projet"
+                      ? "ui.compare.apply.current.title"
                       : stale
-                        ? "Comparaison en cours de mise à jour"
+                        ? "ui.compare.apply.stale.title"
                         : r.adaptations.length > 0
-                          ? "Remplacer la structure du projet et adapter le raccord de jour"
-                          : "Remplacer la structure du projet"
-                  }
+                          ? "ui.compare.apply.adapt.title"
+                          : "ui.compare.apply.title",
+                  )}
                 >
-                  {r.current ? "Actuelle" : "Appliquer"}
+                  {t.t(r.current ? "ui.compare.apply.current" : "ui.compare.apply")}
                 </button>
               </td>
             ))}
           </tr>
         </tfoot>
       </table>
-      <p className="muted">
-        Grandeurs physiques calculées par le cœur sur la même épure (site, ligne de foulée,
-        découpage), raccord de jour adapté à chaque structure ; paramètres par défaut de chaque
-        structure (ceux du projet pour la structure en cours). Coût : barème d'atelier (bouton «
-        Atelier… » de la barre d'outils : taux horaire, temps unitaires, prix matière et finition,
-        gardés dans ce navigateur hors du projet) ; sans barème complet, aucun montant n'est
-        affiché. Prédimensionnement indicatif : ne remplace pas une note de calcul.
-      </p>
+      <p className="muted">{t.t("ui.compare.footnote")}</p>
     </div>
   );
 }

@@ -12,6 +12,7 @@ import {
 } from "@blondel/core";
 import { useRef } from "react";
 import { DEFAULT_LANDING_ANGLE, FALLBACK_TREADS_PER_TURN } from "../lib/layoutKind.js";
+import { useT } from "../i18n/useT.js";
 import { formatDecimal, formatLength, parseDecimal } from "../lib/units.js";
 import { appStore, useApp, useModel } from "../store/appStore.js";
 import type { UpdateResult } from "../store/projectStore.js";
@@ -35,6 +36,7 @@ function AngleField(props: {
   hint?: string;
   onCommit: (v: number) => UpdateResult;
 }) {
+  const t = useT();
   return (
     <NumberField
       label={props.label}
@@ -44,13 +46,14 @@ function AngleField(props: {
       {...(props.min === undefined ? {} : { min: props.min })}
       {...(props.max === undefined ? {} : { max: props.max })}
       parse={parseDecimal}
-      format={formatDecimal}
+      format={(v) => formatDecimal(v, t.locale)}
       onCommit={props.onCommit}
     />
   );
 }
 
 export function HelicalEditor({ layout }: { layout: HelicalLayoutSpec }) {
+  const t = useT();
   const unit = useApp((s) => s.displayUnit);
   const { model } = useModel();
   const h = model?.layout.helical;
@@ -60,47 +63,51 @@ export function HelicalEditor({ layout }: { layout: HelicalLayoutSpec }) {
   const sweep = layout.sweep;
   return (
     <fieldset className="helical">
-      <legend>Hélicoïdal</legend>
+      <legend>{t.t("ui.label.layoutKind.helical")}</legend>
       <SelectField
-        label="Sens de rotation en montant"
+        label={t.t("ui.helical.direction.label")}
         value={layout.direction}
         options={[
-          { value: "left", label: "À gauche (sens trigonométrique)" },
-          { value: "right", label: "À droite (sens horaire)" },
+          { value: "left", label: t.t("ui.helical.direction.left") },
+          { value: "right", label: t.t("ui.helical.direction.right") },
         ]}
         onCommit={set(["direction"])}
       />
       <IntField
-        label="Rayon extérieur R_e"
-        hint="Bout des marches (face intérieure d'un limon extérieur)"
+        label={t.t("ui.helical.outerRadius.label")}
+        hint={t.t("ui.helical.outerRadius.hint")}
         value={layout.outerRadius}
         min={1}
         onCommit={set(["outerRadius"])}
       />
       <SelectField
-        label="Centre"
+        label={t.t("ui.helical.core.label")}
         value={core.kind}
         options={[
-          { value: "column", label: "Fût central (marches portées par le fût)" },
-          { value: "well", label: "Jour central" },
+          { value: "column", label: t.t("ui.helical.core.column") },
+          { value: "well", label: t.t("ui.helical.core.well") },
         ]}
         onCommit={(kind) => set(["core"])({ kind, radius: core.radius })}
       />
       <IntField
-        label={core.kind === "column" ? "Rayon du fût r_f" : "Rayon du jour r_j"}
+        label={t.t(
+          core.kind === "column" ? "ui.helical.coreRadius.column" : "ui.helical.coreRadius.well",
+        )}
         value={core.radius}
         min={1}
         onCommit={set(["core", "radius"])}
       />
       <p className="muted" aria-live="polite">
-        Emmarchement E = R_e − r : {formatLength(layout.outerRadius - core.radius, unit)}
+        {t.t("ui.helical.width", {
+          value: formatLength(layout.outerRadius - core.radius, unit, t.locale),
+        })}
       </p>
       <SelectField
-        label="Rotation"
+        label={t.t("ui.helical.sweep.label")}
         value={sweep.mode}
         options={[
-          { value: "treadsPerTurn", label: "Nombre de marches par tour" },
-          { value: "angle", label: "Angle total des marches" },
+          { value: "treadsPerTurn", label: t.t("ui.helical.sweep.treadsPerTurn") },
+          { value: "angle", label: t.t("ui.helical.sweep.angle") },
         ]}
         onCommit={(mode) => {
           if (mode === sweep.mode) return { ok: true };
@@ -120,40 +127,44 @@ export function HelicalEditor({ layout }: { layout: HelicalLayoutSpec }) {
       />
       {sweep.mode === "treadsPerTurn" ? (
         <IntField
-          label="Marches par tour N"
+          label={t.t("ui.helical.treadsPerTurn.label")}
           unit=""
           value={sweep.count}
           min={HELICAL_TREADS_PER_TURN_MIN}
           max={HELICAL_TREADS_PER_TURN_MAX}
           {...(h
             ? {
-                hint: `Angle par marche ${formatDecimal(Math.round(h.stepAngle * DEG * 10) / 10)}°`,
+                hint: t.t("ui.helical.treadsPerTurn.hint", {
+                  angle: formatDecimal(Math.round(h.stepAngle * DEG * 10) / 10, t.locale),
+                }),
               }
             : {})}
           onCommit={set(["sweep", "count"])}
         />
       ) : (
         <AngleField
-          label="Angle total (nez de départ → nez d'arrivée)"
+          label={t.t("ui.helical.totalAngle.label")}
           value={sweep.degrees}
           min={0}
           max={2160}
           {...(h
             ? {
-                hint: `${formatDecimal(Math.round(h.treadsPerTurn * 10) / 10)} marches par tour`,
+                hint: t.t("ui.helical.totalAngle.hint", {
+                  value: formatDecimal(Math.round(h.treadsPerTurn * 10) / 10, t.locale),
+                }),
               }
             : {})}
           onCommit={set(["sweep", "degrees"])}
         />
       )}
       <AngleField
-        label="Angle de départ"
-        hint="Ligne de nez de départ, depuis l'axe X (sens trigonométrique)"
+        label={t.t("ui.helical.startAngle.label")}
+        hint={t.t("ui.helical.startAngle.hint")}
         value={layout.startAngle}
         onCommit={set(["startAngle"])}
       />
       <CheckField
-        label="Palier d'arrivée en secteur"
+        label={t.t("ui.helical.landing.label")}
         checked={layout.landing !== undefined}
         onCommit={(checked) => {
           if (!checked) {
@@ -165,7 +176,7 @@ export function HelicalEditor({ layout }: { layout: HelicalLayoutSpec }) {
       />
       {layout.landing ? (
         <AngleField
-          label="Angle du palier"
+          label={t.t("ui.helical.landing.angle")}
           value={layout.landing.angle}
           min={0}
           max={359.9}

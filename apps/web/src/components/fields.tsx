@@ -4,7 +4,10 @@
  * saisissent en mm entiers (ADR-0003) ; la validation métier reste celle du schéma du cœur,
  * appliquée par le store (une valeur refusée affiche le message sans modifier le projet).
  */
+import { msg, textMessage, type Message, type Translator } from "@blondel/i18n";
 import { useEffect, useId, useState, type ReactNode } from "react";
+import { numberFormat } from "../i18n/locale.js";
+import { useT } from "../i18n/useT.js";
 import {
   decideDraft,
   parseIntMm,
@@ -67,8 +70,14 @@ function describedBy(
 }
 
 /** Message d'une saisie refusée dont la valeur précédente a été rétablie. */
-export function revertedNote(error: string): string {
-  return `Saisie refusée (${error.replace(/\.$/, "")}) : valeur précédente rétablie.`;
+export function revertedNote(error: Message, t: Translator): string {
+  return t.t("ui.common.input.reverted", { error: t.t(error).replace(/\.$/, "") });
+}
+
+/** Premier motif de refus du store (texte brut du schéma), ou « Valeur refusée. ». */
+function refusal(issues: readonly string[]): Message {
+  const first = issues[0];
+  return first === undefined ? msg("ui.common.input.refused") : textMessage(first);
 }
 
 export interface IntFieldProps extends IntFieldBounds {
@@ -107,16 +116,19 @@ export function NumberField({
   format = String,
 }: NumberFieldProps) {
   const id = useId();
+  const t = useT();
   const [draft, setDraft] = useState(format(value));
-  const [error, setError] = useState<string | null>(null);
-  const [note, setNote] = useState<string | null>(null);
+  const [error, setError] = useState<Message | null>(null);
+  /** Motif d'une saisie refusée puis rétablie (message transitoire). */
+  const [note, setNote] = useState<Message | null>(null);
   const [focused, setFocused] = useState(false);
 
-  // Valeur modifiée ailleurs (annuler, préréglage) : resynchroniser hors saisie.
+  // Valeur modifiée ailleurs (annuler, préréglage) ou langue changée (séparateur décimal) :
+  // resynchroniser hors saisie.
   useEffect(() => {
     if (!focused) setDraft(format(value));
-    // `format` : fonction de présentation, sans effet sur la resynchronisation.
-  }, [value, focused]);
+    // `format` : fonction de présentation recréée à chaque rendu ; la langue suffit.
+  }, [value, focused, t.locale]);
   // Nouvelle valeur du projet hors saisie : l'ancien message ne la concerne plus.
   useEffect(() => {
     if (!focused) {
@@ -137,7 +149,7 @@ export function NumberField({
    */
   const validate = (revert: boolean): void => {
     const d = decideDraft(draft, value, read);
-    let refused: string;
+    let refused: Message;
     if (d.kind === "commit") {
       const u = onCommit(d.value);
       endGroup();
@@ -146,7 +158,7 @@ export function NumberField({
         setNote(null);
         return;
       }
-      refused = u.issues[0] ?? "Valeur refusée.";
+      refused = refusal(u.issues);
     } else if (d.kind === "invalid") {
       refused = d.error;
     } else {
@@ -156,15 +168,17 @@ export function NumberField({
     if (revert) {
       setDraft(format(value));
       setError(null);
-      setNote(revertedNote(refused));
+      setNote(refused);
     } else {
       setError(refused);
       setNote(null);
     }
   };
+  const errorText = error ? t.t(error) : null;
+  const noteText = note ? revertedNote(note, t) : null;
 
   return (
-    <FieldShell id={id} label={label} hint={hint} error={error} note={note}>
+    <FieldShell id={id} label={label} hint={hint} error={errorText} note={noteText}>
       <span className="input-unit">
         <input
           id={id}
@@ -174,7 +188,7 @@ export function NumberField({
           value={draft}
           disabled={disabled}
           aria-invalid={error ? true : undefined}
-          aria-describedby={describedBy(id, hint, error, note)}
+          aria-describedby={describedBy(id, hint, errorText, noteText)}
           onFocus={() => setFocused(true)}
           onBlur={() => {
             validate(true);
@@ -235,7 +249,8 @@ export function AutoIntField(props: AutoIntFieldProps) {
   const { label, value, fallback, unit, hint, min, max, onCommit } = props;
   const autoAllowed = props.autoAllowed ?? true;
   const id = useId();
-  const [error, setError] = useState<string | null>(null);
+  const t = useT();
+  const [error, setError] = useState<Message | null>(null);
   const isAuto = value === "auto";
   return (
     <div className="auto-field">
@@ -248,11 +263,11 @@ export function AutoIntField(props: AutoIntFieldProps) {
           title={!autoAllowed ? props.autoHint : undefined}
           onChange={(e) => {
             const r = onCommit(e.target.checked ? "auto" : fallback);
-            setError(r.ok ? null : (r.issues[0] ?? "Valeur refusée."));
+            setError(r.ok ? null : refusal(r.issues));
             endGroup();
           }}
         />
-        <label htmlFor={id}>{label} : automatique</label>
+        <label htmlFor={id}>{t.t("ui.common.input.automatic", { label })}</label>
       </div>
       {isAuto ? null : (
         <IntField
@@ -267,7 +282,7 @@ export function AutoIntField(props: AutoIntFieldProps) {
       )}
       {error ? (
         <small className="field__error" role="alert">
-          {error}
+          {t.t(error)}
         </small>
       ) : null}
     </div>
@@ -290,16 +305,18 @@ export function SelectField<V extends string>({
   onCommit,
 }: SelectFieldProps<V>) {
   const id = useId();
-  const [error, setError] = useState<string | null>(null);
+  const t = useT();
+  const [error, setError] = useState<Message | null>(null);
+  const errorText = error ? t.t(error) : null;
   return (
-    <FieldShell id={id} label={label} hint={hint} error={error}>
+    <FieldShell id={id} label={label} hint={hint} error={errorText}>
       <select
         id={id}
         value={value}
-        aria-describedby={describedBy(id, hint, error)}
+        aria-describedby={describedBy(id, hint, errorText)}
         onChange={(e) => {
           const r = onCommit(e.target.value as V);
-          setError(r.ok ? null : (r.issues[0] ?? "Valeur refusée."));
+          setError(r.ok ? null : refusal(r.issues));
           endGroup();
         }}
       >
@@ -348,8 +365,10 @@ export interface TextFieldProps {
 
 export function TextField({ label, value, type = "text", hint, onCommit }: TextFieldProps) {
   const id = useId();
-  const [error, setError] = useState<string | null>(null);
-  const [note, setNote] = useState<string | null>(null);
+  const t = useT();
+  const [error, setError] = useState<Message | null>(null);
+  /** Motif d'un texte refusé puis rétabli (message transitoire). */
+  const [note, setNote] = useState<Message | null>(null);
   const [draft, setDraft] = useState(value);
   const [focused, setFocused] = useState(false);
   useEffect(() => {
@@ -377,25 +396,27 @@ export function TextField({ label, value, type = "text", hint, onCommit }: TextF
       setNote(null);
       return;
     }
-    const refused = r.issues[0] ?? "Valeur refusée.";
+    const refused = refusal(r.issues);
     if (revert) {
       setError(null);
-      setNote(revertedNote(refused));
+      setNote(refused);
     } else {
       setError(refused);
       setNote(null);
     }
   };
+  const errorText = error ? t.t(error) : null;
+  const noteText = note ? revertedNote(note, t) : null;
   // Texte : appliqué à la validation (Entrée, perte de focus) ; date : choix discret, appliqué
   // tout de suite.
   return (
-    <FieldShell id={id} label={label} hint={hint} error={error} note={note}>
+    <FieldShell id={id} label={label} hint={hint} error={errorText} note={noteText}>
       <input
         id={id}
         type={type}
         value={draft}
         aria-invalid={error ? true : undefined}
-        aria-describedby={describedBy(id, hint, error, note)}
+        aria-describedby={describedBy(id, hint, errorText, noteText)}
         onFocus={() => setFocused(true)}
         onBlur={() => {
           commit(draft, true);
@@ -428,7 +449,7 @@ export interface RangeFieldProps {
   /** Unité affichée après la valeur (ex. « ° », « girons »). */
   readonly unit?: string;
   readonly hint?: string;
-  /** Mise en forme de la valeur affichée (défaut : décimale à la française). */
+  /** Mise en forme de la valeur affichée (défaut : décimale dans la langue d'affichage). */
   readonly format?: (value: number) => string;
   /**
    * Applique la valeur ; appelé à chaque déplacement du curseur avec une clé de regroupement
@@ -441,7 +462,7 @@ export interface RangeFieldProps {
   readonly isDefault?: boolean;
 }
 
-const rangeFmt = new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 2 });
+const RANGE_FORMAT: Intl.NumberFormatOptions = { maximumFractionDigits: 2 };
 
 /**
  * Curseur borné (`input type=range`, flèches du clavier comprises) avec la valeur affichée. Les
@@ -456,17 +477,20 @@ export function RangeField({
   step,
   unit = "",
   hint,
-  format = (v) => rangeFmt.format(v),
+  format,
   onChange,
   onReset,
   isDefault = false,
 }: RangeFieldProps) {
   const id = useId();
-  const [error, setError] = useState<string | null>(null);
+  const t = useT();
+  const [error, setError] = useState<Message | null>(null);
   useEffect(() => setError(null), [value]);
-  const text = `${format(value)}${unit ? ` ${unit}` : ""}`;
+  const shown = format ? format(value) : numberFormat(t.locale, RANGE_FORMAT).format(value);
+  const text = `${shown}${unit ? ` ${unit}` : ""}`;
+  const errorText = error ? t.t(error) : null;
   return (
-    <FieldShell id={id} label={label} hint={hint} error={error}>
+    <FieldShell id={id} label={label} hint={hint} error={errorText}>
       <span className="range-field">
         <input
           id={id}
@@ -477,12 +501,12 @@ export function RangeField({
           value={value}
           disabled={!(max > min)}
           aria-valuetext={text}
-          aria-describedby={describedBy(id, hint, error)}
+          aria-describedby={describedBy(id, hint, errorText)}
           onChange={(e) => {
             const v = Number(e.target.value);
             if (!Number.isFinite(v)) return;
             const r = onChange(v, `range:${id}`);
-            setError(r.ok ? null : (r.issues[0] ?? "Valeur refusée."));
+            setError(r.ok ? null : refusal(r.issues));
           }}
           onPointerUp={endGroup}
           onKeyUp={endGroup}
@@ -490,20 +514,20 @@ export function RangeField({
         />
         <output htmlFor={id} className="range-field__value">
           {text}
-          {isDefault ? <span className="muted"> (défaut)</span> : null}
+          {isDefault ? <span className="muted"> {t.t("ui.common.input.default")}</span> : null}
         </output>
         {onReset && !isDefault ? (
           <button
             type="button"
             className="range-field__reset"
-            aria-label={`${label} : valeur par défaut`}
+            aria-label={t.t("ui.common.input.resetLabel", { label })}
             onClick={() => {
               const r = onReset();
-              setError(r.ok ? null : (r.issues[0] ?? "Valeur refusée."));
+              setError(r.ok ? null : refusal(r.issues));
               endGroup();
             }}
           >
-            Défaut
+            {t.t("ui.common.input.resetButton")}
           </button>
         ) : null}
       </span>

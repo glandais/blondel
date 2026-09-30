@@ -16,9 +16,11 @@ import {
   type Project,
   type UnderlayEntity,
 } from "@blondel/core";
+import { MessageError, errorMessage, isMessageError, msg, type Message } from "@blondel/i18n";
 import { useEffect, useId, useRef, useState, type ChangeEvent } from "react";
 import { useStore } from "zustand";
-import { tr } from "../i18n/fr.js";
+import { formatNumber } from "../i18n/locale.js";
+import { useT } from "../i18n/useT.js";
 import { appStore, useApp } from "../store/appStore.js";
 import { importQueue, takeUnderlayImport } from "../store/importQueue.js";
 import {
@@ -28,7 +30,10 @@ import {
   UNIT_CHOICES,
 } from "../views/planSiteGeometry.js";
 
-type Notice = { readonly kind: "info" | "error"; readonly text: string } | null;
+/** Texte d'un avis : message traduit à l'affichage, ou texte brut (refus de validation du store). */
+type NoticeText = Message | string;
+
+type Notice = { readonly kind: "info" | "error"; readonly text: NoticeText } | null;
 
 /** Lecture DXF en attente d'une échelle (unité absente de l'en-tête). */
 interface PendingDxf {
@@ -36,17 +41,17 @@ interface PendingDxf {
   readonly text: string;
 }
 
-function commit(recipe: (p: Project) => Project): string | null {
+function commit(recipe: (p: Project) => Project): NoticeText | null {
   const r = appStore.getState().update(recipe);
   appStore.getState().endGroup();
-  return r.ok ? null : (r.issues[0] ?? "Modification refusée.");
+  return r.ok ? null : (r.issues[0] ?? msg("ui.underlay.refused"));
 }
 
 function readFile(file: File, as: "text" | "dataUrl"): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => resolve(String(reader.result));
-    reader.onerror = () => reject(reader.error ?? new Error("lecture impossible"));
+    reader.onerror = () => reject(reader.error ?? new MessageError(msg("ui.underlay.error.read")));
     if (as === "text") reader.readAsText(file);
     else reader.readAsDataURL(file);
   });
@@ -56,7 +61,7 @@ function decodeImage(src: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const img = new Image();
     img.onload = () => resolve(img);
-    img.onerror = () => reject(new Error("image illisible"));
+    img.onerror = () => reject(new MessageError(msg("ui.underlay.error.image")));
     img.src = src;
   });
 }
@@ -88,7 +93,7 @@ async function prepareImage(
     canvas.width = w;
     canvas.height = h;
     const ctx = canvas.getContext("2d");
-    if (!ctx) throw new Error("réduction de l'image impossible (canvas indisponible)");
+    if (!ctx) throw new MessageError(msg("ui.underlay.error.canvas"));
     ctx.fillStyle = "#ffffff";
     ctx.fillRect(0, 0, w, h);
     ctx.drawImage(img, 0, 0, w, h);
@@ -96,7 +101,7 @@ async function prepareImage(
     if (dataUrl.length <= UNDERLAY_IMAGE_MAX_CHARS) return { dataUrl, w, h, reduced: true };
     scale *= 0.75;
   }
-  throw new Error("image trop lourde, même réduite");
+  throw new MessageError(msg("ui.underlay.error.tooLarge"));
 }
 
 export function UnderlayImport({
@@ -106,6 +111,7 @@ export function UnderlayImport({
   readonly stairBounds: BBox | null;
 }) {
   const id = useId();
+  const t = useT();
   const underlay = useApp((s) => s.project.site.underlay);
   const dxfInput = useRef<HTMLInputElement>(null);
   const imageInput = useRef<HTMLInputElement>(null);
@@ -121,18 +127,12 @@ export function UnderlayImport({
       const r = readDxfUnderlay(text, unitScale !== undefined ? { unitScale } : {});
       if (r.needsScale) {
         setPending({ name, text });
-        setNotice({
-          kind: "info",
-          text: `« ${name} » n'indique pas son unité ($INSUNITS) : préciser l'échelle du dessin.`,
-        });
+        setNotice({ kind: "info", text: msg("ui.underlay.dxf.needsScale", { name }) });
         return;
       }
       setPending(null);
       if (r.entities.length === 0) {
-        setNotice({
-          kind: "error",
-          text: `« ${name} » : aucune ligne, polyligne, arc, cercle, ellipse ou spline lisible.`,
-        });
+        setNotice({ kind: "error", text: msg("ui.underlay.dxf.empty", { name }) });
         return;
       }
       const dxf: DxfUnderlay = {
@@ -144,23 +144,32 @@ export function UnderlayImport({
       const error = commit((p) => withDxfUnderlay(p, dxf));
       // Entités ignorées détaillées par famille (textes, cotes, hachures…), lues dans le cœur.
       const skipped = describeSkipped(r.skipped);
+      let summary = msg("ui.underlay.dxf.imported", {
+        name,
+        entities: msg("ui.underlay.dxf.entities", { count: r.entities.length }),
+        scale: r.unitName
+          ? msg("ui.underlay.dxf.unit", { unit: r.unitName })
+          : msg("ui.underlay.dxf.scale", { scale: String(r.unitScale) }),
+      });
+      if (skipped !== null) {
+        summary = msg("ui.underlay.dxf.detail", {
+          text: summary,
+          detail: msg("ui.underlay.dxf.skipped", { list: skipped }),
+        });
+      }
+      if (r.truncated) {
+        summary = msg("ui.underlay.dxf.detail", {
+          text: summary,
+          detail: msg("ui.underlay.dxf.truncated"),
+        });
+      }
       setNotice(
         error
           ? { kind: "error", text: error }
-          : {
-              kind: "info",
-              text:
-                `« ${name} » importé : ${r.entities.length} entités` +
-                (r.unitName
-                  ? ` (unité : ${tr(r.unitName)})`
-                  : ` (échelle ${r.unitScale} mm par unité)`) +
-                (skipped !== null ? ` ; ignorées : ${tr(skipped)}` : "") +
-                (r.truncated ? " ; plan tronqué (trop d'entités)" : "") +
-                ".",
-            },
+          : { kind: "info", text: msg("ui.underlay.dxf.sentence", { text: summary }) },
       );
     } catch (e) {
-      setNotice({ kind: "error", text: e instanceof Error ? e.message : String(e) });
+      setNotice({ kind: "error", text: errorMessage(e) });
     } finally {
       setBusy(false);
     }
@@ -170,7 +179,13 @@ export function UnderlayImport({
     try {
       await loadDxf(file.name, await readFile(file, "text"));
     } catch (err) {
-      setNotice({ kind: "error", text: `Lecture de « ${file.name} » impossible : ${String(err)}` });
+      setNotice({
+        kind: "error",
+        text: msg("ui.underlay.readFailed", {
+          name: file.name,
+          error: isMessageError(err) ? err.msg : String(err),
+        }),
+      });
     }
   };
 
@@ -214,13 +229,15 @@ export function UnderlayImport({
           ? { kind: "error", text: error }
           : {
               kind: "info",
-              text: `« ${file.name} » importée${reduced ? " (réduite)" : ""} : la calibrer avec l'outil « Calibrer » (deux points et une distance).`,
+              text: reduced
+                ? msg("ui.underlay.image.importedReduced", { name: file.name })
+                : msg("ui.underlay.image.imported", { name: file.name }),
             },
       );
     } catch (err) {
       setNotice({
         kind: "error",
-        text: `Image « ${file.name} » : ${err instanceof Error ? err.message : String(err)}`,
+        text: msg("ui.underlay.image.failed", { name: file.name, error: errorMessage(err) }),
       });
     } finally {
       setBusy(false);
@@ -243,20 +260,20 @@ export function UnderlayImport({
 
   return (
     <details className="plan-site__group" open>
-      <summary>Calque de fond</summary>
+      <summary>{t.t("ui.underlay.title")}</summary>
       <div className="button-row">
         <button type="button" disabled={busy} onClick={() => dxfInput.current?.click()}>
-          Importer un plan DXF…
+          {t.t("ui.underlay.importDxf")}
         </button>
         <button type="button" disabled={busy} onClick={() => imageInput.current?.click()}>
-          Importer une image…
+          {t.t("ui.underlay.importImage")}
         </button>
         <input
           ref={dxfInput}
           type="file"
           accept=".dxf,application/dxf,image/vnd.dxf"
           hidden
-          aria-label="Fichier DXF du plan"
+          aria-label={t.t("ui.underlay.dxfFile")}
           onChange={(e) => void onDxf(e)}
         />
         <input
@@ -264,24 +281,24 @@ export function UnderlayImport({
           type="file"
           accept="image/png,image/jpeg"
           hidden
-          aria-label="Image du plan"
+          aria-label={t.t("ui.underlay.imageFile")}
           onChange={(e) => void onImage(e)}
         />
       </div>
       {pending ? (
         <div className="plan-site__scale">
           <div className="field">
-            <label htmlFor={`${id}-scale`}>Millimètres par unité du dessin</label>
+            <label htmlFor={`${id}-scale`}>{t.t("ui.underlay.scale.label")}</label>
             <select
               id={`${id}-scale-choice`}
-              aria-label="Unité du dessin"
+              aria-label={t.t("ui.underlay.scale.unit")}
               value={UNIT_CHOICES.some((u) => String(u.mm) === scale) ? scale : ""}
               onChange={(e) => e.target.value && setScale(e.target.value)}
             >
-              <option value="">Autre…</option>
+              <option value="">{t.t("ui.underlay.scale.other")}</option>
               {UNIT_CHOICES.map((u) => (
                 <option key={u.mm} value={String(u.mm)}>
-                  {u.label}
+                  {t.t(u.key)}
                 </option>
               ))}
             </select>
@@ -301,10 +318,10 @@ export function UnderlayImport({
                 void loadDxf(pending.name, pending.text, Number(scale.replace(",", ".")))
               }
             >
-              Importer à cette échelle
+              {t.t("ui.underlay.scale.import")}
             </button>
             <button type="button" onClick={() => setPending(null)}>
-              Abandonner l'import
+              {t.t("ui.underlay.scale.cancel")}
             </button>
           </div>
         </div>
@@ -314,54 +331,65 @@ export function UnderlayImport({
           className={`notice ${notice.kind === "error" ? "notice--error" : "notice--info"}`}
           role={notice.kind === "error" ? "alert" : "status"}
         >
-          {notice.text}
+          {typeof notice.text === "string" ? notice.text : t.t(notice.text)}
         </p>
       ) : null}
       {underlay?.dxf ? (
         <fieldset className="grid-2">
           <legend>
-            Plan DXF « {underlay.dxf.name || "sans nom"} » ({underlay.dxf.entities.length} entités)
+            {t.t("ui.underlay.dxf.legend", {
+              name: underlay.dxf.name || t.t("ui.underlay.unnamed"),
+              count: underlay.dxf.entities.length,
+            })}
           </legend>
           <PlacementInput
-            label="Origine X (mm)"
+            label={t.t("ui.underlay.originX")}
             value={underlay.dxf.placement.origin.x}
-            onCommit={(t) => setPlacement("x", t)}
+            onCommit={(v) => setPlacement("x", v)}
           />
           <PlacementInput
-            label="Origine Y (mm)"
+            label={t.t("ui.underlay.originY")}
             value={underlay.dxf.placement.origin.y}
-            onCommit={(t) => setPlacement("y", t)}
+            onCommit={(v) => setPlacement("y", v)}
           />
           <PlacementInput
-            label="Rotation (°)"
+            label={t.t("ui.underlay.rotation")}
             value={underlay.dxf.placement.rotation}
-            onCommit={(t) => setPlacement("rotation", t)}
+            onCommit={(v) => setPlacement("rotation", v)}
           />
           <div className="button-row">
             <button type="button" onClick={() => commit((p) => withDxfUnderlay(p, undefined))}>
-              Retirer le plan DXF
+              {t.t("ui.underlay.removeDxf")}
             </button>
           </div>
         </fieldset>
       ) : null}
       {underlay?.image ? (
         <fieldset>
-          <legend>Image « {underlay.image.name || "sans nom"} »</legend>
+          <legend>
+            {t.t("ui.underlay.image.legend", {
+              name: underlay.image.name || t.t("ui.underlay.unnamed"),
+            })}
+          </legend>
           <p className="muted">
             {underlay.image.calibration
-              ? `Calibrée : ${underlay.image.mmPerPx.toLocaleString("fr-FR", { maximumFractionDigits: 3 })} mm par pixel.`
-              : "Non calibrée : outil « Calibrer », deux points puis la distance réelle."}
+              ? t.t("ui.underlay.image.calibrated", {
+                  value: formatNumber(t.locale, underlay.image.mmPerPx, {
+                    maximumFractionDigits: 3,
+                  }),
+                })
+              : t.t("ui.underlay.image.notCalibrated")}
           </p>
           <div className="button-row">
             <button type="button" onClick={() => commit((p) => withImageUnderlay(p, undefined))}>
-              Retirer l'image
+              {t.t("ui.underlay.removeImage")}
             </button>
           </div>
         </fieldset>
       ) : null}
       {underlay ? (
         <div className="field">
-          <label htmlFor={`${id}-opacity`}>Opacité du calque</label>
+          <label htmlFor={`${id}-opacity`}>{t.t("ui.underlay.opacity")}</label>
           <select
             id={`${id}-opacity`}
             value={String(Math.round(opacity * 100))}
@@ -369,12 +397,12 @@ export function UnderlayImport({
           >
             {[25, 50, 75, 100].map((v) => (
               <option key={v} value={String(v)}>
-                {v} %
+                {t.t("ui.underlay.percent", { value: String(v) })}
               </option>
             ))}
             {[25, 50, 75, 100].includes(Math.round(opacity * 100)) ? null : (
               <option value={String(Math.round(opacity * 100))}>
-                {Math.round(opacity * 100)} %
+                {t.t("ui.underlay.percent", { value: String(Math.round(opacity * 100)) })}
               </option>
             )}
           </select>

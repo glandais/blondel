@@ -14,15 +14,16 @@ import {
   type Model,
   type Project,
 } from "@blondel/core";
+import type { MessageKey, Translator } from "@blondel/i18n";
 import { enumOptions, fieldSchema, numberConstraints } from "./structureForm.js";
 
 /** Libellés des méthodes (B §3). */
-export const BALANCING_METHOD_LABELS: Readonly<Record<BalancingMethod, string>> = {
-  M3: "M3 — développement du limon",
-  M1: "M1 — progression arithmétique",
-  M2: "M2 — herse (angle α)",
-  M6: "M6 — rotation paramétrée (λ, p)",
-  M0: "M0 — sans balancement",
+export const BALANCING_METHOD_LABELS: Readonly<Record<BalancingMethod, MessageKey>> = {
+  M3: "ui.label.balancing.M3",
+  M1: "ui.label.balancing.M1",
+  M2: "ui.label.balancing.M2",
+  M6: "ui.label.balancing.M6",
+  M0: "ui.label.balancing.M0",
 };
 
 /** Ordre d'affichage : la méthode par défaut du cœur en tête, puis les autres du schéma. */
@@ -32,7 +33,7 @@ const DISPLAY_ORDER: readonly BalancingMethod[] = ["M3", "M1", "M2", "M6", "M0"]
  * Options du choix de méthode : toutes celles du schéma du cœur (une méthode ajoutée au
  * schéma sans libellé apparaît sous son identifiant).
  */
-export function balancingMethodOptions(): readonly {
+export function balancingMethodOptions(t: Translator): readonly {
   readonly value: BalancingMethod;
   readonly label: string;
 }[] {
@@ -41,7 +42,11 @@ export function balancingMethodOptions(): readonly {
     ...DISPLAY_ORDER.filter((m) => schema.includes(m)),
     ...schema.filter((m) => !DISPLAY_ORDER.includes(m)),
   ];
-  return ordered.map((m) => ({ value: m, label: BALANCING_METHOD_LABELS[m] ?? m }));
+  const key = (m: BalancingMethod): string => {
+    const k = (BALANCING_METHOD_LABELS as Readonly<Record<string, MessageKey>>)[m];
+    return k === undefined ? m : t.t(k);
+  };
+  return ordered.map((m) => ({ value: m, label: key(m) }));
 }
 
 /** Curseur borné : bornes incluses, pas, valeur affichée et origine de la borne haute. */

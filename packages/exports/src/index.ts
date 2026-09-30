@@ -11,14 +11,7 @@
  * l'interface (`await import("@blondel/exports/pdf")`) : le réexporter ici ferait entrer
  * jsPDF dans le paquet principal de l'application et rendrait l'import dynamique inopérant.
  */
-export {
-  formatFr,
-  formatIn,
-  formatNum,
-  escapeXml,
-  NARROW_NBSP,
-  type FrNumberOptions,
-} from "./format.js";
+export { formatIn, formatNum, escapeXml, NARROW_NBSP, type FrNumberOptions } from "./format.js";
 export {
   MATERIAL_KEYS,
   compareMarks,
@@ -91,15 +84,8 @@ export {
   DEFAULT_PLAN_DXF_VERSION,
   createDxfWriter,
 } from "./dxf/create.js";
+export { exportPlanDxf, planLayers, type PlanDxfOptions, type PlanLayerId } from "./dxf/plan.js";
 export {
-  PLAN_LAYERS,
-  exportPlanDxf,
-  planLayers,
-  type PlanDxfOptions,
-  type PlanLayerId,
-} from "./dxf/plan.js";
-export {
-  PART_LAYERS,
   partLayers,
   engravingPoint,
   flatEngravingPoint,
@@ -126,8 +112,6 @@ export {
 export { crc32, createZip, type ZipEntry, type ZipOptions } from "./zip.js";
 export {
   CSV_BOM,
-  CUT_LIST_HEADER,
-  MASS_DENSITY_NOTE,
   QUANTITY_MASS,
   QUANTITY_MASS_KG,
   QUANTITY_VOLUME,
@@ -184,7 +168,6 @@ export {
 export {
   TEMPLATE_FAMILIES,
   TEMPLATE_FAMILY_KEYS,
-  TEMPLATE_FAMILY_LABELS,
   templateFamily,
   templateFamilyLabel,
   type TemplateFamily,

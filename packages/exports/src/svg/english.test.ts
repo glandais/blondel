@@ -9,9 +9,9 @@ import { fileURLToPath } from "node:url";
 import { buildModel, parseProjectText, type Model } from "@blondel/core";
 import { translatorFor } from "@blondel/i18n";
 import { describe, expect, it } from "vitest";
-import { partLayers, PART_LAYERS, partLineLayer, exportPartDxf } from "../dxf/part.js";
+import { partLayers, partLineLayer, exportPartDxf } from "../dxf/part.js";
 import { exportPartsDxf } from "../dxf/parts.js";
-import { exportPlanDxf, planLayers, PLAN_LAYERS } from "../dxf/plan.js";
+import { exportPlanDxf, planLayers } from "../dxf/plan.js";
 import { sanitizeLayerName } from "../dxf/r12.js";
 import { FRENCH_ACCENTS, residualFrench } from "../testing/french.js";
 import { findAll, parseXml } from "../testing/xml.js";
@@ -138,7 +138,7 @@ describe("dessins en anglais (locale « en »)", () => {
 
 describe("calques DXF traduits", () => {
   it("français : noms historiques inchangés", () => {
-    expect(Object.values(PLAN_LAYERS).map((l) => l.name)).toEqual([
+    expect(Object.values(planLayers()).map((l) => l.name)).toEqual([
       "CONTOUR",
       "MARCHES",
       "NEZ",
@@ -147,7 +147,7 @@ describe("calques DXF traduits", () => {
       "COTES",
       "TEXTE",
     ]);
-    expect(Object.values(PART_LAYERS).map((l) => l.name)).toEqual([
+    expect(Object.values(partLayers()).map((l) => l.name)).toEqual([
       "CONTOUR",
       "PLI",
       "TRACAGE",
@@ -158,14 +158,14 @@ describe("calques DXF traduits", () => {
       "TEXTE",
       "INFO",
     ]);
-    expect(planLayers()).toBe(PLAN_LAYERS);
+    expect(planLayers()).toBe(planLayers(translatorFor("fr")));
   });
 
   it("anglais : noms traduits, assainis, uniques, couleurs et types de ligne conservés", () => {
     const en = translatorFor("en");
     for (const [fr, tr] of [
-      [PLAN_LAYERS, planLayers(en)],
-      [PART_LAYERS, partLayers(en)],
+      [planLayers(), planLayers(en)],
+      [partLayers(), partLayers(en)],
     ] as const) {
       const names = Object.values(tr).map((l) => l.name);
       expect(new Set(names).size).toBe(names.length);

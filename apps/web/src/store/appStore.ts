@@ -7,6 +7,12 @@
 import type { Project } from "@blondel/core";
 import { useEffect } from "react";
 import { useStore } from "zustand";
+import {
+  applyDocumentLang,
+  initialLocale,
+  navigatorLanguage,
+  storeLocale,
+} from "../i18n/locale.js";
 import { availableStructures } from "../lib/optionalApi.js";
 import { variantsFor } from "../lib/variants.js";
 import { withWorkshopRates } from "../lib/workshopRates.js";
@@ -28,7 +34,22 @@ export const firstVisit: boolean = (() => {
   }
 })();
 
-export const appStore = createProjectStore({ storage: browserStorage() });
+/**
+ * Langue au premier lancement : celle du navigateur (`en*` → anglais, sinon français), puis le
+ * choix mémorisé (`blondel.lang`, ADR-0007).
+ */
+const startLocale = initialLocale(browserStorage(), navigatorLanguage());
+
+export const appStore = createProjectStore({ storage: browserStorage(), locale: startLocale });
+
+// Langue : `<html lang>` et mémorisation suivent le store. Le `Model` est neutre : aucun calcul
+// n'est relancé (seul l'affichage est retraduit).
+applyDocumentLang(startLocale);
+appStore.subscribe((s, prev) => {
+  if (s.locale === prev.locale) return;
+  applyDocumentLang(s.locale);
+  storeLocale(browserStorage(), s.locale);
+});
 
 // L'autosauvegarde est différée : l'écrire avant que la page soit masquée ou fermée, sinon la
 // dernière saisie (moins de 500 ms avant la fermeture) serait perdue.

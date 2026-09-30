@@ -3,7 +3,9 @@
  * débit CSV, dossiers PDF (complet A4 / A3, sans gabarits), fiche de pose PDF, DXF des pièces,
  * modèle 3D glTF (.glb, calculé dans le worker) et DXF de la pièce sélectionnée. Menu déroulant non modal ; téléchargement direct (Blob + lien).
  */
+import { errorMessage, msg, type Message } from "@blondel/i18n";
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
+import { useT } from "../i18n/useT.js";
 import { downloadFile, downloadFiles } from "../lib/download.js";
 import {
   DEFAULT_EXPORT_DEPS,
@@ -21,15 +23,16 @@ import { appStore, modelService, useApp, useModel } from "../store/appStore.js";
 /** Dossier PDF mis en page dans le worker de calcul (le fil principal reste disponible). */
 const EXPORT_DEPS: ExportDeps = {
   ...DEFAULT_EXPORT_DEPS,
-  renderPdf: (project, _model, options) => modelService.exportPdf(project, options),
-  renderGlb: (project) => modelService.exportGlb(project),
+  renderPdf: (project, _model, options, locale) => modelService.exportPdf(project, options, locale),
+  renderGlb: (project, _model, locale) => modelService.exportGlb(project, locale),
 };
 
-function notify(kind: "info" | "error", text: string): void {
-  appStore.setState({ notice: { kind, text } });
+function notify(kind: "info" | "error", message: Message): void {
+  appStore.setState({ notice: { kind, msg: message } });
 }
 
 export function ExportMenu() {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const project = useApp((s) => s.project);
@@ -58,14 +61,16 @@ export function ExportMenu() {
     setOpen(false);
     setBusy(true);
     try {
-      const files = await buildExport(id, project, model, EXPORT_DEPS);
-      if (files.length === 0) notify("info", "Aucun fichier à exporter.");
+      const files = await buildExport(id, project, model, EXPORT_DEPS, t.locale);
+      if (files.length === 0) notify("info", msg("ui.export.noFiles"));
       else {
         downloadFiles(files);
-        if (files.length > 1) notify("info", `${files.length} fichiers téléchargés.`);
+        if (files.length > 1) {
+          notify("info", msg("ui.export.downloaded", { count: files.length }));
+        }
       }
     } catch (e) {
-      notify("error", `Export impossible : ${e instanceof Error ? e.message : String(e)}`);
+      notify("error", msg("ui.export.failed", { error: errorMessage(e) }));
     } finally {
       setBusy(false);
     }
@@ -75,9 +80,9 @@ export function ExportMenu() {
     setOpen(false);
     if (!part) return;
     try {
-      downloadFile(partDxfFile(part, fileStem(project.name)));
+      downloadFile(partDxfFile(part, fileStem(project.name), t.locale));
     } catch (e) {
-      notify("error", `Export impossible : ${e instanceof Error ? e.message : String(e)}`);
+      notify("error", msg("ui.export.failed", { error: errorMessage(e) }));
     }
   };
 
@@ -109,25 +114,28 @@ export function ExportMenu() {
         disabled={busy}
         onClick={() => setOpen((o) => !o)}
       >
-        {busy ? "Export…" : "Exporter ▾"}
+        {busy ? t.t("ui.export.busy") : t.t("ui.export.menu")}
       </button>
       {open ? (
-        <div id={menuId} role="menu" className="menu__list" aria-label="Exporter">
+        <div id={menuId} role="menu" className="menu__list" aria-label={t.t("ui.export.label")}>
           {EXPORT_ENTRIES.map((entry) => {
-            const a =
+            const a = exportAvailability(entry.id, model);
+            const reason =
               computing && entry.id !== "project-json"
-                ? ({ ok: false, reason: "Calcul du modèle en cours…" } as const)
-                : exportAvailability(entry.id, model);
+                ? t.t("ui.export.computing")
+                : a.ok
+                  ? undefined
+                  : t.t(a.reason);
             return (
               <button
                 key={entry.id}
                 type="button"
                 role="menuitem"
-                disabled={!a.ok}
-                title={a.ok ? undefined : a.reason}
+                disabled={reason !== undefined}
+                title={reason}
                 onClick={() => void run(entry.id)}
               >
-                {entry.label}
+                {t.t(entry.label)}
               </button>
             );
           })}
@@ -135,14 +143,12 @@ export function ExportMenu() {
             type="button"
             role="menuitem"
             disabled={!part?.flat}
-            title={
-              part?.flat
-                ? undefined
-                : "Sélectionner une pièce à développé (vue 3D, Développés ou Nomenclature)."
-            }
+            title={part?.flat ? undefined : t.t("ui.export.selectPart")}
             onClick={exportSelectedPart}
           >
-            DXF de la pièce sélectionnée{part?.flat ? ` (${part.mark})` : ""}
+            {part?.flat
+              ? t.t("ui.export.selectedPartMark", { mark: part.mark })
+              : t.t("ui.export.selectedPart")}
           </button>
         </div>
       ) : null}

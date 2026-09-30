@@ -16,13 +16,13 @@ import {
   type Project,
   type Turn,
 } from "@blondel/core";
-import { tr } from "../i18n/fr.js";
+import { msg, type Message, type MessageKey } from "@blondel/i18n";
 
 export type LayoutKind = "flights" | "helical";
 
-export const LAYOUT_KIND_LABELS: Readonly<Record<LayoutKind, string>> = {
-  flights: "À volées (droit, tournants)",
-  helical: "Hélicoïdal",
+export const LAYOUT_KIND_LABELS: Readonly<Record<LayoutKind, MessageKey>> = {
+  flights: "ui.label.layoutKind.flights",
+  helical: "ui.label.layoutKind.helical",
 };
 
 /** Contexte de forme de rules.yaml activé pour un hélicoïdal (non déduit par le moteur). */
@@ -73,7 +73,7 @@ export const FALLBACK_TREADS_PER_TURN = 12;
 export interface LayoutSwitch {
   readonly project: Project;
   /** Remarque à afficher (valeur provisoire retenue), absente sinon. */
-  readonly note?: string;
+  readonly note?: Message;
 }
 
 /**
@@ -94,7 +94,7 @@ function basePreset(project: Project, kind: LayoutKind): LayoutSwitch {
   const helical = createHelicalProjectWithFallback({ ...options, patch: { stair: kept } });
   return helical.note === undefined
     ? { project: helical.project }
-    : { project: helical.project, note: tr(helical.note) };
+    : { project: helical.project, note: helical.note };
 }
 
 /**
@@ -146,30 +146,45 @@ export function hasOppositeTurns(turns: readonly Pick<Turn, "direction">[]): boo
   return turns.some((t, i) => i > 0 && t.direction !== turns[i - 1]!.direction);
 }
 
-const dirLabel = (d: Turn["direction"]): string => (d === "left" ? "à gauche" : "à droite");
+const dirLabel = (d: Turn["direction"]): Message =>
+  msg(d === "left" ? "ui.lib.typology.left" : "ui.lib.typology.right");
 
 /**
  * Typologie lisible d'un tracé à volées, déduite des tournants saisis (présentation seulement :
  * le cœur construit le tracé à partir des volées et des tournants, quel que soit ce libellé).
+ * Traduite à l'affichage.
  */
-export function flightsTypologyLabel(turns: readonly Pick<Turn, "direction" | "mode">[]): string {
-  if (turns.length === 0) return "Escalier droit";
+export function flightsTypologyLabel(turns: readonly Pick<Turn, "direction" | "mode">[]): Message {
+  if (turns.length === 0) return msg("assistant.typology.straight");
   const landing = turns.some((t) => t.mode === "landing");
-  const withLanding = landing
-    ? turns.every((t) => t.mode === "landing")
-      ? ", paliers"
-      : ", palier"
+  const withLanding: Message | string = landing
+    ? msg(
+        turns.every((t) => t.mode === "landing")
+          ? "ui.lib.typology.suffix.landings"
+          : "ui.lib.typology.suffix.landing",
+      )
     : "";
   if (turns.length === 1) {
-    return `Quart tournant ${dirLabel(turns[0]!.direction)}${landing ? " avec palier" : ""}`;
+    const direction = dirLabel(turns[0]!.direction);
+    return landing
+      ? msg("ui.lib.typology.quarterLanding", { direction })
+      : msg("ui.lib.typology.quarter", { direction });
   }
   if (turns.length === 2) {
     const [a, b] = turns as [Pick<Turn, "direction">, Pick<Turn, "direction">];
     return a.direction === b.direction
-      ? `Deux quarts tournants ${dirLabel(a.direction)} (U)${withLanding}`
-      : `Deux quarts tournants opposés (S / Z : ${dirLabel(a.direction)} puis ${dirLabel(b.direction)})${withLanding}`;
+      ? msg("ui.lib.typology.twoSame", { direction: dirLabel(a.direction), landing: withLanding })
+      : msg("ui.lib.typology.twoOpposite", {
+          first: dirLabel(a.direction),
+          second: dirLabel(b.direction),
+          landing: withLanding,
+        });
   }
-  return `${turns.length} tournants${hasOppositeTurns(turns) ? ", sens alternés" : ""}${withLanding}`;
+  return msg("ui.lib.typology.several", {
+    n: String(turns.length),
+    alternate: hasOppositeTurns(turns) ? msg("ui.lib.typology.suffix.alternate") : "",
+    landing: withLanding,
+  });
 }
 
 /**

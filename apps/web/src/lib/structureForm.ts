@@ -8,6 +8,8 @@
  * ceux du plugin.
  */
 import type { Model, Project, StructureContext, StructureKind } from "@blondel/core";
+import { msg, type Message } from "@blondel/i18n";
+import { SCHEMA_PARSE_OPTIONS, schemaIssues } from "./schemaIssues.js";
 
 export type ParamPath = readonly string[];
 
@@ -317,16 +319,13 @@ export function safeDefaults(kind: StructureKind, ctx: StructureContext | undefi
 }
 
 /**
- * Valide des paramètres par le schéma du plugin : `null` si valides, sinon le premier message
- * (chemin compris).
+ * Valide des paramètres par le schéma du plugin : `null` si valides, sinon le premier problème
+ * (chemin compris), traduit à l'affichage.
  */
-export function validateParams(kind: StructureKind, params: unknown): string | null {
-  const r = kind.paramsSchema.safeParse(params);
+export function validateParams(kind: StructureKind, params: unknown): Message | null {
+  const r = kind.paramsSchema.safeParse(params, SCHEMA_PARSE_OPTIONS);
   if (r.success) return null;
-  const issue = r.error.issues[0];
-  if (!issue) return "Paramètres refusés par le plugin.";
-  const where = issue.path.map(String).join(".");
-  return where ? `${where} : ${issue.message}` : issue.message;
+  return schemaIssues(r.error)[0] ?? msg("ui.lib.structure.refused");
 }
 
 /**

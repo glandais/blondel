@@ -31,15 +31,15 @@ describe("parseIntMm", () => {
 describe("formatLength", () => {
   it("affiche en mm au dixième et en cm au centième", () => {
     const nbsp = /[\s  ]/g;
-    expect(formatLength(180.6667, "mm").replace(nbsp, " ")).toBe("180,7 mm");
-    expect(formatLength(180.6667, "cm").replace(nbsp, " ")).toBe("18,07 cm");
-    expect(formatLength(Number.NaN, "mm")).toBe("–");
-    expect(formatLength(undefined, "cm")).toBe("–");
+    expect(formatLength(180.6667, "mm", "fr").replace(nbsp, " ")).toBe("180,7 mm");
+    expect(formatLength(180.6667, "cm", "fr").replace(nbsp, " ")).toBe("18,07 cm");
+    expect(formatLength(Number.NaN, "mm", "fr")).toBe("–");
+    expect(formatLength(undefined, "cm", "fr")).toBe("–");
   });
 
   it("formatMeasure n'applique l'unité d'affichage qu'aux mm", () => {
-    expect(formatMeasure(0.5, "", "cm")).toBe("0,5");
-    expect(formatMeasure(40, "°", "cm")).toBe("40 °");
-    expect(formatMeasure(100, "mm", "cm").replace(/\s/g, " ")).toBe("10 cm");
+    expect(formatMeasure(0.5, "", "cm", "fr")).toBe("0,5");
+    expect(formatMeasure(40, "°", "cm", "fr")).toBe("40 °");
+    expect(formatMeasure(100, "mm", "cm", "fr").replace(/\s/g, " ")).toBe("10 cm");
   });
 });

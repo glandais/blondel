@@ -7,6 +7,8 @@
  * cœur), reprise dans le dossier PDF ; la liste « Surcharges » les reprend toutes.
  */
 import {
+  CONFIDENCE_LABEL_KEYS,
+  NATURE_LABEL_KEYS,
   RULE_OVERRIDE_SEVERITIES,
   ruleDescription,
   ruleOverrideOf,
@@ -23,25 +25,39 @@ import {
   modelNotes,
   sameLocation,
 } from "../lib/compliance.js";
-import { tr } from "../i18n/fr.js";
+import { msg, type Message, type MessageKey, type Translator } from "@blondel/i18n";
+import { useT } from "../i18n/useT.js";
 import { formatMeasure, type DisplayUnit } from "../lib/units.js";
 import { appStore, useApp, useModel } from "../store/appStore.js";
 
-function bounds(r: RuleResult, unit: DisplayUnit): string {
+function bounds(r: RuleResult, unit: DisplayUnit, t: Translator): string {
+  const locale = t.locale;
   const min = r.min ?? null;
   const max = r.max ?? null;
   if (min !== null && max !== null)
-    return `${formatMeasure(min, r.unit, unit)} à ${formatMeasure(max, r.unit, unit)}`;
-  if (min !== null) return `≥ ${formatMeasure(min, r.unit, unit)}`;
-  if (max !== null) return `≤ ${formatMeasure(max, r.unit, unit)}`;
+    return t.t("ui.compliance.bounds", {
+      min: formatMeasure(min, r.unit, unit, locale),
+      max: formatMeasure(max, r.unit, unit, locale),
+    });
+  if (min !== null) return `≥ ${formatMeasure(min, r.unit, unit, locale)}`;
+  if (max !== null) return `≤ ${formatMeasure(max, r.unit, unit, locale)}`;
   return "";
+}
+
+/**
+ * Libellé traduit d'une valeur du tableau des règles (nature, confiance) ; valeur brute si elle
+ * est inconnue de la table.
+ */
+function labelOf(keys: Readonly<Record<string, MessageKey>>, value: string, t: Translator): string {
+  const key = keys[value];
+  return key === undefined ? value : t.t(key);
 }
 
 type OverrideSeverity = RuleOverride["severity"];
 
-const OVERRIDE_LABELS: Readonly<Record<OverrideSeverity, string>> = {
+const OVERRIDE_LABELS: Readonly<Record<OverrideSeverity, MessageKey>> = {
   ...SEVERITY_LABELS,
-  ignore: "Ignorée",
+  ignore: "ui.label.severity.ignore",
 };
 
 /** Formulaire d'une surcharge : sévérité et justification obligatoire. */
@@ -55,33 +71,37 @@ function OverrideEditor({
   onClose: () => void;
 }) {
   const id = useId();
+  const t = useT();
   const [severity, setSeverity] = useState<OverrideSeverity>(current?.severity ?? "avertissement");
   const [justification, setJustification] = useState(current?.justification ?? "");
   const [error, setError] = useState<string | null>(null);
   const empty = justification.trim() === "";
+  // Refus de validation du store : textes bruts du schéma (ou messages, traduits ici).
+  const issuesText = (issues: readonly (string | Message)[]): string =>
+    issues.map((i) => (typeof i === "string" ? i : t.t(i))).join(" ; ");
   const save = () => {
     const r = appStore
       .getState()
       .update((p) => withRuleOverride(p, { ruleId, severity, justification }));
     if (r.ok) onClose();
-    else setError(r.issues.join(" ; "));
+    else setError(issuesText(r.issues));
   };
   const remove = () => {
     const r = appStore.getState().update((p) => withoutRuleOverride(p, ruleId));
     if (r.ok) onClose();
-    else setError(r.issues.join(" ; "));
+    else setError(issuesText(r.issues));
   };
   return (
     <form
       className="override-editor"
-      aria-label={`Surcharge de ${ruleId}`}
+      aria-label={t.t("ui.compliance.override.formLabel", { ruleId })}
       onSubmit={(e) => {
         e.preventDefault();
         if (!empty) save();
       }}
     >
       <div className="field">
-        <label htmlFor={`${id}-sev`}>Sévérité retenue pour {ruleId}</label>
+        <label htmlFor={`${id}-sev`}>{t.t("ui.compliance.override.severity", { ruleId })}</label>
         <select
           id={`${id}-sev`}
           value={severity}
@@ -89,13 +109,13 @@ function OverrideEditor({
         >
           {RULE_OVERRIDE_SEVERITIES.map((v) => (
             <option key={v} value={v}>
-              {OVERRIDE_LABELS[v]}
+              {t.t(OVERRIDE_LABELS[v])}
             </option>
           ))}
         </select>
       </div>
       <div className={`field${empty ? " field--invalid" : ""}`}>
-        <label htmlFor={`${id}-just`}>Justification (obligatoire, reprise dans le dossier)</label>
+        <label htmlFor={`${id}-just`}>{t.t("ui.compliance.override.justification")}</label>
         <textarea
           id={`${id}-just`}
           rows={3}
@@ -104,7 +124,7 @@ function OverrideEditor({
           onChange={(e) => setJustification(e.target.value)}
         />
         {empty ? (
-          <span className="field__hint">Saisir la justification pour enregistrer.</span>
+          <span className="field__hint">{t.t("ui.compliance.override.justificationHint")}</span>
         ) : null}
         {error ? (
           <span className="field__error" role="alert">
@@ -114,15 +134,15 @@ function OverrideEditor({
       </div>
       <div className="button-row">
         <button type="submit" disabled={empty}>
-          Enregistrer la surcharge
+          {t.t("ui.compliance.override.save")}
         </button>
         {current ? (
           <button type="button" onClick={remove}>
-            Retirer la surcharge
+            {t.t("ui.compliance.override.remove")}
           </button>
         ) : null}
         <button type="button" className="link" onClick={onClose}>
-          Annuler
+          {t.t("ui.compliance.override.cancel")}
         </button>
       </div>
     </form>
@@ -131,20 +151,24 @@ function OverrideEditor({
 
 /** Surcharge affichée sous un résultat, et bouton d'édition. */
 function OverrideControl({ ruleId }: { ruleId: string }) {
+  const t = useT();
   const current = useApp((s) => ruleOverrideOf(s.project, ruleId));
   const [open, setOpen] = useState(false);
   return (
     <div className="override">
       {current ? (
         <p className="override__current">
-          Surcharge : {OVERRIDE_LABELS[current.severity]} — {current.justification}
+          {t.t("ui.compliance.override.current", {
+            severity: msg(OVERRIDE_LABELS[current.severity]),
+            justification: current.justification,
+          })}
         </p>
       ) : null}
       {open ? (
         <OverrideEditor ruleId={ruleId} current={current} onClose={() => setOpen(false)} />
       ) : (
         <button type="button" className="link" onClick={() => setOpen(true)}>
-          {current ? "Modifier la surcharge" : "Surcharger la règle…"}
+          {current ? t.t("ui.compliance.override.edit") : t.t("ui.compliance.override.add")}
         </button>
       )}
     </div>
@@ -153,12 +177,13 @@ function OverrideControl({ ruleId }: { ruleId: string }) {
 
 /** Toutes les surcharges du projet (y compris celles de règles hors des contextes actifs). */
 function OverrideList() {
+  const t = useT();
   const overrides = useApp((s) => s.project.compliance.overrides);
   if (overrides.length === 0) return null;
   return (
     <details className="sev sev--overrides" open>
       <summary>
-        Surcharges <span className="count">{overrides.length}</span>
+        {t.t("ui.compliance.overrides")} <span className="count">{overrides.length}</span>
       </summary>
       <ul className="results">
         {overrides.map((o, i) => (
@@ -173,13 +198,14 @@ function OverrideList() {
 }
 
 function ResultItem({ r }: { r: RuleResult }) {
+  const t = useT();
   const unit = useApp((s) => s.displayUnit);
   const selection = useApp((s) => s.selection);
   const selected =
     selection !== null &&
     selection.ruleId === r.ruleId &&
     sameLocation(selection.location, r.location);
-  const b = bounds(r, unit);
+  const b = bounds(r, unit, t);
   return (
     <li>
       <button
@@ -192,19 +218,30 @@ function ResultItem({ r }: { r: RuleResult }) {
       >
         <span className="result__head">
           <code>{r.ruleId}</code>
-          <span className="result__loc">{locationLabel(r.location)}</span>
+          <span className="result__loc">{t.t(locationLabel(r.location))}</span>
         </span>
-        <span className="result__msg">{tr(r.message) || tr(ruleDescription(r.ruleId))}</span>
+        <span className="result__msg">
+          {(r.message ? t.t(r.message) : "") || t.t(ruleDescription(r.ruleId))}
+        </span>
         {r.measured !== undefined ? (
           <span className="result__measure">
-            Mesuré : {formatMeasure(r.measured, r.unit, unit)}
-            {b ? ` (attendu ${b})` : ""}
+            {b
+              ? t.t("ui.compliance.measuredExpected", {
+                  value: formatMeasure(r.measured, r.unit, unit, t.locale),
+                  bounds: b,
+                })
+              : t.t("ui.compliance.measured", {
+                  value: formatMeasure(r.measured, r.unit, unit, t.locale),
+                })}
           </span>
         ) : null}
         <span className="result__meta">
-          {r.nature} · confiance {r.confidence}
-          {r.secondarySource ? " · source secondaire" : ""}
-          {r.downgradeReason ? ` · ${tr(r.downgradeReason)}` : ""}
+          {t.t("ui.compliance.meta", {
+            nature: labelOf(NATURE_LABEL_KEYS, r.nature, t),
+            confidence: labelOf(CONFIDENCE_LABEL_KEYS, r.confidence, t),
+          })}
+          {r.secondarySource ? ` · ${t.t("ui.compliance.secondarySource")}` : ""}
+          {r.downgradeReason ? ` · ${t.t(r.downgradeReason)}` : ""}
         </span>
       </button>
       <OverrideControl ruleId={r.ruleId} />
@@ -223,38 +260,47 @@ function ResultList({ results }: { results: readonly RuleResult[] }) {
 }
 
 export function CompliancePanel() {
+  const t = useT();
   const { model } = useModel();
   const report = model?.compliance;
   const groups = groupResults(report);
   const notes = modelNotes(model);
   return (
     <section className="compliance" aria-labelledby="compliance-title">
-      <h2 id="compliance-title">Contrôle de conception</h2>
+      <h2 id="compliance-title">{t.t("ui.compliance.title")}</h2>
       {report ? (
         <p className="muted">
-          Règles v{report.rulesVersion} · profil {report.profile} · contextes :{" "}
-          {report.contexts.join(", ") || "–"}
+          {t.t("ui.compliance.summary", {
+            version: String(report.rulesVersion),
+            profile: report.profile,
+            contexts: report.contexts.join(", ") || "–",
+          })}
         </p>
       ) : (
-        <p className="muted">Aucun modèle calculé.</p>
+        <p className="muted">{t.t("ui.compliance.noModel")}</p>
       )}
       {groups.violations.map(({ severity, results }) => (
         <details key={severity} className={`sev sev--${severity}`} open={results.length > 0}>
           <summary>
-            {SEVERITY_LABELS[severity]} <span className="count">{results.length}</span>
+            {t.t(SEVERITY_LABELS[severity])} <span className="count">{results.length}</span>
           </summary>
-          {results.length > 0 ? <ResultList results={results} /> : <p className="muted">Aucun.</p>}
+          {results.length > 0 ? (
+            <ResultList results={results} />
+          ) : (
+            <p className="muted">{t.t("ui.compliance.none")}</p>
+          )}
         </details>
       ))}
       <details className="sev sev--na">
         <summary>
-          Non évaluées <span className="count">{groups.notEvaluated.length}</span>
+          {t.t("ui.compliance.notEvaluated")}{" "}
+          <span className="count">{groups.notEvaluated.length}</span>
         </summary>
         <ResultList results={groups.notEvaluated} />
       </details>
       <details className="sev sev--ok">
         <summary>
-          Respectées <span className="count">{groups.passed.length}</span>
+          {t.t("ui.compliance.passed")} <span className="count">{groups.passed.length}</span>
         </summary>
         <ResultList results={groups.passed} />
       </details>
@@ -262,18 +308,16 @@ export function CompliancePanel() {
       {notes.length > 0 ? (
         <details className="sev sev--notes" open>
           <summary>
-            Remarques <span className="count">{notes.length}</span>
+            {t.t("ui.compliance.notes")} <span className="count">{notes.length}</span>
           </summary>
           <ul className="notes">
-            {notes.map((n) => (
-              <li key={n}>{n}</li>
+            {notes.map((n, i) => (
+              <li key={i}>{t.t(n)}</li>
             ))}
           </ul>
         </details>
       ) : null}
-      <p className="disclaimer">
-        Contrôle de conception indicatif : il ne vaut pas attestation de conformité.
-      </p>
+      <p className="disclaimer">{t.t("ui.compliance.disclaimer")}</p>
     </section>
   );
 }

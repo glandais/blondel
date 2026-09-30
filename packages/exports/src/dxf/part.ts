@@ -42,9 +42,6 @@ export function partLayers(t: Translator = translatorOf()) {
   return localizedLayers(PART_LAYER_SPECS, t);
 }
 
-/** Calques du développé en français (noms historiques : CONTOUR, PLI, TRACAGE…). */
-export const PART_LAYERS = partLayers();
-
 export interface PartDxfOptions extends LocaleOption {
   /** Défaut : R12 (`DEFAULT_PART_DXF_VERSION`). */
   readonly version?: DxfVersion;

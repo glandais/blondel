@@ -18,12 +18,14 @@ import {
   formFromProject,
   formOpening,
   openingSideLabel,
+  openingWallLabel,
   summaryFacts,
   usageOf,
   variantCount,
   wallsAlongOpening,
   type AssistantForm,
 } from "./assistant.js";
+import { translatorFor } from "@blondel/i18n";
 
 const straight = createProject("straight");
 
@@ -65,6 +67,7 @@ describe("formulaire de l'assistant", () => {
     const r = assistantInput(
       acceptanceForm({ structure: "wood-housed", typologies: ["quarter"], direction: "left" }),
       straight,
+      translatorFor("fr"),
     );
     expect(r.ok).toBe(true);
     if (!r.ok) return;
@@ -83,12 +86,22 @@ describe("formulaire de l'assistant", () => {
     const r = assistantInput(
       acceptanceForm({ floorToFloor: "", sizeX: "-3", width: "abc" }),
       straight,
+      translatorFor("fr"),
     );
     expect(r.ok).toBe(false);
     if (r.ok) return;
     expect(r.errors.join("\n")).toMatch(/Hauteur à monter/);
     expect(r.errors.join("\n")).toMatch(/Dimensions de la trémie/);
     expect(r.errors.join("\n")).toMatch(/Emmarchement/);
+    const en = assistantInput(
+      acceptanceForm({ floorToFloor: "", sizeX: "-3", width: "abc" }),
+      straight,
+      translatorFor("en"),
+    );
+    expect(en.ok).toBe(false);
+    if (en.ok) return;
+    expect(en.errors.join("\n")).toMatch(/^Total rise H: positive whole millimetres expected\.$/m);
+    expect(en.errors.join("\n")).not.toMatch(/[àéèù]/);
   });
 
   it("relevé 4 côtés + 2 diagonales : trémie polygonale ; relevé incohérent refusé", () => {
@@ -99,6 +112,7 @@ describe("formulaire de l'assistant", () => {
         survey: { ab: "2800", bc: "900", cd: "2800", da: "900", ac: d, bd: d },
       }),
       straight,
+      translatorFor("fr"),
     );
     expect(ok.ok).toBe(true);
     if (ok.ok) {
@@ -112,9 +126,14 @@ describe("formulaire de l'assistant", () => {
         survey: { ab: "2800", bc: "900", cd: "2800", da: "900", ac: d, bd: "2500" },
       }),
       straight,
+      translatorFor("fr"),
     );
     expect(bad.ok).toBe(false);
-    const missing = formOpening(acceptanceForm({ openingMode: "survey" }), straight);
+    const missing = formOpening(
+      acceptanceForm({ openingMode: "survey" }),
+      straight,
+      translatorFor("fr"),
+    );
     expect(missing.ok).toBe(false);
   });
 
@@ -126,7 +145,7 @@ describe("formulaire de l'assistant", () => {
         contexts: ["bois_dtu", "logement_interieur", "garde_corps_1988", "helicoidal"],
       },
     };
-    const r = assistantInput(acceptanceForm({ usage: "collective" }), current);
+    const r = assistantInput(acceptanceForm({ usage: "collective" }), current, translatorFor("fr"));
     expect(r.ok).toBe(true);
     if (!r.ok) return;
     expect(r.input.compliance?.contexts).toEqual([
@@ -145,6 +164,7 @@ describe("formulaire de l'assistant", () => {
         survey: { ab: "2800", bc: "900", cd: "2800", da: "900", ac: d, bd: d },
       }),
       straight,
+      translatorFor("fr"),
     );
     expect(r).toEqual({ ok: false, error: "Position du point A invalide." });
   });
@@ -153,17 +173,22 @@ describe("formulaire de l'assistant", () => {
     const r = assistantInput(
       acceptanceForm({ openingMode: "none", wallSides: [0, 1], wallThickness: "" }),
       { ...straight, site: { ...straight.site, walls: [] } },
+      translatorFor("fr"),
     );
     expect(r.ok).toBe(true);
     if (r.ok) expect(r.input.site.walls).toEqual([]);
   });
 
   it("sans trémie ; trémie du projet", () => {
-    expect(formOpening(acceptanceForm({ openingMode: "none" }), straight)).toEqual({
+    expect(
+      formOpening(acceptanceForm({ openingMode: "none" }), straight, translatorFor("fr")),
+    ).toEqual({
       ok: true,
       opening: undefined,
     });
-    expect(formOpening(acceptanceForm({ openingMode: "project" }), straight)).toEqual({
+    expect(
+      formOpening(acceptanceForm({ openingMode: "project" }), straight, translatorFor("fr")),
+    ).toEqual({
       ok: true,
       opening: straight.site.opening,
     });
@@ -179,10 +204,18 @@ describe("murs le long de la trémie", () => {
   ];
 
   it("nomme les côtés d'un rectangle selon le plan", () => {
-    expect(openingSideLabel(rect, 0)).toMatch(/^Côté b1 \(bas du plan\), 2\s?800 mm$/);
-    expect(openingSideLabel(rect, 1)).toMatch(/droite du plan/);
-    expect(openingSideLabel(rect, 2)).toMatch(/haut du plan/);
-    expect(openingSideLabel(rect, 3)).toMatch(/gauche du plan/);
+    expect(openingSideLabel(rect, 0, "fr")).toMatch(/^Côté b1 \(bas du plan\), 2\s?800 mm$/);
+    expect(openingSideLabel(rect, 1, "fr")).toMatch(/droite du plan/);
+    expect(openingSideLabel(rect, 2, "fr")).toMatch(/haut du plan/);
+    expect(openingSideLabel(rect, 3, "fr")).toMatch(/gauche du plan/);
+    expect(openingWallLabel(rect, 0, "fr")).toMatch(
+      /^Mur le long du côté b1 \(bas du plan\), 2\s?800 mm$/,
+    );
+    // Anglais : mêmes désignations, séparateur de milliers de la langue.
+    expect(openingSideLabel(rect, 0, "en")).toBe("Side b1 (bottom of the plan), 2,800 mm");
+    expect(openingWallLabel(rect, 1, "en")).toBe("Wall along side b2 (right of the plan), 900 mm");
+    const tri: Vec2[] = [rect[0]!, rect[1]!, rect[2]!];
+    expect(openingSideLabel(tri, 2, "fr")).toMatch(/^Côté b3, /);
   });
 
   it("propriété : nu du mur sur le côté, corps hors de la trémie, identifiants libres", () => {
@@ -239,7 +272,7 @@ describe("murs le long de la trémie", () => {
 describe("de la proposition au projet", () => {
   // Cas du critère n° 1 (préférence limons à la française, quart tournant).
   const form = acceptanceForm({ structure: "wood-housed", typologies: ["quarter"] });
-  const r = assistantInput(form, straight);
+  const r = assistantInput(form, straight, translatorFor("fr"));
   if (!r.ok) throw new Error(r.errors.join("\n"));
   const result = proposeDesigns({
     ...r.input,
@@ -273,7 +306,7 @@ describe("de la proposition au projet", () => {
   });
 
   it("cotes de la carte", () => {
-    const facts = summaryFacts(result.candidates[0]!);
+    const facts = summaryFacts(result.candidates[0]!, "fr");
     expect(facts.map((f) => f.label)).toEqual([
       "Hauteurs n",
       "Hauteur h",
@@ -283,13 +316,20 @@ describe("de la proposition au projet", () => {
       "Collet mini",
       "Échappée mini",
     ]);
+    const en = summaryFacts(result.candidates[0]!, "en");
+    expect(en.map((f) => f.label)).toContain("Min. headroom");
+    expect(en.find((f) => f.label === "Going G")!.value).toMatch(/^\d+\.\d mm$/);
   });
 });
 
 describe("variantes de l'assistant", () => {
   it("« Montrer toutes les variantes » : limits.showAllVariants seulement si coché", () => {
-    const off = assistantInput(acceptanceForm(), straight);
-    const on = assistantInput(acceptanceForm({ showAllVariants: true }), straight);
+    const off = assistantInput(acceptanceForm(), straight, translatorFor("fr"));
+    const on = assistantInput(
+      acceptanceForm({ showAllVariants: true }),
+      straight,
+      translatorFor("fr"),
+    );
     expect(off.ok && on.ok).toBe(true);
     if (!off.ok || !on.ok) return;
     expect(off.input.limits).toBeUndefined();
@@ -310,10 +350,15 @@ describe("variantes de l'assistant", () => {
   });
 
   it("cœur : variantes regroupées sous la meilleure carte de chaque forme ; à plat sur demande", () => {
-    const grouped = assistantInput(acceptanceForm({ structure: "none" }), straight);
+    const grouped = assistantInput(
+      acceptanceForm({ structure: "none" }),
+      straight,
+      translatorFor("fr"),
+    );
     const flat = assistantInput(
       acceptanceForm({ structure: "none", showAllVariants: true }),
       straight,
+      translatorFor("fr"),
     );
     if (!grouped.ok || !flat.ok) throw new Error("entrée invalide");
     const g = proposeDesigns(grouped.input);

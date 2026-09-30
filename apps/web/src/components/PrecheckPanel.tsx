@@ -5,27 +5,37 @@
  * Ne remplace pas une note de calcul.
  */
 import { PRECHECK_LABEL } from "@blondel/core";
-import { tr } from "../i18n/fr.js";
+import type { Locale } from "@blondel/i18n";
 import { useMemo } from "react";
+import { numberFormat } from "../i18n/locale.js";
+import { useT } from "../i18n/useT.js";
 import { executionClassInfo, precheckSummary, type PrecheckRow } from "../lib/precheck.js";
 import { appStore, useApp, useModel } from "../store/appStore.js";
 
-const dec = (digits: number) =>
-  new Intl.NumberFormat("fr-FR", { minimumFractionDigits: digits, maximumFractionDigits: digits });
-const d0 = dec(0);
-const d1 = dec(1);
-const d2 = dec(2);
+/** Formats à 0, 1 et 2 décimales dans la langue d'affichage. */
+function decimals(locale: Locale) {
+  const dec = (digits: number) =>
+    numberFormat(locale, { minimumFractionDigits: digits, maximumFractionDigits: digits });
+  return { d0: dec(0), d1: dec(1), d2: dec(2) };
+}
 
 function Status({ ok, label }: { ok: boolean; label: string }) {
+  const t = useT();
   return (
     <span className={ok ? "pc-ok" : "pc-bad"} title={label}>
       {ok ? "✓" : "✗"}
-      <span className="visually-hidden">{ok ? " respecté" : " non respecté"}</span>
+      <span className="visually-hidden">
+        {" "}
+        {t.t(ok ? "ui.precheck.status.ok" : "ui.precheck.status.bad")}
+      </span>
     </span>
   );
 }
 
 function BeamRow({ row, selected }: { row: PrecheckRow; selected: boolean }) {
+  const t = useT();
+  const { d0, d1, d2 } = decimals(t.locale);
+  const label = t.t(row.label);
   return (
     <tr
       className={selected ? "is-selected" : undefined}
@@ -35,14 +45,15 @@ function BeamRow({ row, selected }: { row: PrecheckRow; selected: boolean }) {
           .select(selected ? null : { location: { kind: "part", partId: row.partId } })
       }
     >
-      <th scope="row" title={row.label}>
-        {row.label}
+      <th scope="row" title={label}>
+        {label}
       </th>
       <td className="num">{d2.format(row.lengthM)}</td>
       <td className="num">
-        {d1.format(row.deflection)} <Status ok={row.ok.deflection} label="L/200 (bloquant)" />
+        {d1.format(row.deflection)}{" "}
+        <Status ok={row.ok.deflection} label={t.t("ui.precheck.deflection.blocking")} />
         {row.ok.deflection && !row.ok.advice ? (
-          <span className="pc-warn" title="L/300 (conseil, usage résidentiel)">
+          <span className="pc-warn" title={t.t("ui.precheck.deflection.advice")}>
             {" "}
             L/300
           </span>
@@ -53,7 +64,8 @@ function BeamRow({ row, selected }: { row: PrecheckRow; selected: boolean }) {
         </small>
       </td>
       <td className="num">
-        {d0.format(row.ratio)} % <Status ok={row.ok.stress} label="σ_Ed ≤ f_d (bloquant)" />
+        {t.t("ui.precheck.percent", { value: d0.format(row.ratio) })}{" "}
+        <Status ok={row.ok.stress} label={t.t("ui.precheck.stress.blocking")} />
         <br />
         <small className="muted">
           {d0.format(row.stress)} / {d0.format(row.design)} MPa
@@ -67,6 +79,8 @@ function BeamRow({ row, selected }: { row: PrecheckRow; selected: boolean }) {
 }
 
 export function PrecheckPanel() {
+  const t = useT();
+  const { d1, d2 } = decimals(t.locale);
   const { model } = useModel();
   const selection = useApp((s) => s.selection);
   // Lecture du prédimensionnement calculé dans le worker (`Model.precheck`) : aucun calcul ici.
@@ -80,15 +94,15 @@ export function PrecheckPanel() {
 
   return (
     <section className="precheck" aria-labelledby="precheck-title">
-      <h2 id="precheck-title">Prédimensionnement indicatif</h2>
+      <h2 id="precheck-title">{t.t("ui.precheck.title")}</h2>
       {exc ? (
         <p className="precheck__exc">
-          Classe d'exécution EN 1090-2 :{" "}
+          {t.t("ui.precheck.executionClass")}{" "}
           <strong className={exc.value === "EXC2" ? "pc-warn" : undefined}>{exc.value}</strong>
           {exc.detail ? (
             <>
               <br />
-              <small className="muted">{exc.detail}</small>
+              <small className="muted">{t.t(exc.detail)}</small>
             </>
           ) : null}
         </p>
@@ -96,24 +110,27 @@ export function PrecheckPanel() {
       {hasBeams && summary ? (
         <>
           <p className="muted">
-            Charges : q<sub>k</sub> {d1.format(summary.loads.qk)} kN/m², Q<sub>k</sub>{" "}
-            {d1.format(summary.loads.Qk)} kN (catégorie {summary.loads.category}) ; permanentes{" "}
-            {d2.format(summary.permanentArea)} kN/m².
+            {t.t("ui.precheck.loads.label")} q<sub>k</sub> {d1.format(summary.loads.qk)} kN/m², Q
+            <sub>k</sub> {d1.format(summary.loads.Qk)} kN{" "}
+            {t.t("ui.precheck.loads.rest", {
+              category: summary.loads.category,
+              permanent: d2.format(summary.permanentArea),
+            })}
           </p>
           <div className="precheck__table">
             <table>
-              <caption className="visually-hidden">Limons prédimensionnés</caption>
+              <caption className="visually-hidden">{t.t("ui.precheck.caption")}</caption>
               <thead>
                 <tr>
-                  <th scope="col">Limon</th>
+                  <th scope="col">{t.t("ui.precheck.column.beam")}</th>
                   <th scope="col" className="num">
                     L (m)
                   </th>
                   <th scope="col" className="num">
-                    Flèche (mm)
+                    {t.t("ui.precheck.column.deflection")}
                   </th>
                   <th scope="col" className="num">
-                    Contrainte
+                    {t.t("ui.precheck.column.stress")}
                   </th>
                   <th scope="col" className="num">
                     f₁ (Hz)
@@ -129,14 +146,14 @@ export function PrecheckPanel() {
           </div>
           {summary.notes.length > 0 ? (
             <ul className="notes">
-              {summary.notes.map((n) => (
-                <li key={n}>{n}</li>
+              {summary.notes.map((n, i) => (
+                <li key={i}>{t.t(n)}</li>
               ))}
             </ul>
           ) : null}
         </>
       ) : null}
-      <p className="disclaimer">{tr(PRECHECK_LABEL)}.</p>
+      <p className="disclaimer">{t.t(PRECHECK_LABEL)}.</p>
     </section>
   );
 }

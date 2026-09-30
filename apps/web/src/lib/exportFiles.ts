@@ -31,6 +31,13 @@ import {
   templateFamily,
   type TemplateFamily,
 } from "@blondel/exports";
+import {
+  DEFAULT_LOCALE,
+  translatorFor,
+  type Locale,
+  type MessageKey,
+  type Translator,
+} from "@blondel/i18n";
 import { PROJECT_FILE_SUFFIX, projectFileName } from "../store/persistence.js";
 import {
   loadExportPdf,
@@ -50,13 +57,14 @@ export interface ExportDeps {
   readonly renderPdf?: (
     project: Project,
     model: Model,
-    options?: PdfJobOptions,
+    options: PdfJobOptions | undefined,
+    locale: Locale,
   ) => Promise<FileContent>;
   /**
    * Modèle glTF hors du fil principal (worker de calcul) ; absent : `exportGlb` sur le fil
    * principal.
    */
-  readonly renderGlb?: (project: Project, model: Model) => Promise<FileContent>;
+  readonly renderGlb?: (project: Project, model: Model, locale: Locale) => Promise<FileContent>;
 }
 
 export const DEFAULT_EXPORT_DEPS: ExportDeps = { loadPdf: loadExportPdf };
@@ -86,35 +94,28 @@ export type ExportId =
 
 export interface ExportEntry {
   readonly id: ExportId;
-  readonly label: string;
+  /** Clé du libellé (à traduire par `t(entry.label)`). */
+  readonly label: MessageKey;
   /** Le modèle est-il nécessaire (tous sauf le projet JSON) ? */
   readonly needsModel: boolean;
 }
 
 export const EXPORT_ENTRIES: readonly ExportEntry[] = [
-  { id: "project-json", label: "Projet (.blondel.json)", needsModel: false },
-  { id: "plan-svg", label: "Plan coté (SVG)", needsModel: true },
-  { id: "plan-dxf", label: "Plan coté (DXF 2007 / AC1021)", needsModel: true },
-  { id: "plan-dxf-r12", label: "Plan coté (DXF R12)", needsModel: true },
-  { id: "elevation-svg", label: "Élévation (SVG)", needsModel: true },
-  { id: "cutlist-csv", label: "Liste de débit (CSV)", needsModel: true },
-  { id: "pdf", label: "Dossier PDF complet (gabarits 1:1 en A4)", needsModel: true },
-  { id: "pdf-a3", label: "Dossier PDF complet (gabarits 1:1 en A3)", needsModel: true },
-  {
-    id: "pdf-stringers",
-    label: "Dossier PDF, gabarits 1:1 des limons et de la structure (A4)",
-    needsModel: true,
-  },
-  { id: "pdf-treads", label: "Dossier PDF, gabarits 1:1 des marches (A4)", needsModel: true },
-  {
-    id: "pdf-guards",
-    label: "Dossier PDF, gabarits 1:1 des garde-corps (A4)",
-    needsModel: true,
-  },
-  { id: "pdf-light", label: "Dossier PDF sans gabarits", needsModel: true },
-  { id: "installation-pdf", label: "Fiche de pose (PDF)", needsModel: true },
-  { id: "parts-dxf", label: "DXF des pièces (R12)", needsModel: true },
-  { id: "glb", label: "Modèle 3D glTF (.glb)", needsModel: true },
+  { id: "project-json", label: "ui.label.export.projectJson", needsModel: false },
+  { id: "plan-svg", label: "ui.label.export.planSvg", needsModel: true },
+  { id: "plan-dxf", label: "ui.label.export.planDxf", needsModel: true },
+  { id: "plan-dxf-r12", label: "ui.label.export.planDxfR12", needsModel: true },
+  { id: "elevation-svg", label: "ui.label.export.elevationSvg", needsModel: true },
+  { id: "cutlist-csv", label: "ui.label.export.cutlistCsv", needsModel: true },
+  { id: "pdf", label: "ui.label.export.pdf", needsModel: true },
+  { id: "pdf-a3", label: "ui.label.export.pdfA3", needsModel: true },
+  { id: "pdf-stringers", label: "ui.label.export.pdfStringers", needsModel: true },
+  { id: "pdf-treads", label: "ui.label.export.pdfTreads", needsModel: true },
+  { id: "pdf-guards", label: "ui.label.export.pdfGuards", needsModel: true },
+  { id: "pdf-light", label: "ui.label.export.pdfLight", needsModel: true },
+  { id: "installation-pdf", label: "ui.label.export.installationPdf", needsModel: true },
+  { id: "parts-dxf", label: "ui.label.export.partsDxf", needsModel: true },
+  { id: "glb", label: "ui.label.export.glb", needsModel: true },
 ];
 
 /** Dossiers PDF filtrés par famille de gabarits (QUESTIONS A20). */
@@ -129,43 +130,59 @@ export const PDF_FAMILY_JOBS: Readonly<
 type PdfJobId = "pdf" | "pdf-a3" | "pdf-light" | "installation-pdf" | keyof typeof PDF_FAMILY_JOBS;
 
 /**
+ * Suffixe du nom de fichier d'un dossier PDF : aucun, un code (« a3 »), ou un mot traduit (clé
+ * de `@blondel/i18n`, sans accents ni espaces dans chaque langue).
+ */
+export type FileSuffix = "" | { readonly raw: string } | { readonly key: MessageKey };
+
+/** Suffixe « -… » d'un nom de fichier dans la langue du traducteur. */
+export function fileSuffix(suffix: FileSuffix, t: Translator): string {
+  if (suffix === "") return "";
+  return `-${"raw" in suffix ? suffix.raw : t.t(suffix.key)}`;
+}
+
+/**
  * Pages et format de chaque dossier PDF (`@blondel/exports/pdf`) : complet = toutes les pages,
  * gabarits 1:1 tuilés en A4 ou A3 ; gabarits d'une seule famille (A4) ; sans gabarits ; fiche
  * de pose seule.
  */
-export const PDF_JOBS: Readonly<Record<PdfJobId, { suffix: string; options: PdfJobOptions }>> = {
-  pdf: { suffix: "", options: {} },
-  "pdf-a3": { suffix: "-a3", options: { format: "a3" } },
-  "pdf-stringers": {
-    suffix: "-gabarits-limons",
-    options: { templateFamilies: [PDF_FAMILY_JOBS["pdf-stringers"]] },
-  },
-  "pdf-treads": {
-    suffix: "-gabarits-marches",
-    options: { templateFamilies: [PDF_FAMILY_JOBS["pdf-treads"]] },
-  },
-  "pdf-guards": {
-    suffix: "-gabarits-garde-corps",
-    options: { templateFamilies: [PDF_FAMILY_JOBS["pdf-guards"]] },
-  },
-  "pdf-light": { suffix: "-sans-gabarits", options: { pages: { templates: false } } },
-  "installation-pdf": {
-    suffix: "-fiche-de-pose",
-    options: {
-      pages: {
-        toc: false,
-        plan: false,
-        elevation: false,
-        installation: true,
-        bom: false,
-        cutsheet: false,
-        compliance: false,
-        flats: false,
-        templates: false,
+export const PDF_JOBS: Readonly<Record<PdfJobId, { suffix: FileSuffix; options: PdfJobOptions }>> =
+  {
+    pdf: { suffix: "", options: {} },
+    "pdf-a3": { suffix: { raw: "a3" }, options: { format: "a3" } },
+    "pdf-stringers": {
+      suffix: { key: "ui.label.exportFile.templatesStringers" },
+      options: { templateFamilies: [PDF_FAMILY_JOBS["pdf-stringers"]] },
+    },
+    "pdf-treads": {
+      suffix: { key: "ui.label.exportFile.templatesTreads" },
+      options: { templateFamilies: [PDF_FAMILY_JOBS["pdf-treads"]] },
+    },
+    "pdf-guards": {
+      suffix: { key: "ui.label.exportFile.templatesGuards" },
+      options: { templateFamilies: [PDF_FAMILY_JOBS["pdf-guards"]] },
+    },
+    "pdf-light": {
+      suffix: { key: "ui.label.exportFile.noTemplates" },
+      options: { pages: { templates: false } },
+    },
+    "installation-pdf": {
+      suffix: { key: "ui.label.exportFile.installation" },
+      options: {
+        pages: {
+          toc: false,
+          plan: false,
+          elevation: false,
+          installation: true,
+          bom: false,
+          cutsheet: false,
+          compliance: false,
+          flats: false,
+          templates: false,
+        },
       },
     },
-  },
-};
+  };
 
 export const MIME = {
   json: "application/json",
@@ -193,11 +210,11 @@ export function partFileStem(part: Part): string {
 }
 
 /** DXF R12 d'une seule pièce (lève `RangeError` si elle n'a pas de développé). */
-export function partDxfFile(part: Part, stem: string): ExportFile {
+export function partDxfFile(part: Part, stem: string, locale: Locale = DEFAULT_LOCALE): ExportFile {
   return {
     filename: `${stem}-${partFileStem(part)}.dxf`,
     mime: MIME.dxf,
-    content: exportPartDxf(part, { version: DEFAULT_PART_DXF_VERSION }),
+    content: exportPartDxf(part, { version: DEFAULT_PART_DXF_VERSION, locale }),
   };
 }
 
@@ -206,50 +223,65 @@ export function partDxfFile(part: Part, stem: string): ExportFile {
  * dans le fichier), regroupés dans une archive ZIP (`createZip`) ; un seul fichier : téléchargé
  * tel quel. Liste vide : aucune pièce n'a de développé.
  */
-export function partsDxfFiles(model: Pick<Model, "parts">, stem: string): ExportFile[] {
-  const files = exportPartsDxf(model, { version: DEFAULT_PART_DXF_VERSION });
+export function partsDxfFiles(
+  model: Pick<Model, "parts">,
+  stem: string,
+  locale: Locale = DEFAULT_LOCALE,
+): ExportFile[] {
+  const t = translatorFor(locale);
+  const files = exportPartsDxf(model, { version: DEFAULT_PART_DXF_VERSION, locale });
   if (files.length === 0) return [];
   if (files.length === 1) {
     const f = files[0]!;
     return [{ filename: `${stem}-${f.filename}`, mime: MIME.dxf, content: f.content }];
   }
   const zip = createZip(files.map((f) => ({ name: f.filename, data: f.content })));
-  return [{ filename: `${stem}-pieces-dxf.zip`, mime: MIME.zip, content: zip }];
+  return [
+    {
+      filename: `${stem}-${t.t("ui.label.exportFile.partsDxf")}.zip`,
+      mime: MIME.zip,
+      content: zip,
+    },
+  ];
 }
 
-/** Un export est-il disponible (modèle calculé, pièces à développé) ? Motif sinon. */
+/**
+ * Un export est-il disponible (modèle calculé, pièces à développé) ? Motif sinon (clé, à
+ * traduire par `t(reason)`).
+ */
 export function exportAvailability(
   id: ExportId,
   model: Model | null,
-): { readonly ok: true } | { readonly ok: false; readonly reason: string } {
+): { readonly ok: true } | { readonly ok: false; readonly reason: MessageKey } {
   if (id === "project-json") return { ok: true };
-  if (!model) return { ok: false, reason: "Aucun modèle calculé." };
+  if (!model) return { ok: false, reason: "ui.label.export.noModel" };
   if (id === "pdf-stringers" || id === "pdf-treads" || id === "pdf-guards") {
     const family = PDF_FAMILY_JOBS[id];
     if (!partsWithFlat(model).some((p) => templateFamily(p) === family)) {
-      return { ok: false, reason: "Aucune pièce de cette famille n'a de développé (gabarit 1:1)." };
+      return { ok: false, reason: "ui.label.export.noFamilyFlat" };
     }
   }
   if (id === "parts-dxf" && partsWithFlat(model).length === 0) {
-    return {
-      ok: false,
-      reason: "Aucune pièce n'a de développé à plat (choisir une structure qui en produit).",
-    };
+    return { ok: false, reason: "ui.label.export.noFlat" };
   }
   return { ok: true };
 }
 
 /**
- * Produit le ou les fichiers d'un export. Lève si le rendu échoue (l'appelant affiche le
- * message) ; `pdf` peut être asynchrone.
+ * Produit le ou les fichiers d'un export dans la langue `locale` (textes, nombres, calques DXF,
+ * en-têtes CSV, noms de fichiers ; français par défaut). Lève si le rendu échoue (l'appelant
+ * affiche le message) ; `pdf` peut être asynchrone.
  */
 export async function buildExport(
   id: ExportId,
   project: Project,
   model: Model | null,
   deps: ExportDeps = DEFAULT_EXPORT_DEPS,
+  locale: Locale = DEFAULT_LOCALE,
 ): Promise<ExportFile[]> {
+  const t = translatorFor(locale);
   const stem = fileStem(project.name);
+  const name = (key: MessageKey): string => `${stem}-${t.t(key)}`;
   if (id === "project-json") {
     return [
       {
@@ -260,18 +292,28 @@ export async function buildExport(
     ];
   }
   const avail = exportAvailability(id, model);
-  if (!avail.ok) throw new Error(avail.reason);
+  if (!avail.ok) throw new Error(t.t(avail.reason));
   const m = model as Model;
-  const svgOptions = { project, theme: "light" as const, background: true, title: project.name };
+  const svgOptions = {
+    project,
+    theme: "light" as const,
+    background: true,
+    title: project.name,
+    locale,
+  };
   switch (id) {
     case "plan-svg":
       return [
-        { filename: `${stem}-plan.svg`, mime: MIME.svg, content: renderPlanSvg(m, svgOptions) },
+        {
+          filename: `${name("ui.label.exportFile.plan")}.svg`,
+          mime: MIME.svg,
+          content: renderPlanSvg(m, svgOptions),
+        },
       ];
     case "elevation-svg":
       return [
         {
-          filename: `${stem}-elevation.svg`,
+          filename: `${name("ui.label.exportFile.elevation")}.svg`,
           mime: MIME.svg,
           content: renderElevationSvg(m, svgOptions),
         },
@@ -279,25 +321,25 @@ export async function buildExport(
     case "plan-dxf":
       return [
         {
-          filename: `${stem}-plan.dxf`,
+          filename: `${name("ui.label.exportFile.plan")}.dxf`,
           mime: MIME.dxf,
-          content: exportPlanDxf(m, { project, version: DEFAULT_PLAN_DXF_VERSION }),
+          content: exportPlanDxf(m, { project, version: DEFAULT_PLAN_DXF_VERSION, locale }),
         },
       ];
     case "plan-dxf-r12":
       return [
         {
-          filename: `${stem}-plan-r12.dxf`,
+          filename: `${name("ui.label.exportFile.planR12")}.dxf`,
           mime: MIME.dxf,
-          content: exportPlanDxf(m, { project, version: "R12" }),
+          content: exportPlanDxf(m, { project, version: "R12", locale }),
         },
       ];
     case "cutlist-csv":
       return [
         {
-          filename: `${stem}-debit.csv`,
+          filename: `${name("ui.label.exportFile.cutlist")}.csv`,
           mime: MIME.csv,
-          content: exportCutListCsv(m, { massNote: massNoteFor(project.workshop) }),
+          content: exportCutListCsv(m, { massNote: massNoteFor(project.workshop), locale }),
         },
       ];
     case "pdf":
@@ -308,21 +350,23 @@ export async function buildExport(
     case "pdf-guards":
     case "installation-pdf": {
       const { suffix, options } = PDF_JOBS[id];
-      const filename = `${stem}${suffix}.pdf`;
+      const filename = `${stem}${fileSuffix(suffix, t)}.pdf`;
       if (deps.renderPdf) {
-        return [{ filename, mime: MIME.pdf, content: await deps.renderPdf(project, m, options) }];
+        return [
+          { filename, mime: MIME.pdf, content: await deps.renderPdf(project, m, options, locale) },
+        ];
       }
       const exportPdf = await deps.loadPdf();
-      const content = await exportPdf(m, { project, title: project.name, ...options });
+      const content = await exportPdf(m, { project, title: project.name, ...options, locale });
       return [{ filename, mime: MIME.pdf, content }];
     }
     case "glb": {
       const content = deps.renderGlb
-        ? await deps.renderGlb(project, m)
-        : exportGlb(m, { project, title: project.name });
+        ? await deps.renderGlb(project, m, locale)
+        : exportGlb(m, { project, title: project.name, locale });
       return [{ filename: `${stem}.glb`, mime: MIME.glb, content }];
     }
     case "parts-dxf":
-      return partsDxfFiles(m, stem);
+      return partsDxfFiles(m, stem, locale);
   }
 }

@@ -1,7 +1,11 @@
 import { createTranslator } from "@blondel/i18n";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
-import { escapeXml, formatFr, formatNum } from "./format.js";
+import { escapeXml, formatIn, formatNum, type FrNumberOptions } from "./format.js";
+
+/** Nombre au format français (`formatIn` avec le traducteur français). */
+const formatFr = (value: number, options?: FrNumberOptions): string =>
+  formatIn(createTranslator("fr"), value, options);
 
 describe("formatFr", () => {
   it("virgule décimale, milliers, zéros", () => {

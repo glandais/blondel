@@ -59,9 +59,6 @@ export function massDensityNote(t: Translator = translatorOf()): string {
   return t.t("csv.massDensityNote");
 }
 
-/** Mention française (compatibilité) : `massDensityNote()` en français. */
-export const MASS_DENSITY_NOTE = massDensityNote();
-
 /**
  * Remarque attachée à la masse d'une pièce selon son matériau (`undefined` : aucune). `t` :
  * langue de la remarque, transmise par `cutListRows` / `cutSheet` (défaut : français) ; une
@@ -121,9 +118,6 @@ const CUT_LIST_HEADER_KEYS: readonly MessageKey[] = [
 export function cutListHeader(t: Translator = translatorOf()): readonly string[] {
   return CUT_LIST_HEADER_KEYS.map((k) => t.t(k));
 }
-
-/** En-têtes français (compatibilité) : `cutListHeader()` en français. */
-export const CUT_LIST_HEADER: readonly string[] = cutListHeader();
 
 /** Séparateur de champs du CSV. */
 export type CsvSeparator = ";" | ",";

@@ -7,7 +7,8 @@
  */
 import type { StructureContext, StructureKind } from "@blondel/core";
 import { useMemo, useState } from "react";
-import { trKey } from "../i18n/fr.js";
+import { msg, type Message, type MessageKey } from "@blondel/i18n";
+import { useT } from "../i18n/useT.js";
 import { layoutKindOf, structureFitsLayout } from "../lib/layoutKind.js";
 import { availableStructures } from "../lib/optionalApi.js";
 import { chooseStructure } from "../lib/structureChoice.js";
@@ -34,10 +35,10 @@ import { AutoIntField, CheckField, NumberField, SelectField, TextField } from ".
 
 export const NO_STRUCTURE = "none";
 
-const FAMILY_LABELS: Readonly<Record<StructureKind["family"], string>> = {
-  bois: "bois",
-  metal: "métal",
-  mixte: "mixte",
+const FAMILY_LABELS: Readonly<Record<StructureKind["family"], MessageKey>> = {
+  bois: "ui.structure.family.bois",
+  metal: "ui.structure.family.metal",
+  mixte: "ui.structure.family.mixte",
 };
 
 function setStructure(kind: string, params: Record<string, unknown>): UpdateResult {
@@ -53,6 +54,7 @@ function ParamInput({
   value: unknown;
   onCommit: (v: unknown) => UpdateResult;
 }) {
+  const t = useT();
   const hint = field.hint === undefined ? {} : { hint: field.hint };
   switch (field.kind) {
     case "number": {
@@ -70,12 +72,14 @@ function ParamInput({
             label={field.label}
             value={n}
             unit={field.unit}
-            hint={field.hint ?? "Facultatif : laisser vide pour le comportement par défaut."}
+            hint={field.hint ?? t.t("ui.structure.optionalHint")}
             {...bounds}
             parse={(text, b) =>
               text.trim() === "" ? { ok: true, value: Number.NaN } : read(text, b)
             }
-            format={(v) => (Number.isNaN(v) ? "" : field.integer ? String(v) : formatDecimal(v))}
+            format={(v) =>
+              Number.isNaN(v) ? "" : field.integer ? String(v) : formatDecimal(v, t.locale)
+            }
             onCommit={(v) => onCommit(Number.isNaN(v) ? undefined : v)}
           />
         );
@@ -97,7 +101,7 @@ function ParamInput({
           {...hint}
           {...bounds}
           parse={parseDecimal}
-          format={formatDecimal}
+          format={(v) => formatDecimal(v, t.locale)}
           onCommit={onCommit}
         />
       );
@@ -137,7 +141,7 @@ function ParamInput({
     case "readonly":
       return (
         <p className="muted">
-          {field.label} : {JSON.stringify(value)}
+          {t.t("ui.structure.readonly", { label: field.label, value: JSON.stringify(value) })}
         </p>
       );
   }
@@ -161,10 +165,11 @@ function groupFields(
 }
 
 export function StructureSection() {
+  const t = useT();
   const structure = useApp((s) => s.project.stair.structure);
   const project = useApp((s) => s.project);
   const { model } = useModel();
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<Message | null>(null);
   const kinds = useMemo(() => availableStructures(), []);
   const plugin = kinds.find((k) => k.kind === structure.kind);
   const ctx: StructureContext | undefined = useMemo(
@@ -179,26 +184,32 @@ export function StructureSection() {
   const fields = useMemo(
     () =>
       plugin && defaults !== undefined
-        ? presentFields(plugin.kind, deriveParamFields(defaults, plugin.paramsSchema), params)
+        ? presentFields(plugin.kind, deriveParamFields(defaults, plugin.paramsSchema), params, t)
         : [],
-    [plugin, defaults, params],
+    [plugin, defaults, params, t],
   );
 
   const layoutKind = layoutKindOf(project);
   const options = [
-    { value: NO_STRUCTURE, label: "Aucune (marches, contremarches, paliers)" },
+    { value: NO_STRUCTURE, label: t.t("ui.structure.none") },
     ...kinds.map((k) => ({
       value: k.kind,
-      label: `${trKey(k.labelKey)} (${FAMILY_LABELS[k.family]})${
+      label: t.t(
         structureFitsLayout(k.kind, layoutKind)
-          ? ""
+          ? "ui.structure.option"
           : layoutKind === "helical"
-            ? " — escaliers à volées seulement"
-            : " — hélicoïdal seulement"
-      }`,
+            ? "ui.structure.optionFlightsOnly"
+            : "ui.structure.optionHelicalOnly",
+        { label: msg(k.labelKey), family: msg(FAMILY_LABELS[k.family]) },
+      ),
     })),
     ...(structure.kind !== NO_STRUCTURE && !plugin
-      ? [{ value: structure.kind, label: `${structure.kind} (plugin indisponible)` }]
+      ? [
+          {
+            value: structure.kind,
+            label: t.t("ui.structure.pluginMissing", { kind: structure.kind }),
+          },
+        ]
       : []),
   ];
 
@@ -211,20 +222,20 @@ export function StructureSection() {
     const d = kind === NO_STRUCTURE || !k ? undefined : safeDefaults(k, ctx);
     const params = kind === NO_STRUCTURE ? {} : withDefaults(d, {});
     // Structure et jour adapté (poteau d'angle, poteau des profilés) en une seule modification.
-    let notice: string | null = null;
+    let notice: Message | null = null;
     const r = appStore.getState().update((p) => {
       const c = chooseStructure(p, kind, params);
       notice = c.notice;
       return c.project;
     });
-    if (r.ok && notice !== null) appStore.setState({ notice: { kind: "info", text: notice } });
+    if (r.ok && notice !== null) appStore.setState({ notice: { kind: "info", msg: notice } });
     return r;
   };
 
   const onParam =
     (field: ParamField) =>
     (value: unknown): UpdateResult => {
-      if (!plugin) return { ok: false, issues: ["Plugin de structure indisponible."] };
+      if (!plugin) return { ok: false, issues: [t.t("ui.structure.pluginUnavailable")] };
       const next = afterParamChange(
         plugin.kind,
         field.path,
@@ -233,7 +244,7 @@ export function StructureSection() {
       const invalid = validateParams(plugin, next);
       if (invalid) {
         setError(invalid);
-        return { ok: false, issues: [invalid] };
+        return { ok: false, issues: [t.t(invalid)] };
       }
       setError(null);
       return setStructure(structure.kind, next);
@@ -241,18 +252,21 @@ export function StructureSection() {
 
   return (
     <>
-      <SelectField label="Structure" value={structure.kind} options={options} onCommit={onKind} />
-      {kinds.length === 0 ? (
-        <p className="muted">Aucun plugin de structure disponible dans le cœur.</p>
-      ) : null}
+      <SelectField
+        label={t.t("ui.structure.label")}
+        value={structure.kind}
+        options={options}
+        onCommit={onKind}
+      />
+      {kinds.length === 0 ? <p className="muted">{t.t("ui.structure.noPlugin")}</p> : null}
       {plugin && defaults === undefined ? (
-        <p className="muted">
-          Paramètres indisponibles : le tracé et le découpage doivent être calculés sans erreur.
-        </p>
+        <p className="muted">{t.t("ui.structure.paramsUnavailable")}</p>
       ) : null}
       {fields.length > 0 ? (
         <fieldset className="structure-params">
-          <legend>Paramètres de {plugin ? trKey(plugin.labelKey) : undefined}</legend>
+          <legend>
+            {t.t("ui.structure.paramsLegend", { name: plugin ? msg(plugin.labelKey) : "" })}
+          </legend>
           {groupFields(fields).map(({ group, fields: gf }) => {
             const inputs = gf.map((f) => (
               <ParamInput
@@ -266,7 +280,7 @@ export function StructureSection() {
               inputs
             ) : (
               <details key={group} className="structure-params__group">
-                <summary>{groupLabel(group)}</summary>
+                <summary>{groupLabel(group, t)}</summary>
                 {inputs}
               </details>
             );
@@ -275,7 +289,7 @@ export function StructureSection() {
       ) : null}
       {error ? (
         <small className="field__error" role="alert">
-          {error}
+          {t.t(error)}
         </small>
       ) : null}
     </>

@@ -6,6 +6,7 @@
 import {
   DEMO_PRESET_DESCRIPTIONS,
   DEMO_PRESET_LABELS,
+  PRESET_LABELS,
   ProjectSchema,
   createDemoProject,
   createProject,
@@ -15,11 +16,20 @@ import {
   type PresetId,
   type PresetOptions,
   type Project,
+  errorMessageOf,
 } from "@blondel/core";
+import {
+  DEFAULT_LOCALE,
+  createTranslator,
+  msg,
+  textMessage,
+  type Locale,
+  type Message,
+} from "@blondel/i18n";
 import { createStore, type StoreApi } from "zustand/vanilla";
-import { trKey } from "../i18n/fr.js";
 import { presetProject } from "../lib/layoutKind.js";
 import type { AppearanceOverrides } from "../lib/appearance.js";
+import { SCHEMA_PARSE_OPTIONS, schemaIssues } from "../lib/schemaIssues.js";
 import type { DisplayUnit } from "../lib/units.js";
 import {
   DEFAULT_HISTORY_OPTIONS,
@@ -59,6 +69,16 @@ export interface Selection {
   readonly ruleId?: string;
 }
 
+/**
+ * Message de la barre d'outils (import refusé, sauvegarde, démo…) : `Message` neutre, traduit à
+ * l'affichage dans la langue courante (un changement de langue le retraduit).
+ */
+export interface Notice {
+  readonly kind: "info" | "error";
+  readonly msg: Message;
+  readonly details?: readonly Message[];
+}
+
 export type UpdateResult =
   { readonly ok: true } | { readonly ok: false; readonly issues: readonly string[] };
 
@@ -89,12 +109,13 @@ export interface AppState {
   readonly assistantOpen: boolean;
   readonly displayUnit: DisplayUnit;
   readonly theme: ThemeChoice;
+  /**
+   * Langue de l'interface et des exports (ADR-0007). Affichage seulement : le `Model` est
+   * neutre, un changement de langue ne relance aucun calcul.
+   */
+  readonly locale: Locale;
   /** Dernier message à afficher dans la barre d'outils (import refusé, sauvegarde…). */
-  readonly notice: {
-    readonly kind: "info" | "error";
-    readonly text: string;
-    readonly details?: readonly string[];
-  } | null;
+  readonly notice: Notice | null;
   /** L'autosauvegarde a-t-elle échoué (stockage indisponible ou plein) ? */
   readonly autosaveFailed: boolean;
   /**
@@ -142,7 +163,7 @@ export interface AppState {
    * Remplace le projet par un projet complet (proposition de l'assistant) : une entrée
    * d'historique (annulable), sélection effacée, message `notice` affiché.
    */
-  replaceProject(project: Project, notice?: string): UpdateResult;
+  replaceProject(project: Project, notice?: Message): UpdateResult;
   exportFile(): { filename: string; text: string };
   select(selection: Selection | null): void;
   setView(view: ViewTab): void;
@@ -151,6 +172,8 @@ export interface AppState {
   setAssistantOpen(open: boolean): void;
   setDisplayUnit(unit: DisplayUnit): void;
   setTheme(theme: ThemeChoice): void;
+  /** Change la langue d'affichage (mémorisation et `<html lang>` : `store/appStore.ts`). */
+  setLocale(locale: Locale): void;
   clearNotice(): void;
   /**
    * L'utilisateur a pris connaissance de l'autosauvegarde refusée (après l'avoir téléchargée ou
@@ -201,7 +224,7 @@ export interface RejectedAutosave {
   /** Le cœur sait relire la copie : elle peut être restaurée. */
   readonly restorable?: boolean;
   /** Motif du refus (copie non restaurable). */
-  readonly reason?: string;
+  readonly reason?: Message;
 }
 
 export interface ProjectStoreOptions {
@@ -220,35 +243,35 @@ export interface ProjectStoreOptions {
    * (QUESTIONS A22, à confirmer).
    */
   readonly reportBackupCopy?: boolean;
+  /** Langue initiale (défaut : français ; l'application passe la langue détectée). */
+  readonly locale?: Locale;
 }
 
 export const DEFAULT_PRESET: PresetId = "straight";
 
-function describeZodIssues(error: {
-  issues: readonly { path: readonly PropertyKey[]; message: string }[];
-}): string[] {
-  return error.issues.map((i) => `${i.path.map(String).join(".") || "(racine)"} : ${i.message}`);
-}
-
-/** Valide un projet candidat ; renvoie les messages d'erreur, ou `[]` s'il est valide. */
-export function validateProject(p: Project): string[] {
-  const r = ProjectSchema.safeParse(p);
-  return r.success ? [] : describeZodIssues(r.error);
+/**
+ * Valide un projet candidat ; renvoie les problèmes (« chemin (libellé) : motif », traduits à
+ * l'affichage), ou `[]` s'il est valide.
+ */
+export function validateProject(p: Project): Message[] {
+  const r = ProjectSchema.safeParse(p, SCHEMA_PARSE_OPTIONS);
+  return r.success ? [] : schemaIssues(r.error);
 }
 
 export type NormalizeResult =
   | { readonly ok: true; readonly project: Project }
-  | { readonly ok: false; readonly issues: readonly string[] };
+  | { readonly ok: false; readonly issues: readonly Message[] };
 
 /**
  * Valide un projet candidat et le ramène à la forme canonique du schéma du cœur. Si le candidat
  * est déjà canonique, il est rendu tel quel (même référence : partage structurel conservé) ;
  * sinon (clé à valeur par défaut retirée, clé inconnue), c'est la sortie de `ProjectSchema`
  * qui est rendue : le projet stocké ne peut jamais différer de ce que relirait l'import.
+ * Problèmes rendus en `Message` (le store les traduit dans la langue courante).
  */
 export function normalizeProject(p: Project): NormalizeResult {
-  const r = ProjectSchema.safeParse(p);
-  if (!r.success) return { ok: false, issues: describeZodIssues(r.error) };
+  const r = ProjectSchema.safeParse(p, SCHEMA_PARSE_OPTIONS);
+  if (!r.success) return { ok: false, issues: schemaIssues(r.error) };
   return { ok: true, project: stableStringify(r.data) === stableStringify(p) ? p : r.data };
 }
 
@@ -258,20 +281,27 @@ export function createProjectStore(options: ProjectStoreOptions = {}): ProjectSt
   const storage = options.storage;
   const historyOptions = options.history ?? DEFAULT_HISTORY_OPTIONS;
   const clock = options.now ?? (() => Date.now());
+  const initialLocale = options.locale ?? DEFAULT_LOCALE;
   const loaded: AutosaveLoad =
     options.initialProject === undefined ? loadAutosave(storage) : { kind: "none" };
+  // Projet neuf nommé dans la langue de l'interface (le cœur le nomme en français).
   const initial =
     options.initialProject ??
-    (loaded.kind === "ok" ? loaded.project : createProject(DEFAULT_PRESET));
+    (loaded.kind === "ok"
+      ? loaded.project
+      : createProject(DEFAULT_PRESET, {
+          name: createTranslator(initialLocale).t(PRESET_LABELS[DEFAULT_PRESET]),
+        }));
   const rejectedNotice: AppState["notice"] =
     loaded.kind === "rejected"
       ? {
           kind: "error",
-          text:
-            `L'autosauvegarde n'a pas pu être rouverte : ${loaded.message} ` +
-            (loaded.preserved
-              ? "Un projet neuf est ouvert ; la sauvegarde refusée est conservée à part et peut être téléchargée."
-              : "Un projet neuf est ouvert ; l'autosauvegarde est suspendue pour ne pas l'écraser : téléchargez-la, puis reprenez l'autosauvegarde."),
+          msg: msg(
+            loaded.preserved
+              ? "ui.notice.autosaveRejected.preserved"
+              : "ui.notice.autosaveRejected.suspended",
+            { reason: loaded.message },
+          ),
           details: loaded.issues,
         }
       : null;
@@ -302,7 +332,11 @@ export function createProjectStore(options: ProjectStoreOptions = {}): ProjectSt
       const cur = get().history;
       if (Object.is(next, cur.present)) return { ok: true };
       const normalized = normalizeProject(next);
-      if (!normalized.ok) return normalized;
+      if (!normalized.ok) {
+        // Motifs traduits dans la langue du moment (message transitoire du champ refusé).
+        const t = createTranslator(get().locale);
+        return { ok: false, issues: normalized.issues.map((m) => t.t(m)) };
+      }
       // Forme canonique identique à l'état présent (ex. valeur par défaut rétablie) : rien à
       // enregistrer, pas d'entrée d'historique vide.
       if (
@@ -331,6 +365,7 @@ export function createProjectStore(options: ProjectStoreOptions = {}): ProjectSt
       assistantOpen: false,
       displayUnit: "mm",
       theme: "system",
+      locale: initialLocale,
       notice: rejectedNotice,
       autosaveFailed: false,
       rejectedAutosave:
@@ -343,7 +378,7 @@ export function createProjectStore(options: ProjectStoreOptions = {}): ProjectSt
         try {
           next = recipe(get().project);
         } catch (e) {
-          return { ok: false, issues: [e instanceof Error ? e.message : String(e)] };
+          return { ok: false, issues: [createTranslator(get().locale).t(errorMessageOf(e))] };
         }
         return apply(next, groupKey, updateOptions?.sticky === true);
       },
@@ -361,12 +396,17 @@ export function createProjectStore(options: ProjectStoreOptions = {}): ProjectSt
       canRedo: () => canRedo(get().history),
       loadPreset: (id, presetOptions) => {
         let p: Project;
+        const t = createTranslator(get().locale);
         try {
-          p = presetProject(id, presetOptions);
+          // Projet neuf nommé dans la langue de l'interface (le cœur le nomme en français).
+          p = presetProject(id, {
+            ...presetOptions,
+            name: presetOptions?.name ?? t.t(PRESET_LABELS[id]),
+          });
         } catch (e) {
-          const text = e instanceof Error ? e.message : String(e);
-          set({ notice: { kind: "error", text } });
-          return { ok: false, issues: [text] };
+          const message = errorMessageOf(e);
+          set({ notice: { kind: "error", msg: message } });
+          return { ok: false, issues: [t.t(message)] };
         }
         const r = apply(p);
         if (r.ok) set({ selection: null, notice: null, overlays: DEFAULT_OVERLAYS });
@@ -374,12 +414,13 @@ export function createProjectStore(options: ProjectStoreOptions = {}): ProjectSt
       },
       loadDemo: (id) => {
         let p: Project;
+        const t = createTranslator(get().locale);
         try {
-          p = createDemoProject(id);
+          p = createDemoProject(id, { name: t.t(DEMO_PRESET_LABELS[id]) });
         } catch (e) {
-          const text = e instanceof Error ? e.message : String(e);
-          set({ notice: { kind: "error", text } });
-          return { ok: false, issues: [text] };
+          const message = errorMessageOf(e);
+          set({ notice: { kind: "error", msg: message } });
+          return { ok: false, issues: [t.t(message)] };
         }
         // Entrée d'historique distincte : un groupe ouvert (saisie en cours) est d'abord clos.
         const h = get().history;
@@ -394,7 +435,10 @@ export function createProjectStore(options: ProjectStoreOptions = {}): ProjectSt
             frameRequest: { project: s.project, seq: (s.frameRequest?.seq ?? 0) + 1 },
             notice: {
               kind: "info",
-              text: `Démo « ${trKey(DEMO_PRESET_LABELS[id])} » : ${trKey(DEMO_PRESET_DESCRIPTIONS[id])}`,
+              msg: msg("ui.notice.demo", {
+                label: msg(DEMO_PRESET_LABELS[id]),
+                description: msg(DEMO_PRESET_DESCRIPTIONS[id]),
+              }),
             },
           }));
         }
@@ -407,10 +451,10 @@ export function createProjectStore(options: ProjectStoreOptions = {}): ProjectSt
           set({
             selection: null,
             overlays: DEFAULT_OVERLAYS,
-            notice: { kind: "info", text: `Projet « ${r.project.name} » importé.` },
+            notice: { kind: "info", msg: msg("ui.notice.imported", { name: r.project.name }) },
           });
         } else {
-          set({ notice: { kind: "error", text: r.message, details: r.issues } });
+          set({ notice: { kind: "error", msg: r.message, details: r.issues } });
         }
         return r;
       },
@@ -423,7 +467,7 @@ export function createProjectStore(options: ProjectStoreOptions = {}): ProjectSt
           set({
             selection: null,
             overlays: DEFAULT_OVERLAYS,
-            notice: text ? { kind: "info", text } : null,
+            notice: text ? { kind: "info", msg: text } : null,
           });
         }
         return r;
@@ -437,6 +481,7 @@ export function createProjectStore(options: ProjectStoreOptions = {}): ProjectSt
       setAssistantOpen: (assistantOpen) => set({ assistantOpen }),
       setDisplayUnit: (displayUnit) => set({ displayUnit }),
       setTheme: (theme) => set({ theme }),
+      setLocale: (locale) => set({ locale }),
       clearNotice: () => set({ notice: null }),
       dismissRejectedAutosave: () => {
         if (get().rejectedAutosave === null) return;
@@ -452,14 +497,18 @@ export function createProjectStore(options: ProjectStoreOptions = {}): ProjectSt
       restoreRejectedAutosave: () => {
         const copy = get().rejectedAutosave;
         if (copy === null) {
-          return { ok: false, message: "Aucune copie de secours à restaurer.", issues: [] };
+          return {
+            ok: false,
+            message: msg("ui.notice.backup.none"),
+            issues: [],
+          };
         }
         const r = importProjectText(copy.text);
         if (!r.ok) {
           set({
             notice: {
               kind: "error",
-              text: `La copie de secours ne peut pas être restaurée : ${r.message}`,
+              msg: msg("ui.notice.backup.unreadable", { reason: r.message }),
               details: r.issues,
             },
           });
@@ -469,16 +518,18 @@ export function createProjectStore(options: ProjectStoreOptions = {}): ProjectSt
         if (h.group !== null) set({ history: endGroup(h) });
         const applied = apply(r.project);
         if (!applied.ok) {
-          const message = "La copie de secours ne peut pas être restaurée.";
-          set({ notice: { kind: "error", text: message, details: applied.issues } });
-          return { ok: false, message, issues: applied.issues };
+          const message = msg("ui.notice.backup.refused");
+          // Motifs déjà traduits par `apply` dans la langue du moment.
+          const issues = applied.issues.map(textMessage);
+          set({ notice: { kind: "error", msg: message, details: issues } });
+          return { ok: false, message, issues };
         }
         set({
           selection: null,
           overlays: DEFAULT_OVERLAYS,
           notice: {
             kind: "info",
-            text: `Copie de secours « ${r.project.name} » restaurée (annulable) ; elle est supprimée du stockage.`,
+            msg: msg("ui.notice.backup.restored", { name: r.project.name }),
           },
         });
         get().dismissRejectedAutosave();

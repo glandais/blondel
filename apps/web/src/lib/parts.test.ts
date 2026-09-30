@@ -1,13 +1,13 @@
 import fc from "fast-check";
 import { PRESET_IDS, buildModel, createProject } from "@blondel/core";
-import { MASS_DENSITY_NOTE, massNoteFor } from "@blondel/exports";
+import { massDensityNote, massNoteFor } from "@blondel/exports";
 import { describe, expect, it } from "vitest";
 import { bomSummary, selectedPart } from "./parts.js";
 
 describe("nomenclature", () => {
   it.each(PRESET_IDS)("%s : chaque pièce apparaît une fois, totaux = somme des lignes", (id) => {
     const model = buildModel(createProject(id));
-    const bom = bomSummary(model.parts);
+    const bom = bomSummary(model.parts, "fr");
     expect(bom.count).toBe(model.parts.length);
     const ids = bom.lines.flatMap((l) => l.partIds);
     expect(new Set(ids).size).toBe(model.parts.length);
@@ -26,7 +26,7 @@ describe("nomenclature", () => {
         l.unitMass !== undefined &&
         ["Chêne", "Hêtre", "Frêne", "Pin", "Lamellé-collé"].includes(l.material)
       )
-        expect(l.massNote).toBe(MASS_DENSITY_NOTE);
+        expect(l.massNote).toBe(massDensityNote());
     }
   });
 
@@ -38,10 +38,10 @@ describe("nomenclature", () => {
       material: "wood-oak" as const,
       quantities: { ...p.quantities, mass_kg: 10 + i },
     }));
-    const bom = bomSummary(parts);
+    const bom = bomSummary(parts, "fr");
     expect(bom.mass).toBeCloseTo(33, 9);
-    expect(bom.massNotes).toEqual([MASS_DENSITY_NOTE]);
-    const own = bomSummary(parts, massNoteFor({ wood: { densities: { "wood-oak": 700 } } }));
+    expect(bom.massNotes).toEqual([massDensityNote()]);
+    const own = bomSummary(parts, "fr", massNoteFor({ wood: { densities: { "wood-oak": 700 } } }));
     expect(own.massNotes).toEqual([]);
     expect(own.lines.every((l) => l.massNote === undefined)).toBe(true);
   });
@@ -50,7 +50,7 @@ describe("nomenclature", () => {
     const model = buildModel(createProject("quarter-left"));
     fc.assert(
       fc.property(fc.subarray([...model.parts]), (parts) => {
-        const bom = bomSummary(parts);
+        const bom = bomSummary(parts, "fr");
         expect(bom.count).toBe(parts.length);
         expect(bom.lines.reduce((s, l) => s + l.quantity, 0)).toBe(parts.length);
       }),
@@ -68,7 +68,7 @@ describe("nomenclature", () => {
     });
     // Ordre du modèle : 1000, 900, 1000 → lignes « X 1000 × 2 » puis « X 900 × 1 ».
     const parts = [withLength("a", 1000), withLength("b", 900), withLength("c", 1000)];
-    const bom = bomSummary(parts);
+    const bom = bomSummary(parts, "fr");
     expect(bom.lines).toHaveLength(2);
     for (const l of bom.lines) {
       for (const id of l.partIds) {
@@ -79,7 +79,7 @@ describe("nomenclature", () => {
   });
 
   it("modèle vide : aucune ligne, totaux absents", () => {
-    expect(bomSummary([])).toEqual({ lines: [], count: 0, withFlat: 0, massNotes: [] });
+    expect(bomSummary([], "fr")).toEqual({ lines: [], count: 0, withFlat: 0, massNotes: [] });
   });
 });
 

@@ -14,20 +14,22 @@ import {
   type Vec2,
 } from "@blondel/core";
 import { useEffect, useId, useMemo, useState } from "react";
-import { tr } from "../i18n/fr.js";
+import { msg, type Locale, type Message, type MessageKey, type Translator } from "@blondel/i18n";
+import { formatNumber } from "../i18n/locale.js";
+import { useT } from "../i18n/useT.js";
 import { appStore, useApp } from "../store/appStore.js";
 
-const LABELS: Readonly<Record<SurveyMeasure, string>> = {
-  ab: "Côté AB",
-  bc: "Côté BC",
-  cd: "Côté CD",
-  da: "Côté DA",
-  ac: "Diagonale AC",
-  bd: "Diagonale BD",
+const LABELS: Readonly<Record<SurveyMeasure, MessageKey>> = {
+  ab: "ui.plan.survey.measure.ab",
+  bc: "ui.plan.survey.measure.bc",
+  cd: "ui.plan.survey.measure.cd",
+  da: "ui.plan.survey.measure.da",
+  ac: "ui.plan.survey.measure.ac",
+  bd: "ui.plan.survey.measure.bd",
 };
 
-const fmt = (v: number, d = 0): string =>
-  v.toLocaleString("fr-FR", { minimumFractionDigits: d, maximumFractionDigits: d });
+const fmt = (v: number, locale: Locale, d = 0): string =>
+  formatNumber(locale, v, { minimumFractionDigits: d, maximumFractionDigits: d });
 
 /** Lecture d'une saisie en mm (virgule décimale acceptée) ; NaN si vide ou illisible. */
 export function parseMm(text: string): number {
@@ -44,15 +46,16 @@ export function parseMm(text: string): number {
  */
 export function blindSpot(
   result: Pick<Extract<SurveyResult, { ok: true }>, "undetectable">,
+  t: Translator,
 ): string {
   const blind = result.undetectable;
   let worst: SurveyMeasure = SURVEY_MEASURES[0]!;
   for (const k of SURVEY_MEASURES) if (blind[k] > blind[worst]) worst = k;
-  const t = blind[worst];
-  const label = LABELS[worst].toLowerCase();
-  return Number.isFinite(t)
-    ? `Limite du contrôle : une erreur isolée allant jusqu'à ${fmt(t)} mm sur la mesure « ${label} » peut ne pas être détectée ; la vérifier deux fois.`
-    : `Limite du contrôle : une erreur sur la mesure « ${label} » ne peut pas être détectée ; la vérifier deux fois.`;
+  const limit = blind[worst];
+  const label = t.t(LABELS[worst]).toLowerCase();
+  return Number.isFinite(limit)
+    ? t.t("ui.plan.survey.blindSpot", { limit: fmt(limit, t.locale), label })
+    : t.t("ui.plan.survey.blindSpot.none", { label });
 }
 
 interface Props {
@@ -62,6 +65,7 @@ interface Props {
 
 export function PlanSurveyForm({ onPreview }: Props) {
   const id = useId();
+  const t = useT();
   const opening = useApp((s) => s.project.site.opening);
   const [values, setValues] = useState<Record<SurveyMeasure, string>>({
     ab: "",
@@ -78,7 +82,8 @@ export function PlanSurveyForm({ onPreview }: Props) {
   }));
   const [angle, setAngle] = useState("0");
   const [orientation, setOrientation] = useState<"ccw" | "cw">("ccw");
-  const [notice, setNotice] = useState<string | null>(null);
+  // Remarque d'application : message traduit à l'affichage, ou motif de refus du schéma.
+  const [notice, setNotice] = useState<Message | string | null>(null);
 
   const measures = useMemo(
     () =>
@@ -107,13 +112,13 @@ export function PlanSurveyForm({ onPreview }: Props) {
     const r = appStore.getState().update((p) => withOpeningPolygon(p, result.points));
     appStore.getState().endGroup();
     setNotice(
-      r.ok ? "Trémie remplacée par le relevé (annulable)." : (r.issues[0] ?? "Relevé refusé."),
+      r.ok ? msg("ui.plan.survey.applied") : (r.issues[0] ?? msg("ui.plan.survey.refused")),
     );
   };
 
   const field = (k: SurveyMeasure) => (
     <div className="field" key={k}>
-      <label htmlFor={`${id}-${k}`}>{LABELS[k]}</label>
+      <label htmlFor={`${id}-${k}`}>{t.t(LABELS[k])}</label>
       <span className="input-unit">
         <input
           id={`${id}-${k}`}
@@ -129,16 +134,18 @@ export function PlanSurveyForm({ onPreview }: Props) {
 
   return (
     <details className="plan-site__group" open>
-      <summary>Relevé de trémie (4 côtés + 2 diagonales)</summary>
+      <summary>{t.t("ui.plan.survey.title")}</summary>
       <p className="muted">
-        Coins A, B, C, D dans l'ordre,{" "}
-        {orientation === "ccw" ? "sens trigonométrique" : "sens horaire"} vu de dessus ; A est placé
-        au point ci-dessous, AB suit l'angle donné.
+        {t.t("ui.plan.survey.hint", {
+          direction: msg(
+            orientation === "ccw" ? "ui.plan.survey.direction.ccw" : "ui.plan.survey.direction.cw",
+          ),
+        })}
       </p>
       <div className="grid-2">{SURVEY_MEASURES.map(field)}</div>
       <div className="grid-2">
         <div className="field">
-          <label htmlFor={`${id}-ox`}>A : X</label>
+          <label htmlFor={`${id}-ox`}>{t.t("ui.plan.survey.originX")}</label>
           <input
             id={`${id}-ox`}
             type="text"
@@ -148,7 +155,7 @@ export function PlanSurveyForm({ onPreview }: Props) {
           />
         </div>
         <div className="field">
-          <label htmlFor={`${id}-oy`}>A : Y</label>
+          <label htmlFor={`${id}-oy`}>{t.t("ui.plan.survey.originY")}</label>
           <input
             id={`${id}-oy`}
             type="text"
@@ -158,7 +165,7 @@ export function PlanSurveyForm({ onPreview }: Props) {
           />
         </div>
         <div className="field">
-          <label htmlFor={`${id}-angle`}>Direction de AB (°)</label>
+          <label htmlFor={`${id}-angle`}>{t.t("ui.plan.survey.angle")}</label>
           <input
             id={`${id}-angle`}
             type="text"
@@ -168,22 +175,22 @@ export function PlanSurveyForm({ onPreview }: Props) {
           />
         </div>
         <div className="field">
-          <label htmlFor={`${id}-orient`}>Sens A → B → C</label>
+          <label htmlFor={`${id}-orient`}>{t.t("ui.plan.survey.orientation")}</label>
           <select
             id={`${id}-orient`}
             value={orientation}
             onChange={(e) => setOrientation(e.target.value === "cw" ? "cw" : "ccw")}
           >
-            <option value="ccw">Trigonométrique</option>
-            <option value="cw">Horaire</option>
+            <option value="ccw">{t.t("ui.plan.survey.orientation.ccw")}</option>
+            <option value="cw">{t.t("ui.plan.survey.orientation.cw")}</option>
           </select>
         </div>
       </div>
       {result === null ? (
-        <p className="muted">Saisir les six mesures.</p>
+        <p className="muted">{t.t("ui.plan.survey.incomplete")}</p>
       ) : !result.ok ? (
         <p className="notice notice--error" role="alert">
-          Relevé impossible : {tr(result.reason)}.
+          {t.t("ui.plan.survey.impossible", { reason: result.reason })}
         </p>
       ) : (
         <div
@@ -192,24 +199,30 @@ export function PlanSurveyForm({ onPreview }: Props) {
         >
           <span>
             {result.consistent
-              ? `Relevé cohérent : écart maximal ${fmt(result.maxResidual, 1)} mm.`
-              : `Relevé incohérent : écart maximal ${fmt(result.maxResidual, 1)} mm (tolérance ${fmt(SURVEY_TOLERANCE_DEFAULT)} mm, à valider) — vérifier les mesures.`}
+              ? t.t("ui.plan.survey.consistent", {
+                  residual: fmt(result.maxResidual, t.locale, 1),
+                })
+              : t.t("ui.plan.survey.inconsistent", {
+                  residual: fmt(result.maxResidual, t.locale, 1),
+                  tolerance: fmt(SURVEY_TOLERANCE_DEFAULT, t.locale),
+                })}
           </span>
           <span>
-            Angles A, B, C, D : {result.angles.map((a) => `${fmt(a, 1)}°`).join(", ")}
-            {result.convex ? "" : " (trémie non convexe)"}.
+            {t.t(result.convex ? "ui.plan.survey.angles" : "ui.plan.survey.angles.concave", {
+              angles: result.angles.map((a) => `${fmt(a, t.locale, 1)}°`).join(", "),
+            })}
           </span>
-          <span>{blindSpot(result)}</span>
+          <span>{blindSpot(result, t)}</span>
         </div>
       )}
       <div className="button-row">
         <button type="button" disabled={!result?.ok} onClick={apply}>
-          Remplacer la trémie par le relevé
+          {t.t("ui.plan.survey.apply")}
         </button>
       </div>
       {notice ? (
         <p className="muted" role="status">
-          {notice}
+          {typeof notice === "string" ? notice : t.t(notice)}
         </p>
       ) : null}
     </details>

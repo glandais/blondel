@@ -1,3 +1,4 @@
+import { textMessage, translatorFor } from "@blondel/i18n";
 import fc from "fast-check";
 import {
   PRESET_IDS,
@@ -15,6 +16,8 @@ function clock(): { now: () => number; advance: (ms: number) => void } {
   let t = 0;
   return { now: () => t, advance: (ms) => void (t += ms) };
 }
+
+const FR = translatorFor("fr");
 
 describe("store du projet", () => {
   it("démarre sur le préréglage par défaut sans autosauvegarde", () => {
@@ -147,7 +150,7 @@ describe("store du projet", () => {
       const s = createProjectStore({ storage, autosaveDelayMs: 0 });
       expect(s.getState().project.name).toBe(createProject("straight").name);
       expect(s.getState().notice?.kind).toBe("error");
-      expect(s.getState().notice?.text).toMatch(message);
+      expect(FR.t(s.getState().notice!.msg)).toMatch(message);
       expect(s.getState().rejectedAutosave).toMatchObject({ text: raw, preserved: true });
       expect(s.getState().rejectedAutosave?.since).toBeUndefined();
       // La première modification écrit l'autosauvegarde, mais l'original reste récupérable.
@@ -172,7 +175,7 @@ describe("store du projet", () => {
       };
       const s = createProjectStore({ storage, autosaveDelayMs: 0 });
       expect(s.getState().rejectedAutosave).toMatchObject({ text: raw, preserved: false });
-      expect(s.getState().notice?.text).toMatch(/suspendue/);
+      expect(FR.t(s.getState().notice!.msg)).toMatch(/suspendue/);
       s.getState().setField(["site", "floorToFloor"], 2800);
       s.getState().flushAutosave();
       expect(inner.getItem(AUTOSAVE_KEY)).toBe(raw);
@@ -196,7 +199,7 @@ describe("store du projet", () => {
           since: "earlier",
           restorable: false,
         });
-        expect(s.getState().rejectedAutosave?.reason).toMatch(/plus récent/);
+        expect(FR.t(s.getState().rejectedAutosave!.reason!)).toMatch(/plus récent/);
         // Pas de restauration d'une copie illisible : message, rien ne change.
         const before = s.getState().project;
         expect(s.getState().restoreRejectedAutosave().ok).toBe(false);
@@ -370,10 +373,12 @@ describe("remplacement du projet (assistant) et état d'interface", () => {
     // Saisie en cours (groupe ouvert) : le remplacement reste une entrée distincte.
     s.getState().setField(["site", "floorToFloor"], 2750);
     const q = createProject("quarter-left");
-    expect(s.getState().replaceProject(q, "Proposition retenue.")).toEqual({ ok: true });
+    expect(s.getState().replaceProject(q, textMessage("Proposition retenue."))).toEqual({
+      ok: true,
+    });
     expect(s.getState().project).toEqual(q);
     expect(s.getState().selection).toBeNull();
-    expect(s.getState().notice).toEqual({ kind: "info", text: "Proposition retenue." });
+    expect(s.getState().notice).toEqual({ kind: "info", msg: textMessage("Proposition retenue.") });
     s.getState().undo();
     expect(s.getState().project.site.floorToFloor).toBe(2750);
     s.getState().undo();

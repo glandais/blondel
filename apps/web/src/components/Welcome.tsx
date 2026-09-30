@@ -6,6 +6,7 @@
  * navigateur).
  */
 import { useState } from "react";
+import { useT } from "../i18n/useT.js";
 import { DEMO_GROUP_LABEL, PRESET_GROUPS, applyPresetChoice } from "../lib/presetChoice.js";
 import { appStore, firstVisit, useApp } from "../store/appStore.js";
 
@@ -22,6 +23,7 @@ function wasDismissed(): boolean {
 }
 
 export function Welcome() {
+  const t = useT();
   const [hidden, setHidden] = useState(() => !firstVisit || wasDismissed());
   const edited = useApp((s) => s.history.past.length > 0);
   if (hidden || edited) return null;
@@ -34,12 +36,9 @@ export function Welcome() {
     }
   };
   return (
-    <section className="welcome" aria-label="Accueil">
-      <h2>Bienvenue dans Blondel</h2>
-      <p>
-        L'assistant propose des escaliers conformes à partir de la hauteur à monter, de la trémie et
-        des murs. On peut aussi partir d'un préréglage ou importer un projet.
-      </p>
+    <section className="welcome" aria-label={t.t("ui.welcome.label")}>
+      <h2>{t.t("ui.welcome.title")}</h2>
+      <p>{t.t("ui.welcome.intro")}</p>
       <div className="button-row">
         <button
           type="button"
@@ -48,24 +47,24 @@ export function Welcome() {
             appStore.getState().setAssistantOpen(true);
           }}
         >
-          Démarrer avec l'assistant
+          {t.t("ui.welcome.startAssistant")}
         </button>
         <button type="button" onClick={dismiss}>
-          Fermer
+          {t.t("ui.welcome.close")}
         </button>
       </div>
       {DEMOS.length > 0 ? (
-        <div className="welcome__demos" role="group" aria-label="Démos">
-          <span className="muted">Ou découvrir une démo :</span>
+        <div className="welcome__demos" role="group" aria-label={t.t("ui.welcome.demos")}>
+          <span className="muted">{t.t("ui.welcome.demosIntro")}</span>
           {DEMOS.map((d) => (
             <button
               key={d.id}
               type="button"
               className="link"
-              title={d.description}
+              title={d.description ? t.t(d.description) : undefined}
               onClick={() => applyPresetChoice(appStore.getState(), d.id)}
             >
-              {d.label}
+              {t.t(d.label)}
             </button>
           ))}
         </div>

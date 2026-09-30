@@ -19,14 +19,14 @@ import {
   type Severity,
   type Vec3,
 } from "@blondel/core";
-import { tr, trOpt } from "../i18n/fr.js";
+import type { Message } from "@blondel/i18n";
 import { SEVERITY_ORDER } from "./compliance.js";
 
 export interface PointMarker {
   readonly at: Vec3;
   readonly severity: Severity;
   readonly ruleId: string;
-  readonly message: string;
+  readonly message: Message;
   readonly location: Location;
 }
 
@@ -112,7 +112,7 @@ export function controlMarkers(
         at: r.location.at,
         severity: r.severity,
         ruleId: r.ruleId,
-        message: trOpt(r.message) || tr(ruleDescription(r.ruleId)),
+        message: r.message ?? ruleDescription(r.ruleId),
         location: r.location,
       });
     }

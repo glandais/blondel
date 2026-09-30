@@ -3,8 +3,14 @@
  * (ADR-0005). La lecture et la validation sont celles du cœur (`parseProjectText`,
  * migrations comprises) ; ici, seulement la plomberie et les messages.
  */
-import { ProjectParseError, parseProjectText, serializeProject, type Project } from "@blondel/core";
-import { tr } from "../i18n/fr.js";
+import {
+  ProjectParseError,
+  errorMessageOf,
+  parseProjectText,
+  serializeProject,
+  type Project,
+} from "@blondel/core";
+import { msg, type Message, type Translator } from "@blondel/i18n";
 
 /** Sous-ensemble de l'API `Storage` utilisé (injectable dans les tests). */
 export interface StorageLike {
@@ -78,9 +84,9 @@ export type AutosaveLoad =
   | {
       /** Autosauvegarde présente mais illisible (format plus récent, projet invalide…). */
       readonly kind: "rejected";
-      /** Message du cœur (première ligne) et détail des erreurs. */
-      readonly message: string;
-      readonly issues: readonly string[];
+      /** Message du cœur (résumé) et détail des erreurs, traduits à l'affichage. */
+      readonly message: Message;
+      readonly issues: readonly Message[];
       /** Texte brut refusé (pour le télécharger). */
       readonly text: string;
       /**
@@ -131,14 +137,20 @@ export function loadRejectedCopy(storage: StorageLike | undefined): string | nul
   }
 }
 
-/** Fichier proposé au téléchargement pour une autosauvegarde refusée (texte brut, intact). */
-export function rejectedAutosaveFile(text: string): { filename: string; text: string } {
-  return { filename: `autosauvegarde-refusee${PROJECT_FILE_SUFFIX}`, text };
+/**
+ * Fichier proposé au téléchargement pour une autosauvegarde refusée (texte brut, intact), nommé
+ * dans la langue d'affichage.
+ */
+export function rejectedAutosaveFile(
+  text: string,
+  t: Translator,
+): { filename: string; text: string } {
+  return { filename: `${t.t("ui.notice.rejectedAutosaveFile")}${PROJECT_FILE_SUFFIX}`, text };
 }
 
 export type ImportResult =
   | { readonly ok: true; readonly project: Project }
-  | { readonly ok: false; readonly message: string; readonly issues: readonly string[] };
+  | { readonly ok: false; readonly message: Message; readonly issues: readonly Message[] };
 
 /** Lit le texte d'un fichier `.blondel.json` ; les erreurs sont rendues, jamais levées. */
 export function importProjectText(text: string): ImportResult {
@@ -146,16 +158,20 @@ export function importProjectText(text: string): ImportResult {
     return { ok: true, project: parseProjectText(text) };
   } catch (e) {
     if (e instanceof ProjectParseError) {
-      const summary = e.message.split("\n")[0] ?? e.message;
       return {
         ok: false,
-        message: summary,
-        issues: e.issues.map((i) => `${i.path === "" ? "(racine)" : i.path} : ${tr(i.message)}`),
+        message: e.msg,
+        issues: e.issues.map((i) =>
+          msg("project.issue.line", {
+            path: i.path === "" ? msg("project.issue.root") : i.path,
+            message: i.message,
+          }),
+        ),
       };
     }
     return {
       ok: false,
-      message: `Fichier de projet illisible : ${e instanceof Error ? e.message : String(e)}`,
+      message: msg("ui.notice.projectFileUnreadable", { detail: errorMessageOf(e) }),
       issues: [],
     };
   }

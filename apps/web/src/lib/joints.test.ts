@@ -1,3 +1,4 @@
+import { translatorFor } from "@blondel/i18n";
 import {
   textMessage,
   ProjectSchema,
@@ -10,6 +11,8 @@ import {
 import { describe, expect, it } from "vitest";
 import j5bText from "../../../../examples/j5b-debillarde-soude.blondel.json?raw";
 import { segmentedParts } from "./joints.js";
+
+const FR = translatorFor("fr");
 
 describe("tronçons et joints (limon de jour débillardé)", () => {
   it("exemple j5b : tronçons dans l'ordre de la montée, joints J1, J2 entre tronçons consécutifs", () => {
@@ -28,7 +31,7 @@ describe("tronçons et joints (limon de jour débillardé)", () => {
       expect(j.from.mark).toBe(marks[i]);
       expect(j.to.mark).toBe(marks[i + 1]);
       expect(j.weldMm).toBeGreaterThan(0);
-      expect(j.label).toMatch(/Joint/);
+      expect(FR.t(j.label)).toMatch(/Joint/);
     });
     // Cordons des joints = soudures bout à bout des tronçons (chaque joint compté une fois).
     const butt = g.segments.reduce((s, x) => s + (x.part.quantities["butt_weld_mm"] ?? 0), 0);
@@ -78,7 +81,7 @@ describe("tronçons et joints (limon de jour débillardé)", () => {
       )!;
       expect(g.segments.length).toBeGreaterThanOrEqual(3);
       for (const j of g.joints) {
-        expect(j.label).toMatch(new RegExp(`avec ${j.to.mark}\\b`));
+        expect(FR.t(j.label)).toMatch(new RegExp(`avec ${j.to.mark}\\b`));
         // Cordon = soudure bout à bout comptée par le cœur sur le tronçon amont.
         expect(j.weldMm).toBeCloseTo(j.from.quantities["butt_weld_mm"] ?? NaN, 6);
       }

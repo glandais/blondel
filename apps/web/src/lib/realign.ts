@@ -10,21 +10,22 @@ import {
   type Project,
   type WalklineSide,
 } from "@blondel/core";
-import { tr, trList } from "../i18n/fr.js";
+import type { Message, MessageKey } from "@blondel/i18n";
+import { joinMessages } from "../i18n/text.js";
 
 /** Choix du formulaire : bord imposé, ou automatique (champ absent du projet). */
 export type WalklineSideChoice = WalklineSide | "auto";
 
 export interface RealignChoice {
   readonly project: Project;
-  /** Message d'information (volées et trémie avant → après). */
-  readonly notice: string;
+  /** Message d'information (volées et trémie avant → après), `null` sans remarque. */
+  readonly notice: Message | null;
 }
 
 /** Projet recalé et message ; lève `RangeError` (message du cœur) si le recalage est impossible. */
 export function realign(project: Project): RealignChoice {
   const r = realignFlightsAndOpening(project);
-  return { project: r.project, notice: trList(r.notes).join(" ") };
+  return { project: r.project, notice: joinMessages(r.notes) };
 }
 
 /**
@@ -32,21 +33,19 @@ export function realign(project: Project): RealignChoice {
  * position des tournants saisie incompatible avec H, palier hors d'un nombre entier de girons,
  * hélicoïdal…), ou `null` s'il est actif (décision A18 (a) du 2026-09-30).
  */
-export function realignDisabledReason(project: Project): string | null {
-  const reason = realignBlocker(project);
-  return reason === null ? null : tr(reason);
+export function realignDisabledReason(project: Project): Message | null {
+  return realignBlocker(project);
 }
 
-/** Infobulle du bouton de recalage actif. */
-export const REALIGN_HINT =
-  "Après une modification de H, E ou de l'épaisseur du plancher haut : longueur de la dernière volée recalculée (position des tournants saisie conservée) et trémie rectangulaire recalculée ; une trémie polygonale est conservée (annulable)";
+/** Infobulle du bouton de recalage actif (clé, traduite à l'affichage). */
+export const REALIGN_HINT_KEY: MessageKey = "ui.lib.realign.hint";
 
 /**
- * Aide du réglage du bord de mesure. Sans valeur chiffrée : le seuil d'emmarchement et la
- * distance DTU sont dans rules.yaml (`LF_POSITION_DTU_*`), pas recopiés dans l'interface.
+ * Aide du réglage du bord de mesure (clé, traduite à l'affichage). Sans valeur chiffrée : le
+ * seuil d'emmarchement et la distance DTU sont dans rules.yaml (`LF_POSITION_DTU_*`), pas
+ * recopiés dans l'interface.
  */
-export const WALKLINE_SIDE_HINT =
-  "Escalier droit : bord depuis lequel la ligne de foulée est placée (emmarchement large selon le DTU, ou distance imposée) ; automatique = côté de la main courante principale (vide avec garde-corps, sinon mur ; à défaut gauche)";
+export const WALKLINE_SIDE_HINT_KEY: MessageKey = "ui.lib.realign.walklineSideHint";
 
 /** Bord de mesure saisi (`auto` si absent). */
 export function walklineSideChoice(project: Project): WalklineSideChoice {

@@ -24,7 +24,6 @@ import { RecordingCanvas, helveticaMeasure } from "./canvas.js";
 import { measuredText } from "./compliance.js";
 import { installationLines } from "./installation.js";
 import {
-  COMPLIANCE_DISCLAIMER,
   complianceDisclaimer,
   exportPdfDocument,
   renderPdf,
@@ -127,7 +126,7 @@ describe("dossier PDF en anglais sur examples/", () => {
         );
         expect(fr.pages[0]!.title).toMatch(/^Sommaire( \(1\/\d+\))?$/);
         expect(fr.texts.flat()).toContain("30/09/2026");
-        expect(fr.texts.flat()).toContain(COMPLIANCE_DISCLAIMER);
+        expect(fr.texts.flat()).toContain(complianceDisclaimer());
       });
     });
   }

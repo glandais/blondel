@@ -52,7 +52,6 @@ export {
   type TileInfo,
 } from "./tiles.js";
 export {
-  COMPLIANCE_DISCLAIMER,
   STANDARD_SCALES,
   complianceDisclaimer,
   exportPdf,

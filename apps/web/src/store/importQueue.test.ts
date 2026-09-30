@@ -1,3 +1,4 @@
+import { translatorFor } from "@blondel/i18n";
 import { describe, expect, it } from "vitest";
 import {
   cancelUnderlayImport,
@@ -5,6 +6,8 @@ import {
   queuedImportMessage,
   requestUnderlayImport,
 } from "./importQueue.js";
+
+const FR = translatorFor("fr");
 
 describe("file des imports de calque (QUESTIONS D1)", () => {
   const file = new File(["0\nEOF\n"], "rdc.dxf");
@@ -14,11 +17,11 @@ describe("file des imports de calque (QUESTIONS D1)", () => {
     const pending = importQueue.getState().pending;
     const failed = queuedImportMessage(pending, { available: false, computing: false });
     expect(failed?.kind).toBe("error");
-    expect(failed?.text).toContain("« rdc.dxf »");
-    expect(failed?.text).toMatch(/en échec/);
+    expect(FR.t(failed!.text)).toContain("« rdc.dxf »");
+    expect(FR.t(failed!.text)).toMatch(/en échec/);
     const computing = queuedImportMessage(pending, { available: false, computing: true });
     expect(computing?.kind).toBe("info");
-    expect(computing?.text).toMatch(/fin du calcul/);
+    expect(FR.t(computing!.text)).toMatch(/fin du calcul/);
     // Modèle disponible : le plan « Site et saisie » prend la demande, rien à signaler.
     expect(queuedImportMessage(pending, { available: true, computing: false })).toBeNull();
     cancelUnderlayImport();
@@ -32,7 +35,8 @@ describe("file des imports de calque (QUESTIONS D1)", () => {
       available: false,
       computing: false,
     });
-    expect(m?.text).toMatch(/^L'image « plan\.png »/);
+    expect(FR.t(m!.text)).toMatch(/^L'image « plan\.png »/);
+    expect(translatorFor("en").t(m!.text)).toMatch(/^The image “plan\.png” cannot be imported/);
     cancelUnderlayImport();
   });
 
@@ -43,7 +47,7 @@ describe("file des imports de calque (QUESTIONS D1)", () => {
     const pending = importQueue.getState().pending;
     const m = queuedImportMessage(pending, { available: true, computing: false, hostShown: false });
     expect(m?.kind).toBe("info");
-    expect(m?.text).toMatch(/Site et saisie/);
+    expect(FR.t(m!.text)).toMatch(/Site et saisie/);
     expect(
       queuedImportMessage(pending, { available: true, computing: false, hostShown: true }),
     ).toBeNull();

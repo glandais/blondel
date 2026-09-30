@@ -5,13 +5,18 @@
  */
 import type { Model, Project } from "@blondel/core";
 import { renderElevationSvg, renderPlanSvg } from "@blondel/exports";
+import type { Locale } from "@blondel/i18n";
 
 export type SvgRenderResult = { readonly svg: string } | { readonly error: string };
 
-/** Options communes de l'écran : fond transparent (thème de la page), titre du projet. */
+/**
+ * Options communes de l'écran : fond transparent (thème de la page), titre du projet, langue
+ * d'affichage (textes et nombres du SVG, comme l'export dans cette langue).
+ */
 export interface ScreenSvgOptions {
   readonly project: Project;
   readonly theme: "light" | "dark";
+  readonly locale: Locale;
 }
 
 /** Rend un SVG ou le message d'erreur du rendu ; ne lève jamais. */
@@ -30,6 +35,7 @@ export function renderPlanForScreen(model: Model, o: ScreenSvgOptions): SvgRende
       theme: o.theme,
       background: false,
       title: o.project.name,
+      locale: o.locale,
     }),
   );
 }
@@ -41,6 +47,7 @@ export function renderElevationForScreen(model: Model, o: ScreenSvgOptions): Svg
       theme: o.theme,
       background: false,
       title: o.project.name,
+      locale: o.locale,
     }),
   );
 }

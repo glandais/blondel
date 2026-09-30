@@ -14,7 +14,8 @@ import {
   type Model,
   type Severity,
 } from "@blondel/core";
-import { MATERIAL_PBR, type PbrLook } from "@blondel/exports";
+import { MATERIAL_KEYS, MATERIAL_PBR, type PbrLook } from "@blondel/exports";
+import type { MessageKey } from "@blondel/i18n";
 import type { TextureKind } from "./proceduralTextures.js";
 
 export interface MaterialLook {
@@ -72,20 +73,11 @@ export const MATERIAL_LOOKS: Readonly<Record<MaterialId, MaterialLook>> = Object
   ]),
 ) as Record<MaterialId, MaterialLook>;
 
-/** Libellés français des matériaux. */
-export const MATERIAL_LABELS: Readonly<Record<MaterialId, string>> = {
-  "wood-oak": "Chêne",
-  "wood-beech": "Hêtre",
-  "wood-ash": "Frêne",
-  "wood-pine": "Pin",
-  "wood-glulam": "Lamellé-collé",
-  "steel-raw": "Acier brut",
-  "steel-painted": "Acier peint",
-  "steel-galvanized": "Acier galvanisé",
-  "stainless-brushed": "Inox brossé",
-  glass: "Verre",
-  concrete: "Béton",
-};
+/**
+ * Clés des libellés des matériaux (`material.*` de `@blondel/i18n`, partagées avec les exports :
+ * `MATERIAL_KEYS`). À traduire par `t(MATERIAL_LABELS[id])`.
+ */
+export const MATERIAL_LABELS: Readonly<Record<MaterialId, MessageKey>> = MATERIAL_KEYS;
 
 export const HIGHLIGHT_COLOR = "#ff7a1a";
 

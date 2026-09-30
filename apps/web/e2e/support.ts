@@ -188,7 +188,30 @@ export class Interactions {
   }
 }
 
+/** Clé de stockage de la langue choisie (ADR-0007, `apps/web/src/i18n/locale.ts`). */
+export const LANG_KEY = "blondel.lang";
+
+/**
+ * Langue de départ des parcours : les specs vérifient les libellés français. Le contexte
+ * Playwright est déjà en `fr-FR` (`playwright.config.ts`, langue détectée au premier
+ * lancement) ; ce script l'impose en plus dans le stockage **s'il n'y a pas encore de choix**,
+ * pour qu'un choix fait pendant le parcours (passage en anglais) survive à un rechargement.
+ */
+export async function startInLanguage(page: Page, lang: "fr" | "en" = "fr"): Promise<void> {
+  await page.addInitScript(
+    ([key, value]) => {
+      try {
+        if (window.localStorage.getItem(key) === null) window.localStorage.setItem(key, value);
+      } catch {
+        // Stockage indisponible : la langue du navigateur (fr-FR) s'applique.
+      }
+    },
+    [LANG_KEY, lang] as const,
+  );
+}
+
 export async function openApp(page: Page): Promise<void> {
+  await startInLanguage(page, "fr");
   await page.goto("./");
   await expect(page.getByRole("toolbar", { name: "Barre d'outils" })).toBeVisible();
   await settle(page);

@@ -6,17 +6,19 @@
  * panneaux Structure et Garde-corps. Choix de présentation, aucune règle métier.
  */
 import type { MaterialId, PartCategory, PartFamilyId } from "@blondel/core";
+import type { MessageKey } from "@blondel/i18n";
 import { MATERIAL_LABELS, type PaintZone } from "../three/materials.js";
 
 export type PartFamily = "treads" | "structure" | "guards" | "handrails";
 
 export const PART_FAMILIES: readonly PartFamily[] = ["treads", "structure", "guards", "handrails"];
 
-export const FAMILY_LABELS: Readonly<Record<PartFamily, string>> = {
-  treads: "Marches, contremarches et paliers",
-  structure: "Structure (limons, poteaux, supports)",
-  guards: "Garde-corps (poteaux, remplissages)",
-  handrails: "Mains courantes",
+/** Clés des libellés des familles de pièces. */
+export const FAMILY_LABELS: Readonly<Record<PartFamily, MessageKey>> = {
+  treads: "ui.label.partFamily.treads",
+  structure: "ui.label.partFamily.structure",
+  guards: "ui.label.partFamily.guards",
+  handrails: "ui.label.partFamily.handrails",
 };
 
 /** Surcharges d'apparence par famille (absente : matériau du modèle). */

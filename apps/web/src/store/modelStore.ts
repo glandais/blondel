@@ -7,7 +7,8 @@
  * Le comparateur de variantes a son propre worker (un calcul long de comparaison ne retarde
  * pas le modèle) et n'est calculé qu'à la demande (onglet « Comparateur » affiché).
  */
-import type { Project } from "@blondel/core";
+import { errorMessageOf, type Project } from "@blondel/core";
+import { msg, type Locale } from "@blondel/i18n";
 import { createStore, type StoreApi } from "zustand/vanilla";
 import type { PdfJobOptions } from "../lib/optionalApi.js";
 import type { CompareOutcome } from "../lib/variants.js";
@@ -49,10 +50,17 @@ export interface ModelService {
   request(project: Project): void;
   /** Demande la comparaison des variantes d'un projet. */
   requestCompare(project: Project): void;
-  /** Dossier PDF d'un projet, mis en page dans le worker de calcul (hors du fil principal). */
-  exportPdf(project: Project, options?: PdfJobOptions): Promise<Uint8Array>;
-  /** Modèle 3D glTF binaire d'un projet, dans le worker de calcul. */
-  exportGlb(project: Project): Promise<Uint8Array>;
+  /**
+   * Dossier PDF d'un projet dans la langue `locale`, mis en page dans le worker de calcul (hors
+   * du fil principal).
+   */
+  exportPdf(
+    project: Project,
+    options: PdfJobOptions | undefined,
+    locale: Locale,
+  ): Promise<Uint8Array>;
+  /** Modèle 3D glTF binaire d'un projet (noms dans la langue `locale`), dans le worker de calcul. */
+  exportGlb(project: Project, locale: Locale): Promise<Uint8Array>;
 }
 
 export interface ModelServiceOptions {
@@ -61,10 +69,6 @@ export interface ModelServiceOptions {
   readonly compareExec?: JobExec;
   /** Variantes comparées pour un projet (déterministe : le résultat est mis en cache). */
   readonly variantsOf: (project: Project) => readonly Variant[];
-}
-
-function failure(e: unknown): string {
-  return e instanceof Error ? e.message : String(e);
 }
 
 export function createModelService(options: ModelServiceOptions): ModelService {
@@ -79,7 +83,7 @@ export function createModelService(options: ModelServiceOptions): ModelService {
     exec: (p) => exec.build(p),
     onError: (_p, e) => ({
       model: null,
-      errors: [`Erreur du calcul : ${failure(e)}`],
+      errors: [msg("ui.worker.buildFailed", { detail: errorMessageOf(e) })],
       timeMs: 0,
       mesh: null,
     }),
@@ -93,7 +97,7 @@ export function createModelService(options: ModelServiceOptions): ModelService {
     onError: (_p, e) => ({
       rows: [],
       timeMs: 0,
-      error: `Erreur de la comparaison : ${failure(e)}`,
+      error: msg("ui.worker.compareFailed", { detail: errorMessageOf(e) }),
     }),
     onResult: (project, outcome) =>
       store.setState((s) => ({ compare: { ...s.compare, project, outcome } })),
@@ -105,7 +109,7 @@ export function createModelService(options: ModelServiceOptions): ModelService {
     store,
     request: (project) => build.submit(project),
     requestCompare: (project) => compare.submit(project),
-    exportPdf: (project, pdfOptions) => exec.pdf(project, pdfOptions),
-    exportGlb: (project) => exec.glb(project),
+    exportPdf: (project, pdfOptions, locale) => exec.pdf(project, pdfOptions, locale),
+    exportGlb: (project, locale) => exec.glb(project, locale),
   };
 }

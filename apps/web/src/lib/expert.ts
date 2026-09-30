@@ -13,6 +13,7 @@
  * collets, K3 / K5) est calculé par le cœur et lu dans le `Model`.
  */
 import {
+  MessageRangeError,
   curveTangentAt,
   vec2,
   type Model,
@@ -20,7 +21,8 @@ import {
   type Project,
   type Vec2,
 } from "@blondel/core";
-import { trList } from "../i18n/fr.js";
+import { createTranslator, msg, type Locale, type Message, type MessageKey } from "@blondel/i18n";
+import { formatNumber } from "../i18n/locale.js";
 
 /**
  * Écart maximal accepté par la poignée (degrés) : borne d'interface seulement (une ligne de nez
@@ -42,16 +44,12 @@ export function turnSign(model: Pick<Model, "layout">): 1 | -1 {
 /** Le mode expert s'applique-t-il (tracé à volées, au moins un nez) ? Motif sinon. */
 export function expertAvailability(
   model: Pick<Model, "layout" | "stepping">,
-): { readonly ok: true } | { readonly ok: false; readonly reason: string } {
+): { readonly ok: true } | { readonly ok: false; readonly reason: Message } {
   if (model.layout.helical || model.stepping.helical) {
-    return {
-      ok: false,
-      reason:
-        "Hélicoïdal : les lignes de nez sont rayonnantes, aucune surcharge n'est appliquée par le cœur.",
-    };
+    return { ok: false, reason: msg("ui.lib.expert.helical") };
   }
   if (model.stepping.nosings.length === 0) {
-    return { ok: false, reason: "Aucun nez calculé (modèle partiel)." };
+    return { ok: false, reason: msg("ui.lib.expert.noNosing") };
   }
   return { ok: true };
 }
@@ -62,7 +60,8 @@ export function expertAvailability(
  */
 export function perpendicularAt(model: Pick<Model, "layout" | "stepping">, k: number): Vec2 {
   const nosing = model.stepping.nosings[k];
-  if (!nosing) throw new RangeError(`Nez ${k} inexistant.`);
+  if (!nosing)
+    throw new MessageRangeError(msg("ui.lib.expert.missingNosing", { index: String(k) }));
   const t = curveTangentAt(model.layout.walkline, nosing.s);
   return model.layout.innerSide === "left" ? vec2.perpRight(t) : vec2.perpLeft(t);
 }
@@ -78,7 +77,8 @@ function signedAngle(from: Vec2, to: Vec2): number {
  */
 export function nosingAngleDeg(model: Pick<Model, "layout" | "stepping">, k: number): number {
   const nosing = model.stepping.nosings[k];
-  if (!nosing) throw new RangeError(`Nez ${k} inexistant.`);
+  if (!nosing)
+    throw new MessageRangeError(msg("ui.lib.expert.missingNosing", { index: String(k) }));
   return (turnSign(model) * signedAngle(perpendicularAt(model, k), nosing.dir)) / DEG;
 }
 
@@ -144,7 +144,7 @@ function withOverrides(project: Project, overrides: NosingOverride[]): Project {
 
 /** Impose l'angle du nez k (remplace un angle déjà imposé, garde un éventuel « nez fixe »). */
 export function withAngleOverride(project: Project, k: number, angle: number): Project {
-  if (!Number.isFinite(angle)) throw new RangeError("Angle imposé non fini.");
+  if (!Number.isFinite(angle)) throw new MessageRangeError(msg("ui.lib.expert.angleNotFinite"));
   const rest = project.stair.nosingOverrides.filter((o) => !(o.index === k && o.kind === "angle"));
   return withOverrides(project, [...rest, { kind: "angle", index: k, angle }]);
 }
@@ -183,19 +183,33 @@ export function orphanOverrides(
  * contrôles des lignes de nez qu'un angle imposé peut rompre (K5 croisements, K3 monotonie des
  * collets, collet nul), pour que l'effet d'une rotation soit visible à côté du plan.
  */
-export function overrideNotes(model: Pick<Model, "stepping">): readonly string[] {
-  return trList(model.stepping.notes).filter(
-    (t) =>
-      /^Surcharge/.test(t) ||
-      /^Nez \d+ : (angle imposé|plusieurs angles)/.test(t) ||
-      /^K[35] : /.test(t) ||
-      /^Marche \d+ : collet nul/.test(t),
-  );
+export function overrideNotes(model: Pick<Model, "stepping">): readonly Message[] {
+  return model.stepping.notes.filter((m) => OVERRIDE_NOTE_KEYS.has(m.key));
 }
 
+/**
+ * Remarques du découpage retenues par `overrideNotes` (par clé, indépendamment de la langue) :
+ * surcharges orphelines ou ignorées, angles imposés inapplicables ou multiples, K3, K5, collet
+ * nul.
+ */
+const OVERRIDE_NOTE_KEYS: ReadonlySet<MessageKey> = new Set<MessageKey>([
+  "stepping.override.orphan",
+  "stepping.helical.overrideIgnored",
+  "stepping.override.angleInapplicable",
+  "stepping.override.angleOnFixed",
+  "stepping.override.multipleAngles",
+  "stepping.k3NotMonotone",
+  "stepping.k5Crossing",
+  "stepping.zeroCollet",
+]);
+
 /** Libellé court d'une surcharge. */
-export function overrideLabel(o: NosingOverride): string {
+export function overrideLabel(o: NosingOverride, locale: Locale): string {
+  const t = createTranslator(locale);
   return o.kind === "fixed"
-    ? `nez ${o.index} : fixe`
-    : `nez ${o.index} : angle imposé ${o.angle.toLocaleString("fr-FR")}°`;
+    ? t.t("ui.lib.expert.override.fixed", { index: String(o.index) })
+    : t.t("ui.lib.expert.override.angle", {
+        index: String(o.index),
+        angle: formatNumber(locale, o.angle),
+      });
 }

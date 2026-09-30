@@ -12,7 +12,7 @@ import {
   type Model,
   type Part,
 } from "@blondel/core";
-import { tr } from "../i18n/fr.js";
+import { DEFAULT_LOCALE, msg, translatorFor, type Message } from "@blondel/i18n";
 
 export interface SegmentRow {
   readonly part: Part;
@@ -34,7 +34,7 @@ export interface JointRow {
    */
   readonly weldMm: number | null;
   /** Libellé du trait de joint (nature de l'assemblage). */
-  readonly label: string;
+  readonly label: Message;
 }
 
 export interface SegmentedPart {
@@ -67,7 +67,10 @@ function escapeRegExp(s: string): string {
 /** Traits de joint de `p` dont le libellé nomme le repère `mark` (mot entier : LD1 ≠ LD10). */
 function namingLines(p: Part, mark: string): FlatLine[] {
   const re = new RegExp(`(^|[^\\p{L}\\p{N}])${escapeRegExp(mark)}($|[^\\p{L}\\p{N}])`, "u");
-  return jointLines(p).filter((l) => l.label !== undefined && re.test(tr(l.label)));
+  // Recherche du repère dans le libellé rendu dans une langue fixe : le repère (texte brut)
+  // y figure quelle que soit la langue d'affichage, le résultat n'en dépend donc pas.
+  const fixed = translatorFor(DEFAULT_LOCALE);
+  return jointLines(p).filter((l) => l.label !== undefined && re.test(fixed.t(l.label)));
 }
 
 /**
@@ -126,7 +129,7 @@ export function segmentedParts(model: Pick<Model, "parts">): SegmentedPart[] {
         from,
         to,
         weldMm: welded(from) || welded(to) ? length : null,
-        label: line?.label !== undefined ? tr(line.label) : "Joint",
+        label: line?.label ?? msg("ui.label.joint"),
       });
     }
     out.push({ base, segments, joints });

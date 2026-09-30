@@ -21,6 +21,7 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
+import ts from "typescript";
 import { describe, expect, it } from "vitest";
 
 const SRC = dirname(fileURLToPath(import.meta.url));
@@ -205,6 +206,129 @@ describe("aucun calcul métier dans les composants UI", () => {
           if (tainted.has(n)) bad.push(`${relative(SRC, f)} → ${relative(SRC, target)} : ${n}`);
         }
       }
+    }
+    expect(bad).toEqual([]);
+  });
+});
+
+/**
+ * Textes visibles écrits en dur (ADR-0007) : dans les composants, vues et `App.tsx`, tout texte
+ * affiché passe par le traducteur (`useT()`). Le détecteur analyse la syntaxe TSX (compilateur
+ * TypeScript) et relève, s'ils contiennent une lettre :
+ *
+ * - le texte JSX (`<p>Texte</p>`) et les littéraux placés en enfant (`<p>{"Texte"}</p>`) ;
+ * - les attributs `title`, `aria-label`, `placeholder`, `alt` littéraux (`title="…"`,
+ *   `title={"…"}`, gabarit `` title={`… ${x}`} `` dont une partie fixe contient une lettre).
+ *
+ * Les textes invariants (nom propre, unités, symboles) sont listés dans `INVARIANT_TEXTS`.
+ */
+const TEXT_ATTRIBUTES = new Set(["title", "aria-label", "placeholder", "alt"]);
+
+/**
+ * Textes identiques dans toutes les langues, comparés espaces normalisées : nom du logiciel,
+ * unités, et notation des Eurocodes du pré-dimensionnement (`PrecheckPanel` : symboles q/Q
+ * indice k, L, f₁, flèche L/300, unités SI).
+ */
+const INVARIANT_TEXTS = new Set([
+  "Blondel",
+  "mm",
+  "cm",
+  "L/300",
+  "L/",
+  "· max",
+  "MPa",
+  "q",
+  "k",
+  "kN/m², Q",
+  "kN",
+  "L (m)",
+  "f₁ (Hz)",
+]);
+
+const LETTER = /\p{L}/u;
+
+function hardCodedTexts(fileName: string, code: string): string[] {
+  const sf = ts.createSourceFile(fileName, code, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  const out: string[] = [];
+  const report = (node: ts.Node, text: string, what: string): void => {
+    const trimmed = text.replace(/\s+/g, " ").trim();
+    if (!LETTER.test(trimmed) || INVARIANT_TEXTS.has(trimmed)) return;
+    const { line } = sf.getLineAndCharacterOfPosition(node.getStart(sf));
+    out.push(`${fileName}:${line + 1} ${what} « ${trimmed} »`);
+  };
+  /** Parties fixes d'un littéral de chaîne ou d'un gabarit (`null` pour une autre expression). */
+  const literalParts = (e: ts.Expression): string[] | null => {
+    if (ts.isStringLiteral(e) || ts.isNoSubstitutionTemplateLiteral(e)) return [e.text];
+    if (ts.isTemplateExpression(e)) {
+      return [e.head.text, ...e.templateSpans.map((s) => s.literal.text)];
+    }
+    if (ts.isParenthesizedExpression(e)) return literalParts(e.expression);
+    return null;
+  };
+  const visit = (node: ts.Node): void => {
+    if (ts.isJsxText(node)) {
+      report(node, node.text, "texte JSX");
+    } else if (
+      ts.isJsxExpression(node) &&
+      node.expression !== undefined &&
+      (ts.isJsxElement(node.parent) || ts.isJsxFragment(node.parent))
+    ) {
+      for (const part of literalParts(node.expression) ?? []) report(node, part, "texte JSX");
+    } else if (ts.isJsxAttribute(node) && TEXT_ATTRIBUTES.has(node.name.getText(sf))) {
+      const init = node.initializer;
+      const name = node.name.getText(sf);
+      if (init !== undefined && ts.isStringLiteral(init)) report(node, init.text, name);
+      else if (init !== undefined && ts.isJsxExpression(init) && init.expression !== undefined) {
+        for (const part of literalParts(init.expression) ?? []) report(node, part, name);
+      }
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(sf);
+  return out;
+}
+
+describe("aucun texte visible en dur dans l'interface (ADR-0007)", () => {
+  it("détecteur : texte JSX, enfants littéraux et attributs textuels (garde-fou du garde-fou)", () => {
+    const code = [
+      "export const A = () => (",
+      '  <div title="Titre" aria-label={"Libellé"} placeholder={`Nom ${n}`} alt="" data-x="ok">',
+      "    Bonjour",
+      '    {"Monde"}',
+      '    {t.t("ui.x.y")} {n} mm',
+      '    <img alt={t.t("ui.a.b")} title={`${n} ·`} />',
+      "    <b>Blondel</b> {x > 0 && y < 1 ? a : b} {cond && <i>Aide</i>}",
+      "  </div>",
+      ");",
+      'const s = "Texte d\'une fonction";',
+    ].join("\n");
+    expect(hardCodedTexts("x.tsx", code)).toEqual([
+      "x.tsx:2 title « Titre »",
+      "x.tsx:2 aria-label « Libellé »",
+      "x.tsx:2 placeholder « Nom »",
+      "x.tsx:3 texte JSX « Bonjour »",
+      "x.tsx:4 texte JSX « Monde »",
+      "x.tsx:7 texte JSX « Aide »",
+    ]);
+  });
+
+  it("composants, vues et App.tsx : aucun texte JSX ni attribut textuel littéral", () => {
+    const ui = files.filter(
+      (f) => f.endsWith(".tsx") && /[/\\](components|views)[/\\]|[/\\]App\.tsx$/.test(f),
+    );
+    expect(ui.length).toBeGreaterThan(20);
+    const bad = ui.flatMap((f) => hardCodedTexts(relative(SRC, f), readFileSync(f, "utf8")));
+    expect(bad).toEqual([]);
+  });
+
+  it("nombres : aucun format français écrit en dur (toLocaleString / Intl.NumberFormat)", () => {
+    const bad: string[] = [];
+    for (const f of files) {
+      const code = stripComments(readFileSync(f, "utf8"));
+      if (/toLocale(?:String|DateString|TimeString)\(\s*["'`]fr/.test(code)) {
+        bad.push(`${relative(SRC, f)} : toLocale…("fr…")`);
+      }
+      if (/Intl\.\w+\(\s*["'`]fr/.test(code)) bad.push(`${relative(SRC, f)} : Intl.…("fr…")`);
     }
     expect(bad).toEqual([]);
   });

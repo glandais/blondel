@@ -1,3 +1,4 @@
+import { translatorFor } from "@blondel/i18n";
 import {
   ALL_PRESET_IDS,
   ProjectSchema,
@@ -22,6 +23,8 @@ import {
 
 const withStructure = (p: Project, kind: string): Project =>
   ProjectSchema.parse({ ...p, stair: { ...p.stair, structure: { kind, params: {} } } });
+
+const FR = translatorFor("fr");
 
 describe("type de tracé", () => {
   it("compatibilité des structures : helical-core pour l'hélicoïdal, les autres pour les volées", () => {
@@ -94,7 +97,7 @@ describe("type de tracé", () => {
       }),
     ).toThrow(RangeError);
     const s = switchLayoutKind(p, "helical");
-    expect(s.note).toMatch(/Repli : \d+ marches par tour/);
+    expect(FR.t(s.note!)).toMatch(/Repli : \d+ marches par tour/);
     // Repli fourni par le cœur (dette D4), plus de rotation provisoire propre à l'interface.
     const core = createHelicalProjectWithFallback({
       floorToFloor: 2750,
@@ -149,7 +152,7 @@ describe("type de tracé", () => {
           // Repli seulement quand le préréglage du cœur n'a rien trouvé.
           if (s.note !== undefined) {
             expect(other).toBe("helical");
-            expect(s.note).toMatch(/Repli/);
+            expect(FR.t(s.note)).toMatch(/Repli/);
           }
           expect(normalizeProject(q).ok).toBe(true);
           expect(layoutKindOf(q)).toBe(other);
@@ -194,7 +197,7 @@ describe("type de tracé", () => {
       ...p,
       stair: { ...p.stair, stepping: { ...p.stair.stepping, riserCount: 17 } },
     });
-    expect(switchLayoutKind(p17, "helical").note).toMatch(/Repli/);
+    expect(FR.t(switchLayoutKind(p17, "helical").note!)).toMatch(/Repli/);
   });
 });
 
@@ -202,15 +205,17 @@ describe("typologie des volées (S / Z)", () => {
   const turnsOf = (p: Project) => p.stair.layout.turns;
 
   it("libellés des préréglages à volées", () => {
-    expect(flightsTypologyLabel(turnsOf(createProject("straight")))).toBe("Escalier droit");
-    expect(flightsTypologyLabel(turnsOf(createProject("quarter-left")))).toBe(
+    expect(FR.t(flightsTypologyLabel(turnsOf(createProject("straight"))))).toBe("Escalier droit");
+    expect(FR.t(flightsTypologyLabel(turnsOf(createProject("quarter-left"))))).toBe(
       "Quart tournant à gauche",
     );
-    expect(flightsTypologyLabel(turnsOf(createProject("quarter-landing")))).toMatch(/avec palier$/);
-    expect(flightsTypologyLabel(turnsOf(createProject("two-quarters-u")))).toMatch(/\(U\)/);
+    expect(FR.t(flightsTypologyLabel(turnsOf(createProject("quarter-landing"))))).toMatch(
+      /avec palier$/,
+    );
+    expect(FR.t(flightsTypologyLabel(turnsOf(createProject("two-quarters-u"))))).toMatch(/\(U\)/);
     const s = turnsOf(createProject("two-quarters-s"));
     expect(hasOppositeTurns(s)).toBe(true);
-    expect(flightsTypologyLabel(s)).toMatch(/^Deux quarts tournants opposés \(S \/ Z/);
+    expect(FR.t(flightsTypologyLabel(s))).toMatch(/^Deux quarts tournants opposés \(S \/ Z/);
     expect(hasOppositeTurns(turnsOf(createProject("two-quarters-u")))).toBe(false);
   });
 

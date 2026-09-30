@@ -5,6 +5,7 @@
 import type { Model, Project } from "@blondel/core";
 import { useMemo } from "react";
 import { useResolvedTheme } from "../components/ThemeToggle.js";
+import { useT } from "../i18n/useT.js";
 import { renderElevationForScreen } from "../model/planSvg.js";
 import { appStore } from "../store/appStore.js";
 import { ExportedSvg } from "./ExportedSvg.js";
@@ -17,9 +18,11 @@ interface ElevationProps {
 
 export function ElevationView({ model, project, selectedTread }: ElevationProps) {
   const theme = useResolvedTheme();
+  const t = useT();
+  const locale = t.locale;
   const rendered = useMemo(
-    () => renderElevationForScreen(model, { project, theme }),
-    [model, project, theme],
+    () => renderElevationForScreen(model, { project, theme, locale }),
+    [model, project, theme, locale],
   );
   const onSelectTread = (n: number) =>
     appStore
@@ -28,14 +31,14 @@ export function ElevationView({ model, project, selectedTread }: ElevationProps)
   if ("error" in rendered) {
     return (
       <p className="notice notice--error" role="alert">
-        Élévation cotée indisponible : {rendered.error}
+        {t.t("ui.view.elevation.unavailable", { error: rendered.error })}
       </p>
     );
   }
   return (
     <ExportedSvg
       svg={rendered.svg}
-      label="Élévation développée le long de la ligne de foulée"
+      label={t.t("ui.view.elevation.label")}
       selectedTread={selectedTread}
       onSelectTread={onSelectTread}
     />

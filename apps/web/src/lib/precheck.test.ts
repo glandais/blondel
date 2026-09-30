@@ -1,3 +1,4 @@
+import { translatorFor } from "@blondel/i18n";
 import {
   PRECHECK_RULE_IDS,
   ProjectSchema,
@@ -15,6 +16,8 @@ const base = parseProjectText(j3aText);
 const withStructure = (kind: string, params: Record<string, unknown> = {}): Project =>
   ProjectSchema.parse({ ...base, stair: { ...base.stair, structure: { kind, params } } });
 
+const FR = translatorFor("fr");
+
 describe("prédimensionnement indicatif et classe d'exécution", () => {
   it("steel-flat : classe d'exécution lue dans le contrôle de conception (EXC1 en S235, EXC2 en S355)", () => {
     const m1 = buildModel(withStructure("steel-flat"));
@@ -22,7 +25,7 @@ describe("prédimensionnement indicatif et classe d'exécution", () => {
     const m2 = buildModel(withStructure("steel-flat", { grade: "S355" }));
     const exc = executionClassInfo(m2);
     expect(exc?.value).toBe("EXC2");
-    expect(exc?.detail).toMatch(/S355/);
+    expect(FR.t(exc!.detail!)).toMatch(/S355/);
     // Bois : pas de classe d'exécution.
     expect(executionClassInfo(buildModel(withStructure("wood-housed")))).toBeNull();
     // Classe portée par le modèle prioritaire.
@@ -42,7 +45,7 @@ describe("prédimensionnement indicatif et classe d'exécution", () => {
       expect(r.ok.deflection).toBe(r.deflection <= r.limit + 1e-9);
       expect(r.ratio).toBeCloseTo((100 * r.stress) / r.design, 6);
     }
-    expect(s.notes.some((n) => /indicatif/.test(n))).toBe(true);
+    expect(s.notes.some((n) => /indicatif/.test(translatorFor("fr").t(n)))).toBe(true);
   });
 
   it("panneau et contrôle de conception : mêmes valeurs (une seule source, Model.precheck)", () => {

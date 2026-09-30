@@ -51,10 +51,13 @@ import {
   zoomAt,
   type ViewBox,
 } from "./planSiteGeometry.js";
+import { msg, type Locale, type Message } from "@blondel/i18n";
+import { formatNumber } from "../i18n/locale.js";
+import { useT } from "../i18n/useT.js";
 import "./planExpert.css";
 
-const fmtAngle = (a: number): string =>
-  a.toLocaleString("fr-FR", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+const fmtAngle = (a: number, locale: Locale): string =>
+  formatNumber(locale, a, { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 
 /** Modification ponctuelle : une entrée d'historique ; message d'erreur ou `null`. */
 function commit(recipe: Parameters<ReturnType<typeof appStore.getState>["update"]>[0]) {
@@ -62,7 +65,7 @@ function commit(recipe: Parameters<ReturnType<typeof appStore.getState>["update"
   s.endGroup();
   const r = s.update(recipe);
   s.endGroup();
-  return r.ok ? null : (r.issues[0] ?? "Modification refusée.");
+  return r.ok ? null : (r.issues[0] ?? msg("ui.plan.site.refused"));
 }
 
 /** Extrémité de la poignée : côté mur de la ligne de nez, à la longueur P → R. */
@@ -72,6 +75,7 @@ function handlePoint(n: NosingLine, dir: Vec2): Vec2 {
 }
 
 export function PlanExpertEditor({ model }: { model: Model }) {
+  const t = useT();
   const project = useApp((s) => s.project);
   const selection = useApp((s) => s.selection);
   const selected = selection?.location.kind === "nosing" ? selection.location.index : null;
@@ -90,7 +94,8 @@ export function PlanExpertEditor({ model }: { model: Model }) {
     key: string;
     moved: boolean;
   } | null>(null);
-  const [message, setMessage] = useState<string | null>(null);
+  // Erreur affichée : message traduit à l'affichage.
+  const [message, setMessage] = useState<Message | null>(null);
   const [angleText, setAngleText] = useState<string | null>(null);
   const svgRef = useRef<SVGSVGElement>(null);
   const boxRef = useRef<HTMLDivElement>(null);
@@ -174,13 +179,13 @@ export function PlanExpertEditor({ model }: { model: Model }) {
 
   const setAngle = (k: number, angle: number): void => {
     const error = commit((p) => withAngleOverride(p, k, roundAngle(angle)));
-    setMessage(error ? `Angle refusé : ${error}` : null);
+    setMessage(error ? msg("ui.plan.expert.angleRefused", { error }) : null);
   };
 
   const toggleFixed = (k: number): void => {
     const fixed = overridesAt(project, k).fixed;
     const error = commit((p) => withFixedOverride(p, k, !fixed));
-    setMessage(error ? `Surcharge refusée : ${error}` : null);
+    setMessage(error ? msg("ui.plan.expert.overrideRefused", { error }) : null);
   };
 
   // ------------------------------------------------------------------ glissement de la poignée
@@ -249,7 +254,7 @@ export function PlanExpertEditor({ model }: { model: Model }) {
       .update((p) => withAngleOverride(p, k, angle), key, { sticky: true });
     appStore.getState().endGroup();
     setDrag(null);
-    setMessage(r.ok ? null : `Angle refusé : ${r.issues[0] ?? ""}`);
+    setMessage(r.ok ? null : msg("ui.plan.expert.angleRefused", { error: r.issues[0] ?? "" }));
   };
 
   const onKeyDown = (e: KeyboardEvent<HTMLDivElement>): void => {
@@ -281,7 +286,7 @@ export function PlanExpertEditor({ model }: { model: Model }) {
     return (
       <div className="plan-expert">
         <p className="notice notice--info" role="status">
-          Mode expert indisponible : {availability.reason}
+          {t.t("ui.plan.expert.unavailable", { reason: availability.reason })}
         </p>
       </div>
     );
@@ -291,6 +296,8 @@ export function PlanExpertEditor({ model }: { model: Model }) {
   const pR = 3.5 * mmPerPx;
   const selectedNosing = current !== null ? nosings[current] : undefined;
   const selectedOverrides = current !== null ? overridesAt(project, current) : null;
+  const nosingName = (index: number, balanced: boolean): string =>
+    t.t(balanced ? "ui.plan.expert.nosing.balanced" : "ui.plan.expert.nosing", { index });
   const shownAngle =
     drag && drag.k === current
       ? drag.angle
@@ -307,7 +314,7 @@ export function PlanExpertEditor({ model }: { model: Model }) {
             className="plan-site__svg plan-expert__svg"
             viewBox={viewBoxAttr(v, aspect)}
             role="application"
-            aria-label="Plan des lignes de nez (mode expert) : cliquer une ligne pour la sélectionner, faire glisser la poignée pour la faire pivoter, clic droit pour la fixer"
+            aria-label={t.t("ui.plan.expert.svg.label")}
             tabIndex={0}
             onPointerDown={onPointerDown}
             onPointerMove={onPointerMove}
@@ -396,7 +403,7 @@ export function PlanExpertEditor({ model }: { model: Model }) {
                         toggleFixed(n.index);
                       }}
                     >
-                      <title>{`Nez ${n.index}${n.balanced ? " (balancé)" : ""}`}</title>
+                      <title>{nosingName(n.index, n.balanced)}</title>
                     </line>
                     <circle className="plan-expert__p" cx={n.p.x} cy={n.p.y} r={pR} />
                   </g>
@@ -419,39 +426,42 @@ export function PlanExpertEditor({ model }: { model: Model }) {
                   vectorEffect="non-scaling-stroke"
                   onPointerDown={(e) => onHandleDown(e, current!)}
                 >
-                  <title>Faire glisser pour faire pivoter la ligne de nez autour de P</title>
+                  <title>{t.t("ui.plan.expert.handle.title")}</title>
                 </circle>
               ) : null}
             </g>
           </svg>
           <p className="plan-site__status" aria-live="polite">
             {current !== null
-              ? `Nez ${current} : ${fmtAngle(shownAngle)}° par rapport à la perpendiculaire${drag ? " (glissement)" : ""}`
-              : "Cliquer une ligne de nez pour la sélectionner."}
+              ? t.t(drag ? "ui.plan.expert.status.dragging" : "ui.plan.expert.status", {
+                  index: current,
+                  angle: fmtAngle(shownAngle, t.locale),
+                })
+              : t.t("ui.plan.expert.status.none")}
           </p>
         </div>
-        <aside className="plan-site__panel" aria-label="Surcharges des nez">
-          <p className="muted">
-            Surcharges du mode expert : angle imposé (rotation autour de P sur la ligne de foulée)
-            ou nez fixe. Elles sont enregistrées dans le projet et appliquées par le calcul ;
-            annulables.
-          </p>
+        <aside className="plan-site__panel" aria-label={t.t("ui.plan.expert.overrides.label")}>
+          <p className="muted">{t.t("ui.plan.expert.intro")}</p>
           {message ? (
             <p className="notice notice--error" role="alert">
-              {message}
+              {t.t(message)}
             </p>
           ) : null}
           <div className="field">
-            <label htmlFor={selectId}>Nez sélectionné</label>
+            <label htmlFor={selectId}>{t.t("ui.plan.expert.selected")}</label>
             <select
               id={selectId}
               value={current === null ? "" : String(current)}
               onChange={(e) => select(e.target.value === "" ? null : Number(e.target.value))}
             >
-              <option value="">Aucun</option>
+              <option value="">{t.t("ui.plan.expert.selected.none")}</option>
               {nosings.map((n) => (
                 <option key={n.index} value={String(n.index)}>
-                  {`Nez ${n.index}${n.balanced ? " (balancé)" : ""}${overridden.has(n.index) ? " — surchargé" : ""}`}
+                  {overridden.has(n.index)
+                    ? t.t("ui.plan.expert.nosing.overridden", {
+                        name: nosingName(n.index, n.balanced),
+                      })
+                    : nosingName(n.index, n.balanced)}
                 </option>
               ))}
             </select>
@@ -459,12 +469,12 @@ export function PlanExpertEditor({ model }: { model: Model }) {
           {current !== null && selectedOverrides ? (
             <div className="plan-site__group plan-expert__edit">
               <div className="field">
-                <label htmlFor={angleId}>Angle imposé (°)</label>
+                <label htmlFor={angleId}>{t.t("ui.plan.expert.angle")}</label>
                 <input
                   id={angleId}
                   type="text"
                   inputMode="decimal"
-                  value={angleText ?? fmtAngle(shownAngle)}
+                  value={angleText ?? fmtAngle(shownAngle, t.locale)}
                   onChange={(e) => setAngleText(e.target.value)}
                   onKeyDown={(e) => {
                     if (e.key !== "Enter") return;
@@ -474,47 +484,48 @@ export function PlanExpertEditor({ model }: { model: Model }) {
                   }}
                   onBlur={() => setAngleText(null)}
                 />
-                <small className="field__hint">
-                  0° = perpendiculaire à la ligne de foulée ; positif dans le sens du tournant.
-                  Entrée pour imposer.
-                </small>
+                <small className="field__hint">{t.t("ui.plan.expert.angle.hint")}</small>
               </div>
               <div className="button-row">
                 <button
                   type="button"
                   aria-pressed={selectedOverrides.fixed}
                   onClick={() => toggleFixed(current)}
-                  title="Nez fixe : non balancé, borne de zone (touche F, ou clic droit sur la ligne)"
+                  title={t.t("ui.plan.expert.fixed.title")}
                 >
-                  Nez fixe
+                  {t.t("ui.plan.expert.fixed")}
                 </button>
                 <button
                   type="button"
                   disabled={!selectedOverrides.fixed && selectedOverrides.angle === null}
                   onClick={() => commit((p) => withoutNosingOverrides(p, [current]))}
                 >
-                  Retirer les surcharges du nez
+                  {t.t("ui.plan.expert.removeNosing")}
                 </button>
               </div>
             </div>
           ) : null}
           <details className="plan-site__group" open>
-            <summary>Surcharges ({project.stair.nosingOverrides.length})</summary>
+            <summary>
+              {t.t("ui.plan.expert.overrides", { count: project.stair.nosingOverrides.length })}
+            </summary>
             {project.stair.nosingOverrides.length === 0 ? (
-              <p className="muted">Aucune surcharge.</p>
+              <p className="muted">{t.t("ui.plan.expert.overrides.none")}</p>
             ) : (
-              <ul className="plan-expert__list" aria-label="Surcharges des nez">
+              <ul className="plan-expert__list" aria-label={t.t("ui.plan.expert.overrides.label")}>
                 {project.stair.nosingOverrides.map((o, i) => {
                   const orphan = orphans.includes(o);
                   return (
                     <li key={i} className={orphan ? "plan-expert__orphan" : undefined}>
                       <span>
-                        {overrideLabel(o)}
-                        {orphan ? " — orpheline (nez inexistant, non appliquée)" : ""}
+                        {overrideLabel(o, t.locale)}
+                        {orphan ? t.t("ui.plan.expert.orphan") : ""}
                       </span>
                       <button
                         type="button"
-                        aria-label={`Retirer la surcharge ${overrideLabel(o)}`}
+                        aria-label={t.t("ui.plan.expert.remove.label", {
+                          label: overrideLabel(o, t.locale),
+                        })}
                         onClick={() =>
                           commit((p) => ({
                             ...p,
@@ -525,7 +536,7 @@ export function PlanExpertEditor({ model }: { model: Model }) {
                           }))
                         }
                       >
-                        Retirer
+                        {t.t("ui.plan.expert.remove")}
                       </button>
                     </li>
                   );
@@ -540,32 +551,26 @@ export function PlanExpertEditor({ model }: { model: Model }) {
                     commit((p) => withoutNosingOverrides(p, new Set(orphans.map((o) => o.index))))
                   }
                 >
-                  Retirer les orphelines ({orphans.length})
+                  {t.t("ui.plan.expert.removeOrphans", { count: orphans.length })}
                 </button>
               ) : null}
               {project.stair.nosingOverrides.length > 0 ? (
                 <button type="button" onClick={() => commit((p) => withoutNosingOverrides(p))}>
-                  Retirer toutes les surcharges
+                  {t.t("ui.plan.expert.removeAll")}
                 </button>
               ) : null}
             </div>
           </details>
           {notes.length > 0 ? (
-            <ul
-              className="plan-expert__notes"
-              aria-label="Remarques du calcul sur les lignes de nez"
-            >
-              {notes.map((t) => (
-                <li key={t}>{t}</li>
+            <ul className="plan-expert__notes" aria-label={t.t("ui.plan.expert.notes.label")}>
+              {notes.map((n, i) => (
+                <li key={i}>{t.t(n)}</li>
               ))}
             </ul>
           ) : null}
-          <p className="muted plan-expert__keys">
-            Clavier (plan actif) : ← → ± 1°, Maj ± 0,1°, F nez fixe, Suppr retire, Échap
-            désélectionne. Molette : zoom ; glisser le fond : déplacer.
-          </p>
+          <p className="muted plan-expert__keys">{t.t("ui.plan.expert.keys")}</p>
           <button type="button" onClick={() => setView(null)}>
-            Recadrer
+            {t.t("ui.plan.site.fit")}
           </button>
         </aside>
       </div>

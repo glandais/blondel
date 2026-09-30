@@ -1,3 +1,4 @@
+import { translatorFor } from "@blondel/i18n";
 import {
   textMessage,
   buildModel,
@@ -100,12 +101,13 @@ describe("regroupement du contrôle de conception", () => {
 
 describe("modelNotes", () => {
   it("réunit les remarques du découpage, du pipeline et du contrôle, sans doublon", () => {
+    const [a, b, c, d] = ["a", "b", "c", "d"].map(textMessage);
     const model = {
-      stepping: { notes: ["a", "b"] },
-      notes: ["b", "c"],
-      compliance: { notes: ["d"] },
+      stepping: { notes: [a, b] },
+      notes: [textMessage("b"), c],
+      compliance: { notes: [d] },
     } as unknown as Model;
-    expect(modelNotes(model)).toEqual(["a", "b", "c", "d"]);
+    expect(modelNotes(model)).toEqual([a, b, c, d]);
     expect(modelNotes(null)).toEqual([]);
   });
 
@@ -116,7 +118,8 @@ describe("modelNotes", () => {
       stair: { ...p.stair, layout: { ...p.stair.layout, width: -1 } },
     });
     expect(model.errors.length).toBeGreaterThan(0);
-    expect(modelNotes(model).some((n) => /partiel/i.test(n))).toBe(true);
+    const fr = translatorFor("fr");
+    expect(modelNotes(model).some((n) => /partiel/i.test(fr.t(n)))).toBe(true);
   });
 });
 

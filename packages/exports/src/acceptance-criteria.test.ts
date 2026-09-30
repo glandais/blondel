@@ -28,7 +28,7 @@ import {
 } from "@blondel/core";
 import { describe, expect, it } from "vitest";
 import { exportPartsDxf } from "./dxf/parts.js";
-import { PART_LAYERS } from "./dxf/part.js";
+import { partLayers } from "./dxf/part.js";
 import { exportPlanDxf } from "./dxf/plan.js";
 import { RecordingCanvas, exportPdf, renderPdf } from "./pdf/index.js";
 import { renderFlatPatternSvg } from "./svg/flat.js";
@@ -76,7 +76,7 @@ function expectRing(
  */
 function expectFaithful(f: DxfFile, part: Part): void {
   const flat = part.flat as FlatPattern;
-  const contours = polylines(f, PART_LAYERS.contour.name);
+  const contours = polylines(f, partLayers().contour.name);
   const holes = flat.outline.holes.filter((h) => h.length >= 3);
   expect(contours, part.mark).toHaveLength(1 + holes.length);
   for (const c of contours) expect(c.closed, part.mark).toBe(true);
@@ -89,7 +89,7 @@ function expectFaithful(f: DxfFile, part: Part): void {
     expect(vec2.distance(lines[i]!.a, l.a), `${part.mark} trait ${i}`).toBeLessThanOrEqual(TOL);
     expect(vec2.distance(lines[i]!.b, l.b), `${part.mark} trait ${i}`).toBeLessThanOrEqual(TOL);
   });
-  expect(entitiesOn(f, "TEXT", PART_LAYERS.text.name).map((t) => t.value)).toContain(part.mark);
+  expect(entitiesOn(f, "TEXT", partLayers().text.name).map((t) => t.value)).toContain(part.mark);
 }
 
 /** Décode les séquences `\\U+XXXX` des textes DXF R12 (caractères non ASCII). */
@@ -158,7 +158,7 @@ describe("critère d'acceptation n° 1 complet : quart tournant bois, poteau, ga
       const f = partDxf(model, s);
       const mortises = s.flat!.lines.filter((l) => l.feature === "mortise").length;
       expect(mortises, s.mark).toBeGreaterThan(0);
-      expect(entitiesOn(f, "LINE", PART_LAYERS.mortise.name)).toHaveLength(mortises);
+      expect(entitiesOn(f, "LINE", partLayers().mortise.name)).toHaveLength(mortises);
     }
   });
 
@@ -213,7 +213,7 @@ describe("critère d'acceptation n° 3 : DXF de limon acier et de marche en tôl
       const f = partDxf(model, s);
       expectFaithful(f, s);
       expect(s.flat!.reference?.kind, s.mark).toBe("face");
-      const info = textsOn(f, PART_LAYERS.info.name);
+      const info = textsOn(f, partLayers().info.name);
       expect(
         info.some((t) => t.startsWith("Référence : face tracée")),
         s.mark,
@@ -238,14 +238,14 @@ describe("critère d'acceptation n° 3 : DXF de limon acier et de marche en tôl
       expect(bends.map((b) => b.bendAngle)).toEqual([90, 90]);
       expect(bends.map((b) => b.bendUp).sort()).toEqual([false, true]);
       // Calque PLI (tirets), un trait et une annotation (angle, sens) par pli.
-      expect(f.layers.get(PART_LAYERS.bend.name)?.lineType).toBe("DASHED");
-      const bendLines = entitiesOn(f, "LINE", PART_LAYERS.bend.name);
+      expect(f.layers.get(partLayers().bend.name)?.lineType).toBe("DASHED");
+      const bendLines = entitiesOn(f, "LINE", partLayers().bend.name);
       expect(bendLines, t.mark).toHaveLength(2);
       bends.forEach((b, i) => {
         expect(vec2.distance(bendLines[i]!.a, b.a)).toBeLessThanOrEqual(TOL);
         expect(vec2.distance(bendLines[i]!.b, b.b)).toBeLessThanOrEqual(TOL);
       });
-      const notes = textsOn(f, PART_LAYERS.bend.name);
+      const notes = textsOn(f, partLayers().bend.name);
       expect(
         notes.some((n) => /90°.* bas$/.test(n)),
         t.mark,
@@ -305,20 +305,20 @@ describe("critère d'acceptation n° 3 : chaque tronçon d'un limon débillardé
       expectFaithful(f, s);
       // Lignes de roulage (génératrices) : calque ROULAGE en tirets, rayon annoté.
       const rolls = s.flat!.lines.filter((l) => l.kind === "roll");
-      expect(entitiesOn(f, "LINE", PART_LAYERS.roll.name), s.mark).toHaveLength(rolls.length);
+      expect(entitiesOn(f, "LINE", partLayers().roll.name), s.mark).toHaveLength(rolls.length);
       if (rolls.length > 0) {
         rolled++;
-        expect(f.layers.get(PART_LAYERS.roll.name)?.lineType).toBe("DASHED");
+        expect(f.layers.get(partLayers().roll.name)?.lineType).toBe("DASHED");
         expect(
-          textsOn(f, PART_LAYERS.roll.name).some((t) => /Roulage R int \d+ mm/.test(t)),
+          textsOn(f, partLayers().roll.name).some((t) => /Roulage R int \d+ mm/.test(t)),
           s.mark,
         ).toBe(true);
       }
       // Joints bout à bout : un trait par tronçon voisin, qui nomme le repère du voisin.
       const joints = s.flat!.lines.filter((l) => l.kind === "joint");
       expect(joints.length, s.mark).toBeGreaterThanOrEqual(1);
-      expect(entitiesOn(f, "LINE", PART_LAYERS.joint.name), s.mark).toHaveLength(joints.length);
-      const jointTexts = textsOn(f, PART_LAYERS.joint.name);
+      expect(entitiesOn(f, "LINE", partLayers().joint.name), s.mark).toHaveLength(joints.length);
+      const jointTexts = textsOn(f, partLayers().joint.name);
       const neighbours = sections.filter(
         (o) => o !== s && jointTexts.some((t) => t.includes(o.mark)),
       );

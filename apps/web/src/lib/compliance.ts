@@ -3,14 +3,15 @@
  * par le cœur. Aucune règle n'est évaluée ici.
  */
 import type { ComplianceReport, Location, Model, Part, RuleResult, Severity } from "@blondel/core";
-import { trList } from "../i18n/fr.js";
+import { messageEquals, msg, type Message, type MessageKey } from "@blondel/i18n";
 
 export const SEVERITY_ORDER: readonly Severity[] = ["bloquant", "avertissement", "conseil"];
 
-export const SEVERITY_LABELS: Readonly<Record<Severity, string>> = {
-  bloquant: "Bloquant",
-  avertissement: "Avertissement",
-  conseil: "Conseil",
+/** Clés des libellés des sévérités. */
+export const SEVERITY_LABELS: Readonly<Record<Severity, MessageKey>> = {
+  bloquant: "ui.label.severity.bloquant",
+  avertissement: "ui.label.severity.avertissement",
+  conseil: "ui.label.severity.conseil",
 };
 
 export interface ComplianceGroups {
@@ -40,19 +41,19 @@ export function groupResults(report: ComplianceReport | undefined): ComplianceGr
   };
 }
 
-/** Libellé court d'une localisation. */
-export function locationLabel(loc: Location): string {
+/** Libellé court d'une localisation (traduit à l'affichage : `t.t(locationLabel(loc))`). */
+export function locationLabel(loc: Location): Message {
   switch (loc.kind) {
     case "stair":
-      return "Escalier";
+      return msg("ui.lib.location.stair");
     case "tread":
-      return `Marche ${loc.number}`;
+      return msg("ui.lib.location.tread", { number: String(loc.number) });
     case "nosing":
-      return `Nez ${loc.index}`;
+      return msg("ui.lib.location.nosing", { index: String(loc.index) });
     case "part":
-      return `Pièce ${loc.partId}`;
+      return msg("ui.lib.location.part", { id: loc.partId });
     case "point":
-      return "Point";
+      return msg("ui.lib.location.point");
   }
 }
 
@@ -126,8 +127,8 @@ export function treadNumberFromAttribute(attr: string | null | undefined): numbe
  * sans doublon : `stepping.notes`, `Model.notes` (pièces non générées, modèle partiel) et
  * `ComplianceReport.notes` (contextes déduits, hypothèses de règles).
  */
-export function modelNotes(model: Model | null | undefined): readonly string[] {
+export function modelNotes(model: Model | null | undefined): readonly Message[] {
   if (!model) return [];
   const all = [...model.stepping.notes, ...(model.notes ?? []), ...(model.compliance.notes ?? [])];
-  return [...new Set(trList(all))];
+  return all.filter((m, i) => all.findIndex((o) => messageEquals(o, m)) === i);
 }

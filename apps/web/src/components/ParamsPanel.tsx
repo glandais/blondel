@@ -4,6 +4,7 @@
  * d'un mode automatique sont lues dans le modèle rendu par le cœur.
  */
 import {
+  contextLabel,
   DEDUCED_ONLY_CONTEXTS,
   DEFAULT_NEWEL_SIZE,
   defaultOpening,
@@ -14,7 +15,10 @@ import {
   type Project,
   type Turn,
 } from "@blondel/core";
+import { msg, textMessage, type Locale, type Message, type MessageKey } from "@blondel/i18n";
 import { useMemo, useRef, type ReactNode } from "react";
+import { formatNumber } from "../i18n/locale.js";
+import { useT } from "../i18n/useT.js";
 import { appStore, useApp, useModel } from "../store/appStore.js";
 import type { Path } from "../store/setIn.js";
 import { addLeg, legAutoAllowed, removeLastLeg } from "../lib/layoutEdit.js";
@@ -32,8 +36,8 @@ import { balancingMethodOptions, herseAngleRange, rotationRanges } from "../lib/
 import {
   realign,
   realignDisabledReason,
-  REALIGN_HINT,
-  WALKLINE_SIDE_HINT,
+  REALIGN_HINT_KEY,
+  WALKLINE_SIDE_HINT_KEY,
   walklineSideApplies,
   walklineSideChoice,
   withWalklineSide,
@@ -83,36 +87,37 @@ function SiteSection() {
   // Dernière trémie retirée : restaurée si l'on réactive la trémie.
   const lastOpening = useRef<Opening | null>(null);
   const o = site.opening;
+  const t = useT();
   return (
-    <Section title="Site">
+    <Section title={t.t("ui.params.site.title")}>
       <IntField
-        label="Hauteur à monter H"
-        hint="Sol fini bas → sol fini haut"
+        label={t.t("ui.params.site.floorToFloor.label")}
+        hint={t.t("ui.params.site.floorToFloor.hint")}
         value={site.floorToFloor}
         min={1}
         onCommit={set(["site", "floorToFloor"])}
       />
       <IntField
-        label="Épaisseur du plancher haut"
-        hint="Sol fini → sous-face"
+        label={t.t("ui.params.site.slab.label")}
+        hint={t.t("ui.params.site.slab.hint")}
         value={site.upperSlabThickness}
         min={1}
         onCommit={set(["site", "upperSlabThickness"])}
       />
       <IntField
-        label="Revêtement du sol bas"
+        label={t.t("ui.params.site.lowerFinish")}
         value={site.lowerFinish}
         min={0}
         onCommit={set(["site", "lowerFinish"])}
       />
       <IntField
-        label="Revêtement du sol haut"
+        label={t.t("ui.params.site.upperFinish")}
         value={site.upperFinish}
         min={0}
         onCommit={set(["site", "upperFinish"])}
       />
       <CheckField
-        label="Trémie dans le plancher haut"
+        label={t.t("ui.params.site.opening.label")}
         checked={o !== undefined}
         onCommit={(checked) => {
           if (!checked) {
@@ -137,17 +142,25 @@ function SiteSection() {
       />
       {o?.kind === "rect" ? (
         <fieldset className="grid-2">
-          <legend>Trémie rectangulaire</legend>
-          <IntField label="X (coin)" value={o.x} onCommit={set(["site", "opening", "x"])} />
-          <IntField label="Y (coin)" value={o.y} onCommit={set(["site", "opening", "y"])} />
+          <legend>{t.t("ui.params.site.opening.rect")}</legend>
           <IntField
-            label="Largeur (X)"
+            label={t.t("ui.params.site.opening.x")}
+            value={o.x}
+            onCommit={set(["site", "opening", "x"])}
+          />
+          <IntField
+            label={t.t("ui.params.site.opening.y")}
+            value={o.y}
+            onCommit={set(["site", "opening", "y"])}
+          />
+          <IntField
+            label={t.t("ui.params.site.opening.sizeX")}
             value={o.sizeX}
             min={1}
             onCommit={set(["site", "opening", "sizeX"])}
           />
           <IntField
-            label="Longueur (Y)"
+            label={t.t("ui.params.site.opening.sizeY")}
             value={o.sizeY}
             min={1}
             onCommit={set(["site", "opening", "sizeY"])}
@@ -155,10 +168,7 @@ function SiteSection() {
         </fieldset>
       ) : null}
       {o?.kind === "polygon" ? (
-        <p className="muted">
-          Trémie polygonale ({o.points.length} sommets) : à retracer ou relever dans Plan 2D › «
-          Site et saisie ».
-        </p>
+        <p className="muted">{t.t("ui.params.site.opening.polygon", { count: o.points.length })}</p>
       ) : null}
     </Section>
   );
@@ -167,39 +177,40 @@ function SiteSection() {
 // ------------------------------------------------------------------ Tracé
 
 const INNER_KINDS = [
-  { value: "sharp", label: "Angle vif" },
-  { value: "arc", label: "Arrondi" },
-  { value: "newel", label: "Poteau" },
-] as const;
+  { value: "sharp", key: "ui.params.turn.inner.sharp" },
+  { value: "arc", key: "ui.params.turn.inner.arc" },
+  { value: "newel", key: "ui.params.turn.inner.newel" },
+] as const satisfies readonly { value: InnerCorner["kind"]; key: MessageKey }[];
 
 function TurnEditor({ turn, index }: { turn: Turn; index: number }) {
   const base: Path = ["stair", "layout", "turns", index];
   const inner = turn.inner;
+  const t = useT();
   return (
     <fieldset className="turn">
-      <legend>Tournant {index + 1}</legend>
+      <legend>{t.t("ui.params.turn.legend", { index: index + 1 })}</legend>
       <SelectField
-        label="Sens"
+        label={t.t("ui.params.turn.direction")}
         value={turn.direction}
         options={[
-          { value: "left", label: "À gauche" },
-          { value: "right", label: "À droite" },
+          { value: "left", label: t.t("ui.params.turn.left") },
+          { value: "right", label: t.t("ui.params.turn.right") },
         ]}
         onCommit={set([...base, "direction"])}
       />
       <SelectField
-        label="Type"
+        label={t.t("ui.params.turn.mode")}
         value={turn.mode}
         options={[
-          { value: "winders", label: "Marches balancées" },
-          { value: "landing", label: "Palier" },
+          { value: "winders", label: t.t("ui.params.turn.winders") },
+          { value: "landing", label: t.t("ui.params.turn.landing") },
         ]}
         onCommit={set([...base, "mode"])}
       />
       <SelectField
-        label="Jour"
+        label={t.t("ui.params.turn.inner.label")}
         value={inner.kind}
-        options={INNER_KINDS}
+        options={INNER_KINDS.map((k) => ({ value: k.value, label: t.t(k.key) }))}
         onCommit={(kind) => {
           if (kind === inner.kind) return { ok: true };
           const size =
@@ -219,7 +230,7 @@ function TurnEditor({ turn, index }: { turn: Turn; index: number }) {
       />
       {inner.kind === "arc" ? (
         <IntField
-          label="Rayon du jour"
+          label={t.t("ui.params.turn.arcRadius")}
           value={inner.radius}
           min={1}
           onCommit={set([...base, "inner", "radius"])}
@@ -228,16 +239,16 @@ function TurnEditor({ turn, index }: { turn: Turn; index: number }) {
       {inner.kind === "newel" ? (
         <>
           <IntField
-            label="Côté du poteau"
+            label={t.t("ui.params.turn.newelSize")}
             value={inner.size}
             min={1}
             onCommit={set([...base, "inner", "size"])}
           />
           <IntField
-            label="Décalage du poteau vers le jour"
+            label={t.t("ui.params.turn.newelOffset.label")}
             value={inner.offset ?? 0}
             min={0}
-            hint="0 : poteau centré sur l'angle du jour ; poteau élargi des profilés décalé vers le jour"
+            hint={t.t("ui.params.turn.newelOffset.hint")}
             onCommit={set([...base, "inner", "offset"])}
           />
         </>
@@ -265,25 +276,26 @@ function LayoutSection() {
   const sideChoice = useApp((s) => walklineSideChoice(s.project));
   const sideApplies = useApp((s) => walklineSideApplies(s.project));
   const side = walkline.side !== undefined ? { side: walkline.side } : {};
+  const t = useT();
   return (
-    <Section title="Tracé">
+    <Section title={t.t("ui.params.layout.title")}>
       <SelectField<LayoutKind>
-        label="Type de tracé"
+        label={t.t("ui.params.layout.kind.label")}
         value={kind}
         options={(["flights", "helical"] as const).map((k) => ({
           value: k,
-          label: LAYOUT_KIND_LABELS[k],
+          label: t.t(LAYOUT_KIND_LABELS[k]),
         }))}
-        hint="Changer de type remplace le tracé et la trémie (préréglage du cœur, annulable)"
+        hint={t.t("ui.params.layout.kind.hint")}
         onCommit={(k) => {
-          let note: string | undefined;
+          let note: Message | undefined;
           const r = update((p) => {
             const s = switchLayoutKind(p, k);
             note = s.note;
             return s.project;
           });
           if (r.ok && note !== undefined)
-            appStore.setState({ notice: { kind: "info", text: note } });
+            appStore.setState({ notice: { kind: "info", msg: note } });
           return r;
         }}
       />
@@ -291,18 +303,18 @@ function LayoutSection() {
         <HelicalEditor layout={layout} />
       ) : (
         <IntField
-          label="Emmarchement E"
+          label={t.t("compliance.stair.width")}
           value={layout.width}
           min={1}
           onCommit={set(["stair", "layout", "width"])}
         />
       )}
       <SelectField
-        label="Ligne de foulée"
+        label={t.t("ui.params.walkline.label")}
         value={walkline.mode}
         options={[
-          { value: "dtu", label: "Selon le DTU" },
-          { value: "fromInner", label: "Distance au jour imposée" },
+          { value: "dtu", label: t.t("ui.params.walkline.dtu") },
+          { value: "fromInner", label: t.t("ui.params.walkline.fromInner") },
         ]}
         onCommit={(mode) =>
           set(["stair", "walkline"])(
@@ -318,28 +330,34 @@ function LayoutSection() {
       />
       {walkline.mode === "fromInner" ? (
         <IntField
-          label="Distance au jour"
+          label={t.t("ui.params.walkline.distance")}
           value={walkline.distance}
           min={1}
           {...(layout.kind !== "helical" && hasOppositeTurns(layout.turns)
-            ? { hint: "Mesurée depuis le jour du tournant le plus proche (S / Z)" }
+            ? { hint: t.t("ui.params.walkline.distanceHint") }
             : {})}
           onCommit={set(["stair", "walkline", "distance"])}
         />
       ) : null}
       {sideApplies ? (
         <SelectField<WalklineSideChoice>
-          label="Bord de mesure de la ligne de foulée"
+          label={t.t("ui.params.walkline.side.label")}
           value={sideChoice}
           options={[
             {
               value: "auto",
-              label: `Automatique${model?.layout.walklineSide === "right" ? " (droite)" : model?.layout.walklineSide === "left" ? " (gauche)" : ""}`,
+              label: t.t(
+                model?.layout.walklineSide === "right"
+                  ? "ui.params.walkline.side.autoRight"
+                  : model?.layout.walklineSide === "left"
+                    ? "ui.params.walkline.side.autoLeft"
+                    : "ui.params.walkline.side.auto",
+              ),
             },
-            { value: "left", label: "Bord gauche" },
-            { value: "right", label: "Bord droit" },
+            { value: "left", label: t.t("ui.params.walkline.side.left") },
+            { value: "right", label: t.t("ui.params.walkline.side.right") },
           ]}
-          hint={WALKLINE_SIDE_HINT}
+          hint={t.t(WALKLINE_SIDE_HINT_KEY)}
           onCommit={(choice) => update((p) => withWalklineSide(p, choice))}
         />
       ) : null}
@@ -362,9 +380,11 @@ function LayoutSection() {
  */
 function RealignButton() {
   const project = useApp((s) => s.project);
-  const reason = useMemo(() => realignDisabledReason(project), [project]);
+  const t = useT();
+  const blocker = useMemo(() => realignDisabledReason(project), [project]);
+  const reason = blocker === null ? null : t.t(blocker);
   const onClick = () => {
-    let notice = "";
+    let notice: Message | null = null;
     const r = update((p) => {
       const c = realign(p);
       notice = c.notice;
@@ -372,8 +392,11 @@ function RealignButton() {
     });
     appStore.setState({
       notice: r.ok
-        ? { kind: "info", text: notice }
-        : { kind: "error", text: `Recalage impossible : ${r.issues.join(" ; ")}` },
+        ? { kind: "info", msg: notice ?? textMessage("") }
+        : {
+            kind: "error",
+            msg: msg("ui.params.realign.failed", { issues: r.issues.join(" ; ") }),
+          },
     });
   };
   return (
@@ -382,10 +405,10 @@ function RealignButton() {
         type="button"
         onClick={onClick}
         disabled={reason !== null}
-        title={reason ?? REALIGN_HINT}
+        title={reason ?? t.t(REALIGN_HINT_KEY)}
         aria-describedby={reason !== null ? "realign-reason" : undefined}
       >
-        Recaler volées et trémie
+        {t.t("ui.params.realign.button")}
       </button>
       {reason !== null ? (
         <p className="muted" id="realign-reason" data-testid="realign-reason">
@@ -408,8 +431,8 @@ function transitionsOf(
   return model?.layout.walklineTransitions ?? [];
 }
 
-const deg = (rad: number): string =>
-  ((rad * 180) / Math.PI).toLocaleString("fr-FR", { maximumFractionDigits: 1 });
+const deg = (rad: number, locale: Locale): string =>
+  formatNumber(locale, (rad * 180) / Math.PI, { maximumFractionDigits: 1 });
 
 /**
  * Typologie du tracé à volées (déduite des tournants) et enchaînement des deux premiers
@@ -423,32 +446,34 @@ function TypologyInfo({
   transitions: readonly TransitionInfo[];
 }) {
   const opposite = hasOppositeTurns(turns);
+  const t = useT();
   return (
     <div className="typology">
       <p className="typology__label">
-        Typologie : <strong>{flightsTypologyLabel(turns)}</strong>
+        {t.t("ui.params.typology.label")} <strong>{t.t(flightsTypologyLabel(turns))}</strong>
       </p>
       {turns.length >= 2 ? (
         <SelectField<TurnSequence>
-          label="Enchaînement des tournants 1 et 2"
+          label={t.t("ui.params.typology.sequence.label")}
           value={turns[0]!.direction === turns[1]!.direction ? "same" : "opposite"}
           options={[
-            { value: "same", label: "Même sens (U, demi-tournant)" },
-            { value: "opposite", label: "Sens opposés (S / Z)" },
+            { value: "same", label: t.t("ui.params.typology.sequence.same") },
+            { value: "opposite", label: t.t("ui.params.typology.sequence.opposite") },
           ]}
-          hint="Garde le sens du premier tournant"
+          hint={t.t("ui.params.typology.sequence.hint")}
           onCommit={(seq) => update((p) => withTurnSequence(p, seq))}
         />
       ) : null}
       {opposite ? (
         <p className="muted typology__note">
-          Tournants de sens opposés : le jour change de côté ; la ligne de foulée passe d'un côté à
-          l'autre dans la volée intermédiaire, qui doit garder au moins un giron de partie droite.
-          {transitions.map((t) => (
-            <span key={t.leg}>
+          {t.t("ui.params.typology.opposite")}
+          {transitions.map((tr) => (
+            <span key={tr.leg}>
               {" "}
-              Volée {t.leg + 1} : ligne de foulée oblique de {deg(t.angle)}° (profondeur entre nez
-              réduite à g·cos θ).
+              {t.t("ui.params.typology.transition", {
+                flight: tr.leg + 1,
+                angle: deg(tr.angle, t.locale),
+              })}
             </span>
           ))}
         </p>
@@ -466,16 +491,17 @@ function FlightsEditor({
   turns: readonly Turn[];
   run: number | undefined;
 }) {
+  const t = useT();
   return (
     <>
       {legs.map((leg: Leg, i: number) => (
         <div key={i} className="leg">
           <AutoIntField
-            label={`Volée ${i + 1} (bord extérieur)`}
+            label={t.t("ui.params.flights.leg", { index: i + 1 })}
             value={leg.length}
             fallback={legFallback(legs, i, run)}
             autoAllowed={legAutoAllowed(legs.length)}
-            autoHint="Automatique : escalier droit seulement"
+            autoHint={t.t("ui.params.flights.autoHint")}
             min={1}
             onCommit={set(["stair", "layout", "legs", i, "length"])}
           />
@@ -484,10 +510,10 @@ function FlightsEditor({
       ))}
       <div className="button-row">
         <button type="button" onClick={() => update(addLeg)}>
-          Ajouter une volée
+          {t.t("ui.params.flights.add")}
         </button>
         <button type="button" disabled={legs.length <= 1} onClick={() => update(removeLastLeg)}>
-          Retirer la dernière volée
+          {t.t("ui.params.flights.remove")}
         </button>
       </div>
     </>
@@ -500,10 +526,11 @@ function SteppingSection() {
   const st = useApp((s) => s.project.stair.stepping);
   const helical = useApp((s) => s.project.stair.layout.kind === "helical");
   const { model } = useModel();
+  const t = useT();
   return (
-    <Section title="Découpage">
+    <Section title={t.t("ui.params.stepping.title")}>
       <AutoIntField
-        label="Nombre de hauteurs n"
+        label={t.t("ui.params.stepping.riserCount")}
         unit=""
         value={st.riserCount}
         fallback={model?.stepping.riserCount ?? 2}
@@ -512,26 +539,26 @@ function SteppingSection() {
         onCommit={set(["stair", "stepping", "riserCount"])}
       />
       <IntField
-        label="Hauteur de marche cible"
+        label={t.t("ui.params.stepping.targetRise")}
         value={st.targetRise}
         min={1}
         onCommit={set(["stair", "stepping", "targetRise"])}
       />
       <AutoIntField
-        label="Giron cible"
+        label={t.t("ui.params.stepping.targetGoing.label")}
         value={st.targetGoing}
         fallback={Math.max(1, Math.round(model?.stepping.going ?? 1))}
         min={1}
         hint={
           helical
-            ? "Sans effet sur un hélicoïdal (giron = rayon de la ligne de foulée × angle par marche)"
-            : "Utilisé seulement pour une volée de longueur automatique"
+            ? t.t("ui.params.stepping.targetGoing.hintHelical")
+            : t.t("ui.params.stepping.targetGoing.hint")
         }
         onCommit={set(["stair", "stepping", "targetGoing"])}
       />
       <IntField
-        label="Correction de la 1re hauteur"
-        hint="Compensation de revêtement, signée"
+        label={t.t("ui.params.stepping.firstRise.label")}
+        hint={t.t("ui.params.stepping.firstRise.hint")}
         value={st.firstRiseOffset}
         onCommit={set(["stair", "stepping", "firstRiseOffset"])}
       />
@@ -546,29 +573,32 @@ function BalancingSection() {
   const hasTurns = useApp((s) => s.project.stair.layout.turns.length > 0);
   const helical = useApp((s) => s.project.stair.layout.kind === "helical");
   const { model } = useModel();
+  const t = useT();
   return (
-    <Section title="Balancement" open={hasTurns}>
+    <Section title={t.t("ui.params.balancing.title")} open={hasTurns}>
       {!hasTurns ? (
         <p className="muted">
-          {helical
-            ? "Sans objet pour un hélicoïdal (marches rayonnantes, girons égaux)."
-            : "Sans objet pour un escalier droit."}
+          {t.t(
+            helical
+              ? "ui.params.balancing.notApplicableHelical"
+              : "ui.params.balancing.notApplicable",
+          )}
         </p>
       ) : null}
       <SelectField
-        label="Méthode"
+        label={t.t("ui.params.balancing.method")}
         value={b.method}
-        options={balancingMethodOptions()}
+        options={balancingMethodOptions(t)}
         onCommit={set(["stair", "balancing", "method"])}
       />
       {b.method === "M3" ? (
         <SelectField
-          label="Variante M3"
+          label={t.t("ui.params.balancing.variant.label")}
           value={b.variant}
           options={[
-            { value: "auto", label: "Automatique (selon la structure)" },
-            { value: "cubic", label: "Cubique (C1)" },
-            { value: "quintic", label: "Quintique (C2)" },
+            { value: "auto", label: t.t("ui.params.balancing.variant.auto") },
+            { value: "cubic", label: t.t("ui.params.balancing.variant.cubic") },
+            { value: "quintic", label: t.t("ui.params.balancing.variant.quintic") },
           ]}
           onCommit={set(["stair", "balancing", "variant"])}
         />
@@ -576,7 +606,7 @@ function BalancingSection() {
       {b.method === "M2" ? <HerseControls model={model} /> : null}
       {b.method === "M6" ? <RotationControls /> : null}
       <AutoIntField
-        label="Marches balancées par côté"
+        label={t.t("ui.params.balancing.windersPerSide")}
         unit=""
         value={b.windersPerSide}
         fallback={1}
@@ -585,7 +615,7 @@ function BalancingSection() {
         onCommit={set(["stair", "balancing", "windersPerSide"])}
       />
       <IntField
-        label="Collet cible (corde)"
+        label={t.t("ui.params.balancing.targetCollet")}
         value={b.targetCollet}
         min={1}
         onCommit={set(["stair", "balancing", "targetCollet"])}
@@ -616,9 +646,10 @@ const resetBalancing = (key: "herseAngle" | "rotationReach" | "rotationSteepness
 function HerseControls({ model }: { model: ReturnType<typeof useModel>["model"] }) {
   const b = useApp((s) => s.project.stair.balancing);
   const r = herseAngleRange(b, model);
+  const t = useT();
   return (
     <RangeField
-      label="Angle α de la herse"
+      label={t.t("ui.params.herse.label")}
       unit="°"
       value={r.value}
       min={r.min}
@@ -627,8 +658,10 @@ function HerseControls({ model }: { model: ReturnType<typeof useModel>["model"] 
       isDefault={r.isDefault}
       hint={
         r.modelBound !== null
-          ? `Borné à ]0 ; ${r.modelBound.toLocaleString("fr-FR", { maximumFractionDigits: 1 })}°[ par la zone retenue (au-delà, collets croissants vers l'angle)`
-          : "Borne de la zone indisponible (aucune zone M2 retenue) : réduire α si le découpage échoue"
+          ? t.t("ui.params.herse.bounded", {
+              bound: formatNumber(t.locale, r.modelBound, { maximumFractionDigits: 1 }),
+            })
+          : t.t("ui.params.herse.noBound")
       }
       onChange={setBalancing("herseAngle")}
       onReset={resetBalancing("herseAngle")}
@@ -639,28 +672,29 @@ function HerseControls({ model }: { model: ReturnType<typeof useModel>["model"] 
 function RotationControls() {
   const b = useApp((s) => s.project.stair.balancing);
   const { reach, steepness } = rotationRanges(b);
+  const t = useT();
   return (
     <>
       <RangeField
-        label="Portée λ de la rotation"
-        unit="girons"
+        label={t.t("ui.params.rotation.reach")}
+        unit={t.t("ui.params.rotation.goings")}
         value={reach.value}
         min={reach.min}
         max={reach.max}
         step={reach.step}
         isDefault={reach.isDefault}
-        hint="Défaut du cœur à valider (sans source)"
+        hint={t.t("ui.params.rotation.defaultHint")}
         onChange={setBalancing("rotationReach")}
         onReset={resetBalancing("rotationReach")}
       />
       <RangeField
-        label="Raideur p de la rotation"
+        label={t.t("ui.params.rotation.steepness")}
         value={steepness.value}
         min={steepness.min}
         max={steepness.max}
         step={steepness.step}
         isDefault={steepness.isDefault}
-        hint="Défaut du cœur à valider (sans source)"
+        hint={t.t("ui.params.rotation.defaultHint")}
         onChange={setBalancing("rotationSteepness")}
         onReset={resetBalancing("rotationSteepness")}
       />
@@ -671,35 +705,36 @@ function RotationControls() {
 // ------------------------------------------------------------------ Marches
 
 function TreadsSection() {
-  const t = useApp((s) => s.project.stair.treads);
+  const treads = useApp((s) => s.project.stair.treads);
+  const t = useT();
   return (
-    <Section title="Marches">
+    <Section title={t.t("ui.params.treads.title")}>
       <IntField
-        label="Épaisseur de marche"
-        value={t.thickness}
+        label={t.t("ui.params.treads.thickness")}
+        value={treads.thickness}
         min={1}
         onCommit={set(["stair", "treads", "thickness"])}
       />
       <IntField
-        label="Débord de nez"
-        value={t.nosing}
+        label={t.t("ui.params.treads.nosing")}
+        value={treads.nosing}
         min={0}
         onCommit={set(["stair", "treads", "nosing"])}
       />
       <SelectField
-        label="Contremarches"
-        value={t.risers}
+        label={t.t("ui.params.treads.risers.label")}
+        value={treads.risers}
         options={[
-          { value: "full", label: "Pleines" },
-          { value: "open", label: "Ajourées" },
-          { value: "none", label: "Aucune" },
+          { value: "full", label: t.t("ui.params.treads.risers.full") },
+          { value: "open", label: t.t("ui.params.treads.risers.open") },
+          { value: "none", label: t.t("ui.params.treads.risers.none") },
         ]}
         onCommit={set(["stair", "treads", "risers"])}
       />
-      {t.risers !== "none" ? (
+      {treads.risers !== "none" ? (
         <IntField
-          label="Épaisseur de contremarche"
-          value={t.riserThickness}
+          label={t.t("ui.params.treads.riserThickness")}
+          value={treads.riserThickness}
           min={1}
           onCommit={set(["stair", "treads", "riserThickness"])}
         />
@@ -715,16 +750,17 @@ const DEDUCED_CONTEXTS = DEDUCED_ONLY_CONTEXTS;
 
 function ComplianceSection() {
   const c = useApp((s) => s.project.compliance);
-  const contexts = Object.entries(RULE_TABLE.contextes).filter(([k]) => !DEDUCED_CONTEXTS.has(k));
+  const contexts = Object.keys(RULE_TABLE.contextes).filter((k) => !DEDUCED_CONTEXTS.has(k));
+  const t = useT();
   return (
-    <Section title="Contexte de contrôle" open={false}>
+    <Section title={t.t("ui.params.compliance.title")} open={false}>
       <fieldset>
-        <legend>Contextes</legend>
-        {contexts.map(([key, description]) => (
+        <legend>{t.t("ui.params.compliance.contexts")}</legend>
+        {contexts.map((key) => (
           <CheckField
             key={key}
             label={key.replace(/_/g, " ")}
-            title={description}
+            title={t.t(contextLabel(key))}
             checked={c.contexts.includes(key)}
             onCommit={(checked) =>
               set(["compliance", "contexts"])(
@@ -735,29 +771,32 @@ function ComplianceSection() {
         ))}
       </fieldset>
       <SelectField
-        label="Profil"
+        label={t.t("ui.params.compliance.profile.label")}
         value={c.profile}
         options={[
-          { value: "strict", label: "Strict" },
-          { value: "souple", label: "Souple" },
+          { value: "strict", label: t.t("ui.params.compliance.profile.strict") },
+          { value: "souple", label: t.t("ui.params.compliance.profile.souple") },
         ]}
         onCommit={set(["compliance", "profile"])}
       />
       <TextField
-        label="Date de référence (PC/DP ou marché)"
+        label={t.t("ui.params.compliance.referenceDate.label")}
         type="date"
         value={c.referenceDate ?? ""}
-        hint="Pilote le régime garde-corps"
+        hint={t.t("ui.params.compliance.referenceDate.hint")}
         onCommit={(v) => set(["compliance", "referenceDate"])(v === "" ? undefined : v)}
       />
       {c.overrides.length > 0 ? (
-        <p className="muted">{c.overrides.length} surcharge(s) de règle justifiée(s).</p>
+        <p className="muted">
+          {t.t("ui.params.compliance.overrides", { count: c.overrides.length })}
+        </p>
       ) : null}
     </Section>
   );
 }
 
 export function ParamsPanel() {
+  const t = useT();
   return (
     <div className="params">
       <SiteSection />
@@ -765,10 +804,10 @@ export function ParamsPanel() {
       <SteppingSection />
       <BalancingSection />
       <TreadsSection />
-      <Section title="Structure">
+      <Section title={t.t("ui.structure.label")}>
         <StructureSection />
       </Section>
-      <Section title="Garde-corps" open={false}>
+      <Section title={t.t("ui.params.guards.title")} open={false}>
         <GuardsSection />
       </Section>
       <ComplianceSection />

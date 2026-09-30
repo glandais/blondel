@@ -1,4 +1,5 @@
 import { buildModel, createProject } from "@blondel/core";
+import { translatorFor } from "@blondel/i18n";
 import { describe, expect, it } from "vitest";
 import type { Model } from "@blondel/core";
 import fc from "fast-check";
@@ -12,11 +13,14 @@ import {
   polylineMidpoint,
 } from "./annotations.js";
 
+const FR = translatorFor("fr");
+const EN = translatorFor("en");
+
 describe("cotes 3D principales", () => {
   it("escalier droit : H = Σh, E = emmarchement, reculement = run", () => {
     const project = createProject("straight");
     const model = buildModel(project);
-    const dims = mainDimensions(model);
+    const dims = mainDimensions(model, FR);
     expect(dims.map((d) => d.id)).toEqual(["dim-H", "dim-E", "dim-run"]);
     const [H, E, run] = dims;
     expect(H!.points[1]!.z - H!.points[0]!.z).toBeCloseTo(project.site.floorToFloor, 6);
@@ -26,14 +30,26 @@ describe("cotes 3D principales", () => {
     for (let i = 1; i < run!.points.length; i++)
       len += distance(run!.points[i - 1]!, run!.points[i]!);
     expect(len).toBeCloseTo(model.stepping.run, 3);
+    expect(run!.label).toMatch(/^Reculement \d/);
+  });
+
+  it("libellés en anglais : cotes et nombres dans la langue", () => {
+    const model = buildModel(createProject("straight"));
+    const labels = mainDimensions(model, EN).map((d) => d.label);
+    expect(labels[0]).toMatch(/^H = [\d,]+(\.\d)? mm$/);
+    expect(labels[1]).toMatch(/^W = /);
+    expect(labels[2]).toMatch(/^Total going \d/);
+    const a = { shown: { x: 0, y: 0, z: 0 }, real: { x: 0, y: 0, z: 0 } };
+    const b = { shown: { x: 1234.5, y: 0, z: 0 }, real: { x: 1234.5, y: 0, z: 0 } };
+    expect(measureAnnotation([a, b], "en")?.label).toBe("1,234.5 mm");
   });
 
   it("mesure : longueur réelle, segment entre les points affichés", () => {
     const a = { shown: { x: 0, y: 0, z: 400 }, real: { x: 0, y: 0, z: 0 } };
     const b = { shown: { x: 300, y: 400, z: 400 }, real: { x: 300, y: 400, z: 0 } };
-    expect(measureAnnotation([])).toBeUndefined();
-    expect(measureAnnotation([a])?.label).toBe("");
-    const m = measureAnnotation([a, b]);
+    expect(measureAnnotation([], "fr")).toBeUndefined();
+    expect(measureAnnotation([a], "fr")?.label).toBe("");
+    const m = measureAnnotation([a, b], "fr");
     expect(m?.points).toEqual([a.shown, b.shown]);
     expect(m?.label).toMatch(/^500(,0)? mm$/);
     expect(polylineMidpoint([a.real, b.real])).toEqual({ x: 150, y: 200, z: 0 });
@@ -55,7 +71,7 @@ describe("cotes et mesure : cas limites", () => {
       ...model,
       stepping: { ...model.stepping, nosings: [oblique, ...rest] },
     };
-    const E = mainDimensions(skewed).find((d) => d.id === "dim-E")!;
+    const E = mainDimensions(skewed, FR).find((d) => d.id === "dim-E")!;
     expect(distance(E.points[0]!, E.points[1]!)).toBeCloseTo(project.stair.layout.width, 3);
     expect(E.points[0]!.z).toBe(rest[0]!.z);
   });

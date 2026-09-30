@@ -6,7 +6,9 @@
  * menus « Importer » (projet, plan DXF, image de plan) et « Exporter », unité d'affichage et
  * thème.
  */
+import { msg } from "@blondel/i18n";
 import { useId, useState } from "react";
+import { useT } from "../i18n/useT.js";
 import { downloadFile } from "../lib/download.js";
 import {
   PRESET_GROUPS,
@@ -19,10 +21,12 @@ import { rejectedAutosaveFile } from "../store/persistence.js";
 import { ExportMenu } from "./ExportMenu.js";
 import { TextField } from "./fields.js";
 import { ImportMenu } from "./ImportMenu.js";
+import { LanguageToggle } from "./LanguageToggle.js";
 import { ThemeToggle } from "./ThemeToggle.js";
 import { WorkshopDialog } from "./WorkshopDialog.js";
 
 export function Toolbar() {
+  const t = useT();
   const name = useApp((s) => s.project.name);
   const canUndo = useApp((s) => s.history.past.length > 0);
   const canRedo = useApp((s) => s.history.future.length > 0);
@@ -38,25 +42,29 @@ export function Toolbar() {
   const st = appStore.getState;
 
   return (
-    <header className="toolbar" role="toolbar" aria-label="Barre d'outils">
+    <header className="toolbar" role="toolbar" aria-label={t.t("ui.toolbar.label")}>
       <strong className="brand">Blondel</strong>
       <div className="toolbar__name">
-        <TextField label="Projet" value={name} onCommit={(v) => st().setField(["name"], v)} />
+        <TextField
+          label={t.t("ui.toolbar.project")}
+          value={name}
+          onCommit={(v) => st().setField(["name"], v)}
+        />
       </div>
 
       <div className="toolbar__group">
         <button
           type="button"
           onClick={() => st().setAssistantOpen(true)}
-          title="Proposer des escaliers à partir du site (H, trémie, murs)"
+          title={t.t("ui.toolbar.assistant.title")}
         >
-          Assistant…
+          {t.t("ui.toolbar.assistant.label")}
         </button>
         <WorkshopDialog />
       </div>
 
       <div className="toolbar__group">
-        <label htmlFor={presetId}>Préréglage</label>
+        <label htmlFor={presetId}>{t.t("ui.toolbar.preset")}</label>
         <select
           id={presetId}
           value={preset}
@@ -64,22 +72,26 @@ export function Toolbar() {
           aria-describedby={description ? presetDescId : undefined}
         >
           {PRESET_GROUPS.map((g) => (
-            <optgroup key={g.label} label={g.label}>
+            <optgroup key={g.label} label={t.t(g.label)}>
               {g.items.map((item) => (
-                <option key={item.id} value={item.id} title={item.description}>
-                  {item.label}
+                <option
+                  key={item.id}
+                  value={item.id}
+                  title={item.description ? t.t(item.description) : undefined}
+                >
+                  {t.t(item.label)}
                 </option>
               ))}
             </optgroup>
           ))}
         </select>
         <button type="button" onClick={() => applyPresetChoice(st(), preset)}>
-          Appliquer
+          {t.t("ui.toolbar.applyPreset")}
         </button>
       </div>
       {description ? (
         <span id={presetDescId} className="toolbar__hint muted">
-          {description}
+          {t.t(description)}
         </span>
       ) : null}
 
@@ -88,17 +100,17 @@ export function Toolbar() {
           type="button"
           onClick={() => st().undo()}
           disabled={!canUndo}
-          title="Annuler (Ctrl+Z)"
+          title={t.t("ui.toolbar.undo.title")}
         >
-          Annuler
+          {t.t("ui.toolbar.undo.label")}
         </button>
         <button
           type="button"
           onClick={() => st().redo()}
           disabled={!canRedo}
-          title="Rétablir (Ctrl+Maj+Z)"
+          title={t.t("ui.toolbar.redo.title")}
         >
-          Rétablir
+          {t.t("ui.toolbar.redo.label")}
         </button>
       </div>
 
@@ -108,7 +120,7 @@ export function Toolbar() {
       </div>
 
       <div className="toolbar__group">
-        <label htmlFor={unitId}>Affichage</label>
+        <label htmlFor={unitId}>{t.t("ui.toolbar.display")}</label>
         <select
           id={unitId}
           value={unit}
@@ -118,17 +130,18 @@ export function Toolbar() {
           <option value="cm">cm</option>
         </select>
         <ThemeToggle />
+        <LanguageToggle />
       </div>
 
       {rejected && !rejected.preserved ? (
         <span className="badge badge--warn" role="status">
-          Autosauvegarde suspendue
+          {t.t("ui.toolbar.autosave.suspended")}
         </span>
       ) : null}
 
       {autosaveFailed ? (
         <span className="badge badge--warn" role="status">
-          Autosauvegarde indisponible
+          {t.t("ui.toolbar.autosave.unavailable")}
         </span>
       ) : null}
 
@@ -137,16 +150,16 @@ export function Toolbar() {
           className={`notice notice--${notice.kind}`}
           role={notice.kind === "error" ? "alert" : "status"}
         >
-          <span>{notice.text}</span>
+          <span>{t.t(notice.msg)}</span>
           {notice.details && notice.details.length > 0 ? (
             <ul>
-              {notice.details.slice(0, 8).map((d) => (
-                <li key={d}>{d}</li>
+              {notice.details.slice(0, 8).map((d, i) => (
+                <li key={i}>{t.t(d)}</li>
               ))}
             </ul>
           ) : null}
           <button type="button" className="link" onClick={() => st().clearNotice()}>
-            Fermer
+            {t.t("ui.toolbar.notice.close")}
           </button>
         </div>
       ) : null}
@@ -157,14 +170,14 @@ export function Toolbar() {
           role="group"
           aria-label={
             rejected.since === "earlier"
-              ? "Copie de secours d'autosauvegarde"
-              : "Autosauvegarde refusée"
+              ? t.t("ui.toolbar.rejected.earlier.label")
+              : t.t("ui.toolbar.rejected.startup.label")
           }
         >
           <span>
             {rejected.since === "earlier"
-              ? "Une copie de secours d'autosauvegarde refusée est conservée dans ce navigateur :"
-              : "Autosauvegarde refusée au démarrage :"}
+              ? t.t("ui.toolbar.rejected.earlier.text")
+              : t.t("ui.toolbar.rejected.startup.text")}
           </span>
           {rejected.since === "earlier" ? (
             <button
@@ -173,23 +186,27 @@ export function Toolbar() {
               disabled={rejected.restorable !== true}
               title={
                 rejected.restorable === true
-                  ? "Remplacer le projet courant par la copie (annulable)"
-                  : `Copie illisible par cette version : ${rejected.reason ?? "format non reconnu"}`
+                  ? t.t("ui.toolbar.rejected.restore.title")
+                  : t.t("ui.toolbar.rejected.unreadable", {
+                      reason: rejected.reason ?? msg("ui.toolbar.rejected.unknownFormat"),
+                    })
               }
               onClick={() => st().restoreRejectedAutosave()}
             >
-              Restaurer
+              {t.t("ui.toolbar.rejected.restore.label")}
             </button>
           ) : null}
           <button
             type="button"
             className="link"
             onClick={() => {
-              const f = rejectedAutosaveFile(rejected.text);
+              const f = rejectedAutosaveFile(rejected.text, t);
               downloadFile({ filename: f.filename, mime: "application/json", content: f.text });
             }}
           >
-            {rejected.since === "earlier" ? "Exporter" : "Télécharger le texte brut"}
+            {rejected.since === "earlier"
+              ? t.t("ui.toolbar.rejected.export")
+              : t.t("ui.toolbar.rejected.download")}
           </button>
           <button
             type="button"
@@ -200,10 +217,10 @@ export function Toolbar() {
             }}
           >
             {rejected.since === "earlier"
-              ? "Supprimer"
+              ? t.t("ui.toolbar.rejected.delete")
               : rejected.preserved
-                ? "Oublier cette sauvegarde"
-                : "Reprendre l'autosauvegarde"}
+                ? t.t("ui.toolbar.rejected.forget")
+                : t.t("ui.toolbar.rejected.resume")}
           </button>
         </div>
       ) : null}

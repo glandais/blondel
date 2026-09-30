@@ -12,8 +12,9 @@ import {
   type RuleFamily,
   type Severity,
 } from "@blondel/core";
+import type { MessageKey } from "@blondel/i18n";
 import { useId } from "react";
-import { trKey } from "../i18n/fr.js";
+import { useT } from "../i18n/useT.js";
 import {
   APPEARANCE_MATERIALS,
   FAMILY_LABELS,
@@ -49,11 +50,11 @@ export const INITIAL_TOOLS: ToolsState = {
   hiddenFamilies: [],
 };
 
-const SECTION_LABELS: Readonly<Record<SectionAxis | "none", string>> = {
-  none: "Aucun",
-  x: "Selon X",
-  y: "Selon Y",
-  z: "En hauteur (Z)",
+const SECTION_LABELS: Readonly<Record<SectionAxis | "none", MessageKey>> = {
+  none: "ui.viewer3d.section.none",
+  x: "ui.viewer3d.section.x",
+  y: "ui.viewer3d.section.y",
+  z: "ui.viewer3d.section.z",
 };
 
 export interface Viewer3DToolsProps {
@@ -93,19 +94,20 @@ function FamilySelect({
   readonly onChange: (m: MaterialId | null) => void;
 }) {
   const id = useId();
-  const own = materials.map((m) => MATERIAL_LABELS[m]).join(", ");
+  const t = useT();
+  const own = materials.map((m) => t.t(MATERIAL_LABELS[m])).join(", ");
   return (
     <div className="viewer3d__family">
-      <label htmlFor={id}>{FAMILY_LABELS[family]}</label>
+      <label htmlFor={id}>{t.t(FAMILY_LABELS[family])}</label>
       <select
         id={id}
         value={value ?? ""}
         onChange={(e) => onChange(e.target.value === "" ? null : (e.target.value as MaterialId))}
       >
-        <option value="">Matériau du projet ({own})</option>
+        <option value="">{t.t("ui.viewer3d.material.project", { own })}</option>
         {APPEARANCE_MATERIALS.map((m) => (
           <option key={m} value={m}>
-            {MATERIAL_LABELS[m]}
+            {t.t(MATERIAL_LABELS[m])}
           </option>
         ))}
       </select>
@@ -128,6 +130,7 @@ export function Viewer3DTools({
   appearance,
   onAppearance,
 }: Viewer3DToolsProps) {
+  const t = useT();
   const overridden = Object.keys(appearance).length;
   return (
     <>
@@ -138,11 +141,11 @@ export function Viewer3DTools({
             checked={tools.showControls}
             onChange={(e) => onChange({ showControls: e.target.checked })}
           />{" "}
-          Contrôles sur les pièces
+          {t.t("ui.viewer3d.controls")}
         </label>
         {tools.showControls ? (
           <fieldset className="viewer3d__families">
-            <legend>Familles de règles</legend>
+            <legend>{t.t("ui.viewer3d.families")}</legend>
             {RULE_FAMILIES.map((f) => (
               <label key={f} className="viewer3d__check">
                 <input
@@ -156,13 +159,13 @@ export function Viewer3DTools({
                     })
                   }
                 />{" "}
-                {trKey(RULE_FAMILY_LABELS[f])} ({familyCounts[f]})
+                {t.t(RULE_FAMILY_LABELS[f])} ({familyCounts[f]})
               </label>
             ))}
           </fieldset>
         ) : null}
         {tools.showControls && flaggedCount > 0 ? (
-          <ul className="viewer3d__legend" aria-label="Légende des contrôles">
+          <ul className="viewer3d__legend" aria-label={t.t("ui.viewer3d.legend.label")}>
             {(["bloquant", "avertissement", "conseil"] as const satisfies readonly Severity[]).map(
               (sev) => (
                 <li key={sev}>
@@ -171,7 +174,7 @@ export function Viewer3DTools({
                     style={{ background: SEVERITY_COLORS[sev] }}
                     aria-hidden="true"
                   />
-                  {SEVERITY_LABELS[sev]}
+                  {t.t(SEVERITY_LABELS[sev])}
                 </li>
               ),
             )}
@@ -181,8 +184,8 @@ export function Viewer3DTools({
           <span className="muted">
             {tools.hiddenFamilies.length > 0 &&
             tools.hiddenFamilies.some((f) => familyCounts[f] > 0)
-              ? "Aucune violation localisée dans les familles affichées."
-              : "Aucune violation localisée."}
+              ? t.t("ui.viewer3d.noViolation.shown")
+              : t.t("ui.viewer3d.noViolation")}
           </span>
         ) : null}
         {tools.measuring && measureText !== null ? (
@@ -191,17 +194,21 @@ export function Viewer3DTools({
           </output>
         ) : null}
       </div>
-      <div className="viewer3d__toolbar" role="toolbar" aria-label="Outils 3D">
+      <div
+        className="viewer3d__toolbar"
+        role="toolbar"
+        aria-label={t.t("ui.viewer3d.toolbar.label")}
+      >
         <label className="viewer3d__check">
           <input
             type="checkbox"
             checked={tools.showDimensions}
             onChange={(e) => onChange({ showDimensions: e.target.checked })}
           />{" "}
-          Cotes principales
+          {t.t("ui.viewer3d.dimensions")}
         </label>
         <label className="viewer3d__range">
-          Vue éclatée
+          {t.t("ui.viewer3d.explode")}
           <input
             type="range"
             min={0}
@@ -212,14 +219,14 @@ export function Viewer3DTools({
           />
         </label>
         <label className="viewer3d__range">
-          Plan de coupe
+          {t.t("ui.viewer3d.section")}
           <select
             value={tools.section}
             onChange={(e) => onChange({ section: e.target.value as ToolsState["section"] })}
           >
             {(Object.keys(SECTION_LABELS) as (keyof typeof SECTION_LABELS)[]).map((k) => (
               <option key={k} value={k}>
-                {SECTION_LABELS[k]}
+                {t.t(SECTION_LABELS[k])}
               </option>
             ))}
           </select>
@@ -227,7 +234,7 @@ export function Viewer3DTools({
         {tools.section !== "none" ? (
           <>
             <label className="viewer3d__range">
-              Position de la coupe
+              {t.t("ui.viewer3d.sectionAt")}
               <input
                 type="range"
                 min={0}
@@ -243,7 +250,7 @@ export function Viewer3DTools({
                 checked={tools.sectionFlip}
                 onChange={(e) => onChange({ sectionFlip: e.target.checked })}
               />{" "}
-              Inverser la coupe
+              {t.t("ui.viewer3d.sectionFlip")}
             </label>
           </>
         ) : null}
@@ -253,25 +260,28 @@ export function Viewer3DTools({
             aria-pressed={tools.measuring}
             onClick={() => onChange({ measuring: !tools.measuring })}
           >
-            Mesurer
+            {t.t("ui.viewer3d.measure")}
           </button>
           {tools.measuring ? (
             <button type="button" onClick={onClearMeasure}>
-              Effacer la mesure
+              {t.t("ui.viewer3d.measure.clear")}
             </button>
           ) : null}
           {isolated ? (
             <button type="button" onClick={onShowAll}>
-              Tout afficher
+              {t.t("ui.viewer3d.showAll")}
             </button>
           ) : (
             <button type="button" disabled={!canIsolate} onClick={onIsolate}>
-              Isoler la pièce
+              {t.t("ui.viewer3d.isolate")}
             </button>
           )}
         </div>
         <details className="viewer3d__materials">
-          <summary>Matériaux{overridden > 0 ? ` (${overridden})` : ""}</summary>
+          <summary>
+            {t.t("ui.viewer3d.materials")}
+            {overridden > 0 ? ` (${t.num(overridden, { digits: 0 })})` : ""}
+          </summary>
           <div className="viewer3d__materials-panel">
             {families.map((f) => (
               <FamilySelect
@@ -282,10 +292,7 @@ export function Viewer3DTools({
                 onChange={(m) => onAppearance(f.family, m)}
               />
             ))}
-            <small className="field__hint">
-              Aperçu du rendu : ne modifie ni le projet, ni la nomenclature, ni les exports
-              (matériau de fabrication : panneaux Structure et Garde-corps).
-            </small>
+            <small className="field__hint">{t.t("ui.viewer3d.materials.hint")}</small>
           </div>
         </details>
       </div>

@@ -7,6 +7,7 @@
  * Convention d'affichage : le SVG dessine en coordonnées du site (mm, y vers le haut) dans un
  * groupe `scale(1, -1)` ; le `viewBox` est donc exprimé en (x, −y).
  */
+import type { MessageKey } from "@blondel/i18n";
 import {
   bbox,
   entitySegments,
@@ -211,13 +212,13 @@ export function projectSnapSegments(project: Project): CurveSeg[] {
 
 export type PlanTool = "pan" | "opening" | "wall" | "calibrate";
 
-/** Libellé français d'un type d'accroche (bulle d'aide). */
-export const SNAP_LABELS: Readonly<Record<SnapCandidate["kind"], string>> = {
-  endpoint: "Extrémité",
-  midpoint: "Milieu",
-  intersection: "Intersection",
-  center: "Centre",
-  point: "Sommet",
+/** Clé du libellé d'un type d'accroche (bulle d'aide). */
+export const SNAP_LABELS: Readonly<Record<SnapCandidate["kind"], MessageKey>> = {
+  endpoint: "ui.label.snap.endpoint",
+  midpoint: "ui.label.snap.midpoint",
+  intersection: "ui.label.snap.intersection",
+  center: "ui.label.snap.center",
+  point: "ui.label.snap.point",
 };
 
 /**
@@ -292,7 +293,7 @@ export type WallClick =
       readonly b: Vec2;
       readonly reference: "axis" | "left" | "right";
     }
-  | { readonly kind: "ignored"; readonly draft: Vec2[]; readonly reason: string };
+  | { readonly kind: "ignored"; readonly draft: Vec2[]; readonly reason: MessageKey };
 
 /**
  * Clic de tracé de mur : à l'axe, deux clics (extrémités) ; au nu, deux clics (extrémités du
@@ -307,7 +308,7 @@ export function wallClick(draft: readonly Vec2[], p: Vec2, mode: WallTraceMode):
       return {
         kind: "ignored",
         draft: [...draft],
-        reason: "Second point confondu avec le premier.",
+        reason: "ui.plan.site.wall.samePoint",
       };
     }
     return mode === "axis"
@@ -319,7 +320,7 @@ export function wallClick(draft: readonly Vec2[], p: Vec2, mode: WallTraceMode):
     return {
       kind: "ignored",
       draft: [...draft],
-      reason: "Cliquer d'un côté du nu tracé : le côté où se trouve le mur.",
+      reason: "ui.plan.site.wall.faceOnLine",
     };
   }
   return { kind: "commit", a, b, reference: side };
@@ -342,13 +343,13 @@ export const IMAGE_MAX_SIDE_PX = 4096;
  */
 export const FAR_UNDERLAY_MM = 100_000;
 
-/** Unités proposées quand le DXF n'indique pas la sienne. */
-export const UNIT_CHOICES: readonly { readonly mm: number; readonly label: string }[] = [
-  { mm: 1, label: "Millimètre" },
-  { mm: 10, label: "Centimètre" },
-  { mm: 1000, label: "Mètre" },
-  { mm: 25.4, label: "Pouce" },
-  { mm: 304.8, label: "Pied" },
+/** Unités proposées quand le DXF n'indique pas la sienne ; `key` : libellé à traduire. */
+export const UNIT_CHOICES: readonly { readonly mm: number; readonly key: MessageKey }[] = [
+  { mm: 1, key: "ui.plan.unit.millimetre" },
+  { mm: 10, key: "ui.plan.unit.centimetre" },
+  { mm: 1000, key: "ui.plan.unit.metre" },
+  { mm: 25.4, key: "ui.plan.unit.inch" },
+  { mm: 304.8, key: "ui.plan.unit.foot" },
 ];
 
 const center = (b: BBox): Vec2 => ({ x: (b.min.x + b.max.x) / 2, y: (b.min.y + b.max.y) / 2 });

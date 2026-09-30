@@ -3,6 +3,7 @@
  * navigateur (préférence locale, sans conséquence si le stockage est indisponible).
  */
 import { useEffect, useId, useState } from "react";
+import { useT } from "../i18n/useT.js";
 import { appStore, useApp } from "../store/appStore.js";
 import type { ThemeChoice } from "../store/projectStore.js";
 
@@ -35,6 +36,7 @@ export function useResolvedTheme(): "light" | "dark" {
 }
 
 export function ThemeToggle() {
+  const t = useT();
   const theme = useApp((s) => s.theme);
   const id = useId();
   useEffect(() => {
@@ -52,15 +54,15 @@ export function ThemeToggle() {
   }, [theme]);
   return (
     <>
-      <label htmlFor={id}>Thème</label>
+      <label htmlFor={id}>{t.t("ui.theme.label")}</label>
       <select
         id={id}
         value={theme}
         onChange={(e) => appStore.getState().setTheme(e.target.value as ThemeChoice)}
       >
-        <option value="system">Système</option>
-        <option value="light">Clair</option>
-        <option value="dark">Sombre</option>
+        <option value="system">{t.t("ui.theme.system")}</option>
+        <option value="light">{t.t("ui.theme.light")}</option>
+        <option value="dark">{t.t("ui.theme.dark")}</option>
       </select>
     </>
   );

@@ -12,7 +12,7 @@ import { useEffect, useId, useRef, useState } from "react";
 import { downloadFile } from "../lib/download.js";
 import {
   COST_FIELDS,
-  RATES_FILE_NAME,
+  ratesFileName,
   effectiveRates,
   missingRequiredRates,
   parseRateInput,
@@ -22,21 +22,28 @@ import {
   type CostFieldInfo,
 } from "../lib/workshopRates.js";
 import { useApp, useWorkshop, workshopStore } from "../store/appStore.js";
+import { msg, type Locale, type Message } from "@blondel/i18n";
+import { numberFormat } from "../i18n/locale.js";
+import { useLocale, useT } from "../i18n/useT.js";
 import "./workshop.css";
 
-const nf = new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 4, useGrouping: false });
-const shown = (v: number | undefined): string => (v === undefined ? "" : nf.format(v));
+const RATE_FORMAT: Intl.NumberFormatOptions = { maximumFractionDigits: 4, useGrouping: false };
+/** Valeur du champ dans la langue d'affichage (relue par `parseRateInput`, virgule ou point). */
+const shown = (v: number | undefined, locale: Locale): string =>
+  v === undefined ? "" : numberFormat(locale, RATE_FORMAT).format(v);
 
 function RateField({ field, rates }: { field: CostFieldInfo; rates: CostRates }) {
   const id = useId();
+  const t = useT();
+  const locale = useLocale();
   const value = rates[field.key];
-  const [text, setText] = useState(shown(value));
+  const [text, setText] = useState(shown(value, locale));
   const [invalid, setInvalid] = useState(false);
   // Valeur changée ailleurs (import, effacement) : champ resynchronisé.
   useEffect(() => {
-    setText(shown(value));
+    setText(shown(value, locale));
     setInvalid(false);
-  }, [value]);
+  }, [value, locale]);
   const commit = (): void => {
     const r = parseRateInput(text);
     if (!r.ok) {
@@ -53,8 +60,9 @@ function RateField({ field, rates }: { field: CostFieldInfo; rates: CostRates })
   return (
     <div className="field">
       <label htmlFor={id}>
-        {field.label}
-        {field.always ? "" : " (selon les matériaux)"}
+        {field.always
+          ? t.t(field.labelKey)
+          : t.t("ui.workshop.field.byMaterial", { label: msg(field.labelKey) })}
       </label>
       <div className="input-unit">
         <input
@@ -62,7 +70,7 @@ function RateField({ field, rates }: { field: CostFieldInfo; rates: CostRates })
           type="text"
           inputMode="decimal"
           value={text}
-          placeholder="non renseigné"
+          placeholder={t.t("ui.workshop.field.empty")}
           aria-invalid={invalid || undefined}
           onChange={(e) => setText(e.target.value)}
           onBlur={commit}
@@ -70,11 +78,11 @@ function RateField({ field, rates }: { field: CostFieldInfo; rates: CostRates })
             if (e.key === "Enter") commit();
           }}
         />
-        <span className="input-unit__unit">{field.unit}</span>
+        <span className="input-unit__unit">{t.t(field.unitKey)}</span>
       </div>
       {invalid ? (
         <small className="field__error" role="alert">
-          Nombre positif ou nul attendu (vide : non renseigné).
+          {t.t("ui.workshop.field.invalid")}
         </small>
       ) : null}
     </div>
@@ -82,6 +90,7 @@ function RateField({ field, rates }: { field: CostFieldInfo; rates: CostRates })
 }
 
 export function WorkshopDialog() {
+  const t = useT();
   const rates = useWorkshop((s) => s.rates);
   const project = useApp((s) => s.project);
   const saveFailed = useWorkshop((s) => s.saveFailed);
@@ -89,7 +98,7 @@ export function WorkshopDialog() {
   const file = useRef<HTMLInputElement>(null);
   const titleId = useId();
   const [open, setOpen] = useState(false);
-  const [message, setMessage] = useState<{ kind: "info" | "error"; text: string } | null>(null);
+  const [message, setMessage] = useState<{ kind: "info" | "error"; text: Message } | null>(null);
 
   useEffect(() => {
     const d = dialog.current;
@@ -108,13 +117,13 @@ export function WorkshopDialog() {
   const importFile = async (f: File): Promise<void> => {
     const r = parseRatesJson(await f.text());
     if (!r.ok) {
-      setMessage({ kind: "error", text: `Import refusé : ${r.error}` });
+      setMessage({ kind: "error", text: msg("ui.workshop.importRefused", { error: r.error }) });
       return;
     }
     workshopStore.getState().setRates(r.rates);
     setMessage({
       kind: "info",
-      text: `Barème importé (${Object.keys(r.rates).length} champ(s)) : il remplace le précédent.`,
+      text: msg("ui.workshop.imported", { count: Object.keys(r.rates).length }),
     });
   };
 
@@ -126,9 +135,9 @@ export function WorkshopDialog() {
           setMessage(null);
           setOpen(true);
         }}
-        title="Barème de coût de l'atelier (hors projet) : taux horaire, temps, prix matière"
+        title={t.t("ui.workshop.open.title")}
       >
-        Atelier…
+        {t.t("ui.workshop.open.label")}
       </button>
       <dialog
         ref={dialog}
@@ -141,33 +150,40 @@ export function WorkshopDialog() {
         {open ? (
           <>
             <header className="workshop__header">
-              <h2 id={titleId}>Profil d'atelier</h2>
+              <h2 id={titleId}>{t.t("ui.workshop.title")}</h2>
               <button type="button" onClick={() => setOpen(false)}>
-                Fermer
+                {t.t("ui.workshop.close")}
               </button>
             </header>
             <p className="muted">
-              Barème de coût de votre atelier, gardé dans ce navigateur et{" "}
-              <strong>séparé du projet</strong> (il n'est pas enregistré dans le fichier du projet).
-              Aucune valeur par défaut : Blondel n'a pas de temps d'atelier sourcé. Les euros
-              n'apparaissent dans le comparateur qu'avec un barème complet.
+              {t.t("ui.workshop.intro.before")} <strong>{t.t("ui.workshop.intro.strong")}</strong>{" "}
+              {t.t("ui.workshop.intro.after")}
             </p>
-            <p className="notice notice--info" role="status" aria-label="État du barème">
+            <p className="notice notice--info" role="status" aria-label={t.t("ui.workshop.state")}>
               {missing.length > 0
-                ? `Barème incomplet (${applied} / ${COST_FIELDS.length}) : coûts masqués. À renseigner : ${missing
-                    .map((f) => f.label.toLowerCase())
-                    .join(", ")}.`
-                : "Taux horaire et temps renseignés : coûts affichés dans le comparateur pour les variantes dont les prix matière et de finition sont aussi renseignés."}
+                ? t.t("ui.workshop.incomplete", {
+                    applied: String(applied),
+                    total: String(COST_FIELDS.length),
+                    fields: missing.map((f) => t.t(f.labelKey).toLowerCase()).join(", "),
+                  })
+                : t.t("ui.workshop.complete")}
             </p>
             {effective.fromProject.length > 0 ? (
-              <p className="notice notice--info" role="note" aria-label="Barème du projet ouvert">
-                Le projet ouvert porte aussi un barème (fichier importé) : champs vides ici repris
-                de ce barème ({effective.fromProject.map((f) => f.label.toLowerCase()).join(", ")}).
+              <p
+                className="notice notice--info"
+                role="note"
+                aria-label={t.t("ui.workshop.fromProject.label")}
+              >
+                {t.t("ui.workshop.fromProject.text", {
+                  fields: effective.fromProject
+                    .map((f) => t.t(f.labelKey).toLowerCase())
+                    .join(", "),
+                })}
               </p>
             ) : null}
             <form
               className="workshop__fields"
-              aria-label="Barème de coût"
+              aria-label={t.t("ui.workshop.form")}
               onSubmit={(e) => e.preventDefault()}
             >
               {COST_FIELDS.map((f) => (
@@ -179,48 +195,47 @@ export function WorkshopDialog() {
                 className={`notice ${message.kind === "error" ? "notice--error" : "notice--info"}`}
                 role={message.kind === "error" ? "alert" : "status"}
               >
-                {message.text}
+                {t.t(message.text)}
               </p>
             ) : null}
             {saveFailed ? (
               <p className="notice notice--error" role="alert">
-                Stockage du navigateur indisponible : le barème sera perdu à la fermeture
-                (l'exporter).
+                {t.t("ui.workshop.saveFailed")}
               </p>
             ) : null}
             <div className="button-row">
               <button type="button" onClick={() => file.current?.click()}>
-                Importer (JSON)…
+                {t.t("ui.workshop.import")}
               </button>
               <button
                 type="button"
                 disabled={filled === 0}
                 onClick={() =>
                   downloadFile({
-                    filename: RATES_FILE_NAME,
+                    filename: ratesFileName(t),
                     mime: "application/json",
                     content: ratesToJson(rates),
                   })
                 }
               >
-                Exporter (JSON)
+                {t.t("ui.workshop.export")}
               </button>
               <button
                 type="button"
                 disabled={filled === 0}
                 onClick={() => {
                   workshopStore.getState().setRates({});
-                  setMessage({ kind: "info", text: "Barème effacé." });
+                  setMessage({ kind: "info", text: msg("ui.workshop.cleared") });
                 }}
               >
-                Effacer le barème
+                {t.t("ui.workshop.clear")}
               </button>
               <input
                 ref={file}
                 type="file"
                 accept=".json,application/json"
                 hidden
-                aria-label="Fichier de barème d'atelier"
+                aria-label={t.t("ui.workshop.file")}
                 onChange={(e) => {
                   const f = e.target.files?.[0];
                   e.target.value = "";

@@ -51,6 +51,8 @@ export default defineConfig({
     baseURL,
     acceptDownloads: true,
     trace: "retain-on-failure",
+    // Navigateur en français : langue détectée au premier lancement (ADR-0007) ; les specs
+    // vérifient les libellés français (`openApp` l'impose aussi dans le stockage).
     locale: "fr-FR",
     viewport: { width: 1440, height: 900 },
   },

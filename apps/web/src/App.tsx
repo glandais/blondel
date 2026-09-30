@@ -14,6 +14,8 @@ import { PrecheckPanel } from "./components/PrecheckPanel.js";
 import { StatusBar } from "./components/StatusBar.js";
 import { Toolbar } from "./components/Toolbar.js";
 import { Welcome } from "./components/Welcome.js";
+import type { MessageKey } from "@blondel/i18n";
+import { useT } from "./i18n/useT.js";
 import { selectedTreadNumber } from "./lib/compliance.js";
 import { appStore, useApp, useModel } from "./store/appStore.js";
 import { cancelUnderlayImport, importQueue, queuedImportMessage } from "./store/importQueue.js";
@@ -27,13 +29,14 @@ import { PlanView } from "./views/PlanView.js";
 // three.js et react-three-fiber chargés à la demande (bundle initial plus léger).
 const Viewer3D = lazy(() => import("./views/Viewer3D.js"));
 
-const TABS: readonly { id: ViewTab; label: string }[] = [
-  { id: "plan", label: "Plan 2D" },
-  { id: "3d", label: "3D" },
-  { id: "elevation", label: "Élévation" },
-  { id: "flat", label: "Développés" },
-  { id: "bom", label: "Nomenclature" },
-  { id: "compare", label: "Comparateur" },
+// « 3D » : sigle invariant, sans clé.
+const TABS: readonly { id: ViewTab; label: MessageKey | null }[] = [
+  { id: "plan", label: "ui.app.tab.plan" },
+  { id: "3d", label: null },
+  { id: "elevation", label: "ui.app.tab.elevation" },
+  { id: "flat", label: "ui.app.tab.flat" },
+  { id: "bom", label: "ui.app.tab.bom" },
+  { id: "compare", label: "ui.app.tab.compare" },
 ];
 
 function isEditable(target: EventTarget | null): boolean {
@@ -76,6 +79,7 @@ function useUndoShortcuts(): void {
 
 function Tabs() {
   const view = useApp((s) => s.view);
+  const tr = useT();
   const onKeyDown = (e: KeyboardEvent<HTMLButtonElement>) => {
     const i = TABS.findIndex((t) => t.id === view);
     const delta = e.key === "ArrowRight" ? 1 : e.key === "ArrowLeft" ? -1 : 0;
@@ -87,7 +91,7 @@ function Tabs() {
     }
   };
   return (
-    <div role="tablist" aria-label="Vues" className="tabs">
+    <div role="tablist" aria-label={tr.t("ui.app.tabs.label")} className="tabs">
       {TABS.map((t) => (
         <button
           key={t.id}
@@ -100,7 +104,7 @@ function Tabs() {
           onClick={() => appStore.getState().setView(t.id)}
           onKeyDown={onKeyDown}
         >
-          {t.label}
+          {t.label === null ? "3D" : tr.t(t.label)}
         </button>
       ))}
     </div>
@@ -122,6 +126,7 @@ function QueuedImportNotice({
   hostShown: boolean;
 }) {
   const pending = useStore(importQueue, (s) => s.pending);
+  const t = useT();
   const message = queuedImportMessage(pending, { available, computing, hostShown });
   if (!message) return null;
   return (
@@ -129,7 +134,7 @@ function QueuedImportNotice({
       className={`notice notice--${message.kind}`}
       role={message.kind === "error" ? "alert" : "status"}
     >
-      <span>{message.text}</span>
+      <span>{t.t(message.text)}</span>
       {message.openHost ? (
         <button
           type="button"
@@ -139,11 +144,11 @@ function QueuedImportNotice({
             appStore.getState().setPlanMode("site");
           }}
         >
-          Ouvrir « Site et saisie »
+          {t.t("ui.app.queued.openHost")}
         </button>
       ) : null}
       <button type="button" className="link" onClick={() => cancelUnderlayImport()}>
-        Abandonner l'import
+        {t.t("ui.app.queued.cancel")}
       </button>
     </div>
   );
@@ -154,6 +159,7 @@ function CentralView() {
   const project = useApp((s) => s.project);
   const selection = useApp((s) => s.selection);
   const planMode = useApp((s) => s.planMode);
+  const t = useT();
   const { model, errors, mesh, pending, project: modelProject } = useModel();
   // Vues qui croisent le modèle et le projet (dalle, trémie) : le projet dont le modèle est issu,
   // pour rester cohérentes pendant un calcul.
@@ -164,16 +170,16 @@ function CentralView() {
   } else if (!model && pending) {
     content = (
       <div className="empty-view" role="status">
-        <p>Calcul du modèle…</p>
+        <p>{t.t("ui.app.computing")}</p>
       </div>
     );
   } else if (!model) {
     content = (
       <div className="empty-view" role="status">
-        <p>Aucun modèle à afficher.</p>
+        <p>{t.t("ui.app.noModel")}</p>
         <ul>
-          {errors.map((e) => (
-            <li key={e}>{e}</li>
+          {errors.map((e, i) => (
+            <li key={i}>{t.t(e)}</li>
           ))}
         </ul>
       </div>
@@ -182,7 +188,7 @@ function CentralView() {
     content = <PlanView model={model} />;
   } else if (view === "3d") {
     content = (
-      <Suspense fallback={<p className="muted">Chargement de la vue 3D…</p>}>
+      <Suspense fallback={<p className="muted">{t.t("ui.app.loading3d")}</p>}>
         <Viewer3D
           model={model}
           mesh={mesh}
@@ -213,7 +219,7 @@ function CentralView() {
     );
   }
   return (
-    <section className="center" aria-label="Vues de l'escalier">
+    <section className="center" aria-label={t.t("ui.app.center.label")}>
       <Welcome />
       <ErrorsBar />
       <Tabs />
@@ -231,14 +237,15 @@ function CentralView() {
 
 export function App() {
   useUndoShortcuts();
+  const t = useT();
   return (
     <div className="app">
       <Toolbar />
-      <aside className="left" aria-label="Paramètres">
+      <aside className="left" aria-label={t.t("ui.app.params.label")}>
         <ParamsPanel />
       </aside>
       <CentralView />
-      <aside className="right" aria-label="Contrôle de conception">
+      <aside className="right" aria-label={t.t("ui.app.compliance.label")}>
         <CompliancePanel />
         <PrecheckPanel />
       </aside>

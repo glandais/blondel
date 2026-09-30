@@ -5,10 +5,12 @@
  * outils de tracé de la trémie et des murs sont disponibles).
  */
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
+import { useT } from "../i18n/useT.js";
 import { appStore } from "../store/appStore.js";
 import { requestUnderlayImport, type UnderlayImportKind } from "../store/importQueue.js";
 
 export function ImportMenu() {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const root = useRef<HTMLDivElement>(null);
   const projectInput = useRef<HTMLInputElement>(null);
@@ -63,18 +65,18 @@ export function ImportMenu() {
         aria-controls={menuId}
         onClick={() => setOpen((o) => !o)}
       >
-        Importer ▾
+        {t.t("ui.import.menu")}
       </button>
       {open ? (
-        <div id={menuId} role="menu" className="menu__list" aria-label="Importer">
+        <div id={menuId} role="menu" className="menu__list" aria-label={t.t("ui.import.label")}>
           <button type="button" role="menuitem" onClick={() => pick(projectInput.current)}>
-            Projet (.blondel.json)…
+            {t.t("ui.import.project")}
           </button>
           <button type="button" role="menuitem" onClick={() => pick(dxfInput.current)}>
-            Plan DXF (calque de fond)…
+            {t.t("ui.import.dxf")}
           </button>
           <button type="button" role="menuitem" onClick={() => pick(imageInput.current)}>
-            Image de plan à calibrer (PNG, JPEG)…
+            {t.t("ui.import.image")}
           </button>
         </div>
       ) : null}
@@ -83,7 +85,7 @@ export function ImportMenu() {
         type="file"
         accept=".json,.blondel.json,application/json"
         hidden
-        aria-label="Fichier de projet à importer"
+        aria-label={t.t("ui.import.projectFile")}
         onChange={async (e) => {
           const file = e.target.files?.[0];
           e.target.value = "";
@@ -96,7 +98,7 @@ export function ImportMenu() {
         type="file"
         accept=".dxf,application/dxf,image/vnd.dxf"
         hidden
-        aria-label="Plan DXF à importer"
+        aria-label={t.t("ui.import.dxfFile")}
         onChange={(e) => {
           const file = e.target.files?.[0];
           e.target.value = "";
@@ -108,7 +110,7 @@ export function ImportMenu() {
         type="file"
         accept="image/png,image/jpeg"
         hidden
-        aria-label="Image de plan à importer"
+        aria-label={t.t("ui.import.imageFile")}
         onChange={(e) => {
           const file = e.target.files?.[0];
           e.target.value = "";

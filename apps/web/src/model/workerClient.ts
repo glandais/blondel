@@ -9,6 +9,7 @@
 import type { Project } from "@blondel/core";
 import type { CompareOutcome, Variant } from "../lib/variants.js";
 import { createJobRunner, type JobRunner } from "./handler.js";
+import { MessageError, msg, type Locale } from "@blondel/i18n";
 import type { PdfJobOptions } from "../lib/optionalApi.js";
 import type { PdfResult, WorkerJob, WorkerRequest, WorkerResponse } from "./protocol.js";
 import type { ModelSnapshot } from "./snapshot.js";
@@ -32,9 +33,9 @@ export interface JobExec {
    * Dossier PDF du projet, mis en page dans le worker (repli : fil principal). Rejette avec le
    * message de l'export si celui-ci échoue (sans basculer sur le fil principal).
    */
-  pdf(project: Project, options?: PdfJobOptions): Promise<Uint8Array>;
+  pdf(project: Project, options?: PdfJobOptions, locale?: Locale): Promise<Uint8Array>;
   /** Modèle 3D glTF binaire, dans le worker (repli : fil principal) ; rejette si l'export échoue. */
-  glb(project: Project): Promise<Uint8Array>;
+  glb(project: Project, locale?: Locale): Promise<Uint8Array>;
   /** Le worker est-il utilisé (sinon : fil principal) ? */
   readonly usesWorker: boolean;
   /** Workers remplacés par le chien de garde (statistiques, tests). */
@@ -50,15 +51,19 @@ export const DEFAULT_WATCHDOG_MS = 20_000;
  * avoir été recréé. Jamais de repli sur le fil principal dans ce cas (le même calcul y
  * figerait l'interface).
  */
-export class WatchdogTimeoutError extends Error {
+export class WatchdogTimeoutError extends MessageError {
   constructor(
     readonly timeoutMs: number,
     readonly restarts: number,
   ) {
+    // `msg` : message neutre affiché dans la langue de l'interface (`errorMessageOf`).
     super(
-      `Calcul interrompu : aucune réponse en ${Math.round(timeoutMs / 1000)} s` +
-        (restarts > 0 ? ` (relancé ${restarts} fois dans un nouveau worker)` : "") +
-        ". Modifiez un paramètre pour relancer le calcul.",
+      restarts > 0
+        ? msg("ui.worker.watchdogRestarted", {
+            seconds: String(Math.round(timeoutMs / 1000)),
+            count: restarts,
+          })
+        : msg("ui.worker.watchdog", { seconds: String(Math.round(timeoutMs / 1000)) }),
     );
     this.name = "WatchdogTimeoutError";
   }
@@ -271,8 +276,13 @@ export function createJobExec(
         (e: unknown) => recover(e, () => runLocal().compare(job)),
       );
     },
-    async pdf(project, options) {
-      const job = { type: "pdf", project, ...(options ? { options } : {}) } as const;
+    async pdf(project, options, locale) {
+      const job = {
+        type: "pdf",
+        project,
+        ...(options ? { options } : {}),
+        ...(locale ? { locale } : {}),
+      } as const;
       const p = call(job);
       let result: PdfResult;
       if (!p) result = await runLocal().pdf(job);
@@ -285,8 +295,8 @@ export function createJobExec(
       if ("error" in result) throw new Error(result.error);
       return result.bytes;
     },
-    async glb(project) {
-      const job = { type: "glb", project } as const;
+    async glb(project, locale) {
+      const job = { type: "glb", project, ...(locale ? { locale } : {}) } as const;
       const p = call(job);
       let result: PdfResult;
       if (!p) result = runLocal().glb(job);

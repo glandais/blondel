@@ -7,7 +7,8 @@
  * Tout ce qui est rendu ici doit rester clonable (`structuredClone`, `postMessage`) : objets
  * simples et tableaux typés, aucune fonction.
  */
-import type { Project } from "@blondel/core";
+import { errorMessageOf, type Project } from "@blondel/core";
+import { msg, type Message } from "@blondel/i18n";
 import type { PartMesh } from "@blondel/geometry";
 import { computeModel, type BuildModelFn, type ModelResult } from "./buildModel.js";
 import type { MeshCache } from "./meshCache.js";
@@ -31,7 +32,7 @@ export interface ModelSnapshot extends ModelResult {
   /** Maillage d'aperçu ; `null` sans modèle ou si le maillage a échoué. */
   readonly mesh: MeshSnapshot | null;
   /** Message d'un échec du maillage (le modèle reste affiché en 2D). */
-  readonly meshError?: string;
+  readonly meshError?: Message;
 }
 
 /** Calcule le modèle puis maille ses pièces ; ne lève jamais. */
@@ -54,7 +55,10 @@ export function computeSnapshot(
       },
     };
   } catch (e) {
-    const detail = e instanceof Error ? e.message : String(e);
-    return { ...result, mesh: null, meshError: `Maillage impossible : ${detail}` };
+    return {
+      ...result,
+      mesh: null,
+      meshError: msg("ui.worker.meshFailed", { detail: errorMessageOf(e) }),
+    };
   }
 }

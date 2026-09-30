@@ -11,13 +11,16 @@
  * d'atelier porté par le projet (`Project.workshop.costs`, fichier importé).
  */
 import { COST_TIME_FIELDS, CostRatesSchema, type CostRates, type Project } from "@blondel/core";
+import { msg, type Message, type MessageKey, type Translator } from "@blondel/i18n";
 
 export type CostField = keyof CostRates;
 
 export interface CostFieldInfo {
   readonly key: CostField;
-  readonly label: string;
-  readonly unit: string;
+  /** Clé du libellé, traduite à l'affichage (`t.t(f.labelKey)`). */
+  readonly labelKey: MessageKey;
+  /** Clé de l'unité (prix hors taxe), traduite à l'affichage. */
+  readonly unitKey: MessageKey;
   /**
    * Champ exigé pour tout chiffrage (taux horaire et `COST_TIME_FIELDS` du cœur) ; sinon
    * selon les matériaux de la variante.
@@ -31,18 +34,50 @@ const always = (key: CostField): boolean =>
 /** Champs du barème, dans l'ordre du panneau. */
 export const COST_FIELDS: readonly CostFieldInfo[] = (
   [
-    { key: "hourlyRate", label: "Taux horaire", unit: "€ HT/h" },
-    { key: "minutesPerCut", label: "Temps par coupe", unit: "min" },
-    { key: "minutesPerWeldMeter", label: "Temps par mètre de cordon", unit: "min/m" },
-    { key: "minutesPerBend", label: "Temps par pli", unit: "min" },
-    { key: "minutesPerHole", label: "Temps par perçage", unit: "min" },
-    { key: "minutesPerUniquePart", label: "Temps par pièce unique", unit: "min" },
-    { key: "steelPricePerKg", label: "Prix de l'acier", unit: "€ HT/kg" },
-    { key: "woodPricePerM3", label: "Prix du bois (débit)", unit: "€ HT/m³" },
+    {
+      key: "hourlyRate",
+      labelKey: "ui.lib.workshop.field.hourlyRate",
+      unitKey: "ui.lib.workshop.unit.eurPerHour",
+    },
+    {
+      key: "minutesPerCut",
+      labelKey: "ui.lib.workshop.field.minutesPerCut",
+      unitKey: "ui.lib.workshop.unit.min",
+    },
+    {
+      key: "minutesPerWeldMeter",
+      labelKey: "ui.lib.workshop.field.minutesPerWeldMeter",
+      unitKey: "ui.lib.workshop.unit.minPerMetre",
+    },
+    {
+      key: "minutesPerBend",
+      labelKey: "ui.lib.workshop.field.minutesPerBend",
+      unitKey: "ui.lib.workshop.unit.min",
+    },
+    {
+      key: "minutesPerHole",
+      labelKey: "ui.lib.workshop.field.minutesPerHole",
+      unitKey: "ui.lib.workshop.unit.min",
+    },
+    {
+      key: "minutesPerUniquePart",
+      labelKey: "ui.lib.workshop.field.minutesPerUniquePart",
+      unitKey: "ui.lib.workshop.unit.min",
+    },
+    {
+      key: "steelPricePerKg",
+      labelKey: "ui.lib.workshop.field.steelPricePerKg",
+      unitKey: "ui.lib.workshop.unit.eurPerKg",
+    },
+    {
+      key: "woodPricePerM3",
+      labelKey: "ui.lib.workshop.field.woodPricePerM3",
+      unitKey: "ui.lib.workshop.unit.eurPerM3",
+    },
     {
       key: "finishPricePerM2",
-      label: "Finition (acier peint ou galvanisé)",
-      unit: "€ HT/m²",
+      labelKey: "ui.lib.workshop.field.finishPricePerM2",
+      unitKey: "ui.lib.workshop.unit.eurPerM2",
     },
   ] as const satisfies readonly Omit<CostFieldInfo, "always">[]
 ).map((f) => ({ ...f, always: always(f.key) }));
@@ -91,7 +126,11 @@ export function withRate(rates: CostRates, key: CostField, value: number | undef
 
 /** Format du fichier d'export du barème. */
 export const RATES_FILE_FORMAT = "blondel-bareme-atelier";
-export const RATES_FILE_NAME = "bareme-atelier.json";
+
+/** Nom du fichier d'export du barème, dans la langue d'affichage (« bareme-atelier.json »). */
+export function ratesFileName(t: Translator): string {
+  return `${t.t("ui.lib.workshop.fileName")}.json`;
+}
 
 /**
  * Fichier JSON du barème : un profil d'atelier partiel (`{ costs }`, forme de
@@ -110,15 +149,15 @@ export function parseRatesJson(
   text: string,
 ):
   | { readonly ok: true; readonly rates: CostRates }
-  | { readonly ok: false; readonly error: string } {
+  | { readonly ok: false; readonly error: Message } {
   let data: unknown;
   try {
     data = JSON.parse(text);
   } catch {
-    return { ok: false, error: "Fichier JSON illisible." };
+    return { ok: false, error: msg("ui.lib.workshop.error.unreadable") };
   }
   if (typeof data !== "object" || data === null || Array.isArray(data)) {
-    return { ok: false, error: "Objet JSON attendu." };
+    return { ok: false, error: msg("ui.lib.workshop.error.notObject") };
   }
   const obj = data as Record<string, unknown>;
   const workshop =
@@ -131,11 +170,13 @@ export function parseRatesJson(
     const issue = parsed.error.issues[0];
     return {
       ok: false,
-      error: `Barème invalide${issue ? ` (${issue.path.join(".")} : nombre positif ou nul attendu)` : ""}.`,
+      error: issue
+        ? msg("ui.lib.workshop.error.invalidField", { path: issue.path.join(".") })
+        : msg("ui.lib.workshop.error.invalid"),
     };
   }
   const rates = compactRates(parsed.data);
-  if (isEmptyRates(rates)) return { ok: false, error: "Aucun champ de barème reconnu." };
+  if (isEmptyRates(rates)) return { ok: false, error: msg("ui.lib.workshop.error.empty") };
   return { ok: true, rates };
 }
 

@@ -9,6 +9,7 @@ import {
   type MessageKey,
   type StructureKind,
 } from "@blondel/core";
+import { translatorFor } from "@blondel/i18n";
 import { describe, expect, it } from "vitest";
 import {
   deriveParamFields,
@@ -219,8 +220,15 @@ describe("plugin de structure", () => {
 
   it("validation par le schéma du plugin, message avec le chemin", () => {
     expect(validateParams(plugin, { method: "M1", targetCollet: 120 })).toBeNull();
-    expect(validateParams(plugin, { method: "M9" })).toMatch(/^method : /);
-    expect(validateParams(plugin, { targetCollet: 12.5 })).toMatch(/^targetCollet : /);
+    const fr = translatorFor("fr");
+    const en = translatorFor("en");
+    const method = validateParams(plugin, { method: "M9" })!;
+    const collet = validateParams(plugin, { targetCollet: 12.5 })!;
+    expect(fr.t(method)).toMatch(/^method : /);
+    expect(fr.t(collet)).toMatch(/^targetCollet\b.* : /);
+    // Motif du schéma dans la langue d'affichage (carte d'erreurs du cœur), pas le texte de zod.
+    expect(en.t(method)).toMatch(/^method: /);
+    expect(en.t(method)).not.toBe(fr.t(method).replace(" : ", ": "));
   });
 });
 

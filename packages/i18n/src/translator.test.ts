@@ -192,7 +192,7 @@ describe("nombres", () => {
   const fr = createTranslator("fr");
   const en = createTranslator("en");
 
-  it("français : virgule et espace fine insécable (comme formatFr)", () => {
+  it("français : virgule et espace fine insécable (comme l'ancien formatFr des exports)", () => {
     expect(fr.num(1234.56)).toBe(`1${NARROW_NBSP}234,6`);
     expect(fr.num(1234.56, { digits: 2 })).toBe(`1${NARROW_NBSP}234,56`);
     expect(fr.num(1234567, { digits: 0 })).toBe(`1${NARROW_NBSP}234${NARROW_NBSP}567`);

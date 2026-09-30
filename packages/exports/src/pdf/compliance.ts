@@ -20,9 +20,6 @@ export function complianceDisclaimer(t: Translator = translatorOf()): string {
   return t.t("pdf.compliance.disclaimer");
 }
 
-/** Avertissement en français (compatibilité : `complianceDisclaimer(t)` pour une autre langue). */
-export const COMPLIANCE_DISCLAIMER = complianceDisclaimer();
-
 export const SEVERITY_COLOR: Readonly<Record<Severity, Rgb>> = {
   bloquant: [209, 36, 47],
   avertissement: [232, 134, 12],

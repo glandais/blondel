@@ -56,7 +56,7 @@ import {
 import { drawSvg, parseSvg, svgSize } from "./svg-draw.js";
 import { DEFAULT_TILE_OVERLAP, templatePages, type TileInfo } from "./tiles.js";
 
-export { COMPLIANCE_DISCLAIMER, complianceDisclaimer, complianceLines } from "./compliance.js";
+export { complianceDisclaimer, complianceLines } from "./compliance.js";
 export { wrapText } from "./layout.js";
 
 /** Échelles normalisées essayées, de la plus grande (1:1) à la plus petite. */

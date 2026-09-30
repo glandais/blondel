@@ -6,31 +6,33 @@
  * est issu (pas pendant un calcul).
  */
 import type { FixSuggestion } from "@blondel/core";
+import { msg, type Message } from "@blondel/i18n";
 import { useMemo, useState } from "react";
-import { tr } from "../i18n/fr.js";
+import { useT } from "../i18n/useT.js";
 import { applyFix, fixesFor } from "../lib/fixes.js";
 import { appStore, useApp, useModel } from "../store/appStore.js";
 
 /** Nombre d'erreurs affichées avant « … et N autres ». */
 const MAX_ERRORS = 4;
 
-function apply(fix: FixSuggestion): string | null {
+/** Motif d'un refus : texte brut (validation du store) ou message traduit à l'affichage. */
+type Failure = string | Message;
+
+function apply(fix: FixSuggestion): Failure | null {
   const r = appStore.getState().update((p) => applyFix(p, fix));
   appStore.getState().endGroup();
-  if (!r.ok) return r.issues[0] ?? "Correction refusée.";
+  if (!r.ok) return r.issues[0] ?? msg("ui.errors.fixRefused");
   appStore.setState({
-    notice: {
-      kind: "info",
-      text: `Correction appliquée : ${tr(fix.label)}. « Annuler » (Ctrl+Z) pour revenir en arrière.`,
-    },
+    notice: { kind: "info", msg: msg("ui.errors.fixApplied", { label: fix.label }) },
   });
   return null;
 }
 
 export function ErrorsBar() {
+  const t = useT();
   const project = useApp((s) => s.project);
   const { model, errors, pending, project: modelProject } = useModel();
-  const [failure, setFailure] = useState<string | null>(null);
+  const [failure, setFailure] = useState<Failure | null>(null);
   const current = modelProject === project && !pending;
   const fixes = useMemo(
     () => (current && model ? fixesFor(project, model) : []),
@@ -39,21 +41,23 @@ export function ErrorsBar() {
   if (errors.length === 0 && fixes.length === 0 && failure === null) return null;
   const shown = errors.slice(0, MAX_ERRORS);
   return (
-    <section className="errors-bar" aria-label="Erreurs et corrections proposées">
+    <section className="errors-bar" aria-label={t.t("ui.errors.label")}>
       {errors.length > 0 ? (
         <div className="errors-bar__errors" role="status">
-          <strong>
-            {errors.length === 1
-              ? "Erreur de génération"
-              : `${errors.length} erreurs de génération`}
-          </strong>
+          <strong>{t.t("ui.errors.title", { count: errors.length })}</strong>
           <ul>
-            {shown.map((e) => (
-              <li key={e}>{e}</li>
+            {shown.map((e, i) => (
+              <li key={i}>{t.t(e)}</li>
             ))}
             {errors.length > shown.length ? (
-              <li className="muted" title={errors.slice(MAX_ERRORS).join("\n")}>
-                … et {errors.length - shown.length} autre(s)
+              <li
+                className="muted"
+                title={errors
+                  .slice(MAX_ERRORS)
+                  .map((e) => t.t(e))
+                  .join("\n")}
+              >
+                {t.t("ui.errors.more", { count: errors.length - shown.length })}
               </li>
             ) : null}
           </ul>
@@ -61,19 +65,19 @@ export function ErrorsBar() {
       ) : null}
       {fixes.length > 0 ? (
         <div className="errors-bar__fixes">
-          <strong id="fixes-title">Corrections proposées</strong>
+          <strong id="fixes-title">{t.t("ui.errors.fixes")}</strong>
           <ul aria-labelledby="fixes-title">
             {fixes.map((f) => (
               <li key={f.id}>
                 <button
                   type="button"
                   data-fix={f.id}
-                  title={tr(f.reason)}
+                  title={t.t(f.reason)}
                   onClick={() => setFailure(apply(f))}
                 >
-                  {tr(f.label)}
+                  {t.t(f.label)}
                 </button>
-                <small className="muted">{tr(f.reason)}</small>
+                <small className="muted">{t.t(f.reason)}</small>
               </li>
             ))}
           </ul>
@@ -81,9 +85,11 @@ export function ErrorsBar() {
       ) : null}
       {failure ? (
         <p className="field__error" role="alert">
-          Correction impossible : {failure}{" "}
+          {t.t("ui.errors.failure", {
+            reason: typeof failure === "string" ? failure : t.t(failure),
+          })}{" "}
           <button type="button" className="link" onClick={() => setFailure(null)}>
-            Fermer
+            {t.t("ui.errors.close")}
           </button>
         </p>
       ) : null}
