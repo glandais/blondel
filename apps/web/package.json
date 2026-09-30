@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "tsc -p tsconfig.json --noEmit && vite build",
     "preview": "vite preview",
-    "e2e": "playwright test"
+    "e2e": "playwright test",
+    "ux:captures": "playwright test -c playwright.captures.config.ts"
   },
   "dependencies": {
     "@blondel/core": "workspace:*",

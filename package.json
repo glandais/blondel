@@ -12,7 +12,8 @@
     "rules:build": "node scripts/build-rules.mjs",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "e2e": "pnpm --filter @blondel/web e2e"
+    "e2e": "pnpm --filter @blondel/web e2e",
+    "ux:captures": "pnpm --filter @blondel/web ux:captures"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",
