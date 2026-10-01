@@ -5,6 +5,7 @@
  */
 import { errorMessage, msg, type Message } from "@blondel/i18n";
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
+import { useMenuPlacement } from "./useMenuPlacement.js";
 import { useT } from "../i18n/useT.js";
 import { downloadFile, downloadFiles } from "../lib/download.js";
 import {
@@ -34,6 +35,7 @@ function notify(kind: "info" | "error", message: Message): void {
 export function ExportMenu() {
   const t = useT();
   const [open, setOpen] = useState(false);
+  const placement = useMenuPlacement(open);
   const [busy, setBusy] = useState(false);
   const project = useApp((s) => s.project);
   const selection = useApp((s) => s.selection);
@@ -117,7 +119,13 @@ export function ExportMenu() {
         {busy ? t.t("ui.export.busy") : t.t("ui.export.menu")}
       </button>
       {open ? (
-        <div id={menuId} role="menu" className="menu__list" aria-label={t.t("ui.export.label")}>
+        <div
+          id={menuId}
+          role="menu"
+          ref={placement.ref}
+          className={placement.className}
+          aria-label={t.t("ui.export.label")}
+        >
           {EXPORT_ENTRIES.map((entry) => {
             const a = exportAvailability(entry.id, model);
             const reason =

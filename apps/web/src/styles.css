@@ -654,6 +654,11 @@ legend {
   box-shadow: 0 6px 18px rgba(0, 0, 0, 0.18);
 }
 
+.menu__list--end {
+  left: auto;
+  right: 0;
+}
+
 .menu__list [role="menuitem"] {
   text-align: left;
   border: none;

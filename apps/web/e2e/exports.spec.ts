@@ -101,3 +101,33 @@ test("menu Importer : plan DXF ouvert dans le plan « Site et saisie »", async 
   await settle(page);
   await expect(page.locator("path.plan-site__dxf")).toHaveCount(0);
 });
+
+test("menus Importer et Exporter : jamais hors de la fenêtre, quelle que soit la largeur", async ({
+  page,
+}) => {
+  await openApp(page);
+  const problems: string[] = [];
+  for (const width of [760, 900, 1024, 1180, 1280, 1440]) {
+    await page.setViewportSize({ width, height: 800 });
+    for (const name of [/^Importer/, /^Exporter/]) {
+      await page.getByRole("button", { name }).click();
+      const menu = page.getByRole("menu");
+      await expect(menu).toBeVisible();
+      const m = await page.evaluate(() => {
+        const de = document.documentElement;
+        const r = document.querySelector('[role="menu"]')!.getBoundingClientRect();
+        return {
+          left: Math.round(r.left),
+          right: Math.round(r.right),
+          view: de.clientWidth,
+          overflowX: de.scrollWidth - de.clientWidth,
+        };
+      });
+      if (m.overflowX > 0 || m.left < 0 || m.right > m.view)
+        problems.push(`${width} px, ${String(name)} : ${JSON.stringify(m)}`);
+      await page.keyboard.press("Escape");
+      await expect(menu).toHaveCount(0);
+    }
+  }
+  expect(problems.join("\n"), "menu hors de la fenêtre").toBe("");
+});

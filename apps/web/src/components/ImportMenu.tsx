@@ -5,6 +5,7 @@
  * outils de tracé de la trémie et des murs sont disponibles).
  */
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
+import { useMenuPlacement } from "./useMenuPlacement.js";
 import { useT } from "../i18n/useT.js";
 import { appStore } from "../store/appStore.js";
 import { requestUnderlayImport, type UnderlayImportKind } from "../store/importQueue.js";
@@ -12,6 +13,7 @@ import { requestUnderlayImport, type UnderlayImportKind } from "../store/importQ
 export function ImportMenu() {
   const t = useT();
   const [open, setOpen] = useState(false);
+  const placement = useMenuPlacement(open);
   const root = useRef<HTMLDivElement>(null);
   const projectInput = useRef<HTMLInputElement>(null);
   const dxfInput = useRef<HTMLInputElement>(null);
@@ -68,7 +70,13 @@ export function ImportMenu() {
         {t.t("ui.import.menu")}
       </button>
       {open ? (
-        <div id={menuId} role="menu" className="menu__list" aria-label={t.t("ui.import.label")}>
+        <div
+          id={menuId}
+          role="menu"
+          ref={placement.ref}
+          className={placement.className}
+          aria-label={t.t("ui.import.label")}
+        >
           <button type="button" role="menuitem" onClick={() => pick(projectInput.current)}>
             {t.t("ui.import.project")}
           </button>
