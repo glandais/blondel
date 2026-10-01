@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- Icône de Blondel : profil d'un escalier (marches et contremarches) sur fond bleu.
+       Source des icônes PNG de l'application installable (`pnpm pwa:icons`). Fond plein, sans
+       coins arrondis : l'icône « maskable » est découpée par le système ; le motif tient dans
+       la zone sûre centrale (cercle de 80 % du côté). -->
+  <rect width="512" height="512" fill="#2f6fb3"/>
+  <path d="M136 352 H200 V288 H264 V224 H328 V160 H376 V352 Z" fill="#ffffff"/>
+  <path d="M136 352 H200 V288 H264 V224 H328 V160 H376" fill="none" stroke="#173a5e" stroke-width="12" stroke-linejoin="round" stroke-linecap="round"/>
+</svg>

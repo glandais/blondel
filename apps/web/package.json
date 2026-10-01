@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "tsc -p tsconfig.json --noEmit && vite build",
     "preview": "vite preview",
-    "e2e": "playwright test"
+    "e2e": "playwright test",
+    "pwa:icons": "rsvg-convert -w 192 -h 192 public/favicon.svg -o public/pwa-192.png && rsvg-convert -w 512 -h 512 public/favicon.svg -o public/pwa-512.png && rsvg-convert -w 180 -h 180 public/favicon.svg -o public/apple-touch-icon.png"
   },
   "dependencies": {
     "@blondel/core": "workspace:*",
@@ -27,6 +28,8 @@
     "@types/react-dom": "^19.2.0",
     "@types/three": "^0.186.0",
     "@vitejs/plugin-react": "^6.1.1",
-    "vite": "^8.3.1"
+    "vite": "^8.3.1",
+    "vite-plugin-pwa": "^1.3.0",
+    "workbox-window": "^7.4.1"
   }
 }

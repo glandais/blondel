@@ -14,7 +14,8 @@
     "i18n:merge": "node scripts/sort-locales.mjs --merge",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "e2e": "pnpm --filter @blondel/web e2e"
+    "e2e": "pnpm --filter @blondel/web e2e",
+    "pwa:icons": "pnpm --filter @blondel/web pwa:icons"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",

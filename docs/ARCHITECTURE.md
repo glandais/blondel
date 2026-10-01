@@ -1,6 +1,6 @@
 # Architecture de Blondel
 
-Vue d'ensemble courte. Les décisions détaillées sont dans `docs/adr/` (ADR 0001 à 0007) et les arbitrages de conception dans `docs/CHALLENGE.md`. Le métier fait foi dans `docs/SPEC.md` et `docs/research/`.
+Vue d'ensemble courte. Les décisions détaillées sont dans `docs/adr/` (ADR 0001 à 0008) et les arbitrages de conception dans `docs/CHALLENGE.md`. Le métier fait foi dans `docs/SPEC.md` et `docs/research/`.
 
 ## Paquets
 
@@ -121,6 +121,7 @@ saisie ─► store zustand (projectStore) ─► Project canonique (ProjectSche
 - La sélection (marche, pièce, règle) passe par les attributs `data-tread` des SVG et par les identifiants de pièce `tread-N`.
 - Vue 3D : matériaux PBR (`three/pbr.ts`, `MeshPhysicalMaterial` : verre en transmission, vernis, inox anisotrope) et textures procédurales périodiques générées par tranches (`three/proceduralTextures.ts`, `textures.ts`), UV selon le fil (`grainUVMesh`) ; outils vue éclatée (`three/explode.ts`), coupe (`three/section.ts`), mesure et cotes 3D (`three/annotations.ts`, surimpression `views/Viewer3DOverlay.tsx`), isolation. Shaders compilés avant la première image (`three/shaderWarmup.ts`, interrompu si le contexte WebGL est perdu), qualité réduite en rendu logiciel (`three/quality.ts`).
 - Les exports (SVG, DXF, CSV, ZIP, JSON, PDF) sont des fonctions pures du `Model` (et du `Project` pour la trémie). Le PDF n'est jamais réexporté par l'index principal de `@blondel/exports` (un test surveille les imports) pour que jsPDF reste hors du paquet principal.
+- Application installable (ADR-0008) : `vite-plugin-pwa` génère le manifeste et un service worker Workbox qui met toute l'application en cache (workers et morceaux à la demande compris) ; elle s'ouvre et calcule hors ligne. Les mises à jour sont proposées, jamais imposées (`components/UpdatePrompt.tsx`).
 
 ## Internationalisation (ADR-0007)
 

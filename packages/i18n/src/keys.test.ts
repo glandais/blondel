@@ -26,7 +26,7 @@ const en = messagesFor("en");
 
 const REPO = fileURLToPath(new URL("../../../", import.meta.url));
 
-/** Sources de production (hors tests) de packages/*\/src et apps/web/src. */
+/** Sources de production (hors tests) de packages/*\/src et apps/web/src, et vite.config.ts. */
 function sourceFiles(): string[] {
   const roots = [
     ...readdirSync(join(REPO, "packages"), { withFileTypes: true })
@@ -52,6 +52,8 @@ function sourceFiles(): string[] {
     }
   };
   roots.forEach(walk);
+  // Manifeste de l'application installable (textes lus dans fr.json, ADR-0008).
+  out.push(join(REPO, "apps", "web", "vite.config.ts"));
   return out;
 }
 

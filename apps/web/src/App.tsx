@@ -13,6 +13,7 @@ import { ParamsPanel } from "./components/ParamsPanel.js";
 import { PrecheckPanel } from "./components/PrecheckPanel.js";
 import { StatusBar } from "./components/StatusBar.js";
 import { Toolbar } from "./components/Toolbar.js";
+import { UpdatePrompt } from "./components/UpdatePrompt.js";
 import { Welcome } from "./components/Welcome.js";
 import type { MessageKey } from "@blondel/i18n";
 import { useT } from "./i18n/useT.js";
@@ -251,6 +252,7 @@ export function App() {
       </aside>
       <StatusBar />
       <AssistantDialog />
+      <UpdatePrompt />
     </div>
   );
 }

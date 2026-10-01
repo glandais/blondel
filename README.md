@@ -6,6 +6,7 @@ Logiciel web de conception paramétrique d'escaliers, pour les menuisiers, les m
 
 ## Fonctionnalités
 
+- **Application installable, hors ligne** : Blondel s'installe depuis le navigateur (icône, fenêtre propre) et, une fois chargé, s'ouvre, calcule et exporte sans réseau ; une nouvelle version est proposée, jamais imposée (ADR-0008).
 - **Français ou anglais** : l'interface démarre dans la langue du navigateur (anglais si elle commence par `en`, sinon français), un sélecteur de la barre d'outils la change à tout moment sans relancer de calcul, et tous les exports (SVG, DXF, CSV, glTF, PDF) sortent dans la langue choisie : nombres, dates, séparateur CSV et calques DXF compris. Terminologie anglaise britannique, **à valider** ([`docs/research/glossaire-en.md`](docs/research/glossaire-en.md)).
 - **Assistant d'initialisation** : à partir de la hauteur à monter, de la trémie (rectangulaire, relevée ou tracée) et des murs, propose les typologies compatibles, classées par score (Blondel, régularité, échappée et marge d'échappée), une carte par forme avec croquis, cotes et score détaillé, les autres variantes de la forme (sens, emmarchement, nombre de marches) repliées sous la carte ou toutes à plat sur demande ; diagnostic lisible quand rien ne passe.
 - **Tracé** : droit, quart tournant, deux quarts (U), deux quarts opposés (S / Z, la ligne de foulée change de côté dans la volée intermédiaire), demi-tournant, quart tournant avec palier, hélicoïdal à fût ou à jour central ; jour vif, en arc ou à poteau.
@@ -82,6 +83,7 @@ Le type de tracé (volées ou hélicoïdal) se choisit en tête du panneau des p
 | `pnpm format` / `pnpm format:check` | Formatage Prettier / vérification.                                                                                                        |
 | `pnpm rules:build`                  | Régénère `rules.data.json` depuis `docs/research/rules.yaml`.                                                                             |
 | `pnpm i18n:sort`                    | Trie les clés des dictionnaires `packages/i18n/src/locales/*.json`.                                                                       |
+| `pnpm pwa:icons`                    | Régénère les icônes PNG de l'application installable depuis `apps/web/public/favicon.svg` (`rsvg-convert`, ADR-0008).                     |
 
 Régénérer `examples/` : `UPDATE_EXAMPLES=1 pnpm vitest run packages/core/src/project/examples.test.ts packages/core/src/guards/acceptance.test.ts packages/core/src/structures/helicalExample.test.ts packages/core/src/structures/steelCurved.acceptance.test.ts`.
 

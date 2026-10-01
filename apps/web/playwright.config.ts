@@ -55,6 +55,9 @@ export default defineConfig({
     // vérifient les libellés français (`openApp` l'impose aussi dans le stockage).
     locale: "fr-FR",
     viewport: { width: 1440, height: 900 },
+    // Service worker de l'application installable (ADR-0008) bloqué par défaut : son
+    // téléchargement du cache ne doit pas fausser les mesures. `pwa.spec.ts` l'autorise.
+    serviceWorkers: "block",
   },
   projects: [
     {
