@@ -7,3 +7,4 @@ docs/research/
 docs/prompts/
 # Fichiers générés (serializeProject), comparés octet par octet dans les tests
 examples/*.blondel.json
+docs/ux/design_handoff_parcours_guide_libre/
