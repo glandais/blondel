@@ -1,0 +1,491 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="stylesheet" href="_ds/industry-284fbf80-8693-4f36-b3b8-968f954d0b0d/styles.css">
+<script src="_ds/industry-284fbf80-8693-4f36-b3b8-968f954d0b0d/_ds_bundle.js"></script>
+<style>body{margin:0;background:var(--color-neutral-300);color:var(--color-text);font-family:var(--font-body)}a{color:var(--color-accent-700)}a:hover{color:var(--color-accent-800)}</style>
+</helmet>
+<section id="t2" style="padding:48px 56px 64px;display:flex;flex-direction:column;gap:28px;border-bottom:1px solid var(--color-divider)">
+<div style="display:flex;align-items:baseline;gap:12px"><span style="font:600 11px ui-monospace,Menlo,monospace;padding:3px 8px;background:var(--color-text);color:var(--color-bg)">2</span><span style="font:600 26px/1.1 var(--font-heading)">Inspecteur de <a href="#1b">1b</a> · un gabarit par type d'élément</span></div>
+<p style="margin:0;max-width:1000px;font-size:14px;color:var(--color-neutral-800);text-wrap:pretty">Même ossature pour les quatre états : en-tête (type, nom, pastille de sélection), valeurs, actions, puis <b>règles</b> et <b>liens</b> vers les éléments voisins. Colonne droite de 340 × 848 px, à l'échelle 1.</p>
+<div style="display:flex;flex-wrap:wrap;gap:40px;align-items:flex-start">
+
+<!-- 2a Marche -->
+<div id="2a" style="display:flex;flex-direction:column;gap:12px">
+<div style="display:flex;align-items:baseline;gap:10px;font:600 17px var(--font-heading)"><span style="font:600 11px ui-monospace,monospace;padding:3px 8px;background:var(--color-neutral-400)">2a</span>Marche</div>
+<aside data-screen-label="Inspecteur · Marche" style="width:340px;height:848px;background:var(--color-bg);border:1px solid var(--color-divider);box-shadow:var(--shadow-md);padding:18px 20px;display:flex;flex-direction:column;gap:16px;font-size:13px;line-height:1.45;overflow:hidden">
+<div style="display:flex;flex-direction:column;gap:4px">
+<span style="font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--color-neutral-700)">Marche · tournant 1</span>
+<div style="display:flex;align-items:center;gap:8px"><span style="width:12px;height:12px;background:#ff7a1a;flex:none"></span><h3 style="margin:0;font-size:24px">Marche 3</h3><span class="tag tag-neutral">balancée</span><span style="flex:1"></span><span style="display:flex;gap:2px"><button class="btn btn-ghost btn-icon" style="width:28px;height:28px;color:var(--color-neutral-700)" title="Marche précédente"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"></path></svg></button><button class="btn btn-ghost btn-icon" style="width:28px;height:28px;color:var(--color-neutral-700)" title="Marche suivante"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"></path></svg></button></span></div>
+</div>
+<table class="table" style="font-size:13px;font-variant-numeric:tabular-nums"><tbody>
+<sc-for list="{{ stepVals }}" as="r" hint-placeholder-count="5"><tr><td style="padding-left:0;color:var(--color-neutral-700)">{{ r.l }}</td><td style="text-align:right;padding-right:0">{{ r.v }}</td></tr></sc-for>
+</tbody></table>
+<div style="display:flex;flex-direction:column;gap:8px;padding:12px 14px;border:1px solid var(--color-divider)">
+<span style="font:600 15px var(--font-heading)">Ligne de nez</span>
+<div style="display:flex;align-items:center;gap:8px"><span style="flex:1;color:var(--color-neutral-700)">Angle</span><input class="input" value="32,4" style="width:76px;min-height:30px;padding:3px 8px;text-align:right"><span>°</span></div>
+<div style="display:flex;align-items:center;gap:8px"><span style="flex:1;color:var(--color-neutral-700)">Calculé par M3 quintique</span><span style="font-variant-numeric:tabular-nums;color:var(--color-neutral-700)">31,0°</span></div>
+<div style="display:flex;gap:6px"><button class="btn btn-secondary" style="font-size:13px">Fixer le nez <kbd style="font:11px ui-monospace,monospace;color:var(--color-neutral-700)">F</kbd></button><button class="btn btn-ghost" style="font-size:13px">Retirer la retouche</button></div>
+<span style="font-size:11.5px;color:var(--color-neutral-700)">← / → ±1°, Maj ±0,1° quand la vue a le focus.</span>
+</div>
+<div style="display:flex;flex-direction:column;gap:8px">
+<span style="font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--color-neutral-700)">Règles sur cette marche · 1</span>
+<div class="blueprint" style="padding:10px 12px;display:flex;flex-direction:column;gap:3px"><i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+<span style="display:flex;align-items:center;gap:6px;color:var(--color-accent-700);font:600 14px var(--font-heading)"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M12 16v-4"></path><path d="M12 8h.01"></path></svg>Conseil</span>
+<span>Échappée 1 901 mm · conseillé ≥ 2 100 mm</span>
+</div>
+<span style="font-size:12px;color:var(--color-neutral-700)">Respectées ici : giron mini, collet mini, régularité des hauteurs (+ 6) ▸</span>
+</div>
+<div style="display:flex;flex-direction:column;gap:2px">
+<span style="font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--color-neutral-700);margin-bottom:6px">Pièces de cette marche</span>
+<sc-for list="{{ linked }}" as="p" hint-placeholder-count="3"><a href="#2b" style="display:flex;align-items:baseline;gap:10px;text-decoration:none;color:var(--color-text);padding:6px 0;border-bottom:1px solid var(--color-divider)" style-hover="color:var(--color-accent-700)"><b style="font:600 14px var(--font-heading);width:36px">{{ p.r }}</b><span style="flex:1">{{ p.n }}</span><span style="color:var(--color-neutral-700);font-size:12px">{{ p.m }}</span></a></sc-for>
+</div>
+<span style="flex:1"></span>
+<span style="font-size:11.5px;color:var(--color-neutral-700)">Contrôle de conception indicatif : il ne vaut pas attestation de conformité.</span>
+</aside>
+<ol style="margin:0;padding-left:18px;width:330px;font-size:13px;line-height:1.5;color:var(--color-neutral-800)">
+<li>Le mode expert disparaît : la retouche de la ligne de nez se fait ici, avec la valeur calculée en regard.</li>
+<li>‹ › parcourt les marches sans revenir à la vue.</li>
+</ol>
+</div>
+
+<!-- 2b Pièce -->
+<div id="2b" style="display:flex;flex-direction:column;gap:12px">
+<div style="display:flex;align-items:baseline;gap:10px;font:600 17px var(--font-heading)"><span style="font:600 11px ui-monospace,monospace;padding:3px 8px;background:var(--color-neutral-400)">2b</span>Pièce</div>
+<aside data-screen-label="Inspecteur · Pièce" style="width:340px;height:848px;background:var(--color-bg);border:1px solid var(--color-divider);box-shadow:var(--shadow-md);padding:18px 20px;display:flex;flex-direction:column;gap:12px;font-size:13px;line-height:1.45;overflow:hidden">
+<div style="display:flex;flex-direction:column;gap:4px">
+<span style="font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--color-neutral-700)">Pièce · structure</span>
+<div style="display:flex;align-items:center;gap:8px"><span style="width:12px;height:12px;background:#ff7a1a;flex:none"></span><h3 style="margin:0;font-size:24px">LE1</h3><span class="tag tag-neutral">× 1</span></div>
+<span style="color:var(--color-neutral-800)">Limon extérieur, plat acier soudé</span>
+</div>
+<table class="table" style="font-size:13px;font-variant-numeric:tabular-nums"><tbody>
+<sc-for list="{{ pieceVals }}" as="r" hint-placeholder-count="5"><tr><td style="padding-left:0;color:var(--color-neutral-700)">{{ r.l }}</td><td style="text-align:right;padding-right:0">{{ r.v }}</td></tr></sc-for>
+</tbody></table>
+<div style="display:flex;flex-wrap:wrap;gap:6px">
+<button class="btn btn-secondary" style="font-size:13px">Isoler en 3D</button>
+<button class="btn btn-secondary" style="font-size:13px;gap:6px">Développé<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"></path><path d="m12 5 7 7-7 7"></path></svg></button>
+<button class="btn btn-secondary" style="font-size:13px;gap:6px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><path d="m7 10 5 5 5-5"></path><path d="M12 15V3"></path></svg>DXF R12</button>
+</div>
+<div style="display:flex;flex-direction:column;gap:8px">
+<span style="font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--color-neutral-700)">Règles sur cette pièce · 1</span>
+<a href="#2c" class="blueprint" style="padding:10px 12px;display:flex;flex-direction:column;gap:3px;text-decoration:none;color:var(--color-text)"><i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+<span style="display:flex;align-items:center;gap:6px;color:#9a6200;font:600 14px var(--font-heading)"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"></path><path d="M12 9v4"></path><path d="M12 17h.01"></path></svg>Avertissement</span>
+<span>Appui trop court sous la marche 6 · 37,2 mm, attendu ≥ 50</span>
+</a>
+</div>
+<div style="display:flex;flex-direction:column;gap:9px;padding:12px 14px;border:1px solid var(--color-divider)">
+<div style="display:flex;justify-content:space-between;align-items:baseline"><span style="font:600 15px var(--font-heading)">Réglages d'atelier</span><span style="font-size:11.5px;color:var(--color-neutral-700)">communs aux limons</span></div>
+<div style="display:flex;align-items:center;gap:8px"><span style="flex:1">Dépassement bas d_b</span><span style="display:flex;border:1px solid var(--color-divider);font-size:12.5px"><span style="padding:4px 8px;background:var(--color-accent);color:var(--color-bg)">Auto</span><span style="padding:4px 8px;font-variant-numeric:tabular-nums">275 mm</span></span></div>
+<div style="display:flex;align-items:center;gap:8px"><span style="flex:1">Dépassement haut d_h</span><input class="input" value="50" style="width:64px;min-height:30px;padding:3px 8px;text-align:right;border-color:#9a6200"><span style="width:22px">mm</span></div>
+<span style="font-size:11.5px;color:#9a6200;margin-top:-5px;text-align:right">◆ valeur par défaut à valider</span>
+<button class="btn btn-ghost" style="align-self:flex-start;font-size:12.5px;gap:4px">Tous les réglages dans Structure<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"></path><path d="m12 5 7 7-7 7"></path></svg></button>
+</div>
+<div style="display:flex;flex-direction:column;gap:2px">
+<span style="font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--color-neutral-700);margin-bottom:6px">Assemblée avec</span>
+<sc-for list="{{ pieceLinks }}" as="p" hint-placeholder-count="3"><a href="#" style="display:flex;align-items:baseline;gap:10px;text-decoration:none;color:var(--color-text);padding:6px 0;border-bottom:1px solid var(--color-divider)" style-hover="color:var(--color-accent-700)"><b style="font:600 14px var(--font-heading);width:44px">{{ p.r }}</b><span style="flex:1">{{ p.n }}</span><span style="color:var(--color-neutral-700);font-size:12px">{{ p.m }}</span></a></sc-for>
+</div>
+<span style="flex:1"></span>
+<span style="font-size:11.5px;color:var(--color-neutral-700)">Contrôle de conception indicatif : il ne vaut pas attestation de conformité.</span>
+</aside>
+<ol style="margin:0;padding-left:18px;width:330px;font-size:13px;line-height:1.5;color:var(--color-neutral-800)">
+<li>Les réglages d'atelier qui concernent la pièce sont repris ici ; un changement s'applique à tous les limons, comme indiqué.</li>
+<li>« Développé → » ouvre la pièce en mode Fabrication.</li>
+</ol>
+</div>
+
+<!-- 2c Règle -->
+<div id="2c" style="display:flex;flex-direction:column;gap:12px">
+<div style="display:flex;align-items:baseline;gap:10px;font:600 17px var(--font-heading)"><span style="font:600 11px ui-monospace,monospace;padding:3px 8px;background:var(--color-neutral-400)">2c</span>Règle (surcharge ouverte)</div>
+<aside data-screen-label="Inspecteur · Règle" style="width:340px;height:848px;background:var(--color-bg);border:1px solid var(--color-divider);box-shadow:var(--shadow-md);padding:18px 20px;display:flex;flex-direction:column;gap:15px;font-size:13px;line-height:1.45;overflow:hidden">
+<div style="display:flex;flex-direction:column;gap:5px">
+<span style="display:flex;align-items:center;gap:6px;font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:#9a6200"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"></path><path d="M12 9v4"></path><path d="M12 17h.01"></path></svg>Avertissement</span>
+<h3 style="margin:0;font-size:22px;text-wrap:pretty">Appui trop court sous la marche 6</h3>
+<span style="color:var(--color-neutral-800);text-wrap:pretty">Le support soudé sur le limon ne porte pas assez la marche.</span>
+</div>
+<div style="display:flex;flex-direction:column;gap:6px">
+<div style="display:flex;justify-content:space-between;font-variant-numeric:tabular-nums"><span>Mesuré <b>37,2 mm</b></span><span style="color:var(--color-neutral-700)">attendu ≥ 50 mm</span></div>
+<div style="position:relative;height:8px;background:var(--color-neutral-200)"><span style="position:absolute;left:0;top:0;bottom:0;width:62%;background:#9a6200"></span><span style="position:absolute;left:83.3%;top:-4px;width:2px;height:16px;background:var(--color-text)"></span></div>
+</div>
+<div style="display:flex;flex-direction:column;gap:4px">
+<span style="font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--color-neutral-700)">Où</span>
+<div style="display:flex;gap:6px;flex-wrap:wrap"><a href="#2b" class="tag tag-outline" style="text-decoration:none">LE1 limon extérieur</a><a href="#2a" class="tag tag-outline" style="text-decoration:none">Marche 6</a><a href="#" class="tag tag-outline" style="text-decoration:none">CR6 support</a></div>
+</div>
+<div style="display:flex;flex-direction:column;gap:6px">
+<span style="font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--color-neutral-700)">Pour corriger</span>
+<button class="btn btn-secondary" style="justify-content:space-between;font:500 13px var(--font-body)">Supports à 50 mm (tous les limons)<span style="font-size:11.5px;color:var(--color-neutral-700)">annulable</span></button>
+<button class="btn btn-ghost" style="align-self:flex-start;font-size:12.5px">Ouvrir Structure › Supports</button>
+</div>
+<div style="display:grid;grid-template-columns:auto minmax(0,1fr);gap:4px 12px;font-size:12.5px">
+<span style="color:var(--color-neutral-700)">Nature</span><span>Règle de l'art (fabrication)</span>
+<span style="color:var(--color-neutral-700)">Fiabilité</span><span>Faible : valeur d'usage, non normative</span>
+<span style="color:var(--color-neutral-700)">Source</span><span>Pratique d'atelier, à confirmer</span>
+<span style="color:var(--color-neutral-700)">Référence</span><span style="font-family:ui-monospace,monospace;font-size:11.5px;color:var(--color-neutral-700)">fab_support_longueur_min</span>
+</div>
+<div class="blueprint" style="padding:12px 14px;display:flex;flex-direction:column;gap:9px"><i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+<span style="font:600 15px var(--font-heading)">Surcharger la règle</span>
+<div class="field"><label>Nouvelle sévérité</label>
+<div style="display:flex;border:1px solid var(--color-divider);font-size:12.5px"><span style="flex:1;text-align:center;padding:5px 0">Bloquant</span><span style="flex:1;text-align:center;padding:5px 0;border-left:1px solid var(--color-divider)">Avert.</span><span style="flex:1;text-align:center;padding:5px 0;border-left:1px solid var(--color-divider);background:var(--color-accent);color:var(--color-bg)">Conseil</span><span style="flex:1;text-align:center;padding:5px 0;border-left:1px solid var(--color-divider)">Ignorer</span></div></div>
+<div class="field"><label>Justification (obligatoire, reprise dans le dossier PDF)</label>
+<textarea class="input" style="min-height:64px;font-size:13px">Marche reprise par une vis traversante M8 en plus du support.</textarea></div>
+<div style="display:flex;justify-content:flex-end;gap:6px"><button class="btn btn-secondary">Annuler</button><button class="btn btn-primary">Surcharger</button></div>
+</div>
+<span style="flex:1"></span>
+<span style="font-size:11.5px;color:var(--color-neutral-700)">Contrôle de conception indicatif : il ne vaut pas attestation de conformité.</span>
+</aside>
+<ol style="margin:0;padding-left:18px;width:330px;font-size:13px;line-height:1.5;color:var(--color-neutral-800)">
+<li>Ordre de lecture : quoi, combien, où, comment corriger ; la provenance et la référence viennent ensuite.</li>
+<li>Les éléments concernés sont des liens vers leur propre inspecteur.</li>
+<li>« Surcharger » reste désactivé tant que la justification est vide.</li>
+</ol>
+</div>
+
+<!-- 2d Sans sélection -->
+<div id="2d" style="display:flex;flex-direction:column;gap:12px">
+<div style="display:flex;align-items:baseline;gap:10px;font:600 17px var(--font-heading)"><span style="font:600 11px ui-monospace,monospace;padding:3px 8px;background:var(--color-neutral-400)">2d</span>Sans sélection : fiche du projet + contrôle</div>
+<aside data-screen-label="Inspecteur · Projet" style="width:340px;height:848px;background:var(--color-bg);border:1px solid var(--color-divider);box-shadow:var(--shadow-md);padding:18px 20px;display:flex;flex-direction:column;gap:15px;font-size:13px;line-height:1.45;overflow:hidden">
+<div style="display:flex;flex-direction:column;gap:4px">
+<span style="font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--color-neutral-700)">Projet</span>
+<h3 style="margin:0;font-size:22px">Quart tournant gauche, débillardé soudé</h3>
+</div>
+<div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));border:1px solid var(--color-divider);font-variant-numeric:tabular-nums">
+<sc-for list="{{ projFigs }}" as="f" hint-placeholder-count="6"><div style="padding:9px 10px;display:flex;flex-direction:column;border-right:1px solid var(--color-divider);border-bottom:1px solid var(--color-divider);margin:0 -1px -1px 0"><span style="font:600 20px/1.05 var(--font-heading)">{{ f.v }}</span><span style="font-size:11.5px;color:var(--color-neutral-700)">{{ f.l }}</span></div></sc-for>
+</div>
+<div style="display:flex;justify-content:space-between;font-size:12.5px"><span style="color:var(--color-neutral-700)">Coût estimé</span><a href="#">Compléter le profil d'atelier (3 / 9)</a></div>
+<div style="display:flex;flex-direction:column;gap:9px">
+<div style="display:flex;justify-content:space-between;align-items:baseline"><span style="font:600 17px var(--font-heading)">Contrôle de conception</span><span style="font-size:12px;color:var(--color-neutral-700)">Strict ▾</span></div>
+<span style="font-size:11.5px;color:var(--color-neutral-700)">Logement intérieur · bois (DTU 36.3) · garde-corps 2024</span>
+<div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--color-divider);text-align:center;font-variant-numeric:tabular-nums">
+<span style="padding:6px 0;color:var(--color-neutral-600)"><b style="display:block;font:600 18px/1 var(--font-heading)">0</b><span style="font-size:11px">Bloquant</span></span>
+<span style="padding:6px 0;border-left:1px solid var(--color-divider);color:#9a6200;background:var(--color-neutral-100)"><b style="display:block;font:600 18px/1 var(--font-heading)">1</b><span style="font-size:11px">Avert.</span></span>
+<span style="padding:6px 0;border-left:1px solid var(--color-divider);color:var(--color-accent-700)"><b style="display:block;font:600 18px/1 var(--font-heading)">1</b><span style="font-size:11px">Conseil</span></span>
+<span style="padding:6px 0;border-left:1px solid var(--color-divider);color:#2e7d32"><b style="display:block;font:600 18px/1 var(--font-heading)">81</b><span style="font-size:11px">Respect.</span></span>
+</div>
+<a href="#2c" class="blueprint" style="padding:10px 12px;display:flex;flex-direction:column;gap:3px;text-decoration:none;color:var(--color-text)"><i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+<span style="display:flex;justify-content:space-between;align-items:center"><span style="display:flex;align-items:center;gap:6px;color:#9a6200;font:600 14px var(--font-heading)"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"></path><path d="M12 9v4"></path><path d="M12 17h.01"></path></svg>Avertissement</span><span style="font-size:11.5px;color:var(--color-neutral-700)">LE1 · M6</span></span>
+<span>Appui trop court sous la marche 6</span>
+</a>
+<a href="#2a" class="blueprint" style="padding:10px 12px;display:flex;flex-direction:column;gap:3px;text-decoration:none;color:var(--color-text)"><i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+<span style="display:flex;justify-content:space-between;align-items:center"><span style="display:flex;align-items:center;gap:6px;color:var(--color-accent-700);font:600 14px var(--font-heading)"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M12 16v-4"></path><path d="M12 8h.01"></path></svg>Conseil</span><span style="font-size:11.5px;color:var(--color-neutral-700)">Nez 3</span></span>
+<span>Échappée sous la recommandation</span>
+</a>
+<span style="font-size:12px;color:var(--color-neutral-700)">7 non évaluées ▸ · 81 respectées ▸ · 11 remarques ▸</span>
+</div>
+<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 12px;border:1px solid var(--color-divider)"><span style="font:600 15px var(--font-heading)">Prédimensionnement</span><span style="font-size:12.5px;color:#2e7d32;font-variant-numeric:tabular-nums">EXC2 · 5 / 5 limons ✓ ▸</span></div>
+<span style="flex:1"></span>
+<span style="font-size:11.5px;color:var(--color-neutral-700)">Contrôle de conception indicatif : il ne vaut pas attestation de conformité.</span>
+</aside>
+<ol style="margin:0;padding-left:18px;width:330px;font-size:13px;line-height:1.5;color:var(--color-neutral-800)">
+<li>Échap ou un clic dans le vide ramène ici. C'est aussi ce qu'ouvre le badge « Contrôle » de la barre du haut.</li>
+<li>Seuls les groupes non vides sont listés ; chaque carte mène à <a href="#2c">2c</a>.</li>
+</ol>
+</div>
+</div>
+</section>
+<section id="t1" style="padding:48px 56px 64px;display:flex;flex-direction:column;gap:28px">
+<div style="display:flex;align-items:baseline;gap:12px"><span style="font:600 11px ui-monospace,Menlo,monospace;padding:3px 8px;background:var(--color-text);color:var(--color-bg)">1</span><span style="font:600 26px/1.1 var(--font-heading)">Parcours guidé et parcours libre · haute fidélité, 1440 × 900</span></div>
+<div style="display:flex;flex-wrap:wrap;gap:56px;align-items:flex-start">
+
+<!-- ============ 1a GUIDÉ ============ -->
+<div id="1a" style="display:flex;flex-direction:column;gap:12px">
+<div style="display:flex;align-items:baseline;gap:10px;font:600 17px var(--font-heading)"><span style="font:600 11px ui-monospace,monospace;padding:3px 8px;background:var(--color-neutral-400)">1a</span>Parcours guidé · étape Découpage (ouvert depuis une démo)</div>
+<div data-screen-label="Guidé · Découpage" style="width:1440px;height:900px;background:var(--color-bg);display:grid;grid-template-rows:52px 68px minmax(0,1fr) 60px;grid-template-columns:minmax(0,1fr);font-size:13px;line-height:1.45;box-shadow:var(--shadow-lg);overflow:hidden">
+
+<header style="display:flex;align-items:center;gap:16px;padding:0 16px;border-bottom:1px solid var(--color-divider)">
+<span style="font:600 21px var(--font-heading);letter-spacing:.06em">BLONDEL</span>
+<span style="width:1px;height:22px;background:var(--color-divider)"></span>
+<button class="btn btn-ghost" style="color:var(--color-text);font:500 14px var(--font-body);gap:6px">Quart tournant débillardé soudé<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"></path></svg></button>
+<span class="tag tag-accent">Démo</span>
+<span style="display:flex;align-items:center;gap:5px;color:var(--color-neutral-700);font-size:12px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"></path></svg>Enregistré</span>
+<span style="flex:1"></span>
+<div style="display:flex;border:1px solid var(--color-divider)">
+<span style="padding:6px 14px;background:var(--color-text);color:var(--color-bg);font:600 14px var(--font-heading)">Guidé</span>
+<a href="#1b" style="padding:6px 14px;color:var(--color-text);text-decoration:none;font:600 14px var(--font-heading)" style-hover="background:var(--color-neutral-200)">Libre</a>
+</div>
+<div style="display:flex;gap:4px">
+<button class="btn btn-secondary btn-icon" title="Annuler (Ctrl+Z)"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14 4 9l5-5"></path><path d="M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5a5.5 5.5 0 0 1-5.5 5.5H11"></path></svg></button>
+<button class="btn btn-secondary btn-icon" disabled title="Rétablir"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="m15 14 5-5-5-5"></path><path d="M20 9H9.5A5.5 5.5 0 0 0 4 14.5A5.5 5.5 0 0 0 9.5 20H13"></path></svg></button>
+</div>
+<button class="btn btn-secondary btn-icon" title="Plus : unité, thème, profil d'atelier"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"></circle><circle cx="19" cy="12" r="1"></circle><circle cx="5" cy="12" r="1"></circle></svg></button>
+</header>
+
+<nav style="display:grid;grid-template-columns:repeat(7,minmax(0,1fr));border-bottom:1px solid var(--color-divider)">
+<sc-for list="{{ steps }}" as="st" hint-placeholder-count="7">
+<div style="display:flex;align-items:center;gap:10px;padding:0 14px;border-right:1px solid var(--color-divider);box-shadow:{{ st.shadow }};background:{{ st.bg }};cursor:pointer" style-hover="background:var(--color-neutral-100)">
+<span style="width:24px;height:24px;flex:none;display:flex;align-items:center;justify-content:center;border:1px solid {{ st.bc }};background:{{ st.nbg }};color:{{ st.nc }};font:600 12px var(--font-heading)">{{ st.n }}</span>
+<span style="display:flex;flex-direction:column;min-width:0"><span style="font:600 15px/1.15 var(--font-heading)">{{ st.t }}</span><span style="font-size:11.5px;color:{{ st.sc }};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ st.s }}</span></span>
+</div>
+</sc-for>
+</nav>
+
+<div style="display:grid;grid-template-columns:400px minmax(0,1fr);min-height:0">
+<aside style="border-right:1px solid var(--color-divider);padding:24px 24px 20px;display:flex;flex-direction:column;gap:18px;overflow:auto">
+<div style="display:flex;flex-direction:column;gap:4px">
+<span style="font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--color-accent-700)">Étape 3 sur 7</span>
+<h2 style="margin:0;font-size:30px">Découpage</h2>
+<p style="margin:0;color:var(--color-neutral-700);text-wrap:pretty">Combien de marches pour monter 2 700 mm, et de quelle hauteur. Blondel propose un découpage ; vous pouvez l'imposer.</p>
+</div>
+<div style="display:flex;flex-direction:column;gap:14px">
+<div class="field"><label>Nombre de hauteurs n</label>
+<div style="display:flex;gap:8px;align-items:center"><div style="display:flex;border:1px solid var(--color-divider)"><span style="padding:7px 12px;background:var(--color-accent);color:var(--color-bg);font-size:13px">Auto</span><span style="padding:7px 12px;font-size:13px;border-left:1px solid var(--color-divider)">Imposer</span></div><span style="color:var(--color-neutral-700);font-variant-numeric:tabular-nums">15 hauteurs calculées</span></div></div>
+<div class="field"><label>Hauteur de marche cible</label>
+<div style="display:flex;align-items:center;gap:8px"><input class="input" value="175" style="width:120px;text-align:right;font-variant-numeric:tabular-nums"><span style="color:var(--color-neutral-700)">mm</span><span style="flex:1"></span><span style="font-size:12px;color:var(--color-neutral-700)">obtenue : 180</span></div></div>
+<div class="field"><label>Giron cible</label>
+<div style="display:flex;gap:8px;align-items:center"><div style="display:flex;border:1px solid var(--color-divider)"><span style="padding:7px 12px;background:var(--color-accent);color:var(--color-bg);font-size:13px">Auto</span><span style="padding:7px 12px;font-size:13px;border-left:1px solid var(--color-divider)">Imposer</span></div><span style="color:var(--color-neutral-700);font-variant-numeric:tabular-nums">245 mm</span></div></div>
+</div>
+<div class="blueprint" style="padding:16px;display:flex;flex-direction:column;gap:14px"><i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+<div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px">
+<div style="display:flex;flex-direction:column"><span style="font:600 32px/1 var(--font-heading);font-variant-numeric:tabular-nums">15</span><span style="font-size:12px;color:var(--color-neutral-700)">hauteurs n</span></div>
+<div style="display:flex;flex-direction:column"><span style="font:600 32px/1 var(--font-heading);font-variant-numeric:tabular-nums">180<small style="font-size:15px;margin-left:2px">mm</small></span><span style="font-size:12px;color:var(--color-neutral-700)">hauteur h</span></div>
+<div style="display:flex;flex-direction:column"><span style="font:600 32px/1 var(--font-heading);font-variant-numeric:tabular-nums">605<small style="font-size:15px;margin-left:2px">mm</small></span><span style="font-size:12px;color:var(--color-neutral-700)">2h + g</span></div>
+</div>
+<div style="display:flex;flex-direction:column;gap:5px">
+<div style="position:relative;height:8px;background:var(--color-neutral-200)"><span style="position:absolute;left:33.3%;width:33.3%;top:0;bottom:0;background:var(--color-accent-300)"></span><span style="position:absolute;left:37.5%;top:-4px;width:2px;height:16px;background:var(--color-text)"></span></div>
+<div style="position:relative;height:16px;font-size:11px;color:var(--color-neutral-700);font-variant-numeric:tabular-nums"><span style="position:absolute;left:0">56</span><span style="position:absolute;left:33.3%;transform:translateX(-50%)">60</span><span style="position:absolute;left:66.6%;transform:translateX(-50%)">64</span><span style="position:absolute;right:0">68 cm</span></div>
+<span style="font-size:12px;color:var(--color-neutral-800)">Confortable : 60,5 cm, dans la zone 60–64 cm.</span>
+</div>
+</div>
+<div style="display:flex;gap:10px;padding:12px 14px;background:var(--color-neutral-100);border:1px solid var(--color-divider)">
+<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--color-accent-700)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="flex:none;margin-top:1px"><circle cx="12" cy="12" r="10"></circle><path d="M12 16v-4"></path><path d="M12 8h.01"></path></svg>
+<span style="font-size:12.5px;color:var(--color-neutral-800);text-wrap:pretty"><b>2h + g, le module de Blondel</b>, mesure le confort du pas : deux hauteurs et un giron font une enjambée naturelle.</span>
+</div>
+<span style="flex:1"></span>
+<button class="btn btn-ghost" style="align-self:flex-start;font:500 13px var(--font-body)">Réglage avancé : correction de la 1re hauteur<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"></path></svg></button>
+</aside>
+
+<main style="display:flex;flex-direction:column;min-height:0;padding:16px 20px 18px;gap:12px">
+<div style="display:flex;align-items:center;gap:12px">
+<div style="display:flex;border:1px solid var(--color-divider)">
+<span style="padding:6px 14px;background:var(--color-accent);color:var(--color-bg);font-size:13px">Élévation</span>
+<span style="padding:6px 14px;font-size:13px;border-left:1px solid var(--color-divider)">Plan</span>
+<span style="padding:6px 14px;font-size:13px;border-left:1px solid var(--color-divider)">3D</span>
+</div>
+<span style="font-size:12px;color:var(--color-neutral-700)">Vue conseillée pour cette étape</span>
+<span style="flex:1"></span>
+<div style="display:flex;gap:4px"><button class="btn btn-secondary btn-icon" style="width:32px;height:32px">−</button><button class="btn btn-secondary btn-icon" style="width:32px;height:32px">+</button><button class="btn btn-secondary" style="height:32px;font-size:13px">Recadrer</button></div>
+</div>
+<div class="blueprint" style="flex:1;min-height:0;background:#fff;display:flex;align-items:center;justify-content:center;position:relative"><i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+<div style="height:94%;aspect-ratio:600/700;position:relative">
+<img src="assets/elevation-demo.png" alt="Élévation développée de la démo" style="width:100%;height:100%;object-fit:contain">
+<span style="position:absolute;left:29.6%;top:67.2%;width:4.8%;height:3px;background:#ff7a1a"></span>
+<span style="position:absolute;left:34.2%;top:64.5%;width:3px;height:3%;background:#ff7a1a"></span>
+</div>
+<div class="elev-md" style="position:absolute;right:18px;top:18px;width:290px;background:var(--color-bg);border:1px solid var(--color-divider);padding:14px 16px;display:flex;flex-direction:column;gap:8px">
+<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px"><span style="font:600 17px/1.15 var(--font-heading)">Vous connaissez le métier ?</span><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--color-neutral-700)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"></path><path d="m6 6 12 12"></path></svg></div>
+<span style="font-size:12.5px;color:var(--color-neutral-800);text-wrap:pretty">Le parcours libre montre toutes les sections, et un inspecteur pour chaque marche ou pièce. Vous gardez votre projet et votre historique.</span>
+<a href="#1b" class="btn btn-secondary" style="align-self:flex-start;gap:6px">Passer en parcours libre<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"></path><path d="m12 5 7 7-7 7"></path></svg></a>
+</div>
+<span style="position:absolute;left:14px;bottom:12px;font-size:11.5px;color:var(--color-neutral-700);display:flex;align-items:center;gap:6px"><span style="width:10px;height:10px;background:#ff7a1a"></span>Marche 3 sélectionnée</span>
+</div>
+</main>
+</div>
+
+<footer style="display:flex;align-items:center;gap:16px;padding:0 16px;border-top:1px solid var(--color-divider);background:var(--color-neutral-100)">
+<button class="btn btn-ghost" style="color:#9a6200;font:600 13px var(--font-body);gap:6px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"></path><path d="M12 9v4"></path><path d="M12 17h.01"></path></svg>1 avertissement</button>
+<button class="btn btn-ghost" style="color:var(--color-accent-700);font:600 13px var(--font-body);gap:6px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M12 16v-4"></path><path d="M12 8h.01"></path></svg>1 conseil</button>
+<span style="font-size:12.5px;color:var(--color-neutral-700)">Contrôle de conception indicatif : il ne vaut pas attestation de conformité.</span>
+<span style="flex:1"></span>
+<button class="btn btn-secondary" style="gap:6px"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="m12 19-7-7 7-7"></path><path d="M19 12H5"></path></svg>Forme</button>
+<button class="btn btn-primary blueprint" style="gap:6px;padding-inline:18px"><i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>Marches<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"></path><path d="m12 5 7 7-7 7"></path></svg></button>
+</footer>
+</div>
+</div>
+
+<!-- ============ 1b LIBRE ============ -->
+<div id="1b" style="display:flex;flex-direction:column;gap:12px">
+<div style="display:flex;align-items:baseline;gap:10px;font:600 17px var(--font-heading)"><span style="font:600 11px ui-monospace,monospace;padding:3px 8px;background:var(--color-neutral-400)">1b</span>Parcours libre · Conception, même projet, même section, même sélection</div>
+<div data-screen-label="Libre · Conception" style="width:1440px;height:900px;background:var(--color-bg);display:grid;grid-template-rows:52px minmax(0,1fr);grid-template-columns:minmax(0,1fr);font-size:13px;line-height:1.45;box-shadow:var(--shadow-lg);overflow:hidden">
+
+<header style="display:flex;align-items:center;gap:14px;padding:0 16px;border-bottom:1px solid var(--color-divider)">
+<span style="font:600 21px var(--font-heading);letter-spacing:.06em">BLONDEL</span>
+<span style="width:1px;height:22px;background:var(--color-divider)"></span>
+<button class="btn btn-ghost" style="color:var(--color-text);font:500 14px var(--font-body);gap:6px">Quart tournant débillardé soudé<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"></path></svg></button>
+<div style="display:flex;border:1px solid var(--color-divider);font-size:12px">
+<a href="#1a" style="padding:3px 10px;color:var(--color-text);text-decoration:none" style-hover="background:var(--color-neutral-200)">Guidé</a>
+<span style="padding:3px 10px;background:var(--color-accent-200);color:var(--color-accent-900);border-left:1px solid var(--color-divider)">Libre</span>
+</div>
+<span style="flex:1"></span>
+<div style="display:flex;border:1px solid var(--color-text)">
+<span style="padding:6px 20px;background:var(--color-text);color:var(--color-bg);font:600 15px var(--font-heading)">Conception</span>
+<span style="padding:6px 20px;font:600 15px var(--font-heading)" style-hover="background:var(--color-neutral-200)">Fabrication</span>
+</div>
+<span style="flex:1"></span>
+<button class="btn btn-secondary" style="border-color:#9a6200;color:#9a6200;font:600 13px var(--font-body);gap:10px;height:36px"><span style="display:flex;align-items:center;gap:4px"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"></path><path d="M12 9v4"></path><path d="M12 17h.01"></path></svg>1</span><span style="display:flex;align-items:center;gap:4px;color:var(--color-accent-700)"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M12 16v-4"></path><path d="M12 8h.01"></path></svg>1</span><span style="color:var(--color-text);font-weight:500">Contrôle</span></button>
+<div style="display:flex;gap:4px">
+<button class="btn btn-secondary btn-icon" title="Annuler (Ctrl+Z)"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14 4 9l5-5"></path><path d="M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5a5.5 5.5 0 0 1-5.5 5.5H11"></path></svg></button>
+<button class="btn btn-secondary btn-icon" disabled title="Rétablir"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="m15 14 5-5-5-5"></path><path d="M20 9H9.5A5.5 5.5 0 0 0 4 14.5A5.5 5.5 0 0 0 9.5 20H13"></path></svg></button>
+</div>
+<button class="btn btn-secondary" style="height:36px">Importer</button>
+<button class="btn btn-primary blueprint" style="height:36px;gap:6px"><i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><path d="m7 10 5 5 5-5"></path><path d="M12 15V3"></path></svg>Exporter</button>
+<button class="btn btn-secondary btn-icon" title="Plus"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"></circle><circle cx="19" cy="12" r="1"></circle><circle cx="5" cy="12" r="1"></circle></svg></button>
+</header>
+
+<div style="display:grid;grid-template-columns:76px 330px minmax(0,1fr) 340px;min-height:0">
+<nav style="border-right:1px solid var(--color-divider);display:flex;flex-direction:column;padding:6px 0;background:var(--color-neutral-100)">
+<div style="display:flex;flex-direction:column;align-items:center;gap:3px;padding:9px 4px;cursor:pointer;background:transparent;box-shadow:none;color:var(--color-neutral-800)" style-hover="background:var(--color-bg)"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" stroke-dasharray="3 3"></rect></svg><span style="font-size:11px;line-height:1.2;text-align:center">Site</span><span style="font-size:10px;color:#9a6200;min-height:12px;line-height:1.2"></span></div>
+<div style="display:flex;flex-direction:column;align-items:center;gap:3px;padding:9px 4px;cursor:pointer;background:transparent;box-shadow:none;color:var(--color-neutral-800)" style-hover="background:var(--color-bg)"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 10 20 15 15 20"></polyline><path d="M4 4v7a4 4 0 0 0 4 4h12"></path></svg><span style="font-size:11px;line-height:1.2;text-align:center">Tracé</span><span style="font-size:10px;color:#9a6200;min-height:12px;line-height:1.2"></span></div>
+<div style="display:flex;flex-direction:column;align-items:center;gap:3px;padding:9px 4px;cursor:pointer;background:var(--color-bg);box-shadow:inset 3px 0 0 var(--color-accent);color:var(--color-accent-800)" style-hover="background:var(--color-bg)"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21.3 15.3a2.4 2.4 0 0 1 0 3.4l-2.6 2.6a2.4 2.4 0 0 1-3.4 0L2.7 8.7a2.41 2.41 0 0 1 0-3.4l2.6-2.6a2.41 2.41 0 0 1 3.4 0Z"></path><path d="m14.5 12.5 2-2"></path><path d="m11.5 9.5 2-2"></path><path d="m8.5 6.5 2-2"></path><path d="m17.5 15.5 2-2"></path></svg><span style="font-size:11px;line-height:1.2;text-align:center">Découpage</span><span style="font-size:10px;color:#9a6200;min-height:12px;line-height:1.2"></span></div>
+<div style="display:flex;flex-direction:column;align-items:center;gap:3px;padding:9px 4px;cursor:pointer;background:transparent;box-shadow:none;color:var(--color-neutral-800)" style-hover="background:var(--color-bg)"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"></path><path d="M21 3v5h-5"></path></svg><span style="font-size:11px;line-height:1.2;text-align:center">Balancement</span><span style="font-size:10px;color:#9a6200;min-height:12px;line-height:1.2"></span></div>
+<div style="display:flex;flex-direction:column;align-items:center;gap:3px;padding:9px 4px;cursor:pointer;background:transparent;box-shadow:none;color:var(--color-neutral-800)" style-hover="background:var(--color-bg)"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83Z"></path><path d="m22 17.65-9.17 4.16a2 2 0 0 1-1.66 0L2 17.65"></path><path d="m22 12.65-9.17 4.16a2 2 0 0 1-1.66 0L2 12.65"></path></svg><span style="font-size:11px;line-height:1.2;text-align:center">Marches</span><span style="font-size:10px;color:#9a6200;min-height:12px;line-height:1.2"></span></div>
+<div style="display:flex;flex-direction:column;align-items:center;gap:3px;padding:9px 4px;cursor:pointer;background:transparent;box-shadow:none;color:var(--color-neutral-800)" style-hover="background:var(--color-bg)"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"></path><path d="m3.3 7 8.7 5 8.7-5"></path><path d="M12 22V12"></path></svg><span style="font-size:11px;line-height:1.2;text-align:center">Structure</span><span style="font-size:10px;color:#9a6200;min-height:12px;line-height:1.2">◆ 3</span></div>
+<div style="display:flex;flex-direction:column;align-items:center;gap:3px;padding:9px 4px;cursor:pointer;background:transparent;box-shadow:none;color:var(--color-neutral-800)" style-hover="background:var(--color-bg)"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 3 2 5v15c0 .6.4 1 1 1h2c.6 0 1-.4 1-1V5Z"></path><path d="M6 8h4"></path><path d="M6 18h4"></path><path d="m12 3-2 2v15c0 .6.4 1 1 1h2c.6 0 1-.4 1-1V5Z"></path><path d="M14 8h4"></path><path d="M14 18h4"></path><path d="m20 3-2 2v15c0 .6.4 1 1 1h2c.6 0 1-.4 1-1V5Z"></path></svg><span style="font-size:11px;line-height:1.2;text-align:center">Garde-corps</span><span style="font-size:10px;color:#9a6200;min-height:12px;line-height:1.2">◆ 1</span></div>
+<div style="display:flex;flex-direction:column;align-items:center;gap:3px;padding:9px 4px;cursor:pointer;background:transparent;box-shadow:none;color:var(--color-neutral-800)" style-hover="background:var(--color-bg)"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"></path><path d="m9 12 2 2 4-4"></path></svg><span style="font-size:11px;line-height:1.2;text-align:center">Contexte</span><span style="font-size:10px;color:#9a6200;min-height:12px;line-height:1.2"></span></div>
+</nav>
+
+<aside class="elev-md" style="border-right:1px solid var(--color-divider);padding:18px 20px;display:flex;flex-direction:column;gap:16px;background:var(--color-bg);position:relative;z-index:1;overflow:auto">
+<div style="display:flex;align-items:center;gap:8px"><h3 style="margin:0;font-size:24px;flex:1">Découpage</h3>
+<button class="btn btn-ghost btn-icon" style="width:30px;height:30px;color:var(--color-neutral-700)" title="Épingler"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 17v5"></path><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z"></path></svg></button>
+<button class="btn btn-ghost btn-icon" style="width:30px;height:30px;color:var(--color-neutral-700)" title="Fermer"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"></path><path d="m6 6 12 12"></path></svg></button></div>
+<div class="field"><label>Nombre de hauteurs n</label>
+<div style="display:flex;gap:8px;align-items:center"><div style="display:flex;border:1px solid var(--color-divider)"><span style="padding:6px 11px;background:var(--color-accent);color:var(--color-bg)">Auto</span><span style="padding:6px 11px;border-left:1px solid var(--color-divider)">Imposer</span></div><span style="color:var(--color-neutral-700);font-variant-numeric:tabular-nums">15</span></div></div>
+<div class="field"><label>Hauteur de marche cible</label>
+<div style="display:flex;align-items:center;gap:8px"><input class="input" value="175" style="width:110px;text-align:right;font-variant-numeric:tabular-nums"><span style="color:var(--color-neutral-700)">mm</span><span style="flex:1"></span><span style="font-size:12px;color:var(--color-neutral-700)">obtenue : 180</span></div></div>
+<div class="field"><label>Giron cible</label>
+<div style="display:flex;gap:8px;align-items:center"><div style="display:flex;border:1px solid var(--color-divider)"><span style="padding:6px 11px;background:var(--color-accent);color:var(--color-bg)">Auto</span><span style="padding:6px 11px;border-left:1px solid var(--color-divider)">Imposer</span></div><span style="color:var(--color-neutral-700);font-variant-numeric:tabular-nums">245 mm</span></div></div>
+<div class="field"><label>Correction de la 1re hauteur</label>
+<div style="display:flex;align-items:center;gap:8px"><input class="input" value="0" style="width:110px;text-align:right;font-variant-numeric:tabular-nums"><span style="color:var(--color-neutral-700)">mm</span></div>
+<span style="display:block;margin-top:4px;font-size:11.5px;color:var(--color-neutral-700)">Compense un revêtement de sol posé après l'escalier.</span></div>
+<div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));border:1px solid var(--color-divider);font-variant-numeric:tabular-nums">
+<div style="padding:10px;display:flex;flex-direction:column"><span style="font:600 22px/1 var(--font-heading)">15</span><span style="font-size:11.5px;color:var(--color-neutral-700)">n</span></div>
+<div style="padding:10px;display:flex;flex-direction:column;border-left:1px solid var(--color-divider)"><span style="font:600 22px/1 var(--font-heading)">180</span><span style="font-size:11.5px;color:var(--color-neutral-700)">h mm</span></div>
+<div style="padding:10px;display:flex;flex-direction:column;border-left:1px solid var(--color-divider)"><span style="font:600 22px/1 var(--font-heading)">605</span><span style="font-size:11.5px;color:var(--color-neutral-700)">2h + g mm</span></div>
+</div>
+<span style="flex:1"></span>
+<span style="font-size:12px;color:var(--color-neutral-700);text-wrap:pretty">Ouvert sur la section où vous étiez dans le parcours guidé. Épinglez-le pour le garder ouvert en changeant de section.</span>
+</aside>
+
+<main style="position:relative;display:flex;flex-direction:column;min-height:0;padding:14px 16px 16px;gap:10px">
+<div style="display:flex;align-items:center;gap:12px">
+<div style="display:flex;border:1px solid var(--color-divider)">
+<span style="padding:6px 14px;font-size:13px">Plan</span>
+<span style="padding:6px 14px;font-size:13px;border-left:1px solid var(--color-divider)">3D</span>
+<span style="padding:6px 14px;background:var(--color-accent);color:var(--color-bg);font-size:13px">Élévation</span>
+</div>
+<span style="flex:1"></span>
+<div style="display:flex;gap:4px"><button class="btn btn-secondary btn-icon" style="width:32px;height:32px">−</button><button class="btn btn-secondary btn-icon" style="width:32px;height:32px">+</button><button class="btn btn-secondary" style="height:32px;font-size:13px">Recadrer</button></div>
+</div>
+<div class="blueprint" style="flex:1;min-height:0;background:#fff;display:flex;align-items:center;justify-content:center;position:relative"><i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+<div style="height:94%;aspect-ratio:600/700;position:relative">
+<img src="assets/elevation-demo.png" alt="Élévation développée de la démo" style="width:100%;height:100%;object-fit:contain">
+<span style="position:absolute;left:29.6%;top:67.2%;width:4.8%;height:3px;background:#ff7a1a"></span>
+<span style="position:absolute;left:34.2%;top:64.5%;width:3px;height:3%;background:#ff7a1a"></span>
+</div>
+</div>
+<div style="display:flex;gap:18px;align-items:center;font-size:12px;color:var(--color-neutral-800);font-variant-numeric:tabular-nums">
+<span><b>n</b> 15</span><span><b>h</b> 180 mm</span><span><b>g</b> 245 mm</span><span><b>2h + g</b> 605 mm</span><span><b>E</b> 900 mm</span><span><b>Échappée</b> 1 901 mm</span>
+<span style="flex:1"></span><span style="color:var(--color-neutral-700)">Calculé en 78 ms</span>
+</div>
+</main>
+
+<aside style="border-left:1px solid var(--color-divider);padding:18px 20px;display:flex;flex-direction:column;gap:16px;overflow:auto">
+<div style="display:flex;flex-direction:column;gap:4px">
+<span style="font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--color-neutral-700)">Sélection</span>
+<div style="display:flex;align-items:center;gap:8px"><span style="width:12px;height:12px;background:#ff7a1a;flex:none"></span><h3 style="margin:0;font-size:24px">Marche 3</h3><span class="tag tag-neutral">balancée</span></div>
+</div>
+<table class="table" style="font-size:13px;font-variant-numeric:tabular-nums">
+<tbody>
+<tr><td style="padding-left:0;color:var(--color-neutral-700)">Giron (ligne de foulée)</td><td style="text-align:right;padding-right:0">245 mm</td></tr>
+<tr><td style="padding-left:0;color:var(--color-neutral-700)">Collet</td><td style="text-align:right;padding-right:0">108 mm</td></tr>
+<tr><td style="padding-left:0;color:var(--color-neutral-700)">Hauteur</td><td style="text-align:right;padding-right:0">180 mm</td></tr>
+<tr><td style="padding-left:0;color:var(--color-neutral-700)">Angle du nez</td><td style="text-align:right;padding-right:0"><span style="display:inline-flex;align-items:center;gap:6px"><input class="input" value="32,4" style="width:72px;min-height:28px;padding:3px 8px;text-align:right"><span>°</span></span></td></tr>
+</tbody>
+</table>
+<div style="display:flex;gap:8px"><button class="btn btn-secondary" style="font-size:13px">Fixer le nez (F)</button><button class="btn btn-ghost" style="font-size:13px">Recalculer</button></div>
+
+<div style="display:flex;flex-direction:column;gap:8px">
+<span style="font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--color-neutral-700)">Règles sur cet élément</span>
+<div class="blueprint" style="padding:12px 14px;display:flex;flex-direction:column;gap:5px"><i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+<span style="display:flex;align-items:center;gap:6px;color:var(--color-accent-700);font:600 14px var(--font-heading)"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M12 16v-4"></path><path d="M12 8h.01"></path></svg>Conseil</span>
+<span style="font-size:13px;text-wrap:pretty">Échappée sous la recommandation pour un logement.</span>
+<span style="font-size:12.5px;font-variant-numeric:tabular-nums">Mesuré <b>1 901 mm</b> · conseillé ≥ 2 100 mm</span>
+<span style="font-size:11px;color:var(--color-neutral-700)">Règle de l'art · confiance moyenne · <span style="font-family:ui-monospace,monospace">echappee_reco_privatif</span></span>
+</div>
+</div>
+
+<div style="display:flex;flex-direction:column;gap:8px">
+<span style="font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--color-neutral-700)">Pièces liées</span>
+<sc-for list="{{ linked }}" as="p" hint-placeholder-count="3">
+<a href="#" style="display:flex;align-items:baseline;gap:10px;text-decoration:none;color:var(--color-text);padding:6px 0;border-bottom:1px solid var(--color-divider)" style-hover="color:var(--color-accent-700)"><b style="font:600 14px var(--font-heading);width:36px">{{ p.r }}</b><span style="flex:1">{{ p.n }}</span><span style="color:var(--color-neutral-700);font-size:12px">{{ p.m }}</span></a>
+</sc-for>
+</div>
+<span style="flex:1"></span>
+<span style="font-size:11.5px;color:var(--color-neutral-700);text-wrap:pretty">Contrôle de conception indicatif : il ne vaut pas attestation de conformité.</span>
+</aside>
+</div>
+</div>
+</div>
+
+</div>
+<ol style="margin:0;padding-left:18px;max-width:1100px;font-size:14px;line-height:1.55;color:var(--color-neutral-800)">
+<li>Les contrôles sont ceux d'Industry : boutons à angles vifs, Exporter et « Suivant » en seuls boutons pleins (avec repères de coin), segmentés pour Auto / Imposer, cadres <i>blueprint</i> pour la vue et les cartes.</li>
+<li>Couleurs fonctionnelles conservées hors palette : ocre (avertissement), orange (sélection partagée) et, non visibles ici, rouge et vert. Conseil utilise l'acier du système.</li>
+<li>La vue est l'élévation réellement exportée (capture 07) : elle reste sur fond blanc dans un cadre, comme un document posé sur la table.</li>
+<li>Les liens « Guidé / Libre » et « Passer en parcours libre » sautent d'un écran à l'autre.</li>
+</ol>
+</section>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const done = (n, t, s) => ({ n: '✓', t, s, bg: 'transparent', shadow: 'none', bc: 'var(--color-accent)', nbg: 'var(--color-accent)', nc: 'var(--color-bg)', sc: 'var(--color-neutral-700)' });
+    const todo = (n, t, s, warn) => ({ n, t, s, bg: 'transparent', shadow: 'none', bc: 'var(--color-neutral-500)', nbg: 'transparent', nc: 'var(--color-text)', sc: warn ? '#9a6200' : 'var(--color-neutral-700)' });
+    const rail = [
+      ['S', 'Site', ''], ['T', 'Tracé', ''], ['D', 'Découpage', ''], ['B', 'Balancement', ''],
+      ['M', 'Marches', ''], ['St', 'Structure', '◆ 3'], ['G', 'Garde-corps', '◆ 1'], ['C', 'Contexte', ''],
+    ].map(([k, t, f]) => {
+      const on = t === 'Découpage';
+      return { k, t, f, bg: on ? 'var(--color-bg)' : 'transparent', shadow: on ? 'inset 3px 0 0 var(--color-accent)' : 'none', c: on ? 'var(--color-accent-800)' : 'var(--color-neutral-800)' };
+    });
+    return {
+      steps: [
+        done(1, 'Site', 'H 2 700 · trémie 2 930 × 1 330'),
+        done(2, 'Forme', 'Quart tournant gauche'),
+        { n: '3', t: 'Découpage', s: '15 marches · 180 mm', bg: 'var(--color-neutral-100)', shadow: 'inset 0 -3px 0 var(--color-accent)', bc: 'var(--color-text)', nbg: 'var(--color-text)', nc: 'var(--color-bg)', sc: 'var(--color-neutral-800)' },
+        todo(4, 'Marches', 'Chêne 40 mm'),
+        todo(5, 'Structure', '◆ 3 valeurs à valider', true),
+        todo(6, 'Garde-corps', 'Verre · ◆ 1', true),
+        todo(7, 'Fabrication', '102 pièces'),
+      ],
+      rail,
+      stepVals: [
+        { l: 'Giron (ligne de foulée)', v: '245 mm' },
+        { l: 'Collet', v: '108 mm' },
+        { l: 'Hauteur', v: '180 mm' },
+        { l: 'Altitude du nez', v: '540 mm' },
+        { l: 'Échappée au nez', v: '1 901 mm' },
+      ],
+      pieceVals: [
+        { l: 'Matériau', v: 'Acier S235' },
+        { l: 'Section', v: 'Plat 250 × 8' },
+        { l: 'Longueur développée', v: '4 212 mm' },
+        { l: 'Masse', v: '66,1 kg' },
+        { l: 'Soudures', v: '15 supports · 2,1 m' },
+      ],
+      pieceLinks: [
+        { r: 'CR1–15', n: 'Supports cornière', m: 'L 40×40×4' },
+        { r: 'PF1', n: 'Platine de pied', m: '200 × 150' },
+        { r: 'PH1', n: 'Platine haute', m: '200 × 150' },
+      ],
+      projFigs: [
+        { v: '2 700', l: 'H mm' }, { v: '900', l: 'E mm' }, { v: '15', l: 'hauteurs' },
+        { v: '605', l: '2h + g mm' }, { v: '3 430', l: 'reculement mm' }, { v: '1 901', l: 'échappée mm' },
+        { v: '412 kg', l: 'masse' }, { v: '102', l: 'pièces' }, { v: 'EXC2', l: 'classe' },
+      ],
+      linked: [
+        { r: 'M3', n: 'Marche chêne 40', m: '4,8 kg' },
+        { r: 'CR3', n: 'Cornière support', m: 'L 40×40×4' },
+        { r: 'LD2', n: 'Limon de jour, tronçon 2/3', m: 'tôle 8' },
+      ],
+    };
+  }
+}
+</script>
+</body>
+</html>

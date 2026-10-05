@@ -1,0 +1,708 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics>
+<meta name="design_doc_mode" content="canvas">
+<link rel="stylesheet" href="_ds/industry-284fbf80-8693-4f36-b3b8-968f954d0b0d/styles.css">
+<style>body{margin:0;background:var(--color-bg);color:var(--color-text);font-family:var(--font-body)}a{color:var(--color-accent-700)}a:hover{color:var(--color-accent-800)}.dv-turn{padding:40px 44px 32px;border-bottom:1px solid var(--color-divider);scroll-margin-top:16px}.dv-thd{display:flex;align-items:baseline;gap:10px;margin:0 0 8px}.dv-tid{font:600 10px ui-monospace,Menlo,monospace;padding:3px 7px;background:var(--color-text);color:var(--color-bg);text-decoration:none}.dv-tname{font:600 22px/1.1 var(--font-heading);color:var(--color-text)}.dv-opts{display:flex;flex-wrap:wrap;gap:44px 36px;align-items:flex-start}.dv-opt{flex:none;display:flex;flex-direction:column;gap:9px;scroll-margin-top:16px}.dv-oid{font:600 10.5px ui-monospace,Menlo,monospace;padding:3px 7px;background:var(--color-neutral-300);color:var(--color-text);text-decoration:none}.dv-olabel{display:flex;align-items:baseline;gap:8px;font:600 15px/1.2 var(--font-heading);color:var(--color-text)}.dv-card{max-width:100%;background:var(--color-neutral-100);border:1px solid var(--color-divider);box-shadow:var(--shadow-sm);overflow:hidden}.dv-opt:target .dv-oid{background:var(--color-accent);color:#fff}.dv-next{margin:28px 0 0;font:13px/1.5 var(--font-body);color:var(--color-neutral-700)}</style>
+</helmet>
+<section class="dv-turn" id="t2">
+<div class="dv-thd"><a class="dv-tid" href="#t2">2</a><span class="dv-tname">Deux parcours, un projet : guidé (<a class="dv-oid" href="#1c">1c</a>) et libre (<a class="dv-oid" href="#1b">1b</a> + <a class="dv-oid" href="#1d">1d</a>)</span></div>
+<p style="margin:0 0 28px;max-width:860px;font-size:13px;line-height:1.5;color:var(--color-neutral-700);text-wrap:pretty">Un même projet (« Quart tournant débillardé soudé ») vu dans l'ordre d'un parcours. Le guidé et le libre partagent les mêmes champs, les mêmes vues et la même sélection : seule change la façon d'avancer. À lire de <a class="dv-oid" href="#2a">2a</a> à <a class="dv-oid" href="#2d">2d</a>.</p>
+<div class="dv-opts">
+
+<!-- 2a -->
+<div class="dv-opt" id="2a">
+<div class="dv-olabel"><a class="dv-oid" href="#2a">2a</a>Parcours guidé, ouvert par une démo</div>
+<div class="dv-card" style="width:960px;height:600px;display:grid;grid-template-rows:36px 44px 1fr 34px;grid-template-columns:minmax(0,1fr);font-size:10.5px">
+<div style="display:flex;align-items:center;gap:12px;padding:0 12px;border-bottom:1px solid var(--color-divider);background:var(--color-bg)">
+<b style="font:600 15px var(--font-heading);letter-spacing:.04em">BLONDEL</b><span style="font-weight:500">Quart tournant débillardé soudé ▾</span><span class="tag tag-accent" style="font-size:9px">Démo</span>
+<span style="flex:1"></span>
+<span style="display:flex;border:1px solid var(--color-text)"><b style="padding:3px 10px;background:var(--color-text);color:var(--color-bg)">Guidé</b><span style="padding:3px 10px">Libre</span></span>
+<span style="border:1px solid var(--color-neutral-400);padding:2px 7px">↶ ↷</span><span style="border:1px solid var(--color-neutral-400);padding:3px 9px">⋯</span>
+</div>
+<div style="display:grid;grid-template-columns:repeat(7,minmax(0,1fr));border-bottom:1px solid var(--color-divider)">
+<sc-for list="{{ steps }}" as="st" hint-placeholder-count="7"><div style="display:flex;align-items:center;gap:6px;padding:0 10px;border-right:1px solid var(--color-divider);border-bottom:{{ st.bb }};background:{{ st.bg }}"><span style="width:18px;height:18px;border:1px solid var(--color-neutral-500);display:flex;align-items:center;justify-content:center;font:600 9px ui-monospace,monospace">{{ st.n }}</span><span style="display:flex;flex-direction:column;min-width:0"><b>{{ st.t }}</b><span style="color:var(--color-neutral-600);font-size:9px">{{ st.s }}</span></span></div></sc-for>
+</div>
+<div style="display:grid;grid-template-columns:300px minmax(0,1fr);min-height:0">
+<div style="border-right:1px solid var(--color-divider);padding:12px;display:flex;flex-direction:column;gap:7px">
+<b style="font:600 16px var(--font-heading)">3 · Découpage</b>
+<span style="color:var(--color-neutral-600)">Combien de marches, et de quelle taille.</span>
+<sc-for list="{{ decoupe }}" as="f" hint-placeholder-count="3"><div style="display:flex;justify-content:space-between;align-items:center;gap:6px"><span>{{ f.l }}</span><span style="border:1px solid var(--color-neutral-400);background:#fff;padding:1px 6px;min-width:70px;text-align:right">{{ f.v }}</span></div></sc-for>
+<div style="border:1px solid var(--color-divider);padding:8px;display:grid;grid-template-columns:repeat(3,1fr);gap:4px;text-align:center;background:#fff;font-variant-numeric:tabular-nums"><span><b style="font-size:14px">15</b><br>n</span><span><b style="font-size:14px">180</b><br>h mm</span><span><b style="font-size:14px">605</b><br>2h+g · 60–64</span></div>
+<div style="border:1px dashed var(--color-neutral-500);padding:7px;display:flex;flex-direction:column;gap:3px;color:var(--color-neutral-700)"><b>Le saviez-vous ?</b><span>2h + g, le module de Blondel, mesure le confort du pas.</span></div>
+<span style="flex:1"></span>
+<span style="color:var(--color-neutral-600)">Mêmes champs que le panneau « Découpage » du parcours libre.</span>
+</div>
+<div style="display:flex;flex-direction:column;min-height:0">
+<div style="display:flex;gap:12px;padding:6px 12px;color:var(--color-neutral-600)"><span>Vue conseillée : <b style="color:var(--color-text)">Élévation</b></span><span>Plan</span><span>3D</span></div>
+<div style="flex:1;margin:0 10px 10px;background:repeating-linear-gradient(135deg,var(--color-neutral-200) 0 1px,transparent 1px 9px);border:1px solid var(--color-divider);display:flex;align-items:center;justify-content:center;position:relative"><span style="font:500 10px ui-monospace,monospace;color:var(--color-neutral-600);background:var(--color-neutral-100);padding:3px 6px">ÉLÉVATION · marche 3 sélectionnée</span>
+<div style="position:absolute;right:10px;top:10px;width:230px;background:#fff;border:1px solid var(--color-divider);box-shadow:var(--shadow-md);padding:8px;display:flex;flex-direction:column;gap:5px"><b>Vous connaissez le métier ?</b><span style="color:var(--color-neutral-700)">Le parcours libre montre toutes les sections et un inspecteur par élément.</span><span style="color:var(--color-accent-700);font-weight:600">Passer en parcours libre →</span></div>
+</div>
+</div>
+</div>
+<div style="display:flex;align-items:center;gap:12px;padding:0 12px;border-top:1px solid var(--color-divider);background:var(--color-bg)">
+<span style="color:#9a6200;font-weight:600">▲ 1 avertissement</span><span style="color:var(--color-accent-700)">● 1 conseil</span><span style="color:var(--color-neutral-600)">Contrôle ▴</span><span style="flex:1"></span>
+<span style="border:1px solid var(--color-neutral-400);padding:3px 10px">← Forme</span><span style="background:var(--color-accent);color:#fff;padding:4px 12px">Marches →</span>
+</div>
+</div>
+<sc-if value="{{ notes }}" hint-placeholder-val="{{ true }}"><ol style="margin:0;padding-left:18px;max-width:940px;font-size:12.5px;line-height:1.5;color:var(--color-neutral-800)">
+<li>Une démo, l'assistant ou le premier lancement ouvrent le parcours guidé. La bascule <b>Guidé | Libre</b> reste dans la barre du haut, à côté du nom du projet.</li>
+<li>Le parcours libre n'est proposé qu'une fois, dans un encart discret, après quelques modifications ; on ne demande jamais « débutant ou expert ? ».</li>
+<li>Le contrôle de conception reste toujours en bas, compteurs visibles ; ▴ ouvre la liste par-dessus la vue.</li>
+</ol></sc-if>
+</div>
+
+<!-- 2b -->
+<div class="dv-opt" id="2b">
+<div class="dv-olabel"><a class="dv-oid" href="#2b">2b</a>Parcours libre · Conception (même projet, même étape)</div>
+<div class="dv-card" style="width:960px;height:600px;display:grid;grid-template-rows:36px 1fr;grid-template-columns:minmax(0,1fr);font-size:10.5px">
+<div style="display:flex;align-items:center;gap:12px;padding:0 12px;border-bottom:1px solid var(--color-divider);background:var(--color-bg)">
+<b style="font:600 15px var(--font-heading);letter-spacing:.04em">BLONDEL</b><span style="font-weight:500">Quart tournant débillardé soudé ▾</span>
+<span style="display:flex;border:1px solid var(--color-neutral-400)"><span style="padding:2px 8px">Guidé</span><b style="padding:2px 8px;background:var(--color-accent-200)">Libre</b></span>
+<span style="flex:1"></span>
+<span style="display:flex;border:1px solid var(--color-text)"><b style="padding:4px 14px;background:var(--color-text);color:var(--color-bg)">Conception</b><span style="padding:4px 14px">Fabrication</span></span>
+<span style="flex:1"></span>
+<span style="border:1px solid #9a6200;color:#9a6200;padding:2px 8px;font-weight:600;background:#fff">▲ 1 · ● 1</span>
+<span style="border:1px solid var(--color-neutral-400);padding:2px 7px">↶ ↷</span>
+<span style="background:var(--color-accent);color:#fff;padding:4px 11px">Exporter ▾</span>
+</div>
+<div style="display:grid;grid-template-columns:52px 250px minmax(0,1fr) 250px;min-height:0">
+<div style="border-right:1px solid var(--color-divider);display:flex;flex-direction:column;padding-top:6px;background:var(--color-bg)">
+<sc-for list="{{ rail2 }}" as="r" hint-placeholder-count="8"><div style="display:flex;flex-direction:column;align-items:center;gap:2px;padding:6px 0;font-size:8.5px;color:var(--color-neutral-700);background:{{ r.bg }};border-left:{{ r.bl }}"><span style="width:18px;height:18px;border:1px solid var(--color-neutral-500)"></span>{{ r.t }}<span style="color:#9a6200;font-size:8px">{{ r.f }}</span></div></sc-for>
+</div>
+<div style="border-right:1px solid var(--color-divider);padding:10px;display:flex;flex-direction:column;gap:6px;background:#fff;box-shadow:var(--shadow-md);position:relative;z-index:1">
+<div style="display:flex;justify-content:space-between"><b style="font:600 13px var(--font-heading)">Découpage</b><span style="color:var(--color-neutral-600)">📌 ✕</span></div>
+<sc-for list="{{ decoupe }}" as="f" hint-placeholder-count="3"><div style="display:flex;justify-content:space-between;align-items:center;gap:6px"><span>{{ f.l }}</span><span style="border:1px solid var(--color-neutral-400);padding:1px 6px;min-width:64px;text-align:right">{{ f.v }}</span></div></sc-for>
+<div style="display:flex;justify-content:space-between;align-items:center;gap:6px"><span>Correction 1re hauteur</span><span style="border:1px solid var(--color-neutral-400);padding:1px 6px;min-width:64px;text-align:right">0 mm</span></div>
+<span style="flex:1"></span>
+<span style="color:var(--color-neutral-600)">Ouvert sur la section où l'on était dans le guidé.</span>
+</div>
+<div style="position:relative;margin:10px;background:repeating-linear-gradient(135deg,var(--color-neutral-200) 0 1px,transparent 1px 9px);border:1px solid var(--color-divider);display:flex;align-items:center;justify-content:center">
+<span style="position:absolute;left:8px;top:8px;display:flex;border:1px solid var(--color-neutral-400);background:#fff"><b style="padding:1px 7px;background:var(--color-accent-200)">Élévation</b><span style="padding:1px 7px">Plan</span><span style="padding:1px 7px">3D</span></span>
+<span style="font:500 10px ui-monospace,monospace;color:var(--color-neutral-600);background:var(--color-neutral-100);padding:3px 6px">ÉLÉVATION · marche 3 en orange</span>
+<span style="position:absolute;left:8px;bottom:8px;display:flex;gap:10px;background:#fff;border:1px solid var(--color-divider);padding:3px 8px;font-variant-numeric:tabular-nums;color:var(--color-neutral-700)"><span>n 15</span><span>h 180</span><span>g 245</span><span>2h+g 605</span><span>E 900</span></span>
+</div>
+<div style="border-left:1px solid var(--color-divider);padding:10px;display:flex;flex-direction:column;gap:7px">
+<span style="font:600 9px ui-monospace,monospace;color:var(--color-neutral-500)">SÉLECTION</span>
+<b style="font:600 14px var(--font-heading);color:#c85a00">Marche 3 · balancée</b>
+<div style="display:grid;grid-template-columns:1fr auto;gap:3px 8px;font-variant-numeric:tabular-nums"><span>Giron</span><span>245 mm</span><span>Collet</span><span>108 mm</span><span>Hauteur</span><span>180 mm</span><span>Angle du nez</span><span>32,4° ✎</span></div>
+<span style="font:600 9px ui-monospace,monospace;color:var(--color-neutral-500);margin-top:6px">RÈGLES SUR CET ÉLÉMENT</span>
+<div style="border:1px solid var(--color-divider);border-left:3px solid var(--color-accent-700);padding:6px;background:#fff">Échappée 1 901 mm · conseillé ≥ 2 100</div>
+<span style="font:600 9px ui-monospace,monospace;color:var(--color-neutral-500);margin-top:6px">PIÈCES LIÉES</span>
+<span style="color:var(--color-accent-700)">M3 marche chêne · CR3 · LD2 →</span>
+<span style="flex:1"></span>
+<i style="color:var(--color-neutral-600);font-size:9.5px">Contrôle indicatif : il ne vaut pas attestation de conformité.</i>
+</div>
+</div>
+</div>
+<sc-if value="{{ notes }}" hint-placeholder-val="{{ true }}"><ol style="margin:0;padding-left:18px;max-width:940px;font-size:12.5px;line-height:1.5;color:var(--color-neutral-800)">
+<li>La bascule Guidé → Libre ne change ni le projet, ni la vue, ni la sélection, ni l'historique d'annulation : l'étape « Découpage » devient le panneau « Découpage » du rail.</li>
+<li>Le rail porte les drapeaux ◆ (valeurs à valider) de chaque section, ce qui compense l'absence du formulaire complet.</li>
+<li>Le badge ▲ 1 · ● 1 est cerclé de la couleur de la sévérité la plus haute ; en rouge, il ouvre seul le contrôle à la place de l'inspecteur.</li>
+<li>« LD2 → » dans les pièces liées mène à <a class="dv-oid" href="#2c">2c</a>.</li>
+</ol></sc-if>
+</div>
+
+<!-- 2c -->
+<div class="dv-opt" id="2c">
+<div class="dv-olabel"><a class="dv-oid" href="#2c">2c</a>Parcours libre · Fabrication, avec retour vers la Conception</div>
+<div class="dv-card" style="width:960px;height:600px;display:grid;grid-template-rows:36px 1fr;grid-template-columns:minmax(0,1fr);font-size:10.5px">
+<div style="display:flex;align-items:center;gap:12px;padding:0 12px;border-bottom:1px solid var(--color-divider);background:var(--color-bg)">
+<b style="font:600 15px var(--font-heading);letter-spacing:.04em">BLONDEL</b><span style="font-weight:500">Quart tournant débillardé soudé ▾</span>
+<span style="display:flex;border:1px solid var(--color-neutral-400)"><span style="padding:2px 8px">Guidé</span><b style="padding:2px 8px;background:var(--color-accent-200)">Libre</b></span>
+<span style="flex:1"></span>
+<span style="display:flex;border:1px solid var(--color-text)"><span style="padding:4px 14px">Conception</span><b style="padding:4px 14px;background:var(--color-text);color:var(--color-bg)">Fabrication</b></span>
+<span style="flex:1"></span>
+<span style="border:1px solid #9a6200;color:#9a6200;padding:2px 8px;font-weight:600;background:#fff">▲ 1 · ● 1</span>
+<span style="border:1px solid var(--color-neutral-400);padding:2px 7px">↶ ↷</span>
+<span style="border:1px solid var(--color-neutral-400);padding:3px 9px">⋯</span>
+</div>
+<div style="display:grid;grid-template-columns:230px minmax(0,1fr) 270px;min-height:0">
+<div style="border-right:1px solid var(--color-divider);padding:10px;display:flex;flex-direction:column;gap:6px;overflow:hidden">
+<div style="display:flex;border:1px solid var(--color-neutral-400)"><b style="flex:1;text-align:center;padding:2px;background:var(--color-accent-200)">Pièces</b><span style="flex:1;text-align:center;padding:2px">Nomencl.</span><span style="flex:1;text-align:center;padding:2px">Comparer</span></div>
+<span style="border:1px solid var(--color-neutral-400);background:#fff;padding:3px 6px;color:var(--color-neutral-500)">Filtrer : repère, matériau…</span>
+<sc-for list="{{ pieces }}" as="p" hint-placeholder-count="6"><div style="display:flex;flex-direction:column;gap:2px;padding:4px 0;border-top:1px solid var(--color-divider)"><div style="display:flex;justify-content:space-between"><b>{{ p.g }}</b><span style="color:var(--color-neutral-600)">{{ p.n }}</span></div><span style="color:var(--color-neutral-700)">{{ p.r }}</span></div></sc-for>
+</div>
+<div style="display:flex;flex-direction:column;min-height:0">
+<div style="display:flex;align-items:center;gap:10px;padding:8px 12px;border-bottom:1px solid var(--color-divider)"><b style="font:600 13px var(--font-heading);color:#c85a00">LD2</b><span>Limon de jour débillardé, tronçon 2/3 · tôle 8 mm S235 · 13,2 kg</span><span style="flex:1"></span><span style="border:1px solid var(--color-neutral-400);padding:2px 8px">DXF R12</span></div>
+<div style="flex:1;margin:10px;background:repeating-linear-gradient(135deg,var(--color-neutral-200) 0 1px,transparent 1px 9px);border:1px solid var(--color-divider);display:flex;align-items:center;justify-content:center"><span style="font:500 10px ui-monospace,monospace;color:var(--color-neutral-600);background:var(--color-neutral-100);padding:3px 6px">GABARIT COTÉ DU DÉVELOPPÉ</span></div>
+</div>
+<div style="border-left:1px solid var(--color-divider);padding:10px;display:flex;flex-direction:column;gap:7px">
+<span style="font:600 9px ui-monospace,monospace;color:var(--color-neutral-500)">RÉGLAGES D'ATELIER DE LA PIÈCE</span>
+<div style="display:flex;justify-content:space-between;align-items:center"><span>Marge à la rive basse</span><span style="border:1px solid #9a6200;background:#fff;padding:1px 6px">15 mm</span></div>
+<span style="color:#9a6200;font-size:9.5px;text-align:right;margin-top:-4px">◆ valeur par défaut à valider</span>
+<div style="display:flex;justify-content:space-between;align-items:center"><span>Pince de perçage</span><span style="border:1px solid var(--color-neutral-400);background:#fff;padding:1px 6px">30 mm</span></div>
+<div style="display:flex;justify-content:space-between;align-items:center"><span>Cordon des joints</span><span style="border:1px solid var(--color-neutral-400);background:#fff;padding:1px 6px">a 4</span></div>
+<span style="color:var(--color-neutral-600)">Modifiés ici, ils s'appliquent à toute la structure (section Structure).</span>
+<div style="border:1px solid var(--color-divider);padding:7px;display:flex;flex-direction:column;gap:3px;margin-top:4px"><b>Forme du limon</b><span style="color:var(--color-neutral-700)">Épaisseur, rives, jour : réglages de conception.</span><span style="color:var(--color-accent-700);font-weight:600">← Ouvrir dans Conception</span></div>
+<span style="flex:1"></span>
+<div class="blueprint" style="padding:7px;display:flex;justify-content:space-between;align-items:center"><i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i><b>Dossier PDF</b><span style="background:var(--color-accent);color:#fff;padding:3px 9px">Générer…</span></div>
+</div>
+</div>
+</div>
+<sc-if value="{{ notes }}" hint-placeholder-val="{{ true }}"><ol style="margin:0;padding-left:18px;max-width:940px;font-size:12.5px;line-height:1.5;color:var(--color-neutral-800)">
+<li>La pièce reste sélectionnée d'un mode à l'autre : LD2, choisie dans l'inspecteur en <a class="dv-oid" href="#2b">2b</a>, est ouverte ici.</li>
+<li>Les réglages d'atelier sont modifiables sur place : on n'a plus à revenir en Conception pour une pince ou une marge. Pour ce qui change la forme, « ← Ouvrir dans Conception » ramène au panneau concerné avec la pièce sélectionnée.</li>
+<li>Exporter est remplacé par « Générer… » à droite : en Fabrication, les sorties font partie de l'écran.</li>
+</ol></sc-if>
+</div>
+
+<!-- 2d -->
+<div class="dv-opt" id="2d">
+<div class="dv-olabel"><a class="dv-oid" href="#2d">2d</a>Règles du double parcours</div>
+<div class="dv-card" style="width:620px;padding:14px;display:flex;flex-direction:column;gap:14px;font-size:11px">
+<div style="display:flex;flex-direction:column;gap:6px">
+<b style="font:600 14px var(--font-heading)">Quel parcours à l'ouverture</b>
+<sc-for list="{{ entry }}" as="e" hint-placeholder-count="5"><div style="display:grid;grid-template-columns:minmax(0,1fr) 90px;gap:8px;padding:4px 0;border-top:1px solid var(--color-divider)"><span>{{ e.k }}</span><b style="color:var(--color-accent-700)">{{ e.v }}</b></div></sc-for>
+</div>
+<div style="display:flex;flex-direction:column;gap:6px">
+<b style="font:600 14px var(--font-heading)">Étape guidée ↔ panneau du rail</b>
+<div style="display:grid;grid-template-columns:110px minmax(0,1fr) 110px;gap:0;border:1px solid var(--color-divider)">
+<span style="padding:4px 6px;font:600 9px ui-monospace,monospace;color:var(--color-neutral-600);background:var(--color-bg)">ÉTAPE</span><span style="padding:4px 6px;font:600 9px ui-monospace,monospace;color:var(--color-neutral-600);background:var(--color-bg)">PANNEAU(X) LIBRE</span><span style="padding:4px 6px;font:600 9px ui-monospace,monospace;color:var(--color-neutral-600);background:var(--color-bg)">VUE CONSEILLÉE</span>
+<sc-for list="{{ mapping }}" as="m" hint-placeholder-count="7"><span style="padding:4px 6px;border-top:1px solid var(--color-divider);font-weight:600">{{ m.s }}</span><span style="padding:4px 6px;border-top:1px solid var(--color-divider)">{{ m.p }}</span><span style="padding:4px 6px;border-top:1px solid var(--color-divider);color:var(--color-neutral-700)">{{ m.v }}</span></sc-for>
+</div>
+</div>
+<div style="display:flex;flex-direction:column;gap:4px">
+<b style="font:600 14px var(--font-heading)">Ce qui ne change jamais en basculant</b>
+<span>Projet, historique d'annulation, sélection, vue active, unité, thème.</span>
+</div>
+</div>
+<sc-if value="{{ notes }}" hint-placeholder-val="{{ true }}"><ol style="margin:0;padding-left:18px;width:600px;font-size:12.5px;line-height:1.5;color:var(--color-neutral-800)">
+<li><b>Validé (5 oct.)</b> : « Forme » réunit Tracé et Balancement ; le Contexte de contrôle n'a pas d'étape propre.</li>
+<li>« Contexte de contrôle » n'a pas d'étape : dans le guidé, il est réglé par l'assistant et reste modifiable depuis le contrôle (▴), en tête de liste.</li>
+<li>« Forme » réunit Tracé et Balancement : pour un débutant, le balancement est une conséquence du tournant, pas une étape à part.</li>
+<li>Coût de développement : 1b porte l'essentiel (inspecteurs par type d'élément) ; le guidé ajoute la navigation par étapes, le résumé de chaque étape et la vue conseillée.</li>
+</ol></sc-if>
+</div>
+</div>
+</section>
+<section class="dv-turn" id="t1">
+<div class="dv-thd"><a class="dv-tid" href="#t1">1</a><span class="dv-tname">Refonte franche — pistes de mise en page, puis une proposition par zone</span></div>
+<p style="margin:0 0 28px;max-width:860px;font-size:13px;line-height:1.5;color:var(--color-neutral-700);text-wrap:pretty">Wireframes basse fidélité, écrans à 1440 × 900 dessinés à 2/3. Démo de référence : « Quart tournant débillardé soudé ». Les pistes <a class="dv-oid" href="#1a">1a</a> à <a class="dv-oid" href="#1d">1d</a> sont combinables : <a class="dv-oid" href="#1d">1d</a> (deux modes) peut porter <a class="dv-oid" href="#1a">1a</a> ou <a class="dv-oid" href="#1b">1b</a> en mode Conception. Les zones <a class="dv-oid" href="#1f">1f</a>–<a class="dv-oid" href="#1l">1l</a> valent pour toutes les pistes.</p>
+
+<div style="font:600 11px ui-monospace,Menlo,monospace;letter-spacing:.08em;text-transform:uppercase;color:var(--color-neutral-600);margin:0 0 14px">Pistes de mise en page · 1440</div>
+<div class="dv-opts">
+
+<!-- 1a -->
+<div class="dv-opt" id="1a">
+<div class="dv-olabel"><a class="dv-oid" href="#1a">1a</a>Trois colonnes, hiérarchisées</div>
+<div class="dv-card" style="width:960px;height:600px;display:grid;grid-template-rows:36px 1fr 24px;grid-template-columns:minmax(0,1fr);font-size:10.5px">
+<div style="display:flex;align-items:center;gap:12px;padding:0 12px;border-bottom:1px solid var(--color-divider);background:var(--color-bg)">
+<b style="font:600 15px var(--font-heading);letter-spacing:.04em">BLONDEL</b>
+<span style="border-left:1px solid var(--color-divider);height:18px"></span>
+<span style="font-weight:500">Quart tournant débillardé soudé ▾</span>
+<span style="color:var(--color-neutral-600)">● Enregistré</span>
+<span style="flex:1"></span>
+<span style="display:flex;gap:4px"><span style="border:1px solid var(--color-neutral-400);padding:2px 7px">↶</span><span style="border:1px solid var(--color-neutral-400);padding:2px 7px;color:var(--color-neutral-500)">↷</span></span>
+<span style="border:1px solid var(--color-neutral-400);padding:3px 9px">Nouveau ▾</span>
+<span style="border:1px solid var(--color-neutral-400);padding:3px 9px">Importer ▾</span>
+<span style="background:var(--color-accent);color:#fff;padding:4px 11px;font-weight:500">Exporter ▾</span>
+<span style="border:1px solid var(--color-neutral-400);padding:3px 8px">⋯</span>
+</div>
+<div style="display:grid;grid-template-columns:240px minmax(0,1fr) 250px;min-height:0">
+<div style="border-right:1px solid var(--color-divider);padding:10px;display:flex;flex-direction:column;gap:8px;overflow:hidden">
+<div style="display:flex;justify-content:space-between;align-items:center"><b style="font:600 13px var(--font-heading)">Paramètres</b><span style="display:flex;border:1px solid var(--color-neutral-400)"><span style="padding:1px 6px;background:var(--color-accent-200)">Essentiels</span><span style="padding:1px 6px">Tout</span></span></div>
+<div class="blueprint" style="padding:8px;display:flex;flex-direction:column;gap:4px"><i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+<sc-for list="{{ ess }}" as="f" hint-placeholder-count="4"><div style="display:flex;justify-content:space-between;align-items:center;gap:6px"><span>{{ f.l }}</span><span style="border:1px solid var(--color-neutral-400);background:#fff;padding:1px 6px;min-width:60px;text-align:right;font-variant-numeric:tabular-nums">{{ f.v }}</span></div></sc-for>
+</div>
+<sc-for list="{{ sections }}" as="s" hint-placeholder-count="7"><div style="border-top:1px solid var(--color-divider);padding-top:5px"><div style="display:flex;justify-content:space-between"><b>▸ {{ s.t }}</b><span style="color:var(--color-warn,#9a6200)">{{ s.flag }}</span></div><div style="color:var(--color-neutral-600)">{{ s.s }}</div></div></sc-for>
+</div>
+<div style="display:flex;flex-direction:column;min-height:0">
+<div style="display:flex;align-items:center;gap:10px;padding:0 12px;height:30px;border-bottom:1px solid var(--color-divider)">
+<b style="border-bottom:2px solid var(--color-accent);padding:7px 0">Plan</b><span>3D</span><span>Élévation</span>
+<span style="border-left:1px solid var(--color-neutral-400);height:14px"></span>
+<span style="color:var(--color-neutral-700)">Développés</span><span style="color:var(--color-neutral-700)">Nomenclature</span><span style="color:var(--color-neutral-700)">Comparateur</span>
+</div>
+<div style="flex:1;margin:10px;position:relative;background:repeating-linear-gradient(135deg,var(--color-neutral-200) 0 1px,transparent 1px 9px);border:1px solid var(--color-divider);display:flex;align-items:center;justify-content:center">
+<span style="font:500 10px ui-monospace,monospace;color:var(--color-neutral-600);background:var(--color-neutral-100);padding:3px 6px">PLAN COTÉ (SVG exporté) · marche 3 sélectionnée en orange</span>
+<span style="position:absolute;right:8px;bottom:8px;display:flex;gap:3px"><span style="border:1px solid var(--color-neutral-400);background:#fff;padding:1px 6px">−</span><span style="border:1px solid var(--color-neutral-400);background:#fff;padding:1px 6px">+</span><span style="border:1px solid var(--color-neutral-400);background:#fff;padding:1px 6px">Recadrer</span></span>
+<span style="position:absolute;left:8px;bottom:8px;border:1px solid var(--color-divider);background:#fff;padding:4px 6px;color:var(--color-neutral-700)">Cartouche ▾</span>
+<span style="position:absolute;left:8px;top:8px;display:flex;border:1px solid var(--color-neutral-400);background:#fff"><span style="padding:1px 6px;background:var(--color-accent-200)">Coté</span><span style="padding:1px 6px">Site</span><span style="padding:1px 6px">Expert</span></span>
+</div>
+</div>
+<div style="border-left:1px solid var(--color-divider);padding:10px;display:flex;flex-direction:column;gap:8px">
+<b style="font:600 13px var(--font-heading)">Contrôle de conception</b>
+<div style="display:grid;grid-template-columns:repeat(4,1fr);border:1px solid var(--color-divider)">
+<span style="padding:4px;text-align:center;color:var(--color-neutral-500)">0<br>Bloq.</span><span style="padding:4px;text-align:center;border-left:1px solid var(--color-divider);color:#9a6200;font-weight:700">1<br>Avert.</span><span style="padding:4px;text-align:center;border-left:1px solid var(--color-divider);color:var(--color-accent-700)">1<br>Conseil</span><span style="padding:4px;text-align:center;border-left:1px solid var(--color-divider);color:#2e7d32">81<br>OK</span>
+</div>
+<div style="border:1px solid var(--color-divider);border-left:3px solid #9a6200;padding:6px;display:flex;flex-direction:column;gap:2px;background:#fff">
+<span>Longueur d'appui trop courte sous M6</span><span style="color:var(--color-neutral-600)">37,2 mm · attendu ≥ 50 mm · LE1</span><span style="color:var(--color-neutral-500);font-size:9px">Règle de l'art · confiance faible</span>
+</div>
+<div style="border:1px solid var(--color-divider);padding:6px;display:flex;flex-direction:column;gap:2px;background:#fff">
+<span>Échappée sous la recommandation</span><span style="color:var(--color-neutral-600)">1 901 mm · conseillé ≥ 2 100 mm</span>
+</div>
+<span style="color:var(--color-neutral-600)">▸ Prédimensionnement · EXC2 · 5 limons ✓</span>
+<span style="color:var(--color-neutral-600)">▸ Non évaluées (7) · Respectées (81)</span>
+<span style="flex:1"></span>
+<i style="color:var(--color-neutral-600);font-size:9.5px">Contrôle indicatif : il ne vaut pas attestation de conformité.</i>
+</div>
+</div>
+<div style="display:flex;align-items:center;gap:14px;padding:0 12px;border-top:1px solid var(--color-divider);background:var(--color-bg);font-variant-numeric:tabular-nums;color:var(--color-neutral-700)"><span>n 15</span><span>h 180</span><span>g 245</span><span>2h+g 605</span><span>Échappée 1 901 / 1 960</span><span style="flex:1"></span><span>Calculé en 78 ms</span></div>
+</div>
+<sc-if value="{{ notes }}" hint-placeholder-val="{{ true }}"><ol style="margin:0;padding-left:18px;max-width:940px;font-size:12.5px;line-height:1.5;color:var(--color-neutral-800)">
+<li>Barre d'outils à 3 niveaux : identité du projet, annulation, puis sorties (Exporter en seul bouton plein). Préréglages, Assistant et démos vont dans « Nouveau ▾ » ; unité, thème et Atelier dans « ⋯ ».</li>
+<li>Onglets en deux familles séparées par un filet : <b>Conception</b> (Plan, 3D, Élévation) puis <b>Fabrication</b> ; les modes du plan passent en segmenté dans la vue ; zoom et Recadrer sur toutes les vues 2D.</li>
+<li>Paramètres : un bloc « Essentiels » toujours visible, et des sections repliées qui montrent leur résumé (valeurs clés, drapeau « à valider »).</li>
+<li>Contrôle : compteurs en tête, on n'affiche que les groupes non vides, le message passe avant l'identifiant de règle.</li>
+</ol></sc-if>
+</div>
+
+<!-- 1b -->
+<div class="dv-opt" id="1b">
+<div class="dv-olabel"><a class="dv-oid" href="#1b">1b</a>La vue au centre, inspecteur contextuel</div>
+<div class="dv-card" style="width:960px;height:600px;display:grid;grid-template-rows:36px 1fr;grid-template-columns:minmax(0,1fr);font-size:10.5px">
+<div style="display:flex;align-items:center;gap:12px;padding:0 12px;border-bottom:1px solid var(--color-divider);background:var(--color-bg)">
+<b style="font:600 15px var(--font-heading);letter-spacing:.04em">BLONDEL</b><span style="font-weight:500">Quart tournant débillardé soudé ▾</span>
+<span style="flex:1"></span>
+<span style="display:flex;border:1px solid var(--color-neutral-400)"><b style="padding:3px 10px;background:var(--color-accent-200)">Plan</b><span style="padding:3px 10px">3D</span><span style="padding:3px 10px">Élévation</span><span style="padding:3px 10px;border-left:1px solid var(--color-neutral-400)">Fabrication ▸</span></span>
+<span style="flex:1"></span>
+<span style="border:1px solid #9a6200;color:#9a6200;padding:2px 8px;font-weight:600">▲ 1 · ● 1</span>
+<span style="border:1px solid var(--color-neutral-400);padding:2px 7px">↶ ↷</span>
+<span style="background:var(--color-accent);color:#fff;padding:4px 11px">Exporter ▾</span>
+</div>
+<div style="display:grid;grid-template-columns:52px 250px minmax(0,1fr) 250px;min-height:0">
+<div style="border-right:1px solid var(--color-divider);display:flex;flex-direction:column;align-items:stretch;padding-top:6px;background:var(--color-bg)">
+<sc-for list="{{ rail }}" as="r" hint-placeholder-count="8"><div style="display:flex;flex-direction:column;align-items:center;gap:2px;padding:6px 0;font-size:8.5px;color:var(--color-neutral-700)"><span style="width:18px;height:18px;border:1px solid var(--color-neutral-500)"></span>{{ r }}</div></sc-for>
+</div>
+<div style="border-right:1px solid var(--color-divider);padding:10px;display:flex;flex-direction:column;gap:6px;background:#fff;box-shadow:var(--shadow-md);position:relative;z-index:1">
+<div style="display:flex;justify-content:space-between"><b style="font:600 13px var(--font-heading)">Tracé</b><span>✕</span></div>
+<sc-for list="{{ trace }}" as="f" hint-placeholder-count="6"><div style="display:flex;justify-content:space-between;align-items:center;gap:6px"><span>{{ f.l }}</span><span style="border:1px solid var(--color-neutral-400);padding:1px 6px;min-width:64px;text-align:right">{{ f.v }}</span></div></sc-for>
+<div style="border:1px dashed var(--color-neutral-400);padding:6px;color:var(--color-neutral-600)">Tournant 1 · marches balancées · jour arrondi R 250 ▸</div>
+<span style="color:var(--color-accent-700)">+ Ajouter une volée</span>
+<span style="flex:1"></span>
+<span style="color:var(--color-neutral-600)">Un seul panneau ouvert à la fois ; il se ferme ou s'épingle.</span>
+</div>
+<div style="position:relative;margin:10px;background:repeating-linear-gradient(135deg,var(--color-neutral-200) 0 1px,transparent 1px 9px);border:1px solid var(--color-divider);display:flex;align-items:center;justify-content:center">
+<span style="font:500 10px ui-monospace,monospace;color:var(--color-neutral-600);background:var(--color-neutral-100);padding:3px 6px">PLAN · pleine hauteur, sans barre d'état</span>
+<span style="position:absolute;left:8px;bottom:8px;display:flex;gap:10px;background:#fff;border:1px solid var(--color-divider);padding:3px 8px;font-variant-numeric:tabular-nums;color:var(--color-neutral-700)"><span>n 15</span><span>h 180</span><span>g 245</span><span>2h+g 605</span><span>E 900</span></span>
+</div>
+<div style="border-left:1px solid var(--color-divider);padding:10px;display:flex;flex-direction:column;gap:7px">
+<span style="font:600 9px ui-monospace,monospace;color:var(--color-neutral-500)">SÉLECTION</span>
+<b style="font:600 14px var(--font-heading);color:#c85a00">Marche 3 · balancée</b>
+<div style="display:grid;grid-template-columns:1fr auto;gap:3px 8px;font-variant-numeric:tabular-nums"><span>Giron</span><span>245 mm</span><span>Collet</span><span>108 mm</span><span>Hauteur</span><span>180 mm</span><span>Angle du nez</span><span>32,4° ✎</span></div>
+<span style="font:600 9px ui-monospace,monospace;color:var(--color-neutral-500);margin-top:6px">RÈGLES SUR CET ÉLÉMENT</span>
+<div style="border:1px solid var(--color-divider);border-left:3px solid var(--color-accent-700);padding:6px;background:#fff">Échappée 1 901 mm · conseillé ≥ 2 100</div>
+<span style="font:600 9px ui-monospace,monospace;color:var(--color-neutral-500);margin-top:6px">PIÈCES LIÉES</span>
+<span style="color:var(--color-accent-700)">M3 marche chêne · CR3 cornière · LD1</span>
+<span style="flex:1"></span>
+<span style="color:var(--color-neutral-600)">Sans sélection : fiche du projet (H, E, typologie, masse, EXC) et contrôle complet.</span>
+</div>
+</div>
+</div>
+<sc-if value="{{ notes }}" hint-placeholder-val="{{ true }}"><ol style="margin:0;padding-left:18px;max-width:940px;font-size:12.5px;line-height:1.5;color:var(--color-neutral-800)">
+<li>La sélection partagée devient l'axe de l'interface : l'inspecteur montre les valeurs, les règles et les pièces de l'élément cliqué, et permet d'y agir sur place (le mode expert est fondu dans l'inspecteur).</li>
+<li>Rail de 8 sections : on n'ouvre qu'un panneau à la fois, ce qui supprime le formulaire de 8 600 px.</li>
+<li>Contrôle résumé en badge dans la barre (▲ 1 · ● 1) ; un clic ouvre la liste complète à la place de l'inspecteur.</li>
+<li>Le risque : les réglages globaux sont moins visibles d'un coup d'œil. Je le compenserais avec la fiche du projet affichée quand rien n'est sélectionné.</li>
+</ol></sc-if>
+</div>
+
+<!-- 1c -->
+<div class="dv-opt" id="1c">
+<div class="dv-olabel"><a class="dv-oid" href="#1c">1c</a>Parcours par étapes</div>
+<div class="dv-card" style="width:960px;height:600px;display:grid;grid-template-rows:36px 44px 1fr 34px;grid-template-columns:minmax(0,1fr);font-size:10.5px">
+<div style="display:flex;align-items:center;gap:12px;padding:0 12px;border-bottom:1px solid var(--color-divider);background:var(--color-bg)">
+<b style="font:600 15px var(--font-heading);letter-spacing:.04em">BLONDEL</b><span style="font-weight:500">Quart tournant débillardé soudé ▾</span><span style="flex:1"></span><span style="border:1px solid var(--color-neutral-400);padding:2px 7px">↶ ↷</span><span style="border:1px solid var(--color-neutral-400);padding:3px 9px">⋯</span>
+</div>
+<div style="display:grid;grid-template-columns:repeat(7,1fr);border-bottom:1px solid var(--color-divider)">
+<sc-for list="{{ steps }}" as="st" hint-placeholder-count="7"><div style="display:flex;align-items:center;gap:6px;padding:0 10px;border-right:1px solid var(--color-divider);border-bottom:{{ st.bb }};background:{{ st.bg }}"><span style="width:18px;height:18px;border:1px solid var(--color-neutral-500);display:flex;align-items:center;justify-content:center;font:600 9px ui-monospace,monospace">{{ st.n }}</span><span style="display:flex;flex-direction:column"><b>{{ st.t }}</b><span style="color:var(--color-neutral-600);font-size:9px">{{ st.s }}</span></span></div></sc-for>
+</div>
+<div style="display:grid;grid-template-columns:300px minmax(0,1fr);min-height:0">
+<div style="border-right:1px solid var(--color-divider);padding:12px;display:flex;flex-direction:column;gap:7px">
+<b style="font:600 16px var(--font-heading)">3 · Découpage</b>
+<span style="color:var(--color-neutral-600)">Combien de marches, et de quelle taille.</span>
+<sc-for list="{{ decoupe }}" as="f" hint-placeholder-count="4"><div style="display:flex;justify-content:space-between;align-items:center;gap:6px"><span>{{ f.l }}</span><span style="border:1px solid var(--color-neutral-400);background:#fff;padding:1px 6px;min-width:70px;text-align:right">{{ f.v }}</span></div></sc-for>
+<div style="border:1px solid var(--color-divider);padding:8px;display:grid;grid-template-columns:repeat(3,1fr);gap:4px;text-align:center;background:#fff;font-variant-numeric:tabular-nums"><span><b style="font-size:14px">15</b><br>n</span><span><b style="font-size:14px">180</b><br>h mm</span><span><b style="font-size:14px">605</b><br>2h+g · 60–64</span></div>
+<span style="flex:1"></span>
+<span style="color:var(--color-neutral-600)">▸ Réglages avancés (correction de la 1re hauteur)</span>
+</div>
+<div style="display:flex;flex-direction:column;min-height:0">
+<div style="display:flex;gap:12px;padding:6px 12px;color:var(--color-neutral-600)"><span>Vue conseillée : <b style="color:var(--color-text)">Élévation</b></span><span>Plan</span><span>3D</span></div>
+<div style="flex:1;margin:0 10px 10px;background:repeating-linear-gradient(135deg,var(--color-neutral-200) 0 1px,transparent 1px 9px);border:1px solid var(--color-divider);display:flex;align-items:center;justify-content:center"><span style="font:500 10px ui-monospace,monospace;color:var(--color-neutral-600);background:var(--color-neutral-100);padding:3px 6px">ÉLÉVATION · hauteurs de marche et échappée</span></div>
+</div>
+</div>
+<div style="display:flex;align-items:center;gap:12px;padding:0 12px;border-top:1px solid var(--color-divider);background:var(--color-bg)">
+<span style="color:#9a6200;font-weight:600">▲ 1 avertissement</span><span style="color:var(--color-accent-700)">● 1 conseil</span><span style="color:var(--color-neutral-600)">Contrôle ▴</span><span style="flex:1"></span>
+<span style="border:1px solid var(--color-neutral-400);padding:3px 10px">← Forme</span><span style="background:var(--color-accent);color:#fff;padding:4px 12px">Marches →</span>
+</div>
+</div>
+<sc-if value="{{ notes }}" hint-placeholder-val="{{ true }}"><ol style="margin:0;padding-left:18px;max-width:940px;font-size:12.5px;line-height:1.5;color:var(--color-neutral-800)">
+<li>Les 8 sections deviennent 7 étapes libres (pas un tunnel) : chacune affiche son état et un résumé, et on peut cliquer n'importe laquelle.</li>
+<li>Chaque étape ouvre la vue la plus utile : Site sur le plan « Site et saisie », Découpage sur l'élévation, Structure sur la 3D.</li>
+<li>L'assistant devient le point d'entrée de l'étape 1, et la dernière étape, « Fabrication », rassemble développés, nomenclature et exports.</li>
+<li>C'est la piste la plus lisible pour le visiteur ; elle est plus lente pour l'artisan qui retouche un seul réglage.</li>
+</ol></sc-if>
+</div>
+
+<!-- 1d -->
+<div class="dv-opt" id="1d">
+<div class="dv-olabel"><a class="dv-oid" href="#1d">1d</a>Deux modes : Conception / Fabrication (vue Fabrication)</div>
+<div class="dv-card" style="width:960px;height:600px;display:grid;grid-template-rows:36px 1fr;grid-template-columns:minmax(0,1fr);font-size:10.5px">
+<div style="display:flex;align-items:center;gap:12px;padding:0 12px;border-bottom:1px solid var(--color-divider);background:var(--color-bg)">
+<b style="font:600 15px var(--font-heading);letter-spacing:.04em">BLONDEL</b><span style="font-weight:500">Quart tournant débillardé soudé ▾</span>
+<span style="flex:1"></span>
+<span style="display:flex;border:1px solid var(--color-text)"><span style="padding:4px 14px">Conception</span><b style="padding:4px 14px;background:var(--color-text);color:var(--color-bg)">Fabrication</b></span>
+<span style="flex:1"></span>
+<span style="border:1px solid var(--color-neutral-400);padding:2px 7px">↶ ↷</span><span style="border:1px solid var(--color-neutral-400);padding:3px 9px">⋯</span>
+</div>
+<div style="display:grid;grid-template-columns:230px minmax(0,1fr) 270px;min-height:0">
+<div style="border-right:1px solid var(--color-divider);padding:10px;display:flex;flex-direction:column;gap:6px;overflow:hidden">
+<div style="display:flex;border:1px solid var(--color-neutral-400)"><b style="flex:1;text-align:center;padding:2px;background:var(--color-accent-200)">Pièces</b><span style="flex:1;text-align:center;padding:2px">Nomencl.</span><span style="flex:1;text-align:center;padding:2px">Comparer</span></div>
+<span style="border:1px solid var(--color-neutral-400);background:#fff;padding:3px 6px;color:var(--color-neutral-500)">Filtrer : repère, matériau…</span>
+<sc-for list="{{ pieces }}" as="p" hint-placeholder-count="6"><div style="display:flex;flex-direction:column;gap:2px;padding:4px 0;border-top:1px solid var(--color-divider)"><div style="display:flex;justify-content:space-between"><b>{{ p.g }}</b><span style="color:var(--color-neutral-600)">{{ p.n }}</span></div><span style="color:var(--color-neutral-700)">{{ p.r }}</span></div></sc-for>
+</div>
+<div style="display:flex;flex-direction:column;min-height:0">
+<div style="display:flex;align-items:center;gap:10px;padding:8px 12px;border-bottom:1px solid var(--color-divider)"><b style="font:600 13px var(--font-heading);color:#c85a00">LD2</b><span>Limon de jour débillardé, tronçon 2/3 · tôle 8 mm S235 · 13,2 kg</span><span style="flex:1"></span><span style="border:1px solid var(--color-neutral-400);padding:2px 8px">DXF R12</span></div>
+<div style="flex:1;margin:10px;background:repeating-linear-gradient(135deg,var(--color-neutral-200) 0 1px,transparent 1px 9px);border:1px solid var(--color-divider);display:flex;align-items:center;justify-content:center"><span style="font:500 10px ui-monospace,monospace;color:var(--color-neutral-600);background:var(--color-neutral-100);padding:3px 6px">GABARIT COTÉ DU DÉVELOPPÉ · zoom et déplacement</span></div>
+<div style="display:flex;gap:14px;padding:0 12px 10px;color:var(--color-neutral-700)"><span>Joints : J2 LD1↔LD2 · J3 LD2↔LD3 (cordon 325 mm)</span></div>
+</div>
+<div style="border-left:1px solid var(--color-divider);padding:10px;display:flex;flex-direction:column;gap:8px">
+<b style="font:600 13px var(--font-heading)">Sorties</b>
+<div class="blueprint" style="padding:8px;display:flex;flex-direction:column;gap:5px"><i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+<b>Dossier PDF</b>
+<span style="display:flex;gap:4px"><span style="border:1px solid var(--color-neutral-400);padding:1px 6px;background:var(--color-accent-200)">A4</span><span style="border:1px solid var(--color-neutral-400);padding:1px 6px">A3</span></span>
+<span>☑ Plans et élévation</span><span>☑ Gabarits limons et structure</span><span>☐ Gabarits marches</span><span>☐ Gabarits garde-corps</span>
+<span style="background:var(--color-accent);color:#fff;padding:4px;text-align:center">Générer le dossier</span>
+</div>
+<span>Fiche de pose (PDF)</span><span>Liste de débit (CSV)</span><span>DXF de toutes les pièces</span>
+<div style="border:1px dashed var(--color-neutral-500);padding:7px;display:flex;flex-direction:column;gap:3px;margin-top:4px"><b>Coût estimé : masqué</b><span style="color:var(--color-neutral-600)">Barème d'atelier 0 / 9</span><span style="color:var(--color-accent-700)">Compléter le profil d'atelier →</span></div>
+</div>
+</div>
+</div>
+<sc-if value="{{ notes }}" hint-placeholder-val="{{ true }}"><ol style="margin:0;padding-left:18px;max-width:940px;font-size:12.5px;line-height:1.5;color:var(--color-neutral-800)">
+<li>La bascule sépare deux moments du métier : <b>concevoir</b> (paramètres, plan, 3D, élévation, contrôle ; mise en page <a class="dv-oid" href="#1a">1a</a> ou <a class="dv-oid" href="#1b">1b</a>) et <b>fabriquer</b> (pièces, gabarits, sorties).</li>
+<li>En Fabrication, les réglages d'atelier (pinces, marges, platines) sont proposés sur la pièce concernée plutôt que dans le formulaire général.</li>
+<li>Le Dossier PDF devient un constructeur (format et familles de gabarits) au lieu de 6 entrées de menu ; le profil d'atelier y est proposé sur place.</li>
+</ol></sc-if>
+</div>
+
+<!-- 1e -->
+<div class="dv-opt" id="1e">
+<div class="dv-olabel"><a class="dv-oid" href="#1e">1e</a>Grand écran 1920 — <a class="dv-oid" href="#1a">1a</a> avec vue double</div>
+<div class="dv-card" style="width:1280px;height:720px;display:grid;grid-template-rows:36px 1fr 24px;grid-template-columns:minmax(0,1fr);font-size:10.5px">
+<div style="display:flex;align-items:center;gap:12px;padding:0 12px;border-bottom:1px solid var(--color-divider);background:var(--color-bg)"><b style="font:600 15px var(--font-heading);letter-spacing:.04em">BLONDEL</b><span style="font-weight:500">Quart tournant débillardé soudé ▾</span><span style="color:var(--color-neutral-600)">● Enregistré</span><span style="flex:1"></span><span style="border:1px solid var(--color-neutral-400);padding:2px 7px">↶ ↷</span><span style="border:1px solid var(--color-neutral-400);padding:3px 9px">Nouveau ▾</span><span style="border:1px solid var(--color-neutral-400);padding:3px 9px">Importer ▾</span><span style="background:var(--color-accent);color:#fff;padding:4px 11px">Exporter ▾</span><span style="border:1px solid var(--color-neutral-400);padding:3px 8px">⋯</span></div>
+<div style="display:grid;grid-template-columns:280px minmax(0,1fr) minmax(0,1fr) 290px;min-height:0">
+<div style="border-right:1px solid var(--color-divider);padding:10px;display:flex;flex-direction:column;gap:8px"><b style="font:600 13px var(--font-heading)">Paramètres</b><div style="flex:1;border:1px dashed var(--color-neutral-400);display:flex;align-items:center;justify-content:center;color:var(--color-neutral-600)">comme <a class="dv-oid" href="#1f" style="margin-left:4px">1f</a></div></div>
+<div style="display:flex;flex-direction:column;border-right:1px solid var(--color-divider)"><div style="display:flex;gap:12px;padding:8px 12px;border-bottom:1px solid var(--color-divider)"><b>Plan ▾</b><span style="color:var(--color-neutral-600)">Coté · Site · Expert</span></div><div style="flex:1;margin:10px;background:repeating-linear-gradient(135deg,var(--color-neutral-200) 0 1px,transparent 1px 9px);border:1px solid var(--color-divider);display:flex;align-items:center;justify-content:center"><span style="font:500 10px ui-monospace,monospace;color:var(--color-neutral-600);background:var(--color-neutral-100);padding:3px 6px">PLAN</span></div></div>
+<div style="display:flex;flex-direction:column"><div style="display:flex;gap:12px;padding:8px 12px;border-bottom:1px solid var(--color-divider)"><b>3D ▾</b><span style="color:var(--color-neutral-600)">sélection synchronisée</span><span style="flex:1"></span><span>⇆ Vue unique</span></div><div style="flex:1;margin:10px;background:repeating-linear-gradient(135deg,var(--color-neutral-200) 0 1px,transparent 1px 9px);border:1px solid var(--color-divider);display:flex;align-items:center;justify-content:center"><span style="font:500 10px ui-monospace,monospace;color:var(--color-neutral-600);background:var(--color-neutral-100);padding:3px 6px">3D</span></div></div>
+<div style="border-left:1px solid var(--color-divider);padding:10px;display:flex;flex-direction:column;gap:8px"><b style="font:600 13px var(--font-heading)">Contrôle de conception</b><div style="flex:1;border:1px dashed var(--color-neutral-400);display:flex;align-items:center;justify-content:center;color:var(--color-neutral-600)">comme <a class="dv-oid" href="#1g" style="margin-left:4px">1g</a></div></div>
+</div>
+<div style="display:flex;align-items:center;gap:14px;padding:0 12px;border-top:1px solid var(--color-divider);background:var(--color-bg);color:var(--color-neutral-700)"><span>n 15</span><span>h 180</span><span>g 245</span><span>2h+g 605</span><span>Échappée 1 901 / 1 960</span><span style="flex:1"></span><span>Calculé en 78 ms</span></div>
+</div>
+<sc-if value="{{ notes }}" hint-placeholder-val="{{ true }}"><ol style="margin:0;padding-left:18px;max-width:1260px;font-size:12.5px;line-height:1.5;color:var(--color-neutral-800)">
+<li>Dès 1680 px, la zone centrale se partage en deux vues au choix (Plan + 3D par défaut), avec la sélection synchronisée ; un bouton ⇆ revient à la vue unique.</li>
+<li>Les colonnes latérales s'élargissent (280 et 290 px) pour que les libellés longs ne passent plus à la ligne. En 1440, on reste sur <a class="dv-oid" href="#1a">1a</a>.</li>
+</ol></sc-if>
+</div>
+</div>
+
+<div style="font:600 11px ui-monospace,Menlo,monospace;letter-spacing:.08em;text-transform:uppercase;color:var(--color-neutral-600);margin:56px 0 14px">Zones · une proposition chacune</div>
+<div class="dv-opts">
+
+<!-- 1f -->
+<div class="dv-opt" id="1f">
+<div class="dv-olabel"><a class="dv-oid" href="#1f">1f</a>Panneau des paramètres : essentiel / atelier</div>
+<div class="dv-card" style="width:340px;padding:12px;display:flex;flex-direction:column;gap:9px;font-size:11px">
+<div style="display:flex;justify-content:space-between;align-items:center"><b style="font:600 14px var(--font-heading)">Structure</b><span style="color:var(--color-neutral-600)">▾</span></div>
+<div style="display:flex;justify-content:space-between;align-items:center"><span>Type</span><span style="border:1px solid var(--color-neutral-400);background:#fff;padding:2px 6px">Débillardé soudé ▾</span></div>
+<div style="display:flex;justify-content:space-between;align-items:center"><span>Nuance d'acier</span><span style="border:1px solid var(--color-neutral-400);background:#fff;padding:2px 6px">S235 · EXC2 ▾</span></div>
+<div style="display:flex;justify-content:space-between;align-items:center"><span>Épaisseur des limons</span><span style="border:1px solid #9a6200;background:#fff;padding:2px 6px">8 <span style="color:var(--color-neutral-600)">mm</span></span></div>
+<span style="color:#9a6200;font-size:10px;margin-top:-6px;text-align:right">◆ valeur par défaut à valider</span>
+<div style="display:flex;justify-content:space-between;align-items:center"><span>Dépassement bas d_b</span><span style="display:flex;border:1px solid var(--color-neutral-400);background:#fff"><b style="padding:2px 6px;background:var(--color-accent-200)">Auto</b><span style="padding:2px 6px;color:var(--color-neutral-600)">275 mm</span></span></div>
+<div style="display:flex;justify-content:space-between;align-items:center"><span>Dépassement haut d_h</span><span style="display:flex;align-items:center;gap:4px"><span style="border:2px solid var(--color-accent);background:#fff;padding:1px 6px">60▍ <span style="color:var(--color-neutral-600)">mm</span></span><span style="color:var(--color-neutral-500)">↵</span></span></div>
+<span style="font-size:10px;color:var(--color-neutral-600);margin-top:-6px;text-align:right">Entrée ou sortie du champ pour appliquer · Échap annule</span>
+<div style="border:1px solid var(--color-divider);padding:8px;display:flex;flex-direction:column;gap:4px;background:var(--color-bg)">
+<div style="display:flex;justify-content:space-between"><b>▸ Réglages d'atelier</b><span style="color:var(--color-neutral-600)">14 · <span style="color:#9a6200">3 ◆</span></span></div>
+<span style="color:var(--color-neutral-600)">Poteau, supports de marche, platines, tôle pliée, rives du débillardé</span>
+</div>
+<div style="border-top:1px solid var(--color-divider);padding-top:8px;display:flex;flex-direction:column;gap:3px;opacity:.6"><b>Balancement</b><span>Sans objet sur un escalier droit : ajoutez un tournant dans Tracé.</span></div>
+</div>
+<sc-if value="{{ notes }}" hint-placeholder-val="{{ true }}"><ol style="margin:0;padding-left:18px;width:320px;font-size:12.5px;line-height:1.5;color:var(--color-neutral-800)">
+<li>Champs automatiques : un seul contrôle « Auto | valeur calculée ». Un clic sur la valeur la fixe ; plus de libellé répété.</li>
+<li>Pendant la saisie, un liseré accent et ↵ indiquent que la valeur n'est pas encore appliquée. Après calcul, le champ modifié clignote brièvement, et les valeurs dérivées aussi.</li>
+<li>Les réglages d'atelier sont regroupés et repliés avec un compteur ; ◆ marque les valeurs par défaut à valider, dans la section comme dans son résumé.</li>
+<li>Une section sans objet est désactivée et dit comment la rendre utile.</li>
+</ol></sc-if>
+</div>
+
+<!-- 1g -->
+<div class="dv-opt" id="1g">
+<div class="dv-olabel"><a class="dv-oid" href="#1g">1g</a>Contrôle de conception</div>
+<div class="dv-card" style="width:320px;padding:12px;display:flex;flex-direction:column;gap:9px;font-size:11px">
+<div style="display:flex;justify-content:space-between;align-items:baseline"><b style="font:600 14px var(--font-heading)">Contrôle de conception</b><span style="color:var(--color-neutral-600)">Strict ▾</span></div>
+<span style="color:var(--color-neutral-600);font-size:10px">Logement intérieur · bois (DTU 36.3) · garde-corps 2024 · règles v1</span>
+<div style="display:grid;grid-template-columns:repeat(4,1fr);border:1px solid var(--color-divider)"><span style="padding:5px;text-align:center;color:var(--color-neutral-500)">0<br>Bloquant</span><span style="padding:5px;text-align:center;border-left:1px solid var(--color-divider);background:#fff;color:#9a6200;font-weight:700">1<br>Avert.</span><span style="padding:5px;text-align:center;border-left:1px solid var(--color-divider);color:var(--color-accent-700)">1<br>Conseil</span><span style="padding:5px;text-align:center;border-left:1px solid var(--color-divider);color:#2e7d32">81<br>Respect.</span></div>
+<div style="border:2px solid #ff7a1a;padding:8px;display:flex;flex-direction:column;gap:4px;background:#fff">
+<div style="display:flex;justify-content:space-between"><b style="color:#9a6200">▲ Avertissement</b><span style="color:var(--color-neutral-600)">Limon LE1</span></div>
+<span style="font-size:12px">Longueur d'appui trop courte sous la marche 6</span>
+<span style="font-variant-numeric:tabular-nums">Mesuré <b>37,2 mm</b> · attendu ≥ 50 mm</span>
+<span style="color:var(--color-neutral-600);font-size:10px">Règle de l'art · confiance faible · <span style="font-family:ui-monospace,monospace">fab_support_longueur_min</span></span>
+<div style="display:flex;gap:10px;margin-top:3px"><span style="color:var(--color-accent-700)">Voir dans la 3D</span><span style="color:var(--color-accent-700)">Surcharger…</span></div>
+</div>
+<div style="border:1px solid var(--color-divider);padding:8px;display:flex;flex-direction:column;gap:3px;background:#fff"><b style="color:var(--color-accent-700)">● Conseil</b><span>Échappée sous la recommandation : 1 901 mm, conseillé ≥ 2 100 mm</span></div>
+<span style="color:var(--color-neutral-600)">▸ 7 règles non évaluées · ▸ 81 respectées · ▸ 11 remarques</span>
+<div style="border-top:1px solid var(--color-divider);padding-top:7px;display:flex;justify-content:space-between"><b>▸ Prédimensionnement</b><span style="color:#2e7d32">EXC2 · 5/5 ✓</span></div>
+<i style="color:var(--color-neutral-600);font-size:10px">Contrôle indicatif : il ne vaut pas attestation de conformité.</i>
+</div>
+<sc-if value="{{ notes }}" hint-placeholder-val="{{ true }}"><ol style="margin:0;padding-left:18px;width:300px;font-size:12.5px;line-height:1.5;color:var(--color-neutral-800)">
+<li>Les compteurs servent de filtres. Les groupes vides disparaissent, et quand tout va bien la colonne l'annonce en une ligne.</li>
+<li>Le message, en langage courant, vient en premier ; l'identifiant passe en minuscules à chasse fixe, en queue de carte.</li>
+<li>Les métadonnées sont traduites (« metier » devient « Règle de l'art »), et les contextes de contrôle ont des libellés accentués et lisibles.</li>
+<li>La mention indicative reste en pied de colonne, toujours visible.</li>
+</ol></sc-if>
+</div>
+
+<!-- 1h -->
+<div class="dv-opt" id="1h">
+<div class="dv-olabel"><a class="dv-oid" href="#1h">1h</a>Menu Exporter regroupé</div>
+<div class="dv-card" style="width:420px;padding:14px;background:var(--color-bg);font-size:11px">
+<div style="display:flex;justify-content:flex-end;margin-bottom:6px"><span style="background:var(--color-accent);color:#fff;padding:4px 11px">Exporter ▴</span></div>
+<div style="margin-left:auto;width:340px;background:#fff;border:1px solid var(--color-divider);box-shadow:var(--shadow-lg);display:flex;flex-direction:column">
+<div style="padding:8px 10px;border-bottom:1px solid var(--color-divider);display:flex;flex-direction:column;gap:5px">
+<span style="font:600 9px ui-monospace,monospace;color:var(--color-neutral-500)">ATELIER</span>
+<div style="display:flex;justify-content:space-between"><b>Dossier PDF…</b><span style="color:var(--color-neutral-600)">format, gabarits ▸</span></div>
+<span>Fiche de pose (PDF)</span><span>Liste de débit (CSV)</span><span>DXF de toutes les pièces (R12)</span>
+<span style="color:var(--color-neutral-500)">DXF de la pièce sélectionnée — <i>sélectionnez une pièce</i></span>
+</div>
+<div style="padding:8px 10px;border-bottom:1px solid var(--color-divider);display:flex;flex-direction:column;gap:5px">
+<span style="font:600 9px ui-monospace,monospace;color:var(--color-neutral-500)">CAO ET PLANS</span>
+<div style="display:flex;justify-content:space-between"><span>Plan coté</span><span style="display:flex;gap:3px"><span style="border:1px solid var(--color-neutral-400);padding:0 5px">DXF 2007</span><span style="border:1px solid var(--color-neutral-400);padding:0 5px">R12</span><span style="border:1px solid var(--color-neutral-400);padding:0 5px">SVG</span></span></div>
+<span>Élévation (SVG)</span><span>Modèle 3D (glTF .glb)</span>
+</div>
+<div style="padding:8px 10px;display:flex;flex-direction:column;gap:5px">
+<span style="font:600 9px ui-monospace,monospace;color:var(--color-neutral-500)">PROJET</span>
+<span>Fichier projet (.blondel.json)</span>
+</div>
+</div>
+<div style="margin:10px 0 0 auto;width:340px;background:#fff;border:1px solid var(--color-divider);box-shadow:var(--shadow-md);padding:10px;display:flex;flex-direction:column;gap:6px">
+<b>Dossier PDF</b>
+<div style="display:flex;gap:6px;align-items:center"><span style="width:60px">Format</span><span style="border:1px solid var(--color-neutral-400);padding:1px 6px;background:var(--color-accent-200)">A4</span><span style="border:1px solid var(--color-neutral-400);padding:1px 6px">A3</span></div>
+<div style="display:flex;gap:6px;align-items:flex-start"><span style="width:60px">Gabarits 1:1</span><span style="display:flex;flex-direction:column;gap:2px"><span>☑ Limons et structure</span><span style="color:var(--color-neutral-500)">☐ Marches — aucun gabarit</span><span style="color:var(--color-neutral-500)">☐ Garde-corps — aucun gabarit</span></span></div>
+<div style="display:flex;justify-content:flex-end"><span style="background:var(--color-accent);color:#fff;padding:4px 12px">Télécharger</span></div>
+</div>
+</div>
+<sc-if value="{{ notes }}" hint-placeholder-val="{{ true }}"><ol style="margin:0;padding-left:18px;width:400px;font-size:12.5px;line-height:1.5;color:var(--color-neutral-800)">
+<li>Les 16 entrées tiennent en 3 groupes d'usage ; les 6 dossiers PDF deviennent une seule entrée qui se règle (A4/A3, familles de gabarits, ou aucune pour le dossier sans gabarits).</li>
+<li>Les variantes de format d'un même plan sont des pastilles sur la même ligne.</li>
+<li>Le menu est aligné sur le bord droit du bouton (il ne déborde plus) ; la raison d'une indisponibilité est écrite en clair, pas en infobulle.</li>
+</ol></sc-if>
+</div>
+
+<!-- 1i -->
+<div class="dv-opt" id="1i">
+<div class="dv-olabel"><a class="dv-oid" href="#1i">1i</a>Assistant : saisie guidée, propositions comparables</div>
+<div class="dv-card" style="width:720px;height:460px;display:grid;grid-template-rows:40px 1fr 44px;font-size:11px;background:#fff">
+<div style="display:flex;align-items:center;gap:10px;padding:0 14px;border-bottom:1px solid var(--color-divider)"><b style="font:600 15px var(--font-heading)">Nouvel escalier</b><span style="color:var(--color-neutral-600)">Assistant</span><span style="flex:1"></span><span>✕</span></div>
+<div style="display:grid;grid-template-columns:230px 1fr;min-height:0">
+<div style="border-right:1px solid var(--color-divider);padding:12px;display:flex;flex-direction:column;gap:8px;background:var(--color-bg)">
+<div style="display:flex;justify-content:space-between"><b>✓ 1 · Niveaux</b><span style="color:var(--color-neutral-600)">H 2 700 · dalle 200</span></div>
+<div style="display:flex;justify-content:space-between"><b>✓ 2 · Trémie</b><span style="color:var(--color-neutral-600)">1 100 × 3 150</span></div>
+<div style="border:1px solid var(--color-accent);background:#fff;padding:8px;display:flex;flex-direction:column;gap:5px"><b>3 · Murs</b><span>☑ Côté gauche · 3 150 mm</span><span>☐ Côté bas · 1 100 mm</span><span>☐ Côté droit · 3 150 mm</span><div style="height:60px;background:repeating-linear-gradient(135deg,var(--color-neutral-200) 0 1px,transparent 1px 7px);border:1px solid var(--color-divider);display:flex;align-items:center;justify-content:center;font:500 9px ui-monospace,monospace;color:var(--color-neutral-600)">SCHÉMA TRÉMIE + MURS</div></div>
+<span style="color:var(--color-neutral-600)">4 · Contexte</span><span style="color:var(--color-neutral-600)">5 · Préférences (facultatif)</span>
+</div>
+<div style="padding:12px;display:flex;flex-direction:column;gap:8px;min-height:0">
+<div style="display:flex;justify-content:space-between"><b>9 propositions conformes</b><span style="color:var(--color-neutral-600)">Trier : score ▾ · ⇆ comparer</span></div>
+<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">
+<sc-for list="{{ props }}" as="p" hint-placeholder-count="3"><div style="border:1px solid var(--color-divider);display:flex;flex-direction:column"><div style="height:74px;background:repeating-linear-gradient(135deg,var(--color-neutral-200) 0 1px,transparent 1px 7px);display:flex;align-items:center;justify-content:center;font:500 9px ui-monospace,monospace;color:var(--color-neutral-600)">CROQUIS EN PLAN</div><div style="padding:7px;display:flex;flex-direction:column;gap:3px"><b>{{ p.t }}</b><span style="font-variant-numeric:tabular-nums;color:var(--color-neutral-700)">{{ p.v }}</span><span style="color:{{ p.c }}">{{ p.w }}</span><span style="color:var(--color-accent-700)">▸ {{ p.var }}</span></div></div></sc-for>
+</div>
+<span style="color:var(--color-neutral-600)">Les propositions se recalculent à chaque étape validée, sans bouton « Proposer ».</span>
+</div>
+</div>
+<div style="display:flex;align-items:center;gap:10px;padding:0 14px;border-top:1px solid var(--color-divider)"><span style="color:var(--color-neutral-600)">Remplace le projet en cours (annulable)</span><span style="flex:1"></span><span style="border:1px solid var(--color-neutral-400);padding:4px 10px">Annuler</span><span style="background:var(--color-accent);color:#fff;padding:5px 12px">Choisir la proposition 1</span></div>
+</div>
+<sc-if value="{{ notes }}" hint-placeholder-val="{{ true }}"><ol style="margin:0;padding-left:18px;width:700px;font-size:12.5px;line-height:1.5;color:var(--color-neutral-800)">
+<li>La saisie se fait en étapes repliables qui gardent leur résumé ; le pied de fenêtre est fixe, donc plus de bouton masqué par le contenu.</li>
+<li>Mêmes libellés que le panneau des paramètres (« Épaisseur du plancher haut », axes X/Y identiques).</li>
+<li>« ⇆ comparer » aligne 2 à 3 propositions en colonnes, avec les mêmes grandeurs et le même ordre.</li>
+</ol></sc-if>
+</div>
+
+<!-- 1j -->
+<div class="dv-opt" id="1j">
+<div class="dv-olabel"><a class="dv-oid" href="#1j">1j</a>Un seul modèle de fenêtre (ici Profil d'atelier)</div>
+<div class="dv-card" style="width:480px;font-size:11px;background:#fff;display:flex;flex-direction:column">
+<div style="display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--color-divider)"><b style="font:600 15px var(--font-heading)">Profil d'atelier</b><span style="color:var(--color-neutral-600)">gardé dans ce navigateur</span><span style="flex:1"></span><span>✕</span></div>
+<div style="padding:12px 14px;display:flex;flex-direction:column;gap:9px">
+<div style="display:flex;align-items:center;gap:8px"><span style="flex:1;height:6px;border:1px solid var(--color-neutral-400);background:linear-gradient(90deg,var(--color-accent) 33%,transparent 33%)"></span><span>3 / 9 — coûts masqués jusqu'à 9 / 9</span></div>
+<span style="font:600 9px ui-monospace,monospace;color:var(--color-neutral-500)">MAIN-D'ŒUVRE</span>
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px 12px">
+<sc-for list="{{ rates }}" as="r" hint-placeholder-count="6"><div style="display:flex;flex-direction:column;gap:2px"><span>{{ r.l }}</span><span style="border:1px solid var(--color-neutral-400);padding:2px 6px;text-align:right;color:{{ r.c }}">{{ r.v }}</span></div></sc-for>
+</div>
+<span style="font:600 9px ui-monospace,monospace;color:var(--color-neutral-500)">MATIÈRE ET FINITION</span>
+<span style="color:var(--color-neutral-600)">Acier · Bois · Finition — 3 champs ▸</span>
+</div>
+<div style="display:flex;align-items:center;gap:8px;padding:10px 14px;border-top:1px solid var(--color-divider);background:var(--color-bg)"><span style="color:var(--color-accent-700)">Importer JSON</span><span style="color:var(--color-accent-700)">Exporter JSON</span><span style="flex:1"></span><span style="border:1px solid var(--color-neutral-400);padding:4px 10px">Fermer</span></div>
+</div>
+<sc-if value="{{ notes }}" hint-placeholder-val="{{ true }}"><ol style="margin:0;padding-left:18px;width:460px;font-size:12.5px;line-height:1.5;color:var(--color-neutral-800)">
+<li>Même grammaire pour l'assistant, l'atelier et les surcharges : en-tête (titre, portée, ✕), corps qui défile, pied fixe (actions secondaires à gauche, principale à droite).</li>
+<li>Deux tailles seulement : moyenne (atelier) et large (assistant).</li>
+<li>La progression 3 / 9 explique d'un coup d'œil pourquoi les coûts sont masqués ailleurs.</li>
+</ol></sc-if>
+</div>
+
+<!-- 1k -->
+<div class="dv-opt" id="1k">
+<div class="dv-olabel"><a class="dv-oid" href="#1k">1k</a>États d'erreur et états de vue</div>
+<div class="dv-card" style="width:560px;padding:12px;display:flex;flex-direction:column;gap:10px;font-size:11px">
+<div style="border:1px solid #b3261e;background:#fff;display:flex;flex-direction:column">
+<div style="display:flex;gap:8px;align-items:center;padding:7px 10px;background:color-mix(in srgb,#b3261e 8%,#fff)"><b style="color:#b3261e">✕ Le calcul n'a pas pu aboutir</b><span style="flex:1"></span><span style="color:var(--color-neutral-600)">modèle partiel affiché</span></div>
+<div style="padding:8px 10px;display:flex;flex-direction:column;gap:6px"><span>La structure « hélicoïdale à fût » ne s'applique qu'à un tracé hélicoïdal. Le projet est à volées.</span>
+<div style="display:flex;gap:6px;flex-wrap:wrap"><span style="border:1px solid var(--color-text);padding:3px 8px">Passer en structure limons à la française</span><span style="border:1px solid var(--color-text);padding:3px 8px">Passer le tracé en hélicoïdal</span><span style="color:var(--color-neutral-600);padding:3px 0">annulable (Ctrl+Z)</span></div>
+<span style="color:var(--color-neutral-500);font-family:ui-monospace,monospace;font-size:9.5px">structure « helical-core » · tracé « flights »</span></div>
+</div>
+<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">
+<div style="border:1px solid var(--color-divider);height:96px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;text-align:center"><span style="width:60%;height:2px;background:linear-gradient(90deg,var(--color-accent) 40%,var(--color-neutral-300) 40%)"></span><span>Calcul…</span><span style="color:var(--color-neutral-600);font-size:9.5px">dernier modèle conservé, estompé</span></div>
+<div style="border:1px solid var(--color-divider);height:96px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;text-align:center;padding:4px"><b>Aucun modèle</b><span style="color:var(--color-neutral-600);font-size:9.5px">2 erreurs · voir ci-dessus</span></div>
+<div style="border:1px solid var(--color-divider);height:96px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;text-align:center;padding:4px"><b>Aucune pièce développée</b><span style="color:var(--color-accent-700);font-size:9.5px">Choisir une structure →</span></div>
+</div>
+<div style="display:flex;gap:8px;align-items:center;border:1px solid var(--color-divider);padding:6px 10px;background:#fff"><span style="color:#9a6200">▲</span><span>Autosauvegarde indisponible (stockage plein)</span><span style="flex:1"></span><span style="color:var(--color-accent-700)">Exporter le projet</span><span style="color:var(--color-accent-700)">Détails</span></div>
+</div>
+<sc-if value="{{ notes }}" hint-placeholder-val="{{ true }}"><ol style="margin:0;padding-left:18px;width:540px;font-size:12.5px;line-height:1.5;color:var(--color-neutral-800)">
+<li>La barre d'erreur est annoncée comme une alerte (<code>role="alert"</code>). Elle donne d'abord la cause en français, puis les corrections sous forme d'actions ; le détail technique vient en dernier.</li>
+<li>Pendant un calcul, la vue garde le dernier modèle, estompé, avec un fin liseré de progression (au lieu du seul texte dans la barre d'état).</li>
+<li>Chaque état vide propose l'action qui le fait disparaître.</li>
+</ol></sc-if>
+</div>
+
+<!-- 1l -->
+<div class="dv-opt" id="1l">
+<div class="dv-olabel"><a class="dv-oid" href="#1l">1l</a>Thème sombre et couleurs partagées 2D / 3D / PDF</div>
+<div class="dv-card" style="width:640px;display:grid;grid-template-columns:1fr 1fr;font-size:11px">
+<div style="padding:12px;display:flex;flex-direction:column;gap:6px;background:var(--color-bg)">
+<b style="font:600 13px var(--font-heading)">Clair</b>
+<sc-for list="{{ swLight }}" as="s" hint-placeholder-count="6"><div style="display:flex;align-items:center;gap:8px"><span style="width:18px;height:18px;background:{{ s.c }};border:1px solid var(--color-divider)"></span><span style="flex:1">{{ s.l }}</span><span style="font:500 9.5px ui-monospace,monospace;color:var(--color-neutral-600)">{{ s.c }}</span></div></sc-for>
+<div style="height:110px;margin-top:6px;border:1px solid var(--color-divider);background:repeating-linear-gradient(135deg,var(--color-neutral-200) 0 1px,transparent 1px 9px);display:flex;align-items:center;justify-content:center;font:500 9.5px ui-monospace,monospace;color:var(--color-neutral-600)">3D · fond clair</div>
+</div>
+<div style="padding:12px;display:flex;flex-direction:column;gap:6px;background:#1b1d20;color:#e6e7e9">
+<b style="font:600 13px var(--font-heading)">Sombre</b>
+<sc-for list="{{ swDark }}" as="s" hint-placeholder-count="6"><div style="display:flex;align-items:center;gap:8px"><span style="width:18px;height:18px;background:{{ s.c }};border:1px solid #3a3d42"></span><span style="flex:1">{{ s.l }}</span><span style="font:500 9.5px ui-monospace,monospace;color:#9a9ea5">{{ s.c }}</span></div></sc-for>
+<div style="height:110px;margin-top:6px;border:1px solid #3a3d42;background:repeating-linear-gradient(135deg,#2a2d31 0 1px,transparent 1px 9px);display:flex;align-items:center;justify-content:center;font:500 9.5px ui-monospace,monospace;color:#9a9ea5">3D · fond sombre, grille atténuée</div>
+</div>
+</div>
+<sc-if value="{{ notes }}" hint-placeholder-val="{{ true }}"><ol style="margin:0;padding-left:18px;width:620px;font-size:12.5px;line-height:1.5;color:var(--color-neutral-800)">
+<li>Un seul jeu de jetons alimente l'interface, la scène 3D et les SVG exportés, alors qu'aujourd'hui la 3D a ses propres couleurs. La trémie a un jeton dédié, au lieu de <code>#6e40c9</code> codé en dur.</li>
+<li>« Conseil » reprend l'accent acier du système : le rouge et l'ocre restent réservés à ce qui exige d'agir.</li>
+<li>Les documents d'atelier (PDF, SVG) restent toujours sur la palette claire, quel que soit le thème de l'écran.</li>
+</ol></sc-if>
+</div>
+</div>
+
+<p class="dv-next">À essayer ensuite : « pousser <a class="dv-oid" href="#1b">1b</a> avec le mode Fabrication de <a class="dv-oid" href="#1d">1d</a> » · « détailler <a class="dv-oid" href="#1f">1f</a> pour les 8 sections » · « passer <a class="dv-oid" href="#1a">1a</a> en haute fidélité »</p>
+</section>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;showNotes&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;}}">
+class Component extends DCLogic {
+  renderVals() {
+    const on = 'var(--color-accent-200)';
+    return {
+      notes: this.props.showNotes ?? true,
+      ess: [
+        { l: 'Hauteur à monter H', v: '2 700 mm' },
+        { l: 'Emmarchement E', v: '900 mm' },
+        { l: 'Tracé', v: 'Volées ▾' },
+        { l: 'Hauteurs n', v: 'Auto · 15' },
+      ],
+      sections: [
+        { t: 'Site', s: 'Trémie 2 930 × 1 330 · dalle 200', flag: '' },
+        { t: 'Tracé', s: 'Quart tournant gauche · 2 volées', flag: '' },
+        { t: 'Découpage', s: 'n 15 · h 180 · g 245', flag: '' },
+        { t: 'Balancement', s: 'M3 quintique · nez 3→9', flag: '' },
+        { t: 'Marches', s: 'Chêne 40 · nez 10 · pleines', flag: '' },
+        { t: 'Structure', s: 'Débillardé soudé · S235 · 8 mm', flag: '◆ 3' },
+        { t: 'Garde-corps', s: 'Verre · 3 lignes · 18 poteaux', flag: '◆ 1' },
+        { t: 'Contexte de contrôle', s: 'Logement · strict', flag: '' },
+      ],
+      rail: ['Site', 'Tracé', 'Découp.', 'Balanc.', 'Marches', 'Struct.', 'G.-corps', 'Contexte'],
+      rail2: ['Site', 'Tracé', 'Découp.', 'Balanc.', 'Marches', 'Struct.', 'G.-corps', 'Contexte'].map(t => ({
+        t, f: t === 'Struct.' ? '◆ 3' : t === 'G.-corps' ? '◆ 1' : '',
+        bg: t === 'Découp.' ? '#fff' : 'transparent',
+        bl: t === 'Découp.' ? '2px solid var(--color-accent)' : '2px solid transparent',
+      })),
+      entry: [
+        { k: 'Première visite, démo chargée', v: 'Guidé' },
+        { k: 'Projet créé avec l\'assistant', v: 'Guidé' },
+        { k: 'Préréglage basique appliqué', v: 'Dernier choix' },
+        { k: 'Projet importé (.blondel.json) ou repris', v: 'Libre' },
+        { k: 'Visite suivante', v: 'Dernier choix' },
+      ],
+      mapping: [
+        { s: '1 · Site', p: 'Site', v: 'Plan · Site et saisie' },
+        { s: '2 · Forme', p: 'Tracé + Balancement', v: 'Plan coté' },
+        { s: '3 · Découpage', p: 'Découpage', v: 'Élévation' },
+        { s: '4 · Marches', p: 'Marches', v: '3D' },
+        { s: '5 · Structure', p: 'Structure (hors atelier)', v: '3D' },
+        { s: '6 · Garde-corps', p: 'Garde-corps', v: '3D' },
+        { s: '7 · Fabrication', p: 'mode Fabrication', v: 'Développés' },
+      ],
+      trace: [
+        { l: 'Type', v: 'Volées ▾' },
+        { l: 'Emmarchement E', v: '900 mm' },
+        { l: 'Ligne de foulée', v: 'Selon DTU ▾' },
+        { l: 'Typologie', v: '¼ tournant G' },
+        { l: 'Volée 1', v: 'Auto · 1 800' },
+        { l: 'Volée 2', v: 'Auto · 2 830' },
+      ],
+      steps: [
+        { n: '✓', t: 'Site', s: 'H 2 700', bb: '0', bg: 'transparent' },
+        { n: '✓', t: 'Forme', s: '¼ tournant G', bb: '0', bg: 'transparent' },
+        { n: '3', t: 'Découpage', s: 'n 15 · g 245', bb: '2px solid var(--color-accent)', bg: '#fff' },
+        { n: '4', t: 'Marches', s: 'Chêne 40', bb: '0', bg: 'transparent' },
+        { n: '5', t: 'Structure', s: '◆ 3 à valider', bb: '0', bg: 'transparent' },
+        { n: '6', t: 'Garde-corps', s: 'Verre', bb: '0', bg: 'transparent' },
+        { n: '7', t: 'Fabrication', s: '102 pièces', bb: '0', bg: 'transparent' },
+      ],
+      decoupe: [
+        { l: 'Nombre de hauteurs n', v: 'Auto · 15' },
+        { l: 'Hauteur de marche cible', v: '175 mm' },
+        { l: 'Giron cible', v: 'Auto · 245' },
+      ],
+      pieces: [
+        { g: 'Limons', n: '5', r: 'LE1 · LE2 · LD1 · LD2 · LD3' },
+        { g: 'Marches', n: '15', r: 'M1 … M15 · chêne 40' },
+        { g: 'Supports', n: '28', r: 'CR1 … CR14 · L 40×40×4' },
+        { g: 'Platines', n: '4', r: 'PF1 · PH1' },
+        { g: 'Garde-corps', n: '36', r: '3 lignes · verre feuilleté' },
+        { g: 'Visserie', n: '14', r: 'M6, M10' },
+      ],
+      props: [
+        { t: '1 · ¼ tournant palier G', v: 'n 15 · g 270 · 2h+g 630', w: '1 conseil', c: 'var(--color-accent-700)', var: '5 variantes' },
+        { t: '2 · ¼ tournant G', v: 'n 15 · g 270 · E 800', w: '1 avertissement', c: '#9a6200', var: '11 variantes' },
+        { t: '3 · Droit', v: 'n 15 · g 270 · E 1 000', w: '1 conseil', c: 'var(--color-accent-700)', var: '2 variantes' },
+      ],
+      rates: [
+        { l: 'Taux horaire', v: '52 € HT/h', c: 'inherit' },
+        { l: 'Temps par coupe', v: '4 min', c: 'inherit' },
+        { l: 'Temps par mètre de cordon', v: '12 min/m', c: 'inherit' },
+        { l: 'Temps par pli', v: 'à renseigner min', c: 'var(--color-neutral-500)' },
+        { l: 'Temps par perçage', v: 'à renseigner min', c: 'var(--color-neutral-500)' },
+        { l: 'Temps par pièce unique', v: 'à renseigner min', c: 'var(--color-neutral-500)' },
+      ],
+      swLight: [
+        { l: 'Sélection partagée', c: '#ff7a1a' },
+        { l: 'Bloquant', c: '#b3261e' },
+        { l: 'Avertissement', c: '#9a6200' },
+        { l: 'Conseil (accent)', c: '#416180' },
+        { l: 'Respecté', c: '#2e7d32' },
+        { l: 'Trémie', c: '#6e40c9' },
+      ],
+      swDark: [
+        { l: 'Sélection partagée', c: '#ff9a4d' },
+        { l: 'Bloquant', c: '#f28b82' },
+        { l: 'Avertissement', c: '#f0b85a' },
+        { l: 'Conseil (accent)', c: '#94bce3' },
+        { l: 'Respecté', c: '#81c995' },
+        { l: 'Trémie', c: '#a58cf0' },
+      ],
+    };
+  }
+}
+</script>
+</body>
+</html>

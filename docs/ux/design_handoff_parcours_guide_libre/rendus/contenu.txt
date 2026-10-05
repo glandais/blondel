@@ -1,0 +1,358 @@
+BLONDEL · REFONTE · CONTENU
+Les 7 étapes guidées et les 8 panneaux libres
+
+Inventaire champ par champ, établi d'après ParamsPanel.tsx, GuardsSection.tsx, HelicalEditor.tsx et paramLabels.ts. Pour chaque paramètre : où il apparaît dans le parcours guidé, à quel niveau dans le parcours libre, et quel libellé il porte désormais partout.
+
+1 · Trois niveaux de présence
+Essentiel
+Visible dans l'étape guidée et en tête du panneau libre. Ce qui définit l'escalier : un débutant doit pouvoir le régler.
+Guidé : Étape · Libre : Visible
+Conception
+Visible dans le panneau libre. Dans le guidé, rangé sous « Plus de réglages » replié, ou absent quand l'automatique suffit.
+Guidé : Plus / — · Libre : Visible
+Atelier
+Fabrication : pinces, marges, coefficients. Replié sous « Réglages d'atelier » dans le panneau, et repris dans l'inspecteur de la pièce et le mode Fabrication.
+Guidé : étape 7 · Libre : Atelier ▸
+◆ marque toute valeur par défaut non sourcée (« à valider »). Le compteur ◆ remonte sur le titre du groupe, l'icône du rail et le résumé de l'étape. L'étape 7 en dresse la liste complète.
+Un champ conditionnel (rayon du jour, épaisseur de contremarche…) n'apparaît que lorsqu'il s'applique, au même niveau que son déclencheur.
+Un champ « automatique » est un seul contrôle : Auto | valeur. Fini la case « … : automatique » suivie d'un second champ du même nom.
+L'unité est toujours à droite du champ, jamais dans le libellé.
+2 · Les 7 étapes du parcours guidé
+
+Chaque étape a un objectif en une phrase, une vue conseillée, des chiffres de contrôle visibles en permanence et un résumé d'une ligne pour la barre d'étapes. Une étape est cochée ✓ quand elle a été vue et qu'aucune règle bloquante ne lui est rattachée.
+
+1
+Site
+Où va l'escalier : niveaux, trémie, murs.
+Vue :
+Plan · Site et saisie
+Libre :
+Site
+DANS L'ÉTAPE
+Hauteur à monter H
+nombre, mm
+Épaisseur du plancher haut
+nombre, mm
+Trémie
+Rectangulaire | Tracée | Aucune
+Trémie : coin X, coin Y, longueur X, largeur Y
+saisie ou tracé sur le plan
+Murs
+tracé sur le plan, ou un côté par case
+PLUS DE RÉGLAGES (REPLIÉ)
+Revêtements des sols bas et haut. Calque de fond (DXF ou image à calibrer). Relevé de trémie (4 côtés + 2 diagonales).
+CHIFFRES AFFICHÉS
+Trémie 2 930 × 1 330 · dalle 200 · échappée possible sous dalle
+RÈGLES RATTACHÉES
+Hauteur à monter, échappée (pré-évaluée), dimensions de trémie.
+RÉSUMÉ DANS LA BARRE D'ÉTAPES
+H 2 700 · trémie 2 930 × 1 330
+2
+Forme
+Le plan de l'escalier : droit, tournant, hélicoïdal.
+Vue :
+Plan coté
+Libre :
+Tracé + Balancement
+DANS L'ÉTAPE
+Forme
+cartes : droit, ¼ G, ¼ D, U, S, ½ tournant, hélicoïdal
+Emmarchement E
+nombre, mm
+Tournant n : marches balancées ou palier
+segmenté, par tournant
+Tournant n : jour
+Angle vif | Arrondi | Poteau
+Rayon du jour / côté du poteau
+si arrondi / poteau
+Hélicoïdal : R_e, centre, r_f ou r_j, marches par tour
+si hélicoïdal
+PLUS DE RÉGLAGES (REPLIÉ)
+Longueur de chaque volée (Auto | valeur). Collet cible, marches balancées par côté. Recaler volées et trémie (proposé seulement quand le tracé déborde la trémie).
+CHIFFRES AFFICHÉS
+Typologie · reculement 3 430 · collet mini 108 · emprise au sol
+RÈGLES RATTACHÉES
+Emmarchement, collet, giron sur la ligne de foulée, régularité des balancées.
+RÉSUMÉ DANS LA BARRE D'ÉTAPES
+Quart tournant gauche · E 900
+3
+Découpage
+Combien de marches, et de quelle hauteur.
+Vue :
+Élévation
+Libre :
+Découpage
+DANS L'ÉTAPE
+Nombre de hauteurs n
+Auto | valeur
+Hauteur de marche cible
+nombre, mm
+Giron cible
+Auto | valeur (volée automatique seulement)
+PLUS DE RÉGLAGES (REPLIÉ)
+Correction de la 1re hauteur.
+CHIFFRES AFFICHÉS
+n · h · g · 2h + g sur la jauge 60–64 cm · échappée
+RÈGLES RATTACHÉES
+Hauteur de marche, giron, 2h + g, échappée.
+RÉSUMÉ DANS LA BARRE D'ÉTAPES
+15 marches · 180 mm
+4
+Marches
+De quoi sont faites les marches.
+Vue :
+3D
+Libre :
+Marches (+ Structure › essence)
+DANS L'ÉTAPE
+Matériau des marches
+Bois | Tôle pliée (selon structure)
+Essence
+liste (si bois)
+Épaisseur de marche
+nombre, mm
+Débord de nez
+nombre, mm
+Contremarches
+Pleines | Ajourées | Aucune
+PLUS DE RÉGLAGES (REPLIÉ)
+Épaisseur de contremarche. Rayon d'arrondi du nez.
+CHIFFRES AFFICHÉS
+Masse des marches · recouvrement au nez
+RÈGLES RATTACHÉES
+Débord de nez, ouverture entre marches (contremarches ajourées), recouvrement.
+RÉSUMÉ DANS LA BARRE D'ÉTAPES
+Chêne 40 · nez 30
+5
+Structure
+Ce qui porte les marches.
+Vue :
+3D
+Libre :
+Structure (hors Atelier)
+DANS L'ÉTAPE
+Structure
+cartes par famille : bois, métal, mixte
+Nuance d'acier / essence
+selon famille
+Finition
+Brut | Peint | Galvanisé (métal)
+Famille de profilé
+si profilés
+PLUS DE RÉGLAGES (REPLIÉ)
+Épaisseur des limons, dépassements haut et bas, section du catalogue (Auto), poteau. Les réglages d'atelier n'apparaissent pas ici.
+CHIFFRES AFFICHÉS
+Masse · classe d'exécution · prédimensionnement ✓ / ✗ par limon
+RÈGLES RATTACHÉES
+Prédimensionnement, compatibilité structure / tracé, porte-à-faux.
+RÉSUMÉ DANS LA BARRE D'ÉTAPES
+Débillardé soudé · S235 · ◆ 3
+6
+Garde-corps
+Protéger du vide.
+Vue :
+3D
+Libre :
+Garde-corps (hors Atelier)
+DANS L'ÉTAPE
+Garde-corps et mains courantes
+case
+Remplissage
+cartes : balustres, lisses, câbles, verre, tôle perforée, panneau
+Garde-corps de trémie
+case
+Mains courantes murales
+Auto | Aucune | Jour | Extérieur | Les deux
+Matériau
+liste ◆
+PLUS DE RÉGLAGES (REPLIÉ)
+Côtés jour / extérieur (Auto selon murs | Vide | Mur), hauteurs, paramètres du remplissage.
+CHIFFRES AFFICHÉS
+Longueur de garde-corps · poteaux · hauteur mini exigée
+RÈGLES RATTACHÉES
+Hauteur de garde-corps, vides du remplissage, main courante.
+RÉSUMÉ DANS LA BARRE D'ÉTAPES
+Verre · 3 lignes · ◆ 1
+7
+Fabrication
+Vérifier avant de fabriquer, puis sortir les documents.
+Vue :
+Développés
+Libre :
+mode Fabrication
+DANS L'ÉTAPE
+Valeurs ◆ à valider
+liste à cocher, une ligne par valeur
+Pièces
+liste par famille → développé
+Dossier PDF
+format, gabarits → Générer
+Fiche de pose, liste de débit
+boutons
+Coût estimé
+ou « Compléter le profil d'atelier »
+PLUS DE RÉGLAGES (REPLIÉ)
+Tous les réglages d'atelier, groupés par pièce. Comparateur de structures.
+CHIFFRES AFFICHÉS
+102 pièces · 412 kg · EXC2 · ◆ 4 restantes
+RÈGLES RATTACHÉES
+Toutes les règles de fabrication (fab_*), soudures, classe d'exécution.
+RÉSUMÉ DANS LA BARRE D'ÉTAPES
+102 pièces · ◆ 4 à valider
+3 · Les 8 panneaux du parcours libre
+
+Ordre des lignes = ordre dans le panneau. Guidé : Étape n, Plus (replié dans l'étape) ou — (absent, l'automatique s'applique). Libre : Visible ou Atelier (replié). Aussi dans : autres endroits où la même valeur se modifie.
+
+Site
+Étape 1
+PARAMÈTRE (LIBELLÉ UNIFIÉ)	CONTRÔLE	GUIDÉ	LIBRE	AUSSI DANS	NOTE
+Hauteur à monter H	nombre, mm	Étape 1	Visible	Assistant	Sol fini bas → sol fini haut
+Épaisseur du plancher haut	nombre, mm	Étape 1	Visible	Assistant	Remplace « Épaisseur de dalle »
+Revêtement du sol bas	nombre, mm	Plus	Visible		
+Revêtement du sol haut	nombre, mm	Plus	Visible		
+Trémie	Rectangulaire | Tracée | Aucune	Étape 1	Visible	Plan Site, Assistant	Remplace la case « Trémie dans le plancher haut »
+Trémie : coin X / coin Y	nombre, mm	Étape 1	Visible	Plan Site	si rectangulaire
+Trémie : longueur (X) / largeur (Y)	nombre, mm	Étape 1	Visible	Plan Site	si rectangulaire
+Trémie tracée	lien « Modifier sur le plan »	Étape 1	Visible	Plan Site	n sommets ; relevé 4 côtés + 2 diagonales
+Murs	liste par côté	Étape 1	Visible	Plan Site, Assistant	Aujourd'hui seulement dans le plan
+Calque de fond	Importer DXF | image	Plus	Visible	Importer ▾	Calibrer, opacité
+Tracé
+Étape 2 · volées ou hélicoïdal
+PARAMÈTRE (LIBELLÉ UNIFIÉ)	CONTRÔLE	GUIDÉ	LIBRE	AUSSI DANS	NOTE
+Type de tracé	Volées | Hélicoïdal	Étape 2	Visible		Dans le guidé, inclus dans les cartes de forme
+Emmarchement E	nombre, mm	Étape 2	Visible	Assistant	
+Typologie	lecture seule	Étape 2	Visible		Déduite des tournants
+Volées		Étape 2	Visible		
+Volée n : longueur (bord extérieur)	Auto | valeur	Plus	Visible	Plan coté	Auto : escalier droit seulement
+Ajouter / retirer une volée	boutons	—	Visible		Dans le guidé, remplacé par les cartes de forme
+Enchaînement des tournants 1 et 2	Même sens (U) | Opposés (S/Z)	—	Visible		Cartes U / S dans le guidé
+Tournant n		Étape 2	Visible		
+Tournant n : sens	Gauche | Droite	—	Visible		Cartes ¼ G / ¼ D dans le guidé
+Tournant n : type	Balancées | Palier	Étape 2	Visible		
+Tournant n : jour	Angle vif | Arrondi | Poteau	Étape 2	Visible		
+Rayon du jour	nombre, mm	Étape 2	Visible		si arrondi
+Côté du poteau	nombre, mm	Étape 2	Visible	Inspecteur pièce	si poteau
+Décalage du poteau vers le jour	nombre, mm	—	Visible	Inspecteur pièce	si poteau
+Ligne de foulée		—	Visible		
+Ligne de foulée	Selon le DTU | Distance au jour	—	Visible		DTU par défaut
+Distance au jour	nombre, mm	—	Visible		si distance imposée
+Bord de mesure	Auto | Gauche | Droit	—	Visible		si applicable
+Recaler volées et trémie	bouton	Plus	Visible	Correction proposée	Raison affichée sous le bouton si désactivé
+Hélicoïdal		Étape 2	Visible		
+Sens de rotation en montant	Gauche | Droite	Étape 2	Visible		
+Rayon extérieur R_e	nombre, mm	Étape 2	Visible		
+Centre	Fût | Jour central	Étape 2	Visible		
+Rayon du fût r_f / du jour r_j	nombre, mm	Étape 2	Visible		
+Rotation	Marches par tour | Angle total	Plus	Visible		
+Marches par tour N / angle total	nombre / °	Étape 2	Visible		
+Angle de départ	°	Plus	Visible		
+Palier d'arrivée en secteur + angle	case + °	Plus	Visible		
+Découpage
+Étape 3
+PARAMÈTRE (LIBELLÉ UNIFIÉ)	CONTRÔLE	GUIDÉ	LIBRE	AUSSI DANS	NOTE
+Nombre de hauteurs n	Auto | valeur (2–60)	Étape 3	Visible		
+Hauteur de marche cible	nombre, mm	Étape 3	Visible	Assistant	
+Giron cible	Auto | valeur	Étape 3	Visible		Volée automatique seulement ; sans effet en hélicoïdal
+Correction de la 1re hauteur	nombre signé, mm	Plus	Visible		Compensation de revêtement
+Balancement
+Étape 2 (Plus) · désactivé sans tournant
+PARAMÈTRE (LIBELLÉ UNIFIÉ)	CONTRÔLE	GUIDÉ	LIBRE	AUSSI DANS	NOTE
+Méthode	liste M0 à M6, avec libellé clair	—	Visible		Défaut du cœur appliqué dans le guidé
+Variante M3	Auto | Cubique | Quintique	—	Visible		si M3
+Angle α de la herse	curseur, °	—	Visible		si M2
+Portée λ / raideur p de la rotation	curseurs ◆	—	Visible		si M6
+Marches balancées par côté	Auto | valeur (1–8)	Plus	Visible		
+Collet cible (corde)	nombre, mm	Plus	Visible		
+Ligne de nez n	angle °, fixer	—	—	Inspecteur marche	Remplace le mode expert
+Marches
+Étape 4
+PARAMÈTRE (LIBELLÉ UNIFIÉ)	CONTRÔLE	GUIDÉ	LIBRE	AUSSI DANS	NOTE
+Épaisseur de marche	nombre, mm	Étape 4	Visible		
+Débord de nez	nombre, mm	Étape 4	Visible		
+Contremarches	Pleines | Ajourées | Aucune	Étape 4	Visible		
+Épaisseur de contremarche	nombre, mm	Plus	Visible		si contremarches
+Matériau / essence des marches	liste	Étape 4	Visible		Paramètre de la structure, montré ici aussi (même valeur)
+Rayon d'arrondi du nez	nombre, mm	Plus	Visible		Paramètre de la structure
+Structure
+Étape 5 · paramètres selon la structure choisie
+PARAMÈTRE (LIBELLÉ UNIFIÉ)	CONTRÔLE	GUIDÉ	LIBRE	AUSSI DANS	NOTE
+Structure	cartes (famille, compatibilité tracé)	Étape 5	Visible	Comparateur	Incompatible : grisée, raison écrite
+Nuance d'acier	S235 | S355	Étape 5	Visible		S355 ⇒ EXC2
+Finition	Brut | Peint | Galvanisé	Étape 5	Visible		
+Famille de profilé	liste	Étape 5	Visible		si profilés
+Section du catalogue	Auto | liste	Plus	Visible	Inspecteur pièce	Auto : la plus légère qui passe
+Épaisseur des limons	nombre, mm ◆	Plus	Visible	Inspecteur pièce	
+Dépassements haut d_h / bas d_b	Auto | valeur	Plus	Visible	Inspecteur pièce	
+Prolongements avant départ / après arrivée	nombre, mm	—	Atelier	Inspecteur pièce	
+Aboutage d'un limon trop long	Soudé | Éclissé	—	Atelier		
+Profondeur d'encastrement, reste sous entaille	nombre, mm	—	Atelier		bois
+Tolérance d'onglet à l'angle mural	nombre, mm ◆	—	Atelier		
+Poteau		Plus	Visible		
+Section, côté, assemblage, pied	listes / nombres	Plus	Visible	Inspecteur pièce	
+Jeu, paroi du tube, boulons, tenon	nombres ◆	—	Atelier	Inspecteur pièce	
+Supports de marche		—	Atelier		
+Type, fixation	Cornière | Plat · Soudés | Vissés	—	Visible	Inspecteur pièce	
+Aile, épaisseur, perçage, pince, marges, appui mini	nombres ◆	—	Atelier	Inspecteur pièce, Correction	
+Platines		—	Atelier		
+Platine de pied / de tête	cases	—	Visible	Inspecteur pièce	
+Épaisseur, largeur, longueur, débord, perçage, pince	nombres	—	Atelier	Inspecteur pièce	
+Marches en tôle pliée		—	Atelier		si tôle pliée
+Profil, épaisseur de tôle	Z | U · nombre ◆	Plus	Visible	Inspecteur pièce	
+Ailes, retour, jeu, contremarche d'arrivée	nombres ◆	—	Atelier	Inspecteur pièce	
+Limon de jour débillardé		—	Atelier		8 réglages, tous ◆ sauf le pas
+Prédimensionnement indicatif		—	Visible		
+Jeu de charges, catégorie d'usage	listes	—	Visible	Contrôle	
+γ_G, γ_Q, γ_M0, γ_M, k_mod, classe du bois, part de Q_k	nombres ◆	—	Atelier		
+Justification du porte-à-faux	texte	—	Visible	Inspecteur règle	Hélicoïdal à fût ; apparaît avec l'avertissement
+Garde-corps
+Étape 6
+PARAMÈTRE (LIBELLÉ UNIFIÉ)	CONTRÔLE	GUIDÉ	LIBRE	AUSSI DANS	NOTE
+Garde-corps et mains courantes	case	Étape 6	Visible	Assistant	
+Garde-corps de volée		Étape 6	Visible		
+Côté jour / côté extérieur	Auto (murs) | Vide | Mur	Plus	Visible	Plan Site	
+Hauteur	nombre, mm	Plus	Visible		Défaut réglementaire selon date
+Axe depuis le bord de l'emmarchement	nombre, mm ◆	—	Atelier		
+Garde-corps de trémie		Étape 6	Visible		
+Sur les côtés libres de la trémie	case	Étape 6	Visible		
+Hauteur	nombre, mm	Plus	Visible		
+Recul depuis le nu de la trémie	nombre, mm ◆	—	Atelier		
+Remplissage		Étape 6	Visible		
+Type	6 cartes	Étape 6	Visible		
+Entraxe / nombre / diamètre / épaisseur / section	selon type	Plus	Visible		Épaisseur verre et entraxe balustres ◆
+Jeu panneaux / poteaux, perforations	nombres	—	Atelier		
+Vide sous le remplissage	nombre, mm	Plus	Visible		
+Poteaux : côté, entraxe max, angle de poteau d'angle	nombres ◆	—	Atelier	Inspecteur pièce	
+Main courante		Étape 6	Visible		
+Mains courantes murales	Auto | Aucune | Jour | Ext. | Les deux	Étape 6	Visible		
+Section	Ronde | Rect. + dimensions	Plus	Visible		
+Hauteur, prolongements bas / haut	nombre · Auto (un giron)	Plus	Visible		
+Dégagement au mur	nombre, mm	—	Atelier		
+Matériau	liste ◆	Étape 6	Visible		
+Tolérance de détection des murs	nombre, mm ◆	—	Atelier		
+Contexte de contrôle
+Pas d'étape (validé) · réglé par l'assistant, modifiable depuis le contrôle
+PARAMÈTRE (LIBELLÉ UNIFIÉ)	CONTRÔLE	GUIDÉ	LIBRE	AUSSI DANS	NOTE
+Usage	Logement | ERP | … (libellés clairs)	—	Visible	Assistant, Contrôle	Remplace les cases « logement interieur »
+Autres contextes	cases, description visible sous chaque case	—	Visible	Contrôle	Les contextes déduits restent en lecture seule
+Profil	Strict | Souple	—	Visible	Contrôle (en-tête)	
+Date de référence (PC/DP ou marché)	date	—	Visible	Assistant	Pilote le régime garde-corps
+Surcharges de règles	lien → liste	—	Visible	Inspecteur règle	Compteur
+4 · Libellés unifiés
+
+Un seul libellé par notion dans le panneau, l'assistant, l'inspecteur, le plan et les exports (frictions 6, 7, 11 et 12).
+
+AUJOURD'HUI (PANNEAU)	AUJOURD'HUI (ASSISTANT)	DÉSORMAIS
+Largeur (X) / Longueur (Y)	Longueur de trémie (X) / Largeur de trémie (Y)	Trémie : longueur (X) · Trémie : largeur (Y)
+X (coin) / Y (coin)	Coin X	Trémie : coin X · coin Y
+Épaisseur du plancher haut	Épaisseur de dalle	Épaisseur du plancher haut
+« Nombre de hauteurs n : automatique » + champ	—	Nombre de hauteurs n [Auto | 15]
+Distance réelle (mm), Angle imposé (°)	—	Distance réelle · Angle imposé (unité à droite)
+logement interieur, bois dtu…	Usage	Logement (intérieur), Bois (DTU 36.3)…
+Méthode M3	—	M3 · courbe continue (quintique)
+Dépassement haut d_h (au-dessus des nez)	—	Dépassement haut d_h · aide : au-dessus de la ligne des nez
+5 · À trancher
+Étape 4 : l'essence et le rayon de nez sont des paramètres de la structure. Les afficher aussi dans « Marches » suppose qu'une même valeur s'édite à deux endroits ; d'accord ?
+Balancement dans le guidé : seuls le collet cible et le nombre de marches balancées par côté sont proposés (sous « Plus »). La méthode reste celle du cœur. Suffisant pour un débutant ?
+Les « Supports de marche » passent en Atelier sauf leur type et leur fixation. Or la longueur d'appui déclenche souvent un avertissement : faut-il la remonter au niveau Conception ?
+Le prédimensionnement (jeu de charges, catégorie) reste dans Structure. On pourrait aussi le rattacher au Contexte de contrôle.
+L'étape 7 dresse la liste de toutes les valeurs ◆. Faut-il bloquer « Générer le dossier » tant qu'il en reste, ou seulement les signaler dans le PDF ?

@@ -1,0 +1,727 @@
+2
+Deux parcours, un projet : guidé (1c) et libre (1b + 1d)
+
+Un même projet (« Quart tournant débillardé soudé ») vu dans l'ordre d'un parcours. Le guidé et le libre partagent les mêmes champs, les mêmes vues et la même sélection : seule change la façon d'avancer. À lire de 2a à 2d.
+
+2a
+Parcours guidé, ouvert par une démo
+BLONDEL
+Quart tournant débillardé soudé ▾
+Démo
+Guidé
+Libre
+↶ ↷
+⋯
+✓
+Site
+H 2 700
+✓
+Forme
+¼ tournant G
+3
+Découpage
+n 15 · g 245
+4
+Marches
+Chêne 40
+5
+Structure
+◆ 3 à valider
+6
+Garde-corps
+Verre
+7
+Fabrication
+102 pièces
+3 · Découpage
+Combien de marches, et de quelle taille.
+Nombre de hauteurs n
+Auto · 15
+Hauteur de marche cible
+175 mm
+Giron cible
+Auto · 245
+15
+n
+180
+h mm
+605
+2h+g · 60–64
+Le saviez-vous ?
+2h + g, le module de Blondel, mesure le confort du pas.
+Mêmes champs que le panneau « Découpage » du parcours libre.
+Vue conseillée : Élévation
+Plan
+3D
+ÉLÉVATION · marche 3 sélectionnée
+Vous connaissez le métier ?
+Le parcours libre montre toutes les sections et un inspecteur par élément.
+Passer en parcours libre →
+▲ 1 avertissement
+● 1 conseil
+Contrôle ▴
+← Forme
+Marches →
+Une démo, l'assistant ou le premier lancement ouvrent le parcours guidé. La bascule Guidé | Libre reste dans la barre du haut, à côté du nom du projet.
+Le parcours libre n'est proposé qu'une fois, dans un encart discret, après quelques modifications ; on ne demande jamais « débutant ou expert ? ».
+Le contrôle de conception reste toujours en bas, compteurs visibles ; ▴ ouvre la liste par-dessus la vue.
+2b
+Parcours libre · Conception (même projet, même étape)
+BLONDEL
+Quart tournant débillardé soudé ▾
+Guidé
+Libre
+Conception
+Fabrication
+▲ 1 · ● 1
+↶ ↷
+Exporter ▾
+Site
+Tracé
+Découp.
+Balanc.
+Marches
+Struct.
+◆ 3
+G.-corps
+◆ 1
+Contexte
+Découpage
+📌 ✕
+Nombre de hauteurs n
+Auto · 15
+Hauteur de marche cible
+175 mm
+Giron cible
+Auto · 245
+Correction 1re hauteur
+0 mm
+Ouvert sur la section où l'on était dans le guidé.
+Élévation
+Plan
+3D
+ÉLÉVATION · marche 3 en orange
+n 15
+h 180
+g 245
+2h+g 605
+E 900
+SÉLECTION
+Marche 3 · balancée
+Giron
+245 mm
+Collet
+108 mm
+Hauteur
+180 mm
+Angle du nez
+32,4° ✎
+RÈGLES SUR CET ÉLÉMENT
+Échappée 1 901 mm · conseillé ≥ 2 100
+PIÈCES LIÉES
+M3 marche chêne · CR3 · LD2 →
+Contrôle indicatif : il ne vaut pas attestation de conformité.
+La bascule Guidé → Libre ne change ni le projet, ni la vue, ni la sélection, ni l'historique d'annulation : l'étape « Découpage » devient le panneau « Découpage » du rail.
+Le rail porte les drapeaux ◆ (valeurs à valider) de chaque section, ce qui compense l'absence du formulaire complet.
+Le badge ▲ 1 · ● 1 est cerclé de la couleur de la sévérité la plus haute ; en rouge, il ouvre seul le contrôle à la place de l'inspecteur.
+« LD2 → » dans les pièces liées mène à 2c.
+2c
+Parcours libre · Fabrication, avec retour vers la Conception
+BLONDEL
+Quart tournant débillardé soudé ▾
+Guidé
+Libre
+Conception
+Fabrication
+▲ 1 · ● 1
+↶ ↷
+⋯
+Pièces
+Nomencl.
+Comparer
+Filtrer : repère, matériau…
+Limons
+5
+LE1 · LE2 · LD1 · LD2 · LD3
+Marches
+15
+M1 … M15 · chêne 40
+Supports
+28
+CR1 … CR14 · L 40×40×4
+Platines
+4
+PF1 · PH1
+Garde-corps
+36
+3 lignes · verre feuilleté
+Visserie
+14
+M6, M10
+LD2
+Limon de jour débillardé, tronçon 2/3 · tôle 8 mm S235 · 13,2 kg
+DXF R12
+GABARIT COTÉ DU DÉVELOPPÉ
+RÉGLAGES D'ATELIER DE LA PIÈCE
+Marge à la rive basse
+15 mm
+◆ valeur par défaut à valider
+Pince de perçage
+30 mm
+Cordon des joints
+a 4
+Modifiés ici, ils s'appliquent à toute la structure (section Structure).
+Forme du limon
+Épaisseur, rives, jour : réglages de conception.
+← Ouvrir dans Conception
+Dossier PDF
+Générer…
+La pièce reste sélectionnée d'un mode à l'autre : LD2, choisie dans l'inspecteur en 2b, est ouverte ici.
+Les réglages d'atelier sont modifiables sur place : on n'a plus à revenir en Conception pour une pince ou une marge. Pour ce qui change la forme, « ← Ouvrir dans Conception » ramène au panneau concerné avec la pièce sélectionnée.
+Exporter est remplacé par « Générer… » à droite : en Fabrication, les sorties font partie de l'écran.
+2d
+Règles du double parcours
+Quel parcours à l'ouverture
+Première visite, démo chargée
+Guidé
+Projet créé avec l'assistant
+Guidé
+Préréglage basique appliqué
+Dernier choix
+Projet importé (.blondel.json) ou repris
+Libre
+Visite suivante
+Dernier choix
+Étape guidée ↔ panneau du rail
+ÉTAPE
+PANNEAU(X) LIBRE
+VUE CONSEILLÉE
+1 · Site
+Site
+Plan · Site et saisie
+2 · Forme
+Tracé + Balancement
+Plan coté
+3 · Découpage
+Découpage
+Élévation
+4 · Marches
+Marches
+3D
+5 · Structure
+Structure (hors atelier)
+3D
+6 · Garde-corps
+Garde-corps
+3D
+7 · Fabrication
+mode Fabrication
+Développés
+Ce qui ne change jamais en basculant
+Projet, historique d'annulation, sélection, vue active, unité, thème.
+Validé (5 oct.) : « Forme » réunit Tracé et Balancement ; le Contexte de contrôle n'a pas d'étape propre.
+« Contexte de contrôle » n'a pas d'étape : dans le guidé, il est réglé par l'assistant et reste modifiable depuis le contrôle (▴), en tête de liste.
+« Forme » réunit Tracé et Balancement : pour un débutant, le balancement est une conséquence du tournant, pas une étape à part.
+Coût de développement : 1b porte l'essentiel (inspecteurs par type d'élément) ; le guidé ajoute la navigation par étapes, le résumé de chaque étape et la vue conseillée.
+1
+Refonte franche — pistes de mise en page, puis une proposition par zone
+
+Wireframes basse fidélité, écrans à 1440 × 900 dessinés à 2/3. Démo de référence : « Quart tournant débillardé soudé ». Les pistes 1a à 1d sont combinables : 1d (deux modes) peut porter 1a ou 1b en mode Conception. Les zones 1f–1l valent pour toutes les pistes.
+
+PISTES DE MISE EN PAGE · 1440
+1a
+Trois colonnes, hiérarchisées
+BLONDEL
+Quart tournant débillardé soudé ▾
+● Enregistré
+↶
+↷
+Nouveau ▾
+Importer ▾
+Exporter ▾
+⋯
+Paramètres
+Essentiels
+Tout
+Hauteur à monter H
+2 700 mm
+Emmarchement E
+900 mm
+Tracé
+Volées ▾
+Hauteurs n
+Auto · 15
+▸ Site
+Trémie 2 930 × 1 330 · dalle 200
+▸ Tracé
+Quart tournant gauche · 2 volées
+▸ Découpage
+n 15 · h 180 · g 245
+▸ Balancement
+M3 quintique · nez 3→9
+▸ Marches
+Chêne 40 · nez 10 · pleines
+▸ Structure
+◆ 3
+Débillardé soudé · S235 · 8 mm
+▸ Garde-corps
+◆ 1
+Verre · 3 lignes · 18 poteaux
+▸ Contexte de contrôle
+Logement · strict
+Plan
+3D
+Élévation
+Développés
+Nomenclature
+Comparateur
+PLAN COTÉ (SVG exporté) · marche 3 sélectionnée en orange
+−
++
+Recadrer
+Cartouche ▾
+Coté
+Site
+Expert
+Contrôle de conception
+0
+Bloq.
+1
+Avert.
+1
+Conseil
+81
+OK
+Longueur d'appui trop courte sous M6
+37,2 mm · attendu ≥ 50 mm · LE1
+Règle de l'art · confiance faible
+Échappée sous la recommandation
+1 901 mm · conseillé ≥ 2 100 mm
+▸ Prédimensionnement · EXC2 · 5 limons ✓
+▸ Non évaluées (7) · Respectées (81)
+Contrôle indicatif : il ne vaut pas attestation de conformité.
+n 15
+h 180
+g 245
+2h+g 605
+Échappée 1 901 / 1 960
+Calculé en 78 ms
+Barre d'outils à 3 niveaux : identité du projet, annulation, puis sorties (Exporter en seul bouton plein). Préréglages, Assistant et démos vont dans « Nouveau ▾ » ; unité, thème et Atelier dans « ⋯ ».
+Onglets en deux familles séparées par un filet : Conception (Plan, 3D, Élévation) puis Fabrication ; les modes du plan passent en segmenté dans la vue ; zoom et Recadrer sur toutes les vues 2D.
+Paramètres : un bloc « Essentiels » toujours visible, et des sections repliées qui montrent leur résumé (valeurs clés, drapeau « à valider »).
+Contrôle : compteurs en tête, on n'affiche que les groupes non vides, le message passe avant l'identifiant de règle.
+1b
+La vue au centre, inspecteur contextuel
+BLONDEL
+Quart tournant débillardé soudé ▾
+Plan
+3D
+Élévation
+Fabrication ▸
+▲ 1 · ● 1
+↶ ↷
+Exporter ▾
+Site
+Tracé
+Découp.
+Balanc.
+Marches
+Struct.
+G.-corps
+Contexte
+Tracé
+✕
+Type
+Volées ▾
+Emmarchement E
+900 mm
+Ligne de foulée
+Selon DTU ▾
+Typologie
+¼ tournant G
+Volée 1
+Auto · 1 800
+Volée 2
+Auto · 2 830
+Tournant 1 · marches balancées · jour arrondi R 250 ▸
++ Ajouter une volée
+Un seul panneau ouvert à la fois ; il se ferme ou s'épingle.
+PLAN · pleine hauteur, sans barre d'état
+n 15
+h 180
+g 245
+2h+g 605
+E 900
+SÉLECTION
+Marche 3 · balancée
+Giron
+245 mm
+Collet
+108 mm
+Hauteur
+180 mm
+Angle du nez
+32,4° ✎
+RÈGLES SUR CET ÉLÉMENT
+Échappée 1 901 mm · conseillé ≥ 2 100
+PIÈCES LIÉES
+M3 marche chêne · CR3 cornière · LD1
+Sans sélection : fiche du projet (H, E, typologie, masse, EXC) et contrôle complet.
+La sélection partagée devient l'axe de l'interface : l'inspecteur montre les valeurs, les règles et les pièces de l'élément cliqué, et permet d'y agir sur place (le mode expert est fondu dans l'inspecteur).
+Rail de 8 sections : on n'ouvre qu'un panneau à la fois, ce qui supprime le formulaire de 8 600 px.
+Contrôle résumé en badge dans la barre (▲ 1 · ● 1) ; un clic ouvre la liste complète à la place de l'inspecteur.
+Le risque : les réglages globaux sont moins visibles d'un coup d'œil. Je le compenserais avec la fiche du projet affichée quand rien n'est sélectionné.
+1c
+Parcours par étapes
+BLONDEL
+Quart tournant débillardé soudé ▾
+↶ ↷
+⋯
+✓
+Site
+H 2 700
+✓
+Forme
+¼ tournant G
+3
+Découpage
+n 15 · g 245
+4
+Marches
+Chêne 40
+5
+Structure
+◆ 3 à valider
+6
+Garde-corps
+Verre
+7
+Fabrication
+102 pièces
+3 · Découpage
+Combien de marches, et de quelle taille.
+Nombre de hauteurs n
+Auto · 15
+Hauteur de marche cible
+175 mm
+Giron cible
+Auto · 245
+15
+n
+180
+h mm
+605
+2h+g · 60–64
+▸ Réglages avancés (correction de la 1re hauteur)
+Vue conseillée : Élévation
+Plan
+3D
+ÉLÉVATION · hauteurs de marche et échappée
+▲ 1 avertissement
+● 1 conseil
+Contrôle ▴
+← Forme
+Marches →
+Les 8 sections deviennent 7 étapes libres (pas un tunnel) : chacune affiche son état et un résumé, et on peut cliquer n'importe laquelle.
+Chaque étape ouvre la vue la plus utile : Site sur le plan « Site et saisie », Découpage sur l'élévation, Structure sur la 3D.
+L'assistant devient le point d'entrée de l'étape 1, et la dernière étape, « Fabrication », rassemble développés, nomenclature et exports.
+C'est la piste la plus lisible pour le visiteur ; elle est plus lente pour l'artisan qui retouche un seul réglage.
+1d
+Deux modes : Conception / Fabrication (vue Fabrication)
+BLONDEL
+Quart tournant débillardé soudé ▾
+Conception
+Fabrication
+↶ ↷
+⋯
+Pièces
+Nomencl.
+Comparer
+Filtrer : repère, matériau…
+Limons
+5
+LE1 · LE2 · LD1 · LD2 · LD3
+Marches
+15
+M1 … M15 · chêne 40
+Supports
+28
+CR1 … CR14 · L 40×40×4
+Platines
+4
+PF1 · PH1
+Garde-corps
+36
+3 lignes · verre feuilleté
+Visserie
+14
+M6, M10
+LD2
+Limon de jour débillardé, tronçon 2/3 · tôle 8 mm S235 · 13,2 kg
+DXF R12
+GABARIT COTÉ DU DÉVELOPPÉ · zoom et déplacement
+Joints : J2 LD1↔LD2 · J3 LD2↔LD3 (cordon 325 mm)
+Sorties
+Dossier PDF
+A4
+A3
+☑ Plans et élévation
+☑ Gabarits limons et structure
+☐ Gabarits marches
+☐ Gabarits garde-corps
+Générer le dossier
+Fiche de pose (PDF)
+Liste de débit (CSV)
+DXF de toutes les pièces
+Coût estimé : masqué
+Barème d'atelier 0 / 9
+Compléter le profil d'atelier →
+La bascule sépare deux moments du métier : concevoir (paramètres, plan, 3D, élévation, contrôle ; mise en page 1a ou 1b) et fabriquer (pièces, gabarits, sorties).
+En Fabrication, les réglages d'atelier (pinces, marges, platines) sont proposés sur la pièce concernée plutôt que dans le formulaire général.
+Le Dossier PDF devient un constructeur (format et familles de gabarits) au lieu de 6 entrées de menu ; le profil d'atelier y est proposé sur place.
+1e
+Grand écran 1920 —
+1a
+avec vue double
+BLONDEL
+Quart tournant débillardé soudé ▾
+● Enregistré
+↶ ↷
+Nouveau ▾
+Importer ▾
+Exporter ▾
+⋯
+Paramètres
+comme
+1f
+Plan ▾
+Coté · Site · Expert
+PLAN
+3D ▾
+sélection synchronisée
+⇆ Vue unique
+3D
+Contrôle de conception
+comme
+1g
+n 15
+h 180
+g 245
+2h+g 605
+Échappée 1 901 / 1 960
+Calculé en 78 ms
+Dès 1680 px, la zone centrale se partage en deux vues au choix (Plan + 3D par défaut), avec la sélection synchronisée ; un bouton ⇆ revient à la vue unique.
+Les colonnes latérales s'élargissent (280 et 290 px) pour que les libellés longs ne passent plus à la ligne. En 1440, on reste sur 1a.
+ZONES · UNE PROPOSITION CHACUNE
+1f
+Panneau des paramètres : essentiel / atelier
+Structure
+▾
+Type
+Débillardé soudé ▾
+Nuance d'acier
+S235 · EXC2 ▾
+Épaisseur des limons
+8 mm
+◆ valeur par défaut à valider
+Dépassement bas d_b
+Auto
+275 mm
+Dépassement haut d_h
+60▍ mm
+↵
+Entrée ou sortie du champ pour appliquer · Échap annule
+▸ Réglages d'atelier
+14 · 3 ◆
+Poteau, supports de marche, platines, tôle pliée, rives du débillardé
+Balancement
+Sans objet sur un escalier droit : ajoutez un tournant dans Tracé.
+Champs automatiques : un seul contrôle « Auto | valeur calculée ». Un clic sur la valeur la fixe ; plus de libellé répété.
+Pendant la saisie, un liseré accent et ↵ indiquent que la valeur n'est pas encore appliquée. Après calcul, le champ modifié clignote brièvement, et les valeurs dérivées aussi.
+Les réglages d'atelier sont regroupés et repliés avec un compteur ; ◆ marque les valeurs par défaut à valider, dans la section comme dans son résumé.
+Une section sans objet est désactivée et dit comment la rendre utile.
+1g
+Contrôle de conception
+Contrôle de conception
+Strict ▾
+Logement intérieur · bois (DTU 36.3) · garde-corps 2024 · règles v1
+0
+Bloquant
+1
+Avert.
+1
+Conseil
+81
+Respect.
+▲ Avertissement
+Limon LE1
+Longueur d'appui trop courte sous la marche 6
+Mesuré 37,2 mm · attendu ≥ 50 mm
+Règle de l'art · confiance faible · fab_support_longueur_min
+Voir dans la 3D
+Surcharger…
+● Conseil
+Échappée sous la recommandation : 1 901 mm, conseillé ≥ 2 100 mm
+▸ 7 règles non évaluées · ▸ 81 respectées · ▸ 11 remarques
+▸ Prédimensionnement
+EXC2 · 5/5 ✓
+Contrôle indicatif : il ne vaut pas attestation de conformité.
+Les compteurs servent de filtres. Les groupes vides disparaissent, et quand tout va bien la colonne l'annonce en une ligne.
+Le message, en langage courant, vient en premier ; l'identifiant passe en minuscules à chasse fixe, en queue de carte.
+Les métadonnées sont traduites (« metier » devient « Règle de l'art »), et les contextes de contrôle ont des libellés accentués et lisibles.
+La mention indicative reste en pied de colonne, toujours visible.
+1h
+Menu Exporter regroupé
+Exporter ▴
+ATELIER
+Dossier PDF…
+format, gabarits ▸
+Fiche de pose (PDF)
+Liste de débit (CSV)
+DXF de toutes les pièces (R12)
+DXF de la pièce sélectionnée — sélectionnez une pièce
+CAO ET PLANS
+Plan coté
+DXF 2007
+R12
+SVG
+Élévation (SVG)
+Modèle 3D (glTF .glb)
+PROJET
+Fichier projet (.blondel.json)
+Dossier PDF
+Format
+A4
+A3
+Gabarits 1:1
+☑ Limons et structure
+☐ Marches — aucun gabarit
+☐ Garde-corps — aucun gabarit
+Télécharger
+Les 16 entrées tiennent en 3 groupes d'usage ; les 6 dossiers PDF deviennent une seule entrée qui se règle (A4/A3, familles de gabarits, ou aucune pour le dossier sans gabarits).
+Les variantes de format d'un même plan sont des pastilles sur la même ligne.
+Le menu est aligné sur le bord droit du bouton (il ne déborde plus) ; la raison d'une indisponibilité est écrite en clair, pas en infobulle.
+1i
+Assistant : saisie guidée, propositions comparables
+Nouvel escalier
+Assistant
+✕
+✓ 1 · Niveaux
+H 2 700 · dalle 200
+✓ 2 · Trémie
+1 100 × 3 150
+3 · Murs
+☑ Côté gauche · 3 150 mm
+☐ Côté bas · 1 100 mm
+☐ Côté droit · 3 150 mm
+SCHÉMA TRÉMIE + MURS
+4 · Contexte
+5 · Préférences (facultatif)
+9 propositions conformes
+Trier : score ▾ · ⇆ comparer
+CROQUIS EN PLAN
+1 · ¼ tournant palier G
+n 15 · g 270 · 2h+g 630
+1 conseil
+▸ 5 variantes
+CROQUIS EN PLAN
+2 · ¼ tournant G
+n 15 · g 270 · E 800
+1 avertissement
+▸ 11 variantes
+CROQUIS EN PLAN
+3 · Droit
+n 15 · g 270 · E 1 000
+1 conseil
+▸ 2 variantes
+Les propositions se recalculent à chaque étape validée, sans bouton « Proposer ».
+Remplace le projet en cours (annulable)
+Annuler
+Choisir la proposition 1
+La saisie se fait en étapes repliables qui gardent leur résumé ; le pied de fenêtre est fixe, donc plus de bouton masqué par le contenu.
+Mêmes libellés que le panneau des paramètres (« Épaisseur du plancher haut », axes X/Y identiques).
+« ⇆ comparer » aligne 2 à 3 propositions en colonnes, avec les mêmes grandeurs et le même ordre.
+1j
+Un seul modèle de fenêtre (ici Profil d'atelier)
+Profil d'atelier
+gardé dans ce navigateur
+✕
+3 / 9 — coûts masqués jusqu'à 9 / 9
+MAIN-D'ŒUVRE
+Taux horaire
+52 € HT/h
+Temps par coupe
+4 min
+Temps par mètre de cordon
+12 min/m
+Temps par pli
+à renseigner min
+Temps par perçage
+à renseigner min
+Temps par pièce unique
+à renseigner min
+MATIÈRE ET FINITION
+Acier · Bois · Finition — 3 champs ▸
+Importer JSON
+Exporter JSON
+Fermer
+Même grammaire pour l'assistant, l'atelier et les surcharges : en-tête (titre, portée, ✕), corps qui défile, pied fixe (actions secondaires à gauche, principale à droite).
+Deux tailles seulement : moyenne (atelier) et large (assistant).
+La progression 3 / 9 explique d'un coup d'œil pourquoi les coûts sont masqués ailleurs.
+1k
+États d'erreur et états de vue
+✕ Le calcul n'a pas pu aboutir
+modèle partiel affiché
+La structure « hélicoïdale à fût » ne s'applique qu'à un tracé hélicoïdal. Le projet est à volées.
+Passer en structure limons à la française
+Passer le tracé en hélicoïdal
+annulable (Ctrl+Z)
+structure « helical-core » · tracé « flights »
+Calcul…
+dernier modèle conservé, estompé
+Aucun modèle
+2 erreurs · voir ci-dessus
+Aucune pièce développée
+Choisir une structure →
+▲
+Autosauvegarde indisponible (stockage plein)
+Exporter le projet
+Détails
+La barre d'erreur est annoncée comme une alerte (role="alert"). Elle donne d'abord la cause en français, puis les corrections sous forme d'actions ; le détail technique vient en dernier.
+Pendant un calcul, la vue garde le dernier modèle, estompé, avec un fin liseré de progression (au lieu du seul texte dans la barre d'état).
+Chaque état vide propose l'action qui le fait disparaître.
+1l
+Thème sombre et couleurs partagées 2D / 3D / PDF
+Clair
+Sélection partagée
+#ff7a1a
+Bloquant
+#b3261e
+Avertissement
+#9a6200
+Conseil (accent)
+#416180
+Respecté
+#2e7d32
+Trémie
+#6e40c9
+3D · fond clair
+Sombre
+Sélection partagée
+#ff9a4d
+Bloquant
+#f28b82
+Avertissement
+#f0b85a
+Conseil (accent)
+#94bce3
+Respecté
+#81c995
+Trémie
+#a58cf0
+3D · fond sombre, grille atténuée
+Un seul jeu de jetons alimente l'interface, la scène 3D et les SVG exportés, alors qu'aujourd'hui la 3D a ses propres couleurs. La trémie a un jeton dédié, au lieu de #6e40c9 codé en dur.
+« Conseil » reprend l'accent acier du système : le rouge et l'ocre restent réservés à ce qui exige d'agir.
+Les documents d'atelier (PDF, SVG) restent toujours sur la palette claire, quel que soit le thème de l'écran.
+
+À essayer ensuite : « pousser 1b avec le mode Fabrication de 1d » · « détailler 1f pour les 8 sections » · « passer 1a en haute fidélité »

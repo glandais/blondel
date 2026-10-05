@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="_ds/industry-284fbf80-8693-4f36-b3b8-968f954d0b0d/styles.css">
+<script src="_ds/industry-284fbf80-8693-4f36-b3b8-968f954d0b0d/_ds_bundle.js"></script>
+<style>body{margin:0;background:var(--color-bg);color:var(--color-text);font-family:var(--font-body)}a{color:var(--color-accent-700)}a:hover{color:var(--color-accent-800)}</style>
+</helmet>
+<div style="max-width:1120px;margin:0 auto;padding:48px 32px 96px;display:flex;flex-direction:column;gap:48px;font-size:14px;line-height:1.55">
+
+<header style="display:flex;flex-direction:column;gap:10px">
+<span style="font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--color-accent-700)">Blondel · refonte · contenu</span>
+<h1 style="margin:0;font-size:44px">Les 7 étapes guidées et les 8 panneaux libres</h1>
+<p style="margin:0;max-width:760px;color:var(--color-neutral-800);text-wrap:pretty">Inventaire champ par champ, établi d'après <span style="font-family:ui-monospace,monospace;font-size:12.5px">ParamsPanel.tsx</span>, <span style="font-family:ui-monospace,monospace;font-size:12.5px">GuardsSection.tsx</span>, <span style="font-family:ui-monospace,monospace;font-size:12.5px">HelicalEditor.tsx</span> et <span style="font-family:ui-monospace,monospace;font-size:12.5px">paramLabels.ts</span>. Pour chaque paramètre : où il apparaît dans le parcours guidé, à quel niveau dans le parcours libre, et quel libellé il porte désormais partout.</p>
+</header>
+
+<section style="display:flex;flex-direction:column;gap:16px">
+<h2 style="margin:0;font-size:30px">1 · Trois niveaux de présence</h2>
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:20px">
+<div class="blueprint" style="padding:16px;display:flex;flex-direction:column;gap:6px"><i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+<span style="font:600 19px var(--font-heading)">Essentiel</span>
+<span style="color:var(--color-neutral-800);text-wrap:pretty">Visible dans l'étape guidée <b>et</b> en tête du panneau libre. Ce qui définit l'escalier : un débutant doit pouvoir le régler.</span>
+<span style="font-size:12px;color:var(--color-neutral-700)">Guidé : Étape · Libre : Visible</span></div>
+<div class="blueprint" style="padding:16px;display:flex;flex-direction:column;gap:6px"><i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+<span style="font:600 19px var(--font-heading)">Conception</span>
+<span style="color:var(--color-neutral-800);text-wrap:pretty">Visible dans le panneau libre. Dans le guidé, rangé sous « Plus de réglages » replié, ou absent quand l'automatique suffit.</span>
+<span style="font-size:12px;color:var(--color-neutral-700)">Guidé : Plus / — · Libre : Visible</span></div>
+<div class="blueprint" style="padding:16px;display:flex;flex-direction:column;gap:6px"><i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+<span style="font:600 19px var(--font-heading)">Atelier</span>
+<span style="color:var(--color-neutral-800);text-wrap:pretty">Fabrication : pinces, marges, coefficients. Replié sous « Réglages d'atelier » dans le panneau, et repris dans l'inspecteur de la pièce et le mode Fabrication.</span>
+<span style="font-size:12px;color:var(--color-neutral-700)">Guidé : étape 7 · Libre : Atelier ▸</span></div>
+</div>
+<ul style="margin:0;padding-left:20px;color:var(--color-neutral-800);display:flex;flex-direction:column;gap:4px">
+<li><b>◆</b> marque toute valeur par défaut non sourcée (« à valider »). Le compteur ◆ remonte sur le titre du groupe, l'icône du rail et le résumé de l'étape. L'étape 7 en dresse la liste complète.</li>
+<li>Un champ conditionnel (rayon du jour, épaisseur de contremarche…) n'apparaît que lorsqu'il s'applique, au même niveau que son déclencheur.</li>
+<li>Un champ « automatique » est <b>un seul contrôle</b> : <span style="border:1px solid var(--color-divider);padding:0 6px">Auto | valeur</span>. Fini la case « … : automatique » suivie d'un second champ du même nom.</li>
+<li>L'unité est toujours à droite du champ, jamais dans le libellé.</li>
+</ul>
+</section>
+
+<section style="display:flex;flex-direction:column;gap:20px">
+<h2 style="margin:0;font-size:30px">2 · Les 7 étapes du parcours guidé</h2>
+<p style="margin:0;max-width:760px;color:var(--color-neutral-800);text-wrap:pretty">Chaque étape a un objectif en une phrase, une vue conseillée, des chiffres de contrôle visibles en permanence et un résumé d'une ligne pour la barre d'étapes. Une étape est cochée ✓ quand elle a été vue et qu'aucune règle bloquante ne lui est rattachée.</p>
+<sc-for list="{{ steps }}" as="s" hint-placeholder-count="7">
+<article class="blueprint" style="padding:20px 22px;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px 28px"><i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+<div style="grid-column:1/-1;display:flex;align-items:baseline;gap:14px;flex-wrap:wrap">
+<span style="font:600 13px var(--font-heading);width:28px;height:28px;display:flex;align-items:center;justify-content:center;background:var(--color-text);color:var(--color-bg)">{{ s.n }}</span>
+<h3 style="margin:0;font-size:26px">{{ s.t }}</h3>
+<span style="color:var(--color-neutral-800)">{{ s.goal }}</span>
+<span style="flex:1"></span>
+<span class="tag tag-accent">Vue : {{ s.view }}</span>
+<span class="tag tag-neutral">Libre : {{ s.panels }}</span>
+</div>
+<div style="display:flex;flex-direction:column;gap:6px">
+<span style="font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--color-neutral-700)">Dans l'étape</span>
+<sc-for list="{{ s.fields }}" as="f" hint-placeholder-count="4"><div style="display:flex;gap:10px;padding:4px 0;border-bottom:1px solid var(--color-divider)"><span style="flex:1">{{ f.l }}</span><span style="color:var(--color-neutral-700);font-size:12.5px;text-align:right">{{ f.c }}</span></div></sc-for>
+</div>
+<div style="display:flex;flex-direction:column;gap:12px">
+<div style="display:flex;flex-direction:column;gap:6px">
+<span style="font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--color-neutral-700)">Plus de réglages (replié)</span>
+<span style="color:var(--color-neutral-800);text-wrap:pretty">{{ s.more }}</span>
+</div>
+<div style="display:flex;flex-direction:column;gap:6px">
+<span style="font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--color-neutral-700)">Chiffres affichés</span>
+<span style="color:var(--color-neutral-800);font-variant-numeric:tabular-nums">{{ s.figs }}</span>
+</div>
+<div style="display:flex;flex-direction:column;gap:6px">
+<span style="font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--color-neutral-700)">Règles rattachées</span>
+<span style="color:var(--color-neutral-800)">{{ s.rules }}</span>
+</div>
+<div style="display:flex;flex-direction:column;gap:6px">
+<span style="font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--color-neutral-700)">Résumé dans la barre d'étapes</span>
+<span style="font-family:ui-monospace,monospace;font-size:12.5px;color:var(--color-neutral-800)">{{ s.summary }}</span>
+</div>
+</div>
+</article>
+</sc-for>
+</section>
+
+<section style="display:flex;flex-direction:column;gap:20px">
+<h2 style="margin:0;font-size:30px">3 · Les 8 panneaux du parcours libre</h2>
+<p style="margin:0;max-width:760px;color:var(--color-neutral-800);text-wrap:pretty">Ordre des lignes = ordre dans le panneau. <b>Guidé</b> : <i>Étape n</i>, <i>Plus</i> (replié dans l'étape) ou — (absent, l'automatique s'applique). <b>Libre</b> : <i>Visible</i> ou <i>Atelier</i> (replié). <b>Aussi dans</b> : autres endroits où la même valeur se modifie.</p>
+<sc-for list="{{ panels }}" as="p" hint-placeholder-count="8">
+<div style="display:flex;flex-direction:column;gap:10px">
+<div style="display:flex;align-items:baseline;gap:12px;flex-wrap:wrap"><h3 style="margin:0;font-size:24px">{{ p.t }}</h3><span style="color:var(--color-neutral-700)">{{ p.sub }}</span></div>
+<div style="overflow-x:auto">
+<table class="table" style="font-size:13px;min-width:820px">
+<thead><tr><th style="width:30%">Paramètre (libellé unifié)</th><th style="width:17%">Contrôle</th><th style="width:9%">Guidé</th><th style="width:9%">Libre</th><th style="width:14%">Aussi dans</th><th>Note</th></tr></thead>
+<tbody>
+<sc-for list="{{ p.rows }}" as="r" hint-placeholder-count="5"><tr><td style="font-weight:{{ r.w }}">{{ r.p }}</td><td style="color:var(--color-neutral-800)">{{ r.c }}</td><td style="color:{{ r.gc }}">{{ r.g }}</td><td style="color:{{ r.lc }}">{{ r.l }}</td><td style="color:var(--color-neutral-700)">{{ r.x }}</td><td style="color:var(--color-neutral-700)">{{ r.n }}</td></tr></sc-for>
+</tbody>
+</table>
+</div>
+</div>
+</sc-for>
+</section>
+
+<section style="display:flex;flex-direction:column;gap:14px">
+<h2 style="margin:0;font-size:30px">4 · Libellés unifiés</h2>
+<p style="margin:0;max-width:760px;color:var(--color-neutral-800)">Un seul libellé par notion dans le panneau, l'assistant, l'inspecteur, le plan et les exports (frictions 6, 7, 11 et 12).</p>
+<div style="overflow-x:auto"><table class="table" style="font-size:13px;min-width:720px">
+<thead><tr><th>Aujourd'hui (panneau)</th><th>Aujourd'hui (assistant)</th><th>Désormais</th></tr></thead>
+<tbody><sc-for list="{{ labels }}" as="r" hint-placeholder-count="6"><tr><td style="color:var(--color-neutral-700)">{{ r.a }}</td><td style="color:var(--color-neutral-700)">{{ r.b }}</td><td style="font-weight:500">{{ r.c }}</td></tr></sc-for></tbody>
+</table></div>
+</section>
+
+<section style="display:flex;flex-direction:column;gap:12px">
+<h2 style="margin:0;font-size:30px">5 · À trancher</h2>
+<ol style="margin:0;padding-left:20px;display:flex;flex-direction:column;gap:6px;color:var(--color-neutral-800)">
+<sc-for list="{{ open }}" as="q" hint-placeholder-count="5"><li style="text-wrap:pretty">{{ q }}</li></sc-for>
+</ol>
+</section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const C = { g: 'var(--color-accent-800)', p: 'var(--color-neutral-800)', d: 'var(--color-neutral-500)', a: '#9a6200' };
+    const R = (p, c, g, l, x = '', n = '', head = false) => ({
+      p, c, g, l, x, n, w: head ? 600 : 400,
+      gc: g.startsWith('Étape') ? C.g : g === 'Plus' ? C.p : C.d,
+      lc: l === 'Atelier' ? C.a : C.p,
+    });
+    return {
+      steps: [
+        { n: '1', t: 'Site', goal: 'Où va l\'escalier : niveaux, trémie, murs.', view: 'Plan · Site et saisie', panels: 'Site',
+          fields: [
+            { l: 'Hauteur à monter H', c: 'nombre, mm' },
+            { l: 'Épaisseur du plancher haut', c: 'nombre, mm' },
+            { l: 'Trémie', c: 'Rectangulaire | Tracée | Aucune' },
+            { l: 'Trémie : coin X, coin Y, longueur X, largeur Y', c: 'saisie ou tracé sur le plan' },
+            { l: 'Murs', c: 'tracé sur le plan, ou un côté par case' },
+          ],
+          more: 'Revêtements des sols bas et haut. Calque de fond (DXF ou image à calibrer). Relevé de trémie (4 côtés + 2 diagonales).',
+          figs: 'Trémie 2 930 × 1 330 · dalle 200 · échappée possible sous dalle',
+          rules: 'Hauteur à monter, échappée (pré-évaluée), dimensions de trémie.',
+          summary: 'H 2 700 · trémie 2 930 × 1 330' },
+        { n: '2', t: 'Forme', goal: 'Le plan de l\'escalier : droit, tournant, hélicoïdal.', view: 'Plan coté', panels: 'Tracé + Balancement',
+          fields: [
+            { l: 'Forme', c: 'cartes : droit, ¼ G, ¼ D, U, S, ½ tournant, hélicoïdal' },
+            { l: 'Emmarchement E', c: 'nombre, mm' },
+            { l: 'Tournant n : marches balancées ou palier', c: 'segmenté, par tournant' },
+            { l: 'Tournant n : jour', c: 'Angle vif | Arrondi | Poteau' },
+            { l: 'Rayon du jour / côté du poteau', c: 'si arrondi / poteau' },
+            { l: 'Hélicoïdal : R_e, centre, r_f ou r_j, marches par tour', c: 'si hélicoïdal' },
+          ],
+          more: 'Longueur de chaque volée (Auto | valeur). Collet cible, marches balancées par côté. Recaler volées et trémie (proposé seulement quand le tracé déborde la trémie).',
+          figs: 'Typologie · reculement 3 430 · collet mini 108 · emprise au sol',
+          rules: 'Emmarchement, collet, giron sur la ligne de foulée, régularité des balancées.',
+          summary: 'Quart tournant gauche · E 900' },
+        { n: '3', t: 'Découpage', goal: 'Combien de marches, et de quelle hauteur.', view: 'Élévation', panels: 'Découpage',
+          fields: [
+            { l: 'Nombre de hauteurs n', c: 'Auto | valeur' },
+            { l: 'Hauteur de marche cible', c: 'nombre, mm' },
+            { l: 'Giron cible', c: 'Auto | valeur (volée automatique seulement)' },
+          ],
+          more: 'Correction de la 1re hauteur.',
+          figs: 'n · h · g · 2h + g sur la jauge 60–64 cm · échappée',
+          rules: 'Hauteur de marche, giron, 2h + g, échappée.',
+          summary: '15 marches · 180 mm' },
+        { n: '4', t: 'Marches', goal: 'De quoi sont faites les marches.', view: '3D', panels: 'Marches (+ Structure › essence)',
+          fields: [
+            { l: 'Matériau des marches', c: 'Bois | Tôle pliée (selon structure)' },
+            { l: 'Essence', c: 'liste (si bois)' },
+            { l: 'Épaisseur de marche', c: 'nombre, mm' },
+            { l: 'Débord de nez', c: 'nombre, mm' },
+            { l: 'Contremarches', c: 'Pleines | Ajourées | Aucune' },
+          ],
+          more: 'Épaisseur de contremarche. Rayon d\'arrondi du nez.',
+          figs: 'Masse des marches · recouvrement au nez',
+          rules: 'Débord de nez, ouverture entre marches (contremarches ajourées), recouvrement.',
+          summary: 'Chêne 40 · nez 30' },
+        { n: '5', t: 'Structure', goal: 'Ce qui porte les marches.', view: '3D', panels: 'Structure (hors Atelier)',
+          fields: [
+            { l: 'Structure', c: 'cartes par famille : bois, métal, mixte' },
+            { l: 'Nuance d\'acier / essence', c: 'selon famille' },
+            { l: 'Finition', c: 'Brut | Peint | Galvanisé (métal)' },
+            { l: 'Famille de profilé', c: 'si profilés' },
+          ],
+          more: 'Épaisseur des limons, dépassements haut et bas, section du catalogue (Auto), poteau. Les réglages d\'atelier n\'apparaissent pas ici.',
+          figs: 'Masse · classe d\'exécution · prédimensionnement ✓ / ✗ par limon',
+          rules: 'Prédimensionnement, compatibilité structure / tracé, porte-à-faux.',
+          summary: 'Débillardé soudé · S235 · ◆ 3' },
+        { n: '6', t: 'Garde-corps', goal: 'Protéger du vide.', view: '3D', panels: 'Garde-corps (hors Atelier)',
+          fields: [
+            { l: 'Garde-corps et mains courantes', c: 'case' },
+            { l: 'Remplissage', c: 'cartes : balustres, lisses, câbles, verre, tôle perforée, panneau' },
+            { l: 'Garde-corps de trémie', c: 'case' },
+            { l: 'Mains courantes murales', c: 'Auto | Aucune | Jour | Extérieur | Les deux' },
+            { l: 'Matériau', c: 'liste ◆' },
+          ],
+          more: 'Côtés jour / extérieur (Auto selon murs | Vide | Mur), hauteurs, paramètres du remplissage.',
+          figs: 'Longueur de garde-corps · poteaux · hauteur mini exigée',
+          rules: 'Hauteur de garde-corps, vides du remplissage, main courante.',
+          summary: 'Verre · 3 lignes · ◆ 1' },
+        { n: '7', t: 'Fabrication', goal: 'Vérifier avant de fabriquer, puis sortir les documents.', view: 'Développés', panels: 'mode Fabrication',
+          fields: [
+            { l: 'Valeurs ◆ à valider', c: 'liste à cocher, une ligne par valeur' },
+            { l: 'Pièces', c: 'liste par famille → développé' },
+            { l: 'Dossier PDF', c: 'format, gabarits → Générer' },
+            { l: 'Fiche de pose, liste de débit', c: 'boutons' },
+            { l: 'Coût estimé', c: 'ou « Compléter le profil d\'atelier »' },
+          ],
+          more: 'Tous les réglages d\'atelier, groupés par pièce. Comparateur de structures.',
+          figs: '102 pièces · 412 kg · EXC2 · ◆ 4 restantes',
+          rules: 'Toutes les règles de fabrication (fab_*), soudures, classe d\'exécution.',
+          summary: '102 pièces · ◆ 4 à valider' },
+      ],
+      panels: [
+        { t: 'Site', sub: 'Étape 1', rows: [
+          R('Hauteur à monter H', 'nombre, mm', 'Étape 1', 'Visible', 'Assistant', 'Sol fini bas → sol fini haut'),
+          R('Épaisseur du plancher haut', 'nombre, mm', 'Étape 1', 'Visible', 'Assistant', 'Remplace « Épaisseur de dalle »'),
+          R('Revêtement du sol bas', 'nombre, mm', 'Plus', 'Visible'),
+          R('Revêtement du sol haut', 'nombre, mm', 'Plus', 'Visible'),
+          R('Trémie', 'Rectangulaire | Tracée | Aucune', 'Étape 1', 'Visible', 'Plan Site, Assistant', 'Remplace la case « Trémie dans le plancher haut »'),
+          R('Trémie : coin X / coin Y', 'nombre, mm', 'Étape 1', 'Visible', 'Plan Site', 'si rectangulaire'),
+          R('Trémie : longueur (X) / largeur (Y)', 'nombre, mm', 'Étape 1', 'Visible', 'Plan Site', 'si rectangulaire'),
+          R('Trémie tracée', 'lien « Modifier sur le plan »', 'Étape 1', 'Visible', 'Plan Site', 'n sommets ; relevé 4 côtés + 2 diagonales'),
+          R('Murs', 'liste par côté', 'Étape 1', 'Visible', 'Plan Site, Assistant', 'Aujourd\'hui seulement dans le plan'),
+          R('Calque de fond', 'Importer DXF | image', 'Plus', 'Visible', 'Importer ▾', 'Calibrer, opacité'),
+        ] },
+        { t: 'Tracé', sub: 'Étape 2 · volées ou hélicoïdal', rows: [
+          R('Type de tracé', 'Volées | Hélicoïdal', 'Étape 2', 'Visible', '', 'Dans le guidé, inclus dans les cartes de forme'),
+          R('Emmarchement E', 'nombre, mm', 'Étape 2', 'Visible', 'Assistant'),
+          R('Typologie', 'lecture seule', 'Étape 2', 'Visible', '', 'Déduite des tournants'),
+          R('Volées', '', 'Étape 2', 'Visible', '', '', true),
+          R('Volée n : longueur (bord extérieur)', 'Auto | valeur', 'Plus', 'Visible', 'Plan coté', 'Auto : escalier droit seulement'),
+          R('Ajouter / retirer une volée', 'boutons', '—', 'Visible', '', 'Dans le guidé, remplacé par les cartes de forme'),
+          R('Enchaînement des tournants 1 et 2', 'Même sens (U) | Opposés (S/Z)', '—', 'Visible', '', 'Cartes U / S dans le guidé'),
+          R('Tournant n', '', 'Étape 2', 'Visible', '', '', true),
+          R('Tournant n : sens', 'Gauche | Droite', '—', 'Visible', '', 'Cartes ¼ G / ¼ D dans le guidé'),
+          R('Tournant n : type', 'Balancées | Palier', 'Étape 2', 'Visible'),
+          R('Tournant n : jour', 'Angle vif | Arrondi | Poteau', 'Étape 2', 'Visible'),
+          R('Rayon du jour', 'nombre, mm', 'Étape 2', 'Visible', '', 'si arrondi'),
+          R('Côté du poteau', 'nombre, mm', 'Étape 2', 'Visible', 'Inspecteur pièce', 'si poteau'),
+          R('Décalage du poteau vers le jour', 'nombre, mm', '—', 'Visible', 'Inspecteur pièce', 'si poteau'),
+          R('Ligne de foulée', '', '—', 'Visible', '', '', true),
+          R('Ligne de foulée', 'Selon le DTU | Distance au jour', '—', 'Visible', '', 'DTU par défaut'),
+          R('Distance au jour', 'nombre, mm', '—', 'Visible', '', 'si distance imposée'),
+          R('Bord de mesure', 'Auto | Gauche | Droit', '—', 'Visible', '', 'si applicable'),
+          R('Recaler volées et trémie', 'bouton', 'Plus', 'Visible', 'Correction proposée', 'Raison affichée sous le bouton si désactivé'),
+          R('Hélicoïdal', '', 'Étape 2', 'Visible', '', '', true),
+          R('Sens de rotation en montant', 'Gauche | Droite', 'Étape 2', 'Visible'),
+          R('Rayon extérieur R_e', 'nombre, mm', 'Étape 2', 'Visible'),
+          R('Centre', 'Fût | Jour central', 'Étape 2', 'Visible'),
+          R('Rayon du fût r_f / du jour r_j', 'nombre, mm', 'Étape 2', 'Visible'),
+          R('Rotation', 'Marches par tour | Angle total', 'Plus', 'Visible'),
+          R('Marches par tour N / angle total', 'nombre / °', 'Étape 2', 'Visible'),
+          R('Angle de départ', '°', 'Plus', 'Visible'),
+          R('Palier d\'arrivée en secteur + angle', 'case + °', 'Plus', 'Visible'),
+        ] },
+        { t: 'Découpage', sub: 'Étape 3', rows: [
+          R('Nombre de hauteurs n', 'Auto | valeur (2–60)', 'Étape 3', 'Visible'),
+          R('Hauteur de marche cible', 'nombre, mm', 'Étape 3', 'Visible', 'Assistant'),
+          R('Giron cible', 'Auto | valeur', 'Étape 3', 'Visible', '', 'Volée automatique seulement ; sans effet en hélicoïdal'),
+          R('Correction de la 1re hauteur', 'nombre signé, mm', 'Plus', 'Visible', '', 'Compensation de revêtement'),
+        ] },
+        { t: 'Balancement', sub: 'Étape 2 (Plus) · désactivé sans tournant', rows: [
+          R('Méthode', 'liste M0 à M6, avec libellé clair', '—', 'Visible', '', 'Défaut du cœur appliqué dans le guidé'),
+          R('Variante M3', 'Auto | Cubique | Quintique', '—', 'Visible', '', 'si M3'),
+          R('Angle α de la herse', 'curseur, °', '—', 'Visible', '', 'si M2'),
+          R('Portée λ / raideur p de la rotation', 'curseurs ◆', '—', 'Visible', '', 'si M6'),
+          R('Marches balancées par côté', 'Auto | valeur (1–8)', 'Plus', 'Visible'),
+          R('Collet cible (corde)', 'nombre, mm', 'Plus', 'Visible'),
+          R('Ligne de nez n', 'angle °, fixer', '—', '—', 'Inspecteur marche', 'Remplace le mode expert'),
+        ] },
+        { t: 'Marches', sub: 'Étape 4', rows: [
+          R('Épaisseur de marche', 'nombre, mm', 'Étape 4', 'Visible'),
+          R('Débord de nez', 'nombre, mm', 'Étape 4', 'Visible'),
+          R('Contremarches', 'Pleines | Ajourées | Aucune', 'Étape 4', 'Visible'),
+          R('Épaisseur de contremarche', 'nombre, mm', 'Plus', 'Visible', '', 'si contremarches'),
+          R('Matériau / essence des marches', 'liste', 'Étape 4', 'Visible', '', 'Paramètre de la structure, montré ici aussi (même valeur)'),
+          R('Rayon d\'arrondi du nez', 'nombre, mm', 'Plus', 'Visible', '', 'Paramètre de la structure'),
+        ] },
+        { t: 'Structure', sub: 'Étape 5 · paramètres selon la structure choisie', rows: [
+          R('Structure', 'cartes (famille, compatibilité tracé)', 'Étape 5', 'Visible', 'Comparateur', 'Incompatible : grisée, raison écrite'),
+          R('Nuance d\'acier', 'S235 | S355', 'Étape 5', 'Visible', '', 'S355 ⇒ EXC2'),
+          R('Finition', 'Brut | Peint | Galvanisé', 'Étape 5', 'Visible'),
+          R('Famille de profilé', 'liste', 'Étape 5', 'Visible', '', 'si profilés'),
+          R('Section du catalogue', 'Auto | liste', 'Plus', 'Visible', 'Inspecteur pièce', 'Auto : la plus légère qui passe'),
+          R('Épaisseur des limons', 'nombre, mm ◆', 'Plus', 'Visible', 'Inspecteur pièce'),
+          R('Dépassements haut d_h / bas d_b', 'Auto | valeur', 'Plus', 'Visible', 'Inspecteur pièce'),
+          R('Prolongements avant départ / après arrivée', 'nombre, mm', '—', 'Atelier', 'Inspecteur pièce'),
+          R('Aboutage d\'un limon trop long', 'Soudé | Éclissé', '—', 'Atelier'),
+          R('Profondeur d\'encastrement, reste sous entaille', 'nombre, mm', '—', 'Atelier', '', 'bois'),
+          R('Tolérance d\'onglet à l\'angle mural', 'nombre, mm ◆', '—', 'Atelier'),
+          R('Poteau', '', 'Plus', 'Visible', '', '', true),
+          R('Section, côté, assemblage, pied', 'listes / nombres', 'Plus', 'Visible', 'Inspecteur pièce'),
+          R('Jeu, paroi du tube, boulons, tenon', 'nombres ◆', '—', 'Atelier', 'Inspecteur pièce'),
+          R('Supports de marche', '', '—', 'Atelier', '', '', true),
+          R('Type, fixation', 'Cornière | Plat · Soudés | Vissés', '—', 'Visible', 'Inspecteur pièce'),
+          R('Aile, épaisseur, perçage, pince, marges, appui mini', 'nombres ◆', '—', 'Atelier', 'Inspecteur pièce, Correction'),
+          R('Platines', '', '—', 'Atelier', '', '', true),
+          R('Platine de pied / de tête', 'cases', '—', 'Visible', 'Inspecteur pièce'),
+          R('Épaisseur, largeur, longueur, débord, perçage, pince', 'nombres', '—', 'Atelier', 'Inspecteur pièce'),
+          R('Marches en tôle pliée', '', '—', 'Atelier', '', 'si tôle pliée', true),
+          R('Profil, épaisseur de tôle', 'Z | U · nombre ◆', 'Plus', 'Visible', 'Inspecteur pièce'),
+          R('Ailes, retour, jeu, contremarche d\'arrivée', 'nombres ◆', '—', 'Atelier', 'Inspecteur pièce'),
+          R('Limon de jour débillardé', '', '—', 'Atelier', '', '8 réglages, tous ◆ sauf le pas', true),
+          R('Prédimensionnement indicatif', '', '—', 'Visible', '', '', true),
+          R('Jeu de charges, catégorie d\'usage', 'listes', '—', 'Visible', 'Contrôle'),
+          R('γ_G, γ_Q, γ_M0, γ_M, k_mod, classe du bois, part de Q_k', 'nombres ◆', '—', 'Atelier'),
+          R('Justification du porte-à-faux', 'texte', '—', 'Visible', 'Inspecteur règle', 'Hélicoïdal à fût ; apparaît avec l\'avertissement'),
+        ] },
+        { t: 'Garde-corps', sub: 'Étape 6', rows: [
+          R('Garde-corps et mains courantes', 'case', 'Étape 6', 'Visible', 'Assistant'),
+          R('Garde-corps de volée', '', 'Étape 6', 'Visible', '', '', true),
+          R('Côté jour / côté extérieur', 'Auto (murs) | Vide | Mur', 'Plus', 'Visible', 'Plan Site'),
+          R('Hauteur', 'nombre, mm', 'Plus', 'Visible', '', 'Défaut réglementaire selon date'),
+          R('Axe depuis le bord de l\'emmarchement', 'nombre, mm ◆', '—', 'Atelier'),
+          R('Garde-corps de trémie', '', 'Étape 6', 'Visible', '', '', true),
+          R('Sur les côtés libres de la trémie', 'case', 'Étape 6', 'Visible'),
+          R('Hauteur', 'nombre, mm', 'Plus', 'Visible'),
+          R('Recul depuis le nu de la trémie', 'nombre, mm ◆', '—', 'Atelier'),
+          R('Remplissage', '', 'Étape 6', 'Visible', '', '', true),
+          R('Type', '6 cartes', 'Étape 6', 'Visible'),
+          R('Entraxe / nombre / diamètre / épaisseur / section', 'selon type', 'Plus', 'Visible', '', 'Épaisseur verre et entraxe balustres ◆'),
+          R('Jeu panneaux / poteaux, perforations', 'nombres', '—', 'Atelier'),
+          R('Vide sous le remplissage', 'nombre, mm', 'Plus', 'Visible'),
+          R('Poteaux : côté, entraxe max, angle de poteau d\'angle', 'nombres ◆', '—', 'Atelier', 'Inspecteur pièce'),
+          R('Main courante', '', 'Étape 6', 'Visible', '', '', true),
+          R('Mains courantes murales', 'Auto | Aucune | Jour | Ext. | Les deux', 'Étape 6', 'Visible'),
+          R('Section', 'Ronde | Rect. + dimensions', 'Plus', 'Visible'),
+          R('Hauteur, prolongements bas / haut', 'nombre · Auto (un giron)', 'Plus', 'Visible'),
+          R('Dégagement au mur', 'nombre, mm', '—', 'Atelier'),
+          R('Matériau', 'liste ◆', 'Étape 6', 'Visible'),
+          R('Tolérance de détection des murs', 'nombre, mm ◆', '—', 'Atelier'),
+        ] },
+        { t: 'Contexte de contrôle', sub: 'Pas d\'étape (validé) · réglé par l\'assistant, modifiable depuis le contrôle', rows: [
+          R('Usage', 'Logement | ERP | … (libellés clairs)', '—', 'Visible', 'Assistant, Contrôle', 'Remplace les cases « logement interieur »'),
+          R('Autres contextes', 'cases, description visible sous chaque case', '—', 'Visible', 'Contrôle', 'Les contextes déduits restent en lecture seule'),
+          R('Profil', 'Strict | Souple', '—', 'Visible', 'Contrôle (en-tête)'),
+          R('Date de référence (PC/DP ou marché)', 'date', '—', 'Visible', 'Assistant', 'Pilote le régime garde-corps'),
+          R('Surcharges de règles', 'lien → liste', '—', 'Visible', 'Inspecteur règle', 'Compteur'),
+        ] },
+      ],
+      labels: [
+        { a: 'Largeur (X) / Longueur (Y)', b: 'Longueur de trémie (X) / Largeur de trémie (Y)', c: 'Trémie : longueur (X) · Trémie : largeur (Y)' },
+        { a: 'X (coin) / Y (coin)', b: 'Coin X', c: 'Trémie : coin X · coin Y' },
+        { a: 'Épaisseur du plancher haut', b: 'Épaisseur de dalle', c: 'Épaisseur du plancher haut' },
+        { a: '« Nombre de hauteurs n : automatique » + champ', b: '—', c: 'Nombre de hauteurs n [Auto | 15]' },
+        { a: 'Distance réelle (mm), Angle imposé (°)', b: '—', c: 'Distance réelle · Angle imposé (unité à droite)' },
+        { a: 'logement interieur, bois dtu…', b: 'Usage', c: 'Logement (intérieur), Bois (DTU 36.3)…' },
+        { a: 'Méthode M3', b: '—', c: 'M3 · courbe continue (quintique)' },
+        { a: 'Dépassement haut d_h (au-dessus des nez)', b: '—', c: 'Dépassement haut d_h · aide : au-dessus de la ligne des nez' },
+      ],
+      open: [
+        'Étape 4 : l\'essence et le rayon de nez sont des paramètres de la structure. Les afficher aussi dans « Marches » suppose qu\'une même valeur s\'édite à deux endroits ; d\'accord ?',
+        'Balancement dans le guidé : seuls le collet cible et le nombre de marches balancées par côté sont proposés (sous « Plus »). La méthode reste celle du cœur. Suffisant pour un débutant ?',
+        'Les « Supports de marche » passent en Atelier sauf leur type et leur fixation. Or la longueur d\'appui déclenche souvent un avertissement : faut-il la remonter au niveau Conception ?',
+        'Le prédimensionnement (jeu de charges, catégorie) reste dans Structure. On pourrait aussi le rattacher au Contexte de contrôle.',
+        'L\'étape 7 dresse la liste de toutes les valeurs ◆. Faut-il bloquer « Générer le dossier » tant qu\'il en reste, ou seulement les signaler dans le PDF ?',
+      ],
+    };
+  }
+}
+</script>
+</body>
+</html>
