@@ -31,7 +31,12 @@ import { intersectLines } from "../geom2d/intersect.js";
 import * as V from "../geom2d/vec.js";
 import type { NosingLine, Part } from "../model/derived.js";
 import type { Mm, Vec2 } from "../model/primitives.js";
-import type { StructureContext, StructureKind, StructureOutput } from "../model/plugins.js";
+import type {
+  PartAssembly,
+  StructureContext,
+  StructureKind,
+  StructureOutput,
+} from "../model/plugins.js";
 import { buildBasicParts } from "../parts/basic.js";
 import { getRule } from "../rules/table.js";
 import {
@@ -47,6 +52,7 @@ import {
   pluginRuleDef,
   stringerRulesOutOfDomain,
 } from "./checks.js";
+import { commonAutoValue } from "./autoValue.js";
 import {
   developStringer,
   housingPolygons,
@@ -639,10 +645,16 @@ export function buildWoodHoused(ctx: StructureContext, params: WoodHousedParams)
 
   // 3. Limons.
   const stringers: HousedStringer[] = [];
+  /** Assemblages : limon ↔ marches qu'il porte, poteau ↔ limons qu'il reçoit. */
+  const assemblies: PartAssembly[] = [];
   const stocks = new Map<string, ReturnType<typeof stockOf>>();
   for (const f of faces) {
     const { uLo, uHi } = windowOf(f, nosings, resolved.startExtension, resolved.endExtension, e);
     const housings = housingsOn(f, pieces, nosings, depth, clearance, params.noseRadius, uLo, uHi);
+    for (const h of housings) {
+      if (h.tread !== undefined)
+        assemblies.push({ a: { partId: f.id }, b: { treadNumber: h.tread } });
+    }
     const dev = developStringer({
       pitch: pitch[f.side],
       sigmaA: f.sigmaA,
@@ -759,6 +771,7 @@ export function buildWoodHoused(ctx: StructureContext, params: WoodHousedParams)
       const atEnd = s.face.end === "newel" && s.face.leg === nw.geom.turn;
       const atStart = s.face.start === "newel" && s.face.leg === nw.geom.turn + 1;
       if (!atEnd && !atStart) continue;
+      assemblies.push({ a: { partId: nw.id }, b: { partId: s.face.id } });
       const u = atEnd ? s.development.uHi : s.development.uLo;
       const idx = atEnd ? s.development.lowerRive.length - 1 : 0;
       const tenon = s.development.tenons.find((t) => t.toward === (atEnd ? 1 : -1));
@@ -970,17 +983,49 @@ export function buildWoodHoused(ctx: StructureContext, params: WoodHousedParams)
     }),
   );
 
+  const autoValues = housedAutoValues(params, resolved, faces);
   return {
     output: {
       parts: [...replaced, ...allParts],
       checks: checks.results,
       notes,
       ...(errors.length > 0 ? { errors } : {}),
+      ...(autoValues ? { autoValues } : {}),
+      ...(assemblies.length > 0 ? { assemblies } : {}),
     },
     stringers,
     posts,
     resolved,
   };
+}
+
+/**
+ * Valeurs retenues des paramètres laissés en `auto` (`StructureOutput.autoValues`). Les
+ * dépassements d_h / d_b sont résolus par limon (jour, mur) : la valeur n'est exposée que si
+ * tous les limons générés ont la même (`commonAutoValue` ; l'imposer d'un clic ne doit changer
+ * aucun limon), absente sans limon.
+ */
+function housedAutoValues(
+  params: WoodHousedParams,
+  resolved: ResolvedHousedParams,
+  faces: readonly StringerFace[],
+): Record<string, number> | undefined {
+  const out: Record<string, number> = {};
+  const sides = [...new Set(faces.map((f) => f.side))];
+  const bySide = (v: { readonly inner: Mm; readonly outer: Mm }): number | undefined =>
+    commonAutoValue(sides.map((side) => v[side]));
+  const put = (key: string, isAuto: boolean, value: number | undefined): void => {
+    if (isAuto && value !== undefined && Number.isFinite(value)) out[key] = value;
+  };
+  put("housingDepth", params.housingDepth === "auto", resolved.housingDepth);
+  put("newel.tenonThickness", params.newel.tenonThickness === "auto", resolved.tenonThickness);
+  if (sides.length > 0) {
+    put("upperOffset", params.upperOffset === "auto", bySide(resolved.upperOffset));
+    put("lowerOffset", params.lowerOffset === "auto", bySide(resolved.lowerOffset));
+    put("startExtension", params.startExtension === "auto", resolved.startExtension);
+    put("endExtension", params.endExtension === "auto", resolved.endExtension);
+  }
+  return Object.keys(out).length > 0 ? out : undefined;
 }
 
 export const WOOD_HOUSED: StructureKind<WoodHousedParams> = {

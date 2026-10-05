@@ -471,9 +471,9 @@ describe("remplacement du projet (assistant) et état d'interface", () => {
 
   it("mode du plan et apparence 3D : état d'interface, hors historique", () => {
     const s = createProjectStore();
-    s.getState().setPlanMode("expert");
+    s.getState().setPlanMode("site");
     s.getState().setAppearance({ treads: "wood-ash" });
-    expect(s.getState().planMode).toBe("expert");
+    expect(s.getState().planMode).toBe("site");
     expect(s.getState().appearance).toEqual({ treads: "wood-ash" });
     expect(s.getState().canUndo()).toBe(false);
   });

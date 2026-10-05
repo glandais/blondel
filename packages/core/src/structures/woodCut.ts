@@ -424,8 +424,20 @@ export function buildWoodCut(ctx: StructureContext, params: WoodCutParams): CutR
           }),
   );
 
+  // Assemblages : chaque crémaillère porte toutes les marches (escalier droit).
+  const assemblies = carriages.flatMap((c) =>
+    stepping.treads.map((t) => ({ a: { partId: c.part.id }, b: { treadNumber: t.number } })),
+  );
   return {
-    output: { parts: carriages.map((c) => c.part), checks: checks.results, notes },
+    output: {
+      parts: carriages.map((c) => c.part),
+      checks: checks.results,
+      notes,
+      ...(params.residual === "auto" && Number.isFinite(residual)
+        ? { autoValues: { residual } }
+        : {}),
+      ...(assemblies.length > 0 ? { assemblies } : {}),
+    },
     carriages,
     residual,
     ...(fcbaUnusable !== undefined ? { fcbaUnusable } : {}),

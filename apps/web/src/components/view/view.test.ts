@@ -98,16 +98,22 @@ describe("ViewArea : onglets et commandes de vue", () => {
     expect(html).not.toContain("Recadrer");
   });
 
-  it("mode expert du plan : boutons de zoom désactivés, avec une explication", () => {
-    expect(viewHandlesZoom("plan", "drawing")).toBe(true);
-    expect(viewHandlesZoom("plan", "site")).toBe(true);
-    expect(viewHandlesZoom("plan", "expert")).toBe(false);
-    expect(viewHandlesZoom("3d", "expert")).toBe(true);
-    expect(viewHandlesZoom("elevation", "drawing")).toBe(true);
-    expect(viewHandlesZoom("bom", "drawing")).toBe(false);
-    appStore.getState().setPlanMode("expert");
-    const html = render(ViewArea);
-    expect(html).toMatch(/title="Zoom indisponible dans ce mode du plan" disabled=""/);
+  it("zoom : plan (deux modes), 3D et élévation ; jamais désactivé en Conception", () => {
+    expect(viewHandlesZoom("plan")).toBe(true);
+    expect(viewHandlesZoom("3d")).toBe(true);
+    expect(viewHandlesZoom("elevation")).toBe(true);
+    expect(viewHandlesZoom("bom")).toBe(false);
+    expect(viewHandlesZoom("flat")).toBe(false);
+    for (const mode of ["drawing", "site"] as const) {
+      appStore.getState().setPlanMode(mode);
+      const html = render(ViewArea);
+      expect(html).not.toContain("Zoom indisponible");
+      expect(html).not.toMatch(/aria-label="Zoom avant"[^>]*disabled=""/);
+    }
+  });
+
+  it("le cadre de la vue prend le focus (flèches de l'inspecteur Marche)", () => {
+    expect(render(ViewArea)).toMatch(/id="view-panel"[^>]*tabindex="0"/);
   });
 
   it("la bascule d'espace ne touche ni projet, ni historique, ni sélection", () => {

@@ -358,3 +358,68 @@ export async function blockingCount(page: Page): Promise<number> {
   await expect(count).toHaveCount(1);
   return Number(await count.textContent());
 }
+
+/** Inspecteur contextuel (colonne de droite) ; `data-template` : tread, part, rule, project. */
+export function inspectorPanel(page: Page): Locator {
+  return page.locator("aside.inspector");
+}
+
+/**
+ * Point de la page où un clic atteint réellement l'élément `[data-tread="n"]` du SVG affiché
+ * (`root`) : échantillonnage de sa boîte, le premier point dont l'élément visible le plus haut
+ * appartient à cette marche (une cote ou un texte peut recouvrir le centre).
+ */
+export async function treadClickPoint(
+  page: Page,
+  n: number,
+  root = "#view-panel .svg-export",
+): Promise<{ x: number; y: number }> {
+  const point = await page.locator(`${root} [data-tread="${n}"]`).evaluateAll((els, tread) => {
+    for (const el of els) {
+      const r = el.getBoundingClientRect();
+      for (const fy of [0.5, 0.35, 0.65, 0.2, 0.8]) {
+        for (const fx of [0.5, 0.35, 0.65, 0.2, 0.8]) {
+          const x = r.left + r.width * fx;
+          const y = r.top + r.height * fy;
+          const hit = document.elementFromPoint(x, y);
+          if (hit?.closest("[data-tread]")?.getAttribute("data-tread") === tread) return { x, y };
+        }
+      }
+    }
+    return null;
+  }, String(n));
+  if (!point) throw new Error(`marche ${n} introuvable dans la vue`);
+  return point;
+}
+
+/**
+ * Sélectionne la marche `n` d'un clic sur le plan coté (onglet Plan, mode « Plan coté ») et
+ * attend l'inspecteur Marche (gabarit 2a). Sans effet si la marche est déjà inspectée (un
+ * second clic la désélectionnerait).
+ */
+export async function selectTreadOnPlan(page: Page, n: number): Promise<Locator> {
+  await openTab(page, "Plan");
+  const drawing = page.getByRole("button", { name: "Plan coté", exact: true });
+  if ((await drawing.getAttribute("aria-pressed")) !== "true") await drawing.click();
+  await expect(page.locator("#view-panel .svg-export svg")).toBeVisible();
+  const inspector = inspectorPanel(page);
+  const shown = inspector.locator(`[data-tread-number="${n}"]`);
+  if ((await shown.count()) === 0) {
+    const { x, y } = await treadClickPoint(page, n);
+    await page.mouse.click(x, y);
+  }
+  await expect(inspector).toHaveAttribute("data-template", "tread");
+  await expect(shown).toBeVisible();
+  return inspector;
+}
+
+/**
+ * Règle CSS de surlignage de la marche sélectionnée dans la vue (plan coté, élévation), ou `""`
+ * sans sélection. Lue par `textContent` : les assertions de texte de Playwright ignorent le
+ * contenu d'un élément `<style>`. À employer avec `expect.poll`.
+ */
+export async function viewHighlight(page: Page): Promise<string> {
+  return page
+    .locator("#view-panel .zoomable style")
+    .evaluateAll((els) => els.map((el) => el.textContent ?? "").join("\n"));
+}

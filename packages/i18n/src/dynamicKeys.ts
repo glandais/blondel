@@ -20,6 +20,12 @@ export const DYNAMIC_KEYS: readonly DynamicKeyFamily[] = [
     pattern: /^rules\.[A-Z][A-Z0-9_]*\.description$/,
     builtBy: "packages/core/src/model/messages.ts (ruleDescription)",
   },
+  {
+    // Titre court de chaque règle (rules.yaml et contrôles de plugins), indexé par son
+    // identifiant : inspecteur Règle et cartes du contrôle (ADR-0009).
+    pattern: /^rules\.[A-Z][A-Z0-9_]*\.title$/,
+    builtBy: "packages/core/src/model/messages.ts (ruleTitle)",
+  },
 ];
 
 /** La clé est-elle construite dynamiquement (famille déclarée) ? */

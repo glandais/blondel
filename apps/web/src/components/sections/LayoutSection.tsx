@@ -16,6 +16,7 @@ import { useMemo } from "react";
 import { formatNumber } from "../../i18n/locale.js";
 import { listMessages } from "../../i18n/text.js";
 import { useT } from "../../i18n/useT.js";
+import { autoValueOf } from "../../lib/autoValues.js";
 import { addLeg, legAutoAllowed, removeLastLeg } from "../../lib/layoutEdit.js";
 import {
   LAYOUT_KIND_LABELS,
@@ -331,8 +332,9 @@ export function LayoutSection({ display }: SectionProps) {
               <AutoIntField
                 label={t.t("ui.params.flights.leg", { index: i + 1 })}
                 value={leg.length}
-                // Longueur calculée de la volée non exposée par le modèle : libellé neutre en
-                // mode Auto ; « Imposer » part de `legFallback` (simple proposition de saisie).
+                // Longueur retenue par le calcul (`Model.autoValues`) en regard d'« Auto » ; non
+                // exposée : libellé neutre, et « Imposer » part de `legFallback`.
+                computed={autoValueOf(model, ["stair", "layout", "legs", i, "length"])}
                 fallback={legFallback(legs, i, run)}
                 autoAllowed={legAutoAllowed(legs.length)}
                 autoHint={t.t("ui.params.flights.autoHint")}

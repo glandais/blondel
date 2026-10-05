@@ -1,13 +1,15 @@
 /**
  * Section « Contexte de contrôle » : usage (liste, mêmes usages que l'assistant), autres
  * contextes cumulés (hors usages et contextes déduits par le moteur de règles), profil, date de
- * référence, nombre de surcharges de règles (toujours affiché). Pas d'étape guidée : réglé par
+ * référence, nombre de surcharges de règles (toujours affiché ; dès une surcharge, lien vers la
+ * liste des surcharges de l'inspecteur, `revealOverrides`). Pas d'étape guidée : réglé par
  * l'assistant, modifiable depuis le contrôle. Répartition par niveau : `Tiered`.
  */
 import { contextLabel, DEDUCED_ONLY_CONTEXTS, RULE_TABLE } from "@blondel/core";
 import { useT } from "../../i18n/useT.js";
 import { PRIMARY_USAGE_CONTEXTS, USAGES, usageOf, withUsage } from "../../lib/assistant.js";
 import { appStore, useApp } from "../../store/appStore.js";
+import { revealOverrides } from "../../store/uiStore.js";
 import type { Path } from "../../store/setIn.js";
 import { CheckField, SelectField, TextField } from "../fields.js";
 import { Tiered, type SectionProps } from "./Tiered.js";
@@ -85,14 +87,25 @@ export function ContextSection({ display }: SectionProps) {
           ),
         },
         {
-          // Compteur toujours présent ; le lien vers la liste (inspecteur Règle) vient avec les
-          // inspecteurs (vague 3).
+          // Compteur toujours présent ; dès une surcharge, c'est un lien vers la liste des
+          // surcharges de l'inspecteur « sans sélection » (dépliée, montrée, focalisée).
           key: "compliance.overrides",
-          node: (
-            <p className="muted">
-              {t.t("ui.params.compliance.overrides", { count: c.overrides.length })}
-            </p>
-          ),
+          node:
+            c.overrides.length > 0 ? (
+              <p className="muted">
+                <button
+                  type="button"
+                  className="link context-overrides-link"
+                  onClick={revealOverrides}
+                >
+                  {t.t("ui.params.compliance.overrides", { count: c.overrides.length })}
+                </button>
+              </p>
+            ) : (
+              <p className="muted">
+                {t.t("ui.params.compliance.overrides", { count: c.overrides.length })}
+              </p>
+            ),
         },
       ]}
     />

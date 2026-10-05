@@ -45,9 +45,17 @@ async function blondelRuleText(page: Page): Promise<string> {
     await panel.locator('.control-folds__link[data-fold="ok"]').click();
   }
   await expect(panel.locator(".sev--ok")).toHaveAttribute("open", "");
-  const item = panel.locator("li", { has: page.locator("code", { hasText: /^BLONDEL_DTU$/ }) });
+  // Vague 3 : la ligne ouvre l'inspecteur Règle, qui porte le constat ; le badge Contrôle
+  // ramène ensuite l'inspecteur « sans sélection ».
+  const item = panel.locator('li[data-rule="BLONDEL_DTU"]');
   await expect(item.first()).toBeVisible();
-  return (await item.first().locator(".result__msg").textContent()) ?? "";
+  await item.first().locator("button.result").click();
+  const finding = page.locator('.inspector[data-template="rule"] .rule-insp__finding');
+  await expect(finding).toBeVisible();
+  const text = (await finding.textContent()) ?? "";
+  await page.locator(".control-badge").click();
+  await expect(page.locator('.inspector[data-template="project"]')).toBeVisible();
+  return text;
 }
 
 test(`navigateur anglais : interface, contrôle et export en anglais, puis français mémorisé (tâches ≤ ${LONG_TASK_BUDGET_MS} ms)`, async ({

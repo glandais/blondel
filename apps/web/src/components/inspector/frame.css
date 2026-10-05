@@ -1,0 +1,191 @@
+/*
+ * Ossature commune des gabarits de l'inspecteur (ADR-0009, maquettes 2a à 2c, source
+ * « Blondel Parcours Hi-fi.dc.html ») : surtitre, pastille de sélection, titre, tableau des
+ * valeurs, actions, blocs encadrés, liens vers les éléments voisins. Importée par Inspector.tsx ;
+ * les gabarits Marche, Pièce et Règle n'utilisent que ces classes.
+ * Couleurs par variables seulement (--selected, --sev-*, --ok, --color-*).
+ */
+
+.insp-template {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  flex: 1 0 auto;
+  min-width: 0;
+}
+
+/* 2b (Pièce) : 12 px d'écart vertical. */
+.insp-template--part {
+  gap: 12px;
+}
+
+.insp-head {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.insp-eyebrow,
+.insp-section-title {
+  font-size: 10.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-neutral-700);
+}
+
+.insp-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.insp-swatch {
+  width: 12px;
+  height: 12px;
+  flex: none;
+  background: var(--selected);
+}
+
+.insp-title {
+  margin: 0;
+  font-family: var(--font-heading);
+  font-weight: 600;
+  font-size: 24px;
+  line-height: 1.15;
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+
+.insp-title--rule {
+  font-size: 22px;
+  text-wrap: pretty;
+}
+
+.insp-subtitle {
+  color: var(--color-neutral-800);
+}
+
+/* Tableau des valeurs (.table d'Industry) : libellé à gauche, valeur à droite. */
+.table.insp-values {
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.table.insp-values td:first-child,
+.table.insp-values th:first-child {
+  padding-left: 0;
+  color: var(--color-neutral-700);
+  font-weight: 400;
+  text-align: left;
+}
+
+.table.insp-values td:last-child {
+  padding-right: 0;
+  text-align: right;
+}
+
+.insp-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.insp-actions .btn {
+  font-size: 13px;
+}
+
+.insp-block {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px;
+  border: 1px solid var(--color-divider);
+}
+
+.insp-block__title {
+  margin: 0;
+  font: 600 15px var(--font-heading);
+}
+
+/* Liens vers les éléments voisins (pièces de la marche, « Assemblée avec »…). */
+.insp-links {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.insp-links + .insp-section-title,
+.insp-section-title + .insp-links {
+  margin-top: 4px;
+}
+
+.insp-link {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  width: 100%;
+  min-width: 0;
+  padding: 6px 0;
+  border: 0;
+  border-bottom: 1px solid var(--color-divider);
+  background: none;
+  color: var(--color-text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.insp-link b {
+  flex: none;
+  min-width: 36px;
+  font: 600 14px var(--font-heading);
+}
+
+.insp-link > span:not(.insp-link__detail) {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.insp-link__detail {
+  flex: none;
+  font-size: 12px;
+  color: var(--color-neutral-700);
+}
+
+.insp-link:hover,
+.insp-link:focus-visible {
+  color: var(--color-accent-700);
+}
+
+.insp-spacer {
+  flex: 1;
+}
+
+/*
+ * Ossature fixe (maquette 340 × 848) : quand le contenu dépasse, seul le corps défile ; l'en-tête
+ * (surtitre, pastille, nom) reste en haut de l'inspecteur et la mention indicative en pied.
+ * `sticky` dans le conteneur défilant `.inspector` ; fond plein pour masquer le corps dessous.
+ */
+.insp-template > .insp-head {
+  position: sticky;
+  top: -18px; /* Chrome colle au bord du contenu : on remonte du rembourrage de .inspector */
+  z-index: 1;
+  margin-top: -18px; /* le fond couvre le rembourrage haut de .inspector */
+  padding: 18px 0 8px;
+  background: var(--color-bg);
+}
+
+.insp-template > .inspector-disclaimer {
+  position: sticky;
+  bottom: -18px; /* idem en pied */
+  z-index: 1;
+  margin-bottom: -18px; /* idem, rembourrage bas */
+  padding: 8px 0 18px;
+  border-top: 1px solid var(--color-divider);
+  background: var(--color-bg);
+}

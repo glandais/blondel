@@ -124,8 +124,12 @@ describe("suggestFixes — garde-corps sous la dalle haute", () => {
     const p = with_(createProject("quarter-left", { openingClearance: 0 }), { guards: {} });
     const m = buildModel(p);
     expect(m.compliance.results.some((r) => r.ruleId === "GC_CONFLIT_DALLE")).toBe(true);
-    const fix = suggestFixes(p, m).find((f) => f.id === "opening-clearance");
+    const fixes = suggestFixes(p, m);
+    const fix = fixes.find((f) => f.id === "opening-clearance");
     expect(fr(fix?.label)).toBe("Élargir la trémie de 100 mm le long de l'escalier");
+    // Règle visée (inspecteur Règle, « Pour corriger ») ; les autres corrections n'en ont pas.
+    expect(fix?.ruleIds).toEqual(["GC_CONFLIT_DALLE"]);
+    for (const f of fixes) if (f.id !== "opening-clearance") expect(f.ruleIds).toBeUndefined();
     expect(translatorFor("en").t(fix!.label)).toBe(
       "Widen the stairwell opening by 100 mm along the stair",
     );

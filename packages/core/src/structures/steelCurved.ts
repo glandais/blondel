@@ -51,7 +51,12 @@ import { pointInPolygon, signedArea } from "../geom2d/polygon.js";
 import * as V from "../geom2d/vec.js";
 import type { FlatPattern, NosingLine, Part, Tread } from "../model/derived.js";
 import type { Mm, Polygon2, Vec2, Vec3 } from "../model/primitives.js";
-import type { StructureContext, StructureKind, StructureOutput } from "../model/plugins.js";
+import type {
+  PartAssembly,
+  StructureContext,
+  StructureKind,
+  StructureOutput,
+} from "../model/plugins.js";
 import { buildBasicParts } from "../parts/basic.js";
 import type { Finding } from "../rules/types.js";
 import { findBendLaw } from "../workshop/metal.js";
@@ -61,8 +66,10 @@ import {
   FAB_RULES,
   flightsOnlyError,
   pluginRuleDef,
+  type CheckItem,
   type PluginRuleSpec,
 } from "./checks.js";
+import { commonAutoValue } from "./autoValue.js";
 import { developStringer, type StringerDevelopment } from "./development.js";
 import { insetPlate, type PlanLine } from "./folded.js";
 import { PiecewiseLinear, clipHalfPlane, dedupe, minAreaRect, removeCollinear } from "./geom.js";
@@ -72,6 +79,7 @@ import {
   QUANTITY_BUTT_WELD_MM,
   QUANTITY_WELD_MM,
   STEEL_RULES,
+  assembledTo,
   deduceExecutionClass,
   executionClassReasons,
   holePolygon,
@@ -111,6 +119,7 @@ import {
 } from "./steelCurvedGeometry.js";
 import {
   boltCenters,
+  supportAssemblies,
   supportDepth,
   supportPart,
   type SupportFace,
@@ -470,6 +479,24 @@ function curveInterval(
 // ------------------------------------------------------------------ Construction
 
 /** Construction complète (détails compris). */
+/**
+ * Valeur retenue de `lowerOffset` laissé en `auto` (`StructureOutput.autoValues`) : d_b est
+ * résolu par limon (limons droits de `steel-flat`, limon débillardé) ; la valeur n'est exposée
+ * que si tous les limons générés ont la même (`commonAutoValue`).
+ */
+function curvedAutoValues(
+  params: SteelCurvedParams,
+  flat: SteelFlatResult,
+  curved: CurvedStringerResult | null,
+): Record<string, number> | undefined {
+  if (params.lowerOffset !== "auto") return undefined;
+  const value = commonAutoValue([
+    ...flat.stringers.map((s) => flat.lowerOffset[s.face.side]),
+    ...(curved ? [curved.lowerOffset] : []),
+  ]);
+  return value === undefined ? undefined : { lowerOffset: value };
+}
+
 export function buildSteelCurved(
   ctx: StructureContext,
   params: SteelCurvedParams,
@@ -681,6 +708,15 @@ export function buildSteelCurved(
     ...allSupports,
     ...allPlates,
   ];
+  // Assemblages : supports (marche portée, limon ou poteau porteur), tronçons consécutifs du
+  // limon débillardé (joints soudés bout à bout).
+  const segmentIds = curved?.segments.map((s) => s.part.id) ?? [];
+  const assemblies: PartAssembly[] = [
+    ...supportAssemblies(flat.supports),
+    ...supportAssemblies(innerSupports),
+    ...segmentIds.slice(1).map((id, i) => ({ a: { partId: segmentIds[i]! }, b: { partId: id } })),
+  ];
+  const autoValues = curvedAutoValues(params, flat, curved);
   return {
     output: {
       parts,
@@ -689,6 +725,8 @@ export function buildSteelCurved(
       notes,
       ...(errors.length > 0 ? { errors } : {}),
       ...(flat.output.removedBaseParts ? { removedBaseParts: flat.output.removedBaseParts } : {}),
+      ...(autoValues ? { autoValues } : {}),
+      ...(assemblies.length > 0 ? { assemblies } : {}),
     },
     flat,
     curved: curved
@@ -851,7 +889,11 @@ function buildCurvedStringer(
     joints,
     segments,
     supports,
-    shortSupports,
+    // Appui rapporté au tronçon de la joue qui le porte (localisation « LD2 · M3 »).
+    shortSupports: shortSupports.map(({ sigma, ...item }) => {
+      const i = ivs.findIndex((iv) => iv.a <= sigma && sigma <= iv.b);
+      return i < 0 ? item : { ...item, partId: idOf(i) };
+    }),
   });
 
   // 8. Remarques.
@@ -924,6 +966,9 @@ function buildCurvedStringer(
 
 // ------------------------------------------------------------------ étapes de buildCurvedStringer
 
+/** Longueur d'appui d'un support côté jour, à l'abscisse `sigma` (milieu) sur la joue. */
+type CurvedShortSupport = CheckItem & { readonly sigma: Mm };
+
 /** Étape 1 : supports côté jour (cornières tangentes à la joue), portées sur C_i. */
 function curvedRawSupports(
   zones: readonly TreadZone[],
@@ -933,9 +978,9 @@ function curvedRawSupports(
   P: (s: Mm) => Vec2,
   N: (s: Mm) => Vec2,
   sup: SteelCurvedParams["supports"],
-): { raw: CurvedRawSupport[]; shortSupports: { value: Mm; label: Message }[] } {
+): { raw: CurvedRawSupport[]; shortSupports: CurvedShortSupport[] } {
   const raw: CurvedRawSupport[] = [];
-  const shortSupports: { value: Mm; label: Message }[] = [];
+  const shortSupports: CurvedShortSupport[] = [];
   for (const zn of zones) {
     const a = nosings[zn.tread.number - 1]!;
     const b = nosings[zn.tread.number]!;
@@ -950,6 +995,8 @@ function curvedRawSupports(
     shortSupports.push({
       value: len,
       label: msg("structure.steelCurved.check.onOuterString", { mark: zn.mark }),
+      treadNumber: zn.tread.number,
+      sigma: (iv.s0 + iv.s1) / 2,
     });
     if (len < sup.minLength) continue;
     raw.push({ zone: zn, s0: iv.s0, s1: iv.s1 });
@@ -1586,21 +1633,24 @@ function curvedPlates(g: CurvedGeometry, segCount: number): Part[] {
       const o = V.add(V.addScaled(f.a, f.dir, mid - L / 2), V.scale(f.into, -(pl.width - e) / 2));
       const sgn = V.cross(f.dir, f.into) > 0 ? 1 : -1;
       plates.push(
-        plateObject(
-          `plate-foot-${idOf(0)}`,
-          msg("structure.steel.part.footPlate", { mark: markOf(0) }),
-          pf,
-          pl.thickness,
-          2 * L,
-          material,
-          profile,
-          {
-            origin: { x: o.x, y: o.y, z: 0 },
-            xAxis: { x: f.dir.x, y: f.dir.y, z: 0 },
-            yAxis: { x: f.into.x, y: f.into.y, z: 0 },
-            zAxis: { x: 0, y: 0, z: sgn },
-            depth: sgn * pl.thickness,
-          },
+        assembledTo(
+          plateObject(
+            `plate-foot-${idOf(0)}`,
+            msg("structure.steel.part.footPlate", { mark: markOf(0) }),
+            pf,
+            pl.thickness,
+            2 * L,
+            material,
+            profile,
+            {
+              origin: { x: o.x, y: o.y, z: 0 },
+              xAxis: { x: f.dir.x, y: f.dir.y, z: 0 },
+              yAxis: { x: f.into.x, y: f.into.y, z: 0 },
+              zAxis: { x: 0, y: 0, z: sgn },
+              depth: sgn * pl.thickness,
+            },
+          ),
+          [idOf(0)],
         ),
       );
     }
@@ -1622,15 +1672,18 @@ function curvedPlates(g: CurvedGeometry, segCount: number): Part[] {
         msg("structure.steel.reference.headPlate", { mark: markOf(last) }),
       );
       plates.push(
-        plateObject(
-          `plate-head-${idOf(last)}`,
-          msg("structure.steel.part.headPlate", { mark: markOf(last) }),
-          ph,
-          pl.thickness,
-          2 * H,
-          material,
-          profile,
-          endPlateFrame(pseudoFace(uHi), uHi, zLo, pl.width, e, pl.thickness, 1),
+        assembledTo(
+          plateObject(
+            `plate-head-${idOf(last)}`,
+            msg("structure.steel.part.headPlate", { mark: markOf(last) }),
+            ph,
+            pl.thickness,
+            2 * H,
+            material,
+            profile,
+            endPlateFrame(pseudoFace(uHi), uHi, zLo, pl.width, e, pl.thickness, 1),
+          ),
+          [idOf(last)],
         ),
       );
     }
@@ -1650,7 +1703,7 @@ function addCurvedChecks(
     readonly joints: readonly CurvedJoint[];
     readonly segments: readonly CurvedSegment[];
     readonly supports: readonly CurvedSupport[];
-    readonly shortSupports: { value: Mm; label: Message }[];
+    readonly shortSupports: readonly CheckItem[];
   },
 ): {
   minPerp: Mm;
@@ -1860,6 +1913,7 @@ function addCurvedChecks(
         value,
         label: supportOn(s.placement.treadMark, s.placement.face.ownerMark),
         partId: s.placement.face.owner,
+        treadNumber: s.placement.tread,
       };
     }),
     msg("structure.steel.quantity.supportEdgeMargin"),

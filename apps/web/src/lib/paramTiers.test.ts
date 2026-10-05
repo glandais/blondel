@@ -308,6 +308,14 @@ describe("valeurs ◆ d'un projet", () => {
     );
     expect(structureParamApplies(p, {}, ["newel", "bolts"])).toBe(false);
     expect(structureParamApplies(p, {}, ["thickness"])).toBe(true);
+    // Dimensions du plat ou de la cornière selon le type de support.
+    const angle = { supports: { kind: "angle" } };
+    const plate = { supports: { kind: "plate" } };
+    expect(structureParamApplies(p, angle, ["supports", "plateWidth"])).toBe(false);
+    expect(structureParamApplies(p, angle, ["supports", "angleLeg"])).toBe(true);
+    expect(structureParamApplies(p, plate, ["supports", "angleThickness"])).toBe(false);
+    expect(structureParamApplies(p, plate, ["supports", "plateThickness"])).toBe(true);
+    expect(structureParamApplies(p, plate, ["supports", "minLength"])).toBe(true);
     const turns = (p.stair.layout.turns ?? []).map((t) => ({
       ...t,
       inner: { kind: "newel" as const, size: 100 },

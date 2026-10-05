@@ -83,34 +83,61 @@ test("surcharge d'une règle : justification obligatoire, liste des surcharges",
   await openApp(page);
   await applyPreset(page, "Quart tournant à gauche");
   // Contrôle de conception dans l'inspecteur : liste des règles respectées dépliée par son lien.
+  const inspector = page.getByRole("complementary", { name: "Inspecteur" });
   const panel = page.locator(".inspector-control");
   await expect(panel.locator(".sev--ok")).toHaveCount(0);
   await panel.locator('.control-folds__link[data-fold="ok"]').click();
   await expect(panel.locator(".sev--ok")).toHaveAttribute("open", "");
   const item = panel.locator(".sev--ok li").first();
-  const ruleId = (await item.locator("code").first().textContent())!;
-  await item.getByRole("button", { name: "Surcharger la règle…" }).click();
-  const form = item.getByRole("form", { name: `Surcharge de ${ruleId}` });
-  await form.getByLabel(`Sévérité retenue pour ${ruleId}`).selectOption("conseil");
-  const save = form.getByRole("button", { name: "Enregistrer la surcharge" });
+  const ruleId = (await item.getAttribute("data-rule"))!;
+  // La ligne ouvre l'inspecteur Règle (2c), où se fait la surcharge.
+  await item.locator("button.result").click();
+  await expect(inspector).toHaveAttribute("data-template", "rule");
+  await expect(inspector.locator(".rule-insp__ref")).toHaveText(ruleId);
+  const form = inspector.getByRole("form", { name: `Surcharge de ${ruleId}` });
+  const advice = form
+    .getByRole("radiogroup", { name: "Nouvelle sévérité" })
+    .getByRole("radio", { name: "Conseil", exact: true });
+  await advice.click();
+  await expect(advice).toHaveAttribute("aria-checked", "true");
+  const save = form.getByRole("button", { name: "Surcharger", exact: true });
   await expect(save).toBeDisabled();
   await form.getByLabel(/Justification/).fill("Validé par le bureau d'études");
   await expect(save).toBeEnabled();
   await save.click();
   await settle(page);
+  // Surcharge rappelée dans l'inspecteur Règle.
+  await expect(form).toContainText("Surcharge : Conseil — Validé par le bureau d'études");
+  await expect(form.getByRole("button", { name: "Lever la surcharge" })).toBeVisible();
 
+  // Lien du compteur de surcharges (section Contexte) : retour à l'inspecteur « sans
+  // sélection », liste des surcharges dépliée et focalisée.
+  const context = await openSection(page, "Contexte");
+  await context.getByRole("button", { name: "1 surcharge(s) de règle justifiée(s)." }).click();
+  await expect(inspector).toHaveAttribute("data-template", "project");
   const list = panel.locator(".sev--overrides");
   const overridesLink = panel.locator('.control-folds__link[data-fold="overrides"]');
   await expect(overridesLink).toContainText("1 surcharge");
-  if ((await list.count()) === 0) await overridesLink.click();
+  await expect(list).toHaveAttribute("open", "");
+  await expect(list.locator("summary")).toBeFocused();
   await expect(list.locator("summary .count")).toHaveText("1");
   await expect(list).toContainText(ruleId);
   await expect(list).toContainText("Validé par le bureau d'études");
 
-  // Retrait depuis la liste des surcharges.
-  await list.getByRole("button", { name: "Modifier la surcharge" }).click();
-  await list.getByRole("button", { name: "Retirer la surcharge" }).click();
+  // Levée depuis la liste des surcharges (annulable).
+  await list.getByRole("button", { name: "Lever la surcharge" }).click();
   await settle(page);
   await expect(panel.locator(".sev--overrides")).toHaveCount(0);
   await expect(overridesLink).toHaveCount(0);
+  await expect(context.getByText("0 surcharge(s) de règle justifiée(s).")).toBeVisible();
+  await page.getByRole("button", { name: "Annuler (Ctrl+Z)", exact: true }).click();
+  await settle(page);
+  await expect(overridesLink).toContainText("1 surcharge");
+
+  // Le titre d'une surcharge de la liste ouvre l'inspecteur Règle, où elle se modifie.
+  if ((await panel.locator(".sev--overrides[open]").count()) === 0) await overridesLink.click();
+  await panel.locator(".sev--overrides .override-item__open").first().click();
+  await expect(inspector).toHaveAttribute("data-template", "rule");
+  await expect(inspector.locator(".rule-insp__ref")).toHaveText(ruleId);
+  await expect(form).toContainText("Surcharge : Conseil — Validé par le bureau d'études");
 });

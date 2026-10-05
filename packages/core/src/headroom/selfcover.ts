@@ -166,6 +166,18 @@ function widthHeadroom(
   return best;
 }
 
+/**
+ * Échappée au droit de chaque nez : plafond le plus bas au-dessus de P_k (dalle hors trémie,
+ * sous-faces des pièces commençant après le nez qui le couvrent en plan, bord compris) moins
+ * l'altitude z_k ; `null` si aucun plafond ne couvre P_k.
+ */
+function nosingsHeadroom(input: SelfCoverInput, ceilings: readonly Ceiling[]): (Mm | null)[] {
+  return input.stepping.nosings.map((nosing) => {
+    const top = ceilingAt(nosing.p, nosing.s, input.slab, ceilings);
+    return top === null ? null : top - nosing.z;
+  });
+}
+
 /** Analyse d'échappée avec les sous-faces de l'escalier (voir l'en-tête du module). */
 export function selfCoveredHeadroom(input: SelfCoverInput): HeadroomAnalysis {
   const ceilings: Ceiling[] = input.soffits
@@ -177,6 +189,7 @@ export function selfCoveredHeadroom(input: SelfCoverInput): HeadroomAnalysis {
     ceiling: input.ceiling,
     opening: input.slab?.opening ?? null,
     covered: input.covered,
+    atNosings: nosingsHeadroom(input, ceilings),
     ...(walkline ? { walkline } : {}),
     ...(width ? { width } : {}),
   };

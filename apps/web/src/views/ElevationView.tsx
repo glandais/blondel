@@ -1,15 +1,16 @@
 /**
  * Onglet Élévation : SVG de `renderElevationSvg` (@blondel/exports), développé le long de la
  * ligne de foulée, avec surlignage et sélection de la marche par ses attributs `data-tread` ;
- * zoom − / + / Recadrer de la vue centrale (`ZoomableSvg`).
+ * un clic hors d'une marche efface la sélection ; zoom − / + / Recadrer de la vue centrale
+ * (`ZoomableSvg`).
  */
 import type { Model, Project } from "@blondel/core";
 import { useMemo } from "react";
 import { useResolvedTheme } from "../components/ThemeToggle.js";
 import { useT } from "../i18n/useT.js";
 import { renderElevationForScreen } from "../model/planSvg.js";
-import { appStore } from "../store/appStore.js";
 import { ZoomableSvg } from "../components/view/ZoomableSvg.js";
+import { clearSelection, selectTreadOrClear } from "./PlanView.js";
 
 interface ElevationProps {
   readonly model: Model;
@@ -25,10 +26,7 @@ export function ElevationView({ model, project, selectedTread }: ElevationProps)
     () => renderElevationForScreen(model, { project, theme, locale }),
     [model, project, theme, locale],
   );
-  const onSelectTread = (n: number) =>
-    appStore
-      .getState()
-      .select(selectedTread === n ? null : { location: { kind: "tread", number: n } });
+  const onSelectTread = selectTreadOrClear;
   if ("error" in rendered) {
     return (
       <p className="notice notice--error" role="alert">
@@ -42,6 +40,7 @@ export function ElevationView({ model, project, selectedTread }: ElevationProps)
       label={t.t("ui.view.elevation.label")}
       selectedTread={selectedTread}
       onSelectTread={onSelectTread}
+      onClickEmpty={clearSelection}
     />
   );
 }

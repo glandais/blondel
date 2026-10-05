@@ -82,6 +82,7 @@ import { cuttingPlan, type CutPiece, type CuttingPlan } from "./steelProfileCutt
 import {
   boltCenters,
   effectiveFixing,
+  supportAssemblies,
   supportDepth,
   supportInterval,
   supportPart,
@@ -96,6 +97,7 @@ interface CheckItem {
   readonly value: Mm;
   readonly label: Message;
   readonly partId?: string;
+  readonly treadNumber?: number;
 }
 
 /** Élément rattaché à une pièce. */
@@ -585,7 +587,12 @@ export function buildSteelProfile(
       pl = { ...c, u0: fit.u0, u1: fit.u1 };
     }
     const len = pl.u1 - pl.u0;
-    shortSupports.push({ value: len, label: supportOn(c.treadMark, c.face.ownerMark) });
+    shortSupports.push({
+      value: len,
+      label: supportOn(c.treadMark, c.face.ownerMark),
+      partId: c.face.owner,
+      treadNumber: c.tread,
+    });
     if (len < minLen - 1e-9) continue;
     placements.push(pl);
     const set = carried.get(c.tread) ?? new Set<Side>();
@@ -727,6 +734,7 @@ export function buildSteelProfile(
     msg("structure.steelProfile.note.squareEnds"),
   );
 
+  const supports = placements.map((placement, i) => ({ placement, part: supportMarked[i]! }));
   return {
     output: {
       parts: [...stringers.map((x) => x.part), ...posts, ...supportMarked],
@@ -737,12 +745,17 @@ export function buildSteelProfile(
       precheck: { beams, loads, permanentArea, notes: [precheckNote] },
       notes,
       ...(errors.length > 0 ? { errors } : {}),
+      // Côté de poteau `auto` : côté attendu pour l'aile de la section retenue.
+      ...(params.newel.size === "auto"
+        ? { autoValues: { "newel.size": profileNewel(s.b, params.newel).size } }
+        : {}),
+      ...(supports.length > 0 ? { assemblies: supportAssemblies(supports) } : {}),
     },
     section: s,
     requiredHeight,
     stringers,
     posts,
-    supports: placements.map((placement, i) => ({ placement, part: supportMarked[i]! })),
+    supports,
     cutting,
     executionClass: exc.executionClass,
   };
@@ -1099,6 +1112,7 @@ function buildProfileStringer(
         value: Math.min(zb - (lower(u) + tfBand), upper(u) - tfBand - sp.zTop),
         label: supportOn(sp.treadMark, f.mark),
         partId: f.id,
+        treadNumber: sp.tread,
       });
     }
   }
@@ -1224,6 +1238,7 @@ function buildProfileStringer(
         value: sup.angleLeg - shift,
         label: supportOn(sp.treadMark, f.mark),
         partId: f.id,
+        treadNumber: sp.tread,
       });
     }
   }
@@ -1419,6 +1434,8 @@ function profileNewelPosts(
         profile: { outer: outer.map(rel), holes: [inner.map(rel)] },
         depth: height,
       },
+      // Limons reçus par le poteau (assemblage soudé), symétrisé par le pipeline.
+      ...(received.length > 0 ? { assembledWith: received.map((x) => x.face.id) } : {}),
       section: msg("structure.steel.section.squareTube", {
         size: dec(a, 0),
         thickness: dec(tt, 0),

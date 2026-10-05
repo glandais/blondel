@@ -398,3 +398,13 @@ export function groupIdenticalFlats(
   }
   return groups.map((g) => g.ids);
 }
+
+/**
+ * Pièce déclarée assemblée aux pièces `ids` (`Part.assembledWith`, complété et symétrisé par le
+ * pipeline). Sans identifiant : pièce rendue telle quelle.
+ */
+export function assembledTo(part: Part, ids: readonly string[]): Part {
+  if (ids.length === 0) return part;
+  const all = [...new Set([...(part.assembledWith ?? []), ...ids])];
+  return { ...part, assembledWith: all };
+}

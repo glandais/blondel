@@ -158,6 +158,19 @@ export interface StructureCapabilities<P = unknown> {
   lateralThickness?(params: P): { readonly inner: Mm; readonly outer: Mm };
 }
 
+/**
+ * Désignation d'une pièce dans un assemblage déclaré par un plugin : par identifiant, ou par
+ * numéro de marche (pièces du modèle qui portent ce `Part.treadNumber`, résolues par le
+ * pipeline : le plugin n'a pas à connaître l'identifiant de la pièce de marche).
+ */
+export type PartRef = { readonly partId: string } | { readonly treadNumber: number };
+
+/** Assemblage entre deux pièces (relation symétrique). */
+export interface PartAssembly {
+  readonly a: PartRef;
+  readonly b: PartRef;
+}
+
 export interface StructureOutput {
   /**
    * Pièces de la structure. Une pièce de même `id` qu'une pièce de base la remplace dans le
@@ -184,6 +197,19 @@ export interface StructureOutput {
   readonly removedBaseParts?: readonly string[];
   /** Remarques non bloquantes, reprises dans `Model.notes`. */
   readonly notes: readonly Message[];
+  /**
+   * Valeurs retenues pour les paramètres du plugin laissés en `auto`, par chemin du paramètre
+   * joint par des points (`lowerOffset`, `newel.size`) ; le pipeline les reprend dans
+   * `Model.autoValues` sous `stair.structure.params.`. Ajout rétrocompatible ; absent : aucune.
+   */
+  readonly autoValues?: Readonly<Record<string, number>>;
+  /**
+   * Assemblages connus du plugin entre deux pièces (support ↔ marche et limon porteur, limon ↔
+   * poteau, tronçons consécutifs…) : le pipeline les résout sur les pièces finales du modèle et
+   * les reporte, symétrisés, dans `Part.assembledWith`. Une pièce peut aussi déclarer elle-même
+   * `assembledWith` (identifiants). Ajout rétrocompatible ; absent : aucun.
+   */
+  readonly assemblies?: readonly PartAssembly[];
   /**
    * Configurations non prises en charge (ex. jour en arc sous un limon à la française) : la
    * structure est partielle ; messages repris dans `Model.errors`. Absent : aucune.

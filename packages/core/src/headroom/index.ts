@@ -6,6 +6,7 @@ export {
   ceilingOf,
   computeHeadroom,
   coveredIntervals,
+  headroomAtNosingsUnderSlab,
   headroomOnWalkline,
   headroomOnWidth,
   openingPolygon,

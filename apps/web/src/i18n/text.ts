@@ -29,6 +29,14 @@ export function listMessages(messages: readonly Message[]): Message | null {
   return chain(messages, "ui.common.joinList");
 }
 
+/**
+ * Énumération courte séparée par des virgules (titres de règles d'une ligne de l'inspecteur) :
+ * un seul `Message`, traduit dans la langue d'affichage. Liste vide : `null`.
+ */
+export function commaMessages(messages: readonly Message[]): Message | null {
+  return chain(messages, "ui.common.joinComma");
+}
+
 function chain(messages: readonly Message[], key: MessageKey): Message | null {
   if (messages.length === 0) return null;
   let out = messages[messages.length - 1]!;

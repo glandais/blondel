@@ -5,7 +5,13 @@
 import { dec, messagesFor, msg, translatorFor, type Message } from "@blondel/i18n";
 import { describe, expect, it } from "vitest";
 import { fr } from "../i18n.test-helpers.js";
-import { ruleDescription } from "../model/messages.js";
+import { ruleDescription, ruleTitle } from "../model/messages.js";
+import { PRECHECK_RULES } from "../precheck/checks.js";
+import { FAB_RULES, type PluginRuleSpec } from "../structures/checks.js";
+import { HELICAL_RULES } from "../structures/helicalCore.js";
+import { STEEL_RULES } from "../structures/steelCommon.js";
+import { CURVED_RULES } from "../structures/steelCurved.js";
+import { PROFILE_RULES } from "../structures/steelProfile.js";
 import { evaluateCompliance, evaluateComplianceDetailed } from "./engine.js";
 import { severityLabel } from "./severity.js";
 import { CONFIDENCE_LABEL_KEYS, NATURE_LABEL_KEYS, RULES } from "./table.js";
@@ -34,6 +40,59 @@ describe("descriptions des règles", () => {
     expect(EN.t(ruleDescription("MC_HAUTEUR"))).toBe(
       "Handrail height measured plumb with the nosing",
     );
+  });
+});
+
+describe("titres courts des règles", () => {
+  /** Contrôles propres aux plugins (`PluginRuleSpec`), hors rules.yaml. */
+  const PLUGIN_SPECS: readonly Readonly<Record<string, PluginRuleSpec>>[] = [
+    FAB_RULES,
+    STEEL_RULES,
+    PROFILE_RULES,
+    CURVED_RULES,
+    HELICAL_RULES,
+    PRECHECK_RULES,
+  ];
+  const pluginIds = PLUGIN_SPECS.flatMap((t) => Object.values(t).map((s) => s.id));
+  const frMessages = messagesFor("fr");
+  const enMessages = messagesFor("en");
+  /** Identifiants décrits dans le dictionnaire (règles, contrôles de plugins et de garde-corps). */
+  const describedIds = Object.keys(frMessages)
+    .map((k) => /^rules\.([A-Z][A-Z0-9_]*)\.description$/.exec(k)?.[1])
+    .filter((id): id is string => id !== undefined);
+  const allIds = [...new Set([...RULES.map((r) => r.id), ...pluginIds, ...describedIds])];
+
+  it("chaque règle de la table et chaque contrôle de plugin a un titre en français et en anglais", () => {
+    expect(pluginIds).toContain("HELICOIDAL_PORTE_A_FAUX");
+    expect(pluginIds).toContain("PRECHECK_FLECHE");
+    expect(allIds.length).toBeGreaterThanOrEqual(RULES.length);
+    for (const id of allIds) {
+      const key = `rules.${id}.title`;
+      expect(frMessages[key], key).toBeTruthy();
+      expect(enMessages[key], key).toBeTruthy();
+      // Traduction effective : jamais la clé brute.
+      expect(fr(ruleTitle(id)), key).not.toBe(key);
+      expect(EN.t(ruleTitle(id)), key).not.toBe(key);
+    }
+  });
+
+  it("titres courts (40 caractères au plus), sans seuil chiffré, anglais sans accent", () => {
+    for (const id of allIds) {
+      const f = fr(ruleTitle(id));
+      const e = EN.t(ruleTitle(id));
+      expect(f.length, id).toBeLessThanOrEqual(40);
+      expect(e.length, id).toBeLessThanOrEqual(40);
+      // Aucun seuil : ni nombre suivi d'une unité, ni comparaison.
+      for (const t of [f, e]) expect(t, id).not.toMatch(/\d+\s*(mm|m|°|kN|Hz)\b|[≤≥<>]/);
+      expect(e, id).not.toMatch(/[àâçéèêëîïôûù]/i);
+    }
+    expect(fr(ruleTitle("FAB_SUPPORT_LONGUEUR_MIN"))).toBe("Appui des marches sur support");
+    expect(fr(ruleTitle("ECHAPPEE_MIN_DTU"))).toBe("Échappée minimale");
+    expect(EN.t(ruleTitle("ECHAPPEE_MIN_DTU"))).toBe("Minimum headroom");
+  });
+
+  it("identifiant inconnu : la clé brute (aucune exception)", () => {
+    expect(fr(ruleTitle("REGLE_FANTOME"))).toBe("rules.REGLE_FANTOME.title");
   });
 });
 

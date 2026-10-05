@@ -70,10 +70,12 @@ test("critère n° 1 : quart tournant bois à poteau avec garde-corps, PDF et DX
 
   // Conception conforme : aucun contrôle bloquant, pièces de garde-corps dans la nomenclature.
   const blocking = await blockingCount(page);
+  // Identifiants des règles bloquantes : attribut `data-rule` des cartes (l'identifiant n'est
+  // plus affiché sur la carte, seulement dans l'inspecteur Règle).
   const listed = await page
-    .locator('.rule-card[data-severity="bloquant"] code')
-    .allTextContents()
-    .catch(() => []);
+    .locator('.rule-card[data-severity="bloquant"]')
+    .evaluateAll((cards) => cards.map((c) => c.getAttribute("data-rule") ?? ""))
+    .catch(() => [] as string[]);
   expect(blocking, `contrôles bloquants : ${listed.join(", ")}`).toBe(0);
   await expect(page.locator(".figure-line__errors")).toHaveCount(0);
   await openTab(page, "Nomenclature", ix);

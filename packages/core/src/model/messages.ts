@@ -12,3 +12,13 @@ import { msg, type Message, type MessageKey } from "@blondel/i18n";
 export function ruleDescription(ruleId: string): Message {
   return msg(`rules.${ruleId}.description` as MessageKey);
 }
+
+/**
+ * Titre court d'une règle (inspecteur Règle, cartes du contrôle, ADR-0009) : groupe nominal
+ * neutre, sans seuil chiffré, qui vaut pour une règle respectée comme violée. Clé
+ * `rules.<ruleId>.title`, pour les règles de rules.yaml comme pour les contrôles de plugins.
+ * Identifiant sans titre dans les dictionnaires : la traduction rend la clé elle-même.
+ */
+export function ruleTitle(ruleId: string): Message {
+  return msg(`rules.${ruleId}.title` as MessageKey);
+}

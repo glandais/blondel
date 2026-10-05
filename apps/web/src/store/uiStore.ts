@@ -9,7 +9,11 @@
  * - `viewCommand` : commande − / + / Recadrer de la vue centrale, consommée par la vue affichée
  *   (zoom des SVG exportés, caméra 3D) ;
  * - `lastViewByWorkspace` : dernière vue de chaque espace (Conception : Plan, 3D, Élévation ;
- *   Fabrication : Développés, Nomenclature, Comparateur).
+ *   Fabrication : Développés, Nomenclature, Comparateur) ;
+ * - `isolatedPartId` : pièce isolée dans la vue 3D (outil « Isoler » de la vue, action « Isoler
+ *   en 3D » de l'inspecteur Pièce), `null` : toutes les pièces ;
+ * - `overridesRevealSeq` : incrémenté par le lien du compteur de surcharges (panneau Contexte) ;
+ *   l'inspecteur « sans sélection » déplie alors la liste des surcharges et la montre.
  *
  * Espace de travail et vue restent cohérents (`linkWorkspaceAndView`) : passer en Fabrication
  * affiche la dernière vue de Fabrication, revenir en Conception rend la vue quittée ; une vue
@@ -46,6 +50,8 @@ export interface UiState {
   readonly controlRevealSeq: number;
   readonly viewCommand: ViewCommand | null;
   readonly lastViewByWorkspace: Readonly<Record<Workspace, ViewTab>>;
+  readonly isolatedPartId: string | null;
+  readonly overridesRevealSeq: number;
 }
 
 export function createUiStore(initialView: ViewTab = "plan"): StoreApi<UiState> {
@@ -57,6 +63,8 @@ export function createUiStore(initialView: ViewTab = "plan"): StoreApi<UiState> 
       design: workspaceOfView(initialView) === "design" ? initialView : "plan",
       fabrication: workspaceOfView(initialView) === "fabrication" ? initialView : "flat",
     },
+    isolatedPartId: null,
+    overridesRevealSeq: 0,
   }));
 }
 
@@ -145,4 +153,23 @@ export function useViewCommand(onCommand: (kind: ViewCommandKind) => void): void
 /** Bascule Conception / Fabrication (la vue suit, voir `linkWorkspaceAndView`). */
 export function switchWorkspace(target: Workspace): void {
   journeyStore.getState().setWorkspace(target);
+}
+
+/** Isole une pièce dans la vue 3D (la vue réaffiche tout si la pièce disparaît du modèle). */
+export function isolatePart(partId: string): void {
+  uiStore.setState({ isolatedPartId: partId });
+}
+
+/** Réaffiche toutes les pièces de la vue 3D. */
+export function showAllParts(): void {
+  uiStore.setState({ isolatedPartId: null });
+}
+
+/**
+ * Lien du compteur de surcharges : sélection effacée (inspecteur « sans sélection ») et liste
+ * des surcharges dépliée et montrée.
+ */
+export function revealOverrides(): void {
+  appStore.getState().select(null);
+  uiStore.setState((s) => ({ overridesRevealSeq: s.overridesRevealSeq + 1 }));
 }

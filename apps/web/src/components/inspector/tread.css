@@ -1,0 +1,151 @@
+/*
+ * Inspecteur Marche (maquette 2a) : navigation ‹ ›, bloc « Ligne de nez ». L'ossature commune
+ * (surtitre, titre, valeurs, blocs, liens) est dans frame.css.
+ */
+
+.tread-inspector__nav {
+  display: flex;
+  gap: 2px;
+  flex: none;
+}
+
+.tread-inspector__nav .btn-icon {
+  width: 28px;
+  height: 28px;
+  min-height: 28px;
+  padding: 0;
+  color: var(--color-neutral-700);
+}
+
+/* ------------------------------------------------------------ Ligne de nez */
+
+.nosing-line__row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.nosing-line__label {
+  flex: 1;
+  min-width: 0;
+  color: var(--color-neutral-700);
+}
+
+.nosing-line__value {
+  font-variant-numeric: tabular-nums;
+  color: var(--color-neutral-700);
+}
+
+/* Champ « Angle » : libellé à gauche, saisie de 76 px à droite. */
+.nosing-line__angle .field {
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+}
+
+.nosing-line__angle .field > label {
+  flex: 1;
+  font-size: 13px;
+  color: var(--color-neutral-700);
+}
+
+.nosing-line__angle .input-unit {
+  flex: none;
+}
+
+.nosing-line__angle .input-unit input {
+  width: 76px;
+  min-height: 30px;
+  padding: 3px 8px;
+}
+
+.nosing-line__angle .input-unit__unit {
+  min-width: 0;
+  color: var(--color-text);
+  font-size: 13px;
+}
+
+.nosing-line__angle .field > small {
+  flex-basis: 100%;
+}
+
+.nosing-line .insp-actions .btn {
+  font-size: 13px;
+}
+
+.nosing-line kbd {
+  font:
+    11px ui-monospace,
+    Menlo,
+    monospace;
+  color: var(--color-neutral-700);
+}
+
+.nosing-line__keys,
+.nosing-line__unavailable {
+  margin: 0;
+  font-size: 11.5px;
+  color: var(--color-neutral-700);
+}
+
+.nosing-line__unavailable {
+  font-size: 13px;
+}
+
+.nosing-line__error {
+  margin: 0;
+  font-size: 12px;
+  color: var(--danger);
+}
+
+.nosing-line__all,
+.nosing-line__orphans {
+  justify-content: space-between;
+  flex-wrap: wrap;
+  padding-top: 6px;
+  border-top: 1px solid var(--color-divider);
+  font-size: 12px;
+}
+
+.nosing-line__orphans {
+  border-top: 0;
+  padding-top: 0;
+  color: var(--sev-avertissement);
+}
+
+/* Retouches de l'escalier, nez par nez (lien vers la marche, « Retirer »). */
+.nosing-line__list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 12px;
+}
+
+.nosing-line__list li {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.nosing-line__list li[aria-current="true"] .nosing-line__entry {
+  font-weight: 600;
+}
+
+.nosing-line__entry {
+  min-width: 0;
+  text-align: left;
+  font-variant-numeric: tabular-nums;
+}
+
+.nosing-line__notes {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 12px;
+  color: var(--color-neutral-800);
+}

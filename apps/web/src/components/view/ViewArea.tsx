@@ -7,6 +7,8 @@
  *   Fabrication, provisoirement : Développés | Nomenclature | Comparateur) et, en Conception,
  *   − + Recadrer (`uiStore.sendViewCommand`, consommé par la vue affichée) ;
  * - la vue dans un cadre blueprint ; un clic dans le cadre ferme le panneau libre non épinglé ;
+ *   le cadre prend le focus (`tabIndex`) : les flèches y règlent l'angle de la ligne de nez de
+ *   la marche sélectionnée (inspecteur Marche) ;
  * - en pied, la ligne de chiffres (`FigureLine`).
  *
  * Les SVG affichés sont ceux des exports ; aucune grandeur n'est calculée ici.
@@ -15,10 +17,10 @@ import { Suspense, lazy } from "react";
 import { useStore } from "zustand";
 import type { MessageKey } from "@blondel/i18n";
 import { useT } from "../../i18n/useT.js";
-import { selectedTreadNumber } from "../../lib/compliance.js";
+import { partSelection, selectedTreadNumber } from "../../lib/compliance.js";
 import { appStore, journeyStore, useApp, useJourney, useModel } from "../../store/appStore.js";
 import { cancelUnderlayImport, importQueue, queuedImportMessage } from "../../store/importQueue.js";
-import type { PlanMode, ViewTab } from "../../store/projectStore.js";
+import type { ViewTab } from "../../store/projectStore.js";
 import {
   DESIGN_VIEWS,
   FABRICATION_VIEWS,
@@ -54,12 +56,11 @@ const VIEW_LABELS: Readonly<Record<ViewTab, MessageKey | null>> = {
 const THREE_D = "3D";
 
 /**
- * Vue qui gère les commandes − / + / Recadrer : plan coté et « Site et saisie », 3D, élévation.
- * Le mode expert du plan (retiré en vague 3) et les vues de Fabrication ne zooment pas.
+ * Vue qui gère les commandes − / + / Recadrer : plan (coté et « Site et saisie »), 3D,
+ * élévation. Les vues de Fabrication ne zooment pas.
  */
-export function viewHandlesZoom(view: ViewTab, planMode: PlanMode): boolean {
-  if (view === "plan") return planMode !== "expert";
-  return view === "3d" || view === "elevation";
+export function viewHandlesZoom(view: ViewTab): boolean {
+  return view === "plan" || view === "3d" || view === "elevation";
 }
 
 /** Commandes de la vue : les manipuler ne ferme pas le panneau libre. */
@@ -163,9 +164,7 @@ function ViewContent({ view }: { view: ViewTab }) {
               appStore.getState().select({ location: m.location, ruleId: m.ruleId })
             }
             onSelectPart={(partId) =>
-              appStore
-                .getState()
-                .select(partId === null ? null : { location: { kind: "part", partId } })
+              appStore.getState().select(partSelection(partId, model.parts))
             }
           />
         </Suspense>
@@ -255,7 +254,7 @@ export function ViewArea() {
           options={options}
           onChange={(v) => appStore.getState().setView(v)}
         />
-        {design ? <ZoomControls enabled={viewHandlesZoom(view, planMode)} /> : null}
+        {design ? <ZoomControls enabled={viewHandlesZoom(view)} /> : null}
       </div>
       <div
         id="view-panel"
@@ -263,6 +262,7 @@ export function ViewArea() {
         aria-labelledby={`tab-${view}`}
         className="view blueprint"
         data-view={view}
+        tabIndex={0}
         onClick={(e) => {
           if (!closesFreePanel(e.target)) return;
           journeyStore.getState().panelEvent({ type: "outside" });

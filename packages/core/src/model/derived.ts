@@ -182,6 +182,20 @@ export interface NosingLine {
   /** Altitude du dessus de marche (sol fini). */
   readonly z: Mm;
   readonly balanced: boolean;
+  /**
+   * Angle de la ligne de nez (degrés) : écart à la perpendiculaire à la ligne de foulée en P_k,
+   * positif dans le sens du tournant voisin, même convention que la retouche
+   * `NosingOverride` « angle » (0 : nez droit). Escaliers à volées seulement. Ajout
+   * rétrocompatible (inspecteur Marche, ADR-0009) ; absent : non exposé (hélicoïdal).
+   */
+  readonly angle?: number;
+  /**
+   * Angle (degrés, même convention qu'`angle`) que le découpage donnait à ce nez (balancement,
+   * nez fixes compris) **avant** la retouche d'angle de l'utilisateur : présent seulement quand
+   * une retouche d'angle s'applique à ce nez (`dir` et `angle` sont alors ceux de la retouche).
+   * Ajout rétrocompatible (inspecteur Marche, valeur calculée en regard de la retouche).
+   */
+  readonly computedAngle?: number;
 }
 
 export type TreadKind = "straight" | "winder" | "landing";
@@ -434,6 +448,14 @@ export interface Part {
    * une marche de base en hérite. Absent : pièce qui n'est pas une marche.
    */
   readonly treadNumber?: number;
+  /**
+   * Pièces auxquelles celle-ci est assemblée (identifiants de pièces du `Model`), relation
+   * symétrique normalisée par le pipeline (sans doublon ni identifiant inconnu, dans l'ordre de
+   * `Model.parts`) : support ↔ marche et limon porteur, tronçons consécutifs d'un limon
+   * débité en plusieurs morceaux… Ajout rétrocompatible (inspecteur Pièce, ADR-0009) ; absent :
+   * aucun assemblage déclaré.
+   */
+  readonly assembledWith?: readonly string[];
 }
 
 // ------------------------------------------------------------------ Conformité
@@ -445,8 +467,24 @@ export type Location =
   | { readonly kind: "stair" }
   | { readonly kind: "tread"; readonly number: number }
   | { readonly kind: "nosing"; readonly index: number }
-  | { readonly kind: "part"; readonly partId: string }
-  | { readonly kind: "point"; readonly at: Vec3 };
+  | {
+      readonly kind: "part";
+      readonly partId: string;
+      /**
+       * Marche concernée sur cette pièce (ex. appui de la marche 6 sur le limon LE1) : localisation
+       * « LE1 · M6 » de l'inspecteur. Ajout rétrocompatible (ADR-0009) ; absent : toute la pièce.
+       */
+      readonly treadNumber?: number;
+    }
+  | {
+      readonly kind: "point";
+      readonly at: Vec3;
+      /**
+       * Nez le plus proche du point (indice k de `Stepping.nosings`), pour rattacher un constat
+       * ponctuel (échappée) à une marche. Ajout rétrocompatible (ADR-0009) ; absent : aucun nez.
+       */
+      readonly nosingIndex?: number;
+    };
 
 /**
  * Résultat d'une règle du contrôle de conception. La description de la règle n'est plus portée
@@ -538,7 +576,15 @@ export interface Model {
    * où l'échappée est minimale ; le plafond est à `at.z + min`. Absent : pas de trémie, aucun
    * plafond au-dessus de la ligne de foulée, ou modèle partiel.
    */
-  readonly headroom?: { readonly min: Mm; readonly at: Vec3 };
+  readonly headroom?: {
+    readonly min: Mm;
+    readonly at: Vec3;
+    /**
+     * Nez le plus proche du point critique sur la ligne de foulée (indice k, |s_k − s| minimal) :
+     * rattache le constat d'échappée à une marche (inspecteur, ADR-0009). Ajout rétrocompatible.
+     */
+    readonly nosingIndex?: number;
+  };
   /** Échappée sur la largeur des marches (règle ECHAPPEE_LARGEUR, CHALLENGE G4). */
   readonly headroomWidth?: HeadroomOnWidth;
   /**
@@ -563,6 +609,28 @@ export interface Model {
    * pose) le lisent ici plutôt que dans le projet. Absent : modèle construit hors pipeline.
    */
   readonly upperFloor?: ModelUpperFloor;
+  /**
+   * Valeurs retenues par le calcul pour les paramètres laissés en `auto` dans le projet, par
+   * chemin du projet joint par des points, indices de tableau en clair
+   * (`stair.layout.legs.0.length`, `stair.structure.params.lowerOffset`,
+   * `stair.structure.params.newel.size`) : l'interface les affiche à côté d'« Auto » sans
+   * calcul. Seuls les paramètres numériques effectivement en `auto` y figurent : longueur de la
+   * volée d'un escalier droit, `stair.stepping.riserCount`, `stair.stepping.targetGoing` (quand
+   * une longueur est `auto`), paramètres des plugins (`StructureOutput.autoValues`). Un
+   * paramètre résolu par limon (d_h, d_b) expose la valeur la plus forte des limons générés.
+   * `windersPerSide` (couple par tournant) n'est pas exposé. Ajout rétrocompatible (ADR-0009) ;
+   * absent : aucune valeur exposée.
+   */
+  readonly autoValues?: Readonly<Record<string, number>>;
+  /**
+   * Échappée au droit de chaque nez (indice k = `Stepping.nosings[k]`) : hauteur libre verticale
+   * au-dessus du point P_k de la ligne de foulée (altitude du nez z_k) jusqu'au plafond le plus
+   * bas qui le couvre (sous-face de la dalle hors trémie, sous-faces de l'escalier lui-même) ;
+   * `null` si aucun plafond ne couvre P_k (trémie, ciel ouvert). Même construction que
+   * `headroom` (mesure verticale, décision Q4). Ajout rétrocompatible (inspecteur Marche,
+   * ADR-0009) ; absent : échappée non calculée (sans site, modèle partiel).
+   */
+  readonly headroomAtNosings?: readonly (Mm | null)[];
   /** Erreurs de génération (paramètres impossibles) : le modèle peut être partiel. */
   readonly errors: readonly Message[];
   /** Remarques non bloquantes du pipeline (pièces non générées, hypothèses). */

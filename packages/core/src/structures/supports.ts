@@ -13,6 +13,7 @@
 import { dec, msg, type Message } from "@blondel/i18n";
 import * as V from "../geom2d/vec.js";
 import type { Part } from "../model/derived.js";
+import type { PartAssembly } from "../model/plugins.js";
 import type { Frame3, Mm, Polygon2, Vec2 } from "../model/primitives.js";
 import type { WorkshopProfile } from "../workshop/profile.js";
 import { pocketInterval } from "./housing.js";
@@ -201,4 +202,18 @@ export function supportPart(
       profile,
     ),
   };
+}
+
+/**
+ * Assemblages des supports (`StructureOutput.assemblies`) : chaque support est assemblé à la
+ * marche qu'il porte (désignée par son numéro, résolue par le pipeline) et à la pièce porteuse
+ * de sa face (limon ou poteau, `face.owner`).
+ */
+export function supportAssemblies(
+  supports: readonly { readonly placement: SupportPlacement; readonly part: Part }[],
+): PartAssembly[] {
+  return supports.flatMap(({ placement, part }) => [
+    { a: { partId: part.id }, b: { treadNumber: placement.tread } },
+    { a: { partId: part.id }, b: { partId: placement.face.owner } },
+  ]);
 }

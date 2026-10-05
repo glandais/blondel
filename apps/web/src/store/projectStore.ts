@@ -51,8 +51,11 @@ import {
 import { setIn, type Path } from "./setIn.js";
 
 export type ViewTab = "plan" | "3d" | "elevation" | "flat" | "bom" | "compare";
-/** Mode de l'onglet Plan 2D : plan coté, site et saisie (jalon 7), mode expert des nez. */
-export type PlanMode = "drawing" | "site" | "expert";
+/**
+ * Mode de l'onglet Plan 2D : plan coté, site et saisie (jalon 7). Le mode expert des nez est
+ * retiré (ADR-0009 point 4) : la retouche des lignes de nez se fait dans l'inspecteur Marche.
+ */
+export type PlanMode = "drawing" | "site";
 export type ThemeChoice = "system" | "light" | "dark";
 /**
  * Origine d'un projet chargé (démo, assistant, import, copie de secours restaurée, préréglage) :

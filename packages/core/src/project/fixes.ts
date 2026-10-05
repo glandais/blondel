@@ -54,6 +54,11 @@ export interface FixSuggestion {
   readonly reason: Message;
   /** Patch de projet (fusion profonde, tableaux remplacés en bloc). */
   readonly patch: DeepPartial<ProjectInput>;
+  /**
+   * Règles du contrôle de conception que la correction vise (inspecteur Règle, « Pour
+   * corriger ») ; absent : correction d'une erreur ou d'une remarque, sans règle associée.
+   */
+  readonly ruleIds?: readonly string[];
 }
 
 /** Le tracé du projet corrigé par `patch` est-il constructible (`newel.ts`) ? */
@@ -161,6 +166,9 @@ export function suggestFixes(
         label: msg("project.fix.openingClearance.label", { clearance: String(clearance) }),
         reason: msg("project.fix.openingClearance.reason"),
         patch: { site: { opening: { kind: "rect", ...grown } } },
+        // Seule correction attachée à une règle du contrôle : les autres corrigent une erreur
+        // de génération (jour vif), une remarque (poteau des profilés, jour étroit).
+        ruleIds: ["GC_CONFLIT_DALLE"],
       });
     }
   }

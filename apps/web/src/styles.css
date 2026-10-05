@@ -610,6 +610,13 @@ legend {
   cursor: pointer;
 }
 
+/* Marche atteinte au clavier (Tab) : contour de sélection. */
+.svg-export [data-tread]:focus-visible {
+  outline: none;
+  stroke: var(--selected);
+  stroke-width: 3px;
+}
+
 .viewer3d {
   position: absolute;
   inset: 0;
@@ -673,31 +680,15 @@ legend {
   background: var(--panel-2);
 }
 
-.result--selected {
-  border-color: var(--selected);
-  box-shadow: inset 3px 0 0 var(--selected);
-}
-
 .result__head {
   display: flex;
   justify-content: space-between;
   gap: 0.5rem;
 }
 
-.result__head code {
-  font-family: var(--mono);
-  font-size: 0.78rem;
-}
-
-.result__loc,
-.result__meta {
+.result__loc {
   color: var(--muted);
   font-size: 0.78rem;
-}
-
-.result__measure {
-  font-size: 0.82rem;
-  font-variant-numeric: tabular-nums;
 }
 
 .disclaimer {
@@ -1182,31 +1173,10 @@ fieldset.helical {
 
 /* ------------------------------------------------------------ Surcharges de règles (A18 b) */
 
-.override {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 0.2rem;
-  padding: 0.1rem 0.25rem 0.25rem;
-}
-
 .override__current {
   margin: 0;
   font-size: 0.8rem;
   color: var(--muted);
-}
-
-.override-editor {
-  display: flex;
-  flex-direction: column;
-  gap: 0.35rem;
-  width: 100%;
-}
-
-.override-editor textarea {
-  width: 100%;
-  box-sizing: border-box;
-  font: inherit;
 }
 
 .override-item {

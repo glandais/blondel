@@ -5,28 +5,17 @@
  * revient en arrière). Les corrections ne sont proposées que pour le projet dont le modèle affiché
  * est issu (pas pendant un calcul).
  */
-import type { FixSuggestion } from "@blondel/core";
-import { msg, type Message } from "@blondel/i18n";
+import type { Message } from "@blondel/i18n";
 import { useMemo, useState } from "react";
 import { useT } from "../i18n/useT.js";
-import { applyFix, fixesFor } from "../lib/fixes.js";
-import { appStore, useApp, useModel } from "../store/appStore.js";
+import { applyFixInStore, fixesFor } from "../lib/fixes.js";
+import { useApp, useModel } from "../store/appStore.js";
 
 /** Nombre d'erreurs affichées avant « … et N autres ». */
 const MAX_ERRORS = 4;
 
 /** Motif d'un refus : message traduit à l'affichage (il suit un changement de langue). */
 type Failure = Message;
-
-function apply(fix: FixSuggestion): Failure | null {
-  const r = appStore.getState().update((p) => applyFix(p, fix));
-  appStore.getState().endGroup();
-  if (!r.ok) return r.issues[0] ?? msg("ui.errors.fixRefused");
-  appStore.setState({
-    notice: { kind: "info", msg: msg("ui.errors.fixApplied", { label: fix.label }) },
-  });
-  return null;
-}
 
 export function ErrorsBar() {
   const t = useT();
@@ -73,7 +62,7 @@ export function ErrorsBar() {
                   type="button"
                   data-fix={f.id}
                   title={t.t(f.reason)}
-                  onClick={() => setFailure(apply(f))}
+                  onClick={() => setFailure(applyFixInStore(f))}
                 >
                   {t.t(f.label)}
                 </button>

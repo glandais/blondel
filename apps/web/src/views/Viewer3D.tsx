@@ -56,7 +56,7 @@ import { controlMarkers, type PointMarker } from "../lib/markers.js";
 import type { MeshSnapshot, MeshedPartData } from "../model/snapshot.js";
 import { appStore, useApp } from "../store/appStore.js";
 import type { Selection } from "../store/projectStore.js";
-import { useViewCommand } from "../store/uiStore.js";
+import { isolatePart, showAllParts, useUi, useViewCommand } from "../store/uiStore.js";
 import {
   mainDimensions,
   measureAnnotation,
@@ -741,7 +741,8 @@ export default function Viewer3D({
     }
     if (Object.keys(rest).length > 0) setTools((t) => ({ ...t, ...rest }));
   }, []);
-  const [isolated, setIsolated] = useState<string | null>(null);
+  // Pièce isolée partagée avec l'inspecteur Pièce (« Isoler en 3D »), état d'interface.
+  const isolated = useUi((st) => st.isolatedPartId);
   const appearance = useApp((s) => s.appearance);
   const families = useMemo(() => familiesOf(parts.map((p) => p.part)), [parts]);
   // Points mesurés : pièce et position réelle (hors vue éclatée) ; la position affichée suit
@@ -979,9 +980,9 @@ export default function Viewer3D({
         canIsolate={selectedMesh !== undefined}
         isolated={isolatedShown}
         onIsolate={() => {
-          if (selectedMesh) setIsolated(selectedMesh.partId);
+          if (selectedMesh) isolatePart(selectedMesh.partId);
         }}
-        onShowAll={() => setIsolated(null)}
+        onShowAll={showAllParts}
         families={families}
         appearance={appearance}
         onAppearance={(family, material) =>

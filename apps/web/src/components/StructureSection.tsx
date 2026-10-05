@@ -41,6 +41,7 @@ import {
   tierEntry,
   type ParamTierEntry,
 } from "../lib/paramTiers.js";
+import { autoValueOf } from "../lib/autoValues.js";
 import { formatDecimal, parseDecimal, parseIntMm } from "../lib/units.js";
 import { appStore, useApp, useModel } from "../store/appStore.js";
 import type { UpdateResult } from "../store/projectStore.js";
@@ -69,6 +70,15 @@ function setStructure(kind: string, params: Record<string, unknown>): UpdateResu
   return appStore.getState().setField(["stair", "structure"], { kind, params });
 }
 
+/**
+ * Valeur retenue par le calcul pour un paramètre en « auto » (`Model.autoValues` du modèle
+ * affiché), `undefined` si le modèle ne l'expose pas. Lecture seule.
+ */
+export function useAutoValue(path: readonly (string | number)[]): number | undefined {
+  const { model } = useModel();
+  return autoValueOf(model, path);
+}
+
 /** Champ d'un paramètre de plugin (libellé, unité, aide et bornes présentés par `paramLabels`). */
 export function ParamInput({
   field,
@@ -80,6 +90,7 @@ export function ParamInput({
   onCommit: (v: unknown) => UpdateResult;
 }) {
   const t = useT();
+  const computed = useAutoValue(["stair", "structure", "params", ...field.path]);
   const hint = field.hint === undefined ? {} : { hint: field.hint };
   switch (field.kind) {
     case "number": {
@@ -132,14 +143,15 @@ export function ParamInput({
       );
     }
     case "auto-number": {
-      // Valeur retenue par le plugin en mode Auto non exposée par le modèle : libellé neutre
-      // (« calculé ») à côté d'« Auto », jamais la borne. « Imposer » part de la borne minimale
-      // du plugin (simple point de départ de la saisie, aucune règle).
+      // Valeur retenue par le plugin en mode Auto (`Model.autoValues`) affichée à côté
+      // d'« Auto » ; non exposée : libellé neutre (« calculé »), jamais la borne. « Imposer »
+      // part alors de la borne minimale du plugin (simple point de départ de la saisie).
       const fallback = Math.max(1, Math.ceil(field.min ?? 1));
       return (
         <AutoIntField
           label={field.label}
           value={typeof value === "number" ? value : "auto"}
+          computed={computed}
           fallback={fallback}
           unit={field.unit}
           {...hint}

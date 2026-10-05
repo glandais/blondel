@@ -22,6 +22,10 @@
  * plan (`selfcover.ts`). Le calcul reste exact : Γ et les segments de nez sont coupés aux côtés
  * de la trémie et des contours des sous-faces, le plafond est constant par morceau et le minimum
  * de chaque morceau est atteint à sa borne haute. Sans sous-face, le calcul est inchangé.
+ *
+ * 3. **Échappée au droit de chaque nez** (`atNosings`, inspecteur Marche) : plafond le plus bas
+ *    au-dessus du point P_k de Γ (dalle hors trémie, sous-faces de l'escalier qui le couvrent),
+ *    moins l'altitude z_k du nez ; valeur exacte en ce point, `null` sans plafond au-dessus.
  */
 import { cumulativeLengths, curveLength, curvePointAt } from "../geom2d/curve.js";
 import { intersectLineCurve, segmentIntersect } from "../geom2d/intersect.js";
@@ -57,6 +61,12 @@ export interface HeadroomAnalysis {
   readonly walkline?: HeadroomOnWalkline;
   /** Échappée sur la largeur des marches ; absente si aucun nez n'est sous la dalle. */
   readonly width?: HeadroomOnWidth;
+  /**
+   * Échappée au droit de chaque nez (indice k = `Stepping.nosings[k]`) : plafond le plus bas
+   * au-dessus de P_k moins l'altitude z_k du nez ; `null` si aucun plafond ne couvre P_k.
+   * Repris dans `Model.headroomAtNosings`.
+   */
+  readonly atNosings: readonly (Mm | null)[];
 }
 
 /** Contour CCW de la trémie, ou `null` sans trémie. */
@@ -179,6 +189,18 @@ export function headroomOnWidth(
 }
 
 /**
+ * Échappée verticale au droit de chaque nez sous la seule dalle : z_p − z_k si P_k est sous la
+ * dalle (hors trémie, le bord appartient à la trémie), `null` sinon.
+ */
+export function headroomAtNosingsUnderSlab(
+  nosings: readonly NosingLine[],
+  ceiling: Mm,
+  opening: Polygon2,
+): (Mm | null)[] {
+  return nosings.map((n) => (isUnderSlab(n.p, opening) ? ceiling - n.z : null));
+}
+
+/**
  * Échappée d'un escalier : `null` sans trémie (escalier extérieur ou sans plancher au-dessus).
  * Le découpage doit être complet (nez et marches).
  */
@@ -210,6 +232,7 @@ export function computeHeadroom(
     ceiling,
     opening,
     covered,
+    atNosings: headroomAtNosingsUnderSlab(stepping.nosings, ceiling, opening),
     ...(walkline ? { walkline } : {}),
     ...(width ? { width } : {}),
   };

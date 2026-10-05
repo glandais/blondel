@@ -261,6 +261,15 @@ export interface AutoIntFieldProps extends IntFieldBounds {
 }
 
 /**
+ * Valeur imposée au sortir du mode Auto d'un champ entier : la valeur retenue par le calcul,
+ * arrondie à l'entier (saisie en mm entiers, ADR-0003 : le calcul est en flottant, une longueur
+ * de volée résolue vaut par exemple 3 873,33 mm), sinon le point de départ `fallback`.
+ */
+export function autoProposal(computed: number | undefined, fallback: number): number {
+  return computed !== undefined && Number.isFinite(computed) ? Math.round(computed) : fallback;
+}
+
+/**
  * Champ entier « Auto | Imposer » (un seul contrôle segmenté, ADR-0009). En mode Auto, la
  * valeur calculée par le modèle (`computed`) s'affiche à côté : un clic dessus (ou sur
  * « Imposer ») la fixe et place le focus dans le champ ; sans valeur calculée exposée, un
@@ -271,8 +280,8 @@ export interface AutoIntFieldProps extends IntFieldBounds {
 export function AutoIntField(props: AutoIntFieldProps) {
   const { label, value, computed, unit = "mm", hint, min, max, onCommit, autoHint } = props;
   const known = computed !== undefined && Number.isFinite(computed);
-  // Valeur imposée au sortir du mode Auto : celle du calcul si elle est connue.
-  const proposed = known ? computed : props.fallback;
+  // Valeur imposée au sortir du mode Auto : celle du calcul si elle est connue, en mm entiers.
+  const proposed = autoProposal(computed, props.fallback);
   const autoAllowed = props.autoAllowed ?? true;
   const labelId = useId();
   const helpId = useId();

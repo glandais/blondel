@@ -9,13 +9,14 @@
  */
 import { useEffect } from "react";
 import { AssistantDialog } from "./components/AssistantDialog.js";
-import { FreePanel } from "./components/free/FreePanel.js";
+import { escapeAction, type EscapeTarget } from "./components/escapeChain.js";
+import { FreePanel, focusRailTab } from "./components/free/FreePanel.js";
 import { Rail } from "./components/free/Rail.js";
 import { Inspector } from "./components/inspector/Inspector.js";
 import { TopBar } from "./components/topbar/TopBar.js";
 import { UpdatePrompt } from "./components/UpdatePrompt.js";
 import { ViewArea } from "./components/view/ViewArea.js";
-import { appStore, useJourney } from "./store/appStore.js";
+import { appStore, journeyStore, useJourney } from "./store/appStore.js";
 import "./store/uiStore.js";
 
 function isEditable(target: EventTarget | null): boolean {
@@ -56,8 +57,41 @@ function useUndoShortcuts(): void {
   }, []);
 }
 
+/**
+ * Écouteur global unique d'Échap (`escapeAction`) : un menu ou une saisie l'ont déjà traité,
+ * sinon panneau libre non épinglé, puis sélection (retour à l'inspecteur « sans sélection »),
+ * puis panneau épinglé. Fermé par Échap, le panneau rend le focus à l'onglet de sa section.
+ */
+function useEscapeChain(): void {
+  useEffect(() => {
+    const onKey = (e: globalThis.KeyboardEvent) => {
+      const journey = journeyStore.getState();
+      const section = journey.workspace === "design" ? journey.freePanel : null;
+      const app = appStore.getState();
+      const action = escapeAction({
+        key: e.key,
+        defaultPrevented: e.defaultPrevented,
+        target: e.target instanceof Element ? (e.target as EscapeTarget) : null,
+        assistantOpen: app.assistantOpen,
+        panelOpen: section !== null,
+        panelPinned: journey.freePanelPinned,
+        hasSelection: app.selection !== null,
+      });
+      if (action === "clearSelection") {
+        app.select(null);
+      } else if (action === "closePanel" && section !== null) {
+        journey.panelEvent({ type: "escape" });
+        focusRailTab(section);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+}
+
 export function App() {
   useUndoShortcuts();
+  useEscapeChain();
   const workspace = useJourney((s) => s.workspace);
   const panelOpen = useJourney((s) => s.freePanel !== null);
   const design = workspace === "design";

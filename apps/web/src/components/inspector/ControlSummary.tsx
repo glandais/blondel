@@ -6,14 +6,16 @@
  * respectées, remarques, surcharges). Lecture du rapport rendu par le cœur : aucune règle
  * n'est évaluée ici.
  *
- * Les corrections proposées (`lib/fixes.ts`) restent dans la barre d'erreurs au-dessus de la
- * vue ; « Pour corriger » arrive avec l'inspecteur Règle (vague 3).
+ * Chaque carte (titre court et localisation courte) et chaque ligne des listes repliées ouvre
+ * l'inspecteur Règle (maquette 2c), qui porte la mesure, les corrections et la surcharge.
  *
  * Badge « Contrôle » de la barre du haut (`revealControl`) : le bloc défile dans le champ et son
- * titre reçoit le focus.
+ * titre reçoit le focus. Lien du compteur de surcharges du panneau Contexte
+ * (`revealOverrides`) : la liste des surcharges se déplie, défile dans le champ et son résumé
+ * reçoit le focus.
  */
 import type { MessageKey } from "@blondel/i18n";
-import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useId, useMemo, useRef, useState, type ReactNode, type Ref } from "react";
 import { useT } from "../../i18n/useT.js";
 import {
   controlCounts,
@@ -23,7 +25,7 @@ import {
   type ControlCounts,
 } from "../../lib/compliance.js";
 import { journeyStore, useApp, useModel } from "../../store/appStore.js";
-import { switchWorkspace, useUi } from "../../store/uiStore.js";
+import { switchWorkspace, uiStore, useUi } from "../../store/uiStore.js";
 import { RuleCard } from "./RuleCard.js";
 import { OverrideList, ResultList } from "./RuleResults.js";
 
@@ -54,6 +56,22 @@ const PROFILE_LABELS: Readonly<Record<"strict" | "souple", MessageKey>> = {
 
 /** Listes repliées de la ligne de liens. */
 export type FoldId = "na" | "ok" | "notes" | "overrides";
+
+/**
+ * Dernière demande traitée de chaque sorte (badge « Contrôle », lien des surcharges), commune à
+ * tous les montages du bloc : au départ, les compteurs du store d'interface.
+ */
+const seen: Record<"control" | "overrides", number> = {
+  control: uiStore.getState().controlRevealSeq,
+  overrides: uiStore.getState().overridesRevealSeq,
+};
+
+/** La demande `seq` est-elle nouvelle ? Elle est alors marquée traitée. */
+export function takeReveal(kind: "control" | "overrides", seq: number): boolean {
+  if (seq <= seen[kind]) return false;
+  seen[kind] = seq;
+  return true;
+}
 
 /** Profil : ouvre le panneau Contexte du parcours libre (en Conception). */
 function openContextPanel(): void {
@@ -93,6 +111,7 @@ function Fold({
   title,
   count,
   onClose,
+  summaryRef,
   children,
 }: {
   id: string;
@@ -100,6 +119,7 @@ function Fold({
   title: string;
   count: number;
   onClose: () => void;
+  summaryRef?: Ref<HTMLElement>;
   children: ReactNode;
 }) {
   return (
@@ -111,7 +131,7 @@ function Fold({
         if (!e.currentTarget.open) onClose();
       }}
     >
-      <summary>
+      <summary ref={summaryRef}>
         {title} <span className="count">{count}</span>
       </summary>
       {children}
@@ -138,17 +158,33 @@ export function ControlSummary({ initialOpen = [] }: ControlSummaryProps = {}) {
   const profile = report?.profile ?? projectProfile;
   const [open, setOpen] = useState<ReadonlySet<FoldId>>(() => new Set(initialOpen));
 
-  // Badge « Contrôle » : défilement jusqu'au bloc et focus du titre (pas au montage).
+  // Badge « Contrôle » : défilement jusqu'au bloc et focus du titre. Le bloc peut être monté par
+  // la demande elle-même (sélection effacée : la 2d remplace un autre gabarit) : la demande
+  // traitée est mémorisée hors du composant (`seen`), pas au montage.
   const sectionRef = useRef<HTMLElement>(null);
   const titleRef = useRef<HTMLHeadingElement>(null);
   const revealSeq = useUi((s) => s.controlRevealSeq);
-  const seenSeq = useRef(revealSeq);
   useEffect(() => {
-    if (revealSeq === seenSeq.current) return;
-    seenSeq.current = revealSeq;
+    if (!takeReveal("control", revealSeq)) return;
     sectionRef.current?.scrollIntoView?.({ block: "start" });
     titleRef.current?.focus({ preventScroll: true });
   }, [revealSeq]);
+
+  // Lien du compteur de surcharges (panneau Contexte) : liste dépliée, montrée et focalisée.
+  const overridesSummaryRef = useRef<HTMLElement>(null);
+  const overridesSeq = useUi((s) => s.overridesRevealSeq);
+  const [overridesFocus, setOverridesFocus] = useState(0);
+  useEffect(() => {
+    if (!takeReveal("overrides", overridesSeq)) return;
+    setOpen((s) => (s.has("overrides") ? s : new Set([...s, "overrides"])));
+    setOverridesFocus((n) => n + 1);
+  }, [overridesSeq]);
+  useEffect(() => {
+    if (overridesFocus === 0) return;
+    const summary = overridesSummaryRef.current;
+    summary?.scrollIntoView?.({ block: "nearest" });
+    summary?.focus({ preventScroll: true });
+  }, [overridesFocus]);
 
   const toggle = (f: FoldId): void =>
     setOpen((s) => {
@@ -304,6 +340,7 @@ export function ControlSummary({ initialOpen = [] }: ControlSummaryProps = {}) {
           title={t.t("ui.compliance.overrides")}
           count={overrides.length}
           onClose={close("overrides")}
+          summaryRef={overridesSummaryRef}
         >
           <OverrideList />
         </Fold>

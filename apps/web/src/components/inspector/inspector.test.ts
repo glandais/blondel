@@ -1,25 +1,27 @@
 /**
  * Inspecteur du parcours libre, état « sans sélection » (maquette 2d, ADR-0009) : 9 chiffres
  * clés, coût (profil d'atelier ou comparateur), compteurs et cartes du contrôle, carte
- * sélectionnée, liens repliés, surcharges, prédimensionnement et mention, en français et en
- * anglais ; choix du gabarit.
+ * de règle (titre court et localisation), liens repliés, surcharges, prédimensionnement et
+ * mention, en français et en anglais. Le choix du gabarit est testé dans `template.test.ts`.
  */
 import {
   buildModel,
   createProject,
+  ruleTitle,
   withRuleOverride,
   type Project,
   type RuleResult,
 } from "@blondel/core";
 import { createElement, type ComponentType } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import { translatorFor } from "@blondel/i18n";
 import { afterEach, describe, expect, it } from "vitest";
 import { COST_FIELDS } from "../../lib/workshopRates.js";
 import { appStore, journeyStore, modelService, workshopStore } from "../../store/appStore.js";
 import { uiStore } from "../../store/uiStore.js";
 import { ControlSummary, type FoldId } from "./ControlSummary.js";
-import { Inspector, inspectorTemplate } from "./Inspector.js";
-import { precheckCounts } from "./ProjectInspector.js";
+import { Inspector } from "./Inspector.js";
+import { ProjectInspector, precheckCounts } from "./ProjectInspector.js";
 
 const initial = appStore.getState().project;
 const initialRates = workshopStore.getState().rates;
@@ -71,6 +73,10 @@ function figures(html: string): Record<string, [string, string]> {
   }
   return out;
 }
+
+/** Titre court d'une règle tel qu'il apparaît dans le HTML (apostrophes échappées). */
+const titleOf = (ruleId: string): string =>
+  translatorFor("fr").t(ruleTitle(ruleId)).replace(/'/g, "&#x27;");
 
 const decode = (s: string): string =>
   s
@@ -206,11 +212,14 @@ describe("contrôle de conception", () => {
     );
     expect(html).not.toMatch(/rule-card[^"]*" data-severity="bloquant"/);
     expect(html).toContain('class="result result--violation rule-card__button"');
-    expect(html).toContain("<code");
     expect(html).toContain("Avertissement");
-    // Non sélectionnée : repliée (ni mesure, ni surcharge).
-    expect(html).not.toContain("rule-card--selected");
+    // Titre court de chaque règle et localisation courte ; l'identifiant n'est plus sur la
+    // carte (Référence de l'inspecteur Règle), ni aucun détail déplié.
+    for (const r of violations()) expect(html, r.ruleId).toContain(titleOf(r.ruleId));
+    expect(html).toContain('class="rule-card__loc"');
+    expect(html).not.toContain("<code");
     expect(html).not.toContain("rule-card__details");
+    expect(html).not.toContain("aria-pressed");
   });
 
   it("sans violation : phrase courte, aucune carte", () => {
@@ -229,21 +238,17 @@ describe("contrôle de conception", () => {
     expect(html).not.toContain("rule-card");
   });
 
-  it("carte sélectionnée : mise en évidence et dépliée (mesure, nature, surcharge)", () => {
+  it("règle sélectionnée : la carte de la fiche ne se déplie plus (inspecteur Règle)", () => {
     load(helical());
     const r = violations().find((v) => v.severity === "avertissement")!;
     appStore.getState().select({ location: r.location, ruleId: r.ruleId });
-    const html = render(Inspector);
-    const start = html.indexOf("rule-card--selected");
+    const html = render(ProjectInspector);
+    const start = html.indexOf(`data-rule="${r.ruleId}"`);
     expect(start).toBeGreaterThan(0);
     const card = html.slice(start, html.indexOf("</li>", start));
-    expect(card).toContain(`data-rule="${r.ruleId}"`);
-    expect(card).toContain('aria-pressed="true"');
-    expect(card).toContain("rule-card__details");
-    expect(card).toContain("confiance");
-    expect(card).toContain("Surcharger la règle…");
-    // Une sélection garde l'inspecteur « sans sélection » en vague 2.
-    expect(html).toContain('data-template="project"');
+    expect(card).toContain(titleOf(r.ruleId));
+    expect(card).not.toContain("confiance");
+    expect(card).not.toContain("Surcharger la règle…");
   });
 
   it("liens repliés : compteurs, aria-expanded, listes absentes tant que repliées", () => {
@@ -260,7 +265,7 @@ describe("contrôle de conception", () => {
     expect(html).not.toContain("surcharge");
   });
 
-  it("listes dépliées : classes .sev--na / .sev--ok / .sev--notes, bouton de surcharge", () => {
+  it("listes dépliées : classes .sev--na / .sev--ok / .sev--notes, titre et localisation", () => {
     load(helical());
     const html = controlWith(["na", "ok", "notes"]);
     expect(html).toContain('class="sev sev--na"');
@@ -268,8 +273,15 @@ describe("contrôle de conception", () => {
     expect(html).toContain("Non évaluées");
     expect(html).toContain("Respectées");
     const okList = html.slice(html.indexOf('class="sev sev--ok"'));
-    expect(okList).toContain("<li><button");
-    expect(okList).toContain("Surcharger la règle…");
+    expect(okList).toMatch(/<li data-rule="\w+"><button type="button" class="result result--ok">/);
+    expect(okList).toContain('class="result__title"');
+    expect(okList).toContain('class="result__loc"');
+    const passed = modelService.store
+      .getState()
+      .model.model!.compliance.results.find((r) => r.status === "ok")!;
+    expect(okList).toContain(titleOf(passed.ruleId));
+    // La surcharge se fait dans l'inspecteur Règle : plus de bouton en ligne.
+    expect(okList).not.toContain("Surcharger la règle…");
     expect(html).toContain('aria-expanded="true"');
     expect(html).toMatch(/aria-controls="[^"]+-ok"/);
   });
@@ -285,9 +297,13 @@ describe("contrôle de conception", () => {
     const fr = controlWith(["overrides"]);
     expect(fr).toContain('class="sev sev--overrides"');
     expect(fr).toContain("Surcharge : Ignorée — Essai");
+    // Liste des surcharges : identifiant, titre court et levée.
+    expect(fr).toContain("<code>BLONDEL</code>");
+    expect(fr).toContain("Lever la surcharge");
     const en = controlWith(["overrides"], "en");
     expect(en).toContain("1 override");
     expect(en).toContain("Override: Ignored — Essai");
+    expect(en).toContain("Lift the override");
     expect(en).not.toContain("ui.label");
   });
 
@@ -357,8 +373,6 @@ describe("mention et langues", () => {
       .update((p) =>
         withRuleOverride(p, { ruleId: "BLONDEL", severity: "ignore", justification: "x" }),
       );
-    const r = violations()[0];
-    if (r) appStore.getState().select({ location: r.location, ruleId: r.ruleId });
     const html = render(Inspector, "en");
     expect(html).toContain('aria-label="Inspector"');
     expect(html).toContain("Design check");
@@ -386,14 +400,5 @@ describe("mention et langues", () => {
     expect(fr).toContain('aria-label="Inspecteur"');
     expect(fr).toContain("Projet");
     expect(fr).not.toMatch(/\bui\.[a-z]+\.[a-zA-Z.]+/);
-  });
-});
-
-describe("gabarit de l'inspecteur", () => {
-  it("vague 2 : « projet » pour toute sélection", () => {
-    expect(inspectorTemplate(null)).toBe("project");
-    expect(inspectorTemplate({ location: { kind: "tread", number: 3 } })).toBe("project");
-    expect(inspectorTemplate({ location: { kind: "part", partId: "LI1" } })).toBe("project");
-    expect(inspectorTemplate({ location: { kind: "stair" }, ruleId: "BLONDEL" })).toBe("project");
   });
 });

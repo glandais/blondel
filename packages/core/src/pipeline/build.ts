@@ -49,7 +49,9 @@ import type {
   Stepping,
 } from "../model/derived.js";
 import type { StructureContext, StructureKind } from "../model/plugins.js";
-import type { Project } from "../model/project.js";
+import { isHelicalLayout, type Project } from "../model/project.js";
+import type { PartAssembly } from "../model/plugins.js";
+import { resolveLegLengths, resolveTargetGoing } from "../layout/resolve.js";
 import { buildBasicParts } from "../parts/basic.js";
 import { issuesFromZod, projectErrorMap, projectIssueMessage } from "../project/errors.js";
 import { checkSolids } from "../parts/solidChecks.js";
@@ -67,6 +69,7 @@ import { resolveWorkshopProfile } from "../workshop/profile.js";
 import { SteppingError } from "../stepping/errors.js";
 import { computeRises } from "../stepping/rises.js";
 import { computeStepping } from "../stepping/stepping.js";
+import { normalizeAssemblies } from "./assembly.js";
 import { LastValueCache } from "./memo.js";
 
 /** Résultat d'une étape : valeur ou message d'erreur. */
@@ -158,6 +161,10 @@ interface StructureStage {
   readonly executionClass?: "EXC1" | "EXC2";
   /** Prédimensionnement indicatif des limons, reporté dans `Model.precheck`. */
   readonly precheck?: ModelPrecheck;
+  /** Valeurs retenues des paramètres `auto` du plugin (`StructureOutput.autoValues`). */
+  readonly autoValues?: Readonly<Record<string, number>>;
+  /** Assemblages déclarés par le plugin (`StructureOutput.assemblies`). */
+  readonly assemblies?: readonly PartAssembly[];
 }
 
 interface ComplianceStage {
@@ -267,6 +274,64 @@ function upperFloorOf(site: Project["site"]): ModelUpperFloor {
   return value;
 }
 
+/**
+ * Nez le plus proche de l'abscisse `s` de la ligne de foulée (`Model.headroom.nosingIndex`) ;
+ * `{}` sans nez.
+ */
+export function nearestNosing(
+  nosings: Stepping["nosings"],
+  s: number,
+): { readonly nosingIndex?: number } {
+  let best = -1;
+  let gap = Infinity;
+  nosings.forEach((n, k) => {
+    const d = Math.abs(n.s - s);
+    if (d < gap) {
+      gap = d;
+      best = k;
+    }
+  });
+  return best < 0 ? {} : { nosingIndex: best };
+}
+
+/** Préfixe des chemins des paramètres de structure dans `Model.autoValues`. */
+const STRUCTURE_PARAMS_PATH = "stair.structure.params.";
+
+/**
+ * Valeurs retenues des paramètres numériques laissés en `auto` (`Model.autoValues`) : ceux du
+ * plugin de structure (préfixés), longueur des volées d'un escalier droit
+ * (`resolveLegLengths`), nombre de hauteurs (découpage) et giron cible quand il sert (longueur
+ * `auto`). `undefined` si aucune. Une résolution impossible est omise (l'erreur est déjà
+ * rapportée par l'étape concernée).
+ */
+function computeAutoValues(
+  project: Project,
+  stepping: Stepping | undefined,
+  structureAuto: Readonly<Record<string, number>> | undefined,
+): Readonly<Record<string, number>> | undefined {
+  const out: Record<string, number> = {};
+  const { stair } = project;
+  if (!isHelicalLayout(stair.layout) && stair.layout.legs.some((l) => l.length === "auto")) {
+    try {
+      const lengths = resolveLegLengths(project);
+      stair.layout.legs.forEach((leg, i) => {
+        const v = lengths[i];
+        if (leg.length === "auto" && v !== undefined && Number.isFinite(v))
+          out[`stair.layout.legs.${i}.length`] = v;
+      });
+      if (stair.stepping.targetGoing === "auto" && stepping && stepping.riserCount > 0)
+        out["stair.stepping.targetGoing"] = resolveTargetGoing(project, stepping.riserCount);
+    } catch {
+      // Longueur impossible : erreur du tracé déjà rapportée.
+    }
+  }
+  if (stair.stepping.riserCount === "auto" && stepping && stepping.riserCount > 0)
+    out["stair.stepping.riserCount"] = stepping.riserCount;
+  for (const [k, v] of Object.entries(structureAuto ?? {}))
+    if (Number.isFinite(v)) out[STRUCTURE_PARAMS_PATH + k] = v;
+  return Object.keys(out).length > 0 ? out : undefined;
+}
+
 /** Caches par étape (dernier résultat). */
 const caches = {
   layout: new LastValueCache<Stage<Layout>>(),
@@ -276,6 +341,12 @@ const caches = {
   guards: new LastValueCache<Stage<GuardsAnalysis>>(),
   headroom: new LastValueCache<Stage<HeadroomAnalysis | null>>(),
   compliance: new LastValueCache<Stage<ComplianceStage>>(),
+  /** Pièces finales avec `assembledWith` normalisé (`pipeline/assembly.ts`). */
+  assembly: new LastValueCache<readonly Part[]>(),
+  /** `Model.autoValues`, à identité stable. */
+  autoValues: new LastValueCache<Readonly<Record<string, number>> | undefined>(),
+  /** `Model.headroomAtNosings` sans plafond (aucune trémie ni sous-face), à identité stable. */
+  headroomAtNosings: new LastValueCache<readonly (number | null)[]>(),
 };
 let models = new WeakMap<Project, Model>();
 
@@ -538,6 +609,8 @@ export function buildModel(project: Project, options: BuildModelOptions = {}): M
   let structureChecks: readonly RuleResult[] = [];
   let executionClass: "EXC1" | "EXC2" | undefined;
   let precheck: ModelPrecheck | undefined;
+  let structureAuto: Readonly<Record<string, number>> | undefined;
+  let assemblies: readonly PartAssembly[] | undefined;
   const kind = stair.structure.kind;
   const plugin = kind !== "none" ? getStructure(kind) : undefined;
   if (kind !== "none" && !plugin) {
@@ -592,6 +665,10 @@ export function buildModel(project: Project, options: BuildModelOptions = {}): M
               errors: out.errors ?? [],
               ...(out.executionClass ? { executionClass: out.executionClass } : {}),
               ...(precheck ? { precheck } : {}),
+              ...(out.autoValues ? { autoValues: out.autoValues } : {}),
+              ...(out.assemblies && out.assemblies.length > 0
+                ? { assemblies: out.assemblies }
+                : {}),
             };
           }),
       );
@@ -605,11 +682,16 @@ export function buildModel(project: Project, options: BuildModelOptions = {}): M
         structureChecks = structureStage.value.checks;
         executionClass = structureStage.value.executionClass;
         precheck = structureStage.value.precheck;
+        structureAuto = structureStage.value.autoValues;
+        assemblies = structureStage.value.assemblies;
         notes.push(...structureStage.value.notes);
         errors.push(...structureStage.value.errors);
       }
     }
   }
+
+  /** Pièces avant les garde-corps (résultat mémoïsé de l'étape structure), clé des assemblages. */
+  const structureParts = parts;
 
   // 3 bis. Garde-corps et mains courantes (pièces ajoutées après la structure).
   let guards: GuardsAnalysis | null | undefined;
@@ -627,21 +709,43 @@ export function buildModel(project: Project, options: BuildModelOptions = {}): M
       guardResults = guardChecks(project, stepping, guards);
     }
   }
+  // Assemblages entre pièces : relation symétrique sur les pièces finales (`Part.assembledWith`).
+  // Clés : pièces de structure et de garde-corps (résultats d'étapes mémoïsés) et assemblages.
+  const assemblyInput = parts;
+  parts = run(caches.assembly, [structureParts, guards?.parts, assemblies], () =>
+    normalizeAssemblies(assemblyInput, assemblies),
+  );
   // Solides dégénérés (dette D3 : profondeur nulle, section plate, balayage auto-intersecté),
   // contrôle mémoïsé par solide (`parts/solidChecks.ts`).
   errors.push(...checkSolids(parts));
 
   // 4. Échappée.
   let headroom: HeadroomAnalysis | null = null;
+  let headroomAtNosings: readonly (number | null)[] | undefined;
   if (complete) {
     const headroomStage = run(caches.headroom, [layout, stepping, ...siteKey], () =>
       attempt(STAGE_LABELS.headroom, () => computeHeadroom(site, layout, stepping)),
     );
     if (headroomStage.error !== undefined) errors.push(headroomStage.error);
-    else headroom = headroomStage.value;
+    else {
+      headroom = headroomStage.value;
+      // Échappée au droit de chaque nez ; sans trémie ni sous-face, aucun plafond (`null`).
+      headroomAtNosings =
+        headroom?.atNosings ??
+        run(caches.headroomAtNosings, [stepping], () => stepping.nosings.map(() => null));
+    }
   }
+  const autoValues = run(
+    caches.autoValues,
+    [stair, site.floorToFloor, stepping, structureAuto],
+    () => computeAutoValues(project, stepping, structureAuto),
+  );
   const headroomMin = headroom?.walkline
-    ? { min: headroom.walkline.min, at: headroom.walkline.at }
+    ? {
+        min: headroom.walkline.min,
+        at: headroom.walkline.at,
+        ...nearestNosing(stepping?.nosings ?? [], headroom.walkline.s),
+      }
     : undefined;
   const headroomClear = headroom !== null && headroom.walkline === undefined;
   const width = headroom?.width;
@@ -711,6 +815,8 @@ export function buildModel(project: Project, options: BuildModelOptions = {}): M
     ...(headroomUnlimited ? { headroomUnlimited } : {}),
     ...(executionClass ? { executionClass } : {}),
     ...(precheck ? { precheck } : {}),
+    ...(autoValues ? { autoValues } : {}),
+    ...(headroomAtNosings ? { headroomAtNosings } : {}),
     upperFloor: upperFloorOf(site),
     errors,
     ...(notes.length > 0 ? { notes } : {}),

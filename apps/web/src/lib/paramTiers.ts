@@ -445,7 +445,8 @@ function guardPaths(project: Project): (readonly string[])[] {
  * Le paramètre de plugin `path` s'applique-t-il à ce projet ? Un champ conditionnel n'apparaît
  * que lorsqu'il s'applique (spécification de contenu § 1) : réglages de la tôle pliée
  * (`folded.*`) seulement si les marches sont en tôle pliée (`treadKind`), réglages du poteau
- * (`newel.*`) seulement si un tournant du tracé a un poteau (jour `newel`). Les autres
+ * (`newel.*`) seulement si un tournant du tracé a un poteau (jour `newel`), dimensions du plat
+ * ou de la cornière selon le type de support (`supports.kind`). Les autres
  * paramètres s'appliquent toujours. `params` : paramètres du plugin complétés par ses défauts.
  * Lecture du projet seulement, aucun calcul.
  */
@@ -465,6 +466,20 @@ export function structureParamApplies(
   if (head === "newel") {
     const turns = project.stair.layout.turns ?? [];
     return turns.some((t) => t.inner.kind === "newel");
+  }
+  if (head === "supports") {
+    // Dimensions du plat pour des supports en plat, de la cornière pour des cornières.
+    const supports =
+      typeof params === "object" && params !== null
+        ? (params as Readonly<Record<string, unknown>>)["supports"]
+        : undefined;
+    const kind =
+      typeof supports === "object" && supports !== null
+        ? (supports as Readonly<Record<string, unknown>>)["kind"]
+        : undefined;
+    const leaf = path[1];
+    if (kind === "angle" && (leaf === "plateWidth" || leaf === "plateThickness")) return false;
+    if (kind === "plate" && (leaf === "angleLeg" || leaf === "angleThickness")) return false;
   }
   return true;
 }

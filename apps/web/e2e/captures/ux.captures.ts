@@ -10,8 +10,8 @@
  * et l'anticrénelage diffèrent un peu d'un poste réel.
  *
  * Vague 2 du parcours (ADR-0009) : adaptées a minima à la nouvelle mise en page (barre du haut,
- * rail et panneau unique, inspecteur) ; la refonte des captures et de `EXISTANT.md` est en
- * vague 6.
+ * rail et panneau unique, inspecteur) ; vague 3 : inspecteurs Marche et Règle (le mode expert
+ * du plan est retiré) ; la refonte des captures et de `EXISTANT.md` est en vague 6.
  */
 import { mkdirSync } from "node:fs";
 import { resolve } from "node:path";
@@ -95,10 +95,16 @@ test("02 à 11 vues centrales sur une démo", async ({ page }) => {
   await page.getByRole("button", { name: "Site et saisie" }).click();
   await settle(page);
   await shot(page, "03-plan-site-et-saisie");
-  await page.getByRole("button", { name: "Mode expert" }).click();
-  await settle(page);
-  await shot(page, "04-plan-mode-expert");
+  // Inspecteur Marche (2a, vague 3) : clic sur une marche du plan coté (il remplace l'ancien
+  // mode expert du plan), puis retour à l'inspecteur « sans sélection » par le badge Contrôle.
   await page.getByRole("button", { name: "Plan coté" }).click();
+  await settle(page);
+  await page.locator('#view-panel [data-tread="3"]').first().click();
+  await expect(page.locator('.inspector[data-template="tread"]')).toBeVisible();
+  await settle(page);
+  await shot(page, "04-inspecteur-marche");
+  await page.locator(".control-badge").click();
+  await expect(page.locator('.inspector[data-template="project"]')).toBeVisible();
 
   await openTab(page, "3D");
   await shot(page, "05-vue-3d");
@@ -131,21 +137,25 @@ test("12 panneau des paramètres, entièrement déplié", async ({ page }) => {
   await shotWholePanel(page, "12-parametres-complet", left);
 });
 
-test("13 contrôle de conception et prédimensionnement, surcharge ouverte", async ({ page }) => {
+test("13 contrôle de conception et prédimensionnement, inspecteur Règle et surcharge", async ({
+  page,
+}) => {
   await openDemo(page);
   const right = page.getByRole("complementary", { name: "Inspecteur" });
   // Toutes les sections, sauf les longues listes « Respectées » et « Non évaluées » (fermées
-  // par défaut) : une centaine de cartes, plusieurs mètres d'écran.
+  // par défaut) : une centaine de lignes, plusieurs mètres d'écran.
   await expandAll(right);
   await right.locator("details.sev--ok, details.sev--na").evaluateAll((all) => {
     for (const d of all) (d as HTMLDetailsElement).open = false;
   });
-  const warning = right.locator('.rule-card[data-severity="avertissement"] button.result').first();
-  await warning.click();
-  await right.getByRole("button", { name: "Surcharger la règle…" }).first().click();
-  await expect(right.locator("form.override-editor")).toBeVisible();
   await settle(page);
   await shotWholePanel(page, "13-controle-complet", right);
+  // Inspecteur Règle (2c) ouvert par une carte, formulaire de surcharge ouvert.
+  await right.locator('.rule-card[data-severity="avertissement"] button.result').first().click();
+  await expect(page.locator('.inspector[data-template="rule"]')).toBeVisible();
+  await expect(right.locator("form.override-editor")).toBeVisible();
+  await settle(page);
+  await shotWholePanel(page, "13-inspecteur-regle-surcharge", right);
 });
 
 test("14 et 15 assistant d'initialisation", async ({ page }) => {

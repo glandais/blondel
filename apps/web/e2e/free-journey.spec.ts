@@ -211,13 +211,17 @@ test("badge Contrôle : couleur de la sévérité, inspecteur sans sélection, f
   });
   expect(tone.border).toBe(tone.expected);
 
-  // Une carte de règle sélectionnée, puis le badge : sélection effacée, contrôle focalisé.
+  // Une carte de règle ouvre l'inspecteur Règle (2c) ; le badge ramène l'inspecteur « sans
+  // sélection » (2d), contrôle focalisé.
   const inspector = page.getByRole("complementary", { name: "Inspecteur" });
-  const card = inspector.locator('.rule-card[data-severity="bloquant"] button.result').first();
-  await card.click();
-  await expect(card).toHaveAttribute("aria-pressed", "true");
+  const firstCard = inspector.locator('.rule-card[data-severity="bloquant"]').first();
+  const ruleId = (await firstCard.getAttribute("data-rule"))!;
+  await firstCard.locator("button.result").click();
+  await expect(inspector).toHaveAttribute("data-template", "rule");
+  await expect(inspector.locator(".rule-insp__ref")).toHaveText(ruleId);
+  await expect(inspector.locator(".rule-insp__status")).toContainText("Bloquant");
   await badge.click();
-  await expect(card).toHaveAttribute("aria-pressed", "false");
+  await expect(inspector).toHaveAttribute("data-template", "project");
   await expect(inspector.locator(".inspector-control__title")).toBeFocused();
   await expect(inspector.locator(".inspector-control__title")).toHaveText("Contrôle de conception");
   // Compteurs (4 cellules) et mention indicative.
@@ -246,12 +250,17 @@ test("Conception → Fabrication → Conception : historique, vue, sélection et
   await openTab(page, "Élévation");
   const undo = page.getByRole("button", { name: "Annuler (Ctrl+Z)", exact: true });
   await expect(undo).toBeEnabled();
-  // Sélection d'un résultat de contrôle (liste des règles respectées) et unité en cm.
+  // Sélection d'un résultat de contrôle (liste des règles respectées : inspecteur Règle) et
+  // unité en cm.
   const control = page.locator(".inspector-control");
   await control.locator('.control-folds__link[data-fold="ok"]').click();
-  const result = control.locator(".sev--ok button.result").first();
-  await result.click();
-  await expect(result).toHaveAttribute("aria-pressed", "true");
+  const item = control.locator(".sev--ok li").first();
+  const ruleId = (await item.getAttribute("data-rule"))!;
+  await item.locator("button.result").click();
+  const inspector = page.getByRole("complementary", { name: "Inspecteur" });
+  const selectedRule = inspector.locator(".rule-insp__ref");
+  await expect(inspector).toHaveAttribute("data-template", "rule");
+  await expect(selectedRule).toHaveText(ruleId);
   await openMoreMenu(page);
   await page.getByLabel("Affichage", { exact: true }).selectOption("cm");
   await page.getByRole("button", { name: "Plus d'options" }).click();
@@ -285,7 +294,8 @@ test("Conception → Fabrication → Conception : historique, vue, sélection et
   await expect(viewTab(page, "Élévation")).toHaveAttribute("aria-selected", "true");
   await expect(panel(page)).toBeVisible();
   // Sélection et unité inchangées par les bascules (retour en mm pour la suite).
-  await expect(result).toHaveAttribute("aria-pressed", "true");
+  await expect(inspector).toHaveAttribute("data-template", "rule");
+  await expect(selectedRule).toHaveText(ruleId);
   await openMoreMenu(page);
   await expect(page.getByLabel("Affichage", { exact: true })).toHaveValue("cm");
   await page.getByLabel("Affichage", { exact: true }).selectOption("mm");

@@ -1,0 +1,133 @@
+/*
+ * Inspecteur « Pièce » (maquette 2b) et listes de liens vers des pièces : compléments propres à
+ * ce gabarit. L'ossature commune (`.insp-*`) est dans `frame.css` (inspecteur) ; couleurs
+ * uniquement par variables.
+ */
+
+.insp-template--part {
+  gap: 12px;
+}
+
+.part-insp__count {
+  font-size: 11px;
+  padding: 1px 6px;
+}
+
+.part-insp__action {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Réglages d'atelier : titre et portée sur une ligne. */
+.part-insp__settings {
+  gap: 9px;
+}
+
+.part-insp__settings-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.part-insp__scope {
+  font-size: 11.5px;
+  color: var(--color-neutral-700);
+  text-align: right;
+}
+
+/*
+ * Lignes compactes (maquette 2b) : libellé à gauche, champ de 64 px et unité à droite, ◆ et
+ * messages en dessous ; l'aide détaillée reste dans la section Structure.
+ */
+.part-insp__settings .field {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: 8px;
+  row-gap: 2px;
+  margin: 0;
+}
+
+.part-insp__settings .field > label {
+  grid-column: 1;
+  font-size: 12.5px;
+  margin: 0;
+}
+
+.part-insp__settings .field > .input-unit {
+  grid-column: 2;
+}
+
+.part-insp__settings .field input[type="text"] {
+  width: 64px;
+}
+
+.part-insp__settings .field > small {
+  grid-column: 1 / -1;
+}
+
+.part-insp__settings .field > .field__hint {
+  display: none;
+}
+
+/* Liste courte en segmenté : sur la ligne du libellé, ou dessous si les choix sont longs. */
+.part-insp__seg-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px 8px;
+}
+
+.part-insp__seg-label {
+  flex: 1 1 auto;
+  font-size: 12.5px;
+  min-width: 0;
+}
+
+.part-insp__tread {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12.5px;
+  padding-left: 0;
+}
+
+.part-insp__all {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12.5px;
+}
+
+/* Liste de liens (« Assemblée avec », « Pièces de cette marche »). */
+.part-links {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.part-links .insp-section-title {
+  margin-bottom: 6px;
+}
+
+.part-links .insp-links {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.part-links .insp-link b {
+  flex: none;
+  min-width: 44px;
+}
+
+.part-links .insp-link__name {
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+}

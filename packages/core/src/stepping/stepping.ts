@@ -634,6 +634,8 @@ export function computeStepping(
   const { balancedZones, zoneRanges } = zoneRun;
 
   // ------------------------------------------------------------ angles imposés
+  /** Angle du nez avant sa retouche d'angle (`NosingLine.computedAngle`). */
+  const computedAngles = new Map<number, number>();
   for (const [k, angle] of angleOverrides) {
     const seed = seeds[k]!;
     // Sens positif = sens du tournant voisin (trigonométrique si son jour est à gauche, horaire
@@ -651,11 +653,22 @@ export function computeStepping(
       );
       continue;
     }
+    computedAngles.set(k, nosingAngle(layout, seed, nosings[k]!));
     nosings[k] = res.nosing;
     if (fixed.has(k) && Math.abs(angle) > 0) {
       notes.push(msg("stepping.override.angleOnFixed", { nosing: k, angle: dec(angle) }));
     }
   }
+
+  // Angle de chaque nez (même convention que la retouche « angle »), exposé pour l'interface.
+  nosings.forEach((nosing, k) => {
+    const computedAngle = computedAngles.get(k);
+    nosings[k] = {
+      ...nosing,
+      angle: nosingAngle(layout, seeds[k]!, nosing),
+      ...(computedAngle !== undefined ? { computedAngle } : {}),
+    };
+  });
 
   // ------------------------------------------------------------ contrôles K5 / K3 / collets
   for (const c of findCrossingsOnSides(layout, nosings)) {
@@ -708,6 +721,23 @@ export function computeStepping(
     balancedZones,
     notes,
   };
+}
+
+/** En deçà (degrés), un angle de nez est rendu nul (pas de « −0 » ni de bruit d'arrondi). */
+const ANGLE_ZERO_DEG = 1e-9;
+
+/**
+ * Angle (degrés) de la ligne de nez `nosing` : écart signé de sa direction à la perpendiculaire
+ * à Γ en P_k (`seed.perpendicular`), positif dans le sens du tournant voisin — exactement la
+ * convention des retouches « angle » (rotation de `turnSign · angle` de la perpendiculaire).
+ * Une ligne n'ayant pas de sens, la direction est d'abord ramenée du côté de la perpendiculaire.
+ */
+export function nosingAngle(layout: Layout, seed: NosingSeed, nosing: NosingLine): number {
+  const perp = seed.perpendicular;
+  const dir = V.dot(nosing.dir, perp) < 0 ? V.scale(nosing.dir, -1) : nosing.dir;
+  const turnSign = collarSideAt(layout, seed.s) === "left" ? 1 : -1;
+  const deg = (turnSign * Math.atan2(V.cross(perp, dir), V.dot(perp, dir)) * 180) / Math.PI;
+  return Math.abs(deg) < ANGLE_ZERO_DEG ? 0 : deg;
 }
 
 /**

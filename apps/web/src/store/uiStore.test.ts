@@ -41,3 +41,20 @@ describe("espace de travail et vue", () => {
     expect(app.getState().history).toBe(history);
   });
 });
+
+describe("isolation 3D et lien des surcharges", () => {
+  it("isoler puis tout réafficher ; révéler les surcharges efface la sélection", async () => {
+    const { appStore } = await import("./appStore.js");
+    const { uiStore, isolatePart, showAllParts, revealOverrides } = await import("./uiStore.js");
+    expect(uiStore.getState().isolatedPartId).toBeNull();
+    isolatePart("stringer-outer-1");
+    expect(uiStore.getState().isolatedPartId).toBe("stringer-outer-1");
+    showAllParts();
+    expect(uiStore.getState().isolatedPartId).toBeNull();
+    appStore.getState().select({ location: { kind: "tread", number: 3 } });
+    const seq = uiStore.getState().overridesRevealSeq;
+    revealOverrides();
+    expect(appStore.getState().selection).toBeNull();
+    expect(uiStore.getState().overridesRevealSeq).toBe(seq + 1);
+  });
+});

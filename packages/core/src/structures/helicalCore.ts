@@ -49,7 +49,12 @@ import type {
   SolidDesc,
   Stepping,
 } from "../model/derived.js";
-import type { StructureContext, StructureKind, StructureOutput } from "../model/plugins.js";
+import type {
+  PartAssembly,
+  StructureContext,
+  StructureKind,
+  StructureOutput,
+} from "../model/plugins.js";
 import type { Frame3, Mm, Polygon2, Shape2, Vec2, Vec3 } from "../model/primitives.js";
 import type { Project } from "../model/project.js";
 import { DEFAULT_WOOD_MATERIAL } from "../parts/basic.js";
@@ -940,12 +945,23 @@ export function buildHelicalCore(
         : msg("structure.helicalCore.exc.noteBare", { executionClass: exc.executionClass }),
     );
   }
+  // Assemblages : marches (et palier d'arrivée) sur le fût, ou portées par les limons.
+  const carriers = [
+    ...(!well ? ["helical-column"] : []),
+    ...(innerStringer ? ["helical-stringer-inner"] : []),
+    ...(stringer ? ["helical-stringer"] : []),
+  ];
+  const assemblies: PartAssembly[] = carriers.flatMap((id) => [
+    ...stepping.treads.map((t) => ({ a: { partId: id }, b: { treadNumber: t.number } })),
+    ...(h.landingOutline ? [{ a: { partId: id }, b: { partId: "landing-arrival" } }] : []),
+  ]);
   const output: StructureOutput = {
     parts,
     checks: checks.results as RuleResult[],
     notes,
     ...(exc ? { executionClass: exc.executionClass } : {}),
     ...(removedBaseParts.length > 0 ? { removedBaseParts } : {}),
+    ...(assemblies.length > 0 ? { assemblies } : {}),
   };
   return {
     output,

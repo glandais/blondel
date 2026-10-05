@@ -6,7 +6,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it } from "vitest";
 import { appStore } from "../store/appStore.js";
-import { AutoIntField, type AutoIntFieldProps } from "./fields.js";
+import { AutoIntField, autoProposal, type AutoIntFieldProps } from "./fields.js";
 
 // Rendu serveur : zustand lit `getInitialState()` ; le test rend l'état courant du store.
 appStore.getInitialState = appStore.getState;
@@ -98,5 +98,18 @@ describe("AutoIntField", () => {
       expect(html).not.toMatch(/automatique|Imposer|Valeur|imposer|cliquez|calculé/);
     }
     expect(render({ label: "Flight 1", value: 1800 }, "en")).toContain("click Auto");
+  });
+});
+
+describe("autoProposal", () => {
+  it("valeur retenue arrondie au mm entier (volée auto : 14 × 276,67 = 3 873,33 mm)", () => {
+    expect(autoProposal(3873.333, 1)).toBe(3873);
+    expect(autoProposal(52.5, 1)).toBe(53);
+    expect(Number.isInteger(autoProposal(14 * (630 - (2 * 2650) / 15), 1))).toBe(true);
+  });
+
+  it("sans valeur retenue exposée : point de départ de la saisie", () => {
+    expect(autoProposal(undefined, 40)).toBe(40);
+    expect(autoProposal(Number.NaN, 40)).toBe(40);
   });
 });

@@ -428,7 +428,10 @@ const headroom: RuleEvaluator = (ctx) => {
   }
   return [
     checkValue(ctx, ctx.headroom.min, msg("compliance.headroom.quantity"), {
-      location: { kind: "point", at: ctx.headroom.at },
+      location:
+        ctx.headroom.nosingIndex === undefined
+          ? { kind: "point", at: ctx.headroom.at }
+          : { kind: "point", at: ctx.headroom.at, nosingIndex: ctx.headroom.nosingIndex },
     }),
   ];
 };

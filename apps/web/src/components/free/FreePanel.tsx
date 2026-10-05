@@ -2,15 +2,15 @@
  * Panneau unique du parcours libre (ADR-0009, maquette 1b) : la section choisie dans le rail,
  * en mode d'affichage « libre » (niveau Atelier replié sous « Réglages d'atelier » par
  * `Tiered`), suivie de sa bande de chiffres clés. Un seul panneau ouvert ; épinglé, il reste
- * ouvert au clic dans la vue et suit la section choisie ; Échap et la croix le ferment.
+ * ouvert au clic dans la vue et suit la section choisie ; la croix le ferme, Échap aussi (chaîne
+ * d'Échap globale, `components/escapeChain.ts` : non épinglé avant la sélection, épinglé après).
  *
  * Nommé par l'onglet du rail (`aria-labelledby`), il rend `null` sans section ouverte.
  */
 import { Pin, PinOff, X } from "lucide-react";
-import { useEffect } from "react";
 import { useT } from "../../i18n/useT.js";
 import type { SectionId } from "../../lib/sectionIds.js";
-import { appStore, journeyStore, useApp, useJourney } from "../../store/appStore.js";
+import { journeyStore, useApp, useJourney } from "../../store/appStore.js";
 import { SECTION_COMPONENTS, SECTION_TITLE_KEYS } from "../sections/index.js";
 import { Icon } from "../ui/Icon.js";
 import { railTabId } from "./Rail.js";
@@ -19,40 +19,11 @@ import "./free.css";
 
 const FREE_DISPLAY = { kind: "free" } as const;
 
-/** Cible d'un événement clavier, réduite à ce que le filtre d'Échap consulte. */
-export interface EscapeTarget {
-  readonly tagName?: string;
-  readonly isContentEditable?: boolean;
-  closest?(selector: string): unknown;
-}
-
-export interface EscapeEventLike {
-  readonly key: string;
-  readonly defaultPrevented: boolean;
-  readonly target: EscapeTarget | null;
-}
-
-const EDITABLE_TAGS = new Set(["INPUT", "TEXTAREA", "SELECT"]);
-
 /**
- * Échap ferme-t-il le panneau ? Non si l'événement est déjà traité (menu, popover), si la
- * saisie a le focus (Échap y rétablit la valeur), dans une fenêtre modale ou quand l'assistant
- * est ouvert.
+ * Rend le focus à l'entrée du rail d'une section (après la fermeture du panneau par la croix,
+ * ou par Échap : `useEscapeChain`, App.tsx).
  */
-export function escapeClosesPanel(e: EscapeEventLike, assistantOpen: boolean): boolean {
-  if (e.key !== "Escape" || e.defaultPrevented || assistantOpen) return false;
-  const target = e.target;
-  if (target === null) return true;
-  if (target.isContentEditable === true) return false;
-  if (target.tagName !== undefined && EDITABLE_TAGS.has(target.tagName.toUpperCase())) {
-    return false;
-  }
-  const inModal = target.closest?.('[aria-modal="true"], dialog[open]');
-  return inModal === null || inModal === undefined;
-}
-
-/** Rend le focus à l'entrée du rail d'une section (après la fermeture du panneau). */
-function focusRailTab(section: SectionId): void {
+export function focusRailTab(section: SectionId): void {
   if (typeof document === "undefined") return;
   document.getElementById(railTabId(section))?.focus();
 }
@@ -63,19 +34,6 @@ export function FreePanel() {
   const pinned = useJourney((s) => s.freePanelPinned);
   const fromGuided = useJourney((s) => s.freePanelFromGuided);
   const layout = useApp((s) => s.project.stair.layout);
-
-  useEffect(() => {
-    if (section === null) return;
-    const onKeyDown = (e: KeyboardEvent): void => {
-      const target = e.target instanceof Element ? (e.target as EscapeTarget) : null;
-      const event = { key: e.key, defaultPrevented: e.defaultPrevented, target };
-      if (!escapeClosesPanel(event, appStore.getState().assistantOpen)) return;
-      journeyStore.getState().panelEvent({ type: "escape" });
-      focusRailTab(section);
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [section]);
 
   if (section === null) return null;
   const Content = SECTION_COMPONENTS[section];

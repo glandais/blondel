@@ -59,7 +59,14 @@ import {
   type SteelGrade,
 } from "../workshop/metal.js";
 import { resolveWorkshopProfile, type WorkshopProfile } from "../workshop/profile.js";
-import { CheckCollector, FAB_RULES, flightsOnlyError, pluginRuleDef } from "./checks.js";
+import {
+  CheckCollector,
+  FAB_RULES,
+  flightsOnlyError,
+  pluginRuleDef,
+  type CheckItem,
+} from "./checks.js";
+import { commonAutoValue } from "./autoValue.js";
 import {
   developStringer,
   flatTransform,
@@ -83,6 +90,7 @@ import { newelFaces, stairGeometry, type NewelGeometry, type StairGeometry } fro
 import { newelTopWithHandrail } from "./newel.js";
 import {
   STEEL_RULES,
+  assembledTo,
   deduceExecutionClass,
   executionClassReasons,
   QUANTITY_WELD_MM,
@@ -98,6 +106,7 @@ import {
   effectiveFixing,
   supportDepth,
   supportInterval,
+  supportAssemblies,
   supportPart,
   type SupportFace,
   type SupportPlacement,
@@ -794,6 +803,8 @@ export function buildSteelFlat(ctx: StructureContext, params: SteelFlatParams): 
     );
   }
 
+  const supports = placements.map((placement, i) => ({ placement, part: supportParts[i]! }));
+  const autoValues = params.lowerOffset === "auto" ? flatAutoValues(lowerOffset, faces) : undefined;
   return {
     output: {
       parts: [
@@ -808,10 +819,12 @@ export function buildSteelFlat(ctx: StructureContext, params: SteelFlatParams): 
       notes,
       ...(errors.length > 0 ? { errors } : {}),
       ...(removedBaseParts.length > 0 ? { removedBaseParts } : {}),
+      ...(autoValues ? { autoValues } : {}),
+      ...(supports.length > 0 ? { assemblies: supportAssemblies(supports) } : {}),
     },
     stringers,
     posts,
-    supports: placements.map((placement, i) => ({ placement, part: supportParts[i]! })),
+    supports,
     plates: platesMarked,
     treads: treadDetails,
     lowerOffset,
@@ -1180,11 +1193,11 @@ function placeSupports(
   sup: SteelFlatParams["supports"],
 ): {
   placements: SupportPlacement[];
-  shortSupports: { value: Mm; label: Message }[];
+  shortSupports: CheckItem[];
   carried: Map<number, Set<Side>>;
 } {
   const placements: SupportPlacement[] = [];
-  const shortSupports: { value: Mm; label: Message }[] = [];
+  const shortSupports: CheckItem[] = [];
   const carried = new Map<number, Set<Side>>();
   for (const z of zones) {
     for (const face of supportFaces) {
@@ -1192,7 +1205,7 @@ function placeSupports(
       if (!iv) continue;
       const len = iv.u1 - iv.u0;
       const label = supportOn(z.mark, face.ownerMark);
-      shortSupports.push({ value: len, label });
+      shortSupports.push({ value: len, label, partId: face.owner, treadNumber: z.tread.number });
       if (len < sup.minLength) continue;
       placements.push({
         tread: z.tread.number,
@@ -1208,6 +1221,21 @@ function placeSupports(
     }
   }
   return { placements, shortSupports, carried };
+}
+
+/**
+ * Valeur retenue de `lowerOffset` laissé en `auto` (`StructureOutput.autoValues`) : d_b est
+ * résolu par limon (jour, mur) ; la valeur n'est exposée que si tous les limons générés ont la
+ * même (`commonAutoValue`).
+ */
+function flatAutoValues(
+  lowerOffset: Record<Side, Mm>,
+  faces: readonly StringerFace[],
+): Record<string, number> | undefined {
+  const value = commonAutoValue(
+    [...new Set(faces.map((f) => f.side))].map((side) => lowerOffset[side]),
+  );
+  return value === undefined ? undefined : { lowerOffset: value };
 }
 
 /** Étape 5 : d_b automatique, chaque support sur la joue à `edgeMargin` de la rive basse. */
@@ -1270,7 +1298,7 @@ function addFlatChecks(
     readonly supportParts: readonly Part[];
     readonly posts: readonly Part[];
     readonly depthSup: Mm;
-    readonly shortSupports: { value: Mm; label: Message }[];
+    readonly shortSupports: CheckItem[];
     readonly sup: SteelFlatParams["supports"];
     readonly zones: readonly TreadZone[];
     readonly carried: ReadonlyMap<number, Set<Side>>;
@@ -1400,7 +1428,12 @@ function addFlatChecks(
           zb - polyAt(s.development.lowerRive, p.u1),
           polyAt(s.development.upperRive, p.u0) - p.zTop,
         );
-        return { value: margin, label: supportOn(p.treadMark, s.face.mark), partId: s.part.id };
+        return {
+          value: margin,
+          label: supportOn(p.treadMark, s.face.mark),
+          partId: s.part.id,
+          treadNumber: p.tread,
+        };
       }),
     ),
     msg("structure.steel.quantity.supportEdgeMargin"),
@@ -1787,7 +1820,12 @@ function flatNewelPosts(
         profile,
       ),
     };
-    posts.push(post);
+    posts.push(
+      assembledTo(
+        post,
+        received.map((s) => s.face.id),
+      ),
+    );
     // Platines d'about (assemblage vissé) : une par limon reçu.
     if (bolted) {
       received.forEach((s, i) => {
@@ -1812,15 +1850,18 @@ function flatNewelPosts(
         const u = atEnd ? s.development.uHi : s.development.uLo;
         const zLo = Math.max(polyAt(s.development.lowerRive, u), 0);
         plates.push(
-          plateObject(
-            `plate-end-${s.face.id}`,
-            msg("structure.steel.part.endPlate", { string: s.face.mark, newel: nw.mark }),
-            flat,
-            pl.thickness,
-            2 * hgt,
-            material,
-            profile,
-            endPlateFrame(s.face, u, zLo, a, e, pl.thickness, atEnd ? 1 : -1),
+          assembledTo(
+            plateObject(
+              `plate-end-${s.face.id}`,
+              msg("structure.steel.part.endPlate", { string: s.face.mark, newel: nw.mark }),
+              flat,
+              pl.thickness,
+              2 * hgt,
+              material,
+              profile,
+              endPlateFrame(s.face, u, zLo, a, e, pl.thickness, atEnd ? 1 : -1),
+            ),
+            [s.face.id, nw.id],
           ),
         );
       });
@@ -1840,21 +1881,24 @@ function flatNewelPosts(
       );
       const corner = at(-side / 2, -side / 2);
       plates.push(
-        plateObject(
-          `plate-post-${g.turn + 1}`,
-          msg("structure.steel.part.newelFootPlate", { mark: nw.mark }),
-          flat,
-          pl.thickness,
-          4 * a,
-          material,
-          profile,
-          {
-            origin: { x: corner.x, y: corner.y, z: 0 },
-            xAxis: { x: g.n.x, y: g.n.y, z: 0 },
-            yAxis: { x: g.u.x, y: g.u.y, z: 0 },
-            zAxis: { x: 0, y: 0, z: V.cross(g.n, g.u) > 0 ? 1 : -1 },
-            depth: V.cross(g.n, g.u) > 0 ? pl.thickness : -pl.thickness,
-          },
+        assembledTo(
+          plateObject(
+            `plate-post-${g.turn + 1}`,
+            msg("structure.steel.part.newelFootPlate", { mark: nw.mark }),
+            flat,
+            pl.thickness,
+            4 * a,
+            material,
+            profile,
+            {
+              origin: { x: corner.x, y: corner.y, z: 0 },
+              xAxis: { x: g.n.x, y: g.n.y, z: 0 },
+              yAxis: { x: g.u.x, y: g.u.y, z: 0 },
+              zAxis: { x: 0, y: 0, z: V.cross(g.n, g.u) > 0 ? 1 : -1 },
+              depth: V.cross(g.n, g.u) > 0 ? pl.thickness : -pl.thickness,
+            },
+          ),
+          [nw.id],
         ),
       );
     }
@@ -1896,21 +1940,24 @@ function stringerPlates(
         const o = V.add(V.addScaled(f.a, f.dir, mid - L / 2), across(pl.width));
         const sgn = V.cross(f.dir, f.into) > 0 ? 1 : -1;
         plates.push(
-          plateObject(
-            `plate-foot-${f.id}`,
-            msg("structure.steel.part.footPlate", { mark: f.mark }),
-            flat,
-            pl.thickness,
-            2 * L,
-            material,
-            profile,
-            {
-              origin: { x: o.x, y: o.y, z: 0 },
-              xAxis: { x: f.dir.x, y: f.dir.y, z: 0 },
-              yAxis: { x: f.into.x, y: f.into.y, z: 0 },
-              zAxis: { x: 0, y: 0, z: sgn },
-              depth: sgn * pl.thickness,
-            },
+          assembledTo(
+            plateObject(
+              `plate-foot-${f.id}`,
+              msg("structure.steel.part.footPlate", { mark: f.mark }),
+              flat,
+              pl.thickness,
+              2 * L,
+              material,
+              profile,
+              {
+                origin: { x: o.x, y: o.y, z: 0 },
+                xAxis: { x: f.dir.x, y: f.dir.y, z: 0 },
+                yAxis: { x: f.into.x, y: f.into.y, z: 0 },
+                zAxis: { x: 0, y: 0, z: sgn },
+                depth: sgn * pl.thickness,
+              },
+            ),
+            [f.id],
           ),
         );
       }
@@ -1931,15 +1978,18 @@ function stringerPlates(
           msg("structure.steel.reference.headPlate", { mark: f.mark }),
         );
         plates.push(
-          plateObject(
-            `plate-head-${f.id}`,
-            msg("structure.steel.part.headPlate", { mark: f.mark }),
-            flat,
-            pl.thickness,
-            2 * H,
-            material,
-            profile,
-            endPlateFrame(f, dev.uHi, zLo, pl.width, e, pl.thickness, 1),
+          assembledTo(
+            plateObject(
+              `plate-head-${f.id}`,
+              msg("structure.steel.part.headPlate", { mark: f.mark }),
+              flat,
+              pl.thickness,
+              2 * H,
+              material,
+              profile,
+              endPlateFrame(f, dev.uHi, zLo, pl.width, e, pl.thickness, 1),
+            ),
+            [f.id],
           ),
         );
       }

@@ -12,7 +12,7 @@
  *   d'atelier ou les paramètres du plugin (valeurs « à valider »).
  */
 import { dec, msg, type Message } from "@blondel/i18n";
-import type { RuleResult, Severity } from "../model/derived.js";
+import type { Location, RuleResult, Severity } from "../model/derived.js";
 import type { Project } from "../model/project.js";
 import type { Layout, Stepping } from "../model/derived.js";
 import { STAIR, boundsText, within, type Bounds } from "../rules/check.js";
@@ -81,6 +81,28 @@ export function toRuleResult(rule: RuleDef, f: Finding, project: Project): RuleR
   };
 }
 
+/** Élément contrôlé par `CheckCollector.addItems` : valeur, libellé et localisation. */
+export interface CheckItem {
+  readonly value: number;
+  readonly label: Message;
+  readonly partId?: string;
+  /** Marche concernée (seule, ou sur la pièce `partId`). */
+  readonly treadNumber?: number;
+}
+
+/**
+ * Localisation d'un élément contrôlé : la pièce (et la marche concernée sur cette pièce, par
+ * exemple l'appui d'une marche sur un limon), sinon la marche seule, sinon l'escalier.
+ */
+function itemLocation(it: { readonly partId?: string; readonly treadNumber?: number }): Location {
+  if (it.partId !== undefined) {
+    return it.treadNumber === undefined
+      ? { kind: "part", partId: it.partId }
+      : { kind: "part", partId: it.partId, treadNumber: it.treadNumber };
+  }
+  return it.treadNumber === undefined ? STAIR : { kind: "tread", number: it.treadNumber };
+}
+
 /** Collecteur de contrôles d'un plugin. */
 export class CheckCollector {
   readonly results: RuleResult[] = [];
@@ -121,12 +143,7 @@ export class CheckCollector {
    * de phrase) ; `label` de chaque élément : repère ou désignation (`textMessage(mark)` pour un
    * repère seul).
    */
-  addItems(
-    rule: RuleDef,
-    items: readonly { value: number; label: Message; partId?: string }[],
-    quantity: Message,
-    bounds: Bounds,
-  ): void {
+  addItems(rule: RuleDef, items: readonly CheckItem[], quantity: Message, bounds: Bounds): void {
     const unit = rule.unite;
     const u = unit ? ` ${unit}` : "";
     if (items.length === 0) {
@@ -139,7 +156,7 @@ export class CheckCollector {
     const valid = items.filter((it) => Number.isFinite(it.value));
     const findings: Finding[] = nan.map((it) => ({
       status: "non-evaluee" as const,
-      location: it.partId ? { kind: "part" as const, partId: it.partId } : STAIR,
+      location: itemLocation(it),
       message: msg("structure.common.check.itemNotComputable", { quantity, item: it.label }),
     }));
     const bad = valid.filter((it) => !within(it.value, bounds));
@@ -149,7 +166,7 @@ export class CheckCollector {
         measured: it.value,
         min: bounds.min,
         max: bounds.max,
-        location: it.partId ? { kind: "part", partId: it.partId } : STAIR,
+        location: itemLocation(it),
         message: msg("compliance.check.item", {
           quantity,
           item: it.label,

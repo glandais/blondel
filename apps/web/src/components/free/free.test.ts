@@ -12,12 +12,7 @@ import { defaultGuards } from "../../lib/guardsForm.js";
 import { switchLayoutKind } from "../../lib/layoutKind.js";
 import { SECTION_IDS, type SectionId } from "../../lib/sectionIds.js";
 import { appStore, journeyStore, modelService } from "../../store/appStore.js";
-import {
-  FreePanel,
-  escapeClosesPanel,
-  type EscapeEventLike,
-  type EscapeTarget,
-} from "./FreePanel.js";
+import { FreePanel, focusRailTab } from "./FreePanel.js";
 import { Rail, disabledSections, railKeyTarget, railTabStop } from "./Rail.js";
 import { sectionFigures } from "./SectionFigures.js";
 
@@ -284,33 +279,9 @@ describe("clavier du rail (onglets, activation manuelle)", () => {
   });
 });
 
-describe("Échap ferme le panneau", () => {
-  const el = (tagName: string, inModal = false, editable = false): EscapeTarget => ({
-    tagName,
-    isContentEditable: editable,
-    closest: () => (inModal ? {} : null),
-  });
-  const ev = (target: EscapeTarget | null, extra: Partial<EscapeEventLike> = {}) => ({
-    key: "Escape",
-    defaultPrevented: false,
-    target,
-    ...extra,
-  });
-
-  it("depuis un bouton ou le document", () => {
-    expect(escapeClosesPanel(ev(el("BUTTON")), false)).toBe(true);
-    expect(escapeClosesPanel(ev(null), false)).toBe(true);
-  });
-
-  it("ignoré : autre touche, déjà traité, saisie, modale, assistant ouvert", () => {
-    expect(escapeClosesPanel(ev(el("BUTTON"), { key: "Enter" }), false)).toBe(false);
-    expect(escapeClosesPanel(ev(el("BUTTON"), { defaultPrevented: true }), false)).toBe(false);
-    for (const tag of ["INPUT", "textarea", "SELECT"]) {
-      expect(escapeClosesPanel(ev(el(tag)), false)).toBe(false);
-    }
-    expect(escapeClosesPanel(ev(el("DIV", false, true)), false)).toBe(false);
-    expect(escapeClosesPanel(ev(el("BUTTON", true)), false)).toBe(false);
-    expect(escapeClosesPanel(ev(el("BUTTON")), true)).toBe(false);
+describe("Échap (chaîne globale, components/escapeChain.ts)", () => {
+  it("retour du focus au rail : sans effet hors navigateur", () => {
+    expect(() => focusRailTab("site")).not.toThrow();
   });
 });
 
