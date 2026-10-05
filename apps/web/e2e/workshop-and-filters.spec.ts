@@ -5,7 +5,7 @@
  * un troisième clic.
  */
 import { expect, test, type Page } from "@playwright/test";
-import { openApp, openTab, settle } from "./support.js";
+import { openApp, openMoreMenu, openTab, settle } from "./support.js";
 
 const RATES: readonly (readonly [RegExp, string])[] = [
   [/^Taux horaire/, "55"],
@@ -31,7 +31,14 @@ test("profil d'atelier : barème hors projet, euros du comparateur, persistance"
   const costs = costRow(page).getByRole("cell");
   await expect(costs.first()).toBeVisible();
   for (const c of await costs.all()) await expect(c).not.toContainText("€");
+  // Inspecteur : barème incomplet, lien vers le profil d'atelier.
+  const inspector = page.getByRole("complementary", { name: "Inspecteur" });
+  await expect(
+    inspector.getByRole("button", { name: "Compléter le profil d'atelier (0 / 9)" }),
+  ).toBeVisible();
 
+  // Profil d'atelier : menu ⋯ « Plus d'options », bouton « Atelier… ».
+  await openMoreMenu(page);
   await page.getByRole("button", { name: "Atelier…" }).click();
   const dialog = page.getByRole("dialog", { name: "Profil d'atelier" });
   await expect(dialog).toBeVisible();
@@ -59,14 +66,25 @@ test("profil d'atelier : barème hors projet, euros du comparateur, persistance"
 
   await settle(page);
   await expect(costRow(page).getByRole("cell").filter({ hasText: "€" }).first()).toBeVisible();
+  // Barème complet : l'inspecteur renvoie au coût du comparateur.
+  await expect(
+    inspector.getByRole("button", { name: "Voir le coût dans le comparateur" }),
+  ).toBeVisible();
 
   // Barème mémorisé dans le navigateur, hors du projet : relu au rechargement.
   await page.reload();
   await expect(page.getByRole("toolbar", { name: "Barre d'outils" })).toBeVisible();
+  await openMoreMenu(page);
   await page.getByRole("button", { name: "Atelier…" }).click();
   await expect(page.getByLabel(/^Taux horaire/)).toHaveValue("55");
   await page.getByRole("button", { name: "Effacer le barème" }).click();
   await expect(page.getByLabel(/^Taux horaire/)).toHaveValue("");
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("dialog", { name: "Profil d'atelier" })).toBeHidden();
+  // Barème effacé : le lien de l'inspecteur rouvre le profil d'atelier.
+  const complete = inspector.getByRole("button", { name: "Compléter le profil d'atelier (0 / 9)" });
+  await complete.click();
+  await expect(page.getByRole("dialog", { name: "Profil d'atelier" })).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(page.getByRole("dialog", { name: "Profil d'atelier" })).toBeHidden();
 });
@@ -132,7 +150,7 @@ async function clickSite(page: Page, x: number, y: number): Promise<void> {
 
 test("site : mur tracé au nu, côté du mur donné par un troisième clic", async ({ page }) => {
   await openApp(page);
-  await openTab(page, "Plan 2D");
+  await openTab(page, "Plan");
   await page.getByRole("button", { name: "Site et saisie", exact: true }).click();
   await page.getByRole("button", { name: "Tracer un mur" }).click();
   await page.getByLabel("Épaisseur du mur tracé (mm)").fill("200");
@@ -163,6 +181,10 @@ test("site : mur tracé au nu, côté du mur donné par un troisième clic", asy
     .trim()
     .split(/\s+/)
     .map((p) => Number(p.split(",")[0]));
-  expect(Math.min(...xs)).toBeCloseTo(-500, 0);
-  expect(Math.max(...xs)).toBeCloseTo(-300, 0);
+  // Nu à la résolution du pointeur près (une fraction de pixel du plan : l'échelle du dessin est
+  // limitée par la hauteur utile sous l'accueil et les outils de saisie), épaisseur exacte, corps
+  // du côté cliqué.
+  const [min, max] = [Math.min(...xs), Math.max(...xs)];
+  expect(Math.abs(max - -300)).toBeLessThanOrEqual(1);
+  expect(max - min).toBeCloseTo(200, 3);
 });

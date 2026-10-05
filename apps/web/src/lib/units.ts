@@ -82,6 +82,21 @@ export function formatLength(
     : `${numberFormat(locale, TWO_DECIMALS).format(mm / 10)} cm`;
 }
 
+/**
+ * Chiffre clé (mm, sans unité : l'unité est dans la légende) de l'inspecteur et des bandes du
+ * panneau libre : mm entiers, cm à 0,1 près, séparateur de milliers. Valeur non finie : tiret.
+ */
+export function formatFigureLength(
+  mm: number | undefined | null,
+  unit: DisplayUnit,
+  locale: Locale,
+): string {
+  if (mm === undefined || mm === null || !Number.isFinite(mm)) return "–";
+  return unit === "mm"
+    ? numberFormat(locale, INT).format(mm)
+    : numberFormat(locale, { maximumFractionDigits: 1 }).format(mm / 10);
+}
+
 /** Durée en millisecondes pour la barre d'état. */
 export function formatDuration(ms: number | undefined, locale: Locale): string {
   if (ms === undefined || !Number.isFinite(ms)) return "–";

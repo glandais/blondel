@@ -1,0 +1,222 @@
+/*
+ * Parcours libre (ADR-0009, maquette 1b) : rail des 8 sections, panneau unique et bande de
+ * chiffres clés. Placement dans la grille (grid-area) : styles.css (coquille de l'application).
+ * Valeurs de la maquette hi-fi : rail sur neutral-100, entrée active sur le fond avec un filet
+ * d'accent de 3 px à gauche ; panneau sur le fond, ombre moyenne, 18 × 20 px de marge.
+ */
+
+/* ------------------------------------------------------------ Rail */
+
+.rail {
+  min-width: 0;
+  min-height: 0;
+  background: var(--color-neutral-100);
+  border-right: 1px solid var(--color-divider);
+  overflow-y: auto;
+}
+
+.rail__list {
+  display: flex;
+  flex-direction: column;
+  padding: 6px 0;
+}
+
+.rail__tab {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  width: 100%;
+  padding: 9px 4px;
+  font-family: var(--font-body);
+  font-weight: 400;
+  color: var(--color-neutral-800);
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  cursor: pointer;
+}
+
+.rail__tab:hover:not([aria-disabled="true"]) {
+  background: var(--color-bg);
+}
+
+.rail__tab[aria-selected="true"] {
+  background: var(--color-bg);
+  box-shadow: inset 3px 0 0 var(--color-accent);
+  color: var(--color-accent-800);
+}
+
+.rail__tab[aria-disabled="true"] {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.rail__tab:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: -2px;
+}
+
+.rail__label {
+  font-size: 11px;
+  line-height: 1.2;
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+
+.rail__count {
+  min-height: 12px;
+  font-size: 10px;
+  line-height: 1.2;
+}
+
+/* ------------------------------------------------------------ Panneau unique */
+
+.free-panel {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+  min-height: 0;
+  padding: 18px 20px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  background: var(--color-bg);
+  border-right: 1px solid var(--color-divider);
+  box-shadow: var(--shadow-md);
+}
+
+.free-panel__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.free-panel__title {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  font-size: 24px;
+}
+
+.free-panel .free-panel__tool {
+  width: 30px;
+  height: 30px;
+  color: var(--color-neutral-700);
+}
+
+.free-panel__body {
+  display: grid;
+  gap: var(--gap);
+  min-width: 0;
+}
+
+/* Les champs tiennent dans la colonne de 330 px : une liste prend sinon la largeur de sa plus
+   longue option et un fieldset vaut `min-content` par défaut, ce qui faisait déborder (et
+   rogner) le panneau Structure. */
+.free-panel fieldset {
+  min-inline-size: 0;
+  min-width: 0;
+}
+
+.free-panel select,
+.free-panel textarea,
+.free-panel input:not([type="checkbox"], [type="radio"], [type="color"]) {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.free-panel select {
+  width: 100%;
+}
+
+.free-panel__note {
+  margin: auto 0 0;
+  font-size: 12px;
+  color: var(--color-neutral-700);
+  text-wrap: pretty;
+}
+
+/* ------------------------------------------------------------ Chiffres clés */
+
+.section-figures {
+  display: grid;
+  grid-template-columns: repeat(var(--figure-cols, 3), minmax(0, 1fr));
+  gap: 1px;
+  margin: 0;
+  background: var(--color-divider);
+  border: 1px solid var(--color-divider);
+  font-variant-numeric: tabular-nums;
+}
+
+.section-figures__cell {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: 10px;
+  background: var(--color-bg);
+}
+
+.section-figures__cell--wide {
+  grid-column: 1 / -1;
+}
+
+/* Dernière ligne incomplète : la dernière cellule s'étend jusqu'au bord (pas de trou). */
+.section-figures__cell:last-child {
+  grid-column-end: -1;
+}
+
+/* Valeur au-dessus de sa légende (dt avant dd dans le document). */
+.section-figures__cell dd {
+  order: -1;
+  margin: 0;
+  font: 600 22px/1 var(--font-heading);
+  overflow-wrap: anywhere;
+}
+
+.section-figures__cell dd.section-figures__text {
+  font-size: 16px;
+  line-height: 1.2;
+}
+
+.section-figures__cell dt {
+  margin-top: 4px;
+  font-size: 11.5px;
+  color: var(--color-neutral-700);
+}
+
+/* ------------------------------------------------------------ Repli (vague 6 : vrai repli) */
+
+@media (max-width: 1099px) {
+  /* Rail en ligne, défilant dans son propre conteneur : jamais de défilement du document. */
+  .rail {
+    overflow-x: auto;
+    overflow-y: hidden;
+    border-right: 0;
+    border-bottom: 1px solid var(--color-divider);
+  }
+
+  .rail__list {
+    flex-direction: row;
+    padding: 0 6px;
+    width: max-content;
+  }
+
+  .rail__tab {
+    width: 76px;
+    flex: none;
+  }
+
+  .rail__tab[aria-selected="true"] {
+    box-shadow: inset 0 -3px 0 var(--color-accent);
+  }
+
+  .free-panel {
+    border-right: 0;
+    border-bottom: 1px solid var(--color-divider);
+    overflow-y: visible;
+  }
+}

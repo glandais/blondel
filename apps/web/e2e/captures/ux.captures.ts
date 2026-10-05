@@ -8,11 +8,25 @@
  * Chaque cas part d'une page vierge (stockage du navigateur vide : première visite) et attend la
  * fin des calculs avant la capture. La 3D est rendue par SwiftShader (sans GPU) : les teintes
  * et l'anticrénelage diffèrent un peu d'un poste réel.
+ *
+ * Vague 2 du parcours (ADR-0009) : adaptées a minima à la nouvelle mise en page (barre du haut,
+ * rail et panneau unique, inspecteur) ; la refonte des captures et de `EXISTANT.md` est en
+ * vague 6.
  */
 import { mkdirSync } from "node:fs";
 import { resolve } from "node:path";
 import { expect, test, type Locator, type Page } from "@playwright/test";
-import { applyPreset, commitField, openApp, openTab, settle, structureSelect } from "../support.js";
+import {
+  applyPreset,
+  commitField,
+  openApp,
+  openMoreMenu,
+  openProjectMenu,
+  openSection,
+  openTab,
+  settle,
+  structureSelect,
+} from "../support.js";
 
 const OUT = resolve(process.env["CAPTURES_DIR"] ?? "../../docs/ux/captures");
 mkdirSync(OUT, { recursive: true });
@@ -29,9 +43,9 @@ async function shot(page: Page, name: string, target?: Locator): Promise<void> {
   else await page.screenshot({ path: `${OUT}/${name}.png` });
 }
 
-/** Ferme le message d'information de la barre d'outils (« Démo … »), s'il est affiché. */
+/** Ferme le message d'information au-dessus de la vue (« Démo … »), s'il est affiché. */
 async function closeNotice(page: Page): Promise<void> {
-  const close = page.locator(".toolbar .notice").getByRole("button", { name: "Fermer" });
+  const close = page.locator(".notices .notice").getByRole("button", { name: "Fermer" });
   if (await close.count()) await close.click();
 }
 
@@ -76,7 +90,7 @@ test("01 accueil de la première visite", async ({ page }) => {
 
 test("02 à 11 vues centrales sur une démo", async ({ page }) => {
   await openDemo(page);
-  await openTab(page, "Plan 2D");
+  await openTab(page, "Plan");
   await shot(page, "02-plan-cote");
   await page.getByRole("button", { name: "Site et saisie" }).click();
   await settle(page);
@@ -111,7 +125,7 @@ test("02 à 11 vues centrales sur une démo", async ({ page }) => {
 
 test("12 panneau des paramètres, entièrement déplié", async ({ page }) => {
   await openDemo(page);
-  const left = page.getByRole("complementary", { name: "Paramètres" });
+  const left = await openSection(page, "Structure");
   await expandAll(left);
   await settle(page);
   await shotWholePanel(page, "12-parametres-complet", left);
@@ -119,14 +133,14 @@ test("12 panneau des paramètres, entièrement déplié", async ({ page }) => {
 
 test("13 contrôle de conception et prédimensionnement, surcharge ouverte", async ({ page }) => {
   await openDemo(page);
-  const right = page.getByRole("complementary", { name: "Contrôle de conception" });
+  const right = page.getByRole("complementary", { name: "Inspecteur" });
   // Toutes les sections, sauf les longues listes « Respectées » et « Non évaluées » (fermées
   // par défaut) : une centaine de cartes, plusieurs mètres d'écran.
   await expandAll(right);
   await right.locator("details.sev--ok, details.sev--na").evaluateAll((all) => {
     for (const d of all) (d as HTMLDetailsElement).open = false;
   });
-  const warning = right.locator("details.sev--avertissement button.result").first();
+  const warning = right.locator('.rule-card[data-severity="avertissement"] button.result').first();
   await warning.click();
   await right.getByRole("button", { name: "Surcharger la règle…" }).first().click();
   await expect(right.locator("form.override-editor")).toBeVisible();
@@ -136,6 +150,7 @@ test("13 contrôle de conception et prédimensionnement, surcharge ouverte", asy
 
 test("14 et 15 assistant d'initialisation", async ({ page }) => {
   await openApp(page);
+  await openProjectMenu(page);
   await page.getByRole("button", { name: "Assistant…" }).click();
   const dialog = page.getByRole("dialog");
   await expect(dialog).toBeVisible();
@@ -148,6 +163,7 @@ test("14 et 15 assistant d'initialisation", async ({ page }) => {
 
 test("16 profil d'atelier", async ({ page }) => {
   await openApp(page);
+  await openMoreMenu(page);
   await page.getByRole("button", { name: "Atelier…" }).click();
   await expect(page.getByRole("dialog")).toBeVisible();
   await shot(page, "16-profil-atelier");
@@ -155,8 +171,8 @@ test("16 profil d'atelier", async ({ page }) => {
 
 test("17 et 18 menus Importer et Exporter", async ({ page }) => {
   await openDemo(page);
-  await openTab(page, "Plan 2D");
-  await page.getByRole("button", { name: /^Importer/ }).click();
+  await openTab(page, "Plan");
+  await page.getByRole("button", { name: "Importer", exact: true }).click();
   await shot(page, "17-menu-importer");
   await page.keyboard.press("Escape");
   await page.getByRole("button", { name: /^Exporter/ }).click();
@@ -165,12 +181,14 @@ test("17 et 18 menus Importer et Exporter", async ({ page }) => {
 
 test("19 contrôle bloquant", async ({ page }) => {
   await openApp(page);
+  await openSection(page, "Découpage");
   await commitField(page, page.getByLabel("Hauteur de marche cible"), "215");
   await shot(page, "19-controle-bloquant");
 });
 
 test("20 erreur de génération", async ({ page }) => {
   await openApp(page);
+  await openSection(page, "Structure");
   await structureSelect(page).selectOption("helical-core");
   await settle(page);
   await shot(page, "20-erreur-generation");
@@ -178,6 +196,7 @@ test("20 erreur de génération", async ({ page }) => {
 
 test("21 thème sombre", async ({ page }) => {
   await openDemo(page);
+  await openMoreMenu(page);
   await page.getByLabel("Thème").selectOption("dark");
   await settle(page);
   await shot(page, "21-theme-sombre");

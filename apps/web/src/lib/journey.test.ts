@@ -315,3 +315,46 @@ describe("préférences mémorisées", () => {
     );
   });
 });
+
+describe("parcours guidé indisponible (vague 2)", () => {
+  it("démarrage : toujours libre, même avec « guidé » mémorisé", () => {
+    for (const remembered of [null, "guided", "free"] as const) {
+      for (const hasAutosave of [false, true]) {
+        expect(initialJourney({ remembered, hasAutosave, guidedAvailable: false })).toBe("free");
+      }
+    }
+  });
+
+  it("démo et assistant : libre, étapes remises à zéro, Conception, panneau inchangé", () => {
+    const prefs: JourneyPrefs = {
+      ...DEFAULT_JOURNEY_PREFS,
+      journey: "free",
+      guidedStep: 4,
+      visitedSteps: new Set([1, 4]),
+      freePanel: null,
+      workspace: "fabrication",
+    };
+    for (const origin of ["demo", "assistant"] as const) {
+      const r = journeyAfterOpening(origin, prefs, false);
+      expect(r).toMatchObject({ journey: "free", workspace: "design", freePanel: null });
+      expect(r.visitedSteps.size).toBe(0);
+    }
+  });
+
+  it("passage au guidé sans effet ; guidé → libre inchangé", () => {
+    const free: JourneyPrefs = { ...DEFAULT_JOURNEY_PREFS, journey: "free", freePanel: "site" };
+    expect(switchJourney(free, "guided", false)).toBe(free);
+    const guided = { ...DEFAULT_JOURNEY_PREFS, guidedStep: 3 as const };
+    expect(switchJourney(guided, "free", false)).toEqual(switchJourney(guided, "free"));
+  });
+
+  it("propriété : aucune transition ne mène au guidé", () => {
+    fc.assert(
+      fc.property(prefsArb, fc.constantFrom(...ORIGINS), (p0, origin) => {
+        const p = { ...p0, journey: "free" as const };
+        expect(switchJourney(p, "guided", false).journey).toBe("free");
+        expect(journeyAfterOpening(origin, p, false).journey).toBe("free");
+      }),
+    );
+  });
+});

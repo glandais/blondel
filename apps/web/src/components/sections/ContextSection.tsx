@@ -46,7 +46,7 @@ export function ContextSection({ display }: SectionProps) {
                 <CheckField
                   key={key}
                   label={key.replace(/_/g, " ")}
-                  title={t.t(contextLabel(key))}
+                  hint={t.t(contextLabel(key))}
                   checked={c.contexts.includes(key)}
                   onCommit={(checked) =>
                     set(["compliance", "contexts"])(

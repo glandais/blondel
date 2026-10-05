@@ -5,7 +5,20 @@
  */
 import { fileURLToPath } from "node:url";
 import { expect, test } from "@playwright/test";
-import { applyPreset, blockingCount, commitField, openApp, settle } from "./support.js";
+import {
+  applyPreset,
+  blockingCount,
+  commitField,
+  openApp,
+  openSection,
+  openTab,
+  settle,
+  structureSelect,
+  viewTab,
+} from "./support.js";
+
+/** Nom du projet, affiché sur le bouton du menu du projet (barre du haut). */
+const PROJECT_NAME = ".topbar__project-name";
 
 const EXAMPLE = fileURLToPath(
   new URL("../../../examples/j4-acceptance-01-garde-corps.blondel.json", import.meta.url),
@@ -15,7 +28,7 @@ test("import d'un exemple par le menu Importer", async ({ page }) => {
   await openApp(page);
   // Le menu « Importer » ouvre le sélecteur de fichiers du champ caché.
   const chooser = page.waitForEvent("filechooser");
-  await page.getByRole("button", { name: /^Importer/ }).click();
+  await page.getByRole("button", { name: "Importer", exact: true }).click();
   await page.getByRole("menuitem", { name: "Projet (.blondel.json)…" }).click();
   await (await chooser).setFiles(EXAMPLE);
   await settle(page);
@@ -23,32 +36,36 @@ test("import d'un exemple par le menu Importer", async ({ page }) => {
   await expect(page.getByRole("status").filter({ hasText: "importé" })).toContainText(
     "Jalon 4 — cas d'acceptation n° 1, garde-corps barreaudé",
   );
-  await expect(page.getByLabel("Projet", { exact: true })).toHaveValue(
+  await expect(page.locator(PROJECT_NAME)).toHaveText(
     "Jalon 4 — cas d'acceptation n° 1, garde-corps barreaudé",
   );
+  await openSection(page, "Site");
   await expect(page.getByLabel("Hauteur à monter H")).toHaveValue("2700");
-  await expect(page.getByLabel("Structure", { exact: true })).toHaveValue("wood-housed");
+  await openSection(page, "Structure");
+  await expect(structureSelect(page)).toHaveValue("wood-housed");
+  await openSection(page, "Tracé");
   await expect(page.getByLabel("Jour", { exact: true })).toHaveValue("newel");
   expect(await blockingCount(page)).toBe(0);
   // Garde-corps de l'exemple : balustres et poteaux dans la nomenclature.
-  await page.getByRole("tab", { name: "Nomenclature", exact: true }).click();
-  await expect(page.getByRole("tabpanel")).toContainText(/[Bb]alustre/);
+  await openTab(page, "Nomenclature");
+  await expect(page.locator("#view-panel")).toContainText(/[Bb]alustre/);
 
   // L'import est une seule étape d'historique.
-  await page.getByRole("button", { name: "Annuler", exact: true }).click();
+  await page.getByRole("button", { name: "Annuler (Ctrl+Z)", exact: true }).click();
   await settle(page);
-  await expect(page.getByLabel("Projet", { exact: true })).not.toHaveValue(/Jalon 4/);
+  await expect(page.locator(PROJECT_NAME)).not.toHaveText(/Jalon 4/);
 });
 
 test("fichier invalide : message d'erreur, projet inchangé", async ({ page }) => {
   await openApp(page);
-  const before = await page.getByLabel("Projet", { exact: true }).inputValue();
+  const before = (await page.locator(PROJECT_NAME).textContent()) ?? "";
+  await openSection(page, "Site");
   const h = await page.getByLabel("Hauteur à monter H").inputValue();
-  const undo = page.getByRole("button", { name: "Annuler", exact: true });
+  const undo = page.getByRole("button", { name: "Annuler (Ctrl+Z)", exact: true });
   await expect(undo).toBeDisabled();
   // Même chemin que l'utilisateur : menu « Importer », entrée « Projet », sélecteur de fichiers.
   const chooser = page.waitForEvent("filechooser");
-  await page.getByRole("button", { name: /^Importer/ }).click();
+  await page.getByRole("button", { name: "Importer", exact: true }).click();
   await page.getByRole("menuitem", { name: "Projet (.blondel.json)…" }).click();
   await (
     await chooser
@@ -62,7 +79,7 @@ test("fichier invalide : message d'erreur, projet inchangé", async ({ page }) =
   await expect(notice).toHaveAttribute("role", "alert");
   await expect(notice).toBeVisible();
   await expect(page.locator(".notice--info")).toHaveCount(0);
-  await expect(page.getByLabel("Projet", { exact: true })).toHaveValue(before);
+  await expect(page.locator(PROJECT_NAME)).toHaveText(before);
   await expect(page.getByLabel("Hauteur à monter H")).toHaveValue(h);
   // Aucune étape d'historique créée par l'échec.
   await expect(undo).toBeDisabled();
@@ -71,10 +88,13 @@ test("fichier invalide : message d'erreur, projet inchangé", async ({ page }) =
 test("annuler / rétablir : boutons et raccourcis clavier", async ({ page }) => {
   await openApp(page);
   await applyPreset(page, "Quart tournant à gauche");
+  await openSection(page, "Site");
   const h = page.getByLabel("Hauteur à monter H");
-  const undo = page.getByRole("button", { name: "Annuler", exact: true });
-  const redo = page.getByRole("button", { name: "Rétablir", exact: true });
-  const riseCell = page.locator('.statusbar__item[title="Hauteur de marche"] dd');
+  const undo = page.getByRole("button", { name: "Annuler (Ctrl+Z)", exact: true });
+  const redo = page.getByRole("button", { name: "Rétablir (Ctrl+Maj+Z)", exact: true });
+  const riseCell = page.locator(
+    '.figure-line__item[data-figure="h"][title="Hauteur de marche"] dd',
+  );
 
   await expect(h).toHaveValue("2700");
   const rise2700 = await riseCell.textContent();
@@ -96,7 +116,7 @@ test("annuler / rétablir : boutons et raccourcis clavier", async ({ page }) => 
   await expect(riseCell).toHaveText(rise2900 ?? "");
 
   // Raccourcis hors des champs : Ctrl+Z, puis Ctrl+Maj+Z et Ctrl+Y.
-  await page.getByRole("tab", { name: "Plan 2D", exact: true }).focus();
+  await viewTab(page, "Plan").focus();
   await page.keyboard.press("Control+z");
   await settle(page);
   await expect(h).toHaveValue("2700");
@@ -109,6 +129,8 @@ test("annuler / rétablir : boutons et raccourcis clavier", async ({ page }) => 
   await expect(h).toHaveValue("2900");
 
   // Retour jusqu'au préréglage droit d'origine, puis plus rien à annuler.
+  await openSection(page, "Tracé");
+  await expect(page.getByLabel("Jour", { exact: true })).toHaveCount(1);
   await undo.click();
   await undo.click();
   await settle(page);
@@ -119,10 +141,14 @@ test("annuler / rétablir : boutons et raccourcis clavier", async ({ page }) => 
 test("autosauvegarde relue au rechargement", async ({ page }) => {
   await openApp(page);
   await applyPreset(page, "Deux quarts tournants (U)");
+  await openSection(page, "Site");
   await commitField(page, page.getByLabel("Hauteur à monter H"), "2850");
   await page.reload();
   await settle(page);
+  // Panneau ouvert mémorisé : la section « Site » est rouverte au rechargement.
+  await expect(page.locator("#free-panel")).toBeVisible();
   await expect(page.getByLabel("Hauteur à monter H")).toHaveValue("2850");
+  await openSection(page, "Tracé");
   await expect(page.locator("fieldset.turn")).toHaveCount(2);
 });
 
@@ -148,6 +174,7 @@ test("autosauvegarde illisible : message, copie de secours, jamais écrasée en 
   await expect(actions).toBeVisible();
 
   // Première modification : l'original reste disponible sous la clé de secours.
+  await openSection(page, "Site");
   await commitField(page, page.getByLabel("Hauteur à monter H"), "2800");
   await page.evaluate(() => window.dispatchEvent(new Event("pagehide")));
   const stored = await page.evaluate(() => ({

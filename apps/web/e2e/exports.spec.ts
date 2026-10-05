@@ -14,6 +14,7 @@ import {
   overBudget,
   settle,
   takeLongTasks,
+  viewTab,
 } from "./support.js";
 
 test.beforeEach(async ({ page }) => {
@@ -76,15 +77,18 @@ test("menu Importer : plan DXF ouvert dans le plan « Site et saisie »", async 
       g(0, "ENDSEC", 0, "EOF"),
     ].join("\n") + "\n";
   const chooser = page.waitForEvent("filechooser");
-  await page.getByRole("button", { name: /^Importer/ }).click();
+  await page.getByRole("button", { name: "Importer", exact: true }).click();
   await page.getByRole("menuitem", { name: "Plan DXF (calque de fond)…" }).click();
   await (
     await chooser
   ).setFiles({ name: "murs.dxf", mimeType: "application/dxf", buffer: Buffer.from(dxf) });
-  await expect(page.getByRole("tab", { name: "Plan 2D", exact: true })).toHaveAttribute(
-    "aria-selected",
-    "true",
-  );
+  // Le plan « Site et saisie » s'ouvre, dans l'espace Conception (liaison vue ↔ espace).
+  await expect(
+    page.getByRole("radiogroup", { name: "Espace de travail" }).getByRole("radio", {
+      name: "Conception",
+    }),
+  ).toHaveAttribute("aria-checked", "true");
+  await expect(viewTab(page, "Plan")).toHaveAttribute("aria-selected", "true");
   await expect(page.getByRole("button", { name: "Site et saisie", exact: true })).toHaveAttribute(
     "aria-pressed",
     "true",
@@ -97,19 +101,34 @@ test("menu Importer : plan DXF ouvert dans le plan « Site et saisie »", async 
   await expect(page.getByRole("button", { name: "Tracer la trémie" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Tracer un mur" })).toBeVisible();
   // L'import est annulable.
-  await page.getByRole("button", { name: "Annuler", exact: true }).click();
+  await page.getByRole("button", { name: "Annuler (Ctrl+Z)", exact: true }).click();
   await settle(page);
   await expect(page.locator("path.plan-site__dxf")).toHaveCount(0);
 });
 
-test("menus Importer et Exporter : jamais hors de la fenêtre, quelle que soit la largeur", async ({
+test("barre du haut, menus Importer et Exporter : jamais hors de la fenêtre, quelle que soit la largeur", async ({
   page,
 }) => {
   await openApp(page);
   const problems: string[] = [];
   for (const width of [760, 900, 1024, 1180, 1280, 1440]) {
     await page.setViewportSize({ width, height: 800 });
-    for (const name of [/^Importer/, /^Exporter/]) {
+    // La barre du haut ne déborde pas : chacune de ses commandes reste dans la fenêtre.
+    const bar = await page.evaluate(() => {
+      const de = document.documentElement;
+      const out = [...document.querySelectorAll<HTMLElement>(".topbar button")]
+        .filter((b) => b.offsetParent !== null)
+        .map((b) => ({
+          name: b.getAttribute("aria-label") ?? b.textContent ?? "",
+          r: b.getBoundingClientRect(),
+        }))
+        .filter(({ r }) => r.left < 0 || r.right > de.clientWidth)
+        .map(({ name }) => name);
+      return { out, overflowX: de.scrollWidth - de.clientWidth };
+    });
+    if (bar.out.length > 0 || bar.overflowX > 0)
+      problems.push(`${width} px, barre du haut : ${JSON.stringify(bar)}`);
+    for (const name of [/^Importer$/, /^Exporter/]) {
       await page.getByRole("button", { name }).click();
       const menu = page.getByRole("menu");
       await expect(menu).toBeVisible();

@@ -56,6 +56,7 @@ import { controlMarkers, type PointMarker } from "../lib/markers.js";
 import type { MeshSnapshot, MeshedPartData } from "../model/snapshot.js";
 import { appStore, useApp } from "../store/appStore.js";
 import type { Selection } from "../store/projectStore.js";
+import { useViewCommand } from "../store/uiStore.js";
 import {
   mainDimensions,
   measureAnnotation,
@@ -482,6 +483,51 @@ function DemoFramer({ project, box, ready }: { project: Project; box: Box3; read
     controls.update?.();
     invalidate();
   }, [request, project, ready, box, camera, controls, size, invalidate]);
+  return null;
+}
+
+/** Facteurs de distance caméra → cible des commandes − et + de la vue centrale. */
+const ZOOM_IN_FACTOR = 0.8;
+const ZOOM_OUT_FACTOR = 1.25;
+
+/**
+ * Commandes − / + / Recadrer de la vue centrale (`uiStore.viewCommand`) : − et + éloignent ou
+ * rapprochent la caméra de la cible des contrôles (bornée par leur distance maximale),
+ * Recadrer applique le cadrage de trois quarts des démos (`flatteringView`). Une image est
+ * demandée après chaque commande (rendu à la demande) ; aucun calcul n'est relancé.
+ */
+function ViewCommandHandler({ box, maxDistance }: { box: Box3; maxDistance: number }) {
+  const camera = useThree((s) => s.camera);
+  const controls = useThree((s) => s.controls) as {
+    target?: Vector3;
+    update?: () => void;
+  } | null;
+  const size = useThree((s) => s.size);
+  const invalidate = useThree((s) => s.invalidate);
+  useViewCommand((kind) => {
+    const target = controls?.target;
+    if (!target) return;
+    if (kind === "fit") {
+      if (box.isEmpty()) return;
+      const fov = "fov" in camera && typeof camera.fov === "number" ? camera.fov : 40;
+      const pose = flatteringView(box, {
+        fovDeg: fov,
+        aspect: size.height > 0 ? size.width / size.height : 1,
+      });
+      target.set(...pose.target);
+      camera.position.set(...pose.position);
+    } else {
+      const offset = camera.position.clone().sub(target);
+      const distance = offset.length();
+      if (!(distance > 0)) return;
+      const factor = kind === "zoomIn" ? ZOOM_IN_FACTOR : ZOOM_OUT_FACTOR;
+      offset.setLength(Math.min(distance * factor, maxDistance));
+      camera.position.copy(target).add(offset);
+    }
+    camera.lookAt(target);
+    controls?.update?.();
+    invalidate();
+  });
   return null;
 }
 
@@ -913,6 +959,7 @@ export default function Viewer3D({
         <TextureInvalidator />
         <CameraTestHook target={frame.target} />
         <DemoFramer project={project} box={stairBox} ready={parts.length > 0} />
+        <ViewCommandHandler box={stairBox} maxDistance={clip.far / 2} />
         <TintInvalidator tintKey={tintKey} />
         <SectionUpdater clip={materials.clip} plane={plane} />
         <AnnotationProjector annotations={annotations} svgRef={svgRef} />

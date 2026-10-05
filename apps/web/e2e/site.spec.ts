@@ -5,7 +5,7 @@
  * annulable et la trémie polygonale est reprise par le modèle (échappée, plan coté).
  */
 import { expect, test, type Page } from "@playwright/test";
-import { openApp, openTab, settle } from "./support.js";
+import { openApp, openSection, openTab, settle } from "./support.js";
 
 /** DXF minimal sans `$INSUNITS` : un rectangle de 900 × 2 600 (unités : cm) et une diagonale. */
 function dxfText(): string {
@@ -28,7 +28,7 @@ function dxfText(): string {
 
 async function openSite(page: Page): Promise<void> {
   await openApp(page);
-  await openTab(page, "Plan 2D");
+  await openTab(page, "Plan");
   await page.getByRole("button", { name: "Site et saisie", exact: true }).click();
   await expect(page.getByRole("toolbar", { name: "Outils de saisie du plan" })).toBeVisible();
 }
@@ -53,8 +53,10 @@ async function clickSite(page: Page, x: number, y: number): Promise<void> {
 
 test("import DXF (échelle demandée), trémie tracée avec accroches, annulable", async ({ page }) => {
   await openSite(page);
+  // Plan « Site et saisie » : ses commandes (le panneau « Site » propose aussi l'import).
+  const view = page.locator("#view-panel");
   const chooser = page.waitForEvent("filechooser");
-  await page.getByRole("button", { name: "Importer un plan DXF…" }).click();
+  await view.getByRole("button", { name: "Importer un plan DXF…" }).click();
   await (
     await chooser
   ).setFiles({ name: "plan.dxf", mimeType: "application/dxf", buffer: Buffer.from(dxfText()) });
@@ -83,14 +85,26 @@ test("import DXF (échelle demandée), trémie tracée avec accroches, annulable
     "points",
     "0,1000 900,1000 900,3600 0,3600",
   );
-  await expect(page.getByText("Trémie polygonale (4 sommets)")).toBeVisible();
+  // Panneau « Site » : trémie « Tracée », polygone de 4 sommets.
+  const panel = await openSection(page, "Site");
+  const trémie = panel.getByRole("radiogroup", { name: "Trémie" });
+  await expect(trémie.getByRole("radio", { name: "Tracée" })).toHaveAttribute(
+    "aria-checked",
+    "true",
+  );
+  await expect(panel.getByText("Trémie polygonale (4 sommets)")).toBeVisible();
 
   // Le plan coté reprend la trémie ; la saisie s'annule.
   await page.getByRole("button", { name: "Plan coté", exact: true }).click();
   await expect(page.locator(".svg-export svg")).toBeVisible();
-  await page.getByRole("button", { name: "Annuler", exact: true }).click();
+  await page.getByRole("button", { name: "Annuler (Ctrl+Z)", exact: true }).click();
   await settle(page);
-  await expect(page.getByText("Trémie polygonale (4 sommets)")).toHaveCount(0);
+  await openSection(page, "Site");
+  await expect(trémie.getByRole("radio", { name: "Rectangulaire" })).toHaveAttribute(
+    "aria-checked",
+    "true",
+  );
+  await expect(panel.getByText("Trémie polygonale (4 sommets)")).toHaveCount(0);
 });
 
 test("relevé de trémie 4 côtés + 2 diagonales et tracé d'un mur", async ({ page }) => {
@@ -112,7 +126,8 @@ test("relevé de trémie 4 côtés + 2 diagonales et tracé d'un mur", async ({ 
   await expect(page.locator("polygon.plan-site__preview")).toHaveCount(1);
   await page.getByRole("button", { name: "Remplacer la trémie par le relevé" }).click();
   await settle(page);
-  await expect(page.getByText("Trémie polygonale (4 sommets)")).toBeVisible();
+  const panel = await openSection(page, "Site");
+  await expect(panel.getByText("Trémie polygonale (4 sommets)")).toBeVisible();
 
   // Incohérence signalée si une diagonale est fausse de 40 mm.
   await page.getByLabel("Diagonale BD", { exact: true }).fill(String(d + 40));
@@ -125,4 +140,7 @@ test("relevé de trémie 4 côtés + 2 diagonales et tracé d'un mur", async ({ 
   await expect(page.getByRole("status").filter({ hasText: "Mur ajouté" })).toBeVisible();
   await settle(page);
   await expect(page.locator("polygon.plan-site__wall")).toHaveCount(1);
+  // Le mur figure aussi dans la liste du panneau « Site ».
+  const site = await openSection(page, "Site");
+  await expect(site.getByRole("group", { name: /^Murs \(1\)/ })).toBeVisible();
 });

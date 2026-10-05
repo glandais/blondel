@@ -1,5 +1,5 @@
 /**
- * Menu « Importer » de la barre d'outils : projet Blondel (.blondel.json, remplace le projet,
+ * Menu « Importer » de la barre du haut (bouton secondaire) : projet Blondel (.blondel.json, remplace le projet,
  * annulable), plan DXF ou image de plan (calque de fond du plan « Site et saisie », jalon 7 :
  * l'onglet Plan 2D s'ouvre dans ce mode, où l'échelle, le placement, la calibration et les
  * outils de tracé de la trémie et des murs sont disponibles).
@@ -46,6 +46,8 @@ export function ImportMenu() {
 
   const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
     if (e.key === "Escape" && open) {
+      // Échap consommé ici : ni le panneau libre ni la vue ne le reçoivent.
+      e.preventDefault();
       e.stopPropagation();
       setOpen(false);
       root.current?.querySelector<HTMLButtonElement>("button")?.focus();
@@ -62,12 +64,13 @@ export function ImportMenu() {
     <div className="menu" ref={root} onKeyDown={onKeyDown}>
       <button
         type="button"
+        className="btn btn-secondary topbar__btn"
         aria-haspopup="menu"
         aria-expanded={open}
         aria-controls={menuId}
         onClick={() => setOpen((o) => !o)}
       >
-        {t.t("ui.import.menu")}
+        {t.t("ui.topbar.import")}
       </button>
       {open ? (
         <div

@@ -6,7 +6,7 @@
  * conception.
  */
 import { expect, test } from "@playwright/test";
-import { applyPreset, commitField, instrument, openApp, settle } from "./support.js";
+import { applyPreset, commitField, instrument, openApp, openSection, settle } from "./support.js";
 
 test.beforeEach(async ({ page }) => {
   await instrument(page);
@@ -17,10 +17,13 @@ test("recaler volées et trémie après modification de H, annulable en une fois
 }) => {
   await openApp(page);
   await applyPreset(page, "Quart tournant à gauche");
+  await openSection(page, "Tracé");
   const leg1 = page.getByRole("textbox", { name: "Volée 1 (bord extérieur)" });
   const leg2 = page.getByRole("textbox", { name: "Volée 2 (bord extérieur)" });
   const before = [await leg1.inputValue(), await leg2.inputValue()];
+  await openSection(page, "Site");
   await commitField(page, page.getByLabel("Hauteur à monter H"), "2900");
+  await openSection(page, "Tracé");
   await expect(leg2).toHaveValue(before[1]!);
 
   await page.getByRole("button", { name: "Recaler volées et trémie" }).click();
@@ -31,13 +34,14 @@ test("recaler volées et trémie après modification de H, annulable en une fois
   // Position du tournant saisie conservée (A18 a, 2026-09-30) : seule la dernière volée change.
   await expect(leg1).toHaveValue(before[0]!);
   await expect(leg2).not.toHaveValue(before[1]!);
-  await expect(page.locator(".statusbar__errors")).toHaveCount(0);
+  await expect(page.locator(".figure-line__errors")).toHaveCount(0);
 
   // Une seule entrée d'annulation : H reste à 2 900, volées d'origine.
-  await page.getByRole("button", { name: "Annuler", exact: true }).click();
+  await page.getByRole("button", { name: "Annuler (Ctrl+Z)", exact: true }).click();
   await settle(page);
   await expect(leg1).toHaveValue(before[0]!);
   await expect(leg2).toHaveValue(before[1]!);
+  await openSection(page, "Site");
   await expect(page.getByLabel("Hauteur à monter H")).toHaveValue("2900");
 });
 
@@ -46,7 +50,9 @@ test("recalage impossible : bouton désactivé avec la raison rendue par le cœu
 }) => {
   await openApp(page);
   await applyPreset(page, "Quart tournant avec palier");
+  await openSection(page, "Site");
   await commitField(page, page.getByLabel("Hauteur à monter H"), "2900");
+  await openSection(page, "Tracé");
   const button = page.getByRole("button", { name: "Recaler volées et trémie" });
   await expect(button).toBeDisabled();
   await expect(page.getByTestId("realign-reason")).toContainText("nombre entier de girons");
@@ -55,6 +61,7 @@ test("recalage impossible : bouton désactivé avec la raison rendue par le cœu
 test("escalier droit large : bord de mesure de la ligne de foulée réglable", async ({ page }) => {
   await openApp(page);
   await applyPreset(page, "Escalier droit");
+  await openSection(page, "Tracé");
   await commitField(page, page.getByLabel("Emmarchement E"), "1400");
   const side = page.getByLabel("Bord de mesure de la ligne de foulée");
   await expect(side).toHaveValue("auto");
@@ -62,9 +69,11 @@ test("escalier droit large : bord de mesure de la ligne de foulée réglable", a
   await side.selectOption("right");
   await settle(page);
   await expect(side).toHaveValue("right");
-  await expect(page.locator(".statusbar__errors")).toHaveCount(0);
+  await expect(page.locator(".figure-line__errors")).toHaveCount(0);
   // Sans objet sur un tracé à tournants.
   await applyPreset(page, "Quart tournant à gauche");
+  await openSection(page, "Tracé");
+  await expect(page.getByLabel("Emmarchement E")).toBeVisible();
   await expect(page.getByLabel("Bord de mesure de la ligne de foulée")).toHaveCount(0);
 });
 
@@ -73,8 +82,11 @@ test("surcharge d'une règle : justification obligatoire, liste des surcharges",
 }) => {
   await openApp(page);
   await applyPreset(page, "Quart tournant à gauche");
-  const panel = page.locator(".compliance");
-  await panel.locator(".sev--ok > summary").click();
+  // Contrôle de conception dans l'inspecteur : liste des règles respectées dépliée par son lien.
+  const panel = page.locator(".inspector-control");
+  await expect(panel.locator(".sev--ok")).toHaveCount(0);
+  await panel.locator('.control-folds__link[data-fold="ok"]').click();
+  await expect(panel.locator(".sev--ok")).toHaveAttribute("open", "");
   const item = panel.locator(".sev--ok li").first();
   const ruleId = (await item.locator("code").first().textContent())!;
   await item.getByRole("button", { name: "Surcharger la règle…" }).click();
@@ -88,6 +100,9 @@ test("surcharge d'une règle : justification obligatoire, liste des surcharges",
   await settle(page);
 
   const list = panel.locator(".sev--overrides");
+  const overridesLink = panel.locator('.control-folds__link[data-fold="overrides"]');
+  await expect(overridesLink).toContainText("1 surcharge");
+  if ((await list.count()) === 0) await overridesLink.click();
   await expect(list.locator("summary .count")).toHaveText("1");
   await expect(list).toContainText(ruleId);
   await expect(list).toContainText("Validé par le bureau d'études");
@@ -97,4 +112,5 @@ test("surcharge d'une règle : justification obligatoire, liste des surcharges",
   await list.getByRole("button", { name: "Retirer la surcharge" }).click();
   await settle(page);
   await expect(panel.locator(".sev--overrides")).toHaveCount(0);
+  await expect(overridesLink).toHaveCount(0);
 });

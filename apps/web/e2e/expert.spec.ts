@@ -11,6 +11,7 @@ import {
   describeTasks,
   instrument,
   openApp,
+  openSection,
   openTab,
   overBudget,
   settle,
@@ -22,7 +23,7 @@ test.beforeEach(async ({ page }) => {
 });
 
 async function openExpert(page: Page): Promise<void> {
-  await openTab(page, "Plan 2D");
+  await openTab(page, "Plan");
   await page.getByRole("button", { name: "Mode expert", exact: true }).click();
   await expect(page.getByLabel("Nez sélectionné")).toBeVisible();
 }
@@ -77,11 +78,11 @@ test(`mode expert : rotation d'un nez, nez fixe, orpheline, annulation (tâches 
   await expect(status).not.toHaveText(before ?? "");
   await expect(page.locator(".plan-expert__notes")).toHaveCount(0);
 
-  const undo = page.getByRole("button", { name: "Annuler", exact: true });
+  const undo = page.getByRole("button", { name: "Annuler (Ctrl+Z)", exact: true });
   await undo.click();
   await settle(page);
   await expect(page.getByText("Aucune surcharge.")).toBeVisible();
-  await page.getByRole("button", { name: "Rétablir", exact: true }).click();
+  await page.getByRole("button", { name: "Rétablir (Ctrl+Maj+Z)", exact: true }).click();
   await settle(page);
   await expect(overrides(page)).toHaveCount(1);
 
@@ -106,6 +107,7 @@ test(`mode expert : rotation d'un nez, nez fixe, orpheline, annulation (tâches 
   );
 
   // Moins de marches : le dernier nez disparaît, sa surcharge devient orpheline (affichée).
+  await openSection(page, "Site");
   await commitField(page, page.getByLabel("Hauteur à monter H"), "2300");
   await expect(page.locator(".plan-expert__orphan")).toHaveCount(1);
   await expect(page.locator(".plan-expert__orphan")).toContainText("orpheline");
@@ -125,7 +127,7 @@ test(`mode expert : rotation d'un nez, nez fixe, orpheline, annulation (tâches 
 test("mode expert indisponible sur un hélicoïdal", async ({ page }) => {
   await openApp(page);
   await applyPreset(page, "Hélicoïdal à fût central");
-  await openTab(page, "Plan 2D");
+  await openTab(page, "Plan");
   await page.getByRole("button", { name: "Mode expert", exact: true }).click();
   await expect(
     page.getByRole("status").filter({ hasText: "Mode expert indisponible" }),

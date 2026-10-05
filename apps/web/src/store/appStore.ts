@@ -76,9 +76,14 @@ export function useWorkshop<T>(selector: (s: WorkshopState) => T): T {
 /**
  * Parcours guidé / libre (ADR-0009) : hors du projet, mémorisé dans le navigateur. Au démarrage,
  * un projet repris de l'autosauvegarde ouvre le libre, une première visite le guidé (sauf choix
- * mémorisé) ; chaque projet chargé ensuite applique sa règle d'ouverture (`lastOpened`).
+ * mémorisé) ; chaque projet chargé ensuite applique sa règle d'ouverture (`lastOpened`). Le
+ * parcours guidé n'est pas encore affiché (vague 5) : `guidedAvailable: false` ramène toutes ces
+ * règles au parcours libre.
  */
-export const journeyStore = createJourneyStore(browserStorage(), { hasAutosave: !firstVisit });
+export const journeyStore = createJourneyStore(browserStorage(), {
+  hasAutosave: !firstVisit,
+  guidedAvailable: false,
+});
 
 linkJourneyToProject(appStore, journeyStore);
 

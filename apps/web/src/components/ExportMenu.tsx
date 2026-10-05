@@ -1,11 +1,14 @@
 /**
- * Menu « Exporter » de la barre d'outils : projet JSON, plan SVG / DXF, élévation SVG, liste de
+ * Menu « Exporter » de la barre du haut (bouton primaire « blueprint ») : projet JSON, plan SVG / DXF, élévation SVG, liste de
  * débit CSV, dossiers PDF (complet A4 / A3, sans gabarits), fiche de pose PDF, DXF des pièces,
  * modèle 3D glTF (.glb, calculé dans le worker) et DXF de la pièce sélectionnée. Menu déroulant non modal ; téléchargement direct (Blob + lien).
  */
 import { errorMessage, msg, type Message } from "@blondel/i18n";
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
+import { Download } from "lucide-react";
 import { useMenuPlacement } from "./useMenuPlacement.js";
+import { Corners } from "./ui/Blueprint.js";
+import { Icon } from "./ui/Icon.js";
 import { useT } from "../i18n/useT.js";
 import { downloadFile, downloadFiles } from "../lib/download.js";
 import {
@@ -90,6 +93,8 @@ export function ExportMenu() {
 
   const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
     if (e.key === "Escape" && open) {
+      // Échap consommé ici : ni le panneau libre ni la vue ne le reçoivent.
+      e.preventDefault();
       e.stopPropagation();
       setOpen(false);
       root.current?.querySelector<HTMLButtonElement>("button")?.focus();
@@ -110,13 +115,16 @@ export function ExportMenu() {
     <div className="menu" ref={root} onKeyDown={onKeyDown}>
       <button
         type="button"
+        className="btn btn-primary blueprint topbar__btn"
         aria-haspopup="menu"
         aria-expanded={open}
         aria-controls={menuId}
         disabled={busy}
         onClick={() => setOpen((o) => !o)}
       >
-        {busy ? t.t("ui.export.busy") : t.t("ui.export.menu")}
+        <Corners />
+        <Icon icon={Download} size={16} />
+        {busy ? t.t("ui.export.busy") : t.t("ui.topbar.export")}
       </button>
       {open ? (
         <div

@@ -11,6 +11,7 @@ import {
   describeTasks,
   instrument,
   openApp,
+  openSection,
   overBudget,
   settle,
   structureSelect,
@@ -26,20 +27,23 @@ test(`limons à la française sur le quart tournant : poteau de 100 mm, annulabl
 }) => {
   await openApp(page);
   await applyPreset(page, "Quart tournant à gauche");
+  await openSection(page, "Tracé");
   const jour = page.getByLabel("Jour", { exact: true });
   await expect(jour).toHaveValue("sharp");
   await takeLongTasks(page);
 
   await chooseStructure(page, "wood-housed");
+  await openSection(page, "Tracé");
   await expect(jour).toHaveValue("newel");
   await expect(page.getByLabel("Côté du poteau")).toHaveValue("100");
   await expect(page.locator(".notice")).toContainText("jour vif → poteau de 100 mm");
-  await expect(page.locator(".statusbar__errors")).toHaveCount(0);
+  await expect(page.locator(".figure-line__errors")).toHaveCount(0);
 
   // Une seule entrée d'historique : « Annuler » rend le jour vif et la structure « aucune ».
-  await page.getByRole("button", { name: "Annuler", exact: true }).click();
+  await page.getByRole("button", { name: "Annuler (Ctrl+Z)", exact: true }).click();
   await settle(page);
   await expect(jour).toHaveValue("sharp");
+  await openSection(page, "Structure");
   await expect(structureSelect(page)).toHaveValue("none");
 
   const over = overBudget(await takeLongTasks(page));
@@ -51,6 +55,7 @@ test("profilés sur le quart tournant : poteau élargi décalé vers le jour", a
   await applyPreset(page, "Quart tournant à gauche");
   await takeLongTasks(page);
   await chooseStructure(page, "steel-profile");
+  await openSection(page, "Tracé");
   await expect(page.getByLabel("Jour", { exact: true })).toHaveValue("newel");
   await expect(page.locator(".notice")).toContainText("vers le jour");
   const offset = page.getByLabel("Décalage du poteau vers le jour");

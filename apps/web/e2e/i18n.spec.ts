@@ -1,7 +1,7 @@
 /**
  * Langue de l'interface (ADR-0007) : premier lancement avec un navigateur anglais (`en-US`,
- * **sans** le forçage français d'`openApp`), passage au français par le sélecteur de la barre
- * d'outils, mémorisation au rechargement ; contrôle de conception et export CSV dans la langue.
+ * **sans** le forçage français d'`openApp`), passage au français par le sélecteur du menu ⋯ de
+ * la barre du haut, mémorisation au rechargement ; contrôle de conception et export CSV dans la langue.
  */
 import { readFile } from "node:fs/promises";
 import { expect, test, type Page } from "@playwright/test";
@@ -28,11 +28,23 @@ async function openWithBrowserLanguage(page: Page): Promise<void> {
   await settle(page);
 }
 
-/** Message affiché du contrôle BLONDEL_DTU (liste des contrôles satisfaits dépliée). */
+/** Ouvre le menu ⋯ de la barre du haut (nom accessible selon la langue). */
+async function openMore(page: Page, name: string): Promise<void> {
+  const button = page.getByRole("button", { name, exact: true });
+  if ((await button.getAttribute("aria-expanded")) !== "true") await button.click();
+  await expect(page.getByRole("dialog", { name, exact: true })).toBeVisible();
+}
+
+/**
+ * Message affiché du contrôle BLONDEL_DTU dans l'inspecteur (liste des contrôles satisfaits
+ * dépliée par son lien « … respectées ▸ »).
+ */
 async function blondelRuleText(page: Page): Promise<string> {
-  const panel = page.locator(".compliance");
-  const ok = panel.locator(".sev--ok");
-  if ((await ok.getAttribute("open")) === null) await ok.locator("> summary").click();
+  const panel = page.locator(".inspector-control");
+  if ((await panel.locator(".sev--ok").count()) === 0) {
+    await panel.locator('.control-folds__link[data-fold="ok"]').click();
+  }
+  await expect(panel.locator(".sev--ok")).toHaveAttribute("open", "");
   const item = panel.locator("li", { has: page.locator("code", { hasText: /^BLONDEL_DTU$/ }) });
   await expect(item.first()).toBeVisible();
   return (await item.first().locator(".result__msg").textContent()) ?? "";
@@ -45,10 +57,16 @@ test(`navigateur anglais : interface, contrôle et export en anglais, puis fran�
   await expect(page.locator("html")).toHaveAttribute("lang", "en");
   await takeLongTasks(page);
 
-  // Interface en anglais : barre d'outils, onglets, sélecteur de langue, contrôle de conception.
-  await expect(page.getByRole("button", { name: "Undo", exact: true })).toBeVisible();
-  await expect(page.getByRole("tab", { name: "2D plan", exact: true })).toBeVisible();
-  await expect(page.getByRole("tab", { name: "Bill of materials", exact: true })).toBeVisible();
+  // Interface en anglais : barre du haut, onglets des deux espaces, sélecteur de langue (menu ⋯),
+  // contrôle de conception.
+  await expect(page.getByRole("button", { name: "Undo (Ctrl+Z)", exact: true })).toBeVisible();
+  const views = page.getByRole("tablist", { name: "Views" });
+  await expect(views.getByRole("tab", { name: "Plan", exact: true })).toBeVisible();
+  await page.getByRole("radio", { name: "Fabrication", exact: true }).click();
+  await expect(views.getByRole("tab", { name: "Bill of materials", exact: true })).toBeVisible();
+  await page.getByRole("radio", { name: "Design", exact: true }).click();
+  await expect(views.getByRole("tab", { name: "Plan", exact: true })).toBeVisible();
+  await openMore(page, "More options");
   await expect(page.getByLabel("Language", { exact: true })).toHaveValue("en");
   await expect(page.getByText("Design check", { exact: true }).first()).toBeVisible();
   const english = await blondelRuleText(page);
@@ -70,12 +88,17 @@ test(`navigateur anglais : interface, contrôle et export en anglais, puis fran�
   await settle(page);
 
   // Passage au français par le sélecteur : texte français, html[lang=fr], aucun recalcul lourd.
+  await openMore(page, "More options");
   await page.getByLabel("Language", { exact: true }).selectOption("fr");
   await expect(page.locator("html")).toHaveAttribute("lang", "fr");
   await expect(page.getByRole("toolbar", { name: "Barre d'outils" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Annuler", exact: true })).toBeVisible();
-  await expect(page.getByRole("tab", { name: "Nomenclature", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Annuler (Ctrl+Z)", exact: true })).toBeVisible();
+  await openMore(page, "Plus d'options");
   await expect(page.getByLabel("Langue", { exact: true })).toHaveValue("fr");
+  await page.getByRole("radio", { name: "Fabrication", exact: true }).click();
+  await expect(
+    page.getByRole("tablist", { name: "Vues" }).getByRole("tab", { name: "Nomenclature" }),
+  ).toBeVisible();
   await expect(page.getByText("Contrôle de conception", { exact: true }).first()).toBeVisible();
   const french = await blondelRuleText(page);
   expect(french).not.toBe(english);
@@ -90,6 +113,10 @@ test(`navigateur anglais : interface, contrôle et export en anglais, puis fran�
   await page.reload();
   await expect(page.getByRole("toolbar", { name: "Barre d'outils" })).toBeVisible();
   await expect(page.locator("html")).toHaveAttribute("lang", "fr");
+  await openMore(page, "Plus d'options");
   await expect(page.getByLabel("Langue", { exact: true })).toHaveValue("fr");
-  await expect(page.getByRole("tab", { name: "Plan 2D", exact: true })).toBeVisible();
+  await page.getByRole("radio", { name: "Conception", exact: true }).click();
+  await expect(
+    page.getByRole("tablist", { name: "Vues" }).getByRole("tab", { name: "Plan", exact: true }),
+  ).toBeVisible();
 });

@@ -60,9 +60,15 @@
   /* Angles vifs partout. */
   --radius: 0;
 
-  /* États du bouton primaire, tirés de la ramp (Industry : survol 600, appui 700). */
-  --accent-hover: var(--color-accent-600);
-  --accent-pressed: var(--color-accent-700);
+  /* Fonds pleins d'accent qui portent du texte (bouton primaire, option active d'un segmenté,
+     onglet choisi, bouton pressé ; ADR-0009 point 11) : pas 700 de la ramp au lieu de l'accent
+     Industry (#5980a6, 3,7:1 sous le texte), survol et appui un et deux pas plus profonds.
+     Le texte posé dessus est `--accent-text` (≥ 4,5:1 dans les trois thèmes, styles.test.ts).
+     Ramps inversées en sombre : la même référence donne #b5d9fd, puis #d6ebff et #eef6ff.
+     `--accent` reste pour les filets, traits et teintes légères. */
+  --accent-fill: var(--color-accent-700);
+  --accent-fill-hover: var(--color-accent-800);
+  --accent-fill-pressed: var(--color-accent-900);
   /* Texte en accent (liens, boutons « ghost ») : pas profond, lisible en corps de texte. */
   --accent-ink: var(--color-accent-700);
 
@@ -94,6 +100,9 @@
   --sev-conseil: var(--fn-advice);
   --ok: var(--fn-ok);
   --opening: var(--fn-opening);
+
+  /* Fond du cadre de la vue (maquette 1b : blanc en clair). */
+  --view-bg: #ffffff;
 
   color-scheme: light;
 }
@@ -132,10 +141,8 @@
     --shadow-md: 0 3px 10px color-mix(in srgb, #000000 45%, transparent);
     --shadow-lg: 0 12px 32px color-mix(in srgb, #000000 55%, transparent);
 
-    --accent-hover: var(--color-accent-700);
-    --accent-pressed: var(--color-accent-800);
-
     --panel: #202123;
+    --view-bg: #111214;
     --muted: var(--color-neutral-600);
     --control-border: var(--color-neutral-400);
 
@@ -174,10 +181,8 @@
   --shadow-md: 0 3px 10px color-mix(in srgb, #000000 45%, transparent);
   --shadow-lg: 0 12px 32px color-mix(in srgb, #000000 55%, transparent);
 
-  --accent-hover: var(--color-accent-700);
-  --accent-pressed: var(--color-accent-800);
-
   --panel: #202123;
+  --view-bg: #111214;
   --muted: var(--color-neutral-600);
   --control-border: var(--color-neutral-400);
 
@@ -314,157 +319,85 @@ a {
 
 /* ------------------------------------------------------------ Mise en page */
 
+/*
+ * Parcours libre (maquette 1b) : barre du haut, puis rail (76 px), panneau unique (330 px, s'il
+ * est ouvert), vue centrale et inspecteur (340 px). En Fabrication, ni rail ni panneau. Les
+ * colonnes latérales restent fixes sur grand écran ; la vue prend la place restante.
+ */
 .app {
   display: grid;
   height: 100%;
-  grid-template-columns: minmax(260px, 320px) 1fr minmax(260px, 340px);
-  grid-template-rows: auto 1fr auto;
+  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-columns: 76px minmax(0, 1fr) 340px;
   grid-template-areas:
-    "toolbar toolbar toolbar"
-    "left center right"
-    "status status status";
+    "topbar topbar topbar"
+    "rail work inspector";
 }
 
-.toolbar {
-  grid-area: toolbar;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--gap);
-  padding: 0.5rem 0.75rem;
-  background: var(--panel);
-  border-bottom: 1px solid var(--border);
+.app[data-panel="open"] {
+  grid-template-columns: 76px 330px minmax(0, 1fr) 340px;
+  grid-template-areas:
+    "topbar topbar topbar topbar"
+    "rail panel work inspector";
 }
 
-.brand {
-  font-size: 1.05rem;
-  letter-spacing: 0.02em;
+.app[data-workspace="fabrication"] {
+  grid-template-columns: minmax(0, 1fr) 340px;
+  grid-template-areas:
+    "topbar topbar"
+    "work inspector";
 }
 
-.toolbar__group {
-  display: flex;
-  align-items: center;
-  gap: 0.35rem;
+.app > .topbar {
+  grid-area: topbar;
+  min-width: 0;
 }
 
-.toolbar__hint {
-  flex: 1 1 16rem;
-  max-width: 28rem;
-  font-size: 0.8rem;
-  line-height: 1.2;
-}
-
-.toolbar__name .field {
-  flex-direction: row;
-  align-items: center;
-  gap: 0.35rem;
-  margin: 0;
-}
-
-.left,
-.right {
-  /* Bloc conteneur des descendants en position absolue (.visually-hidden) :
-     sinon ils se placent par rapport à la page et l'agrandissent. */
+/* Rail, panneau et inspecteur défilent seuls : bloc conteneur de leurs descendants en position
+   absolue (`.visually-hidden`), sans quoi ceux-ci agrandiraient le document. */
+.app > .rail {
+  grid-area: rail;
   position: relative;
-  overflow: auto;
-  background: var(--panel);
-  padding: 0.5rem 0.75rem;
-}
-
-.left {
-  grid-area: left;
-  overflow-x: hidden;
-  border-right: 1px solid var(--border);
-}
-
-.right {
-  grid-area: right;
-  border-left: 1px solid var(--border);
-}
-
-.center {
-  grid-area: center;
-  display: flex;
-  flex-direction: column;
   min-width: 0;
   min-height: 0;
 }
 
-.view {
-  flex: 1;
+.app > .free-panel {
+  grid-area: panel;
+  min-width: 0;
   min-height: 0;
+}
+
+.app > .workarea {
+  grid-area: work;
+}
+
+.app > .inspector {
+  grid-area: inspector;
   position: relative;
-  padding: 0.5rem;
+  min-width: 0;
+  min-height: 0;
 }
 
-.statusbar {
-  grid-area: status;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--gap);
-  padding: 0.3rem 0.75rem;
-  background: var(--panel);
-  border-top: 1px solid var(--border);
-  font-size: 0.85rem;
-}
-
-.statusbar dl {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 1.25rem;
-  margin: 0;
-}
-
-.statusbar__item {
-  display: flex;
-  gap: 0.35rem;
-}
-
-.statusbar dt {
-  color: var(--muted);
-}
-
-.statusbar dd {
-  margin: 0;
-  font-variant-numeric: tabular-nums;
-}
-
-.statusbar__errors {
-  color: var(--danger);
-}
-
-@media (max-width: 900px) {
-  .app {
-    grid-template-columns: 1fr;
-    grid-template-rows: auto auto 60vh auto auto;
-    grid-template-areas: "toolbar" "left" "center" "right" "status";
+/* Repli minimal des petits écrans (le vrai repli est en vague 6) : une colonne, zones empilées,
+   aucun défilement horizontal du document. */
+@media (max-width: 1099px) {
+  .app,
+  .app[data-panel="open"],
+  .app[data-workspace="fabrication"] {
     height: auto;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: none;
+    grid-template-areas: "topbar" "rail" "panel" "work" "inspector";
+    overflow-x: clip;
+  }
+
+  .app > .workarea {
+    min-height: 60vh;
   }
 }
 
 /* ------------------------------------------------------------ Champs */
-
-.section {
-  border-bottom: 1px solid var(--border);
-  padding: 0.4rem 0;
-}
-
-.section summary {
-  cursor: pointer;
-  list-style-position: inside;
-}
-
-.section summary h2 {
-  display: inline;
-}
-
-.section__body {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  padding: 0.5rem 0 0.25rem;
-}
 
 fieldset {
   border: 1px solid var(--border);
@@ -576,6 +509,18 @@ legend {
   font-size: 0.85rem;
 }
 
+/* Case suivie de sa description (contextes du contrôle), alignée sur le libellé. */
+.check-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+.check-field__hint {
+  padding-left: 1.45rem;
+  text-wrap: pretty;
+}
+
 .leg {
   display: flex;
   flex-direction: column;
@@ -616,14 +561,24 @@ legend {
 }
 
 /* Application installable : encart flottant, hors de la grille de mise en page. */
+/* Avis hors ligne : au-dessus de la ligne de chiffres de la vue centrale, à gauche de
+   l'inspecteur (340 px), pour ne jamais couvrir la mention indicative de son pied. */
 .pwa-prompt {
   position: fixed;
-  right: 1rem;
-  bottom: 2.5rem;
+  right: calc(340px + 1rem);
+  bottom: 4rem;
   z-index: 50;
-  max-width: min(28rem, calc(100vw - 2rem));
+  max-width: min(28rem, calc(100vw - 340px - 2rem));
   background: var(--panel);
   box-shadow: var(--shadow-md);
+}
+
+@media (max-width: 1099px) {
+  .pwa-prompt {
+    right: 1rem;
+    bottom: 1rem;
+    max-width: min(28rem, calc(100vw - 2rem));
+  }
 }
 
 .badge {
@@ -637,26 +592,7 @@ legend {
   color: var(--warn);
 }
 
-/* ------------------------------------------------------------ Onglets et vues */
-
-.tabs {
-  display: flex;
-  gap: 0.25rem;
-  padding: 0.5rem 0.5rem 0;
-  border-bottom: 1px solid var(--border);
-}
-
-.tabs [role="tab"] {
-  border-bottom-left-radius: 0;
-  border-bottom-right-radius: 0;
-  border-bottom: none;
-}
-
-.tabs [role="tab"][aria-selected="true"] {
-  background: var(--accent);
-  color: var(--accent-text);
-  border-color: var(--accent);
-}
+/* ------------------------------------------------------------ Vues */
 
 .empty-view {
   padding: 1rem;
@@ -676,7 +612,7 @@ legend {
 
 .viewer3d {
   position: absolute;
-  inset: 0.5rem;
+  inset: 0;
   border-radius: var(--radius);
   overflow: hidden;
   background: linear-gradient(var(--panel-2), var(--bg));
@@ -697,28 +633,11 @@ legend {
 
 /* ------------------------------------------------------------ Contrôle de conception */
 
-.compliance {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-}
-
+/* Listes repliées de l'inspecteur (non évaluées, respectées, remarques, surcharges). */
 .sev summary {
   cursor: pointer;
   font-weight: 600;
   padding: 0.2rem 0;
-}
-
-.sev--bloquant summary {
-  color: var(--sev-bloquant);
-}
-
-.sev--avertissement summary {
-  color: var(--sev-avertissement);
-}
-
-.sev--conseil summary {
-  color: var(--sev-conseil);
 }
 
 .sev--ok summary {
@@ -985,13 +904,6 @@ legend {
   border: 0;
 }
 
-/* ------------------------------------------------------------ Barre d'état : calcul en cours */
-
-.statusbar__pending {
-  color: var(--muted);
-  font-style: italic;
-}
-
 /* ------------------------------------------------------------ 3D : contrôles sur les pièces */
 
 .viewer3d__controls {
@@ -1036,14 +948,6 @@ legend {
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
-  margin-top: 1rem;
-  padding-top: 0.75rem;
-  border-top: 1px solid var(--border);
-}
-
-.precheck h2 {
-  margin: 0;
-  font-size: 1rem;
 }
 
 .precheck p {
@@ -1186,12 +1090,17 @@ legend {
   display: flex;
   flex-wrap: wrap;
   gap: 0.4rem 1.25rem;
-  padding: 0.35rem 0.75rem;
+  padding: var(--space-2) var(--space-4);
   background: var(--panel);
-  border-bottom: 1px solid var(--border);
-  font-size: 0.85rem;
+  border: 1px solid var(--border);
+  font-size: 12.5px;
   max-height: 30%;
+  min-width: 0;
   overflow: auto;
+}
+
+.errors-bar:has(.errors-bar__errors) {
+  border-left: 3px solid var(--danger);
 }
 
 .errors-bar ul {
@@ -1345,22 +1254,23 @@ fieldset.helical {
   border-color: var(--control-border);
 }
 
-/* Le seul objet plein de l'interface : fond accent, texte sur le fond de page. */
+/* Le seul objet plein de l'interface : fond plein d'accent (--accent-fill, ADR-0009 point 11),
+   texte sur le fond de page. */
 .btn-primary,
 .btn-primary.blueprint {
-  background: var(--accent);
-  border-color: var(--accent);
+  background: var(--accent-fill);
+  border-color: var(--accent-fill);
   color: var(--accent-text);
 }
 
 .btn-primary:hover:not(:disabled) {
-  background: var(--accent-hover);
-  border-color: var(--accent-hover);
+  background: var(--accent-fill-hover);
+  border-color: var(--accent-fill-hover);
 }
 
 .btn-primary:active:not(:disabled) {
-  background: var(--accent-pressed);
-  border-color: var(--accent-pressed);
+  background: var(--accent-fill-pressed);
+  border-color: var(--accent-fill-pressed);
 }
 
 .btn-ghost {
@@ -1418,16 +1328,16 @@ fieldset.helical {
 }
 
 .seg .seg-opt:is([aria-checked="true"], [aria-selected="true"], [aria-pressed="true"]) {
-  background: var(--accent);
+  background: var(--accent-fill);
   color: var(--accent-text);
 }
 
 .seg .seg-opt:is([aria-checked="true"], [aria-selected="true"], [aria-pressed="true"]):hover {
-  background: var(--accent-hover);
+  background: var(--accent-fill-hover);
 }
 
 .seg .seg-opt:is([aria-checked="true"], [aria-selected="true"], [aria-pressed="true"]):active {
-  background: var(--accent-pressed);
+  background: var(--accent-fill-pressed);
 }
 
 /* Le contour de focus passe au-dessus des options voisines. */

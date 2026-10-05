@@ -4,17 +4,20 @@
  * (saisie refusée puis rétablie à la perte de focus : champ valide, message transitoire).
  */
 import { expect, test } from "@playwright/test";
-import { commitField, openApp, settle } from "./support.js";
+import { commitField, openApp, openProjectMenu, openSection, settle, viewTab } from "./support.js";
 
 test("assistant : focus piégé dans la fenêtre, rendu à l'ouverture, Ctrl+Z sans effet", async ({
   page,
 }) => {
   await openApp(page);
+  await openSection(page, "Site");
   const h = page.getByLabel("Hauteur à monter H");
   await commitField(page, h, "2800");
 
-  const opener = page.getByRole("button", { name: "Assistant…" });
-  await opener.click();
+  // L'assistant s'ouvre depuis le menu du projet ; le focus revient au bouton du projet.
+  const menu = await openProjectMenu(page);
+  await menu.getByRole("button", { name: "Assistant…" }).click();
+  const opener = page.locator(".topbar__project");
   const dialog = page.getByRole("dialog", { name: "Assistant d'initialisation" });
   await expect(dialog).toBeVisible();
   const close = dialog.getByRole("button", { name: "Fermer l'assistant" });
@@ -33,7 +36,7 @@ test("assistant : focus piégé dans la fenêtre, rendu à l'ouverture, Ctrl+Z s
   await page.keyboard.press("Tab");
   await expect(close).toBeFocused();
   // Arrière-plan inerte.
-  await expect(page.locator(".app > .toolbar")).toHaveAttribute("inert", "");
+  await expect(page.locator(".app > .topbar")).toHaveAttribute("inert", "");
 
   // Ctrl+Z pendant la fenêtre : le projet ne change pas derrière elle.
   await page.keyboard.press("Control+z");
@@ -45,9 +48,9 @@ test("assistant : focus piégé dans la fenêtre, rendu à l'ouverture, Ctrl+Z s
   await expect(dialog).toHaveCount(0);
   await expect(opener).toBeFocused();
   await expect(h).toHaveValue("2800");
-  await expect(page.locator(".app > .toolbar")).not.toHaveAttribute("inert", "");
+  await expect(page.locator(".app > .topbar")).not.toHaveAttribute("inert", "");
   // Hors de la fenêtre, Ctrl+Z annule de nouveau.
-  await page.getByRole("tab", { name: "Plan 2D", exact: true }).focus();
+  await viewTab(page, "Plan").focus();
   await page.keyboard.press("Control+z");
   await settle(page);
   await expect(h).toHaveValue("2700");
@@ -57,6 +60,7 @@ test("champ numérique : saisie refusée puis rétablie au blur, champ non marqu
   page,
 }) => {
   await openApp(page);
+  await openSection(page, "Site");
   const h = page.getByLabel("Hauteur à monter H");
   await expect(h).toHaveValue("2700");
   await h.fill("abc");

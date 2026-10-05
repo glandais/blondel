@@ -3,10 +3,11 @@
  * tournant bois (limons à la française) à poteau d'angle avec garde-corps, sans contrôle
  * bloquant, puis télécharger le dossier PDF et le plan DXF, en moins de 20 interactions.
  *
- * Interactions comptées (voir `Interactions`, journal joint au rapport) : choix et application
- * du préréglage (2), jour « Poteau » (1), structure (1), ouverture du panneau « Garde-corps »
- * (1), activation des garde-corps (1), menu « Exporter » et entrée PDF (2), menu et entrée DXF
- * (2) : 10. Les côtés restent en « automatique » (QUESTIONS D5) : le préréglage n'a pas de mur,
+ * Interactions comptées (voir `Interactions`, journal joint au rapport) : menu du projet, choix
+ * et application du préréglage (3), section « Tracé » et jour « Poteau » (2), section
+ * « Structure » et structure (2), section « Garde-corps » (1), activation des garde-corps (1),
+ * espace Fabrication et onglet « Nomenclature » (2), menu « Exporter » et entrée PDF (2), menu
+ * et entrée DXF (2) : 15. Les côtés restent en « automatique » (QUESTIONS D5) : le préréglage n'a pas de mur,
  * les deux côtés sont vides et reçoivent un garde-corps ; le côté extérieur n'est plus forcé
  * sur « Mur ».
  */
@@ -18,6 +19,8 @@ import {
   blockingCount,
   chooseStructure,
   openApp,
+  openSection,
+  openTab,
   settle,
 } from "./support.js";
 
@@ -48,6 +51,7 @@ test("critère n° 1 : quart tournant bois à poteau avec garde-corps, PDF et DX
 
   // Tracé : quart tournant à gauche (préréglage), jour à poteau d'angle.
   await applyPreset(page, "Quart tournant à gauche", ix);
+  await openSection(page, "Tracé", ix);
   await page.getByLabel("Jour", { exact: true }).selectOption("newel");
   ix.count("jour Poteau");
   await settle(page);
@@ -58,8 +62,7 @@ test("critère n° 1 : quart tournant bois à poteau avec garde-corps, PDF et DX
 
   // Garde-corps : côtés automatiques (aucun mur au préréglage : deux côtés vides, garde-corps
   // des deux côtés).
-  await page.locator("summary", { hasText: "Garde-corps" }).click();
-  ix.count("panneau Garde-corps");
+  await openSection(page, "Garde-corps", ix);
   await page.getByLabel("Garde-corps et mains courantes").check();
   ix.count("garde-corps activés");
   await settle(page);
@@ -68,14 +71,14 @@ test("critère n° 1 : quart tournant bois à poteau avec garde-corps, PDF et DX
   // Conception conforme : aucun contrôle bloquant, pièces de garde-corps dans la nomenclature.
   const blocking = await blockingCount(page);
   const listed = await page
-    .locator(".compliance .sev--bloquant code")
+    .locator('.rule-card[data-severity="bloquant"] code')
     .allTextContents()
     .catch(() => []);
   expect(blocking, `contrôles bloquants : ${listed.join(", ")}`).toBe(0);
-  await expect(page.locator(".statusbar__errors")).toHaveCount(0);
-  await page.getByRole("tab", { name: "Nomenclature", exact: true }).click();
-  await expect(page.getByRole("tabpanel")).toContainText(/[Bb]alustre/);
-  await expect(page.getByRole("tabpanel")).toContainText(/[Pp]oteau/);
+  await expect(page.locator(".figure-line__errors")).toHaveCount(0);
+  await openTab(page, "Nomenclature", ix);
+  await expect(page.locator("#view-panel")).toContainText(/[Bb]alustre/);
+  await expect(page.locator("#view-panel")).toContainText(/[Pp]oteau/);
 
   // Exports : dossier PDF (worker de calcul) et plan coté DXF 2007.
   const pdf = await download(page, /^Dossier PDF complet \(gabarits 1:1 en A4\)/, ix);

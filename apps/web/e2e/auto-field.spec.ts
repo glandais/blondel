@@ -5,7 +5,7 @@
  * la valeur calculée pour l'imposer, « Auto » rend la main au calcul.
  */
 import { expect, test } from "@playwright/test";
-import { applyPreset, instrument, openApp, settle } from "./support.js";
+import { applyPreset, instrument, openApp, openSection, settle } from "./support.js";
 
 test.beforeEach(async ({ page }) => {
   await instrument(page);
@@ -16,6 +16,7 @@ test("nombre de hauteurs : Auto, Imposer, saisie, Échap, annuler, retour à Aut
 }) => {
   await openApp(page);
   await applyPreset(page, "Escalier droit");
+  await openSection(page, "Découpage");
   const label = "Nombre de hauteurs n";
   const group = page.getByRole("group", { name: label });
   const auto = group.getByRole("button", { name: `${label} : automatique` });
@@ -24,7 +25,7 @@ test("nombre de hauteurs : Auto, Imposer, saisie, Échap, annuler, retour à Aut
   const computedButton = page.getByRole("button", {
     name: new RegExp(`^${label} : imposer \\d+$`),
   });
-  const undo = page.getByRole("button", { name: "Annuler", exact: true });
+  const undo = page.getByRole("button", { name: "Annuler (Ctrl+Z)", exact: true });
 
   // Mode Auto : valeur calculée par le cœur affichée (« n hauteurs calculées »), aucun champ.
   await expect(auto).toHaveAttribute("aria-pressed", "true");

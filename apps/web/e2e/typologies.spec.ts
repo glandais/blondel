@@ -10,6 +10,7 @@ import {
   describeTasks,
   instrument,
   openApp,
+  openSection,
   overBudget,
   settle,
   takeLongTasks,
@@ -27,21 +28,22 @@ test(`S / Z : préréglage, enchaînement des tournants, sans bloquant (tâches 
   await openApp(page);
   await takeLongTasks(page);
   await applyPreset(page, "Deux quarts tournants opposés (S)");
+  await openSection(page, "Tracé");
   await expect(typology(page)).toContainText("Deux quarts tournants opposés (S / Z");
   const sequence = page.getByLabel("Enchaînement des tournants 1 et 2");
   await expect(sequence).toHaveValue("opposite");
   await expect(page.locator(".typology__note")).toContainText("le jour change de côté");
-  await expect(page.locator(".statusbar__errors")).toHaveCount(0);
+  await expect(page.locator(".figure-line__errors")).toHaveCount(0);
 
   // S → U : le second tournant prend le sens du premier ; « Annuler » revient au S.
   await sequence.selectOption("same");
   await settle(page);
   await expect(typology(page)).toContainText("(U)");
   await expect(page.locator(".typology__note")).toHaveCount(0);
-  await page.getByRole("button", { name: "Annuler", exact: true }).click();
+  await page.getByRole("button", { name: "Annuler (Ctrl+Z)", exact: true }).click();
   await settle(page);
   await expect(sequence).toHaveValue("opposite");
-  await expect(page.locator(".statusbar__errors")).toHaveCount(0);
+  await expect(page.locator(".figure-line__errors")).toHaveCount(0);
 
   const over = overBudget(await takeLongTasks(page));
   expect(describeTasks(over), `tâches > ${LONG_TASK_BUDGET_MS} ms`).toBe("");
@@ -52,6 +54,7 @@ test(`M2 et M6 : curseurs bornés, un geste = une entrée d'historique (tâches 
 }) => {
   await openApp(page);
   await applyPreset(page, "Quart tournant à gauche");
+  await openSection(page, "Balancement");
   await takeLongTasks(page);
   const method = page.getByLabel("Méthode", { exact: true });
   for (const m of ["M0", "M1", "M2", "M3", "M6"]) {
@@ -74,8 +77,8 @@ test(`M2 et M6 : curseurs bornés, un geste = une entrée d'historique (tâches 
   for (let i = 0; i < 3; i++) await alpha.press("ArrowRight");
   await settle(page);
   await expect(alpha).toHaveValue("21.5");
-  await expect(page.locator(".statusbar__errors")).toHaveCount(0);
-  await page.getByRole("button", { name: "Annuler", exact: true }).click();
+  await expect(page.locator(".figure-line__errors")).toHaveCount(0);
+  await page.getByRole("button", { name: "Annuler (Ctrl+Z)", exact: true }).click();
   await settle(page);
   await expect(alpha).toHaveValue("21");
   // Glissement à la souris : plusieurs valeurs, une seule entrée d'historique.
@@ -88,7 +91,7 @@ test(`M2 et M6 : curseurs bornés, un geste = une entrée d'historique (tâches 
   await page.mouse.up();
   await settle(page);
   expect(await alpha.inputValue()).not.toBe("21");
-  await page.getByRole("button", { name: "Annuler", exact: true }).click();
+  await page.getByRole("button", { name: "Annuler (Ctrl+Z)", exact: true }).click();
   await settle(page);
   await expect(alpha).toHaveValue("21");
   // Fin de course : α au maximum du curseur, découpage toujours valide.
@@ -96,7 +99,7 @@ test(`M2 et M6 : curseurs bornés, un geste = une entrée d'historique (tâches 
   await alpha.press("End");
   await settle(page);
   expect(Number(await alpha.inputValue())).toBeLessThan(90);
-  await expect(page.locator(".statusbar__errors")).toHaveCount(0);
+  await expect(page.locator(".figure-line__errors")).toHaveCount(0);
   await page.getByRole("button", { name: "Angle α de la herse : valeur par défaut" }).click();
   await settle(page);
   await expect(alpha).toHaveValue("20");
@@ -113,7 +116,7 @@ test(`M2 et M6 : curseurs bornés, un geste = une entrée d'historique (tâches 
   await reach.press("ArrowRight");
   await settle(page);
   await expect(reach).toHaveValue("2.1");
-  await expect(page.locator(".statusbar__errors")).toHaveCount(0);
+  await expect(page.locator(".figure-line__errors")).toHaveCount(0);
 
   const over = overBudget(await takeLongTasks(page));
   expect(describeTasks(over), `tâches > ${LONG_TASK_BUDGET_MS} ms`).toBe("");

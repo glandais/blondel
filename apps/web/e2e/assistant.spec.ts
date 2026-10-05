@@ -4,9 +4,9 @@
  * garde-corps, sans contrôle bloquant, puis télécharger le dossier PDF et le plan DXF, en moins
  * de 2 minutes, mesurées en nombre d'interactions (journal joint au rapport).
  *
- * Interactions comptées : ouverture de l'assistant (1), longueur et largeur de trémie (2),
+ * Interactions comptées : menu du projet et ouverture de l'assistant (2), longueur et largeur de trémie (2),
  * structure visée (1), typologie « Quart tournant » (1), emmarchement E = 800 (1), « Proposer »
- * (1), « Choisir » (1), menu « Exporter » et PDF (2), menu et DXF (2) : 12. H = 2 700 et dalle = 200 sont repris du
+ * (1), « Choisir » (1), menu « Exporter » et PDF (2), menu et DXF (2) : 13. H = 2 700 et dalle = 200 sont repris du
  * projet de départ (vérifiés, non comptés).
  */
 import { expect, test, type Page } from "@playwright/test";
@@ -17,6 +17,9 @@ import {
   describeTasks,
   instrument,
   openApp,
+  openProjectMenu,
+  openSection,
+  openTab,
   overBudget,
   settle,
   takeLongTasks,
@@ -54,6 +57,7 @@ test("critère n° 1 par l'assistant : quart tournant bois conforme, PDF et DXF"
   await takeLongTasks(page);
   const t0 = Date.now();
 
+  await openProjectMenu(page, ix);
   await page.getByRole("button", { name: "Assistant…" }).click();
   ix.count("Assistant…");
   const d = dialog(page);
@@ -98,14 +102,17 @@ test("critère n° 1 par l'assistant : quart tournant bois conforme, PDF et DXF"
   const designMs = Date.now() - t0;
 
   // Projet retenu : limons à la française, poteau d'angle, garde-corps, sans bloquant.
-  await expect(page.getByLabel("Structure", { exact: true })).toHaveValue("wood-housed");
+  await openSection(page, "Structure");
+  const structure = page.getByRole("combobox", { name: "Structure", exact: true });
+  await expect(structure).toHaveValue("wood-housed");
+  await openSection(page, "Tracé");
   await expect(page.getByLabel("Jour", { exact: true })).toHaveValue("newel");
   const blocking = await blockingCount(page);
   expect(blocking).toBe(0);
-  await expect(page.locator(".statusbar__errors")).toHaveCount(0);
-  await page.getByRole("tab", { name: "Nomenclature", exact: true }).click();
-  await expect(page.getByRole("tabpanel")).toContainText(/[Bb]alustre/);
-  await expect(page.getByRole("tabpanel")).toContainText(/[Pp]oteau/);
+  await expect(page.locator(".figure-line__errors")).toHaveCount(0);
+  await openTab(page, "Nomenclature");
+  await expect(page.locator("#view-panel")).toContainText(/[Bb]alustre/);
+  await expect(page.locator("#view-panel")).toContainText(/[Pp]oteau/);
 
   const pdf = await download(page, /^Dossier PDF complet \(gabarits 1:1 en A4\)/, ix);
   expect(pdf.suggestedFilename()).toMatch(/\.pdf$/);
@@ -114,9 +121,10 @@ test("critère n° 1 par l'assistant : quart tournant bois conforme, PDF et DXF"
   const totalMs = Date.now() - t0;
 
   // « Annuler » revient au projet de départ (le choix est une seule entrée d'historique).
-  await page.getByRole("button", { name: "Annuler", exact: true }).click();
+  await page.getByRole("button", { name: "Annuler (Ctrl+Z)", exact: true }).click();
   await settle(page);
-  await expect(page.getByLabel("Structure", { exact: true })).not.toHaveValue("wood-housed");
+  await openSection(page, "Structure");
+  await expect(structure).not.toHaveValue("wood-housed");
 
   const tasks = await takeLongTasks(page);
   const over = overBudget(tasks);
@@ -165,13 +173,14 @@ test("accueil, annulation de la recherche, fermeture", async ({ page }) => {
   await expect(d.locator(".assistant__summary")).toBeVisible({ timeout: 30_000 });
   await page.keyboard.press("Escape");
   await expect(d).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "Annuler", exact: true })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Annuler (Ctrl+Z)", exact: true })).toBeDisabled();
 });
 
 test("variantes : repliées sous la carte de chaque forme, avec croquis ; liste à plat sur demande", async ({
   page,
 }) => {
   await openApp(page);
+  await openProjectMenu(page);
   await page.getByRole("button", { name: "Assistant…" }).click();
   const d = dialog(page);
   await d.getByLabel("Longueur de trémie (X)").fill("2800");
@@ -219,5 +228,5 @@ test("variantes : repliées sous la carte de chaque forme, avec croquis ; liste 
     .click();
   await expect(d).toHaveCount(0);
   await settle(page);
-  await expect(page.getByRole("button", { name: "Annuler", exact: true })).toBeEnabled();
+  await expect(page.getByRole("button", { name: "Annuler (Ctrl+Z)", exact: true })).toBeEnabled();
 });

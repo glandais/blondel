@@ -132,3 +132,36 @@ export function modelNotes(model: Model | null | undefined): readonly Message[] 
   const all = [...model.stepping.notes, ...(model.notes ?? []), ...(model.compliance.notes ?? [])];
   return all.filter((m, i) => all.findIndex((o) => messageEquals(o, m)) === i);
 }
+
+/** Comptes du contrôle par statut (cellules de l'inspecteur, badge « Contrôle »). */
+export interface ControlCounts {
+  readonly bloquant: number;
+  readonly avertissement: number;
+  readonly conseil: number;
+  /** Règles respectées. */
+  readonly ok: number;
+  readonly notEvaluated: number;
+}
+
+/** Comptes des groupes de `groupResults` (dénombrement des résultats du cœur, sans évaluation). */
+export function controlCounts(groups: ComplianceGroups): ControlCounts {
+  const of = (s: Severity): number =>
+    groups.violations.find((v) => v.severity === s)?.results.length ?? 0;
+  return {
+    bloquant: of("bloquant"),
+    avertissement: of("avertissement"),
+    conseil: of("conseil"),
+    ok: groups.passed.length,
+    notEvaluated: groups.notEvaluated.length,
+  };
+}
+
+/** Sévérité effective la plus haute parmi les violations ; `null` sans violation. */
+export function highestSeverity(groups: ComplianceGroups): Severity | null {
+  return groups.violations.find((v) => v.results.length > 0)?.severity ?? null;
+}
+
+/** Violations dans l'ordre bloquant → avertissement → conseil (une carte par résultat). */
+export function orderedViolations(groups: ComplianceGroups): readonly RuleResult[] {
+  return groups.violations.flatMap((v) => v.results);
+}

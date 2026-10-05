@@ -25,6 +25,12 @@ import type { ProjectOrigin, ProjectStore } from "./projectStore.js";
 export const JOURNEY_KEY = "blondel.ui.journey";
 
 export interface JourneyState extends JourneyPrefs {
+  /**
+   * Transitoire, jamais mémorisé : le panneau libre vient d'être ouvert par la bascule depuis le
+   * guidé (note « Ouvert sur la section où vous étiez… »). Remis à faux par tout événement du
+   * panneau.
+   */
+  readonly freePanelFromGuided: boolean;
   /** Change de parcours (panneau ou étape correspondants, `switchJourney`). */
   setJourney(journey: Journey): void;
   /** Va à une étape du guidé (marquée comme vue, espace de l'étape : `goToStep`). */
@@ -44,6 +50,12 @@ export interface JourneyState extends JourneyPrefs {
 export interface JourneyStoreOptions {
   /** Un projet est repris de l'autosauvegarde (sinon : première visite). */
   readonly hasAutosave: boolean;
+  /**
+   * Parcours guidé disponible (vrai par défaut). Faux tant qu'il n'est pas affiché (vague 2) :
+   * toute transition qui y mènerait (démarrage, préférence mémorisée, démo, assistant,
+   * `setJourney("guided")`) donne le libre, sans ouvrir de panneau.
+   */
+  readonly guidedAvailable?: boolean;
 }
 
 /** Préférences mémorisées (vides si absentes, illisibles ou stockage indisponible). */
@@ -72,19 +84,32 @@ export function createJourneyStore(
   options: JourneyStoreOptions,
 ): StoreApi<JourneyState> {
   const stored = loadPrefs(storage);
+  const guidedAvailable = options.guidedAvailable ?? true;
   const start: JourneyPrefs = {
     ...DEFAULT_JOURNEY_PREFS,
     ...stored,
     journey: initialJourney({
       remembered: stored.journey ?? null,
       hasAutosave: options.hasAutosave,
+      guidedAvailable,
     }),
   };
   const store = createStore<JourneyState>()((set, get) => {
     const prefs = (): JourneyPrefs => prefsOf(get());
     return {
       ...start,
-      setJourney: (journey) => set(switchJourney(prefs(), journey)),
+      freePanelFromGuided: false,
+      setJourney: (journey) => {
+        const before = prefs();
+        const next = switchJourney(before, journey, guidedAvailable);
+        if (next === before) return;
+        set({
+          ...next,
+          // Guidé → libre ouvre le panneau de l'étape (sauf étape 7 : Fabrication).
+          freePanelFromGuided:
+            before.journey === "guided" && next.journey === "free" && next.workspace === "design",
+        });
+      },
       setGuidedStep: (step) => set(goToStep(prefs(), step)),
       markStepVisited: (step) => {
         if (get().visitedSteps.has(step)) return;
@@ -92,14 +117,14 @@ export function createJourneyStore(
       },
       panelEvent: (e) => {
         const { freePanel, freePanelPinned } = get();
-        set(panelAfter({ freePanel, freePanelPinned }, e));
+        set({ ...panelAfter({ freePanel, freePanelPinned }, e), freePanelFromGuided: false });
       },
-      openFreePanel: (section) => set({ freePanel: section }),
-      closeFreePanel: () => set({ freePanel: null }),
+      openFreePanel: (section) => set({ freePanel: section, freePanelFromGuided: false }),
+      closeFreePanel: () => set({ freePanel: null, freePanelFromGuided: false }),
       setFreePanelPinned: (freePanelPinned) => set({ freePanelPinned }),
       setWorkspace: (workspace) => set({ workspace }),
       dismissFreeJourneyHint: () => set({ hintFreeJourneyDismissed: true }),
-      applyOpening: (origin) => set(journeyAfterOpening(origin, prefs())),
+      applyOpening: (origin) => set(journeyAfterOpening(origin, prefs(), guidedAvailable)),
     };
   });
 
@@ -112,13 +137,24 @@ export function createJourneyStore(
         // stockage inaccessible : préférences gardées en mémoire seulement
       }
     };
-    let last = serializePrefs(start);
+    // Sans parcours guidé, le « libre » affiché est un repli, pas un choix : on mémorise le
+    // parcours enregistré tel quel (ou rien), pour que la règle d'ouverture (première visite →
+    // guidé) et une préférence « guidé » survivent jusqu'à l'arrivée du guidé.
+    const persisted = (p: JourneyPrefs): string => {
+      const text = serializePrefs(p);
+      if (guidedAvailable) return text;
+      const { journey: _fallback, ...rest } = JSON.parse(text) as Record<string, unknown>;
+      return JSON.stringify(
+        stored.journey === undefined ? rest : { journey: stored.journey, ...rest },
+      );
+    };
+    let last = persisted(start);
     // Parcours choisi par la règle de démarrage mémorisé tout de suite : au lancement suivant,
     // c'est lui le « dernier choix » (un nouveau venu guidé ne bascule pas en libre parce que
-    // son projet est désormais repris de l'autosauvegarde).
-    if (stored.journey === undefined) write(last);
+    // son projet est désormais repris de l'autosauvegarde). Jamais pour un repli.
+    if (stored.journey === undefined && guidedAvailable) write(last);
     store.subscribe((s) => {
-      const text = serializePrefs(prefsOf(s));
+      const text = persisted(prefsOf(s));
       if (text === last) return;
       last = text;
       write(text);

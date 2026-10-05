@@ -157,3 +157,90 @@ describe("liaison au projet chargé", () => {
     expect(journey.getState().journey).toBe("free");
   });
 });
+
+describe("parcours guidé indisponible (guidedAvailable: false)", () => {
+  it("première visite et préférence « guidé » → libre, sans panneau", () => {
+    const s = createJourneyStore(memoryStorage(), { hasAutosave: false, guidedAvailable: false });
+    expect(s.getState()).toMatchObject({ journey: "free", freePanel: null });
+    const remembered = memoryStorage({
+      [JOURNEY_KEY]: serializePrefs({ ...DEFAULT_JOURNEY_PREFS, journey: "guided" }),
+    });
+    const r = createJourneyStore(remembered, { hasAutosave: true, guidedAvailable: false });
+    expect(r.getState()).toMatchObject({ journey: "free", freePanel: null });
+  });
+
+  it("le repli « libre » n'est jamais mémorisé comme choix", () => {
+    // Première visite : rien n'est écrit au démarrage, puis aucun parcours n'est mémorisé.
+    const fresh = memoryStorage();
+    const s = createJourneyStore(fresh, { hasAutosave: false, guidedAvailable: false });
+    expect(fresh.data.has(JOURNEY_KEY)).toBe(false);
+    s.getState().panelEvent({ type: "rail", section: "site" });
+    expect(stored(fresh)).not.toHaveProperty("journey");
+    expect(stored(fresh).freePanel).toBe("site");
+    // Une préférence « guidé » enregistrée survit aux changements d'état du libre.
+    const remembered = memoryStorage({
+      [JOURNEY_KEY]: serializePrefs({ ...DEFAULT_JOURNEY_PREFS, journey: "guided" }),
+    });
+    const r = createJourneyStore(remembered, { hasAutosave: true, guidedAvailable: false });
+    r.getState().panelEvent({ type: "rail", section: "layout" });
+    r.getState().setWorkspace("fabrication");
+    expect(stored(remembered)).toMatchObject({ journey: "guided", workspace: "fabrication" });
+    // Le guidé revenu, la préférence s'applique.
+    expect(createJourneyStore(remembered, { hasAutosave: true }).getState().journey).toBe("guided");
+  });
+
+  it("setJourney(« guidé ») sans effet ; démo et assistant restent en libre", () => {
+    const projects = createProjectStore();
+    const s = createJourneyStore(memoryStorage(), { hasAutosave: true, guidedAvailable: false });
+    linkJourneyToProject(projects, s);
+    const before = s.getState();
+    s.getState().setJourney("guided");
+    expect(s.getState()).toBe(before);
+    s.getState().setWorkspace("fabrication");
+    s.getState().markStepVisited(2);
+    expect(projects.getState().loadDemo(DEMO_PRESET_IDS[0]!).ok).toBe(true);
+    expect(s.getState()).toMatchObject({ journey: "free", workspace: "design", freePanel: null });
+    expect(s.getState().visitedSteps.size).toBe(0);
+    s.getState().applyOpening("assistant");
+    expect(s.getState().journey).toBe("free");
+  });
+});
+
+describe("note « ouvert depuis le guidé » (freePanelFromGuided)", () => {
+  it("vraie après guidé → libre avec panneau, fausse après tout événement du panneau", () => {
+    const storage = memoryStorage();
+    const s = createJourneyStore(storage, { hasAutosave: false });
+    expect(s.getState().freePanelFromGuided).toBe(false);
+    s.getState().setGuidedStep(3);
+    s.getState().setJourney("free");
+    expect(s.getState()).toMatchObject({ freePanel: "stepping", freePanelFromGuided: true });
+    // Jamais mémorisé.
+    expect(stored(storage)).not.toHaveProperty("freePanelFromGuided");
+    s.getState().panelEvent({ type: "pin", pinned: true });
+    expect(s.getState().freePanelFromGuided).toBe(false);
+
+    const reset: ((st: typeof s) => void)[] = [
+      (st) => st.getState().panelEvent({ type: "rail", section: "site" }),
+      (st) => st.getState().openFreePanel("guards"),
+      (st) => st.getState().closeFreePanel(),
+      (st) => st.getState().panelEvent({ type: "escape" }),
+    ];
+    for (const action of reset) {
+      const t = createJourneyStore(memoryStorage(), { hasAutosave: false });
+      t.getState().setGuidedStep(1);
+      t.getState().setJourney("free");
+      expect(t.getState().freePanelFromGuided).toBe(true);
+      action(t);
+      expect(t.getState().freePanelFromGuided).toBe(false);
+    }
+  });
+
+  it("fausse vers la Fabrication (étape 7) ou déjà en libre", () => {
+    const s = createJourneyStore(memoryStorage(), { hasAutosave: false });
+    s.getState().setGuidedStep(7);
+    s.getState().setJourney("free");
+    expect(s.getState()).toMatchObject({ workspace: "fabrication", freePanelFromGuided: false });
+    s.getState().setJourney("free");
+    expect(s.getState().freePanelFromGuided).toBe(false);
+  });
+});

@@ -430,23 +430,35 @@ export interface CheckFieldProps {
   readonly label: string;
   readonly checked: boolean;
   readonly title?: string;
+  /** Description affichée sous la case (reliée par `aria-describedby`). */
+  readonly hint?: string;
   readonly onCommit: (checked: boolean) => UpdateResult;
 }
 
-export function CheckField({ label, checked, title, onCommit }: CheckFieldProps) {
+export function CheckField({ label, checked, title, hint, onCommit }: CheckFieldProps) {
   const id = useId();
-  return (
+  const box = (
     <div className="check" title={title}>
       <input
         id={id}
         type="checkbox"
         checked={checked}
+        aria-describedby={hint === undefined ? undefined : `${id}-hint`}
         onChange={(e) => {
           onCommit(e.target.checked);
           endGroup();
         }}
       />
       <label htmlFor={id}>{label}</label>
+    </div>
+  );
+  if (hint === undefined) return box;
+  return (
+    <div className="check-field">
+      {box}
+      <small id={`${id}-hint`} className="field__hint check-field__hint">
+        {hint}
+      </small>
     </div>
   );
 }

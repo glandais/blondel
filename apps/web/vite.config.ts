@@ -58,9 +58,14 @@ export default defineConfig({
         // Dictionnaires de l'interface (`@blondel/i18n`, français et anglais, ≈ 475 ko non
         // compressés) dans leur propre morceau, chargé au démarrage avec l'application : le
         // morceau principal reste sous la limite. Les workers (bundles séparés) les embarquent.
+        // React et React DOM (≈ 190 ko) ont aussi leur morceau, chargé au démarrage.
         codeSplitting: {
           groups: [
             { name: "i18n-locales", test: /[\\/]packages[\\/]i18n[\\/]src[\\/]locales[\\/]/ },
+            {
+              name: "react",
+              test: /[\\/]node_modules[\\/](?:\.pnpm[\\/][^\\/]+[\\/]node_modules[\\/])?(?:react|react-dom|scheduler)[\\/]/,
+            },
           ],
         },
       },

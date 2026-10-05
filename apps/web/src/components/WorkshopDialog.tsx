@@ -5,7 +5,11 @@
  * jamais enregistré dans le `.blondel.json`. Aucune valeur par défaut ; aucun montant n'est
  * affiché ici, et le comparateur ne montre les euros qu'avec un barème complet (règle du cœur).
  *
- * Fenêtre modale native (`<dialog>` : arrière-plan inerte, Échap ferme, focus rendu au bouton).
+ * Fenêtre modale native (`<dialog>` : arrière-plan inerte, Échap ferme, focus rendu à l'élément
+ * actif à l'ouverture). Sans bouton déclencheur propre : l'ouverture est pilotée par
+ * `uiStore.workshopOpen` (`openWorkshopDialog` : menu ⋯ de la barre du haut, lien de
+ * l'inspecteur) ; toute fermeture (bouton, Échap, événement `close`) appelle
+ * `closeWorkshopDialog`. Monté une seule fois, dans la barre du haut.
  */
 import type { CostRates } from "@blondel/core";
 import { useEffect, useId, useRef, useState } from "react";
@@ -22,6 +26,7 @@ import {
   type CostFieldInfo,
 } from "../lib/workshopRates.js";
 import { useApp, useWorkshop, workshopStore } from "../store/appStore.js";
+import { closeWorkshopDialog, useUi } from "../store/uiStore.js";
 import { msg, type Locale, type Message } from "@blondel/i18n";
 import { numberFormat } from "../i18n/locale.js";
 import { useLocale, useT } from "../i18n/useT.js";
@@ -97,14 +102,16 @@ export function WorkshopDialog() {
   const dialog = useRef<HTMLDialogElement>(null);
   const file = useRef<HTMLInputElement>(null);
   const titleId = useId();
-  const [open, setOpen] = useState(false);
+  const open = useUi((s) => s.workshopOpen);
   const [message, setMessage] = useState<{ kind: "info" | "error"; text: Message } | null>(null);
 
   useEffect(() => {
     const d = dialog.current;
     if (!d) return;
-    if (open && !d.open) d.showModal();
-    else if (!open && d.open) d.close();
+    if (open && !d.open) {
+      setMessage(null);
+      d.showModal();
+    } else if (!open && d.open) d.close();
   }, [open]);
 
   // État lu sur le barème appliqué au comparateur : celui du panneau, complété par un barème
@@ -128,124 +135,110 @@ export function WorkshopDialog() {
   };
 
   return (
-    <>
-      <button
-        type="button"
-        onClick={() => {
-          setMessage(null);
-          setOpen(true);
-        }}
-        title={t.t("ui.workshop.open.title")}
-      >
-        {t.t("ui.workshop.open.label")}
-      </button>
-      <dialog
-        ref={dialog}
-        className="workshop"
-        aria-labelledby={titleId}
-        onClose={() => setOpen(false)}
-      >
-        {/* Contenu monté seulement fenêtre ouverte : pas de `.notice` ni de `role="status"`
+    <dialog
+      ref={dialog}
+      className="workshop"
+      aria-labelledby={titleId}
+      onClose={closeWorkshopDialog}
+    >
+      {/* Contenu monté seulement fenêtre ouverte : pas de `.notice` ni de `role="status"`
             fantômes dans la page (barre d'erreurs, lecteurs d'écran, sélecteurs e2e). */}
-        {open ? (
-          <>
-            <header className="workshop__header">
-              <h2 id={titleId}>{t.t("ui.workshop.title")}</h2>
-              <button type="button" onClick={() => setOpen(false)}>
-                {t.t("ui.workshop.close")}
-              </button>
-            </header>
-            <p className="muted">
-              {t.t("ui.workshop.intro.before")} <strong>{t.t("ui.workshop.intro.strong")}</strong>{" "}
-              {t.t("ui.workshop.intro.after")}
-            </p>
-            <p className="notice notice--info" role="status" aria-label={t.t("ui.workshop.state")}>
-              {missing.length > 0
-                ? t.t("ui.workshop.incomplete", {
-                    applied: String(applied),
-                    total: String(COST_FIELDS.length),
-                    fields: missing.map((f) => t.t(f.labelKey).toLowerCase()).join(", "),
-                  })
-                : t.t("ui.workshop.complete")}
-            </p>
-            {effective.fromProject.length > 0 ? (
-              <p
-                className="notice notice--info"
-                role="note"
-                aria-label={t.t("ui.workshop.fromProject.label")}
-              >
-                {t.t("ui.workshop.fromProject.text", {
-                  fields: effective.fromProject
-                    .map((f) => t.t(f.labelKey).toLowerCase())
-                    .join(", "),
-                })}
-              </p>
-            ) : null}
-            <form
-              className="workshop__fields"
-              aria-label={t.t("ui.workshop.form")}
-              onSubmit={(e) => e.preventDefault()}
+      {open ? (
+        <>
+          <header className="workshop__header">
+            <h2 id={titleId}>{t.t("ui.workshop.title")}</h2>
+            <button type="button" onClick={closeWorkshopDialog}>
+              {t.t("ui.workshop.close")}
+            </button>
+          </header>
+          <p className="muted">
+            {t.t("ui.workshop.intro.before")} <strong>{t.t("ui.workshop.intro.strong")}</strong>{" "}
+            {t.t("ui.workshop.intro.after")}
+          </p>
+          <p className="notice notice--info" role="status" aria-label={t.t("ui.workshop.state")}>
+            {missing.length > 0
+              ? t.t("ui.workshop.incomplete", {
+                  applied: String(applied),
+                  total: String(COST_FIELDS.length),
+                  fields: missing.map((f) => t.t(f.labelKey).toLowerCase()).join(", "),
+                })
+              : t.t("ui.workshop.complete")}
+          </p>
+          {effective.fromProject.length > 0 ? (
+            <p
+              className="notice notice--info"
+              role="note"
+              aria-label={t.t("ui.workshop.fromProject.label")}
             >
-              {COST_FIELDS.map((f) => (
-                <RateField key={f.key} field={f} rates={rates} />
-              ))}
-            </form>
-            {message ? (
-              <p
-                className={`notice ${message.kind === "error" ? "notice--error" : "notice--info"}`}
-                role={message.kind === "error" ? "alert" : "status"}
-              >
-                {t.t(message.text)}
-              </p>
-            ) : null}
-            {saveFailed ? (
-              <p className="notice notice--error" role="alert">
-                {t.t("ui.workshop.saveFailed")}
-              </p>
-            ) : null}
-            <div className="button-row">
-              <button type="button" onClick={() => file.current?.click()}>
-                {t.t("ui.workshop.import")}
-              </button>
-              <button
-                type="button"
-                disabled={filled === 0}
-                onClick={() =>
-                  downloadFile({
-                    filename: ratesFileName(t),
-                    mime: "application/json",
-                    content: ratesToJson(rates),
-                  })
-                }
-              >
-                {t.t("ui.workshop.export")}
-              </button>
-              <button
-                type="button"
-                disabled={filled === 0}
-                onClick={() => {
-                  workshopStore.getState().setRates({});
-                  setMessage({ kind: "info", text: msg("ui.workshop.cleared") });
-                }}
-              >
-                {t.t("ui.workshop.clear")}
-              </button>
-              <input
-                ref={file}
-                type="file"
-                accept=".json,application/json"
-                hidden
-                aria-label={t.t("ui.workshop.file")}
-                onChange={(e) => {
-                  const f = e.target.files?.[0];
-                  e.target.value = "";
-                  if (f) void importFile(f);
-                }}
-              />
-            </div>
-          </>
-        ) : null}
-      </dialog>
-    </>
+              {t.t("ui.workshop.fromProject.text", {
+                fields: effective.fromProject.map((f) => t.t(f.labelKey).toLowerCase()).join(", "),
+              })}
+            </p>
+          ) : null}
+          <form
+            className="workshop__fields"
+            aria-label={t.t("ui.workshop.form")}
+            onSubmit={(e) => e.preventDefault()}
+          >
+            {COST_FIELDS.map((f) => (
+              <RateField key={f.key} field={f} rates={rates} />
+            ))}
+          </form>
+          {message ? (
+            <p
+              className={`notice ${message.kind === "error" ? "notice--error" : "notice--info"}`}
+              role={message.kind === "error" ? "alert" : "status"}
+            >
+              {t.t(message.text)}
+            </p>
+          ) : null}
+          {saveFailed ? (
+            <p className="notice notice--error" role="alert">
+              {t.t("ui.workshop.saveFailed")}
+            </p>
+          ) : null}
+          <div className="button-row">
+            <button type="button" onClick={() => file.current?.click()}>
+              {t.t("ui.workshop.import")}
+            </button>
+            <button
+              type="button"
+              disabled={filled === 0}
+              onClick={() =>
+                downloadFile({
+                  filename: ratesFileName(t),
+                  mime: "application/json",
+                  content: ratesToJson(rates),
+                })
+              }
+            >
+              {t.t("ui.workshop.export")}
+            </button>
+            <button
+              type="button"
+              disabled={filled === 0}
+              onClick={() => {
+                workshopStore.getState().setRates({});
+                setMessage({ kind: "info", text: msg("ui.workshop.cleared") });
+              }}
+            >
+              {t.t("ui.workshop.clear")}
+            </button>
+            <input
+              ref={file}
+              type="file"
+              accept=".json,application/json"
+              hidden
+              aria-label={t.t("ui.workshop.file")}
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                e.target.value = "";
+                if (f) void importFile(f);
+              }}
+            />
+          </div>
+        </>
+      ) : null}
+    </dialog>
   );
 }

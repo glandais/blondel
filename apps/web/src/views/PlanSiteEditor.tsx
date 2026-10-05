@@ -8,6 +8,8 @@
  * clics sur le nu puis un troisième du côté du mur, QUESTIONS A24), Calibrer
  * (deux points de l'image puis la distance réelle). Échap abandonne le tracé, Retour arrière
  * retire le dernier sommet. Chaque tracé terminé est une entrée d'historique (annulable).
+ * Les commandes − / + / Recadrer de la vue centrale zooment autour du centre de la vue ou
+ * reviennent au cadrage initial.
  */
 import {
   buildSnapIndex,
@@ -39,6 +41,7 @@ import {
 } from "react";
 import { UnderlayImport } from "../components/UnderlayImport.js";
 import { appStore, useApp } from "../store/appStore.js";
+import { useViewCommand } from "../store/uiStore.js";
 import { errorMessage, msg, type Locale, type Message, type MessageKey } from "@blondel/i18n";
 import { formatNumber } from "../i18n/locale.js";
 import { useT } from "../i18n/useT.js";
@@ -184,6 +187,12 @@ export function PlanSiteEditor({ model }: { model: Model }) {
     return () => el.removeEventListener("wheel", onWheel);
   }, [toSite, v]);
 
+  // − / + : zoom au centre de la vue ; Recadrer : retour au cadrage sur le site et l'escalier.
+  useViewCommand((kind) => {
+    if (kind === "fit") setView(null);
+    else setView(zoomAt(v, { x: v.cx, y: v.cy }, kind === "zoomIn" ? 1.25 : 1 / 1.25));
+  });
+
   const reset = (): void => {
     setDraft([]);
     setCalib(null);
@@ -280,6 +289,8 @@ export function PlanSiteEditor({ model }: { model: Model }) {
   const onKeyDown = (e: KeyboardEvent<HTMLDivElement>): void => {
     if (e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement) return;
     if (e.key === "Escape") {
+      // Échap consommé (tracé ou calibrage abandonné) : il ne ferme pas aussi le panneau libre.
+      if (draft.length > 0 || calib !== null) e.preventDefault();
       reset();
     } else if (e.key === "Enter" && tool === "opening" && draft.length >= 3) {
       e.preventDefault();

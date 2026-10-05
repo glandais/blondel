@@ -49,26 +49,34 @@ export const DEFAULT_JOURNEY_PREFS: JourneyPrefs = {
 export function initialJourney({
   remembered,
   hasAutosave,
+  guidedAvailable = true,
 }: {
   readonly remembered: Journey | null;
   readonly hasAutosave: boolean;
+  /** Parcours guidé disponible (faux tant qu'il n'est pas affiché : « libre » à la place). */
+  readonly guidedAvailable?: boolean;
 }): Journey {
-  if (remembered !== null) return remembered;
-  return hasAutosave ? "free" : "guided";
+  const journey = remembered ?? (hasAutosave ? "free" : "guided");
+  return guidedAvailable ? journey : "free";
 }
 
 /**
  * Préférences après l'ouverture d'un projet : démo ou assistant → guidé à l'étape 1 ; import ou
  * reprise d'une copie → libre ; préréglage → parcours inchangé. Dans tous les cas, les étapes
  * vues repartent de zéro et l'espace revient en Conception ; le panneau libre et son épinglage
- * sont conservés.
+ * sont conservés. Sans parcours guidé disponible (`guidedAvailable` faux), démo et assistant
+ * restent en libre, sans ouvrir de panneau ; le reste de la règle s'applique.
  */
-export function journeyAfterOpening(origin: ProjectOrigin, prefs: JourneyPrefs): JourneyPrefs {
+export function journeyAfterOpening(
+  origin: ProjectOrigin,
+  prefs: JourneyPrefs,
+  guidedAvailable = true,
+): JourneyPrefs {
   const base: JourneyPrefs = { ...prefs, visitedSteps: new Set(), workspace: "design" };
   switch (origin) {
     case "demo":
     case "assistant":
-      return { ...base, journey: "guided", guidedStep: 1 };
+      return { ...base, journey: guidedAvailable ? "guided" : "free", guidedStep: 1 };
     case "import":
     case "restore":
       return { ...base, journey: "free" };
@@ -182,10 +190,16 @@ export function panelAfter(state: PanelState, e: PanelEvent): PanelState {
 /**
  * Bascule de parcours. Guidé → libre : ouvert sur la section de l'étape en cours (étape 7 :
  * mode Fabrication, panneau inchangé). Libre → guidé : étape du panneau ouvert (Fabrication :
- * étape 7 ; Contexte ou aucun panneau : étape inchangée), marquée comme vue.
+ * étape 7 ; Contexte ou aucun panneau : étape inchangée), marquée comme vue. Sans parcours
+ * guidé disponible (`guidedAvailable` faux), le passage au guidé est sans effet.
  */
-export function switchJourney(prefs: JourneyPrefs, target: Journey): JourneyPrefs {
+export function switchJourney(
+  prefs: JourneyPrefs,
+  target: Journey,
+  guidedAvailable = true,
+): JourneyPrefs {
   if (prefs.journey === target) return prefs;
+  if (target === "guided" && !guidedAvailable) return prefs;
   if (target === "free") {
     const panel = panelForStep(prefs.guidedStep);
     return panel === null

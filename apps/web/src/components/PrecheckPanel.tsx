@@ -3,6 +3,9 @@
  * structures métal et vérification indicative des limons (flèche L/200 et L/300, contrainte,
  * fréquence propre) rendues par le cœur. Un clic sur un limon le sélectionne (surligné en 3D).
  * Ne remplace pas une note de calcul.
+ *
+ * Déplié sous la ligne « Prédimensionnement » de l'inspecteur (ADR-0009 point 8), qui porte le
+ * titre visible : le panneau n'a plus qu'un nom accessible.
  */
 import { PRECHECK_LABEL } from "@blondel/core";
 import type { Locale } from "@blondel/i18n";
@@ -78,7 +81,7 @@ function BeamRow({ row, selected }: { row: PrecheckRow; selected: boolean }) {
   );
 }
 
-export function PrecheckPanel() {
+export function PrecheckPanel({ id }: { readonly id?: string } = {}) {
   const t = useT();
   const { d1, d2 } = decimals(t.locale);
   const { model } = useModel();
@@ -93,8 +96,7 @@ export function PrecheckPanel() {
   if (!hasBeams && !exc) return null;
 
   return (
-    <section className="precheck" aria-labelledby="precheck-title">
-      <h2 id="precheck-title">{t.t("ui.precheck.title")}</h2>
+    <section id={id} className="precheck" aria-label={t.t("ui.precheck.title")}>
       {exc ? (
         <p className="precheck__exc">
           {t.t("ui.precheck.executionClass")}{" "}

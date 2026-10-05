@@ -273,6 +273,8 @@ export function PlanExpertEditor({ model }: { model: Model }) {
     }
     if (current === null) return;
     if (e.key === "Escape") {
+      // Échap consommé (nez désélectionné) : il ne ferme pas aussi le panneau libre.
+      e.preventDefault();
       select(null);
     } else if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
       e.preventDefault();

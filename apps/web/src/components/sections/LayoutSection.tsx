@@ -364,7 +364,6 @@ export function LayoutSection({ display }: SectionProps) {
           </div>
         ),
       },
-      { key: "ui:layout.realign", node: <RealignButton /> },
     ];
   };
 
@@ -397,7 +396,8 @@ export function LayoutSection({ display }: SectionProps) {
             />
           ),
         },
-        ...helicalItems,
+        // Ordre de la spécification de contenu (§ 3, tableau Tracé) : type, E, typologie,
+        // volées et tournants, ligne de foulée, recalage, puis le bloc hélicoïdal.
         layout.kind !== "helical" && {
           key: "stair.layout.width",
           node: (
@@ -409,6 +409,7 @@ export function LayoutSection({ display }: SectionProps) {
             />
           ),
         },
+        ...flightsItems(),
         {
           key: "stair.walkline.mode",
           node: (
@@ -472,7 +473,8 @@ export function LayoutSection({ display }: SectionProps) {
             />
           ),
         },
-        ...flightsItems(),
+        layout.kind !== "helical" && { key: "ui:layout.realign", node: <RealignButton /> },
+        ...helicalItems,
       ]}
     />
   );

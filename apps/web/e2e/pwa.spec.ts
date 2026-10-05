@@ -50,6 +50,18 @@ test("hors ligne : après installation, l'application se recharge et calcule san
   await expect(page.getByRole("status", { name: "Mise à jour de l'application" })).toContainText(
     "prêt à fonctionner hors ligne",
   );
+  // L'avis ne recouvre pas la mention indicative du pied de l'inspecteur (toujours lisible).
+  const disclaimer = page.locator(".inspector-disclaimer");
+  await disclaimer.scrollIntoViewIfNeeded();
+  const covered = await disclaimer.evaluate((el) => {
+    const r = el.getBoundingClientRect();
+    const points = [0.1, 0.5, 0.9].map((f) => [r.left + f * r.width, r.top + r.height / 2]);
+    return points.filter(([x, y]) => {
+      const hit = document.elementFromPoint(x!, y!);
+      return hit === null || !el.contains(hit);
+    }).length;
+  });
+  expect(covered).toBe(0);
 
   await context.setOffline(true);
   await page.reload();
@@ -59,7 +71,7 @@ test("hors ligne : après installation, l'application se recharge et calcule san
   // Modèle calculé par le worker (servi par le cache) : nombre de hauteurs affiché.
   await expect(
     page
-      .locator(".statusbar__item")
+      .locator(".figure-line__item")
       .filter({ has: page.locator("dt", { hasText: /^n$/ }) })
       .locator("dd"),
   ).toHaveText(/^\d+$/);

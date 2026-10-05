@@ -77,9 +77,9 @@
 }
 
 .viewer3d__buttons button[aria-pressed="true"] {
-  background: var(--accent);
+  background: var(--accent-fill);
   color: var(--accent-text);
-  border-color: var(--accent);
+  border-color: var(--accent-fill);
 }
 
 .viewer3d__measure {

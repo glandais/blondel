@@ -15,6 +15,14 @@ import { TIER_KEYS, tierEntry, type Display } from "../../lib/paramTiers.js";
 import { SECTION_IDS } from "../../lib/sectionIds.js";
 import { appStore, modelService } from "../../store/appStore.js";
 import { SECTION_COMPONENTS, SECTION_TITLE_KEYS, type SectionProps } from "./index.js";
+import {
+  chooseOpeningKind,
+  openingKindOf,
+  openingMemoryFor,
+  proposedRectOpening,
+  removeWall,
+  type OpeningMemory,
+} from "./SiteSection.js";
 
 const initial = appStore.getState().project;
 
@@ -261,12 +269,175 @@ describe("clés du dictionnaire employées par les sections", () => {
     ]
       .map((f) => readFileSync(f, "utf8"))
       .join("\n");
-    // Murs (liste par côté) et calque de fond de la section Site : reportés à la vague 2
-    // (panneau libre Site, avec le plan Site et le menu Importer).
-    const deferred = new Set(["ui:site.walls", "ui:site.underlay"]);
-    const unused = TIER_KEYS.filter(
-      (k) => k.startsWith("ui:") && !deferred.has(k) && !code.includes(`key: "${k}"`),
-    );
+    const unused = TIER_KEYS.filter((k) => k.startsWith("ui:") && !code.includes(`key: "${k}"`));
     expect(unused).toEqual([]);
+  });
+});
+
+describe("ordre des champs = spécification de contenu (§ 3)", () => {
+  const free: Display = { kind: "free" };
+  const inOrder = (html: string, labels: readonly string[]): void => {
+    const at = labels.map((l) => html.indexOf(l));
+    expect(at.every((i) => i >= 0)).toBe(true);
+    expect([...at].sort((a, b) => a - b)).toEqual(at);
+  };
+
+  it("Site : H, plancher haut, revêtements bas et haut, trémie, murs, calque de fond", () => {
+    load(createProject("quarter-left"));
+    inOrder(render(SECTION_COMPONENTS.site, free), [
+      "Hauteur à monter",
+      "Revêtement du sol bas",
+      "Revêtement du sol haut",
+      "Trémie",
+      "site-section__walls",
+      "site-section__underlay",
+    ]);
+  });
+
+  it("Tracé : type, E, typologie, volées et tournants, ligne de foulée, recalage", () => {
+    load(createProject("quarter-left"));
+    inOrder(render(SECTION_COMPONENTS.layout, free), [
+      "Type de tracé",
+      "Emmarchement",
+      "Typologie",
+      "Volée 1",
+      "Ligne de foulée",
+    ]);
+  });
+});
+
+describe("Site : trémie Rectangulaire | Tracée | Aucune, murs, calque de fond", () => {
+  const free: Display = { kind: "free" };
+  const site = (locale: "fr" | "en" = "fr") => render(SECTION_COMPONENTS.site, free, locale);
+  const withSite = (p: Project, patch: Partial<Project["site"]>): Project => ({
+    ...p,
+    site: { ...p.site, ...patch },
+  });
+
+  it("segmenté radio à trois options, choix courant coché", () => {
+    load(createProject("quarter-left"));
+    const html = site();
+    expect(html).toContain('role="radiogroup" aria-label="Trémie"');
+    expect(html).not.toContain("Trémie dans le plancher haut");
+    for (const label of ["Rectangulaire", "Tracée", "Aucune"]) {
+      expect(html).toMatch(new RegExp(`role="radio"[^>]*>${label}</button>`));
+    }
+    expect(html).toMatch(/aria-checked="true"[^>]*>Rectangulaire</);
+    expect(html).toContain("X (coin)");
+    const en = site("en");
+    expect(en).toContain('aria-label="Stairwell opening"');
+    for (const label of ["Rectangular", "Drawn", "None"])
+      expect(en).toContain(`>${label}</button>`);
+  });
+
+  it("Aucune puis Rectangulaire : retirée puis restaurée, chaque choix annulable", () => {
+    load(createProject("quarter-left"));
+    const memory: OpeningMemory = { rect: null, polygon: null };
+    const before = appStore.getState().project.site.opening;
+    expect(chooseOpeningKind("none", memory)).toBe(false);
+    expect(appStore.getState().project.site.opening).toBeUndefined();
+    expect(site()).toMatch(/aria-checked="true"[^>]*>Aucune</);
+    expect(chooseOpeningKind("rect", memory)).toBe(false);
+    expect(appStore.getState().project.site.opening).toEqual(before);
+    appStore.getState().undo();
+    expect(appStore.getState().project.site.opening).toBeUndefined();
+    appStore.getState().undo();
+    expect(appStore.getState().project.site.opening).toEqual(before);
+  });
+
+  it("Tracée : rectangle converti en polygone (une entrée d'historique), plan à montrer", () => {
+    load(createProject("quarter-left"));
+    const memory: OpeningMemory = { rect: null, polygon: null };
+    const rect = appStore.getState().project.site.opening;
+    expect(rect?.kind).toBe("rect");
+    expect(chooseOpeningKind("polygon", memory)).toBe(true);
+    const o = appStore.getState().project.site.opening;
+    expect(o?.kind).toBe("polygon");
+    if (o?.kind === "polygon") expect(o.points).toHaveLength(4);
+    // Déjà tracée : rien à faire.
+    expect(chooseOpeningKind("polygon", memory)).toBe(false);
+    const html = site();
+    expect(html).toContain("Trémie polygonale (4 sommets).");
+    expect(html).toContain("Modifier sur le plan");
+    expect(html).not.toContain("X (coin)");
+    expect(site("en")).toContain("Polygonal stairwell opening (4 vertices).");
+    // Retour au rectangle : le dernier rectangle revient.
+    chooseOpeningKind("rect", memory);
+    expect(appStore.getState().project.site.opening).toEqual(rect);
+    appStore.getState().undo();
+    appStore.getState().undo();
+    expect(appStore.getState().project.site.opening).toEqual(rect);
+  });
+
+  it("mémoire des trémies hors du panneau : gardée pour le projet ouvert, vidée au suivant", () => {
+    const m = openingMemoryFor(41);
+    m.rect = proposedRectOpening(createProject("quarter-left"));
+    // Panneau refermé puis rouvert (nouveau rendu de la section) : même mémoire.
+    expect(openingMemoryFor(41)).toBe(m);
+    expect(openingMemoryFor(41).rect).not.toBeNull();
+    // Autre projet chargé : mémoire neuve.
+    expect(openingMemoryFor(42)).toEqual({ rect: null, polygon: null });
+  });
+
+  it("Rectangulaire sans trémie mémorisée : proposition du cœur ou carré de côté E", () => {
+    const p = createProject("quarter-left");
+    const { opening: _o, ...siteWithout } = p.site;
+    const bare: Project = { ...p, site: siteWithout };
+    load(bare);
+    chooseOpeningKind("rect", { rect: null, polygon: null });
+    expect(appStore.getState().project.site.opening).toEqual(proposedRectOpening(bare));
+    expect(openingKindOf(appStore.getState().project.site.opening)).toBe("rect");
+  });
+
+  it("murs : liste, suppression annulable, lien vers le plan", () => {
+    const p = withSite(createProject("quarter-left"), {
+      walls: [
+        {
+          id: "wall-1",
+          a: { x: 0, y: 0 },
+          b: { x: 3000, y: 0 },
+          thickness: 200,
+          loadBearing: false,
+        },
+        {
+          id: "wall-2",
+          a: { x: 0, y: 0 },
+          b: { x: 0, y: 2500 },
+          thickness: 160,
+          loadBearing: true,
+        },
+      ],
+    });
+    load(p);
+    const html = site();
+    expect(html).toContain("<legend>Murs (2)</legend>");
+    expect(html).toMatch(/wall-1 : 3\s000 mm, ép\. 200 mm/);
+    expect(html).toContain('aria-label="Supprimer le mur wall-2"');
+    expect(html).toContain("Modifier sur le plan");
+    const en = site("en");
+    expect(en).toContain("Walls (2)");
+    expect(en).toContain('aria-label="Delete wall wall-2"');
+    expect(en).toContain("Edit on the plan");
+    removeWall("wall-1");
+    expect(appStore.getState().project.site.walls.map((w) => w.id)).toEqual(["wall-2"]);
+    expect(site()).toContain("<legend>Murs (1)</legend>");
+    appStore.getState().undo();
+    expect(appStore.getState().project.site.walls).toHaveLength(2);
+    load(withSite(p, { walls: [] }));
+    expect(site()).toContain("Aucun mur");
+  });
+
+  it("calque de fond : état et import DXF / image", () => {
+    load(createProject("quarter-left"));
+    const html = site();
+    expect(html).toContain("<legend>Calque de fond</legend>");
+    expect(html).toContain("Aucun calque");
+    expect(html).toContain("Importer un plan DXF…");
+    expect(html).toContain("Importer une image…");
+    expect(html).toContain('aria-label="Plan DXF à importer"');
+    const en = site("en");
+    expect(en).toContain("Background layer");
+    expect(en).toContain("Import a DXF plan…");
+    expect(en).not.toContain("Calque");
   });
 });

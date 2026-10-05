@@ -95,7 +95,8 @@ saisie ─► store zustand (projectStore) ─► Project canonique (ProjectSche
              project/realign.ts : dernière volée seulement, tournants et trémie polygonale
              conservés, une entrée d'historique, bandeau d'information ; bouton désactivé avec
              la raison rendue par realignBlocker si le recalage est impossible)
- Contrôle  : CompliancePanel ─► surcharges de règles (withRuleOverride, cœur, project/overrides.ts :
+ Contrôle  : inspecteur (components/inspector/ : ControlSummary, RuleCard, RuleResults)
+             ─► surcharges de règles (withRuleOverride, cœur, project/overrides.ts :
              justification obligatoire) ─► compliance.overrides, reprises dans le dossier PDF
  Erreurs   : ErrorsBar ─► suggestFixes (cœur, project/fixes.ts) ─► lib/fixes.ts applyFix (annulable)
  Comparateur : CompareView (lib/variants.ts) ─► compareEpure (cœur, worker dédié) : même épure,
@@ -152,7 +153,7 @@ L'interface et toutes les sorties existent en français et en anglais ; le fran�
 
 1. Implémenter `BalancingStrategy` (`packages/core/src/model/plugins.ts`) dans `packages/core/src/balancing/<id>.ts` : rendre les abscisses σ des points de collet ou les angles φ des nez de la zone ; le post-traitement commun (`balancing/postprocess.ts`) calcule Q, R, collets et contrôles.
 2. L'ajouter à l'énumération `method` de `BalancingSchema` (`model/project.ts`, évolution rétrocompatible notée au ledger) : c'est la **liste unique** des identifiants (`BalancingMethod`), dont dérivent `BalancingStrategy.id` et `BalancingMethodId` ; puis l'enregistrer dans `balancing/registry.ts` (le typage exige une stratégie par méthode).
-3. Interface : le sélecteur « Méthode » de `apps/web/src/components/ParamsPanel.tsx` propose **toutes** les méthodes du schéma (`balancingMethodOptions`, `apps/web/src/lib/balancingForm.ts`) ; ajouter le libellé dans `BALANCING_METHOD_LABELS` et, si la méthode a des paramètres, leurs curseurs (`RangeField`, bornes lues dans le schéma et le modèle, comme α de M2 borné par `herseAlphaMax` et λ / p de M6).
+3. Interface : le sélecteur « Méthode » de `apps/web/src/components/sections/BalancingSection.tsx` propose **toutes** les méthodes du schéma (`balancingMethodOptions`, `apps/web/src/lib/balancingForm.ts`) ; ajouter le libellé dans `BALANCING_METHOD_LABELS` et, si la méthode a des paramètres, leurs curseurs (`RangeField`, bornes lues dans le schéma et le modèle, comme α de M2 borné par `herseAlphaMax` et λ / p de M6).
 4. Tests : exemples de `docs/research/B-geometrie.md` §3 et propriétés fast-check (K3, K5, collets > 0, miroir gauche/droite).
 
 ### une structure (limons, crémaillère, tôle pliée…)

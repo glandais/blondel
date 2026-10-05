@@ -16,6 +16,7 @@ import {
   describeTasks,
   instrument,
   openApp,
+  openSection,
   openTab,
   overBudget,
   settle,
@@ -80,7 +81,8 @@ test(`chargement et onglets : aucune tâche > ${LONG_TASK_BUDGET_MS} ms`, async 
   );
   await measure(page, steps, "structure wood-housed", () => chooseStructure(page, "wood-housed"));
   // Deux passages : premier montage de chaque vue, puis retour (constat : gel au premier
-  // clic sur « Comparateur », puis Plan 2D → Comparateur → 3D).
+  // clic sur « Comparateur », puis Plan → Comparateur → 3D). Les onglets des deux espaces
+  // (Conception, puis Fabrication) sont parcourus ; `openTab` bascule l'espace au besoin.
   for (const round of [1, 2]) {
     for (const tab of TABS) {
       await measure(page, steps, `onglet ${tab} (${round})`, () => openTab(page, tab));
@@ -112,12 +114,12 @@ test(`chargement et onglets : aucune tâche > ${LONG_TASK_BUDGET_MS} ms`, async 
 test(`préréglages et structures : aucune tâche > ${LONG_TASK_BUDGET_MS} ms`, async ({
   page,
 }, info) => {
-  // 7 préréglages × 7 structures, Plan 2D puis 3D.
+  // 7 préréglages × 7 structures, Plan puis 3D.
   test.setTimeout(600_000);
   const steps: Step[] = [];
   await measure(page, steps, "chargement", () => openApp(page));
   // Vue 3D ouverte : les changements de modèle remplacent aussi les géométries three.js.
-  for (const tab of ["Plan 2D", "3D"] as const) {
+  for (const tab of ["Plan", "3D"] as const) {
     await measure(page, steps, `onglet ${tab}`, () => openTab(page, tab));
     for (const preset of PRESETS) {
       await measure(page, steps, `[${tab}] préréglage ${preset}`, () => applyPreset(page, preset));
@@ -139,6 +141,7 @@ test(`saisie de H et export PDF : aucune tâche > ${LONG_TASK_BUDGET_MS} ms`, as
   await measure(page, steps, "chargement", () => openApp(page));
   await applyPreset(page, "Quart tournant à gauche");
   await chooseStructure(page, "wood-housed");
+  await openSection(page, "Site");
   const h = page.getByLabel("Hauteur à monter H");
   for (const value of ["2750", "2800"]) {
     await measure(page, steps, `H = ${value}`, () => commitField(page, h, value));

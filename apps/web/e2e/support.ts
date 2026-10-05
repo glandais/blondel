@@ -29,15 +29,26 @@ export function parseLongTaskBudget(raw: string | undefined): number {
  */
 export const LONG_TASK_BUDGET_MS = parseLongTaskBudget(process.env["E2E_LONG_TASK_BUDGET_MS"]);
 
-export const TABS = [
-  "Plan 2D",
-  "3D",
-  "Élévation",
-  "Développés",
-  "Nomenclature",
-  "Comparateur",
-] as const;
+/** Vues de l'espace Conception (onglets de la vue centrale). */
+export const DESIGN_TABS = ["Plan", "3D", "Élévation"] as const;
+/** Vues de l'espace Fabrication (provisoires jusqu'à la vague 4). */
+export const FABRICATION_TABS = ["Développés", "Nomenclature", "Comparateur"] as const;
+/** Toutes les vues, Conception puis Fabrication. */
+export const TABS = [...DESIGN_TABS, ...FABRICATION_TABS] as const;
 export type TabName = (typeof TABS)[number];
+
+/** Sections du rail du parcours libre, dans l'ordre (noms accessibles des onglets). */
+export const SECTIONS = [
+  "Site",
+  "Tracé",
+  "Découpage",
+  "Balancement",
+  "Marches",
+  "Structure",
+  "Garde-corps",
+  "Contexte",
+] as const;
+export type SectionName = (typeof SECTIONS)[number];
 
 export const PRESETS = [
   "Escalier droit",
@@ -148,12 +159,12 @@ export function describeTasks(over: readonly LongTask[], all: readonly LongTask[
 }
 
 /**
- * Attend la fin des calculs : plus de « Calcul… » dans la barre d'état, comparaison terminée
- * si l'onglet Comparateur est affiché, puis deux images et un moment de repos du fil
+ * Attend la fin des calculs : plus de « Calcul… » dans la ligne de chiffres, comparaison
+ * terminée si l'onglet Comparateur est affiché, puis deux images et un moment de repos du fil
  * principal (les observateurs de performance sont notifiés de façon asynchrone).
  */
 export async function settle(page: Page): Promise<void> {
-  await expect(page.locator(".statusbar__pending")).toHaveCount(0);
+  await expect(page.locator(".figure-line__pending")).toHaveCount(0);
   const compare = page.locator(".compare, .empty-view");
   if (await page.getByRole("tab", { name: "Comparateur", selected: true }).count()) {
     await expect(page.locator(".compare caption")).toContainText(" ms)");
@@ -217,31 +228,112 @@ export async function openApp(page: Page): Promise<void> {
   await settle(page);
 }
 
+/** Ouvre le menu du projet de la barre du haut (renommage, démos, préréglages, assistant). */
+export async function openProjectMenu(page: Page, ix?: Interactions): Promise<Locator> {
+  const menu = page.getByRole("dialog", { name: "Menu du projet" });
+  if (!(await menu.isVisible())) {
+    await page.locator(".topbar__project").click();
+    ix?.count("menu du projet");
+  }
+  await expect(menu).toBeVisible();
+  return menu;
+}
+
+/** Ferme le menu du projet (re-clic sur son bouton) s'il est ouvert. */
+export async function closeProjectMenu(page: Page): Promise<void> {
+  const menu = page.getByRole("dialog", { name: "Menu du projet" });
+  if (await menu.isVisible()) {
+    await page.locator(".topbar__project").click();
+    await expect(menu).toBeHidden();
+  }
+}
+
+/** Ouvre le menu ⋯ « Plus d'options » (affichage, thème, langue, profil d'atelier). */
+export async function openMoreMenu(page: Page): Promise<void> {
+  const button = page.getByRole("button", { name: "Plus d'options" });
+  if ((await button.getAttribute("aria-expanded")) !== "true") await button.click();
+  await expect(button).toHaveAttribute("aria-expanded", "true");
+}
+
+/** Bascule l'espace de travail (Conception | Fabrication) si besoin. */
+export async function openWorkspace(
+  page: Page,
+  name: "Conception" | "Fabrication",
+  ix?: Interactions,
+): Promise<void> {
+  const radio = page
+    .getByRole("radiogroup", { name: "Espace de travail" })
+    .getByRole("radio", { name, exact: true });
+  if ((await radio.getAttribute("aria-checked")) !== "true") {
+    await radio.click();
+    ix?.count(`espace ${name}`);
+  }
+  await expect(radio).toHaveAttribute("aria-checked", "true");
+}
+
+/** Onglet du rail d'une section. */
+export function sectionTab(page: Page, name: SectionName): Locator {
+  return page.getByRole("tablist", { name: "Sections" }).getByRole("tab", { name, exact: true });
+}
+
+/**
+ * Ouvre la section `name` dans le panneau unique (clic sur l'onglet du rail, sauf si elle est
+ * déjà ouverte), puis attend le panneau. Bascule d'abord en Conception si besoin.
+ */
+export async function openSection(
+  page: Page,
+  name: SectionName,
+  ix?: Interactions,
+): Promise<Locator> {
+  await openWorkspace(page, "Conception", ix);
+  const tab = sectionTab(page, name);
+  if ((await tab.getAttribute("aria-selected")) !== "true") {
+    await tab.click();
+    ix?.count(`section ${name}`);
+  }
+  await expect(tab).toHaveAttribute("aria-selected", "true");
+  const panel = page.locator("#free-panel");
+  await expect(panel).toBeVisible();
+  return panel;
+}
+
 export async function applyPreset(page: Page, label: string, ix?: Interactions): Promise<void> {
-  await page.getByLabel("Préréglage").selectOption({ label });
+  const menu = await openProjectMenu(page, ix);
+  await menu.getByLabel("Préréglage").selectOption({ label });
   ix?.count(`préréglage « ${label} »`);
-  await page.getByRole("button", { name: "Appliquer", exact: true }).click();
+  await menu.getByRole("button", { name: "Appliquer", exact: true }).click();
   ix?.count("Appliquer");
+  await closeProjectMenu(page);
   await settle(page);
 }
 
+/** Liste « Structure » (le panneau, nommé par l'onglet « Structure », n'est pas visé). */
 export function structureSelect(page: Page): Locator {
-  return page.getByLabel("Structure", { exact: true });
+  return page.getByRole("combobox", { name: "Structure", exact: true });
 }
 
 export async function chooseStructure(page: Page, kind: string, ix?: Interactions): Promise<void> {
+  await openSection(page, "Structure", ix);
   await structureSelect(page).selectOption(kind);
   ix?.count(`structure ${kind}`);
   await settle(page);
 }
 
+/** Onglet de vue `name` (liste « Vues » de la vue centrale). */
+export function viewTab(page: Page, name: TabName): Locator {
+  return page.getByRole("tablist", { name: "Vues" }).getByRole("tab", { name, exact: true });
+}
+
+/** Affiche une vue : bascule d'abord l'espace qui la contient, puis choisit son onglet. */
 export async function openTab(page: Page, name: TabName, ix?: Interactions): Promise<void> {
-  await page.getByRole("tab", { name, exact: true }).click();
-  ix?.count(`onglet ${name}`);
-  await expect(page.getByRole("tab", { name, exact: true })).toHaveAttribute(
-    "aria-selected",
-    "true",
-  );
+  const fabrication = (FABRICATION_TABS as readonly string[]).includes(name);
+  await openWorkspace(page, fabrication ? "Fabrication" : "Conception", ix);
+  const tab = viewTab(page, name);
+  if ((await tab.getAttribute("aria-selected")) !== "true") {
+    await tab.click();
+    ix?.count(`onglet ${name}`);
+  }
+  await expect(tab).toHaveAttribute("aria-selected", "true");
   if (name === "3D") await expect(page.locator(".viewer3d canvas")).toBeVisible();
   await settle(page);
 }
@@ -260,9 +352,9 @@ export async function commitField(
   await settle(page);
 }
 
-/** Nombre de contrôles bloquants annoncés par le panneau « Contrôle de conception ». */
+/** Nombre de contrôles bloquants annoncés par l'inspecteur (bloc « Contrôle de conception »). */
 export async function blockingCount(page: Page): Promise<number> {
-  const count = page.locator(".compliance .sev--bloquant > summary .count");
+  const count = page.locator('.control-counts [data-severity="bloquant"] dd');
   await expect(count).toHaveCount(1);
   return Number(await count.textContent());
 }

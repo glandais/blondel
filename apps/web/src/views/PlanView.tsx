@@ -1,7 +1,7 @@
 /**
- * Onglet Plan 2D. Trois modes (état d'interface du store, `planMode`) :
+ * Onglet Plan. Trois modes (état d'interface du store, `planMode`), en segmenté en haut du cadre :
  * - « Plan coté » : SVG de `renderPlanSvg` (@blondel/exports), avec surlignage et sélection de
- *   la marche par ses attributs `data-tread` ;
+ *   la marche par ses attributs `data-tread`, zoom − / + / Recadrer (`ZoomableSvg`) ;
  * - « Site et saisie » (jalon 7) : calque de fond (DXF, image calibrée), murs, trémie
  *   polygonale, tracé assisté avec accroches et relevé de trémie (`PlanSiteEditor`) ;
  * - « Mode expert » : surcharges des lignes de nez, rotation autour de P_k et nez fixes
@@ -10,11 +10,11 @@
 import type { Model } from "@blondel/core";
 import { useMemo } from "react";
 import { useResolvedTheme } from "../components/ThemeToggle.js";
+import { ZoomableSvg } from "../components/view/ZoomableSvg.js";
 import { selectedTreadNumber } from "../lib/compliance.js";
 import { useT } from "../i18n/useT.js";
 import { renderPlanForScreen } from "../model/planSvg.js";
 import { appStore, useApp } from "../store/appStore.js";
-import { ExportedSvg } from "./ExportedSvg.js";
 import { PlanExpertEditor } from "./PlanExpertEditor.js";
 import { PlanSiteEditor } from "./PlanSiteEditor.js";
 import "./planSite.css";
@@ -42,7 +42,7 @@ function DimensionedPlan({ model }: { model: Model }) {
     );
   }
   return (
-    <ExportedSvg
+    <ZoomableSvg
       svg={rendered.svg}
       label={t.t("ui.plan.drawing.label")}
       selectedTread={selectedTread}
@@ -57,14 +57,33 @@ export function PlanView({ model }: { model: Model }) {
   const t = useT();
   return (
     <div className="plan-view">
-      <div className="plan-view__mode" role="group" aria-label={t.t("ui.plan.mode.label")}>
-        <button type="button" aria-pressed={mode === "drawing"} onClick={() => setMode("drawing")}>
+      <div
+        className="plan-view__mode seg seg--sm"
+        role="group"
+        aria-label={t.t("ui.plan.mode.label")}
+      >
+        <button
+          type="button"
+          className="seg-opt"
+          aria-pressed={mode === "drawing"}
+          onClick={() => setMode("drawing")}
+        >
           {t.t("ui.plan.mode.drawing")}
         </button>
-        <button type="button" aria-pressed={mode === "site"} onClick={() => setMode("site")}>
+        <button
+          type="button"
+          className="seg-opt"
+          aria-pressed={mode === "site"}
+          onClick={() => setMode("site")}
+        >
           {t.t("ui.plan.mode.site")}
         </button>
-        <button type="button" aria-pressed={mode === "expert"} onClick={() => setMode("expert")}>
+        <button
+          type="button"
+          className="seg-opt"
+          aria-pressed={mode === "expert"}
+          onClick={() => setMode("expert")}
+        >
           {t.t("ui.plan.mode.expert")}
         </button>
       </div>

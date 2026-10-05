@@ -8,16 +8,18 @@
   min-height: 0;
 }
 
+/* Modes du plan : segmenté (`.seg.seg--sm`) en haut du cadre. */
 .plan-view__mode {
-  display: flex;
-  gap: 0.25rem;
+  align-self: flex-start;
+  max-width: 100%;
+  overflow-x: auto;
 }
 
 .plan-view__mode [aria-pressed="true"],
 .plan-site__toolbar [aria-pressed="true"] {
-  background: var(--accent);
+  background: var(--accent-fill);
   color: var(--accent-text);
-  border-color: var(--accent);
+  border-color: var(--accent-fill);
 }
 
 .plan-view__body {

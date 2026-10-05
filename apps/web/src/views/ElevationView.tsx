@@ -1,6 +1,7 @@
 /**
  * Onglet Élévation : SVG de `renderElevationSvg` (@blondel/exports), développé le long de la
- * ligne de foulée, avec surlignage et sélection de la marche par ses attributs `data-tread`.
+ * ligne de foulée, avec surlignage et sélection de la marche par ses attributs `data-tread` ;
+ * zoom − / + / Recadrer de la vue centrale (`ZoomableSvg`).
  */
 import type { Model, Project } from "@blondel/core";
 import { useMemo } from "react";
@@ -8,7 +9,7 @@ import { useResolvedTheme } from "../components/ThemeToggle.js";
 import { useT } from "../i18n/useT.js";
 import { renderElevationForScreen } from "../model/planSvg.js";
 import { appStore } from "../store/appStore.js";
-import { ExportedSvg } from "./ExportedSvg.js";
+import { ZoomableSvg } from "../components/view/ZoomableSvg.js";
 
 interface ElevationProps {
   readonly model: Model;
@@ -36,7 +37,7 @@ export function ElevationView({ model, project, selectedTread }: ElevationProps)
     );
   }
   return (
-    <ExportedSvg
+    <ZoomableSvg
       svg={rendered.svg}
       label={t.t("ui.view.elevation.label")}
       selectedTread={selectedTread}

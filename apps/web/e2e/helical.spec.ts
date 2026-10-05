@@ -9,6 +9,7 @@ import {
   chooseStructure,
   commitField,
   openApp,
+  openSection,
   openTab,
   settle,
   structureSelect,
@@ -19,16 +20,18 @@ test("hélicoïdal : préréglage, formulaire, plan à arcs, 3D, retour aux vol�
 }) => {
   await openApp(page);
   await applyPreset(page, "Hélicoïdal à fût central");
+  await openSection(page, "Structure");
+  await expect(structureSelect(page)).toHaveValue("helical-core");
+  await openSection(page, "Tracé");
   const kind = page.getByLabel("Type de tracé");
   await expect(kind).toHaveValue("helical");
-  await expect(structureSelect(page)).toHaveValue("helical-core");
   await expect(page.getByLabel("Emmarchement E")).toHaveCount(0);
   const radius = page.getByLabel("Rayon extérieur R_e");
   await expect(radius).toHaveValue("950");
   await expect(page.locator(".errors-bar")).toHaveCount(0);
 
   // Plan : marches en secteur (arcs SVG), palier d'arrivée, cote du rayon.
-  await openTab(page, "Plan 2D");
+  await openTab(page, "Plan");
   const plan = page.locator(".svg-export svg");
   await expect(plan.locator("path.landing")).toHaveCount(1);
   await expect(plan.locator('[data-dimension="radius"] text')).toHaveText("R 950");
@@ -56,9 +59,11 @@ test("hélicoïdal : préréglage, formulaire, plan à arcs, 3D, retour aux vol�
   await kind.selectOption("flights");
   await settle(page);
   await expect(page.getByLabel("Emmarchement E")).toBeVisible();
+  await openSection(page, "Structure");
   await expect(structureSelect(page)).toHaveValue("none");
-  await page.getByRole("button", { name: "Annuler", exact: true }).click();
+  await page.getByRole("button", { name: "Annuler (Ctrl+Z)", exact: true }).click();
   await settle(page);
+  await openSection(page, "Tracé");
   await expect(kind).toHaveValue("helical");
 });
 
@@ -70,6 +75,7 @@ test("corrections proposées : bouton dans la barre d'erreurs, appliqué puis an
   await chooseStructure(page, "wood-housed");
   // Le choix de la structure pose le poteau (décision A4) : jour remis à angle vif à la main
   // pour faire apparaître l'erreur et sa correction.
+  await openSection(page, "Tracé");
   await expect(page.getByLabel("Jour", { exact: true })).toHaveValue("newel");
   await page.getByLabel("Jour", { exact: true }).selectOption("sharp");
   await settle(page);
@@ -82,7 +88,7 @@ test("corrections proposées : bouton dans la barre d'erreurs, appliqué puis an
   await expect(page.getByLabel("Jour", { exact: true })).toHaveValue("newel");
   await expect(page.locator(".notice--info")).toContainText("Correction appliquée");
   await expect(fix).toHaveCount(0);
-  await page.getByRole("button", { name: "Annuler", exact: true }).click();
+  await page.getByRole("button", { name: "Annuler (Ctrl+Z)", exact: true }).click();
   await settle(page);
   await expect(page.getByLabel("Jour", { exact: true })).toHaveValue("sharp");
   await expect(fix).toBeVisible();
@@ -114,7 +120,9 @@ test("comparateur : débillardé soudé à jour adapté, appliqué ; développé
     .getByRole("button", { name: "Appliquer" })
     .click();
   await settle(page);
+  await openSection(page, "Structure");
   await expect(structureSelect(page)).toHaveValue("steel-curved");
+  await openSection(page, "Tracé");
   await expect(page.getByLabel("Jour", { exact: true })).toHaveValue("arc");
 
   await openTab(page, "Développés");

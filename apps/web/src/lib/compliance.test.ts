@@ -9,9 +9,12 @@ import {
 } from "@blondel/core";
 import { describe, expect, it } from "vitest";
 import {
+  controlCounts,
   groupResults,
+  highestSeverity,
   isPartSelected,
   modelNotes,
+  orderedViolations,
   sameLocation,
   selectedTreadNumber,
   treadNumberFromAttribute,
@@ -131,5 +134,52 @@ describe("treadPartId", () => {
       const id = treadPartId(model.parts, t.number);
       expect(id !== undefined && ids.has(id)).toBe(true);
     }
+  });
+});
+
+describe("comptes du contrôle", () => {
+  const report = (results: RuleResult[]): ComplianceReport => ({
+    rulesVersion: 1,
+    contexts: [],
+    profile: "strict",
+    results,
+    summary: { bloquant: 0, avertissement: 0, conseil: 0 },
+  });
+
+  it("dénombre chaque statut et ordonne les violations bloquant → conseil", () => {
+    const g = groupResults(
+      report([
+        result({ ruleId: "A", severity: "conseil" }),
+        result({ ruleId: "B", severity: "avertissement" }),
+        result({ ruleId: "C", status: "ok" }),
+        result({ ruleId: "D", status: "non-evaluee" }),
+        result({ ruleId: "E", severity: "bloquant" }),
+        result({ ruleId: "F", status: "ok" }),
+      ]),
+    );
+    expect(controlCounts(g)).toEqual({
+      bloquant: 1,
+      avertissement: 1,
+      conseil: 1,
+      ok: 2,
+      notEvaluated: 1,
+    });
+    expect(orderedViolations(g).map((r) => r.ruleId)).toEqual(["E", "B", "A"]);
+    expect(highestSeverity(g)).toBe("bloquant");
+  });
+
+  it("sévérité la plus haute : premier groupe non vide, null sans violation", () => {
+    expect(highestSeverity(groupResults(report([result({ severity: "conseil" })])))).toBe(
+      "conseil",
+    );
+    expect(highestSeverity(groupResults(report([result({ status: "ok" })])))).toBeNull();
+    expect(highestSeverity(groupResults(undefined))).toBeNull();
+    expect(controlCounts(groupResults(undefined))).toEqual({
+      bloquant: 0,
+      avertissement: 0,
+      conseil: 0,
+      ok: 0,
+      notEvaluated: 0,
+    });
   });
 });

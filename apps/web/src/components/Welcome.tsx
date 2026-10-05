@@ -42,6 +42,7 @@ export function Welcome() {
       <div className="button-row">
         <button
           type="button"
+          className="btn btn-primary"
           onClick={() => {
             setHidden(true);
             appStore.getState().setAssistantOpen(true);
@@ -49,7 +50,7 @@ export function Welcome() {
         >
           {t.t("ui.welcome.startAssistant")}
         </button>
-        <button type="button" onClick={dismiss}>
+        <button type="button" className="btn btn-secondary" onClick={dismiss}>
           {t.t("ui.welcome.close")}
         </button>
       </div>

@@ -1,0 +1,377 @@
+/*
+ * Inspecteur du parcours libre (ADR-0009, maquette 2d). La position dans la grille (grid-area)
+ * est posée par styles.css ; cette feuille ne règle que l'intérieur de la colonne.
+ * Couleurs fonctionnelles par variables seulement (--sev-*, --ok, --selected, --danger).
+ */
+
+.inspector {
+  min-width: 0;
+  min-height: 0;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  padding: 18px 20px;
+  border-left: 1px solid var(--color-divider);
+  background: var(--color-bg);
+  font-size: 13px;
+  line-height: 1.45;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+.project-inspector {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+  flex: 1 0 auto;
+  min-width: 0;
+}
+
+/* ------------------------------------------------------------ Fiche du projet */
+
+.project-inspector__head {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.project-inspector__eyebrow {
+  font-size: 10.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-neutral-700);
+}
+
+.project-inspector__name {
+  margin: 0;
+  font-family: var(--font-heading);
+  font-weight: 600;
+  font-size: 22px;
+  line-height: 1.15;
+  overflow-wrap: anywhere;
+}
+
+.project-figures {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin: 0;
+  border: 1px solid var(--color-divider);
+  font-variant-numeric: tabular-nums;
+}
+
+.project-figures__cell {
+  display: flex;
+  flex-direction: column-reverse;
+  justify-content: flex-end;
+  min-width: 0;
+  padding: 9px 10px;
+  margin: 0 -1px -1px 0;
+  border-right: 1px solid var(--color-divider);
+  border-bottom: 1px solid var(--color-divider);
+}
+
+.project-figures__cell dd {
+  margin: 0;
+  font-family: var(--font-heading);
+  font-weight: 600;
+  font-size: 20px;
+  line-height: 1.05;
+  overflow-wrap: anywhere;
+}
+
+.project-figures__cell dt {
+  font-size: 11.5px;
+  color: var(--color-neutral-700);
+}
+
+.inspector-cost {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  font-size: 12.5px;
+}
+
+.inspector-cost__label {
+  color: var(--color-neutral-700);
+}
+
+.inspector-cost button.link {
+  text-align: right;
+}
+
+/* ------------------------------------------------------------ Contrôle de conception */
+
+.inspector-control {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  min-width: 0;
+  scroll-margin-top: 12px;
+}
+
+.inspector-control__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.inspector-control__title {
+  margin: 0;
+  font-family: var(--font-heading);
+  font-weight: 600;
+  font-size: 17px;
+}
+
+.inspector-control__profile.btn {
+  padding: 2px 4px;
+  font-family: var(--font-body);
+  font-weight: 400;
+  font-size: 12px;
+  color: var(--color-neutral-700);
+}
+
+.inspector-control__contexts,
+.inspector-control__none {
+  margin: 0;
+  font-size: 11.5px;
+  color: var(--color-neutral-700);
+  overflow-wrap: anywhere;
+}
+
+.control-counts {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin: 0;
+  border: 1px solid var(--color-divider);
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.control-counts__cell {
+  display: flex;
+  flex-direction: column-reverse;
+  padding: 6px 0;
+  min-width: 0;
+}
+
+.control-counts__cell + .control-counts__cell {
+  border-left: 1px solid var(--color-divider);
+}
+
+.control-counts__cell dd {
+  margin: 0;
+  font-family: var(--font-heading);
+  font-weight: 600;
+  font-size: 18px;
+  line-height: 1;
+}
+
+.control-counts__cell dt {
+  font-size: 11px;
+}
+
+.control-counts__cell abbr {
+  text-decoration: none;
+}
+
+.control-counts__cell[data-severity="bloquant"] {
+  color: var(--sev-bloquant);
+}
+
+.control-counts__cell[data-severity="avertissement"] {
+  color: var(--sev-avertissement);
+  background: var(--color-neutral-100);
+}
+
+.control-counts__cell[data-severity="conseil"] {
+  color: var(--sev-conseil);
+}
+
+.control-counts__cell[data-severity="ok"] {
+  color: var(--ok);
+}
+
+/* Aucun bloquant : compteur neutre (maquette 2d). */
+.control-counts__cell[data-severity="bloquant"][data-zero="true"] {
+  color: var(--color-neutral-600);
+}
+
+/* ------------------------------------------------------------ Cartes des règles en défaut */
+
+.rule-cards {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+.rule-card {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.rule-card--selected {
+  border-color: var(--selected);
+  outline: 1px solid var(--selected);
+}
+
+.rule-card .rule-card__button {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 3px;
+  width: 100%;
+  padding: 10px 12px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+}
+
+.rule-card .rule-card__button:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--text) 5%, transparent);
+}
+
+.rule-card__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.rule-card__severity {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-heading);
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.rule-card[data-severity="bloquant"] .rule-card__severity {
+  color: var(--sev-bloquant);
+}
+
+.rule-card[data-severity="avertissement"] .rule-card__severity {
+  color: var(--sev-avertissement);
+}
+
+.rule-card[data-severity="conseil"] .rule-card__severity {
+  color: var(--sev-conseil);
+}
+
+.rule-card__loc {
+  font-size: 11.5px;
+  color: var(--color-neutral-700);
+  text-align: right;
+}
+
+.rule-card__id {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--color-neutral-700);
+  overflow-wrap: anywhere;
+}
+
+.rule-card__details {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 0 12px 10px;
+  font-size: 12px;
+}
+
+.rule-card__details .override {
+  padding: 0;
+}
+
+/* ------------------------------------------------------------ Liens repliés et listes */
+
+.control-folds {
+  margin: 0;
+  font-size: 12px;
+  color: var(--color-neutral-700);
+}
+
+.control-folds__link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font-size: inherit;
+  font-variant-numeric: tabular-nums;
+}
+
+.control-folds__link:hover:not(:disabled) {
+  background: none;
+  color: var(--accent-ink);
+  text-decoration: underline;
+}
+
+.control-folds__link[aria-expanded="true"] {
+  color: var(--accent-ink);
+}
+
+.inspector-control .sev {
+  min-width: 0;
+  padding-top: 6px;
+  border-top: 1px solid var(--color-divider);
+}
+
+.inspector-control .result {
+  padding: 6px 8px;
+  font-size: 12px;
+}
+
+/* ------------------------------------------------------------ Prédimensionnement */
+
+.inspector .precheck-line {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--color-divider);
+  border-radius: 0;
+  text-align: left;
+}
+
+.precheck-line__title {
+  font-family: var(--font-heading);
+  font-weight: 600;
+  font-size: 15px;
+}
+
+.precheck-line__summary {
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.precheck-line__summary.pc-bad {
+  font-weight: 400;
+}
+
+.inspector .precheck {
+  margin-top: -6px;
+}
+
+/* ------------------------------------------------------------ Pied */
+
+.project-inspector__spacer {
+  flex: 1 1 auto;
+}
+
+.inspector-disclaimer {
+  margin: 0;
+  font-size: 11.5px;
+  color: var(--color-neutral-700);
+}

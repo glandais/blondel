@@ -1,0 +1,163 @@
+/*
+ * Vue centrale du parcours libre (maquette 1b) : barre de vue (onglets, − + Recadrer), cadre
+ * blueprint de la vue, ligne de chiffres. La zone `.workarea` est placée dans la grille de `.app`
+ * par styles.css.
+ */
+
+.workarea {
+  /* Bloc conteneur des descendants en position absolue (.visually-hidden). */
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+  min-height: 0;
+  padding: 14px 16px 16px;
+}
+
+/* ------------------------------------------------------------ Barre de vue */
+
+.view-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.view-bar .seg {
+  border-color: var(--border);
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.view-bar .seg .seg-opt {
+  padding: 6px 14px;
+}
+
+.view-bar__zoom {
+  display: flex;
+  gap: 4px;
+  margin-left: auto;
+}
+
+.view-bar__zoom .btn {
+  height: 32px;
+  font-size: 13px;
+}
+
+.view-bar__zoom .btn-icon {
+  width: 32px;
+}
+
+/* ------------------------------------------------------------ Cadre de la vue */
+
+.view {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  padding: 10px;
+  background: var(--view-bg);
+}
+
+/* Zoom des SVG exportés : la zone défile, le dessin garde son rapport (centré tant qu'il tient). */
+.zoomable {
+  display: grid;
+  /* Une cellule de la taille du cadre : les pourcentages du contenu s'y rapportent. */
+  grid-template: minmax(0, 1fr) / minmax(0, 1fr);
+  width: 100%;
+  height: 100%;
+  overflow: auto;
+}
+
+.zoomable__content {
+  margin: auto;
+  min-width: 0;
+  min-height: 0;
+}
+
+/* ------------------------------------------------------------ Ligne de chiffres */
+
+.figure-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 18px;
+  min-width: 0;
+  font-size: 12px;
+  color: var(--color-neutral-800);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Base nulle : les chiffres passent à la ligne entre eux, « Calculé en N ms » reste sur la
+   première ligne (maquette 1b, une seule ligne à 1440 px). */
+.figure-line__list {
+  display: flex;
+  flex: 1 1 0;
+  flex-wrap: wrap;
+  gap: 4px 18px;
+  margin: 0;
+  min-width: 0;
+}
+
+.figure-line__item {
+  display: flex;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+.figure-line__item dt {
+  font-weight: 600;
+}
+
+.figure-line__item dd {
+  margin: 0;
+}
+
+.figure-line__errors {
+  color: var(--danger);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.figure-line__pending,
+.figure-line__time {
+  margin-left: auto;
+  color: var(--color-neutral-700);
+  white-space: nowrap;
+}
+
+.figure-line__pending {
+  font-style: italic;
+}
+
+/* Détail des temps (cœur, maillage) : repli natif, déplié au-dessus de la ligne. */
+.figure-line__time {
+  position: relative;
+}
+
+.figure-line__time > summary {
+  cursor: pointer;
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
+}
+
+.figure-line__time-details {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 6px);
+  z-index: 5;
+  width: max-content;
+  max-width: min(28rem, calc(100vw - 2rem));
+  margin: 0;
+  padding: 8px 10px;
+  list-style: none;
+  white-space: normal;
+  background: var(--color-bg);
+  border: 1px solid var(--color-divider);
+  box-shadow: var(--shadow-md);
+}
+
+.figure-line__time-details li + li {
+  margin-top: 4px;
+}

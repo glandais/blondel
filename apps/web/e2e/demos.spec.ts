@@ -9,12 +9,15 @@ import {
   applyPreset,
   PRESETS,
   blockingCount,
+  closeProjectMenu,
   describeTasks,
   instrument,
   openApp,
+  openProjectMenu,
   overBudget,
   settle,
   takeLongTasks,
+  viewTab,
 } from "./support.js";
 
 /** Libellés des démos du cœur (`DEMO_PRESET_LABELS`), dans l'ordre du sélecteur. */
@@ -38,7 +41,8 @@ test.beforeEach(async ({ page }) => {
 
 test("sélecteur : deux groupes, Basiques puis Démo, description d'une ligne", async ({ page }) => {
   await openApp(page);
-  const select = page.getByLabel("Préréglage");
+  const menu = await openProjectMenu(page);
+  const select = menu.getByLabel("Préréglage");
   const groups = select.locator("optgroup");
   await expect(groups).toHaveCount(2);
   await expect(groups.nth(0)).toHaveAttribute("label", "Basiques");
@@ -60,24 +64,31 @@ test(`chaque démo : onglet 3D, aucun bloquant, une entrée d'annulation (tâche
   await settle(page);
   await takeLongTasks(page);
   const problems: string[] = [];
-  const name = page.getByLabel("Projet", { exact: true });
+  // Nom du projet : bouton du menu du projet (barre du haut).
+  const name = page.locator(".topbar__project-name");
+  const demoTag = page.locator(".topbar__demo");
+  await expect(demoTag).toHaveCount(0);
   for (const label of DEMOS) {
-    const before = await name.inputValue();
-    await page.getByLabel("Préréglage").selectOption({ label });
-    await page.getByRole("button", { name: "Appliquer", exact: true }).click();
+    const before = (await name.textContent()) ?? "";
+    const menu = await openProjectMenu(page);
+    await expect(menu.getByLabel("Projet", { exact: true })).toHaveValue(before);
+    await menu.getByLabel("Préréglage").selectOption({ label });
+    await menu.getByRole("button", { name: "Appliquer", exact: true }).click();
     await settle(page);
-    await expect(page.getByRole("tab", { name: "3D", exact: true })).toHaveAttribute(
-      "aria-selected",
-      "true",
-    );
+    await expect(menu.getByLabel("Projet", { exact: true })).toHaveValue(label);
+    await closeProjectMenu(page);
+    await expect(viewTab(page, "3D")).toHaveAttribute("aria-selected", "true");
     await expect(page.locator(".viewer3d canvas")).toBeVisible();
     await expect(page.locator(".viewer3d__empty")).toHaveCount(0);
-    await expect(name).toHaveValue(label);
-    await expect(page.locator(".statusbar__errors")).toHaveCount(0);
+    await expect(name).toHaveText(label);
+    // Étiquette « Démo » de la barre du haut.
+    await expect(demoTag).toHaveText("Démo");
+    await expect(page.locator(".figure-line__errors")).toHaveCount(0);
     expect(await blockingCount(page), label).toBe(0);
     await expect(page.locator(".notice")).toContainText(label);
-    // La page tient dans la fenêtre : seuls les panneaux défilent (régression :
-    // `.visually-hidden` du panneau de droite agrandissait le document).
+    // La page tient dans la fenêtre, sans défilement horizontal ni vertical du document : seuls
+    // les panneaux défilent (régression : `.visually-hidden` du panneau de droite agrandissait
+    // le document).
     const overflow = await page.evaluate(() => {
       const de = document.documentElement;
       return { x: de.scrollWidth - de.clientWidth, y: de.scrollHeight - de.clientHeight };
@@ -88,12 +99,12 @@ test(`chaque démo : onglet 3D, aucun bloquant, une entrée d'annulation (tâche
     const over = overBudget(tasks);
     if (over.length > 0) problems.push(`${label}\n${describeTasks(over, tasks)}`);
     // Une seule entrée d'annulation : « Annuler » rend le projet précédent.
-    await page.getByRole("button", { name: "Annuler", exact: true }).click();
+    await page.getByRole("button", { name: "Annuler (Ctrl+Z)", exact: true }).click();
     await settle(page);
-    await expect(name).toHaveValue(before);
-    await page.getByRole("button", { name: "Rétablir", exact: true }).click();
+    await expect(name).toHaveText(before);
+    await page.getByRole("button", { name: "Rétablir (Ctrl+Maj+Z)", exact: true }).click();
     await settle(page);
-    await expect(name).toHaveValue(label);
+    await expect(name).toHaveText(label);
     await takeLongTasks(page);
   }
   expect(problems.join("\n\n"), `tâches > ${LONG_TASK_BUDGET_MS} ms`).toBe("");
@@ -166,15 +177,15 @@ test("démo : cotes et contrôles masqués, réactivables, rétablis par un pré
   // Réactivation par l'utilisateur, conservée en changeant d'onglet.
   await page.getByRole("checkbox", { name: "Contrôles sur les pièces", exact: true }).check();
   await page.getByRole("checkbox", { name: "Cotes principales", exact: true }).check();
-  await page.getByRole("tab", { name: "Plan 2D", exact: true }).click();
-  await page.getByRole("tab", { name: "3D", exact: true }).click();
+  await viewTab(page, "Plan").click();
+  await viewTab(page, "3D").click();
   await expectOverlays(page, true);
   await expect(page.locator(".viewer3d__overlay [data-annotation]").first()).toBeAttached();
   // Nouvelle démo : de nouveau masqués ; préréglage de base : rétablis.
   await applyPreset(page, "Hélicoïdal à jour central");
   await expectOverlays(page, false);
   await applyPreset(page, "Hélicoïdal à fût central");
-  await page.getByRole("tab", { name: "3D", exact: true }).click();
+  await viewTab(page, "3D").click();
   await expectOverlays(page, true);
 });
 

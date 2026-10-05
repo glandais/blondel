@@ -4,11 +4,14 @@
  * - contraste non textuel (WCAG 2.1, critère 1.4.11) : la limite des champs de saisie et des
  *   boutons atteint 3:1 sur les surfaces où ils sont posés, dans les trois blocs de thème ;
  * - contraste du texte courant (WCAG 1.4.3) : 4,5:1 sur le fond et les panneaux ;
+ * - fonds pleins d'accent qui portent du texte sur `--accent-fill` (ADR-0009 point 11) : texte à
+ *   4,5:1 au moins dans les trois thèmes, vérifié dans toutes les feuilles de l'application ;
+ * - grille du parcours libre (maquette 1b) ;
  * - angles vifs (`--radius: 0`), couleurs fonctionnelles seulement par `palette.css` (`--fn-*`) ;
  * - `main.tsx` charge `palette.css` avant `styles.css`, et aucune ressource externe.
  */
-import { readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { readdirSync, readFileSync } from "node:fs";
+import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
@@ -141,6 +144,118 @@ describe("contraste du texte (WCAG 1.4.3)", () => {
 
   it("le texte en accent passe par --accent-ink, jamais par --accent", () => {
     expect(CSS).not.toMatch(/(?:^|[^-])color:\s*var\(--accent\)/m);
+  });
+});
+
+/** Feuilles `.css` de l'application (toutes tâches confondues), sans commentaires. */
+function sheets(dir: string): { file: string; css: string }[] {
+  const out: { file: string; css: string }[] = [];
+  for (const e of readdirSync(dir, { withFileTypes: true })) {
+    const p = join(dir, e.name);
+    if (e.isDirectory()) out.push(...sheets(p));
+    else if (e.name.endsWith(".css")) {
+      out.push({
+        file: relative(DIR, p),
+        css: readFileSync(p, "utf8").replace(/\/\*[\s\S]*?\*\//g, ""),
+      });
+    }
+  }
+  return out;
+}
+
+/** Règles feuilles (sélecteur → corps) d'une feuille ; les blocs `@media` sont traversés. */
+function rules(css: string): { selector: string; body: string }[] {
+  return [...css.matchAll(/([^{}]+)\{([^{}]*)\}/g)].map((m) => ({
+    selector: (m[1] as string).trim(),
+    body: m[2] as string,
+  }));
+}
+
+describe("contraste des fonds pleins d'accent (ADR-0009 point 11)", () => {
+  it("--accent-fill : pas 700 de la ramp (#416180 en clair, #b5d9fd en sombre)", () => {
+    expect(resolve({}, "--accent-fill")).toBe("#416180");
+    expect(resolve(DARK_SYSTEM, "--accent-fill")).toBe("#b5d9fd");
+    expect(resolve(DARK_FORCED, "--accent-fill")).toBe("#b5d9fd");
+  });
+
+  for (const [name, t] of Object.entries(THEMES)) {
+    it(`thème ${name} : --accent-text ≥ 4,5:1 sur --accent-fill, son survol et son appui`, () => {
+      for (const fill of ["--accent-fill", "--accent-fill-hover", "--accent-fill-pressed"]) {
+        expect(contrast(t, "--accent-text", fill), fill).toBeGreaterThanOrEqual(4.5);
+      }
+    });
+  }
+
+  it("l'accent Industry seul ne porterait pas de texte (contre-épreuve)", () => {
+    expect(contrast({}, "--accent-text", "--accent")).toBeLessThan(4.5);
+  });
+
+  const all = sheets(DIR);
+
+  it("parcourt toutes les feuilles de l'application", () => {
+    const files = all.map((s) => s.file);
+    expect(files).toContain("styles.css");
+    expect(files.length).toBeGreaterThan(5);
+  });
+
+  it("aucun fond plein en accent Industry (var(--accent) / var(--color-accent))", () => {
+    const bad = all.flatMap(({ file, css }) =>
+      rules(css)
+        .filter((r) => /background(?:-color)?:\s*var\(--(?:color-)?accent\)/.test(r.body))
+        .map((r) => `${file} : ${r.selector}`),
+    );
+    expect(bad).toEqual([]);
+  });
+
+  it("tout texte en --accent-text est posé sur un fond --accent-fill…", () => {
+    const bad = all.flatMap(({ file, css }) =>
+      rules(css)
+        .filter((r) => /(?:^|[;\s])color:\s*var\(--accent-text\)/.test(r.body))
+        .filter((r) => !/background(?:-color)?:\s*var\(--accent-fill[\w-]*\)/.test(r.body))
+        .map((r) => `${file} : ${r.selector}`),
+    );
+    expect(bad).toEqual([]);
+  });
+
+  it("bouton primaire et option active d'un segmenté sur --accent-fill", () => {
+    expect(rule(".btn-primary,\n.btn-primary.blueprint")).toContain(
+      "background: var(--accent-fill);",
+    );
+    expect(
+      rule(
+        '.seg .seg-opt:is([aria-checked="true"], [aria-selected="true"], [aria-pressed="true"])',
+      ),
+    ).toContain("background: var(--accent-fill);");
+  });
+});
+
+describe("mise en page du parcours libre (maquette 1b)", () => {
+  it("colonnes : rail 76, panneau 330, inspecteur 340 ; vue en minmax(0, 1fr)", () => {
+    expect(rule(".app")).toContain("grid-template-columns: 76px minmax(0, 1fr) 340px;");
+    expect(rule('.app[data-panel="open"]')).toContain(
+      "grid-template-columns: 76px 330px minmax(0, 1fr) 340px;",
+    );
+    expect(rule('.app[data-workspace="fabrication"]')).toContain(
+      "grid-template-columns: minmax(0, 1fr) 340px;",
+    );
+  });
+
+  it("zones placées par styles.css", () => {
+    for (const [cls, area] of [
+      ["topbar", "topbar"],
+      ["rail", "rail"],
+      ["free-panel", "panel"],
+      ["workarea", "work"],
+      ["inspector", "inspector"],
+    ]) {
+      expect(rule(`.app > .${cls}`)).toContain(`grid-area: ${area};`);
+    }
+  });
+
+  it("anciennes règles retirées (barre d'outils, colonnes, barre d'état, onglets)", () => {
+    for (const dead of [".toolbar", ".statusbar", ".tabs", ".left", ".right", ".center {"]) {
+      expect(CSS, dead).not.toContain(dead);
+    }
   });
 });
 

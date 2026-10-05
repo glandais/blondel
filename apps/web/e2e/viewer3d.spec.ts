@@ -116,3 +116,79 @@ test(`outils 3D : cotes, éclatée, coupe, mesure, isolation (tâches ≤ ${LONG
   await expect(page.locator(".viewer3d__errors")).toHaveCount(0);
   expect(over.join("\n\n")).toBe("");
 });
+
+interface CameraHook {
+  pose: () => { position: [number, number, number]; target: [number, number, number] };
+  orbit: (azimuthDeg: number, elevationDeg: number) => void;
+}
+
+/** Pose de la caméra (point d'accès de test de la vue 3D). */
+async function cameraPose(page: Page) {
+  return page.evaluate(() => {
+    const h = (window as Window & { __blondelViewer3D?: CameraHook }).__blondelViewer3D;
+    if (!h) throw new Error("point d'accès de test de la vue 3D absent");
+    return h.pose();
+  });
+}
+
+const distance = (p: { position: number[]; target: number[] }) =>
+  Math.hypot(...p.position.map((v, i) => v - p.target[i]!));
+
+test("vue 3D : boutons − / + et Recadrer de la vue centrale (sans recalcul)", async ({ page }) => {
+  await openApp(page);
+  await applyPreset(page, "Escalier droit");
+  await openTab(page, "3D");
+  await expect.poll(() => page.evaluate(() => "__blondelViewer3D" in window)).toBe(true);
+  const initial = await cameraPose(page);
+  const zoomIn = page.getByRole("button", { name: "Zoom avant", exact: true });
+  const zoomOut = page.getByRole("button", { name: "Zoom arrière", exact: true });
+  const fit = page.getByRole("button", { name: "Recadrer", exact: true });
+
+  // « + » rapproche la caméra de sa cible, « − » l'éloigne ; la cible ne bouge pas.
+  await zoomIn.click();
+  await expect.poll(async () => distance(await cameraPose(page))).toBeLessThan(distance(initial));
+  const closer = await cameraPose(page);
+  expect(closer.target).toEqual(initial.target);
+  await zoomOut.click();
+  await zoomOut.click();
+  await expect
+    .poll(async () => distance(await cameraPose(page)))
+    .toBeGreaterThan(distance(initial));
+  // Aucun calcul relancé par le zoom.
+  await expect(page.locator(".figure-line__pending")).toHaveCount(0);
+
+  // Vue tournée, puis « Recadrer » : cadrage de trois quarts de l'escalier entier (celui des
+  // démos, `three/framing.ts` : 35° d'azimut, 28° de plongée), le même d'où que l'on parte.
+  const orbit = (az: number, el: number) =>
+    page.evaluate(
+      ([a, e]) =>
+        (window as Window & { __blondelViewer3D?: CameraHook }).__blondelViewer3D!.orbit(a!, e!),
+      [az, el],
+    );
+  const angles = (p: { position: number[]; target: number[] }) => {
+    const [dx, dy, dz] = p.position.map((v, i) => v - p.target[i]!) as [number, number, number];
+    return {
+      azimuth: (Math.atan2(dx, dz) * 180) / Math.PI,
+      elevation: (Math.asin(dy / Math.hypot(dx, dy, dz)) * 180) / Math.PI,
+    };
+  };
+  await orbit(70, -15);
+  await fit.click();
+  await expect
+    .poll(async () => {
+      const a = angles(await cameraPose(page));
+      return Math.abs(a.azimuth - 35) < 1 && Math.abs(a.elevation - 28) < 1;
+    })
+    .toBe(true);
+  const framed = await cameraPose(page);
+  await orbit(-40, 20);
+  await zoomIn.click();
+  await fit.click();
+  await expect
+    .poll(async () => {
+      const p = await cameraPose(page);
+      return Math.max(...p.position.map((v, i) => Math.abs(v - framed.position[i]!)));
+    })
+    .toBeLessThan(0.001);
+  await expect(page.locator(".viewer3d__errors")).toHaveCount(0);
+});

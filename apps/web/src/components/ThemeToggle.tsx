@@ -1,6 +1,8 @@
 /**
  * Thème clair / sombre / système : attribut `data-theme` sur `<html>`, choix mémorisé dans le
- * navigateur (préférence locale, sans conséquence si le stockage est indisponible).
+ * navigateur (préférence locale, sans conséquence si le stockage est indisponible). La
+ * synchronisation (`useThemeSync`) tourne dans la barre du haut, même menu ⋯ fermé ; la liste
+ * (`ThemeToggle`) est dans le menu ⋯.
  */
 import { useEffect, useId, useState } from "react";
 import { useT } from "../i18n/useT.js";
@@ -35,10 +37,13 @@ export function useResolvedTheme(): "light" | "dark" {
   return choice === "system" ? (systemDark ? "dark" : "light") : choice;
 }
 
-export function ThemeToggle() {
-  const t = useT();
+/**
+ * Synchronisation du thème, indépendante de l'affichage de la liste (menu ⋯ fermé) : choix
+ * mémorisé relu au montage, attribut `data-theme` appliqué et choix mémorisé à chaque changement.
+ * Appelé une seule fois, par la barre du haut.
+ */
+export function useThemeSync(): void {
   const theme = useApp((s) => s.theme);
-  const id = useId();
   useEffect(() => {
     appStore.getState().setTheme(readTheme());
   }, []);
@@ -52,6 +57,13 @@ export function ThemeToggle() {
       // Stockage indisponible : le choix vaut pour la session.
     }
   }, [theme]);
+}
+
+/** Liste « Thème » (sans effet propre : voir `useThemeSync`). */
+export function ThemeToggle() {
+  const t = useT();
+  const theme = useApp((s) => s.theme);
+  const id = useId();
   return (
     <>
       <label htmlFor={id}>{t.t("ui.theme.label")}</label>
