@@ -22,7 +22,8 @@ Arbitrages de l'utilisateur (2026-10-05), tous conformes aux recommandations :
 8. **Prédimensionnement** (jeu de charges, catégorie d'usage) : reste dans Structure, repris en ligne dans l'inspecteur « sans sélection ».
 9. **Valeurs ◆ à valider** : leur validation est mémorisée **dans le projet** (champ optionnel du `ProjectSchema`, rétrocompatible, annulable) et reprise dans le dossier PDF. « Générer le dossier » n'est **pas bloqué** par des ◆ restantes : compteur visible et liste dans le PDF.
 10. **Couleurs fonctionnelles** (sélection, sévérités, respecté, trémie) centralisées en une palette unique partagée par l'interface, la 3D et les SVG exportés ; les documents d'atelier restent sur la palette claire. Les écarts d'instantanés qui en découlent sont justifiés.
-11. **Livraison** : worktree dédié (`feat/parcours`), une vague de workflow par étape, fusion sur `develop` (donc déploiement) seulement après accord de l'utilisateur.
+11. **Contraste** (décision du 2026-10-05, après la vague 1) : les fonds pleins d'accent qui portent du texte (bouton primaire, option active d'un segmenté, onglet choisi) prennent `--color-accent-700` (#416180, 5,8:1) au lieu de l'accent Industry #5980a6 (3,7:1, sous WCAG AA) ; un test de contraste le garantit.
+12. **Livraison** : worktree dédié (`feat/parcours`), une vague de workflow par étape, fusion sur `develop` (donc déploiement) seulement après accord de l'utilisateur.
 
 ## Conséquences
 
