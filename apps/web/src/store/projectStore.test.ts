@@ -478,3 +478,51 @@ describe("remplacement du projet (assistant) et état d'interface", () => {
     expect(s.getState().canUndo()).toBe(false);
   });
 });
+
+describe("dernier projet chargé (parcours, ADR-0009)", () => {
+  it("origine et numéro d'ordre de chaque chargement réussi", () => {
+    const s = createProjectStore();
+    expect(s.getState().lastOpened).toBeNull();
+    // Saisie, annuler : pas un chargement.
+    s.getState().setField(["site", "floorToFloor"], 2800);
+    s.getState().undo();
+    expect(s.getState().lastOpened).toBeNull();
+    expect(s.getState().loadDemo(DEMO_PRESET_IDS[0]!).ok).toBe(true);
+    expect(s.getState().lastOpened).toEqual({ origin: "demo", seq: 1 });
+    expect(s.getState().loadPreset("quarter-left").ok).toBe(true);
+    expect(s.getState().lastOpened).toEqual({ origin: "preset", seq: 2 });
+    expect(s.getState().importText(serializeProject(createProject("straight"))).ok).toBe(true);
+    expect(s.getState().lastOpened).toEqual({ origin: "import", seq: 3 });
+    expect(s.getState().replaceProject(createProject("quarter-right")).ok).toBe(true);
+    expect(s.getState().lastOpened).toEqual({ origin: "assistant", seq: 4 });
+    expect(s.getState().replaceProject(createProject("straight"), undefined, "import").ok).toBe(
+      true,
+    );
+    expect(s.getState().lastOpened).toEqual({ origin: "import", seq: 5 });
+    // Même origine deux fois : deux ouvertures distinctes.
+    s.getState().loadPreset("straight");
+    s.getState().loadPreset("straight");
+    expect(s.getState().lastOpened?.seq).toBe(7);
+  });
+
+  it("échecs : rien ne change", () => {
+    const s = createProjectStore();
+    expect(s.getState().importText("pas du json").ok).toBe(false);
+    expect(s.getState().restoreRejectedAutosave().ok).toBe(false);
+    const invalid = { ...createProject("straight"), site: { floorToFloor: -1 } } as Project;
+    expect(s.getState().replaceProject(invalid).ok).toBe(false);
+    expect(s.getState().lastOpened).toBeNull();
+  });
+
+  it("copie de secours restaurée : origine « restore »", () => {
+    const raw = serializeProject(createProject("straight", { name: "Copie" }));
+    const storage = memoryStorage({
+      [AUTOSAVE_KEY]: serializeProject(createProject("straight", { name: "Courant" })),
+      [AUTOSAVE_REJECTED_KEY]: raw,
+    });
+    const s = createProjectStore({ storage, autosaveDelayMs: 0 });
+    expect(s.getState().lastOpened).toBeNull();
+    expect(s.getState().restoreRejectedAutosave().ok).toBe(true);
+    expect(s.getState().lastOpened).toEqual({ origin: "restore", seq: 1 });
+  });
+});

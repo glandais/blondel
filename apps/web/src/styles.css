@@ -1,75 +1,186 @@
-/* Blondel — style sobre, variables CSS, thème clair / sombre (système ou forcé). */
+/*
+ * Blondel — système de design Industry (ADR-0009) : jetons, thème clair / sombre (système ou
+ * forcé), styles de base et classes réutilisables.
+ *
+ * - Jetons Industry (`--color-*`, `--font-*`, `--space-*`, `--shadow-*`, `--radius`) repris de
+ *   `docs/ux/design_handoff_parcours_guide_libre/_ds/…/styles.css`. Le thème sombre en est
+ *   dérivé : fond plus sombre que neutral-900, ramps inversées (le pas n du clair devient le
+ *   pas 1000 − n), de sorte qu'un même pas garde le même rôle (neutral-700 = texte secondaire,
+ *   accent-700 = texte en accent) dans les deux thèmes.
+ * - Les anciens noms de l'application (`--bg`, `--panel`, `--text`, `--accent`…) sont gardés et
+ *   pointent sur ces jetons ; ils sont déclarés une seule fois dans `:root` et se résolvent avec
+ *   le thème courant.
+ * - Couleurs fonctionnelles (sélection, sévérités, respecté, trémie) : variables `--fn-*` de
+ *   `palette.css` (palette unique partagée avec la 3D et les exports), reprises ici sous leurs
+ *   anciens alias. Aucune valeur hexadécimale fonctionnelle dans ce fichier.
+ */
 
 :root {
-  --bg: #f6f7f8;
-  --panel: #ffffff;
-  --panel-2: #f0f2f4;
-  --text: #1d2125;
-  --muted: #5f6770;
-  --border: #d6dade;
+  /* — Jetons Industry — */
+  --color-bg: #f2f2f3;
+  --color-surface: #e9e9ea;
+  --color-text: #1d1f20;
+  --color-accent: #5980a6;
+  --color-divider: color-mix(in srgb, #1d1f20 16%, transparent);
+
+  --color-neutral-100: #f5f5f8;
+  --color-neutral-200: #e7e7ea;
+  --color-neutral-300: #d4d4d7;
+  --color-neutral-400: #b7b7ba;
+  --color-neutral-500: #98989b;
+  --color-neutral-600: #7a7a7d;
+  --color-neutral-700: #5d5d60;
+  --color-neutral-800: #424244;
+  --color-neutral-900: #2b2b2d;
+
+  --color-accent-100: #eef6ff;
+  --color-accent-200: #d6ebff;
+  --color-accent-300: #b5d9fd;
+  --color-accent-400: #94bce3;
+  --color-accent-500: #749dc4;
+  --color-accent-600: #597ea3;
+  --color-accent-700: #416180;
+  --color-accent-800: #2c455d;
+  --color-accent-900: #1d2d3d;
+
+  --font-heading: "Barlow Condensed", system-ui, sans-serif;
+  --font-body: "Barlow", system-ui, sans-serif;
+
+  --space-1: 3.4px;
+  --space-2: 6.8px;
+  --space-3: 10.2px;
+  --space-4: 13.6px;
+  --space-6: 20.4px;
+  --space-8: 27.2px;
+
+  --shadow-sm: 0 1px 2px color-mix(in srgb, #2b2b2d 14%, transparent);
+  --shadow-md: 0 3px 10px color-mix(in srgb, #2b2b2d 16%, transparent);
+  --shadow-lg: 0 12px 32px color-mix(in srgb, #2b2b2d 22%, transparent);
+
+  /* Angles vifs partout. */
+  --radius: 0;
+
+  /* États du bouton primaire, tirés de la ramp (Industry : survol 600, appui 700). */
+  --accent-hover: var(--color-accent-600);
+  --accent-pressed: var(--color-accent-700);
+  /* Texte en accent (liens, boutons « ghost ») : pas profond, lisible en corps de texte. */
+  --accent-ink: var(--color-accent-700);
+
+  /* — Anciens noms de l'application, sur les jetons — */
+  --bg: var(--color-bg);
+  --panel: var(--color-neutral-100);
+  --panel-2: var(--color-surface);
+  --text: var(--color-text);
+  --muted: var(--color-neutral-700);
+  --border: var(--color-divider);
   /* Limite des champs et boutons : au moins 3:1 sur --panel, --panel-2 et --bg (WCAG 1.4.11) ;
      --border reste réservé aux séparateurs décoratifs. */
-  --control-border: #7d868f;
-  --accent: #2f6fb3;
-  --accent-text: #ffffff;
-  --focus: #2f6fb3;
-  --danger: #b3261e;
-  --warn: #9a6200;
-  --info: #2f6fb3;
-  --ok: #2e7d32;
-  --sev-bloquant: #b3261e;
-  --sev-avertissement: #9a6200;
-  --sev-conseil: #2f6fb3;
-  --selected: #ff7a1a;
-  --selected-fill: rgba(255, 122, 26, 0.4);
-  --radius: 6px;
-  --gap: 0.75rem;
-  --font: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --control-border: var(--color-neutral-600);
+  --accent: var(--color-accent);
+  --accent-text: var(--color-bg);
+  --focus: var(--color-accent);
+  --gap: var(--space-3);
+  --font: var(--font-body);
   --mono: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+
+  /* — Couleurs fonctionnelles (palette.css), sous leurs anciens alias — */
+  --selected: var(--fn-selection);
+  --selected-fill: color-mix(in srgb, var(--fn-selection) 40%, transparent);
+  --danger: var(--fn-blocking);
+  --sev-bloquant: var(--fn-blocking);
+  --warn: var(--fn-warning);
+  --sev-avertissement: var(--fn-warning);
+  --info: var(--fn-advice);
+  --sev-conseil: var(--fn-advice);
+  --ok: var(--fn-ok);
+  --opening: var(--fn-opening);
+
   color-scheme: light;
 }
 
+/* Thème sombre dérivé des ramps : les deux blocs ci-dessous sont identiques (préférence du
+   système, ou choix forcé par `data-theme="dark"`). */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --bg: #15181b;
-    --panel: #1d2125;
-    --panel-2: #252a2f;
-    --text: #e6e8ea;
-    --muted: #9aa3ab;
-    --border: #353b41;
-    --control-border: #6b747d;
-    --accent: #6ea8e6;
-    --accent-text: #0e1114;
-    --focus: #8fbdf0;
-    --danger: #f28b82;
-    --warn: #f0b85a;
-    --info: #8fbdf0;
-    --ok: #81c995;
-    --sev-bloquant: #f28b82;
-    --sev-avertissement: #f0b85a;
-    --sev-conseil: #8fbdf0;
+    --color-bg: #18191b;
+    --color-surface: #2b2b2d;
+    --color-text: #e7e7ea;
+    --color-accent: #94bce3;
+    --color-divider: color-mix(in srgb, #e7e7ea 16%, transparent);
+
+    --color-neutral-100: #2b2b2d;
+    --color-neutral-200: #424244;
+    --color-neutral-300: #5d5d60;
+    --color-neutral-400: #7a7a7d;
+    --color-neutral-500: #98989b;
+    --color-neutral-600: #b7b7ba;
+    --color-neutral-700: #d4d4d7;
+    --color-neutral-800: #e7e7ea;
+    --color-neutral-900: #f5f5f8;
+
+    --color-accent-100: #1d2d3d;
+    --color-accent-200: #2c455d;
+    --color-accent-300: #416180;
+    --color-accent-400: #597ea3;
+    --color-accent-500: #749dc4;
+    --color-accent-600: #94bce3;
+    --color-accent-700: #b5d9fd;
+    --color-accent-800: #d6ebff;
+    --color-accent-900: #eef6ff;
+
+    --shadow-sm: 0 1px 2px color-mix(in srgb, #000000 40%, transparent);
+    --shadow-md: 0 3px 10px color-mix(in srgb, #000000 45%, transparent);
+    --shadow-lg: 0 12px 32px color-mix(in srgb, #000000 55%, transparent);
+
+    --accent-hover: var(--color-accent-700);
+    --accent-pressed: var(--color-accent-800);
+
+    --panel: #202123;
+    --muted: var(--color-neutral-600);
+    --control-border: var(--color-neutral-400);
+
     color-scheme: dark;
   }
 }
 
 :root[data-theme="dark"] {
-  --bg: #15181b;
-  --panel: #1d2125;
-  --panel-2: #252a2f;
-  --text: #e6e8ea;
-  --muted: #9aa3ab;
-  --border: #353b41;
-  --control-border: #6b747d;
-  --accent: #6ea8e6;
-  --accent-text: #0e1114;
-  --focus: #8fbdf0;
-  --danger: #f28b82;
-  --warn: #f0b85a;
-  --info: #8fbdf0;
-  --ok: #81c995;
-  --sev-bloquant: #f28b82;
-  --sev-avertissement: #f0b85a;
-  --sev-conseil: #8fbdf0;
+  --color-bg: #18191b;
+  --color-surface: #2b2b2d;
+  --color-text: #e7e7ea;
+  --color-accent: #94bce3;
+  --color-divider: color-mix(in srgb, #e7e7ea 16%, transparent);
+
+  --color-neutral-100: #2b2b2d;
+  --color-neutral-200: #424244;
+  --color-neutral-300: #5d5d60;
+  --color-neutral-400: #7a7a7d;
+  --color-neutral-500: #98989b;
+  --color-neutral-600: #b7b7ba;
+  --color-neutral-700: #d4d4d7;
+  --color-neutral-800: #e7e7ea;
+  --color-neutral-900: #f5f5f8;
+
+  --color-accent-100: #1d2d3d;
+  --color-accent-200: #2c455d;
+  --color-accent-300: #416180;
+  --color-accent-400: #597ea3;
+  --color-accent-500: #749dc4;
+  --color-accent-600: #94bce3;
+  --color-accent-700: #b5d9fd;
+  --color-accent-800: #d6ebff;
+  --color-accent-900: #eef6ff;
+
+  --shadow-sm: 0 1px 2px color-mix(in srgb, #000000 40%, transparent);
+  --shadow-md: 0 3px 10px color-mix(in srgb, #000000 45%, transparent);
+  --shadow-lg: 0 12px 32px color-mix(in srgb, #000000 55%, transparent);
+
+  --accent-hover: var(--color-accent-700);
+  --accent-pressed: var(--color-accent-800);
+
+  --panel: #202123;
+  --muted: var(--color-neutral-600);
+  --control-border: var(--color-neutral-400);
+
   color-scheme: dark;
 }
 
@@ -87,23 +198,37 @@ body,
 body {
   background: var(--bg);
   color: var(--text);
-  font: 14px/1.4 var(--font);
+  font: 13px/1.45 var(--font);
+}
+
+h2,
+h3 {
+  font-family: var(--font-heading);
+  font-weight: 600;
+  line-height: 1.12;
+  letter-spacing: -0.005em;
 }
 
 h2 {
-  font-size: 0.95rem;
+  font-size: 17px;
   margin: 0;
+}
+
+h3 {
+  font-size: 15px;
 }
 
 button,
 select,
-input {
+input,
+textarea {
   font: inherit;
   color: inherit;
 }
 
+/* Bouton générique : aspect de `.btn-secondary` (filet, fond transparent, angles vifs). */
 button {
-  background: var(--panel-2);
+  background: transparent;
   border: 1px solid var(--control-border);
   border-radius: var(--radius);
   padding: 0.3rem 0.65rem;
@@ -111,35 +236,75 @@ button {
 }
 
 button:hover:not(:disabled) {
-  border-color: var(--accent);
+  background: color-mix(in srgb, var(--text) 7%, transparent);
+}
+
+button:active:not(:disabled) {
+  background: color-mix(in srgb, var(--text) 14%, transparent);
 }
 
 button:disabled {
-  opacity: 0.5;
-  cursor: default;
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 button.link {
   background: none;
   border: none;
-  color: var(--accent);
+  color: var(--accent-ink);
   text-decoration: underline;
+  text-underline-offset: 3px;
   padding: 0;
 }
 
 select,
 input[type="text"],
 input[type="date"] {
-  background: var(--panel);
+  background: var(--color-surface);
   border: 1px solid var(--control-border);
   border-radius: var(--radius);
   padding: 0.25rem 0.4rem;
   min-width: 0;
+  caret-color: var(--accent);
+}
+
+textarea {
+  background: var(--color-surface);
+  border: 1px solid var(--control-border);
+  border-radius: var(--radius);
+  padding: 0.25rem 0.4rem;
+  caret-color: var(--accent);
+}
+
+select:hover,
+input[type="text"]:hover,
+input[type="date"]:hover,
+textarea:hover {
+  border-color: color-mix(in srgb, var(--text) 60%, transparent);
+}
+
+input[type="checkbox"],
+input[type="radio"],
+input[type="range"] {
+  accent-color: var(--accent);
+}
+
+a {
+  color: var(--accent-ink);
+  text-underline-offset: 3px;
+}
+
+:focus {
+  outline: none;
 }
 
 :focus-visible {
   outline: 2px solid var(--focus);
-  outline-offset: 1px;
+  outline-offset: 2px;
+}
+
+::selection {
+  background: color-mix(in srgb, var(--accent) 30%, transparent);
 }
 
 .muted {
@@ -336,8 +501,11 @@ legend {
   gap: 0.15rem;
 }
 
+/* Libellés de champ (Industry : 12,5 px, texte secondaire). Pas de `.field > label` d'Industry :
+   la `.field` de l'application est une colonne flex, dont la mise en page reste inchangée. */
 .field label {
-  font-size: 0.85rem;
+  font-size: 12.5px;
+  color: var(--muted);
 }
 
 .field__hint {
@@ -401,18 +569,11 @@ legend {
   padding: 0.1rem 0.4rem;
 }
 
-.check,
-.auto-field__toggle {
+.check {
   display: flex;
   align-items: center;
   gap: 0.4rem;
   font-size: 0.85rem;
-}
-
-.auto-field {
-  display: flex;
-  flex-direction: column;
-  gap: 0.3rem;
 }
 
 .leg {
@@ -462,13 +623,13 @@ legend {
   z-index: 50;
   max-width: min(28rem, calc(100vw - 2rem));
   background: var(--panel);
-  box-shadow: 0 2px 10px rgb(0 0 0 / 25%);
+  box-shadow: var(--shadow-md);
 }
 
 .badge {
   font-size: 0.78rem;
   padding: 0.1rem 0.45rem;
-  border-radius: 999px;
+  border-radius: var(--radius);
   border: 1px solid currentColor;
 }
 
@@ -570,7 +731,7 @@ legend {
   text-align: center;
   font-size: 0.78rem;
   border: 1px solid currentColor;
-  border-radius: 999px;
+  border-radius: var(--radius);
   margin-left: 0.25rem;
 }
 
@@ -651,7 +812,7 @@ legend {
   background: var(--panel);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.18);
+  box-shadow: var(--shadow-md);
 }
 
 .menu__list--end {
@@ -866,7 +1027,7 @@ legend {
   display: inline-block;
   width: 0.7rem;
   height: 0.7rem;
-  border-radius: 2px;
+  border-radius: var(--radius);
 }
 
 /* ------------------------------------------------------------ Prédimensionnement indicatif */
@@ -1066,7 +1227,7 @@ legend {
 
 .errors-bar__fixes button {
   border-color: var(--accent);
-  color: var(--accent);
+  color: var(--accent-ink);
   font-weight: 600;
 }
 
@@ -1143,4 +1304,281 @@ fieldset.helical {
   display: flex;
   flex-direction: column;
   gap: 0.1rem;
+}
+
+/* ==========================================================================
+   Classes de base Industry (parcours guidé / libre, ADR-0009). Réutilisables
+   partout ; les états (survol, appui, focus, désactivé) sont intégrés.
+   ========================================================================== */
+
+/* ------------------------------------------------------------ Boutons */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-family: var(--font-heading);
+  font-weight: 600;
+  font-size: 14px;
+  line-height: 1.2;
+  color: var(--text);
+  background: transparent;
+  border: 1px solid var(--control-border);
+  border-radius: var(--radius);
+  padding: var(--space-2) calc(var(--space-3) * 1.2);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.btn svg {
+  display: block;
+  flex: none;
+}
+
+.btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.btn-secondary {
+  border-color: var(--control-border);
+}
+
+/* Le seul objet plein de l'interface : fond accent, texte sur le fond de page. */
+.btn-primary,
+.btn-primary.blueprint {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-text);
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+}
+
+.btn-primary:active:not(:disabled) {
+  background: var(--accent-pressed);
+  border-color: var(--accent-pressed);
+}
+
+.btn-ghost {
+  color: var(--accent-ink);
+  border-color: transparent;
+  padding-inline: var(--space-1);
+}
+
+.btn-ghost:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+.btn-ghost:active:not(:disabled) {
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+.btn-icon {
+  width: 36px;
+  height: 36px;
+  padding: 0;
+}
+
+.btn-block {
+  display: flex;
+  width: 100%;
+}
+
+/* ------------------------------------------------------------ Segmenté */
+
+.seg {
+  display: inline-flex;
+  align-items: stretch;
+  border: 1px solid var(--control-border);
+  border-radius: var(--radius);
+}
+
+.seg .seg-opt {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin: 0;
+  padding: 7px 12px;
+  font-size: 13px;
+  line-height: 1.2;
+  color: var(--text);
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius);
+  white-space: nowrap;
+}
+
+.seg .seg-opt + .seg-opt {
+  border-left: 1px solid var(--border);
+}
+
+.seg .seg-opt:is([aria-checked="true"], [aria-selected="true"], [aria-pressed="true"]) {
+  background: var(--accent);
+  color: var(--accent-text);
+}
+
+.seg .seg-opt:is([aria-checked="true"], [aria-selected="true"], [aria-pressed="true"]):hover {
+  background: var(--accent-hover);
+}
+
+.seg .seg-opt:is([aria-checked="true"], [aria-selected="true"], [aria-pressed="true"]):active {
+  background: var(--accent-pressed);
+}
+
+/* Le contour de focus passe au-dessus des options voisines. */
+.seg .seg-opt:focus-visible {
+  position: relative;
+  z-index: 1;
+}
+
+.seg--sm .seg-opt {
+  padding: 4px 8px;
+  font-size: 12px;
+}
+
+.seg--lg .seg-opt {
+  padding: 6px 20px;
+  font-family: var(--font-heading);
+  font-weight: 600;
+  font-size: 15px;
+}
+
+/* ------------------------------------------------------------ Cadre « blueprint » */
+
+.blueprint {
+  position: relative;
+  border: 1px solid var(--border);
+  border-radius: 0;
+}
+
+.blueprint > .corner {
+  position: absolute;
+  width: 11px;
+  height: 11px;
+  color: color-mix(in srgb, var(--text) 55%, transparent);
+  pointer-events: none;
+}
+
+.blueprint > .corner::before,
+.blueprint > .corner::after {
+  content: "";
+  position: absolute;
+  background: currentColor;
+}
+
+.blueprint > .corner::before {
+  left: 5px;
+  top: 0;
+  width: 1px;
+  height: 100%;
+}
+
+.blueprint > .corner::after {
+  top: 5px;
+  left: 0;
+  width: 100%;
+  height: 1px;
+}
+
+.blueprint > .corner.tl {
+  top: -6px;
+  left: -6px;
+}
+
+.blueprint > .corner.tr {
+  top: -6px;
+  right: -6px;
+}
+
+.blueprint > .corner.bl {
+  bottom: -6px;
+  left: -6px;
+}
+
+.blueprint > .corner.br {
+  bottom: -6px;
+  right: -6px;
+}
+
+/* ------------------------------------------------------------ Étiquettes */
+
+.tag {
+  display: inline-flex;
+  align-items: center;
+  font-size: 11px;
+  line-height: 1.3;
+  letter-spacing: 0.02em;
+  padding: 3px 10px;
+  border-radius: var(--radius);
+  white-space: nowrap;
+}
+
+.tag-accent {
+  background: var(--color-accent-100);
+  color: var(--color-accent-800);
+}
+
+.tag-neutral {
+  background: var(--color-neutral-200);
+  color: var(--color-neutral-800);
+}
+
+.tag-outline {
+  border: 1px solid var(--accent);
+  color: var(--accent-ink);
+}
+
+/* ------------------------------------------------------------ Tableau */
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+
+.table th {
+  text-align: left;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  padding: var(--space-2);
+  border-bottom: 1px solid var(--border);
+}
+
+.table td {
+  padding: var(--space-2);
+  border-bottom: 1px solid color-mix(in srgb, var(--text) 8%, transparent);
+}
+
+.table tbody tr:hover {
+  background: color-mix(in srgb, var(--text) 4%, transparent);
+}
+
+/* ------------------------------------------------------------ Typographie utilitaire */
+
+/* Surtitre (« SÉLECTION », « RÈGLES SUR CET ÉLÉMENT »…). */
+.eyebrow {
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-accent-700);
+}
+
+.num {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Marqueur ◆ : valeur par défaut non sourcée, « à valider ». */
+.tv-mark {
+  color: var(--warn);
+  font-size: 10.5px;
+  line-height: 1;
 }

@@ -22,7 +22,7 @@ import {
   type PartFamily,
 } from "../lib/appearance.js";
 import { SEVERITY_LABELS } from "../lib/compliance.js";
-import { MATERIAL_LABELS, SEVERITY_COLORS } from "../three/materials.js";
+import { MATERIAL_LABELS } from "../three/materials.js";
 import type { SectionAxis } from "../three/section.js";
 
 export interface ToolsState {
@@ -171,7 +171,9 @@ export function Viewer3DTools({
                 <li key={sev}>
                   <span
                     className="viewer3d__swatch"
-                    style={{ background: SEVERITY_COLORS[sev] }}
+                    // Pastille : variable CSS de la sévérité (palette fonctionnelle du thème,
+                    // la même que la scène).
+                    style={{ background: `var(--sev-${sev})` }}
                     aria-hidden="true"
                   />
                   {t.t(SEVERITY_LABELS[sev])}

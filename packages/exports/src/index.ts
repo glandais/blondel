@@ -52,9 +52,17 @@ export {
   type PlanTread,
 } from "./plan/drawing.js";
 export {
+  FUNCTIONAL_COLORS,
+  functionalColors,
+  severityRole,
+  type FunctionalColors,
+  type FunctionalRole,
+} from "./palette.js";
+export {
   DARK_THEME,
   LIGHT_THEME,
   resolveTheme,
+  severityColor,
   type SvgScaleOptions,
   type SvgTheme,
   type ThemeOption,

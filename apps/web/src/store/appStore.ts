@@ -19,6 +19,7 @@ import { withWorkshopRates } from "../lib/workshopRates.js";
 import { browserWorker, createJobExec } from "../model/workerClient.js";
 import { AUTOSAVE_KEY, browserStorage } from "./persistence.js";
 import { createModelService, type CompareView, type ModelView } from "./modelStore.js";
+import { createJourneyStore, linkJourneyToProject, type JourneyState } from "./journeyStore.js";
 import { createProjectStore, type AppState } from "./projectStore.js";
 import { createWorkshopStore, type WorkshopState } from "./workshopStore.js";
 
@@ -70,6 +71,19 @@ export const workshopStore = createWorkshopStore(browserStorage());
 
 export function useWorkshop<T>(selector: (s: WorkshopState) => T): T {
   return useStore(workshopStore, selector);
+}
+
+/**
+ * Parcours guidé / libre (ADR-0009) : hors du projet, mémorisé dans le navigateur. Au démarrage,
+ * un projet repris de l'autosauvegarde ouvre le libre, une première visite le guidé (sauf choix
+ * mémorisé) ; chaque projet chargé ensuite applique sa règle d'ouverture (`lastOpened`).
+ */
+export const journeyStore = createJourneyStore(browserStorage(), { hasAutosave: !firstVisit });
+
+linkJourneyToProject(appStore, journeyStore);
+
+export function useJourney<T>(selector: (s: JourneyState) => T): T {
+  return useStore(journeyStore, selector);
 }
 
 /** Calculs du modèle et du comparateur : deux workers distincts (créés à la première demande). */

@@ -1,0 +1,69 @@
+/*
+ * Champ « Auto | Imposer » (AutoIntField, maquette 1b) : libellé, puis le segmenté et, à côté,
+ * la valeur calculée (mode Auto) ou le champ imposé. S'appuie sur les classes globales .seg,
+ * .seg-opt, .num et .field (styles.css). Libellé comme celui des autres champs (.field label),
+ * valeur calculée en texte secondaire Barlow 13 px (maquette : neutral-700, chiffres tabulaires).
+ */
+.auto-int {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.auto-int__label {
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+.auto-int__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.auto-int__row > .seg {
+  flex: none;
+}
+
+/* Valeur calculée : texte (cliquable pour l'imposer), pas un bouton d'action. */
+.auto-int__value {
+  padding: 2px 4px;
+  font-family: var(--font-body);
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  background: transparent;
+  border: 0;
+}
+
+button.auto-int__value:hover:not(:disabled) {
+  color: var(--text);
+  background: transparent;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.auto-int__input {
+  flex: 1 1 8rem;
+  min-width: 0;
+}
+
+.auto-int__input .field {
+  margin: 0;
+}
+
+/* Le libellé du champ imposé est déjà affiché au-dessus du segmenté : il reste le nom
+   accessible du champ, mais n'est plus visible (même technique que .visually-hidden). */
+.auto-int__input .field > label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}

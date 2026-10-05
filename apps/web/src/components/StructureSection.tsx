@@ -4,6 +4,11 @@
  * français (libellés, unités, groupes : `lib/paramLabels.ts`) ; section des profilés choisie
  * dans le catalogue du cœur. Sans plugin disponible, seule la structure « aucune » (marches,
  * contremarches, paliers) est proposée.
+ *
+ * Les paramètres sont répartis par niveau (`Tiered`, `structureParamEntry`) ; le crochet
+ * `useStructureParamForm` et `structureParamItem` servent aussi à la section « Marches », qui
+ * reprend l'essence, le matériau des marches et le rayon de nez (même chemin du projet, même
+ * validation, ADR-0009 point 5).
  */
 import type { StructureContext, StructureKind } from "@blondel/core";
 import { useMemo, useState } from "react";
@@ -28,10 +33,26 @@ import {
   presentFields,
   type PresentedField,
 } from "../lib/paramLabels.js";
+import {
+  paramKey,
+  placementOf,
+  structureParamApplies,
+  structureParamEntry,
+  tierEntry,
+  type ParamTierEntry,
+} from "../lib/paramTiers.js";
 import { formatDecimal, parseDecimal, parseIntMm } from "../lib/units.js";
 import { appStore, useApp, useModel } from "../store/appStore.js";
 import type { UpdateResult } from "../store/projectStore.js";
 import { AutoIntField, CheckField, NumberField, SelectField, TextField } from "./fields.js";
+import {
+  DISPLAY_ALL,
+  hasVisibleItems,
+  Tiered,
+  type SectionProps,
+  type TieredGroup,
+  type TieredItem,
+} from "./sections/Tiered.js";
 
 export const NO_STRUCTURE = "none";
 
@@ -41,11 +62,15 @@ const FAMILY_LABELS: Readonly<Record<StructureKind["family"], MessageKey>> = {
   mixte: "ui.structure.family.mixte",
 };
 
+/** Entrée de repli du choix de structure (le dictionnaire la définit toujours). */
+const KIND_FALLBACK: ParamTierEntry = { tier: "essential", section: "structure", guided: [] };
+
 function setStructure(kind: string, params: Record<string, unknown>): UpdateResult {
   return appStore.getState().setField(["stair", "structure"], { kind, params });
 }
 
-function ParamInput({
+/** Champ d'un paramètre de plugin (libellé, unité, aide et bornes présentés par `paramLabels`). */
+export function ParamInput({
   field,
   value,
   onCommit,
@@ -107,7 +132,9 @@ function ParamInput({
       );
     }
     case "auto-number": {
-      // Sortie du mode automatique : borne minimale du plugin (valeur à saisir, aucune règle).
+      // Valeur retenue par le plugin en mode Auto non exposée par le modèle : libellé neutre
+      // (« calculé ») à côté d'« Auto », jamais la borne. « Imposer » part de la borne minimale
+      // du plugin (simple point de départ de la saisie, aucune règle).
       const fallback = Math.max(1, Math.ceil(field.min ?? 1));
       return (
         <AutoIntField
@@ -164,7 +191,31 @@ function groupFields(
   return out;
 }
 
-export function StructureSection() {
+/** Formulaire des paramètres du plugin de structure courant. */
+export interface StructureParamForm {
+  /** Plugins disponibles. */
+  readonly kinds: readonly StructureKind[];
+  /** Plugin courant (`undefined` : structure « aucune » ou plugin absent). */
+  readonly plugin: StructureKind | undefined;
+  readonly ctx: StructureContext | undefined;
+  /** Défauts du plugin (`undefined` : non calculables, modèle partiel). */
+  readonly defaults: unknown;
+  /** Paramètres du projet complétés par les défauts. */
+  readonly params: Record<string, unknown>;
+  /** Champs présentés dans la langue d'affichage. */
+  readonly fields: readonly PresentedField[];
+  /** Modification d'un champ, validée par le schéma du plugin. */
+  readonly onParam: (field: ParamField) => (value: unknown) => UpdateResult;
+  /** Dernier refus du schéma du plugin. */
+  readonly error: Message | null;
+  readonly setError: (error: Message | null) => void;
+}
+
+/**
+ * Formulaire des paramètres du plugin courant : défauts et champs déduits du plugin, validation
+ * par son schéma (`validateParams`), une modification = une entrée d'historique.
+ */
+export function useStructureParamForm(): StructureParamForm {
   const t = useT();
   const structure = useApp((s) => s.project.stair.structure);
   const project = useApp((s) => s.project);
@@ -181,13 +232,83 @@ export function StructureSection() {
     () => withDefaults(defaults, structure.params),
     [defaults, structure.params],
   );
+  // Champs qui s'appliquent au projet seulement (tôle pliée, poteau : `structureParamApplies`).
   const fields = useMemo(
     () =>
       plugin && defaults !== undefined
-        ? presentFields(plugin.kind, deriveParamFields(defaults, plugin.paramsSchema), params, t)
+        ? presentFields(
+            plugin.kind,
+            deriveParamFields(defaults, plugin.paramsSchema).filter((f) =>
+              structureParamApplies(project, params, f.path),
+            ),
+            params,
+            t,
+          )
         : [],
-    [plugin, defaults, params, t],
+    [plugin, defaults, params, project, t],
   );
+
+  const onParam =
+    (field: ParamField) =>
+    (value: unknown): UpdateResult => {
+      if (!plugin) return { ok: false, issues: [msg("ui.structure.pluginUnavailable")] };
+      const next = afterParamChange(
+        plugin.kind,
+        field.path,
+        setParam(withDefaults(defaults, structure.params), field.path, value),
+      );
+      const invalid = validateParams(plugin, next);
+      if (invalid) {
+        setError(invalid);
+        return { ok: false, issues: [invalid] };
+      }
+      setError(null);
+      return setStructure(structure.kind, next);
+    };
+
+  return { kinds, plugin, ctx, defaults, params, fields, onParam, error, setError };
+}
+
+/**
+ * Élément `Tiered` d'un paramètre de plugin : clé `stair.structure.params.<chemin>`, entrée
+ * `structureParamEntry` (niveau, ◆ déduit de `paramLabels`).
+ */
+export function structureParamItem(
+  form: StructureParamForm,
+  field: PresentedField,
+  group?: TieredGroup,
+): TieredItem {
+  const kind = form.plugin?.kind ?? NO_STRUCTURE;
+  return {
+    key: paramKey(["stair", "structure", "params", ...field.path]),
+    entry: structureParamEntry(kind, field.path),
+    ...(group === undefined ? {} : { group }),
+    node: (
+      <ParamInput
+        field={field}
+        value={getParam(form.params, field.path)}
+        onCommit={form.onParam(field)}
+      />
+    ),
+  };
+}
+
+/** Refus du schéma du plugin (sous le formulaire). */
+export function StructureParamError({ error }: { error: Message | null }) {
+  const t = useT();
+  return error ? (
+    <small className="field__error" role="alert">
+      {t.t(error)}
+    </small>
+  ) : null;
+}
+
+export function StructureSection({ display = DISPLAY_ALL }: Partial<SectionProps> = {}) {
+  const t = useT();
+  const structure = useApp((s) => s.project.stair.structure);
+  const project = useApp((s) => s.project);
+  const form = useStructureParamForm();
+  const { kinds, plugin, ctx, defaults, fields, setError } = form;
 
   const layoutKind = layoutKindOf(project);
   const options = [
@@ -232,66 +353,51 @@ export function StructureSection() {
     return r;
   };
 
-  const onParam =
-    (field: ParamField) =>
-    (value: unknown): UpdateResult => {
-      if (!plugin) return { ok: false, issues: [msg("ui.structure.pluginUnavailable")] };
-      const next = afterParamChange(
-        plugin.kind,
-        field.path,
-        setParam(withDefaults(defaults, structure.params), field.path, value),
-      );
-      const invalid = validateParams(plugin, next);
-      if (invalid) {
-        setError(invalid);
-        return { ok: false, issues: [invalid] };
-      }
-      setError(null);
-      return setStructure(structure.kind, next);
-    };
+  // Paramètres : principaux d'abord, puis un sous-groupe repliable par sous-objet, dans chaque
+  // zone (principale, « Plus de réglages », « Réglages d'atelier »).
+  const items: TieredItem[] = groupFields(fields).flatMap(({ group, fields: gf }) => {
+    const g: TieredGroup | undefined =
+      group === undefined
+        ? undefined
+        : {
+            id: group,
+            render: (children) => (
+              <details className="structure-params__group">
+                <summary>{groupLabel(group, t)}</summary>
+                {children}
+              </details>
+            ),
+          };
+    return gf.map((f) => structureParamItem(form, f, g));
+  });
+  const kindVisible =
+    placementOf(tierEntry("stair.structure.kind") ?? KIND_FALLBACK, display) !== "hidden";
 
   return (
     <>
-      <SelectField
-        label={t.t("ui.structure.label")}
-        value={structure.kind}
-        options={options}
-        onCommit={onKind}
-      />
-      {kinds.length === 0 ? <p className="muted">{t.t("ui.structure.noPlugin")}</p> : null}
-      {plugin && defaults === undefined ? (
-        <p className="muted">{t.t("ui.structure.paramsUnavailable")}</p>
+      {kindVisible ? (
+        <>
+          <SelectField
+            label={t.t("ui.structure.label")}
+            value={structure.kind}
+            options={options}
+            onCommit={onKind}
+          />
+          {kinds.length === 0 ? <p className="muted">{t.t("ui.structure.noPlugin")}</p> : null}
+          {plugin && defaults === undefined ? (
+            <p className="muted">{t.t("ui.structure.paramsUnavailable")}</p>
+          ) : null}
+        </>
       ) : null}
-      {fields.length > 0 ? (
+      {hasVisibleItems(items, display) ? (
         <fieldset className="structure-params">
           <legend>
             {t.t("ui.structure.paramsLegend", { name: plugin ? msg(plugin.labelKey) : "" })}
           </legend>
-          {groupFields(fields).map(({ group, fields: gf }) => {
-            const inputs = gf.map((f) => (
-              <ParamInput
-                key={f.path.join(".")}
-                field={f}
-                value={getParam(params, f.path)}
-                onCommit={onParam(f)}
-              />
-            ));
-            return group === undefined ? (
-              inputs
-            ) : (
-              <details key={group} className="structure-params__group">
-                <summary>{groupLabel(group, t)}</summary>
-                {inputs}
-              </details>
-            );
-          })}
+          <Tiered display={display} items={items} />
         </fieldset>
       ) : null}
-      {error ? (
-        <small className="field__error" role="alert">
-          {t.t(error)}
-        </small>
-      ) : null}
+      <StructureParamError error={form.error} />
     </>
   );
 }

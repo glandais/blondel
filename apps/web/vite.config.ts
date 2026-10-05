@@ -26,9 +26,10 @@ export default defineConfig({
         start_url: "./",
         scope: "./",
         display: "standalone",
-        // `--accent` (thème clair) et `--bg` (thème sombre) de styles.css.
-        theme_color: "#2f6fb3",
-        background_color: "#15181b",
+        // Accent Industry (`--color-accent`, thème clair) et fond du thème sombre dérivé
+        // (`--color-bg` sombre) de styles.css ; même accent dans la meta theme-color d'index.html.
+        theme_color: "#5980a6",
+        background_color: "#18191b",
         icons: [
           { src: "pwa-192.png", sizes: "192x192", type: "image/png" },
           { src: "pwa-512.png", sizes: "512x512", type: "image/png" },
@@ -37,6 +38,8 @@ export default defineConfig({
         ],
       },
       workbox: {
+        // Polices embarquées (@fontsource, `.woff2`) comprises ; les `.woff` de repli, inutiles
+        // aux navigateurs visés, restent hors du précache.
         globPatterns: ["**/*.{js,css,html,svg,png,wasm,woff2}"],
         // Vue 3D (≈ 1 Mo) et PDF (jsPDF) en cache dès l'installation, sous ce plafond.
         maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,

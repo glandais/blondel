@@ -1,7 +1,14 @@
 import type { MaterialId } from "@blondel/core";
-import { MATERIAL_PBR } from "@blondel/exports";
+import { FUNCTIONAL_COLORS, MATERIAL_PBR } from "@blondel/exports";
 import { describe, expect, it } from "vitest";
-import { MATERIAL_LABELS, MATERIAL_LOOKS, SEVERITY_COLORS, materialLook } from "./materials.js";
+import {
+  HIGHLIGHT_COLOR,
+  MATERIAL_LABELS,
+  MATERIAL_LOOKS,
+  SEVERITY_COLORS,
+  materialLook,
+  severityColors3d,
+} from "./materials.js";
 
 const ALL: readonly MaterialId[] = [
   "wood-oak",
@@ -51,5 +58,21 @@ describe("apparence des matériaux", () => {
     }
     expect(MATERIAL_LOOKS.glass.opacity).toBeLessThan(1);
     expect(Object.keys(SEVERITY_COLORS)).toEqual(["bloquant", "avertissement", "conseil"]);
+  });
+
+  it("sélection et sévérités : palette fonctionnelle unique (ADR-0009, point 10)", () => {
+    const light = FUNCTIONAL_COLORS.light;
+    expect(HIGHLIGHT_COLOR).toBe(light.selection);
+    expect(SEVERITY_COLORS).toEqual({
+      bloquant: light.blocking,
+      avertissement: light.warning,
+      conseil: light.advice,
+    });
+    const dark = FUNCTIONAL_COLORS.dark;
+    expect(severityColors3d("dark")).toEqual({
+      bloquant: dark.blocking,
+      avertissement: dark.warning,
+      conseil: dark.advice,
+    });
   });
 });

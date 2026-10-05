@@ -220,7 +220,7 @@
 
 .assistant__opening {
   fill: none;
-  stroke: #6e40c9;
+  stroke: var(--fn-opening);
   stroke-width: 1.5px;
   stroke-dasharray: 6 3;
 }

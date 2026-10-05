@@ -20,9 +20,11 @@ import {
   openingSideLabel,
   openingWallLabel,
   summaryFacts,
+  PRIMARY_USAGE_CONTEXTS,
   usageOf,
   variantCount,
   wallsAlongOpening,
+  withUsage,
   type AssistantForm,
 } from "./assistant.js";
 import { translatorFor } from "@blondel/i18n";
@@ -61,6 +63,27 @@ describe("formulaire de l'assistant", () => {
       }
     }
     expect(contextsFor("erp-new", false, false)).toEqual(["erp_neuf", "erp_securite"]);
+  });
+
+  it("choix d'usage (section Contexte de contrôle) : autres contextes conservés", () => {
+    const base = ["bois_dtu", "logement_interieur", "exterieur", "garde_corps_2024"];
+    expect(withUsage(base, "erp-new")).toEqual([
+      "bois_dtu",
+      "exterieur",
+      "garde_corps_2024",
+      "erp_neuf",
+      "erp_securite",
+    ]);
+    expect(withUsage(["bois_dtu", "erp_neuf", "erp_securite"], "other")).toEqual(["bois_dtu"]);
+    for (const usage of ["house", "collective", "erp-new", "erp-existing", "other"] as const) {
+      expect(usageOf(withUsage(base, usage)).usage).toBe(usage);
+    }
+    expect([...PRIMARY_USAGE_CONTEXTS].sort()).toEqual([
+      "bhc_parties_communes",
+      "erp_existant",
+      "erp_neuf",
+      "logement_interieur",
+    ]);
   });
 
   it("construit l'entrée du cœur (préférences, contextes, sans fonction non clonable)", () => {

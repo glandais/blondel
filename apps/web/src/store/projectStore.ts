@@ -54,6 +54,18 @@ export type ViewTab = "plan" | "3d" | "elevation" | "flat" | "bom" | "compare";
 /** Mode de l'onglet Plan 2D : plan coté, site et saisie (jalon 7), mode expert des nez. */
 export type PlanMode = "drawing" | "site" | "expert";
 export type ThemeChoice = "system" | "light" | "dark";
+/**
+ * Origine d'un projet chargé (démo, assistant, import, copie de secours restaurée, préréglage) :
+ * règle d'ouverture du parcours guidé / libre (`lib/journey.ts`, ADR-0009).
+ */
+export type ProjectOrigin = "demo" | "assistant" | "import" | "restore" | "preset";
+
+/** Dernier projet chargé avec succès (voir `AppState.lastOpened`). */
+export interface LastOpened {
+  readonly origin: ProjectOrigin;
+  /** Incrémenté à chaque chargement : deux ouvertures de même origine restent distinctes. */
+  readonly seq: number;
+}
 
 /** Élément surligné (clic sur un résultat du contrôle de conception, ou sur une pièce). */
 export interface Selection {
@@ -122,6 +134,11 @@ export interface AppState {
    * l'original) jusqu'à `dismissRejectedAutosave`.
    */
   readonly rejectedAutosave: RejectedAutosave | null;
+  /**
+   * Dernier projet chargé avec succès (démo, préréglage, import, assistant, copie restaurée) ;
+   * `null` tant qu'aucun ne l'a été depuis le démarrage. Le store du parcours s'y abonne.
+   */
+  readonly lastOpened: LastOpened | null;
 
   /**
    * Applique une modification du projet. Le résultat est validé par le schéma du cœur : un
@@ -158,9 +175,10 @@ export interface AppState {
   importText(text: string): ImportResult;
   /**
    * Remplace le projet par un projet complet (proposition de l'assistant) : une entrée
-   * d'historique (annulable), sélection effacée, message `notice` affiché.
+   * d'historique (annulable), sélection effacée, message `notice` affiché. `origin` : origine
+   * signalée par `lastOpened` (défaut : assistant).
    */
-  replaceProject(project: Project, notice?: Message): UpdateResult;
+  replaceProject(project: Project, notice?: Message, origin?: ProjectOrigin): UpdateResult;
   exportFile(): { filename: string; text: string };
   select(selection: Selection | null): void;
   setView(view: ViewTab): void;
@@ -346,6 +364,10 @@ export function createProjectStore(options: ProjectStoreOptions = {}): ProjectSt
     const move = (h: History<Project>): void => {
       set({ history: h, project: h.present });
     };
+    /** Signale un projet chargé avec succès (`lastOpened`). */
+    const opened = (origin: ProjectOrigin): void => {
+      set((s) => ({ lastOpened: { origin, seq: (s.lastOpened?.seq ?? 0) + 1 } }));
+    };
     return {
       history: initHistory(initial),
       project: initial,
@@ -365,6 +387,7 @@ export function createProjectStore(options: ProjectStoreOptions = {}): ProjectSt
         loaded.kind === "rejected"
           ? { text: loaded.text, preserved: loaded.preserved, reason: loaded.message }
           : earlierCopy,
+      lastOpened: null,
 
       update: (recipe, groupKey, updateOptions) => {
         let next: Project;
@@ -402,7 +425,10 @@ export function createProjectStore(options: ProjectStoreOptions = {}): ProjectSt
           return { ok: false, issues: [message] };
         }
         const r = apply(p);
-        if (r.ok) set({ selection: null, notice: null, overlays: DEFAULT_OVERLAYS });
+        if (r.ok) {
+          set({ selection: null, notice: null, overlays: DEFAULT_OVERLAYS });
+          opened("preset");
+        }
         return r;
       },
       loadDemo: (id) => {
@@ -434,6 +460,7 @@ export function createProjectStore(options: ProjectStoreOptions = {}): ProjectSt
               }),
             },
           }));
+          opened("demo");
         }
         return r;
       },
@@ -448,12 +475,13 @@ export function createProjectStore(options: ProjectStoreOptions = {}): ProjectSt
             overlays: DEFAULT_OVERLAYS,
             notice: { kind: "info", msg: msg("ui.notice.imported", { name: r.project.name }) },
           });
+          opened("import");
         } else {
           set({ notice: { kind: "error", msg: r.message, details: r.issues } });
         }
         return r;
       },
-      replaceProject: (project, text) => {
+      replaceProject: (project, text, origin = "assistant") => {
         // Entrée d'historique distincte : un groupe ouvert (saisie en cours) est d'abord clos.
         const h = get().history;
         if (h.group !== null) set({ history: endGroup(h) });
@@ -464,6 +492,7 @@ export function createProjectStore(options: ProjectStoreOptions = {}): ProjectSt
             overlays: DEFAULT_OVERLAYS,
             notice: text ? { kind: "info", msg: text } : null,
           });
+          opened(origin);
         }
         return r;
       },
@@ -526,6 +555,7 @@ export function createProjectStore(options: ProjectStoreOptions = {}): ProjectSt
             msg: msg("ui.notice.backup.restored", { name: r.project.name }),
           },
         });
+        opened("restore");
         get().dismissRejectedAutosave();
         return r;
       },

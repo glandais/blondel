@@ -1,26 +1,52 @@
 /**
- * Contraste non textuel (WCAG 2.1, critère 1.4.11) : la limite des champs de saisie et des
- * boutons doit atteindre 3:1 sur les surfaces où ils sont posés, dans les deux thèmes. Les jetons
- * sont relus dans `styles.css` (source unique).
+ * Jetons de `styles.css` (système Industry, ADR-0009), relus dans la feuille (source unique) :
+ *
+ * - contraste non textuel (WCAG 2.1, critère 1.4.11) : la limite des champs de saisie et des
+ *   boutons atteint 3:1 sur les surfaces où ils sont posés, dans les trois blocs de thème ;
+ * - contraste du texte courant (WCAG 1.4.3) : 4,5:1 sur le fond et les panneaux ;
+ * - angles vifs (`--radius: 0`), couleurs fonctionnelles seulement par `palette.css` (`--fn-*`) ;
+ * - `main.tsx` charge `palette.css` avant `styles.css`, et aucune ressource externe.
  */
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
-const CSS = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "styles.css"), "utf8");
+const DIR = dirname(fileURLToPath(import.meta.url));
+const RAW = readFileSync(join(DIR, "styles.css"), "utf8");
+/** Feuille sans commentaires (les commentaires citent volontiers des sélecteurs). */
+const CSS = RAW.replace(/\/\*[\s\S]*?\*\//g, "");
+const MAIN = readFileSync(join(DIR, "main.tsx"), "utf8");
 
-/** Déclarations `--nom: #rrggbb` du premier bloc qui suit `selector`. */
-function tokens(selector: string): Record<string, string> {
+type Block = Readonly<Record<string, string>>;
+
+/** Déclarations `--nom: valeur` du premier bloc qui suit `selector`. */
+function declarations(selector: string): Block {
   const start = CSS.indexOf(selector);
   if (start < 0) throw new Error(`bloc introuvable : ${selector}`);
   const open = CSS.indexOf("{", start);
   const close = CSS.indexOf("}", open);
   const out: Record<string, string> = {};
-  for (const m of CSS.slice(open + 1, close).matchAll(/(--[\w-]+):\s*(#[0-9a-fA-F]{6})\s*;/g)) {
-    out[m[1] as string] = m[2] as string;
+  for (const m of CSS.slice(open + 1, close).matchAll(/(--[\w-]+):\s*([^;]+);/g)) {
+    out[m[1] as string] = (m[2] as string).trim();
   }
   return out;
+}
+
+const ROOT = declarations(":root {");
+
+/**
+ * Valeur hexadécimale de `name` dans un thème : déclaration du bloc du thème, sinon de `:root`,
+ * en suivant les `var(--x)` (résolus eux aussi dans le thème d'abord, comme le navigateur le fait
+ * sur l'élément racine).
+ */
+function resolve(theme: Block, name: string, seen: readonly string[] = []): string | undefined {
+  if (seen.includes(name)) throw new Error(`référence circulaire : ${[...seen, name].join(" → ")}`);
+  const value = theme[name] ?? ROOT[name];
+  if (value === undefined) return undefined;
+  const ref = /^var\((--[\w-]+)\)$/.exec(value);
+  if (ref) return resolve(theme, ref[1] as string, [...seen, name]);
+  return /^#[0-9a-fA-F]{6}$/.test(value) ? value : undefined;
 }
 
 function luminance(hex: string): number {
@@ -46,26 +72,47 @@ function rule(selector: string): string {
   return CSS.slice(i, CSS.indexOf("}", i));
 }
 
-const THEMES = {
-  clair: tokens(":root {"),
-  "sombre (système)": tokens(':root:not([data-theme="light"])'),
-  "sombre (forcé)": tokens(':root[data-theme="dark"]'),
+const DARK_SYSTEM = declarations(':root:not([data-theme="light"])');
+const DARK_FORCED = declarations(':root[data-theme="dark"]');
+
+const THEMES: Readonly<Record<string, Block>> = {
+  clair: {},
+  "sombre (système)": DARK_SYSTEM,
+  "sombre (forcé)": DARK_FORCED,
 };
 
-describe("contraste des limites de composants (WCAG 1.4.11)", () => {
+function contrast(theme: Block, fg: string, bg: string): number {
+  const a = resolve(theme, fg);
+  const b = resolve(theme, bg);
+  expect(a, fg).toBeDefined();
+  expect(b, bg).toBeDefined();
+  return contrastRatio(a as string, b as string);
+}
+
+describe("lecteur de jetons", () => {
   it("formule de référence", () => {
     expect(contrastRatio("#000000", "#ffffff")).toBeCloseTo(21, 5);
     expect(contrastRatio("#d6dade", "#ffffff")).toBeCloseTo(1.41, 2);
   });
 
+  it("suit les var(--x) dans le thème puis dans :root", () => {
+    expect(resolve({}, "--bg")).toBe(ROOT["--color-bg"]);
+    expect(resolve(DARK_FORCED, "--bg")).toBe(DARK_FORCED["--color-bg"]);
+    expect(resolve({}, "--accent")).toBe("#5980a6");
+  });
+});
+
+describe("contraste des limites de composants (WCAG 1.4.11)", () => {
   for (const [name, t] of Object.entries(THEMES)) {
     it(`thème ${name} : --control-border ≥ 3:1 sur --panel, --panel-2 et --bg`, () => {
-      const border = t["--control-border"];
-      expect(border).toBeDefined();
       for (const surface of ["--panel", "--panel-2", "--bg"]) {
-        const bg = t[surface] ?? THEMES.clair[surface];
-        expect(bg, surface).toBeDefined();
-        expect(contrastRatio(border as string, bg as string), surface).toBeGreaterThanOrEqual(3);
+        expect(contrast(t, "--control-border", surface), surface).toBeGreaterThanOrEqual(3);
+      }
+    });
+
+    it(`thème ${name} : focus (--focus) ≥ 3:1 sur --panel et --bg`, () => {
+      for (const surface of ["--panel", "--bg"]) {
+        expect(contrast(t, "--focus", surface), surface).toBeGreaterThanOrEqual(3);
       }
     });
   }
@@ -75,5 +122,159 @@ describe("contraste des limites de composants (WCAG 1.4.11)", () => {
     expect(rule('select,\ninput[type="text"],\ninput[type="date"]')).toContain(
       "border: 1px solid var(--control-border)",
     );
+  });
+});
+
+describe("contraste du texte (WCAG 1.4.3)", () => {
+  for (const [name, t] of Object.entries(THEMES)) {
+    it(`thème ${name} : --text ≥ 4,5:1 sur --bg et --panel ; --muted ≥ 4,5:1 sur --panel`, () => {
+      expect(contrast(t, "--text", "--bg")).toBeGreaterThanOrEqual(4.5);
+      expect(contrast(t, "--text", "--panel")).toBeGreaterThanOrEqual(4.5);
+      expect(contrast(t, "--muted", "--panel")).toBeGreaterThanOrEqual(4.5);
+    });
+
+    it(`thème ${name} : texte en accent (--accent-ink) ≥ 4,5:1 sur --bg et --panel`, () => {
+      expect(contrast(t, "--accent-ink", "--bg")).toBeGreaterThanOrEqual(4.5);
+      expect(contrast(t, "--accent-ink", "--panel")).toBeGreaterThanOrEqual(4.5);
+    });
+  }
+
+  it("le texte en accent passe par --accent-ink, jamais par --accent", () => {
+    expect(CSS).not.toMatch(/(?:^|[^-])color:\s*var\(--accent\)/m);
+  });
+});
+
+describe("jetons Industry", () => {
+  it("angles vifs : --radius vaut 0", () => {
+    expect(ROOT["--radius"]).toBe("0");
+  });
+
+  it("jetons de couleur, de police, d'espacement et d'ombre présents", () => {
+    for (const name of [
+      "--color-bg",
+      "--color-surface",
+      "--color-text",
+      "--color-accent",
+      "--color-divider",
+      "--font-heading",
+      "--font-body",
+      "--space-1",
+      "--space-2",
+      "--space-3",
+      "--space-4",
+      "--space-6",
+      "--space-8",
+      "--shadow-sm",
+      "--shadow-md",
+      "--shadow-lg",
+    ]) {
+      expect(ROOT[name], name).toBeDefined();
+    }
+    for (const ramp of ["accent", "neutral"]) {
+      for (let step = 100; step <= 900; step += 100) {
+        expect(resolve({}, `--color-${ramp}-${step}`), `${ramp}-${step}`).toBeDefined();
+      }
+    }
+  });
+
+  it("anciens noms de l'application définis et rattachés aux jetons", () => {
+    for (const name of [
+      "--bg",
+      "--panel",
+      "--panel-2",
+      "--text",
+      "--muted",
+      "--border",
+      "--control-border",
+      "--accent",
+      "--accent-text",
+      "--focus",
+      "--font",
+      "--mono",
+      "--gap",
+    ]) {
+      expect(ROOT[name], name).toBeDefined();
+    }
+    expect(ROOT["--font"]).toBe("var(--font-body)");
+    expect(ROOT["--border"]).toBe("var(--color-divider)");
+  });
+
+  it("les deux blocs du thème sombre sont identiques", () => {
+    expect(DARK_SYSTEM).toEqual(DARK_FORCED);
+    expect(Object.keys(DARK_SYSTEM).length).toBeGreaterThan(10);
+  });
+});
+
+describe("couleurs fonctionnelles : seulement par palette.css", () => {
+  it("aucune valeur hexadécimale fonctionnelle dans styles.css", () => {
+    for (const hex of [
+      "#ff7a1a",
+      "#ff9a4d",
+      "#b3261e",
+      "#9a6200",
+      "#2f6fb3",
+      "#2e7d32",
+      "#f28b82",
+      "#f0b85a",
+      "#8fbdf0",
+      "#81c995",
+      "#6e40c9",
+      "#a58cf0",
+    ]) {
+      expect(RAW.toLowerCase(), hex).not.toContain(hex);
+    }
+    expect(RAW).not.toMatch(/rgba?\(\s*255\s*,?\s*122\s*,?\s*26/);
+  });
+
+  it("alias déclarés une seule fois, dans :root, sur les --fn-*", () => {
+    const aliases: Record<string, string> = {
+      "--selected": "var(--fn-selection)",
+      "--selected-fill": "color-mix(in srgb, var(--fn-selection) 40%, transparent)",
+      "--danger": "var(--fn-blocking)",
+      "--sev-bloquant": "var(--fn-blocking)",
+      "--warn": "var(--fn-warning)",
+      "--sev-avertissement": "var(--fn-warning)",
+      "--info": "var(--fn-advice)",
+      "--sev-conseil": "var(--fn-advice)",
+      "--ok": "var(--fn-ok)",
+      "--opening": "var(--fn-opening)",
+    };
+    for (const [name, value] of Object.entries(aliases)) {
+      expect(ROOT[name], name).toBe(value);
+      expect(DARK_SYSTEM[name], name).toBeUndefined();
+      expect(DARK_FORCED[name], name).toBeUndefined();
+      expect(CSS.split(`${name}:`).length - 1, name).toBe(1);
+    }
+  });
+});
+
+describe("main.tsx : feuilles et polices", () => {
+  const imports = [...MAIN.matchAll(/^import\s+(?:[^"]*?from\s+)?"([^"]+)";/gm)].map(
+    (m) => m[1] as string,
+  );
+
+  it("palette.css avant styles.css", () => {
+    const palette = imports.indexOf("./palette.css");
+    const styles = imports.indexOf("./styles.css");
+    expect(palette).toBeGreaterThanOrEqual(0);
+    expect(styles).toBeGreaterThan(palette);
+  });
+
+  it("polices embarquées (@fontsource), avant les feuilles de l'application", () => {
+    const fonts = imports.filter((s) => s.startsWith("@fontsource/"));
+    expect(fonts.length).toBeGreaterThanOrEqual(5);
+    for (const family of ["@fontsource/barlow/", "@fontsource/barlow-condensed/"]) {
+      expect(
+        fonts.some((s) => s.startsWith(family)),
+        family,
+      ).toBe(true);
+    }
+    const lastFont = Math.max(...fonts.map((s) => imports.indexOf(s)));
+    expect(lastFont).toBeLessThan(imports.indexOf("./palette.css"));
+  });
+
+  it("aucune ressource externe", () => {
+    expect(MAIN).not.toMatch(/https?:\/\//);
+    expect(RAW).not.toMatch(/@import|https?:\/\//);
   });
 });

@@ -49,6 +49,7 @@ import {
   type Material,
 } from "three";
 import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
+import { useResolvedTheme } from "../components/ThemeToggle.js";
 import { displayedMaterial, familiesOf, paintZone, withAppearance } from "../lib/appearance.js";
 import { isPartSelected, sameLocation } from "../lib/compliance.js";
 import { controlMarkers, type PointMarker } from "../lib/markers.js";
@@ -76,13 +77,14 @@ import {
 } from "../three/groundGrid.js";
 import { flatteringView } from "../three/framing.js";
 import {
-  HIGHLIGHT_COLOR,
-  SEVERITY_COLORS,
   appearanceKey,
   glassThicknessOf,
   GLASS_THICKNESS_MM,
+  highlightColor3d,
   paintZoneFor,
+  severityColors3d,
   type PaintZone,
+  type Theme3d,
 } from "../three/materials.js";
 import {
   createPartMaterial,
@@ -205,10 +207,13 @@ interface Materials {
 
 /**
  * Matériaux partagés par identifiant, libérés au démontage de la vue (textures en cache). Les
- * teintes du projet ne les recréent pas (`retint`).
+ * teintes du projet ne les recréent pas (`retint`) ; un changement de thème, oui (sélection et
+ * sévérités suivent la palette fonctionnelle du thème de l'interface, ADR-0009 point 10).
  */
-function useMaterials(quality: RenderQuality): Materials {
+function useMaterials(quality: RenderQuality, theme: Theme3d): Materials {
   const value = useMemo(() => {
+    const highlightColor = highlightColor3d(theme);
+    const severityColors = severityColors3d(theme);
     let tints: Appearance | undefined;
     let tintKey = "";
     let glassThickness = GLASS_THICKNESS_MM;
@@ -235,8 +240,8 @@ function useMaterials(quality: RenderQuality): Materials {
     const highlight = clipped(
       simpleMaterial(
         {
-          color: HIGHLIGHT_COLOR,
-          emissive: HIGHLIGHT_COLOR,
+          color: highlightColor,
+          emissive: highlightColor,
           emissiveIntensity: 0.35,
           roughness: 0.5,
         },
@@ -269,6 +274,7 @@ function useMaterials(quality: RenderQuality): Materials {
           clipped(
             createPartMaterial(id, quality, {
               severity,
+              theme,
               appearance: tints,
               zone: z,
               glassThickness,
@@ -297,7 +303,7 @@ function useMaterials(quality: RenderQuality): Materials {
       },
       marker: (severity: Severity, selected: boolean) =>
         cached(`marker|${severity}|${selected}`, () => {
-          const color = selected ? HIGHLIGHT_COLOR : SEVERITY_COLORS[severity];
+          const color = selected ? highlightColor : severityColors[severity];
           return simpleMaterial(
             { color, emissive: color, emissiveIntensity: 0.6, roughness: 0.4 },
             quality,
@@ -312,7 +318,7 @@ function useMaterials(quality: RenderQuality): Materials {
         sphere.dispose();
       },
     };
-  }, [quality]);
+  }, [quality, theme]);
   useEffect(() => () => value.dispose(), [value]);
   return value;
 }
@@ -666,7 +672,8 @@ export default function Viewer3D({
   const tr = useT();
   const { parts, failed } = usePartGeometries(mesh, model);
   const quality = useMemo(() => browserRenderQuality(), []);
-  const materials = useMaterials(quality);
+  const theme = useResolvedTheme();
+  const materials = useMaterials(quality, theme);
   // Teintes du projet affiché, appliquées sur place avant le rendu des pièces (idempotent : sans
   // effet si elles n'ont pas changé).
   const tintKey = appearanceKey(project.appearance);

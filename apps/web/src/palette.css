@@ -1,0 +1,34 @@
+/*
+ * Couleurs fonctionnelles de l'interface (sélection, sévérités, respecté, trémie), reflet de la
+ * palette unique `FUNCTIONAL_COLORS` de `@blondel/exports` (ADR-0009, point 10). Importé par
+ * `main.tsx` avant `styles.css`. Toute modification passe d'abord par
+ * `packages/exports/src/palette.ts` ; `palette.test.ts` vérifie la correspondance.
+ */
+:root {
+  --fn-selection: #ff7a1a;
+  --fn-blocking: #b3261e;
+  --fn-warning: #9a6200;
+  --fn-advice: #416180;
+  --fn-ok: #2e7d32;
+  --fn-opening: #6e40c9;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --fn-selection: #ff9a4d;
+    --fn-blocking: #f28b82;
+    --fn-warning: #f0b85a;
+    --fn-advice: #94bce3;
+    --fn-ok: #81c995;
+    --fn-opening: #a58cf0;
+  }
+}
+
+:root[data-theme="dark"] {
+  --fn-selection: #ff9a4d;
+  --fn-blocking: #f28b82;
+  --fn-warning: #f0b85a;
+  --fn-advice: #94bce3;
+  --fn-ok: #81c995;
+  --fn-opening: #a58cf0;
+}

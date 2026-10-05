@@ -1,0 +1,47 @@
+/*
+ * Sections de paramètres réparties par niveau (`Tiered.tsx`) : zones repliées « Plus de
+ * réglages » et « Réglages d'atelier », marque ◆ d'une valeur à valider. Les classes globales
+ * (.tv-mark, .num, .visually-hidden) viennent de styles.css.
+ */
+
+.tiered__fold {
+  margin-top: var(--space-3, 10px);
+  border-top: 1px solid var(--border);
+}
+
+.tiered__fold > summary {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2, 6px);
+  padding: var(--space-2, 6px) 0;
+  cursor: pointer;
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.tiered__fold[open] > summary {
+  color: var(--text);
+}
+
+.tiered__fold-body {
+  display: grid;
+  gap: var(--gap, 8px);
+  padding-bottom: var(--space-2, 6px);
+}
+
+.tiered__count {
+  margin-left: auto;
+}
+
+/* Champ ◆ : marque à droite du champ, alignée sur son libellé. */
+.tiered__item--tv {
+  position: relative;
+  padding-right: 1.25em;
+}
+
+.tiered__mark {
+  position: absolute;
+  top: 0.15em;
+  right: 0;
+  line-height: 1;
+}

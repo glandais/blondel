@@ -157,8 +157,8 @@
 }
 
 .plan-site__opening {
-  fill: color-mix(in srgb, #6e40c9 15%, transparent);
-  stroke: #6e40c9;
+  fill: color-mix(in srgb, var(--fn-opening) 15%, transparent);
+  stroke: var(--fn-opening);
   stroke-width: 2px;
   stroke-dasharray: 8 4;
 }

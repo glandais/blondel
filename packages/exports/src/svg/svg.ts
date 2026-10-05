@@ -5,6 +5,7 @@
 import type { Mm, Severity, Vec2 } from "@blondel/core";
 import { escapeXml, formatNum } from "../format.js";
 import { translatorOf, type LocaleOption } from "../i18n.js";
+import { FUNCTIONAL_COLORS, severityRole } from "../palette.js";
 import { arcFromBulge, type PlanPath } from "../path.js";
 
 export interface SvgTheme {
@@ -20,17 +21,22 @@ export interface SvgTheme {
   readonly dimension: string;
   readonly text: string;
   readonly mutedText: string;
-  /** Violations : bloquant (rouge), avertissement (orange), conseil. */
+  /** Violations : bloquant, avertissement, conseil (palette fonctionnelle, `palette.ts`). */
   readonly blocking: string;
   readonly warning: string;
   readonly advice: string;
   readonly ceiling: string;
+  /** Échappée respectée (rôle « respecté » de la palette fonctionnelle). */
   readonly headroom: string;
   readonly panelFill: string;
   readonly panelStroke: string;
   readonly fontFamily: string;
 }
 
+/**
+ * Thème clair : celui des exports par défaut et des documents d'atelier (SVG, PDF). Les couleurs
+ * fonctionnelles (trémie, sévérités, échappée respectée) viennent de `FUNCTIONAL_COLORS.light`.
+ */
 export const LIGHT_THEME: SvgTheme = {
   background: "#ffffff",
   edge: "#1f2328",
@@ -40,20 +46,24 @@ export const LIGHT_THEME: SvgTheme = {
   nosing: "#57606a",
   nosingBalanced: "#8a5a00",
   walkline: "#0969da",
-  opening: "#6e40c9",
+  opening: FUNCTIONAL_COLORS.light.opening,
   dimension: "#424a53",
   text: "#1f2328",
   mutedText: "#57606a",
-  blocking: "#d1242f",
-  warning: "#e8860c",
-  advice: "#bf8700",
+  blocking: FUNCTIONAL_COLORS.light.blocking,
+  warning: FUNCTIONAL_COLORS.light.warning,
+  advice: FUNCTIONAL_COLORS.light.advice,
   ceiling: "#afb8c1",
-  headroom: "#1a7f37",
+  headroom: FUNCTIONAL_COLORS.light.ok,
   panelFill: "#f6f8fa",
   panelStroke: "#d0d7de",
   fontFamily: "system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif",
 };
 
+/**
+ * Thème sombre : affichage à l'écran seulement (`apps/web/src/model/planSvg.ts`). Couleurs
+ * fonctionnelles de `FUNCTIONAL_COLORS.dark`.
+ */
 export const DARK_THEME: SvgTheme = {
   background: "#0d1117",
   edge: "#e6edf3",
@@ -63,15 +73,15 @@ export const DARK_THEME: SvgTheme = {
   nosing: "#9198a1",
   nosingBalanced: "#e3b341",
   walkline: "#4493f8",
-  opening: "#ab7df8",
+  opening: FUNCTIONAL_COLORS.dark.opening,
   dimension: "#b7bdc8",
   text: "#e6edf3",
   mutedText: "#9198a1",
-  blocking: "#f85149",
-  warning: "#f0883e",
-  advice: "#d29922",
+  blocking: FUNCTIONAL_COLORS.dark.blocking,
+  warning: FUNCTIONAL_COLORS.dark.warning,
+  advice: FUNCTIONAL_COLORS.dark.advice,
   ceiling: "#484f58",
-  headroom: "#3fb950",
+  headroom: FUNCTIONAL_COLORS.dark.ok,
   panelFill: "#161b22",
   panelStroke: "#30363d",
   fontFamily: "system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif",
@@ -87,8 +97,9 @@ export function resolveTheme(theme: ThemeOption | undefined): SvgTheme {
   return { ...(base === "dark" ? DARK_THEME : LIGHT_THEME), ...rest };
 }
 
+/** Couleur d'une sévérité dans un thème (rôle de la palette fonctionnelle, `severityRole`). */
 export function severityColor(theme: SvgTheme, s: Severity): string {
-  return s === "bloquant" ? theme.blocking : s === "avertissement" ? theme.warning : theme.advice;
+  return theme[severityRole(s)];
 }
 
 /** Options d'échelle communes aux rendus SVG. */

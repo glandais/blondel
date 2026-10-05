@@ -14,7 +14,14 @@ import {
   type Model,
   type Severity,
 } from "@blondel/core";
-import { MATERIAL_KEYS, MATERIAL_PBR, type PbrLook } from "@blondel/exports";
+import {
+  FUNCTIONAL_COLORS,
+  MATERIAL_KEYS,
+  MATERIAL_PBR,
+  functionalColors,
+  severityRole,
+  type PbrLook,
+} from "@blondel/exports";
 import type { MessageKey } from "@blondel/i18n";
 import type { TextureKind } from "./proceduralTextures.js";
 
@@ -79,14 +86,35 @@ export const MATERIAL_LOOKS: Readonly<Record<MaterialId, MaterialLook>> = Object
  */
 export const MATERIAL_LABELS: Readonly<Record<MaterialId, MessageKey>> = MATERIAL_KEYS;
 
-export const HIGHLIGHT_COLOR = "#ff7a1a";
+/** Thème de la scène 3D : celui de l'interface (le fond de la vue suit `--panel`). */
+export type Theme3d = "light" | "dark";
 
-/** Teinte des pièces et repères en violation (mêmes tons que le panneau de contrôle). */
-export const SEVERITY_COLORS: Readonly<Record<Severity, string>> = {
-  bloquant: "#c62828",
-  avertissement: "#c07a00",
-  conseil: "#2f6fb3",
-};
+/**
+ * Teinte de la sélection dans un thème : rôle `selection` de la palette fonctionnelle (ADR-0009,
+ * point 10). La scène suit le thème de l'interface, comme sa légende.
+ */
+export function highlightColor3d(theme: Theme3d): string {
+  return functionalColors(theme).selection;
+}
+
+/** Teinte de la sélection en thème clair (référence des tests). */
+export const HIGHLIGHT_COLOR: string = FUNCTIONAL_COLORS.light.selection;
+
+/**
+ * Teintes des sévérités dans un thème : palette fonctionnelle unique de `@blondel/exports`
+ * (ADR-0009, point 10), la même que le panneau de contrôle et les SVG exportés.
+ */
+export function severityColors3d(theme: Theme3d): Readonly<Record<Severity, string>> {
+  const c = functionalColors(theme);
+  return {
+    bloquant: c[severityRole("bloquant")],
+    avertissement: c[severityRole("avertissement")],
+    conseil: c[severityRole("conseil")],
+  };
+}
+
+/** Teinte des pièces et repères en violation en thème clair (référence des tests). */
+export const SEVERITY_COLORS: Readonly<Record<Severity, string>> = severityColors3d("light");
 
 /**
  * Épaisseur de verre par défaut (mm, unités locales des maillages) : défaut du remplissage verre

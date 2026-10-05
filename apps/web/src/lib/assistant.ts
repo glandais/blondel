@@ -64,6 +64,30 @@ export const USAGES: readonly {
   { id: "other", labelKey: "ui.lib.assistant.usage.other", contexts: [] },
 ];
 
+/** Contextes portés par le choix d'usage (union des contextes de `USAGES`). */
+const USAGE_CONTEXTS: ReadonlySet<string> = new Set(USAGES.flatMap((u) => u.contexts));
+
+/**
+ * Contextes qui désignent un usage (premier contexte de chaque usage : `logement_interieur`,
+ * `bhc_parties_communes`, `erp_neuf`, `erp_existant`) : édités par le choix « Usage » de la
+ * section Contexte de contrôle, pas par une case. Les contextes associés (`erp_securite`)
+ * restent aussi des cases.
+ */
+export const PRIMARY_USAGE_CONTEXTS: ReadonlySet<string> = new Set(
+  USAGES.flatMap((u) => u.contexts.slice(0, 1)),
+);
+
+/**
+ * Contextes d'un projet après le choix d'un usage : contextes des autres usages retirés,
+ * contextes de l'usage ajoutés, autres contextes (bois, extérieur, garde-corps…) conservés dans
+ * leur ordre.
+ */
+export function withUsage(contexts: readonly string[], usage: UsageId): string[] {
+  const kept = contexts.filter((c) => !USAGE_CONTEXTS.has(c));
+  const added = USAGES.find((u) => u.id === usage)?.contexts ?? [];
+  return [...kept, ...added.filter((c) => !kept.includes(c))];
+}
+
 /** Contextes cumulés : usage, bois (NF DTU 36.3), extérieur. */
 export function contextsFor(usage: UsageId, wood: boolean, outdoor: boolean): string[] {
   const base = USAGES.find((u) => u.id === usage)?.contexts ?? [];

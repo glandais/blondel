@@ -19,11 +19,12 @@ import {
 } from "three";
 import {
   GLASS_THICKNESS_MM,
-  SEVERITY_COLORS,
   materialLook,
   materialLookFor,
   type MaterialLook,
   type PaintZone,
+  severityColors3d,
+  type Theme3d,
 } from "./materials.js";
 import type { RenderQuality } from "./quality.js";
 import { proceduralTextures } from "./textures.js";
@@ -48,6 +49,8 @@ export function simpleMaterial(
 export interface PartMaterialOptions {
   /** Teinte d'une pièce en violation (contrôle de conception). */
   readonly severity?: Severity;
+  /** Thème de la palette fonctionnelle de la teinte de violation (défaut : clair). */
+  readonly theme?: Theme3d;
   /** Teintes enregistrées du projet (peinture, ton du bois, verre) : `materialLookFor`. */
   readonly appearance?: Appearance;
   /** Zone de peinture de la pièce (acier peint : ossature, marches, garde-corps). */
@@ -114,7 +117,10 @@ export function createPartMaterial(
     color: baseColor(look, textures !== undefined),
     ...(textures ? { map: textures.map } : {}),
     ...(options.severity
-      ? { emissive: new Color(SEVERITY_COLORS[options.severity]), emissiveIntensity: 0.55 }
+      ? {
+          emissive: new Color(severityColors3d(options.theme ?? "light")[options.severity]),
+          emissiveIntensity: 0.55,
+        }
       : {}),
   };
   const base = {

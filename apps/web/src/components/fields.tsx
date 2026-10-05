@@ -5,8 +5,8 @@
  * appliquée par le store (une valeur refusée affiche le message sans modifier le projet).
  */
 import { msg, type Message, type Translator } from "@blondel/i18n";
-import { useEffect, useId, useState, type ReactNode } from "react";
-import { numberFormat } from "../i18n/locale.js";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
+import { formatNumber, numberFormat } from "../i18n/locale.js";
 import { useT } from "../i18n/useT.js";
 import {
   decideDraft,
@@ -16,6 +16,7 @@ import {
 } from "../lib/units.js";
 import { appStore } from "../store/appStore.js";
 import type { UpdateResult } from "../store/projectStore.js";
+import "./fields.css";
 
 function endGroup(): void {
   appStore.getState().endGroup();
@@ -229,7 +230,17 @@ export function IntField(props: IntFieldProps) {
 export interface AutoIntFieldProps extends IntFieldBounds {
   readonly label: string;
   readonly value: number | "auto";
-  /** Valeur proposée quand on quitte le mode automatique (ex. valeur calculée par le modèle). */
+  /**
+   * Valeur réellement retenue par le calcul en mode Auto, lue dans le modèle rendu par le cœur
+   * (ex. `model.stepping.riserCount`). Affichée à côté d'« Auto » ; un clic dessus l'impose.
+   * Absente (le modèle ne l'expose pas) : un libellé neutre « calculé » est affiché, jamais un
+   * chiffre qui ne serait pas celui du calcul.
+   */
+  readonly computed?: number | undefined;
+  /**
+   * Valeur proposée au passage en « Imposer » quand `computed` est absente (point de départ de
+   * la saisie, jamais affiché comme valeur calculée).
+   */
   readonly fallback: number;
   readonly unit?: string;
   readonly hint?: string;
@@ -241,44 +252,130 @@ export interface AutoIntFieldProps extends IntFieldBounds {
   readonly autoAllowed?: boolean;
   /** Explication affichée quand le mode automatique n'est pas possible. */
   readonly autoHint?: string;
+  /**
+   * Texte affiché en mode Auto à la place de la valeur calculée (ex. « 15 hauteurs calculées ») ;
+   * pris en compte seulement avec `computed`. Défaut : `computed` mis en forme dans la langue,
+   * suivi de l'unité.
+   */
+  readonly autoText?: string | undefined;
 }
 
-/** Champ entier avec case « automatique ». */
+/**
+ * Champ entier « Auto | Imposer » (un seul contrôle segmenté, ADR-0009). En mode Auto, la
+ * valeur calculée par le modèle (`computed`) s'affiche à côté : un clic dessus (ou sur
+ * « Imposer ») la fixe et place le focus dans le champ ; sans valeur calculée exposée, un
+ * libellé neutre la remplace et « Imposer » part de `fallback`. « Auto » rend la main au calcul.
+ * Chaque bascule est une entrée d'historique (annulable) ; la saisie imposée suit `IntField`
+ * (mm entiers, Entrée ou perte de focus valide, Échap rétablit).
+ */
 export function AutoIntField(props: AutoIntFieldProps) {
-  const { label, value, fallback, unit, hint, min, max, onCommit } = props;
+  const { label, value, computed, unit = "mm", hint, min, max, onCommit, autoHint } = props;
+  const known = computed !== undefined && Number.isFinite(computed);
+  // Valeur imposée au sortir du mode Auto : celle du calcul si elle est connue.
+  const proposed = known ? computed : props.fallback;
   const autoAllowed = props.autoAllowed ?? true;
-  const id = useId();
+  const labelId = useId();
+  const helpId = useId();
   const t = useT();
   const [error, setError] = useState<Message | null>(null);
+  /** Valeur venant d'être imposée : le focus passe dans le champ dès qu'il est affiché. */
+  const [focusPending, setFocusPending] = useState(false);
+  const inputBox = useRef<HTMLSpanElement>(null);
   const isAuto = value === "auto";
+
+  useEffect(() => {
+    if (!focusPending || isAuto) return;
+    inputBox.current?.querySelector("input")?.focus();
+    setFocusPending(false);
+  }, [focusPending, isAuto]);
+
+  const commit = (next: number | "auto"): void => {
+    const r = onCommit(next);
+    endGroup();
+    setError(r.ok ? null : refusal(r.issues));
+    if (r.ok && next !== "auto") setFocusPending(true);
+  };
+
+  const computedText = known
+    ? `${formatNumber(t.locale, computed, { maximumFractionDigits: 0 })}${unit ? ` ${unit}` : ""}`
+    : undefined;
+  // Aide : celle de l'appelant, puis le retour à Auto (ou pourquoi Auto est impossible).
+  const help = [
+    hint,
+    !autoAllowed ? autoHint : isAuto ? undefined : t.t("ui.common.input.autoBack"),
+  ]
+    .filter((x): x is string => x !== undefined && x !== "")
+    .join(" ");
+
   return (
-    <div className="auto-field">
-      <div className="auto-field__toggle">
-        <input
-          id={id}
-          type="checkbox"
-          checked={isAuto}
-          disabled={!autoAllowed && !isAuto}
-          title={!autoAllowed ? props.autoHint : undefined}
-          onChange={(e) => {
-            const r = onCommit(e.target.checked ? "auto" : fallback);
-            setError(r.ok ? null : refusal(r.issues));
-            endGroup();
-          }}
-        />
-        <label htmlFor={id}>{t.t("ui.common.input.automatic", { label })}</label>
+    <div className="auto-int">
+      <span id={labelId} className="auto-int__label">
+        {label}
+      </span>
+      <div className="auto-int__row">
+        <span
+          className="seg"
+          role="group"
+          aria-labelledby={labelId}
+          aria-describedby={isAuto && help !== "" ? helpId : undefined}
+        >
+          <button
+            type="button"
+            className="seg-opt"
+            aria-pressed={isAuto}
+            aria-label={t.t("ui.common.input.automatic", { label })}
+            disabled={!autoAllowed && !isAuto}
+            title={!autoAllowed ? autoHint : undefined}
+            onClick={() => {
+              if (!isAuto) commit("auto");
+            }}
+          >
+            {t.t("ui.common.input.auto")}
+          </button>
+          <button
+            type="button"
+            className="seg-opt"
+            aria-pressed={!isAuto}
+            onClick={() => {
+              if (isAuto) commit(proposed);
+            }}
+          >
+            {t.t("ui.common.input.impose")}
+          </button>
+        </span>
+        {isAuto && computedText !== undefined ? (
+          <button
+            type="button"
+            className="auto-int__value num"
+            title={t.t("ui.common.input.imposeValue", { label, value: computedText })}
+            aria-label={t.t("ui.common.input.imposeValue", { label, value: computedText })}
+            onClick={() => commit(proposed)}
+          >
+            {props.autoText ?? computedText}
+          </button>
+        ) : isAuto ? (
+          <span className="auto-int__value auto-int__value--neutral">
+            {t.t("ui.common.input.computed")}
+          </span>
+        ) : (
+          <span ref={inputBox} className="auto-int__input">
+            <IntField
+              label={label}
+              value={value}
+              unit={unit}
+              {...(help === "" ? {} : { hint: help })}
+              {...(min === undefined ? {} : { min })}
+              {...(max === undefined ? {} : { max })}
+              onCommit={onCommit}
+            />
+          </span>
+        )}
       </div>
-      {isAuto ? null : (
-        <IntField
-          label={label}
-          value={value}
-          {...(unit === undefined ? {} : { unit })}
-          {...(hint === undefined ? {} : { hint })}
-          {...(min === undefined ? {} : { min })}
-          {...(max === undefined ? {} : { max })}
-          onCommit={onCommit}
-        />
-      )}
+      {isAuto && help !== "" ? (
+        <small id={helpId} className="field__hint">
+          {help}
+        </small>
+      ) : null}
       {error ? (
         <small className="field__error" role="alert">
           {t.t(error)}
