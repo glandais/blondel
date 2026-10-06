@@ -31,6 +31,7 @@
  * le plan de coupe est toujours attaché aux matériaux (désactivé = rejeté au loin) et les cotes
  * et mesures sont dessinées en SVG, sans nouveau programme.
  */
+import { ruleTitle } from "@blondel/core";
 import type { Appearance, MaterialId, Model, Part, Project, Severity, Vec3 } from "@blondel/core";
 import { OrbitControls } from "@react-three/drei";
 import { Canvas, useThree, type ThreeEvent } from "@react-three/fiber";
@@ -994,7 +995,9 @@ export default function Viewer3D({
           {tr.t("ui.viewer3d.selection")}
           <strong>{selectedMesh.mark}</strong>
           {tr.t("ui.viewer3d.selection.name", { name: selectedName })}
-          {selectedRules && selectedRules.length > 0 ? ` · ${selectedRules.join(", ")}` : ""}
+          {selectedRules && selectedRules.length > 0
+            ? ` · ${selectedRules.map((id) => tr.t(ruleTitle(id))).join(", ")}`
+            : ""}
         </p>
       ) : null}
       {parts.length === 0 ? (

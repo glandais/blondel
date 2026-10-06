@@ -3,13 +3,15 @@
  * d'affichage (étape guidée, panneau libre, tout), en français et en anglais ; table des
  * composants et des titres ; clés du dictionnaire employées par les sections.
  */
-import { buildModel, createProject, type Project } from "@blondel/core";
+import { buildModel, contextLabel, createProject, type Project } from "@blondel/core";
+import { translatorFor } from "@blondel/i18n";
 import { readdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createElement, type ComponentType } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it } from "vitest";
+import { formatNumber } from "../../i18n/locale.js";
 import { defaultGuards } from "../../lib/guardsForm.js";
 import { TIER_KEYS, tierEntry, type Display } from "../../lib/paramTiers.js";
 import { SECTION_IDS } from "../../lib/sectionIds.js";
@@ -145,8 +147,8 @@ describe("Marches : paramètres de la structure repris", () => {
     const free = render(SECTION_COMPONENTS.treads, { kind: "free" });
     expect(free).toContain("Essence");
     expect(free).toContain("Rayon d&#x27;arrondi du nez");
-    // Ordre de la spécification : épaisseur de contremarche, essence, rayon de nez.
-    expect(free.indexOf("Épaisseur de contremarche")).toBeLessThan(free.indexOf("Essence"));
+    // Ordre de la spécification (§ 2, étape 4) : essence en tête, rayon de nez en dernier.
+    expect(free.indexOf("Essence")).toBeLessThan(free.indexOf("Épaisseur de contremarche"));
     expect(free.indexOf("Essence")).toBeLessThan(free.indexOf("Rayon d&#x27;arrondi du nez"));
     const guided = render(SECTION_COMPONENTS.treads, { kind: "guided", step: 4 });
     const main = guided.slice(0, guided.indexOf("<details"));
@@ -316,6 +318,7 @@ describe("ordre des champs = spécification de contenu (§ 3)", () => {
     load(createProject("quarter-left"));
     inOrder(render(SECTION_COMPONENTS.site, free), [
       "Hauteur à monter",
+      "Épaisseur du plancher haut",
       "Revêtement du sol bas",
       "Revêtement du sol haut",
       "Trémie",
@@ -353,7 +356,7 @@ describe("Site : trémie Rectangulaire | Tracée | Aucune, murs, calque de fond"
       expect(html).toMatch(new RegExp(`role="radio"[^>]*>${label}</button>`));
     }
     expect(html).toMatch(/aria-checked="true"[^>]*>Rectangulaire</);
-    expect(html).toContain("X (coin)");
+    expect(html).toContain("Trémie : coin X");
     const en = site("en");
     expect(en).toContain('aria-label="Stairwell opening"');
     for (const label of ["Rectangular", "Drawn", "None"])
@@ -389,7 +392,7 @@ describe("Site : trémie Rectangulaire | Tracée | Aucune, murs, calque de fond"
     const html = site();
     expect(html).toContain("Trémie polygonale (4 sommets).");
     expect(html).toContain("Modifier sur le plan");
-    expect(html).not.toContain("X (coin)");
+    expect(html).not.toContain("Trémie : coin X");
     expect(site("en")).toContain("Polygonal stairwell opening (4 vertices).");
     // Retour au rectangle : le dernier rectangle revient.
     chooseOpeningKind("rect", memory);
@@ -469,5 +472,117 @@ describe("Site : trémie Rectangulaire | Tracée | Aucune, murs, calque de fond"
     expect(en).toContain("Background layer");
     expect(en).toContain("Import a DXF plan…");
     expect(en).not.toContain("Calque");
+  });
+});
+
+describe("libellés unifiés (spécification de contenu § 4)", () => {
+  const free: Display = { kind: "free" };
+  const FR = translatorFor("fr");
+
+  /** Valeur du champ nommé `label` (libellé associé par `for`). */
+  const valueOf = (html: string, label: string): string | undefined => {
+    const escaped = label.replace(/[()]/g, "\\$&");
+    const id = new RegExp(`<label for="([^"]+)">${escaped}</label>`).exec(html)?.[1];
+    if (id === undefined) return undefined;
+    return new RegExp(`<input[^>]*id="${id}"[^>]*value="([^"]*)"`).exec(html)?.[1];
+  };
+
+  it("Site : trémie « longueur (X) » = sizeX, « largeur (Y) » = sizeY, coins, plancher haut", () => {
+    load(createProject("quarter-left"));
+    const o = appStore.getState().project.site.opening;
+    expect(o?.kind).toBe("rect");
+    if (o?.kind !== "rect") return;
+    const html = render(SECTION_COMPONENTS.site, free);
+    expect(valueOf(html, "Trémie : longueur (X)")).toBe(String(o.sizeX));
+    expect(valueOf(html, "Trémie : largeur (Y)")).toBe(String(o.sizeY));
+    expect(valueOf(html, "Trémie : coin X")).toBe(String(o.x));
+    expect(valueOf(html, "Trémie : coin Y")).toBe(String(o.y));
+    expect(html).toContain("Épaisseur du plancher haut");
+    for (const old of ["X (coin)", "Largeur (X)", "Longueur (Y)", "(mm)"]) {
+      expect(html).not.toContain(old);
+    }
+    const en = render(SECTION_COMPONENTS.site, free, "en");
+    expect(en).toContain("Stairwell opening: length (X)");
+    expect(en).toContain("Upper floor thickness");
+  });
+
+  it("Découpage : « obtenue : h » à droite de la hauteur cible, mm entiers, rien sans modèle", () => {
+    load(initial);
+    const rise = modelService.store.getState().model.model!.stepping.rise;
+    const shown = formatNumber("fr", rise, { maximumFractionDigits: 0 });
+    const html = render(SECTION_COMPONENTS.stepping, free);
+    expect(html).toContain(`<span class="field__trailing num">obtenue : ${shown}</span>`);
+    expect(render(SECTION_COMPONENTS.stepping, free, "en")).toContain("achieved: ");
+    modelService.store.setState((s) => ({ model: { ...s.model, model: null } }));
+    expect(render(SECTION_COMPONENTS.stepping, free)).not.toContain("obtenue");
+  });
+
+  it("Balancement : variante M3 en segmenté Auto | Cubique | Quintique, méthode en clair", () => {
+    load(createProject("quarter-left"));
+    const html = render(SECTION_COMPONENTS.balancing, free);
+    const variant = FR.t("ui.params.balancing.variant.label");
+    expect(html).toContain(`role="radiogroup" aria-label="${variant}"`);
+    for (const k of ["auto", "cubic", "quintic"] as const) {
+      expect(html).toContain(`>${FR.t(`ui.params.balancing.variant.${k}`)}</button>`);
+    }
+    expect(html).toContain(FR.t("ui.params.balancing.variant.hint"));
+    const m3 = FR.t("balancing.method.M3");
+    expect(html).toContain(`<option value="M3" selected="">${m3}</option>`);
+  });
+
+  it("Marches : matériau des marches et essence en tête, puis épaisseur, nez, contremarches", () => {
+    load(withStructure("steel-flat"));
+    const displays: Display[] = [free, { kind: "guided", step: 4 }];
+    for (const d of displays) {
+      const html = render(SECTION_COMPONENTS.treads, d);
+      const order = [
+        "Matériau des marches",
+        ">Essence<",
+        "Épaisseur de marche",
+        "Débord de nez",
+        "Contremarches",
+      ].map((l) => html.indexOf(l));
+      expect(
+        order.every((i) => i >= 0),
+        JSON.stringify(d),
+      ).toBe(true);
+      expect([...order].sort((a, b) => a - b)).toEqual(order);
+    }
+    load(withStructure("wood-housed"));
+    const wood = render(SECTION_COMPONENTS.treads, free);
+    const at = (l: string): number => wood.indexOf(l);
+    expect(at("Essence")).toBeLessThan(at("Épaisseur de marche"));
+    expect(at("Épaisseur de contremarche")).toBeLessThan(at("Rayon d&#x27;arrondi du nez"));
+  });
+
+  it("Contexte : libellé court de chaque case, description en aide, jamais l'identifiant", () => {
+    load(initial);
+    const html = render(SECTION_COMPONENTS.compliance, free);
+    expect(html).toMatch(/>Extérieur<\/label>/);
+    expect(html).toMatch(/>Bois \(DTU 36\.3\)<\/label>/);
+    expect(html).toContain(FR.t(contextLabel("bois_dtu")));
+    for (const raw of ["bois dtu", "erp securite", "echelle meunier", "garde corps 2024"]) {
+      expect(html).not.toContain(raw);
+    }
+    const en = render(SECTION_COMPONENTS.compliance, free, "en");
+    expect(en).toMatch(/>Timber \(DTU 36\.3\)<\/label>/);
+  });
+
+  it("Contexte : usages en libellés courts (les mêmes que la 2d), description de l'usage en aide", () => {
+    load(initial);
+    const html = render(SECTION_COMPONENTS.compliance, free);
+    expect(html).toContain(">Logement (intérieur)</option>");
+    expect(html).toContain(">Logement collectif (parties communes)</option>");
+    expect(html).not.toContain("Maison individuelle ou intérieur");
+    expect(html.replace(/&#x27;/g, "'")).toContain(FR.t(contextLabel("logement_interieur")));
+  });
+
+  it("Structure : paramètre facultatif sans valeur (cassure de pente) : « Auto » dans le champ", () => {
+    load(withStructure("steel-curved"));
+    const html = render(SECTION_COMPONENTS.structure, { kind: "all" });
+    const label = /<label for="([^"]+)">Cassure de pente maximale aux naissances<\/label>/;
+    const field = label.exec(html);
+    expect(field).not.toBeNull();
+    expect(html).toMatch(new RegExp(`<input[^>]*id="${field![1]}"[^>]*placeholder="Auto"`));
   });
 });

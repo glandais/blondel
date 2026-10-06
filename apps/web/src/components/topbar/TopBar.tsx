@@ -28,6 +28,7 @@
  * au-dessus de la vue (`Notices`).
  */
 import { Redo2, Undo2 } from "lucide-react";
+import { useId } from "react";
 import { useT } from "../../i18n/useT.js";
 import type { Journey, Workspace } from "../../lib/journey.js";
 import { appStore, journeyStore, useApp, useJourney } from "../../store/appStore.js";
@@ -86,22 +87,43 @@ function ProjectIdentity() {
   );
 }
 
-/** Segmenté Guidé | Libre : petit en libre, grand en guidé (maquette 1a). */
+/**
+ * Segmenté Guidé | Libre : petit en libre, grand en guidé (maquette 1a). Fenêtre étroite
+ * (< 760 px, guidé imposé) : option Libre désactivée, avec son explication affichée en clair
+ * (ligne sous la barre, lisible sans survol), en info-bulle et en description accessible du
+ * groupe.
+ */
 function JourneySwitch({ guided }: { readonly guided: boolean }) {
   const t = useT();
   const journey = useJourney((s) => s.journey);
+  const imposed = useJourney((s) => s.guidedImposed);
+  const noteId = useId();
+  const note = t.t("ui.topbar.journey.freeNarrow");
   return (
-    <Segmented<Journey>
-      label={t.t("ui.topbar.journey.label")}
-      size={guided ? "md" : "sm"}
-      className={guided ? "journey-switch journey-switch--guided" : "journey-switch"}
-      value={journey}
-      options={[
-        { value: "guided", label: t.t("ui.topbar.journey.guided") },
-        { value: "free", label: t.t("ui.topbar.journey.free") },
-      ]}
-      onChange={(v) => journeyStore.getState().setJourney(v)}
-    />
+    <>
+      <Segmented<Journey>
+        label={t.t("ui.topbar.journey.label")}
+        size={guided ? "md" : "sm"}
+        className={guided ? "journey-switch journey-switch--guided" : "journey-switch"}
+        value={journey}
+        options={[
+          { value: "guided", label: t.t("ui.topbar.journey.guided") },
+          {
+            value: "free",
+            label: t.t("ui.topbar.journey.free"),
+            disabled: imposed,
+            title: imposed ? note : undefined,
+          },
+        ]}
+        onChange={(v) => journeyStore.getState().setJourney(v)}
+        describedBy={imposed ? noteId : undefined}
+      />
+      {imposed ? (
+        <small id={noteId} className="topbar__journey-note">
+          {note}
+        </small>
+      ) : null}
+    </>
   );
 }
 

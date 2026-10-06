@@ -6,9 +6,15 @@
  * la section Structure, même validation) et la section du parcours libre qui les porte tous.
  * Le mode Fabrication y lit aussi l'encart « Forme du … » et la section de Conception qui porte
  * la forme de la pièce (`partShapeFor`, `partDesignSection`). Aucune valeur métier.
+ *
+ * Pièces de garde-corps (famille `guards`) : chemins du projet sous `guards` qui concernent la
+ * catégorie de la pièce (poteau, main courante, balustre ou remplissage selon le type), aux
+ * niveaux Conception et Atelier du dictionnaire des niveaux (`lib/paramTiers.ts`), mêmes chemins
+ * et même validation que la section Garde-corps.
  */
-import type { MaterialId, Part } from "@blondel/core";
+import type { GuardsSpec, MaterialId, Part } from "@blondel/core";
 import type { MessageKey } from "@blondel/i18n";
+import { paramKey, tierEntry } from "./paramTiers.js";
 import type { SectionId } from "./sectionIds.js";
 
 export interface PartSettings {
@@ -22,6 +28,97 @@ export interface PartSettings {
   readonly structureParams: readonly string[];
   /** Section du parcours libre qui porte tous les réglages (« Tous les réglages dans … »). */
   readonly section: SectionId;
+  /**
+   * Pièce de garde-corps : chemins complets du projet des paramètres repris
+   * (`["guards", "posts", "size"]`), dans l'ordre d'affichage, niveaux Conception et Atelier
+   * seulement. Absent ou vide : aucun champ de garde-corps.
+   */
+  readonly guardParams?: readonly (readonly string[])[];
+}
+
+/** Chemin d'un paramètre de garde-corps (sous `guards`). */
+const g = (...path: string[]): readonly string[] => ["guards", ...path];
+
+/** Poteaux de garde-corps : section, entraxe, poteau d'angle, implantation (volée, trémie). */
+const GUARD_POST_PARAMS: readonly (readonly string[])[] = [
+  g("posts", "size"),
+  g("posts", "maxSpacing"),
+  g("posts", "cornerAngle"),
+  g("flight", "edgeOffset"),
+  g("opening", "setback"),
+];
+
+/** Mains courantes : section, hauteur, prolongements, dégagement au mur. */
+const GUARD_HANDRAIL_PARAMS: readonly (readonly string[])[] = [
+  g("handrail", "section"),
+  g("handrail", "height"),
+  g("handrail", "extensions", "bottom"),
+  g("handrail", "extensions", "top"),
+  g("handrail", "wallClearance"),
+];
+
+/** Remplissage selon son type (mêmes champs que la section Garde-corps pour ce type). */
+function infillParams(kind: GuardsSpec["infill"]["kind"]): readonly (readonly string[])[] {
+  const bottomGap = g("infill", "bottomGap");
+  switch (kind) {
+    case "balusters":
+      return [g("infill", "spacing"), g("infill", "section"), bottomGap];
+    case "rails":
+      return [g("infill", "count"), g("infill", "section"), bottomGap];
+    case "cables":
+      return [g("infill", "count"), g("infill", "diameter"), bottomGap];
+    case "glass":
+    case "panel":
+      return [g("infill", "thickness"), g("infill", "panelGap"), bottomGap];
+    case "perforated":
+      return [
+        g("infill", "thickness"),
+        g("infill", "panelGap"),
+        g("infill", "holeDiameter"),
+        bottomGap,
+      ];
+  }
+}
+
+/** Le paramètre est-il de niveau Conception ou Atelier (jamais Essentiel) ? */
+function isDesignOrWorkshop(path: readonly string[]): boolean {
+  const tier = tierEntry(paramKey(path))?.tier;
+  return tier === "design" || tier === "workshop";
+}
+
+/**
+ * Paramètres de garde-corps repris pour une pièce de la famille `guards` (catégorie de la pièce,
+ * type de remplissage du projet), niveaux Conception et Atelier. Sans garde-corps : aucun.
+ */
+export function guardParamsFor(
+  category: Part["category"],
+  guards: GuardsSpec | undefined,
+): readonly (readonly string[])[] {
+  if (guards === undefined) return [];
+  const paths =
+    category === "post"
+      ? GUARD_POST_PARAMS
+      : category === "handrail"
+        ? GUARD_HANDRAIL_PARAMS
+        : category === "baluster" || category === "infill"
+          ? infillParams(guards.infill.kind)
+          : [];
+  return paths.filter(isDesignOrWorkshop);
+}
+
+/** Portée affichée des réglages d'une pièce de garde-corps. */
+function guardScope(category: Part["category"]): MessageKey {
+  switch (category) {
+    case "post":
+      return "ui.partInspector.scope.guardPosts";
+    case "handrail":
+      return "ui.partInspector.scope.handrails";
+    case "baluster":
+    case "infill":
+      return "ui.partInspector.scope.infill";
+    default:
+      return "ui.partInspector.scope.guards";
+  }
 }
 
 /** Réglages des limons et crémaillères (section, épaisseur, dépassements, prolongements…). */
@@ -49,13 +146,20 @@ function isSteel(material: MaterialId | undefined): boolean {
 
 /**
  * Réglages repris pour la pièce, `null` si l'inspecteur n'en reprend aucun (marches et paliers
- * bois, pièces sans famille de réglages).
+ * bois, pièces sans famille de réglages). `guards` : garde-corps du projet, pour les champs
+ * d'une pièce de garde-corps (le type de remplissage choisit les champs repris).
  */
 export function partSettingsFor(
   part: Pick<Part, "category" | "family"> & { readonly material?: MaterialId },
+  guards?: GuardsSpec,
 ): PartSettings | null {
   if (part.family === "guards") {
-    return { scopeLabel: "ui.partInspector.scope.guards", structureParams: [], section: "guards" };
+    return {
+      scopeLabel: guardScope(part.category),
+      structureParams: [],
+      section: "guards",
+      guardParams: guardParamsFor(part.category, guards),
+    };
   }
   switch (part.category) {
     case "stringer":

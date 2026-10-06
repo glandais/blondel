@@ -164,7 +164,7 @@ describe("StepForm : en-tête, champs par niveau", () => {
     expect(html).toContain("<b>2h + g, le module de Blondel</b>, mesure le confort du pas");
     // Une seule phrase traduite, terme en gras interpolé : l'anglais garde son ordre.
     expect(render(3, "en")).toContain(
-      "<b>2h + g, the Blondel formula</b>, measures how comfortable the stride is",
+      "<b>2R + G, the Blondel formula</b>, measures how comfortable the stride is",
     );
   });
 
@@ -194,20 +194,26 @@ describe("StepFigures : chiffres clés", () => {
       expect(html).toContain(`class="blueprint step-figures" role="group"`);
       expect(html).toContain('aria-label="Chiffres clés de l&#x27;étape"');
       const ids = stepFigures(step, { project, model, unit: "mm", mass: 1 }, t).map((f) => f.id);
+      // Garde-corps présents : la case « aucun garde-corps » n'apparaît pas.
       expect(ids).toEqual(
-        step === 7 ? ["parts", "mass", "executionClass"] : STEP_FIGURE_IDS[step].ids,
+        step === 7
+          ? ["parts", "mass", "executionClass"]
+          : STEP_FIGURE_IDS[step].ids.filter((id) => id !== "guards"),
       );
       for (const id of ids) expect(html).toContain(`data-figure="${id}"`);
     }
   });
 
-  it("étape 3 : n, h, 2h + g du modèle", () => {
+  it("étape 3 : n, h, 2h + g du modèle, unité accolée au chiffre", () => {
     const model = load(steelProject());
     const html = render(3);
     expect(html).toMatch(
-      new RegExp(`data-figure="riserCount"><dt[^>]*>n</dt><dd[^>]*>${model.stepping.riserCount}<`),
+      new RegExp(
+        `data-figure="riserCount"[^>]*><dt[^>]*>n</dt><dd[^>]*>${model.stepping.riserCount}<`,
+      ),
     );
-    expect(html).toContain(">2h + g mm</dt>");
+    expect(html).toMatch(/>2h \+ g<\/dt><dd[^>]*>\d+<span class="step-figures__unit">mm<\/span>/);
+    expect(html).not.toMatch(/<dt[^>]*>[^<]*mm<\/dt>/);
   });
 
   it("étape 7 : pièces, masse, classe d'exécution", () => {
@@ -295,7 +301,7 @@ describe("anglais", () => {
       expect(html).not.toContain("Étape");
       expect(html).not.toMatch(/\bui\.[a-z]+\.[\w.]+/);
     }
-    expect(render(3, "en")).toContain('aria-label="2h + g module"');
+    expect(render(3, "en")).toContain('aria-label="2R + G formula"');
     expect(render(3, "en")).toContain("How many steps to climb 2,700 mm");
     expect(render(7, "en")).toContain("Compare structures");
   });

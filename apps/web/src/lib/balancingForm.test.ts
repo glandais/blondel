@@ -48,8 +48,16 @@ describe("méthodes de balancement", () => {
     expect(values[0]).toBe("M3");
     expect(values).toContain("M2");
     expect(values).toContain("M6");
+    // Libellé clair « M3 · courbe continue » (spécification § 4 ; variante en contrôle à part).
     for (const o of balancingMethodOptions(translatorFor("fr")))
-      expect(o.label).toMatch(new RegExp(`^${o.value} — `));
+      expect(o.label).toMatch(new RegExp(`^${o.value} · [a-zé]`));
+    const fr = Object.fromEntries(
+      balancingMethodOptions(translatorFor("fr")).map((o) => [o.value, o.label]),
+    );
+    expect(fr["M3"]).toBe("M3 · courbe continue");
+    expect(fr["M0"]).toBe("M0 · rayonnant (sans balancement)");
+    const en = balancingMethodOptions(translatorFor("en"));
+    for (const o of en) expect(o.label).toMatch(new RegExp(`^${o.value} · [a-z]`));
   });
 });
 

@@ -631,10 +631,61 @@ export interface Model {
    * ADR-0009) ; absent : échappée non calculée (sans site, modèle partiel).
    */
   readonly headroomAtNosings?: readonly (Mm | null)[];
+  /**
+   * Chiffres clés lus par l'interface (bandes du panneau libre, étapes du guidé, spécification
+   * de contenu § 2), calculés par `pipeline/figures.ts`. Ajout rétrocompatible (ADR-0009) ;
+   * absent : modèle construit hors pipeline. Chaque champ est omis s'il n'est pas calculable.
+   */
+  readonly figures?: ModelFigures;
   /** Erreurs de génération (paramètres impossibles) : le modèle peut être partiel. */
   readonly errors: readonly Message[];
   /** Remarques non bloquantes du pipeline (pièces non générées, hypothèses). */
   readonly notes?: readonly Message[];
+}
+
+/**
+ * Chiffres des garde-corps (`ModelFigures.guards`) : lignes, longueur, poteaux, hauteur exigée.
+ */
+export interface ModelGuardFigures {
+  /** Nombre de lignes de garde-corps (`GuardsAnalysis.runs` : rampants et trémie). */
+  readonly lines: number;
+  /**
+   * Longueur cumulée des lignes (mm), mesurée **en plan** le long de leurs axes
+   * (`GuardRun.path`), et non en développé le long de la pente.
+   */
+  readonly length: Mm;
+  /** Nombre de poteaux de garde-corps (pièces des garde-corps de catégorie `post`). */
+  readonly posts: number;
+  /**
+   * Hauteur minimale exigée (mm) : la plus forte borne `min` des résultats évalués des règles
+   * de hauteur de garde-corps (GC_HAUTEUR_RAMPANT_1988, GC_HAUTEUR_RAMPANT_2024,
+   * GC_HAUTEUR_PALIER_1988, GC_HAUTEUR_2024), lue dans le contrôle de conception. Absente si
+   * aucune de ces règles n'est évaluée.
+   */
+  readonly requiredHeight?: Mm;
+}
+
+/** Chiffres clés du modèle (`Model.figures`, `pipeline/figures.ts`). */
+export interface ModelFigures {
+  /**
+   * Collet minimal (mm) : plus petite corde de collet (`Tread.colletChord`) des marches
+   * balancées (`kind: "winder"`, toutes les marches d'un hélicoïdal), même grandeur que la
+   * règle de collet. Absent sans marche balancée.
+   */
+  readonly minCollet?: Mm;
+  /**
+   * Emprise au sol (mm) : dimensions selon les axes X et Y du site du rectangle englobant en
+   * plan des contours des marches et paliers (débord de nez compris) et de l'emprise du tracé,
+   * garde-corps exclus. Absente si aucun contour n'est calculé.
+   */
+  readonly footprint?: { readonly x: Mm; readonly y: Mm };
+  /**
+   * Recouvrement au nez (mm) : la grandeur que mesurent les règles RECOUVREMENT_* (le débord de
+   * nez saisi, `stair.treads.nosing`, vaut recouvrement entre deux marches successives).
+   */
+  readonly nosingOverlap?: Mm;
+  /** Chiffres des garde-corps ; absent sans garde-corps (ou étape des garde-corps en échec). */
+  readonly guards?: ModelGuardFigures;
 }
 
 /** Plancher haut et trémie, dans le repère du site (celui du tracé, `placement` appliqué). */

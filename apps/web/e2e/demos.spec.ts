@@ -7,7 +7,10 @@ import { expect, test, type Page } from "@playwright/test";
 import {
   LONG_TASK_BUDGET_MS,
   applyPreset,
+  boxesOverlap,
   PRESETS,
+  setWidth,
+  useGuidedJourney,
   closeProjectMenu,
   describeTasks,
   instrument,
@@ -89,7 +92,10 @@ test(`chaque démo : onglet 3D, aucun bloquant, une entrée d'annulation (tâche
     // Aucune erreur de génération, aucun bloquant (pied du guidé : bouton absent à zéro).
     await expect(page.locator(".errors-bar__errors")).toHaveCount(0);
     const footer = page.locator(".guided-footer");
-    await expect(footer.locator('[data-severity="avertissement"]')).toBeVisible();
+    // Comptes calculés (bouton d'une sévérité non nulle, ou « Aucun constat ») ; jamais de
+    // compte nul affiché.
+    await expect(footer.locator(".guided-footer__count").first()).toBeVisible();
+    await expect(footer.getByRole("button", { name: /^0 / })).toHaveCount(0);
     await expect(footer.locator('[data-severity="bloquant"]'), label).toHaveCount(0);
     await expect(page.locator(".notice")).toContainText(label);
     // La page tient dans la fenêtre, sans défilement horizontal ni vertical du document : seuls
@@ -114,6 +120,64 @@ test(`chaque démo : onglet 3D, aucun bloquant, une entrée d'annulation (tâche
     await takeLongTasks(page);
   }
   expect(problems.join("\n\n"), `tâches > ${LONG_TASK_BUDGET_MS} ms`).toBe("");
+});
+
+test("avis de démo : libellé et description, ne recouvre ni la vue, ni ses commandes, ni le pied, ni le formulaire, ni l'inspecteur", async ({
+  page,
+}) => {
+  const label = DEMOS[1];
+  await openApp(page);
+  /** Zones que l'avis ne doit jamais recouvrir, selon le parcours. */
+  const zones = [
+    "#view-panel",
+    ".view-bar",
+    ".figure-line",
+    ".guided-footer",
+    ".guided-form",
+    "aside.inspector",
+    ".step-bar",
+    ".topbar",
+  ];
+  const check = async (where: string): Promise<void> => {
+    const notice = page.locator(".notice", { hasText: label });
+    await expect(notice).toBeVisible();
+    // Texte lisible en entier, sans troncature (pas d'ellipse, pas d'info-bulle seule).
+    const clipped = await notice
+      .locator(".notice__text")
+      .evaluate((el) => el.scrollWidth > el.clientWidth + 1);
+    expect(clipped, `${where} : texte de l'avis tronqué`).toBe(false);
+    const box = (await notice.boundingBox())!;
+    for (const sel of zones) {
+      const el = page.locator(sel).first();
+      if ((await el.count()) === 0 || !(await el.isVisible())) continue;
+      const other = (await el.boundingBox())!;
+      expect(boxesOverlap(box, other), `${where} : avis sur ${sel}`).toBe(false);
+    }
+  };
+  await applyPreset(page, label);
+  const notice = page.locator(".notice", { hasText: label });
+  // Libellé et description de la démo, affichés en entier.
+  await expect(notice).toContainText(`Démo « ${label} »`);
+  const text = (await notice.locator(".notice__text").textContent()) ?? "";
+  expect(text.length).toBeGreaterThan(`Démo « ${label} » : `.length);
+  for (const [width, height] of [
+    [1440, 900],
+    [1100, 800],
+    [760, 900],
+    [390, 844],
+  ] as const) {
+    await setWidth(page, width, height);
+    await check(`guidé ${width} px`);
+    if (width >= 760) {
+      await useFreeJourney(page);
+      await check(`libre ${width} px`);
+      await useGuidedJourney(page);
+    }
+  }
+  // L'avis reste jusqu'à « Fermer ».
+  await setWidth(page, 1440, 900);
+  await notice.getByRole("button", { name: "Fermer", exact: true }).click();
+  await expect(page.locator(".notice", { hasText: label })).toHaveCount(0);
 });
 
 interface DemoViewerHook {

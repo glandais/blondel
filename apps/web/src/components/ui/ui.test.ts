@@ -90,6 +90,23 @@ describe("Segmented", () => {
     expect(html).toMatch(/<svg[^>]*aria-hidden="true"/);
     expect(html).toContain('stroke-width="1.5"');
   });
+
+  it("description du groupe (aria-describedby) seulement si elle est fournie", () => {
+    expect(seg()).not.toContain("aria-describedby");
+    const html = renderToStaticMarkup(
+      createElement(Segmented<string>, {
+        label: "Parcours",
+        value: "a",
+        options: [
+          { value: "a", label: "A" },
+          { value: "b", label: "B", disabled: true, title: "Indisponible ici" },
+        ],
+        onChange: () => {},
+        describedBy: "note-1",
+      }),
+    );
+    expect(html).toContain('role="radiogroup" aria-label="Parcours" aria-describedby="note-1"');
+  });
 });
 
 describe("nextIndex", () => {

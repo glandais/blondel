@@ -12,14 +12,8 @@
  * Lecture du rapport rendu par le cœur et des corrections proposées (`lib/fixes.ts`) : aucune
  * règle n'est évaluée ici ; la jauge n'est qu'une mise à l'échelle d'affichage (`ruleGauge`).
  */
-import {
-  CONFIDENCE_LABEL_KEYS,
-  NATURE_LABEL_KEYS,
-  ruleTitle,
-  type Part,
-  type RuleResult,
-} from "@blondel/core";
-import type { Message } from "@blondel/i18n";
+import { ruleTitle, type Part, type RuleResult } from "@blondel/core";
+import type { Message, MessageKey } from "@blondel/i18n";
 import { CircleCheck, CircleDashed, type LucideIcon } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useT } from "../../i18n/useT.js";
@@ -214,12 +208,32 @@ function Fixes({ ruleId }: { ruleId: string }) {
   );
 }
 
+/**
+ * Nature d'une règle avec son explication (A-regles § 0.1 : réglementaire, normatif, métier),
+ * une clé par valeur de `nature` de rules.yaml. Valeur inconnue : identifiant brut.
+ */
+export const NATURE_EXPLAINED_KEYS: Readonly<Record<string, MessageKey>> = {
+  reglementaire: "ui.ruleInspector.nature.reglementaire",
+  normatif: "ui.ruleInspector.nature.normatif",
+  metier: "ui.ruleInspector.nature.metier",
+};
+
+/**
+ * Fiabilité (confiance) d'une règle avec son explication (A-regles § 0.2 : élevée, moyenne,
+ * faible), une clé par valeur de `confiance` de rules.yaml.
+ */
+export const CONFIDENCE_EXPLAINED_KEYS: Readonly<Record<string, MessageKey>> = {
+  eleve: "ui.ruleInspector.confidence.eleve",
+  moyen: "ui.ruleInspector.confidence.moyen",
+  faible: "ui.ruleInspector.confidence.faible",
+};
+
 /** Nature, fiabilité, source, sévérité déclarée et déclassement, puis la référence. */
 function Provenance({ r }: { r: RuleResult }) {
   const t = useT();
   const rows: [string, string][] = [
-    [t.t("ui.ruleInspector.meta.nature"), labelOf(NATURE_LABEL_KEYS, r.nature, t)],
-    [t.t("ui.ruleInspector.meta.confidence"), labelOf(CONFIDENCE_LABEL_KEYS, r.confidence, t)],
+    [t.t("ui.ruleInspector.meta.nature"), labelOf(NATURE_EXPLAINED_KEYS, r.nature, t)],
+    [t.t("ui.ruleInspector.meta.confidence"), labelOf(CONFIDENCE_EXPLAINED_KEYS, r.confidence, t)],
     [
       t.t("ui.ruleInspector.meta.source"),
       r.secondarySource ? `${r.source} · ${t.t("ui.compliance.secondarySource")}` : r.source,

@@ -146,33 +146,48 @@ export function PlanSurveyForm({ onPreview }: Props) {
       <div className="grid-2">
         <div className="field">
           <label htmlFor={`${id}-ox`}>{t.t("ui.plan.survey.originX")}</label>
-          <input
-            id={`${id}-ox`}
-            type="text"
-            inputMode="decimal"
-            value={origin.x}
-            onChange={(e) => setOrigin((o) => ({ ...o, x: e.target.value }))}
-          />
+          <span className="input-unit">
+            <input
+              id={`${id}-ox`}
+              type="text"
+              inputMode="decimal"
+              value={origin.x}
+              onChange={(e) => setOrigin((o) => ({ ...o, x: e.target.value }))}
+            />
+            <span className="input-unit__unit" aria-hidden="true">
+              mm
+            </span>
+          </span>
         </div>
         <div className="field">
           <label htmlFor={`${id}-oy`}>{t.t("ui.plan.survey.originY")}</label>
-          <input
-            id={`${id}-oy`}
-            type="text"
-            inputMode="decimal"
-            value={origin.y}
-            onChange={(e) => setOrigin((o) => ({ ...o, y: e.target.value }))}
-          />
+          <span className="input-unit">
+            <input
+              id={`${id}-oy`}
+              type="text"
+              inputMode="decimal"
+              value={origin.y}
+              onChange={(e) => setOrigin((o) => ({ ...o, y: e.target.value }))}
+            />
+            <span className="input-unit__unit" aria-hidden="true">
+              mm
+            </span>
+          </span>
         </div>
         <div className="field">
           <label htmlFor={`${id}-angle`}>{t.t("ui.plan.survey.angle")}</label>
-          <input
-            id={`${id}-angle`}
-            type="text"
-            inputMode="decimal"
-            value={angle}
-            onChange={(e) => setAngle(e.target.value)}
-          />
+          <span className="input-unit">
+            <input
+              id={`${id}-angle`}
+              type="text"
+              inputMode="decimal"
+              value={angle}
+              onChange={(e) => setAngle(e.target.value)}
+            />
+            <span className="input-unit__unit" aria-hidden="true">
+              °
+            </span>
+          </span>
         </div>
         <div className="field">
           <label htmlFor={`${id}-orient`}>{t.t("ui.plan.survey.orientation")}</label>

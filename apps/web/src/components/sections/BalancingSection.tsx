@@ -138,8 +138,11 @@ export function BalancingSection({ display }: SectionProps) {
         b.method === "M3" && {
           key: "stair.balancing.variant",
           node: (
+            // Segmenté « Auto | Cubique | Quintique » (spécification de contenu § 3).
             <SelectField
               label={t.t("ui.params.balancing.variant.label")}
+              segmented
+              hint={t.t("ui.params.balancing.variant.hint")}
               value={b.variant}
               options={[
                 { value: "auto", label: t.t("ui.params.balancing.variant.auto") },

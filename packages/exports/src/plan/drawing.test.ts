@@ -65,6 +65,33 @@ describe("buildPlanDrawing sur des tracés réels (computeLayout)", () => {
     // Contour à arc exact : le jour en arc garde un renflement non nul.
     const d = buildPlanDrawing(m);
     expect(d.contour.vertices.some((v) => v.bulge !== 0)).toBe(true);
+    // Méthode de balancement en libellé clair (spécification de contenu § 4 : « M1 ·
+    // progression arithmétique des collets »), jamais l'identifiant seul, en français comme en
+    // anglais.
+    expect(m.stepping.balancedZones.length).toBeGreaterThan(0);
+    const line = d.cartouche.find((l) => l.startsWith("Balancement : "))!;
+    expect(line).toMatch(/^Balancement : M\d · [a-zé].*, nez \d+→\d+/);
+    const en = buildPlanDrawing(m, { locale: "en" }).cartouche.find((l) =>
+      l.startsWith("Winder balancing: "),
+    )!;
+    expect(en).toMatch(/^Winder balancing: M\d · [a-z].*, nosings \d+→\d+/);
+  });
+
+  it("cartouche : variante de M3 retenue en clair, « M3 · courbe continue (cubique) »", () => {
+    const base = layoutModel(layoutProject({ width: 900, legs: [2600, 2400] }), {
+      riserCount: 17,
+    });
+    const zones = base.stepping.balancedZones.map((z) => ({ ...z, method: "M3-cubic" }));
+    const m: Model = { ...base, stepping: { ...base.stepping, balancedZones: zones } };
+    const line = buildPlanDrawing(m).cartouche.find((l) => l.startsWith("Balancement : "))!;
+    expect(line).toMatch(/^Balancement : M3 · courbe continue \(cubique\), nez \d+→\d+/);
+    expect(line).not.toContain("M3-cubic");
+    // Méthode inconnue (stratégie tierce) : identifiant tel quel.
+    const other: Model = {
+      ...base,
+      stepping: { ...base.stepping, balancedZones: zones.map((z) => ({ ...z, method: "X9" })) },
+    };
+    expect(buildPlanDrawing(other).cartouche.join("\n")).toMatch(/Balancement : X9, nez/);
   });
 
   it("quart tournant bas : premier nez balancé, E reste la largeur de départ", () => {

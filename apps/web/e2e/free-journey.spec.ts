@@ -350,14 +350,17 @@ test("menu ⋯ : unité d'affichage et thème ; contraste du bouton Exporter", a
 test("petites largeurs : pas de défilement horizontal du document, contenu atteignable", async ({
   page,
 }) => {
+  // Sous 760 px, le guidé est imposé : voir responsive.spec.ts. À 760 et 1 100 px, le libre
+  // reste disponible ; à 760 px, l'inspecteur est un tiroir ouvert par le badge Contrôle.
   await openApp(page);
-  for (const width of [760, 390]) {
+  for (const width of [1100, 760]) {
     await page.setViewportSize({ width, height: 844 });
     await settle(page);
     expect(await overflowX(page), `${width} px`).toBe(0);
     await openSection(page, "Tracé");
     await expect(page.getByLabel("Emmarchement E")).toBeVisible();
     expect(await overflowX(page), `${width} px, panneau ouvert`).toBe(0);
+    if (width < 1100) await page.locator(".control-badge").click();
     await page.getByRole("complementary", { name: "Inspecteur" }).scrollIntoViewIfNeeded();
     await expect(page.locator(".inspector-control__title")).toBeVisible();
     await openTab(page, "Nomenclature");

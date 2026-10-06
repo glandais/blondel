@@ -7,6 +7,7 @@ import {
   buildModel,
   createProject,
   ProjectSchema,
+  RULES,
   ruleTitle,
   textMessage,
   withRuleOverride,
@@ -22,7 +23,11 @@ import { afterEach, describe, expect, it } from "vitest";
 import { appStore, journeyStore, modelService, workshopStore } from "../../store/appStore.js";
 import type { Selection } from "../../store/projectStore.js";
 import { uiStore } from "../../store/uiStore.js";
-import { RuleInspector } from "./RuleInspector.js";
+import {
+  CONFIDENCE_EXPLAINED_KEYS,
+  NATURE_EXPLAINED_KEYS,
+  RuleInspector,
+} from "./RuleInspector.js";
 import { OverrideEditor } from "./RuleResults.js";
 
 const initial = appStore.getState().project;
@@ -142,6 +147,25 @@ describe("inspecteur Règle : contenu", () => {
     for (const fr of ["Fiabilité", "Référence", "Où", "Pour corriger", "Surcharger"]) {
       expect(visible, fr).not.toContain(fr);
     }
+  });
+
+  it("provenance : nature et fiabilité avec leur explication, une clé par valeur de rules.yaml", () => {
+    expect(Object.keys(NATURE_EXPLAINED_KEYS).sort()).toEqual(
+      [...new Set(RULES.map((r) => r.nature))].sort(),
+    );
+    expect(Object.keys(CONFIDENCE_EXPLAINED_KEYS).sort()).toEqual(
+      [...new Set(RULES.map((r) => r.confiance))].sort(),
+    );
+    const m = load(createProject("helical"));
+    const r = violationsOf(m)[0]!;
+    const fr = text(render(selectionOf(r)));
+    expect(fr).toContain(FR.t(NATURE_EXPLAINED_KEYS[r.nature]!));
+    expect(fr).toContain(FR.t(CONFIDENCE_EXPLAINED_KEYS[r.confidence]!));
+    expect(FR.t("ui.ruleInspector.nature.reglementaire")).toMatch(
+      /^Réglementaire : imposé par un texte officiel/,
+    );
+    const en = text(render(selectionOf(r), "en"));
+    expect(en).toContain(translatorFor("en").t(NATURE_EXPLAINED_KEYS[r.nature]!));
   });
 
   it("règle respectée et règle non évaluée : surtitre du statut", () => {

@@ -99,7 +99,7 @@ test("Échap : panneau non épinglé, puis sélection, puis panneau épinglé ; 
 
   // Échap dans une saisie : la valeur est rétablie, la marche reste sélectionnée.
   await selectTreadOnPlan(page, 3);
-  const angle = inspector.getByLabel("Angle", { exact: true });
+  const angle = inspector.getByLabel("Angle imposé", { exact: true });
   const before = await angle.inputValue();
   await angle.fill("9");
   await angle.press("Escape");

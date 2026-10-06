@@ -5,17 +5,19 @@
  * pures (choix des gabarits, remplissage du barème, coût de la variante courante).
  * Rendu serveur, modèle calculé ici sans le worker.
  */
-import { buildModel, createProject, type Model, type Project } from "@blondel/core";
+import { buildModel, createProject, type CostRates, type Model, type Project } from "@blondel/core";
 import { textMessage, translatorFor } from "@blondel/i18n";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it } from "vitest";
+import { defaultGuards } from "../../lib/guardsForm.js";
 import { structureParamEntry } from "../../lib/paramTiers.js";
 import { toValidateRows, validationEntry } from "../../lib/toValidate.js";
 import { runVariants, type CompareOutcome, type VariantRow } from "../../lib/variants.js";
+import { COST_FIELDS, withWorkshopRates } from "../../lib/workshopRates.js";
 import { appStore, journeyStore, modelService, workshopStore } from "../../store/appStore.js";
 import { uiStore } from "../../store/uiStore.js";
-import { costProfileFill, currentCostText } from "./CostEstimate.js";
+import { CostEstimate, costProfileFill, currentCostText } from "./CostEstimate.js";
 import { FabricationAside, openPartInDesign } from "./FabricationAside.js";
 import { TEMPLATE_CHOICES, templateChoiceReason } from "./OutputsBlock.js";
 import { ToValidateList } from "./ToValidateList.js";
@@ -118,6 +120,10 @@ describe("colonne de droite du mode Fabrication", () => {
     // supports.angleLeg est une valeur ◆ de niveau Atelier : mention sous le champ.
     expect(structureParamEntry("steel-flat", ["supports", "angleLeg"]).tier).toBe("workshop");
     expect(text).toContain("◆ valeur par défaut à valider");
+    // Le glyphe de la mention est masqué aux lecteurs d'écran.
+    expect(html).toContain(
+      '<small class="part-insp__tv-note"><span class="tv-mark tv-mark--inherit" aria-hidden="true">◆</span> valeur par défaut à valider</small>',
+    );
     expect(html).toContain('data-to-validate="true"');
     expect(text).toContain("Forme des supports");
     expect(text).toContain("Ouvrir dans Conception");
@@ -155,6 +161,23 @@ describe("colonne de droite du mode Fabrication", () => {
     expect(text).not.toMatch(/Épaisseur du limon|Épaisseur de tôle/);
   });
 
+  it("poteau de garde-corps : réglages Atelier de la section Garde-corps, note de portée", () => {
+    const model = load({ ...createProject("straight"), guards: defaultGuards() });
+    const post = model.parts.find((p) => p.family === "guards" && p.category === "post")!;
+    selectPart(post.id);
+    const html = render();
+    const text = decode(html);
+    expect(text).toContain("Réglages d'atelier de la pièce");
+    expect(text).toContain(FR.t("ui.guards.posts.size"));
+    expect(text).toContain(FR.t("ui.fabAside.workshop.noteGuards"));
+    expect(text).not.toContain(FR.t("ui.fabAside.workshop.note"));
+    // Niveau Atelier seulement : la hauteur de main courante (Conception) n'est pas reprise.
+    expect(html).toContain('data-setting="guards.posts.size"');
+    expect(html).toContain('data-to-validate="true"');
+    expect(text).toContain("Forme du garde-corps");
+    noRawKeys(html);
+  });
+
   it("marche bois : aucun réglage d'atelier, forme de la marche", () => {
     const model = load(createProject("straight"));
     const tread = model.parts.find((p) => p.category === "tread")!;
@@ -182,17 +205,130 @@ describe("colonne de droite du mode Fabrication", () => {
 });
 
 describe("liste des valeurs ◆", () => {
-  it("projet sans valeur ◆ : seul « Aucune valeur ◆ », ni « toutes validées », ni « Tout valider »", () => {
+  const html = (): string =>
+    decode(renderToStaticMarkup(createElement(ToValidateList, { variant: "compact" })));
+
+  it("projet sans valeur ◆ : seul « Aucune valeur à valider », ni « toutes validées », ni « Tout valider »", () => {
     load(createProject("straight"));
-    const html = renderToStaticMarkup(createElement(ToValidateList, { variant: "compact" }));
-    expect(html).toContain("Aucune valeur ◆ dans ce projet.");
-    expect(html).not.toContain("Toutes les valeurs ◆ sont validées");
-    expect(html).not.toContain("Tout valider");
+    const empty = html();
+    expect(empty).toContain(FR.t("ui.toValidate.noneInProject"));
+    expect(empty).not.toContain(FR.t("ui.toValidate.allValidated"));
+    expect(empty).not.toContain("Tout valider");
     // Avec des valeurs ◆ : compte et bouton reviennent.
     load(steelFlat());
-    const full = renderToStaticMarkup(createElement(ToValidateList, { variant: "compact" }));
+    const full = html();
     expect(full).toContain("Tout valider");
-    expect(full).not.toContain("Aucune valeur ◆");
+    expect(full).not.toContain(FR.t("ui.toValidate.noneInProject"));
+  });
+
+  it("guidé imposé (< 760 px) : réglage sans étape guidée (M6) → explication, pas de « Ouvrir » inerte", () => {
+    const base = createProject("quarter-left");
+    load({
+      ...base,
+      stair: { ...base.stair, balancing: { ...base.stair.balancing, method: "M6" } },
+    });
+    const narrowNote = FR.t("ui.topbar.journey.freeNarrow");
+    const rotation = (out: string): string =>
+      out.split("<li").find((li) => li.includes(FR.t("ui.params.rotation.reach"))) ?? "";
+    // Fenêtre large : « Ouvrir » partout.
+    expect(rotation(html())).toContain(FR.t("ui.toValidate.open"));
+    journeyStore.setState({ journey: "guided", guidedImposed: true });
+    try {
+      const narrow = html();
+      expect(rotation(narrow)).toContain(narrowNote);
+      expect(rotation(narrow)).not.toContain(`>${FR.t("ui.toValidate.open")}<`);
+    } finally {
+      journeyStore.setState({ journey: "free", guidedImposed: false });
+    }
+  });
+
+  it("glyphe ◆ hors des noms accessibles : titre de la région, cases, compteur", () => {
+    load(steelFlat());
+    const raw = renderToStaticMarkup(createElement(ToValidateList, { variant: "compact" }));
+    // Titre : « Valeurs ◆ à valider » visible mais masqué aux lecteurs d'écran, nom sans glyphe.
+    expect(raw).toMatch(
+      /<h2 id="[^"]+" class="tv-list__title"><span aria-hidden="true">Valeurs ◆ à valider<\/span><span class="visually-hidden">Valeurs à valider<\/span><\/h2>/,
+    );
+    // Aucun attribut de nom ou de titre ne contient le glyphe.
+    expect(raw).not.toMatch(/(aria-label|title)="[^"]*◆/);
+    // Chaque ◆ visible est dans un élément aria-hidden.
+    const visible = raw.replace(/<span[^>]*aria-hidden="true"[^>]*>[^<]*<\/span>/g, "");
+    expect(visible).not.toContain("◆");
+    // Toutes validées : message sans glyphe.
+    const rows = toValidateRows(
+      appStore.getState().project,
+      buildModel(appStore.getState().project),
+    );
+    const entries = rows.map(validationEntry).filter((e) => e !== null);
+    expect(appStore.getState().setValuesValidated(entries, true).ok).toBe(true);
+    expect(html()).toContain(FR.t("ui.toValidate.allValidated"));
+    expect(FR.t("ui.toValidate.allValidated")).not.toContain("◆");
+    appStore.getState().undo();
+  });
+});
+
+describe("ligne « Coût estimé » (rendu serveur)", () => {
+  const initialRates = workshopStore.getState().rates;
+  const initialCompare = modelService.store.getState().compare;
+  afterEach(() => {
+    workshopStore.setState({ rates: initialRates });
+    modelService.store.setState({ compare: initialCompare });
+  });
+
+  const FULL_RATES = Object.fromEntries(COST_FIELDS.map((f) => [f.key, 2])) as CostRates;
+
+  /** Comparaison terminée pour le projet effectivement comparé (barème fusionné). */
+  function compareDone(rows: readonly VariantRow[]): void {
+    const requested = withWorkshopRates(
+      appStore.getState().project,
+      workshopStore.getState().rates,
+    );
+    modelService.store.setState({
+      compare: { project: requested, outcome: { rows, timeMs: 1 }, pending: false },
+    });
+  }
+
+  it("barème incomplet : lien « Compléter le profil d'atelier (n / 9) », aucun coût", () => {
+    load(steelFlat());
+    workshopStore.getState().setRates({ hourlyRate: 50, minutesPerCut: 2 });
+    const text = decode(renderToStaticMarkup(createElement(CostEstimate)));
+    expect(text).toContain("Coût estimé");
+    expect(text).toContain("Compléter le profil d'atelier (2 / 9)");
+    expect(text).not.toContain("€");
+  });
+
+  it("barème complet : « calcul… » tant que la comparaison du projet courant manque", () => {
+    load(steelFlat());
+    workshopStore.getState().setRates(FULL_RATES);
+    const html = renderToStaticMarkup(createElement(CostEstimate));
+    expect(html).toContain('role="status"');
+    expect(decode(html)).toContain("calcul…");
+    expect(decode(html)).not.toContain("Compléter le profil d'atelier");
+  });
+
+  it("barème complet et comparaison terminée : coût de la variante courante", () => {
+    load(steelFlat());
+    workshopStore.getState().setRates(FULL_RATES);
+    const base = runVariants(steelFlat(), [
+      { id: "cur", kind: "steel-flat", label: textMessage("Plat") },
+    ]).rows[0]!;
+    compareDone([
+      {
+        ...base,
+        current: true,
+        cost: { total: 1234, material: 0, labour: 0, hours: 0, finish: 0 },
+      },
+    ]);
+    const html = renderToStaticMarkup(createElement(CostEstimate));
+    const text = decode(html);
+    expect(html).toContain('class="fab-cost__value num"');
+    expect(text).toMatch(/1\s?234\s€/u);
+    expect(text).not.toContain("calcul…");
+    // Aucune variante courante : lien vers le comparateur.
+    compareDone([{ ...base, current: false }]);
+    expect(decode(renderToStaticMarkup(createElement(CostEstimate)))).toContain(
+      "Voir le coût dans le comparateur",
+    );
   });
 });
 

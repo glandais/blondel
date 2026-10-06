@@ -167,7 +167,7 @@ export function SiteSection({ display }: SectionProps) {
   };
 
   const underlay = site.underlay;
-  const openingLabel = t.t("ui.params.site.opening.kind");
+  const openingLabel = t.t("ui.label.opening");
 
   return (
     <Tiered
@@ -177,8 +177,8 @@ export function SiteSection({ display }: SectionProps) {
           key: "site.floorToFloor",
           node: (
             <IntField
-              label={t.t("ui.params.site.floorToFloor.label")}
-              hint={t.t("ui.params.site.floorToFloor.hint")}
+              label={t.t("ui.label.site.floorToFloor")}
+              hint={t.t("ui.label.site.floorToFloor.hint")}
               value={site.floorToFloor}
               min={1}
               onCommit={set(["site", "floorToFloor"])}
@@ -189,8 +189,8 @@ export function SiteSection({ display }: SectionProps) {
           key: "site.upperSlabThickness",
           node: (
             <IntField
-              label={t.t("ui.params.site.slab.label")}
-              hint={t.t("ui.params.site.slab.hint")}
+              label={t.t("ui.label.site.upperSlabThickness")}
+              hint={t.t("ui.label.site.upperSlabThickness.hint")}
               value={site.upperSlabThickness}
               min={1}
               onCommit={set(["site", "upperSlabThickness"])}
@@ -250,7 +250,7 @@ export function SiteSection({ display }: SectionProps) {
                 group: rect,
                 node: (
                   <IntField
-                    label={t.t("ui.params.site.opening.x")}
+                    label={t.t("ui.label.opening.cornerX")}
                     value={o.x}
                     onCommit={set(["site", "opening", "x"])}
                   />
@@ -261,7 +261,7 @@ export function SiteSection({ display }: SectionProps) {
                 group: rect,
                 node: (
                   <IntField
-                    label={t.t("ui.params.site.opening.y")}
+                    label={t.t("ui.label.opening.cornerY")}
                     value={o.y}
                     onCommit={set(["site", "opening", "y"])}
                   />
@@ -272,7 +272,7 @@ export function SiteSection({ display }: SectionProps) {
                 group: rect,
                 node: (
                   <IntField
-                    label={t.t("ui.params.site.opening.sizeX")}
+                    label={t.t("ui.label.opening.sizeX")}
                     value={o.sizeX}
                     min={1}
                     onCommit={set(["site", "opening", "sizeX"])}
@@ -284,7 +284,7 @@ export function SiteSection({ display }: SectionProps) {
                 group: rect,
                 node: (
                   <IntField
-                    label={t.t("ui.params.site.opening.sizeY")}
+                    label={t.t("ui.label.opening.sizeY")}
                     value={o.sizeY}
                     min={1}
                     onCommit={set(["site", "opening", "sizeY"])}

@@ -262,6 +262,33 @@ export async function openAppFresh(page: Page): Promise<void> {
   await settle(page);
 }
 
+/**
+ * Largeur de la fenêtre (hauteur gardée, 844 px par défaut) puis attente de la mise en page
+ * (classe de largeur `data-viewport` de `.app` : wide ≥ 1 100, medium ≥ 760, narrow sinon).
+ */
+export async function setWidth(page: Page, width: number, height?: number): Promise<void> {
+  const h = height ?? page.viewportSize()?.height ?? 844;
+  await page.setViewportSize({ width, height: h });
+  const cls = width >= 1100 ? "wide" : width >= 760 ? "medium" : "narrow";
+  await expect(page.locator(`.app[data-viewport="${cls}"]`)).toBeVisible();
+  await settle(page);
+}
+
+/** Largeur du document (`scrollWidth`) : ≤ largeur de la fenêtre sans défilement horizontal. */
+export async function documentScrollWidth(page: Page): Promise<number> {
+  return page.evaluate(() => document.documentElement.scrollWidth);
+}
+
+/** Boîtes englobantes de deux éléments qui se recouvrent (aire d'intersection > 0). */
+export function boxesOverlap(
+  a: { x: number; y: number; width: number; height: number },
+  b: { x: number; y: number; width: number; height: number },
+): boolean {
+  const w = Math.min(a.x + a.width, b.x + b.width) - Math.max(a.x, b.x);
+  const h = Math.min(a.y + a.height, b.y + b.height) - Math.max(a.y, b.y);
+  return w > 0.5 && h > 0.5;
+}
+
 /** Radio d'un parcours (« Guidé » ou « Libre ») de la barre du haut. */
 export function journeyRadio(page: Page, name: "Guidé" | "Libre"): Locator {
   return page

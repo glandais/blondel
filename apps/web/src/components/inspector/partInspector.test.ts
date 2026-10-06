@@ -1,6 +1,7 @@
 /**
  * Inspecteur « Pièce » (maquette 2b) : valeurs lues dans le modèle, actions désactivées sans
- * développé, réglages d'atelier filtrés par famille de pièces (avec la valeur retenue d'un
+ * développé, réglages d'atelier filtrés par famille de pièces (structure, et garde-corps par
+ * catégorie de pièce) (avec la valeur retenue d'un
  * paramètre auto, marque ◆ des seules valeurs non validées), pièces assemblées, mention, en
  * français et en anglais (aucune clé brute).
  * Rendu serveur, modèle calculé ici sans le worker ; assemblages et valeurs auto fabriqués à la
@@ -17,6 +18,8 @@ import {
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it } from "vitest";
+import { translatorFor } from "@blondel/i18n";
+import { defaultGuards } from "../../lib/guardsForm.js";
 import { toValidateRows, validationEntry } from "../../lib/toValidate.js";
 import { appStore, journeyStore, modelService } from "../../store/appStore.js";
 import { uiStore } from "../../store/uiStore.js";
@@ -24,6 +27,7 @@ import { PartInspector } from "./PartInspector.js";
 import { PartLinkList } from "./PartLinkList.js";
 
 const initial = appStore.getState().project;
+const FR = translatorFor("fr");
 
 // Rendu serveur : zustand lit `getInitialState()` (instantané serveur de
 // `useSyncExternalStore`) ; le test rend l'état courant des stores.
@@ -193,6 +197,75 @@ describe("inspecteur Pièce : marche bois sans structure", () => {
   it("pièce absente du modèle : rien", () => {
     load(createProject("straight"));
     expect(render("piece-inconnue")).toBe("");
+  });
+});
+
+/** Projet droit avec les garde-corps par défaut du cœur. */
+const withGuards = (): Project => ({ ...createProject("straight"), guards: defaultGuards() });
+
+describe("inspecteur Pièce : pièces de garde-corps (réglages de la section Garde-corps)", () => {
+  it("poteau : côté, entraxe, poteau d'angle, implantation ; ◆ sans glyphe dans les noms", () => {
+    const model = load(withGuards());
+    const post = model.parts.find((p) => p.family === "guards" && p.category === "post")!;
+    expect(post).toBeDefined();
+    const html = render(post.id);
+    const text = decode(html);
+    expect(text).toContain("Pièce · garde-corps");
+    expect(text).toContain("Réglages d'atelier");
+    expect(text).toContain("communs aux poteaux de garde-corps");
+    for (const key of [
+      "ui.guards.posts.size",
+      "ui.guards.posts.maxSpacing",
+      "ui.guards.posts.cornerAngle",
+      "ui.guards.flight.edgeOffset",
+      "ui.guards.opening.setback",
+    ] as const) {
+      expect(text).toContain(FR.t(key));
+    }
+    expect(html).toContain('data-setting="guards.posts.size"');
+    expect(text).toContain("Tous les réglages dans Garde-corps");
+    // Valeurs ◆ : glyphe masqué, suivi du texte lu « à valider ».
+    expect(html).toContain(
+      '<span class="tv-mark tiered__mark" aria-hidden="true">◆</span><span class="visually-hidden"> à valider</span>',
+    );
+    expect(html).not.toMatch(/(aria-label|title)="[^"]*◆/);
+    noRawKeys(html);
+    noRawKeys(render(post.id, "en"));
+  });
+
+  it("main courante et balustre : champs de leur catégorie ; ◆ retirée une fois validée", () => {
+    const model = load(withGuards());
+    const handrail = model.parts.find((p) => p.family === "guards" && p.category === "handrail")!;
+    const hr = decode(render(handrail.id));
+    expect(hr).toContain("communs aux mains courantes");
+    expect(hr).toContain(FR.t("ui.guards.handrail.wallClearance"));
+    expect(hr).not.toContain(FR.t("ui.guards.posts.size"));
+    const baluster = model.parts.find((p) => p.family === "guards" && p.category === "baluster")!;
+    const bal = decode(render(baluster.id));
+    expect(bal).toContain("communs au remplissage");
+    expect(bal).toContain(FR.t("ui.guards.infill.balusterSpacing"));
+    expect(bal).toContain(FR.t("ui.guards.infill.balusterSection"));
+    // Entraxe des balustres : valeur ◆ ; validée, plus de marque ; annulée, elle revient.
+    const marks = (): number => (render(baluster.id).match(/tiered__item--tv/g) ?? []).length;
+    const before = marks();
+    expect(before).toBeGreaterThan(0);
+    const entries = toValidateRows(appStore.getState().project, model)
+      .filter((r) => r.key.startsWith("guards.infill."))
+      .map(validationEntry)
+      .filter((e) => e !== null);
+    expect(appStore.getState().setValuesValidated(entries, true).ok).toBe(true);
+    expect(marks()).toBe(0);
+    appStore.getState().undo();
+    expect(marks()).toBe(before);
+  });
+
+  it("modification d'un réglage : même chemin du projet que la section, annulable", () => {
+    load(withGuards());
+    const size = appStore.getState().project.guards!.posts.size;
+    expect(appStore.getState().setField(["guards", "posts", "size"], size + 10).ok).toBe(true);
+    expect(appStore.getState().project.guards!.posts.size).toBe(size + 10);
+    appStore.getState().undo();
+    expect(appStore.getState().project.guards!.posts.size).toBe(size);
   });
 });
 

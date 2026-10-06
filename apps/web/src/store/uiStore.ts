@@ -73,6 +73,13 @@ export interface UiState {
    * le ramène en tête et lui donne le focus, même s'il était déjà déplié.
    */
   readonly guidedControlContextSeq: number;
+  /**
+   * Tiroir de l'inspecteur ouvert (fenêtre de 760 à 1 099 px, parcours libre en Conception ;
+   * ADR-0009 point 3) : ouvert par une sélection, le badge « Contrôle » ou le lien des
+   * surcharges, fermé par Échap, par sa croix ou quand la sélection s'efface. Sans effet visible
+   * sur grand écran, où l'inspecteur est une colonne.
+   */
+  readonly inspectorDrawerOpen: boolean;
 }
 
 export function createUiStore(initialView: ViewTab = "plan"): StoreApi<UiState> {
@@ -89,7 +96,21 @@ export function createUiStore(initialView: ViewTab = "plan"): StoreApi<UiState> 
     guidedControlOpen: false,
     guidedControlContext: false,
     guidedControlContextSeq: 0,
+    inspectorDrawerOpen: false,
   }));
+}
+
+/**
+ * Lie le tiroir de l'inspecteur à la sélection : une nouvelle sélection l'ouvre, son effacement
+ * le ferme (Échap ou clic dans le vide reviennent à la 2d, tiroir fermé). Rend la fonction de
+ * désabonnement.
+ */
+export function linkDrawerToSelection(app: ProjectStore, ui: StoreApi<UiState>): () => void {
+  return app.subscribe((s, prev) => {
+    if (s.selection === prev.selection) return;
+    const open = s.selection !== null;
+    if (ui.getState().inspectorDrawerOpen !== open) ui.setState({ inspectorDrawerOpen: open });
+  });
 }
 
 /**
@@ -132,6 +153,38 @@ export function linkWorkspaceAndView(
 export const uiStore = createUiStore(appStore.getState().view);
 
 linkWorkspaceAndView(appStore, journeyStore, uiStore);
+linkDrawerToSelection(appStore, uiStore);
+
+/** Élément qui avait le focus à l'ouverture du tiroir (focus rendu à sa fermeture). */
+let drawerOpener: HTMLElement | null = null;
+
+/** Ouvre le tiroir de l'inspecteur (fenêtre moyenne) ; retient l'élément qui avait le focus. */
+export function openInspectorDrawer(): void {
+  if (typeof document !== "undefined") {
+    const active = document.activeElement;
+    const inDrawer = active instanceof Element && active.closest(".inspector") !== null;
+    if (active instanceof HTMLElement && active !== document.body && !inDrawer) {
+      drawerOpener = active;
+    }
+  }
+  if (!uiStore.getState().inspectorDrawerOpen) uiStore.setState({ inspectorDrawerOpen: true });
+}
+
+/**
+ * Ferme le tiroir de l'inspecteur sans toucher à la sélection. `restoreFocus` : rend le focus à
+ * l'élément qui l'avait ouvert, s'il est encore affiché, sinon au cadre de la vue (`#view-panel`).
+ */
+export function closeInspectorDrawer(options?: { readonly restoreFocus?: boolean }): void {
+  if (uiStore.getState().inspectorDrawerOpen) uiStore.setState({ inspectorDrawerOpen: false });
+  const opener = drawerOpener;
+  drawerOpener = null;
+  if (options?.restoreFocus !== true || typeof document === "undefined") return;
+  if (opener !== null && opener.isConnected) {
+    opener.focus();
+    return;
+  }
+  document.getElementById("view-panel")?.focus();
+}
 
 export function useUi<T>(selector: (s: UiState) => T): T {
   return useStore(uiStore, selector);
@@ -159,6 +212,9 @@ export function revealControl(): void {
   if (isGuided()) openGuidedControl();
   else showDesign();
   appStore.getState().select(null);
+  // Fenêtre moyenne : le tiroir de l'inspecteur s'ouvre sur la 2d (après l'effacement de la
+  // sélection, qui le ferme).
+  if (!isGuided()) openInspectorDrawer();
   uiStore.setState((s) => ({ controlRevealSeq: s.controlRevealSeq + 1 }));
 }
 
@@ -223,6 +279,7 @@ export function revealOverrides(): void {
   if (isGuided()) openGuidedControl();
   else showDesign();
   appStore.getState().select(null);
+  if (!isGuided()) openInspectorDrawer();
   uiStore.setState((s) => ({ overridesRevealSeq: s.overridesRevealSeq + 1 }));
 }
 
@@ -278,6 +335,8 @@ export function openParam(
       closeGuidedControl();
       return;
     }
+    // Fenêtre étroite : le libre est indisponible, le paramètre reste hors d'atteinte ici.
+    if (journeyStore.getState().guidedImposed) return;
     journeyStore.getState().setJourney("free");
   }
   showDesign();

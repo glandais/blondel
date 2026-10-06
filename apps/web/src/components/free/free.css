@@ -15,10 +15,13 @@
   overflow-y: auto;
 }
 
+/* Marge intérieure de 4 px : le contour de focus (2 px, décalé de 2 px) n'est pas rogné par le
+   rail, qui défile. */
 .rail__list {
   display: flex;
   flex-direction: column;
-  padding: 6px 0;
+  gap: 2px;
+  padding: 6px 4px;
 }
 
 .rail__tab {
@@ -27,7 +30,7 @@
   align-items: center;
   gap: 3px;
   width: 100%;
-  padding: 9px 4px;
+  padding: 9px 0;
   font-family: var(--font-body);
   font-weight: 400;
   color: var(--color-neutral-800);
@@ -54,8 +57,10 @@
 }
 
 .rail__tab:focus-visible {
+  position: relative;
+  z-index: 1;
   outline: 2px solid var(--focus);
-  outline-offset: -2px;
+  outline-offset: 2px;
 }
 
 .rail__label {
@@ -133,6 +138,17 @@
   width: 100%;
 }
 
+/* Segmentés à options longues (méthodes de balancement…) : ils passent à la ligne plutôt que
+   d'élargir la colonne. */
+.free-panel .seg {
+  flex-wrap: wrap;
+  max-width: 100%;
+}
+
+.free-panel .seg .seg-opt {
+  white-space: normal;
+}
+
 .free-panel__note {
   margin: auto 0 0;
   font-size: 12px;
@@ -188,9 +204,11 @@
   color: var(--color-neutral-700);
 }
 
-/* ------------------------------------------------------------ Repli (vague 6 : vrai repli) */
+/* ------------------------------------------------------------ Repli étroit */
 
-@media (max-width: 1099px) {
+/* De 760 à 1 099 px, le rail reste vertical (l'inspecteur passe en tiroir, styles.css). Sous
+   760 px, le parcours guidé est imposé : ce repli ne sert que si le libre s'affichait quand même. */
+@media (max-width: 759px) {
   /* Rail en ligne, défilant dans son propre conteneur : jamais de défilement du document. */
   .rail {
     overflow-x: auto;
@@ -201,7 +219,7 @@
 
   .rail__list {
     flex-direction: row;
-    padding: 0 6px;
+    padding: 4px 6px;
     width: max-content;
   }
 

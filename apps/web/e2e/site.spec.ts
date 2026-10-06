@@ -104,6 +104,15 @@ test("import DXF (échelle demandée), trémie tracée avec accroches, annulable
     "aria-checked",
     "true",
   );
+  // Libellés unifiés de la trémie rectangulaire (spécification de contenu § 4).
+  for (const label of [
+    "Trémie : coin X",
+    "Trémie : coin Y",
+    "Trémie : longueur (X)",
+    "Trémie : largeur (Y)",
+  ]) {
+    await expect(panel.getByLabel(label, { exact: true })).toBeVisible();
+  }
   await expect(panel.getByText("Trémie polygonale (4 sommets)")).toHaveCount(0);
 });
 

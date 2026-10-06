@@ -281,3 +281,103 @@ describe("note « ouvert depuis le guidé » (freePanelFromGuided)", () => {
     expect(s.getState().freePanelFromGuided).toBe(false);
   });
 });
+
+describe("guidé imposé sous 760 px (setNarrowViewport)", () => {
+  it("libre → guidé imposé à l'étape du panneau ; retour → libre, même panneau et même espace", () => {
+    const storage = memoryStorage();
+    const s = createJourneyStore(storage, { hasAutosave: true });
+    s.getState().openFreePanel("treads");
+    s.getState().setFreePanelPinned(true);
+    s.getState().setNarrowViewport(true);
+    expect(s.getState()).toMatchObject({ journey: "guided", guidedStep: 4, guidedImposed: true });
+    expect(s.getState().visitedSteps.has(4)).toBe(true);
+    // Le parcours mémorisé reste le dernier choix de l'utilisateur ; l'imposition jamais.
+    expect(stored(storage)).toMatchObject({ journey: "free" });
+    expect(stored(storage)).not.toHaveProperty("guidedImposed");
+    // Second appel sans effet.
+    const before = s.getState();
+    s.getState().setNarrowViewport(true);
+    expect(s.getState()).toBe(before);
+    s.getState().setNarrowViewport(false);
+    expect(s.getState()).toMatchObject({
+      journey: "free",
+      freePanel: "treads",
+      freePanelPinned: true,
+      workspace: "design",
+      guidedImposed: false,
+      freePanelFromGuided: false,
+    });
+    expect(stored(storage)).toMatchObject({ journey: "free", freePanel: "treads" });
+  });
+
+  it("libre en Fabrication : étape 7, Fabrication rétablie au retour", () => {
+    const s = createJourneyStore(memoryStorage(), { hasAutosave: true });
+    s.getState().setWorkspace("fabrication");
+    s.getState().setNarrowViewport(true);
+    expect(s.getState()).toMatchObject({ journey: "guided", guidedStep: 7 });
+    s.getState().setNarrowViewport(false);
+    expect(s.getState()).toMatchObject({ journey: "free", workspace: "fabrication" });
+  });
+
+  it("étape changée pendant l'imposition : libre ouvert sur le panneau de l'étape courante", () => {
+    const s = createJourneyStore(memoryStorage(), { hasAutosave: true });
+    s.getState().openFreePanel("site");
+    s.getState().setNarrowViewport(true);
+    s.getState().setGuidedStep(3);
+    s.getState().setNarrowViewport(false);
+    expect(s.getState()).toMatchObject({ journey: "free", freePanel: "stepping" });
+  });
+
+  it("setJourney(« libre ») sans effet tant que le guidé est imposé", () => {
+    const storage = memoryStorage();
+    const s = createJourneyStore(storage, { hasAutosave: true });
+    s.getState().setNarrowViewport(true);
+    const before = s.getState();
+    s.getState().setJourney("free");
+    expect(s.getState()).toBe(before);
+    expect(stored(storage).journey).toBe("free");
+  });
+
+  it("déjà guidé : reste guidé, rien de plus au retour", () => {
+    const storage = memoryStorage();
+    const s = createJourneyStore(storage, { hasAutosave: false });
+    s.getState().setGuidedStep(5);
+    s.getState().setNarrowViewport(true);
+    expect(s.getState()).toMatchObject({ journey: "guided", guidedStep: 5, guidedImposed: true });
+    s.getState().setNarrowViewport(false);
+    expect(s.getState()).toMatchObject({ journey: "guided", guidedStep: 5, guidedImposed: false });
+    expect(stored(storage).journey).toBe("guided");
+  });
+
+  it("sans imposition, le retour est sans effet", () => {
+    const s = createJourneyStore(memoryStorage(), { hasAutosave: true });
+    const before = s.getState();
+    s.getState().setNarrowViewport(false);
+    expect(s.getState()).toBe(before);
+  });
+
+  it("ouverture d'un projet pendant l'imposition : la règle fixe le parcours rétabli", () => {
+    const storage = memoryStorage();
+    const s = createJourneyStore(storage, { hasAutosave: false });
+    expect(s.getState().journey).toBe("guided");
+    s.getState().setNarrowViewport(true);
+    // Import → libre (mémorisé), guidé toujours affiché.
+    s.getState().applyOpening("import");
+    expect(s.getState()).toMatchObject({ journey: "guided", guidedImposed: true });
+    expect(stored(storage).journey).toBe("free");
+    // Démo → guidé à l'étape 1 (mémorisé).
+    s.getState().applyOpening("demo");
+    expect(s.getState()).toMatchObject({ journey: "guided", guidedStep: 1 });
+    expect(stored(storage).journey).toBe("guided");
+    s.getState().applyOpening("import");
+    s.getState().setNarrowViewport(false);
+    expect(s.getState().journey).toBe("free");
+  });
+
+  it("parcours guidé indisponible : aucune imposition", () => {
+    const s = createJourneyStore(memoryStorage(), { hasAutosave: true, guidedAvailable: false });
+    const before = s.getState();
+    s.getState().setNarrowViewport(true);
+    expect(s.getState()).toBe(before);
+  });
+});

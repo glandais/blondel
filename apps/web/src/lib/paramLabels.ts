@@ -77,8 +77,17 @@ const COMMON: Readonly<Record<string, FieldText>> = {
   },
   material: { label: "ui.param.material.label", options: MATERIAL_KEYS },
   thickness: { label: "ui.param.thickness.label", unit: MM },
-  upperOffset: { label: "ui.param.upperOffset.label", unit: MM },
-  lowerOffset: { label: "ui.param.lowerOffset.label", unit: MM },
+  // Libellés unifiés (spécification de contenu § 4) : la référence (ligne des nez) en aide.
+  upperOffset: {
+    label: "ui.param.upperOffset.label",
+    unit: MM,
+    hint: "ui.param.upperOffset.hint",
+  },
+  lowerOffset: {
+    label: "ui.param.lowerOffset.label",
+    unit: MM,
+    hint: "ui.param.lowerOffset.hint",
+  },
   startExtension: { label: "ui.param.startExtension.label", unit: MM },
   endExtension: { label: "ui.param.endExtension.label", unit: MM },
   splice: {
@@ -87,8 +96,9 @@ const COMMON: Readonly<Record<string, FieldText>> = {
   },
   housingDepth: { label: "ui.param.housingDepth.label", unit: MM },
   noseRadius: { label: "ui.param.noseRadius.label", unit: MM },
+  // « Matériau des marches » : même libellé pour le matériau des marches de tous les plugins.
   treadKind: {
-    label: "ui.param.treadKind.label",
+    label: "ui.label.treadMaterial",
     options: {
       wood: "ui.param.treadKind.option.wood",
       "folded-steel": "ui.param.treadKind.option.foldedSteel",
@@ -336,7 +346,7 @@ const BY_KIND: Readonly<Record<string, Readonly<Record<string, FieldText>>>> = {
       hint: TO_VALIDATE,
     },
     "treads.material": {
-      label: "ui.param.helicalCore.treads.material.label",
+      label: "ui.label.treadMaterial",
       options: {
         wood: "ui.param.helicalCore.treads.material.option.wood",
         steel: "ui.param.helicalCore.treads.material.option.steel",

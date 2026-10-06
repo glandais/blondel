@@ -5,8 +5,10 @@
  * 1. un menu, un popover ou un éditeur qui consomme Échap (`preventDefault`), ou une saisie au
  *    focus (Échap y rétablit la valeur) : rien de plus ;
  * 2. panneau libre ouvert et **non épinglé** : il se ferme ;
- * 3. une sélection : elle est effacée (inspecteur « sans sélection », 2d) ;
- * 4. panneau libre **épinglé** ouvert : il se ferme.
+ * 3. tiroir de l'inspecteur ouvert (fenêtre de 760 à 1 099 px seulement) : il se ferme, la
+ *    sélection reste ;
+ * 4. une sélection : elle est effacée (inspecteur « sans sélection », 2d) ;
+ * 5. panneau libre **épinglé** ouvert : il se ferme.
  *
  * Fonction pure, testée sous Node ; l'écouteur global unique est `useEscapeChain` (App.tsx).
  */
@@ -26,10 +28,15 @@ export interface EscapeInput {
   readonly assistantOpen: boolean;
   readonly panelOpen: boolean;
   readonly panelPinned: boolean;
+  /**
+   * Tiroir de l'inspecteur ouvert **et affiché en tiroir** (fenêtre moyenne, parcours libre en
+   * Conception) ; faux sur grand écran, où l'inspecteur est une colonne.
+   */
+  readonly drawerOpen: boolean;
   readonly hasSelection: boolean;
 }
 
-export type EscapeAction = "closePanel" | "clearSelection";
+export type EscapeAction = "closePanel" | "closeDrawer" | "clearSelection";
 
 const EDITABLE_TAGS = new Set(["INPUT", "TEXTAREA", "SELECT"]);
 
@@ -51,6 +58,7 @@ export function escapeAction(e: EscapeInput): EscapeAction | null {
   if (e.key !== "Escape" || e.defaultPrevented || e.assistantOpen) return null;
   if (isEditableTarget(e.target) || inModalTarget(e.target)) return null;
   if (e.panelOpen && !e.panelPinned) return "closePanel";
+  if (e.drawerOpen) return "closeDrawer";
   if (e.hasSelection) return "clearSelection";
   if (e.panelOpen) return "closePanel";
   return null;

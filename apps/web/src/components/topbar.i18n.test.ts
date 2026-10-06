@@ -17,6 +17,7 @@ import { GuardsSection } from "./GuardsSection.js";
 import { ControlBadge, badgeCounts } from "./topbar/ControlBadge.js";
 import { MoreMenu } from "./topbar/MoreMenu.js";
 import { Notices } from "./topbar/Notices.js";
+import { pwaStore } from "./topbar/PwaNotice.js";
 import { ProjectMenu } from "./topbar/ProjectMenu.js";
 import { TopBar } from "./topbar/TopBar.js";
 import { UnderlayImport } from "./UnderlayImport.js";
@@ -325,8 +326,46 @@ describe("Notices", () => {
     });
     const fr = render("fr", Notices);
     expect(fr).toContain("3 fichiers téléchargés.");
-    expect(fr).toContain('class="notice notice--info" role="status"');
+    // Avis d'information sans détail : texte et « Fermer » sur une bande, texte jamais tronqué
+    // (pas d'info-bulle, le texte complet est affiché).
+    expect(fr).toContain('class="notice notice--info notice--line" role="status"');
+    expect(fr).toContain('<span class="notice__text">3 fichiers téléchargés.</span>');
     expect(render("en", Notices)).toContain("3 files downloaded.");
+  });
+
+  it("avis de démo : libellé et description dans le DOM, sur une ligne, jusqu'à « Fermer »", () => {
+    appStore.setState({
+      notice: {
+        kind: "info",
+        msg: {
+          key: "ui.notice.demo",
+          params: { label: "Escalier", description: "Une description assez longue." },
+        },
+      },
+    });
+    const fr = render("fr", Notices);
+    expect(fr).toContain("notice--line");
+    expect(fr).toMatch(/Démo « Escalier » : Une description assez longue\./);
+    expect(fr).toContain('<button type="button" class="link">Fermer</button>');
+  });
+
+  it("avis de l'application installable : dans le flux, avec les autres messages", () => {
+    pwaStore.setState({ offlineReady: true });
+    (pwaStore as { getInitialState: () => unknown }).getInitialState = pwaStore.getState;
+    try {
+      const fr = render("fr", Notices);
+      expect(fr).toMatch(
+        /^<div class="notices"><div class="notice notice--info pwa-prompt" role="status" aria-label="Mise à jour de l&#x27;application">/,
+      );
+      expect(fr).toContain("Blondel est prêt à fonctionner hors ligne.");
+      pwaStore.setState({ offlineReady: false, needRefresh: true });
+      const en = render("en", Notices);
+      expect(en).toContain("A new version of Blondel is available.");
+      expect(en).toContain(">Reload</button>");
+      expect(en).toContain(">Later</button>");
+    } finally {
+      pwaStore.setState({ offlineReady: false, needRefresh: false });
+    }
   });
 
   it("refus d'une saisie : motifs en `Message`, suivent un changement de langue", () => {

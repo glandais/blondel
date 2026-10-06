@@ -97,3 +97,31 @@ describe("formulaire des structures en français", () => {
     expect(presented.find((f) => f.path[0] === "upperOffset")?.label).toMatch(/Dépassement haut/);
   });
 });
+
+describe("libellés unifiés (spécification de contenu § 4)", () => {
+  it("dépassements d_h / d_b : référence « ligne des nez » en aide, jamais dans le libellé", () => {
+    const f = fieldsOf("steel-flat");
+    const up = f.find((x) => x.path.join(".") === "upperOffset")!;
+    const low = f.find((x) => x.path.join(".") === "lowerOffset")!;
+    expect(up.hint).toBe("Au-dessus de la ligne des nez");
+    expect(low.hint).toBe("Sous la ligne des nez");
+    expect(up.toValidateHint).toBeUndefined();
+    expect(fieldText("steel-flat", ["upperOffset"])?.label).toBe("ui.param.upperOffset.label");
+  });
+
+  it("matériau des marches : un seul libellé pour tous les plugins", () => {
+    expect(fieldText("steel-flat", ["treadKind"])?.label).toBe("ui.label.treadMaterial");
+    expect(fieldText("helical-core", ["treads", "material"])?.label).toBe("ui.label.treadMaterial");
+    const t = translatorFor("fr");
+    expect(t.t("ui.label.treadMaterial")).toBe("Matériau des marches");
+    expect(translatorFor("en").t("ui.label.treadMaterial")).toBe("Tread material");
+  });
+
+  it("aucun libellé ne porte d'unité entre parenthèses (unité à droite du champ)", () => {
+    for (const kind of ["steel-flat", "steel-profile", "steel-curved", "helical-core"]) {
+      for (const f of fieldsOf(kind)) {
+        expect(f.label, `${kind} ${f.path.join(".")}`).not.toMatch(/\((mm|°|kN\/m²)\)/);
+      }
+    }
+  });
+});

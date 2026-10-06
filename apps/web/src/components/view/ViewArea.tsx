@@ -222,7 +222,12 @@ export function ZoomControls({ enabled }: { enabled: boolean }) {
   );
 }
 
-export function ViewArea() {
+/**
+ * `disclaimer` : inspecteur en tiroir (fenêtre moyenne, ADR-0009 point 3) ; la mention « Contrôle
+ * de conception indicatif… » de son pied, masquée tiroir fermé, est reprise sous la ligne de
+ * chiffres pour rester toujours visible.
+ */
+export function ViewArea({ disclaimer = false }: { readonly disclaimer?: boolean } = {}) {
   const view = useApp((s) => s.view);
   const planMode = useApp((s) => s.planMode);
   const t = useT();
@@ -265,6 +270,9 @@ export function ViewArea() {
         <ViewContent view={view} />
       </div>
       <FigureLine />
+      {disclaimer ? (
+        <p className="workarea__disclaimer">{t.t("ui.compliance.disclaimer")}</p>
+      ) : null}
     </main>
   );
 }

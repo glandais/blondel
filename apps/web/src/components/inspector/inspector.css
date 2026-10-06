@@ -19,6 +19,34 @@
   overflow-y: auto;
 }
 
+/* Tiroir (fenêtre de 760 à 1 099 px) : croix « Fermer l'inspecteur » en haut à droite, dans une
+   barre collante de hauteur nulle (elle reste visible quand le corps défile, au-dessus de
+   l'en-tête collant des gabarits) ; les titres lui laissent la place. */
+.inspector__drawer-bar {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  flex: none;
+  display: flex;
+  justify-content: flex-end;
+  height: 0;
+  margin: 0 -14px 0 0;
+  overflow: visible;
+}
+
+.inspector__drawer-bar .inspector__drawer-close {
+  width: 30px;
+  height: 30px;
+  margin-top: -4px;
+  background: var(--color-bg);
+  color: var(--color-neutral-700);
+}
+
+.inspector[data-drawer="open"] .insp-head,
+.inspector[data-drawer="open"] .project-inspector__head {
+  padding-right: 28px;
+}
+
 .project-inspector {
   display: flex;
   flex-direction: column;
@@ -194,9 +222,10 @@
   color: var(--ok);
 }
 
-/* Aucun bloquant : compteur neutre (maquette 2d). */
+/* Aucun bloquant : compteur neutre (maquette 2d). Neutre 700 plutôt que 600 : le libellé de
+   11 px doit atteindre le contraste 4,5:1 (WCAG AA, audit axe). */
 .control-counts__cell[data-severity="bloquant"][data-zero="true"] {
-  color: var(--color-neutral-600);
+  color: var(--color-neutral-700);
 }
 
 /* ------------------------------------------------------------ Cartes des règles en défaut */
@@ -275,6 +304,17 @@
 /* Carte d'un inspecteur d'élément (2a, 2b) : constat en corps, un peu plus petit. */
 .rule-card--compact .rule-card__body {
   font-size: 12.5px;
+}
+
+/* Titre puis « Mesuré … · attendu … » sur deux lignes. */
+.rule-card__title,
+.rule-card__measure {
+  display: block;
+}
+
+.rule-card__measure {
+  color: var(--color-neutral-700);
+  font-variant-numeric: tabular-nums;
 }
 
 /* ------------------------------------------------------------ Liens repliés et listes */

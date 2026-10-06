@@ -293,6 +293,23 @@ L'interface et les sorties existent en anglais depuis l'internationalisation (AD
 - Proposition : garder les termes actuels sauf « development » pour les développés de limons bois (glossaire) ; traduire les sources citées en gardant les titres de normes dans leur langue (clé par source dans `rules.yaml`) ; afficher le profil et les contextes par des libellés traduits (les descriptions des contextes existent déjà : `compliance.context.*` ; le profil n'a pas encore de clé) ; pas de variante américaine.
 - Aujourd'hui : comme décrit ; aucun de ces points n'empêche un export.
 - Réf. : `docs/adr/0007-internationalisation.md` (« Restes connus », « Tests » de la vague 3) ; `docs/research/glossaire-en.md` ; `packages/i18n/src/locales/en.json`.
+- Complément du 2026-10-06 (refonte de l'interface, ADR-0009) : les contextes du contrôle s'affichent en libellés clairs dans les deux langues (`contextShortLabel`, `packages/core/src/rules/contexts.ts`), la description longue en aide ; le reste de A26 est inchangé.
+
+### A27. Groupe « Visserie » du mode Fabrication
+
+Le handoff de la refonte (ADR-0009, maquette « Parcours libre · Fabrication ») prévoit un groupe « Visserie » dans la liste des pièces par famille. Le modèle ne produit aucune pièce de visserie (vis, boulons, chevilles, tire-fonds) : ni les plugins de structure, ni les garde-corps, ni le profil d'atelier n'en décrivent.
+
+- Proposition : ne pas afficher de groupe vide ; si la visserie doit apparaître (nomenclature, liste de débit, dossier PDF), la modéliser dans le cœur (quantités par assemblage, déduites des platines, supports et poteaux, avec un type et un diamètre « à valider » du profil d'atelier) avant de l'ajouter à l'interface.
+- Aujourd'hui : groupes Limons, Marches, Contremarches, Supports, Platines, Poteaux, Garde-corps, Autres (`apps/web/src/lib/partGroups.ts`) ; pas de groupe « Visserie ».
+- Réf. : `docs/LEDGER.md` [parcours:vague-4] ; ADR-0009, « Mise en œuvre ».
+
+### A28. Retouche de l'angle du nez d'arrivée
+
+L'inspecteur Marche (2a) règle l'angle de la ligne de nez de la marche choisie. Le nez d'arrivée (dernier nez, au palier haut) n'est porté par aucune marche : une retouche existante de ce nez (fichier importé, ancien mode expert) est listée et retirable dans le bloc « Ligne de nez », mais ne peut plus être modifiée depuis l'interface.
+
+- Proposition : rendre le nez d'arrivée sélectionnable (clic sur le nez dans le plan ou l'élévation → bloc « Ligne de nez » seul, sans fiche de marche), ou bien interdire la retouche de ce nez dans le schéma (avec migration des fichiers qui en portent une).
+- Aujourd'hui : listée et retirable, pas éditable.
+- Réf. : `docs/LEDGER.md` [parcours:vague-3] ; `apps/web/src/components/inspector/NosingLineBlock.tsx`, `apps/web/src/lib/nosingOverrides.ts`.
 
 ## B. Validations par un atelier ou un professionnel
 

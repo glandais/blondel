@@ -58,7 +58,9 @@ interface GuardText {
 }
 
 const GUARD_TEXTS: Readonly<Record<string, GuardText>> = {
-  "guards.material": { label: "ui.guards.material" },
+  // Matériau de tout le garde-corps (poteaux, main courante, remplissage) et tolérance de
+  // détection des murs : champs de la section elle-même, préfixés « Garde-corps · ».
+  "guards.material": { label: "ui.guards.material", group: "ui.params.guards.title" },
   "guards.flight.edgeOffset": {
     label: "ui.guards.flight.edgeOffset",
     group: "ui.guards.flight.legend",
@@ -85,7 +87,11 @@ const GUARD_TEXTS: Readonly<Record<string, GuardText>> = {
     group: "ui.guards.posts.legend",
     unit: DEGREE,
   },
-  "guards.wallTolerance": { label: "ui.guards.wallTolerance", unit: MM },
+  "guards.wallTolerance": {
+    label: "ui.guards.wallTolerance",
+    group: "ui.params.guards.title",
+    unit: MM,
+  },
 };
 
 /** Libellés de la rotation M6 (clés de `BalancingSection`). */

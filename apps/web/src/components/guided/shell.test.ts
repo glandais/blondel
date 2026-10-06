@@ -18,9 +18,9 @@ import { uiStore } from "../../store/uiStore.js";
 import { TopBar } from "../topbar/TopBar.js";
 import { ControlOverlay } from "./ControlOverlay.js";
 import { FreeJourneyHint } from "./FreeJourneyHint.js";
-import { GuidedFooter } from "./GuidedFooter.js";
+import { GuidedFooter, footerCountButtons } from "./GuidedFooter.js";
 import { GuidedView, selectionLegendText } from "./GuidedView.js";
-import { StepBar, stepKeyTarget, stepTabId } from "./StepBar.js";
+import { StepBar, stepBarScrollDelta, stepKeyTarget, stepTabId } from "./StepBar.js";
 
 // Rendu serveur : zustand lit `getInitialState()` (instantané serveur de
 // `useSyncExternalStore`) ; le test rend l'état courant des stores.
@@ -42,6 +42,7 @@ afterEach(() => {
     visitedSteps: new Set(),
     hintFreeJourneyDismissed: false,
     workspace: "design",
+    guidedImposed: false,
   });
   uiStore.setState({ guidedControlOpen: false, guidedControlContext: false });
   modelService.store.setState((s) => ({
@@ -101,6 +102,24 @@ describe("TopBar en parcours guidé", () => {
     const html = render(TopBar);
     expect(html).not.toMatch(/disabled=""[^>]*>Guidé</);
     expect(html).toMatch(/aria-checked="true"[^>]*>Libre</);
+    expect(html).not.toContain("760 px");
+  });
+
+  it("fenêtre étroite (guidé imposé) : Libre désactivé, expliqué en clair, en info-bulle et en description", () => {
+    journeyStore.setState({ journey: "guided", guidedStep: 1, guidedImposed: true });
+    const html = render(TopBar);
+    const note = "Parcours libre disponible à partir de 760 px de large.";
+    const group = html.match(
+      /<div role="radiogroup" aria-label="Parcours" aria-describedby="([^"]+)"/,
+    );
+    expect(group).not.toBeNull();
+    // Explication visible (lisible sans survol), qui décrit aussi le groupe.
+    expect(html).toContain(`<small id="${group![1]}" class="topbar__journey-note">${note}</small>`);
+    expect(html).toMatch(new RegExp(`disabled="" title="${note}"[^>]*>Libre<`));
+    expect(html).not.toMatch(/disabled=""[^>]*>Guidé</);
+    const en = render(TopBar, "en");
+    expect(en).toContain("Free mode available from 760 px wide.");
+    expect(en).not.toContain("Parcours libre");
   });
 });
 
@@ -197,7 +216,10 @@ describe("StepBar", () => {
     expect(html.match(/aria-label="Étapes du parcours"/g)).toHaveLength(1);
     const step5 = tabs(html)[4]!.inner;
     expect(text(step5)).toContain("Débillardé soudé · S235");
-    expect(step5).toMatch(/<span class="step-bar__summary-base">Débillardé soudé · S235<\/span>/);
+    // Tête tronquable (structure), suite « · S235 » toujours lisible.
+    expect(step5).toContain(
+      '<span class="step-bar__summary-base">Débillardé soudé</span><span class="step-bar__summary-tail"> · S235</span>',
+    );
     expect(step5).toContain(
       `<span class="step-bar__summary-tv" aria-hidden="true">· ◆ ${counts[5]}</span>`,
     );
@@ -239,9 +261,17 @@ describe("GuidedFooter", () => {
     expect(html).toContain(
       "Contrôle de conception indicatif : il ne vaut pas attestation de conformité.",
     );
-    expect(html).toContain(`${counts.avertissement} avertissement`);
-    expect(html).toContain(`${counts.conseil} conseil`);
-    expect(html.includes('data-severity="bloquant"')).toBe(counts.bloquant > 0);
+    // Seuls les comptes non nuls ont un bouton (plus de « 0 avertissement »).
+    for (const [severity, word] of [
+      ["bloquant", "bloquant"],
+      ["avertissement", "avertissement"],
+      ["conseil", "conseil"],
+    ] as const) {
+      const n = counts[severity];
+      expect(html.includes(`data-severity="${severity}"`)).toBe(n > 0);
+      if (n > 0) expect(html).toContain(`${n} ${word}`);
+    }
+    expect(html).not.toMatch(/>0 (bloquant|avertissement|conseil)/);
     expect(html).not.toContain("Étape précédente");
     expect(html).toContain('aria-label="Étape suivante : Forme"');
     expect(html).toContain("btn btn-primary blueprint");
@@ -260,7 +290,7 @@ describe("GuidedFooter", () => {
 
   it("bloquants affichés s'il y en a ; sans modèle, ni compte ni bouton de sévérité", () => {
     guided(2);
-    expect(render(GuidedFooter)).not.toContain("guided-footer__count");
+    expect(render(GuidedFooter)).not.toContain('guided-footer__count"');
     withModel({
       results: [
         {
@@ -274,7 +304,26 @@ describe("GuidedFooter", () => {
     const html = render(GuidedFooter);
     expect(html).toContain('data-severity="bloquant"');
     expect(html).toContain("1 bloquant");
-    expect(html).toContain("0 avertissement");
+    expect(html).not.toContain("0 avertissement");
+    expect(html).not.toContain('data-severity="avertissement"');
+    expect(html).not.toContain('data-severity="conseil"');
+    expect(html).not.toContain("Aucun constat");
+  });
+
+  it("aucun constat : un seul bouton neutre, qui ouvre la liste du contrôle", () => {
+    withModel(EMPTY_REPORT);
+    guided(2);
+    const html = render(GuidedFooter);
+    expect(html.match(/guided-footer__count"/g)?.length).toBe(1);
+    expect(html).toContain('data-severity="none"');
+    expect(html).toContain("Aucun constat");
+    expect(html).toContain('title="Afficher la liste du contrôle de conception"');
+    expect(render(GuidedFooter, "en")).toContain("No findings");
+    expect(footerCountButtons({ bloquant: 0, avertissement: 0, conseil: 0 })).toBe("none");
+    expect(footerCountButtons({ bloquant: 2, avertissement: 0, conseil: 1 })).toEqual([
+      "bloquant",
+      "conseil",
+    ]);
   });
 
   it("anglais", () => {
@@ -391,6 +440,25 @@ describe("FreeJourneyHint", () => {
     expect(render(GuidedView)).toContain('class="free-hint"');
     journeyStore.setState({ hintFreeJourneyDismissed: true });
     expect(render(GuidedView)).not.toContain('class="free-hint"');
+  });
+
+  it("absent sous 760 px (guidé imposé : le libre est indisponible)", () => {
+    guided(3);
+    journeyStore.setState({ guidedImposed: true });
+    expect(render(FreeJourneyHint)).toBe("");
+  });
+});
+
+describe("barre d'étapes défilante", () => {
+  it("ramène l'onglet courant dans la zone visible, avec une marge ; rien s'il y est", () => {
+    const list = { left: 0, right: 390 };
+    expect(stepBarScrollDelta(list, { left: 100, right: 268 })).toBe(0);
+    // À droite : défilement vers la droite jusqu'à la marge de 8 px.
+    expect(stepBarScrollDelta(list, { left: 900, right: 1068 })).toBe(1068 - 390 + 8);
+    // À gauche (barre déjà défilée) : défilement vers la gauche.
+    expect(stepBarScrollDelta(list, { left: -300, right: -132 })).toBe(-308);
+    // Onglet plus large que la zone : son début est montré.
+    expect(stepBarScrollDelta({ left: 0, right: 100 }, { left: 150, right: 400 })).toBe(142);
   });
 });
 

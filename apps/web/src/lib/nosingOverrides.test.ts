@@ -181,10 +181,12 @@ describe("zones balancées (lecture du découpage)", () => {
   it("libellé de méthode : variante de M3, méthode, sinon notation brute", () => {
     const tr = (m: ReturnType<typeof zoneMethodLabel>, t = FR) =>
       typeof m === "string" ? m : t.t(m);
-    expect(tr(zoneMethodLabel("M3-quintic", BALANCING_METHOD_LABELS))).toBe("M3 quintique");
+    expect(tr(zoneMethodLabel("M3-quintic", BALANCING_METHOD_LABELS))).toBe(
+      "M3 · courbe continue (quintique)",
+    );
     expect(tr(zoneMethodLabel("M3-cubic", BALANCING_METHOD_LABELS), EN)).not.toContain("cubique");
     expect(tr(zoneMethodLabel("M1", BALANCING_METHOD_LABELS))).toBe(
-      "M1 — progression arithmétique",
+      "M1 · progression arithmétique des collets",
     );
     expect(zoneMethodLabel("M9-x", BALANCING_METHOD_LABELS)).toBe("M9-x");
   });

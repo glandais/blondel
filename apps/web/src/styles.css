@@ -389,20 +389,77 @@ a {
   min-height: 0;
 }
 
-/* Repli minimal des petits écrans (le vrai repli est en vague 6) : une colonne, zones empilées,
-   aucun défilement horizontal du document. */
+/*
+ * Petits écrans (ADR-0009 point 3 ; classes de largeur de lib/viewport.ts, posées par App en
+ * `data-viewport`). Jamais de défilement horizontal du document (`overflow-x: clip` en filet de
+ * sécurité ; chaque zone tient dans sa colonne).
+ *
+ * Fenêtre moyenne (760 à 1 099 px), parcours libre en Conception : rail, panneau (s'il est
+ * ouvert) et vue ; l'inspecteur devient un tiroir de 340 px à droite, par-dessus la vue et sous la
+ * barre du haut (même zone de grille que la vue, aligné à droite), ombre forte ; fermé
+ * (`data-inspector="closed"`), il est masqué (et `inert`).
+ */
+.app {
+  overflow-x: clip;
+}
+
+.app[data-viewport="medium"][data-workspace="design"] {
+  grid-template-columns: 76px minmax(0, 1fr);
+  grid-template-areas:
+    "topbar topbar"
+    "rail work";
+}
+
+.app[data-viewport="medium"][data-workspace="design"][data-panel="open"] {
+  grid-template-columns: 76px minmax(0, 330px) minmax(0, 1fr);
+  grid-template-areas:
+    "topbar topbar topbar"
+    "rail panel work";
+}
+
+.app[data-viewport="medium"] > .inspector[data-drawer] {
+  grid-area: work;
+  justify-self: end;
+  z-index: 20;
+  width: min(340px, 100%);
+  box-shadow: var(--shadow-lg);
+}
+
+.app[data-inspector="closed"] > .inspector {
+  display: none;
+}
+
+/*
+ * Fabrication en fenêtre moyenne (et en repli étroit, si le guidé n'était pas imposé) : zone de
+ * Fabrication puis colonne de droite empilée dessous, le document défile verticalement.
+ */
 @media (max-width: 1099px) {
-  .app,
-  .app[data-panel="open"],
   .app[data-workspace="fabrication"] {
+    height: auto;
+    min-height: 100%;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(70vh, auto) auto;
+    grid-template-areas: "topbar" "work" "inspector";
+  }
+
+  .app[data-workspace="fabrication"] > .fab-aside {
+    border-left: 0;
+    border-top: 1px solid var(--color-divider);
+  }
+}
+
+/* Repli si le parcours libre s'affichait sous 760 px (il y est normalement remplacé par le
+   guidé imposé) : zones empilées, document défilant verticalement. */
+@media (max-width: 759px) {
+  .app[data-journey="free"][data-workspace="design"],
+  .app[data-journey="free"][data-workspace="design"][data-panel="open"] {
     height: auto;
     grid-template-columns: minmax(0, 1fr);
     grid-template-rows: none;
     grid-template-areas: "topbar" "rail" "panel" "work" "inspector";
-    overflow-x: clip;
   }
 
-  .app > .workarea {
+  .app[data-journey="free"] > .workarea {
     min-height: 60vh;
   }
 }
@@ -568,27 +625,6 @@ legend {
 
 .notice--info {
   color: var(--info);
-}
-
-/* Application installable : encart flottant, hors de la grille de mise en page. */
-/* Avis hors ligne : au-dessus de la ligne de chiffres de la vue centrale, à gauche de
-   l'inspecteur (340 px), pour ne jamais couvrir la mention indicative de son pied. */
-.pwa-prompt {
-  position: fixed;
-  right: calc(340px + 1rem);
-  bottom: 4rem;
-  z-index: 50;
-  max-width: min(28rem, calc(100vw - 340px - 2rem));
-  background: var(--panel);
-  box-shadow: var(--shadow-md);
-}
-
-@media (max-width: 1099px) {
-  .pwa-prompt {
-    right: 1rem;
-    bottom: 1rem;
-    max-width: min(28rem, calc(100vw - 2rem));
-  }
 }
 
 .badge {

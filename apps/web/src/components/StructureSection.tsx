@@ -111,13 +111,20 @@ export function ParamInput({
       const n = typeof value === "number" ? value : Number.NaN;
       if (field.optional) {
         // Facultatif sans défaut : vide = paramètre absent (NaN dans le champ, `undefined` au
-        // projet), sinon nombre lu comme le champ non facultatif.
+        // projet), sinon nombre lu comme le champ non facultatif. Champ vide : « Auto » écrit
+        // dans le champ (comportement du plugin sans valeur, expliqué par l'aide), avec la valeur
+        // retenue si le modèle l'expose (`Model.autoValues`), jamais un champ blanc.
         const read = field.integer ? parseIntMm : parseDecimal;
+        const auto =
+          computed === undefined
+            ? t.t("ui.common.input.auto")
+            : t.t("ui.param.optionalAuto", { value: formatDecimal(computed, t.locale) });
         return (
           <NumberField
             label={field.label}
             value={n}
             unit={field.unit}
+            placeholder={auto}
             hint={shownHint ?? t.t("ui.structure.optionalHint")}
             {...bounds}
             parse={(text, b) =>

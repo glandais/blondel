@@ -65,7 +65,7 @@ test(`inspecteur Marche : angle, flèches, nez fixe, orpheline, annulation, pers
   }
 
   const block = nosingBlock(page);
-  const angle = block.getByLabel("Angle", { exact: true });
+  const angle = block.getByLabel("Angle imposé", { exact: true });
   const fix = block.getByRole("button", { name: /^Fixer le nez/ });
   const remove = block.getByRole("button", { name: "Retirer la retouche" });
   await expect(block.getByText(/^Calculé par M3/)).toBeVisible();
@@ -192,7 +192,7 @@ test(`inspecteur Marche : angle, flèches, nez fixe, orpheline, annulation, pers
   await settle(page);
   await selectTreadOnPlan(page, WINDER);
   await expect(block.getByText("2 retouches sur l'escalier")).toBeVisible();
-  await expect(block.getByLabel("Angle", { exact: true })).toHaveValue("4,5");
+  await expect(block.getByLabel("Angle imposé", { exact: true })).toHaveValue("4,5");
   await expect(fix).toHaveAttribute("aria-pressed", "true");
 });
 

@@ -1,5 +1,7 @@
 # Blondel — état de l'interface (existant, avant refonte UX/UI)
 
+> **Document historique.** Il décrit l'interface d'avant la refonte (trois colonnes, état du 2026-09-30), remplacée entièrement par les parcours guidé et libre : voir [ADR-0009](../adr/0009-parcours-guide-libre.md) (décisions et « Mise en œuvre ») et les captures de la nouvelle interface dans [`captures-refonte/`](captures-refonte/). Il n'est plus tenu à jour ; ses captures (`captures/`) ne sont plus régénérées (`pnpm ux:captures` écrit désormais dans `captures-refonte/`).
+
 > 2026-09-30. Document destiné au design : ce que l'application montre et permet **aujourd'hui**, avec des captures. Il décrit l'existant et ne prescrit rien. Les frictions relevées (§ 9) sont des constats à discuter, pas des décisions.
 >
 > Application en ligne : <https://glandais.github.io/blondel/>. Les captures sont produites par un script (`pnpm ux:captures`, voir § 11) : on les régénère après chaque évolution de l'interface.

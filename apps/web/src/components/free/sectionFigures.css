@@ -1,0 +1,14 @@
+/*
+ * Bande de chiffres du panneau libre : unité à droite du chiffre (spécification de contenu § 1,
+ * « l'unité est toujours à droite »), plus petite, sur la ligne de base. Les cellules reçoivent
+ * leur étendue en style en ligne (`figureSpans`) : jamais de case vide.
+ */
+.section-figures__unit {
+  margin-left: 2px;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.section-figures__cell dd.section-figures__text .section-figures__unit {
+  font-size: 12px;
+}

@@ -97,6 +97,20 @@ export function formatFigureLength(
     : numberFormat(locale, { maximumFractionDigits: 1 }).format(mm / 10);
 }
 
+/**
+ * Chiffre clé avec son unité (ligne de chiffres sous la vue, maquette 1b : « h 180 mm ») : mm
+ * entiers, cm à 0,1 près, comme `formatFigureLength`. Arrondi à l'affichage seulement
+ * (ADR-0003). Valeur non finie : tiret.
+ */
+export function formatFigureLengthWithUnit(
+  mm: number | undefined | null,
+  unit: DisplayUnit,
+  locale: Locale,
+): string {
+  const value = formatFigureLength(mm, unit, locale);
+  return value === "–" ? value : `${value} ${unit}`;
+}
+
 /** Durée en millisecondes pour la barre d'état. */
 export function formatDuration(ms: number | undefined, locale: Locale): string {
   if (ms === undefined || !Number.isFinite(ms)) return "–";

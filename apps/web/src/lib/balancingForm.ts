@@ -17,13 +17,18 @@ import {
 import type { MessageKey, Translator } from "@blondel/i18n";
 import { enumOptions, fieldSchema, numberConstraints } from "./structureForm.js";
 
-/** Libellés des méthodes (B §3). */
+/**
+ * Libellés clairs des méthodes, « M3 · courbe continue » (spécification de contenu § 4 ; noms
+ * de B §3.2 à §3.8). Mêmes clés pour la liste du panneau, la bande de chiffres, l'inspecteur
+ * Marche et le cartouche du plan exporté ; la variante M3 retenue s'écrit « M3 · courbe continue
+ * (quintique) » (`stepping.method.m3*`).
+ */
 export const BALANCING_METHOD_LABELS: Readonly<Record<BalancingMethod, MessageKey>> = {
-  M3: "ui.label.balancing.M3",
-  M1: "ui.label.balancing.M1",
-  M2: "ui.label.balancing.M2",
-  M6: "ui.label.balancing.M6",
-  M0: "ui.label.balancing.M0",
+  M3: "balancing.method.M3",
+  M1: "balancing.method.M1",
+  M2: "balancing.method.M2",
+  M6: "balancing.method.M6",
+  M0: "balancing.method.M0",
 };
 
 /** Ordre d'affichage : la méthode par défaut du cœur en tête, puis les autres du schéma. */

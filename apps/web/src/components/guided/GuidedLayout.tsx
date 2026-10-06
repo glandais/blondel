@@ -9,9 +9,13 @@
  * onglet de la barre d'étapes) ; son contenu est `StepForm`, bâti sur les composants de section.
  * L'étape affichée est marquée comme vue (coche ✓ de la barre d'étapes) : une ouverture de
  * projet remet les étapes vues à zéro, l'étape courante l'est donc à nouveau ici.
+ *
+ * Petits écrans (ADR-0009 point 3) : de 760 à 1 099 px, formulaire resserré (340 px) ; sous
+ * 760 px, la vue passe au-dessus du formulaire et le document défile verticalement.
  */
 import { useEffect } from "react";
 import { journeyStore, useJourney } from "../../store/appStore.js";
+import { useViewportClass } from "../useViewport.js";
 import { GuidedFooter } from "./GuidedFooter.js";
 import { GuidedView } from "./GuidedView.js";
 import { STEP_PANEL_ID, StepBar, stepTabId } from "./StepBar.js";
@@ -30,19 +34,26 @@ function useMarkCurrentStepVisited(): void {
 export function GuidedLayout() {
   useMarkCurrentStepVisited();
   const step = useJourney((s) => s.guidedStep);
+  // Fenêtre étroite : la vue passe au-dessus du formulaire, dans le DOM aussi (ordre de lecture
+  // et de tabulation conforme à l'ordre affiché).
+  const viewFirst = useViewportClass() === "narrow";
+  const form = (
+    <section
+      id={STEP_PANEL_ID}
+      className="guided-form"
+      role="tabpanel"
+      aria-labelledby={stepTabId(step)}
+    >
+      <StepForm step={step} />
+    </section>
+  );
   return (
     <>
       <StepBar />
       <div className="guided-body">
-        <section
-          id={STEP_PANEL_ID}
-          className="guided-form"
-          role="tabpanel"
-          aria-labelledby={stepTabId(step)}
-        >
-          <StepForm step={step} />
-        </section>
+        {viewFirst ? null : form}
         <GuidedView />
+        {viewFirst ? form : null}
       </div>
       <GuidedFooter />
     </>

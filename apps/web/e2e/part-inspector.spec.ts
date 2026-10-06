@@ -3,13 +3,15 @@
  * gabarit Pièce ; « Développé → » bascule en Fabrication sur le développé de la pièce ;
  * « Isoler en 3D » / « Tout réafficher » (isolation partagée avec la vue 3D) ; un réglage
  * d'atelier modifié depuis l'inspecteur est annulable (Ctrl+Z) ; un lien « Assemblée avec »
- * sélectionne une autre pièce.
+ * sélectionne une autre pièce ; une pièce de garde-corps reprend les réglages de la section
+ * Garde-corps (même chemin du projet, annulable), en Conception comme en Fabrication.
  */
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import {
   applyPreset,
   chooseStructure,
   openApp,
+  openSection,
   openTab,
   openWorkspace,
   settle,
@@ -209,4 +211,72 @@ test("inspecteur Pièce : sélection 3D, développé, isolation, réglage annula
     "data-part",
     other!,
   );
+});
+
+test("pièce de garde-corps : réglages de la section Garde-corps, modifiés puis annulés", async ({
+  page,
+}) => {
+  await openApp(page);
+  await applyPreset(page, "Escalier droit");
+  // Garde-corps activés (ils le sont par défaut sur certains préréglages).
+  const panel = await openSection(page, "Garde-corps");
+  const enabled = panel.getByRole("checkbox", { name: "Garde-corps et mains courantes" });
+  if (!(await enabled.isChecked())) {
+    await enabled.check();
+    await settle(page);
+  }
+
+  // Fabrication : premier poteau de garde-corps (repère PG…) de la liste des pièces.
+  await openTab(page, "Pièces");
+  const list = page.getByRole("navigation", { name: "Pièces par famille" });
+  const group = list.getByRole("button", { name: /^Garde-corps\b/ });
+  if ((await group.getAttribute("aria-expanded")) !== "true") await group.click();
+  const post = list
+    .getByRole("list", { name: "Repères : Garde-corps" })
+    .getByRole("button", { name: /^PG/ })
+    .first();
+  await post.click();
+  await expect(post).toHaveAttribute("aria-pressed", "true");
+  const mark = ((await post.locator("strong").textContent()) ?? "").trim();
+  // Colonne de droite : réglages de niveau Atelier du poteau, note propre aux garde-corps.
+  const fabSettings = page
+    .locator("aside.fab-aside")
+    .getByRole("region", { name: `Réglages d'atelier de la pièce ${mark}` });
+  await expect(fabSettings.locator('[data-setting="guards.posts.size"] input')).toBeVisible();
+  await expect(fabSettings).toContainText(
+    "Modifiés ici, ils s'appliquent à tous les garde-corps (section Garde-corps).",
+  );
+
+  // Conception : inspecteur Pièce, réglages communs aux poteaux de garde-corps.
+  await openWorkspace(page, "Conception");
+  const inspector = partInspector(page);
+  await expect(inspector.locator(".insp-title")).toHaveText(mark);
+  const settings = inspector.getByRole("region", {
+    name: `Réglages d'atelier de la pièce ${mark}`,
+  });
+  await expect(settings).toContainText("communs aux poteaux de garde-corps");
+  // Le glyphe ◆ des valeurs à valider n'entre dans aucun nom accessible.
+  await expect(settings.getByRole("textbox", { name: /◆/ })).toHaveCount(0);
+  const field = settings.locator('[data-setting="guards.posts.size"] input');
+  const before = await field.inputValue();
+  const next = String(Number(before.replace(/\s/g, "")) + 5);
+  await field.fill(next);
+  await field.press("Enter");
+  await settle(page);
+  await expect(field).toHaveValue(next);
+  // Même chemin du projet que la section Garde-corps : son champ (repli « Réglages d'atelier »,
+  // niveau Atelier) montre la même valeur.
+  const guardsPanel = await openSection(page, "Garde-corps");
+  const workshop = guardsPanel.locator("details.tiered__fold--workshop");
+  if ((await workshop.getAttribute("open")) === null) await workshop.locator("summary").click();
+  const sectionField = guardsPanel.locator('[data-param="guards.posts.size"] input');
+  await expect(sectionField).toHaveValue(next);
+  // Ctrl+Z hors des champs : valeur d'avant rétablie.
+  await viewTab(page, "Plan").focus();
+  await page.keyboard.press("Control+z");
+  await settle(page);
+  await expect(field).toHaveValue(before);
+  // Lien « Tous les réglages dans Garde-corps ».
+  await settings.getByRole("button", { name: /^Tous les réglages dans Garde-corps/ }).click();
+  await expect(page.locator("#free-panel")).toBeVisible();
 });

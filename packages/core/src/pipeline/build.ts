@@ -3,6 +3,7 @@
  *
  *   computeLayout → computeStepping → pièces de base → structure (plugin) → garde-corps
  *   → échappée → contrôle de conception (+ contrôles du plugin de structure et des garde-corps)
+ *   → chiffres clés (`Model.figures`, `pipeline/figures.ts`)
  *
  * - **Aucune exception** pour des paramètres impossibles : l'erreur de l'étape (`Message` porté
  *   par `LayoutError` / `SteppingError` / `StructureError` / `GuardError`, ou
@@ -40,6 +41,7 @@ import type {
   ComplianceReport,
   Layout,
   Model,
+  ModelFigures,
   ModelPrecheck,
   ModelUpperFloor,
   Part,
@@ -70,6 +72,7 @@ import { SteppingError } from "../stepping/errors.js";
 import { computeRises } from "../stepping/rises.js";
 import { computeStepping } from "../stepping/stepping.js";
 import { normalizeAssemblies } from "./assembly.js";
+import { computeFigures, requiredGuardHeightOf } from "./figures.js";
 import { LastValueCache } from "./memo.js";
 
 /** Résultat d'une étape : valeur ou message d'erreur. */
@@ -347,6 +350,8 @@ const caches = {
   autoValues: new LastValueCache<Readonly<Record<string, number>> | undefined>(),
   /** `Model.headroomAtNosings` sans plafond (aucune trémie ni sous-face), à identité stable. */
   headroomAtNosings: new LastValueCache<readonly (number | null)[]>(),
+  /** `Model.figures` (`pipeline/figures.ts`), à identité stable. */
+  figures: new LastValueCache<ModelFigures | undefined>(),
 };
 let models = new WeakMap<Project, Model>();
 
@@ -805,6 +810,27 @@ export function buildModel(project: Project, options: BuildModelOptions = {}): M
 
   // Échappée sur la largeur des marches : règle ECHAPPEE_LARGEUR du contrôle (QUESTIONS A7).
 
+  // 6. Chiffres clés (lectures des étapes précédentes et du contrôle). La hauteur exigée est
+  // lue à chaque appel (le rapport fusionné est un objet neuf) et entre dans la clé par valeur.
+  let figures: ModelFigures | undefined;
+  try {
+    const requiredGuardHeight = guards ? requiredGuardHeightOf(compliance) : undefined;
+    figures = run(
+      caches.figures,
+      [layoutOut, steppingOut, stair.treads.nosing, guards, requiredGuardHeight],
+      () =>
+        computeFigures({
+          layout: layoutOut,
+          stepping: steppingOut,
+          nosing: stair.treads.nosing,
+          guards,
+          requiredGuardHeight,
+        }),
+    );
+  } catch {
+    figures = undefined;
+  }
+
   const model: Model = {
     layout: layoutOut,
     stepping: steppingOut,
@@ -817,6 +843,7 @@ export function buildModel(project: Project, options: BuildModelOptions = {}): M
     ...(precheck ? { precheck } : {}),
     ...(autoValues ? { autoValues } : {}),
     ...(headroomAtNosings ? { headroomAtNosings } : {}),
+    ...(figures ? { figures } : {}),
     upperFloor: upperFloorOf(site),
     errors,
     ...(notes.length > 0 ? { notes } : {}),

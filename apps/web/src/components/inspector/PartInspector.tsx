@@ -4,7 +4,8 @@
  * désignation), valeurs lues dans le modèle (matériau, section, longueur, masse, soudures),
  * actions (Isoler en 3D, Développé →, DXF R12), règles sur la pièce, réglages d'atelier communs
  * à la famille de pièces (`PartWorkshopSettings`, partagé avec le mode Fabrication : mêmes
- * chemins du projet et même validation que la section Structure),
+ * chemins du projet et même validation que la section Structure, ou que la section Garde-corps
+ * pour une pièce de garde-corps),
  * pièces assemblées et mention indicative.
  *
  * Aucune grandeur n'est calculée : une valeur absente du modèle n'a pas de ligne. Une pièce
@@ -62,6 +63,7 @@ export function PartInspector({ partId }: PartInspectorProps) {
   const { model } = useModel();
   const projectName = useApp((s) => s.project.name);
   const displayUnit = useApp((s) => s.displayUnit);
+  const guards = useApp((s) => s.project.guards);
   const isolated = useUi((s) => s.isolatedPartId) === partId;
   const part = model?.parts.find((p) => p.id === partId);
   if (!model || !part) return null;
@@ -114,7 +116,7 @@ export function PartInspector({ partId }: PartInspectorProps) {
 
   const hasFlat = part.flat !== undefined;
   const noFlat = t.t("ui.partInspector.noFlat");
-  const settings = partSettingsFor(part);
+  const settings = partSettingsFor(part, guards);
   const family = part.family;
 
   return (

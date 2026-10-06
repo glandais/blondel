@@ -6,12 +6,18 @@
  * Chaque gabarit est monté avec une `key` dérivée de la sélection : changer d'élément
  * réinitialise son état local (saisie en cours, formulaire de surcharge). Les gabarits 2a à 2c
  * partagent l'ossature de `frame.css` (surtitre, pastille, titre, valeurs, blocs, liens).
+ *
+ * Fenêtre de 760 à 1 099 px (ADR-0009 point 3) : l'inspecteur du parcours libre passe en tiroir
+ * à droite, par-dessus la vue (`drawer`, posé par `App`), avec une croix « Fermer l'inspecteur ».
  */
 import type { Model } from "@blondel/core";
+import { X } from "lucide-react";
 import { useLayoutEffect, useRef } from "react";
 import { useT } from "../../i18n/useT.js";
 import { useApp, useModel } from "../../store/appStore.js";
 import type { Selection } from "../../store/projectStore.js";
+import { closeInspectorDrawer } from "../../store/uiStore.js";
+import { Icon } from "../ui/Icon.js";
 import { PartInspector } from "./PartInspector.js";
 import { ProjectInspector } from "./ProjectInspector.js";
 import { RuleInspector } from "./RuleInspector.js";
@@ -72,7 +78,17 @@ export function selectionKey(selection: Selection | null): string {
   return selection.ruleId === undefined ? where : `rule-${selection.ruleId}-${where}`;
 }
 
-export function Inspector() {
+export interface InspectorProps {
+  /**
+   * Inspecteur en tiroir (fenêtre de 760 à 1 099 px, parcours libre en Conception) : ouvert ou
+   * fermé (`uiStore.inspectorDrawerOpen`). Fermé, il est masqué et hors de l'arbre
+   * d'accessibilité (`inert`) ; ouvert, il porte la croix « Fermer l'inspecteur ». Absent : colonne
+   * (grand écran) ou liste du contrôle du guidé.
+   */
+  readonly drawer?: "open" | "closed";
+}
+
+export function Inspector({ drawer }: InspectorProps) {
   const t = useT();
   const selection = useApp((s) => s.selection);
   const { model } = useModel();
@@ -102,7 +118,23 @@ export function Inspector() {
       className="inspector"
       aria-label={t.t("ui.inspector.label")}
       data-template={template}
+      data-drawer={drawer}
+      inert={drawer === "closed" ? true : undefined}
     >
+      {drawer === "open" ? (
+        // Barre collante de hauteur nulle : la croix reste en haut à droite pendant le défilement.
+        <div className="inspector__drawer-bar">
+          <button
+            type="button"
+            className="btn btn-ghost btn-icon inspector__drawer-close"
+            aria-label={t.t("ui.inspector.drawer.close")}
+            title={t.t("ui.inspector.drawer.close")}
+            onClick={() => closeInspectorDrawer({ restoreFocus: true })}
+          >
+            <Icon icon={X} size={16} />
+          </button>
+        </div>
+      ) : null}
       {content}
     </aside>
   );

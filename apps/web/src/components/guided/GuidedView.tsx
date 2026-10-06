@@ -184,8 +184,10 @@ export function GuidedView() {
           ) : (
             <ViewContent view={shown} />
           )}
-          {FABRICATION_TABS.has(shown) ? null : <SelectionLegend />}
         </div>
+        {/* Hors du cadre : posée sur le dessin en fenêtre large, dans le flux sous le cadre en
+            fenêtre étroite (elle y masquerait le cartouche). */}
+        {FABRICATION_TABS.has(shown) ? null : <SelectionLegend />}
         <FreeJourneyHint />
         <ControlOverlay />
       </div>

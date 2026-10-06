@@ -1,6 +1,6 @@
 # Architecture de Blondel
 
-Vue d'ensemble courte. Les décisions détaillées sont dans `docs/adr/` (ADR 0001 à 0008) et les arbitrages de conception dans `docs/CHALLENGE.md`. Le métier fait foi dans `docs/SPEC.md` et `docs/research/`.
+Vue d'ensemble courte. Les décisions détaillées sont dans `docs/adr/` (ADR 0001 à 0009) et les arbitrages de conception dans `docs/CHALLENGE.md`. Le métier fait foi dans `docs/SPEC.md` et `docs/research/`.
 
 ## Paquets
 
@@ -10,7 +10,7 @@ Vue d'ensemble courte. Les décisions détaillées sont dans `docs/adr/` (ADR 00
 | `packages/core`     | Contrats (`model/`), géométrie plane, pipeline de calcul, moteur de règles, projets, profil d'atelier bois et métal (`workshop/`), plugins de structure (`structures/`), catalogue de profilés (`catalog/`), prédimensionnement indicatif (`precheck/`), garde-corps et mains courantes (`guards/`), assistant d'initialisation (`assistant/`), site importé (`site/` : calque DXF par `@blondel/core/dxf`, image calibrée, accroches, trémie polygonale, relevé). **Aucun DOM.** | i18n, zod, dxf-parser                                  |
 | `packages/geometry` | Maillage 3D des `SolidDesc` rendus par le cœur (extrusion, surface réglée, balayage) pour l'aperçu et le glTF ; coordonnées de texture selon le fil (`grainUVMesh`, projection par triangle).                                                                                                                                                                                                                                                                                     | core, i18n, earcut                                     |
 | `packages/exports`  | Fonctions pures `Model → fichier` : plan, élévation et développés SVG, DXF (R12 maison, AC1021 ; plan et pièces), liste de débit CSV, ZIP, JSON, glTF binaire (`gltf/glb.ts`, sans dépendance) ; dossier PDF (sommaire, fiche de pose, fiche de débit, gabarits 1:1 tuilés) par le point d'entrée séparé `@blondel/exports/pdf` (jsPDF).                                                                                                                                          | core, geometry, i18n, jspdf, @tarikjabiri/dxf (AC1021) |
-| `apps/web`          | Interface React + Vite : édition du projet, de sa structure et de ses garde-corps, vues plan / 3D / élévation / développés, nomenclature, contrôle de conception, prédimensionnement, comparateur de variantes, assistant d'initialisation, mode expert, saisie du site (calque, trémie, murs, relevé), exports ; calcul dans des Web Workers.                                                                                                                                    | core, geometry, exp., i18n                             |
+| `apps/web`          | Interface React + Vite : édition du projet, de sa structure et de ses garde-corps, vues plan / 3D / élévation / développés, nomenclature, contrôle de conception, prédimensionnement, comparateur de variantes, assistant d'initialisation, parcours guidé et parcours libre, inspecteurs, mode Fabrication, saisie du site (calque, trémie, murs, relevé), exports ; calcul dans des Web Workers.                                                                                | core, geometry, exp., i18n                             |
 
 Les paquets sont consommés **par leurs sources TypeScript** (`main: ./src/index.ts`) : pas d'étape de build entre paquets, Vite et vitest compilent directement.
 
@@ -50,8 +50,10 @@ Project (JSON validé par zod, immuable)
                                                              du plugin et des garde-corps
   ▼
 Model { layout, stepping, parts, compliance, headroom?, headroomWidth?, headroomUnlimited?,
-        executionClass?, precheck?, errors, notes? }
+        headroomAtNosings?, executionClass?, precheck?, autoValues?, figures?, errors, notes? }
 ```
+
+Champs lus par l'interface de la refonte (ADR-0009, tous facultatifs et rétrocompatibles) : `Model.autoValues` (valeur retenue par le calcul d'un paramètre « Auto », par clé du dictionnaire des niveaux, dont celles des plugins via `StructureOutput.autoValues` ; une valeur résolue par limon n'est exposée que si tous les limons ont la même, `structures/autoValue.ts`), `Model.headroomAtNosings` (échappée au droit de chaque nez), `Model.figures` (chiffres de section sans calcul dans l'UI : collet minimal des marches balancées, emprise au sol, recouvrement au nez, garde-corps — lignes, longueur, poteaux, hauteur minimale exigée lue dans les règles —, `pipeline/figures.ts`), `NosingLine.angle` / `computedAngle`, `Part.assembledWith` (assemblages entre pièces, `pipeline/assembly.ts`), `FixSuggestion.ruleIds`, titre court des règles (`ruleTitle`, clés `rules.<id>.title`) et localisation précise des constats (`Location` pièce + `treadNumber`, point + `nosingIndex`).
 
 En amont du pipeline :
 
@@ -95,9 +97,11 @@ saisie ─► store zustand (projectStore) ─► Project canonique (ProjectSche
              project/realign.ts : dernière volée seulement, tournants et trémie polygonale
              conservés, une entrée d'historique, bandeau d'information ; bouton désactivé avec
              la raison rendue par realignBlocker si le recalage est impossible)
- Contrôle  : inspecteur (components/inspector/ : ControlSummary, RuleCard, RuleResults)
-             ─► surcharges de règles (withRuleOverride, cœur, project/overrides.ts :
-             justification obligatoire) ─► compliance.overrides, reprises dans le dossier PDF
+ Contrôle  : inspecteur (components/inspector/ : ControlSummary, RuleCard, RuleResults ;
+             inspecteur Règle 2c) ─► surcharges de règles (withRuleOverride, cœur,
+             project/overrides.ts : justification obligatoire) ─► compliance.overrides,
+             reprises dans le dossier PDF ; contextes en libellés clairs (contextShortLabel, cœur,
+             rules/contexts.ts), description longue (contextLabel) en aide
  Erreurs   : ErrorsBar ─► suggestFixes (cœur, project/fixes.ts) ─► lib/fixes.ts applyFix (annulable)
  Comparateur : CompareView (lib/variants.ts) ─► compareEpure (cœur, worker dédié) : même épure,
              raccord de jour adapté par variante et signalé ; « Appliquer » reprend l'adaptation ;
@@ -111,8 +115,13 @@ saisie ─► store zustand (projectStore) ─► Project canonique (ProjectSche
  Assistant : AssistantDialog (lib/assistant.ts) ─► proposeDesigns (cœur) dans un worker dédié
              annulable (model/assistant.worker.ts, assistantClient.ts) ─► cartes (croquis, cotes,
              score) ─► « Choisir » : une entrée d'historique
- Expert    : PlanExpertEditor (lib/expert.ts) ─► stair.nosingOverrides (angle imposé, nez fixe),
-             orphelines listées ; le cœur applique les surcharges et rend ses remarques
+ Ligne de nez : inspecteur Marche (2a) › NosingLineBlock (lib/nosingOverrides.ts)
+             ─► stair.nosingOverrides (angle imposé, nez fixe, retrait), orphelines listées ;
+             le cœur applique les surcharges et rend ses remarques (le mode expert du plan,
+             PlanExpertEditor et lib/expert.ts, est retiré : ADR-0009 point 4)
+ Valeurs ◆ : lib/paramTiers.ts (◆ par chemin) ─► lib/toValidate.ts (lignes, valeur effective)
+             ─► setValuesValidated (projectStore, annulable) ─► Project.validatedValues
+             (cœur, project/validatedValues.ts, caducité) ─► compteurs, ToValidateList, PDF
  Site      : Plan 2D › « Site et saisie » : PlanSiteEditor (calque, trémie, murs, calibration,
              accroches du cœur), PlanSurveyForm (relevé), UnderlayImport / ImportMenu (DXF, image)
 ```
@@ -124,6 +133,39 @@ saisie ─► store zustand (projectStore) ─► Project canonique (ProjectSche
 - Les exports (SVG, DXF, CSV, ZIP, JSON, PDF) sont des fonctions pures du `Model` (et du `Project` pour la trémie). Le PDF n'est jamais réexporté par l'index principal de `@blondel/exports` (un test surveille les imports) pour que jsPDF reste hors du paquet principal.
 - Application installable (ADR-0008) : `vite-plugin-pwa` génère le manifeste et un service worker Workbox qui met toute l'application en cache (workers et morceaux à la demande compris) ; elle s'ouvre et calcule hors ligne. Les mises à jour sont proposées, jamais imposées (`components/UpdatePrompt.tsx`).
 
+### Interface : parcours guidé et parcours libre (ADR-0009)
+
+Un seul projet, deux parcours (handoff `docs/ux/design_handoff_parcours_guide_libre/`, captures `docs/ux/captures-refonte/`). L'interface trois colonnes d'avant la refonte (`docs/ux/EXISTANT.md`) est remplacée entièrement.
+
+```
+App.tsx ─► TopBar (components/topbar/ : menu du projet, Guidé | Libre, Conception | Fabrication,
+   │        badge Contrôle, Annuler / Rétablir, Importer, Exporter, ⋯ ; Notices, PwaNotice)
+   ├─ guidé (1a) : components/guided/GuidedLayout ─► StepBar (7 onglets) · StepForm (sections en
+   │               affichage guidé, StepFigures, BlondelGauge, ShapeCards, FabricationStep à
+   │               l'étape 7) · GuidedView (vue conseillée) · GuidedFooter (contrôle, mention,
+   │               précédent / suivant) · ControlOverlay · FreeJourneyHint
+   └─ libre (1b) : Conception ─► Rail (8 sections) · FreePanel (une section, épingle, Échap,
+                   SectionFigures) · ViewArea (Plan | 3D | Élévation, − + Recadrer, FigureLine)
+                   · Inspector (2a Marche, 2b Pièce, 2c Règle, 2d sans sélection)
+                   Fabrication ─► FabricationArea (Pièces | Nomenclature | Comparer | À valider,
+                   FabricationFigures, PartsList, PartSheet) · FabricationAside
+                   (PartWorkshopSettings, « Forme du … », OutputsBlock, CostEstimate)
+```
+
+- **État d'interface hors projet** (jamais dans l'historique ni dans le `.blondel.json`) :
+  - `store/journeyStore.ts` + `lib/journey.ts` (fonctions pures) : parcours, étape guidée, étapes vues (coche ✓ = vue et sans règle bloquante rattachée, `isStepChecked`), panneau libre et épinglage, espace Conception / Fabrication, encart « parcours libre » fermé ; préférences mémorisées (`blondel.ui.journey`). **Règles d'ouverture** (`initialJourney`, `journeyAfterOpening`, `linkJourneyToProject`) : première visite ou démo → guidé à l'étape 1, assistant → guidé à l'étape 1, import ou reprise → libre, ensuite le dernier choix ; on ne demande jamais « débutant ou expert ? ». **Correspondance étape ↔ panneau** (`STEP_SECTIONS`, `panelForStep`, `stepForPanel`) ; **vue conseillée** par étape (`recommendedView`), appliquée au changement d'étape ; l'étape 7 et l'espace Fabrication se suivent (`goToStep`, `stepWorkspace`). **Guidé imposé sous 760 px** : état transitoire `guidedImposed` (jamais mémorisé, `setNarrowViewport`), le choix mémorisé reste celui de l'utilisateur et revient au-dessus de 760 px.
+  - `store/uiStore.ts` : vue active liée à l'espace (`linkWorkspaceAndView`), pièce isolée en 3D, profil d'atelier ouvert, commandes de vue (− + Recadrer), liste du contrôle du guidé ; **navigation consciente du parcours** (`openSection`, `openParam`, `switchWorkspace`, `revealControl`, `revealOverrides`, `goToGuidedStep` : en libre, panneau de la section ; en guidé, étape qui porte la section ou le paramètre) ; **tiroir d'inspecteur** (`inspectorDrawerOpen`, `openInspectorDrawer`, `closeInspectorDrawer`, ouvert par une sélection non nulle, le badge Contrôle et la liste des surcharges, `linkDrawerToSelection`).
+- **Sélection partagée** (`AppState.selection` : marche, nez, pièce, règle) entre plan, élévation, 3D, Fabrication et inspecteur ; `components/inspector/Inspector.tsx` choisit le gabarit d'après elle (règle → 2c `RuleInspector`, marche ou nez → 2a `TreadInspector` + `NosingLineBlock`, pièce → 2b `PartInspector`, sinon 2d `ProjectInspector` + `ControlSummary`) ; ossature commune `frame.css` (en-tête et mention indicative fixes, corps défilant). Clic dans le vide → 2d. **Chaîne d'Échap** (`components/escapeChain.ts`, fonction pure) : saisie ou menu → panneau non épinglé → tiroir d'inspecteur ouvert (largeur moyenne) → sélection → panneau épinglé.
+- **Sections** (`components/sections/` : Site, Tracé, Découpage, Balancement, Marches, Contexte ; `StructureSection` et `GuardsSection` à la racine de `components/`) : composants autonomes, mêmes chemins du projet partout, rendus par `Tiered` selon le mode d'affichage (`all`, `free`, `guided` + étape) et le niveau de chaque champ : `main`, repli « Plus de réglages », repli « Réglages d'atelier », masqué. `Tiered` pose `data-param` sur chaque champ ◆ (cible du lien « Ouvrir » de la liste ◆, `fabrication/focusParam.ts`) et la marque ◆ des valeurs non validées.
+- **Dictionnaire des niveaux** `lib/paramTiers.ts` : par chemin du projet (clé `paramKey`, indices en `*`), niveau Essentiel / Conception / Atelier, section du libre, places dans le guidé (étape, sous « Plus de réglages » ou non), ◆ « à valider », autres sections qui éditent la même valeur ; paramètres de plugin par `structureParamEntry(kind, path)` ; comptes ◆ restants par section et par étape (`toValidateCountBySection`, `toValidateCountByStep`). Libellés unifiés des paramètres : `lib/paramLabels.ts` et clés partagées `ui.label.*` (spécification de contenu § 4).
+- **Valeurs ◆ validées** : `Project.validatedValues` (cœur, `project/validatedValues.ts`, ADR-0009 « Mise en œuvre du point 9 ») : chemin + valeur effective (+ plugin) ; une validation devient **caduque** dès que la valeur ou la structure change (`isValueValidated`). Lignes de la liste : `lib/toValidate.ts` ; lecture mémoïsée par couple (projet, modèle) : `fabrication/useToValidate.ts` ; marque : `components/ui/TvMark.tsx` (glyphe `aria-hidden` + texte lu « à valider », jamais dans un nom accessible).
+- **Fabrication** (`components/fabrication/`) : liste des pièces par famille (`lib/partGroups.ts`), pièce choisie et gabarit coté exporté, réglages d'atelier de la pièce (`inspector/PartWorkshopSettings.tsx`, partagé avec la 2b : champs du plugin repris par famille ou champs de garde-corps repris par catégorie et type de remplissage, `lib/partSettings.ts`), « Forme du … » et retour en Conception, sorties (dossier PDF jamais bloqué par les ◆, fiche de pose, liste de débit, autres exports), coût estimé (`CostEstimate` : comparaison des variantes avec le barème d'atelier, `withWorkshopRates` mémoïsé sur le contenu du barème).
+- **Vue centrale** (`components/view/`) : onglets de vue en segmenté, cadre blueprint, `ZoomableSvg` (− + Recadrer sans recalcul), ligne de chiffres `FigureLine` (mm entiers, arrondi à l'affichage seulement, ADR-0003). Les SVG affichés restent ceux des exports.
+- **Composants de base** (`components/ui/`) : `Segmented` (radio ou onglets, activation automatique, focus itinérant), `Blueprint`, `Icon` (Lucide, trait 1,5), `ChoiceCards`, `TvMark`, icônes du rail. Style Industry : jetons dans `styles.css`, thème sombre dérivé, polices Barlow embarquées ; feuilles CSS par composant, importées par le composant.
+- **Palette fonctionnelle** unique `FUNCTIONAL_COLORS` (`packages/exports/src/palette.ts`) : sélection, sévérités, respecté, trémie ; reprise par l'interface (`apps/web/src/palette.css`, variables `--fn-*`), la 3D (`three/materials.ts`, `pbr.ts`) et les SVG exportés (palette claire).
+- **Petits écrans** (`lib/viewport.ts`, `components/useViewport.ts`) : `viewportClass(width)` → `wide` (≥ 1 100 px), `medium` (760 à 1 099 px : inspecteur en tiroir à droite, `.app[data-inspector="open|closed"]`, la mention « Contrôle de conception indicatif… » reprise sous la ligne de chiffres, `ViewArea disclaimer`), `narrow` (< 760 px : guidé imposé, barre d'étapes défilante, vue au-dessus du formulaire) ; `.app[data-viewport]` porte la classe ; aucun défilement horizontal du document.
+- **Clavier** : rail et barre d'étapes suivent le modèle ARIA des onglets à activation manuelle (flèches, Début / Fin déplacent le focus, Entrée ou Espace active) ; segmentés et onglets de vue à activation automatique ; un seul arrêt de tabulation par liste (focus itinérant) ; contour de focus 2 px plein, couleur d'accent, décalé de 2 px partout. Vérifié par `apps/web/e2e/accessibility.spec.ts` (avec un audit axe-core WCAG A / AA).
+
 ## Internationalisation (ADR-0007)
 
 L'interface et toutes les sorties existent en français et en anglais ; le français est la langue de référence.
@@ -132,7 +174,7 @@ L'interface et toutes les sorties existent en français et en anglais ; le fran�
 - **Dictionnaires** : un JSON plat par langue, `packages/i18n/src/locales/fr.json` et `en.json`, clés ASCII `domaine.sousDomaine.element` triées (`pnpm i18n:sort`). `fr.json` fait foi : `MessageKey` en dérive (une clé inconnue ne compile pas). Préfixes par paquet : ADR-0007. Toute clé est écrite en littéral dans le code (jamais construite par gabarit), sauf les familles déclarées dans `src/dynamicKeys.ts` (`rules.<ID>.description`).
 - **Messages neutres dans le `Model`** : `Model.errors` / `notes`, constats et descriptions de règles, noms de pièces, libellés de développé, exceptions métier (`LayoutError`, `StructureError`… étendent `MessageError`) ne portent que des `Message` `{ key, params }`. `buildModel` ne dépend pas de la langue : changer de langue ne relance aucun calcul et ne touche pas à la mémoïsation par identité.
 - **Traduction à l'affichage et dans les exports** : chaque export public reçoit l'option `locale?` (`LocaleOption`, **français par défaut**) et traduit en tête (`translatorOf(options)`), puis transmet la langue aux exports qu'il appelle (PDF → plan, élévation, développés…). Nombres : virgule et espace fine insécable en français, point et virgule des milliers en anglais ; dates JJ/MM/AAAA ou AAAA-MM-JJ ; CSV `;` (français) ou `,` (anglais) ; calques DXF traduits puis assainis. Le format machine des coordonnées (`formatNum`) ne dépend pas de la langue. Les exemples `examples/` et les instantanés restent en français, octet par octet.
-- **Langue dans l'UI** : `AppState.locale` / `setLocale` (store) ; au premier lancement celle du navigateur (`en*` → anglais, sinon français), puis le choix du sélecteur `LanguageToggle` (barre d'outils, groupe « Affichage »), mémorisé (`blondel.lang`) et reporté sur `<html lang>`. Composants : `const t = useT()` ; hors composants, les fonctions rendent des `Message` / `MessageKey` que le composant traduit (`i18n/text.ts`), ou reçoivent un `Translator`. Tout texte conservé dans un état (store, notification, `useState`) est un `Message`, retraduit au changement de langue. Le worker de calcul ne reçoit la langue que pour les jobs PDF et glTF et rend ses erreurs en `Message`.
+- **Langue dans l'UI** : `AppState.locale` / `setLocale` (store) ; au premier lancement celle du navigateur (`en*` → anglais, sinon français), puis le choix du sélecteur `LanguageToggle` (menu ⋯ « Plus d'options » de la barre du haut), mémorisé (`blondel.lang`) et reporté sur `<html lang>`. Composants : `const t = useT()` ; hors composants, les fonctions rendent des `Message` / `MessageKey` que le composant traduit (`i18n/text.ts`), ou reçoivent un `Translator`. Tout texte conservé dans un état (store, notification, `useState`) est un `Message`, retraduit au changement de langue. Le worker de calcul ne reçoit la langue que pour les jobs PDF et glTF et rend ses erreurs en `Message`.
 - **Garde-fous** : `packages/i18n/src/keys.test.ts` (parité fr / en, paramètres `{…}` identiques, aucune valeur vide, tri, clés employées existantes, aucune clé orpheline) ; `apps/web/src/architecture.test.ts` (aucun texte JSX ni attribut `title` / `aria-label` / `placeholder` / `alt` littéral, aucun format `fr` écrit en dur) ; tests anglais de chaque export sur tous les exemples, sans texte français résiduel (`packages/exports/src/i18n.test.ts`, heuristique `src/testing/french.ts`) ; e2e `apps/web/e2e/i18n.spec.ts`. Les autres e2e imposent le français (`openApp`) : le texte français des clés existantes est leur référence.
 - **Terminologie** : `docs/research/glossaire-en.md` (anglais britannique, un terme par notion, **à valider**) ; les références de normes restent dans leur langue. Restes connus (sources citées des règles en français, identifiants du contrôle…) : ADR-0007.
 
@@ -184,6 +226,32 @@ Les plugins de structure implémentent `StructureKind` (`model/plugins.ts`) et v
 - Les plugins lisent le profil résolu (débit au plus petit disponible : `smallestAvailable`) ; le pipeline en dépend pour la mémoïsation de l'étape structure.
 - Barème de coût (`workshop/costs.ts`, aucun défaut) : saisi dans l'interface (« Atelier… », `apps/web/src/components/WorkshopDialog.tsx`), gardé hors du projet (stockage du navigateur, import / export JSON) et fusionné par `withWorkshopRates` (`apps/web/src/lib/workshopRates.ts`) dans une copie du projet envoyée au comparateur ; `Project.workshop.costs` d'un fichier importé reste lu, complété par le barème de l'interface.
 
+### un paramètre dans l'interface (ADR-0009)
+
+1. Chemin dans le `ProjectSchema` (évolution rétrocompatible) ou dans `paramsSchema` d'un plugin (le formulaire générique de la section Structure le reprend seul).
+2. Niveau et places : une entrée dans `TIERS` de `apps/web/src/lib/paramTiers.ts` (Essentiel, Conception ou Atelier ; section du libre ; étape guidée, sous « Plus de réglages » ou non ; `toValidate` si la valeur par défaut n'est pas sourcée) d'après la spécification de contenu (`rendus/contenu.txt` § 3) ; un paramètre de plugin passe par `structureParamEntry`. `paramTiers.test.ts` vérifie la couverture.
+3. Libellé unifié (spécification § 4) : une clé dans `packages/i18n/src/locales/{fr,en}.json` (de préférence `ui.label.<notion>…` si plusieurs écrans l'affichent), unité à droite du champ, jamais dans le libellé ; paramètre de plugin : `lib/paramLabels.ts`.
+4. Champ dans la section qui le porte, enveloppé dans `Tiered` (`{ key: paramKey(path), node }`) : le panneau libre, l'étape guidée et les replis le placent selon le niveau. Un paramètre « Auto » utilise `AutoIntField` avec la valeur retenue lue dans `Model.autoValues` (jamais une valeur de repli).
+5. Valeur ◆ : `toValidate` suffit (marque, compteurs du rail, des replis et des étapes, liste « À valider », dossier PDF) ; la valeur effective par défaut doit pouvoir être lue par `lib/toValidate.ts`. Pièce concernée : l'ajouter, si besoin, aux chemins repris par l'inspecteur Pièce (`lib/partSettings.ts`).
+
+### une section du parcours libre
+
+1. Identifiant dans `SECTION_IDS` et titre dans `SECTION_TITLE_KEYS` (`apps/web/src/lib/sectionIds.ts`), icône du rail (`components/ui/sectionIcons.ts`), libellé court du rail si besoin (`RAIL_LABEL_KEYS`).
+2. Composant autonome dans `components/sections/` (`SectionProps` : `display`), exporté par `components/sections/index.ts` ; chiffres clés du panneau dans `components/free/SectionFigures.tsx` (lectures du `Model` seulement).
+3. Correspondance avec le guidé : `STEP_SECTIONS` (`lib/journey.ts`) ; règles rattachées à la section : `lib/ruleSections.ts`. Tests : `components/sections/sections.test.ts`, `free/free.test.ts`, e2e `free-journey.spec.ts`.
+
+### une étape du parcours guidé
+
+`GuidedStep` (`lib/sectionIds.ts`), titre, résumé d'une ligne et onglets de vue (`lib/guidedSteps.ts`), sections de l'étape et vue conseillée (`STEP_SECTIONS`, `recommendedView` dans `lib/journey.ts`), règles rattachées (`lib/ruleSteps.ts`, coche ✓), formulaire (`components/guided/StepForm.tsx`, mêmes sections en affichage `guided`), chiffres clés (`StepFigures.tsx`) et places des paramètres (`paramTiers.ts`). Tests : `guidedSteps.test.ts`, `journey.test.ts`, `guided/stepForm.test.ts`, e2e `guided-journey.spec.ts`.
+
+### un gabarit d'inspecteur
+
+Un nouveau type de sélection (`AppState.selection`) et son gabarit dans `components/inspector/` (ossature `frame.css` : `.insp-template`, en-tête, corps défilant, mention indicative en pied), choisi dans `Inspector.tsx` ; Échap et clic dans le vide reviennent à la 2d (`escapeChain.ts`). Valeurs lues dans le `Model` uniquement ; une valeur absente n'a pas de ligne. Tests SSR à côté (`*Inspector.test.ts`) et e2e de la sélection (`selection.spec.ts`).
+
+### une vue
+
+Identifiant dans `ViewTab` (`store/projectStore.ts`) et dans `DESIGN_VIEWS` ou `FABRICATION_VIEWS` (`store/uiStore.ts`, l'espace suit la vue), onglet dans `components/view/ViewArea.tsx` ou `fabrication/FabricationArea.tsx` (`Segmented` en onglets, `id` `tab-<vue>`), onglets du guidé (`lib/guidedSteps.ts`). Un dessin affiché est celui d'un export (`@blondel/exports`), jamais une seconde implémentation.
+
 ### une langue
 
 1. `packages/i18n/src/index.ts` : ajouter le code à `Locale` et à `LOCALES`, puis compléter `isLocale`, `detectLocale` (langue du navigateur), `DICTIONARIES` (import du nouveau JSON) et `FORMATS` (séparateur décimal, de milliers, espace avant l'unité) ; revoir le format de `date` (aujourd'hui `fr` ou ISO) et, au besoin, les règles de pluriel (`Intl.PluralRules` : sous-clés `.one` / `.other`, ajouter les catégories nécessaires, par exemple `.few`).
@@ -198,6 +266,6 @@ Les plugins de structure implémentent `StructureKind` (`model/plugins.ts`) et v
 - Aucun texte affiché écrit en dur : libellés dans `packages/i18n/src/locales/*.json`, code en `Message` / `MessageKey` (ADR-0007) ; les tests de texte portent sur la `key` d'un message ou sur sa traduction française.
 - Tests vitest `*.test.ts` à côté du code ; invariants en propriétés fast-check sur générateurs **contraints**.
 - Exemples `examples/*.blondel.json` générés par leurs générateurs de test (`project/examples.test.ts`, `guards/acceptance.test.ts`, `structures/helicalExample.test.ts`, `structures/steelCurved.acceptance.test.ts`, `UPDATE_EXAMPLES=1`) ; chacun est couvert de bout en bout par tous les exports (`exports/src/examples.test.ts`) et par un instantané des cotes principales (`pipeline/build.test.ts`). Critères d'acceptation n° 1 et n° 3 (dont chaque tronçon d'un débillardé) : `exports/src/acceptance-criteria.test.ts` ; n° 2 : `core/src/structures/steelCurved.acceptance.test.ts` ; « aucun calcul métier dans l'UI » : `apps/web/src/architecture.test.ts` ; traçabilité des règles : `core/src/rules/traceability.test.ts` ; bilan : [`ACCEPTATION.md`](ACCEPTATION.md) ; interactions entre étapes : `core/src/pipeline/integration.test.ts`.
-- Tests de bout en bout Playwright (`apps/web/e2e/`, `pnpm e2e`) sur le build : critère n° 1 dans l'interface, critère n° 1 par l'assistant, mode expert, outils 3D, exports glTF et fiche de pose, import DXF et relevé de trémie, hélicoïdal, corrections proposées, comparateur, import / annuler / autosauvegarde, et aucune tâche longue au-delà de 200 ms (`E2E_LONG_TASK_BUDGET_MS`).
+- Tests de bout en bout Playwright (`apps/web/e2e/`, `pnpm e2e`) sur le build : critère n° 1 dans l'interface, critère n° 1 par l'assistant, parcours guidé et libre, inspecteurs et ligne de nez, mode Fabrication, petits écrans, clavier et audit axe, outils 3D, exports glTF et fiche de pose, import DXF et relevé de trémie, hélicoïdal, corrections proposées, comparateur, import / annuler / autosauvegarde, et aucune tâche longue au-delà de 200 ms (`E2E_LONG_TASK_BUDGET_MS`).
 - Prettier (`.prettierrc.json`) ; `pnpm format:check` doit passer.
 - Suivi du travail : `docs/LEDGER.md` (avancement, points en suspens, messages entre agents, journal).

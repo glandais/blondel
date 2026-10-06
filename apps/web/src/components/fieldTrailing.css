@@ -1,0 +1,11 @@
+/*
+ * Contenu à droite de l'unité d'un champ numérique (`trailing` de NumberField / IntField) :
+ * rappel de la valeur retenue par le calcul, par exemple « obtenue : 180 » (maquette hi-fi,
+ * 12 px, neutral-700).
+ */
+.field__trailing {
+  flex: none;
+  font-size: 12px;
+  color: var(--color-neutral-700);
+  white-space: nowrap;
+}

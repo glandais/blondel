@@ -1,6 +1,6 @@
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
-import { formatLength, formatMeasure, parseIntMm } from "./units.js";
+import { formatFigureLengthWithUnit, formatLength, formatMeasure, parseIntMm } from "./units.js";
 
 describe("parseIntMm", () => {
   it("accepte les entiers, avec espaces de milliers", () => {
@@ -41,5 +41,17 @@ describe("formatLength", () => {
     expect(formatMeasure(0.5, "", "cm", "fr")).toBe("0,5");
     expect(formatMeasure(40, "°", "cm", "fr")).toBe("40 °");
     expect(formatMeasure(100, "mm", "cm", "fr").replace(/\s/g, " ")).toBe("10 cm");
+  });
+});
+
+describe("formatFigureLengthWithUnit (ligne de chiffres)", () => {
+  const nbsp = /[\s  ]/g;
+  it("mm entiers avec l'unité, cm au dixième ; arrondi à l'affichage seulement", () => {
+    expect(formatFigureLengthWithUnit(180.6667, "mm", "fr").replace(nbsp, " ")).toBe("181 mm");
+    expect(formatFigureLengthWithUnit(1901.4, "mm", "fr").replace(nbsp, " ")).toBe("1 901 mm");
+    expect(formatFigureLengthWithUnit(1901.4, "mm", "en")).toBe("1,901 mm");
+    expect(formatFigureLengthWithUnit(180.6667, "cm", "fr").replace(nbsp, " ")).toBe("18,1 cm");
+    expect(formatFigureLengthWithUnit(Number.NaN, "mm", "fr")).toBe("–");
+    expect(formatFigureLengthWithUnit(undefined, "cm", "fr")).toBe("–");
   });
 });

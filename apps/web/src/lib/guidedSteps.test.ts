@@ -169,7 +169,11 @@ describe("résumés de la barre d'étapes", () => {
     const step6 = stepSummary(6, s, fr);
     expect(step6.toValidate).toBe(s.toValidateByStep[6]);
     expect(step6.toValidate).toBeGreaterThan(0);
-    expect(plain(step6.text)).toBe(`Verre · ◆ ${step6.toValidate}`);
+    // Spécification : « Verre · 3 lignes · ◆ 1 » (lignes lues dans `Model.figures.guards`).
+    const lines = s.model!.figures!.guards!.lines;
+    expect(lines).toBe(3);
+    expect(plain(step6.text)).toBe(`Verre · 3 lignes · ◆ ${step6.toValidate}`);
+    expect(plain(stepSummary(6, s, en).base)).toBe("Glass · 3 runs");
     const step7 = stepSummary(7, s, fr);
     expect(plain(step7.text)).toBe(
       `${s.model!.parts.length} pièces · ◆ ${s.toValidateByStep[7]} à valider`,
@@ -231,6 +235,24 @@ describe("résumés de la barre d'étapes", () => {
     const s = sources({ ...base, guards: defaultGuards() }, "cm");
     expect(plain(stepSummary(1, s, fr).text)).toMatch(/^H 270 · trémie/);
     expect(plain(stepSummary(3, s, fr).text)).toMatch(/^\d+ hauteurs · [\d,]+ cm$/);
-    expect(plain(stepSummary(6, s, fr).text)).toMatch(/^Barreaudage vertical/);
+    expect(plain(stepSummary(6, s, fr).base)).toMatch(/ · \d+ lignes?$/);
+  });
+
+  it("étape 6 : pluriel du nombre de lignes, remplissage seul sans modèle", () => {
+    const s = sources(createDemoProject("demo-quarter-curved"));
+    const g = s.model!.figures!.guards!;
+    const one = { ...s, model: { ...s.model!, figures: { guards: { ...g, lines: 1 } } } };
+    expect(plain(stepSummary(6, one, fr).base)).toBe("Verre · 1 ligne");
+    expect(plain(stepSummary(6, one, en).base)).toBe("Glass · 1 run");
+    expect(stepSummary(6, { ...s, model: null }, fr).base).toBe("Verre");
+  });
+
+  it("étape 4 : matériau, épaisseur et nez (« Chêne 40 · nez 30 »)", () => {
+    const base = createProject("quarter-left");
+    const p: Project = {
+      ...base,
+      stair: { ...base.stair, treads: { ...base.stair.treads, thickness: 40, nosing: 30 } },
+    };
+    expect(plain(stepSummary(4, sources(p), fr).base)).toBe("Chêne 40 · nez 30");
   });
 });

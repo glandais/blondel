@@ -1,5 +1,5 @@
 /**
- * Chaîne d'Échap (ADR-0009) : saisie / menu → panneau non épinglé → sélection → panneau
+ * Chaîne d'Échap (ADR-0009) : saisie / menu → panneau non épinglé → tiroir → sélection → panneau
  * épinglé, une seule action par appui ; filtre des raccourcis F et ← →.
  */
 import { describe, expect, it } from "vitest";
@@ -18,6 +18,7 @@ const base: EscapeInput = {
   assistantOpen: false,
   panelOpen: false,
   panelPinned: false,
+  drawerOpen: false,
   hasSelection: false,
 };
 const esc = (extra: Partial<EscapeInput>) => escapeAction({ ...base, ...extra });
@@ -50,6 +51,34 @@ describe("ordre d'Échap", () => {
       if (a === "clearSelection") state = { ...state, hasSelection: false };
     }
     expect(seen).toEqual(["closePanel", "clearSelection", null]);
+  });
+
+  it("tiroir de l'inspecteur : après le panneau non épinglé, avant la sélection", () => {
+    expect(esc({ panelOpen: true, drawerOpen: true, hasSelection: true })).toBe("closePanel");
+    expect(esc({ drawerOpen: true, hasSelection: true })).toBe("closeDrawer");
+    expect(esc({ drawerOpen: true })).toBe("closeDrawer");
+    expect(esc({ panelOpen: true, panelPinned: true, drawerOpen: true })).toBe("closeDrawer");
+    // Tiroir, sélection, panneau épinglé : quatre appuis, dans l'ordre de la chaîne.
+    let state = {
+      panelOpen: true,
+      panelPinned: true,
+      drawerOpen: true,
+      hasSelection: true,
+    };
+    const seen: (string | null)[] = [];
+    for (let i = 0; i < 4; i++) {
+      const a = esc(state);
+      seen.push(a);
+      if (a === "closePanel") state = { ...state, panelOpen: false };
+      if (a === "closeDrawer") state = { ...state, drawerOpen: false };
+      if (a === "clearSelection") state = { ...state, hasSelection: false };
+    }
+    expect(seen).toEqual(["closeDrawer", "clearSelection", "closePanel", null]);
+  });
+
+  it("tiroir : ignoré dans une saisie ou si l'événement est déjà traité", () => {
+    expect(esc({ drawerOpen: true, target: el("INPUT") })).toBeNull();
+    expect(esc({ drawerOpen: true, defaultPrevented: true })).toBeNull();
   });
 
   it("depuis le document (aucune cible)", () => {

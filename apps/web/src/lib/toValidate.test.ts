@@ -69,7 +69,9 @@ describe("toValidateRows", () => {
     expect(FR.t(rowOf(rows, "guards.posts.size").label)).toBe(
       `${FR.t("ui.guards.posts.legend")} · ${FR.t("ui.guards.posts.size")}`,
     );
-    expect(FR.t(rowOf(rows, "guards.material").label)).toBe(FR.t("ui.guards.material"));
+    expect(FR.t(rowOf(rows, "guards.material").label)).toBe(
+      `${FR.t("ui.params.guards.title")} · ${FR.t("ui.guards.material")}`,
+    );
     const nested = rows.find(
       (r) => r.key.startsWith("stair.structure.params.") && r.path.length > 4,
     );

@@ -326,6 +326,29 @@
   background: var(--color-bg);
 }
 
+/* Avis d'information sans détail (démo, correction appliquée) : texte à gauche, « Fermer » à
+   droite. Le texte passe à la ligne au besoin, jamais tronqué (lisible au toucher, sans
+   info-bulle) : l'avis est dans le flux, au-dessus de la vue, il ne recouvre donc rien. */
+.notices .notice--line {
+  flex-wrap: nowrap;
+  align-items: baseline;
+}
+
+.notices .notice--line > .notice__text {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.notices .notice--line > button {
+  flex: none;
+}
+
+/* Avis de l'application installable : dans le flux, comme les autres messages. */
+.notices .pwa-prompt {
+  align-items: center;
+}
+
 /* ------------------------------------------------------------ Petits écrans (repli minimal) */
 
 /* Entre 1100 et 1280 px, la place manque à gauche du segmenté centré : l'état normal
@@ -363,6 +386,15 @@
   .topbar__project {
     max-width: 14rem;
   }
+}
+
+/* Guidé imposé (< 760 px) : explication de l'option Libre désactivée, en clair sur sa propre
+   ligne en bas de la barre (la barre passe à la ligne sous 1100 px). */
+.topbar__journey-note {
+  order: 10;
+  flex-basis: 100%;
+  font-size: 11.5px;
+  color: var(--color-neutral-700);
 }
 
 /* Très petit écran : menus et popovers pris dans la largeur de la fenêtre (position verticale

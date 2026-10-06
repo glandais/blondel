@@ -6,6 +6,7 @@
  */
 import {
   buildModel,
+  contextShortLabel,
   createProject,
   ruleTitle,
   withRuleOverride,
@@ -307,13 +308,21 @@ describe("contrôle de conception", () => {
     expect(en).not.toContain("ui.label");
   });
 
-  it("profil et contextes du rapport", () => {
+  it("profil et contextes du rapport, par leur libellé court (jamais l'identifiant)", () => {
     load(createProject("straight"));
     const html = render(Inspector);
     expect(html).toContain("Strict");
     expect(html).toContain("panneau Contexte");
     const { contexts } = modelService.store.getState().model.model!.compliance;
-    expect(html).toContain(contexts.join(" · "));
+    const fr = translatorFor("fr");
+    const line = contexts.map((c) => fr.t(contextShortLabel(c))).join(" · ");
+    expect(html).toContain(line.replace(/'/g, "&#x27;"));
+    expect(html).toContain("Logement (intérieur)");
+    for (const c of contexts) if (c.includes("_")) expect(html).not.toContain(c);
+    const en = render(Inspector, "en");
+    expect(en).toContain(
+      contexts.map((c) => translatorFor("en").t(contextShortLabel(c))).join(" · "),
+    );
     // Version des règles en texte visible (plus seulement en info-bulle).
     expect(html).toMatch(/<p class="inspector-control__contexts">Règles v/);
   });

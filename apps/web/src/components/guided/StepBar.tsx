@@ -9,11 +9,14 @@
  * arrêt de tabulation : l'étape courante. Toutes les étapes sont atteignables, dans n'importe
  * quel ordre.
  *
+ * Quand la place manque (cellules à largeur minimale, fenêtre étroite ou moyenne), la liste
+ * défile horizontalement et l'onglet de l'étape courante est ramené dans la zone visible.
+ *
  * Aucun calcul : résumés (`stepSummary`), ◆ restantes (`toValidateCountByStep`) et étapes
  * cochées (`checkedSteps` : vues et sans règle bloquante rattachée) viennent de fonctions pures.
  */
 import { Check } from "lucide-react";
-import { useMemo, useRef, type KeyboardEvent } from "react";
+import { useEffect, useMemo, useRef, type KeyboardEvent } from "react";
 import { useT } from "../../i18n/useT.js";
 import { STEP_TITLE_KEYS, stepSummary, type StepSummary } from "../../lib/guidedSteps.js";
 import { toValidateCountByStep } from "../../lib/paramTiers.js";
@@ -42,15 +45,44 @@ export function stepKeyTarget(current: number, key: string): number | null {
   );
 }
 
+/** Marge laissée de part et d'autre de l'onglet ramené dans la zone visible (contour de focus). */
+const SCROLL_MARGIN = 8;
+
 /**
- * Résumé d'une étape : seul le texte de base se tronque (…) ; la partie « · ◆ n … », rendue à
+ * Défilement horizontal (px, à ajouter à `scrollLeft`) qui ramène l'onglet `tab` dans la zone
+ * visible de la liste `list` (boîtes à l'écran), avec une marge ; 0 s'il y est déjà.
+ */
+export function stepBarScrollDelta(
+  list: { readonly left: number; readonly right: number },
+  tab: { readonly left: number; readonly right: number },
+): number {
+  if (tab.left < list.left + SCROLL_MARGIN) return tab.left - list.left - SCROLL_MARGIN;
+  if (tab.right > list.right - SCROLL_MARGIN) {
+    // Onglet plus large que la zone : on montre son début.
+    const overflowRight = tab.right - list.right + SCROLL_MARGIN;
+    const overflowLeft = tab.left - list.left - SCROLL_MARGIN;
+    return Math.min(overflowRight, overflowLeft);
+  }
+  return 0;
+}
+
+/**
+ * Résumé d'une étape : seul le texte de base se tronque (…), et d'abord sa tête (typologie,
+ * structure) : « · E 900 » et « · S235 » restent lisibles ; la partie « · ◆ n … », rendue à
  * part, reste toujours visible. Elle est masquée aux lecteurs d'écran (glyphe décoratif) et
  * remplacée par un texte accessible (« n valeurs à valider »).
  */
 function SummaryText({ summary, t }: { summary: StepSummary; t: ReturnType<typeof useT> }) {
   return (
     <>
-      <span className="step-bar__summary-base">{summary.base}</span>
+      {summary.baseParts === null ? (
+        <span className="step-bar__summary-base">{summary.base}</span>
+      ) : (
+        <>
+          <span className="step-bar__summary-base">{summary.baseParts[0]}</span>
+          <span className="step-bar__summary-tail">{summary.baseParts[1]}</span>
+        </>
+      )}
       {summary.toValidateText === null ? null : (
         <>
           <span className="step-bar__summary-tv" aria-hidden="true">
@@ -81,6 +113,19 @@ export function StepBar() {
   const report = model?.compliance;
   const checked = useMemo(() => checkedSteps(visited, report), [visited, report]);
   const refs = useRef<(HTMLButtonElement | null)[]>([]);
+  const listRef = useRef<HTMLDivElement>(null);
+
+  // Barre qui défile (fenêtre étroite) : l'onglet de l'étape courante est ramené dans la zone
+  // visible à chaque changement d'étape, sans faire défiler le document.
+  useEffect(() => {
+    const list = listRef.current;
+    const tab = refs.current[GUIDED_STEPS.indexOf(current)];
+    if (!list || !tab) return;
+    list.scrollLeft += stepBarScrollDelta(
+      list.getBoundingClientRect(),
+      tab.getBoundingClientRect(),
+    );
+  }, [current]);
 
   const onKeyDown = (e: KeyboardEvent<HTMLButtonElement>, index: number): void => {
     const next = stepKeyTarget(index, e.key);
@@ -93,7 +138,12 @@ export function StepBar() {
     // Pas de repère `nav` : la liste d'onglets porte seule le nom « Étapes du parcours » (un
     // lecteur d'écran ne l'annonce qu'une fois).
     <div className="step-bar">
-      <div className="step-bar__list" role="tablist" aria-label={t.t("ui.guided.stepbar.label")}>
+      <div
+        ref={listRef}
+        className="step-bar__list"
+        role="tablist"
+        aria-label={t.t("ui.guided.stepbar.label")}
+      >
         {GUIDED_STEPS.map((step, i) => {
           const selected = step === current;
           const done = checked.has(step);

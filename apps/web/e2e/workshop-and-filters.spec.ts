@@ -176,7 +176,7 @@ test("site : mur tracé au nu, côté du mur donné par un troisième clic", asy
   await openTab(page, "Plan");
   await page.getByRole("button", { name: "Site et saisie", exact: true }).click();
   await page.getByRole("button", { name: "Tracer un mur" }).click();
-  await page.getByLabel("Épaisseur du mur tracé (mm)").fill("200");
+  await page.getByLabel("Épaisseur du mur tracé", { exact: true }).fill("200");
   const mode = page.getByLabel("Ligne tracée");
   await expect(mode.locator("option")).toHaveText([
     "Axe du mur",

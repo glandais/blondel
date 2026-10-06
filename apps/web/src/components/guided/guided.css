@@ -8,7 +8,7 @@
 /* ------------------------------------------------------------ Grille (52 / 68 / 1fr / 60) */
 
 /* Spécificité (.app.app--guided) au-dessus des règles .app de styles.css, petits écrans
-   compris : le repli du guidé arrive en vague 6. */
+   compris : le repli du guidé (fenêtres moyenne et étroite) est en fin de feuille. */
 .app.app--guided {
   display: grid;
   height: 100%;
@@ -52,10 +52,21 @@
   border-bottom: 1px solid var(--color-divider);
 }
 
+/* Marge intérieure de 4 px : le contour de focus (2 px, décalé de 2 px) n'est rogné ni en haut,
+   ni en bas, ni aux extrémités quand la barre défile. Cellules à largeur minimale
+   (`--step-min`, nulle sur grand écran) : sous 1 100 px, la barre défile horizontalement. */
 .step-bar__list {
+  --step-min: 0px;
+  /* Bloc conteneur des `.visually-hidden` des onglets : sans lui, placés à leur position
+     statique hors de la zone défilante, ils élargiraient le document. */
+  position: relative;
   display: grid;
-  grid-template-columns: repeat(7, minmax(0, 1fr));
+  grid-template-columns: repeat(7, minmax(var(--step-min), 1fr));
   height: 100%;
+  padding: 4px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
 }
 
 .step-bar .step-bar__tab {
@@ -85,9 +96,11 @@
   background: var(--color-neutral-100);
 }
 
-/* Le contour de focus est dessiné à l'intérieur de la cellule (cellules jointives). */
+/* Contour de focus décalé de 2 px comme partout, au-dessus des cellules voisines (jointives). */
 .step-bar .step-bar__tab:focus-visible {
-  outline-offset: -3px;
+  position: relative;
+  z-index: 1;
+  outline-offset: 2px;
 }
 
 .step-bar .step-bar__tab[aria-selected="true"] {
@@ -132,10 +145,13 @@
 }
 
 .step-bar__title {
+  overflow: hidden;
   font-family: var(--font-heading);
   font-weight: 600;
   font-size: 15px;
   line-height: 1.15;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* Le texte de base se tronque (…), la partie « · ◆ n » qui le suit ne rétrécit jamais. */
@@ -154,8 +170,15 @@
   text-overflow: ellipsis;
 }
 
-.step-bar__summary-tv {
+.step-bar__summary-tv,
+.step-bar__summary-tail {
   flex: none;
+}
+
+/* Suite du résumé (« · E 900 ») collée à sa tête tronquée (l'espace est dans le texte). */
+.step-bar__summary-tail {
+  margin-left: -0.3em;
+  white-space: pre;
 }
 
 .step-bar__tab[aria-selected="true"] .step-bar__summary {
@@ -238,6 +261,15 @@
 .guided-view__stage[data-view="3d"] .guided-view__selection {
   top: 12px;
   bottom: auto;
+}
+
+/* Fenêtre étroite : la légende quitte le dessin (elle masquerait le cartouche) et suit le cadre,
+   dans le flux. */
+.app--guided[data-viewport="narrow"] .guided-view__selection {
+  position: static;
+  align-self: flex-start;
+  margin-top: 6px;
+  padding-inline: 0;
 }
 
 .guided-view__selection-swatch {
@@ -398,12 +430,25 @@
   border-top: 1px solid var(--color-divider);
 }
 
+.guided-footer__counts {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+}
+
 .guided-footer .guided-footer__count {
   flex: none;
   gap: 6px;
   font-family: var(--font-body);
   font-weight: 600;
   font-size: 13px;
+}
+
+/* « Aucun constat » : bouton neutre. */
+.guided-footer .guided-footer__count[data-severity="none"] {
+  color: var(--color-neutral-800);
+  font-weight: 500;
 }
 
 .guided-footer .guided-footer__count[data-severity="bloquant"] {
@@ -435,4 +480,85 @@
 
 .guided-footer .guided-footer__next {
   padding-inline: 18px;
+}
+
+/* ------------------------------------------------------------ Petits écrans (ADR-0009 point 3) */
+
+/* Fenêtre moyenne (760 à 1 099 px) : formulaire resserré à 340 px, barre d'étapes défilante. */
+.app--guided[data-viewport="medium"] .step-bar__list {
+  --step-min: 150px;
+}
+
+.app--guided[data-viewport="medium"] .guided-body {
+  grid-template-columns: 340px minmax(0, 1fr);
+}
+
+.app--guided[data-viewport="medium"] .guided-form {
+  padding-inline: 20px;
+}
+
+/*
+ * Fenêtre étroite (< 760 px, guidé imposé) : le document défile verticalement ; barre du haut et
+ * pied passent à la ligne ; la vue (au moins la moitié de la hauteur, 280 px) est au-dessus du
+ * formulaire (ordre du DOM inversé par GuidedLayout) ; la liste du contrôle couvre la fenêtre.
+ */
+.app.app--guided[data-viewport="narrow"] {
+  height: auto;
+  min-height: 100%;
+  grid-template-rows: auto 68px auto auto;
+}
+
+.app--guided[data-viewport="narrow"] .step-bar__list {
+  --step-min: 168px;
+}
+
+.app--guided[data-viewport="narrow"] .guided-body {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.app--guided[data-viewport="narrow"] .guided-view {
+  min-height: max(50vh, 280px);
+  padding: 12px 16px 14px;
+}
+
+.app--guided[data-viewport="narrow"] .guided-view__stage {
+  min-height: 240px;
+}
+
+.app--guided[data-viewport="narrow"] .guided-form {
+  overflow: visible;
+  padding: 20px 16px;
+  border-right: 0;
+  border-top: 1px solid var(--color-divider);
+}
+
+.app--guided[data-viewport="narrow"] .control-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  width: auto;
+}
+
+.app--guided[data-viewport="narrow"] .guided-footer {
+  flex-wrap: wrap;
+  row-gap: 8px;
+  padding: 10px 16px;
+}
+
+.app--guided[data-viewport="narrow"] .guided-footer__counts {
+  flex-wrap: wrap;
+}
+
+.app--guided[data-viewport="narrow"] .guided-footer__disclaimer {
+  flex: 1 1 100%;
+}
+
+.app--guided[data-viewport="narrow"] .guided-footer__spacer {
+  display: none;
+}
+
+.app--guided[data-viewport="narrow"] .guided-footer .guided-footer__nav {
+  flex: 1 1 auto;
+  justify-content: center;
+  min-width: 0;
 }

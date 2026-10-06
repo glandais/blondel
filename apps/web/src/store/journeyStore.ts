@@ -31,7 +31,16 @@ export interface JourneyState extends JourneyPrefs {
    * panneau.
    */
   readonly freePanelFromGuided: boolean;
-  /** Change de parcours (panneau ou étape correspondants, `switchJourney`). */
+  /**
+   * Transitoire, jamais mémorisé : fenêtre étroite (< 760 px, ADR-0009 point 3), le parcours
+   * guidé est imposé (`setNarrowViewport`). Le libre y est indisponible ; le parcours mémorisé
+   * reste le dernier choix de l'utilisateur.
+   */
+  readonly guidedImposed: boolean;
+  /**
+   * Change de parcours (panneau ou étape correspondants, `switchJourney`). Sans effet vers le
+   * libre tant que le guidé est imposé.
+   */
   setJourney(journey: Journey): void;
   /** Va à une étape du guidé (marquée comme vue, espace de l'étape : `goToStep`). */
   setGuidedStep(step: GuidedStep): void;
@@ -43,8 +52,29 @@ export interface JourneyState extends JourneyPrefs {
   setFreePanelPinned(pinned: boolean): void;
   setWorkspace(workspace: Workspace): void;
   dismissFreeJourneyHint(): void;
-  /** Applique la règle d'ouverture d'un projet chargé (`journeyAfterOpening`). */
+  /**
+   * Applique la règle d'ouverture d'un projet chargé (`journeyAfterOpening`). Guidé imposé :
+   * la règle fixe le parcours rétabli au retour d'une fenêtre large (import → libre), le guidé
+   * reste affiché.
+   */
   applyOpening(origin: ProjectOrigin): void;
+  /**
+   * Fenêtre étroite (< 760 px) ou non, appelé par `App` au passage du seuil. Étroite : le guidé
+   * est imposé (étape du panneau ouvert, comme `switchJourney`). Large de nouveau : le parcours
+   * d'avant est rétabli (libre : même panneau et même espace si l'étape n'a pas changé, sinon
+   * panneau de l'étape courante).
+   */
+  setNarrowViewport(narrow: boolean): void;
+}
+
+/** Parcours à rétablir quand le guidé cesse d'être imposé. */
+interface ImposedFrom {
+  /** Dernier choix de l'utilisateur (ou de la règle d'ouverture), celui qu'on mémorise. */
+  readonly journey: Journey;
+  readonly freePanel: SectionId | null;
+  readonly workspace: Workspace;
+  /** Étape affichée par l'imposition : si elle n'a pas changé, panneau et espace rétablis. */
+  readonly step: GuidedStep;
 }
 
 export interface JourneyStoreOptions {
@@ -97,12 +127,22 @@ export function createJourneyStore(
     journey0 === "guided" && !base.visitedSteps.has(base.guidedStep)
       ? { ...base, visitedSteps: new Set([...base.visitedSteps, base.guidedStep]) }
       : base;
+  // Guidé imposé (fenêtre étroite) : parcours à rétablir, `null` hors imposition.
+  let imposed: ImposedFrom | null = null;
   const store = createStore<JourneyState>()((set, get) => {
     const prefs = (): JourneyPrefs => prefsOf(get());
+    /** Impose le guidé sur `p` ; `journey` : parcours à rétablir ensuite. */
+    const impose = (p: JourneyPrefs, journey: Journey): JourneyPrefs => {
+      const next = switchJourney(p, "guided", true);
+      imposed = { journey, freePanel: p.freePanel, workspace: p.workspace, step: next.guidedStep };
+      return next;
+    };
     return {
       ...start,
       freePanelFromGuided: false,
+      guidedImposed: false,
       setJourney: (journey) => {
+        if (get().guidedImposed && journey === "free") return;
         const before = prefs();
         const next = switchJourney(before, journey, guidedAvailable);
         if (next === before) return;
@@ -127,7 +167,55 @@ export function createJourneyStore(
       setFreePanelPinned: (freePanelPinned) => set({ freePanelPinned }),
       setWorkspace: (workspace) => set({ workspace }),
       dismissFreeJourneyHint: () => set({ hintFreeJourneyDismissed: true }),
-      applyOpening: (origin) => set(journeyAfterOpening(origin, prefs(), guidedAvailable)),
+      applyOpening: (origin) => {
+        if (imposed === null) {
+          set(journeyAfterOpening(origin, prefs(), guidedAvailable));
+          return;
+        }
+        // Règle appliquée comme sans imposition (parcours de référence : celui à rétablir).
+        const wouldBe = journeyAfterOpening(
+          origin,
+          { ...prefs(), journey: imposed.journey },
+          guidedAvailable,
+        );
+        if (wouldBe.journey === "guided") {
+          imposed = { ...imposed, journey: "guided" };
+          set(wouldBe);
+        } else {
+          set({ ...impose(wouldBe, "free"), freePanelFromGuided: false });
+        }
+      },
+      setNarrowViewport: (narrow) => {
+        if (narrow) {
+          if (get().guidedImposed || !guidedAvailable) return;
+          const p = prefs();
+          if (p.journey === "guided") {
+            imposed = {
+              journey: "guided",
+              freePanel: p.freePanel,
+              workspace: p.workspace,
+              step: p.guidedStep,
+            };
+            set({ guidedImposed: true });
+          } else {
+            set({ ...impose(p, "free"), guidedImposed: true, freePanelFromGuided: false });
+          }
+          return;
+        }
+        const from = imposed;
+        if (!get().guidedImposed || from === null) return;
+        imposed = null;
+        if (from.journey === "guided") {
+          set({ guidedImposed: false });
+          return;
+        }
+        const p = prefs();
+        const next: JourneyPrefs =
+          p.guidedStep === from.step
+            ? { ...p, journey: "free", freePanel: from.freePanel, workspace: from.workspace }
+            : switchJourney(p, "free", guidedAvailable);
+        set({ ...next, guidedImposed: false, freePanelFromGuided: false });
+      },
     };
   });
 
@@ -151,13 +239,18 @@ export function createJourneyStore(
         stored.journey === undefined ? rest : { journey: stored.journey, ...rest },
       );
     };
+    // Guidé imposé : on mémorise le parcours à rétablir (dernier choix de l'utilisateur).
+    const chosen = (s: JourneyState): JourneyPrefs => {
+      const p = prefsOf(s);
+      return imposed === null ? p : { ...p, journey: imposed.journey };
+    };
     let last = persisted(start);
     // Parcours choisi par la règle de démarrage mémorisé tout de suite : au lancement suivant,
     // c'est lui le « dernier choix » (un nouveau venu guidé ne bascule pas en libre parce que
     // son projet est désormais repris de l'autosauvegarde). Jamais pour un repli.
     if (stored.journey === undefined && guidedAvailable) write(last);
     store.subscribe((s) => {
-      const text = persisted(prefsOf(s));
+      const text = persisted(chosen(s));
       if (text === last) return;
       last = text;
       write(text);

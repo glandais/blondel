@@ -3,18 +3,41 @@
  * principales lues dans le modèle et le projet (aucun calcul ici), « Calculé en N ms » qui déplie
  * les temps du cœur (`buildModel`) et du maillage d'aperçu (ADR-0006), mesurés dans le
  * Web Worker à chaque modèle ; « Calcul… » pendant un calcul ; erreurs de génération.
+ *
+ * Format de la maquette : longueurs en mm entiers avec l'unité (« h 180 mm »), arrondies à
+ * l'affichage seulement (ADR-0003, `formatFigureLengthWithUnit`). Toujours sur **une** ligne :
+ * quand la place manque (panneau ouvert, fenêtre moyenne), les chiffres secondaires
+ * (`data-tier="2"` : emmarchement, échappée sur la largeur, puis `data-tier="3"` : échappée)
+ * quittent la ligne (requêtes de conteneur de view.css) et restent lisibles dans le détail
+ * repliable « Calculé en N ms », qui les reprend tous ; chaque chiffre garde son intitulé complet
+ * en info-bulle.
  */
 import { msg } from "@blondel/i18n";
 import { useT } from "../../i18n/useT.js";
-import { formatDuration, formatLength } from "../../lib/units.js";
+import { formatDuration, formatFigureLengthWithUnit } from "../../lib/units.js";
 import { useApp, useModel } from "../../store/appStore.js";
+
+/** Priorité d'un chiffre : 1 toujours sur la ligne, 2 puis 3 retirés quand la place manque. */
+export type FigureTier = 1 | 2 | 3;
 
 interface Figure {
   readonly id: string;
   readonly symbol: string;
   readonly title: string;
   readonly value: string;
+  readonly tier: FigureTier;
 }
+
+/** Priorité de chaque chiffre de la ligne (maquette 1b : secondaires retirés d'abord). */
+export const FIGURE_TIERS: Readonly<Record<string, FigureTier>> = {
+  n: 1,
+  h: 1,
+  g: 1,
+  blondel: 1,
+  width: 2,
+  headroom: 3,
+  headroomWidth: 2,
+};
 
 export function FigureLine() {
   const t = useT();
@@ -23,12 +46,13 @@ export function FigureLine() {
   const unit = useApp((s) => s.displayUnit);
   const loc = t.locale;
   const st = model?.stepping;
+  const len = (mm: number | undefined | null): string => formatFigureLengthWithUnit(mm, unit, loc);
   // Projet dont le modèle affiché est issu (cohérent pendant un calcul).
   const shown = modelProject ?? project;
   // Trémie couvrante : échappée non limitée par la dalle haute (lue dans le modèle, QUESTIONS A7).
   const unlimited = model?.headroomUnlimited;
   const UNLIMITED = t.t("ui.status.unlimited");
-  const figures: readonly Figure[] = [
+  const base: readonly Omit<Figure, "tier">[] = [
     {
       id: "n",
       symbol: t.t("ui.status.riserCount.symbol"),
@@ -39,25 +63,25 @@ export function FigureLine() {
       id: "h",
       symbol: t.t("ui.status.rise.symbol"),
       title: t.t("ui.status.rise.title"),
-      value: formatLength(st?.rise, unit, loc),
+      value: len(st?.rise),
     },
     {
       id: "g",
       symbol: t.t("ui.status.going.symbol"),
       title: t.t("ui.status.going.title"),
-      value: formatLength(st?.going, unit, loc),
+      value: len(st?.going),
     },
     {
       id: "blondel",
       symbol: t.t("ui.status.blondel.symbol"),
       title: t.t("ui.status.blondel.title"),
-      value: formatLength(st?.blondel, unit, loc),
+      value: len(st?.blondel),
     },
     {
       id: "width",
       symbol: t.t("ui.figures.width.symbol"),
       title: t.t("ui.figures.width.title"),
-      value: formatLength(shown.stair.layout.width, unit, loc),
+      value: len(shown.stair.layout.width),
     },
     {
       id: "headroom",
@@ -65,7 +89,7 @@ export function FigureLine() {
       title: unlimited?.walkline
         ? t.t("ui.status.headroom.titleUnlimited")
         : t.t("ui.status.headroom.title"),
-      value: unlimited?.walkline ? UNLIMITED : formatLength(model?.headroom?.min, unit, loc),
+      value: unlimited?.walkline ? UNLIMITED : len(model?.headroom?.min),
     },
     {
       id: "headroomWidth",
@@ -73,9 +97,10 @@ export function FigureLine() {
       title: unlimited?.width
         ? t.t("ui.status.headroomWidth.titleUnlimited")
         : t.t("ui.status.headroomWidth.title"),
-      value: unlimited?.width ? UNLIMITED : formatLength(model?.headroomWidth?.min, unit, loc),
+      value: unlimited?.width ? UNLIMITED : len(model?.headroomWidth?.min),
     },
   ];
+  const figures: readonly Figure[] = base.map((f) => ({ ...f, tier: FIGURE_TIERS[f.id] ?? 1 }));
   const meshDetail = mesh
     ? t.t("ui.status.mesh.title", {
         meshed: msg("ui.status.mesh.meshed", { count: mesh.misses }),
@@ -91,11 +116,19 @@ export function FigureLine() {
     }),
     t.t("ui.figures.time.mesh", { time: formatDuration(mesh?.timeMs, loc), detail: meshDetail }),
   ];
+  const computed = t.t("ui.figures.computed", { time: formatDuration(timeMs, loc) });
+  const secondary = figures.filter((f) => f.tier > 1);
   return (
     <footer className="figure-line" aria-label={t.t("ui.figures.label")}>
       <dl className="figure-line__list">
         {figures.map((f) => (
-          <div key={f.id} className="figure-line__item" data-figure={f.id} title={f.title}>
+          <div
+            key={f.id}
+            className="figure-line__item"
+            data-figure={f.id}
+            data-tier={f.tier > 1 ? String(f.tier) : undefined}
+            title={f.title}
+          >
             <dt>{f.symbol}</dt>
             <dd>{f.value}</dd>
           </div>
@@ -117,14 +150,28 @@ export function FigureLine() {
           {t.t("ui.status.pending")}
         </span>
       ) : model ? (
-        // Détail cœur / maillage atteignable au clavier et au toucher (repli natif).
+        // Détail cœur / maillage atteignable au clavier et au toucher (repli natif) ; il reprend
+        // les chiffres secondaires retirés de la ligne faute de place.
         <details className="figure-line__time">
-          <summary>{t.t("ui.figures.computed", { time: formatDuration(timeMs, loc) })}</summary>
-          <ul className="figure-line__time-details">
-            {timeDetails.map((line) => (
-              <li key={line}>{line}</li>
-            ))}
-          </ul>
+          <summary title={computed}>
+            <span className="figure-line__time-long">{computed}</span>
+            <span className="figure-line__time-short">{formatDuration(timeMs, loc)}</span>
+          </summary>
+          <div className="figure-line__time-details">
+            <dl className="figure-line__extra">
+              {secondary.map((f) => (
+                <div key={f.id} data-figure={f.id} data-tier={String(f.tier)}>
+                  <dt>{f.title}</dt>
+                  <dd>{f.value}</dd>
+                </div>
+              ))}
+            </dl>
+            <ul>
+              {timeDetails.map((line) => (
+                <li key={line}>{line}</li>
+              ))}
+            </ul>
+          </div>
         </details>
       ) : null}
     </footer>

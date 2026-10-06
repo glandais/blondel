@@ -14,6 +14,7 @@
  * (`revealOverrides`) : la liste des surcharges se déplie, défile dans le champ et son résumé
  * reçoit le focus.
  */
+import { contextShortLabel } from "@blondel/core";
 import type { MessageKey } from "@blondel/i18n";
 import { useEffect, useId, useMemo, useRef, useState, type ReactNode, type Ref } from "react";
 import { useT } from "../../i18n/useT.js";
@@ -251,12 +252,12 @@ export function ControlSummary({ initialOpen = [] }: ControlSummaryProps = {}) {
       </div>
       {report ? (
         // Version des règles, profil et contextes en texte visible (lisible au clavier et au
-        // lecteur d'écran) ; libellés courts des contextes : vague 6 (libellés unifiés).
+        // lecteur d'écran) ; contextes par leur libellé court (libellés unifiés, ADR-0009).
         <p className="inspector-control__contexts">
           {t.t("ui.compliance.summary", {
             version: String(report.rulesVersion),
             profile: profileLabel,
-            contexts: report.contexts.join(" · ") || "–",
+            contexts: report.contexts.map((c) => t.t(contextShortLabel(c))).join(" · ") || "–",
           })}
         </p>
       ) : (

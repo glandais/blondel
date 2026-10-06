@@ -54,13 +54,14 @@ import type { AssistantOutcome } from "../model/assistantJob.js";
 import { appStore, useApp } from "../store/appStore.js";
 import "./assistant.css";
 
+/** Mesures du relevé : mêmes libellés que le relevé du plan « Site et saisie » (libellés unifiés). */
 const SURVEY_LABELS: readonly [SurveyMeasure, MessageKey][] = [
-  ["ab", "ui.assistant.survey.ab"],
-  ["bc", "ui.assistant.survey.bc"],
-  ["cd", "ui.assistant.survey.cd"],
-  ["da", "ui.assistant.survey.da"],
-  ["ac", "ui.assistant.survey.ac"],
-  ["bd", "ui.assistant.survey.bd"],
+  ["ab", "ui.plan.survey.measure.ab"],
+  ["bc", "ui.plan.survey.measure.bc"],
+  ["cd", "ui.plan.survey.measure.cd"],
+  ["da", "ui.plan.survey.measure.da"],
+  ["ac", "ui.plan.survey.measure.ac"],
+  ["bd", "ui.plan.survey.measure.bd"],
 ];
 
 type RunState =
@@ -622,23 +623,23 @@ function AssistantDialogBody() {
             <fieldset className="grid-2">
               <legend>{t.t("ui.assistant.levels.legend")}</legend>
               <TextInput
-                label={t.t("ui.assistant.levels.floorToFloor.label")}
+                label={t.t("ui.label.site.floorToFloor")}
                 value={form.floorToFloor}
                 onChange={(v) => set({ floorToFloor: v })}
-                hint={t.t("ui.assistant.levels.floorToFloor.hint")}
+                hint={t.t("ui.label.site.floorToFloor.hint")}
               />
               <TextInput
-                label={t.t("ui.assistant.levels.slab.label")}
+                label={t.t("ui.label.site.upperSlabThickness")}
                 value={form.upperSlabThickness}
                 onChange={(v) => set({ upperSlabThickness: v })}
-                hint={t.t("ui.assistant.levels.slab.hint")}
+                hint={t.t("ui.label.site.upperSlabThickness.hint")}
               />
             </fieldset>
             <fieldset className="grid-2">
-              <legend>{t.t("ui.assistant.opening.legend")}</legend>
+              <legend>{t.t("ui.label.opening")}</legend>
               <div className="assistant__wide">
                 <Select
-                  label={t.t("ui.assistant.opening.label")}
+                  label={t.t("ui.label.opening")}
                   value={form.openingMode}
                   options={openingModes}
                   // Les côtés cochés désignent les côtés de l'ancienne trémie : décochés.
@@ -650,7 +651,7 @@ function AssistantDialogBody() {
                   <TextInput
                     label={t.t(
                       form.openingMode === "rect"
-                        ? "ui.assistant.opening.cornerX"
+                        ? "ui.label.opening.cornerX"
                         : "ui.assistant.opening.pointAX",
                     )}
                     value={form.openingX}
@@ -659,7 +660,7 @@ function AssistantDialogBody() {
                   <TextInput
                     label={t.t(
                       form.openingMode === "rect"
-                        ? "ui.assistant.opening.cornerY"
+                        ? "ui.label.opening.cornerY"
                         : "ui.assistant.opening.pointAY",
                     )}
                     value={form.openingY}
@@ -670,12 +671,12 @@ function AssistantDialogBody() {
               {form.openingMode === "rect" ? (
                 <>
                   <TextInput
-                    label={t.t("ui.assistant.opening.sizeX")}
+                    label={t.t("ui.label.opening.sizeX")}
                     value={form.sizeX}
                     onChange={(v) => set({ sizeX: v })}
                   />
                   <TextInput
-                    label={t.t("ui.assistant.opening.sizeY")}
+                    label={t.t("ui.label.opening.sizeY")}
                     value={form.sizeY}
                     onChange={(v) => set({ sizeY: v })}
                   />

@@ -11,8 +11,8 @@
  *   (`FabricationStep`) ;
  * - cadre de chiffres clés (`StepFigures`, jauge 2h + g à l'étape 3) ;
  * - encart d'aide (une phrase qui décrit l'interface, sans seuil) ;
- * - lien « Réglage avancé… », sous l'encart et collé au bas de la colonne quand le formulaire
- *   défile (toujours visible), affiché seulement si le formulaire contient un repli « Plus de
+ * - lien « Réglage avancé… », sous l'encart, dans le flux en fin de formulaire (il ne chevauche
+ *   jamais le contenu qui défile), affiché seulement si le formulaire contient un repli « Plus de
  *   réglages ». Les résumés de ces replis sont masqués (maquette 1a : le lien est le seul accès) :
  *   il les ouvre tous et donne le focus au premier champ (`aria-expanded` reflète l'état ; un
  *   second clic les referme). Il porte le compteur ◆ des champs repliés.

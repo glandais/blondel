@@ -74,6 +74,12 @@ test("carte → inspecteur Règle → correction appliquée, puis annulée", asy
   await expect(inspector).toContainText(
     "Contrôle de conception indicatif : il ne vaut pas attestation de conformité.",
   );
+  // Provenance : nature et fiabilité avec leur explication (libellés unifiés).
+  const provenance = inspector.locator(".rule-insp__provenance");
+  await expect(provenance).toContainText(
+    /(Réglementaire : imposé|Normatif : fixé|Métier : règle de l'art)/,
+  );
+  await expect(provenance).toContainText(/(Élevée|Moyenne|Faible) : /);
 
   // « Pour corriger » : correction du cœur (annulable) et section du panneau libre.
   const fixes = inspector.locator(".rule-insp__fixes");

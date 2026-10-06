@@ -102,6 +102,23 @@ describe("règles sur une marche", () => {
     expect(html).not.toContain("element-rules__none");
   });
 
+  it("règle mesurée : titre puis « Mesuré … · attendu … » en mm entiers (maquette 2a)", () => {
+    loadWith([
+      result({
+        ruleId: "ECHAPPEE_MIN_DTU",
+        severity: "bloquant",
+        measured: 1901.17,
+        min: 2100,
+        unit: "mm",
+        message: textMessage("Échappée : 1901,17 mm (attendu ≥ 2100 mm)."),
+      }),
+    ]);
+    const t = text(render({ kind: "tread", number: 3 }));
+    expect(t).toContain(FR.t(ruleTitle("ECHAPPEE_MIN_DTU")));
+    expect(t).toMatch(/Mesuré 1\s901 mm · attendu ≥ 2\s100 mm/);
+    expect(t).not.toContain("1901,17");
+  });
+
   it("aucune violation : phrase ; respectées : 3 titres puis (+ k), repliées", () => {
     loadWith(PASSED_IDS.map((ruleId) => result({ ruleId, status: "ok" })));
     const html = render({ kind: "tread", number: 3 });

@@ -200,16 +200,19 @@
   border-top: 1px dashed var(--color-divider);
 }
 
-/* --- Lien « Réglage avancé… » sous l'encart d'aide, collé au bas de la colonne qui défile */
+/* --- Lien « Réglage avancé… » sous l'encart d'aide, dans le flux en fin de formulaire : aucun
+   contenu ne passe dessous, à aucune position de défilement (chiffres clés, liste ◆). */
 
 .step-form__foot {
-  position: sticky;
-  bottom: 0;
-  z-index: 1;
   display: flex;
-  margin: -10px 0 0;
-  padding: 4px 0;
-  background: var(--color-bg);
+  margin: -8px 0 0;
+}
+
+/* --- Étape 3 : saisies de 120 px (maquette 1a, hauteur cible), unité à droite. */
+
+.step-form[data-step="3"] .input-unit input {
+  flex: none;
+  width: 120px;
 }
 
 .step-form__advanced {

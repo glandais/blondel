@@ -68,11 +68,11 @@ test("critère n° 1 par l'assistant : quart tournant bois conforme, PDF et DXF"
   const d = dialog(page);
   await expect(d).toBeVisible();
   await expect(d.getByLabel("Hauteur à monter H")).toHaveValue("2700");
-  await expect(d.getByLabel("Épaisseur de dalle")).toHaveValue("200");
+  await expect(d.getByLabel("Épaisseur du plancher haut")).toHaveValue("200");
 
-  await d.getByLabel("Longueur de trémie (X)").fill("2800");
+  await d.getByLabel("Trémie : longueur (X)").fill("2800");
   ix.count("trémie X = 2 800");
-  await d.getByLabel("Largeur de trémie (Y)").fill("900");
+  await d.getByLabel("Trémie : largeur (Y)").fill("900");
   ix.count("trémie Y = 900");
   await d.getByLabel("Structure visée").selectOption("wood-housed");
   ix.count("structure visée : limons à la française");
@@ -188,8 +188,8 @@ test("variantes : repliées sous la carte de chaque forme, avec croquis ; liste 
   await openProjectMenu(page);
   await page.getByRole("button", { name: "Assistant…" }).click();
   const d = dialog(page);
-  await d.getByLabel("Longueur de trémie (X)").fill("2800");
-  await d.getByLabel("Largeur de trémie (Y)").fill("900");
+  await d.getByLabel("Trémie : longueur (X)").fill("2800");
+  await d.getByLabel("Trémie : largeur (Y)").fill("900");
   await d.getByLabel("Quart tournant", { exact: true }).check();
   await d.getByRole("button", { name: "Proposer", exact: true }).click();
   await expect(d.locator(".assistant__summary")).toBeVisible({ timeout: 30_000 });

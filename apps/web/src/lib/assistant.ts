@@ -41,24 +41,32 @@ export type UsageId = "house" | "collective" | "erp-new" | "erp-existing" | "oth
  */
 export const USAGES: readonly {
   readonly id: UsageId;
-  /** Clé du libellé, traduite à l'affichage (`t.t(u.labelKey)`). */
+  /**
+   * Clé du libellé, traduite à l'affichage (`t.t(u.labelKey)`) : libellé court du contexte
+   * principal (« Logement (intérieur) », spécification de contenu § 4), le même que dans
+   * l'inspecteur et le dossier PDF.
+   */
   readonly labelKey: MessageKey;
   readonly contexts: readonly string[];
 }[] = [
-  { id: "house", labelKey: "ui.lib.assistant.usage.house", contexts: ["logement_interieur"] },
+  {
+    id: "house",
+    labelKey: "compliance.contextShort.logement_interieur",
+    contexts: ["logement_interieur"],
+  },
   {
     id: "collective",
-    labelKey: "ui.lib.assistant.usage.collective",
+    labelKey: "compliance.contextShort.bhc_parties_communes",
     contexts: ["bhc_parties_communes"],
   },
   {
     id: "erp-new",
-    labelKey: "ui.lib.assistant.usage.erpNew",
+    labelKey: "compliance.contextShort.erp_neuf",
     contexts: ["erp_neuf", "erp_securite"],
   },
   {
     id: "erp-existing",
-    labelKey: "ui.lib.assistant.usage.erpExisting",
+    labelKey: "compliance.contextShort.erp_existant",
     contexts: ["erp_existant", "erp_securite"],
   },
   { id: "other", labelKey: "ui.lib.assistant.usage.other", contexts: [] },

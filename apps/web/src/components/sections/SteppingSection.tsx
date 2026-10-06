@@ -1,8 +1,10 @@
 /**
  * Section « Découpage » : nombre de hauteurs, hauteur et giron cibles, correction de la
- * première hauteur. Les valeurs affichées en mode automatique (et imposées d'un clic) sont
- * lues dans le modèle rendu par le cœur. Répartition par niveau : `Tiered`.
+ * première hauteur. Les valeurs affichées en mode automatique (et imposées d'un clic) et le rappel
+ * « obtenue : h » à droite de la hauteur cible sont lus dans le modèle rendu par le cœur (arrondi
+ * au mm entier à l'affichage seulement, ADR-0003). Répartition par niveau : `Tiered`.
  */
+import { formatNumber } from "../../i18n/locale.js";
 import { useT } from "../../i18n/useT.js";
 import { appStore, useApp, useModel } from "../../store/appStore.js";
 import type { Path } from "../../store/setIn.js";
@@ -24,6 +26,14 @@ export function SteppingSection({ display }: SectionProps) {
   const riserCount = finite(model?.stepping.riserCount);
   const goingRaw = finite(model?.stepping.going);
   const going = goingRaw === undefined ? undefined : Math.max(1, Math.round(goingRaw));
+  // Hauteur de marche obtenue (rappel à droite de la cible) ; rien sans modèle.
+  const rise = finite(model?.stepping.rise);
+  const obtained =
+    rise === undefined
+      ? undefined
+      : t.t("ui.params.stepping.targetRise.obtained", {
+          value: formatNumber(t.locale, rise, { maximumFractionDigits: 0 }),
+        });
   return (
     <Tiered
       display={display}
@@ -54,6 +64,7 @@ export function SteppingSection({ display }: SectionProps) {
             <IntField
               label={t.t("ui.params.stepping.targetRise")}
               value={st.targetRise}
+              trailing={obtained}
               min={1}
               onCommit={set(["stair", "stepping", "targetRise"])}
             />

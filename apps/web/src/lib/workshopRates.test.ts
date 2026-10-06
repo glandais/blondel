@@ -125,6 +125,22 @@ describe("barème d'atelier (QUESTIONS A14)", () => {
     });
   });
 
+  it("mémoïsation sur le contenu du barème : une copie de même contenu rend la même copie du projet", () => {
+    const project = createProject("straight");
+    const rates = { hourlyRate: 50, minutesPerCut: 2 };
+    // `effectiveRates` passe une copie compactée : elle ne doit pas invalider la copie du projet
+    // obtenue avec l'objet du store (sinon la comparaison n'est jamais reconnue comme courante).
+    effectiveRates(project, rates);
+    const a = withWorkshopRates(project, rates);
+    effectiveRates(project, rates);
+    expect(withWorkshopRates(project, { ...rates })).toBe(a);
+    expect(withWorkshopRates(project, rates)).toBe(a);
+    // Contenu différent : nouvelle copie.
+    const b = withWorkshopRates(project, { ...rates, hourlyRate: 60 });
+    expect(b).not.toBe(a);
+    expect(b.workshop?.costs?.hourlyRate).toBe(60);
+  });
+
   it("comparateur : euros masqués tant que le barème est incomplet, affichés sinon", () => {
     const project = createProject("straight", {
       patch: { stair: { structure: { kind: "steel-flat", params: {} } } },

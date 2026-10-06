@@ -42,6 +42,9 @@ describe("partage structurel du projet reçu par le worker", () => {
     // Tracé et balancement inchangés : mêmes objets (cache par étape de `buildModel`).
     expect(b.model?.layout).toBe(a.model?.layout);
     expect(b.model?.stepping).toBe(a.model?.stepping);
+    // Chiffres clés (`Model.figures`) : même objet, leurs entrées étant inchangées.
+    expect(b.model?.figures).toBeDefined();
+    expect(b.model?.figures).toBe(a.model?.figures);
     // Même projet renvoyé : modèle entier réutilisé.
     const c = runner.build({ type: "build", project: structuredClone(changed) });
     expect(c.model).toBe(b.model);

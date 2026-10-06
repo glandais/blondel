@@ -4,6 +4,7 @@
  * source secondaire ; l'avertissement est rappelé en tête de chaque page de suite.
  */
 import {
+  contextShortLabel,
   ruleDescription,
   type Model,
   type RuleOverride,
@@ -215,7 +216,8 @@ export function complianceLines(
     t.t("pdf.compliance.summary", {
       profile: rep.profile,
       version: String(rep.rulesVersion),
-      contexts: rep.contexts.join(", ") || "—",
+      // Libellés courts des contextes (libellés unifiés, ADR-0009), pas les identifiants bruts.
+      contexts: rep.contexts.map((id) => t.t(contextShortLabel(id))).join(", ") || "—",
       bloquant: String(rep.summary.bloquant),
       avertissement: String(rep.summary.avertissement),
       conseil: String(rep.summary.conseil),

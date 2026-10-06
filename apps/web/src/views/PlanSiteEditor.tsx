@@ -438,7 +438,7 @@ export function PlanSiteEditor({ model }: { model: Model }) {
                   points={pointsAttr(opening)}
                   vectorEffect="non-scaling-stroke"
                 >
-                  <title>{tr.t("ui.plan.site.opening")}</title>
+                  <title>{tr.t("ui.label.opening")}</title>
                 </polygon>
               ) : null}
               {preview ? (
@@ -531,14 +531,20 @@ export function PlanSiteEditor({ model }: { model: Model }) {
                   <label htmlFor="plan-site-calib">
                     {tr.t("ui.plan.site.calib.distance.label")}
                   </label>
-                  <input
-                    id="plan-site-calib"
-                    type="text"
-                    inputMode="decimal"
-                    value={calib.distance}
-                    onChange={(e) => setCalib({ ...calib, distance: e.target.value })}
-                    onKeyDown={(e) => e.key === "Enter" && applyCalibration()}
-                  />
+                  {/* Unité à droite du champ, jamais dans le libellé (libellés unifiés). */}
+                  <span className="input-unit">
+                    <input
+                      id="plan-site-calib"
+                      type="text"
+                      inputMode="decimal"
+                      value={calib.distance}
+                      onChange={(e) => setCalib({ ...calib, distance: e.target.value })}
+                      onKeyDown={(e) => e.key === "Enter" && applyCalibration()}
+                    />
+                    <span className="input-unit__unit" aria-hidden="true">
+                      mm
+                    </span>
+                  </span>
                   <div className="button-row">
                     <button type="button" onClick={applyCalibration}>
                       {tr.t("ui.plan.site.calib.apply")}
@@ -551,13 +557,18 @@ export function PlanSiteEditor({ model }: { model: Model }) {
           {tool === "wall" ? (
             <div className="field">
               <label htmlFor="plan-site-wall">{tr.t("ui.plan.site.wall.thickness")}</label>
-              <input
-                id="plan-site-wall"
-                type="text"
-                inputMode="numeric"
-                value={wallThickness}
-                onChange={(e) => setWallThickness(e.target.value)}
-              />
+              <span className="input-unit">
+                <input
+                  id="plan-site-wall"
+                  type="text"
+                  inputMode="numeric"
+                  value={wallThickness}
+                  onChange={(e) => setWallThickness(e.target.value)}
+                />
+                <span className="input-unit__unit" aria-hidden="true">
+                  mm
+                </span>
+              </span>
               <small className="field__hint">{tr.t("ui.plan.site.wall.thickness.hint")}</small>
               <label htmlFor="plan-site-wall-ref">{tr.t("ui.plan.site.wall.reference")}</label>
               <select

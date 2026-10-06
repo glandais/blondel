@@ -14,9 +14,16 @@
  * pièce choisie) et, à droite, la colonne de Fabrication (réglages d'atelier de la pièce, retour
  * en Conception, sorties et coût). La sélection est la même dans les deux espaces.
  *
- * L'import de `uiStore` installe la liaison espace de travail ↔ vue active.
+ * Petits écrans (ADR-0009 point 3, vague 6) : `.app` porte la classe de largeur
+ * (`data-viewport` : wide ≥ 1 100 px, medium ≥ 760 px, narrow sinon, `useViewportClass`). En
+ * medium, parcours libre en Conception, l'inspecteur est un tiroir (`data-inspector` open |
+ * closed, `uiStore.inspectorDrawerOpen`) ; en narrow, le parcours guidé est imposé
+ * (`journeyStore.setNarrowViewport`) et la vue passe au-dessus du formulaire.
+ *
+ * L'import de `uiStore` installe la liaison espace de travail ↔ vue active et la liaison
+ * tiroir de l'inspecteur ↔ sélection.
  */
-import { useEffect } from "react";
+import { useEffect, useLayoutEffect } from "react";
 import { AssistantDialog } from "./components/AssistantDialog.js";
 import { escapeAction, type EscapeTarget } from "./components/escapeChain.js";
 import { FabricationArea } from "./components/fabrication/FabricationArea.js";
@@ -28,9 +35,11 @@ import { GuidedLayout } from "./components/guided/GuidedLayout.js";
 import { Inspector } from "./components/inspector/Inspector.js";
 import { TopBar } from "./components/topbar/TopBar.js";
 import { UpdatePrompt } from "./components/UpdatePrompt.js";
+import { currentViewportClass, useViewportClass } from "./components/useViewport.js";
 import { ViewArea } from "./components/view/ViewArea.js";
+import type { ViewportClass } from "./lib/viewport.js";
 import { appStore, journeyStore, useJourney } from "./store/appStore.js";
-import { closeGuidedControl, uiStore } from "./store/uiStore.js";
+import { closeGuidedControl, closeInspectorDrawer, uiStore, useUi } from "./store/uiStore.js";
 
 /** Champs sans annulation propre au navigateur : Ctrl+Z y annule le projet (cases ◆, radios…). */
 const NON_TEXT_INPUTS = new Set(["checkbox", "radio", "button", "submit", "reset", "color"]);
@@ -75,8 +84,10 @@ function useUndoShortcuts(): void {
 
 /**
  * Écouteur global unique d'Échap (`escapeAction`) : un menu ou une saisie l'ont déjà traité,
- * sinon panneau libre non épinglé, puis sélection (retour à l'inspecteur « sans sélection »),
- * puis panneau épinglé. Fermé par Échap, le panneau rend le focus à l'onglet de sa section.
+ * sinon panneau libre non épinglé, puis tiroir de l'inspecteur (fenêtre moyenne : il se ferme,
+ * la sélection reste, le focus revient à l'élément qui l'a ouvert ou au cadre de la vue), puis
+ * sélection (retour à l'inspecteur « sans sélection »), puis panneau épinglé. Fermé par Échap,
+ * le panneau rend le focus à l'onglet de sa section.
  *
  * En guidé, la liste du contrôle superposée à la vue joue le rôle d'un panneau épinglé : une
  * sélection s'efface d'abord, la liste se ferme ensuite et rend le focus au bouton du pied qui
@@ -87,8 +98,12 @@ function useEscapeChain(): void {
     const onKey = (e: globalThis.KeyboardEvent) => {
       const journey = journeyStore.getState();
       const guided = journey.journey === "guided";
-      const section = !guided && journey.workspace === "design" ? journey.freePanel : null;
+      const design = !guided && journey.workspace === "design";
+      const section = design ? journey.freePanel : null;
       const controlOpen = guided && uiStore.getState().guidedControlOpen;
+      // Tiroir de l'inspecteur : fenêtre moyenne, parcours libre en Conception seulement.
+      const drawerOpen =
+        design && currentViewportClass() === "medium" && uiStore.getState().inspectorDrawerOpen;
       const app = appStore.getState();
       const action = escapeAction({
         key: e.key,
@@ -97,10 +112,13 @@ function useEscapeChain(): void {
         assistantOpen: app.assistantOpen,
         panelOpen: guided ? controlOpen : section !== null,
         panelPinned: guided ? true : journey.freePanelPinned,
+        drawerOpen,
         hasSelection: app.selection !== null,
       });
       if (action === "clearSelection") {
         app.select(null);
+      } else if (action === "closeDrawer") {
+        closeInspectorDrawer({ restoreFocus: true });
       } else if (action === "closePanel" && guided) {
         closeGuidedControl();
         focusControlOpener();
@@ -114,22 +132,40 @@ function useEscapeChain(): void {
   }, []);
 }
 
+/**
+ * Fenêtre étroite (< 760 px) : parcours guidé imposé (`setNarrowViewport`), avant l'affichage
+ * (effet de mise en page : pas d'image du parcours libre à 390 px). Au-dessus, le parcours
+ * d'avant est rétabli.
+ */
+function useNarrowViewportJourney(viewport: ViewportClass): void {
+  useLayoutEffect(() => {
+    journeyStore.getState().setNarrowViewport(viewport === "narrow");
+  }, [viewport]);
+}
+
 export function App() {
   useUndoShortcuts();
   useEscapeChain();
+  const viewport = useViewportClass();
+  useNarrowViewportJourney(viewport);
   const journey = useJourney((s) => s.journey);
   const workspace = useJourney((s) => s.workspace);
   const panelOpen = useJourney((s) => s.freePanel !== null);
+  const drawerOpen = useUi((s) => s.inspectorDrawerOpen);
   const design = workspace === "design";
   const guided = journey === "guided";
+  // Fenêtre moyenne, libre en Conception : l'inspecteur est un tiroir (ADR-0009 point 3).
+  const drawer = !guided && design && viewport === "medium";
   // Même racine et même barre du haut dans les deux parcours : la bascule ne remonte pas la
   // barre (focus gardé sur le segmenté Guidé | Libre, menu du projet laissé ouvert).
   return (
     <div
       className={guided ? "app app--guided" : "app"}
       data-journey={journey}
+      data-viewport={viewport}
       data-workspace={guided ? undefined : workspace}
       data-panel={guided ? undefined : design && panelOpen ? "open" : "closed"}
+      data-inspector={drawer ? (drawerOpen ? "open" : "closed") : undefined}
     >
       <TopBar />
       {guided ? (
@@ -138,8 +174,8 @@ export function App() {
         <>
           <Rail />
           <FreePanel />
-          <ViewArea />
-          <Inspector />
+          <ViewArea disclaimer={drawer} />
+          <Inspector drawer={drawer ? (drawerOpen ? "open" : "closed") : undefined} />
         </>
       ) : (
         <>

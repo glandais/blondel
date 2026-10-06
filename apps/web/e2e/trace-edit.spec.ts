@@ -18,8 +18,8 @@ test("recaler volées et trémie après modification de H, annulable en une fois
   await openApp(page);
   await applyPreset(page, "Quart tournant à gauche");
   await openSection(page, "Tracé");
-  const leg1 = page.getByRole("textbox", { name: "Volée 1 (bord extérieur)" });
-  const leg2 = page.getByRole("textbox", { name: "Volée 2 (bord extérieur)" });
+  const leg1 = page.getByRole("textbox", { name: "Volée 1 : longueur (bord extérieur)" });
+  const leg2 = page.getByRole("textbox", { name: "Volée 2 : longueur (bord extérieur)" });
   const before = [await leg1.inputValue(), await leg2.inputValue()];
   await openSection(page, "Site");
   await commitField(page, page.getByLabel("Hauteur à monter H"), "2900");

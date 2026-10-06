@@ -2,7 +2,8 @@
  * Mode Fabrication (ADR-0009, vague 4 ; wireframe « Parcours libre · Fabrication, avec retour
  * vers la Conception ») : pièce choisie gardée d'un espace à l'autre, liste des pièces par
  * famille et filtre, réglage d'atelier modifié sur place puis annulé, « Ouvrir dans
- * Conception », valeurs ◆ à valider (bande, rail, annulation, « Tout valider »), dossier PDF
+ * Conception », valeurs ◆ à valider (bande, rail, annulation, « Tout valider », glyphe hors des
+ * noms accessibles), dossier PDF
  * généré malgré des ◆ restantes, fiche de pose, nomenclature, comparateur, coût, Échap.
  */
 import { readFile } from "node:fs/promises";
@@ -228,8 +229,14 @@ test("valeurs ◆ à valider : bande et rail, annulation, « Tout valider » en 
   // Le compteur de la bande ouvre l'onglet « À valider ».
   await page.locator(".fab-figures__remaining").click();
   await expect(viewTab(page, "À valider")).toHaveAttribute("aria-selected", "true");
-  const list = page.getByRole("region", { name: "Valeurs ◆ à valider" });
+  // Nom accessible sans glyphe (le titre visible reste « Valeurs ◆ à valider »).
+  const list = page.getByRole("region", { name: "Valeurs à valider", exact: true });
+  await expect(list.locator(".tv-list__title")).toContainText("Valeurs ◆ à valider");
   await expect(list.getByRole("status")).toHaveText(`◆ ${n} restantes`);
+  // Le glyphe ◆ n'entre dans aucun nom accessible (cases, boutons, bande de chiffres).
+  await expect(list.getByRole("checkbox", { name: /◆/ })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /◆/ })).toHaveCount(0);
+  await expect(page.locator(".fab-figures__remaining")).toHaveAccessibleName(/^\d+ restantes?$/);
 
   // Première ligne restante et calculable : sa section, son compteur dans le rail.
   const row = list
@@ -275,7 +282,7 @@ test("valeurs ◆ à valider : bande et rail, annulation, « Tout valider » en 
   await list.getByRole("button", { name: "Tout valider" }).click();
   expect(await bandRemaining(page)).toBe(disabled);
   if (disabled === 0) {
-    await expect(list.getByRole("status")).toHaveText("Toutes les valeurs ◆ sont validées");
+    await expect(list.getByRole("status")).toHaveText("Toutes les valeurs sont validées");
   }
   await undoButton(page).click();
   await settle(page);

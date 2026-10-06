@@ -5,9 +5,11 @@ import { translatorFor } from "@blondel/i18n";
 import { frList } from "../i18n.test-helpers.js";
 import {
   CONTEXT_LABEL_KEYS,
+  CONTEXT_SHORT_LABEL_KEYS,
   DEDUCED_ONLY_CONTEXTS,
   SHAPE_CONTEXTS,
   contextLabel,
+  contextShortLabel,
   guardRailRegime,
   isRuleApplicable,
   resolveContexts,
@@ -49,6 +51,26 @@ describe("libellés des contextes (ADR-0007)", () => {
     expect(en.t(contextLabel("exterieur"))).toBe("External stair");
     expect(en.t(contextLabel("tous"))).toBe("Any stair");
     expect(en.t(contextLabel("contexte_inconnu"))).toBe("contexte_inconnu");
+  });
+  it("libellés courts (ADR-0009, libellés unifiés) : un par contexte, distincts de l'identifiant", () => {
+    expect(Object.keys(CONTEXT_SHORT_LABEL_KEYS).sort()).toEqual([...RULE_CONTEXTS].sort());
+    const fr = translatorFor("fr");
+    const en = translatorFor("en");
+    for (const id of RULE_CONTEXTS) {
+      const short = fr.t(contextShortLabel(id));
+      expect(short).not.toBe(id);
+      expect(short).not.toContain("_");
+      expect(en.t(contextShortLabel(id))).not.toBe(id);
+    }
+    expect(fr.t(contextShortLabel("logement_interieur"))).toBe("Logement (intérieur)");
+    expect(fr.t(contextShortLabel("bois_dtu"))).toBe("Bois (DTU 36.3)");
+    expect(en.t(contextShortLabel("bois_dtu"))).toBe("Timber (DTU 36.3)");
+    // Libellés courts deux à deux distincts (une case par contexte).
+    const all = RULE_CONTEXTS.map((id) => fr.t(contextShortLabel(id)));
+    expect(new Set(all).size).toBe(all.length);
+  });
+  it("libellé court d'un contexte inconnu : repli sur la description, puis l'identifiant", () => {
+    expect(translatorFor("fr").t(contextShortLabel("contexte_inconnu"))).toBe("contexte_inconnu");
   });
   it("remarque de régime supposé : texte français historique, anglais traduit", () => {
     const note = guardRailRegime(undefined).note!;

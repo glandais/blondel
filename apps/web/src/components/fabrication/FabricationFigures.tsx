@@ -14,6 +14,7 @@ import { useT } from "../../i18n/useT.js";
 import { bomSummary } from "../../lib/parts.js";
 import { executionClassInfo } from "../../lib/precheck.js";
 import { appStore, useModel } from "../../store/appStore.js";
+import { TvMark } from "../ui/TvMark.js";
 import { useRemainingCount } from "./useToValidate.js";
 
 const DASH = "–";
@@ -67,10 +68,10 @@ export function FabricationFigures() {
         <button
           type="button"
           className={`fab-figures__remaining${remaining > 0 ? " is-pending" : ""}`}
-          title={t.t("ui.fab.figures.remaining.title")}
+          title={t.t("ui.fab.figures.remaining.open")}
           onClick={() => appStore.getState().setView("validate")}
         >
-          <span aria-hidden="true">◆ </span>
+          <TvMark silent tone="inherit" />{" "}
           {t.t(msg("ui.fab.figures.remaining", { count: remaining }))}
         </button>
       </li>

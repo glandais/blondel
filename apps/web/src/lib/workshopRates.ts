@@ -180,23 +180,35 @@ export function parseRatesJson(
   return { ok: true, rates };
 }
 
-const merged = new WeakMap<Project, { rates: CostRates; project: Project }>();
+const merged = new WeakMap<Project, { signature: string; project: Project }>();
+
+/** Signature du contenu d'un barème compacté (un champ par champ, dans l'ordre du panneau). */
+function ratesSignature(rates: CostRates): string {
+  return COST_FIELDS.map((f) => rates[f.key] ?? "").join("|");
+}
 
 /**
  * Projet de la comparaison : le barème d'atelier fusionné dans une copie de son profil
  * d'atelier (champs renseignés prioritaires). Barème vide : le projet lui-même. Mémoïsé sur
- * l'identité du projet et du barème (les caches du comparateur servent).
+ * l'identité du projet et le **contenu** du barème (les caches du comparateur servent).
+ *
+ * Le contenu, et non l'identité de l'objet `rates` : `effectiveRates` passe une copie compactée
+ * du barème du store. Avec une mémoïsation par identité, cette copie remplaçait l'entrée du
+ * cache, et `useComparison` (qui passe l'objet du store) obtenait à chaque appel une nouvelle
+ * copie du projet : le résultat de la comparaison, rattaché à la copie précédente, n'était
+ * jamais reconnu (« calcul… » sans fin dans le rendu serveur de la ligne « Coût estimé »).
  */
 export function withWorkshopRates(project: Project, rates: CostRates): Project {
   const own = compactRates(rates);
   if (isEmptyRates(own)) return project;
+  const signature = ratesSignature(own);
   const hit = merged.get(project);
-  if (hit && hit.rates === rates) return hit.project;
+  if (hit && hit.signature === signature) return hit.project;
   const next: Project = {
     ...project,
     workshop: { ...project.workshop, costs: { ...project.workshop?.costs, ...own } },
   };
-  merged.set(project, { rates, project: next });
+  merged.set(project, { signature, project: next });
   return next;
 }
 

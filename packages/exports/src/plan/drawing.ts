@@ -33,6 +33,22 @@ import {
   helicalTreadPath,
 } from "./helical.js";
 
+/**
+ * Libellé clair de la méthode d'une zone balancée (`Stepping.balancedZones[].method` :
+ * `M3-quintic`, `M1`…), le même que dans le panneau Balancement et l'inspecteur (spécification
+ * de contenu § 4, « M3 · courbe continue (quintique) ») ; identifiant brut si la méthode est
+ * inconnue (stratégie tierce).
+ */
+const ZONE_METHOD_LABELS: Readonly<Record<string, MessageKey>> = {
+  M0: "balancing.method.M0",
+  M1: "balancing.method.M1",
+  M2: "balancing.method.M2",
+  M3: "balancing.method.M3",
+  "M3-cubic": "stepping.method.m3Cubic",
+  "M3-quintic": "stepping.method.m3Quintic",
+  M6: "balancing.method.M6",
+};
+
 /** Fonction d'un élément de dessin (calque DXF, groupe SVG). */
 export type PlanLayer = "CONTOUR" | "MARCHES" | "NEZ" | "FOULEE" | "TREMIE" | "COTES" | "TEXTE";
 
@@ -330,12 +346,14 @@ export function buildPlanDrawing(model: Model, options: PlanDrawingOptions = {})
     const zones = stepping.balancedZones
       .map((z) =>
         tx.t("drawing.plan.balancingZone", {
-          method: z.method,
+          method: Object.hasOwn(ZONE_METHOD_LABELS, z.method)
+            ? tx.t(ZONE_METHOD_LABELS[z.method]!)
+            : z.method,
           from: String(z.from),
           to: String(z.to),
         }),
       )
-      .join(", ");
+      .join(" ; ");
     cartouche.push(tx.t("drawing.plan.balancing", { zones }));
   }
 

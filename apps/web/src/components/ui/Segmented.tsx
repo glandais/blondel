@@ -33,6 +33,8 @@ export interface SegmentedProps<V extends string> {
   readonly className?: string;
   /** Préfixe des `id` des options (`<prefix>-<value>`), par exemple pour `aria-labelledby`. */
   readonly idPrefix?: string;
+  /** `id` d'un texte qui décrit le groupe (`aria-describedby`), par exemple une option indisponible. */
+  readonly describedBy?: string;
 }
 
 /**
@@ -89,6 +91,7 @@ export function Segmented<V extends string>({
   size = "md",
   className,
   idPrefix,
+  describedBy,
 }: SegmentedProps<V>) {
   const refs = useRef<(HTMLButtonElement | null)[]>([]);
   const tabs = semantics === "tabs";
@@ -111,7 +114,12 @@ export function Segmented<V extends string>({
   };
 
   return (
-    <div role={tabs ? "tablist" : "radiogroup"} aria-label={label} className={classes}>
+    <div
+      role={tabs ? "tablist" : "radiogroup"}
+      aria-label={label}
+      aria-describedby={describedBy}
+      className={classes}
+    >
       {options.map((o, i) => {
         const selected = o.value === value;
         return (

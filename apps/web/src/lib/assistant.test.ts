@@ -121,6 +121,27 @@ describe("formulaire de l'assistant", () => {
     expect(en).not.toMatch(/[àéèù]/);
   });
 
+  it("messages d'erreur : libellés unifiés du panneau Site (spécification de contenu § 4)", () => {
+    const r = assistantInput(
+      acceptanceForm({ floorToFloor: "0", upperSlabThickness: "" }),
+      straight,
+    );
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    for (const locale of ["fr", "en"] as const) {
+      const t = translatorFor(locale);
+      const texts = r.errors.map((m) => t.t(m));
+      for (const label of [
+        "ui.label.site.floorToFloor",
+        "ui.label.site.upperSlabThickness",
+      ] as const)
+        expect(
+          texts.some((x) => x.startsWith(`${t.t(label)}${locale === "fr" ? " :" : ":"}`)),
+          `${locale} ${label}`,
+        ).toBe(true);
+    }
+  });
+
   it("relevé 4 côtés + 2 diagonales : trémie polygonale ; relevé incohérent refusé", () => {
     const d = String(Math.round(Math.hypot(2800, 900)));
     const ok = formOpening(

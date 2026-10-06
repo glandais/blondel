@@ -1,0 +1,7 @@
+/* Marque ◆ (TvMark) : la classe de base `.tv-mark` est dans styles.css. Variante qui reprend la
+   couleur et la taille du texte voisin (compteurs « ◆ 3 restantes », bandes de chiffres). */
+.tv-mark.tv-mark--inherit {
+  color: inherit;
+  font-size: inherit;
+  line-height: inherit;
+}

@@ -131,6 +131,11 @@ export interface StepSummary {
   readonly base: string;
   /** Partie « · ◆ n » (« · ◆ n à valider » à l'étape 7), `null` s'il n'en reste pas. */
   readonly toValidateText: string | null;
+  /**
+   * Découpage de `base` pour l'affichage : tête qui se tronque (typologie, structure) et suite
+   * toujours lisible (« · E 900 », « · S235 ») ; `null` : tout `base` se tronque.
+   */
+  readonly baseParts: readonly [head: string, tail: string] | null;
   /** Résumé complet : `base`, suivi de `toValidateText` s'il y en a. */
   readonly text: string;
   /** ◆ restantes de l'étape (> 0 → résumé ocre). */
@@ -160,6 +165,28 @@ function structureValues(project: Project, model: Model | null): Record<string, 
   return withDefaults(safeDefaults(plugin, structureContext(project, model)), structure.params);
 }
 
+/** Libellé court d'une structure livrée, sinon son libellé complet. */
+function structureLabel(kind: string, labelKey: MessageKey, t: Translator): string {
+  return t.t(STRUCTURE_SHORT_LABEL_KEYS[kind] ?? labelKey);
+}
+
+/** Typologie affichée à l'étape 2 (hélicoïdal, ou typologie des volées). */
+function layoutTypology(project: Project, t: Translator): string {
+  const layout = project.stair.layout;
+  return layout.kind === "helical"
+    ? t.t(LAYOUT_KIND_LABELS.helical)
+    : t.t(flightsTypologyLabel(layout.turns));
+}
+
+/** Tête tronquable du résumé d'une étape (étapes 2 et 5), `null` ailleurs. */
+function summaryHead(step: GuidedStep, project: Project, t: Translator): string | null {
+  if (step === 2) return layoutTypology(project, t);
+  if (step !== 5) return null;
+  const kind = project.stair.structure.kind;
+  const plugin = availableStructures().find((k) => k.kind === kind);
+  return plugin === undefined ? null : structureLabel(kind, plugin.labelKey, t);
+}
+
 /**
  * Résumé de l'étape 5 : libellé court de la structure, puis nuance d'acier (paramètre `grade`)
  * ou essence (paramètre `material`) du plugin, quand il en a une.
@@ -169,8 +196,7 @@ function structureSummary(project: Project, model: Model | null, t: Translator):
   if (kind === "none") return t.t("ui.guided.cards.structure.none");
   const plugin = availableStructures().find((k) => k.kind === kind);
   if (plugin === undefined) return t.t("ui.structure.pluginMissing", { kind });
-  const shortKey = STRUCTURE_SHORT_LABEL_KEYS[kind];
-  const label = t.t(shortKey ?? plugin.labelKey);
+  const label = structureLabel(kind, plugin.labelKey, t);
   const values = structureValues(project, model) ?? {};
   const grade = values["grade"];
   const material = values["material"];
@@ -214,14 +240,11 @@ function baseSummary(step: GuidedStep, s: StepSummarySources, t: Translator): st
       }
       return t.t("ui.guided.summary.site.polygon", { height });
     }
-    case 2: {
-      const layout = project.stair.layout;
-      const typology =
-        layout.kind === "helical"
-          ? t.t(LAYOUT_KIND_LABELS.helical)
-          : t.t(flightsTypologyLabel(layout.turns));
-      return t.t("ui.guided.summary.layout", { typology, width: len(layout.width) });
-    }
+    case 2:
+      return t.t("ui.guided.summary.layout", {
+        typology: layoutTypology(project, t),
+        width: len(project.stair.layout.width),
+      });
     case 3: {
       const st = model?.stepping;
       if (st === undefined) return DASH;
@@ -250,9 +273,13 @@ function baseSummary(step: GuidedStep, s: StepSummarySources, t: Translator): st
       return structureSummary(project, model, t);
     case 6: {
       const guards = project.guards;
-      return guards === undefined
-        ? t.t("ui.guided.summary.guards.none")
-        : t.t(INFILL_LABELS[guards.infill.kind]);
+      if (guards === undefined) return t.t("ui.guided.summary.guards.none");
+      const infill = t.t(INFILL_LABELS[guards.infill.kind]);
+      // Nombre de lignes lu dans le modèle (`Model.figures.guards`) ; inconnu : remplissage seul.
+      const lines = model?.figures?.guards?.lines;
+      return lines === undefined
+        ? infill
+        : t.t(msg("ui.guided.summary.guards.lines", { infill, count: lines }));
     }
     case 7:
       return model ? t.t(msg("ui.fab.figures.parts", { count: model.parts.length })) : DASH;
@@ -266,12 +293,18 @@ function baseSummary(step: GuidedStep, s: StepSummarySources, t: Translator): st
  */
 export function stepSummary(step: GuidedStep, s: StepSummarySources, t: Translator): StepSummary {
   const base = baseSummary(step, s, t);
+  // Tête (typologie, structure) tronquée la première : la suite (emmarchement, nuance) reste lue.
+  const head = summaryHead(step, s.project, t);
+  const baseParts: StepSummary["baseParts"] =
+    head !== null && head !== "" && base.startsWith(head) && base.length > head.length
+      ? [head, base.slice(head.length)]
+      : null;
   const toValidate = s.toValidateByStep[step];
-  if (toValidate <= 0) return { base, toValidateText: null, text: base, toValidate: 0 };
+  if (toValidate <= 0) return { base, baseParts, toValidateText: null, text: base, toValidate: 0 };
   // Deux textes distincts : à l'affichage, seul `base` est tronqué, la partie ◆ reste visible.
   const toValidateText = t.t(
     step === 7 ? "ui.guided.summary.toValidate.fabrication" : "ui.guided.summary.toValidate",
     { count: toValidate },
   );
-  return { base, toValidateText, text: `${base} ${toValidateText}`, toValidate };
+  return { base, baseParts, toValidateText, text: `${base} ${toValidateText}`, toValidate };
 }

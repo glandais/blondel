@@ -18,8 +18,10 @@ export {
 export {
   ALWAYS_CONTEXT,
   CONTEXT_LABEL_KEYS,
+  CONTEXT_SHORT_LABEL_KEYS,
   DEDUCED_ONLY_CONTEXTS,
   contextLabel,
+  contextShortLabel,
   HELICAL_COLUMN_CONTEXT,
   SHAPE_CONTEXTS,
   guardRailRegime,

@@ -153,8 +153,14 @@ describe("FabricationArea (rendu)", () => {
     expect(html).toContain('id="view-panel" role="tabpanel" aria-labelledby="tab-flat"');
     expect(html).toContain(`>${model.parts.length} pièces<`);
     expect(html).toMatch(/>\d[\d  ]* kg</);
-    // ◆ hors du nom accessible du bouton (élément aria-hidden), suivi du décompte.
-    expect(html).toMatch(/<span aria-hidden="true">◆ <\/span>\d+ restantes?</);
+    // ◆ hors du nom accessible du bouton (élément aria-hidden, TvMark), suivi du décompte ; le
+    // titre (description accessible) ne contient pas non plus le glyphe.
+    expect(html).toMatch(
+      /<span class="tv-mark tv-mark--inherit" aria-hidden="true">◆<\/span> \d+ restantes?</,
+    );
+    const remainingButton = /<button[^>]*fab-figures__remaining[^>]*>/.exec(html)?.[0] ?? "";
+    expect(remainingButton).toContain("title=");
+    expect(remainingButton).not.toContain("◆");
     expect(html).toContain('placeholder="Filtrer : repère, matériau…"');
     expect(html).toContain(">Limons<");
     expect(html).toContain(">Marches<");

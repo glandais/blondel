@@ -1,8 +1,9 @@
 /**
- * Section « Marches » : épaisseur, débord de nez, contremarches et leur épaisseur ; puis, quand
- * le plugin de structure courant les a, ses paramètres de marche (essence, matériau des marches,
- * rayon d'arrondi du nez) : même chemin du projet, même validation que dans la section
- * Structure, où ils restent aussi (ADR-0009 point 5). Marches bois sans essence propre au
+ * Section « Marches », dans l'ordre de la spécification de contenu (§ 2, étape 4) : matériau des
+ * marches puis essence en tête, épaisseur de marche, débord de nez, contremarches et leur
+ * épaisseur, rayon d'arrondi du nez. Matériau, essence et rayon de nez sont, quand le plugin de
+ * structure courant les a, ses paramètres : même chemin du projet, même validation que dans la
+ * section Structure, où ils restent aussi (ADR-0009 point 5). Marches bois sans essence propre au
  * plugin (structure « aucune », acier à marches bois, hélicoïdal à marches bois) : essence du
  * projet `stair.treads.material` (`treadsMaterialApplies`). Répartition par niveau : `Tiered`.
  */
@@ -28,18 +29,33 @@ export function TreadsSection({ display }: SectionProps) {
   const form = useStructureParamForm();
   const kind = form.plugin?.kind ?? NO_STRUCTURE;
   const t = useT();
-  // Paramètres de structure repris ici : ceux que le dictionnaire place aussi dans « Marches »,
-  // dans l'ordre de la spécification (matériau / essence, puis rayon de nez).
+  // Paramètres de structure repris ici : ceux que le dictionnaire place aussi dans « Marches ».
   const structureFields = form.fields.filter(
     (f) => structureParamEntry(kind, f.path).alsoIn?.includes("treads") === true,
   );
   const isNose = (path: readonly string[]): boolean => path.join(".") === "noseRadius";
+  // Matériau des marches (`treadKind`) avant l'essence, quel que soit l'ordre du plugin.
+  const materialFields = structureFields
+    .filter((f) => !isNose(f.path))
+    .sort((a, b) => Number(b.path[0] === "treadKind") - Number(a.path[0] === "treadKind"));
   const woodTreads = treadsMaterialApplies(form.plugin ? form.params : undefined);
   return (
     <>
       <Tiered
         display={display}
         items={[
+          ...materialFields.map((f) => structureParamItem(form, f)),
+          woodTreads && {
+            key: "stair.treads.material",
+            node: (
+              <SelectField<WoodMaterialId>
+                label={t.t("ui.param.material.label")}
+                value={treads.material ?? (DEFAULT_WOOD_MATERIAL as WoodMaterialId)}
+                options={WOOD_MATERIALS.map((m) => ({ value: m, label: t.t(MATERIAL_KEYS[m]) }))}
+                onCommit={set(["stair", "treads", "material"])}
+              />
+            ),
+          },
           {
             key: "stair.treads.thickness",
             node: (
@@ -85,18 +101,6 @@ export function TreadsSection({ display }: SectionProps) {
                 value={treads.riserThickness}
                 min={1}
                 onCommit={set(["stair", "treads", "riserThickness"])}
-              />
-            ),
-          },
-          ...structureFields.filter((f) => !isNose(f.path)).map((f) => structureParamItem(form, f)),
-          woodTreads && {
-            key: "stair.treads.material",
-            node: (
-              <SelectField<WoodMaterialId>
-                label={t.t("ui.param.material.label")}
-                value={treads.material ?? (DEFAULT_WOOD_MATERIAL as WoodMaterialId)}
-                options={WOOD_MATERIALS.map((m) => ({ value: m, label: t.t(MATERIAL_KEYS[m]) }))}
-                onCommit={set(["stair", "treads", "material"])}
               />
             ),
           },

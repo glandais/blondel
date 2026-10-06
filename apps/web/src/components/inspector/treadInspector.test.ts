@@ -13,6 +13,7 @@ import {
   type Project,
 } from "@blondel/core";
 import curvedDemo from "../../../../../examples/demo-quarter-curved.blondel.json?raw";
+import { translatorFor } from "@blondel/i18n";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it } from "vitest";
@@ -165,7 +166,9 @@ describe("bloc « Ligne de nez »", () => {
     const html = render(winder(m));
     expect(html).toContain("Ligne de nez");
     expect(html).toMatch(/<input[^>]*value="12,3"/);
-    expect(html).toMatch(/Calculé par M3 [a-z]+<\/span><span class="nosing-line__value">11,0°/);
+    expect(html).toMatch(
+      /Calculé par M3 · courbe continue \([a-z]+\)<\/span><span class="nosing-line__value">11,0°/,
+    );
     expect(html).toMatch(/aria-pressed="false"[^>]*>Fixer le nez <kbd aria-hidden="true">F<\/kbd>/);
     expect(html).toMatch(
       /<button type="button" class="btn btn-ghost" disabled="" title="[^"]*">Retirer la retouche/,
@@ -175,6 +178,25 @@ describe("bloc « Ligne de nez »", () => {
     );
     // Hors zone balancée.
     expect(render(1)).toContain("Calculé hors balancement");
+  });
+
+  it("« Angle imposé » : libellé seul, unité ° à droite du champ (libellés unifiés § 4)", () => {
+    const m = load(quarter, (x) => ({
+      ...x,
+      stepping: {
+        ...x.stepping,
+        nosings: x.stepping.nosings.map((n) => ({ ...n, angle: 12.34, computedAngle: 11 })),
+      },
+    }));
+    const html = render(winder(m));
+    const label = translatorFor("fr").t("ui.inspector.tread.nosing.angle");
+    expect(label).toBe("Angle imposé");
+    expect(html).toMatch(
+      new RegExp(
+        `<label for="[^"]+">${label}</label><span class="input-unit"><input[^>]*value="12,3"[^>]*/><span class="input-unit__unit" aria-hidden="true">°</span>`,
+      ),
+    );
+    expect(render(winder(m), "en")).toContain(">Imposed angle</label>");
   });
 
   it("marche balancée dont le nez avant précède la zone (démo débillardé, M3) : libellé cohérent", () => {

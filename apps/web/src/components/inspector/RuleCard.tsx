@@ -6,15 +6,19 @@
  * `data-rule` le garde pour les tests.
  *
  * Variante `compact` (blocs « Règles sur cette marche / cette pièce » des inspecteurs 2a et 2b) :
- * sans localisation (l'élément est celui de l'inspecteur), le constat en corps.
+ * sans localisation (l'élément est celui de l'inspecteur) ; en corps, le titre de la règle et
+ * « Mesuré … · attendu … » formatés par l'interface comme dans l'inspecteur Règle (mm entiers,
+ * maquette 2a), ou le constat du cœur si la règle n'a pas de mesure.
  */
 import { ruleTitle, type RuleResult, type Severity } from "@blondel/core";
 import { Info, OctagonX, TriangleAlert, type LucideIcon } from "lucide-react";
 import { useT } from "../../i18n/useT.js";
 import { SEVERITY_LABELS, locationShort } from "../../lib/compliance.js";
+import { formatFigureLengthWithUnit, formatMeasure } from "../../lib/units.js";
 import { Corners } from "../ui/Blueprint.js";
 import { Icon } from "../ui/Icon.js";
-import { resultMessage, selectResult, useModelParts } from "./RuleResults.js";
+import { useApp } from "../../store/appStore.js";
+import { bounds, resultMessage, selectResult, useModelParts } from "./RuleResults.js";
 
 /** Icône Lucide de chaque sévérité. */
 export const SEVERITY_ICONS: Readonly<Record<Severity, LucideIcon>> = {
@@ -54,9 +58,34 @@ export function RuleCard({ r, compact = false }: RuleCardProps) {
           )}
         </span>
         <span className="rule-card__body">
-          {compact ? resultMessage(r, t) : t.t(ruleTitle(r.ruleId))}
+          {compact ? <CompactBody r={r} /> : t.t(ruleTitle(r.ruleId))}
         </span>
       </button>
     </li>
+  );
+}
+
+/** Corps d'une carte compacte : titre et mesure formatée, ou constat sans mesure. */
+function CompactBody({ r }: { readonly r: RuleResult }) {
+  const t = useT();
+  const unit = useApp((s) => s.displayUnit);
+  if (r.measured === undefined) return <>{resultMessage(r, t)}</>;
+  const expected = bounds(r, unit, t);
+  // Longueur mesurée en mm entiers (cm au dixième), comme les chiffres clés ; arrondi à
+  // l'affichage seulement (ADR-0003).
+  const value =
+    r.unit === "mm"
+      ? formatFigureLengthWithUnit(r.measured, unit, t.locale)
+      : formatMeasure(r.measured, r.unit, unit, t.locale);
+  const measured = `${t.t("ui.ruleInspector.gauge.measured")} ${value}`;
+  return (
+    <>
+      <span className="rule-card__title">{t.t(ruleTitle(r.ruleId))}</span>
+      <span className="rule-card__measure">
+        {expected === ""
+          ? measured
+          : `${measured} · ${t.t("ui.ruleInspector.gauge.expected", { bounds: expected })}`}
+      </span>
+    </>
   );
 }

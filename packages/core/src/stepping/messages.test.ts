@@ -45,10 +45,12 @@ describe("messages du tracé et du découpage", () => {
     const note = st.notes.find((n) => n.key === "stepping.zoneSummary");
     expect(note).toBeDefined();
     expect(FR.t(note!)).toMatch(
-      /^Tournant 1 : \d+ \+ \d+ nez balancés \(nez fixes \d+ et \d+, extrémités (tangente|libre)\/(tangente|libre)\), M3 cubique, collet minimal [\d,]+ mm en corde \([\d,]+ mm en arc\)\.$/,
+      /^Tournant 1 : \d+ \+ \d+ nez balancés \(nez fixes \d+ et \d+, extrémités (tangente|libre)\/(tangente|libre)\), M3 · courbe continue \(cubique\), collet minimal [\d,]+ mm en corde \([\d,]+ mm en arc\)\.$/,
     );
     const en = EN.t(note!);
-    expect(en).toMatch(/^Turn 1: \d+ \+ \d+ balanced nosings .*M3 cubic, minimum narrow end/);
+    expect(en).toMatch(
+      /^Turn 1: \d+ \+ \d+ balanced nosings .*M3 · smooth curve \(cubic\), minimum narrow end/,
+    );
     expect(en).not.toMatch(FRENCH);
   });
 

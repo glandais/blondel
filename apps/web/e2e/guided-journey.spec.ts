@@ -11,6 +11,7 @@ import { fileURLToPath } from "node:url";
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import {
   applyPreset,
+  boxesOverlap,
   commitField,
   inspectorPanel,
   journeyRadio,
@@ -239,13 +240,31 @@ test("bascule Guidé ↔ Libre au clavier : le focus reste sur le segmenté Parc
   await expect(journeyRadio(page, "Guidé")).toBeFocused();
 });
 
-test("lien « Réglage avancé… » : visible sans défiler, ouvre les réglages repliés", async ({
+/**
+ * Le lien « Réglage avancé… » est dans le flux, en fin de formulaire : aucun bloc du formulaire
+ * (chiffres clés, aide, liste ◆) ne passe dessous, à aucune position de défilement.
+ */
+async function expectAdvancedLinkInFlow(page: Page, link: Locator): Promise<void> {
+  await link.scrollIntoViewIfNeeded();
+  await expect(link).toBeInViewport();
+  const linkBox = (await link.boundingBox())!;
+  const blocks = page.locator(
+    ".step-form__head, .step-form__fields, .step-figures, .step-form__help, .step-fab",
+  );
+  for (let i = 0; i < (await blocks.count()); i++) {
+    const box = await blocks.nth(i).boundingBox();
+    if (box === null) continue;
+    expect(boxesOverlap(linkBox, box), `lien sur le bloc ${i}`).toBe(false);
+  }
+}
+
+test("lien « Réglage avancé… » : dans le flux en fin de formulaire, ouvre les réglages repliés", async ({
   page,
 }) => {
   await openAppFresh(page);
   await goToStep(page, 3);
   const link = page.locator(".step-form").getByRole("button", { name: /^Réglage avancé/ });
-  await expect(link).toBeInViewport();
+  await expectAdvancedLinkInFlow(page, link);
   await expect(link).toHaveAttribute("aria-expanded", "false");
   // Résumés « Plus de réglages » masqués : le lien est le seul accès.
   await expect(
@@ -261,8 +280,13 @@ test("lien « Réglage avancé… » : visible sans défiler, ouvre les réglage
   await expect(field).toBeHidden();
   // Étape 7 : un seul repli, sans « Plus de réglages » imbriqué.
   await goToStep(page, 7);
-  await expect(link).toBeInViewport();
+  await expectAdvancedLinkInFlow(page, link);
   await expect(page.locator(".step-form details.tiered__fold--more")).toHaveCount(1);
+  // Étapes Site et Forme : chiffres clés entiers, sous le lien jamais.
+  for (const step of [1, 2] as const) {
+    await goToStep(page, step);
+    await expectAdvancedLinkInFlow(page, link);
+  }
 });
 
 test("encart « Vous connaissez le métier ? » : fermeture mémorisée, passage en libre", async ({
@@ -296,6 +320,8 @@ test("pied : liste du contrôle par-dessus la vue, carte → Règle, Échap, Éc
   const footer = page.getByRole("contentinfo", { name: "Contrôle et étapes" });
   const warnings = footer.getByRole("button", { name: /^\d+ avertissements?$/ });
   await expect(warnings).toBeVisible();
+  // Aucun bouton de compte nul (plus de « 0 bloquant », « 0 conseil »…).
+  await expect(footer.getByRole("button", { name: /^0 / })).toHaveCount(0);
   await warnings.click();
   const control = page.getByRole("dialog", { name: "Contrôle de conception" });
   await expect(control).toBeVisible();
@@ -407,8 +433,9 @@ test("assistant validé depuis le libre → parcours guidé à l'étape 1", asyn
   await openProjectMenu(page);
   await page.getByRole("button", { name: "Assistant…" }).click();
   const d = page.getByRole("dialog", { name: "Assistant d'initialisation" });
-  await d.getByLabel("Longueur de trémie (X)").fill("2800");
-  await d.getByLabel("Largeur de trémie (Y)").fill("900");
+  // Libellés unifiés (spécification § 4).
+  await d.getByLabel("Trémie : longueur (X)").fill("2800");
+  await d.getByLabel("Trémie : largeur (Y)").fill("900");
   await d.getByRole("button", { name: "Proposer", exact: true }).click();
   const choose = d
     .locator(".assistant__card")

@@ -4,7 +4,7 @@
  * dans l'inspecteur 2b est celle-ci, et inversement) :
  *
  * - « Réglages d'atelier de la pièce » modifiables sur place (`PartWorkshopSettings`, variante
- *   Fabrication : mêmes chemins du projet que la section Structure, annulables) ;
+ *   Fabrication : mêmes chemins du projet que la section Structure ou Garde-corps, annulables) ;
  * - encart « Forme du … » : ce qui change la forme relève de la Conception ; « ← Ouvrir dans
  *   Conception » repasse en Conception et ouvre le panneau concerné, la pièce restant
  *   sélectionnée (l'inspecteur 2b la montre) ;
@@ -68,8 +68,9 @@ export function FabricationAside() {
   const t = useT();
   const { model } = useModel();
   const selection = useApp((s) => s.selection);
+  const guards = useApp((s) => s.project.guards);
   const part = model ? selectedPart(model, selection?.location) : undefined;
-  const settings = part ? partSettingsFor(part) : null;
+  const settings = part ? partSettingsFor(part, guards) : null;
   return (
     <aside className="fab-aside" aria-label={t.t("ui.fabAside.label")}>
       <div className="fab-aside__body" data-part={part?.id}>

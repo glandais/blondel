@@ -121,7 +121,7 @@ describe("panneau unique : libellés de l'ancien panneau, section par section", 
     expect(panel("layout")).toContain("Sens de rotation en montant");
     const html = panel("layout", "en");
     expect(html).toContain("Direction of rotation going up");
-    expect(html).toContain("Stair width E = R_e − r: ");
+    expect(html).toContain("Stair width W = R_e − r: ");
     expect(html).not.toContain("Rayon extérieur");
     expect(html).not.toMatch(/\b(ui|compliance|assistant)\.[a-z]+\.[\w.]+/);
   });
@@ -169,10 +169,23 @@ describe("FreePanel", () => {
     const html = panel("stepping");
     expect(html).toContain('aria-label="Chiffres clés de la section"');
     expect(html).toContain(`<dt>n</dt><dd>${st.riserCount}</dd>`);
-    expect(html).toContain("<dt>h mm</dt>");
-    expect(html).toContain("<dt>2h + g mm</dt>");
+    // Unité à droite du chiffre, jamais dans la légende (spécification de contenu § 1).
+    const rise = Math.round(st.rise);
+    expect(html).toContain(`<dt>h</dt><dd>${rise}<span class="section-figures__unit">mm</span>`);
+    expect(html).toContain("<dt>2h + g</dt><dd>");
+    expect(html).not.toMatch(/<dt>[^<]*mm<\/dt>/);
     appStore.getState().setDisplayUnit("cm");
-    expect(panel("stepping")).toContain("<dt>h cm</dt>");
+    expect(panel("stepping")).toMatch(
+      /<dt>h<\/dt><dd>[\d,]+<span class="section-figures__unit">cm<\/span>/,
+    );
+  });
+
+  it("bande de chiffres de Découpage : cinq chiffres sur trois colonnes, aucune case vide", () => {
+    load(createProject("quarter-left"));
+    const html = panel("stepping");
+    expect(html).toContain("--figure-cols:3");
+    // n, h, g sur la première ligne ; 2h + g, puis l'échappée qui s'étend jusqu'au bord.
+    expect(html).toMatch(/data-figure="headroom" style="grid-column:span 2 \/ span 2"/);
   });
 
   it("balancement sans tournant : message au lieu des champs", () => {
@@ -292,7 +305,11 @@ describe("chiffres clés par section (lectures seulement)", () => {
     const p = { ...createProject("quarter-left"), guards: defaultGuards() };
     const model = buildModel(p);
     for (const id of SECTION_IDS) {
-      const figures = sectionFigures(id, { project: p, model, unit: "mm", structureMass: 1 }, fr);
+      const figures = sectionFigures(
+        id,
+        { project: p, model, unit: "mm", structureMass: 1, treadMass: 1 },
+        fr,
+      );
       expect(figures.length, id).toBeGreaterThan(0);
       if (id !== "structure") {
         for (const f of figures) expect(f.value, `${id} ${f.id}`).not.toBe("–");
@@ -335,8 +352,11 @@ describe("chiffres clés par section (lectures seulement)", () => {
     load(withStructure("steel-flat"));
     const html = panel("structure");
     const cell = (id: string) =>
-      new RegExp(`data-figure="${id}"><dt>[^<]*</dt><dd>([^<]*)</dd>`).exec(html)?.[1];
+      new RegExp(`data-figure="${id}"[^>]*><dt>[^<]*</dt><dd>([^<]*)`).exec(html)?.[1];
     expect(cell("mass")).toMatch(/^\d[\d\s  ]*$/);
+    expect(html).toMatch(
+      /data-figure="mass"[^>]*><dt>masse de la structure<\/dt><dd>[^<]*<span class="section-figures__unit">kg<\/span>/,
+    );
     expect(cell("executionClass")).toMatch(/^EXC[12]$/);
     expect(cell("precheck")).toMatch(/^\d+ \/ \d+$/);
   });

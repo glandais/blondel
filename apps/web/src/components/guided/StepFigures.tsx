@@ -1,15 +1,17 @@
 /**
  * Cadre de chiffres clés d'une étape du parcours guidé (maquette 1a, spécification de contenu § 2
- * « Chiffres affichés ») : cadre blueprint, trois colonnes, chiffres en Barlow Condensed 32 px.
+ * « Chiffres affichés ») : cadre blueprint, trois colonnes, chiffres en Barlow Condensed 32 px,
+ * unité accolée à droite du chiffre (plus petite, sur la ligne de base).
  *
  * Aucun calcul métier : les chiffres des étapes 1 à 6 sont ceux de la bande du panneau libre
- * (`sectionFigures`), choisis par identifiant ; ceux de l'étape 7 reprennent la lecture de la
- * bande du mode Fabrication (`FabricationFigures` : nombre de pièces, masse de la nomenclature,
- * classe d'exécution). Pendant un calcul, le dernier modèle reste affiché. À l'étape 3, la jauge
- * du module 2h + g suit les chiffres.
+ * (`sectionFigures`, chiffres du cœur dans `Model.figures`), choisis par identifiant ; ceux de
+ * l'étape 7 reprennent la lecture de la bande du mode Fabrication (`FabricationFigures` :
+ * nombre de pièces, masse de la nomenclature, classe d'exécution). Pendant un calcul, le
+ * dernier modèle reste affiché. À l'étape 3, la jauge du module 2h + g suit les chiffres. La
+ * grille n'a jamais de case vide (`figureSpans`).
  */
 import { massNoteFor } from "@blondel/exports";
-import type { Model, Project } from "@blondel/core";
+import type { Model, PartFamilyId, Project } from "@blondel/core";
 import type { Translator } from "@blondel/i18n";
 import { useMemo } from "react";
 import { formatNumber } from "../../i18n/locale.js";
@@ -19,22 +21,37 @@ import { executionClassInfo } from "../../lib/precheck.js";
 import type { GuidedStep, SectionId } from "../../lib/sectionIds.js";
 import type { DisplayUnit } from "../../lib/units.js";
 import { useApp, useModel } from "../../store/appStore.js";
-import { sectionFigures, type SectionFigure } from "../free/SectionFigures.js";
+import {
+  FigureValue,
+  massUnit,
+  figureSpans,
+  sectionFigures,
+  spanStyle,
+  type SectionFigure,
+} from "../free/SectionFigures.js";
 import { Corners } from "../ui/Blueprint.js";
 import { BlondelGauge } from "./BlondelGauge.js";
+import "./stepFigures.css";
 
 const DASH = "–";
 
-/** Chiffres retenus pour chaque étape de conception : section et identifiants, dans l'ordre. */
+/** Colonnes du cadre de chiffres (maquette 1a). */
+const STEP_FIGURE_COLUMNS = 3;
+
+/**
+ * Chiffres retenus pour chaque étape de conception : section et identifiants, dans l'ordre.
+ * Un identifiant absent de la bande (collet mini sans marche balancée, chiffres de garde-corps
+ * sans garde-corps) est simplement omis.
+ */
 export const STEP_FIGURE_IDS: Readonly<
   Record<Exclude<GuidedStep, 7>, { readonly section: SectionId; readonly ids: readonly string[] }>
 > = {
   1: { section: "site", ids: ["opening", "slab", "headroom"] },
-  2: { section: "layout", ids: ["typology", "run", "width"] },
-  3: { section: "stepping", ids: ["riserCount", "rise", "blondel"] },
-  4: { section: "treads", ids: ["treadCount", "thickness", "nosing"] },
+  2: { section: "layout", ids: ["typology", "run", "minCollet", "footprint"] },
+  3: { section: "stepping", ids: ["riserCount", "rise", "going", "blondel", "headroom"] },
+  4: { section: "treads", ids: ["treadCount", "treadMass", "nosingOverlap"] },
   5: { section: "structure", ids: ["mass", "executionClass", "precheck"] },
-  6: { section: "guards", ids: ["guards"] },
+  6: { section: "guards", ids: ["guards", "guardLength", "guardPosts", "guardRequiredHeight"] },
 };
 
 /** Sources des chiffres d'une étape. */
@@ -42,7 +59,10 @@ export interface StepFigureSources {
   readonly project: Project;
   readonly model: Model | null;
   readonly unit: DisplayUnit;
-  /** Masse de toutes les pièces (kg), étape 7 ; masse de la structure, étape 5. */
+  /**
+   * Masse affichée par l'étape (kg) : marches à l'étape 4, structure à l'étape 5, toutes les
+   * pièces à l'étape 7 ; ignorée ailleurs.
+   */
   readonly mass: number | undefined;
 }
 
@@ -52,6 +72,7 @@ export function fabricationStepFigures(
   mass: number | undefined,
   t: Translator,
 ): readonly SectionFigure[] {
+  const known = mass !== undefined && Number.isFinite(mass);
   return [
     {
       id: "parts",
@@ -60,11 +81,9 @@ export function fabricationStepFigures(
     },
     {
       id: "mass",
-      value:
-        mass === undefined || !Number.isFinite(mass)
-          ? DASH
-          : formatNumber(t.locale, mass, { maximumFractionDigits: 0 }),
-      caption: t.t("ui.guided.figures.mass"),
+      value: known ? formatNumber(t.locale, mass, { maximumFractionDigits: 0 }) : DASH,
+      caption: t.t("ui.figures.caption.mass"),
+      ...(known ? { unit: massUnit(t) } : {}),
     },
     {
       id: "executionClass",
@@ -82,16 +101,35 @@ export function stepFigures(
 ): readonly SectionFigure[] {
   if (step === 7) return fabricationStepFigures(model, mass, t);
   const { section, ids } = STEP_FIGURE_IDS[step];
-  const all = sectionFigures(section, { project, model, unit, structureMass: mass }, t);
-  return ids.flatMap((id) => all.filter((f) => f.id === id));
+  const all = sectionFigures(
+    section,
+    {
+      project,
+      model,
+      unit,
+      structureMass: step === 5 ? mass : undefined,
+      treadMass: step === 4 ? mass : undefined,
+    },
+    t,
+  );
+  // Valeur composée « L × l » : toute la ligne du cadre (sinon coupée en deux lignes).
+  return ids.flatMap((id) =>
+    all.filter((f) => f.id === id).map((f) => (f.composite === true ? { ...f, wide: true } : f)),
+  );
 }
 
-/** Pièces dont la masse est affichée : structure à l'étape 5, toutes à l'étape 7. */
+/** Famille des pièces dont la masse est affichée : marches (4), structure (5), toutes (7). */
+const MASS_FAMILY: Partial<Record<GuidedStep, PartFamilyId | "all">> = {
+  4: "treads",
+  5: "structure",
+  7: "all",
+};
+
+/** Pièces dont la masse est affichée à une étape, `null` si l'étape n'en affiche pas. */
 function massParts(step: GuidedStep, model: Model | null): Model["parts"] | null {
-  if (!model) return null;
-  if (step === 7) return model.parts;
-  if (step === 5) return model.parts.filter((p) => p.family === "structure");
-  return null;
+  const family = MASS_FAMILY[step];
+  if (!model || family === undefined) return null;
+  return family === "all" ? model.parts : model.parts.filter((p) => p.family === family);
 }
 
 export function StepFigures({ step }: { step: GuidedStep }) {
@@ -109,6 +147,7 @@ export function StepFigures({ step }: { step: GuidedStep }) {
       : bomSummary(parts, t.locale).mass;
   }, [step, model, t.locale, workshop]);
   const figures = stepFigures(step, { project, model, unit, mass }, t);
+  const spans = figureSpans(figures, STEP_FIGURE_COLUMNS);
   return (
     <div
       className="blueprint step-figures"
@@ -118,17 +157,18 @@ export function StepFigures({ step }: { step: GuidedStep }) {
     >
       <Corners />
       <dl className="step-figures__grid">
-        {figures.map((f) => (
+        {figures.map((f, i) => (
           <div
             key={f.id}
             className={`step-figures__cell${f.wide === true ? " step-figures__cell--wide" : ""}`}
             data-figure={f.id}
+            style={spanStyle(spans[i]!, STEP_FIGURE_COLUMNS)}
           >
             <dt className="step-figures__caption">{f.caption}</dt>
             <dd
               className={`step-figures__value${f.text === true ? " step-figures__value--text" : ""}`}
             >
-              {f.value}
+              <FigureValue figure={f} unitClass="step-figures__unit" />
             </dd>
           </div>
         ))}

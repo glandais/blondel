@@ -1,0 +1,14 @@
+/*
+ * Cadre de chiffres d'une étape guidée : unité accolée à droite du chiffre, plus petite, sur la
+ * ligne de base (maquette 1a : 15 px, 2 px d'écart). Les cellules reçoivent leur étendue en
+ * style en ligne (`figureSpans`) : jamais de case vide.
+ */
+.step-figures__unit {
+  margin-left: 2px;
+  font-size: 15px;
+  font-weight: 500;
+}
+
+.step-figures__value--text .step-figures__unit {
+  font-size: 13px;
+}

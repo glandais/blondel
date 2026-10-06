@@ -344,16 +344,19 @@ export function UnderlayImport({
           </legend>
           <PlacementInput
             label={t.t("ui.underlay.originX")}
+            unit="mm"
             value={underlay.dxf.placement.origin.x}
             onCommit={(v) => setPlacement("x", v)}
           />
           <PlacementInput
             label={t.t("ui.underlay.originY")}
+            unit="mm"
             value={underlay.dxf.placement.origin.y}
             onCommit={(v) => setPlacement("y", v)}
           />
           <PlacementInput
             label={t.t("ui.underlay.rotation")}
+            unit="°"
             value={underlay.dxf.placement.rotation}
             onCommit={(v) => setPlacement("rotation", v)}
           />
@@ -412,14 +415,19 @@ export function UnderlayImport({
   );
 }
 
-/** Champ numérique appliqué à la validation (Entrée ou perte de focus). */
+/**
+ * Champ numérique appliqué à la validation (Entrée ou perte de focus) ; unité à droite du champ,
+ * jamais dans le libellé (libellés unifiés, ADR-0009).
+ */
 function PlacementInput({
   label,
   value,
+  unit,
   onCommit,
 }: {
   readonly label: string;
   readonly value: number;
+  readonly unit: string;
   readonly onCommit: (text: string) => void;
 }) {
   const id = useId();
@@ -432,18 +440,23 @@ function PlacementInput({
   return (
     <div className="field">
       <label htmlFor={id}>{label}</label>
-      <input
-        id={id}
-        type="text"
-        inputMode="decimal"
-        value={draft ?? shown}
-        onChange={(e) => setDraft(e.target.value)}
-        onBlur={done}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") done();
-          else if (e.key === "Escape") setDraft(null);
-        }}
-      />
+      <span className="input-unit">
+        <input
+          id={id}
+          type="text"
+          inputMode="decimal"
+          value={draft ?? shown}
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={done}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") done();
+            else if (e.key === "Escape") setDraft(null);
+          }}
+        />
+        <span className="input-unit__unit" aria-hidden="true">
+          {unit}
+        </span>
+      </span>
     </div>
   );
 }

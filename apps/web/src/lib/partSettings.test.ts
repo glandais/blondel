@@ -1,12 +1,16 @@
 /**
  * Réglages repris par l'inspecteur Pièce selon la famille de pièces (spécification de contenu
- * § 3, colonne « Inspecteur pièce »), filtrage des chemins par préfixe, encart « Forme du … » et
+ * § 3, colonne « Inspecteur pièce »), paramètres de garde-corps par catégorie de pièce et type de
+ * remplissage, filtrage des chemins par préfixe, encart « Forme du … » et
  * section de Conception de la pièce (mode Fabrication).
  */
 import type { Part } from "@blondel/core";
 import { translatorFor } from "@blondel/i18n";
 import { describe, expect, it } from "vitest";
+import { defaultGuards, switchInfill, type InfillKind } from "./guardsForm.js";
+import { paramKey, tierEntry } from "./paramTiers.js";
 import {
+  guardParamsFor,
   matchesSettings,
   partDesignSection,
   partSettingsFor,
@@ -23,6 +27,10 @@ const p = (
   family,
   material,
 });
+
+/** Clés des chemins de garde-corps repris. */
+const keys = (paths: readonly (readonly string[])[] | undefined): string[] =>
+  (paths ?? []).map((path) => path.join("."));
 
 describe("partSettingsFor", () => {
   it("limons et crémaillères : section, épaisseur, dépassements, prolongements", () => {
@@ -57,14 +65,84 @@ describe("partSettingsFor", () => {
     );
   });
 
-  it("garde-corps : aucun champ repris, lien vers la section Garde-corps", () => {
+  it("garde-corps sans spécification : aucun champ repris, lien vers la section Garde-corps", () => {
     for (const c of ["post", "handrail", "baluster", "infill"] as const) {
-      expect(partSettingsFor(p(c, "guards"))).toEqual({
-        scopeLabel: "ui.partInspector.scope.guards",
-        structureParams: [],
-        section: "guards",
-      });
+      const s = partSettingsFor(p(c, "guards"))!;
+      expect(s.section).toBe("guards");
+      expect(s.structureParams).toEqual([]);
+      expect(s.guardParams).toEqual([]);
     }
+  });
+
+  it("poteau de garde-corps : côté, entraxe maximal, poteau d'angle, implantation", () => {
+    const s = partSettingsFor(p("post", "guards"), defaultGuards())!;
+    expect(s.scopeLabel).toBe("ui.partInspector.scope.guardPosts");
+    expect(keys(s.guardParams)).toEqual([
+      "guards.posts.size",
+      "guards.posts.maxSpacing",
+      "guards.posts.cornerAngle",
+      "guards.flight.edgeOffset",
+      "guards.opening.setback",
+    ]);
+  });
+
+  it("main courante : section, hauteur, prolongements, dégagement au mur", () => {
+    const s = partSettingsFor(p("handrail", "guards"), defaultGuards())!;
+    expect(s.scopeLabel).toBe("ui.partInspector.scope.handrails");
+    expect(keys(s.guardParams)).toEqual([
+      "guards.handrail.section",
+      "guards.handrail.height",
+      "guards.handrail.extensions.bottom",
+      "guards.handrail.extensions.top",
+      "guards.handrail.wallClearance",
+    ]);
+  });
+
+  it("balustre et remplissage : champs du type de remplissage du projet", () => {
+    const guards = defaultGuards();
+    expect(guards.infill.kind).toBe("balusters");
+    const balusters = partSettingsFor(p("baluster", "guards"), guards)!;
+    expect(balusters.scopeLabel).toBe("ui.partInspector.scope.infill");
+    expect(keys(balusters.guardParams)).toEqual([
+      "guards.infill.spacing",
+      "guards.infill.section",
+      "guards.infill.bottomGap",
+    ]);
+    const withKind = (kind: InfillKind) => ({
+      ...guards,
+      infill: switchInfill(guards.infill, kind),
+    });
+    expect(keys(guardParamsFor("infill", withKind("rails")))).toEqual([
+      "guards.infill.count",
+      "guards.infill.section",
+      "guards.infill.bottomGap",
+    ]);
+    expect(keys(guardParamsFor("infill", withKind("cables")))).toContain("guards.infill.diameter");
+    expect(keys(guardParamsFor("infill", withKind("glass")))).toEqual([
+      "guards.infill.thickness",
+      "guards.infill.panelGap",
+      "guards.infill.bottomGap",
+    ]);
+    expect(keys(guardParamsFor("infill", withKind("perforated")))).toContain(
+      "guards.infill.holeDiameter",
+    );
+  });
+
+  it("garde-corps : niveaux Conception et Atelier seulement, jamais Essentiel", () => {
+    const guards = defaultGuards();
+    const cats = ["post", "handrail", "baluster", "infill", "stringer"] as const;
+    for (const c of cats) {
+      for (const path of guardParamsFor(c, guards)) {
+        expect(["design", "workshop"]).toContain(tierEntry(paramKey(path))?.tier);
+        expect(path[0]).toBe("guards");
+      }
+    }
+    // Ni matériau (Essentiel) ni type de remplissage dans les réglages d'une pièce.
+    const all = cats.flatMap((c) => keys(guardParamsFor(c, guards)));
+    expect(all).not.toContain("guards.material");
+    expect(all).not.toContain("guards.infill.kind");
+    // Catégorie sans réglages de garde-corps : aucun.
+    expect(guardParamsFor("stringer", guards)).toEqual([]);
   });
 
   it("marches et paliers bois, pièces sans réglages : null", () => {
@@ -85,6 +163,13 @@ describe("partSettingsFor", () => {
       }
     }
     expect(translatorFor("fr").t("ui.partInspector.scope.stringers")).toBe("communs aux limons");
+    for (const locale of ["fr", "en"] as const) {
+      const t = translatorFor(locale);
+      for (const c of ["post", "handrail", "baluster", "infill"] as const) {
+        const key = partSettingsFor(p(c, "guards"), defaultGuards())!.scopeLabel;
+        expect(t.t(key)).not.toBe(key);
+      }
+    }
   });
 });
 

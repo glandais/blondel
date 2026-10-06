@@ -2,7 +2,8 @@
  * Encart flottant « Vous connaissez le métier ? » du parcours guidé (maquette 1a), en haut à
  * droite du cadre de la vue : il propose de passer en parcours libre (même projet, même
  * historique, `journeyStore.setJourney`) et se ferme par sa croix. La fermeture est mémorisée
- * (`hintFreeJourneyDismissed`, préférences du parcours) : l'encart ne revient plus.
+ * (`hintFreeJourneyDismissed`, préférences du parcours) : l'encart ne revient plus. Sous 760 px
+ * (guidé imposé), il n'est pas affiché.
  */
 import { ArrowRight, X } from "lucide-react";
 import { useId } from "react";
@@ -14,8 +15,10 @@ import "./guided.css";
 export function FreeJourneyHint() {
   const t = useT();
   const dismissed = useJourney((s) => s.hintFreeJourneyDismissed);
+  // Fenêtre étroite : le libre est indisponible, l'encart ne le propose pas.
+  const imposed = useJourney((s) => s.guidedImposed);
   const titleId = useId();
-  if (dismissed) return null;
+  if (dismissed || imposed) return null;
   return (
     <aside className="free-hint" aria-labelledby={titleId}>
       <div className="free-hint__head">

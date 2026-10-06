@@ -1,9 +1,10 @@
 /**
  * Pied du parcours guidé (maquette 1a), 60 px sur fond neutral-100 :
  *
- * - à gauche, les comptes du contrôle de conception en boutons ghost : bloquants (rouge, s'il y
- *   en a), avertissements (ocre) et conseils (acier), ces deux derniers toujours affichés dès
- *   qu'un modèle est calculé ; un clic ouvre la liste du contrôle par-dessus la vue
+ * - à gauche, les comptes du contrôle de conception en boutons ghost : bloquants (rouge),
+ *   avertissements (ocre) et conseils (acier), chacun seulement s'il est non nul ; si les trois
+ *   sont nuls, un seul bouton neutre « Aucun constat » ; un clic ouvre la liste du contrôle
+ *   par-dessus la vue
  *   (`revealControl` : sélection effacée, `ControlOverlay`). Le bouton qui l'a ouverte reçoit à
  *   nouveau le focus quand Échap la referme (`focusControlOpener`) ;
  * - la mention indicative du contrôle, toujours visible ;
@@ -16,13 +17,14 @@ import type { Severity } from "@blondel/core";
 import {
   ArrowLeft,
   ArrowRight,
+  CircleCheck,
   Info,
   OctagonX,
   TriangleAlert,
   type LucideIcon,
 } from "lucide-react";
 import type { MessageKey } from "@blondel/i18n";
-import { useMemo } from "react";
+import { useMemo, type MouseEvent } from "react";
 import { useT } from "../../i18n/useT.js";
 import { controlCounts, groupResults } from "../../lib/compliance.js";
 import { STEP_TITLE_KEYS, nextStep, previousStep } from "../../lib/guidedSteps.js";
@@ -51,20 +53,24 @@ interface CountButton {
   readonly severity: Severity;
   readonly icon: LucideIcon;
   readonly key: MessageKey;
-  /** Affiché même à zéro (avertissements et conseils, maquette 1a). */
-  readonly always: boolean;
 }
 
 const COUNT_BUTTONS: readonly CountButton[] = [
-  { severity: "bloquant", icon: OctagonX, key: "ui.topbar.control.blocking", always: false },
-  {
-    severity: "avertissement",
-    icon: TriangleAlert,
-    key: "ui.topbar.control.warnings",
-    always: true,
-  },
-  { severity: "conseil", icon: Info, key: "ui.topbar.control.advice", always: true },
+  { severity: "bloquant", icon: OctagonX, key: "ui.topbar.control.blocking" },
+  { severity: "avertissement", icon: TriangleAlert, key: "ui.topbar.control.warnings" },
+  { severity: "conseil", icon: Info, key: "ui.topbar.control.advice" },
 ];
+
+/**
+ * Boutons de compte affichés : sévérités au compte non nul, dans l'ordre bloquants,
+ * avertissements, conseils ; `"none"` si les trois sont nuls (un seul bouton « Aucun constat »).
+ */
+export function footerCountButtons(
+  counts: Readonly<Record<Severity, number>>,
+): readonly Severity[] | "none" {
+  const shown = COUNT_BUTTONS.filter((b) => counts[b.severity] > 0).map((b) => b.severity);
+  return shown.length === 0 ? "none" : shown;
+}
 
 export function GuidedFooter() {
   const t = useT();
@@ -74,6 +80,11 @@ export function GuidedFooter() {
   const counts = useMemo(() => (report ? controlCounts(groupResults(report)) : null), [report]);
   const previous = previousStep(step);
   const next = nextStep(step);
+  const shown = counts ? footerCountButtons(counts) : null;
+  const open = (e: MouseEvent<HTMLButtonElement>): void => {
+    controlOpener = e.currentTarget;
+    revealControl();
+  };
 
   return (
     <footer
@@ -82,24 +93,36 @@ export function GuidedFooter() {
       // Calcul en cours : les comptes sont ceux du modèle précédent (attendu par les e2e).
       data-pending={pending ? "true" : undefined}
     >
-      {counts
-        ? COUNT_BUTTONS.filter((b) => b.always || counts[b.severity] > 0).map((b) => (
+      <div className="guided-footer__counts">
+        {shown === "none" ? (
+          // Aucun constat : un bouton neutre garde l'accès à la liste du contrôle (et au
+          // Contexte de contrôle, qui n'a pas d'étape).
+          <button
+            type="button"
+            className="btn btn-ghost guided-footer__count"
+            data-severity="none"
+            title={t.t("ui.guided.footer.openControl")}
+            onClick={open}
+          >
+            <Icon icon={CircleCheck} size={16} />
+            {t.t("ui.guided.footer.noFinding")}
+          </button>
+        ) : counts && shown ? (
+          COUNT_BUTTONS.filter((b) => shown.includes(b.severity)).map((b) => (
             <button
               key={b.severity}
               type="button"
               className="btn btn-ghost guided-footer__count"
               data-severity={b.severity}
               title={t.t("ui.guided.footer.openControl")}
-              onClick={(e) => {
-                controlOpener = e.currentTarget;
-                revealControl();
-              }}
+              onClick={open}
             >
               <Icon icon={b.icon} size={16} />
               {t.t(b.key, { count: counts[b.severity] })}
             </button>
           ))
-        : null}
+        ) : null}
+      </div>
       <span className="guided-footer__disclaimer">{t.t("ui.compliance.disclaimer")}</span>
       <span className="guided-footer__spacer" />
       {previous !== null ? (

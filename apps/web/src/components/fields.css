@@ -15,10 +15,12 @@
   color: var(--muted);
 }
 
+/* Segmenté puis valeur sur la même ligne, alignés en haut : en mode imposé, le champ garde son
+   aide sous la saisie (et non à côté du segmenté), la saisie restant en face du segmenté. */
 .auto-int__row {
   display: flex;
   flex-wrap: wrap;
-  align-items: center;
+  align-items: flex-start;
   gap: 0.5rem;
 }
 
@@ -28,6 +30,7 @@
 
 /* Valeur calculée : texte (cliquable pour l'imposer), pas un bouton d'action. */
 .auto-int__value {
+  align-self: center;
   padding: 2px 4px;
   font-family: var(--font-body);
   font-size: 13px;

@@ -78,30 +78,42 @@
 
 /* ------------------------------------------------------------ Ligne de chiffres */
 
+/* Une seule ligne, toujours (maquette 1b) : conteneur de requêtes, les chiffres secondaires
+   quittent la ligne quand la place manque (voir plus bas) ; en dernier recours la liste est
+   rognée, jamais renvoyée à la ligne. */
+/* Mention du contrôle de conception quand l'inspecteur est un tiroir (fenêtre moyenne). */
+.workarea__disclaimer {
+  margin: 0;
+  font-size: 11.5px;
+  color: var(--color-neutral-700);
+}
+
 .figure-line {
+  container-type: inline-size;
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
-  gap: 4px 18px;
+  gap: 18px;
   min-width: 0;
   font-size: 12px;
   color: var(--color-neutral-800);
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
-/* Base nulle : les chiffres passent à la ligne entre eux, « Calculé en N ms » reste sur la
-   première ligne (maquette 1b, une seule ligne à 1440 px). */
 .figure-line__list {
   display: flex;
   flex: 1 1 0;
-  flex-wrap: wrap;
-  gap: 4px 18px;
+  flex-wrap: nowrap;
+  gap: 18px;
   margin: 0;
   min-width: 0;
+  overflow: hidden;
 }
 
 .figure-line__item {
   display: flex;
+  flex: none;
   gap: 4px;
   white-space: nowrap;
 }
@@ -115,13 +127,16 @@
 }
 
 .figure-line__errors {
+  flex: 0 1 auto;
   color: var(--danger);
   min-width: 0;
-  overflow-wrap: anywhere;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .figure-line__pending,
 .figure-line__time {
+  flex: none;
   margin-left: auto;
   color: var(--color-neutral-700);
   white-space: nowrap;
@@ -158,6 +173,83 @@
   box-shadow: var(--shadow-md);
 }
 
+.figure-line__time-details ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
 .figure-line__time-details li + li {
   margin-top: 4px;
+}
+
+/* Chiffres secondaires repris dans le détail : seulement ceux retirés de la ligne. */
+.figure-line__extra {
+  display: none;
+  margin: 0 0 6px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--color-divider);
+}
+
+.figure-line__extra > div {
+  display: none;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.figure-line__extra dt {
+  font-weight: 400;
+}
+
+.figure-line__extra dd {
+  margin: 0;
+  font-weight: 600;
+}
+
+/* Durée seule (« 12,5 ms ») dans les places les plus étroites. */
+.figure-line__time-short {
+  display: none;
+}
+
+/* Paliers de largeur de la ligne (place réelle de la vue : panneau ouvert ou non, fenêtre
+   moyenne) : secondaires (emmarchement, échappée sur la largeur) d'abord, puis l'échappée,
+   puis le libellé « Calculé en » et des écarts resserrés. */
+@container (max-width: 760px) {
+  .figure-line__item[data-tier="2"] {
+    display: none;
+  }
+
+  .figure-line__extra,
+  .figure-line__extra > div[data-tier="2"] {
+    display: flex;
+  }
+
+  .figure-line__extra {
+    flex-direction: column;
+    gap: 2px;
+  }
+}
+
+@container (max-width: 520px) {
+  .figure-line__item[data-tier="3"] {
+    display: none;
+  }
+
+  .figure-line__extra > div[data-tier="3"] {
+    display: flex;
+  }
+}
+
+@container (max-width: 420px) {
+  .figure-line__list {
+    gap: 12px;
+  }
+
+  .figure-line__time-long {
+    display: none;
+  }
+
+  .figure-line__time-short {
+    display: inline;
+  }
 }

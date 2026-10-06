@@ -148,10 +148,25 @@ describe("FigureLine", () => {
     expect(fr).toContain(`<dd>${String(model.stepping?.riserCount)}</dd>`);
     // Détail cœur / maillage en texte (repli natif), pas seulement en info-bulle.
     expect(fr).toContain(
-      '<details class="figure-line__time"><summary>Calculé en 12,5 ms</summary>',
+      '<details class="figure-line__time"><summary title="Calculé en 12,5 ms">' +
+        '<span class="figure-line__time-long">Calculé en 12,5 ms</span>' +
+        '<span class="figure-line__time-short">12,5 ms</span></summary>',
     );
     expect(fr).toMatch(/<li>Cœur : 12,5 ms — [^<]*<\/li><li>Maillage : – — /);
     expect(fr).not.toContain("figure-line__pending");
+    // Chiffres en mm entiers avec l'unité (maquette 1b, ADR-0003 : arrondi à l'affichage).
+    const rise = model.stepping!.rise;
+    const riseText = `${Math.round(rise)} mm`;
+    expect(fr).toContain(`<dt>h</dt><dd>${riseText}</dd>`);
+    expect(fr).not.toMatch(/<dt>h<\/dt><dd>\d+,\d/);
+    // Priorités : emmarchement et échappée sur la largeur d'abord, puis l'échappée ; les
+    // secondaires sont repris dans le détail repliable.
+    expect(fr).toMatch(/data-figure="width" data-tier="2"/);
+    expect(fr).toMatch(/data-figure="headroomWidth" data-tier="2"/);
+    expect(fr).toMatch(/data-figure="headroom" data-tier="3"/);
+    expect(fr).toMatch(/data-figure="h" title=/);
+    expect(fr).toContain('<dl class="figure-line__extra">');
+    expect(fr.match(/<div data-figure="[^"]+" data-tier="[23]">/g)?.length).toBe(3);
 
     const en = render(FigureLine, "en");
     for (const text of ["2R + G", "<dt>W</dt>", "<dt>Headroom</dt>", "Computed in 12.5 ms"]) {
@@ -176,8 +191,9 @@ describe("FigureLine", () => {
       compare: s.compare,
     }));
     const fr = render(FigureLine);
-    expect(fr.match(/<dd>non limitée<\/dd>/g)?.length).toBe(2);
-    expect(render(FigureLine, "en").match(/<dd>unlimited<\/dd>/g)?.length).toBe(2);
+    // Sur la ligne et dans le détail repliable (chiffres secondaires).
+    expect(fr.match(/<dd>non limitée<\/dd>/g)?.length).toBe(4);
+    expect(render(FigureLine, "en").match(/<dd>unlimited<\/dd>/g)?.length).toBe(4);
   });
 
   it("erreurs : texte de l'erreur seule, sinon leur nombre", () => {

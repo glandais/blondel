@@ -73,9 +73,15 @@
   cursor: grab;
 }
 
+/* Focus du dessin : contour de 2 px décalé de 2 px (README « Focus clavier »), porté par le cadre
+   du dessin, qui ne le rogne pas (le dessin, lui, remplit un cadre `overflow: hidden`). */
 .plan-site__svg:focus-visible {
+  outline: none;
+}
+
+.plan-site__canvas:has(.plan-site__svg:focus-visible) {
   outline: 2px solid var(--focus);
-  outline-offset: -2px;
+  outline-offset: 2px;
 }
 
 .plan-site__status {
@@ -202,10 +208,21 @@
   stroke: var(--ok);
 }
 
-@media (max-width: 900px) {
+/* Place étroite (panneau ouvert, fenêtre moyenne ou étroite) : le panneau de saisie passe sous
+   le dessin, la zone défile verticalement dans le cadre de la vue (jamais en largeur). */
+.plan-site {
+  container-type: inline-size;
+}
+
+@container (max-width: 640px) {
   .plan-site__main {
-    grid-template-columns: 1fr;
-    grid-template-rows: minmax(18rem, 1fr) auto;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(16rem, 1fr) auto;
+    overflow-y: auto;
+  }
+
+  .plan-site__panel {
+    overflow: visible;
   }
 }
 

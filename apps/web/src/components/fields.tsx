@@ -18,6 +18,7 @@ import { appStore } from "../store/appStore.js";
 import type { UpdateResult } from "../store/projectStore.js";
 import { Segmented } from "./ui/Segmented.js";
 import "./fields.css";
+import "./fieldTrailing.css";
 
 function endGroup(): void {
   appStore.getState().endGroup();
@@ -88,6 +89,13 @@ export interface IntFieldProps extends IntFieldBounds {
   readonly unit?: string;
   readonly hint?: string;
   readonly disabled?: boolean;
+  /**
+   * Contenu aligné à droite de l'unité (ex. « obtenue : 180 », rappel de la valeur retenue par le
+   * calcul), hors du nom accessible du champ.
+   */
+  readonly trailing?: ReactNode;
+  /** Texte affiché dans le champ vide (ex. « Auto » d'un paramètre facultatif sans valeur). */
+  readonly placeholder?: string;
   readonly onCommit: (value: number) => UpdateResult;
 }
 
@@ -112,6 +120,8 @@ export function NumberField({
   min,
   max,
   disabled,
+  trailing,
+  placeholder,
   onCommit,
   parse = parseIntMm,
   format = String,
@@ -188,6 +198,7 @@ export function NumberField({
           autoComplete="off"
           value={draft}
           disabled={disabled}
+          placeholder={placeholder}
           aria-invalid={error ? true : undefined}
           aria-describedby={describedBy(id, hint, errorText, noteText)}
           onFocus={() => setFocused(true)}
@@ -217,6 +228,9 @@ export function NumberField({
           <span className="input-unit__unit" aria-hidden="true">
             {unit}
           </span>
+        ) : null}
+        {trailing !== undefined && trailing !== null ? (
+          <span className="field__trailing num">{trailing}</span>
         ) : null}
       </span>
     </FieldShell>

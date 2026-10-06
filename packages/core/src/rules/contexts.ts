@@ -55,6 +55,43 @@ export function contextLabel(context: string): Message {
 }
 
 /**
+ * Clé du libellé **court** de chaque contexte (« Logement (intérieur) », « Bois (DTU 36.3) ») :
+ * libellé unifié des cases du panneau Contexte, de la ligne des contextes de l'inspecteur et du
+ * dossier PDF (spécification de contenu § 4, ADR-0009). La description longue
+ * (`contextLabel`) reste l'aide sous la case. Liste explicite, couverte par un test.
+ */
+export const CONTEXT_SHORT_LABEL_KEYS: Readonly<Record<string, MessageKey>> = {
+  bois_dtu: "compliance.contextShort.bois_dtu",
+  logement_interieur: "compliance.contextShort.logement_interieur",
+  bhc_parties_communes: "compliance.contextShort.bhc_parties_communes",
+  erp_neuf: "compliance.contextShort.erp_neuf",
+  erp_existant: "compliance.contextShort.erp_existant",
+  erp_securite: "compliance.contextShort.erp_securite",
+  exterieur: "compliance.contextShort.exterieur",
+  tournant: "compliance.contextShort.tournant",
+  helicoidal: "compliance.contextShort.helicoidal",
+  helicoidal_fut: "compliance.contextShort.helicoidal_fut",
+  gain_de_place: "compliance.contextShort.gain_de_place",
+  echelle_meunier: "compliance.contextShort.echelle_meunier",
+  industriel: "compliance.contextShort.industriel",
+  garde_corps_1988: "compliance.contextShort.garde_corps_1988",
+  garde_corps_2024: "compliance.contextShort.garde_corps_2024",
+  limon_bois_encastre: "compliance.contextShort.limon_bois_encastre",
+  tous: "compliance.contextShort.tous",
+};
+
+/**
+ * Libellé court d'un contexte ; à défaut (contexte sans libellé court), sa description
+ * (`contextLabel`), elle-même rendue par l'identifiant si le contexte est inconnu.
+ */
+export function contextShortLabel(context: string): Message {
+  const key = Object.hasOwn(CONTEXT_SHORT_LABEL_KEYS, context)
+    ? CONTEXT_SHORT_LABEL_KEYS[context]
+    : undefined;
+  return key !== undefined ? msg(key) : contextLabel(context);
+}
+
+/**
  * Contextes de **forme** de l'escalier (`contextes_forme` de rules.yaml). Dans une règle, ils
  * qualifient les autres contextes : `[erp_securite, tournant, helicoidal]` se lit « ERP **et**
  * (tournant **ou** hélicoïdal) », `[helicoidal, bois_dtu]` « bois **et** hélicoïdal ».

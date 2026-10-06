@@ -2,7 +2,12 @@ import { afterEach, describe, expect, it } from "vitest";
 import { createJourneyStore } from "./journeyStore.js";
 import { memoryStorage } from "./persistence.js";
 import { createProjectStore } from "./projectStore.js";
-import { createUiStore, linkWorkspaceAndView, workspaceOfView } from "./uiStore.js";
+import {
+  createUiStore,
+  linkDrawerToSelection,
+  linkWorkspaceAndView,
+  workspaceOfView,
+} from "./uiStore.js";
 
 function stores() {
   const app = createProjectStore();
@@ -272,5 +277,78 @@ describe("navigation du parcours guidé (vague 5)", () => {
     expect(appStore.getState().project).toBe(project);
     expect(appStore.getState().history).toBe(history);
     appStore.getState().undo();
+  });
+});
+
+describe("tiroir de l'inspecteur (fenêtre moyenne, vague 6)", () => {
+  it("lié à la sélection : ouvert par une sélection, fermé par son effacement", () => {
+    const app = createProjectStore();
+    const ui = createUiStore();
+    const unlink = linkDrawerToSelection(app, ui);
+    expect(ui.getState().inspectorDrawerOpen).toBe(false);
+    app.getState().select({ location: { kind: "tread", number: 2 } });
+    expect(ui.getState().inspectorDrawerOpen).toBe(true);
+    // Fermé à la main : la sélection reste.
+    ui.setState({ inspectorDrawerOpen: false });
+    expect(app.getState().selection).not.toBeNull();
+    // Nouvelle sélection : rouvert.
+    app.getState().select({ location: { kind: "tread", number: 3 } });
+    expect(ui.getState().inspectorDrawerOpen).toBe(true);
+    app.getState().select(null);
+    expect(ui.getState().inspectorDrawerOpen).toBe(false);
+    unlink();
+    app.getState().select({ location: { kind: "tread", number: 3 } });
+    expect(ui.getState().inspectorDrawerOpen).toBe(false);
+  });
+
+  it("badge Contrôle et lien des surcharges : tiroir ouvert sur la 2d ; fermeture sans toucher à la sélection", async () => {
+    const { appStore, journeyStore } = await import("./appStore.js");
+    const ui = await import("./uiStore.js");
+    journeyStore.getState().setJourney("free");
+    journeyStore.getState().setWorkspace("design");
+    ui.closeInspectorDrawer();
+    appStore.getState().select({ location: { kind: "tread", number: 2 } });
+    expect(ui.uiStore.getState().inspectorDrawerOpen).toBe(true);
+    ui.closeInspectorDrawer({ restoreFocus: true });
+    expect(ui.uiStore.getState().inspectorDrawerOpen).toBe(false);
+    expect(appStore.getState().selection).not.toBeNull();
+    ui.revealControl();
+    expect(appStore.getState().selection).toBeNull();
+    expect(ui.uiStore.getState().inspectorDrawerOpen).toBe(true);
+    ui.closeInspectorDrawer();
+    ui.revealOverrides();
+    expect(ui.uiStore.getState().inspectorDrawerOpen).toBe(true);
+    ui.closeInspectorDrawer();
+    ui.openInspectorDrawer();
+    expect(ui.uiStore.getState().inspectorDrawerOpen).toBe(true);
+    ui.closeInspectorDrawer();
+  });
+
+  it("guidé : le badge ouvre la liste du contrôle, pas le tiroir", async () => {
+    const { journeyStore } = await import("./appStore.js");
+    const ui = await import("./uiStore.js");
+    journeyStore.getState().setJourney("guided");
+    ui.closeInspectorDrawer();
+    ui.revealControl();
+    expect(ui.uiStore.getState().guidedControlOpen).toBe(true);
+    expect(ui.uiStore.getState().inspectorDrawerOpen).toBe(false);
+    ui.closeGuidedControl();
+    journeyStore.getState().setJourney("free");
+  });
+
+  it("guidé imposé : openParam d'un paramètre hors du guidé ne quitte pas le guidé", async () => {
+    const { journeyStore } = await import("./appStore.js");
+    const ui = await import("./uiStore.js");
+    journeyStore.getState().setJourney("guided");
+    journeyStore.getState().setNarrowViewport(true);
+    const before = journeyStore.getState();
+    ui.openParam({ key: "stair.unknown", section: "compliance", steps: [] });
+    expect(journeyStore.getState()).toMatchObject({
+      journey: "guided",
+      workspace: before.workspace,
+      freePanel: before.freePanel,
+    });
+    journeyStore.getState().setNarrowViewport(false);
+    journeyStore.getState().setJourney("free");
   });
 });

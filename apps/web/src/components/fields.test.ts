@@ -6,7 +6,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it } from "vitest";
 import { appStore } from "../store/appStore.js";
-import { AutoIntField, autoProposal, type AutoIntFieldProps } from "./fields.js";
+import { AutoIntField, IntField, autoProposal, type AutoIntFieldProps } from "./fields.js";
 
 // Rendu serveur : zustand lit `getInitialState()` ; le test rend l'état courant du store.
 appStore.getInitialState = appStore.getState;
@@ -111,5 +111,31 @@ describe("autoProposal", () => {
   it("sans valeur retenue exposée : point de départ de la saisie", () => {
     expect(autoProposal(undefined, 40)).toBe(40);
     expect(autoProposal(Number.NaN, 40)).toBe(40);
+  });
+});
+
+describe("IntField : contenu à droite de l'unité (`trailing`) et texte du champ vide", () => {
+  const field = (props: Partial<Parameters<typeof IntField>[0]>): string =>
+    renderToStaticMarkup(
+      createElement(IntField, {
+        label: "Hauteur de marche cible",
+        value: 180,
+        onCommit: ok,
+        ...props,
+      }),
+    );
+
+  it("rappel à droite de l'unité, hors du nom accessible du champ", () => {
+    const html = field({ trailing: "obtenue : 178" });
+    expect(html).toMatch(
+      /<span class="input-unit__unit" aria-hidden="true">mm<\/span><span class="field__trailing num">obtenue : 178<\/span>/,
+    );
+    expect(html).toContain(">Hauteur de marche cible</label>");
+    expect(field({})).not.toContain("field__trailing");
+  });
+
+  it("texte du champ vide (`placeholder`)", () => {
+    expect(field({ placeholder: "Auto" })).toContain('placeholder="Auto"');
+    expect(field({})).not.toContain("placeholder");
   });
 });

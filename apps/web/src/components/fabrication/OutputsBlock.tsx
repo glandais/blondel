@@ -34,6 +34,7 @@ import { EXPORT_DEPS, ExportMenu, deliverFiles, notify } from "../ExportMenu.js"
 import { Corners } from "../ui/Blueprint.js";
 import { Segmented } from "../ui/Segmented.js";
 import { CostEstimate } from "./CostEstimate.js";
+import { TvMark } from "../ui/TvMark.js";
 import { useRemainingCount } from "./useToValidate.js";
 
 /** Format de page du dossier. */
@@ -174,11 +175,11 @@ export function OutputsBlock() {
           <p className="fab-outputs__remaining" data-remaining={remaining}>
             {remaining > 0 ? (
               <>
-                <span aria-hidden="true">◆ </span>
+                <TvMark silent tone="inherit" />{" "}
                 {t.t("ui.fabAside.dossier.remaining", { count: remaining })}
               </>
             ) : (
-              t.t("ui.fabAside.dossier.allValidated")
+              t.t("ui.fabAside.dossier.validated")
             )}
           </p>
           <button
