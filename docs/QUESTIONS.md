@@ -314,6 +314,21 @@ L'inspecteur Marche (2a) règle l'angle de la ligne de nez de la marche choisie.
 - Réf. : `docs/LEDGER.md` [parcours:vague-3] ; `apps/web/src/components/inspector/NosingLineBlock.tsx`, `apps/web/src/lib/nosingOverrides.ts`.
 - **Décision de l'utilisateur (2026-10-06)** : rendre le nez d'arrivée sélectionnable (clic sur le nez dans le plan ou l'élévation → bloc « Ligne de nez » seul dans l'inspecteur, sans fiche de marche) ; pas de changement de schéma ni de migration. À implémenter.
 
+### A29. Limon central (droit et débillardé)
+
+Le limon central, une poutre unique sous les marches, est prévu par le cahier des charges : SPEC §2.4, « Limon central (bois couches collées, métal caisson / tube) », V1, jalon 5 ; SPEC §2.3, « Hélicoïdal : … sur limon central », V1. Il est aussi décrit par la recherche : C §1.5 (bois), §2.4 (réalisation d'un limon central débillardé : âme HEB, deux flasques roulées, entretoises, consoles de 8 mm) et §2.5 (caisson, tube, supports soudés, effet flottant). Il est tombé entre deux lignes du découpage des jalons : J5b a livré le débillardé soudé en **limon de jour** latéral (`steel-curved`), et aucun plugin ne fait de limon central, droit ou débillardé. L'état de l'art le cite chez MétalCad (« caisson débillardé », « limon central », D §1.2) et Mon Escalier Métal (D §1.4).
+
+Décisions à prendre avant un plugin :
+
+1. **Familles** : métal (tube rectangulaire, caisson en tôles soudées, profilé HEB / IPE avec flasques), bois (couches collées, épaisseur × 2 du tableau FCBA, C §1.4 et §1.5), ou les deux ? Proposition : métal d'abord (tube et caisson), bois ensuite, dans la logique « un plugin par famille » de `structures/`.
+2. **Tracés** : droit seulement, ou aussi les tournants avec un limon central **débillardé** qui suit la ligne de foulée ou l'axe de l'emmarchement en plan (flasques roulées par tronçons, joints bout à bout, EXC2 comme `steel-curved`) ? Et l'hélicoïdal sur limon central (SPEC §2.3) ? Proposition : droit et tournants, avec la trace du limon central sur l'axe de l'emmarchement par défaut (paramètre « à valider »), réutiliser la géométrie de développé et de roulage de `steel-curved` ; hélicoïdal plus tard.
+3. **Supports de marche** : consoles soudées en tôle (C §2.4 : 8 mm), supports pliés en U / Z / triangle découpés laser (C §2.5), platines vissées sous la marche ? Proposition : consoles soudées par défaut, supports pliés en option, épaisseurs et dimensions du profil d'atelier « à valider ».
+4. **Porte-à-faux et torsion** : la marche est en double porte-à-faux sur une seule poutre, et la poutre travaille en torsion sous charge excentrée. Faut-il un contrôle dédié (épaisseur de marche, C §1.7 : 35 à 40 mm pour E ≤ 80 cm, exemple de fabricant, source faible) et un prédimensionnement en torsion (déversement et torsion non vérifiés aujourd'hui, C6), ou un avertissement « justification nécessaire » comme `HELICOIDAL_PORTE_A_FAUX` (A12) ? Proposition : avertissement avec justification jointe, plus le prédimensionnement en flexion existant, la torsion signalée comme non vérifiée.
+5. **Ancrages** : platine de pied au sol et platine ou chevêtre en tête, quelles valeurs par défaut ? Proposition : celles de `steel-flat` (platines « à valider »), visserie selon A27.
+
+- Aujourd'hui : non implémenté ; aucune règle de `rules.yaml` propre au limon central (sauf l'épaisseur × 2 de la crémaillère centrale, `CREMAILLERE_REGLE_MOYENS`, C-B-03).
+- Réf. : `docs/SPEC.md` §2.3 et §2.4 ; `docs/research/C-structures.md` §1.4, §1.5, §1.7, §2.4, §2.5, [20], [23], [42], [43] ; `docs/research/D-etat-de-l-art.md` §1.2 et §1.4 ; `packages/core/src/structures/steelCurved.ts`.
+
 ## B. Validations par un atelier ou un professionnel
 
 Valeurs et conventions « à valider » : toutes sont des paramètres modifiables (profil d'atelier ou paramètres de plugin), jamais des constantes cachées. « Aucune » = aucune source dans `docs/research/`. SPEC §7.3 (Q13 à Q20) reste le cadre : aucune donnée publique de temps d'atelier, capacités machines propres à chaque atelier.
