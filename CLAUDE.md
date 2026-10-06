@@ -20,6 +20,7 @@ BASE_PATH=/blondel/ pnpm --filter @blondel/web build   # build tel que déployé
 pnpm e2e                          # Playwright (build + vite preview, Chromium)
 pnpm rules:build                  # rules.yaml -> packages/core/src/rules/rules.data.json
 pnpm i18n:sort                    # trie les clés de packages/i18n/src/locales/*.json
+pnpm ux:captures                  # captures de l'interface -> docs/ux/captures-refonte/ (build + preview)
 ```
 
 - Avant un commit : `typecheck`, `test`, `format:check`, build web, et `e2e` si `apps/web` a changé. Vérifier l'absence d'échec, pas seulement la ligne de synthèse.
