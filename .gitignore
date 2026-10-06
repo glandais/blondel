@@ -5,3 +5,6 @@ coverage/
 .vite/
 playwright-report/
 test-results/
+
+# Worktrees git des sessions Claude Code
+.claude/worktrees/
