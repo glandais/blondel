@@ -71,7 +71,17 @@ test(`navigateur anglais : interface, contrôle et export en anglais, puis fran�
   const views = page.getByRole("tablist", { name: "Views" });
   await expect(views.getByRole("tab", { name: "Plan", exact: true })).toBeVisible();
   await page.getByRole("radio", { name: "Fabrication", exact: true }).click();
-  await expect(views.getByRole("tab", { name: "Bill of materials", exact: true })).toBeVisible();
+  // Fabrication (vague 4) : onglets, bande de chiffres, sorties de la colonne de droite.
+  await expect(views.getByRole("tab")).toHaveText([
+    "Parts",
+    "Bill of materials",
+    "Compare",
+    "To validate",
+  ]);
+  await expect(page.locator(".fab-figures")).toContainText(/\d+ parts · \d+ kg · /);
+  await expect(page.locator(".fab-figures__remaining")).toHaveText(/^◆ \d+ remaining$/);
+  await expect(page.getByRole("button", { name: "Generate…", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: /^Other exports/ })).toBeVisible();
   await page.getByRole("radio", { name: "Design", exact: true }).click();
   await expect(views.getByRole("tab", { name: "Plan", exact: true })).toBeVisible();
   await openMore(page, "More options");
@@ -107,6 +117,8 @@ test(`navigateur anglais : interface, contrôle et export en anglais, puis fran�
   await expect(
     page.getByRole("tablist", { name: "Vues" }).getByRole("tab", { name: "Nomenclature" }),
   ).toBeVisible();
+  // Contrôle de conception : inspecteur de la Conception (absent en Fabrication).
+  await page.getByRole("radio", { name: "Conception", exact: true }).click();
   await expect(page.getByText("Contrôle de conception", { exact: true }).first()).toBeVisible();
   const french = await blondelRuleText(page);
   expect(french).not.toBe(english);

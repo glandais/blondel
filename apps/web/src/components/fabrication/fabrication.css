@@ -1,0 +1,456 @@
+/*
+ * Mode Fabrication (ADR-0009, vague 4) : zone centrale (`.workarea.fab`, placée dans la grille de
+ * `.app` par styles.css), barre d'onglets et bande de chiffres, liste des pièces par famille et
+ * pièce choisie, nomenclature et comparateur en tableaux Industry. Jetons existants seulement.
+ */
+
+/* ------------------------------------------------------------ Barre et bande de chiffres */
+
+.fab-bar {
+  justify-content: space-between;
+}
+
+.fab-figures {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-neutral-800);
+}
+
+.fab-figures li {
+  white-space: nowrap;
+}
+
+/* « · » entouré d'espaces : `pre` garde l'espace final, sinon supprimé en fin de ligne. */
+.fab-figures__sep {
+  white-space: pre;
+  color: var(--muted);
+}
+
+.fab-figures__remaining {
+  border: none;
+  padding: 2px 4px;
+  color: var(--muted);
+}
+
+.fab-figures__remaining.is-pending {
+  color: var(--warn);
+  font-weight: 600;
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
+}
+
+.fab-figures__pending {
+  margin-left: 8px;
+  color: var(--color-neutral-700);
+  font-style: italic;
+}
+
+/* ------------------------------------------------------------ Panneau de l'onglet */
+
+.fab-panel {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  border: 1px solid var(--border);
+  background: var(--panel);
+}
+
+.fab-validate {
+  position: absolute;
+  inset: 0;
+  overflow: auto;
+  padding: var(--space-4);
+}
+
+/* Onglet Pièces : liste (≈ 260 px) et pièce choisie. */
+.fab-parts {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  grid-template-columns: 260px minmax(0, 1fr);
+  min-height: 0;
+}
+
+/* ------------------------------------------------------------ Liste des pièces */
+
+.fab-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-height: 0;
+  overflow: auto;
+  padding: var(--space-3);
+  border-right: 1px solid var(--border);
+}
+
+.fab-list__filter {
+  width: 100%;
+  min-width: 0;
+  padding: 0.35rem 0.5rem;
+  background: var(--color-surface);
+  border: 1px solid var(--control-border);
+  border-radius: var(--radius);
+  caret-color: var(--accent);
+}
+
+.fab-list__filter:hover {
+  border-color: color-mix(in srgb, var(--text) 60%, transparent);
+}
+
+.fab-list__empty {
+  margin: 0;
+  font-size: 13px;
+}
+
+.fab-list__groups {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.fab-group + .fab-group {
+  border-top: 1px solid var(--border);
+}
+
+.fab-group__head {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-areas:
+    "icon name count"
+    ". summary summary";
+  align-items: center;
+  column-gap: var(--space-2);
+  width: 100%;
+  padding: var(--space-2) 0;
+  border: none;
+  text-align: left;
+}
+
+.fab-group__head > svg {
+  grid-area: icon;
+  color: var(--muted);
+}
+
+.fab-group__name {
+  grid-area: name;
+  font-weight: 600;
+}
+
+.fab-group__count {
+  grid-area: count;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.fab-group__summary {
+  grid-area: summary;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.fab-group__marks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 0 0 var(--space-2);
+  padding: 0 0 0 22px;
+  list-style: none;
+}
+
+.fab-mark {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  padding: 2px 8px;
+  font-size: 13px;
+}
+
+.fab-mark[aria-pressed="true"] {
+  border-color: var(--selected);
+  background: var(--selected-fill);
+  box-shadow: inset 3px 0 0 var(--selected);
+}
+
+.fab-mark__qty {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+/* ------------------------------------------------------------ Pièce choisie */
+
+.fab-sheet {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  padding: var(--space-3) var(--space-4);
+}
+
+.fab-sheet__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.fab-sheet__title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-3);
+  margin: 0;
+  min-width: 0;
+  font-family: var(--font-body);
+  font-size: 14px;
+  font-weight: 400;
+}
+
+.fab-sheet__mark {
+  font-family: var(--font-heading);
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--accent-ink);
+}
+
+.fab-sheet__details {
+  min-width: 0;
+  color: var(--color-neutral-800);
+}
+
+.fab-sheet__eyebrow {
+  margin: 0;
+}
+
+.fab-sheet__drawing {
+  flex: 1 0 320px;
+  min-height: 320px;
+  padding: var(--space-3);
+  background: var(--view-bg);
+}
+
+.fab-sheet__drawing .svg-export {
+  position: absolute;
+  inset: var(--space-3);
+  width: auto;
+  height: auto;
+}
+
+.fab-sheet__noflat {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-2);
+  color: var(--muted);
+}
+
+.fab-sheet__noflat p {
+  margin: 0;
+}
+
+/* Tronçons et joints d'une pièce débitée en plusieurs morceaux. */
+.flat-view__joints {
+  font-size: 13px;
+}
+
+.flat-view__joints .table {
+  width: auto;
+}
+
+.flat-view__joints caption {
+  text-align: left;
+  padding-bottom: var(--space-2);
+}
+
+.flat-view__joints .num {
+  text-align: right;
+}
+
+.flat-view__joints tr.is-selected {
+  background: var(--selected-fill);
+}
+
+.flat-view__joints ul {
+  margin: var(--space-2) 0 0;
+  padding-left: 1rem;
+}
+
+/* ------------------------------------------------------------ Nomenclature */
+
+.bom {
+  position: absolute;
+  inset: 0;
+  overflow: auto;
+  padding: var(--space-3);
+}
+
+.bom .table {
+  font-size: 13px;
+}
+
+.bom caption {
+  text-align: left;
+  padding: 0 0 var(--space-2);
+  color: var(--muted);
+}
+
+.bom th,
+.bom td {
+  white-space: nowrap;
+}
+
+.bom .num {
+  text-align: right;
+}
+
+.bom thead th {
+  position: sticky;
+  top: 0;
+  background: var(--panel);
+}
+
+.bom tbody th {
+  font-size: inherit;
+  letter-spacing: normal;
+  text-transform: none;
+  color: var(--text);
+}
+
+.bom tr.is-selected {
+  background: var(--selected-fill);
+  box-shadow: inset 3px 0 0 var(--selected);
+}
+
+.bom tfoot th,
+.bom tfoot td {
+  font-weight: 600;
+  color: var(--text);
+  border-top: 2px solid var(--border);
+}
+
+.bom__notes {
+  font-size: 12px;
+}
+
+/* ------------------------------------------------------------ Comparateur */
+
+.compare {
+  position: absolute;
+  inset: 0;
+  overflow: auto;
+  padding: var(--space-3);
+}
+
+.compare .table {
+  width: auto;
+  min-width: 100%;
+  font-size: 13px;
+}
+
+.compare caption {
+  text-align: left;
+  padding: 0 0 var(--space-2);
+  color: var(--muted);
+}
+
+.compare thead th {
+  position: sticky;
+  top: 0;
+  background: var(--panel);
+  vertical-align: bottom;
+}
+
+.compare thead th.is-current {
+  box-shadow: inset 0 -2px 0 var(--accent);
+}
+
+.compare .num {
+  text-align: right;
+}
+
+.compare tbody th,
+.compare tfoot th {
+  font-size: inherit;
+  letter-spacing: normal;
+  text-transform: none;
+  font-weight: normal;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.compare td[title] {
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
+}
+
+.compare .tone-bad {
+  color: var(--danger);
+  font-weight: 600;
+}
+
+.compare .tone-warn {
+  color: var(--warn);
+}
+
+.compare .tone-muted {
+  color: var(--muted);
+}
+
+.compare tfoot td {
+  text-align: right;
+}
+
+.compare__badge {
+  display: block;
+  color: var(--muted);
+  font-weight: normal;
+  text-transform: none;
+  letter-spacing: normal;
+}
+
+.compare__notes {
+  font-size: 12px;
+  vertical-align: top;
+}
+
+.compare tfoot td.compare__notes {
+  text-align: left;
+}
+
+.compare__notes ul {
+  margin: 0;
+  padding-left: 1rem;
+}
+
+/* ------------------------------------------------------------ Petits écrans */
+
+/* Repli < 1100 px : liste au-dessus de la pièce, le panneau prend la hauteur de son contenu. */
+@media (max-width: 1099px) {
+  .fab-panel {
+    min-height: 60vh;
+  }
+
+  .fab-parts {
+    position: static;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .fab-list {
+    max-height: 40vh;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+  }
+}

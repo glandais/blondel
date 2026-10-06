@@ -4,6 +4,7 @@
  * contenus PDF en octets (`toBytes`).
  */
 import { createProject } from "@blondel/core";
+import { msg, textMessage } from "@blondel/i18n";
 import { describe, expect, it } from "vitest";
 import { createJobRunner, handleWorkerRequest, toBytes, type JobRunner } from "./handler.js";
 import type { WorkerResponse } from "./protocol.js";
@@ -124,5 +125,28 @@ describe("exports du worker : glTF et options du dossier PDF", () => {
       options: { templateFamilies: ["treads"] },
     });
     expect(seen[0]).toMatchObject({ templateFamilies: ["treads"] });
+  });
+
+  it("PDF : valeurs ◆ à valider transmises telles quelles (lignes clonables)", async () => {
+    const seen: unknown[] = [];
+    const runner = createJobRunner({
+      loadPdf: async () => (_m, o) => {
+        seen.push(o);
+        return pdfBytes;
+      },
+    });
+    const toValidate = [
+      {
+        label: msg("ui.param.toValidate"),
+        value: "30 mm",
+        section: textMessage("Structure"),
+        validated: true,
+      },
+    ];
+    await runner.pdf({ type: "pdf", project: createProject("straight"), options: { toValidate } });
+    expect(seen[0]).toMatchObject({ toValidate });
+    expect(structuredClone(toValidate)).toEqual(toValidate);
+    await runner.pdf({ type: "pdf", project: createProject("straight") });
+    expect(seen[1]).not.toHaveProperty("toValidate");
   });
 });

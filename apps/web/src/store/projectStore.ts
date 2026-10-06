@@ -16,7 +16,10 @@ import {
   type PresetId,
   type PresetOptions,
   type Project,
+  type ValidatedValue,
   errorMessageOf,
+  withValidatedValues,
+  withoutValidatedValues,
 } from "@blondel/core";
 import { DEFAULT_LOCALE, createTranslator, msg, type Locale, type Message } from "@blondel/i18n";
 import { createStore, type StoreApi } from "zustand/vanilla";
@@ -50,7 +53,11 @@ import {
 } from "./persistence.js";
 import { setIn, type Path } from "./setIn.js";
 
-export type ViewTab = "plan" | "3d" | "elevation" | "flat" | "bom" | "compare";
+/**
+ * Onglet de la zone de vue : vues de Conception (`plan`, `3d`, `elevation`) et de Fabrication
+ * (`flat` pièces, `bom` nomenclature, `compare` comparateur, `validate` valeurs ◆ à valider).
+ */
+export type ViewTab = "plan" | "3d" | "elevation" | "flat" | "bom" | "compare" | "validate";
 /**
  * Mode de l'onglet Plan 2D : plan coté, site et saisie (jalon 7). Le mode expert des nez est
  * retiré (ADR-0009 point 4) : la retouche des lignes de nez se fait dans l'inspecteur Marche.
@@ -157,6 +164,12 @@ export interface AppState {
   setField(path: Path, value: unknown): UpdateResult;
   /** Clôt le groupe de modifications en cours (perte de focus). */
   endGroup(): void;
+  /**
+   * Valide (`validated` vrai) ou dévalide des valeurs ◆ (ADR-0009 point 9) : `entries` porte
+   * le chemin, la valeur effective et le plugin de structure. Une seule entrée d'historique,
+   * même pour plusieurs valeurs (« Tout valider »), annulable.
+   */
+  setValuesValidated(entries: readonly ValidatedValue[], validated: boolean): UpdateResult;
   undo(): void;
   redo(): void;
   canUndo(): boolean;
@@ -408,6 +421,18 @@ export function createProjectStore(options: ProjectStoreOptions = {}): ProjectSt
       endGroup: () => {
         const h = get().history;
         if (h.group !== null) set({ history: endGroup(h) });
+      },
+      setValuesValidated: (entries, validated) => {
+        // Entrée d'historique distincte : un groupe ouvert (saisie en cours) est d'abord clos.
+        const h = get().history;
+        if (h.group !== null) set({ history: endGroup(h) });
+        const p = get().project;
+        const r = apply(
+          validated ? withValidatedValues(p, entries) : withoutValidatedValues(p, entries),
+        );
+        const after = get().history;
+        if (after.group !== null) set({ history: endGroup(after) });
+        return r;
       },
       undo: () => move(undo(get().history)),
       redo: () => move(redo(get().history)),

@@ -389,6 +389,8 @@ export function fieldText(kind: string, path: ParamPath): FieldText | undefined 
 export type PresentedField = ParamField & {
   readonly unit: string;
   readonly hint?: string;
+  /** L'aide est « valeur par défaut à valider » (valeur ◆) : retirée une fois validée. */
+  readonly toValidateHint?: true;
   /** Groupe (fieldset) du champ, `undefined` : paramètres principaux. */
   readonly group?: string;
   /** Libellés des choix d'une liste. */
@@ -425,6 +427,7 @@ export function presentFields(
       unit: text?.unit ?? "",
       ...(text ? { label: t.t(text.label) } : group ? { label: stripGroup(f.label) } : {}),
       ...(text?.hint ? { hint: t.t(text.hint) } : {}),
+      ...(text?.hint === TO_VALIDATE ? { toValidateHint: true as const } : {}),
       ...(group ? { group } : {}),
       ...(text?.options
         ? {

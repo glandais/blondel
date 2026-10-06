@@ -12,7 +12,7 @@ import { listStructures } from "@blondel/core";
 import type { Model, Project, StructureKind } from "@blondel/core";
 import type { TemplateFamily } from "@blondel/exports";
 import type { Locale } from "@blondel/i18n";
-import type { PdfPages } from "@blondel/exports/pdf";
+import type { PdfPages, PdfToValidateRow } from "@blondel/exports/pdf";
 
 /** Octets, texte ou `Blob` : toutes les formes de contenu de fichier acceptées. */
 export type FileContent = string | Uint8Array | ArrayBuffer | Blob;
@@ -27,6 +27,11 @@ export interface PdfJobOptions {
   readonly format?: "a4" | "a3";
   /** Familles des gabarits 1:1 tuilés (QUESTIONS A20) ; absent : toutes. */
   readonly templateFamilies?: readonly TemplateFamily[];
+  /**
+   * Valeurs ◆ validées et restantes (page « Valeurs à valider », ADR-0009 point 9), déjà
+   * formatées dans la langue du dossier ; absent : aucune page.
+   */
+  readonly toValidate?: readonly PdfToValidateRow[];
 }
 
 /** Signature attendue de `exportPdf` (synchrone ou asynchrone). */

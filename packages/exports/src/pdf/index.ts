@@ -1,7 +1,7 @@
 /**
  * `@blondel/exports/pdf` : dossier PDF (sommaire, plan, élévation, fiche de pose, nomenclature,
- * fiche de débit, contrôle de conception, développés, gabarits 1:1 tuilés). Point d'entrée
- * séparé : jsPDF n'est chargé que si l'on exporte en PDF.
+ * fiche de débit, contrôle de conception, valeurs à valider, développés, gabarits 1:1 tuilés).
+ * Point d'entrée séparé : jsPDF n'est chargé que si l'on exporte en PDF.
  */
 export {
   JsPdfCanvas,
@@ -64,3 +64,4 @@ export {
   type PdfPageKind,
   type PdfPages,
 } from "./document.js";
+export type { PdfToValidateRow } from "./toValidate.js";

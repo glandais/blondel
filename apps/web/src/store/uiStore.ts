@@ -9,7 +9,7 @@
  * - `viewCommand` : commande − / + / Recadrer de la vue centrale, consommée par la vue affichée
  *   (zoom des SVG exportés, caméra 3D) ;
  * - `lastViewByWorkspace` : dernière vue de chaque espace (Conception : Plan, 3D, Élévation ;
- *   Fabrication : Développés, Nomenclature, Comparateur) ;
+ *   Fabrication : Pièces, Nomenclature, Comparer, À valider) ;
  * - `isolatedPartId` : pièce isolée dans la vue 3D (outil « Isoler » de la vue, action « Isoler
  *   en 3D » de l'inspecteur Pièce), `null` : toutes les pièces ;
  * - `overridesRevealSeq` : incrémenté par le lien du compteur de surcharges (panneau Contexte) ;
@@ -30,7 +30,7 @@ import type { ProjectStore, ViewTab } from "./projectStore.js";
 
 /** Vues de chaque espace de travail, dans l'ordre des onglets. */
 export const DESIGN_VIEWS: readonly ViewTab[] = ["plan", "3d", "elevation"];
-export const FABRICATION_VIEWS: readonly ViewTab[] = ["flat", "bom", "compare"];
+export const FABRICATION_VIEWS: readonly ViewTab[] = ["flat", "bom", "compare", "validate"];
 
 /** Espace de travail qui contient une vue. */
 export function workspaceOfView(view: ViewTab): Workspace {
@@ -121,8 +121,12 @@ export function closeWorkshopDialog(): void {
   uiStore.setState({ workshopOpen: false });
 }
 
-/** Badge « Contrôle » : sélection effacée (inspecteur « sans sélection ») et contrôle montré. */
+/**
+ * Badge « Contrôle » : sélection effacée (inspecteur « sans sélection ») et contrôle montré.
+ * L'inspecteur n'est affiché qu'en Conception : appelé en Fabrication, on y repasse d'abord.
+ */
 export function revealControl(): void {
+  showDesign();
   appStore.getState().select(null);
   uiStore.setState((s) => ({ controlRevealSeq: s.controlRevealSeq + 1 }));
 }
@@ -155,6 +159,11 @@ export function switchWorkspace(target: Workspace): void {
   journeyStore.getState().setWorkspace(target);
 }
 
+/** Repasse en Conception si l'espace courant est la Fabrication (inspecteur affiché). */
+function showDesign(): void {
+  if (journeyStore.getState().workspace !== "design") switchWorkspace("design");
+}
+
 /** Isole une pièce dans la vue 3D (la vue réaffiche tout si la pièce disparaît du modèle). */
 export function isolatePart(partId: string): void {
   uiStore.setState({ isolatedPartId: partId });
@@ -167,9 +176,10 @@ export function showAllParts(): void {
 
 /**
  * Lien du compteur de surcharges : sélection effacée (inspecteur « sans sélection ») et liste
- * des surcharges dépliée et montrée.
+ * des surcharges dépliée et montrée (en Conception, comme `revealControl`).
  */
 export function revealOverrides(): void {
+  showDesign();
   appStore.getState().select(null);
   uiStore.setState((s) => ({ overridesRevealSeq: s.overridesRevealSeq + 1 }));
 }

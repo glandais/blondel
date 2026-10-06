@@ -59,7 +59,7 @@ Preuves :
 
 - `packages/core/src/structures/compare.test.ts` : une ligne par variante sur le même découpage, coût calculé à la main (`variantCost`), pas d'euros si une donnée manque.
 - `apps/web/src/lib/variants.test.ts` : tableau côte à côte, « profil d'atelier requis » sans barème, euros avec un barème complet, jour adapté appliqué avec la variante.
-- `apps/web/e2e/helical.spec.ts`, « comparateur : débillardé soudé à jour adapté, appliqué ; développés par tronçon et joints » : onglet Comparateur dans l'application construite.
+- `apps/web/e2e/helical.spec.ts`, « comparateur : débillardé soudé à jour adapté, appliqué ; développés par tronçon et joints » : onglet « Comparer » de la Fabrication dans l'application construite.
 
 Réserves :
 

@@ -99,7 +99,7 @@ test("comparateur : débillardé soudé à jour adapté, appliqué ; développé
 }) => {
   await openApp(page);
   await applyPreset(page, "Quart tournant à gauche");
-  await openTab(page, "Comparateur");
+  await openTab(page, "Comparer");
   const table = page.locator(".compare table");
   const header = table.locator("thead th", { hasText: "limon de jour débillardé soudé" });
   await expect(header).toBeVisible();
@@ -125,11 +125,20 @@ test("comparateur : débillardé soudé à jour adapté, appliqué ; développé
   await openSection(page, "Tracé");
   await expect(page.getByLabel("Jour", { exact: true })).toHaveValue("arc");
 
-  await openTab(page, "Développés");
+  // Onglet Pièces : premier tronçon du limon de jour (LD1) choisi dans le groupe « Limons » ;
+  // ses tronçons et joints suivent le développé.
+  await openTab(page, "Pièces");
+  const list = page.getByRole("navigation", { name: "Pièces par famille" });
+  const group = list.getByRole("button", { name: /^Limons\b/ });
+  if ((await group.getAttribute("aria-expanded")) !== "true") await group.click();
+  await list
+    .getByRole("list", { name: "Repères : Limons" })
+    .getByRole("button", { name: /^LD1\b/ })
+    .click();
   const joints = page.locator(".flat-view__joints").filter({ hasText: "LD1" });
   await expect(joints).toBeVisible();
   await expect(joints.locator("[data-joint]").first()).toContainText(/J\d+ : LD1 ↔ LD2/);
   await joints.getByRole("button", { name: "LD2" }).click();
-  await expect(page.locator(".flat-view__head")).toContainText("LD2");
-  await expect(page.locator(".flat-view__drawing .svg-export svg")).toBeVisible();
+  await expect(page.locator(".fab-sheet__mark")).toHaveText("LD2");
+  await expect(page.locator(".fab-sheet__drawing .svg-export svg")).toBeVisible();
 });

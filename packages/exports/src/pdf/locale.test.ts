@@ -7,7 +7,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { buildModel, parseProjectText, type Model, type Project } from "@blondel/core";
-import { messagesFor, textMessage } from "@blondel/i18n";
+import { messagesFor, msg, textMessage } from "@blondel/i18n";
 import { describe, expect, it } from "vitest";
 import { translatorOf } from "../i18n.js";
 import {
@@ -168,7 +168,26 @@ describe("dossier PDF en anglais sur examples/", () => {
         { ...ruleResult("OK_1", { kind: "stair" }), status: "ok", measured: 620, unit: "mm" },
       ]),
     };
-    const en = render(model, { project, locale: "en", date: new Date(2026, 0, 2) });
+    const toValidate = [
+      {
+        label: textMessage("Post size"),
+        value: "40 mm",
+        section: msg("pipeline.stage.guards"),
+        validated: false,
+      },
+      {
+        label: textMessage("Pinch"),
+        value: "30 mm",
+        section: msg("pipeline.stage.structure"),
+        validated: true,
+      },
+    ];
+    const en = render(model, {
+      project,
+      locale: "en",
+      date: new Date(2026, 0, 2),
+      toValidate,
+    });
     // Les pièces et règles de synthèse ont des noms français bruts (`textMessage`) : on vérifie
     // seulement qu'aucun texte français propre au PDF ne reste (fragments fixes des `pdf.*`).
     const fr = messagesFor("fr");
@@ -195,6 +214,11 @@ describe("dossier PDF en anglais sur examples/", () => {
     expect(tiled[0]!.title).toMatch(/^1:1 template \S+ — tile [A-Z]+\d+ \(1\/\d+\)/);
     expect(all).toMatch(/1:1 template \S+: grid of \d+ × \d+ tiles \(\d+ printed\)/);
     expect(all).toContain("2026-01-02");
+    expect(en.pages.some((p) => p.kind === "toValidate" && p.title === "Values to validate")).toBe(
+      true,
+    );
+    expect(all).toContain("1 validated · 1 remaining");
+    expect(all).toContain("to be validated");
   });
 
   it("unités en mots accordées en anglais, inchangées en français", () => {

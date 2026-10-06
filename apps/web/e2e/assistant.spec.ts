@@ -6,7 +6,7 @@
  *
  * Interactions comptées : menu du projet et ouverture de l'assistant (2), longueur et largeur de trémie (2),
  * structure visée (1), typologie « Quart tournant » (1), emmarchement E = 800 (1), « Proposer »
- * (1), « Choisir » (1), menu « Exporter » et PDF (2), menu et DXF (2) : 13. H = 2 700 et dalle = 200 sont repris du
+ * (1), « Choisir » (1), menu « Exporter » (« Autres exports » en Fabrication) et PDF (2), menu et DXF (2) : 13. H = 2 700 et dalle = 200 sont repris du
  * projet de départ (vérifiés, non comptés).
  */
 import { expect, test, type Page } from "@playwright/test";
@@ -14,6 +14,7 @@ import {
   Interactions,
   LONG_TASK_BUDGET_MS,
   blockingCount,
+  exportMenuButton,
   describeTasks,
   instrument,
   openApp,
@@ -40,7 +41,9 @@ function dialog(page: Page) {
 
 async function download(page: Page, entry: RegExp, ix: Interactions) {
   const pending = page.waitForEvent("download");
-  await page.getByRole("button", { name: /^Exporter/ }).click();
+  // Menu des exports : « Autres exports » de la colonne de Fabrication (la nomenclature vient
+  // d'être vérifiée), « Exporter » de la barre du haut en Conception.
+  await exportMenuButton(page).click();
   ix.count("menu Exporter");
   const item = page.getByRole("menuitem", { name: entry });
   await expect(item).toBeEnabled();

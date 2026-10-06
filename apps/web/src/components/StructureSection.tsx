@@ -46,6 +46,7 @@ import { formatDecimal, parseDecimal, parseIntMm } from "../lib/units.js";
 import { appStore, useApp, useModel } from "../store/appStore.js";
 import type { UpdateResult } from "../store/projectStore.js";
 import { AutoIntField, CheckField, NumberField, SelectField, TextField } from "./fields.js";
+import { useValidatedKeys } from "./fabrication/useToValidate.js";
 import {
   DISPLAY_ALL,
   hasVisibleItems,
@@ -91,7 +92,14 @@ export function ParamInput({
 }) {
   const t = useT();
   const computed = useAutoValue(["stair", "structure", "params", ...field.path]);
-  const hint = field.hint === undefined ? {} : { hint: field.hint };
+  // Aide « à valider » retirée quand la valeur ◆ est validée (`Project.validatedValues`).
+  const validated = useValidatedKeys();
+  const shownHint =
+    field.toValidateHint === true &&
+    validated.has(paramKey(["stair", "structure", "params", ...field.path]))
+      ? undefined
+      : field.hint;
+  const hint = shownHint === undefined ? {} : { hint: shownHint };
   switch (field.kind) {
     case "number": {
       const bounds = {
@@ -108,7 +116,7 @@ export function ParamInput({
             label={field.label}
             value={n}
             unit={field.unit}
-            hint={field.hint ?? t.t("ui.structure.optionalHint")}
+            hint={shownHint ?? t.t("ui.structure.optionalHint")}
             {...bounds}
             parse={(text, b) =>
               text.trim() === "" ? { ok: true, value: Number.NaN } : read(text, b)

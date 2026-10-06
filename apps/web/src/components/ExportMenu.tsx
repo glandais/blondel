@@ -1,7 +1,12 @@
 /**
- * Menu « Exporter » de la barre du haut (bouton primaire « blueprint ») : projet JSON, plan SVG / DXF, élévation SVG, liste de
- * débit CSV, dossiers PDF (complet A4 / A3, sans gabarits), fiche de pose PDF, DXF des pièces,
- * modèle 3D glTF (.glb, calculé dans le worker) et DXF de la pièce sélectionnée. Menu déroulant non modal ; téléchargement direct (Blob + lien).
+ * Menu « Exporter » de la barre du haut (bouton primaire « blueprint ») : projet JSON, plan SVG /
+ * DXF, élévation SVG, liste de débit CSV, dossiers PDF (complet A4 / A3, sans gabarits), fiche
+ * de pose PDF, DXF des pièces, modèle 3D glTF (.glb, calculé dans le worker) et DXF de la pièce
+ * sélectionnée. Menu déroulant non modal ; téléchargement direct (Blob + lien).
+ *
+ * Props facultatives (colonne de droite du mode Fabrication, « Autres exports ») : libellé du
+ * bouton et variante secondaire (sans coins « blueprint »). Sans props : bouton « Exporter » de
+ * la barre du haut, inchangé.
  */
 import { errorMessage, msg, type Message } from "@blondel/i18n";
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
@@ -19,23 +24,42 @@ import {
   fileStem,
   partDxfFile,
   type ExportDeps,
+  type ExportFile,
   type ExportId,
 } from "../lib/exportFiles.js";
 import { selectedPart } from "../lib/parts.js";
 import { appStore, modelService, useApp, useModel } from "../store/appStore.js";
 
 /** Dossier PDF mis en page dans le worker de calcul (le fil principal reste disponible). */
-const EXPORT_DEPS: ExportDeps = {
+export const EXPORT_DEPS: ExportDeps = {
   ...DEFAULT_EXPORT_DEPS,
   renderPdf: (project, _model, options, locale) => modelService.exportPdf(project, options, locale),
   renderGlb: (project, _model, locale) => modelService.exportGlb(project, locale),
 };
 
-function notify(kind: "info" | "error", message: Message): void {
+export function notify(kind: "info" | "error", message: Message): void {
   appStore.setState({ notice: { kind, msg: message } });
 }
 
-export function ExportMenu() {
+/** Fichiers produits : téléchargés, ou notification « aucun fichier » ; plusieurs : leur nombre. */
+export function deliverFiles(files: readonly ExportFile[]): void {
+  if (files.length === 0) notify("info", msg("ui.export.noFiles"));
+  else {
+    downloadFiles(files);
+    if (files.length > 1) {
+      notify("info", msg("ui.export.downloaded", { count: files.length }));
+    }
+  }
+}
+
+export interface ExportMenuProps {
+  /** Libellé du bouton (défaut : « Exporter »). */
+  readonly label?: string;
+  /** `primary` (défaut) : bouton « blueprint » de la barre du haut ; `secondary` : bouton simple. */
+  readonly variant?: "primary" | "secondary";
+}
+
+export function ExportMenu({ label, variant = "primary" }: ExportMenuProps = {}) {
   const t = useT();
   const [open, setOpen] = useState(false);
   const placement = useMenuPlacement(open);
@@ -66,14 +90,7 @@ export function ExportMenu() {
     setOpen(false);
     setBusy(true);
     try {
-      const files = await buildExport(id, project, model, EXPORT_DEPS, t.locale);
-      if (files.length === 0) notify("info", msg("ui.export.noFiles"));
-      else {
-        downloadFiles(files);
-        if (files.length > 1) {
-          notify("info", msg("ui.export.downloaded", { count: files.length }));
-        }
-      }
+      deliverFiles(await buildExport(id, project, model, EXPORT_DEPS, t.locale));
     } catch (e) {
       notify("error", msg("ui.export.failed", { error: errorMessage(e) }));
     } finally {
@@ -115,16 +132,18 @@ export function ExportMenu() {
     <div className="menu" ref={root} onKeyDown={onKeyDown}>
       <button
         type="button"
-        className="btn btn-primary blueprint topbar__btn"
+        className={
+          variant === "primary" ? "btn btn-primary blueprint topbar__btn" : "btn btn-secondary"
+        }
         aria-haspopup="menu"
         aria-expanded={open}
         aria-controls={menuId}
         disabled={busy}
         onClick={() => setOpen((o) => !o)}
       >
-        <Corners />
+        {variant === "primary" ? <Corners /> : null}
         <Icon icon={Download} size={16} />
-        {busy ? t.t("ui.export.busy") : t.t("ui.topbar.export")}
+        {busy ? t.t("ui.export.busy") : (label ?? t.t("ui.topbar.export"))}
       </button>
       {open ? (
         <div

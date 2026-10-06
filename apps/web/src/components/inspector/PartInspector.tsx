@@ -3,7 +3,8 @@
  * développés ou la nomenclature. En-tête (famille, repère, nombre de pièces de même repère,
  * désignation), valeurs lues dans le modèle (matériau, section, longueur, masse, soudures),
  * actions (Isoler en 3D, Développé →, DXF R12), règles sur la pièce, réglages d'atelier communs
- * à la famille de pièces (mêmes chemins du projet et même validation que la section Structure),
+ * à la famille de pièces (`PartWorkshopSettings`, partagé avec le mode Fabrication : mêmes
+ * chemins du projet et même validation que la section Structure),
  * pièces assemblées et mention indicative.
  *
  * Aucune grandeur n'est calculée : une valeur absente du modèle n'a pas de ligne. Une pièce
@@ -13,7 +14,6 @@ import {
   QUANTITY_LENGTH_MM,
   QUANTITY_MASS_KG,
   QUANTITY_WELD_MM,
-  type Part,
   type PartFamilyId,
 } from "@blondel/core";
 import { materialLabel } from "@blondel/exports";
@@ -23,23 +23,14 @@ import { formatNumber } from "../../i18n/locale.js";
 import { useT } from "../../i18n/useT.js";
 import { downloadFile } from "../../lib/download.js";
 import { fileStem, partDxfFile } from "../../lib/exportFiles.js";
-import { structureParamEntry } from "../../lib/paramTiers.js";
 import { assembledParts } from "../../lib/partLinks.js";
-import { matchesSettings, partSettingsFor, type PartSettings } from "../../lib/partSettings.js";
-import { getParam } from "../../lib/structureForm.js";
+import { partSettingsFor } from "../../lib/partSettings.js";
 import { formatFigureLength } from "../../lib/units.js";
 import { appStore, journeyStore, useApp, useModel } from "../../store/appStore.js";
 import { isolatePart, showAllParts, switchWorkspace, useUi } from "../../store/uiStore.js";
-import {
-  NO_STRUCTURE,
-  ParamInput,
-  StructureParamError,
-  useStructureParamForm,
-} from "../StructureSection.js";
-import { SECTION_TITLE_KEYS } from "../sections/index.js";
-import { Segmented } from "../ui/Segmented.js";
 import { ElementRules } from "./ElementRules.js";
 import { PartLinkList } from "./PartLinkList.js";
+import { PartWorkshopSettings } from "./PartWorkshopSettings.js";
 import "./part.css";
 
 export interface PartInspectorProps {
@@ -215,7 +206,9 @@ export function PartInspector({ partId }: PartInspectorProps) {
 
       <ElementRules target={{ kind: "part", partId: part.id }} />
 
-      {settings ? <WorkshopSettings part={part} settings={settings} /> : null}
+      {settings ? (
+        <PartWorkshopSettings part={part} settings={settings} variant="inspector" />
+      ) : null}
 
       <PartLinkList
         title={t.t("ui.partInspector.assembledWith")}
@@ -225,77 +218,5 @@ export function PartInspector({ partId }: PartInspectorProps) {
       <span className="insp-spacer" />
       <p className="inspector-disclaimer">{t.t("ui.compliance.disclaimer")}</p>
     </div>
-  );
-}
-
-/** Nombre maximal de choix d'une liste rendue en segmenté dans les réglages d'atelier. */
-const SEGMENTED_MAX_OPTIONS = 3;
-
-/**
- * Bloc « Réglages d'atelier » : champs du plugin de structure courant repris pour la famille de
- * pièces (`partSettingsFor`), rendus comme dans la section Structure (`ParamInput`, même
- * chemin, même validation, ◆, Auto | valeur retenue) en lignes compactes (libellé, champ de
- * 64 px et unité ; listes courtes en segmenté, maquette 2b), puis le lien vers la section qui
- * porte tous les réglages.
- */
-function WorkshopSettings({ part, settings }: { part: Part; settings: PartSettings }) {
-  const t = useT();
-  const form = useStructureParamForm();
-  const kind = form.plugin?.kind ?? NO_STRUCTURE;
-  const fields = form.fields.filter((f) => matchesSettings(f.path, settings.structureParams));
-  const section = settings.section;
-  return (
-    <section
-      className="insp-block part-insp__settings"
-      aria-label={t.t("ui.partInspector.workshop", { mark: part.mark })}
-    >
-      <div className="part-insp__settings-head">
-        <span className="insp-block__title">{t.t("ui.sections.workshop")}</span>
-        <span className="part-insp__scope">{t.t(settings.scopeLabel)}</span>
-      </div>
-      {fields.map((f) => {
-        const value = getParam(form.params, f.path);
-        // Liste courte (Type, Fixation) : segmenté, comme dans la maquette 2b.
-        const input =
-          f.kind === "enum" && f.options.length <= SEGMENTED_MAX_OPTIONS ? (
-            <div className="part-insp__seg-row">
-              <span className="part-insp__seg-label" aria-hidden="true">
-                {f.label}
-              </span>
-              <Segmented
-                label={f.label}
-                size="sm"
-                value={String(value)}
-                options={f.options.map((o) => ({ value: o, label: f.optionLabels?.[o] ?? o }))}
-                onChange={(v) => form.onParam(f)(v)}
-              />
-            </div>
-          ) : (
-            <ParamInput field={f} value={value} onCommit={form.onParam(f)} />
-          );
-        return structureParamEntry(kind, f.path).toValidate === true ? (
-          <div key={f.path.join(".")} className="tiered__item tiered__item--tv">
-            {input}
-            <span className="tv-mark tiered__mark" aria-hidden="true">
-              ◆
-            </span>
-          </div>
-        ) : (
-          <div key={f.path.join(".")}>{input}</div>
-        );
-      })}
-      <StructureParamError error={form.error} />
-      <button
-        type="button"
-        className="btn btn-ghost part-insp__all"
-        onClick={() => {
-          if (journeyStore.getState().workspace !== "design") switchWorkspace("design");
-          journeyStore.getState().openFreePanel(section);
-        }}
-      >
-        {t.t("ui.partInspector.allSettings", { section: msg(SECTION_TITLE_KEYS[section]) })}
-        <ArrowRight size={13} aria-hidden="true" />
-      </button>
-    </section>
   );
 }

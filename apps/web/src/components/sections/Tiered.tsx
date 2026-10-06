@@ -11,7 +11,8 @@
  * En mode `all` (ancienne interface), tout est rendu à la suite, sans repli ni marque ajoutée :
  * le rendu est celui d'avant l'extraction des sections. En `free` et `guided`, un champ ◆ porte
  * la marque `.tv-mark` à côté de lui (élément `aria-hidden`, le nom accessible du champ ne
- * change pas).
+ * change pas). Un champ ◆ dont la valeur est validée (`Project.validatedValues`, ADR-0009
+ * point 9) perd sa marque et n'est plus compté dans le compteur de son repli.
  *
  * Usage :
  *
@@ -37,6 +38,7 @@ import {
   type ParamTierEntry,
   type Placement,
 } from "../../lib/paramTiers.js";
+import { useValidatedKeys } from "../fabrication/useToValidate.js";
 import "./sections.css";
 
 /** Regroupement de champs (fieldset, sous-groupe repliable…) rendu par zone. */
@@ -89,22 +91,36 @@ export function hasVisibleItems(items: TieredItems, display: Display): boolean {
   return present(items).some((i) => tieredPlacement(i, display) !== "hidden");
 }
 
-/** Rendu d'une zone : éléments dans l'ordre, groupes à la place de leur premier élément. */
-function renderZone(items: readonly TieredItem[], marks: boolean): ReactNode[] {
+/** L'élément porte-t-il une valeur ◆ restante (non validée) ? */
+function remainsToValidate(item: TieredItem, validated: ReadonlySet<string>): boolean {
+  return entryOf(item)?.toValidate === true && !validated.has(item.key);
+}
+
+/**
+ * Rendu d'une zone : éléments dans l'ordre, groupes à la place de leur premier élément.
+ * `marks` : clés validées (marque ◆ sur les autres champs ◆), `null` : aucune marque.
+ */
+function renderZone(items: readonly TieredItem[], marks: ReadonlySet<string> | null): ReactNode[] {
   const out: ReactNode[] = [];
   const done = new Set<string>();
   const one = (i: TieredItem): ReactNode => {
-    const node =
-      marks && entryOf(i)?.toValidate === true ? (
-        <div className="tiered__item tiered__item--tv">
-          {i.node}
-          <span className="tv-mark tiered__mark" aria-hidden="true">
-            ◆
-          </span>
-        </div>
-      ) : (
-        i.node
-      );
+    // Champ ◆ : repéré par `data-param` (lien « Ouvrir » de la liste des valeurs à valider,
+    // `focusParamField`) ; marque ◆ tant qu'il n'est pas validé.
+    const tv = marks !== null && entryOf(i)?.toValidate === true;
+    const node = !tv ? (
+      i.node
+    ) : remainsToValidate(i, marks) ? (
+      <div className="tiered__item tiered__item--tv" data-param={i.key}>
+        {i.node}
+        <span className="tv-mark tiered__mark" aria-hidden="true">
+          ◆
+        </span>
+      </div>
+    ) : (
+      <div className="tiered__item" data-param={i.key}>
+        {i.node}
+      </div>
+    );
     return <Fragment key={i.id ?? i.key}>{node}</Fragment>;
   };
   for (const i of items) {
@@ -121,9 +137,17 @@ function renderZone(items: readonly TieredItem[], marks: boolean): ReactNode[] {
   return out;
 }
 
-function Folded({ kind, items }: { kind: "more" | "workshop"; items: readonly TieredItem[] }) {
+function Folded({
+  kind,
+  items,
+  validated,
+}: {
+  kind: "more" | "workshop";
+  items: readonly TieredItem[];
+  validated: ReadonlySet<string>;
+}) {
   const t = useT();
-  const count = items.filter((i) => entryOf(i)?.toValidate === true).length;
+  const count = items.filter((i) => remainsToValidate(i, validated)).length;
   const label = t.t("ui.sections.toValidateCount", { count });
   return (
     <details className={`tiered__fold tiered__fold--${kind}`}>
@@ -140,24 +164,27 @@ function Folded({ kind, items }: { kind: "more" | "workshop"; items: readonly Ti
           </span>
         ) : null}
       </summary>
-      <div className="tiered__fold-body">{renderZone(items, true)}</div>
+      <div className="tiered__fold-body">{renderZone(items, validated)}</div>
     </details>
   );
 }
 
 /** Champs d'une section répartis par niveau (voir l'en-tête du module). */
 export function Tiered({ display, items }: { display: Display; items: TieredItems }) {
+  const validated = useValidatedKeys();
   const all = present(items);
-  if (display.kind === "all") return <>{renderZone(all, false)}</>;
+  if (display.kind === "all") return <>{renderZone(all, null)}</>;
   const zone = (p: Placement): TieredItem[] => all.filter((i) => tieredPlacement(i, display) === p);
   const main = zone("main");
   const moreItems = zone("more");
   const workshopItems = zone("workshop");
   return (
     <>
-      {renderZone(main, true)}
-      {moreItems.length > 0 ? <Folded kind="more" items={moreItems} /> : null}
-      {workshopItems.length > 0 ? <Folded kind="workshop" items={workshopItems} /> : null}
+      {renderZone(main, validated)}
+      {moreItems.length > 0 ? <Folded kind="more" items={moreItems} validated={validated} /> : null}
+      {workshopItems.length > 0 ? (
+        <Folded kind="workshop" items={workshopItems} validated={validated} />
+      ) : null}
     </>
   );
 }

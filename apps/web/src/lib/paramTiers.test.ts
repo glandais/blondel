@@ -9,6 +9,7 @@ import {
   buildModel,
   createDemoProject,
   createProject,
+  withValidatedValues,
   type Model,
   type Project,
 } from "@blondel/core";
@@ -28,6 +29,7 @@ import {
   toValidateCountBySection,
   toValidateCountByStep,
   toValidateItems,
+  toValidateStates,
   treadsMaterialApplies,
   type ParamTierEntry,
 } from "./paramTiers.js";
@@ -361,5 +363,43 @@ describe("valeurs ◆ d'un projet", () => {
     expect(bySection.guards).toBe(8);
     expect(bySection.structure).toBe(items.filter((i) => i.section === "structure").length);
     expect(bySection.structure).toBeGreaterThan(0);
+  });
+
+  it("les compteurs (rail, étapes) ne comptent que les valeurs restantes", () => {
+    const p: Project = { ...withStructure(base, "steel-flat"), guards: defaultGuards() };
+    const m = buildModel(p);
+    const states = toValidateStates(p, m);
+    expect(states.map((s) => s.key)).toEqual(toValidateItems(p, m).map((i) => i.key));
+    const before = toValidateCountBySection(p, m);
+    const stepsBefore = toValidateCountByStep(p, m);
+    // Valider le matériau (étape 6) et l'épaisseur des limons (plugin).
+    const material = states.find((s) => s.key === "guards.material")!;
+    const thickness = states.find((s) => s.key === "stair.structure.params.thickness")!;
+    expect(material.value).toBe(p.guards!.material);
+    expect(thickness.structureKind).toBe("steel-flat");
+    const validated = withValidatedValues(p, [
+      { path: material.key, value: material.value! },
+      { path: thickness.key, value: thickness.value!, structureKind: "steel-flat" },
+    ]);
+    const after = toValidateCountBySection(validated, m);
+    expect(after.guards).toBe(before.guards - 1);
+    expect(after.structure).toBe(before.structure - 1);
+    const stepsAfter = toValidateCountByStep(validated, m);
+    expect(stepsAfter[6]).toBe(stepsBefore[6] - 1);
+    expect(stepsAfter[7]).toBe(stepsBefore[7] - 2);
+    // Les éléments restent listés (validés compris).
+    expect(toValidateItems(validated, m)).toHaveLength(states.length);
+    // Valeur changée : la validation est caduque, le compteur remonte.
+    const changed: Project = {
+      ...validated,
+      guards: { ...validated.guards!, material: "steel-raw" },
+    };
+    expect(toValidateCountBySection(changed, m).guards).toBe(before.guards);
+    // Autre plugin : la validation du paramètre de plugin ne vaut plus.
+    const other = withStructure(validated, "steel-curved");
+    const s = toValidateStates(other, buildModel(other)).find(
+      (x) => x.key === "stair.structure.params.thickness",
+    );
+    if (s !== undefined) expect(s.validated).toBe(false);
   });
 });

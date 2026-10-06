@@ -5,7 +5,10 @@ import {
   EXPORT_ENTRIES,
   MIME,
   PDF_JOBS,
+  buildDossierPdf,
   buildExport,
+  dossierPdfJob,
+  fileSuffix,
   exportAvailability,
   fileStem,
   partDxfFile,
@@ -13,6 +16,8 @@ import {
   partsWithFlat,
 } from "./exportFiles.js";
 import type { ExportDeps } from "./exportFiles.js";
+import type { PdfJobOptions } from "./optionalApi.js";
+import { toValidateDocRows } from "./toValidate.js";
 
 const project = createProject("quarter-left");
 const model = buildModel(project);
@@ -189,10 +194,14 @@ describe("dossiers PDF, fiche de pose et modèle glTF", () => {
     }
     expect(new Set(names).size).toBe(4);
     expect(names).toContain("quart-tournant-a-gauche-fiche-de-pose.pdf");
-    expect(seen[0]).toEqual({});
-    expect(seen[1]).toEqual({ format: "a3" });
-    expect(seen[2]).toEqual({ pages: { templates: false } });
-    const pose = seen[3] as { pages: Record<string, boolean> };
+    // Dossiers : leurs options et les valeurs ◆ du projet ; fiche de pose : ni page ni lignes.
+    const rows = toValidateDocRows(project, model, FR);
+    expect(seen[0]).toEqual({ toValidate: rows });
+    expect(seen[1]).toEqual({ format: "a3", toValidate: rows });
+    expect(seen[2]).toEqual({ pages: { templates: false }, toValidate: rows });
+    const pose = seen[3] as { pages: Record<string, boolean>; toValidate?: unknown };
+    expect(pose.toValidate).toBeUndefined();
+    expect(pose.pages["toValidate"]).toBe(false);
     expect(pose.pages["installation"]).toBe(true);
     expect(
       Object.entries(pose.pages)
@@ -219,7 +228,10 @@ describe("dossiers PDF, fiche de pose et modèle glTF", () => {
       const [f] = await buildExport(id, industrial, m, deps);
       names.push(f!.filename);
     }
-    expect(seen).toEqual([{ templateFamilies: ["stringers"] }, { templateFamilies: ["treads"] }]);
+    expect(seen).toMatchObject([
+      { templateFamilies: ["stringers"] },
+      { templateFamilies: ["treads"] },
+    ]);
     expect(names[0]).toMatch(/-gabarits-limons\.pdf$/);
     expect(names[1]).toMatch(/-gabarits-marches\.pdf$/);
     // Le dossier complet garde tous les gabarits (aucun filtre transmis).
@@ -258,5 +270,111 @@ describe("dossiers PDF, fiche de pose et modèle glTF", () => {
     expect(labels).toContain("Modèle 3D glTF (.glb)");
     expect(labels).toContain("Fiche de pose (PDF)");
     expect(labels.some((l) => l.startsWith("Dossier PDF complet"))).toBe(true);
+  });
+});
+
+describe("dossier PDF du mode Fabrication : format × gabarits, valeurs ◆", () => {
+  /** Options reçues par la mise en page (worker simulé). */
+  function recorder(): { deps: ExportDeps; seen: PdfJobOptions[] } {
+    const seen: PdfJobOptions[] = [];
+    return {
+      seen,
+      deps: {
+        loadPdf: async () => () => new Uint8Array(),
+        renderPdf: async (_p, _m, options) => {
+          seen.push(options ?? {});
+          return new Uint8Array([1]);
+        },
+      },
+    };
+  }
+
+  it("A4 / A3 × tous, une famille, aucun : options et suffixes", () => {
+    const formats = ["a4", "a3"] as const;
+    const templates = ["all", "stringers", "treads", "guards", "none"] as const;
+    const names = new Set<string>();
+    for (const f of formats) {
+      for (const tpl of templates) {
+        const job = dossierPdfJob(f, tpl);
+        expect(job.options.format, `${f} ${tpl}`).toBe(f === "a3" ? "a3" : undefined);
+        if (tpl === "all") {
+          expect(job.options.templateFamilies).toBeUndefined();
+          expect(job.options.pages).toBeUndefined();
+        } else if (tpl === "none") {
+          expect(job.options.pages).toEqual({ templates: false });
+        } else {
+          expect(job.options.templateFamilies).toEqual([tpl]);
+        }
+        names.add(fileSuffix(job.suffix, FR));
+      }
+    }
+    // Dix combinaisons, dix noms de fichiers distincts.
+    expect(names.size).toBe(10);
+    expect(fileSuffix(dossierPdfJob("a4", "all").suffix, FR)).toBe("");
+    expect(fileSuffix(dossierPdfJob("a3", "all").suffix, FR)).toBe("-a3");
+    expect(fileSuffix(dossierPdfJob("a3", "stringers").suffix, FR)).toBe("-gabarits-limons-a3");
+    expect(fileSuffix(dossierPdfJob("a4", "none").suffix, FR)).toBe(
+      fileSuffix(PDF_JOBS["pdf-light"].suffix, FR),
+    );
+  });
+
+  it("dossiers du menu = combinaisons du formulaire (même suffixe, mêmes options)", () => {
+    expect(PDF_JOBS.pdf).toEqual(dossierPdfJob("a4", "all"));
+    expect(PDF_JOBS["pdf-a3"]).toEqual(dossierPdfJob("a3", "all"));
+    expect(PDF_JOBS["pdf-light"]).toEqual(dossierPdfJob("a4", "none"));
+    expect(PDF_JOBS["pdf-stringers"]).toEqual(dossierPdfJob("a4", "stringers"));
+    expect(PDF_JOBS["pdf-treads"]).toEqual(dossierPdfJob("a4", "treads"));
+    expect(PDF_JOBS["pdf-guards"]).toEqual(dossierPdfJob("a4", "guards"));
+  });
+
+  it("valeurs ◆ transmises (validées et restantes), dans la langue du dossier", async () => {
+    const industrial = createDemoProject("demo-half-turn-industrial");
+    const m = buildModel(industrial);
+    const fr = toValidateDocRows(industrial, m, FR);
+    expect(fr.length).toBeGreaterThan(0);
+    const { deps, seen } = recorder();
+    const [file] = await buildDossierPdf(industrial, m, dossierPdfJob("a3", "treads"), deps, "fr");
+    expect(file!.filename).toMatch(/-gabarits-marches-a3\.pdf$/);
+    expect(seen[0]).toEqual({ format: "a3", templateFamilies: ["treads"], toValidate: fr });
+    const [en] = await buildDossierPdf(industrial, m, dossierPdfJob("a4", "all"), deps, "en");
+    expect(en!.filename).toMatch(/\.pdf$/);
+    expect(seen[1]!.toValidate).toEqual(toValidateDocRows(industrial, m, translatorFor("en")));
+  });
+
+  it("module PDF chargé sur le fil principal : mêmes options, lignes ◆ comprises", async () => {
+    const seen: unknown[] = [];
+    const deps: ExportDeps = {
+      loadPdf: async () => (_m, o) => {
+        seen.push(o);
+        return new Uint8Array([1]);
+      },
+    };
+    await buildDossierPdf(project, model, dossierPdfJob("a4", "none"), deps);
+    expect(seen[0]).toMatchObject({
+      project,
+      title: project.name,
+      locale: "fr",
+      pages: { templates: false },
+      toValidate: toValidateDocRows(project, model, FR),
+    });
+    await buildExport("installation-pdf", project, model, deps);
+    expect(seen[1]).not.toHaveProperty("toValidate");
+  });
+
+  it("sans modèle, ou famille de gabarits sans développé : `MessageError`", async () => {
+    const { deps, seen } = recorder();
+    const noModel = await buildDossierPdf(project, null, dossierPdfJob("a4", "all"), deps).catch(
+      (e: unknown) => e,
+    );
+    expect((noModel as MessageError).msg.key).toBe("ui.label.export.noModel");
+    const noFlat = await buildDossierPdf(
+      project,
+      model,
+      dossierPdfJob("a4", "stringers"),
+      deps,
+    ).catch((e: unknown) => e);
+    expect(isMessageError(noFlat)).toBe(true);
+    expect((noFlat as MessageError).msg.key).toBe("ui.label.export.noFamilyFlat");
+    expect(seen).toHaveLength(0);
   });
 });

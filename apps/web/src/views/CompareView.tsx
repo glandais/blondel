@@ -1,6 +1,6 @@
 /**
- * Onglet « Comparateur » : variantes de structure sur la même épure (bois à la française, bois
- * à l'anglaise si l'escalier est droit, plat découpé laser, limon de jour débillardé soudé s'il y
+ * Onglet « Comparer » du mode Fabrication : variantes de structure sur la même épure (bois à la
+ * française, bois à l'anglaise si l'escalier est droit, plat découpé laser, limon de jour débillardé soudé s'il y
  * a un tournant, profilés UPN et IPE ; hélicoïdal : fût avec marches bois ou en tôle), calculées
  * par `compareEpure` du cœur dans un Web Worker dédié, en tableau côte à côte. Le raccord de jour
  * est adapté à chaque structure (poteau, arc roulable) et les écarts d'épure sont listés. Les
@@ -44,7 +44,7 @@ export function CompareView() {
   const lines = compareLines(rows, t);
   return (
     <div className="compare" aria-busy={stale}>
-      <table>
+      <table className="table">
         <caption>
           {t.t("ui.compare.caption")}
           {stale
@@ -108,6 +108,7 @@ export function CompareView() {
               <td key={r.id}>
                 <button
                   type="button"
+                  className="btn btn-secondary"
                   disabled={r.current || stale}
                   onClick={() => apply(r)}
                   title={t.t(

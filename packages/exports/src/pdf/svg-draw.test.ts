@@ -133,4 +133,10 @@ describe("interprète SVG → PdfCanvas", () => {
     );
     expect(toWinAnsi("a\u0001b 中")).toBe("ab ?");
   });
+
+  it("toWinAnsi : lettres grecques des libellés (δ, γ, λ…) écrites en toutes lettres", () => {
+    expect(toWinAnsi("joint / naissance δ, γ_M0, λ = 3")).toBe(
+      "joint / naissance delta, gamma_M0, lambda = 3",
+    );
+  });
 });

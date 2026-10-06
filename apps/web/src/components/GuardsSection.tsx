@@ -6,7 +6,8 @@
  *
  * Champs répartis par niveau (`Tiered`, mode d'affichage `display`, tout par défaut) ; les
  * groupes (volée, trémie, remplissage, poteaux, main courante) restent regroupés dans chaque
- * zone. L'aide « à valider » d'un champ vient du dictionnaire des niveaux (`isToValidate`).
+ * zone. L'aide « à valider » d'un champ vient du dictionnaire des niveaux (`isToValidate`) ;
+ * elle disparaît quand la valeur est validée (`Project.validatedValues`).
  */
 import type { GuardInfill, GuardSection, GuardsSpec } from "@blondel/core";
 import { useRef } from "react";
@@ -28,6 +29,7 @@ import { formatDecimal, parseDecimal } from "../lib/units.js";
 import { useT } from "../i18n/useT.js";
 import type { MessageKey, Translator } from "@blondel/i18n";
 import { appStore, useApp, useModel } from "../store/appStore.js";
+import { useValidatedKeys } from "./fabrication/useToValidate.js";
 import type { Path } from "../store/setIn.js";
 import { AutoIntField, CheckField, IntField, NumberField, SelectField } from "./fields.js";
 import {
@@ -47,9 +49,17 @@ const options = <K extends string>(labels: Readonly<Record<K, MessageKey>>, t: T
     label: t.t(label),
   }));
 
-/** Aide « valeur par défaut à valider » d'un champ ◆ (dictionnaire des niveaux). */
-function toValidateHint(path: Path, t: Translator): { hint?: string } {
-  return isToValidate(paramKey(path)) ? { hint: t.t("ui.guards.toValidate") } : {};
+/**
+ * Aide « valeur par défaut à valider » d'un champ ◆ (dictionnaire des niveaux), retirée quand
+ * la valeur est validée (`validated` : clés validées du projet, ADR-0009 point 9).
+ */
+function toValidateHint(
+  path: Path,
+  t: Translator,
+  validated: ReadonlySet<string>,
+): { hint?: string } {
+  const key = paramKey(path);
+  return isToValidate(key) && !validated.has(key) ? { hint: t.t("ui.guards.toValidate") } : {};
 }
 
 function SectionEditor({
@@ -103,7 +113,12 @@ function field(path: Path, node: TieredItem["node"], group?: TieredGroup): Tiere
   return { key: paramKey(path), node, ...(group === undefined ? {} : { group }) };
 }
 
-function infillItems(infill: GuardInfill, t: Translator, g: TieredGroup): (TieredItem | false)[] {
+function infillItems(
+  infill: GuardInfill,
+  t: Translator,
+  g: TieredGroup,
+  validated: ReadonlySet<string>,
+): (TieredItem | false)[] {
   const base: Path = [...G, "infill"];
   return [
     field(
@@ -121,7 +136,7 @@ function infillItems(infill: GuardInfill, t: Translator, g: TieredGroup): (Tiere
         [...base, "spacing"],
         <IntField
           label={t.t("ui.guards.infill.balusterSpacing")}
-          {...toValidateHint([...base, "spacing"], t)}
+          {...toValidateHint([...base, "spacing"], t, validated)}
           value={infill.spacing}
           min={1}
           onCommit={set([...base, "spacing"])}
@@ -179,7 +194,7 @@ function infillItems(infill: GuardInfill, t: Translator, g: TieredGroup): (Tiere
               ? t.t("ui.guards.infill.glassThickness")
               : t.t("ui.guards.infill.panelThickness")
           }
-          {...toValidateHint([...base, "thickness"], t)}
+          {...toValidateHint([...base, "thickness"], t, validated)}
           value={infill.thickness}
           min={1}
           onCommit={set([...base, "thickness"])}
@@ -235,6 +250,7 @@ function guardsItems(
   going: number | undefined,
   walls: number,
   t: Translator,
+  validated: ReadonlySet<string>,
 ): (TieredItem | false)[] {
   const { flight, opening, posts, handrail } = guards;
   const fieldset = (id: string, legend: MessageKey): TieredGroup => ({
@@ -314,7 +330,7 @@ function guardsItems(
       [...F, "edgeOffset"],
       <IntField
         label={t.t("ui.guards.flight.edgeOffset")}
-        {...toValidateHint([...F, "edgeOffset"], t)}
+        {...toValidateHint([...F, "edgeOffset"], t, validated)}
         value={flight.edgeOffset}
         min={0}
         onCommit={set([...F, "edgeOffset"])}
@@ -346,7 +362,7 @@ function guardsItems(
       [...O, "setback"],
       <IntField
         label={t.t("ui.guards.opening.setback")}
-        {...toValidateHint([...O, "setback"], t)}
+        {...toValidateHint([...O, "setback"], t, validated)}
         value={opening.setback}
         min={0}
         onCommit={set([...O, "setback"])}
@@ -354,13 +370,13 @@ function guardsItems(
       gOpening,
     ),
     // Remplissage
-    ...infillItems(guards.infill, t, gInfill),
+    ...infillItems(guards.infill, t, gInfill, validated),
     // Poteaux
     field(
       [...P, "size"],
       <IntField
         label={t.t("ui.guards.posts.size")}
-        {...toValidateHint([...P, "size"], t)}
+        {...toValidateHint([...P, "size"], t, validated)}
         value={posts.size}
         min={1}
         onCommit={set([...P, "size"])}
@@ -371,7 +387,7 @@ function guardsItems(
       [...P, "maxSpacing"],
       <IntField
         label={t.t("ui.guards.posts.maxSpacing")}
-        {...toValidateHint([...P, "maxSpacing"], t)}
+        {...toValidateHint([...P, "maxSpacing"], t, validated)}
         value={posts.maxSpacing}
         min={1}
         onCommit={set([...P, "maxSpacing"])}
@@ -383,7 +399,7 @@ function guardsItems(
       <NumberField
         label={t.t("ui.guards.posts.cornerAngle")}
         unit="°"
-        {...toValidateHint([...P, "cornerAngle"], t)}
+        {...toValidateHint([...P, "cornerAngle"], t, validated)}
         value={posts.cornerAngle}
         min={0}
         max={180}
@@ -465,7 +481,7 @@ function guardsItems(
       [...G, "material"],
       <SelectField
         label={t.t("ui.guards.material")}
-        {...toValidateHint([...G, "material"], t)}
+        {...toValidateHint([...G, "material"], t, validated)}
         value={guards.material}
         options={GUARD_MATERIAL_OPTIONS.map((o) => ({ value: o.value, label: t.t(o.label) }))}
         onCommit={set([...G, "material"])}
@@ -475,7 +491,7 @@ function guardsItems(
       [...G, "wallTolerance"],
       <IntField
         label={t.t("ui.guards.wallTolerance")}
-        {...toValidateHint([...G, "wallTolerance"], t)}
+        {...toValidateHint([...G, "wallTolerance"], t, validated)}
         value={guards.wallTolerance}
         min={0}
         onCommit={set([...G, "wallTolerance"])}
@@ -489,6 +505,7 @@ export function GuardsSection({ display = DISPLAY_ALL }: Partial<SectionProps> =
   const guards = useApp((s) => s.project.guards);
   const walls = useApp((s) => s.project.site.walls.length);
   const { model } = useModel();
+  const validated = useValidatedKeys();
   // Derniers garde-corps retirés : restaurés si on les réactive.
   const last = useRef<GuardsSpec | null>(null);
   // Prolongements automatiques de la main courante : un giron nominal (calcul du cœur, lu dans
@@ -519,7 +536,7 @@ export function GuardsSection({ display = DISPLAY_ALL }: Partial<SectionProps> =
           ),
         },
         ...(guards
-          ? guardsItems(guards, going, walls, t)
+          ? guardsItems(guards, going, walls, t, validated)
           : [
               {
                 key: "guards",

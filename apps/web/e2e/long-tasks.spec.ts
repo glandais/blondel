@@ -81,22 +81,35 @@ test(`chargement et onglets : aucune tâche > ${LONG_TASK_BUDGET_MS} ms`, async 
   );
   await measure(page, steps, "structure wood-housed", () => chooseStructure(page, "wood-housed"));
   // Deux passages : premier montage de chaque vue, puis retour (constat : gel au premier
-  // clic sur « Comparateur », puis Plan → Comparateur → 3D). Les onglets des deux espaces
-  // (Conception, puis Fabrication) sont parcourus ; `openTab` bascule l'espace au besoin.
+  // clic sur le comparateur, puis Plan → Comparer → 3D). Les onglets des deux espaces
+  // (Conception, puis Fabrication : Pièces, Nomenclature, Comparer, À valider) sont parcourus ;
+  // `openTab` bascule l'espace au besoin.
   for (const round of [1, 2]) {
     for (const tab of TABS) {
       await measure(page, steps, `onglet ${tab} (${round})`, () => openTab(page, tab));
     }
   }
-  await measure(page, steps, "onglet Comparateur → 3D", async () => {
-    await openTab(page, "Comparateur");
+  await measure(page, steps, "onglet Comparer → 3D", async () => {
+    await openTab(page, "Comparer");
     await openTab(page, "3D");
   });
+  // Bascule en Fabrication (onglet Pièces) et pièce choisie dans la liste : développé exporté
+  // rendu au centre, réglages d'atelier à droite.
+  await measure(page, steps, "bascule en Fabrication (Pièces)", () => openTab(page, "Pièces"));
+  await measure(page, steps, "Fabrication : pièce choisie", async () => {
+    const list = page.getByRole("navigation", { name: "Pièces par famille" });
+    const group = list.getByRole("button", { name: /^Limons\b/ });
+    if ((await group.getAttribute("aria-expanded")) !== "true") await group.click();
+    await list.getByRole("list", { name: "Repères : Limons" }).getByRole("button").first().click();
+    await expect(page.locator(".fab-sheet__mark")).toBeVisible();
+    await settle(page);
+  });
+  await measure(page, steps, "Fabrication : onglet À valider", () => openTab(page, "À valider"));
   // Structures métal (QUESTIONS D5 : onglets mesurés jusque-là avec `wood-housed` seulement) :
-  // chaque onglet hors Comparateur (mesuré ci-dessus, indépendant de la structure affichée).
+  // chaque onglet hors Comparer (mesuré ci-dessus, indépendant de la structure affichée).
   for (const kind of ["steel-flat", "steel-profile", "steel-curved"]) {
     await measure(page, steps, `structure ${kind}`, () => chooseStructure(page, kind));
-    for (const tab of TABS.filter((t) => t !== "Comparateur")) {
+    for (const tab of TABS.filter((t) => t !== "Comparer")) {
       await measure(page, steps, `${kind} : onglet ${tab}`, () => openTab(page, tab));
     }
   }
@@ -146,12 +159,25 @@ test(`saisie de H et export PDF : aucune tâche > ${LONG_TASK_BUDGET_MS} ms`, as
   for (const value of ["2750", "2800"]) {
     await measure(page, steps, `H = ${value}`, () => commitField(page, h, value));
   }
+  // Menu « Exporter » de la barre du haut : en Conception seulement (en Fabrication, les
+  // sorties sont dans la colonne de droite, mesurées ci-dessous).
+  await expect(page.locator(".app")).toHaveAttribute("data-workspace", "design");
   await measure(page, steps, "export PDF", async () => {
     const download = page.waitForEvent("download");
     await page.getByRole("button", { name: /Exporter/ }).click();
     await page
       .getByRole("menuitem", { name: /^Dossier PDF complet \(gabarits 1:1 en A4\)/ })
       .click();
+    await download;
+    await settle(page);
+  });
+  await openTab(page, "Pièces");
+  await measure(page, steps, "Fabrication : Générer le dossier", async () => {
+    const outputs = page.getByRole("region", { name: "Sorties" });
+    const open = outputs.getByRole("button", { name: "Générer…" });
+    if ((await open.getAttribute("aria-expanded")) !== "true") await open.click();
+    const download = page.waitForEvent("download");
+    await outputs.getByRole("button", { name: "Générer le dossier" }).click();
     await download;
     await settle(page);
   });

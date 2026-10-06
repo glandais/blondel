@@ -1,11 +1,17 @@
 /**
  * Réglages repris par l'inspecteur Pièce selon la famille de pièces (spécification de contenu
- * § 3, colonne « Inspecteur pièce ») et filtrage des chemins par préfixe.
+ * § 3, colonne « Inspecteur pièce »), filtrage des chemins par préfixe, encart « Forme du … » et
+ * section de Conception de la pièce (mode Fabrication).
  */
 import type { Part } from "@blondel/core";
 import { translatorFor } from "@blondel/i18n";
 import { describe, expect, it } from "vitest";
-import { matchesSettings, partSettingsFor } from "./partSettings.js";
+import {
+  matchesSettings,
+  partDesignSection,
+  partSettingsFor,
+  partShapeFor,
+} from "./partSettings.js";
 
 type P = Pick<Part, "category" | "family" | "material">;
 const p = (
@@ -89,5 +95,58 @@ describe("matchesSettings", () => {
     expect(matchesSettings(["newelX"], ["newel"])).toBe(false);
     expect(matchesSettings(["sectionAuto"], ["section"])).toBe(false);
     expect(matchesSettings(["supports", "kind"], [])).toBe(false);
+  });
+});
+
+describe("forme de la pièce (encart « Forme du … » du mode Fabrication)", () => {
+  const FR = translatorFor("fr");
+
+  it("titre et aide adaptés à la pièce", () => {
+    const limon = partShapeFor(p("stringer", "structure"));
+    expect(FR.t(limon.title)).toBe("Forme du limon");
+    expect(FR.t(limon.help)).toBe("Épaisseur, rives, jour : réglages de conception.");
+    expect(FR.t(partShapeFor(p("carriage", "structure")).title)).toBe("Forme de la crémaillère");
+    expect(FR.t(partShapeFor(p("support", "structure")).title)).toBe("Forme des supports");
+    expect(FR.t(partShapeFor(p("tread", "treads", "wood-oak")).title)).toBe("Forme de la marche");
+    expect(FR.t(partShapeFor(p("post", "guards")).title)).toBe("Forme du garde-corps");
+  });
+
+  it("chaque catégorie a un titre et une aide traduits (français, anglais)", () => {
+    const cats: readonly Part["category"][] = [
+      "tread",
+      "riser",
+      "stringer",
+      "carriage",
+      "support",
+      "post",
+      "handrail",
+      "baluster",
+      "infill",
+      "landing",
+      "fixing",
+    ];
+    for (const locale of ["fr", "en"] as const) {
+      const t = translatorFor(locale);
+      for (const category of cats) {
+        for (const family of ["structure", "treads", "guards", undefined] as const) {
+          const s = partShapeFor({ category, family });
+          expect(t.t(s.title)).not.toBe(s.title);
+          expect(t.t(s.help)).not.toBe(s.help);
+        }
+      }
+    }
+  });
+
+  it("section de Conception : marches, garde-corps, structure (même sans réglages repris)", () => {
+    expect(partDesignSection(p("tread", "treads", "wood-oak"))).toBe("treads");
+    expect(partSettingsFor(p("tread", "treads", "wood-oak"))).toBeNull();
+    expect(partDesignSection(p("riser", "treads", "steel-raw"))).toBe("treads");
+    expect(partDesignSection(p("landing", "treads", "wood-oak"))).toBe("treads");
+    for (const c of ["post", "handrail", "baluster", "infill"] as const) {
+      expect(partDesignSection(p(c, "guards"))).toBe("guards");
+    }
+    for (const c of ["stringer", "carriage", "support", "fixing", "post", "handrail"] as const) {
+      expect(partDesignSection(p(c, "structure"))).toBe("structure");
+    }
   });
 });

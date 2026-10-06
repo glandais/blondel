@@ -4,7 +4,6 @@
  * d'affichage (`display`) : le titre et l'enveloppe viennent du conteneur (ancien panneau à
  * sections repliables, panneau libre, étape guidée).
  */
-import type { MessageKey } from "@blondel/i18n";
 import type { ComponentType } from "react";
 import type { SectionId } from "../../lib/sectionIds.js";
 import { GuardsSection } from "../GuardsSection.js";
@@ -17,6 +16,8 @@ import { SteppingSection } from "./SteppingSection.js";
 import type { SectionProps } from "./Tiered.js";
 import { TreadsSection } from "./TreadsSection.js";
 
+/** Titre de chaque section : déplacé dans `lib/sectionIds.ts` (utilisable hors composants). */
+export { SECTION_TITLE_KEYS } from "../../lib/sectionIds.js";
 export type { SectionProps } from "./Tiered.js";
 export {
   DISPLAY_ALL,
@@ -48,16 +49,4 @@ export const SECTION_COMPONENTS: Readonly<Record<SectionId, ComponentType<Sectio
   structure: StructureSection,
   guards: GuardsSection,
   compliance: ContextSection,
-};
-
-/** Titre de chaque section (clés existantes de l'ancien panneau). */
-export const SECTION_TITLE_KEYS: Readonly<Record<SectionId, MessageKey>> = {
-  site: "ui.params.site.title",
-  layout: "ui.params.layout.title",
-  stepping: "ui.params.stepping.title",
-  balancing: "ui.params.balancing.title",
-  treads: "ui.params.treads.title",
-  structure: "ui.structure.label",
-  guards: "ui.params.guards.title",
-  compliance: "ui.params.compliance.title",
 };

@@ -5,7 +5,15 @@
  * un troisième clic.
  */
 import { expect, test, type Page } from "@playwright/test";
-import { openApp, openMoreMenu, openTab, settle } from "./support.js";
+import {
+  chooseStructure,
+  openApp,
+  openMoreMenu,
+  openTab,
+  openWorkspace,
+  settle,
+  viewTab,
+} from "./support.js";
 
 const RATES: readonly (readonly [RegExp, string])[] = [
   [/^Taux horaire/, "55"],
@@ -27,14 +35,17 @@ test("profil d'atelier : barème hors projet, euros du comparateur, persistance"
   page,
 }) => {
   await openApp(page);
-  await openTab(page, "Comparateur");
+  // Structure du projet parmi les variantes comparées : la colonne de Fabrication affiche le
+  // coût de la variante courante (sans structure, aucune variante n'est courante : « – »).
+  await chooseStructure(page, "wood-housed");
+  await openTab(page, "Comparer");
   const costs = costRow(page).getByRole("cell");
   await expect(costs.first()).toBeVisible();
   for (const c of await costs.all()) await expect(c).not.toContainText("€");
-  // Inspecteur : barème incomplet, lien vers le profil d'atelier.
-  const inspector = page.getByRole("complementary", { name: "Inspecteur" });
+  // Colonne de Fabrication (« Coût estimé ») : barème incomplet, lien vers le profil d'atelier.
+  const outputs = page.getByRole("region", { name: "Sorties" });
   await expect(
-    inspector.getByRole("button", { name: "Compléter le profil d'atelier (0 / 9)" }),
+    outputs.getByRole("button", { name: "Compléter le profil d'atelier (0 / 9)" }),
   ).toBeVisible();
 
   // Profil d'atelier : menu ⋯ « Plus d'options », bouton « Atelier… ».
@@ -66,10 +77,21 @@ test("profil d'atelier : barème hors projet, euros du comparateur, persistance"
 
   await settle(page);
   await expect(costRow(page).getByRole("cell").filter({ hasText: "€" }).first()).toBeVisible();
-  // Barème complet : l'inspecteur renvoie au coût du comparateur.
+  // Barème complet : la colonne de Fabrication affiche le coût de la variante courante ;
+  // en Conception, l'inspecteur (sans sélection) renvoie au coût du comparateur.
+  await expect(outputs.locator(".fab-cost__value")).toContainText("€");
+  await openWorkspace(page, "Conception");
+  const inspector = page.getByRole("complementary", { name: "Inspecteur" });
   await expect(
     inspector.getByRole("button", { name: "Voir le coût dans le comparateur" }),
   ).toBeVisible();
+  // Sans structure, aucune variante n'est courante : la colonne de Fabrication renvoie au
+  // comparateur (pas de « – »).
+  await chooseStructure(page, "none");
+  await openTab(page, "Pièces");
+  await settle(page);
+  await outputs.getByRole("button", { name: "Voir le coût dans le comparateur" }).click();
+  await expect(viewTab(page, "Comparer")).toHaveAttribute("aria-selected", "true");
 
   // Barème mémorisé dans le navigateur, hors du projet : relu au rechargement.
   await page.reload();
@@ -82,6 +104,7 @@ test("profil d'atelier : barème hors projet, euros du comparateur, persistance"
   await page.keyboard.press("Escape");
   await expect(page.getByRole("dialog", { name: "Profil d'atelier" })).toBeHidden();
   // Barème effacé : le lien de l'inspecteur rouvre le profil d'atelier.
+  await openWorkspace(page, "Conception");
   const complete = inspector.getByRole("button", { name: "Compléter le profil d'atelier (0 / 9)" });
   await complete.click();
   await expect(page.getByRole("dialog", { name: "Profil d'atelier" })).toBeVisible();

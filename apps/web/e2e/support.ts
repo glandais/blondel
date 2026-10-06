@@ -31,8 +31,8 @@ export const LONG_TASK_BUDGET_MS = parseLongTaskBudget(process.env["E2E_LONG_TAS
 
 /** Vues de l'espace Conception (onglets de la vue centrale). */
 export const DESIGN_TABS = ["Plan", "3D", "Élévation"] as const;
-/** Vues de l'espace Fabrication (provisoires jusqu'à la vague 4). */
-export const FABRICATION_TABS = ["Développés", "Nomenclature", "Comparateur"] as const;
+/** Vues de l'espace Fabrication (onglets « Vues » de la zone de Fabrication, vague 4). */
+export const FABRICATION_TABS = ["Pièces", "Nomenclature", "Comparer", "À valider"] as const;
 /** Toutes les vues, Conception puis Fabrication. */
 export const TABS = [...DESIGN_TABS, ...FABRICATION_TABS] as const;
 export type TabName = (typeof TABS)[number];
@@ -160,13 +160,14 @@ export function describeTasks(over: readonly LongTask[], all: readonly LongTask[
 
 /**
  * Attend la fin des calculs : plus de « Calcul… » dans la ligne de chiffres, comparaison
- * terminée si l'onglet Comparateur est affiché, puis deux images et un moment de repos du fil
+ * terminée si l'onglet Comparer est affiché, puis deux images et un moment de repos du fil
  * principal (les observateurs de performance sont notifiés de façon asynchrone).
  */
 export async function settle(page: Page): Promise<void> {
-  await expect(page.locator(".figure-line__pending")).toHaveCount(0);
+  // « Calcul… » de la ligne de chiffres (Conception) ou de la bande de chiffres (Fabrication).
+  await expect(page.locator(".figure-line__pending, .fab-figures__pending")).toHaveCount(0);
   const compare = page.locator(".compare, .empty-view");
-  if (await page.getByRole("tab", { name: "Comparateur", selected: true }).count()) {
+  if (await page.getByRole("tab", { name: "Comparer", selected: true }).count()) {
     await expect(page.locator(".compare caption")).toContainText(" ms)");
     await expect(compare.first()).toBeVisible();
   }
@@ -317,6 +318,15 @@ export async function chooseStructure(page: Page, kind: string, ix?: Interaction
   await structureSelect(page).selectOption(kind);
   ix?.count(`structure ${kind}`);
   await settle(page);
+}
+
+/**
+ * Bouton du menu des exports : « Exporter » de la barre du haut en Conception, « Autres
+ * exports » de la colonne de droite en Fabrication (vague 4 : plus de menu « Exporter » dans la
+ * barre du haut en Fabrication). Même menu, mêmes entrées.
+ */
+export function exportMenuButton(page: Page): Locator {
+  return page.getByRole("button", { name: /^(Exporter|Autres exports)/ });
 }
 
 /** Onglet de vue `name` (liste « Vues » de la vue centrale). */

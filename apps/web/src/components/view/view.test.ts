@@ -1,6 +1,6 @@
 /**
- * Vue centrale du parcours libre (maquette 1b) : onglets de chaque espace de travail, boutons
- * − + Recadrer seulement en Conception, ligne de chiffres en français et en anglais (elle
+ * Vue centrale du parcours libre en Conception (maquette 1b) : onglets Plan | 3D | Élévation,
+ * boutons − + Recadrer, ligne de chiffres en français et en anglais (elle
  * remplace la barre d'état), logique pure du zoom des SVG exportés.
  */
 import { buildModel } from "@blondel/core";
@@ -77,17 +77,12 @@ describe("ViewArea : onglets et commandes de vue", () => {
     expect(html).toContain('class="figure-line"');
   });
 
-  it("Fabrication : Développés | Nomenclature | Comparateur, sans zoom", () => {
-    journeyStore.getState().setWorkspace("fabrication");
-    expect(appStore.getState().view).toBe("flat");
+  it("Conception seulement : aucun onglet de Fabrication (zone FabricationArea)", () => {
     const html = render(ViewArea);
-    expect(tabs(html)).toEqual([
-      ["tab-flat", true, "Développés"],
-      ["tab-bom", false, "Nomenclature"],
-      ["tab-compare", false, "Comparateur"],
-    ]);
-    expect(html).not.toContain("Zoom avant");
-    expect(html).not.toContain("Recadrer");
+    expect(tabs(html).map((t) => t[0])).toEqual(["tab-plan", "tab-3d", "tab-elevation"]);
+    for (const text of ["Pièces", "Nomenclature", "Comparer", "À valider", "Développés"]) {
+      expect(html).not.toContain(`>${text}<`);
+    }
   });
 
   it("anglais : libellés traduits", () => {

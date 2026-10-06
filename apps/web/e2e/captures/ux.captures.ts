@@ -116,16 +116,23 @@ test("02 à 11 vues centrales sur une démo", async ({ page }) => {
   await openTab(page, "Élévation");
   await shot(page, "07-elevation");
 
-  await openTab(page, "Développés");
+  // Fabrication (vague 4) : liste des pièces par famille, puis pièce choisie (LD2).
+  await openTab(page, "Pièces");
   await shot(page, "08-developpes-liste");
-  await page.locator(".view").getByRole("button").filter({ hasText: "LD2" }).first().click();
+  const list = page.getByRole("navigation", { name: "Pièces par famille" });
+  const group = list.getByRole("button", { name: /^Limons\b/ });
+  if ((await group.getAttribute("aria-expanded")) !== "true") await group.click();
+  await list
+    .getByRole("button", { name: /^LD2\b/ })
+    .first()
+    .click();
   await settle(page);
   await shot(page, "09-developpes-piece");
 
   await openTab(page, "Nomenclature");
   await shot(page, "10-nomenclature");
 
-  await openTab(page, "Comparateur");
+  await openTab(page, "Comparer");
   await shot(page, "11-comparateur");
 });
 

@@ -6,7 +6,15 @@
  * sélectionne une autre pièce.
  */
 import { expect, test, type Locator, type Page } from "@playwright/test";
-import { applyPreset, chooseStructure, openApp, openTab, settle, viewTab } from "./support.js";
+import {
+  applyPreset,
+  chooseStructure,
+  openApp,
+  openTab,
+  openWorkspace,
+  settle,
+  viewTab,
+} from "./support.js";
 
 test.describe.configure({ retries: 1 });
 
@@ -46,22 +54,27 @@ async function selectFlatPartIn3d(page: Page): Promise<Locator> {
   throw new Error("aucune pièce à développé trouvée dans le canevas 3D");
 }
 
-test("pièce choisie dans les développés : DXF R12 téléchargé, pièces regroupées", async ({
+test("pièce choisie dans la liste de Fabrication : DXF R12 téléchargé, pièces regroupées", async ({
   page,
 }) => {
   await openApp(page);
   await applyPreset(page, "Escalier droit");
   await chooseStructure(page, "steel-flat");
-  // Sélection déterministe : liste des pièces à développé (Fabrication).
-  await openTab(page, "Développés");
-  await page
-    .getByRole("navigation", { name: "Pièces à développé" })
-    .getByRole("button")
-    .first()
-    .click();
+  // Sélection déterministe : liste des pièces groupées par famille (Fabrication, onglet Pièces),
+  // groupe « Limons » déplié, premier repère.
+  await openTab(page, "Pièces");
+  const list = page.getByRole("navigation", { name: "Pièces par famille" });
+  const group = list.getByRole("button", { name: /^Limons\b/ });
+  if ((await group.getAttribute("aria-expanded")) !== "true") await group.click();
+  const markButton = list.getByRole("list", { name: "Repères : Limons" }).getByRole("button");
+  await markButton.first().click();
+  await expect(markButton.first()).toHaveAttribute("aria-pressed", "true");
+  // L'inspecteur Pièce (Conception) montre la pièce choisie en Fabrication.
+  await openWorkspace(page, "Conception");
   const inspector = partInspector(page);
   await expect(inspector).toBeVisible();
   const mark = (await inspector.locator(".insp-title").textContent())?.trim() ?? "";
+  expect(mark).not.toBe("");
   const dxf = inspector.getByRole("button", { name: /DXF R12/ });
   await expect(dxf).toBeEnabled();
   const download = page.waitForEvent("download");
@@ -135,12 +148,17 @@ test("inspecteur Pièce : sélection 3D, développé, isolation, réglage annula
     "Contrôle de conception indicatif : il ne vaut pas attestation de conformité.",
   );
 
-  // « Développé → » : Fabrication, onglet Développés, développé de la pièce affiché.
+  // « Développé → » : Fabrication, onglet Pièces, développé de la pièce affiché.
   await inspector.getByRole("button", { name: /^Développé/ }).click();
   await settle(page);
-  await expect(viewTab(page, "Développés")).toHaveAttribute("aria-selected", "true");
+  await expect(viewTab(page, "Pièces")).toHaveAttribute("aria-selected", "true");
+  const sheet = page.getByRole("region", { name: "Pièce choisie" });
+  await expect(sheet.locator(".fab-sheet__mark")).toHaveText(mark);
   await expect(page.getByLabel(`Développé de la pièce ${mark}`)).toBeVisible();
-  // La sélection reste la pièce : l'inspecteur Pièce reste ouvert.
+  await expect(sheet.locator(".svg-export svg")).toBeVisible();
+  // La sélection reste la pièce : de retour en Conception, l'inspecteur Pièce la montre.
+  await expect(sheet).toHaveAttribute("data-part", partId!);
+  await openWorkspace(page, "Conception");
   await expect(partInspector(page).locator(".insp-template--part")).toHaveAttribute(
     "data-part",
     partId!,

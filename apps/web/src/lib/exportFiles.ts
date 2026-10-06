@@ -10,7 +10,12 @@
  * Dossier PDF (QUESTIONS A20, décision du 2026-09-29) : « complet » garde tous les gabarits
  * 1:1 ; trois dossiers filtrés ne tuilent que les gabarits d'une famille (limons et structure,
  * marches, garde-corps : `templateFamily` de `@blondel/exports`) ; recouvrement des cases fixe
- * (10 mm, `DEFAULT_TILE_OVERLAP`), sans réglage.
+ * (10 mm, `DEFAULT_TILE_OVERLAP`), sans réglage. Le formulaire « Dossier PDF » du mode
+ * Fabrication combine format (A4 | A3) et gabarits (tous, une famille, aucun) : `dossierPdfJob`.
+ *
+ * Valeurs ◆ à valider (ADR-0009 point 9) : chaque dossier PDF reçoit la liste des valeurs ◆
+ * validées et restantes (`toValidateDocRows`, page « Valeurs à valider ») ; la fiche de pose
+ * seule n'en a pas. Des ◆ restantes ne bloquent jamais la génération.
  */
 import type { Model, Part, Project } from "@blondel/core";
 import {
@@ -41,6 +46,7 @@ import {
   type Translator,
 } from "@blondel/i18n";
 import { PROJECT_FILE_SUFFIX, projectFileName } from "../store/persistence.js";
+import { toValidateDocRows } from "./toValidate.js";
 import {
   loadExportPdf,
   type ExportPdfFn,
@@ -129,62 +135,108 @@ export const PDF_FAMILY_JOBS: Readonly<
   "pdf-guards": "guards",
 };
 
-type PdfJobId = "pdf" | "pdf-a3" | "pdf-light" | "installation-pdf" | keyof typeof PDF_FAMILY_JOBS;
+type DossierPdfId = "pdf" | "pdf-a3" | "pdf-light" | keyof typeof PDF_FAMILY_JOBS;
+type PdfJobId = DossierPdfId | "installation-pdf";
 
 /**
  * Suffixe du nom de fichier d'un dossier PDF : aucun, un code (« a3 »), ou un mot traduit (clé
- * de `@blondel/i18n`, sans accents ni espaces dans chaque langue).
+ * de `@blondel/i18n`, sans accents ni espaces dans chaque langue) éventuellement suivi d'un code
+ * (« gabarits-limons-a3 »).
  */
-export type FileSuffix = "" | { readonly raw: string } | { readonly key: MessageKey };
+export type FileSuffix =
+  "" | { readonly raw: string } | { readonly key: MessageKey; readonly raw?: string };
 
 /** Suffixe « -… » d'un nom de fichier dans la langue du traducteur. */
 export function fileSuffix(suffix: FileSuffix, t: Translator): string {
   if (suffix === "") return "";
-  return `-${"raw" in suffix ? suffix.raw : t.t(suffix.key)}`;
+  const parts = "key" in suffix ? [t.t(suffix.key)] : [];
+  if (suffix.raw !== undefined) parts.push(suffix.raw);
+  return `-${parts.join("-")}`;
 }
+
+/** Dossier PDF à produire : suffixe du nom de fichier et options de mise en page. */
+export interface PdfJob {
+  readonly suffix: FileSuffix;
+  readonly options: PdfJobOptions;
+}
+
+/** Gabarits 1:1 d'un dossier PDF : tous, ceux d'une seule famille, ou aucun. */
+export type DossierTemplates = "all" | "none" | TemplateFamily;
+
+/** Suffixe des dossiers filtrés par famille de gabarits. */
+const FAMILY_SUFFIX: Readonly<Record<TemplateFamily, MessageKey>> = {
+  stringers: "ui.label.exportFile.templatesStringers",
+  treads: "ui.label.exportFile.templatesTreads",
+  guards: "ui.label.exportFile.templatesGuards",
+};
+
+/**
+ * Dossier PDF du formulaire « Dossier PDF » (mode Fabrication) : format de page (A4 | A3) et
+ * gabarits 1:1 (tous, une famille, aucun). A4 + tous = dossier complet (aucune option, aucun
+ * suffixe) ; A3 ajoute le format et le code « a3 » au nom du fichier.
+ */
+export function dossierPdfJob(format: "a4" | "a3", templates: DossierTemplates): PdfJob {
+  const a3 = format === "a3";
+  const formatOption: PdfJobOptions = a3 ? { format: "a3" } : {};
+  const raw = a3 ? { raw: "a3" } : {};
+  if (templates === "all") return { suffix: a3 ? { raw: "a3" } : "", options: formatOption };
+  if (templates === "none") {
+    return {
+      suffix: { key: "ui.label.exportFile.noTemplates", ...raw },
+      options: { pages: { templates: false }, ...formatOption },
+    };
+  }
+  return {
+    suffix: { key: FAMILY_SUFFIX[templates], ...raw },
+    options: { templateFamilies: [templates], ...formatOption },
+  };
+}
+
+/** Dossiers PDF du menu « Exporter » : format et gabarits de chacun. */
+const DOSSIER_JOBS: Readonly<
+  Record<DossierPdfId, { readonly format: "a4" | "a3"; readonly templates: DossierTemplates }>
+> = {
+  pdf: { format: "a4", templates: "all" },
+  "pdf-a3": { format: "a3", templates: "all" },
+  "pdf-stringers": { format: "a4", templates: PDF_FAMILY_JOBS["pdf-stringers"] },
+  "pdf-treads": { format: "a4", templates: PDF_FAMILY_JOBS["pdf-treads"] },
+  "pdf-guards": { format: "a4", templates: PDF_FAMILY_JOBS["pdf-guards"] },
+  "pdf-light": { format: "a4", templates: "none" },
+};
+
+const dossierJob = (id: DossierPdfId): PdfJob =>
+  dossierPdfJob(DOSSIER_JOBS[id].format, DOSSIER_JOBS[id].templates);
 
 /**
  * Pages et format de chaque dossier PDF (`@blondel/exports/pdf`) : complet = toutes les pages,
  * gabarits 1:1 tuilés en A4 ou A3 ; gabarits d'une seule famille (A4) ; sans gabarits ; fiche
- * de pose seule.
+ * de pose seule (sans la page des valeurs à valider).
  */
-export const PDF_JOBS: Readonly<Record<PdfJobId, { suffix: FileSuffix; options: PdfJobOptions }>> =
-  {
-    pdf: { suffix: "", options: {} },
-    "pdf-a3": { suffix: { raw: "a3" }, options: { format: "a3" } },
-    "pdf-stringers": {
-      suffix: { key: "ui.label.exportFile.templatesStringers" },
-      options: { templateFamilies: [PDF_FAMILY_JOBS["pdf-stringers"]] },
-    },
-    "pdf-treads": {
-      suffix: { key: "ui.label.exportFile.templatesTreads" },
-      options: { templateFamilies: [PDF_FAMILY_JOBS["pdf-treads"]] },
-    },
-    "pdf-guards": {
-      suffix: { key: "ui.label.exportFile.templatesGuards" },
-      options: { templateFamilies: [PDF_FAMILY_JOBS["pdf-guards"]] },
-    },
-    "pdf-light": {
-      suffix: { key: "ui.label.exportFile.noTemplates" },
-      options: { pages: { templates: false } },
-    },
-    "installation-pdf": {
-      suffix: { key: "ui.label.exportFile.installation" },
-      options: {
-        pages: {
-          toc: false,
-          plan: false,
-          elevation: false,
-          installation: true,
-          bom: false,
-          cutsheet: false,
-          compliance: false,
-          flats: false,
-          templates: false,
-        },
+export const PDF_JOBS: Readonly<Record<PdfJobId, PdfJob>> = {
+  pdf: dossierJob("pdf"),
+  "pdf-a3": dossierJob("pdf-a3"),
+  "pdf-stringers": dossierJob("pdf-stringers"),
+  "pdf-treads": dossierJob("pdf-treads"),
+  "pdf-guards": dossierJob("pdf-guards"),
+  "pdf-light": dossierJob("pdf-light"),
+  "installation-pdf": {
+    suffix: { key: "ui.label.exportFile.installation" },
+    options: {
+      pages: {
+        toc: false,
+        plan: false,
+        elevation: false,
+        installation: true,
+        bom: false,
+        cutsheet: false,
+        compliance: false,
+        toValidate: false,
+        flats: false,
+        templates: false,
       },
     },
-  };
+  },
+};
 
 export const MIME = {
   json: "application/json",
@@ -269,6 +321,58 @@ export function exportAvailability(
   return { ok: true };
 }
 
+/** Un PDF mis en page (worker si `deps.renderPdf`, sinon module chargé à la demande). */
+async function renderPdfFile(
+  project: Project,
+  model: Model,
+  job: PdfJob,
+  deps: ExportDeps,
+  locale: Locale,
+): Promise<ExportFile[]> {
+  const t = translatorFor(locale);
+  const filename = `${fileStem(project.name)}${fileSuffix(job.suffix, t)}.pdf`;
+  const options = job.options;
+  if (deps.renderPdf) {
+    return [
+      { filename, mime: MIME.pdf, content: await deps.renderPdf(project, model, options, locale) },
+    ];
+  }
+  const exportPdf = await deps.loadPdf();
+  const content = await exportPdf(model, { project, title: project.name, ...options, locale });
+  return [{ filename, mime: MIME.pdf, content }];
+}
+
+/**
+ * Dossier PDF (`dossierPdfJob` ou un dossier de `PDF_JOBS`) dans la langue `locale`, avec la
+ * liste des valeurs ◆ validées et restantes (page « Valeurs à valider ») : jamais bloqué par des
+ * ◆ restantes. Lève une `MessageError` sans modèle, ou si la famille de gabarits demandée n'a
+ * aucun développé (motif traduit à l'affichage).
+ */
+export async function buildDossierPdf(
+  project: Project,
+  model: Model | null,
+  job: PdfJob,
+  deps: ExportDeps = DEFAULT_EXPORT_DEPS,
+  locale: Locale = DEFAULT_LOCALE,
+): Promise<ExportFile[]> {
+  if (!model) throw new MessageError(msg("ui.label.export.noModel"));
+  const families = job.options.templateFamilies;
+  if (
+    families !== undefined &&
+    !partsWithFlat(model).some((p) => families.includes(templateFamily(p)))
+  ) {
+    throw new MessageError(msg("ui.label.export.noFamilyFlat"));
+  }
+  const toValidate = toValidateDocRows(project, model, translatorFor(locale));
+  return renderPdfFile(
+    project,
+    model,
+    { suffix: job.suffix, options: { ...job.options, toValidate } },
+    deps,
+    locale,
+  );
+}
+
 /**
  * Produit le ou les fichiers d'un export dans la langue `locale` (textes, nombres, calques DXF,
  * en-têtes CSV, noms de fichiers ; français par défaut). Lève si le rendu échoue (l'appelant
@@ -351,18 +455,9 @@ export async function buildExport(
     case "pdf-stringers":
     case "pdf-treads":
     case "pdf-guards":
-    case "installation-pdf": {
-      const { suffix, options } = PDF_JOBS[id];
-      const filename = `${stem}${fileSuffix(suffix, t)}.pdf`;
-      if (deps.renderPdf) {
-        return [
-          { filename, mime: MIME.pdf, content: await deps.renderPdf(project, m, options, locale) },
-        ];
-      }
-      const exportPdf = await deps.loadPdf();
-      const content = await exportPdf(m, { project, title: project.name, ...options, locale });
-      return [{ filename, mime: MIME.pdf, content }];
-    }
+      return buildDossierPdf(project, m, PDF_JOBS[id], deps, locale);
+    case "installation-pdf":
+      return renderPdfFile(project, m, PDF_JOBS[id], deps, locale);
     case "glb": {
       const content = deps.renderGlb
         ? await deps.renderGlb(project, m, locale)

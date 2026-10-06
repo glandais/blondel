@@ -22,13 +22,26 @@
  *   `ui.param.toValidate`), une seule source ;
  * - garde-corps et rotation M6 : déclarés ici (seule source de ces marqueurs dans l'interface),
  *   d'après les défauts « à valider » du cœur cités en commentaire.
+ *
+ * Validation des ◆ (ADR-0009 point 9) : `toValidateStates` donne, pour chaque valeur ◆ du
+ * projet, sa valeur effective (défauts compris) et si elle est validée
+ * (`Project.validatedValues`, `isValueValidated` du cœur). Les compteurs ne comptent que les
+ * valeurs **restantes** (non validées). Lecture du projet seulement, aucun calcul métier.
  */
-import type { Model, Project } from "@blondel/core";
+import {
+  ROTATION_DEFAULT_REACH,
+  ROTATION_DEFAULT_STEEPNESS,
+  isValueValidated,
+  type Model,
+  type Project,
+  type ValidatedScalar,
+} from "@blondel/core";
 import { availableStructures } from "./optionalApi.js";
 import { fieldText } from "./paramLabels.js";
 import { GUIDED_STEPS, SECTION_IDS, type GuidedStep, type SectionId } from "./sectionIds.js";
 import {
   deriveParamFields,
+  getParam,
   safeDefaults,
   structureContext,
   withDefaults,
@@ -504,62 +517,118 @@ export function treadsMaterialApplies(params: unknown): boolean {
   return true;
 }
 
-/** Chemins des paramètres du plugin de structure courant (comme `StructureSection`). */
-function structurePaths(project: Project, model: Model | null | undefined): ParamPath[] {
+/** Paramètres du plugin de structure courant complétés par ses défauts, et leurs chemins. */
+function structureFields(
+  project: Project,
+  model: Model | null | undefined,
+): { readonly values: Record<string, unknown>; readonly paths: ParamPath[] } {
   const kind = project.stair.structure.kind;
   const plugin = availableStructures().find((k) => k.kind === kind);
-  if (!plugin) return [];
+  if (!plugin) return { values: {}, paths: [] };
   const defaults = safeDefaults(plugin, structureContext(project, model));
   // Sans modèle (défauts non calculables), paramètres enregistrés dans le projet.
   const values = withDefaults(defaults, project.stair.structure.params);
-  return deriveParamFields(values, plugin.paramsSchema)
+  const paths = deriveParamFields(values, plugin.paramsSchema)
     .map((f) => f.path)
     .filter((p) => structureParamApplies(project, values, p));
+  return { values, paths };
+}
+
+/** Valeur scalaire (nombre fini, texte, booléen), sinon `undefined`. */
+function scalar(v: unknown): ValidatedScalar | undefined {
+  if (typeof v === "number") return Number.isFinite(v) ? v : undefined;
+  return typeof v === "string" || typeof v === "boolean" ? v : undefined;
+}
+
+/** Valeur ◆ d'un projet avec sa valeur effective et son état de validation. */
+export interface ToValidateState extends ToValidateItem {
+  /** Valeur effective (défauts compris) ; `undefined` : non calculable ou non scalaire. */
+  readonly value: ValidatedScalar | undefined;
+  /** Plugin de structure, pour les paramètres `stair.structure.params.*`. */
+  readonly structureKind?: string;
+  /** Validée : une entrée de `validatedValues` porte cette valeur effective (sinon caduque). */
+  readonly validated: boolean;
 }
 
 /**
- * Valeurs ◆ présentes dans ce projet : garde-corps présents (type de remplissage courant),
- * paramètres du plugin de structure courant, portée et raideur de la rotation M6.
+ * Valeurs ◆ présentes dans ce projet, avec leur valeur effective et leur état de validation :
+ * portée et raideur de la rotation M6 (défauts du cœur si absentes), paramètres du plugin de
+ * structure courant (défauts du plugin compris), garde-corps présents (type de remplissage
+ * courant). Une valeur non calculable n'est jamais validée.
  */
-export function toValidateItems(project: Project, model?: Model | null): readonly ToValidateItem[] {
-  const out: ToValidateItem[] = [];
-  const push = (path: readonly string[]): void => {
+export function toValidateStates(
+  project: Project,
+  model?: Model | null,
+): readonly ToValidateState[] {
+  const out: ToValidateState[] = [];
+  const state = (base: ToValidateItem, raw: unknown, structureKind?: string): ToValidateState => {
+    const value = scalar(raw);
+    const validated =
+      value !== undefined && isValueValidated(project, base.key, value, structureKind);
+    return {
+      ...base,
+      value,
+      ...(structureKind === undefined ? {} : { structureKind }),
+      validated,
+    };
+  };
+  const push = (path: readonly string[], raw: unknown): void => {
     const key = paramKey(path);
     const e = tierEntry(key);
-    if (e?.toValidate === true) out.push(item(key, path, e));
+    if (e?.toValidate === true) out.push(state(item(key, path, e), raw));
   };
-  if (project.stair.balancing.method === "M6") {
-    push(["stair", "balancing", "rotationReach"]);
-    push(["stair", "balancing", "rotationSteepness"]);
+  const b = project.stair.balancing;
+  if (b.method === "M6") {
+    push(["stair", "balancing", "rotationReach"], b.rotationReach ?? ROTATION_DEFAULT_REACH);
+    push(
+      ["stair", "balancing", "rotationSteepness"],
+      b.rotationSteepness ?? ROTATION_DEFAULT_STEEPNESS,
+    );
   }
   const kind = project.stair.structure.kind;
-  for (const p of structurePaths(project, model)) {
+  const { values, paths } = structureFields(project, model);
+  for (const p of paths) {
     const e = structureParamEntry(kind, p);
     if (e.toValidate !== true) continue;
     const path = ["stair", "structure", "params", ...p];
-    out.push(item(paramKey(path), path, e));
+    out.push(state(item(paramKey(path), path, e), getParam(values, p), kind));
   }
-  for (const p of guardPaths(project)) push(p);
+  for (const p of guardPaths(project)) push(p, getParam(project.guards, p.slice(1)));
   return out;
 }
 
-/** Nombre de valeurs ◆ par section principale. */
+/**
+ * Valeurs ◆ présentes dans ce projet (validées ou non) : garde-corps présents (type de
+ * remplissage courant), paramètres du plugin de structure courant, portée et raideur de la
+ * rotation M6.
+ */
+export function toValidateItems(project: Project, model?: Model | null): readonly ToValidateItem[] {
+  return toValidateStates(project, model).map(({ key, path, section, steps }) => ({
+    key,
+    path,
+    section,
+    steps,
+  }));
+}
+
+/** Nombre de valeurs ◆ **restantes** (non validées) par section principale. */
 export function toValidateCountBySection(
   project: Project,
   model?: Model | null,
 ): Record<SectionId, number> {
   const out = Object.fromEntries(SECTION_IDS.map((s) => [s, 0])) as Record<SectionId, number>;
-  for (const i of toValidateItems(project, model)) out[i.section] += 1;
+  for (const i of toValidateStates(project, model)) if (!i.validated) out[i.section] += 1;
   return out;
 }
 
-/** Nombre de valeurs ◆ par étape guidée (l'étape 7 les compte toutes). */
+/** Nombre de valeurs ◆ **restantes** par étape guidée (l'étape 7 les compte toutes). */
 export function toValidateCountByStep(
   project: Project,
   model?: Model | null,
 ): Record<GuidedStep, number> {
   const out = Object.fromEntries(GUIDED_STEPS.map((s) => [s, 0])) as Record<GuidedStep, number>;
-  for (const i of toValidateItems(project, model)) {
+  for (const i of toValidateStates(project, model)) {
+    if (i.validated) continue;
     for (const s of i.steps) if (s !== 7) out[s] += 1;
     out[7] += 1;
   }

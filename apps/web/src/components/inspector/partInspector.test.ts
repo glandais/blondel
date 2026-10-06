@@ -1,7 +1,8 @@
 /**
  * Inspecteur « Pièce » (maquette 2b) : valeurs lues dans le modèle, actions désactivées sans
  * développé, réglages d'atelier filtrés par famille de pièces (avec la valeur retenue d'un
- * paramètre auto), pièces assemblées, mention, en français et en anglais (aucune clé brute).
+ * paramètre auto, marque ◆ des seules valeurs non validées), pièces assemblées, mention, en
+ * français et en anglais (aucune clé brute).
  * Rendu serveur, modèle calculé ici sans le worker ; assemblages et valeurs auto fabriqués à la
  * main (le cœur peut ne pas encore les exposer).
  */
@@ -16,6 +17,7 @@ import {
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it } from "vitest";
+import { toValidateRows, validationEntry } from "../../lib/toValidate.js";
 import { appStore, journeyStore, modelService } from "../../store/appStore.js";
 import { uiStore } from "../../store/uiStore.js";
 import { PartInspector } from "./PartInspector.js";
@@ -130,6 +132,22 @@ describe("inspecteur Pièce : limon acier (développé, réglages des limons)", 
     }));
     const stringer = model.parts.find((p) => p.category === "stringer")!;
     expect(decode(render(stringer.id))).toContain("275 mm");
+  });
+
+  it("marque ◆ seulement pour une valeur non validée (validation annulable)", () => {
+    const model = load(steelFlat());
+    const support = model.parts.find((p) => p.category === "support")!;
+    const marks = (): number => (render(support.id).match(/tiered__item--tv/g) ?? []).length;
+    const before = marks();
+    expect(before).toBeGreaterThan(0);
+    const entries = toValidateRows(appStore.getState().project, model)
+      .filter((r) => r.key.startsWith("stair.structure.params.supports."))
+      .map(validationEntry)
+      .filter((e) => e !== null);
+    expect(appStore.getState().setValuesValidated(entries, true).ok).toBe(true);
+    expect(marks()).toBe(0);
+    appStore.getState().undo();
+    expect(marks()).toBe(before);
   });
 
   it("pièce isolée : « Tout réafficher »", () => {

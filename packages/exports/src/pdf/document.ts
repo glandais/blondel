@@ -8,6 +8,8 @@
  * 4. nomenclature (repère, désignation, matériau, section, débit, quantité, masse) ;
  * 5. fiche de débit (pièces par matériau et épaisseur, longueurs, volumes et masses cumulés) ;
  * 6. contrôle de conception (avertissement « indicatif », résultats groupés, provenance) ;
+ * 6 bis. valeurs à valider (valeurs par défaut non sourcées, validées et restantes ; ADR-0009
+ *    point 9), si l'appelant les fournit ;
  * 7. une planche par développé distinct, à l'échelle normalisée qui tient dans la page ;
  * 8. gabarits 1:1 des développés, tuilés sur plusieurs pages (A4 ou A3) avec repères
  *    d'assemblage et règle de contrôle de 100 mm.
@@ -39,6 +41,7 @@ import { templateFamily, type TemplateFamily } from "../templateFamily.js";
 import { JsPdfCanvas, type PdfCanvas } from "./canvas.js";
 import { compliancePages } from "./compliance.js";
 import { installationPages } from "./installation.js";
+import { toValidatePages, type PdfToValidateRow } from "./toValidate.js";
 import {
   MUTED,
   contentFrame,
@@ -70,6 +73,8 @@ export interface PdfPages {
   readonly bom?: boolean;
   readonly cutsheet?: boolean;
   readonly compliance?: boolean;
+  /** Valeurs à valider (seulement si `PdfLayoutOptions.toValidate` est fourni). */
+  readonly toValidate?: boolean;
   readonly flats?: boolean;
   /** Gabarits 1:1 tuilés des développés. */
   readonly templates?: boolean;
@@ -112,6 +117,12 @@ export interface PdfLayoutOptions extends LocaleOption {
    * valider »), sans projet `defaultMassNote`.
    */
   readonly massNote?: MassNote;
+  /**
+   * Valeurs par défaut à valider par l'atelier (ADR-0009 point 9), validées et restantes,
+   * préparées par l'appelant. Absent : aucune page « Valeurs à valider ». Les valeurs restantes
+   * ne bloquent jamais la génération.
+   */
+  readonly toValidate?: readonly PdfToValidateRow[];
 }
 
 export interface PdfOptions extends PdfLayoutOptions {
@@ -129,6 +140,7 @@ export type PdfPageKind =
   | "bom"
   | "cutsheet"
   | "compliance"
+  | "toValidate"
   | "flat"
   | "template";
 
@@ -539,6 +551,7 @@ export function renderPdf(
     bom: true,
     cutsheet: true,
     compliance: true,
+    toValidate: true,
     flats: true,
     templates: true,
     ...options.pages,
@@ -595,6 +608,14 @@ export function renderPdf(
   if (show.cutsheet) pages.push(...cutSheetPages(model.parts, frame, massNote, t));
   if (show.compliance)
     pages.push(...compliancePages(c, model, frame, project?.compliance.overrides ?? [], t));
+  if (show.toValidate && options.toValidate !== undefined) {
+    pages.push(
+      ...toValidatePages(options.toValidate, frame, t, (title) => ({
+        kind: "toValidate" as const,
+        title,
+      })),
+    );
+  }
   const groups = show.flats || show.templates ? flatGroups(model.parts) : [];
   if (show.flats) {
     for (const { part, ids } of groups) {

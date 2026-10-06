@@ -526,3 +526,48 @@ describe("dernier projet chargé (parcours, ADR-0009)", () => {
     expect(s.getState().lastOpened).toEqual({ origin: "restore", seq: 1 });
   });
 });
+
+describe("validation des valeurs ◆ (ADR-0009 point 9)", () => {
+  it("valider puis Annuler rend le projet d'avant ; Rétablir revalide", () => {
+    const s = createProjectStore();
+    const p0 = s.getState().project;
+    const r = s.getState().setValuesValidated([{ path: "guards.posts.size", value: 40 }], true);
+    expect(r).toEqual({ ok: true });
+    expect(s.getState().project.validatedValues).toEqual([
+      { path: "guards.posts.size", value: 40 },
+    ]);
+    s.getState().undo();
+    expect(s.getState().project).toBe(p0);
+    s.getState().redo();
+    expect(s.getState().project.validatedValues).toHaveLength(1);
+    // Dévalider : le champ disparaît, annulable aussi.
+    s.getState().setValuesValidated([{ path: "guards.posts.size", value: 40 }], false);
+    expect("validatedValues" in s.getState().project).toBe(false);
+    s.getState().undo();
+    expect(s.getState().project.validatedValues).toHaveLength(1);
+  });
+
+  it("plusieurs valeurs (« Tout valider ») : une seule entrée d'historique, distincte d'une saisie", () => {
+    const c = clock();
+    const s = createProjectStore({ now: c.now });
+    s.getState().setField(["site", "floorToFloor"], 2800);
+    const p1 = s.getState().project;
+    c.advance(10);
+    s.getState().setValuesValidated(
+      [
+        { path: "guards.posts.size", value: 40 },
+        { path: "guards.material", value: "steel" },
+        { path: "stair.structure.params.a", value: true, structureKind: "steel-plate" },
+      ],
+      true,
+    );
+    expect(s.getState().project.validatedValues).toHaveLength(3);
+    // Une saisie qui suit ne se fond pas dans la validation.
+    c.advance(10);
+    s.getState().setField(["site", "floorToFloor"], 2810);
+    s.getState().undo();
+    expect(s.getState().project.validatedValues).toHaveLength(3);
+    s.getState().undo();
+    expect(s.getState().project).toBe(p1);
+  });
+});

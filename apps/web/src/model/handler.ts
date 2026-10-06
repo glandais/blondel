@@ -96,6 +96,7 @@ export function createJobRunner(options: JobRunnerOptions = {}): JobRunner {
           ...(job.options?.templateFamilies
             ? { templateFamilies: job.options.templateFamilies }
             : {}),
+          ...(job.options?.toValidate ? { toValidate: job.options.toValidate } : {}),
         });
         return { bytes: await toBytes(content) };
       } catch (e) {

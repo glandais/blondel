@@ -1,0 +1,95 @@
+/*
+ * Liste à cocher des valeurs ◆ à valider (ToValidateList) : tableau en Fabrication, liste
+ * compacte à l'étape 7 du guidé. Jetons Industry seulement (thème sombre compris) ; les
+ * utilitaires (.tv-mark, .num, .btn, .visually-hidden) viennent de styles.css.
+ */
+
+.tv-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.tv-list__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-2) var(--space-3);
+}
+
+.tv-list__title {
+  margin: 0;
+  font-family: var(--font-heading);
+  font-size: 1.15rem;
+  font-weight: 600;
+}
+
+.tv-list__count {
+  color: var(--warn);
+}
+
+.tv-list__all {
+  margin-left: auto;
+}
+
+.tv-list__hint,
+.tv-list__empty {
+  margin: 0;
+}
+
+.tv-list__table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.tv-list__table th {
+  text-align: left;
+  font-weight: 600;
+  color: var(--muted);
+  border-bottom: 1px solid var(--border);
+  padding: var(--space-1) var(--space-2);
+}
+
+.tv-list__table td {
+  border-bottom: 1px solid var(--border);
+  padding: var(--space-1) var(--space-2);
+  vertical-align: middle;
+}
+
+.tv-list__check {
+  width: 2rem;
+}
+
+.tv-list__value {
+  white-space: nowrap;
+}
+
+.tv-list__section {
+  color: var(--muted);
+}
+
+.tv-list__open {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.tv-list .is-validated .tv-list__label,
+.tv-list .is-validated .tv-list__value {
+  color: var(--muted);
+}
+
+.tv-list__items {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.tv-list__row {
+  display: grid;
+  grid-template-columns: 2rem minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) 0;
+  border-bottom: 1px solid var(--border);
+}

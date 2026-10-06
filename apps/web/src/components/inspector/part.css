@@ -87,6 +87,38 @@
   min-width: 0;
 }
 
+/*
+ * Variante Fabrication (colonne de droite du mode Fabrication) : sans cadre, surtitre, mêmes
+ * lignes compactes ; mention ◆ sous le champ, alignée à droite (wireframe), note de portée.
+ */
+.part-insp__settings--fab {
+  display: flex;
+  flex-direction: column;
+}
+
+.part-insp__fab-field {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.part-insp__fab-field[data-to-validate="true"] .field input[type="text"] {
+  border-color: var(--warn);
+}
+
+.part-insp__tv-note {
+  align-self: flex-end;
+  font-size: 11px;
+  color: var(--warn);
+}
+
+.part-insp__note {
+  margin: 0;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--color-neutral-700);
+}
+
 .part-insp__tread {
   align-self: flex-start;
   display: inline-flex;

@@ -8,8 +8,11 @@
  * - segmenté Guidé | Libre (le guidé arrive en vague 5 : option désactivée) ;
  * - au centre, segmenté Conception | Fabrication (`switchWorkspace` : la vue suit, le projet,
  *   l'historique et la sélection ne changent pas) ;
- * - badge « Contrôle », Annuler / Rétablir, Importer, Exporter, menu ⋯ (unité, thème, langue,
- *   profil d'atelier).
+ * - badge « Contrôle », Annuler / Rétablir, Importer, Exporter (en Conception seulement), menu ⋯
+ *   (unité, thème, langue, profil d'atelier).
+ *
+ * En Fabrication, « Exporter » quitte la barre : les sorties (« Générer… », dossier PDF, fiche de
+ * pose, liste de débit, autres exports) sont en bas de la colonne de droite (`FabricationAside`).
  *
  * La barre monte aussi la fenêtre du profil d'atelier (pilotée par `uiStore.workshopOpen`) et
  * synchronise le thème (`useThemeSync`), menu ⋯ fermé compris. Les notifications sont rendues
@@ -135,7 +138,7 @@ export function TopBar() {
           </button>
         </div>
         <ImportMenu />
-        <ExportMenu />
+        {workspace === "design" ? <ExportMenu /> : null}
         <MoreMenu />
       </div>
       <WorkshopDialog />

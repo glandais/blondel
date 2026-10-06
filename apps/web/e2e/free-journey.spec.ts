@@ -273,16 +273,20 @@ test("Conception → Fabrication → Conception : historique, vue, sélection et
     "true",
   );
 
-  // Fabrication : ni rail ni panneau, vues de fabrication (Développés par défaut).
+  // Fabrication : ni rail, ni panneau, ni inspecteur ; colonne de Fabrication à droite ; vues
+  // de fabrication (Pièces par défaut).
   await openWorkspace(page, "Fabrication");
   await expect(page.locator(".app")).toHaveAttribute("data-workspace", "fabrication");
   await expect(page.locator("nav.rail")).toHaveCount(0);
   await expect(panel(page)).toHaveCount(0);
-  await expect(viewTab(page, "Développés")).toHaveAttribute("aria-selected", "true");
+  await expect(page.locator("aside.inspector")).toHaveCount(0);
+  await expect(page.locator("aside.fab-aside")).toBeVisible();
+  await expect(viewTab(page, "Pièces")).toHaveAttribute("aria-selected", "true");
   await expect(page.getByRole("tablist", { name: "Vues" }).getByRole("tab")).toHaveText([
-    "Développés",
+    "Pièces",
     "Nomenclature",
-    "Comparateur",
+    "Comparer",
+    "À valider",
   ]);
   await expect(page.getByRole("button", { name: "Recadrer" })).toHaveCount(0);
   await expect(undo).toBeEnabled();

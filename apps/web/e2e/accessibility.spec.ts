@@ -1,10 +1,20 @@
 /**
  * Accessibilité clavier et lecteur d'écran : fenêtre modale de l'assistant (focus piégé et
  * rendu, arrière-plan inerte, annuler sans effet derrière la fenêtre) et champs numériques
- * (saisie refusée puis rétablie à la perte de focus : champ valide, message transitoire).
+ * (saisie refusée puis rétablie à la perte de focus : champ valide, message transitoire) ;
+ * écran Fabrication (repères nommés, onglets au clavier, commandes nommées).
  */
 import { expect, test } from "@playwright/test";
-import { commitField, openApp, openProjectMenu, openSection, settle, viewTab } from "./support.js";
+import {
+  chooseStructure,
+  commitField,
+  openApp,
+  openProjectMenu,
+  openSection,
+  openWorkspace,
+  settle,
+  viewTab,
+} from "./support.js";
 
 test("assistant : focus piégé dans la fenêtre, rendu à l'ouverture, Ctrl+Z sans effet", async ({
   page,
@@ -75,4 +85,48 @@ test("champ numérique : saisie refusée puis rétablie au blur, champ non marqu
   // Nouvelle saisie : le message transitoire disparaît.
   await commitField(page, h, "2750");
   await expect(note).toHaveCount(0);
+});
+
+test("écran Fabrication : repères nommés, onglets au clavier, commandes nommées", async ({
+  page,
+}) => {
+  await openApp(page);
+  // Structure acier : valeurs ◆ de plugin dans la liste « À valider ».
+  await chooseStructure(page, "steel-flat");
+  await openWorkspace(page, "Fabrication");
+  // Repères nommés : zone de Fabrication, liste des pièces, colonne de droite.
+  await expect(page.getByRole("main", { name: "Fabrication de l'escalier" })).toBeVisible();
+  await expect(page.getByRole("navigation", { name: "Pièces par famille" })).toBeVisible();
+  await expect(
+    page.getByRole("complementary", { name: "Réglages de la pièce et sorties" }),
+  ).toBeVisible();
+  // Modèle ARIA des onglets : flèches et Fin pour passer d'un onglet à l'autre, panneau associé.
+  await viewTab(page, "Pièces").focus();
+  await page.keyboard.press("ArrowRight");
+  await expect(viewTab(page, "Nomenclature")).toBeFocused();
+  await expect(viewTab(page, "Nomenclature")).toHaveAttribute("aria-selected", "true");
+  await expect(page.getByRole("tabpanel")).toHaveAttribute("aria-labelledby", "tab-bom");
+  await page.keyboard.press("End");
+  await expect(viewTab(page, "À valider")).toHaveAttribute("aria-selected", "true");
+  // Liste à cocher : chaque case porte le nom de sa valeur.
+  expect(await page.getByRole("checkbox", { name: /^Valider : .+/ }).count()).toBeGreaterThan(0);
+  await expect(page.locator('#view-panel input[type="checkbox"]:not([aria-label])')).toHaveCount(0);
+  // Aucune commande visible sans nom (texte, aria-label, aria-labelledby, étiquette ou title).
+  const unnamed = await page.evaluate(() =>
+    [...document.querySelectorAll<HTMLElement>(".app button, .app [role='tab'], .app input")]
+      .filter((el) => el.offsetParent !== null)
+      .filter((el) => {
+        const by = el.getAttribute("aria-labelledby");
+        const label =
+          el.getAttribute("aria-label") ??
+          (by ? document.getElementById(by)?.textContent : null) ??
+          (el instanceof HTMLInputElement
+            ? (el.labels?.[0]?.textContent ?? el.placeholder)
+            : null) ??
+          "";
+        return `${label}${el.textContent ?? ""}${el.title}`.trim() === "";
+      })
+      .map((el) => el.outerHTML.slice(0, 160)),
+  );
+  expect(unnamed).toEqual([]);
 });

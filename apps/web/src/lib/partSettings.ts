@@ -4,7 +4,8 @@
  * (`docs/ux/design_handoff_parcours_guide_libre/rendus/contenu.txt` § 3). Présentation
  * seulement : des préfixes de chemins des paramètres du plugin de structure (mêmes chemins que
  * la section Structure, même validation) et la section du parcours libre qui les porte tous.
- * Aucune valeur métier.
+ * Le mode Fabrication y lit aussi l'encart « Forme du … » et la section de Conception qui porte
+ * la forme de la pièce (`partShapeFor`, `partDesignSection`). Aucune valeur métier.
  */
 import type { MaterialId, Part } from "@blondel/core";
 import type { MessageKey } from "@blondel/i18n";
@@ -114,4 +115,71 @@ export function partSettingsFor(
 export function matchesSettings(path: readonly string[], prefixes: readonly string[]): boolean {
   const key = path.join(".");
   return prefixes.some((p) => key === p || key.startsWith(`${p}.`));
+}
+
+// ------------------------------------------------------------------ Forme de la pièce
+
+/**
+ * Encart « Forme du … » du mode Fabrication (wireframe « Parcours libre · Fabrication ») : ce
+ * qui change la forme de la pièce relève de la Conception ; titre et aide adaptés à la pièce.
+ */
+export interface PartShape {
+  /** Titre de l'encart (« Forme du limon »). */
+  readonly title: MessageKey;
+  /** Aide (« Épaisseur, rives, jour : réglages de conception. »). */
+  readonly help: MessageKey;
+}
+
+type ShapedPart = Pick<Part, "category" | "family">;
+
+/** Pièce de garde-corps : famille `guards`, ou barreau / remplissage hors famille. */
+function isGuardPart(part: ShapedPart): boolean {
+  return part.family === "guards" || part.category === "baluster" || part.category === "infill";
+}
+
+/** Titre et aide de l'encart « Forme du … » pour la pièce. */
+export function partShapeFor(part: ShapedPart): PartShape {
+  if (isGuardPart(part)) {
+    return { title: "ui.fabAside.shape.guards", help: "ui.fabAside.shapeHelp.guards" };
+  }
+  switch (part.category) {
+    case "stringer":
+      return { title: "ui.fabAside.shape.stringer", help: "ui.fabAside.shapeHelp.stringer" };
+    case "carriage":
+      return { title: "ui.fabAside.shape.carriage", help: "ui.fabAside.shapeHelp.stringer" };
+    case "support":
+      return { title: "ui.fabAside.shape.support", help: "ui.fabAside.shapeHelp.support" };
+    case "fixing":
+      return { title: "ui.fabAside.shape.fixing", help: "ui.fabAside.shapeHelp.fixing" };
+    case "post":
+      return { title: "ui.fabAside.shape.post", help: "ui.fabAside.shapeHelp.post" };
+    case "handrail":
+      return { title: "ui.fabAside.shape.handrail", help: "ui.fabAside.shapeHelp.handrail" };
+    case "tread":
+      return { title: "ui.fabAside.shape.tread", help: "ui.fabAside.shapeHelp.tread" };
+    case "riser":
+      return { title: "ui.fabAside.shape.riser", help: "ui.fabAside.shapeHelp.tread" };
+    case "landing":
+      return { title: "ui.fabAside.shape.landing", help: "ui.fabAside.shapeHelp.tread" };
+    default:
+      return { title: "ui.fabAside.shape.part", help: "ui.fabAside.shapeHelp.part" };
+  }
+}
+
+/**
+ * Section du parcours libre qui porte la forme de la pièce (« ← Ouvrir dans Conception ») :
+ * marches, contremarches et paliers → Marches ; garde-corps → Garde-corps ; le reste (limons,
+ * supports, platines, poteaux, main courante du plugin) → Structure. Vaut aussi pour une pièce
+ * sans réglages d'atelier repris (marches bois).
+ */
+export function partDesignSection(part: ShapedPart): SectionId {
+  if (isGuardPart(part)) return "guards";
+  switch (part.category) {
+    case "tread":
+    case "riser":
+    case "landing":
+      return "treads";
+    default:
+      return "structure";
+  }
 }

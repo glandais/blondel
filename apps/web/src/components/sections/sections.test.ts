@@ -13,6 +13,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { defaultGuards } from "../../lib/guardsForm.js";
 import { TIER_KEYS, tierEntry, type Display } from "../../lib/paramTiers.js";
 import { SECTION_IDS } from "../../lib/sectionIds.js";
+import { pendingValidationEntries, toValidateRows } from "../../lib/toValidate.js";
 import { appStore, modelService } from "../../store/appStore.js";
 import { SECTION_COMPONENTS, SECTION_TITLE_KEYS, type SectionProps } from "./index.js";
 import {
@@ -206,6 +207,27 @@ describe("tout afficher (ancienne interface)", () => {
     ]) {
       expect(html).toContain(text);
     }
+  });
+});
+
+describe("valeurs ◆ validées", () => {
+  it("l'aide « Valeur par défaut à valider » disparaît des panneaux Structure et Garde-corps", () => {
+    load({ ...withStructure("steel-flat"), guards: defaultGuards() });
+    const panels = (): string =>
+      [SECTION_COMPONENTS.structure, SECTION_COMPONENTS.guards]
+        .map((c) => render(c, { kind: "free" }))
+        .join("");
+    const hint = /Valeur par défaut à valider/g;
+    expect((panels().match(hint) ?? []).length).toBeGreaterThan(1);
+    const project = appStore.getState().project;
+    const rows = toValidateRows(project, modelService.store.getState().model.model);
+    expect(appStore.getState().setValuesValidated(pendingValidationEntries(rows), true).ok).toBe(
+      true,
+    );
+    expect(panels()).not.toMatch(hint);
+    // Annulation : les aides reviennent.
+    appStore.getState().undo();
+    expect((panels().match(hint) ?? []).length).toBeGreaterThan(1);
   });
 });
 

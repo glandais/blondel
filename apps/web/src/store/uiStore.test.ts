@@ -58,3 +58,50 @@ describe("isolation 3D et lien des surcharges", () => {
     expect(uiStore.getState().overridesRevealSeq).toBe(seq + 1);
   });
 });
+
+describe("mode Fabrication (vague 4)", () => {
+  it("onglets de Fabrication : Pièces, Nomenclature, Comparer, À valider", async () => {
+    const { FABRICATION_VIEWS, DESIGN_VIEWS } = await import("./uiStore.js");
+    expect(FABRICATION_VIEWS).toEqual(["flat", "bom", "compare", "validate"]);
+    expect(DESIGN_VIEWS).toEqual(["plan", "3d", "elevation"]);
+    expect(workspaceOfView("validate")).toBe("fabrication");
+  });
+
+  it("l'onglet À valider se retrouve au retour en Fabrication", () => {
+    const { app, journey } = stores();
+    journey.getState().setWorkspace("fabrication");
+    app.getState().setView("validate");
+    journey.getState().setWorkspace("design");
+    expect(app.getState().view).toBe("plan");
+    journey.getState().setWorkspace("fabrication");
+    expect(app.getState().view).toBe("validate");
+  });
+
+  it("badge Contrôle et lien des surcharges : retour en Conception depuis la Fabrication", async () => {
+    const { appStore, journeyStore } = await import("./appStore.js");
+    const { revealControl, revealOverrides, uiStore } = await import("./uiStore.js");
+    for (const reveal of [revealControl, revealOverrides]) {
+      journeyStore.getState().setWorkspace("fabrication");
+      appStore.getState().select({ location: { kind: "part", partId: "tread-1" } });
+      const { project, history } = appStore.getState();
+      const before = uiStore.getState();
+      reveal();
+      expect(journeyStore.getState().workspace).toBe("design");
+      expect(appStore.getState().selection).toBeNull();
+      expect(appStore.getState().project).toBe(project);
+      expect(appStore.getState().history).toBe(history);
+      const after = uiStore.getState();
+      expect(after.controlRevealSeq + after.overridesRevealSeq).toBe(
+        before.controlRevealSeq + before.overridesRevealSeq + 1,
+      );
+    }
+  });
+
+  it("en Conception, le badge Contrôle ne change pas d'espace", async () => {
+    const { journeyStore } = await import("./appStore.js");
+    const { revealControl } = await import("./uiStore.js");
+    journeyStore.getState().setWorkspace("design");
+    revealControl();
+    expect(journeyStore.getState().workspace).toBe("design");
+  });
+});

@@ -1,8 +1,9 @@
 /**
- * Onglet « Nomenclature » : pièces groupées par repère (mêmes lignes que la liste de débit CSV),
- * dimensions de débit, quantités, masses (`mass_kg` du cœur ; renvoi « * » pour une masse
- * calculée avec une masse volumique à valider, QUESTIONS A6) et totaux. Un clic sur une ligne sélectionne la pièce (surlignée
- * en 3D, affichée dans « Développés »).
+ * Onglet « Nomenclature » du mode Fabrication : pièces groupées par repère (mêmes lignes que la
+ * liste de débit CSV), dimensions de débit, quantités, masses (`mass_kg` du cœur ; renvoi « * »
+ * pour une masse calculée avec une masse volumique à valider, QUESTIONS A6) et totaux, en tableau
+ * Industry (`.table`). Un clic sur un repère sélectionne la pièce (surlignée en 3D, ouverte dans
+ * l'onglet « Pièces »).
  */
 import type { Model } from "@blondel/core";
 import { massNoteFor } from "@blondel/exports";
@@ -48,7 +49,7 @@ export function BomView({ model }: { model: Model }) {
   }
   return (
     <div className="bom">
-      <table>
+      <table className="table">
         <caption>
           {t.t("ui.bom.caption", {
             parts: msg("ui.bom.parts", { count: bom.count }),

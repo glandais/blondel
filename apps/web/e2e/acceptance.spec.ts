@@ -6,7 +6,7 @@
  * Interactions comptées (voir `Interactions`, journal joint au rapport) : menu du projet, choix
  * et application du préréglage (3), section « Tracé » et jour « Poteau » (2), section
  * « Structure » et structure (2), section « Garde-corps » (1), activation des garde-corps (1),
- * espace Fabrication et onglet « Nomenclature » (2), menu « Exporter » et entrée PDF (2), menu
+ * espace Fabrication et onglet « Nomenclature » (2), menu « Exporter » (« Autres exports » en Fabrication) et entrée PDF (2), menu
  * et entrée DXF (2) : 15. Les côtés restent en « automatique » (QUESTIONS D5) : le préréglage n'a pas de mur,
  * les deux côtés sont vides et reçoivent un garde-corps ; le côté extérieur n'est plus forcé
  * sur « Mur ».
@@ -17,6 +17,7 @@ import {
   Interactions,
   applyPreset,
   blockingCount,
+  exportMenuButton,
   chooseStructure,
   openApp,
   openSection,
@@ -29,7 +30,9 @@ const MAX_INTERACTIONS = 20;
 
 async function download(page: Page, entry: RegExp, ix: Interactions): Promise<Download> {
   const pending = page.waitForEvent("download");
-  await page.getByRole("button", { name: /^Exporter/ }).click();
+  // Menu des exports : « Autres exports » de la colonne de Fabrication (la nomenclature vient
+  // d'être vérifiée), « Exporter » de la barre du haut en Conception.
+  await exportMenuButton(page).click();
   ix.count("menu Exporter");
   const item = page.getByRole("menuitem", { name: entry });
   await expect(item).toBeEnabled();

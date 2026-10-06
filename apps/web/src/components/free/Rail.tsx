@@ -8,7 +8,8 @@
  * Un seul arrêt de tabulation : l'entrée ouverte, sinon la première disponible. Sans tournant,
  * « Balancement » est désactivé (`aria-disabled`, sauté par les flèches, clic sans effet).
  *
- * Aucun calcul : les compteurs ◆ viennent du dictionnaire des niveaux (`toValidateCountBySection`).
+ * Aucun calcul : les compteurs ◆ viennent du dictionnaire des niveaux (`toValidateCountBySection`)
+ * et ne comptent que les valeurs restantes (non validées, ADR-0009 point 9).
  */
 import type { MessageKey } from "@blondel/i18n";
 import { useId, useMemo, useRef, type KeyboardEvent } from "react";

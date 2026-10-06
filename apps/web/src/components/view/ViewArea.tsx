@@ -3,14 +3,14 @@
  *
  * - en tête : accueil de la première visite, messages de l'application, barre d'erreurs et de
  *   corrections, import de calque en attente ;
- * - barre de vue : onglets de l'espace de travail (Conception : Plan | 3D | Élévation ;
- *   Fabrication, provisoirement : Développés | Nomenclature | Comparateur) et, en Conception,
- *   − + Recadrer (`uiStore.sendViewCommand`, consommé par la vue affichée) ;
+ * - barre de vue : onglets Plan | 3D | Élévation et − + Recadrer (`uiStore.sendViewCommand`,
+ *   consommé par la vue affichée) ;
  * - la vue dans un cadre blueprint ; un clic dans le cadre ferme le panneau libre non épinglé ;
  *   le cadre prend le focus (`tabIndex`) : les flèches y règlent l'angle de la ligne de nez de
  *   la marche sélectionnée (inspecteur Marche) ;
  * - en pied, la ligne de chiffres (`FigureLine`).
  *
+ * Conception seulement : le mode Fabrication a sa propre zone (`fabrication/FabricationArea`).
  * Les SVG affichés sont ceux des exports ; aucune grandeur n'est calculée ici.
  */
 import { Suspense, lazy } from "react";
@@ -18,19 +18,11 @@ import { useStore } from "zustand";
 import type { MessageKey } from "@blondel/i18n";
 import { useT } from "../../i18n/useT.js";
 import { partSelection, selectedTreadNumber } from "../../lib/compliance.js";
-import { appStore, journeyStore, useApp, useJourney, useModel } from "../../store/appStore.js";
+import { appStore, journeyStore, useApp, useModel } from "../../store/appStore.js";
 import { cancelUnderlayImport, importQueue, queuedImportMessage } from "../../store/importQueue.js";
 import type { ViewTab } from "../../store/projectStore.js";
-import {
-  DESIGN_VIEWS,
-  FABRICATION_VIEWS,
-  sendViewCommand,
-  type ViewCommandKind,
-} from "../../store/uiStore.js";
-import { BomView } from "../../views/BomView.js";
-import { CompareView } from "../../views/CompareView.js";
+import { DESIGN_VIEWS, sendViewCommand, type ViewCommandKind } from "../../store/uiStore.js";
 import { ElevationView } from "../../views/ElevationView.js";
-import { FlatPatternView } from "../../views/FlatPatternView.js";
 import { PlanView } from "../../views/PlanView.js";
 import { ErrorsBar } from "../ErrorsBar.js";
 import { Notices } from "../topbar/Notices.js";
@@ -43,21 +35,25 @@ import "./view.css";
 // three.js et react-three-fiber chargés à la demande (bundle initial plus léger).
 const Viewer3D = lazy(() => import("../../views/Viewer3D.js"));
 
+/** Vue de Conception (onglets de `DESIGN_VIEWS`). */
+type DesignView = "plan" | "3d" | "elevation";
+
 /** Libellés des onglets ; « 3D » : sigle invariant, sans clé. */
-const VIEW_LABELS: Readonly<Record<ViewTab, MessageKey | null>> = {
+const VIEW_LABELS: Readonly<Record<DesignView, MessageKey | null>> = {
   plan: "ui.view.tab.plan",
   "3d": null,
   elevation: "ui.app.tab.elevation",
-  flat: "ui.app.tab.flat",
-  bom: "ui.app.tab.bom",
-  compare: "ui.app.tab.compare",
 };
+
+/** Libellé d'un onglet de Conception (`null` : sigle « 3D »). */
+const labelKey = (view: ViewTab): MessageKey | null =>
+  (VIEW_LABELS as Readonly<Partial<Record<ViewTab, MessageKey | null>>>)[view] ?? null;
 
 const THREE_D = "3D";
 
 /**
  * Vue qui gère les commandes − / + / Recadrer : plan (coté et « Site et saisie »), 3D,
- * élévation. Les vues de Fabrication ne zooment pas.
+ * élévation. Les onglets de Fabrication n'en ont pas.
  */
 export function viewHandlesZoom(view: ViewTab): boolean {
   return view === "plan" || view === "3d" || view === "elevation";
@@ -129,7 +125,6 @@ function ViewContent({ view }: { view: ViewTab }) {
   // Vues qui croisent le modèle et le projet (dalle, trémie) : le projet dont le modèle est issu,
   // pour rester cohérentes pendant un calcul.
   const shown = modelProject ?? project;
-  if (view === "compare") return <CompareView />;
   if (!model && pending) {
     return (
       <div className="empty-view" role="status">
@@ -169,10 +164,6 @@ function ViewContent({ view }: { view: ViewTab }) {
           />
         </Suspense>
       );
-    case "flat":
-      return <FlatPatternView model={model} />;
-    case "bom":
-      return <BomView model={model} />;
     default:
       return (
         <ElevationView
@@ -226,13 +217,10 @@ function ZoomControls({ enabled }: { enabled: boolean }) {
 export function ViewArea() {
   const view = useApp((s) => s.view);
   const planMode = useApp((s) => s.planMode);
-  const workspace = useJourney((s) => s.workspace);
   const t = useT();
   const { model, pending } = useModel();
-  const design = workspace === "design";
-  const views = design ? DESIGN_VIEWS : FABRICATION_VIEWS;
-  const options = views.map((v) => {
-    const key = VIEW_LABELS[v];
+  const options = DESIGN_VIEWS.map((v) => {
+    const key = labelKey(v);
     return { value: v, label: key === null ? THREE_D : t.t(key) };
   });
   return (
@@ -254,7 +242,7 @@ export function ViewArea() {
           options={options}
           onChange={(v) => appStore.getState().setView(v)}
         />
-        {design ? <ZoomControls enabled={viewHandlesZoom(view)} /> : null}
+        <ZoomControls enabled={viewHandlesZoom(view)} />
       </div>
       <div
         id="view-panel"

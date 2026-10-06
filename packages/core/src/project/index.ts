@@ -81,3 +81,8 @@ export {
   type RealignResult,
 } from "./realign.js";
 export { ruleOverrideOf, withoutRuleOverride, withRuleOverride } from "./overrides.js";
+export {
+  isValueValidated,
+  withValidatedValues,
+  withoutValidatedValues,
+} from "./validatedValues.js";

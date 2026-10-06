@@ -11,6 +11,7 @@ import {
   describeTasks,
   instrument,
   openApp,
+  openWorkspace,
   overBudget,
   settle,
   takeLongTasks,
@@ -144,6 +145,47 @@ test("barre du haut, menus Importer et Exporter : jamais hors de la fenêtre, qu
       });
       if (m.overflowX > 0 || m.left < 0 || m.right > m.view)
         problems.push(`${width} px, ${String(name)} : ${JSON.stringify(m)}`);
+      await page.keyboard.press("Escape");
+      await expect(menu).toHaveCount(0);
+    }
+  }
+  expect(problems.join("\n"), "menu hors de la fenêtre").toBe("");
+});
+
+test("Fabrication : pas de menu Exporter en haut ; « Autres exports » à droite, jamais hors de la fenêtre", async ({
+  page,
+}) => {
+  await openApp(page);
+  await openWorkspace(page, "Fabrication");
+  await expect(page.locator(".topbar").getByRole("button", { name: /^Exporter/ })).toHaveCount(0);
+  const other = page.locator("aside.fab-aside").getByRole("button", { name: /^Autres exports/ });
+  const problems: string[] = [];
+  for (const width of [1100, 1280, 1440]) {
+    for (const height of [720, 900]) {
+      await page.setViewportSize({ width, height });
+      await other.scrollIntoViewIfNeeded();
+      await other.click();
+      const menu = page.getByRole("menu");
+      await expect(menu).toBeVisible();
+      // Mêmes entrées que le menu « Exporter » de la Conception.
+      await expect(
+        menu.getByRole("menuitem", { name: /^Dossier PDF complet \(gabarits 1:1 en A4\)/ }),
+      ).toBeVisible();
+      const m = await page.evaluate(() => {
+        const de = document.documentElement;
+        const r = document.querySelector('[role="menu"]')!.getBoundingClientRect();
+        return {
+          top: Math.round(r.top),
+          bottom: Math.round(r.bottom),
+          left: Math.round(r.left),
+          right: Math.round(r.right),
+          width: de.clientWidth,
+          height: de.clientHeight,
+          overflowX: de.scrollWidth - de.clientWidth,
+        };
+      });
+      if (m.overflowX > 0 || m.left < 0 || m.right > m.width || m.top < 0 || m.bottom > m.height)
+        problems.push(`${width} × ${height} px : ${JSON.stringify(m)}`);
       await page.keyboard.press("Escape");
       await expect(menu).toHaveCount(0);
     }

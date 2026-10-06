@@ -341,3 +341,33 @@ describe("messages des issues zod (ADR-0007)", () => {
     expect(translatorFor("en").t(err.msg)).toBe("Invalid project:");
   });
 });
+
+describe("validatedValues (valeurs ◆ validées)", () => {
+  it("champ absent : non ajouté par la lecture", () => {
+    expect("validatedValues" in parseProject(minimal())).toBe(false);
+  });
+
+  it("entrées valides acceptées", () => {
+    const p = parseProject({
+      ...minimal(),
+      validatedValues: [
+        { path: "guards.posts.size", value: 40 },
+        { path: "stair.structure.params.a.b", value: "x", structureKind: "steel-plate" },
+        { path: "guards.flight.enabled", value: false },
+      ],
+    });
+    expect(p.validatedValues).toHaveLength(3);
+  });
+
+  it("chemin vide, valeur objet ou absente refusés", () => {
+    expect(() => parseProject({ ...minimal(), validatedValues: [{ path: "", value: 1 }] })).toThrow(
+      ProjectParseError,
+    );
+    expect(() =>
+      parseProject({ ...minimal(), validatedValues: [{ path: "a", value: { x: 1 } }] }),
+    ).toThrow(ProjectParseError);
+    expect(() => parseProject({ ...minimal(), validatedValues: [{ path: "a" }] })).toThrow(
+      ProjectParseError,
+    );
+  });
+});

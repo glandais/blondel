@@ -79,6 +79,19 @@ describe("TopBar", () => {
     expect(html).not.toMatch(/ui\.(topbar|toolbar|import|export)\./);
   });
 
+  it("Fabrication : « Exporter » quitte la barre (sorties dans la colonne de droite)", () => {
+    journeyStore.getState().setWorkspace("fabrication");
+    try {
+      const html = render("fr", TopBar);
+      expect(html).not.toContain("Exporter");
+      expect(html).toContain("Importer");
+      expect(html).toContain(">Contrôle<");
+    } finally {
+      journeyStore.getState().setWorkspace("design");
+    }
+    expect(render("fr", TopBar)).toContain("Exporter");
+  });
+
   it("anglais : libellés traduits, aucun libellé français", () => {
     const html = render("en", TopBar);
     for (const text of [

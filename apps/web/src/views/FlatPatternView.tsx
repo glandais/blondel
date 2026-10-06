@@ -1,24 +1,21 @@
 /**
- * Onglet « Développés » : liste des pièces à développé à plat et SVG 1:1 (mis à l'échelle de
- * l'écran) de la pièce sélectionnée, rendu par `renderFlatPatternSvg` de `@blondel/exports`
- * (une seule implémentation pour l'écran et les exports). La sélection est partagée avec la
- * vue 3D et la nomenclature. Pièces débitées en tronçons (limon de jour débillardé) : tableau des
- * tronçons et des joints soudés, repérés J1, J2… dans l'ordre de la montée.
+ * Développé à plat d'une pièce (mode Fabrication, fiche de la pièce choisie) : SVG 1:1 (mis à
+ * l'échelle de l'écran) rendu par `renderFlatPatternSvg` de `@blondel/exports` (une seule
+ * implémentation pour l'écran et les exports). Pièces débitées en tronçons (limon de jour
+ * débillardé) : tableau des tronçons et des joints soudés, repérés J1, J2… dans l'ordre de la
+ * montée. La liste des pièces est celle du mode Fabrication (`components/fabrication/PartsList`).
  */
-import type { Model } from "@blondel/core";
+import type { Model, Part } from "@blondel/core";
 import { msg, type Translator } from "@blondel/i18n";
 import { renderFlatPatternSvg } from "@blondel/exports";
 import { useMemo } from "react";
 import { useResolvedTheme } from "../components/ThemeToggle.js";
-import { downloadFile } from "../lib/download.js";
-import { fileStem, partDxfFile, partsWithFlat } from "../lib/exportFiles.js";
 import { segmentedPartName, segmentedParts, type SegmentedPart } from "../lib/joints.js";
-import { selectedPart } from "../lib/parts.js";
 import { numberFormat } from "../i18n/locale.js";
 import { useT } from "../i18n/useT.js";
 import { formatLength } from "../lib/units.js";
 import { renderWith } from "../model/planSvg.js";
-import { appStore, useApp } from "../store/appStore.js";
+import { appStore } from "../store/appStore.js";
 import { ExportedSvg } from "./ExportedSvg.js";
 
 const select = (partId: string) =>
@@ -29,13 +26,13 @@ const KG: Intl.NumberFormatOptions = { maximumFractionDigits: 1 };
 const groupName = (group: SegmentedPart, t: Translator): string => t.t(segmentedPartName(group));
 
 /** Tronçons d'une pièce et joints entre tronçons consécutifs. */
-function SegmentsTable({ group, selected }: { group: SegmentedPart; selected?: string }) {
+export function SegmentsTable({ group, selected }: { group: SegmentedPart; selected?: string }) {
   const t = useT();
   const kg = numberFormat(t.locale, KG);
   const name = groupName(group, t);
   return (
     <section className="flat-view__joints" aria-label={t.t("ui.flat.segments.label", { name })}>
-      <table>
+      <table className="table">
         <caption>
           <strong>{name}</strong>
           {t.t("ui.flat.segments.caption", {
@@ -46,9 +43,15 @@ function SegmentsTable({ group, selected }: { group: SegmentedPart; selected?: s
         <thead>
           <tr>
             <th scope="col">{t.t("ui.flat.col.segment")}</th>
-            <th scope="col">{t.t("ui.flat.col.developed")}</th>
-            <th scope="col">{t.t("ui.flat.col.rolled")}</th>
-            <th scope="col">{t.t("ui.flat.col.mass")}</th>
+            <th scope="col" className="num">
+              {t.t("ui.flat.col.developed")}
+            </th>
+            <th scope="col" className="num">
+              {t.t("ui.flat.col.rolled")}
+            </th>
+            <th scope="col" className="num">
+              {t.t("ui.flat.col.mass")}
+            </th>
           </tr>
         </thead>
         <tbody>
@@ -95,21 +98,51 @@ function SegmentsTable({ group, selected }: { group: SegmentedPart; selected?: s
   );
 }
 
-export function FlatPatternView({ model }: { model: Model }) {
-  const t = useT();
-  const selection = useApp((s) => s.selection);
-  const projectName = useApp((s) => s.project.name);
-  const theme = useResolvedTheme();
-  const flats = partsWithFlat(model);
-  const current = selectedPart(model, selection?.location);
-  const part = current?.flat ? current : undefined;
+/** Groupes de tronçons qui contiennent la pièce (aucun pour une pièce d'un seul tenant). */
+export function segmentGroupsOf(
+  model: Pick<Model, "parts">,
+  partId: string,
+): readonly SegmentedPart[] {
+  return segmentedParts(model).filter((g) => g.segments.some((s) => s.part.id === partId));
+}
+
+/** Tronçons et joints de la pièce `part` (tableaux), s'il y a lieu. */
+export function PartSegments({ model, part }: { model: Pick<Model, "parts">; part: Part }) {
+  const groups = useMemo(() => segmentGroupsOf(model, part.id), [model, part.id]);
+  return (
+    <>
+      {groups.map((g) => (
+        <SegmentsTable key={g.base} group={g} selected={part.id} />
+      ))}
+    </>
+  );
+}
+
+/**
+ * Vue d'ensemble sans pièce choisie : tronçons et joints de toutes les pièces débitées en
+ * plusieurs morceaux (J1, J2… d'un limon débillardé) ; rien s'il n'y en a pas.
+ */
+export function AllSegments({ model }: { model: Pick<Model, "parts"> }) {
   const groups = useMemo(() => segmentedParts(model), [model]);
-  const shownGroups = part
-    ? groups.filter((g) => g.segments.some((s) => s.part.id === part.id))
-    : groups;
+  return (
+    <>
+      {groups.map((g) => (
+        <SegmentsTable key={g.base} group={g} />
+      ))}
+    </>
+  );
+}
+
+/**
+ * Gabarit coté du développé de `part` : SVG exporté (`renderFlatPatternSvg`), inséré tel quel.
+ * Rien sans développé ; erreur de rendu : message explicite.
+ */
+export function FlatPatternDrawing({ part }: { part: Part }) {
+  const t = useT();
+  const theme = useResolvedTheme();
   const rendered = useMemo(
     () =>
-      part
+      part.flat
         ? renderWith(() =>
             renderFlatPatternSvg(part, {
               theme,
@@ -121,69 +154,15 @@ export function FlatPatternView({ model }: { model: Model }) {
         : undefined,
     [part, theme, t],
   );
-
-  if (flats.length === 0) {
+  if (!rendered) return null;
+  if ("error" in rendered) {
     return (
-      <div className="empty-view" role="status">
-        <p>{t.t("ui.flat.empty")}</p>
-        <p className="muted">{t.t("ui.flat.empty.hint")}</p>
-      </div>
+      <p className="notice notice--error" role="alert">
+        {t.t("ui.flat.unavailable", { error: rendered.error })}
+      </p>
     );
   }
   return (
-    <div className="flat-view">
-      <nav className="flat-view__list" aria-label={t.t("ui.flat.list.label")}>
-        <ul>
-          {flats.map((p) => (
-            <li key={p.id}>
-              <button
-                type="button"
-                aria-pressed={p.id === part?.id}
-                className={p.id === part?.id ? "is-selected" : undefined}
-                onClick={() => select(p.id)}
-              >
-                <strong>{p.mark}</strong> <span className="muted">{t.t(p.name)}</span>
-              </button>
-            </li>
-          ))}
-        </ul>
-      </nav>
-      <div className="flat-view__drawing">
-        {shownGroups.map((g) => (
-          <SegmentsTable key={g.base} group={g} {...(part ? { selected: part.id } : {})} />
-        ))}
-        {!part ? (
-          <p className="muted">{t.t("ui.flat.choose")}</p>
-        ) : (
-          <>
-            <div className="flat-view__head">
-              <span>
-                <strong>{part.mark}</strong>
-                {t.t("ui.flat.head", {
-                  name: part.name,
-                  thickness: formatLength(part.flat?.thickness, "mm", t.locale),
-                })}
-              </span>
-              <button
-                type="button"
-                onClick={() => downloadFile(partDxfFile(part, fileStem(projectName), t.locale))}
-              >
-                {t.t("ui.flat.dxf")}
-              </button>
-            </div>
-            {!rendered ? null : "error" in rendered ? (
-              <p className="notice notice--error" role="alert">
-                {t.t("ui.flat.unavailable", { error: rendered.error })}
-              </p>
-            ) : (
-              <ExportedSvg
-                svg={rendered.svg}
-                label={t.t("ui.flat.drawing.label", { mark: part.mark })}
-              />
-            )}
-          </>
-        )}
-      </div>
-    </div>
+    <ExportedSvg svg={rendered.svg} label={t.t("ui.flat.drawing.label", { mark: part.mark })} />
   );
 }

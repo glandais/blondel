@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { parseProject, parseProjectText } from "./parse.js";
@@ -75,5 +78,31 @@ describe("serializeProject", () => {
       }),
       { numRuns: 60 },
     );
+  });
+});
+
+describe("validatedValues (ADR-0009 point 9, ajout rétrocompatible)", () => {
+  const examples = resolve(dirname(fileURLToPath(import.meta.url)), "../../../../examples");
+
+  it("un exemple sans le champ est relu et réécrit à l'octet près", () => {
+    const text = readFileSync(join(examples, "j4-acceptance-01-garde-corps.blondel.json"), "utf8");
+    expect(text).not.toContain("validatedValues");
+    const p = parseProjectText(text);
+    expect("validatedValues" in p).toBe(false);
+    expect(serializeProject(p)).toBe(text);
+  });
+
+  it("un projet avec le champ fait l'aller-retour", () => {
+    const p = {
+      ...createProject("quarter-left"),
+      validatedValues: [
+        { path: "guards.posts.size", value: 40 },
+        { path: "guards.material", value: "steel" },
+        { path: "stair.structure.params.precheck.x", value: true, structureKind: "steel-plate" },
+      ],
+    };
+    const text = serializeProject(p);
+    expect(parseProjectText(text)).toEqual(p);
+    expect(serializeProject(parseProjectText(text))).toBe(text);
   });
 });

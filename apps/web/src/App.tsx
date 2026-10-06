@@ -2,14 +2,18 @@
  * Mise en page du parcours libre (maquette 1b, ADR-0009) : barre du haut ; en Conception, rail
  * des 8 sections et panneau unique ; vue centrale (onglets, cadre, ligne de chiffres) ;
  * inspecteur à droite ; assistant d'initialisation (fenêtre modale) et invite de mise à jour.
- * En Fabrication (provisoire jusqu'à la vague 4), ni rail ni panneau : la vue centrale montre
- * les développés, la nomenclature et le comparateur.
+ * En Fabrication (vague 4), ni rail, ni panneau, ni inspecteur : la zone de Fabrication (onglets
+ * Pièces | Nomenclature | Comparer | À valider, bande de chiffres, liste des pièces par famille et
+ * pièce choisie) et, à droite, la colonne de Fabrication (réglages d'atelier de la pièce, retour
+ * en Conception, sorties et coût). La sélection est la même dans les deux espaces.
  *
  * L'import de `uiStore` installe la liaison espace de travail ↔ vue active.
  */
 import { useEffect } from "react";
 import { AssistantDialog } from "./components/AssistantDialog.js";
 import { escapeAction, type EscapeTarget } from "./components/escapeChain.js";
+import { FabricationArea } from "./components/fabrication/FabricationArea.js";
+import { FabricationAside } from "./components/fabrication/FabricationAside.js";
 import { FreePanel, focusRailTab } from "./components/free/FreePanel.js";
 import { Rail } from "./components/free/Rail.js";
 import { Inspector } from "./components/inspector/Inspector.js";
@@ -19,11 +23,14 @@ import { ViewArea } from "./components/view/ViewArea.js";
 import { appStore, journeyStore, useJourney } from "./store/appStore.js";
 import "./store/uiStore.js";
 
+/** Champs sans annulation propre au navigateur : Ctrl+Z y annule le projet (cases ◆, radios…). */
+const NON_TEXT_INPUTS = new Set(["checkbox", "radio", "button", "submit", "reset", "color"]);
+
 function isEditable(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false;
+  if (target instanceof HTMLInputElement) return !NON_TEXT_INPUTS.has(target.type);
   return (
     target.isContentEditable ||
-    target instanceof HTMLInputElement ||
     target instanceof HTMLTextAreaElement ||
     target instanceof HTMLSelectElement
   );
@@ -102,10 +109,19 @@ export function App() {
       data-panel={design && panelOpen ? "open" : "closed"}
     >
       <TopBar />
-      {design ? <Rail /> : null}
-      {design ? <FreePanel /> : null}
-      <ViewArea />
-      <Inspector />
+      {design ? (
+        <>
+          <Rail />
+          <FreePanel />
+          <ViewArea />
+          <Inspector />
+        </>
+      ) : (
+        <>
+          <FabricationArea />
+          <FabricationAside />
+        </>
+      )}
       <AssistantDialog />
       <UpdatePrompt />
     </div>

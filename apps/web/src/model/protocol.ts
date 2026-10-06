@@ -21,7 +21,10 @@ export type WorkerRequest =
       readonly id: number;
       readonly type: "pdf";
       readonly project: Project;
-      /** Pages et format du dossier (absent : dossier complet, A4). */
+      /**
+       * Pages, format, gabarits et valeurs ◆ du dossier (absent : dossier complet, A4, sans
+       * page des valeurs à valider).
+       */
       readonly options?: PdfJobOptions;
       /** Langue du dossier (absent : français). */
       readonly locale?: Locale;

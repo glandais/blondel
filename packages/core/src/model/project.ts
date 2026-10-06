@@ -442,6 +442,33 @@ export const AppearanceSchema = z.object({
 });
 export type Appearance = z.infer<typeof AppearanceSchema>;
 
+// ------------------------------------------------------------------ Valeurs ◆ validées
+
+/** Valeur scalaire validée (nombre, choix d'une liste, case à cocher). */
+export type ValidatedScalar = number | string | boolean;
+
+/**
+ * Validation d'une valeur par défaut « à valider » (◆) par l'utilisateur (ADR-0009 point 9,
+ * vague 4) :
+ * - `path` : clé du dictionnaire des niveaux de l'interface, chemin du projet joint par des
+ *   points (`guards.posts.size`, `stair.balancing.rotationReach`,
+ *   `stair.structure.params.supports.pinch`) ;
+ * - `value` : valeur **effective** au moment de la validation (défauts compris, même si le
+ *   projet ne l'enregistre pas) ;
+ * - `structureKind` : plugin de structure, seulement pour les paramètres de plugin
+ *   (`stair.structure.params.*`).
+ *
+ * Une validation ne vaut que si le chemin, le plugin et la valeur effective courante sont égaux
+ * (`===`) à ceux enregistrés. Sinon elle est **caduque** : l'entrée reste dans le fichier mais
+ * est ignorée (une valeur modifiée doit être validée de nouveau).
+ */
+export const ValidatedValueSchema = z.object({
+  path: z.string().min(1),
+  value: z.union([z.number(), z.string(), z.boolean()]),
+  structureKind: z.string().optional(),
+});
+export type ValidatedValue = z.infer<typeof ValidatedValueSchema>;
+
 // ------------------------------------------------------------------ Projet
 
 export const ProjectSchema = z.object({
@@ -467,6 +494,12 @@ export const ProjectSchema = z.object({
    * rendu par défaut. Ajout rétrocompatible, sans effet sur le modèle.
    */
   appearance: AppearanceSchema.optional(),
+  /**
+   * Valeurs ◆ validées par l'utilisateur (voir `ValidatedValueSchema`, ADR-0009 point 9). Absent
+   * : aucune validation (fichier inchangé). Sans défaut, pour que les projets antérieurs restent
+   * identiques à l'octet près. Ajout rétrocompatible, sans migration, sans effet sur le modèle.
+   */
+  validatedValues: z.array(ValidatedValueSchema).optional(),
 });
 export type Project = z.infer<typeof ProjectSchema>;
 export type ProjectInput = z.input<typeof ProjectSchema>;
