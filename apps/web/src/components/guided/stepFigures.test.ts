@@ -8,7 +8,7 @@ import { buildModel, createProject, type Model, type Project } from "@blondel/co
 import { createTranslator } from "@blondel/i18n";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { defaultGuards } from "../../lib/guardsForm.js";
 import { bomSummary } from "../../lib/parts.js";
 import { formatFigureLength } from "../../lib/units.js";
@@ -31,6 +31,9 @@ function load(p: Project): Model {
   }));
   return model;
 }
+
+// Langue fixée avant chaque cas : sinon le premier dépend de la langue de la machine (CI en anglais).
+beforeEach(() => appStore.getState().setLocale("fr"));
 
 afterEach(() => {
   appStore.getState().setLocale("fr");
