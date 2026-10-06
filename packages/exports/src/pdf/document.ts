@@ -6,6 +6,8 @@
  * 3. fiche de pose : plan d'implantation, cotes aux nus des murs et à la trémie, diagonales,
  *    hauteurs, épure des nez au sol ;
  * 4. nomenclature (repère, désignation, matériau, section, débit, quantité, masse) ;
+ * 4 bis. visserie (repères de visserie déduits des assemblages, QUESTIONS A27), si le modèle en
+ *    a (`fasteners.ts`) ;
  * 5. fiche de débit (pièces par matériau et épaisseur, longueurs, volumes et masses cumulés) ;
  * 6. contrôle de conception (avertissement « indicatif », résultats groupés, provenance) ;
  * 6 bis. valeurs à valider (valeurs par défaut non sourcées, validées et restantes ; ADR-0009
@@ -25,6 +27,7 @@
 import type { Model, Part, Project } from "@blondel/core";
 import { cutListRows, defaultMassNote, massNoteFor, type MassNote } from "../csv/cutlist.js";
 import { cutSheet } from "../cutsheet.js";
+import { pdfFlatTitle } from "../flatTerms.js";
 import { formatIn } from "../format.js";
 import {
   localeOption,
@@ -40,6 +43,7 @@ import { renderPlanSvg } from "../svg/plan.js";
 import { templateFamily, type TemplateFamily } from "../templateFamily.js";
 import { JsPdfCanvas, type PdfCanvas } from "./canvas.js";
 import { compliancePages } from "./compliance.js";
+import { fastenerPages } from "./fasteners.js";
 import { installationPages } from "./installation.js";
 import { toValidatePages, type PdfToValidateRow } from "./toValidate.js";
 import {
@@ -71,6 +75,8 @@ export interface PdfPages {
   readonly elevation?: boolean;
   readonly installation?: boolean;
   readonly bom?: boolean;
+  /** Visserie (QUESTIONS A27) : seulement si le modèle en a (`Model.fasteners`). */
+  readonly fasteners?: boolean;
   readonly cutsheet?: boolean;
   readonly compliance?: boolean;
   /** Valeurs à valider (seulement si `PdfLayoutOptions.toValidate` est fourni). */
@@ -138,6 +144,7 @@ export type PdfPageKind =
   | "elevation"
   | "installation"
   | "bom"
+  | "fasteners"
   | "cutsheet"
   | "compliance"
   | "toValidate"
@@ -549,6 +556,7 @@ export function renderPdf(
     elevation: true,
     installation: true,
     bom: true,
+    fasteners: true,
     cutsheet: true,
     compliance: true,
     toValidate: true,
@@ -605,6 +613,11 @@ export function renderPdf(
   const massNote =
     options.massNote ?? (project !== undefined ? massNoteFor(project.workshop) : defaultMassNote);
   if (show.bom) pages.push(...bomPages(model.parts, frame, massNote, t));
+  if (show.fasteners) {
+    pages.push(
+      ...fastenerPages(model, frame, t, (title) => ({ kind: "fasteners" as const, title })),
+    );
+  }
   if (show.cutsheet) pages.push(...cutSheetPages(model.parts, frame, massNote, t));
   if (show.compliance)
     pages.push(...compliancePages(c, model, frame, project?.compliance.overrides ?? [], t));
@@ -619,7 +632,7 @@ export function renderPdf(
   const groups = show.flats || show.templates ? flatGroups(model.parts) : [];
   if (show.flats) {
     for (const { part, ids } of groups) {
-      const title = t.t("pdf.flat.title", { mark: part.mark, name: tr(t, part.name) });
+      const title = pdfFlatTitle(t, part);
       pages.push(
         drawingPage(
           "flat",

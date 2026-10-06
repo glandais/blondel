@@ -13,6 +13,7 @@ import { partLayers, partLineLayer, exportPartDxf } from "../dxf/part.js";
 import { exportPartsDxf } from "../dxf/parts.js";
 import { exportPlanDxf, planLayers } from "../dxf/plan.js";
 import { sanitizeLayerName } from "../dxf/r12.js";
+import { isTimberDevelopment } from "../flatTerms.js";
 import { FRENCH_ACCENTS, residualFrench } from "../testing/french.js";
 import { findAll, parseXml } from "../testing/xml.js";
 import { renderElevationSvg } from "./elevation.js";
@@ -70,7 +71,9 @@ describe("dessins en anglais (locale « en »)", () => {
         expectEnglish(texts, "plan");
         expect(texts.some((t) => /^Plan — \d+ rises$/.test(t))).toBe(true);
         expect(texts.some((t) => /^Total rise H = [\d,]+ mm$/.test(t))).toBe(true);
-        expect(texts.some((t) => /^2R \+ G = \d+\.\d mm$/.test(t))).toBe(true);
+        expect(texts.some((t) => /^2 × rise \+ going = \d+\.\d mm$/.test(t))).toBe(true);
+        // « R » réservé au rayon (QUESTIONS A26 (a)) : jamais « R = » ni « R1 » pour la hauteur.
+        expect(texts.filter((t) => /\bR ?=|\bR1\b|2R\b/.test(t))).toEqual([]);
         expect(texts.some((t) => t.startsWith("Design check — blocking: "))).toBe(true);
       });
 
@@ -79,6 +82,7 @@ describe("dessins en anglais (locale « en »)", () => {
         expectEnglish(texts, "élévation");
         expect(texts).toContain("Developed elevation");
         expect(texts).toContain("Elevation developed along the walking line");
+        expect(texts.filter((t) => /\bR ?=|\bR1\b|2R\b/.test(t))).toEqual([]);
       });
 
       it("plan DXF : textes et calques en anglais", () => {
@@ -95,9 +99,11 @@ describe("dessins en anglais (locale « en »)", () => {
         const parts = model(file).parts.filter((p) => p.flat !== undefined);
         expect(parts.length).toBeGreaterThan(0);
         for (const part of parts) {
-          expectEnglish(
-            svgTexts(renderFlatPatternSvg(part, { locale: "en" })),
-            `développé ${part.mark}`,
+          const svgText = svgTexts(renderFlatPatternSvg(part, { locale: "en" }));
+          expectEnglish(svgText, `développé ${part.mark}`);
+          // « Development » pour un limon bois, « Flat pattern » sinon (QUESTIONS A26 (a)).
+          expect(svgText[0], part.mark).toBe(
+            `${isTimberDevelopment(part) ? "Development" : "Flat pattern"} ${part.mark}`,
           );
           const f = readDxf(exportPartDxf(part, { locale: "en", quantity: 2 }));
           const texts = dxfTexts(f);
@@ -116,6 +122,17 @@ describe("dessins en anglais (locale « en »)", () => {
     const texts = svgTexts(renderPlanSvg(model("j5a-helicoidal.blondel.json"), { locale: "en" }));
     expect(texts.some((t) => t.startsWith("Spiral stair ("))).toBe(true);
     expect(texts.some((t) => t.startsWith("Angle per step "))).toBe(true);
+  });
+
+  it("limon bois : développé « Development », tôle pliée : « Flat pattern »", () => {
+    const wood = model("j3a-acceptance-01-bois.blondel.json").parts.filter(
+      (p) => p.flat !== undefined && isTimberDevelopment(p),
+    );
+    expect(wood.length).toBeGreaterThan(0);
+    const sheet = model("j3b-acceptance-01-tole-pliee.blondel.json").parts.filter(
+      (p) => p.flat !== undefined,
+    );
+    expect(sheet.some(isTimberDevelopment)).toBe(false);
   });
 
   it("tôle pliée : sens de pli traduit (up / down)", () => {

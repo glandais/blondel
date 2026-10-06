@@ -16,7 +16,7 @@ import {
   type Project,
   type RuleResult,
 } from "@blondel/core";
-import { translatorFor } from "@blondel/i18n";
+import { msg, translatorFor } from "@blondel/i18n";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it } from "vitest";
@@ -166,6 +166,25 @@ describe("inspecteur Règle : contenu", () => {
     );
     const en = text(render(selectionOf(r), "en"));
     expect(en).toContain(translatorFor("en").t(NATURE_EXPLAINED_KEYS[r.nature]!));
+  });
+
+  it("source citée dans la langue de l'interface (QUESTIONS A26 (b))", () => {
+    load(createProject("straight"));
+    // Règle de la table : source_en en anglais, source française inchangée.
+    const def = RULES.find((d) => d.id === "G_MIN_DTU")!;
+    const table = result({ ruleId: def.id, source: def.source });
+    // Contrôle hors table : message traduisible, français = `source`.
+    const plugin = result({
+      source: "Profil d'atelier Blondel (valeur par défaut à valider, LEDGER §2)",
+      sourceMessage: msg("compliance.source.workshopDefault"),
+    });
+    withModel([table, plugin]);
+    expect(text(render(selectionOf(table)))).toContain(def.source);
+    expect(text(render(selectionOf(table), "en"))).toContain(def.source_en);
+    expect(text(render(selectionOf(plugin)))).toContain(plugin.source);
+    const en = text(render(selectionOf(plugin), "en"));
+    expect(en).toContain("Blondel workshop profile (default value to be validated, LEDGER §2)");
+    expect(en).not.toContain("Profil d'atelier");
   });
 
   it("règle respectée et règle non évaluée : surtitre du statut", () => {

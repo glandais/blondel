@@ -9,6 +9,8 @@ import {
   buildModel,
   createDemoProject,
   createProject,
+  fastenerKindLabel,
+  msg,
   withValidatedValues,
   type Model,
   type Project,
@@ -292,7 +294,56 @@ describe("valeurs ◆ d'un projet", () => {
       ...p,
       stair: { ...p.stair, structure: { kind: "steel-flat", params } },
     };
-    expect(keysOf(saved)).toEqual(keysOf(p, m));
+    // La visserie (QUESTIONS A27) dépend des assemblages du modèle : absente sans modèle.
+    expect(keysOf(saved)).toEqual(keysOf(p, m).filter((k) => !k.startsWith("workshop.fasteners.")));
+  });
+
+  it("visserie : réglages ◆ des assemblages du modèle seulement, section Structure (A27)", () => {
+    const p = withStructure(base, "steel-flat");
+    const m = buildModel(p);
+    const none: Model = { ...m, fasteners: [] };
+    expect(keysOf(p, none).filter((k) => k.startsWith("workshop."))).toEqual([]);
+    const withFasteners: Model = {
+      ...m,
+      fasteners: [
+        {
+          id: "f",
+          mark: "VS1",
+          kind: "bolt",
+          grade: "8.8",
+          diameter: 12,
+          length: 100,
+          quantity: 4,
+          joint: "plateBolted",
+          name: fastenerKindLabel("bolt"),
+          origin: msg("fastener.joint.plateBolted"),
+          partIds: [m.parts[0]!.id],
+          deduced: ["diameter", "quantity"],
+        },
+      ],
+    };
+    const items = toValidateItems(p, withFasteners).filter((i) =>
+      i.key.startsWith("workshop.fasteners."),
+    );
+    expect(items.map((i) => i.key)).toEqual([
+      "workshop.fasteners.holeClearance",
+      "workshop.fasteners.nominalDiameters",
+      "workshop.fasteners.joints.plateBolted.kind",
+      "workshop.fasteners.joints.plateBolted.grade",
+      "workshop.fasteners.joints.plateBolted.length",
+      "workshop.fasteners.joints.plateBolted.perPoint",
+    ]);
+    expect(items.every((i) => i.section === "structure" && i.steps.length === 0)).toBe(true);
+    for (const i of items) expect(isToValidate(i.key), i.key).toBe(true);
+    expect(tierEntry("workshop.fasteners.joints.plateBolted.length")).toMatchObject({
+      tier: "workshop",
+      section: "structure",
+      toValidate: true,
+    });
+    // Étape 7 du guidé : comptées comme les autres réglages d'atelier.
+    expect(toValidateCountByStep(p, withFasteners)[7]).toBe(
+      toValidateCountByStep(p, none)[7] + items.length,
+    );
   });
 
   it("paramètres de plugin conditionnels : tôle pliée et poteau seulement s'ils s'appliquent", () => {

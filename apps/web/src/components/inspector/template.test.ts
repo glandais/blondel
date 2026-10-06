@@ -1,12 +1,18 @@
 /**
  * Choix du gabarit de l'inspecteur d'après la sélection partagée (ADR-0009, vague 3) : règle
- * (2c), marche ou nez (2a), pièce (2b), sinon « sans sélection » (2d) ; correspondance nez k ↔
- * marche k + 1, éléments absents du modèle, clé de montage des gabarits.
+ * (2c), marche ou nez (2a), nez d'arrivée (bloc « Ligne de nez » seul, QUESTIONS A28), pièce
+ * (2b), sinon « sans sélection » (2d) ; correspondance nez k ↔ marche k + 1, éléments absents du
+ * modèle, clé de montage des gabarits.
  */
 import { buildModel, createProject } from "@blondel/core";
 import { describe, expect, it } from "vitest";
 import type { Selection } from "../../store/projectStore.js";
-import { inspectedTread, inspectorTemplate, selectionKey } from "./Inspector.js";
+import {
+  inspectedArrivalNosing,
+  inspectedTread,
+  inspectorTemplate,
+  selectionKey,
+} from "./Inspector.js";
 
 const model = buildModel(createProject("quarter-left"));
 const treads = model.stepping.treads.map((t) => t.number);
@@ -39,11 +45,30 @@ describe("inspectorTemplate", () => {
   it("nez k : 2a de la marche k + 1 si elle existe", () => {
     expect(inspectorTemplate(at({ kind: "nosing", index: 0 }), model)).toBe("tread");
     expect(inspectorTemplate(at({ kind: "nosing", index: last - 1 }), model)).toBe("tread");
-    // Dernier nez (arrivée) : pas de marche au-dessus.
-    expect(inspectorTemplate(at({ kind: "nosing", index: last }), model)).toBe("project");
     expect(inspectedTread(at({ kind: "nosing", index: 2 }), model)).toBe(3);
     expect(inspectedTread(at({ kind: "tread", number: 3 }), model)).toBe(3);
     expect(inspectedTread(at({ kind: "nosing", index: last }), model)).toBeNull();
+    // Nez d'une marche : jamais le gabarit du nez d'arrivée.
+    expect(inspectedArrivalNosing(at({ kind: "nosing", index: last - 1 }), model)).toBeNull();
+  });
+
+  it("nez d'arrivée (dernier nez, sans marche au-dessus) : gabarit « nez » (A28)", () => {
+    // Dernier nez : indice = nombre de nez − 1 = numéro de la dernière marche.
+    expect(model.stepping.nosings.length - 1).toBe(last);
+    expect(inspectorTemplate(at({ kind: "nosing", index: last }), model)).toBe("nosing");
+    expect(inspectedArrivalNosing(at({ kind: "nosing", index: last }), model)).toBe(last);
+    // Avec une règle : l'inspecteur Règle l'emporte ; sans modèle : projet.
+    expect(inspectorTemplate(at({ kind: "nosing", index: last }, "R-x"), model)).toBe("rule");
+    expect(inspectorTemplate(at({ kind: "nosing", index: last }), null)).toBe("project");
+    expect(inspectedArrivalNosing(at({ kind: "nosing", index: last }), null)).toBeNull();
+    expect(inspectedArrivalNosing(null, model)).toBeNull();
+    expect(inspectedArrivalNosing(at({ kind: "tread", number: last }), model)).toBeNull();
+  });
+
+  it("nez hors découpage (indice au-delà du nez d'arrivée, retouche orpheline) : 2d", () => {
+    expect(inspectorTemplate(at({ kind: "nosing", index: last + 1 }), model)).toBe("project");
+    expect(inspectorTemplate(at({ kind: "nosing", index: 999 }), model)).toBe("project");
+    expect(inspectedArrivalNosing(at({ kind: "nosing", index: last + 1 }), model)).toBeNull();
   });
 
   it("pièce présente : 2b ; pièce disparue : 2d", () => {
@@ -78,5 +103,14 @@ describe("selectionKey", () => {
     expect(selectionKey(at({ kind: "tread", number: 3 }))).toBe(
       selectionKey(at({ kind: "tread", number: 3 })),
     );
+  });
+
+  it("nez d'arrivée : clé propre, distincte de la marche qu'il borde et des autres nez", () => {
+    const arrival = selectionKey(at({ kind: "nosing", index: last }));
+    expect(arrival).toBe(`nosing-${last}`);
+    expect(arrival).not.toBe(selectionKey(at({ kind: "tread", number: last })));
+    expect(arrival).not.toBe(selectionKey(at({ kind: "nosing", index: last - 1 })));
+    expect(arrival).not.toBe(selectionKey(at({ kind: "nosing", index: last }, "R-1")));
+    expect(selectionKey(at({ kind: "nosing", index: last }))).toBe(arrival);
   });
 });

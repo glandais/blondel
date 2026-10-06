@@ -21,7 +21,9 @@
  * - paramètres des plugins de structure : déduits de `lib/paramLabels.ts` (aide
  *   `ui.param.toValidate`), une seule source ;
  * - garde-corps et rotation M6 : déclarés ici (seule source de ces marqueurs dans l'interface),
- *   d'après les défauts « à valider » du cœur cités en commentaire.
+ *   d'après les défauts « à valider » du cœur cités en commentaire ;
+ * - visserie du profil d'atelier (`workshop.fasteners.*`, QUESTIONS A27) : déclarée ici, valeurs
+ *   présentes selon les assemblages du modèle (`lib/fasteners.ts`).
  *
  * Validation des ◆ (ADR-0009 point 9) : `toValidateStates` donne, pour chaque valeur ◆ du
  * projet, sa valeur effective (défauts compris) et si elle est validée
@@ -36,6 +38,7 @@ import {
   type Project,
   type ValidatedScalar,
 } from "@blondel/core";
+import { fastenerSettingPaths, fastenerSettingValue } from "./fasteners.js";
 import { availableStructures } from "./optionalApi.js";
 import { fieldText } from "./paramLabels.js";
 import { GUIDED_STEPS, SECTION_IDS, type GuidedStep, type SectionId } from "./sectionIds.js";
@@ -218,6 +221,16 @@ const TIERS: Readonly<Record<string, ParamTierEntry>> = {
   "guards.infill.panelGap": workshop("guards"),
   "guards.infill.holeDiameter": workshop("guards"),
   "guards.handrail.wallClearance": workshop("guards"),
+
+  // --- Visserie du profil d'atelier (QUESTIONS A27) : réglée dans « Réglages d'atelier » de la
+  // section Structure (et à l'étape 7). Aucune valeur sourcée (packages/core/src/workshop/
+  // fasteners.ts, DEFAULT_FASTENER_PROFILE « à valider ») : toutes ◆. L'entrée `joints` couvre
+  // `workshop.fasteners.joints.<assemblage>.<champ>` (préfixe le plus long).
+  "workshop.fasteners.holeClearance": workshop("structure", TV),
+  "workshop.fasteners.nominalDiameters": workshop("structure", TV),
+  "workshop.fasteners.bracketSpacing": workshop("structure", TV),
+  "workshop.fasteners.unknownWallLoadBearing": workshop("structure", TV),
+  "workshop.fasteners.joints": workshop("structure", TV),
 
   // --- Contexte de contrôle (pas d'étape : réglé par l'assistant, modifiable depuis le contrôle)
   "compliance.contexts": design("compliance"),
@@ -558,7 +571,8 @@ export interface ToValidateState extends ToValidateItem {
  * Valeurs ◆ présentes dans ce projet, avec leur valeur effective et leur état de validation :
  * portée et raideur de la rotation M6 (défauts du cœur si absentes), paramètres du plugin de
  * structure courant (défauts du plugin compris), garde-corps présents (type de remplissage
- * courant). Une valeur non calculable n'est jamais validée.
+ * courant), visserie des assemblages présents dans le modèle (profil d'atelier, défauts compris).
+ * Une valeur non calculable n'est jamais validée.
  */
 export function toValidateStates(
   project: Project,
@@ -598,6 +612,8 @@ export function toValidateStates(
     out.push(state(item(paramKey(path), path, e), getParam(values, p), kind));
   }
   for (const p of guardPaths(project)) push(p, getParam(project.guards, p.slice(1)));
+  // Visserie : seulement les assemblages présents dans le modèle (aucune sans modèle).
+  for (const p of fastenerSettingPaths(model)) push(p, fastenerSettingValue(project, p));
   return out;
 }
 

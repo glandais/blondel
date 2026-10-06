@@ -41,6 +41,20 @@ export function nosingEditAvailability(
   return { ok: true };
 }
 
+/**
+ * Indice du nez d'arrivée (QUESTIONS A28) : dernier nez du découpage (k = nombre de nez − 1),
+ * au palier haut, quand aucune marche ne le porte (pas de marche k + 1). `null` sans nez, ou si
+ * une marche k + 1 existe (découpage incohérent : le nez est alors celui d'une marche). Lecture
+ * du modèle seulement : il se sélectionne seul (bloc « Ligne de nez » sans fiche de marche).
+ */
+export function arrivalNosingIndex(
+  stepping: Pick<Model["stepping"], "nosings" | "treads">,
+): number | null {
+  const k = stepping.nosings.length - 1;
+  if (k < 0) return null;
+  return stepping.treads.some((t) => t.number === k + 1) ? null : k;
+}
+
 /** Arrondi au pas `step` (degrés), sans « −0 ». */
 export function roundAngle(angle: number, step = EXPERT_ANGLE_STEP_DEG): number {
   const r = Math.round(angle / step) * step;

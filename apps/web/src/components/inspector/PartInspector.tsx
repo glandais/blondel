@@ -17,14 +17,14 @@ import {
   QUANTITY_WELD_MM,
   type PartFamilyId,
 } from "@blondel/core";
-import { materialLabel } from "@blondel/exports";
+import { flatTermKeys, materialLabel } from "@blondel/exports";
 import { msg, type MessageKey } from "@blondel/i18n";
 import { ArrowRight, Download } from "lucide-react";
 import { formatNumber } from "../../i18n/locale.js";
 import { useT } from "../../i18n/useT.js";
 import { downloadFile } from "../../lib/download.js";
 import { fileStem, partDxfFile } from "../../lib/exportFiles.js";
-import { assembledParts } from "../../lib/partLinks.js";
+import { assembledParts, partFastenerLines } from "../../lib/partLinks.js";
 import { partSettingsFor } from "../../lib/partSettings.js";
 import { formatFigureLength } from "../../lib/units.js";
 import { appStore, journeyStore, useApp, useModel } from "../../store/appStore.js";
@@ -115,6 +115,8 @@ export function PartInspector({ partId }: PartInspectorProps) {
   }
 
   const hasFlat = part.flat !== undefined;
+  // « Development » pour un limon bois, « flat pattern » sinon (anglais, QUESTIONS A26 (a)).
+  const flatKeys = flatTermKeys(part);
   const noFlat = t.t("ui.partInspector.noFlat");
   const settings = partSettingsFor(part, guards);
   const family = part.family;
@@ -188,17 +190,17 @@ export function PartInspector({ partId }: PartInspectorProps) {
           type="button"
           className="btn btn-secondary part-insp__action"
           disabled={!hasFlat}
-          title={hasFlat ? t.t("ui.partInspector.action.flat.title", { mark: part.mark }) : noFlat}
+          title={hasFlat ? t.t(flatKeys.actionTitle, { mark: part.mark }) : noFlat}
           onClick={() => showView("fabrication", "flat")}
         >
-          {t.t("ui.partInspector.action.flat")}
+          {t.t(flatKeys.action)}
           <ArrowRight size={14} aria-hidden="true" />
         </button>
         <button
           type="button"
           className="btn btn-secondary part-insp__action"
           disabled={!hasFlat}
-          title={hasFlat ? t.t("ui.partInspector.action.dxf.title", { mark: part.mark }) : noFlat}
+          title={hasFlat ? t.t(flatKeys.dxfTitle, { mark: part.mark }) : noFlat}
           onClick={() => downloadFile(partDxfFile(part, fileStem(projectName), t.locale))}
         >
           <Download size={14} aria-hidden="true" />
@@ -215,6 +217,7 @@ export function PartInspector({ partId }: PartInspectorProps) {
       <PartLinkList
         title={t.t("ui.partInspector.assembledWith")}
         parts={assembledParts(model, part.id)}
+        fasteners={partFastenerLines(model, part.id)}
       />
 
       <span className="insp-spacer" />

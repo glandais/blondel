@@ -8,6 +8,7 @@
  * - NF EN 16481 § 4.2 (C §1.2) : valeurs par défaut sans valeur nationale q_k = 3 kN/m²,
  *   Q_k = 2 kN, masse de vibration M_k,2 = 1 kN.
  */
+import { msg, translatorFor, type Message } from "@blondel/i18n";
 import { findRule, numberCell, ruleParam, ruleTable } from "../rules/table.js";
 import { LOAD_CATEGORIES, type LoadCategory, type PrecheckSettings } from "./settings.js";
 
@@ -19,7 +20,15 @@ export interface StairLoads {
   /** Masse de vibration (poids), kN. */
   readonly vibrationMass: number;
   readonly category: LoadCategory;
+  /** Source citée, en français (traduction française de `sourceMessage`). */
   readonly source: string;
+  /** Source citée traduisible (QUESTIONS A26 (b)) : notes du prédimensionnement. */
+  readonly sourceMessage: Message;
+}
+
+/** Source française et message d'une source de charges. */
+function loadsSource(m: Message): Pick<StairLoads, "source" | "sourceMessage"> {
+  return { source: translatorFor("fr").t(m), sourceMessage: m };
 }
 
 /**
@@ -73,7 +82,7 @@ export function stairLoads(settings: PrecheckSettings, contexts: readonly string
     return {
       ...EN16481_DEFAULT_LOADS,
       category,
-      source: "NF EN 16481 § 4.2, valeurs par défaut (C §1.2)",
+      ...loadsSource(msg("compliance.source.loadsDefault")),
     };
   }
   const [q, Q] = AN_STAIR_LOADS[category];
@@ -82,6 +91,11 @@ export function stairLoads(settings: PrecheckSettings, contexts: readonly string
     Qk: Q,
     vibrationMass: EN16481_DEFAULT_LOADS.vibrationMass,
     category,
-    source: `NF EN 1991-1-1/NA tableau 6.2(NF), catégorie ${category} (A §3.6, rules.yaml CHARGE_ESCALIER_${category === "A" ? "A" : "AUTRES"})`,
+    ...loadsSource(
+      msg("compliance.source.loadsNationalAnnex", {
+        category,
+        ruleId: category === "A" ? "CHARGE_ESCALIER_A" : "CHARGE_ESCALIER_AUTRES",
+      }),
+    ),
   };
 }

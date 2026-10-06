@@ -59,6 +59,7 @@ import type { Frame3, Mm, Polygon2, Shape2, Vec2, Vec3 } from "../model/primitiv
 import type { Project } from "../model/project.js";
 import { DEFAULT_WOOD_MATERIAL } from "../parts/basic.js";
 import { NOSING_EVALUATORS } from "../rules/evaluators/nosing.js";
+import { sourceSpec } from "../rules/sources.js";
 import { getRule } from "../rules/table.js";
 import type { Finding } from "../rules/types.js";
 import { STEEL_GRADES } from "../workshop/metal.js";
@@ -168,8 +169,7 @@ export type HelicalCoreParams = z.output<typeof HelicalCoreParamsSchema>;
 export const HELICAL_RULES = {
   cantilever: {
     id: "HELICOIDAL_PORTE_A_FAUX",
-    source:
-      "docs/research/C-structures.md §1.8 [48] (porte-à-faux et escaliers suspendus hors règles de moyens)",
+    ...sourceSpec(msg("compliance.source.helicalCantilever")),
     confidence: "moyen",
     nature: "metier",
     severity: "avertissement",
@@ -177,8 +177,7 @@ export const HELICAL_RULES = {
   },
   rolling: {
     id: "FAB_ROULAGE_LIMON",
-    source:
-      "Profil d'atelier Blondel, rouleuse (C §2.4 [16], valeurs par défaut à valider, LEDGER §2)",
+    ...sourceSpec(msg("compliance.source.helicalRolling")),
     confidence: "faible",
     nature: "metier",
     severity: "avertissement",

@@ -4,31 +4,76 @@
  * sélectionnée est surlignée par CSS et un clic sur une marche la sélectionne ; un clic
  * ailleurs dans le dessin (« dans le vide ») appelle `onClickEmpty`.
  *
+ * Nez d'arrivée (QUESTIONS A28) : la cible posée par `withNosingTarget` (`data-nosing-target`)
+ * sélectionne ce nez (`onSelectNosing`) ; le nez sélectionné (`selectedNosing`, ligne du plan
+ * ou point de l'élévation `data-nosing`) est surligné comme une marche.
+ *
  * Clavier (sélectionnable seulement) : la première forme de chaque marche reçoit le focus
  * (Tab), un rôle de bouton et le nom « Marche n » ; Entrée ou Espace la sélectionne (inspecteur
- * Marche, bloc « Ligne de nez »). Le dessin devient alors un groupe (`role="group"`) pour que ses
- * marches restent atteignables par les technologies d'assistance.
+ * Marche, bloc « Ligne de nez ») ; la cible du nez d'arrivée est focalisable de la même façon.
+ * Le dessin devient alors un groupe (`role="group"`) pour que ses marches restent atteignables
+ * par les technologies d'assistance.
  */
 import { useEffect, useRef, type KeyboardEvent, type MouseEvent } from "react";
 import { useT } from "../i18n/useT.js";
-import { treadNumberFromAttribute } from "../lib/compliance.js";
+import { nosingIndexFromAttribute, treadNumberFromAttribute } from "../lib/compliance.js";
 
 export interface ExportedSvgProps {
   readonly svg: string;
   readonly label: string;
   readonly selectedTread?: number | undefined;
   readonly onSelectTread?: (n: number) => void;
-  /** Clic hors de tout élément de marche (`[data-tread]`). */
+  /** Nez sélectionné (surligné : ligne du plan, point de l'élévation). */
+  readonly selectedNosing?: number | undefined;
+  /** Clic ou Entrée sur la cible d'un nez (`[data-nosing-target]`, nez d'arrivée). */
+  readonly onSelectNosing?: (index: number) => void;
+  /** Clic hors de tout élément de marche (`[data-tread]`) ou de nez sélectionnable. */
   readonly onClickEmpty?: () => void;
 }
 
 /** Formes de marche rendues focalisables (pas les textes de numéro). */
 const TREAD_SHAPES = "polygon[data-tread], path[data-tread]";
 
-/** Numéro de marche de la cible d'un événement, `undefined` hors marche. */
-function treadOf(target: EventTarget): number | undefined {
-  if (!(target instanceof Element)) return undefined;
-  return treadNumberFromAttribute(target.closest("[data-tread]")?.getAttribute("data-tread"));
+/** Cible d'un événement : nez sélectionnable, marche, ou rien. */
+export type SvgHit =
+  | { readonly kind: "nosing"; readonly index: number }
+  | { readonly kind: "tread"; readonly number: number }
+  | null;
+
+/** Élément réduit à ce que la recherche de cible consulte (testable sans DOM). */
+export interface HitElement {
+  closest(selector: string): { getAttribute(name: string): string | null } | null;
+}
+
+/** Cible d'un clic : la cible du nez d'arrivée l'emporte sur la marche qu'elle recouvre. */
+export function svgHit(target: HitElement | null): SvgHit {
+  if (target === null) return null;
+  const k = nosingIndexFromAttribute(
+    target.closest("[data-nosing-target]")?.getAttribute("data-nosing-target"),
+  );
+  if (k !== undefined) return { kind: "nosing", index: k };
+  const n = treadNumberFromAttribute(target.closest("[data-tread]")?.getAttribute("data-tread"));
+  return n === undefined ? null : { kind: "tread", number: n };
+}
+
+const asHitElement = (target: EventTarget): HitElement | null =>
+  typeof Element !== "undefined" && target instanceof Element ? target : null;
+
+/** Règles CSS de surlignage de la sélection (marche, nez), vides sans sélection. */
+export function highlightCss(selectedTread?: number, selectedNosing?: number): string {
+  const rules: string[] = [];
+  if (selectedTread !== undefined) {
+    rules.push(
+      `.svg-export polygon[data-tread="${selectedTread}"], .svg-export path[data-tread="${selectedTread}"] { fill: var(--selected-fill); stroke: var(--selected); stroke-width: 2px; }`,
+    );
+  }
+  if (selectedNosing !== undefined) {
+    rules.push(
+      `.svg-export line[data-nosing="${selectedNosing}"] { stroke: var(--selected); stroke-width: 3px; }`,
+      `.svg-export circle[data-nosing="${selectedNosing}"] { fill: var(--selected); r: 4px; }`,
+    );
+  }
+  return rules.join(" ");
 }
 
 export function ExportedSvg({
@@ -36,6 +81,8 @@ export function ExportedSvg({
   label,
   selectedTread,
   onSelectTread,
+  selectedNosing,
+  onSelectNosing,
   onClickEmpty,
 }: ExportedSvgProps) {
   const t = useT();
@@ -57,22 +104,25 @@ export function ExportedSvg({
     }
   }, [svg, selectable, t]);
 
+  const select = (hit: SvgHit): boolean => {
+    if (hit?.kind === "nosing" && onSelectNosing) {
+      onSelectNosing(hit.index);
+      return true;
+    }
+    if (hit?.kind === "tread" && onSelectTread) {
+      onSelectTread(hit.number);
+      return true;
+    }
+    return false;
+  };
   const onClick = (e: MouseEvent<HTMLDivElement>) => {
-    const n = treadOf(e.target);
-    if (n !== undefined) onSelectTread?.(n);
-    else onClickEmpty?.();
+    if (!select(svgHit(asHitElement(e.target)))) onClickEmpty?.();
   };
   const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
     if (e.key !== "Enter" && e.key !== " ") return;
-    const n = treadOf(e.target);
-    if (n === undefined || !onSelectTread) return;
-    e.preventDefault();
-    onSelectTread(n);
+    if (select(svgHit(asHitElement(e.target)))) e.preventDefault();
   };
-  const highlight =
-    selectedTread === undefined
-      ? ""
-      : `.svg-export polygon[data-tread="${selectedTread}"], .svg-export path[data-tread="${selectedTread}"] { fill: var(--selected-fill); stroke: var(--selected); stroke-width: 2px; }`;
+  const highlight = highlightCss(selectedTread, selectedNosing);
   return (
     <>
       {highlight ? <style>{highlight}</style> : null}

@@ -12,7 +12,7 @@
  */
 import { dec, msg, type Message } from "@blondel/i18n";
 import * as V from "../geom2d/vec.js";
-import type { Part } from "../model/derived.js";
+import type { Part, PartFixing } from "../model/derived.js";
 import type { PartAssembly } from "../model/plugins.js";
 import type { Frame3, Mm, Polygon2, Vec2 } from "../model/primitives.js";
 import type { WorkshopProfile } from "../workshop/profile.js";
@@ -173,6 +173,7 @@ export function supportPart(
         ? msg("structure.common.support.angleWelded")
         : msg("structure.common.support.angleBolted")
       : msg("structure.common.support.plateWelded");
+  const fixings = supportFixings(p, spec);
   return {
     id: `support-${p.tread}-${p.face.key}`,
     mark,
@@ -201,7 +202,30 @@ export function supportPart(
       },
       profile,
     ),
+    ...(fixings.length > 0 ? { fixings } : {}),
   };
+}
+
+/**
+ * Fixations du support (`Part.fixings`, QUESTIONS A27) : boulons dans la joue du limon ou la
+ * face du poteau (support vissé : un par perçage, une lumière comptant pour un, diamètre de
+ * perçage `holeDiameter`) et vis de la marche dans l'aile horizontale (`treadScrews`, perçage
+ * non dimensionné). La marche portée est résolue par l'étape « Visserie » (assemblage
+ * support ↔ marche).
+ */
+export function supportFixings(p: SupportPlacement, spec: SupportSpec): PartFixing[] {
+  const out: PartFixing[] = [];
+  const bolts = boltCenters(p, spec).length;
+  if (bolts > 0)
+    out.push({
+      joint: "supportBolted",
+      points: bolts,
+      holeDiameter: spec.holeDiameter,
+      with: [p.face.owner],
+    });
+  const screws = Math.floor(spec.treadScrews);
+  if (screws > 0) out.push({ joint: "treadScrewed", points: screws });
+  return out;
 }
 
 /**

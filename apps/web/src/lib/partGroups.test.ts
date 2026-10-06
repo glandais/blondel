@@ -4,6 +4,8 @@ import { describe, expect, it } from "vitest";
 import j4Text from "../../../../examples/j4-demi-tournant-acier-garde-corps.blondel.json?raw";
 import j5bText from "../../../../examples/j5b-debillarde-soude.blondel.json?raw";
 import {
+  FASTENER_GROUP_ID,
+  FASTENER_GROUP_KEY,
   PART_GROUP_KEYS,
   PART_GROUP_ORDER,
   foldText,
@@ -216,5 +218,13 @@ describe("filtre", () => {
   it("section", () => {
     const section = FR.t(limon.section!);
     expect(matchesPartFilter(limon, section, FR)).toBe(true);
+  });
+});
+
+describe("groupe « Visserie » (QUESTIONS A27)", () => {
+  it("identifiant distinct des familles de pièces, libellé traduit", () => {
+    expect((PART_GROUP_ORDER as readonly string[]).includes(FASTENER_GROUP_ID)).toBe(false);
+    expect(FR.t(FASTENER_GROUP_KEY)).toBe("Visserie");
+    expect(EN.t(FASTENER_GROUP_KEY)).toBe("Fixings");
   });
 });

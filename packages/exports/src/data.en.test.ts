@@ -7,7 +7,7 @@
 import { readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { buildModel, parseProjectText } from "@blondel/core";
+import { buildModel, parseProjectText, ruleSourceText } from "@blondel/core";
 import { describe, expect, it } from "vitest";
 import {
   CSV_BOM,
@@ -111,6 +111,13 @@ describe("exports de données en anglais", () => {
         expect(s.points.length).toBeGreaterThan(0);
         for (const p of s.points) expectEnglish(p.label);
         for (const d of s.diagonals) expectEnglish(`${d.from} ${d.to}`);
+        // Source citée de la tolérance de la 1re marche traduite (QUESTIONS A26 (b)).
+        if (s.heights.firstTolerance !== undefined) {
+          expectEnglish(s.heights.firstTolerance.source);
+          const rule = model.compliance.results.find((r) => r.ruleId === "H_PREMIERE_MARCHE_TOL")!;
+          expect(s.heights.firstTolerance.source).toBe(ruleSourceText(rule, en));
+          expect(frSheet.heights.firstTolerance!.source).toBe(rule.source);
+        }
         expect(installationSheet(model, project, { locale: "fr" })).toEqual(frSheet);
       });
 

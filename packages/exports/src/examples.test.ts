@@ -9,6 +9,8 @@ import { fileURLToPath } from "node:url";
 import { buildModel, clearModelCache, parseProjectText } from "@blondel/core";
 import { describe, expect, it } from "vitest";
 import { CSV_BOM, cutListHeader, exportCutListCsv } from "./csv/cutlist.js";
+import { exportFastenersCsv, fastenersCsvHeader } from "./csv/fasteners.js";
+import { translatorOf } from "./i18n.js";
 import { cutSheet } from "./cutsheet.js";
 import { exportPartDxf } from "./dxf/part.js";
 import { exportPartsDxf } from "./dxf/parts.js";
@@ -110,6 +112,8 @@ describe("exports de bout en bout sur examples/", () => {
         for (const k of ["installation", "bom", "cutsheet", "compliance"] as const) {
           expect(kinds, k).toContain(k);
         }
+        // Section « Visserie » si et seulement si le modèle a de la visserie (QUESTIONS A27).
+        expect(kinds.includes("fasteners")).toBe((model.fasteners?.length ?? 0) > 0);
         // Un gabarit 1:1 au moins par développé distinct.
         const flatIds = new Set(
           pages.filter((p) => p.kind === "flat").map((p) => p.partIds!.join()),
@@ -151,6 +155,31 @@ describe("exports de bout en bout sur examples/", () => {
         expect(csv).toContain(cutListHeader()[0]);
         expect(csv).not.toMatch(NON_FINITE);
         expect(csv.trim().split(/\r?\n/).length).toBeGreaterThan(1);
+      });
+
+      it("liste de visserie : en-tête, une ligne par repère, sans NaN ni « undefined »", () => {
+        for (const locale of ["fr", "en"] as const) {
+          const csv = exportFastenersCsv(model, { locale });
+          expect(csv.startsWith(CSV_BOM)).toBe(true);
+          expect(csv).not.toMatch(NON_FINITE);
+          expect(csv).not.toMatch(/undefined|\[object Object\]/);
+          const lines = csv.slice(1).trim().split(/\r?\n/);
+          expect(lines[0]).toBe(
+            fastenersCsvHeader(translatorOf({ locale })).join(locale === "en" ? "," : ";"),
+          );
+          const marks = new Set((model.fasteners ?? []).map((f) => f.mark));
+          // En-tête, une ligne par repère, total (sans visserie : en-tête seul).
+          expect(lines).toHaveLength(marks.size === 0 ? 1 : marks.size + 2);
+        }
+        for (const f of model.fasteners ?? []) {
+          expect(Number.isInteger(f.quantity) && f.quantity > 0, f.id).toBe(true);
+          expect(Number.isFinite(f.diameter) && Number.isFinite(f.length), f.id).toBe(true);
+          for (const id of f.partIds)
+            expect(
+              model.parts.some((p) => p.id === id),
+              id,
+            ).toBe(true);
+        }
       });
 
       it("projet JSON : relecture identique, même modèle", () => {

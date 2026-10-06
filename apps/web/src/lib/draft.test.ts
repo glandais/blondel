@@ -1,6 +1,6 @@
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
-import { decideDraft, formatDecimal, parseDecimal, parseIntMm } from "./units.js";
+import { decideDraft, formatDecimal, isRepeatedCommit, parseDecimal, parseIntMm } from "./units.js";
 
 describe("saisie appliquée à la validation", () => {
   const int = (t: string) => parseIntMm(t, { min: 1 });
@@ -56,5 +56,21 @@ describe("parseDecimal", () => {
           expect(Math.abs(r.value - v)).toBeLessThanOrEqual(1e-6 * Math.max(1, Math.abs(v)));
       }),
     );
+  });
+});
+
+describe("revalidation d'une saisie déjà appliquée (perte de focus)", () => {
+  it("saisie acceptée sans changement de la valeur du projet : la perte de focus est ignorée", () => {
+    expect(isRepeatedCommit({ draft: "2", value: 0 }, "2", 0, true)).toBe(true);
+  });
+
+  it("Entrée explicite : toujours appliquée", () => {
+    expect(isRepeatedCommit({ draft: "2", value: 0 }, "2", 0, false)).toBe(false);
+  });
+
+  it("frappe (mémoire oubliée), autre saisie ou valeur du projet changée : revalidée", () => {
+    expect(isRepeatedCommit(null, "2", 0, true)).toBe(false);
+    expect(isRepeatedCommit({ draft: "2", value: 0 }, "3", 0, true)).toBe(false);
+    expect(isRepeatedCommit({ draft: "2", value: 0 }, "2", 2, true)).toBe(false);
   });
 });

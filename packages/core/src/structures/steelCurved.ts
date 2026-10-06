@@ -58,6 +58,7 @@ import type {
   StructureOutput,
 } from "../model/plugins.js";
 import { buildBasicParts } from "../parts/basic.js";
+import { WORKSHOP_DEFAULT_SOURCE, sourceSpec } from "../rules/sources.js";
 import type { Finding } from "../rules/types.js";
 import { findBendLaw } from "../workshop/metal.js";
 import { resolveWorkshopProfile, type WorkshopProfile } from "../workshop/profile.js";
@@ -163,12 +164,13 @@ export const SteelCurvedParamsSchema = SteelFlatParamsSchema.extend({
 });
 export type SteelCurvedParams = z.output<typeof SteelCurvedParamsSchema>;
 
-const WORKSHOP_SOURCE = "Profil d'atelier Blondel (valeur par défaut à valider, LEDGER §2)";
+/** Source des contrôles réglés par le profil d'atelier (valeurs par défaut « à valider »). */
+const WORKSHOP_SOURCE = sourceSpec(WORKSHOP_DEFAULT_SOURCE);
 
 export const CURVED_RULES = {
   jour: {
     id: "FAB_DEBILLARDE_JOUR",
-    source: "docs/CHALLENGE.md G7 ; docs/research/B-geometrie.md §5.1",
+    ...sourceSpec(msg("compliance.source.curvedWell")),
     confidence: "eleve",
     nature: "metier",
     severity: "bloquant",
@@ -176,7 +178,7 @@ export const CURVED_RULES = {
   },
   rollingRadius: {
     id: "FAB_ROULAGE_RAYON_MIN",
-    source: `docs/research/C-structures.md §2.4 [16] (r_min ≈ 0,65 × Ø du rouleau supérieur) ; ${WORKSHOP_SOURCE}`,
+    ...sourceSpec(msg("compliance.source.rollingRadius", { workshop: WORKSHOP_DEFAULT_SOURCE })),
     confidence: "faible",
     nature: "metier",
     severity: "bloquant",
@@ -184,7 +186,7 @@ export const CURVED_RULES = {
   },
   rollingThickness: {
     id: "FAB_ROULAGE_EPAISSEUR",
-    source: WORKSHOP_SOURCE,
+    ...WORKSHOP_SOURCE,
     confidence: "faible",
     nature: "metier",
     severity: "avertissement",
@@ -192,7 +194,7 @@ export const CURVED_RULES = {
   },
   rollLength: {
     id: "FAB_ROULAGE_LONGUEUR_ROULEAUX",
-    source: `docs/research/C-structures.md §2.4 [16] ; ${WORKSHOP_SOURCE}`,
+    ...sourceSpec(msg("compliance.source.rollLength", { workshop: WORKSHOP_DEFAULT_SOURCE })),
     confidence: "faible",
     nature: "metier",
     severity: "avertissement",
@@ -200,7 +202,7 @@ export const CURVED_RULES = {
   },
   slopeBreak: {
     id: "FAB_DEBILLARDE_CASSURE_PENTE",
-    source: "docs/research/B-geometrie.md §5.3 [ANALYSE] (aucun seuil sourcé)",
+    ...sourceSpec(msg("compliance.source.slopeBreak")),
     confidence: "moyen",
     nature: "metier",
     severity: "conseil",
@@ -208,8 +210,7 @@ export const CURVED_RULES = {
   },
   jointPlacement: {
     id: "FAB_DEBILLARDE_JOINT",
-    source:
-      "docs/research/C-structures.md §2.4 et B §5.4 (recommandation de conception non sourcée, à valider)",
+    ...sourceSpec(msg("compliance.source.curvedJoint")),
     confidence: "faible",
     nature: "metier",
     severity: "avertissement",

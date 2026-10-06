@@ -90,7 +90,7 @@ function FabricationTabContent({ view }: { view: ViewTab }) {
 /**
  * Légende de la sélection dans le cadre de la vue (maquette 1a : « ▪ Marche 3 sélectionnée »),
  * seul retour textuel de la sélection quand la liste du contrôle (et son inspecteur) est fermée.
- * Marche (ou nez) et pièce, d'après le gabarit de l'inspecteur ; rien sinon.
+ * Marche (ou nez), nez d'arrivée et pièce, d'après le gabarit de l'inspecteur ; rien sinon.
  */
 export function selectionLegendText(
   selection: Selection | null,
@@ -102,6 +102,7 @@ export function selectionLegendText(
     const n = inspectedTread(selection, model);
     return n === null ? null : t.t("ui.guided.view.selected.tread", { number: String(n) });
   }
+  if (template === "nosing") return t.t("ui.guided.view.selected.arrivalNosing");
   if (template === "part" && selection?.location.kind === "part" && model !== null) {
     const id = selection.location.partId;
     const part = model.parts.find((p) => p.id === id);

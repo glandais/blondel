@@ -7,7 +7,7 @@
  */
 import type { Model, Part } from "@blondel/core";
 import { msg, type Translator } from "@blondel/i18n";
-import { renderFlatPatternSvg } from "@blondel/exports";
+import { flatTermKeys, renderFlatPatternSvg } from "@blondel/exports";
 import { useMemo } from "react";
 import { useResolvedTheme } from "../components/ThemeToggle.js";
 import { segmentedPartName, segmentedParts, type SegmentedPart } from "../lib/joints.js";
@@ -155,14 +155,14 @@ export function FlatPatternDrawing({ part }: { part: Part }) {
     [part, theme, t],
   );
   if (!rendered) return null;
+  // « Development » pour un limon bois, « flat pattern » sinon (anglais, QUESTIONS A26 (a)).
+  const keys = flatTermKeys(part);
   if ("error" in rendered) {
     return (
       <p className="notice notice--error" role="alert">
-        {t.t("ui.flat.unavailable", { error: rendered.error })}
+        {t.t(keys.unavailable, { error: rendered.error })}
       </p>
     );
   }
-  return (
-    <ExportedSvg svg={rendered.svg} label={t.t("ui.flat.drawing.label", { mark: part.mark })} />
-  );
+  return <ExportedSvg svg={rendered.svg} label={t.t(keys.viewLabel, { mark: part.mark })} />;
 }

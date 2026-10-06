@@ -6,11 +6,31 @@
  * `toValidateStates` (`lib/paramTiers.ts`, seule source) ; ce module n'ajoute que la
  * présentation : libellé (mêmes clés que les sections de paramètres), unité, valeur mise en
  * forme dans une langue donnée, entrée de validation pour le store. Aucun calcul métier.
+ *
+ * Visserie du profil d'atelier (QUESTIONS A27) : libellés « Visserie · <assemblage> · <champ> »,
+ * jeu de perçage, série des diamètres nominaux, entraxe des supports et mur non décrit supposé
+ * porteur sous « Visserie » ; nature et classe affichées par
+ * leurs libellés du cœur.
  */
-import type { Model, Project, ValidatedScalar, ValidatedValue } from "@blondel/core";
+import {
+  FASTENER_GRADES,
+  FASTENER_KINDS,
+  fastenerGradeLabel,
+  fastenerJointLabel,
+  fastenerKindLabel,
+  type FastenerGrade,
+  type FastenerJointKind,
+  type FastenerKind,
+  type FastenerSettingField,
+  type Model,
+  type Project,
+  type ValidatedScalar,
+  type ValidatedValue,
+} from "@blondel/core";
 import { materialLabel } from "@blondel/exports";
 import { msg, textMessage, type Message, type MessageKey, type Translator } from "@blondel/i18n";
 import { toMessage } from "../i18n/text.js";
+import { fastenerSettingOf } from "./fasteners.js";
 import { GROUP_LABELS, fieldText } from "./paramLabels.js";
 import { STRUCTURE_PARAMS_PREFIX, toValidateStates, type ToValidateState } from "./paramTiers.js";
 import { SECTION_TITLE_KEYS, type GuidedStep, type SectionId } from "./sectionIds.js";
@@ -103,6 +123,55 @@ const BALANCING_LABELS: Readonly<Record<string, MessageKey>> = {
 const grouped = (group: Message, label: Message): Message =>
   msg("ui.toValidate.grouped", { group, label });
 
+/** Préfixe des réglages de visserie du profil d'atelier (QUESTIONS A27). */
+const FASTENERS_PREFIX = "workshop.fasteners.";
+
+/** Libellés des champs d'un réglage de visserie (mêmes clés que `FastenersFields`). */
+export const FASTENER_FIELD_LABELS: Readonly<Record<FastenerSettingField, MessageKey>> = {
+  kind: "ui.fasteners.field.kind",
+  grade: "ui.fasteners.field.grade",
+  diameter: "ui.fasteners.field.diameter",
+  length: "ui.fasteners.field.length",
+  perPoint: "ui.fasteners.field.perPoint",
+};
+
+/** Unités des champs d'un réglage de visserie (nombre sans unité : quantité par point). */
+const FASTENER_FIELD_UNITS: Readonly<Partial<Record<FastenerSettingField, string>>> = {
+  diameter: MM,
+  length: MM,
+};
+
+/** Titre du groupe d'un assemblage : « Visserie · Platine sur sol ». */
+export function fastenerJointGroup(joint: FastenerJointKind): Message {
+  return msg("ui.fasteners.jointGroup", { joint: fastenerJointLabel(joint) });
+}
+
+/** Libellé et unité d'une valeur ◆ de visserie (`undefined` : autre chemin). */
+function fastenerPresentation(s: ToValidateState): { label: Message; unit?: string } | undefined {
+  if (!s.key.startsWith(FASTENERS_PREFIX)) return undefined;
+  const fasteners = msg("ui.fasteners.title");
+  if (s.key === "workshop.fasteners.holeClearance") {
+    return { label: grouped(fasteners, msg("ui.fasteners.holeClearance")), unit: MM };
+  }
+  if (s.key === "workshop.fasteners.nominalDiameters") {
+    return { label: grouped(fasteners, msg("ui.fasteners.nominalDiameters")) };
+  }
+  if (s.key === "workshop.fasteners.bracketSpacing") {
+    return { label: grouped(fasteners, msg("ui.fasteners.bracketSpacing")), unit: MM };
+  }
+  if (s.key === "workshop.fasteners.unknownWallLoadBearing") {
+    return { label: grouped(fasteners, msg("ui.fasteners.unknownWallLoadBearing")) };
+  }
+  const setting = fastenerSettingOf(s.path);
+  if (setting === undefined) return { label: textMessage(s.key) };
+  const label = grouped(
+    fastenerJointGroup(setting.joint),
+    msg(FASTENER_FIELD_LABELS[setting.field]),
+  );
+  const unit = FASTENER_FIELD_UNITS[setting.field];
+  return unit === undefined ? { label } : { label, unit };
+}
+
 /** Libellé et unité d'une valeur ◆. */
 function presentation(project: Project, s: ToValidateState): { label: Message; unit?: string } {
   if (s.key.startsWith(STRUCTURE_PARAMS_PREFIX)) {
@@ -115,6 +184,8 @@ function presentation(project: Project, s: ToValidateState): { label: Message; u
   }
   const balancing = BALANCING_LABELS[s.key];
   if (balancing !== undefined) return { label: msg(balancing) };
+  const fastener = fastenerPresentation(s);
+  if (fastener !== undefined) return fastener;
   if (s.key === "guards.infill.thickness") {
     const glass = project.guards?.infill.kind === "glass";
     const leaf = msg(glass ? "ui.guards.infill.glassThickness" : "ui.guards.infill.panelThickness");
@@ -154,6 +225,13 @@ export function toValidateRows(
 /** Libellé d'un choix de liste (`undefined` : aucun libellé connu). */
 function optionLabel(row: ToValidateRow, value: string, t: Translator): string | undefined {
   if (row.key === "guards.material") return materialLabel(t, value);
+  const setting = fastenerSettingOf(row.path);
+  if (setting?.field === "kind" && (FASTENER_KINDS as readonly string[]).includes(value)) {
+    return t.t(fastenerKindLabel(value as FastenerKind));
+  }
+  if (setting?.field === "grade" && (FASTENER_GRADES as readonly string[]).includes(value)) {
+    return t.t(fastenerGradeLabel(value as FastenerGrade));
+  }
   if (row.key.startsWith(STRUCTURE_PARAMS_PREFIX)) {
     const text = fieldText(row.structureKind ?? "", row.path.slice(3).map(String));
     const option = text?.options?.[value];

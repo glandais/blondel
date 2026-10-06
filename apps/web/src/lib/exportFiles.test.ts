@@ -1,5 +1,13 @@
 import { isMessageError, translatorFor, type MessageError } from "@blondel/i18n";
-import { buildModel, createDemoProject, createProject, type Model, type Part } from "@blondel/core";
+import {
+  buildModel,
+  createDemoProject,
+  createProject,
+  fastenerKindLabel,
+  msg,
+  type Model,
+  type Part,
+} from "@blondel/core";
 import { describe, expect, it } from "vitest";
 import {
   EXPORT_ENTRIES,
@@ -376,5 +384,63 @@ describe("dossier PDF du mode Fabrication : format × gabarits, valeurs ◆", ()
     expect(isMessageError(noFlat)).toBe(true);
     expect((noFlat as MessageError).msg.key).toBe("ui.label.export.noFamilyFlat");
     expect(seen).toHaveLength(0);
+  });
+});
+
+describe("liste de visserie CSV (QUESTIONS A27)", () => {
+  /** Modèle réel complété d'une visserie de test (le calcul du cœur n'est pas requis). */
+  const withFasteners: Model = {
+    ...model,
+    fasteners: [
+      {
+        id: "f1",
+        mark: "VS1",
+        kind: "anchor",
+        grade: "zinc-plated",
+        diameter: 12,
+        length: 100,
+        quantity: 4,
+        joint: "plateFloor",
+        name: fastenerKindLabel("anchor"),
+        origin: msg("fastener.joint.plateFloor"),
+        partIds: [model.parts[0]!.id],
+        deduced: ["diameter", "quantity"],
+      },
+    ],
+  };
+
+  it("entrée du menu après la liste de débit", () => {
+    const ids = EXPORT_ENTRIES.map((e) => e.id);
+    expect(ids.indexOf("fasteners-csv")).toBe(ids.indexOf("cutlist-csv") + 1);
+    expect(FR.t(EXPORT_ENTRIES.find((e) => e.id === "fasteners-csv")!.label)).toBe(
+      "Liste de visserie (CSV)",
+    );
+  });
+
+  it("indisponible sans visserie (motif), sans modèle", async () => {
+    const none: Model = { ...model, fasteners: [] };
+    expect(exportAvailability("fasteners-csv", none)).toEqual({
+      ok: false,
+      reason: "ui.label.export.noFasteners",
+    });
+    expect(exportAvailability("fasteners-csv", null).ok).toBe(false);
+    const error = await buildExport("fasteners-csv", project, none).catch((e: unknown) => e);
+    expect((error as MessageError).msg.key).toBe("ui.label.export.noFasteners");
+  });
+
+  it("fichier CSV dans la langue : nom, en-tête, une ligne par repère et le total", async () => {
+    expect(exportAvailability("fasteners-csv", withFasteners).ok).toBe(true);
+    const [fr] = await buildExport("fasteners-csv", project, withFasteners);
+    expect(fr).toMatchObject({ filename: "quart-tournant-a-gauche-visserie.csv", mime: MIME.csv });
+    const lines = text(fr!.content).trim().split(/\r?\n/);
+    expect(lines).toHaveLength(3);
+    expect(lines[1]).toContain("VS1;Cheville mécanique");
+    const [en] = await buildExport("fasteners-csv", project, withFasteners, undefined, "en");
+    expect(en!.filename).toBe("quart-tournant-a-gauche-fixings.csv");
+    expect(text(en!.content)).toContain("VS1,Expansion anchor");
+  });
+
+  it("fiche de pose seule : sans section « Visserie »", () => {
+    expect(PDF_JOBS["installation-pdf"].options.pages?.fasteners).toBe(false);
   });
 });

@@ -13,17 +13,20 @@ import {
   findSelectedResult,
   groupResults,
   highestSeverity,
+  isExactNosingSelection,
   isExactTreadSelection,
   isPartSelected,
   linkedTreadNumber,
   locationShort,
   modelNotes,
+  nosingIndexFromAttribute,
   orderedViolations,
   partSelection,
   resultsForElement,
   ruleGauge,
   sameLocation,
   whereTargets,
+  selectedNosingIndex,
   selectedTreadNumber,
   treadNumberFromAttribute,
   treadPartId,
@@ -402,6 +405,23 @@ describe("sélection depuis les vues", () => {
     expect(isExactTreadSelection({ ...tread6, ruleId: "R" }, 6)).toBe(false);
     expect(isExactTreadSelection({ location: { kind: "part", partId: "tread-6" } }, 6)).toBe(false);
     expect(isExactTreadSelection(null, 6)).toBe(false);
+  });
+
+  it("nez d'arrivée (A28) : cible data-nosing-target, second clic, nez surligné", () => {
+    expect(nosingIndexFromAttribute("14")).toBe(14);
+    expect(nosingIndexFromAttribute(" 0 ")).toBe(0);
+    for (const bad of [null, undefined, "", " ", "-1", "1.5", "a", "1e3"]) {
+      expect(nosingIndexFromAttribute(bad)).toBeUndefined();
+    }
+    const arrival = { location: { kind: "nosing", index: 14 } } as const;
+    expect(isExactNosingSelection(arrival, 14)).toBe(true);
+    expect(isExactNosingSelection(arrival, 13)).toBe(false);
+    expect(isExactNosingSelection({ ...arrival, ruleId: "R" }, 14)).toBe(false);
+    expect(isExactNosingSelection({ location: { kind: "tread", number: 14 } }, 14)).toBe(false);
+    expect(isExactNosingSelection(null, 14)).toBe(false);
+    expect(selectedNosingIndex({ kind: "nosing", index: 14 })).toBe(14);
+    expect(selectedNosingIndex({ kind: "tread", number: 14 })).toBeUndefined();
+    expect(selectedNosingIndex(null)).toBeUndefined();
   });
 
   it("nez k sélectionné : la marche k + 1 est surlignée (comme l'inspecteur Marche)", () => {

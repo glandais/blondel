@@ -1,9 +1,11 @@
 import { textMessage } from "@blondel/i18n";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
+import { translatorOf } from "../i18n.js";
 import {
   buildModel,
   createProject,
+  RULES,
   withHelicalCore,
   type Model,
   type RuleResult,
@@ -152,5 +154,50 @@ describe("justification saisie (décision A12)", () => {
     } as unknown as Model;
     const lines = text(model).split("\n");
     expect(lines[lines.indexOf("m") + 1]).toBe("Justification fournie : avis AT-7");
+  });
+});
+
+describe("sources citées et profil dans la langue du dossier (QUESTIONS A26 (b))", () => {
+  const canvas = { textWidth: (t: string, size: number) => t.length * size * 0.5 };
+  const lines = (model: Model, locale: "fr" | "en"): string =>
+    complianceLines(model, canvas, 1e6, [], translatorOf({ locale }))
+      .map((l) => l.text)
+      .join("\n");
+
+  it("règle de la table : source_en en anglais, source inchangée en français", () => {
+    const def = RULES.find((d) => d.source.startsWith("Arrêté 24/12/2015 art. 12"))!;
+    const model = {
+      errors: [],
+      compliance: {
+        rulesVersion: 1,
+        contexts: [],
+        profile: "souple",
+        summary: { bloquant: 0, avertissement: 0, conseil: 0 },
+        results: [result({ ruleId: def.id, source: def.source })],
+      },
+    } as unknown as Model;
+    expect(lines(model, "fr")).toContain(def.source);
+    expect(lines(model, "fr")).toMatch(/^Profil souple — /m);
+    expect(lines(model, "en")).toContain(def.source_en);
+    expect(lines(model, "en")).not.toContain(def.source);
+    expect(lines(model, "en")).toMatch(/^Profile Lenient — /m);
+  });
+
+  it("contrôles de plugin (profil d'atelier) : message traduit, français identique", () => {
+    const base = createProject("straight");
+    const project = {
+      ...base,
+      stair: { ...base.stair, structure: { kind: "steel-flat", params: {} } },
+    };
+    const model = buildModel(project, { memo: false });
+    const withSource = model.compliance.results.filter((r) => r.sourceMessage !== undefined);
+    expect(withSource.length).toBeGreaterThan(0);
+    const fr = lines(model, "fr");
+    for (const r of withSource) expect(fr).toContain(r.source);
+    expect(fr).toContain("Profil d'atelier Blondel");
+    const en = lines(model, "en");
+    expect(en).toContain("Blondel workshop profile (default value to be validated, LEDGER §2)");
+    expect(en).not.toContain("Profil d'atelier Blondel");
+    expect(en).not.toContain("Géométrie");
   });
 });

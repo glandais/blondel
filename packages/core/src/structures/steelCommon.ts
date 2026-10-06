@@ -12,6 +12,7 @@
  * `length_mm`.
  */
 import { dec, msg, type Message } from "@blondel/i18n";
+import { WORKSHOP_DEFAULT_SOURCE, sourceSpec } from "../rules/sources.js";
 import { signedArea } from "../geom2d/polygon.js";
 import * as V from "../geom2d/vec.js";
 import type { FlatPattern, MaterialId, Part } from "../model/derived.js";
@@ -169,13 +170,14 @@ export function executionClassReasons(
 
 // ------------------------------------------------------------------ Contrôles métal
 
-const WORKSHOP_SOURCE = "Profil d'atelier Blondel (valeur par défaut à valider, LEDGER §2)";
+/** Source des contrôles réglés par le profil d'atelier (valeurs par défaut « à valider »). */
+const WORKSHOP_SOURCE = sourceSpec(WORKSHOP_DEFAULT_SOURCE);
 
 /** Contrôles métal ; descriptions : `rules.<id>.description` (ADR-0007). */
 export const STEEL_RULES = {
   executionClass: {
     id: "EXC_CLASSE_EXECUTION",
-    source: "CNC2M N0169 (2015), tableaux 3 et 6, via docs/research/C-structures.md §2.1 [13]",
+    ...sourceSpec(msg("compliance.source.executionClass")),
     confidence: "eleve",
     nature: "normatif",
     severity: "conseil",
@@ -183,7 +185,7 @@ export const STEEL_RULES = {
   },
   bendRadius: {
     id: "FAB_PLI_RAYON_MIN",
-    source: "docs/research/C-structures.md §2.6 et §4.1 [17][19] (usage, confiance moyenne)",
+    ...sourceSpec(msg("compliance.source.bendRadius")),
     confidence: "moyen",
     nature: "metier",
     severity: "bloquant",
@@ -191,8 +193,7 @@ export const STEEL_RULES = {
   },
   bendFlange: {
     id: "FAB_PLI_BORD_MIN",
-    source:
-      "docs/research/C-structures.md §2.6 et §4.1 [17] (usage, confiance moyenne) ; table du profil d'atelier",
+    ...sourceSpec(msg("compliance.source.bendFlange")),
     confidence: "moyen",
     nature: "metier",
     severity: "bloquant",
@@ -200,8 +201,7 @@ export const STEEL_RULES = {
   },
   pressBrake: {
     id: "FAB_PRESSE_PLIEUSE",
-    source:
-      "docs/research/C-structures.md §2.6 et §4.1 [18] (capacité d'un sous-traitant, paramétrable)",
+    ...sourceSpec(msg("compliance.source.pressBrake")),
     confidence: "moyen",
     nature: "metier",
     severity: "avertissement",
@@ -209,7 +209,7 @@ export const STEEL_RULES = {
   },
   bendLaw: {
     id: "FAB_LOI_DE_PLI",
-    source: WORKSHOP_SOURCE,
+    ...WORKSHOP_SOURCE,
     confidence: "faible",
     nature: "metier",
     severity: "bloquant",
@@ -217,7 +217,7 @@ export const STEEL_RULES = {
   },
   laser: {
     id: "FAB_LASER_EPAISSEUR",
-    source: WORKSHOP_SOURCE,
+    ...WORKSHOP_SOURCE,
     confidence: "faible",
     nature: "metier",
     severity: "avertissement",
@@ -225,7 +225,7 @@ export const STEEL_RULES = {
   },
   sheetFormat: {
     id: "FAB_FORMAT_TOLE",
-    source: "docs/research/C-structures.md §4.3 (formats à confirmer par l'atelier)",
+    ...sourceSpec(msg("compliance.source.sheetFormat")),
     confidence: "faible",
     nature: "metier",
     severity: "avertissement",
@@ -233,7 +233,7 @@ export const STEEL_RULES = {
   },
   barLength: {
     id: "FAB_BARRE_LONGUEUR",
-    source: "docs/research/C-structures.md §4.1 et §4.3 [46] (usage, confiance moyenne)",
+    ...sourceSpec(msg("compliance.source.barLength")),
     confidence: "moyen",
     nature: "metier",
     severity: "avertissement",
@@ -241,7 +241,7 @@ export const STEEL_RULES = {
   },
   supportInStringer: {
     id: "FAB_SUPPORT_DANS_LIMON",
-    source: WORKSHOP_SOURCE,
+    ...WORKSHOP_SOURCE,
     confidence: "faible",
     nature: "metier",
     severity: "avertissement",
@@ -249,7 +249,7 @@ export const STEEL_RULES = {
   },
   supportLength: {
     id: "FAB_SUPPORT_LONGUEUR_MIN",
-    source: WORKSHOP_SOURCE,
+    ...WORKSHOP_SOURCE,
     confidence: "faible",
     nature: "metier",
     severity: "avertissement",
@@ -257,7 +257,7 @@ export const STEEL_RULES = {
   },
   treadCarried: {
     id: "FAB_MARCHE_PORTEE",
-    source: "Géométrie de la structure (supports générés)",
+    ...sourceSpec(msg("compliance.source.treadCarried")),
     confidence: "eleve",
     nature: "metier",
     severity: "avertissement",

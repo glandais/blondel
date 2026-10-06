@@ -6,6 +6,7 @@
  */
 import { bbox, type Part, type Vec2 } from "@blondel/core";
 import { checkedFlat, flatEngravingPoint, partLineAnnotation, referenceText } from "../dxf/part.js";
+import { flatDrawingTitle } from "../flatTerms.js";
 import { formatIn } from "../format.js";
 import { materialLabel, translatorOf, tr, type LocaleOption } from "../i18n.js";
 import { polygonPath } from "../path.js";
@@ -334,7 +335,7 @@ export function renderFlatPatternSvg(part: Part, options: FlatPatternSvgOptions 
       : undefined;
   return svgDocument(width, height, body, {
     ...(physical ? { physicalMm: physical } : {}),
-    title: options.title ?? tx.t("drawing.flat.title", { mark: part.mark }),
+    title: options.title ?? flatDrawingTitle(tx, part),
     className: "blondel-flat",
   });
 }

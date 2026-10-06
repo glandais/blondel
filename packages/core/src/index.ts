@@ -3,6 +3,7 @@ export * from "./model/project.js";
 export * from "./model/derived.js";
 export * from "./model/plugins.js";
 export * from "./model/messages.js";
+export * from "./model/fasteners.js";
 // Textes du modèle (ADR-0007) : types et constructeurs de `@blondel/i18n` utiles aux plugins et
 // aux consommateurs du `Model` (la traduction elle-même se fait à l'affichage).
 export {
@@ -35,6 +36,8 @@ export * from "./structures/compare.js";
 export * from "./catalog/index.js";
 export * from "./precheck/index.js";
 export * from "./guards/index.js";
+// Visserie déduite des assemblages (QUESTIONS A27), étape « Visserie » du pipeline.
+export * from "./fasteners/index.js";
 export * from "./pipeline/index.js";
 // Import de plan (jalon 7) ; lecteur DXF séparé : `@blondel/core/dxf`.
 export * from "./site/index.js";

@@ -1,0 +1,66 @@
+/*
+ * Visserie : réglages ◆ du profil d'atelier (`FastenersFields`), tableau « Visserie » de la
+ * nomenclature (`BomView`), groupe « Visserie » du mode Fabrication (`PartsList`) et visserie
+ * d'une pièce dans l'inspecteur (`PartLinkList`).
+ */
+
+.fasteners {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap, 8px);
+}
+
+.fasteners__hint {
+  margin: 0;
+  font-size: 0.85rem;
+}
+
+.fasteners__joint {
+  display: grid;
+  gap: var(--gap, 8px);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.25rem 0.5rem 0.5rem;
+}
+
+.fasteners__joint > legend {
+  font-weight: 600;
+  padding: 0 0.25rem;
+}
+
+.bom__fasteners {
+  margin-top: var(--space-4, 16px);
+}
+
+.fab-fastener {
+  display: flex;
+  align-items: baseline;
+  gap: 0.4rem;
+  width: 100%;
+  text-align: left;
+}
+
+.fab-fastener__name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted);
+}
+
+.part-links__fasteners {
+  margin-top: var(--space-2, 6px);
+}
+
+.insp-fastener {
+  display: flex;
+  align-items: baseline;
+  gap: 0.4rem;
+  padding: 0.15rem 0;
+}
+
+.insp-fastener__name {
+  flex: 1;
+  min-width: 0;
+}

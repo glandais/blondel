@@ -4,7 +4,11 @@
  * Garde-corps, Autres), résumés de repères et de matériau, filtre texte.
  *
  * Présentation seulement : famille, catégorie, repère, matériau et débit viennent du modèle du
- * cœur ; rien n'est calculé ici. La visserie n'est pas une pièce du modèle : aucun groupe.
+ * cœur ; rien n'est calculé ici.
+ *
+ * La visserie (QUESTIONS A27) n'est pas une pièce du modèle : son groupe « Visserie »
+ * (`FASTENER_GROUP_ID`), placé après les groupes de pièces, est rendu à part par `PartsList` à
+ * partir des lignes de la liste de visserie (`lib/fasteners.ts`).
  */
 import type { Part } from "@blondel/core";
 import { materialLabel } from "@blondel/exports";
@@ -37,6 +41,15 @@ export const PART_GROUP_KEYS: Readonly<Record<PartGroupId, MessageKey>> = {
   guards: "ui.fab.group.guards",
   other: "ui.fab.group.other",
 };
+
+/** Groupe « Visserie » de la liste du mode Fabrication (lignes de visserie, pas des pièces). */
+export const FASTENER_GROUP_ID = "fasteners";
+
+/** Nom affiché du groupe « Visserie ». */
+export const FASTENER_GROUP_KEY: MessageKey = "ui.fab.group.fasteners";
+
+/** Groupe de la liste du mode Fabrication : famille de pièces ou visserie. */
+export type ListGroupId = PartGroupId | typeof FASTENER_GROUP_ID;
 
 /**
  * Groupe d'une pièce : toute pièce de la famille garde-corps va dans « Garde-corps » ; les

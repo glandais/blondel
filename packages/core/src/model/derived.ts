@@ -17,6 +17,7 @@
 import type { Message } from "@blondel/i18n";
 import type { PrecheckedBeam } from "../precheck/checks.js";
 import type { StairLoads } from "../precheck/loads.js";
+import type { Fastener, FastenerJointKind } from "./fasteners.js";
 import type { Curve2, Frame3, Mm, Polygon2, Rad, Shape2, Vec2, Vec3 } from "./primitives.js";
 
 // ------------------------------------------------------------------ Étape 2 : tracé
@@ -456,6 +457,34 @@ export interface Part {
    * aucun assemblage déclaré.
    */
   readonly assembledWith?: readonly string[];
+  /**
+   * Fixations boulonnées ou vissées que la pièce porte (QUESTIONS A27) : déclarées par l'étape
+   * qui crée la pièce (support vissé, contremarche d'arrivée fixée au chevêtre…) et lues par
+   * l'étape « Visserie » du pipeline (`fasteners/compute.ts`). Ajout rétrocompatible ; absent :
+   * aucune fixation déclarée (une platine percée de catégorie `fixing` est alors lue sur ses
+   * perçages, voir `fasteners/compute.ts`).
+   */
+  readonly fixings?: readonly PartFixing[];
+}
+
+/**
+ * Fixation déclarée par une pièce (`Part.fixings`, QUESTIONS A27) : assemblage d'origine,
+ * nombre de points de fixation (perçages ; une lumière oblongue compte pour un) et diamètre de
+ * perçage quand il est dimensionné. Nature, classe, longueur et quantité par point viennent du
+ * profil d'atelier (`workshop/fasteners.ts`, valeurs « à valider »).
+ */
+export interface PartFixing {
+  readonly joint: FastenerJointKind;
+  /** Nombre de points de fixation (entier > 0). */
+  readonly points: number;
+  /** Diamètre de perçage (mm) ; absent : perçage non dimensionné (diamètre du profil). */
+  readonly holeDiameter?: Mm;
+  /**
+   * Autres pièces de l'assemblage (identifiants de `Model.parts`, ex. limon ou poteau qui
+   * reçoit un support). Absent : fixation au gros œuvre seul (sol, chevêtre, mur), ou pièces
+   * résolues par l'étape « Visserie » (marche portée par un support, `treadScrewed`).
+   */
+  readonly with?: readonly string[];
 }
 
 // ------------------------------------------------------------------ Conformité
@@ -505,7 +534,21 @@ export interface RuleResult {
   readonly location: Location;
   readonly nature: string;
   readonly confidence: string;
+  /**
+   * Source citée, en français (texte de rules.yaml pour une règle de la table ; texte du
+   * contrôle hors table). Inchangée par l'internationalisation : sorties françaises et
+   * traçabilité (`rules/traceability.test.ts`) la lisent telle quelle.
+   */
   readonly source: string;
+  /**
+   * Source citée traduisible d'un contrôle hors table (plugins, garde-corps, prédimensionnement,
+   * catalogue de profilés, profil d'atelier ; QUESTIONS A26 (b)) : sa traduction française est
+   * exactement `source`, les titres de normes restent dans leur langue. Absente : règle de
+   * rules.yaml (traduction anglaise lue dans la table, `source_en`) ou source non traduite.
+   * Ajout rétrocompatible ; l'affichage passe par l'aide du cœur (`rules/`), jamais par `source`
+   * seul dans une sortie anglaise.
+   */
+  readonly sourceMessage?: Message;
   readonly secondarySource: boolean;
   /** Raison d'une rétrogradation (profil souple, surcharge avec justification). */
   readonly downgradeReason?: Message;
@@ -637,6 +680,12 @@ export interface Model {
    * absent : modèle construit hors pipeline. Chaque champ est omis s'il n'est pas calculable.
    */
   readonly figures?: ModelFigures;
+  /**
+   * Visserie déduite des assemblages connus du modèle (QUESTIONS A27, `model/fasteners.ts`) : une
+   * entrée par assemblage d'origine, dans l'ordre des pièces. Ajout rétrocompatible ; absent :
+   * aucun assemblage boulonné ou vissé connu (ou modèle construit hors pipeline).
+   */
+  readonly fasteners?: readonly Fastener[];
   /** Erreurs de génération (paramètres impossibles) : le modèle peut être partiel. */
   readonly errors: readonly Message[];
   /** Remarques non bloquantes du pipeline (pièces non générées, hypothèses). */

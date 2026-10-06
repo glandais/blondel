@@ -10,7 +10,9 @@ import { formatNumber, numberFormat } from "../i18n/locale.js";
 import { useT } from "../i18n/useT.js";
 import {
   decideDraft,
+  isRepeatedCommit,
   parseIntMm,
+  type AppliedDraft,
   type IntFieldBounds,
   type ParseNumberResult,
 } from "../lib/units.js";
@@ -133,11 +135,19 @@ export function NumberField({
   /** Motif d'une saisie refusée puis rétablie (message transitoire). */
   const [note, setNote] = useState<Message | null>(null);
   const [focused, setFocused] = useState(false);
+  /**
+   * Dernière saisie appliquée et valeur du projet à ce moment (`isRepeatedCommit`) : la même
+   * saisie, revalidée à la perte de focus, ne crée pas une seconde entrée d'historique.
+   */
+  const lastCommit = useRef<AppliedDraft | null>(null);
 
   // Valeur modifiée ailleurs (annuler, préréglage) ou langue changée (séparateur décimal) :
   // resynchroniser hors saisie.
   useEffect(() => {
-    if (!focused) setDraft(format(value));
+    if (!focused) {
+      setDraft(format(value));
+      lastCommit.current = null;
+    }
     // `format` : fonction de présentation recréée à chaque rendu ; la langue suffit.
   }, [value, focused, t.locale]);
   // Nouvelle valeur du projet hors saisie : l'ancien message ne la concerne plus.
@@ -159,12 +169,14 @@ export function NumberField({
    * redevient valide, le refus reste signalé par un message transitoire, sans `aria-invalid`).
    */
   const validate = (revert: boolean): void => {
+    if (isRepeatedCommit(lastCommit.current, draft, value, revert)) return;
     const d = decideDraft(draft, value, read);
     let refused: Message;
     if (d.kind === "commit") {
       const u = onCommit(d.value);
       endGroup();
       if (u.ok) {
+        lastCommit.current = { draft, value };
         setError(null);
         setNote(null);
         return;
@@ -209,6 +221,7 @@ export function NumberField({
           onChange={(e) => {
             const text = e.target.value;
             setDraft(text);
+            lastCommit.current = null;
             setNote(null);
             const r = read(text);
             setError(r.ok ? null : r.error);

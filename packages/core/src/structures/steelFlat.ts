@@ -1101,6 +1101,18 @@ function arrivalRiserPart(
             },
             profile,
           ),
+          // Fixation au chevêtre (QUESTIONS A27) : un point par perçage `ar.fixings`.
+          ...(result.holeCenters.length > 0
+            ? {
+                fixings: [
+                  {
+                    joint: "riserTrimmer",
+                    points: result.holeCenters.length,
+                    holeDiameter: ar.holeDiameter,
+                  },
+                ],
+              }
+            : {}),
         },
       };
     } catch (err) {

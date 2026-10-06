@@ -54,5 +54,15 @@ export {
   type GuardHeightStep,
 } from "./evaluators/guards.js";
 export { SEVERITY_LABEL_KEYS, severityLabel } from "./severity.js";
+export {
+  PROFILE_LABEL_KEYS,
+  WORKSHOP_DEFAULT_SOURCE,
+  profileLabel,
+  ruleDefSource,
+  ruleDefSourceText,
+  ruleSourceText,
+  sourceSpec,
+  type SourcedRuleDef,
+} from "./sources.js";
 export type { ComplianceInput, EvaluatorContext, Finding, RuleEvaluator } from "./types.js";
 export { RULE_FAMILIES, RULE_FAMILY_LABELS, ruleFamily, type RuleFamily } from "./family.js";

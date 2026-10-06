@@ -18,6 +18,12 @@ import type { Layout, Stepping } from "../model/derived.js";
 import { STAIR, boundsText, within, type Bounds } from "../rules/check.js";
 import { isRuleApplicable, resolveContexts } from "../rules/contexts.js";
 import { effectiveSeverity } from "../rules/engine.js";
+import {
+  WORKSHOP_DEFAULT_SOURCE,
+  ruleDefSource,
+  sourceSpec,
+  type SourcedRuleDef,
+} from "../rules/sources.js";
 import { findRule, ruleParam, type RuleDef } from "../rules/table.js";
 import type { Finding } from "../rules/types.js";
 
@@ -28,7 +34,13 @@ import type { Finding } from "../rules/types.js";
  */
 export interface PluginRuleSpec {
   readonly id: string;
+  /** Source citée en français (`RuleResult.source`). */
   readonly source: string;
+  /**
+   * Source traduisible (QUESTIONS A26 (b)) : sa traduction française est exactement `source`
+   * (écrire `...sourceSpec(msg(…))`, qui dérive l'une de l'autre).
+   */
+  readonly sourceMessage?: Message;
   readonly confidence: RuleDef["confiance"];
   readonly nature: RuleDef["nature"];
   readonly severity: Severity;
@@ -36,7 +48,7 @@ export interface PluginRuleSpec {
 }
 
 /** RuleDef équivalente (contexte `tous`, seuils portés par chaque constat). */
-export function pluginRuleDef(spec: PluginRuleSpec): RuleDef {
+export function pluginRuleDef(spec: PluginRuleSpec): SourcedRuleDef {
   return {
     id: spec.id,
     // Description dans les dictionnaires (`rules.<id>.description`), pas dans la RuleDef.
@@ -48,7 +60,9 @@ export function pluginRuleDef(spec: PluginRuleSpec): RuleDef {
     unite: spec.unit,
     contexte: ["tous"],
     nature: spec.nature,
-    source: spec.source,
+    ...(spec.sourceMessage !== undefined
+      ? ruleDefSource(spec.sourceMessage)
+      : { source: spec.source, source_en: spec.source }),
     source_secondaire: false,
     confiance: spec.confidence,
     severite: spec.severity,
@@ -56,7 +70,7 @@ export function pluginRuleDef(spec: PluginRuleSpec): RuleDef {
 }
 
 /** Conversion d'un constat en résultat (même logique que le moteur, `rules/engine.ts`). */
-export function toRuleResult(rule: RuleDef, f: Finding, project: Project): RuleResult {
+export function toRuleResult(rule: SourcedRuleDef, f: Finding, project: Project): RuleResult {
   const eff = effectiveSeverity(rule, project.compliance);
   const base: RuleResult = {
     ruleId: rule.id,
@@ -74,6 +88,7 @@ export function toRuleResult(rule: RuleDef, f: Finding, project: Project): RuleR
   };
   return {
     ...base,
+    ...(rule.sourceMessage !== undefined ? { sourceMessage: rule.sourceMessage } : {}),
     ...(f.measured !== undefined ? { measured: f.measured } : {}),
     ...(rule.unite !== null ? { unit: rule.unite } : {}),
     ...(eff.downgradeReason !== undefined ? { downgradeReason: eff.downgradeReason } : {}),
@@ -133,7 +148,7 @@ export class CheckCollector {
     return rule;
   }
 
-  add(rule: RuleDef, findings: readonly Finding[]): void {
+  add(rule: SourcedRuleDef, findings: readonly Finding[]): void {
     for (const f of findings) this.results.push(toRuleResult(rule, f, this.project));
   }
 
@@ -143,7 +158,12 @@ export class CheckCollector {
    * de phrase) ; `label` de chaque élément : repère ou désignation (`textMessage(mark)` pour un
    * repère seul).
    */
-  addItems(rule: RuleDef, items: readonly CheckItem[], quantity: Message, bounds: Bounds): void {
+  addItems(
+    rule: SourcedRuleDef,
+    items: readonly CheckItem[],
+    quantity: Message,
+    bounds: Bounds,
+  ): void {
     const unit = rule.unite;
     const u = unit ? ` ${unit}` : "";
     if (items.length === 0) {
@@ -222,13 +242,14 @@ export function stringerRulesOutOfDomain(rule: RuleDef, width: number): Message 
 
 // ------------------------------------------------------------------ Contrôles de fabrication
 
-const WORKSHOP_SOURCE = "Profil d'atelier Blondel (valeur par défaut à valider, LEDGER §2)";
+/** Source des contrôles réglés par le profil d'atelier (valeurs par défaut « à valider »). */
+const WORKSHOP_SOURCE = sourceSpec(WORKSHOP_DEFAULT_SOURCE);
 
 /** Contrôles de fabrication communs ; descriptions : `rules.<id>.description`. */
 export const FAB_RULES = {
   perpendicularWidth: {
     id: "FAB_LIMON_LARGEUR_PERP_MIN",
-    source: WORKSHOP_SOURCE,
+    ...WORKSHOP_SOURCE,
     confidence: "faible",
     nature: "metier",
     severity: "avertissement",
@@ -236,7 +257,7 @@ export const FAB_RULES = {
   },
   woodBetweenHousings: {
     id: "FAB_LIMON_BOIS_ENTRE_MORTAISES",
-    source: WORKSHOP_SOURCE,
+    ...WORKSHOP_SOURCE,
     confidence: "faible",
     nature: "metier",
     severity: "avertissement",
@@ -244,7 +265,7 @@ export const FAB_RULES = {
   },
   cheek: {
     id: "FAB_LIMON_JOUE_MIN",
-    source: WORKSHOP_SOURCE,
+    ...WORKSHOP_SOURCE,
     confidence: "faible",
     nature: "metier",
     severity: "avertissement",
@@ -252,7 +273,7 @@ export const FAB_RULES = {
   },
   boardLength: {
     id: "FAB_PLATEAU_LONGUEUR_MAX",
-    source: WORKSHOP_SOURCE,
+    ...WORKSHOP_SOURCE,
     confidence: "faible",
     nature: "metier",
     severity: "avertissement",
@@ -260,7 +281,7 @@ export const FAB_RULES = {
   },
   stockAvailable: {
     id: "FAB_DEBIT_DISPONIBLE",
-    source: WORKSHOP_SOURCE,
+    ...WORKSHOP_SOURCE,
     confidence: "faible",
     nature: "metier",
     severity: "avertissement",
@@ -268,8 +289,7 @@ export const FAB_RULES = {
   },
   newelReception: {
     id: "FAB_POTEAU_RECEPTION",
-    source:
-      "Géométrie du tracé (layout.ts et layout/newel.ts : poteau centré sur le coin intérieur K ou décalé vers le jour)",
+    ...sourceSpec(msg("compliance.source.newelReception")),
     confidence: "eleve",
     nature: "metier",
     severity: "avertissement",

@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import { BALANCING_METHOD_LABELS } from "./balancingForm.js";
 import {
   EXPERT_ANGLE_LIMIT_DEG,
+  arrivalNosingIndex,
   clampAngle,
   nosingEditAvailability,
   orphanOverrides,
@@ -41,6 +42,34 @@ describe("disponibilité et arrondis", () => {
       stepping: { ...modelLeft.stepping, nosings: [] },
     });
     expect(empty.ok).toBe(false);
+  });
+
+  it("nez d'arrivée (A28) : dernier nez, aucune marche ne le porte ; éditable comme les autres", () => {
+    const last = modelLeft.stepping.nosings.length - 1;
+    expect(arrivalNosingIndex(modelLeft.stepping)).toBe(last);
+    expect(modelLeft.stepping.treads.some((t) => t.number === last + 1)).toBe(false);
+    // Disponibilité de l'édition : la même que pour les nez des marches (tracé à volées).
+    expect(nosingEditAvailability(modelLeft).ok).toBe(true);
+    const straight = buildModel(createProject("straight"));
+    expect(arrivalNosingIndex(straight.stepping)).toBe(straight.stepping.nosings.length - 1);
+    expect(nosingEditAvailability(straight).ok).toBe(true);
+    // Sans nez : pas de nez d'arrivée, édition indisponible.
+    expect(arrivalNosingIndex({ ...modelLeft.stepping, nosings: [] })).toBeNull();
+    // Découpage tronqué (le dernier nez porte une marche) : pas de nez d'arrivée.
+    const cut = { ...modelLeft.stepping, nosings: modelLeft.stepping.nosings.slice(0, last) };
+    expect(arrivalNosingIndex(cut)).toBeNull();
+    // Hélicoïdal : le nez d'arrivée existe, mais l'édition reste indisponible (motif affiché).
+    const helical = buildModel(createProject("helical"));
+    expect(arrivalNosingIndex(helical.stepping)).toBe(helical.stepping.nosings.length - 1);
+    expect(nosingEditAvailability(helical).ok).toBe(false);
+  });
+
+  it("nez d'arrivée : retouches d'angle et de nez fixe écrites et retirées comme les autres", () => {
+    const k = arrivalNosingIndex(modelLeft.stepping)!;
+    const p = withFixedOverride(withAngleOverride(quarterLeft, k, 3), k, true);
+    expect(overridesAt(p, k)).toEqual({ fixed: true, angle: 3 });
+    expect(orphanOverrides(p, modelLeft)).toEqual([]);
+    expect(overridesAt(withoutNosingOverrides(p, [k]), k)).toEqual({ fixed: false, angle: null });
   });
 
   it("arrondit au dixième sans « −0 »", () => {

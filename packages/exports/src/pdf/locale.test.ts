@@ -3,10 +3,10 @@
  * ne reste ; le français par défaut est inchangé (les instantanés et tests existants en font
  * foi, ici seulement quelques repères).
  */
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { buildModel, parseProjectText, type Model, type Project } from "@blondel/core";
+import { RULES, buildModel, parseProjectText, type Model, type Project } from "@blondel/core";
 import { messagesFor, msg, textMessage } from "@blondel/i18n";
 import { describe, expect, it } from "vitest";
 import { translatorOf } from "../i18n.js";
@@ -18,6 +18,7 @@ import {
   straightModel,
   woodStringerPart,
 } from "../testing/fixtures.js";
+import { isTimberDevelopment } from "../flatTerms.js";
 import { installationSheet } from "../installation.js";
 import { FRENCH_ACCENTS, RAW_KEY, residualFrench } from "../testing/french.js";
 import { RecordingCanvas, helveticaMeasure } from "./canvas.js";
@@ -53,35 +54,80 @@ function render(
 }
 
 /**
- * Textes repris tels quels, non traduits : sources bibliographiques des règles (`rules.yaml`,
- * citations), nom du projet et identifiants des murs saisis par l'utilisateur.
+ * Textes repris tels quels, non traduits : nom du projet et identifiants des murs saisis par
+ * l'utilisateur. Les sources citées des règles ne sont plus retirées (QUESTIONS A26 (b)) : elles
+ * sont traduites ; seules les références de `CITED_FRENCH_REFERENCES` restent permises.
  */
-function verbatim(project: Project, model: Model): { sources: string[]; ids: string[] } {
+function verbatim(project: Project): { names: string[]; ids: string[] } {
   return {
-    // Le nom du projet peut être tronqué (cartouche) : traité comme une source.
-    sources: [project.name, ...model.compliance.results.map((r) => r.source)],
+    // Le nom du projet peut être tronqué (cartouche).
+    names: [project.name].filter((s) => s !== ""),
     ids: [project.name, ...project.site.walls.map((w) => w.id)].filter((s) => s !== ""),
   };
 }
 
 function frenchProblems(texts: readonly string[][], project: Project, model: Model): string[] {
-  const { sources, ids } = verbatim(project, model);
-  // Identifiants repris tels quels : règles et contextes du contrôle de conception.
-  const idents = [...model.compliance.results.map((r) => r.ruleId), ...model.compliance.contexts];
+  const { names, ids } = verbatim(project);
+  // Identifiants repris tels quels : règles (table et contrôles hors table, cités aussi dans les
+  // sources : « rules.yaml CHARGE_ESCALIER_A ») et contextes du contrôle de conception.
+  const idents = [
+    ...RULES.map((r) => r.id),
+    ...model.compliance.results.map((r) => r.ruleId),
+    ...model.compliance.contexts,
+  ];
   const out: string[] = [];
   texts.forEach((page, i) =>
     page.forEach((raw) => {
       let s = raw;
       for (const id of ids) s = s.split(id).join("");
-      // Ligne de provenance : la source citée n'est pas traduite (suite coupée : texte de source).
-      s = s.replace(/source: .*$/, "source:");
       const bare = s.replace(/…$/, "").trim();
-      if (bare !== "" && sources.some((src) => src.includes(bare))) return;
-      if (residualFrench([s], idents).length > 0) out.push(`page ${i + 1} : ${raw}`);
+      if (bare !== "" && names.some((n) => n.includes(bare))) return;
+      // Le dossier imprime les sources citées : références françaises permises (A26 (b)).
+      if (residualFrench([s], idents, { citedSources: true }).length > 0) {
+        out.push(`page ${i + 1} : ${raw}`);
+      }
     }),
   );
   return out;
 }
+
+/** Tous les exemples de `examples/` (test anglais transversal, QUESTIONS A26). */
+const ALL_EXAMPLES = readdirSync(EXAMPLES_DIR)
+  .filter((f) => f.endsWith(".blondel.json"))
+  .sort();
+
+describe("dossier PDF anglais de tous les examples/ (QUESTIONS A26)", () => {
+  for (const file of ALL_EXAMPLES) {
+    it(`${file} : aucun texte français (sources citées comprises), titres des développés`, () => {
+      const { project, model } = load(file);
+      const en = render(model, { project, locale: "en", date: new Date(2026, 8, 30) });
+      expect(frenchProblems(en.texts, project, model)).toEqual([]);
+      // Profil du contrôle traduit (Strict / Lenient), jamais l'identifiant brut.
+      const summary = en.texts.flat().find((s) => s.startsWith("Profile "));
+      if (model.compliance.results.length > 0) {
+        expect(summary).toMatch(/^Profile (Strict|Lenient) — /);
+      }
+      // « Development » pour un limon bois, « Flat pattern » pour la tôle et l'acier.
+      for (const p of en.pages.filter((pg) => pg.kind === "flat")) {
+        const part = model.parts.find((q) => q.id === p.partIds?.[0])!;
+        expect(p.title, part.mark).toMatch(
+          isTimberDevelopment(part)
+            ? new RegExp(`^Development ${part.mark} — `)
+            : new RegExp(`^Flat pattern ${part.mark} — `),
+        );
+      }
+    });
+  }
+
+  it("le profil souple s'affiche « souple » en français et « Lenient » en anglais", () => {
+    const { project, model } = load(EXAMPLES[0]!);
+    const soft: Model = { ...model, compliance: { ...model.compliance, profile: "souple" } };
+    const en = render(soft, { project, locale: "en" }).texts.flat();
+    const fr = render(soft, { project }).texts.flat();
+    expect(en.some((s) => s.startsWith("Profile Lenient — "))).toBe(true);
+    expect(fr.some((s) => s.startsWith("Profil souple — "))).toBe(true);
+  });
+});
 
 describe("dossier PDF en anglais sur examples/", () => {
   for (const file of EXAMPLES) {

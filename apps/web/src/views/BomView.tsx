@@ -4,6 +4,11 @@
  * pour une masse calculée avec une masse volumique à valider, QUESTIONS A6) et totaux, en tableau
  * Industry (`.table`). Un clic sur un repère sélectionne la pièce (surlignée en 3D, ouverte dans
  * l'onglet « Pièces »).
+ *
+ * Visserie (QUESTIONS A27) : tableau « Visserie » sous la nomenclature des pièces, seulement si le
+ * modèle en a (lignes de la liste de visserie, `lib/fasteners.ts`) : repère, désignation,
+ * quantité, assemblages et pièces assemblées ; un clic sur un repère de visserie sélectionne la
+ * première pièce de son assemblage.
  */
 import type { Model } from "@blondel/core";
 import { massNoteFor } from "@blondel/exports";
@@ -11,8 +16,11 @@ import { useMemo } from "react";
 import { numberFormat } from "../i18n/locale.js";
 import { msg } from "@blondel/i18n";
 import { useT } from "../i18n/useT.js";
+import { fastenerRows } from "../lib/fasteners.js";
+import { SUMMARY_SEPARATOR } from "../lib/partGroups.js";
 import { bomSummary, selectedPart } from "../lib/parts.js";
 import { appStore, useApp, useModel } from "../store/appStore.js";
+import "../components/fasteners.css";
 
 const dec = (digits: number): Intl.NumberFormatOptions => ({
   minimumFractionDigits: 0,
@@ -39,7 +47,13 @@ export function BomView({ model }: { model: Model }) {
   );
   const noteMark = (note: string | undefined): string =>
     note === undefined ? "" : ` ${"*".repeat(bom.massNotes.indexOf(note) + 1)}`;
+  const fasteners = useMemo(() => fastenerRows(model, t), [model, t]);
   const current = selectedPart(model, selection?.location);
+  const selectPart = (partId: string | undefined): void => {
+    if (partId !== undefined) {
+      appStore.getState().select({ location: { kind: "part", partId } });
+    }
+  };
   if (bom.lines.length === 0) {
     return (
       <div className="empty-view" role="status">
@@ -142,6 +156,54 @@ export function BomView({ model }: { model: Model }) {
         <p className="muted bom__notes">
           {bom.massNotes.map((n, i) => `${"*".repeat(i + 1)} ${n}.`).join(" ")}
         </p>
+      ) : null}
+      {fasteners.length > 0 ? (
+        <table className="table bom__fasteners" data-testid="bom-fasteners">
+          <caption>
+            {t.t("ui.bom.fasteners.caption", {
+              marks: msg("ui.bom.marks", { count: fasteners.length }),
+            })}
+          </caption>
+          <thead>
+            <tr>
+              <th scope="col">{t.t("pdf.bom.col.mark")}</th>
+              <th scope="col">{t.t("pdf.bom.col.designation")}</th>
+              <th scope="col" className="num">
+                {t.t("pdf.bom.col.quantity")}
+              </th>
+              <th scope="col">{t.t("pdf.fasteners.col.joints")}</th>
+              <th scope="col">{t.t("pdf.fasteners.col.parts")}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {fasteners.map((r) => {
+              const selected = current !== undefined && r.partIds.includes(current.id);
+              const first = r.partIds.find((id) => model.parts.some((p) => p.id === id));
+              return (
+                <tr
+                  key={r.mark}
+                  className={selected ? "is-selected" : undefined}
+                  aria-selected={selected}
+                >
+                  <th scope="row">
+                    <button
+                      type="button"
+                      className="link"
+                      disabled={first === undefined}
+                      onClick={() => selectPart(first)}
+                    >
+                      {r.mark}
+                    </button>
+                  </th>
+                  <td>{r.name}</td>
+                  <td className="num">{r.quantity}</td>
+                  <td>{r.joints.join(SUMMARY_SEPARATOR)}</td>
+                  <td>{r.partMarks.join(SUMMARY_SEPARATOR)}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
       ) : null}
     </div>
   );

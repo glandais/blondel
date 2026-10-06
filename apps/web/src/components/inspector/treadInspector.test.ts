@@ -20,9 +20,17 @@ import { afterEach, describe, expect, it } from "vitest";
 import { withAngleOverride, withFixedOverride } from "../../lib/nosingOverrides.js";
 import { appStore, journeyStore, modelService } from "../../store/appStore.js";
 import { uiStore } from "../../store/uiStore.js";
+import { selectionLegendText } from "../guided/GuidedView.js";
+import { lastTreadBefore } from "./ArrivalNosingInspector.js";
 import { Inspector } from "./Inspector.js";
 import { arrowsTargetNosing, nosingArrowGroup } from "./NosingLineBlock.js";
-import { MISSING, TreadInspector, neighbourTreads, treadValues } from "./TreadInspector.js";
+import {
+  MISSING,
+  TreadInspector,
+  neighbourTreads,
+  nextTarget,
+  treadValues,
+} from "./TreadInspector.js";
 
 const initial = appStore.getState().project;
 
@@ -138,19 +146,30 @@ describe("en-tête", () => {
     expect(straight).not.toContain("tag-neutral");
   });
 
-  it("‹ › désactivés aux bouts", () => {
+  it("‹ désactivé sur la première marche ; › de la dernière mène au nez d'arrivée (A28)", () => {
     const m = load(quarter);
     const numbers = m.stepping.treads.map((t) => t.number);
     const first = Math.min(...numbers);
     const last = Math.max(...numbers);
     expect(neighbourTreads(m.stepping, first)).toEqual({ prev: null, next: first + 1 });
     expect(neighbourTreads(m.stepping, last)).toEqual({ prev: last - 1, next: null });
+    expect(nextTarget(m.stepping, first)).toEqual({ kind: "tread", number: first + 1 });
+    expect(nextTarget(m.stepping, last)).toEqual({ kind: "nosing", index: last });
     const prev = /<button[^>]*aria-label="Marche précédente"[^>]*>/;
     const next = /<button[^>]*aria-label="Marche suivante"[^>]*>/;
+    const toArrival = /<button[^>]*aria-label="Nez d&#x27;arrivée"[^>]*>/;
     expect(prev.exec(render(first))![0]).toContain('disabled=""');
     expect(next.exec(render(first))![0]).not.toContain("disabled");
-    expect(next.exec(render(last))![0]).toContain('disabled=""');
+    expect(next.exec(render(last))).toBeNull();
+    expect(toArrival.exec(render(last))![0]).not.toContain("disabled");
     expect(prev.exec(render(last))![0]).not.toContain("disabled");
+  });
+
+  it("› sans nez d'arrivée (découpage sans nez au-delà) : rien", () => {
+    const m = buildModel(quarter);
+    const last = Math.max(...m.stepping.treads.map((t) => t.number));
+    const cut = { ...m.stepping, nosings: m.stepping.nosings.slice(0, last) };
+    expect(nextTarget(cut, last)).toBeNull();
   });
 });
 
@@ -299,5 +318,87 @@ describe("langues, mention et dispatch", () => {
     html = renderToStaticMarkup(createElement(Inspector));
     expect(html).toContain('data-template="project"');
     expect(html).not.toContain("tread-inspector");
+  });
+});
+
+describe("nez d'arrivée (QUESTIONS A28)", () => {
+  const inspect = (k: number, locale: "fr" | "en" = "fr"): string => {
+    appStore.getState().setLocale(locale);
+    appStore.getState().select({ location: { kind: "nosing", index: k } });
+    return decode(renderToStaticMarkup(createElement(Inspector)));
+  };
+  const arrival = (m: Model): number => m.stepping.nosings.length - 1;
+
+  it("gabarit « nez » : bloc « Ligne de nez » seul, sans fiche de marche", () => {
+    const m = load(quarter);
+    const k = arrival(m);
+    const html = inspect(k);
+    expect(html).toContain('data-template="nosing"');
+    expect(html).toContain(`data-nosing-index="${k}"`);
+    expect(html).toContain(`class="insp-eyebrow">Nez ${k} · palier d'arrivée</span>`);
+    expect(html).toContain(`<h3 class="insp-title">Nez d'arrivée</h3>`);
+    expect(html).toContain("Aucune marche ne porte ce nez");
+    // Bloc « Ligne de nez » : angle affiché non modifiable avec son motif (les bords s'arrêtent
+    // au nez d'arrivée, question A30), valeur calculée, Fixer, Retirer, aide clavier sans flèches.
+    expect(html).toContain("Ligne de nez");
+    expect(html).toMatch(/<input[^>]*disabled=""[^>]*value="0,0"/);
+    expect(html).toContain("Angle non modifiable : les bords de l'escalier s'arrêtent");
+    expect(html).toContain("data-computed");
+    expect(html).toContain("Fixer le nez");
+    expect(html).toContain("Retirer la retouche");
+    expect(html).toContain("F fixe le nez ; Suppr retire la retouche.");
+    expect(html).not.toContain("← / → ±1°");
+    // Pas de fiche de marche : ni valeurs, ni contrôles, ni pièces, ni « Marche n ».
+    expect(html).not.toContain("data-tread-number");
+    expect(html).not.toContain("insp-values");
+    expect(html).not.toContain("Giron");
+    expect(html).not.toContain(`Marche ${k}<`);
+  });
+
+  it("‹ revient à la dernière marche", () => {
+    const m = load(quarter);
+    const k = arrival(m);
+    const prev = /<button[^>]*aria-label="Dernière marche"[^>]*>/.exec(inspect(k));
+    expect(prev![0]).not.toContain("disabled");
+    expect(lastTreadBefore(m.stepping, k)).toBe(k);
+    expect(lastTreadBefore({ treads: [] }, k)).toBeNull();
+  });
+
+  it("retouches du nez d'arrivée : pressé, retirable, lien de la liste vers le nez", () => {
+    const k = arrival(buildModel(quarter));
+    load(withAngleOverride(withFixedOverride(quarter, k, true), k, 2));
+    const html = inspect(k);
+    expect(html).toMatch(/aria-pressed="true"[^>]*>Fixer le nez/);
+    expect(html).toMatch(/class="btn btn-ghost" title="[^"]*">Retirer la retouche/);
+    // Entrée de la liste : bouton (nez d'arrivée) marqué courant.
+    expect(html).toContain(
+      `<li data-nosing="${k}" aria-current="true"><button type="button" class="link nosing-line__entry" title="Nez d'arrivée">`,
+    );
+    // Depuis une marche, l'entrée du nez d'arrivée est aussi un lien (vers le nez).
+    expect(decode(render(1))).toContain(
+      `<li data-nosing="${k}"><button type="button" class="link nosing-line__entry" title="Nez d'arrivée">`,
+    );
+  });
+
+  it("anglais : « Top nosing », aucune clé brute ni texte français", () => {
+    const m = load(quarter);
+    const k = arrival(m);
+    const html = inspect(k, "en");
+    expect(html).toContain(`Nosing ${k} · top landing`);
+    expect(html).toContain('<h3 class="insp-title">Top nosing</h3>');
+    expect(html).toContain('aria-label="Last tread"');
+    expect(html).toContain("Nosing line");
+    for (const text of ["Nez", "Marche", "Fixer", "Retirer", "palier"]) {
+      expect(html).not.toContain(text);
+    }
+    expect(html).not.toMatch(/\b(ui|compliance|stepping)\.[a-z]+\.[\w.]+/);
+  });
+
+  it("légende du guidé : « Nez d'arrivée sélectionné »", () => {
+    const m = load(quarter);
+    const k = arrival(m);
+    const sel = { location: { kind: "nosing", index: k } } as const;
+    expect(selectionLegendText(sel, m, translatorFor("fr"))).toBe("Nez d'arrivée sélectionné");
+    expect(selectionLegendText(sel, m, translatorFor("en"))).toBe("Top nosing selected");
   });
 });

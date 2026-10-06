@@ -184,3 +184,25 @@ export function decideDraft(
   if (!r.ok) return { kind: "invalid", error: r.error };
   return Object.is(r.value, current) ? { kind: "unchanged" } : { kind: "commit", value: r.value };
 }
+
+/** Dernière saisie appliquée par un champ numérique et valeur du projet à ce moment. */
+export interface AppliedDraft {
+  readonly draft: string;
+  readonly value: number;
+}
+
+/**
+ * Revalidation à ignorer : le cœur peut accepter une saisie sans que la valeur affichée change
+ * (retouche déclarée inapplicable, valeur recalculée) ; la **perte de focus** qui suit, sur la
+ * même saisie et la même valeur du projet, ne doit pas créer une seconde entrée d'historique
+ * (sinon « Annuler » semble sans effet). Un Entrée explicite applique toujours ; une frappe
+ * oublie la saisie mémorisée (`last` remis à `null` par le champ).
+ */
+export function isRepeatedCommit(
+  last: AppliedDraft | null,
+  draft: string,
+  value: number,
+  onBlur: boolean,
+): boolean {
+  return onBlur && last !== null && last.draft === draft && Object.is(last.value, value);
+}

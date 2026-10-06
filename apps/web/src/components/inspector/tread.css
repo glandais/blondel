@@ -84,7 +84,8 @@
 }
 
 .nosing-line__keys,
-.nosing-line__unavailable {
+.nosing-line__unavailable,
+.arrival-nosing__hint {
   margin: 0;
   font-size: 11.5px;
   color: var(--color-neutral-700);

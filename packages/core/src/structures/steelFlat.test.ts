@@ -259,6 +259,25 @@ describe("steel-flat — quart tournant à poteau (cas n° 1) en acier", () => {
         }
       });
 
+      it("fixations déclarées des supports (QUESTIONS A27) : boulons dans la joue, vis de marche", () => {
+        const bolted = (params["supports"] as { fixing?: string } | undefined)?.fixing === "bolted";
+        for (const s of r.supports) {
+          const fx = s.part.fixings ?? [];
+          const b = fx.find((f) => f.joint === "supportBolted");
+          if (bolted) {
+            expect(b).toMatchObject({ holeDiameter: 11, with: [s.placement.face.owner] });
+            // Un boulon par perçage (lumière comptée une fois) : perçages du support − vis.
+            expect(b!.points).toBe(s.part.quantities[QUANTITY_HOLES]! - 2);
+          } else expect(b).toBeUndefined();
+          expect(fx.find((f) => f.joint === "treadScrewed")).toEqual({
+            joint: "treadScrewed",
+            points: 2,
+          });
+        }
+        // Visserie du modèle : boulons de support seulement si les supports sont vissés.
+        expect(m.fasteners?.some((f) => f.joint === "supportBolted") ?? false).toBe(bolted);
+      });
+
       it("marches : tôle pliée (développé en fibre neutre, 2 plis, pièces uniques) ou bois conservé", () => {
         if (params["treadKind"] !== "folded-steel") {
           expect(r.treads).toEqual([]);

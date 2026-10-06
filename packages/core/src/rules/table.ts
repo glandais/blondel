@@ -36,6 +36,12 @@ export const RuleDefSchema = z.object({
   contexte_exclu: z.array(z.string()).optional(),
   nature: z.enum(["reglementaire", "normatif", "metier"]),
   source: z.string(),
+  /**
+   * Traduction anglaise de `source` (QUESTIONS A26 (b), décision du 2026-10-06), affichée dans
+   * les sorties anglaises par `ruleSourceText` / `ruleDefSourceText` (`rules/sources.ts`) ; titres
+   * et références de normes gardés dans leur langue. Obligatoire.
+   */
+  source_en: z.string().min(1),
   /** Valeur issue d'une norme payante non lue (profil souple : bloquant → avertissement). */
   source_secondaire: z.boolean().default(false),
   confiance: z.enum(["eleve", "moyen", "faible"]),

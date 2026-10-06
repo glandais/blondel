@@ -5,7 +5,9 @@
  */
 import {
   contextShortLabel,
+  profileLabel,
   ruleDescription,
+  ruleSourceText,
   type Model,
   type RuleOverride,
   type RuleResult,
@@ -141,7 +143,7 @@ function provenance(r: RuleResult, t: Translator): string {
   const text = t.t("pdf.compliance.provenance", {
     nature: label(t, NATURE_KEYS, r.nature),
     confidence: label(t, CONFIDENCE_KEYS, r.confidence),
-    source: r.source,
+    source: ruleSourceText(r, t),
   });
   return r.secondarySource ? t.t("pdf.compliance.provenanceSecondary", { text }) : text;
 }
@@ -214,7 +216,7 @@ export function complianceLines(
   push(complianceDisclaimer(t), { size: 3.4, bold: true, color: SEVERITY_COLOR.bloquant });
   push(
     t.t("pdf.compliance.summary", {
-      profile: rep.profile,
+      profile: tr(t, profileLabel(rep.profile)),
       version: String(rep.rulesVersion),
       // Libellés courts des contextes (libellés unifiés, ADR-0009), pas les identifiants bruts.
       contexts: rep.contexts.map((id) => t.t(contextShortLabel(id))).join(", ") || "—",

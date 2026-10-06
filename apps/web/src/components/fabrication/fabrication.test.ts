@@ -3,7 +3,16 @@
  * distincts, état de la fiche de pièce ; rendu de la zone (onglets, bande de chiffres, liste par
  * famille, pièce choisie) en français et en anglais.
  */
-import { buildModel, parseProjectText, textMessage, type Part } from "@blondel/core";
+import {
+  buildModel,
+  fastenerKindLabel,
+  msg,
+  parseProjectText,
+  textMessage,
+  type Fastener,
+  type Model,
+  type Part,
+} from "@blondel/core";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
@@ -18,6 +27,7 @@ import {
   fabricationContent,
   fabricationView,
 } from "./FabricationArea.js";
+import { FastenersFields } from "../FastenersFields.js";
 import { partSheetState } from "./PartSheet.js";
 import { expandedGroups, markEntries } from "./PartsList.js";
 
@@ -81,6 +91,15 @@ describe("liste des pièces", () => {
       ["supports", true],
     ] as const);
     expect([...expandedGroups(groups, "treads", toggled, false)]).toEqual(["supports"]);
+  });
+
+  it("groupe « Visserie » : déplié par l'utilisateur ou par un filtre, jamais d'office", () => {
+    const listed = [...groups, { id: "fasteners" as const }];
+    expect([...expandedGroups(listed, "treads", new Map(), false)]).toEqual(["treads"]);
+    expect([...expandedGroups(listed, undefined, new Map([["fasteners", true]]), false)]).toEqual([
+      "fasteners",
+    ]);
+    expect([...expandedGroups(listed, undefined, new Map(), true)]).toContain("fasteners");
   });
 
   it("avec un filtre, tous les groupes montrés sont dépliés", () => {
@@ -237,5 +256,122 @@ describe("FabricationArea (rendu)", () => {
         compare: s.compare,
       }));
     }
+  });
+});
+
+describe("visserie dans le mode Fabrication (QUESTIONS A27)", () => {
+  const project = parseProjectText(j5bText);
+  const base = buildModel(project);
+  const fastener = (id: string, mark: string, partIds: readonly string[]): Fastener => ({
+    id,
+    mark,
+    kind: "bolt",
+    grade: "8.8",
+    diameter: 12,
+    length: 100,
+    quantity: 4,
+    joint: "plateFloor",
+    name: fastenerKindLabel("bolt"),
+    origin: msg("fastener.joint.plateFloor"),
+    partIds,
+    deduced: ["diameter", "quantity"],
+  });
+  /** Modèle réel complété d'une visserie de test (le calcul du cœur n'est pas requis). */
+  const model: Model = {
+    ...base,
+    fasteners: [
+      fastener("f1", "VS1", [base.parts[0]!.id]),
+      fastener("f2", "VS2", [base.parts[1]!.id]),
+    ],
+  };
+  const setModel = (m: Model): void =>
+    modelService.store.setState((s) => ({
+      model: { model: m, errors: [], timeMs: 5, mesh: null, project, pending: false },
+      compare: s.compare,
+    }));
+
+  beforeAll(() => {
+    appStore.getState().replaceProject(project);
+    setModel(model);
+    journeyStore.getState().setWorkspace("fabrication");
+  });
+
+  afterEach(() => {
+    appStore.getState().setLocale("fr");
+    appStore.getState().select(null);
+  });
+
+  afterAll(() => {
+    journeyStore.getState().setWorkspace("design");
+    appStore.getState().replaceProject(initialProject);
+  });
+
+  const render = (locale: "fr" | "en" = "fr"): string => {
+    appStore.getState().setLocale(locale);
+    return renderToStaticMarkup(createElement(FabricationArea));
+  };
+
+  it("liste des pièces : groupe « Visserie » en dernier, replié, repères en résumé", () => {
+    appStore.getState().setView("flat");
+    const html = render();
+    const groups = [...html.matchAll(/data-group="([\w-]+)"/g)].map((m) => m[1]);
+    expect(groups[groups.length - 1]).toBe("fasteners");
+    expect(html).toMatch(/data-group="fasteners"><button[^>]*aria-expanded="false"/);
+    expect(html).toContain(">Visserie<");
+    expect(html).toContain("VS1 · VS2");
+    expect(render("en")).toContain(">Fixings<");
+  });
+
+  it("réglages ◆ de la visserie : un groupe par assemblage présent, valeurs du profil", () => {
+    const guided = renderToStaticMarkup(
+      createElement(FastenersFields, { display: { kind: "guided", step: 7 } }),
+    );
+    expect(guided).toContain("<legend>Visserie</legend>");
+    expect(guided).toContain('data-joint="plateFloor"');
+    expect(guided).toContain("<legend>Platine sur sol</legend>");
+    expect(guided).not.toContain('data-joint="handrailWall"');
+    // Diamètre lu sur les perçages : pas de champ « Diamètre nominal », jeu de perçage proposé.
+    expect(guided).not.toContain("Diamètre nominal");
+    expect(guided).toContain("Jeu de perçage");
+    expect(guided).toContain('data-param="workshop.fasteners.joints.plateFloor.length"');
+    expect(guided).toContain("Cheville mécanique");
+    expect(guided).toContain("◆");
+    // Parcours libre : sous « Réglages d'atelier » ; étape 5 du guidé : absents.
+    const free = renderToStaticMarkup(
+      createElement(FastenersFields, { display: { kind: "free" } }),
+    );
+    expect(free).toContain("tiered__fold--workshop");
+    const step5 = renderToStaticMarkup(
+      createElement(FastenersFields, { display: { kind: "guided", step: 5 } }),
+    );
+    expect(step5).toBe("");
+  });
+
+  it("sans visserie : aucun groupe ni tableau", () => {
+    setModel({ ...model, fasteners: [] });
+    try {
+      expect(
+        renderToStaticMarkup(createElement(FastenersFields, { display: { kind: "all" } })),
+      ).toBe("");
+      appStore.getState().setView("flat");
+      expect(render()).not.toContain('data-group="fasteners"');
+      appStore.getState().setView("bom");
+      expect(render()).not.toContain("bom__fasteners");
+    } finally {
+      setModel(model);
+    }
+  });
+
+  it("nomenclature : tableau « Visserie » sous les pièces (repère, désignation, quantité)", () => {
+    appStore.getState().setView("bom");
+    const html = render();
+    const table = html.slice(html.indexOf("bom__fasteners"));
+    expect(table).toContain("Visserie : 2 repère(s)");
+    expect(table).toContain(">VS1</button>");
+    expect(table).toContain("<td>Boulon</td>");
+    expect(table).toContain("<td>Platine sur sol</td>");
+    expect(table).toContain(`<td>${base.parts[0]!.mark}</td>`);
+    const en = render("en");
+    expect(en.slice(en.indexOf("bom__fasteners"))).toContain("Fixings: 2 marks");
   });
 });

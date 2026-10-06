@@ -1,7 +1,8 @@
 /**
  * Inspecteur contextuel du parcours libre (ADR-0009, maquettes 2a à 2d), colonne de droite de
  * 340 px, visible en Conception comme en Fabrication. Le gabarit suit la sélection partagée
- * (`appStore.selection`) : règle (2c), marche ou nez (2a), pièce (2b), rien ou autre chose (2d).
+ * (`appStore.selection`) : règle (2c), marche ou nez (2a), nez d'arrivée (bloc « Ligne de nez »
+ * seul, QUESTIONS A28), pièce (2b), rien ou autre chose (2d).
  *
  * Chaque gabarit est monté avec une `key` dérivée de la sélection : changer d'élément
  * réinitialise son état local (saisie en cours, formulaire de surcharge). Les gabarits 2a à 2c
@@ -17,7 +18,9 @@ import { useT } from "../../i18n/useT.js";
 import { useApp, useModel } from "../../store/appStore.js";
 import type { Selection } from "../../store/projectStore.js";
 import { closeInspectorDrawer } from "../../store/uiStore.js";
+import { arrivalNosingIndex } from "../../lib/nosingOverrides.js";
 import { Icon } from "../ui/Icon.js";
+import { ArrivalNosingInspector } from "./ArrivalNosingInspector.js";
 import { PartInspector } from "./PartInspector.js";
 import { ProjectInspector } from "./ProjectInspector.js";
 import { RuleInspector } from "./RuleInspector.js";
@@ -25,8 +28,11 @@ import { TreadInspector } from "./TreadInspector.js";
 import "./frame.css";
 import "./inspector.css";
 
-/** Gabarits de l'inspecteur : marche (2a), pièce (2b), règle (2c), sans sélection (2d). */
-export type InspectorTemplate = "tread" | "part" | "rule" | "project";
+/**
+ * Gabarits de l'inspecteur : marche (2a), nez d'arrivée (bloc « Ligne de nez » seul, A28),
+ * pièce (2b), règle (2c), sans sélection (2d).
+ */
+export type InspectorTemplate = "tread" | "nosing" | "part" | "rule" | "project";
 
 /**
  * Numéro de la marche inspectée pour une sélection de marche ou de nez (nez k ↔ marche k + 1),
@@ -44,9 +50,25 @@ export function inspectedTread(
 }
 
 /**
+ * Indice du nez d'arrivée inspecté (QUESTIONS A28) : sélection du nez `k` quand `k` est le
+ * nez d'arrivée du découpage (`arrivalNosingIndex`, aucune marche ne le porte) ; `null` sinon
+ * (nez d'une marche, indice hors découpage, autre élément).
+ */
+export function inspectedArrivalNosing(
+  selection: Selection | null,
+  model: Pick<Model, "stepping"> | null,
+): number | null {
+  if (selection === null || model === null) return null;
+  const loc = selection.location;
+  if (loc.kind !== "nosing") return null;
+  return arrivalNosingIndex(model.stepping) === loc.index ? loc.index : null;
+}
+
+/**
  * Gabarit d'une sélection : aucune → projet ; règle (`ruleId`) → règle ; marche existante, ou
- * nez dont la marche suivante existe → marche ; pièce présente dans le modèle → pièce ; tout le
- * reste (escalier, point, élément disparu, pas de modèle) → projet.
+ * nez dont la marche suivante existe → marche ; nez d'arrivée → nez ; pièce présente dans le
+ * modèle → pièce ; tout le reste (escalier, point, élément disparu, nez hors découpage, pas de
+ * modèle) → projet.
  */
 export function inspectorTemplate(
   selection: Selection | null,
@@ -56,6 +78,7 @@ export function inspectorTemplate(
   if (selection.ruleId !== undefined) return "rule";
   if (model === null) return "project";
   if (inspectedTread(selection, model) !== null) return "tread";
+  if (inspectedArrivalNosing(selection, model) !== null) return "nosing";
   const loc = selection.location;
   if (loc.kind === "part" && model.parts.some((p) => p.id === loc.partId)) return "part";
   return "project";
@@ -109,6 +132,10 @@ export function Inspector({ drawer }: InspectorProps) {
   } else if (template === "tread") {
     const n = inspectedTread(selection, model);
     content = n === null ? <ProjectInspector /> : <TreadInspector key={`tread-${n}`} number={n} />;
+  } else if (template === "nosing") {
+    const k = inspectedArrivalNosing(selection, model);
+    content =
+      k === null ? <ProjectInspector /> : <ArrivalNosingInspector key={`nosing-${k}`} index={k} />;
   } else {
     content = <ProjectInspector />;
   }

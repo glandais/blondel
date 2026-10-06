@@ -4,7 +4,8 @@
  *
  * - en-tête : surtitre (« Marche », « · tournant i » dans une zone balancée), pastille de
  *   sélection, « Marche n », étiquette « balancée » / « palier », ‹ › vers la marche voisine
- *   (la sélection partagée suit : toutes les vues surlignent la nouvelle marche) ;
+ *   (la sélection partagée suit : toutes les vues surlignent la nouvelle marche) ; depuis la
+ *   dernière marche, › mène au nez d'arrivée (QUESTIONS A28) ;
  * - valeurs lues dans le modèle : giron sur la ligne de foulée, collet (corde, comme le
  *   contrôle), hauteur, altitude du nez, échappée au nez (`Model.headroomAtNosings`) ;
  * - bloc « Ligne de nez » (`NosingLineBlock`), qui remplace le mode expert du plan ;
@@ -15,7 +16,7 @@
 import type { Model } from "@blondel/core";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useT } from "../../i18n/useT.js";
-import { zoneOfTread } from "../../lib/nosingOverrides.js";
+import { arrivalNosingIndex, zoneOfTread } from "../../lib/nosingOverrides.js";
 import { treadLinkedParts } from "../../lib/partLinks.js";
 import { formatFigureLength, type DisplayUnit } from "../../lib/units.js";
 import type { Locale } from "@blondel/i18n";
@@ -92,8 +93,31 @@ export function neighbourTreads(
   return { prev: has(n - 1) ? n - 1 : null, next: has(n + 1) ? n + 1 : null };
 }
 
+/** Élément atteint par « › » : marche suivante, sinon nez d'arrivée, sinon rien. */
+export type NextTarget =
+  | { readonly kind: "tread"; readonly number: number }
+  | { readonly kind: "nosing"; readonly index: number }
+  | null;
+
+/**
+ * Cible de « › » depuis la marche n : la marche n + 1 si elle existe ; depuis la dernière
+ * marche, le nez d'arrivée (nez n, qu'aucune marche ne porte) ; `null` sinon.
+ */
+export function nextTarget(
+  stepping: Pick<Model["stepping"], "treads" | "nosings">,
+  n: number,
+): NextTarget {
+  const { next } = neighbourTreads(stepping, n);
+  if (next !== null) return { kind: "tread", number: next };
+  return arrivalNosingIndex(stepping) === n ? { kind: "nosing", index: n } : null;
+}
+
 const selectTread = (number: number): void =>
   appStore.getState().select({ location: { kind: "tread", number } });
+
+const selectTarget = (target: NextTarget): void => {
+  if (target !== null) appStore.getState().select({ location: target });
+};
 
 export function TreadInspector({ number: n }: TreadInspectorProps) {
   const t = useT();
@@ -102,7 +126,8 @@ export function TreadInspector({ number: n }: TreadInspectorProps) {
   const tread = model?.stepping.treads.find((x) => x.number === n);
   if (!model || !tread) return null;
   const zone = zoneOfTread(model.stepping, n);
-  const { prev, next } = neighbourTreads(model.stepping, n);
+  const { prev } = neighbourTreads(model.stepping, n);
+  const next = nextTarget(model.stepping, n);
   const values = treadValues(model, n, unit, t.locale, t.t("ui.inspector.figure.unlimited"));
   const kindTag =
     tread.kind === "winder"
@@ -111,7 +136,8 @@ export function TreadInspector({ number: n }: TreadInspectorProps) {
         ? t.t("ui.inspector.tread.kind.landing")
         : null;
   const prevLabel = t.t("ui.inspector.tread.prev");
-  const nextLabel = t.t("ui.inspector.tread.next");
+  const nextLabel =
+    next?.kind === "nosing" ? t.t("ui.lib.location.arrivalNosing") : t.t("ui.inspector.tread.next");
 
   return (
     <div className="insp-template tread-inspector" data-tread-number={n}>
@@ -143,7 +169,7 @@ export function TreadInspector({ number: n }: TreadInspectorProps) {
               aria-label={nextLabel}
               title={nextLabel}
               disabled={next === null}
-              onClick={() => next !== null && selectTread(next)}
+              onClick={() => selectTarget(next)}
             >
               <Icon icon={ChevronRight} size={16} />
             </button>

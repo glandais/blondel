@@ -10,6 +10,9 @@
  * `useStructureParamForm` et `structureParamItem` servent aussi à la section « Marches », qui
  * reprend l'essence, le matériau des marches et le rayon de nez (même chemin du projet, même
  * validation, ADR-0009 point 5).
+ *
+ * Visserie du profil d'atelier (QUESTIONS A27) : réglages ◆ par assemblage présent dans le modèle
+ * (`FastenersFields`), sous les paramètres du plugin (zone « Réglages d'atelier », étape 7).
  */
 import type { StructureContext, StructureKind } from "@blondel/core";
 import { useMemo, useState } from "react";
@@ -47,6 +50,7 @@ import { formatDecimal, parseDecimal, parseIntMm } from "../lib/units.js";
 import { appStore, useApp, useModel } from "../store/appStore.js";
 import type { UpdateResult } from "../store/projectStore.js";
 import { AutoIntField, CheckField, NumberField, SelectField, TextField } from "./fields.js";
+import { FastenersFields } from "./FastenersFields.js";
 import { ChoiceCards, type ChoiceCard } from "./ui/ChoiceCards.js";
 import { useValidatedKeys } from "./fabrication/useToValidate.js";
 import {
@@ -535,6 +539,7 @@ export function StructureSection({ display = DISPLAY_ALL }: Partial<SectionProps
         </fieldset>
       ) : null}
       <StructureParamError error={form.error} />
+      <FastenersFields display={display} />
     </>
   );
 }

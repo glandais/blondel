@@ -4,10 +4,15 @@
  * du dossier PDF.
  */
 import {
+  DEFAULT_FASTENER_PROFILE,
   ROTATION_DEFAULT_REACH,
   buildModel,
   createProject,
+  fastenerKindLabel,
+  msg,
   withValidatedValues,
+  type Fastener,
+  type Model,
   type Project,
 } from "@blondel/core";
 import { translatorFor } from "@blondel/i18n";
@@ -168,5 +173,101 @@ describe("toValidateDocRows", () => {
       }
     }
     expect(bad).toEqual([]);
+  });
+});
+
+describe("visserie du profil d'atelier (QUESTIONS A27)", () => {
+  const fastener = (o: Partial<Fastener> & Pick<Fastener, "id" | "mark" | "joint">): Fastener => ({
+    kind: "anchor",
+    grade: "zinc-plated",
+    diameter: 12,
+    length: 100,
+    quantity: 4,
+    name: fastenerKindLabel("anchor"),
+    origin: msg("fastener.joint.plateFloor"),
+    partIds: [steelModel.parts[0]!.id],
+    deduced: ["diameter", "quantity"],
+    ...o,
+  });
+  /** Modèle réel complété d'une visserie de test (le calcul du cœur n'est pas requis). */
+  const model: Model = {
+    ...steelModel,
+    fasteners: [
+      fastener({ id: "a", mark: "VS1", joint: "plateFloor" }),
+      fastener({ id: "b", mark: "VS2", joint: "handrailWall", deduced: ["quantity"] }),
+    ],
+  };
+  const fasteners = (rows: readonly ToValidateRow[]) =>
+    rows.filter((r) => r.key.startsWith("workshop.fasteners."));
+
+  it("réglages des assemblages présents seulement, section Structure, valeurs par défaut", () => {
+    expect(fasteners(toValidateRows(steel, { ...model, fasteners: [] }))).toEqual([]);
+    const rows = fasteners(toValidateRows(steel, model));
+    expect(rows.map((r) => r.key)).toEqual([
+      "workshop.fasteners.holeClearance",
+      "workshop.fasteners.nominalDiameters",
+      "workshop.fasteners.bracketSpacing",
+      "workshop.fasteners.joints.plateFloor.kind",
+      "workshop.fasteners.joints.plateFloor.grade",
+      "workshop.fasteners.joints.plateFloor.length",
+      "workshop.fasteners.joints.plateFloor.perPoint",
+      "workshop.fasteners.joints.handrailWall.kind",
+      "workshop.fasteners.joints.handrailWall.grade",
+      "workshop.fasteners.joints.handrailWall.diameter",
+      "workshop.fasteners.joints.handrailWall.length",
+      "workshop.fasteners.joints.handrailWall.perPoint",
+    ]);
+    expect(rows.every((r) => r.section === "structure" && !r.validated)).toBe(true);
+    const length = rowOf(rows, "workshop.fasteners.joints.plateFloor.length");
+    expect(length).toMatchObject({
+      value: DEFAULT_FASTENER_PROFILE.joints.plateFloor.length,
+      unit: "mm",
+    });
+    expect(rowOf(rows, "workshop.fasteners.joints.plateFloor.perPoint").unit).toBeUndefined();
+  });
+
+  it("libellés « Visserie · assemblage · champ », valeurs et choix traduits", () => {
+    const rows = toValidateRows(steel, model);
+    const kind = rowOf(rows, "workshop.fasteners.joints.plateFloor.kind");
+    expect(FR.t(kind.label)).toBe("Visserie · Platine sur sol · Nature");
+    expect(EN.t(kind.label)).toBe("Fixings · Plate to floor · Type");
+    expect(formatToValidateValue(kind, FR)).toBe("Cheville mécanique");
+    expect(formatToValidateValue(kind, EN)).toBe("Expansion anchor");
+    const grade = rowOf(rows, "workshop.fasteners.joints.plateFloor.grade");
+    expect(formatToValidateValue(grade, FR)).toBe("acier zingué");
+    const length = rowOf(rows, "workshop.fasteners.joints.plateFloor.length");
+    expect(formatToValidateValue(length, FR)).toMatch(/^100\s?mm$/u);
+    expect(FR.t(rowOf(rows, "workshop.fasteners.holeClearance").label)).toBe(
+      "Visserie · Jeu de perçage",
+    );
+    const series = rowOf(rows, "workshop.fasteners.nominalDiameters");
+    expect(FR.t(series.label)).toBe("Visserie · Série des diamètres nominaux (mm)");
+    expect(formatToValidateValue(series, EN)).toBe(
+      "3 ; 4 ; 5 ; 6 ; 8 ; 10 ; 12 ; 16 ; 20 ; 24 ; 30",
+    );
+    // Lignes du dossier PDF : imprimables en WinAnsi.
+    for (const t of [FR, EN]) {
+      for (const r of toValidateDocRows(steel, model, t)) {
+        expect(toWinAnsi(`${t.t(r.label)} ${r.value}`)).not.toContain("?");
+      }
+    }
+  });
+
+  it("valeur du projet et validation (caduque si la valeur change)", () => {
+    const key = "workshop.fasteners.joints.plateFloor.length";
+    const own: Project = {
+      ...steel,
+      workshop: { fasteners: { joints: { plateFloor: { length: 120 } } } },
+    };
+    expect(rowOf(toValidateRows(own, model), key).value).toBe(120);
+    const validated = withValidatedValues(own, [{ path: key, value: 120 }]);
+    const row = rowOf(toValidateRows(validated, model), key);
+    expect(row.validated).toBe(true);
+    expect(validationEntry(row)).toEqual({ path: key, value: 120 });
+    const changed: Project = {
+      ...validated,
+      workshop: { fasteners: { joints: { plateFloor: { length: 140 } } } },
+    };
+    expect(rowOf(toValidateRows(changed, model), key).validated).toBe(false);
   });
 });

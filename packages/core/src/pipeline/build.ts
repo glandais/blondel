@@ -2,9 +2,16 @@
  * Assemblage du pipeline (ADR-0002) : `buildModel(project) → Model`.
  *
  *   computeLayout → computeStepping → pièces de base → structure (plugin) → garde-corps
- *   → échappée → contrôle de conception (+ contrôles du plugin de structure et des garde-corps)
+ *   → assemblages (`Part.assembledWith`) → visserie (`Model.fasteners`) → échappée
+ *   → contrôle de conception (+ contrôles du plugin de structure et des garde-corps)
  *   → chiffres clés (`Model.figures`, `pipeline/figures.ts`)
  *
+ * - **Visserie** (QUESTIONS A27, `fasteners/compute.ts`) : éléments déduits des assemblages
+ *   connus (fixations déclarées `Part.fixings`, platines percées, poteaux de garde-corps, mains
+ *   courantes murales), réglages non déduits du profil d'atelier (`workshop.fasteners`, « à
+ *   valider »). `Model.fasteners` omis sans élément ; échec : `pipeline.internalError` (étape
+ *   « Visserie »), visserie absente. Régler la visserie ne recalcule que cette étape (le profil
+ *   d'atelier entre dans les clés de la structure et des garde-corps sans `fasteners`).
  * - **Aucune exception** pour des paramètres impossibles : l'erreur de l'étape (`Message` porté
  *   par `LayoutError` / `SteppingError` / `StructureError` / `GuardError`, ou
  *   `pipeline.internalError` pour toute autre exception) est ajoutée à `Model.errors` et les
@@ -68,6 +75,9 @@ import type { GuardsAnalysis } from "../guards/types.js";
 import { getStructure, StructureError } from "../structures/index.js";
 import { ensureMass, normalizeWoodQuantities } from "../structures/quantities.js";
 import { resolveWorkshopProfile } from "../workshop/profile.js";
+import { resolveFastenerProfile } from "../workshop/fasteners.js";
+import { computeFasteners } from "../fasteners/compute.js";
+import type { Fastener } from "../model/fasteners.js";
 import { SteppingError } from "../stepping/errors.js";
 import { computeRises } from "../stepping/rises.js";
 import { computeStepping } from "../stepping/stepping.js";
@@ -89,6 +99,7 @@ const STAGE_LABELS = {
   guards: msg("pipeline.stage.guards"),
   headroom: msg("pipeline.stage.headroom"),
   compliance: msg("pipeline.stage.compliance"),
+  fasteners: msg("pipeline.stage.fasteners"),
 } as const;
 
 /**
@@ -234,6 +245,20 @@ function siteKeys(site: Project["site"]): unknown[] {
   return out;
 }
 
+/**
+ * Clés de mémoïsation du profil d'atelier pour la structure et les garde-corps : chaque champ
+ * (nom, valeur) **sauf la visserie** (`workshop.fasteners`), que seule l'étape « Visserie »
+ * lit. Régler la visserie ne recalcule ni la structure ni les garde-corps (QUESTIONS A27).
+ */
+function workshopKeys(workshop: Project["workshop"]): unknown[] {
+  // Profil absent et profil vide se résolvent aux mêmes défauts : mêmes clés.
+  if (workshop === undefined) return [];
+  const out: unknown[] = [];
+  const record = workshop as unknown as Readonly<Record<string, unknown>>;
+  for (const k of Object.keys(record).sort()) if (k !== "fasteners") out.push(k, record[k]);
+  return out;
+}
+
 let lastUpperFloor:
   | {
       readonly site: Pick<Project["site"], "opening" | "upperSlabThickness">;
@@ -352,6 +377,8 @@ const caches = {
   headroomAtNosings: new LastValueCache<readonly (number | null)[]>(),
   /** `Model.figures` (`pipeline/figures.ts`), à identité stable. */
   figures: new LastValueCache<ModelFigures | undefined>(),
+  /** `Model.fasteners` (`fasteners/compute.ts`), à identité stable. */
+  fasteners: new LastValueCache<Stage<readonly Fastener[]>>(),
 };
 let models = new WeakMap<Project, Model>();
 
@@ -528,6 +555,7 @@ export function buildModel(project: Project, options: BuildModelOptions = {}): M
 
   const { site, stair } = project;
   const siteKey = siteKeys(site);
+  const workshopKey = workshopKeys(project.workshop);
   const errors: Message[] = [];
   const notes: Message[] = [];
 
@@ -594,7 +622,7 @@ export function buildModel(project: Project, options: BuildModelOptions = {}): M
             stepping,
             ...siteKey,
             stair.layout,
-            project.workshop,
+            ...workshopKey,
             // `handrail.wallSides: auto` dépend des contextes réglementaires (QUESTIONS A2) :
             // sans cette clé, changer de contexte (logement → ERP) rendait l'ancien résultat.
             autoHandrailBothSides(project, stepping),
@@ -641,10 +669,10 @@ export function buildModel(project: Project, options: BuildModelOptions = {}): M
               stair,
               ...siteKey,
               project.compliance,
-              project.workshop,
+              ...workshopKey,
               newelHandrailTops,
             ]
-          : [base, project.workshop],
+          : [base, ...workshopKey],
         () =>
           attempt(STAGE_LABELS.structure, (): StructureStage => {
             const profile = resolveWorkshopProfile(project.workshop);
@@ -723,6 +751,27 @@ export function buildModel(project: Project, options: BuildModelOptions = {}): M
   // Solides dégénérés (dette D3 : profondeur nulle, section plate, balayage auto-intersecté),
   // contrôle mémoïsé par solide (`parts/solidChecks.ts`).
   errors.push(...checkSolids(parts));
+
+  // 3 ter. Visserie (QUESTIONS A27) : éléments déduits des assemblages connus des pièces finales
+  // et des garde-corps ; réglages non déduits lus dans le profil d'atelier (« à valider »).
+  // Clés : pièces finales (résultat mémoïsé des assemblages), analyse des garde-corps, visserie
+  // du profil d'atelier, murs du site (mur porteur ou cloison des mains courantes murales).
+  const finalParts = parts;
+  const fastenersStage = run(
+    caches.fasteners,
+    [finalParts, guards, project.workshop?.fasteners, site.walls],
+    () =>
+      attempt(STAGE_LABELS.fasteners, () =>
+        computeFasteners({
+          parts: finalParts,
+          guards,
+          walls: site.walls,
+          profile: resolveFastenerProfile(project.workshop?.fasteners),
+        }),
+      ),
+  );
+  if (fastenersStage.error !== undefined) errors.push(fastenersStage.error);
+  const fasteners = fastenersStage.value;
 
   // 4. Échappée.
   let headroom: HeadroomAnalysis | null = null;
@@ -844,6 +893,7 @@ export function buildModel(project: Project, options: BuildModelOptions = {}): M
     ...(autoValues ? { autoValues } : {}),
     ...(headroomAtNosings ? { headroomAtNosings } : {}),
     ...(figures ? { figures } : {}),
+    ...(fasteners && fasteners.length > 0 ? { fasteners } : {}),
     upperFloor: upperFloorOf(site),
     errors,
     ...(notes.length > 0 ? { notes } : {}),

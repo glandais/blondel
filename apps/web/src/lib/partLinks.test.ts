@@ -3,10 +3,15 @@
  * la main (les assemblages `assembledWith` du cœur peuvent manquer), ordre du modèle, sans
  * doublon ni la pièce elle-même.
  */
-import { textMessage, type Part } from "@blondel/core";
+import { fastenerKindLabel, textMessage, type Fastener, type Part } from "@blondel/core";
 import { msg } from "@blondel/i18n";
 import { describe, expect, it } from "vitest";
-import { assembledParts, groupPartLinks, treadLinkedParts } from "./partLinks.js";
+import {
+  assembledParts,
+  groupPartLinks,
+  partFastenerLines,
+  treadLinkedParts,
+} from "./partLinks.js";
 
 function part(id: string, extra: Partial<Part> = {}): Part {
   return {
@@ -145,5 +150,39 @@ describe("groupPartLinks", () => {
       part("b", { category: "stringer" }),
     ]);
     expect(groups.map((g) => g.parts.length)).toEqual([1, 1]);
+  });
+});
+
+describe("visserie d'une pièce (QUESTIONS A27)", () => {
+  const fastener = (id: string, mark: string, partIds: string[], quantity: number): Fastener => ({
+    id,
+    mark,
+    kind: "bolt",
+    grade: "8.8",
+    diameter: 12,
+    length: 100,
+    quantity,
+    joint: "supportBolted",
+    name: fastenerKindLabel("bolt"),
+    origin: msg("fastener.joint.supportBolted"),
+    partIds,
+    deduced: ["diameter", "quantity"],
+  });
+
+  it("éléments dont l'assemblage comprend la pièce, réunis par repère", () => {
+    const model = {
+      fasteners: [
+        fastener("f1", "VS1", ["cr1", "li1"], 2),
+        fastener("f2", "VS1", ["cr2", "li1"], 2),
+        fastener("f3", "VS2", ["cr1"], 4),
+      ],
+    };
+    expect(partFastenerLines(model, "li1").map((l) => [l.mark, l.quantity])).toEqual([["VS1", 4]]);
+    expect(partFastenerLines(model, "cr1").map((l) => [l.mark, l.quantity])).toEqual([
+      ["VS1", 2],
+      ["VS2", 4],
+    ]);
+    expect(partFastenerLines(model, "autre")).toEqual([]);
+    expect(partFastenerLines({}, "li1")).toEqual([]);
   });
 });

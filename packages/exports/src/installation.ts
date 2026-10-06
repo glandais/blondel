@@ -12,6 +12,7 @@
 import {
   curvePointAt,
   curveLength,
+  ruleSourceText,
   vec2,
   type Model,
   type Project,
@@ -77,6 +78,7 @@ export interface InstallationSheet {
     readonly firstTolerance?: {
       readonly min: number;
       readonly max: number;
+      /** Source citée dans la langue de la fiche (`ruleSourceText`, QUESTIONS A26 (b)). */
       readonly source: string;
     };
   };
@@ -273,7 +275,13 @@ export function installationSheet(
       ...(firstRule !== undefined &&
       typeof firstRule.min === "number" &&
       typeof firstRule.max === "number"
-        ? { firstTolerance: { min: firstRule.min, max: firstRule.max, source: firstRule.source } }
+        ? {
+            firstTolerance: {
+              min: firstRule.min,
+              max: firstRule.max,
+              source: ruleSourceText(firstRule, t),
+            },
+          }
         : {}),
     },
     nosings: stepping.nosings.map((n) => ({ index: n.index, q: n.q, r: n.r, z: n.z })),

@@ -138,3 +138,18 @@ describe("wrapWords", () => {
     expect(wrapWords("", 10)).toEqual([""]);
   });
 });
+
+describe("titre du développé selon la pièce (QUESTIONS A26 (a))", () => {
+  it("anglais : Development pour un limon bois, Flat pattern pour la tôle ; français inchangé", () => {
+    const wood = woodStringerPart();
+    const sheet = sheetStringerPart();
+    expect(renderFlatPatternSvg(wood, { locale: "en" })).toContain(
+      `<title>Development ${wood.mark}</title>`,
+    );
+    expect(renderFlatPatternSvg(sheet, { locale: "en" })).toContain(
+      `<title>Flat pattern ${sheet.mark}</title>`,
+    );
+    expect(renderFlatPatternSvg(wood)).toContain(`<title>Développé ${wood.mark}</title>`);
+    expect(renderFlatPatternSvg(sheet)).toContain(`<title>Développé ${sheet.mark}</title>`);
+  });
+});

@@ -2,8 +2,11 @@
  * Pièces liées d'une marche et d'une pièce (inspecteurs Marche et Pièce, ADR-0009, vague 3) :
  * lecture de `Part.treadNumber`, `Part.assembledWith` et des tronçons (`lib/joints.ts`), sans
  * calcul. Les listes rendues suivent l'ordre de `Model.parts`, sans doublon.
+ *
+ * Visserie d'une pièce (QUESTIONS A27) : éléments de `Model.fasteners` dont l'assemblage comprend
+ * la pièce, réunis par repère (`fastenerLines` du cœur, quantités de ces assemblages seulement).
  */
-import type { Model, Part } from "@blondel/core";
+import { fastenerLines, type FastenerLine, type Model, type Part } from "@blondel/core";
 import { messageEquals, type Message } from "@blondel/i18n";
 import { segmentedParts } from "./joints.js";
 
@@ -119,4 +122,16 @@ export function assembledParts(model: Pick<Model, "parts">, partId: string): Par
   }
   ids.delete(partId);
   return inModelOrder(model, ids);
+}
+
+/**
+ * Visserie des assemblages d'une pièce : éléments de `Model.fasteners` dont `partIds` contient la
+ * pièce, réunis par repère (`fastenerLines`). Vide sans visserie.
+ */
+export function partFastenerLines(
+  model: Pick<Model, "fasteners">,
+  partId: string,
+): readonly FastenerLine[] {
+  const own = (model.fasteners ?? []).filter((f) => f.partIds.includes(partId));
+  return own.length === 0 ? [] : fastenerLines(own);
 }

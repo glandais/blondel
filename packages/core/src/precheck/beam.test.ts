@@ -1,3 +1,4 @@
+import { textMessage } from "@blondel/i18n";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { findSection } from "../catalog/sections.js";
@@ -16,7 +17,14 @@ function input(over: Partial<InclinedBeamInput>): InclinedBeamInput {
     material: weightless,
     tributaryWidth: 1000,
     permanentArea: 0,
-    loads: { qk: 0, Qk: 0, vibrationMass: 0, category: "A", source: "test" },
+    loads: {
+      qk: 0,
+      Qk: 0,
+      vibrationMass: 0,
+      category: "A",
+      source: "test",
+      sourceMessage: textMessage("test"),
+    },
     settings: { gammaG: 1.35, gammaQ: 1.5, pointLoadShare: 1 },
     ...over,
   };
@@ -29,7 +37,14 @@ describe("prédimensionnement — poutre de référence calculée à la main", (
       input({
         spanH: 4800,
         section: { area: upn.area, i: upn.iy, w: upn.wy },
-        loads: { qk: 1.6, Qk: 0, vibrationMass: 0, category: "A", source: "C §2.3" },
+        loads: {
+          qk: 1.6,
+          Qk: 0,
+          vibrationMass: 0,
+          category: "A",
+          source: "C §2.3",
+          sourceMessage: textMessage("C §2.3"),
+        },
       }),
     );
     // 5·q·L⁴ / (384·E·I) = 5 × 1,6 × 4 800⁴ / (384 × 210 000 × 9 250 000)
@@ -45,7 +60,14 @@ describe("prédimensionnement — poutre de référence calculée à la main", (
     const r = analyzeInclinedBeam(
       input({
         slope: 0.75,
-        loads: { qk: 1, Qk: 2, vibrationMass: 0, category: "A", source: "test" },
+        loads: {
+          qk: 1,
+          Qk: 2,
+          vibrationMass: 0,
+          category: "A",
+          source: "test",
+          sourceMessage: textMessage("test"),
+        },
       }),
     );
     expect(r.length).toBeCloseTo(5000, 9);
@@ -110,7 +132,14 @@ describe("prédimensionnement — poutre de référence calculée à la main", (
             material: steel,
             section: { area: upn.area, i: upn.iy, w: upn.wy },
             permanentArea: 0.5,
-            loads: { qk: 2.5, Qk: 2, vibrationMass: 1, category: "A", source: "AN" },
+            loads: {
+              qk: 2.5,
+              Qk: 2,
+              vibrationMass: 1,
+              category: "A",
+              source: "AN",
+              sourceMessage: textMessage("AN"),
+            },
           });
           const a = analyzeInclinedBeam({ ...base, spanH: span });
           const b = analyzeInclinedBeam({ ...base, spanH: span + extra });

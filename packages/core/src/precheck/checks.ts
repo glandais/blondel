@@ -6,6 +6,7 @@ import { dec, msg, type Message } from "@blondel/i18n";
 import type { Location, RuleResult, Stepping } from "../model/derived.js";
 import type { Project } from "../model/project.js";
 import type { Finding } from "../rules/types.js";
+import { sourceSpec } from "../rules/sources.js";
 import { CheckCollector, pluginRuleDef, type PluginRuleSpec } from "../structures/checks.js";
 import { PRECHECK_LIMITS, type InclinedBeamResult } from "./beam.js";
 
@@ -18,8 +19,7 @@ export const PRECHECK_LABEL: Message = msg("precheck.label");
 export const PRECHECK_RULES = {
   deflection: {
     id: "PRECHECK_FLECHE",
-    source:
-      "NF EN 16481 § 6.2 via docs/research/C-structures.md §1.3 et C-B-05 [3] ; SPEC X17 (L/200 bloquant si calcul) ; modèle de poutre Blondel",
+    ...sourceSpec(msg("compliance.source.precheckDeflection")),
     confidence: "moyen",
     nature: "normatif",
     severity: "bloquant",
@@ -27,7 +27,7 @@ export const PRECHECK_RULES = {
   },
   deflectionAdvice: {
     id: "PRECHECK_FLECHE_CONSEIL",
-    source: "docs/research/C-structures.md §1.3 [52] (usage, confiance faible) ; SPEC X17",
+    ...sourceSpec(msg("compliance.source.precheckDeflectionAdvice")),
     confidence: "faible",
     nature: "metier",
     severity: "conseil",
@@ -35,8 +35,7 @@ export const PRECHECK_RULES = {
   },
   stress: {
     id: "PRECHECK_CONTRAINTE",
-    source:
-      "Calcul élastique Blondel ; f_y = 235 / 355 MPa (nuance) ; coefficients partiels et classes de bois à valider (EN 1990, EC3, EC5, EN 338 non lus)",
+    ...sourceSpec(msg("compliance.source.precheckStress")),
     confidence: "faible",
     nature: "metier",
     severity: "bloquant",
@@ -44,7 +43,7 @@ export const PRECHECK_RULES = {
   },
   frequency: {
     id: "PRECHECK_FREQUENCE",
-    source: "NF EN 16481 § 6.3 via docs/research/C-structures.md §1.3 et C-B-06 [3]",
+    ...sourceSpec(msg("compliance.source.precheckFrequency")),
     confidence: "moyen",
     nature: "normatif",
     severity: "avertissement",

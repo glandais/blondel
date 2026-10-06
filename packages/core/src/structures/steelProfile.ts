@@ -53,6 +53,7 @@ import { precheckResults, type PrecheckedBeam } from "../precheck/checks.js";
 import { stairLoads } from "../precheck/loads.js";
 import { PrecheckSettingsSchema, steelMaterialOf } from "../precheck/settings.js";
 import { activeContexts, permanentAreaLoad } from "../precheck/stringers.js";
+import { WORKSHOP_DEFAULT_SOURCE, sourceSpec } from "../rules/sources.js";
 import type { Finding } from "../rules/types.js";
 import { STEEL_GRADES, minProfileBendRadius, type SteelGrade } from "../workshop/metal.js";
 import { resolveWorkshopProfile, type WorkshopProfile } from "../workshop/profile.js";
@@ -200,8 +201,7 @@ type Side = "inner" | "outer";
 export const PROFILE_RULES = {
   bending: {
     id: "FAB_CINTRAGE_PROFILE",
-    source:
-      "docs/research/C-structures.md §2.3 et §4.1 [15] (capacités d'un cintreur, confiance moyenne, paramétrables)",
+    ...sourceSpec(msg("compliance.source.profileBending")),
     confidence: "moyen",
     nature: "metier",
     severity: "bloquant",
@@ -209,7 +209,7 @@ export const PROFILE_RULES = {
   },
   sectionHeight: {
     id: "FAB_PROFILE_HAUTEUR",
-    source: "Géométrie de la structure (supports générés) ; marges à valider",
+    ...sourceSpec(msg("compliance.source.profileHeight")),
     confidence: "faible",
     nature: "metier",
     severity: "avertissement",
@@ -217,7 +217,7 @@ export const PROFILE_RULES = {
   },
   supportBearing: {
     id: "FAB_SUPPORT_DEBORD",
-    source: "Profil d'atelier Blondel (valeur par défaut à valider, LEDGER §2)",
+    ...sourceSpec(WORKSHOP_DEFAULT_SOURCE),
     confidence: "faible",
     nature: "metier",
     severity: "avertissement",
@@ -225,7 +225,7 @@ export const PROFILE_RULES = {
   },
   miter: {
     id: "FAB_ONGLET_RACCORD",
-    source: "Géométrie de la structure ; tolérance à valider (ISO 13920 non appliquée)",
+    ...sourceSpec(msg("compliance.source.profileMiter")),
     confidence: "faible",
     nature: "metier",
     severity: "conseil",
@@ -233,8 +233,7 @@ export const PROFILE_RULES = {
   },
   lateralWidth: {
     id: "FAB_PROFILE_AILE_HORS_EMPRISE",
-    source:
-      "Géométrie de la structure (aile de la section retenue) et épaisseur déclarée par le plugin (`capabilities.lateralThickness`) ; décision de l'utilisateur 2026-09-30 (docs/QUESTIONS.md D4)",
+    ...sourceSpec(msg("compliance.source.profileFlange")),
     confidence: "eleve",
     nature: "metier",
     severity: "conseil",
@@ -704,7 +703,7 @@ export function buildSteelProfile(
   const precheckNote = msg("structure.steelProfile.note.precheck", {
     qk: dec(loads.qk, 1),
     Qk: dec(loads.Qk, 1),
-    source: loads.source,
+    source: loads.sourceMessage,
     permanent: dec(permanentArea, 2),
   });
   const reasons = joinMessages(exc.reasons);

@@ -9,8 +9,9 @@
  * - sorties (`OutputsBlock`) : dossier PDF, fiche de pose, liste de débit, autres exports, coût
  *   estimé ou « Compléter le profil d'atelier » ;
  * - repli « Plus de réglages » : comparateur de structures (onglet « Comparer » de la vue) et
- *   réglages d'atelier des sections Structure et Garde-corps (affichage guidé de l'étape 7 :
- *   seuls les champs d'atelier y figurent, cibles du lien « Ouvrir » de la liste ◆).
+ *   réglages d'atelier des sections Structure (visserie comprise, QUESTIONS A27 :
+ *   `FastenersFields`) et Garde-corps (affichage guidé de l'étape 7 : seuls les champs d'atelier
+ *   y figurent, cibles du lien « Ouvrir » de la liste ◆).
  */
 import { useId } from "react";
 import { useT } from "../../i18n/useT.js";

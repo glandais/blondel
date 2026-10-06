@@ -89,6 +89,11 @@ describe("exports en anglais sur tous les exemples : aucun texte français resta
         ["Escalier de la cave", "Code de la construction"],
       ),
     ).toEqual([]);
+    // Références françaises des sources citées : permises seulement pour une sortie qui
+    // imprime des sources (`citedSources`), refusées ailleurs.
+    const cited = ["Arrêté (French ministerial order) 24/12/2015 art. 12 (checked on Légifrance)"];
+    expect(residualFrench(cited, [], { citedSources: true })).toEqual([]);
+    expect(residualFrench(cited)).toHaveLength(1);
   });
 
   for (const file of EXAMPLES) {
@@ -97,9 +102,10 @@ describe("exports en anglais sur tous les exemples : aucun texte français resta
       const model = buildModel(project);
       const verbatim = verbatimOf(project, model);
       const en = { locale: "en" } as const;
-      const check = (texts: readonly string[]): void => {
+      /** `citedSources` : seulement pour une sortie qui imprime des sources (dossier PDF). */
+      const check = (texts: readonly string[], citedSources = false): void => {
         expect(texts.length).toBeGreaterThan(0);
-        expect(residualFrench(texts, verbatim)).toEqual([]);
+        expect(residualFrench(texts, verbatim, { citedSources })).toEqual([]);
       };
       const flats = model.parts.filter((p) => p.flat !== undefined);
 
@@ -177,7 +183,7 @@ describe("exports en anglais sur tous les exemples : aucun texte français resta
       it("dossier PDF : chaînes passées au canevas, titres de pages et métadonnées", () => {
         const c = new RecordingCanvas(297, 210, helveticaMeasure());
         const pages = renderPdf(c, model, { ...en, project, date: new Date(2026, 8, 30) });
-        check(c.pageTexts().flat());
+        check(c.pageTexts().flat(), true);
         check(pages.flatMap((p) => [p.title, ...(p.scaleNote !== undefined ? [p.scaleNote] : [])]));
         if (file === EXAMPLES[0]) {
           // Métadonnées jsPDF (non compressé : chaînes lisibles dans le fichier).

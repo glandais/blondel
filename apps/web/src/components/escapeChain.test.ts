@@ -29,6 +29,12 @@ describe("ordre d'Échap", () => {
     expect(esc({ panelOpen: true, panelPinned: false })).toBe("closePanel");
   });
 
+  it("nez d'arrivée sélectionné (A28) : Échap efface la sélection comme pour une marche", () => {
+    // La chaîne ne distingue pas l'élément sélectionné : marche, nez d'arrivée, pièce, règle.
+    expect(esc({ hasSelection: true })).toBe("clearSelection");
+    expect(esc({ hasSelection: true, drawerOpen: true })).toBe("closeDrawer");
+  });
+
   it("sélection avant le panneau épinglé", () => {
     expect(esc({ panelOpen: true, panelPinned: true, hasSelection: true })).toBe("clearSelection");
     expect(esc({ hasSelection: true })).toBe("clearSelection");

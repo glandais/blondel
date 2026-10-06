@@ -14,6 +14,11 @@ import {
   resolveWorkshopProfile,
   smallestAvailable,
 } from "./profile.js";
+import {
+  DEFAULT_FASTENER_PROFILE,
+  FASTENER_PROVENANCE,
+  FASTENER_SETTING_FIELDS,
+} from "./fasteners.js";
 
 describe("profil d'atelier", () => {
   it("chaque valeur par défaut a une provenance, marquée « à valider »", () => {
@@ -92,5 +97,52 @@ describe("masses volumiques de tous les matériaux (QUESTIONS A6)", () => {
     expect(materialDensity("stainless-brushed", p)).toBe(
       DEFAULT_WORKSHOP_PROFILE.densities["stainless-brushed"],
     );
+  });
+
+  it("visserie (QUESTIONS A27) : absente = défauts, partielle = fusion champ par champ", () => {
+    expect(resolveWorkshopProfile().fasteners).toBe(DEFAULT_FASTENER_PROFILE);
+    expect(resolveWorkshopProfile({}).fasteners).toBe(DEFAULT_FASTENER_PROFILE);
+    const p = resolveWorkshopProfile({
+      fasteners: { bracketSpacing: 800, joints: { plateFloor: { length: 150 } } },
+    });
+    expect(p.fasteners.bracketSpacing).toBe(800);
+    expect(p.fasteners.holeClearance).toBe(DEFAULT_FASTENER_PROFILE.holeClearance);
+    expect(p.fasteners.joints.plateFloor).toEqual({
+      ...DEFAULT_FASTENER_PROFILE.joints.plateFloor,
+      length: 150,
+    });
+    expect(p.fasteners.joints.plateBolted).toBe(DEFAULT_FASTENER_PROFILE.joints.plateBolted);
+    // Le reste du profil n'est pas touché.
+    expect(p.wood).toEqual(DEFAULT_WORKSHOP_PROFILE.wood);
+  });
+
+  it("visserie : schéma du projet (champ optionnel, quantité par point entière > 0)", () => {
+    const base = makeSteppingProject({ width: 900, legs: ["auto"] });
+    const ok = ProjectSchema.parse({
+      ...base,
+      workshop: { fasteners: { joints: { handrailWall: { kind: "chemical-anchor" } } } },
+    });
+    expect(ok.workshop?.fasteners?.joints?.handrailWall?.kind).toBe("chemical-anchor");
+    expect(
+      ProjectSchema.safeParse({
+        ...base,
+        workshop: { fasteners: { joints: { plateFloor: { perPoint: 0 } } } },
+      }).success,
+    ).toBe(false);
+    // Rien n'est injecté dans un projet sans visserie.
+    expect(serializeProject(base)).not.toContain("fasteners");
+  });
+
+  it("visserie : chaque réglage a une provenance « à valider »", () => {
+    for (const k of [
+      "holeClearance",
+      "nominalDiameters",
+      "bracketSpacing",
+      "unknownWallLoadBearing",
+      ...FASTENER_SETTING_FIELDS,
+    ] as const) {
+      expect(FASTENER_PROVENANCE[k].status).toBe("a-valider");
+      expect(fr(FASTENER_PROVENANCE[k].note)).toContain("à valider");
+    }
   });
 });

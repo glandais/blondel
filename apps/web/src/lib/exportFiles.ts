@@ -13,6 +13,10 @@
  * (10 mm, `DEFAULT_TILE_OVERLAP`), sans réglage. Le formulaire « Dossier PDF » du mode
  * Fabrication combine format (A4 | A3) et gabarits (tous, une famille, aucun) : `dossierPdfJob`.
  *
+ * Liste de visserie (QUESTIONS A27) : CSV dédié (`exportFastenersCsv`), proposé seulement si le
+ * modèle a de la visserie (motif sinon) ; le dossier PDF a sa section « Visserie », la fiche de
+ * pose seule non.
+ *
  * Valeurs ◆ à valider (ADR-0009 point 9) : chaque dossier PDF reçoit la liste des valeurs ◆
  * validées et restantes (`toValidateDocRows`, page « Valeurs à valider ») ; la fiche de pose
  * seule n'en a pas. Des ◆ restantes ne bloquent jamais la génération.
@@ -25,6 +29,8 @@ import {
   createZip,
   exportGlb,
   exportCutListCsv,
+  exportFastenersCsv,
+  hasFasteners,
   massNoteFor,
   exportPartDxf,
   exportPartsDxf,
@@ -90,6 +96,7 @@ export type ExportId =
   | "plan-dxf-r12"
   | "elevation-svg"
   | "cutlist-csv"
+  | "fasteners-csv"
   | "pdf"
   | "pdf-a3"
   | "pdf-light"
@@ -115,6 +122,7 @@ export const EXPORT_ENTRIES: readonly ExportEntry[] = [
   { id: "plan-dxf-r12", label: "ui.label.export.planDxfR12", needsModel: true },
   { id: "elevation-svg", label: "ui.label.export.elevationSvg", needsModel: true },
   { id: "cutlist-csv", label: "ui.label.export.cutlistCsv", needsModel: true },
+  { id: "fasteners-csv", label: "ui.label.export.fastenersCsv", needsModel: true },
   { id: "pdf", label: "ui.label.export.pdf", needsModel: true },
   { id: "pdf-a3", label: "ui.label.export.pdfA3", needsModel: true },
   { id: "pdf-stringers", label: "ui.label.export.pdfStringers", needsModel: true },
@@ -228,6 +236,7 @@ export const PDF_JOBS: Readonly<Record<PdfJobId, PdfJob>> = {
         elevation: false,
         installation: true,
         bom: false,
+        fasteners: false,
         cutsheet: false,
         compliance: false,
         toValidate: false,
@@ -300,7 +309,7 @@ export function partsDxfFiles(
 }
 
 /**
- * Un export est-il disponible (modèle calculé, pièces à développé) ? Motif sinon (clé, à
+ * Un export est-il disponible (modèle calculé, pièces à développé, visserie) ? Motif sinon (clé, à
  * traduire par `t(reason)`).
  */
 export function exportAvailability(
@@ -314,6 +323,9 @@ export function exportAvailability(
     if (!partsWithFlat(model).some((p) => templateFamily(p) === family)) {
       return { ok: false, reason: "ui.label.export.noFamilyFlat" };
     }
+  }
+  if (id === "fasteners-csv" && !hasFasteners(model)) {
+    return { ok: false, reason: "ui.label.export.noFasteners" };
   }
   if (id === "parts-dxf" && partsWithFlat(model).length === 0) {
     return { ok: false, reason: "ui.label.export.noFlat" };
@@ -447,6 +459,14 @@ export async function buildExport(
           filename: `${name("ui.label.exportFile.cutlist")}.csv`,
           mime: MIME.csv,
           content: exportCutListCsv(m, { massNote: massNoteFor(project.workshop), locale }),
+        },
+      ];
+    case "fasteners-csv":
+      return [
+        {
+          filename: `${name("ui.label.exportFile.fasteners")}.csv`,
+          mime: MIME.csv,
+          content: exportFastenersCsv(m, { locale }),
         },
       ];
     case "pdf":

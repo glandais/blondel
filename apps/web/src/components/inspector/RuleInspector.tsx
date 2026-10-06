@@ -12,7 +12,7 @@
  * Lecture du rapport rendu par le cœur et des corrections proposées (`lib/fixes.ts`) : aucune
  * règle n'est évaluée ici ; la jauge n'est qu'une mise à l'échelle d'affichage (`ruleGauge`).
  */
-import { ruleTitle, type Part, type RuleResult } from "@blondel/core";
+import { ruleSourceText, ruleTitle, type Part, type RuleResult } from "@blondel/core";
 import type { Message, MessageKey } from "@blondel/i18n";
 import { CircleCheck, CircleDashed, type LucideIcon } from "lucide-react";
 import { useMemo, useState } from "react";
@@ -231,12 +231,14 @@ export const CONFIDENCE_EXPLAINED_KEYS: Readonly<Record<string, MessageKey>> = {
 /** Nature, fiabilité, source, sévérité déclarée et déclassement, puis la référence. */
 function Provenance({ r }: { r: RuleResult }) {
   const t = useT();
+  // Source citée dans la langue de l'interface (QUESTIONS A26 (b)).
+  const source = ruleSourceText(r, t);
   const rows: [string, string][] = [
     [t.t("ui.ruleInspector.meta.nature"), labelOf(NATURE_EXPLAINED_KEYS, r.nature, t)],
     [t.t("ui.ruleInspector.meta.confidence"), labelOf(CONFIDENCE_EXPLAINED_KEYS, r.confidence, t)],
     [
       t.t("ui.ruleInspector.meta.source"),
-      r.secondarySource ? `${r.source} · ${t.t("ui.compliance.secondarySource")}` : r.source,
+      r.secondarySource ? `${source} · ${t.t("ui.compliance.secondarySource")}` : source,
     ],
   ];
   if (r.declaredSeverity !== r.severity) {

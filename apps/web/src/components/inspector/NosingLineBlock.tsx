@@ -1,6 +1,7 @@
 /**
  * Bloc « Ligne de nez » de l'inspecteur Marche (maquette 2a, ADR-0009 point 4) : il remplace le
- * mode expert du plan. Pour le nez k qui porte la marche k + 1 :
+ * mode expert du plan. Pour le nez k qui porte la marche k + 1, ou pour le nez d'arrivée
+ * (dernier nez, qu'aucune marche ne porte : inspecteur du nez d'arrivée, QUESTIONS A28) :
  *
  * - « Angle » : écart à la perpendiculaire à la ligne de foulée (degrés, 0,1°), saisi et validé
  *   à Entrée ou à la perte de focus (Échap rétablit) → retouche « angle » ;
@@ -10,12 +11,17 @@
  * - « Retirer la retouche » (touche Suppr) : retire les retouches de ce nez ;
  * - ← / → (Maj : 0,1°) quand la vue centrale a le focus ; une rafale de touches sur un même nez
  *   ne fait qu'une entrée d'historique (regroupement par nez) ;
- * - en pied, les retouches de l'escalier, nez par nez (lien vers la marche que porte le nez,
- *   « Retirer » pour chacune, y compris le nez d'arrivée qu'aucune marche ne porte), « Tout
- *   retirer », les orphelines et les remarques du découpage sur les lignes de nez.
+ * - en pied, les retouches de l'escalier, nez par nez (lien vers la marche que porte le nez, ou
+ *   vers le nez d'arrivée lui-même, « Retirer » pour chacune), « Tout retirer », les orphelines
+ *   et les remarques du découpage sur les lignes de nez.
  *
  * Chaque action est une entrée d'historique, annulable. Les angles affichés sont ceux du cœur
  * (`NosingLine.angle`, `computedAngle`) : un modèle qui ne les expose pas affiche « — ».
+ *
+ * `angleLocked` (nez d'arrivée) : l'angle est affiché mais non modifiable, avec son motif ; les
+ * flèches ← / → n'y imposent pas d'angle. Les bords de l'escalier s'arrêtent au nez d'arrivée :
+ * le découpage (`computeStepping`) déclare inapplicable tout angle non nul sur ce nez (question
+ * ouverte A30). Fixer le nez et retirer une retouche existante restent possibles.
  */
 import type { Model } from "@blondel/core";
 import { msg, type Message } from "@blondel/i18n";
@@ -25,6 +31,7 @@ import { useT } from "../../i18n/useT.js";
 import { BALANCING_METHOD_LABELS } from "../../lib/balancingForm.js";
 import {
   EXPERT_ANGLE_LIMIT_DEG,
+  arrivalNosingIndex,
   clampAngle,
   nosingEditAvailability,
   orphanOverrides,
@@ -76,11 +83,13 @@ export const nosingArrowGroup = (k: number): string => `nosing-angle-${k}`;
 
 export interface NosingLineBlockProps {
   readonly model: Model;
-  /** Indice du nez (k = numéro de marche − 1). */
+  /** Indice du nez : k = numéro de marche − 1, ou indice du nez d'arrivée. */
   readonly index: number;
+  /** Angle non modifiable (nez d'arrivée) : motif affiché sous le champ. */
+  readonly angleLocked?: Message;
 }
 
-export function NosingLineBlock({ model, index: k }: NosingLineBlockProps) {
+export function NosingLineBlock({ model, index: k, angleLocked }: NosingLineBlockProps) {
   const t = useT();
   const project = useApp((s) => s.project);
   const [message, setMessage] = useState<Message | null>(null);
@@ -92,6 +101,7 @@ export function NosingLineBlock({ model, index: k }: NosingLineBlockProps) {
   const notes = overrideNotes(model);
   const overrideCount = project.stair.nosingOverrides.length;
   const treadNumbers = new Set(model.stepping.treads.map((tr) => tr.number));
+  const arrival = arrivalNosingIndex(model.stepping);
 
   // Modèle courant pour l'écouteur clavier (installé une fois par nez).
   const modelRef = useRef(model);
@@ -116,6 +126,7 @@ export function NosingLineBlock({ model, index: k }: NosingLineBlockProps) {
   const removeRef = useRef(removeOwn);
   removeRef.current = removeOwn;
 
+  const locked = angleLocked !== undefined;
   useEffect(() => {
     if (!availability.ok) return;
     const onKey = (e: KeyboardEvent): void => {
@@ -134,6 +145,7 @@ export function NosingLineBlock({ model, index: k }: NosingLineBlockProps) {
         e.preventDefault();
         removeRef.current();
       } else if (
+        !locked &&
         (e.key === "ArrowLeft" || e.key === "ArrowRight") &&
         arrowsTargetNosing(e.target)
       ) {
@@ -151,7 +163,7 @@ export function NosingLineBlock({ model, index: k }: NosingLineBlockProps) {
       window.removeEventListener("keydown", onKey);
       appStore.getState().endGroup();
     };
-  }, [k, availability.ok]);
+  }, [k, availability.ok, locked]);
 
   const fmt = (a: number): string =>
     formatNumber(t.locale, a, { minimumFractionDigits: 1, maximumFractionDigits: 1 });
@@ -207,6 +219,7 @@ export function NosingLineBlock({ model, index: k }: NosingLineBlockProps) {
             max={EXPERT_ANGLE_LIMIT_DEG}
             parse={parseDecimal}
             format={fmt}
+            {...(angleLocked === undefined ? {} : { disabled: true, hint: t.t(angleLocked) })}
             onCommit={(v) => {
               const r = commit((p) => withAngleOverride(p, k, roundAngle(v)));
               report(r);
@@ -247,7 +260,9 @@ export function NosingLineBlock({ model, index: k }: NosingLineBlockProps) {
           {t.t(message)}
         </p>
       ) : null}
-      <p className="nosing-line__keys">{t.t("ui.inspector.tread.nosing.keys")}</p>
+      <p className="nosing-line__keys">
+        {t.t(locked ? "ui.inspector.arrivalNosing.keys" : "ui.inspector.tread.nosing.keys")}
+      </p>
       {overrideCount > 0 ? (
         <div className="nosing-line__row nosing-line__all">
           <span>{t.t("ui.inspector.tread.nosing.overrides", { count: overrideCount })}</span>
@@ -264,11 +279,23 @@ export function NosingLineBlock({ model, index: k }: NosingLineBlockProps) {
         <ul className="nosing-line__list" aria-label={t.t("ui.inspector.tread.nosing.list.label")}>
           {overridesByNosing(project).map((g) => {
             const label = g.overrides.map((o) => overrideLabel(o, t.locale)).join(" ; ");
-            // Le nez i porte la marche i + 1 ; le nez d'arrivée (et une orpheline) n'en porte pas.
+            // Le nez i porte la marche i + 1 ; le nez d'arrivée n'en porte pas mais se
+            // sélectionne lui-même ; une orpheline n'a aucune cible.
             const tread = treadNumbers.has(g.index + 1) ? g.index + 1 : null;
             return (
               <li key={g.index} data-nosing={g.index} aria-current={g.index === k || undefined}>
-                {tread === null ? (
+                {tread === null && g.index === arrival ? (
+                  <button
+                    type="button"
+                    className="link nosing-line__entry"
+                    title={t.t("ui.lib.location.arrivalNosing")}
+                    onClick={() =>
+                      appStore.getState().select({ location: { kind: "nosing", index: g.index } })
+                    }
+                  >
+                    {label}
+                  </button>
+                ) : tread === null ? (
                   <span className="nosing-line__entry">{label}</span>
                 ) : (
                   <button

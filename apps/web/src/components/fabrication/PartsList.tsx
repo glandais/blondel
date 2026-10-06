@@ -8,24 +8,35 @@
  *
  * Le groupe de la pièce sélectionnée est déplié d'office ; avec un filtre, seuls les groupes qui
  * ont des correspondances sont montrés, dépliés. Dépliage et filtre : état local au composant.
+ *
+ * Groupe « Visserie » (QUESTIONS A27), après les familles de pièces, seulement si le modèle a de
+ * la visserie : une ligne par repère de visserie (lignes de la liste de visserie, `lib/fasteners`)
+ * avec repère, désignation et quantité ; un clic sélectionne la première pièce de son assemblage
+ * (sélection partagée), le titre de la ligne rappelle ses assemblages et ses pièces.
  */
 import type { Model, Part } from "@blondel/core";
 import { msg } from "@blondel/i18n";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { useId, useMemo, useState } from "react";
 import { useT } from "../../i18n/useT.js";
+import { fastenerRows, matchesFastenerFilter } from "../../lib/fasteners.js";
 import {
+  FASTENER_GROUP_ID,
+  FASTENER_GROUP_KEY,
   PART_GROUP_KEYS,
+  SUMMARY_SEPARATOR,
   groupParts,
   groupSummary,
+  marksSummary,
   matchesPartFilter,
   partGroupOf,
+  type ListGroupId,
   type PartGroup,
-  type PartGroupId,
 } from "../../lib/partGroups.js";
 import { selectedPart } from "../../lib/parts.js";
 import { appStore, useApp } from "../../store/appStore.js";
 import { Icon } from "../ui/Icon.js";
+import "../fasteners.css";
 
 /** Repère distinct d'un groupe : première pièce (sélectionnée au clic) et nombre de pièces. */
 export interface MarkEntry {
@@ -51,11 +62,11 @@ export function markEntries(group: PartGroup): readonly MarkEntry[] {
  * sélectionnée.
  */
 export function expandedGroups(
-  groups: readonly Pick<PartGroup, "id">[],
-  selectedGroup: PartGroupId | undefined,
-  toggled: ReadonlyMap<PartGroupId, boolean>,
+  groups: readonly { readonly id: ListGroupId }[],
+  selectedGroup: ListGroupId | undefined,
+  toggled: ReadonlyMap<ListGroupId, boolean>,
   filtering: boolean,
-): ReadonlySet<PartGroupId> {
+): ReadonlySet<ListGroupId> {
   return new Set(
     groups.map((g) => g.id).filter((id) => filtering || (toggled.get(id) ?? id === selectedGroup)),
   );
@@ -64,25 +75,36 @@ export function expandedGroups(
 const select = (partId: string): void =>
   appStore.getState().select({ location: { kind: "part", partId } });
 
-export function PartsList({ model }: { model: Pick<Model, "parts"> }) {
+export function PartsList({ model }: { model: Pick<Model, "parts" | "fasteners"> }) {
   const t = useT();
   const baseId = useId();
   const selection = useApp((s) => s.selection);
   const [query, setQuery] = useState("");
-  const [toggled, setToggled] = useState<ReadonlyMap<PartGroupId, boolean>>(new Map());
+  const [toggled, setToggled] = useState<ReadonlyMap<ListGroupId, boolean>>(new Map());
   const current = selectedPart(model, selection?.location);
   const filtering = query.trim() !== "";
   const groups = useMemo(
     () => groupParts(model.parts.filter((p) => matchesPartFilter(p, query, t))),
     [model.parts, query, t],
   );
+  const allFasteners = useMemo(() => fastenerRows(model, t), [model, t]);
+  const fasteners = allFasteners.filter((r) => matchesFastenerFilter(r, query));
+  const fastenerGroup: { readonly id: ListGroupId } = { id: FASTENER_GROUP_ID };
+  const listed: { readonly id: ListGroupId }[] = [
+    ...groups,
+    ...(fasteners.length > 0 ? [fastenerGroup] : []),
+  ];
   const open = expandedGroups(
-    groups,
+    listed,
     current ? partGroupOf(current) : undefined,
     toggled,
     filtering,
   );
-  const toggle = (id: PartGroupId): void => setToggled((m) => new Map(m).set(id, !open.has(id)));
+  const toggle = (id: ListGroupId): void => setToggled((m) => new Map(m).set(id, !open.has(id)));
+  const fastenerName = t.t(FASTENER_GROUP_KEY);
+  const fastenersId = `${baseId}-${FASTENER_GROUP_ID}`;
+  const fastenersOpen = open.has(FASTENER_GROUP_ID);
+  const markOf = new Map(model.parts.map((p) => [p.id, p.mark]));
 
   return (
     <nav className="fab-list" aria-label={t.t("ui.fab.list.label")}>
@@ -94,7 +116,7 @@ export function PartsList({ model }: { model: Pick<Model, "parts"> }) {
         aria-label={t.t("ui.fab.list.filter.label")}
         onChange={(e) => setQuery(e.target.value)}
       />
-      {groups.length === 0 && filtering ? (
+      {listed.length === 0 && filtering ? (
         <p className="muted fab-list__empty" role="status">
           {t.t("ui.fab.list.noMatch")}
         </p>
@@ -155,6 +177,61 @@ export function PartsList({ model }: { model: Pick<Model, "parts"> }) {
             </li>
           );
         })}
+        {fasteners.length > 0 ? (
+          <li className="fab-group" data-group={FASTENER_GROUP_ID}>
+            <button
+              type="button"
+              className="fab-group__head"
+              aria-expanded={fastenersOpen}
+              aria-controls={fastenersOpen ? fastenersId : undefined}
+              onClick={() => toggle(FASTENER_GROUP_ID)}
+            >
+              <Icon icon={fastenersOpen ? ChevronDown : ChevronRight} size={14} />
+              <span className="fab-group__name">{fastenerName}</span>
+              <span
+                className="fab-group__count num"
+                title={t.t(msg("ui.bom.marks", { count: fasteners.length }))}
+              >
+                {fasteners.length}
+              </span>
+              <span className="fab-group__summary">
+                {marksSummary(fasteners.map((r) => r.mark))}
+              </span>
+            </button>
+            {fastenersOpen ? (
+              <ul
+                id={fastenersId}
+                className="fab-group__marks fab-group__fasteners"
+                aria-label={t.t("ui.fab.list.marks", { group: fastenerName })}
+              >
+                {fasteners.map((r) => {
+                  const first = r.partIds.find((id) => markOf.has(id));
+                  return (
+                    <li key={r.mark}>
+                      <button
+                        type="button"
+                        className="fab-fastener"
+                        data-fastener={r.mark}
+                        disabled={first === undefined}
+                        title={t.t("ui.fab.fastener.title", {
+                          joints: r.joints.join(SUMMARY_SEPARATOR),
+                          parts: r.partMarks.join(SUMMARY_SEPARATOR),
+                        })}
+                        onClick={() => first !== undefined && select(first)}
+                      >
+                        <strong>{r.mark}</strong>
+                        <span className="fab-fastener__name">{r.name}</span>
+                        <span className="fab-mark__qty">
+                          {t.t("ui.fab.list.quantity", { count: r.quantity })}
+                        </span>
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            ) : null}
+          </li>
+        ) : null}
       </ul>
     </nav>
   );

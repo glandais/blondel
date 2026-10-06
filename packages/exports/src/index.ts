@@ -1,7 +1,7 @@
 /**
  * @blondel/exports : rendus et fichiers dérivés du `Model` (plan, élévation et développés
- * SVG, DXF, liste de débit CSV, archive ZIP, projet JSON, modèle 3D glTF binaire, données de
- * la fiche de pose et de la fiche de débit). Fonctions pures, sans DOM.
+ * SVG, DXF, liste de débit CSV, liste de visserie CSV, archive ZIP, projet JSON, modèle 3D
+ * glTF binaire, données de la fiche de pose et de la fiche de débit). Fonctions pures, sans DOM.
  *
  * Pas d'export XLSX (exceljs peu maintenu, SPEC §5 : CSV seulement) ni STEP au MVP (noyau
  * OCCT sous LGPL, question Q21 ouverte) : voir LEDGER.
@@ -12,6 +12,8 @@
  * jsPDF dans le paquet principal de l'application et rendrait l'import dynamique inopérant.
  */
 export { formatIn, formatNum, escapeXml, NARROW_NBSP, type FrNumberOptions } from "./format.js";
+// Terme du développé selon la pièce (QUESTIONS A26 (a)) : PDF, SVG et interface.
+export * from "./flatTerms.js";
 export {
   MATERIAL_KEYS,
   compareMarks,
@@ -140,6 +142,17 @@ export {
   type CutListRowsOptions,
   type MassNote,
 } from "./csv/cutlist.js";
+export {
+  exportFastenersCsv,
+  fastenerListSeparator,
+  fastenerMm,
+  fastenerScheduleRows,
+  fastenersCsvHeader,
+  hasFasteners,
+  type FastenerScheduleRow,
+  type FastenersCsvOptions,
+  type FastenersModel,
+} from "./csv/fasteners.js";
 export { PROJECT_FILE_EXTENSION, exportProjectJson } from "./json.js";
 export {
   GLB_FILE_EXTENSION,

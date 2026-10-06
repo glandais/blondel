@@ -4,9 +4,28 @@
  * restée brute, un paramètre de gabarit non rempli ou une valeur mal convertie en texte
  * (« [object Object] », « undefined », « NaN »).
  *
- * Les textes repris tels quels (nom du projet, identifiants des murs, sources citées des règles,
- * identifiants de contextes) sont retirés avant le contrôle par `residualFrench`.
+ * Les textes repris tels quels (nom du projet, identifiants des murs, identifiants de règles et
+ * de contextes) sont retirés avant le contrôle par `residualFrench`. Les sources citées ne le
+ * sont plus (QUESTIONS A26 (b)) : elles sont traduites, seules les références françaises de
+ * `CITED_FRENCH_REFERENCES` y restent permises (option `citedSources`, à n'activer que pour une
+ * sortie qui imprime des sources ; ailleurs le contrôle reste strict).
  */
+
+/**
+ * Références françaises légitimes dans une source citée anglaise (QUESTIONS A26 (b), glossaire
+ * « Conventions » : les titres et références de textes restent dans leur langue). Liste courte
+ * et explicite : seuls les mots accentués des titres de textes réglementaires sont concernés
+ * (les normes « NF DTU 36.3 », « NF P01-012 » n'ont ni accent ni mot français repéré) :
+ * - « Arrêté », « Arrêtés », « arrêté » : arrêtés ministériels cités par leur date (« Arrêté
+ *   (French ministerial order) 24/12/2015 art. 12 ») ;
+ * - « Légifrance » : site officiel des textes (« checked on Légifrance »).
+ */
+export const CITED_FRENCH_REFERENCES: readonly string[] = [
+  "Arrêtés",
+  "Arrêté",
+  "arrêté",
+  "Légifrance",
+];
 
 /** Lettres propres au français (absentes de l'anglais technique). */
 export const FRENCH_ACCENTS = /[àâæçéèêëîïôœùûüÿÀÂÆÇÉÈÊËÎÏÔŒÙÛÜŸ]/u;
@@ -146,15 +165,28 @@ function stripVerbatim(input: string, v: string): string {
   return s;
 }
 
+/** Options de `residualFrench`. */
+export interface ResidualFrenchOptions {
+  /**
+   * Les textes contrôlés citent des sources (règles, contextes du contrôle, provenances) : les
+   * références françaises de `CITED_FRENCH_REFERENCES` y sont permises. Faux par défaut : une
+   * sortie sans source citée reste contrôlée strictement (aucun « arrêté » permis).
+   */
+  readonly citedSources?: boolean;
+}
+
 /**
  * Textes suspects (« motif : texte ») parmi `texts`, après retrait des textes repris tels quels
- * (`verbatim`, les plus longs d'abord ; voir `stripVerbatim`).
+ * (`verbatim`, et `CITED_FRENCH_REFERENCES` seulement pour des textes de sources citées, les plus
+ * longs d'abord ; voir `stripVerbatim`).
  */
 export function residualFrench(
   texts: readonly string[],
   verbatim: readonly string[] = [],
+  options: ResidualFrenchOptions = {},
 ): string[] {
-  const kept = [...new Set(verbatim.filter((v) => v.length >= 2))].sort(
+  const cited = options.citedSources === true ? CITED_FRENCH_REFERENCES : [];
+  const kept = [...new Set([...verbatim, ...cited].filter((v) => v.length >= 2))].sort(
     (a, b) => b.length - a.length,
   );
   const out: string[] = [];

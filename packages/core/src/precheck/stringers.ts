@@ -188,7 +188,7 @@ export function precheckStringers(
       msg("precheck.note.loads", {
         qk: dec(loads.qk, 1),
         Qk: dec(loads.Qk, 1),
-        source: loads.source,
+        source: loads.sourceMessage,
         permanent: dec(permanentArea, 2),
       }),
     );

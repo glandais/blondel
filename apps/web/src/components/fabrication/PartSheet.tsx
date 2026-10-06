@@ -13,7 +13,7 @@
  * nomenclature. Aucune grandeur n'est calculée ici.
  */
 import { QUANTITY_MASS_KG, type Model, type Part } from "@blondel/core";
-import { materialLabel } from "@blondel/exports";
+import { flatTermKeys, materialLabel } from "@blondel/exports";
 import { Download } from "lucide-react";
 import { numberFormat } from "../../i18n/locale.js";
 import { useT } from "../../i18n/useT.js";
@@ -88,7 +88,7 @@ export function PartSheet({ model }: { model: Pick<Model, "parts"> }) {
       </header>
       {state === "flat" ? (
         <>
-          <p className="eyebrow fab-sheet__eyebrow">{t.t("ui.fab.sheet.template")}</p>
+          <p className="eyebrow fab-sheet__eyebrow">{t.t(flatTermKeys(part).template)}</p>
           <div className="fab-sheet__drawing blueprint">
             <Corners />
             <FlatPatternDrawing part={part} />

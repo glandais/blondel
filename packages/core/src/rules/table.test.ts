@@ -27,6 +27,17 @@ describe("table des règles", () => {
     expect(() => getRule("INEXISTANTE")).toThrow();
   });
 
+  it("chaque règle a une source anglaise (source_en, QUESTIONS A26 (b)) dans le YAML", () => {
+    // Champ obligatoire du schéma ; vérifié aussi sur le YAML brut (pas de valeur par défaut).
+    const yaml = parse(readFileSync(root + "docs/research/rules.yaml", "utf8")) as {
+      regles: { id: string; source_en?: unknown }[];
+    };
+    const missing = yaml.regles.filter((r) => typeof r.source_en !== "string").map((r) => r.id);
+    expect(missing).toEqual([]);
+    expect(yaml.regles).toHaveLength(RULES.length);
+    for (const r of RULES) expect(r.source_en.trim(), r.id).not.toBe("");
+  });
+
   it("min ≤ max quand les deux bornes existent", () => {
     for (const r of RULES)
       if (r.min !== null && r.max !== null) expect(r.min).toBeLessThanOrEqual(r.max);

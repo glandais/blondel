@@ -1,5 +1,5 @@
 import { textMessage } from "@blondel/i18n";
-import { bbox, type Model } from "@blondel/core";
+import { bbox, fastenerKindLabel, msg, type Model } from "@blondel/core";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { quarterArb, straightArb } from "../testing/arbitraries.js";
@@ -30,6 +30,7 @@ function only(...keys: (keyof PdfPages)[]): PdfPages {
     "elevation",
     "installation",
     "bom",
+    "fasteners",
     "cutsheet",
     "compliance",
     "flats",
@@ -44,6 +45,7 @@ const ORDER: readonly PdfPageKind[] = [
   "elevation",
   "installation",
   "bom",
+  "fasteners",
   "cutsheet",
   "compliance",
   "flat",
@@ -55,6 +57,23 @@ function fullModel(): Model {
   return {
     ...m,
     parts: [...sampleParts(), woodStringerPart(), woodStringerPart({ mark: "LE1" })],
+    // Visserie de test (QUESTIONS A27) : section « Visserie » après la nomenclature.
+    fasteners: [
+      {
+        id: "fastener-1",
+        mark: "VS1",
+        kind: "bolt",
+        grade: "8.8",
+        diameter: 12,
+        length: 100,
+        quantity: 4,
+        joint: "plateFloor",
+        name: fastenerKindLabel("bolt"),
+        origin: msg("fastener.joint.plateFloor"),
+        partIds: ["stringer-inner-1"],
+        deduced: ["diameter", "quantity"],
+      },
+    ],
     compliance: report([
       ruleResult("GIRON_MIN", { kind: "tread", number: 2 }, "bloquant", {
         measured: 200,
@@ -105,7 +124,7 @@ describe("renderPdf (mise en page sur surface enregistrée)", () => {
   const pages = renderPdf(c, model, { project, date: "29/09/2026" });
   const texts = c.pageTexts();
 
-  it("ordre des pages : sommaire, plans, pose, nomenclature, débit, contrôle, développés, gabarits", () => {
+  it("ordre des pages : sommaire, plans, pose, nomenclature, visserie, débit, contrôle, développés, gabarits", () => {
     const kinds = pages.map((p) => p.kind);
     // Sections dans l'ordre, chacune présente.
     const ranks = kinds.map((k) => ORDER.indexOf(k));
@@ -160,6 +179,7 @@ describe("renderPdf (mise en page sur surface enregistrée)", () => {
       "Élévation développée",
       "Fiche de pose",
       "Nomenclature",
+      "Visserie",
       "Fiche de débit",
       "Contrôle de conception",
     ]) {
@@ -199,7 +219,7 @@ describe("renderPdf (mise en page sur surface enregistrée)", () => {
       }
     });
     for (const p of pages) {
-      if (["toc", "bom", "cutsheet", "compliance"].includes(p.kind))
+      if (["toc", "bom", "fasteners", "cutsheet", "compliance"].includes(p.kind))
         expect(p.scale).toBeUndefined();
       else if (p.kind !== "installation") expect(p.scale).toBeGreaterThan(0);
       if (p.kind === "template") expect(p.scale).toBe(1);
@@ -359,7 +379,8 @@ describe("renderPdf (mise en page sur surface enregistrée)", () => {
 
   it("modèle vide : pages de texte explicites", () => {
     const c5 = new RecordingCanvas();
-    const ps = renderPdf(c5, { ...model, parts: [], compliance: report([]) }, {});
+    const empty = { ...model, parts: [], fasteners: [], compliance: report([]) };
+    const ps = renderPdf(c5, empty, {});
     expect(ps.map((p) => p.kind)).toEqual([
       "toc",
       "plan",

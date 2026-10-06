@@ -174,6 +174,31 @@ describe("inspecteur Pièce : limon acier (développé, réglages des limons)", 
     expect(values(html)["material"]![0]).toBe("Material");
     noRawKeys(html);
   });
+
+  it("anglais : « Flat pattern » pour le limon acier, « Development » pour le limon bois", () => {
+    const steel = load(steelFlat()).parts.find((p) => p.category === "stringer" && p.flat)!;
+    const steelHtml = render(steel.id, "en");
+    expect(button(steelHtml, "Flat pattern")).toContain(`Show the flat pattern of ${steel.mark}`);
+    expect(button(steelHtml, "Development")).toBe("");
+    const wood = load({
+      ...createProject("straight"),
+      stair: {
+        ...createProject("straight").stair,
+        structure: { kind: "wood-housed", params: {} },
+      },
+    }).parts.find((p) => p.category === "stringer" && p.flat)!;
+    expect(wood).toBeDefined();
+    const woodHtml = render(wood.id, "en");
+    expect(button(woodHtml, "Development")).toContain(`Show the development of ${wood.mark}`);
+    expect(button(woodHtml, "DXF R12")).toContain(
+      `Download the development of ${wood.mark} as DXF R12`,
+    );
+    expect(button(woodHtml, "Flat pattern")).toBe("");
+    // Français identique : « Développé » dans les deux cas.
+    expect(button(render(wood.id), "Développé")).toContain(
+      `Afficher le développé de ${wood.mark} (Fabrication)`,
+    );
+  });
 });
 
 describe("inspecteur Pièce : marche bois sans structure", () => {

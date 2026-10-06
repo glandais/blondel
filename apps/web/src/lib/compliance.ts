@@ -163,6 +163,34 @@ export function treadNumberFromAttribute(attr: string | null | undefined): numbe
 }
 
 /**
+ * Indice de nez porté par l'attribut `data-nosing-target` (cible de clic du nez d'arrivée posée
+ * par l'interface) : entier ≥ 0 écrit en chiffres, sinon `undefined`.
+ */
+export function nosingIndexFromAttribute(attr: string | null | undefined): number | undefined {
+  if (attr === null || attr === undefined || !/^\d+$/.test(attr.trim())) return undefined;
+  const n = Number(attr.trim());
+  return Number.isSafeInteger(n) ? n : undefined;
+}
+
+/** Indice du nez désigné par la localisation sélectionnée (nez seulement), sinon `undefined`. */
+export function selectedNosingIndex(loc: Location | undefined | null): number | undefined {
+  return loc?.kind === "nosing" ? loc.index : undefined;
+}
+
+/** La sélection est-elle exactement le nez k (sans règle) ? */
+export function isExactNosingSelection(
+  selection: { readonly location: Location; readonly ruleId?: string | undefined } | null,
+  k: number,
+): boolean {
+  return (
+    selection !== null &&
+    selection.ruleId === undefined &&
+    selection.location.kind === "nosing" &&
+    selection.location.index === k
+  );
+}
+
+/**
  * Remarques non bloquantes rendues par le cœur, dans l'ordre découpage → pipeline → contrôle,
  * sans doublon : `stepping.notes`, `Model.notes` (pièces non générées, modèle partiel) et
  * `ComplianceReport.notes` (contextes déduits, hypothèses de règles).

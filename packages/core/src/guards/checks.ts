@@ -26,7 +26,7 @@ import type { Vec2 } from "../model/primitives.js";
 import type { Project } from "../model/project.js";
 import type { Stepping } from "../model/derived.js";
 import { effectiveSeverity } from "../rules/engine.js";
-import type { RuleDef } from "../rules/table.js";
+import { ruleDefSource, type SourcedRuleDef } from "../rules/sources.js";
 import { runTitle } from "./labels.js";
 import { sectionWidth } from "./parts.js";
 import { cumulative, interp, pointAt, tangentAt } from "./polyline.js";
@@ -36,7 +36,7 @@ import type { GuardPostFootprint, GuardRun, GuardsAnalysis } from "./types.js";
  * Contrôles hors rules.yaml : leur description est la clé `rules.<id>.description` des
  * dictionnaires (`ruleDescription(id)`, ADR-0007), pas la `RuleDef` (vide, jamais affichée).
  */
-export const SLAB_CLASH_RULE: RuleDef = {
+export const SLAB_CLASH_RULE: SourcedRuleDef = {
   id: "GC_CONFLIT_DALLE",
   description: "",
   formule: "",
@@ -46,13 +46,13 @@ export const SLAB_CLASH_RULE: RuleDef = {
   unite: "mm",
   contexte: ["tous"],
   nature: "metier",
-  source: "Géométrie du projet (Blondel) : trémie, épaisseur de plancher, lignes de garde-corps",
+  ...ruleDefSource(msg("compliance.source.guardSlabClash")),
   source_secondaire: false,
   confiance: "eleve",
   severite: "avertissement",
 };
 
-export const JOUR_POSTS_CLASH_RULE: RuleDef = {
+export const JOUR_POSTS_CLASH_RULE: SourcedRuleDef = {
   id: "GC_POTEAUX_JOUR",
   description: "",
   formule: "",
@@ -62,8 +62,7 @@ export const JOUR_POSTS_CLASH_RULE: RuleDef = {
   unite: "mm",
   contexte: ["tous"],
   nature: "metier",
-  source:
-    "Géométrie du projet (Blondel) : lignes et poteaux des garde-corps de jour ; décision de l'utilisateur 2026-09-29 (docs/QUESTIONS.md A10)",
+  ...ruleDefSource(msg("compliance.source.guardWellPosts")),
   source_secondaire: false,
   confiance: "eleve",
   severite: "avertissement",
@@ -193,6 +192,7 @@ function jourPostChecks(project: Project, analysis: GuardsAnalysis): RuleResult[
     nature: rule.nature,
     confidence: rule.confiance,
     source: rule.source,
+    ...(rule.sourceMessage !== undefined ? { sourceMessage: rule.sourceMessage } : {}),
     secondarySource: rule.source_secondaire,
     ...(eff.downgradeReason !== undefined ? { downgradeReason: eff.downgradeReason } : {}),
     message: msg("guard.check.jourPostsClash", { a: a.partId, b: b.partId, depth: dec(depth, 0) }),
@@ -218,6 +218,7 @@ function slabClashChecks(project: Project, analysis: GuardsAnalysis): RuleResult
       nature: rule.nature,
       confidence: rule.confiance,
       source: rule.source,
+      ...(rule.sourceMessage !== undefined ? { sourceMessage: rule.sourceMessage } : {}),
       secondarySource: rule.source_secondaire,
       ...(eff.downgradeReason !== undefined ? { downgradeReason: eff.downgradeReason } : {}),
       message: msg("guard.check.slabClash", {

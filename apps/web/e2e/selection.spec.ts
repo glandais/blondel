@@ -24,7 +24,10 @@ test.beforeEach(async ({ page }) => {
 
 const panel = (page: Page) => page.locator("#free-panel");
 
-/** Point du SVG exporté affiché où un clic ne touche aucune marche (« le vide »). */
+/**
+ * Point du SVG exporté affiché où un clic ne touche aucune marche ni la cible du nez d'arrivée
+ * (« le vide »).
+ */
 async function emptyPoint(page: Page): Promise<{ x: number; y: number }> {
   const point = await page.locator("#view-panel .svg-export svg").evaluate((svg) => {
     const r = svg.getBoundingClientRect();
@@ -33,7 +36,12 @@ async function emptyPoint(page: Page): Promise<{ x: number; y: number }> {
         const x = r.left + r.width * fx;
         const y = r.top + r.height * fy;
         const hit = document.elementFromPoint(x, y);
-        if (hit !== null && hit.closest(".svg-export") && !hit.closest("[data-tread]")) {
+        if (
+          hit !== null &&
+          hit.closest(".svg-export") &&
+          !hit.closest("[data-tread]") &&
+          !hit.closest("[data-nosing-target]")
+        ) {
           return { x, y };
         }
       }

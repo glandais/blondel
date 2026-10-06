@@ -663,6 +663,17 @@ legend {
   stroke-width: 3px;
 }
 
+/* Cible transparente du nez d'arrivée (QUESTIONS A28), posée par l'interface. */
+.svg-export [data-nosing-target] {
+  cursor: pointer;
+}
+
+/* Nez d'arrivée atteint au clavier : la cible devient visible en teinte de sélection. */
+.svg-export [data-nosing-target]:focus-visible {
+  outline: none;
+  fill: var(--selected-fill);
+}
+
 .viewer3d {
   position: absolute;
   inset: 0;

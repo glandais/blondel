@@ -38,6 +38,7 @@ import { Canvas, useThree, type ThreeEvent } from "@react-three/fiber";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   Box3,
+  BoxGeometry,
   BufferAttribute,
   BufferGeometry as ThreeBufferGeometry,
   DoubleSide,
@@ -52,7 +53,8 @@ import {
 import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
 import { useResolvedTheme } from "../components/ThemeToggle.js";
 import { displayedMaterial, familiesOf, paintZone, withAppearance } from "../lib/appearance.js";
-import { isPartSelected, sameLocation } from "../lib/compliance.js";
+import { isPartSelected, sameLocation, selectedNosingIndex } from "../lib/compliance.js";
+import { arrivalNosingIndex } from "../lib/nosingOverrides.js";
 import { controlMarkers, type PointMarker } from "../lib/markers.js";
 import type { MeshSnapshot, MeshedPartData } from "../model/snapshot.js";
 import { appStore, useApp } from "../store/appStore.js";
@@ -96,6 +98,7 @@ import {
   tintPartMaterial,
   type PartMaterial,
 } from "../three/pbr.js";
+import { NOSING_MARKER_SECTION_MM, nosingMarkerPose } from "../three/nosingMarker.js";
 import { browserRenderQuality, type RenderQuality } from "../three/quality.js";
 import {
   NO_SECTION,
@@ -370,6 +373,36 @@ function SceneEnvironment({ enabled }: { enabled: boolean }) {
     };
   }, [enabled, gl, scene]);
   return null;
+}
+
+/**
+ * Nez d'arrivée sélectionné (QUESTIONS A28) : aucune pièce de marche ne le matérialise, une
+ * barre surlignée (matériau de sélection) est posée sur sa ligne de nez (`three/nosingMarker`).
+ * Un clic sur la barre ne traverse pas vers les pièces (la sélection reste).
+ */
+function NosingMarker({
+  nosing,
+  material,
+}: {
+  nosing: Model["stepping"]["nosings"][number];
+  material: Material;
+}) {
+  const geometry = useMemo(() => new BoxGeometry(1, 1, 1), []);
+  useEffect(() => () => geometry.dispose(), [geometry]);
+  const pose = nosingMarkerPose(nosing);
+  if (pose === null) return null;
+  return (
+    <mesh
+      geometry={geometry}
+      material={material}
+      position={[...pose.position]}
+      rotation={[0, 0, pose.rotationZ]}
+      scale={[pose.length, NOSING_MARKER_SECTION_MM, NOSING_MARKER_SECTION_MM]}
+      receiveShadow
+      dispose={null}
+      onClick={(e: ThreeEvent<MouseEvent>) => e.stopPropagation()}
+    />
+  );
 }
 
 /**
@@ -767,6 +800,14 @@ export default function Viewer3D({
 
   // Pièce isolée disparue du modèle : tout réafficher.
   const isolatedShown = isolated !== null && parts.some((p) => p.part.partId === isolated);
+  // Nez d'arrivée sélectionné (A28) : surligné par une barre sur sa ligne de nez.
+  const selectedNosing = selectedNosingIndex(selection?.location);
+  const arrivalNosing =
+    selectedNosing !== undefined &&
+    selection?.ruleId === undefined &&
+    arrivalNosingIndex(model.stepping) === selectedNosing
+      ? model.stepping.nosings[selectedNosing]
+      : undefined;
   const shownParts = isolatedShown ? parts.filter((p) => p.part.partId === isolated) : parts;
 
   // Boîte de l'escalier (mm, repère du cœur), non éclaté.
@@ -944,6 +985,9 @@ export default function Viewer3D({
           {isolatedShown || sectionByParts ? null : (
             <Slab project={project} model={model} material={materials.slab} />
           )}
+          {arrivalNosing !== undefined && !isolatedShown ? (
+            <NosingMarker nosing={arrivalNosing} material={materials.highlight} />
+          ) : null}
           <ProgramProxy material={materials.highlight} />
         </group>
         <mesh

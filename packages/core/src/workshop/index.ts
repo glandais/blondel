@@ -56,3 +56,17 @@ export {
   type SteelGrade,
 } from "./metal.js";
 export { COST_TIME_FIELDS, CostRatesSchema, type CostRates } from "./costs.js";
+export {
+  DEFAULT_FASTENER_PROFILE,
+  FASTENER_PROVENANCE,
+  FASTENER_SETTING_FIELDS,
+  FastenerProfileInputSchema,
+  FastenerSettingInputSchema,
+  resolveFastenerProfile,
+  type FastenerProfile,
+  type FastenerProfileInput,
+  type FastenerProvenanceKey,
+  type FastenerSetting,
+  type FastenerSettingField,
+  type FastenerSettingInput,
+} from "./fasteners.js";

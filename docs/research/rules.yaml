@@ -9,6 +9,10 @@
 # Toutes les règles des contextes actifs s'appliquent ; la plus contraignante l'emporte.
 # source_secondaire: true = valeur issue d'une norme payante NON lue (décision 2026-09-28 : pas d'achat),
 #   reprise d'une source secondaire. Traitée selon le profil de conformité du projet (voir `profils`).
+# source_en : traduction anglaise de `source` (décision de l'utilisateur 2026-10-06, QUESTIONS A26 (b)),
+#   affichée dans les sorties anglaises ; titres et références de normes gardés dans leur langue
+#   (NF DTU 36.3, NF P01-012, « arrêté » suivi d'une courte explication), voir
+#   docs/research/glossaire-en.md (Conventions). Obligatoire pour chaque règle (schéma de la table).
 # contexte_exclu (facultatif) : contextes qui écartent la règle même si ses contextes sont actifs
 #   (ex. G_COLLET_MIN hors fût central, décision de l'utilisateur 2026-09-29, QUESTIONS A5).
 #
@@ -119,6 +123,7 @@ regles:
     contexte: [bois_dtu]
     nature: normatif
     source: "NF DTU 36.3 P3 §6.2 via [1][4]"
+    source_en: "NF DTU 36.3 P3 §6.2 via [1][4]"
     source_secondaire: true
     confiance: eleve
     severite: bloquant
@@ -133,6 +138,7 @@ regles:
     contexte: [erp_neuf, erp_existant, bhc_parties_communes]
     nature: normatif
     source: "NF DTU 36.3 P3 selon UICB [4] ; AFEB [1] donne seulement min 600"
+    source_en: "NF DTU 36.3 P3 according to the UICB [4]; AFEB [1] gives only min 600"
     source_secondaire: true
     confiance: moyen
     severite: avertissement
@@ -147,6 +153,7 @@ regles:
     contexte: [tous]
     nature: metier
     source: "[4][24][25]"
+    source_en: "[4][24][25]"
     confiance: moyen
     severite: conseil
 
@@ -160,6 +167,7 @@ regles:
     contexte: [industriel]
     nature: normatif
     source: "NF EN ISO 14122-3 / NF E85-015 via [18][19][20]"
+    source_en: "NF EN ISO 14122-3 / NF E85-015 via [18][19][20]"
     source_secondaire: true
     confiance: moyen
     severite: bloquant
@@ -174,6 +182,7 @@ regles:
     contexte: [bois_dtu]
     nature: normatif
     source: "NF DTU 36.3 P3 §6.1 via [1]"
+    source_en: "NF DTU 36.3 P3 §6.1 via [1]"
     source_secondaire: true
     confiance: eleve
     severite: avertissement
@@ -189,6 +198,7 @@ regles:
     contexte: [bois_dtu]
     nature: normatif
     source: "NF DTU 36.3 P3 §6.4 via [1][3]"
+    source_en: "NF DTU 36.3 P3 §6.4 via [1][3]"
     source_secondaire: true
     confiance: eleve
     severite: bloquant
@@ -203,6 +213,7 @@ regles:
     contexte: [bois_dtu, logement_interieur, bhc_parties_communes, erp_neuf]
     nature: normatif
     source: "NF DTU 36.3 via [1][4]"
+    source_en: "NF DTU 36.3 via [1][4]"
     source_secondaire: true
     confiance: eleve
     severite: avertissement
@@ -217,6 +228,7 @@ regles:
     contexte: [bois_dtu]
     nature: normatif
     source: "NF DTU 36.3 P1-1 §6.5.1 via [1][2][4]"
+    source_en: "NF DTU 36.3 P1-1 §6.5.1 via [1][2][4]"
     source_secondaire: true
     confiance: eleve
     severite: avertissement
@@ -231,6 +243,7 @@ regles:
     contexte: [logement_interieur]
     nature: reglementaire
     source: "Arrêté 24/12/2015 art. 12 [8][4]"
+    source_en: "Arrêté (French ministerial order) 24/12/2015 art. 12 [8][4]"
     confiance: eleve
     severite: bloquant
 
@@ -244,6 +257,7 @@ regles:
     contexte: [bhc_parties_communes]
     nature: reglementaire
     source: "Arrêté 24/12/2015 art. 6.1 [7][9][4]"
+    source_en: "Arrêté (French ministerial order) 24/12/2015 art. 6.1 [7][9][4]"
     confiance: eleve
     severite: bloquant
 
@@ -257,6 +271,7 @@ regles:
     contexte: [erp_neuf]
     nature: reglementaire
     source: "Arrêté 20/04/2017 art. 7-1 [5][6]"
+    source_en: "Arrêté (French ministerial order) 20/04/2017 art. 7-1 [5][6]"
     confiance: eleve
     severite: bloquant
 
@@ -270,6 +285,7 @@ regles:
     contexte: [erp_existant]
     nature: reglementaire
     source: "Arrêté 08/12/2014 art. 7 point 7.1 [31][4] (dimensions initiales conservables sans travaux sur l'escalier)"
+    source_en: "Arrêté (French ministerial order) 08/12/2014 art. 7 item 7.1 [31][4] (original dimensions may be kept when no work is done on the stair)"
     confiance: eleve
     severite: bloquant
 
@@ -283,6 +299,7 @@ regles:
     contexte: [helicoidal]
     nature: normatif
     source: "NF DTU 36.3 P3 annexe A selon [24] (source unique)"
+    source_en: "NF DTU 36.3 P3 annex A according to [24] (single source)"
     source_secondaire: true
     confiance: faible
     severite: avertissement
@@ -297,6 +314,7 @@ regles:
     contexte: [echelle_meunier, industriel]
     nature: normatif
     source: "NF EN ISO 14122-3 / NF E85-015 via [18][19][20]"
+    source_en: "NF EN ISO 14122-3 / NF E85-015 via [18][19][20]"
     source_secondaire: true
     confiance: moyen
     severite: avertissement
@@ -311,6 +329,7 @@ regles:
     contexte: [tous]
     nature: metier
     source: "[24]"
+    source_en: "[24]"
     confiance: faible
     severite: conseil
 
@@ -324,6 +343,7 @@ regles:
     contexte: [tous]
     nature: normatif
     source: "Circulaire 2007-53 (fortement recommandé) + tolérance ±5 mm DTU [4][1]"
+    source_en: "Circulaire 2007-53 (French ministerial circular, strongly recommended) + DTU tolerance ±5 mm [4][1]"
     confiance: eleve
     severite: avertissement
 
@@ -338,6 +358,7 @@ regles:
     contexte: [bois_dtu]
     nature: normatif
     source: "NF DTU 36.3 P3 §6.5 via [1]"
+    source_en: "NF DTU 36.3 P3 §6.5 via [1]"
     source_secondaire: true
     confiance: eleve
     severite: bloquant
@@ -352,6 +373,7 @@ regles:
     contexte: [bois_dtu]
     nature: normatif
     source: "NF DTU 36.3 P3 via [1][4]"
+    source_en: "NF DTU 36.3 P3 via [1][4]"
     source_secondaire: true
     confiance: eleve
     severite: avertissement
@@ -366,6 +388,7 @@ regles:
     contexte: [bois_dtu, tournant]
     nature: normatif
     source: "NF DTU 36.3 P3 via [1][4]"
+    source_en: "NF DTU 36.3 P3 via [1][4]"
     source_secondaire: true
     confiance: eleve
     severite: avertissement
@@ -380,6 +403,7 @@ regles:
     contexte: [logement_interieur]
     nature: reglementaire
     source: "Arrêté 24/12/2015 art. 12 [8][4]"
+    source_en: "Arrêté (French ministerial order) 24/12/2015 art. 12 [8][4]"
     confiance: eleve
     severite: bloquant
 
@@ -393,6 +417,7 @@ regles:
     contexte: [bhc_parties_communes]
     nature: reglementaire
     source: "Arrêté 24/12/2015 art. 6.1 [7][9]"
+    source_en: "Arrêté (French ministerial order) 24/12/2015 art. 6.1 [7][9]"
     confiance: eleve
     severite: bloquant
 
@@ -406,6 +431,7 @@ regles:
     contexte: [erp_neuf]
     nature: reglementaire
     source: "Arrêté 20/04/2017 art. 7-1 [5][6]"
+    source_en: "Arrêté (French ministerial order) 20/04/2017 art. 7-1 [5][6]"
     confiance: eleve
     severite: bloquant
 
@@ -419,6 +445,7 @@ regles:
     contexte: [erp_existant]
     nature: reglementaire
     source: "Arrêté 08/12/2014 art. 7 point 7.1 [31][4] (dimensions initiales conservables sans travaux sur l'escalier)"
+    source_en: "Arrêté (French ministerial order) 08/12/2014 art. 7 item 7.1 [31][4] (original dimensions may be kept when no work is done on the stair)"
     confiance: eleve
     severite: bloquant
 
@@ -432,6 +459,7 @@ regles:
     contexte: [erp_securite, tournant, helicoidal]
     nature: reglementaire
     source: "Règlement sécurité ERP CO 56 §2 [10]"
+    source_en: "ERP fire safety regulations CO 56 §2 [10]"
     confiance: eleve
     severite: bloquant
 
@@ -446,6 +474,7 @@ regles:
     contexte_exclu: [helicoidal_fut]
     nature: metier
     source: "[30] (usage) ; comparaisons ADK 50 mm [21], DIN 18065 50/100 mm [22]"
+    source_en: "[30] (common practice); comparisons: ADK 50 mm [21], DIN 18065 50/100 mm [22]"
     confiance: faible
     severite: avertissement
     note: "Non appliquée aux hélicoïdaux à fût central : la DIN 18065 et l'ADK admettent 0 mm au noyau (A-regles §1.9) ; appliquée aux hélicoïdaux à jour central (décision de l'utilisateur 2026-09-29, QUESTIONS A5)."
@@ -460,6 +489,7 @@ regles:
     contexte: [tournant]
     nature: metier
     source: "DIN 18065 (comparaison) [22]"
+    source_en: "DIN 18065 (comparison) [22]"
     confiance: moyen
     severite: avertissement
 
@@ -473,6 +503,7 @@ regles:
     contexte: [tournant]
     nature: metier
     source: "ADK §1.27 (comparaison) [21] ; tolérance DTU ±10 mm [1]"
+    source_en: "ADK §1.27 (comparison) [21]; DTU tolerance ±10 mm [1]"
     confiance: moyen
     severite: avertissement
 
@@ -486,6 +517,7 @@ regles:
     contexte: [echelle_meunier, industriel]
     nature: normatif
     source: "NF EN ISO 14122-3 via [18][19]"
+    source_en: "NF EN ISO 14122-3 via [18][19]"
     source_secondaire: true
     confiance: moyen
     severite: avertissement
@@ -501,6 +533,7 @@ regles:
     contexte: [bois_dtu]
     nature: normatif
     source: "NF DTU 36.3 P3 §6.3 via [1][3]"
+    source_en: "NF DTU 36.3 P3 §6.3 via [1][3]"
     source_secondaire: true
     confiance: eleve
     severite: bloquant
@@ -518,6 +551,7 @@ regles:
     contexte: [bois_dtu]
     nature: normatif
     source: "NF DTU 36.3 P3 §6.3 via [1][3]"
+    source_en: "NF DTU 36.3 P3 §6.3 via [1][3]"
     source_secondaire: true
     confiance: eleve
     severite: bloquant
@@ -535,6 +569,7 @@ regles:
     contexte: [erp_securite, tournant, helicoidal]
     nature: reglementaire
     source: "Règlement sécurité ERP CO 56 §2 [10]"
+    source_en: "ERP fire safety regulations CO 56 §2 [10]"
     confiance: eleve
     severite: bloquant
     regles_mesurees: [G_MIN_ERP_NEUF, G_MIN_ERP_EXISTANT]
@@ -549,6 +584,7 @@ regles:
     contexte: [logement_interieur, bhc_parties_communes, erp_neuf]
     nature: reglementaire
     source: "QR n°81 accessibilite-batiment.fr (classée « ancienne réglementation », reprise par l'UICB en 2020) et DTU 36.3 P3 via [4]"
+    source_en: "FAQ no. 81 accessibilite-batiment.fr (marked “former regulations”, taken up by the UICB in 2020) and DTU 36.3 P3 via [4]"
     source_secondaire: true
     note: "Seule la ligne milieu / 600 mm est bloquante ; la tolérance « milieu ↔ 350 mm du mur extérieur » est une option non bloquante (SPEC X8)"
     confiance: moyen
@@ -567,6 +603,7 @@ regles:
     contexte: [helicoidal, bois_dtu]
     nature: normatif
     source: "[24]"
+    source_en: "[24]"
     confiance: faible
     severite: avertissement
     regles_mesurees: [G_MIN_DTU, G_TOL_BALANCEE]
@@ -582,6 +619,7 @@ regles:
     contexte: [bois_dtu]
     nature: normatif
     source: "NF DTU 36.3 P3 §6.7 via [1][3]"
+    source_en: "NF DTU 36.3 P3 §6.7 via [1][3]"
     source_secondaire: true
     confiance: eleve
     severite: bloquant
@@ -596,6 +634,7 @@ regles:
     contexte: [logement_interieur]
     nature: reglementaire
     source: "Arrêté 24/12/2015 art. 12 [8][4]"
+    source_en: "Arrêté (French ministerial order) 24/12/2015 art. 12 [8][4]"
     confiance: eleve
     severite: bloquant
     parametres:
@@ -611,6 +650,7 @@ regles:
     contexte: [bhc_parties_communes]
     nature: reglementaire
     source: "Arrêté 24/12/2015 art. 6.1 [9][4]"
+    source_en: "Arrêté (French ministerial order) 24/12/2015 art. 6.1 [9][4]"
     confiance: eleve
     severite: bloquant
 
@@ -624,6 +664,7 @@ regles:
     contexte: [erp_neuf]
     nature: reglementaire
     source: "Arrêté 20/04/2017 art. 7-1 [5][6]"
+    source_en: "Arrêté (French ministerial order) 20/04/2017 art. 7-1 [5][6]"
     confiance: eleve
     severite: bloquant
 
@@ -637,6 +678,7 @@ regles:
     contexte: [erp_existant]
     nature: reglementaire
     source: "Arrêté 08/12/2014 art. 7 point 7.1 [31][4] (dimensions initiales conservables sans travaux sur l'escalier)"
+    source_en: "Arrêté (French ministerial order) 08/12/2014 art. 7 item 7.1 [31][4] (original dimensions may be kept when no work is done on the stair)"
     confiance: eleve
     severite: bloquant
 
@@ -650,6 +692,7 @@ regles:
     contexte: [erp_securite]
     nature: reglementaire
     source: "Règlement sécurité ERP CO 36 [11] (relu sur Légifrance)"
+    source_en: "ERP fire safety regulations CO 36 [11] (checked on Légifrance)"
     confiance: eleve
     severite: bloquant
     parametres:
@@ -668,6 +711,7 @@ regles:
     contexte: [erp_securite]
     nature: reglementaire
     source: "Règlement sécurité ERP CO 55 §1 [10]"
+    source_en: "ERP fire safety regulations CO 55 §1 [10]"
     confiance: eleve
     severite: bloquant
 
@@ -681,6 +725,7 @@ regles:
     contexte: [industriel]
     nature: normatif
     source: "NF EN ISO 14122-3 via [18]"
+    source_en: "NF EN ISO 14122-3 via [18]"
     source_secondaire: true
     confiance: moyen
     severite: bloquant
@@ -695,6 +740,7 @@ regles:
     contexte: [echelle_meunier, industriel]
     nature: normatif
     source: "NF EN ISO 14122-3 via [19]"
+    source_en: "NF EN ISO 14122-3 via [19]"
     source_secondaire: true
     confiance: moyen
     severite: avertissement
@@ -710,6 +756,7 @@ regles:
     contexte: [bois_dtu, logement_interieur]
     nature: normatif
     source: "NF DTU 36.3 P1-1 §6.5.2 via [1][3]"
+    source_en: "NF DTU 36.3 P1-1 §6.5.2 via [1][3]"
     source_secondaire: true
     confiance: eleve
     severite: bloquant
@@ -724,6 +771,7 @@ regles:
     contexte: [logement_interieur, bois_dtu]
     nature: metier
     source: "[3]"
+    source_en: "[3]"
     confiance: moyen
     severite: conseil
 
@@ -737,6 +785,7 @@ regles:
     contexte: [erp_neuf, erp_existant, bhc_parties_communes]
     nature: metier
     source: "[3]"
+    source_en: "[3]"
     confiance: moyen
     severite: conseil
 
@@ -750,6 +799,7 @@ regles:
     contexte: [industriel]
     nature: normatif
     source: "NF EN ISO 14122-3 §3.1.4 (définition) [17] ; valeurs via [18][20]"
+    source_en: "NF EN ISO 14122-3 §3.1.4 (definition) [17]; values via [18][20]"
     source_secondaire: true
     confiance: moyen
     severite: bloquant
@@ -764,6 +814,7 @@ regles:
     contexte: [tous]
     nature: metier
     source: "docs/CHALLENGE.md G4 (objectif de K8) ; seuil repris des règles ECHAPPEE_* bloquantes actives ; décision de l'utilisateur 2026-09-29 (QUESTIONS A7)"
+    source_en: "docs/CHALLENGE.md G4 (objective of K8); threshold taken from the active blocking ECHAPPEE_* rules; user decision 2026-09-29 (QUESTIONS A7)"
     confiance: faible
     severite: avertissement
     note: "Pas de seuil propre : le seuil est le plus grand `min` des règles ECHAPPEE_* de sévérité déclarée `bloquant` applicables aux contextes actifs ; sans elles, sans objet."
@@ -778,6 +829,7 @@ regles:
     contexte: [tous]
     nature: metier
     source: "Dérivation géométrique (A-regles §1.7)"
+    source_en: "Geometric derivation (A-regles §1.7)"
     confiance: eleve
     severite: conseil
 
@@ -791,6 +843,7 @@ regles:
     contexte: [bois_dtu]
     nature: normatif
     source: "NF DTU 36.3 P1-1 §5.2 via [1][2]"
+    source_en: "NF DTU 36.3 P1-1 §5.2 via [1][2]"
     source_secondaire: true
     confiance: eleve
     severite: conseil
@@ -805,6 +858,7 @@ regles:
     contexte: [bois_dtu]
     nature: normatif
     source: "NF DTU 36.3 P1-1 §5.2 via [1][2]"
+    source_en: "NF DTU 36.3 P1-1 §5.2 via [1][2]"
     source_secondaire: true
     confiance: eleve
     severite: conseil
@@ -823,6 +877,7 @@ regles:
     contexte: [tous]
     nature: metier
     source: "Définition géométrique (A-regles §1.8)"
+    source_en: "Geometric definition (A-regles §1.8)"
     confiance: eleve
     severite: conseil
 
@@ -837,6 +892,7 @@ regles:
     contexte: [bois_dtu]
     nature: normatif
     source: "NF DTU 36.3 P3 §6.6 via [1]"
+    source_en: "NF DTU 36.3 P3 §6.6 via [1]"
     source_secondaire: true
     confiance: eleve
     severite: bloquant
@@ -851,6 +907,7 @@ regles:
     contexte: [erp_securite]
     nature: reglementaire
     source: "Règlement sécurité ERP CO 55 §1 [10]"
+    source_en: "ERP fire safety regulations CO 55 §1 [10]"
     confiance: eleve
     severite: bloquant
 
@@ -864,6 +921,7 @@ regles:
     contexte: [erp_securite, tournant]
     nature: reglementaire
     source: "Règlement sécurité ERP CO 56 §1 [10]"
+    source_en: "ERP fire safety regulations CO 56 §1 [10]"
     confiance: eleve
     severite: bloquant
 
@@ -877,6 +935,7 @@ regles:
     contexte: [erp_securite]
     nature: reglementaire
     source: "Règlement sécurité ERP CO 55 §2 [10]"
+    source_en: "ERP fire safety regulations CO 55 §2 [10]"
     confiance: eleve
     severite: bloquant
 
@@ -890,6 +949,7 @@ regles:
     contexte: [erp_securite]
     nature: reglementaire
     source: "Règlement sécurité ERP CO 55 §2 [10]"
+    source_en: "ERP fire safety regulations CO 55 §2 [10]"
     confiance: eleve
     severite: bloquant
 
@@ -903,6 +963,7 @@ regles:
     contexte: [tous]
     nature: metier
     source: "Usage ; ADK §1.20 (comparaison) [21]"
+    source_en: "Common practice; ADK §1.20 (comparison) [21]"
     confiance: moyen
     severite: conseil
 
@@ -916,6 +977,7 @@ regles:
     contexte: [industriel]
     nature: normatif
     source: "NF EN ISO 14122-3 via [18]"
+    source_en: "NF EN ISO 14122-3 via [18]"
     source_secondaire: true
     confiance: moyen
     severite: bloquant
@@ -930,6 +992,7 @@ regles:
     contexte: [industriel, echelle_meunier]
     nature: normatif
     source: "NF EN ISO 14122-3 / NF E85-015 via [18][20]"
+    source_en: "NF EN ISO 14122-3 / NF E85-015 via [18][20]"
     source_secondaire: true
     confiance: moyen
     severite: avertissement
@@ -945,6 +1008,7 @@ regles:
     contexte: [erp_securite]
     nature: reglementaire
     source: "Règlement sécurité ERP CO 51 §1 [10]"
+    source_en: "ERP fire safety regulations CO 51 §1 [10]"
     confiance: eleve
     severite: bloquant
 
@@ -958,6 +1022,7 @@ regles:
     contexte: [erp_neuf]
     nature: reglementaire
     source: "Arrêté 20/04/2017 art. 7-1 [5][6]"
+    source_en: "Arrêté (French ministerial order) 20/04/2017 art. 7-1 [5][6]"
     confiance: eleve
     severite: bloquant
 
@@ -971,6 +1036,7 @@ regles:
     contexte: [logement_interieur]
     nature: reglementaire
     source: "Guide de contrôle CRC via [4]"
+    source_en: "CRC building-control inspection guide (French) via [4]"
     source_secondaire: true
     confiance: moyen
     severite: avertissement
@@ -985,6 +1051,7 @@ regles:
     contexte: [bhc_parties_communes]
     nature: reglementaire
     source: "Guide de contrôle CRC via [4]"
+    source_en: "CRC building-control inspection guide (French) via [4]"
     source_secondaire: true
     confiance: moyen
     severite: avertissement
@@ -999,6 +1066,7 @@ regles:
     contexte: [erp_neuf, bhc_parties_communes]
     nature: reglementaire
     source: "Arrêté 20/04/2017 art. 7-1 [5][6] ; arrêté 24/12/2015 art. 6.1 [9]"
+    source_en: "Arrêté (French ministerial order) 20/04/2017 art. 7-1 [5][6]; arrêté 24/12/2015 art. 6.1 [9]"
     confiance: eleve
     severite: bloquant
 
@@ -1012,6 +1080,7 @@ regles:
     contexte: [erp_neuf, bhc_parties_communes]
     nature: reglementaire
     source: "Arrêté 20/04/2017 art. 7-1 [5][6] ; arrêté 24/12/2015 art. 6.1 [9]"
+    source_en: "Arrêté (French ministerial order) 20/04/2017 art. 7-1 [5][6]; arrêté 24/12/2015 art. 6.1 [9]"
     confiance: eleve
     severite: bloquant
 
@@ -1025,6 +1094,7 @@ regles:
     contexte: [erp_neuf, bhc_parties_communes]
     nature: reglementaire
     source: "Arrêté 20/04/2017 art. 7-1 [5][6] ; arrêté 24/12/2015 art. 6.1 [9]"
+    source_en: "Arrêté (French ministerial order) 20/04/2017 art. 7-1 [5][6]; arrêté 24/12/2015 art. 6.1 [9]"
     confiance: eleve
     severite: bloquant
 
@@ -1038,6 +1108,7 @@ regles:
     contexte: [industriel, echelle_meunier]
     nature: normatif
     source: "NF E85-015 via [20] ; ISO 14122-3 >= 10 [18]"
+    source_en: "NF E85-015 via [20]; ISO 14122-3 >= 10 [18]"
     source_secondaire: true
     confiance: faible
     severite: avertissement
@@ -1055,6 +1126,7 @@ regles:
     contexte: [erp_neuf, bhc_parties_communes]
     nature: reglementaire
     source: "Arrêté 20/04/2017 art. 7-1 [5][6] ; arrêté 24/12/2015 art. 6.1 [9]"
+    source_en: "Arrêté (French ministerial order) 20/04/2017 art. 7-1 [5][6]; arrêté 24/12/2015 art. 6.1 [9]"
     confiance: eleve
     severite: bloquant
     parametres:
@@ -1070,6 +1142,7 @@ regles:
     contexte: [erp_securite]
     nature: reglementaire
     source: "Règlement sécurité ERP CO 51 §2, CO 56 §3 [10]"
+    source_en: "ERP fire safety regulations CO 51 §2, CO 56 §3 [10]"
     confiance: eleve
     severite: bloquant
 
@@ -1083,6 +1156,7 @@ regles:
     contexte: [logement_interieur]
     nature: reglementaire
     source: "Arrêté 24/12/2015 art. 12 [8]"
+    source_en: "Arrêté (French ministerial order) 24/12/2015 art. 12 [8]"
     confiance: eleve
     severite: bloquant
 
@@ -1096,6 +1170,7 @@ regles:
     contexte: [erp_neuf, bhc_parties_communes]
     nature: reglementaire
     source: "Arrêté 20/04/2017 art. 7-1 [5][6] ; arrêté 24/12/2015 art. 6.1 [7][9]"
+    source_en: "Arrêté (French ministerial order) 20/04/2017 art. 7-1 [5][6]; arrêté 24/12/2015 art. 6.1 [7][9]"
     confiance: eleve
     severite: bloquant
 
@@ -1109,6 +1184,7 @@ regles:
     contexte: [industriel]
     nature: normatif
     source: "NF E85-015 via [20]"
+    source_en: "NF E85-015 via [20]"
     source_secondaire: true
     confiance: faible
     severite: avertissement
@@ -1123,6 +1199,7 @@ regles:
     contexte: [erp_neuf]
     nature: reglementaire
     source: "Arrêté 20/04/2017 art. 7-1 [5][6][4]"
+    source_en: "Arrêté (French ministerial order) 20/04/2017 art. 7-1 [5][6][4]"
     confiance: eleve
     severite: bloquant
 
@@ -1136,6 +1213,7 @@ regles:
     contexte: [bhc_parties_communes, logement_interieur]
     nature: reglementaire
     source: "Arrêté 24/12/2015 art. 6.1 et 12 via [4][9]"
+    source_en: "Arrêté (French ministerial order) 24/12/2015 art. 6.1 and 12 via [4][9]"
     source_secondaire: true
     confiance: eleve
     severite: bloquant
@@ -1150,6 +1228,7 @@ regles:
     contexte: [erp_neuf, bhc_parties_communes, logement_interieur]
     nature: reglementaire
     source: "Arrêtés 24/12/2015 et 20/04/2017 via [4]"
+    source_en: "Arrêtés (French ministerial orders) 24/12/2015 and 20/04/2017 via [4]"
     source_secondaire: true
     confiance: eleve
     severite: bloquant
@@ -1164,6 +1243,7 @@ regles:
     contexte: [erp_neuf, bhc_parties_communes, logement_interieur]
     nature: reglementaire
     source: "Guide de contrôle CRC via [4]"
+    source_en: "CRC building-control inspection guide (French) via [4]"
     source_secondaire: true
     confiance: moyen
     severite: avertissement
@@ -1178,6 +1258,7 @@ regles:
     contexte: [bois_dtu]
     nature: normatif
     source: "NF DTU 36.3 CCT (prise de main courante) via [1]"
+    source_en: "NF DTU 36.3 CCT (handrail grip) via [1]"
     source_secondaire: true
     confiance: eleve
     severite: bloquant
@@ -1195,6 +1276,7 @@ regles:
     contexte: [garde_corps_1988, garde_corps_2024]
     nature: normatif
     source: "NF P01-012 via [12]"
+    source_en: "NF P01-012 via [12]"
     source_secondaire: true
     confiance: eleve
     severite: bloquant
@@ -1209,6 +1291,7 @@ regles:
     contexte: [garde_corps_1988]
     nature: normatif
     source: "NF P01-012:1988 via [14]"
+    source_en: "NF P01-012:1988 via [14]"
     source_secondaire: true
     confiance: moyen
     severite: bloquant
@@ -1223,6 +1306,7 @@ regles:
     contexte: [garde_corps_1988]
     nature: normatif
     source: "NF P01-012:1988 via [14]"
+    source_en: "NF P01-012:1988 via [14]"
     source_secondaire: true
     confiance: moyen
     severite: bloquant
@@ -1237,6 +1321,7 @@ regles:
     contexte: [garde_corps_1988]
     nature: normatif
     source: "NF P01-012:1988 via [14][15]"
+    source_en: "NF P01-012:1988 via [14][15]"
     source_secondaire: true
     confiance: moyen
     severite: bloquant
@@ -1251,6 +1336,7 @@ regles:
     contexte: [garde_corps_1988]
     nature: normatif
     source: "NF P01-012:1988 via [14]"
+    source_en: "NF P01-012:1988 via [14]"
     source_secondaire: true
     confiance: moyen
     severite: bloquant
@@ -1265,6 +1351,7 @@ regles:
     contexte: [garde_corps_1988]
     nature: normatif
     source: "NF P01-012:1988 via [14]"
+    source_en: "NF P01-012:1988 via [14]"
     source_secondaire: true
     confiance: moyen
     severite: bloquant
@@ -1279,6 +1366,7 @@ regles:
     contexte: [garde_corps_2024]
     nature: normatif
     source: "NF P01-012:2024 via APAVE [12]"
+    source_en: "NF P01-012:2024 via APAVE [12]"
     source_secondaire: true
     confiance: eleve
     severite: bloquant
@@ -1304,6 +1392,7 @@ regles:
     contexte: [garde_corps_2024]
     nature: normatif
     source: "Sources secondaires [15]"
+    source_en: "Secondary sources [15]"
     source_secondaire: true
     confiance: faible
     severite: bloquant
@@ -1318,6 +1407,7 @@ regles:
     contexte: [garde_corps_2024]
     nature: normatif
     source: "NF P01-012:2024 via APAVE [12]"
+    source_en: "NF P01-012:2024 via APAVE [12]"
     source_secondaire: true
     confiance: eleve
     severite: bloquant
@@ -1334,6 +1424,7 @@ regles:
     contexte: [garde_corps_2024]
     nature: normatif
     source: "NF P01-012:2024 via APAVE [12]"
+    source_en: "NF P01-012:2024 via APAVE [12]"
     source_secondaire: true
     confiance: eleve
     severite: bloquant
@@ -1350,6 +1441,7 @@ regles:
     contexte: [garde_corps_2024]
     nature: normatif
     source: "NF P01-012:2024 via APAVE [12]"
+    source_en: "NF P01-012:2024 via APAVE [12]"
     source_secondaire: true
     confiance: eleve
     severite: bloquant
@@ -1364,6 +1456,7 @@ regles:
     contexte: [garde_corps_2024]
     nature: normatif
     source: "NF P01-012:2024 via APAVE [12] ; fabricant Horizal ; C-structures §3.1"
+    source_en: "NF P01-012:2024 via APAVE [12]; manufacturer Horizal; C-structures §3.1"
     source_secondaire: true
     confiance: moyen
     severite: bloquant
@@ -1382,6 +1475,7 @@ regles:
     contexte: [garde_corps_2024]
     nature: normatif
     source: "NF P01-012:2024 via sources secondaires, C-structures §3.1"
+    source_en: "NF P01-012:2024 via secondary sources, C-structures §3.1"
     source_secondaire: true
     confiance: faible
     severite: avertissement
@@ -1396,6 +1490,7 @@ regles:
     contexte: [garde_corps_1988, garde_corps_2024]
     nature: normatif
     source: "NF P01-012:2024 via APAVE [12] (durabilité des vides, C-structures §3.1) ; SPEC X12"
+    source_en: "NF P01-012:2024 via APAVE [12] (durability of the gaps, C-structures §3.1); SPEC X12"
     source_secondaire: true
     confiance: eleve
     severite: avertissement
@@ -1410,6 +1505,7 @@ regles:
     contexte: [logement_interieur]
     nature: metier
     source: "Approved Document K (Royaume-Uni) [21] ; pas d'équivalent français trouvé"
+    source_en: "Approved Document K (United Kingdom) [21]; no French equivalent found"
     confiance: moyen
     severite: conseil
 
@@ -1424,6 +1520,7 @@ regles:
     contexte: [logement_interieur, bhc_parties_communes]
     nature: normatif
     source: "NF EN 1991-1-1/NA (NF P06-111-2) tableau 6.2(NF) [16]"
+    source_en: "NF EN 1991-1-1/NA (NF P06-111-2) table 6.2(NF) [16]"
     confiance: eleve
     severite: bloquant
     parametres:
@@ -1440,6 +1537,7 @@ regles:
     contexte: [erp_neuf, erp_existant]
     nature: normatif
     source: "NF P06-111-2 tableau 6.2(NF) [16]"
+    source_en: "NF P06-111-2 table 6.2(NF) [16]"
     confiance: eleve
     severite: bloquant
     tables:
@@ -1463,6 +1561,7 @@ regles:
     contexte: [garde_corps_1988, garde_corps_2024]
     nature: normatif
     source: "NF P06-111-2/A1 (mars 2009) via guide PACTE/CTB garde-corps [32][34] ; version 2004 lue [16]"
+    source_en: "NF P06-111-2/A1 (March 2009) via the PACTE/CTB guarding guide [32][34]; 2004 version read [16]"
     source_secondaire: true
     confiance: moyen
     severite: bloquant
@@ -1484,6 +1583,7 @@ regles:
     contexte: [industriel]
     nature: normatif
     source: "ISO 14122-3:2016 §4.2.2 [17]"
+    source_en: "ISO 14122-3:2016 §4.2.2 [17]"
     confiance: eleve
     severite: avertissement
     parametres:
@@ -1501,6 +1601,7 @@ regles:
     contexte: [bois_dtu]
     nature: normatif
     source: "NF DTU 36.3 P3 via FCBA [2]"
+    source_en: "NF DTU 36.3 P3 via FCBA [2]"
     source_secondaire: true
     confiance: eleve
     severite: avertissement
@@ -1517,6 +1618,7 @@ regles:
     contexte: [bois_dtu, limon_bois_encastre]
     nature: normatif
     source: "NF EN 16481 § 5.4.2 et 7.3.1 (texte relu, docs/research/C-structures.md §1.4 et C-B-04, réf. [3] de C-structures)"
+    source_en: "NF EN 16481 § 5.4.2 and 7.3.1 (text checked, docs/research/C-structures.md §1.4 and C-B-04, ref. [3] of C-structures)"
     source_secondaire: false
     confiance: eleve
     severite: avertissement
@@ -1532,6 +1634,7 @@ regles:
     contexte: [bois_dtu]
     nature: normatif
     source: "FCBA [2] tableau 4 (« exemple de résultats de calcul », rattachement exact au P3 non établi)"
+    source_en: "FCBA [2] table 4 (“example of calculation results”, exact link to P3 not established)"
     confiance: eleve
     severite: avertissement
     parametres:
@@ -1558,6 +1661,7 @@ regles:
     contexte: [bois_dtu]
     nature: normatif
     source: "NF DTU 36.3 via FCBA [2] tableau 2"
+    source_en: "NF DTU 36.3 via FCBA [2] table 2"
     source_secondaire: true
     confiance: eleve
     severite: conseil
@@ -1575,6 +1679,7 @@ regles:
     contexte: [echelle_meunier]
     nature: normatif
     source: "[1][3]"
+    source_en: "[1][3]"
     confiance: eleve
     severite: avertissement
 
@@ -1588,6 +1693,7 @@ regles:
     contexte: [echelle_meunier, industriel]
     nature: normatif
     source: "NF EN ISO 14122-3 via [19] (résumé de recherche)"
+    source_en: "NF EN ISO 14122-3 via [19] (research summary)"
     source_secondaire: true
     confiance: moyen
     severite: avertissement
@@ -1602,6 +1708,7 @@ regles:
     contexte: [echelle_meunier, industriel]
     nature: normatif
     source: "NF EN ISO 14122-3 via [18][19]"
+    source_en: "NF EN ISO 14122-3 via [18][19]"
     source_secondaire: true
     confiance: moyen
     severite: avertissement

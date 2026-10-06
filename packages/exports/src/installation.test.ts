@@ -134,6 +134,7 @@ describe("fiche de pose : données", () => {
         plan: false,
         elevation: false,
         bom: false,
+        fasteners: false,
         cutsheet: false,
         compliance: false,
         flats: false,

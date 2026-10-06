@@ -22,6 +22,12 @@ import {
   type MetalProfile,
 } from "./metal.js";
 import { CostRatesSchema, type CostRates } from "./costs.js";
+import {
+  DEFAULT_FASTENER_PROFILE,
+  FastenerProfileInputSchema,
+  resolveFastenerProfile,
+  type FastenerProfile,
+} from "./fasteners.js";
 
 /** Essences de bois connues du modèle (`MaterialId` commençant par `wood-`). */
 export const WOOD_MATERIALS = [
@@ -107,6 +113,12 @@ export const WorkshopProfileSchema = z.object({
    * absent ou incomplet : pas de chiffrage en euros (CHALLENGE P2).
    */
   costs: CostRatesSchema.optional(),
+  /**
+   * Visserie (QUESTIONS A27) : type, classe, longueur, quantité par point de fixation et
+   * diamètre par assemblage d'origine, jeu de perçage, entraxe des supports de main courante
+   * (`fasteners.ts`). Ajout rétrocompatible ; absent : défauts « à valider ».
+   */
+  fasteners: FastenerProfileInputSchema.optional(),
 });
 export type WorkshopProfileInput = z.infer<typeof WorkshopProfileSchema>;
 
@@ -135,6 +147,8 @@ export interface WorkshopProfile {
   readonly densities: Readonly<Record<OtherMaterialId, number>>;
   /** Barème de coût (jalon 3c) : champs absents = non renseignés (aucun défaut). */
   readonly costs: CostRates;
+  /** Visserie (QUESTIONS A27), voir `fasteners.ts` ; valeurs par défaut « à valider ». */
+  readonly fasteners: FastenerProfile;
 }
 
 export type WoodSettingKey = keyof WorkshopProfile["wood"];
@@ -173,6 +187,7 @@ export const DEFAULT_WORKSHOP_PROFILE: WorkshopProfile = {
     concrete: 2400,
   },
   costs: {},
+  fasteners: DEFAULT_FASTENER_PROFILE,
 };
 
 /**
@@ -284,6 +299,7 @@ export function resolveWorkshopProfile(input?: WorkshopProfileInput): WorkshopPr
     metal: resolveMetalProfile(input.metal),
     densities: { ...d.densities, ...(input.densities ?? {}) },
     costs: input.costs ?? d.costs,
+    fasteners: resolveFastenerProfile(input.fasteners),
   };
 }
 

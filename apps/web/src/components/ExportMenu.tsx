@@ -1,6 +1,7 @@
 /**
  * Menu « Exporter » de la barre du haut (bouton primaire « blueprint ») : projet JSON, plan SVG /
- * DXF, élévation SVG, liste de débit CSV, dossiers PDF (complet A4 / A3, sans gabarits), fiche
+ * DXF, élévation SVG, liste de débit CSV, liste de visserie CSV (si le modèle a de la visserie,
+ * QUESTIONS A27), dossiers PDF (complet A4 / A3, sans gabarits), fiche
  * de pose PDF, DXF des pièces, modèle 3D glTF (.glb, calculé dans le worker) et DXF de la pièce
  * sélectionnée. Menu déroulant non modal ; téléchargement direct (Blob + lien).
  *

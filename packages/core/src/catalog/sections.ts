@@ -20,7 +20,7 @@
  * recoupée serait marquée `verified: false` (« à vérifier »). Les rayons de congé et la pente
  * des ailes (IPN, UPN) ne sont pas modélisés : les solides 3D sont dessinés à ailes parallèles.
  */
-import { isMessage, translatorFor, type Message } from "@blondel/i18n";
+import { isMessage, msg, translatorFor, type Message } from "@blondel/i18n";
 import type { Mm } from "../model/primitives.js";
 
 export const SECTION_FAMILIES = ["UPN", "IPN", "IPE", "HEA"] as const;
@@ -49,23 +49,42 @@ export interface SteelSection {
   readonly iz: number;
   /** Valeurs recoupées sur la source ; `false` : « à vérifier ». */
   readonly verified: boolean;
+  /** Source citée, en français (traduction française de `sourceMessage`). */
   readonly source: string;
+  /**
+   * Source citée traduisible (QUESTIONS A26 (b)) : « consulté le … » / « accessed … », date ISO
+   * dans les deux langues ; désignations et normes (DIN 1026-1, EN 10365) non traduites.
+   */
+  readonly sourceMessage: Message;
 }
 
-const SRC_UPN = "CivilAxis, UPN (DIN 1026-1), consulté le 2026-09-29 ; C §2.3 [24]";
-const SRC_IPE = "CivilAxis, IPE (EN 10365), consulté le 2026-09-29";
-const SRC_HEA = "CivilAxis, HE A (EN 10365), consulté le 2026-09-29";
-const SRC_IPN =
-  "Metala Konstrukcijas, IPN (DIN 1025-1:1995), consulté le 2026-09-29 ; W_el,y = 2·I_y / h recalculé";
+/** Date de consultation des tables de profilés (ISO, identique dans les deux langues). */
+const CONSULTED = "2026-09-29";
+
+/** Source « éditeur, désignation, consulté le … ». */
+const consulted = (publisher: string, designation: string): Message =>
+  msg("catalog.source.consulted", { publisher, designation, date: CONSULTED });
+
+const SRC_UPN = msg("catalog.source.withReference", {
+  source: consulted("CivilAxis", "UPN (DIN 1026-1)"),
+  reference: "C §2.3 [24]",
+});
+const SRC_IPE = consulted("CivilAxis", "IPE (EN 10365)");
+const SRC_HEA = consulted("CivilAxis", "HE A (EN 10365)");
+const SRC_IPN = msg("catalog.source.recomputed", {
+  source: consulted("Metala Konstrukcijas", "IPN (DIN 1025-1:1995)"),
+  formula: "W_el,y = 2·I_y / h",
+});
 
 /** Ligne de table dans les unités de la source : h, b, t_w, t_f (mm), A (cm²), G (kg/m), I_y (cm⁴), W_y (cm³), I_z (cm⁴). */
 type Row = readonly [number, number, number, number, number, number, number, number | null, number];
 
 function build(
   family: SectionFamily,
-  source: string,
+  sourceMessage: Message,
   rows: Readonly<Record<string, Row>>,
 ): SteelSection[] {
+  const source = translatorFor("fr").t(sourceMessage);
   return Object.entries(rows).map(([size, [h, b, tw, tf, A, G, Iy, Wy, Iz]]) => ({
     name: `${family} ${size}`,
     family,
@@ -81,6 +100,7 @@ function build(
     iz: Iz * 1e4,
     verified: true,
     source,
+    sourceMessage,
   }));
 }
 

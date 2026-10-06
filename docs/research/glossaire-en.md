@@ -10,6 +10,7 @@
 - Les **titres et références de normes** restent dans leur langue d'origine (« NF DTU 36.3 », « NF P01-012 », « arrêté du 1er août 2006 ») ; on peut ajouter une explication courte entre parenthèses (« French building code »).
 - Les **repères** de pièces (`M5`, `L1`) ne sont pas traduits.
 - « _(usage)_ » : traduction courante du métier sans source lue dans la recherche.
+- **Sources citées** du contrôle de conception (décision de l'utilisateur du 2026-10-06, QUESTIONS A26 (b)) : traduites en anglais, une traduction par source (`source_en` dans `docs/research/rules.yaml` ; clés `compliance.source.*` et `catalog.source.*` pour les contrôles de plugin, le prédimensionnement, le catalogue de profilés et le profil d'atelier). Les titres et références restent dans leur langue (« NF DTU 36.3 P3 §6.2 », « NF EN 1991-1-1/NA », « CNC2M N0169 », numéros de sources « [4] », chemins `docs/research/…`) ; un arrêté est cité « Arrêté (French ministerial order) 24/12/2015 art. 12 », une circulaire « Circulaire 2007-53 (French ministerial circular…) », le règlement de sécurité « ERP fire safety regulations CO 55 §1 ». « consulté le » → « accessed » (date ISO dans les deux langues) ; « via » et « [ANALYSE] » → « via », « [ANALYSIS] » ; « usage » → « common practice » ; « (comparaison) » → « (comparison) ». Seuls « Arrêté(s) », « arrêté » et « Légifrance » restent en français dans une source anglaise (liste blanche du test anglais, `packages/exports/src/testing/french.ts`).
 
 ## Tracé et dimensions
 
@@ -30,13 +31,15 @@
 | Reculement                         | Total going                    | Total run                     |                                                        |
 | Emmarchement                       | Stair width                    | —                             | Entre faces internes des limons                        |
 | Largeur de passage                 | Clear width                    | —                             |                                                        |
-| Loi de Blondel (2h + g)            | Blondel formula (2R + G)       | —                             | « Blondel » est un nom propre                          |
+| Loi de Blondel (2h + g)            | Blondel formula (2R + G)       | —                             | « Blondel » est un nom propre ; dans les cartouches des dessins : « 2 × rise + going » (voir Notations) |
 | Pente                              | Pitch                          | Slope                         |                                                        |
 | Ligne de pente                     | Pitch line                     | —                             |                                                        |
 | Ligne de foulée                    | Walking line                   | Walkline                      |                                                        |
 | Nez de marche                      | Nosing                         | —                             |                                                        |
 | Ligne des nez                      | Nosing line                    | —                             |                                                        |
 | Débord du nez                      | Nosing projection              | —                             |                                                        |
+| Nez d'arrivée                      | Top nosing                     | —                             | Dernier nez, au palier haut (A28)                      |
+| Palier d'arrivée                   | Top landing                    | —                             |                                                        |
 | Contremarche                       | Riser                          | —                             |                                                        |
 | Recouvrement                       | Overlap                        | —                             |                                                        |
 | Échappée                           | Headroom                       | —                             | Hauteur libre verticale                                |
@@ -56,6 +59,21 @@
 | Noyau, fût                         | Centre column                  | Center pole                   | « newel » est réservé au poteau                         |
 | Côté mur / côté jour               | Wall side / well side          | —                             |                                                        |
 | À gauche / à droite (sens de montée)| Left-hand / right-hand         | —                             |                                                        |
+
+## Notations des cartouches
+
+Décision de l'utilisateur du 2026-10-06 (QUESTIONS A26 (a)) : une lettre ne désigne qu'une grandeur dans un même cartouche.
+
+| Grandeur                    | Français        | Anglais (cartouche)            | Remarque                                                      |
+| --------------------------- | --------------- | ------------------------------ | ------------------------------------------------------------- |
+| Rayon                       | R               | R                              | Préfixe d'une cote de rayon (« R 800 »), convention ISO 129-1 |
+| Hauteur de marche           | h               | rise (en toutes lettres)       | « 15 rises of 175.0 mm », « 15 × rise 175.0 mm », « First rise = … » ; jamais « R = » ni « R1 » |
+| Loi de Blondel              | 2h + g          | 2 × rise + going               | Cartouches du plan et de l'élévation ; « 2R + G » reste le nom de la formule ailleurs (interface, règles), où aucun rayon n'est coté |
+| Giron                       | g               | G                              | « Going G = … »                                               |
+| Hauteur à monter            | H               | H                              | « Total rise H = … »                                          |
+| Rayon extérieur / intérieur (hélicoïdal) | R_e, r | R_e, r                        | Indice explicite : pas d'ambiguïté avec la hauteur            |
+
+En français, rien ne change : la hauteur de marche s'écrit déjà h (h1 pour la première), R est réservé au rayon.
 
 ## Balancement
 
@@ -145,7 +163,7 @@
 | ---------------------------- | ---------------------------- | ------------------- | ------------------------------------- |
 | Pièce                        | Part                         | —                   |                                       |
 | Repère                       | Mark                         | Part mark           | Les valeurs (`M5`) ne sont pas traduites |
-| Développé                    | Flat pattern                 | —                   | « development » pour un limon bois    |
+| Développé                    | Flat pattern (tôle, acier), development (limon bois) | —  | Décision du 2026-10-06 (A26 (a)) : « Development » pour le développé d'un limon ou d'une crémaillère en bois (titres de dessin et de page, inspecteur, gabarit) ; « Flat pattern » pour la tôle, l'acier et les libellés génériques (onglet, menu d'export, nomenclature) ; point unique : `packages/exports/src/flatTerms.ts` |
 | Gabarit                      | Template                     | —                   |                                       |
 | Calibre rallongé             | Face mould                   | Face mold           |                                       |
 | Calepinage                   | Nesting                      | —                   |                                       |
@@ -189,7 +207,42 @@
 | « À valider »                | “To be validated”            | Valeurs non sourcées (profil d'atelier, plugins)      |
 | Profil d'atelier             | Workshop profile             |                                                       |
 | Prédimensionnement           | Preliminary sizing           |                                                       |
+| Profil strict / souple       | Strict / Lenient profile     | « Profile Lenient » dans une phrase (dossier PDF) ; libellé traduit, jamais l'identifiant (`strict`, `souple`) |
+| Source citée                 | Source                       | Traduite, titres de normes dans leur langue (voir Conventions) |
+| Profil d'atelier Blondel (valeur par défaut à valider) | Blondel workshop profile (default value to be validated) | Source des contrôles de fabrication |
 | ERP (établissement recevant du public) | Public building (French ERP category) | Sigle conservé entre parenthèses       |
 | Logement                     | Dwelling                     |                                                       |
 | Assistant                    | Wizard                       |                                                       |
 | Typologie                    | Stair type                   |                                                       |
+
+## Visserie
+
+Termes fixés avec la modélisation de la visserie (décision de l'utilisateur du 2026-10-06, QUESTIONS A27) ; libellés `fastener.*` des dictionnaires.
+
+| Français                         | Anglais (interface)         | US                 | Remarque                                  |
+| -------------------------------- | --------------------------- | ------------------ | ----------------------------------------- |
+| Visserie                         | Fixings                     | Fasteners          | Groupe du mode Fabrication, page du dossier, liste CSV |
+| Boulon                           | Bolt                        | —                  |                                           |
+| Vis à métaux                     | Machine screw               | —                  |                                           |
+| Vis à bois                       | Wood screw                  | —                  |                                           |
+| Tire-fond                        | Coach screw                 | Lag screw          |                                           |
+| Cheville mécanique               | Expansion anchor            | —                  |                                           |
+| Scellement chimique              | Chemical anchor             | —                  |                                           |
+| Cheville pour cloison creuse     | Cavity wall anchor          | Hollow-wall anchor |                                           |
+| Classe 4.6, 8.8, 10.9            | Grade 4.6, 8.8, 10.9        | —                  | « grade 8.8 » dans une désignation        |
+| Inox A2-70, A4-70                | Stainless A2-70, A4-70      | —                  |                                           |
+| Acier zingué                     | Zinc-plated steel           | —                  |                                           |
+| Galvanisé à chaud                | Hot-dip galvanised          | Hot-dip galvanized |                                           |
+| Liste de visserie                | Fixings schedule            | Fastener schedule  | Export CSV, page du dossier               |
+| Assemblage d'origine             | Joint                       | —                  |                                           |
+| Nature (d'un élément de visserie) | Type                       | —                  |                                           |
+| Classe ou matière                | Grade or material           | —                  |                                           |
+| Diamètre nominal                 | Nominal diameter            | —                  |                                           |
+| Jeu de perçage (minimal)         | (Minimum) hole clearance    | —                  |                                           |
+| Série des diamètres nominaux     | Nominal diameter series     | —                  | Saisie « 6 ; 8 ; 10 » (point-virgule)     |
+| Poteau de garde-corps sur l'escalier bois / métal | Guard post to timber / steel stair | — | Assemblage selon le support (A27)  |
+| Mur non décrit par le site : porteur | Wall not described by the site: load-bearing | — | Réglage d'atelier « à valider » |
+| Entraxe maximal des supports de main courante | Maximum handrail bracket spacing | — |                              |
+| Quantité par point de fixation   | Quantity per fixing point   | —                  |                                           |
+| Mur porteur / cloison            | Load-bearing / non-load-bearing wall | —         |                                           |
+| ETE (évaluation technique européenne) | ETA                    | —                  | Fiche du fabricant de chevilles           |
