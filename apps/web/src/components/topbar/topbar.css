@@ -201,6 +201,38 @@
   background: var(--color-neutral-200);
 }
 
+/* Parcours guidé (maquette 1a) : grand segmenté Guidé | Libre, Barlow Condensed 600 14 px,
+   option active pleine en couleur de texte (comme Conception | Fabrication). */
+.topbar .journey-switch--guided .seg-opt {
+  padding: 6px 14px;
+  font-family: var(--font-heading);
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.topbar .journey-switch--guided .seg-opt[aria-checked="true"],
+.topbar .journey-switch--guided .seg-opt[aria-checked="true"]:hover,
+.topbar .journey-switch--guided .seg-opt[aria-checked="true"]:active {
+  background: var(--color-text);
+  color: var(--color-bg);
+}
+
+/* Guidé : pas de segmenté centré, le groupe de droite prend la place de son contenu. Le
+   segmenté Guidé | Libre reste dans le groupe de gauche (même arbre que le libre, rien n'est
+   remonté à la bascule) et y est poussé à droite, juste avant Annuler / Rétablir. */
+.topbar--guided {
+  gap: 16px;
+}
+
+.topbar--guided .journey-switch {
+  margin-left: auto;
+}
+
+.topbar--guided .topbar__actions {
+  flex: none;
+  gap: 16px;
+}
+
 /* Conception | Fabrication : grand, option active pleine en couleur de texte. */
 .topbar .workspace-switch {
   flex: none;

@@ -32,11 +32,10 @@ import {
 } from "../../lib/compliance.js";
 import { applyFixInStore, fixesFor, fixesForRule } from "../../lib/fixes.js";
 import { ruleSection } from "../../lib/ruleSections.js";
-import type { SectionId } from "../../lib/sectionIds.js";
 import { formatMeasure } from "../../lib/units.js";
-import { appStore, journeyStore, useApp, useModel } from "../../store/appStore.js";
+import { appStore, useApp, useModel } from "../../store/appStore.js";
 import type { Selection } from "../../store/projectStore.js";
-import { switchWorkspace } from "../../store/uiStore.js";
+import { openSection } from "../../store/uiStore.js";
 import { RAIL_LABEL_KEYS } from "../free/Rail.js";
 import { ParamInput, useStructureParamForm } from "../StructureSection.js";
 import { Icon } from "../ui/Icon.js";
@@ -161,12 +160,6 @@ function Where({ r }: { r: RuleResult }) {
       </ul>
     </div>
   );
-}
-
-/** Ouvre une section du panneau libre (en Conception). */
-function openSection(section: SectionId): void {
-  if (journeyStore.getState().workspace !== "design") switchWorkspace("design");
-  journeyStore.getState().openFreePanel(section);
 }
 
 /**

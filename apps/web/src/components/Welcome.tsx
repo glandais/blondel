@@ -4,6 +4,10 @@
  * `lib/presetChoice.ts`), un préréglage ou l'import d'un projet. Masqué dès
  * que le projet est modifié, que l'assistant est ouvert ou sur « Fermer » (mémorisé dans le
  * navigateur).
+ *
+ * Affiché au-dessus de la vue dans les deux parcours : la vue centrale du libre (`ViewArea`) et
+ * celle du guidé (`GuidedView`), où une première visite s'ouvre (ADR-0009). Une fois l'accueil
+ * fermé, démos, préréglages et assistant restent dans le menu du projet de la barre du haut.
  */
 import { useState } from "react";
 import { useT } from "../i18n/useT.js";

@@ -1,8 +1,10 @@
 /**
  * Parcours guidé / libre (ADR-0009) : état d'interface hors projet et ses règles, en fonctions
  * pures (sans DOM ni store). Le store `store/journeyStore.ts` les applique et mémorise les
- * préférences dans le stockage du navigateur ; l'affichage arrive en vagues 2 (libre) et 5
- * (guidé). Rien ici ne touche au projet, à l'historique, à la sélection ni à la vue.
+ * préférences dans le stockage du navigateur ; la navigation consciente du parcours (étape,
+ * vue conseillée, liste du contrôle) est dans `store/uiStore.ts`, la présentation des étapes
+ * dans `lib/guidedSteps.ts`. Rien ici ne touche au projet, à l'historique, à la sélection ni
+ * à la vue.
  */
 import type { PlanMode, ProjectOrigin, ViewTab } from "../store/projectStore.js";
 import {
@@ -53,7 +55,10 @@ export function initialJourney({
 }: {
   readonly remembered: Journey | null;
   readonly hasAutosave: boolean;
-  /** Parcours guidé disponible (faux tant qu'il n'est pas affiché : « libre » à la place). */
+  /**
+   * Parcours guidé disponible (vrai par défaut, l'application l'affiche depuis la vague 5).
+   * Faux : « libre » à la place (repli conservé pour les tests et un éventuel écran sans guidé).
+   */
   readonly guidedAvailable?: boolean;
 }): Journey {
   const journey = remembered ?? (hasAutosave ? "free" : "guided");
@@ -63,9 +68,12 @@ export function initialJourney({
 /**
  * Préférences après l'ouverture d'un projet : démo ou assistant → guidé à l'étape 1 ; import ou
  * reprise d'une copie → libre ; préréglage → parcours inchangé. Dans tous les cas, les étapes
- * vues repartent de zéro et l'espace revient en Conception ; le panneau libre et son épinglage
- * sont conservés. Sans parcours guidé disponible (`guidedAvailable` faux), démo et assistant
- * restent en libre, sans ouvrir de panneau ; le reste de la règle s'applique.
+ * vues repartent de zéro (en guidé, l'étape affichée compte comme vue) et l'espace revient en
+ * Conception (en guidé, celui de l'étape : Fabrication à l'étape 7) ; le panneau libre et son
+ * épinglage sont conservés. La vue n'est pas touchée (une démo reste en 3D) : la vue conseillée
+ * n'est appliquée qu'au changement d'étape.
+ * Sans parcours guidé disponible (`guidedAvailable` faux), démo et assistant restent en libre,
+ * sans ouvrir de panneau ; le reste de la règle s'applique.
  */
 export function journeyAfterOpening(
   origin: ProjectOrigin,
@@ -73,15 +81,22 @@ export function journeyAfterOpening(
   guidedAvailable = true,
 ): JourneyPrefs {
   const base: JourneyPrefs = { ...prefs, visitedSteps: new Set(), workspace: "design" };
+  // En guidé, l'étape affichée compte comme vue et donne l'espace (Fabrication à l'étape 7).
+  const shown = (p: JourneyPrefs): JourneyPrefs =>
+    p.journey === "guided"
+      ? { ...p, visitedSteps: new Set([p.guidedStep]), workspace: stepWorkspace(p.guidedStep) }
+      : p;
   switch (origin) {
     case "demo":
     case "assistant":
-      return { ...base, journey: guidedAvailable ? "guided" : "free", guidedStep: 1 };
+      return guidedAvailable
+        ? shown({ ...base, journey: "guided", guidedStep: 1 })
+        : { ...base, journey: "free", guidedStep: 1 };
     case "import":
     case "restore":
       return { ...base, journey: "free" };
     case "preset":
-      return base;
+      return shown(base);
   }
 }
 
@@ -189,8 +204,9 @@ export function panelAfter(state: PanelState, e: PanelEvent): PanelState {
 
 /**
  * Bascule de parcours. Guidé → libre : ouvert sur la section de l'étape en cours (étape 7 :
- * mode Fabrication, panneau inchangé). Libre → guidé : étape du panneau ouvert (Fabrication :
- * étape 7 ; Contexte ou aucun panneau : étape inchangée), marquée comme vue. Sans parcours
+ * espace courant gardé, donc la vue active aussi ; en Fabrication, panneau inchangé, en
+ * Conception, sans panneau). Libre → guidé : étape du panneau ouvert (Fabrication : étape 7 ;
+ * Contexte ou aucun panneau : étape inchangée), marquée comme vue. Sans parcours
  * guidé disponible (`guidedAvailable` faux), le passage au guidé est sans effet.
  */
 export function switchJourney(
@@ -202,9 +218,13 @@ export function switchJourney(
   if (target === "guided" && !guidedAvailable) return prefs;
   if (target === "free") {
     const panel = panelForStep(prefs.guidedStep);
-    return panel === null
-      ? { ...prefs, journey: "free", workspace: "fabrication" }
-      : { ...prefs, journey: "free", freePanel: panel, workspace: "design" };
+    if (panel !== null) return { ...prefs, journey: "free", freePanel: panel, workspace: "design" };
+    // Étape 7 : l'espace courant est gardé, et avec lui la vue active. En Fabrication (cas
+    // ordinaire), panneau inchangé ; en Conception (onglet « 3D » choisi à l'étape 7), aucun
+    // panneau, pour que le retour au guidé ramène à l'étape 7.
+    return prefs.workspace === "design"
+      ? { ...prefs, journey: "free", freePanel: null }
+      : { ...prefs, journey: "free", workspace: "fabrication" };
   }
   const fromPanel = prefs.freePanel === null ? null : stepForPanel(prefs.freePanel);
   const step: GuidedStep = prefs.workspace === "fabrication" ? 7 : (fromPanel ?? prefs.guidedStep);
@@ -212,14 +232,15 @@ export function switchJourney(
     ...prefs,
     journey: "guided",
     guidedStep: step,
-    workspace: stepWorkspace(step),
+    // L'étape 7 montre aussi la 3D (vue de Conception) : l'espace courant y est gardé.
+    workspace: step === 7 ? prefs.workspace : stepWorkspace(step),
     visitedSteps: new Set([...prefs.visitedSteps, step]),
   };
 }
 
 /**
- * Étape cochée ✓ : vue au moins une fois et aucune règle bloquante rattachée (le rattachement
- * des règles aux étapes est fait par l'appelant, vague 5).
+ * Étape cochée ✓ : vue au moins une fois et aucune règle bloquante rattachée (rattachement des
+ * règles aux étapes : `lib/ruleSteps.ts`, `checkedSteps`).
  */
 export function isStepChecked(
   step: GuidedStep,

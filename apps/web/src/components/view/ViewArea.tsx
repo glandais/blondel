@@ -11,11 +11,13 @@
  * - en pied, la ligne de chiffres (`FigureLine`).
  *
  * Conception seulement : le mode Fabrication a sa propre zone (`fabrication/FabricationArea`).
+ * La vue du parcours guidé (`guided/GuidedView`) réutilise `ViewContent`, `ZoomControls`,
+ * `QueuedImportNotice` et `designViewLabel`.
  * Les SVG affichés sont ceux des exports ; aucune grandeur n'est calculée ici.
  */
 import { Suspense, lazy } from "react";
 import { useStore } from "zustand";
-import type { MessageKey } from "@blondel/i18n";
+import type { MessageKey, Translator } from "@blondel/i18n";
 import { useT } from "../../i18n/useT.js";
 import { partSelection, selectedTreadNumber } from "../../lib/compliance.js";
 import { appStore, journeyStore, useApp, useModel } from "../../store/appStore.js";
@@ -51,6 +53,12 @@ const labelKey = (view: ViewTab): MessageKey | null =>
 
 const THREE_D = "3D";
 
+/** Libellé d'un onglet de Conception (Plan, 3D, Élévation), partagé avec la vue du guidé. */
+export function designViewLabel(view: ViewTab, t: Pick<Translator, "t">): string {
+  const key = labelKey(view);
+  return key === null ? THREE_D : t.t(key);
+}
+
 /**
  * Vue qui gère les commandes − / + / Recadrer : plan (coté et « Site et saisie »), 3D,
  * élévation. Les onglets de Fabrication n'en ont pas.
@@ -79,7 +87,7 @@ export function closesFreePanel(target: EventTarget | null): boolean {
  * saisie » qui l'accueille n'est pas affiché, la demande attend ; message explicite et bouton
  * pour l'abandonner (QUESTIONS D1).
  */
-function QueuedImportNotice({
+export function QueuedImportNotice({
   available,
   computing,
   hostShown,
@@ -117,7 +125,7 @@ function QueuedImportNotice({
   );
 }
 
-function ViewContent({ view }: { view: ViewTab }) {
+export function ViewContent({ view }: { view: ViewTab }) {
   const project = useApp((s) => s.project);
   const selection = useApp((s) => s.selection);
   const t = useT();
@@ -175,7 +183,7 @@ function ViewContent({ view }: { view: ViewTab }) {
   }
 }
 
-function ZoomControls({ enabled }: { enabled: boolean }) {
+export function ZoomControls({ enabled }: { enabled: boolean }) {
   const t = useT();
   const unavailable = enabled ? undefined : t.t("ui.view.zoom.unavailable");
   const send = (kind: ViewCommandKind) => () => sendViewCommand(kind);
@@ -219,10 +227,7 @@ export function ViewArea() {
   const planMode = useApp((s) => s.planMode);
   const t = useT();
   const { model, pending } = useModel();
-  const options = DESIGN_VIEWS.map((v) => {
-    const key = labelKey(v);
-    return { value: v, label: key === null ? THREE_D : t.t(key) };
-  });
+  const options = DESIGN_VIEWS.map((v) => ({ value: v, label: designViewLabel(v, t) }));
   return (
     <main className="workarea" aria-label={t.t("ui.app.center.label")}>
       <Welcome />

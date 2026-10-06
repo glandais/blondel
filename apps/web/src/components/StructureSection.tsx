@@ -3,7 +3,8 @@
  * et formulaire de ses paramètres, déduit des défauts et du schéma du plugin, présenté en
  * français (libellés, unités, groupes : `lib/paramLabels.ts`) ; section des profilés choisie
  * dans le catalogue du cœur. Sans plugin disponible, seule la structure « aucune » (marches,
- * contremarches, paliers) est proposée.
+ * contremarches, paliers) est proposée. Dans le parcours guidé, la liste devient des cartes par
+ * famille (`StructureCards`), structures incompatibles avec le tracé grisées.
  *
  * Les paramètres sont répartis par niveau (`Tiered`, `structureParamEntry`) ; le crochet
  * `useStructureParamForm` et `structureParamItem` servent aussi à la section « Marches », qui
@@ -46,6 +47,7 @@ import { formatDecimal, parseDecimal, parseIntMm } from "../lib/units.js";
 import { appStore, useApp, useModel } from "../store/appStore.js";
 import type { UpdateResult } from "../store/projectStore.js";
 import { AutoIntField, CheckField, NumberField, SelectField, TextField } from "./fields.js";
+import { ChoiceCards, type ChoiceCard } from "./ui/ChoiceCards.js";
 import { useValidatedKeys } from "./fabrication/useToValidate.js";
 import {
   DISPLAY_ALL,
@@ -323,6 +325,118 @@ export function StructureParamError({ error }: { error: Message | null }) {
   ) : null;
 }
 
+/**
+ * Choix de la structure `kind` (liste du parcours libre ou cartes du guidé) : paramètres complets
+ * du plugin (ses valeurs par défaut) et jour adapté (poteau d'angle, poteau des profilés) en une
+ * seule modification du projet, donc une seule entrée d'historique ; la remarque du cœur devient
+ * une notice d'information. Sans effet si `kind` est la structure courante.
+ */
+export function selectStructureKind(
+  kind: string,
+  current: string,
+  kinds: readonly StructureKind[],
+  ctx: StructureContext | undefined,
+): UpdateResult {
+  if (kind === current) return { ok: true };
+  const k = kinds.find((x) => x.kind === kind);
+  // Paramètres complets du plugin enregistrés au choix (valeurs par défaut du plugin) : le
+  // projet reste lisible même si les défauts changent avec le tracé.
+  const d = kind === NO_STRUCTURE || !k ? undefined : safeDefaults(k, ctx);
+  const params = kind === NO_STRUCTURE ? {} : withDefaults(d, {});
+  let notice: Message | null = null;
+  const r = appStore.getState().update((p) => {
+    const c = chooseStructure(p, kind, params);
+    notice = c.notice;
+    return c.project;
+  });
+  if (r.ok && notice !== null) appStore.setState({ notice: { kind: "info", msg: notice } });
+  return r;
+}
+
+const FAMILY_ORDER: readonly StructureKind["family"][] = ["bois", "metal", "mixte"];
+
+/** Titres des groupes de cartes, par famille. */
+const FAMILY_TITLES: Readonly<Record<StructureKind["family"], MessageKey>> = {
+  bois: "ui.guided.cards.structure.family.bois",
+  metal: "ui.guided.cards.structure.family.metal",
+  mixte: "ui.guided.cards.structure.family.mixte",
+};
+
+/**
+ * Cartes de structure du parcours guidé (spécification de contenu § 3) : « Aucune structure »
+ * d'abord (et le plugin indisponible du projet, s'il y en a un), puis un groupe par famille. Une
+ * structure incompatible avec le tracé est grisée, sa raison écrite.
+ */
+function StructureCards({
+  kinds,
+  current,
+  missing,
+  onKind,
+}: {
+  kinds: readonly StructureKind[];
+  current: string;
+  missing: boolean;
+  onKind: (kind: string) => UpdateResult;
+}) {
+  const t = useT();
+  const layoutKind = useApp((s) => layoutKindOf(s.project));
+  const isPressed = (k: string): boolean => k === current;
+  const choose = (k: string): void => {
+    onKind(k);
+  };
+  const reason = t.t(
+    layoutKind === "helical"
+      ? "ui.guided.cards.structure.flightsOnly"
+      : "ui.guided.cards.structure.helicalOnly",
+  );
+  const first: ChoiceCard<string>[] = [
+    {
+      value: NO_STRUCTURE,
+      label: t.t("ui.guided.cards.structure.none"),
+      caption: t.t("ui.guided.cards.structure.noneCaption"),
+    },
+    ...(missing
+      ? [{ value: current, label: t.t("ui.structure.pluginMissing", { kind: current }) }]
+      : []),
+  ];
+  return (
+    <div className="structure-cards" role="group" aria-label={t.t("ui.structure.label")}>
+      <ChoiceCards
+        label={t.t("ui.guided.cards.structure.none")}
+        cards={first}
+        isPressed={isPressed}
+        onChoose={choose}
+      />
+      {FAMILY_ORDER.map((family) => {
+        const members = kinds.filter((k) => k.family === family);
+        if (members.length === 0) return null;
+        const title = t.t(FAMILY_TITLES[family]);
+        return (
+          <div key={family} className="structure-cards__family">
+            <p className="eyebrow structure-cards__title" aria-hidden="true">
+              {title}
+            </p>
+            <ChoiceCards
+              label={title}
+              cards={members.map((k) => {
+                const fits = structureFitsLayout(k.kind, layoutKind);
+                return {
+                  value: k.kind,
+                  label: t.t(k.labelKey),
+                  caption: t.t(FAMILY_LABELS[k.family]),
+                  ...(fits ? {} : { disabled: true, reason }),
+                };
+              })}
+              isPressed={isPressed}
+              onChoose={choose}
+            />
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 export function StructureSection({ display = DISPLAY_ALL }: Partial<SectionProps> = {}) {
   const t = useT();
   const structure = useApp((s) => s.project.stair.structure);
@@ -356,22 +470,9 @@ export function StructureSection({ display = DISPLAY_ALL }: Partial<SectionProps
 
   const onKind = (kind: string): UpdateResult => {
     setError(null);
-    if (kind === structure.kind) return { ok: true };
-    const k = kinds.find((x) => x.kind === kind);
-    // Paramètres complets du plugin enregistrés au choix (valeurs par défaut du plugin) : le
-    // projet reste lisible même si les défauts changent avec le tracé.
-    const d = kind === NO_STRUCTURE || !k ? undefined : safeDefaults(k, ctx);
-    const params = kind === NO_STRUCTURE ? {} : withDefaults(d, {});
-    // Structure et jour adapté (poteau d'angle, poteau des profilés) en une seule modification.
-    let notice: Message | null = null;
-    const r = appStore.getState().update((p) => {
-      const c = chooseStructure(p, kind, params);
-      notice = c.notice;
-      return c.project;
-    });
-    if (r.ok && notice !== null) appStore.setState({ notice: { kind: "info", msg: notice } });
-    return r;
+    return selectStructureKind(kind, structure.kind, kinds, ctx);
   };
+  const guided = display.kind === "guided";
 
   // Paramètres : principaux d'abord, puis un sous-groupe repliable par sous-objet, dans chaque
   // zone (principale, « Plus de réglages », « Réglages d'atelier »).
@@ -397,12 +498,21 @@ export function StructureSection({ display = DISPLAY_ALL }: Partial<SectionProps
     <>
       {kindVisible ? (
         <>
-          <SelectField
-            label={t.t("ui.structure.label")}
-            value={structure.kind}
-            options={options}
-            onCommit={onKind}
-          />
+          {guided ? (
+            <StructureCards
+              kinds={kinds}
+              current={structure.kind}
+              missing={structure.kind !== NO_STRUCTURE && !plugin}
+              onKind={onKind}
+            />
+          ) : (
+            <SelectField
+              label={t.t("ui.structure.label")}
+              value={structure.kind}
+              options={options}
+              onCommit={onKind}
+            />
+          )}
           {kinds.length === 0 ? <p className="muted">{t.t("ui.structure.noPlugin")}</p> : null}
           {plugin && defaults === undefined ? (
             <p className="muted">{t.t("ui.structure.paramsUnavailable")}</p>

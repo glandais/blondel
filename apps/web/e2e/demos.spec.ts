@@ -8,7 +8,6 @@ import {
   LONG_TASK_BUDGET_MS,
   applyPreset,
   PRESETS,
-  blockingCount,
   closeProjectMenu,
   describeTasks,
   instrument,
@@ -17,6 +16,7 @@ import {
   overBudget,
   settle,
   takeLongTasks,
+  useFreeJourney,
   viewTab,
 } from "./support.js";
 
@@ -83,8 +83,14 @@ test(`chaque démo : onglet 3D, aucun bloquant, une entrée d'annulation (tâche
     await expect(name).toHaveText(label);
     // Étiquette « Démo » de la barre du haut.
     await expect(demoTag).toHaveText("Démo");
-    await expect(page.locator(".figure-line__errors")).toHaveCount(0);
-    expect(await blockingCount(page), label).toBe(0);
+    // Une démo ouvre le parcours guidé à l'étape 1 (ADR-0009), la vue 3D gardée.
+    await expect(page.locator('.app[data-journey="guided"]')).toBeVisible();
+    await expect(page.locator("#step-tab-1")).toHaveAttribute("aria-selected", "true");
+    // Aucune erreur de génération, aucun bloquant (pied du guidé : bouton absent à zéro).
+    await expect(page.locator(".errors-bar__errors")).toHaveCount(0);
+    const footer = page.locator(".guided-footer");
+    await expect(footer.locator('[data-severity="avertissement"]')).toBeVisible();
+    await expect(footer.locator('[data-severity="bloquant"]'), label).toHaveCount(0);
     await expect(page.locator(".notice")).toContainText(label);
     // La page tient dans la fenêtre, sans défilement horizontal ni vertical du document : seuls
     // les panneaux défilent (régression : `.visually-hidden` du panneau de droite agrandissait
@@ -171,8 +177,10 @@ test("démo : cotes et contrôles masqués, réactivables, rétablis par un pré
   await openApp(page);
   await applyPreset(page, "Hélicoïdal acier, verre et inox");
   await expectOverlays(page, false);
-  // Aucune pièce teintée ni cote dessinée ; le panneau de contrôle garde les avertissements.
+  // Aucune pièce teintée ni cote dessinée ; le panneau de contrôle garde les avertissements
+  // (inspecteur du parcours libre : la démo a ouvert le guidé).
   await expect(page.locator(".viewer3d__overlay [data-annotation]")).toHaveCount(0);
+  await useFreeJourney(page);
   await expect(page.locator(".result--violation").first()).toBeAttached();
   // Réactivation par l'utilisateur, conservée en changeant d'onglet.
   await page.getByRole("checkbox", { name: "Contrôles sur les pièces", exact: true }).check();

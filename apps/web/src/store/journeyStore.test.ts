@@ -28,6 +28,8 @@ describe("store du parcours", () => {
     const s = createJourneyStore(storage, { hasAutosave: false });
     expect(s.getState().journey).toBe("guided");
     expect(stored(storage).journey).toBe("guided");
+    // L'étape affichée au démarrage compte comme vue.
+    expect([...s.getState().visitedSteps]).toEqual([1]);
     // Lancement suivant : le projet est repris, mais le dernier choix (guidé) l'emporte.
     expect(createJourneyStore(storage, { hasAutosave: true }).getState().journey).toBe("guided");
   });
@@ -69,7 +71,7 @@ describe("store du parcours", () => {
     const storage = memoryStorage();
     const s = createJourneyStore(storage, { hasAutosave: false });
     s.getState().setGuidedStep(3);
-    expect(stored(storage)).toMatchObject({ guidedStep: 3, visitedSteps: [3] });
+    expect(stored(storage)).toMatchObject({ guidedStep: 3, visitedSteps: [1, 3] });
     s.getState().setJourney("free");
     expect(stored(storage)).toMatchObject({ journey: "free", freePanel: "stepping" });
     s.getState().panelEvent({ type: "pin", pinned: true });
@@ -89,7 +91,7 @@ describe("store du parcours", () => {
       freePanelPinned: false,
       workspace: "fabrication",
       hintFreeJourneyDismissed: true,
-      visitedSteps: [3, 6],
+      visitedSteps: [1, 3, 6],
     });
     // Rien de plus : les préférences relues sont celles de l'état.
     const again = createJourneyStore(storage, { hasAutosave: true }).getState();
@@ -99,7 +101,9 @@ describe("store du parcours", () => {
   it("stockage qui lève ou absent : valeurs par défaut, sans exception", () => {
     for (const storage of [throwing, undefined]) {
       const s = createJourneyStore(storage, { hasAutosave: false });
-      expect(serializePrefs(s.getState())).toBe(serializePrefs(DEFAULT_JOURNEY_PREFS));
+      expect(serializePrefs(s.getState())).toBe(
+        serializePrefs({ ...DEFAULT_JOURNEY_PREFS, visitedSteps: new Set([1]) }),
+      );
       s.getState().setJourney("free");
       expect(s.getState().journey).toBe("free");
     }
@@ -117,7 +121,8 @@ describe("store du parcours", () => {
     expect(s.getState().journey).toBe("free");
     s.getState().applyOpening("assistant");
     expect(s.getState()).toMatchObject({ journey: "guided", guidedStep: 1 });
-    expect(stored(storage)).toMatchObject({ journey: "guided", guidedStep: 1, visitedSteps: [] });
+    // Démo ou assistant : l'étape 1 affichée compte comme vue.
+    expect(stored(storage)).toMatchObject({ journey: "guided", guidedStep: 1, visitedSteps: [1] });
   });
 
   it("étape 7 ↔ espace Fabrication, quel que soit le chemin", () => {
@@ -154,6 +159,38 @@ describe("liaison au projet chargé", () => {
     // Désabonné : plus d'effet.
     unlink();
     projects.getState().loadDemo(DEMO_PRESET_IDS[0]!);
+    expect(journey.getState().journey).toBe("free");
+  });
+
+  it("store par défaut (guidé disponible) : projet de l'assistant → guidé à l'étape 1, vue intacte", () => {
+    const projects = createProjectStore();
+    // Projet repris (libre au démarrage), panneau ouvert, Fabrication.
+    const journey = createJourneyStore(memoryStorage(), { hasAutosave: true });
+    expect(journey.getState().journey).toBe("free");
+    linkJourneyToProject(projects, journey);
+    journey.getState().openFreePanel("guards");
+    journey.getState().setWorkspace("fabrication");
+    projects.getState().setView("3d");
+    projects.getState().replaceProject(createProject("quarter-left"), undefined, "assistant");
+    expect(journey.getState()).toMatchObject({
+      journey: "guided",
+      guidedStep: 1,
+      workspace: "design",
+    });
+    expect([...journey.getState().visitedSteps]).toEqual([1]);
+    // La vue conseillée n'est appliquée qu'au changement d'étape (pas à l'ouverture).
+    expect(projects.getState().view).toBe("3d");
+    // Bascule libre puis guidé : historique non touché, panneau de l'étape, retour à l'étape.
+    const history = projects.getState().history;
+    journey.getState().setJourney("free");
+    expect(journey.getState()).toMatchObject({ freePanel: "site", freePanelFromGuided: true });
+    journey.getState().setJourney("guided");
+    expect(journey.getState().guidedStep).toBe(1);
+    expect(projects.getState().history).toBe(history);
+    // Import → libre.
+    expect(projects.getState().importText(serializeProject(createProject("straight"))).ok).toBe(
+      true,
+    );
     expect(journey.getState().journey).toBe("free");
   });
 });

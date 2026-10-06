@@ -1,0 +1,87 @@
+/* Cartes de choix du parcours guidé (maquette 1a, système Industry : angles vifs, filet 1 px). */
+
+.choice-cards {
+  display: grid;
+  grid-template-columns: repeat(var(--choice-columns, 3), minmax(0, 1fr));
+  gap: 8px;
+}
+
+.choice-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid var(--color-divider);
+  border-radius: 0;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+}
+
+.choice-card__icon {
+  display: flex;
+  color: var(--muted);
+}
+
+.choice-card__icon svg {
+  width: 32px;
+  height: 32px;
+}
+
+.choice-card__label {
+  font-family: var(--font-heading);
+  font-weight: 600;
+  font-size: 15px;
+  line-height: 1.15;
+  overflow-wrap: anywhere;
+}
+
+.choice-card__caption {
+  font-size: 11.5px;
+  line-height: 1.3;
+  color: var(--color-neutral-700);
+}
+
+/* Carte retenue : filet et fond légers d'accent, texte accent-800 (pas de fond plein). */
+.choice-card[aria-pressed="true"],
+.choice-card[aria-pressed="true"]:hover {
+  border-color: var(--accent-ink);
+  background: var(--color-accent-100);
+  color: var(--color-accent-800);
+}
+
+.choice-card[aria-pressed="true"] .choice-card__icon,
+.choice-card[aria-pressed="true"] .choice-card__caption {
+  color: var(--color-accent-800);
+}
+
+/* Carte indisponible : grisée, toujours atteignable au clavier, clic sans effet. */
+.choice-card[aria-disabled="true"],
+.choice-card[aria-disabled="true"]:hover,
+.choice-card[aria-disabled="true"]:active {
+  cursor: not-allowed;
+  border-style: dashed;
+  background: transparent;
+  color: var(--muted);
+}
+
+.choice-card[aria-disabled="true"] .choice-card__label {
+  opacity: 0.7;
+}
+
+.choice-card:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+/* Cartes de structure : un groupe par famille. */
+.structure-cards {
+  display: grid;
+  gap: 12px;
+}
+
+.structure-cards__title {
+  margin: 0 0 6px;
+}

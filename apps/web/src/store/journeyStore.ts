@@ -51,9 +51,10 @@ export interface JourneyStoreOptions {
   /** Un projet est repris de l'autosauvegarde (sinon : première visite). */
   readonly hasAutosave: boolean;
   /**
-   * Parcours guidé disponible (vrai par défaut). Faux tant qu'il n'est pas affiché (vague 2) :
-   * toute transition qui y mènerait (démarrage, préférence mémorisée, démo, assistant,
-   * `setJourney("guided")`) donne le libre, sans ouvrir de panneau.
+   * Parcours guidé disponible (vrai par défaut ; l'application l'affiche depuis la vague 5 et
+   * ne passe plus l'option). Faux : toute transition qui y mènerait (démarrage, préférence
+   * mémorisée, démo, assistant, `setJourney("guided")`) donne le libre, sans ouvrir de panneau,
+   * et ce repli n'est jamais mémorisé comme un choix.
    */
   readonly guidedAvailable?: boolean;
 }
@@ -85,15 +86,17 @@ export function createJourneyStore(
 ): StoreApi<JourneyState> {
   const stored = loadPrefs(storage);
   const guidedAvailable = options.guidedAvailable ?? true;
-  const start: JourneyPrefs = {
-    ...DEFAULT_JOURNEY_PREFS,
-    ...stored,
-    journey: initialJourney({
-      remembered: stored.journey ?? null,
-      hasAutosave: options.hasAutosave,
-      guidedAvailable,
-    }),
-  };
+  const journey0 = initialJourney({
+    remembered: stored.journey ?? null,
+    hasAutosave: options.hasAutosave,
+    guidedAvailable,
+  });
+  const base: JourneyPrefs = { ...DEFAULT_JOURNEY_PREFS, ...stored, journey: journey0 };
+  // Démarrage en guidé : l'étape affichée compte comme vue (coche ✓).
+  const start: JourneyPrefs =
+    journey0 === "guided" && !base.visitedSteps.has(base.guidedStep)
+      ? { ...base, visitedSteps: new Set([...base.visitedSteps, base.guidedStep]) }
+      : base;
   const store = createStore<JourneyState>()((set, get) => {
     const prefs = (): JourneyPrefs => prefsOf(get());
     return {

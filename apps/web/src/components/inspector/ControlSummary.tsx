@@ -24,8 +24,8 @@ import {
   orderedViolations,
   type ControlCounts,
 } from "../../lib/compliance.js";
-import { journeyStore, useApp, useModel } from "../../store/appStore.js";
-import { switchWorkspace, uiStore, useUi } from "../../store/uiStore.js";
+import { useApp, useModel } from "../../store/appStore.js";
+import { openSection, uiStore, useUi } from "../../store/uiStore.js";
 import { RuleCard } from "./RuleCard.js";
 import { OverrideList, ResultList } from "./RuleResults.js";
 
@@ -73,10 +73,12 @@ export function takeReveal(kind: "control" | "overrides", seq: number): boolean 
   return true;
 }
 
-/** Profil : ouvre le panneau Contexte du parcours libre (en Conception). */
+/**
+ * Profil : ouvre le Contexte de contrôle (libre : panneau Contexte, en Conception ; guidé : repli
+ * « Contexte » de la liste du contrôle).
+ */
 function openContextPanel(): void {
-  if (journeyStore.getState().workspace !== "design") switchWorkspace("design");
-  journeyStore.getState().openFreePanel("compliance");
+  openSection("compliance");
 }
 
 function Counts({ counts }: { counts: ControlCounts }) {

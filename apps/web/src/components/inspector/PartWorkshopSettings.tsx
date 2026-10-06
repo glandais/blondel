@@ -24,8 +24,7 @@ import { paramKey, structureParamEntry } from "../../lib/paramTiers.js";
 import { matchesSettings, type PartSettings } from "../../lib/partSettings.js";
 import type { PresentedField } from "../../lib/paramLabels.js";
 import { getParam } from "../../lib/structureForm.js";
-import { journeyStore } from "../../store/appStore.js";
-import { switchWorkspace } from "../../store/uiStore.js";
+import { openSection } from "../../store/uiStore.js";
 import { useValidatedKeys } from "../fabrication/useToValidate.js";
 import {
   NO_STRUCTURE,
@@ -143,10 +142,7 @@ export function PartWorkshopSettings({ part, settings, variant }: PartWorkshopSe
       <button
         type="button"
         className="btn btn-ghost part-insp__all"
-        onClick={() => {
-          if (journeyStore.getState().workspace !== "design") switchWorkspace("design");
-          journeyStore.getState().openFreePanel(section);
-        }}
+        onClick={() => openSection(section)}
       >
         {t.t("ui.partInspector.allSettings", { section: msg(SECTION_TITLE_KEYS[section]) })}
         <ArrowRight size={13} aria-hidden="true" />

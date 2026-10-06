@@ -396,7 +396,11 @@ export function tierEntry(key: string): ParamTierEntry | undefined {
   return lookup(TIERS, key)?.entry;
 }
 
-/** Emplacement d'un champ selon le mode d'affichage. */
+/**
+ * Emplacement d'un champ selon le mode d'affichage. Guidé, étape 7 : les réglages d'atelier
+ * sont à plat (`main`), car l'étape 7 les range déjà tous sous son propre repli « Plus de
+ * réglages » (`FabricationStep`) : pas de second repli imbriqué.
+ */
 export function placementOf(e: ParamTierEntry, display: Display): Placement {
   switch (display.kind) {
     case "all":
@@ -406,7 +410,7 @@ export function placementOf(e: ParamTierEntry, display: Display): Placement {
     case "guided": {
       const g = e.guided.find((x) => x.step === display.step);
       if (g !== undefined) return g.more ? "more" : "main";
-      return display.step === 7 && e.tier === "workshop" ? "more" : "hidden";
+      return display.step === 7 && e.tier === "workshop" ? "main" : "hidden";
     }
   }
 }

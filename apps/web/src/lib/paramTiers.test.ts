@@ -77,7 +77,8 @@ describe("placementOf", () => {
     expect(placementOf(designMore, { kind: "guided", step: 1 })).toBe("more");
     expect(placementOf(designAbsent, { kind: "guided", step: 1 })).toBe("hidden");
     expect(placementOf(workshop, { kind: "guided", step: 5 })).toBe("hidden");
-    expect(placementOf(workshop, { kind: "guided", step: 7 })).toBe("more");
+    // À plat : l'étape 7 range déjà ses réglages d'atelier sous son propre repli.
+    expect(placementOf(workshop, { kind: "guided", step: 7 })).toBe("main");
     expect(placementOf(designAbsent, { kind: "guided", step: 7 })).toBe("hidden");
   });
 });

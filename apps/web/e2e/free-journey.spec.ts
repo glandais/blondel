@@ -3,7 +3,7 @@
  * unique (re-clic, épingle, clic dans la vue, Échap hors saisie), Balancement indisponible sans
  * tournant, compteurs ◆ d'une démo, badge Contrôle (couleur de la sévérité, inspecteur sans
  * sélection), bascule Conception / Fabrication sans perte d'historique ni de vue, option Guidé
- * désactivée, réglages du menu ⋯ (unité, thème), contraste du bouton Exporter (ADR-0009
+ * disponible, réglages du menu ⋯ (unité, thème), contraste du bouton Exporter (ADR-0009
  * point 11) et absence de défilement horizontal du document aux petites largeurs.
  */
 import { expect, test, type Locator, type Page } from "@playwright/test";
@@ -18,6 +18,7 @@ import {
   instrument,
   openApp,
   openMoreMenu,
+  useFreeJourney,
   openProjectMenu,
   openSection,
   openTab,
@@ -179,8 +180,9 @@ test("Balancement indisponible sans tournant ; compteurs ◆ d'une démo", async
   await expect(panel(page).getByLabel("Méthode", { exact: true })).toBeVisible();
 
   // Démo : valeurs « à valider » (◆) comptées sur Structure et Garde-corps, décrites hors du
-  // nom accessible de l'onglet.
+  // nom accessible de l'onglet. Une démo ouvre le guidé : retour au libre.
   await applyPreset(page, "Quart tournant débillardé soudé");
+  await useFreeJourney(page);
   for (const name of ["Structure", "Garde-corps"] as const) {
     const tab = sectionTab(page, name);
     await expect(tab.locator(".rail__count")).toHaveText(/^◆ \d+$/);
@@ -265,9 +267,10 @@ test("Conception → Fabrication → Conception : historique, vue, sélection et
   await page.getByLabel("Affichage", { exact: true }).selectOption("cm");
   await page.getByRole("button", { name: "Plus d'options" }).click();
 
-  // Parcours : Guidé visible mais désactivé (vague 5), Libre choisi.
+  // Parcours : Guidé disponible (vague 5 ; bascule sans perte : guided-journey.spec.ts), Libre
+  // choisi.
   const journey = page.getByRole("radiogroup", { name: "Parcours" });
-  await expect(journey.getByRole("radio", { name: "Guidé" })).toBeDisabled();
+  await expect(journey.getByRole("radio", { name: "Guidé" })).toBeEnabled();
   await expect(journey.getByRole("radio", { name: "Libre" })).toHaveAttribute(
     "aria-checked",
     "true",

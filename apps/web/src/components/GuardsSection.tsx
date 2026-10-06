@@ -23,6 +23,7 @@ import {
   infillIsPanel,
   switchInfill,
   switchSection,
+  type InfillKind,
 } from "../lib/guardsForm.js";
 import { isToValidate, paramKey } from "../lib/paramTiers.js";
 import { formatDecimal, parseDecimal } from "../lib/units.js";
@@ -32,6 +33,7 @@ import { appStore, useApp, useModel } from "../store/appStore.js";
 import { useValidatedKeys } from "./fabrication/useToValidate.js";
 import type { Path } from "../store/setIn.js";
 import { AutoIntField, CheckField, IntField, NumberField, SelectField } from "./fields.js";
+import { ChoiceCards } from "./ui/ChoiceCards.js";
 import {
   DISPLAY_ALL,
   Tiered,
@@ -113,22 +115,70 @@ function field(path: Path, node: TieredItem["node"], group?: TieredGroup): Tiere
   return { key: paramKey(path), node, ...(group === undefined ? {} : { group }) };
 }
 
+/** Remplissage vu en élévation, entre main courante et poteaux (viewBox 40 × 40). */
+const INFILL_PATHS: Readonly<Record<InfillKind, string>> = {
+  balusters: "M12 9v25M17 9v25M22 9v25M27 9v25",
+  rails: "M7 15h26M7 21h26M7 27h26",
+  cables: "M7 13h26M7 17h26M7 21h26M7 25h26M7 29h26",
+  glass: "M9 11h22v21H9zM14 27l9-12M19 28l6-8",
+  perforated:
+    "M9 11h22v21H9zM14 16h.01M20 16h.01M26 16h.01M14 22h.01M20 22h.01M26 22h.01M14 28h.01M20 28h.01M26 28h.01",
+  panel: "M9 11h22v21H9zM9 18l7-7M9 25l14-14M9 32l22-21M16 32l15-14M23 32l8-7",
+};
+
+/** Pictogramme décoratif d'un type de remplissage (tracé fixe, trait currentColor 1,5). */
+function InfillIcon({ kind }: { kind: InfillKind }) {
+  return (
+    <svg
+      viewBox="0 0 40 40"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.5}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <path d="M4 7h32M6 7v28M34 7v28M6 35h28" />
+      <path d={INFILL_PATHS[kind]} />
+    </svg>
+  );
+}
+
 function infillItems(
   infill: GuardInfill,
   t: Translator,
   g: TieredGroup,
   validated: ReadonlySet<string>,
+  guided: boolean,
 ): (TieredItem | false)[] {
   const base: Path = [...G, "infill"];
+  const choose = (kind: InfillKind) => set(base)(switchInfill(infill, kind));
   return [
     field(
       [...base, "kind"],
-      <SelectField
-        label={t.t("ui.guards.infill.kind")}
-        value={infill.kind}
-        options={INFILL_KINDS.map((k) => ({ value: k, label: t.t(INFILL_LABELS[k]) }))}
-        onCommit={(kind) => set(base)(switchInfill(infill, kind))}
-      />,
+      // Guidé : six cartes à la place de la liste (spécification de contenu § 3).
+      guided ? (
+        <ChoiceCards<InfillKind>
+          label={t.t("ui.guided.cards.infill.group")}
+          cards={INFILL_KINDS.map((k) => ({
+            value: k,
+            label: t.t(INFILL_LABELS[k]),
+            icon: <InfillIcon kind={k} />,
+          }))}
+          isPressed={(k) => k === infill.kind}
+          onChoose={(k) => {
+            if (k !== infill.kind) choose(k);
+          }}
+        />
+      ) : (
+        <SelectField
+          label={t.t("ui.guards.infill.kind")}
+          value={infill.kind}
+          options={INFILL_KINDS.map((k) => ({ value: k, label: t.t(INFILL_LABELS[k]) }))}
+          onCommit={choose}
+        />
+      ),
       g,
     ),
     infill.kind === "balusters" &&
@@ -251,6 +301,7 @@ function guardsItems(
   walls: number,
   t: Translator,
   validated: ReadonlySet<string>,
+  guided: boolean,
 ): (TieredItem | false)[] {
   const { flight, opening, posts, handrail } = guards;
   const fieldset = (id: string, legend: MessageKey): TieredGroup => ({
@@ -370,7 +421,7 @@ function guardsItems(
       gOpening,
     ),
     // Remplissage
-    ...infillItems(guards.infill, t, gInfill, validated),
+    ...infillItems(guards.infill, t, gInfill, validated, guided),
     // Poteaux
     field(
       [...P, "size"],
@@ -536,7 +587,7 @@ export function GuardsSection({ display = DISPLAY_ALL }: Partial<SectionProps> =
           ),
         },
         ...(guards
-          ? guardsItems(guards, going, walls, t, validated)
+          ? guardsItems(guards, going, walls, t, validated, display.kind === "guided")
           : [
               {
                 key: "guards",

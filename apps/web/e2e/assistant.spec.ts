@@ -6,8 +6,10 @@
  *
  * Interactions comptées : menu du projet et ouverture de l'assistant (2), longueur et largeur de trémie (2),
  * structure visée (1), typologie « Quart tournant » (1), emmarchement E = 800 (1), « Proposer »
- * (1), « Choisir » (1), menu « Exporter » (« Autres exports » en Fabrication) et PDF (2), menu et DXF (2) : 13. H = 2 700 et dalle = 200 sont repris du
- * projet de départ (vérifiés, non comptés).
+ * (1), « Choisir » (1), passage au parcours libre (1 : le projet de l'assistant ouvre le guidé,
+ * les vérifications passent par le panneau et l'inspecteur du libre), menu « Exporter »
+ * (« Autres exports » en Fabrication) et PDF (2), menu et DXF (2) : 14. H = 2 700 et dalle = 200
+ * sont repris du projet de départ (vérifiés, non comptés).
  */
 import { expect, test, type Page } from "@playwright/test";
 import {

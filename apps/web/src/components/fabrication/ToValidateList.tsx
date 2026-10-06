@@ -4,8 +4,9 @@
  * colonne Section).
  *
  * Une ligne par valeur ◆ effective : case « Valider : {libellé} » (désactivée si la valeur n'est
- * pas calculable), paramètre, valeur avec son unité, section, lien « Ouvrir » vers le champ, dans
- * le panneau de la section en Conception (repli déplié, focus). Cocher, décocher et « Tout valider » passent par
+ * pas calculable), paramètre, valeur avec son unité, section, lien « Ouvrir » vers le champ :
+ * panneau de la section en Conception (libre) ou formulaire de l'étape (guidé), repli déplié,
+ * focus. Cocher, décocher et « Tout valider » passent par
  * `setValuesValidated` du projectStore : une entrée d'historique, annulable. La validation est
  * enregistrée dans le projet avec la valeur effective : elle devient caduque si la valeur change.
  * Aucun calcul métier : les lignes viennent de `lib/toValidate.ts`.
@@ -19,19 +20,19 @@ import {
   validationEntry,
   type ToValidateRow,
 } from "../../lib/toValidate.js";
-import { appStore, journeyStore } from "../../store/appStore.js";
-import { switchWorkspace } from "../../store/uiStore.js";
+import { appStore } from "../../store/appStore.js";
+import { openParam } from "../../store/uiStore.js";
 import { focusParamField } from "./focusParam.js";
 import { useToValidateRows } from "./useToValidate.js";
 import "./toValidate.css";
 
 /**
- * Ouvre la section de la valeur en Conception (panneau du parcours libre) et mène à son champ
- * (repli déplié, focus).
+ * Ouvre la section de la valeur (`openParam` : libre, panneau de la section en Conception ;
+ * guidé, étape du paramètre, ou panneau libre pour un réglage absent du guidé) et mène à son
+ * champ (repli déplié, focus).
  */
 function openField(row: ToValidateRow): void {
-  if (journeyStore.getState().workspace !== "design") switchWorkspace("design");
-  journeyStore.getState().openFreePanel(row.section);
+  openParam(row);
   focusParamField(row.key);
 }
 
@@ -96,8 +97,10 @@ export function ToValidateList(props: { readonly variant?: "full" | "compact" })
         <h2 id={titleId} className="tv-list__title">
           {t.t("ui.toValidate.title")}
         </h2>
+        {/* Projet sans valeur ◆ : ni compte (« toutes validées » contredirait « aucune valeur »),
+            ni « Tout valider », ni consigne ; seul le message du corps reste. */}
         <span className="tv-list__count num" role="status">
-          {remaining > 0 ? (
+          {rows.length === 0 ? null : remaining > 0 ? (
             <>
               <span aria-hidden="true">◆ </span>
               {t.t("ui.toValidate.remaining", { count: remaining })}
@@ -106,16 +109,20 @@ export function ToValidateList(props: { readonly variant?: "full" | "compact" })
             t.t("ui.toValidate.allDone")
           )}
         </span>
-        <button
-          type="button"
-          className="btn btn-secondary tv-list__all"
-          disabled={pending.length === 0}
-          onClick={() => appStore.getState().setValuesValidated(pending, true)}
-        >
-          {t.t("ui.toValidate.validateAll")}
-        </button>
+        {rows.length === 0 ? null : (
+          <button
+            type="button"
+            className="btn btn-secondary tv-list__all"
+            disabled={pending.length === 0}
+            onClick={() => appStore.getState().setValuesValidated(pending, true)}
+          >
+            {t.t("ui.toValidate.validateAll")}
+          </button>
+        )}
       </header>
-      <p className="tv-list__hint muted">{t.t("ui.toValidate.hint")}</p>
+      {rows.length === 0 ? null : (
+        <p className="tv-list__hint muted">{t.t("ui.toValidate.hint")}</p>
+      )}
       {rows.length === 0 ? (
         <p className="tv-list__empty muted">{t.t("ui.toValidate.empty")}</p>
       ) : compact ? (

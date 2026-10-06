@@ -16,6 +16,7 @@ import {
 } from "../lib/units.js";
 import { appStore } from "../store/appStore.js";
 import type { UpdateResult } from "../store/projectStore.js";
+import { Segmented } from "./ui/Segmented.js";
 import "./fields.css";
 
 function endGroup(): void {
@@ -400,6 +401,11 @@ export interface SelectFieldProps<V extends string> {
   readonly options: readonly { readonly value: V; readonly label: string }[];
   readonly hint?: string;
   readonly onCommit: (value: V) => UpdateResult;
+  /**
+   * Rendu en contrôle segmenté (groupe de boutons radio) au lieu d'une liste déroulante : pour
+   * peu d'options, dans le parcours guidé (spécification de contenu § 2 : « segmenté »).
+   */
+  readonly segmented?: boolean;
 }
 
 export function SelectField<V extends string>({
@@ -408,22 +414,49 @@ export function SelectField<V extends string>({
   options,
   hint,
   onCommit,
+  segmented = false,
 }: SelectFieldProps<V>) {
   const id = useId();
   const t = useT();
   const [error, setError] = useState<Message | null>(null);
   const errorText = error ? t.t(error) : null;
+  const commit = (v: V): void => {
+    const r = onCommit(v);
+    setError(r.ok ? null : refusal(r.issues));
+    endGroup();
+  };
+  if (segmented) {
+    // Libellé visible, nom accessible porté par le groupe (`Segmented`) : pas de `<label>`.
+    return (
+      <div className={`field field--segmented${errorText ? " field--invalid" : ""}`}>
+        <span className="field__label" aria-hidden="true">
+          {label}
+        </span>
+        <Segmented<V>
+          label={label}
+          value={value}
+          size="sm"
+          options={options}
+          onChange={(v) => {
+            if (v !== value) commit(v);
+          }}
+        />
+        {hint && !errorText ? <small className="field__hint">{hint}</small> : null}
+        {errorText ? (
+          <small className="field__error" role="alert">
+            {errorText}
+          </small>
+        ) : null}
+      </div>
+    );
+  }
   return (
     <FieldShell id={id} label={label} hint={hint} error={errorText}>
       <select
         id={id}
         value={value}
         aria-describedby={describedBy(id, hint, errorText)}
-        onChange={(e) => {
-          const r = onCommit(e.target.value as V);
-          setError(r.ok ? null : refusal(r.issues));
-          endGroup();
-        }}
+        onChange={(e) => commit(e.target.value as V)}
       >
         {options.map((o) => (
           <option key={o.value} value={o.value}>

@@ -24,20 +24,19 @@ import { ArrowLeft } from "lucide-react";
 import { useT } from "../../i18n/useT.js";
 import { partDesignSection, partSettingsFor, partShapeFor } from "../../lib/partSettings.js";
 import { selectedPart } from "../../lib/parts.js";
-import { journeyStore, useApp, useModel } from "../../store/appStore.js";
-import { switchWorkspace } from "../../store/uiStore.js";
+import { useApp, useModel } from "../../store/appStore.js";
+import { openSection } from "../../store/uiStore.js";
 import { PartWorkshopSettings } from "../inspector/PartWorkshopSettings.js";
 import { SECTION_TITLE_KEYS } from "../sections/index.js";
 import { OutputsBlock } from "./OutputsBlock.js";
 import "./aside.css";
 
 /**
- * « ← Ouvrir dans Conception » : bascule en Conception puis ouvre le panneau de la section qui
- * porte la forme de la pièce. La sélection n'est pas touchée.
+ * « ← Ouvrir dans Conception » : ouvre la section qui porte la forme de la pièce (libre : en
+ * Conception, son panneau ; guidé : l'étape de la section). La sélection n'est pas touchée.
  */
 export function openPartInDesign(part: Pick<Part, "category" | "family">): void {
-  switchWorkspace("design");
-  journeyStore.getState().openFreePanel(partDesignSection(part));
+  openSection(partDesignSection(part));
 }
 
 /** Encart « Forme du … » et retour vers la Conception. */

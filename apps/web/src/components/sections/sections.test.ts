@@ -248,7 +248,15 @@ describe("tous les modes", () => {
     load(createProject("quarter-left"));
     const step2 = render(SECTION_COMPONENTS.layout, { kind: "guided", step: 2 });
     const main = step2.slice(0, step2.indexOf("<details"));
-    expect(main).toContain("Type de tracé");
+    // Guidé : cartes de forme (en tête) à la place de la liste « Type de tracé » ; le libre et
+    // l'ancien rendu gardent la liste.
+    expect(main.startsWith('<div class="choice-cards" role="group" aria-label="Forme"')).toBe(true);
+    expect(main).not.toContain("Type de tracé");
+    for (const d of [{ kind: "free" }, { kind: "all" }] as const) {
+      const html = render(SECTION_COMPONENTS.layout, d);
+      expect(html).toContain("Type de tracé");
+      expect(html).not.toContain("choice-card");
+    }
     expect(main).toContain("Tournant 1");
     expect(main).not.toContain("Ligne de foulée");
     expect(fold(step2, "more")).toContain("Recaler volées et trémie");

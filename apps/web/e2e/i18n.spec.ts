@@ -12,6 +12,7 @@ import {
   instrument,
   overBudget,
   settle,
+  startInFreeJourney,
   takeLongTasks,
 } from "./support.js";
 
@@ -21,8 +22,12 @@ test.beforeEach(async ({ page }) => {
   await instrument(page);
 });
 
-/** Ouvre l'application sans choix mémorisé : la langue vient du navigateur. */
+/**
+ * Ouvre l'application sans choix de langue mémorisé : la langue vient du navigateur. Le parcours
+ * libre est imposé (la première visite ouvrirait le guidé) : la spec vérifie ses libellés.
+ */
 async function openWithBrowserLanguage(page: Page): Promise<void> {
+  await startInFreeJourney(page);
   await page.goto("./");
   await expect(page.getByRole("toolbar", { name: "Toolbar" })).toBeVisible();
   await settle(page);

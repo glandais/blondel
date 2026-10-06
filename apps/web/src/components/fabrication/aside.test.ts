@@ -18,6 +18,7 @@ import { uiStore } from "../../store/uiStore.js";
 import { costProfileFill, currentCostText } from "./CostEstimate.js";
 import { FabricationAside, openPartInDesign } from "./FabricationAside.js";
 import { TEMPLATE_CHOICES, templateChoiceReason } from "./OutputsBlock.js";
+import { ToValidateList } from "./ToValidateList.js";
 
 const initial = appStore.getState().project;
 const FR = translatorFor("fr");
@@ -31,6 +32,8 @@ workshopStore.getInitialState = workshopStore.getState;
 /** Projet courant et son modèle (calculé ici, sans le worker). */
 function load(p: Project): Model {
   appStore.getState().replaceProject(p);
+  // Un projet de l'assistant ouvre le guidé : ces tests portent sur le parcours libre.
+  journeyStore.getState().setJourney("free");
   const project = appStore.getState().project;
   const model = buildModel(project);
   modelService.store.setState((s) => ({
@@ -175,6 +178,21 @@ describe("colonne de droite du mode Fabrication", () => {
     const stringer = model.parts.find((p) => p.category === "stringer")!;
     openPartInDesign(stringer);
     expect(journeyStore.getState().freePanel).toBe("structure");
+  });
+});
+
+describe("liste des valeurs ◆", () => {
+  it("projet sans valeur ◆ : seul « Aucune valeur ◆ », ni « toutes validées », ni « Tout valider »", () => {
+    load(createProject("straight"));
+    const html = renderToStaticMarkup(createElement(ToValidateList, { variant: "compact" }));
+    expect(html).toContain("Aucune valeur ◆ dans ce projet.");
+    expect(html).not.toContain("Toutes les valeurs ◆ sont validées");
+    expect(html).not.toContain("Tout valider");
+    // Avec des valeurs ◆ : compte et bouton reviennent.
+    load(steelFlat());
+    const full = renderToStaticMarkup(createElement(ToValidateList, { variant: "compact" }));
+    expect(full).toContain("Tout valider");
+    expect(full).not.toContain("Aucune valeur ◆");
   });
 });
 

@@ -73,9 +73,16 @@ describe("parcours à l'ouverture (README § Comportements)", () => {
       guidedStep: 4,
     });
     expect(journeyAfterOpening("preset", prefs).journey).toBe("free");
+    // Préréglage en guidé à l'étape 7 : l'espace reste celui de l'étape.
+    expect(journeyAfterOpening("preset", { ...guided, guidedStep: 7 })).toMatchObject({
+      journey: "guided",
+      guidedStep: 7,
+      workspace: "fabrication",
+    });
     for (const origin of ORIGINS) {
       const r = journeyAfterOpening(origin, prefs);
-      expect(r.visitedSteps.size).toBe(0);
+      // En guidé, l'étape affichée compte comme vue ; en libre, aucune.
+      expect([...r.visitedSteps]).toEqual(r.journey === "guided" ? [r.guidedStep] : []);
       expect(r.workspace).toBe("design");
       expect(r.freePanel).toBe("structure");
       expect(r.freePanelPinned).toBe(true);
@@ -215,11 +222,32 @@ describe("bascule de parcours", () => {
   });
 
   it("guidé → libre à l'étape 7 : mode Fabrication, panneau inchangé", () => {
-    const p = { ...DEFAULT_JOURNEY_PREFS, guidedStep: 7 as const, freePanel: "site" as const };
+    const p: JourneyPrefs = {
+      ...DEFAULT_JOURNEY_PREFS,
+      guidedStep: 7,
+      freePanel: "site",
+      workspace: "fabrication",
+    };
     expect(switchJourney(p, "free")).toMatchObject({
       journey: "free",
       freePanel: "site",
       workspace: "fabrication",
+    });
+  });
+
+  it("étape 7 en 3D (Conception) : l'espace, donc la vue, est gardé à l'aller et au retour", () => {
+    const p: JourneyPrefs = {
+      ...DEFAULT_JOURNEY_PREFS,
+      guidedStep: 7,
+      freePanel: "site",
+      workspace: "design",
+    };
+    const free = switchJourney(p, "free");
+    expect(free).toMatchObject({ journey: "free", freePanel: null, workspace: "design" });
+    expect(switchJourney(free, "guided")).toMatchObject({
+      journey: "guided",
+      guidedStep: 7,
+      workspace: "design",
     });
   });
 

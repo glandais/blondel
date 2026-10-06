@@ -1,7 +1,8 @@
 /**
  * Type de tracé (jalon 5a) : escalier « à volées » (volées droites et tournants à 90°) ou
  * hélicoïdal. Transformations pures du `Project` pour passer de l'un à l'autre, préréglages de
- * l'interface et compatibilité des structures avec le type de tracé. Aucune valeur métier ici :
+ * l'interface, formes des cartes du parcours guidé (`SHAPE_IDS`, `pressedShapes`, `applyShape`)
+ * et compatibilité des structures avec le type de tracé. Aucune valeur métier ici :
  * le nouveau tracé vient des préréglages du cœur (`createProject`).
  */
 import {
@@ -17,6 +18,7 @@ import {
   type Turn,
 } from "@blondel/core";
 import { msg, type Message, type MessageKey } from "@blondel/i18n";
+import { chooseStructure } from "./structureChoice.js";
 
 export type LayoutKind = "flights" | "helical";
 
@@ -110,12 +112,24 @@ function basePreset(project: Project, kind: LayoutKind): LayoutSwitch {
 export function switchLayoutKind(project: Project, kind: LayoutKind): LayoutSwitch {
   if (layoutKindOf(project) === kind) return { project };
   const { project: base, note } = basePreset(project, kind);
+  const next = adoptPreset(project, base, kind);
+  return note === undefined ? { project: next } : { project: next, note };
+}
+
+/**
+ * Reprend du préréglage `base` (de type `kind`) le tracé, le placement, les murs et la trémie
+ * (seulement si `project` en a une) et garde le reste de `project`. Structure gardée si elle
+ * convient au nouveau tracé (et n'est pas « aucune »), sinon celle du préréglage ; surcharges de
+ * nez retirées ; contexte de forme `helicoidal` synchronisé. Partie commune de
+ * `switchLayoutKind` et `applyShape`.
+ */
+function adoptPreset(project: Project, base: Project, kind: LayoutKind): Project {
   const { opening: _opening, ...site } = project.site;
   const opening = project.site.opening !== undefined ? base.site.opening : undefined;
   const cur = project.stair.structure;
   const structure =
     cur.kind !== "none" && structureFitsLayout(cur.kind, kind) ? cur : base.stair.structure;
-  const next: Project = {
+  return {
     ...project,
     site: { ...site, walls: base.site.walls, ...(opening ? { opening } : {}) },
     stair: {
@@ -130,7 +144,94 @@ export function switchLayoutKind(project: Project, kind: LayoutKind): LayoutSwit
       contexts: withContext(project.compliance.contexts, kind),
     },
   };
-  return note === undefined ? { project: next } : { project: next, note };
+}
+
+// ------------------------------------------------------------------ Formes du parcours guidé
+
+/** Formes proposées en cartes à l'étape « Forme » du parcours guidé (ordre de la maquette). */
+export const SHAPE_IDS = [
+  "straight",
+  "quarter-left",
+  "quarter-right",
+  "u",
+  "s",
+  "half-turn",
+  "helical",
+] as const;
+export type ShapeId = (typeof SHAPE_IDS)[number];
+
+/** Préréglage du cœur de chaque forme (libellé complet : `PRESET_LABELS` du cœur). */
+export const SHAPE_PRESETS: Readonly<Record<ShapeId, PresetId>> = {
+  straight: "straight",
+  "quarter-left": "quarter-left",
+  "quarter-right": "quarter-right",
+  u: "two-quarters-u",
+  s: "two-quarters-s",
+  "half-turn": "half-turn",
+  helical: "helical",
+};
+
+/**
+ * Formes qui correspondent au projet, déduites des tournants saisis (présentation seulement) :
+ * hélicoïdal ; aucun tournant → droit ; un tournant → ¼ selon son sens (palier compris) ; deux
+ * tournants de même sens → U **et** ½ tournant (les deux préréglages ne diffèrent que par les
+ * longueurs de volées et le jour : on ne peut pas les distinguer) ; deux tournants de sens
+ * opposés → S ; trois tournants ou plus → aucune.
+ */
+export function pressedShapes(project: Project): ReadonlySet<ShapeId> {
+  const layout = project.stair.layout;
+  if (layout.kind === "helical") return new Set<ShapeId>(["helical"]);
+  const turns = layout.turns;
+  if (turns.length === 0) return new Set<ShapeId>(["straight"]);
+  if (turns.length === 1) {
+    return new Set<ShapeId>([turns[0]!.direction === "left" ? "quarter-left" : "quarter-right"]);
+  }
+  if (turns.length === 2) {
+    return new Set<ShapeId>(hasOppositeTurns(turns) ? ["s"] : ["u", "half-turn"]);
+  }
+  return new Set<ShapeId>();
+}
+
+/** Préréglage à volées pour H, dalle et découpage du projet, et E s'il est donné. */
+function flightsPreset(project: Project, id: PresetId, width: number | undefined): Project {
+  return presetProject(id, {
+    floorToFloor: project.site.floorToFloor,
+    upperSlabThickness: project.site.upperSlabThickness,
+    ...(width === undefined ? {} : { width }),
+    // Découpage conservé transmis au préréglage : ses longueurs de volées portent sur le nombre
+    // de marches et le giron qui seront réellement calculés.
+    patch: { stair: { stepping: project.stair.stepping } },
+  });
+}
+
+/**
+ * Applique une forme (carte de l'étape « Forme » du guidé) : transformation pure, dont
+ * l'appelant fait une seule entrée d'historique. Hélicoïdal : `switchLayoutKind`. Sinon,
+ * préréglage à volées du cœur pour la hauteur à monter, la dalle, le découpage et l'emmarchement
+ * E du projet (sans E si le cœur le refuse pour cette forme) : on en prend le tracé, le
+ * placement, les murs et la trémie (si le projet en a une) ; on garde le reste (nom, site hors
+ * murs et trémie, découpage, marches, ligne de foulée, balancement, garde-corps, contrôle,
+ * valeurs validées). Une structure gardée qui demande un poteau d'angle reçoit le jour adapté
+ * par le cœur (`chooseStructure`), dont la remarque devient la note.
+ * @throws RangeError (message pour l'utilisateur) si le préréglage est impossible même sans E.
+ */
+export function applyShape(project: Project, shape: ShapeId): LayoutSwitch {
+  if (shape === "helical") return switchLayoutKind(project, "helical");
+  const id = SHAPE_PRESETS[shape];
+  const layout = project.stair.layout;
+  const width = layout.kind === "helical" ? undefined : layout.width;
+  let base: Project;
+  try {
+    base = flightsPreset(project, id, width);
+  } catch (e) {
+    if (!(e instanceof RangeError) || width === undefined) throw e;
+    base = flightsPreset(project, id, undefined);
+  }
+  const next = adoptPreset(project, base, "flights");
+  const kept = next.stair.structure;
+  if (kept.kind === "none" || kept !== project.stair.structure) return { project: next };
+  const c = chooseStructure(next, kept.kind, kept.params);
+  return c.notice === null ? { project: c.project } : { project: c.project, note: c.notice };
 }
 
 /** Angle proposé quand on ajoute un palier d'arrivée à un hélicoïdal (degrés, repris du cœur). */

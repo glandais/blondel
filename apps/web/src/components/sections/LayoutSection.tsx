@@ -2,7 +2,8 @@
  * Section « Tracé » : type de tracé (volées ou hélicoïdal), emmarchement, ligne de foulée,
  * typologie, volées et tournants, recalage ; formulaire hélicoïdal (`HelicalEditor`). Aucune
  * valeur n'est calculée ici : les valeurs proposées au sortir d'un mode automatique sont lues
- * dans le modèle rendu par le cœur. Répartition par niveau : `Tiered`.
+ * dans le modèle rendu par le cœur. Répartition par niveau : `Tiered`. Dans le parcours guidé,
+ * le type de tracé est choisi par les cartes de forme (`guided/ShapeCards`).
  */
 import {
   DEFAULT_NEWEL_SIZE,
@@ -42,6 +43,7 @@ import {
 import { appStore, useApp, useModel } from "../../store/appStore.js";
 import type { Path } from "../../store/setIn.js";
 import { AutoIntField, IntField, SelectField } from "../fields.js";
+import { ShapeCards } from "../guided/ShapeCards.js";
 import { useHelicalItems } from "../HelicalEditor.js";
 import { Tiered, type SectionProps, type TieredGroup, type TieredItem } from "./Tiered.js";
 
@@ -59,6 +61,8 @@ function TurnEditor({ turn, index, display }: { turn: Turn; index: number; displ
   const base: Path = ["stair", "layout", "turns", index];
   const inner = turn.inner;
   const t = useT();
+  // Guidé : type de tournant et jour en segmentés (spécification de contenu § 2, étape 2).
+  const segmented = display.kind === "guided";
   const g: TieredGroup = {
     id: "turn",
     render: (children) => (
@@ -93,6 +97,7 @@ function TurnEditor({ turn, index, display }: { turn: Turn; index: number; displ
           node: (
             <SelectField
               label={t.t("ui.params.turn.mode")}
+              segmented={segmented}
               value={turn.mode}
               options={[
                 { value: "winders", label: t.t("ui.params.turn.winders") },
@@ -108,6 +113,7 @@ function TurnEditor({ turn, index, display }: { turn: Turn; index: number; displ
           node: (
             <SelectField
               label={t.t("ui.params.turn.inner.label")}
+              segmented={segmented}
               value={inner.kind}
               options={INNER_KINDS.map((k) => ({ value: k.value, label: t.t(k.key) }))}
               onCommit={(kind) => {
@@ -374,29 +380,34 @@ export function LayoutSection({ display }: SectionProps) {
       display={display}
       items={[
         {
+          // Guidé : cartes de forme (droit, ¼, U, S, ½ tournant, hélicoïdal) à la place de la
+          // liste Volées | Hélicoïdal, à la même place (spécification de contenu § 3).
           key: "stair.layout.kind",
-          node: (
-            <SelectField<LayoutKind>
-              label={t.t("ui.params.layout.kind.label")}
-              value={kind}
-              options={(["flights", "helical"] as const).map((k) => ({
-                value: k,
-                label: t.t(LAYOUT_KIND_LABELS[k]),
-              }))}
-              hint={t.t("ui.params.layout.kind.hint")}
-              onCommit={(k) => {
-                let note: Message | undefined;
-                const r = update((p) => {
-                  const s = switchLayoutKind(p, k);
-                  note = s.note;
-                  return s.project;
-                });
-                if (r.ok && note !== undefined)
-                  appStore.setState({ notice: { kind: "info", msg: note } });
-                return r;
-              }}
-            />
-          ),
+          node:
+            display.kind === "guided" ? (
+              <ShapeCards />
+            ) : (
+              <SelectField<LayoutKind>
+                label={t.t("ui.params.layout.kind.label")}
+                value={kind}
+                options={(["flights", "helical"] as const).map((k) => ({
+                  value: k,
+                  label: t.t(LAYOUT_KIND_LABELS[k]),
+                }))}
+                hint={t.t("ui.params.layout.kind.hint")}
+                onCommit={(k) => {
+                  let note: Message | undefined;
+                  const r = update((p) => {
+                    const s = switchLayoutKind(p, k);
+                    note = s.note;
+                    return s.project;
+                  });
+                  if (r.ok && note !== undefined)
+                    appStore.setState({ notice: { kind: "info", msg: note } });
+                  return r;
+                }}
+              />
+            ),
         },
         // Ordre de la spécification de contenu (§ 3, tableau Tracé) : type, E, typologie,
         // volées et tournants, ligne de foulée, recalage, puis le bloc hélicoïdal.

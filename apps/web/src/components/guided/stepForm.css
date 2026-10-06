@@ -1,0 +1,262 @@
+/* Formulaire d'étape du parcours guidé (maquette 1a, « Blondel Parcours Hi-fi », colonne de
+   gauche) : blocs espacés de 18 px, surtitre, titre de 30 px, objectif ; cadre de chiffres clés
+   (blueprint, trois colonnes, Barlow Condensed 32 px) ; jauge 2h + g ; encart d'aide ; lien
+   « Réglage avancé… ». Jetons Industry seulement, angles vifs. La marge (24 px) et le
+   défilement sont ceux de la colonne `.guided-form` (mise en page du guidé). */
+
+.step-form {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  min-width: 0;
+  min-height: 100%;
+}
+
+/* --- En-tête */
+
+.step-form__head {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.step-form__eyebrow {
+  font-size: 10.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-accent-700);
+}
+
+.step-form__title {
+  margin: 0;
+  font-family: var(--font-heading);
+  font-size: 30px;
+  font-weight: 600;
+  line-height: 1.1;
+}
+
+.step-form__objective {
+  margin: 0;
+  color: var(--color-neutral-700);
+  text-wrap: pretty;
+}
+
+/* --- Champs (sections en affichage guidé) */
+
+.step-form__fields {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+
+.step-form__subtitle {
+  margin: 0 0 6px;
+  font: 600 15px/1.15 var(--font-heading);
+}
+
+/* --- Chiffres clés */
+
+.step-figures {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 16px;
+}
+
+.step-figures__grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+}
+
+.step-figures__cell {
+  display: flex;
+  flex-direction: column-reverse;
+  justify-content: flex-end;
+  min-width: 0;
+}
+
+.step-figures__cell--wide {
+  grid-column: 1 / -1;
+}
+
+.step-figures__value {
+  margin: 0;
+  font: 600 32px/1 var(--font-heading);
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.step-figures__value--text {
+  font-size: 20px;
+  line-height: 1.15;
+}
+
+.step-figures__caption {
+  font-size: 12px;
+  color: var(--color-neutral-700);
+}
+
+/* --- Jauge 2h + g */
+
+.blondel-gauge {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.blondel-gauge__bar {
+  position: relative;
+  height: 8px;
+  background: var(--color-neutral-200);
+}
+
+.blondel-gauge__zone {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: var(--color-accent-300);
+}
+
+.blondel-gauge__mark {
+  position: absolute;
+  top: -4px;
+  width: 2px;
+  height: 16px;
+  margin-left: -1px;
+  background: var(--color-text);
+}
+
+.blondel-gauge__ticks {
+  position: relative;
+  height: 16px;
+  font-size: 11px;
+  color: var(--color-neutral-700);
+  font-variant-numeric: tabular-nums;
+}
+
+.blondel-gauge__tick {
+  position: absolute;
+  transform: translateX(-50%);
+  white-space: nowrap;
+}
+
+/* Bornes de l'échelle : calées aux extrémités, sans position calculée. */
+.blondel-gauge__tick--scale-min {
+  left: 0;
+  transform: none;
+}
+
+.blondel-gauge__tick--scale-max {
+  right: 0;
+  transform: none;
+}
+
+.blondel-gauge__text {
+  margin: 0;
+  font-size: 12px;
+  color: var(--color-neutral-800);
+}
+
+/* --- Encart d'aide */
+
+.step-form__help {
+  display: flex;
+  gap: 10px;
+  padding: 12px 14px;
+  background: var(--color-neutral-100);
+  border: 1px solid var(--color-divider);
+}
+
+.step-form__help-icon {
+  flex: none;
+  margin-top: 1px;
+  color: var(--color-accent-700);
+}
+
+.step-form__help-text {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--color-neutral-800);
+  text-wrap: pretty;
+}
+
+/* --- Replis « Plus de réglages » : sans résumé dans le formulaire d'étape (maquette 1a), ouverts
+   par le lien « Réglage avancé… » ; fermés, ils ne prennent aucune place. */
+
+.step-form .tiered__fold--more > summary {
+  display: none;
+}
+
+.step-form .tiered__fold--more:not([open]) {
+  display: none;
+}
+
+.step-form .tiered__fold--more[open] {
+  margin-top: 0;
+  padding-top: var(--space-3, 10px);
+  border-top: 1px dashed var(--color-divider);
+}
+
+/* --- Lien « Réglage avancé… » sous l'encart d'aide, collé au bas de la colonne qui défile */
+
+.step-form__foot {
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
+  display: flex;
+  margin: -10px 0 0;
+  padding: 4px 0;
+  background: var(--color-bg);
+}
+
+.step-form__advanced {
+  gap: 6px;
+  font: 500 13px var(--font-body);
+}
+
+.step-form__advanced-count {
+  display: inline-flex;
+}
+
+.step-form__advanced[aria-expanded="true"] .step-form__advanced-icon {
+  transform: rotate(180deg);
+}
+
+/* --- Étape 7 : contraintes de largeur (colonne de 400 px) sur les blocs du mode Fabrication */
+
+.step-fab {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  min-width: 0;
+}
+
+.step-fab .fab-list {
+  padding: 0;
+  overflow: visible;
+  border-right: none;
+  border-bottom: none;
+  max-height: none;
+}
+
+.step-fab .fab-group__summary {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.step-fab .fab-outputs__dossier {
+  flex-wrap: wrap;
+}
+
+.step-fab__more-body {
+  gap: 14px;
+}
+
+.step-fab__compare {
+  justify-self: start;
+}

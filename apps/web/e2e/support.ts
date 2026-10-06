@@ -164,8 +164,11 @@ export function describeTasks(over: readonly LongTask[], all: readonly LongTask[
  * principal (les observateurs de performance sont notifiés de façon asynchrone).
  */
 export async function settle(page: Page): Promise<void> {
-  // « Calcul… » de la ligne de chiffres (Conception) ou de la bande de chiffres (Fabrication).
-  await expect(page.locator(".figure-line__pending, .fab-figures__pending")).toHaveCount(0);
+  // « Calcul… » de la ligne de chiffres (Conception) ou de la bande de chiffres (Fabrication) ;
+  // calcul en cours signalé par le pied du parcours guidé.
+  await expect(
+    page.locator(".figure-line__pending, .fab-figures__pending, .guided-footer[data-pending]"),
+  ).toHaveCount(0);
   const compare = page.locator(".compare, .empty-view");
   if (await page.getByRole("tab", { name: "Comparer", selected: true }).count()) {
     await expect(page.locator(".compare caption")).toContainText(" ms)");
@@ -222,11 +225,73 @@ export async function startInLanguage(page: Page, lang: "fr" | "en" = "fr"): Pro
   );
 }
 
+/** Clé de stockage des préférences de parcours (`apps/web/src/store/journeyStore.ts`). */
+export const JOURNEY_KEY = "blondel.ui.journey";
+
+/**
+ * Parcours de départ des specs du parcours libre : sans préférence mémorisée, la première visite
+ * ouvre le guidé (ADR-0009) ; ce script impose le libre **s'il n'y a pas encore de choix**, pour
+ * qu'une bascule faite pendant le parcours survive à un rechargement.
+ */
+export async function startInFreeJourney(page: Page): Promise<void> {
+  await page.addInitScript((key) => {
+    try {
+      if (window.localStorage.getItem(key) === null) {
+        window.localStorage.setItem(key, JSON.stringify({ journey: "free" }));
+      }
+    } catch {
+      // Stockage indisponible : la règle d'ouverture (guidé à la première visite) s'applique.
+    }
+  }, JOURNEY_KEY);
+}
+
+/** Ouvre l'application en français, dans le parcours libre (sauf choix déjà mémorisé). */
 export async function openApp(page: Page): Promise<void> {
+  await startInFreeJourney(page);
+  await openAppFresh(page);
+}
+
+/**
+ * Ouvre l'application en français sans imposer de parcours : la règle d'ouverture s'applique
+ * (première visite → guidé). Pour les specs qui testent l'ouverture.
+ */
+export async function openAppFresh(page: Page): Promise<void> {
   await startInLanguage(page, "fr");
   await page.goto("./");
   await expect(page.getByRole("toolbar", { name: "Barre d'outils" })).toBeVisible();
   await settle(page);
+}
+
+/** Radio d'un parcours (« Guidé » ou « Libre ») de la barre du haut. */
+export function journeyRadio(page: Page, name: "Guidé" | "Libre"): Locator {
+  return page
+    .getByRole("radiogroup", { name: "Parcours" })
+    .getByRole("radio", { name, exact: true });
+}
+
+/**
+ * Passe dans le parcours libre si besoin (une démo ou l'assistant ouvrent le guidé) : rail,
+ * panneau, inspecteur, Conception | Fabrication et Exporter n'existent que dans le libre.
+ */
+export async function useFreeJourney(page: Page, ix?: Interactions): Promise<void> {
+  const radio = journeyRadio(page, "Libre");
+  if ((await radio.getAttribute("aria-checked")) !== "true") {
+    await radio.click();
+    ix?.count("parcours libre");
+  }
+  await expect(radio).toHaveAttribute("aria-checked", "true");
+  await expect(page.locator('.app[data-journey="free"]')).toBeVisible();
+}
+
+/** Passe dans le parcours guidé si besoin. */
+export async function useGuidedJourney(page: Page, ix?: Interactions): Promise<void> {
+  const radio = journeyRadio(page, "Guidé");
+  if ((await radio.getAttribute("aria-checked")) !== "true") {
+    await radio.click();
+    ix?.count("parcours guidé");
+  }
+  await expect(radio).toHaveAttribute("aria-checked", "true");
+  await expect(page.locator('.app[data-journey="guided"]')).toBeVisible();
 }
 
 /** Ouvre le menu du projet de la barre du haut (renommage, démos, préréglages, assistant). */
@@ -256,12 +321,16 @@ export async function openMoreMenu(page: Page): Promise<void> {
   await expect(button).toHaveAttribute("aria-expanded", "true");
 }
 
-/** Bascule l'espace de travail (Conception | Fabrication) si besoin. */
+/**
+ * Bascule l'espace de travail (Conception | Fabrication) si besoin, après être passé dans le
+ * parcours libre (seul à porter ce segmenté).
+ */
 export async function openWorkspace(
   page: Page,
   name: "Conception" | "Fabrication",
   ix?: Interactions,
 ): Promise<void> {
+  await useFreeJourney(page, ix);
   const radio = page
     .getByRole("radiogroup", { name: "Espace de travail" })
     .getByRole("radio", { name, exact: true });
@@ -364,6 +433,7 @@ export async function commitField(
 
 /** Nombre de contrôles bloquants annoncés par l'inspecteur (bloc « Contrôle de conception »). */
 export async function blockingCount(page: Page): Promise<number> {
+  await useFreeJourney(page);
   const count = page.locator('.control-counts [data-severity="bloquant"] dd');
   await expect(count).toHaveCount(1);
   return Number(await count.textContent());

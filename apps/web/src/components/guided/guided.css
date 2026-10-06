@@ -1,0 +1,438 @@
+/*
+ * Parcours guidé (maquette 1a, ADR-0009) : grille de l'application, barre d'étapes, corps
+ * (formulaire de l'étape | vue), encart « Vous connaissez le métier ? », liste du contrôle
+ * superposée et pied. Le formulaire lui-même (`.step-form`, marges et blocs) est dans
+ * stepForm.css. Couleurs : jetons Industry et alias fonctionnels (sévérités) seulement.
+ */
+
+/* ------------------------------------------------------------ Grille (52 / 68 / 1fr / 60) */
+
+/* Spécificité (.app.app--guided) au-dessus des règles .app de styles.css, petits écrans
+   compris : le repli du guidé arrive en vague 6. */
+.app.app--guided {
+  display: grid;
+  height: 100%;
+  grid-template-rows: 52px 68px minmax(0, 1fr) 60px;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-areas:
+    "topbar"
+    "steps"
+    "body"
+    "foot";
+}
+
+.app.app--guided > .topbar {
+  grid-area: topbar;
+}
+
+.app.app--guided > .step-bar {
+  grid-area: steps;
+}
+
+.app.app--guided > .guided-body {
+  grid-area: body;
+}
+
+.app.app--guided > .guided-footer {
+  grid-area: foot;
+}
+
+/* Focus visible : 2 px en accent, décalé de 2 px (README « Focus clavier »). */
+.app--guided :focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+/* ------------------------------------------------------------ Barre d'étapes */
+
+.step-bar {
+  min-width: 0;
+  min-height: 0;
+  background: var(--color-bg);
+  border-bottom: 1px solid var(--color-divider);
+}
+
+.step-bar__list {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  height: 100%;
+}
+
+.step-bar .step-bar__tab {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 10px;
+  min-width: 0;
+  height: 100%;
+  margin: 0;
+  padding: 0 14px;
+  border: 0;
+  border-right: 1px solid var(--color-divider);
+  border-radius: 0;
+  background: transparent;
+  color: var(--color-text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.step-bar .step-bar__tab:last-child {
+  border-right: 0;
+}
+
+.step-bar .step-bar__tab:hover {
+  background: var(--color-neutral-100);
+}
+
+/* Le contour de focus est dessiné à l'intérieur de la cellule (cellules jointives). */
+.step-bar .step-bar__tab:focus-visible {
+  outline-offset: -3px;
+}
+
+.step-bar .step-bar__tab[aria-selected="true"] {
+  background: var(--color-neutral-100);
+  box-shadow: inset 0 -3px 0 var(--color-accent);
+}
+
+.step-bar__badge {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: 1px solid var(--color-neutral-500);
+  background: transparent;
+  color: var(--color-text);
+  font-family: var(--font-heading);
+  font-weight: 600;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Étape faite : ✓ sur fond plein d'accent (ADR-0009 point 11 : --accent-fill). */
+.step-bar__tab[data-done="true"] .step-bar__badge {
+  border-color: var(--accent-fill);
+  background: var(--accent-fill);
+  color: var(--accent-text);
+}
+
+/* Étape active : pastille foncée (✓ si elle est faite). */
+.step-bar__tab[aria-selected="true"] .step-bar__badge {
+  border-color: var(--color-text);
+  background: var(--color-text);
+  color: var(--color-bg);
+}
+
+.step-bar__text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.step-bar__title {
+  font-family: var(--font-heading);
+  font-weight: 600;
+  font-size: 15px;
+  line-height: 1.15;
+}
+
+/* Le texte de base se tronque (…), la partie « · ◆ n » qui le suit ne rétrécit jamais. */
+.step-bar__summary {
+  display: flex;
+  gap: 0.3em;
+  min-width: 0;
+  color: var(--color-neutral-700);
+  font-size: 11.5px;
+  white-space: nowrap;
+}
+
+.step-bar__summary-base {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.step-bar__summary-tv {
+  flex: none;
+}
+
+.step-bar__tab[aria-selected="true"] .step-bar__summary {
+  color: var(--color-neutral-800);
+}
+
+/* Reste des ◆ à valider : résumé en ocre (couleur d'avertissement). */
+.step-bar__tab .step-bar__summary[data-to-validate="true"] {
+  color: var(--sev-avertissement);
+}
+
+/* ------------------------------------------------------------ Corps */
+
+.guided-body {
+  display: grid;
+  grid-template-columns: 400px minmax(0, 1fr);
+  min-width: 0;
+  min-height: 0;
+}
+
+/* Colonne du formulaire : marge 24 px (20 en bas, maquette 1a), filet droit, défilement propre,
+   bloc conteneur des descendants en position absolue (.visually-hidden). Blocs : stepForm.css. */
+.guided-form {
+  position: relative;
+  box-sizing: border-box;
+  min-width: 0;
+  min-height: 0;
+  padding: 24px 24px 20px;
+  overflow-y: auto;
+  border-right: 1px solid var(--color-divider);
+}
+
+/* ------------------------------------------------------------ Vue */
+
+.guided-view {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+  min-height: 0;
+  padding: 16px 20px 18px;
+}
+
+.guided-view__recommended {
+  color: var(--color-neutral-700);
+  font-size: 12px;
+}
+
+/* Cadre et calques superposés (encart, liste du contrôle). */
+.guided-view__stage {
+  position: relative;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+.guided-view__frame {
+  position: relative;
+}
+
+/* Légende de la sélection (maquette 1a), en bas à gauche du cadre ; en 3D, en haut à gauche. */
+.guided-view__selection {
+  position: absolute;
+  left: 14px;
+  bottom: 12px;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 6px;
+  background: var(--color-bg);
+  color: var(--color-neutral-800);
+  font-size: 12px;
+  pointer-events: none;
+}
+
+.guided-view__stage[data-view="3d"] .guided-view__selection {
+  top: 12px;
+  bottom: auto;
+}
+
+.guided-view__selection-swatch {
+  flex: none;
+  width: 10px;
+  height: 10px;
+  background: var(--selected);
+}
+
+/* Développé de la pièce choisie (étape 7) : la fiche défile dans le cadre. */
+.guided-view__sheet {
+  position: absolute;
+  inset: 10px;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: auto;
+}
+
+/* ------------------------------------------------------------ Encart « Vous connaissez le métier ? » */
+
+.free-hint {
+  position: absolute;
+  top: 18px;
+  right: 18px;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 290px;
+  max-width: calc(100% - 36px);
+  padding: 14px 16px;
+  background: var(--color-bg);
+  border: 1px solid var(--color-divider);
+  box-shadow: var(--shadow-md);
+}
+
+/* En 3D, le haut droit du cadre porte « Contrôles sur les pièces » et le bas sa barre d'outils
+   centrée : l'encart passe en bas à gauche, au-dessus de la barre d'outils. */
+.guided-view__stage[data-view="3d"] .free-hint {
+  top: auto;
+  right: auto;
+  bottom: 64px;
+  left: 18px;
+}
+
+.free-hint__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.free-hint__title {
+  margin: 0;
+  font-family: var(--font-heading);
+  font-weight: 600;
+  font-size: 17px;
+  line-height: 1.15;
+}
+
+.free-hint .free-hint__close {
+  flex: none;
+  width: 28px;
+  height: 28px;
+  margin: -4px -6px 0 0;
+  color: var(--color-neutral-700);
+}
+
+.free-hint__text {
+  margin: 0;
+  color: var(--color-neutral-800);
+  font-size: 12.5px;
+  text-wrap: pretty;
+}
+
+.free-hint__switch {
+  align-self: flex-start;
+  gap: 6px;
+}
+
+/* ------------------------------------------------------------ Liste du contrôle superposée */
+
+.control-overlay {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  width: 380px;
+  max-width: 100%;
+  background: var(--color-bg);
+  border: 1px solid var(--color-divider);
+  box-shadow: var(--shadow-md);
+}
+
+.control-overlay__head {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 12px 10px 16px;
+  border-bottom: 1px solid var(--color-divider);
+}
+
+.control-overlay__title {
+  margin: 0;
+  font-family: var(--font-heading);
+  font-weight: 600;
+  font-size: 17px;
+  line-height: 1.15;
+}
+
+.control-overlay__body {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.control-overlay__context {
+  border: 0;
+  border-bottom: 1px solid var(--color-divider);
+}
+
+.control-overlay__context > summary {
+  padding: 10px 16px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.control-overlay__context-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 0 16px 14px;
+}
+
+/* L'inspecteur réutilisé tel quel : la liste défile, pas lui. */
+.control-overlay .inspector {
+  overflow: visible;
+  height: auto;
+  border: 0;
+}
+
+/* ------------------------------------------------------------ Pied */
+
+.guided-footer {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-width: 0;
+  padding: 0 16px;
+  background: var(--color-neutral-100);
+  border-top: 1px solid var(--color-divider);
+}
+
+.guided-footer .guided-footer__count {
+  flex: none;
+  gap: 6px;
+  font-family: var(--font-body);
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.guided-footer .guided-footer__count[data-severity="bloquant"] {
+  color: var(--sev-bloquant);
+}
+
+.guided-footer .guided-footer__count[data-severity="avertissement"] {
+  color: var(--sev-avertissement);
+}
+
+.guided-footer .guided-footer__count[data-severity="conseil"] {
+  color: var(--accent-ink);
+}
+
+.guided-footer__disclaimer {
+  min-width: 0;
+  color: var(--color-neutral-700);
+  font-size: 12.5px;
+}
+
+.guided-footer__spacer {
+  flex: 1;
+}
+
+.guided-footer .guided-footer__nav {
+  flex: none;
+  gap: 6px;
+}
+
+.guided-footer .guided-footer__next {
+  padding-inline: 18px;
+}

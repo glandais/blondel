@@ -1,6 +1,6 @@
 /**
- * État d'interface éphémère partagé par la barre du haut, la vue centrale et l'inspecteur du
- * parcours libre (ADR-0009, vague 2) : ni projet, ni préférence mémorisée.
+ * État d'interface éphémère partagé par la barre du haut, la vue centrale et l'inspecteur des
+ * deux parcours (ADR-0009, vagues 2 et 5) : ni projet, ni préférence mémorisée.
  *
  * - `workshopOpen` : fenêtre « Profil d'atelier » ouverte (menu ⋯ de la barre du haut, lien
  *   « Compléter le profil d'atelier » de l'inspecteur) ;
@@ -13,7 +13,16 @@
  * - `isolatedPartId` : pièce isolée dans la vue 3D (outil « Isoler » de la vue, action « Isoler
  *   en 3D » de l'inspecteur Pièce), `null` : toutes les pièces ;
  * - `overridesRevealSeq` : incrémenté par le lien du compteur de surcharges (panneau Contexte) ;
- *   l'inspecteur « sans sélection » déplie alors la liste des surcharges et la montre.
+ *   l'inspecteur « sans sélection » déplie alors la liste des surcharges et la montre ;
+ * - `guidedControlOpen` : liste du contrôle superposée à la vue du parcours guidé (boutons des
+ *   sévérités du pied de page) ; `guidedControlContext` : repli « Contexte de contrôle » déplié
+ *   en tête de cette liste (le Contexte n'a pas d'étape).
+ *
+ * Navigation consciente du parcours : `goToGuidedStep` (étape, vue conseillée), `openSection`,
+ * `openParam`, `switchWorkspace`, `revealControl` et `revealOverrides` mènent, en libre, au
+ * panneau ou à l'espace demandé et, en guidé, à l'étape correspondante (ou à la liste du
+ * contrôle). Ni le projet, ni l'historique, ni la sélection (sauf « révéler » le contrôle, qui
+ * l'efface) ne changent.
  *
  * Espace de travail et vue restent cohérents (`linkWorkspaceAndView`) : passer en Fabrication
  * affiche la dernière vue de Fabrication, revenir en Conception rend la vue quittée ; une vue
@@ -23,7 +32,10 @@
 import { useEffect, useRef } from "react";
 import { useStore } from "zustand";
 import { createStore, type StoreApi } from "zustand/vanilla";
-import type { Workspace } from "../lib/journey.js";
+import { guidedStepOfRow } from "../lib/guidedSteps.js";
+import { recommendedView, stepForPanel, type Workspace } from "../lib/journey.js";
+import type { GuidedStep, SectionId } from "../lib/sectionIds.js";
+import type { ToValidateRow } from "../lib/toValidate.js";
 import { appStore, journeyStore } from "./appStore.js";
 import type { JourneyState } from "./journeyStore.js";
 import type { ProjectStore, ViewTab } from "./projectStore.js";
@@ -52,6 +64,15 @@ export interface UiState {
   readonly lastViewByWorkspace: Readonly<Record<Workspace, ViewTab>>;
   readonly isolatedPartId: string | null;
   readonly overridesRevealSeq: number;
+  /** Liste du contrôle superposée à la vue du parcours guidé. */
+  readonly guidedControlOpen: boolean;
+  /** Repli « Contexte de contrôle » déplié en tête de la liste du contrôle du guidé. */
+  readonly guidedControlContext: boolean;
+  /**
+   * Demandes de montrer le « Contexte de contrôle » (lien « Profil », `openSection`) : la liste
+   * le ramène en tête et lui donne le focus, même s'il était déjà déplié.
+   */
+  readonly guidedControlContextSeq: number;
 }
 
 export function createUiStore(initialView: ViewTab = "plan"): StoreApi<UiState> {
@@ -65,6 +86,9 @@ export function createUiStore(initialView: ViewTab = "plan"): StoreApi<UiState> 
     },
     isolatedPartId: null,
     overridesRevealSeq: 0,
+    guidedControlOpen: false,
+    guidedControlContext: false,
+    guidedControlContextSeq: 0,
   }));
 }
 
@@ -121,12 +145,19 @@ export function closeWorkshopDialog(): void {
   uiStore.setState({ workshopOpen: false });
 }
 
+/** Le parcours guidé est-il affiché ? */
+function isGuided(): boolean {
+  return journeyStore.getState().journey === "guided";
+}
+
 /**
  * Badge « Contrôle » : sélection effacée (inspecteur « sans sélection ») et contrôle montré.
- * L'inspecteur n'est affiché qu'en Conception : appelé en Fabrication, on y repasse d'abord.
+ * Libre : l'inspecteur n'est affiché qu'en Conception ; appelé en Fabrication, on y repasse
+ * d'abord. Guidé : la liste du contrôle s'ouvre par-dessus la vue (étape inchangée).
  */
 export function revealControl(): void {
-  showDesign();
+  if (isGuided()) openGuidedControl();
+  else showDesign();
   appStore.getState().select(null);
   uiStore.setState((s) => ({ controlRevealSeq: s.controlRevealSeq + 1 }));
 }
@@ -154,8 +185,17 @@ export function useViewCommand(onCommand: (kind: ViewCommandKind) => void): void
   }, [command]);
 }
 
-/** Bascule Conception / Fabrication (la vue suit, voir `linkWorkspaceAndView`). */
+/**
+ * Bascule Conception / Fabrication (la vue suit, voir `linkWorkspaceAndView`). En guidé, la
+ * Fabrication est l'étape 7 (`goToGuidedStep(7)`) ; « Conception » est sans effet : chaque
+ * étape de 1 à 6 est déjà en Conception et le guidé n'a pas de bascule d'espace (l'appelant
+ * qui veut une section précise passe par `openSection`).
+ */
 export function switchWorkspace(target: Workspace): void {
+  if (isGuided()) {
+    if (target === "fabrication") goToGuidedStep(7);
+    return;
+  }
   journeyStore.getState().setWorkspace(target);
 }
 
@@ -176,10 +216,93 @@ export function showAllParts(): void {
 
 /**
  * Lien du compteur de surcharges : sélection effacée (inspecteur « sans sélection ») et liste
- * des surcharges dépliée et montrée (en Conception, comme `revealControl`).
+ * des surcharges dépliée et montrée (en Conception, comme `revealControl` ; en guidé, dans la
+ * liste du contrôle superposée à la vue).
  */
 export function revealOverrides(): void {
-  showDesign();
+  if (isGuided()) openGuidedControl();
+  else showDesign();
   appStore.getState().select(null);
   uiStore.setState((s) => ({ overridesRevealSeq: s.overridesRevealSeq + 1 }));
+}
+
+// ------------------------------------------------------------------ Parcours guidé
+
+/**
+ * Va à une étape du guidé : étape courante, marquée comme vue, espace de l'étape
+ * (`setGuidedStep`, la liaison espace ↔ vue réagit aussitôt), puis vue conseillée de l'étape
+ * (vue et mode du plan) : proposée au changement d'étape, l'utilisateur peut en changer
+ * ensuite. La liste du contrôle se ferme. Sans effet sur l'étape courante.
+ */
+export function goToGuidedStep(step: GuidedStep): void {
+  if (journeyStore.getState().guidedStep === step) return;
+  journeyStore.getState().setGuidedStep(step);
+  const rec = recommendedView(step);
+  const app = appStore.getState();
+  if (app.view !== rec.view) app.setView(rec.view);
+  if (rec.planMode !== undefined && appStore.getState().planMode !== rec.planMode) {
+    appStore.getState().setPlanMode(rec.planMode);
+  }
+  closeGuidedControl();
+}
+
+/**
+ * Ouvre une section. Libre : en Conception, panneau de la section. Guidé : étape de la section
+ * (`stepForPanel`) ; le Contexte de contrôle, sans étape, ouvre la liste du contrôle avec son
+ * repli « Contexte » déplié.
+ */
+export function openSection(section: SectionId): void {
+  if (!isGuided()) {
+    showDesign();
+    journeyStore.getState().openFreePanel(section);
+    return;
+  }
+  const step = stepForPanel(section);
+  if (step === null) openGuidedControl({ context: true });
+  else goToGuidedStep(step);
+}
+
+/**
+ * Mène à la section d'un paramètre (lien « Ouvrir » d'une valeur ◆, « Pour corriger »). Libre :
+ * en Conception, panneau de la section. Guidé : étape du paramètre (`guidedStepOfRow`) ; un
+ * paramètre absent du guidé (réglage de Conception) fait passer en libre, panneau de sa
+ * section ouvert. Ne donne pas le focus : l'appelant appelle ensuite `focusParamField`.
+ */
+export function openParam(
+  row: Pick<ToValidateRow, "key" | "section" | "steps" | "structureKind">,
+): void {
+  if (isGuided()) {
+    const step = guidedStepOfRow(row);
+    if (step !== null) {
+      goToGuidedStep(step);
+      closeGuidedControl();
+      return;
+    }
+    journeyStore.getState().setJourney("free");
+  }
+  showDesign();
+  journeyStore.getState().openFreePanel(row.section);
+}
+
+/**
+ * Ouvre la liste du contrôle du guidé ; `context` : repli « Contexte de contrôle » déplié,
+ * ramené en tête de la liste et focalisé (`guidedControlContextSeq`).
+ */
+export function openGuidedControl(options?: { readonly context?: boolean }): void {
+  const context = options?.context === true;
+  uiStore.setState((s) => ({
+    guidedControlOpen: true,
+    guidedControlContext: context ? true : s.guidedControlContext,
+    guidedControlContextSeq: s.guidedControlContextSeq + (context ? 1 : 0),
+  }));
+}
+
+/** Ferme la liste du contrôle du guidé (Échap, croix, changement d'étape). */
+export function closeGuidedControl(): void {
+  if (uiStore.getState().guidedControlOpen) uiStore.setState({ guidedControlOpen: false });
+}
+
+/** Déplie ou replie le « Contexte de contrôle » en tête de la liste du contrôle du guidé. */
+export function setGuidedControlContext(open: boolean): void {
+  uiStore.setState({ guidedControlContext: open });
 }

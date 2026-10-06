@@ -8,7 +8,7 @@ import { DEMO_PRESET_IDS } from "@blondel/core";
 import { msg, translatorFor } from "@blondel/i18n";
 import { createElement, type FunctionComponent } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { listMessages } from "../i18n/text.js";
 import { defaultGuards } from "../lib/guardsForm.js";
 import { appStore, journeyStore } from "../store/appStore.js";
@@ -29,11 +29,18 @@ appStore.getInitialState = appStore.getState;
 journeyStore.getInitialState = journeyStore.getState;
 uiStore.getInitialState = uiStore.getState;
 
+// Parcours libre par défaut (un projet remplacé ou une démo ouvrent le guidé) : chaque test
+// part du libre, ceux du guidé le choisissent.
+beforeEach(() => {
+  journeyStore.setState({ journey: "free" });
+});
+
 afterEach(() => {
   appStore.getState().setLocale("fr");
   appStore.getState().replaceProject(initial);
   appStore.getState().clearNotice();
   appStore.setState({ autosaveFailed: false, rejectedAutosave: null });
+  journeyStore.setState({ journey: "free" });
 });
 
 function render(locale: "fr" | "en", component: FunctionComponent): string {
@@ -127,11 +134,51 @@ describe("TopBar", () => {
     expect(html).not.toMatch(/ui\.(topbar|toolbar|import|export)\./);
   });
 
-  it("parcours guidé désactivé (vague 2), libre choisi ; Conception choisie", () => {
+  it("parcours libre : Guidé disponible, Libre choisi ; Conception choisie", () => {
     const html = render("fr", TopBar);
-    expect(html).toMatch(/aria-checked="false"[^>]*disabled=""[^>]*title="Parcours guidé[^"]*"/);
+    expect(html).toMatch(/aria-checked="false"[^>]*>Guidé</);
+    expect(html).not.toMatch(/disabled=""[^>]*>Guidé</);
     expect(html).toMatch(/aria-checked="true"[^>]*>Libre</);
     expect(html).toMatch(/aria-checked="true"[^>]*>Conception</);
+    expect(html).toContain('class="seg seg--sm journey-switch"');
+  });
+
+  it("parcours guidé (maquette 1a) : grand segmenté, ni espace, ni contrôle, ni import / export", () => {
+    journeyStore.setState({ journey: "guided" });
+    try {
+      const html = render("fr", TopBar);
+      expect(html).toContain('aria-label="Barre d&#x27;outils"');
+      expect(html).toContain("journey-switch journey-switch--guided");
+      expect(html).toMatch(/aria-checked="true"[^>]*>Guidé</);
+      expect(html).toMatch(/aria-checked="false"[^>]*>Libre</);
+      for (const text of ['aria-label="Annuler (Ctrl+Z)"', 'aria-label="Plus d&#x27;options"']) {
+        expect(html).toContain(text);
+      }
+      for (const text of [
+        "Espace de travail",
+        ">Conception<",
+        ">Contrôle<",
+        "Importer",
+        "Exporter",
+      ]) {
+        expect(html).not.toContain(text);
+      }
+      const en = render("en", TopBar);
+      expect(en).toMatch(/aria-checked="true"[^>]*>Guided</);
+      expect(en).not.toContain("Guidé");
+    } finally {
+      journeyStore.setState({ journey: "free" });
+    }
+  });
+
+  it("parcours guidé : marque, menu du projet et « Démo » gardés", () => {
+    appStore.getState().loadDemo(DEMO_PRESET_IDS[0]!);
+    expect(journeyStore.getState().journey).toBe("guided");
+    const html = render("fr", TopBar);
+    expect(html).toContain("topbar--guided");
+    expect(html).toContain(">Blondel<");
+    expect(html).toContain("topbar__project");
+    expect(html).toContain(">Démo<");
   });
 
   it("étiquette « Démo » après le chargement d'une démo", () => {

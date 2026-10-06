@@ -11,7 +11,14 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { expect, test, type Page } from "@playwright/test";
-import { applyPreset, instrument, openApp, openSection, settle } from "./support.js";
+import {
+  applyPreset,
+  instrument,
+  openApp,
+  openSection,
+  settle,
+  useFreeJourney,
+} from "./support.js";
 
 test.beforeEach(async ({ page }) => {
   await instrument(page);
@@ -182,6 +189,8 @@ test("démo débillardé : appui localisé « LE1 · M6 », « Où » cliquable,
 }) => {
   await openApp(page);
   await applyPreset(page, "Quart tournant débillardé soudé");
+  // Une démo ouvre le parcours guidé : l'inspecteur est celui du libre.
+  await useFreeJourney(page);
   const inspector = inspectorOf(page);
   const card = inspector.locator('.rule-card[data-rule="FAB_SUPPORT_LONGUEUR_MIN"]').first();
   await expect(card.locator(".rule-card__loc")).toHaveText("LE1 · M6");

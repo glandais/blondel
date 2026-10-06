@@ -11,7 +11,8 @@
  *
  * Vague 2 du parcours (ADR-0009) : adaptées a minima à la nouvelle mise en page (barre du haut,
  * rail et panneau unique, inspecteur) ; vague 3 : inspecteurs Marche et Règle (le mode expert
- * du plan est retiré) ; la refonte des captures et de `EXISTANT.md` est en vague 6.
+ * du plan est retiré) ; vague 5 : une démo ouvre le parcours guidé, `openDemo` repasse en
+ * libre ; la refonte des captures et de `EXISTANT.md` est en vague 6.
  */
 import { mkdirSync } from "node:fs";
 import { resolve } from "node:path";
@@ -26,6 +27,7 @@ import {
   openTab,
   settle,
   structureSelect,
+  useFreeJourney,
 } from "../support.js";
 
 const OUT = resolve(process.env["CAPTURES_DIR"] ?? "../../docs/ux/captures");
@@ -49,9 +51,11 @@ async function closeNotice(page: Page): Promise<void> {
   if (await close.count()) await close.click();
 }
 
+/** Ouvre une démo dans le parcours libre (une démo ouvre le guidé : retour au libre). */
 async function openDemo(page: Page, label = DEMO): Promise<void> {
   await openApp(page);
   await applyPreset(page, label);
+  await useFreeJourney(page);
   await closeNotice(page);
 }
 
