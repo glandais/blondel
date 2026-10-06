@@ -294,6 +294,7 @@ L'interface et les sorties existent en anglais depuis l'internationalisation (AD
 - Aujourd'hui : comme décrit ; aucun de ces points n'empêche un export.
 - Réf. : `docs/adr/0007-internationalisation.md` (« Restes connus », « Tests » de la vague 3) ; `docs/research/glossaire-en.md` ; `packages/i18n/src/locales/en.json`.
 - Complément du 2026-10-06 (refonte de l'interface, ADR-0009) : les contextes du contrôle s'affichent en libellés clairs dans les deux langues (`contextShortLabel`, `packages/core/src/rules/contexts.ts`), la description longue en aide ; le reste de A26 est inchangé.
+- **Décision de l'utilisateur (2026-10-06)** : proposition retenue. (a) Termes actuels gardés, sauf « development » pour les développés de limons bois (« flat pattern » reste pour la tôle) ; lever l'ambiguïté de « R » (rayon / hauteur de marche) dans le cartouche. (b) Sources citées traduites (une clé par source dans `rules.yaml`, titres de normes dans leur langue), profil du contrôle traduit (Strict / Lenient) ; anglais britannique seul, pas de variante américaine. À implémenter.
 
 ### A27. Groupe « Visserie » du mode Fabrication
 
@@ -302,6 +303,7 @@ Le handoff de la refonte (ADR-0009, maquette « Parcours libre · Fabrication »
 - Proposition : ne pas afficher de groupe vide ; si la visserie doit apparaître (nomenclature, liste de débit, dossier PDF), la modéliser dans le cœur (quantités par assemblage, déduites des platines, supports et poteaux, avec un type et un diamètre « à valider » du profil d'atelier) avant de l'ajouter à l'interface.
 - Aujourd'hui : groupes Limons, Marches, Contremarches, Supports, Platines, Poteaux, Garde-corps, Autres (`apps/web/src/lib/partGroups.ts`) ; pas de groupe « Visserie ».
 - Réf. : `docs/LEDGER.md` [parcours:vague-4] ; ADR-0009, « Mise en œuvre ».
+- **Décision de l'utilisateur (2026-10-06)** : modéliser la visserie dans le cœur (quantités par assemblage déduites des platines, supports, poteaux et garde-corps ; type, diamètre et longueur « à valider » du profil d'atelier), puis l'afficher dans la nomenclature, la liste de débit, le dossier PDF et le groupe « Visserie » du mode Fabrication. À implémenter.
 
 ### A28. Retouche de l'angle du nez d'arrivée
 
@@ -310,6 +312,7 @@ L'inspecteur Marche (2a) règle l'angle de la ligne de nez de la marche choisie.
 - Proposition : rendre le nez d'arrivée sélectionnable (clic sur le nez dans le plan ou l'élévation → bloc « Ligne de nez » seul, sans fiche de marche), ou bien interdire la retouche de ce nez dans le schéma (avec migration des fichiers qui en portent une).
 - Aujourd'hui : listée et retirable, pas éditable.
 - Réf. : `docs/LEDGER.md` [parcours:vague-3] ; `apps/web/src/components/inspector/NosingLineBlock.tsx`, `apps/web/src/lib/nosingOverrides.ts`.
+- **Décision de l'utilisateur (2026-10-06)** : rendre le nez d'arrivée sélectionnable (clic sur le nez dans le plan ou l'élévation → bloc « Ligne de nez » seul dans l'inspecteur, sans fiche de marche) ; pas de changement de schéma ni de migration. À implémenter.
 
 ## B. Validations par un atelier ou un professionnel
 
