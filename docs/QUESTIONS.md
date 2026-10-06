@@ -331,6 +331,13 @@ Décisions à prendre avant un plugin :
 
 - Aujourd'hui : non implémenté ; aucune règle de `rules.yaml` propre au limon central (sauf l'épaisseur × 2 de la crémaillère centrale, `CREMAILLERE_REGLE_MOYENS`, C-B-03).
 - Réf. : `docs/SPEC.md` §2.3 et §2.4 ; `docs/research/C-structures.md` §1.4, §1.5, §1.7, §2.4, §2.5, [20], [23], [42], [43] ; `docs/research/D-etat-de-l-art.md` §1.2 et §1.4 ; `packages/core/src/structures/steelCurved.ts`.
+- **Décisions de l'utilisateur (2026-10-06)** :
+  1. familles : métal (tube rectangulaire, caisson en tôles soudées) **et** bois (couches collées, épaisseur × 2 du tableau FCBA) dans le même chantier ;
+  2. tracés : droit, tournants (limon central débillardé, trace sur l'axe de l'emmarchement par défaut, « à valider », géométrie de développé et de roulage de `steel-curved`) **et hélicoïdal sur limon central** ;
+  3. supports : métal, consoles en tôle soudées par défaut, supports pliés U / Z / triangle en option ; bois, marche entaillée et boulonnée ; dimensions du profil d'atelier « à valider » ;
+  4. torsion et double porte-à-faux : avertissement avec justification jointe, reprise dans le dossier PDF (comme A12) ; prédimensionnement en flexion existant, torsion signalée comme non vérifiée ;
+  5. ancrages : platines de `steel-flat` (valeurs « à valider » existantes), sabots ou platines métalliques pour le bois, visserie déduite (A27).
+     À implémenter.
 
 ### A30. Angle imposé sur le nez d'arrivée
 
@@ -339,6 +346,7 @@ Le nez d'arrivée est sélectionnable (A28), mais un angle non nul ne peut pas s
 - Proposition : laisser l'angle non modifiable sur ce nez (état actuel), ou prolonger les bords au-delà du palier dans `packages/core/src/stepping/stepping.ts` pour la seule ligne du nez d'arrivée (palier et chevêtre obliques, à répercuter sur les structures et les garde-corps de trémie).
 - Aujourd'hui : angle affiché, non modifiable (motif dans l'inspecteur) ; une retouche d'angle importée reste listée, sans effet (remarque du découpage), et retirable ; Fixer le nez fonctionne.
 - Réf. : A28 ; `apps/web/src/components/inspector/ArrivalNosingInspector.tsx`, `NosingLineBlock.tsx` (`angleLocked`) ; `stepping.override.angleInapplicable`.
+- **Décision de l'utilisateur (2026-10-06)** : laisser l'angle non modifiable sur le nez d'arrivée (état actuel). Point clos.
 
 ### A31. Marche en tôle pliée sur support : assemblage et perçages chiffrés
 
@@ -347,6 +355,7 @@ Un support de marche (cornière ou plat, `structures/supports.ts`) compte toujou
 - Proposition : décrire l'assemblage d'une marche en tôle sur son support (vissée : perçages dans le développé de la marche et visserie ; ou soudée : ni perçage ni visserie), puis aligner chiffrage et visserie.
 - Aujourd'hui : perçages chiffrés, aucune visserie pour la marche en tôle (antérieur à A27, chiffrage inchangé).
 - Réf. : A27 ; `supportPart` et `supportFixings` (`packages/core/src/structures/supports.ts`), `computeFasteners` (`packages/core/src/fasteners/compute.ts`).
+- **Décision de l'utilisateur (2026-10-06)** : paramètre de plugin « marche vissée | soudée » sur son support, vissée par défaut (« à valider ») : vissée, perçages dans le développé de la marche et visserie ; soudée, ni perçage ni visserie, cordons comptés ; chiffrage aligné dans les deux cas. À implémenter.
 
 ## B. Validations par un atelier ou un professionnel
 
