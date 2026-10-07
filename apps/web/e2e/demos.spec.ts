@@ -33,6 +33,7 @@ const DEMOS = [
   "Quart tournant à palier, frêne et verre",
   "Grand escalier d'ERP",
   "Hélicoïdal à jour central",
+  "Quart tournant sur limon central débillardé",
 ] as const;
 
 // Mesures de temps : une reprise absorbe un pic de charge ponctuel de la machine.

@@ -91,13 +91,41 @@ describe("buildModel — visserie (QUESTIONS A27)", () => {
     expect(m.fasteners!.some((f) => f.joint === "treadScrewed")).toBe(true);
   });
 
-  it("tôle pliée : contremarche d'arrivée au chevêtre, pas de vis de marche", () => {
+  it("tôle pliée vissée (défaut A31) : contremarche d'arrivée au chevêtre, vis à métaux M8", () => {
     const m = buildModel(load(FOLDED));
     expectConsistent(m);
     const riser = m.fasteners!.find((f) => f.joint === "riserTrimmer")!;
     expect(riser).toMatchObject({ quantity: 3, diameter: 10 });
     expect(fr(riser.origin)).toMatch(/^Contremarche d'arrivée CM\d+ → chevêtre$/);
     expect(m.fasteners!.some((f) => f.joint === "treadScrewed")).toBe(false);
+    const screws = m.fasteners!.filter((f) => f.joint === "treadBolted");
+    expect(screws.length).toBeGreaterThan(0);
+    for (const f of screws) {
+      expect(f).toMatchObject({ kind: "machine-screw", grade: "8.8", diameter: 8, length: 20 });
+      expect(fr(f.name)).toBe("Vis à métaux M8 × 20, classe 8.8");
+      // Support et marche en tôle portée.
+      const parts = f.partIds.map((id) => m.parts.find((p) => p.id === id)!);
+      expect(parts.map((p) => p.category).sort()).toEqual(["support", "tread"]);
+      const tread = parts.find((p) => p.category === "tread")!;
+      expect(tread.material).toMatch(/^steel-/);
+      // Perçages correspondants dans le développé de la marche.
+      expect(tread.flat!.outline.holes.length).toBeGreaterThan(0);
+    }
+  });
+
+  it("tôle pliée soudée (A31) : ni vis de marche ni perçage dans les marches", () => {
+    const base = load(FOLDED);
+    const sup = (base.stair.structure.params as { supports?: object }).supports ?? {};
+    const m = buildModel(
+      withStructureParams(base, { supports: { ...sup, treadFixing: "welded" } }),
+    );
+    expectConsistent(m);
+    expect(m.errors).toEqual([]);
+    expect(m.fasteners!.some((f) => f.joint === "treadBolted" || f.joint === "treadScrewed")).toBe(
+      false,
+    );
+    for (const p of m.parts.filter((x) => x.category === "tread"))
+      expect(p.flat?.outline.holes ?? []).toEqual([]);
   });
 
   it("steel-curved : platines de pied et de tête (plateObject)", () => {
@@ -106,6 +134,35 @@ describe("buildModel — visserie (QUESTIONS A27)", () => {
     const joints = m.fasteners!.map((f) => f.joint);
     expect(joints).toContain("plateFloor");
     expect(joints).toContain("plateTrimmer");
+  });
+
+  it("steel-central (tube et caisson, droit et quart tournant) : platines chevillées au sol et au chevêtre", () => {
+    // La platine d'un caisson est soudée à plusieurs pièces de la poutre (flasques, semelles) :
+    // ce ne sont pas des partenaires boulonnés, l'ancrage reste au gros œuvre (A27, A29 n° 5).
+    for (const [layout, section] of [
+      [{ width: 900, legs: ["auto"] }, "tube"],
+      [{ width: 900, legs: ["auto"] }, "box"],
+      [{ width: 900, legs: [1800, 2300], direction: "left" }, "box"],
+    ] as const) {
+      const base = makeSteppingProject(layout as Parameters<typeof makeSteppingProject>[0]);
+      const m = buildModel(
+        ProjectSchema.parse({
+          ...base,
+          stair: {
+            ...base.stair,
+            structure: { kind: "steel-central", params: { section: { kind: section } } },
+          },
+        }),
+      );
+      expect(m.errors, section).toEqual([]);
+      expectConsistent(m);
+      const joints = (m.fasteners ?? []).map((f) => f.joint);
+      expect(joints, section).toContain("plateFloor");
+      expect(joints, section).toContain("plateTrimmer");
+      expect(joints, section).not.toContain("plateBolted");
+      const foot = m.fasteners!.find((f) => f.id === "fastener-plateFloor-plate-foot-central");
+      expect(foot).toMatchObject({ kind: "anchor", quantity: 4 });
+    }
   });
 
   it("structure bois sans assemblage boulonné ni garde-corps : visserie absente", () => {

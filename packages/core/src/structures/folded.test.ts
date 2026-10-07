@@ -12,6 +12,7 @@ import {
   developArrivalRiser,
   developFoldedTread,
   flatLength,
+  foldedFlatTransform,
   insetPlate,
   sectionPolygon,
   uSection,
@@ -355,5 +356,44 @@ describe("contremarche d'arrivée des marches en Z (décision A11)", () => {
       expect(en).toMatch(/^CM15: flange “return” has no straight part \(-1\.5 mm\)/);
       expect(en).not.toMatch(/aile|sans|retour|cotes/);
     }
+  });
+});
+
+describe("tôle pliée — dessus plan et mise à plat (perçages de fixation, A31)", () => {
+  it("foldedFlatTransform envoie le contour monde sur le développé ; dessus dans le contour", () => {
+    fc.assert(
+      fc.property(
+        fc.constantFrom<"Z" | "U">("Z", "U"),
+        fc.double({ min: -Math.PI, max: Math.PI, noNaN: true }),
+        fc.integer({ min: -150, max: 150 }),
+        (profile, angle, skew) => {
+          const rot = (p: Vec2): Vec2 => V.rotate(p, angle);
+          const base = rectInput({ profile });
+          const plate = [V.vec(0, 0), V.vec(800, 0), V.vec(800, 250 + skew), V.vec(0, 250)];
+          const rearDir = V.normalize(V.vec(800, skew));
+          const res = developFoldedTread({
+            ...base,
+            plate: plate.map(rot),
+            front: { p: V.ZERO, dir: rot(V.vec(1, 0)) },
+            rear: { p: rot(V.vec(0, 250)), dir: rot(rearDir) },
+          });
+          const T = foldedFlatTransform(res);
+          res.worldOutline.forEach((p, i) => {
+            expect(V.distance(T(p), res.flat.outline.outer[i]!)).toBeLessThan(1e-9);
+          });
+          expect(signedArea(res.top)).toBeGreaterThan(0);
+          for (const p of res.top) {
+            expect(pointInPolygon(p, res.worldOutline, 1e-6)).not.toBe("outside");
+          }
+          // Le dessus plan ne contient aucune ligne de pli.
+          const topFlat = res.top.map(T);
+          for (const l of res.flat.lines.filter((x) => x.kind === "bend")) {
+            const mid = V.lerp(l.a, l.b, 0.5);
+            expect(pointInPolygon(mid, topFlat, 1e-6)).toBe("outside");
+          }
+        },
+      ),
+      { numRuns: 50 },
+    );
   });
 });

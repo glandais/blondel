@@ -154,6 +154,20 @@ export function renderFlatPatternSvg(part: Part, options: FlatPatternSvgOptions 
   // Emprise du dessin (mm) : pièce, lignes, cotes et ligne d'information.
   const pts: Vec2[] = [...flat.outline.outer];
   for (const l of flat.lines) pts.push(l.a, l.b);
+  // Libellés des lignes, centrés sur leur milieu et portés par la ligne : une ligne courte
+  // (joint ou repère sur un développé peu haut) a un libellé plus long qu'elle, gardé dans le
+  // cadre (largeur de caractère estimée comme pour la ligne d'information).
+  for (const l of flat.lines) {
+    if (flatLineStyle(l) === undefined) continue;
+    const annotation = partLineAnnotation(l, tx);
+    const len = Math.hypot(l.b.x - l.a.x, l.b.y - l.a.y);
+    if (annotation === undefined || !(len > 0)) continue;
+    const half = (annotation.length * th * 0.55 * 0.85) / 2;
+    if (half <= len / 2) continue;
+    const u = { x: (l.b.x - l.a.x) / len, y: (l.b.y - l.a.y) / len };
+    const mid = { x: (l.a.x + l.b.x) / 2, y: (l.a.y + l.b.y) / 2 };
+    for (const k of [-1, 1]) pts.push({ x: mid.x + k * half * u.x, y: mid.y + k * half * u.y });
+  }
   let minX = Math.min(...pts.map((p) => p.x));
   let maxX = Math.max(...pts.map((p) => p.x));
   let minY = Math.min(...pts.map((p) => p.y));

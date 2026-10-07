@@ -190,6 +190,17 @@ describe("résumés de la barre d'étapes", () => {
     expect(stepSummary(5, s, en).base).toBe("Welded wreathed string · S235");
   });
 
+  it("étape 5 : limon central, libellé court et nuance (A29)", () => {
+    const base = createProject("straight");
+    const central: Project = {
+      ...base,
+      stair: { ...base.stair, structure: { kind: "steel-central", params: {} } },
+    };
+    const s = sources(central);
+    expect(plain(stepSummary(5, s, fr).base)).toBe("Limon central · S235");
+    expect(plain(stepSummary(5, s, en).base)).toBe("Mono-stringer · S235");
+  });
+
   it("étape 5 : essence d'une structure bois, plugin indisponible traduit", () => {
     const wood = sources(createDemoProject("demo-u-oak"));
     expect(plain(stepSummary(5, wood, fr).base)).toMatch(/^Limons .+ · Chêne$/);

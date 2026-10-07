@@ -145,6 +145,13 @@ describe("préréglages de démonstration", () => {
     expect(curved.stair.layout.turns[0]!.inner.kind).toBe("arc");
     const well = createDemoProject("demo-helical-well");
     expect(well.stair.layout.kind === "helical" && well.stair.layout.core.kind).toBe("well");
+    // Limon central débillardé (QUESTIONS A29) : caisson à flasques roulées, consoles soudées.
+    const central = createDemoProject("demo-central-wreathed");
+    expect(central.stair.structure.kind).toBe("steel-central");
+    const cm = buildModel(central, { memo: false });
+    expect(cm.parts.some((p) => p.id.startsWith("central-web-left-"))).toBe(true);
+    expect(cm.parts.some((p) => p.id.endsWith("-central-bearing"))).toBe(true);
+    expect(cm.executionClass).toBe("EXC2");
   });
 });
 

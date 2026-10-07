@@ -122,6 +122,60 @@ describe("clés", () => {
     expect(structureParamEntry("steel-profile", ["supports", "angleLeg"]).tier).toBe("workshop");
   });
 
+  it("limon central (A29) : section en Essentiel, dimensions et justification sous « Plus », reste en Atelier", () => {
+    const e = (p: string) => structureParamEntry("steel-central", p.split("."));
+    expect(e("section.kind")).toMatchObject({
+      tier: "essential",
+      guided: [{ step: 5, more: false }],
+    });
+    for (const p of ["grade", "finish"]) expect(e(p).tier).toBe("essential");
+    expect(e("treadKind")).toMatchObject({ tier: "essential", alsoIn: ["treads"] });
+    for (const p of [
+      "section.height",
+      "section.width",
+      "supports.kind",
+      "trace.lateralOffset",
+      "beam.topOffset",
+      "cantileverJustification",
+    ]) {
+      expect(e(p), p).toMatchObject({ tier: "design", guided: [{ step: 5, more: true }] });
+    }
+    for (const p of [
+      "section.wallThickness",
+      "section.webThickness",
+      "section.diaphragmSpacing",
+      "section.ventDiameter",
+      "beam.splice",
+      "beam.jointOffset",
+      "supports.consoleThickness",
+      "supports.landingSpacing",
+      "plates.thickness",
+      "folded.noseHeight",
+    ]) {
+      expect(e(p).tier, p).toBe("workshop");
+    }
+    // ◆ déduits de paramLabels : dimensions sans source oui, choix et valeurs « auto » non.
+    expect(e("section.height").toValidate).toBe(true);
+    expect(e("supports.consoleThickness").toValidate).toBe(true);
+    expect(e("section.kind").toValidate).toBeUndefined();
+    expect(e("beam.topOffset").toValidate).toBeUndefined();
+    // La section du catalogue des profilés garde son entrée commune.
+    expect(structureParamEntry("steel-profile", ["section"]).tier).toBe("design");
+  });
+
+  it("A31 : fixation de la marche en Conception, perçage en Atelier, ◆", () => {
+    for (const kind of ["steel-flat", "steel-curved", "steel-central"]) {
+      expect(structureParamEntry(kind, ["supports", "treadFixing"])).toMatchObject({
+        tier: "design",
+        toValidate: true,
+      });
+      expect(structureParamEntry(kind, ["supports", "treadHoleDiameter"])).toMatchObject({
+        tier: "workshop",
+        toValidate: true,
+      });
+    }
+  });
+
   it("essence et rayon de nez : aussi dans « Marches »", () => {
     for (const p of [["material"], ["noseRadius"], ["treadKind"]]) {
       expect(structureParamEntry("wood-housed", p).alsoIn).toEqual(["treads"]);
@@ -379,6 +433,44 @@ describe("valeurs ◆ d'un projet", () => {
       stair: { ...p.stair, layout: { ...p.stair.layout, turns } } as Project["stair"],
     };
     expect(structureParamApplies(withNewel, {}, ["newel", "bolts"])).toBe(true);
+  });
+
+  it("paramètres conditionnels du limon central et de la fixation des marches (A31)", () => {
+    const p = createProject("straight");
+    const applies = (params: unknown, path: string) =>
+      structureParamApplies(p, params, path.split("."));
+    // Fixation de la marche : marches en tôle pliée seulement ; perçage si vissée.
+    const wood = { treadKind: "wood", supports: { treadFixing: "screwed" } };
+    const screwed = { treadKind: "folded-steel", supports: { treadFixing: "screwed" } };
+    const welded = { treadKind: "folded-steel", supports: { treadFixing: "welded" } };
+    expect(applies(wood, "supports.treadFixing")).toBe(false);
+    expect(applies(wood, "supports.treadHoleDiameter")).toBe(false);
+    expect(applies(screwed, "supports.treadFixing")).toBe(true);
+    expect(applies(screwed, "supports.treadHoleDiameter")).toBe(true);
+    expect(applies(welded, "supports.treadFixing")).toBe(true);
+    expect(applies(welded, "supports.treadHoleDiameter")).toBe(false);
+    // Section : paroi d'un tube, tôles d'un caisson, évents d'un galvanisé.
+    const tube = { finish: "painted", section: { kind: "tube" } };
+    const box = { finish: "galvanized", section: { kind: "box" } };
+    expect(applies(tube, "section.wallThickness")).toBe(true);
+    expect(applies(tube, "section.webThickness")).toBe(false);
+    expect(applies(tube, "section.diaphragmSpacing")).toBe(false);
+    expect(applies(tube, "section.ventDiameter")).toBe(false);
+    expect(applies(box, "section.wallThickness")).toBe(false);
+    expect(applies(box, "section.flangeThickness")).toBe(true);
+    expect(applies(box, "section.ventDiameter")).toBe(true);
+    expect(applies(tube, "section.height")).toBe(true);
+    // Section du catalogue d'un profilé (chemin d'un seul segment) : toujours.
+    expect(applies({ section: "auto" }, "section")).toBe(true);
+    // Supports : console ou support plié.
+    const bracket = { supports: { kind: "console" } };
+    const folded = { supports: { kind: "folded-z" } };
+    expect(applies(bracket, "supports.consoleThickness")).toBe(true);
+    expect(applies(bracket, "supports.foldedThickness")).toBe(false);
+    expect(applies(folded, "supports.foldedThickness")).toBe(true);
+    expect(applies(folded, "supports.tipHeight")).toBe(false);
+    expect(applies(folded, "supports.bearingThickness")).toBe(false);
+    expect(applies(folded, "supports.bearingWidth")).toBe(true);
   });
 
   it("essence des marches du projet : marches bois sans essence propre au plugin", () => {

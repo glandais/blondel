@@ -1,6 +1,6 @@
 /**
- * Tronçons et joints des pièces débitées en plusieurs morceaux (limon de jour débillardé
- * `steel-curved`, jalon 5b) : les pièces dont le développé porte des lignes `joint` sont groupées
+ * Tronçons et joints des pièces débitées en plusieurs morceaux (limon de jour débillardé,
+ * `steel-curved`, jalon 5b ; tube et tôles du limon central `steel-central`, A29) : les pièces dont le développé porte des lignes `joint` sont groupées
  * par identifiant de base (`stringer-inner-curved-1`, `-2`… → `stringer-inner-curved`), dans
  * l'ordre de la montée, et chaque joint entre deux tronçons consécutifs reçoit un repère J1, J2…
  * Présentation seulement : tronçons, joints et cordons viennent du modèle du cœur.
@@ -150,6 +150,12 @@ export function segmentedParts(model: Pick<Model, "parts">): SegmentedPart[] {
  */
 const WHOLE_PART_NAME: Readonly<Partial<Record<MessageKey, MessageKey>>> = {
   "structure.steelCurved.part.segment": "structure.steelCurved.part.outerString",
+  // Limon central (A29) : tronçons du tube ou des tôles du caisson débillardé.
+  "structure.steelCentral.part.tube": "structure.steelCentral.part.tubeWhole",
+  "structure.steelCentral.part.webLeft": "structure.steelCentral.part.webLeftWhole",
+  "structure.steelCentral.part.webRight": "structure.steelCentral.part.webRightWhole",
+  "structure.steelCentral.part.flangeTop": "structure.steelCentral.part.flangeTopWhole",
+  "structure.steelCentral.part.flangeBottom": "structure.steelCentral.part.flangeBottomWhole",
 };
 
 /**

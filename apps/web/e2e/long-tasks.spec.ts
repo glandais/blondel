@@ -127,7 +127,7 @@ test(`chargement et onglets : aucune tâche > ${LONG_TASK_BUDGET_MS} ms`, async 
 test(`préréglages et structures : aucune tâche > ${LONG_TASK_BUDGET_MS} ms`, async ({
   page,
 }, info) => {
-  // 7 préréglages × 7 structures, Plan puis 3D.
+  // 8 préréglages × 8 structures (`PRESETS`, `STRUCTURES` de support.ts), Plan puis 3D.
   test.setTimeout(600_000);
   const steps: Step[] = [];
   await measure(page, steps, "chargement", () => openApp(page));

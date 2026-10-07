@@ -5,14 +5,17 @@
  * Plugins intégrés, enregistrés au chargement : `wood-housed` (limons à la française, poteaux
  * d'angle), `wood-cut` (crémaillères, escalier droit), `steel-flat` (limons acier en plat
  * découpé laser, supports, marches bois ou en tôle pliée Z / U), `steel-profile` (limons en
- * profilés du commerce UPN / IPN / IPE / HEA, jalon 3c) et `steel-curved` (limon de jour
- * débillardé soudé, tôle roulée par tronçons, jalon 5b).
+ * profilés du commerce UPN / IPN / IPE / HEA, jalon 3c), `steel-curved` (limon de jour
+ * débillardé soudé, tôle roulée par tronçons, jalon 5b) et `steel-central` (limon central
+ * métal : tube ou caisson, droit, débillardé ou hélicoïdal, consoles ou supports pliés,
+ * QUESTIONS A29).
  */
 import { registerStructure, getStructure } from "./registry.js";
 import { WOOD_CUT } from "./woodCut.js";
 import { STEEL_FLAT } from "./steelFlat.js";
 import { STEEL_PROFILE } from "./steelProfile.js";
 import { STEEL_CURVED } from "./steelCurved.js";
+import { STEEL_CENTRAL } from "./steelCentral.js";
 import { WOOD_HOUSED } from "./woodHoused.js";
 import { registerHelicalCore } from "./helicalCore.js";
 
@@ -26,6 +29,7 @@ export {
   structureLateralThickness,
   structureLayouts,
   structureRequiresNewel,
+  structureUnsupportedOptions,
   unregisterStructure,
 } from "./registry.js";
 export {
@@ -177,6 +181,21 @@ export {
   type SteelCurvedResult,
 } from "./steelCurved.js";
 export {
+  CENTRAL_RULES,
+  CENTRAL_SECTION_KINDS,
+  CENTRAL_SUPPORT_KINDS,
+  STEEL_CENTRAL,
+  SteelCentralParamsSchema,
+  buildSteelCentral,
+  centralUnsupportedOptions,
+  effectiveCentralFixing,
+  type CentralSectionKind,
+  type CentralSupport,
+  type CentralSupportKind,
+  type SteelCentralParams,
+  type SteelCentralResult,
+} from "./steelCentral.js";
+export {
   arcFiberLength,
   fiberDevelopment,
   jourNormal,
@@ -203,6 +222,7 @@ if (!getStructure(WOOD_CUT.kind)) registerStructure(WOOD_CUT);
 if (!getStructure(STEEL_FLAT.kind)) registerStructure(STEEL_FLAT);
 if (!getStructure(STEEL_PROFILE.kind)) registerStructure(STEEL_PROFILE);
 if (!getStructure(STEEL_CURVED.kind)) registerStructure(STEEL_CURVED);
+if (!getStructure(STEEL_CENTRAL.kind)) registerStructure(STEEL_CENTRAL);
 // Jalon 5a (hélicoïdal à fût central) : plugin défini et exporté par `helicalCore.ts`.
 registerHelicalCore();
 export { newelTopWithHandrail } from "./newel.js";

@@ -24,6 +24,7 @@ import { GEOM_EPS } from "../geom2d/tolerance.js";
 import * as V from "../geom2d/vec.js";
 import type { Layout, NosingLine, Stepping } from "../model/derived.js";
 import type { Curve2, Mm, Rad, Vec2 } from "../model/primitives.js";
+import { dedupe } from "./geom.js";
 
 export type JourSide = "left" | "right";
 
@@ -218,7 +219,7 @@ export interface NosingProfile {
 }
 
 /** Hermite cubique monotone (Fritsch–Carlson) avec pentes d'extrémité imposées. */
-function monotoneHermite(
+export function monotoneHermite(
   xs: readonly number[],
   ys: readonly number[],
   startSlope: number,
@@ -463,4 +464,82 @@ export function slopeBreakAt(
   const after = (F(sigma + h) - F(sigma)) / (dev.toFiber(sigma + h) - x);
   const degrees = (Math.abs(Math.atan(after) - Math.atan(before)) * 180) / Math.PI;
   return { offset: dev.offset, before, after, degrees };
+}
+
+// ------------------------------------------------------------------ Outils de développé
+// (déplacés de `steelCurved.ts`, partagés avec le limon central `steel-central`)
+
+/** Altitude d'une polyligne (x croissants) en x, bornée aux extrémités. */
+export function polyAt(line: readonly Vec2[], x: Mm): Mm {
+  if (line.length === 0) return Number.NaN;
+  if (x <= line[0]!.x) return line[0]!.y;
+  for (let i = 0; i + 1 < line.length; i++) {
+    const a = line[i]!;
+    const b = line[i + 1]!;
+    if (x <= b.x + 1e-9) {
+      return b.x - a.x > 1e-9 ? a.y + ((b.y - a.y) * (x - a.x)) / (b.x - a.x) : Math.max(a.y, b.y);
+    }
+  }
+  return line[line.length - 1]!.y;
+}
+
+/**
+ * Change l'abscisse d'une polyligne ou d'un polygone (x ↦ toX(x)) en insérant un sommet à
+ * chaque abscisse de rupture `breaks` traversée (l'application est affine par morceaux).
+ */
+export function remapX(
+  pts: readonly Vec2[],
+  toX: (x: Mm) => Mm,
+  breaks: readonly Mm[],
+  closed: boolean,
+): Vec2[] {
+  const out: Vec2[] = [];
+  const n = pts.length;
+  for (let i = 0; i < n; i++) {
+    const a = pts[i]!;
+    out.push(V.vec(toX(a.x), a.y));
+    if (!closed && i === n - 1) break;
+    const b = pts[(i + 1) % n]!;
+    const inside = breaks.filter(
+      (x) => x > Math.min(a.x, b.x) + 1e-9 && x < Math.max(a.x, b.x) - 1e-9,
+    );
+    inside.sort((p, q) => (b.x > a.x ? p - q : q - p));
+    for (const x of inside) {
+      const t = (x - a.x) / (b.x - a.x);
+      out.push(V.vec(toX(x), a.y + t * (b.y - a.y)));
+    }
+  }
+  return dedupe(out);
+}
+
+/** Plus petit intervalle [σ0 ; σ1] où C_i (décalée de `probe` vers les marches) longe la zone. */
+export function curveInterval(
+  inside: (sigma: Mm) => boolean,
+  lo: Mm,
+  hi: Mm,
+  step: Mm,
+): { s0: Mm; s1: Mm } | null {
+  let first = Number.NaN;
+  let last = Number.NaN;
+  for (let s = lo; s <= hi + 1e-9; s += step) {
+    if (inside(s)) {
+      if (Number.isNaN(first)) first = s;
+      last = s;
+    }
+  }
+  if (Number.isNaN(first)) return null;
+  const refine = (ok: Mm, ko: Mm): Mm => {
+    let a = ok;
+    let b = ko;
+    for (let i = 0; i < 30; i++) {
+      const mid = (a + b) / 2;
+      if (inside(mid)) a = mid;
+      else b = mid;
+    }
+    return a;
+  };
+  return {
+    s0: first - step >= lo ? refine(first, first - step) : first,
+    s1: last + step <= hi ? refine(last, last + step) : last,
+  };
 }

@@ -135,6 +135,9 @@ const STRINGER_PARAMS: readonly string[] = [
   "curved",
   "innerStringer",
   "outerStringer",
+  // Limon central (steel-central) : tracé et poutre (la section est couverte par `section`).
+  "trace",
+  "beam",
 ];
 
 /** Tôle et acier : matériaux des marches et contremarches pliées. */
@@ -206,7 +209,13 @@ export function partSettingsFor(
       return isSteel(part.material)
         ? {
             scopeLabel: "ui.partInspector.scope.folded",
-            structureParams: ["folded", "treads"],
+            // Fixation sur le support (A31) : vissée ou soudée, perçage des vis.
+            structureParams: [
+              "folded",
+              "treads",
+              "supports.treadFixing",
+              "supports.treadHoleDiameter",
+            ],
             section: "structure",
           }
         : null;

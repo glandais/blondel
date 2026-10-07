@@ -7,7 +7,15 @@
  * proposé vide (QUESTIONS D6). Aucune valeur métier ici : les défauts et la validation sont
  * ceux du plugin.
  */
-import type { Model, Project, StructureContext, StructureKind } from "@blondel/core";
+import {
+  structureUnsupportedOptions,
+  type Model,
+  type Project,
+  type StructureContext,
+  type StructureKind,
+  type StructureLayoutTraits,
+  type UnsupportedParamOption,
+} from "@blondel/core";
 import { msg, type Message } from "@blondel/i18n";
 import { SCHEMA_PARSE_OPTIONS, schemaIssues } from "./schemaIssues.js";
 
@@ -342,4 +350,34 @@ export function withDefaults(defaults: unknown, params: unknown): Record<string,
     out[k] = isPlainObject(v) && isPlainObject(base[k]) ? withDefaults(base[k], v) : v;
   }
   return out;
+}
+
+// ------------------------------------------------------------------ Options non prises en charge
+
+/**
+ * Tracé du projet vu par les capacités des plugins : type (volées ou hélicoïdal) et nombre de
+ * tournants (0 en hélicoïdal). Lecture du projet seulement.
+ */
+export function layoutTraitsOf(project: Project): StructureLayoutTraits {
+  const layout = project.stair.layout;
+  return layout.kind === "helical"
+    ? { kind: "helical", turns: 0 }
+    : { kind: "flights", turns: layout.turns.length };
+}
+
+/**
+ * Choix de paramètres que le plugin `kind` déclare ne pas savoir construire sur le tracé du
+ * projet (`capabilities.unsupportedOptions`, ex. section tube du limon central sur un tournant) :
+ * l'interface les grise avec leur raison. Lecture d'une capacité, aucun calcul ; vide si le
+ * plugin ne déclare rien ou lève.
+ */
+export function unsupportedOptionsOf(
+  kind: string,
+  project: Project,
+): readonly UnsupportedParamOption[] {
+  try {
+    return structureUnsupportedOptions(kind, layoutTraitsOf(project));
+  } catch {
+    return [];
+  }
 }

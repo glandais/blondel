@@ -207,6 +207,51 @@ Réserves :
 - A27 : marche en tôle pliée sur son support, assemblage non décrit (perçages chiffrés, aucune visserie) : question A31. Pinces de verre non modélisées : aucune visserie.
 - Toutes les valeurs de visserie restent « à valider » par un atelier (aucune règle chiffrée de cheville dans docs/research).
 
+## 9. Décisions de l'utilisateur A29 (limon central métal) et A31 (2026-10-06)
+
+**Partiel** (worktree `feat/limon-central-metal`, 2026-10-07) : vague 1 (métal) atteinte, limon central bois (couches collées) en vague 2. Définition retenue : les décisions consignées dans `docs/QUESTIONS.md` A29 (familles métal, tracés, supports, porte-à-faux et torsion, ancrages) et A31 sont mises en œuvre sans écart d'instantané sur les exemples existants (instantanés et `examples/` existants inchangés), sans calcul métier dans l'interface ni valeur non sourcée en dur. Écart voulu (A31) : les sorties de trois exemples en tôle pliée changent — `j3b-acceptance-01-tole-pliee`, `demo-half-turn-industrial`, `j4-demi-tournant-acier-garde-corps` : perçages dans le développé des marches, vis à métaux M8 × 20 (`treadBolted`) au lieu de vis à bois sur les supports, masse des marches, nomenclature, CSV, DXF, PDF et glTF ; classe d'exécution inchangée. L'instantané des cotes ne compte pas les perçages, d'où son identité.
+
+| Critère                                                                                                                                                                                                                                          | Tests                                                                                                                                                                                   |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A29 : trace du limon central à l'axe de l'emmarchement (décalage), droite, débillardée sur les tournants (S / Z, poteau d'angle), hélicoïdale ; ligne des nez monotone                                                                           | `packages/core/src/structures/centralTrace.test.ts`                                                                                                                                     |
+| A29 : poutre tube (droit) ou caisson (flasques roulées, semelles, entretoises), tronçons continus, joints bout à bout EXC2, développés en fibre neutre, évents, platines                                                                         | `packages/core/src/structures/centralBeam.test.ts`                                                                                                                                      |
+| A29 : consoles ou supports pliés sous chaque marche, aucune pièce hors emprise, `buildModel` ne lève jamais (propriétés fast-check), justification de `LIMON_CENTRAL_PORTE_A_FAUX`                                                               | `packages/core/src/structures/steelCentral.test.ts`, `steelCentral.acceptance.test.ts`                                                                                                  |
+| A29 : justification reprise dans le dossier PDF                                                                                                                                                                                                  | `packages/exports/src/pdf/compliance.test.ts`                                                                                                                                           |
+| A29 : exemples `j5c-limon-central-*` et démo couverts par tous les exports et l'instantané des cotes                                                                                                                                             | `packages/exports/src/examples.test.ts`, `packages/core/src/pipeline/build.test.ts`, `project/presetDemo.test.ts`                                                                       |
+| A29 : interface (carte, tube grisé avec sa raison, caisson, tronçons et joints en Fabrication, justification dans l'inspecteur Règle, démo)                                                                                                      | `apps/web/src/lib/structureForm.test.ts`, `paramTiers.test.ts`, `paramLabels.test.ts`, `variants.test.ts` ; e2e `central-stringer.spec.ts`, `english-terms.spec.ts` (« mono-stringer ») |
+| A31 : marche en tôle vissée (perçages dans le développé et le support, visserie `treadBolted`) ou soudée (cordons, ni perçage ni visserie), chiffrage aligné                                                                                     | `packages/core/src/structures/treadFixing.test.ts`, `steelFlat.test.ts`, `steelCurved.test.ts`, `fasteners/compute.test.ts`, `pipeline/fasteners.test.ts`                               |
+| A31 : point de fixation non percé dans la marche (trop près d'un pli, d'un bord, d'un autre perçage) : ni perçage du support ni vis ; trous des marches = points `treadBolted` = vis (propriétés)                                                | `steelFlat.test.ts`, `steelCentral.test.ts` (« points de fixation non percés », propriété « modèle sans erreur »)                                                                       |
+| A31 : choix vissée / soudée dans l'interface (vis à métaux et perçages du développé d'une marche, annulation)                                                                                                                                    | e2e `fasteners.spec.ts` (« marches en tôle vissées \| soudées »)                                                                                                                        |
+| A29 n° 5 : platines du limon central (tube et caisson) chevillées au sol et au chevêtre, jamais boulonnées acier sur acier                                                                                                                       | `pipeline/fasteners.test.ts`, `centralBeam.test.ts`                                                                                                                                     |
+| A29 : console sous une marche balancée posée sur le dessus réel de la poutre (largeur b / cos β) ; support plié d'équerre ; support assemblé à la semelle haute du caisson                                                                       | `steelCentral.test.ts` (« appui des supports sur la poutre », propriété « modèle sans erreur »)                                                                                         |
+| A29 : section incohérente refusée (erreur explicite, aucune pièce, quantités finies) ; entretoises jointives et supports de palier superposés signalés ; flasques valides sur un premier tronçon court (contre-exemple fixé) ; hélicoïdaux tirés | `centralBeam.test.ts`, `steelCentral.test.ts`                                                                                                                                           |
+
+Réserves :
+
+- Limon central bois (vague 2). Torsion et déversement non vérifiés (signalés, justification jointe). Boulons d'un support vissé non tracés dans la semelle haute de la poutre. Variante M3 quintique automatique non appliquée à `steel-central`, entraxe minimal des entretoises et supports pliés sous une marche balancée : questions A32. Palier d'arrivée d'un hélicoïdal non porté par le limon central.
+- Toutes les dimensions du limon central et de la fixation des marches restent « à valider » par un atelier.
+
+## Vérifications de l'intégration (limon central métal)
+
+Dans le worktree `feat-limon-central`, le 2026-10-07, sans commit.
+
+- `pnpm typecheck` : vert (paquets, application web, tests e2e).
+- `pnpm test` : vert en français et en anglais (`LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8 LANGUAGE=en`), 263 fichiers (1 ignoré), 3 805 tests passés et 3 ignorés.
+- `pnpm format:check` : vert.
+- `BASE_PATH=/blondel/ pnpm --filter @blondel/web build` : OK.
+- e2e : 116 sur 116 verts, sous le budget de 200 ms par tâche, dont `central-stringer.spec.ts` (nouveau) et le parcours « préréglages et structures » de `long-tasks.spec.ts` avec `steel-central`.
+- Exemples : les 28 `examples/*.blondel.json` se lisent, se construisent et s'exportent ; 4 ajoutés (`j5c-limon-central-*`, `demo-central-wreathed`), aucun exemple ni instantané existant modifié.
+
+## Vérifications de la correction finale (limon central métal)
+
+Dans le worktree `feat-limon-central`, le 2026-10-07, sans commit, après les corrections de la relecture (platines chevillées, consoles en biais, supports pliés d'équerre, semelle haute, sections incohérentes, entraxes, flasques du premier tronçon, perçages A31 alignés, libellés des développés, comparateur).
+
+- `pnpm typecheck` : vert (paquets, application web, tests e2e).
+- `pnpm test` : vert en français et en anglais (`LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8 LANGUAGE=en`), 263 fichiers (1 ignoré), 3 822 tests passés et 3 ignorés ; propriétés du limon central, de `steel-flat` et de `steel-curved` relancées quatre fois (tirages différents) sans échec.
+- `pnpm format:check` : vert. `BASE_PATH=/blondel/ pnpm --filter @blondel/web build` : OK.
+- e2e : 117 sur 117 verts, sous le budget de 200 ms par tâche, dont le nouveau cas A31 de `fasteners.spec.ts`.
+- Instantanés et `examples/` : aucun écart (l'instantané des cotes et les projets générés ne portent ni les consoles ni les perçages).
+
 ## Vérifications de l'intégration (vague F)
 
 Depuis la racine, le 2026-09-30, sans commit :

@@ -31,6 +31,7 @@ import {
   type Translator,
 } from "@blondel/i18n";
 import { numberFormat } from "../i18n/locale.js";
+import { unsupportedOptionsOf } from "./structureForm.js";
 
 /** Variante à comparer : une structure et, éventuellement, des paramètres imposés. */
 export interface Variant {
@@ -81,10 +82,23 @@ export interface CompareOutcome {
  * Variantes proposées pour un projet à volées : limons bois à la française ; crémaillères bois
  * « à l'anglaise » si l'escalier est droit (le plugin refuse les tournants) ; limons en plat
  * découpé laser ; limon de jour débillardé soudé s'il y a un tournant (jour adapté en arc) ;
- * profilés UPN et IPE. Hélicoïdal : structure à fût, marches bois ou en tôle. Seules les
+ * limon central (tube sur un escalier droit, caisson débillardé sur un tournant) ; profilés UPN
+ * et IPE. Hélicoïdal : structure à fût, marches bois ou en tôle ; limon central hélicoïdal en
+ * caisson. Seules les
  * structures enregistrées dans le cœur sont retenues ; la structure courante est ajoutée si elle
  * n'est pas déjà couverte (ex. profilés HEA).
  */
+/**
+ * Section du limon central comparée sur ce tracé : tube si le plugin le sait construire, sinon
+ * caisson — lu sur `capabilities.unsupportedOptions` du cœur, sans règle propre à l'interface.
+ */
+function centralSection(project: Project): "tube" | "box" {
+  const tubeUnsupported = unsupportedOptionsOf("steel-central", project).some(
+    (o) => o.path.join(".") === "section.kind" && o.value === "tube",
+  );
+  return tubeUnsupported ? "box" : "tube";
+}
+
 export function variantsFor(
   project: Project,
   available: readonly Pick<StructureKind, "kind">[],
@@ -108,6 +122,15 @@ export function variantsFor(
         },
       );
     }
+    // Limon central hélicoïdal : section que le plugin sait construire (caisson, A29).
+    if (has("steel-central")) {
+      out.push({
+        id: "steel-central-helical",
+        kind: "steel-central",
+        label: msg("ui.lib.variant.steelCentralHelical"),
+        params: { section: { kind: centralSection(project) } },
+      });
+    }
     return withCurrent(project, out, has);
   }
   const straight = project.stair.layout.turns.length === 0;
@@ -126,6 +149,25 @@ export function variantsFor(
       kind: "steel-curved",
       label: msg("ui.lib.variant.steelCurved"),
     });
+  }
+  // Limon central (A29) : tube rectangulaire si le plugin le sait construire sur ce tracé
+  // (escalier droit), sinon caisson débillardé (`capabilities.unsupportedOptions`).
+  if (has("steel-central")) {
+    out.push(
+      centralSection(project) === "tube"
+        ? {
+            id: "steel-central-tube",
+            kind: "steel-central",
+            label: msg("ui.lib.variant.steelCentralTube"),
+            params: { section: { kind: "tube" } },
+          }
+        : {
+            id: "steel-central-box",
+            kind: "steel-central",
+            label: msg("ui.lib.variant.steelCentralBox"),
+            params: { section: { kind: "box" } },
+          },
+    );
   }
   if (has("steel-profile")) {
     for (const family of ["UPN", "IPE"] as const) {
@@ -190,8 +232,12 @@ function isCurrent(project: Project, v: Variant, params: Record<string, unknown>
   if (v.params === undefined) return true;
   const mine = fullParams(v.kind, cur.params);
   const theirs = fullParams(v.kind, params);
+  // Section du catalogue d'un profilé ignorée ; la section du limon central (tube ou caisson)
+  // est comparée comme les autres paramètres.
   return Object.keys(v.params).every(
-    (k) => k === "section" || stableStringify(mine[k]) === stableStringify(theirs[k]),
+    (k) =>
+      (k === "section" && v.kind === "steel-profile") ||
+      stableStringify(mine[k]) === stableStringify(theirs[k]),
   );
 }
 

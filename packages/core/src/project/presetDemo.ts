@@ -31,6 +31,7 @@ export const DEMO_PRESET_IDS = [
   "demo-quarter-landing-ash",
   "demo-erp-grand",
   "demo-helical-well",
+  "demo-central-wreathed",
 ] as const;
 export type DemoPresetId = (typeof DEMO_PRESET_IDS)[number];
 
@@ -44,6 +45,7 @@ export const DEMO_PRESET_LABELS: Readonly<Record<DemoPresetId, MessageKey>> = {
   "demo-quarter-landing-ash": "preset.demo.quarterLandingAsh.label",
   "demo-erp-grand": "preset.demo.erpGrand.label",
   "demo-helical-well": "preset.demo.helicalWell.label",
+  "demo-central-wreathed": "preset.demo.centralWreathed.label",
 };
 
 /** Clés des descriptions d'une ligne de chaque démo (sélecteur de l'interface). */
@@ -56,6 +58,7 @@ export const DEMO_PRESET_DESCRIPTIONS: Readonly<Record<DemoPresetId, MessageKey>
   "demo-quarter-landing-ash": "preset.demo.quarterLandingAsh.description",
   "demo-erp-grand": "preset.demo.erpGrand.description",
   "demo-helical-well": "preset.demo.helicalWell.description",
+  "demo-central-wreathed": "preset.demo.centralWreathed.description",
 };
 
 /** Garde-corps vitré à main courante inox (commun à plusieurs démos). */
@@ -237,6 +240,22 @@ function helicalWell(name: string): Project {
   });
 }
 
+/**
+ * Quart tournant balancé sur limon central en caisson débillardé (QUESTIONS A29) : consoles
+ * soudées, marches chêne, garde-corps vitré. Jour vif du préréglage (la trace du limon central
+ * le contourne à l'axe de l'emmarchement).
+ */
+function centralWreathed(name: string): Project {
+  const p = createProject("quarter-left", { name, width: 900 });
+  return withPatch(p, {
+    stair: {
+      structure: { kind: "steel-central", params: { section: { kind: "box" }, finish: "painted" } },
+    },
+    guards: GLASS_GUARDS,
+    appearance: { paintColor: "#2b2f33", woodTone: "natural", glassTint: "clear" },
+  });
+}
+
 const BUILDERS: Readonly<Record<DemoPresetId, (name: string) => Project>> = {
   "demo-helical-glass": helicalGlass,
   "demo-quarter-curved": quarterCurved,
@@ -246,6 +265,7 @@ const BUILDERS: Readonly<Record<DemoPresetId, (name: string) => Project>> = {
   "demo-quarter-landing-ash": quarterLandingAsh,
   "demo-erp-grand": erpGrand,
   "demo-helical-well": helicalWell,
+  "demo-central-wreathed": centralWreathed,
 };
 
 /** Vrai si `id` est une démo. */

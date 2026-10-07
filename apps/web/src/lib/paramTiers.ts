@@ -290,6 +290,10 @@ const STRUCTURE_COMMON: Readonly<Record<string, ParamTierEntry>> = {
   "supports.kind": design(S),
   "supports.fixing": design(S),
   "supports.minLength": design(S),
+  // Marche en tôle pliée sur son support (QUESTIONS A31) : vissée ou soudée en Conception, le
+  // perçage des vis en Atelier ; seulement avec des marches en tôle pliée.
+  "supports.treadFixing": design(S),
+  "supports.treadHoleDiameter": workshop(S),
   // Platines : cases pied / tête visibles, dimensions en Atelier.
   plates: workshop(S),
   "plates.foot": design(S),
@@ -313,6 +317,24 @@ const STRUCTURE_COMMON: Readonly<Record<string, ParamTierEntry>> = {
  * courante (réglages ◆ ou d'ajustement) en Atelier ; matériau des marches à l'étape 4.
  */
 const STRUCTURE_BY_KIND: Readonly<Record<string, Readonly<Record<string, ParamTierEntry>>>> = {
+  // Limon central métal (QUESTIONS A29) : section (tube ou caisson) en Essentiel à l'étape 5,
+  // avec la nuance, la finition et le matériau des marches (entrées communes) ; dimensions
+  // hors tout, type de support, décalage de l'axe, dessus de poutre et justification du double
+  // porte-à-faux en Conception sous « Plus » ; le reste (épaisseurs, entretoises, évents,
+  // tronçons, consoles, perçages, palier) en Atelier. Les préfixes `trace`, `section` et `beam`
+  // l'emportent sur l'entrée commune `section` (section du catalogue des profilés).
+  "steel-central": {
+    trace: workshop(S),
+    "trace.lateralOffset": design(S, [more(5)]),
+    section: workshop(S),
+    "section.kind": essential(S, [at(5)]),
+    "section.height": design(S, [more(5)]),
+    "section.width": design(S, [more(5)]),
+    beam: workshop(S),
+    "beam.topOffset": design(S, [more(5)]),
+    "supports.kind": design(S, [more(5)]),
+    cantileverJustification: design(S, [more(5)]),
+  },
   "helical-core": {
     column: workshop(S),
     "column.material": design(S, [more(5)]),
@@ -476,7 +498,10 @@ function guardPaths(project: Project): (readonly string[])[] {
  * que lorsqu'il s'applique (spécification de contenu § 1) : réglages de la tôle pliée
  * (`folded.*`) seulement si les marches sont en tôle pliée (`treadKind`), réglages du poteau
  * (`newel.*`) seulement si un tournant du tracé a un poteau (jour `newel`), dimensions du plat
- * ou de la cornière selon le type de support (`supports.kind`). Les autres
+ * ou de la cornière selon le type de support (`supports.kind`), fixation d'une marche en tôle
+ * sur son support (A31) seulement avec des marches en tôle pliée, réglages du limon central
+ * selon la section (tube, caisson), le type de support (console, support plié) et la finition
+ * (évents d'un galvanisé). Les autres
  * paramètres s'appliquent toujours. `params` : paramètres du plugin complétés par ses défauts.
  * Lecture du projet seulement, aucun calcul.
  */
@@ -499,19 +524,51 @@ export function structureParamApplies(
   }
   if (head === "supports") {
     // Dimensions du plat pour des supports en plat, de la cornière pour des cornières.
-    const supports =
-      typeof params === "object" && params !== null
-        ? (params as Readonly<Record<string, unknown>>)["supports"]
-        : undefined;
-    const kind =
-      typeof supports === "object" && supports !== null
-        ? (supports as Readonly<Record<string, unknown>>)["kind"]
-        : undefined;
+    const supports = field(params, "supports");
+    const kind = field(supports, "kind");
     const leaf = path[1];
     if (kind === "angle" && (leaf === "plateWidth" || leaf === "plateThickness")) return false;
     if (kind === "plate" && (leaf === "angleLeg" || leaf === "angleThickness")) return false;
+    // Limon central : âme et plat d'appui d'une console, tôle d'un support plié.
+    if (kind === "console" && leaf === "foldedThickness") return false;
+    if (
+      typeof kind === "string" &&
+      kind.startsWith("folded-") &&
+      (leaf === "consoleThickness" || leaf === "bearingThickness" || leaf === "tipHeight")
+    ) {
+      return false;
+    }
+    // Marche en tôle pliée sur son support (A31) : seulement avec des marches en tôle pliée ;
+    // perçage des vis seulement si elle est vissée.
+    if (leaf === "treadFixing" || leaf === "treadHoleDiameter") {
+      if (field(params, "treadKind") !== "folded-steel") return false;
+      if (leaf === "treadHoleDiameter" && field(supports, "treadFixing") === "welded") return false;
+    }
+  }
+  if (head === "section" && path.length > 1) {
+    // Limon central : paroi d'un tube, tôles d'un caisson ; évents d'un corps creux galvanisé.
+    const kind = field(field(params, "section"), "kind");
+    const leaf = path[1];
+    if (kind === "box" && leaf === "wallThickness") return false;
+    if (kind === "tube" && BOX_ONLY.has(leaf ?? "")) return false;
+    if (leaf === "ventDiameter" && field(params, "finish") !== "galvanized") return false;
   }
   return true;
+}
+
+/** Réglages du caisson du limon central (tôles soudées), sans objet pour un tube. */
+const BOX_ONLY: ReadonlySet<string> = new Set([
+  "webThickness",
+  "flangeThickness",
+  "diaphragmThickness",
+  "diaphragmSpacing",
+]);
+
+/** Champ `key` d'un objet de paramètres, `undefined` sinon. */
+function field(v: unknown, key: string): unknown {
+  return typeof v === "object" && v !== null
+    ? (v as Readonly<Record<string, unknown>>)[key]
+    : undefined;
 }
 
 /**

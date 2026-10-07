@@ -24,6 +24,7 @@ import { appStore, journeyStore, modelService, workshopStore } from "../../store
 import type { Selection } from "../../store/projectStore.js";
 import { uiStore } from "../../store/uiStore.js";
 import {
+  CANTILEVER_RULES,
   CONFIDENCE_EXPLAINED_KEYS,
   NATURE_EXPLAINED_KEYS,
   RuleInspector,
@@ -317,6 +318,38 @@ describe("« Pour corriger »", () => {
     const r = m.compliance.results.find((x) => x.ruleId === "HELICOIDAL_PORTE_A_FAUX");
     if (!r) return;
     expect(text(render(selectionOf(r)))).toContain("Justification du porte-à-faux");
+  });
+
+  it("limon central : justification du double porte-à-faux et de la torsion saisie sur place (A29)", () => {
+    expect(CANTILEVER_RULES.has("LIMON_CENTRAL_PORTE_A_FAUX")).toBe(true);
+    expect(CANTILEVER_RULES.has("HELICOIDAL_PORTE_A_FAUX")).toBe(true);
+    const base = createProject("quarter-left");
+    const central = ProjectSchema.parse({
+      ...base,
+      stair: {
+        ...base.stair,
+        structure: {
+          kind: "steel-central",
+          params: { section: { kind: "box" }, cantileverJustification: "Note de calcul NC-12" },
+        },
+      },
+    });
+    const m = load(central);
+    const r =
+      m.compliance.results.find((x) => x.ruleId === "LIMON_CENTRAL_PORTE_A_FAUX") ??
+      result({ ruleId: "LIMON_CENTRAL_PORTE_A_FAUX" });
+    withModel([r]);
+    const html = render(selectionOf(r));
+    expect(text(html)).toContain("Justification du double porte-à-faux et de la torsion");
+    // Valeur saisie reprise du paramètre de Structure (même chemin que l'hélicoïdal).
+    expect(html).toContain("Note de calcul NC-12");
+    expect(text(render(selectionOf(r), "en"))).toContain(
+      "Justification of the double cantilever and torsion",
+    );
+    // Autre règle : pas de saisie.
+    const other = result({ ruleId: "FAB_SUPPORT_LONGUEUR_MIN" });
+    withModel([other]);
+    expect(text(render(selectionOf(other)))).not.toContain("double porte-à-faux");
   });
 });
 

@@ -4,11 +4,14 @@ import { fileURLToPath } from "node:url";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { pointInPolygon, signedArea } from "../geom2d/polygon.js";
+import * as V from "../geom2d/vec.js";
 import type { Model, RuleResult } from "../model/derived.js";
+import type { Vec2 } from "../model/primitives.js";
 import type { Project } from "../model/project.js";
 import { buildModel } from "../pipeline/build.js";
 import { parseProjectText } from "../project/parse.js";
 import { makeSteppingProject } from "../stepping/test-helpers.js";
+import { foldedFlatTransform } from "./folded.js";
 import { isSimplePolygon } from "./geom.js";
 import { landingPitchGap } from "./pitch.test-helpers.js";
 import { QUANTITY_MASS_KG, QUANTITY_VOLUME_M3 } from "./quantities.js";
@@ -21,6 +24,7 @@ import {
   QUANTITY_WELD_MM,
 } from "./steelCommon.js";
 import { SteelFlatParamsSchema, buildSteelFlat, type SteelFlatResult } from "./steelFlat.js";
+import { treadScrewPoints } from "./supports.js";
 import { bendAllowance, findBendLaw, resolveBend } from "../workshop/metal.js";
 import { WorkshopProfileSchema, resolveWorkshopProfile } from "../workshop/profile.js";
 import "./index.js";
@@ -269,10 +273,13 @@ describe("steel-flat — quart tournant à poteau (cas n° 1) en acier", () => {
             // Un boulon par perçage (lumière comptée une fois) : perçages du support − vis.
             expect(b!.points).toBe(s.part.quantities[QUANTITY_HOLES]! - 2);
           } else expect(b).toBeUndefined();
-          expect(fx.find((f) => f.joint === "treadScrewed")).toEqual({
-            joint: "treadScrewed",
-            points: 2,
-          });
+          // Marche bois : vis à bois ; marche en tôle (vissée par défaut, A31) : vis à métaux.
+          const steelTread = r.treads.some((d) => d.number === s.placement.tread);
+          expect(fx.filter((f) => f.joint === "treadScrewed" || f.joint === "treadBolted")).toEqual(
+            steelTread
+              ? [{ joint: "treadBolted", points: 2, holeDiameter: 9 }]
+              : [{ joint: "treadScrewed", points: 2 }],
+          );
         }
         // Visserie du modèle : boulons de support seulement si les supports sont vissés.
         expect(m.fasteners?.some((f) => f.joint === "supportBolted") ?? false).toBe(bolted);
@@ -524,6 +531,202 @@ describe("steel-flat — propriétés (tournants à poteau)", () => {
         }
       }),
       { numRuns: 60 },
+    );
+  }, 60000);
+});
+
+describe("steel-flat — fixation des marches en tôle sur leurs supports (A31)", () => {
+  /** Centre d'un perçage polygonal. */
+  const centerOf = (h: readonly Vec2[]): Vec2 =>
+    V.scale(
+      h.reduce((s, p) => V.add(s, p), V.ZERO),
+      1 / h.length,
+    );
+
+  /** Contrôles communs : chiffrage aligné, visserie, perçages aux points des supports. */
+  function checkFixing(m: Model, r: SteelFlatResult, fixing: "screwed" | "welded"): void {
+    const steelTreads = new Set(r.treads.map((d) => d.number));
+    const byId = new Map(m.parts.map((p) => [p.id, p]));
+    const spec = SteelFlatParamsSchema.parse({}).supports;
+    let expectedPoints = 0;
+    let supportTreadHoles = 0;
+    for (const s of r.supports) {
+      const part = byId.get(s.part.id)!;
+      const bolts = (part.fixings ?? [])
+        .filter((f) => f.joint === "supportBolted")
+        .reduce((a, f) => a + f.points, 0);
+      const steelTread = steelTreads.has(s.placement.tread);
+      if (!steelTread) {
+        // Marche bois : boulons + perçages des vis à bois.
+        expect(part.quantities[QUANTITY_HOLES]).toBe(bolts + 2);
+        continue;
+      }
+      if (fixing === "welded") {
+        expect(part.quantities[QUANTITY_HOLES]).toBe(bolts);
+        expect(part.quantities[QUANTITY_WELD_MM]).toBeGreaterThan(0);
+        expect(part.fixings?.some((f) => f.joint === "treadBolted") ?? false).toBe(false);
+        continue;
+      }
+      // Tôle vissée : perçages de l'aile = points réellement percés dans la marche (0 à 2),
+      // autant de points `treadBolted` (A31, chiffrage aligné).
+      expectedPoints += 2;
+      const own = part.quantities[QUANTITY_HOLES]! - bolts;
+      expect(own).toBeGreaterThanOrEqual(0);
+      expect(own).toBeLessThanOrEqual(2);
+      const declared = (part.fixings ?? [])
+        .filter((f) => f.joint === "treadBolted")
+        .reduce((a, f) => a + f.points, 0);
+      expect(declared).toBe(own);
+      supportTreadHoles += own;
+    }
+    let drawn = 0;
+    for (const d of r.treads) {
+      const part = byId.get(d.part.id)!;
+      const holes = part.flat!.outline.holes;
+      // Chiffrage de la marche = trous réellement dessinés.
+      expect(part.quantities[QUANTITY_HOLES]).toBe(holes.length);
+      if (fixing === "welded") {
+        expect(holes).toEqual([]);
+        continue;
+      }
+      drawn += holes.length;
+      // Chaque trou : dans le contour développé, dans la partie plane du dessus (hors des zones
+      // de pli), à l'aplomb d'un point de fixation d'un support de la marche.
+      const T = foldedFlatTransform(d.result);
+      const topFlat = d.result.top.map(T);
+      const points = r.supports
+        .filter((s) => s.placement.tread === d.number)
+        .flatMap((s) => treadScrewPoints(s.placement, spec))
+        .map(T);
+      for (const h of holes) {
+        for (const p of h) {
+          expect(pointInPolygon(p, part.flat!.outline.outer), part.id).toBe("inside");
+          expect(pointInPolygon(p, topFlat, 1e-6), part.id).not.toBe("outside");
+        }
+        const c = centerOf(h);
+        expect(Math.min(...points.map((q) => V.distance(q, c))), part.id).toBeLessThan(1e-6);
+      }
+    }
+    // Nombre de trous = points de fixation des supports sous les marches en tôle − non reportés ;
+    // perçages des supports et vis à métaux = trous des marches (A31, chiffrage aligné).
+    expect(drawn + r.treadHolesSkipped).toBe(expectedPoints);
+    expect(supportTreadHoles).toBe(drawn);
+    const bolted = (m.fasteners ?? []).filter((f) => f.joint === "treadBolted");
+    if (fixing === "welded" || drawn === 0) expect(bolted).toEqual([]);
+    else {
+      expect(bolted.reduce((a, f) => a + f.quantity, 0)).toBe(drawn);
+      for (const f of bolted) expect(f.diameter).toBe(8);
+    }
+    expect((m.fasteners ?? []).some((f) => f.joint === "treadScrewed")).toBe(false);
+  }
+
+  /** Exemple j3b en tôle pliée, fixation des marches choisie. */
+  function folded(fixing?: "welded"): Project {
+    const base = loadExample("j3b-acceptance-01-tole-pliee.blondel.json");
+    if (!fixing) return base;
+    return {
+      ...base,
+      stair: {
+        ...base.stair,
+        structure: {
+          kind: "steel-flat",
+          params: { ...base.stair.structure.params, supports: { treadFixing: fixing } },
+        },
+      },
+    };
+  }
+
+  it("exemple tôle pliée (j3b) vissé : tous les points percés, remarque de fixation", () => {
+    const { m, r } = run(folded());
+    expect(m.errors).toEqual([]);
+    checkFixing(m, r, "screwed");
+    expect(r.treadHolesSkipped).toBe(0);
+    // Chaque marche est percée sous chacun de ses supports (2 vis par support).
+    for (const d of r.treads) {
+      const n = r.supports.filter((s) => s.placement.tread === d.number).length;
+      expect(n).toBeGreaterThan(0);
+      expect(d.part.flat!.outline.holes).toHaveLength(2 * n);
+    }
+    expect(frList(m.notes).join(" ")).toMatch(/Marches en tôle vissées.*2 perçages Ø9/);
+  });
+
+  it("exemple tôle pliée (j3b) soudé : cordons comptés, ni perçage ni visserie de marche", () => {
+    const screwed = run(folded());
+    const { m, r } = run(folded("welded"));
+    expect(m.errors).toEqual([]);
+    checkFixing(m, r, "welded");
+    // Cordon marche ↔ support = longueur d'appui, en plus des cordons support ↔ limon.
+    r.supports.forEach((s, i) => {
+      const L = s.placement.u1 - s.placement.u0;
+      const before = screwed.r.supports[i]!.part.quantities[QUANTITY_WELD_MM]!;
+      expect(s.part.quantities[QUANTITY_WELD_MM]! - before).toBeCloseTo(L, 6);
+    });
+    expect(frList(m.notes).join(" ")).toMatch(/Marches en tôle soudées/);
+  });
+
+  it("classe d'exécution : marches soudées sur supports vissés en S355 ⇒ EXC2 (soudé)", () => {
+    const params = (treadFixing: "screwed" | "welded"): Record<string, unknown> => ({
+      grade: "S355",
+      treadKind: "folded-steel",
+      supports: { fixing: "bolted", kind: "angle", treadFixing },
+      newel: { joint: "bolted" },
+      splice: "bolted",
+    });
+    const p0 = makeSteppingProject({ width: 900, legs: ["auto"] });
+    const a = run(steel(p0, params("screwed")));
+    const b = run(steel(p0, params("welded")));
+    expect(a.m.errors).toEqual([]);
+    expect(b.m.errors).toEqual([]);
+    const weldOf = (x: SteelFlatResult): number =>
+      x.output.parts.reduce((s, p) => s + (p.quantities[QUANTITY_WELD_MM] ?? 0), 0);
+    expect(weldOf(b.r)).toBeGreaterThan(weldOf(a.r));
+    expect(b.r.executionClass).toBe("EXC2");
+  });
+
+  it("marches bois : paramètre sans effet (vis à bois, aucun cordon ajouté)", () => {
+    const p0 = makeSteppingProject({ width: 900, legs: ["auto"] });
+    const a = run(steel(p0, {}));
+    const b = run(steel(p0, { supports: { treadFixing: "welded" } }));
+    expect(b.r.supports.map((s) => s.part.quantities)).toEqual(
+      a.r.supports.map((s) => s.part.quantities),
+    );
+    expect(b.m.fasteners).toEqual(a.m.fasteners);
+  });
+
+  it("propriété : perçages aux points des supports, chiffrage aligné, visserie (vissé | soudé)", () => {
+    const arb = fc.record({
+      width: fc.integer({ min: 750, max: 1100 }),
+      l1: fc.integer({ min: 1800, max: 3200 }),
+      l2: fc.integer({ min: 1400, max: 3000 }),
+      legs: fc.constantFrom(1, 2),
+      newel: fc.integer({ min: 45, max: 75 }).map((k) => 2 * k),
+      direction: fc.constantFrom<"left" | "right">("left", "right"),
+      mode: fc.constantFrom<"winders" | "landing">("winders", "landing"),
+      profile: fc.constantFrom("Z", "U"),
+      bolted: fc.boolean(),
+      fixing: fc.constantFrom<"screwed" | "welded">("screwed", "welded"),
+    });
+    fc.assert(
+      fc.property(arb, (g) => {
+        const p0 = makeSteppingProject({
+          width: g.width,
+          legs: g.legs === 1 ? ["auto"] : [g.l1, g.l2],
+          direction: g.direction,
+          mode: g.mode,
+          inner: { kind: "newel", size: g.newel },
+        });
+        const { m, r } = run(
+          steel(p0, {
+            treadKind: "folded-steel",
+            folded: { profile: g.profile },
+            supports: { fixing: g.bolted ? "bolted" : "welded", treadFixing: g.fixing },
+          }),
+        );
+        if (m.stepping.nosings.length < 2) return;
+        expect(m.errors).toEqual([]);
+        checkFixing(m, r, g.fixing);
+      }),
+      { numRuns: 40 },
     );
   }, 60000);
 });

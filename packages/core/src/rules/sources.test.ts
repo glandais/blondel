@@ -17,7 +17,9 @@ import { stairLoads } from "../precheck/loads.js";
 import { DEFAULT_PRECHECK_SETTINGS } from "../precheck/settings.js";
 import { parseProjectText } from "../project/parse.js";
 import { FAB_RULES, pluginRuleDef, type PluginRuleSpec } from "../structures/checks.js";
+import { CENTRAL_BEAM_RULES } from "../structures/centralBeam.js";
 import { HELICAL_RULES } from "../structures/helicalCore.js";
+import { CENTRAL_RULES } from "../structures/steelCentral.js";
 import { STEEL_RULES } from "../structures/steelCommon.js";
 import { CURVED_RULES } from "../structures/steelCurved.js";
 import { PROFILE_RULES } from "../structures/steelProfile.js";
@@ -61,6 +63,8 @@ const PLUGIN_SPECS: readonly PluginRuleSpec[] = [
   ...Object.values(CURVED_RULES),
   ...Object.values(PROFILE_RULES),
   ...Object.values(HELICAL_RULES),
+  ...Object.values(CENTRAL_RULES),
+  ...Object.values(CENTRAL_BEAM_RULES),
   ...Object.values(PRECHECK_RULES),
 ];
 

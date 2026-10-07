@@ -70,10 +70,18 @@ function fieldKey(field: PresentedField): string {
   return paramKey(["stair", "structure", "params", ...field.path]);
 }
 
-/** Champ compact : liste courte en segmenté (maquette 2b), sinon `ParamInput`. */
+/**
+ * Champ compact : liste courte en segmenté (maquette 2b), sinon `ParamInput`. Une liste dont des
+ * choix sont grisés sur ce tracé (`disabledOptions`, raison écrite dans le libellé du choix) reste
+ * une liste déroulante : la raison n'entre pas dans un bouton du segmenté.
+ */
 function FieldInput({ form, field }: { form: StructureParamForm; field: PresentedField }) {
   const value = getParam(form.params, field.path);
-  if (field.kind === "enum" && field.options.length <= SEGMENTED_MAX_OPTIONS) {
+  if (
+    field.kind === "enum" &&
+    field.options.length <= SEGMENTED_MAX_OPTIONS &&
+    field.disabledOptions === undefined
+  ) {
     return (
       <div className="part-insp__seg-row">
         <span className="part-insp__seg-label" aria-hidden="true">

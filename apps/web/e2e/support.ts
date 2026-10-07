@@ -73,6 +73,7 @@ export const STRUCTURES = [
   "steel-flat",
   "steel-profile",
   "steel-curved",
+  "steel-central",
   "helical-core",
 ];
 

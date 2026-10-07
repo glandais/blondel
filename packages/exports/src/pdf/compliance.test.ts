@@ -139,6 +139,25 @@ describe("justification saisie (décision A12)", () => {
     expect(text(bare)).not.toContain("Justification fournie");
   });
 
+  it("porte-à-faux et torsion du limon central justifiés : justification reprise (A29, A12)", () => {
+    const base = createProject("straight");
+    const central = (params: Record<string, unknown>) => ({
+      ...base,
+      stair: { ...base.stair, structure: { kind: "steel-central", params } },
+    });
+    const justified = buildModel(
+      central({ cantileverJustification: "Note de calcul NC-077 (BET Exemple)" }),
+      { memo: false },
+    );
+    const r = justified.compliance.results.find((x) => x.ruleId === "LIMON_CENTRAL_PORTE_A_FAUX");
+    expect(r?.status).toBe("violation");
+    expect(r?.severity).toBe("avertissement");
+    expect(text(justified)).toContain(
+      "Justification fournie : Note de calcul NC-077 (BET Exemple)",
+    );
+    expect(text(buildModel(central({}), { memo: false }))).not.toContain("Justification fournie");
+  });
+
   it("violation portant une justification : ligne imprimée sous le message", () => {
     const model = {
       errors: [],

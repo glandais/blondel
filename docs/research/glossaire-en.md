@@ -132,6 +132,13 @@ En français, rien ne change : la hauteur de marche s'écrit déjà h (h1 pour l
 | Profilé du commerce (UPN, IPN, IPE, HEA) | Rolled section (channel UPN, I-beam IPN / IPE, H-beam HEA) | Rolled shape | Désignations européennes conservées |
 | Platine                               | Base plate                          | —                       |                                                  |
 | Console                               | Bracket                             | —                       |                                                  |
+| Plat d'appui (d'une console)          | Bearing plate                       | —                       | Limon central : bracket bearing plate            |
+| Caisson (tôles soudées)               | Box section                         | Box girder              | Limon central en caisson                         |
+| Flasque (de caisson)                  | Web                                 | Side plate              | Âme verticale roulée du caisson                  |
+| Semelle (de caisson)                  | Flange                              | —                       | Semelle haute : top flange ; basse : bottom flange |
+| Entretoise (de caisson)               | Diaphragm                           | Stiffener               |                                                  |
+| Tube rectangulaire                    | Rectangular hollow section (RHS), rectangular tube | Rectangular tubing | Désignation H × b × t              |
+| Évent (corps creux galvanisé)         | Vent hole                           | —                       |                                                  |
 | Patte de fixation                     | Fixing lug _(usage)_                | Mounting tab            |                                                  |
 | Soudure d'angle                       | Fillet weld                         | —                       |                                                  |
 | Découpe laser                         | Laser cutting                       | —                       |                                                  |

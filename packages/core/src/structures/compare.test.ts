@@ -6,7 +6,7 @@ import { precheckModel } from "../precheck/stringers.js";
 import { buildModel } from "../pipeline/build.js";
 import { makeSteppingProject } from "../stepping/test-helpers.js";
 import { WorkshopProfileSchema } from "../workshop/profile.js";
-import { adaptJour, compareVariants, variantCost } from "./compare.js";
+import { adaptJour, compareEpure, compareVariants, variantCost } from "./compare.js";
 import { layoutAccepts } from "../project/newel.js";
 import { createProject } from "../project/presets.js";
 import "./index.js";
@@ -258,5 +258,36 @@ describe("adaptJour — poteau élargi des profilés refusé par le tracé", () 
     expect(en).toMatch(/not possible in this layout: default newel of 100 mm\.$/);
     expect(en).not.toMatch(/poteau|tracé|décision/);
     expect(layoutAccepts(r.project)).toBe(true);
+  });
+});
+
+describe("limon central (steel-central) dans le comparateur", () => {
+  it("même épure sans adaptation du jour (vif, poteau ou arc), poutre unique prédimensionnée", () => {
+    const quarter = createProject("quarter-left");
+    for (const inner of [
+      { kind: "sharp" as const },
+      { kind: "newel" as const, size: 100 },
+      { kind: "arc" as const, radius: 250 },
+    ]) {
+      const p: Project = {
+        ...quarter,
+        stair: {
+          ...quarter.stair,
+          layout: {
+            ...quarter.stair.layout,
+            turns: quarter.stair.layout.turns.map((t) => ({ ...t, inner })),
+          },
+        },
+      };
+      const r = adaptJour(p, { kind: "steel-central" });
+      expect(r.adaptations).toEqual([]);
+      expect(r.signals).toEqual([]);
+    }
+    const [central] = compareEpure(quarter, [{ kind: "steel-central" }]);
+    expect(central!.errors).toEqual([]);
+    expect(central!.family).toBe("metal");
+    expect(central!.precheck.beams).toBe(1);
+    expect(central!.weldMm).toBeGreaterThan(0);
+    expect(central!.executionClass).toBe(central!.buttWeldMm > 0 ? "EXC2" : "EXC1");
   });
 });

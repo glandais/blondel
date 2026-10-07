@@ -6,7 +6,8 @@
  * - A26 (a) : « Development » (inspecteur Pièce) pour un limon bois, « Flat pattern » pour un
  *   limon acier ;
  * - A27 : groupe « Fixings » du mode Fabrication, tableau « Fixings » de la nomenclature ;
- * - A28 : inspecteur « Top nosing » du nez d'arrivée.
+ * - A28 : inspecteur « Top nosing » du nez d'arrivée ;
+ * - A29 : « mono-stringer » pour le limon central (choix de la structure, glossaire-en.md).
  */
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import {
@@ -101,4 +102,15 @@ test("nez d'arrivée : inspecteur « Top nosing » en anglais", async ({ page })
   await expect(inspector.getByRole("heading", { level: 3 })).toHaveText("Top nosing");
   await expect(inspector.getByRole("region", { name: "Nosing line" })).toBeVisible();
   await expect(inspector.getByText(/^The angle cannot be changed/)).toBeVisible();
+});
+
+test("limon central : « mono-stringer » en anglais (A29)", async ({ page }) => {
+  await openApp(page);
+  await applyPreset(page, "Escalier droit");
+  await chooseStructure(page, "steel-central");
+  await switchToEnglish(page);
+  const select = page.getByRole("combobox", { name: "Structure", exact: true });
+  await expect(select).toHaveValue("steel-central");
+  await expect(select.locator('option[value="steel-central"]')).toContainText(/mono-stringer/i);
+  await expect(select.locator('option[value="steel-central"]')).not.toContainText(/limon/i);
 });

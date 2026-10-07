@@ -74,6 +74,44 @@ describe("renderFlatPatternSvg", () => {
     expect(findAll(root, "rect")).toHaveLength(0);
   });
 
+  it("libellé plus long que sa ligne (joint sur un développé peu haut) : gardé dans le cadre", () => {
+    const base = sheetStringerPart();
+    const label = "Joint soudé bout à bout avec FG3 (chanfrein à définir par l'atelier, EXC2)";
+    const outer = [
+      { x: 0, y: 0 },
+      { x: 2000, y: 0 },
+      { x: 2000, y: 100 },
+      { x: 0, y: 100 },
+    ];
+    const part: Part = {
+      ...base,
+      flat: {
+        outline: { outer, holes: [] },
+        lines: [
+          {
+            kind: "joint",
+            a: { x: 1000, y: 0 },
+            b: { x: 1000, y: 100 },
+            label: textMessage(label),
+          },
+        ],
+        thickness: 8,
+      },
+    };
+    const opts = { dimensions: false, info: false } as const;
+    const root = parseXml(renderFlatPatternSvg(part, opts));
+    const fontSize = 12;
+    // Hauteur du dessin (px) au moins la longueur estimée du libellé vertical.
+    expect(parseFloat(root.attrs.height!)).toBeGreaterThanOrEqual(
+      label.length * 0.55 * fontSize * 0.85,
+    );
+    // Sans libellé : le cadre suit la pièce.
+    const bare = parseXml(
+      renderFlatPatternSvg({ ...part, flat: { ...part.flat!, lines: [] } }, opts),
+    );
+    expect(parseFloat(bare.attrs.height!)).toBeLessThan(parseFloat(root.attrs.height!));
+  });
+
   it("refus explicite sans développé", () => {
     const p = { ...treadPart(1), flat: undefined } as Part;
     expect(() => renderFlatPatternSvg(p)).toThrow(/développé à plat/);

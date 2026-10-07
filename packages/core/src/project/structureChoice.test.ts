@@ -62,11 +62,22 @@ describe("applyStructureChoice — poteau automatique (décision A4)", () => {
 
   it("sans structure (ou structure sans poteau) : le jour vif reste le défaut", () => {
     const base = createProject("quarter-left");
-    for (const kind of ["none", "steel-curved"]) {
+    for (const kind of ["none", "steel-curved", "steel-central"]) {
       const { project, notes } = applyStructureChoice(base, kind);
       expect(project.stair.layout).toEqual(base.stair.layout);
       expect(project.stair.structure.kind).toBe(kind);
       expect(notes).toEqual([]);
+    }
+  });
+
+  it("limon central (QUESTIONS A29) : volées et hélicoïdal acceptés, jour conservé, modèle sans erreur", () => {
+    for (const id of ["quarter-left", "half-turn", "helical"] as const) {
+      const base = createProject(id);
+      const { project, notes } = applyStructureChoice(base, "steel-central");
+      expect(project.stair.structure).toEqual({ kind: "steel-central", params: {} });
+      expect(project.stair.layout).toEqual(base.stair.layout);
+      expect(notes).toEqual([]);
+      expect(frList(buildModel(project, { memo: false }).errors), id).toEqual([]);
     }
   });
 

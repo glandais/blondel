@@ -88,12 +88,14 @@ import {
   plateMeasures,
   steelMaterial,
   steelQuantities,
+  groupIdenticalFlats,
   IDENTICAL_TOLERANCE,
 } from "./steelCommon.js";
 import {
   SteelFlatParamsSchema,
   ascentDirection,
   buildSteelFlat,
+  drillTreadsAtSupports,
   endPlateFrame,
   markGroups,
   plateHoles,
@@ -101,15 +103,19 @@ import {
   rectFlat,
   sheetFormatMessage,
   supportOn,
+  treadFixingNotes,
   treadNotCarried,
   type SteelFlatResult,
 } from "./steelFlat.js";
 import {
+  curveInterval,
   fiberDevelopment,
   jourNormal,
   naissances,
   nosingProfile,
   pointAtExtended,
+  polyAt,
+  remapX,
   slopeBreakAt,
   tangentAtExtended,
   type FiberDevelopment,
@@ -123,6 +129,7 @@ import {
   supportAssemblies,
   supportDepth,
   supportPart,
+  treadScrewPoints,
   type SupportFace,
   type SupportPlacement,
 } from "./supports.js";
@@ -324,49 +331,6 @@ const ceil5 = (x: Mm): Mm => Math.ceil(x / 5 - 1e-9) * 5;
  */
 const JOINT_TOLERANCE = 1e-3;
 
-/** Altitude d'une polyligne (x croissants) en x, bornée aux extrémités. */
-function polyAt(line: readonly Vec2[], x: Mm): Mm {
-  if (line.length === 0) return Number.NaN;
-  if (x <= line[0]!.x) return line[0]!.y;
-  for (let i = 0; i + 1 < line.length; i++) {
-    const a = line[i]!;
-    const b = line[i + 1]!;
-    if (x <= b.x + 1e-9) {
-      return b.x - a.x > 1e-9 ? a.y + ((b.y - a.y) * (x - a.x)) / (b.x - a.x) : Math.max(a.y, b.y);
-    }
-  }
-  return line[line.length - 1]!.y;
-}
-
-/**
- * Change l'abscisse d'une polyligne ou d'un polygone (x ↦ toX(x)) en insérant un sommet à
- * chaque abscisse de rupture `breaks` traversée (l'application est affine par morceaux).
- */
-function remapX(
-  pts: readonly Vec2[],
-  toX: (x: Mm) => Mm,
-  breaks: readonly Mm[],
-  closed: boolean,
-): Vec2[] {
-  const out: Vec2[] = [];
-  const n = pts.length;
-  for (let i = 0; i < n; i++) {
-    const a = pts[i]!;
-    out.push(V.vec(toX(a.x), a.y));
-    if (!closed && i === n - 1) break;
-    const b = pts[(i + 1) % n]!;
-    const inside = breaks.filter(
-      (x) => x > Math.min(a.x, b.x) + 1e-9 && x < Math.max(a.x, b.x) - 1e-9,
-    );
-    inside.sort((p, q) => (b.x > a.x ? p - q : q - p));
-    for (const x of inside) {
-      const t = (x - a.x) / (b.x - a.x);
-      out.push(V.vec(toX(x), a.y + t * (b.y - a.y)));
-    }
-  }
-  return dedupe(out);
-}
-
 function lineOf(k: NosingLine): PlanLine {
   return { p: k.p, dir: k.dir };
 }
@@ -388,6 +352,8 @@ interface TreadZone {
   readonly zUnder: Mm;
   /** Recherche du support : décalage du point d'essai depuis C_i vers les marches. */
   readonly probe: Mm;
+  /** Marche en tôle pliée (fixation sur le support, A31) ; sinon bois. */
+  readonly steel: boolean;
 }
 
 /**
@@ -430,6 +396,7 @@ function treadZones(
           zone: dedupe(zone),
           zUnder: tread.z - t,
           probe: ft.clearance + 0.5,
+          steel: true,
         });
         continue;
       }
@@ -440,41 +407,16 @@ function treadZones(
     const front = spec.nosing + (spec.risers === "full" ? spec.riserThickness : 0) + m;
     let zone: Polygon2 = clipHalfPlane(ex.outline, V.addScaled(a.p, upA, front), upA);
     zone = clipHalfPlane(zone, V.addScaled(b.p, upB, spec.nosing - m), V.scale(upB, -1));
-    out.push({ tread, mark: base.mark, zone: dedupe(zone), zUnder: ex.zBottom, probe: 0.5 });
+    out.push({
+      tread,
+      mark: base.mark,
+      zone: dedupe(zone),
+      zUnder: ex.zBottom,
+      probe: 0.5,
+      steel: false,
+    });
   }
   return out;
-}
-
-/** Plus petit intervalle [σ0 ; σ1] où C_i (décalée de `probe` vers les marches) longe la zone. */
-function curveInterval(
-  inside: (sigma: Mm) => boolean,
-  lo: Mm,
-  hi: Mm,
-  step: Mm,
-): { s0: Mm; s1: Mm } | null {
-  let first = Number.NaN;
-  let last = Number.NaN;
-  for (let s = lo; s <= hi + 1e-9; s += step) {
-    if (inside(s)) {
-      if (Number.isNaN(first)) first = s;
-      last = s;
-    }
-  }
-  if (Number.isNaN(first)) return null;
-  const refine = (ok: Mm, ko: Mm): Mm => {
-    let a = ok;
-    let b = ko;
-    for (let i = 0; i < 30; i++) {
-      const mid = (a + b) / 2;
-      if (inside(mid)) a = mid;
-      else b = mid;
-    }
-    return a;
-  };
-  return {
-    s0: first - step >= lo ? refine(first, first - step) : first,
-    s1: last + step <= hi ? refine(last, last + step) : last,
-  };
 }
 
 // ------------------------------------------------------------------ Construction
@@ -614,6 +556,54 @@ export function buildSteelCurved(
     }
   }
 
+  // 1 bis. Marches en tôle vissées (A31) : perçages aux supports du limon débillardé, en plus de
+  // ceux des supports de `steel-flat` (déjà reportés).
+  const innerDrill = drillTreadsAtSupports(
+    flat.treads,
+    innerSupports.map((x) => x.placement),
+    sup,
+  );
+  // Supports du limon débillardé sous une marche en tôle : perçages de l'aile et visserie alignés
+  // sur les trous réellement faits dans la marche (A31) ; inchangés quand tous sont percés.
+  const steelNumbers = new Set(flat.treads.map((d) => d.number));
+  innerSupports = innerSupports.map((s, i) => {
+    const drilledPoints = innerDrill.drilledPoints[i]!;
+    if (
+      !steelNumbers.has(s.placement.tread) ||
+      drilledPoints === treadScrewPoints(s.placement, sup).length
+    ) {
+      return s;
+    }
+    return {
+      ...s,
+      part: supportPart(s.placement, sup, "S", s.part.material, profile, "steel", drilledPoints),
+    };
+  });
+  const drilledTreads = new Map(innerDrill.treads.map((d) => [d.part.id, d.part]));
+  const treadHolesSkipped = flat.treadHolesSkipped + innerDrill.skipped;
+  const treadGroups = groupIdenticalFlats(innerDrill.treads.map((d) => d.part));
+  for (let i = 0; i < notes.length; i++) {
+    const x = notes[i]!;
+    if (x.key === "structure.steelFlat.note.foldedTreads" && x.params) {
+      notes[i] = msg("structure.steelFlat.note.foldedTreads", {
+        ...x.params,
+        unique: msg("structure.steelFlat.count.uniqueParts", { count: treadGroups.length }),
+      });
+    }
+  }
+  if (flat.treads.length > 0) {
+    const fixingKeys = new Set<string>([
+      "structure.steel.note.treadFixing.screwed",
+      "structure.steel.note.treadFixing.welded",
+      "structure.steel.note.treadHolesSkipped",
+    ]);
+    const at = notes.findIndex((x) => fixingKeys.has(x.key));
+    const kept = notes.filter((x) => !fixingKeys.has(x.key));
+    const fixing = treadFixingNotes(sup, treadHolesSkipped);
+    kept.splice(at < 0 ? kept.length : at, 0, ...fixing);
+    notes.splice(0, notes.length, ...kept);
+  }
+
   // 2. Repères : supports et platines regroupés avec ceux de `steel-flat`.
   const flatSupportIds = new Set(flat.supports.map((s) => s.part.id));
   const flatPlateIds = new Set(flat.plates.map((p) => p.id));
@@ -700,9 +690,9 @@ export function buildSteelCurved(
   const flatChecks = flat.output.checks.filter(
     (c) => c.ruleId !== STEEL_RULES.executionClass.id && c.ruleId !== STEEL_RULES.treadCarried.id,
   );
-  const otherParts = flat.output.parts.filter(
-    (p) => !flatSupportIds.has(p.id) && !flatPlateIds.has(p.id),
-  );
+  const otherParts = flat.output.parts
+    .filter((p) => !flatSupportIds.has(p.id) && !flatPlateIds.has(p.id))
+    .map((p) => drilledTreads.get(p.id) ?? p);
   const parts = [
     ...otherParts,
     ...(curved?.segments.map((s) => s.part) ?? []),
@@ -729,7 +719,7 @@ export function buildSteelCurved(
       ...(autoValues ? { autoValues } : {}),
       ...(assemblies.length > 0 ? { assemblies } : {}),
     },
-    flat,
+    flat: { ...flat, treads: innerDrill.treads, treadGroups, treadHolesSkipped },
     curved: curved
       ? {
           ...curved,
@@ -1330,7 +1320,7 @@ function curvedSupportsOf(
       sigma0: r.s0,
       sigma1: r.s1,
       gap,
-      part: supportPart(placement, sup, "S", material, profile),
+      part: supportPart(placement, sup, "S", material, profile, r.zone.steel ? "steel" : "wood"),
     };
   });
 }

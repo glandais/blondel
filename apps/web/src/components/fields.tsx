@@ -425,7 +425,12 @@ export function AutoIntField(props: AutoIntFieldProps) {
 export interface SelectFieldProps<V extends string> {
   readonly label: string;
   readonly value: V;
-  readonly options: readonly { readonly value: V; readonly label: string }[];
+  /** Choix ; `disabled` : grisé, non sélectionnable (raison écrite dans le libellé). */
+  readonly options: readonly {
+    readonly value: V;
+    readonly label: string;
+    readonly disabled?: boolean;
+  }[];
   readonly hint?: string;
   readonly onCommit: (value: V) => UpdateResult;
   /**
@@ -486,7 +491,7 @@ export function SelectField<V extends string>({
         onChange={(e) => commit(e.target.value as V)}
       >
         {options.map((o) => (
-          <option key={o.value} value={o.value}>
+          <option key={o.value} value={o.value} disabled={o.disabled === true}>
             {o.label}
           </option>
         ))}

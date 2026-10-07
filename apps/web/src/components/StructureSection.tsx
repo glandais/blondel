@@ -27,6 +27,7 @@ import {
   safeDefaults,
   setParam,
   structureContext,
+  unsupportedOptionsOf,
   validateParams,
   withDefaults,
   type ParamField,
@@ -182,16 +183,26 @@ export function ParamInput({
         />
       );
     }
-    case "enum":
+    case "enum": {
+      // Choix non pris en charge sur le tracé (`disabledOptions`) : grisés, raison dans le
+      // libellé ; si le projet porte un tel choix, sa raison remplace l'aide.
+      const disabled = field.disabledOptions ?? {};
+      const current = disabled[String(value)];
+      const enumHint = current === undefined ? hint : { hint: current };
       return (
         <SelectField
           label={field.label}
           value={String(value)}
-          {...hint}
-          options={field.options.map((o) => ({ value: o, label: field.optionLabels?.[o] ?? o }))}
+          {...enumHint}
+          options={field.options.map((o) => ({
+            value: o,
+            label: field.optionLabels?.[o] ?? o,
+            ...(disabled[o] === undefined ? {} : { disabled: true }),
+          }))}
           onCommit={onCommit}
         />
       );
+    }
     case "boolean":
       return <CheckField label={field.label} checked={value === true} onCommit={onCommit} />;
     case "text":
@@ -265,7 +276,8 @@ export function useStructureParamForm(): StructureParamForm {
     () => withDefaults(defaults, structure.params),
     [defaults, structure.params],
   );
-  // Champs qui s'appliquent au projet seulement (tôle pliée, poteau : `structureParamApplies`).
+  // Champs qui s'appliquent au projet seulement (tôle pliée, poteau : `structureParamApplies`) ;
+  // choix que le plugin ne sait pas construire sur ce tracé grisés (`unsupportedOptionsOf`).
   const fields = useMemo(
     () =>
       plugin && defaults !== undefined
@@ -276,6 +288,7 @@ export function useStructureParamForm(): StructureParamForm {
             ),
             params,
             t,
+            unsupportedOptionsOf(plugin.kind, project),
           )
         : [],
     [plugin, defaults, params, project, t],

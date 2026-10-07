@@ -122,3 +122,64 @@ test("réglage ◆ de la visserie : longueur modifiée puis annulée", async ({ 
     reopened.locator("fieldset.fasteners__joint").first().getByLabel("Longueur", { exact: true }),
   ).toHaveValue(before);
 });
+
+/** Déplie les replis et groupes fermés du panneau jusqu'à rendre `field` visible. */
+async function reveal(panel: Locator, field: Locator): Promise<void> {
+  for (let k = 0; k < 6 && !(await field.isVisible()); k++) {
+    const closed = panel.locator("details:not([open]) > summary");
+    if ((await closed.count()) === 0) break;
+    await closed.first().click();
+  }
+  await expect(field).toBeVisible();
+}
+
+/** Vis à métaux (marches en tôle vissées, A31) dans le tableau « Visserie » de la nomenclature. */
+async function machineScrews(page: Page): Promise<number> {
+  await openTab(page, "Nomenclature");
+  const table = page.locator("table.bom__fasteners");
+  if ((await table.count()) === 0) return 0;
+  return table.locator("tbody tr", { hasText: "Vis à métaux" }).count();
+}
+
+/** Nombre de contours (pièce + perçages) du développé de la première marche. */
+async function treadRings(page: Page): Promise<number> {
+  await openTab(page, "Pièces");
+  const head = partsList(page).getByRole("button", { name: /^Marches\b/ });
+  if ((await head.getAttribute("aria-expanded")) !== "true") await head.click();
+  await partsList(page)
+    .getByRole("list", { name: "Repères : Marches" })
+    .getByRole("button")
+    .first()
+    .click();
+  const outline = page.locator(".fab-sheet__drawing .svg-export svg path.outline");
+  await expect(outline).toBeVisible();
+  return ((await outline.getAttribute("d")) ?? "").match(/M/g)?.length ?? 0;
+}
+
+test("marches en tôle vissées | soudées (A31) : perçages du développé et vis à métaux", async ({
+  page,
+}) => {
+  await openApp(page);
+  await applyPreset(page, "Demi-tournant industriel en tôle pliée");
+  // Vissées (défaut) : vis à métaux dans la visserie, perçages dans le développé de la marche.
+  expect(await machineScrews(page)).toBeGreaterThan(0);
+  expect(await treadRings(page)).toBeGreaterThan(1);
+
+  const panel = await openSection(page, "Structure");
+  const fixing = panel.getByLabel("Fixation des marches en tôle sur les supports", {
+    exact: true,
+  });
+  await reveal(panel, fixing);
+  await expect(fixing).toHaveValue("screwed");
+  await fixing.selectOption("welded");
+  await settle(page);
+  // Soudées : ni vis à métaux ni perçage dans la marche.
+  expect(await machineScrews(page)).toBe(0);
+  expect(await treadRings(page)).toBe(1);
+
+  // Annuler : vissées de nouveau.
+  await undoButton(page).click();
+  await settle(page);
+  expect(await machineScrews(page)).toBeGreaterThan(0);
+  expect(await treadRings(page)).toBeGreaterThan(1);
+});

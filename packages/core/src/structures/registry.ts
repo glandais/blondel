@@ -7,7 +7,12 @@
  */
 import { MessageError, msg, type Message } from "@blondel/i18n";
 import type { Mm } from "../model/primitives.js";
-import type { StructureKind, StructureLayoutKind } from "../model/plugins.js";
+import type {
+  StructureKind,
+  StructureLayoutKind,
+  StructureLayoutTraits,
+  UnsupportedParamOption,
+} from "../model/plugins.js";
 
 /**
  * Erreur de configuration non prise en charge par un plugin. Porte un `Message` (ADR-0007),
@@ -95,4 +100,16 @@ export function structureLateralThickness(
   if (!f) return { inner: 0, outer: 0 };
   const parsed = plugin.paramsSchema.safeParse(params ?? {});
   return parsed.success ? f(parsed.data) : null;
+}
+
+/**
+ * Options de paramètres que `kind` ne sait pas construire sur un tracé `layout`
+ * (`capabilities.unsupportedOptions`) ; vide pour `none`, un plugin inconnu ou sans déclaration.
+ */
+export function structureUnsupportedOptions(
+  kind: string,
+  layout: StructureLayoutTraits,
+): readonly UnsupportedParamOption[] {
+  if (kind === "none") return [];
+  return registry.get(kind)?.capabilities?.unsupportedOptions?.(layout) ?? [];
 }

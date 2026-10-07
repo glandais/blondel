@@ -49,8 +49,15 @@ export interface RuleInspectorProps {
   readonly selection: Selection;
 }
 
-/** Règle dont la justification se saisit dans l'inspecteur (spécification de contenu). */
-const CANTILEVER_RULE = "HELICOIDAL_PORTE_A_FAUX";
+/**
+ * Règles dont la justification se saisit dans l'inspecteur (spécification de contenu) : porte-à-
+ * faux de l'hélicoïdal (A12) et double porte-à-faux / torsion du limon central (A29 n° 4), même
+ * paramètre de plugin `cantileverJustification`.
+ */
+export const CANTILEVER_RULES: ReadonlySet<string> = new Set([
+  "HELICOIDAL_PORTE_A_FAUX",
+  "LIMON_CENTRAL_PORTE_A_FAUX",
+]);
 
 /** Statut affiché en surtitre : sévérité effective d'une violation, sinon le statut. */
 function Eyebrow({ r }: { r: RuleResult }) {
@@ -266,8 +273,8 @@ function Provenance({ r }: { r: RuleResult }) {
 }
 
 /**
- * Justification du porte-à-faux hélicoïdal : même paramètre (`cantileverJustification`), même
- * validation et même historique que le panneau Structure.
+ * Justification du porte-à-faux (hélicoïdal, limon central) : même paramètre
+ * (`cantileverJustification`), même validation et même historique que le panneau Structure.
  */
 function CantileverJustification() {
   const t = useT();
@@ -349,7 +356,7 @@ export function RuleInspector({ selection }: RuleInspectorProps) {
       <Where r={r} />
       <Fixes ruleId={r.ruleId} />
       <Provenance r={r} />
-      {r.ruleId === CANTILEVER_RULE ? <CantileverJustification /> : null}
+      {CANTILEVER_RULES.has(r.ruleId) ? <CantileverJustification /> : null}
       <Override ruleId={r.ruleId} />
       <span className="insp-spacer" aria-hidden="true" />
       <p className="inspector-disclaimer">{t.t("ui.compliance.disclaimer")}</p>

@@ -1,4 +1,4 @@
-import { sectionsOf } from "@blondel/core";
+import { buildModel, createProject, sectionsOf } from "@blondel/core";
 import { describe, expect, it } from "vitest";
 import { availableStructures } from "./optionalApi.js";
 import {
@@ -8,13 +8,20 @@ import {
   groupLabel,
   presentFields,
 } from "./paramLabels.js";
-import { deriveParamFields, withDefaults } from "./structureForm.js";
-import { translatorFor } from "@blondel/i18n";
+import { deriveParamFields, structureContext, withDefaults } from "./structureForm.js";
+import { textMessage, translatorFor } from "@blondel/i18n";
 
-/** Défauts des plugins qui ne dépendent pas du contexte (`defaults()` sans tracé). */
+/** Contexte d'un escalier droit, pour les plugins dont les défauts dépendent du tracé. */
+const straight = createProject("straight");
+const STRAIGHT_CTX = structureContext(straight, buildModel(straight))!;
+
+/**
+ * Défauts des plugins qui ne dépendent pas du contexte (`defaults()` sans tracé) ; ceux qui le
+ * lisent (limon central : section selon le tracé) sur un escalier droit.
+ */
 function fieldsOf(kind: string, params: Record<string, unknown> = {}) {
   const plugin = availableStructures().find((p) => p.kind === kind)!;
-  const defaults = plugin.defaults(undefined as never);
+  const defaults = plugin.defaults(kind === "steel-central" ? STRAIGHT_CTX : (undefined as never));
   const values = withDefaults(defaults, params);
   return presentFields(
     kind,
@@ -25,8 +32,14 @@ function fieldsOf(kind: string, params: Record<string, unknown> = {}) {
 }
 
 describe("formulaire des structures en français", () => {
-  it("steel-flat, steel-profile, steel-curved, helical-core : tous les paramètres ont un libellé français", () => {
-    for (const kind of ["steel-flat", "steel-profile", "steel-curved", "helical-core"]) {
+  it("steel-flat, steel-profile, steel-curved, steel-central, helical-core : tous les paramètres ont un libellé français", () => {
+    for (const kind of [
+      "steel-flat",
+      "steel-profile",
+      "steel-curved",
+      "steel-central",
+      "helical-core",
+    ]) {
       const fields = fieldsOf(kind);
       expect(fields.length).toBeGreaterThan(10);
       for (const f of fields) {
@@ -118,10 +131,96 @@ describe("libellés unifiés (spécification de contenu § 4)", () => {
   });
 
   it("aucun libellé ne porte d'unité entre parenthèses (unité à droite du champ)", () => {
-    for (const kind of ["steel-flat", "steel-profile", "steel-curved", "helical-core"]) {
+    for (const kind of [
+      "steel-flat",
+      "steel-profile",
+      "steel-curved",
+      "steel-central",
+      "helical-core",
+    ]) {
       for (const f of fieldsOf(kind)) {
         expect(f.label, `${kind} ${f.path.join(".")}`).not.toMatch(/\((mm|°|kN\/m²)\)/);
       }
     }
+  });
+});
+
+describe("limon central (A29) et fixation des marches en tôle (A31)", () => {
+  it("limon central : groupes, choix et ◆ des valeurs sans source", () => {
+    const f = fieldsOf("steel-central");
+    const at = (p: string) => f.find((x) => x.path.join(".") === p);
+    expect(at("section.kind")?.optionLabels).toEqual({
+      tube: "Tube rectangulaire",
+      box: "Caisson en tôles soudées",
+    });
+    expect(at("supports.kind")?.optionLabels).toEqual({
+      console: "Console soudée",
+      "folded-u": "Support plié en U",
+      "folded-z": "Support plié en Z",
+      "folded-triangle": "Support plié en triangle",
+    });
+    expect(at("section.height")).toMatchObject({ unit: "mm", toValidateHint: true });
+    expect(at("trace.lateralOffset")).toMatchObject({ unit: "mm", toValidateHint: true });
+    // Valeurs calculées (« auto ») : pas de ◆, une aide qui dit comment.
+    expect(at("beam.topOffset")?.kind).toBe("auto-number");
+    expect(at("beam.topOffset")?.toValidateHint).toBeUndefined();
+    expect(at("supports.length")?.kind).toBe("auto-number");
+    // Libellés unifiés repris (sens identique).
+    expect(fieldText("steel-central", ["beam", "jointOffset"])?.label).toBe(
+      "ui.param.steelCurved.curved.jointOffset.label",
+    );
+    expect(fieldText("steel-central", ["plates", "thickness"])?.label).toBe(
+      "ui.param.plates.thickness.label",
+    );
+    const fr = translatorFor("fr");
+    for (const g of ["trace", "section", "beam", "supports", "plates", "precheck"]) {
+      expect(groupLabel(g, fr)).not.toBe(g);
+    }
+    expect(groupLabel("section", translatorFor("en"))).toBe("Beam section");
+  });
+
+  it("A31 : fixation vissée | soudée et perçage, ◆, pour les plugins à supports", () => {
+    for (const kind of ["steel-flat", "steel-curved", "steel-central"]) {
+      expect(fieldText(kind, ["supports", "treadFixing"])).toMatchObject({
+        label: "ui.param.supports.treadFixing.label",
+        hint: "ui.param.toValidate",
+      });
+      expect(fieldText(kind, ["supports", "treadHoleDiameter"])).toMatchObject({
+        unit: "mm",
+        hint: "ui.param.toValidate",
+      });
+    }
+    const f = fieldsOf("steel-central").find((x) => x.path.join(".") === "supports.treadFixing");
+    expect(f?.optionLabels).toEqual({ screwed: "Vissées", welded: "Soudées" });
+  });
+
+  it("choix non pris en charge sur le tracé : grisé, raison dans le libellé (anglais compris)", () => {
+    const fields = [
+      {
+        kind: "enum" as const,
+        path: ["section", "kind"],
+        label: "Section › kind",
+        options: ["tube", "box"],
+      },
+    ];
+    const unsupported = [
+      { path: ["section", "kind"], value: "tube", reason: textMessage("droit seulement") },
+      // Autre chemin ou valeur absente : ignorés.
+      { path: ["supports", "kind"], value: "console", reason: textMessage("x") },
+      { path: ["section", "kind"], value: "inconnu", reason: textMessage("x") },
+    ];
+    const [fr] = presentFields("steel-central", fields, {}, translatorFor("fr"), unsupported);
+    expect(fr!.disabledOptions).toEqual({ tube: "droit seulement" });
+    expect(fr!.optionLabels).toEqual({
+      tube: "Tube rectangulaire — indisponible : droit seulement",
+      box: "Caisson en tôles soudées",
+    });
+    const [en] = presentFields("steel-central", fields, {}, translatorFor("en"), unsupported);
+    expect(en!.optionLabels!["tube"]).toBe(
+      "Rectangular hollow section — unavailable: droit seulement",
+    );
+    // Sans déclaration : rien de grisé.
+    const [plain] = presentFields("steel-central", fields, {}, translatorFor("fr"));
+    expect(plain!.disabledOptions).toBeUndefined();
   });
 });

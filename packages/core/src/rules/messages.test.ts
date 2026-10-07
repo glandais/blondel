@@ -8,7 +8,9 @@ import { fr } from "../i18n.test-helpers.js";
 import { ruleDescription, ruleTitle } from "../model/messages.js";
 import { PRECHECK_RULES } from "../precheck/checks.js";
 import { FAB_RULES, type PluginRuleSpec } from "../structures/checks.js";
+import { CENTRAL_BEAM_RULES } from "../structures/centralBeam.js";
 import { HELICAL_RULES } from "../structures/helicalCore.js";
+import { CENTRAL_RULES } from "../structures/steelCentral.js";
 import { STEEL_RULES } from "../structures/steelCommon.js";
 import { CURVED_RULES } from "../structures/steelCurved.js";
 import { PROFILE_RULES } from "../structures/steelProfile.js";
@@ -51,6 +53,8 @@ describe("titres courts des règles", () => {
     PROFILE_RULES,
     CURVED_RULES,
     HELICAL_RULES,
+    CENTRAL_RULES,
+    CENTRAL_BEAM_RULES,
     PRECHECK_RULES,
   ];
   const pluginIds = PLUGIN_SPECS.flatMap((t) => Object.values(t).map((s) => s.id));
@@ -64,6 +68,7 @@ describe("titres courts des règles", () => {
 
   it("chaque règle de la table et chaque contrôle de plugin a un titre en français et en anglais", () => {
     expect(pluginIds).toContain("HELICOIDAL_PORTE_A_FAUX");
+    expect(pluginIds).toContain("LIMON_CENTRAL_PORTE_A_FAUX");
     expect(pluginIds).toContain("PRECHECK_FLECHE");
     expect(allIds.length).toBeGreaterThanOrEqual(RULES.length);
     for (const id of allIds) {

@@ -40,16 +40,38 @@ describe("comparateur de variantes", () => {
       "wood-housed",
       "wood-cut",
       "steel-flat",
+      "steel-central-tube",
       "steel-profile-UPN",
       "steel-profile-IPE",
     ]);
     const quarter = variantsFor(createProject("quarter-left"), all).map((v) => v.id);
     expect(quarter).not.toContain("wood-cut");
+    // Limon central (A29) : tube sur l'escalier droit, caisson débillardé sur un tournant.
+    expect(quarter).toContain("steel-central-box");
+    expect(quarter).not.toContain("steel-central-tube");
     // Structure du projet non couverte (HEA) : ajoutée.
     const hea = withStructure(createProject("quarter-left"), "steel-profile", { family: "HEA" });
     expect(variantsFor(hea, all).map((v) => v.id)).toContain("current-steel-profile");
     // Structures absentes du cœur : non proposées.
     expect(variantsFor(createProject("straight"), [{ kind: "wood-housed" }])).toHaveLength(1);
+  });
+
+  it("limon central : la section (tube, caisson) distingue la variante du projet", () => {
+    const all = availableStructures();
+    const box = withStructure(createProject("straight"), "steel-central", {
+      section: { kind: "box", height: 250 },
+    });
+    const ids = variantsFor(box, all).map((v) => v.id);
+    // Caisson sur un escalier droit : non couvert par la variante « tube », ajouté.
+    expect(ids).toContain("steel-central-tube");
+    expect(ids).toContain("current-steel-central");
+    const tube = variantsFor(box, all).find((v) => v.id === "steel-central-tube")!;
+    // Fusion profonde : la hauteur du projet est gardée, seule la section change de type.
+    expect(variantParams(box, tube)).toMatchObject({ section: { kind: "tube", height: 250 } });
+    const own = withStructure(createProject("straight"), "steel-central", {
+      section: { kind: "tube" },
+    });
+    expect(variantsFor(own, all).map((v) => v.id)).not.toContain("current-steel-central");
   });
 
   it("paramètres : ceux du projet pour la même structure, section gardée si même famille", () => {
@@ -150,7 +172,12 @@ describe("comparateur de variantes", () => {
     expect(quarter).toContain("steel-curved");
     const helical = presetProject("helical");
     const hv = variantsFor(helical, all);
-    expect(hv.map((v) => v.id)).toEqual(["helical-core-wood", "helical-core-steel"]);
+    expect(hv.map((v) => v.id)).toEqual([
+      "helical-core-wood",
+      "helical-core-steel",
+      "steel-central-helical",
+    ]);
+    expect(hv[2]!.params).toEqual({ section: { kind: "box" } });
     // Paramètres imposés fusionnés en profondeur (l'épaisseur de tôle du projet est gardée).
     const own = withStructure(helical, "helical-core", {
       treads: { material: "wood", plateThickness: 10 },
@@ -191,7 +218,7 @@ describe("comparateur de variantes", () => {
     clearModelCache();
     const project = presetProject("helical");
     const { rows } = runVariants(project, variantsFor(project, availableStructures()));
-    expect(rows.map((r) => r.current)).toEqual([true, false]);
+    expect(rows.map((r) => r.current)).toEqual([true, false, false]);
     expect(rows[0]!.reference).toBe(true);
     for (const r of rows) {
       expect(r.adaptations).toEqual([]);

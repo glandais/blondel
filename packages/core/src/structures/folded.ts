@@ -308,6 +308,11 @@ export interface FoldedTreadResult {
   readonly flat: FlatPattern;
   /** Contour développé dans le repère plan monde (avant mise à plat locale). */
   readonly worldOutline: Polygon2;
+  /**
+   * Dessus plan de la marche en plan (repère monde, CCW) : contour du dessus rogné aux lignes de
+   * tangence des plis, c.-à-d. la partie plane du développé (perçages de fixation, A31).
+   */
+  readonly top: Polygon2;
   readonly bendLines: readonly BendLineInfo[];
   readonly flanges: readonly FlangeCheck[];
   /** Section au milieu de la ligne de pli avant (profondeur D mesurée là). */
@@ -565,15 +570,7 @@ export function developFoldedTread(input: FoldedTreadInput): FoldedTreadResult {
   const worldOutline = outline;
 
   // Mise à plat locale : x le long de la ligne de pli avant, y vers l'arrière, minimum à 0.
-  const ax = fr.along;
-  const ay = inF;
-  let minX = Infinity;
-  let minY = Infinity;
-  for (const p of outline) {
-    minX = Math.min(minX, V.dot(p, ax));
-    minY = Math.min(minY, V.dot(p, ay));
-  }
-  const T = (p: Vec2): Vec2 => V.vec(V.dot(p, ax) - minX, V.dot(p, ay) - minY);
+  const T = flatTransform(outline, fr.along, inF);
   const outer = outline.map(T);
   let cx = 0;
   let cy = 0;
@@ -609,6 +606,7 @@ export function developFoldedTread(input: FoldedTreadInput): FoldedTreadResult {
       },
     },
     worldOutline,
+    top: clipped,
     bendLines,
     flanges,
     section,
@@ -620,6 +618,29 @@ export function developFoldedTread(input: FoldedTreadInput): FoldedTreadResult {
     prismatic: parallel && plate.length === 4,
     flatArea: Math.abs(signedArea(outline)),
   };
+}
+
+/**
+ * Mise à plat locale du développé d'une marche (déplacement plan, sans retournement) : x le long
+ * de la ligne de pli avant (`ax`), y vers l'arrière (`ay`), minimums du contour monde à 0.
+ */
+function flatTransform(outline: Polygon2, ax: Vec2, ay: Vec2): (p: Vec2) => Vec2 {
+  let minX = Infinity;
+  let minY = Infinity;
+  for (const p of outline) {
+    minX = Math.min(minX, V.dot(p, ax));
+    minY = Math.min(minY, V.dot(p, ay));
+  }
+  return (p) => V.vec(V.dot(p, ax) - minX, V.dot(p, ay) - minY);
+}
+
+/**
+ * Transformation rigide qui met à plat le développé d'une marche : point du plan (repère monde,
+ * dans le dessus) ↦ point du développé `result.flat` (même transformation que celle qui envoie
+ * `result.worldOutline` sur `result.flat.outline.outer`).
+ */
+export function foldedFlatTransform(result: FoldedTreadResult): (p: Vec2) => Vec2 {
+  return flatTransform(result.worldOutline, result.frontAxis, result.inward);
 }
 
 /**

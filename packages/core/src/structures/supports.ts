@@ -18,6 +18,13 @@ import type { Frame3, Mm, Polygon2, Vec2 } from "../model/primitives.js";
 import type { WorkshopProfile } from "../workshop/profile.js";
 import { pocketInterval } from "./housing.js";
 import { steelQuantities } from "./steelCommon.js";
+import {
+  DEFAULT_TREAD_HOLE_DIAMETER,
+  treadSupportJoint,
+  type TreadFixing,
+  type TreadMaterialKind,
+  type TreadSupportJoint,
+} from "./treadFixing.js";
 
 export type SupportKind = "angle" | "plate";
 export type SupportFixing = "welded" | "bolted";
@@ -39,6 +46,13 @@ export interface SupportSpec {
   readonly holeEdgeDistance: Mm;
   /** Perçages de fixation de la marche dans l'aile horizontale (par support). */
   readonly treadScrews: number;
+  /**
+   * Fixation d'une marche en tôle pliée sur le support (A31, `supports.treadFixing`) : vissée
+   * (défaut, « à valider ») ou soudée. Sans effet sous une marche bois (toujours vissée).
+   */
+  readonly treadFixing?: TreadFixing;
+  /** Diamètre de perçage des vis d'une marche en tôle vissée (A31, défaut 9 mm, « à valider »). */
+  readonly treadHoleDiameter?: Mm;
 }
 
 /** Face porteuse (joue de limon ou face de poteau), vue en plan. */
@@ -131,13 +145,65 @@ export function boltCenters(p: SupportPlacement, spec: SupportSpec): Vec2[] {
   );
 }
 
-/** Pièce « support » (barre sciée), solide extrudé le long de la face. */
+/**
+ * Points de fixation d'une marche sur le support (A31), en plan (repère monde) : `treadScrews`
+ * points au milieu de l'aile horizontale (cornière : partie libre de l'aile, entre l'épaisseur
+ * de l'aile verticale et son bout ; plat : milieu de sa largeur), répartis le long du support
+ * entre `holeEdgeDistance` de ses bouts (un seul : au milieu ; support trop court : répartis
+ * régulièrement sur sa longueur). Mêmes points dans l'aile du support et dans la marche.
+ */
+export function treadScrewPoints(p: SupportPlacement, spec: SupportSpec): Vec2[] {
+  const n = Number.isFinite(spec.treadScrews) ? Math.max(0, Math.floor(spec.treadScrews)) : 0;
+  if (n === 0) return [];
+  const across =
+    spec.kind === "angle" ? (spec.angleLeg + spec.angleThickness) / 2 : spec.plateWidth / 2;
+  const at = (u: Mm): Vec2 =>
+    V.addScaled(V.addScaled(p.face.a, p.face.dir, u), p.face.into, -across);
+  const lo = p.u0 + spec.holeEdgeDistance;
+  const hi = p.u1 - spec.holeEdgeDistance;
+  if (n === 1) return [at((p.u0 + p.u1) / 2)];
+  if (!(hi > lo)) {
+    return Array.from({ length: n }, (_, i) => at(p.u0 + ((p.u1 - p.u0) * (i + 1)) / (n + 1)));
+  }
+  return Array.from({ length: n }, (_, i) => at(lo + ((hi - lo) * i) / (n - 1)));
+}
+
+/**
+ * Fixation de la marche portée sur le support (A31), selon son matériau. `drilledPoints` : sous
+ * une marche en tôle vissée, nombre de points réellement percés dans la marche
+ * (`drillTreadsAtSupports`) ; le support n'est percé, et la visserie comptée, qu'à ces points.
+ * Absent : `treadScrews`.
+ */
+export function supportTreadJoint(
+  p: SupportPlacement,
+  spec: SupportSpec,
+  tread: TreadMaterialKind = "wood",
+  drilledPoints?: number,
+): TreadSupportJoint {
+  return treadSupportJoint(
+    {
+      fixing: spec.treadFixing ?? "screwed",
+      screws: tread === "steel" && drilledPoints !== undefined ? drilledPoints : spec.treadScrews,
+      holeDiameter: spec.treadHoleDiameter ?? DEFAULT_TREAD_HOLE_DIAMETER,
+    },
+    tread,
+    p.u1 - p.u0,
+  );
+}
+
+/**
+ * Pièce « support » (barre sciée), solide extrudé le long de la face. `tread` : matériau de la
+ * marche portée (A31 ; défaut bois) — perçages et cordons de la fixation de la marche ;
+ * `drilledPoints` : points réellement percés dans une marche en tôle vissée (`supportTreadJoint`).
+ */
 export function supportPart(
   p: SupportPlacement,
   spec: SupportSpec,
   mark: string,
   material: Part["material"],
   profile: WorkshopProfile,
+  tread: TreadMaterialKind = "wood",
+  drilledPoints?: number,
 ): Part {
   const L = p.u1 - p.u0;
   const x = V.scale(p.face.into, -1);
@@ -173,7 +239,8 @@ export function supportPart(
         ? msg("structure.common.support.angleWelded")
         : msg("structure.common.support.angleBolted")
       : msg("structure.common.support.plateWelded");
-  const fixings = supportFixings(p, spec);
+  const joint = supportTreadJoint(p, spec, tread, drilledPoints);
+  const fixings = supportFixings(p, spec, tread, drilledPoints);
   return {
     id: `support-${p.tread}-${p.face.key}`,
     mark,
@@ -196,9 +263,9 @@ export function supportPart(
         volumeMm3: areaS * L,
         treatedSurfaceMm2: sectionPerimeter * L + 2 * areaS,
         length: L,
-        weld: fixing === "welded" ? 2 * L : 0,
+        weld: (fixing === "welded" ? 2 * L : 0) + joint.weld,
         cuts: 2,
-        holes: bolts + spec.treadScrews,
+        holes: bolts + joint.holes,
       },
       profile,
     ),
@@ -209,11 +276,17 @@ export function supportPart(
 /**
  * Fixations du support (`Part.fixings`, QUESTIONS A27) : boulons dans la joue du limon ou la
  * face du poteau (support vissé : un par perçage, une lumière comptant pour un, diamètre de
- * perçage `holeDiameter`) et vis de la marche dans l'aile horizontale (`treadScrews`, perçage
- * non dimensionné). La marche portée est résolue par l'étape « Visserie » (assemblage
- * support ↔ marche).
+ * perçage `holeDiameter`) et fixation de la marche dans l'aile horizontale (A31) : vis à bois
+ * sous une marche bois (`treadScrewed`, perçage non dimensionné), vis à métaux sous une marche
+ * en tôle vissée (`treadBolted`, perçage `treadHoleDiameter`), rien sous une marche soudée. La
+ * marche portée est résolue par l'étape « Visserie » (assemblage support ↔ marche).
  */
-export function supportFixings(p: SupportPlacement, spec: SupportSpec): PartFixing[] {
+export function supportFixings(
+  p: SupportPlacement,
+  spec: SupportSpec,
+  tread: TreadMaterialKind = "wood",
+  drilledPoints?: number,
+): PartFixing[] {
   const out: PartFixing[] = [];
   const bolts = boltCenters(p, spec).length;
   if (bolts > 0)
@@ -223,8 +296,7 @@ export function supportFixings(p: SupportPlacement, spec: SupportSpec): PartFixi
       holeDiameter: spec.holeDiameter,
       with: [p.face.owner],
     });
-  const screws = Math.floor(spec.treadScrews);
-  if (screws > 0) out.push({ joint: "treadScrewed", points: screws });
+  out.push(...supportTreadJoint(p, spec, tread, drilledPoints).fixings);
   return out;
 }
 

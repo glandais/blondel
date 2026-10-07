@@ -6,8 +6,9 @@
  * Sources, dans l'ordre des pièces du modèle :
  *
  * 1. **Fixations déclarées** par la pièce (`Part.fixings`) : supports de marche vissés
- *    (`supportBolted`, un boulon par perçage, lumière comprise ; `treadScrewed`, vis de la
- *    marche dans l'aile horizontale), contremarche d'arrivée pliée fixée au chevêtre
+ *    (`supportBolted`, un boulon par perçage, lumière comprise ; `treadScrewed`, vis à bois
+ *    d'une marche bois dans l'aile horizontale ; `treadBolted`, vis à métaux d'une marche en
+ *    tôle vissée, A31), contremarche d'arrivée pliée fixée au chevêtre
  *    (`riserTrimmer`). Un plugin déclare ainsi tout nouvel assemblage (point d'extension).
  * 2. **Platines percées** (catégorie `fixing`, perçages de `flat.outline.holes`) sans fixation
  *    déclarée : pied et tête de limon, about limon ↔ poteau, pied de poteau, de `steel-flat` et
@@ -30,9 +31,12 @@
  *    (quincaillerie) n'est pas un élément de visserie : son nombre figure dans
  *    `Fastener.origin`.
  *
- * Vis de marche (`treadScrewed`) : seulement sous une marche **bois** portée par le support
- * (assemblage support ↔ marche) ; une marche en tôle pliée n'a pas de perçage correspondant
- * dans son développé (assemblage non décrit) : aucun élément.
+ * Vis de marche (QUESTIONS A31) : `treadScrewed` seulement sous une marche **bois** portée par
+ * le support, `treadBolted` seulement sous une marche **acier** (tôle pliée vissée, perçages du
+ * développé de la marche aux mêmes points que ceux de l'aile du support ; diamètre nominal lu
+ * sur le perçage, M8 dans 9 mm) ; partenaires = marches du matériau attendu assemblées au
+ * support (assemblage support ↔ marche). Une marche en tôle soudée sur son support ne déclare
+ * aucune fixation : aucun élément.
  *
  * Diamètre nominal déduit (`nominalDiameterFor`) = plus grand diamètre de la série du profil
  * (`nominalDiameters`) qui passe dans le perçage avec le jeu minimal `holeClearance` (M12 dans
@@ -267,6 +271,8 @@ function originOf(f: PartFixing, mark: string, withMarks: string): Message {
       return msg("fastener.origin.supportBolted", { mark, with: withMarks });
     case "treadScrewed":
       return msg("fastener.origin.treadScrewed", { mark, with: withMarks });
+    case "treadBolted":
+      return msg("fastener.origin.treadBolted", { mark, with: withMarks });
     case "riserTrimmer":
       return msg("fastener.origin.riserTrimmer", { mark });
     case "guardPostFloor":
@@ -326,16 +332,20 @@ export function computeFasteners(input: FastenerInput): Fastener[] {
       const points = Math.floor(f.points);
       if (!(points > 0)) continue;
       let partners = (f.with ?? []).filter((id) => byId.has(id) && id !== part.id);
-      if (f.joint === "treadScrewed") {
-        // Marche bois portée par le support (assemblage support ↔ marche).
+      if (f.joint === "treadScrewed" || f.joint === "treadBolted") {
+        // Marche portée par le support (assemblage support ↔ marche) : bois pour les vis à bois,
+        // acier (tôle pliée) pour les vis à métaux (A31).
+        const wanted = f.joint === "treadScrewed";
         const treads = (part.assembledWith ?? [])
           .map((id) => byId.get(id))
           .filter(
             (p): p is Part =>
-              p !== undefined && (p.category === "tread" || p.category === "landing"),
+              p !== undefined &&
+              (p.category === "tread" || p.category === "landing") &&
+              isWood(p) === wanted,
           );
-        if (!treads.some(isWood)) continue;
-        partners = treads.filter(isWood).map((t) => t.id);
+        if (treads.length === 0) continue;
+        partners = treads.map((t) => t.id);
       }
       const setting = profile.joints[f.joint];
       const nominal =

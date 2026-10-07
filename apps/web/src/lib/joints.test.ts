@@ -1,4 +1,4 @@
-import { translatorFor } from "@blondel/i18n";
+import { msg, translatorFor, type MessageKey } from "@blondel/i18n";
 import {
   textMessage,
   ProjectSchema,
@@ -113,5 +113,78 @@ describe("tronçons et joints (limon de jour débillardé)", () => {
     const EN = translatorFor("en");
     expect(EN.t(name)).toBe(EN.t("structure.steelCurved.part.outerString"));
     expect(EN.t(name)).not.toMatch(/segment/i);
+  });
+});
+
+describe("tronçons du limon central (A29)", () => {
+  /** Tronçon fabriqué : développé rectangulaire portant un trait de joint. */
+  const segment = (id: string, key: MessageKey, index: number): Part =>
+    ({
+      id,
+      mark: `LC${index}`,
+      name: msg(key, { index, count: 2 }),
+      category: "stringer",
+      quantities: {},
+      flat: {
+        outline: {
+          outer: [
+            { x: 0, y: 0 },
+            { x: 1000, y: 0 },
+            { x: 1000, y: 200 },
+            { x: 0, y: 200 },
+          ],
+          holes: [],
+        },
+        lines: [{ kind: "joint", a: { x: 1000, y: 0 }, b: { x: 1000, y: 200 } }],
+      },
+    }) as unknown as Part;
+
+  it("nom de la pièce entière pour chaque tôle du caisson et pour le tube", () => {
+    const cases: [string, MessageKey, MessageKey][] = [
+      ["central-tube", "structure.steelCentral.part.tube", "structure.steelCentral.part.tubeWhole"],
+      [
+        "central-web-left",
+        "structure.steelCentral.part.webLeft",
+        "structure.steelCentral.part.webLeftWhole",
+      ],
+      [
+        "central-web-right",
+        "structure.steelCentral.part.webRight",
+        "structure.steelCentral.part.webRightWhole",
+      ],
+      [
+        "central-flange-top",
+        "structure.steelCentral.part.flangeTop",
+        "structure.steelCentral.part.flangeTopWhole",
+      ],
+      [
+        "central-flange-bottom",
+        "structure.steelCentral.part.flangeBottom",
+        "structure.steelCentral.part.flangeBottomWhole",
+      ],
+    ];
+    for (const [base, key, whole] of cases) {
+      const parts = [segment(`${base}-1`, key, 1), segment(`${base}-2`, key, 2)];
+      const [g] = segmentedParts({ parts });
+      expect(g!.base).toBe(base);
+      expect(g!.joints).toHaveLength(1);
+      expect(segmentedPartName(g!).key).toBe(whole);
+    }
+  });
+
+  it("quart tournant en caisson : tronçons regroupés par tôle, nom sans « tronçon »", () => {
+    const base = createProject("quarter-left");
+    const p = ProjectSchema.parse({
+      ...base,
+      stair: {
+        ...base.stair,
+        structure: { kind: "steel-central", params: { section: { kind: "box" } } },
+      },
+    });
+    const groups = segmentedParts(buildModel(p)).filter((g) => g.base.startsWith("central-"));
+    for (const g of groups) {
+      expect(g.segments.length).toBeGreaterThanOrEqual(2);
+      expect(segmentedPartName(g).key).toMatch(/Whole$/);
+    }
   });
 });

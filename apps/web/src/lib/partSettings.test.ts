@@ -53,6 +53,29 @@ describe("partSettingsFor", () => {
     );
   });
 
+  it("limon central (A29) : tracé, section et poutre repris pour ses pièces de poutre", () => {
+    const s = partSettingsFor(p("stringer", "structure"))!;
+    for (const path of [
+      ["trace", "lateralOffset"],
+      ["section", "kind"],
+      ["section", "webThickness"],
+      ["beam", "topOffset"],
+      ["beam", "jointOffset"],
+    ]) {
+      expect(matchesSettings(path, s.structureParams), path.join(".")).toBe(true);
+    }
+    // Supports (consoles, supports pliés) : tous les réglages `supports.*`.
+    const sup = partSettingsFor(p("support", "structure"))!;
+    expect(matchesSettings(["supports", "consoleThickness"], sup.structureParams)).toBe(true);
+  });
+
+  it("A31 : fixation de la marche en tôle sur son support reprise pour la marche", () => {
+    const s = partSettingsFor(p("tread", "treads", "steel-painted"))!;
+    expect(matchesSettings(["supports", "treadFixing"], s.structureParams)).toBe(true);
+    expect(matchesSettings(["supports", "treadHoleDiameter"], s.structureParams)).toBe(true);
+    expect(matchesSettings(["supports", "bolts"], s.structureParams)).toBe(false);
+  });
+
   it("poteau de structure, supports, platines, marches en tôle pliée", () => {
     expect(partSettingsFor(p("post", "structure"))!.structureParams).toContain("newel");
     expect(partSettingsFor(p("support", "structure"))!.structureParams).toEqual(["supports"]);

@@ -12,6 +12,7 @@ import {
   structureLateralThickness,
   structureLayouts,
   structureRequiresNewel,
+  structureUnsupportedOptions,
   unregisterStructure,
 } from "./index.js";
 
@@ -27,8 +28,9 @@ const dummy: StructureKind<{ a: number }> = {
 describe("registre des structures", () => {
   it("plugins bois intégrés enregistrés", () => {
     const kinds = listStructures().map((s) => s.kind);
-    expect(kinds).toEqual(expect.arrayContaining(["wood-housed", "wood-cut"]));
+    expect(kinds).toEqual(expect.arrayContaining(["wood-housed", "wood-cut", "steel-central"]));
     expect(getStructure("wood-housed")?.family).toBe("bois");
+    expect(getStructure("steel-central")?.family).toBe("metal");
   });
 
   it("enregistre, refuse les doublons et `none`, retire", () => {
@@ -48,6 +50,7 @@ describe("registre des structures", () => {
     expect(fr.t(housed.labelKey)).toBe("Limons bois à la française (marches encastrées)");
     expect(en.t(housed.labelKey)).toBe("Timber closed strings (housed treads)");
     expect(en.t(getStructure("wood-cut")!.labelKey)).toBe("Timber cut strings");
+    expect(en.t(getStructure("steel-central")!.labelKey)).toMatch(/^Steel mono-stringer/);
   });
 });
 
@@ -55,6 +58,7 @@ describe("capacités déclarées par les plugins (dette D4)", () => {
   it("poteau exigé : mêmes structures que l'ancienne liste NEWEL_REQUIRED_STRUCTURES", () => {
     expect(newelRequiredStructures()).toEqual(["wood-housed", "steel-flat", "steel-profile"]);
     expect(structureRequiresNewel("steel-curved")).toBe(false);
+    expect(structureRequiresNewel("steel-central")).toBe(false);
     expect(structureRequiresNewel("none")).toBe(false);
     expect(structureRequiresNewel("inconnue")).toBe(false);
   });
@@ -67,6 +71,8 @@ describe("capacités déclarées par les plugins (dette D4)", () => {
       expect(structureAcceptsLayout(k, "flights")).toBe(true);
       expect(structureAcceptsLayout(k, "helical")).toBe(false);
     }
+    // Limon central (QUESTIONS A29) : volées (droit, tournants) et hélicoïdal.
+    expect(structureLayouts("steel-central")).toEqual(["flights", "helical"]);
     expect(structureLayouts("inconnue")).toEqual([]);
     // Plugin sans déclaration : volées seulement.
     registerStructure(dummy);
@@ -106,8 +112,28 @@ describe("capacités déclarées par les plugins (dette D4)", () => {
         outerStringer: { enabled: true, thickness: 10 },
       }),
     ).toEqual({ inner: 0, outer: 10 });
+    // Limon central : poutre sous les marches, rien hors de l'emmarchement utile.
+    expect(structureLateralThickness("steel-central", {})).toEqual({ inner: 0, outer: 0 });
     // Paramètres invalides, plugin inconnu : null.
     expect(structureLateralThickness("wood-housed", { thickness: -3 })).toBeNull();
     expect(structureLateralThickness("inconnue", {})).toBeNull();
+  });
+
+  it("options non prises en charge : tube du limon central sur un tracé courbe seulement", () => {
+    const straight = { kind: "flights", turns: 0 } as const;
+    const quarter = { kind: "flights", turns: 1 } as const;
+    const helical = { kind: "helical", turns: 0 } as const;
+    expect(structureUnsupportedOptions("steel-central", straight)).toEqual([]);
+    for (const traits of [quarter, helical]) {
+      const opts = structureUnsupportedOptions("steel-central", traits);
+      expect(opts.map((o) => ({ path: o.path, value: o.value }))).toEqual([
+        { path: ["section", "kind"], value: "tube" },
+      ]);
+      expect(translatorFor("fr").t(opts[0]!.reason)).toMatch(/^Tube réservé à l'escalier droit/);
+    }
+    // Sans déclaration, `none` ou plugin inconnu : aucune.
+    for (const kind of ["none", "inconnue", "steel-flat", "steel-curved", "helical-core"]) {
+      expect(structureUnsupportedOptions(kind, quarter)).toEqual([]);
+    }
   });
 });

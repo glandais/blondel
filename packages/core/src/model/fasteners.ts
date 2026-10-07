@@ -44,7 +44,9 @@ export type FastenerGrade = (typeof FASTENER_GRADES)[number];
  * - `plateTrimmer` : platine de tête fixée au chevêtre (rive du plancher haut) ;
  * - `plateBolted` : platine d'about boulonnée entre deux pièces (limon ↔ poteau) ;
  * - `supportBolted` : support de marche vissé sur la joue du limon ou la face du poteau ;
- * - `treadScrewed` : marche vissée sur son support (perçages de l'aile horizontale) ;
+ * - `treadScrewed` : marche bois vissée sur son support (perçages de l'aile horizontale) ;
+ * - `treadBolted` : marche en tôle pliée vissée sur son support (QUESTIONS A31 : perçages de
+ *   l'aile horizontale et du développé de la marche) ;
  * - `riserTrimmer` : contremarche d'arrivée en tôle pliée fixée au chevêtre ;
  * - `guardPostFloor` : poteau de garde-corps fixé au plancher (trémie) ;
  * - `guardPostStair` / `guardPostStairMetal` : poteau de garde-corps fixé sur l'escalier (rampant),
@@ -59,6 +61,7 @@ export const FASTENER_JOINTS = [
   "plateBolted",
   "supportBolted",
   "treadScrewed",
+  "treadBolted",
   "riserTrimmer",
   "guardPostFloor",
   "guardPostStair",
@@ -141,6 +144,7 @@ const JOINT_KEYS: Readonly<Record<FastenerJointKind, MessageKey>> = {
   plateBolted: "fastener.joint.plateBolted",
   supportBolted: "fastener.joint.supportBolted",
   treadScrewed: "fastener.joint.treadScrewed",
+  treadBolted: "fastener.joint.treadBolted",
   riserTrimmer: "fastener.joint.riserTrimmer",
   guardPostFloor: "fastener.joint.guardPostFloor",
   guardPostStair: "fastener.joint.guardPostStair",

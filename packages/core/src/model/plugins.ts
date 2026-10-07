@@ -156,6 +156,31 @@ export interface StructureCapabilities<P = unknown> {
    * (borne basse, documentée par le plugin). Absent : 0 mm des deux côtés.
    */
   lateralThickness?(params: P): { readonly inner: Mm; readonly outer: Mm };
+  /**
+   * Choix de paramètres (valeurs d'une énumération) que la structure ne sait pas construire sur
+   * un tracé donné, avec leur raison (ex. `steel-central` : section tube sur un tracé tournant
+   * ou hélicoïdal). L'interface grise ces options et affiche la raison ; le plugin rend tout de
+   * même une erreur explicite si le projet les porte. Absent : aucun. Ajout rétrocompatible
+   * (vague « limon central »).
+   */
+  unsupportedOptions?(layout: StructureLayoutTraits): readonly UnsupportedParamOption[];
+}
+
+/** Tracé vu par les capacités, sans modèle : type de tracé et nombre de tournants. */
+export interface StructureLayoutTraits {
+  readonly kind: StructureLayoutKind;
+  /** Nombre de tournants d'un tracé à volées (0 : droit ; toujours 0 en hélicoïdal). */
+  readonly turns: number;
+}
+
+/** Valeur d'un paramètre de plugin non prise en charge sur un tracé (`unsupportedOptions`). */
+export interface UnsupportedParamOption {
+  /** Chemin du paramètre dans `structure.params` (ex. `["section", "kind"]`). */
+  readonly path: readonly string[];
+  /** Valeur de l'énumération non prise en charge (ex. `"tube"`). */
+  readonly value: string;
+  /** Raison affichée (option grisée). */
+  readonly reason: Message;
 }
 
 /**

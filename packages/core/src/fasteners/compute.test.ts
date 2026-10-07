@@ -222,9 +222,50 @@ describe("computeFasteners — fixations déclarées", () => {
     expect(fr(screw!.origin)).toBe("Marche M1 → support CR1");
   });
 
-  it("marche en tôle pliée : pas de vis de marche (assemblage non décrit)", () => {
+  it("vis à bois déclarées sous une marche en tôle : aucun élément (matériau inattendu)", () => {
     const out = computeFasteners({ parts: parts("steel-raw"), walls: [], profile });
     expect(out.map((f) => f.joint)).toEqual(["supportBolted"]);
+  });
+
+  /** Support sous une marche de matériau donné, fixation de la marche `treadBolted` (A31). */
+  const boltedTread = (treadMaterial: Part["material"], holeDiameter = 9): Part[] =>
+    parts(treadMaterial).map((p) =>
+      p.id === "sup"
+        ? { ...p, fixings: [{ joint: "treadBolted" as const, points: 3, holeDiameter }] }
+        : p,
+    );
+
+  it("marche en tôle vissée (A31) : vis à métaux M8 lues sur le perçage de 9 mm", () => {
+    const out = computeFasteners({ parts: boltedTread("steel-painted"), walls: [], profile });
+    expect(out).toHaveLength(1);
+    expect(out[0]).toMatchObject({
+      joint: "treadBolted",
+      kind: "machine-screw",
+      grade: "8.8",
+      diameter: 8,
+      length: 20,
+      quantity: 3,
+      partIds: ["t", "sup"],
+      deduced: ["diameter", "quantity"],
+    });
+    expect(fr(out[0]!.name)).toBe("Vis à métaux M8 × 20, classe 8.8");
+    expect(fr(out[0]!.origin)).toBe("Marche M1 → support CR1");
+    expect(EN.t(out[0]!.origin)).toBe("Tread M1 → support CR1");
+  });
+
+  it("vis à métaux déclarées sous une marche bois : aucun élément", () => {
+    expect(computeFasteners({ parts: boltedTread("wood-oak"), walls: [], profile })).toEqual([]);
+  });
+
+  it("perçage de marche plus grand : diamètre nominal déduit (M10 dans 11 mm)", () => {
+    const out = computeFasteners({ parts: boltedTread("steel-raw", 11), walls: [], profile });
+    expect(out[0]!.diameter).toBe(10);
+  });
+
+  it("réglage d'atelier de la marche en tôle vissée : longueur et quantité par point", () => {
+    const p = resolveFastenerProfile({ joints: { treadBolted: { length: 25, perPoint: 2 } } });
+    const [f] = computeFasteners({ parts: boltedTread("steel-raw"), walls: [], profile: p });
+    expect(f).toMatchObject({ length: 25, quantity: 6, diameter: 8 });
   });
 
   it("contremarche d'arrivée fixée au chevêtre", () => {

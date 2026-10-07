@@ -98,7 +98,8 @@ export interface FastenerProfile {
 
 /**
  * Défauts **« à valider »** (aucune source) : chevilles mécaniques zinguées au sol, au chevêtre
- * et au plancher ; boulons 8.8 entre pièces métal ; vis à bois sous les marches ; tire-fonds
+ * et au plancher ; boulons 8.8 entre pièces métal ; vis à bois sous les marches bois ; vis à
+ * métaux M8 × 20 classe 8.8 sous les marches en tôle vissées (A31) ; tire-fonds
  * pour les poteaux de garde-corps posés sur un escalier bois, boulons 8.8 sur un escalier
  * métal ; chevilles pour cloison creuse sur une cloison, mur non décrit supposé porteur. Jeu de
  * perçage minimal 1 mm (perçages du cœur : 11 mm pour M10, 13 mm pour M12) ; série des
@@ -122,6 +123,9 @@ export const DEFAULT_FASTENER_PROFILE: FastenerProfile = {
       length: 30,
       perPoint: 1,
     },
+    // Marche en tôle vissée sur son support (A31) : vis à métaux M8 × 20 classe 8.8 (diamètre
+    // lu sur le perçage de 9 mm), une par perçage, écrou ou taraudage selon l'atelier.
+    treadBolted: { kind: "machine-screw", grade: "8.8", diameter: 8, length: 20, perPoint: 1 },
     riserTrimmer: { kind: "anchor", grade: "zinc-plated", diameter: 10, length: 80, perPoint: 1 },
     guardPostFloor: { kind: "anchor", grade: "zinc-plated", diameter: 10, length: 80, perPoint: 4 },
     guardPostStair: {

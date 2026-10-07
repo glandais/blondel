@@ -4,12 +4,15 @@ import {
   ProjectSchema,
   buildModel,
   createProject,
+  getStructure,
+  registerStructure,
+  unregisterStructure,
   TreadSpecSchema,
   type StructureContext,
   type MessageKey,
   type StructureKind,
 } from "@blondel/core";
-import { translatorFor } from "@blondel/i18n";
+import { textMessage, translatorFor } from "@blondel/i18n";
 import { describe, expect, it } from "vitest";
 import {
   deriveParamFields,
@@ -21,6 +24,8 @@ import {
   safeDefaults,
   setParam,
   structureContext,
+  layoutTraitsOf,
+  unsupportedOptionsOf,
   validateParams,
   withDefaults,
 } from "./structureForm.js";
@@ -254,5 +259,67 @@ describe("contexte du plugin de structure", () => {
     const partial = buildModel(bad);
     expect(partial.errors.length).toBeGreaterThan(0);
     expect(structureContext(bad, partial)).toBeUndefined();
+  });
+});
+
+describe("options non prises en charge sur le tracé (capacité `unsupportedOptions`)", () => {
+  it("tracé vu par les capacités : type et nombre de tournants", () => {
+    expect(layoutTraitsOf(createProject("straight"))).toEqual({ kind: "flights", turns: 0 });
+    expect(layoutTraitsOf(createProject("quarter-left"))).toEqual({ kind: "flights", turns: 1 });
+    expect(layoutTraitsOf(createProject("helical"))).toEqual({ kind: "helical", turns: 0 });
+  });
+
+  it("lecture de la déclaration du plugin ; rien pour « aucune », un plugin inconnu ou qui lève", () => {
+    const reason = textMessage("Tube : escalier droit seulement.");
+    const base = getStructure("wood-housed")!;
+    const declaring: StructureKind<unknown> = {
+      ...base,
+      kind: "test-unsupported-options",
+      labelKey: "test.unsupportedOptions" as MessageKey,
+      capabilities: {
+        ...base.capabilities,
+        unsupportedOptions: (layout) =>
+          layout.kind === "helical" || layout.turns > 0
+            ? [{ path: ["section", "kind"], value: "tube", reason }]
+            : [],
+      },
+    };
+    const throwing: StructureKind<unknown> = {
+      ...declaring,
+      kind: "test-unsupported-throws",
+      capabilities: {
+        ...base.capabilities,
+        unsupportedOptions: () => {
+          throw new Error("échec volontaire");
+        },
+      },
+    };
+    registerStructure(declaring);
+    registerStructure(throwing);
+    try {
+      expect(unsupportedOptionsOf(declaring.kind, createProject("straight"))).toEqual([]);
+      expect(unsupportedOptionsOf(declaring.kind, createProject("quarter-left"))).toEqual([
+        { path: ["section", "kind"], value: "tube", reason },
+      ]);
+      expect(unsupportedOptionsOf(declaring.kind, createProject("helical"))).toHaveLength(1);
+      expect(unsupportedOptionsOf(throwing.kind, createProject("quarter-left"))).toEqual([]);
+    } finally {
+      unregisterStructure(declaring.kind);
+      unregisterStructure(throwing.kind);
+    }
+    expect(unsupportedOptionsOf("none", createProject("quarter-left"))).toEqual([]);
+    expect(unsupportedOptionsOf("plugin-absent", createProject("quarter-left"))).toEqual([]);
+    expect(unsupportedOptionsOf("wood-housed", createProject("quarter-left"))).toEqual([]);
+  });
+
+  it("limon central : tube grisé sur un tournant et en hélicoïdal, avec sa raison (A29)", () => {
+    const fr = translatorFor("fr");
+    expect(unsupportedOptionsOf("steel-central", createProject("straight"))).toEqual([]);
+    for (const id of ["quarter-left", "helical"] as const) {
+      const opts = unsupportedOptionsOf("steel-central", createProject(id));
+      const tube = opts.find((o) => o.path.join(".") === "section.kind" && o.value === "tube");
+      expect(tube, id).toBeDefined();
+      expect(fr.t(tube!.reason).length).toBeGreaterThan(0);
+    }
   });
 });

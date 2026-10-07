@@ -3,6 +3,8 @@ import { dec, msg } from "@blondel/i18n";
 import { describe, expect, it } from "vitest";
 import { lineSeg, arcSeg } from "../geom2d/segment.js";
 import { makeCurve } from "../geom2d/curve.js";
+import { pointInPolygon } from "../geom2d/polygon.js";
+import * as V from "../geom2d/vec.js";
 import type { Model } from "../model/derived.js";
 import type { InnerCorner, Project } from "../model/project.js";
 import { ProjectSchema } from "../model/project.js";
@@ -10,9 +12,10 @@ import { buildModel } from "../pipeline/build.js";
 import { resolveM3Variant } from "../stepping/stepping.js";
 import { makeSteppingProject } from "../stepping/test-helpers.js";
 import { WorkshopProfileSchema } from "../workshop/profile.js";
+import { foldedFlatTransform } from "./folded.js";
 import { isSimplePolygon } from "./geom.js";
 import { ruledFlatGap } from "./ruled.test-helpers.js";
-import { QUANTITY_BUTT_WELD_MM, QUANTITY_WELD_MM } from "./steelCommon.js";
+import { QUANTITY_BUTT_WELD_MM, QUANTITY_HOLES, QUANTITY_WELD_MM } from "./steelCommon.js";
 import {
   QUANTITY_ROLLED_LENGTH_MM,
   SteelCurvedParamsSchema,
@@ -20,6 +23,7 @@ import {
   type SteelCurvedResult,
 } from "./steelCurved.js";
 import { arcFiberLength, fiberDevelopment } from "./steelCurvedGeometry.js";
+import { treadScrewPoints } from "./supports.js";
 import "./index.js";
 import { fr, frList } from "../i18n.test-helpers.js";
 
@@ -671,4 +675,116 @@ describe("propriétés du limon débillardé (générateur contraint)", () => {
       { numRuns: 25 },
     );
   });
+});
+
+describe("marches en tôle pliée sur le limon débillardé : fixation vissée | soudée (A31)", () => {
+  const folded = (treadFixing?: "screwed" | "welded", profile: "Z" | "U" = "Z"): Project =>
+    quarterArc({
+      params: {
+        treadKind: "folded-steel",
+        folded: { profile },
+        ...(treadFixing ? { supports: { treadFixing } } : {}),
+      },
+    });
+
+  /** Contrôles : trous aux points des supports droits et débillardés, chiffrage, visserie. */
+  function checkCurvedFixing(m: Model, r: SteelCurvedResult, fixing: "screwed" | "welded"): void {
+    const spec = SteelCurvedParamsSchema.parse({}).supports;
+    const placements = [
+      ...r.flat.supports.map((s) => s.placement),
+      ...(r.curved?.supports ?? []).map((s) => s.placement),
+    ];
+    const byId = new Map(m.parts.map((p) => [p.id, p]));
+    let drawn = 0;
+    let expected = 0;
+    for (const d of r.flat.treads) {
+      const part = byId.get(d.part.id)!;
+      const holes = part.flat!.outline.holes;
+      expect(part.quantities[QUANTITY_HOLES]).toBe(holes.length);
+      const mine = placements.filter((p) => p.tread === d.number);
+      if (fixing === "welded") {
+        expect(holes).toEqual([]);
+        continue;
+      }
+      expected += 2 * mine.length;
+      drawn += holes.length;
+      const T = foldedFlatTransform(d.result);
+      const points = mine.flatMap((p) => treadScrewPoints(p, spec)).map(T);
+      for (const h of holes) {
+        for (const p of h)
+          expect(pointInPolygon(p, part.flat!.outline.outer), part.id).toBe("inside");
+        const c = V.scale(
+          h.reduce((s, p) => V.add(s, p), V.ZERO),
+          1 / h.length,
+        );
+        expect(Math.min(...points.map((q) => V.distance(q, c))), part.id).toBeLessThan(1e-6);
+      }
+      // Résultat détaillé cohérent avec la pièce du modèle.
+      expect(d.part.flat!.outline.holes).toHaveLength(holes.length);
+    }
+    expect(drawn + r.flat.treadHolesSkipped).toBe(expected);
+    const supports = m.parts.filter((p) => p.category === "support");
+    for (const s of supports) {
+      const bolted = s.fixings?.some((f) => f.joint === "treadBolted") ?? false;
+      expect(bolted).toBe(fixing === "screwed");
+      if (fixing === "welded") expect(s.quantities[QUANTITY_WELD_MM]).toBeGreaterThan(0);
+    }
+    const screws = (m.fasteners ?? []).filter((f) => f.joint === "treadBolted");
+    expect(screws.reduce((a, f) => a + f.quantity, 0)).toBe(fixing === "screwed" ? expected : 0);
+  }
+
+  it("vissée (défaut) : marches percées aussi aux supports du limon débillardé", () => {
+    const { m, r } = run(folded());
+    expect(m.errors).toEqual([]);
+    expect(r.curved!.supports.length).toBeGreaterThan(0);
+    checkCurvedFixing(m, r, "screwed");
+    // Une marche portée par le limon débillardé est percée sous ce support.
+    const n = r.curved!.supports[0]!.placement.tread;
+    const tread = m.parts.find((p) => p.id === `tread-${n}`)!;
+    const flatOnly = r.flat.supports.filter((s) => s.placement.tread === n).length;
+    const onCurved = r.curved!.supports.filter((s) => s.placement.tread === n).length;
+    expect(r.flat.treadHolesSkipped).toBe(0);
+    expect(tread.flat!.outline.holes).toHaveLength(2 * (flatOnly + onCurved));
+    expect(frList(m.notes).join(" ")).toMatch(/Marches en tôle vissées/);
+    expect(frList(m.notes).filter((x) => /Marches en tôle (vissées|soudées)/.test(x))).toHaveLength(
+      1,
+    );
+  });
+
+  it("soudée : ni perçage ni visserie de marche, cordons comptés sur tous les supports", () => {
+    const { m, r } = run(folded("welded", "U"));
+    expect(m.errors).toEqual([]);
+    checkCurvedFixing(m, r, "welded");
+    expect(frList(m.notes).join(" ")).toMatch(/Marches en tôle soudées/);
+  });
+
+  it("propriété : générateur contraint, vissé | soudé, chiffrage et perçages alignés", () => {
+    fc.assert(
+      fc.property(
+        curvedStairArb,
+        fc.constantFrom<"screwed" | "welded">("screwed", "welded"),
+        fc.constantFrom<"Z" | "U">("Z", "U"),
+        (base, fixing, profile) => {
+          const project: Project = {
+            ...base,
+            stair: {
+              ...base.stair,
+              structure: {
+                kind: "steel-curved",
+                params: {
+                  treadKind: "folded-steel",
+                  folded: { profile },
+                  supports: { treadFixing: fixing },
+                },
+              },
+            },
+          };
+          const { m, r } = run(project);
+          if (m.layout.turns.length === 0 || m.stepping.nosings.length < 2) return;
+          checkCurvedFixing(m, r, fixing);
+        },
+      ),
+      { numRuns: 25 },
+    );
+  }, 120000);
 });

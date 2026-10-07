@@ -17,6 +17,7 @@ import {
   WOOD_CLASSES,
   sectionsOf,
   type SectionFamily,
+  type UnsupportedParamOption,
 } from "@blondel/core";
 import { MATERIAL_KEYS } from "@blondel/exports";
 import { msg, textMessage, type MessageKey, type Translator } from "@blondel/i18n";
@@ -44,6 +45,10 @@ export const GROUP_LABELS: Readonly<Record<string, MessageKey>> = {
   innerStringer: "ui.param.group.innerStringer",
   outerStringer: "ui.param.group.outerStringer",
   handrail: "ui.param.group.handrail",
+  // Limon central (`steel-central`) : tracé, section et poutre.
+  trace: "ui.param.group.trace",
+  section: "ui.param.group.section",
+  beam: "ui.param.group.beam",
 };
 
 const MM = "mm";
@@ -164,6 +169,21 @@ const COMMON: Readonly<Record<string, FieldText>> = {
   "supports.slotLength": { label: "ui.param.supports.slotLength.label", unit: MM },
   "supports.holeEdgeDistance": { label: "ui.param.holeEdgeDistance.label", unit: MM },
   "supports.treadScrews": { label: "ui.param.supports.treadScrews.label" },
+  // Marche en tôle pliée sur son support : vissée ou soudée (QUESTIONS A31, vissée par défaut,
+  // à valider), perçage des vis (M8 : 9 mm, à valider) ; `treadFixing.ts` du cœur.
+  "supports.treadFixing": {
+    label: "ui.param.supports.treadFixing.label",
+    hint: TO_VALIDATE,
+    options: {
+      screwed: "ui.param.supports.treadFixing.option.screwed",
+      welded: "ui.param.supports.treadFixing.option.welded",
+    },
+  },
+  "supports.treadHoleDiameter": {
+    label: "ui.param.supports.treadHoleDiameter.label",
+    unit: MM,
+    hint: TO_VALIDATE,
+  },
   "supports.endMargin": { label: "ui.param.supports.endMargin.label", unit: MM },
   "supports.edgeMargin": { label: "ui.param.supports.edgeMargin.label", unit: MM },
   "supports.minLength": { label: "ui.param.supports.minLength.label", unit: MM },
@@ -265,6 +285,177 @@ function helicalStringer(group: "innerStringer" | "outerStringer"): Record<strin
   };
 }
 
+/** Mêmes textes que le limon débillardé (`steel-curved.curved.*`), sens identique. */
+function wreathedBeam(): Record<string, FieldText> {
+  return {
+    "beam.jointOffset": {
+      label: "ui.param.steelCurved.curved.jointOffset.label",
+      unit: MM,
+      hint: TO_VALIDATE,
+    },
+    "beam.jointSupportMargin": {
+      label: "ui.param.steelCurved.curved.jointSupportMargin.label",
+      unit: MM,
+      hint: TO_VALIDATE,
+    },
+    "beam.minSegmentLength": {
+      label: "ui.param.steelCurved.curved.minSegmentLength.label",
+      unit: MM,
+      hint: TO_VALIDATE,
+    },
+    "beam.sampleStep": {
+      label: "ui.param.steelCurved.curved.sampleStep.label",
+      unit: MM,
+      hint: "ui.param.steelCurved.curved.sampleStep.hint",
+    },
+    "beam.rollLineSpacing": {
+      label: "ui.param.steelCurved.curved.rollLineSpacing.label",
+      unit: MM,
+      hint: TO_VALIDATE,
+    },
+  };
+}
+
+/**
+ * Limon central métal (`steel-central`, QUESTIONS A29) : ◆ d'après les commentaires de
+ * `steelCentralParams.ts` du cœur (toute valeur sans source, ou de confiance faible, est « à
+ * valider ») ; sans ◆ : choix (section, type et fixation des supports, aboutage), valeurs
+ * calculées (`auto`), pas d'échantillonnage sourcé (B §5.2) et marge aux ailes reprise de
+ * `steel-flat`.
+ */
+const STEEL_CENTRAL: Readonly<Record<string, FieldText>> = {
+  "trace.lateralOffset": {
+    label: "ui.param.steelCentral.trace.lateralOffset.label",
+    unit: MM,
+    hint: TO_VALIDATE,
+  },
+  "section.kind": {
+    label: "ui.param.steelCentral.section.kind.label",
+    options: {
+      tube: "ui.param.steelCentral.section.kind.option.tube",
+      box: "ui.param.steelCentral.section.kind.option.box",
+    },
+  },
+  "section.height": {
+    label: "ui.param.steelCentral.section.height.label",
+    unit: MM,
+    hint: TO_VALIDATE,
+  },
+  "section.width": {
+    label: "ui.param.steelCentral.section.width.label",
+    unit: MM,
+    hint: TO_VALIDATE,
+  },
+  "section.wallThickness": {
+    label: "ui.param.steelCentral.section.wallThickness.label",
+    unit: MM,
+    hint: TO_VALIDATE,
+  },
+  "section.webThickness": {
+    label: "ui.param.steelCentral.section.webThickness.label",
+    unit: MM,
+    hint: TO_VALIDATE,
+  },
+  "section.flangeThickness": {
+    label: "ui.param.steelCentral.section.flangeThickness.label",
+    unit: MM,
+    hint: TO_VALIDATE,
+  },
+  "section.diaphragmThickness": {
+    label: "ui.param.steelCentral.section.diaphragmThickness.label",
+    unit: MM,
+    hint: TO_VALIDATE,
+  },
+  "section.diaphragmSpacing": {
+    label: "ui.param.steelCentral.section.diaphragmSpacing.label",
+    unit: MM,
+    hint: TO_VALIDATE,
+  },
+  "section.ventDiameter": {
+    label: "ui.param.steelCentral.section.ventDiameter.label",
+    unit: MM,
+    hint: TO_VALIDATE,
+  },
+  "beam.topOffset": {
+    label: "ui.param.steelCentral.beam.topOffset.label",
+    unit: MM,
+    hint: "ui.param.steelCentral.beam.topOffset.hint",
+  },
+  "beam.startExtension": { label: "ui.param.startExtension.label", unit: MM, hint: TO_VALIDATE },
+  "beam.endExtension": { label: "ui.param.endExtension.label", unit: MM, hint: TO_VALIDATE },
+  "beam.splice": {
+    label: "ui.param.splice.label",
+    options: { welded: "ui.param.splice.option.welded", bolted: "ui.param.splice.option.bolted" },
+  },
+  ...wreathedBeam(),
+  "supports.kind": {
+    label: "ui.param.supports.kind.label",
+    options: {
+      console: "ui.param.steelCentral.supports.kind.option.console",
+      "folded-u": "ui.param.steelCentral.supports.kind.option.foldedU",
+      "folded-z": "ui.param.steelCentral.supports.kind.option.foldedZ",
+      "folded-triangle": "ui.param.steelCentral.supports.kind.option.foldedTriangle",
+    },
+  },
+  "supports.consoleThickness": {
+    label: "ui.param.steelCentral.supports.consoleThickness.label",
+    unit: MM,
+    hint: TO_VALIDATE,
+  },
+  "supports.foldedThickness": {
+    label: "ui.param.steelCentral.supports.foldedThickness.label",
+    unit: MM,
+    hint: TO_VALIDATE,
+  },
+  "supports.length": {
+    label: "ui.param.steelCentral.supports.length.label",
+    unit: MM,
+    hint: "ui.param.steelCentral.supports.length.hint",
+  },
+  "supports.endClearance": {
+    label: "ui.param.steelCentral.supports.endClearance.label",
+    unit: MM,
+    hint: TO_VALIDATE,
+  },
+  "supports.bearingWidth": {
+    label: "ui.param.steelCentral.supports.bearingWidth.label",
+    unit: MM,
+    hint: TO_VALIDATE,
+  },
+  "supports.bearingThickness": {
+    label: "ui.param.steelCentral.supports.bearingThickness.label",
+    unit: MM,
+    hint: TO_VALIDATE,
+  },
+  "supports.tipHeight": {
+    label: "ui.param.steelCentral.supports.tipHeight.label",
+    unit: MM,
+    hint: TO_VALIDATE,
+  },
+  "supports.minHeight": {
+    label: "ui.param.steelCentral.supports.minHeight.label",
+    unit: MM,
+    hint: TO_VALIDATE,
+  },
+  "supports.bolts": { label: "ui.param.supports.bolts.label", hint: TO_VALIDATE },
+  "supports.holeDiameter": { label: "ui.param.holeDiameter.label", unit: MM, hint: TO_VALIDATE },
+  "supports.holeEdgeDistance": {
+    label: "ui.param.holeEdgeDistance.label",
+    unit: MM,
+    hint: TO_VALIDATE,
+  },
+  "supports.treadScrews": { label: "ui.param.supports.treadScrews.label", hint: TO_VALIDATE },
+  "supports.landingSpacing": {
+    label: "ui.param.steelCentral.supports.landingSpacing.label",
+    unit: MM,
+    hint: TO_VALIDATE,
+  },
+  cantileverJustification: {
+    label: "ui.param.steelCentral.cantileverJustification.label",
+    hint: "ui.param.steelCentral.cantileverJustification.hint",
+  },
+};
+
 /** Variantes propres à un plugin. */
 const BY_KIND: Readonly<Record<string, Readonly<Record<string, FieldText>>>> = {
   "wood-cut": {
@@ -326,6 +517,7 @@ const BY_KIND: Readonly<Record<string, Readonly<Record<string, FieldText>>>> = {
       hint: "ui.param.steelCurved.curved.maxSlopeBreak.hint",
     },
   },
+  "steel-central": STEEL_CENTRAL,
   "helical-core": {
     "column.material": {
       label: "ui.param.helicalCore.column.material.label",
@@ -405,6 +597,11 @@ export type PresentedField = ParamField & {
   readonly group?: string;
   /** Libellés des choix d'une liste. */
   readonly optionLabels?: Readonly<Record<string, string>>;
+  /**
+   * Choix non pris en charge par le plugin sur le tracé du projet (option grisée), avec leur
+   * raison traduite (`capabilities.unsupportedOptions`, lue par `unsupportedOptionsOf`).
+   */
+  readonly disabledOptions?: Readonly<Record<string, string>>;
 };
 
 function isPlainObject(v: unknown): v is Record<string, unknown> {
@@ -419,54 +616,95 @@ export function catalogSectionOptions(family: unknown): string[] {
   return ["auto", ...sectionsOf(fam).map((s) => s.name)];
 }
 
+/** Même chemin de paramètre ? */
+const samePath = (a: readonly string[], b: readonly string[]): boolean =>
+  a.length === b.length && a.every((x, i) => x === b[i]);
+
+/**
+ * Choix grisés d'une liste : raison traduite par valeur, et libellé « … — indisponible : … ».
+ * `undefined` si aucun choix du champ n'est concerné.
+ */
+function disabledChoices(
+  f: ParamField,
+  labels: Readonly<Record<string, string>> | undefined,
+  unsupported: readonly UnsupportedParamOption[],
+  t: Translator,
+): { disabled: Record<string, string>; labels: Record<string, string> } | undefined {
+  if (f.kind !== "enum") return undefined;
+  const mine = unsupported.filter((u) => samePath(u.path, f.path) && f.options.includes(u.value));
+  if (mine.length === 0) return undefined;
+  const disabled: Record<string, string> = {};
+  const out: Record<string, string> = { ...labels };
+  for (const u of mine) {
+    const reason = t.t(u.reason);
+    disabled[u.value] = reason;
+    out[u.value] = t.t("ui.param.optionUnsupported", {
+      label: labels?.[u.value] ?? u.value,
+      reason,
+    });
+  }
+  return { disabled, labels: out };
+}
+
 /**
  * Champs présentés dans la langue du traducteur : libellés, unités, groupes ; `section` d'un
- * profilé en liste du catalogue de la famille choisie.
+ * profilé en liste du catalogue de la famille choisie ; choix non pris en charge sur le tracé
+ * (`unsupported`, déclarés par le plugin, `unsupportedOptionsOf`) grisés avec leur raison.
  */
 export function presentFields(
   kind: string,
   fields: readonly ParamField[],
   params: unknown,
   t: Translator,
+  unsupported: readonly UnsupportedParamOption[] = [],
 ): PresentedField[] {
   return fields.map((f): PresentedField => {
-    const text = fieldText(kind, f.path);
-    const group = f.path.length > 1 ? f.path[0] : undefined;
-    const base = {
-      ...f,
-      unit: text?.unit ?? "",
-      ...(text ? { label: t.t(text.label) } : group ? { label: stripGroup(f.label) } : {}),
-      ...(text?.hint ? { hint: t.t(text.hint) } : {}),
-      ...(text?.hint === TO_VALIDATE ? { toValidateHint: true as const } : {}),
-      ...(group ? { group } : {}),
-      ...(text?.options
-        ? {
-            optionLabels: Object.fromEntries(
-              Object.entries(text.options).map(([k, v]) => [k, t.t(v)]),
-            ),
-          }
-        : {}),
-    };
-    if (kind === "steel-profile" && f.path.length === 1 && f.path[0] === "section") {
-      const family = isPlainObject(params) ? params["family"] : undefined;
-      const current = isPlainObject(params) ? params["section"] : undefined;
-      const options = catalogSectionOptions(family);
-      const labels: Record<string, string> = { auto: t.t("ui.param.auto") };
-      // Section d'une autre famille (projet importé) : le plugin l'utilise telle quelle, la
-      // liste doit donc la montrer (sinon elle afficherait « Automatique »).
-      if (typeof current === "string" && !options.includes(current)) {
-        options.push(current);
-        labels[current] = t.t("ui.param.otherFamily", { section: current });
-      }
-      return {
-        ...base,
-        kind: "enum",
-        options,
-        optionLabels: labels,
-      } as PresentedField;
-    }
-    return base as PresentedField;
+    const presented = presentField(kind, f, params, t);
+    const d = disabledChoices(f, presented.optionLabels, unsupported, t);
+    return d === undefined
+      ? presented
+      : { ...presented, optionLabels: d.labels, disabledOptions: d.disabled };
   });
+}
+
+/** Présentation d'un champ, sans les choix grisés. */
+function presentField(kind: string, f: ParamField, params: unknown, t: Translator): PresentedField {
+  const text = fieldText(kind, f.path);
+  const group = f.path.length > 1 ? f.path[0] : undefined;
+  const base = {
+    ...f,
+    unit: text?.unit ?? "",
+    ...(text ? { label: t.t(text.label) } : group ? { label: stripGroup(f.label) } : {}),
+    ...(text?.hint ? { hint: t.t(text.hint) } : {}),
+    ...(text?.hint === TO_VALIDATE ? { toValidateHint: true as const } : {}),
+    ...(group ? { group } : {}),
+    ...(text?.options
+      ? {
+          optionLabels: Object.fromEntries(
+            Object.entries(text.options).map(([k, v]) => [k, t.t(v)]),
+          ),
+        }
+      : {}),
+  };
+  if (kind === "steel-profile" && f.path.length === 1 && f.path[0] === "section") {
+    const family = isPlainObject(params) ? params["family"] : undefined;
+    const current = isPlainObject(params) ? params["section"] : undefined;
+    const options = catalogSectionOptions(family);
+    const labels: Record<string, string> = { auto: t.t("ui.param.auto") };
+    // Section d'une autre famille (projet importé) : le plugin l'utilise telle quelle, la
+    // liste doit donc la montrer (sinon elle afficherait « Automatique »).
+    if (typeof current === "string" && !options.includes(current)) {
+      options.push(current);
+      labels[current] = t.t("ui.param.otherFamily", { section: current });
+    }
+    return {
+      ...base,
+      kind: "enum",
+      options,
+      optionLabels: labels,
+    } as PresentedField;
+  }
+  return base as PresentedField;
 }
 
 /** Libellé dérivé sans le préfixe de groupe (« Newel › joint » → « Joint »). */

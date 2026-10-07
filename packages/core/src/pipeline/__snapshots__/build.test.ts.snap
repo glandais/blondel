@@ -34,6 +34,40 @@ exports[`buildModel — exemples du dépôt > acceptance-01-quart-tournant.blond
 }
 `;
 
+exports[`buildModel — exemples du dépôt > demo-central-wreathed.blondel.json : cotes principales (non-régression) 1`] = `
+{
+  "blondel": 629.99,
+  "colletMin": 102.5,
+  "colletsChord": [
+    160.2,
+    109.8,
+    102.5,
+    110.1,
+    160.2,
+  ],
+  "firstRise": 180,
+  "g": 269.99,
+  "h": 180,
+  "headroom": 2026.7,
+  "headroomWidth": {
+    "min": 1960,
+    "nosing": 2,
+  },
+  "n": 15,
+  "parts": 116,
+  "run": 3779.9,
+  "treads": "swwwwwssssssss",
+  "violations": {
+    "avertissement": 1,
+    "bloquant": 0,
+    "conseil": 1,
+  },
+  "zones": [
+    "1-6 M3-cubic",
+  ],
+}
+`;
+
 exports[`buildModel — exemples du dépôt > demo-erp-grand.blondel.json : cotes principales (non-régression) 1`] = `
 {
   "blondel": 630.02,
@@ -625,6 +659,108 @@ exports[`buildModel — exemples du dépôt > j5b-debillarde-soude.blondel.json 
   },
   "zones": [
     "3-9 M3-quintic",
+  ],
+}
+`;
+
+exports[`buildModel — exemples du dépôt > j5c-limon-central-droit.blondel.json : cotes principales (non-régression) 1`] = `
+{
+  "blondel": 630,
+  "colletMin": null,
+  "colletsChord": [],
+  "firstRise": 180,
+  "g": 270,
+  "h": 180,
+  "headroom": 1900,
+  "headroomWidth": {
+    "min": 1960,
+    "nosing": 2,
+  },
+  "n": 15,
+  "parts": 60,
+  "run": 3780,
+  "treads": "ssssssssssssss",
+  "violations": {
+    "avertissement": 1,
+    "bloquant": 0,
+    "conseil": 1,
+  },
+  "zones": [],
+}
+`;
+
+exports[`buildModel — exemples du dépôt > j5c-limon-central-helicoidal.blondel.json : cotes principales (non-régression) 1`] = `
+{
+  "blondel": 648.09,
+  "colletMin": 136.6,
+  "colletsChord": [
+    136.6,
+    136.6,
+    136.6,
+    136.6,
+    136.6,
+    136.6,
+    136.6,
+    136.6,
+    136.6,
+    136.6,
+    136.6,
+    136.6,
+    136.6,
+    136.6,
+    136.6,
+  ],
+  "firstRise": 171.88,
+  "g": 304.34,
+  "h": 171.88,
+  "headroom": 1982.5,
+  "headroomWidth": {
+    "min": 1982.5,
+    "nosing": 3,
+  },
+  "n": 16,
+  "parts": 59,
+  "run": 4565.1,
+  "treads": "wwwwwwwwwwwwwww",
+  "violations": {
+    "avertissement": 1,
+    "bloquant": 0,
+    "conseil": 2,
+  },
+  "zones": [],
+}
+`;
+
+exports[`buildModel — exemples du dépôt > j5c-limon-central-quart-tournant.blondel.json : cotes principales (non-régression) 1`] = `
+{
+  "blondel": 629.99,
+  "colletMin": 102.5,
+  "colletsChord": [
+    160.2,
+    109.8,
+    102.5,
+    110.1,
+    160.2,
+  ],
+  "firstRise": 180,
+  "g": 269.99,
+  "h": 180,
+  "headroom": 2026.7,
+  "headroomWidth": {
+    "min": 1960,
+    "nosing": 2,
+  },
+  "n": 15,
+  "parts": 64,
+  "run": 3779.9,
+  "treads": "swwwwwssssssss",
+  "violations": {
+    "avertissement": 1,
+    "bloquant": 0,
+    "conseil": 1,
+  },
+  "zones": [
+    "1-6 M3-cubic",
   ],
 }
 `;

@@ -108,10 +108,18 @@ import {
   supportInterval,
   supportAssemblies,
   supportPart,
+  treadScrewPoints,
   type SupportFace,
   type SupportPlacement,
   type SupportSpec,
 } from "./supports.js";
+import {
+  DEFAULT_TREAD_HOLE_DIAMETER,
+  TreadFixingSchema,
+  TreadHoleDiameterSchema,
+  drillFoldedTreadPoints,
+  type TreadMaterialKind,
+} from "./treadFixing.js";
 import type { StringerFace } from "./woodHoused.js";
 
 const mmInt = z.number().int();
@@ -172,6 +180,14 @@ export const SteelFlatParamsSchema = z.object({
       holeEdgeDistance: mmPos.default(20),
       /** Vis de fixation de la marche par support. */
       treadScrews: mmNonNeg.default(2),
+      /**
+       * Fixation d'une marche en tôle pliée sur son support (A31) : vissée (défaut) ou soudée,
+       * **à valider** (aucune source ne tranche : C §2.3 [58] marches en tôle larmée soudées,
+       * C §2.6 [23] marches vissées sur supports soudés). Sans effet sous une marche bois.
+       */
+      treadFixing: TreadFixingSchema,
+      /** Perçage des vis d'une marche en tôle vissée (M8 : 9 mm, **à valider**, aucune source). */
+      treadHoleDiameter: TreadHoleDiameterSchema,
       /** Marge entre le support et les ailes / contremarches voisines. */
       endMargin: mmNonNeg.default(10),
       /** Marge entre le bas du support et la rive basse du limon. */
@@ -260,6 +276,11 @@ export interface SteelFlatResult {
   readonly executionClass: "EXC1" | "EXC2";
   /** Groupes de marches en tôle pliée identiques (ids), tolérance 0,5 mm. */
   readonly treadGroups: readonly (readonly string[])[];
+  /**
+   * Points de fixation de marche en tôle vissée non reportés dans le développé de la marche
+   * (A31 : hors de la partie plane du dessus, trop près d'un bord ou d'un autre perçage).
+   */
+  readonly treadHolesSkipped: number;
 }
 
 const ceil5 = (x: Mm): Mm => Math.ceil(x / 5 - 1e-9) * 5;
@@ -494,7 +515,11 @@ export function markGroups(parts: Part[], prefix: string, key: (p: Part) => stri
   });
 }
 
-interface TreadZone {
+/**
+ * Zone d'appui d'une marche (exportée pour les plugins qui réutilisent les marches de
+ * `steel-flat`, ex. `steel-central`).
+ */
+export interface TreadZone {
   readonly tread: Tread;
   readonly mark: string;
   /** Zone d'appui possible (marges retirées), en plan. */
@@ -542,6 +567,7 @@ export function buildSteelFlat(ctx: StructureContext, params: SteelFlatParams): 
     lowerOffset: { inner: Number.NaN, outer: Number.NaN },
     executionClass: "EXC1",
     treadGroups: [],
+    treadHolesSkipped: 0,
   });
   const helical = flightsOnlyError("steel-flat", msg("structure.steelFlat.shortLabel"), layout);
   if (helical) return empty([helical]);
@@ -563,15 +589,11 @@ export function buildSteelFlat(ctx: StructureContext, params: SteelFlatParams): 
   errors.push(...(bendLaw?.errors ?? []));
 
   // 2. Marches : dessus (tôle pliée) ou pièces de base (bois), zones d'appui.
-  const { treadDetails, zones, foldedErrors } = flatTreadZones(
-    project,
-    stepping,
-    params,
-    baseById,
-    folded ? bend : null,
-    material,
-    profile,
-  );
+  const {
+    treadDetails: undrilledTreads,
+    zones,
+    foldedErrors,
+  } = flatTreadZones(project, stepping, params, baseById, folded ? bend : null, material, profile);
   if (foldedErrors.length > 0) {
     errors.push(
       ...foldedErrors.map((detail) =>
@@ -613,6 +635,11 @@ export function buildSteelFlat(ctx: StructureContext, params: SteelFlatParams): 
   // 4. Supports.
   const { placements, shortSupports, carried } = placeSupports(zones, supportFaces, sup);
   const depthSup = supportDepth(sup);
+  // 4 bis. Fixation des marches en tôle sur leurs supports (A31) : vissée, perçages reportés
+  // dans le développé de chaque marche ; soudée, rien (cordons comptés sur les supports).
+  const drilled = drillTreadsAtSupports(undrilledTreads, placements, sup);
+  const treadDetails = drilled.treads;
+  const steelTreads = new Set(treadDetails.map((d) => d.number));
 
   // 5. d_b automatique : chaque support sur la joue, à `edgeMargin` de la rive basse.
   const lowerOffset = autoLowerOffset(placements, faces, pitch, depthSup, params);
@@ -663,7 +690,17 @@ export function buildSteelFlat(ctx: StructureContext, params: SteelFlatParams): 
 
   // 9. Pièces supports (marques par groupe de pièces identiques).
   const supportParts = markGroups(
-    placements.map((p) => supportPart(p, sup, "S", material, profile)),
+    placements.map((p, i) =>
+      supportPart(
+        p,
+        sup,
+        "S",
+        material,
+        profile,
+        treadMaterialOf(steelTreads, p.tread),
+        drilled.drilledPoints[i],
+      ),
+    ),
     sup.kind === "angle" ? "CR" : "PS",
     (p) =>
       `${JSON.stringify(p.section)}|${Math.round((p.stock?.length ?? 0) / IDENTICAL_TOLERANCE)}|${p.quantities["holes"]}`,
@@ -773,6 +810,7 @@ export function buildSteelFlat(ctx: StructureContext, params: SteelFlatParams): 
       }),
     );
     notes.push(msg("structure.steelFlat.note.foldedSolids"));
+    notes.push(...treadFixingNotes(sup, drilled.skipped));
   }
   // Profil Z : la pièce de la marche t porte la contremarche sous son propre nez (nez t − 1,
   // contremarche de base `riser-t`) ; ces contremarches sont retirées. La contremarche
@@ -830,13 +868,91 @@ export function buildSteelFlat(ctx: StructureContext, params: SteelFlatParams): 
     lowerOffset,
     executionClass: exc.executionClass,
     treadGroups,
+    treadHolesSkipped: drilled.skipped,
   };
+}
+
+// ------------------------------------------------------------------ fixation des marches (A31)
+
+/** Matériau de la marche `tread` : tôle si elle est une marche en tôle pliée développée. */
+export function treadMaterialOf(
+  steelTreads: ReadonlySet<number>,
+  tread: number,
+): TreadMaterialKind {
+  return steelTreads.has(tread) ? "steel" : "wood";
+}
+
+/**
+ * Perce les marches en tôle pliée vissées (A31) aux points de fixation (`treadScrewPoints`) de
+ * tous leurs supports (`drillFoldedTreadPoints`, diamètre `treadHoleDiameter`) ; marches
+ * soudées : rendues telles quelles. `skipped` : points non reportés (hors de la partie plane du
+ * dessus, trop près d'un bord ou d'un autre perçage). `drilledPoints[i]` : points réellement
+ * percés dans la marche pour `placements[i]` (tous ses points sous une marche absente de
+ * `treads`, 0 sous une marche soudée), à passer à `supportPart` pour que les perçages de l'aile
+ * et la visserie concordent avec la marche. Partagé avec `steel-curved` (supports du limon
+ * débillardé).
+ */
+export function drillTreadsAtSupports(
+  treads: readonly FoldedTreadDetail[],
+  placements: readonly SupportPlacement[],
+  spec: SupportSpec,
+): { treads: FoldedTreadDetail[]; skipped: number; drilledPoints: number[] } {
+  const pointsOf = placements.map((p) => treadScrewPoints(p, spec));
+  const drilledPoints = pointsOf.map((pts) => pts.length);
+  if ((spec.treadFixing ?? "screwed") === "welded") {
+    const steel = new Set(treads.map((d) => d.number));
+    return {
+      treads: [...treads],
+      skipped: 0,
+      drilledPoints: placements.map((p, i) => (steel.has(p.tread) ? 0 : drilledPoints[i]!)),
+    };
+  }
+  const diameter = spec.treadHoleDiameter ?? DEFAULT_TREAD_HOLE_DIAMETER;
+  let skipped = 0;
+  const out = treads.map((d) => {
+    const owners: number[] = [];
+    const points: Vec2[] = [];
+    placements.forEach((p, i) => {
+      if (p.tread !== d.number) return;
+      for (const pt of pointsOf[i]!) {
+        owners.push(i);
+        points.push(pt);
+      }
+    });
+    if (points.length === 0) return d;
+    const { part, drilled } = drillFoldedTreadPoints(d.part, d.result, points, diameter);
+    for (const i of new Set(owners)) drilledPoints[i] = 0;
+    drilled.forEach((ok, k) => {
+      if (ok) drilledPoints[owners[k]!]! += 1;
+      else skipped += 1;
+    });
+    return part === d.part ? d : { ...d, part };
+  });
+  return { treads: out, skipped, drilledPoints };
+}
+
+/** Remarques de la fixation des marches en tôle sur leurs supports (A31). */
+export function treadFixingNotes(
+  spec: Pick<SupportSpec, "treadFixing" | "treadScrews" | "treadHoleDiameter">,
+  skipped: number,
+): Message[] {
+  const notes: Message[] =
+    (spec.treadFixing ?? "screwed") === "welded"
+      ? [msg("structure.steel.note.treadFixing.welded")]
+      : [
+          msg("structure.steel.note.treadFixing.screwed", {
+            screws: Math.max(0, Math.floor(spec.treadScrews)),
+            diameter: dec(spec.treadHoleDiameter ?? DEFAULT_TREAD_HOLE_DIAMETER, 0),
+          }),
+        ];
+  if (skipped > 0) notes.push(msg("structure.steel.note.treadHolesSkipped", { count: skipped }));
+  return notes;
 }
 
 // ------------------------------------------------------------------ étapes de buildSteelFlat
 
 /** Étape 1 : loi de pli des marches en tôle pliée (profil d'atelier), contrôle `FAB_LOI_PLI`. */
-function resolveFoldedBend(
+export function resolveFoldedBend(
   thickness: Mm,
   metal: WorkshopProfile["metal"],
   grade: SteelGrade,
@@ -883,13 +999,22 @@ function resolveFoldedBend(
 }
 
 /**
+ * Paramètres des marches lus par `flatTreadZones` et `arrivalRiserPart` : sous-ensemble de
+ * `SteelFlatParams`, partagé avec les plugins qui réutilisent les marches de `steel-flat`
+ * (ex. `steel-central`, même schéma `treadKind` / `folded` / `supports.endMargin`).
+ */
+export type FlatTreadParams = Pick<SteelFlatParams, "treadKind" | "folded"> & {
+  readonly supports: Pick<SteelFlatParams["supports"], "endMargin">;
+};
+
+/**
  * Étape 2 : marches en tôle pliée développées (dessus, développé, repère) ou pièces de base
  * (bois), et leurs zones d'appui ; erreurs de développement (pièce de base conservée).
  */
-function flatTreadZones(
+export function flatTreadZones(
   project: StructureContext["project"],
   stepping: StructureContext["stepping"],
-  params: SteelFlatParams,
+  params: FlatTreadParams,
   baseById: ReadonlyMap<string, Part>,
   bend: ResolvedBend | null,
   material: Part["material"],
@@ -1019,9 +1144,9 @@ function flatTreadZones(
  * Étape 2 bis : contremarche d'arrivée en plat plié en L fixé au chevêtre (profil Z, décision
  * A11), à la place de la contremarche bois de base de même identifiant.
  */
-function arrivalRiserPart(
+export function arrivalRiserPart(
   stepping: StructureContext["stepping"],
-  params: SteelFlatParams,
+  params: Pick<SteelFlatParams, "treadKind" | "folded">,
   baseById: ReadonlyMap<string, Part>,
   bend: ResolvedBend | null,
   material: Part["material"],

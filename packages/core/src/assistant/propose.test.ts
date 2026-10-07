@@ -274,6 +274,26 @@ describe("préférences, annulation, données invalides", () => {
     for (const c of r.candidates) expect(c.project.stair.placement.origin).toEqual({ x: 0, y: 0 });
   });
 
+  it("limon central (QUESTIONS A29) : quart tournant et hélicoïdal proposés, jour vif, sans bloquant", () => {
+    const opening = { kind: "rect", x: 0, y: 0, sizeX: 2400, sizeY: 2400 } as const;
+    const r = proposeUntimed({
+      site: { floorToFloor: 2700, upperSlabThickness: 200, opening },
+      preferences: { structure: { kind: "steel-central" }, typologies: ["helical", "quarter"] },
+    });
+    const typologies = new Set(r.candidates.map((c) => c.typology));
+    expect(typologies.has("helical")).toBe(true);
+    for (const c of r.candidates) {
+      expect(c.project.stair.structure.kind).toBe("steel-central");
+      const layout = c.project.stair.layout;
+      if (layout.kind !== "helical") {
+        for (const t of layout.turns) expect(t.inner.kind).toBe("sharp");
+      }
+      const model = buildModel(c.project, { memo: false });
+      expect(frList(model.errors)).toEqual([]);
+      expect(model.compliance.summary.bloquant).toBe(0);
+    }
+  });
+
   it("grande trémie carrée : hélicoïdal proposé, contenu dans la trémie", () => {
     const opening = { kind: "rect", x: 0, y: 0, sizeX: 2400, sizeY: 2400 } as const;
     const r = proposeUntimed({
