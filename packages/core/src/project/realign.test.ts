@@ -313,6 +313,17 @@ describe("realignFlightsAndOpening (A18 a, précisé le 2026-09-30)", () => {
     expect(fr(realignBlocker(wide)!)).toMatch(/volée 1 est trop courte/);
   });
 
+  it("demi-tournant élargi à E = 920 : volées qui se touchent → recalage refusé, raison du tracé", () => {
+    // Contre-exemple trouvé par la propriété ci-dessous en CI (2026-10-07) : la volée 2 du
+    // préréglage vaut 2 × 920, le jour disparaît ; le recalage, qui garde les volées sauf la
+    // dernière, ne peut pas le rendre constructible.
+    const p = edited(createProject("half-turn"), { floorToFloor: 2500, width: 920, slab: 150 });
+    const reason = realignBlocker(p);
+    expect(reason).not.toBeNull();
+    expect(fr(reason!)).toContain("se touchent");
+    expect(() => realignFlightsAndOpening(p)).toThrow(RangeError);
+  });
+
   it("propriété : recalage possible → modèle sans erreur au giron cible ; sinon raison lisible", () => {
     fc.assert(
       fc.property(

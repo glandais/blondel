@@ -198,8 +198,13 @@ export function realignFlightsAndOpening(
             layout: { ...spec, legs: lengths.map((length) => ({ length })) },
           },
         };
-  // Le tracé recalé doit être constructible (poteau, transition de Γ…).
-  guarded(() => computeLayout(flights));
+  // Le tracé recalé doit être constructible (poteau, transition de Γ…) et non dégénéré : une
+  // emprise dégénérée (`Layout.errors`, volées qui se touchent…) n'est pas levée par le tracé,
+  // elle bloque donc le recalage ici, avec le message du tracé.
+  const realigned = guarded(() => computeLayout(flights));
+  if (realigned.errors !== undefined && realigned.errors.length > 0) {
+    throw new MessageRangeError(realigned.errors[0]!);
+  }
   if (legsChanged) {
     const last = spec.legs.length;
     notes.push(
