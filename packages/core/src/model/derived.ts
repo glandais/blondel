@@ -432,8 +432,17 @@ export interface Part {
    * normalisée seule (`UPN 200`) passe par `textMessage`.
    */
   readonly section?: Message;
-  /** Débit : dimensions brutes de la pièce (L × l × e) en mm. */
-  readonly stock?: { readonly length: Mm; readonly width: Mm; readonly thickness: Mm };
+  /**
+   * Débit : dimensions brutes de la pièce (L × l × e) en mm. `count` : nombre de plateaux ou de
+   * lames identiques L × l × e qui composent la pièce (lamellé-collé : une par lamelle ; absent :
+   * 1) ; la liste et la fiche de débit comptent alors `count` lignes de débit par pièce.
+   */
+  readonly stock?: {
+    readonly length: Mm;
+    readonly width: Mm;
+    readonly thickness: Mm;
+    readonly count?: number;
+  };
   /** Grandeurs de coût/nomenclature (masse kg, volume m³, cordons mm, plis, coupes…). */
   readonly quantities: Readonly<Record<string, number>>;
   /** Direction du fil (bois) dans le repère du solide, pour les textures. */
@@ -479,6 +488,12 @@ export interface PartFixing {
   readonly points: number;
   /** Diamètre de perçage (mm) ; absent : perçage non dimensionné (diamètre du profil). */
   readonly holeDiameter?: Mm;
+  /**
+   * Longueur de l'élément déduite de l'assemblage (mm, ex. boulon traversant : épaisseurs
+   * traversées + dépassement, arrondie par le plugin) ; absent : longueur du profil d'atelier.
+   * Ajout rétrocompatible (limon central bois).
+   */
+  readonly length?: Mm;
   /**
    * Autres pièces de l'assemblage (identifiants de `Model.parts`, ex. limon ou poteau qui
    * reçoit un support). Absent : fixation au gros œuvre seul (sol, chevêtre, mur), ou pièces

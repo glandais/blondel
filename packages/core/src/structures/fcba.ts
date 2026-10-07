@@ -7,7 +7,9 @@
  * cohérence de rules.yaml).
  *
  * Domaine publié (FCBA) : crémaillères **par paire**, non fixées au mur, escalier **droit**,
- * hauteur d'étage **2,70 m**, pente **38°**.
+ * hauteur d'étage **2,70 m**, pente **38°**. Crémaillère centrale unique (C §1.4, §1.5 ;
+ * `parametres.facteur_centrale`) : épaisseurs du tableau multipliées par ce facteur, soit une
+ * lecture du tableau à b / facteur (`requiredCentralResidual`, limon central bois).
  */
 import { MessageError, msg } from "@blondel/i18n";
 import { numberCell, ruleParam, ruleTable, getRule, type RuleDef } from "../rules/table.js";
@@ -24,6 +26,8 @@ export interface FcbaTable {
   /** Hauteur d'étage (mm) et pente (degrés) de l'exemple publié. */
   readonly floorToFloor: number;
   readonly pitchDeg: number;
+  /** Facteur des épaisseurs pour une crémaillère centrale unique (`facteur_centrale`, × 2). */
+  readonly centralFactor: number;
 }
 
 /** Tableau lu dans les champs structurés de la règle ; lève une erreur s'ils manquent. */
@@ -42,6 +46,7 @@ export function parseFcbaTable(rule: RuleDef): FcbaTable {
     rows,
     floorToFloor: ruleParam(rule, "hauteur_etage"),
     pitchDeg: ruleParam(rule, "pente"),
+    centralFactor: ruleParam(rule, "facteur_centrale"),
   };
 }
 
@@ -66,4 +71,17 @@ export function requiredResidual(
   let best: number | null = null;
   for (const r of table.rows[cls]) if (r.thickness <= thickness + 1e-9) best = r.residual;
   return best;
+}
+
+/**
+ * Crémaillère centrale unique de largeur b (C §1.4 : « épaisseurs à multiplier par 2 ») : distance
+ * exigée pour l'épaisseur équivalente b / `centralFactor`, du côté de la sécurité comme
+ * `requiredResidual`. `null` sous 2 × la plus petite épaisseur tabulée.
+ */
+export function requiredCentralResidual(
+  table: FcbaTable,
+  cls: StrengthClass,
+  width: number,
+): number | null {
+  return requiredResidual(table, cls, width / table.centralFactor);
 }

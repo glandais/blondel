@@ -58,10 +58,18 @@ export default defineConfig({
         // Dictionnaires de l'interface (`@blondel/i18n`, français et anglais, ≈ 475 ko non
         // compressés) dans leur propre morceau, chargé au démarrage avec l'application : le
         // morceau principal reste sous la limite. Les workers (bundles séparés) les embarquent.
-        // React et React DOM (≈ 190 ko) ont aussi leur morceau, chargé au démarrage.
+        // React et React DOM (≈ 190 ko) ont aussi leur morceau, chargé au démarrage. Le cœur
+        // métier (`@blondel/core`, `@blondel/geometry`, le reste de `@blondel/i18n` et leurs
+        // dépendances zod, earcut), qui grossit à chaque plugin de structure, a le sien, chargé
+        // au démarrage : groupé avec ses dépendances, sans import circulaire entre morceaux.
+        // Un module qui répond à plusieurs groupes va au premier (dictionnaires d'abord).
         codeSplitting: {
           groups: [
             { name: "i18n-locales", test: /[\\/]packages[\\/]i18n[\\/]src[\\/]locales[\\/]/ },
+            {
+              name: "core",
+              test: /[\\/]packages[\\/](?:core|geometry|i18n)[\\/]src[\\/]|[\\/]node_modules[\\/](?:\.pnpm[\\/][^\\/]+[\\/]node_modules[\\/])?(?:zod|earcut)[\\/]/,
+            },
             {
               name: "react",
               test: /[\\/]node_modules[\\/](?:\.pnpm[\\/][^\\/]+[\\/]node_modules[\\/])?(?:react|react-dom|scheduler)[\\/]/,

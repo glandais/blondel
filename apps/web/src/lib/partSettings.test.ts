@@ -4,7 +4,12 @@
  * remplissage, filtrage des chemins par préfixe, encart « Forme du … » et
  * section de Conception de la pièce (mode Fabrication).
  */
-import type { Part } from "@blondel/core";
+import {
+  WOOD_CENTRAL_BEAM_ID,
+  WOOD_CENTRAL_SHOE_FOOT_ID,
+  WOOD_CENTRAL_SHOE_HEAD_ID,
+  type Part,
+} from "@blondel/core";
 import { translatorFor } from "@blondel/i18n";
 import { describe, expect, it } from "vitest";
 import { defaultGuards, switchInfill, type InfillKind } from "./guardsForm.js";
@@ -67,6 +72,47 @@ describe("partSettingsFor", () => {
     // Supports (consoles, supports pliés) : tous les réglages `supports.*`.
     const sup = partSettingsFor(p("support", "structure"))!;
     expect(matchesSettings(["supports", "consoleThickness"], sup.structureParams)).toBe(true);
+  });
+
+  it("limon central bois (A29, vague 2) : poutre et sabots, sans changer wood-cut ni les platines", () => {
+    const beam = partSettingsFor({
+      ...p("carriage", "structure", "wood-oak"),
+      id: WOOD_CENTRAL_BEAM_ID,
+    })!;
+    expect(beam.section).toBe("structure");
+    expect(beam.scopeLabel).toBe("ui.partInspector.scope.woodCentralBeam");
+    for (const path of [
+      ["section", "kind"],
+      ["section", "lamellaThickness"],
+      ["notch", "rearDepth"],
+      ["bolts", "perTread"],
+      ["trace", "lateralOffset"],
+      ["material"],
+      ["strengthClass"],
+    ]) {
+      expect(matchesSettings(path, beam.structureParams), path.join(".")).toBe(true);
+    }
+    expect(matchesSettings(["anchors", "thickness"], beam.structureParams)).toBe(false);
+    for (const id of [WOOD_CENTRAL_SHOE_FOOT_ID, WOOD_CENTRAL_SHOE_HEAD_ID]) {
+      const shoe = partSettingsFor({ ...p("fixing", "structure"), id })!;
+      expect(shoe.structureParams).toEqual(["anchors"]);
+      expect(shoe.scopeLabel).toBe("ui.partInspector.scope.woodCentralShoes");
+    }
+    // Crémaillères de wood-cut et platines des structures acier : inchangées.
+    const cut = partSettingsFor({
+      ...p("carriage", "structure", "wood-oak"),
+      id: "carriage-left",
+    })!;
+    expect(cut.scopeLabel).toBe("ui.partInspector.scope.carriages");
+    expect(cut.structureParams).not.toContain("bolts");
+    expect(
+      partSettingsFor({ ...p("fixing", "structure"), id: "plate-foot" })!.structureParams,
+    ).toEqual(["plates"]);
+    const fr = translatorFor("fr");
+    expect(fr.t("ui.partInspector.scope.woodCentralShoes")).toBe("communs aux sabots");
+    expect(translatorFor("en").t("ui.partInspector.scope.woodCentralShoes")).toBe(
+      "shared by the shoes",
+    );
   });
 
   it("A31 : fixation de la marche en tôle sur son support reprise pour la marche", () => {

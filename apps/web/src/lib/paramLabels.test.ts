@@ -8,7 +8,12 @@ import {
   groupLabel,
   presentFields,
 } from "./paramLabels.js";
-import { deriveParamFields, structureContext, withDefaults } from "./structureForm.js";
+import {
+  deriveParamFields,
+  structureContext,
+  unsupportedOptionsOf,
+  withDefaults,
+} from "./structureForm.js";
 import { textMessage, translatorFor } from "@blondel/i18n";
 
 /** Contexte d'un escalier droit, pour les plugins dont les défauts dépendent du tracé. */
@@ -32,12 +37,13 @@ function fieldsOf(kind: string, params: Record<string, unknown> = {}) {
 }
 
 describe("formulaire des structures en français", () => {
-  it("steel-flat, steel-profile, steel-curved, steel-central, helical-core : tous les paramètres ont un libellé français", () => {
+  it("steel-flat, steel-profile, steel-curved, steel-central, wood-central, helical-core : tous les paramètres ont un libellé français", () => {
     for (const kind of [
       "steel-flat",
       "steel-profile",
       "steel-curved",
       "steel-central",
+      "wood-central",
       "helical-core",
     ]) {
       const fields = fieldsOf(kind);
@@ -136,6 +142,7 @@ describe("libellés unifiés (spécification de contenu § 4)", () => {
       "steel-profile",
       "steel-curved",
       "steel-central",
+      "wood-central",
       "helical-core",
     ]) {
       for (const f of fieldsOf(kind)) {
@@ -222,5 +229,85 @@ describe("limon central (A29) et fixation des marches en tôle (A31)", () => {
     // Sans déclaration : rien de grisé.
     const [plain] = presentFields("steel-central", fields, {}, translatorFor("fr"));
     expect(plain!.disabledOptions).toBeUndefined();
+  });
+});
+
+describe("limon central bois (A29, vague 2)", () => {
+  /** Champs présentés sur le tracé d'un préréglage, options grisées lues sur le cœur. */
+  function woodFields(id: "straight" | "quarter-left" | "helical", locale: "fr" | "en" = "fr") {
+    const plugin = availableStructures().find((p) => p.kind === "wood-central")!;
+    const defaults = plugin.paramsSchema.parse({});
+    return presentFields(
+      "wood-central",
+      deriveParamFields(defaults, plugin.paramsSchema),
+      defaults,
+      translatorFor(locale),
+      unsupportedOptionsOf("wood-central", createProject(id)),
+    );
+  }
+  const at = (fields: ReturnType<typeof woodFields>, p: string) =>
+    fields.find((x) => x.path.join(".") === p);
+
+  it("libellés, choix, groupes et ◆ des valeurs sans source", () => {
+    const f = woodFields("straight");
+    expect(at(f, "section.kind")?.optionLabels).toEqual({
+      glulam: "Lamellé-collé",
+      solid: "Bois massif",
+    });
+    expect(at(f, "section.kind")?.disabledOptions).toBeUndefined();
+    expect(at(f, "strengthClass")?.optionLabels).toEqual({
+      auto: "Automatique (selon l'essence)",
+      unknown: "Inconnue",
+      C30: "C30",
+      D40: "D40",
+    });
+    expect(at(f, "anchors.finish")?.optionLabels).toEqual({
+      raw: "Acier brut",
+      painted: "Peint",
+      galvanized: "Galvanisé",
+    });
+    for (const p of [
+      "section.width",
+      "trace.lateralOffset",
+      "section.thinPlyMax",
+      "bolts.holeDiameter",
+      "anchors.thickness",
+    ]) {
+      expect(at(f, p), p).toMatchObject({ unit: "mm", toValidateHint: true });
+    }
+    // Valeurs calculées (« auto ») : pas de ◆, une aide qui dit comment.
+    for (const p of ["section.residual", "section.lamellaThickness", "notch.rearDepth"]) {
+      expect(at(f, p)?.kind, p).toBe("auto-number");
+      expect(at(f, p)?.toValidateHint, p).toBeUndefined();
+      expect(at(f, p)?.hint, p).toBeTruthy();
+    }
+    expect(at(f, "laminationJustification")?.hint).toMatch(
+      /^Lamellé-collé cintré en plis minces, hors NF EN 14080 \(SPEC Q10\)/,
+    );
+    const fr = translatorFor("fr");
+    const en = translatorFor("en");
+    expect(groupLabel("notch", fr)).toBe("Entaille arrière des marches");
+    expect(groupLabel("anchors", en)).toBe("Foot and head shoes");
+    expect(groupLabel("bolts", en)).toBe("Tread bolts");
+    const fEn = woodFields("straight", "en");
+    expect(at(fEn, "section.kind")?.optionLabels).toEqual({
+      glulam: "Glulam",
+      solid: "Solid timber",
+    });
+    expect(at(fEn, "section.lamellaThickness")?.label).toBe("Lamination thickness");
+    expect(at(fEn, "notch.rearDepth")?.label).toBe("Rear housing depth");
+  });
+
+  it("bois massif grisé sur un tournant et en hélicoïdal, raison du cœur", () => {
+    for (const id of ["quarter-left", "helical"] as const) {
+      const kind = at(woodFields(id), "section.kind")!;
+      expect(kind.disabledOptions?.["solid"], id).toMatch(
+        /^Bois massif réservé à l'escalier droit/,
+      );
+      expect(kind.optionLabels?.["solid"]).toMatch(/^Bois massif — indisponible : /);
+      expect(kind.optionLabels?.["glulam"]).toBe("Lamellé-collé");
+    }
+    const en = at(woodFields("quarter-left", "en"), "section.kind")!;
+    expect(en.optionLabels?.["solid"]).toMatch(/^Solid timber — unavailable: /);
   });
 });

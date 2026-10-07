@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { getRule } from "../rules/table.js";
-import { CREMAILLERE_RULE_ID, fcbaTable, parseFcbaTable, requiredResidual } from "./fcba.js";
+import {
+  CREMAILLERE_RULE_ID,
+  fcbaTable,
+  parseFcbaTable,
+  requiredCentralResidual,
+  requiredResidual,
+} from "./fcba.js";
 
 describe("tableau FCBA des crémaillères (rules.yaml)", () => {
   it("six couples et domaine publié lus dans rules.yaml", () => {
@@ -28,6 +34,14 @@ describe("tableau FCBA des crémaillères (rules.yaml)", () => {
     expect(requiredResidual(t, "D40", 70)).toBe(139);
     expect(requiredResidual(t, "C30", 60)).toBe(163);
     expect(requiredResidual(t, "C30", 30)).toBeNull();
+  });
+
+  it("crémaillère centrale : épaisseurs du tableau × facteur_centrale (C §1.4)", () => {
+    const t = fcbaTable();
+    expect(t.centralFactor).toBe(2);
+    expect(requiredCentralResidual(t, "D40", 88)).toBe(162);
+    expect(requiredCentralResidual(t, "D40", 140)).toBe(139);
+    expect(requiredCentralResidual(t, "C30", 65)).toBeNull();
   });
 
   it("lu dans les champs structurés (tables C30 / D40), erreur si la table manque", () => {

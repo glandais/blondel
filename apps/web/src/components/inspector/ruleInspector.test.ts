@@ -26,6 +26,7 @@ import { uiStore } from "../../store/uiStore.js";
 import {
   CANTILEVER_RULES,
   CONFIDENCE_EXPLAINED_KEYS,
+  JUSTIFICATION_PARAMS,
   NATURE_EXPLAINED_KEYS,
   RuleInspector,
 } from "./RuleInspector.js";
@@ -350,6 +351,51 @@ describe("« Pour corriger »", () => {
     const other = result({ ruleId: "FAB_SUPPORT_LONGUEUR_MIN" });
     withModel([other]);
     expect(text(render(selectionOf(other)))).not.toContain("double porte-à-faux");
+  });
+
+  it("limon central bois : justification des plis minces saisie sur place (SPEC Q10, A29)", () => {
+    expect(JUSTIFICATION_PARAMS.get("LAMELLE_PLIS_MINCES")).toBe("laminationJustification");
+    expect(JUSTIFICATION_PARAMS.get("LIMON_CENTRAL_PORTE_A_FAUX")).toBe("cantileverJustification");
+    expect(JUSTIFICATION_PARAMS.get("HELICOIDAL_PORTE_A_FAUX")).toBe("cantileverJustification");
+    const base = createProject("quarter-left");
+    const wood = ProjectSchema.parse({
+      ...base,
+      stair: {
+        ...base.stair,
+        structure: {
+          kind: "wood-central",
+          params: {
+            section: { kind: "glulam", lamellaThickness: 5 },
+            laminationJustification: "Avis technique AT-7",
+            cantileverJustification: "Note NC-3",
+          },
+        },
+      },
+    });
+    load(wood);
+    const plies = result({ ruleId: "LAMELLE_PLIS_MINCES" });
+    withModel([plies]);
+    const html = render(selectionOf(plies));
+    expect(text(html)).toContain("Justification des plis minces du lamellé-collé cintré");
+    expect(html).toContain("Avis technique AT-7");
+    expect(html).not.toContain("Note NC-3");
+    expect(text(render(selectionOf(plies), "en"))).toContain(
+      "Justification of the thin plies of the curved glulam",
+    );
+    // Porte-à-faux du limon central bois : même paramètre que le limon central métal.
+    const cantilever = result({ ruleId: "LIMON_CENTRAL_PORTE_A_FAUX" });
+    withModel([cantilever]);
+    expect(render(selectionOf(cantilever))).toContain("Note NC-3");
+    // Escalier droit : pas de cintrage, la justification des plis minces ne s'applique pas.
+    const straight = createProject("straight");
+    load(
+      ProjectSchema.parse({
+        ...straight,
+        stair: { ...straight.stair, structure: { kind: "wood-central", params: {} } },
+      }),
+    );
+    withModel([plies]);
+    expect(text(render(selectionOf(plies)))).not.toContain("Justification des plis minces");
   });
 });
 

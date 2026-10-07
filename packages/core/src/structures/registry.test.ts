@@ -137,3 +137,36 @@ describe("capacités déclarées par les plugins (dette D4)", () => {
     }
   });
 });
+
+describe("limon central bois (`wood-central`, QUESTIONS A29, vague 2)", () => {
+  it("enregistré dans la famille bois, libellés traduits", () => {
+    const s = getStructure("wood-central");
+    expect(s?.family).toBe("bois");
+    expect(s?.labelKey).toBe("structure.woodCentral.label");
+    expect(translatorFor("fr").t(s!.labelKey)).toMatch(/^Limon central bois/);
+    expect(translatorFor("en").t(s!.labelKey)).not.toBe(s!.labelKey);
+  });
+
+  it("tracés : volées (droit, tournants) et hélicoïdal ; pas de poteau ; rien hors emprise", () => {
+    expect(structureLayouts("wood-central")).toEqual(["flights", "helical"]);
+    expect(structureAcceptsLayout("wood-central", "helical")).toBe(true);
+    expect(structureRequiresNewel("wood-central")).toBe(false);
+    expect(newelRequiredStructures()).not.toContain("wood-central");
+    expect(structureLateralThickness("wood-central", {})).toEqual({ inner: 0, outer: 0 });
+  });
+
+  it("options non prises en charge : bois massif sur un tracé courbe seulement", () => {
+    expect(structureUnsupportedOptions("wood-central", { kind: "flights", turns: 0 })).toEqual([]);
+    for (const traits of [
+      { kind: "flights", turns: 1 },
+      { kind: "flights", turns: 2 },
+      { kind: "helical", turns: 0 },
+    ] as const) {
+      const opts = structureUnsupportedOptions("wood-central", traits);
+      expect(opts.map((o) => ({ path: o.path, value: o.value }))).toEqual([
+        { path: ["section", "kind"], value: "solid" },
+      ]);
+      expect(translatorFor("fr").t(opts[0]!.reason)).toMatch(/^Bois massif réservé/);
+    }
+  });
+});

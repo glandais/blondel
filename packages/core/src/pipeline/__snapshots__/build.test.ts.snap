@@ -34,6 +34,40 @@ exports[`buildModel — exemples du dépôt > acceptance-01-quart-tournant.blond
 }
 `;
 
+exports[`buildModel — exemples du dépôt > demo-central-glulam.blondel.json : cotes principales (non-régression) 1`] = `
+{
+  "blondel": 629.99,
+  "colletMin": 102.5,
+  "colletsChord": [
+    160.2,
+    109.8,
+    102.5,
+    110.1,
+    160.2,
+  ],
+  "firstRise": 180,
+  "g": 269.99,
+  "h": 180,
+  "headroom": 2026.7,
+  "headroomWidth": {
+    "min": 1960,
+    "nosing": 2,
+  },
+  "n": 15,
+  "parts": 55,
+  "run": 3779.9,
+  "treads": "swwwwwssssssss",
+  "violations": {
+    "avertissement": 5,
+    "bloquant": 0,
+    "conseil": 16,
+  },
+  "zones": [
+    "1-6 M3-cubic",
+  ],
+}
+`;
+
 exports[`buildModel — exemples du dépôt > demo-central-wreathed.blondel.json : cotes principales (non-régression) 1`] = `
 {
   "blondel": 629.99,
@@ -659,6 +693,108 @@ exports[`buildModel — exemples du dépôt > j5b-debillarde-soude.blondel.json 
   },
   "zones": [
     "3-9 M3-quintic",
+  ],
+}
+`;
+
+exports[`buildModel — exemples du dépôt > j5c-limon-central-bois-droit.blondel.json : cotes principales (non-régression) 1`] = `
+{
+  "blondel": 589.52,
+  "colletMin": null,
+  "colletsChord": [],
+  "firstRise": 173.33,
+  "g": 242.86,
+  "h": 173.33,
+  "headroom": 1905.5,
+  "headroomWidth": {
+    "min": 2053.3,
+    "nosing": 1,
+  },
+  "n": 15,
+  "parts": 17,
+  "run": 3400,
+  "treads": "ssssssssssssss",
+  "violations": {
+    "avertissement": 4,
+    "bloquant": 0,
+    "conseil": 3,
+  },
+  "zones": [],
+}
+`;
+
+exports[`buildModel — exemples du dépôt > j5c-limon-central-bois-helicoidal.blondel.json : cotes principales (non-régression) 1`] = `
+{
+  "blondel": 648.09,
+  "colletMin": 136.6,
+  "colletsChord": [
+    136.6,
+    136.6,
+    136.6,
+    136.6,
+    136.6,
+    136.6,
+    136.6,
+    136.6,
+    136.6,
+    136.6,
+    136.6,
+    136.6,
+    136.6,
+    136.6,
+    136.6,
+  ],
+  "firstRise": 171.88,
+  "g": 304.34,
+  "h": 171.88,
+  "headroom": 1982.5,
+  "headroomWidth": {
+    "min": 1982.5,
+    "nosing": 3,
+  },
+  "n": 16,
+  "parts": 18,
+  "run": 4565.1,
+  "treads": "wwwwwwwwwwwwwww",
+  "violations": {
+    "avertissement": 7,
+    "bloquant": 0,
+    "conseil": 2,
+  },
+  "zones": [],
+}
+`;
+
+exports[`buildModel — exemples du dépôt > j5c-limon-central-bois-quart-tournant.blondel.json : cotes principales (non-régression) 1`] = `
+{
+  "blondel": 629.99,
+  "colletMin": 102.5,
+  "colletsChord": [
+    160.2,
+    109.8,
+    102.5,
+    110.1,
+    160.2,
+  ],
+  "firstRise": 180,
+  "g": 269.99,
+  "h": 180,
+  "headroom": 2026.7,
+  "headroomWidth": {
+    "min": 1960,
+    "nosing": 2,
+  },
+  "n": 15,
+  "parts": 17,
+  "run": 3779.9,
+  "treads": "swwwwwssssssss",
+  "violations": {
+    "avertissement": 5,
+    "bloquant": 0,
+    "conseil": 16,
+  },
+  "zones": [
+    "1-6 M3-cubic",
   ],
 }
 `;

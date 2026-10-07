@@ -152,6 +152,16 @@ describe("préréglages de démonstration", () => {
     expect(cm.parts.some((p) => p.id.startsWith("central-web-left-"))).toBe(true);
     expect(cm.parts.some((p) => p.id.endsWith("-central-bearing"))).toBe(true);
     expect(cm.executionClass).toBe("EXC2");
+    // Limon central bois (QUESTIONS A29, vague 2) : lamellé-collé cintré, sabots, k_r contrôlé.
+    const glulam = createDemoProject("demo-central-glulam");
+    expect(glulam.name).toBe("Quart tournant sur limon central bois lamellé-collé");
+    expect(glulam.stair.structure.kind).toBe("wood-central");
+    const gm = buildModel(glulam, { memo: false });
+    expect(gm.parts.some((p) => p.id === "wood-central-beam" && p.mark === "LC1")).toBe(true);
+    expect(gm.parts.some((p) => p.id === "wood-central-shoe-foot")).toBe(true);
+    expect(gm.parts.some((p) => p.id === "wood-central-shoe-head")).toBe(true);
+    const kr = gm.compliance.results.filter((r) => r.ruleId === "LAMELLE_CINTRE_KR");
+    expect(kr.map((r) => r.status)).toEqual(["ok"]);
   });
 });
 

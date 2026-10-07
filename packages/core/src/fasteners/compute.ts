@@ -9,7 +9,10 @@
  *    (`supportBolted`, un boulon par perçage, lumière comprise ; `treadScrewed`, vis à bois
  *    d'une marche bois dans l'aile horizontale ; `treadBolted`, vis à métaux d'une marche en
  *    tôle vissée, A31), contremarche d'arrivée pliée fixée au chevêtre
- *    (`riserTrimmer`). Un plugin déclare ainsi tout nouvel assemblage (point d'extension).
+ *    (`riserTrimmer`), marches et sabots boulonnés au travers du limon central bois
+ *    (`treadBeamBolted`, `shoeBolted`, `wood-central`). Un plugin déclare ainsi tout nouvel
+ *    assemblage (point d'extension). Longueur : déduite si la fixation la porte
+ *    (`PartFixing.length`, boulon traversant), sinon celle du profil d'atelier.
  * 2. **Platines percées** (catégorie `fixing`, perçages de `flat.outline.holes`) sans fixation
  *    déclarée : pied et tête de limon, about limon ↔ poteau, pied de poteau, de `steel-flat` et
  *    `steel-curved`. Assemblée à deux pièces ou plus (`assembledWith`) : `plateBolted` ; sinon
@@ -275,6 +278,10 @@ function originOf(f: PartFixing, mark: string, withMarks: string): Message {
       return msg("fastener.origin.treadBolted", { mark, with: withMarks });
     case "riserTrimmer":
       return msg("fastener.origin.riserTrimmer", { mark });
+    case "treadBeamBolted":
+      return msg("fastener.origin.treadBeamBolted", { mark, with: withMarks });
+    case "shoeBolted":
+      return msg("fastener.origin.shoeBolted", { mark, with: withMarks });
     case "guardPostFloor":
       return msg("fastener.origin.guardPostFloor", { mark });
     case "guardPostStair":
@@ -354,10 +361,14 @@ export function computeFasteners(input: FastenerInput): Fastener[] {
           : NaN;
       const deducedDiameter = Number.isFinite(nominal) && nominal > 0;
       const diameter = deducedDiameter ? nominal : setting.diameter;
+      // Longueur déduite de l'assemblage (boulon traversant du limon central bois), sinon profil.
+      const deducedLength = f.length !== undefined && Number.isFinite(f.length) && f.length > 0;
+      const length = deducedLength ? f.length! : setting.length;
       const deduced: FastenerDeducedField[] = [];
       if (deducedDiameter) deduced.push("diameter");
       if (f.drilled) deduced.push("quantity");
-      const key = `${setting.kind}|${setting.grade}|${diameter}|${setting.length}`;
+      if (deducedLength) deduced.push("length");
+      const key = `${setting.kind}|${setting.grade}|${diameter}|${length}`;
       let mark = marks.get(key);
       if (mark === undefined) {
         mark = `${FASTENER_MARK_PREFIX}${marks.size + 1}`;
@@ -376,10 +387,10 @@ export function computeFasteners(input: FastenerInput): Fastener[] {
         kind: setting.kind,
         grade: setting.grade,
         diameter,
-        length: setting.length,
+        length,
         quantity: points * setting.perPoint,
         joint: f.joint,
-        name: fastenerName(setting.kind, setting.grade, diameter, setting.length),
+        name: fastenerName(setting.kind, setting.grade, diameter, length),
         origin: originOf({ ...f, points }, part.mark, withMarks),
         partIds,
         deduced,

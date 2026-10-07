@@ -14,6 +14,7 @@ import {
   errorMessageOf,
   getStructure,
   stableStringify,
+  structureAcceptsLayout,
   type EpureSummary,
   type InnerCorner,
   type JourAdaptation,
@@ -82,10 +83,10 @@ export interface CompareOutcome {
  * Variantes proposées pour un projet à volées : limons bois à la française ; crémaillères bois
  * « à l'anglaise » si l'escalier est droit (le plugin refuse les tournants) ; limons en plat
  * découpé laser ; limon de jour débillardé soudé s'il y a un tournant (jour adapté en arc) ;
- * limon central (tube sur un escalier droit, caisson débillardé sur un tournant) ; profilés UPN
- * et IPE. Hélicoïdal : structure à fût, marches bois ou en tôle ; limon central hélicoïdal en
- * caisson. Seules les
- * structures enregistrées dans le cœur sont retenues ; la structure courante est ajoutée si elle
+ * limon central (tube sur un escalier droit, caisson débillardé sur un tournant) ; limon central
+ * bois en lamellé-collé (droit ou cintré) ; profilés UPN et IPE. Hélicoïdal : structure à fût,
+ * marches bois ou en tôle ; limon central hélicoïdal en caisson ; limon central bois hélicoïdal
+ * en lamellé-collé cintré. Seules les structures enregistrées dans le cœur sont retenues ; la structure courante est ajoutée si elle
  * n'est pas déjà couverte (ex. profilés HEA).
  */
 /**
@@ -97,6 +98,11 @@ function centralSection(project: Project): "tube" | "box" {
     (o) => o.path.join(".") === "section.kind" && o.value === "tube",
   );
   return tubeUnsupported ? "box" : "tube";
+}
+
+/** Variante du limon central bois en lamellé-collé. */
+function woodCentralVariant(id: string, label: MessageKey): Variant {
+  return { id, kind: "wood-central", label: msg(label), params: { section: { kind: "glulam" } } };
 }
 
 export function variantsFor(
@@ -130,6 +136,11 @@ export function variantsFor(
         label: msg("ui.lib.variant.steelCentralHelical"),
         params: { section: { kind: centralSection(project) } },
       });
+    }
+    // Limon central bois hélicoïdal en lamellé-collé cintré (A29, vague 2), si le plugin
+    // déclare savoir construire un hélicoïdal (`capabilities.layouts`).
+    if (has("wood-central") && structureAcceptsLayout("wood-central", "helical")) {
+      out.push(woodCentralVariant("wood-central-helical", "ui.lib.variant.woodCentralHelical"));
     }
     return withCurrent(project, out, has);
   }
@@ -168,6 +179,11 @@ export function variantsFor(
             params: { section: { kind: "box" } },
           },
     );
+  }
+  // Limon central bois (A29, vague 2) : lamellé-collé, droit ou cintré sur moule — la seule
+  // section que le plugin sait construire sur tous les tracés à volées.
+  if (has("wood-central") && structureAcceptsLayout("wood-central", "flights")) {
+    out.push(woodCentralVariant("wood-central", "ui.lib.variant.woodCentral"));
   }
   if (has("steel-profile")) {
     for (const family of ["UPN", "IPE"] as const) {

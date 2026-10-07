@@ -41,11 +41,20 @@ describe("comparateur de variantes", () => {
       "wood-cut",
       "steel-flat",
       "steel-central-tube",
+      "wood-central",
       "steel-profile-UPN",
       "steel-profile-IPE",
     ]);
     const quarter = variantsFor(createProject("quarter-left"), all).map((v) => v.id);
     expect(quarter).not.toContain("wood-cut");
+    // Limon central bois (A29, vague 2) : lamellé-collé, droit ou cintré sur moule.
+    expect(quarter).toContain("wood-central");
+    const wood = variantsFor(createProject("quarter-left"), all).find(
+      (v) => v.id === "wood-central",
+    )!;
+    expect(wood).toMatchObject({ kind: "wood-central", params: { section: { kind: "glulam" } } });
+    expect(FR.t(wood.label)).toBe("Bois — limon central en lamellé-collé");
+    expect(translatorFor("en").t(wood.label)).toBe("Timber — glulam mono-stringer");
     // Limon central (A29) : tube sur l'escalier droit, caisson débillardé sur un tournant.
     expect(quarter).toContain("steel-central-box");
     expect(quarter).not.toContain("steel-central-tube");
@@ -176,8 +185,10 @@ describe("comparateur de variantes", () => {
       "helical-core-wood",
       "helical-core-steel",
       "steel-central-helical",
+      "wood-central-helical",
     ]);
     expect(hv[2]!.params).toEqual({ section: { kind: "box" } });
+    expect(hv[3]!.params).toEqual({ section: { kind: "glulam" } });
     // Paramètres imposés fusionnés en profondeur (l'épaisseur de tôle du projet est gardée).
     const own = withStructure(helical, "helical-core", {
       treads: { material: "wood", plateThickness: 10 },
@@ -218,7 +229,8 @@ describe("comparateur de variantes", () => {
     clearModelCache();
     const project = presetProject("helical");
     const { rows } = runVariants(project, variantsFor(project, availableStructures()));
-    expect(rows.map((r) => r.current)).toEqual([true, false, false]);
+    // Fût bois (projet), fût tôle, limon central métal, limon central bois.
+    expect(rows.map((r) => r.current)).toEqual([true, false, false, false]);
     expect(rows[0]!.reference).toBe(true);
     for (const r of rows) {
       expect(r.adaptations).toEqual([]);

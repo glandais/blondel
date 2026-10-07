@@ -127,6 +127,12 @@ export const DEFAULT_FASTENER_PROFILE: FastenerProfile = {
     // lu sur le perçage de 9 mm), une par perçage, écrou ou taraudage selon l'atelier.
     treadBolted: { kind: "machine-screw", grade: "8.8", diameter: 8, length: 20, perPoint: 1 },
     riserTrimmer: { kind: "anchor", grade: "zinc-plated", diameter: 10, length: 80, perPoint: 1 },
+    // Limon central bois (`wood-central`) : marche boulonnée au travers de la poutre (C §1.5 [54] :
+    // boulons de 10 ou 12 mm avec écrou, source faible) et sabot boulonné au travers de la
+    // poutre ; diamètre lu sur le perçage, longueur déduite par le plugin (`PartFixing.length`),
+    // classe « à valider ».
+    treadBeamBolted: { kind: "bolt", grade: "8.8", diameter: 10, length: 300, perPoint: 1 },
+    shoeBolted: { kind: "bolt", grade: "8.8", diameter: 12, length: 120, perPoint: 1 },
     guardPostFloor: { kind: "anchor", grade: "zinc-plated", diameter: 10, length: 80, perPoint: 4 },
     guardPostStair: {
       kind: "lag-screw",

@@ -48,6 +48,10 @@ export type FastenerGrade = (typeof FASTENER_GRADES)[number];
  * - `treadBolted` : marche en tôle pliée vissée sur son support (QUESTIONS A31 : perçages de
  *   l'aile horizontale et du développé de la marche) ;
  * - `riserTrimmer` : contremarche d'arrivée en tôle pliée fixée au chevêtre ;
+ * - `treadBeamBolted` : marche bois boulonnée au travers du limon central bois (`wood-central`,
+ *   C §1.5 [54] : « boulons de 10 ou 12 mm qui traversent le limon, avec écrou ») ;
+ * - `shoeBolted` : sabot métallique (pied ou tête) boulonné au travers de la poutre bois
+ *   (`wood-central`, QUESTIONS A29 n° 5 : sabots ou platines métalliques pour le bois) ;
  * - `guardPostFloor` : poteau de garde-corps fixé au plancher (trémie) ;
  * - `guardPostStair` / `guardPostStairMetal` : poteau de garde-corps fixé sur l'escalier (rampant),
  *   selon le support : bois (limons, à défaut marches en bois) ou métal (QUESTIONS A27, « type
@@ -63,6 +67,8 @@ export const FASTENER_JOINTS = [
   "treadScrewed",
   "treadBolted",
   "riserTrimmer",
+  "treadBeamBolted",
+  "shoeBolted",
   "guardPostFloor",
   "guardPostStair",
   "guardPostStairMetal",
@@ -72,7 +78,7 @@ export const FASTENER_JOINTS = [
 export type FastenerJointKind = (typeof FASTENER_JOINTS)[number];
 
 /** Grandeurs d'un élément de visserie que le modèle déduit (les autres viennent du profil). */
-export type FastenerDeducedField = "diameter" | "quantity";
+export type FastenerDeducedField = "diameter" | "quantity" | "length";
 
 /**
  * Élément de visserie d'un assemblage (`Model.fasteners`) : une entrée par assemblage d'origine
@@ -146,6 +152,8 @@ const JOINT_KEYS: Readonly<Record<FastenerJointKind, MessageKey>> = {
   treadScrewed: "fastener.joint.treadScrewed",
   treadBolted: "fastener.joint.treadBolted",
   riserTrimmer: "fastener.joint.riserTrimmer",
+  treadBeamBolted: "fastener.joint.treadBeamBolted",
+  shoeBolted: "fastener.joint.shoeBolted",
   guardPostFloor: "fastener.joint.guardPostFloor",
   guardPostStair: "fastener.joint.guardPostStair",
   guardPostStairMetal: "fastener.joint.guardPostStairMetal",

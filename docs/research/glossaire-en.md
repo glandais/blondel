@@ -101,6 +101,8 @@ En français, rien ne change : la hauteur de marche s'écrit déjà h (h1 pour l
 | Limon à la française                  | Closed string (housed)              | Housed stringer         | Marches encastrées                               |
 | Limon à l'anglaise, crémaillère       | Cut string                          | Cut (open) stringer     | Aussi « open string » : marches posées sur le limon |
 | Limon central                         | Mono-stringer _(usage)_             | —                       |                                                  |
+| Limon central bois                    | Timber mono-stringer                | —                       | Structure `wood-central` (A29, vague 2)          |
+| Crémaillère centrale                  | Central cut string                  | —                       | Crémaillère unique sous l'axe de l'emmarchement  |
 | Limon débillardé                      | Wreathed string _(usage)_           | —                       |                                                  |
 | Débillardement, débillarder           | Wreathing _(usage)_                 | —                       |                                                  |
 | Délardement, marche délardée          | Soffit chamfering _(usage)_         | —                       | Délardement du dessous des marches (soffite continu) |
@@ -110,6 +112,9 @@ En français, rien ne change : la hauteur de marche s'écrit déjà h (h1 pour l
 | Raccord, adoucissement                | Easing                              | —                       |                                                  |
 | Poteau                                | Newel post                          | —                       | « newel » dans les libellés courts               |
 | Entaille                              | Housing (bois), notch (métal)       | Dado (bois)             | « Fond des entailles » : housing bottom          |
+| Entaille arrière                      | Rear housing                        | —                       | Arrière de la marche logé dans la dent suivante  |
+| Assise (d'une crémaillère)            | Seat                                | —                       | Appui horizontal de la marche                    |
+| Dent (d'une crémaillère)              | Tooth                               | —                       |                                                  |
 | Joue (de bois restant)                | Cheek                               | —                       |                                                  |
 | Tenon                                 | Tenon                               | —                       |                                                  |
 | Mortaise                              | Mortise                             | —                       | Orthographe britannique « mortice » acceptée     |
@@ -117,6 +122,11 @@ En français, rien ne change : la hauteur de marche s'écrit déjà h (h1 pour l
 | Enture                                | Scarf joint                         | —                       |                                                  |
 | Boulon d'escalier                     | Handrail bolt _(usage)_             | —                       |                                                  |
 | Lamellé-collé                         | Glulam                              | —                       |                                                  |
+| Lamellé-collé cintré                  | Curved glulam                       | —                       | Lamelles cintrées sur moule                      |
+| Lamelle                               | Lamination                          | —                       | Épaisseur de lamelle : lamination thickness      |
+| Moule de cintrage                     | Bending form                        | —                       |                                                  |
+| Joint de colle                        | Glue line                           | Bond line               | Boulons du limon central bois hors du joint central |
+| Entraxe (de perçages)                 | Spacing (of holes)                  | Pitch                   | Entraxe minimal des perçages de la poutre        |
 | Bois massif                           | Solid timber                        | Solid wood / lumber     |                                                  |
 | Section, équarrissage                 | Section                             | —                       |                                                  |
 | Plat (acier)                          | Flat bar / plate                    | —                       | Limon en plat : plate string                     |
@@ -131,6 +141,7 @@ En français, rien ne change : la hauteur de marche s'écrit déjà h (h1 pour l
 | Cornière                              | Angle                               | —                       |                                                  |
 | Profilé du commerce (UPN, IPN, IPE, HEA) | Rolled section (channel UPN, I-beam IPN / IPE, H-beam HEA) | Rolled shape | Désignations européennes conservées |
 | Platine                               | Base plate                          | —                       |                                                  |
+| Sabot                                 | (Steel) shoe                        | —                       | Tôle pliée en U au pied ou en tête d'une poutre bois |
 | Console                               | Bracket                             | —                       |                                                  |
 | Plat d'appui (d'une console)          | Bearing plate                       | —                       | Limon central : bracket bearing plate            |
 | Caisson (tôles soudées)               | Box section                         | Box girder              | Limon central en caisson                         |

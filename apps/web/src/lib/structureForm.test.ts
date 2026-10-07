@@ -322,4 +322,17 @@ describe("options non prises en charge sur le tracé (capacité `unsupportedOpti
       expect(fr.t(tube!.reason).length).toBeGreaterThan(0);
     }
   });
+
+  it("limon central bois : bois massif grisé sur un tournant et en hélicoïdal, avec sa raison (A29)", () => {
+    const fr = translatorFor("fr");
+    expect(unsupportedOptionsOf("wood-central", createProject("straight"))).toEqual([]);
+    for (const id of ["quarter-left", "helical"] as const) {
+      const opts = unsupportedOptionsOf("wood-central", createProject(id));
+      expect(
+        opts.map((o) => [o.path.join("."), o.value]),
+        id,
+      ).toEqual([["section.kind", "solid"]]);
+      expect(fr.t(opts[0]!.reason)).toMatch(/^Bois massif réservé à l'escalier droit/);
+    }
+  });
 });

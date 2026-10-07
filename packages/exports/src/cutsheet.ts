@@ -11,6 +11,10 @@
  * calculée avec une masse volumique non validée porte une remarque (`massNote`, défaut : bois
  * « masse volumique à valider », QUESTIONS A6).
  *
+ * Pièce composée de plusieurs lames identiques (`Part.stock.count`, lamellé-collé) : la ligne
+ * porte le débit d'une lame et la quantité compte les lames (masse unitaire : part égale de la
+ * pièce), de sorte que volumes bruts et masses cumulés restent ceux des pièces.
+ *
  * Regroupement : par **épaisseur** seulement pour un débit en plaque (tôle, plat, plateau de
  * bois), c.-à-d. quand l'épaisseur de débit est une épaisseur de matière : pièce en bois, ou
  * pièce dont le développé a cette épaisseur. Les profilés et tubes (UPN, cornières, tubes,
@@ -118,7 +122,11 @@ export function cutSheet(parts: readonly Part[], options: CutSheetOptions = {}):
   >();
   for (const p of parts) {
     const d = cutDims(p);
-    const mass = partMassKg(p);
+    // Lames identiques d'une pièce composée (lamellé-collé) : une ligne de débit par lame.
+    const pieces =
+      d.source === "stock" && p.stock?.count !== undefined && p.stock.count > 1 ? p.stock.count : 1;
+    const partMass = partMassKg(p);
+    const mass = partMass !== undefined ? partMass / pieces : undefined;
     const note = mass !== undefined ? noteOf(p.material, tx) : undefined;
     const key = JSON.stringify([
       p.mark,
@@ -127,15 +135,16 @@ export function cutSheet(parts: readonly Part[], options: CutSheetOptions = {}):
       d.length ?? null,
       d.width ?? null,
       d.thickness ?? null,
+      pieces,
       mass ?? null,
     ]);
     const l = lines.get(key);
-    if (l) l.count += 1;
+    if (l) l.count += pieces;
     else
       lines.set(key, {
         part: p,
         sheet: isSheetStock(p, d),
-        count: 1,
+        count: pieces,
         row: {
           mark: p.mark,
           name: tr(tx, p.name),

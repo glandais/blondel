@@ -7,7 +7,8 @@
  *   limon acier ;
  * - A27 : groupe « Fixings » du mode Fabrication, tableau « Fixings » de la nomenclature ;
  * - A28 : inspecteur « Top nosing » du nez d'arrivée ;
- * - A29 : « mono-stringer » pour le limon central (choix de la structure, glossaire-en.md).
+ * - A29 : « mono-stringer » pour le limon central (choix de la structure, glossaire-en.md) ;
+ *   « Timber mono-stringer » et « Development » de la poutre LC1 du limon central bois.
  */
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import {
@@ -113,4 +114,25 @@ test("limon central : « mono-stringer » en anglais (A29)", async ({ page }) =>
   await expect(select).toHaveValue("steel-central");
   await expect(select.locator('option[value="steel-central"]')).toContainText(/mono-stringer/i);
   await expect(select.locator('option[value="steel-central"]')).not.toContainText(/limon/i);
+});
+
+test("limon central bois : « Timber mono-stringer » et « Development » de LC1 (A29, A26)", async ({
+  page,
+}) => {
+  await openApp(page);
+  await applyPreset(page, "Escalier droit");
+  await chooseStructure(page, "wood-central");
+  // LC1, seule pièce du groupe « Limons ».
+  await selectFirstStringer(page);
+  await switchToEnglish(page);
+  const select = page.getByRole("combobox", { name: "Structure", exact: true });
+  await expect(select).toHaveValue("wood-central");
+  await expect(select.locator('option[value="wood-central"]')).toContainText(
+    /^Timber mono-stringer/,
+  );
+  await expect(select.locator('option[value="wood-central"]')).not.toContainText(/limon/i);
+  const inspector = page.locator('.inspector[data-template="part"]');
+  await expect(inspector).toBeVisible();
+  await expect(inspector.getByRole("button", { name: /^Development/ })).toBeEnabled();
+  await expect(inspector.getByRole("button", { name: /^Flat pattern/ })).toHaveCount(0);
 });

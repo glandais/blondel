@@ -56,8 +56,10 @@ export function woodQuantities(
   };
   const density = materialDensity(material, profile);
   if (Number.isFinite(density)) q[QUANTITY_MASS_KG] = volume * density;
-  if (stock)
-    q[QUANTITY_STOCK_VOLUME_M3] = (stock.length * stock.width * stock.thickness) / MM3_PER_M3;
+  if (stock) {
+    q[QUANTITY_STOCK_VOLUME_M3] =
+      (stock.length * stock.width * stock.thickness * (stock.count ?? 1)) / MM3_PER_M3;
+  }
   return q;
 }
 

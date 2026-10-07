@@ -88,6 +88,32 @@ describe("exportCutListCsv", () => {
     ]);
   });
 
+  it("pièce en lamellé-collé (`stock.count`) : une ligne de débit par lame, totaux de la pièce", () => {
+    const beam = {
+      ...treadPart(1, "LC1"),
+      id: "wood-central-beam",
+      category: "carriage" as const,
+      stock: { length: 4140, width: 320, thickness: 54, count: 2 },
+      quantities: { volume: 0.1, mass_kg: 70 },
+    };
+    const rows = cutListRows([beam]);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      mark: "LC1",
+      length: 4140,
+      width: 320,
+      thickness: 54,
+      quantity: 2,
+      unitVolume: 0.05,
+      unitMass: 35,
+    });
+    const csv = parseCsv(exportCutListCsv({ parts: [beam] }).slice(1));
+    const total = csv[csv.length - 1]!;
+    expect(total[7]).toBe("2");
+    expect(total[9]).toBe("0,100000");
+    expect(total[11]).toBe("70,00");
+  });
+
   it("petite pièce : volume non nul affiché (cornière 80,3 × 304 mm² ≈ 2,4e-5 m³)", () => {
     const angle = {
       ...treadPart(1, "CR1"),

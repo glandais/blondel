@@ -18,8 +18,10 @@ import { makeSteppingProject } from "../../stepping/test-helpers.js";
 import "../../structures/index.js";
 import { listStructures } from "../../structures/registry.js";
 import { AN_STAIR_LOADS } from "../../precheck/loads.js";
+import { STRUCTURE_CONTEXTS } from "../contexts.js";
 import { evaluateCompliance } from "../engine.js";
 import { upCount, upWidth } from "../params.js";
+import { getRule } from "../table.js";
 import { STRUCTURE_EVALUATED_RULES } from "./structure.js";
 
 const EXAMPLES = fileURLToPath(new URL("../../../../../examples/", import.meta.url));
@@ -182,7 +184,15 @@ describe("règles évaluées par une structure (limons et crémaillères bois)",
     buildModel(p).compliance.results.filter((r) => r.ruleId === id);
 
   it("aucune structure : non évaluée avec motif ; structure acier : sans objet", () => {
+    // Règle dont tous les contextes sont déduits d'une structure (ex. LAMELLE_CINTRE_KR,
+    // `limon_central_bois`) : inactive sans cette structure, aucun résultat.
+    const structureContexts = new Set(Object.values(STRUCTURE_CONTEXTS).flat());
     for (const id of Object.keys(STRUCTURE_EVALUATED_RULES)) {
+      if (getRule(id).contexte.every((c) => structureContexts.has(c))) {
+        expect(result(load("straight"), id), id).toEqual([]);
+        expect(result(load("demo-straight-loft"), id), id).toEqual([]);
+        continue;
+      }
       const none = result(load("straight"), id);
       expect(
         none.map((r) => r.status),
@@ -208,6 +218,22 @@ describe("règles évaluées par une structure (limons et crémaillères bois)",
     const entaille = m.compliance.results.find((r) => r.ruleId === "LIMON_ENTAILLE_MIN")!;
     expect(entaille.source).toMatch(/NF EN 16481/);
     expect(entaille.min).toBe(14);
+  });
+
+  it("limon central bois : résultats du plugin, pas le résultat d'attente", () => {
+    const m = buildModel(load("j5c-limon-central-bois-droit"));
+    for (const id of ["CREMAILLERE_REGLE_MOYENS", "LIMON_ENTAILLE_MIN", "LAMELLE_CINTRE_KR"]) {
+      const rs = m.compliance.results.filter((r) => r.ruleId === id);
+      expect(rs.length, id).toBeGreaterThan(0);
+      for (const r of rs) expect(fr(r.message), id).not.toMatch(/Contrôle porté par la structure/);
+    }
+    // Crémaillère centrale : tableau FCBA lu à b / facteur_centrale, constat par assise.
+    const cr = m.compliance.results.filter((r) => r.ruleId === "CREMAILLERE_REGLE_MOYENS");
+    expect(cr.every((r) => r.status !== "non-evaluee")).toBe(true);
+    expect(fr(cr[0]!.message)).toMatch(/crémaillère centrale/);
+    const kr = m.compliance.results.find((r) => r.ruleId === "LAMELLE_CINTRE_KR")!;
+    expect(kr.status).toBe("ok");
+    expect(kr.severity).toBe("bloquant");
   });
 
   it("toute structure bois du registre porte les contrôles de limon", () => {

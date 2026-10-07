@@ -42,6 +42,7 @@ export const CONTEXT_LABEL_KEYS: Readonly<Record<string, MessageKey>> = {
   garde_corps_1988: "compliance.context.garde_corps_1988",
   garde_corps_2024: "compliance.context.garde_corps_2024",
   limon_bois_encastre: "compliance.context.limon_bois_encastre",
+  limon_central_bois: "compliance.context.limon_central_bois",
   tous: "compliance.context.tous",
 };
 
@@ -77,6 +78,7 @@ export const CONTEXT_SHORT_LABEL_KEYS: Readonly<Record<string, MessageKey>> = {
   garde_corps_1988: "compliance.contextShort.garde_corps_1988",
   garde_corps_2024: "compliance.contextShort.garde_corps_2024",
   limon_bois_encastre: "compliance.contextShort.limon_bois_encastre",
+  limon_central_bois: "compliance.contextShort.limon_central_bois",
   tous: "compliance.contextShort.tous",
 };
 

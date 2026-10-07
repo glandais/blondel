@@ -49,6 +49,10 @@ export const GROUP_LABELS: Readonly<Record<string, MessageKey>> = {
   trace: "ui.param.group.trace",
   section: "ui.param.group.section",
   beam: "ui.param.group.beam",
+  // Limon central bois (`wood-central`) : entaille arrière, boulons des marches, sabots.
+  notch: "ui.param.group.notch",
+  bolts: "ui.param.group.bolts",
+  anchors: "ui.param.group.anchors",
 };
 
 const MM = "mm";
@@ -456,6 +460,147 @@ const STEEL_CENTRAL: Readonly<Record<string, FieldText>> = {
   },
 };
 
+/**
+ * Limon central bois (`wood-central`, QUESTIONS A29 vague 2) : ◆ d'après les commentaires de
+ * `woodCentralParams.ts` du cœur — toute valeur sans source est « à valider » (décalage de l'axe,
+ * largeur 2 × 44, reste de repli, seuil des plis minces, boulons des marches, tôle, nuance,
+ * finition, dimensions, chevilles, boulons et perçages des sabots) ; sans ◆ : choix (section,
+ * classe, essence, présence des sabots, décision A29 n° 5), valeurs calculées (`auto` : reste
+ * sous entaille, épaisseur des lamelles, entaille arrière) et justifications.
+ */
+const WOOD_CENTRAL: Readonly<Record<string, FieldText>> = {
+  strengthClass: {
+    label: "ui.param.woodCut.strengthClass.label",
+    options: {
+      auto: "ui.param.woodCut.strengthClass.option.auto",
+      unknown: "ui.param.woodCut.strengthClass.option.unknown",
+      ...raw(["C30", "D40"]),
+    },
+  },
+  "trace.lateralOffset": {
+    label: "ui.param.steelCentral.trace.lateralOffset.label",
+    unit: MM,
+    hint: TO_VALIDATE,
+  },
+  // Sur un tournant ou un hélicoïdal, l'aide du choix « Bois massif » grisé est la raison du
+  // cœur (`unsupportedOptions`, lue par `presentFields`).
+  "section.kind": {
+    label: "ui.param.woodCentral.section.kind.label",
+    options: {
+      glulam: "ui.param.woodCentral.section.kind.option.glulam",
+      solid: "ui.param.woodCentral.section.kind.option.solid",
+    },
+  },
+  "section.width": {
+    label: "ui.param.woodCentral.section.width.label",
+    unit: MM,
+    hint: TO_VALIDATE,
+  },
+  "section.residual": {
+    label: "ui.param.woodCut.residual.label",
+    unit: MM,
+    hint: "ui.param.woodCentral.section.residual.hint",
+  },
+  "section.residualFallback": {
+    label: "ui.param.woodCut.residualFallback.label",
+    unit: MM,
+    hint: TO_VALIDATE,
+  },
+  "section.lamellaThickness": {
+    label: "ui.param.woodCentral.section.lamellaThickness.label",
+    unit: MM,
+    hint: "ui.param.woodCentral.section.lamellaThickness.hint",
+  },
+  "section.thinPlyMax": {
+    label: "ui.param.woodCentral.section.thinPlyMax.label",
+    unit: MM,
+    hint: TO_VALIDATE,
+  },
+  "notch.rearDepth": {
+    label: "ui.param.woodCentral.notch.rearDepth.label",
+    unit: MM,
+    hint: "ui.param.woodCentral.notch.rearDepth.hint",
+  },
+  "bolts.perTread": { label: "ui.param.woodCentral.bolts.perTread.label", hint: TO_VALIDATE },
+  "bolts.holeDiameter": { label: "ui.param.holeDiameter.label", unit: MM, hint: TO_VALIDATE },
+  "bolts.edgeDistance": {
+    label: "ui.param.woodCentral.bolts.edgeDistance.label",
+    unit: MM,
+    hint: TO_VALIDATE,
+  },
+  "bolts.minSpacing": {
+    label: "ui.param.woodCentral.bolts.minSpacing.label",
+    unit: MM,
+    hint: "ui.param.woodCentral.bolts.minSpacing.hint",
+  },
+  "bolts.protrusion": {
+    label: "ui.param.woodCentral.bolts.protrusion.label",
+    unit: MM,
+    hint: TO_VALIDATE,
+  },
+  "bolts.lengthStep": {
+    label: "ui.param.woodCentral.bolts.lengthStep.label",
+    unit: MM,
+    hint: TO_VALIDATE,
+  },
+  "anchors.foot": { label: "ui.param.woodCentral.anchors.foot.label" },
+  "anchors.head": { label: "ui.param.woodCentral.anchors.head.label" },
+  "anchors.grade": {
+    label: "ui.param.woodCentral.anchors.grade.label",
+    hint: TO_VALIDATE,
+    options: raw(["S235", "S355"]),
+  },
+  "anchors.finish": {
+    label: "ui.param.finish.label",
+    hint: TO_VALIDATE,
+    options: {
+      raw: "ui.param.finish.option.raw",
+      painted: "ui.param.finish.option.painted",
+      galvanized: "ui.param.finish.option.galvanized",
+    },
+  },
+  "anchors.thickness": {
+    label: "ui.param.woodCentral.anchors.thickness.label",
+    unit: MM,
+    hint: TO_VALIDATE,
+  },
+  "anchors.cheekDepth": {
+    label: "ui.param.woodCentral.anchors.cheekDepth.label",
+    unit: MM,
+    hint: TO_VALIDATE,
+  },
+  "anchors.length": {
+    label: "ui.param.woodCentral.anchors.length.label",
+    unit: MM,
+    hint: TO_VALIDATE,
+  },
+  "anchors.anchors": { label: "ui.param.woodCentral.anchors.anchors.label", hint: TO_VALIDATE },
+  "anchors.anchorHoleDiameter": {
+    label: "ui.param.woodCentral.anchors.anchorHoleDiameter.label",
+    unit: MM,
+    hint: TO_VALIDATE,
+  },
+  "anchors.bolts": { label: "ui.param.woodCentral.anchors.bolts.label", hint: TO_VALIDATE },
+  "anchors.boltHoleDiameter": {
+    label: "ui.param.woodCentral.anchors.boltHoleDiameter.label",
+    unit: MM,
+    hint: TO_VALIDATE,
+  },
+  "anchors.holeEdgeDistance": {
+    label: "ui.param.holeEdgeDistance.label",
+    unit: MM,
+    hint: TO_VALIDATE,
+  },
+  cantileverJustification: {
+    label: "ui.param.steelCentral.cantileverJustification.label",
+    hint: "ui.param.steelCentral.cantileverJustification.hint",
+  },
+  laminationJustification: {
+    label: "ui.param.woodCentral.laminationJustification.label",
+    hint: "ui.param.woodCentral.laminationJustification.hint",
+  },
+};
+
 /** Variantes propres à un plugin. */
 const BY_KIND: Readonly<Record<string, Readonly<Record<string, FieldText>>>> = {
   "wood-cut": {
@@ -518,6 +663,7 @@ const BY_KIND: Readonly<Record<string, Readonly<Record<string, FieldText>>>> = {
     },
   },
   "steel-central": STEEL_CENTRAL,
+  "wood-central": WOOD_CENTRAL,
   "helical-core": {
     "column.material": {
       label: "ui.param.helicalCore.column.material.label",

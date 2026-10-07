@@ -32,6 +32,23 @@ describe("fiche de débit", () => {
     });
   });
 
+  it("pièce en lamellé-collé (`stock.count`) : lames comptées, volume brut et masse de la pièce", () => {
+    const beam: Part = {
+      ...treadPart(1),
+      id: "wood-central-beam",
+      mark: "LC1",
+      category: "carriage",
+      stock: { length: 4140, width: 320, thickness: 54, count: 2 },
+      quantities: { mass_kg: 70 },
+    };
+    const [g] = cutSheet([beam]);
+    expect(g!.thickness).toBe(54);
+    expect(g!.rows).toEqual([expect.objectContaining({ mark: "LC1", quantity: 2, unitMass: 35 })]);
+    expect(g!.totals.quantity).toBe(2);
+    expect(g!.totals.volumeM3).toBeCloseTo((2 * 4140 * 320 * 54) / 1e9, 12);
+    expect(g!.totals.massKg).toBeCloseTo(70, 9);
+  });
+
   it("pièce sans débit : dimensions du développé (flan), L ≥ l", () => {
     const steel = groups[0]!.rows[0]!;
     expect(steel).toMatchObject({

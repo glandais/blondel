@@ -1,0 +1,75 @@
+{
+  "compliance": {
+    "contexts": [
+      "bois_dtu",
+      "logement_interieur"
+    ],
+    "overrides": [],
+    "profile": "strict"
+  },
+  "name": "Jalon 5c — escalier droit sur limon central bois (lamellé-collé)",
+  "rulesVersion": 1,
+  "schemaVersion": 1,
+  "site": {
+    "floorToFloor": 2600,
+    "lowerFinish": 0,
+    "opening": {
+      "kind": "rect",
+      "sizeX": 1100,
+      "sizeY": 2950,
+      "x": -100,
+      "y": 450
+    },
+    "upperFinish": 0,
+    "upperSlabThickness": 200,
+    "walls": []
+  },
+  "stair": {
+    "balancing": {
+      "method": "M3",
+      "targetCollet": 100,
+      "variant": "auto",
+      "windersPerSide": "auto"
+    },
+    "layout": {
+      "legs": [
+        {
+          "length": 3400
+        }
+      ],
+      "turns": [],
+      "width": 900
+    },
+    "nosingOverrides": [],
+    "placement": {
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "rotation": 0
+    },
+    "stepping": {
+      "firstRiseOffset": 0,
+      "riserCount": "auto",
+      "targetGoing": "auto",
+      "targetRise": 175
+    },
+    "structure": {
+      "kind": "wood-central",
+      "params": {
+        "section": {
+          "kind": "glulam"
+        }
+      }
+    },
+    "treads": {
+      "nosing": 10,
+      "riserThickness": 20,
+      "risers": "none",
+      "thickness": 80
+    },
+    "walkline": {
+      "mode": "dtu"
+    }
+  }
+}

@@ -39,6 +39,9 @@ describe("section à ouvrir pour corriger une règle", () => {
     expect(ruleSection("CHARGE_ESCALIER_A")).toBe("structure");
     expect(ruleSection("DEFORMATION_CINTRAGE")).toBe("structure");
     expect(ruleSection("HELICOIDAL_PORTE_A_FAUX")).toBe("structure");
+    // Lamellé-collé cintré du limon central bois (A29, vague 2).
+    expect(ruleSection("LAMELLE_CINTRE_KR")).toBe("structure");
+    expect(ruleSection("LAMELLE_PLIS_MINCES")).toBe("structure");
   });
 
   it("le plus long préfixe l'emporte ; préfixe inconnu : aucune section", () => {

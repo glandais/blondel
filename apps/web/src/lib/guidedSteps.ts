@@ -155,6 +155,7 @@ const STRUCTURE_SHORT_LABEL_KEYS: Readonly<Record<string, MessageKey>> = {
   "steel-profile": "ui.guided.summary.structure.steelProfile",
   "steel-curved": "ui.guided.summary.structure.steelCurved",
   "steel-central": "ui.guided.summary.structure.steelCentral",
+  "wood-central": "ui.guided.summary.structure.woodCentral",
   "helical-core": "ui.guided.summary.structure.helicalCore",
 };
 

@@ -23,6 +23,8 @@ import { CENTRAL_RULES } from "../structures/steelCentral.js";
 import { STEEL_RULES } from "../structures/steelCommon.js";
 import { CURVED_RULES } from "../structures/steelCurved.js";
 import { PROFILE_RULES } from "../structures/steelProfile.js";
+import { WOOD_CENTRAL_RULES } from "../structures/woodCentral.js";
+import { WOOD_CENTRAL_BEAM_RULES } from "../structures/woodCentralBeam.js";
 import {
   profileLabel,
   ruleDefSourceText,
@@ -65,6 +67,8 @@ const PLUGIN_SPECS: readonly PluginRuleSpec[] = [
   ...Object.values(HELICAL_RULES),
   ...Object.values(CENTRAL_RULES),
   ...Object.values(CENTRAL_BEAM_RULES),
+  ...Object.values(WOOD_CENTRAL_RULES),
+  ...(Object.values(WOOD_CENTRAL_BEAM_RULES) as PluginRuleSpec[]),
   ...Object.values(PRECHECK_RULES),
 ];
 

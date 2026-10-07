@@ -12,7 +12,14 @@
  * niveaux Conception et Atelier du dictionnaire des niveaux (`lib/paramTiers.ts`), mêmes chemins
  * et même validation que la section Garde-corps.
  */
-import type { GuardsSpec, MaterialId, Part } from "@blondel/core";
+import {
+  WOOD_CENTRAL_BEAM_ID,
+  WOOD_CENTRAL_SHOE_FOOT_ID,
+  WOOD_CENTRAL_SHOE_HEAD_ID,
+  type GuardsSpec,
+  type MaterialId,
+  type Part,
+} from "@blondel/core";
 import type { MessageKey } from "@blondel/i18n";
 import { paramKey, tierEntry } from "./paramTiers.js";
 import type { SectionId } from "./sectionIds.js";
@@ -140,6 +147,25 @@ const STRINGER_PARAMS: readonly string[] = [
   "beam",
 ];
 
+/**
+ * Limon central bois (`wood-central`, A29 vague 2) : identifiants de pièces du contrat du cœur
+ * (`woodCentralBeam.ts`, `woodCentralShoes.ts`), importés de `@blondel/core`. La poutre reprend
+ * sa section, son entaille arrière, ses boulons, son tracé, son essence et sa classe ; les
+ * sabots (catégorie `fixing`), leurs réglages `anchors`.
+ */
+const WOOD_CENTRAL_SHOE_IDS: ReadonlySet<string> = new Set([
+  WOOD_CENTRAL_SHOE_FOOT_ID,
+  WOOD_CENTRAL_SHOE_HEAD_ID,
+]);
+const WOOD_CENTRAL_BEAM_PARAMS: readonly string[] = [
+  "section",
+  "notch",
+  "bolts",
+  "trace",
+  "material",
+  "strengthClass",
+];
+
 /** Tôle et acier : matériaux des marches et contremarches pliées. */
 function isSteel(material: MaterialId | undefined): boolean {
   return (
@@ -150,10 +176,14 @@ function isSteel(material: MaterialId | undefined): boolean {
 /**
  * Réglages repris pour la pièce, `null` si l'inspecteur n'en reprend aucun (marches et paliers
  * bois, pièces sans famille de réglages). `guards` : garde-corps du projet, pour les champs
- * d'une pièce de garde-corps (le type de remplissage choisit les champs repris).
+ * d'une pièce de garde-corps (le type de remplissage choisit les champs repris). L'identifiant
+ * de la pièce, s'il est donné, distingue les pièces du limon central bois (poutre, sabots).
  */
 export function partSettingsFor(
-  part: Pick<Part, "category" | "family"> & { readonly material?: MaterialId },
+  part: Pick<Part, "category" | "family"> & {
+    readonly material?: MaterialId;
+    readonly id?: string;
+  },
   guards?: GuardsSpec,
 ): PartSettings | null {
   if (part.family === "guards") {
@@ -162,6 +192,20 @@ export function partSettingsFor(
       structureParams: [],
       section: "guards",
       guardParams: guardParamsFor(part.category, guards),
+    };
+  }
+  if (part.id === WOOD_CENTRAL_BEAM_ID) {
+    return {
+      scopeLabel: "ui.partInspector.scope.woodCentralBeam",
+      structureParams: WOOD_CENTRAL_BEAM_PARAMS,
+      section: "structure",
+    };
+  }
+  if (part.id !== undefined && WOOD_CENTRAL_SHOE_IDS.has(part.id)) {
+    return {
+      scopeLabel: "ui.partInspector.scope.woodCentralShoes",
+      structureParams: ["anchors"],
+      section: "structure",
     };
   }
   switch (part.category) {

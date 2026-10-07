@@ -163,6 +163,81 @@ describe("clés", () => {
     expect(structureParamEntry("steel-profile", ["section"]).tier).toBe("design");
   });
 
+  it("limon central bois (A29, vague 2) : section, largeur, essence en Essentiel ; ◆ sans source", () => {
+    const e = (p: string) => structureParamEntry("wood-central", p.split("."));
+    for (const p of ["section.kind", "section.width", "material"]) {
+      expect(e(p), p).toMatchObject({ tier: "essential" });
+      expect(e(p).guided, p).toContainEqual({ step: 5, more: false });
+    }
+    for (const p of [
+      "strengthClass",
+      "trace.lateralOffset",
+      "section.residual",
+      "section.lamellaThickness",
+      "notch.rearDepth",
+      "bolts.perTread",
+      "anchors.foot",
+      "anchors.head",
+      "cantileverJustification",
+      "laminationJustification",
+    ]) {
+      expect(e(p), p).toMatchObject({ tier: "design", guided: [{ step: 5, more: true }] });
+    }
+    for (const p of [
+      "section.residualFallback",
+      "section.thinPlyMax",
+      "bolts.holeDiameter",
+      "bolts.edgeDistance",
+      "bolts.protrusion",
+      "bolts.lengthStep",
+      "anchors.grade",
+      "anchors.finish",
+      "anchors.thickness",
+      "anchors.cheekDepth",
+      "anchors.length",
+      "anchors.anchors",
+      "anchors.anchorHoleDiameter",
+      "anchors.bolts",
+      "anchors.boltHoleDiameter",
+      "anchors.holeEdgeDistance",
+      "precheck.gammaMWood",
+    ]) {
+      expect(e(p).tier, p).toBe("workshop");
+    }
+    // ◆ : valeurs sans source oui ; choix, valeurs « auto » et justifications non.
+    for (const p of [
+      "section.width",
+      "trace.lateralOffset",
+      "section.residualFallback",
+      "section.thinPlyMax",
+      "bolts.perTread",
+      "bolts.holeDiameter",
+      "anchors.thickness",
+      "anchors.grade",
+      "anchors.holeEdgeDistance",
+    ]) {
+      expect(e(p).toValidate, p).toBe(true);
+    }
+    for (const p of [
+      "section.kind",
+      "material",
+      "strengthClass",
+      "section.residual",
+      "section.lamellaThickness",
+      "notch.rearDepth",
+      "anchors.foot",
+      "laminationJustification",
+    ]) {
+      expect(e(p).toValidate, p).toBeUndefined();
+    }
+    // Chaque chemin du schéma a son entrée (aucun repli Atelier implicite).
+    const plugin = availableStructures().find((k) => k.kind === "wood-central")!;
+    const defaults = plugin.paramsSchema.parse({});
+    for (const f of deriveParamFields(defaults, plugin.paramsSchema)) {
+      expect(hasStructureParamEntry("wood-central", f.path), f.path.join(".")).toBe(true);
+    }
+  });
+
   it("A31 : fixation de la marche en Conception, perçage en Atelier, ◆", () => {
     for (const kind of ["steel-flat", "steel-curved", "steel-central"]) {
       expect(structureParamEntry(kind, ["supports", "treadFixing"])).toMatchObject({
@@ -471,6 +546,37 @@ describe("valeurs ◆ d'un projet", () => {
     expect(applies(folded, "supports.tipHeight")).toBe(false);
     expect(applies(folded, "supports.bearingThickness")).toBe(false);
     expect(applies(folded, "supports.bearingWidth")).toBe(true);
+  });
+
+  it("paramètres conditionnels du limon central bois : lamelles, plis minces, sabots", () => {
+    const straight = createProject("straight");
+    const quarter = createProject("quarter-left");
+    const helical = createProject("helical");
+    const at = (p: Project, params: unknown, path: string) =>
+      structureParamApplies(p, params, path.split("."));
+    const glulam = { section: { kind: "glulam" }, anchors: { foot: true, head: true } };
+    const solid = { section: { kind: "solid" }, anchors: { foot: true, head: false } };
+    // Lamelles : lamellé-collé seulement.
+    expect(at(straight, glulam, "section.lamellaThickness")).toBe(true);
+    expect(at(straight, solid, "section.lamellaThickness")).toBe(false);
+    expect(at(straight, solid, "section.width")).toBe(true);
+    // Plis minces et leur justification : lamelles cintrées (tournant, hélicoïdal).
+    expect(at(straight, glulam, "section.thinPlyMax")).toBe(false);
+    expect(at(straight, glulam, "laminationJustification")).toBe(false);
+    for (const p of [quarter, helical]) {
+      expect(at(p, glulam, "section.thinPlyMax")).toBe(true);
+      expect(at(p, glulam, "laminationJustification")).toBe(true);
+      expect(at(p, solid, "section.thinPlyMax")).toBe(false);
+    }
+    // Sabots : présence toujours ; réglages s'il y a au moins un sabot.
+    const none = { anchors: { foot: false, head: false } };
+    for (const leaf of ["foot", "head"]) expect(at(straight, none, `anchors.${leaf}`)).toBe(true);
+    for (const leaf of ["thickness", "grade", "anchors", "boltHoleDiameter"]) {
+      expect(at(straight, none, `anchors.${leaf}`), leaf).toBe(false);
+      expect(at(straight, solid, `anchors.${leaf}`), leaf).toBe(true);
+    }
+    // Justification du porte-à-faux : toujours.
+    expect(at(straight, glulam, "cantileverJustification")).toBe(true);
   });
 
   it("essence des marches du projet : marches bois sans essence propre au plugin", () => {

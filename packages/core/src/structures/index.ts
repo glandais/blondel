@@ -6,9 +6,10 @@
  * d'angle), `wood-cut` (crémaillères, escalier droit), `steel-flat` (limons acier en plat
  * découpé laser, supports, marches bois ou en tôle pliée Z / U), `steel-profile` (limons en
  * profilés du commerce UPN / IPN / IPE / HEA, jalon 3c), `steel-curved` (limon de jour
- * débillardé soudé, tôle roulée par tronçons, jalon 5b) et `steel-central` (limon central
+ * débillardé soudé, tôle roulée par tronçons, jalon 5b), `steel-central` (limon central
  * métal : tube ou caisson, droit, débillardé ou hélicoïdal, consoles ou supports pliés,
- * QUESTIONS A29).
+ * QUESTIONS A29) et `wood-central` (limon central bois : crémaillère centrale massive ou en
+ * lamellé-collé, cintrée sur moule sur les tournants et l'hélicoïdal, A29 vague 2).
  */
 import { registerStructure, getStructure } from "./registry.js";
 import { WOOD_CUT } from "./woodCut.js";
@@ -16,6 +17,7 @@ import { STEEL_FLAT } from "./steelFlat.js";
 import { STEEL_PROFILE } from "./steelProfile.js";
 import { STEEL_CURVED } from "./steelCurved.js";
 import { STEEL_CENTRAL } from "./steelCentral.js";
+import { WOOD_CENTRAL } from "./woodCentral.js";
 import { WOOD_HOUSED } from "./woodHoused.js";
 import { registerHelicalCore } from "./helicalCore.js";
 
@@ -57,6 +59,7 @@ export {
   CREMAILLERE_RULE_ID,
   fcbaTable,
   parseFcbaTable,
+  requiredCentralResidual,
   requiredResidual,
   type FcbaTable,
   type StrengthClass,
@@ -196,6 +199,34 @@ export {
   type SteelCentralResult,
 } from "./steelCentral.js";
 export {
+  WOOD_CENTRAL,
+  WOOD_CENTRAL_RULES,
+  WOOD_CENTRAL_SECTION_KINDS,
+  WOOD_CENTRAL_STRENGTH_CLASSES,
+  WoodCentralParamsSchema,
+  buildWoodCentral,
+  woodCentralCurvedLayout,
+  woodCentralUnsupportedOptions,
+  type WoodCentralParams,
+  type WoodCentralSectionKind,
+} from "./woodCentral.js";
+export {
+  WOOD_CENTRAL_SHOE_FOOT_ID,
+  WOOD_CENTRAL_SHOE_HEAD_ID,
+  type ShoeBeamHole,
+} from "./woodCentralShoes.js";
+export {
+  WOOD_CENTRAL_BEAM_ID,
+  WOOD_CENTRAL_BEAM_RULES,
+  buildWoodCentralBeam,
+  type WoodCentralBolt,
+  type WoodCentralBeamInput,
+  type WoodCentralBeamResult,
+  type WoodCentralFcba,
+  type WoodCentralLamination,
+  type WoodCentralSeat,
+} from "./woodCentralBeam.js";
+export {
   arcFiberLength,
   fiberDevelopment,
   jourNormal,
@@ -223,6 +254,7 @@ if (!getStructure(STEEL_FLAT.kind)) registerStructure(STEEL_FLAT);
 if (!getStructure(STEEL_PROFILE.kind)) registerStructure(STEEL_PROFILE);
 if (!getStructure(STEEL_CURVED.kind)) registerStructure(STEEL_CURVED);
 if (!getStructure(STEEL_CENTRAL.kind)) registerStructure(STEEL_CENTRAL);
+if (!getStructure(WOOD_CENTRAL.kind)) registerStructure(WOOD_CENTRAL);
 // Jalon 5a (hélicoïdal à fût central) : plugin défini et exporté par `helicalCore.ts`.
 registerHelicalCore();
 export { newelTopWithHandrail } from "./newel.js";

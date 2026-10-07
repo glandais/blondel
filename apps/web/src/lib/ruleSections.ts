@@ -41,10 +41,12 @@ export const RULE_SECTION_PREFIXES: readonly (readonly [prefix: string, section:
   ["CONTREMARCHE", "treads"],
   ["NEZ_", "treads"],
   ["BANDE_", "treads"],
-  // Structure : fabrication, limons, crémaillères, prédimensionnement, charges.
+  // Structure : fabrication, limons, crémaillères, lamellé-collé cintré, prédimensionnement,
+  // charges.
   ["FAB_", "structure"],
   ["LIMON_", "structure"],
   ["CREMAILLERE", "structure"],
+  ["LAMELLE_", "structure"],
   ["PRECHECK_", "structure"],
   ["CHARGE_", "structure"],
   ["DEFORMATION", "structure"],

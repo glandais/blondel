@@ -13,7 +13,7 @@ Logiciel web de conception paramétrique d'escaliers, pour les menuisiers, les m
 - **Tracé** : droit, quart tournant, deux quarts (U), deux quarts opposés (S / Z, la ligne de foulée change de côté dans la volée intermédiaire), demi-tournant, quart tournant avec palier, hélicoïdal à fût ou à jour central ; jour vif, en arc ou à poteau.
 - **Balancement** des marches (M0, M1, M3 et variante quintique pour les débillardés ; M2 herse avec curseur d'angle borné par le modèle, M6 rotation paramétrée avec curseurs de portée et de raideur), contrôle du giron au collet ; **ligne de nez** dans l'inspecteur Marche : angle imposé d'un nez, nez fixe, retouches orphelines signalées.
 - **Site** : niveaux, trémie rectangulaire ou polygonale, murs ; **import de plan** DXF (calque) ou image calibrée, accroches, tracé assisté de la trémie et des murs (à l'axe ou au nu), **relevé** 4 côtés + 2 diagonales avec contrôle de cohérence.
-- **Structures** bois (limons à la française avec poteau d'angle, crémaillères) et métal (limons en plat découpé laser, marches en tôle pliée Z / U, limons en profilés UPN / IPN / IPE / HEA, limon de jour **débillardé soudé** en tronçons roulés, **limon central** en tube ou en caisson, droit, débillardé ou hélicoïdal, sur consoles soudées ou supports pliés, hélicoïdal à fût central avec marches en porte-à-faux) ; **garde-corps** et mains courantes (balustres, lisses, câbles, verre, tôle perforée, panneau plein).
+- **Structures** bois (limons à la française avec poteau d'angle, crémaillères, **limon central bois** en lamellé-collé ou massif, droit ou cintré sur moule — tournants, hélicoïdal —, marches entaillées et boulonnées, sabots métalliques) et métal (limons en plat découpé laser, marches en tôle pliée Z / U, limons en profilés UPN / IPN / IPE / HEA, limon de jour **débillardé soudé** en tronçons roulés, **limon central** en tube ou en caisson, droit, débillardé ou hélicoïdal, sur consoles soudées ou supports pliés, hélicoïdal à fût central avec marches en porte-à-faux) ; **garde-corps** et mains courantes (balustres, lisses, câbles, verre, tôle perforée, panneau plein).
 - **Contrôle de conception** indicatif (DTU 36.3, NF P01-012, garde-corps régimes 1988 et 2024, ERP…), échappée (y compris sous le tour supérieur d'un hélicoïdal), contrôles de fabrication, prédimensionnement indicatif et classe d'exécution EN 1090-2, corrections proposées ; chaque règle renvoie à sa source dans `docs/research/`.
 - **Comparateur de variantes** de structure sur la même épure : masse, pièces, pièces uniques, cordons, plis, EXC, coût si le barème d'atelier est renseigné.
 - **Vues** : plan 2D coté, élévation, développés, nomenclature ; **3D** avec matériaux PBR (essences de bois avec fil orienté, acier brut / peint / galvanisé, inox brossé, verre, béton), vue éclatée, coupe, mesure, isolation d'une pièce, cotes 3D.
@@ -37,19 +37,20 @@ pnpm dev          # application web sur http://localhost:5173
 Le sélecteur « Préréglage » du menu du projet (nom du projet, dans la barre du haut du parcours libre) présente deux groupes :
 
 - **Basiques** : les huit tracés de départ (droit, quart tournant à gauche ou à droite, deux quarts en U ou en S, demi-tournant balancé, quart tournant avec palier, hélicoïdal à fût central), réglages par défaut, à compléter pas à pas (structure, garde-corps, matériaux) ;
-- **Démo** : neuf escaliers complets, prêts à montrer (structure, marches, garde-corps et teintes), ouverts dans le parcours guidé à l'étape 1, vue 3D cadrée de trois quarts, cotes principales et contrôles sur les pièces masqués (deux cases de la vue 3D, à cocher pour les revoir ; le contrôle de conception liste toujours les avertissements ; un préréglage de base ou un autre projet les rétablit). Chaque démo est décrite en une ligne sous le sélecteur :
+- **Démo** : dix escaliers complets, prêts à montrer (structure, marches, garde-corps et teintes), ouverts dans le parcours guidé à l'étape 1, vue 3D cadrée de trois quarts, cotes principales et contrôles sur les pièces masqués (deux cases de la vue 3D, à cocher pour les revoir ; le contrôle de conception liste toujours les avertissements ; un préréglage de base ou un autre projet les rétablit). Chaque démo est décrite en une ligne sous le sélecteur :
 
-| Démo                                        | Contenu                                                                                                              |
-| ------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
-| Hélicoïdal acier, verre et inox             | fût acier noir, marches chêne rayonnantes, garde-corps verre et main courante inox                                   |
-| Quart tournant débillardé soudé             | limon acier débillardé soudé autour d'un jour en arc, marches chêne, garde-corps verre                               |
-| Deux quarts en U, chêne massif              | limons à la française, poteaux d'angle et balustres, tout en chêne huilé                                             |
-| Demi-tournant industriel en tôle pliée      | limons en plat laser anthracite, marches en tôle pliée en Z gris clair, barreaudage graphite                         |
-| Escalier droit loft sur UPN                 | limons UPN noirs, marches massives de 80 mm en chêne foncé sans contremarche, verre fumé                             |
-| Quart tournant à palier, frêne et verre     | limons à la française et poteau en frêne clair, palier d'angle, garde-corps verre                                    |
-| Grand escalier d'ERP                        | emmarchement de 1 400 mm, mains courantes des deux côtés, contextes ERP neuf                                         |
-| Hélicoïdal à jour central                   | marches portées par deux limons hélicoïdaux roulés autour d'un jour central                                          |
-| Quart tournant sur limon central débillardé | limon central en caisson débillardé sous l'axe de l'emmarchement, consoles soudées, marches chêne, garde-corps verre |
+| Démo                                                | Contenu                                                                                                                         |
+| --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| Hélicoïdal acier, verre et inox                     | fût acier noir, marches chêne rayonnantes, garde-corps verre et main courante inox                                              |
+| Quart tournant débillardé soudé                     | limon acier débillardé soudé autour d'un jour en arc, marches chêne, garde-corps verre                                          |
+| Deux quarts en U, chêne massif                      | limons à la française, poteaux d'angle et balustres, tout en chêne huilé                                                        |
+| Demi-tournant industriel en tôle pliée              | limons en plat laser anthracite, marches en tôle pliée en Z gris clair, barreaudage graphite                                    |
+| Escalier droit loft sur UPN                         | limons UPN noirs, marches massives de 80 mm en chêne foncé sans contremarche, verre fumé                                        |
+| Quart tournant à palier, frêne et verre             | limons à la française et poteau en frêne clair, palier d'angle, garde-corps verre                                               |
+| Grand escalier d'ERP                                | emmarchement de 1 400 mm, mains courantes des deux côtés, contextes ERP neuf                                                    |
+| Hélicoïdal à jour central                           | marches portées par deux limons hélicoïdaux roulés autour d'un jour central                                                     |
+| Quart tournant sur limon central débillardé         | limon central en caisson débillardé sous l'axe de l'emmarchement, consoles soudées, marches chêne, garde-corps verre            |
+| Quart tournant sur limon central bois lamellé-collé | crémaillère centrale en lamellé-collé cintré sur moule, marches chêne entaillées et boulonnées, sabots acier, garde-corps vitré |
 
 Une démo reste un projet ordinaire : tout se modifie, et une seule entrée d'annulation la retire. Elle peut porter l'essence des marches (`stair.treads.material`, qui compte dans les masses et le débit) et des teintes d'affichage (`appearance` : couleur de la peinture, éventuellement distincte pour les marches et les garde-corps, ton du bois, teinte du verre), propres à la vue 3D : elles ne changent ni les pièces, ni les masses, ni les exports. Chaque démo existe aussi en fichier (`examples/demo-*.blondel.json`).
 
@@ -57,21 +58,24 @@ Une démo reste un projet ordinaire : tout se modifie, et une seule entrée d'an
 
 Des projets d'exemple sont dans `examples/*.blondel.json` ; ils s'ouvrent depuis le menu « Importer » de l'application. On y trouve un exemple par préréglage, le cas d'acceptation n° 1 et ses variantes :
 
-| Exemple                              | Contenu                                                                                       |
-| ------------------------------------ | --------------------------------------------------------------------------------------------- |
-| `acceptance-01-quart-tournant`       | quart tournant bas, poteau d'angle, sans structure                                            |
-| `j3a-acceptance-01-bois`             | limons à la française (bois)                                                                  |
-| `j3b-acceptance-01-acier-plat`       | limons en plat acier, marches bois                                                            |
-| `j3b-acceptance-01-tole-pliee`       | limons en plat acier, marches en tôle pliée en Z (critère n° 3)                               |
-| `j3c-acceptance-01-upn`              | limons en profilés UPN (section automatique)                                                  |
-| `j4-acceptance-01-garde-corps`       | limons bois, garde-corps barreaudé côté vide (critère n° 1)                                   |
-| `j4-demi-tournant-acier-garde-corps` | demi-tournant, deux poteaux, acier et tôle pliée, garde-corps                                 |
-| `j5a-helicoidal`                     | hélicoïdal à fût central, marches en porte-à-faux, main courante                              |
-| `j5b-debillarde-soude`               | quart tournant à jour en arc, limon de jour débillardé soudé (critère n° 2)                   |
-| `j5c-limon-central-droit`            | escalier droit sur limon central en tube, consoles soudées, marches bois                      |
-| `j5c-limon-central-quart-tournant`   | quart tournant balancé sur limon central en caisson débillardé, marches en tôle pliée vissées |
-| `j5c-limon-central-helicoidal`       | hélicoïdal à jour central sur limon central en caisson hélicoïdal                             |
-| `two-quarters-s`                     | deux quarts tournants de sens opposés (S / Z), sans structure                                 |
+| Exemple                                 | Contenu                                                                                       |
+| --------------------------------------- | --------------------------------------------------------------------------------------------- |
+| `acceptance-01-quart-tournant`          | quart tournant bas, poteau d'angle, sans structure                                            |
+| `j3a-acceptance-01-bois`                | limons à la française (bois)                                                                  |
+| `j3b-acceptance-01-acier-plat`          | limons en plat acier, marches bois                                                            |
+| `j3b-acceptance-01-tole-pliee`          | limons en plat acier, marches en tôle pliée en Z (critère n° 3)                               |
+| `j3c-acceptance-01-upn`                 | limons en profilés UPN (section automatique)                                                  |
+| `j4-acceptance-01-garde-corps`          | limons bois, garde-corps barreaudé côté vide (critère n° 1)                                   |
+| `j4-demi-tournant-acier-garde-corps`    | demi-tournant, deux poteaux, acier et tôle pliée, garde-corps                                 |
+| `j5a-helicoidal`                        | hélicoïdal à fût central, marches en porte-à-faux, main courante                              |
+| `j5b-debillarde-soude`                  | quart tournant à jour en arc, limon de jour débillardé soudé (critère n° 2)                   |
+| `j5c-limon-central-droit`               | escalier droit sur limon central en tube, consoles soudées, marches bois                      |
+| `j5c-limon-central-quart-tournant`      | quart tournant balancé sur limon central en caisson débillardé, marches en tôle pliée vissées |
+| `j5c-limon-central-helicoidal`          | hélicoïdal à jour central sur limon central en caisson hélicoïdal                             |
+| `j5c-limon-central-bois-droit`          | escalier droit sur limon central bois en couches collées, marches entaillées et boulonnées    |
+| `j5c-limon-central-bois-quart-tournant` | quart tournant balancé sur limon central bois en lamellé-collé cintré                         |
+| `j5c-limon-central-bois-helicoidal`     | hélicoïdal sur limon central bois en lamellé-collé cintré                                     |
+| `two-quarters-s`                        | deux quarts tournants de sens opposés (S / Z), sans structure                                 |
 
 Le type de tracé (volées ou hélicoïdal) se choisit en tête du panneau des paramètres (pour deux tournants, « Enchaînement des tournants » passe du U au S / Z), la méthode de balancement et ses curseurs dans la section « Balancement », la structure dans la section « Structure », les garde-corps dans la section « Garde-corps ». Les erreurs de génération s'affichent au-dessus des vues avec, quand il y en a, des corrections proposées (annulables). Les développés des pièces s'affichent dans l'onglet « Développés » (avec le tableau des tronçons et joints d'un débillardé), le comparateur de variantes dans l'onglet « Comparateur » (raccord de jour adapté à chaque structure et signalé), et le menu « Exporter » produit tous les fichiers.
 

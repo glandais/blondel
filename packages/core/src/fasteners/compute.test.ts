@@ -281,6 +281,101 @@ describe("computeFasteners — fixations déclarées", () => {
   });
 });
 
+describe("computeFasteners — longueur déduite (`PartFixing.length`, limon central bois)", () => {
+  const tread = (n: number): Part =>
+    part({ id: `tread-${n}`, mark: `M${n}`, category: "tread", material: "wood-oak" });
+  /** Poutre déclarant ses boulons traversants, une fixation par assise et par longueur. */
+  const beam = (fixings: PartFixing[]): Part =>
+    part({
+      id: "wood-central-beam",
+      mark: "LC1",
+      category: "carriage",
+      material: "wood-oak",
+      fixings,
+    });
+
+  it("longueur déduite prioritaire sur le profil, M10 lu sur le perçage de 11 mm", () => {
+    const parts = [
+      tread(1),
+      beam([
+        { joint: "treadBeamBolted", points: 2, holeDiameter: 11, length: 260, with: ["tread-1"] },
+      ]),
+    ];
+    const [f] = computeFasteners({ parts, walls: [], profile });
+    expect(profile.joints.treadBeamBolted.length).not.toBe(260);
+    expect(f).toMatchObject({
+      joint: "treadBeamBolted",
+      kind: "bolt",
+      diameter: 10,
+      length: 260,
+      quantity: 2,
+      partIds: ["tread-1", "wood-central-beam"],
+      deduced: ["diameter", "quantity", "length"],
+    });
+    expect(fr(f!.name)).toMatch(/M10 × 260/);
+    expect(fr(f!.origin)).toBe("Marche M1 → limon central LC1");
+    expect(EN.t(f!.origin)).not.toBe("fastener.origin.treadBeamBolted");
+  });
+
+  it("repères distincts par longueur, identiques pour une même longueur", () => {
+    const parts = [
+      tread(1),
+      tread(2),
+      tread(3),
+      beam([
+        { joint: "treadBeamBolted", points: 2, holeDiameter: 11, length: 260, with: ["tread-1"] },
+        { joint: "treadBeamBolted", points: 2, holeDiameter: 11, length: 270, with: ["tread-2"] },
+        { joint: "treadBeamBolted", points: 2, holeDiameter: 11, length: 260, with: ["tread-3"] },
+      ]),
+    ];
+    const out = computeFasteners({ parts, walls: [], profile });
+    expect(out.map((f) => f.length)).toEqual([260, 270, 260]);
+    expect(out[0]!.mark).toBe(out[2]!.mark);
+    expect(out[0]!.mark).not.toBe(out[1]!.mark);
+    expect(new Set(out.map((f) => f.id)).size).toBe(3);
+  });
+
+  it("longueur absente, nulle ou non finie : longueur du profil, non déduite", () => {
+    for (const length of [undefined, 0, Number.NaN]) {
+      const fx: PartFixing = {
+        joint: "treadBeamBolted",
+        points: 1,
+        holeDiameter: 11,
+        with: ["tread-1"],
+        ...(length !== undefined ? { length } : {}),
+      };
+      const [f] = computeFasteners({ parts: [tread(1), beam([fx])], walls: [], profile });
+      expect(f!.length).toBe(profile.joints.treadBeamBolted.length);
+      expect(f!.deduced).not.toContain("length");
+    }
+  });
+
+  it("sabot : chevilles au sol, boulons au travers de la poutre (origine des deux joints)", () => {
+    const shoe = part({
+      id: "wood-central-shoe-foot",
+      mark: "SP1",
+      category: "fixing",
+      fixings: [
+        { joint: "plateFloor", points: 2, holeDiameter: 13 },
+        {
+          joint: "shoeBolted",
+          points: 2,
+          holeDiameter: 13,
+          length: 120,
+          with: ["wood-central-beam"],
+        },
+      ],
+    });
+    const out = computeFasteners({ parts: [beam([]), shoe], walls: [], profile });
+    expect(out.map((f) => f.joint)).toEqual(["plateFloor", "shoeBolted"]);
+    const bolt = out[1]!;
+    expect(bolt).toMatchObject({ kind: "bolt", diameter: 12, length: 120, quantity: 2 });
+    expect(bolt.partIds).toEqual(["wood-central-beam", "wood-central-shoe-foot"]);
+    expect(fr(bolt.origin)).toBe("Sabot SP1 → LC1");
+    expect(EN.t(bolt.origin)).not.toBe("fastener.origin.shoeBolted");
+  });
+});
+
 describe("computeFasteners — garde-corps", () => {
   const side = (s: "inner" | "outer", wallId?: string): SideAnalysis => ({
     side: s,

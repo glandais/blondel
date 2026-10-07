@@ -39,7 +39,6 @@ import type { Layout, NosingLine, Stepping } from "../model/derived.js";
 import type { StructureContext } from "../model/plugins.js";
 import type { Curve2, CurveSeg, Mm, Vec2 } from "../model/primitives.js";
 import type { LayoutSpec } from "../model/project.js";
-import type { SteelCentralParams } from "./steelCentralParams.js";
 import {
   monotoneHermite,
   naissances,
@@ -47,6 +46,15 @@ import {
   tangentAtExtended,
   type Naissance,
 } from "./steelCurvedGeometry.js";
+
+/**
+ * Paramètres lus par la trace (sous-ensemble commun de `steel-central` et `wood-central`) :
+ * décalage latéral de l'axe et largeur de la section (contrôle d'emprise et de rayon d'axe).
+ */
+export interface CentralTraceParams {
+  readonly trace: { readonly lateralOffset: Mm };
+  readonly section: { readonly width: Mm };
+}
 
 /** Type de trace : droite (escalier droit), débillardée (tournants), hélicoïdale. */
 export type CentralTraceKind = "straight" | "turning" | "helical";
@@ -100,7 +108,7 @@ const NOSING_SEGMENT_TOL = 1e-6;
  */
 export function buildCentralTrace(
   ctx: StructureContext,
-  params: SteelCentralParams,
+  params: CentralTraceParams,
 ): CentralTraceResult {
   try {
     return traceOf(ctx, params);
@@ -121,7 +129,7 @@ export function beamTopAt(trace: CentralTrace, topOffset: Mm, sigma: Mm): Mm {
 
 type Built = { readonly curve: Curve2; readonly notes: Message[] } | { readonly errors: Message[] };
 
-function traceOf(ctx: StructureContext, params: SteelCentralParams): CentralTraceResult {
+function traceOf(ctx: StructureContext, params: CentralTraceParams): CentralTraceResult {
   const { layout, stepping, project } = ctx;
   if (stepping.nosings.length < 2) {
     return { ok: false, errors: [msg("structure.steelCentral.error.traceTooFewNosings")] };
@@ -240,7 +248,7 @@ function traceOf(ctx: StructureContext, params: SteelCentralParams): CentralTrac
 }
 
 /** Trace hélicoïdale : arc de rayon (R_i + R_e)/2 + décalage, du nez 0 au nez d'arrivée. */
-function helicalCurve(layout: Layout, params: SteelCentralParams): Built {
+function helicalCurve(layout: Layout, params: CentralTraceParams): Built {
   const h = layout.helical!;
   const sign = h.direction === "left" ? 1 : -1;
   // Montée à gauche (sens trigonométrique) : la gauche de la montée est vers l'axe.
@@ -271,7 +279,7 @@ function helicalCurve(layout: Layout, params: SteelCentralParams): Built {
 function flightsCurve(
   layout: Layout,
   spec: Pick<LayoutSpec, "width" | "turns">,
-  params: SteelCentralParams,
+  params: CentralTraceParams,
 ): Built {
   const width = spec.width;
   const half = params.section.width / 2;

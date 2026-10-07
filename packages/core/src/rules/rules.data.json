@@ -54,6 +54,7 @@
     "garde_corps_1988": "Garde-corps selon NF P01-012 (1988) — projets antérieurs au 01/06/2025 (PC/DP) ou au 01/01/2026 (marchés)",
     "garde_corps_2024": "Garde-corps selon NF P01-012 (2024)",
     "limon_bois_encastre": "Structure à limons bois, marches encastrées (structure `wood-housed`) — déduit de la structure, non saisi",
+    "limon_central_bois": "Structure à limon central bois, crémaillère centrale massive ou en lamellé-collé (structure `wood-central`) — déduit de la structure, non saisi",
     "tous": "Tout escalier"
   },
   "contextes_forme": [
@@ -64,6 +65,9 @@
   "contextes_structure": {
     "wood-housed": [
       "limon_bois_encastre"
+    ],
+    "wood-central": [
+      "limon_central_bois"
     ]
   },
   "regles": [
@@ -2000,7 +2004,8 @@
       "unite": "mm",
       "contexte": [
         "bois_dtu",
-        "limon_bois_encastre"
+        "limon_bois_encastre",
+        "limon_central_bois"
       ],
       "nature": "normatif",
       "source": "NF EN 16481 § 5.4.2 et 7.3.1 (texte relu, docs/research/C-structures.md §1.4 et C-B-04, réf. [3] de C-structures)",
@@ -2008,24 +2013,26 @@
       "source_secondaire": false,
       "confiance": "eleve",
       "severite": "avertissement",
-      "note": "Évaluée par les structures à limons bois encastrés (wood-housed), dès que cette structure est utilisée (contexte déduit `limon_bois_encastre`, décision de l'utilisateur 2026-09-30, QUESTIONS D2), bois_dtu ou non. Section résiduelle sous entailles (100 / 80 mm) non retenue : source non identifiée (C-structures §1.4)."
+      "note": "Évaluée par les structures à limons bois encastrés (wood-housed), dès que cette structure est utilisée (contexte déduit `limon_bois_encastre`, décision de l'utilisateur 2026-09-30, QUESTIONS D2), bois_dtu ou non ; et par le limon central bois (wood-central, contexte déduit `limon_central_bois`) sur l'entaille arrière de chaque marche dans la crémaillère centrale (C-structures §1.5 : torsion réputée vérifiée si d_logement >= 14 mm). Section résiduelle sous entailles (100 / 80 mm) non retenue : source non identifiée (C-structures §1.4)."
     },
     {
       "id": "CREMAILLERE_REGLE_MOYENS",
       "description": "Crémaillère bois (paire, droit, hauteur d'étage 2,70 m soit 2700 mm, 38°) : distance min fond d'entaille / sous-face selon épaisseur — C30 : 33→179, 44→163, 70→141 ; D40 : 35→177, 44→162, 70→139 ; crémaillère centrale : épaisseurs x2",
-      "formule": "distance_entaille_sous_face >= table_FCBA(essence, epaisseur)",
+      "formule": "distance_entaille_sous_face >= table_FCBA(essence, epaisseur) ; crémaillère centrale : table_FCBA(essence, epaisseur / facteur_centrale)",
       "min": 139,
       "max": null,
       "recommande": null,
       "unite": "mm",
       "contexte": [
-        "bois_dtu"
+        "bois_dtu",
+        "limon_central_bois"
       ],
       "nature": "normatif",
       "source": "FCBA [2] tableau 4 (« exemple de résultats de calcul », rattachement exact au P3 non établi)",
       "source_en": "FCBA [2] table 4 (“example of calculation results”, exact link to P3 not established)",
       "confiance": "eleve",
       "severite": "avertissement",
+      "note": "Évaluée par les crémaillères (wood-cut, contexte bois_dtu) et par le limon central bois (wood-central, contexte déduit `limon_central_bois`) : crémaillère centrale unique, tableau lu à l'épaisseur b / facteur_centrale (C-structures §1.4, §1.5, C-B-03).",
       "parametres": {
         "hauteur_etage": 2700,
         "pente": 38,
@@ -2082,6 +2089,29 @@
       "parametres": {
         "max_balustres": 3
       }
+    },
+    {
+      "id": "LAMELLE_CINTRE_KR",
+      "description": "Lamellé-collé cintré (limon courbe en lamelles cintrées sur moule) : r_in/t (rayon intérieur / épaisseur de lame) >= 240 : pas de réduction (k_r = 1) ; de 170 à 240 : k_r = 0,76 + 0,001 · r_in/t ; sous 170 : refus (limite de fabrication)",
+      "formule": "r_in / t >= 170 ; k_r = 1 si r_in / t >= 240, sinon k_r = 0,76 + 0,001 * r_in / t",
+      "min": 170,
+      "max": null,
+      "recommande": 240,
+      "unite": "ratio",
+      "contexte": [
+        "limon_central_bois"
+      ],
+      "nature": "normatif",
+      "source": "EN 1995-1-1 (poutres courbes) via Swedish Wood [71] pour k_r, limite pratique de fabrication de 170 [9] ; docs/research/C-structures.md §1.6 et C-B-08 ; SPEC §2.4",
+      "source_en": "EN 1995-1-1 (curved beams) via Swedish Wood [71] for k_r, practical manufacturing limit of 170 [9]; docs/research/C-structures.md §1.6 and C-B-08; SPEC §2.4",
+      "source_secondaire": true,
+      "confiance": "moyen",
+      "severite": "bloquant",
+      "parametres": {
+        "kr_a": 0.76,
+        "kr_b": 0.001
+      },
+      "note": "Évaluée par le limon central bois (wood-central, contexte déduit `limon_central_bois`) sur la lamelle la plus cintrée ; k_r réduit la résistance de calcul du prédimensionnement. La limite de 170 est une limite de fabrication (rupture des lames au cintrage), pas un seuil de calcul. Lamellé en plis minces (hors NF EN 14080) : avertissement et justification (SPEC Q10), contrôle du plugin."
     },
     {
       "id": "ECHELLE_MEUNIER_HORS_DTU",

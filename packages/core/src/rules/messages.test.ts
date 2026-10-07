@@ -14,6 +14,8 @@ import { CENTRAL_RULES } from "../structures/steelCentral.js";
 import { STEEL_RULES } from "../structures/steelCommon.js";
 import { CURVED_RULES } from "../structures/steelCurved.js";
 import { PROFILE_RULES } from "../structures/steelProfile.js";
+import { WOOD_CENTRAL_RULES } from "../structures/woodCentral.js";
+import { WOOD_CENTRAL_BEAM_RULES } from "../structures/woodCentralBeam.js";
 import { evaluateCompliance, evaluateComplianceDetailed } from "./engine.js";
 import { severityLabel } from "./severity.js";
 import { CONFIDENCE_LABEL_KEYS, NATURE_LABEL_KEYS, RULES } from "./table.js";
@@ -55,6 +57,8 @@ describe("titres courts des règles", () => {
     HELICAL_RULES,
     CENTRAL_RULES,
     CENTRAL_BEAM_RULES,
+    WOOD_CENTRAL_RULES,
+    WOOD_CENTRAL_BEAM_RULES,
     PRECHECK_RULES,
   ];
   const pluginIds = PLUGIN_SPECS.flatMap((t) => Object.values(t).map((s) => s.id));
@@ -70,6 +74,7 @@ describe("titres courts des règles", () => {
     expect(pluginIds).toContain("HELICOIDAL_PORTE_A_FAUX");
     expect(pluginIds).toContain("LIMON_CENTRAL_PORTE_A_FAUX");
     expect(pluginIds).toContain("PRECHECK_FLECHE");
+    expect(pluginIds).toContain("LAMELLE_PLIS_MINCES");
     expect(allIds.length).toBeGreaterThanOrEqual(RULES.length);
     for (const id of allIds) {
       const key = `rules.${id}.title`;

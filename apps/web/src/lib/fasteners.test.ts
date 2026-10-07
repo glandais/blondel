@@ -128,6 +128,49 @@ describe("réglages de visserie du profil d'atelier", () => {
     ]);
   });
 
+  it("boulons traversants du limon central bois : longueur déduite, réglage de longueur masqué", () => {
+    const bolt = (id: string, deduced: Fastener["deduced"], length = 290) =>
+      fastener({
+        id,
+        mark: `VS-${id}`,
+        kind: "bolt",
+        grade: "8.8",
+        diameter: 10,
+        length,
+        joint: "treadBeamBolted",
+        deduced,
+      });
+    const deduced = withFasteners([
+      bolt("a", ["diameter", "quantity", "length"]),
+      bolt("b", ["diameter", "quantity", "length"], 300),
+      fastener({
+        id: "s",
+        mark: "VS-s",
+        kind: "bolt",
+        grade: "8.8",
+        joint: "shoeBolted",
+        deduced: ["diameter", "quantity", "length"],
+      }),
+    ]);
+    const s = fastenerSettingsInModel(deduced);
+    expect(s.joints.map((j) => j.joint)).toEqual(["treadBeamBolted", "shoeBolted"]);
+    for (const j of s.joints) expect(j.fields).toEqual(["kind", "grade", "perPoint"]);
+    expect(fastenerSettingPaths(deduced)).not.toContainEqual(
+      fastenerSettingPath("treadBeamBolted", "length"),
+    );
+    // Un élément sans longueur déduite : le réglage de longueur du profil sert encore.
+    const mixed = withFasteners([
+      bolt("a", ["diameter", "quantity", "length"]),
+      bolt("b", ["diameter", "quantity"]),
+    ]);
+    expect(fastenerSettingsInModel(mixed).joints[0]!.fields).toEqual([
+      "kind",
+      "grade",
+      "length",
+      "perPoint",
+    ]);
+  });
+
   it("entraxe des supports : seulement avec une main courante murale", () => {
     const m = withFasteners([
       fastener({ id: "h", mark: "VS3", joint: "handrailPartition", deduced: ["quantity"] }),

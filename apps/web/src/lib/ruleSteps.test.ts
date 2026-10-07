@@ -57,6 +57,9 @@ describe("rattachement règle → étape", () => {
     expect(ruleSteps("ECHELLE_MEUNIER_MC")).toEqual([6]);
     expect(ruleSteps("ECHELLE_MEUNIER_HORS_DTU")).toEqual([3]);
     expect(ruleSteps("LARGEUR_MC_ERP_NEUF")).toEqual([2]);
+    // Limon central bois (A29, vague 2) : lamellé-collé cintré à l'étape Structure.
+    expect(ruleSteps("LAMELLE_CINTRE_KR")).toEqual([5]);
+    expect(ruleSteps("LAMELLE_PLIS_MINCES")).toEqual([5]);
   });
 
   it("replis : famille du cœur, puis section du panneau, sinon aucune étape", () => {

@@ -49,8 +49,17 @@ export const STEP_RULE_PREFIXES: Readonly<Record<GuidedStep, readonly string[]>>
   ],
   // Marches : nez, recouvrement, contremarches, bandes d'éveil, vide entre marches.
   4: ["DEBORD_NEZ", "RECOUVREMENT", "CONTREMARCHE", "NEZ_", "BANDE_", "VIDE_ENTRE_MARCHES"],
-  // Structure : prédimensionnement, hélicoïdal, limons, crémaillères, charges.
-  5: ["PRECHECK_", "HELICOIDAL_", "LIMON_", "CREMAILLERE", "CHARGE_ESCALIER", "CHARGE_MARCHE"],
+  // Structure : prédimensionnement, hélicoïdal, limons, crémaillères, lamellé-collé cintré du
+  // limon central bois (`LAMELLE_CINTRE_KR`, `LAMELLE_PLIS_MINCES`), charges.
+  5: [
+    "PRECHECK_",
+    "HELICOIDAL_",
+    "LIMON_",
+    "CREMAILLERE",
+    "LAMELLE_",
+    "CHARGE_ESCALIER",
+    "CHARGE_MARCHE",
+  ],
   // Garde-corps : garde-corps, mains courantes, charge horizontale.
   6: ["GC_", "MC_", "CHARGE_GC_HORIZONTALE", "ECHELLE_MEUNIER_MC"],
   // Fabrication : contrôles des plugins, classe d'exécution, cintrage.

@@ -32,6 +32,7 @@ export const DEMO_PRESET_IDS = [
   "demo-erp-grand",
   "demo-helical-well",
   "demo-central-wreathed",
+  "demo-central-glulam",
 ] as const;
 export type DemoPresetId = (typeof DEMO_PRESET_IDS)[number];
 
@@ -46,6 +47,7 @@ export const DEMO_PRESET_LABELS: Readonly<Record<DemoPresetId, MessageKey>> = {
   "demo-erp-grand": "preset.demo.erpGrand.label",
   "demo-helical-well": "preset.demo.helicalWell.label",
   "demo-central-wreathed": "preset.demo.centralWreathed.label",
+  "demo-central-glulam": "preset.demo.centralGlulam.label",
 };
 
 /** Clés des descriptions d'une ligne de chaque démo (sélecteur de l'interface). */
@@ -59,6 +61,7 @@ export const DEMO_PRESET_DESCRIPTIONS: Readonly<Record<DemoPresetId, MessageKey>
   "demo-erp-grand": "preset.demo.erpGrand.description",
   "demo-helical-well": "preset.demo.helicalWell.description",
   "demo-central-wreathed": "preset.demo.centralWreathed.description",
+  "demo-central-glulam": "preset.demo.centralGlulam.description",
 };
 
 /** Garde-corps vitré à main courante inox (commun à plusieurs démos). */
@@ -256,6 +259,27 @@ function centralWreathed(name: string): Project {
   });
 }
 
+/**
+ * Quart tournant balancé sur limon central bois en lamellé-collé cintré sur moule (QUESTIONS
+ * A29, vague 2) : marches chêne entaillées et boulonnées, sabots acier peint en pied et en tête,
+ * garde-corps vitré (comme `demo-central-wreathed`). Jour vif du préréglage : la trace contourne
+ * le jour à l'axe de l'emmarchement.
+ */
+function centralGlulam(name: string): Project {
+  const p = createProject("quarter-left", { name, width: 900 });
+  return withPatch(p, {
+    stair: {
+      // Marches ouvertes (sans contremarche) : l'arrière de chaque marche se loge dans la dent
+      // suivante (entaille arrière) ; avec des contremarches pleines, les marches seraient
+      // posées sans entaille arrière (LIMON_ENTAILLE_MIN en violation).
+      treads: { risers: "none", thickness: 80 },
+      structure: { kind: "wood-central", params: { section: { kind: "glulam" } } },
+    },
+    guards: GLASS_GUARDS,
+    appearance: { paintColor: "#2b2f33", woodTone: "natural", glassTint: "clear" },
+  });
+}
+
 const BUILDERS: Readonly<Record<DemoPresetId, (name: string) => Project>> = {
   "demo-helical-glass": helicalGlass,
   "demo-quarter-curved": quarterCurved,
@@ -266,6 +290,7 @@ const BUILDERS: Readonly<Record<DemoPresetId, (name: string) => Project>> = {
   "demo-erp-grand": erpGrand,
   "demo-helical-well": helicalWell,
   "demo-central-wreathed": centralWreathed,
+  "demo-central-glulam": centralGlulam,
 };
 
 /** Vrai si `id` est une démo. */

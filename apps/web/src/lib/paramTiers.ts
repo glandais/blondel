@@ -34,6 +34,7 @@ import {
   ROTATION_DEFAULT_REACH,
   ROTATION_DEFAULT_STEEPNESS,
   isValueValidated,
+  woodCentralCurvedLayout,
   type Model,
   type Project,
   type ValidatedScalar,
@@ -45,6 +46,7 @@ import { GUIDED_STEPS, SECTION_IDS, type GuidedStep, type SectionId } from "./se
 import {
   deriveParamFields,
   getParam,
+  layoutTraitsOf,
   safeDefaults,
   structureContext,
   withDefaults,
@@ -335,6 +337,49 @@ const STRUCTURE_BY_KIND: Readonly<Record<string, Readonly<Record<string, ParamTi
     "supports.kind": design(S, [more(5)]),
     cantileverJustification: design(S, [more(5)]),
   },
+  // Limon central bois (QUESTIONS A29, vague 2) : section (lamellé-collé ou massif), largeur et
+  // essence en Essentiel à l'étape 5 ; classe, décalage de l'axe, épaisseur des lamelles, reste
+  // sous entaille, entaille arrière, boulons par marche, présence des sabots et justifications
+  // en Conception sous « Plus » ; le reste (repli FCBA, seuil des plis minces, perçages, pinces,
+  // pas d'arrondi, tôle et dimensions des sabots) en Atelier. Chaque chemin a son entrée ;
+  // l'essence (`material`, Essentiel, aussi dans « Marches ») garde l'entrée commune, comme
+  // `wood-cut`.
+  "wood-central": {
+    strengthClass: design(S, [more(5)]),
+    trace: workshop(S),
+    "trace.lateralOffset": design(S, [more(5)]),
+    section: workshop(S),
+    "section.kind": essential(S, [at(5)]),
+    "section.width": essential(S, [at(5)]),
+    "section.residual": design(S, [more(5)]),
+    "section.residualFallback": workshop(S),
+    "section.lamellaThickness": design(S, [more(5)]),
+    "section.thinPlyMax": workshop(S),
+    notch: workshop(S),
+    "notch.rearDepth": design(S, [more(5)]),
+    bolts: workshop(S),
+    "bolts.perTread": design(S, [more(5)]),
+    "bolts.holeDiameter": workshop(S),
+    "bolts.edgeDistance": workshop(S),
+    "bolts.minSpacing": workshop(S),
+    "bolts.protrusion": workshop(S),
+    "bolts.lengthStep": workshop(S),
+    anchors: workshop(S),
+    "anchors.foot": design(S, [more(5)]),
+    "anchors.head": design(S, [more(5)]),
+    "anchors.grade": workshop(S),
+    "anchors.finish": workshop(S),
+    "anchors.thickness": workshop(S),
+    "anchors.cheekDepth": workshop(S),
+    "anchors.length": workshop(S),
+    "anchors.anchors": workshop(S),
+    "anchors.anchorHoleDiameter": workshop(S),
+    "anchors.bolts": workshop(S),
+    "anchors.boltHoleDiameter": workshop(S),
+    "anchors.holeEdgeDistance": workshop(S),
+    cantileverJustification: design(S, [more(5)]),
+    laminationJustification: design(S, [more(5)]),
+  },
   "helical-core": {
     column: workshop(S),
     "column.material": design(S, [more(5)]),
@@ -501,8 +546,9 @@ function guardPaths(project: Project): (readonly string[])[] {
  * ou de la cornière selon le type de support (`supports.kind`), fixation d'une marche en tôle
  * sur son support (A31) seulement avec des marches en tôle pliée, réglages du limon central
  * selon la section (tube, caisson), le type de support (console, support plié) et la finition
- * (évents d'un galvanisé). Les autres
- * paramètres s'appliquent toujours. `params` : paramètres du plugin complétés par ses défauts.
+ * (évents d'un galvanisé), réglages du limon central bois selon la section (lamelles d'un
+ * lamellé-collé), le tracé (plis minces et leur justification seulement sur une trace courbe) et
+ * la présence des sabots (`anchors.*`). Les autres paramètres s'appliquent toujours. `params` : paramètres du plugin complétés par ses défauts.
  * Lecture du projet seulement, aucun calcul.
  */
 export function structureParamApplies(
@@ -552,8 +598,30 @@ export function structureParamApplies(
     if (kind === "box" && leaf === "wallThickness") return false;
     if (kind === "tube" && BOX_ONLY.has(leaf ?? "")) return false;
     if (leaf === "ventDiameter" && field(params, "finish") !== "galvanized") return false;
+    // Limon central bois : lamelles d'un lamellé-collé seulement ; plis minces seulement pour
+    // des lamelles cintrées (trace courbe : tournant ou hélicoïdal).
+    if (kind === "solid" && (leaf === "lamellaThickness" || leaf === "thinPlyMax")) return false;
+    if (leaf === "thinPlyMax" && !curvedLayout(project)) return false;
+  }
+  // Justification des plis minces du lamellé-collé cintré : sans objet sans cintrage.
+  if (head === "laminationJustification") {
+    return field(field(params, "section"), "kind") !== "solid" && curvedLayout(project);
+  }
+  // Sabots du limon central bois : présence toujours, réglages s'il y en a au moins un.
+  if (head === "anchors" && path[1] !== "foot" && path[1] !== "head") {
+    const anchors = field(params, "anchors");
+    return field(anchors, "foot") !== false || field(anchors, "head") !== false;
   }
   return true;
+}
+
+/**
+ * Le tracé du projet porte-t-il une trace courbe (tournant ou hélicoïdal) ? Lecture des traits
+ * du tracé (`layoutTraitsOf`, ceux que lisent les capacités des plugins) et critère du cœur
+ * (`woodCentralCurvedLayout`, sans copie), aucun calcul.
+ */
+function curvedLayout(project: Project): boolean {
+  return woodCentralCurvedLayout(layoutTraitsOf(project));
 }
 
 /** Réglages du caisson du limon central (tôles soudées), sans objet pour un tube. */

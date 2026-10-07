@@ -12,7 +12,8 @@
  * Un réglage ne s'applique que si le modèle a un assemblage de ce type : rien n'est proposé sans
  * visserie. Le diamètre d'un assemblage dont tous les éléments ont un diamètre lu sur les
  * perçages (`deduced`) ne s'applique pas (le jeu de perçage et la série des diamètres
- * nominaux, si) ; l'entraxe des supports ne s'applique qu'aux mains courantes murales, le mur
+ * nominaux, si), ni la longueur d'un assemblage dont tous les éléments ont une longueur déduite
+ * de l'épaisseur traversée (boulons `treadBeamBolted` et `shoeBolted` du limon central bois) ; l'entraxe des supports ne s'applique qu'aux mains courantes murales, le mur
  * supposé porteur qu'à celles qui longent un mur non décrit par le site (`unknownWall`).
  *
  * La série des diamètres nominaux se saisit en texte (`formatNominalDiameters`,
@@ -133,11 +134,16 @@ export function fastenerSettingsInModel(
   const joints = FASTENER_JOINTS.flatMap((joint) => {
     const own = fasteners.filter((f) => f.joint === joint);
     if (own.length === 0) return [];
+    // Diamètre lu sur les perçages, longueur déduite de l'épaisseur traversée (boulons
+    // traversants du limon central bois) : le réglage du profil ne sert pas.
     const holes = own.every((f) => f.deduced.includes("diameter"));
+    const lengths = own.every((f) => f.deduced.includes("length"));
     return [
       {
         joint,
-        fields: FASTENER_SETTING_FIELDS.filter((field) => field !== "diameter" || !holes),
+        fields: FASTENER_SETTING_FIELDS.filter(
+          (field) => (field !== "diameter" || !holes) && (field !== "length" || !lengths),
+        ),
       },
     ];
   });

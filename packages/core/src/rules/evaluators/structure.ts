@@ -1,7 +1,7 @@
 /**
- * Règles de rules.yaml évaluées par un **plugin de structure** (limons et crémaillères bois) :
- * seul le plugin connaît l'épaisseur des limons, la profondeur des entailles ou le reste sous
- * entaille. Le moteur rend ici un résultat d'attente, que `mergeStructureChecks` (pipeline)
+ * Règles de rules.yaml évaluées par un **plugin de structure** (limons et crémaillères bois,
+ * limon central bois) : seul le plugin connaît l'épaisseur des limons, la profondeur des
+ * entailles, le reste sous entaille ou le rayon de cintrage des lamelles. Le moteur rend ici un résultat d'attente, que `mergeStructureChecks` (pipeline)
  * remplace par les contrôles du plugin :
  * - structure concernée : `non-evaluee` « contrôle porté par la structure… » (visible seulement si
  *   le plugin n'a rien rendu : erreur de structure, découpage vide…) ;
@@ -14,9 +14,10 @@ import type { RuleEvaluator } from "../types.js";
 
 /** Structures qui évaluent chaque règle (`StructureOutput.checks`). */
 export const STRUCTURE_EVALUATED_RULES: Readonly<Record<string, readonly string[]>> = {
-  LIMON_EPAISSEUR_MIN_DTU: ["wood-housed", "wood-cut"],
-  LIMON_ENTAILLE_MIN: ["wood-housed"],
-  CREMAILLERE_REGLE_MOYENS: ["wood-cut"],
+  LIMON_EPAISSEUR_MIN_DTU: ["wood-housed", "wood-cut", "wood-central"],
+  LIMON_ENTAILLE_MIN: ["wood-housed", "wood-central"],
+  CREMAILLERE_REGLE_MOYENS: ["wood-cut", "wood-central"],
+  LAMELLE_CINTRE_KR: ["wood-central"],
 };
 
 /** Grandeur contrôlée par chaque règle (complément de « inconnue(s) »). */
@@ -24,6 +25,7 @@ const SUBJECT: Readonly<Record<string, MessageKey>> = {
   LIMON_EPAISSEUR_MIN_DTU: "rules.LIMON_EPAISSEUR_MIN_DTU.subject",
   LIMON_ENTAILLE_MIN: "rules.LIMON_ENTAILLE_MIN.subject",
   CREMAILLERE_REGLE_MOYENS: "rules.CREMAILLERE_REGLE_MOYENS.subject",
+  LAMELLE_CINTRE_KR: "rules.LAMELLE_CINTRE_KR.subject",
 };
 
 /** « « wood-housed » ou « wood-cut » » : identifiants de structure entre guillemets. */

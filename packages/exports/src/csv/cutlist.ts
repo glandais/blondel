@@ -5,7 +5,9 @@
  *
  * Regroupement : les pièces de même repère (`Part.mark`) sont des pièces identiques ; la
  * quantité est leur nombre (deux pièces de même repère mais de débit différent restent sur deux
- * lignes). Grandeurs lues dans `Part.quantities` : `volume` (m³) et la masse (kg), clé
+ * lignes). Pièce composée de plusieurs lames identiques (`Part.stock.count`, lamellé-collé) : la
+ * ligne porte le débit d'une lame, la quantité compte les lames, volume et masse unitaires sont
+ * ceux d'une lame (part égale de la pièce), de sorte que les totaux restent ceux des pièces. Grandeurs lues dans `Part.quantities` : `volume` (m³) et la masse (kg), clé
  * normalisée `mass_kg` du cœur, à défaut clé historique `mass` (`partMassKg`) ; à défaut de
  * `volume`, volume brut du débit L × l × e (`Part.stock`). Aucune masse n'est inventée : sans
  * masse, la colonne reste vide et le total est « incomplet ».
@@ -217,7 +219,7 @@ export function cutListRows(
       p.category,
       p.material,
       trOpt(t, p.section) ?? null,
-      p.stock ? [p.stock.length, p.stock.width, p.stock.thickness] : null,
+      p.stock ? [p.stock.length, p.stock.width, p.stock.thickness, p.stock.count ?? 1] : null,
       p.quantities[QUANTITY_VOLUME] ?? null,
       partMassKg(p) ?? null,
     ]);
@@ -228,10 +230,14 @@ export function cutListRows(
   const rows: CutListRow[] = [];
   for (const { part, count } of groups.values()) {
     const s = part.stock;
-    const volume =
+    // Lames identiques d'une pièce composée (lamellé-collé) : une ligne de débit par lame.
+    const pieces = s?.count !== undefined && s.count > 1 ? s.count : 1;
+    const partVolume =
       part.quantities[QUANTITY_VOLUME] ??
-      (s ? (s.length * s.width * s.thickness) / 1e9 : undefined);
-    const mass = partMassKg(part);
+      (s ? (s.length * s.width * s.thickness * pieces) / 1e9 : undefined);
+    const volume = partVolume !== undefined ? partVolume / pieces : undefined;
+    const partMass = partMassKg(part);
+    const mass = partMass !== undefined ? partMass / pieces : undefined;
     const note = mass !== undefined ? noteOf(part.material, t) : undefined;
     rows.push({
       mark: part.mark,
@@ -240,7 +246,7 @@ export function cutListRows(
       material: materialLabel(t, part.material),
       section: trOpt(t, part.section) ?? "",
       ...(s ? { length: s.length, width: s.width, thickness: s.thickness } : {}),
-      quantity: count,
+      quantity: count * pieces,
       ...(volume !== undefined ? { unitVolume: volume } : {}),
       ...(mass !== undefined ? { unitMass: mass } : {}),
       ...(note !== undefined && note !== "" ? { massNote: note } : {}),

@@ -31,6 +31,7 @@ import { appStore, useApp, useModel } from "../../store/appStore.js";
 import type { Selection } from "../../store/projectStore.js";
 import { openSection } from "../../store/uiStore.js";
 import { RAIL_LABEL_KEYS } from "../free/Rail.js";
+import { getParam } from "../../lib/structureForm.js";
 import { ParamInput, useStructureParamForm } from "../StructureSection.js";
 import { Icon } from "../ui/Icon.js";
 import { SEVERITY_ICONS } from "./RuleCard.js";
@@ -57,6 +58,17 @@ export interface RuleInspectorProps {
 export const CANTILEVER_RULES: ReadonlySet<string> = new Set([
   "HELICOIDAL_PORTE_A_FAUX",
   "LIMON_CENTRAL_PORTE_A_FAUX",
+]);
+
+/**
+ * Règle → paramètre de plugin (chemin) qui porte sa justification, saisie dans l'inspecteur :
+ * porte-à-faux (`CANTILEVER_RULES` → `cantileverJustification`) et plis minces du lamellé-collé
+ * cintré du limon central bois (SPEC Q10, `LAMELLE_PLIS_MINCES` → `laminationJustification`).
+ * L'avertissement reste, la justification lui est jointe (A12).
+ */
+export const JUSTIFICATION_PARAMS: ReadonlyMap<string, string> = new Map([
+  ...[...CANTILEVER_RULES].map((id): [string, string] => [id, "cantileverJustification"]),
+  ["LAMELLE_PLIS_MINCES", "laminationJustification"],
 ]);
 
 /** Statut affiché en surtitre : sévérité effective d'une violation, sinon le statut. */
@@ -273,19 +285,21 @@ function Provenance({ r }: { r: RuleResult }) {
 }
 
 /**
- * Justification du porte-à-faux (hélicoïdal, limon central) : même paramètre
- * (`cantileverJustification`), même validation et même historique que le panneau Structure.
+ * Justification jointe à une règle (porte-à-faux de l'hélicoïdal ou du limon central, plis
+ * minces du lamellé-collé cintré) : même paramètre de plugin (`param`, `JUSTIFICATION_PARAMS`),
+ * même validation et même historique que le panneau Structure. Rien si le plugin courant n'a pas
+ * ce paramètre ou s'il ne s'applique pas au projet.
  */
-function CantileverJustification() {
+function RuleJustification({ param }: { param: string }) {
   const t = useT();
   const form = useStructureParamForm();
-  const field = form.fields.find((f) => f.path.join(".") === "cantileverJustification");
+  const field = form.fields.find((f) => f.path.join(".") === param);
   if (!field) return null;
   return (
     <div className="rule-insp__cantilever">
       <ParamInput
         field={field}
-        value={form.params["cantileverJustification"]}
+        value={getParam(form.params, field.path)}
         onCommit={form.onParam(field)}
       />
       {form.error ? (
@@ -339,6 +353,7 @@ export function RuleInspector({ selection }: RuleInspectorProps) {
   const { model } = useModel();
   const r = findSelectedResult(model?.compliance, selection);
   if (!r) return <Missing />;
+  const justification = JUSTIFICATION_PARAMS.get(r.ruleId);
   return (
     <div
       className="insp-template rule-insp"
@@ -356,7 +371,7 @@ export function RuleInspector({ selection }: RuleInspectorProps) {
       <Where r={r} />
       <Fixes ruleId={r.ruleId} />
       <Provenance r={r} />
-      {CANTILEVER_RULES.has(r.ruleId) ? <CantileverJustification /> : null}
+      {justification === undefined ? null : <RuleJustification param={justification} />}
       <Override ruleId={r.ruleId} />
       <span className="insp-spacer" aria-hidden="true" />
       <p className="inspector-disclaimer">{t.t("ui.compliance.disclaimer")}</p>
