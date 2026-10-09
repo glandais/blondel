@@ -4,10 +4,14 @@
  * calcul (`model.worker.ts`) comme du repli sur le fil principal : la barre d'état affiche
  * ainsi le temps de maillage même quand la vue 3D n'est pas ouverte.
  *
+ * Pièces de la scène : toutes sauf les composantes (`Part.componentOf`, couches d'une poutre en
+ * couches empilées, QUESTIONS A33 (e)), que la pièce finie dessine déjà ; elles restent dans le
+ * `Model` (listes, nomenclature, gabarits en Fabrication).
+ *
  * Tout ce qui est rendu ici doit rester clonable (`structuredClone`, `postMessage`) : objets
  * simples et tableaux typés, aucune fonction.
  */
-import { errorMessageOf, type Project } from "@blondel/core";
+import { errorMessageOf, type Part, type Project } from "@blondel/core";
 import { msg, type Message } from "@blondel/i18n";
 import type { PartMesh } from "@blondel/geometry";
 import { computeModel, type BuildModelFn, type ModelResult } from "./buildModel.js";
@@ -35,7 +39,14 @@ export interface ModelSnapshot extends ModelResult {
   readonly meshError?: Message;
 }
 
-/** Calcule le modèle puis maille ses pièces ; ne lève jamais. */
+/** Pièces dessinées dans la scène 3D : sans les composantes (`Part.componentOf`). */
+export function sceneParts(parts: readonly Part[]): readonly Part[] {
+  return parts.some((p) => p.componentOf !== undefined)
+    ? parts.filter((p) => p.componentOf === undefined)
+    : parts;
+}
+
+/** Calcule le modèle puis maille ses pièces de la scène ; ne lève jamais. */
 export function computeSnapshot(
   project: Project,
   meshCache: MeshCache,
@@ -44,7 +55,7 @@ export function computeSnapshot(
   const result = computeModel(project, build);
   if (!result.model) return { ...result, mesh: null };
   try {
-    const run = meshCache.mesh(result.model.parts);
+    const run = meshCache.mesh(sceneParts(result.model.parts));
     return {
       ...result,
       mesh: {

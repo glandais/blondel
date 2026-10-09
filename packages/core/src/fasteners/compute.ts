@@ -10,7 +10,8 @@
  *    d'une marche bois dans l'aile horizontale ; `treadBolted`, vis à métaux d'une marche en
  *    tôle vissée, A31), contremarche d'arrivée pliée fixée au chevêtre
  *    (`riserTrimmer`), marches et sabots boulonnés au travers du limon central bois
- *    (`treadBeamBolted`, `shoeBolted`, `wood-central`). Un plugin déclare ainsi tout nouvel
+ *    (`treadBeamBolted`, `shoeBolted`, `wood-central`), marches basses fixées par tire-fonds
+ *    (`treadBeamLagScrewed`) et âme de platine brochée (`embeddedPlatePinned`). Un plugin déclare ainsi tout nouvel
  *    assemblage (point d'extension). Longueur : déduite si la fixation la porte
  *    (`PartFixing.length`, boulon traversant), sinon celle du profil d'atelier.
  * 2. **Platines percées** (catégorie `fixing`, perçages de `flat.outline.holes`) sans fixation
@@ -282,6 +283,10 @@ function originOf(f: PartFixing, mark: string, withMarks: string): Message {
       return msg("fastener.origin.treadBeamBolted", { mark, with: withMarks });
     case "shoeBolted":
       return msg("fastener.origin.shoeBolted", { mark, with: withMarks });
+    case "treadBeamLagScrewed":
+      return msg("fastener.origin.treadBeamLagScrewed", { mark, with: withMarks });
+    case "embeddedPlatePinned":
+      return msg("fastener.origin.embeddedPlatePinned", { mark, with: withMarks });
     case "guardPostFloor":
       return msg("fastener.origin.guardPostFloor", { mark });
     case "guardPostStair":

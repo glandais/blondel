@@ -12,6 +12,13 @@
  * `volume`, volume brut du débit L × l × e (`Part.stock`). Aucune masse n'est inventée : sans
  * masse, la colonne reste vide et le total est « incomplet ».
  *
+ * Pièce finie faite de composantes (`Part.componentOf`, couches d'une poutre en couches
+ * empilées, QUESTIONS A33 (e)) : seules les composantes sont listées (elles portent le débit, le
+ * volume et la masse) ; la pièce finie, sans débit propre, ne l'est pas (aucun double compte).
+ * Débit en placage (`Part.stock.supply = "veneer"`, plis minces achetés à l'épaisseur,
+ * QUESTIONS A34 (e)) : désignation suivie de « (placage) » (sans nouvelle colonne) et champ
+ * `supply` de la ligne pour l'interface et le PDF.
+ *
  * Remarque de masse (QUESTIONS A6, appliqué par défaut) : une masse calculée avec une masse
  * volumique non validée porte la mention « masse volumique à valider » (colonne « Remarque
  * masse ») ; par défaut toutes les essences de bois (masses volumiques du profil d'atelier à
@@ -22,6 +29,7 @@
  * non nulle n'est jamais affichée nulle ; les totaux somment les valeurs de ligne affichées.
  */
 import {
+  fabricatedParts,
   isWoodMaterial,
   type MaterialId,
   type Model,
@@ -195,6 +203,30 @@ export interface CutListRow {
   readonly unitMass?: number;
   /** Remarque sur la masse (ex. « masse volumique à valider ») ; absente sans masse. */
   readonly massNote?: string;
+  /**
+   * Approvisionnement particulier du débit, traduit (« placage » : `Part.stock.supply =
+   * "veneer"`) ; absent : débit ordinaire. La désignation `name` le mentionne déjà.
+   */
+  readonly supply?: string;
+}
+
+/**
+ * Pièces du débit : toutes, sauf une pièce finie dont des composantes (`Part.componentOf`) sont
+ * dans le lot (elle n'a pas de débit propre : ses composantes le portent).
+ */
+export function cutParts(parts: readonly Part[]): readonly Part[] {
+  return fabricatedParts(parts);
+}
+
+/** Approvisionnement traduit du débit d'une pièce (`undefined` : débit ordinaire). */
+export function supplyLabel(t: Translator, part: Pick<Part, "stock">): string | undefined {
+  return part.stock?.supply === "veneer" ? t.t("export.cutlist.supply.veneer") : undefined;
+}
+
+/** Désignation d'une ligne de débit : nom de la pièce, suivi de « (placage) » s'il y a lieu. */
+export function cutName(t: Translator, part: Pick<Part, "name" | "stock">): string {
+  const name = tr(t, part.name);
+  return part.stock?.supply === "veneer" ? t.t("export.cutlist.veneer", { name }) : name;
 }
 
 export interface CutListRowsOptions extends LocaleOption {
@@ -213,13 +245,21 @@ export function cutListRows(
   // débit différentes (erreur amont) ne sont jamais fusionnées en silence : une ligne chacune,
   // le repère en double reste visible.
   const groups = new Map<string, { part: Part; count: number }>();
-  for (const p of parts) {
+  for (const p of cutParts(parts)) {
     const key = JSON.stringify([
       p.mark,
       p.category,
       p.material,
       trOpt(t, p.section) ?? null,
-      p.stock ? [p.stock.length, p.stock.width, p.stock.thickness, p.stock.count ?? 1] : null,
+      p.stock
+        ? [
+            p.stock.length,
+            p.stock.width,
+            p.stock.thickness,
+            p.stock.count ?? 1,
+            p.stock.supply ?? null,
+          ]
+        : null,
       p.quantities[QUANTITY_VOLUME] ?? null,
       partMassKg(p) ?? null,
     ]);
@@ -239,9 +279,10 @@ export function cutListRows(
     const partMass = partMassKg(part);
     const mass = partMass !== undefined ? partMass / pieces : undefined;
     const note = mass !== undefined ? noteOf(part.material, t) : undefined;
+    const supply = supplyLabel(t, part);
     rows.push({
       mark: part.mark,
-      name: tr(t, part.name),
+      name: cutName(t, part),
       category: part.category,
       material: materialLabel(t, part.material),
       section: trOpt(t, part.section) ?? "",
@@ -250,6 +291,7 @@ export function cutListRows(
       ...(volume !== undefined ? { unitVolume: volume } : {}),
       ...(mass !== undefined ? { unitMass: mass } : {}),
       ...(note !== undefined && note !== "" ? { massNote: note } : {}),
+      ...(supply !== undefined ? { supply } : {}),
     });
   }
   const rank = (c: PartCategory): number => {

@@ -13,7 +13,11 @@
  * - **à valider** (aucune source dans docs/research : EN 1990, EC3 / EC5 et leurs AN, EN 338 non
  *   lus) : γ_G = 1,35, γ_Q = 1,5, γ_M0 = 1,0, γ_M bois = 1,3, k_mod = 0,8, classes de bois C24
  *   (E = 11 000 MPa, f_m,k = 24 MPa) et f_m,k des C30 / D40, part de la charge ponctuelle et de
- *   la masse de vibration reprise par un limon (1 : tout sur un limon, sécuritaire).
+ *   la masse de vibration reprise par un limon (1 : tout sur un limon, sécuritaire) ;
+ * - lamellé-collé (QUESTIONS A33 (a), 2026-10-09) : classes GL24h / GL28h / GL32h (E_0,g,mean,
+ *   f_m,g,k de la NF EN 14080) et γ_M = 1,25 (EN 1995-1-1 § 2.4.1), rapportés par C §1.11 [71]
+ *   (normes non lues, confiance moyenne, **à valider**) ; classe `auto` : GL24h pour l'essence
+ *   lamellé-collé, C24 sinon.
  */
 import { msg, type Message } from "@blondel/i18n";
 import { z } from "zod";
@@ -22,8 +26,22 @@ import type { SteelGrade } from "../workshop/metal.js";
 export const LOAD_CATEGORIES = ["A", "B", "C1", "C2", "C3", "C4", "C5", "D1", "D2"] as const;
 export type LoadCategory = (typeof LOAD_CATEGORIES)[number];
 
-export const WOOD_CLASSES = ["C24", "C30", "D40"] as const;
+/**
+ * Classes de résistance du bois : massif (EN 338 non lue) et lamellé-collé homogène GL24h,
+ * GL28h, GL32h (NF EN 14080 non lue, valeurs rapportées par C §1.11 [71], QUESTIONS A33 (a)).
+ */
+export const WOOD_CLASSES = ["C24", "C30", "D40", "GL24h", "GL28h", "GL32h"] as const;
 export type WoodClass = (typeof WOOD_CLASSES)[number];
+
+/** Classes de lamellé-collé (γ_M du lamellé-collé, `gammaMGlulam`). */
+export const GLULAM_WOOD_CLASSES: readonly WoodClass[] = ["GL24h", "GL28h", "GL32h"];
+
+/**
+ * Réglage de la classe : une classe, ou `auto` = GL24h pour l'essence lamellé-collé
+ * (`wood-glulam`, plus basse classe GL sourcée), C24 sinon (défaut historique) ; à valider.
+ */
+export const WOOD_CLASS_SETTINGS = [...WOOD_CLASSES, "auto"] as const;
+export type WoodClassSetting = (typeof WOOD_CLASS_SETTINGS)[number];
 
 export const PrecheckSettingsSchema = z.object({
   /** `AN` : annexe nationale française (prime, SPEC X16) ; `EN16481` : défauts de la norme. */
@@ -45,8 +63,16 @@ export const PrecheckSettingsSchema = z.object({
   /** Bois : γ_M et k_mod (à valider : EC5 et son AN non lus). */
   gammaMWood: z.number().positive().default(1.3),
   kmod: z.number().positive().max(1.1).default(0.8),
-  /** Classe de résistance des limons bois (à valider : EN 338 non lue). */
-  woodClass: z.enum(WOOD_CLASSES).default("C24"),
+  /**
+   * Bois lamellé-collé (classes GL) : γ_M = 1,25 (EN 1995-1-1 § 2.4.1 via C §1.11 [71], valeur
+   * recommandée ; annexe nationale non lue, à valider).
+   */
+  gammaMGlulam: z.number().positive().default(1.25),
+  /**
+   * Classe de résistance des limons bois ; `auto` : GL24h pour l'essence lamellé-collé, C24
+   * sinon (à valider : EN 338 non lue ; classes GL : NF EN 14080 via C §1.11 [71]).
+   */
+  woodClass: z.enum(WOOD_CLASS_SETTINGS).default("auto"),
 });
 export type PrecheckSettings = z.output<typeof PrecheckSettingsSchema>;
 
@@ -70,6 +96,7 @@ export const PRECHECK_PROVENANCE: Readonly<Record<keyof PrecheckSettings, Preche
   gammaM0: { status: "a-valider", note: msg("precheck.provenance.gammaM0") },
   gammaMWood: { status: "a-valider", note: msg("precheck.provenance.gammaMWood") },
   kmod: { status: "a-valider", note: msg("precheck.provenance.kmod") },
+  gammaMGlulam: { status: "a-valider", note: msg("precheck.provenance.gammaMGlulam") },
   woodClass: { status: "a-valider", note: msg("precheck.provenance.woodClass") },
 };
 
@@ -97,7 +124,8 @@ export function steelYield(grade: SteelGrade): number {
 
 /**
  * Propriétés des classes de bois : E de C30 et D40 sourcés (exemple FCBA du DTU 36.3, C §1.4 [1]),
- * tout le reste **à valider** (EN 338 non lue).
+ * le reste des classes massives **à valider** (EN 338 non lue) ; classes GL : E_0,g,mean et
+ * f_m,g,k de la NF EN 14080 rapportés par C §1.11 [71] (norme non lue, confiance moyenne).
  */
 export const WOOD_CLASS_PROPERTIES: Readonly<
   Record<WoodClass, { readonly e: number; readonly fmk: number; readonly sourced: Message }>
@@ -105,7 +133,19 @@ export const WOOD_CLASS_PROPERTIES: Readonly<
   C24: { e: 11_000, fmk: 24, sourced: msg("precheck.woodClass.C24") },
   C30: { e: 12_000, fmk: 30, sourced: msg("precheck.woodClass.C30") },
   D40: { e: 13_000, fmk: 40, sourced: msg("precheck.woodClass.D40") },
+  GL24h: { e: 11_500, fmk: 24, sourced: msg("precheck.woodClass.GL24h") },
+  GL28h: { e: 12_600, fmk: 28, sourced: msg("precheck.woodClass.GL28h") },
+  GL32h: { e: 14_200, fmk: 32, sourced: msg("precheck.woodClass.GL32h") },
 };
+
+/**
+ * Classe retenue : celle du réglage, ou `auto` → GL24h pour l'essence lamellé-collé
+ * (`wood-glulam`), C24 sinon (et sans essence connue).
+ */
+export function resolveWoodClass(settings: PrecheckSettings, material?: string): WoodClass {
+  if (settings.woodClass !== "auto") return settings.woodClass;
+  return material === "wood-glulam" ? "GL24h" : "C24";
+}
 
 export function steelMaterialOf(
   grade: SteelGrade,
@@ -123,14 +163,24 @@ export function steelMaterialOf(
   };
 }
 
-export function woodMaterialOf(settings: PrecheckSettings, density: number): BeamMaterial {
-  const c = WOOD_CLASS_PROPERTIES[settings.woodClass];
+/**
+ * Matériau bois d'une poutre : classe retenue (`resolveWoodClass`, `material` = essence de la
+ * pièce pour `auto`), γ_M du lamellé-collé pour une classe GL, du bois massif sinon.
+ */
+export function woodMaterialOf(
+  settings: PrecheckSettings,
+  density: number,
+  material?: string,
+): BeamMaterial {
+  const cls = resolveWoodClass(settings, material);
+  const c = WOOD_CLASS_PROPERTIES[cls];
+  const gammaM = GLULAM_WOOD_CLASSES.includes(cls) ? settings.gammaMGlulam : settings.gammaMWood;
   return {
     kind: "wood",
-    label: settings.woodClass,
+    label: cls,
     e: c.e,
     strength: c.fmk,
-    design: (settings.kmod * c.fmk) / settings.gammaMWood,
+    design: (settings.kmod * c.fmk) / gammaM,
     density,
   };
 }

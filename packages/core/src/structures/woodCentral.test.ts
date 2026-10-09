@@ -20,6 +20,7 @@ import { makeSteppingProject, stairArb } from "../stepping/test-helpers.js";
 import { getRule } from "../rules/table.js";
 import { structureUnsupportedOptions } from "./registry.js";
 import { CENTRAL_RULES } from "./steelCentral.js";
+import { deduceExecutionClass } from "./steelCommon.js";
 import {
   WOOD_CENTRAL,
   WOOD_CENTRAL_RULES,
@@ -38,6 +39,9 @@ const KR_MIN = getRule(KR).min!;
 
 /** Marches sans contremarche (entaille arrière dans la dent suivante). */
 const OPEN = { risers: "none", thickness: 80 } as const;
+
+/** Cintrage sur moule choisi (le défaut sur trace courbe est la filière des couches empilées). */
+const MOULD = { section: { curvedMethod: "mould" } } as const;
 
 function withWoodCentral(
   p: Project,
@@ -201,8 +205,8 @@ describe("contrôles selon le tracé", () => {
     }
   });
 
-  it("quart tournant : lamelles cintrées, k_r contrôlé, FCBA hors domaine, plis minces signalés", () => {
-    const { m, out, beam } = run(preset("quarter-left"));
+  it("quart tournant, cintrage sur moule choisi : lamelles cintrées, k_r contrôlé, FCBA hors domaine, plis minces signalés", () => {
+    const { m, out, beam } = run(preset("quarter-left", MOULD));
     expect(frList(m.errors)).toEqual([]);
     expect(beam?.lamination.curved).toBe(true);
     const kr = byRule(out.checks, KR);
@@ -222,18 +226,51 @@ describe("contrôles selon le tracé", () => {
 
   it("lamelles épaisses (au-delà du seuil) : plis minces conformes", () => {
     const { out, beam } = run(
-      preset("quarter-left", { section: { thinPlyMax: 1, lamellaThickness: 2 } }),
+      preset("quarter-left", {
+        section: { thinPlyMax: 1, lamellaThickness: 2, curvedMethod: "mould" },
+      }),
     );
     expect(beam!.lamination.lamellaThickness).toBeGreaterThan(1);
     expect(byRule(out.checks, THIN).map((c) => c.status)).toEqual(["ok"]);
   });
 
-  it("contremarches pleines : marches posées, entaille arrière en violation explicite", () => {
+  it("quart tournant et hélicoïdal par défaut : couches empilées, k_r = 1 sans cintrage, pas de plis minces", () => {
+    for (const id of ["quarter-left", "helical"] as const) {
+      const { m, out, beam } = run(preset(id));
+      expect(frList(m.errors)).toEqual([]);
+      expect(beam!.lamination.method, id).toBe("stacked");
+      const kr = byRule(out.checks, KR);
+      expect(kr.map((c) => [c.status, c.message.key])).toEqual([
+        ["ok", "structure.woodCentral.check.krStacked"],
+      ]);
+      expect(fr(kr[0]!.message)).toMatch(/sans cintrage : k_r = 1/);
+      expect(byRule(out.checks, THIN)).toEqual([]);
+      expect(byRule(out.checks, "CREMAILLERE_REGLE_MOYENS").map((c) => c.status)).toEqual([
+        "non-evaluee",
+      ]);
+    }
+    // Refus de cintrage toujours actif sur le moule, sans objet en couches empilées.
+    const stacked = run(preset("quarter-left", { section: { lamellaThickness: 10 } }));
+    expect(stacked.out.errors ?? []).toEqual([]);
+    expect(byRule(stacked.out.checks, KR).map((c) => c.status)).toEqual(["ok"]);
+  });
+
+  it("contremarches pleines (A33 (i)) : entaille arrière derrière la contremarche, conforme", () => {
     const { out } = run(preset("straight", {}, { risers: "full" }));
     const housing = byRule(out.checks, "LIMON_ENTAILLE_MIN");
     expect(housing.length).toBeGreaterThan(0);
-    expect(housing.every((c) => c.status === "violation")).toBe(true);
-    expect(fr(housing[0]!.message)).toMatch(/marche posée, sans entaille arrière/);
+    expect(housing.every((c) => c.status === "ok")).toBe(true);
+    expect(
+      housing.some((c) => c.message.key === "structure.woodCentral.check.rearHousingNone"),
+    ).toBe(false);
+    expect(out.notes.map((n) => n.key)).toContain("structure.woodCentral.note.riserHousing");
+    // Entaille nulle saisie : marches posées, constat explicite (chemin conservé).
+    const laid = byRule(
+      run(preset("straight", { notch: { rearDepth: 0 } }, { risers: "full" })).out.checks,
+      "LIMON_ENTAILLE_MIN",
+    );
+    expect(laid.every((c) => c.status === "violation")).toBe(true);
+    expect(fr(laid[0]!.message)).toMatch(/marche posée, sans entaille arrière/);
   });
 });
 
@@ -252,7 +289,9 @@ describe("justifications jointes (A12)", () => {
   });
 
   it("plis minces : justification jointe, l'avertissement reste", () => {
-    const { out } = run(preset("quarter-left", { laminationJustification: "Avis technique 7" }));
+    const { out } = run(
+      preset("quarter-left", { ...MOULD, laminationJustification: "Avis technique 7" }),
+    );
     const thin = byRule(out.checks, THIN);
     expect(thin.map((c) => c.status)).toEqual(["violation"]);
     expect(thin[0]!.justification).toBe("Avis technique 7");
@@ -262,7 +301,9 @@ describe("justifications jointes (A12)", () => {
 
 describe("refus et configurations non prises en charge (aucune exception)", () => {
   it("rayon trop petit (lamelles de 10 mm sur quart tournant) : refus lisible, bloquant, aucune pièce", () => {
-    const { m, out, beam } = run(preset("quarter-left", { section: { lamellaThickness: 10 } }));
+    const { m, out, beam } = run(
+      preset("quarter-left", { section: { lamellaThickness: 10, curvedMethod: "mould" } }),
+    );
     expect(beam!.lamination.ratio).toBeLessThan(KR_MIN);
     expect((out.errors ?? []).map((e) => e.key)).toContain(
       "structure.woodCentral.error.bendRadius",
@@ -309,14 +350,20 @@ describe("valeurs auto, prédimensionnement, visserie", () => {
       "section.residual": beam!.residual,
       "section.lamellaThickness": beam!.lamination.lamellaThickness,
       "notch.rearDepth": beam!.rearDepth,
-      "bolts.minSpacing": 11,
+      // EC5 « tous angles » pour M10 (perçage de 11) : a1 = 5·d, a3,c = 4·d (C §1.11 [71]).
+      "bolts.minSpacing": 50,
+      "bolts.edgeDistance": 40,
     });
+    // Perçage de 13 (M12) : 60 et 48.
+    const m12 = run(preset("straight", { bolts: { holeDiameter: 13 } })).out.autoValues!;
+    expect(m12["bolts.minSpacing"]).toBe(60);
+    expect(m12["bolts.edgeDistance"]).toBe(48);
     // Valeurs imposées : non exposées.
     const fixed = run(
       preset("straight", {
         section: { residual: 200, lamellaThickness: 44 },
         notch: { rearDepth: 20 },
-        bolts: { minSpacing: 40 },
+        bolts: { minSpacing: 40, edgeDistance: 30 },
       }),
     ).out;
     expect(fixed.autoValues).toBeUndefined();
@@ -325,17 +372,47 @@ describe("valeurs auto, prédimensionnement, visserie", () => {
     expect(Object.keys(solid.autoValues ?? {})).not.toContain("section.lamellaThickness");
   });
 
+  it("valeurs `auto` des couches empilées et de la platine (trace courbe par défaut)", () => {
+    const { out, beam } = run(preset("quarter-left"));
+    expect(beam!.stacked).not.toBeNull();
+    const auto = out.autoValues!;
+    expect(auto["section.layerThickness"]).toBe(beam!.stacked!.layerThickness);
+    expect(auto["section.dressingAllowance"]).toBe(beam!.stacked!.dressingAllowance);
+    expect(auto["section.lamellaThickness"]).toBeUndefined();
+    // Platine : b + 4 × pince = 88 + 100.
+    expect(auto["anchors.plate.width"]).toBe(188);
+    // Cintrage sur moule : épaisseur de lamelle, pas de couche.
+    const mould = run(preset("quarter-left", MOULD)).out.autoValues!;
+    expect(mould["section.lamellaThickness"]).toBeGreaterThan(0);
+    expect(mould["section.layerThickness"]).toBeUndefined();
+  });
+
   it("prédimensionnement : poutre LC1, largeur reprise = emmarchement, k_r appliqué", () => {
     const straight = run(preset("straight")).out;
     expect(straight.precheck?.beams).toHaveLength(1);
     expect(straight.precheck?.beams[0]!.partId).toBe("wood-central-beam");
     expect(frList(straight.notes).some((n) => /torsion sous charge excentrée/.test(n))).toBe(true);
-    expect(frList(straight.notes).some((n) => /QUESTIONS A33/.test(n))).toBe(true);
+    // Classe `auto` : C24 pour le chêne (essence massive), GL24h pour l'essence lamellé-collé.
+    expect(fr(straight.precheck!.beams[0]!.label)).toMatch(/C24/);
+    expect(frList(straight.notes).some((n) => /classe C24 .*NF EN 14080/.test(n))).toBe(true);
+    const gl = run(preset("straight", { material: "wood-glulam" })).out;
+    expect(fr(gl.precheck!.beams[0]!.label)).toMatch(/GL24h/);
+    expect(frList(gl.notes).some((n) => /classe GL24h/.test(n))).toBe(true);
+    // GL24h : γ_M = 1,25, f_m,k = 24 ⇒ f_d = 0,8 × 24 / 1,25.
+    expect(gl.precheck!.beams[0]!.result.design).toBeCloseTo((0.8 * 24) / 1.25, 9);
+    const gl32 = run(
+      preset("straight", { material: "wood-glulam", precheck: { woodClass: "GL32h" } }),
+    ).out;
+    expect(gl32.precheck!.beams[0]!.result.design).toBeCloseTo((0.8 * 32) / 1.25, 9);
     // k_r < 1 (r_in / t entre 170 et 240) : résistance de calcul réduite.
-    const q = run(preset("quarter-left", { section: { lamellaThickness: 2 } }));
+    const q = run(
+      preset("quarter-left", { section: { lamellaThickness: 2, curvedMethod: "mould" } }),
+    );
     const kr = q.beam!.lamination.kr;
     if (kr < 1) {
-      const ref = run(preset("quarter-left", { section: { lamellaThickness: 1 } })).out;
+      const ref = run(
+        preset("quarter-left", { section: { lamellaThickness: 1, curvedMethod: "mould" } }),
+      ).out;
       const d = q.out.precheck!.beams[0]!.result.design;
       const d0 = ref.precheck!.beams[0]!.result.design;
       expect(d).toBeCloseTo(d0 * kr, 9);
@@ -365,6 +442,42 @@ describe("valeurs auto, prédimensionnement, visserie", () => {
       .filter((f) => f.joint === "treadBeamBolted")
       .reduce((a, f) => a + f.points, 0);
     expect(tread.reduce((a, f) => a + f.quantity, 0)).toBe(declared);
+    // Marches basses : tire-fonds Ø10 (diamètre lu sur le perçage de la marche), longueur
+    // déduite, origine traduite (QUESTIONS A34 (a)).
+    const lags = fasteners.filter((f) => f.joint === "treadBeamLagScrewed");
+    expect(lags.length).toBeGreaterThan(0);
+    for (const f of lags) {
+      expect(f.kind).toBe("lag-screw");
+      expect(f.diameter).toBe(10);
+      expect(f.deduced).toContain("length");
+    }
+    const declaredLags = m.parts
+      .flatMap((p) => p.fixings ?? [])
+      .filter((f) => f.joint === "treadBeamLagScrewed")
+      .reduce((a, f) => a + f.points, 0);
+    expect(lags.reduce((a, f) => a + f.quantity, 0)).toBe(declaredLags);
+    expect(violations(m, "FAB_LIMON_CENTRAL_BOIS_BOULONS")).toEqual([]);
+  });
+
+  it("classe d'exécution des ancrages : sabots sans soudure EXC1, platines selon leur soudure", () => {
+    const shoe = run(preset("straight")).out;
+    expect(shoe.executionClass).toBe("EXC1");
+    for (const p of [
+      preset("helical"),
+      preset("straight", { anchors: { kind: "embeddedPlate" } }),
+    ]) {
+      const { out, beam } = run(p);
+      expect(beam!.anchorKind).toBe("embeddedPlate");
+      const steel = out.parts.some((q) => q.material.startsWith("steel"));
+      if (!steel) {
+        expect(out.executionClass).toBeUndefined();
+        continue;
+      }
+      const grade = woodCentralParams({}).anchors.grade;
+      expect(out.executionClass).toBe(
+        deduceExecutionClass({ grade, buttWeld: 0, welded: beam!.anchorsWelded }).executionClass,
+      );
+    }
   });
 
   it("textes anglais : messages du plugin traduits", () => {
@@ -389,10 +502,15 @@ const paramsArb = fc.record({
   section: fc.record({
     width: fc.integer({ min: 60, max: 140 }),
     lamellaThickness: fc.oneof(fc.constant("auto"), fc.integer({ min: 1, max: 20 })),
+    curvedMethod: fc.constantFrom("auto", "mould", "stacked"),
   }),
   notch: fc.record({ rearDepth: fc.oneof(fc.constant("auto"), fc.integer({ min: 0, max: 25 })) }),
   bolts: fc.record({ perTread: fc.integer({ min: 0, max: 3 }) }),
-  anchors: fc.record({ foot: fc.boolean(), head: fc.boolean() }),
+  anchors: fc.record({
+    foot: fc.boolean(),
+    head: fc.boolean(),
+    kind: fc.constantFrom("auto", "shoe", "embeddedPlate"),
+  }),
   trace: fc.record({
     lateralOffset: fc.oneof(fc.constant(0), fc.integer({ min: -60, max: 60 })),
   }),
@@ -481,21 +599,33 @@ describe("propriétés (générateurs contraints)", () => {
         const footprint = m.layout.footprint;
         const spec = project.stair.treads;
         const overhang = spec.nosing + (spec.risers === "full" ? spec.riserThickness : 0);
-        for (const p of m.parts.filter((q) => q.id.startsWith("wood-central-"))) {
-          const tol = (p.id === "wood-central-beam" ? 1 : 10) + overhang;
+        // Platines : emprise contrôlée par leurs propres tests ; couches : part de la poutre.
+        for (const p of m.parts.filter(
+          (q) => q.id.startsWith("wood-central-") && !q.id.startsWith("wood-central-plate"),
+        )) {
+          const tol =
+            (p.id === "wood-central-beam" || p.componentOf !== undefined ? 1 : 10) + overhang;
           for (const q of planPoints(p.solid)) {
             expect(outsideBy(q, footprint), p.id).toBeLessThan(tol);
           }
         }
-        // Visserie : boulons traversants = points déclarés.
-        const declared = m.parts
-          .flatMap((p) => p.fixings ?? [])
-          .filter((f) => f.joint === "treadBeamBolted")
-          .reduce((a, f) => a + f.points, 0);
-        const bolts = (m.fasteners ?? [])
-          .filter((f) => f.joint === "treadBeamBolted")
-          .reduce((a, f) => a + f.quantity, 0);
-        expect(bolts).toBe(declared);
+        // Visserie : boulons traversants et tire-fonds = points déclarés.
+        for (const joint of ["treadBeamBolted", "treadBeamLagScrewed"] as const) {
+          const declared = m.parts
+            .flatMap((p) => p.fixings ?? [])
+            .filter((f) => f.joint === joint)
+            .reduce((a, f) => a + f.points, 0);
+          const counted = (m.fasteners ?? [])
+            .filter((f) => f.joint === joint)
+            .reduce((a, f) => a + f.quantity, 0);
+          expect(counted, joint).toBe(declared);
+        }
+        // Sabot en U seulement s'il est choisi ou sur une poutre droite (A34 (c)).
+        const shoes = m.parts.filter((q) => q.id.startsWith("wood-central-shoe"));
+        if (beam.anchorKind === "embeddedPlate") {
+          expect(shoes).toEqual([]);
+          expect(m.compliance.results.some((r) => r.ruleId === "FAB_SABOT_EMPRISE")).toBe(false);
+        }
       }),
       { numRuns: 30 },
     );
@@ -513,7 +643,9 @@ describe("propriétés (générateurs contraints)", () => {
     let acceptedCount = 0;
     fc.assert(
       fc.property(curvedArb, fc.integer({ min: 1, max: 12 }), (base, t) => {
-        const project = withWoodCentral(base, { section: { lamellaThickness: t } });
+        const project = withWoodCentral(base, {
+          section: { lamellaThickness: t, curvedMethod: "mould" },
+        });
         const { out, beam } = run(project);
         if (!beam || !beam.lamination.curved || !Number.isFinite(beam.lamination.ratio)) return;
         const refused = (out.errors ?? []).some(

@@ -22,6 +22,8 @@ export const FASTENER_KINDS = [
   "anchor",
   "chemical-anchor",
   "hollow-wall-anchor",
+  // Broche lisse (limon central bois, platine à âme noyée : C §1.11 [80]).
+  "dowel",
 ] as const;
 export type FastenerKind = (typeof FASTENER_KINDS)[number];
 
@@ -52,6 +54,12 @@ export type FastenerGrade = (typeof FASTENER_GRADES)[number];
  *   C §1.5 [54] : « boulons de 10 ou 12 mm qui traversent le limon, avec écrou ») ;
  * - `shoeBolted` : sabot métallique (pied ou tête) boulonné au travers de la poutre bois
  *   (`wood-central`, QUESTIONS A29 n° 5 : sabots ou platines métalliques pour le bois) ;
+ * - `treadBeamLagScrewed` : marche bois fixée par tire-fonds (ou vis à bois) depuis son dessus
+ *   dans la poutre du limon central bois, là où un boulon traversant ne passe pas (marches
+ *   basses au-dessus de la coupe au sol, QUESTIONS A34 (a) ; C §1.11 [78]) ;
+ * - `embeddedPlatePinned` : âme d'une platine à âme noyée brochée au travers de la poutre bois
+ *   (`wood-central`, QUESTIONS A33 (f), A34 (c) ; C §1.11 [80]), la platine étant chevillée au
+ *   sol ou au chevêtre (`plateFloor` / `plateTrimmer`) ;
  * - `guardPostFloor` : poteau de garde-corps fixé au plancher (trémie) ;
  * - `guardPostStair` / `guardPostStairMetal` : poteau de garde-corps fixé sur l'escalier (rampant),
  *   selon le support : bois (limons, à défaut marches en bois) ou métal (QUESTIONS A27, « type
@@ -69,6 +77,8 @@ export const FASTENER_JOINTS = [
   "riserTrimmer",
   "treadBeamBolted",
   "shoeBolted",
+  "treadBeamLagScrewed",
+  "embeddedPlatePinned",
   "guardPostFloor",
   "guardPostStair",
   "guardPostStairMetal",
@@ -132,6 +142,7 @@ const KIND_KEYS: Readonly<Record<FastenerKind, MessageKey>> = {
   anchor: "fastener.kind.anchor",
   "chemical-anchor": "fastener.kind.chemicalAnchor",
   "hollow-wall-anchor": "fastener.kind.hollowWallAnchor",
+  dowel: "fastener.kind.dowel",
 };
 
 const GRADE_KEYS: Readonly<Record<FastenerGrade, MessageKey>> = {
@@ -154,6 +165,8 @@ const JOINT_KEYS: Readonly<Record<FastenerJointKind, MessageKey>> = {
   riserTrimmer: "fastener.joint.riserTrimmer",
   treadBeamBolted: "fastener.joint.treadBeamBolted",
   shoeBolted: "fastener.joint.shoeBolted",
+  treadBeamLagScrewed: "fastener.joint.treadBeamLagScrewed",
+  embeddedPlatePinned: "fastener.joint.embeddedPlatePinned",
   guardPostFloor: "fastener.joint.guardPostFloor",
   guardPostStair: "fastener.joint.guardPostStair",
   guardPostStairMetal: "fastener.joint.guardPostStairMetal",

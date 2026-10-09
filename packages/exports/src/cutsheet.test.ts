@@ -145,4 +145,42 @@ describe("fiche de débit", () => {
     const none = cutSheet([oak], { massNote: () => undefined });
     expect(none[0]!.totals.massNotes).toEqual([]);
   });
+
+  it("pièce finie à composantes (A33 (e)) : seules les couches, totaux des couches", () => {
+    const beam: Part = { ...woodStringerPart(), id: "beam", mark: "LC1" };
+    const { stock: _stock, ...finished } = beam;
+    const layer = (k: number, mass: number): Part => ({
+      ...beam,
+      id: `beam-layer-${k}`,
+      mark: `LC1-${k}`,
+      componentOf: "beam",
+      stock: { length: 2000, width: 250, thickness: 40 },
+      quantities: { mass_kg: mass },
+    });
+    for (const locale of ["fr", "en"] as const) {
+      const groups = cutSheet([finished, layer(1, 12), layer(2, 8)], { locale });
+      expect(groups).toHaveLength(1);
+      const g = groups[0]!;
+      expect(g.rows.map((r) => r.mark)).toEqual(["LC1-1", "LC1-2"]);
+      expect(g.totals.quantity).toBe(2);
+      expect(g.totals.massKg).toBeCloseTo(20, 9);
+      expect(g.totals.volumeM3).toBeCloseTo((2 * 2000 * 250 * 40) / 1e9, 12);
+    }
+  });
+
+  it("placage (A34 (e)) : désignation « (placage) », champ `supply`, épaisseur finie", () => {
+    const ply: Part = {
+      ...treadPart(2),
+      id: "ply",
+      mark: "PL1",
+      name: textMessage("Pli"),
+      stock: { length: 1200, width: 120, thickness: 3, supply: "veneer" },
+    };
+    const fr = cutSheet([ply])[0]!;
+    expect(fr.thickness).toBe(3);
+    expect(fr.rows[0]).toMatchObject({ name: "Pli (placage)", supply: "placage" });
+    const en = cutSheet([ply], { locale: "en" })[0]!;
+    expect(en.rows[0]).toMatchObject({ name: "Pli (veneer)", supply: "veneer" });
+    expect(cutSheet([treadPart(2)])[0]!.rows[0]!.supply).toBeUndefined();
+  });
 });

@@ -1,8 +1,10 @@
 /**
  * Limon central bois (QUESTIONS A29, vague 2) — exemples générés
  * `examples/j5c-limon-central-bois-*.blondel.json`, un par géométrie de poutre : escalier droit
- * en couches collées droites, quart tournant balancé en lamellé-collé cintré sur moule,
- * hélicoïdal à jour central en lamellé-collé cintré. Marches sans contremarche (l'arrière de
+ * en couches collées droites sur sabots en U, quart tournant balancé et hélicoïdal à jour
+ * central en lamellé-collé de 88 mm, donc en couches horizontales empilées (filière par défaut
+ * au-delà de 60 mm, QUESTIONS A33 (e)) sur platines à âme noyée (ancrage par défaut d'une
+ * poutre cintrée, A34 (c)). Marches sans contremarche (l'arrière de
  * chaque marche se loge dans la dent suivante : entaille arrière, C §1.5 [54]), de 80 mm comme
  * les démos hélicoïdales. Ils sont couverts par l'instantané des cotes (`pipeline/build.test.ts`)
  * et par tous les exports (`packages/exports/src/examples.test.ts`).
@@ -118,7 +120,7 @@ describe("exemples j5c : limon central bois", () => {
   });
 
   it.each(GENERATORS)(
-    "%s : modèle complet, poutre LC1, sabots, k_r conforme, porte-à-faux signalé",
+    "%s : modèle complet, poutre LC1, ancrages, k_r conforme, porte-à-faux signalé",
     (file) => {
       const m = buildModel(load(file), { memo: false });
       expect(frList(m.errors)).toEqual([]);
@@ -126,8 +128,19 @@ describe("exemples j5c : limon central bois", () => {
       const beam = m.parts.find((p) => p.id === "wood-central-beam");
       expect(beam?.mark).toBe("LC1");
       expect(beam?.category).toBe("carriage");
-      expect(m.parts.find((p) => p.id === "wood-central-shoe-foot")?.mark).toBe("SP1");
-      expect(m.parts.find((p) => p.id === "wood-central-shoe-head")?.mark).toBe("ST1");
+      const straight = file === J5C_WOOD_STRAIGHT;
+      // Ancrage par défaut (A34 (c)) : sabots en U sur le droit, platines à âme noyée sur les
+      // poutres cintrées (sabot et FAB_SABOT_EMPRISE absents).
+      const shoeFoot = m.parts.find((p) => p.id === "wood-central-shoe-foot");
+      const shoeHead = m.parts.find((p) => p.id === "wood-central-shoe-head");
+      if (straight) {
+        expect(shoeFoot?.mark).toBe("SP1");
+        expect(shoeHead?.mark).toBe("ST1");
+      } else {
+        expect(shoeFoot).toBeUndefined();
+        expect(shoeHead).toBeUndefined();
+        expect(results(m, "FAB_SABOT_EMPRISE")).toEqual([]);
+      }
       expect(results(m, "LAMELLE_CINTRE_KR").map((r) => r.status)).toEqual(["ok"]);
       // Entaille arrière de chaque marche (sans contremarche) : au moins 14 mm.
       expect(violations(m, "LIMON_ENTAILLE_MIN")).toEqual([]);
@@ -135,19 +148,41 @@ describe("exemples j5c : limon central bois", () => {
       const cantilever = violations(m, CENTRAL_RULES.cantilever.id);
       expect(cantilever).toHaveLength(1);
       expect(fr(cantilever[0]!.message)).toMatch(/^Justification requise/);
-      expect(m.precheck?.beams).toHaveLength(1);
+      // Couches empilées (cintré par défaut) : fil horizontal, prédimensionnement non évalué
+      // (A35 (j)) ; poutre droite en couches verticales : prédimensionnée.
+      expect(m.precheck?.beams).toHaveLength(straight ? 1 : 0);
+      const pre = results(m, "PRECHECK_CONTRAINTE");
+      expect(pre.map((r) => r.status)).toEqual([straight ? "ok" : "non-evaluee"]);
       for (const p of m.parts) {
+        // Poutre en couches empilées : matière portée par ses couches composantes.
+        if (p.id === "wood-central-beam" && p.stock === undefined) continue;
         const mass = p.quantities["mass_kg"];
         expect(mass !== undefined && Number.isFinite(mass) && mass > 0, p.id).toBe(true);
       }
-      // Visserie : marches boulonnées au travers de la poutre, sabots boulonnés et chevillés.
+      // Visserie : marches boulonnées au travers de la poutre, tire-fonds sur les marches
+      // basses (A34 (a)) ; sabots boulonnés et chevillés sur le droit.
       const joints = new Set((m.fasteners ?? []).map((f) => f.joint));
-      for (const j of ["treadBeamBolted", "shoeBolted", "plateFloor", "plateTrimmer"]) {
+      for (const j of [
+        "treadBeamBolted",
+        "treadBeamLagScrewed",
+        ...(straight ? ["shoeBolted", "plateFloor", "plateTrimmer"] : []),
+      ]) {
         expect(joints.has(j as never), j).toBe(true);
       }
+      expect(joints.has("shoeBolted")).toBe(straight);
       expect(joints.has("treadScrewed")).toBe(false);
     },
   );
+
+  it("droit : marches 1 et 2 fixées par tire-fonds, plus de constat de fixation (A34 (a))", () => {
+    const m = buildModel(load(J5C_WOOD_STRAIGHT), { memo: false });
+    expect(violations(m, "FAB_LIMON_CENTRAL_BOIS_BOULONS")).toEqual([]);
+    const lc1 = m.parts.find((p) => p.id === "wood-central-beam")!;
+    const lagTreads = new Set(
+      (lc1.fixings ?? []).filter((f) => f.joint === "treadBeamLagScrewed").map((f) => f.with?.[0]),
+    );
+    expect(lagTreads).toEqual(new Set(["tread-1", "tread-2"]));
+  });
 
   it("droit : couches collées droites, tableau FCBA lu à b / 2, sans plis minces, EXC1", () => {
     const m = buildModel(load(J5C_WOOD_STRAIGHT), { memo: false });
@@ -162,12 +197,19 @@ describe("exemples j5c : limon central bois", () => {
   });
 
   it.each([J5C_WOOD_QUARTER, J5C_WOOD_HELICAL])(
-    "%s : lamelles cintrées, tableau FCBA hors domaine (trace courbe), plis minces contrôlés",
+    "%s : couches empilées par défaut (b = 88 > 60), sans cintrage, tableau FCBA hors domaine",
     (file) => {
       const m = buildModel(load(file), { memo: false });
       expect(results(m, "CREMAILLERE_REGLE_MOYENS").map((r) => r.status)).toEqual(["non-evaluee"]);
-      expect(results(m, WOOD_CENTRAL_RULES.thinPlies.id)).toHaveLength(1);
-      expect(fr(results(m, "LAMELLE_CINTRE_KR")[0]!.message)).toMatch(/^Lamelles cintrées/);
+      // Couches empilées (A33 (e)) : ni plis minces, ni cintrage.
+      expect(results(m, WOOD_CENTRAL_RULES.thinPlies.id)).toEqual([]);
+      expect(fr(results(m, "LAMELLE_CINTRE_KR")[0]!.message)).toMatch(/^Couches horizontales/);
+      const lc1 = m.parts.find((p) => p.id === "wood-central-beam")!;
+      expect(lc1.stock).toBeUndefined();
+      expect(fr(lc1.section!)).toMatch(/^lamellé-collé en couches empilées/);
+      for (const p of m.parts.filter((q) => q.componentOf !== undefined)) {
+        expect(p.componentOf).toBe("wood-central-beam");
+      }
     },
   );
 });

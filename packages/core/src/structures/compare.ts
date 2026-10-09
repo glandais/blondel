@@ -39,6 +39,7 @@ import {
 import type { Model, Part, Severity, Stepping } from "../model/derived.js";
 import type { Mm } from "../model/primitives.js";
 import type { InnerCorner, Project } from "../model/project.js";
+import { fabricatedParts } from "../parts/components.js";
 import { buildModel } from "../pipeline/build.js";
 import { layoutAccepts, newelLabel, newelSatisfies, withNewels } from "../project/newel.js";
 import { resolveProfileNewel } from "../project/structureChoice.js";
@@ -226,7 +227,9 @@ export function summarizeVariant(
   const { kind } = variant.stair.structure;
   const plugin = kind === "none" ? undefined : getStructure(kind);
   const model = buildModel(variant);
-  const parts = model.parts;
+  // Pièces fabriquées : une pièce finie faite de composantes (couches empilées, `componentOf`)
+  // n'a ni masse ni matière propres, ses composantes les portent (aucun double compte).
+  const parts = fabricatedParts(model.parts);
   let massKg = 0;
   let massUnknown = 0;
   let steelKg = 0;

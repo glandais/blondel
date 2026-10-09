@@ -211,6 +211,62 @@ Autres tolérances du DTU : hauteur de marche **±5 mm** ; hauteur de la 1ʳᵉ 
 
 **Durabilité extérieure** : conception drainante, classe d'emploi 3.2 (non abrité) ou 3.1 (abrité). Le plus souvent **classe 4** si la conception est piégeante. Choix des essences selon le FD P 20-651 [1] (élevé).
 
+### 1.11 Limon central bois : lamellé-collé GL, entraxes et pinces, tire-fonds, platine à âme noyée
+
+Complément du **2026-10-09** (QUESTIONS A33 (a), (e), (f), A34 (a), (b), (c) ; sources consultées le 2026-10-09). Les deux normes en jeu, **NF EN 14080** (lamellé-collé) et **NF EN 1995-1-1** (Eurocode 5), ne sont **pas lues** : leurs valeurs viennent de [71], guide de calcul de Swedish Wood qui reproduit les tableaux et en donne la source (« Table according to EN 14080:2013 », « according to EN 1995-1-1:2004, 8.5.1.1 »). Confiance **moyenne** (valeur normative rapportée par une source secondaire sérieuse). Valeurs relues dans le texte du PDF de [71] (extraction `pdftotext`).
+
+**Classes de lamellé-collé homogène (NF EN 14080:2013, non lue ; [71] tableau 3.4, p. 12)** :
+
+| Classe | f_m,g,k (MPa) | f_t,0,g,k | f_c,0,g,k | f_v,g,k | E_0,g,mean (MPa) | E_0,g,05 (MPa) | ρ_g,k (kg/m³) | ρ_g,mean (kg/m³) | Réf. |
+|---|---|---|---|---|---|---|---|---|---|
+| GL24h | 24 | 19,2 | 24 | 3,5 | 11 500 | 9 600 | 385 | 420 | [71] (moyen) |
+| GL28h | 28 | 22,4 | 28 | 3,5 | 12 600 | 10 500 | 425 | 460 | [71] (moyen) |
+| GL32h | 32 | 25,6 | 32 | 3,5 | 14 200 | 11 800 | 440 | 490 | [71] (moyen) |
+
+- Résistances en flexion et en traction valables pour une hauteur de 600 mm (effet de hauteur au § 3.3 de [71], non repris) [71] (moyen).
+- Coefficient partiel du lamellé-collé **γ_M = 1,25** (bois massif 1,3 ; assemblages 1,3), « according to EN 1995-1-1:2004, 2.4.1 » [71] tableau 3.1, p. 7 (moyen ; valeurs recommandées, l'annexe nationale française n'est pas lue).
+- k_mod du lamellé-collé identique à celui du bois massif (classes de service 1 et 2 : 0,60 / 0,70 / 0,80 / 0,90 / 1,10 de la charge permanente à instantanée) [71] tableau 3.2, p. 8 (moyen).
+- Bois massif, pour mémoire : C24 E_0,mean = 11 000 MPa, f_m,k = 24 MPa ; C30 12 000 MPa, 30 MPa (EN 338 via [71] tableau 3.3, p. 10, moyen), ce qui recoupe les valeurs « à valider » de `precheck/`.
+- ⚠️ Rappel (§ 1.6) : des plis de 1 à 7 mm ne font pas un lamellé-collé NF EN 14080 ; ces classes ne s'appliquent qu'à des lamelles conformes à la norme (épaisseur des lamelles non trouvée en accès libre).
+
+**Entraxes et pinces des boulons et des broches dans le bois (NF EN 1995-1-1 § 8.5.1.1 et § 8.6, non lue ; [71] tableaux 10.4 et 10.5, p. 45)**. d : diamètre du boulon ou de la broche ; α : angle entre l'effort et le fil.
+
+| Distance | Boulons | Broches | Réf. |
+|---|---|---|---|
+| a1, entraxe parallèle au fil (0° ≤ α ≤ 360°) | (4 + \|cos α\|)·d | (3 + 2·\|cos α\|)·d | [71] (moyen) |
+| a2, entraxe perpendiculaire au fil | 4·d | 3·d | [71] (moyen) |
+| a3,t, extrémité chargée (−90° ≤ α ≤ 90°) | max(7·d ; 80 mm) | max(7·d ; 80 mm) | [71] (moyen) |
+| a3,c, extrémité non chargée | 90° ≤ α < 150° : (1 + 6·sin α)·d ; 150° ≤ α < 210° : 4·d ; 210° ≤ α ≤ 270° : (1 + 6·\|sin α\|)·d | 90° ≤ α < 150° : a3,t·\|sin α\| ; 150° ≤ α < 210° : max(3,5·d ; 40 mm) ; 210° ≤ α ≤ 270° : a3,t·\|sin α\| | [71] (moyen) |
+| a4,t, rive chargée (0° ≤ α ≤ 180°) | max((2 + 2·sin α)·d ; 3·d) | max((2 + 2·sin α)·d ; 3·d) | [71] (moyen) |
+| a4,c, rive non chargée (180° ≤ α ≤ 360°) | 3·d | 3·d | [71] (moyen) |
+
+- Recoupé par [77] (faible, page de vulgarisation : mêmes formules).
+- Pour des assemblages bois-acier boulonnés ou brochés, [71] renvoie à sa section 10.3 (non relue ici) [71].
+- **[CALCUL]** Valeurs « tous angles » retenues par Blondel faute de connaître α (à valider) : boulons a1 = 5·d, a3,c = 4·d (extrémité non chargée, effort dirigé vers l'intérieur de la pièce), a4,c = 3·d ; broches a1 = 5·d, a3,t = max(7·d ; 80 mm), a4,t = 4·d. Pour M10 : a1 = 50 mm, a3,c = 40 mm, a4,c = 30 mm ; broche Ø12 : a1 = 60 mm, a3,t = 84 mm, a4,t = 48 mm. a1, a2, a3,t, a4,t et a4,c sont l'enveloppe sur α ; **a3,c ne l'est pas** (son maximum sur α vaut 7·d pour un boulon et a3,t pour une broche, à 90°). Les deux organes ne suivent pas la même convention : les boulons et tire-fonds de marche gardent a3,c aux bouts de l'assise, les broches de platine prennent a3,t depuis la coupe au sol ou la coupe de tête (extrémité supposée chargée) ; choix à trancher (QUESTIONS A35 (e)).
+
+**Vis et tire-fonds dans le bois.**
+
+| Règle | Valeur | Type | Réf. |
+|---|---|---|---|
+| Vis chargées latéralement, d > 6 mm | règles des boulons (§ 8.5 de l'EC5) ; d ≤ 6 mm : règles des pointes ; d (diamètre extérieur du filet) sert aux entraxes et pinces | [NORME] EN 1995-1-1 § 8.7.1 rapporté | [71] § 10.6.1, p. 46 (moyen) |
+| Vis chargées axialement, entraxes et pinces | a1 = 7·d ; a2 = 5·d ; a1,CG = 10·d ; a2,CG = 4·d | [NORME] EN 1995-1-1 § 8.7.2 rapporté | [71] tableau 10.6, p. 48 (moyen) |
+| Tire-fond DIN 571 Ø10, classe 4.6 | longueurs 60 à 160 mm ; avant-trou **Ø 6,5 mm** ; « longueur telle que la profondeur d'ancrage soit d'au moins **50 mm** » ; arrachement caractéristique 732 daN (essai XP P30-310, bois à 15 %, 450 kg/m³) | [USAGE] fiche fabricant | [78] (moyen) |
+| Gamme DIN 571 du négoce | Ø 5 à 20 mm, longueurs 25 à 500 mm | [USAGE] | [79] (faible, catalogue) |
+
+**Platine à âme noyée (ferrure en T).** Aucune source escalier ; la ferrure la plus proche est le **pied de poteau à âme intérieure** du commerce [80] (moyen, fiche fabricant) :
+
+| Grandeur | Valeur relevée | Réf. |
+|---|---|---|
+| Âme et platine | tôle de **4 mm** (deux modèles) | [80] (moyen) |
+| Rainure à scier dans le bois | **6 mm** pour une âme de 4 mm (1 mm de jeu par face) | [80] (moyen) |
+| Fixation dans le bois | **2 broches Ø12** (ou boulons Ø12) au travers du bois et de l'âme | [80] (moyen) |
+| Platine | 100 × 100 ou 130 × 130 mm, 4 chevilles M10 (perçages Ø12) | [80] (moyen) |
+| Hauteur de l'âme | 60 à 80 mm (largeur 60 à 80 mm) pour des poteaux jusqu'à 200 × 200 | [80] (moyen) |
+
+- **Implication Blondel** : un pied de poteau n'est pas un appui de limon central (efforts horizontaux et moments différents) ; les dimensions par défaut de la platine d'un limon central restent **à valider** par un atelier. Seuls le principe (âme dans un trait de scie de l'épaisseur de l'âme plus le jeu, broches au travers) et l'ordre de grandeur (broches Ø12, jeu de 1 mm par face) sont repris de [80].
+
+**Couches collées sans moule (complément de § 1.6).** « Quand le limon est très épais par exemple dans le cas d'un limon crémaillère centrale, j'utilise la technique de couches collées » ; « utilisable pour les limons de plus de 60 mm d'épaisseur » ; « [cela] me permet de construire simplement le limon sans construire un moule et dans le cas d'une crémaillère, de ne pas avoir à couper les crans » [8] (moyen, relu le 2026-10-09). La source ne donne **ni l'épaisseur des couches, ni leur orientation, ni la surcote de délardement** : épaisseur, orientation (couches horizontales découpées selon le plan, décision de l'utilisateur A33 (e)) et surcote sont des conventions Blondel **à valider**.
+
 ---
 
 ## 2. Structures métal (C.2)
@@ -595,7 +651,7 @@ Non inclus : supports de marche, marches, garde-corps, heures d'atelier (au taux
 
 ## Sources
 
-Toutes consultées le **2026-09-28**.
+Toutes consultées le **2026-09-28**, sauf [77] à [80] (consultées le **2026-10-09**) ; [8] et [71] relues le 2026-10-09 pour le § 1.11.
 
 1. S. Graissaguel, « Norme DTU 36.3 Travaux de bâtiment — Escaliers en bois et garde-corps associés », *FCBA INFO*, FCBA, octobre 2015. https://www.fcba.fr/wp-content/uploads/2021/01/fcbainfo_2015_28_norme_dtu_36_3_travaux_de_batiment_escaliers_en_bois_et_garde_corps_associes_stephane_graissaguel.pdf
 2. AFEB – Commission professionnelle, *Escaliers en bois — Guide d'application du DTU 36.3*, FIBC / AFEB, janvier 2016. https://www.uiccb.fr/wp-content/uploads/2021/07/AFEB-Guide-DTU-36.3-Janvier-2016.pdf (ancienne URL uicb.pro redirigée)
@@ -667,12 +723,16 @@ Toutes consultées le **2026-09-28**.
 68. Boud'bOis, « Prix du chêne au m³ : guide complet », 7 décembre 2025. https://www.boudbois.fr/ressources/prix-chene-guide-complet
 69. Obat, « Tarif horaire menuisier », 24 décembre 2023, mis à jour le 23 février 2026. https://travaux.obat.fr/guides/tarif-horaire-menuisier/
 70. Guides de prix (HelloPro, « Combien coûte un escalier hélicoïdal » ; Tarif-menuisier.fr, « Prix d'un escalier bois sur mesure 2026 » ; via extraits de recherche). https://conseils.hellopro.fr/combien-coute-un-escalier-helicoidal-1228.html ; https://tarif-menuisier.fr/guide/prix-escalier-bois
-71. Swedish Wood, *Design of timber structures — Volume 2 : Rules and formulas according to Eurocode 5*, édition 3:2022, § 8.2 « Double tapered, curved and pitched cambered beams », p. 29 (formule k_r de l'EN 1995-1-1). https://www.swedishwood.com/siteassets/5-publikationer/pdfer/sw-design-of-timber-structures-vol2-2022.pdf
+71. Swedish Wood, *Design of timber structures — Volume 2 : Rules and formulas according to Eurocode 5*, édition 3:2022, § 8.2 « Double tapered, curved and pitched cambered beams », p. 29 (formule k_r de l'EN 1995-1-1) ; tableaux 3.1 (γ_M, p. 7), 3.2 (k_mod, p. 8), 3.3 (bois massif EN 338, p. 10), 3.4 (lamellé-collé EN 14080, p. 12), 10.4 et 10.5 (entraxes et pinces des boulons et des broches, p. 45), § 10.6.1 (vis chargées latéralement, p. 46) et tableau 10.6 (vis chargées axialement, p. 48), relus le 2026-10-09. https://www.swedishwood.com/siteassets/5-publikationer/pdfer/sw-design-of-timber-structures-vol2-2022.pdf
 72. AFNOR, *NF P 06-111-2 — Eurocode 1 — Annexe nationale à la NF EN 1991-1-1*, juin 2004, tableaux 6.2(NF) et 6.12(NF) (copie en ligne, également citée par l'axe A). http://fewslinux.free.fr/CSB/Echange/Regt/NF%20P06-111-2%20-%20Eurocodes.%20Bases%20de%20calcul%20des%20structures.%20Partie%202%20%20%20annexe%20nationale%20%E0%20l%20EN%201991-1-1%202002.pdf
 73. Horizal (fabricant de garde-corps aluminium), *Évolution de la norme NF P01-012 — 1988 / 2024*, document commercial de septembre 2025 : dates d'application, gabarit B, zones d'application, T1/T2/T3, dénivelés, tolérances, charges. https://www.horizal.com/data/medias/2413/style/default/HORIZAL_NORME_NF.pdf
 74. Dlubal Software, « UPN 160, EN 10365:2017, ArcelorMittal (2018), propriétés de section » (surface à peindre A_L = 0,546 m²/m, valeur lue dans l'extrait de recherche). https://www.dlubal.com/fr/proprietes-des-sections/upn-160-en-10365-2017-arcelormittal-2018
 75. (non utilisée)
 76. AFNOR Norm'Info, notice « NF E85-015 — Éléments d'installations industrielles — Moyens d'accès permanents — Escaliers, échelles à marches et garde-corps » (version de juillet 2019 selon les extraits de recherche). https://norminfo.afnor.org/norme/nf-e85-015/elements-dinstallations-industrielles-moyens-dacces-permanents-escaliers-echelles-a-marches-et-garde-corps/91316
+77. RoyMech, « Timber Connections Design (EC5) » (tableaux des entraxes et pinces des boulons et des broches de l'EN 1995-1-1), consulté le 2026-10-09. https://www.roymech.co.uk/Related/Construction/Timber_connections.html
+78. Ets Faynot, fiche technique « Tirefond à visser Ø 10 mm, tête hexagonale, pour fixation sur support bois » (DIN 571 classe 4.6, NF E 27-140), consultée le 2026-10-09. https://www.faynot.com/catalogue/pdf/039.pdf
+79. Würth France, « Tirefond bois DIN 571 » (gamme de diamètres et de longueurs), consulté le 2026-10-09. https://eshop.wurth.fr/v/tirefond-bois-din-571
+80. Simpson Strong-Tie, « Pied de poteau en âme avec platine — PPS » (dimensions, rainure, broches, chevilles), consulté le 2026-10-09. https://www.simpson.fr/fr-FR/produits/pied-de-poteau-en-ame-avec-platine-pps
 
 ---
 
@@ -710,6 +770,8 @@ Vérification faite le **2026-09-28** par un agent vérificateur distinct de l'a
 | 1 500–2 160 €/m³ ; 625–750 €/m³ | [68] Boud'bOis | conforme |
 | Rayon court 2–3 × la section, grand rayon à partir de 10 × | [57] SFCMM | conforme |
 | Fiche POB : barreaux 11 cm ±3 mm, 18 cm // pente, 5 cm sous la 1ʳᵉ lisse, gabarit 11 × 11 × 25 cm, nez arrondi ≤ 10 mm, glissance < 100 | [4] | conforme |
+| Classes GL24h / GL28h / GL32h (EN 14080), γ_M = 1,25, k_mod ; entraxes et pinces des boulons et des broches (EN 1995-1-1 § 8.5.1.1, § 8.6), vis (§ 8.7) | [71], texte extrait du PDF le 2026-10-09 | conforme (§ 1.11, valeurs rapportées, normes non lues) |
+| Tire-fond Ø10 : avant-trou 6,5 mm, ancrage ≥ 50 mm ; pied de poteau à âme : âme 4 mm, rainure 6 mm, 2 broches Ø12 ; couches collées > 60 mm sans moule, crans non coupés | [78], [80], [8], relus le 2026-10-09 | conforme (§ 1.11) |
 
 ### Corrigé
 

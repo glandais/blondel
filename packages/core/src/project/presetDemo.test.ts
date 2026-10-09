@@ -75,7 +75,13 @@ describe("préréglages de démonstration", () => {
     expect(blocking.map((r) => r.ruleId)).toEqual([]);
     expect(m.compliance.summary.bloquant).toBe(0);
     for (const part of m.parts) {
-      const mass = part.quantities["mass_kg"];
+      // Pièce finie faite de composantes (poutre en couches empilées, QUESTIONS A33 (e)) : sa
+      // matière est portée par ses composantes.
+      const components = m.parts.filter((c) => c.componentOf === part.id);
+      const mass =
+        components.length > 0
+          ? components.reduce((sum, c) => sum + (c.quantities["mass_kg"] ?? Number.NaN), 0)
+          : part.quantities["mass_kg"];
       expect(mass !== undefined && Number.isFinite(mass) && mass > 0, part.id).toBe(true);
     }
   });
@@ -152,14 +158,18 @@ describe("préréglages de démonstration", () => {
     expect(cm.parts.some((p) => p.id.startsWith("central-web-left-"))).toBe(true);
     expect(cm.parts.some((p) => p.id.endsWith("-central-bearing"))).toBe(true);
     expect(cm.executionClass).toBe("EXC2");
-    // Limon central bois (QUESTIONS A29, vague 2) : lamellé-collé cintré, sabots, k_r contrôlé.
+    // Limon central bois (QUESTIONS A29, vague 2 ; A33 (e) (f), A34 (c)) : lamellé-collé en
+    // couches empilées par défaut (b = 88 > 60 mm), platines à âme noyée sur la poutre cintrée,
+    // k_r = 1 (pas de cintrage).
     const glulam = createDemoProject("demo-central-glulam");
     expect(glulam.name).toBe("Quart tournant sur limon central bois lamellé-collé");
     expect(glulam.stair.structure.kind).toBe("wood-central");
     const gm = buildModel(glulam, { memo: false });
     expect(gm.parts.some((p) => p.id === "wood-central-beam" && p.mark === "LC1")).toBe(true);
-    expect(gm.parts.some((p) => p.id === "wood-central-shoe-foot")).toBe(true);
-    expect(gm.parts.some((p) => p.id === "wood-central-shoe-head")).toBe(true);
+    expect(gm.parts.some((p) => p.componentOf === "wood-central-beam")).toBe(true);
+    expect(gm.parts.some((p) => p.id === "wood-central-plate-foot")).toBe(true);
+    expect(gm.parts.some((p) => p.id === "wood-central-plate-head")).toBe(true);
+    expect(gm.parts.some((p) => p.id.startsWith("wood-central-shoe-"))).toBe(false);
     const kr = gm.compliance.results.filter((r) => r.ruleId === "LAMELLE_CINTRE_KR");
     expect(kr.map((r) => r.status)).toEqual(["ok"]);
   });

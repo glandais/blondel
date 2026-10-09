@@ -8,6 +8,11 @@
  * pour une pièce de garde-corps),
  * pièces assemblées et mention indicative.
  *
+ * Pièces composées (QUESTIONS A33 (e), `Part.componentOf`) : une composante (couche d'une poutre
+ * en couches empilées) renvoie à sa pièce finie (« Couche de LC1 ») et « Isoler en 3D » isole la
+ * pièce finie (seule dessinée) ; une pièce finie affiche le nombre de ses composantes et
+ * l'absence de débit propre. Débit en placage (`Part.stock.supply`, A34 (e)) signalé.
+ *
  * Aucune grandeur n'est calculée : une valeur absente du modèle n'a pas de ligne. Une pièce
  * absente du modèle (recalcul) ne rend rien : l'inspecteur retombe sur l'état sans sélection.
  */
@@ -64,9 +69,15 @@ export function PartInspector({ partId }: PartInspectorProps) {
   const projectName = useApp((s) => s.project.name);
   const displayUnit = useApp((s) => s.displayUnit);
   const guards = useApp((s) => s.project.guards);
-  const isolated = useUi((s) => s.isolatedPartId) === partId;
+  const isolatedId = useUi((s) => s.isolatedPartId);
   const part = model?.parts.find((p) => p.id === partId);
   if (!model || !part) return null;
+  // Pièce dessinée en 3D : la pièce finie d'une composante (les composantes ne le sont pas).
+  const shownId = part.componentOf ?? part.id;
+  const isolated = isolatedId === shownId;
+  const assembly =
+    part.componentOf === undefined ? undefined : model.parts.find((p) => p.id === part.componentOf);
+  const components = model.parts.filter((p) => p.componentOf === part.id).length;
 
   const sameMark = model.parts.filter((p) => p.mark === part.mark).length;
   const lengthText = (mm: number): string =>
@@ -101,6 +112,24 @@ export function PartInspector({ partId }: PartInspectorProps) {
       value: t.t("ui.partInspector.value.massKg", {
         mass: formatNumber(t.locale, mass, { maximumFractionDigits: 1 }),
       }),
+    });
+  }
+  if (components > 0) {
+    rows.push({
+      id: "layers",
+      label: "ui.partInspector.value.layers",
+      value: formatNumber(t.locale, components),
+    });
+    rows.push({
+      id: "stock",
+      label: "ui.partInspector.value.stock",
+      value: t.t("ui.partInspector.value.stockLayers"),
+    });
+  } else if (part.stock?.supply === "veneer") {
+    rows.push({
+      id: "stock",
+      label: "ui.partInspector.value.stock",
+      value: t.t("ui.partInspector.value.stockVeneer"),
     });
   }
   const weld = part.quantities[QUANTITY_WELD_MM];
@@ -152,6 +181,18 @@ export function PartInspector({ partId }: PartInspectorProps) {
             <ArrowRight size={13} aria-hidden="true" />
           </button>
         ) : null}
+        {assembly !== undefined ? (
+          <button
+            type="button"
+            className="btn btn-ghost part-insp__tread part-insp__assembly"
+            onClick={() =>
+              appStore.getState().select({ location: { kind: "part", partId: assembly.id } })
+            }
+          >
+            {t.t("ui.partInspector.componentOf", { mark: assembly.mark })}
+            <ArrowRight size={13} aria-hidden="true" />
+          </button>
+        ) : null}
       </div>
 
       <table
@@ -179,7 +220,7 @@ export function PartInspector({ partId }: PartInspectorProps) {
               return;
             }
             showView("design", "3d");
-            isolatePart(part.id);
+            isolatePart(shownId);
           }}
         >
           {isolated

@@ -24,6 +24,8 @@ import {
   CENTRAL_BEAM_RULES,
   boxSection,
   buildCentralBeam,
+  diaphragmSpacingOf,
+  intermediateDiaphragmCount,
   sectionProblems,
   tubeSection,
   type CentralBeamResult,
@@ -34,6 +36,7 @@ import { CheckCollector } from "./checks.js";
 import { isSimplePolygon } from "./geom.js";
 import { QUANTITY_BUTT_WELD_MM, QUANTITY_WELD_MM } from "./steelCommon.js";
 import { QUANTITY_ROLLED_LENGTH_MM } from "./steelCurved.js";
+import { resolveDiaphragmMinSpacing } from "./steelCentralParams.js";
 
 const BOX = { section: { kind: "box" } };
 
@@ -560,5 +563,103 @@ describe("ne lève jamais", () => {
       checkBeam(beam, trace, fakeSpans(trace), 20);
     }
     expect(SAME_SIDE_TYPOLOGIES.length).toBeGreaterThan(0);
+  });
+});
+
+describe("entretoises du caisson : borne basse de l'entraxe (QUESTIONS A32 (a))", () => {
+  const diaphragms = (b: CentralBeamResult) =>
+    b.parts.filter((p) => p.id.startsWith("central-diaphragm-")).length;
+
+  it("borne `auto` = hauteur de la section, borne saisie conservée", () => {
+    const sec = centralParams({ section: { kind: "box", height: 260 } }).section;
+    expect(sec.diaphragmMinSpacing).toBe("auto");
+    expect(resolveDiaphragmMinSpacing(sec)).toBe(260);
+    const set = centralParams({ section: { kind: "box", diaphragmMinSpacing: 90 } }).section;
+    expect(resolveDiaphragmMinSpacing(set)).toBe(90);
+  });
+
+  it("entraxe sous la borne : erreur lisible, entretoises d'extrémité et de joint seules", () => {
+    const { beam: ref } = beamOf(createProject("quarter-left"), BOX);
+    const { beam } = beamOf(createProject("quarter-left"), {
+      section: { kind: "box", height: 200, diaphragmSpacing: 150 },
+    });
+    expect(ref.errors).toEqual([]);
+    expect(beam.errors.map((e) => e.key)).toEqual([
+      "structure.steelCentral.error.diaphragmMinSpacing",
+    ]);
+    expect(beam.errors[0]!.params).toMatchObject({
+      spacing: expect.objectContaining({ num: 150 }),
+      min: expect.objectContaining({ num: 200 }),
+    });
+    expect(diaphragms(beam)).toBeLessThanOrEqual(beam.joints.length + 2);
+    expect(diaphragms(beam)).toBeLessThan(diaphragms(ref));
+  });
+
+  it("borne saisie sous l'entraxe : aucune erreur, entretoises intermédiaires posées", () => {
+    const over = { section: { kind: "box", diaphragmSpacing: 150, diaphragmMinSpacing: 100 } };
+    const { beam } = beamOf(createProject("quarter-left"), over);
+    const { beam: ref } = beamOf(createProject("quarter-left"), BOX);
+    expect(beam.errors).toEqual([]);
+    expect(diaphragms(beam)).toBeGreaterThan(diaphragms(ref));
+  });
+
+  it("entretoises jointives : seule l'erreur d'épaisseur, pas celle de la borne", () => {
+    const { beam } = beamOf(createProject("straight"), {
+      section: { kind: "box", diaphragmSpacing: 5, diaphragmThickness: 8 },
+    });
+    expect(beam.errors.map((e) => e.key)).toEqual([
+      "structure.steelCentral.error.diaphragmSpacing",
+    ]);
+  });
+
+  it("propriété : entretoises intermédiaires = 0 sous la borne, ⌈gap / entraxe⌉ − 1 sinon", () => {
+    fc.assert(
+      fc.property(
+        fc.integer({ min: 60, max: 600 }),
+        fc.integer({ min: 1, max: 1500 }),
+        fc.oneof(fc.constant<"auto">("auto"), fc.integer({ min: 1, max: 1500 })),
+        fc.integer({ min: 1, max: 20 }),
+        fc.double({ min: 0, max: 8000, noNaN: true }),
+        (height, spacing, min, thickness, gap) => {
+          const sec = centralParams({
+            section: {
+              kind: "box",
+              height,
+              diaphragmSpacing: spacing,
+              diaphragmMinSpacing: min,
+              diaphragmThickness: thickness,
+            },
+          }).section;
+          const bound = min === "auto" ? height : min;
+          const n = intermediateDiaphragmCount(gap, diaphragmSpacingOf(sec));
+          if (spacing < bound || spacing <= thickness) expect(n).toBe(0);
+          else expect(n).toBe(Math.max(0, Math.ceil(gap / spacing - 1e-9) - 1));
+        },
+      ),
+    );
+  });
+
+  it("propriété : sous la borne, au plus les entretoises imposées sur la poutre", () => {
+    fc.assert(
+      fc.property(
+        fc.constantFrom<"straight" | "quarter-left" | "helical">(
+          "straight",
+          "quarter-left",
+          "helical",
+        ),
+        fc.integer({ min: 160, max: 320 }),
+        fc.integer({ min: 20, max: 159 }),
+        (preset, height, spacing) => {
+          const { beam } = beamOf(createProject(preset), {
+            section: { kind: "box", height, diaphragmSpacing: spacing },
+          });
+          expect(beam.errors.map((e) => e.key)).toContain(
+            "structure.steelCentral.error.diaphragmMinSpacing",
+          );
+          expect(diaphragms(beam)).toBeLessThanOrEqual(beam.joints.length + 2);
+        },
+      ),
+      { numRuns: 12 },
+    );
   });
 });

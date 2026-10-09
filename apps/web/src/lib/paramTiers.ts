@@ -34,10 +34,13 @@ import {
   ROTATION_DEFAULT_REACH,
   ROTATION_DEFAULT_STEEPNESS,
   isValueValidated,
+  resolveAnchorKind,
+  resolveCurvedMethod,
   woodCentralCurvedLayout,
   type Model,
   type Project,
   type ValidatedScalar,
+  type WoodCentralParams,
 } from "@blondel/core";
 import { fastenerSettingPaths, fastenerSettingValue } from "./fasteners.js";
 import { availableStructures } from "./optionalApi.js";
@@ -336,6 +339,8 @@ const STRUCTURE_BY_KIND: Readonly<Record<string, Readonly<Record<string, ParamTi
     "beam.topOffset": design(S, [more(5)]),
     "supports.kind": design(S, [more(5)]),
     cantileverJustification: design(S, [more(5)]),
+    // Borne basse de l'entraxe des entretoises du caisson (QUESTIONS A32 (a)) : Atelier ◆.
+    "section.diaphragmMinSpacing": workshop(S),
   },
   // Limon central bois (QUESTIONS A29, vague 2) : section (lamellé-collé ou massif), largeur et
   // essence en Essentiel à l'étape 5 ; classe, décalage de l'axe, épaisseur des lamelles, reste
@@ -355,6 +360,12 @@ const STRUCTURE_BY_KIND: Readonly<Record<string, Readonly<Record<string, ParamTi
     "section.residualFallback": workshop(S),
     "section.lamellaThickness": design(S, [more(5)]),
     "section.thinPlyMax": workshop(S),
+    // Filière d'une poutre cintrée (QUESTIONS A33 (e)) : choix en Conception sous « Plus »,
+    // épaisseur des couches empilées à côté des lamelles ; seuil du moule et surcote en Atelier.
+    "section.curvedMethod": design(S, [more(5)]),
+    "section.mouldMaxWidth": workshop(S),
+    "section.layerThickness": design(S, [more(5)]),
+    "section.dressingAllowance": workshop(S),
     notch: workshop(S),
     "notch.rearDepth": design(S, [more(5)]),
     bolts: workshop(S),
@@ -364,9 +375,18 @@ const STRUCTURE_BY_KIND: Readonly<Record<string, Readonly<Record<string, ParamTi
     "bolts.minSpacing": workshop(S),
     "bolts.protrusion": workshop(S),
     "bolts.lengthStep": workshop(S),
+    // Tire-fonds des marches basses (QUESTIONS A34 (a)) : réglages d'atelier ◆.
+    lagScrews: workshop(S),
+    "lagScrews.pilotDiameter": workshop(S),
+    "lagScrews.minAnchorage": workshop(S),
+    "lagScrews.tipCover": workshop(S),
+    "lagScrews.maxLength": workshop(S),
     anchors: workshop(S),
     "anchors.foot": design(S, [more(5)]),
     "anchors.head": design(S, [more(5)]),
+    // Type d'ancrage (sabot en U ou platine à âme noyée, QUESTIONS A33 (f), A34 (c)) : choix
+    // en Conception ; dimensions de la platine en Atelier ◆.
+    "anchors.kind": design(S, [more(5)]),
     "anchors.grade": workshop(S),
     "anchors.finish": workshop(S),
     "anchors.thickness": workshop(S),
@@ -377,6 +397,15 @@ const STRUCTURE_BY_KIND: Readonly<Record<string, Readonly<Record<string, ParamTi
     "anchors.bolts": workshop(S),
     "anchors.boltHoleDiameter": workshop(S),
     "anchors.holeEdgeDistance": workshop(S),
+    "anchors.plate": workshop(S),
+    "anchors.plate.thickness": workshop(S),
+    "anchors.plate.width": workshop(S),
+    "anchors.plate.webThickness": workshop(S),
+    "anchors.plate.webDepth": workshop(S),
+    "anchors.plate.webLength": workshop(S),
+    "anchors.plate.pins": workshop(S),
+    "anchors.plate.pinDiameter": workshop(S),
+    "anchors.plate.pinHoleDiameter": workshop(S),
     cantileverJustification: design(S, [more(5)]),
     laminationJustification: design(S, [more(5)]),
   },
@@ -547,8 +576,11 @@ function guardPaths(project: Project): (readonly string[])[] {
  * sur son support (A31) seulement avec des marches en tôle pliée, réglages du limon central
  * selon la section (tube, caisson), le type de support (console, support plié) et la finition
  * (évents d'un galvanisé), réglages du limon central bois selon la section (lamelles d'un
- * lamellé-collé), le tracé (plis minces et leur justification seulement sur une trace courbe) et
- * la présence des sabots (`anchors.*`). Les autres paramètres s'appliquent toujours. `params` : paramètres du plugin complétés par ses défauts.
+ * lamellé-collé), le tracé (plis minces et leur justification seulement sur une trace courbe), la
+ * filière retenue sur une trace courbe (`resolveCurvedMethod` du cœur : lamelles et plis minces
+ * pour le moule, couches pour les couches empilées, QUESTIONS A33 (e)), la présence des ancrages
+ * (`anchors.*`) et leur type retenu (`resolveAnchorKind` : réglages du sabot ou de la platine à
+ * âme noyée, A33 (f), A34 (c)). Les autres paramètres s'appliquent toujours. `params` : paramètres du plugin complétés par ses défauts.
  * Lecture du projet seulement, aucun calcul.
  */
 export function structureParamApplies(
@@ -599,20 +631,75 @@ export function structureParamApplies(
     if (kind === "tube" && BOX_ONLY.has(leaf ?? "")) return false;
     if (leaf === "ventDiameter" && field(params, "finish") !== "galvanized") return false;
     // Limon central bois : lamelles d'un lamellé-collé seulement ; plis minces seulement pour
-    // des lamelles cintrées (trace courbe : tournant ou hélicoïdal).
-    if (kind === "solid" && (leaf === "lamellaThickness" || leaf === "thinPlyMax")) return false;
-    if (leaf === "thinPlyMax" && !curvedLayout(project)) return false;
+    // des lamelles cintrées sur moule (trace courbe : tournant ou hélicoïdal) ; filière et seuil
+    // du moule sur une trace courbe ; couches seulement pour la filière des couches empilées.
+    if (WOOD_GLULAM_ONLY.has(leaf ?? "") && kind === "solid") return false;
+    if (leaf === "curvedMethod" || leaf === "mouldMaxWidth") return curvedLayout(project);
+    if (leaf === "thinPlyMax") return curvedMethodOf(project, params) === "mould";
+    if (leaf === "lamellaThickness") return curvedMethodOf(project, params) !== "stacked";
+    if (leaf === "layerThickness" || leaf === "dressingAllowance") {
+      return curvedMethodOf(project, params) === "stacked";
+    }
   }
-  // Justification des plis minces du lamellé-collé cintré : sans objet sans cintrage.
+  // Justification des plis minces du lamellé-collé cintré : sans objet sans cintrage sur moule.
   if (head === "laminationJustification") {
-    return field(field(params, "section"), "kind") !== "solid" && curvedLayout(project);
+    return (
+      field(field(params, "section"), "kind") !== "solid" &&
+      curvedMethodOf(project, params) === "mould"
+    );
   }
-  // Sabots du limon central bois : présence toujours, réglages s'il y en a au moins un.
+  // Ancrages du limon central bois : présence toujours, réglages s'il y en a au moins un ;
+  // réglages du sabot ou de la platine selon le type retenu.
   if (head === "anchors" && path[1] !== "foot" && path[1] !== "head") {
     const anchors = field(params, "anchors");
-    return field(anchors, "foot") !== false || field(anchors, "head") !== false;
+    if (field(anchors, "foot") === false && field(anchors, "head") === false) return false;
+    const leaf = path[1] ?? "";
+    if (leaf === "plate") return anchorKindOf(project, params) === "embeddedPlate";
+    if (SHOE_ONLY.has(leaf)) return anchorKindOf(project, params) === "shoe";
   }
   return true;
+}
+
+/** Réglages de la section du limon central bois réservés au lamellé-collé. */
+const WOOD_GLULAM_ONLY: ReadonlySet<string> = new Set([
+  "lamellaThickness",
+  "thinPlyMax",
+  "curvedMethod",
+  "mouldMaxWidth",
+  "layerThickness",
+  "dressingAllowance",
+]);
+
+/** Réglages propres au sabot en U du limon central bois (sans objet pour la platine). */
+const SHOE_ONLY: ReadonlySet<string> = new Set([
+  "thickness",
+  "cheekDepth",
+  "bolts",
+  "boltHoleDiameter",
+]);
+
+/**
+ * Filière de la poutre lamellé-collé du limon central bois (contrat du cœur
+ * `resolveCurvedMethod`) : `null` sur une trace droite ou une section massive. Paramètres sans
+ * `section.curvedMethod` (autre plugin, paramètres partiels) : cintrage sur moule sur une trace
+ * courbe (comportement antérieur à la filière des couches empilées).
+ */
+function curvedMethodOf(project: Project, params: unknown): "mould" | "stacked" | null {
+  const section = field(params, "section");
+  const curved = curvedLayout(project);
+  if (field(section, "curvedMethod") === undefined) {
+    return curved && field(section, "kind") !== "solid" ? "mould" : null;
+  }
+  return resolveCurvedMethod(params as WoodCentralParams, curved);
+}
+
+/**
+ * Ancrage retenu du limon central bois (contrat du cœur `resolveAnchorKind`, trace courbe =
+ * poutre cintrée). Paramètres sans `anchors.kind` : sabot en U (comportement antérieur).
+ */
+function anchorKindOf(project: Project, params: unknown): "shoe" | "embeddedPlate" {
+  if (field(field(params, "anchors"), "kind") === undefined) return "shoe";
+  return resolveAnchorKind(params as WoodCentralParams, curvedLayout(project));
 }
 
 /**
@@ -630,6 +717,7 @@ const BOX_ONLY: ReadonlySet<string> = new Set([
   "flangeThickness",
   "diaphragmThickness",
   "diaphragmSpacing",
+  "diaphragmMinSpacing",
 ]);
 
 /** Champ `key` d'un objet de paramètres, `undefined` sinon. */

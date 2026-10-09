@@ -5,9 +5,11 @@
  * Une crémaillère centrale unique sous les marches (`woodCentralParams.ts`), à l'axe de
  * l'emmarchement par défaut, sur la trace partagée avec `steel-central` (`centralTrace.ts`) :
  * droite (escalier droit : massif ou couches collées), débillardée (tournants) ou hélicoïdale
- * (lamellé-collé cintré sur moule, règle k_r `LAMELLE_CINTRE_KR`). La poutre, ses entailles, ses
- * boulons et ses sabots sont construits par `woodCentralBeam.ts` ; ce module assemble la sortie
- * du plugin et ses contrôles :
+ * (lamellé-collé cintré sur moule, règle k_r `LAMELLE_CINTRE_KR`, ou couches horizontales
+ * empilées sans moule, défaut au-delà de 60 mm, QUESTIONS A33 (e)). La poutre, ses entailles,
+ * ses boulons et tire-fonds, ses ancrages (sabots en U ou platines à âme noyée, A33 (f),
+ * A34 (c)) et ses couches sont construits par `woodCentralBeam.ts` ; ce module assemble la
+ * sortie du plugin et ses contrôles :
  *
  * - **Règles de rules.yaml** (contexte déduit `limon_central_bois`) : `CREMAILLERE_REGLE_MOYENS`
  *   (reste sous entaille de chaque assise contre le tableau FCBA lu à b / `facteur_centrale` ;
@@ -15,13 +17,14 @@
  *   le tableau est établi pour un escalier droit), `LIMON_EPAISSEUR_MIN_DTU` (largeur b),
  *   `LIMON_ENTAILLE_MIN` (entaille arrière de chaque marche dans la dent suivante, marche
  *   d'arrivée exclue), `LAMELLE_CINTRE_KR` (r_in / t des lamelles cintrées, refus bloquant sous
- *   `min` ; poutre droite ou massive : k_r = 1).
+ *   `min` ; poutre droite, massive ou en couches empilées : k_r = 1).
  * - **Contrôles du plugin** : plis minces (`LAMELLE_PLIS_MINCES`, SPEC Q10, avertissement et
  *   justification jointe comme A12), double porte-à-faux et torsion (`LIMON_CENTRAL_PORTE_A_FAUX`,
  *   repris de `steel-central`, toujours présent dès qu'il y a des marches).
  * - **Prédimensionnement** en flexion de la poutre (`precheck/`) : largeur reprise = emmarchement
- *   entier (une seule poutre), classe de bois du réglage `precheck.woodClass` (C24, C30, D40 ;
- *   classes de lamellé-collé GL non sourcées, QUESTIONS A33), résistance de calcul multipliée par
+ *   entier (une seule poutre), classe de bois du réglage `precheck.woodClass` (`auto` : GL24h
+ *   pour l'essence lamellé-collé, C24 sinon ; classes GL de la NF EN 14080 via C §1.11 [71],
+ *   QUESTIONS A33 (a)), résistance de calcul multipliée par
  *   k_r quand les lamelles sont cintrées sous `recommande` (C §1.6, EN 1995-1-1 via [71]) ;
  *   torsion et déversement non vérifiés (remarque du prédimensionnement).
  *
@@ -39,7 +42,7 @@ import type {
 import type { Mm } from "../model/primitives.js";
 import { buildBasicParts } from "../parts/basic.js";
 import { analyzeInclinedBeam } from "../precheck/beam.js";
-import { precheckResults, type PrecheckedBeam } from "../precheck/checks.js";
+import { precheckNotEvaluated, precheckResults, type PrecheckedBeam } from "../precheck/checks.js";
 import { stairLoads } from "../precheck/loads.js";
 import { PrecheckSettingsSchema, woodMaterialOf } from "../precheck/settings.js";
 import { activeContexts, permanentAreaLoad } from "../precheck/stringers.js";
@@ -60,6 +63,8 @@ import { CENTRAL_RULES } from "./steelCentral.js";
 import { deduceExecutionClass, executionClassReasons } from "./steelCommon.js";
 import { buildWoodCentralBeam, type WoodCentralBeamResult } from "./woodCentralBeam.js";
 import { WoodCentralParamsSchema, type WoodCentralParams } from "./woodCentralParams.js";
+import { resolvePlateWidth } from "./woodCentralPlates.js";
+import { woodCentralBoltSpacing } from "./woodSpacing.js";
 
 export {
   WOOD_CENTRAL_SECTION_KINDS,
@@ -227,7 +232,9 @@ function buildUnsafe(ctx: StructureContext, params: WoodCentralParams): Structur
         stepping,
         profile,
       ) + pc.extraPermanent;
-    const base = woodMaterialOf(pc, profile.wood.densities[params.material]);
+    // Classe retenue : réglage, ou `auto` → GL24h pour l'essence lamellé-collé, C24 sinon
+    // (QUESTIONS A33 (a), NF EN 14080 via C §1.11 [71]).
+    const base = woodMaterialOf(pc, profile.wood.densities[params.material], params.material);
     const kr = beam.lamination.kr;
     // k_r réduit la résistance de calcul du lamellé cintré (C §1.6, EN 1995-1-1 via [71]).
     const reduced = Number.isFinite(kr) && kr > 0 && kr < 1;
@@ -242,18 +249,27 @@ function buildUnsafe(ctx: StructureContext, params: WoodCentralParams): Structur
       loads,
       settings: pc,
     });
-    const beams: PrecheckedBeam[] = [
-      {
-        partId: beamPart.id,
-        label: msg("structure.steelCentral.precheck.beam", {
-          mark: beamPart.mark,
-          section: beam.sectionLabel,
-          grade: pc.woodClass,
-        }),
-        result,
-      },
-    ];
-    precheckChecks = precheckResults(project, stepping, beams);
+    const beamLabel = msg("structure.steelCentral.precheck.beam", {
+      mark: beamPart.mark,
+      section: beam.sectionLabel,
+      grade: base.label,
+    });
+    // Couches empilées (A33 (e)) : fil horizontal, coupé en biais par la flexion le long de la
+    // poutre inclinée, et joints de colle inclinés ; la classe vaut le long du fil et aucune
+    // source ne donne sa réduction : prédimensionnement non évalué (QUESTIONS A35 (j)).
+    const stackedGrain =
+      beam.lamination.method === "stacked"
+        ? msg("structure.woodCentral.precheck.stackedGrain", {
+            angle: dec((Math.atan(Math.max(0, beam.slope)) * 180) / Math.PI, 0),
+            woodClass: base.label,
+          })
+        : null;
+    const beams: PrecheckedBeam[] = stackedGrain
+      ? []
+      : [{ partId: beamPart.id, label: beamLabel, result }];
+    precheckChecks = stackedGrain
+      ? precheckNotEvaluated(project, stepping, beamPart.id, beamLabel, stackedGrain)
+      : precheckResults(project, stepping, beams);
     // Remarque du prédimensionnement de `steel-central` (limon central sans matériau) : poutre
     // unique, largeur reprise = emmarchement entier, torsion et déversement non vérifiés.
     const precheckNote = msg("structure.steelCentral.note.precheck", {
@@ -268,7 +284,12 @@ function buildUnsafe(ctx: StructureContext, params: WoodCentralParams): Structur
     }
     if (beam.lamination.kind === "glulam") {
       precheckNotes.push(
-        msg("structure.woodCentral.note.glulamClass", { woodClass: pc.woodClass }),
+        msg("structure.woodCentral.note.precheckClass", { woodClass: base.label }),
+      );
+    }
+    if (stackedGrain) {
+      precheckNotes.push(
+        msg("structure.woodCentral.note.precheckStacked", { reason: stackedGrain }),
       );
     }
     notes.push(...precheckNotes);
@@ -278,15 +299,16 @@ function buildUnsafe(ctx: StructureContext, params: WoodCentralParams): Structur
   // 5. Remarque de synthèse : section, lamellation, k_r, reste sous entaille et sa provenance.
   if (hasBeam) notes.push(summaryNote(params, beam, trace.kind));
 
-  // 6. Classe d'exécution des sabots : tôle pliée boulonnée et chevillée, **sans soudure** ni
-  // joint bout à bout (C §2.1 : PC1 pour les éléments non soudés, toutes nuances) ⇒ EXC1. La
-  // classe n'est rendue que s'il y a des pièces en acier (sabots), comme les autres plugins
-  // mixtes ; sans sabot, aucune pièce métallique : pas de classe d'exécution.
+  // 6. Classe d'exécution des ancrages : sabots en tôle pliée boulonnée et chevillée, **sans
+  // soudure** ni joint bout à bout (C §2.1 : PC1 pour les éléments non soudés, toutes nuances)
+  // ⇒ EXC1 ; platines à âme noyée, âme **soudée** en T sur la platine (`anchorsWelded`). La
+  // classe n'est rendue que s'il y a des pièces en acier (ancrages), comme les autres plugins
+  // mixtes ; sans ancrage, aucune pièce métallique : pas de classe d'exécution.
   const steelParts = beam.parts.filter((p) => p.material.startsWith("steel"));
   let executionClass: "EXC1" | "EXC2" | undefined;
   if (steelParts.length > 0) {
     const grade = params.anchors.grade;
-    const exc = deduceExecutionClass({ grade, buttWeld: 0, welded: false });
+    const exc = deduceExecutionClass({ grade, buttWeld: 0, welded: beam.anchorsWelded });
     executionClass = exc.executionClass;
     notes.push(
       msg("structure.steel.exc.note", {
@@ -301,19 +323,47 @@ function buildUnsafe(ctx: StructureContext, params: WoodCentralParams): Structur
   if (params.section.residual === "auto" && hasBeam && Number.isFinite(beam.residual)) {
     autoValues["section.residual"] = beam.residual;
   }
+  // Épaisseur de lamelle : couches droites ou lamelles cintrées (les couches empilées ont leur
+  // propre épaisseur, `section.layerThickness`).
   if (
     params.section.lamellaThickness === "auto" &&
     hasBeam &&
     beam.lamination.kind === "glulam" &&
+    beam.lamination.method !== "stacked" &&
     Number.isFinite(beam.lamination.lamellaThickness)
   ) {
     autoValues["section.lamellaThickness"] = beam.lamination.lamellaThickness;
   }
+  if (hasBeam && beam.stacked) {
+    if (params.section.layerThickness === "auto" && Number.isFinite(beam.stacked.layerThickness))
+      autoValues["section.layerThickness"] = beam.stacked.layerThickness;
+    if (
+      params.section.dressingAllowance === "auto" &&
+      Number.isFinite(beam.stacked.dressingAllowance)
+    )
+      autoValues["section.dressingAllowance"] = beam.stacked.dressingAllowance;
+  }
   if (params.notch.rearDepth === "auto" && hasBeam && Number.isFinite(beam.rearDepth)) {
     autoValues["notch.rearDepth"] = beam.rearDepth;
   }
-  if (params.bolts.minSpacing === "auto" && hasBeam) {
-    autoValues["bolts.minSpacing"] = params.bolts.holeDiameter;
+  // Entraxe et pince des organes de marche : bornes « tous angles » de l'EC5 (A34 (b)).
+  if (hasBeam) {
+    const spacing = woodCentralBoltSpacing(
+      params.bolts,
+      resolveWorkshopProfile(project.workshop).fasteners,
+    );
+    if (params.bolts.minSpacing === "auto") autoValues["bolts.minSpacing"] = spacing.minSpacing;
+    if (params.bolts.edgeDistance === "auto")
+      autoValues["bolts.edgeDistance"] = spacing.edgeDistance;
+  }
+  // Largeur de la platine à âme noyée (A33 (f)).
+  if (
+    hasBeam &&
+    beam.anchorKind === "embeddedPlate" &&
+    params.anchors.plate.width === "auto" &&
+    (params.anchors.foot || params.anchors.head)
+  ) {
+    autoValues["anchors.plate.width"] = resolvePlateWidth(params);
   }
 
   return {
@@ -482,6 +532,14 @@ function addKrCheck(
     beam.beamPartId !== undefined
       ? { kind: "part" as const, partId: beam.beamPartId }
       : { kind: "stair" as const };
+  if (lam.method === "stacked") {
+    // Couches horizontales découpées selon le plan : aucun cintrage (A33 (e)).
+    if (!hasBeam) return;
+    checks.add(rule, [
+      { status: "ok", location, message: msg("structure.woodCentral.check.krStacked") },
+    ]);
+    return;
+  }
   if (!lam.curved || lam.kind === "solid") {
     if (!hasBeam) return;
     checks.add(rule, [

@@ -836,3 +836,31 @@ describe("propriétés (générateurs contraints)", () => {
     expect(complete).toBeGreaterThanOrEqual(10);
   });
 });
+
+describe("caisson : entraxe des entretoises sous la borne basse (QUESTIONS A32 (a))", () => {
+  it("modèle : erreur lisible, entretoises d'extrémité et de joint seules, modèle construit", () => {
+    const over = { section: { kind: "box", height: 200, diaphragmSpacing: 120 } };
+    const { m } = run(preset("straight", over));
+    const err = m.errors.find((e) => e.key === "structure.steelCentral.error.diaphragmMinSpacing");
+    expect(err).toBeDefined();
+    expect(fr(err!)).toContain("200");
+    const count = m.parts.filter((p) => p.id.startsWith("central-diaphragm-")).length;
+    const { m: ref } = run(preset("straight", { section: { kind: "box" } }));
+    const refCount = ref.parts.filter((p) => p.id.startsWith("central-diaphragm-")).length;
+    expect(count).toBeGreaterThan(0);
+    expect(count).toBeLessThan(refCount);
+    expect(m.parts.some((p) => p.id.startsWith("central-web-"))).toBe(true);
+  });
+
+  it("borne `auto` exposée (hauteur de la section) sur un caisson, absente sur un tube", () => {
+    const key = "stair.structure.params.section.diaphragmMinSpacing";
+    const { m } = run(preset("straight", { section: { kind: "box", height: 240 } }));
+    expect(m.autoValues?.[key]).toBe(240);
+    const { m: tube } = run(preset("straight"));
+    expect(tube.autoValues?.[key]).toBeUndefined();
+    const { m: entered } = run(
+      preset("straight", { section: { kind: "box", diaphragmMinSpacing: 150 } }),
+    );
+    expect(entered.autoValues?.[key]).toBeUndefined();
+  });
+});

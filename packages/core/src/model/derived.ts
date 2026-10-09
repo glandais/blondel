@@ -442,7 +442,26 @@ export interface Part {
     readonly width: Mm;
     readonly thickness: Mm;
     readonly count?: number;
+    /**
+     * Approvisionnement particulier du débit (ajout rétrocompatible ; absent : plateau ou barre
+     * débité à l'atelier). `veneer` : placages ou contreplaqué souple **achetés à l'épaisseur**
+     * (plis minces d'un lamellé cintré sur moule, QUESTIONS A34 (e), C §1.6 [7]) : épaisseur de
+     * débit = épaisseur finie (aucune surcote de corroyage), longueur et largeur avec les
+     * surcotes du profil d'atelier ; la liste et la fiche de débit le signalent (« placage »).
+     */
+    readonly supply?: "veneer";
   };
+  /**
+   * Pièce **composante** d'une pièce finie (ajout rétrocompatible, QUESTIONS A33 (e) : couche
+   * horizontale d'une poutre de limon central bois en couches empilées) : identifiant de la
+   * pièce finie dans le `Model`. Une composante porte son gabarit (`flat`), son débit (`stock`)
+   * et ses grandeurs de matière et de coût (volume, masse, volume de débit) ; son solide est la
+   * part de la pièce finie qu'elle forme. Elle n'est **pas dessinée** dans la scène 3D ni dans le
+   * glTF (la pièce finie l'est). La pièce finie, elle, ne porte alors ni débit (`stock`) ni
+   * grandeurs de matière (ses composantes les portent : aucun double compte) ; la liste et la
+   * fiche de débit ne listent que les composantes. Absent : pièce autonome.
+   */
+  readonly componentOf?: string;
   /** Grandeurs de coût/nomenclature (masse kg, volume m³, cordons mm, plis, coupes…). */
   readonly quantities: Readonly<Record<string, number>>;
   /** Direction du fil (bois) dans le repère du solide, pour les textures. */

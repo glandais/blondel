@@ -190,6 +190,7 @@ export {
   STEEL_CENTRAL,
   SteelCentralParamsSchema,
   buildSteelCentral,
+  resolveDiaphragmMinSpacing,
   centralUnsupportedOptions,
   effectiveCentralFixing,
   type CentralSectionKind,
@@ -211,10 +212,51 @@ export {
   type WoodCentralSectionKind,
 } from "./woodCentral.js";
 export {
+  WOOD_CENTRAL_ANCHOR_KINDS,
+  WOOD_CENTRAL_CURVED_METHODS,
+  resolveAnchorKind,
+  resolveCurvedMethod,
+  type WoodCentralAnchorKind,
+  type WoodCentralCurvedMethod,
+} from "./woodCentralParams.js";
+export {
   WOOD_CENTRAL_SHOE_FOOT_ID,
   WOOD_CENTRAL_SHOE_HEAD_ID,
   type ShoeBeamHole,
 } from "./woodCentralShoes.js";
+export {
+  WOOD_CENTRAL_PLATE_FOOT_ID,
+  WOOD_CENTRAL_PLATE_FOOT_MARK,
+  WOOD_CENTRAL_PLATE_FOOT_WEB_ID,
+  WOOD_CENTRAL_PLATE_FOOT_WEB_MARK,
+  WOOD_CENTRAL_PLATE_HEAD_ID,
+  WOOD_CENTRAL_PLATE_HEAD_MARK,
+  WOOD_CENTRAL_PLATE_HEAD_WEB_ID,
+  WOOD_CENTRAL_PLATE_HEAD_WEB_MARK,
+  buildWoodCentralEmbeddedPlates,
+  resolvePlateWidth,
+  type BeamKerf,
+  type WoodCentralPlatesResult,
+} from "./woodCentralPlates.js";
+export {
+  WOOD_CENTRAL_LAYER_ID_PREFIX,
+  buildStackedLayers,
+  resolveDressingAllowance,
+  resolveLayerThickness,
+  woodCentralLayerId,
+  woodCentralLayerMark,
+  type StackedBeamShape,
+  type StackedLayer,
+  type StackedLayersInput,
+  type StackedLayersResult,
+} from "./woodCentralLayers.js";
+export {
+  ec5Spacing,
+  woodCentralBoltSpacing,
+  type Ec5Spacing,
+  type WoodCentralBoltSpacing,
+  type WoodFastenerType,
+} from "./woodSpacing.js";
 export {
   WOOD_CENTRAL_BEAM_ID,
   WOOD_CENTRAL_BEAM_RULES,

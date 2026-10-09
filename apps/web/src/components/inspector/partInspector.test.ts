@@ -348,3 +348,63 @@ describe("pièces assemblées et liens", () => {
     expect(html).toContain('<span class="insp-link__detail">200 × 150</span>');
   });
 });
+
+describe("inspecteur Pièce : pièces composées et placages (QUESTIONS A33 (e), A34 (e))", () => {
+  /** Poutre finie et deux couches composantes fabriquées à la main ; une marche en placage. */
+  function composed(): Model {
+    return load(steelFlat(), (m) => {
+      const stringer = m.parts.find((p) => p.category === "stringer")!;
+      const { stock: _stock, ...finished } = stringer;
+      const layer = (k: number): Part => ({
+        ...stringer,
+        id: `layer-${k}`,
+        mark: `${stringer.mark}-${k}`,
+        name: textMessage(`Couche ${k}`),
+        componentOf: stringer.id,
+        stock: { length: 1000, width: 200, thickness: 40 },
+      });
+      const tread = m.parts.find((p) => p.category === "tread")!;
+      const veneer: Part = {
+        ...tread,
+        stock: { length: 1000, width: 300, thickness: 3, supply: "veneer" },
+      };
+      return {
+        ...m,
+        parts: m.parts
+          .map((p) => (p.id === stringer.id ? finished : p.id === tread.id ? veneer : p))
+          .concat([layer(1), layer(2)]),
+      };
+    });
+  }
+
+  it("composante : lien « Couche de … » vers la pièce finie, isolement de la pièce finie", () => {
+    const model = composed();
+    const finished = model.parts.find((p) => p.id === "layer-1")!.componentOf!;
+    const mark = model.parts.find((p) => p.id === finished)!.mark;
+    const html = render("layer-1");
+    expect(button(html, `Couche de ${mark}`)).toContain("part-insp__assembly");
+    uiStore.setState({ isolatedPartId: finished });
+    expect(button(render("layer-1"), "Tout réafficher")).toContain('aria-pressed="true"');
+    expect(button(render("layer-1", "en"), `Layer of ${mark}`)).not.toBe("");
+    noRawKeys(html);
+  });
+
+  it("pièce finie : nombre de couches, débit « voir les couches », sans masse propre", () => {
+    const model = composed();
+    const finished = model.parts.find((p) => p.id === "layer-1")!.componentOf!;
+    const v = values(render(finished));
+    expect(v["layers"]).toEqual(["Couches", "2"]);
+    expect(v["stock"]).toEqual(["Débit", "voir les couches"]);
+    expect(values(render(finished, "en"))["stock"]).toEqual(["Cutting", "see the layers"]);
+  });
+
+  it("débit en placage signalé", () => {
+    const model = composed();
+    const tread = model.parts.find((p) => p.stock?.supply === "veneer")!;
+    expect(values(render(tread.id))["stock"]).toEqual(["Débit", "placage acheté à l'épaisseur"]);
+    expect(values(render(tread.id, "en"))["stock"]).toEqual([
+      "Cutting",
+      "veneer bought to thickness",
+    ]);
+  });
+});

@@ -133,6 +133,24 @@ export const DEFAULT_FASTENER_PROFILE: FastenerProfile = {
     // classe « à valider ».
     treadBeamBolted: { kind: "bolt", grade: "8.8", diameter: 10, length: 300, perPoint: 1 },
     shoeBolted: { kind: "bolt", grade: "8.8", diameter: 12, length: 120, perPoint: 1 },
+    // Marches basses du limon central bois (A34 (a)) : tire-fond DIN 571 Ø10 (C §1.11 [78]),
+    // diamètre lu sur le perçage de la marche, longueur déduite par le plugin, « à valider ».
+    treadBeamLagScrewed: {
+      kind: "lag-screw",
+      grade: "zinc-plated",
+      diameter: 10,
+      length: 100,
+      perPoint: 1,
+    },
+    // Platine à âme noyée (A33 (f)) : broches Ø12 au travers de la poutre (C §1.11 [80] : deux
+    // broches Ø12 d'un pied de poteau à âme), longueur déduite par le plugin, « à valider ».
+    embeddedPlatePinned: {
+      kind: "dowel",
+      grade: "zinc-plated",
+      diameter: 12,
+      length: 90,
+      perPoint: 1,
+    },
     guardPostFloor: { kind: "anchor", grade: "zinc-plated", diameter: 10, length: 80, perPoint: 4 },
     guardPostStair: {
       kind: "lag-screw",

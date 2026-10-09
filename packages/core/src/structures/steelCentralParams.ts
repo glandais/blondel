@@ -77,6 +77,13 @@ export const SteelCentralParamsSchema = z.object({
        */
       diaphragmSpacing: mmPos.default(600),
       /**
+       * Caisson : entraxe minimal des entretoises, mm (décision de l'utilisateur A32 (a) du
+       * 2026-10-09, aucune source, **à valider**). `auto` : hauteur de la section
+       * (`section.height`). Sous cette borne, `diaphragmSpacing` est refusé : erreur lisible,
+       * entretoises d'extrémité et de joint seules (`resolveDiaphragmMinSpacing`).
+       */
+      diaphragmMinSpacing: auto(mmPos),
+      /**
        * Diamètre des évents d'un corps creux galvanisé (C §2.8 [28] et C-M-10 : évents
        * obligatoires ; diamètre sans source, **à valider**).
        */
@@ -167,3 +174,14 @@ export const SteelCentralParamsSchema = z.object({
   cantileverJustification: z.string().default(""),
 });
 export type SteelCentralParams = z.output<typeof SteelCentralParamsSchema>;
+
+/**
+ * Borne basse de l'entraxe des entretoises d'un caisson (QUESTIONS A32 (a), **à valider**) :
+ * saisie, ou `auto` → hauteur de la section.
+ */
+export function resolveDiaphragmMinSpacing(
+  section: Pick<SteelCentralParams["section"], "diaphragmMinSpacing" | "height">,
+): number {
+  const entered = section.diaphragmMinSpacing;
+  return entered === "auto" ? section.height : entered;
+}

@@ -134,6 +134,26 @@ function findings(
   return out;
 }
 
+/**
+ * Prédimensionnement **non évalué** d'une poutre (méthode hors de son domaine, sans source pour
+ * l'y ramener) : un constat « non évalué » par critère, avec sa raison.
+ */
+export function precheckNotEvaluated(
+  project: Project,
+  stepping: Stepping,
+  partId: string,
+  beam: Message,
+  reason: Message,
+): RuleResult[] {
+  const col = new CheckCollector(project, stepping);
+  const location: Location = { kind: "part", partId };
+  const message = msg("precheck.finding.notEvaluated", { label: PRECHECK_LABEL, beam, reason });
+  for (const key of Object.keys(PRECHECK_RULES) as (keyof typeof PRECHECK_RULES)[]) {
+    col.add(pluginRuleDef(PRECHECK_RULES[key]), [{ status: "non-evaluee", location, message }]);
+  }
+  return col.results;
+}
+
 /** Contrôles de conception du prédimensionnement (un constat par poutre et par critère). */
 export function precheckResults(
   project: Project,

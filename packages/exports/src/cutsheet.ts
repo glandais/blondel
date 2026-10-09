@@ -15,6 +15,10 @@
  * porte le débit d'une lame et la quantité compte les lames (masse unitaire : part égale de la
  * pièce), de sorte que volumes bruts et masses cumulés restent ceux des pièces.
  *
+ * Pièce finie faite de composantes (`Part.componentOf`) : seules les composantes sont listées
+ * (`cutParts`, comme la liste de débit). Débit en placage (`Part.stock.supply = "veneer"`) :
+ * désignation « … (placage) » et champ `supply` de la ligne.
+ *
  * Regroupement : par **épaisseur** seulement pour un débit en plaque (tôle, plat, plateau de
  * bois), c.-à-d. quand l'épaisseur de débit est une épaisseur de matière : pièce en bois, ou
  * pièce dont le développé a cette épaisseur. Les profilés et tubes (UPN, cornières, tubes,
@@ -22,13 +26,19 @@
  * **section** et n'ont pas de volume brut (L × l × e serait le volume de leur boîte).
  */
 import { bbox, type MaterialId, type Part } from "@blondel/core";
-import { defaultMassNote, partMassKg, type MassNote } from "./csv/cutlist.js";
+import {
+  cutName,
+  cutParts,
+  defaultMassNote,
+  partMassKg,
+  supplyLabel,
+  type MassNote,
+} from "./csv/cutlist.js";
 import {
   compareMarks,
   compareText,
   materialLabel,
   translatorOf,
-  tr,
   trOpt,
   type LocaleOption,
 } from "./i18n.js";
@@ -48,6 +58,8 @@ export interface CutSheetRow {
   readonly unitMass?: number;
   /** Remarque sur la masse (ex. « masse volumique à valider ») ; absente sans masse. */
   readonly massNote?: string;
+  /** Approvisionnement traduit (« placage ») ; absent : débit ordinaire. */
+  readonly supply?: string;
 }
 
 export interface CutSheetOptions extends LocaleOption {
@@ -120,7 +132,7 @@ export function cutSheet(parts: readonly Part[], options: CutSheetOptions = {}):
     string,
     { part: Part; row: Omit<CutSheetRow, "quantity">; sheet: boolean; count: number }
   >();
-  for (const p of parts) {
+  for (const p of cutParts(parts)) {
     const d = cutDims(p);
     // Lames identiques d'une pièce composée (lamellé-collé) : une ligne de débit par lame.
     const pieces =
@@ -137,8 +149,10 @@ export function cutSheet(parts: readonly Part[], options: CutSheetOptions = {}):
       d.thickness ?? null,
       pieces,
       mass ?? null,
+      p.stock?.supply ?? null,
     ]);
     const l = lines.get(key);
+    const supply = supplyLabel(tx, p);
     if (l) l.count += pieces;
     else
       lines.set(key, {
@@ -147,11 +161,12 @@ export function cutSheet(parts: readonly Part[], options: CutSheetOptions = {}):
         count: pieces,
         row: {
           mark: p.mark,
-          name: tr(tx, p.name),
+          name: cutName(tx, p),
           section: trOpt(tx, p.section) ?? "",
           ...d,
           ...(finite(mass) ? { unitMass: mass } : {}),
           ...(note !== undefined && note !== "" ? { massNote: note } : {}),
+          ...(supply !== undefined ? { supply } : {}),
         },
       });
   }

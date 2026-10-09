@@ -3,12 +3,14 @@
  * structure « Limon central », section tube grisée avec sa raison (tube réservé au tracé droit),
  * passage en caisson, tronçons du limon débillardé et leurs joints en Fabrication, justification
  * du double porte-à-faux et de la torsion saisie dans l'inspecteur de la règle
- * LIMON_CENTRAL_PORTE_A_FAUX (l'avertissement reste), démo « Limon central débillardé ».
+ * LIMON_CENTRAL_PORTE_A_FAUX (l'avertissement reste), entraxe des entretoises du caisson sous
+ * sa borne basse (QUESTIONS A32 (a) : erreur lisible), démo « Limon central débillardé ».
  */
 import { expect, test, type Page } from "@playwright/test";
 import {
   applyPreset,
   chooseStructure,
+  commitField,
   instrument,
   openApp,
   openProjectMenu,
@@ -95,6 +97,43 @@ test("quart tournant : limon central en caisson, tronçons et joints, justificat
   await expect(inspector.locator(".rule-insp__ref")).toHaveText("LIMON_CENTRAL_PORTE_A_FAUX");
   await expect(inspector.locator(".rule-insp__status")).toContainText("Avertissement");
   await expect(field).toHaveValue("Note de calcul NC-12");
+});
+
+test("caisson : entraxe des entretoises sous la hauteur de la section, erreur lisible (A32 a)", async ({
+  page,
+}) => {
+  await openApp(page);
+  await applyPreset(page, "Quart tournant à gauche");
+  await chooseStructure(page, "steel-central");
+  const kind = await sectionKind(page);
+  if ((await kind.inputValue()) !== "box") {
+    await kind.selectOption("box");
+    await settle(page);
+  }
+  await expect(page.locator(".errors-bar")).toHaveCount(0);
+
+  // Entraxe des entretoises de 100 mm, sous la borne basse par défaut (hauteur de la section).
+  const panel = await openSection(page, "Structure");
+  const field = panel.getByRole("textbox", {
+    name: "Entraxe maximal des entretoises",
+    exact: true,
+  });
+  for (let k = 0; k < 8 && !(await field.isVisible()); k++) {
+    const closed = panel.locator("details:not([open]) > summary");
+    if ((await closed.count()) === 0) break;
+    await closed.first().click();
+  }
+  await expect(field).toBeVisible();
+  await commitField(page, field, "100");
+  await expect(field).toHaveValue("100");
+
+  // Erreur lisible du cœur (pas d'exception), le limon reste généré.
+  const bar = page.locator(".errors-bar");
+  await expect(bar).toBeVisible();
+  await expect(bar).toContainText(/entretoises/i);
+  await openTab(page, "Pièces");
+  const list = page.getByRole("navigation", { name: "Pièces par famille" });
+  await expect(list.getByRole("button", { name: /^Limons\b/ })).toBeVisible();
 });
 
 test("démo « Limon central débillardé » : limon central, aucune erreur de génération", async ({

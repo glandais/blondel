@@ -59,7 +59,7 @@ import {
   steelMaterial,
   steelQuantities,
 } from "./steelCommon.js";
-import type { SteelCentralParams } from "./steelCentralParams.js";
+import { resolveDiaphragmMinSpacing, type SteelCentralParams } from "./steelCentralParams.js";
 import { CURVED_RULES, QUANTITY_ROLLED_LENGTH_MM } from "./steelCurved.js";
 import {
   fiberDevelopment,
@@ -411,6 +411,15 @@ function beamOf(input: CentralBeamInput): CentralBeamResult {
       msg("structure.steelCentral.error.diaphragmSpacing", {
         spacing: dec(sec.diaphragmSpacing, 0),
         thickness: dec(sec.diaphragmThickness, 0),
+      }),
+    );
+  } else if (!isTube && sec.diaphragmSpacing < resolveDiaphragmMinSpacing(sec)) {
+    // Entretoises trop serrées (QUESTIONS A32 (a), borne « à valider ») : seules les
+    // entretoises imposées (extrémités, joints) sont posées.
+    errors.push(
+      msg("structure.steelCentral.error.diaphragmMinSpacing", {
+        spacing: dec(sec.diaphragmSpacing, 0),
+        min: dec(resolveDiaphragmMinSpacing(sec), 0),
       }),
     );
   }
@@ -925,6 +934,24 @@ function ventNear(
   return null;
 }
 
+/**
+ * Entraxe des entretoises intermédiaires d'un caisson : `section.diaphragmSpacing`, ou ∞ (aucune
+ * entretoise intermédiaire) s'il ne dépasse pas l'épaisseur des entretoises ou s'il est sous la
+ * borne basse résolue (`resolveDiaphragmMinSpacing`, QUESTIONS A32 (a), à valider).
+ */
+export function diaphragmSpacingOf(sec: SteelCentralParams["section"]): Mm {
+  const s = sec.diaphragmSpacing;
+  return s > sec.diaphragmThickness && s >= resolveDiaphragmMinSpacing(sec) ? s : Infinity;
+}
+
+/**
+ * Nombre d'entretoises intermédiaires équidistantes entre deux positions distantes de `gap`, à
+ * l'entraxe `spacing` au plus (∞ : aucune).
+ */
+export function intermediateDiaphragmCount(gap: Mm, spacing: Mm): number {
+  return Number.isFinite(spacing) ? Math.max(0, Math.ceil(gap / spacing - 1e-9) - 1) : 0;
+}
+
 function boxParts(
   g: BeamGeometry,
   ivs: readonly { a: Mm; b: Mm }[],
@@ -937,9 +964,10 @@ function boxParts(
   const tf = sec.flangeThickness;
   const td = sec.diaphragmThickness;
   const wf = Math.max(0, sec.width - 2 * tw);
-  // Entraxe des entretoises intermédiaires ; jointives ou superposées (entraxe ≤ épaisseur,
-  // erreur signalée par `beamOf`) : aucune entretoise intermédiaire.
-  const spacing = sec.diaphragmSpacing > td ? sec.diaphragmSpacing : Infinity;
+  // Entraxe des entretoises intermédiaires ; jointives ou superposées (entraxe ≤ épaisseur), ou
+  // sous la borne basse `diaphragmMinSpacing` (A32 (a)) — erreurs signalées par `beamOf` :
+  // aucune entretoise intermédiaire.
+  const spacing = diaphragmSpacingOf(sec);
   const galvanized = params.finish === "galvanized";
   const ventD = sec.ventDiameter;
   const webs = websFor(g);
@@ -973,7 +1001,7 @@ function boxParts(
   let prev = g.sStart;
   for (const f of fixed) {
     const gap = f - prev;
-    const n = Number.isFinite(spacing) ? Math.max(0, Math.ceil(gap / spacing - 1e-9) - 1) : 0;
+    const n = intermediateDiaphragmCount(gap, spacing);
     for (let k = 1; k <= n; k++) positions.push(prev + (gap * k) / (n + 1));
     positions.push(f);
     prev = f;

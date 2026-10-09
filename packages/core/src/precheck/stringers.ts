@@ -157,7 +157,7 @@ export function precheckStringers(
       section = { area: b * h, i: (b * h ** 3) / 12, w: (b * h * h) / 6 };
       spanH = xExtent(p);
       if (isWoodMaterial(p.material)) {
-        material = woodMaterialOf(settings, profile.wood.densities[p.material]);
+        material = woodMaterialOf(settings, profile.wood.densities[p.material], p.material);
       } else {
         const grade = gradeInLabel(sectionText);
         material = steelMaterialOf(grade, settings, profile.metal.density);

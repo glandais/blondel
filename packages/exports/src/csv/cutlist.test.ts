@@ -1,7 +1,12 @@
 import { textMessage } from "@blondel/i18n";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
-import { sampleParts, sheetStringerPart, treadPart } from "../testing/fixtures.js";
+import {
+  sampleParts,
+  sheetStringerPart,
+  treadPart,
+  woodStringerPart,
+} from "../testing/fixtures.js";
 import {
   CSV_BOM,
   csvField,
@@ -317,5 +322,83 @@ describe("exportCutListCsv", () => {
         ),
       );
     });
+  });
+});
+
+describe("pièces composées et placages (QUESTIONS A33 (e), A34 (e))", () => {
+  /** Poutre finie (sans débit propre) et ses deux couches composantes. */
+  function layered() {
+    const beam = { ...woodStringerPart(), id: "beam", mark: "LC1" };
+    const { stock: _stock, ...finished } = beam;
+    const layer = (k: number, volume: number, mass: number) => ({
+      ...beam,
+      id: `beam-layer-${k}`,
+      mark: `LC1-${k}`,
+      name: textMessage(`Couche ${k}`),
+      componentOf: "beam",
+      stock: { length: 3000, width: 300, thickness: 40 },
+      quantities: { volume, mass_kg: mass },
+    });
+    return [finished, layer(1, 0.03, 21), layer(2, 0.02, 14)];
+  }
+
+  it("la pièce finie n'est pas listée, ses couches le sont ; totaux = somme des couches", () => {
+    for (const locale of ["fr", "en"] as const) {
+      const rows = cutListRows(layered(), { locale });
+      expect(rows.map((r) => r.mark)).toEqual(["LC1-1", "LC1-2"]);
+    }
+    const csv = parseCsv(exportCutListCsv({ parts: layered() }).slice(1));
+    const total = csv[csv.length - 1]!;
+    expect(total[7]).toBe("2");
+    expect(total[9]).toBe("0,050000");
+    expect(total[11]).toBe("35,00");
+    // Sans composante dans le lot, une pièce porteuse de `componentOf` reste listée.
+    const [, alone] = layered();
+    expect(cutListRows([alone!]).map((r) => r.mark)).toEqual(["LC1-1"]);
+  });
+
+  it("débit en placage : désignation « (placage) », champ `supply`, pas de nouvelle colonne", () => {
+    const ply = {
+      ...treadPart(3),
+      id: "ply",
+      mark: "PL1",
+      name: textMessage("Pli"),
+      stock: { length: 1200, width: 120, thickness: 3, supply: "veneer" as const },
+    };
+    const fr = cutListRows([ply])[0]!;
+    expect(fr.name).toBe("Pli (placage)");
+    expect(fr.supply).toBe("placage");
+    expect(fr.thickness).toBe(3);
+    const en = cutListRows([ply], { locale: "en" })[0]!;
+    expect(en.name).toBe("Pli (veneer)");
+    expect(en.supply).toBe("veneer");
+    // Même repère et même débit, l'un en placage : jamais fusionnés.
+    const { supply: _s, ...plain } = ply.stock;
+    expect(cutListRows([ply, { ...ply, id: "ply-b", stock: plain }])).toHaveLength(2);
+    // Débit ordinaire : ni mention ni champ.
+    expect(cutListRows([treadPart(3)])[0]!.supply).toBeUndefined();
+    const csv = parseCsv(exportCutListCsv({ parts: [ply] }).slice(1));
+    expect(csv.every((r) => r.length === 13)).toBe(true);
+    expect(csv[1]![1]).toBe("Pli (placage)");
+  });
+
+  it("propriété : retirer les pièces finies conserve les quantités des composantes", () => {
+    fc.assert(
+      fc.property(fc.integer({ min: 1, max: 6 }), fc.boolean(), (n, withAlone) => {
+        const beam = { ...woodStringerPart(), id: "beam", mark: "LC1" };
+        const layers = Array.from({ length: n }, (_, i) => ({
+          ...beam,
+          id: `l${i}`,
+          mark: `LC1-${i + 1}`,
+          componentOf: "beam",
+        }));
+        const parts = [beam, ...layers, ...(withAlone ? [treadPart(1)] : [])];
+        const rows = cutListRows(parts);
+        const qty = rows.reduce((s, r) => s + r.quantity, 0);
+        expect(rows.some((r) => r.mark === "LC1")).toBe(false);
+        expect(qty).toBe(n + (withAlone ? 1 : 0));
+      }),
+      { numRuns: 30 },
+    );
   });
 });

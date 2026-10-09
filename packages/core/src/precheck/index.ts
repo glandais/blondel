@@ -31,9 +31,12 @@ export {
   LOAD_CATEGORIES,
   PRECHECK_PROVENANCE,
   PrecheckSettingsSchema,
+  GLULAM_WOOD_CLASSES,
   STEEL_E,
   WOOD_CLASSES,
   WOOD_CLASS_PROPERTIES,
+  WOOD_CLASS_SETTINGS,
+  resolveWoodClass,
   steelMaterialOf,
   steelYield,
   woodMaterialOf,
@@ -42,6 +45,7 @@ export {
   type PrecheckProvenance,
   type PrecheckSettings,
   type WoodClass,
+  type WoodClassSetting,
 } from "./settings.js";
 export {
   activeContexts,

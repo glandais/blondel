@@ -206,7 +206,13 @@ describe("examples/", () => {
     const model = buildModel(p, { memo: false });
     expect(model.parts.length).toBeGreaterThan(0);
     for (const part of model.parts) {
-      const m = part.quantities["mass_kg"];
+      // Pièce finie faite de composantes (poutre en couches empilées, QUESTIONS A33 (e)) : sa
+      // matière est portée par ses composantes.
+      const components = model.parts.filter((c) => c.componentOf === part.id);
+      const m =
+        components.length > 0
+          ? components.reduce((sum, c) => sum + (c.quantities["mass_kg"] ?? Number.NaN), 0)
+          : part.quantities["mass_kg"];
       expect(m !== undefined && Number.isFinite(m) && m > 0, `${file} ${part.id}`).toBe(true);
     }
   });

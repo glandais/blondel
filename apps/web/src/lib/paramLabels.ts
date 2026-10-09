@@ -15,6 +15,7 @@ import {
   LOAD_CATEGORIES,
   SECTION_FAMILIES,
   WOOD_CLASSES,
+  WOOD_CLASS_SETTINGS,
   sectionsOf,
   type SectionFamily,
   type UnsupportedParamOption,
@@ -49,10 +50,12 @@ export const GROUP_LABELS: Readonly<Record<string, MessageKey>> = {
   trace: "ui.param.group.trace",
   section: "ui.param.group.section",
   beam: "ui.param.group.beam",
-  // Limon central bois (`wood-central`) : entaille arrière, boulons des marches, sabots.
+  // Limon central bois (`wood-central`) : entaille arrière, boulons et tire-fonds des marches,
+  // ancrages (sabot en U ou platine à âme noyée, QUESTIONS A33 (f)).
   notch: "ui.param.group.notch",
   bolts: "ui.param.group.bolts",
-  anchors: "ui.param.group.anchors",
+  lagScrews: "ui.param.group.lagScrews",
+  anchors: "ui.param.group.anchorsFootHead",
 };
 
 const MM = "mm";
@@ -261,10 +264,16 @@ const COMMON: Readonly<Record<string, FieldText>> = {
   "precheck.gammaM0": { label: "ui.param.precheck.gammaM0.label", hint: TO_VALIDATE },
   "precheck.gammaMWood": { label: "ui.param.precheck.gammaMWood.label", hint: TO_VALIDATE },
   "precheck.kmod": { label: "ui.param.precheck.kmod.label", hint: TO_VALIDATE },
+  // Lamellé-collé (QUESTIONS A33 (a)) : γ_M propre aux classes GL, classe `auto` (GL24h pour
+  // l'essence lamellé-collé, C24 sinon).
+  "precheck.gammaMGlulam": { label: "ui.param.precheck.gammaMGlulam.label", hint: TO_VALIDATE },
   "precheck.woodClass": {
     label: "ui.param.precheck.woodClass.label",
     hint: TO_VALIDATE,
-    options: raw(WOOD_CLASSES),
+    options: {
+      ...raw(WOOD_CLASS_SETTINGS.filter((c) => c !== "auto")),
+      auto: "ui.param.precheck.woodClass.option.auto",
+    },
   },
 };
 
@@ -372,6 +381,12 @@ const STEEL_CENTRAL: Readonly<Record<string, FieldText>> = {
   },
   "section.diaphragmSpacing": {
     label: "ui.param.steelCentral.section.diaphragmSpacing.label",
+    unit: MM,
+    hint: TO_VALIDATE,
+  },
+  // Borne basse de l'entraxe des entretoises (QUESTIONS A32 (a)) ; `auto` : hauteur de la section.
+  "section.diaphragmMinSpacing": {
+    label: "ui.param.steelCentral.section.diaphragmMinSpacing.label",
     unit: MM,
     hint: TO_VALIDATE,
   },
@@ -516,6 +531,32 @@ const WOOD_CENTRAL: Readonly<Record<string, FieldText>> = {
     unit: MM,
     hint: TO_VALIDATE,
   },
+  // Filière sur une trace courbe (QUESTIONS A33 (e)) : moule ou couches empilées ; seuil de
+  // largeur et couches ◆ (aucune source sur les couches, C §1.11).
+  "section.curvedMethod": {
+    label: "ui.param.woodCentral.section.curvedMethod.label",
+    hint: "ui.param.woodCentral.section.curvedMethod.hint",
+    options: {
+      auto: "ui.param.woodCentral.section.curvedMethod.option.auto",
+      mould: "ui.param.woodCentral.section.curvedMethod.option.mould",
+      stacked: "ui.param.woodCentral.section.curvedMethod.option.stacked",
+    },
+  },
+  "section.mouldMaxWidth": {
+    label: "ui.param.woodCentral.section.mouldMaxWidth.label",
+    unit: MM,
+    hint: TO_VALIDATE,
+  },
+  "section.layerThickness": {
+    label: "ui.param.woodCentral.section.layerThickness.label",
+    unit: MM,
+    hint: TO_VALIDATE,
+  },
+  "section.dressingAllowance": {
+    label: "ui.param.woodCentral.section.dressingAllowance.label",
+    unit: MM,
+    hint: TO_VALIDATE,
+  },
   "notch.rearDepth": {
     label: "ui.param.woodCentral.notch.rearDepth.label",
     unit: MM,
@@ -528,10 +569,11 @@ const WOOD_CENTRAL: Readonly<Record<string, FieldText>> = {
     unit: MM,
     hint: TO_VALIDATE,
   },
+  // Entraxe et pinces : défauts de l'EC5 en fonction du diamètre (QUESTIONS A34 (b)), à valider.
   "bolts.minSpacing": {
     label: "ui.param.woodCentral.bolts.minSpacing.label",
     unit: MM,
-    hint: "ui.param.woodCentral.bolts.minSpacing.hint",
+    hint: TO_VALIDATE,
   },
   "bolts.protrusion": {
     label: "ui.param.woodCentral.bolts.protrusion.label",
@@ -543,10 +585,40 @@ const WOOD_CENTRAL: Readonly<Record<string, FieldText>> = {
     unit: MM,
     hint: TO_VALIDATE,
   },
-  "anchors.foot": { label: "ui.param.woodCentral.anchors.foot.label" },
-  "anchors.head": { label: "ui.param.woodCentral.anchors.head.label" },
+  // Tire-fonds des marches basses (QUESTIONS A34 (a), C §1.11 [78]) : tout ◆.
+  "lagScrews.pilotDiameter": {
+    label: "ui.param.woodCentral.lagScrews.pilotDiameter.label",
+    unit: MM,
+    hint: TO_VALIDATE,
+  },
+  "lagScrews.minAnchorage": {
+    label: "ui.param.woodCentral.lagScrews.minAnchorage.label",
+    unit: MM,
+    hint: TO_VALIDATE,
+  },
+  "lagScrews.tipCover": {
+    label: "ui.param.woodCentral.lagScrews.tipCover.label",
+    unit: MM,
+    hint: TO_VALIDATE,
+  },
+  "lagScrews.maxLength": {
+    label: "ui.param.woodCentral.lagScrews.maxLength.label",
+    unit: MM,
+    hint: TO_VALIDATE,
+  },
+  // Ancrages : présence, type (sabot en U ou platine à âme noyée, QUESTIONS A33 (f), A34 (c)).
+  "anchors.foot": { label: "ui.param.woodCentral.anchors.footAnchor.label" },
+  "anchors.head": { label: "ui.param.woodCentral.anchors.headAnchor.label" },
+  "anchors.kind": {
+    label: "ui.param.woodCentral.anchors.kind.label",
+    options: {
+      auto: "ui.param.woodCentral.anchors.kind.option.auto",
+      shoe: "ui.param.woodCentral.anchors.kind.option.shoe",
+      embeddedPlate: "ui.param.woodCentral.anchors.kind.option.embeddedPlate",
+    },
+  },
   "anchors.grade": {
-    label: "ui.param.woodCentral.anchors.grade.label",
+    label: "ui.param.woodCentral.anchors.gradeAny.label",
     hint: TO_VALIDATE,
     options: raw(["S235", "S355"]),
   },
@@ -570,11 +642,14 @@ const WOOD_CENTRAL: Readonly<Record<string, FieldText>> = {
     hint: TO_VALIDATE,
   },
   "anchors.length": {
-    label: "ui.param.woodCentral.anchors.length.label",
+    label: "ui.param.woodCentral.anchors.lengthAny.label",
     unit: MM,
     hint: TO_VALIDATE,
   },
-  "anchors.anchors": { label: "ui.param.woodCentral.anchors.anchors.label", hint: TO_VALIDATE },
+  "anchors.anchors": {
+    label: "ui.param.woodCentral.anchors.anchorsPerAnchor.label",
+    hint: TO_VALIDATE,
+  },
   "anchors.anchorHoleDiameter": {
     label: "ui.param.woodCentral.anchors.anchorHoleDiameter.label",
     unit: MM,
@@ -588,6 +663,46 @@ const WOOD_CENTRAL: Readonly<Record<string, FieldText>> = {
   },
   "anchors.holeEdgeDistance": {
     label: "ui.param.holeEdgeDistance.label",
+    unit: MM,
+    hint: TO_VALIDATE,
+  },
+  // Platine à âme noyée (C §1.11 [80], dimensions à valider).
+  "anchors.plate.thickness": {
+    label: "ui.param.woodCentral.anchors.plate.thickness.label",
+    unit: MM,
+    hint: TO_VALIDATE,
+  },
+  "anchors.plate.width": {
+    label: "ui.param.woodCentral.anchors.plate.width.label",
+    unit: MM,
+    hint: TO_VALIDATE,
+  },
+  "anchors.plate.webThickness": {
+    label: "ui.param.woodCentral.anchors.plate.webThickness.label",
+    unit: MM,
+    hint: TO_VALIDATE,
+  },
+  "anchors.plate.webDepth": {
+    label: "ui.param.woodCentral.anchors.plate.webDepth.label",
+    unit: MM,
+    hint: TO_VALIDATE,
+  },
+  "anchors.plate.webLength": {
+    label: "ui.param.woodCentral.anchors.plate.webLength.label",
+    unit: MM,
+    hint: TO_VALIDATE,
+  },
+  "anchors.plate.pins": {
+    label: "ui.param.woodCentral.anchors.plate.pins.label",
+    hint: TO_VALIDATE,
+  },
+  "anchors.plate.pinDiameter": {
+    label: "ui.param.woodCentral.anchors.plate.pinDiameter.label",
+    unit: MM,
+    hint: TO_VALIDATE,
+  },
+  "anchors.plate.pinHoleDiameter": {
+    label: "ui.param.woodCentral.anchors.plate.pinHoleDiameter.label",
     unit: MM,
     hint: TO_VALIDATE,
   },

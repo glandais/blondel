@@ -133,11 +133,14 @@ describe("exports de bout en bout sur examples/", () => {
         const r = readGlb(exportGlb(model, { project }));
         const root = r.doc.nodes[r.doc.scenes[0]!.nodes[0]!]!;
         expect(root.name).toBe(project.name);
-        expect(root.children).toHaveLength(model.parts.length);
+        // Composantes (couches d'une poutre en couches empilées) non dessinées : leur pièce
+        // finie l'est (`Part.componentOf`).
+        const drawn = model.parts.filter((p) => p.componentOf === undefined);
+        expect(root.children).toHaveLength(drawn.length);
         root.children!.forEach((ni, k) => {
           const node = r.doc.nodes[ni]!;
-          expect(node.name).toBe(model.parts[k]!.mark);
-          expect(node.extras?.["id"]).toBe(model.parts[k]!.id);
+          expect(node.name).toBe(drawn[k]!.mark);
+          expect(node.extras?.["id"]).toBe(drawn[k]!.id);
           expect(node.mesh, node.name).toBeDefined();
         });
       });

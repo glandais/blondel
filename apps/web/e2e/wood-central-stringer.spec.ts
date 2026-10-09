@@ -5,9 +5,16 @@
  *   Fabrication, la poutre LC1 (développé) et les sabots SP1 / ST1 ; visserie « Marche boulonnée
  *   au travers du limon central bois » dans la nomenclature ;
  * - quart tournant : « Bois massif » grisé avec sa raison (lamellé-collé cintré seulement sur une
- *   trace courbe), poutre LC1, règle « Rayon de cintrage du lamellé-collé » respectée ;
- * - refus lisible à petit rayon : lamelles de 10 mm sur le quart tournant, erreur du cœur
- *   « Limon central bois : rayon de cintrage trop petit », aucune pièce LC1 ;
+ *   trace courbe), poutre LC1, règle « Rayon de cintrage du lamellé-collé » respectée une fois
+ *   la filière « Lamelles cintrées sur moule » choisie (par défaut, b = 88 mm > 60 mm : couches
+ *   empilées sans cintrage, QUESTIONS A33 (e)) ;
+ * - refus lisible à petit rayon : moule et lamelles de 10 mm sur le quart tournant, erreur du
+ *   cœur « Limon central bois : rayon de cintrage trop petit », aucune pièce LC1 ;
+ * - suites du 2026-10-09 (QUESTIONS A33, A34) : platine à âme noyée par défaut sur l'hélicoïdal
+ *   (PP1 / AP1 / PT1 / AT1, broches et chevilles, aucun constat `FAB_SABOT_EMPRISE`) ;
+ *   tire-fonds des marches basses de l'escalier droit (plus de constat
+ *   `FAB_LIMON_CENTRAL_BOIS_BOULONS`) ; couches empilées par défaut sur le quart tournant
+ *   (LC1-1… dans la nomenclature et en Fabrication, LC1 sans débit propre) ;
  * - démo « Quart tournant sur limon central bois lamellé-collé » ;
  * - parcours guidé : carte « Limon central bois » de l'étape Structure et résumé de l'étape ;
  * - comparateur sur l'hélicoïdal : variante « limon central hélicoïdal en lamellé-collé
@@ -50,6 +57,48 @@ async function marksOf(page: Page, group: string): Promise<Locator> {
 /** Bouton d'un repère dans la liste d'un groupe. */
 const markButton = (marks: Locator, mark: string): Locator =>
   marks.filter({ has: marks.page().locator("strong", { hasText: new RegExp(`^${mark}$`) }) });
+
+/** Déplie les replis et groupes fermés du panneau jusqu'à rendre `field` visible. */
+async function reveal(panel: Locator, field: Locator): Promise<void> {
+  for (let k = 0; k < 8 && !(await field.isVisible()); k++) {
+    const closed = panel.locator("details:not([open]) > summary");
+    if ((await closed.count()) === 0) break;
+    await closed.first().click();
+  }
+  await expect(field).toBeVisible();
+}
+
+/**
+ * Filière de la poutre cintrée (« Fabrication de la poutre cintrée ») : `mould` (lamelles
+ * cintrées sur moule) ou `stacked` (couches empilées), QUESTIONS A33 (e).
+ */
+async function chooseCurvedMethod(page: Page, value: "mould" | "stacked"): Promise<void> {
+  const panel = await openSection(page, "Structure");
+  const select = panel.getByRole("combobox", {
+    name: "Fabrication de la poutre cintrée",
+    exact: true,
+  });
+  await reveal(panel, select);
+  await select.selectOption(value);
+  await settle(page);
+  await expect(select).toHaveValue(value);
+}
+
+/** Repères de la nomenclature (première colonne du tableau des pièces). */
+async function bomMarks(page: Page): Promise<string[]> {
+  await openTab(page, "Nomenclature");
+  const table = page.locator(".bom > table.table").first();
+  await expect(table).toBeVisible();
+  return (await table.locator("tbody th[scope=row]").allTextContents()).map((m) => m.trim());
+}
+
+/** Cartes de constats d'une règle dans l'inspecteur « sans sélection » (badge Contrôle). */
+async function ruleCards(page: Page, ruleId: string): Promise<Locator> {
+  await page.locator(".control-badge").click();
+  const inspector = page.getByRole("complementary", { name: "Inspecteur" });
+  await expect(inspector).toHaveAttribute("data-template", "project");
+  return inspector.locator(`.rule-card[data-rule="${ruleId}"]`);
+}
 
 /** Liste « Section de la poutre » (lamellé-collé ou massif), dans son groupe déplié. */
 async function sectionKind(page: Page): Promise<Locator> {
@@ -115,6 +164,8 @@ test("quart tournant : bois massif grisé avec sa raison, LC1, rayon de cintrage
   await expect(solid).toContainText("Bois massif — indisponible : Bois massif réservé");
   await expect(kind.locator('option[value="glulam"]')).toBeEnabled();
   await expect(kind).toHaveValue("glulam");
+  // Cintrage sur moule (le défaut, b = 88 mm, est la filière des couches empilées sans k_r).
+  await chooseCurvedMethod(page, "mould");
 
   // Contrôle de conception : règle LAMELLE_CINTRE_KR parmi les règles respectées.
   const control = page.locator(".inspector-control");
@@ -135,6 +186,8 @@ test("refus lisible à petit rayon : lamelles de 10 mm sur le quart tournant, au
   await applyPreset(page, "Quart tournant à gauche");
   await chooseStructure(page, "wood-central");
   await expect(page.locator(".errors-bar")).toHaveCount(0);
+  // Lamelles cintrées sur moule (sans quoi l'épaisseur des lamelles est sans objet).
+  await chooseCurvedMethod(page, "mould");
 
   // Épaisseur des lamelles imposée à 10 mm (« Imposer » puis saisie).
   const panel = await openSection(page, "Structure");
@@ -224,4 +277,95 @@ test("comparateur sur l'hélicoïdal : variante « limon central bois » calcul�
   await expect(page.locator(".errors-bar")).toHaveCount(0);
   const stringers = await marksOf(page, "Limons");
   await expect(markButton(stringers, "LC1")).toHaveCount(1);
+});
+
+test("hélicoïdal : platine à âme noyée par défaut, broches et chevilles, sans sabot", async ({
+  page,
+}) => {
+  await openApp(page);
+  await applyPreset(page, "Hélicoïdal à fût central");
+  await chooseStructure(page, "wood-central");
+  await expect(structureSelect(page)).toHaveValue("wood-central");
+  await expect(page.locator(".errors-bar")).toHaveCount(0);
+
+  // Ancrage automatique : platine à âme noyée sur une poutre cintrée (A34 (c)).
+  const panel = await openSection(page, "Structure");
+  const kind = panel.getByRole("combobox", { name: "Type d'ancrage", exact: true });
+  await reveal(panel, kind);
+  await expect(kind).toHaveValue("auto");
+
+  // Nomenclature : platines PP1 / PT1 et leurs âmes AP1 / AT1, aucun sabot SP1 / ST1.
+  const marks = await bomMarks(page);
+  for (const m of ["PP1", "AP1", "PT1", "AT1"]) expect(marks, m).toContain(m);
+  for (const m of ["SP1", "ST1"]) expect(marks, m).not.toContain(m);
+  // Visserie : broches au travers de la poutre, chevilles au sol et au chevêtre.
+  const fasteners = page.locator("table.bom__fasteners");
+  await expect(fasteners).toBeVisible();
+  await expect(fasteners).toContainText("Broche");
+  await expect(fasteners).toContainText("Cheville");
+  await expect(fasteners).toContainText("Âme de platine brochée dans la poutre bois");
+
+  // Contrôle : aucun constat d'emprise du sabot (le sabot n'est pas choisi).
+  await expect(await ruleCards(page, "FAB_SABOT_EMPRISE")).toHaveCount(0);
+});
+
+test("escalier droit : marches basses fixées par tire-fonds, plus de constat « boulons »", async ({
+  page,
+}) => {
+  await openApp(page);
+  await applyPreset(page, "Escalier droit");
+  await chooseStructure(page, "wood-central");
+  await expect(page.locator(".errors-bar")).toHaveCount(0);
+
+  // Visserie : boulons traversants en partie haute, tire-fonds pour les marches basses.
+  await openTab(page, "Nomenclature");
+  const fasteners = page.locator("table.bom__fasteners");
+  await expect(fasteners).toBeVisible();
+  await expect(fasteners).toContainText("Marche boulonnée au travers du limon central bois");
+  await expect(fasteners).toContainText("Tire-fond");
+  await expect(fasteners).toContainText("Marche fixée par tire-fonds dans le limon central bois");
+
+  // Contrôle : plus d'avertissement « boulon traversant impossible » (M1, M2).
+  await expect(await ruleCards(page, "FAB_LIMON_CENTRAL_BOIS_BOULONS")).toHaveCount(0);
+});
+
+test("quart tournant : couches empilées par défaut, LC1-1… au débit, LC1 sans débit propre", async ({
+  page,
+}) => {
+  await openApp(page);
+  await applyPreset(page, "Quart tournant à gauche");
+  await chooseStructure(page, "wood-central");
+  await expect(page.locator(".errors-bar")).toHaveCount(0);
+
+  // Filière automatique : couches empilées (b = 88 mm > 60 mm) ; épaisseur des couches réglable.
+  const panel = await openSection(page, "Structure");
+  const method = panel.getByRole("combobox", {
+    name: "Fabrication de la poutre cintrée",
+    exact: true,
+  });
+  await reveal(panel, method);
+  await expect(method).toHaveValue("auto");
+  await reveal(
+    panel,
+    panel.getByRole("group", { name: "Épaisseur des couches empilées", exact: true }),
+  );
+
+  // Nomenclature (liste de débit) : les couches, pas la poutre finie.
+  const marks = await bomMarks(page);
+  expect(marks).toContain("LC1-1");
+  expect(marks).toContain("LC1-2");
+  expect(marks).not.toContain("LC1");
+
+  // Fabrication : gabarit de la première couche ; la poutre finie reste dessinée (développé).
+  const stringers = await marksOf(page, "Limons");
+  await expect(markButton(stringers, "LC1")).toHaveCount(1);
+  const layer = markButton(stringers, "LC1-1");
+  await expect(layer).toHaveCount(1);
+  await layer.click();
+  await settle(page);
+  await expect(page.locator(".fab-sheet__mark")).toHaveText("LC1-1");
+  await expect(page.locator(".fab-sheet__drawing .svg-export svg")).toBeVisible();
+
+  // Contrôle : pas de cintrage, aucun constat de rayon de cintrage.
+  await expect(await ruleCards(page, "LAMELLE_CINTRE_KR")).toHaveCount(0);
 });

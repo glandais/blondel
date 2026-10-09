@@ -365,7 +365,8 @@ describe("« Pour corriger »", () => {
         structure: {
           kind: "wood-central",
           params: {
-            section: { kind: "glulam", lamellaThickness: 5 },
+            // Lamelles cintrées sur moule (A33 (e) : défaut b = 88 mm → couches empilées).
+            section: { kind: "glulam", curvedMethod: "mould", lamellaThickness: 5 },
             laminationJustification: "Avis technique AT-7",
             cantileverJustification: "Note NC-3",
           },

@@ -6,7 +6,14 @@ import { precheckModel } from "../precheck/stringers.js";
 import { buildModel } from "../pipeline/build.js";
 import { makeSteppingProject } from "../stepping/test-helpers.js";
 import { WorkshopProfileSchema } from "../workshop/profile.js";
-import { adaptJour, compareEpure, compareVariants, variantCost } from "./compare.js";
+import { fabricatedParts } from "../parts/components.js";
+import {
+  adaptJour,
+  compareEpure,
+  compareVariants,
+  summarizeVariant,
+  variantCost,
+} from "./compare.js";
 import { layoutAccepts } from "../project/newel.js";
 import { createProject } from "../project/presets.js";
 import "./index.js";
@@ -289,5 +296,33 @@ describe("limon central (steel-central) dans le comparateur", () => {
     expect(central!.precheck.beams).toBe(1);
     expect(central!.weldMm).toBeGreaterThan(0);
     expect(central!.executionClass).toBe(central!.buttWeldMm > 0 ? "EXC2" : "EXC1");
+  });
+});
+
+describe("limon central bois (wood-central) dans le comparateur : pièces composées", () => {
+  it("couches empilées : masse comptée par les couches, aucune pièce sans masse, surfaces comparables", () => {
+    const quarter = createProject("quarter-left");
+    const withSection = (curvedMethod: "stacked" | "mould"): Project => ({
+      ...quarter,
+      stair: {
+        ...quarter.stair,
+        structure: { kind: "wood-central", params: { section: { curvedMethod } } },
+      },
+    });
+    const stacked = summarizeVariant(withSection("stacked"));
+    const mould = summarizeVariant(withSection("mould"));
+    for (const v of [stacked, mould]) {
+      expect(v.errors).toEqual([]);
+      expect(v.massUnknown).toBe(0);
+      expect(v.partCount).toBe(fabricatedParts(v.model.parts).length);
+    }
+    // La poutre finie n'est pas comptée en plus de ses couches.
+    expect(stacked.partCount).toBe(stacked.model.parts.length - 1);
+    // Même poutre finie : surfaces et masses du même ordre quelle que soit la filière (la
+    // surface d'une couche est sa part de la face développée, pas l'aire de son gabarit).
+    expect(stacked.surfaceM2 / mould.surfaceM2).toBeGreaterThan(0.95);
+    expect(stacked.surfaceM2 / mould.surfaceM2).toBeLessThan(1.05);
+    expect(stacked.massKg / mould.massKg).toBeGreaterThan(0.9);
+    expect(stacked.massKg / mould.massKg).toBeLessThan(1.1);
   });
 });

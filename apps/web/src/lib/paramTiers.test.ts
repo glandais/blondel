@@ -230,6 +230,46 @@ describe("clés", () => {
     ]) {
       expect(e(p).toValidate, p).toBeUndefined();
     }
+    // Suites du 2026-10-09 (A33 e, f ; A34 a, b, c) : choix en Conception sous « Plus »,
+    // dimensions en Atelier, ◆ sur toute valeur sans source (couches, tire-fonds, platine).
+    for (const p of ["section.curvedMethod", "section.layerThickness", "anchors.kind"]) {
+      expect(e(p), p).toMatchObject({ tier: "design", guided: [{ step: 5, more: true }] });
+    }
+    for (const p of [
+      "section.mouldMaxWidth",
+      "section.dressingAllowance",
+      "lagScrews.pilotDiameter",
+      "lagScrews.minAnchorage",
+      "lagScrews.tipCover",
+      "lagScrews.maxLength",
+      "anchors.plate.thickness",
+      "anchors.plate.width",
+      "anchors.plate.webThickness",
+      "anchors.plate.webDepth",
+      "anchors.plate.webLength",
+      "anchors.plate.pins",
+      "anchors.plate.pinDiameter",
+      "anchors.plate.pinHoleDiameter",
+      "precheck.gammaMGlulam",
+      "precheck.woodClass",
+    ]) {
+      expect(e(p).tier, p).toBe("workshop");
+    }
+    for (const p of [
+      "section.mouldMaxWidth",
+      "section.layerThickness",
+      "section.dressingAllowance",
+      "bolts.edgeDistance",
+      "bolts.minSpacing",
+      "lagScrews.maxLength",
+      "anchors.plate.webDepth",
+      "anchors.plate.pins",
+      "precheck.gammaMGlulam",
+    ]) {
+      expect(e(p).toValidate, p).toBe(true);
+    }
+    expect(e("section.curvedMethod").toValidate).toBeUndefined();
+    expect(e("anchors.kind").toValidate).toBeUndefined();
     // Chaque chemin du schéma a son entrée (aucun repli Atelier implicite).
     const plugin = availableStructures().find((k) => k.kind === "wood-central")!;
     const defaults = plugin.paramsSchema.parse({});
@@ -577,6 +617,89 @@ describe("valeurs ◆ d'un projet", () => {
     }
     // Justification du porte-à-faux : toujours.
     expect(at(straight, glulam, "cantileverJustification")).toBe(true);
+  });
+
+  it("limon central bois, suites du 2026-10-09 : filière (A33 e) et ancrage retenus (A34 c)", () => {
+    const plugin = availableStructures().find((k) => k.kind === "wood-central")!;
+    const params = (input: Record<string, unknown> = {}) => plugin.paramsSchema.parse(input);
+    const straight = createProject("straight");
+    const quarter = createProject("quarter-left");
+    const helical = createProject("helical");
+    const at = (p: Project, v: unknown, path: string) =>
+      structureParamApplies(p, v, path.split("."));
+    // Défauts (b = 88 > 60 mm) : couches empilées sur une trace courbe.
+    const auto = params();
+    const mould = params({ section: { curvedMethod: "mould" } });
+    const narrow = params({ section: { width: 50 } });
+    const solid = params({ section: { kind: "solid" } });
+    // Filière et seuil du moule : trace courbe en lamellé-collé seulement.
+    for (const leaf of ["curvedMethod", "mouldMaxWidth"]) {
+      expect(at(straight, auto, `section.${leaf}`), leaf).toBe(false);
+      expect(at(quarter, auto, `section.${leaf}`), leaf).toBe(true);
+      expect(at(helical, auto, `section.${leaf}`), leaf).toBe(true);
+      expect(at(quarter, solid, `section.${leaf}`), leaf).toBe(false);
+    }
+    // Couches empilées : couches et surcote ; ni lamelles, ni plis minces, ni justification.
+    for (const p of [quarter, helical]) {
+      expect(at(p, auto, "section.layerThickness")).toBe(true);
+      expect(at(p, auto, "section.dressingAllowance")).toBe(true);
+      expect(at(p, auto, "section.lamellaThickness")).toBe(false);
+      expect(at(p, auto, "section.thinPlyMax")).toBe(false);
+      expect(at(p, auto, "laminationJustification")).toBe(false);
+    }
+    // Moule (imposé, ou automatique sous le seuil de largeur) : lamelles et plis minces.
+    for (const v of [mould, narrow]) {
+      expect(at(quarter, v, "section.layerThickness")).toBe(false);
+      expect(at(quarter, v, "section.dressingAllowance")).toBe(false);
+      expect(at(quarter, v, "section.lamellaThickness")).toBe(true);
+      expect(at(quarter, v, "section.thinPlyMax")).toBe(true);
+      expect(at(quarter, v, "laminationJustification")).toBe(true);
+    }
+    // Escalier droit : lamelles droites, aucune couche empilée.
+    expect(at(straight, auto, "section.lamellaThickness")).toBe(true);
+    expect(at(straight, auto, "section.layerThickness")).toBe(false);
+    // Ancrage : sabot sur une poutre droite, platine à âme noyée sur une poutre cintrée.
+    const shoeLeaves = ["thickness", "cheekDepth", "bolts", "boltHoleDiameter"];
+    const plateLeaves = ["plate.thickness", "plate.width", "plate.pins", "plate.pinDiameter"];
+    const common = ["kind", "grade", "finish", "length", "anchors", "holeEdgeDistance"];
+    for (const leaf of shoeLeaves) {
+      expect(at(straight, auto, `anchors.${leaf}`), leaf).toBe(true);
+      expect(at(helical, auto, `anchors.${leaf}`), leaf).toBe(false);
+    }
+    for (const leaf of plateLeaves) {
+      expect(at(straight, auto, `anchors.${leaf}`), leaf).toBe(false);
+      expect(at(helical, auto, `anchors.${leaf}`), leaf).toBe(true);
+      expect(at(quarter, auto, `anchors.${leaf}`), leaf).toBe(true);
+    }
+    for (const leaf of common) {
+      expect(at(straight, auto, `anchors.${leaf}`), leaf).toBe(true);
+      expect(at(helical, auto, `anchors.${leaf}`), leaf).toBe(true);
+    }
+    // Choix imposé : le sabot sur une poutre cintrée, la platine sur une poutre droite.
+    const shoe = params({ anchors: { kind: "shoe" } });
+    const plate = params({ anchors: { kind: "embeddedPlate" } });
+    expect(at(helical, shoe, "anchors.cheekDepth")).toBe(true);
+    expect(at(helical, shoe, "anchors.plate.webDepth")).toBe(false);
+    expect(at(straight, plate, "anchors.plate.webDepth")).toBe(true);
+    expect(at(straight, plate, "anchors.cheekDepth")).toBe(false);
+    // Sans ancrage : aucun réglage hors présence.
+    const none = params({ anchors: { foot: false, head: false } });
+    expect(at(helical, none, "anchors.kind")).toBe(false);
+    expect(at(helical, none, "anchors.plate.pins")).toBe(false);
+    expect(at(helical, none, "anchors.foot")).toBe(true);
+    // Tire-fonds : toujours (marches basses possibles sur tout tracé).
+    expect(at(straight, auto, "lagScrews.minAnchorage")).toBe(true);
+  });
+
+  it("caisson du limon central métal : borne basse de l'entraxe des entretoises (A32 a)", () => {
+    const p = createProject("straight");
+    const at = (v: unknown) => structureParamApplies(p, v, ["section", "diaphragmMinSpacing"]);
+    expect(at({ section: { kind: "box" } })).toBe(true);
+    expect(at({ section: { kind: "tube" } })).toBe(false);
+    expect(structureParamEntry("steel-central", ["section", "diaphragmMinSpacing"])).toMatchObject({
+      tier: "workshop",
+      toValidate: true,
+    });
   });
 
   it("essence des marches du projet : marches bois sans essence propre au plugin", () => {

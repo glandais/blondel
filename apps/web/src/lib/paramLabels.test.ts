@@ -287,7 +287,7 @@ describe("limon central bois (A29, vague 2)", () => {
     const fr = translatorFor("fr");
     const en = translatorFor("en");
     expect(groupLabel("notch", fr)).toBe("Entaille arrière des marches");
-    expect(groupLabel("anchors", en)).toBe("Foot and head shoes");
+    expect(groupLabel("anchors", en)).toBe("Foot and head anchors");
     expect(groupLabel("bolts", en)).toBe("Tread bolts");
     const fEn = woodFields("straight", "en");
     expect(at(fEn, "section.kind")?.optionLabels).toEqual({
@@ -309,5 +309,109 @@ describe("limon central bois (A29, vague 2)", () => {
     }
     const en = at(woodFields("quarter-left", "en"), "section.kind")!;
     expect(en.optionLabels?.["solid"]).toMatch(/^Solid timber — unavailable: /);
+  });
+});
+
+describe("suites du limon central (A32 a, A33, A34 du 2026-10-09)", () => {
+  function woodFields(id: "straight" | "quarter-left", locale: "fr" | "en" = "fr") {
+    const plugin = availableStructures().find((p) => p.kind === "wood-central")!;
+    const defaults = plugin.paramsSchema.parse({});
+    return presentFields(
+      "wood-central",
+      deriveParamFields(defaults, plugin.paramsSchema),
+      defaults,
+      translatorFor(locale),
+      unsupportedOptionsOf("wood-central", createProject(id)),
+    );
+  }
+  const at = (fields: ReturnType<typeof woodFields>, p: string) =>
+    fields.find((x) => x.path.join(".") === p);
+
+  it("filière, couches, tire-fonds, ancrage et platine : libellés, choix et ◆", () => {
+    const f = woodFields("quarter-left");
+    expect(at(f, "section.curvedMethod")?.optionLabels).toEqual({
+      auto: "Automatique",
+      mould: "Lamelles cintrées sur moule",
+      stacked: "Couches horizontales empilées puis délardées",
+    });
+    expect(at(f, "section.curvedMethod")?.toValidateHint).toBeUndefined();
+    expect(at(f, "anchors.kind")?.optionLabels).toEqual({
+      auto: "Automatique (platine à âme noyée sur une poutre cintrée, sabot sinon)",
+      shoe: "Sabot en U",
+      embeddedPlate: "Platine à âme noyée",
+    });
+    for (const p of [
+      "section.mouldMaxWidth",
+      "section.layerThickness",
+      "section.dressingAllowance",
+      "bolts.edgeDistance",
+      "bolts.minSpacing",
+      "lagScrews.pilotDiameter",
+      "lagScrews.minAnchorage",
+      "lagScrews.tipCover",
+      "lagScrews.maxLength",
+      "anchors.plate.thickness",
+      "anchors.plate.width",
+      "anchors.plate.webThickness",
+      "anchors.plate.webDepth",
+      "anchors.plate.webLength",
+      "anchors.plate.pinDiameter",
+      "anchors.plate.pinHoleDiameter",
+    ]) {
+      expect(at(f, p), p).toMatchObject({ unit: "mm", toValidateHint: true });
+    }
+    expect(at(f, "anchors.plate.pins")?.toValidateHint).toBe(true);
+    // Valeurs « auto » ◆ : couches, surcote, pinces et entraxe EC5, largeur de platine.
+    for (const p of [
+      "section.layerThickness",
+      "section.dressingAllowance",
+      "bolts.edgeDistance",
+      "bolts.minSpacing",
+      "anchors.plate.width",
+    ]) {
+      expect(at(f, p)?.kind, p).toBe("auto-number");
+    }
+    expect(at(f, "lagScrews.maxLength")?.group).toBe("lagScrews");
+    expect(at(f, "anchors.plate.pins")?.group).toBe("anchors");
+    const fr = translatorFor("fr");
+    const en = translatorFor("en");
+    expect(groupLabel("lagScrews", fr)).toBe("Tire-fonds des marches basses");
+    expect(groupLabel("anchors", fr)).toBe("Ancrages de pied et de tête");
+    expect(at(f, "anchors.foot")?.label).toBe("Ancrage de pied");
+    const fEn = woodFields("quarter-left", "en");
+    expect(at(fEn, "section.curvedMethod")?.optionLabels?.["stacked"]).toBe(
+      "Stacked horizontal layers, then dressed",
+    );
+    expect(at(fEn, "anchors.kind")?.optionLabels?.["embeddedPlate"]).toBe(
+      "Concealed-web base plate",
+    );
+    expect(groupLabel("lagScrews", en)).toBe("Coach screws of the low treads");
+    // Aucune option grisée : le cœur n'en refuse aucune pour ces choix.
+    expect(at(f, "section.curvedMethod")?.disabledOptions).toBeUndefined();
+    expect(at(f, "anchors.kind")?.disabledOptions).toBeUndefined();
+  });
+
+  it("prédimensionnement : classes GL et « automatique », γ_M du lamellé-collé ◆", () => {
+    const f = fieldsOf("wood-central");
+    const cls = f.find((x) => x.path.join(".") === "precheck.woodClass")!;
+    expect(cls.optionLabels).toEqual({
+      C24: "C24",
+      C30: "C30",
+      D40: "D40",
+      GL24h: "GL24h",
+      GL28h: "GL28h",
+      GL32h: "GL32h",
+      auto: "Automatique (GL24h en lamellé-collé, C24 sinon)",
+    });
+    const gm = f.find((x) => x.path.join(".") === "precheck.gammaMGlulam")!;
+    expect(gm.label).toBe("γ_M (lamellé-collé)");
+    expect(gm.toValidateHint).toBe(true);
+  });
+
+  it("caisson du limon central métal : borne basse de l'entraxe des entretoises ◆", () => {
+    const text = fieldText("steel-central", ["section", "diaphragmMinSpacing"]);
+    expect(text).toMatchObject({ unit: "mm", hint: "ui.param.toValidate" });
+    expect(translatorFor("fr").t(text!.label)).toBe("Entraxe minimal des entretoises");
+    expect(translatorFor("en").t(text!.label)).toBe("Minimum diaphragm spacing");
   });
 });

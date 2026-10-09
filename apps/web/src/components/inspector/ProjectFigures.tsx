@@ -4,6 +4,7 @@
  * masse, pièces, classe d'exécution). Aucun calcul métier : lecture et mise en forme seulement ;
  * un chiffre indisponible affiche « – ».
  */
+import { fabricatedParts } from "@blondel/core";
 import { massNoteFor } from "@blondel/exports";
 import type { MessageKey } from "@blondel/i18n";
 import { useMemo } from "react";
@@ -35,6 +36,12 @@ export function useProjectFigures(): readonly Figure[] {
   const mass = useMemo(
     () => (model ? bomSummary(model.parts, locale, massNoteFor(workshop)).mass : undefined),
     [model, locale, workshop],
+  );
+  // Pièces fabriquées (`fabricatedParts`) : une poutre en couches empilées compte pour ses
+  // couches, comme la nomenclature et la masse.
+  const partCount = useMemo(
+    () => (model ? fabricatedParts(model.parts).length : undefined),
+    [model],
   );
   const st = model?.stepping;
   const exc = executionClassInfo(model);
@@ -73,7 +80,7 @@ export function useProjectFigures(): readonly Figure[] {
           }),
       "ui.inspector.figure.mass",
     ),
-    fig("parts", model ? String(model.parts.length) : DASH, "ui.inspector.figure.parts"),
+    fig("parts", partCount !== undefined ? String(partCount) : DASH, "ui.inspector.figure.parts"),
     fig("executionClass", exc?.value ?? DASH, "ui.inspector.figure.executionClass"),
   ];
 }

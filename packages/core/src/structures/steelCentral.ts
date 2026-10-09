@@ -117,6 +117,7 @@ import {
 } from "./steelCommon.js";
 import {
   CENTRAL_SECTION_KINDS,
+  resolveDiaphragmMinSpacing,
   SteelCentralParamsSchema,
   type CentralSupportKind,
   type SteelCentralParams,
@@ -140,6 +141,7 @@ import {
 export {
   CENTRAL_SECTION_KINDS,
   CENTRAL_SUPPORT_KINDS,
+  resolveDiaphragmMinSpacing,
   SteelCentralParamsSchema,
   type CentralSectionKind,
   type CentralSupportKind,
@@ -807,6 +809,9 @@ function buildUnsafe(
 
   const autoValues: Record<string, number> = {};
   if (params.beam.topOffset === "auto") autoValues["beam.topOffset"] = topOffset;
+  // Entraxe minimal des entretoises d'un caisson (A32 (a)) : hauteur de la section.
+  if (params.section.kind === "box" && params.section.diaphragmMinSpacing === "auto")
+    autoValues["section.diaphragmMinSpacing"] = resolveDiaphragmMinSpacing(params.section);
   if (sup.length === "auto") {
     const len = commonAutoValue(supports.map((s) => Math.round(s.s1 - s.s0)));
     if (len !== undefined) autoValues["supports.length"] = len;

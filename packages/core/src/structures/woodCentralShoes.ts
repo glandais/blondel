@@ -80,6 +80,11 @@ export interface ShoeBeamGeometry {
   /** Dessous et dessus de la poutre à sa coupe de tête, mm. */
   readonly headBottom: Mm;
   readonly headTop: Mm;
+  /**
+   * Dessus de la poutre à σ (assise en place, sans le bois au-dessus des entailles arrière) ;
+   * absent : `headTop` partout. Borne le trait de scie et les broches de l'âme de tête.
+   */
+  readonly topAt?: (s: Mm) => Mm;
 }
 
 export interface WoodCentralShoesInput {

@@ -314,4 +314,26 @@ describe("exportGlb", () => {
       { numRuns: 40 },
     );
   });
+
+  it("composantes (`componentOf`, couches empilées) hors de la scène, pièce finie présente", () => {
+    const beam = { ...boxPart(0, 0, 0, 0, 100, 100, 80), id: "beam", mark: "LC1" };
+    const layer = (k: number): Part => ({
+      ...boxPart(k, 0, 0, (k - 1) * 40, 100, 100, 40),
+      id: `beam-layer-${k}`,
+      mark: `LC1-${k}`,
+      componentOf: "beam",
+    });
+    for (const locale of ["fr", "en"] as const) {
+      const { doc } = buildGltf({ parts: [beam, layer(1), layer(2)] }, { locale });
+      const names = doc.nodes.slice(1).map((n) => n.name);
+      expect(names).toEqual(["LC1"]);
+      expect(doc.nodes[0]!.children).toHaveLength(1);
+    }
+    // Filtre de l'appelant appliqué en plus : jamais de composante.
+    const { doc } = buildGltf(
+      { parts: [beam, layer(1)] },
+      { filter: (p) => p.mark.startsWith("LC1") },
+    );
+    expect(doc.nodes.slice(1).map((n) => n.name)).toEqual(["LC1"]);
+  });
 });

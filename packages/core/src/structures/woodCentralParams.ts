@@ -11,6 +11,12 @@
  * la poutre (boulons de 10 ou 12 mm avec écrou, C §1.5 [54]) ; sabots métalliques en pied et en
  * tête (A29 n° 5).
  *
+ * Suites du 2026-10-09 (QUESTIONS A32 à A34) : filière des couches empilées sur une trace
+ * courbe (`section.curvedMethod`, A33 (e)), platine à âme noyée (`anchors.kind`,
+ * `anchors.plate`, A33 (f), A34 (c)), tire-fonds des marches basses (`lagScrews`, A34 (a)),
+ * entraxes et pinces de l'EC5 (`bolts.minSpacing`, `bolts.edgeDistance`, A34 (b)) ; sources :
+ * C §1.11.
+ *
  * Contrat partagé de la vague « limon central bois » : la poutre (`woodCentralBeam.ts`) lit
  * `material`, `strengthClass`, `trace`, `section`, `notch`, `bolts`, `anchors` ; le plugin
  * (`woodCentral.ts`) lit tout ; l'interface (`apps/web`) présente chaque chemin. Noms et sens
@@ -40,6 +46,32 @@ export type WoodCentralSectionKind = (typeof WOOD_CENTRAL_SECTION_KINDS)[number]
 
 /** Classe de résistance du tableau FCBA (même sémantique que `wood-cut.strengthClass`). */
 export const WOOD_CENTRAL_STRENGTH_CLASSES = ["C30", "D40", "unknown", "auto"] as const;
+
+/**
+ * Filière de la poutre lamellé-collé sur une trace courbe (QUESTIONS A33 (e), décision du
+ * 2026-10-09 ; C §1.6 [7][8], §1.11) :
+ * - `mould` : lamelles verticales cintrées sur moule (plis minces, contrôle k_r
+ *   `LAMELLE_CINTRE_KR`, débit en placages, A34 (e)) ;
+ * - `stacked` : couches **horizontales** découpées selon le plan, empilées et collées puis
+ *   délardées au profil, sans moule (aucun cintrage : k_r = 1) ; chaque couche est une pièce
+ *   composante (`Part.componentOf`) avec son gabarit et son débit.
+ * `auto` (réglage) : `stacked` si la largeur b dépasse `section.mouldMaxWidth`, sinon `mould`.
+ */
+export const WOOD_CENTRAL_CURVED_METHODS = ["mould", "stacked"] as const;
+export type WoodCentralCurvedMethod = (typeof WOOD_CENTRAL_CURVED_METHODS)[number];
+
+/**
+ * Ancrage de la poutre en pied et en tête (A29 n° 5 « sabots ou platines métalliques » ;
+ * QUESTIONS A33 (f), A34 (c), décisions du 2026-10-09) :
+ * - `shoe` : sabot en tôle pliée en U (`woodCentralShoes.ts`) ;
+ * - `embeddedPlate` : platine à âme noyée — platine d'appui chevillée au sol (pied) ou fixée au
+ *   chevêtre (tête), âme (plat soudé en T) noyée dans un trait de scie de la poutre et brochée
+ *   au travers du bois (`woodCentralPlates.ts`, C §1.11 [80]).
+ * `auto` (réglage) : platine à âme noyée sur une poutre cintrée (trace tournante ou
+ * hélicoïdale), sabot en U sur une poutre droite.
+ */
+export const WOOD_CENTRAL_ANCHOR_KINDS = ["shoe", "embeddedPlate"] as const;
+export type WoodCentralAnchorKind = (typeof WOOD_CENTRAL_ANCHOR_KINDS)[number];
 
 export const WoodCentralParamsSchema = z.object({
   /**
@@ -96,6 +128,31 @@ export const WoodCentralParamsSchema = z.object({
        * NF EN 14080, justification requise » (C §1.6 ⚠️ : plis de 1 à 7 mm [7]) ; **à valider**.
        */
       thinPlyMax: mmPos.default(7),
+      /**
+       * Filière sur une trace courbe (`WOOD_CENTRAL_CURVED_METHODS`) ; `auto` : couches
+       * empilées au-delà de `mouldMaxWidth`, cintrage sur moule sinon (A33 (e)). Sans effet
+       * sur une trace droite ou une section massive.
+       */
+      curvedMethod: z.enum([...WOOD_CENTRAL_CURVED_METHODS, "auto"]).default("auto"),
+      /**
+       * Largeur b au-delà de laquelle `auto` choisit les couches empilées, mm : 60 (C §1.6 [7] :
+       * moule « recommandé si l'épaisseur est < 60 mm » ; [8] : couches collées « pour les
+       * limons de plus de 60 mm ») ; **à valider**.
+       */
+      mouldMaxWidth: mmPos.default(60),
+      /**
+       * Couches empilées : épaisseur finie d'une couche horizontale, mm. `auto` : plus forte
+       * épaisseur de débit du profil d'atelier moins la surcote de corroyage (comme les couches
+       * droites) ; aucune source sur l'épaisseur des couches (C §1.11) : **à valider**.
+       */
+      layerThickness: auto(mmPos),
+      /**
+       * Couches empilées : surcote de délardement de chaque couche, mm, ajoutée en plan de
+       * chaque côté de la poutre (faces) et à chaque bout de la couche, retirée au délardement.
+       * `auto` : surcote de corroyage du profil d'atelier (`wood.planingAllowance`) ; aucune
+       * source (C §1.11) : **à valider**.
+       */
+      dressingAllowance: auto(mmNonNeg),
     })
     .prefault({}),
   notch: z
@@ -120,13 +177,18 @@ export const WoodCentralParamsSchema = z.object({
       perTread: mmNonNeg.default(2),
       /** Diamètre de perçage, mm (M10 : 11 mm, jeu 1 mm ; C §1.5 [54] « 10 ou 12 mm »), à valider. */
       holeDiameter: mmPos.default(11),
-      /** Distance mini d'un perçage aux bouts de l'assise (et à l'entaille arrière), à valider. */
-      edgeDistance: mmPos.default(30),
       /**
-       * Entraxe minimal de deux perçages de la poutre (boulons d'une même marche, boulon de
-       * marche et boulon de sabot), mm. `auto` : diamètre de perçage (`holeDiameter`), perçages
-       * seulement disjoints. Aucune source sur les entraxes des boulons dans le bois : **à
-       * valider** (QUESTIONS A34).
+       * Distance mini d'un perçage aux bouts de l'assise (faces des dents, entaille arrière), mm.
+       * `auto` : a3,c = 4·d, extrémité non chargée d'un boulon (EN 1995-1-1 § 8.5.1.1 via
+       * C §1.11 [71]), d = diamètre nominal lu sur le perçage (`nominalDiameterFor`, profil de
+       * visserie) ; borne « tous angles » **à valider** (QUESTIONS A34 (b)).
+       */
+      edgeDistance: auto(mmPos),
+      /**
+       * Entraxe minimal de deux perçages de la poutre (boulons ou tire-fonds d'une même marche,
+       * avec les perçages d'ancrage), mm. `auto` : a1 = (4 + |cos α|)·d au plus défavorable,
+       * soit 5·d (EN 1995-1-1 § 8.5.1.1 via C §1.11 [71]), d nominal lu sur le perçage ; **à
+       * valider** (QUESTIONS A34 (b)).
        */
       minSpacing: auto(mmPos),
       /** Dépassement sous la poutre (rondelle, écrou, filet), ajouté à la longueur, à valider. */
@@ -135,11 +197,46 @@ export const WoodCentralParamsSchema = z.object({
       lengthStep: mmPos.default(10),
     })
     .prefault({}),
+  /**
+   * Tire-fonds des marches où le boulon traversant ne passe pas (sous-face trop basse pour
+   * l'écrou au-dessus de la coupe au sol, QUESTIONS A34 (a), décision du 2026-10-09) : vissés
+   * depuis le dessus de la marche dans la poutre, au perçage de passage `bolts.holeDiameter`
+   * dans la marche (diamètre nominal lu sur ce perçage, comme les boulons) et à l'avant-trou
+   * `pilotDiameter` dans la poutre ; mêmes nombre, pinces et entraxe que les boulons. Longueur =
+   * épaisseur de marche + ancrage, ancrage borné par le bois disponible sous l'assise moins
+   * `tipCover`, arrondie au pas inférieur `bolts.lengthStep`, au plus `maxLength`.
+   */
+  lagScrews: z
+    .object({
+      /**
+       * Avant-trou dans la poutre, mm (C §1.11 [78] : 6,5 mm pour un tire-fond Ø10), arrondi à
+       * 7 mm faute de saisie décimale (mm entiers, ADR-0003), à valider (QUESTIONS A35 (l)).
+       */
+      pilotDiameter: mmPos.default(7),
+      /**
+       * Ancrage minimal dans la poutre, mm (C §1.11 [78] : « profondeur d'ancrage d'au moins
+       * 50 mm » pour un Ø10) ; en dessous, pas de tire-fond (constat
+       * `FAB_LIMON_CENTRAL_BOIS_BOULONS`). À valider.
+       */
+      minAnchorage: mmPos.default(50),
+      /** Bois laissé sous la pointe (au-dessus de la sous-face ou de la coupe au sol), à valider. */
+      tipCover: mmNonNeg.default(10),
+      /** Longueur maximale du tire-fond, mm (C §1.11 [78] : 60 à 160 mm pour un Ø10), à valider. */
+      maxLength: mmPos.default(160),
+    })
+    .prefault({}),
   anchors: z
     .object({
-      /** Sabot de pied (au sol) et sabot de tête (contre le chevêtre), A29 n° 5. */
+      /** Ancrage de pied (au sol) et de tête (contre le chevêtre), A29 n° 5. */
       foot: z.boolean().default(true),
       head: z.boolean().default(true),
+      /**
+       * Nature de l'ancrage (`WOOD_CENTRAL_ANCHOR_KINDS`) ; `auto` : platine à âme noyée sur une
+       * poutre cintrée, sabot en U sur une poutre droite (A34 (c)). Les réglages ci-dessous de
+       * nuance, finition, chevilles et pinces valent pour les deux ; `thickness`, `cheekDepth`,
+       * `bolts` et `boltHoleDiameter` pour le sabot seul ; `plate` pour la platine seule.
+       */
+      kind: z.enum([...WOOD_CENTRAL_ANCHOR_KINDS, "auto"]).default("auto"),
       /** Nuance et finition de la tôle des sabots (matériau `steel-*`), à valider. */
       grade: z.enum(STEEL_GRADES).default("S235"),
       finish: z.enum(["raw", "painted", "galvanized"]).default("painted"),
@@ -164,6 +261,44 @@ export const WoodCentralParamsSchema = z.object({
       boltHoleDiameter: mmPos.default(13),
       /** Pince des perçages (même défaut que `steel-flat.plates.holeEdgeDistance`), à valider. */
       holeEdgeDistance: mmPos.default(25),
+      /**
+       * Platine à âme noyée (A33 (f) ; C §1.11 [80], pied de poteau à âme du commerce, seule
+       * source : dimensions **à valider** par un atelier). Au pied : platine d'appui posée au sol
+       * sous la poutre (longueur `anchors.length` le long de la trace), âme verticale dans le
+       * plan médian de la poutre, noyée vers le haut dans un trait de scie de la sous-face. En
+       * tête : platine verticale contre le chevêtre (hauteur `anchors.length`), âme dans le plan
+       * médian, noyée le long de la trace dans un trait de scie de la coupe de tête. Trait de
+       * scie : épaisseur de l'âme + 2 × jeu d'atelier (`wood.clearance` ; [80] : rainure de
+       * 6 mm pour une âme de 4 mm). Broches horizontales au travers des faces de la poutre et
+       * de l'âme, placées selon les entraxes et pinces des broches (EC5 § 8.6 via [71]).
+       */
+      plate: z
+        .object({
+          /** Épaisseur de la platine d'appui, mm ([80] : 4 mm pour un poteau), à valider. */
+          thickness: mmPos.default(8),
+          /**
+           * Largeur de la platine en travers de la poutre, mm ; `auto` : b + 4 ×
+           * `anchors.holeEdgeDistance` (chevilles de part et d'autre de la poutre, à la pince
+           * du bord et de la poutre). À valider.
+           */
+          width: auto(mmPos),
+          /** Épaisseur de l'âme, mm ([80] : 4 mm), à valider. */
+          webThickness: mmPos.default(6),
+          /** Profondeur de l'âme dans la poutre (perpendiculaire à la platine), mm, à valider. */
+          webDepth: mmPos.default(120),
+          /**
+           * Longueur de l'âme (le long de la trace au pied, verticale en tête), mm, au plus la
+           * longueur de la platine ([80] : 60 à 80 mm pour un poteau), à valider.
+           */
+          webLength: mmPos.default(150),
+          /** Broches au travers de la poutre et de l'âme ([80] : 2 broches Ø12), à valider. */
+          pins: mmNonNeg.default(2),
+          /** Diamètre des broches, mm ([80] : Ø12), à valider. */
+          pinDiameter: mmPos.default(12),
+          /** Perçage des broches dans l'âme, mm (broche + 1 mm de jeu), à valider. */
+          pinHoleDiameter: mmPos.default(13),
+        })
+        .prefault({}),
     })
     .prefault({}),
   /** Réglages du prédimensionnement indicatif (`precheck/settings.ts`), flexion seule. */
@@ -180,3 +315,32 @@ export const WoodCentralParamsSchema = z.object({
   laminationJustification: z.string().default(""),
 });
 export type WoodCentralParams = z.output<typeof WoodCentralParamsSchema>;
+
+/**
+ * Filière retenue sur une trace courbe (`curved` : tournant ou hélicoïdal) pour une section
+ * lamellé-collé ; `null` sur une trace droite ou une section massive (couches droites ou
+ * massif). Contrat partagé (poutre, couches, interface).
+ */
+export function resolveCurvedMethod(
+  params: WoodCentralParams,
+  curved: boolean,
+): WoodCentralCurvedMethod | null {
+  if (!curved || params.section.kind !== "glulam") return null;
+  const m = params.section.curvedMethod;
+  if (m !== "auto") return m;
+  return params.section.width > params.section.mouldMaxWidth ? "stacked" : "mould";
+}
+
+/**
+ * Ancrage retenu (`curved` : trace tournante ou hélicoïdale, poutre cintrée) : celui du
+ * réglage, ou `auto` → platine à âme noyée sur une poutre cintrée, sabot en U sur une poutre
+ * droite (A34 (c)). Contrat partagé (poutre, ancrages, interface).
+ */
+export function resolveAnchorKind(
+  params: WoodCentralParams,
+  curved: boolean,
+): WoodCentralAnchorKind {
+  const k = params.anchors.kind;
+  if (k !== "auto") return k;
+  return curved ? "embeddedPlate" : "shoe";
+}

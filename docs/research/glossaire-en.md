@@ -126,6 +126,13 @@ En français, rien ne change : la hauteur de marche s'écrit déjà h (h1 pour l
 | Lamelle                               | Lamination                          | —                       | Épaisseur de lamelle : lamination thickness      |
 | Moule de cintrage                     | Bending form                        | —                       |                                                  |
 | Joint de colle                        | Glue line                           | Bond line               | Boulons du limon central bois hors du joint central |
+| Couches empilées (horizontales)       | Stacked (horizontal) layers         | Stacked laminations     | Limon central bois sur trace courbe, sans moule (A33 (e)) |
+| Délardement, surcote de délardement   | Dressing to profile, dressing allowance | —                   | Couches empilées délardées au profil             |
+| Placage (plis minces achetés à l'épaisseur) | Veneer                        | —                       | Liste de débit, A34 (e)                          |
+| Platine à âme noyée                   | Concealed-web plate                 | Concealed flitch plate  | Ancrage du limon central bois (A33 (f))          |
+| Trait de scie (logement d'une âme)    | Saw kerf                            | —                       |                                                  |
+| Organe de type tige                   | Dowel-type fastener                 | —                       | Boulons, broches, vis (EC5 § 8)                  |
+| Pince (distance au bord, à l'extrémité) | Edge distance, end distance       | —                       | EC5 a3,t / a3,c / a4,t / a4,c                    |
 | Entraxe (de perçages)                 | Spacing (of holes)                  | Pitch                   | Entraxe minimal des perçages de la poutre        |
 | Bois massif                           | Solid timber                        | Solid wood / lumber     |                                                  |
 | Section, équarrissage                 | Section                             | —                       |                                                  |
@@ -244,6 +251,7 @@ Termes fixés avec la modélisation de la visserie (décision de l'utilisateur d
 | Vis à métaux                     | Machine screw               | —                  |                                           |
 | Vis à bois                       | Wood screw                  | —                  |                                           |
 | Tire-fond                        | Coach screw                 | Lag screw          |                                           |
+| Broche                           | Dowel                       | —                  | Platine à âme noyée (`embeddedPlatePinned`) |
 | Cheville mécanique               | Expansion anchor            | —                  |                                           |
 | Scellement chimique              | Chemical anchor             | —                  |                                           |
 | Cheville pour cloison creuse     | Cavity wall anchor          | Hollow-wall anchor |                                           |
