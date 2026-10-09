@@ -371,6 +371,7 @@ La relecture finale du limon central métal (A29, vague 1) laisse trois choix sa
 - (c) **Supports pliés sous une marche balancée** : une section pliée prismatique ne peut épouser le dessus de la poutre que posée d'équerre sur la trace ; elle est donc posée d'équerre (marche portée en biais), et une marche balancée étroite peut ne plus être portée (signalé par `FAB_MARCHE_PORTEE`). Les consoles, elles, suivent la bissectrice des lignes de nez (âme découpée au dessus réel de la poutre). Proposition : garder ce choix, ou orienter aussi les supports pliés selon la marche avec une cale ou un retour découpé à la pente (à décrire).
 - Aujourd'hui : (a) limite géométrique seule ; (b) hors liste ; (c) supports pliés d'équerre.
 - Réf. : A29 ; `structures/centralBeam.ts` (`boxParts`), `structures/steelCentral.ts` (`placeOne`, `beamContact`), `stepping/stepping.ts` (`DEBILLARDE_STRUCTURE_KINDS`).
+- **Décisions de l'utilisateur (2026-10-09)** : (a) borne basse de l'entraxe des entretoises, par défaut la hauteur de la section, paramètre « à valider » ; en dessous, erreur lisible et entretoises d'extrémité et de joint seules (à implémenter) ; (b) variante quintique M3 automatique laissée hors du limon central (état actuel, point clos) ; (c) supports pliés gardés d'équerre sur la poutre, la marche non portée restant signalée par `FAB_MARCHE_PORTEE` (état actuel, point clos).
 
 ### A33. Limon central bois : points restés ouverts après la vague 2
 
