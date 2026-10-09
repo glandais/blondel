@@ -17,6 +17,12 @@
  * entraxes et pinces de l'EC5 (`bolts.minSpacing`, `bolts.edgeDistance`, A34 (b)) ; sources :
  * C §1.11.
  *
+ * Décisions du 2026-10-09 (QUESTIONS A35) : âme de pied prolongée (`anchors.plate.footWebLength`,
+ * (a)), pente de fil maximale des planches d'une couche (`section.maxGrainSlope`, (h)), entraxe
+ * et pince des tire-fonds au plus sévère des règles latérales et axiales (`lagScrews.minSpacing`,
+ * `lagScrews.endDistance`, (l)), réduction de Hankinson du prédimensionnement des couches
+ * empilées (`grainAngle`, (j)) ; sources : C §1.11.
+ *
  * Contrat partagé de la vague « limon central bois » : la poutre (`woodCentralBeam.ts`) lit
  * `material`, `strengthClass`, `trace`, `section`, `notch`, `bolts`, `anchors` ; le plugin
  * (`woodCentral.ts`) lit tout ; l'interface (`apps/web`) présente chaque chemin. Noms et sens
@@ -118,7 +124,11 @@ export const WoodCentralParamsSchema = z.object({
        * Épaisseur **maximale** t d'une lamelle (lamellé-collé), mm : la poutre compte n = ⌈b / t⌉
        * lamelles **égales** d'épaisseur b / n (≤ t), de sorte que leur composition redonne b.
        * `auto` : sur une trace droite, couches collées les plus épaisses que l'atelier débite
-       * (t_max = plus forte épaisseur de débit du profil moins la surcote de corroyage) ; sur une
+       * (t_max = plus forte épaisseur de débit du profil moins la surcote de corroyage), en
+       * nombre **impair** quand des organes de marche sont posés (`bolts.perTread` > 0 : organe
+       * au milieu de la couche centrale, hors des joints de colle, QUESTIONS A35 (f)) ; une
+       * épaisseur saisie est respectée (n = ⌈b / t⌉, pair compris, avec le décalage d'une
+       * demi-couche et son constat de pince s'il y a lieu) ; sur une
        * trace courbe, plus grande épaisseur entière donnant r_in / t ≥ `recommande` de
        * `LAMELLE_CINTRE_KR` (k_r = 1), 1 mm au moins. Sans effet sur une section massive.
        */
@@ -141,9 +151,13 @@ export const WoodCentralParamsSchema = z.object({
        */
       mouldMaxWidth: mmPos.default(60),
       /**
-       * Couches empilées : épaisseur finie d'une couche horizontale, mm. `auto` : plus forte
-       * épaisseur de débit du profil d'atelier moins la surcote de corroyage (comme les couches
-       * droites) ; aucune source sur l'épaisseur des couches (C §1.11) : **à valider**.
+       * Couches empilées : épaisseur finie **maximale** t_max d'une couche horizontale, mm.
+       * Les joints sont calés sur les assises (QUESTIONS A35 (g), décision du 2026-10-09) :
+       * chaque intervalle de hauteur h entre deux niveaux (base de l'empilement, dessous des
+       * marches) compte ⌈h / t_max⌉ couches égales, de sorte que les crans ne sont pas coupés.
+       * `auto` : plus forte épaisseur de débit du profil d'atelier moins la surcote de corroyage
+       * (comme les couches droites) ; aucune source sur l'épaisseur des couches (C §1.11) :
+       * **à valider**.
        */
       layerThickness: auto(mmPos),
       /**
@@ -153,6 +167,18 @@ export const WoodCentralParamsSchema = z.object({
        * source (C §1.11) : **à valider**.
        */
       dressingAllowance: auto(mmNonNeg),
+      /**
+       * Couches empilées : pente de fil maximale d'une planche, en % (écart en plan entre le fil
+       * d'une planche, pris selon sa corde, et la tangente à la trace sur toute sa longueur ;
+       * angle = atan(valeur / 100)). Au-delà, ou quand le gabarit d'une couche dépasse la plus
+       * large planche du profil d'atelier, la couche est composée de plusieurs planches aboutées
+       * (ou collées sur chant), chacune au débit (QUESTIONS A35 (h), décision du 2026-10-09).
+       * Décimal (non lié aux mm entiers). 20 % (1:5) : pente de fil générale admise pour le chêne
+       * en **petites sections** (épaisseur de 22 à 100 mm, celle des couches), toutes classes
+       * visuelles (NF B 52-001-1, non lue, via FNB fiche C10, C §1.11 [82]) ; 1:10 en grosses
+       * sections (> 100 mm) ; relecture A35 ; **à valider** (QUESTIONS A36 (7)).
+       */
+      maxGrainSlope: z.number().positive().max(100).default(20),
     })
     .prefault({}),
   notch: z
@@ -223,6 +249,21 @@ export const WoodCentralParamsSchema = z.object({
       tipCover: mmNonNeg.default(10),
       /** Longueur maximale du tire-fond, mm (C §1.11 [78] : 60 à 160 mm pour un Ø10), à valider. */
       maxLength: mmPos.default(160),
+      /**
+       * Entraxe minimal de deux tire-fonds (et d'un tire-fond aux autres perçages), mm. `auto` :
+       * le plus sévère des règles latérales (a1 = 5·d, boulons) et axiales (a1 = 7·d, vis
+       * chargées axialement, EN 1995-1-1 § 8.7.2 via C §1.11 [71] tableau 10.6), soit 7·d ;
+       * d nominal lu sur `bolts.holeDiameter` ; **à valider** (QUESTIONS A35 (l)).
+       */
+      minSpacing: auto(mmPos),
+      /**
+       * Pince d'un tire-fond au bout **avant** de l'assise (face de la dent précédente ou face
+       * avant de la poutre, bois de bout à côté de la partie filetée), mm. `auto` : le plus
+       * sévère de a3,c = 4·d (latéral, extrémité non chargée, A35 (e)) et a1,CG = 10·d (axial,
+       * distance du centre de gravité de la partie filetée au bout, [71] tableau 10.6), soit
+       * 10·d ; au bout arrière, `bolts.edgeDistance` ; **à valider** (QUESTIONS A35 (l)).
+       */
+      endDistance: auto(mmPos),
     })
     .prefault({}),
   anchors: z
@@ -287,8 +328,11 @@ export const WoodCentralParamsSchema = z.object({
           /** Profondeur de l'âme dans la poutre (perpendiculaire à la platine), mm, à valider. */
           webDepth: mmPos.default(120),
           /**
-           * Longueur de l'âme (le long de la trace au pied, verticale en tête), mm, au plus la
-           * longueur de la platine ([80] : 60 à 80 mm pour un poteau), à valider.
+           * Longueur de l'âme, mm, au plus la longueur de la platine ([80] : 60 à 80 mm pour un
+           * poteau) : hauteur de l'âme de **tête** ; au pied, l'âme suit
+           * `anchors.plate.footWebLength` (A35 (a)) et cette valeur ne sert que lorsque la coupe
+           * au sol ne permet pas de la prolonger (âme centrée sur la platine sous la première
+           * marche, comportement antérieur). À valider.
            */
           webLength: mmPos.default(150),
           /** Broches au travers de la poutre et de l'âme ([80] : 2 broches Ø12), à valider. */
@@ -297,8 +341,44 @@ export const WoodCentralParamsSchema = z.object({
           pinDiameter: mmPos.default(12),
           /** Perçage des broches dans l'âme, mm (broche + 1 mm de jeu), à valider. */
           pinHoleDiameter: mmPos.default(13),
+          /**
+           * Âme de **pied** prolongée le long de la trace (QUESTIONS A35 (a), décision du
+           * 2026-10-09) : longueur de l'âme sur la platine, mm, mesurée depuis le bout de la
+           * coupe au sol vers la face avant. `auto` : la plus longue âme plane qui finit au bout
+           * de la coupe au sol (moins le jeu) et dont la flèche dans une poutre cintrée reste
+           * dans le bois (flèche + demi-trait ≤ b/2 − a4,c), sans dépasser la face avant ; son
+           * dessus suit les assises (en escalier) en laissant sous chaque marche la place d'un
+           * tire-fond (ancrage arrondi au pas et bois sous la pointe), et ses bouts trop bas
+           * (moins de deux pinces de perçage) sont retirés. Les broches vont où la poutre est
+           * haute (sous les marches 2 et 3). La platine d'appui couvre l'âme (longueur au moins
+           * `anchors.length`). Aucune source (extrapolé de C §1.11 [80]) : **à valider**.
+           */
+          footWebLength: auto(mmPos),
         })
         .prefault({}),
+    })
+    .prefault({}),
+  /**
+   * Réduction de la résistance et du module selon l'angle θ entre le fil et l'axe de la poutre,
+   * pour une poutre en **couches empilées** (fil horizontal, poutre inclinée ; QUESTIONS A35 (j),
+   * décision du 2026-10-09) : formule de type Hankinson N = P·Q / (P·sinⁿθ + Q·cosⁿθ)
+   * (Wood Handbook FPL-GTR-190, chap. 5, éq. 5-2, C §1.11 [81]) ; Q/P et n de la flexion
+   * (MOR : n = 1,5 à 2, Q/P = 0,04 à 0,10) : Q/P = 0,10 et n = 1,5, courbe à laquelle la
+   * source rapporte les essais de pente de fil (tableau 5-12) ; module (n = 2, Q/P = 0,04 à
+   * 0,12) pris à la borne défavorable, faute d'ajustement donné (relecture A35) ;
+   * θ = acos(cos α · cos β) (α : pente de la poutre, β : plus grand écart du fil des planches en
+   * plan). Valeurs **à valider** (QUESTIONS A36 (8)).
+   */
+  grainAngle: z
+    .object({
+      /** Q/P de la résistance en flexion (MOR), [81] : 0,04 à 0,10 ; 0,10 ajuste ses essais. */
+      strengthRatio: z.number().positive().max(1).default(0.1),
+      /** Exposant n de la résistance en flexion, [81] : 1,5 à 2. */
+      strengthExponent: z.number().positive().default(1.5),
+      /** Q/P du module d'élasticité, [81] : 0,04 à 0,12. */
+      modulusRatio: z.number().positive().max(1).default(0.04),
+      /** Exposant n du module d'élasticité, [81] : 2. */
+      modulusExponent: z.number().positive().default(2),
     })
     .prefault({}),
   /** Réglages du prédimensionnement indicatif (`precheck/settings.ts`), flexion seule. */

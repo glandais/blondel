@@ -40,6 +40,7 @@ export const GROUP_LABELS: Readonly<Record<string, MessageKey>> = {
   plates: "ui.param.group.plates",
   folded: "ui.param.group.folded",
   precheck: "ui.param.group.precheck",
+  grainAngle: "ui.param.group.grainAngle",
   curved: "ui.param.group.curved",
   column: "ui.param.group.column",
   treads: "ui.param.group.treads",
@@ -265,14 +266,15 @@ const COMMON: Readonly<Record<string, FieldText>> = {
   "precheck.gammaMWood": { label: "ui.param.precheck.gammaMWood.label", hint: TO_VALIDATE },
   "precheck.kmod": { label: "ui.param.precheck.kmod.label", hint: TO_VALIDATE },
   // Lamellé-collé (QUESTIONS A33 (a)) : γ_M propre aux classes GL, classe `auto` (GL24h pour
-  // l'essence lamellé-collé, C24 sinon).
+  // l'essence lamellé-collé, classe massive de l'essence pour un lamellé-collé feuillu, A35 (k),
+  // C24 sinon).
   "precheck.gammaMGlulam": { label: "ui.param.precheck.gammaMGlulam.label", hint: TO_VALIDATE },
   "precheck.woodClass": {
     label: "ui.param.precheck.woodClass.label",
     hint: TO_VALIDATE,
     options: {
       ...raw(WOOD_CLASS_SETTINGS.filter((c) => c !== "auto")),
-      auto: "ui.param.precheck.woodClass.option.auto",
+      auto: "ui.param.precheck.woodClass.option.autoSpecies",
     },
   },
 };
@@ -557,6 +559,12 @@ const WOOD_CENTRAL: Readonly<Record<string, FieldText>> = {
     unit: MM,
     hint: TO_VALIDATE,
   },
+  // Couches composées de plusieurs planches (QUESTIONS A35 (h)) : pente de fil maximale ◆.
+  "section.maxGrainSlope": {
+    label: "ui.param.woodCentral.section.maxGrainSlope.label",
+    unit: "%",
+    hint: TO_VALIDATE,
+  },
   "notch.rearDepth": {
     label: "ui.param.woodCentral.notch.rearDepth.label",
     unit: MM,
@@ -603,6 +611,17 @@ const WOOD_CENTRAL: Readonly<Record<string, FieldText>> = {
   },
   "lagScrews.maxLength": {
     label: "ui.param.woodCentral.lagScrews.maxLength.label",
+    unit: MM,
+    hint: TO_VALIDATE,
+  },
+  // Entraxe et pince avant des tire-fonds : règles latérales et axiales de l'EC5 (A35 (l)) ◆.
+  "lagScrews.minSpacing": {
+    label: "ui.param.woodCentral.lagScrews.minSpacing.label",
+    unit: MM,
+    hint: TO_VALIDATE,
+  },
+  "lagScrews.endDistance": {
+    label: "ui.param.woodCentral.lagScrews.endDistance.label",
     unit: MM,
     hint: TO_VALIDATE,
   },
@@ -704,6 +723,29 @@ const WOOD_CENTRAL: Readonly<Record<string, FieldText>> = {
   "anchors.plate.pinHoleDiameter": {
     label: "ui.param.woodCentral.anchors.plate.pinHoleDiameter.label",
     unit: MM,
+    hint: TO_VALIDATE,
+  },
+  // Âme de pied prolongée (QUESTIONS A35 (a)) ◆.
+  "anchors.plate.footWebLength": {
+    label: "ui.param.woodCentral.anchors.plate.footWebLength.label",
+    unit: MM,
+    hint: TO_VALIDATE,
+  },
+  // Réduction selon l'angle du fil (Hankinson, couches empilées, A35 (j)) ◆.
+  "grainAngle.strengthRatio": {
+    label: "ui.param.woodCentral.grainAngle.strengthRatio.label",
+    hint: TO_VALIDATE,
+  },
+  "grainAngle.strengthExponent": {
+    label: "ui.param.woodCentral.grainAngle.strengthExponent.label",
+    hint: TO_VALIDATE,
+  },
+  "grainAngle.modulusRatio": {
+    label: "ui.param.woodCentral.grainAngle.modulusRatio.label",
+    hint: TO_VALIDATE,
+  },
+  "grainAngle.modulusExponent": {
+    label: "ui.param.woodCentral.grainAngle.modulusExponent.label",
     hint: TO_VALIDATE,
   },
   cantileverJustification: {

@@ -270,6 +270,21 @@ describe("clés", () => {
     }
     expect(e("section.curvedMethod").toValidate).toBeUndefined();
     expect(e("anchors.kind").toValidate).toBeUndefined();
+    // Décisions A35 du 2026-10-09 : pente de fil des planches (h), tire-fonds au plus sévère
+    // de l'EC5 (l), âme de pied prolongée (a), réduction de Hankinson (j) : Atelier ◆.
+    for (const p of [
+      "section.maxGrainSlope",
+      "lagScrews.minSpacing",
+      "lagScrews.endDistance",
+      "anchors.plate.footWebLength",
+      "grainAngle.strengthRatio",
+      "grainAngle.strengthExponent",
+      "grainAngle.modulusRatio",
+      "grainAngle.modulusExponent",
+    ]) {
+      expect(e(p), p).toMatchObject({ tier: "workshop", toValidate: true });
+    }
+    expect(e("grainAngle").tier).toBe("workshop");
     // Chaque chemin du schéma a son entrée (aucun repli Atelier implicite).
     const plugin = availableStructures().find((k) => k.kind === "wood-central")!;
     const defaults = plugin.paramsSchema.parse({});
@@ -658,6 +673,15 @@ describe("valeurs ◆ d'un projet", () => {
     // Escalier droit : lamelles droites, aucune couche empilée.
     expect(at(straight, auto, "section.lamellaThickness")).toBe(true);
     expect(at(straight, auto, "section.layerThickness")).toBe(false);
+    // Pente de fil des planches et réduction de Hankinson (A35 (h), (j)) : couches empilées
+    // seulement (sans effet sur une poutre droite, massive ou cintrée sur moule).
+    for (const path of ["section.maxGrainSlope", "grainAngle.strengthRatio", "grainAngle"]) {
+      expect(at(straight, auto, path), path).toBe(false);
+      expect(at(quarter, mould, path), path).toBe(false);
+      expect(at(quarter, solid, path), path).toBe(false);
+      expect(at(quarter, auto, path), path).toBe(true);
+      expect(at(helical, auto, path), path).toBe(true);
+    }
     // Ancrage : sabot sur une poutre droite, platine à âme noyée sur une poutre cintrée.
     const shoeLeaves = ["thickness", "cheekDepth", "bolts", "boltHoleDiameter"];
     const plateLeaves = ["plate.thickness", "plate.width", "plate.pins", "plate.pinDiameter"];

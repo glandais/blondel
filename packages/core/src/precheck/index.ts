@@ -31,6 +31,7 @@ export {
   LOAD_CATEGORIES,
   PRECHECK_PROVENANCE,
   PrecheckSettingsSchema,
+  GLULAM_SPECIES_WOOD_CLASS,
   GLULAM_WOOD_CLASSES,
   STEEL_E,
   WOOD_CLASSES,
@@ -45,8 +46,10 @@ export {
   type PrecheckProvenance,
   type PrecheckSettings,
   type WoodClass,
+  type WoodClassOptions,
   type WoodClassSetting,
 } from "./settings.js";
+export { grainAngle, hankinsonFactor } from "./grain.js";
 export {
   activeContexts,
   gradeInLabel,

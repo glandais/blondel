@@ -7,7 +7,15 @@
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { DEFAULT_FASTENER_PROFILE } from "../workshop/fasteners.js";
-import { ec5Spacing, woodCentralBoltSpacing, type Ec5Spacing } from "./woodSpacing.js";
+import {
+  ec5AxialScrewSpacing,
+  ec5EndDistance,
+  ec5Spacing,
+  footPinFloorDistance,
+  lagHoleClearance,
+  woodCentralBoltSpacing,
+  type Ec5Spacing,
+} from "./woodSpacing.js";
 
 const DEG = Math.PI / 180;
 
@@ -231,5 +239,95 @@ describe("woodCentralBoltSpacing", () => {
       { nominalDiameters: [10, 12], holeClearance: 1 },
     );
     expect(small.d).toBe(1);
+  });
+});
+
+describe("convention de gravité (A35 (b), (e)) et vis chargées axialement (A35 (l))", () => {
+  it("ec5EndDistance : a3,c (non chargée) et a3,t (chargée), boulon M10 et broche Ø12", () => {
+    expect(ec5EndDistance("bolt", 10, "unloaded")).toBe(40);
+    expect(ec5EndDistance("bolt", 10, "loaded")).toBe(80);
+    expect(ec5EndDistance("dowel", 12, "unloaded")).toBe(42);
+    expect(ec5EndDistance("dowel", 12, "loaded")).toBe(84);
+  });
+
+  it("ec5AxialScrewSpacing ([71] tableau 10.6) : 7d, 5d, 10d, 4d", () => {
+    expect(ec5AxialScrewSpacing(10)).toEqual({ a1: 70, a2: 50, a1CG: 100, a2CG: 40 });
+  });
+
+  it("footPinFloorDistance : rive a4,t en couches empilées, a3,c sinon", () => {
+    expect(footPinFloorDistance("stacked", 12)).toEqual({ distance: 48, kind: "a4t" });
+    for (const m of ["solid", "straight", "mould"] as const) {
+      expect(footPinFloorDistance(m, 12)).toEqual({ distance: 42, kind: "a3c" });
+    }
+    // Petit diamètre : a3,c d'une broche au moins 40 mm.
+    expect(footPinFloorDistance("mould", 8).distance).toBe(40);
+  });
+
+  const auto = { holeDiameter: 11, minSpacing: "auto", edgeDistance: "auto" } as const;
+
+  it("tire-fonds `auto` (M10) : entraxe 70, avant 100, arrière 40, faces 40", () => {
+    const { lag } = woodCentralBoltSpacing(auto, DEFAULT_FASTENER_PROFILE);
+    expect(lag).toMatchObject({
+      minSpacing: 70,
+      frontEndDistance: 100,
+      rearEndDistance: 40,
+      faceDistance: 40,
+    });
+  });
+
+  it("tire-fonds saisis : entraxe et pince avant conservés ; arrière = pince des boulons", () => {
+    const { lag } = woodCentralBoltSpacing(
+      { ...auto, edgeDistance: 55 },
+      DEFAULT_FASTENER_PROFILE,
+      { minSpacing: 80, endDistance: 120 },
+    );
+    expect(lag).toMatchObject({
+      minSpacing: 80,
+      frontEndDistance: 120,
+      rearEndDistance: 55,
+      faceDistance: 40,
+    });
+  });
+
+  it("propriété : en `auto`, les règles des tire-fonds majorent celles des boulons", () => {
+    fc.assert(
+      fc.property(fc.integer({ min: 7, max: 30 }), (hole) => {
+        const sp = woodCentralBoltSpacing(
+          { ...auto, holeDiameter: hole },
+          DEFAULT_FASTENER_PROFILE,
+        );
+        expect(sp.lag.minSpacing).toBeGreaterThanOrEqual(sp.minSpacing);
+        expect(sp.lag.frontEndDistance).toBeGreaterThanOrEqual(sp.edgeDistance);
+        expect(sp.lag.rearEndDistance).toBe(sp.edgeDistance);
+        expect(sp.lag.faceDistance).toBeGreaterThanOrEqual(sp.ec5.a4c);
+        expect(sp.lag.minSpacing).toBeCloseTo(7 * sp.d, 9);
+        expect(sp.lag.frontEndDistance).toBeCloseTo(10 * sp.d, 9);
+        expect(sp.lag.faceDistance).toBeCloseTo(4 * sp.d, 9);
+      }),
+    );
+  });
+});
+
+describe("lagHoleClearance : tire-fond vertical et perçage horizontal (relecture A35, A36 (10))", () => {
+  it("jeu géométrique seulement : demi-somme des perçages + jeu, pointe à tipCover du perçage", () => {
+    expect(lagHoleClearance(13, 11, 2, 10)).toEqual({ half: 14, above: 16.5 });
+  });
+
+  it("le tire-fond hors de la zone ne coupe jamais le perçage (propriété)", () => {
+    fc.assert(
+      fc.property(
+        fc.integer({ min: 6, max: 30 }),
+        fc.integer({ min: 6, max: 20 }),
+        fc.integer({ min: 0, max: 5 }),
+        fc.integer({ min: 0, max: 30 }),
+        (hole, lag, c, tip) => {
+          const g = lagHoleClearance(hole, lag, c, tip);
+          // Axe du tire-fond à `half` du centre : sa paroi reste à c au moins du perçage.
+          expect(g.half - lag / 2 - hole / 2).toBeGreaterThanOrEqual(c - 1e-9);
+          // Pointe arrêtée à `above` du centre : à tip au moins au-dessus du perçage.
+          expect(g.above - hole / 2).toBeGreaterThanOrEqual(tip - 1e-9);
+        },
+      ),
+    );
   });
 });

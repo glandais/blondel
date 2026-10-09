@@ -13,8 +13,15 @@
  * - suites du 2026-10-09 (QUESTIONS A33, A34) : platine à âme noyée par défaut sur l'hélicoïdal
  *   (PP1 / AP1 / PT1 / AT1, broches et chevilles, aucun constat `FAB_SABOT_EMPRISE`) ;
  *   tire-fonds des marches basses de l'escalier droit (plus de constat
- *   `FAB_LIMON_CENTRAL_BOIS_BOULONS`) ; couches empilées par défaut sur le quart tournant
- *   (LC1-1… dans la nomenclature et en Fabrication, LC1 sans débit propre) ;
+ *   `FAB_LIMON_CENTRAL_BOIS_BOULONS` : aux règles des tire-fonds de A35 (l), un tire-fond ne
+ *   garde autour du perçage d'un boulon de sabot que le jeu géométrique, QUESTIONS A36 (10)) ;
+ *   couches empilées par défaut sur le quart tournant
+ *   (LC1-1… ou leurs planches LC1-1.1… dans la nomenclature et en Fabrication, LC1 sans débit
+ *   propre) ;
+ * - décisions du 2026-10-09 (QUESTIONS A35) : escalier en U à poutre cintrée, âme de pied
+ *   prolongée sous les marches 2 et 3, M1 fixée (aucun constat `FAB_LIMON_CENTRAL_BOIS_BOULONS`
+ *   sur M1) ; hélicoïdal : couches composées de plusieurs planches (LC1-k.1… dans la
+ *   nomenclature) ;
  * - démo « Quart tournant sur limon central bois lamellé-collé » ;
  * - parcours guidé : carte « Limon central bois » de l'étape Structure et résumé de l'étape ;
  * - comparateur sur l'hélicoïdal : variante « limon central hélicoïdal en lamellé-collé
@@ -325,7 +332,8 @@ test("escalier droit : marches basses fixées par tire-fonds, plus de constat «
   await expect(fasteners).toContainText("Tire-fond");
   await expect(fasteners).toContainText("Marche fixée par tire-fonds dans le limon central bois");
 
-  // Contrôle : plus d'avertissement « boulon traversant impossible » (M1, M2).
+  // Contrôle : plus d'avertissement « boulon ou tire-fond impossible » (M1, M2) ; autour du
+  // perçage d'un boulon de sabot, un tire-fond ne garde que le jeu géométrique (A36 (10)).
   await expect(await ruleCards(page, "FAB_LIMON_CENTRAL_BOIS_BOULONS")).toHaveCount(0);
 });
 
@@ -350,22 +358,60 @@ test("quart tournant : couches empilées par défaut, LC1-1… au débit, LC1 sa
     panel.getByRole("group", { name: "Épaisseur des couches empilées", exact: true }),
   );
 
-  // Nomenclature (liste de débit) : les couches, pas la poutre finie.
+  // Nomenclature (liste de débit) : les couches (ou leurs planches LC1-k.j quand la couche est
+  // composée, QUESTIONS A35 (h)), pas la poutre finie.
   const marks = await bomMarks(page);
-  expect(marks).toContain("LC1-1");
-  expect(marks).toContain("LC1-2");
+  const first = marks.find((m) => /^LC1-1(\.1)?$/.test(m));
+  expect(first, "première couche").toBeDefined();
+  expect(marks.some((m) => /^LC1-2(\.\d+)?$/.test(m))).toBe(true);
   expect(marks).not.toContain("LC1");
 
   // Fabrication : gabarit de la première couche ; la poutre finie reste dessinée (développé).
   const stringers = await marksOf(page, "Limons");
   await expect(markButton(stringers, "LC1")).toHaveCount(1);
-  const layer = markButton(stringers, "LC1-1");
+  const layer = markButton(stringers, first!.replace(".", "\\."));
   await expect(layer).toHaveCount(1);
   await layer.click();
   await settle(page);
-  await expect(page.locator(".fab-sheet__mark")).toHaveText("LC1-1");
+  await expect(page.locator(".fab-sheet__mark")).toHaveText(first!);
   await expect(page.locator(".fab-sheet__drawing .svg-export svg")).toBeVisible();
 
   // Contrôle : pas de cintrage, aucun constat de rayon de cintrage.
   await expect(await ruleCards(page, "LAMELLE_CINTRE_KR")).toHaveCount(0);
+});
+
+test("escalier en U : âme de pied prolongée, M1 fixée, aucun constat de fixation sur M1", async ({
+  page,
+}) => {
+  await openApp(page);
+  await applyPreset(page, "Deux quarts tournants (U)");
+  await chooseStructure(page, "wood-central");
+  await expect(structureSelect(page)).toHaveValue("wood-central");
+  await expect(page.locator(".errors-bar")).toHaveCount(0);
+
+  // Poutre cintrée : platine à âme noyée par défaut (PP1 / AP1).
+  const marks = await bomMarks(page);
+  for (const m of ["PP1", "AP1"]) expect(marks, m).toContain(m);
+
+  // Contrôle : aucun constat « boulon ou tire-fond impossible » sur la marche M1 (A35 (a)).
+  const cards = await ruleCards(page, "FAB_LIMON_CENTRAL_BOIS_BOULONS");
+  await expect(cards.filter({ hasText: /\bM1\b/ })).toHaveCount(0);
+});
+
+test("hélicoïdal : couches composées de plusieurs planches LC1-k.j au débit", async ({ page }) => {
+  await openApp(page);
+  await applyPreset(page, "Hélicoïdal à fût central");
+  await chooseStructure(page, "wood-central");
+  await expect(structureSelect(page)).toHaveValue("wood-central");
+  await expect(page.locator(".errors-bar")).toHaveCount(0);
+
+  // Nomenclature (liste de débit) : des planches LC1-k.1, LC1-k.2… (A35 (h)).
+  const marks = await bomMarks(page);
+  expect(marks.some((m) => /^LC1-\d+\.1$/.test(m))).toBe(true);
+  expect(marks.some((m) => /^LC1-\d+\.2$/.test(m))).toBe(true);
+  expect(marks).not.toContain("LC1");
+  // Contrôle (non-régression) : aucun débit indisponible. La preuve de « plus de
+  // FAB_DEBIT_DISPONIBLE dû à une couche trop large » est la propriété (v) de
+  // `woodCentralLayers.test.ts` (profil aux plateaux étroits) : ce préréglage n'en levait pas.
+  await expect(await ruleCards(page, "FAB_DEBIT_DISPONIBLE")).toHaveCount(0);
 });

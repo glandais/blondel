@@ -17,7 +17,12 @@
  * - lamellé-collé (QUESTIONS A33 (a), 2026-10-09) : classes GL24h / GL28h / GL32h (E_0,g,mean,
  *   f_m,g,k de la NF EN 14080) et γ_M = 1,25 (EN 1995-1-1 § 2.4.1), rapportés par C §1.11 [71]
  *   (normes non lues, confiance moyenne, **à valider**) ; classe `auto` : GL24h pour l'essence
- *   lamellé-collé, C24 sinon.
+ *   lamellé-collé, C24 sinon ;
+ * - lamellé-collé d'une essence feuillue (QUESTIONS A35 (k), 2026-10-09) : classe `auto` = classe
+ *   massive de l'essence, D40 pour le chêne, le hêtre et le frêne (`GLULAM_SPECIES_WOOD_CLASS`),
+ *   même hypothèse que la classe FCBA `auto` de `wood-central` ; **à valider** : le classement
+ *   visuel du chêne donne au plus D30 (NF B 52-001-1 non lue, via FNB fiche C10, C §1.11 [82]),
+ *   et E_0,mean de D40 vaut 11 000 MPa d'après [83] contre 13 000 ici (QUESTIONS A36).
  */
 import { msg, type Message } from "@blondel/i18n";
 import { z } from "zod";
@@ -38,7 +43,9 @@ export const GLULAM_WOOD_CLASSES: readonly WoodClass[] = ["GL24h", "GL28h", "GL3
 
 /**
  * Réglage de la classe : une classe, ou `auto` = GL24h pour l'essence lamellé-collé
- * (`wood-glulam`, plus basse classe GL sourcée), C24 sinon (défaut historique) ; à valider.
+ * (`wood-glulam`, plus basse classe GL sourcée), classe massive de l'essence pour un
+ * lamellé-collé feuillu (option `glulam` de `resolveWoodClass`, QUESTIONS A35 (k)), C24 sinon
+ * (défaut historique) ; à valider.
  */
 export const WOOD_CLASS_SETTINGS = [...WOOD_CLASSES, "auto"] as const;
 export type WoodClassSetting = (typeof WOOD_CLASS_SETTINGS)[number];
@@ -97,7 +104,7 @@ export const PRECHECK_PROVENANCE: Readonly<Record<keyof PrecheckSettings, Preche
   gammaMWood: { status: "a-valider", note: msg("precheck.provenance.gammaMWood") },
   kmod: { status: "a-valider", note: msg("precheck.provenance.kmod") },
   gammaMGlulam: { status: "a-valider", note: msg("precheck.provenance.gammaMGlulam") },
-  woodClass: { status: "a-valider", note: msg("precheck.provenance.woodClass") },
+  woodClass: { status: "a-valider", note: msg("precheck.provenance.woodClassAuto") },
 };
 
 /** Matériau d'une poutre : module, résistance de calcul, masse volumique. */
@@ -139,12 +146,49 @@ export const WOOD_CLASS_PROPERTIES: Readonly<
 };
 
 /**
- * Classe retenue : celle du réglage, ou `auto` → GL24h pour l'essence lamellé-collé
- * (`wood-glulam`), C24 sinon (et sans essence connue).
+ * Classe massive retenue pour le lamellé-collé d'une essence feuillue (classe `auto`,
+ * QUESTIONS A35 (k), décision du 2026-10-09) : D40 pour le chêne, le hêtre et le frêne, même
+ * hypothèse que la classe FCBA `auto` de `wood-central` (`strengthClass`). **À valider** : le
+ * classement visuel du chêne donne D30 / D24 / D18, jamais D40 (NF B 52-001-1 non lue, via
+ * C §1.11 [82]) ; aucune classe de lamellé-collé feuillu sourcée (QUESTIONS A36).
  */
-export function resolveWoodClass(settings: PrecheckSettings, material?: string): WoodClass {
+export const GLULAM_SPECIES_WOOD_CLASS: Readonly<Partial<Record<string, WoodClass>>> = {
+  "wood-oak": "D40",
+  "wood-beech": "D40",
+  "wood-ash": "D40",
+};
+
+/** Options de la classe `auto`. */
+export interface WoodClassOptions {
+  /**
+   * La pièce est un lamellé-collé de l'essence `material` (poutre de `wood-central` en couches
+   * collées) : feuillu → classe massive de l'essence (`GLULAM_SPECIES_WOOD_CLASS`).
+   */
+  readonly glulam?: boolean;
+  /**
+   * Classe de résistance imposée à la pièce par son plugin (`wood-central.strengthClass` saisi,
+   * lecture du tableau FCBA) : avec `glulam`, elle remplace la classe massive par défaut d'une
+   * essence feuillue, pour que prédimensionnement et lecture FCBA gardent la même hypothèse.
+   */
+  readonly strengthClass?: WoodClass;
+}
+
+/**
+ * Classe retenue : celle du réglage, ou `auto` → GL24h pour l'essence lamellé-collé
+ * (`wood-glulam`) ; avec `options.glulam`, classe massive d'une essence feuillue (D40,
+ * `GLULAM_SPECIES_WOOD_CLASS`, à valider) ; C24 sinon (et sans essence connue).
+ */
+export function resolveWoodClass(
+  settings: PrecheckSettings,
+  material?: string,
+  options?: WoodClassOptions,
+): WoodClass {
   if (settings.woodClass !== "auto") return settings.woodClass;
-  return material === "wood-glulam" ? "GL24h" : "C24";
+  if (material === "wood-glulam") return "GL24h";
+  const species =
+    options?.glulam && material !== undefined ? GLULAM_SPECIES_WOOD_CLASS[material] : undefined;
+  if (species === undefined) return "C24";
+  return options?.strengthClass ?? species;
 }
 
 export function steelMaterialOf(
@@ -165,14 +209,16 @@ export function steelMaterialOf(
 
 /**
  * Matériau bois d'une poutre : classe retenue (`resolveWoodClass`, `material` = essence de la
- * pièce pour `auto`), γ_M du lamellé-collé pour une classe GL, du bois massif sinon.
+ * pièce pour `auto`, `options` transmises), γ_M du lamellé-collé pour une classe GL, du bois
+ * massif sinon (D40 d'un lamellé-collé feuillu compris : classe massive).
  */
 export function woodMaterialOf(
   settings: PrecheckSettings,
   density: number,
   material?: string,
+  options?: WoodClassOptions,
 ): BeamMaterial {
-  const cls = resolveWoodClass(settings, material);
+  const cls = resolveWoodClass(settings, material, options);
   const c = WOOD_CLASS_PROPERTIES[cls];
   const gammaM = GLULAM_WOOD_CLASSES.includes(cls) ? settings.gammaMGlulam : settings.gammaMWood;
   return {

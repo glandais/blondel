@@ -1,12 +1,13 @@
 /**
  * Réglages du prédimensionnement (`settings.ts`) : classes de lamellé-collé GL24h / GL28h /
  * GL32h (QUESTIONS A33 (a), valeurs NF EN 14080 rapportées par C §1.11 [71]), classe `auto`,
- * γ_M du lamellé-collé.
+ * γ_M du lamellé-collé ; classe massive d'un lamellé-collé feuillu (QUESTIONS A35 (k)).
  */
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import {
   DEFAULT_PRECHECK_SETTINGS,
+  GLULAM_SPECIES_WOOD_CLASS,
   GLULAM_WOOD_CLASSES,
   PRECHECK_PROVENANCE,
   PrecheckSettingsSchema,
@@ -26,6 +27,60 @@ describe("classe de bois du prédimensionnement", () => {
     expect(resolveWoodClass(DEFAULT_PRECHECK_SETTINGS, "wood-glulam")).toBe("GL24h");
     expect(resolveWoodClass(DEFAULT_PRECHECK_SETTINGS, "wood-oak")).toBe("C24");
     expect(resolveWoodClass(DEFAULT_PRECHECK_SETTINGS)).toBe("C24");
+  });
+
+  it("lamellé-collé feuillu (A35 (k)) : D40 pour chêne, hêtre, frêne ; GL24h, C24 sinon", () => {
+    const s = DEFAULT_PRECHECK_SETTINGS;
+    const glulam = { glulam: true } as const;
+    for (const m of ["wood-oak", "wood-beech", "wood-ash"]) {
+      expect(GLULAM_SPECIES_WOOD_CLASS[m]).toBe("D40");
+      expect(resolveWoodClass(s, m, glulam)).toBe("D40");
+      // Sans l'option (autres plugins, pièces massives) : comportement inchangé.
+      expect(resolveWoodClass(s, m)).toBe("C24");
+      expect(resolveWoodClass(s, m, { glulam: false })).toBe("C24");
+    }
+    expect(resolveWoodClass(s, "wood-glulam", glulam)).toBe("GL24h");
+    expect(resolveWoodClass(s, "wood-pine", glulam)).toBe("C24");
+    expect(resolveWoodClass(s, undefined, glulam)).toBe("C24");
+    // Classe saisie : prime sur l'option.
+    expect(resolveWoodClass(settings({ woodClass: "GL28h" }), "wood-oak", glulam)).toBe("GL28h");
+    // Classe FCBA imposée par le plugin (relecture A35 (k)) : même hypothèse pour un feuillu,
+    // sans effet sur un résineux ni sans l'option `glulam`.
+    expect(resolveWoodClass(s, "wood-oak", { glulam: true, strengthClass: "C30" })).toBe("C30");
+    expect(resolveWoodClass(s, "wood-pine", { glulam: true, strengthClass: "C30" })).toBe("C24");
+    expect(resolveWoodClass(s, "wood-oak", { strengthClass: "C30" })).toBe("C24");
+    // γ_M du bois massif pour D40, propriétés de la table.
+    const oak = woodMaterialOf(s, 700, "wood-oak", glulam);
+    expect(oak.label).toBe("D40");
+    expect(oak.e).toBe(WOOD_CLASS_PROPERTIES.D40.e);
+    expect(oak.strength).toBe(40);
+    expect(oak.design).toBeCloseTo((s.kmod * 40) / s.gammaMWood, 12);
+    expect(PRECHECK_PROVENANCE.woodClass.note.key).toBe("precheck.provenance.woodClassAuto");
+  });
+
+  it("propriété : l'option `glulam` ne change que la classe `auto` d'un feuillu", () => {
+    fc.assert(
+      fc.property(
+        fc.constantFrom(...WOOD_CLASS_SETTINGS),
+        fc.constantFrom(
+          undefined,
+          "wood-oak",
+          "wood-beech",
+          "wood-ash",
+          "wood-pine",
+          "wood-glulam",
+        ),
+        (woodClass, material) => {
+          const s = settings({ woodClass });
+          const plain = resolveWoodClass(s, material);
+          const lam = resolveWoodClass(s, material, { glulam: true });
+          const hardwood =
+            material !== undefined && GLULAM_SPECIES_WOOD_CLASS[material] !== undefined;
+          if (woodClass === "auto" && hardwood) expect(lam).toBe("D40");
+          else expect(lam).toBe(plain);
+        },
+      ),
+    );
   });
 
   it("classe saisie conservée, quelle que soit l'essence", () => {

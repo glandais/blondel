@@ -401,11 +401,49 @@ describe("suites du limon central (A32 a, A33, A34 du 2026-10-09)", () => {
       GL24h: "GL24h",
       GL28h: "GL28h",
       GL32h: "GL32h",
-      auto: "Automatique (GL24h en lamellé-collé, C24 sinon)",
+      auto: "Automatique (GL24h en lamellé-collé, D40 en lamellé-collé de chêne, hêtre ou frêne, C24 sinon)",
     });
     const gm = f.find((x) => x.path.join(".") === "precheck.gammaMGlulam")!;
     expect(gm.label).toBe("γ_M (lamellé-collé)");
     expect(gm.toValidateHint).toBe(true);
+  });
+
+  it("décisions A35 : pente de fil, tire-fonds, âme de pied, réduction de Hankinson ◆", () => {
+    const f = woodFields("quarter-left");
+    expect(at(f, "section.maxGrainSlope")).toMatchObject({
+      kind: "number",
+      integer: false,
+      unit: "%",
+      toValidateHint: true,
+      label: "Pente de fil maximale d'une planche de couche",
+    });
+    for (const p of [
+      "lagScrews.minSpacing",
+      "lagScrews.endDistance",
+      "anchors.plate.footWebLength",
+    ]) {
+      expect(at(f, p), p).toMatchObject({ kind: "auto-number", unit: "mm", toValidateHint: true });
+    }
+    expect(at(f, "lagScrews.minSpacing")?.label).toBe("Entraxe minimal des tire-fonds");
+    expect(at(f, "lagScrews.endDistance")?.group).toBe("lagScrews");
+    expect(at(f, "anchors.plate.footWebLength")?.label).toBe("Longueur de l'âme noyée de pied");
+    // Flottants de la formule de Hankinson : saisie décimale (schéma sans `.int()`), sans unité.
+    for (const p of [
+      "grainAngle.strengthRatio",
+      "grainAngle.strengthExponent",
+      "grainAngle.modulusRatio",
+      "grainAngle.modulusExponent",
+    ]) {
+      const field = at(f, p);
+      expect(field, p).toMatchObject({ kind: "number", integer: false, toValidateHint: true });
+      expect(field?.group, p).toBe("grainAngle");
+      expect(field?.unit, p).toBe("");
+    }
+    expect(at(f, "grainAngle.strengthRatio")?.label).toBe(
+      "Rapport Q/P de la résistance en flexion",
+    );
+    expect(groupLabel("grainAngle", translatorFor("fr"))).toBe("Angle du fil (couches empilées)");
+    expect(groupLabel("grainAngle", translatorFor("en"))).toBe("Grain angle (stacked layers)");
   });
 
   it("caisson du limon central métal : borne basse de l'entraxe des entretoises ◆", () => {

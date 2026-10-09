@@ -366,6 +366,8 @@ const STRUCTURE_BY_KIND: Readonly<Record<string, Readonly<Record<string, ParamTi
     "section.mouldMaxWidth": workshop(S),
     "section.layerThickness": design(S, [more(5)]),
     "section.dressingAllowance": workshop(S),
+    // Pente de fil maximale des planches d'une couche empilée (QUESTIONS A35 (h)) : Atelier ◆.
+    "section.maxGrainSlope": workshop(S),
     notch: workshop(S),
     "notch.rearDepth": design(S, [more(5)]),
     bolts: workshop(S),
@@ -381,6 +383,9 @@ const STRUCTURE_BY_KIND: Readonly<Record<string, Readonly<Record<string, ParamTi
     "lagScrews.minAnchorage": workshop(S),
     "lagScrews.tipCover": workshop(S),
     "lagScrews.maxLength": workshop(S),
+    // Entraxe et pince avant des tire-fonds au plus sévère des règles de l'EC5 (A35 (l)).
+    "lagScrews.minSpacing": workshop(S),
+    "lagScrews.endDistance": workshop(S),
     anchors: workshop(S),
     "anchors.foot": design(S, [more(5)]),
     "anchors.head": design(S, [more(5)]),
@@ -406,6 +411,14 @@ const STRUCTURE_BY_KIND: Readonly<Record<string, Readonly<Record<string, ParamTi
     "anchors.plate.pins": workshop(S),
     "anchors.plate.pinDiameter": workshop(S),
     "anchors.plate.pinHoleDiameter": workshop(S),
+    // Âme de pied prolongée sous les marches 2 et 3 (QUESTIONS A35 (a)) : Atelier ◆.
+    "anchors.plate.footWebLength": workshop(S),
+    // Réduction de Hankinson du prédimensionnement des couches empilées (A35 (j)) : Atelier ◆.
+    grainAngle: workshop(S),
+    "grainAngle.strengthRatio": workshop(S),
+    "grainAngle.strengthExponent": workshop(S),
+    "grainAngle.modulusRatio": workshop(S),
+    "grainAngle.modulusExponent": workshop(S),
     cantileverJustification: design(S, [more(5)]),
     laminationJustification: design(S, [more(5)]),
   },
@@ -637,10 +650,12 @@ export function structureParamApplies(
     if (leaf === "curvedMethod" || leaf === "mouldMaxWidth") return curvedLayout(project);
     if (leaf === "thinPlyMax") return curvedMethodOf(project, params) === "mould";
     if (leaf === "lamellaThickness") return curvedMethodOf(project, params) !== "stacked";
-    if (leaf === "layerThickness" || leaf === "dressingAllowance") {
+    if (leaf === "layerThickness" || leaf === "dressingAllowance" || leaf === "maxGrainSlope") {
       return curvedMethodOf(project, params) === "stacked";
     }
   }
+  // Réduction selon l'angle du fil (A35 (j)) : poutre en couches empilées seulement.
+  if (head === "grainAngle") return curvedMethodOf(project, params) === "stacked";
   // Justification des plis minces du lamellé-collé cintré : sans objet sans cintrage sur moule.
   if (head === "laminationJustification") {
     return (
@@ -668,6 +683,7 @@ const WOOD_GLULAM_ONLY: ReadonlySet<string> = new Set([
   "mouldMaxWidth",
   "layerThickness",
   "dressingAllowance",
+  "maxGrainSlope",
 ]);
 
 /** Réglages propres au sabot en U du limon central bois (sans objet pour la platine). */

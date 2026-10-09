@@ -18,6 +18,7 @@ import { buildModel, deepMerge } from "../pipeline/build.js";
 import { createProject, type PresetId } from "../project/presets.js";
 import { makeSteppingProject, stairArb } from "../stepping/test-helpers.js";
 import { getRule } from "../rules/table.js";
+import { grainAngle, hankinsonFactor } from "../precheck/grain.js";
 import { structureUnsupportedOptions } from "./registry.js";
 import { CENTRAL_RULES } from "./steelCentral.js";
 import { deduceExecutionClass } from "./steelCommon.js";
@@ -353,17 +354,24 @@ describe("valeurs auto, prédimensionnement, visserie", () => {
       // EC5 « tous angles » pour M10 (perçage de 11) : a1 = 5·d, a3,c = 4·d (C §1.11 [71]).
       "bolts.minSpacing": 50,
       "bolts.edgeDistance": 40,
+      // Tire-fonds Ø10 au plus sévère des règles latérales et axiales (A35 (l), C §1.11 [71]
+      // tableau 10.6) : entraxe max(5·d ; 7·d), pince avant max(a3,c ; a1,CG = 10·d).
+      "lagScrews.minSpacing": 70,
+      "lagScrews.endDistance": 100,
     });
     // Perçage de 13 (M12) : 60 et 48.
     const m12 = run(preset("straight", { bolts: { holeDiameter: 13 } })).out.autoValues!;
     expect(m12["bolts.minSpacing"]).toBe(60);
     expect(m12["bolts.edgeDistance"]).toBe(48);
+    expect(m12["lagScrews.minSpacing"]).toBe(84);
+    expect(m12["lagScrews.endDistance"]).toBe(120);
     // Valeurs imposées : non exposées.
     const fixed = run(
       preset("straight", {
         section: { residual: 200, lamellaThickness: 44 },
         notch: { rearDepth: 20 },
         bolts: { minSpacing: 40, edgeDistance: 30 },
+        lagScrews: { minSpacing: 80, endDistance: 90 },
       }),
     ).out;
     expect(fixed.autoValues).toBeUndefined();
@@ -381,6 +389,10 @@ describe("valeurs auto, prédimensionnement, visserie", () => {
     expect(auto["section.lamellaThickness"]).toBeUndefined();
     // Platine : b + 4 × pince = 88 + 100.
     expect(auto["anchors.plate.width"]).toBe(188);
+    // Âme de pied prolongée (A35 (a)) : longueur retenue par la poutre, exposée si `auto`.
+    expect(auto["anchors.plate.footWebLength"]).toBe(beam!.footWebLength);
+    const fixedWeb = run(preset("quarter-left", { anchors: { plate: { footWebLength: 200 } } }));
+    expect(fixedWeb.out.autoValues?.["anchors.plate.footWebLength"]).toBeUndefined();
     // Cintrage sur moule : épaisseur de lamelle, pas de couche.
     const mould = run(preset("quarter-left", MOULD)).out.autoValues!;
     expect(mould["section.lamellaThickness"]).toBeGreaterThan(0);
@@ -392,12 +404,35 @@ describe("valeurs auto, prédimensionnement, visserie", () => {
     expect(straight.precheck?.beams).toHaveLength(1);
     expect(straight.precheck?.beams[0]!.partId).toBe("wood-central-beam");
     expect(frList(straight.notes).some((n) => /torsion sous charge excentrée/.test(n))).toBe(true);
-    // Classe `auto` : C24 pour le chêne (essence massive), GL24h pour l'essence lamellé-collé.
-    expect(fr(straight.precheck!.beams[0]!.label)).toMatch(/C24/);
-    expect(frList(straight.notes).some((n) => /classe C24 .*NF EN 14080/.test(n))).toBe(true);
+    // Classe `auto` (A35 (k)) : chêne lamellé-collé → classe massive de l'essence, D40 (à
+    // valider) ; essence lamellé-collé → GL24h ; pin lamellé-collé → C24.
+    expect(fr(straight.precheck!.beams[0]!.label)).toMatch(/D40/);
+    expect(
+      frList(straight.notes).some((n) => /classe D40 : classe massive de l'essence/.test(n)),
+    ).toBe(true);
+    // D40 : γ_M du bois massif (1,3), f_m,k = 40 ⇒ f_d = 0,8 × 40 / 1,3.
+    expect(straight.precheck!.beams[0]!.result.design).toBeCloseTo((0.8 * 40) / 1.3, 9);
     const gl = run(preset("straight", { material: "wood-glulam" })).out;
     expect(fr(gl.precheck!.beams[0]!.label)).toMatch(/GL24h/);
-    expect(frList(gl.notes).some((n) => /classe GL24h/.test(n))).toBe(true);
+    expect(frList(gl.notes).some((n) => /classe GL24h \(réglage/.test(n))).toBe(true);
+    const pine = run(preset("straight", { material: "wood-pine" })).out;
+    expect(fr(pine.precheck!.beams[0]!.label)).toMatch(/C24/);
+    expect(frList(pine.notes).some((n) => /classe C24 \(réglage/.test(n))).toBe(true);
+    // Chêne massif : pas de lamellé-collé, classe `auto` historique C24.
+    const solid = run(preset("straight", { section: { kind: "solid" } })).out;
+    expect(fr(solid.precheck!.beams[0]!.label)).toMatch(/C24/);
+    // Classe FCBA saisie sur une poutre de chêne (relecture A35 (k)) : même classe pour le
+    // prédimensionnement que pour la lecture du tableau FCBA.
+    const fcbaC30 = run(preset("straight", { strengthClass: "C30" }));
+    expect(fcbaC30.beam!.fcba.cls).toBe("C30");
+    expect(fr(fcbaC30.out.precheck!.beams[0]!.label)).toMatch(/C30/);
+    expect(
+      frList(fcbaC30.out.notes).some((n) => /classe C30 : classe massive de l'essence/.test(n)),
+    ).toBe(true);
+    // Classe saisie : prime sur l'essence.
+    const c30 = run(preset("straight", { precheck: { woodClass: "C30" } })).out;
+    expect(fr(c30.precheck!.beams[0]!.label)).toMatch(/C30/);
+    expect(frList(c30.notes).some((n) => /classe C30 \(réglage/.test(n))).toBe(true);
     // GL24h : γ_M = 1,25, f_m,k = 24 ⇒ f_d = 0,8 × 24 / 1,25.
     expect(gl.precheck!.beams[0]!.result.design).toBeCloseTo((0.8 * 24) / 1.25, 9);
     const gl32 = run(
@@ -418,6 +453,44 @@ describe("valeurs auto, prédimensionnement, visserie", () => {
       expect(d).toBeCloseTo(d0 * kr, 9);
       expect(frList(q.out.notes).some((n) => /multipliée par k_r/.test(n))).toBe(true);
     }
+  });
+
+  it("prédimensionnement des couches empilées : réduction de Hankinson (A35 (j), C §1.11 [81])", () => {
+    for (const id of ["quarter-left", "helical"] as const) {
+      const { out, beam } = run(preset(id));
+      expect(beam!.lamination.method, id).toBe("stacked");
+      expect(out.precheck?.beams, id).toHaveLength(1);
+      const statuses = byRule(out.checks, "PRECHECK_CONTRAINTE").map((c) => c.status);
+      expect(statuses.length, id).toBeGreaterThan(0);
+      expect(statuses, id).not.toContain("non-evaluee");
+      // θ = acos(cos α · cos β), facteurs des défauts (flexion Q/P 0,10, n 1,5, ajustement des
+      // essais de [81] ; module Q/P 0,04, n 2).
+      const theta = grainAngle(Math.max(0, beam!.slope), beam!.stacked!.maxGrainDeviation ?? 0);
+      expect(theta).toBeGreaterThan(0);
+      const kf = hankinsonFactor(0.1, 1.5, theta);
+      const kE = hankinsonFactor(0.04, 2, theta);
+      // Sans réduction (Q/P = 1 ⇒ facteur 1) : même poutre, résistance et module entiers.
+      const ref = run(preset(id, { grainAngle: { strengthRatio: 1, modulusRatio: 1 } })).out
+        .precheck!.beams[0]!.result;
+      const r = out.precheck!.beams[0]!.result;
+      expect(r.design).toBeCloseTo(ref.design * kf, 9);
+      expect(r.design).toBeCloseTo(((0.8 * 40) / 1.3) * kf, 9);
+      // Flèche inversement proportionnelle au module.
+      expect(r.deflection * kE).toBeCloseTo(ref.deflection, 6);
+      const note = frList(out.notes).find((n) => /^Couches empilées : fil horizontal/.test(n));
+      expect(note, id).toBeDefined();
+      expect(note).toMatch(/Hankinson/);
+      expect(note).toMatch(/\[81\]/);
+      expect(note).toMatch(/à valider/);
+      expect(frList(out.notes).some((n) => /non évalué/.test(n))).toBe(false);
+    }
+  });
+
+  it("prédimensionnement des couches empilées : paramètres dégénérés → non évalué, sans exception", () => {
+    // Exposant nul refusé par le schéma ; un paramètre non fini ne peut être saisi : la branche
+    // « non évalué » est protégée par `Number.isFinite`, vérifiée ici sur la fonction pure.
+    expect(hankinsonFactor(0.04, Number.NaN, 0.5)).toBeNaN();
+    expect(() => woodCentralParams({ grainAngle: { strengthExponent: 0 } })).toThrow();
   });
 
   it("visserie : boulons traversants M10 de longueur déduite, sabots, aucune vis de marche", () => {
@@ -456,6 +529,8 @@ describe("valeurs auto, prédimensionnement, visserie", () => {
       .filter((f) => f.joint === "treadBeamLagScrewed")
       .reduce((a, f) => a + f.points, 0);
     expect(lags.reduce((a, f) => a + f.quantity, 0)).toBe(declaredLags);
+    // Toutes les marches fixées : autour du perçage d'un boulon de sabot, un tire-fond ne garde
+    // que le jeu géométrique (relecture A35, QUESTIONS A36 (10)).
     expect(violations(m, "FAB_LIMON_CENTRAL_BOIS_BOULONS")).toEqual([]);
   });
 

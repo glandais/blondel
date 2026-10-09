@@ -134,6 +134,16 @@ En français, rien ne change : la hauteur de marche s'écrit déjà h (h1 pour l
 | Organe de type tige                   | Dowel-type fastener                 | —                       | Boulons, broches, vis (EC5 § 8)                  |
 | Pince (distance au bord, à l'extrémité) | Edge distance, end distance       | —                       | EC5 a3,t / a3,c / a4,t / a4,c                    |
 | Entraxe (de perçages)                 | Spacing (of holes)                  | Pitch                   | Entraxe minimal des perçages de la poutre        |
+| Vis chargée axialement                | Axially loaded screw                | —                       | Tire-fonds de marche, EC5 § 8.7.2 (A35 (l))      |
+| Jeu (autour d'un perçage)             | Clearance                           | —                       | Tire-fond et perçage horizontal (A36 (10))       |
+| Angle du fil (θ)                      | Grain angle                         | —                       | Angle entre le fil et l'axe de la poutre (A35 (j)) |
+| Pente de fil                          | Slope of grain                      | Cross grain             | 1:10, 1:5 ; `section.maxGrainSlope` (A35 (h))    |
+| Formule de Hankinson                  | Hankinson formula                   | —                       | « Hankinson-type formula » ([81], A35 (j))       |
+| Planche (d'une couche)                | Board                               | —                       | Repère LC1-k.j (A35 (h))                         |
+| Planches aboutées                     | Butt-jointed boards                 | —                       | Le long de la trace (A35 (h))                    |
+| Collé sur chant                       | Edge-glued                          | —                       | Bandes d'une couche trop large (A35 (h))         |
+| Aboutage à entures                    | Finger joint                        | —                       | Joint d'about possible, non retenu (A36 (6))     |
+| Âme de pied prolongée                 | Extended foot web                   | —                       | Platine à âme noyée (A35 (a))                    |
 | Bois massif                           | Solid timber                        | Solid wood / lumber     |                                                  |
 | Section, équarrissage                 | Section                             | —                       |                                                  |
 | Plat (acier)                          | Flat bar / plate                    | —                       | Limon en plat : plate string                     |

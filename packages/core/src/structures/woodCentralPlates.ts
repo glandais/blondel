@@ -19,12 +19,23 @@
  * Convention Blondel **à valider** (dimensions de `anchors.plate`, aucune source escalier ;
  * principe et ordre de grandeur d'un pied de poteau à âme du commerce, C §1.11 [80]) :
  * - **Pied** (`PP1` platine, `AP1` âme) : platine d'appui posée au sol sous la poutre, le long
- *   de la trace sur `anchors.length` depuis la face avant de la poutre, largeur
- *   `anchors.plate.width` (`auto` : b + 4 × `anchors.holeEdgeDistance`), chevillée au sol
- *   (`anchors.anchors` chevilles de perçage `anchors.anchorHoleDiameter`, de part et d'autre de
- *   la poutre, fixation `plateFloor`) ; âme verticale de `webLength` × `webDepth` dans le plan
- *   médian de la poutre, soudée sur la platine, noyée vers le haut dans un trait de scie de la
- *   sous-face (épaisseur `webThickness` + 2 × `wood.clearance`).
+ *   de la trace depuis la face avant de la poutre, largeur `anchors.plate.width` (`auto` : b +
+ *   4 × `anchors.holeEdgeDistance`), chevillée au sol (`anchors.anchors` chevilles de perçage
+ *   `anchors.anchorHoleDiameter`, de part et d'autre de la poutre, fixation `plateFloor`) ;
+ *   âme verticale dans le plan médian de la poutre, soudée sur la platine, noyée vers le haut
+ *   dans un trait de scie de la sous-face (épaisseur `webThickness` + 2 × `wood.clearance`).
+ *   **Âme prolongée** (QUESTIONS A35 (a), décision du 2026-10-09) : l'âme finit au bout de la
+ *   coupe au sol (moins le jeu c) et s'étend vers l'avant sur `anchors.plate.footWebLength`
+ *   (`auto` : la plus longue âme plane dont la flèche + le demi-trait reste à b/2 − a4,c des
+ *   faces) ; son dessus suit les assises **en escalier** : webTop(σ) = min(tp + `webDepth`,
+ *   dessus de la poutre − max(`wood.minCheek`, `seatClearance`) − c), le dessus de la poutre
+ *   étant pris au plus bas sur [σ − c ; σ + c] pour que le trait de scie (âme épaissie de c)
+ *   reste sous chaque assise ; les bouts plus bas que deux pinces de perçage sont retirés (sous
+ *   la première marche, la place est laissée à ses tire-fonds). La platine couvre l'âme
+ *   (longueur min(coupe au sol, max(`anchors.length`, âme + jeu))). **Repli** : si aucune âme
+ *   ainsi prolongée ne tient, âme de `webLength` × `webDepth` centrée sur la platine de
+ *   `anchors.length` sous la première marche (comportement antérieur, remarque
+ *   `plateWebReduced`).
  * - **Tête** (`PT1` platine, `AT1` âme) : platine verticale contre le chevêtre, de hauteur
  *   `anchors.length` depuis le dessous de la poutre à sa coupe de tête, fixée au chevêtre
  *   (`plateTrimmer`) ; âme dans le plan médian, noyée le long de la trace dans un trait de scie
@@ -33,6 +44,15 @@
  *   horizontales au travers des faces de la poutre et de l'âme, placées selon les entraxes et
  *   pinces des broches de l'EC5 (`ec5Spacing("dowel", d)`, C §1.11 [71]) ; fixation
  *   `embeddedPlatePinned` déclarée sur l'âme (`with` = la poutre, longueur = b).
+ *   Pince d'extrémité selon la convention de gravité (QUESTIONS A35 (e), **à valider**,
+ *   `woodSpacing.ts`) et la filière (A35 (b)) : au **pied**, depuis la coupe au sol, extrémité
+ *   non chargée a3,c (massif, couches droites, cintrage sur moule : fil le long de la poutre)
+ *   ou rive a4,t (couches empilées : fil horizontal parallèle à la coupe), `footPinFloorDistance` ;
+ *   en **tête**, depuis la coupe d'aplomb, extrémité chargée a3,t. Au pied, une rangée
+ *   horizontale dont la hauteur est balayée au pas de 1 mm pour donner le plus long intervalle
+ *   admissible, de préférence là où un tire-fond arrêté au-dessus d'une broche (jeu
+ *   géométrique, `lagHoleClearance`, à valider) garde sous chaque assise son ancrage : en
+ *   pratique sous les marches 2 et 3, où la poutre est haute.
  * - Sur une poutre cintrée, l'âme reste plane (corde) : sa flèche dans la poutre est contrôlée
  *   (l'âme et le trait de scie restent dans le bois, à la pince a4 des faces).
  *
@@ -55,7 +75,13 @@ import {
   steelMaterial,
   steelQuantities,
 } from "./steelCommon.js";
-import { ec5Spacing } from "./woodSpacing.js";
+import { resolveCurvedMethod, WoodCentralParamsSchema } from "./woodCentralParams.js";
+import {
+  ec5Spacing,
+  footPinFloorDistance,
+  lagHoleClearance,
+  type WoodGrainMethod,
+} from "./woodSpacing.js";
 import { spread, type ShoeBeamHole, type WoodCentralShoesInput } from "./woodCentralShoes.js";
 
 /**
@@ -102,6 +128,14 @@ export interface BeamKerf {
   readonly z1: Mm;
   /** Largeur du trait de scie (âme + 2 × jeu), mm. */
   readonly width: Mm;
+  /**
+   * Contour exact du trait de scie dans le plan médian (développement à l'axe, points (σ, z),
+   * sens trigonométrique) quand il n'est pas le rectangle [σ0 ; σ1] × [z0 ; z1] : âme de pied
+   * prolongée dont le dessus suit les assises en escalier (QUESTIONS A35 (a)). Le rectangle
+   * reste son enveloppe. La poutre trace ce contour et lit au-dessus d'un organe vertical le
+   * haut du trait à son abscisse (obstacle d'ancrage).
+   */
+  readonly outline?: readonly Vec2[];
 }
 
 export interface WoodCentralPlatesResult {
@@ -115,6 +149,11 @@ export interface WoodCentralPlatesResult {
   readonly assemblies: readonly PartAssembly[];
   /** Âmes soudées sur leur platine (classe d'exécution du plugin). */
   readonly welded: boolean;
+  /**
+   * Longueur retenue de l'âme de pied le long de la trace (`anchors.plate.footWebLength`
+   * résolu, A35 (a)), mm ; absente sans âme de pied. Valeur `auto` exposée par le plugin.
+   */
+  readonly footWebLength?: Mm;
   readonly notes: readonly Message[];
   readonly errors: readonly Message[];
 }
@@ -171,9 +210,30 @@ interface PlateSpec {
   readonly line: EmbeddedWebLine;
   readonly pins: readonly EmbeddedPin[];
   readonly kerf: BeamKerf;
+  /**
+   * Pied prolongé (A35 (a)) : contour de l'âme dans le développé (points (σ, z), sens
+   * trigonométrique, bord bas sur la platine, dessus en escalier) ; absent : rectangle
+   * `webLength` × `webDepth`.
+   */
+  readonly webOutline?: readonly Vec2[];
+}
+
+/** Palier d'une fonction en escalier σ ↦ h sur [s0 ; s1[ (dernier palier fermé). */
+interface Step {
+  readonly s0: Mm;
+  readonly s1: Mm;
+  readonly h: Mm;
+}
+
+/** Pince d'extrémité exigée d'une broche et message de son constat. */
+interface EndRule {
+  readonly min: Mm;
+  readonly message: (distance: Mm) => Message;
 }
 
 const UP: Vec3 = { x: 0, y: 0, z: 1 };
+/** Défaut de `anchors.plate.webLength` (lu sur le schéma, jamais recopié). */
+const DEFAULT_WEB_LENGTH: Mm = WoodCentralParamsSchema.parse({}).anchors.plate.webLength;
 const v3 = (p: Vec2, z: Mm): Vec3 => ({ x: p.x, y: p.y, z });
 const h3 = (p: Vec2): Vec3 => ({ x: p.x, y: p.y, z: 0 });
 const EPS = 1e-6;
@@ -220,6 +280,87 @@ function fitting(lo: Mm, hi: Mm, a1: Mm, wanted: number): number {
   if (wanted <= 0) return 0;
   if (!(hi > lo)) return 1;
   return Math.min(wanted, Math.floor((hi - lo) / a1 + 1e-9) + 1);
+}
+
+/**
+ * Paliers d'une fonction en escalier (dessus des assises, dessus de l'âme) sur [a ; b] :
+ * échantillonnage au pas `SCAN_STEP`, chaque saut localisé par dichotomie. Deux sauts dans un
+ * même pas (paliers de moins de 1 mm) seraient confondus : sans objet pour des assises.
+ */
+function stepSegments(f: (s: Mm) => Mm, a: Mm, b: Mm): Step[] {
+  if (!(b > a)) return [{ s0: a, s1: Math.max(a, b), h: f(a) }];
+  const n = Math.max(1, Math.ceil((b - a) / SCAN_STEP));
+  const out: Step[] = [];
+  let s0 = a;
+  let h = f(a);
+  for (let i = 1; i <= n; i++) {
+    const s = a + ((b - a) * i) / n;
+    // Plusieurs sauts possibles dans le pas : chacun localisé tour à tour.
+    for (let guard = 0; guard < 8 && Math.abs(f(s) - h) > EPS; guard++) {
+      let lo = s0;
+      let hi = s;
+      for (let k = 0; k < 50 && hi - lo > 1e-7; k++) {
+        const m = (lo + hi) / 2;
+        if (Math.abs(f(m) - h) <= EPS) lo = m;
+        else hi = m;
+      }
+      out.push({ s0, s1: hi, h });
+      s0 = hi;
+      h = f(hi);
+    }
+  }
+  out.push({ s0, s1: b, h });
+  return out.filter((t) => t.s1 - t.s0 > 1e-7 || out.length === 1);
+}
+
+/** Valeur du palier contenant σ (−∞ hors des paliers). */
+function stepAt(steps: readonly Step[], s: Mm): Mm {
+  for (let i = 0; i < steps.length; i++) {
+    const t = steps[i]!;
+    if (s >= t.s0 - 1e-9 && (s < t.s1 || (i === steps.length - 1 && s <= t.s1 + 1e-9))) return t.h;
+  }
+  return -Infinity;
+}
+
+/** Plus petite valeur des paliers qui rencontrent ]w0 ; w1[ (+∞ sans palier). */
+function stepMin(steps: readonly Step[], w0: Mm, w1: Mm): Mm {
+  let out = Infinity;
+  for (const t of steps) if (t.s1 > w0 + 1e-9 && t.s0 < w1 - 1e-9) out = Math.min(out, t.h);
+  return out;
+}
+
+/**
+ * Contour (σ, z), sens trigonométrique, de la région comprise entre z = `base` et le dessus en
+ * escalier `steps` (paliers contigus).
+ */
+function stepOutline(steps: readonly Step[], base: Mm): Vec2[] {
+  const first = steps[0]!;
+  const last = steps[steps.length - 1]!;
+  const pts: Vec2[] = [V.vec(first.s0, base), V.vec(last.s1, base)];
+  for (let i = steps.length - 1; i >= 0; i--) {
+    const t = steps[i]!;
+    pts.push(V.vec(t.s1, t.h), V.vec(t.s0, t.h));
+  }
+  // Points confondus (paliers de même hauteur) retirés.
+  return pts.filter((p, i) => {
+    const q = pts[(i + 1) % pts.length]!;
+    return Math.abs(p.x - q.x) > 1e-9 || Math.abs(p.y - q.y) > 1e-9;
+  });
+}
+
+/** Plus long intervalle d'indices consécutifs satisfaisant `ok` ([−1 ; −2] si aucun). */
+function longestRun(n: number, ok: (k: number) => boolean): [number, number] {
+  let best: [number, number] = [-1, -2];
+  let start = -1;
+  for (let k = 0; k <= n; k++) {
+    if (k < n && ok(k)) {
+      if (start < 0) start = k;
+      continue;
+    }
+    if (start >= 0 && k - 1 - start > best[1] - best[0]) best = [start, k - 1];
+    start = -1;
+  }
+  return best;
 }
 
 /** Plan (vertical) d'une âme plane dans la poutre, vu en plan. */
@@ -315,6 +456,7 @@ function buildPlates(input: WoodCentralShoesInput): WoodCentralPlatesResult {
   const findings: Finding[] = [];
   const specs: PlateSpec[] = [];
   const notes: Message[] = [msg("structure.woodCentral.note.plate")];
+  let footWebLength: Mm | undefined;
 
   /** Constats communs : chevilles hors de l'emprise de la poutre, flèche de l'âme, broches. */
   const commonIssues = (
@@ -323,6 +465,7 @@ function buildPlates(input: WoodCentralShoesInput): WoodCentralPlatesResult {
     sag: Mm,
     pins: readonly EmbeddedPin[],
     dist: (p: EmbeddedPin) => PinDistances,
+    endRule: EndRule,
   ): Issue[] => {
     const issues: Issue[] = [];
     const half = W / 2 - hE;
@@ -372,16 +515,8 @@ function buildPlates(input: WoodCentralShoesInput): WoodCentralPlatesResult {
       end = Math.min(end, d.end);
       edge = Math.min(edge, d.top, d.under);
     }
-    if (end < ec5.a3t - PINCH_TOL) {
-      issues.push({
-        measured: end,
-        min: ec5.a3t,
-        message: msg("structure.woodCentral.check.plate.pinEnd", {
-          web: webMark,
-          distance: dec(end, 0),
-          a3t: dec(ec5.a3t, 0),
-        }),
-      });
+    if (end < endRule.min - PINCH_TOL) {
+      issues.push({ measured: end, min: endRule.min, message: endRule.message(end) });
     }
     if (edge < ec5.a4t - PINCH_TOL) {
       issues.push({
@@ -480,65 +615,92 @@ function buildPlates(input: WoodCentralShoesInput): WoodCentralPlatesResult {
     const mark = WOOD_CENTRAL_PLATE_FOOT_MARK;
     const webMark = WOOD_CENTRAL_PLATE_FOOT_WEB_MARK;
     const cut = beam.floorCutLength;
-    const L = Math.min(an.length, cut);
+    const L0 = Math.min(an.length, cut);
     const issues: Issue[] = [];
     if (an.length > cut + EPS) {
       issues.push({
         measured: an.length,
         max: cut,
         message:
-          L >= minLength
+          L0 >= minLength
             ? msg("structure.woodCentral.check.plate.footReduced", {
                 mark,
                 wanted: dec(an.length, 0),
                 cut: dec(cut, 0),
-                length: dec(L, 0),
+                length: dec(L0, 0),
               })
             : msg("structure.woodCentral.check.plate.footMissing", { mark, cut: dec(cut, 0) }),
       });
-    } else if (L < minLength) {
-      issues.push(tooShort(mark, L));
+    } else if (L0 < minLength) {
+      issues.push(tooShort(mark, L0));
     }
-    // Âme dans le bois : sous le dessous de la première marche moins la joue minimale.
-    const room = beam.firstSeatZ - profile.wood.minCheek - tp;
-    const depth = Math.min(P.webDepth, room - c);
-    if (L >= minLength) limitDepth(webMark, mark, room, depth, issues);
-    if (L >= minLength && depth >= minLength) {
-      const at = beam.frontSigma + L / 2;
-      const Lw = Math.min(P.webLength, L);
-      const ws0 = at - Lw / 2;
-      const ws1 = at + Lw / 2;
-      // Sous-face au-delà de la coupe au sol : parallèle à la ligne des nez (développé).
-      const x1 = beam.frontSigma + beam.floorCutLength;
-      const under = (s: Mm): Mm => tp + Z(s) - Z(x1);
+    // Pince des broches depuis la coupe au sol selon la filière (A35 (b)) et la convention de
+    // gravité (A35 (e)) : extrémité non chargée a3,c, ou rive a4,t en couches empilées.
+    const method: WoodGrainMethod =
+      params.section.kind === "solid"
+        ? "solid"
+        : (resolveCurvedMethod(params, trace.kind !== "straight") ?? "straight");
+    const floorPin = footPinFloorDistance(method, P.pinDiameter);
+    const floorRule: EndRule = {
+      min: floorPin.distance,
+      message: (distance) =>
+        msg(
+          floorPin.kind === "a4t"
+            ? "structure.woodCentral.check.plate.pinFloorEdge"
+            : "structure.woodCentral.check.plate.pinFloorEnd",
+          { web: webMark, distance: dec(distance, 0), min: dec(floorPin.distance, 0) },
+        ),
+    };
+    // Sous-face au-delà de la coupe au sol : parallèle à la ligne des nez (développé).
+    const x1 = beam.frontSigma + cut;
+    const under = (s: Mm): Mm => tp + Z(s) - Z(x1);
+    const underDistance = (p: EmbeddedPin): Mm =>
+      distanceToCurve(
+        V.vec(p.sigma, p.z),
+        Math.max(x1, p.sigma - UNDER_REACH),
+        Math.max(x1, p.sigma) + UNDER_REACH,
+        under,
+      );
+    const topAt = beam.topAt ?? ((): Mm => beam.firstSeatZ);
+    const ext = L0 >= minLength ? extendedFootWeb(input, kerfWidth) : null;
+    if (ext) {
+      // Âme prolongée (A35 (a)) : platine couvrant l'âme, broches où la poutre est haute.
+      const L = Math.min(cut, Math.max(an.length, ext.ws1 - beam.frontSigma + c));
       const dist = (p: EmbeddedPin): PinDistances => ({
         end: p.z - tp,
-        top: beam.firstSeatZ - p.z,
-        under: distanceToCurve(
-          V.vec(p.sigma, p.z),
-          Math.max(x1, p.sigma - UNDER_REACH),
-          Math.max(x1, p.sigma) + UNDER_REACH,
-          under,
-        ),
+        top: topAt(p.sigma) - p.z,
+        under: underDistance(p),
       });
-      // Hauteur de la rangée : pince d'extrémité au-dessus de la coupe au sol (a3,t), pince de
-      // rive sous la première marche (a4,t), pinces de perçage de l'âme.
-      const webLo = tp + Math.min(hE, depth / 2);
-      const webHi = tp + depth - Math.min(hE, depth / 2);
-      const zLo = Math.max(webLo, tp + ec5.a3t);
-      const zHi = Math.min(webHi, beam.firstSeatZ - ec5.a4t);
-      const z = zLo <= zHi ? (zLo + zHi) / 2 : Math.min(webHi, Math.max(webLo, (zLo + zHi) / 2));
-      // Rangée le long de la trace, dans l'âme, à la pince de rive de la sous-face (a4,t).
-      const xLo = ws0 + Math.min(hE, Lw / 2);
-      let xHi = ws1 - Math.min(hE, Lw / 2);
-      const okAt = (s: Mm): boolean => dist({ sigma: s, z }).under >= ec5.a4t;
-      if (okAt(xLo)) {
-        while (xHi > xLo && !okAt(xHi)) xHi = Math.max(xLo, xHi - SCAN_STEP);
+      const pins = placeFootPins(input, ext, floorPin.distance, underDistance);
+      issues.push(...commonIssues(mark, webMark, ext.line.sag, pins, dist, floorRule));
+      const height = Math.max(...ext.steps.map((t) => t.h)) - tp;
+      const seatOf = (s: Mm): number => {
+        const steps = stepSegments(topAt, beam.frontSigma, Math.max(beam.frontSigma, s));
+        return steps.length;
+      };
+      const first = seatOf(ext.ws0 + EPS);
+      const last = seatOf(ext.ws1 - EPS);
+      const common = {
+        web: webMark,
+        mark,
+        length: dec(ext.ws1 - ext.ws0, 0),
+        height: dec(height, 0),
+        wanted: dec(P.webDepth, 0),
+      };
+      notes.push(
+        first === last
+          ? msg("structure.woodCentral.note.plateFootWebExtendedOne", { ...common, seat: first })
+          : msg("structure.woodCentral.note.plateFootWebExtended", { ...common, first, last }),
+      );
+      // Ancien réglage : `webLength` ne règle plus l'âme de pied prolongée (relecture A35).
+      if (P.webLength !== DEFAULT_WEB_LENGTH) {
+        notes.push(
+          msg("structure.woodCentral.note.plateWebLengthHeadOnly", {
+            web: webMark,
+            length: dec(P.webLength, 0),
+          }),
+        );
       }
-      const count = fitting(xLo, xHi, ec5.a1, P.pins);
-      const pins = evenly(xLo, xHi, count).map((sigma) => ({ sigma, z }));
-      const line = embeddedWebLine(trace, ws0, ws1);
-      issues.push(...commonIssues(mark, webMark, line.sag, pins, dist));
       specs.push({
         foot: true,
         id: WOOD_CENTRAL_PLATE_FOOT_ID,
@@ -546,35 +708,112 @@ function buildPlates(input: WoodCentralShoesInput): WoodCentralPlatesResult {
         webId: WOOD_CENTRAL_PLATE_FOOT_WEB_ID,
         webMark,
         length: L,
-        webLength: Lw,
-        webDepth: depth,
-        at,
-        webStart: ws0,
-        line,
+        webLength: ext.ws1 - ext.ws0,
+        webDepth: height,
+        at: beam.frontSigma + L / 2,
+        webStart: ext.ws0,
+        line: ext.line,
         pins,
-        // Trait de scie borné à la coupe au sol (âme aussi longue que la platine : trait
-        // débouchant sur la face avant de la poutre).
-        kerf: {
-          mark: webMark,
-          sigma0: Math.max(ws0 - c, beam.frontSigma),
-          sigma1: Math.min(ws1 + c, x1),
-          z0: tp,
-          z1: tp + depth + c,
-          width: kerfWidth,
-        },
+        kerf: ext.kerf,
+        webOutline: ext.outline,
       });
+      footWebLength = ext.ws1 - ext.ws0;
+      record(
+        msg("structure.woodCentral.check.plate.footOk", {
+          mark,
+          web: webMark,
+          length: dec(L, 0),
+          cut: dec(cut, 0),
+        }),
+        an.length,
+        cut,
+        issues,
+      );
+    } else {
+      // Repli (comportement antérieur à A35 (a)) : âme de `webLength` centrée sur la platine,
+      // sous le dessous de la première marche moins la joue minimale. Une longueur d'âme de pied
+      // saisie qui ne tient pas n'est jamais remplacée en silence (constat en violation).
+      if (P.footWebLength !== "auto" && L0 >= minLength) {
+        issues.push({
+          measured: P.footWebLength,
+          min: minLength,
+          message: msg("structure.woodCentral.check.plate.footWebRejected", {
+            web: webMark,
+            wanted: dec(P.footWebLength, 0),
+            min: dec(minLength, 0),
+          }),
+        });
+      }
+      const L = L0;
+      const room = beam.firstSeatZ - profile.wood.minCheek - tp;
+      const depth = Math.min(P.webDepth, room - c);
+      if (L >= minLength) limitDepth(webMark, mark, room, depth, issues);
+      if (L >= minLength && depth >= minLength) {
+        const at = beam.frontSigma + L / 2;
+        const Lw = Math.min(P.webLength, L);
+        const ws0 = at - Lw / 2;
+        const ws1 = at + Lw / 2;
+        const dist = (p: EmbeddedPin): PinDistances => ({
+          end: p.z - tp,
+          top: beam.firstSeatZ - p.z,
+          under: underDistance(p),
+        });
+        // Hauteur de la rangée : pince depuis la coupe au sol (A35 (b), (e)), pince de rive
+        // sous la première marche (a4,t), pinces de perçage de l'âme.
+        const webLo = tp + Math.min(hE, depth / 2);
+        const webHi = tp + depth - Math.min(hE, depth / 2);
+        const zLo = Math.max(webLo, tp + floorPin.distance);
+        const zHi = Math.min(webHi, beam.firstSeatZ - ec5.a4t);
+        const z = zLo <= zHi ? (zLo + zHi) / 2 : Math.min(webHi, Math.max(webLo, (zLo + zHi) / 2));
+        // Rangée le long de la trace, dans l'âme, à la pince de rive de la sous-face (a4,t).
+        const xLo = ws0 + Math.min(hE, Lw / 2);
+        let xHi = ws1 - Math.min(hE, Lw / 2);
+        const okAt = (s: Mm): boolean => underDistance({ sigma: s, z }) >= ec5.a4t;
+        if (okAt(xLo)) {
+          while (xHi > xLo && !okAt(xHi)) xHi = Math.max(xLo, xHi - SCAN_STEP);
+        }
+        const count = fitting(xLo, xHi, ec5.a1, P.pins);
+        const pins = evenly(xLo, xHi, count).map((sigma) => ({ sigma, z }));
+        const line = embeddedWebLine(trace, ws0, ws1);
+        issues.push(...commonIssues(mark, webMark, line.sag, pins, dist, floorRule));
+        footWebLength = Lw;
+        specs.push({
+          foot: true,
+          id: WOOD_CENTRAL_PLATE_FOOT_ID,
+          mark,
+          webId: WOOD_CENTRAL_PLATE_FOOT_WEB_ID,
+          webMark,
+          length: L,
+          webLength: Lw,
+          webDepth: depth,
+          at,
+          webStart: ws0,
+          line,
+          pins,
+          // Trait de scie borné à la coupe au sol (âme aussi longue que la platine : trait
+          // débouchant sur la face avant de la poutre).
+          kerf: {
+            mark: webMark,
+            sigma0: Math.max(ws0 - c, beam.frontSigma),
+            sigma1: Math.min(ws1 + c, x1),
+            z0: tp,
+            z1: tp + depth + c,
+            width: kerfWidth,
+          },
+        });
+      }
+      record(
+        msg("structure.woodCentral.check.plate.footOk", {
+          mark,
+          web: webMark,
+          length: dec(L, 0),
+          cut: dec(cut, 0),
+        }),
+        an.length,
+        cut,
+        issues,
+      );
     }
-    record(
-      msg("structure.woodCentral.check.plate.footOk", {
-        mark,
-        web: webMark,
-        length: dec(L, 0),
-        cut: dec(cut, 0),
-      }),
-      an.length,
-      cut,
-      issues,
-    );
   }
 
   // ---------------------------------------------------------------- Tête
@@ -655,7 +894,17 @@ function buildPlates(input: WoodCentralShoesInput): WoodCentralPlatesResult {
       const count = fitting(zLo, zHi, ec5.a1, P.pins);
       const pins = evenly(zLo, zHi, count).map((z) => ({ sigma, z }));
       const line = embeddedWebLine(trace, wa, wb);
-      issues.push(...commonIssues(mark, webMark, line.sag, pins, dist));
+      // Tête : extrémité chargée (a3,t), convention de gravité (A35 (e)).
+      const headRule: EndRule = {
+        min: ec5.a3t,
+        message: (distance) =>
+          msg("structure.woodCentral.check.plate.pinEnd", {
+            web: webMark,
+            distance: dec(distance, 0),
+            a3t: dec(ec5.a3t, 0),
+          }),
+      };
+      issues.push(...commonIssues(mark, webMark, line.sag, pins, dist, headRule));
       specs.push({
         foot: false,
         id: WOOD_CENTRAL_PLATE_HEAD_ID,
@@ -720,9 +969,240 @@ function buildPlates(input: WoodCentralShoesInput): WoodCentralPlatesResult {
     beamKerfs: specs.map((s) => s.kerf),
     assemblies,
     welded: true,
+    ...(footWebLength !== undefined ? { footWebLength } : {}),
     notes,
     errors: [],
   };
+}
+
+/** Âme de pied prolongée (A35 (a)) : étendue, dessus en escalier, plan, trait de scie. */
+interface ExtendedFootWeb {
+  readonly ws0: Mm;
+  readonly ws1: Mm;
+  /** Paliers du dessus de l'âme sur [ws0 ; ws1] (z absolus). */
+  readonly steps: readonly Step[];
+  /** Contour de l'âme (σ, z), sens trigonométrique. */
+  readonly outline: readonly Vec2[];
+  readonly line: EmbeddedWebLine;
+  readonly kerf: BeamKerf;
+}
+
+/**
+ * Âme de pied prolongée le long de la trace (QUESTIONS A35 (a), convention **à valider**) : finit
+ * au bout de la coupe au sol moins le jeu (ws1 = x1 − c), commence à ws1 − `footWebLength`
+ * (bornée à la face avant + c ; `auto` : plus longue âme plane dont flèche + demi-trait ≤ b/2 −
+ * a4,c, par dichotomie) ; dessus webTop(σ) = min(tp + `webDepth`, min du dessus de la poutre sur
+ * [σ − c ; σ + c] − max(`wood.minCheek`, `seatClearance`) − c) ; paliers plus bas que deux
+ * pinces de perçage retirés (plus long tronçon restant). `null` : aucune âme d'au moins deux
+ * pinces de perçage en hauteur et en longueur (repli sur l'âme centrée).
+ */
+function extendedFootWeb(input: WoodCentralShoesInput, kerfWidth: Mm): ExtendedFootWeb | null {
+  const { params, profile, beam, trace } = input;
+  const P = params.anchors.plate;
+  const c = profile.wood.clearance;
+  const tp = P.thickness;
+  const minLength = 2 * params.anchors.holeEdgeDistance;
+  const x1 = beam.frontSigma + beam.floorCutLength;
+  let ws1 = x1 - c;
+  const wsMin = beam.frontSigma + c;
+  if (!(ws1 - wsMin >= minLength - EPS)) return null;
+  const topAt = beam.topAt ?? ((): Mm => beam.firstSeatZ);
+  const clear = Math.max(profile.wood.minCheek, beam.seatClearance ?? 0);
+  const webTop = (s: Mm): Mm =>
+    Math.min(tp + P.webDepth, Math.min(topAt(s - c), topAt(s), topAt(s + c)) - clear - c);
+
+  // Longueur : saisie (depuis ws1 vers l'avant), ou plus longue âme dont le trait reste dans le
+  // bois (la flèche croît avec la longueur : dichotomie sur le début de l'âme).
+  let ws0: Mm;
+  if (P.footWebLength !== "auto") {
+    ws0 = Math.max(wsMin, ws1 - P.footWebLength);
+  } else {
+    const allowed = params.section.width / 2 - ec5Spacing("dowel", P.pinDiameter).a4c;
+    const fits = (s0: Mm): boolean =>
+      embeddedWebLine(trace, s0, ws1).sag + kerfWidth / 2 <= allowed + EPS;
+    if (kerfWidth / 2 > allowed + EPS || fits(wsMin)) {
+      // Trait trop large même sans flèche (constat) ou âme entière admise.
+      ws0 = wsMin;
+    } else if (!fits(ws1 - minLength)) {
+      ws0 = ws1 - minLength;
+    } else {
+      let lo = wsMin;
+      let hi = ws1 - minLength;
+      for (let k = 0; k < 40 && hi - lo > 1e-3; k++) {
+        const m = (lo + hi) / 2;
+        if (fits(m)) hi = m;
+        else lo = m;
+      }
+      ws0 = hi;
+    }
+  }
+  // Bouts trop bas retirés : plus long tronçon de paliers d'au moins deux pinces de haut.
+  const span = (r: readonly Step[]): Mm => (r.length > 0 ? r[r.length - 1]!.s1 - r[0]!.s0 : 0);
+  let best: Step[] = [];
+  let cur: Step[] = [];
+  for (const t of stepSegments(webTop, ws0, ws1)) {
+    if (t.h - tp >= minLength - EPS) {
+      cur.push(t);
+      continue;
+    }
+    if (span(cur) > span(best)) best = cur;
+    cur = [];
+  }
+  if (span(cur) > span(best)) best = cur;
+  if (best.length === 0 || span(best) < minLength - EPS) return null;
+  const steps = best;
+  ws0 = steps[0]!.s0;
+  ws1 = steps[steps.length - 1]!.s1;
+
+  // Trait de scie : âme épaissie du jeu c (bouts et dessus), borné à la coupe au sol.
+  const k0 = Math.max(ws0 - c, beam.frontSigma);
+  const k1 = Math.min(ws1 + c, x1);
+  const clamp = (s: Mm): Mm => Math.min(ws1, Math.max(ws0, s));
+  const kerfTop = (s: Mm): Mm =>
+    Math.max(stepAt(steps, clamp(s - c)), stepAt(steps, clamp(s)), stepAt(steps, clamp(s + c))) + c;
+  const kerfSteps = stepSegments(kerfTop, k0, k1);
+  const kerf: BeamKerf = {
+    mark: WOOD_CENTRAL_PLATE_FOOT_WEB_MARK,
+    sigma0: k0,
+    sigma1: k1,
+    z0: tp,
+    z1: Math.max(...kerfSteps.map((t) => t.h)),
+    width: kerfWidth,
+    ...(kerfSteps.length > 1 ? { outline: stepOutline(kerfSteps, tp) } : {}),
+  };
+  return {
+    ws0,
+    ws1,
+    steps,
+    outline: stepOutline(steps, tp),
+    line: embeddedWebLine(trace, ws0, ws1),
+    kerf,
+  };
+}
+
+/** Rangée de broches retenue : hauteur, intervalle le long de la trace, nombre. */
+interface PinRow {
+  readonly z: Mm;
+  readonly sa: Mm;
+  readonly sb: Mm;
+  readonly count: number;
+}
+
+/**
+ * Broches de l'âme de pied prolongée (A35 (a), (b), (e), convention **à valider**) : une rangée
+ * horizontale dont la hauteur z est balayée au pas de 1 mm ; retenue : le plus de broches à
+ * l'entraxe a1, puis le plus long intervalle, puis la plus basse. Conditions en σ (évaluées sur
+ * une grille au pas de 1 mm, minima pris sur une fenêtre qui couvre l'entre-deux) :
+ * - z ≥ tp + pince depuis la coupe au sol (`footPinFloorDistance`) et dans l'âme, à la pince de
+ *   perçage de son dessus (sur ±`holeEdgeDistance`) et de ses bouts ;
+ * - z ≤ dessus de la poutre − a4,t ; pince de rive a4,t de la sous-face au-delà de la coupe au
+ *   sol (borne haute en σ, par dichotomie : la distance décroît vers la coupe) ;
+ * - préférence : la zone d'obstacle d'une broche (jeu géométrique d'un tire-fond autour du
+ *   perçage, `lagHoleClearance`) laisse sous chaque assise de [σ − jeu ; σ + jeu] l'ancrage d'un
+ *   tire-fond arrêté au-dessus du perçage (`seatClearance` − `tipCover`, à défaut
+ *   `lagScrews.minAnchorage`) ; abandonnée si elle ne laisse pas `pins` broches ;
+ * - en dernier recours (aucune rangée aux pinces), dans l'âme seulement : les constats le disent.
+ */
+function placeFootPins(
+  input: WoodCentralShoesInput,
+  ext: ExtendedFootWeb,
+  floorDistance: Mm,
+  underDistance: (p: EmbeddedPin) => Mm,
+): EmbeddedPin[] {
+  const { params, profile, beam } = input;
+  const P = params.anchors.plate;
+  if (P.pins <= 0) return [];
+  const tp = P.thickness;
+  const hE = params.anchors.holeEdgeDistance;
+  const ec5 = ec5Spacing("dowel", P.pinDiameter);
+  const topAt = beam.topAt ?? ((): Mm => beam.firstSeatZ);
+  // Jeu d'un tire-fond autour du perçage d'une broche (convention partagée avec la poutre).
+  const gap = lagHoleClearance(
+    P.pinDiameter,
+    params.bolts.holeDiameter,
+    profile.wood.clearance,
+    params.lagScrews.tipCover,
+  );
+  const margin = gap.half;
+  const anchorage =
+    beam.seatClearance !== undefined
+      ? beam.seatClearance - params.lagScrews.tipCover
+      : params.lagScrews.minAnchorage;
+  const { ws0, ws1, steps } = ext;
+  let lo = ws0 + hE;
+  let hi = ws1 - hE;
+  if (lo > hi) lo = hi = (ws0 + ws1) / 2;
+  const n = Math.max(0, Math.ceil((hi - lo) / SCAN_STEP));
+  const g = (k: number): Mm => (n === 0 ? lo : lo + ((hi - lo) * k) / n);
+  const reach = margin + 2 * SCAN_STEP;
+  const topSteps = stepSegments(topAt, ws0 - reach, ws1 + reach);
+  const webMin: Mm[] = [];
+  const topMin: Mm[] = [];
+  const prefMin: Mm[] = [];
+  for (let k = 0; k <= n; k++) {
+    const s = g(k);
+    webMin.push(stepMin(steps, s - hE - SCAN_STEP, s + hE + SCAN_STEP));
+    topMin.push(stepMin(topSteps, s - SCAN_STEP, s + SCAN_STEP));
+    prefMin.push(stepMin(topSteps, s - margin - SCAN_STEP, s + margin + SCAN_STEP));
+  }
+  const zTop = Math.max(...webMin) - hE;
+
+  const row = (stage: "pref" | "strict" | "relaxed"): PinRow | null => {
+    const zMin = tp + (stage === "relaxed" ? hE : Math.max(hE, floorDistance));
+    let out: PinRow | null = null;
+    const nz = Math.floor((zTop - zMin) / SCAN_STEP + 1e-9);
+    for (let i = 0; i <= nz; i++) {
+      const z = zMin + i * SCAN_STEP;
+      const ok = (k: number): boolean =>
+        z <= webMin[k]! - hE + EPS &&
+        (stage === "relaxed" || z <= topMin[k]! - ec5.a4t + EPS) &&
+        (stage !== "pref" || z + gap.above <= prefMin[k]! - anchorage + EPS);
+      // Sous-face au-delà de la coupe au sol : dernière abscisse à la pince a4,t.
+      let kMax = n;
+      if (stage !== "relaxed") {
+        const under = (k: number): boolean => underDistance({ sigma: g(k), z }) >= ec5.a4t;
+        if (!under(n)) {
+          if (!under(0)) continue;
+          let a = 0;
+          let e = n;
+          while (e - a > 1) {
+            const m = (a + e) >> 1;
+            if (under(m)) a = m;
+            else e = m;
+          }
+          kMax = a;
+        }
+      }
+      const [a, b] = longestRun(kMax + 1, ok);
+      if (a < 0) continue;
+      const sa = g(a);
+      const sb = g(b);
+      const count = fitting(sa, sb, ec5.a1, P.pins);
+      if (!out || count > out.count || (count === out.count && sb - sa > out.sb - out.sa + EPS)) {
+        out = { z, sa, sb, count };
+      }
+    }
+    return out;
+  };
+  const pref = row("pref");
+  if (pref && pref.count >= P.pins) {
+    return evenly(pref.sa, pref.sb, pref.count).map((sigma) => ({ sigma, z: pref.z }));
+  }
+  const chosen = row("strict") ?? row("relaxed");
+  if (!chosen) return [];
+  // Sans la préférence : broches serrées à l'entraxe a1 du côté où la poutre est la plus haute
+  // (vers les marches 2 et 3), pour laisser à la première marche le plus de place possible ;
+  // réparties sur l'intervalle si le dessus est le même aux deux bouts.
+  const { z, sa, sb, count } = chosen;
+  const hiA = topAt(sa);
+  const hiB = topAt(sb);
+  const sigmas =
+    count > 1 && hiB > hiA + EPS
+      ? Array.from({ length: count }, (_, i) => sb - (count - 1 - i) * ec5.a1)
+      : count > 1 && hiA > hiB + EPS
+        ? Array.from({ length: count }, (_, i) => sa + i * ec5.a1)
+        : evenly(sa, sb, count);
+  return sigmas.map((sigma) => ({ sigma, z }));
 }
 
 /** Platine et âme d'un côté : développés, solides, quantités, fixations. */
@@ -798,13 +1278,24 @@ function plateParts(
   const webHoles = s.pins.map((p) =>
     holePolygon(V.vec(p.sigma - webX0, p.z - webY0), P.pinHoleDiameter),
   );
+  // Âme de pied prolongée : contour en escalier (A35 (a)) ; sinon rectangle.
+  const webOuter = s.webOutline
+    ? s.webOutline.map((p) => V.vec(p.x - webX0, p.y - webY0))
+    : [V.vec(0, 0), V.vec(wx, 0), V.vec(wx, wy), V.vec(0, wy)];
+  // Repère gravé au milieu du plus haut palier (dans le contour).
+  let labelX = wx / 2;
+  for (let i = 0; i < webOuter.length; i++) {
+    const p = webOuter[i]!;
+    const q = webOuter[(i + 1) % webOuter.length]!;
+    if (Math.abs(p.y - wy) < 1e-6 && Math.abs(q.y - wy) < 1e-6) labelX = (p.x + q.x) / 2;
+  }
   const webFlat: FlatPattern = {
-    outline: { outer: [V.vec(0, 0), V.vec(wx, 0), V.vec(wx, wy), V.vec(0, wy)], holes: webHoles },
+    outline: { outer: webOuter, holes: webHoles },
     lines: [
       {
         kind: "text",
-        a: V.vec(wx / 2 - 20, wy * 0.85),
-        b: V.vec(wx / 2 + 20, wy * 0.85),
+        a: V.vec(labelX - 20, wy * 0.85),
+        b: V.vec(labelX + 20, wy * 0.85),
         label: textMessage(s.webMark),
       },
     ],

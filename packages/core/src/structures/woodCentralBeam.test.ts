@@ -28,13 +28,17 @@ import {
   WOOD_CENTRAL_BEAM_ID,
   WOOD_CENTRAL_BEAM_RULES,
   buildWoodCentralBeam,
+  kerfObstacleTop,
+  kerfShiftAllowed,
   laminationKr,
+  laminationOf,
   type WoodCentralBeamResult,
 } from "./woodCentralBeam.js";
 import { resolveWorkshopProfile } from "../workshop/profile.js";
 import { WOOD_CENTRAL_SHOE_FOOT_ID, WOOD_CENTRAL_SHOE_HEAD_ID } from "./woodCentralShoes.js";
 import { woodBeamOf, woodCentralContext, woodCentralParams } from "./woodCentral.test-helpers.js";
 import { woodCentralBoltSpacing } from "./woodSpacing.js";
+import type { BeamKerf } from "./woodCentralPlates.js";
 
 const EN = translatorFor("en");
 const RULE = getRule(LAMINATION_RULE_ID);
@@ -203,6 +207,20 @@ function expectLagScrewsInsideBeam(
   return n;
 }
 
+/**
+ * Contour d'un trait de scie tracé sur le développé : sommets des segments consécutifs depuis
+ * le segment libellé `start`, jusqu'au segment qui revient au premier sommet.
+ */
+function kerfPolygon(lines: readonly { a: Vec2; b: Vec2 }[], start: number): Vec2[] {
+  const first = lines[start]!.a;
+  const out: Vec2[] = [];
+  for (let j = start; j < lines.length; j++) {
+    out.push(lines[j]!.a);
+    if (Math.hypot(lines[j]!.b.x - first.x, lines[j]!.b.y - first.y) < 1e-9) break;
+  }
+  return out;
+}
+
 /** Distance d'un point au contour d'un polygone. */
 function boundaryDistance(p: Vec2, poly: readonly Vec2[]): number {
   let d = Infinity;
@@ -249,12 +267,13 @@ describe("limon central bois : escalier droit, lamellé-collé en couches droite
     expect(Math.min(...beam.seats.map((s) => s.residual))).toBeCloseTo(beam.residual, 6);
   });
 
-  it("lamellation : 2 couches collées de 44 mm, k_r = 1, quantités propres", () => {
+  // Écart voulu (QUESTIONS A35 (f), décision du 2026-10-09) : 3 couches de 29,3 mm (nombre impair,
+  // organe au milieu de la couche centrale) au lieu de 2 couches de 44 mm.
+  it("lamellation : 3 couches collées de 29,3 mm (impair, A35 (f)), k_r = 1, quantités propres", () => {
     expect(beam.lamination).toMatchObject({
       kind: "glulam",
       curved: false,
-      lamellaThickness: 44,
-      lamellae: 2,
+      lamellae: 3,
       kr: 1,
       ratio: Infinity,
       bends: [],
@@ -262,17 +281,18 @@ describe("limon central bois : escalier droit, lamellé-collé en couches droite
     const part = beam.parts.find((p) => p.id === WOOD_CENTRAL_BEAM_ID)!;
     expect(part.mark).toBe("LC1");
     expect(part.category).toBe("carriage");
-    expect(part.quantities[QUANTITY_LAMELLAE]).toBe(2);
+    expect(beam.lamination.lamellaThickness).toBeCloseTo(88 / 3, 12);
+    expect(part.quantities[QUANTITY_LAMELLAE]).toBe(3);
     // Débit : une lame par couche (plateau du profil d'atelier), contrôlée par
     // FAB_DEBIT_DISPONIBLE sur la même épaisseur.
-    expect(part.stock!.count).toBe(2);
-    expect(part.stock!.thickness).toBeGreaterThanOrEqual(44);
+    expect(part.stock!.count).toBe(3);
+    expect(part.stock!.thickness).toBeGreaterThanOrEqual(88 / 3);
     expect(part.stock!.thickness).toBeLessThan(88);
     const debit = r.checks.results.filter((c) => c.ruleId === "FAB_DEBIT_DISPONIBLE");
     expect(debit.map((c) => c.status)).toEqual(["ok"]);
     expect(fr(debit[0]!.message)).toContain(`× ${part.stock!.thickness}`);
-    expect(fr(part.section!)).toMatch(/^lamellé-collé 88 × \d+, 2 lamelles de 44$/);
-    expect(EN.t(part.section!)).toMatch(/^glulam 88 × \d+, 2 laminations of 44$/);
+    expect(fr(part.section!)).toMatch(/^lamellé-collé 88 × \d+, 3 lamelles de 29,3$/);
+    expect(EN.t(part.section!)).toMatch(/^glulam 88 × \d+, 3 laminations of 29.3$/);
     expect(part.solid.kind).toBe("extrusion");
     expect(solidProblem(part.solid)).toBeUndefined();
   });
@@ -281,20 +301,28 @@ describe("limon central bois : escalier droit, lamellé-collé en couches droite
     const part = beam.parts.find((p) => p.id === WOOD_CENTRAL_BEAM_ID)!;
     // Marches 1 et 2 au-dessus de la coupe au sol (semelle du sabot) : pas de place pour
     // l'écrou, tire-fonds depuis le dessus de la marche (QUESTIONS A34 (a)).
-    expect(beam.seats[0]!.bolts.map((o) => o.kind)).toEqual(["lagScrew", "lagScrew"]);
+    expect(beam.seats[0]!.bolts.length).toBeGreaterThan(0);
+    expect(beam.seats[0]!.bolts.every((o) => o.kind === "lagScrew")).toBe(true);
     expect(beam.seats[1]!.bolts.map((o) => o.kind)).toContain("lagScrew");
     const lags = beam.seats.flatMap((s) => s.bolts.filter((o) => o.kind === "lagScrew"));
-    expect(lags.length).toBeGreaterThanOrEqual(3);
+    expect(lags.length).toBeGreaterThanOrEqual(2);
     expect(expectLagScrewsInsideBeam(beam, tm)).toBe(lags.length);
-    // Plus aucun constat : toutes les marches ont leurs organes.
+    // A35 (l) : tire-fonds aux règles axiales de l'EC5 (entraxe 70 mm, pince avant 100 mm) ;
+    // relecture A35 : autour du perçage horizontal d'un boulon de sabot, le tire-fond ne garde
+    // que le jeu géométrique (`lagHoleClearance`, QUESTIONS A36 (10)) : M1 reçoit ses 2
+    // tire-fonds, aucun constat.
+    expect(beam.seats[0]!.bolts.map((o) => o.kind)).toEqual(["lagScrew", "lagScrew"]);
+    const m1 = beam.seats[0]!.bolts;
+    expect(m1[1]!.sigma - m1[0]!.sigma).toBeGreaterThanOrEqual(70 - 1e-9);
+    expect(m1[0]!.sigma - beam.seats[0]!.sigma0).toBeGreaterThanOrEqual(100 - 1e-9);
     const fixing = r.checks.results.filter((c) => c.ruleId === WOOD_CENTRAL_BEAM_RULES.bolts.id);
     expect(fixing.map((c) => [c.status, c.message.key])).toEqual([
-      ["ok", "structure.woodCentral.check.fixings.ok"],
+      ["ok", "structure.woodCentral.check.fixings.okLag"],
     ]);
-    expect(fr(fixing[0]!.message)).toMatch(/tire-fonds sur 2 assise\(s\)/);
+    expect(fr(fixing[0]!.message)).toMatch(/entraxe 70 mm, pince 100 mm au bout avant/);
     expect(beam.notes.map((n) => n.key)).toContain("structure.woodCentral.note.lagScrews");
-    // Deux couches : organes au milieu d'une couche, hors du joint de colle central.
-    expect(beam.notes.map((n) => n.key)).toContain("structure.woodCentral.note.boltOffset");
+    // Trois couches (A35 (f)) : organes sur l'axe, au milieu de la couche centrale.
+    expect(beam.notes.map((n) => n.key)).not.toContain("structure.woodCentral.note.boltOffset");
     const nBolts = beam.seats.reduce(
       (n, s) => n + s.bolts.filter((o) => o.kind === "bolt").length,
       0,
@@ -302,17 +330,21 @@ describe("limon central bois : escalier droit, lamellé-collé en couches droite
     expect(expectBoltsInsideBeam(beam, tm)).toBe(nBolts);
     for (const s of beam.seats) {
       expect(s.bolts).toHaveLength(2);
+      const lagged = s.bolts.some((o) => o.kind === "lagScrew");
       for (const b of s.bolts) {
-        expect(b.lateral).toBe(22);
+        expect(b.lateral).toBe(0);
         expect(b.length % 10).toBe(0);
         expect(b.length).toBeGreaterThan(tm);
-        // Pince a3,c = 4·d = 40 mm (M10 dans un perçage de 11, EC5 via C §1.11 [71]).
-        expect(b.sigma).toBeGreaterThanOrEqual(s.sigma0 + 40 - 1e-6);
+        // Pinces : boulons a3,c = 4·d = 40 mm aux deux bouts (M10 dans un perçage de 11, EC5
+        // via C §1.11 [71]) ; assise à tire-fonds, 10·d = 100 mm au bout avant (A35 (l)).
+        expect(b.sigma).toBeGreaterThanOrEqual(s.sigma0 + (lagged ? 100 : 40) - 1e-6);
         expect(b.sigma).toBeLessThanOrEqual(s.sigma1 - 40 + 1e-6);
       }
-      // Entraxe a1 = 5·d = 50 mm.
+      // Entraxe a1 = 5·d = 50 mm ; 7·d = 70 mm sur une assise à tire-fonds.
       for (let i = 1; i < s.bolts.length; i++) {
-        expect(s.bolts[i]!.sigma - s.bolts[i - 1]!.sigma).toBeGreaterThanOrEqual(50 - 1e-6);
+        expect(s.bolts[i]!.sigma - s.bolts[i - 1]!.sigma).toBeGreaterThanOrEqual(
+          (lagged ? 70 : 50) - 1e-6,
+        );
       }
     }
     const fixings = part.fixings ?? [];
@@ -333,13 +365,64 @@ describe("limon central bois : escalier droit, lamellé-collé en couches droite
         );
       }
     }
-    // Développé : un trait par tire-fond, de l'assise à la pointe, libellé avec l'avant-trou.
+    // Développé : un trait par tire-fond, de l'assise à la pointe, libellé avec l'avant-trou
+    // (Ø7 gardé, A35 (l)).
     const lagLines = part.flat!.lines.filter(
       (l) => l.label !== undefined && l.label.key === "structure.woodCentral.flatLine.lagScrew",
     );
     expect(lagLines).toHaveLength(lags.length);
     expect(fr(lagLines[0]!.label!)).toMatch(/^Tire-fond Ø10 × \d+, avant-trou Ø7$/);
     expect(EN.t(lagLines[0]!.label!)).toMatch(/^Coach screw Ø10 × \d+, pilot hole Ø7$/);
+  });
+
+  it("tire-fonds (A35 (l)) : 100 mm du bout avant, 70 mm d'entraxe, message de synthèse dédié", () => {
+    // Sans sabot de pied : aucun perçage sous M1, deux tire-fonds aux règles axiales.
+    const free = beamFor(project, { anchors: { foot: false } })!;
+    const m1 = free.beam.seats[0]!;
+    expect(m1.bolts.map((o) => o.kind)).toEqual(["lagScrew", "lagScrew"]);
+    expect(m1.bolts[0]!.sigma - m1.sigma0).toBeGreaterThanOrEqual(100 - 1e-6);
+    expect(m1.bolts[1]!.sigma - m1.bolts[0]!.sigma).toBeGreaterThanOrEqual(70 - 1e-6);
+    const fixing = free.checks.results.filter((c) => c.ruleId === WOOD_CENTRAL_BEAM_RULES.bolts.id);
+    expect(fixing.map((c) => [c.status, c.message.key])).toEqual([
+      ["ok", "structure.woodCentral.check.fixings.okLag"],
+    ]);
+    expect(fr(fixing[0]!.message)).toMatch(
+      /tire-fonds sur \d+ assise\(s\), entraxe 70 mm, pince 100 mm au bout avant et 40 mm au bout arrière/,
+    );
+    expect(EN.t(fixing[0]!.message)).toMatch(/coach screws on \d+ seat\(s\), spacing 70 mm/);
+    const spacing = free.checks.results.filter(
+      (c) => c.ruleId === WOOD_CENTRAL_BEAM_RULES.spacing.id,
+    );
+    expect(spacing.map((c) => [c.status, c.message.key])).toEqual([
+      ["ok", "structure.woodCentral.check.spacing.okLag"],
+    ]);
+    expect(fr(spacing[0]!.message)).toMatch(
+      /tire-fonds, entraxe ≥ 70 mm, bout avant ≥ 100 mm, bout arrière ≥ 40 mm, faces ≥ 40 mm/,
+    );
+    // Valeurs saisies : entraxe et pince avant des tire-fonds respectées par le placement.
+    const set = beamFor(project, {
+      anchors: { foot: false },
+      lagScrews: { minSpacing: 90, endDistance: 120 },
+    })!.beam.seats[0]!;
+    if (set.bolts.length === 2) {
+      expect(set.bolts[0]!.sigma - set.sigma0).toBeGreaterThanOrEqual(120 - 1e-6);
+      expect(set.bolts[1]!.sigma - set.bolts[0]!.sigma).toBeGreaterThanOrEqual(90 - 1e-6);
+    }
+    // Entraxe saisi sous l'EC5 : constat sur l'assise à tire-fonds.
+    const tight = beamFor(project, {
+      anchors: { foot: false },
+      lagScrews: { minSpacing: 50, endDistance: 40 },
+    })!;
+    const keys = tight.checks.results
+      .filter((c) => c.ruleId === WOOD_CENTRAL_BEAM_RULES.spacing.id && c.status === "violation")
+      .map((c) => c.message.key);
+    expect(keys).toContain("structure.woodCentral.check.spacing.lagFront");
+    for (const c of tight.checks.results.filter(
+      (x) => x.message.key === "structure.woodCentral.check.spacing.lagFront",
+    )) {
+      expect(c.min).toBe(100);
+      expect(fr(c.message)).toMatch(/a1,CG = 10·d/);
+    }
   });
 
   it("tire-fonds : longueur au pas inférieur, bornée par le bois disponible et par maxLength", () => {
@@ -368,15 +451,27 @@ describe("limon central bois : escalier droit, lamellé-collé en couches droite
     expect(EN.t(bad[0]!.message)).toMatch(/not enough timber for a coach screw/);
   });
 
-  it("entraxes et pinces de l'EC5 : demi-couche à 22 mm des faces (< a4,c = 30 mm) signalée", () => {
+  it("entraxes et pinces de l'EC5 : aucun constat par défaut ; demi-couche saisie à 22 mm des faces (< a4,c = 30 mm) signalée", () => {
+    // Écart voulu (A35 (f)) : 3 couches par défaut, organes sur l'axe, plus de constat.
     const spacing = r.checks.results.filter((c) => c.ruleId === WOOD_CENTRAL_BEAM_RULES.spacing.id);
-    // Décalage d'une demi-couche sur 2 couches de 44 mm (A34 (d)) : 22 mm < 3·d = 30 mm.
-    expect(spacing.map((c) => [c.status, c.message.key])).toEqual([
+    expect(spacing.map((c) => c.status)).toEqual(["ok"]);
+    // Épaisseur saisie (rétrocompatibilité) : 2 couches de 44 mm, décalage d'une demi-couche
+    // (A34 (d)) : 22 mm < 3·d = 30 mm pour les boulons, < 4·d = 40 mm pour les tire-fonds.
+    const even = beamFor(project, { section: { lamellaThickness: 44 } })!;
+    expect(even.beam.lamination.lamellae).toBe(2);
+    expect(even.beam.notes.map((n) => n.key)).toContain("structure.woodCentral.note.boltOffset");
+    const bad = even.checks.results.filter((c) => c.ruleId === WOOD_CENTRAL_BEAM_RULES.spacing.id);
+    expect(bad.map((c) => [c.status, c.message.key])).toEqual([
       ["violation", "structure.woodCentral.check.spacing.face"],
+      ["violation", "structure.woodCentral.check.spacing.lagFace"],
     ]);
-    expect(spacing[0]!.measured).toBeCloseTo(22, 9);
-    expect(spacing[0]!.min).toBe(30);
-    expect(spacing[0]!.severity).toBe("avertissement");
+    expect(bad[0]!.measured).toBeCloseTo(22, 9);
+    expect(bad[0]!.min).toBe(30);
+    expect(bad[1]!.measured).toBeCloseTo(22, 9);
+    expect(bad[1]!.min).toBe(40);
+    expect(bad[0]!.severity).toBe("avertissement");
+    expect(fr(bad[1]!.message)).toMatch(/a2,CG = 4·d/);
+    expect(EN.t(bad[1]!.message)).toMatch(/^Tread coach screws 22 mm from the beam faces/);
     // Une seule couche (organes sur l'axe) : entraxes et pinces tenus.
     const one = beamFor(project, { section: { lamellaThickness: 88 } })!;
     const ok = one.checks.results.filter((c) => c.ruleId === WOOD_CENTRAL_BEAM_RULES.spacing.id);
@@ -680,15 +775,20 @@ describe("filière sur trace courbe (A33 (e)) : couches empilées par défaut au
         /^lamellé-collé en couches empilées 88 × \d+, \d+ couches de/,
       );
       expect(EN.t(part.section!)).toMatch(/^stacked-layer glulam 88 × \d+/);
-      // Couches composantes (câblage) : rattachées à la poutre, autant que `lamellae`.
+      // Couches composantes (câblage) : rattachées à la poutre, au moins une pièce par couche
+      // (une couche faite de plusieurs planches en compte une par planche, A35 (h)).
       const layers = beam.parts.filter((p) => p.componentOf !== undefined);
-      expect(layers).toHaveLength(beam.stacked!.count);
+      expect(layers.length).toBeGreaterThanOrEqual(beam.stacked!.count);
       for (const l of layers) expect(l.componentOf).toBe(WOOD_CENTRAL_BEAM_ID);
       // Pas de cintrage : ni lignes de moule, ni remarque sur le domaine du moule ; débit et
       // longueur de plateau de LC1 non contrôlés (les couches le sont).
       expect(part.flat!.lines.some((l) => l.kind === "roll")).toBe(false);
       const keys = beam.notes.map((n) => n.key);
-      expect(keys).toContain("structure.woodCentral.note.stackedGlulam");
+      // Couches calées sur les assises (A35 (g)) : épaisseurs différentes, remarque et libellé de
+      // section donnent l'étendue ; la synthèse des couches n'est pas doublée.
+      expect(keys).toContain("structure.woodCentral.note.stackedGlulamSeated");
+      expect(fr(part.section!)).toMatch(/\d+ couches de [\d,]+ à [\d,]+$/);
+      expect(keys).not.toContain("structure.woodCentral.note.stackedLayersSeated");
       expect(keys).not.toContain("structure.woodCentral.note.mouldDomain");
       const onBeam = (rule: string) =>
         r.checks.results.filter(
@@ -907,6 +1007,80 @@ describe("refus et configurations non prises en charge", () => {
   });
 });
 
+// ------------------------------------------------------------------ A35 (e), (f), (l)
+
+describe("couches droites en nombre impair (A35 (f)) et rétrocompatibilité", () => {
+  const project = noRisers(createProject("straight"));
+  const profile = resolveWorkshopProfile(project.workshop);
+  const lamOf = (over: Record<string, unknown>) => {
+    const r = beamFor(project, over)!;
+    return laminationOf(r.params, r.trace, profile);
+  };
+
+  it("auto avec organes : ⌈88 / 75⌉ = 2 porté à 3 couches de 29,33 mm", () => {
+    const lam = lamOf({});
+    expect(lam.method).toBe("straight");
+    expect(lam.lamellae).toBe(3);
+    expect(lam.lamellaThickness).toBeCloseTo(88 / 3, 12);
+  });
+
+  it("auto sans organe (perTread = 0) : comportement antérieur, 2 couches de 44 mm", () => {
+    const lam = lamOf({ bolts: { perTread: 0 } });
+    expect(lam.lamellae).toBe(2);
+    expect(lam.lamellaThickness).toBe(44);
+  });
+
+  it("épaisseur saisie respectée (n = ⌈b / t⌉, pair compris) : décalage d'une demi-couche", () => {
+    const r = beamFor(project, { section: { lamellaThickness: 44 } })!;
+    expect(r.beam.lamination.lamellae).toBe(2);
+    for (const s of r.beam.seats) for (const o of s.bolts) expect(Math.abs(o.lateral)).toBe(22);
+  });
+
+  it("exemple droit (défauts, contremarches pleines) : aucun constat de pince", () => {
+    const r = beamFor(createProject("straight"))!;
+    const spacing = r.checks.results.filter((c) => c.ruleId === WOOD_CENTRAL_BEAM_RULES.spacing.id);
+    expect(spacing.map((c) => c.status)).toEqual(["ok"]);
+    expect(r.beam.lamination.lamellae).toBe(3);
+  });
+});
+
+describe("traits de scie et tire-fonds (A35 (a), (l))", () => {
+  const sp = woodCentralBoltSpacing(
+    { holeDiameter: 11, minSpacing: "auto", edgeDistance: "auto" },
+    resolveWorkshopProfile(undefined).fasteners,
+  );
+
+  it("décalage autour d'un trait : permis pour un boulon (a4,c), refusé pour un tire-fond (4·d)", () => {
+    // b = 88, décalage 10,5 mm : 33,5 mm des faces ≥ 30 (a4,c) mais < 40 (max(a4,c ; a2,CG)).
+    expect(kerfShiftAllowed(88, 10.5, "bolt", sp)).toBe(true);
+    expect(kerfShiftAllowed(88, 10.5, "lagScrew", sp)).toBe(false);
+    expect(kerfShiftAllowed(88, 4, "lagScrew", sp)).toBe(true);
+    expect(kerfShiftAllowed(60, 10.5, "bolt", sp)).toBe(false);
+  });
+
+  it("trait en escalier : obstacle lu au haut du contour à l'abscisse de l'organe", () => {
+    // Âme de pied prolongée : dessus à 60 mm sur [0 ; 100], 200 mm sur [100 ; 300].
+    const outline = [
+      V.vec(0, 8),
+      V.vec(300, 8),
+      V.vec(300, 200),
+      V.vec(100, 200),
+      V.vec(100, 60),
+      V.vec(0, 60),
+    ];
+    const k: BeamKerf = { mark: "AP1", sigma0: 0, sigma1: 300, z0: 8, z1: 200, width: 12, outline };
+    expect(kerfObstacleTop(k, 40, 6.5)).toBeCloseTo(60, 6);
+    expect(kerfObstacleTop(k, 200, 6.5)).toBeCloseTo(200, 6);
+    // Organe à cheval sur la marche de l'escalier : le plus haut des deux.
+    expect(kerfObstacleTop(k, 97, 6.5)).toBeCloseTo(200, 6);
+    // Hors du trait (au-delà de la demi-largeur) : aucun obstacle.
+    expect(kerfObstacleTop(k, 320, 6.5)).toBe(-Infinity);
+    // Sans contour : rectangle, haut z1.
+    const { outline: _o, ...rect } = k;
+    expect(kerfObstacleTop(rect, 40, 6.5)).toBe(200);
+  });
+});
+
 // ------------------------------------------------------------------ Propriétés
 
 describe("propriétés (générateurs contraints)", () => {
@@ -1112,6 +1286,161 @@ describe("propriétés (générateurs contraints)", () => {
     );
   });
 
+  it("(A35 (f)) auto et organes posés : nombre impair de couches, organes sur l'axe ; épaisseur saisie : n = ⌈b / t⌉", () => {
+    const tArb = fc.constantFrom(...[27, 34, 41, 54, 65, 80].map((t) => t - 5));
+    fc.assert(
+      fc.property(
+        fc.integer({ min: 60, max: 140 }),
+        fc.option(tArb, { nil: undefined }),
+        fc.integer({ min: 0, max: 3 }),
+        (width, entered, perTread) => {
+          const project = noRisers(createProject("straight"));
+          const r = beamFor(project, {
+            section: { width, ...(entered !== undefined ? { lamellaThickness: entered } : {}) },
+            bolts: { perTread },
+          })!;
+          const lam = laminationOf(r.params, r.trace, resolveWorkshopProfile(project.workshop));
+          expect(lam.lamellae * lam.lamellaThickness).toBeCloseTo(width, 9);
+          if (entered !== undefined) {
+            expect(lam.lamellae).toBe(Math.max(1, Math.ceil(width / entered - 1e-9)));
+          } else if (perTread > 0) {
+            expect(lam.lamellae % 2).toBe(1);
+            expect(lam.lamellae).toBeLessThanOrEqual(Math.ceil(width / 75 - 1e-9) + 1);
+            for (const s of r.beam.seats) for (const o of s.bolts) expect(o.lateral).toBe(0);
+          } else {
+            expect(lam.lamellae).toBe(Math.ceil(width / 75 - 1e-9));
+          }
+        },
+      ),
+      { numRuns: 60 },
+    );
+  });
+
+  it("(A35 (l)) tire-fond posé hors des entraxes, pinces ou faces de l'EC5 ⇒ FAB_LIMON_CENTRAL_BOIS_PINCES en violation", () => {
+    const lagArb = fc.record({
+      minSpacing: fc.oneof(fc.constant("auto"), fc.integer({ min: 30, max: 120 })),
+      endDistance: fc.oneof(fc.constant("auto"), fc.integer({ min: 20, max: 150 })),
+    });
+    let lagged = 0;
+    fc.assert(
+      fc.property(
+        projectArb,
+        fc.integer({ min: 60, max: 140 }),
+        fc.integer({ min: 1, max: 3 }),
+        lagArb,
+        fc.option(fc.constantFrom(22, 29, 36, 44), { nil: undefined }),
+        fc.constantFrom("auto", "shoe", "embeddedPlate"),
+        (project, width, perTread, lagScrews, lamellaThickness, kind) => {
+          const r = beamFor(project, {
+            section: {
+              width,
+              ...(lamellaThickness !== undefined ? { lamellaThickness } : {}),
+            },
+            bolts: { perTread },
+            lagScrews,
+            anchors: { kind },
+          });
+          if (r === null || r.beam.errors.length > 0) return;
+          const sp = woodCentralBoltSpacing(
+            r.params.bolts,
+            resolveWorkshopProfile(project.workshop).fasteners,
+          );
+          // Références de l'EC5 (`auto`), A35 (l).
+          const minPitch = Math.max(sp.ec5.a1, sp.lag.axial.a1);
+          const minFront = Math.max(sp.ec5.a3c, sp.lag.axial.a1CG);
+          const minFace = sp.lag.faceDistance;
+          const TOLX = 1e-6;
+          let breach = false;
+          for (const s of r.beam.seats) {
+            const lags = s.bolts.filter((o) => o.kind === "lagScrew");
+            if (lags.length === 0) continue;
+            lagged++;
+            const xs = s.bolts.map((o) => o.sigma).sort((a, b) => a - b);
+            for (let i = 1; i < xs.length; i++)
+              if (xs[i]! - xs[i - 1]! < minPitch - TOLX) breach = true;
+            if (xs[0]! - s.sigma0 < minFront - TOLX) breach = true;
+            for (const o of lags)
+              if (width / 2 - Math.abs(o.lateral) < minFace - TOLX) breach = true;
+          }
+          const violated = r.checks.results.some(
+            (c) => c.ruleId === WOOD_CENTRAL_BEAM_RULES.spacing.id && c.status === "violation",
+          );
+          if (breach) expect(violated).toBe(true);
+          // Valeurs `auto`, organes sur l'axe d'une poutre assez large : aucun écart des tire-fonds.
+          if (
+            lagScrews.minSpacing === "auto" &&
+            lagScrews.endDistance === "auto" &&
+            lamellaThickness === undefined &&
+            width / 2 >= minFace + 12
+          ) {
+            expect(breach).toBe(false);
+          }
+        },
+      ),
+      { numRuns: 60 },
+    );
+    expect(lagged).toBeGreaterThan(0);
+  });
+
+  it("(A35 (a), (l)) aucun organe ne traverse un perçage d'ancrage ni, sur l'axe, un trait de scie", () => {
+    const presetArb = fc.constantFrom<PresetId>("straight", "quarter-left", "helical");
+    fc.assert(
+      fc.property(
+        presetArb,
+        fc.constantFrom("shoe", "embeddedPlate"),
+        fc.integer({ min: 60, max: 140 }),
+        fc.integer({ min: 1, max: 3 }),
+        (preset, kind, width, perTread) => {
+          const r = beamFor(createProject(preset), {
+            section: { width },
+            bolts: { perTread },
+            anchors: { kind },
+          });
+          if (r === null || r.beam.errors.length > 0) return;
+          const tm = r.ctx.project.stair.treads.thickness;
+          const part = r.beam.parts.find((p) => p.id === WOOD_CENTRAL_BEAM_ID)!;
+          const flat = part.flat!;
+          const s0 = Math.min(...r.beam.seats.map((s) => s.sigma0));
+          const holes = flat.outline.holes.map((h) => {
+            const xs = h.map((q) => q.x);
+            const ys = h.map((q) => q.y);
+            return {
+              x: (Math.min(...xs) + Math.max(...xs)) / 2 + s0,
+              y: (Math.min(...ys) + Math.max(...ys)) / 2,
+              r: (Math.max(...xs) - Math.min(...xs)) / 2,
+            };
+          });
+          const kerfs: Vec2[][] = [];
+          flat.lines.forEach((l, i) => {
+            if (l.label?.key === "structure.woodCentral.flatLine.beamKerf") {
+              kerfs.push(kerfPolygon(flat.lines, i).map((q) => V.vec(q.x + s0, q.y)));
+            }
+          });
+          const rr = 11 / 2;
+          for (const s of r.beam.seats) {
+            for (const o of s.bolts) {
+              const tip = o.kind === "bolt" ? -Infinity : s.z - (o.length - tm);
+              for (const h of holes) {
+                if (Math.abs(o.sigma - h.x) >= h.r + rr - 1e-6) continue;
+                // Boulon traversant : jamais au droit d'un perçage ; tire-fond : pointe au-dessus.
+                expect(o.kind, `${preset} M${s.tread}`).toBe("lagScrew");
+                expect(tip).toBeGreaterThanOrEqual(h.y + h.r - 1e-6);
+              }
+              if (o.lateral !== 0) continue;
+              for (const k of kerfs) {
+                const ext = verticalExtent(k, o.sigma);
+                if (!ext) continue;
+                expect(o.kind, `${preset} M${s.tread} trait`).toBe("lagScrew");
+                expect(tip).toBeGreaterThanOrEqual(ext[1] - 1e-6);
+              }
+            }
+          }
+        },
+      ),
+      { numRuns: 40 },
+    );
+  });
+
   it("platines à âme noyée : constat conforme ⇒ trait de scie et broches dans le contour de la poutre", () => {
     const presetArb = fc.constantFrom<PresetId>("straight", "quarter-left", "helical");
     const plateArb = fc.record({
@@ -1143,22 +1472,18 @@ describe("propriétés (générateurs contraints)", () => {
           const label = l.label ? fr(l.label) : "";
           const web = /Trait de scie .*, (A[PT]1)$/.exec(label)?.[1];
           if (!web || !okWebs.has(web)) continue;
-          const corners = lines.slice(i, i + 4).map((x) => x.a);
-          const xs = corners.map((q) => q.x);
-          const ys = corners.map((q) => q.y);
-          const [x0, x1, y0, y1] = [
-            Math.min(...xs),
-            Math.max(...xs),
-            Math.min(...ys),
-            Math.max(...ys),
-          ];
+          // Contour du trait (rectangle, ou escalier de l'âme de pied prolongée, A35 (a)) :
+          // segments consécutifs depuis le segment libellé jusqu'à la fermeture.
+          const corners = kerfPolygon(lines, i);
+          expect(corners.length, `${preset} ${web}`).toBeGreaterThanOrEqual(4);
           for (const q of corners) {
             expect(pointInPolygon(q, outer, 1e-3), `${preset} ${web}`).not.toBe("outside");
           }
           // Aucun sommet du contour (entaille, assise) strictement dans le trait de scie.
           for (const q of outer) {
-            const inside = q.x > x0 + 1e-3 && q.x < x1 - 1e-3 && q.y > y0 + 1e-3 && q.y < y1 - 1e-3;
-            expect(inside, `${preset} ${web} (${q.x}, ${q.y})`).toBe(false);
+            expect(pointInPolygon(q, corners, 1e-3), `${preset} ${web} (${q.x}, ${q.y})`).not.toBe(
+              "inside",
+            );
           }
         }
         // Perçages (broches et organes) : centres dans le contour.

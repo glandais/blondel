@@ -85,6 +85,14 @@ export interface ShoeBeamGeometry {
    * absent : `headTop` partout. Borne le trait de scie et les broches de l'âme de tête.
    */
   readonly topAt?: (s: Mm) => Mm;
+  /**
+   * Hauteur à laisser libre sous chaque assise au-dessus de l'âme de pied d'une platine à âme
+   * noyée (QUESTIONS A35 (a)) : place d'un tire-fond de marche, ancrage minimal arrondi au pas
+   * de longueur (`roundUpTo(épaisseur de marche + lagScrews.minAnchorage, bolts.lengthStep) −
+   * épaisseur de marche`) plus `lagScrews.tipCover`, mm. Absent : `wood.minCheek` seul. La
+   * platine retient max(`wood.minCheek`, `seatClearance`) puis le jeu d'atelier.
+   */
+  readonly seatClearance?: Mm;
 }
 
 export interface WoodCentralShoesInput {

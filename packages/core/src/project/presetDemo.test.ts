@@ -72,8 +72,14 @@ describe("préréglages de démonstration", () => {
     const blocking = m.compliance.results.filter(
       (r) => r.status === "violation" && r.severity === "bloquant",
     );
-    expect(blocking.map((r) => r.ruleId)).toEqual([]);
-    expect(m.compliance.summary.bloquant).toBe(0);
+    // Seule exception : le prédimensionnement indicatif de la poutre en couches empilées du limon
+    // central bois, réduit par la formule de Hankinson (fil horizontal à ≈ 34° de l'axe,
+    // k_f ≈ 0,09), en violation de contrainte et de flèche (QUESTIONS A35 (j), A36 (8)).
+    const admitted = id === "demo-central-glulam" ? ["PRECHECK_CONTRAINTE", "PRECHECK_FLECHE"] : [];
+    expect(blocking.map((r) => r.ruleId).filter((r) => !admitted.includes(r))).toEqual([]);
+    expect(m.compliance.summary.bloquant).toBe(
+      blocking.filter((r) => admitted.includes(r.ruleId)).length,
+    );
     for (const part of m.parts) {
       // Pièce finie faite de composantes (poutre en couches empilées, QUESTIONS A33 (e)) : sa
       // matière est portée par ses composantes.

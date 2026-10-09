@@ -23,9 +23,13 @@
  *   repris de `steel-central`, toujours présent dès qu'il y a des marches).
  * - **Prédimensionnement** en flexion de la poutre (`precheck/`) : largeur reprise = emmarchement
  *   entier (une seule poutre), classe de bois du réglage `precheck.woodClass` (`auto` : GL24h
- *   pour l'essence lamellé-collé, C24 sinon ; classes GL de la NF EN 14080 via C §1.11 [71],
- *   QUESTIONS A33 (a)), résistance de calcul multipliée par
+ *   pour l'essence lamellé-collé, classes GL de la NF EN 14080 via C §1.11 [71], QUESTIONS
+ *   A33 (a) ; classe massive de l'essence pour une poutre en lamellé-collé feuillu, D40 pour le
+ *   chêne, à valider, A35 (k) ; C24 sinon), résistance de calcul multipliée par
  *   k_r quand les lamelles sont cintrées sous `recommande` (C §1.6, EN 1995-1-1 via [71]) ;
+ *   en **couches empilées** (fil horizontal), résistance et module réduits selon l'angle θ entre
+ *   le fil et l'axe de la poutre par la formule de type Hankinson du Wood Handbook
+ *   (`precheck/grain.ts`, paramètres `grainAngle`, C §1.11 [81], à valider, A35 (j)) ;
  *   torsion et déversement non vérifiés (remarque du prédimensionnement).
  *
  * `build` ne lève jamais : toute erreur devient un `Message` de `errors`.
@@ -43,8 +47,14 @@ import type { Mm } from "../model/primitives.js";
 import { buildBasicParts } from "../parts/basic.js";
 import { analyzeInclinedBeam } from "../precheck/beam.js";
 import { precheckNotEvaluated, precheckResults, type PrecheckedBeam } from "../precheck/checks.js";
+import { grainAngle, hankinsonFactor } from "../precheck/grain.js";
 import { stairLoads } from "../precheck/loads.js";
-import { PrecheckSettingsSchema, woodMaterialOf } from "../precheck/settings.js";
+import {
+  GLULAM_SPECIES_WOOD_CLASS,
+  PrecheckSettingsSchema,
+  woodMaterialOf,
+  type BeamMaterial,
+} from "../precheck/settings.js";
 import { activeContexts, permanentAreaLoad } from "../precheck/stringers.js";
 import { sourceSpec } from "../rules/sources.js";
 import type { RuleDef } from "../rules/table.js";
@@ -232,13 +242,36 @@ function buildUnsafe(ctx: StructureContext, params: WoodCentralParams): Structur
         stepping,
         profile,
       ) + pc.extraPermanent;
-    // Classe retenue : réglage, ou `auto` → GL24h pour l'essence lamellé-collé, C24 sinon
-    // (QUESTIONS A33 (a), NF EN 14080 via C §1.11 [71]).
-    const base = woodMaterialOf(pc, profile.wood.densities[params.material], params.material);
+    // Classe retenue : réglage, ou `auto` → GL24h pour l'essence lamellé-collé (QUESTIONS
+    // A33 (a), NF EN 14080 via C §1.11 [71]), classe massive d'une essence feuillue pour une
+    // poutre en lamellé-collé (D40, à valider, A35 (k)), C24 sinon.
+    // Classe FCBA saisie (C30, D40) : même hypothèse pour un lamellé-collé feuillu.
+    const glulam = beam.lamination.kind === "glulam";
+    const imposed =
+      params.strengthClass === "C30" || params.strengthClass === "D40"
+        ? params.strengthClass
+        : undefined;
+    const base = woodMaterialOf(pc, profile.wood.densities[params.material], params.material, {
+      glulam,
+      ...(imposed !== undefined ? { strengthClass: imposed } : {}),
+    });
     const kr = beam.lamination.kr;
     // k_r réduit la résistance de calcul du lamellé cintré (C §1.6, EN 1995-1-1 via [71]).
     const reduced = Number.isFinite(kr) && kr > 0 && kr < 1;
-    const material = reduced ? { ...base, design: base.design * kr } : base;
+    // Couches empilées (A33 (e)) : fil horizontal, à θ de l'axe de la poutre inclinée ; résistance
+    // et module réduits par la formule de type Hankinson (A35 (j), C §1.11 [81], à valider).
+    const grain = beam.lamination.method === "stacked" ? stackedGrainReduction(params, beam) : null;
+    const grainOk =
+      grain !== null && [grain.theta, grain.kf, grain.kE].every((v) => Number.isFinite(v));
+    let material: BeamMaterial = reduced ? { ...base, design: base.design * kr } : base;
+    if (grain !== null && grainOk) {
+      material = {
+        ...material,
+        e: material.e * grain.kE,
+        strength: material.strength * grain.kf,
+        design: material.design * grain.kf,
+      };
+    }
     const result = analyzeInclinedBeam({
       spanH: beam.spanH,
       slope: Math.max(0, beam.slope),
@@ -254,21 +287,14 @@ function buildUnsafe(ctx: StructureContext, params: WoodCentralParams): Structur
       section: beam.sectionLabel,
       grade: base.label,
     });
-    // Couches empilées (A33 (e)) : fil horizontal, coupé en biais par la flexion le long de la
-    // poutre inclinée, et joints de colle inclinés ; la classe vaut le long du fil et aucune
-    // source ne donne sa réduction : prédimensionnement non évalué (QUESTIONS A35 (j)).
-    const stackedGrain =
-      beam.lamination.method === "stacked"
-        ? msg("structure.woodCentral.precheck.stackedGrain", {
-            angle: dec((Math.atan(Math.max(0, beam.slope)) * 180) / Math.PI, 0),
-            woodClass: base.label,
-          })
-        : null;
-    const beams: PrecheckedBeam[] = stackedGrain
+    // Angle du fil ou facteurs non finis (paramètres dégénérés) : non évalué, avec sa raison.
+    const notEvaluated =
+      grain !== null && !grainOk ? msg("structure.woodCentral.precheck.grainNotFinite") : null;
+    const beams: PrecheckedBeam[] = notEvaluated
       ? []
       : [{ partId: beamPart.id, label: beamLabel, result }];
-    precheckChecks = stackedGrain
-      ? precheckNotEvaluated(project, stepping, beamPart.id, beamLabel, stackedGrain)
+    precheckChecks = notEvaluated
+      ? precheckNotEvaluated(project, stepping, beamPart.id, beamLabel, notEvaluated)
       : precheckResults(project, stepping, beams);
     // Remarque du prédimensionnement de `steel-central` (limon central sans matériau) : poutre
     // unique, largeur reprise = emmarchement entier, torsion et déversement non vérifiés.
@@ -282,14 +308,41 @@ function buildUnsafe(ctx: StructureContext, params: WoodCentralParams): Structur
     if (reduced) {
       precheckNotes.push(msg("structure.woodCentral.note.precheckKr", { kr: dec(kr, 3) }));
     }
-    if (beam.lamination.kind === "glulam") {
+    if (glulam) {
+      // Classe massive d'une essence feuillue retenue par `auto` (A35 (k)) : remarque propre.
+      const species =
+        pc.woodClass === "auto" &&
+        glulam &&
+        GLULAM_SPECIES_WOOD_CLASS[params.material] !== undefined &&
+        base.label === (imposed ?? GLULAM_SPECIES_WOOD_CLASS[params.material]);
       precheckNotes.push(
-        msg("structure.woodCentral.note.precheckClass", { woodClass: base.label }),
+        msg(
+          species
+            ? "structure.woodCentral.note.precheckClassSpecies"
+            : "structure.woodCentral.note.precheckClassSetting",
+          { woodClass: base.label },
+        ),
       );
     }
-    if (stackedGrain) {
+    if (grain !== null && grainOk) {
+      const deg = (a: number) => dec((a * 180) / Math.PI, 1);
       precheckNotes.push(
-        msg("structure.woodCentral.note.precheckStacked", { reason: stackedGrain }),
+        msg("structure.woodCentral.note.precheckGrain", {
+          angle: deg(grain.theta),
+          slope: deg(Math.atan(Math.max(0, beam.slope))),
+          deviation: deg(grain.deviation),
+          kf: dec(grain.kf, 3),
+          kE: dec(grain.kE, 3),
+          strengthRatio: dec(params.grainAngle.strengthRatio, 3),
+          strengthExponent: dec(params.grainAngle.strengthExponent, 2),
+          modulusRatio: dec(params.grainAngle.modulusRatio, 3),
+          modulusExponent: dec(params.grainAngle.modulusExponent, 2),
+        }),
+      );
+    }
+    if (notEvaluated) {
+      precheckNotes.push(
+        msg("structure.woodCentral.note.precheckStacked", { reason: notEvaluated }),
       );
     }
     notes.push(...precheckNotes);
@@ -346,15 +399,21 @@ function buildUnsafe(ctx: StructureContext, params: WoodCentralParams): Structur
   if (params.notch.rearDepth === "auto" && hasBeam && Number.isFinite(beam.rearDepth)) {
     autoValues["notch.rearDepth"] = beam.rearDepth;
   }
-  // Entraxe et pince des organes de marche : bornes « tous angles » de l'EC5 (A34 (b)).
+  // Entraxe et pince des organes de marche : bornes « tous angles » de l'EC5 (A34 (b)) ;
+  // tire-fonds au plus sévère des règles latérales et axiales (A35 (l)).
   if (hasBeam) {
     const spacing = woodCentralBoltSpacing(
       params.bolts,
       resolveWorkshopProfile(project.workshop).fasteners,
+      params.lagScrews,
     );
     if (params.bolts.minSpacing === "auto") autoValues["bolts.minSpacing"] = spacing.minSpacing;
     if (params.bolts.edgeDistance === "auto")
       autoValues["bolts.edgeDistance"] = spacing.edgeDistance;
+    if (params.lagScrews.minSpacing === "auto" && Number.isFinite(spacing.lag.minSpacing))
+      autoValues["lagScrews.minSpacing"] = spacing.lag.minSpacing;
+    if (params.lagScrews.endDistance === "auto" && Number.isFinite(spacing.lag.frontEndDistance))
+      autoValues["lagScrews.endDistance"] = spacing.lag.frontEndDistance;
   }
   // Largeur de la platine à âme noyée (A33 (f)).
   if (
@@ -364,6 +423,15 @@ function buildUnsafe(ctx: StructureContext, params: WoodCentralParams): Structur
     (params.anchors.foot || params.anchors.head)
   ) {
     autoValues["anchors.plate.width"] = resolvePlateWidth(params);
+  }
+  // Longueur de l'âme de pied prolongée (A35 (a)), quand la poutre en a une.
+  if (
+    hasBeam &&
+    params.anchors.plate.footWebLength === "auto" &&
+    beam.footWebLength !== undefined &&
+    Number.isFinite(beam.footWebLength)
+  ) {
+    autoValues["anchors.plate.footWebLength"] = beam.footWebLength;
   }
 
   return {
@@ -375,6 +443,37 @@ function buildUnsafe(ctx: StructureContext, params: WoodCentralParams): Structur
     ...(beam.errors.length > 0 ? { errors: beam.errors } : {}),
     ...(Object.keys(autoValues).length > 0 ? { autoValues } : {}),
     ...(beam.assemblies.length > 0 ? { assemblies: beam.assemblies } : {}),
+  };
+}
+
+/** Réduction de Hankinson d'une poutre en couches empilées (A35 (j)). */
+interface GrainReduction {
+  /** Écart en plan du fil des planches retenu (rad). */
+  readonly deviation: number;
+  /** Angle entre le fil et l'axe de la poutre (rad). */
+  readonly theta: number;
+  /** Facteurs de la résistance en flexion et du module. */
+  readonly kf: number;
+  readonly kE: number;
+}
+
+/**
+ * θ = acos(cos α · cos β) (α : pente de la poutre, β : plus grand écart en plan du fil des
+ * planches, 0 sans planches) et facteurs de Hankinson des paramètres `grainAngle` (C §1.11
+ * [81], à valider).
+ */
+function stackedGrainReduction(
+  params: WoodCentralParams,
+  beam: WoodCentralBeamResult,
+): GrainReduction {
+  const g = params.grainAngle;
+  const deviation = beam.stacked?.maxGrainDeviation ?? 0;
+  const theta = grainAngle(Math.max(0, beam.slope), deviation);
+  return {
+    deviation,
+    theta,
+    kf: hankinsonFactor(g.strengthRatio, g.strengthExponent, theta),
+    kE: hankinsonFactor(g.modulusRatio, g.modulusExponent, theta),
   };
 }
 
