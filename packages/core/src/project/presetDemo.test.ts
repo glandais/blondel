@@ -11,6 +11,7 @@ import { translatorFor } from "@blondel/i18n";
 import { describe, expect, it } from "vitest";
 import "../structures/index.js";
 import { ProjectSchema } from "../model/project.js";
+import { assemblyQuantity } from "../parts/components.js";
 import { buildModel } from "../pipeline/build.js";
 import { parseProjectText } from "./parse.js";
 import {
@@ -82,12 +83,8 @@ describe("préréglages de démonstration", () => {
     );
     for (const part of m.parts) {
       // Pièce finie faite de composantes (poutre en couches empilées, QUESTIONS A33 (e)) : sa
-      // matière est portée par ses composantes.
-      const components = m.parts.filter((c) => c.componentOf === part.id);
-      const mass =
-        components.length > 0
-          ? components.reduce((sum, c) => sum + (c.quantities["mass_kg"] ?? Number.NaN), 0)
-          : part.quantities["mass_kg"];
+      // matière est portée par ses composantes, imbriquées (planche → couche → poutre, A36 (9)).
+      const mass = assemblyQuantity(m.parts, part.id, "mass_kg");
       expect(mass !== undefined && Number.isFinite(mass) && mass > 0, part.id).toBe(true);
     }
   });

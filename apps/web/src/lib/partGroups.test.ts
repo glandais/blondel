@@ -9,6 +9,7 @@ import {
   PART_GROUP_KEYS,
   PART_GROUP_ORDER,
   foldText,
+  groupPartCount,
   groupParts,
   groupSummary,
   marksSummary,
@@ -154,6 +155,17 @@ describe("résumés", () => {
       part({ id: "t", mark: "LE2", category: "stringer", material: "steel-painted" }),
     ]);
     expect(groupSummary(steel!, FR)).toBe("LE1 · LE2");
+  });
+
+  it("compte d'un groupe : pièces fabriquées seulement, la pièce composée listée sans être comptée", () => {
+    const [g] = groupParts([
+      part({ id: "beam", mark: "LC1", category: "carriage" }),
+      part({ id: "layer", mark: "LC1-2", category: "carriage", componentOf: "beam" }),
+      part({ id: "b1", mark: "LC1-2.1", category: "carriage", componentOf: "layer" }),
+      part({ id: "b2", mark: "LC1-2.2", category: "carriage", componentOf: "layer" }),
+    ]);
+    expect(g!.parts).toHaveLength(4);
+    expect(groupPartCount(g!, new Set(["b1", "b2"]))).toBe(2);
   });
 
   it("section commune (profilés) plutôt que l'épaisseur de débit ; remplissage des garde-corps", () => {

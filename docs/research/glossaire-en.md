@@ -131,6 +131,7 @@ En français, rien ne change : la hauteur de marche s'écrit déjà h (h1 pour l
 | Placage (plis minces achetés à l'épaisseur) | Veneer                        | —                       | Liste de débit, A34 (e)                          |
 | Platine à âme noyée                   | Concealed-web plate                 | Concealed flitch plate  | Ancrage du limon central bois (A33 (f))          |
 | Trait de scie (logement d'une âme)    | Saw kerf                            | —                       |                                                  |
+| Logement (d'une âme), fraisé, découpé | Slot (milled, cut out)              | —                       | Avant collage en couches empilées (A36 (5))      |
 | Organe de type tige                   | Dowel-type fastener                 | —                       | Boulons, broches, vis (EC5 § 8)                  |
 | Pince (distance au bord, à l'extrémité) | Edge distance, end distance       | —                       | EC5 a3,t / a3,c / a4,t / a4,c                    |
 | Entraxe (de perçages)                 | Spacing (of holes)                  | Pitch                   | Entraxe minimal des perçages de la poutre        |
@@ -140,9 +141,13 @@ En français, rien ne change : la hauteur de marche s'écrit déjà h (h1 pour l
 | Pente de fil                          | Slope of grain                      | Cross grain             | 1:10, 1:5 ; `section.maxGrainSlope` (A35 (h))    |
 | Formule de Hankinson                  | Hankinson formula                   | —                       | « Hankinson-type formula » ([81], A35 (j))       |
 | Planche (d'une couche)                | Board                               | —                       | Repère LC1-k.j (A35 (h))                         |
-| Planches aboutées                     | Butt-jointed boards                 | —                       | Le long de la trace (A35 (h))                    |
+| Planches aboutées (à entures)         | Finger-jointed boards               | —                       | Le long de la trace (A35 (h), A36 (6))           |
 | Collé sur chant                       | Edge-glued                          | —                       | Bandes d'une couche trop large (A35 (h))         |
-| Aboutage à entures                    | Finger joint                        | —                       | Joint d'about possible, non retenu (A36 (6))     |
+| Aboutage à entures                    | Finger joint                        | —                       | Planches d'une couche composée (A36 (6))         |
+| Décalage des aboutages                | Stagger of finger joints            | —                       | D'une couche à l'autre (A36 (6))                 |
+| Pièces composantes                    | Component parts                     | —                       | Inspecteur Pièce, planche → couche → LC1 (A36 (9)) |
+| Joint de colle                        | Glue line                           | —                       | Couches empilées, écarté des perçages (A36 (12)) |
+| Pénétration de la partie filetée      | Pointside penetration of the threaded part | —                | Tire-fonds, 6·d (EC5 § 8.7.2 (3), A37 (1))       |
 | Âme de pied prolongée                 | Extended foot web                   | —                       | Platine à âme noyée (A35 (a))                    |
 | Bois massif                           | Solid timber                        | Solid wood / lumber     |                                                  |
 | Section, équarrissage                 | Section                             | —                       |                                                  |

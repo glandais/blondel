@@ -12,6 +12,9 @@ import {
   ec5EndDistance,
   ec5Spacing,
   footPinFloorDistance,
+  grainDirection,
+  grainEndDistance,
+  isBeamEndSide,
   lagHoleClearance,
   woodCentralBoltSpacing,
   type Ec5Spacing,
@@ -251,7 +254,13 @@ describe("convention de gravité (A35 (b), (e)) et vis chargées axialement (A35
   });
 
   it("ec5AxialScrewSpacing ([71] tableau 10.6) : 7d, 5d, 10d, 4d", () => {
-    expect(ec5AxialScrewSpacing(10)).toEqual({ a1: 70, a2: 50, a1CG: 100, a2CG: 40 });
+    expect(ec5AxialScrewSpacing(10)).toEqual({
+      a1: 70,
+      a2: 50,
+      a1CG: 100,
+      a2CG: 40,
+      penetration: 60,
+    });
   });
 
   it("footPinFloorDistance : rive a4,t en couches empilées, a3,c sinon", () => {
@@ -265,14 +274,34 @@ describe("convention de gravité (A35 (b), (e)) et vis chargées axialement (A35
 
   const auto = { holeDiameter: 11, minSpacing: "auto", edgeDistance: "auto" } as const;
 
-  it("tire-fonds `auto` (M10) : entraxe 70, avant 100, arrière 40, faces 40", () => {
+  it("tire-fonds `auto` (M10) : entraxe 70, avant 40 (a3,c), arrière 40, faces 40, a1,CG 100 (A36 (4))", () => {
     const { lag } = woodCentralBoltSpacing(auto, DEFAULT_FASTENER_PROFILE);
     expect(lag).toMatchObject({
       minSpacing: 70,
-      frontEndDistance: 100,
+      frontEndDistance: 40,
       rearEndDistance: 40,
       faceDistance: 40,
+      threadEndDistance: 100,
     });
+    // Perçage de 13 : M12, pince latérale 48 mm, a1,CG 120 mm.
+    const m12 = woodCentralBoltSpacing({ ...auto, holeDiameter: 13 }, DEFAULT_FASTENER_PROFILE);
+    expect(m12.lag.frontEndDistance).toBe(48);
+    expect(m12.lag.threadEndDistance).toBe(120);
+  });
+
+  it("a1,CG saisie : conservée ; absente ou `auto` : 10·d", () => {
+    const set = woodCentralBoltSpacing(auto, DEFAULT_FASTENER_PROFILE, {
+      minSpacing: "auto",
+      endDistance: "auto",
+      threadEndDistance: 80,
+    });
+    expect(set.lag.threadEndDistance).toBe(80);
+    const a = woodCentralBoltSpacing(auto, DEFAULT_FASTENER_PROFILE, {
+      minSpacing: "auto",
+      endDistance: "auto",
+      threadEndDistance: "auto",
+    });
+    expect(a.lag.threadEndDistance).toBe(100);
   });
 
   it("tire-fonds saisis : entraxe et pince avant conservés ; arrière = pince des boulons", () => {
@@ -301,7 +330,9 @@ describe("convention de gravité (A35 (b), (e)) et vis chargées axialement (A35
         expect(sp.lag.rearEndDistance).toBe(sp.edgeDistance);
         expect(sp.lag.faceDistance).toBeGreaterThanOrEqual(sp.ec5.a4c);
         expect(sp.lag.minSpacing).toBeCloseTo(7 * sp.d, 9);
-        expect(sp.lag.frontEndDistance).toBeCloseTo(10 * sp.d, 9);
+        // Pince latérale a3,c au bout avant (A36 (4)) ; a1,CG mesurée à part, le long du fil.
+        expect(sp.lag.frontEndDistance).toBeCloseTo(4 * sp.d, 9);
+        expect(sp.lag.threadEndDistance).toBeCloseTo(10 * sp.d, 9);
         expect(sp.lag.faceDistance).toBeCloseTo(4 * sp.d, 9);
       }),
     );
@@ -326,6 +357,87 @@ describe("lagHoleClearance : tire-fond vertical et perçage horizontal (relectur
           expect(g.half - lag / 2 - hole / 2).toBeGreaterThanOrEqual(c - 1e-9);
           // Pointe arrêtée à `above` du centre : à tip au moins au-dessus du perçage.
           expect(g.above - hole / 2).toBeGreaterThanOrEqual(tip - 1e-9);
+        },
+      ),
+    );
+  });
+});
+
+describe("grainEndDistance : distance le long du fil à la plus proche surface de bout (A36 (4))", () => {
+  /** Poutre droite développée : face avant à x = 0, coupe au sol à y = 0, assise à y = 100. */
+  const step = [
+    { x: 0, y: 0 },
+    { x: 400, y: 0 },
+    { x: 400, y: 300 },
+    { x: 200, y: 300 },
+    { x: 200, y: 100 },
+    { x: 0, y: 100 },
+  ];
+  const along = (p: { x: number; y: number }, slope: number, method = "straight" as const) =>
+    grainEndDistance(p, grainDirection(method, slope), step, isBeamEndSide);
+
+  it("fil horizontal : distance à la face avant ou à la face de cran, la plus courte", () => {
+    // Couches empilées : rayon horizontal ; la coupe au sol (parallèle) n'est jamais atteinte.
+    const dir = grainDirection("stacked", 1);
+    expect(dir).toEqual({ x: 1, y: 0 });
+    expect(grainEndDistance({ x: 50, y: 50 }, dir, step, isBeamEndSide)).toBeCloseTo(50, 9);
+    expect(grainEndDistance({ x: 150, y: 50 }, dir, step, isBeamEndSide)).toBeCloseTo(150, 9);
+    // Au-dessus de l'assise (y = 200) : face de cran verticale à x = 200 devant, face de bout
+    // à x = 400 derrière.
+    expect(grainEndDistance({ x: 250, y: 200 }, dir, step, isBeamEndSide)).toBeCloseTo(50, 9);
+  });
+
+  it("fil à 45° : coupe au sol comptée, dessus d'assise non compté", () => {
+    // Depuis (100, 50) : vers le bas à gauche, coupe au sol (y = 0) à 50·√2 ; vers le haut à
+    // droite, dessus de l'assise (pas une surface de bout).
+    expect(along({ x: 100, y: 50 }, 1)).toBeCloseTo(50 * Math.SQRT2, 9);
+    // Depuis (30, 50) : la face avant (x = 0) est atteinte d'abord, à 30·√2.
+    expect(along({ x: 30, y: 50 }, 1)).toBeCloseTo(30 * Math.SQRT2, 9);
+    // Sur le développé d'une marche plus haute : la face de cran x = 200 vers le bas à gauche.
+    expect(along({ x: 250, y: 250 }, 1)).toBeCloseTo(50 * Math.SQRT2, 9);
+  });
+
+  it("plafond d'une entaille (bois au-dessus) compté, dessus d'assise (bois au-dessous) non compté", () => {
+    // Contour en sens trigonométrique : côté horizontal parcouru vers +x = bois au-dessus.
+    expect(isBeamEndSide({ x: 0, y: 0 }, { x: 10, y: 0 })).toBe(true);
+    expect(isBeamEndSide({ x: 10, y: 5 }, { x: 0, y: 5 })).toBe(false);
+    expect(isBeamEndSide({ x: 3, y: 0 }, { x: 3, y: 10 })).toBe(true);
+    expect(isBeamEndSide({ x: 0, y: 0 }, { x: 10, y: 4 })).toBe(false);
+  });
+
+  it("aucune surface de bout rencontrée : Infinity ; direction nulle : Infinity", () => {
+    const flat = [
+      { x: 0, y: 0 },
+      { x: 100, y: 0 },
+      { x: 100, y: 10 },
+      { x: 0, y: 10 },
+    ];
+    // Prédicat sans surface de bout.
+    expect(grainEndDistance({ x: 50, y: 5 }, { x: 1, y: 0 }, flat, () => false)).toBe(Infinity);
+    expect(grainEndDistance({ x: 50, y: 5 }, { x: 0, y: 0 }, flat, isBeamEndSide)).toBe(Infinity);
+  });
+
+  it("propriété : distance = min des deux sens, invariante par translation et par le sens de dir", () => {
+    fc.assert(
+      fc.property(
+        fc.double({ min: 5, max: 395, noNaN: true }),
+        fc.double({ min: 5, max: 95, noNaN: true }),
+        fc.double({ min: 0, max: 3, noNaN: true }),
+        fc.double({ min: -500, max: 500, noNaN: true }),
+        (x, y, slope, shift) => {
+          const dir = grainDirection("straight", slope);
+          const d = grainEndDistance({ x, y }, dir, step, isBeamEndSide);
+          const back = grainEndDistance({ x, y }, { x: -dir.x, y: -dir.y }, step, isBeamEndSide);
+          expect(back).toBeCloseTo(d, 6);
+          const moved = step.map((p) => ({ x: p.x + shift, y: p.y }));
+          const dm = grainEndDistance({ x: x + shift, y }, dir, moved, isBeamEndSide);
+          if (Number.isFinite(d)) expect(dm).toBeCloseTo(d, 6);
+          else expect(dm).toBe(Infinity);
+          // Sous l'assise basse, le rayon vers le bas atteint toujours la face avant ou la coupe
+          // au sol : la distance est finie et au plus celle à la coupe au sol (y / sin α).
+          const sin = dir.y;
+          if (sin > 1e-6) expect(d).toBeLessThanOrEqual(y / sin + 1e-6);
+          expect(d).toBeLessThanOrEqual(x / dir.x + 1e-6);
         },
       ),
     );

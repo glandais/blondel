@@ -17,6 +17,11 @@
  * entraxes et pinces de l'EC5 (`bolts.minSpacing`, `bolts.edgeDistance`, A34 (b)) ; sources :
  * C §1.11.
  *
+ * Décisions du 2026-10-09 (QUESTIONS A36) : décalage des joints aboutés et entures des planches
+ * d'une couche empilée (`section.jointOffset`, `section.fingerLength`, (6)), pince axiale des
+ * tire-fonds le long du fil (`lagScrews.threadEndDistance`, (4)), boulons du sabot de pied
+ * regroupés (`anchors.footBoltZone`, (10)) ; sources : C §1.11.
+ *
  * Décisions du 2026-10-09 (QUESTIONS A35) : âme de pied prolongée (`anchors.plate.footWebLength`,
  * (a)), pente de fil maximale des planches d'une couche (`section.maxGrainSlope`, (h)), entraxe
  * et pince des tire-fonds au plus sévère des règles latérales et axiales (`lagScrews.minSpacing`,
@@ -179,6 +184,25 @@ export const WoodCentralParamsSchema = z.object({
        * sections (> 100 mm) ; relecture A35 ; **à valider** (QUESTIONS A36 (7)).
        */
       maxGrainSlope: z.number().positive().max(100).default(20),
+      /**
+       * Couches empilées : décalage minimal, le long de la trace, entre un joint abouté d'une
+       * couche composée et les joints aboutés de la couche du dessous (et du dessus), mesuré
+       * entre les parties les plus proches des deux joints (entraxe des joints moins
+       * `fingerLength`), mm (QUESTIONS A36 (6), décision du 2026-10-09). 152 = 6 in : espacement
+       * minimal des aboutages de lamelles adjacentes dans la zone tendue d'une poutre fléchie,
+       * ANSI A190.1-2017 § 10.4 (a) (norme américaine, C §1.11 [85]) ; aucune valeur trouvée dans
+       * l'EN 14080 (non lue) : **à valider** par un fabricant. 0 : aucun décalage imposé.
+       */
+      jointOffset: mmNonNeg.default(152),
+      /**
+       * Couches empilées : longueur des entures de l'aboutage des planches d'une couche composée
+       * (aboutage à entures multiples), mm ; chaque planche est débitée avec la moitié de cette
+       * longueur en plus à chaque bout abouté (entures de part et d'autre du plan de joint).
+       * 15 mm : entures courtes usuelles du lamellé-collé, « 10 à 15 mm » (C §1.11 [86]),
+       * 15 à 20 mm pour un aboutage de pleine section (EAD 130661-00-0304, C §1.11 [87]) ; **à
+       * valider** (QUESTIONS A36 (6)).
+       */
+      fingerLength: mmNonNeg.default(15),
     })
     .prefault({}),
   notch: z
@@ -257,13 +281,28 @@ export const WoodCentralParamsSchema = z.object({
        */
       minSpacing: auto(mmPos),
       /**
-       * Pince d'un tire-fond au bout **avant** de l'assise (face de la dent précédente ou face
-       * avant de la poutre, bois de bout à côté de la partie filetée), mm. `auto` : le plus
-       * sévère de a3,c = 4·d (latéral, extrémité non chargée, A35 (e)) et a1,CG = 10·d (axial,
-       * distance du centre de gravité de la partie filetée au bout, [71] tableau 10.6), soit
-       * 10·d ; au bout arrière, `bolts.edgeDistance` ; **à valider** (QUESTIONS A35 (l)).
+       * Pince latérale d'un tire-fond au bout **avant** de l'assise (face de la dent précédente
+       * ou face avant de la poutre), mm. `auto` : a3,c = 4·d (extrémité non chargée, A35 (e) ;
+       * 40 mm pour un M10, 48 mm pour un perçage de 13) ; au bout arrière, `bolts.edgeDistance`.
+       * La pince axiale a1,CG n'est plus prise ici mais le long du fil
+       * (`threadEndDistance`, QUESTIONS A36 (4), décision du 2026-10-09) ; **à valider**
+       * (QUESTIONS A35 (l)).
        */
       endDistance: auto(mmPos),
+      /**
+       * Pince axiale a1,CG d'un tire-fond (QUESTIONS A36 (4), décision du 2026-10-09) : distance
+       * minimale, mesurée **le long du fil** dans le développement de la poutre, entre le
+       * centre de gravité de la partie filetée (milieu de l'ancrage dans la poutre, tire-fond
+       * supposé fileté sur tout son ancrage) et la plus proche surface de bout : coupe au sol
+       * et faces de cran (faces verticales des dents, face avant de la poutre). Fil le long de
+       * la poutre (massif, couches droites, cintrage sur moule) ou horizontal (couches
+       * empilées : la coupe au sol, parallèle au fil, est alors une rive, a2,CG). `auto` :
+       * a1,CG = 10·d (EN 1995-1-1:2004+A1:2008 § 8.7.2 tableau 8.6, C §1.11 [88]) ; mesure
+       * le long du fil : convention Blondel **à valider**. Avec `lagScrews.endDistance` (pince
+       * latérale au bout avant de l'assise), remplace la pince a1,CG prise au bout avant de
+       * l'assise (A35 (l)).
+       */
+      threadEndDistance: auto(mmPos),
     })
     .prefault({}),
   anchors: z
@@ -302,6 +341,15 @@ export const WoodCentralParamsSchema = z.object({
       boltHoleDiameter: mmPos.default(13),
       /** Pince des perçages (même défaut que `steel-flat.plates.holeEdgeDistance`), à valider. */
       holeEdgeDistance: mmPos.default(25),
+      /**
+       * Sabot de pied : longueur, depuis la face avant de la poutre, de la zone où sont
+       * regroupés ses boulons (`anchors.bolts`), mm (QUESTIONS A36 (10), décision du
+       * 2026-10-09) : les boulons laissent libre la zone utile des organes de la première
+       * marche ; entraxe et pinces de l'EC5 dans le bois respectés (pince d'extrémité mesurée
+       * le long du fil depuis la face avant et la coupe au sol). Sabot inchangé (`anchors.length`).
+       * Aucune source : **à valider**. Sans effet sur le sabot de tête ni sur la platine.
+       */
+      footBoltZone: mmPos.default(100),
       /**
        * Platine à âme noyée (A33 (f) ; C §1.11 [80], pied de poteau à âme du commerce, seule
        * source : dimensions **à valider** par un atelier). Au pied : platine d'appui posée au sol

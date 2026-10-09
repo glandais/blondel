@@ -460,6 +460,12 @@ export interface Part {
    * glTF (la pièce finie l'est). La pièce finie, elle, ne porte alors ni débit (`stock`) ni
    * grandeurs de matière (ses composantes les portent : aucun double compte) ; la liste et la
    * fiche de débit ne listent que les composantes. Absent : pièce autonome.
+   *
+   * Composantes imbriquées (QUESTIONS A36 (9)) : la planche d'une couche composée est la
+   * composante de sa couche, elle-même composante de la poutre ; une couche composée porte son
+   * solide mais ni gabarit, ni débit, ni grandeurs de matière (ses planches les portent).
+   * Pièces fabriquées : `fabricatedParts` ; pièce dessinée : `rootAssemblyId`
+   * (`parts/components.ts`).
    */
   readonly componentOf?: string;
   /** Grandeurs de coût/nomenclature (masse kg, volume m³, cordons mm, plis, coupes…). */

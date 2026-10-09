@@ -14,7 +14,16 @@
  *   chevêtre.
  * - Chevilles (`anchors.anchors`) dans l'âme, sur son axe, entre les joues (posées avant la
  *   poutre) ; boulons (`anchors.bolts`) traversant les deux joues et la poutre, à mi-hauteur
- *   des joues au pied, à mi-longueur des joues en tête, répartis à la pince `holeEdgeDistance`.
+ *   des joues au pied, à mi-longueur des joues en tête. En tête, répartis à la pince
+ *   `holeEdgeDistance`. **Au pied** (QUESTIONS A36 (10), décision du 2026-10-09, à valider) :
+ *   regroupés dans les `anchors.footBoltZone` premiers millimètres depuis la face avant de la
+ *   poutre, pour laisser libre la zone utile des organes de la première marche ; premier
+ *   boulon à max(`holeEdgeDistance` ; abscisse où la pince d'extrémité a3,c du boulon dans le
+ *   bois, mesurée le long du fil jusqu'à la face avant et à la coupe au sol, est tenue), les
+ *   suivants à l'entraxe a1 (EC5 « tous angles », `woodSpacing.ts`, d nominal lu sur
+ *   `anchors.boltHoleDiameter`). S'ils dépassent la zone, les entraxes sont gardés (remarque) ;
+ *   s'ils dépassent le sabot, répartition à la pince `holeEdgeDistance` (remarque). Sabot
+ *   inchangé (longueur, joues, hauteur des boulons).
  * - Développé à la fibre neutre (loi de pli du profil d'atelier pour la nuance et l'épaisseur,
  *   `bendAllowance`), deux lignes de pli à 90°.
  * - Sabot logé (`FAB_SABOT_EMPRISE`) : semelle ≤ longueur de la coupe au sol, âme de tête ≤
@@ -41,6 +50,7 @@ import {
   type ResolvedBend,
 } from "../workshop/metal.js";
 import type { WorkshopProfile } from "../workshop/profile.js";
+import { nominalDiameterFor } from "../fasteners/compute.js";
 import type { CentralTrace } from "./centralTrace.js";
 import {
   pluginRuleDef,
@@ -58,6 +68,7 @@ import {
   steelQuantities,
 } from "./steelCommon.js";
 import type { WoodCentralParams } from "./woodCentralParams.js";
+import { ec5Spacing } from "./woodSpacing.js";
 
 /** Identifiants et repères des sabots (contrat de la vague). */
 export const WOOD_CENTRAL_SHOE_FOOT_ID = "wood-central-shoe-foot";
@@ -93,6 +104,13 @@ export interface ShoeBeamGeometry {
    * platine retient max(`wood.minCheek`, `seatClearance`) puis le jeu d'atelier.
    */
   readonly seatClearance?: Mm;
+  /**
+   * Distance le long du fil du point (σ, z) du développement à la plus proche surface de bout
+   * de la poutre (face avant, coupe au sol, faces de cran ; `grainEndDistance`, QUESTIONS
+   * A36 (4) et (10), convention à valider). Absente : pince d'extrémité des boulons du sabot de
+   * pied non contrôlée dans le bois (seule la pince `holeEdgeDistance` de la tôle).
+   */
+  readonly endDistanceAlongGrain?: (s: Mm, z: Mm) => Mm;
 }
 
 export interface WoodCentralShoesInput {
@@ -355,7 +373,7 @@ export function buildWoodCentralShoes(input: WoodCentralShoesInput): WoodCentral
 
   const built: BuiltShoe[] = [];
   for (const s of specs) {
-    const shoe = shoeOf(input, bend, s);
+    const shoe = shoeOf(input, bend, s, notes);
     if (shoe) built.push(shoe);
     else {
       errors.push(
@@ -379,7 +397,12 @@ export function buildWoodCentralShoes(input: WoodCentralShoesInput): WoodCentral
 }
 
 /** Sabot en U : section, développé, solide, fixations ; `null` si une aile n'a pas de partie droite. */
-function shoeOf(input: WoodCentralShoesInput, bend: ResolvedBend, s: ShoeSpec): BuiltShoe | null {
+function shoeOf(
+  input: WoodCentralShoesInput,
+  bend: ResolvedBend,
+  s: ShoeSpec,
+  notes: Message[],
+): BuiltShoe | null {
   const { params, trace, profile, beam } = input;
   const an = params.anchors;
   const t = an.thickness;
@@ -410,7 +433,10 @@ function shoeOf(input: WoodCentralShoesInput, bend: ResolvedBend, s: ShoeSpec): 
   }
   const xCheek = (s.cheek - t) / 2;
   const beamHoles: ShoeBeamHole[] = [];
-  for (const y of spread(Y, an.holeEdgeDistance, an.bolts)) {
+  const boltYs = s.foot
+    ? footBoltPositions(input, Y, (s.cheek + t) / 2, notes)
+    : spread(Y, an.holeEdgeDistance, an.bolts);
+  for (const y of boltYs) {
     holes.push(holePolygon(V.vec(xCheek, y), an.boltHoleDiameter));
     holes.push(holePolygon(V.vec(D - xCheek, y), an.boltHoleDiameter));
     // Même perçage dans la poutre : à (joue − t) / 2 du bord libre de la joue (bord à
@@ -549,6 +575,83 @@ function shoeOf(input: WoodCentralShoesInput, bend: ResolvedBend, s: ShoeSpec): 
     ...(fixings.length > 0 ? { fixings } : {}),
   };
   return { part, beamHoles, cheekInner: s.cheek - t, webInner, bendLength: Y };
+}
+
+/**
+ * Abscisses des boulons du sabot de pied depuis la face avant de la poutre (QUESTIONS A36 (10),
+ * à valider ; voir l'en-tête) : premier boulon à max(`holeEdgeDistance` ; plus petite abscisse
+ * où la pince d'extrémité a3,c du boulon dans le bois, mesurée le long du fil, est tenue),
+ * suivants à l'entraxe a1 ; regroupés dans `footBoltZone`. Au-delà de la zone : entraxes gardés
+ * et remarque ; au-delà du sabot (pince `holeEdgeDistance` de la tôle) : répartition sur toute
+ * la semelle et remarque. `zHole` : altitude des perçages.
+ */
+export function footBoltPositions(
+  input: Pick<WoodCentralShoesInput, "params" | "profile" | "beam">,
+  length: Mm,
+  zHole: Mm,
+  notes: Message[],
+): Mm[] {
+  const { params, profile, beam } = input;
+  const an = params.anchors;
+  const n = an.bolts;
+  if (n <= 0) return [];
+  const hE = an.holeEdgeDistance;
+  const nominal = nominalDiameterFor(
+    an.boltHoleDiameter,
+    profile.fasteners.nominalDiameters,
+    profile.fasteners.holeClearance,
+  );
+  const d = Number.isFinite(nominal)
+    ? nominal
+    : Math.max(1, an.boltHoleDiameter - profile.fasteners.holeClearance);
+  const ec5 = ec5Spacing("bolt", d);
+  const along = beam.endDistanceAlongGrain;
+  const fits = (y: Mm): boolean => !along || along(beam.frontSigma + y, zHole) >= ec5.a3c - 1e-9;
+  // Plus petite abscisse tenant a3,c le long du fil (distance croissante en s'éloignant de la
+  // face avant) : balayage au pas de 1 mm puis dichotomie.
+  let first = hE;
+  if (!fits(first)) {
+    let ok: Mm | null = null;
+    for (let y = Math.ceil(hE); y <= length - hE + 1e-9; y += 1) {
+      if (fits(y)) {
+        ok = y;
+        break;
+      }
+    }
+    if (ok === null) first = Infinity;
+    else {
+      let lo = Math.max(hE, ok - 1);
+      let hi = ok;
+      for (let k = 0; k < 40; k++) {
+        const m = (lo + hi) / 2;
+        if (fits(m)) hi = m;
+        else lo = m;
+      }
+      first = hi;
+    }
+  }
+  const ys = Array.from({ length: n }, (_, i) => first + i * ec5.a1);
+  const last = ys[ys.length - 1]!;
+  const args = {
+    mark: WOOD_CENTRAL_SHOE_FOOT_MARK,
+    count: n,
+    zone: dec(an.footBoltZone, 0),
+    a1: dec(ec5.a1, 0),
+    a3c: dec(ec5.a3c, 0),
+    diameter: dec(d, 0),
+  };
+  if (!(last <= length - hE + 1e-6)) {
+    notes.push(
+      msg("structure.woodCentral.note.shoeFootBoltsSpread", { ...args, length: dec(length, 0) }),
+    );
+    return spread(length, hE, n);
+  }
+  if (last > an.footBoltZone + 1e-6) {
+    notes.push(
+      msg("structure.woodCentral.note.shoeFootBoltsBeyondZone", { ...args, last: dec(last, 0) }),
+    );
+  }
+  return ys;
 }
 
 /**

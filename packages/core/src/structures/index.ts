@@ -240,12 +240,16 @@ export {
 } from "./woodCentralPlates.js";
 export {
   WOOD_CENTRAL_LAYER_ID_PREFIX,
+  WOOD_CENTRAL_LAYER_RULES,
   buildStackedLayers,
   resolveDressingAllowance,
   resolveLayerThickness,
   woodCentralLayerId,
   woodCentralLayerMark,
+  type HoleIssue,
+  type HoleLevel,
   type StackedBeamShape,
+  type StackedBoard,
   type StackedLayer,
   type StackedLayersInput,
   type StackedLayersResult,

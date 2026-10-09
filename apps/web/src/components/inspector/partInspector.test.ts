@@ -389,13 +389,15 @@ describe("inspecteur Pièce : pièces composées et placages (QUESTIONS A33 (e),
     noRawKeys(html);
   });
 
-  it("pièce finie : nombre de couches, débit « voir les couches », sans masse propre", () => {
+  it("pièce finie : « Pièces composantes », débit porté par ses composantes, sans masse propre", () => {
     const model = composed();
     const finished = model.parts.find((p) => p.id === "layer-1")!.componentOf!;
     const v = values(render(finished));
-    expect(v["layers"]).toEqual(["Couches", "2"]);
-    expect(v["stock"]).toEqual(["Débit", "voir les couches"]);
-    expect(values(render(finished, "en"))["stock"]).toEqual(["Cutting", "see the layers"]);
+    expect(v["components"]).toEqual(["Pièces composantes", "2"]);
+    expect(v["stock"]).toEqual(["Débit", "porté par ses pièces composantes"]);
+    const en = values(render(finished, "en"));
+    expect(en["components"]).toEqual(["Component parts", "2"]);
+    expect(en["stock"]).toEqual(["Cutting", "carried by its component parts"]);
   });
 
   it("débit en placage signalé", () => {
@@ -406,5 +408,99 @@ describe("inspecteur Pièce : pièces composées et placages (QUESTIONS A33 (e),
       "Cutting",
       "veneer bought to thickness",
     ]);
+  });
+});
+
+describe("inspecteur Pièce : composantes imbriquées (QUESTIONS A36 (9))", () => {
+  /**
+   * Poutre finie, couche composée de deux planches (`componentOf` = la couche), couche d'une
+   * seule planche ; fabriqués à la main sur l'escalier droit en acier (le cœur peut ne pas
+   * encore produire les couches composées).
+   */
+  function nested(): Model {
+    return load(steelFlat(), (m) => {
+      const stringer = m.parts.find((p) => p.category === "stringer")!;
+      const { stock: _stock, ...finished } = stringer;
+      const { stock: _s, flat: _f, ...bare } = stringer;
+      const composed: Part = {
+        ...bare,
+        id: "layer-1",
+        mark: `${stringer.mark}-1`,
+        name: textMessage("Couche 1"),
+        componentOf: stringer.id,
+        quantities: {},
+      };
+      const board = (j: number): Part => ({
+        ...stringer,
+        id: `layer-1-${j}`,
+        mark: `${stringer.mark}-1.${j}`,
+        name: textMessage(`Planche 1.${j}`),
+        componentOf: "layer-1",
+        stock: { length: 1000, width: 200, thickness: 40 },
+      });
+      const simple: Part = {
+        ...stringer,
+        id: "layer-2",
+        mark: `${stringer.mark}-2`,
+        name: textMessage("Couche 2"),
+        componentOf: stringer.id,
+        stock: { length: 2000, width: 200, thickness: 40 },
+      };
+      return {
+        ...m,
+        parts: m.parts
+          .map((p) => (p.id === stringer.id ? finished : p))
+          .concat([composed, board(1), board(2), simple]),
+      };
+    });
+  }
+
+  it("planche : « Planche de LC1-k » vers sa couche, isolement de la poutre racine", () => {
+    const model = nested();
+    const beam = model.parts.find((p) => p.id === "layer-1")!.componentOf!;
+    const layerMark = model.parts.find((p) => p.id === "layer-1")!.mark;
+    const html = render("layer-1-2");
+    const link = button(html, `Planche de ${layerMark}`);
+    expect(link).toContain("part-insp__assembly");
+    expect(button(html, "Couche de")).toBe("");
+    expect(button(render("layer-1-2", "en"), `Board of ${layerMark}`)).not.toBe("");
+    // « Isoler en 3D » vise la poutre (seule dessinée), pas la couche ni la planche.
+    uiStore.setState({ isolatedPartId: "layer-1" });
+    expect(button(render("layer-1-2"), "Isoler en 3D")).toContain('aria-pressed="false"');
+    uiStore.setState({ isolatedPartId: beam });
+    expect(button(render("layer-1-2"), "Tout réafficher")).toContain('aria-pressed="true"');
+    // Une planche n'a pas de composante : ni ligne « Pièces composantes », ni débit reporté.
+    const v = values(html);
+    expect(v["components"]).toBeUndefined();
+    expect(v["stock"]).toBeUndefined();
+    noRawKeys(html);
+  });
+
+  it("couche composée : « Couche de LC1 », « Pièces composantes » = ses planches, débit porté par elles", () => {
+    const model = nested();
+    const beam = model.parts.find((p) => p.id === "layer-1")!.componentOf!;
+    const beamMark = model.parts.find((p) => p.id === beam)!.mark;
+    const html = render("layer-1");
+    expect(button(html, `Couche de ${beamMark}`)).toContain("part-insp__assembly");
+    const v = values(html);
+    expect(v["components"]).toEqual(["Pièces composantes", "2"]);
+    expect(v["stock"]).toEqual(["Débit", "porté par ses pièces composantes"]);
+    expect(v["mass"]).toBeUndefined();
+    uiStore.setState({ isolatedPartId: beam });
+    expect(button(render("layer-1"), "Tout réafficher")).toContain('aria-pressed="true"');
+    noRawKeys(html);
+    noRawKeys(render("layer-1", "en"));
+  });
+
+  it("poutre : composantes directes (couches), couche simple « Couche de LC1 »", () => {
+    const model = nested();
+    const beam = model.parts.find((p) => p.id === "layer-1")!.componentOf!;
+    const beamMark = model.parts.find((p) => p.id === beam)!.mark;
+    const v = values(render(beam));
+    expect(v["components"]).toEqual(["Pièces composantes", "2"]);
+    expect(v["stock"]).toEqual(["Débit", "porté par ses pièces composantes"]);
+    const simple = render("layer-2");
+    expect(button(simple, `Couche de ${beamMark}`)).not.toBe("");
+    expect(values(simple)["components"]).toBeUndefined();
   });
 });

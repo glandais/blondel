@@ -19,8 +19,9 @@
  * - `extras` du nœud : métadonnées de la pièce (identifiant, repère, catégorie, désignation,
  *   matériau, section, débit, grandeurs) ; `extras` de la scène : projet et unités d'origine.
  *
- * Une pièce composante (`Part.componentOf`, couche d'une poutre en couches empilées) n'est pas
- * dans la scène : la pièce finie qu'elle compose y est déjà (aucun double volume).
+ * Une pièce composante (`Part.componentOf`, couche d'une poutre en couches empilées, planche
+ * d'une couche composée, QUESTIONS A36 (9)) n'est pas dans la scène : seule la pièce racine
+ * (`rootAssemblyId`) y est (aucun double volume).
  *
  * Une pièce dont le solide n'a pas pu être maillé garde son nœud (sans maillage) et porte
  * `extras.meshError`.

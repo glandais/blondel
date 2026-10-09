@@ -14,7 +14,7 @@
  * avec repère, désignation et quantité ; un clic sélectionne la première pièce de son assemblage
  * (sélection partagée), le titre de la ligne rappelle ses assemblages et ses pièces.
  */
-import type { Model, Part } from "@blondel/core";
+import { fabricatedParts, type Model, type Part } from "@blondel/core";
 import { msg } from "@blondel/i18n";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { useId, useMemo, useState } from "react";
@@ -25,6 +25,7 @@ import {
   FASTENER_GROUP_KEY,
   PART_GROUP_KEYS,
   SUMMARY_SEPARATOR,
+  groupPartCount,
   groupParts,
   groupSummary,
   marksSummary,
@@ -87,6 +88,11 @@ export function PartsList({ model }: { model: Pick<Model, "parts" | "fasteners">
     () => groupParts(model.parts.filter((p) => matchesPartFilter(p, query, t))),
     [model.parts, query, t],
   );
+  // Compte des groupes : pièces fabriquées seulement (sans double compte, QUESTIONS A36 (9)).
+  const fabricated = useMemo(
+    () => new Set(fabricatedParts(model.parts).map((p) => p.id)),
+    [model.parts],
+  );
   const allFasteners = useMemo(() => fastenerRows(model, t), [model, t]);
   const fasteners = allFasteners.filter((r) => matchesFastenerFilter(r, query));
   const fastenerGroup: { readonly id: ListGroupId } = { id: FASTENER_GROUP_ID };
@@ -126,6 +132,7 @@ export function PartsList({ model }: { model: Pick<Model, "parts" | "fasteners">
           const expanded = open.has(g.id);
           const name = t.t(PART_GROUP_KEYS[g.id]);
           const marksId = `${baseId}-${g.id}`;
+          const count = groupPartCount(g, fabricated);
           return (
             <li key={g.id} className="fab-group" data-group={g.id}>
               <button
@@ -139,9 +146,9 @@ export function PartsList({ model }: { model: Pick<Model, "parts" | "fasteners">
                 <span className="fab-group__name">{name}</span>
                 <span
                   className="fab-group__count num"
-                  title={t.t(msg("ui.fab.list.count", { count: g.parts.length }))}
+                  title={t.t(msg("ui.fab.list.count", { count }))}
                 >
-                  {g.parts.length}
+                  {count}
                 </span>
                 <span className="fab-group__summary">{groupSummary(g, t)}</span>
               </button>

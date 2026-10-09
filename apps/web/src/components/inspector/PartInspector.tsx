@@ -10,8 +10,11 @@
  *
  * Pièces composées (QUESTIONS A33 (e), `Part.componentOf`) : une composante (couche d'une poutre
  * en couches empilées) renvoie à sa pièce finie (« Couche de LC1 ») et « Isoler en 3D » isole la
- * pièce finie (seule dessinée) ; une pièce finie affiche le nombre de ses composantes et
- * l'absence de débit propre. Débit en placage (`Part.stock.supply`, A34 (e)) signalé.
+ * pièce racine (`rootAssemblyId` du cœur, seule dessinée) ; une pièce finie affiche le nombre de
+ * ses composantes directes (« Pièces composantes ») et un débit porté par ses composantes.
+ * Composantes imbriquées (A36 (9)) : une planche d'une couche composée renvoie à sa couche
+ * (« Planche de LC1-k »), la couche à la poutre (« Couche de LC1 »). Débit en placage
+ * (`Part.stock.supply`, A34 (e)) signalé.
  *
  * Aucune grandeur n'est calculée : une valeur absente du modèle n'a pas de ligne. Une pièce
  * absente du modèle (recalcul) ne rend rien : l'inspecteur retombe sur l'état sans sélection.
@@ -20,6 +23,7 @@ import {
   QUANTITY_LENGTH_MM,
   QUANTITY_MASS_KG,
   QUANTITY_WELD_MM,
+  rootAssemblyId,
   type PartFamilyId,
 } from "@blondel/core";
 import { flatTermKeys, materialLabel } from "@blondel/exports";
@@ -72,11 +76,18 @@ export function PartInspector({ partId }: PartInspectorProps) {
   const isolatedId = useUi((s) => s.isolatedPartId);
   const part = model?.parts.find((p) => p.id === partId);
   if (!model || !part) return null;
-  // Pièce dessinée en 3D : la pièce finie d'une composante (les composantes ne le sont pas).
-  const shownId = part.componentOf ?? part.id;
+  // Pièce dessinée en 3D : la pièce racine d'une composante (planche → couche → poutre, les
+  // composantes ne sont pas dessinées).
+  const shownId = rootAssemblyId(model.parts, part.id);
   const isolated = isolatedId === shownId;
   const assembly =
     part.componentOf === undefined ? undefined : model.parts.find((p) => p.id === part.componentOf);
+  // Planche d'une couche composée : sa pièce finie (la couche) est elle-même une composante.
+  const assemblyLink: MessageKey =
+    assembly?.componentOf !== undefined
+      ? "ui.partInspector.boardOf"
+      : "ui.partInspector.componentOf";
+  // Composantes directes (couches de la poutre, planches d'une couche composée).
   const components = model.parts.filter((p) => p.componentOf === part.id).length;
 
   const sameMark = model.parts.filter((p) => p.mark === part.mark).length;
@@ -116,14 +127,14 @@ export function PartInspector({ partId }: PartInspectorProps) {
   }
   if (components > 0) {
     rows.push({
-      id: "layers",
-      label: "ui.partInspector.value.layers",
+      id: "components",
+      label: "ui.partInspector.value.components",
       value: formatNumber(t.locale, components),
     });
     rows.push({
       id: "stock",
       label: "ui.partInspector.value.stock",
-      value: t.t("ui.partInspector.value.stockLayers"),
+      value: t.t("ui.partInspector.value.stockComponents"),
     });
   } else if (part.stock?.supply === "veneer") {
     rows.push({
@@ -189,7 +200,7 @@ export function PartInspector({ partId }: PartInspectorProps) {
               appStore.getState().select({ location: { kind: "part", partId: assembly.id } })
             }
           >
-            {t.t("ui.partInspector.componentOf", { mark: assembly.mark })}
+            {t.t(assemblyLink, { mark: assembly.mark })}
             <ArrowRight size={13} aria-hidden="true" />
           </button>
         ) : null}

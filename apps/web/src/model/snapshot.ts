@@ -5,8 +5,9 @@
  * ainsi le temps de maillage même quand la vue 3D n'est pas ouverte.
  *
  * Pièces de la scène : toutes sauf les composantes (`Part.componentOf`, couches d'une poutre en
- * couches empilées, QUESTIONS A33 (e)), que la pièce finie dessine déjà ; elles restent dans le
- * `Model` (listes, nomenclature, gabarits en Fabrication).
+ * couches empilées, QUESTIONS A33 (e), et planches d'une couche composée, A36 (9)), que la pièce
+ * racine (`rootAssemblyId`) dessine déjà ; elles restent dans le `Model` (listes, nomenclature,
+ * gabarits en Fabrication).
  *
  * Tout ce qui est rendu ici doit rester clonable (`structuredClone`, `postMessage`) : objets
  * simples et tableaux typés, aucune fonction.

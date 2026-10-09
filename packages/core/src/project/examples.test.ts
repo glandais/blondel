@@ -12,6 +12,7 @@ import { describe, expect, it } from "vitest";
 import { computeHeadroom } from "../headroom/headroom.js";
 import { computeLayout } from "../layout/layout.js";
 import { ProjectSchema, type Project } from "../model/project.js";
+import { assemblyQuantity } from "../parts/components.js";
 import { buildModel } from "../pipeline/build.js";
 import { computeStepping } from "../stepping/stepping.js";
 import { parseProjectText } from "./parse.js";
@@ -207,12 +208,8 @@ describe("examples/", () => {
     expect(model.parts.length).toBeGreaterThan(0);
     for (const part of model.parts) {
       // Pièce finie faite de composantes (poutre en couches empilées, QUESTIONS A33 (e)) : sa
-      // matière est portée par ses composantes.
-      const components = model.parts.filter((c) => c.componentOf === part.id);
-      const m =
-        components.length > 0
-          ? components.reduce((sum, c) => sum + (c.quantities["mass_kg"] ?? Number.NaN), 0)
-          : part.quantities["mass_kg"];
+      // matière est portée par ses composantes, imbriquées (planche → couche → poutre, A36 (9)).
+      const m = assemblyQuantity(model.parts, part.id, "mass_kg");
       expect(m !== undefined && Number.isFinite(m) && m > 0, `${file} ${part.id}`).toBe(true);
     }
   });

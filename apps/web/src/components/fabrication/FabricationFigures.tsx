@@ -6,6 +6,7 @@
  * « À valider » (sobre quand il ne reste rien à valider). Pendant un calcul, « Calcul… » suit la
  * bande, comme dans la ligne de chiffres de la Conception.
  */
+import { fabricatedParts } from "@blondel/core";
 import { massNoteFor } from "@blondel/exports";
 import { msg } from "@blondel/i18n";
 import { useMemo } from "react";
@@ -43,7 +44,10 @@ export function FabricationFigures() {
   const items: { readonly id: string; readonly text: string }[] = [
     {
       id: "parts",
-      text: model ? t.t(msg("ui.fab.figures.parts", { count: model.parts.length })) : DASH,
+      // Pièces fabriquées (`fabricatedParts`, composantes sans double compte, QUESTIONS A36 (9)).
+      text: model
+        ? t.t(msg("ui.fab.figures.parts", { count: fabricatedParts(model.parts).length }))
+        : DASH,
     },
     {
       id: "mass",

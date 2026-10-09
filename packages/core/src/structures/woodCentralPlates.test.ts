@@ -166,6 +166,30 @@ const part = (r: WoodCentralPlatesResult, id: string): Part => {
 
 const fits = (checks: CheckCollector) => checks.results.filter((x) => x.ruleId === RULE_ID);
 
+describe("logement de l'âme selon la filière (A36 (5))", () => {
+  it("fraisé sur une poutre droite ou sur moule ; en couches empilées, remarque laissée aux couches ; à valider par un atelier", () => {
+    const milled = run("straight").r.notes;
+    const mk = milled.map((m) => m.key);
+    expect(mk).toContain("structure.woodCentral.note.kerfMilled");
+    expect(mk).not.toContain("structure.woodCentral.note.kerfLayerCut");
+    const m = milled.find((n) => n.key === "structure.woodCentral.note.kerfMilled")!;
+    expect(fr(m)).toMatch(/^Logement des âmes AP1, AT1 fraisé dans la poutre finie/);
+    expect(fr(m)).toMatch(/à faire valider par un atelier/);
+    expect(EN.t(m)).toMatch(/^Slot for webs AP1, AT1 milled into the finished beam/);
+    // Cintrage sur moule : fraisé aussi ; couches empilées (défaut d'une trace courbe) : découpé.
+    const mould = run("quarter-left", { section: { curvedMethod: "mould" } }).r.notes;
+    expect(mould.map((n) => n.key)).toContain("structure.woodCentral.note.kerfMilled");
+    // En couches empilées, la remarque du logement est celle des couches (`note.layerKerf*`,
+    // nombre de pièces où il est découpé ou fraisé, `woodCentralLayers.test.ts`), pas celle de
+    // la platine (pas de doublon).
+    const stacked = run("quarter-left", { section: { curvedMethod: "stacked" } }).r.notes;
+    expect(stacked.map((n) => n.key)).not.toContain("structure.woodCentral.note.kerfMilled");
+    // Massif (escalier droit) : fraisé.
+    const solid = run("straight", { section: { kind: "solid" } }).r.notes;
+    expect(solid.map((n) => n.key)).toContain("structure.woodCentral.note.kerfMilled");
+  });
+});
+
 describe("platines à âme noyée : pièces et fixations", () => {
   it("pied et tête sur un escalier droit : PP1, AP1, PT1, AT1, chevilles et broches", () => {
     const { r, checks, params } = run("straight");

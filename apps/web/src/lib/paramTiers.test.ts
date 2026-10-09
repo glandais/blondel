@@ -285,6 +285,16 @@ describe("clés", () => {
       expect(e(p), p).toMatchObject({ tier: "workshop", toValidate: true });
     }
     expect(e("grainAngle").tier).toBe("workshop");
+    // Décisions A36 du 2026-10-09 : aboutages des planches (6), pince axiale des tire-fonds (4),
+    // zone des boulons du sabot de pied (10) : Atelier ◆.
+    for (const p of [
+      "section.jointOffset",
+      "section.fingerLength",
+      "lagScrews.threadEndDistance",
+      "anchors.footBoltZone",
+    ]) {
+      expect(e(p), p).toMatchObject({ tier: "workshop", toValidate: true });
+    }
     // Chaque chemin du schéma a son entrée (aucun repli Atelier implicite).
     const plugin = availableStructures().find((k) => k.kind === "wood-central")!;
     const defaults = plugin.paramsSchema.parse({});
@@ -682,6 +692,19 @@ describe("valeurs ◆ d'un projet", () => {
       expect(at(quarter, auto, path), path).toBe(true);
       expect(at(helical, auto, path), path).toBe(true);
     }
+    // Aboutages des planches d'une couche (A36 (6)) : couches empilées seulement.
+    for (const path of ["section.jointOffset", "section.fingerLength"]) {
+      expect(at(straight, auto, path), path).toBe(false);
+      expect(at(quarter, mould, path), path).toBe(false);
+      expect(at(quarter, auto, path), path).toBe(true);
+      expect(at(helical, auto, path), path).toBe(true);
+    }
+    // Pince axiale des tire-fonds (A36 (4)) : toujours ; zone des boulons du sabot de pied
+    // (A36 (10)) : sabot seulement.
+    expect(at(straight, auto, "lagScrews.threadEndDistance")).toBe(true);
+    expect(at(helical, auto, "lagScrews.threadEndDistance")).toBe(true);
+    expect(at(straight, auto, "anchors.footBoltZone")).toBe(true);
+    expect(at(helical, auto, "anchors.footBoltZone")).toBe(false);
     // Ancrage : sabot sur une poutre droite, platine à âme noyée sur une poutre cintrée.
     const shoeLeaves = ["thickness", "cheekDepth", "bolts", "boltHoleDiameter"];
     const plateLeaves = ["plate.thickness", "plate.width", "plate.pins", "plate.pinDiameter"];

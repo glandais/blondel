@@ -188,7 +188,8 @@ describe("contrôles selon le tracé", () => {
     const cr = byRule(out.checks, "CREMAILLERE_REGLE_MOYENS");
     expect(cr.length).toBeGreaterThan(0);
     expect(cr.every((c) => c.status === "ok")).toBe(true);
-    expect(fr(cr[0]!.message)).toContain("crémaillère centrale (D40, largeur 88 mm");
+    // Chêne `auto` (D30) : colonne C30 du tableau FCBA (QUESTIONS A37 (2)).
+    expect(fr(cr[0]!.message)).toContain("crémaillère centrale (C30, largeur 88 mm");
     expect(byRule(out.checks, "LIMON_ENTAILLE_MIN").length).toBeGreaterThan(0);
     const kr = byRule(out.checks, KR);
     expect(kr.map((c) => c.status)).toEqual(["ok"]);
@@ -354,24 +355,28 @@ describe("valeurs auto, prédimensionnement, visserie", () => {
       // EC5 « tous angles » pour M10 (perçage de 11) : a1 = 5·d, a3,c = 4·d (C §1.11 [71]).
       "bolts.minSpacing": 50,
       "bolts.edgeDistance": 40,
-      // Tire-fonds Ø10 au plus sévère des règles latérales et axiales (A35 (l), C §1.11 [71]
-      // tableau 10.6) : entraxe max(5·d ; 7·d), pince avant max(a3,c ; a1,CG = 10·d).
+      // Tire-fonds Ø10 (A35 (l), C §1.11 [71] tableau 10.6) : entraxe max(5·d ; 7·d) ; pince
+      // latérale au bout avant de l'assise a3,c = 4·d (A36 (4) : a1,CG se mesure à part, le
+      // long du fil, `lagScrews.threadEndDistance`).
       "lagScrews.minSpacing": 70,
-      "lagScrews.endDistance": 100,
+      "lagScrews.endDistance": 40,
+      // Pince axiale a1,CG = 10·d mesurée le long du fil (A36 (4), EN 1995-1-1 § 8.7.2 via
+      // C §1.11 [88]).
+      "lagScrews.threadEndDistance": 100,
     });
-    // Perçage de 13 (M12) : 60 et 48.
+    // Perçage de 13 (M12) : 60 et 48 ; tire-fond Ø12 : 84 et a3,c = 4·d = 48.
     const m12 = run(preset("straight", { bolts: { holeDiameter: 13 } })).out.autoValues!;
     expect(m12["bolts.minSpacing"]).toBe(60);
     expect(m12["bolts.edgeDistance"]).toBe(48);
     expect(m12["lagScrews.minSpacing"]).toBe(84);
-    expect(m12["lagScrews.endDistance"]).toBe(120);
+    expect(m12["lagScrews.endDistance"]).toBe(48);
     // Valeurs imposées : non exposées.
     const fixed = run(
       preset("straight", {
         section: { residual: 200, lamellaThickness: 44 },
         notch: { rearDepth: 20 },
         bolts: { minSpacing: 40, edgeDistance: 30 },
-        lagScrews: { minSpacing: 80, endDistance: 90 },
+        lagScrews: { minSpacing: 80, endDistance: 90, threadEndDistance: 110 },
       }),
     ).out;
     expect(fixed.autoValues).toBeUndefined();
@@ -404,30 +409,42 @@ describe("valeurs auto, prédimensionnement, visserie", () => {
     expect(straight.precheck?.beams).toHaveLength(1);
     expect(straight.precheck?.beams[0]!.partId).toBe("wood-central-beam");
     expect(frList(straight.notes).some((n) => /torsion sous charge excentrée/.test(n))).toBe(true);
-    // Classe `auto` (A35 (k)) : chêne lamellé-collé → classe massive de l'essence, D40 (à
-    // valider) ; essence lamellé-collé → GL24h ; pin lamellé-collé → C24.
-    expect(fr(straight.precheck!.beams[0]!.label)).toMatch(/D40/);
+    // Classe `auto` (A36 (1)) : chêne, massif ou lamellé-collé → D30 (classe visuelle 1 du
+    // chêne, à valider) ; essence lamellé-collé → GL24h ; pin lamellé-collé → C24.
+    expect(fr(straight.precheck!.beams[0]!.label)).toMatch(/D30/);
     expect(
-      frList(straight.notes).some((n) => /classe D40 : classe massive de l'essence/.test(n)),
+      frList(straight.notes).some((n) => /classe D30 : classe de l'essence feuillue/.test(n)),
     ).toBe(true);
-    // D40 : γ_M du bois massif (1,3), f_m,k = 40 ⇒ f_d = 0,8 × 40 / 1,3.
-    expect(straight.precheck!.beams[0]!.result.design).toBeCloseTo((0.8 * 40) / 1.3, 9);
+    expect(frList(straight.notes).join(" ")).not.toMatch(/D40/);
+    // D30 : γ_M du bois massif (1,3), f_m,k = 30 ⇒ f_d = 0,8 × 30 / 1,3 ; E = 11 000 MPa.
+    expect(straight.precheck!.beams[0]!.result.design).toBeCloseTo((0.8 * 30) / 1.3, 9);
     const gl = run(preset("straight", { material: "wood-glulam" })).out;
     expect(fr(gl.precheck!.beams[0]!.label)).toMatch(/GL24h/);
     expect(frList(gl.notes).some((n) => /classe GL24h \(réglage/.test(n))).toBe(true);
     const pine = run(preset("straight", { material: "wood-pine" })).out;
     expect(fr(pine.precheck!.beams[0]!.label)).toMatch(/C24/);
     expect(frList(pine.notes).some((n) => /classe C24 \(réglage/.test(n))).toBe(true);
-    // Chêne massif : pas de lamellé-collé, classe `auto` historique C24.
+    // Chêne massif : même classe que le lamellé-collé feuillu, D30 (A36 (1)), avec sa remarque.
     const solid = run(preset("straight", { section: { kind: "solid" } })).out;
-    expect(fr(solid.precheck!.beams[0]!.label)).toMatch(/C24/);
+    expect(fr(solid.precheck!.beams[0]!.label)).toMatch(/D30/);
+    expect(
+      frList(solid.notes).some((n) => /classe D30 : classe de l'essence feuillue/.test(n)),
+    ).toBe(true);
+    // Pin massif : C24, sans remarque de classe (pas de lamellé-collé).
+    const pineSolid = run(
+      preset("straight", { material: "wood-pine", section: { kind: "solid" } }),
+    ).out;
+    expect(fr(pineSolid.precheck!.beams[0]!.label)).toMatch(/C24/);
+    expect(frList(pineSolid.notes).some((n) => /Prédimensionnement avec la classe/.test(n))).toBe(
+      false,
+    );
     // Classe FCBA saisie sur une poutre de chêne (relecture A35 (k)) : même classe pour le
     // prédimensionnement que pour la lecture du tableau FCBA.
     const fcbaC30 = run(preset("straight", { strengthClass: "C30" }));
     expect(fcbaC30.beam!.fcba.cls).toBe("C30");
     expect(fr(fcbaC30.out.precheck!.beams[0]!.label)).toMatch(/C30/);
     expect(
-      frList(fcbaC30.out.notes).some((n) => /classe C30 : classe massive de l'essence/.test(n)),
+      frList(fcbaC30.out.notes).some((n) => /classe C30 : classe de l'essence feuillue/.test(n)),
     ).toBe(true);
     // Classe saisie : prime sur l'essence.
     const c30 = run(preset("straight", { precheck: { woodClass: "C30" } })).out;
@@ -474,7 +491,8 @@ describe("valeurs auto, prédimensionnement, visserie", () => {
         .precheck!.beams[0]!.result;
       const r = out.precheck!.beams[0]!.result;
       expect(r.design).toBeCloseTo(ref.design * kf, 9);
-      expect(r.design).toBeCloseTo(((0.8 * 40) / 1.3) * kf, 9);
+      // Chêne en couches empilées : classe `auto` D30 (A36 (1)), f_m,k = 30, γ_M du massif.
+      expect(r.design).toBeCloseTo(((0.8 * 30) / 1.3) * kf, 9);
       // Flèche inversement proportionnelle au module.
       expect(r.deflection * kE).toBeCloseTo(ref.deflection, 6);
       const note = frList(out.notes).find((n) => /^Couches empilées : fil horizontal/.test(n));

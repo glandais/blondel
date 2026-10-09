@@ -50,7 +50,7 @@ import { precheckNotEvaluated, precheckResults, type PrecheckedBeam } from "../p
 import { grainAngle, hankinsonFactor } from "../precheck/grain.js";
 import { stairLoads } from "../precheck/loads.js";
 import {
-  GLULAM_SPECIES_WOOD_CLASS,
+  HARDWOOD_WOOD_CLASS,
   PrecheckSettingsSchema,
   woodMaterialOf,
   type BeamMaterial,
@@ -74,6 +74,7 @@ import { deduceExecutionClass, executionClassReasons } from "./steelCommon.js";
 import { buildWoodCentralBeam, type WoodCentralBeamResult } from "./woodCentralBeam.js";
 import { WoodCentralParamsSchema, type WoodCentralParams } from "./woodCentralParams.js";
 import { resolvePlateWidth } from "./woodCentralPlates.js";
+import { fcbaHardwoodAutoNote } from "./woodCut.js";
 import { woodCentralBoltSpacing } from "./woodSpacing.js";
 
 export {
@@ -243,18 +244,20 @@ function buildUnsafe(ctx: StructureContext, params: WoodCentralParams): Structur
         profile,
       ) + pc.extraPermanent;
     // Classe retenue : réglage, ou `auto` → GL24h pour l'essence lamellé-collé (QUESTIONS
-    // A33 (a), NF EN 14080 via C §1.11 [71]), classe massive d'une essence feuillue pour une
-    // poutre en lamellé-collé (D40, à valider, A35 (k)), C24 sinon.
-    // Classe FCBA saisie (C30, D40) : même hypothèse pour un lamellé-collé feuillu.
+    // A33 (a), NF EN 14080 via C §1.11 [71]), D30 pour une essence feuillue, massive ou
+    // lamellée-collée (classe visuelle 1 du chêne, à valider, A36 (1)), C24 sinon.
+    // Classe FCBA saisie (C30, D40) : même hypothèse pour une essence feuillue.
     const glulam = beam.lamination.kind === "glulam";
     const imposed =
       params.strengthClass === "C30" || params.strengthClass === "D40"
         ? params.strengthClass
         : undefined;
-    const base = woodMaterialOf(pc, profile.wood.densities[params.material], params.material, {
-      glulam,
-      ...(imposed !== undefined ? { strengthClass: imposed } : {}),
-    });
+    const base = woodMaterialOf(
+      pc,
+      profile.wood.densities[params.material],
+      params.material,
+      imposed !== undefined ? { strengthClass: imposed } : undefined,
+    );
     const kr = beam.lamination.kr;
     // k_r réduit la résistance de calcul du lamellé cintré (C §1.6, EN 1995-1-1 via [71]).
     const reduced = Number.isFinite(kr) && kr > 0 && kr < 1;
@@ -308,13 +311,12 @@ function buildUnsafe(ctx: StructureContext, params: WoodCentralParams): Structur
     if (reduced) {
       precheckNotes.push(msg("structure.woodCentral.note.precheckKr", { kr: dec(kr, 3) }));
     }
-    if (glulam) {
-      // Classe massive d'une essence feuillue retenue par `auto` (A35 (k)) : remarque propre.
-      const species =
-        pc.woodClass === "auto" &&
-        glulam &&
-        GLULAM_SPECIES_WOOD_CLASS[params.material] !== undefined &&
-        base.label === (imposed ?? GLULAM_SPECIES_WOOD_CLASS[params.material]);
+    // Classe d'une essence feuillue retenue par `auto` (A35 (k), A36 (1)), massive ou
+    // lamellée-collée : remarque propre ; autre classe d'un lamellé-collé : rappel du réglage.
+    const hardwood = HARDWOOD_WOOD_CLASS[params.material];
+    const species =
+      pc.woodClass === "auto" && hardwood !== undefined && base.label === (imposed ?? hardwood);
+    if (species || glulam) {
       precheckNotes.push(
         msg(
           species
@@ -351,6 +353,16 @@ function buildUnsafe(ctx: StructureContext, params: WoodCentralParams): Structur
 
   // 5. Remarque de synthèse : section, lamellation, k_r, reste sous entaille et sa provenance.
   if (hasBeam) notes.push(summaryNote(params, beam, trace.kind));
+  // Lecture FCBA `auto` d'une essence feuillue D30 : colonne C30 (QUESTIONS A37 (2)).
+  if (
+    hasBeam &&
+    params.section.residual === "auto" &&
+    beam.fcba.required !== null &&
+    beam.fcba.unusable === undefined
+  ) {
+    const hardwood = fcbaHardwoodAutoNote(params.material, params.strengthClass);
+    if (hardwood) notes.push(hardwood);
+  }
 
   // 6. Classe d'exécution des ancrages : sabots en tôle pliée boulonnée et chevillée, **sans
   // soudure** ni joint bout à bout (C §2.1 : PC1 pour les éléments non soudés, toutes nuances)
@@ -414,6 +426,12 @@ function buildUnsafe(ctx: StructureContext, params: WoodCentralParams): Structur
       autoValues["lagScrews.minSpacing"] = spacing.lag.minSpacing;
     if (params.lagScrews.endDistance === "auto" && Number.isFinite(spacing.lag.frontEndDistance))
       autoValues["lagScrews.endDistance"] = spacing.lag.frontEndDistance;
+    // Pince axiale a1,CG le long du fil (QUESTIONS A36 (4)).
+    if (
+      params.lagScrews.threadEndDistance === "auto" &&
+      Number.isFinite(spacing.lag.threadEndDistance)
+    )
+      autoValues["lagScrews.threadEndDistance"] = spacing.lag.threadEndDistance;
   }
   // Largeur de la platine à âme noyée (A33 (f)).
   if (

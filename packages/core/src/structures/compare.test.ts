@@ -230,7 +230,7 @@ describe("comparateur de variantes (CHALLENGE P2)", () => {
     }
   });
 
-  it("precheckModel : limons en plat (steel-flat) et bois (C24, à valider)", () => {
+  it("precheckModel : limons en plat (steel-flat) et bois (chêne : D30, à valider)", () => {
     for (const kind of ["steel-flat", "wood-housed"]) {
       const p: Project = { ...base(), stair: { ...base().stair, structure: { kind, params: {} } } };
       const m = buildModel(p, { memo: false });
@@ -238,7 +238,19 @@ describe("comparateur de variantes (CHALLENGE P2)", () => {
       expect(pc.beams.length, kind).toBe(2);
       expect(pc.results.filter((r) => r.ruleId === "PRECHECK_FLECHE").length).toBe(2);
       const label = pc.beams[0]!.label;
-      expect(text(label)).toMatch(kind === "wood-housed" ? /C24/ : /S235/);
+      // Limons de chêne (essence par défaut de wood-housed) : classe `auto` D30 en massif
+      // (QUESTIONS A36 (1)), C24 n'est plus retenue que pour le pin.
+      expect(text(label)).toMatch(kind === "wood-housed" ? /D30/ : /S235/);
+      if (kind === "wood-housed") {
+        // D30 : f_m,k = 30, γ_M du massif ; E = 11 000 MPa comme C24.
+        expect(pc.beams[0]!.result.design).toBeCloseTo((0.8 * 30) / 1.3, 9);
+        const pine: Project = {
+          ...p,
+          stair: { ...p.stair, structure: { kind, params: { material: "wood-pine" } } },
+        };
+        const pinePc = precheckModel(pine, buildModel(pine, { memo: false }));
+        expect(text(pinePc.beams[0]!.label)).toMatch(/C24/);
+      }
       // Plat mince : déversement non vérifié, signalé.
       expect(pc.notes.some((n) => /déversement/.test(text(n)))).toBe(kind === "steel-flat");
     }
@@ -316,8 +328,14 @@ describe("limon central bois (wood-central) dans le comparateur : pièces compos
       expect(v.massUnknown).toBe(0);
       expect(v.partCount).toBe(fabricatedParts(v.model.parts).length);
     }
-    // La poutre finie n'est pas comptée en plus de ses couches.
-    expect(stacked.partCount).toBe(stacked.model.parts.length - 1);
+    // Ni la poutre finie ni une couche composée de planches ne sont comptées en plus de leurs
+    // composantes (planche → couche → poutre, QUESTIONS A36 (9)).
+    const assemblies = new Set(stacked.model.parts.map((p) => p.componentOf));
+    const composite = stacked.model.parts.filter(
+      (p) => p.componentOf === "wood-central-beam" && assemblies.has(p.id),
+    );
+    expect(composite.length).toBeGreaterThan(0);
+    expect(stacked.partCount).toBe(stacked.model.parts.length - 1 - composite.length);
     // Même poutre finie : surfaces et masses du même ordre quelle que soit la filière (la
     // surface d'une couche est sa part de la face développée, pas l'aire de son gabarit).
     expect(stacked.surfaceM2 / mould.surfaceM2).toBeGreaterThan(0.95);

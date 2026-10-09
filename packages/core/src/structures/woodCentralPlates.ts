@@ -11,8 +11,10 @@
  * - coupe la poutre de niveau sur le dessus de la platine de pied (z = `anchors.plate.thickness`)
  *   et d'aplomb en tête à `trimmerSigma − anchors.plate.thickness − wood.clearance` ;
  * - reporte sur son développé les perçages des broches (`beamHoles`, horizontaux, au travers
- *   des faces : vrais trous du développé, comme ceux des boulons de sabot) et le **trait de
- *   scie** de chaque âme (`beamKerfs`, rectangle tracé en lignes de traçage) ;
+ *   des faces : vrais trous du développé, comme ceux des boulons de sabot) et le **logement**
+ *   de chaque âme (`beamKerfs`, contour tracé en lignes de traçage) : fraisé dans la poutre
+ *   finie (massif, couches droites, cintrage sur moule) ou découpé dans chaque couche avant
+ *   collage (couches empilées), QUESTIONS A36 (5), à faire valider par un atelier ;
  * - écarte ses boulons et tire-fonds de marche des broches (entraxe a1 au moins) ;
  * - transmet `welded` au plugin (classe d'exécution : âme soudée en T sur la platine).
  *
@@ -963,6 +965,24 @@ function buildPlates(input: WoodCentralShoesInput): WoodCentralPlatesResult {
     msg("structure.steel.quantity.cutThickness"),
     { min: null, max: profile.metal.laser.maxThickness },
   );
+  // Logement des âmes selon la filière (QUESTIONS A36 (5), décision du 2026-10-09, à faire
+  // valider par un atelier) : fraisé dans la poutre finie (massif, couches droites, cintrage
+  // sur moule) ; un trait en escalier ne se fait pas d'un seul passage de scie. En couches
+  // empilées, le logement est découpé dans chaque couche avant collage : la remarque, avec le
+  // nombre de pièces où il est découpé ou fraisé, est celle des couches (`woodCentralLayers.ts`,
+  // `note.layerKerf*`), le développé de la poutre en porte le contour (`flatLine.kerfLayerCut`).
+  const housing: WoodGrainMethod =
+    params.section.kind === "solid"
+      ? "solid"
+      : (resolveCurvedMethod(params, trace.kind !== "straight") ?? "straight");
+  if (housing !== "stacked") {
+    notes.push(
+      msg("structure.woodCentral.note.kerfMilled", {
+        webs: specs.map((s) => s.webMark).join(", "),
+        beam: beam.beamMark,
+      }),
+    );
+  }
   return {
     parts,
     beamHoles,

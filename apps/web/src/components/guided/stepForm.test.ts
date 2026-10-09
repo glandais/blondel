@@ -3,11 +3,19 @@
  * serveur, en français et en anglais : en-tête, champs essentiels, réglages « Plus » repliés,
  * réglages d'atelier seulement à l'étape 7, chiffres clés, jauge 2h + g, contenu de l'étape 7.
  */
-import { buildModel, createProject, type Model, type Project } from "@blondel/core";
+import {
+  buildModel,
+  createProject,
+  fabricatedParts,
+  parseProjectText,
+  type Model,
+  type Project,
+} from "@blondel/core";
 import { createTranslator } from "@blondel/i18n";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it } from "vitest";
+import quarterTurnText from "../../../../../examples/j5c-limon-central-bois-quart-tournant.blondel.json?raw";
 import { defaultGuards } from "../../lib/guardsForm.js";
 import { GUIDED_STEPS, type GuidedStep } from "../../lib/sectionIds.js";
 import { chooseStructure } from "../../lib/structureChoice.js";
@@ -222,6 +230,16 @@ describe("StepFigures : chiffres clés", () => {
     const f = fabricationStepFigures(model, 412.4, t);
     expect(f.map((x) => x.value)).toEqual([String(model.parts.length), "412", "EXC1"]);
     expect(fabricationStepFigures(null, undefined, t).map((x) => x.value)).toEqual(["–", "–", "–"]);
+  });
+
+  it("étape 7 : pièces fabriquées seulement, sans double compte des composantes (A36 (9))", () => {
+    // Poutre en couches empilées : LC1 et ses couches composées ne sont pas comptées.
+    const model = buildModel(parseProjectText(quarterTurnText));
+    const fab = fabricatedParts(model.parts).length;
+    expect(model.parts.some((p) => p.componentOf !== undefined)).toBe(true);
+    expect(fab).toBeLessThan(model.parts.length);
+    const f = fabricationStepFigures(model, undefined, createTranslator("fr"));
+    expect(f[0]!.value).toBe(String(fab));
   });
 });
 

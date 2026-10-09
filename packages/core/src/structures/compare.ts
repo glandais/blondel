@@ -228,7 +228,9 @@ export function summarizeVariant(
   const plugin = kind === "none" ? undefined : getStructure(kind);
   const model = buildModel(variant);
   // Pièces fabriquées : une pièce finie faite de composantes (couches empilées, `componentOf`)
-  // n'a ni masse ni matière propres, ses composantes les portent (aucun double compte).
+  // n'a ni masse ni matière propres, ses composantes les portent (aucun double compte) ; avec
+  // des composantes imbriquées (planche → couche composée → poutre, QUESTIONS A36 (9)), seules
+  // les planches et les couches d'une planche sont comptées.
   const parts = fabricatedParts(model.parts);
   let massKg = 0;
   let massUnknown = 0;

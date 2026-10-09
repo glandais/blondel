@@ -6,12 +6,12 @@
  * Aucun calcul métier : les chiffres des étapes 1 à 6 sont ceux de la bande du panneau libre
  * (`sectionFigures`, chiffres du cœur dans `Model.figures`), choisis par identifiant ; ceux de
  * l'étape 7 reprennent la lecture de la bande du mode Fabrication (`FabricationFigures` :
- * nombre de pièces, masse de la nomenclature, classe d'exécution). Pendant un calcul, le
+ * nombre de pièces fabriquées, masse de la nomenclature, classe d'exécution). Pendant un calcul, le
  * dernier modèle reste affiché. À l'étape 3, la jauge du module 2h + g suit les chiffres. La
  * grille n'a jamais de case vide (`figureSpans`).
  */
 import { massNoteFor } from "@blondel/exports";
-import type { Model, PartFamilyId, Project } from "@blondel/core";
+import { fabricatedParts, type Model, type PartFamilyId, type Project } from "@blondel/core";
 import type { Translator } from "@blondel/i18n";
 import { useMemo } from "react";
 import { formatNumber } from "../../i18n/locale.js";
@@ -76,7 +76,8 @@ export function fabricationStepFigures(
   return [
     {
       id: "parts",
-      value: model ? String(model.parts.length) : DASH,
+      // Pièces fabriquées (`fabricatedParts`, sans double compte des composantes, A36 (9)).
+      value: model ? String(fabricatedParts(model.parts).length) : DASH,
       caption: t.t("ui.guided.figures.parts"),
     },
     {

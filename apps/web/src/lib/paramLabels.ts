@@ -265,9 +265,9 @@ const COMMON: Readonly<Record<string, FieldText>> = {
   "precheck.gammaM0": { label: "ui.param.precheck.gammaM0.label", hint: TO_VALIDATE },
   "precheck.gammaMWood": { label: "ui.param.precheck.gammaMWood.label", hint: TO_VALIDATE },
   "precheck.kmod": { label: "ui.param.precheck.kmod.label", hint: TO_VALIDATE },
-  // Lamellé-collé (QUESTIONS A33 (a)) : γ_M propre aux classes GL, classe `auto` (GL24h pour
-  // l'essence lamellé-collé, classe massive de l'essence pour un lamellé-collé feuillu, A35 (k),
-  // C24 sinon).
+  // Lamellé-collé (QUESTIONS A33 (a)) : γ_M propre aux classes GL ; classe `auto` (GL24h pour
+  // l'essence lamellé-collé, D30 pour une essence feuillue, massive ou lamellée-collée, A36 (1),
+  // C24 sinon) ; classes massives de l'EN 338, D30 comprise (A36 (2)).
   "precheck.gammaMGlulam": { label: "ui.param.precheck.gammaMGlulam.label", hint: TO_VALIDATE },
   "precheck.woodClass": {
     label: "ui.param.precheck.woodClass.label",
@@ -565,6 +565,17 @@ const WOOD_CENTRAL: Readonly<Record<string, FieldText>> = {
     unit: "%",
     hint: TO_VALIDATE,
   },
+  // Aboutage à entures des planches d'une couche composée (QUESTIONS A36 (6)) ◆.
+  "section.jointOffset": {
+    label: "ui.param.woodCentral.section.jointOffset.label",
+    unit: MM,
+    hint: TO_VALIDATE,
+  },
+  "section.fingerLength": {
+    label: "ui.param.woodCentral.section.fingerLength.label",
+    unit: MM,
+    hint: TO_VALIDATE,
+  },
   "notch.rearDepth": {
     label: "ui.param.woodCentral.notch.rearDepth.label",
     unit: MM,
@@ -625,6 +636,12 @@ const WOOD_CENTRAL: Readonly<Record<string, FieldText>> = {
     unit: MM,
     hint: TO_VALIDATE,
   },
+  // Pince axiale a1,CG mesurée le long du fil (QUESTIONS A36 (4)) ◆.
+  "lagScrews.threadEndDistance": {
+    label: "ui.param.woodCentral.lagScrews.threadEndDistance.label",
+    unit: MM,
+    hint: TO_VALIDATE,
+  },
   // Ancrages : présence, type (sabot en U ou platine à âme noyée, QUESTIONS A33 (f), A34 (c)).
   "anchors.foot": { label: "ui.param.woodCentral.anchors.footAnchor.label" },
   "anchors.head": { label: "ui.param.woodCentral.anchors.headAnchor.label" },
@@ -682,6 +699,12 @@ const WOOD_CENTRAL: Readonly<Record<string, FieldText>> = {
   },
   "anchors.holeEdgeDistance": {
     label: "ui.param.holeEdgeDistance.label",
+    unit: MM,
+    hint: TO_VALIDATE,
+  },
+  // Boulons du sabot de pied regroupés (QUESTIONS A36 (10)) ◆.
+  "anchors.footBoltZone": {
+    label: "ui.param.woodCentral.anchors.footBoltZone.label",
     unit: MM,
     hint: TO_VALIDATE,
   },

@@ -16,7 +16,8 @@
  * pièce), de sorte que volumes bruts et masses cumulés restent ceux des pièces.
  *
  * Pièce finie faite de composantes (`Part.componentOf`) : seules les composantes sont listées
- * (`cutParts`, comme la liste de débit). Débit en placage (`Part.stock.supply = "veneer"`) :
+ * (`cutParts`, comme la liste de débit ; planches d'une couche composée, QUESTIONS A36 (9)).
+ * Débit en placage (`Part.stock.supply = "veneer"`) :
  * désignation « … (placage) » et champ `supply` de la ligne.
  *
  * Regroupement : par **épaisseur** seulement pour un débit en plaque (tôle, plat, plateau de

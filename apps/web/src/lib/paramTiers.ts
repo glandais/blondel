@@ -368,6 +368,9 @@ const STRUCTURE_BY_KIND: Readonly<Record<string, Readonly<Record<string, ParamTi
     "section.dressingAllowance": workshop(S),
     // Pente de fil maximale des planches d'une couche empilée (QUESTIONS A35 (h)) : Atelier ◆.
     "section.maxGrainSlope": workshop(S),
+    // Aboutage à entures des planches d'une couche et décalage des joints (QUESTIONS A36 (6)) ◆.
+    "section.jointOffset": workshop(S),
+    "section.fingerLength": workshop(S),
     notch: workshop(S),
     "notch.rearDepth": design(S, [more(5)]),
     bolts: workshop(S),
@@ -386,6 +389,8 @@ const STRUCTURE_BY_KIND: Readonly<Record<string, Readonly<Record<string, ParamTi
     // Entraxe et pince avant des tire-fonds au plus sévère des règles de l'EC5 (A35 (l)).
     "lagScrews.minSpacing": workshop(S),
     "lagScrews.endDistance": workshop(S),
+    // Pince axiale a1,CG le long du fil (QUESTIONS A36 (4)) ◆.
+    "lagScrews.threadEndDistance": workshop(S),
     anchors: workshop(S),
     "anchors.foot": design(S, [more(5)]),
     "anchors.head": design(S, [more(5)]),
@@ -402,6 +407,8 @@ const STRUCTURE_BY_KIND: Readonly<Record<string, Readonly<Record<string, ParamTi
     "anchors.bolts": workshop(S),
     "anchors.boltHoleDiameter": workshop(S),
     "anchors.holeEdgeDistance": workshop(S),
+    // Boulons du sabot de pied regroupés hors de la zone utile de M1 (QUESTIONS A36 (10)) ◆.
+    "anchors.footBoltZone": workshop(S),
     "anchors.plate": workshop(S),
     "anchors.plate.thickness": workshop(S),
     "anchors.plate.width": workshop(S),
@@ -650,7 +657,13 @@ export function structureParamApplies(
     if (leaf === "curvedMethod" || leaf === "mouldMaxWidth") return curvedLayout(project);
     if (leaf === "thinPlyMax") return curvedMethodOf(project, params) === "mould";
     if (leaf === "lamellaThickness") return curvedMethodOf(project, params) !== "stacked";
-    if (leaf === "layerThickness" || leaf === "dressingAllowance" || leaf === "maxGrainSlope") {
+    if (
+      leaf === "layerThickness" ||
+      leaf === "dressingAllowance" ||
+      leaf === "maxGrainSlope" ||
+      leaf === "jointOffset" ||
+      leaf === "fingerLength"
+    ) {
       return curvedMethodOf(project, params) === "stacked";
     }
   }
@@ -692,6 +705,7 @@ const SHOE_ONLY: ReadonlySet<string> = new Set([
   "cheekDepth",
   "bolts",
   "boltHoleDiameter",
+  "footBoltZone",
 ]);
 
 /**

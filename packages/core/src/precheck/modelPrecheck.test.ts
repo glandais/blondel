@@ -12,6 +12,7 @@ import { ruleDescription } from "../model/messages.js";
 import type { Project } from "../model/project.js";
 import { buildModel } from "../pipeline/build.js";
 import { parseProjectText } from "../project/parse.js";
+import { createDemoProject } from "../project/presetDemo.js";
 import "../structures/index.js";
 import { PRECHECK_LABEL, PRECHECK_RULE_IDS, precheckResults } from "./checks.js";
 import { precheckModel, structurePrecheckSettings } from "./stringers.js";
@@ -97,5 +98,50 @@ describe("prédimensionnement : messages traduits (ADR-0007)", () => {
       );
     }
     for (const n of pc.notes) expect(EN.t(n)).not.toMatch(/limon|poutres|permanentes/);
+  });
+});
+
+describe("classe `auto` D30 des feuillus dans la chaîne (QUESTIONS A36 (1))", () => {
+  /** Même projet, classe de prédimensionnement saisie (`precheck.woodClass`). */
+  const withClass = (p: Project, woodClass: string): Project => ({
+    ...p,
+    stair: {
+      ...p.stair,
+      structure: {
+        ...p.stair.structure,
+        params: { ...(p.stair.structure.params as object), precheck: { woodClass } },
+      },
+    },
+  });
+  /** Ratio des résistances de calcul `auto` / classe saisie, poutre par poutre. */
+  const designRatio = (p: Project, woodClass: string): number[] => {
+    const auto = buildModel(p).precheck!.beams;
+    const set = buildModel(withClass(p, woodClass)).precheck!.beams;
+    expect(set.map((b) => b.partId)).toEqual(auto.map((b) => b.partId));
+    return auto.map((b, i) => b.result.design / set[i]!.result.design);
+  };
+  const cases: [string, () => Project][] = [
+    // Limons à la française de chêne (`wood-housed`) : C24 → D30 (f_m,k 24 → 30 MPa).
+    ["demo-u-oak (wood-housed, chêne)", () => createDemoProject("demo-u-oak")],
+    ["j3a-acceptance-01-bois (wood-housed)", () => load("j3a-acceptance-01-bois.blondel.json")],
+    // Frêne (`wood-housed`) : D30 par analogie, à valider (QUESTIONS A37 (3)). Les crémaillères
+    // de `wood-cut` ne sont pas prédimensionnées : leur classe `auto` ne sert qu'au tableau FCBA
+    // (colonne C30, `woodCut.test.ts`).
+    [
+      "demo-quarter-landing-ash (wood-housed, frêne)",
+      () => createDemoProject("demo-quarter-landing-ash"),
+    ],
+  ];
+
+  it.each(cases)("%s : prédimensionnement en D30, comme une classe D30 saisie", (_, make) => {
+    const p = make();
+    const m = buildModel(p);
+    expect(frList(m.errors)).toEqual([]);
+    const beams = m.precheck!.beams;
+    expect(beams.length).toBeGreaterThan(0);
+    for (const b of beams) expect(fr(b.label)).toMatch(/\bD30\b/);
+    // Même résultat qu'avec D30 saisie ; résistance de calcul dans le rapport 30 / 24 de C24.
+    for (const r of designRatio(p, "D30")) expect(r).toBeCloseTo(1, 12);
+    for (const r of designRatio(p, "C24")) expect(r).toBeCloseTo(30 / 24, 12);
   });
 });

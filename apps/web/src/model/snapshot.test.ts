@@ -28,6 +28,19 @@ describe("sceneParts", () => {
     expect(shown.map((p) => p.id)).toEqual(model.parts.map((p) => p.id));
   });
 
+  it("composantes imbriquées (A36 (9)) : ni couche composée ni planche, la pièce racine seule", () => {
+    const host = model.parts[0]!;
+    const layer: Part = { ...host, id: "layer-1", mark: "X-1", componentOf: host.id };
+    const boards: Part[] = [1, 2].map((j) => ({
+      ...host,
+      id: `layer-1-${j}`,
+      mark: `X-1.${j}`,
+      componentOf: "layer-1",
+    }));
+    const shown = sceneParts([...model.parts, layer, ...boards]);
+    expect(shown.map((p) => p.id)).toEqual(model.parts.map((p) => p.id));
+  });
+
   it("instantané : aucun maillage de composante", () => {
     const host = model.parts[0]!;
     const layer: Part = { ...host, id: "layer-1", mark: "X-1", componentOf: host.id };

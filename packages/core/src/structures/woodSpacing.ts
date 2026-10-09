@@ -28,14 +28,27 @@
  * (décision (b), plus sévère que la rive non chargée a4,c que donnerait la gravité).
  *
  * Tire-fonds de marche (A35 (l)) : entraxes et pinces au plus sévère des règles latérales
- * (règles des boulons, EC5 § 8.7.1 via [71] § 10.6.1) et axiales (EC5 § 8.7.2 via [71]
- * tableau 10.6 : a1 = 7·d, a2 = 5·d, a1,CG = 10·d, a2,CG = 4·d ; `ec5AxialScrewSpacing`) :
- * entraxe max(5·d ; 7·d), pince au bout avant de l'assise max(a3,c ; a1,CG) (bois de bout à côté
- * de la partie filetée), au bout arrière a3,c, distance aux faces max(a4,c ; a2,CG)
+ * (règles des boulons, EC5 § 8.7.1 via [71] § 10.6.1) et axiales (EC5 § 8.7.2, tableau 8.6 lu
+ * sur l'EN 1995-1-1:2004+A1:2008, C §1.11 [88], recoupé par [71] tableau 10.6 : a1 = 7·d,
+ * a2 = 5·d, a1,CG = 10·d, a2,CG = 4·d ; `ec5AxialScrewSpacing`) : entraxe max(5·d ; 7·d), pince
+ * latérale a3,c aux deux bouts de l'assise, distance aux faces max(a4,c ; a2,CG)
  * (`WoodCentralLagSpacing`).
+ *
+ * **Pince axiale a1,CG le long du fil** (QUESTIONS A36 (4), décision du 2026-10-09, convention
+ * Blondel **à valider**) : la partie filetée d'un tire-fond est supposée occuper tout son
+ * ancrage dans la poutre ; son centre de gravité CG est au milieu de l'ancrage. La distance de
+ * CG au « bout de la pièce » est mesurée **le long du fil** dans le développement (σ, z) de la
+ * poutre (`grainEndDistance`) : on lance un rayon depuis CG dans les deux sens du fil, et seul
+ * compte le premier côté du contour rencontré s'il est une **surface de bout** (`isBeamEndSide` :
+ * faces verticales de cran, face avant, coupe de tête, coupe au sol et plafond des entailles
+ * arrière, coupés en biais du fil) ; un rayon qui sort par le dessus d'une assise ou par la
+ * sous-face ne contraint pas. Fil le long de la pente (massif, couches droites, cintrage sur moule) ou
+ * horizontal (couches empilées : la coupe au sol, parallèle au fil, y est une rive, a2,CG).
+ * Remplace la pince a1,CG prise au seul bout avant de l'assise (A35 (l)). La même mesure sert à
+ * la pince d'extrémité a3,c des boulons du sabot de pied dans le bois (A36 (10)).
  */
 import { nominalDiameterFor } from "../fasteners/compute.js";
-import type { Mm } from "../model/primitives.js";
+import type { Mm, Vec2 } from "../model/primitives.js";
 import type { FastenerProfile } from "../workshop/fasteners.js";
 
 /** Organe de type tige : boulon (vis et tire-fonds d > 6 mm compris) ou broche. */
@@ -122,10 +135,15 @@ export interface Ec5AxialScrewSpacing {
   readonly a1CG: Mm;
   /** Distance du centre de gravité de la partie filetée à la rive : 4·d. */
   readonly a2CG: Mm;
+  /**
+   * Pénétration minimale de la partie filetée côté pointe : 6·d (EN 1995-1-1 § 8.7.2 (3), C §1.11
+   * [88] ; contrôlée, sans borner `lagScrews.minAnchorage`, QUESTIONS A37 (1)).
+   */
+  readonly penetration: Mm;
 }
 
 export function ec5AxialScrewSpacing(d: Mm): Ec5AxialScrewSpacing {
-  return { a1: 7 * d, a2: 5 * d, a1CG: 10 * d, a2CG: 4 * d };
+  return { a1: 7 * d, a2: 5 * d, a1CG: 10 * d, a2CG: 4 * d, penetration: 6 * d };
 }
 
 /**
@@ -172,12 +190,21 @@ export interface WoodCentralLagSpacing {
   readonly axial: Ec5AxialScrewSpacing;
   /** Entraxe minimal retenu (`lagScrews.minSpacing`, `auto` : max(5·d ; 7·d) = 7·d). */
   readonly minSpacing: Mm;
-  /** Pince au bout avant de l'assise (`lagScrews.endDistance`, `auto` : max(a3,c ; a1,CG)). */
+  /**
+   * Pince latérale au bout avant de l'assise (`lagScrews.endDistance`, `auto` : a3,c = 4·d) ;
+   * la pince axiale a1,CG est mesurée à part, le long du fil (`threadEndDistance`, A36 (4)).
+   */
   readonly frontEndDistance: Mm;
   /** Pince au bout arrière de l'assise : celle des boulons (`bolts.edgeDistance` résolu). */
   readonly rearEndDistance: Mm;
   /** Distance minimale aux faces de la poutre : max(a4,c ; a2,CG) = 4·d. */
   readonly faceDistance: Mm;
+  /**
+   * Pince axiale a1,CG (`lagScrews.threadEndDistance`, `auto` : a1,CG = 10·d), mesurée le long
+   * du fil depuis le centre de gravité de la partie filetée jusqu'à la coupe au sol et aux faces
+   * de cran (QUESTIONS A36 (4), décision du 2026-10-09, à valider).
+   */
+  readonly threadEndDistance: Mm;
 }
 
 /** Pinces et entraxe des boulons (et tire-fonds) de marche du limon central bois, résolus. */
@@ -200,7 +227,8 @@ export interface WoodCentralBoltSpacing {
 
 /**
  * Entraxe et pinces des boulons de marche (`bolts.*`, QUESTIONS A34 (b)) et des tire-fonds
- * (`lagScrews.minSpacing`, `lagScrews.endDistance`, A35 (l)) : valeurs saisies, ou `auto` →
+ * (`lagScrews.minSpacing`, `lagScrews.endDistance`, A35 (l) ; `lagScrews.threadEndDistance`,
+ * A36 (4)) : valeurs saisies, ou `auto` →
  * bornes « tous angles » de l'EC5 (C §1.11 [71]). Contrat partagé : la poutre place
  * les boulons et tire-fonds avec, le plugin expose les valeurs `auto` retenues.
  */
@@ -214,6 +242,7 @@ export function woodCentralBoltSpacing(
   lagScrews: {
     readonly minSpacing: Mm | "auto";
     readonly endDistance: Mm | "auto";
+    readonly threadEndDistance?: Mm | "auto";
   } = { minSpacing: "auto", endDistance: "auto" },
 ): WoodCentralBoltSpacing {
   const nominal = nominalDiameterFor(
@@ -236,10 +265,97 @@ export function woodCentralBoltSpacing(
       axial,
       minSpacing:
         lagScrews.minSpacing !== "auto" ? lagScrews.minSpacing : Math.max(ec5.a1, axial.a1),
-      frontEndDistance:
-        lagScrews.endDistance !== "auto" ? lagScrews.endDistance : Math.max(ec5.a3c, axial.a1CG),
+      frontEndDistance: lagScrews.endDistance !== "auto" ? lagScrews.endDistance : ec5.a3c,
       rearEndDistance: edgeDistance,
       faceDistance: Math.max(ec5.a4c, axial.a2CG),
+      threadEndDistance:
+        lagScrews.threadEndDistance !== undefined && lagScrews.threadEndDistance !== "auto"
+          ? lagScrews.threadEndDistance
+          : axial.a1CG,
     },
   };
+}
+
+/** Tolérance de colinéarité et d'appartenance des intersections rayon / côté (mm). */
+const RAY_EPS = 1e-9;
+
+/**
+ * Premier côté du polygone rencontré par le rayon p + t·u (t > 0) : distance t et indice du
+ * côté [poly[i] ; poly[i + 1]] ; côtés parallèles au rayon ignorés. Plusieurs côtés à la même
+ * distance (sommet) : tous rendus.
+ */
+function firstHits(p: Vec2, u: Vec2, poly: readonly Vec2[]): { t: number; sides: number[] } {
+  let best = Infinity;
+  let sides: number[] = [];
+  for (let i = 0; i < poly.length; i++) {
+    const a = poly[i]!;
+    const b = poly[(i + 1) % poly.length]!;
+    const ex = b.x - a.x;
+    const ey = b.y - a.y;
+    const den = u.x * ey - u.y * ex;
+    if (Math.abs(den) < RAY_EPS * Math.hypot(ex, ey)) continue;
+    const wx = a.x - p.x;
+    const wy = a.y - p.y;
+    const t = (wx * ey - wy * ex) / den;
+    const k = (wx * u.y - wy * u.x) / den;
+    if (!(t > RAY_EPS) || k < -RAY_EPS || k > 1 + RAY_EPS) continue;
+    if (t < best - 1e-7) {
+      best = t;
+      sides = [i];
+    } else if (t <= best + 1e-7) sides.push(i);
+  }
+  return { t: best, sides };
+}
+
+/**
+ * Distance le long du fil d'un point à la plus proche surface de bout d'une pièce (QUESTIONS
+ * A36 (4), convention **à valider**, voir l'en-tête) : rayon depuis `p` dans les deux sens de
+ * `dir` (normalisée ici) ; dans chaque sens, le premier côté du contour `polygon` rencontré
+ * compte s'il est une surface de bout (`isEnd(a, b)`, côté [a ; b]) ; sinon (dessus d'assise,
+ * sous-face) ce sens ne contraint pas. Plusieurs côtés à la même distance (sommet) : la distance
+ * compte si l'un d'eux est une surface de bout. `Infinity` si aucun sens ne rencontre de bout.
+ * Fonction pure ; `p` est supposé à l'intérieur du contour.
+ */
+export function grainEndDistance(
+  p: Vec2,
+  dir: Vec2,
+  polygon: readonly Vec2[],
+  isEnd: (a: Vec2, b: Vec2) => boolean,
+): Mm {
+  const n = Math.hypot(dir.x, dir.y);
+  if (!(n > 0) || polygon.length < 3) return Infinity;
+  let out = Infinity;
+  for (const sgn of [1, -1]) {
+    const u = { x: (sgn * dir.x) / n, y: (sgn * dir.y) / n };
+    const hit = firstHits(p, u, polygon);
+    if (!Number.isFinite(hit.t)) continue;
+    const end = hit.sides.some((i) => isEnd(polygon[i]!, polygon[(i + 1) % polygon.length]!));
+    if (end) out = Math.min(out, hit.t);
+  }
+  return out;
+}
+
+/**
+ * Direction du fil d'une poutre dans son développement (σ, z) (A36 (4)) : horizontale en couches
+ * empilées (`stacked`), le long de la pente nominale `slope` (tan α) sinon.
+ */
+export function grainDirection(method: WoodGrainMethod, slope: number): Vec2 {
+  if (method === "stacked" || !Number.isFinite(slope)) return { x: 1, y: 0 };
+  const n = Math.hypot(1, slope);
+  return { x: 1 / n, y: slope / n };
+}
+
+/**
+ * Surfaces de bout du développement d'une poutre (A36 (4), convention à valider), contour en
+ * sens trigonométrique : côtés verticaux (faces de cran, face avant, coupe de tête) et côtés
+ * horizontaux qui ont le bois **au-dessus** (coupe au sol, plafond des entailles arrière où se
+ * loge l'arrière de la marche précédente : faces de cran horizontales, coupées en biais du fil
+ * comme la coupe au sol). Le dessus des assises (bois au-dessous) et la sous-face ne sont pas
+ * des surfaces de bout. En couches empilées (fil horizontal), un rayon horizontal n'atteint
+ * jamais un côté horizontal (côté parallèle ignoré) : la coupe au sol y est une rive.
+ */
+export function isBeamEndSide(a: Vec2, b: Vec2): boolean {
+  const dx = b.x - a.x;
+  if (Math.abs(dx) < 1e-6) return true;
+  return Math.abs(b.y - a.y) < 1e-6 && dx > 0;
 }

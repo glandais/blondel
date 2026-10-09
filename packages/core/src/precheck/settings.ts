@@ -10,19 +10,22 @@
  *   (C §1.2, §1.3, confiance élevée) ; L/300 : usage résidentiel (C §1.3 [52], faible) ;
  * - acier : E = 210 000 MPa (valeur du calcul indicatif de C §2.3), f_y = 235 / 355 MPa
  *   (désignation de la nuance, EN 10025-2 non lue) ;
- * - **à valider** (aucune source dans docs/research : EN 1990, EC3 / EC5 et leurs AN, EN 338 non
- *   lus) : γ_G = 1,35, γ_Q = 1,5, γ_M0 = 1,0, γ_M bois = 1,3, k_mod = 0,8, classes de bois C24
- *   (E = 11 000 MPa, f_m,k = 24 MPa) et f_m,k des C30 / D40, part de la charge ponctuelle et de
- *   la masse de vibration reprise par un limon (1 : tout sur un limon, sécuritaire) ;
+ * - **à valider** (aucune source dans docs/research : EN 1990, EC3 / EC5 et leurs AN non lus) :
+ *   γ_G = 1,35, γ_Q = 1,5, γ_M0 = 1,0, γ_M bois = 1,3, k_mod = 0,8, part de la charge ponctuelle
+ *   et de la masse de vibration reprise par un limon (1 : tout sur un limon, sécuritaire) ;
+ * - classes de bois massif C24, C30, D30, D40 (QUESTIONS A36 (2), 2026-10-09) : f_m,k, E_0,mean,
+ *   ρ_k, ρ_mean, f_v,k de l'EN 338:2016 (tableau 1 lu sur l'aperçu public, C §1.11 [84] ;
+ *   tableau 3 lu sur le projet prEN 338:2013, [89]), recoupées par la NF EN 338:2009 du catalogue
+ *   FCBA [90] ; norme non lue en entier (confiance moyenne) ; E_0,mean = 13 000 MPa de D40
+ *   confirmé (les 11 000 MPa de [83] sont ceux de l'édition 2003, [92]) ;
  * - lamellé-collé (QUESTIONS A33 (a), 2026-10-09) : classes GL24h / GL28h / GL32h (E_0,g,mean,
  *   f_m,g,k de la NF EN 14080) et γ_M = 1,25 (EN 1995-1-1 § 2.4.1), rapportés par C §1.11 [71]
- *   (normes non lues, confiance moyenne, **à valider**) ; classe `auto` : GL24h pour l'essence
- *   lamellé-collé, C24 sinon ;
- * - lamellé-collé d'une essence feuillue (QUESTIONS A35 (k), 2026-10-09) : classe `auto` = classe
- *   massive de l'essence, D40 pour le chêne, le hêtre et le frêne (`GLULAM_SPECIES_WOOD_CLASS`),
- *   même hypothèse que la classe FCBA `auto` de `wood-central` ; **à valider** : le classement
- *   visuel du chêne donne au plus D30 (NF B 52-001-1 non lue, via FNB fiche C10, C §1.11 [82]),
- *   et E_0,mean de D40 vaut 11 000 MPa d'après [83] contre 13 000 ici (QUESTIONS A36).
+ *   (normes non lues, confiance moyenne, **à valider**) ;
+ * - classe `auto` (QUESTIONS A36 (1), décision du 2026-10-09) : GL24h pour l'essence
+ *   lamellé-collé, **D30** pour les essences feuillues (chêne, hêtre, frêne), en massif comme en
+ *   lamellé-collé, dans tous les plugins (`HARDWOOD_WOOD_CLASS`), C24 sinon ; D30 = classe
+ *   visuelle 1 du chêne (NF B 52-001-1 non lue, via C §1.11 [82], et NF EN 1912 via [90]) ;
+ *   hêtre et frêne par analogie, sans source : **à valider** (QUESTIONS A37).
  */
 import { msg, type Message } from "@blondel/i18n";
 import { z } from "zod";
@@ -32,10 +35,12 @@ export const LOAD_CATEGORIES = ["A", "B", "C1", "C2", "C3", "C4", "C5", "D1", "D
 export type LoadCategory = (typeof LOAD_CATEGORIES)[number];
 
 /**
- * Classes de résistance du bois : massif (EN 338 non lue) et lamellé-collé homogène GL24h,
- * GL28h, GL32h (NF EN 14080 non lue, valeurs rapportées par C §1.11 [71], QUESTIONS A33 (a)).
+ * Classes de résistance du bois : massif C24, C30, D30, D40 (EN 338:2016 via C §1.11 [84][89],
+ * recoupée par [90], QUESTIONS A36 (2)) et lamellé-collé homogène GL24h, GL28h, GL32h
+ * (NF EN 14080 non lue, valeurs rapportées par C §1.11 [71], QUESTIONS A33 (a)). D30 ajoutée
+ * le 2026-10-09 (ajout rétrocompatible de l'énumération).
  */
-export const WOOD_CLASSES = ["C24", "C30", "D40", "GL24h", "GL28h", "GL32h"] as const;
+export const WOOD_CLASSES = ["C24", "C30", "D30", "D40", "GL24h", "GL28h", "GL32h"] as const;
 export type WoodClass = (typeof WOOD_CLASSES)[number];
 
 /** Classes de lamellé-collé (γ_M du lamellé-collé, `gammaMGlulam`). */
@@ -43,9 +48,9 @@ export const GLULAM_WOOD_CLASSES: readonly WoodClass[] = ["GL24h", "GL28h", "GL3
 
 /**
  * Réglage de la classe : une classe, ou `auto` = GL24h pour l'essence lamellé-collé
- * (`wood-glulam`, plus basse classe GL sourcée), classe massive de l'essence pour un
- * lamellé-collé feuillu (option `glulam` de `resolveWoodClass`, QUESTIONS A35 (k)), C24 sinon
- * (défaut historique) ; à valider.
+ * (`wood-glulam`, plus basse classe GL sourcée), D30 pour une essence feuillue, massive ou
+ * lamellée-collée (`HARDWOOD_WOOD_CLASS`, QUESTIONS A36 (1)), C24 sinon (défaut historique) ;
+ * à valider.
  */
 export const WOOD_CLASS_SETTINGS = [...WOOD_CLASSES, "auto"] as const;
 export type WoodClassSetting = (typeof WOOD_CLASS_SETTINGS)[number];
@@ -76,8 +81,9 @@ export const PrecheckSettingsSchema = z.object({
    */
   gammaMGlulam: z.number().positive().default(1.25),
   /**
-   * Classe de résistance des limons bois ; `auto` : GL24h pour l'essence lamellé-collé, C24
-   * sinon (à valider : EN 338 non lue ; classes GL : NF EN 14080 via C §1.11 [71]).
+   * Classe de résistance des limons bois ; `auto` : GL24h pour l'essence lamellé-collé, D30
+   * pour une essence feuillue, C24 sinon (à valider ; classes massives : EN 338 via C §1.11
+   * [84][89][90] ; classes GL : NF EN 14080 via C §1.11 [71]).
    */
   woodClass: z.enum(WOOD_CLASS_SETTINGS).default("auto"),
 });
@@ -129,54 +135,107 @@ export function steelYield(grade: SteelGrade): number {
   return grade === "S355" ? 355 : 235;
 }
 
+/** Propriétés d'une classe de résistance du bois. */
+export interface WoodClassProperties {
+  /** Module d'élasticité moyen parallèle au fil E_0,mean (E_0,g,mean en GL), MPa. */
+  readonly e: number;
+  /** Résistance caractéristique en flexion f_m,k (f_m,g,k en GL), MPa. */
+  readonly fmk: number;
+  /**
+   * Masse volumique caractéristique ρ_k, kg/m³ : **informative**, non utilisée par le calcul (la
+   * masse volumique du poids propre reste celle du profil d'atelier). Absente des classes GL.
+   */
+  readonly rhoK?: number;
+  /** Masse volumique moyenne ρ_mean, kg/m³ : informative, non utilisée. */
+  readonly rhoMean?: number;
+  /**
+   * Résistance caractéristique au cisaillement f_v,k, MPa : informative, non utilisée (le
+   * prédimensionnement indicatif ne vérifie que flexion, flèche et fréquence propre).
+   */
+  readonly fvk?: number;
+  /** Provenance des valeurs. */
+  readonly sourced: Message;
+}
+
 /**
- * Propriétés des classes de bois : E de C30 et D40 sourcés (exemple FCBA du DTU 36.3, C §1.4 [1]),
- * le reste des classes massives **à valider** (EN 338 non lue) ; classes GL : E_0,g,mean et
- * f_m,g,k de la NF EN 14080 rapportés par C §1.11 [71] (norme non lue, confiance moyenne).
+ * Propriétés des classes de bois.
+ * - Classes massives C24, C30, D30, D40 : EN 338:2016 (QUESTIONS A36 (2)) ; tableau 1 (C) lu sur
+ *   l'aperçu public de l'édition 2016 (C §1.11 [84]), tableau 3 (D) sur le projet prEN 338:2013
+ *   déclaré équivalent (C §1.11 [89]) ; f_m,k, E_0,mean, ρ_k et ρ_mean identiques dans la
+ *   NF EN 338:2009 (catalogue FCBA, [90]) ; f_v,k de D30 / D40 : 3,9 / 4,2 MPa (projet 2016),
+ *   4,0 en 2009. Norme non lue en entier (confiance moyenne).
+ * - Classes GL : E_0,g,mean et f_m,g,k de la NF EN 14080 rapportés par C §1.11 [71] (norme non
+ *   lue, confiance moyenne) ; masses volumiques et f_v,k non sourcés, donc absents.
  */
-export const WOOD_CLASS_PROPERTIES: Readonly<
-  Record<WoodClass, { readonly e: number; readonly fmk: number; readonly sourced: Message }>
-> = {
-  C24: { e: 11_000, fmk: 24, sourced: msg("precheck.woodClass.C24") },
-  C30: { e: 12_000, fmk: 30, sourced: msg("precheck.woodClass.C30") },
-  D40: { e: 13_000, fmk: 40, sourced: msg("precheck.woodClass.D40") },
+export const WOOD_CLASS_PROPERTIES: Readonly<Record<WoodClass, WoodClassProperties>> = {
+  C24: {
+    e: 11_000,
+    fmk: 24,
+    rhoK: 350,
+    rhoMean: 420,
+    fvk: 4,
+    sourced: msg("precheck.woodClass.C24"),
+  },
+  C30: {
+    e: 12_000,
+    fmk: 30,
+    rhoK: 380,
+    rhoMean: 460,
+    fvk: 4,
+    sourced: msg("precheck.woodClass.C30"),
+  },
+  D30: {
+    e: 11_000,
+    fmk: 30,
+    rhoK: 530,
+    rhoMean: 640,
+    fvk: 3.9,
+    sourced: msg("precheck.woodClass.D30"),
+  },
+  D40: {
+    e: 13_000,
+    fmk: 40,
+    rhoK: 550,
+    rhoMean: 660,
+    fvk: 4.2,
+    sourced: msg("precheck.woodClass.D40"),
+  },
   GL24h: { e: 11_500, fmk: 24, sourced: msg("precheck.woodClass.GL24h") },
   GL28h: { e: 12_600, fmk: 28, sourced: msg("precheck.woodClass.GL28h") },
   GL32h: { e: 14_200, fmk: 32, sourced: msg("precheck.woodClass.GL32h") },
 };
 
 /**
- * Classe massive retenue pour le lamellé-collé d'une essence feuillue (classe `auto`,
- * QUESTIONS A35 (k), décision du 2026-10-09) : D40 pour le chêne, le hêtre et le frêne, même
- * hypothèse que la classe FCBA `auto` de `wood-central` (`strengthClass`). **À valider** : le
- * classement visuel du chêne donne D30 / D24 / D18, jamais D40 (NF B 52-001-1 non lue, via
- * C §1.11 [82]) ; aucune classe de lamellé-collé feuillu sourcée (QUESTIONS A36).
+ * Classe `auto` des essences feuillues du code (QUESTIONS A36 (1), décision du 2026-10-09) :
+ * **D30**, en massif comme en lamellé-collé, dans tous les plugins. D30 = classe visuelle 1 du
+ * chêne (NF B 52-001-1 non lue, via la fiche FNB C10, C §1.11 [82] ; le catalogue FCBA [90]
+ * classe le chêne en D18 / D24 / D30, jamais D40) ; hêtre et frêne par analogie, **aucune
+ * source** : à valider (QUESTIONS A37). La classe FCBA `auto` des tables de crémaillère et de
+ * reste sous entaille d'une essence feuillue (`woodCut`, `WOOD_CENTRAL_AUTO_CLASS`) lit la
+ * colonne C30, de même f_m,k que D30, et non plus « feuillus ≥ D40 » (QUESTIONS A37 (2)).
  */
-export const GLULAM_SPECIES_WOOD_CLASS: Readonly<Partial<Record<string, WoodClass>>> = {
-  "wood-oak": "D40",
-  "wood-beech": "D40",
-  "wood-ash": "D40",
+export const HARDWOOD_WOOD_CLASS: Readonly<Partial<Record<string, WoodClass>>> = {
+  "wood-oak": "D30",
+  "wood-beech": "D30",
+  "wood-ash": "D30",
 };
 
 /** Options de la classe `auto`. */
 export interface WoodClassOptions {
   /**
-   * La pièce est un lamellé-collé de l'essence `material` (poutre de `wood-central` en couches
-   * collées) : feuillu → classe massive de l'essence (`GLULAM_SPECIES_WOOD_CLASS`).
-   */
-  readonly glulam?: boolean;
-  /**
    * Classe de résistance imposée à la pièce par son plugin (`wood-central.strengthClass` saisi,
-   * lecture du tableau FCBA) : avec `glulam`, elle remplace la classe massive par défaut d'une
-   * essence feuillue, pour que prédimensionnement et lecture FCBA gardent la même hypothèse.
+   * lecture du tableau FCBA) : elle remplace la classe `auto` d'une essence feuillue
+   * (`HARDWOOD_WOOD_CLASS`), pour que prédimensionnement et lecture FCBA gardent la même
+   * hypothèse ; sans effet sur une autre essence.
    */
   readonly strengthClass?: WoodClass;
 }
 
 /**
  * Classe retenue : celle du réglage, ou `auto` → GL24h pour l'essence lamellé-collé
- * (`wood-glulam`) ; avec `options.glulam`, classe massive d'une essence feuillue (D40,
- * `GLULAM_SPECIES_WOOD_CLASS`, à valider) ; C24 sinon (et sans essence connue).
+ * (`wood-glulam`) ; D30 pour une essence feuillue, massive ou lamellée-collée
+ * (`HARDWOOD_WOOD_CLASS`, à valider), ou la classe imposée `options.strengthClass` ; C24 sinon
+ * (et sans essence connue).
  */
 export function resolveWoodClass(
   settings: PrecheckSettings,
@@ -185,8 +244,7 @@ export function resolveWoodClass(
 ): WoodClass {
   if (settings.woodClass !== "auto") return settings.woodClass;
   if (material === "wood-glulam") return "GL24h";
-  const species =
-    options?.glulam && material !== undefined ? GLULAM_SPECIES_WOOD_CLASS[material] : undefined;
+  const species = material !== undefined ? HARDWOOD_WOOD_CLASS[material] : undefined;
   if (species === undefined) return "C24";
   return options?.strengthClass ?? species;
 }
@@ -210,7 +268,7 @@ export function steelMaterialOf(
 /**
  * Matériau bois d'une poutre : classe retenue (`resolveWoodClass`, `material` = essence de la
  * pièce pour `auto`, `options` transmises), γ_M du lamellé-collé pour une classe GL, du bois
- * massif sinon (D40 d'un lamellé-collé feuillu compris : classe massive).
+ * massif sinon (D30 d'un lamellé-collé feuillu compris : classe massive).
  */
 export function woodMaterialOf(
   settings: PrecheckSettings,

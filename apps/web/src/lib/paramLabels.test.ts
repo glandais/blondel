@@ -391,21 +391,56 @@ describe("suites du limon central (A32 a, A33, A34 du 2026-10-09)", () => {
     expect(at(f, "anchors.kind")?.disabledOptions).toBeUndefined();
   });
 
-  it("prédimensionnement : classes GL et « automatique », γ_M du lamellé-collé ◆", () => {
+  it("prédimensionnement : classes D30 et GL, « automatique » (A36 (1)), γ_M du lamellé-collé ◆", () => {
     const f = fieldsOf("wood-central");
     const cls = f.find((x) => x.path.join(".") === "precheck.woodClass")!;
     expect(cls.optionLabels).toEqual({
       C24: "C24",
       C30: "C30",
+      D30: "D30",
       D40: "D40",
       GL24h: "GL24h",
       GL28h: "GL28h",
       GL32h: "GL32h",
-      auto: "Automatique (GL24h en lamellé-collé, D40 en lamellé-collé de chêne, hêtre ou frêne, C24 sinon)",
+      auto: "Automatique (GL24h en lamellé-collé, D30 pour le chêne, le hêtre et le frêne, C24 sinon)",
     });
+    const clsEn = at(woodFields("straight", "en"), "precheck.woodClass")!;
+    expect(clsEn.optionLabels?.["auto"]).toBe(
+      "Automatic (GL24h for glulam, D30 for oak, beech and ash, C24 otherwise)",
+    );
+    expect(clsEn.optionLabels?.["D30"]).toBe("D30");
     const gm = f.find((x) => x.path.join(".") === "precheck.gammaMGlulam")!;
     expect(gm.label).toBe("γ_M (lamellé-collé)");
     expect(gm.toValidateHint).toBe(true);
+  });
+
+  it("décisions A36 : aboutages, pince axiale des tire-fonds, zone des boulons du sabot ◆", () => {
+    const quarter = woodFields("quarter-left");
+    expect(at(quarter, "section.jointOffset")).toMatchObject({
+      unit: "mm",
+      toValidateHint: true,
+      label: "Décalage minimal des aboutages d'une couche à l'autre",
+    });
+    expect(at(quarter, "section.fingerLength")).toMatchObject({
+      unit: "mm",
+      toValidateHint: true,
+      label: "Longueur des entures des planches aboutées",
+    });
+    expect(at(quarter, "lagScrews.threadEndDistance")).toMatchObject({
+      kind: "auto-number",
+      unit: "mm",
+      toValidateHint: true,
+      label: "Pince axiale des tire-fonds le long du fil (a1,CG)",
+    });
+    const straight = woodFields("straight");
+    expect(at(straight, "anchors.footBoltZone")).toMatchObject({
+      unit: "mm",
+      toValidateHint: true,
+      label: "Zone des boulons du sabot de pied",
+    });
+    expect(at(woodFields("quarter-left", "en"), "section.fingerLength")?.label).toBe(
+      "Finger length of the finger-jointed boards",
+    );
   });
 
   it("décisions A35 : pente de fil, tire-fonds, âme de pied, réduction de Hankinson ◆", () => {

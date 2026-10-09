@@ -15,6 +15,8 @@
  * Pièce finie faite de composantes (`Part.componentOf`, couches d'une poutre en couches
  * empilées, QUESTIONS A33 (e)) : seules les composantes sont listées (elles portent le débit, le
  * volume et la masse) ; la pièce finie, sans débit propre, ne l'est pas (aucun double compte).
+ * Composantes imbriquées (QUESTIONS A36 (9)) : les planches d'une couche composée sont listées,
+ * ni la couche composée ni la poutre (`fabricatedParts`).
  * Débit en placage (`Part.stock.supply = "veneer"`, plis minces achetés à l'épaisseur,
  * QUESTIONS A34 (e)) : désignation suivie de « (placage) » (sans nouvelle colonne) et champ
  * `supply` de la ligne pour l'interface et le PDF.

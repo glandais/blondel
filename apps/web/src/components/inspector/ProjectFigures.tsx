@@ -38,7 +38,8 @@ export function useProjectFigures(): readonly Figure[] {
     [model, locale, workshop],
   );
   // Pièces fabriquées (`fabricatedParts`) : une poutre en couches empilées compte pour ses
-  // couches, comme la nomenclature et la masse.
+  // couches, une couche composée pour ses planches (QUESTIONS A36 (9)), comme la nomenclature et
+  // la masse ; aucun double compte.
   const partCount = useMemo(
     () => (model ? fabricatedParts(model.parts).length : undefined),
     [model],

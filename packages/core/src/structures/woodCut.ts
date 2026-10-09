@@ -18,7 +18,8 @@
  *   de son domaine), LIMON_EPAISSEUR_MIN_DTU, longueur de plateau et débit (profil d'atelier).
  *
  * Domaine d'exploitation du tableau [hypothèse Blondel, à valider] : escalier droit, classe de
- * résistance connue (C30 résineux, D40 feuillus), épaisseur ≥ la plus petite épaisseur
+ * résistance connue (colonnes C30 résineux, D40 feuillus ; `auto` d'un feuillu D30 : colonne C30,
+ * QUESTIONS A37 (2)), épaisseur ≥ la plus petite épaisseur
  * tabulée, hauteur à monter ≤ celle de l'exemple (2,70 m) et projection horizontale de la
  * crémaillère ≤ celle de l'exemple (2,70 m / tan 38°) : moment de flexion d'une poutre
  * rampante ∝ portée horizontale², donc exemple du côté de la sécurité.
@@ -45,6 +46,7 @@ import {
 } from "./checks.js";
 import { CREMAILLERE_RULE_ID, fcbaTable, requiredResidual, type StrengthClass } from "./fcba.js";
 import { area, clipHalfPlane, minAreaRect, pointSegmentDistance, removeCollinear } from "./geom.js";
+import { HARDWOOD_WOOD_CLASS } from "../precheck/settings.js";
 import { stairGeometry } from "./legs.js";
 import { woodQuantities } from "./quantities.js";
 import { stockOf } from "./woodHoused.js";
@@ -62,9 +64,9 @@ export const WoodCutParamsSchema = z.object({
   /** Reste sous entaille retenu quand le tableau FCBA n'est pas exploitable (à valider). */
   residualFallback: mmPos.default(180),
   /**
-   * Classe de résistance ; `auto` : C30 pour le pin, D40 pour chêne, hêtre, frêne
-   * [hypothèse à valider : classe réelle selon le classement du bois], inconnue pour le
-   * lamellé-collé.
+   * Classe de résistance (colonne du tableau FCBA) ; `auto` : C30 pour le pin, colonne C30
+   * aussi pour chêne, hêtre, frêne, classés D30 (QUESTIONS A36 (1), A37 (2), à valider),
+   * inconnue pour le lamellé-collé.
    */
   strengthClass: z.enum(["C30", "D40", "unknown", "auto"]).default("auto"),
   /** Retrait de la face extérieure des crémaillères sous le bout des marches (à valider). */
@@ -72,13 +74,36 @@ export const WoodCutParamsSchema = z.object({
 });
 export type WoodCutParams = z.output<typeof WoodCutParamsSchema>;
 
+/**
+ * Classe FCBA `auto` (lecture des tableaux de reste sous entaille, colonnes C30 / D40) : C30 pour
+ * le pin ; pour les essences feuillues (chêne, hêtre, frêne), classées **D30** par QUESTIONS
+ * A36 (1) (`HARDWOOD_WOOD_CLASS`), colonne **C30** : le tableau ne donne que « résineux ≥ C30 »
+ * et « feuillus ≥ D40 » (C §1.4 [1]) ; la colonne D40 n'est pas sécuritaire pour un bois D30
+ * (f_m,k 30 contre 40 MPa) et la colonne C30 a la même f_m,k (30 MPa, EN 338:2016 via C §1.11
+ * [84][89]) et demande partout un reste au moins égal ; E_0,mean de D30 (11 000 MPa) reste sous
+ * celui de C30 (12 000 MPa) : **à valider** (QUESTIONS A37 (2), remarque
+ * `structure.woodCut.note.fcbaHardwoodC30`). Inconnue pour le lamellé-collé.
+ */
 const AUTO_CLASS: Readonly<Record<WoodMaterialId, StrengthClass | "unknown">> = {
   "wood-pine": "C30",
-  "wood-oak": "D40",
-  "wood-beech": "D40",
-  "wood-ash": "D40",
+  "wood-oak": "C30",
+  "wood-beech": "C30",
+  "wood-ash": "C30",
   "wood-glulam": "unknown",
 };
+
+/**
+ * Remarque de la lecture FCBA `auto` d'une essence feuillue (colonne C30 pour un bois D30,
+ * QUESTIONS A37 (2)) ; `null` hors de ce cas (classe saisie, essence résineuse ou lamellé-collé).
+ */
+export function fcbaHardwoodAutoNote(
+  material: WoodMaterialId,
+  strengthClass: StrengthClass | "unknown" | "auto",
+): Message | null {
+  return strengthClass === "auto" && HARDWOOD_WOOD_CLASS[material] !== undefined
+    ? msg("structure.woodCut.note.fcbaHardwoodC30")
+    : null;
+}
 
 export interface CarriageDetail {
   readonly part: Part;
@@ -423,6 +448,11 @@ export function buildWoodCut(ctx: StructureContext, params: WoodCutParams): CutR
             reason: fcbaUnusable,
           }),
   );
+  const hardwoodNote =
+    params.residual === "auto" && fcbaUnusable === undefined
+      ? fcbaHardwoodAutoNote(params.material, params.strengthClass)
+      : null;
+  if (hardwoodNote) notes.push(hardwoodNote);
 
   // Assemblages : chaque crémaillère porte toutes les marches (escalier droit).
   const assemblies = carriages.flatMap((c) =>

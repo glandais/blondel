@@ -8,5 +8,5 @@ export {
   buildBasicParts,
   type BasicParts,
 } from "./basic.js";
-export { fabricatedParts } from "./components.js";
+export { assemblyQuantity, fabricatedParts, rootAssemblyId } from "./components.js";
 export { checkSolids, isSelfIntersection, solidProblem } from "./solidChecks.js";

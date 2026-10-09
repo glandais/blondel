@@ -357,6 +357,48 @@ describe("pièces composées et placages (QUESTIONS A33 (e), A34 (e))", () => {
     expect(cutListRows([alone!]).map((r) => r.mark)).toEqual(["LC1-1"]);
   });
 
+  it("composantes imbriquées (A36 (9)) : planches et couche simple listées, ni LC1 ni couche composée", () => {
+    const beam = { ...woodStringerPart(), id: "beam", mark: "LC1" };
+    const { stock: _stock, ...finished } = beam;
+    const { stock: _s, ...bare } = beam;
+    const composed = {
+      ...bare,
+      id: "beam-layer-1",
+      mark: "LC1-1",
+      name: textMessage("Couche 1"),
+      componentOf: "beam",
+      quantities: {},
+    };
+    const board = (j: number, volume: number, mass: number) => ({
+      ...beam,
+      id: `beam-layer-1-${j}`,
+      mark: `LC1-1.${j}`,
+      name: textMessage(`Planche 1.${j}`),
+      componentOf: "beam-layer-1",
+      stock: { length: 1500 + j, width: 300, thickness: 40 },
+      quantities: { volume, mass_kg: mass },
+    });
+    const simple = {
+      ...beam,
+      id: "beam-layer-2",
+      mark: "LC1-2",
+      name: textMessage("Couche 2"),
+      componentOf: "beam",
+      stock: { length: 3000, width: 300, thickness: 40 },
+      quantities: { volume: 0.03, mass_kg: 21 },
+    };
+    const parts = [finished, composed, board(1, 0.01, 7), board(2, 0.02, 14), simple];
+    for (const locale of ["fr", "en"] as const) {
+      const rows = cutListRows(parts, { locale });
+      expect(rows.map((r) => r.mark).sort()).toEqual(["LC1-1.1", "LC1-1.2", "LC1-2"]);
+    }
+    const csv = parseCsv(exportCutListCsv({ parts }).slice(1));
+    const total = csv[csv.length - 1]!;
+    expect(total[7]).toBe("3");
+    expect(total[9]).toBe("0,060000");
+    expect(total[11]).toBe("42,00");
+  });
+
   it("débit en placage : désignation « (placage) », champ `supply`, pas de nouvelle colonne", () => {
     const ply = {
       ...treadPart(3),

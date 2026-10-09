@@ -12,6 +12,7 @@ import { pointInPolygon } from "../geom2d/polygon.js";
 import * as V from "../geom2d/vec.js";
 import type { Part } from "../model/derived.js";
 import type { Mm, Vec2 } from "../model/primitives.js";
+import { fabricatedParts, rootAssemblyId } from "../parts/components.js";
 import { solidProblem } from "../parts/solidChecks.js";
 import { createProject } from "../project/presets.js";
 import { resolveWorkshopProfile, type WorkshopProfile } from "../workshop/profile.js";
@@ -211,7 +212,11 @@ describe("couches empilées sur une trace réelle", () => {
       const zTop = Math.max(...trace.nosingSigma.slice(1).map((s) => trace.nosingZ(s) - 40));
       expect(r.layers).toHaveLength(Math.ceil(zTop / 40));
       const byId = new Map(r.parts.map((p) => [p.id, p]));
-      expect(r.parts).toHaveLength(r.layers.reduce((n, l) => n + l.boards!.length, 0));
+      // Une pièce par planche, plus une par couche composée (A36 (9)).
+      const composedCount = r.layers.filter((l) => l.boards!.length > 1).length;
+      expect(r.parts).toHaveLength(
+        r.layers.reduce((n, l) => n + l.boards!.length, 0) + composedCount,
+      );
       r.layers.forEach((l, i) => {
         expect(l.index).toBe(i + 1);
         expect(l.partId).toBe(woodCentralLayerId(i + 1));
@@ -228,7 +233,16 @@ describe("couches empilées sur une trace réelle", () => {
           expect(boards[0]!.mark).toBe(l.mark);
           expect(byId.get(l.partId)!.name.key).toBe("structure.woodCentral.part.layer");
         } else {
-          expect(byId.has(l.partId)).toBe(false);
+          // Couche composée (A36 (9)) : pièce sans gabarit ni débit ni grandeurs, avant ses planches.
+          const layer = byId.get(l.partId)!;
+          expect(layer.name.key).toBe("structure.woodCentral.part.layer");
+          expect(layer.componentOf).toBe(BEAM_ID);
+          expect(layer.flat).toBeUndefined();
+          expect(layer.stock).toBeUndefined();
+          expect(layer.quantities).toEqual({});
+          expect(solidProblem(layer.solid)).toBeUndefined();
+          const at = r.parts.indexOf(layer);
+          expect(r.parts[at + 1]!.id).toBe(boards[0]!.partId);
           boards.forEach((bd, j) => {
             expect(bd.partId).toBe(woodCentralBoardId(i + 1, j + 1));
             expect(bd.mark).toBe(woodCentralBoardMark("LC1", i + 1, j + 1));
@@ -241,7 +255,8 @@ describe("couches empilées sur une trace réelle", () => {
         const boards = l.boards!;
         boards.forEach((bd, j) => {
           const p = byId.get(bd.partId)!;
-          expect(p.componentOf).toBe(BEAM_ID);
+          expect(p.componentOf).toBe(boards.length === 1 ? BEAM_ID : l.partId);
+          expect(rootAssemblyId([...r.parts, { id: BEAM_ID }], p.id)).toBe(BEAM_ID);
           expect(p.category).toBe("carriage");
           expect(p.assembledWith).toEqual([BEAM_ID]);
           expect(p.material).toBe(params.material);
@@ -276,9 +291,9 @@ describe("couches empilées sur une trace réelle", () => {
       }
       expect(r.maxGrainDeviation).toBeLessThanOrEqual(Math.atan(DEFAULT_SLOPE / 100) + 1e-9);
       // Contrôles par pièce, débit partout disponible.
-      const ids = new Set(r.parts.map((p) => p.id));
+      const ids = new Set(fabricatedParts(r.parts).map((p) => p.id));
       const stockResults = checks.results.filter((x) => x.ruleId === "FAB_DEBIT_DISPONIBLE");
-      expect(stockResults).toHaveLength(r.parts.length);
+      expect(stockResults).toHaveLength(ids.size);
       for (const x of stockResults) {
         expect(x.location.kind === "part" && ids.has(x.location.partId)).toBe(true);
         expect(x.status).toBe("ok");
@@ -294,7 +309,9 @@ describe("couches empilées sur une trace réelle", () => {
     const trace = woodTraceOf(ctx, params);
     const { r } = run(trace, realShape(trace, 88), params);
     const springing = r.parts.flatMap((p) =>
-      p.flat!.lines.filter((l) => l.label?.key === "structure.steelCurved.flatLine.springing"),
+      (p.flat?.lines ?? []).filter(
+        (l) => l.label?.key === "structure.steelCurved.flatLine.springing",
+      ),
     );
     expect(trace.naissances.length).toBeGreaterThan(0);
     expect(springing.length).toBeGreaterThan(0);
@@ -402,9 +419,9 @@ function straightTrace(L: Mm): CentralTrace {
 const seatsOf = (h: Mm, h0: Mm, steps: number): Mm[] =>
   Array.from({ length: steps }, (_, k) => h0 + h * k);
 
-/** Volume fini cumulé des pièces, mm³. */
+/** Volume fini cumulé des pièces fabriquées (planches et couches d'une planche), mm³. */
 const volumeOf = (r: StackedLayersResult): number =>
-  r.parts.reduce((acc, p) => acc + p.quantities[QUANTITY_VOLUME_M3]! * 1e9, 0);
+  fabricatedParts(r.parts).reduce((acc, p) => acc + p.quantities[QUANTITY_VOLUME_M3]! * 1e9, 0);
 
 describe("couches empilées : joints calés sur les assises (A35 (g))", () => {
   it("tranches : intervalles entre niveaux partagés en couches égales ≤ t_max, puis t_max", () => {
@@ -444,7 +461,7 @@ describe("couches empilées : joints calés sur les assises (A35 (g))", () => {
     expect(r.layers[0]!.z1).toBeCloseTo(200 / 3, 9);
     expect(r.layers[3]!.z1 - r.layers[3]!.z0).toBeCloseTo(60, 9);
     // Gabarits et débit à l'épaisseur de chaque couche.
-    for (const p of r.parts) {
+    for (const p of fabricatedParts(r.parts)) {
       const l = r.layers.find((x) => x.boards!.some((bd) => bd.partId === p.id))!;
       expect(p.flat!.thickness).toBeCloseTo(l.z1 - l.z0, 9);
       expect(p.stock!.thickness).toBeGreaterThanOrEqual(l.z1 - l.z0);
@@ -514,21 +531,22 @@ describe("couches empilées : planches (A35 (h))", () => {
 
   it("tournant : couches aboutées, fil borné par la pente, remarque", () => {
     const { shape, volume } = synthetic(80, 250, 180, 200, 0.6, 8);
+    // Sans décalage imposé (A36 (6)) : planches égales, le plus petit nombre.
     const params = woodCentralParams({
-      section: { layerThickness: 40, dressingAllowance: 5, maxGrainSlope: 5 },
+      section: { layerThickness: 40, dressingAllowance: 5, maxGrainSlope: 5, jointOffset: 0 },
     });
     const { r, checks } = run(arcTrace(900, shape.sEnd), shape, params);
     const beta = Math.atan(0.05);
     const composed = r.layers.filter((l) => l.boards!.length > 1);
     expect(composed.length).toBeGreaterThan(0);
     for (const l of composed) {
-      expect(r.parts.some((p) => p.id === l.partId)).toBe(false);
+      expect(r.parts.find((p) => p.id === l.partId)?.flat).toBeUndefined();
       for (const bd of l.boards!) {
         expect(bd.grainDeviation).toBeLessThanOrEqual(beta + 1e-9);
         expect(bd.across).toBeUndefined();
         const p = r.parts.find((x) => x.id === bd.partId)!;
         expect(p.mark).toBe(bd.mark);
-        expect(p.componentOf).toBe(BEAM_ID);
+        expect(p.componentOf).toBe(l.partId);
         expect(p.name.params?.["board"]).toBe(bd.index);
         // Fil selon la corde de la planche.
         const c = V.normalize(
@@ -550,7 +568,7 @@ describe("couches empilées : planches (A35 (h))", () => {
     expect(note.params?.["boards"]).toBe(composed.reduce((acc, l) => acc + l.boards!.length, 0));
     // Un contrôle de débit et de longueur par planche.
     const stock = checks.results.filter((x) => x.ruleId === "FAB_DEBIT_DISPONIBLE");
-    expect(stock).toHaveLength(r.parts.length);
+    expect(stock).toHaveLength(fabricatedParts(r.parts).length);
   });
 
   it("hélicoïdal, défauts, couches empilées : planches LC1-k.j au débit", () => {
@@ -560,7 +578,9 @@ describe("couches empilées : planches (A35 (h))", () => {
     const boards = beam.parts.filter((p) => /^LC1-\d+\.\d+$/.test(p.mark));
     expect(boards.length).toBeGreaterThan(0);
     for (const p of boards) {
-      expect(p.componentOf).toBe("wood-central-beam");
+      // Planche composante de sa couche, elle-même composante de la poutre (A36 (9)).
+      expect(p.componentOf).toBe(p.id.replace(/-\d+$/, ""));
+      expect(rootAssemblyId(beam.parts, p.id)).toBe("wood-central-beam");
       expect(p.stock).toBeDefined();
       expect(p.flat).toBeDefined();
     }
@@ -593,7 +613,7 @@ describe("couches empilées : planches (A35 (h))", () => {
     const wide = run(trace, shape, params).r;
     expect(wide.parts.length).toBeLessThan(r.parts.length);
     expect(r.layers.some((l) => l.boards!.length > 1)).toBe(true);
-    for (const p of r.parts) expect(p.stock!.width).toBe(100);
+    for (const p of fabricatedParts(r.parts)) expect(p.stock!.width).toBe(100);
     const stock = checks.results.filter((x) => x.ruleId === "FAB_DEBIT_DISPONIBLE");
     expect(stock.every((x) => x.status === "ok")).toBe(true);
     expect(Math.abs(volumeOf(r) - volume) / volume).toBeLessThan(1e-6);
@@ -617,6 +637,7 @@ describe("couches empilées : planches (A35 (h))", () => {
       for (let i = 1; i < 3; i++) expect(across[i]!.d0).toBeCloseTo(across[i - 1]!.d1, 9);
       for (const bd of boards) {
         const p = r.parts.find((x) => x.id === bd.partId)!;
+        expect(p.componentOf).toBe(l.partId);
         expect(p.solid.kind === "ruled" && p.solid.thickness).toBeCloseTo(200 / 3, 9);
         const faces = p.flat!.lines.filter(
           (x) => x.label?.key === "structure.woodCentral.flatLine.layerFace",
@@ -675,9 +696,9 @@ describe("couches empilées : propriétés", () => {
         });
         const { r } = run(trace, shape, params);
         expect(r.errors).toEqual([]);
-        const sum = r.parts.reduce((acc, p) => acc + p.quantities[QUANTITY_VOLUME_M3]! * 1e9, 0);
+        const sum = volumeOf(r);
         expect(Math.abs(sum - volume) / volume).toBeLessThan(1e-6);
-        for (const p of r.parts) {
+        for (const p of fabricatedParts(r.parts)) {
           expect(solidProblem(p.solid)).toBeUndefined();
           expect(Math.min(...sectionHeights(p))).toBeGreaterThan(0);
           const outline = flatVertices(p);
@@ -751,6 +772,7 @@ describe("couches empilées : propriétés", () => {
             .map((n) => n.params?.["mark"]),
         );
         const ids = new Set(res.parts.map((p) => p.id));
+        const byId = new Map(res.parts.map((p) => [p.id, p]));
         let maxDev = 0;
         for (const l of res.layers) {
           const boards = l.boards!;
@@ -779,8 +801,13 @@ describe("couches empilées : propriétés", () => {
               expect(strips[i]!.d0).toBeCloseTo(strips[i - 1]!.d1, 9);
             }
           }
-          // Une couche d'une planche reste une pièce ; sinon elle n'en est plus une.
-          expect(ids.has(l.partId)).toBe(boards.length === 1);
+          // Une couche d'une planche reste une pièce fabriquée ; une couche composée est une pièce
+          // sans gabarit, dont les planches sont les composantes (A36 (9)).
+          expect(ids.has(l.partId)).toBe(true);
+          expect(byId.get(l.partId)!.flat === undefined).toBe(boards.length > 1);
+          for (const bd of boards) {
+            if (boards.length > 1) expect(byId.get(bd.partId)!.componentOf).toBe(l.partId);
+          }
         }
         // (v) but de la décision (h) : hors garde-fou, chaque pièce tient dans la largeur du
         // plus large plateau du profil (aucun `FAB_DEBIT_DISPONIBLE` dû à la largeur).

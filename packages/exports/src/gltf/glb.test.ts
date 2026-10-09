@@ -336,4 +336,23 @@ describe("exportGlb", () => {
     );
     expect(doc.nodes.slice(1).map((n) => n.name)).toEqual(["LC1"]);
   });
+
+  it("composantes imbriquées (A36 (9)) : ni couche ni planche dans la scène, LC1 seule", () => {
+    const beam = { ...boxPart(0, 0, 0, 0, 100, 100, 80), id: "beam", mark: "LC1" };
+    const layer: Part = {
+      ...boxPart(1, 0, 0, 0, 100, 100, 40),
+      id: "beam-layer-1",
+      mark: "LC1-1",
+      componentOf: "beam",
+    };
+    const board = (j: number): Part => ({
+      ...boxPart(1 + j, (j - 1) * 50, 0, 0, 50, 100, 40),
+      id: `beam-layer-1-${j}`,
+      mark: `LC1-1.${j}`,
+      componentOf: "beam-layer-1",
+    });
+    const tread = { ...boxPart(9, 0, 200, 0, 100, 100, 40), id: "t1", mark: "M1" };
+    const { doc } = buildGltf({ parts: [beam, layer, board(1), board(2), tread] });
+    expect(doc.nodes.slice(1).map((n) => n.name)).toEqual(["LC1", "M1"]);
+  });
 });

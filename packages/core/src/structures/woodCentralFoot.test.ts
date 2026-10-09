@@ -78,6 +78,14 @@ describe("pied sur platine à âme noyée : âme prolongée, M1 fixée (A35 (a))
     expect(boltIssuesOn(checks, m1.tread)).toEqual([]);
     // Broches : deux, posées au-delà de la zone des organes de M1.
     expect(web.flat!.outline.holes).toHaveLength(params.anchors.plate.pins);
+    // Logement de l'âme tracé sur le développé de LC1 selon la filière (A36 (5)).
+    const lc1 = beam.parts.find((p) => p.id === "wood-central-beam")!;
+    const kerfKeys = lc1.flat!.lines.flatMap((l) => (l.label ? [l.label.key] : []));
+    expect(kerfKeys).toContain(
+      beam.curvedMethod === "stacked"
+        ? "structure.woodCentral.flatLine.kerfLayerCut"
+        : "structure.woodCentral.flatLine.kerfMilled",
+    );
   });
 
   it.each(["quarter-left", "two-quarters-u"] as const)(
@@ -112,18 +120,45 @@ describe("pied sur platine à âme noyée : âme prolongée, M1 fixée (A35 (a))
   });
 });
 
-describe("assise trop courte pour les tire-fonds (A35 (l), QUESTIONS A36 (11))", () => {
-  it("U, poutre de 220 mm : M3 à un organe, constat avec les deux pinces des tire-fonds", () => {
-    // M3 chevauche la limite de l'écrou : son premier organe ne peut être qu'un tire-fond, et
-    // les règles des tire-fonds (100 + 70 + 40 = 210 mm) ne tiennent pas dans son assise.
-    const { checks } = run("two-quarters-u", { section: { width: 220 } });
+describe("assise trop courte pour les tire-fonds (A35 (l), QUESTIONS A36 (4), (11))", () => {
+  it("U, poutre de 220 mm en couches empilées : M3 reste à un organe, a1,CG mesurée le long du fil ne la règle pas", () => {
+    // Couches empilées (fil horizontal) : la mesure de a1,CG le long du fil (A36 (4)) part de la
+    // face de la dent précédente, à la hauteur du centre de gravité de la partie filetée, au-
+    // dessus du plafond de l'entaille de M2 : 100 mm comme avant. M3 chevauche la limite de
+    // l'écrou ; avant elle, seul un tire-fond tient, à σ0 + 100 au plus tôt ; la pince arrière
+    // (40 mm) laisse 62 mm pour l'entraxe de 70 mm : un seul organe, l'avertissement reste.
+    const { beam, checks } = run("two-quarters-u", { section: { width: 220 } });
+    expect(beam.curvedMethod).toBe("stacked");
     const m3 = boltIssuesOn(checks, 3);
     expect(m3).toHaveLength(1);
-    expect(m3[0]!.message.key).toBe("structure.woodCentral.check.fixings.missingLag");
+    expect(m3[0]!.message.key).toBe("structure.woodCentral.check.fixings.missingLagThread");
     expect(fr(m3[0]!.message)).toMatch(
-      /tire-fonds à 100 mm du bout avant, 40 mm du bout arrière, entraxe 70 mm/,
+      /tire-fonds à 40 mm du bout avant, 40 mm du bout arrière, entraxe 70 mm, centre de gravité de la partie filetée à 100 mm au moins de la coupe au sol et des faces de cran le long du fil/,
     );
+    const seat = beam.seats.find((x) => x.tread === 3)!;
+    expect(seat.bolts).toHaveLength(1);
+    // Le seul organe : un tire-fond à 100 mm au moins de la face de la dent (fil horizontal).
+    expect(seat.bolts[0]!.kind).toBe("lagScrew");
+    expect(seat.bolts[0]!.sigma - seat.sigma0).toBeGreaterThanOrEqual(100 - 1e-6);
   });
+});
+
+describe("U à poutre de 200 à 240 mm cintrée sur moule : M3 réglée (QUESTIONS A36 (11))", () => {
+  it.each([200, 220, 240])(
+    "b = %i mm : M3 reçoit ses deux organes, aucun constat de fixation",
+    (width) => {
+      // Fil le long de la pente (moule) : a1,CG mesurée le long du fil depuis la face de la dent
+      // laisse place à deux organes sur l'assise de M3, contrairement aux couches empilées
+      // (cas ci-dessus, fil horizontal).
+      const { beam, checks } = run("two-quarters-u", {
+        section: { width, curvedMethod: "mould" },
+      });
+      expect(beam.curvedMethod).toBe("mould");
+      expect(boltIssuesOn(checks, 3)).toEqual([]);
+      const seat = beam.seats.find((x) => x.tread === 3)!;
+      expect(seat.bolts).toHaveLength(2);
+    },
+  );
 });
 
 describe("pied sur platine à âme noyée ou sabot : propriété (A35 (a))", () => {
@@ -151,7 +186,10 @@ describe("pied sur platine à âme noyée ou sabot : propriété (A35 (a))", () 
           const seatClearance =
             roundUpTo(thickness + lp.minAnchorage, bp.lengthStep) - thickness + lp.tipCover;
           const m1 = beam.seats[0]!;
-          // Garde : assise assez longue pour ses organes, assez de bois sous M1.
+          // Garde : assise assez longue pour ses organes (pinces latérales et entraxe), assez de
+          // bois sous M1. La pince axiale a1,CG le long du fil (A36 (4)) n'entre pas dans la
+          // garde : la propriété vérifie qu'elle ne retire aucun organe à M1 dans ce domaine
+          // (tire-fonds raccourcis au besoin jusqu'à l'ancrage minimal).
           const room =
             m1.sigma1 -
             m1.sigma0 -

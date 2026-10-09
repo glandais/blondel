@@ -155,6 +155,16 @@ export function stockSummary(parts: readonly Part[], t: Translator): string {
   return infill.length > 0 && infill.length < parts.length ? stockSummary(infill, t) : "";
 }
 
+/**
+ * Nombre de pièces fabriquées d'un groupe (en-tête de la liste) : les pièces de `fabricated`
+ * (`fabricatedParts` du cœur), pour que le compte des groupes reste celui des chiffres
+ * « Pièces » ; une pièce composée (poutre en couches empilées, couche de plusieurs planches,
+ * QUESTIONS A36 (9)) reste listée sans être comptée.
+ */
+export function groupPartCount(group: PartGroup, fabricated: ReadonlySet<string>): number {
+  return group.parts.filter((p) => fabricated.has(p.id)).length;
+}
+
 /** Ligne de résumé d'un groupe : repères, puis section ou matériau s'il est connu. */
 export function groupSummary(group: PartGroup, t: Translator): string {
   return [marksSummary(group.marks), stockSummary(group.parts, t)]

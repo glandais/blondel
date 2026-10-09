@@ -26,16 +26,35 @@ const inDomain = makeSteppingProject({ width: 900, legs: [3200], floorToFloor: 2
 const outOfDomain = makeSteppingProject({ width: 900, legs: [3780], floorToFloor: 2700 });
 
 describe("wood-cut (crémaillères)", () => {
-  it("dans le domaine du tableau FCBA : reste sous entaille = valeur exigée (D40, 44 mm → 162)", () => {
+  it("dans le domaine du tableau FCBA : chêne `auto` (D30) lu en C30 (44 mm → 163), remarque", () => {
+    // Classe `auto` du chêne : D30 (QUESTIONS A36 (1)) ; colonne C30, même f_m,k, plutôt que
+    // « feuillus ≥ D40 » (162), non sécuritaire pour un bois D30 (QUESTIONS A37 (2)).
     const { m, r } = cut(inDomain);
     expect(m.errors).toEqual([]);
     expect(r.fcbaUnusable).toBeUndefined();
     expect(r.carriages.map((c) => c.part.mark)).toEqual(["CI1", "CE1"]);
-    for (const c of r.carriages) expect(c.residual).toBeCloseTo(162, 6);
+    for (const c of r.carriages) expect(c.residual).toBeCloseTo(163, 6);
     const res = m.compliance.results.filter((x) => x.ruleId === "CREMAILLERE_REGLE_MOYENS");
     expect(res).toHaveLength(1);
     expect(res[0]!.status).toBe("ok");
-    expect(res[0]!.min).toBe(162);
+    expect(res[0]!.min).toBe(163);
+    expect(r.output.notes.map((n) => n.key)).toContain("structure.woodCut.note.fcbaHardwoodC30");
+  });
+
+  it("classe D40 saisie : colonne D40 (44 mm → 162), sans la remarque de l'automatique", () => {
+    const { r } = cut(inDomain, { strengthClass: "D40" });
+    for (const c of r.carriages) expect(c.residual).toBeCloseTo(162, 6);
+    expect(r.output.notes.map((n) => n.key)).not.toContain(
+      "structure.woodCut.note.fcbaHardwoodC30",
+    );
+  });
+
+  it("pin `auto` : colonne C30, sans la remarque des feuillus", () => {
+    const { r } = cut(inDomain, { material: "wood-pine" });
+    for (const c of r.carriages) expect(c.residual).toBeCloseTo(163, 6);
+    expect(r.output.notes.map((n) => n.key)).not.toContain(
+      "structure.woodCut.note.fcbaHardwoodC30",
+    );
   });
 
   it("reste saisi trop faible : violation CREMAILLERE_REGLE_MOYENS", () => {

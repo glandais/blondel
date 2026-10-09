@@ -12,6 +12,9 @@
  * de pinces), âme de pied prolongée (M1 retrouve ses organes), couches empilées calées sur les
  * assises et faites de plusieurs planches (`LC1-k.j`), classe `auto` D40 du chêne lamellé-collé,
  * prédimensionnement des couches empilées réduit par la formule de Hankinson (évalué).
+ * Décisions A36 (2026-10-09) : classe `auto` D30 des feuillus, a1,CG des tire-fonds le long du
+ * fil et boulons du sabot de pied regroupés (M1 du droit fixée par ses deux tire-fonds), couches
+ * empilées recalées autour des broches, planches aboutées à entures composantes de leur couche.
  * Régénération : `UPDATE_EXAMPLES=1 pnpm vitest run packages/core/src/structures/woodCentral.acceptance.test.ts`.
  */
 import { readFileSync, writeFileSync } from "node:fs";
@@ -20,6 +23,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { fr, frList } from "../i18n.test-helpers.js";
 import type { Model } from "../model/derived.js";
+import { assemblyQuantity, fabricatedParts, rootAssemblyId } from "../parts/components.js";
 import type { Project } from "../model/project.js";
 import { buildModel } from "../pipeline/build.js";
 import { parseProjectText } from "../project/parse.js";
@@ -160,17 +164,18 @@ describe("exemples j5c : limon central bois", () => {
       expect(cantilever).toHaveLength(1);
       expect(fr(cantilever[0]!.message)).toMatch(/^Justification requise/);
       // Prédimensionnement évalué partout (A35 (j)) : couches empilées réduites par la formule
-      // de Hankinson ; classe `auto` du chêne lamellé-collé : D40 (A35 (k), à valider).
+      // de Hankinson ; classe `auto` du chêne lamellé-collé : D30, classe visuelle 1 du chêne
+      // (A36 (1), à valider).
       expect(m.precheck?.beams).toHaveLength(1);
-      expect(fr(m.precheck!.beams[0]!.label)).toMatch(/\bD40\b/);
+      expect(fr(m.precheck!.beams[0]!.label)).toMatch(/\bD30\b/);
       const pre = results(m, "PRECHECK_CONTRAINTE");
       expect(pre).toHaveLength(1);
       expect(pre[0]!.status).not.toBe("non-evaluee");
       if (straight) expect(pre[0]!.status).toBe("ok");
       for (const p of m.parts) {
-        // Poutre en couches empilées : matière portée par ses couches composantes.
-        if (p.id === "wood-central-beam" && p.stock === undefined) continue;
-        const mass = p.quantities["mass_kg"];
+        // Poutre en couches empilées : matière portée par ses couches composantes, et celle
+        // d'une couche composée par ses planches (A36 (9)).
+        const mass = assemblyQuantity(m.parts, p.id, "mass_kg");
         expect(mass !== undefined && Number.isFinite(mass) && mass > 0, p.id).toBe(true);
       }
       // Visserie : marches boulonnées au travers de la poutre, tire-fonds sur les marches
@@ -188,26 +193,37 @@ describe("exemples j5c : limon central bois", () => {
     },
   );
 
-  it("droit : marches 1 et 2 fixées par tire-fonds, M1 bloquée par le boulon de sabot (A34 (a), A35 (l))", () => {
+  it("droit : marches 1 et 2 fixées par tire-fonds, M1 avec ses deux tire-fonds (A34 (a), A36 (4) (10))", () => {
     const m = buildModel(load(J5C_WOOD_STRAIGHT), { memo: false });
-    // Écart voulu (A35 (l), QUESTIONS A36 (10)) : aux règles des tire-fonds (entraxe 7·d = 70 mm,
-    // 10·d = 100 mm au bout avant), l'assise de M1 n'a plus la place que d'un tire-fond hors du
-    // perçage du second boulon de sabot SP1 ; seule M1 garde un constat.
-    const found = violations(m, "FAB_LIMON_CENTRAL_BOIS_BOULONS");
-    expect(
-      found.map((r) => [r.location.kind === "part" ? r.location.treadNumber : null, r.message.key]),
-    ).toEqual([[1, "structure.woodCentral.check.fixings.blocked"]]);
-    expect(found[0]!.measured).toBe(1);
+    // Écart voulu (A36 (4) (10)) : boulons du sabot de pied SP1 regroupés dans ses 100 premiers
+    // millimètres (σ ≈ 49 et 109), a1,CG mesurée le long du fil depuis le centre de gravité de la
+    // partie filetée : M1 reçoit ses deux tire-fonds, raccourcis à 130 mm (ancrage 50 mm), et ne
+    // garde plus de constat FAB_LIMON_CENTRAL_BOIS_BOULONS.
+    expect(violations(m, "FAB_LIMON_CENTRAL_BOIS_BOULONS")).toEqual([]);
     const lc1 = m.parts.find((p) => p.id === "wood-central-beam")!;
-    const lagTreads = new Set(
-      (lc1.fixings ?? []).filter((f) => f.joint === "treadBeamLagScrewed").map((f) => f.with?.[0]),
+    const lags = (lc1.fixings ?? []).filter((f) => f.joint === "treadBeamLagScrewed");
+    expect(new Set(lags.map((f) => f.with?.[0]))).toEqual(new Set(["tread-1", "tread-2"]));
+    const m1 = lags.filter((f) => f.with?.[0] === "tread-1");
+    expect(m1.reduce((a, f) => a + f.points, 0)).toBe(2);
+    expect(m1.map((f) => f.length)).toEqual([130]);
+    // Ancrage de 50 mm (`lagScrews.minAnchorage`, [78]) sous la pénétration de 6·d = 60 mm de
+    // l'EC5 § 8.7.2 (3) ([88]) : constat d'avertissement sur M1, sans retirer ses tire-fonds
+    // (QUESTIONS A37 (1), à trancher).
+    const penetration = violations(m, "FAB_LIMON_CENTRAL_BOIS_PINCES").filter(
+      (r) => r.message.key === "structure.woodCentral.check.spacing.lagPenetration",
     );
-    expect(lagTreads).toEqual(new Set(["tread-1", "tread-2"]));
+    expect(penetration).toHaveLength(1);
+    expect(penetration[0]!.location).toMatchObject({ treadNumber: 1 });
+    expect(penetration[0]!.measured).toBeCloseTo(50, 6);
+    expect(penetration[0]!.min).toBeCloseTo(60, 6);
   });
 
   it("droit : 3 couches droites, boulon au milieu de la couche centrale, pinces tenues (A35 (f))", () => {
     const m = buildModel(load(J5C_WOOD_STRAIGHT), { memo: false });
-    expect(violations(m, "FAB_LIMON_CENTRAL_BOIS_PINCES")).toEqual([]);
+    // Seul écart : la pénétration de la partie filetée des tire-fonds de M1 (cas ci-dessus).
+    expect(violations(m, "FAB_LIMON_CENTRAL_BOIS_PINCES").map((r) => r.message.key)).toEqual([
+      "structure.woodCentral.check.spacing.lagPenetration",
+    ]);
     const lc1 = m.parts.find((p) => p.id === "wood-central-beam")!;
     expect(fr(lc1.section!)).toMatch(/\b3 lamelles\b/);
   });
@@ -253,14 +269,41 @@ describe("exemples j5c : limon central bois", () => {
     },
   );
 
+  it("quart tournant : broche de tête AT1 sur l'assise, joint de colle au droit du perçage signalé (A37 (15))", () => {
+    const m = buildModel(load(J5C_WOOD_QUARTER), { memo: false });
+    const holes = results(m, "FAB_LIMON_CENTRAL_BOIS_JOINT_PERCAGE");
+    expect(holes.length).toBeGreaterThan(1);
+    const bad = holes.filter((r) => r.status === "violation");
+    expect(bad).toHaveLength(1);
+    expect(bad[0]!.severity).toBe("avertissement");
+    expect(bad[0]!.message.params?.["mark"]).toBe("AT1");
+    expect(bad[0]!.measured).toBeCloseTo(0.4, 1);
+    expect(bad[0]!.min).toBeGreaterThan(bad[0]!.measured!);
+    // Broches de pied AP1 : tenues.
+    expect(
+      holes.filter((r) => r.message.params?.["mark"] === "AP1").every((r) => r.status === "ok"),
+    ).toBe(true);
+  });
+
   it("hélicoïdal : couches composées de plusieurs planches LC1-k.j, sans débit indisponible (A35 (h))", () => {
     const m = buildModel(load(J5C_WOOD_HELICAL), { memo: false });
     const boards = m.parts.filter((p) => /^LC1-\d+\.\d+$/.test(p.mark ?? ""));
     expect(boards.length).toBeGreaterThan(0);
     for (const b of boards) {
-      expect(b.componentOf).toBe("wood-central-beam");
+      // Planche composante de sa couche, la couche de LC1 (A36 (9)).
       expect(b.id).toMatch(/^wood-central-layer-\d+-\d+$/);
+      expect(b.componentOf).toBe(b.id.replace(/-\d+$/, ""));
+      expect(rootAssemblyId(m.parts, b.id)).toBe("wood-central-beam");
     }
+    const layers = new Set(boards.map((b) => b.componentOf));
+    for (const id of layers) {
+      const layer = m.parts.find((p) => p.id === id)!;
+      expect(layer.componentOf).toBe("wood-central-beam");
+      expect(layer.flat).toBeUndefined();
+      expect(layer.stock).toBeUndefined();
+      expect(layer.quantities).toEqual({});
+    }
+    expect(fabricatedParts(m.parts).some((p) => layers.has(p.id))).toBe(false);
     expect(violations(m, "FAB_DEBIT_DISPONIBLE")).toEqual([]);
   });
 
@@ -269,9 +312,12 @@ describe("exemples j5c : limon central bois", () => {
     const cr = results(m, "CREMAILLERE_REGLE_MOYENS");
     expect(cr.length).toBeGreaterThan(0);
     expect(cr.every((r) => r.status === "ok")).toBe(true);
+    // Chêne en classe `auto` (D30, A36 (1)) : colonne C30 du tableau FCBA, de même f_m,k, et
+    // non plus « feuillus ≥ D40 » (QUESTIONS A37 (2), à valider), avec sa remarque.
     expect(m.autoValues?.["stair.structure.params.section.residual"]).toBe(
-      requiredCentralResidual(fcbaTable(), "D40", 88),
+      requiredCentralResidual(fcbaTable(), "C30", 88),
     );
+    expect((m.notes ?? []).map((n) => n.key)).toContain("structure.woodCut.note.fcbaHardwoodC30");
     expect(results(m, WOOD_CENTRAL_RULES.thinPlies.id)).toEqual([]);
     expect(m.executionClass).toBe("EXC1");
   });
@@ -288,7 +334,7 @@ describe("exemples j5c : limon central bois", () => {
       expect(lc1.stock).toBeUndefined();
       expect(fr(lc1.section!)).toMatch(/^lamellé-collé en couches empilées/);
       for (const p of m.parts.filter((q) => q.componentOf !== undefined)) {
-        expect(p.componentOf).toBe("wood-central-beam");
+        expect(rootAssemblyId(m.parts, p.id)).toBe("wood-central-beam");
       }
     },
   );

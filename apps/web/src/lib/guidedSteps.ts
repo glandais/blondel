@@ -13,7 +13,7 @@
  * (typologie, structure, remplissage, matériau), longueurs arrondies à l'affichage
  * (`formatFigureLength`, mm entiers ou cm selon l'unité affichée).
  */
-import { DEFAULT_WOOD_MATERIAL, type Model, type Project } from "@blondel/core";
+import { DEFAULT_WOOD_MATERIAL, fabricatedParts, type Model, type Project } from "@blondel/core";
 import { materialLabel } from "@blondel/exports";
 import { msg, type MessageKey, type Translator } from "@blondel/i18n";
 import type { PlanMode, ViewTab } from "../store/projectStore.js";
@@ -284,7 +284,10 @@ function baseSummary(step: GuidedStep, s: StepSummarySources, t: Translator): st
         : t.t(msg("ui.guided.summary.guards.lines", { infill, count: lines }));
     }
     case 7:
-      return model ? t.t(msg("ui.fab.figures.parts", { count: model.parts.length })) : DASH;
+      // Pièces fabriquées (`fabricatedParts`, composantes sans double compte, QUESTIONS A36 (9)).
+      return model
+        ? t.t(msg("ui.fab.figures.parts", { count: fabricatedParts(model.parts).length }))
+        : DASH;
   }
 }
 

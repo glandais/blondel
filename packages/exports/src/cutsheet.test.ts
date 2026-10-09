@@ -168,6 +168,43 @@ describe("fiche de débit", () => {
     }
   });
 
+  it("composantes imbriquées (A36 (9)) : planches et couche simple, ni LC1 ni couche composée", () => {
+    const beam: Part = { ...woodStringerPart(), id: "beam", mark: "LC1" };
+    const { stock: _stock, ...finished } = beam;
+    const { stock: _s, flat: _f, ...bare } = beam;
+    const composed: Part = {
+      ...bare,
+      id: "l1",
+      mark: "LC1-1",
+      componentOf: "beam",
+      quantities: {},
+    };
+    const piece = (id: string, mark: string, of: string, mass: number): Part => ({
+      ...beam,
+      id,
+      mark,
+      componentOf: of,
+      stock: { length: 2000, width: 250, thickness: 40 },
+      quantities: { mass_kg: mass },
+    });
+    const parts = [
+      finished,
+      composed,
+      piece("l1-1", "LC1-1.1", "l1", 5),
+      piece("l1-2", "LC1-1.2", "l1", 6),
+      piece("l2", "LC1-2", "beam", 9),
+    ];
+    for (const locale of ["fr", "en"] as const) {
+      const groups = cutSheet(parts, { locale });
+      const rows = groups.flatMap((g) => g.rows);
+      expect(rows.map((r) => r.mark).sort()).toEqual(["LC1-1.1", "LC1-1.2", "LC1-2"]);
+      const quantity = groups.reduce((s, g) => s + g.totals.quantity, 0);
+      const mass = groups.reduce((s, g) => s + (g.totals.massKg ?? 0), 0);
+      expect(quantity).toBe(3);
+      expect(mass).toBeCloseTo(20, 9);
+    }
+  });
+
   it("placage (A34 (e)) : désignation « (placage) », champ `supply`, épaisseur finie", () => {
     const ply: Part = {
       ...treadPart(2),

@@ -25,19 +25,28 @@
  * - démo « Quart tournant sur limon central bois lamellé-collé » ;
  * - parcours guidé : carte « Limon central bois » de l'étape Structure et résumé de l'étape ;
  * - comparateur sur l'hélicoïdal : variante « limon central hélicoïdal en lamellé-collé
- *   cintré » calculée, appliquée sans erreur, poutre LC1.
+ *   cintré » calculée, appliquée sans erreur, poutre LC1 ;
+ * - décisions du 2026-10-09 (QUESTIONS A36) : exemple `j5c-limon-central-bois-droit` (marches de
+ *   80 mm) importé, M1 fixée par ses tire-fonds (boulons du sabot de pied regroupés, A36 (10) :
+ *   aucun constat `FAB_LIMON_CENTRAL_BOIS_BOULONS` sur M1) ; hélicoïdal en couches empilées :
+ *   une planche LC1-k.j choisie dans la nomenclature renvoie à sa couche (« Planche de LC1-k »),
+ *   la couche à la poutre (« Couche de LC1 »), couche composée et poutre comptent leurs
+ *   « Pièces composantes » (A36 (9)).
  *
  * Textes français figés du cœur (`structure.woodCentral.error.bendRadius`, libellé de la démo) :
  * la CI change de langue système, l'interface reste en français (`openApp`).
  */
+import { fileURLToPath } from "node:url";
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import {
   applyPreset,
   chooseStructure,
+  inspectorPanel,
   instrument,
   openApp,
   openSection,
   openTab,
+  openWorkspace,
   settle,
   structureSelect,
   useGuidedJourney,
@@ -414,4 +423,79 @@ test("hélicoïdal : couches composées de plusieurs planches LC1-k.j au débit"
   // FAB_DEBIT_DISPONIBLE dû à une couche trop large » est la propriété (v) de
   // `woodCentralLayers.test.ts` (profil aux plateaux étroits) : ce préréglage n'en levait pas.
   await expect(await ruleCards(page, "FAB_DEBIT_DISPONIBLE")).toHaveCount(0);
+});
+
+const WOOD_CENTRAL_STRAIGHT = fileURLToPath(
+  new URL("../../../examples/j5c-limon-central-bois-droit.blondel.json", import.meta.url),
+);
+
+test("exemple droit (marches de 80 mm) : M1 fixée, aucun constat « boulons » sur M1", async ({
+  page,
+}) => {
+  await openApp(page);
+  const chooser = page.waitForEvent("filechooser");
+  await page.getByRole("button", { name: "Importer", exact: true }).click();
+  await page.getByRole("menuitem", { name: "Projet (.blondel.json)…" }).click();
+  await (await chooser).setFiles(WOOD_CENTRAL_STRAIGHT);
+  await settle(page);
+  await openSection(page, "Structure");
+  await expect(structureSelect(page)).toHaveValue("wood-central");
+  await expect(page.locator(".errors-bar")).toHaveCount(0);
+
+  // Boulons du sabot de pied dans ses 100 premiers millimètres (A36 (10)) : les deux tire-fonds
+  // de M1 trouvent leur place, plus de constat « boulon ou tire-fond impossible » sur M1.
+  const cards = await ruleCards(page, "FAB_LIMON_CENTRAL_BOIS_BOULONS");
+  await expect(cards.filter({ hasText: /\bM1\b/ })).toHaveCount(0);
+});
+
+test("hélicoïdal : planche LC1-k.j → « Planche de LC1-k » → « Couche de LC1 », pièces composantes", async ({
+  page,
+}) => {
+  await openApp(page);
+  await applyPreset(page, "Hélicoïdal à fût central");
+  await chooseStructure(page, "wood-central");
+  await expect(structureSelect(page)).toHaveValue("wood-central");
+  await expect(page.locator(".errors-bar")).toHaveCount(0);
+
+  // Nomenclature : une planche LC1-k.j d'une couche composée (A35 (h), A36 (9)).
+  const marks = await bomMarks(page);
+  const board = marks.find((m) => /^LC1-\d+\.\d+$/.test(m));
+  expect(board, "planche d'une couche composée").toBeDefined();
+  const layerMark = board!.replace(/\.\d+$/, "");
+  await page
+    .locator(".bom > table.table")
+    .first()
+    .locator("tbody th[scope=row]")
+    .getByRole("button", { name: board!, exact: true })
+    .first()
+    .click();
+  await settle(page);
+
+  // Inspecteur de la planche (Conception, sélection gardée) : lien vers sa couche.
+  await openWorkspace(page, "Conception");
+  const inspector = inspectorPanel(page);
+  await expect(inspector).toHaveAttribute("data-template", "part");
+  await expect(inspector.locator(".insp-title")).toHaveText(board!);
+  const toLayer = inspector.getByRole("button", { name: `Planche de ${layerMark}` });
+  await expect(toLayer).toBeVisible();
+  await toLayer.click();
+  await settle(page);
+
+  // Couche composée : renvoie à LC1, compte ses planches, débit porté par elles.
+  await expect(inspector.locator(".insp-title")).toHaveText(layerMark);
+  const components = inspector.locator('tr[data-value="components"]');
+  await expect(components).toContainText("Pièces composantes");
+  await expect(inspector.locator('tr[data-value="stock"]')).toContainText(
+    "porté par ses pièces composantes",
+  );
+  const toBeam = inspector.getByRole("button", { name: "Couche de LC1" });
+  await expect(toBeam).toBeVisible();
+  await toBeam.click();
+  await settle(page);
+
+  // Poutre : ses couches comptées comme pièces composantes.
+  await expect(inspector.locator(".insp-title")).toHaveText("LC1");
+  await expect(inspector.locator('tr[data-value="components"]')).toContainText(
+    "Pièces composantes",
+  );
 });
