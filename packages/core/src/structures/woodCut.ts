@@ -18,9 +18,9 @@
  *   de son domaine), LIMON_EPAISSEUR_MIN_DTU, longueur de plateau et débit (profil d'atelier).
  *
  * Domaine d'exploitation du tableau [hypothèse Blondel, à valider] : escalier droit, classe de
- * résistance connue (colonnes C30 résineux, D40 feuillus ; `auto` d'un feuillu D30 : colonne C30,
- * QUESTIONS A37 (2)), épaisseur ≥ la plus petite épaisseur
- * tabulée, hauteur à monter ≤ celle de l'exemple (2,70 m) et projection horizontale de la
+ * résistance connue (colonnes C30 résineux, D40 feuillus ; `auto` d'un feuillu D30 : aucune
+ * colonne, tableau non exploitable et reste de repli, QUESTIONS A37 (2), décision du
+ * 2026-10-10), épaisseur ≥ la plus petite épaisseur tabulée, hauteur à monter ≤ celle de l'exemple (2,70 m) et projection horizontale de la
  * crémaillère ≤ celle de l'exemple (2,70 m / tan 38°) : moment de flexion d'une poutre
  * rampante ∝ portée horizontale², donc exemple du côté de la sécurité.
  */
@@ -44,7 +44,13 @@ import {
   pluginRuleDef,
   stringerRulesOutOfDomain,
 } from "./checks.js";
-import { CREMAILLERE_RULE_ID, fcbaTable, requiredResidual, type StrengthClass } from "./fcba.js";
+import {
+  CREMAILLERE_RULE_ID,
+  fcbaTable,
+  requiredResidual,
+  type FcbaTable,
+  type StrengthClass,
+} from "./fcba.js";
 import { area, clipHalfPlane, minAreaRect, pointSegmentDistance, removeCollinear } from "./geom.js";
 import { HARDWOOD_WOOD_CLASS } from "../precheck/settings.js";
 import { stairGeometry } from "./legs.js";
@@ -64,9 +70,10 @@ export const WoodCutParamsSchema = z.object({
   /** Reste sous entaille retenu quand le tableau FCBA n'est pas exploitable (à valider). */
   residualFallback: mmPos.default(180),
   /**
-   * Classe de résistance (colonne du tableau FCBA) ; `auto` : C30 pour le pin, colonne C30
-   * aussi pour chêne, hêtre, frêne, classés D30 (QUESTIONS A36 (1), A37 (2), à valider),
-   * inconnue pour le lamellé-collé.
+   * Classe de résistance (colonne du tableau FCBA) ; `auto` : C30 pour le pin ; aucune colonne
+   * pour chêne, hêtre, frêne, classés D30 (QUESTIONS A36 (1) ; tableau non exploitable, reste de
+   * repli, A37 (2), décision du 2026-10-10) ; inconnue pour le lamellé-collé. Une classe C30 ou
+   * D40 saisie est lue telle quelle.
    */
   strengthClass: z.enum(["C30", "D40", "unknown", "auto"]).default("auto"),
   /** Retrait de la face extérieure des crémaillères sous le bout des marches (à valider). */
@@ -77,32 +84,72 @@ export type WoodCutParams = z.output<typeof WoodCutParamsSchema>;
 /**
  * Classe FCBA `auto` (lecture des tableaux de reste sous entaille, colonnes C30 / D40) : C30 pour
  * le pin ; pour les essences feuillues (chêne, hêtre, frêne), classées **D30** par QUESTIONS
- * A36 (1) (`HARDWOOD_WOOD_CLASS`), colonne **C30** : le tableau ne donne que « résineux ≥ C30 »
- * et « feuillus ≥ D40 » (C §1.4 [1]) ; la colonne D40 n'est pas sécuritaire pour un bois D30
- * (f_m,k 30 contre 40 MPa) et la colonne C30 a la même f_m,k (30 MPa, EN 338:2016 via C §1.11
- * [84][89]) et demande partout un reste au moins égal ; E_0,mean de D30 (11 000 MPa) reste sous
- * celui de C30 (12 000 MPa) : **à valider** (QUESTIONS A37 (2), remarque
- * `structure.woodCut.note.fcbaHardwoodC30`). Inconnue pour le lamellé-collé.
+ * A36 (1) (`HARDWOOD_WOOD_CLASS`), **aucune colonne** : le tableau ne donne que « résineux ≥ C30 »
+ * (E_0,mean 12 000 MPa) et « feuillus ≥ D40 » (C §1.4 [1]) ; la colonne D40 n'est pas
+ * sécuritaire pour un bois D30 (f_m,k 30 contre 40 MPa) et la colonne C30 suppose un module que
+ * D30 n'a pas (E_0,mean 11 000 MPa, EN 338:2016 via C §1.11 [84][89]) : le tableau est déclaré
+ * non exploitable et le reste de repli `residualFallback` s'applique (QUESTIONS A37 (2), décision
+ * du 2026-10-10 ; raison `structure.woodCut.fcba.hardwoodD30`, `fcbaUnknownClassReason`).
+ * Inconnue pour le lamellé-collé.
  */
 const AUTO_CLASS: Readonly<Record<WoodMaterialId, StrengthClass | "unknown">> = {
   "wood-pine": "C30",
-  "wood-oak": "C30",
-  "wood-beech": "C30",
-  "wood-ash": "C30",
+  "wood-oak": "unknown",
+  "wood-beech": "unknown",
+  "wood-ash": "unknown",
   "wood-glulam": "unknown",
 };
 
 /**
- * Remarque de la lecture FCBA `auto` d'une essence feuillue (colonne C30 pour un bois D30,
- * QUESTIONS A37 (2)) ; `null` hors de ce cas (classe saisie, essence résineuse ou lamellé-collé).
+ * Raison pour laquelle le tableau FCBA n'est pas lu quand la classe retenue est inconnue :
+ * essence feuillue en classe `auto` (D30, aucune colonne du tableau, QUESTIONS A37 (2)) ou classe
+ * inconnue (lamellé-collé, classe non précisée). Partagée avec `wood-central`.
  */
-export function fcbaHardwoodAutoNote(
+export function fcbaUnknownClassReason(
   material: WoodMaterialId,
   strengthClass: StrengthClass | "unknown" | "auto",
-): Message | null {
+): Message {
   return strengthClass === "auto" && HARDWOOD_WOOD_CLASS[material] !== undefined
-    ? msg("structure.woodCut.note.fcbaHardwoodC30")
-    : null;
+    ? msg("structure.woodCut.fcba.hardwoodD30")
+    : msg("structure.woodCut.fcba.unknownClass");
+}
+
+/**
+ * Raison de domaine du tableau FCBA, indépendante de la classe : hauteur à monter, puis
+ * projection horizontale au-delà de l'exemple publié ; `null` dans le domaine. Partagée avec
+ * `wood-central`.
+ */
+export function fcbaDomainReason(table: FcbaTable, rise: Mm, run: Mm): Message | null {
+  if (rise > table.floorToFloor) {
+    return msg("structure.woodCut.fcba.totalRise", {
+      rise: dec(rise, 0),
+      max: dec(table.floorToFloor, 0),
+    });
+  }
+  const maxRun = table.floorToFloor / Math.tan((table.pitchDeg * Math.PI) / 180);
+  if (run > maxRun + 1e-6) {
+    return msg("structure.woodCut.fcba.run", {
+      run: dec(run, 0),
+      max: dec(maxRun, 0),
+      floorToFloor: dec(table.floorToFloor, 0),
+      pitch: dec(table.pitchDeg, 0),
+    });
+  }
+  return null;
+}
+
+/**
+ * Raison complète d'une classe inconnue (relecture A37 (2)) : celle de la classe, suivie de la
+ * raison de domaine quand la géométrie est aussi hors de l'exemple publié, pour qu'une classe
+ * saisie ensuite (C30, D40) ne découvre pas seulement alors un second obstacle.
+ */
+export function fcbaUnknownClassFullReason(
+  material: WoodMaterialId,
+  strengthClass: StrengthClass | "unknown" | "auto",
+  domain: Message | null,
+): Message {
+  const base = fcbaUnknownClassReason(material, strengthClass);
+  return domain ? msg("compliance.join.semicolon", { first: base, next: domain }) : base;
 }
 
 export interface CarriageDetail {
@@ -185,10 +232,11 @@ export function buildWoodCut(ctx: StructureContext, params: WoodCutParams): CutR
   const leg = geo.legs[0]!;
   const H = project.site.floorToFloor;
   const run = Math.abs(nosings[n - 1]!.s - nosings[0]!.s);
-  const maxRun = table.floorToFloor / Math.tan((table.pitchDeg * Math.PI) / 180);
+  const domain = fcbaDomainReason(table, H, run);
   let fcbaUnusable: Message | undefined;
   let required: number | null = null;
-  if (cls === "unknown") fcbaUnusable = msg("structure.woodCut.fcba.unknownClass");
+  if (cls === "unknown")
+    fcbaUnusable = fcbaUnknownClassFullReason(params.material, params.strengthClass, domain);
   else {
     required = requiredResidual(table, cls, e);
     if (required === null)
@@ -196,18 +244,7 @@ export function buildWoodCut(ctx: StructureContext, params: WoodCutParams): CutR
         thickness: dec(e, 0),
         cls,
       });
-    else if (H > table.floorToFloor)
-      fcbaUnusable = msg("structure.woodCut.fcba.totalRise", {
-        rise: dec(H, 0),
-        max: dec(table.floorToFloor, 0),
-      });
-    else if (run > maxRun + 1e-6)
-      fcbaUnusable = msg("structure.woodCut.fcba.run", {
-        run: dec(run, 0),
-        max: dec(maxRun, 0),
-        floorToFloor: dec(table.floorToFloor, 0),
-        pitch: dec(table.pitchDeg, 0),
-      });
+    else if (domain) fcbaUnusable = domain;
   }
   const residual =
     params.residual !== "auto"
@@ -448,11 +485,6 @@ export function buildWoodCut(ctx: StructureContext, params: WoodCutParams): CutR
             reason: fcbaUnusable,
           }),
   );
-  const hardwoodNote =
-    params.residual === "auto" && fcbaUnusable === undefined
-      ? fcbaHardwoodAutoNote(params.material, params.strengthClass)
-      : null;
-  if (hardwoodNote) notes.push(hardwoodNote);
 
   // Assemblages : chaque crémaillère porte toutes les marches (escalier droit).
   const assemblies = carriages.flatMap((c) =>

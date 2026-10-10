@@ -74,7 +74,6 @@ import { deduceExecutionClass, executionClassReasons } from "./steelCommon.js";
 import { buildWoodCentralBeam, type WoodCentralBeamResult } from "./woodCentralBeam.js";
 import { WoodCentralParamsSchema, type WoodCentralParams } from "./woodCentralParams.js";
 import { resolvePlateWidth } from "./woodCentralPlates.js";
-import { fcbaHardwoodAutoNote } from "./woodCut.js";
 import { woodCentralBoltSpacing } from "./woodSpacing.js";
 
 export {
@@ -353,16 +352,9 @@ function buildUnsafe(ctx: StructureContext, params: WoodCentralParams): Structur
 
   // 5. Remarque de synthèse : section, lamellation, k_r, reste sous entaille et sa provenance.
   if (hasBeam) notes.push(summaryNote(params, beam, trace.kind));
-  // Lecture FCBA `auto` d'une essence feuillue D30 : colonne C30 (QUESTIONS A37 (2)).
-  if (
-    hasBeam &&
-    params.section.residual === "auto" &&
-    beam.fcba.required !== null &&
-    beam.fcba.unusable === undefined
-  ) {
-    const hardwood = fcbaHardwoodAutoNote(params.material, params.strengthClass);
-    if (hardwood) notes.push(hardwood);
-  }
+  // Lecture FCBA `auto` d'une essence feuillue D30 : tableau non exploitable, reste de repli ; la
+  // raison (`structure.woodCut.fcba.hardwoodD30`) est dans la remarque de synthèse et dans le
+  // constat non évalué (QUESTIONS A37 (2), décision du 2026-10-10).
 
   // 6. Classe d'exécution des ancrages : sabots en tôle pliée boulonnée et chevillée, **sans
   // soudure** ni joint bout à bout (C §2.1 : PC1 pour les éléments non soudés, toutes nuances)
@@ -432,6 +424,12 @@ function buildUnsafe(ctx: StructureContext, params: WoodCentralParams): Structur
       Number.isFinite(spacing.lag.threadEndDistance)
     )
       autoValues["lagScrews.threadEndDistance"] = spacing.lag.threadEndDistance;
+    // Ancrage minimal (pénétration filetée 6·d) et bois autour d'un perçage (A37 (1) (17)) ;
+    // la longueur filetée `auto` dépend de la longueur du tire-fond : pas de valeur unique.
+    if (params.lagScrews.minAnchorage === "auto" && Number.isFinite(spacing.lag.minAnchorage))
+      autoValues["lagScrews.minAnchorage"] = spacing.lag.minAnchorage;
+    if (params.lagScrews.holeWood === "auto" && Number.isFinite(spacing.lag.holeWood))
+      autoValues["lagScrews.holeWood"] = spacing.lag.holeWood;
   }
   // Largeur de la platine à âme noyée (A33 (f)).
   if (

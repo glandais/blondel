@@ -13,8 +13,9 @@
  * - suites du 2026-10-09 (QUESTIONS A33, A34) : platine à âme noyée par défaut sur l'hélicoïdal
  *   (PP1 / AP1 / PT1 / AT1, broches et chevilles, aucun constat `FAB_SABOT_EMPRISE`) ;
  *   tire-fonds des marches basses de l'escalier droit (plus de constat
- *   `FAB_LIMON_CENTRAL_BOIS_BOULONS` : aux règles des tire-fonds de A35 (l), un tire-fond ne
- *   garde autour du perçage d'un boulon de sabot que le jeu géométrique, QUESTIONS A36 (10)) ;
+ *   `FAB_LIMON_CENTRAL_BOIS_BOULONS` : aux règles des tire-fonds de A35 (l), un tire-fond
+ *   garde autour du perçage d'un boulon de sabot le jeu géométrique plus le bois
+ *   `lagScrews.holeWood`, QUESTIONS A36 (10), A37 (17)) ;
  *   couches empilées par défaut sur le quart tournant
  *   (LC1-1… ou leurs planches LC1-1.1… dans la nomenclature et en Fabrication, LC1 sans débit
  *   propre) ;
@@ -26,12 +27,13 @@
  * - parcours guidé : carte « Limon central bois » de l'étape Structure et résumé de l'étape ;
  * - comparateur sur l'hélicoïdal : variante « limon central hélicoïdal en lamellé-collé
  *   cintré » calculée, appliquée sans erreur, poutre LC1 ;
- * - décisions du 2026-10-09 (QUESTIONS A36) : exemple `j5c-limon-central-bois-droit` (marches de
- *   80 mm) importé, M1 fixée par ses tire-fonds (boulons du sabot de pied regroupés, A36 (10) :
- *   aucun constat `FAB_LIMON_CENTRAL_BOIS_BOULONS` sur M1) ; hélicoïdal en couches empilées :
- *   une planche LC1-k.j choisie dans la nomenclature renvoie à sa couche (« Planche de LC1-k »),
- *   la couche à la poutre (« Couche de LC1 »), couche composée et poutre comptent leurs
- *   « Pièces composantes » (A36 (9)).
+ * - décisions du 2026-10-09 (QUESTIONS A36) et du 2026-10-10 (QUESTIONS A37 (1) (5)) : exemple
+ *   `j5c-limon-central-bois-droit` (marches de 80 mm) importé ; avec l'ancrage `auto` (partie
+ *   filetée ≥ 6·d, centre de gravité de la seule partie filetée à a1,CG), M1 ne trouve aucun
+ *   tire-fond et porte le seul constat `FAB_LIMON_CENTRAL_BOIS_BOULONS` ; hélicoïdal en couches
+ *   empilées : une planche LC1-k.j choisie dans la nomenclature renvoie à sa couche (« Planche
+ *   de LC1-k »), la couche à la poutre (« Couche de LC1 »), couche composée et poutre comptent
+ *   leurs « Pièces composantes » (A36 (9)).
  *
  * Textes français figés du cœur (`structure.woodCentral.error.bendRadius`, libellé de la démo) :
  * la CI change de langue système, l'interface reste en français (`openApp`).
@@ -115,6 +117,15 @@ async function ruleCards(page: Page, ruleId: string): Promise<Locator> {
   await expect(inspector).toHaveAttribute("data-template", "project");
   return inspector.locator(`.rule-card[data-rule="${ruleId}"]`);
 }
+
+/**
+ * Cartes localisées sur la marche `n` (« LC1 · M1 ») : filtre sur la localisation courte de la
+ * carte, et non sur tout son texte (« M1Boulons… » : aucune limite de mot après « M1 »).
+ */
+const onTread = (cards: Locator, n: number): Locator =>
+  cards.filter({
+    has: cards.page().locator(".rule-card__loc", { hasText: new RegExp(`\\bM${n}$`) }),
+  });
 
 /** Liste « Section de la poutre » (lamellé-collé ou massif), dans son groupe déplié. */
 async function sectionKind(page: Page): Promise<Locator> {
@@ -342,7 +353,8 @@ test("escalier droit : marches basses fixées par tire-fonds, plus de constat «
   await expect(fasteners).toContainText("Marche fixée par tire-fonds dans le limon central bois");
 
   // Contrôle : plus d'avertissement « boulon ou tire-fond impossible » (M1, M2) ; autour du
-  // perçage d'un boulon de sabot, un tire-fond ne garde que le jeu géométrique (A36 (10)).
+  // perçage d'un boulon de sabot, un tire-fond garde le jeu géométrique plus le bois
+  // `lagScrews.holeWood` (A36 (10), A37 (17)).
   await expect(await ruleCards(page, "FAB_LIMON_CENTRAL_BOIS_BOULONS")).toHaveCount(0);
 });
 
@@ -404,7 +416,7 @@ test("escalier en U : âme de pied prolongée, M1 fixée, aucun constat de fixat
 
   // Contrôle : aucun constat « boulon ou tire-fond impossible » sur la marche M1 (A35 (a)).
   const cards = await ruleCards(page, "FAB_LIMON_CENTRAL_BOIS_BOULONS");
-  await expect(cards.filter({ hasText: /\bM1\b/ })).toHaveCount(0);
+  await expect(onTread(cards, 1)).toHaveCount(0);
 });
 
 test("hélicoïdal : couches composées de plusieurs planches LC1-k.j au débit", async ({ page }) => {
@@ -429,7 +441,7 @@ const WOOD_CENTRAL_STRAIGHT = fileURLToPath(
   new URL("../../../examples/j5c-limon-central-bois-droit.blondel.json", import.meta.url),
 );
 
-test("exemple droit (marches de 80 mm) : M1 fixée, aucun constat « boulons » sur M1", async ({
+test("exemple droit (marches de 80 mm) : M1 sans tire-fond (6·d filetés), constat « boulons » sur M1", async ({
   page,
 }) => {
   await openApp(page);
@@ -442,10 +454,13 @@ test("exemple droit (marches de 80 mm) : M1 fixée, aucun constat « boulons » 
   await expect(structureSelect(page)).toHaveValue("wood-central");
   await expect(page.locator(".errors-bar")).toHaveCount(0);
 
-  // Boulons du sabot de pied dans ses 100 premiers millimètres (A36 (10)) : les deux tire-fonds
-  // de M1 trouvent leur place, plus de constat « boulon ou tire-fond impossible » sur M1.
+  // Ancrage `auto` (A37 (1) (5)) : la partie filetée d'un tire-fond doit pénétrer de 6·d dans la
+  // poutre, son centre de gravité à a1,CG de la coupe au sol. M1 ne trouve aucun tire-fond
+  // (140 mm : a1,CG 99 < 100 ; 130 mm : 50 < 60 filetés) : retiré, avec le constat « boulon ou
+  // tire-fond impossible » sur M1 seule ; M2 garde ses tire-fonds.
   const cards = await ruleCards(page, "FAB_LIMON_CENTRAL_BOIS_BOULONS");
-  await expect(cards.filter({ hasText: /\bM1\b/ })).toHaveCount(0);
+  await expect(onTread(cards, 1)).toHaveCount(1);
+  await expect(cards).toHaveCount(1);
 });
 
 test("hélicoïdal : planche LC1-k.j → « Planche de LC1-k » → « Couche de LC1 », pièces composantes", async ({

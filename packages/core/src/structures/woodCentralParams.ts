@@ -11,6 +11,12 @@
  * la poutre (boulons de 10 ou 12 mm avec écrou, C §1.5 [54]) ; sabots métalliques en pied et en
  * tête (A29 n° 5).
  *
+ * Décisions du 2026-10-10 (QUESTIONS A37) : ancrage minimal des tire-fonds `auto` à 6·d
+ * (`lagScrews.minAnchorage`, (1)), longueur filetée (`lagScrews.threadLength`, (5)), bois entre
+ * un tire-fond et un perçage horizontal (`lagScrews.holeWood`, (17)), zone tendue du décalage
+ * des aboutages et longueur minimale des planches (`section.tensionZone`,
+ * `section.minBoardLength`, (4) et (13)) ; sources : C §1.11.
+ *
  * Suites du 2026-10-09 (QUESTIONS A32 à A34) : filière des couches empilées sur une trace
  * courbe (`section.curvedMethod`, A33 (e)), platine à âme noyée (`anchors.kind`,
  * `anchors.plate`, A33 (f), A34 (c)), tire-fonds des marches basses (`lagScrews`, A34 (a)),
@@ -87,13 +93,16 @@ export type WoodCentralAnchorKind = (typeof WOOD_CENTRAL_ANCHOR_KINDS)[number];
 export const WoodCentralParamsSchema = z.object({
   /**
    * Essence de la poutre (lamelles ou massif) ; masse volumique du profil d'atelier. Chêne par
-   * défaut, comme `wood-cut` (classe FCBA `auto` : D40, hypothèse à valider).
+   * défaut, comme `wood-cut` (classe `auto` D30, QUESTIONS A36 (1) ; tableau FCBA non
+   * exploitable pour un bois D30, QUESTIONS A37 (2)).
    */
   material: z.enum(WOOD_MATERIALS).default("wood-oak"),
   /**
    * Classe de résistance pour le tableau FCBA (`CREMAILLERE_REGLE_MOYENS`) ; `auto` : C30 pour
-   * le pin, D40 pour chêne, hêtre, frêne, inconnue pour `wood-glulam` (mêmes hypothèses « à
-   * valider » que `wood-cut`). Classes de lamellé-collé (GL…) non sourcées : QUESTIONS A33.
+   * le pin ; aucune colonne pour chêne, hêtre, frêne, classés D30 (tableau non exploitable, reste
+   * de repli `section.residualFallback`, QUESTIONS A37 (2), décision du 2026-10-10) ; inconnue
+   * pour `wood-glulam` (mêmes hypothèses « à valider » que `wood-cut`). Classe C30 ou D40 saisie :
+   * lue telle quelle. Classes de lamellé-collé (GL…) non sourcées : QUESTIONS A33.
    */
   strengthClass: z.enum(WOOD_CENTRAL_STRENGTH_CLASSES).default("auto"),
   trace: z
@@ -203,6 +212,28 @@ export const WoodCentralParamsSchema = z.object({
        * valider** (QUESTIONS A36 (6)).
        */
       fingerLength: mmNonNeg.default(15),
+      /**
+       * Couches empilées : zone tendue où s'applique le décalage des aboutages `jointOffset`
+       * (QUESTIONS A37 (4) et (13), décision du 2026-10-10), en part (décimale, 0 à 1) de la
+       * hauteur de la section résistante (reste sous entaille h_res, mesuré perpendiculairement à
+       * la sous-face) comptée depuis la sous-face : un joint abouté est contrôlé si sa couche
+       * descend sous `StackedBeamShape.tensionZoneTop` à son abscisse. 0,5 : moitié basse de la
+       * poutre fléchie sur ses deux appuis (décision de l'utilisateur). ANSI A190.1-2017 § 10.4 (a)
+       * (C §1.11 [85]) ne l'exige que pour « the outer 1/8 of the depth of the member plus one
+       * lamination » de la zone tendue, sur les 75 % centraux de sa longueur : 0,5 est plus
+       * sévère ; **à valider** (QUESTIONS A38).
+       */
+      tensionZone: z.number().positive().max(1).default(0.5),
+      /**
+       * Couches empilées : longueur finie minimale d'une planche d'une couche composée (planche
+       * aboutée à entures), mesurée le long de la trace entre ses bouts (σ1 − σ0, sans les
+       * demi-entures), mm (QUESTIONS A37 (4) et (14), décision du 2026-10-10). Les planches plus
+       * courtes sont évitées au placement des coupes, sinon signalées (constat
+       * `FAB_LIMON_CENTRAL_BOIS_PLANCHES_COURTES`). Aucune source (ANSI A190.1-2017 § 10.5 ne
+       * règle que l'écart de 1,8 m entre aboutages d'une même lamelle dans les 10 % extérieurs
+       * tendus, C §1.11 [85]) : **à valider** par un fabricant (QUESTIONS A38). 0 : aucune.
+       */
+      minBoardLength: mmNonNeg.default(150),
     })
     .prefault({}),
   notch: z
@@ -264,11 +295,16 @@ export const WoodCentralParamsSchema = z.object({
        */
       pilotDiameter: mmPos.default(7),
       /**
-       * Ancrage minimal dans la poutre, mm (C §1.11 [78] : « profondeur d'ancrage d'au moins
-       * 50 mm » pour un Ø10) ; en dessous, pas de tire-fond (constat
-       * `FAB_LIMON_CENTRAL_BOIS_BOULONS`). À valider.
+       * Ancrage minimal dans la poutre, mm (QUESTIONS A37 (1), décision du 2026-10-10). `auto` :
+       * pénétration de la **partie filetée** côté pointe d'au moins 6·d (EN 1995-1-1 § 8.7.2 (3),
+       * C §1.11 [88] ; 60 mm pour un Ø10), partie filetée lue par `threadLength` ; un tire-fond
+       * qui ne la trouve pas est retiré (constat `FAB_LIMON_CENTRAL_BOIS_BOULONS`). Valeur
+       * saisie : ancrage (longueur dans la poutre) minimal respecté tel quel, la pénétration de
+       * la partie filetée sous 6·d restant signalée (`check.spacing.lagPenetration`) ; 50 mm :
+       * « profondeur d'ancrage d'au moins 50 mm » de la fiche du fabricant (C §1.11 [78], valeur
+       * par défaut antérieure). Rétrocompatible : un nombre enregistré reste un nombre. À valider.
        */
-      minAnchorage: mmPos.default(50),
+      minAnchorage: auto(mmPos),
       /** Bois laissé sous la pointe (au-dessus de la sous-face ou de la coupe au sol), à valider. */
       tipCover: mmNonNeg.default(10),
       /** Longueur maximale du tire-fond, mm (C §1.11 [78] : 60 à 160 mm pour un Ø10), à valider. */
@@ -303,6 +339,26 @@ export const WoodCentralParamsSchema = z.object({
        * l'assise (A35 (l)).
        */
       threadEndDistance: auto(mmPos),
+      /**
+       * Longueur filetée b d'un tire-fond, mm (QUESTIONS A37 (5), décision du 2026-10-10) : la
+       * partie filetée est au bout côté pointe ; son centre de gravité (pince axiale a1,CG) et sa
+       * pénétration (`minAnchorage`) sont pris sur la seule part filetée comprise dans la poutre.
+       * `auto` : b = ⌊20 + L / 3⌋ (`lagThreadLength`), loi qui redonne exactement les longueurs
+       * filetées des fiches Faynot Ø10 et Ø12, L de 60 à 220 mm (C §1.11 [78]) ; plus courte que
+       * « b ≥ 0,6·L » des tableaux DIN 571 des distributeurs (C §1.11 [93]), donc plus sévère.
+       * Valeur saisie : même longueur filetée pour toutes les longueurs (bornée à L). À valider.
+       */
+      threadLength: auto(mmPos),
+      /**
+       * Épaisseur de bois minimale entre le filet d'un tire-fond (Ø nominal d) et le bord d'un
+       * perçage horizontal (broche de platine, boulon de sabot), mm (QUESTIONS A37 (17),
+       * décision du 2026-10-10), ajoutée au jeu géométrique `lagHoleClearance` ; un tire-fond qui
+       * ne la tient pas est arrêté au-dessus du perçage, sinon retiré (constat
+       * `FAB_LIMON_CENTRAL_BOIS_BOULONS`). `auto` : 0,5·d (5 mm pour un Ø10), par analogie avec
+       * l'entraxe minimal de 1,5·d entre deux vis croisées (ETA-11/0024 § 3, C §1.11 [94] :
+       * filets distants de 0,5·d) ; aucune source pour un perçage : **à valider** (QUESTIONS A38).
+       */
+      holeWood: auto(mmNonNeg),
     })
     .prefault({}),
   anchors: z

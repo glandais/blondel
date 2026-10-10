@@ -58,6 +58,20 @@
  * [85] § 9.3). Le gabarit d'une planche est prolongé de `fingerLength` / 2 à chaque bout abouté
  * (plan de joint tracé), le débit est lu sur ce gabarit ; le volume fini est inchangé.
  *
+ * Zone tendue et longueur minimale des planches (QUESTIONS A37 (4), (13) et (14), décisions du
+ * 2026-10-10 ; C §1.11 [85]) : le décalage `section.jointOffset` ne s'impose qu'aux joints **en
+ * zone tendue**, c'est-à-dire à une coupe d'abscisse σc d'une couche [z0 ; z1] telle que
+ * z0 < `StackedBeamShape.tensionZoneTop`(σc) (moitié basse de la section résistante par défaut,
+ * `section.tensionZone`, plus sévère que « le huitième extérieur plus une lamelle » de [85]
+ * § 10.4 (a), à valider) ; les joints hors de la zone sont libres. Un constat
+ * `FAB_LIMON_CENTRAL_BOIS_ABOUTAGES` par couche composée : violation seulement si l'un de ses
+ * joints en zone tendue est sous le décalage. Les coupes déplacées laissent d'abord des planches
+ * d'au moins `section.minBoardLength` (σ1 − σ0, sans les demi-entures ; 0 : aucune), puis, à
+ * défaut, de la seule garde technique `MIN_BOARD` ; jamais au-delà de β_max ni de la largeur des
+ * plateaux (le partage minimal dicté par la pente de fil, sourcé, reste prioritaire). Une couche
+ * composée dont une planche reste plus courte reçoit un constat
+ * `FAB_LIMON_CENTRAL_BOIS_PLANCHES_COURTES` (avertissement ; un constat par couche composée).
+ *
  * Couche composée, pièce intermédiaire (QUESTIONS A36 (9), décision du 2026-10-09) : une couche
  * de plusieurs planches est une pièce `wood-central-layer-<k>` / `LC1-<k>` composante de la
  * poutre (`componentOf` = poutre), avec le solide de la couche entière mais ni gabarit, ni débit,
@@ -69,17 +83,28 @@
  * Perçages horizontaux et joints de colle (QUESTIONS A36 (12), décision du 2026-10-09) : aucun
  * joint de colle à moins du rayon du perçage + `wood.clearance` (jeu d'atelier, à valider) du
  * centre d'un perçage (broches des platines, boulons des sabots, `StackedBeamShape.holes`) ;
- * chaque broche de pied (âme `AP1`) est au milieu de sa couche. Les intervalles entre niveaux
+ * chaque broche de pied (âme `AP1`) et chaque broche marquée `centered` (broches de tête,
+ * A37 (15)) est au milieu de sa couche ; une broche d'âme qui porte `webEdge` (broches de pied,
+ * relecture A37 (8)) garde de préférence ses joints à `webEdge` + jeu de son centre, pour que
+ * l'âme arrêtée au joint du dessus garde la pince de perçage (`HoleLevel.reach`, abandonné si
+ * l'intervalle ne le permet pas, QUESTIONS A38 (16)). Les intervalles entre niveaux
  * concernés sont partagés autrement (`layerBounds`) : épaisseur de la couche centrée et joints
  * choisis pour rendre la plus mince couche de l'intervalle la plus épaisse possible, toujours
  * ≤ t_max, joints toujours calés sur les assises. Impossible (perçage à cheval sur une assise,
  * perçages trop proches) : joints écartés au mieux et remarque.
  *
  * Logements des âmes (QUESTIONS A36 (5), décision du 2026-10-09) : le contour en plan du logement
- * (`StackedBeamShape.kerfs`, trait de scie de largeur `width` de part et d'autre de la trace)
- * est tracé sur le gabarit de chaque couche ou planche qu'il traverse, sur l'étendue où il
- * coupe sa tranche : découpé avant collage s'il traverse toute l'épaisseur, fraisé (profondeur
- * indiquée) sinon ; contour extérieur du gabarit inchangé ; à valider par un atelier.
+ * (`StackedBeamShape.kerfs`) est tracé sur le gabarit de chaque couche ou planche qu'il traverse,
+ * sur l'étendue où il coupe sa tranche ; contour extérieur du gabarit inchangé ; à valider par un
+ * atelier. Logement exact (QUESTIONS A37 (16), décision du 2026-10-10) : l'âme est plane, le long
+ * de la corde ; quand le trait porte son plan (`BeamKerf.line`), le contour tracé est
+ * l'intersection de la tranche de largeur `width` centrée sur ce plan avec la couche (rectangle
+ * en plan entre les abscisses où le logement coupe la tranche), sinon la bande de ± `width` / 2
+ * autour de la trace. Logement entièrement découpé (A37 (8)) : les platines arrêtent chaque palier
+ * du logement sur un joint de colle (`stackedJointLevels`), de sorte que toute couche traversée
+ * l'est sur toute son épaisseur (découpé avant collage) ; le fraisage à la profondeur indiquée ne
+ * reste qu'un repli si une traversée partielle subsiste (au-delà de `POS_EPS`, tolérance
+ * d'égalité aux joints).
  *
  * Précisions de mise en œuvre :
  * - les tranches sont empilées jusqu'à couvrir le plus haut dessus ; une tranche que la poutre ne
@@ -101,8 +126,9 @@
  *   largeur de sa bande) : la somme des planches redonne celui de la couche.
  *
  * Question résolue (C §1.11 [8] : « crans non coupés ») : joints calés sur les assises, A35 (g).
- * Sans source (QUESTIONS A37) : épaisseur minimale d'une couche et longueur minimale d'une
- * planche (gardes techniques `MIN_LAYER` et `MIN_BOARD` seulement).
+ * Sans source (QUESTIONS A37 (14), état gardé le 2026-10-10) : épaisseur minimale d'une couche
+ * (garde technique `MIN_LAYER` seulement). La longueur minimale d'une planche est le paramètre
+ * `section.minBoardLength` (à valider, QUESTIONS A38).
  *
  * `buildStackedLayers` ne lève jamais : erreurs dans `errors`.
  */
@@ -125,7 +151,11 @@ import {
 import { area, minAreaRect } from "./geom.js";
 import { woodQuantities } from "./quantities.js";
 import type { WoodCentralParams } from "./woodCentralParams.js";
-import { WOOD_CENTRAL_PLATE_FOOT_WEB_MARK, type BeamKerf } from "./woodCentralPlates.js";
+import {
+  WOOD_CENTRAL_PLATE_FOOT_WEB_MARK,
+  type BeamKerf,
+  type BeamKerfLine,
+} from "./woodCentralPlates.js";
 import type { ShoeBeamHole } from "./woodCentralShoes.js";
 import { stockOf } from "./woodHoused.js";
 
@@ -155,6 +185,19 @@ export const WOOD_CENTRAL_LAYER_RULES = {
   holeJoints: {
     id: "FAB_LIMON_CENTRAL_BOIS_JOINT_PERCAGE",
     ...sourceSpec(msg("compliance.source.woodCentralHoleJoints")),
+    confidence: "faible",
+    nature: "metier",
+    severity: "avertissement",
+    unit: "mm",
+  },
+  /**
+   * Planches d'une couche composée au moins aussi longues que `section.minBoardLength`
+   * (QUESTIONS A37 (4) et (14), décision du 2026-10-10 ; aucune source, à valider) : un constat
+   * par couche composée, `measured` = plus courte de ses planches (σ1 − σ0).
+   */
+  shortBoards: {
+    id: "FAB_LIMON_CENTRAL_BOIS_PLANCHES_COURTES",
+    ...sourceSpec(msg("compliance.source.woodCentralShortBoards")),
     confidence: "faible",
     nature: "metier",
     severity: "avertissement",
@@ -233,6 +276,14 @@ export interface StackedBeamShape {
    * gabarit de chaque couche (ou planche) qu'il traverse. Absent : aucun.
    */
   readonly kerfs?: readonly BeamKerf[];
+  /**
+   * Haut de la zone tendue à l'abscisse σ, mm (QUESTIONS A37 (4) et (13), décision du
+   * 2026-10-10) : sous-face + `section.tensionZone` × hauteur verticale de la section résistante
+   * (reste sous entaille h_res) ; le décalage des aboutages `section.jointOffset` ne s'applique
+   * qu'aux joints dont la couche descend sous cette altitude à leur abscisse. Absent : partout
+   * (comportement antérieur).
+   */
+  readonly tensionZoneTop?: (s: Mm) => Mm;
 }
 
 export interface StackedLayersInput {
@@ -243,7 +294,8 @@ export interface StackedLayersInput {
    * Collecteur des contrôles du plugin : les couches y ajoutent leurs contrôles de fabrication
    * (longueur de plateau `FAB_PLATEAU_LONGUEUR_MAX`, débit disponible `FAB_DEBIT_DISPONIBLE`,
    * par pièce : couche d'une planche ou planche d'une couche composée ; décalage des aboutages
-   * `FAB_LIMON_CENTRAL_BOIS_ABOUTAGES`, par couche composée).
+   * `FAB_LIMON_CENTRAL_BOIS_ABOUTAGES` et longueur des planches
+   * `FAB_LIMON_CENTRAL_BOIS_PLANCHES_COURTES`, par couche composée).
    */
   readonly checks: CheckCollector;
   readonly beam: StackedBeamShape;
@@ -368,9 +420,20 @@ const TEXT_HALF: Mm = 20;
 const MIN_LAYER: Mm = 1;
 /**
  * Garde technique : longueur minimale d'une planche quand les coupes sont déplacées (A36 (6)),
- * mm ; aucune source sur la longueur minimale d'une planche (QUESTIONS A37).
+ * mm ; repli quand `section.minBoardLength` (A37 (14), à valider) n'est pas tenable.
  */
 const MIN_BOARD: Mm = 1;
+/**
+ * Retrait des bornes d'un intervalle hors zone tendue (A37 (13)) : une coupe placée dans un tel
+ * intervalle est hors de la zone à coup sûr (bornes affinées par dichotomie), mm.
+ */
+const TENSION_EPS: Mm = 1e-4;
+/**
+ * Paliers de longueur minimale essayés, en part de la longueur égale (σ1 − σ0) / n, quand
+ * `section.minBoardLength` dépasse cette longueur (A37 (14)) : recherche technique, ni seuil ni
+ * valeur métier (le constat compare toujours à `minBoardLength`).
+ */
+const MIN_BOARD_STEPS: readonly number[] = [0.75, 0.5];
 /** Nombre d'épaisseurs essayées pour la couche centrée sur une broche (recherche technique). */
 const CENTER_SAMPLES = 48;
 /** Itérations des recherches par dichotomie (épaisseur minimale, décalage, portée d'une planche). */
@@ -409,6 +472,81 @@ export function buildStackedLayers(input: StackedLayersInput): StackedLayersResu
 }
 
 /**
+ * Niveaux des joints de colle (bornes des couches, base et sommet compris, croissants) que
+ * `buildStackedLayers` retiendrait avec les perçages horizontaux donnés (QUESTIONS A37 (8) et
+ * (15), décisions du 2026-10-10) : même échantillonnage de la forme, même épaisseur t_max, mêmes
+ * niveaux d'assise et même lecture des perçages (`holeLevelsOf`) que les couches, de sorte que
+ * les platines arrêtent leurs logements et centrent leurs broches sur les joints réels. La forme
+ * (`beam`, sans `holes`) est échantillonnée une fois ; la fonction rendue ne lève jamais (liste
+ * vide si la forme ou l'empilement sont dégénérés).
+ */
+export function stackedJointLevels(
+  input: Pick<StackedLayersInput, "params" | "profile" | "beam">,
+): (holes: readonly ShoeBeamHole[]) => readonly Mm[] {
+  try {
+    const t = resolveLayerThickness(input.params, input.profile);
+    const shape = sampleShape(input.beam);
+    if (!shape || !(t > 0)) return () => [];
+    const clearance = input.profile.wood.clearance;
+    const seats = input.beam.seatLevels ?? [];
+    return (holes) => {
+      try {
+        const { bounds } = layerBounds(
+          input.beam.baseZ,
+          shape.zTop,
+          t,
+          seats,
+          MAX_LAYERS,
+          holeLevelsOf(holes, clearance),
+        );
+        if (bounds.length === 0) return [];
+        return [bounds[0]!.z0, ...bounds.map((b) => b.z1)];
+      } catch {
+        return [];
+      }
+    };
+  } catch {
+    return () => [];
+  }
+}
+
+/**
+ * Perçages horizontaux vus par l'empilement (A36 (12)) : zone interdite aux joints = rayon + jeu
+ * d'atelier ; broche au milieu de sa couche si `centered` (A37 (15)), par défaut les broches de
+ * l'âme de pied.
+ */
+export function holeLevelsOf(holes: readonly ShoeBeamHole[], clearance: Mm): HoleLevel[] {
+  return holes.map((h) => ({
+    z: h.z,
+    r: h.diameter / 2 + clearance,
+    centered: h.centered ?? h.mark === WOOD_CENTRAL_PLATE_FOOT_WEB_MARK,
+    mark: h.mark,
+    ...(h.webEdge !== undefined && Number.isFinite(h.webEdge)
+      ? { reach: h.webEdge + clearance }
+      : {}),
+  }));
+}
+
+/**
+ * Forme finie échantillonnée (dessus constant pris au milieu de chaque intervalle, dessous affine)
+ * et plus haut dessus utile `zTop` ; `null` si la forme est dégénérée.
+ */
+function sampleShape(beam: StackedBeamShape): (Sampled & { readonly zTop: Mm }) | null {
+  const { sStart, sEnd, baseZ, bottomAt, topAt } = beam;
+  if (![sStart, sEnd, baseZ].every(Number.isFinite) || !(sEnd - sStart > 0)) return null;
+  const xs = grid(sStart, sEnd, beam.nodes, FINE_STEP);
+  const bot = xs.map((x) => bottomAt(x));
+  const tops: Mm[] = [];
+  for (let i = 0; i + 1 < xs.length; i++) tops.push(topAt((xs[i]! + xs[i + 1]!) / 2));
+  let zTop = -Infinity;
+  for (let i = 0; i < tops.length; i++) {
+    if (tops[i]! > Math.max(baseZ, Math.min(bot[i]!, bot[i + 1]!))) zTop = Math.max(zTop, tops[i]!);
+  }
+  if (![...bot, ...tops].every(Number.isFinite) || !(zTop > baseZ)) return null;
+  return { xs, bot, tops, zTop };
+}
+
+/**
  * ∫ sur [0 ; L] de (hi − max(B, lo))⁺ avec B affine de B0 à B1 : intégrale exacte de la hauteur
  * de la poutre comprise dans la tranche [lo ; hi] (hi déjà borné par le dessus).
  */
@@ -444,6 +582,12 @@ export interface HoleLevel {
   readonly centered: boolean;
   /** Repère (remarques). */
   readonly mark?: string;
+  /**
+   * Distance préférée d'un joint de colle au centre (`ShoeBeamHole.webEdge` + jeu d'atelier,
+   * relecture A37 (8)) : zone élargie essayée d'abord, abandonnée si l'intervalle ne la permet
+   * pas ; le constat de perçage compare toujours à `r`.
+   */
+  readonly reach?: Mm;
 }
 
 /** Perçage que l'empilement ne tient pas (A36 (12)). */
@@ -563,23 +707,37 @@ function runJoints(
   const ok = (levels: readonly Mm[]): boolean =>
     levels.slice(1, -1).every((j) => !inZone(j, relevant)) &&
     centers.every((h) => centeredIn(levels, h.z));
+  // Zones élargies des broches d'âme (`reach`, relecture A37 (8)) : essayées d'abord.
+  const widen = (h: HoleLevel): HoleLevel =>
+    h.reach !== undefined && h.reach > h.r ? { ...h, r: h.reach } : h;
+  const wide = relevant.map(widen);
+  const wideCenters = centers.map(widen);
+  const okWide = (levels: readonly Mm[]): boolean =>
+    levels.slice(1, -1).every((j) => !inZone(j, wide));
   let levels = equal;
-  if (!ok(equal)) {
+  if (!ok(equal) || !okWide(equal)) {
+    const widened = wide.some((h, i) => h !== relevant[i])
+      ? shareRun(lo, hi, tMax, wide, wideCenters)
+      : null;
+    // Partage égal déjà tenu (hors zones élargies) : gardé si l'élargissement est impossible.
     const inner =
-      shareRun(lo, hi, tMax, relevant, centers) ??
-      shareRun(lo, hi, tMax, relevant, []) ??
-      [0.75, 0.5, 0.25].reduce<Mm[] | null>(
-        (found, k) =>
-          found ??
-          shareRun(
-            lo,
-            hi,
-            tMax,
-            relevant.map((h) => ({ z: h.z, r: h.r * k })),
-            [],
-          ),
-        null,
-      );
+      widened ??
+      (ok(equal)
+        ? null
+        : (shareRun(lo, hi, tMax, relevant, centers) ??
+          shareRun(lo, hi, tMax, relevant, []) ??
+          [0.75, 0.5, 0.25].reduce<Mm[] | null>(
+            (found, k) =>
+              found ??
+              shareRun(
+                lo,
+                hi,
+                tMax,
+                relevant.map((h) => ({ z: h.z, r: h.r * k })),
+                [],
+              ),
+            null,
+          )));
     if (inner) levels = [lo, ...inner, hi];
   }
   for (const h of relevant) {
@@ -864,22 +1022,44 @@ interface BoardPlan {
   readonly guard: boolean;
 }
 
-/** Aboutages de la couche du dessous et décalage exigé (A36 (6)). */
+/** Aboutages de la couche du dessous et décalage exigé (A36 (6), A37 (13) (14)). */
 interface JointRule {
   /** Coupes intérieures (plans de joint) de la couche du dessous, mm. */
   readonly below: readonly Mm[];
   /** Entraxe minimal de deux joints : `jointOffset` + `fingerLength` (0 : aucun), mm. */
   readonly need: Mm;
+  /**
+   * Une coupe de la couche à l'abscisse σ est en zone tendue (A37 (13)) : seules celles-là
+   * doivent être décalées de `need` des joints du dessous.
+   */
+  readonly inTension: (x: Mm) => boolean;
+  /**
+   * Abscisses de la couche hors zone tendue (intervalles fermés, bornes rentrées de
+   * `TENSION_EPS`) : une coupe y est libre.
+   */
+  readonly free: readonly Span[];
+  /** Longueur minimale d'une planche visée au placement des coupes (`minBoardLength`), mm. */
+  readonly minBoard: Mm;
   /** Longueur des entures (`fingerLength`) : demi-enture ajoutée au gabarit par bout abouté. */
   readonly finger: Mm;
   /** Essais de planche restants pour la poutre (`STAGGER_BUDGET`), partagés par les couches. */
   readonly budget: { left: number };
 }
 
-/** Plus petit écart |c − c'| entre les coupes intérieures de `cuts` et `below` (∞ sans vis-à-vis). */
-function cutClearance(cuts: readonly Mm[], below: readonly Mm[]): Mm {
+/**
+ * Plus petit écart |c − c'| entre les coupes intérieures de `cuts` en zone tendue et `below`
+ * (∞ sans vis-à-vis).
+ */
+function cutClearance(
+  cuts: readonly Mm[],
+  below: readonly Mm[],
+  inTension: (x: Mm) => boolean,
+): Mm {
   let out = Infinity;
-  for (const c of cuts.slice(1, -1)) for (const d of below) out = Math.min(out, Math.abs(c - d));
+  for (const c of cuts.slice(1, -1)) {
+    if (!inTension(c)) continue;
+    for (const d of below) out = Math.min(out, Math.abs(c - d));
+  }
   return out;
 }
 
@@ -903,7 +1083,7 @@ function planBoards(
   const plan = equalBoards(trace, b, s, sigma0, sigma1, betaMax, maxWidth, joints.finger);
   const n = plan.cuts.length - 1;
   if (plan.guard || n === 1 || !(joints.need > 0) || joints.below.length === 0) return plan;
-  if (cutClearance(plan.cuts, joints.below) >= joints.need - POS_EPS) return plan;
+  if (cutClearance(plan.cuts, joints.below, joints.inTension) >= joints.need - POS_EPS) return plan;
   const fits = (a: Mm, e: Mm): boolean => {
     joints.budget.left -= plan.strips.length;
     if (joints.budget.left < 0) return false;
@@ -927,7 +1107,19 @@ function planBoards(
       return bandBox(trace, spec(strip), s, joints.finger).width <= maxWidth + CMP_EPS;
     });
   };
-  const cuts = staggerCuts(sigma0, sigma1, n, joints, fits);
+  // Planches d'au moins `minBoardLength` d'abord, puis la seule garde technique (A37 (14)).
+  // Quand le partage égal en n planches les fait déjà plus courtes (pente de fil, largeur des
+  // plateaux), aucun placement ne la tient : paliers intermédiaires de la longueur égale, pour
+  // ne pas retomber d'emblée sur des planches de quelques millimètres.
+  const equal = (sigma1 - sigma0) / n;
+  const minLens = [
+    ...(joints.minBoard > MIN_BOARD ? [joints.minBoard] : []),
+    ...(joints.minBoard > equal + POS_EPS
+      ? MIN_BOARD_STEPS.map((k) => k * equal).filter((x) => x > MIN_BOARD)
+      : []),
+    MIN_BOARD,
+  ];
+  const cuts = staggerCuts(sigma0, sigma1, n, joints, fits, minLens);
   // Garde-fou atteint : un placement trouvé avant l'arrêt a été vérifié planche par planche
   // (`fits`) ; sinon, le partage égal.
   if (!cuts) return plan;
@@ -940,11 +1132,14 @@ function planBoards(
 }
 
 /**
- * Coupes d'une couche décalées des joints de la couche du dessous (A36 (6)) : interdites à moins
- * de `need` d'un joint du dessous ; planche [a ; e] admise si `fits(a, e)` (β_max, largeur ;
- * supposé vrai sur toute sous-planche). On cherche le plus petit nombre de planches ≥ n0 (avance
- * gloutonne la plus longue), puis des coupes au plus près du partage égal. À défaut, le plus
- * grand décalage atteignable (dichotomie sur le décalage). `null` : aucun déplacement utile.
+ * Coupes d'une couche décalées des joints de la couche du dessous (A36 (6)) : en zone tendue
+ * (A37 (13)), interdites à moins de `need` d'un joint du dessous, libres hors de la zone
+ * (`joints.free`) ; planche [a ; e] admise si `fits(a, e)` (β_max, largeur ; supposé vrai sur
+ * toute sous-planche). Pour chaque longueur minimale de planche de `minLens`, dans l'ordre
+ * (A37 (14) : `minBoardLength`, paliers, puis la garde technique), on cherche le plus petit
+ * nombre de planches ≥ n0, puis des coupes au plus près du partage égal ; à défaut, le plus
+ * grand décalage atteignable (dichotomie sur le décalage). La longueur prime donc sur le
+ * décalage (question A38). `null` : aucun déplacement utile.
  */
 function staggerCuts(
   sigma0: Mm,
@@ -952,6 +1147,7 @@ function staggerCuts(
   n0: number,
   joints: JointRule,
   fits: (a: Mm, e: Mm) => boolean,
+  minLens: readonly Mm[],
 ): Mm[] | null {
   const reachMemo = new Map<Mm, Mm>();
   /** Plus loin où peut finir une planche commencée en a. */
@@ -993,102 +1189,144 @@ function staggerCuts(
     backMemo.set(e, out);
     return out;
   };
-  const attempt = (need: Mm): Mm[] | null => {
-    const zones = joints.below.map((z) => ({ z, r: need }));
-    const allowed = allowedSpans(sigma0 + MIN_BOARD, sigma1 - MIN_BOARD, zones);
-    if (allowed.length === 0) return null;
-    // Avance gloutonne : plus petit nombre de planches.
-    const forward: Mm[] = [sigma0];
-    for (let guard = 0; reach(forward[forward.length - 1]!) < sigma1 - POS_EPS; guard++) {
-      const from = forward[forward.length - 1]!;
-      const x = nearestIn(allowed, from + MIN_BOARD, reach(from), Infinity);
-      if (x === null || x <= from + POS_EPS || guard > MAX_BOARDS) return null;
-      forward.push(x);
+  /** Toutes les planches d'au moins `minLen` et admises. */
+  const valid = (cuts: readonly Mm[], minLen: Mm): boolean => {
+    for (let j = 0; j + 1 < cuts.length; j++) {
+      if (!(cuts[j + 1]! - cuts[j]! >= minLen - POS_EPS)) return false;
+      if (!fits(cuts[j]!, cuts[j + 1]!)) return false;
     }
-    for (let n = Math.max(n0, forward.length); n <= Math.min(MAX_BOARDS, n0 + 4); n++) {
-      const cuts = placeCuts(n, allowed) ?? repairCuts(n, allowed);
-      if (cuts) return cuts;
-    }
-    return null;
+    return true;
   };
-  /**
-   * Repli (portée non monotone, trace mêlant droites et arcs) : partage égal en n planches,
-   * chaque coupe interdite déplacée vers le plus proche point permis où ses deux planches
-   * tiennent.
-   */
-  const repairCuts = (n: number, allowed: readonly Span[]): Mm[] | null => {
-    const cuts = equalLevels(sigma0, sigma1, n);
-    for (let j = 1; j < n; j++) {
-      const x = cuts[j]!;
-      if (nearestIn(allowed, x, x, x) !== null) continue;
-      const lo = cuts[j - 1]! + MIN_BOARD;
-      const hi = cuts[j + 1]! - MIN_BOARD;
-      const options = [nearestIn(allowed, lo, x, Infinity), nearestIn(allowed, x, hi, -Infinity)]
-        .filter((y): y is Mm => y !== null)
-        .sort((p, q) => Math.abs(p - x) - Math.abs(q - x));
-      const y = options.find((c) => fits(cuts[j - 1]!, c) && fits(c, cuts[j + 1]!));
-      if (y === undefined) return null;
-      cuts[j] = y;
+  const search = (minLen: Mm): Mm[] | null => {
+    const attempt = (need: Mm): Mm[] | null => {
+      const zones = joints.below.map((z) => ({ z, r: need }));
+      const lo = sigma0 + minLen;
+      const hi = sigma1 - minLen;
+      // Coupes permises : hors des zones des joints du dessous, ou hors zone tendue (A37 (13)).
+      const allowed = mergeSpans([
+        ...allowedSpans(lo, hi, zones),
+        ...joints.free
+          .map((f) => ({ lo: Math.max(f.lo, lo), hi: Math.min(f.hi, hi) }))
+          .filter((f) => f.hi >= f.lo),
+      ]);
+      if (allowed.length === 0) return null;
+      // Avance gloutonne : plus petit nombre de planches (minorant, sans la longueur minimale,
+      // que l'avance la plus longue ne respecte pas toujours ; à défaut, n0).
+      const forward: Mm[] = [sigma0];
+      for (let guard = 0; reach(forward[forward.length - 1]!) < sigma1 - POS_EPS; guard++) {
+        const from = forward[forward.length - 1]!;
+        const x = nearestIn(allowed, from + MIN_BOARD, reach(from), Infinity);
+        if (x === null || x <= from + POS_EPS || guard > MAX_BOARDS) {
+          if (minLen > MIN_BOARD) {
+            forward.length = 0;
+            break;
+          }
+          return null;
+        }
+        forward.push(x);
+      }
+      for (let n = Math.max(n0, forward.length); n <= Math.min(MAX_BOARDS, n0 + 4); n++) {
+        const cuts = placeCuts(n, allowed) ?? repairCuts(n, allowed);
+        if (cuts) return cuts;
+      }
+      return null;
+    };
+    /**
+     * Repli (portée non monotone, trace mêlant droites et arcs) : partage égal en n planches,
+     * chaque coupe interdite déplacée vers le plus proche point permis où ses deux planches
+     * tiennent.
+     */
+    const repairCuts = (n: number, allowed: readonly Span[]): Mm[] | null => {
+      const cuts = equalLevels(sigma0, sigma1, n);
+      for (let j = 1; j < n; j++) {
+        const x = cuts[j]!;
+        if (nearestIn(allowed, x, x, x) !== null) continue;
+        const lo = cuts[j - 1]! + minLen;
+        const hi = cuts[j + 1]! - minLen;
+        const options = [nearestIn(allowed, lo, x, Infinity), nearestIn(allowed, x, hi, -Infinity)]
+          .filter((y): y is Mm => y !== null)
+          .sort((p, q) => Math.abs(p - x) - Math.abs(q - x));
+        const y = options.find((c) => fits(cuts[j - 1]!, c) && fits(c, cuts[j + 1]!));
+        if (y === undefined) return null;
+        cuts[j] = y;
+      }
+      return valid(cuts, minLen) ? cuts : null;
+    };
+    /**
+     * n planches : bornes gloutonnes avant (F) et arrière (G), puis coupes au plus près du
+     * partage égal.
+     */
+    const placeCuts = (n: number, allowed: readonly Span[]): Mm[] | null => {
+      // Bornes nécessaires : la coupe j est au plus loin en F[j] (portée depuis F[j − 1]) et au
+      // plus tôt en G[j] (portée arrière depuis G[j + 1]) ; la longueur minimale borne F par
+      // le bas (σ0 + j·minLen) et G par le haut (F[j + 1] − minLen), pour ne pas écarter un
+      // placement faisable avec des planches plus longues que la garde technique (A37 (14)).
+      const F: Mm[] = [sigma0];
+      for (let j = 1; j < n; j++) {
+        const from = F[j - 1]!;
+        const lo = Math.max(sigma0 + j * minLen, from + MIN_BOARD);
+        const x = nearestIn(allowed, lo, Math.min(reach(from), sigma1), Infinity);
+        if (x === null) return null;
+        F.push(x);
+      }
+      if (reach(F[n - 1]!) < sigma1 - POS_EPS) return null;
+      const G: Mm[] = new Array<Mm>(n + 1);
+      G[n] = sigma1;
+      for (let j = n - 1; j >= 1; j--) {
+        const to = G[j + 1]!;
+        const up = (j + 1 === n ? sigma1 : F[j + 1]!) - minLen;
+        const x = nearestIn(
+          allowed,
+          Math.max(back(to), sigma0),
+          Math.min(up, to - MIN_BOARD),
+          -Infinity,
+        );
+        if (x === null) return null;
+        G[j] = x;
+      }
+      const cuts: Mm[] = [sigma0];
+      for (let j = 1; j < n; j++) {
+        const prev = cuts[j - 1]!;
+        const lo = Math.max(G[j]!, prev + minLen);
+        const hi = Math.min(F[j]!, reach(prev));
+        const x = nearestIn(allowed, lo, hi, sigma0 + ((sigma1 - sigma0) * j) / n);
+        if (x === null) return null;
+        cuts.push(x);
+      }
+      cuts.push(sigma1);
+      return valid(cuts, minLen) ? cuts : null;
+    };
+    const full = attempt(joints.need);
+    if (full) return full;
+    // Décalage exigé impossible : le plus grand décalage atteignable.
+    // Majorant : une coupe ne s'écarte pas plus que de la moitié du plus grand intervalle entre
+    // deux joints du dessous (ou d'un joint à un bout de la couche).
+    const marks = [sigma0, ...joints.below.filter((d) => d > sigma0 && d < sigma1), sigma1].sort(
+      (p, q) => p - q,
+    );
+    let gapMax = 0;
+    for (let i = 1; i < marks.length; i++) {
+      const half = i === 1 || i === marks.length - 1 ? 1 : 2;
+      gapMax = Math.max(gapMax, (marks[i]! - marks[i - 1]!) / half);
     }
-    for (let j = 0; j < n; j++) if (!fits(cuts[j]!, cuts[j + 1]!)) return null;
-    return cuts;
+    let best: Mm[] | null = null;
+    let a = 0;
+    let b = Math.min(joints.need, gapMax);
+    for (let i = 0; i < SEARCH_ITERATIONS && b - a > 1; i++) {
+      const m = (a + b) / 2;
+      const found = attempt(m);
+      if (found) {
+        best = found;
+        a = m;
+      } else b = m;
+    }
+    return best;
   };
-  /** n planches : bornes gloutonnes avant (F) et arrière (G), puis coupes au plus près du partage égal. */
-  const placeCuts = (n: number, allowed: readonly Span[]): Mm[] | null => {
-    const F: Mm[] = [sigma0];
-    for (let j = 1; j < n; j++) {
-      const from = F[j - 1]!;
-      const x = nearestIn(allowed, from + MIN_BOARD, Math.min(reach(from), sigma1), Infinity);
-      if (x === null) return null;
-      F.push(x);
-    }
-    if (reach(F[n - 1]!) < sigma1 - POS_EPS) return null;
-    const G: Mm[] = new Array<Mm>(n + 1);
-    G[n] = sigma1;
-    for (let j = n - 1; j >= 1; j--) {
-      const to = G[j + 1]!;
-      const x = nearestIn(allowed, Math.max(back(to), sigma0), to - MIN_BOARD, -Infinity);
-      if (x === null) return null;
-      G[j] = x;
-    }
-    const cuts: Mm[] = [sigma0];
-    for (let j = 1; j < n; j++) {
-      const prev = cuts[j - 1]!;
-      const lo = Math.max(G[j]!, prev + MIN_BOARD);
-      const hi = Math.min(F[j]!, reach(prev));
-      const x = nearestIn(allowed, lo, hi, sigma0 + ((sigma1 - sigma0) * j) / n);
-      if (x === null) return null;
-      cuts.push(x);
-    }
-    cuts.push(sigma1);
-    for (let j = 0; j < n; j++) if (!fits(cuts[j]!, cuts[j + 1]!)) return null;
-    return cuts;
-  };
-  const full = attempt(joints.need);
-  if (full) return full;
-  // Décalage exigé impossible : le plus grand décalage atteignable.
-  // Majorant : une coupe ne s'écarte pas plus que de la moitié du plus grand intervalle entre
-  // deux joints du dessous (ou d'un joint à un bout de la couche).
-  const marks = [sigma0, ...joints.below.filter((d) => d > sigma0 && d < sigma1), sigma1].sort(
-    (p, q) => p - q,
-  );
-  let gapMax = 0;
-  for (let i = 1; i < marks.length; i++) {
-    const half = i === 1 || i === marks.length - 1 ? 1 : 2;
-    gapMax = Math.max(gapMax, (marks[i]! - marks[i - 1]!) / half);
+  for (const minLen of minLens) {
+    const found = search(minLen);
+    if (found) return found;
   }
-  let best: Mm[] | null = null;
-  let a = 0;
-  let b = Math.min(joints.need, gapMax);
-  for (let i = 0; i < SEARCH_ITERATIONS && b - a > 1; i++) {
-    const m = (a + b) / 2;
-    const found = attempt(m);
-    if (found) {
-      best = found;
-      a = m;
-    } else b = m;
-  }
-  return best;
+  return null;
 }
 
 /** Découpage en planches égales (A35 (h)) : le plus petit n qui respecte β_max et la largeur. */
@@ -1159,7 +1397,7 @@ function equalBoards(
 
 function build(input: StackedLayersInput, t: Mm, s: Mm): StackedLayersResult {
   const { params, trace, profile, checks, beam } = input;
-  const { b, sStart, sEnd, baseZ, bottomAt, topAt } = beam;
+  const { b, sStart, sEnd, baseZ, bottomAt } = beam;
   const empty = (errors: Message[]): StackedLayersResult => ({
     parts: [],
     layers: [],
@@ -1173,28 +1411,17 @@ function build(input: StackedLayersInput, t: Mm, s: Mm): StackedLayersResult {
     return empty([msg("structure.woodCentral.error.layerShape")]);
   }
 
-  // 1. Forme échantillonnée : dessus constant (pris au milieu) et dessous affine par intervalle.
-  const xs = grid(sStart, sEnd, beam.nodes, FINE_STEP);
-  const bot = xs.map((x) => bottomAt(x));
-  const tops: Mm[] = [];
-  for (let i = 0; i + 1 < xs.length; i++) tops.push(topAt((xs[i]! + xs[i + 1]!) / 2));
-  const sampled: Sampled = { xs, bot, tops };
-  let zTop = -Infinity;
-  for (let i = 0; i < tops.length; i++) {
-    if (tops[i]! > Math.max(baseZ, Math.min(bot[i]!, bot[i + 1]!))) zTop = Math.max(zTop, tops[i]!);
-  }
-  if (![...bot, ...tops].every(Number.isFinite) || !(zTop > baseZ)) {
-    return empty([msg("structure.woodCentral.error.layerShape")]);
-  }
+  // 1. Forme échantillonnée : dessus constant (pris au milieu) et dessous affine par intervalle
+  // (même échantillonnage que `stackedJointLevels`).
+  const shape = sampleShape(beam);
+  if (!shape) return empty([msg("structure.woodCentral.error.layerShape")]);
+  const { xs, bot, tops, zTop } = shape;
+  const sampled: Sampled = shape;
   const seated = beam.seatLevels !== undefined;
-  // Perçages horizontaux (A36 (12)) : zone interdite aux joints = rayon + jeu d'atelier.
+  // Perçages horizontaux (A36 (12)) : zone interdite aux joints = rayon + jeu d'atelier ; broches
+  // `centered` au milieu de leur couche (A37 (15)).
   const clearance = profile.wood.clearance;
-  const holes: HoleLevel[] = (beam.holes ?? []).map((h) => ({
-    z: h.z,
-    r: h.diameter / 2 + clearance,
-    centered: h.mark === WOOD_CENTRAL_PLATE_FOOT_WEB_MARK,
-    mark: h.mark,
-  }));
+  const holes: HoleLevel[] = holeLevelsOf(beam.holes ?? [], clearance);
   const { count, bounds, issues } = layerBounds(
     baseZ,
     zTop,
@@ -1246,6 +1473,8 @@ function build(input: StackedLayersInput, t: Mm, s: Mm): StackedLayersResult {
   const finger = params.section.fingerLength;
   const offset = params.section.jointOffset;
   const need = offset > 0 ? offset + finger : 0;
+  const minBoard = params.section.minBoardLength;
+  const zone = params.section.tensionZone;
   const kerfs = beam.kerfs ?? [];
   const notes: Message[] = [];
   const parts: Part[] = [];
@@ -1253,6 +1482,7 @@ function build(input: StackedLayersInput, t: Mm, s: Mm): StackedLayersResult {
   const lengthItems: CheckItem[] = [];
   const stockFindings: Finding[] = [];
   const jointFindings: Finding[] = [];
+  const shortFindings: Finding[] = [];
   const kerfCount = new Map<string, { cut: number; milled: number }>();
   let composed = 0;
   let boardCount = 0;
@@ -1260,6 +1490,8 @@ function build(input: StackedLayersInput, t: Mm, s: Mm): StackedLayersResult {
   let jointsFaced = 0;
   let jointsHeld = 0;
   let minOffset = Infinity;
+  // Couches composées dont des joints font face à ceux du dessous, hors zone tendue compris.
+  let facedLayers = 0;
   const addPart = (
     partId: string,
     mark: string,
@@ -1355,9 +1587,16 @@ function build(input: StackedLayersInput, t: Mm, s: Mm): StackedLayersResult {
       notes.push(msg("structure.woodCentral.note.layerDisjoint", { mark }));
     // Joints de la couche du dessous, si elle est jointive (A36 (6)).
     const below = prev && Math.abs(prev.z1 - slice.z0) < 1e-6 ? prev.cuts : [];
+    // Zone tendue (A37 (13)) : une coupe d'abscisse σ y est si la couche descend sous le haut de
+    // la zone à cette abscisse ; partout sans `tensionZoneTop`.
+    const top = beam.tensionZoneTop;
+    const inTension = top ? (x: Mm): boolean => slice.z0 < top(x) - POS_EPS : (): boolean => true;
     const plan = planBoards(trace, b, s, sigma0, sigma1, betaMax, maxWidth, {
       below,
       need,
+      inTension,
+      free: top && below.length > 0 && need > 0 ? outsideSpans(sigma0, sigma1, xs, inTension) : [],
+      minBoard,
       finger,
       budget,
     });
@@ -1452,16 +1691,39 @@ function build(input: StackedLayersInput, t: Mm, s: Mm): StackedLayersResult {
           }
         }
       }
-      // Un constat par couche composée, et non par planche (QUESTIONS A37 (13)).
-      jointFindings.push(jointFinding(partId, mark, layerOffset, offset));
-      // Décompte par joint (un plan de joint par coupe intérieure, toutes bandes confondues).
-      for (const c of plan.cuts.slice(1, -1)) {
+      // Un constat par couche composée, et non par planche (QUESTIONS A37 (13)) : seuls ses
+      // joints en zone tendue sont tenus au décalage.
+      const inner = plan.cuts.slice(1, -1);
+      const tension = inner.filter(inTension);
+      let tensionOffset: Mm | undefined;
+      for (const c of tension) {
+        for (const d of below) {
+          tensionOffset = Math.min(tensionOffset ?? Infinity, Math.abs(c - d) - finger);
+        }
+      }
+      if (inner.length > 0 && below.length > 0) facedLayers++;
+      jointFindings.push(
+        jointFinding(
+          partId,
+          mark,
+          inner.length === 0 || below.length === 0
+            ? { kind: "free" }
+            : tension.length === 0
+              ? { kind: "outside" }
+              : { kind: "measured", measured: tensionOffset! },
+          offset,
+        ),
+      );
+      // Décompte par joint en zone tendue (un plan de joint par coupe, toutes bandes confondues).
+      for (const c of tension) {
         if (below.length === 0) continue;
         const gap = Math.min(...below.map((d) => Math.abs(c - d))) - finger;
         jointsFaced++;
         if (gap >= offset - POS_EPS) jointsHeld++;
         minOffset = Math.min(minOffset, gap);
       }
+      // Longueur des planches (A37 (14)) : un constat par couche composée, sa plus courte.
+      shortFindings.push(shortBoardFinding(partId, mark, boards, minBoard));
       boardCount += boards.length;
     }
     prev = { z1: slice.z1, cuts: plan.cuts.slice(1, -1) };
@@ -1480,6 +1742,9 @@ function build(input: StackedLayersInput, t: Mm, s: Mm): StackedLayersResult {
     if (jointFindings.length > 0) {
       checks.add(pluginRuleDef(WOOD_CENTRAL_LAYER_RULES.fingerJoints), jointFindings);
     }
+    if (shortFindings.length > 0) {
+      checks.add(pluginRuleDef(WOOD_CENTRAL_LAYER_RULES.shortBoards), shortFindings);
+    }
     // Perçages horizontaux et joints de colle : un constat par perçage (A36 (12), A37 (15)).
     if (holes.length > 0) {
       checks.add(
@@ -1497,19 +1762,27 @@ function build(input: StackedLayersInput, t: Mm, s: Mm): StackedLayersResult {
       );
     }
     if (composed > 0) {
+      // Synthèse des aboutages (A37 (13)) : joints en zone tendue seulement, zone rappelée.
       notes.unshift(
         jointsFaced > 0
-          ? msg("structure.woodCentral.note.layerFingerJoints", {
+          ? msg("structure.woodCentral.note.layerFingerJointsTension", {
               finger: dec(finger, 0),
               offset: dec(offset, 0),
+              zone: dec(zone * 100, 0),
               held: jointsHeld,
               joints: jointsFaced,
               min: dec(minOffset, 0),
             })
-          : msg("structure.woodCentral.note.layerFingerJointsAlone", {
-              finger: dec(finger, 0),
-              offset: dec(offset, 0),
-            }),
+          : facedLayers > 0
+            ? msg("structure.woodCentral.note.layerFingerJointsNoTension", {
+                finger: dec(finger, 0),
+                offset: dec(offset, 0),
+                zone: dec(zone * 100, 0),
+              })
+            : msg("structure.woodCentral.note.layerFingerJointsAlone", {
+                finger: dec(finger, 0),
+                offset: dec(offset, 0),
+              }),
       );
       notes.unshift(
         msg("structure.woodCentral.note.layerBoards", {
@@ -1551,18 +1824,31 @@ function build(input: StackedLayersInput, t: Mm, s: Mm): StackedLayersResult {
 
 /**
  * Constat de décalage d'une couche composée (A36 (6) ; un constat par couche et non par planche,
- * QUESTIONS A37 (13)) : `measured` = plus petit décalage des aboutages de ses planches à ceux de
- * la couche du dessous (parties les plus proches), `min` = `jointOffset`.
+ * QUESTIONS A37 (13)) : `measured` = plus petit décalage de ses aboutages **en zone tendue** à
+ * ceux de la couche du dessous (parties les plus proches), `min` = `jointOffset` ; `free` : aucun
+ * aboutage du dessous en regard ; `outside` : aucun de ses aboutages en zone tendue (libres).
  */
-function jointFinding(partId: string, mark: string, measured: Mm | undefined, offset: Mm): Finding {
+function jointFinding(
+  partId: string,
+  mark: string,
+  state:
+    | { readonly kind: "free" }
+    | { readonly kind: "outside" }
+    | { readonly kind: "measured"; readonly measured: Mm },
+  offset: Mm,
+): Finding {
   const location = { kind: "part", partId } as const;
-  if (measured === undefined) {
+  if (state.kind !== "measured") {
     return {
       status: "ok",
       location,
-      message: msg("structure.woodCentral.check.layerJointFree", { mark }),
+      message:
+        state.kind === "free"
+          ? msg("structure.woodCentral.check.layerJointFree", { mark })
+          : msg("structure.woodCentral.check.layerJointsOutsideTension", { mark }),
     };
   }
+  const { measured } = state;
   const ok = !(offset > 0) || measured >= offset - POS_EPS;
   return {
     status: ok ? "ok" : "violation",
@@ -1578,6 +1864,73 @@ function jointFinding(partId: string, mark: string, measured: Mm | undefined, of
       },
     ),
   };
+}
+
+/**
+ * Constat de longueur des planches d'une couche composée (QUESTIONS A37 (14)) : `measured` = plus
+ * courte de ses planches (σ1 − σ0, sans les demi-entures), `min` = `minBoardLength` (0 : aucune
+ * exigence, constat toujours tenu).
+ */
+function shortBoardFinding(
+  partId: string,
+  mark: string,
+  boards: readonly StackedBoard[],
+  min: Mm,
+): Finding {
+  let shortest = boards[0]!;
+  for (const bd of boards) {
+    if (bd.sigma1 - bd.sigma0 < shortest.sigma1 - shortest.sigma0) shortest = bd;
+  }
+  const measured = shortest.sigma1 - shortest.sigma0;
+  const ok = !(min > 0) || measured >= min - POS_EPS;
+  return {
+    status: ok ? "ok" : "violation",
+    measured,
+    min,
+    location: { kind: "part", partId },
+    message: ok
+      ? msg("structure.woodCentral.check.layerBoardsLengthOk", {
+          mark,
+          length: dec(measured, 0),
+          min: dec(min, 0),
+        })
+      : msg("structure.woodCentral.check.layerBoardShort", {
+          mark,
+          board: shortest.mark,
+          length: dec(measured, 0),
+          min: dec(min, 0),
+        }),
+  };
+}
+
+/**
+ * Abscisses de [σ0 ; σ1] hors zone tendue (A37 (13)) : intervalles fermés où `inTension` est faux,
+ * lus sur la grille de la forme (`xs`) et affinés par dichotomie ; bornes intérieures rentrées de
+ * `TENSION_EPS`, pour qu'une coupe placée dedans soit hors de la zone à coup sûr.
+ */
+function outsideSpans(
+  sigma0: Mm,
+  sigma1: Mm,
+  xs: readonly Mm[],
+  inTension: (x: Mm) => boolean,
+): Span[] {
+  const pts = [sigma0, ...xs.filter((x) => x > sigma0 && x < sigma1), sigma1];
+  const out: Span[] = [];
+  let start: Mm | null = inTension(sigma0) ? null : sigma0;
+  for (let i = 1; i < pts.length; i++) {
+    const x0 = pts[i - 1]!;
+    const x1 = pts[i]!;
+    const was = start === null;
+    const now = inTension(x1);
+    if (was === now) continue;
+    const edge = bisect(x0, x1, was, inTension);
+    if (now) {
+      out.push({ lo: start!, hi: edge - TENSION_EPS });
+      start = null;
+    } else start = edge + TENSION_EPS;
+  }
+  if (start !== null) out.push({ lo: start, hi: sigma1 });
+  return out.filter((sp) => sp.hi >= sp.lo && !inTension(sp.lo) && !inTension(sp.hi));
 }
 
 /**
@@ -1648,7 +2001,8 @@ function holeNotes(
       ? msg("structure.woodCentral.note.layerHolesPins", {
           holes: holes.length,
           clearance: dec(clearance, 1),
-          web: pins[0]!.mark ?? "",
+          // Âmes des broches centrées : pied, et tête depuis A37 (15).
+          web: [...new Set(pins.map((h) => h.mark ?? ""))].join(", "),
           marks: centered.join(", "),
         })
       : msg("structure.woodCentral.note.layerHoles", {
@@ -1674,6 +2028,8 @@ interface KerfRange {
   readonly sigma1: Mm;
   /** Profondeur dans la tranche si le logement n'en traverse pas toute l'épaisseur, mm. */
   readonly depth?: Mm;
+  /** Plan réel de l'âme (`BeamKerf.line`, A37 (16)) ; absent : logement autour de la trace. */
+  readonly line?: BeamKerfLine;
 }
 
 /** Étendue verticale du logement à l'abscisse x (contour exact ou rectangle), `null` hors. */
@@ -1717,6 +2073,7 @@ function kerfRanges(kerfs: readonly BeamKerf[], slice: Slice): KerfRange[] {
           sigma0: cur.sigma0,
           sigma1: cur.sigma1,
           ...(cur.depth !== undefined ? { depth: cur.depth } : {}),
+          ...(kerf.line ? { line: kerf.line } : {}),
         });
       }
       cur = null;
@@ -1988,9 +2345,7 @@ function templateOf(
   for (const k of sliceKerfs) {
     const k0 = Math.max(k.sigma0, spec.sigma0);
     const k1 = Math.min(k.sigma1, spec.sigma1);
-    const d0 = Math.max(-k.width / 2, spec.strip.d0);
-    const d1 = Math.min(k.width / 2, spec.strip.d1);
-    if (!(k1 - k0 > POS_EPS) || !(d1 - d0 > POS_EPS)) continue;
+    if (!(k1 - k0 > POS_EPS)) continue;
     const label =
       k.depth === undefined
         ? msg("structure.woodCentral.flatLine.layerKerf", { web: k.web })
@@ -1998,13 +2353,37 @@ function templateOf(
             web: k.web,
             depth: dec(k.depth, 0),
           });
+    const kerfEnds = [k0, k1].filter(
+      (x) => Math.abs(x - k.sigma0) <= POS_EPS || Math.abs(x - k.sigma1) <= POS_EPS,
+    );
+    if (k.line) {
+      // Logement exact (A37 (16)) : tranche de largeur `width` centrée sur le plan de l'âme,
+      // rectangle en plan de σ = k0 à σ = k1 (même correspondance que le solide de l'âme).
+      const drawn = kerfOnLine(
+        trace,
+        k.line,
+        k.width,
+        k0,
+        k1,
+        spec,
+        label,
+        kerfEnds,
+        polyline,
+        k.depth,
+      );
+      if (!drawn) continue;
+      kerfs.push([k.web, k.depth === undefined ? "cut" : "milled"]);
+      continue;
+    }
+    const d0 = Math.max(-k.width / 2, spec.strip.d0);
+    const d1 = Math.min(k.width / 2, spec.strip.d1);
+    if (!(d1 - d0 > POS_EPS)) continue;
     const sides: Mm[] = [];
     if (-k.width / 2 >= spec.strip.d0 - POS_EPS) sides.push(-k.width / 2);
     if (k.width / 2 <= spec.strip.d1 + POS_EPS) sides.push(k.width / 2);
     for (const d of sides) polyline(band(k0, k1, d), label, k.depth);
     // Bouts du logement (pas une coupe de planche).
-    for (const x of [k0, k1]) {
-      if (Math.abs(x - k.sigma0) > POS_EPS && Math.abs(x - k.sigma1) > POS_EPS) continue;
+    for (const x of kerfEnds) {
       polyline([offsetOf(trace, x, d0), offsetOf(trace, x, d1)], label, k.depth);
     }
     kerfs.push([k.web, k.depth === undefined ? "cut" : "milled"]);
@@ -2036,4 +2415,66 @@ function templateOf(
     area: area(box.outline),
     kerfs: [...new Map(kerfs.map((x) => [`${x[0]}|${x[1]}`, x])).values()],
   };
+}
+
+/**
+ * Contour du logement d'une âme plane (`BeamKerf.line`, QUESTIONS A37 (16)) sur le gabarit d'une
+ * pièce, de σ = k0 à σ = k1 : faces du logement, droites parallèles au plan de l'âme à
+ * ± `width` / 2 (point d'abscisse σ en `center + dir · (σ − sigmaRef)`), et bouts du logement
+ * (`ends`) en travers de l'âme. Bande en travers d'une planche collée sur chant : une face n'est
+ * tracée que si elle reste dans la bande (décalage à la trace lu aux deux bouts et au milieu), un
+ * bout est rogné à la bande. `false` si le logement ne touche pas la pièce.
+ */
+function kerfOnLine(
+  trace: CentralTrace,
+  line: BeamKerfLine,
+  width: Mm,
+  k0: Mm,
+  k1: Mm,
+  spec: BoardSpec,
+  label: Message,
+  ends: readonly Mm[],
+  polyline: (pts: readonly Vec2[], label: Message, depth?: Mm) => void,
+  depth?: Mm,
+): boolean {
+  const n = V.perpLeft(line.dir);
+  const at = (x: Mm, d: Mm): Vec2 =>
+    V.addScaled(V.addScaled(line.center, line.dir, x - line.sigmaRef), n, d);
+  /** Décalage à gauche de la trace, à l'abscisse x, d'un point du plan. */
+  const off = (q: Vec2, x: Mm): Mm => V.dot(V.sub(q, trace.point(x)), trace.left(x));
+  const { d0, d1 } = spec.strip;
+  const whole = spec.strip.outerLeft && spec.strip.outerRight;
+  const mid = (k0 + k1) / 2;
+  const sides = [-width / 2, width / 2].filter(
+    (d) =>
+      whole ||
+      [k0, mid, k1].every((x) => {
+        const v = off(at(x, d), x);
+        return v >= d0 - POS_EPS && v <= d1 + POS_EPS;
+      }),
+  );
+  let touches = sides.length > 0;
+  for (const d of sides) polyline([at(k0, d), at(k1, d)], label, depth);
+  for (const x of ends) {
+    const p = at(x, -width / 2);
+    const q = at(x, width / 2);
+    let t0 = 0;
+    let t1 = 1;
+    if (!whole) {
+      const vp = off(p, x);
+      const vq = off(q, x);
+      if (Math.abs(vq - vp) < 1e-12) {
+        if (vp < d0 - POS_EPS || vp > d1 + POS_EPS) continue;
+      } else {
+        const ta = (d0 - vp) / (vq - vp);
+        const tb = (d1 - vp) / (vq - vp);
+        t0 = Math.max(0, Math.min(ta, tb));
+        t1 = Math.min(1, Math.max(ta, tb));
+      }
+    }
+    if (!(t1 - t0 > POS_EPS / Math.max(width, POS_EPS))) continue;
+    touches = true;
+    polyline([V.addScaled(p, V.sub(q, p), t0), V.addScaled(p, V.sub(q, p), t1)], label, depth);
+  }
+  return touches;
 }

@@ -42,6 +42,8 @@ import {
   grainDirection,
   grainEndDistance,
   isBeamEndSide,
+  lagThreadInBeam,
+  lagThreadLength,
   woodCentralBoltSpacing,
 } from "./woodSpacing.js";
 import type { BeamKerf } from "./woodCentralPlates.js";
@@ -182,15 +184,22 @@ function expectBoltsInsideBeam(
 /**
  * Tire-fonds de marche contre le contour réel de la poutre : pointe au-dessus du dessous réel de
  * `tipCover` au moins (ancrage borné par le bois disponible), longueur multiple du pas, au plus
- * `maxLength`, ancrage ≥ `minAnchorage`. Rend le nombre de tire-fonds.
+ * `maxLength` ; `minAnchorage` saisi : ancrage ≥ valeur ; `auto` (défaut, QUESTIONS A37 (1)) :
+ * pénétration de la partie filetée (b = ⌊20 + L / 3⌋, A37 (5)) ≥ 6·d (60 mm pour Ø10). Rend le
+ * nombre de tire-fonds.
  */
 function expectLagScrewsInsideBeam(
   beam: WoodCentralBeamResult,
   tm: number,
-  over: { tipCover?: number; minAnchorage?: number; maxLength?: number; step?: number } = {},
+  over: {
+    tipCover?: number;
+    minAnchorage?: number | "auto";
+    maxLength?: number;
+    step?: number;
+  } = {},
 ): number {
   const tipCover = over.tipCover ?? 10;
-  const minAnchorage = over.minAnchorage ?? 50;
+  const minAnchorage = over.minAnchorage ?? "auto";
   const maxLength = over.maxLength ?? 160;
   const step = over.step ?? 10;
   const outer = beam.parts.find((p) => p.id === WOOD_CENTRAL_BEAM_ID)!.flat!.outline.outer;
@@ -205,7 +214,10 @@ function expectLagScrewsInsideBeam(
       const anchorage = o.length - tm;
       expect(o.length % step).toBe(0);
       expect(o.length).toBeLessThanOrEqual(maxLength);
-      expect(anchorage).toBeGreaterThanOrEqual(minAnchorage - TOL);
+      if (minAnchorage === "auto") {
+        const p = lagThreadInBeam(o.length, anchorage, lagThreadLength).penetration;
+        expect(p).toBeGreaterThanOrEqual(60 - TOL);
+      } else expect(anchorage).toBeGreaterThanOrEqual(minAnchorage - TOL);
       // Longueur ≤ épaisseur de marche + bois disponible − tipCover.
       expect(o.length).toBeLessThanOrEqual(tm + (s.z - ext![0]) - tipCover + TOL);
     }
@@ -216,8 +228,9 @@ function expectLagScrewsInsideBeam(
 /**
  * Pince axiale a1,CG des tire-fonds posés (QUESTIONS A36 (4)), relue sur le développé de la
  * poutre : distance le long du fil (horizontal en couches empilées, selon la pente sinon) du
- * centre de gravité de la partie filetée (milieu de l'ancrage) à la plus proche surface de bout,
- * et hauteur de ce centre au-dessus du dessous de la poutre (coupe au sol).
+ * centre de gravité de la seule partie filetée comprise dans la poutre (b = ⌊20 + L / 3⌋ côté
+ * pointe, A37 (5)) à la plus proche surface de bout, et hauteur de ce centre au-dessus du
+ * dessous de la poutre (coupe au sol).
  */
 function lagThreadDistances(
   beam: WoodCentralBeamResult,
@@ -231,7 +244,8 @@ function lagThreadDistances(
   for (const s of beam.seats) {
     for (const o of s.bolts) {
       if (o.kind !== "lagScrew") continue;
-      const cg = V.vec(o.sigma - s0, s.z - (o.length - tm) / 2);
+      const { cgDepth } = lagThreadInBeam(o.length, o.length - tm, lagThreadLength);
+      const cg = V.vec(o.sigma - s0, s.z - cgDepth);
       out.push({
         seat: s.tread,
         sigma: o.sigma,
@@ -351,9 +365,9 @@ describe("limon central bois : escalier droit, lamellé-collé en couches droite
     expect(expectLagScrewsInsideBeam(beam, tm)).toBe(lags.length);
     // A35 (l) : tire-fonds aux règles axiales de l'EC5 (entraxe 70 mm) ; A36 (4) : pince
     // latérale a3,c = 40 mm au bout avant, a1,CG = 100 mm le long du fil depuis la coupe au sol
-    // et les faces de cran ; autour du perçage horizontal d'un boulon de sabot, le tire-fond ne
-    // garde que le jeu géométrique (`lagHoleClearance`, QUESTIONS A36 (10)) : M1 reçoit ses 2
-    // tire-fonds, aucun constat.
+    // et les faces de cran ; autour du perçage horizontal d'un boulon de sabot, le tire-fond
+    // garde le jeu géométrique plus le bois `lagScrews.holeWood` (`lagHoleClearance`, QUESTIONS
+    // A36 (10), A37 (17)) : M1 reçoit ses 2 tire-fonds, aucun constat.
     expect(beam.seats[0]!.bolts.map((o) => o.kind)).toEqual(["lagScrew", "lagScrew"]);
     const m1 = beam.seats[0]!.bolts;
     expect(m1[1]!.sigma - m1[0]!.sigma).toBeGreaterThanOrEqual(70 - 1e-9);
@@ -366,7 +380,10 @@ describe("limon central bois : escalier droit, lamellé-collé en couches droite
     ]);
     expect(fr(fixing[0]!.message)).toMatch(/entraxe 70 mm, pince 40 mm au bout avant/);
     expect(fr(fixing[0]!.message)).toMatch(/à 100 mm au moins de la coupe au sol/);
-    expect(beam.notes.map((n) => n.key)).toContain("structure.woodCentral.note.lagScrewsThread");
+    // Ancrage minimal `auto` : pénétration de la partie filetée ≥ 6·d (QUESTIONS A37 (1)).
+    expect(beam.notes.map((n) => n.key)).toContain(
+      "structure.woodCentral.note.lagScrewsThreadAuto",
+    );
     // Trois couches (A35 (f)) : organes sur l'axe, au milieu de la couche centrale.
     expect(beam.notes.map((n) => n.key)).not.toContain("structure.woodCentral.note.boltOffset");
     const nBolts = beam.seats.reduce(
@@ -455,13 +472,28 @@ describe("limon central bois : escalier droit, lamellé-collé en couches droite
     );
     expect(EN.t(spacing[0]!.message)).toMatch(/centre of gravity of the threaded part ≥ 100 mm/);
     expect(free.beam.notes.map((n) => n.key)).toContain(
-      "structure.woodCentral.note.lagScrewsThread",
+      "structure.woodCentral.note.lagScrewsThreadAuto",
     );
     const note = free.beam.notes.find(
-      (n) => n.key === "structure.woodCentral.note.lagScrewsThread",
+      (n) => n.key === "structure.woodCentral.note.lagScrewsThreadAuto",
     )!;
-    expect(fr(note)).toMatch(/fileté sur tout son ancrage/);
+    // Centre de gravité de la seule partie filetée (DIN 571, b = ⌊20 + L / 3⌋, A37 (5)),
+    // pénétration de la partie filetée 6·d en `auto` (A37 (1)).
+    expect(fr(note)).toMatch(/seule partie filetée comprise dans la poutre/);
+    expect(fr(note)).toMatch(/partie filetée pénétrant de 60 mm au moins/);
+    expect(fr(note)).toMatch(/b = ⌊20 \+ L \/ 3⌋/);
     expect(fr(note)).toMatch(/raccourci au pas de 10 mm/);
+    expect(EN.t(note)).toMatch(/threaded part penetrating at least 60 mm/);
+    // Ancrage et longueur filetée saisis : remarque des valeurs saisies.
+    const entered = beamFor(project, {
+      anchors: { foot: false },
+      lagScrews: { minAnchorage: 50, threadLength: 70 },
+    })!;
+    const enteredNote = entered.beam.notes.find(
+      (n) => n.key === "structure.woodCentral.note.lagScrewsThreadEntered",
+    )!;
+    expect(fr(enteredNote)).toMatch(/ancrage saisi de 50 mm au moins/);
+    expect(fr(enteredNote)).toMatch(/partie filetée côté pointe de 70 mm \(saisie/);
     // Valeurs saisies : entraxe et pince avant des tire-fonds respectées par le placement.
     const set = beamFor(project, {
       anchors: { foot: false },
@@ -503,8 +535,11 @@ describe("limon central bois : escalier droit, lamellé-collé en couches droite
     for (const t of lagThreadDistances(straight.beam, 80)) {
       expect(t.along).toBeGreaterThanOrEqual(100 - 1e-6);
     }
+    // Ancrage `auto` : partie filetée (b = ⌊20 + L / 3⌋) pénétrant de 6·d = 60 mm au moins.
     for (const o of m1.bolts.filter((x) => x.kind === "lagScrew")) {
-      expect(o.length - 80).toBeGreaterThanOrEqual(50);
+      expect(
+        lagThreadInBeam(o.length, o.length - 80, lagThreadLength).penetration,
+      ).toBeGreaterThanOrEqual(60);
     }
     // a1,CG portée à 400 mm : aucune position ne la tient sur M1, constat dédié avec a1,CG.
     const far = beamFor(project, {
@@ -518,10 +553,12 @@ describe("limon central bois : escalier droit, lamellé-collé en couches droite
         c.location?.kind === "part" &&
         c.location.treadNumber === far.beam.seats[0]!.tread,
     );
+    // Ancrage `auto` : raccourcissement borné par la pénétration filetée 6·d (A37 (1)).
     expect(bad.map((c) => c.message.key)).toEqual([
-      "structure.woodCentral.check.fixings.missingLagThread",
+      "structure.woodCentral.check.fixings.missingLagThreadAuto",
     ]);
     expect(fr(bad[0]!.message)).toMatch(/centre de gravité de la partie filetée à 400 mm au moins/);
+    expect(fr(bad[0]!.message)).toMatch(/partie filetée pénètre de 60 mm au moins/);
     expect(EN.t(bad[0]!.message)).toMatch(/at least 400 mm from the floor cut/);
   });
 
@@ -549,6 +586,42 @@ describe("limon central bois : escalier droit, lamellé-collé en couches droite
       /bois insuffisant pour un tire-fond \(\d+ mm d'ancrage < 400 mm\)/,
     );
     expect(EN.t(bad[0]!.message)).toMatch(/not enough timber for a coach screw/);
+  });
+
+  it("ancrage `auto` (A37 (1)) : tire-fond dont la partie filetée ne pénètre pas de 6·d retiré, message dédié", () => {
+    // Tire-fonds de 100 mm au plus : b = ⌊20 + 100 / 3⌋ = 53 mm < 6·d = 60 mm, aucun ne tient.
+    const short = beamFor(project, { anchors: { foot: false }, lagScrews: { maxLength: 100 } })!;
+    expect(short.beam.seats[0]!.bolts).toEqual([]);
+    const bad = short.checks.results.filter(
+      (c) =>
+        c.ruleId === WOOD_CENTRAL_BEAM_RULES.bolts.id &&
+        c.status === "violation" &&
+        c.location?.kind === "part" &&
+        c.location.treadNumber === 1,
+    );
+    expect(bad.map((c) => c.message.key)).toEqual([
+      "structure.woodCentral.check.fixings.lagThreadShort",
+    ]);
+    expect(fr(bad[0]!.message)).toMatch(/partie filetée pénétrant de 53 mm dans la poutre < 60 mm/);
+    expect(EN.t(bad[0]!.message)).toMatch(/threaded part penetrating 53 mm into the beam < 60 mm/);
+    // Aucun constat de pénétration : aucun tire-fond posé sous 6·d.
+    expect(
+      short.checks.results.some(
+        (c) => c.message.key === "structure.woodCentral.check.spacing.lagPenetration",
+      ),
+    ).toBe(false);
+    // Même borne saisie (60 mm d'ancrage) : sur l'ancrage seul, 100 − épaisseur de marche.
+    const entered = beamFor(project, {
+      anchors: { foot: false },
+      lagScrews: { maxLength: 100, minAnchorage: 50 },
+    })!;
+    const lags = entered.beam.seats.flatMap((s) => s.bolts.filter((o) => o.kind === "lagScrew"));
+    expect(lags.length).toBeGreaterThan(0);
+    const pen = entered.checks.results.filter(
+      (c) => c.message.key === "structure.woodCentral.check.spacing.lagPenetration",
+    );
+    expect(pen.length).toBeGreaterThan(0);
+    for (const c of pen) expect(c.measured).toBeLessThan(60);
   });
 
   it("entraxes et pinces de l'EC5 : aucun constat par défaut ; demi-couche saisie à 22 mm des faces (< a4,c = 30 mm) signalée", () => {
@@ -691,15 +764,28 @@ describe("limon central bois : escalier droit, lamellé-collé en couches droite
   });
 });
 
-describe("tableau FCBA exploitable (escalier droit court, chêne)", () => {
-  it("reste sous entaille auto = distance exigée à b / facteur ; chêne `auto` (D30) lu en C30", () => {
+describe("tableau FCBA (escalier droit court) : feuillu D30 hors tableau, classes saisies", () => {
+  it("chêne `auto` (D30) : tableau non exploitable, repli de 180 mm (A37 (2)) ; C30, D40 saisies et pin lus", () => {
     const p = noRisers(makeSteppingProject({ width: 900, legs: [2000], floorToFloor: 2400 }));
-    const r = beamFor(p)!;
-    // Classe `auto` du chêne : D30 (A36 (1)) ; colonne C30, même f_m,k (QUESTIONS A37 (2)).
+    // Classe `auto` du chêne, du hêtre et du frêne : D30 (A36 (1)) ; aucune colonne du tableau
+    // ne couvre un bois D30 (QUESTIONS A37 (2), décision du 2026-10-10).
+    for (const material of ["wood-oak", "wood-beech", "wood-ash"]) {
+      const r = beamFor(p, { material })!;
+      expect(r.beam.fcba).toEqual({
+        cls: "unknown",
+        required: null,
+        unusable: expect.objectContaining({ key: "structure.woodCut.fcba.hardwoodD30" }),
+      });
+      expect(r.beam.residual).toBe(180);
+    }
+    // Classe saisie C30 : colonne C30 (même lecture qu'avant A37) ; pin `auto` : C30.
     const required = requiredCentralResidual(fcbaTable(), "C30", 88);
     expect(required).not.toBeNull();
-    expect(r.beam.fcba).toEqual({ cls: "C30", required });
-    expect(r.beam.residual).toBe(required);
+    for (const over of [{ strengthClass: "C30" }, { material: "wood-pine" }]) {
+      const r = beamFor(p, over)!;
+      expect(r.beam.fcba).toEqual({ cls: "C30", required });
+      expect(r.beam.residual).toBe(required);
+    }
     // Classe saisie D40 : colonne D40, au plus le reste de la colonne C30.
     const d40 = beamFor(p, { strengthClass: "D40" })!;
     expect(d40.beam.fcba.cls).toBe("D40");

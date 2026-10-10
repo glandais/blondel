@@ -16,8 +16,7 @@ import { DEFAULT_WORKSHOP_PROFILE } from "../workshop/profile.js";
 import { WOOD_CENTRAL_BEAM_RULES } from "./woodCentralBeam.js";
 import { woodBeamOf, woodCentralContext, woodCentralParams } from "./woodCentral.test-helpers.js";
 import { WOOD_CENTRAL_PLATE_FOOT_ID, WOOD_CENTRAL_PLATE_FOOT_WEB_ID } from "./woodCentralPlates.js";
-import { roundUpTo } from "./woodCentralShoes.js";
-import { ec5EndDistance, woodCentralBoltSpacing } from "./woodSpacing.js";
+import { ec5EndDistance, lagSeatClearance, woodCentralBoltSpacing } from "./woodSpacing.js";
 
 const PRESETS = ["straight", "quarter-left", "two-quarters-u", "half-turn", "helical"] as const;
 type PresetId = (typeof PRESETS)[number];
@@ -68,8 +67,13 @@ describe("pied sur platine à âme noyée : âme prolongée, M1 fixée (A35 (a))
     const plate = beam.parts.find((p) => p.id === WOOD_CENTRAL_PLATE_FOOT_ID)!;
     expect(web).toBeDefined();
     expect(plate).toBeDefined();
-    // Âme prolongée : plus longue que l'âme centrée d'autrefois (`webLength`).
-    expect(beam.footWebLength).toBeGreaterThan(params.anchors.plate.webLength);
+    // Âme prolongée le long de la trace, au moins deux pinces de perçage. Depuis A37 (1), la
+    // place laissée sous chaque assise est celle du plus court tire-fond dont la partie filetée
+    // pénètre de 6·d (marche de 40 mm : 120 mm, ancrage 80, au lieu de 90 mm, ancrage 50) : l'âme
+    // prolongée raccourcit sur tous les préréglages (QUESTIONS A38 (6)) ; sur le droit et
+    // l'hélicoïdal, le palier sous M1 tombe sous deux pinces et l'âme s'arrête avant M1
+    // (`plateFootWebExtendedOne`), plus courte que l'âme centrée `webLength`.
+    expect(beam.footWebLength).toBeGreaterThanOrEqual(2 * params.anchors.holeEdgeDistance - 1e-6);
     // Platine couvrant l'âme.
     expect(plate.stock!.length).toBeGreaterThanOrEqual(beam.footWebLength! - 1e-6);
     const m1 = beam.seats[0]!;
@@ -109,8 +113,9 @@ describe("pied sur platine à âme noyée : âme prolongée, M1 fixée (A35 (a))
   );
 
   it("escalier droit sur sabot en U (ancrage par défaut) : M1 reçoit ses deux organes", () => {
-    // Relecture A35 : autour d'un perçage horizontal (boulon de sabot), un tire-fond ne garde
-    // que le jeu géométrique (`lagHoleClearance`, QUESTIONS A36 (10)).
+    // Relecture A35 : autour d'un perçage horizontal (boulon de sabot), un tire-fond garde le jeu
+    // géométrique plus le bois `lagScrews.holeWood` (`lagHoleClearance`, QUESTIONS A36 (10),
+    // A37 (17), `auto` 0,5·d), retiré sinon.
     const ctx = contextFor("straight");
     const params = woodCentralParams({});
     const { beam, checks } = woodBeamOf(ctx, params);
@@ -131,7 +136,8 @@ describe("assise trop courte pour les tire-fonds (A35 (l), QUESTIONS A36 (4), (1
     expect(beam.curvedMethod).toBe("stacked");
     const m3 = boltIssuesOn(checks, 3);
     expect(m3).toHaveLength(1);
-    expect(m3[0]!.message.key).toBe("structure.woodCentral.check.fixings.missingLagThread");
+    // Ancrage `auto` (A37 (1)) : message des tire-fonds raccourcis jusqu'à 6·d de partie filetée.
+    expect(m3[0]!.message.key).toBe("structure.woodCentral.check.fixings.missingLagThreadAuto");
     expect(fr(m3[0]!.message)).toMatch(
       /tire-fonds à 40 mm du bout avant, 40 mm du bout arrière, entraxe 70 mm, centre de gravité de la partie filetée à 100 mm au moins de la coupe au sol et des faces de cran le long du fil/,
     );
@@ -183,8 +189,13 @@ describe("pied sur platine à âme noyée ou sabot : propriété (A35 (a))", () 
           const lag = woodCentralBoltSpacing(bp, PROFILE.fasteners, lp).lag;
           const tp = params.anchors.plate.thickness;
           const c = PROFILE.wood.clearance;
-          const seatClearance =
-            roundUpTo(thickness + lp.minAnchorage, bp.lengthStep) - thickness + lp.tipCover;
+          // Place du plus court tire-fond admissible (A37 (1), `lagSeatClearance`).
+          const seatClearance = lagSeatClearance(lag, {
+            tm: thickness,
+            lengthStep: bp.lengthStep,
+            maxLength: lp.maxLength,
+            tipCover: lp.tipCover,
+          });
           const m1 = beam.seats[0]!;
           // Garde : assise assez longue pour ses organes (pinces latérales et entraxe), assez de
           // bois sous M1. La pince axiale a1,CG le long du fil (A36 (4)) n'entre pas dans la
@@ -195,6 +206,16 @@ describe("pied sur platine à âme noyée ou sabot : propriété (A35 (a))", () 
             m1.sigma0 -
             (lag.frontEndDistance + lag.rearEndDistance + (perTread - 1) * lag.minSpacing);
           if (room < 0 || m1.z - tp < seatClearance + c) return;
+          // Âme de pied non prolongée (repli sur l'âme centrée sous M1, `plateWebReduced`) : la
+          // place sous M1 n'est pas rendue, hors du domaine de la propriété (A35 (a)). Depuis
+          // A37 (1), un tire-fond arrêté au-dessus de cette âme ne tient plus 6·d de partie
+          // filetée (quart tournant, marche de 47 mm : 100 mm, b = 53). Dans ce cas, M1 garde
+          // tous ses organes ou le constat « boulons » le signale : jamais de retrait muet.
+          if (beam.notes.some((n) => n.key === "structure.woodCentral.note.plateWebReduced")) {
+            if (m1.bolts.length < perTread)
+              expect(boltIssuesOn(checks, m1.tread).length).toBeGreaterThan(0);
+            return;
+          }
           expect(m1.bolts, `${id} ${kind} tm=${thickness} n=${perTread} b=${width}`).toHaveLength(
             perTread,
           );

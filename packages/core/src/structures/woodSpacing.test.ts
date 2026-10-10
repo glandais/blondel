@@ -15,7 +15,12 @@ import {
   grainDirection,
   grainEndDistance,
   isBeamEndSide,
+  lagAnchorageHolds,
   lagHoleClearance,
+  lagRetained,
+  lagSeatClearance,
+  lagThreadInBeam,
+  lagThreadLength,
   woodCentralBoltSpacing,
   type Ec5Spacing,
 } from "./woodSpacing.js";
@@ -357,6 +362,184 @@ describe("lagHoleClearance : tire-fond vertical et perçage horizontal (relectur
           expect(g.half - lag / 2 - hole / 2).toBeGreaterThanOrEqual(c - 1e-9);
           // Pointe arrêtée à `above` du centre : à tip au moins au-dessus du perçage.
           expect(g.above - hole / 2).toBeGreaterThanOrEqual(tip - 1e-9);
+        },
+      ),
+    );
+  });
+});
+
+describe("lagHoleClearance avec le bois entre filet et perçage (A37 (17))", () => {
+  it("bois de 0,5·d : boulon M12 du sabot (Ø13), tire-fond Ø10 dans un passage de 11", () => {
+    // Jeu géométrique 13 mm (12 + 1) ; bois : 6,5 + 5 + 5 = 16,5 mm ; pointe : max(10 ; 5).
+    expect(lagHoleClearance(13, 11, 1, 10, { d: 10, thickness: 5 })).toEqual({
+      half: 16.5,
+      above: 16.5,
+    });
+    // Bois nul : jeu géométrique seul.
+    expect(lagHoleClearance(13, 11, 1, 10, { d: 10, thickness: 0 })).toEqual(
+      lagHoleClearance(13, 11, 1, 10),
+    );
+    // Bois plus épais que le bois sous la pointe : la pointe s'arrête plus haut.
+    expect(lagHoleClearance(13, 11, 1, 10, { d: 10, thickness: 12 }).above).toBe(6.5 + 12);
+  });
+
+  it("propriété : avec le bois, zone ≥ sans bois ; filet à `thickness` du perçage au moins", () => {
+    fc.assert(
+      fc.property(
+        fc.integer({ min: 6, max: 30 }),
+        fc.integer({ min: 6, max: 20 }),
+        fc.integer({ min: 0, max: 5 }),
+        fc.integer({ min: 0, max: 30 }),
+        fc.integer({ min: 6, max: 16 }),
+        fc.double({ min: 0, max: 20, noNaN: true }),
+        (hole, lagHole, c, tip, d, thickness) => {
+          const bare = lagHoleClearance(hole, lagHole, c, tip);
+          const g = lagHoleClearance(hole, lagHole, c, tip, { d, thickness });
+          expect(g.half).toBeGreaterThanOrEqual(bare.half - 1e-9);
+          expect(g.above).toBeGreaterThanOrEqual(bare.above - 1e-9);
+          // Axe à `half` du centre : filet (Ø d) à `thickness` au moins du bord du perçage.
+          expect(g.half - d / 2 - hole / 2).toBeGreaterThanOrEqual(thickness - 1e-9);
+          expect(g.above - hole / 2).toBeGreaterThanOrEqual(Math.max(tip, thickness) - 1e-9);
+        },
+      ),
+    );
+  });
+});
+
+describe("lagThreadLength : longueur filetée des tire-fonds DIN 571 (A37 (5), C §1.11 [78])", () => {
+  it("redonne les longueurs filetées des fiches Faynot Ø10 et Ø12", () => {
+    const faynot: [number, number][] = [
+      [60, 40],
+      [70, 43],
+      [80, 46],
+      [100, 53],
+      [120, 60],
+      [140, 66],
+      [160, 73],
+      [90, 50],
+      [180, 80],
+      [200, 86],
+      [220, 93],
+    ];
+    for (const [L, b] of faynot) expect(lagThreadLength(L), `L = ${L}`).toBe(b);
+  });
+
+  it("valeur saisie : même longueur filetée pour toutes les longueurs, bornée à L", () => {
+    expect(lagThreadLength(140, 70)).toBe(70);
+    expect(lagThreadLength(60, 70)).toBe(60);
+    expect(lagThreadLength(0)).toBe(0);
+  });
+
+  it("propriété : 0 ≤ b ≤ L, croissante avec L", () => {
+    fc.assert(
+      fc.property(
+        fc.integer({ min: 1, max: 400 }),
+        fc.integer({ min: 0, max: 100 }),
+        fc.oneof(fc.constant("auto" as const), fc.integer({ min: 1, max: 300 })),
+        (L, dL, entered) => {
+          const b = lagThreadLength(L, entered);
+          expect(b).toBeGreaterThanOrEqual(0);
+          expect(b).toBeLessThanOrEqual(L);
+          expect(lagThreadLength(L + dL, entered)).toBeGreaterThanOrEqual(b);
+        },
+      ),
+    );
+  });
+});
+
+describe("tire-fonds : ancrage minimal, partie filetée et place sous une assise (A37 (1) (5))", () => {
+  const fasteners = DEFAULT_FASTENER_PROFILE;
+  const bolts = { holeDiameter: 11, minSpacing: "auto" as const, edgeDistance: "auto" as const };
+  const lagSpacing = (lag: {
+    minAnchorage?: number | "auto";
+    threadLength?: number | "auto";
+    holeWood?: number | "auto";
+  }) =>
+    woodCentralBoltSpacing(bolts, fasteners, {
+      minSpacing: "auto",
+      endDistance: "auto",
+      ...lag,
+    }).lag;
+
+  it("résolution : `auto` → 6·d et 0,5·d ; valeurs saisies gardées", () => {
+    const auto = lagSpacing({});
+    expect(auto.minAnchorage).toBe(60);
+    expect(auto.minAnchorageAuto).toBe(true);
+    expect(auto.holeWood).toBe(5);
+    expect(auto.threadLengthOf(140)).toBe(66);
+    const m12 = woodCentralBoltSpacing({ ...bolts, holeDiameter: 13 }, fasteners, {
+      minSpacing: "auto",
+      endDistance: "auto",
+      minAnchorage: "auto",
+      holeWood: "auto",
+    }).lag;
+    expect(m12.minAnchorage).toBe(72);
+    expect(m12.holeWood).toBe(6);
+    const set = lagSpacing({ minAnchorage: 50, threadLength: 70, holeWood: 2 });
+    expect(set.minAnchorage).toBe(50);
+    expect(set.minAnchorageAuto).toBe(false);
+    expect(set.holeWood).toBe(2);
+    expect(set.threadLengthOf(140)).toBe(70);
+    expect(set.threadLengthOf(60)).toBe(60);
+  });
+
+  it("partie filetée dans la poutre : pénétration min(b ; ancrage), centre de gravité à ancrage − p / 2", () => {
+    // 140 mm sous une marche de 80 : ancrage 60, b = 66 → p = 60, CG à 30 mm sous l'assise.
+    expect(lagThreadInBeam(140, 60, lagThreadLength)).toEqual({ penetration: 60, cgDepth: 30 });
+    // 160 mm sous une marche de 40 : ancrage 120, b = 73 → CG à 120 − 36,5 = 83,5 mm.
+    expect(lagThreadInBeam(160, 120, lagThreadLength)).toEqual({
+      penetration: 73,
+      cgDepth: 83.5,
+    });
+  });
+
+  it("rétention : pénétration filetée ≥ 6·d en `auto`, ancrage ≥ valeur saisie sinon", () => {
+    const auto = lagSpacing({});
+    // Marche de 80 : 130 mm → p = 50 refusé ; 140 → 60 admis.
+    expect(lagAnchorageHolds(auto, 130, 80)).toBe(false);
+    expect(lagRetained(auto, 130, 80)).toBe(50);
+    expect(lagAnchorageHolds(auto, 140, 80)).toBe(true);
+    // Marche de 40 : 110 mm → b = 56 < 60 refusé malgré 70 mm d'ancrage ; 120 → 60 admis.
+    expect(lagAnchorageHolds(auto, 110, 40)).toBe(false);
+    expect(lagAnchorageHolds(auto, 120, 40)).toBe(true);
+    const set = lagSpacing({ minAnchorage: 50 });
+    expect(lagAnchorageHolds(set, 130, 80)).toBe(true);
+    expect(lagRetained(set, 130, 80)).toBe(50);
+    expect(lagAnchorageHolds(set, 120, 80)).toBe(false);
+  });
+
+  it("place sous une assise : plus court tire-fond admissible + bois sous la pointe", () => {
+    const options = { lengthStep: 10, maxLength: 160, tipCover: 10 };
+    // `auto`, marche de 40 : 120 mm (ancrage 80) → 90 ; marche de 80 : 140 mm (ancrage 60) → 70.
+    expect(lagSeatClearance(lagSpacing({}), { ...options, tm: 40 })).toBe(90);
+    expect(lagSeatClearance(lagSpacing({}), { ...options, tm: 80 })).toBe(70);
+    // Valeur saisie : ancrage minimal arrondi au pas (comportement antérieur) : 90 − 40 + 10.
+    expect(lagSeatClearance(lagSpacing({ minAnchorage: 50 }), { ...options, tm: 40 })).toBe(60);
+    // Aucun tire-fond admissible jusqu'à `maxLength` : repli sur l'ancrage minimal arrondi.
+    expect(lagSeatClearance(lagSpacing({}), { ...options, tm: 40, maxLength: 100 })).toBe(70);
+  });
+
+  it("propriété : la place retenue est celle du plus court tire-fond admissible de la grille", () => {
+    fc.assert(
+      fc.property(
+        fc.integer({ min: 20, max: 100 }),
+        fc.constantFrom(5, 10, 20),
+        fc.integer({ min: 0, max: 30 }),
+        fc.oneof(fc.constant("auto" as const), fc.integer({ min: 30, max: 120 })),
+        (tm, step, tipCover, threadLength) => {
+          const lag = lagSpacing({ threadLength });
+          const maxLength = 300;
+          const clearance = lagSeatClearance(lag, { tm, lengthStep: step, maxLength, tipCover });
+          const L = clearance - tipCover + tm;
+          if (L > maxLength) return;
+          if (!lagAnchorageHolds(lag, L, tm)) {
+            // Repli : aucune longueur admissible jusqu'à maxLength.
+            for (let x = step; x <= maxLength; x += step)
+              expect(lagAnchorageHolds(lag, x, tm)).toBe(false);
+            return;
+          }
+          expect(Math.abs(L / step - Math.round(L / step))).toBeLessThan(1e-9);
+          if (L - step >= tm) expect(lagAnchorageHolds(lag, L - step, tm)).toBe(false);
         },
       ),
     );

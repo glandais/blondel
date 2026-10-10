@@ -49,7 +49,11 @@
  *   supérieur, là où la sous-face laisse la place de l'écrou au-dessus du sol ou de l'ancrage
  *   de pied (σ ≥ σ*) ; **tire-fond** vertical depuis le dessus de la marche avant σ*
  *   (`lagScrews`, C §1.11 [78]), ancrage borné par le bois disponible sous l'assise, longueur
- *   arrondie au pas inférieur, posé seulement si l'ancrage atteint `lagScrews.minAnchorage`.
+ *   arrondie au pas inférieur, posé seulement si l'ancrage minimal est tenu
+ *   (`lagScrews.minAnchorage`, QUESTIONS A37 (1), décision du 2026-10-10 : en `auto`, partie
+ *   filetée pénétrant de 6·d au moins, EN 1995-1-1 § 8.7.2 (3) via C §1.11 [88], tire-fond retiré
+ *   sinon ; valeur saisie : ancrage ≥ valeur, pénétration sous 6·d signalée), à l'écart des
+ *   perçages horizontaux avec le bois `lagScrews.holeWood` entre filet et perçage (A37 (17)).
  *   **Tire-fonds** (QUESTIONS A35 (l), décision du 2026-10-09, à valider) : entraxes et pinces au
  *   plus sévère des règles latérales (boulons) et axiales (vis chargées axialement, EC5 § 8.7.2
  *   via C §1.11 [71] tableau 10.6) : entraxe `lagScrews.minSpacing` (7·d), pince latérale au
@@ -58,12 +62,13 @@
  *   tire-fond est replacée avec ces règles pour tous ses organes ; avant-trou
  *   `lagScrews.pilotDiameter` (7 mm) gardé.
  *   **Pince axiale a1,CG le long du fil** (QUESTIONS A36 (4), décision du 2026-10-09, à
- *   valider) : centre de gravité de la partie filetée (tire-fond supposé fileté sur tout son
- *   ancrage, CG au milieu de l'ancrage) à `lagScrews.threadEndDistance` (10·d) au moins, le
+ *   valider) : centre de gravité de la seule partie filetée comprise dans la poutre (DIN 571,
+ *   longueur filetée b = `lagScrews.threadLength`, `auto` ⌊20 + L / 3⌋ côté pointe, C §1.11
+ *   [78], QUESTIONS A37 (5) ; `lagThreadInBeam`) à `lagScrews.threadEndDistance` (10·d) au moins, le
  *   long du fil (selon la pente ; horizontal en couches empilées), de la coupe au sol et des
  *   faces de cran (`grainEndDistance`, `isBeamEndSide`, en-tête de `woodSpacing.ts`) ; en
  *   couches empilées, a2,CG au-dessus de la coupe au sol (rive). Le tire-fond est raccourci au
- *   pas `bolts.lengthStep` tant que son ancrage reste ≥ `minAnchorage` ; les positions sont
+ *   pas `bolts.lengthStep` tant que l'ancrage minimal reste tenu ; les positions sont
  *   cherchées dans les parties de l'assise où un organe tient (`fitIntervals`).
  *   **Pinces d'extrémité** (A35 (e), à valider) : direction d'effort supposée par la gravité
  *   (en-tête de `woodSpacing.ts`) ; aux bouts des assises, l'organe pousse le bois vers
@@ -83,8 +88,9 @@
  *   décalé de part et d'autre du trait si la pince de sa nature le permet (boulon : a4,c ;
  *   tire-fond : max(a4,c ; a2,CG)), sinon un tire-fond s'arrête au haut du trait à son abscisse
  *   plus `lagScrews.tipCover`. Autour d'un perçage horizontal, un boulon s'écarte de l'entraxe des
- *   boulons ; un tire-fond ne garde que le jeu géométrique (`lagHoleClearance`, relecture A35,
- *   QUESTIONS A36 (10), à valider).
+ *   boulons ; un tire-fond garde le jeu géométrique plus le bois `lagScrews.holeWood` entre son
+ *   filet et le bord du perçage (`lagHoleClearance`, relecture A35, QUESTIONS A36 (10) et
+ *   A37 (17), `auto` 0,5·d, à valider), retiré sinon (avertissement).
  * - **Solide** : extrusion exacte du contour (entailles comprises) sur une trace droite ; surface
  *   réglée sur la face gauche, épaissie de b vers la droite, sur une trace courbe (dents
  *   d'équerre sur la trace au fond de l'entaille, entailles arrière non représentées en 3D).
@@ -119,6 +125,7 @@ import {
   type PluginRuleSpec,
 } from "./checks.js";
 import { fcbaTable, requiredCentralResidual, type StrengthClass } from "./fcba.js";
+import { fcbaDomainReason, fcbaUnknownClassFullReason } from "./woodCut.js";
 import { area, clipHalfPlane, minAreaRect, removeCollinear } from "./geom.js";
 import { woodQuantities } from "./quantities.js";
 import { STEEL_RULES, holePolygon } from "./steelCommon.js";
@@ -128,6 +135,8 @@ import {
   WOOD_CENTRAL_LAYER_RULES,
   buildStackedLayers,
   resolveLayerThickness,
+  stackedJointLevels,
+  type StackedBeamShape,
   type StackedLayersResult,
 } from "./woodCentralLayers.js";
 import {
@@ -146,7 +155,11 @@ import {
   grainDirection,
   grainEndDistance,
   isBeamEndSide,
+  lagAnchorageHolds,
   lagHoleClearance,
+  lagRetained,
+  lagSeatClearance,
+  lagThreadInBeam,
   woodCentralBoltSpacing,
   type WoodCentralBoltSpacing,
 } from "./woodSpacing.js";
@@ -213,6 +226,8 @@ export const WOOD_CENTRAL_BEAM_RULES = {
   fingerJoints: WOOD_CENTRAL_LAYER_RULES.fingerJoints,
   /** Joints de colle écartés des perçages horizontaux (`woodCentralLayers.ts`, A36 (12)). */
   holeJoints: WOOD_CENTRAL_LAYER_RULES.holeJoints,
+  /** Planches d'une couche composée assez longues (`woodCentralLayers.ts`, A37 (4)). */
+  shortBoards: WOOD_CENTRAL_LAYER_RULES.shortBoards,
   boardLength: FAB_RULES.boardLength,
   stockAvailable: FAB_RULES.stockAvailable,
   cheek: FAB_RULES.cheek,
@@ -511,16 +526,19 @@ export function laminationOf(
 
 /**
  * Classe de résistance `auto` (mêmes hypothèses « à valider » que `wood-cut`) : colonne C30 pour
- * le pin, et pour chêne, hêtre et frêne, classés D30 (QUESTIONS A36 (1) ; colonne C30, même
- * f_m,k, plutôt que « feuillus ≥ D40 », non sécuritaire pour un bois D30 : QUESTIONS A37 (2),
- * `fcbaHardwoodAutoNote`), inconnue pour le lamellé-collé (classes GL : QUESTIONS A33).
+ * le pin ; aucune colonne pour chêne, hêtre et frêne, classés D30 (QUESTIONS A36 (1)) : le
+ * tableau FCBA (« résineux ≥ C30 », « feuillus ≥ D40 ») ne couvre pas un bois D30, il est déclaré
+ * non exploitable et le reste de repli `section.residualFallback` s'applique (QUESTIONS A37 (2),
+ * décision du 2026-10-10, raison `structure.woodCut.fcba.hardwoodD30`, `fcbaUnknownClassReason`) ;
+ * inconnue pour le lamellé-collé (classes GL : QUESTIONS A33). Une classe C30 ou D40 saisie
+ * (`strengthClass`) est lue telle quelle.
  */
 export const WOOD_CENTRAL_AUTO_CLASS: Readonly<Record<WoodMaterialId, StrengthClass | "unknown">> =
   {
     "wood-pine": "C30",
-    "wood-oak": "C30",
-    "wood-beech": "C30",
-    "wood-ash": "C30",
+    "wood-oak": "unknown",
+    "wood-beech": "unknown",
+    "wood-ash": "unknown",
     "wood-glulam": "unknown",
   };
 
@@ -542,7 +560,15 @@ export function woodCentralFcba(
   const b = params.section.width;
   const unusable = (m: Message): WoodCentralFcba => ({ cls, required: null, unusable: m });
   if (trace.kind !== "straight") return unusable(msg("structure.woodCentral.fcba.curved"));
-  if (cls === "unknown") return unusable(msg("structure.woodCut.fcba.unknownClass"));
+  const sig = trace.nosingSigma;
+  const domain = fcbaDomainReason(
+    table,
+    ctx.project.site.floorToFloor,
+    Math.abs(sig[sig.length - 1]! - sig[0]!),
+  );
+  if (cls === "unknown") {
+    return unusable(fcbaUnknownClassFullReason(params.material, params.strengthClass, domain));
+  }
   const required = requiredCentralResidual(table, cls, b);
   if (required === null) {
     return unusable(
@@ -553,28 +579,7 @@ export function woodCentralFcba(
       }),
     );
   }
-  const H = ctx.project.site.floorToFloor;
-  if (H > table.floorToFloor) {
-    return unusable(
-      msg("structure.woodCut.fcba.totalRise", {
-        rise: dec(H, 0),
-        max: dec(table.floorToFloor, 0),
-      }),
-    );
-  }
-  const sig = trace.nosingSigma;
-  const run = Math.abs(sig[sig.length - 1]! - sig[0]!);
-  const maxRun = table.floorToFloor / Math.tan((table.pitchDeg * Math.PI) / 180);
-  if (run > maxRun + 1e-6) {
-    return unusable(
-      msg("structure.woodCut.fcba.run", {
-        run: dec(run, 0),
-        max: dec(maxRun, 0),
-        floorToFloor: dec(table.floorToFloor, 0),
-        pitch: dec(table.pitchDeg, 0),
-      }),
-    );
-  }
+  if (domain) return unusable(domain);
   return { cls, required };
 }
 
@@ -1201,14 +1206,42 @@ function beamOf(input: WoodCentralBeamInput): WoodCentralBeamResult {
   const topAt = seatTopAt(drafts);
   const bp = params.bolts;
   const lp = params.lagScrews;
-  // Place d'un tire-fond sous chaque assise au-dessus de l'âme de pied (A35 (a)) : ancrage
-  // minimal arrondi au pas de longueur (longueur du tire-fond au pas supérieur), plus le bois
-  // sous la pointe.
-  const seatClearance = roundUpTo(tm + lp.minAnchorage, bp.lengthStep) - tm + lp.tipCover;
   // Entraxe et pinces : saisis, ou bornes « tous angles » de l'EC5 (A34 (b), C §1.11 [71]) ;
-  // tire-fonds au plus sévère des règles latérales et axiales (A35 (l)).
+  // tire-fonds au plus sévère des règles latérales et axiales (A35 (l)) ; ancrage minimal,
+  // longueur filetée et bois autour d'un perçage résolus (A37 (1) (5) (17)).
   const boltSpacing = woodCentralBoltSpacing(bp, profile.fasteners, lp);
   const lagSp = boltSpacing.lag;
+  // Place d'un tire-fond sous chaque assise au-dessus de l'âme de pied (A35 (a)) : ancrage du
+  // plus court tire-fond admissible sur la grille des longueurs (en `auto`, partie filetée
+  // pénétrant de 6·d au moins, A37 (1) ; sinon ancrage minimal saisi arrondi au pas), plus le
+  // bois sous la pointe (`lagSeatClearance`).
+  const seatClearance = lagSeatClearance(lagSp, {
+    tm,
+    lengthStep: bp.lengthStep,
+    maxLength: lp.maxLength,
+    tipCover: lp.tipCover,
+  });
+  // Couches empilées (A33 (e)) : forme finie de la poutre vue par l'empilement, décrite avant les
+  // ancrages pour que les platines lisent les joints de colle réels (A37 (8) (15)) ; zone tendue
+  // du décalage des aboutages sous l'axe de la section résistante (A37 (4) (13)).
+  const stackedShape: StackedBeamShape | null =
+    lamination.method === "stacked"
+      ? {
+          beamId: id,
+          beamMark: mark,
+          b,
+          sStart,
+          sEnd,
+          bottomAt,
+          topAt,
+          nodes: [...lineNodes, ...drafts.slice(0, -1).map((d) => d.sigma1)],
+          baseZ: floorLevel,
+          // Joints calés sur les assises (A35 (g)).
+          seatLevels: drafts.map((d) => d.z),
+          tensionZoneTop: (s: Mm): Mm =>
+            zLow(s) + (params.section.tensionZone * residual) / cosAt(s),
+        }
+      : null;
   const anchorInput = {
     params,
     trace,
@@ -1226,6 +1259,10 @@ function beamOf(input: WoodCentralBeamInput): WoodCentralBeamResult {
       topAt,
       seatClearance,
       endDistanceAlongGrain: (s: Mm, z: Mm): Mm => alongGrain(V.vec(s, z)),
+      seatLevels: drafts.map((d) => d.z),
+      ...(stackedShape
+        ? { stackedJoints: stackedJointLevels({ params, profile, beam: stackedShape }) }
+        : {}),
     },
   };
   const anchors: AnchorsOutput =
@@ -1236,29 +1273,19 @@ function beamOf(input: WoodCentralBeamInput): WoodCentralBeamResult {
   notes.push(...anchors.notes);
 
   // 6. Couches empilées (filière `stacked`, A33 (e)) : pièces composantes de la poutre finie.
-  const jumps = drafts.slice(0, -1).map((d) => d.sigma1);
   let layers: StackedLayersResult | null = null;
   let layerRange: LayerRange | null = null;
-  if (lamination.method === "stacked") {
+  if (stackedShape) {
     layers = buildStackedLayers({
       params,
       trace,
       profile,
       checks,
       beam: {
-        beamId: id,
-        beamMark: mark,
-        b,
-        sStart,
-        sEnd,
-        bottomAt,
-        topAt,
-        nodes: [...lineNodes, ...jumps],
-        baseZ: floorLevel,
-        // Joints calés sur les assises (A35 (g)).
-        seatLevels: drafts.map((d) => d.z),
-        // Perçages horizontaux hors des joints de colle, broches de pied au milieu d'une couche
-        // (A36 (12)) ; logements des âmes découpés dans les couches avant collage (A36 (5)).
+        ...stackedShape,
+        // Perçages horizontaux hors des joints de colle, broches au milieu d'une couche
+        // (A36 (12), A37 (15)) ; logements des âmes découpés dans les couches avant collage
+        // (A36 (5), A37 (8) (16)).
         holes: anchors.beamHoles,
         kerfs: anchors.beamKerfs,
       },
@@ -1321,17 +1348,23 @@ function beamOf(input: WoodCentralBeamInput): WoodCentralBeamResult {
   // (boulons de sabot ou broches) et traits de scie des âmes de platine quand l'organe tombe
   // dans le plan de l'âme. Un boulon traversant ne passe jamais au-dessus d'un obstacle ; il
   // s'écarte d'un perçage de l'entraxe des boulons (`bolts.minSpacing`, convention de A34). Un
-  // tire-fond s'arrête au-dessus : autour d'un perçage horizontal, Blondel ne garde que le jeu
-  // géométrique (demi-somme des perçages plus le jeu d'atelier en plan, pointe à `tipCover`
-  // au-dessus du perçage, comme au-dessus d'un trait de scie) ; aucune source ne donne l'écart
-  // entre un organe vertical et un perçage horizontal, l'entraxe des vis (A35 (l)) vaut entre
-  // deux vis parallèles (relecture A35, QUESTIONS A36 (10), à valider).
+  // tire-fond s'arrête au-dessus : autour d'un perçage horizontal, jeu géométrique (demi-somme
+  // des perçages plus le jeu d'atelier en plan, pointe à `tipCover` au-dessus du perçage, comme
+  // au-dessus d'un trait de scie, QUESTIONS A36 (10)) et bois `lagScrews.holeWood` entre le
+  // filet (Ø d) et le bord du perçage (QUESTIONS A37 (17), `auto` 0,5·d par analogie avec
+  // ETA-11/0024 via C §1.11 [94], à valider) ; aucune source ne donne l'écart entre un organe
+  // vertical et un perçage horizontal, l'entraxe des vis (A35 (l)) vaut entre deux vis
+  // parallèles. Un tire-fond qui ne tient ni l'écart ni l'ancrage minimal au-dessus du perçage
+  // est retiré (constat `FAB_LIMON_CENTRAL_BOIS_BOULONS`, `check.fixings.blocked`).
   const boltHoleZones: ObstacleZone[] = anchors.beamHoles.map((h) => {
     const m = Math.max(spacing, (h.diameter + bp.holeDiameter) / 2);
     return { lo: h.sigma - m, hi: h.sigma + m, top: () => h.z + m };
   });
   const lagHoleZones: ObstacleZone[] = anchors.beamHoles.map((h) => {
-    const g = lagHoleClearance(h.diameter, bp.holeDiameter, c, lp.tipCover);
+    const g = lagHoleClearance(h.diameter, bp.holeDiameter, c, lp.tipCover, {
+      d: boltSpacing.d,
+      thickness: lagSp.holeWood,
+    });
     return { lo: h.sigma - g.half, hi: h.sigma + g.half, top: () => h.z + g.above };
   });
   // Traits de scie dans le plan des organes : les organes qui tombent au-dessus sont décalés de
@@ -1363,8 +1396,8 @@ function beamOf(input: WoodCentralBeamInput): WoodCentralBeamResult {
     shiftFor[kind] && overKerf(s) ? (i % 2 === 0 ? kerfShift : -kerfShift) : lateral;
   const obstaclesFor: Record<OrganKind, readonly ObstacleZone[]> = {
     bolt: [...boltHoleZones, ...kerfZones("bolt")],
-    // Tire-fond : jeu géométrique autour d'un perçage (convention partagée avec les broches des
-    // platines, `lagHoleClearance`, à valider).
+    // Tire-fond : jeu géométrique plus bois `lagScrews.holeWood` autour d'un perçage (A37 (17),
+    // convention partagée avec les broches des platines, `lagHoleClearance`, à valider).
     lagScrew: [...lagHoleZones, ...kerfZones("lagScrew")],
   };
   /** Plus haute altitude à laisser libre sous un organe vertical à σ (−∞ sans obstacle). */
@@ -1374,21 +1407,28 @@ function beamOf(input: WoodCentralBeamInput): WoodCentralBeamResult {
     return topZ;
   };
   // Pince axiale a1,CG le long du fil (QUESTIONS A36 (4), à valider) : centre de gravité de la
-  // partie filetée (tire-fond supposé fileté sur tout son ancrage) au milieu de l'ancrage ; en
-  // couches empilées, la coupe au sol (parallèle au fil) est une rive : a2,CG au-dessus d'elle.
+  // seule partie filetée comprise dans la poutre, au bout côté pointe (DIN 571, longueur filetée
+  // `lagScrews.threadLength`, A37 (5), `lagThreadInBeam`) ; en couches empilées, la coupe au sol
+  // (parallèle au fil) est une rive : a2,CG au-dessus d'elle.
   const stackedGrain = lamination.method === "stacked";
-  const threadOk = (s: Mm, z: Mm, anchorage: Mm): boolean => {
-    const cg = V.vec(s, z - anchorage / 2);
+  const threadOk = (s: Mm, z: Mm, length: Mm): boolean => {
+    const anchorage = length - tm;
+    const { cgDepth } = lagThreadInBeam(length, anchorage, lagSp.threadLengthOf);
+    const cg = V.vec(s, z - cgDepth);
     if (stackedGrain && cg.y - floorLevel < lagSp.axial.a2CG - 1e-9) return false;
     return alongGrain(cg) >= lagSp.threadEndDistance - 1e-9;
   };
   /**
    * Tire-fond vertical à l'abscisse `s` sous une assise d'altitude `z` : ancrage borné par le bois
-   * disponible sous l'assise (moins `tipCover`), par les obstacles d'ancrage et par `maxLength`,
-   * longueur arrondie au pas inférieur ; `organ` nul si l'ancrage effectif n'atteint pas
-   * `minAnchorage`. Pince axiale a1,CG le long du fil (A36 (4)) : le tire-fond est raccourci au
-   * pas `bolts.lengthStep` tant que son ancrage reste ≥ `minAnchorage`, jusqu'à la tenir ; à
-   * défaut, `organ` nul et `thread` vrai.
+   * disponible sous l'assise (moins `tipCover`), par les obstacles d'ancrage (perçages
+   * horizontaux avec le bois `lagScrews.holeWood` entre filet et perçage, A37 (17)) et par
+   * `maxLength`, longueur arrondie au pas inférieur ; `organ` nul si l'ancrage minimal n'est pas
+   * tenu (`lagAnchorageHolds` : pénétration de la partie filetée ≥ 6·d en `auto`, ancrage ≥
+   * valeur saisie sinon, A37 (1)) ; `anchorage` rend alors la grandeur comparée (`lagRetained`).
+   * Pince axiale a1,CG le long du fil (A36 (4), CG de la partie filetée, A37 (5)) : le tire-fond
+   * est raccourci au pas `bolts.lengthStep` tant que l'ancrage minimal reste tenu (la longueur
+   * filetée b(L) est recalculée à chaque pas), jusqu'à la tenir ; à défaut, `organ` nul et
+   * `thread` vrai.
    */
   const lagAt = (
     s: Mm,
@@ -1400,26 +1440,39 @@ function beamOf(input: WoodCentralBeamInput): WoodCentralBeamResult {
       const length = roundDownTo(tm + Math.max(0, room), bp.lengthStep);
       return { length, anchorage: Math.max(0, length - tm) };
     };
-    const woodFloor = bottomAt(s) + lp.tipCover;
-    const { length, anchorage } = anchorageAbove(Math.max(woodFloor, obstacleTop(s, "lagScrew")));
-    if (!(anchorage >= lp.minAnchorage - 1e-9)) {
-      // Refus dû à l'obstacle : le bois seul aurait suffi.
-      const obstructed = anchorageAbove(woodFloor).anchorage >= lp.minAnchorage - 1e-9;
-      return { organ: null, anchorage, obstructed, thread: false };
-    }
-    let len = length;
-    let anch = anchorage;
-    while (!threadOk(s, z, anch)) {
-      const next = len - bp.lengthStep;
-      if (!(bp.lengthStep > 0) || !(next - tm >= lp.minAnchorage - 1e-9)) {
-        return { organ: null, anchorage: anch, obstructed: false, thread: true };
+    /**
+     * Tire-fond le plus long sous `floorZ`, raccourci au pas jusqu'à tenir a1,CG ; `fail` :
+     * ancrage minimal non tenu (`short`) ou pince axiale intenable (`thread`).
+     */
+    const fit = (floorZ: Mm): { length: Mm; fail: null | "short" | "thread" } => {
+      let len = anchorageAbove(floorZ).length;
+      if (!lagAnchorageHolds(lagSp, len, tm)) return { length: len, fail: "short" };
+      while (!threadOk(s, z, len)) {
+        const next = len - bp.lengthStep;
+        if (!(bp.lengthStep > 0) || !lagAnchorageHolds(lagSp, next, tm)) {
+          return { length: len, fail: "thread" };
+        }
+        len = next;
       }
-      len = next;
-      anch = next - tm;
+      return { length: len, fail: null };
+    };
+    const woodFloor = bottomAt(s) + lp.tipCover;
+    const obstacle = obstacleTop(s, "lagScrew");
+    const got = fit(Math.max(woodFloor, obstacle));
+    if (got.fail !== null) {
+      // Sans l'obstacle (perçage horizontal ou trait de scie) : tire-fond complet → refus dû à
+      // l'obstacle ; pince axiale intenable → refus dû à a1,CG (A36 (4)) ; sinon ancrage minimal.
+      const free = obstacle > woodFloor ? fit(woodFloor) : got;
+      return {
+        organ: null,
+        anchorage: lagRetained(lagSp, got.length, tm),
+        obstructed: free.fail === null,
+        thread: free.fail === "thread",
+      };
     }
     return {
-      organ: { kind: "lagScrew", sigma: s, lateral: side, length: len },
-      anchorage: anch,
+      organ: { kind: "lagScrew", sigma: s, lateral: side, length: got.length },
+      anchorage: lagRetained(lagSp, got.length, tm),
       obstructed: false,
       thread: false,
     };
@@ -1970,11 +2023,19 @@ function beamOf(input: WoodCentralBeamInput): WoodCentralBeamResult {
               location: { kind: "part" as const, partId: id, treadNumber: m.seat.tread },
               message:
                 m.reason === "lagShort"
-                  ? msg("structure.woodCentral.check.fixings.lagShort", {
-                      ...args,
-                      available: dec(m.anchorage, 0),
-                      min: dec(lp.minAnchorage, 0),
-                    })
+                  ? lagSp.minAnchorageAuto
+                    ? // Pénétration de la partie filetée sous 6·d : tire-fond retiré (A37 (1)).
+                      msg("structure.woodCentral.check.fixings.lagThreadShort", {
+                        ...args,
+                        available: dec(m.anchorage, 0),
+                        min: dec(lagSp.minAnchorage, 0),
+                        diameter: dec(boltSpacing.d, 0),
+                      })
+                    : msg("structure.woodCentral.check.fixings.lagShort", {
+                        ...args,
+                        available: dec(m.anchorage, 0),
+                        min: dec(lagSp.minAnchorage, 0),
+                      })
                   : m.reason === "blocked"
                     ? msg("structure.woodCentral.check.fixings.blocked", {
                         ...args,
@@ -1982,15 +2043,27 @@ function beamOf(input: WoodCentralBeamInput): WoodCentralBeamResult {
                       })
                     : m.rules.kind === "lagScrew" || m.thread
                       ? // Règles des tire-fonds (A35 (l)) et pince axiale a1,CG le long du fil
-                        // (A36 (4)).
-                        msg("structure.woodCentral.check.fixings.missingLagThread", {
-                          ...args,
-                          length: dec(Math.max(0, m.length), 0),
-                          front: dec(rulesFor.lagScrew.front, 0),
-                          rear: dec(rulesFor.lagScrew.rear, 0),
-                          spacing: dec(rulesFor.lagScrew.spacing, 0),
-                          thread: dec(lagSp.threadEndDistance, 0),
-                        })
+                        // (A36 (4)) ; en `auto`, raccourcissement borné par la pénétration de la
+                        // partie filetée 6·d (A37 (1) (5)).
+                        lagSp.minAnchorageAuto
+                        ? msg("structure.woodCentral.check.fixings.missingLagThreadAuto", {
+                            ...args,
+                            length: dec(Math.max(0, m.length), 0),
+                            front: dec(rulesFor.lagScrew.front, 0),
+                            rear: dec(rulesFor.lagScrew.rear, 0),
+                            spacing: dec(rulesFor.lagScrew.spacing, 0),
+                            thread: dec(lagSp.threadEndDistance, 0),
+                            penetration: dec(lagSp.minAnchorage, 0),
+                            diameter: dec(boltSpacing.d, 0),
+                          })
+                        : msg("structure.woodCentral.check.fixings.missingLagThread", {
+                            ...args,
+                            length: dec(Math.max(0, m.length), 0),
+                            front: dec(rulesFor.lagScrew.front, 0),
+                            rear: dec(rulesFor.lagScrew.rear, 0),
+                            spacing: dec(rulesFor.lagScrew.spacing, 0),
+                            thread: dec(lagSp.threadEndDistance, 0),
+                          })
                       : msg("structure.woodCentral.check.fixings.missing", {
                           ...args,
                           length: dec(Math.max(0, m.length), 0),
@@ -2060,21 +2133,38 @@ function beamOf(input: WoodCentralBeamInput): WoodCentralBeamResult {
     );
   }
   if (lagSeats.length > 0) {
+    // Ancrage minimal (A37 (1)) et longueur filetée (A37 (5)) : `auto` → pénétration de la
+    // partie filetée ≥ 6·d, filetage b = ⌊20 + L / 3⌋ ; saisis → valeurs citées.
+    const lagArgs = {
+      marks: lagSeats.map((s) => treadMark(s.tread)).join(", "),
+      diameter: dec(boltSpacing.d, 0),
+      pilot: dec(lp.pilotDiameter, 0),
+      min: dec(lagSp.minAnchorage, 0),
+      thread: dec(lagSp.threadEndDistance, 0),
+      edge: dec(lagSp.axial.a2CG, 0),
+      step: dec(bp.lengthStep, 0),
+      penetration: dec(lagSp.axial.penetration, 0),
+      threaded:
+        lp.threadLength === "auto"
+          ? msg("structure.woodCentral.note.lagThreadLength.auto")
+          : msg("structure.woodCentral.note.lagThreadLength.entered", {
+              length: dec(lp.threadLength, 0),
+            }),
+    };
     notes.push(
-      msg(
-        stackedGrain
-          ? "structure.woodCentral.note.lagScrewsThreadStacked"
-          : "structure.woodCentral.note.lagScrewsThread",
-        {
-          marks: lagSeats.map((s) => treadMark(s.tread)).join(", "),
-          diameter: dec(boltSpacing.d, 0),
-          pilot: dec(lp.pilotDiameter, 0),
-          min: dec(lp.minAnchorage, 0),
-          thread: dec(lagSp.threadEndDistance, 0),
-          edge: dec(lagSp.axial.a2CG, 0),
-          step: dec(bp.lengthStep, 0),
-        },
-      ),
+      lagSp.minAnchorageAuto
+        ? msg(
+            stackedGrain
+              ? "structure.woodCentral.note.lagScrewsThreadAutoStacked"
+              : "structure.woodCentral.note.lagScrewsThreadAuto",
+            lagArgs,
+          )
+        : msg(
+            stackedGrain
+              ? "structure.woodCentral.note.lagScrewsThreadEnteredStacked"
+              : "structure.woodCentral.note.lagScrewsThreadEntered",
+            lagArgs,
+          ),
     );
   }
   if (underRiser && drafts.some((d) => d.notch)) {
@@ -2281,7 +2371,8 @@ function seatTopAt(drafts: readonly SeatDraft[]): (s: Mm) => Mm {
  * posés, chaque nature avec ses règles. Distance aux bouts de l'assise et à l'entaille ≥ a3,c
  * (pince latérale ; extrémités non chargées, gravité, A35 (e)). Entraxe effectif ≥ a1 ; ≥ max(a1 ;
  * 7·d) sur une assise qui porte au moins un tire-fond (EC5 § 8.7.2). Chaque tire-fond : centre de
- * gravité de la partie filetée à a1,CG = 10·d au moins, le long du fil, de la coupe au sol et des
+ * gravité de la seule partie filetée comprise dans la poutre (`lagThreadInBeam`, QUESTIONS
+ * A37 (5)) à a1,CG = 10·d au moins, le long du fil, de la coupe au sol et des
  * faces de cran (`grainEndDistance`, convention à valider, A36 (4)) ; en couches empilées, à
  * a2,CG = 4·d au moins au-dessus de la coupe au sol (rive). Faces de la poutre (b/2 −
  * |décalage latéral|) : boulons ≥ a4,c, tire-fonds ≥ max(a4,c ; a2,CG). Valeurs de référence :
@@ -2297,7 +2388,10 @@ function addSpacingCheck(
     readonly drafts: readonly SeatDraft[];
     readonly boltSpacing: WoodCentralBoltSpacing;
     readonly treadMark: (n: number) => string;
-    /** Épaisseur de marche (ancrage d'un tire-fond = longueur − épaisseur), mm. */
+    /**
+     * Épaisseur de marche (ancrage d'un tire-fond = longueur − épaisseur ; partie filetée et son
+     * centre de gravité, `lagThreadInBeam`, A37 (5)), mm.
+     */
     readonly tm: Mm;
     readonly floorLevel: Mm;
     /** Couches empilées : coupe au sol parallèle au fil (rive, a2,CG). */
@@ -2359,27 +2453,29 @@ function addSpacingCheck(
     // l'assise ; en couches empilées, hauteur au-dessus de la coupe au sol (a2,CG).
     let thread = Infinity;
     let floor = Infinity;
-    let anchorage = Infinity;
+    let penetration = Infinity;
     for (const o of s.bolts) {
       if (o.kind !== "lagScrew") continue;
-      const cg = V.vec(o.sigma, s.z - (o.length - tm) / 2);
+      // Centre de gravité et pénétration de la seule partie filetée (A37 (5)).
+      const inBeam = lagThreadInBeam(o.length, o.length - tm, lag.threadLengthOf);
+      const cg = V.vec(o.sigma, s.z - inBeam.cgDepth);
       thread = Math.min(thread, alongGrain(cg));
       floor = Math.min(floor, cg.y - floorLevel);
-      anchorage = Math.min(anchorage, o.length - tm);
+      penetration = Math.min(penetration, inBeam.penetration);
     }
     // Pénétration de la partie filetée côté pointe, 6·d (EN 1995-1-1 § 8.7.2 (3), C §1.11 [88]) :
-    // l'ancrage minimal retenu (`lagScrews.minAnchorage`, 50 mm de [78]) peut être plus court ;
-    // constat sans borner le raccourcissement des tire-fonds (QUESTIONS A37 (1)).
-    if (anchorage < lagPenetration - TOL) {
+    // en `auto`, tenue par construction (tire-fond retiré sinon, QUESTIONS A37 (1)) ; un ancrage
+    // minimal saisi plus court reste respecté, avec ce constat.
+    if (penetration < lagPenetration - TOL) {
       findings.push({
         status: "violation",
-        measured: anchorage,
+        measured: penetration,
         min: lagPenetration,
         max: null,
         location,
         message: msg("structure.woodCentral.check.spacing.lagPenetration", {
           mark,
-          measured: dec(anchorage, 0),
+          measured: dec(penetration, 0),
           min: dec(lagPenetration, 0),
           diameter: dec(d, 0),
         }),

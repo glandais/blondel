@@ -23,6 +23,7 @@ import type { CentralTrace } from "./centralTrace.js";
 import { CheckCollector } from "./checks.js";
 import { STEEL_RULES } from "./steelCommon.js";
 import { woodCentralContext, woodCentralParams, woodTraceOf } from "./woodCentral.test-helpers.js";
+import { holeLevelsOf, layerBounds } from "./woodCentralLayers.js";
 import type { WoodCentralParams } from "./woodCentralParams.js";
 import {
   WOOD_CENTRAL_PLATE_FOOT_ID,
@@ -36,10 +37,13 @@ import {
   WOOD_CENTRAL_PLATE_RULES,
   buildWoodCentralEmbeddedPlates,
   embeddedWebLine,
+  kerfJointOffset,
+  kerfLevels,
   resolvePlateWidth,
+  type BeamKerf,
   type WoodCentralPlatesResult,
 } from "./woodCentralPlates.js";
-import type { ShoeBeamGeometry } from "./woodCentralShoes.js";
+import type { ShoeBeamGeometry, ShoeBeamHole } from "./woodCentralShoes.js";
 import { ec5Spacing, footPinFloorDistance } from "./woodSpacing.js";
 
 const EN = translatorFor("en");
@@ -73,6 +77,12 @@ interface GeomOver {
   readonly seatLength?: number;
   readonly rise?: number;
   readonly seatClearance?: number;
+  /**
+   * Couches empilées (A37 (8) (15)) : épaisseur maximale des couches de l'oracle des joints de
+   * colle (`layerBounds` réel, joints calés sur les assises, broches centrées) ; ou oracle donné.
+   */
+  readonly layers?: number;
+  readonly stackedJoints?: (holes: readonly ShoeBeamHole[]) => readonly number[];
 }
 
 /**
@@ -103,6 +113,39 @@ function geometry(trace: CentralTrace, over: GeomOver = {}): ShoeBeamGeometry {
         }
       : {}),
     ...(over.seatClearance !== undefined ? { seatClearance: over.seatClearance } : {}),
+    ...stackedOf(front, first, headTop, over),
+  };
+}
+
+/** Assises de la géométrie synthétique (dessus en escalier, ou dessus constant). */
+function seatsOf(first: number, headTop: number, rise: number | undefined): number[] {
+  if (rise === undefined) return [first];
+  const out: number[] = [];
+  for (let z = first; z < headTop - 1e-9; z += rise) out.push(z);
+  return [...out, headTop];
+}
+
+/**
+ * Oracle des joints de colle de la géométrie synthétique (A37 (8) (15)) : même calcul que les
+ * couches (`layerBounds`, `holeLevelsOf`) depuis le dessus de la platine de pied.
+ */
+function stackedOf(
+  _front: number,
+  first: number,
+  headTop: number,
+  over: GeomOver,
+): Pick<ShoeBeamGeometry, "seatLevels" | "stackedJoints"> {
+  const seatLevels = seatsOf(first, headTop, over.seatLength !== undefined ? over.rise : undefined);
+  if (over.stackedJoints) return { seatLevels, stackedJoints: over.stackedJoints };
+  const t = over.layers;
+  if (t === undefined) return {};
+  const tp = woodCentralParams().anchors.plate.thickness;
+  return {
+    seatLevels,
+    stackedJoints: (holes) => {
+      const { bounds } = layerBounds(tp, headTop, t, seatLevels, 1000, holeLevelsOf(holes, C));
+      return bounds.length > 0 ? [bounds[0]!.z0, ...bounds.map((b) => b.z1)] : [];
+    },
   };
 }
 
@@ -732,6 +775,224 @@ describe("platines à âme noyée : propriétés", () => {
         }
       }),
       { numRuns: 60 },
+    );
+  });
+});
+
+/** Correspondance du plan réel de l'âme avec son solide (A37 (16)) : origine, axe, référence. */
+function expectKerfLineMatchesWeb(r: WoodCentralPlatesResult, webId: string, kerf: BeamKerf) {
+  const web = part(r, webId);
+  const line = kerf.line!;
+  expect(line, kerf.mark).toBeDefined();
+  const solid = web.solid;
+  if (solid.kind !== "extrusion") throw new Error("âme : extrusion attendue");
+  const wx = Math.max(...web.flat!.outline.outer.map((p) => p.x));
+  const tw = web.flat!.thickness;
+  const n = V.perpLeft(line.dir);
+  // Axe x du solide = direction de l'âme ; plan de l'âme (milieu de l'épaisseur) = plan du trait.
+  expect(solid.frame.xAxis.x).toBeCloseTo(line.dir.x, 9);
+  expect(solid.frame.xAxis.y).toBeCloseTo(line.dir.y, 9);
+  const o = V.vec(solid.frame.origin.x, solid.frame.origin.y);
+  const rel = V.sub(o, line.center);
+  expect(V.dot(rel, n)).toBeCloseTo(tw / 2, 6);
+  // Origine du solide = point d'abscisse webX0 ; référence au milieu de l'âme.
+  const webX0 = line.sigmaRef + V.dot(rel, line.dir);
+  expect(line.sigmaRef - webX0).toBeCloseTo(wx / 2, 6);
+  return webX0;
+}
+
+describe("plan réel de l'âme porté par le trait de scie (A37 (16))", () => {
+  it.each(["straight", "quarter-left", "helical"] as const)(
+    "%s : `kerf.line` donne le plan du solide de l'âme (pied prolongé et tête)",
+    (id) => {
+      const { r, params, beam } = run(id, {}, { seatLength: 260, rise: 175, seatClearance: 60 });
+      const foot = r.beamKerfs.find((k) => k.mark === "AP1")!;
+      const head = r.beamKerfs.find((k) => k.mark === "AT1");
+      const x0 = expectKerfLineMatchesWeb(r, WOOD_CENTRAL_PLATE_FOOT_WEB_ID, foot);
+      expect(x0).toBeCloseTo(footWebInBeam(r, params, beam).ws0, 6);
+      // Tête : dans la géométrie synthétique de l'hélicoïdal, la coupe de tête n'a pas la place
+      // de l'âme (assises synthétiques) ; vérifiée là où elle est générée.
+      if (head) {
+        const h0 = expectKerfLineMatchesWeb(r, WOOD_CENTRAL_PLATE_HEAD_WEB_ID, head);
+        const web = part(r, WOOD_CENTRAL_PLATE_HEAD_WEB_ID);
+        const wx = Math.max(...web.flat!.outline.outer.map((p) => p.x));
+        expect(h0).toBeCloseTo(beam.trimmerSigma - params.anchors.plate.thickness - wx, 6);
+      } else expect(id).toBe("helical");
+      // Sur une trace droite, le plan de l'âme est l'axe ; sur une courbe, la corde (≠ trace).
+      const { trace } = traceFor(id);
+      const at = (k: BeamKerf, s: number) =>
+        V.addScaled(k.line!.center, k.line!.dir, s - k.line!.sigmaRef);
+      const mid = (foot.sigma0 + foot.sigma1) / 2;
+      const off = V.distance(at(foot, mid), trace.point(mid));
+      if (id === "straight") expect(off).toBeCloseTo(0, 6);
+      expect(off).toBeLessThanOrEqual(embeddedWebLine(trace, foot.sigma0, foot.sigma1).sag + 1);
+    },
+  );
+
+  it("repli (âme centrée de `webLength`) : plan réel au milieu de l'âme", () => {
+    const { r } = run("quarter-left", {}, { firstSeatZ: 140, seatClearance: 90 });
+    expect(r.notes.map((m) => fr(m)).join(" ")).not.toContain("prolongée");
+    expectKerfLineMatchesWeb(r, WOOD_CENTRAL_PLATE_FOOT_WEB_ID, r.beamKerfs[0]!);
+  });
+});
+
+describe("couches empilées : logements calés sur les joints de colle (A37 (8) (15))", () => {
+  const stairs = { seatLength: 260, rise: 175, seatClearance: 60 } as const;
+  const stacked = { section: { curvedMethod: "stacked" } };
+  /** Joints de colle des perçages retenus (même oracle que la géométrie). */
+  const jointsOf = (beam: ShoeBeamGeometry, r: WoodCentralPlatesResult) =>
+    beam.stackedJoints!(r.beamHoles);
+
+  it("âme de pied : chaque palier arrêté au joint de colle le plus proche en dessous", () => {
+    const plain = run("quarter-left", stacked, stairs);
+    const { r, checks, beam, params } = run("quarter-left", stacked, { ...stairs, layers: 40 });
+    expect(r.errors).toEqual([]);
+    expect(fits(checks).map((x) => x.status)).toEqual(["ok", "ok"]);
+    const J = jointsOf(beam, r);
+    const foot = r.beamKerfs.find((k) => k.mark === "AP1")!;
+    const before = plain.r.beamKerfs.find((k) => k.mark === "AP1")!;
+    expect(kerfJointOffset(foot, J)).toBeLessThan(1e-6);
+    // Le dessus du trait est le plus haut joint sous le dessus d'origine (âme + jeu).
+    const top = Math.max(...kerfLevels(before));
+    expect(foot.z1).toBe(Math.max(...J.filter((j) => j <= top + 1e-6)));
+    expect(foot.z1).toBeLessThan(top);
+    expect(foot.z0).toBe(params.anchors.plate.thickness);
+    // Âme = trait − jeu ; broches dans l'âme, à la pince de perçage.
+    const web = part(r, WOOD_CENTRAL_PLATE_FOOT_WEB_ID);
+    const wy = Math.max(...web.flat!.outline.outer.map((p) => p.y));
+    expect(wy).toBeCloseTo(foot.z1 - C - params.anchors.plate.thickness, 9);
+    for (const h of r.beamHoles.filter((x) => x.mark === "AP1")) {
+      expect(foot.z1 - C - h.z).toBeGreaterThanOrEqual(params.anchors.holeEdgeDistance - 0.5);
+      expect(h.centered).toBeUndefined();
+    }
+    const keys = r.notes.map((m) => m.key);
+    expect(keys).toContain("structure.woodCentral.note.plateKerfJointsFoot");
+    const note = r.notes.find((m) => m.key === "structure.woodCentral.note.plateKerfJointsFoot")!;
+    expect(fr(note)).toMatch(/joint de colle le plus proche en dessous/);
+    expect(EN.t(note)).toMatch(/nearest glue line below/);
+    // Hors couches empilées : inchangé (aucune remarque, trait d'origine).
+    expect(plain.r.notes.map((m) => m.key)).not.toContain(
+      "structure.woodCentral.note.plateKerfJointsFoot",
+    );
+  });
+
+  it("âme de tête : broches centrées dans une couche hors des assises, logement sur des joints", () => {
+    const { r, checks, beam, params } = run("quarter-left", stacked, { ...stairs, layers: 40 });
+    expect(fits(checks).map((x) => x.status)).toEqual(["ok", "ok"]);
+    const J = jointsOf(beam, r);
+    const head = r.beamKerfs.find((k) => k.mark === "AT1")!;
+    expect(kerfJointOffset(head, J)).toBeLessThan(1e-6);
+    const rr = params.anchors.plate.pinDiameter / 2 + C;
+    const pins = r.beamHoles.filter((x) => x.mark === "AT1");
+    expect(pins).toHaveLength(params.anchors.plate.pins);
+    for (const h of pins) {
+      expect(h.centered).toBe(true);
+      // Au milieu d'une couche, aucun joint (assises comprises) à moins du rayon + jeu.
+      expect(J.some((j, k) => k + 1 < J.length && Math.abs((j + J[k + 1]!) / 2 - h.z) < 1e-6)).toBe(
+        true,
+      );
+      for (const j of J) expect(Math.abs(j - h.z)).toBeGreaterThanOrEqual(rr - 1e-6);
+      for (const s of beam.seatLevels!) expect(Math.abs(s - h.z)).toBeGreaterThanOrEqual(rr);
+      // Dans l'âme, à la pince de perçage.
+      expect(h.z - (head.z0 + C)).toBeGreaterThanOrEqual(params.anchors.holeEdgeDistance - 1e-6);
+      expect(head.z1 - C - h.z).toBeGreaterThanOrEqual(params.anchors.holeEdgeDistance - 1e-6);
+    }
+    const web = part(r, WOOD_CENTRAL_PLATE_HEAD_WEB_ID);
+    const wy = Math.max(...web.flat!.outline.outer.map((p) => p.y));
+    expect(wy).toBeCloseTo(head.z1 - head.z0 - 2 * C, 9);
+    // Âme dans la hauteur de la platine.
+    expect(head.z0 + C).toBeGreaterThanOrEqual(beam.headBottom - 1e-6);
+    expect(head.z1 - C).toBeLessThanOrEqual(beam.headBottom + params.anchors.length + 1e-6);
+    const note = r.notes.find((m) => m.key === "structure.woodCentral.note.plateKerfJointsHead")!;
+    expect(fr(note)).toMatch(/^Âme AT1 en couches empilées : broches au milieu d'une couche/);
+    expect(EN.t(note)).toMatch(/^Web AT1 in stacked layers: dowels in the middle of a layer/);
+  });
+
+  it("aucun joint ne convient : logement gardé, constat en violation (fraisage partiel)", () => {
+    const tp = woodCentralParams().anchors.plate.thickness;
+    const { trace } = traceFor("quarter-left");
+    const top = geometry(trace).headTop;
+    // Une seule couche : aucun joint intérieur.
+    const { r, checks } = run("quarter-left", stacked, {
+      ...stairs,
+      stackedJoints: () => [tp, top],
+    });
+    expect(r.errors).toEqual([]);
+    const f = fits(checks);
+    expect(f.map((x) => x.status)).toEqual(["violation", "violation"]);
+    expect(fr(f[0]!.message)).toMatch(/^AP1 : aucun joint de colle ne laisse à l'âme/);
+    expect(fr(f[1]!.message)).toMatch(/^AT1 : aucun joint de colle ne laisse à l'âme/);
+    expect(EN.t(f[1]!.message)).toMatch(/^AT1: no glue line leaves the web/);
+    // Platines et âmes générées quand même (état antérieur).
+    expect(r.parts.map((p) => p.mark)).toEqual(["PP1", "AP1", "PT1", "AT1"]);
+  });
+});
+
+describe("couches empilées : propriétés des logements (A37 (8) (15) (16))", () => {
+  it("logements sur des joints de colle (ou constat) ; broches de tête centrées hors des assises ; plan réel de l'âme", () => {
+    fc.assert(
+      fc.property(
+        fc.constantFrom<TraceId>("quarter-left", "helical", "straight"),
+        fc.record({
+          layers: fc.integer({ min: 20, max: 80 }),
+          seatLength: fc.integer({ min: 180, max: 320 }),
+          rise: fc.integer({ min: 140, max: 210 }),
+          seatClearance: fc.integer({ min: 30, max: 90 }),
+          pin: fc.integer({ min: 10, max: 16 }),
+          webLength: fc.integer({ min: 100, max: 200 }),
+          webDepth: fc.integer({ min: 60, max: 160 }),
+          length: fc.integer({ min: 150, max: 300 }),
+        }),
+        (id, g) => {
+          const { r, checks, beam } = run(
+            id,
+            {
+              section: { curvedMethod: "stacked" },
+              anchors: {
+                length: g.length,
+                plate: {
+                  pinDiameter: g.pin,
+                  pinHoleDiameter: g.pin + 1,
+                  webLength: g.webLength,
+                  webDepth: g.webDepth,
+                },
+              },
+            },
+            g,
+          );
+          expect(r.errors).toEqual([]);
+          const J = beam.stackedJoints!(r.beamHoles);
+          const f = fits(checks);
+          for (const k of r.beamKerfs) {
+            const flagged = f.some(
+              (x) =>
+                x.status === "violation" &&
+                fr(x.message).includes(`${k.mark} : aucun joint de colle`),
+            );
+            if (!flagged) expect(kerfJointOffset(k, J), k.mark).toBeLessThan(1e-6);
+            expect(k.line).toBeDefined();
+          }
+          const rr = g.pin / 2 + C;
+          for (const h of r.beamHoles.filter((x) => x.mark === "AT1")) {
+            expect(h.centered).toBe(true);
+            for (const s of beam.seatLevels!) {
+              // Hors des assises dès que la colonne admissible le permet (sinon, constat des
+              // couches) : vérifié sur les joints réels.
+              if (Math.abs(s - h.z) < rr) {
+                expect(J.some((j) => Math.abs(j - h.z) < rr - 1e-6)).toBe(true);
+              }
+            }
+          }
+          for (const [webId, mark] of [
+            [WOOD_CENTRAL_PLATE_FOOT_WEB_ID, "AP1"],
+            [WOOD_CENTRAL_PLATE_HEAD_WEB_ID, "AT1"],
+          ] as const) {
+            const k = r.beamKerfs.find((x) => x.mark === mark);
+            if (k && r.parts.some((p) => p.id === webId)) expectKerfLineMatchesWeb(r, webId, k);
+          }
+        },
+      ),
+      { numRuns: 40 },
     );
   });
 });

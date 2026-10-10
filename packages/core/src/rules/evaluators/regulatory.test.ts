@@ -227,10 +227,11 @@ describe("règles évaluées par une structure (limons et crémaillères bois)",
       expect(rs.length, id).toBeGreaterThan(0);
       for (const r of rs) expect(fr(r.message), id).not.toMatch(/Contrôle porté par la structure/);
     }
-    // Crémaillère centrale : tableau FCBA lu à b / facteur_centrale, constat par assise.
+    // Crémaillère centrale : chêne `auto` (D30), tableau FCBA non exploitable (QUESTIONS
+    // A37 (2), décision du 2026-10-10) ; le plugin rend sa raison, pas le résultat d'attente.
     const cr = m.compliance.results.filter((r) => r.ruleId === "CREMAILLERE_REGLE_MOYENS");
-    expect(cr.every((r) => r.status !== "non-evaluee")).toBe(true);
-    expect(fr(cr[0]!.message)).toMatch(/crémaillère centrale/);
+    expect(cr.map((r) => r.status)).toEqual(["non-evaluee"]);
+    expect(fr(cr[0]!.message)).toMatch(/aucune ne couvre un bois D30/);
     const kr = m.compliance.results.find((r) => r.ruleId === "LAMELLE_CINTRE_KR")!;
     expect(kr.status).toBe("ok");
     expect(kr.severity).toBe("bloquant");

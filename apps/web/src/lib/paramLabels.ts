@@ -576,6 +576,17 @@ const WOOD_CENTRAL: Readonly<Record<string, FieldText>> = {
     unit: MM,
     hint: TO_VALIDATE,
   },
+  // Zone tendue du décalage des aboutages, en part décimale de h_res depuis la sous-face (sans
+  // unité), et longueur minimale d'une planche (QUESTIONS A37 (4), (13) et (14)) ◆.
+  "section.tensionZone": {
+    label: "ui.param.woodCentral.section.tensionZone.label",
+    hint: TO_VALIDATE,
+  },
+  "section.minBoardLength": {
+    label: "ui.param.woodCentral.section.minBoardLength.label",
+    unit: MM,
+    hint: TO_VALIDATE,
+  },
   "notch.rearDepth": {
     label: "ui.param.woodCentral.notch.rearDepth.label",
     unit: MM,
@@ -610,8 +621,9 @@ const WOOD_CENTRAL: Readonly<Record<string, FieldText>> = {
     unit: MM,
     hint: TO_VALIDATE,
   },
+  // Ancrage minimal : `auto` = pénétration de la partie filetée ≥ 6·d (QUESTIONS A37 (1)).
   "lagScrews.minAnchorage": {
-    label: "ui.param.woodCentral.lagScrews.minAnchorage.label",
+    label: "ui.param.woodCentral.lagScrews.minAnchorageThreaded.label",
     unit: MM,
     hint: TO_VALIDATE,
   },
@@ -639,6 +651,18 @@ const WOOD_CENTRAL: Readonly<Record<string, FieldText>> = {
   // Pince axiale a1,CG mesurée le long du fil (QUESTIONS A36 (4)) ◆.
   "lagScrews.threadEndDistance": {
     label: "ui.param.woodCentral.lagScrews.threadEndDistance.label",
+    unit: MM,
+    hint: TO_VALIDATE,
+  },
+  // Longueur filetée b (auto : loi Faynot) et bois entre le filet et un perçage horizontal
+  // (auto : 0,5·d) (QUESTIONS A37 (5), (17)) ◆.
+  "lagScrews.threadLength": {
+    label: "ui.param.woodCentral.lagScrews.threadLength.label",
+    unit: MM,
+    hint: TO_VALIDATE,
+  },
+  "lagScrews.holeWood": {
+    label: "ui.param.woodCentral.lagScrews.holeWood.label",
     unit: MM,
     hint: TO_VALIDATE,
   },

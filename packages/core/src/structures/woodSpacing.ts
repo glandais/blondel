@@ -165,24 +165,62 @@ export function footPinFloorDistance(
 }
 
 /**
+ * Bois minimal entre le filet d'un tire-fond et le bord d'un perçage horizontal (QUESTIONS
+ * A37 (17), décision du 2026-10-10) : diamètre nominal `d` du tire-fond (filet) et épaisseur de
+ * bois `thickness` (`lagScrews.holeWood` résolu).
+ */
+export interface LagHoleWood {
+  readonly d: Mm;
+  readonly thickness: Mm;
+}
+
+/**
  * Jeu d'un tire-fond vertical autour d'un perçage horizontal (boulon de sabot, broche de
  * platine), convention Blondel **à valider** (relecture A35, QUESTIONS A36 (10)) : aucune source
  * ne donne l'écart entre un organe vertical et un perçage horizontal (les entraxes de l'EC5
- * valent entre organes parallèles) ; seul le jeu géométrique est gardé. Le tire-fond s'écarte en
- * plan de la demi-somme des perçages plus le jeu d'atelier (`half`), ou s'arrête au-dessus, sa
- * pointe à `tipCover` du haut du perçage (`above`, depuis le centre du perçage).
+ * valent entre organes parallèles). Le tire-fond s'écarte en plan (`half`, axe à axe) de la
+ * demi-somme des perçages plus le jeu d'atelier, et au moins du demi-perçage plus le demi-filet
+ * plus l'épaisseur de bois `wood.thickness` (A37 (17), `lagScrews.holeWood`) ; ou il s'arrête
+ * au-dessus, sa pointe à max(`tipCover`, `wood.thickness`) du haut du perçage (`above`, depuis
+ * le centre du perçage). Sans `wood` : jeu géométrique seul (comportement antérieur à A37).
  */
 export function lagHoleClearance(
   holeDiameter: Mm,
   lagHoleDiameter: Mm,
   clearance: Mm,
   tipCover: Mm,
+  wood?: LagHoleWood,
 ): { readonly half: Mm; readonly above: Mm } {
+  const geometric = (holeDiameter + lagHoleDiameter) / 2 + clearance;
+  if (!wood) return { half: geometric, above: holeDiameter / 2 + tipCover };
   return {
-    half: (holeDiameter + lagHoleDiameter) / 2 + clearance,
-    above: holeDiameter / 2 + tipCover,
+    half: Math.max(geometric, holeDiameter / 2 + wood.d / 2 + wood.thickness),
+    above: holeDiameter / 2 + Math.max(tipCover, wood.thickness),
   };
 }
+
+/**
+ * Longueur filetée b d'un tire-fond de longueur `length` (QUESTIONS A37 (5), décision du
+ * 2026-10-10), mm : saisie (`lagScrews.threadLength`, bornée à la longueur) ou `auto` →
+ * b = ⌊20 + L / 3⌋, loi qui redonne exactement les longueurs filetées des fiches Faynot de
+ * tire-fonds Ø10 (L 60 à 160 : 40, 43, 46, 53, 60, 66, 73) et Ø12 (L 60 à 220 : … 80, 86, 93),
+ * C §1.11 [78] (moyen) ; plus courte que « b ≥ 0,6·L » des tableaux DIN 571 des distributeurs
+ * (C §1.11 [93]), donc plus sévère pour la pince a1,CG et la pénétration ; hors de 60 à 220 mm
+ * et pour un autre diamètre : extrapolée, **à valider** (QUESTIONS A38). La partie filetée est au
+ * bout côté pointe.
+ */
+export function lagThreadLength(length: Mm, threadLength: Mm | "auto" = "auto"): Mm {
+  if (!(length > 0)) return 0;
+  const b =
+    threadLength !== "auto"
+      ? threadLength
+      : Math.floor(LAG_THREAD_BASE + length / LAG_THREAD_DIVISOR + 1e-9);
+  return Math.min(length, Math.max(0, b));
+}
+
+/** Loi `auto` de la longueur filetée (C §1.11 [78], fiches Faynot Ø10 et Ø12) : b = ⌊20 + L / 3⌋. */
+const LAG_THREAD_BASE: Mm = 20;
+const LAG_THREAD_DIVISOR = 3;
 
 /** Entraxe et pinces des tire-fonds de marche, résolus (A35 (l)). */
 export interface WoodCentralLagSpacing {
@@ -205,6 +243,28 @@ export interface WoodCentralLagSpacing {
    * de cran (QUESTIONS A36 (4), décision du 2026-10-09, à valider).
    */
   readonly threadEndDistance: Mm;
+  /**
+   * Ancrage minimal retenu (`lagScrews.minAnchorage`, QUESTIONS A37 (1)) : saisi, ou `auto` →
+   * pénétration minimale de la partie filetée 6·d (`axial.penetration`).
+   */
+  readonly minAnchorage: Mm;
+  /**
+   * `minAnchorage` en `auto` : la borne porte sur la **pénétration de la partie filetée** dans
+   * la poutre (min(longueur filetée, ancrage) ≥ 6·d), un tire-fond qui ne la tient pas est
+   * retiré ; saisi : sur l'ancrage (longueur dans la poutre), la pénétration filetée sous 6·d
+   * restant un constat (A37 (1)).
+   */
+  readonly minAnchorageAuto: boolean;
+  /**
+   * Longueur filetée d'un tire-fond de longueur L (`lagScrews.threadLength` résolu,
+   * `lagThreadLength`, QUESTIONS A37 (5)).
+   */
+  readonly threadLengthOf: (length: Mm) => Mm;
+  /**
+   * Épaisseur de bois minimale entre le filet et un perçage horizontal (`lagScrews.holeWood`,
+   * `auto` : 0,5·d, QUESTIONS A37 (17)) ; à passer à `lagHoleClearance` avec `d`.
+   */
+  readonly holeWood: Mm;
 }
 
 /** Pinces et entraxe des boulons (et tire-fonds) de marche du limon central bois, résolus. */
@@ -243,6 +303,9 @@ export function woodCentralBoltSpacing(
     readonly minSpacing: Mm | "auto";
     readonly endDistance: Mm | "auto";
     readonly threadEndDistance?: Mm | "auto";
+    readonly minAnchorage?: Mm | "auto";
+    readonly threadLength?: Mm | "auto";
+    readonly holeWood?: Mm | "auto";
   } = { minSpacing: "auto", endDistance: "auto" },
 ): WoodCentralBoltSpacing {
   const nominal = nominalDiameterFor(
@@ -272,8 +335,93 @@ export function woodCentralBoltSpacing(
         lagScrews.threadEndDistance !== undefined && lagScrews.threadEndDistance !== "auto"
           ? lagScrews.threadEndDistance
           : axial.a1CG,
+      minAnchorage:
+        lagScrews.minAnchorage !== undefined && lagScrews.minAnchorage !== "auto"
+          ? lagScrews.minAnchorage
+          : axial.penetration,
+      minAnchorageAuto: lagScrews.minAnchorage === undefined || lagScrews.minAnchorage === "auto",
+      threadLengthOf: (length: Mm): Mm => lagThreadLength(length, lagScrews.threadLength),
+      holeWood:
+        lagScrews.holeWood !== undefined && lagScrews.holeWood !== "auto"
+          ? lagScrews.holeWood
+          : HOLE_WOOD_RATIO * d,
     },
   };
+}
+
+/**
+ * `lagScrews.holeWood` `auto` : 0,5·d, par analogie avec l'entraxe minimal de 1,5·d entre deux vis
+ * croisées (filets à 0,5·d l'un de l'autre), ETA-11/0024 § 3 via C §1.11 [94] ; à valider (A38).
+ */
+const HOLE_WOOD_RATIO = 0.5;
+
+/**
+ * Partie filetée d'un tire-fond vissé depuis le dessus d'une marche (QUESTIONS A37 (1) et (5),
+ * décisions du 2026-10-10) : la partie filetée b = `threadLengthOf(L)` est au bout côté pointe ;
+ * dans la poutre (ancrage A = L − épaisseur de marche), sa pénétration vaut p = min(b ; A) et son
+ * centre de gravité est à `cgDepth` = A − p / 2 sous l'assise (au milieu de la seule partie
+ * filetée comprise dans la poutre ; avant A37 : A / 2, tire-fond supposé fileté sur tout son
+ * ancrage). Le CG sert à la pince axiale a1,CG et à a2,CG ; p à la pénétration minimale 6·d.
+ */
+export function lagThreadInBeam(
+  length: Mm,
+  anchorage: Mm,
+  threadLengthOf: (length: Mm) => Mm,
+): { readonly penetration: Mm; readonly cgDepth: Mm } {
+  const a = Math.max(0, anchorage);
+  const penetration = Math.max(0, Math.min(threadLengthOf(length), a));
+  return { penetration, cgDepth: a - penetration / 2 };
+}
+
+/**
+ * Un tire-fond de longueur `length` sous une marche d'épaisseur `tm` tient-il l'ancrage minimal
+ * (QUESTIONS A37 (1)) ? `auto` (`minAnchorageAuto`) : pénétration de la partie filetée
+ * (`lagThreadInBeam`) ≥ 6·d ; valeur saisie : ancrage (L − tm) ≥ `minAnchorage`.
+ */
+export function lagAnchorageHolds(lag: WoodCentralLagSpacing, length: Mm, tm: Mm): boolean {
+  return lagRetained(lag, length, tm) >= lag.minAnchorage - 1e-9;
+}
+
+/**
+ * Grandeur comparée à `minAnchorage` (QUESTIONS A37 (1)) : pénétration de la partie filetée en
+ * `auto`, ancrage (L − tm) pour une valeur saisie.
+ */
+export function lagRetained(lag: WoodCentralLagSpacing, length: Mm, tm: Mm): Mm {
+  const anchorage = Math.max(0, length - tm);
+  return lag.minAnchorageAuto
+    ? lagThreadInBeam(length, anchorage, lag.threadLengthOf).penetration
+    : anchorage;
+}
+
+/**
+ * Place d'un tire-fond sous une assise (au-dessus de l'âme de pied d'une platine, A35 (a)) :
+ * ancrage du plus court tire-fond admissible plus le bois sous la pointe `tipCover`, mm. Plus
+ * courte longueur L sur la grille des longueurs (multiples de `lengthStep`, 1 mm sans pas) telle
+ * que `lagAnchorageHolds` : en `auto` (QUESTIONS A37 (1)), min(b(L) ; L − tm) ≥ 6·d, cherchée
+ * jusqu'à `maxLength` ; valeur saisie : ancrage minimal arrondi au pas (L = ⌈tm + A_min⌉),
+ * comportement antérieur. Sans longueur admissible jusqu'à `maxLength` (aucun tire-fond ne
+ * tiendrait), repli sur le calcul de la valeur saisie avec A_min = `minAnchorage`.
+ */
+export function lagSeatClearance(
+  lag: WoodCentralLagSpacing,
+  options: {
+    readonly tm: Mm;
+    readonly lengthStep: Mm;
+    readonly maxLength: Mm;
+    readonly tipCover: Mm;
+  },
+): Mm {
+  const { tm, lengthStep, maxLength, tipCover } = options;
+  const least = tm + lag.minAnchorage;
+  // Ancrage minimal arrondi au pas supérieur (`roundUpTo`, longueurs commerciales).
+  const first = lengthStep > 0 ? Math.ceil(least / lengthStep - 1e-9) * lengthStep : least;
+  if (lag.minAnchorageAuto) {
+    const step = lengthStep > 0 ? lengthStep : 1;
+    for (let L = first; L <= maxLength + 1e-9; L += step) {
+      if (lagAnchorageHolds(lag, L, tm)) return L - tm + tipCover;
+    }
+  }
+  return first - tm + tipCover;
 }
 
 /** Tolérance de colinéarité et d'appartenance des intersections rayon / côté (mm). */

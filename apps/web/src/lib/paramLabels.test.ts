@@ -443,6 +443,60 @@ describe("suites du limon central (A32 a, A33, A34 du 2026-10-09)", () => {
     );
   });
 
+  it("décisions A37 : ancrage auto 6·d, longueur filetée, bois au perçage, zone tendue ◆", () => {
+    const quarter = woodFields("quarter-left");
+    // Ancrage minimal devenu `auto` (pénétration de la partie filetée ≥ 6·d, A37 (1)).
+    expect(at(quarter, "lagScrews.minAnchorage")).toMatchObject({
+      kind: "auto-number",
+      unit: "mm",
+      toValidateHint: true,
+      label:
+        "Ancrage minimal des tire-fonds dans la poutre (auto : partie filetée ≥ 6·d ; saisi : longueur sous la marche)",
+    });
+    expect(at(quarter, "lagScrews.threadLength")).toMatchObject({
+      kind: "auto-number",
+      unit: "mm",
+      toValidateHint: true,
+      label: "Longueur filetée des tire-fonds (b)",
+    });
+    expect(at(quarter, "lagScrews.holeWood")).toMatchObject({
+      kind: "auto-number",
+      unit: "mm",
+      toValidateHint: true,
+      label: "Bois minimal entre le filet d'un tire-fond et un perçage",
+    });
+    // Part décimale de h_res : saisie décimale, sans unité.
+    expect(at(quarter, "section.tensionZone")).toMatchObject({
+      kind: "number",
+      integer: false,
+      unit: "",
+      toValidateHint: true,
+      label:
+        "Zone tendue du décalage des aboutages (part du reste sous entaille, depuis la sous-face)",
+    });
+    expect(at(quarter, "section.minBoardLength")).toMatchObject({
+      unit: "mm",
+      toValidateHint: true,
+      label: "Longueur minimale d'une planche aboutée",
+    });
+    expect(at(quarter, "lagScrews.threadLength")?.group).toBe("lagScrews");
+    expect(at(quarter, "section.tensionZone")?.group).toBe("section");
+    const en = woodFields("quarter-left", "en");
+    expect(at(en, "lagScrews.minAnchorage")?.label).toBe(
+      "Minimum coach screw embedment in the beam (auto: threaded part ≥ 6·d; entered: length below the tread)",
+    );
+    expect(at(en, "lagScrews.threadLength")?.label).toBe("Coach screw thread length (b)");
+    expect(at(en, "lagScrews.holeWood")?.label).toBe(
+      "Minimum timber between a coach screw thread and a hole",
+    );
+    expect(at(en, "section.tensionZone")?.label).toBe(
+      "Tension zone for the stagger of finger joints (share of the remaining depth below the notch, from the underside)",
+    );
+    expect(at(en, "section.minBoardLength")?.label).toBe(
+      "Minimum length of a finger-jointed board",
+    );
+  });
+
   it("décisions A35 : pente de fil, tire-fonds, âme de pied, réduction de Hankinson ◆", () => {
     const f = woodFields("quarter-left");
     expect(at(f, "section.maxGrainSlope")).toMatchObject({

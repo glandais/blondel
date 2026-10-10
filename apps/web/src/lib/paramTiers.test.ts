@@ -295,6 +295,17 @@ describe("clés", () => {
     ]) {
       expect(e(p), p).toMatchObject({ tier: "workshop", toValidate: true });
     }
+    // Décisions A37 du 2026-10-10 : ancrage `auto` 6·d (1), longueur filetée (5), bois entre le
+    // filet et un perçage (17), zone tendue et longueur minimale des planches (4), (13) : Atelier ◆.
+    for (const p of [
+      "lagScrews.minAnchorage",
+      "lagScrews.threadLength",
+      "lagScrews.holeWood",
+      "section.tensionZone",
+      "section.minBoardLength",
+    ]) {
+      expect(e(p), p).toMatchObject({ tier: "workshop", toValidate: true });
+    }
     // Chaque chemin du schéma a son entrée (aucun repli Atelier implicite).
     const plugin = availableStructures().find((k) => k.kind === "wood-central")!;
     const defaults = plugin.paramsSchema.parse({});
@@ -693,7 +704,13 @@ describe("valeurs ◆ d'un projet", () => {
       expect(at(helical, auto, path), path).toBe(true);
     }
     // Aboutages des planches d'une couche (A36 (6)) : couches empilées seulement.
-    for (const path of ["section.jointOffset", "section.fingerLength"]) {
+    // Zone tendue et longueur minimale des planches (A37 (4), (13)) : de même.
+    for (const path of [
+      "section.jointOffset",
+      "section.fingerLength",
+      "section.tensionZone",
+      "section.minBoardLength",
+    ]) {
       expect(at(straight, auto, path), path).toBe(false);
       expect(at(quarter, mould, path), path).toBe(false);
       expect(at(quarter, auto, path), path).toBe(true);
@@ -736,6 +753,11 @@ describe("valeurs ◆ d'un projet", () => {
     expect(at(helical, none, "anchors.foot")).toBe(true);
     // Tire-fonds : toujours (marches basses possibles sur tout tracé).
     expect(at(straight, auto, "lagScrews.minAnchorage")).toBe(true);
+    // Longueur filetée et bois entre filet et perçage (A37 (5), (17)) : toujours.
+    for (const path of ["lagScrews.threadLength", "lagScrews.holeWood"]) {
+      expect(at(straight, auto, path), path).toBe(true);
+      expect(at(helical, auto, path), path).toBe(true);
+    }
   });
 
   it("caisson du limon central métal : borne basse de l'entraxe des entretoises (A32 a)", () => {

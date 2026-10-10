@@ -183,12 +183,21 @@ describe("capacités", () => {
 
 describe("contrôles selon le tracé", () => {
   it("droit : règles de moyens, entaille arrière, k_r = 1 sans cintrage, pas de plis minces", () => {
-    const { m, out } = run(fcbaStraight());
+    // Chêne `auto` (D30) : aucune colonne du tableau FCBA ne couvre un bois D30, tableau non
+    // exploitable et reste de repli, la raison dans le constat non évalué (QUESTIONS A37 (2),
+    // décision du 2026-10-10).
+    const auto = run(fcbaStraight());
+    const crAuto = byRule(auto.out.checks, "CREMAILLERE_REGLE_MOYENS");
+    expect(crAuto.map((c) => c.status)).toEqual(["non-evaluee"]);
+    expect(fr(crAuto[0]!.message)).toMatch(/aucune ne couvre un bois D30/);
+    expect(EN.t(crAuto[0]!.message)).toMatch(/neither covers D30 timber/);
+    expect(auto.beam!.residual).toBe(180);
+    // Classe C30 saisie : colonne C30 lue telle quelle.
+    const { m, out } = run(fcbaStraight({ strengthClass: "C30" }));
     expect(frList(m.errors)).toEqual([]);
     const cr = byRule(out.checks, "CREMAILLERE_REGLE_MOYENS");
     expect(cr.length).toBeGreaterThan(0);
     expect(cr.every((c) => c.status === "ok")).toBe(true);
-    // Chêne `auto` (D30) : colonne C30 du tableau FCBA (QUESTIONS A37 (2)).
     expect(fr(cr[0]!.message)).toContain("crémaillère centrale (C30, largeur 88 mm");
     expect(byRule(out.checks, "LIMON_ENTAILLE_MIN").length).toBeGreaterThan(0);
     const kr = byRule(out.checks, KR);
@@ -363,6 +372,10 @@ describe("valeurs auto, prédimensionnement, visserie", () => {
       // Pince axiale a1,CG = 10·d mesurée le long du fil (A36 (4), EN 1995-1-1 § 8.7.2 via
       // C §1.11 [88]).
       "lagScrews.threadEndDistance": 100,
+      // Ancrage minimal `auto` : pénétration de la partie filetée 6·d (A37 (1), EN 1995-1-1
+      // § 8.7.2 (3) via C §1.11 [88]) ; bois entre filet et perçage 0,5·d (A37 (17), [94]).
+      "lagScrews.minAnchorage": 60,
+      "lagScrews.holeWood": 5,
     });
     // Perçage de 13 (M12) : 60 et 48 ; tire-fond Ø12 : 84 et a3,c = 4·d = 48.
     const m12 = run(preset("straight", { bolts: { holeDiameter: 13 } })).out.autoValues!;
@@ -370,13 +383,22 @@ describe("valeurs auto, prédimensionnement, visserie", () => {
     expect(m12["bolts.edgeDistance"]).toBe(48);
     expect(m12["lagScrews.minSpacing"]).toBe(84);
     expect(m12["lagScrews.endDistance"]).toBe(48);
+    // Tire-fond Ø12 : 6·d = 72, 0,5·d = 6.
+    expect(m12["lagScrews.minAnchorage"]).toBe(72);
+    expect(m12["lagScrews.holeWood"]).toBe(6);
     // Valeurs imposées : non exposées.
     const fixed = run(
       preset("straight", {
         section: { residual: 200, lamellaThickness: 44 },
         notch: { rearDepth: 20 },
         bolts: { minSpacing: 40, edgeDistance: 30 },
-        lagScrews: { minSpacing: 80, endDistance: 90, threadEndDistance: 110 },
+        lagScrews: {
+          minSpacing: 80,
+          endDistance: 90,
+          threadEndDistance: 110,
+          minAnchorage: 50,
+          holeWood: 3,
+        },
       }),
     ).out;
     expect(fixed.autoValues).toBeUndefined();
@@ -415,7 +437,8 @@ describe("valeurs auto, prédimensionnement, visserie", () => {
     expect(
       frList(straight.notes).some((n) => /classe D30 : classe de l'essence feuillue/.test(n)),
     ).toBe(true);
-    expect(frList(straight.notes).join(" ")).not.toMatch(/D40/);
+    // Aucune hypothèse D40 (la raison du repli FCBA cite la colonne « feuillus ≥ D40 »).
+    expect(frList(straight.notes).join(" ")).not.toMatch(/classe D40/);
     // D30 : γ_M du bois massif (1,3), f_m,k = 30 ⇒ f_d = 0,8 × 30 / 1,3 ; E = 11 000 MPa.
     expect(straight.precheck!.beams[0]!.result.design).toBeCloseTo((0.8 * 30) / 1.3, 9);
     const gl = run(preset("straight", { material: "wood-glulam" })).out;

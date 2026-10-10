@@ -148,6 +148,8 @@ En français, rien ne change : la hauteur de marche s'écrit déjà h (h1 pour l
 | Pièces composantes                    | Component parts                     | —                       | Inspecteur Pièce, planche → couche → LC1 (A36 (9)) |
 | Joint de colle                        | Glue line                           | —                       | Couches empilées, écarté des perçages (A36 (12)) |
 | Pénétration de la partie filetée      | Pointside penetration of the threaded part | —                | Tire-fonds, 6·d (EC5 § 8.7.2 (3), A37 (1))       |
+| Zone tendue                           | Tension zone                        | —                       | Décalage des aboutages ([85] § 10.4, A37 (4))    |
+| Longueur filetée (b)                  | Thread length                       | —                       | Tire-fonds DIN 571 ([78][93], A37 (5))           |
 | Âme de pied prolongée                 | Extended foot web                   | —                       | Platine à âme noyée (A35 (a))                    |
 | Bois massif                           | Solid timber                        | Solid wood / lumber     |                                                  |
 | Section, équarrissage                 | Section                             | —                       |                                                  |

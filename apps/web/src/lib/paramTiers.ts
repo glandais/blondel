@@ -371,6 +371,10 @@ const STRUCTURE_BY_KIND: Readonly<Record<string, Readonly<Record<string, ParamTi
     // Aboutage à entures des planches d'une couche et décalage des joints (QUESTIONS A36 (6)) ◆.
     "section.jointOffset": workshop(S),
     "section.fingerLength": workshop(S),
+    // Zone tendue du décalage des aboutages et longueur minimale d'une planche (QUESTIONS A37
+    // (4), (13) et (14)) ◆.
+    "section.tensionZone": workshop(S),
+    "section.minBoardLength": workshop(S),
     notch: workshop(S),
     "notch.rearDepth": design(S, [more(5)]),
     bolts: workshop(S),
@@ -391,6 +395,10 @@ const STRUCTURE_BY_KIND: Readonly<Record<string, Readonly<Record<string, ParamTi
     "lagScrews.endDistance": workshop(S),
     // Pince axiale a1,CG le long du fil (QUESTIONS A36 (4)) ◆.
     "lagScrews.threadEndDistance": workshop(S),
+    // Longueur filetée et bois entre le filet et un perçage horizontal (QUESTIONS A37 (5),
+    // (17)) ◆.
+    "lagScrews.threadLength": workshop(S),
+    "lagScrews.holeWood": workshop(S),
     anchors: workshop(S),
     "anchors.foot": design(S, [more(5)]),
     "anchors.head": design(S, [more(5)]),
@@ -662,7 +670,9 @@ export function structureParamApplies(
       leaf === "dressingAllowance" ||
       leaf === "maxGrainSlope" ||
       leaf === "jointOffset" ||
-      leaf === "fingerLength"
+      leaf === "fingerLength" ||
+      leaf === "tensionZone" ||
+      leaf === "minBoardLength"
     ) {
       return curvedMethodOf(project, params) === "stacked";
     }

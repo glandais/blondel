@@ -210,9 +210,11 @@ export const WOOD_CLASS_PROPERTIES: Readonly<Record<WoodClass, WoodClassProperti
  * **D30**, en massif comme en lamellé-collé, dans tous les plugins. D30 = classe visuelle 1 du
  * chêne (NF B 52-001-1 non lue, via la fiche FNB C10, C §1.11 [82] ; le catalogue FCBA [90]
  * classe le chêne en D18 / D24 / D30, jamais D40) ; hêtre et frêne par analogie, **aucune
- * source** : à valider (QUESTIONS A37). La classe FCBA `auto` des tables de crémaillère et de
- * reste sous entaille d'une essence feuillue (`woodCut`, `WOOD_CENTRAL_AUTO_CLASS`) lit la
- * colonne C30, de même f_m,k que D30, et non plus « feuillus ≥ D40 » (QUESTIONS A37 (2)).
+ * source** : à valider (QUESTIONS A37 (3)). Les tableaux FCBA de crémaillère et de reste sous
+ * entaille n'ont pas de colonne pour un bois D30 (« résineux ≥ C30 », E_0,mean 12 000 MPa ;
+ * « feuillus ≥ D40 », f_m,k 40 MPa ; C §1.4 [1]) : la classe FCBA `auto` d'une essence feuillue
+ * (`woodCut`, `WOOD_CENTRAL_AUTO_CLASS`) les déclare non exploitables, reste de repli
+ * (QUESTIONS A37 (2), décision du 2026-10-10).
  */
 export const HARDWOOD_WOOD_CLASS: Readonly<Partial<Record<string, WoodClass>>> = {
   "wood-oak": "D30",

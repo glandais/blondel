@@ -26,46 +26,78 @@ const inDomain = makeSteppingProject({ width: 900, legs: [3200], floorToFloor: 2
 const outOfDomain = makeSteppingProject({ width: 900, legs: [3780], floorToFloor: 2700 });
 
 describe("wood-cut (crémaillères)", () => {
-  it("dans le domaine du tableau FCBA : chêne `auto` (D30) lu en C30 (44 mm → 163), remarque", () => {
-    // Classe `auto` du chêne : D30 (QUESTIONS A36 (1)) ; colonne C30, même f_m,k, plutôt que
-    // « feuillus ≥ D40 » (162), non sécuritaire pour un bois D30 (QUESTIONS A37 (2)).
-    const { m, r } = cut(inDomain);
-    expect(m.errors).toEqual([]);
-    expect(r.fcbaUnusable).toBeUndefined();
-    expect(r.carriages.map((c) => c.part.mark)).toEqual(["CI1", "CE1"]);
-    for (const c of r.carriages) expect(c.residual).toBeCloseTo(163, 6);
-    const res = m.compliance.results.filter((x) => x.ruleId === "CREMAILLERE_REGLE_MOYENS");
-    expect(res).toHaveLength(1);
-    expect(res[0]!.status).toBe("ok");
-    expect(res[0]!.min).toBe(163);
-    expect(r.output.notes.map((n) => n.key)).toContain("structure.woodCut.note.fcbaHardwoodC30");
+  it("feuillu `auto` (D30) : tableau FCBA non exploitable, repli de 180 mm et raison (A37 (2))", () => {
+    // Classe `auto` du chêne, du hêtre et du frêne : D30 (QUESTIONS A36 (1)) ; le tableau n'a que
+    // les colonnes « résineux ≥ C30 » et « feuillus ≥ D40 », aucune ne couvre un bois D30 :
+    // tableau déclaré non exploitable, reste de repli (QUESTIONS A37 (2), décision du
+    // 2026-10-10 ; la colonne C30 lue jusque-là donnait 163 mm à 44 mm d'épaisseur).
+    for (const material of ["wood-oak", "wood-beech", "wood-ash"] as const) {
+      const { m, r } = cut(inDomain, { material });
+      expect(m.errors).toEqual([]);
+      expect(r.fcbaUnusable?.key).toBe("structure.woodCut.fcba.hardwoodD30");
+      expect(r.carriages.map((c) => c.part.mark)).toEqual(["CI1", "CE1"]);
+      expect(r.residual).toBe(180);
+      for (const c of r.carriages) expect(c.residual).toBeCloseTo(180, 6);
+      const res = m.compliance.results.filter((x) => x.ruleId === "CREMAILLERE_REGLE_MOYENS");
+      expect(res.map((x) => x.status)).toEqual(["non-evaluee"]);
+      // Remarque de synthèse : repli expliqué par la classe D30 (fr et en).
+      const note = r.output.notes.find((n) => n.key === "structure.woodCut.summary.fallback")!;
+      expect(fr(note)).toMatch(/aucune ne couvre un bois D30/);
+      expect(translatorFor("en").t(note)).toMatch(/neither covers D30 timber/);
+    }
   });
 
-  it("classe D40 saisie : colonne D40 (44 mm → 162), sans la remarque de l'automatique", () => {
-    const { r } = cut(inDomain, { strengthClass: "D40" });
-    for (const c of r.carriages) expect(c.residual).toBeCloseTo(162, 6);
-    expect(r.output.notes.map((n) => n.key)).not.toContain(
-      "structure.woodCut.note.fcbaHardwoodC30",
-    );
+  it("classes C30 et D40 saisies : colonnes lues telles quelles (44 mm → 163 et 162)", () => {
+    for (const [strengthClass, expected] of [
+      ["C30", 163],
+      ["D40", 162],
+    ] as const) {
+      const { m, r } = cut(inDomain, { strengthClass });
+      expect(r.fcbaUnusable).toBeUndefined();
+      for (const c of r.carriages) expect(c.residual).toBeCloseTo(expected, 6);
+      const res = m.compliance.results.filter((x) => x.ruleId === "CREMAILLERE_REGLE_MOYENS");
+      expect(res[0]!.status).toBe("ok");
+      expect(res[0]!.min).toBe(expected);
+    }
   });
 
-  it("pin `auto` : colonne C30, sans la remarque des feuillus", () => {
+  it("pin `auto` : colonne C30 (44 mm → 163)", () => {
     const { r } = cut(inDomain, { material: "wood-pine" });
+    expect(r.fcbaUnusable).toBeUndefined();
     for (const c of r.carriages) expect(c.residual).toBeCloseTo(163, 6);
-    expect(r.output.notes.map((n) => n.key)).not.toContain(
-      "structure.woodCut.note.fcbaHardwoodC30",
-    );
   });
 
   it("reste saisi trop faible : violation CREMAILLERE_REGLE_MOYENS", () => {
-    const { m } = cut(inDomain, { residual: 120 });
+    const { m } = cut(inDomain, { residual: 120, strengthClass: "C30" });
     const res = m.compliance.results.filter((x) => x.ruleId === "CREMAILLERE_REGLE_MOYENS");
     expect(res.every((x) => x.status === "violation")).toBe(true);
     expect(res[0]!.measured).toBeCloseTo(120, 6);
   });
 
+  it("feuillu `auto` (D30), reste saisi trop faible : non évaluée, raison D30 (A37 (2), relecture)", () => {
+    // Effet de bord voulu de A37 (2) : sans colonne pour un bois D30, le reste saisi d'une
+    // crémaillère en chêne, hêtre ou frêne (classe `auto`) n'est plus contrôlé (QUESTIONS A38).
+    const { m, r } = cut(inDomain, { material: "wood-oak", residual: 120 });
+    expect(r.fcbaUnusable?.key).toBe("structure.woodCut.fcba.hardwoodD30");
+    for (const c of r.carriages) expect(c.residual).toBeCloseTo(120, 6);
+    const res = m.compliance.results.filter((x) => x.ruleId === "CREMAILLERE_REGLE_MOYENS");
+    expect(res.map((x) => x.status)).toEqual(["non-evaluee"]);
+  });
+
+  it("feuillu `auto` hors du domaine publié : les deux raisons sont citées (relecture A37 (2))", () => {
+    const { m, r } = cut(outOfDomain, { material: "wood-oak" });
+    const reason = fr(r.fcbaUnusable);
+    expect(reason).toMatch(/aucune ne couvre un bois D30/);
+    expect(reason).toMatch(/projection horizontale 3\d{3} mm > 3\d{3} mm/);
+    expect(translatorFor("en").t(r.fcbaUnusable!)).toMatch(/horizontal projection/);
+    const res = m.compliance.results.filter((x) => x.ruleId === "CREMAILLERE_REGLE_MOYENS");
+    expect(res.map((x) => x.status)).toEqual(["non-evaluee"]);
+    expect(r.residual).toBe(180);
+  });
+
   it("hors du domaine publié : non évaluée, reste de repli signalé", () => {
-    const { m, r } = cut(outOfDomain);
+    // Classe saisie : la raison du repli est le domaine de l'exemple, pas la classe.
+    const { m, r } = cut(outOfDomain, { strengthClass: "C30" });
     expect(fr(r.fcbaUnusable)).toMatch(/projection horizontale/);
     const res = m.compliance.results.filter((x) => x.ruleId === "CREMAILLERE_REGLE_MOYENS");
     expect(res.map((x) => x.status)).toEqual(["non-evaluee"]);

@@ -193,22 +193,59 @@ describe("exemples j5c : limon central bois", () => {
     },
   );
 
-  it("droit : marches 1 et 2 fixées par tire-fonds, M1 avec ses deux tire-fonds (A34 (a), A36 (4) (10))", () => {
+  it("droit : M2 fixée par tire-fonds, M1 sans tire-fond faute de 6·d de partie filetée (A37 (1) (5))", () => {
     const m = buildModel(load(J5C_WOOD_STRAIGHT), { memo: false });
-    // Écart voulu (A36 (4) (10)) : boulons du sabot de pied SP1 regroupés dans ses 100 premiers
-    // millimètres (σ ≈ 49 et 109), a1,CG mesurée le long du fil depuis le centre de gravité de la
-    // partie filetée : M1 reçoit ses deux tire-fonds, raccourcis à 130 mm (ancrage 50 mm), et ne
-    // garde plus de constat FAB_LIMON_CENTRAL_BOIS_BOULONS.
-    expect(violations(m, "FAB_LIMON_CENTRAL_BOIS_BOULONS")).toEqual([]);
+    // Écart voulu (QUESTIONS A37 (1) et (5), décisions du 2026-10-10) : ancrage minimal `auto` =
+    // pénétration de la partie filetée ≥ 6·d = 60 mm, centre de gravité de la seule partie
+    // filetée (b = ⌊20 + L / 3⌋). Sur M1 (marche de 80 mm), le tire-fond de 140 mm (b = 66,
+    // ancrage 60) laisse 99 mm le long du fil jusqu'à la coupe au sol pour a1,CG = 100 mm ; celui
+    // de 130 mm ne pénètre que de 50 mm : M1 perd ses deux tire-fonds, avec l'avertissement
+    // FAB_LIMON_CENTRAL_BOIS_BOULONS (A36 : deux tire-fonds de 130 mm et un constat de
+    // pénétration).
+    const bolts = violations(m, "FAB_LIMON_CENTRAL_BOIS_BOULONS");
+    expect(
+      bolts.map((r) => [r.location.kind === "part" && r.location.treadNumber, r.message.key]),
+    ).toEqual([[1, "structure.woodCentral.check.fixings.missingLagThreadAuto"]]);
+    expect(bolts[0]!.severity).toBe("avertissement");
+    expect(bolts[0]!.measured).toBe(0);
     const lc1 = m.parts.find((p) => p.id === "wood-central-beam")!;
     const lags = (lc1.fixings ?? []).filter((f) => f.joint === "treadBeamLagScrewed");
-    expect(new Set(lags.map((f) => f.with?.[0]))).toEqual(new Set(["tread-1", "tread-2"]));
-    const m1 = lags.filter((f) => f.with?.[0] === "tread-1");
+    expect(new Set(lags.map((f) => f.with?.[0]))).toEqual(new Set(["tread-2"]));
+    expect(lags.map((f) => f.length).sort()).toEqual([140, 160]);
+    expect((lc1.fixings ?? []).some((f) => f.with?.[0] === "tread-1")).toBe(false);
+    // Plus de constat de pénétration : aucun tire-fond posé sous 6·d en `auto`.
+    expect(
+      violations(m, "FAB_LIMON_CENTRAL_BOIS_PINCES").filter(
+        (r) => r.message.key === "structure.woodCentral.check.spacing.lagPenetration",
+      ),
+    ).toEqual([]);
+  });
+
+  it("droit, ancrage minimal saisi à 50 mm (rétrocompatibilité, A37 (1)) : M1 garde ses tire-fonds de 130 mm et le constat de pénétration", () => {
+    const p = load(J5C_WOOD_STRAIGHT);
+    const st = p.stair.structure;
+    const params = (st.params ?? {}) as Record<string, Record<string, unknown> | undefined>;
+    const m = buildModel(
+      {
+        ...p,
+        stair: {
+          ...p.stair,
+          structure: {
+            ...st,
+            params: { ...params, lagScrews: { ...(params["lagScrews"] ?? {}), minAnchorage: 50 } },
+          } as typeof st,
+        },
+      },
+      { memo: false },
+    );
+    expect(violations(m, "FAB_LIMON_CENTRAL_BOIS_BOULONS")).toEqual([]);
+    const lc1 = m.parts.find((q) => q.id === "wood-central-beam")!;
+    const m1 = (lc1.fixings ?? []).filter(
+      (f) => f.joint === "treadBeamLagScrewed" && f.with?.[0] === "tread-1",
+    );
     expect(m1.reduce((a, f) => a + f.points, 0)).toBe(2);
     expect(m1.map((f) => f.length)).toEqual([130]);
-    // Ancrage de 50 mm (`lagScrews.minAnchorage`, [78]) sous la pénétration de 6·d = 60 mm de
-    // l'EC5 § 8.7.2 (3) ([88]) : constat d'avertissement sur M1, sans retirer ses tire-fonds
-    // (QUESTIONS A37 (1), à trancher).
+    // Partie filetée de 50 mm (b = 63 > ancrage 50) sous 6·d = 60 mm : constat d'avertissement.
     const penetration = violations(m, "FAB_LIMON_CENTRAL_BOIS_PINCES").filter(
       (r) => r.message.key === "structure.woodCentral.check.spacing.lagPenetration",
     );
@@ -220,10 +257,8 @@ describe("exemples j5c : limon central bois", () => {
 
   it("droit : 3 couches droites, boulon au milieu de la couche centrale, pinces tenues (A35 (f))", () => {
     const m = buildModel(load(J5C_WOOD_STRAIGHT), { memo: false });
-    // Seul écart : la pénétration de la partie filetée des tire-fonds de M1 (cas ci-dessus).
-    expect(violations(m, "FAB_LIMON_CENTRAL_BOIS_PINCES").map((r) => r.message.key)).toEqual([
-      "structure.woodCentral.check.spacing.lagPenetration",
-    ]);
+    // Ancrage `auto` (A37 (1)) : plus aucun écart aux pinces.
+    expect(violations(m, "FAB_LIMON_CENTRAL_BOIS_PINCES")).toEqual([]);
     const lc1 = m.parts.find((p) => p.id === "wood-central-beam")!;
     expect(fr(lc1.section!)).toMatch(/\b3 lamelles\b/);
   });
@@ -269,20 +304,16 @@ describe("exemples j5c : limon central bois", () => {
     },
   );
 
-  it("quart tournant : broche de tête AT1 sur l'assise, joint de colle au droit du perçage signalé (A37 (15))", () => {
+  it("quart tournant : broche de tête AT1 au milieu d'une couche, aucun joint de colle au droit d'un perçage (A37 (15))", () => {
+    // Écart voulu (QUESTIONS A37 (15), décision du 2026-10-10) : la broche de tête AT1, sur
+    // l'assise 2 260, est placée au milieu d'une couche comme les broches de pied ; plus de
+    // constat FAB_LIMON_CENTRAL_BOIS_JOINT_PERCAGE (joint à 0,4 mm de son centre avant).
     const m = buildModel(load(J5C_WOOD_QUARTER), { memo: false });
     const holes = results(m, "FAB_LIMON_CENTRAL_BOIS_JOINT_PERCAGE");
     expect(holes.length).toBeGreaterThan(1);
-    const bad = holes.filter((r) => r.status === "violation");
-    expect(bad).toHaveLength(1);
-    expect(bad[0]!.severity).toBe("avertissement");
-    expect(bad[0]!.message.params?.["mark"]).toBe("AT1");
-    expect(bad[0]!.measured).toBeCloseTo(0.4, 1);
-    expect(bad[0]!.min).toBeGreaterThan(bad[0]!.measured!);
-    // Broches de pied AP1 : tenues.
-    expect(
-      holes.filter((r) => r.message.params?.["mark"] === "AP1").every((r) => r.status === "ok"),
-    ).toBe(true);
+    expect(holes.filter((r) => r.status === "violation")).toEqual([]);
+    expect(holes.some((r) => r.message.params?.["mark"] === "AT1")).toBe(true);
+    expect(holes.some((r) => r.message.params?.["mark"] === "AP1")).toBe(true);
   });
 
   it("hélicoïdal : couches composées de plusieurs planches LC1-k.j, sans débit indisponible (A35 (h))", () => {
@@ -307,17 +338,39 @@ describe("exemples j5c : limon central bois", () => {
     expect(violations(m, "FAB_DEBIT_DISPONIBLE")).toEqual([]);
   });
 
-  it("droit : couches collées droites, tableau FCBA lu à b / 2, sans plis minces, EXC1", () => {
+  it("droit : couches collées droites, tableau FCBA non exploitable pour le chêne D30, sans plis minces, EXC1", () => {
     const m = buildModel(load(J5C_WOOD_STRAIGHT), { memo: false });
+    // Chêne en classe `auto` (D30, A36 (1)) : aucune colonne du tableau FCBA ne couvre un bois
+    // D30 ; tableau déclaré non exploitable, reste de repli de 180 mm (QUESTIONS A37 (2),
+    // décision du 2026-10-10 ; 163 mm lus en colonne C30 avant), raison dans le constat et dans
+    // la remarque de synthèse.
     const cr = results(m, "CREMAILLERE_REGLE_MOYENS");
-    expect(cr.length).toBeGreaterThan(0);
-    expect(cr.every((r) => r.status === "ok")).toBe(true);
-    // Chêne en classe `auto` (D30, A36 (1)) : colonne C30 du tableau FCBA, de même f_m,k, et
-    // non plus « feuillus ≥ D40 » (QUESTIONS A37 (2), à valider), avec sa remarque.
-    expect(m.autoValues?.["stair.structure.params.section.residual"]).toBe(
+    expect(cr.map((r) => r.status)).toEqual(["non-evaluee"]);
+    expect(fr(cr[0]!.message)).toMatch(/aucune ne couvre un bois D30/);
+    expect(m.autoValues?.["stair.structure.params.section.residual"]).toBe(180);
+    expect(frList(m.notes ?? []).join(" ")).toMatch(
+      /reste sous entaille 180 mm \(valeur de repli à valider — tableau FCBA non exploitable : essence feuillue en classe automatique D30/,
+    );
+    // Classe C30 saisie : colonne C30 lue à b / 2, comme avant A37.
+    const p = load(J5C_WOOD_STRAIGHT);
+    const st = p.stair.structure;
+    const c30 = buildModel(
+      {
+        ...p,
+        stair: {
+          ...p.stair,
+          structure: {
+            ...st,
+            params: { ...(st.params ?? {}), strengthClass: "C30" },
+          } as typeof st,
+        },
+      },
+      { memo: false },
+    );
+    expect(results(c30, "CREMAILLERE_REGLE_MOYENS").every((r) => r.status === "ok")).toBe(true);
+    expect(c30.autoValues?.["stair.structure.params.section.residual"]).toBe(
       requiredCentralResidual(fcbaTable(), "C30", 88),
     );
-    expect((m.notes ?? []).map((n) => n.key)).toContain("structure.woodCut.note.fcbaHardwoodC30");
     expect(results(m, WOOD_CENTRAL_RULES.thinPlies.id)).toEqual([]);
     expect(m.executionClass).toBe("EXC1");
   });

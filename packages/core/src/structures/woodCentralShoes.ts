@@ -98,10 +98,11 @@ export interface ShoeBeamGeometry {
   readonly topAt?: (s: Mm) => Mm;
   /**
    * Hauteur à laisser libre sous chaque assise au-dessus de l'âme de pied d'une platine à âme
-   * noyée (QUESTIONS A35 (a)) : place d'un tire-fond de marche, ancrage minimal arrondi au pas
-   * de longueur (`roundUpTo(épaisseur de marche + lagScrews.minAnchorage, bolts.lengthStep) −
-   * épaisseur de marche`) plus `lagScrews.tipCover`, mm. Absent : `wood.minCheek` seul. La
-   * platine retient max(`wood.minCheek`, `seatClearance`) puis le jeu d'atelier.
+   * noyée (QUESTIONS A35 (a)) : place d'un tire-fond de marche, ancrage du plus court tire-fond
+   * admissible sur la grille des longueurs (`lagSeatClearance` : en `auto`, partie filetée
+   * pénétrant de 6·d au moins, QUESTIONS A37 (1) ; ancrage minimal saisi arrondi au pas sinon)
+   * plus `lagScrews.tipCover`, mm. Absent : `wood.minCheek` seul. La platine retient
+   * max(`wood.minCheek`, `seatClearance`) puis le jeu d'atelier.
    */
   readonly seatClearance?: Mm;
   /**
@@ -111,6 +112,21 @@ export interface ShoeBeamGeometry {
    * pied non contrôlée dans le bois (seule la pince `holeEdgeDistance` de la tôle).
    */
   readonly endDistanceAlongGrain?: (s: Mm, z: Mm) => Mm;
+  /**
+   * Altitudes des assises (dessous des marches), croissantes, mm : niveaux où sont calés les
+   * joints de colle des couches empilées (QUESTIONS A35 (g)). Absentes : lues sur `topAt`.
+   */
+  readonly seatLevels?: readonly Mm[];
+  /**
+   * Couches empilées seulement (filière `stacked`, QUESTIONS A37 (8) et (15), décisions du
+   * 2026-10-10) : niveaux des joints de colle (bornes des couches, base et sommet compris,
+   * croissants) que l'empilement retiendrait avec ces perçages horizontaux — même calcul que
+   * `buildStackedLayers` (`stackedJointLevels`, `layerBounds`) : une broche `centered` y est au
+   * milieu de sa couche, aucun joint à moins du rayon + jeu d'un perçage quand c'est possible.
+   * Les platines s'en servent pour arrêter chaque palier du logement de l'âme de pied sur un
+   * joint et placer les broches de tête au milieu d'une couche. Absente : autre filière.
+   */
+  readonly stackedJoints?: (holes: readonly ShoeBeamHole[]) => readonly Mm[];
 }
 
 export interface WoodCentralShoesInput {
@@ -129,6 +145,20 @@ export interface ShoeBeamHole {
   readonly sigma: Mm;
   readonly z: Mm;
   readonly diameter: Mm;
+  /**
+   * Broche à placer au milieu de sa couche dans un empilement (QUESTIONS A36 (12) pour les
+   * broches de pied, A37 (15) pour celles de tête). Absent : vrai pour une broche de l'âme de
+   * pied (`AP1`), faux sinon (comportement antérieur à A37).
+   */
+  readonly centered?: boolean;
+  /**
+   * Broche d'âme logée en couches empilées : distance de son centre au bord de l'âme arrêtée sur
+   * les joints de colle (pince de perçage de l'âme, `anchors.holeEdgeDistance`, QUESTIONS A37 (8)).
+   * L'empilement garde alors, de préférence, ses joints à au moins cette distance plus le jeu
+   * d'atelier du centre (couche centrée assez épaisse pour que l'âme arrêtée au joint du dessus
+   * garde la pince) ; abandonnée si l'intervalle ne le permet pas. Absent : rayon + jeu seuls.
+   */
+  readonly webEdge?: Mm;
 }
 
 export interface WoodCentralShoesResult {
