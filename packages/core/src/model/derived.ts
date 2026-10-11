@@ -19,6 +19,7 @@ import type { PrecheckedBeam } from "../precheck/checks.js";
 import type { StairLoads } from "../precheck/loads.js";
 import type { Fastener, FastenerJointKind } from "./fasteners.js";
 import type { Curve2, Frame3, Mm, Polygon2, Rad, Shape2, Vec2, Vec3 } from "./primitives.js";
+import type { WallJoint, WellJoint } from "./project.js";
 
 // ------------------------------------------------------------------ Étape 2 : tracé
 
@@ -40,6 +41,48 @@ export interface TurnZone {
    * la courbe `Layout.outer`). Absent : `Layout.innerSide`.
    */
   readonly collarSide?: "left" | "right";
+  /**
+   * Angle signé de la jonction (rad, positif = à gauche en montant : +π/2 pour un tournant à
+   * gauche, −π/2 à droite). Ajout rétrocompatible (facultatif), rendu par le moteur de cage
+   * (ADR-0010) ; absent : ±π/2 selon `direction`.
+   */
+  readonly angle?: Rad;
+  /** Raccord côté jour de la jonction (cage, ADR-0010). Absent : non renseigné. */
+  readonly well?: WellJoint;
+  /** Raccord côté mur de la jonction (cage, ADR-0010). Absent : angle vif. */
+  readonly wall?: WallJoint;
+}
+
+/** Ligne transversale d'un tronçon (départ ou arrivée), du bord gauche au bord droit, repère monde. */
+export interface LayoutSectionLine {
+  readonly left: Vec2;
+  readonly right: Vec2;
+}
+
+/**
+ * Tronçon d'un tracé de cage (ADR-0010) : partie droite comprise entre la jonction d'entrée et
+ * la jonction de sortie (hors carrés d'angle E × E d'un tournant à ±90°), repère monde.
+ */
+export interface LayoutSection {
+  /** Indice du tronçon (0 = premier). */
+  readonly index: number;
+  /** Axe du tronçon (droit seulement au lot 1). */
+  readonly kind: "straight" | "arc";
+  /** Lignes de départ et d'arrivée de la partie droite. */
+  readonly start: LayoutSectionLine;
+  readonly end: LayoutSectionLine;
+  /** Largeurs utiles au départ et à l'arrivée. */
+  readonly widthStart: Mm;
+  readonly widthEnd: Mm;
+  /** Côté du jour de la jonction d'entrée et de la jonction de sortie (absent sans jonction). */
+  readonly startWellSide?: "left" | "right";
+  readonly endWellSide?: "left" | "right";
+  /**
+   * Intervalle d'abscisse sur Γ entre les zones tournantes voisines (`TurnZone.sEnd` de la
+   * jonction d'entrée, sinon 0 ; `TurnZone.sStart` de la jonction de sortie, sinon longueur de Γ).
+   */
+  readonly sStart: Mm;
+  readonly sEnd: Mm;
 }
 
 /**
@@ -163,6 +206,11 @@ export interface Layout {
    * du jour central dans `footprintHoles`).
    */
   readonly helical?: HelicalLayout;
+  /**
+   * Tronçons du tracé (moteur de cage, ADR-0010), dans l'ordre de la montée. Ajout
+   * rétrocompatible : absent pour le moteur à volées et l'hélicoïdal.
+   */
+  readonly sections?: readonly LayoutSection[];
 }
 
 // ------------------------------------------------------------------ Étape 3 : découpage

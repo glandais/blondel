@@ -25,6 +25,7 @@ import { wallCover } from "../guards/sides.js";
 import { GuardsSpecSchema, type GuardSideMode } from "../guards/spec.js";
 import type { Mm, Vec2 } from "../model/primitives.js";
 import type { Project, WalklineSide } from "../model/project.js";
+import { resolveStraightLengths } from "./cage/section.js";
 import { resolveLegLengths } from "./resolve.js";
 
 /** Nature d'un côté d'escalier droit pour le choix du bord de mesure. */
@@ -112,14 +113,23 @@ export function resolveWalklineSide(project: Project, length: Mm): WalklineSide 
  * escalier droit lit les murs du site et les garde-corps, absents des autres clés de l'étape.
  * Rend le bord automatique (valeur primitive, comparée par valeur) d'un escalier droit sans
  * choix explicite, `undefined` sinon (tournants, hélicoïdal, choix explicite, tracé invalide :
- * `computeLayout` rendra alors l'erreur).
+ * `computeLayout` rendra alors l'erreur). Escalier droit : une volée sans tournant, ou une cage
+ * d'un seul tronçon droit sans jonction (même bord automatique, `layout/cage/cage.ts`).
  */
 export function autoWalklineSideKey(project: Project): WalklineSide | undefined {
   const spec = project.stair.layout;
-  if (spec.kind === "helical" || spec.turns.length > 0 || spec.legs.length !== 1) return undefined;
+  if (spec.kind === "helical") return undefined;
   if (project.stair.walkline.side !== undefined) return undefined;
+  if (spec.kind === "cage") {
+    if (spec.sections.length !== 1 || spec.junctions.length !== 0) return undefined;
+    if (spec.sections[0]!.axis.kind !== "straight") return undefined;
+  } else if (spec.turns.length > 0 || spec.legs.length !== 1) return undefined;
   try {
-    return autoWalklineSide(project, resolveLegLengths(project)[0]!);
+    const length =
+      spec.kind === "cage"
+        ? resolveStraightLengths(project, spec)[0]!
+        : resolveLegLengths(project)[0]!;
+    return autoWalklineSide(project, length);
   } catch {
     return undefined;
   }

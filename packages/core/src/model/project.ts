@@ -413,9 +413,11 @@ export type WallJoint = z.infer<typeof WallJointSchema>;
 
 /**
  * Axe d'un tronçon : droit, de longueur `length` (mm, `auto` seulement pour une cage d'un seul
- * tronçon : longueur déduite du giron cible, comme une volée droite ; convention de mesure fixée
- * par le moteur au lot 1, `flightsToCage`), ou en arc de rayon `radius` et de balayage `sweep`
- * (degrés signés, positif = trigonométrique vu de dessus, 0 < |sweep| < 360).
+ * tronçon : longueur déduite du giron cible, comme une volée droite ; `length` = partie droite
+ * hors carrés d'angle E × E des jonctions voisines, mesurée sur le bord d'ancrage, une volée L à
+ * k tournants voisins valant L − k·E : amendement 1b d'ADR-0010, `layout/cage/section.ts`, à
+ * valider, question F11), ou en arc de rayon `radius` et de balayage `sweep` (degrés signés,
+ * positif = trigonométrique vu de dessus, 0 < |sweep| < 360).
  */
 export const CageAxisSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("straight"), length: z.union([mmNonNeg, z.literal("auto")]) }),
@@ -426,8 +428,8 @@ export type CageAxis = z.infer<typeof CageAxisSchema>;
 /**
  * Tronçon de cage : axe, largeur utile `width` au départ et `widthEnd` à l'arrivée (largeur
  * variable, trapèze, axe droit seulement ; absente : `width`). `anchor` : bord (ou milieu) que
- * suit l'axe du tronçon, celui qui reste droit quand la largeur varie ; absent : choix du moteur
- * (lot 1).
+ * suit l'axe du tronçon, celui qui reste droit quand la largeur varie ; absent : `center`
+ * (amendement 1b d'ADR-0010, à valider, question F11), sans effet à largeur constante.
  */
 export const CageSectionSchema = z.object({
   axis: CageAxisSchema,

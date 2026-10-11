@@ -10,7 +10,7 @@
  * autrement (assistant, énumération de variantes).
  */
 import type { Mm } from "../model/primitives.js";
-import type { Project } from "../model/project.js";
+import type { Project, WalklineSpec } from "../model/project.js";
 import { LF_WIDE_THRESHOLD } from "../rules/params.js";
 import { getRule } from "../rules/table.js";
 import { MessageError, msg } from "@blondel/i18n";
@@ -42,8 +42,15 @@ const DTU_WIDE_OFFSET: Mm = (() => {
  * @throws LayoutError si d_f n'est pas strictement comprise entre 0 et E.
  */
 export function resolveWalklineOffset(project: Project): Mm {
-  const width = project.stair.layout.width;
-  const spec = project.stair.walkline;
+  return walklineOffsetFor(project.stair.walkline, project.stair.layout.width);
+}
+
+/**
+ * d_f pour un emmarchement `width` donné (même règle que `resolveWalklineOffset`) : partagé avec
+ * le moteur de cage (`layout/cage/`), qui lit la largeur des tronçons et non `layout.width`.
+ * @throws LayoutError si d_f n'est pas strictement comprise entre 0 et `width`.
+ */
+export function walklineOffsetFor(spec: WalklineSpec, width: Mm): Mm {
   const d =
     spec.mode === "fromInner"
       ? spec.distance

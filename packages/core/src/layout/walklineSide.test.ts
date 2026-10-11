@@ -6,7 +6,13 @@ import { buildModel } from "../pipeline/build.js";
 import { ProjectSchema, type Project, type Wall } from "../model/project.js";
 import { computeLayout } from "./layout.js";
 import { makeProject } from "./test-helpers.js";
-import { autoWalklineSide, resolveWalklineSide, straightSideKinds } from "./walklineSide.js";
+import { computeCageLayout } from "./cage/cage.js";
+import {
+  autoWalklineSide,
+  autoWalklineSideKey,
+  resolveWalklineSide,
+  straightSideKinds,
+} from "./walklineSide.js";
 
 const L = 4000;
 
@@ -153,6 +159,54 @@ describe("bord de mesure de la ligne de foulée d'un escalier droit (A16)", () =
       guards: ProjectSchema.parse({ ...p1, guards: { flight: { inner: "void" } } }).guards!,
     };
     expect(buildModel(p2).layout?.walklineSide).toBe("left");
+  });
+
+  it("clé de mémoïsation : cage d'un seul tronçon droit, le bord automatique suit les murs", () => {
+    // Relecture du sous-lot 1b : la clé ne voyait qu'une volée unique (`legs.length === 1`) ;
+    // une cage (`legs: []`) rendait `undefined` et un mur déplacé n'invalidait pas le tracé.
+    const cage = (walls: Wall[]): Project =>
+      ProjectSchema.parse({
+        ...straight({ walls }),
+        stair: {
+          ...straight().stair,
+          layout: {
+            kind: "cage",
+            sections: [{ axis: { kind: "straight", length: L }, width: 1400 }],
+            junctions: [],
+          },
+        },
+      });
+    const onLeft = cage([leftWall]);
+    const onRight = cage([rightWall()]);
+    expect(autoWalklineSideKey(onLeft)).toBe("right");
+    expect(autoWalklineSideKey(onRight)).toBe("left");
+    // Même bord que le moteur de cage.
+    for (const p of [onLeft, onRight]) {
+      expect(computeCageLayout(p, p.stair.layout as never).walklineSide).toBe(
+        autoWalklineSideKey(p),
+      );
+    }
+    // Choix explicite, ou cage à jonction : pas de clé.
+    const chosen = ProjectSchema.parse({
+      ...onLeft,
+      stair: { ...onLeft.stair, walkline: { ...onLeft.stair.walkline, side: "left" } },
+    });
+    expect(autoWalklineSideKey(chosen)).toBeUndefined();
+    const turning = ProjectSchema.parse({
+      ...onLeft,
+      stair: {
+        ...onLeft.stair,
+        layout: {
+          kind: "cage",
+          sections: [
+            { axis: { kind: "straight", length: 2000 }, width: 1400 },
+            { axis: { kind: "straight", length: 2000 }, width: 1400 },
+          ],
+          junctions: [{ angle: 90, mode: "landing" }],
+        },
+      },
+    });
+    expect(autoWalklineSideKey(turning)).toBeUndefined();
   });
 
   it("propriété : Γ est à d_f du bord de mesure (rotation et placement quelconques)", () => {

@@ -965,3 +965,13 @@ L'hélicoïdal garde son `kind` et son calcul (ADR-0010, décision 4). Faut-il, 
 - Proposition : (b) jusqu'à la fin du lot 6 (structures généralisées), puis (a) si le test de parité passe.
 - Aujourd'hui : `layout/helical.ts`, `HelicalLayoutSpecSchema`, une quarantaine de fichiers hors tests qui testent `isHelicalLayout` ou le littéral `"helical"`.
 - Réf. : CHALLENGE-panel, « Angle geometrie » (hélicoïdal = 1 tronçon à axe en arc) ; B §1.1 ; ADR-0010.
+
+### F11. Mesure de la longueur d'un tronçon et défaut d'`anchor`
+
+Une cage saisit pour chaque tronçon droit une longueur `axis.length`. Que mesure-t-elle, et quel bord suit l'axe (`anchor`) quand il n'est pas saisi ? Le choix est visible : la conversion d'un tracé à volées (lot 4, « Convertir en tracé libre ») change les cotes affichées, et l'éditeur (`cageEdit.ts`, lot 3a), les poignées de longueur et les exports figent la convention.
+
+- Options pour `axis.length` : (a) **partie droite** du tronçon, hors carrés d'angle E × E des jonctions voisines, mesurée sur le bord d'ancrage (une volée L à k tournants voisins devient L − k·E ; quart tournant 2 000 / 1 800 mm, E = 900 → tronçons 1 100 / 900 mm ; demi-tour à jour nul → tronçon intermédiaire de 0) ; (b) **au mur**, carrés d'angle compris, comme `LegSchema` (cotes identiques aux volées, mais la longueur saisie dépend de l'angle des jonctions voisines dès que θ ≠ ±90° : débord E·tan(|θ|/2)) ; (c) **côté jour** (longueur du bord du jour, convention du CHALLENGE-panel pour le tronçon intermédiaire d'un demi-tour, F4 (c)).
+- Options pour `anchor` absent : `center` (milieu de l'emmarchement), `left`, `right`, ou côté du jour de la première jonction voisine.
+- Proposition (appliquée au sous-lot 1b, à valider) : (a), grandeur propre au tronçon et indépendante de l'angle des jonctions ; `anchor` absent = `center`, symétrique et cohérent avec le rayon d'un axe en arc mesuré au milieu (sans effet à largeur constante, donc sur toute cage issue de volées).
+- Aujourd'hui : les volées se saisissent au mur, carrés d'angle compris (`LegSchema`) ; la parité du moteur de cage avec le moteur à volées est exacte quelle que soit l'option, la conversion `flightsToCage` / `cageToFlights` s'adaptant.
+- Réf. : ADR-0010, amendement du sous-lot 1b ; F4 (c) ; CHALLENGE-panel, « Angle geometrie » ; `layout/cage/section.ts`, `layout/cage/fromFlights.ts`, `model/project.ts` (`CageAxisSchema`, `CageSectionSchema`).

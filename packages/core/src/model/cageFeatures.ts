@@ -44,13 +44,14 @@ export const CAGE_FEATURES: readonly CageFeature[] = [
  *   signalée pour que le garde-fou des structures la voie.
  *
  * Liste vide : la cage n'utilise aucune de ces fonctions ; elle a vocation à s'écrire en volées et
- * à passer partout où passe le tracé à volées équivalent, **sous la convention de mesure de
- * `length` que fixera le moteur (lot 1, `flightsToCage`)**. Exception connue : un tronçon droit de
- * longueur 0 (admis par le schéma, utile pour un demi-tour par deux jonctions de 90°, décision F4)
- * n'a pas d'équivalent direct en volées (`LegSchema` exige une longueur > 0) ; la conversion
- * inverse devra le traiter (tournant de 180° ou refus), à fixer avec elle au lot 1 / 2e. Les
- * raccords `wallArc` et `chamfer` ne peuvent venir que d'une jonction tournante (le schéma les
- * refuse sur un palier droit).
+ * à passer partout où passe le tracé à volées équivalent, sous la convention de mesure de
+ * `length` du sous-lot 1b : partie droite hors carrés d'angle E × E, une volée de longueur L à
+ * k tournants voisins valant L − k·E (amendement 1b d'ADR-0010, `layout/cage/section.ts` ; à
+ * valider, question F11). Un tronçon intermédiaire de longueur 0 (demi-tour par deux jonctions
+ * de 90°, décision F4) se reconvertit en volée de 2E ; seul un tronçon **unique** de longueur 0
+ * n'a pas d'équivalent en volées (`LegSchema` exige une longueur > 0) : `cageToFlights` rend
+ * `null`. Les raccords `wallArc` et `chamfer` ne peuvent venir que d'une jonction tournante (le
+ * schéma les refuse sur un palier droit).
  */
 export function cageFeatures(spec: CageLayoutSpec): CageFeature[] {
   const found = new Set<CageFeature>();
