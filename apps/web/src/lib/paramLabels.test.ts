@@ -450,8 +450,7 @@ describe("suites du limon central (A32 a, A33, A34 du 2026-10-09)", () => {
       kind: "auto-number",
       unit: "mm",
       toValidateHint: true,
-      label:
-        "Ancrage minimal des tire-fonds dans la poutre (auto : partie filetée ≥ 6·d ; saisi : longueur sous la marche)",
+      label: "Pénétration minimale de la partie filetée des tire-fonds (auto : 6·d)",
     });
     expect(at(quarter, "lagScrews.threadLength")).toMatchObject({
       kind: "auto-number",
@@ -472,28 +471,76 @@ describe("suites du limon central (A32 a, A33, A34 du 2026-10-09)", () => {
       unit: "",
       toValidateHint: true,
       label:
-        "Zone tendue du décalage des aboutages (part du reste sous entaille, depuis la sous-face)",
+        "Zone tendue du décalage des aboutages : part de la hauteur résistante depuis la sous-face (1/8 selon ANSI A190.1)",
     });
     expect(at(quarter, "section.minBoardLength")).toMatchObject({
+      kind: "auto-number",
       unit: "mm",
       toValidateHint: true,
-      label: "Longueur minimale d'une planche aboutée",
+      label: "Longueur minimale d'une planche aboutée (auto : 2 × enture + marge)",
     });
     expect(at(quarter, "lagScrews.threadLength")?.group).toBe("lagScrews");
     expect(at(quarter, "section.tensionZone")?.group).toBe("section");
     const en = woodFields("quarter-left", "en");
     expect(at(en, "lagScrews.minAnchorage")?.label).toBe(
-      "Minimum coach screw embedment in the beam (auto: threaded part ≥ 6·d; entered: length below the tread)",
+      "Minimum pointside penetration of the coach screw threaded part (auto: 6·d)",
     );
     expect(at(en, "lagScrews.threadLength")?.label).toBe("Coach screw thread length (b)");
     expect(at(en, "lagScrews.holeWood")?.label).toBe(
       "Minimum timber between a coach screw thread and a hole",
     );
     expect(at(en, "section.tensionZone")?.label).toBe(
-      "Tension zone for the stagger of finger joints (share of the remaining depth below the notch, from the underside)",
+      "Tension zone for the stagger of finger joints: share of the resisting depth from the underside (1/8 per ANSI A190.1)",
     );
     expect(at(en, "section.minBoardLength")?.label).toBe(
-      "Minimum length of a finger-jointed board",
+      "Minimum length of a finger-jointed board (auto: 2 × finger length + margin)",
+    );
+  });
+
+  it("décisions A38 : bande tendue ANSI, marge des planches, ancrage total ◆", () => {
+    const quarter = woodFields("quarter-left");
+    // Couches comptées en plus : entier sans unité ; part centrale de la longueur : décimale.
+    expect(at(quarter, "section.tensionZoneLayers")).toMatchObject({
+      kind: "number",
+      integer: true,
+      unit: "",
+      toValidateHint: true,
+      group: "section",
+      label: "Zone tendue : couches comptées en plus au-dessus de cette part",
+    });
+    expect(at(quarter, "section.tensionZoneLength")).toMatchObject({
+      kind: "number",
+      integer: false,
+      unit: "",
+      toValidateHint: true,
+      group: "section",
+      label: "Zone tendue : part centrale de la longueur de la poutre où le décalage est exigé",
+    });
+    expect(at(quarter, "section.boardLengthMargin")).toMatchObject({
+      unit: "mm",
+      toValidateHint: true,
+      group: "section",
+      label: "Marge de la longueur minimale d'une planche aboutée (en plus des deux entures)",
+    });
+    expect(at(quarter, "lagScrews.minTotalAnchorage")).toMatchObject({
+      unit: "mm",
+      toValidateHint: true,
+      group: "lagScrews",
+      label:
+        "Ancrage total minimal des tire-fonds sous la marche (0 : aucun ; repris d'un projet enregistré avant la version 2 du format)",
+    });
+    const en = woodFields("quarter-left", "en");
+    expect(at(en, "section.tensionZoneLayers")?.label).toBe(
+      "Tension zone: additional layers counted above this share",
+    );
+    expect(at(en, "section.tensionZoneLength")?.label).toBe(
+      "Tension zone: central share of the beam length where the stagger is required",
+    );
+    expect(at(en, "section.boardLengthMargin")?.label).toBe(
+      "Margin of the minimum finger-jointed board length (on top of the two finger lengths)",
+    );
+    expect(at(en, "lagScrews.minTotalAnchorage")?.label).toBe(
+      "Minimum total coach screw anchorage below the tread (0: none; carried over from a project saved before file format version 2)",
     );
   });
 

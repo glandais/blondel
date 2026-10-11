@@ -17,8 +17,8 @@ import {
   isBeamEndSide,
   lagAnchorageHolds,
   lagHoleClearance,
+  lagRequired,
   lagRetained,
-  lagSeatClearance,
   lagThreadInBeam,
   lagThreadLength,
   woodCentralBoltSpacing,
@@ -447,11 +447,12 @@ describe("lagThreadLength : longueur filetée des tire-fonds DIN 571 (A37 (5), C
   });
 });
 
-describe("tire-fonds : ancrage minimal, partie filetée et place sous une assise (A37 (1) (5))", () => {
+describe("tire-fonds : ancrage minimal, partie filetée et place sous une assise (A37 (1) (5), A38 (14))", () => {
   const fasteners = DEFAULT_FASTENER_PROFILE;
   const bolts = { holeDiameter: 11, minSpacing: "auto" as const, edgeDistance: "auto" as const };
   const lagSpacing = (lag: {
     minAnchorage?: number | "auto";
+    minTotalAnchorage?: number;
     threadLength?: number | "auto";
     holeWood?: number | "auto";
   }) =>
@@ -481,6 +482,18 @@ describe("tire-fonds : ancrage minimal, partie filetée et place sous une assise
     expect(set.holeWood).toBe(2);
     expect(set.threadLengthOf(140)).toBe(70);
     expect(set.threadLengthOf(60)).toBe(60);
+    // Modes d'ancrage (QUESTIONS A38 (14)) : `thread` par défaut, saisie comprise ; `total` dès
+    // qu'un ancrage total est enregistré (projet antérieur à A38, migration du format).
+    expect(auto.anchorageMode).toBe("thread");
+    expect(auto.minTotalAnchorage).toBe(0);
+    expect(lagRequired(auto)).toBe(60);
+    expect(set.anchorageMode).toBe("thread");
+    expect(lagRequired(set)).toBe(50);
+    const total = lagSpacing({ minTotalAnchorage: 50 });
+    expect(total.anchorageMode).toBe("total");
+    expect(total.minTotalAnchorage).toBe(50);
+    expect(total.minAnchorage).toBe(60);
+    expect(lagRequired(total)).toBe(50);
   });
 
   it("partie filetée dans la poutre : pénétration min(b ; ancrage), centre de gravité à ancrage − p / 2", () => {
@@ -493,7 +506,7 @@ describe("tire-fonds : ancrage minimal, partie filetée et place sous une assise
     });
   });
 
-  it("rétention : pénétration filetée ≥ 6·d en `auto`, ancrage ≥ valeur saisie sinon", () => {
+  it("rétention : pénétration filetée ≥ 6·d en `auto` ou ≥ valeur saisie, ancrage total ≥ valeur en mode `total`", () => {
     const auto = lagSpacing({});
     // Marche de 80 : 130 mm → p = 50 refusé ; 140 → 60 admis.
     expect(lagAnchorageHolds(auto, 130, 80)).toBe(false);
@@ -502,47 +515,21 @@ describe("tire-fonds : ancrage minimal, partie filetée et place sous une assise
     // Marche de 40 : 110 mm → b = 56 < 60 refusé malgré 70 mm d'ancrage ; 120 → 60 admis.
     expect(lagAnchorageHolds(auto, 110, 40)).toBe(false);
     expect(lagAnchorageHolds(auto, 120, 40)).toBe(true);
+    // Valeur saisie (A38 (14)) : sur la partie filetée. Marche de 80 : 130 mm → p = min(63 ; 50)
+    // = 50 admis ; 120 → p = 40 refusé.
     const set = lagSpacing({ minAnchorage: 50 });
     expect(lagAnchorageHolds(set, 130, 80)).toBe(true);
     expect(lagRetained(set, 130, 80)).toBe(50);
     expect(lagAnchorageHolds(set, 120, 80)).toBe(false);
-  });
-
-  it("place sous une assise : plus court tire-fond admissible + bois sous la pointe", () => {
-    const options = { lengthStep: 10, maxLength: 160, tipCover: 10 };
-    // `auto`, marche de 40 : 120 mm (ancrage 80) → 90 ; marche de 80 : 140 mm (ancrage 60) → 70.
-    expect(lagSeatClearance(lagSpacing({}), { ...options, tm: 40 })).toBe(90);
-    expect(lagSeatClearance(lagSpacing({}), { ...options, tm: 80 })).toBe(70);
-    // Valeur saisie : ancrage minimal arrondi au pas (comportement antérieur) : 90 − 40 + 10.
-    expect(lagSeatClearance(lagSpacing({ minAnchorage: 50 }), { ...options, tm: 40 })).toBe(60);
-    // Aucun tire-fond admissible jusqu'à `maxLength` : repli sur l'ancrage minimal arrondi.
-    expect(lagSeatClearance(lagSpacing({}), { ...options, tm: 40, maxLength: 100 })).toBe(70);
-  });
-
-  it("propriété : la place retenue est celle du plus court tire-fond admissible de la grille", () => {
-    fc.assert(
-      fc.property(
-        fc.integer({ min: 20, max: 100 }),
-        fc.constantFrom(5, 10, 20),
-        fc.integer({ min: 0, max: 30 }),
-        fc.oneof(fc.constant("auto" as const), fc.integer({ min: 30, max: 120 })),
-        (tm, step, tipCover, threadLength) => {
-          const lag = lagSpacing({ threadLength });
-          const maxLength = 300;
-          const clearance = lagSeatClearance(lag, { tm, lengthStep: step, maxLength, tipCover });
-          const L = clearance - tipCover + tm;
-          if (L > maxLength) return;
-          if (!lagAnchorageHolds(lag, L, tm)) {
-            // Repli : aucune longueur admissible jusqu'à maxLength.
-            for (let x = step; x <= maxLength; x += step)
-              expect(lagAnchorageHolds(lag, x, tm)).toBe(false);
-            return;
-          }
-          expect(Math.abs(L / step - Math.round(L / step))).toBeLessThan(1e-9);
-          if (L - step >= tm) expect(lagAnchorageHolds(lag, L - step, tm)).toBe(false);
-        },
-      ),
-    );
+    // Marche de 40, 100 mm : ancrage 60 mais b = 53. Partie filetée saisie à 60 : refusé ;
+    // ancrage total de 60 (mode hérité) : admis, la grandeur comparée est l'ancrage.
+    const thread60 = lagSpacing({ minAnchorage: 60 });
+    expect(lagRetained(thread60, 100, 40)).toBe(53);
+    expect(lagAnchorageHolds(thread60, 100, 40)).toBe(false);
+    const total60 = lagSpacing({ minTotalAnchorage: 60 });
+    expect(lagRetained(total60, 100, 40)).toBe(60);
+    expect(lagAnchorageHolds(total60, 100, 40)).toBe(true);
+    expect(lagAnchorageHolds(total60, 90, 40)).toBe(false);
   });
 });
 

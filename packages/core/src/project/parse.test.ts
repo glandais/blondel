@@ -16,7 +16,7 @@ import { PRESET_NOSING } from "./presets.js";
 import { serializeProject } from "./serialize.js";
 
 const minimal = () => ({
-  schemaVersion: 1,
+  schemaVersion: PROJECT_SCHEMA_VERSION,
   site: { floorToFloor: 2700, upperSlabThickness: 200 },
   stair: {
     placement: { origin: { x: 0, y: 0 } },
@@ -153,9 +153,9 @@ describe("parseProject", () => {
 });
 
 describe("migrations", () => {
-  it("le registre est vide en version 1", () => {
-    expect(PROJECT_SCHEMA_VERSION).toBe(1);
-    expect(PROJECT_MIGRATIONS).toEqual([]);
+  it("format 2 : une seule migration, du format 1 (QUESTIONS A38)", () => {
+    expect(PROJECT_SCHEMA_VERSION).toBe(2);
+    expect(PROJECT_MIGRATIONS.map((m) => m.from)).toEqual([1]);
   });
 
   /** Migration factice : le format 0 nommait l'emmarchement `emmarchement`. */
@@ -178,8 +178,8 @@ describe("migrations", () => {
     v0.stair.layout["emmarchement"] = 850;
     delete v0.stair.layout["width"];
     const before = structuredClone(v0);
-    const p = parseProject(v0, { migrations: [fake0to1] });
-    expect(p.schemaVersion).toBe(1);
+    const p = parseProject(v0, { migrations: [fake0to1, ...PROJECT_MIGRATIONS] });
+    expect(p.schemaVersion).toBe(2);
     expect(p.stair.layout.width).toBe(850);
     expect(v0).toEqual(before);
   });

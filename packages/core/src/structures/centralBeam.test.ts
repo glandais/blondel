@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { pointInPolygon } from "../geom2d/polygon.js";
 import * as V from "../geom2d/vec.js";
 import type { Part } from "../model/derived.js";
-import { ProjectSchema, type Project } from "../model/project.js";
+import { PROJECT_SCHEMA_VERSION, ProjectSchema, type Project } from "../model/project.js";
 import { solidProblem } from "../parts/solidChecks.js";
 import { createProject } from "../project/presets.js";
 import {
@@ -372,7 +372,7 @@ describe("section incohérente", () => {
 
 /** Escalier en U balancé (jour vif puis poteau), dessus de poutre bas : contre-exemple fixé. */
 const U_LOW_TOP = ProjectSchema.parse({
-  schemaVersion: 1,
+  schemaVersion: PROJECT_SCHEMA_VERSION,
   site: { floorToFloor: 2200, upperSlabThickness: 200 },
   stair: {
     placement: { origin: { x: 0, y: 0 } },

@@ -156,20 +156,20 @@ test("autosauvegarde illisible : message, copie de secours, jamais écrasée en 
   page,
 }) => {
   await openApp(page);
-  // Autosauvegarde d'une version plus récente de Blondel (format 2).
+  // Autosauvegarde d'une version plus récente de Blondel (format 3 ; le logiciel lit le format 2).
   await page.evaluate(() => {
     const key = "blondel.autosave.project";
     const json = JSON.parse(localStorage.getItem(key) ?? "{}") as Record<string, unknown>;
     localStorage.setItem(
       key,
-      JSON.stringify({ ...json, name: "Mon escalier client", schemaVersion: 2 }),
+      JSON.stringify({ ...json, name: "Mon escalier client", schemaVersion: 3 }),
     );
   });
   await page.reload();
   await settle(page);
   const notice = page.locator(".notice--error[role=alert]");
   await expect(notice).toContainText("n'a pas pu être rouverte");
-  await expect(notice).toContainText("format 2, plus récent");
+  await expect(notice).toContainText("format 3, plus récent");
   const actions = page.getByRole("group", { name: "Autosauvegarde refusée" });
   await expect(actions).toBeVisible();
 
@@ -209,7 +209,7 @@ test("copie de secours d'un démarrage antérieur : bandeau restaurer / exporter
     >;
     localStorage.setItem(
       "blondel.autosave.rejected",
-      JSON.stringify({ ...json, name: "Mon escalier client", schemaVersion: 2 }),
+      JSON.stringify({ ...json, name: "Mon escalier client", schemaVersion: 3 }),
     );
   });
   await page.reload();

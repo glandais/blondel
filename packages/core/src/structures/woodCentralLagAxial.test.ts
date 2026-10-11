@@ -4,17 +4,22 @@
  * minimal, partie filetée et bois autour d'un perçage (QUESTIONS A37 (1), (5), (17), décisions du
  * 2026-10-10) :
  * - tout tire-fond posé a une partie filetée (b = ⌊20 + L / 3⌋ côté pointe, ou saisie) pénétrant
- *   de 6·d au moins en `auto`, un ancrage ≥ la valeur saisie sinon ; le centre de gravité de la
+ *   de 6·d au moins en `auto`, de la valeur saisie sinon (une valeur saisie porte aussi sur la
+ *   partie filetée, QUESTIONS A38 (14), décision du 2026-10-11) ; le centre de gravité de la
  *   seule partie filetée comprise dans la poutre (pointe + p / 2) est à
  *   `lagScrews.threadEndDistance` au moins, le long du fil, de la coupe au sol et des faces de
  *   cran (a2,CG au-dessus de la coupe au sol en couches empilées) ; il s'écarte de chaque perçage
  *   horizontal de la poutre (`lagHoleClearance` avec `lagScrews.holeWood`) ou s'arrête au-dessus ;
- *   en `auto`, aucun constat de pénétration (propriété sur les préréglages droit, quart tournant,
- *   U et hélicoïdal, épaisseur de marche, largeur de poutre, ancrage et réglages tirés) ;
+ *   aucun constat de pénétration (propriété sur les préréglages droit, quart tournant, U et
+ *   hélicoïdal, épaisseur de marche, largeur de poutre, ancrage et réglages tirés) ;
+ * - l'ancrage total `lagScrews.minTotalAnchorage` = N (cible de la migration des projets
+ *   antérieurs à A38) redonne exactement les tire-fonds d'avant A38 avec `minAnchorage` = N
+ *   (table de référence calculée avec le code d'avant A38) ;
  * - les boulons du sabot de pied sont dans `anchors.footBoltZone` quand ils y tiennent, à
  *   l'entraxe a1 et à la pince a3,c du bois mesurée le long du fil ;
  * - l'exemple droit `j5c-limon-central-bois-droit` : M1 sans tire-fond faute de 6·d de partie
- *   filetée (A37 (1)), deux tire-fonds de 130 mm avec un ancrage minimal saisi à 50 mm.
+ *   filetée (A37 (1)), deux tire-fonds de 130 mm avec une pénétration saisie de 50 mm (sans
+ *   constat) ou un ancrage total de 50 mm (constat de pénétration, comme avant A38).
  */
 import { readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
@@ -43,7 +48,10 @@ import {
   grainDirection,
   grainEndDistance,
   isBeamEndSide,
+  lagAnchorageHolds,
   lagHoleClearance,
+  lagRequired,
+  lagRetained,
   lagThreadInBeam,
   woodCentralBoltSpacing,
 } from "./woodSpacing.js";
@@ -162,9 +170,10 @@ describe("tire-fonds : partie filetée, a1,CG le long du fil, bois autour des pe
               const anchorage = o.length - thickness;
               const tip = s.z - anchorage;
               const p = lagThreadInBeam(o.length, anchorage, sp.lag.threadLengthOf).penetration;
-              // (a) Ancrage minimal : pénétration filetée ≥ 6·d en `auto`, ancrage ≥ valeur saisie.
-              if (minAnchorage === "auto") expect(p, label).toBeGreaterThanOrEqual(6 * sp.d - 1e-9);
-              else expect(anchorage, label).toBeGreaterThanOrEqual(minAnchorage - 1e-9);
+              // (a) Ancrage minimal : pénétration filetée ≥ 6·d en `auto`, ≥ valeur saisie sinon
+              // (une valeur saisie porte sur la partie filetée, QUESTIONS A38 (14)).
+              const min = minAnchorage === "auto" ? 6 * sp.d : minAnchorage;
+              expect(p, label).toBeGreaterThanOrEqual(min - 1e-9);
               // (b) Centre de gravité de la seule partie filetée : pointe + p / 2.
               const cg = V.vec(o.sigma, tip + p / 2);
               expect(alongGrain(beam, outer, cg), label).toBeGreaterThanOrEqual(
@@ -191,14 +200,13 @@ describe("tire-fonds : partie filetée, a1,CG le long du fil, bois autour des pe
               }
             }
           }
-          // (d) `auto` : aucun constat de pénétration de la partie filetée.
-          if (minAnchorage === "auto") {
-            expect(
-              checks.results.filter(
-                (c) => c.message.key === "structure.woodCentral.check.spacing.lagPenetration",
-              ),
-            ).toEqual([]);
-          }
+          // (d) Mode `thread` (`auto` ou saisi) : aucun constat de pénétration de la partie
+          // filetée, tenue par construction (A38 (14)).
+          expect(
+            checks.results.filter((c) =>
+              c.message.key.startsWith("structure.woodCentral.check.spacing.lagPenetration"),
+            ),
+          ).toEqual([]);
         },
       ),
       { numRuns: 40 },
@@ -355,8 +363,36 @@ describe("exemple droit j5c-limon-central-bois-droit : M1 et l'ancrage minimal d
     }
   });
 
-  it("ancrage minimal saisi à 50 mm (rétrocompatibilité) : M1 garde deux tire-fonds de 130 mm, constat de pénétration", () => {
+  it("pénétration filetée saisie à 50 mm (A38 (14)) : M1 garde deux tire-fonds de 130 mm, sans constat de pénétration", () => {
+    // Écart voulu (QUESTIONS A38 (14), décision du 2026-10-11) : la valeur saisie porte sur la
+    // partie filetée ; à 130 mm, elle pénètre de 50 mm : tenue, sans constat (avant A38 : la
+    // valeur portait sur l'ancrage total, constat de pénétration sous 6·d).
     const lagScrews = { ...((raw["lagScrews"] as object | undefined) ?? {}), minAnchorage: 50 };
+    const params = woodCentralParams({ ...raw, lagScrews });
+    const { beam, checks } = woodBeamOf(ctx, params);
+    expect(beam.seats[0]!.bolts.map((o) => [o.kind, o.length])).toEqual([
+      ["lagScrew", 130],
+      ["lagScrew", 130],
+    ]);
+    expect(
+      checks.results.filter((c) => c.ruleId === BOLTS_RULE && c.status === "violation"),
+    ).toEqual([]);
+    expect(
+      checks.results.filter(
+        (c) => c.ruleId === WOOD_CENTRAL_BEAM_RULES.spacing.id && c.status === "violation",
+      ),
+    ).toEqual([]);
+    const note = beam.notes.find(
+      (n) => n.key === "structure.woodCentral.note.lagScrewsThreadEnteredMin",
+    )!;
+    expect(fr(note)).toMatch(/partie filetée pénétrant de 50 mm au moins/);
+  });
+
+  it("ancrage total de 50 mm (mode hérité d'avant A38) : M1 garde deux tire-fonds de 130 mm, constat de pénétration", () => {
+    const lagScrews = {
+      ...((raw["lagScrews"] as object | undefined) ?? {}),
+      minTotalAnchorage: 50,
+    };
     const params = woodCentralParams({ ...raw, lagScrews });
     const { beam, checks } = woodBeamOf(ctx, params);
     const m1 = beam.seats[0]!;
@@ -383,11 +419,344 @@ describe("exemple droit j5c-limon-central-bois-droit : M1 et l'ancrage minimal d
       (c) => c.ruleId === WOOD_CENTRAL_BEAM_RULES.spacing.id && c.status === "violation",
     );
     expect(spacing.map((c) => c.message.key)).toEqual([
-      "structure.woodCentral.check.spacing.lagPenetration",
+      "structure.woodCentral.check.spacing.lagPenetrationTotal",
     ]);
     expect(spacing[0]!.location).toMatchObject({ treadNumber: 1 });
     expect(spacing[0]!.measured).toBeCloseTo(50, 6);
+    expect(spacing[0]!.min).toBeCloseTo(60, 6);
+    expect(fr(spacing[0]!.message)).toMatch(/lagScrews\.minTotalAnchorage/);
+    expect(EN.t(spacing[0]!.message)).toMatch(/minimum total anchorage/);
     const ok = checks.results.find((c) => c.ruleId === BOLTS_RULE)!;
     expect(EN.t(ok.message)).toMatch(/a1,CG/);
+  });
+});
+
+/**
+ * Référence d'avant A38 (QUESTIONS A38 (14)) : organes des quatre premières assises
+ * (`<nature><longueur>@<σ>`), constats de pénétration (marche, mesure) et assises incomplètes
+ * (marche, organes posés), calculés avec le code d'avant A38 (commit c9ff9f3, `minAnchorage` = N
+ * saisi, ancrage total sous la marche) sur l'escalier droit par défaut et l'exemple droit, sabot
+ * en U (ni âme de platine ni couches empilées : A38 (6) (8) (12) sans effet), épaisseur de marche
+ * tm et N tirés. Le mode `total` (`minTotalAnchorage` = N, cible de la migration) doit les
+ * redonner exactement.
+ */
+const LEGACY: Record<
+  string,
+  {
+    readonly organs: readonly (readonly string[])[];
+    readonly pen: readonly (readonly [number, number])[];
+    readonly missing: readonly (readonly [number, number])[];
+  }
+> = {
+  "straight/40/30": {
+    organs: [
+      ["l150@146.438", "l150@260.000"],
+      ["l160@383.205", "b320@530.000"],
+      ["b450@610.000", "b320@800.000"],
+      ["b450@880.000", "b320@1070.000"],
+    ],
+    pen: [],
+    missing: [],
+  },
+  "straight/40/50": {
+    organs: [
+      ["l150@146.438", "l150@260.000"],
+      ["l160@383.205", "b320@530.000"],
+      ["b450@610.000", "b320@800.000"],
+      ["b450@880.000", "b320@1070.000"],
+    ],
+    pen: [],
+    missing: [],
+  },
+  "straight/40/70": {
+    organs: [
+      ["l150@146.438", "l150@260.000"],
+      ["l160@383.205", "b320@530.000"],
+      ["b450@610.000", "b320@800.000"],
+      ["b450@880.000", "b320@1070.000"],
+    ],
+    pen: [],
+    missing: [],
+  },
+  "straight/40/90": {
+    organs: [
+      ["l150@146.438", "l150@260.000"],
+      ["l160@383.205", "b320@530.000"],
+      ["b450@610.000", "b320@800.000"],
+      ["b450@880.000", "b320@1070.000"],
+    ],
+    pen: [],
+    missing: [],
+  },
+  "straight/60/30": {
+    organs: [
+      ["l150@146.438", "l150@260.000"],
+      ["l160@383.205", "b340@530.000"],
+      ["b470@610.000", "b340@800.000"],
+      ["b470@880.000", "b340@1070.000"],
+    ],
+    pen: [],
+    missing: [],
+  },
+  "straight/60/50": {
+    organs: [
+      ["l150@146.438", "l150@260.000"],
+      ["l160@383.205", "b340@530.000"],
+      ["b470@610.000", "b340@800.000"],
+      ["b470@880.000", "b340@1070.000"],
+    ],
+    pen: [],
+    missing: [],
+  },
+  "straight/60/70": {
+    organs: [
+      ["l150@146.438", "l150@260.000"],
+      ["l160@383.205", "b340@530.000"],
+      ["b470@610.000", "b340@800.000"],
+      ["b470@880.000", "b340@1070.000"],
+    ],
+    pen: [],
+    missing: [],
+  },
+  "straight/60/90": {
+    organs: [
+      ["l150@146.438", "l150@260.000"],
+      ["l160@383.205", "b340@530.000"],
+      ["b470@610.000", "b340@800.000"],
+      ["b470@880.000", "b340@1070.000"],
+    ],
+    pen: [],
+    missing: [],
+  },
+  "straight/80/30": {
+    organs: [
+      ["l150@146.438", "l150@260.000"],
+      ["l160@383.205", "l160@530.000"],
+      ["b490@610.000", "b360@800.000"],
+      ["b490@880.000", "b360@1070.000"],
+    ],
+    pen: [],
+    missing: [],
+  },
+  "straight/80/50": {
+    organs: [
+      ["l150@146.438", "l150@260.000"],
+      ["l160@383.205", "l160@530.000"],
+      ["b490@610.000", "b360@800.000"],
+      ["b490@880.000", "b360@1070.000"],
+    ],
+    pen: [],
+    missing: [],
+  },
+  "straight/80/70": {
+    organs: [
+      ["l150@146.438", "l150@260.000"],
+      ["l160@383.205", "l160@530.000"],
+      ["b490@610.000", "b360@800.000"],
+      ["b490@880.000", "b360@1070.000"],
+    ],
+    pen: [],
+    missing: [],
+  },
+  "straight/80/90": {
+    organs: [[], [], ["b490@610.000", "b360@800.000"], ["b490@880.000", "b360@1070.000"]],
+    pen: [],
+    missing: [
+      [1, 0],
+      [2, 0],
+    ],
+  },
+  "j5c-droit/40/30": {
+    organs: [
+      ["l140@125.570", "l140@197.857"],
+      ["l140@319.252", "b330@440.714"],
+      ["b440@520.714", "b330@683.571"],
+      ["b440@763.571", "b330@926.429"],
+    ],
+    pen: [],
+    missing: [],
+  },
+  "j5c-droit/40/50": {
+    organs: [
+      ["l140@125.570", "l140@197.857"],
+      ["l140@319.252", "b330@440.714"],
+      ["b440@520.714", "b330@683.571"],
+      ["b440@763.571", "b330@926.429"],
+    ],
+    pen: [],
+    missing: [],
+  },
+  "j5c-droit/40/70": {
+    organs: [
+      ["l140@125.570", "l140@197.857"],
+      ["l140@319.252", "b330@440.714"],
+      ["b440@520.714", "b330@683.571"],
+      ["b440@763.571", "b330@926.429"],
+    ],
+    pen: [],
+    missing: [],
+  },
+  "j5c-droit/40/90": {
+    organs: [
+      ["l140@125.570", "l140@197.857"],
+      ["l140@319.252", "b330@440.714"],
+      ["b440@520.714", "b330@683.571"],
+      ["b440@763.571", "b330@926.429"],
+    ],
+    pen: [],
+    missing: [],
+  },
+  "j5c-droit/60/30": {
+    organs: [
+      ["l140@125.570", "l140@197.857"],
+      ["l140@319.252", "l160@440.714"],
+      ["b460@520.714", "b350@683.571"],
+      ["b460@763.571", "b350@926.429"],
+    ],
+    pen: [],
+    missing: [],
+  },
+  "j5c-droit/60/50": {
+    organs: [
+      ["l140@125.570", "l140@197.857"],
+      ["l140@319.252", "l160@440.714"],
+      ["b460@520.714", "b350@683.571"],
+      ["b460@763.571", "b350@926.429"],
+    ],
+    pen: [],
+    missing: [],
+  },
+  "j5c-droit/60/70": {
+    organs: [
+      ["l140@125.570", "l140@197.857"],
+      ["l140@319.252", "l160@440.714"],
+      ["b460@520.714", "b350@683.571"],
+      ["b460@763.571", "b350@926.429"],
+    ],
+    pen: [],
+    missing: [],
+  },
+  "j5c-droit/60/90": {
+    organs: [
+      [],
+      ["l160@335.252", "l160@440.714"],
+      ["b460@520.714", "b350@683.571"],
+      ["b460@763.571", "b350@926.429"],
+    ],
+    pen: [],
+    missing: [[1, 0]],
+  },
+  "j5c-droit/80/30": {
+    organs: [
+      ["l130@125.570", "l130@197.857"],
+      ["l140@319.252", "l160@440.714"],
+      ["b480@520.714", "b370@683.571"],
+      ["b480@763.571", "b370@926.429"],
+    ],
+    pen: [[1, 50]],
+    missing: [],
+  },
+  "j5c-droit/80/50": {
+    organs: [
+      ["l130@125.570", "l130@197.857"],
+      ["l140@319.252", "l160@440.714"],
+      ["b480@520.714", "b370@683.571"],
+      ["b480@763.571", "b370@926.429"],
+    ],
+    pen: [[1, 50]],
+    missing: [],
+  },
+  "j5c-droit/80/70": {
+    organs: [
+      [],
+      ["l160@335.252", "l160@440.714"],
+      ["b480@520.714", "b370@683.571"],
+      ["b480@763.571", "b370@926.429"],
+    ],
+    pen: [],
+    missing: [[1, 0]],
+  },
+  "j5c-droit/80/90": {
+    organs: [[], [], ["b480@520.714", "b370@683.571"], ["b480@763.571", "b370@926.429"]],
+    pen: [],
+    missing: [
+      [1, 0],
+      [2, 0],
+    ],
+  },
+};
+
+describe("ancrage total hérité `minTotalAnchorage` (QUESTIONS A38 (14))", () => {
+  it("propriété : le prédicat d'ancrage du mode `total` est celui d'avant A38 (L − tm ≥ N)", () => {
+    fc.assert(
+      fc.property(
+        fc.integer({ min: 1, max: 200 }),
+        fc.integer({ min: 20, max: 100 }),
+        fc.integer({ min: 0, max: 300 }),
+        fc.oneof(fc.constant("auto" as const), fc.integer({ min: 20, max: 120 })),
+        (n, tm, length, minAnchorage) => {
+          const lag = woodCentralBoltSpacing(
+            { holeDiameter: 11, minSpacing: "auto", edgeDistance: "auto" },
+            PROFILE.fasteners,
+            { minSpacing: "auto", endDistance: "auto", minAnchorage, minTotalAnchorage: n },
+          ).lag;
+          expect(lag.anchorageMode).toBe("total");
+          expect(lagRequired(lag)).toBe(n);
+          // Logique de référence d'avant A38 (valeur saisie = ancrage sous la marche).
+          const anchorage = Math.max(0, length - tm);
+          expect(lagRetained(lag, length, tm)).toBe(anchorage);
+          expect(lagAnchorageHolds(lag, length, tm)).toBe(anchorage >= n - 1e-9);
+        },
+      ),
+      { numRuns: 200 },
+    );
+  });
+
+  it("propriété : avec `minTotalAnchorage` = N et `minAnchorage` auto, mêmes tire-fonds qu'avant A38 avec `minAnchorage` = N", () => {
+    const example = parseProjectText(readFileSync(join(EXAMPLES_DIR, STRAIGHT_EXAMPLE), "utf8"));
+    fc.assert(
+      fc.property(fc.constantFrom(...Object.keys(LEGACY)), (key) => {
+        const [src, tmText, nText] = key.split("/");
+        const tm = Number(tmText);
+        const n = Number(nText);
+        const base = src === "straight" ? createProject("straight") : example;
+        const project: Project = {
+          ...base,
+          stair: { ...base.stair, treads: { ...base.stair.treads, thickness: tm } },
+        };
+        const raw =
+          src === "straight" || base.stair.structure.kind !== "wood-central"
+            ? {}
+            : (base.stair.structure.params as Record<string, unknown>);
+        const params = woodCentralParams({
+          ...raw,
+          anchors: { kind: "shoe" },
+          lagScrews: { minTotalAnchorage: n },
+        });
+        const { beam, checks } = woodBeamOf(woodCentralContext(project), params);
+        const want = LEGACY[key]!;
+        expect(
+          beam.seats
+            .slice(0, 4)
+            .map((x) => x.bolts.map((o) => `${o.kind[0]}${o.length}@${o.sigma.toFixed(3)}`)),
+          key,
+        ).toEqual(want.organs);
+        expect(
+          checks.results
+            .filter(
+              (c) => c.message.key === "structure.woodCentral.check.spacing.lagPenetrationTotal",
+            )
+            .map((c) => [c.location?.kind === "part" ? c.location.treadNumber : null, c.measured]),
+          key,
+        ).toEqual(want.pen);
+        expect(
+          checks.results
+            .filter((c) => c.ruleId === BOLTS_RULE && c.status === "violation")
+            .map((c) => [c.location?.kind === "part" ? c.location.treadNumber : null, c.measured]),
+          key,
+        ).toEqual(want.missing);
+      }),
+      { numRuns: 24 },
+    );
   });
 });

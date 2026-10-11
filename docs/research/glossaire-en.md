@@ -150,6 +150,8 @@ En français, rien ne change : la hauteur de marche s'écrit déjà h (h1 pour l
 | Pénétration de la partie filetée      | Pointside penetration of the threaded part | —                | Tire-fonds, 6·d (EC5 § 8.7.2 (3), A37 (1))       |
 | Zone tendue                           | Tension zone                        | —                       | Décalage des aboutages ([85] § 10.4, A37 (4))    |
 | Longueur filetée (b)                  | Thread length                       | —                       | Tire-fonds DIN 571 ([78][93], A37 (5))           |
+| Bande tendue                          | Tension band                        | —                       | Huitième extérieur plus une couche, 75 % centraux ([85] § 10.4 (a), A38 (3)) |
+| Ancrage total (sous la marche)        | Total anchorage (below the tread)   | —                       | Tire-fonds, mode des projets antérieurs à A38 (A38 (14)) |
 | Âme de pied prolongée                 | Extended foot web                   | —                       | Platine à âme noyée (A35 (a))                    |
 | Bois massif                           | Solid timber                        | Solid wood / lumber     |                                                  |
 | Section, équarrissage                 | Section                             | —                       |                                                  |

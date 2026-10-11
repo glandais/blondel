@@ -9,7 +9,7 @@
   },
   "name": "Jalon 5c — escalier droit sur limon central bois (lamellé-collé)",
   "rulesVersion": 1,
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "site": {
     "floorToFloor": 2600,
     "lowerFinish": 0,

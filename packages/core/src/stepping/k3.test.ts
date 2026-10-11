@@ -11,7 +11,7 @@ import { createProject } from "../project/presets.js";
 import { readFileSync } from "node:fs";
 import * as V from "../geom2d/vec.js";
 import { parseProjectText } from "../project/parse.js";
-import { ProjectSchema, type Project } from "../model/project.js";
+import { PROJECT_SCHEMA_VERSION, ProjectSchema, type Project } from "../model/project.js";
 import { computeStepping } from "./stepping.js";
 import { postNosing } from "./zones.js";
 import { fr, frList } from "../i18n.test-helpers.js";
@@ -217,7 +217,7 @@ describe("poteaux d'angle : zones par angle (G_COLLET_MONOTONE corrigé par le b
     // Contre-exemple du générateur : U, poteau au 1er tournant ; les zones par angle, régulières
     // zone par zone, laissaient entre elles une marche de poteau à 25 mm de collet (après 186).
     const p = ProjectSchema.parse({
-      schemaVersion: 1,
+      schemaVersion: PROJECT_SCHEMA_VERSION,
       name: "U à poteau",
       rulesVersion: 1,
       site: { floorToFloor: 3062, lowerFinish: 0, upperFinish: 0, upperSlabThickness: 200 },

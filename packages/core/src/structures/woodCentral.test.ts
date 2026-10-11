@@ -30,6 +30,7 @@ import {
 } from "./woodCentral.js";
 import { woodBeamOf, woodCentralContext, woodCentralParams } from "./woodCentral.test-helpers.js";
 import type { WoodCentralBeamResult } from "./woodCentralBeam.js";
+import { resolveMinBoardLength } from "./woodCentralParams.js";
 import "./index.js";
 
 const EN = translatorFor("en");
@@ -214,6 +215,97 @@ describe("contrôles selon le tracé", () => {
         id,
       ).toBe(false);
     }
+  });
+
+  it("feuillu `auto` (D30), reste saisi : contrôlé contre le repli de 180 mm, par assise (A38 (15))", () => {
+    // Décision du 2026-10-11 (QUESTIONS A38 (15)) : sans colonne FCBA pour un bois D30, le reste
+    // saisi est contrôlé contre `section.residualFallback` au lieu de « non évalué ».
+    const low = run(fcbaStraight({ section: { residual: 120 } }));
+    expect(low.beam!.fcba.hardwoodFallback).toBe(true);
+    const crLow = byRule(low.out.checks, "CREMAILLERE_REGLE_MOYENS");
+    expect(crLow.length).toBe(low.beam!.seats.length);
+    expect(crLow.every((c) => c.status === "violation")).toBe(true);
+    expect(crLow.every((c) => c.min === 180)).toBe(true);
+    expect(fr(crLow[0]!.message)).toMatch(
+      /contrôlé contre le reste de repli 180 mm \(essence feuillue en classe automatique D30, hors tableau FCBA ; valeur à valider, QUESTIONS A38 \(15\)\), largeur 88 mm/,
+    );
+    expect(EN.t(crLow[0]!.message)).toMatch(/checked against the fallback residual 180 mm/);
+    const crHigh = byRule(
+      run(fcbaStraight({ material: "wood-beech", section: { residual: 200 } })).out.checks,
+      "CREMAILLERE_REGLE_MOYENS",
+    );
+    expect(crHigh.map((c) => c.status)).toEqual(["ok"]);
+    expect(crHigh[0]!.min).toBe(180);
+    // Reste `auto` (= repli) : toujours non évalué (test précédent) ; classe saisie : colonne
+    // FCBA lue ; trace courbe : non évalué.
+    const c30 = byRule(
+      run(fcbaStraight({ strengthClass: "C30", section: { residual: 120 } })).out.checks,
+      "CREMAILLERE_REGLE_MOYENS",
+    );
+    expect(c30.every((c) => c.status === "violation" && c.min !== 180)).toBe(true);
+    const pine = run(fcbaStraight({ material: "wood-pine", section: { residual: 120 } }));
+    expect(pine.beam!.fcba.hardwoodFallback).toBeUndefined();
+    expect(byRule(pine.out.checks, "CREMAILLERE_REGLE_MOYENS").every((c) => c.min !== 180)).toBe(
+      true,
+    );
+    const glulam = run(fcbaStraight({ material: "wood-glulam", section: { residual: 120 } }));
+    expect(byRule(glulam.out.checks, "CREMAILLERE_REGLE_MOYENS").map((c) => c.status)).toEqual([
+      "non-evaluee",
+    ]);
+    const curved = run(preset("quarter-left", { section: { residual: 120 } }));
+    expect(byRule(curved.out.checks, "CREMAILLERE_REGLE_MOYENS").map((c) => c.status)).toEqual([
+      "non-evaluee",
+    ]);
+    // Hors domaine (droit du préréglage, 3 780 mm de projection) : non évalué.
+    const outside = run(preset("straight", { section: { residual: 120 } }));
+    expect(outside.beam!.fcba.hardwoodFallback).toBeUndefined();
+    expect(byRule(outside.out.checks, "CREMAILLERE_REGLE_MOYENS").map((c) => c.status)).toEqual([
+      "non-evaluee",
+    ]);
+  });
+
+  it("feuillu `auto` de largeur sous 2 × le tableau : reste saisi non évalué, comme le pin (relecture A38 (15))", () => {
+    // b / facteur_centrale doit atteindre la plus petite épaisseur de chaque colonne (35 mm en D40).
+    const thin = run(fcbaStraight({ section: { width: 60, residual: 200 } }));
+    expect(thin.beam!.fcba.hardwoodFallback).toBeUndefined();
+    expect(byRule(thin.out.checks, "CREMAILLERE_REGLE_MOYENS").map((c) => c.status)).toEqual([
+      "non-evaluee",
+    ]);
+    expect(fr(thin.beam!.fcba.unusable)).toContain(
+      "largeur 60 mm inférieure à 2 × la plus petite épaisseur du tableau (D40)",
+    );
+    const pine = run(
+      fcbaStraight({ material: "wood-pine", section: { width: 60, residual: 200 } }),
+    );
+    expect(byRule(pine.out.checks, "CREMAILLERE_REGLE_MOYENS").map((c) => c.status)).toEqual([
+      "non-evaluee",
+    ]);
+    const wide = run(fcbaStraight({ section: { width: 70, residual: 200 } }));
+    expect(wide.beam!.fcba.hardwoodFallback).toBe(true);
+  });
+
+  it("propriété : feuillu `auto` droit dans le domaine, violation ⟺ reste saisi < repli (A38 (15))", () => {
+    const base = fcbaStraight();
+    const ctx = woodCentralContext(base);
+    fc.assert(
+      fc.property(
+        fc.constantFrom("wood-oak", "wood-beech", "wood-ash"),
+        fc.integer({ min: 120, max: 260 }),
+        fc.integer({ min: 120, max: 260 }),
+        (material, residual, residualFallback) => {
+          fc.pre(Math.abs(residual - residualFallback) >= 1);
+          const params = woodCentralParams({ material, section: { residual, residualFallback } });
+          const out = buildWoodCentral(ctx, params);
+          const cr = byRule(out.checks, "CREMAILLERE_REGLE_MOYENS");
+          expect(cr.length).toBeGreaterThan(0);
+          for (const c of cr) {
+            expect(c.status === "violation").toBe(residual < residualFallback);
+            expect(c.status).not.toBe("non-evaluee");
+          }
+        },
+      ),
+      { numRuns: 10 },
+    );
   });
 
   it("quart tournant, cintrage sur moule choisi : lamelles cintrées, k_r contrôlé, FCBA hors domaine, plis minces signalés", () => {
@@ -424,6 +516,20 @@ describe("valeurs auto, prédimensionnement, visserie", () => {
     const mould = run(preset("quarter-left", MOULD)).out.autoValues!;
     expect(mould["section.lamellaThickness"]).toBeGreaterThan(0);
     expect(mould["section.layerThickness"]).toBeUndefined();
+    expect(mould["section.minBoardLength"]).toBeUndefined();
+  });
+
+  it("longueur minimale de planche `auto` exposée en couches empilées : 2 × enture + marge (A38 (4) (9))", () => {
+    // Défaut : 2 × 15 + 50 = 80 mm.
+    expect(run(preset("quarter-left")).out.autoValues!["section.minBoardLength"]).toBe(80);
+    const params = { section: { fingerLength: 20, boardLengthMargin: 30 } };
+    expect(resolveMinBoardLength(woodCentralParams(params))).toBe(70);
+    expect(run(preset("quarter-left", params)).out.autoValues!["section.minBoardLength"]).toBe(70);
+    // Valeur saisie respectée, non exposée ; poutre droite (couches droites) : sans objet.
+    const fixed = run(preset("quarter-left", { section: { minBoardLength: 150 } })).out;
+    expect(fixed.autoValues?.["section.minBoardLength"]).toBeUndefined();
+    expect(resolveMinBoardLength(woodCentralParams({ section: { minBoardLength: 0 } }))).toBe(0);
+    expect(run(preset("straight")).out.autoValues?.["section.minBoardLength"]).toBeUndefined();
   });
 
   it("prédimensionnement : poutre LC1, largeur reprise = emmarchement, k_r appliqué", () => {

@@ -11,6 +11,13 @@
  * la poutre (boulons de 10 ou 12 mm avec écrou, C §1.5 [54]) ; sabots métalliques en pied et en
  * tête (A29 n° 5).
  *
+ * Décisions du 2026-10-11 (QUESTIONS A38) : zone tendue du décalage des aboutages selon ANSI
+ * A190.1 § 10.4 (a) (`section.tensionZone`, `section.tensionZoneLayers`,
+ * `section.tensionZoneLength`, (3)), longueur minimale des planches `auto` = 2 × enture + marge
+ * (`section.minBoardLength`, `section.boardLengthMargin`, (4) et (9)), ancrage saisi des
+ * tire-fonds porté sur la partie filetée et ancrage total des projets antérieurs
+ * (`lagScrews.minAnchorage`, `lagScrews.minTotalAnchorage`, (14)) ; sources : C §1.11.
+ *
  * Décisions du 2026-10-10 (QUESTIONS A37) : ancrage minimal des tire-fonds `auto` à 6·d
  * (`lagScrews.minAnchorage`, (1)), longueur filetée (`lagScrews.threadLength`, (5)), bois entre
  * un tire-fond et un perçage horizontal (`lagScrews.holeWood`, (17)), zone tendue du décalage
@@ -213,27 +220,57 @@ export const WoodCentralParamsSchema = z.object({
        */
       fingerLength: mmNonNeg.default(15),
       /**
-       * Couches empilées : zone tendue où s'applique le décalage des aboutages `jointOffset`
-       * (QUESTIONS A37 (4) et (13), décision du 2026-10-10), en part (décimale, 0 à 1) de la
-       * hauteur de la section résistante (reste sous entaille h_res, mesuré perpendiculairement à
-       * la sous-face) comptée depuis la sous-face : un joint abouté est contrôlé si sa couche
-       * descend sous `StackedBeamShape.tensionZoneTop` à son abscisse. 0,5 : moitié basse de la
-       * poutre fléchie sur ses deux appuis (décision de l'utilisateur). ANSI A190.1-2017 § 10.4 (a)
-       * (C §1.11 [85]) ne l'exige que pour « the outer 1/8 of the depth of the member plus one
-       * lamination » de la zone tendue, sur les 75 % centraux de sa longueur : 0,5 est plus
-       * sévère ; **à valider** (QUESTIONS A38).
+       * Couches empilées : zone tendue où s'applique le décalage des aboutages `jointOffset`,
+       * selon ANSI A190.1-2017 § 10.4 (a) (C §1.11 [85] : « the outer 1/8 of the depth of the
+       * member plus one lamination », « over the central 75% along the length of the zone
+       * stressed in tension », aucun décalage exigé ailleurs ; QUESTIONS A38 (3), décision du
+       * 2026-10-11). Part (décimale, 0 à 1) de la hauteur de la section résistante (reste sous
+       * entaille h_res, mesuré perpendiculairement à la sous-face) comptée depuis la sous-face :
+       * haut de bande `StackedBeamShape.tensionZoneTop`(σ) = sous-face + part × h_res / cos ; la
+       * couche qui coupe ce haut de bande et les `tensionZoneLayers` couches au-dessus d'elle (à
+       * cette abscisse) sont en zone tendue. 0,125 = 1/8 de [85] ; **à valider** par un
+       * fabricant de lamellé-collé (la poutre en couches empilées est une crémaillère inclinée,
+       * une couche empilée n'est pas une lamelle au sens de [85]). Avant A38 : 0,5 (moitié
+       * basse, sur toute la longueur, sans couche en plus) ; une valeur enregistrée avant A38
+       * garde ce sens par la migration du format (`tensionZoneLayers` = 0, `tensionZoneLength`
+       * = 1).
        */
-      tensionZone: z.number().positive().max(1).default(0.5),
+      tensionZone: z.number().positive().max(1).default(0.125),
+      /**
+       * Couches empilées : nombre de couches comptées en zone tendue **au-dessus** de celle qui
+       * coupe le haut de bande `tensionZone` (« plus one lamination » de [85] § 10.4 (a), C §1.11 ;
+       * QUESTIONS A38 (3)). Entier ≥ 0 ; 1 ; **à valider** (une couche empilée n'est pas une
+       * lamelle de [85]).
+       */
+      tensionZoneLayers: z.number().int().nonnegative().default(1),
+      /**
+       * Couches empilées : part centrale de la longueur de la poutre (étendue le long de la
+       * trace, [sStart ; sEnd] de `StackedBeamShape`) où le décalage des aboutages est exigé en
+       * zone tendue (« over the central 75% along the length », [85] § 10.4 (a), C §1.11 ;
+       * QUESTIONS A38 (3)) : un joint d'abscisse σ hors de
+       * [sStart + (1 − part)·L / 2 ; sEnd − (1 − part)·L / 2] est libre. Décimal, 0 à 1 ; 0,75 ;
+       * mesure le long de la trace : convention **à valider**.
+       */
+      tensionZoneLength: z.number().positive().max(1).default(0.75),
       /**
        * Couches empilées : longueur finie minimale d'une planche d'une couche composée (planche
        * aboutée à entures), mesurée le long de la trace entre ses bouts (σ1 − σ0, sans les
-       * demi-entures), mm (QUESTIONS A37 (4) et (14), décision du 2026-10-10). Les planches plus
-       * courtes sont évitées au placement des coupes, sinon signalées (constat
-       * `FAB_LIMON_CENTRAL_BOIS_PLANCHES_COURTES`). Aucune source (ANSI A190.1-2017 § 10.5 ne
-       * règle que l'écart de 1,8 m entre aboutages d'une même lamelle dans les 10 % extérieurs
-       * tendus, C §1.11 [85]) : **à valider** par un fabricant (QUESTIONS A38). 0 : aucune.
+       * demi-entures), mm (QUESTIONS A37 (4) et (14) ; A38 (4) et (9), décision du 2026-10-11).
+       * Les planches plus courtes sont évitées au placement des coupes, sinon signalées (constat
+       * `FAB_LIMON_CENTRAL_BOIS_PLANCHES_COURTES`) ; la pente de fil `maxGrainSlope` reste
+       * prioritaire. `auto` : 2 × `fingerLength` + `boardLengthMargin` (`resolveMinBoardLength`,
+       * 80 mm par défaut) ; aucune source (ANSI A190.1-2017 § 10.5 ne règle que l'écart de 1,8 m
+       * entre aboutages d'une même lamelle, C §1.11 [85]) : **à valider** par un fabricant. Valeur
+       * saisie respectée (0 : aucune). Rétrocompatible : un nombre enregistré reste un nombre.
        */
-      minBoardLength: mmNonNeg.default(150),
+      minBoardLength: auto(mmNonNeg),
+      /**
+       * Couches empilées : marge ajoutée aux deux longueurs d'enture pour la longueur minimale
+       * `auto` d'une planche aboutée (QUESTIONS A38 (4), décision du 2026-10-11 : « deux
+       * longueurs d'enture plus une marge »), mm. 50 : ordre de grandeur sans source (prise de
+       * la planche par la machine à abouter), **à valider** par un fabricant.
+       */
+      boardLengthMargin: mmNonNeg.default(50),
     })
     .prefault({}),
   notch: z
@@ -295,16 +332,24 @@ export const WoodCentralParamsSchema = z.object({
        */
       pilotDiameter: mmPos.default(7),
       /**
-       * Ancrage minimal dans la poutre, mm (QUESTIONS A37 (1), décision du 2026-10-10). `auto` :
-       * pénétration de la **partie filetée** côté pointe d'au moins 6·d (EN 1995-1-1 § 8.7.2 (3),
-       * C §1.11 [88] ; 60 mm pour un Ø10), partie filetée lue par `threadLength` ; un tire-fond
-       * qui ne la trouve pas est retiré (constat `FAB_LIMON_CENTRAL_BOIS_BOULONS`). Valeur
-       * saisie : ancrage (longueur dans la poutre) minimal respecté tel quel, la pénétration de
-       * la partie filetée sous 6·d restant signalée (`check.spacing.lagPenetration`) ; 50 mm :
-       * « profondeur d'ancrage d'au moins 50 mm » de la fiche du fabricant (C §1.11 [78], valeur
-       * par défaut antérieure). Rétrocompatible : un nombre enregistré reste un nombre. À valider.
+       * Pénétration minimale de la **partie filetée** côté pointe dans la poutre, mm (QUESTIONS
+       * A37 (1), décision du 2026-10-10 ; A38 (14), décision du 2026-10-11 : une valeur saisie
+       * porte aussi sur la partie filetée). `auto` : 6·d (EN 1995-1-1 § 8.7.2 (3), C §1.11 [88] ;
+       * 60 mm pour un Ø10) ; partie filetée lue par `threadLength`. Un tire-fond qui ne la trouve
+       * pas est retiré (constat `FAB_LIMON_CENTRAL_BOIS_BOULONS`), sauf avec un ancrage total
+       * `minTotalAnchorage` (projets antérieurs à A38), où elle n'est que signalée. À valider.
        */
       minAnchorage: auto(mmPos),
+      /**
+       * Ancrage **total** minimal sous la marche (L − épaisseur de marche), mm ; 0 : aucun (défaut).
+       * Sens d'une valeur saisie de `minAnchorage` avant A38 (QUESTIONS A38 (14)) : la migration
+       * du format y reporte une telle valeur, pour que le projet garde son modèle. Valeur > 0 :
+       * un tire-fond dont l'ancrage total n'atteint pas cette valeur est retiré, la pénétration de
+       * la partie filetée sous `minAnchorage` restant un constat (`check.spacing.lagPenetration`,
+       * comportement antérieur à A38) ; 50 mm : « profondeur d'ancrage d'au moins 50 mm » de la
+       * fiche du fabricant (C §1.11 [78]). À valider.
+       */
+      minTotalAnchorage: mmNonNeg.default(0),
       /** Bois laissé sous la pointe (au-dessus de la sous-face ou de la coupe au sol), à valider. */
       tipCover: mmNonNeg.default(10),
       /** Longueur maximale du tire-fond, mm (C §1.11 [78] : 60 à 160 mm pour un Ø10), à valider. */
@@ -527,4 +572,15 @@ export function resolveAnchorKind(
   const k = params.anchors.kind;
   if (k !== "auto") return k;
   return curved ? "embeddedPlate" : "shoe";
+}
+
+/**
+ * Longueur finie minimale d'une planche aboutée (QUESTIONS A38 (4) et (9), décision du
+ * 2026-10-11) : saisie (`section.minBoardLength`), ou `auto` → 2 × `section.fingerLength` +
+ * `section.boardLengthMargin` (80 mm par défaut, à valider). Contrat partagé (couches empilées,
+ * plugin, interface).
+ */
+export function resolveMinBoardLength(params: WoodCentralParams): number {
+  const s = params.section;
+  return s.minBoardLength !== "auto" ? s.minBoardLength : 2 * s.fingerLength + s.boardLengthMargin;
 }

@@ -306,6 +306,16 @@ describe("clés", () => {
     ]) {
       expect(e(p), p).toMatchObject({ tier: "workshop", toValidate: true });
     }
+    // Décisions A38 du 2026-10-11 : bande tendue d'ANSI A190.1 (3), marge de la longueur
+    // minimale `auto` (4), (9), ancrage total des projets antérieurs (14) : Atelier ◆.
+    for (const p of [
+      "section.tensionZoneLayers",
+      "section.tensionZoneLength",
+      "section.boardLengthMargin",
+      "lagScrews.minTotalAnchorage",
+    ]) {
+      expect(e(p), p).toMatchObject({ tier: "workshop", toValidate: true });
+    }
     // Chaque chemin du schéma a son entrée (aucun repli Atelier implicite).
     const plugin = availableStructures().find((k) => k.kind === "wood-central")!;
     const defaults = plugin.paramsSchema.parse({});
@@ -709,7 +719,10 @@ describe("valeurs ◆ d'un projet", () => {
       "section.jointOffset",
       "section.fingerLength",
       "section.tensionZone",
+      "section.tensionZoneLayers",
+      "section.tensionZoneLength",
       "section.minBoardLength",
+      "section.boardLengthMargin",
     ]) {
       expect(at(straight, auto, path), path).toBe(false);
       expect(at(quarter, mould, path), path).toBe(false);
@@ -753,6 +766,17 @@ describe("valeurs ◆ d'un projet", () => {
     expect(at(helical, none, "anchors.foot")).toBe(true);
     // Tire-fonds : toujours (marches basses possibles sur tout tracé).
     expect(at(straight, auto, "lagScrews.minAnchorage")).toBe(true);
+    // Ancrage total des projets enregistrés avant la version 2 du format (A38 (14)) : seulement
+    // en vigueur (> 0, reporté par la migration) ; caché au défaut 0, rien à valider.
+    expect(at(straight, auto, "lagScrews.minTotalAnchorage")).toBe(false);
+    expect(at(helical, auto, "lagScrews.minTotalAnchorage")).toBe(false);
+    const legacy = params({ lagScrews: { minTotalAnchorage: 50 } });
+    expect(at(straight, legacy, "lagScrews.minTotalAnchorage")).toBe(true);
+    expect(at(helical, legacy, "lagScrews.minTotalAnchorage")).toBe(true);
+    // Marge de la longueur minimale `auto` (A38 (4)) : cachée pour une longueur saisie.
+    const setLength = params({ section: { minBoardLength: 120 } });
+    expect(at(quarter, setLength, "section.minBoardLength")).toBe(true);
+    expect(at(quarter, setLength, "section.boardLengthMargin")).toBe(false);
     // Longueur filetée et bois entre filet et perçage (A37 (5), (17)) : toujours.
     for (const path of ["lagScrews.threadLength", "lagScrews.holeWood"]) {
       expect(at(straight, auto, path), path).toBe(true);

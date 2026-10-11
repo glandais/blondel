@@ -60,7 +60,7 @@
   },
   "name": "Hélicoïdal acier, verre et inox",
   "rulesVersion": 1,
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "site": {
     "floorToFloor": 2750,
     "lowerFinish": 0,

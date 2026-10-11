@@ -215,13 +215,15 @@ describe("exemples j5c : limon central bois", () => {
     expect((lc1.fixings ?? []).some((f) => f.with?.[0] === "tread-1")).toBe(false);
     // Plus de constat de pénétration : aucun tire-fond posé sous 6·d en `auto`.
     expect(
-      violations(m, "FAB_LIMON_CENTRAL_BOIS_PINCES").filter(
-        (r) => r.message.key === "structure.woodCentral.check.spacing.lagPenetration",
+      violations(m, "FAB_LIMON_CENTRAL_BOIS_PINCES").filter((r) =>
+        r.message.key.startsWith("structure.woodCentral.check.spacing.lagPenetration"),
       ),
     ).toEqual([]);
   });
 
-  it("droit, ancrage minimal saisi à 50 mm (rétrocompatibilité, A37 (1)) : M1 garde ses tire-fonds de 130 mm et le constat de pénétration", () => {
+  it("droit, ancrage total de 50 mm (projet antérieur à A38, migré en `minTotalAnchorage`, A38 (14)) : M1 garde ses tire-fonds de 130 mm et le constat de pénétration", () => {
+    // Sens d'avant A38 d'un ancrage saisi de 50 mm gardé : la migration du format le reporte en
+    // ancrage total (`lagScrews.minTotalAnchorage`), même modèle qu'avant A38.
     const p = load(J5C_WOOD_STRAIGHT);
     const st = p.stair.structure;
     const params = (st.params ?? {}) as Record<string, Record<string, unknown> | undefined>;
@@ -232,7 +234,10 @@ describe("exemples j5c : limon central bois", () => {
           ...p.stair,
           structure: {
             ...st,
-            params: { ...params, lagScrews: { ...(params["lagScrews"] ?? {}), minAnchorage: 50 } },
+            params: {
+              ...params,
+              lagScrews: { ...(params["lagScrews"] ?? {}), minTotalAnchorage: 50 },
+            },
           } as typeof st,
         },
       },
@@ -247,7 +252,7 @@ describe("exemples j5c : limon central bois", () => {
     expect(m1.map((f) => f.length)).toEqual([130]);
     // Partie filetée de 50 mm (b = 63 > ancrage 50) sous 6·d = 60 mm : constat d'avertissement.
     const penetration = violations(m, "FAB_LIMON_CENTRAL_BOIS_PINCES").filter(
-      (r) => r.message.key === "structure.woodCentral.check.spacing.lagPenetration",
+      (r) => r.message.key === "structure.woodCentral.check.spacing.lagPenetrationTotal",
     );
     expect(penetration).toHaveLength(1);
     expect(penetration[0]!.location).toMatchObject({ treadNumber: 1 });

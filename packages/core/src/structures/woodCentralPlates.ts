@@ -32,8 +32,9 @@
  *   coupe au sol (moins le jeu c) et s'étend vers l'avant sur `anchors.plate.footWebLength`
  *   (`auto` : la plus longue âme plane dont la flèche + le demi-trait reste à b/2 − a4,c des
  *   faces) ; son dessus suit les assises **en escalier** : webTop(σ) = min(tp + `webDepth`,
- *   dessus de la poutre − max(`wood.minCheek`, `seatClearance`) − c), le dessus de la poutre
- *   étant pris au plus bas sur [σ − c ; σ + c] pour que le trait de scie (âme épaissie de c)
+ *   dessus de la poutre − max(`wood.minCheek`, `seatClearanceAt`) − c), le dessus de la poutre
+ *   moins la place réservée sous l'assise (tire-fond réellement posé, QUESTIONS A38 (6)) étant
+ *   pris au plus bas sur [σ − c ; σ + c] pour que le trait de scie (âme épaissie de c)
  *   reste sous chaque assise ; les bouts plus bas que deux pinces de perçage sont retirés (sous
  *   la première marche, la place est laissée à ses tire-fonds). La platine couvre l'âme
  *   (longueur min(coupe au sol, max(`anchors.length`, âme + jeu))). **Repli** : si aucune âme
@@ -96,6 +97,7 @@ import {
   ec5Spacing,
   footPinFloorDistance,
   lagHoleClearance,
+  lagRequired,
   woodCentralBoltSpacing,
   type WoodGrainMethod,
 } from "./woodSpacing.js";
@@ -1317,8 +1319,9 @@ interface FootWebSteps {
  * Dessus brut de l'âme de pied prolongée le long de la trace (QUESTIONS A35 (a), convention
  * **à valider**) : finit au bout de la coupe au sol moins le jeu (ws1 = x1 − c), commence à
  * ws1 − `footWebLength` (bornée à la face avant + c ; `auto` : plus longue âme plane dont flèche
- * + demi-trait ≤ b/2 − a4,c, par dichotomie) ; dessus webTop(σ) = min(tp + `webDepth`, min du
- * dessus de la poutre sur [σ − c ; σ + c] − max(`wood.minCheek`, `seatClearance`) − c). `null` :
+ * + demi-trait ≤ b/2 − a4,c, par dichotomie) ; dessus webTop(σ) = min(tp + `webDepth`, min sur
+ * x ∈ {σ − c ; σ ; σ + c} du dessus de la poutre en x − max(`wood.minCheek`, `seatClearanceAt`(x))
+ * − c), place réservée sous chaque assise par la poutre (QUESTIONS A38 (6)). `null` :
  * coupe au sol plus courte que deux pinces de perçage.
  */
 function footWebSteps(input: WoodCentralShoesInput, kerfWidth: Mm): FootWebSteps | null {
@@ -1332,9 +1335,11 @@ function footWebSteps(input: WoodCentralShoesInput, kerfWidth: Mm): FootWebSteps
   const wsMin = beam.frontSigma + c;
   if (!(ws1 - wsMin >= minLength - EPS)) return null;
   const topAt = beam.topAt ?? ((): Mm => beam.firstSeatZ);
-  const clear = Math.max(profile.wood.minCheek, beam.seatClearance ?? 0);
+  // Place sous l'assise à σ (A38 (6)) : au moins la joue minimale.
+  const clear = (s: Mm): Mm => Math.max(profile.wood.minCheek, beam.seatClearanceAt?.(s) ?? 0);
+  const free = (s: Mm): Mm => topAt(s) - clear(s);
   const webTop = (s: Mm): Mm =>
-    Math.min(tp + P.webDepth, Math.min(topAt(s - c), topAt(s), topAt(s + c)) - clear - c);
+    Math.min(tp + P.webDepth, Math.min(free(s - c), free(s), free(s + c)) - c);
 
   // Longueur : saisie (depuis ws1 vers l'avant), ou plus longue âme dont le trait reste dans le
   // bois (la flèche croît avec la longueur : dichotomie sur le début de l'âme).
@@ -1732,8 +1737,9 @@ interface PinRow {
  *   sol (borne haute en σ, par dichotomie : la distance décroît vers la coupe) ;
  * - préférence : la zone d'obstacle d'une broche (jeu géométrique d'un tire-fond autour du
  *   perçage plus le bois `lagScrews.holeWood`, `lagHoleClearance`, A37 (17)) laisse sous chaque assise de [σ − jeu ; σ + jeu] l'ancrage d'un
- *   tire-fond arrêté au-dessus du perçage (`seatClearance` − `tipCover`, à défaut
- *   `lagScrews.minAnchorage`) ; abandonnée si elle ne laisse pas `pins` broches ;
+ *   tire-fond arrêté au-dessus du perçage (`seatClearanceAt`(σ) − `tipCover`, place du tire-fond
+ *   réellement posé sous l'assise, A38 (6) ; à défaut l'ancrage requis `lagRequired`, A38 (14)) ;
+ *   abandonnée si elle ne laisse pas `pins` broches ;
  * - en dernier recours (aucune rangée aux pinces), dans l'âme seulement : les constats le disent.
  */
 function placeFootPins(
@@ -1760,10 +1766,12 @@ function placeFootPins(
     { d: lagSpacing.d, thickness: lagSpacing.lag.holeWood },
   );
   const margin = gap.half;
-  const anchorage =
-    beam.seatClearance !== undefined
-      ? beam.seatClearance - params.lagScrews.tipCover
-      : lagSpacing.lag.minAnchorage;
+  // Ancrage à garder sous l'assise à σ au-dessus d'une broche : place réservée par la poutre
+  // moins le bois sous la pointe (A38 (6)), à défaut l'ancrage requis (`lagRequired`, A38 (14)).
+  const anchorageAt = (s: Mm): Mm =>
+    beam.seatClearanceAt
+      ? Math.max(0, beam.seatClearanceAt(s) - params.lagScrews.tipCover)
+      : lagRequired(lagSpacing.lag);
   const { ws0, ws1, steps } = ext;
   let lo = ws0 + hE;
   let hi = ws1 - hE;
@@ -1772,6 +1780,8 @@ function placeFootPins(
   const g = (k: number): Mm => (n === 0 ? lo : lo + ((hi - lo) * k) / n);
   const reach = margin + 2 * SCAN_STEP;
   const topSteps = stepSegments(topAt, ws0 - reach, ws1 + reach);
+  // Dessus de la poutre moins l'ancrage gardé sous l'assise (fonction en escalier).
+  const prefSteps = stepSegments((s) => topAt(s) - anchorageAt(s), ws0 - reach, ws1 + reach);
   const webMin: Mm[] = [];
   const topMin: Mm[] = [];
   const prefMin: Mm[] = [];
@@ -1779,7 +1789,7 @@ function placeFootPins(
     const s = g(k);
     webMin.push(stepMin(steps, s - hE - SCAN_STEP, s + hE + SCAN_STEP));
     topMin.push(stepMin(topSteps, s - SCAN_STEP, s + SCAN_STEP));
-    prefMin.push(stepMin(topSteps, s - margin - SCAN_STEP, s + margin + SCAN_STEP));
+    prefMin.push(stepMin(prefSteps, s - margin - SCAN_STEP, s + margin + SCAN_STEP));
   }
   const zTop = Math.max(...webMin) - hE;
 
@@ -1792,7 +1802,7 @@ function placeFootPins(
       const ok = (k: number): boolean =>
         z <= webMin[k]! - hE + EPS &&
         (stage === "relaxed" || z <= topMin[k]! - ec5.a4t + EPS) &&
-        (stage !== "pref" || z + gap.above <= prefMin[k]! - anchorage + EPS);
+        (stage !== "pref" || z + gap.above <= prefMin[k]! + EPS);
       // Sous-face au-delà de la coupe au sol : dernière abscisse à la pince a4,t.
       let kMax = n;
       if (stage !== "relaxed") {

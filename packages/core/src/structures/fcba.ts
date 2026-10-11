@@ -85,3 +85,27 @@ export function requiredCentralResidual(
 ): number | null {
   return requiredResidual(table, cls, width / table.centralFactor);
 }
+
+/**
+ * Bois hors colonne du tableau (feuillu D30 en classe `auto`, QUESTIONS A38 (15)) : le reste de
+ * repli ne vaut que dans le **domaine d'épaisseur** du tableau, c'est-à-dire au moins la plus
+ * petite épaisseur tabulée de **chaque** colonne (un D30 se place entre C30 et D40). Renvoie la
+ * colonne dont la plus petite épaisseur tabulée dépasse le plus `thickness` (raison affichée), ou
+ * `null` dans le domaine.
+ */
+export function fallbackThicknessOutOfRange(
+  table: FcbaTable,
+  thickness: number,
+): StrengthClass | null {
+  let worst: StrengthClass | null = null;
+  let worstMin = -Infinity;
+  for (const cls of ["C30", "D40"] as const) {
+    if (requiredResidual(table, cls, thickness) !== null) continue;
+    const min = table.rows[cls][0]!.thickness;
+    if (min > worstMin) {
+      worst = cls;
+      worstMin = min;
+    }
+  }
+  return worst;
+}

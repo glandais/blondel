@@ -9,7 +9,7 @@ import { GuardsSpecSchema } from "../guards/spec.js";
 import { UnderlaySchema } from "../site/schema.js";
 import { WOOD_MATERIALS, WorkshopProfileSchema } from "../workshop/profile.js";
 
-export const PROJECT_SCHEMA_VERSION = 1 as const;
+export const PROJECT_SCHEMA_VERSION = 2 as const;
 
 /** mm entier saisi par l'utilisateur. */
 const mmInt = z.number().int();

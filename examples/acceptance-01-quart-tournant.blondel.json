@@ -9,7 +9,7 @@
   },
   "name": "Cas d'acceptation n° 1 — quart tournant bas bois, poteau d'angle",
   "rulesVersion": 1,
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "site": {
     "floorToFloor": 2700,
     "lowerFinish": 0,

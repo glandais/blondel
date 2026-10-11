@@ -4,7 +4,12 @@
  */
 import type { Layout, NosingLine, Stepping, Tread, TreadKind } from "../model/derived.js";
 import type { Polygon2 } from "../model/primitives.js";
-import { ProjectSchema, type Project, type ProjectInput } from "../model/project.js";
+import {
+  PROJECT_SCHEMA_VERSION,
+  ProjectSchema,
+  type Project,
+  type ProjectInput,
+} from "../model/project.js";
 import type { ComplianceInput } from "./types.js";
 
 export interface ProjectOptions {
@@ -26,7 +31,7 @@ export interface ProjectOptions {
 
 export function makeProject(o: ProjectOptions = {}): Project {
   const input: ProjectInput = {
-    schemaVersion: 1,
+    schemaVersion: PROJECT_SCHEMA_VERSION,
     ...(o.rulesVersion !== undefined ? { rulesVersion: o.rulesVersion } : {}),
     site: {
       floorToFloor: o.floorToFloor ?? 2720,

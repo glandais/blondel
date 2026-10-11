@@ -15,7 +15,9 @@
  *   sous-face rampante (rive basse droite). `auto` : valeur exigée par le tableau FCBA quand il
  *   est exploitable, sinon `residualFallback` (à valider).
  * - Contrôles : CREMAILLERE_REGLE_MOYENS (tableau FCBA lu dans rules.yaml, `non-evaluee` hors
- *   de son domaine), LIMON_EPAISSEUR_MIN_DTU, longueur de plateau et débit (profil d'atelier).
+ *   de son domaine ; reste **saisi** d'un feuillu en classe `auto` D30 dans le domaine contrôlé
+ *   contre `residualFallback`, QUESTIONS A38 (15)), LIMON_EPAISSEUR_MIN_DTU, longueur de plateau
+ *   et débit (profil d'atelier).
  *
  * Domaine d'exploitation du tableau [hypothèse Blondel, à valider] : escalier droit, classe de
  * résistance connue (colonnes C30 résineux, D40 feuillus ; `auto` d'un feuillu D30 : aucune
@@ -46,6 +48,7 @@ import {
 } from "./checks.js";
 import {
   CREMAILLERE_RULE_ID,
+  fallbackThicknessOutOfRange,
   fcbaTable,
   requiredResidual,
   type FcbaTable,
@@ -152,6 +155,24 @@ export function fcbaUnknownClassFullReason(
   return domain ? msg("compliance.join.semicolon", { first: base, next: domain }) : base;
 }
 
+/**
+ * Classe D30 d'une essence feuillue en classe `auto` quand le reste sous entaille **saisi** est
+ * contrôlé contre le reste de repli (QUESTIONS A38 (15), décision du 2026-10-11) : classe
+ * inconnue du tableau FCBA pour la seule raison de l'essence feuillue (`HARDWOOD_WOOD_CLASS`),
+ * domaine du tableau tenu (`domain` nul, épaisseur au moins la plus petite épaisseur tabulée de
+ * chaque colonne : `outOfRange` nul) et reste saisi ; `null` sinon (contrôle inchangé).
+ */
+function hardwoodFallbackClass(
+  params: WoodCutParams,
+  cls: StrengthClass | "unknown",
+  domain: Message | null,
+  outOfRange: StrengthClass | null,
+): string | null {
+  if (params.residual === "auto" || cls !== "unknown" || domain !== null) return null;
+  if (params.strengthClass !== "auto" || outOfRange !== null) return null;
+  return HARDWOOD_WOOD_CLASS[params.material] ?? null;
+}
+
 export interface CarriageDetail {
   readonly part: Part;
   readonly outline: Polygon2;
@@ -235,9 +256,23 @@ export function buildWoodCut(ctx: StructureContext, params: WoodCutParams): CutR
   const domain = fcbaDomainReason(table, H, run);
   let fcbaUnusable: Message | undefined;
   let required: number | null = null;
-  if (cls === "unknown")
+  // Feuillu D30 en classe `auto` plus mince que le tableau : même raison d'épaisseur qu'un
+  // résineux (relecture A38 (15)), le repli ne vaut que dans le domaine d'épaisseur.
+  const outOfRange =
+    cls === "unknown" && HARDWOOD_WOOD_CLASS[params.material] !== undefined
+      ? fallbackThicknessOutOfRange(table, e)
+      : null;
+  if (cls === "unknown") {
     fcbaUnusable = fcbaUnknownClassFullReason(params.material, params.strengthClass, domain);
-  else {
+    if (outOfRange !== null)
+      fcbaUnusable = msg("compliance.join.semicolon", {
+        first: fcbaUnusable,
+        next: msg("structure.woodCut.fcba.belowSmallestThickness", {
+          thickness: dec(e, 0),
+          cls: outOfRange,
+        }),
+      });
+  } else {
     required = requiredResidual(table, cls, e);
     if (required === null)
       fcbaUnusable = msg("structure.woodCut.fcba.belowSmallestThickness", {
@@ -252,6 +287,11 @@ export function buildWoodCut(ctx: StructureContext, params: WoodCutParams): CutR
       : fcbaUnusable === undefined && required !== null
         ? required
         : params.residualFallback;
+  // Reste **saisi** d'une essence feuillue en classe `auto` (D30, aucune colonne FCBA), dans le
+  // domaine du tableau : contrôlé contre le reste de repli `residualFallback` (QUESTIONS A38 (15),
+  // décision du 2026-10-11) au lieu de « non évalué ». Reste `auto` (= repli), lamellé-collé,
+  // classe saisie, hors domaine ou épaisseur sous le tableau : inchangé.
+  const hardwoodFallback = hardwoodFallbackClass(params, cls, domain, outOfRange);
 
   const tm = spec.thickness;
   const toothOffset = spec.nosing + (spec.risers === "full" ? spec.riserThickness : 0);
@@ -399,7 +439,22 @@ export function buildWoodCut(ctx: StructureContext, params: WoodCutParams): CutR
   const loc = (p: Part) => ({ partId: p.id });
   const cremaillere = checks.yamlRule(CREMAILLERE_RULE_ID);
   if (cremaillere && carriages.length > 0) {
-    if (fcbaUnusable !== undefined || required === null) {
+    if (hardwoodFallback !== null) {
+      checks.addItems(
+        cremaillere,
+        carriages.map((c) => ({
+          value: c.residual,
+          label: textMessage(c.part.mark),
+          ...loc(c.part),
+        })),
+        msg("structure.woodCut.check.residualHardwoodFallback", {
+          cls: hardwoodFallback,
+          fallback: dec(params.residualFallback, 0),
+          thickness: dec(e, 0),
+        }),
+        { min: params.residualFallback, max: null },
+      );
+    } else if (fcbaUnusable !== undefined || required === null) {
       checks.add(cremaillere, [
         {
           status: "non-evaluee",

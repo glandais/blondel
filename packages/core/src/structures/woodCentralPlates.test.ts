@@ -76,7 +76,10 @@ interface GeomOver {
    */
   readonly seatLength?: number;
   readonly rise?: number;
+  /** Place constante sous chaque assise (`seatClearanceAt` constant). */
   readonly seatClearance?: number;
+  /** Place sous l'assise à σ (QUESTIONS A38 (6)). */
+  readonly seatClearanceAt?: (s: number) => number;
   /**
    * Couches empilées (A37 (8) (15)) : épaisseur maximale des couches de l'oracle des joints de
    * colle (`layerBounds` réel, joints calés sur les assises, broches centrées) ; ou oracle donné.
@@ -112,7 +115,12 @@ function geometry(trace: CentralTrace, over: GeomOver = {}): ShoeBeamGeometry {
             Math.min(headTop, first + rise * Math.max(0, Math.floor((s - front) / seatLength))),
         }
       : {}),
-    ...(over.seatClearance !== undefined ? { seatClearance: over.seatClearance } : {}),
+    // Place sous les assises constante (contrat `seatClearanceAt`, QUESTIONS A38 (6)).
+    ...(over.seatClearance !== undefined
+      ? { seatClearanceAt: () => over.seatClearance! }
+      : over.seatClearanceAt !== undefined
+        ? { seatClearanceAt: over.seatClearanceAt }
+        : {}),
     ...stackedOf(front, first, headTop, over),
   };
 }
@@ -153,8 +161,9 @@ function stackedOf(
 function webTopOf(beam: ShoeBeamGeometry, params: WoodCentralParams, s: number): number {
   const top = beam.topAt ?? (() => beam.firstSeatZ);
   const P = params.anchors.plate;
-  const clear = Math.max(PROFILE.wood.minCheek, beam.seatClearance ?? 0);
-  return Math.min(P.thickness + P.webDepth, Math.min(top(s - C), top(s), top(s + C)) - clear - C);
+  const free = (x: number): number =>
+    top(x) - Math.max(PROFILE.wood.minCheek, beam.seatClearanceAt?.(x) ?? 0);
+  return Math.min(P.thickness + P.webDepth, Math.min(free(s - C), free(s), free(s + C)) - C);
 }
 
 /**
@@ -509,6 +518,42 @@ describe("platines à âme noyée : âme de pied prolongée (A35 (a), (b), (e))"
       for (const p of r.parts) expect(solidProblem(p.solid)).toBeUndefined();
     },
   );
+
+  it("place réservée par assise (A38 (6)) : rien sous une assise sans tire-fond, l'âme y descend à la joue minimale", () => {
+    // Place du tire-fond réellement posé (`seatClearanceAt`) : 0 sous M1 (aucun tire-fond n'y
+    // tient), 60 mm sous les autres assises. Le palier sous M1 n'est plus borné que par la joue
+    // minimale ; avec la place de 60 mm partout (contrat antérieur), il était plus bas.
+    const first = STAIRS.firstSeatZ;
+    const flat = run("quarter-left", {}, STAIRS);
+    const m2 = flat.beam.frontSigma + STAIRS.seatLength;
+    const { seatClearance: _, ...stairs } = STAIRS;
+    const per = run(
+      "quarter-left",
+      {},
+      {
+        ...stairs,
+        seatClearanceAt: (s: number) => (s < m2 ? 0 : STAIRS.seatClearance),
+      },
+    );
+    expect(per.r.errors).toEqual([]);
+    const tp = per.params.anchors.plate.thickness;
+    const web = footWebInBeam(per.r, per.params, per.beam);
+    const levels = [...new Set(web.outer.map((p) => Math.round(p.y * 1e6) / 1e6))].filter(
+      (z) => z > tp + 1e-6,
+    );
+    expect(Math.min(...levels)).toBeCloseTo(first - PROFILE.wood.minCheek - C, 6);
+    const flatWeb = footWebInBeam(flat.r, flat.params, flat.beam);
+    const flatLevels = flatWeb.outer.map((p) => p.y).filter((z) => z > tp + 1e-6);
+    expect(Math.min(...levels)).toBeGreaterThan(Math.min(...flatLevels));
+    // Dessus de l'âme toujours sous le dessus permis (contrat `footWebSteps`, place par σ).
+    for (const q of web.outer) {
+      const allowed = Math.max(
+        webTopOf(per.beam, per.params, q.x - 1e-6),
+        webTopOf(per.beam, per.params, q.x + 1e-6),
+      );
+      expect(q.y).toBeLessThanOrEqual(allowed + 1e-6);
+    }
+  });
 
   it("pince de la coupe au sol selon la filière : a4,t en couches empilées, a3,c sur moule", () => {
     const stacked = run("quarter-left", { section: { curvedMethod: "stacked" } }, STAIRS);

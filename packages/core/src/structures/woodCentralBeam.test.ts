@@ -30,9 +30,13 @@ import {
   WOOD_CENTRAL_BEAM_RULES,
   buildWoodCentralBeam,
   kerfObstacleTop,
+  kerfPlaneOffset,
   kerfShiftAllowed,
+  kerfSideOffset,
   laminationKr,
   laminationOf,
+  seatClearanceFrom,
+  seatReservations,
   type WoodCentralBeamResult,
 } from "./woodCentralBeam.js";
 import { resolveWorkshopProfile } from "../workshop/profile.js";
@@ -46,7 +50,7 @@ import {
   lagThreadLength,
   woodCentralBoltSpacing,
 } from "./woodSpacing.js";
-import type { BeamKerf } from "./woodCentralPlates.js";
+import { embeddedWebLine, type BeamKerf } from "./woodCentralPlates.js";
 
 const EN = translatorFor("en");
 const RULE = getRule(LAMINATION_RULE_ID);
@@ -184,9 +188,10 @@ function expectBoltsInsideBeam(
 /**
  * Tire-fonds de marche contre le contour réel de la poutre : pointe au-dessus du dessous réel de
  * `tipCover` au moins (ancrage borné par le bois disponible), longueur multiple du pas, au plus
- * `maxLength` ; `minAnchorage` saisi : ancrage ≥ valeur ; `auto` (défaut, QUESTIONS A37 (1)) :
- * pénétration de la partie filetée (b = ⌊20 + L / 3⌋, A37 (5)) ≥ 6·d (60 mm pour Ø10). Rend le
- * nombre de tire-fonds.
+ * `maxLength` ; mode `thread` (QUESTIONS A37 (1), A38 (14)) : pénétration de la partie filetée
+ * (b = ⌊20 + L / 3⌋, A37 (5)) ≥ `minAnchorage` saisi, ou 6·d (60 mm pour Ø10) en `auto` ; mode
+ * `total` (`minTotalAnchorage` > 0, projets antérieurs à A38) : ancrage ≥ valeur. Rend le nombre
+ * de tire-fonds.
  */
 function expectLagScrewsInsideBeam(
   beam: WoodCentralBeamResult,
@@ -194,12 +199,14 @@ function expectLagScrewsInsideBeam(
   over: {
     tipCover?: number;
     minAnchorage?: number | "auto";
+    minTotalAnchorage?: number;
     maxLength?: number;
     step?: number;
   } = {},
 ): number {
   const tipCover = over.tipCover ?? 10;
   const minAnchorage = over.minAnchorage ?? "auto";
+  const minTotal = over.minTotalAnchorage ?? 0;
   const maxLength = over.maxLength ?? 160;
   const step = over.step ?? 10;
   const outer = beam.parts.find((p) => p.id === WOOD_CENTRAL_BEAM_ID)!.flat!.outline.outer;
@@ -214,10 +221,11 @@ function expectLagScrewsInsideBeam(
       const anchorage = o.length - tm;
       expect(o.length % step).toBe(0);
       expect(o.length).toBeLessThanOrEqual(maxLength);
-      if (minAnchorage === "auto") {
+      if (minTotal > 0) expect(anchorage).toBeGreaterThanOrEqual(minTotal - TOL);
+      else {
         const p = lagThreadInBeam(o.length, anchorage, lagThreadLength).penetration;
-        expect(p).toBeGreaterThanOrEqual(60 - TOL);
-      } else expect(anchorage).toBeGreaterThanOrEqual(minAnchorage - TOL);
+        expect(p).toBeGreaterThanOrEqual((minAnchorage === "auto" ? 60 : minAnchorage) - TOL);
+      }
       // Longueur ≤ épaisseur de marche + bois disponible − tipCover.
       expect(o.length).toBeLessThanOrEqual(tm + (s.z - ext![0]) - tipCover + TOL);
     }
@@ -484,16 +492,32 @@ describe("limon central bois : escalier droit, lamellé-collé en couches droite
     expect(fr(note)).toMatch(/b = ⌊20 \+ L \/ 3⌋/);
     expect(fr(note)).toMatch(/raccourci au pas de 10 mm/);
     expect(EN.t(note)).toMatch(/threaded part penetrating at least 60 mm/);
-    // Ancrage et longueur filetée saisis : remarque des valeurs saisies.
+    // Pénétration filetée et longueur filetée saisies : remarque des valeurs saisies ; une valeur
+    // saisie de `minAnchorage` porte sur la partie filetée (QUESTIONS A38 (14)).
     const entered = beamFor(project, {
       anchors: { foot: false },
       lagScrews: { minAnchorage: 50, threadLength: 70 },
     })!;
     const enteredNote = entered.beam.notes.find(
-      (n) => n.key === "structure.woodCentral.note.lagScrewsThreadEntered",
+      (n) => n.key === "structure.woodCentral.note.lagScrewsThreadEnteredMin",
     )!;
-    expect(fr(enteredNote)).toMatch(/ancrage saisi de 50 mm au moins/);
+    expect(fr(enteredNote)).toMatch(/partie filetée pénétrant de 50 mm au moins/);
+    expect(fr(enteredNote)).toMatch(/pénétration minimale saisie, lagScrews\.minAnchorage/);
+    expect(fr(enteredNote)).not.toMatch(/longueur sous la marche/);
     expect(fr(enteredNote)).toMatch(/partie filetée côté pointe de 70 mm \(saisie/);
+    expect(EN.t(enteredNote)).toMatch(/entered minimum penetration/);
+    // Ancrage total d'un projet antérieur à A38 (`minTotalAnchorage`, migration du format) :
+    // remarque du mode hérité, pénétration filetée contrôlée à 6·d.
+    const total = beamFor(project, {
+      anchors: { foot: false },
+      lagScrews: { minTotalAnchorage: 50 },
+    })!;
+    const totalNote = total.beam.notes.find(
+      (n) => n.key === "structure.woodCentral.note.lagScrewsTotal",
+    )!;
+    expect(fr(totalNote)).toMatch(/ancrage total de 50 mm au moins sous la marche/);
+    expect(fr(totalNote)).toMatch(/pénétration de la partie filetée contrôlée à 60 mm/);
+    expect(EN.t(totalNote)).toMatch(/total anchorage of at least 50 mm/);
     // Valeurs saisies : entraxe et pince avant des tire-fonds respectées par le placement.
     const set = beamFor(project, {
       anchors: { foot: false },
@@ -574,7 +598,21 @@ describe("limon central bois : escalier droit, lamellé-collé en couches droite
   });
 
   it("bois insuffisant pour un tire-fond : le constat reste, message dédié", () => {
-    const deep = beamFor(project, { lagScrews: { minAnchorage: 400 } })!;
+    // Pénétration filetée saisie de 400 mm (A38 (14)) : message de la pénétration saisie.
+    const thread = beamFor(project, { lagScrews: { minAnchorage: 400 } })!;
+    expect(thread.beam.seats[0]!.bolts).toEqual([]);
+    const threadBad = thread.checks.results.filter(
+      (c) => c.ruleId === WOOD_CENTRAL_BEAM_RULES.bolts.id && c.status === "violation",
+    );
+    expect(threadBad[0]!.message.key).toBe(
+      "structure.woodCentral.check.fixings.lagThreadShortEntered",
+    );
+    expect(fr(threadBad[0]!.message)).toMatch(
+      /partie filetée pénétrant de \d+ mm dans la poutre < 400 mm, pénétration minimale saisie, lagScrews\.minAnchorage ; 6·d = 60 mm pour Ø10/,
+    );
+    expect(EN.t(threadBad[0]!.message)).toMatch(/entered minimum penetration/);
+    // Ancrage total de 400 mm (mode hérité) : message de l'ancrage, comme avant A38.
+    const deep = beamFor(project, { lagScrews: { minTotalAnchorage: 400 } })!;
     expect(deep.beam.seats[0]!.bolts).toEqual([]);
     const bad = deep.checks.results.filter(
       (c) => c.ruleId === WOOD_CENTRAL_BEAM_RULES.bolts.id && c.status === "violation",
@@ -606,22 +644,46 @@ describe("limon central bois : escalier droit, lamellé-collé en couches droite
     expect(EN.t(bad[0]!.message)).toMatch(/threaded part penetrating 53 mm into the beam < 60 mm/);
     // Aucun constat de pénétration : aucun tire-fond posé sous 6·d.
     expect(
-      short.checks.results.some(
-        (c) => c.message.key === "structure.woodCentral.check.spacing.lagPenetration",
+      short.checks.results.some((c) =>
+        c.message.key.startsWith("structure.woodCentral.check.spacing.lagPenetration"),
       ),
     ).toBe(false);
-    // Même borne saisie (60 mm d'ancrage) : sur l'ancrage seul, 100 − épaisseur de marche.
+    // Pénétration saisie de 50 mm (A38 (14)) : portée par la partie filetée (53 mm ≥ 50), les
+    // tire-fonds de 100 mm sont posés, sans constat de pénétration (la valeur saisie fait foi).
     const entered = beamFor(project, {
       anchors: { foot: false },
       lagScrews: { maxLength: 100, minAnchorage: 50 },
     })!;
     const lags = entered.beam.seats.flatMap((s) => s.bolts.filter((o) => o.kind === "lagScrew"));
     expect(lags.length).toBeGreaterThan(0);
-    const pen = entered.checks.results.filter(
-      (c) => c.message.key === "structure.woodCentral.check.spacing.lagPenetration",
+    for (const o of lags) {
+      expect(
+        lagThreadInBeam(o.length, o.length - tm, lagThreadLength).penetration,
+      ).toBeGreaterThanOrEqual(50);
+    }
+    expect(
+      entered.checks.results.some((c) =>
+        c.message.key.startsWith("structure.woodCentral.check.spacing.lagPenetration"),
+      ),
+    ).toBe(false);
+    // Ancrage total de 50 mm (mode hérité, A38 (14)) : posés sur l'ancrage seul, 100 − épaisseur
+    // de marche, avec le constat de pénétration sous 6·d.
+    const total = beamFor(project, {
+      anchors: { foot: false },
+      lagScrews: { maxLength: 100, minTotalAnchorage: 50 },
+    })!;
+    expect(
+      total.beam.seats.flatMap((s) => s.bolts.filter((o) => o.kind === "lagScrew")).length,
+    ).toBeGreaterThan(0);
+    const pen = total.checks.results.filter(
+      (c) => c.message.key === "structure.woodCentral.check.spacing.lagPenetrationTotal",
     );
     expect(pen.length).toBeGreaterThan(0);
-    for (const c of pen) expect(c.measured).toBeLessThan(60);
+    for (const c of pen) {
+      expect(c.measured).toBeLessThan(60);
+      expect(c.min).toBe(60);
+    }
+    expect(fr(pen[0]!.message)).toMatch(/lagScrews\.minTotalAnchorage/);
   });
 
   it("entraxes et pinces de l'EC5 : aucun constat par défaut ; demi-couche saisie à 22 mm des faces (< a4,c = 30 mm) signalée", () => {
@@ -775,6 +837,8 @@ describe("tableau FCBA (escalier droit court) : feuillu D30 hors tableau, classe
         cls: "unknown",
         required: null,
         unusable: expect.objectContaining({ key: "structure.woodCut.fcba.hardwoodD30" }),
+        // Reste saisi contrôlé contre le repli (QUESTIONS A38 (15), décision du 2026-10-11).
+        hardwoodFallback: true,
       });
       expect(r.beam.residual).toBe(180);
     }
@@ -1343,7 +1407,9 @@ describe("propriétés (générateurs contraints)", () => {
     notch: fc.record({ rearDepth: fc.oneof(fc.constant("auto"), fc.integer({ min: 0, max: 30 })) }),
     bolts: fc.record({ perTread: fc.integer({ min: 0, max: 3 }) }),
     lagScrews: fc.record({
-      minAnchorage: fc.integer({ min: 20, max: 120 }),
+      // Pénétration filetée saisie ou `auto`, ancrage total hérité ou aucun (A38 (14)).
+      minAnchorage: fc.oneof(fc.constant<"auto">("auto"), fc.integer({ min: 20, max: 120 })),
+      minTotalAnchorage: fc.oneof(fc.constant(0), fc.integer({ min: 20, max: 120 })),
       tipCover: fc.integer({ min: 0, max: 40 }),
     }),
     anchors: fc.record({
@@ -1411,7 +1477,8 @@ describe("propriétés (générateurs contraints)", () => {
         // traversant avant σ*), aucun perçage croisé avec les perçages d'ancrage.
         const floor = params.anchors.foot ? (beam.anchorKind === "shoe" ? 6 : 8) : 0;
         expectBoltsInsideBeam(beam, tm, { floor });
-        // Tire-fonds : ancrage ≥ minAnchorage, longueur ≤ marche + bois disponible − tipCover.
+        // Tire-fonds : ancrage minimal du mode retenu (A38 (14)), longueur ≤ marche + bois
+        // disponible − tipCover.
         expectLagScrewsInsideBeam(beam, tm, params.lagScrews);
         // Entraxe ≥ spacing et pinces ≥ edge (valeurs `auto` de l'EC5).
         const sp = woodCentralBoltSpacing(
@@ -1798,5 +1865,134 @@ describe("débit et matière de la poutre finie", () => {
     expect(thickStock.supply).toBeUndefined();
     expect(thickStock.thickness).toBeGreaterThan(t2);
     expect(thickStock.count).toBe(thick.beam.lamination.lamellae);
+  });
+});
+
+// ------------------------------------------------------------------ A38 (6), (8)
+
+describe("place réservée sous les assises : pré-passe sans obstacle (QUESTIONS A38 (6))", () => {
+  const lag = (sigma: number, length: number) =>
+    ({ kind: "lagScrew", sigma, lateral: 0, length }) as const;
+  const bolt = (sigma: number) => ({ kind: "bolt", sigma, lateral: 0, length: 400 }) as const;
+  const base = { tm: 40, tipCover: 10 };
+
+  it("longueur posée par la pré-passe, max sur l'assise ; rien sans tire-fond", () => {
+    const drafts = [{ z: 300 }, { z: 300 }, { z: 300 }, { z: 300 }];
+    const organs = [[lag(100, 160), lag(200, 150)], [], [bolt(500), bolt(600)], [lag(700, 130)]];
+    // 160 mm posés → 120 + 10 ; aucun organe → 0 ; seuls boulons → 0 (au-delà de la coupe au
+    // sol) ; 130 mm posés → 90 + 10.
+    expect(seatReservations(drafts, organs, base)).toEqual([130, 0, 0, 100]);
+    expect(seatReservations(drafts, organs, { tm: 80, tipCover: 5 })).toEqual([85, 0, 0, 55]);
+  });
+
+  it("propriété : réservation = max(L − tm + tipCover) des tire-fonds de l'assise, 0 sans tire-fond", () => {
+    fc.assert(
+      fc.property(
+        fc.array(
+          fc.array(
+            fc.record({
+              kind: fc.constantFrom("lagScrew" as const, "bolt" as const),
+              // Tire-fond plus long que la marche (un tire-fond posé traverse la marche).
+              length: fc.integer({ min: 100, max: 300 }),
+            }),
+            { maxLength: 3 },
+          ),
+          { minLength: 1, maxLength: 6 },
+        ),
+        fc.integer({ min: 20, max: 80 }),
+        fc.integer({ min: 0, max: 20 }),
+        (seats, tm, tipCover) => {
+          const organs = seats.map((list) =>
+            list.map((o, j) => ({ kind: o.kind, sigma: j * 50, lateral: 0, length: o.length })),
+          );
+          const out = seatReservations(seats, organs, { tm, tipCover });
+          seats.forEach((list, i) => {
+            const lags = list.filter((o) => o.kind === "lagScrew");
+            if (lags.length === 0) expect(out[i]).toBe(0);
+            else expect(out[i]).toBe(Math.max(...lags.map((o) => o.length - tm + tipCover)));
+          });
+        },
+      ),
+      { numRuns: 100 },
+    );
+  });
+
+  it("place sous le dessus de la poutre : assises qui se recouvrent, hors des assises", () => {
+    const drafts = [
+      { sigma0: 0, sigma1: 260, z: 100 },
+      { sigma0: 240, sigma1: 500, z: 280 },
+    ];
+    const top = (s: number) => (s < 260 ? 100 : 280);
+    const at = seatClearanceFrom(drafts, [0, 90], top);
+    expect(at(100)).toBe(0);
+    // Recouvrement : dessus de l'assise basse ; la demande de M2 (90 sous 280) ne descend pas
+    // sous 100 : rien.
+    expect(at(250)).toBe(0);
+    expect(at(300)).toBe(90);
+    // Hors des assises : assise la plus proche.
+    expect(at(600)).toBe(90);
+    expect(at(-50)).toBe(0);
+    // Demande de l'assise haute plus basse que le dessus de l'assise basse : retenue.
+    expect(seatClearanceFrom(drafts, [0, 200], top)(250)).toBe(20);
+  });
+});
+
+describe("organes et plan réel de l'âme (QUESTIONS A38 (8))", () => {
+  const kerfOn = (trace: ReturnType<typeof buildCentralTrace>, from: number, to: number) => {
+    if (!trace.ok) throw new Error("trace");
+    const line = embeddedWebLine(trace.trace, from, to);
+    const k: BeamKerf = {
+      mark: "AP1",
+      sigma0: from,
+      sigma1: to,
+      z0: 10,
+      z1: 130,
+      width: 12,
+      line: { center: line.center, dir: line.dir, sigmaRef: (from + to) / 2 },
+    };
+    return { k, t: trace.trace, sag: line.sag };
+  };
+
+  it("trace droite : distance au plan = décalage (comportement antérieur)", () => {
+    const project = createProject("straight");
+    const ctx = woodCentralContext(project);
+    const params = woodCentralParams({});
+    const { k, t } = kerfOn(buildCentralTrace(ctx, params), 50, 400);
+    for (const s of [60, 200, 390]) {
+      for (const side of [-20, 0, 7.5]) expect(kerfPlaneOffset(k, t, s, side)).toBeCloseTo(side, 9);
+      expect(kerfSideOffset(k, t, s, 12.5)).toBeCloseTo(12.5, 9);
+    }
+  });
+
+  it("âme plane sur un arc : organe décalé hors du trait et dans la poutre ; écart à la trace ≤ flèche", () => {
+    const project = createProject("helical");
+    const ctx = woodCentralContext(project);
+    const params = woodCentralParams({});
+    const { k, t, sag } = kerfOn(buildCentralTrace(ctx, params), 50, 400);
+    expect(sag).toBeGreaterThan(1);
+    const b = params.section.width;
+    const sp = woodCentralBoltSpacing(
+      params.bolts,
+      resolveWorkshopProfile().fasteners,
+      params.lagScrews,
+    );
+    const hole = params.bolts.holeDiameter;
+    const target = k.width / 2 + hole / 2 + resolveWorkshopProfile().wood.clearance;
+    for (let s = 60; s <= 390; s += 10) {
+      // Organe sur l'axe : écart au plan au plus la flèche de la corde.
+      expect(Math.abs(kerfPlaneOffset(k, t, s, 0))).toBeLessThanOrEqual(sag + 1e-6);
+      for (const sign of [1, -1]) {
+        const side = kerfSideOffset(k, t, s, sign * target);
+        // Hors du trait : distance au plan ≥ demi-trait + demi-perçage (+ jeu).
+        expect(Math.abs(kerfPlaneOffset(k, t, s, side))).toBeCloseTo(target, 6);
+        expect(Math.abs(kerfPlaneOffset(k, t, s, side))).toBeGreaterThanOrEqual(
+          k.width / 2 + hole / 2,
+        );
+        // Dans la poutre quand la pince des faces le permet de ce côté.
+        if (kerfShiftAllowed(b, Math.abs(side), "lagScrew", sp)) {
+          expect(b / 2 - Math.abs(side)).toBeGreaterThanOrEqual(sp.lag.faceDistance - 1e-9);
+        }
+      }
+    }
   });
 });

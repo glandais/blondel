@@ -14,7 +14,9 @@
  * - **Règles de rules.yaml** (contexte déduit `limon_central_bois`) : `CREMAILLERE_REGLE_MOYENS`
  *   (reste sous entaille de chaque assise contre le tableau FCBA lu à b / `facteur_centrale` ;
  *   `non-evaluee` avec sa raison hors du domaine du tableau, en particulier sur une trace courbe :
- *   le tableau est établi pour un escalier droit), `LIMON_EPAISSEUR_MIN_DTU` (largeur b),
+ *   le tableau est établi pour un escalier droit ; reste **saisi** d'un feuillu en classe `auto`
+ *   D30 sur une trace droite dans le domaine : contrôlé contre `section.residualFallback`,
+ *   QUESTIONS A38 (15)), `LIMON_EPAISSEUR_MIN_DTU` (largeur b),
  *   `LIMON_ENTAILLE_MIN` (entaille arrière de chaque marche dans la dent suivante, marche
  *   d'arrivée exclue), `LAMELLE_CINTRE_KR` (r_in / t des lamelles cintrées, refus bloquant sous
  *   `min` ; poutre droite, massive ou en couches empilées : k_r = 1).
@@ -72,7 +74,11 @@ import { CREMAILLERE_RULE_ID, fcbaTable } from "./fcba.js";
 import { CENTRAL_RULES } from "./steelCentral.js";
 import { deduceExecutionClass, executionClassReasons } from "./steelCommon.js";
 import { buildWoodCentralBeam, type WoodCentralBeamResult } from "./woodCentralBeam.js";
-import { WoodCentralParamsSchema, type WoodCentralParams } from "./woodCentralParams.js";
+import {
+  resolveMinBoardLength,
+  WoodCentralParamsSchema,
+  type WoodCentralParams,
+} from "./woodCentralParams.js";
 import { resolvePlateWidth } from "./woodCentralPlates.js";
 import { woodCentralBoltSpacing } from "./woodSpacing.js";
 
@@ -394,6 +400,9 @@ function buildUnsafe(ctx: StructureContext, params: WoodCentralParams): Structur
   if (hasBeam && beam.stacked) {
     if (params.section.layerThickness === "auto" && Number.isFinite(beam.stacked.layerThickness))
       autoValues["section.layerThickness"] = beam.stacked.layerThickness;
+    // Longueur minimale d'une planche aboutée : 2 × enture + marge (QUESTIONS A38 (4) et (9)).
+    if (params.section.minBoardLength === "auto")
+      autoValues["section.minBoardLength"] = resolveMinBoardLength(params);
     if (
       params.section.dressingAllowance === "auto" &&
       Number.isFinite(beam.stacked.dressingAllowance)
@@ -534,7 +543,28 @@ function addMeansChecks(
   const cremaillere = checks.yamlRule(CREMAILLERE_RULE_ID);
   if (cremaillere) {
     const reason = fcbaUnusableReason(beam, curved);
-    if (reason !== null || beam.fcba.required === null) {
+    const hardwood = HARDWOOD_WOOD_CLASS[params.material];
+    if (
+      beam.fcba.hardwoodFallback === true &&
+      !curved &&
+      params.section.residual !== "auto" &&
+      hardwood !== undefined
+    ) {
+      // Reste **saisi** d'un feuillu en classe `auto` (D30, aucune colonne FCBA) sur une trace
+      // droite dans le domaine du tableau : contrôlé contre le reste de repli (QUESTIONS A38 (15),
+      // décision du 2026-10-11) au lieu de « non évalué ». Reste `auto` (= repli) : inchangé.
+      const fallback = params.section.residualFallback;
+      checks.addItems(
+        cremaillere,
+        beam.seats.map((s) => seatItem(s, s.residual)),
+        msg("structure.woodCentral.check.residualHardwoodFallback", {
+          cls: hardwood,
+          fallback: dec(fallback, 0),
+          width: dec(b, 0),
+        }),
+        { min: fallback, max: null },
+      );
+    } else if (reason !== null || beam.fcba.required === null) {
       checks.add(cremaillere, [
         {
           status: "non-evaluee",

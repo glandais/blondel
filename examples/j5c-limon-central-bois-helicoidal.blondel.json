@@ -10,7 +10,7 @@
   },
   "name": "Jalon 5c — hélicoïdal à jour central sur limon central bois (lamellé-collé cintré)",
   "rulesVersion": 1,
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "site": {
     "floorToFloor": 2750,
     "lowerFinish": 0,

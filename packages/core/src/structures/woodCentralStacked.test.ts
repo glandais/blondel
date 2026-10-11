@@ -11,6 +11,10 @@
  * - logement entièrement découpé : chaque palier du trait de AP1 et les bornes du trait de AT1
  *   sont sur une borne de couche (sinon constat `FAB_PLATINE_AME_NOYEE`), aucun fraisage partiel
  *   tracé sur les gabarits des couches.
+ * - joint de colle imposé sur le dessus voulu du logement de l'âme de pied (épaisseur de
+ *   platine + `anchors.plate.webDepth` + jeu, QUESTIONS A38 (12), décision du 2026-10-11) : l'âme
+ *   garde sa profondeur partout où les assises ne la bornent pas (120 mm sur les préréglages
+ *   cintrés par défaut, 73 mm avant A38).
  * Le plan réel de l'âme (`BeamKerf.line`) est vérifié contre le solide de l'âme dans
  * `woodCentralPlates.test.ts`.
  */
@@ -27,7 +31,11 @@ import { createProject } from "../project/presets.js";
 import { resolveWorkshopProfile } from "../workshop/profile.js";
 import type { CheckCollector } from "./checks.js";
 import { woodBeamOf, woodCentralContext, woodCentralParams } from "./woodCentral.test-helpers.js";
-import type { WoodCentralBeamResult } from "./woodCentralBeam.js";
+import {
+  kerfObstacleTop,
+  seatClearanceFrom,
+  type WoodCentralBeamResult,
+} from "./woodCentralBeam.js";
 import { WOOD_CENTRAL_LAYER_RULES } from "./woodCentralLayers.js";
 import { WoodCentralParamsSchema, type WoodCentralParams } from "./woodCentralParams.js";
 import {
@@ -221,8 +229,79 @@ describe("préréglages cintrés par défaut : âme de pied arrêtée sur les jo
         expect(top - y).toBeGreaterThanOrEqual(hE - 0.5);
       }
       expect(expectHousings(beam, checks, params)).toEqual({ holeIssues: 0, kerfIssues: 0 });
+      // Écart voulu (QUESTIONS A38 (12), décision du 2026-10-11) : un joint de colle est calé
+      // sur le dessus voulu du logement (tp + webDepth + c) ; l'âme garde ses 120 mm (73 mm
+      // avant A38, arrêt au joint en dessous, A37 (8)).
+      const tp = params.anchors.plate.thickness;
+      expect(top).toBeCloseTo(params.anchors.plate.webDepth, 6);
+      expect(onLevel(layerLevels(beam), tp + params.anchors.plate.webDepth + C)).toBe(true);
     });
   }
+});
+
+/** Dessus fini des assises à σ (comme la poutre : assise i jusqu'à son fond σ1). */
+function seatTop(beam: WoodCentralBeamResult): (s: Mm) => Mm {
+  return (s) => {
+    for (const x of beam.seats) if (s < x.sigma1 - 1e-9) return x.z;
+    return beam.seats[beam.seats.length - 1]!.z;
+  };
+}
+
+describe("joint de colle imposé sur le dessus voulu de l'âme de pied (QUESTIONS A38 (12))", () => {
+  it("propriété : niveau imposé retenu → chaque palier non borné par une assise garde la profondeur webDepth", () => {
+    let retained = 0;
+    let full = 0;
+    fc.assert(
+      fc.property(
+        fc.record({
+          id: fc.constantFrom("quarter-left", "two-quarters-u", "half-turn", "helical"),
+          tread: fc.integer({ min: 30, max: 80 }),
+          b: fc.integer({ min: 70, max: 240 }),
+          webDepth: fc.integer({ min: 60, max: 200 }),
+        }),
+        (c) => {
+          const p = createProject(c.id);
+          const project: Project = {
+            ...p,
+            stair: { ...p.stair, treads: { ...p.stair.treads, thickness: c.tread } },
+          };
+          const params = woodCentralParams({
+            section: { width: c.b },
+            anchors: { kind: "embeddedPlate", plate: { webDepth: c.webDepth } },
+          });
+          const { beam } = woodBeamOf(woodCentralContext(project), params);
+          expect(beam.errors).toEqual([]);
+          const kerf = beam.beamKerfs?.find((k) => k.mark === "AP1");
+          if (!beam.stacked || !kerf || !beam.seatReserve) return;
+          const tp = params.anchors.plate.thickness;
+          const wanted = tp + c.webDepth + C;
+          if (!onLevel(layerLevels(beam), wanted)) return;
+          retained++;
+          // Dessus brut de l'âme (contrat `footWebSteps`) : place réservée sous chaque assise.
+          const top = seatTop(beam);
+          const clear = seatClearanceFrom(
+            beam.seats,
+            beam.seatReserve.map((r) => r.reserved),
+            top,
+          );
+          const free = (x: Mm): Mm => top(x) - Math.max(PROFILE.wood.minCheek, clear(x));
+          const raw = (x: Mm): Mm => Math.min(free(x - C), free(x), free(x + C)) - C;
+          for (let s = kerf.sigma0 + 3 * C; s <= kerf.sigma1 - 3 * C; s += 1) {
+            // Palier non borné par une assise sur tout le voisinage du trait.
+            const unbounded = [-2 * C, -C, 0, C, 2 * C].every(
+              (d) => raw(s + d) >= tp + c.webDepth - 1e-6,
+            );
+            if (!unbounded) continue;
+            full++;
+            expect(kerfObstacleTop(kerf, s, 0), `${c.id} σ = ${s}`).toBeCloseTo(wanted, 6);
+          }
+        },
+      ),
+      { numRuns: 24 },
+    );
+    expect(retained).toBeGreaterThan(0);
+    expect(full).toBeGreaterThan(0);
+  });
 });
 
 describe("exemples en couches empilées : plus de perçage au droit d'un joint ni de fraisage partiel (A37 (8) (15) (16))", () => {

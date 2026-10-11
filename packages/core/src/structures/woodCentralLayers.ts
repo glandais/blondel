@@ -58,19 +58,49 @@
  * [85] § 9.3). Le gabarit d'une planche est prolongé de `fingerLength` / 2 à chaque bout abouté
  * (plan de joint tracé), le débit est lu sur ce gabarit ; le volume fini est inchangé.
  *
- * Zone tendue et longueur minimale des planches (QUESTIONS A37 (4), (13) et (14), décisions du
- * 2026-10-10 ; C §1.11 [85]) : le décalage `section.jointOffset` ne s'impose qu'aux joints **en
- * zone tendue**, c'est-à-dire à une coupe d'abscisse σc d'une couche [z0 ; z1] telle que
- * z0 < `StackedBeamShape.tensionZoneTop`(σc) (moitié basse de la section résistante par défaut,
- * `section.tensionZone`, plus sévère que « le huitième extérieur plus une lamelle » de [85]
- * § 10.4 (a), à valider) ; les joints hors de la zone sont libres. Un constat
- * `FAB_LIMON_CENTRAL_BOIS_ABOUTAGES` par couche composée : violation seulement si l'un de ses
- * joints en zone tendue est sous le décalage. Les coupes déplacées laissent d'abord des planches
- * d'au moins `section.minBoardLength` (σ1 − σ0, sans les demi-entures ; 0 : aucune), puis, à
- * défaut, de la seule garde technique `MIN_BOARD` ; jamais au-delà de β_max ni de la largeur des
- * plateaux (le partage minimal dicté par la pente de fil, sourcé, reste prioritaire). Une couche
- * composée dont une planche reste plus courte reçoit un constat
- * `FAB_LIMON_CENTRAL_BOIS_PLANCHES_COURTES` (avertissement ; un constat par couche composée).
+ * Bande tendue du décalage des aboutages (QUESTIONS A37 (4) et (13), décisions du 2026-10-10 ;
+ * A38 (3), décision du 2026-10-11 ; ANSI A190.1-2017 § 10.4 (a), C §1.11 [85] : « the outer 1/8
+ * of the depth of the member plus one lamination », « over the central 75% along the length of
+ * the zone stressed in tension », aucun décalage exigé dans le reste de la zone tendue) : le
+ * décalage `section.jointOffset` ne s'impose qu'à une coupe d'abscisse σc d'une couche
+ * [z0 ; z1] **dans la bande**, c'est-à-dire si les deux conditions tiennent :
+ * - en hauteur, la couche est sous le haut de bande bt(σc) = `StackedBeamShape.tensionZoneTop`(σc)
+ *   (sous-face + `section.tensionZone` × h_res / cos, 1/8 par défaut), le contient, ou est l'une
+ *   des `section.tensionZoneLayers` couches (N = 1 par défaut) au-dessus de celle qui le contient,
+ *   comptées à cette abscisse dans l'empilement (`bandTopAt`) : z0 < max(bt, z1 de la couche de
+ *   rang j + N), j le rang de la couche où z0 ≤ bt < z1 (bt sous la première couche : ses N
+ *   premières couches) ;
+ * - en longueur, σc est dans la part centrale `section.tensionZoneLength` (0,75) de l'étendue
+ *   [sStart ; sEnd] de la poutre, mesurée le long de la trace (convention à valider).
+ * Sans `tensionZoneTop`, toutes les coupes sont dans la bande (comportement antérieur, sur toute
+ * la longueur). Avec N = 0 et une part centrale de 1, on retrouve exactement la zone d'avant A38
+ * (z0 < bt), au cas d'égalité z0 = bt près : c'est le sens d'une valeur de `tensionZone`
+ * enregistrée avant A38, que la migration du format garde. Les joints hors de la bande sont
+ * libres. Un constat `FAB_LIMON_CENTRAL_BOIS_ABOUTAGES` par couche composée : violation
+ * seulement si l'un de ses joints dans la bande est sous le décalage. Une couche empilée n'est pas
+ * une lamelle au sens de [85] (fil horizontal, joints de colle inclinés sur la sous-face) :
+ * transposition à valider par un fabricant de lamellé-collé.
+ *
+ * Longueur minimale des planches (QUESTIONS A37 (14) ; A38 (4) et (9), décision du 2026-10-11) :
+ * les coupes déplacées laissent d'abord des planches d'au moins la longueur minimale résolue
+ * (`resolveMinBoardLength` : `section.minBoardLength` saisie, ou `auto` = 2 × `fingerLength` +
+ * `section.boardLengthMargin`, 80 mm par défaut, à valider ; σ1 − σ0, sans les demi-entures ;
+ * 0 : aucune), puis, à défaut, de la seule garde technique `MIN_BOARD` ; jamais au-delà de β_max
+ * ni de la largeur des plateaux (le partage minimal dicté par la pente de fil, sourcé, reste
+ * prioritaire). Une couche composée dont une planche reste plus courte que ce minimum reçoit un
+ * constat `FAB_LIMON_CENTRAL_BOIS_PLANCHES_COURTES` (avertissement ; un constat par couche
+ * composée, `min` = longueur minimale résolue).
+ *
+ * Joints de colle imposés (QUESTIONS A38 (12), décision du 2026-10-11) : les niveaux
+ * `StackedBeamShape.jointLevels` (dessus voulu du logement de l'âme de pied d'une platine à âme
+ * noyée : base + `anchors.plate.webDepth` + jeu, posé par la poutre) sont des niveaux d'assise de
+ * plus (`resolveImposedLevels`, mêmes niveaux pour `layerBounds` dans `buildStackedLayers` et pour
+ * l'oracle `stackedJointLevels`) : ignorés hors de ]base ; dessus], fusionnés avec une assise ou
+ * la base à moins de la garde technique `MIN_LAYER` (l'assise prime), **abandonnés** s'ils
+ * tombent dans la zone interdite d'un perçage (|niveau − z| < rayon + jeu, `HoleLevel.r`), avec
+ * une remarque ; sinon joints de colle, les intervalles voisins étant partagés comme entre deux
+ * assises (broches `centered` au milieu de leur couche, A36 (12) ; zone `reach` de la pince de
+ * perçage de l'âme préférée, A37 (8)).
  *
  * Couche composée, pièce intermédiaire (QUESTIONS A36 (9), décision du 2026-10-09) : une couche
  * de plusieurs planches est une pièce `wood-central-layer-<k>` / `LC1-<k>` composante de la
@@ -128,7 +158,7 @@
  * Question résolue (C §1.11 [8] : « crans non coupés ») : joints calés sur les assises, A35 (g).
  * Sans source (QUESTIONS A37 (14), état gardé le 2026-10-10) : épaisseur minimale d'une couche
  * (garde technique `MIN_LAYER` seulement). La longueur minimale d'une planche est le paramètre
- * `section.minBoardLength` (à valider, QUESTIONS A38).
+ * `section.minBoardLength` (`auto` = 2 × enture + marge, à valider, QUESTIONS A38 (4) (9)).
  *
  * `buildStackedLayers` ne lève jamais : erreurs dans `errors`.
  */
@@ -150,7 +180,7 @@ import {
 } from "./checks.js";
 import { area, minAreaRect } from "./geom.js";
 import { woodQuantities } from "./quantities.js";
-import type { WoodCentralParams } from "./woodCentralParams.js";
+import { resolveMinBoardLength, type WoodCentralParams } from "./woodCentralParams.js";
 import {
   WOOD_CENTRAL_PLATE_FOOT_WEB_MARK,
   type BeamKerf,
@@ -166,11 +196,13 @@ export const WOOD_CENTRAL_LAYER_RULES = {
   /**
    * Aboutages à entures des planches d'une couche composée décalés de ceux de la couche du
    * dessous (QUESTIONS A36 (6)) : décalage `section.jointOffset` entre les parties les plus
-   * proches des joints (C §1.11 [85] § 10.4 (a), norme américaine, à valider).
+   * proches des joints, dans la seule bande tendue de [85] (huitième extérieur de la hauteur plus
+   * une couche, 75 % centraux de la longueur, QUESTIONS A38 (3) ; C §1.11 [85] § 10.4 (a), norme
+   * américaine, à valider).
    */
   fingerJoints: {
     id: "FAB_LIMON_CENTRAL_BOIS_ABOUTAGES",
-    ...sourceSpec(msg("compliance.source.woodCentralFingerJoints")),
+    ...sourceSpec(msg("compliance.source.woodCentralFingerJointsBand")),
     confidence: "faible",
     nature: "metier",
     severity: "avertissement",
@@ -191,13 +223,14 @@ export const WOOD_CENTRAL_LAYER_RULES = {
     unit: "mm",
   },
   /**
-   * Planches d'une couche composée au moins aussi longues que `section.minBoardLength`
-   * (QUESTIONS A37 (4) et (14), décision du 2026-10-10 ; aucune source, à valider) : un constat
-   * par couche composée, `measured` = plus courte de ses planches (σ1 − σ0).
+   * Planches d'une couche composée au moins aussi longues que la longueur minimale résolue
+   * (`resolveMinBoardLength` : `section.minBoardLength` saisie, ou `auto` = 2 × enture + marge ;
+   * QUESTIONS A37 (4) et (14), A38 (4) et (9) ; aucune source, à valider) : un constat par couche
+   * composée, `measured` = plus courte de ses planches (σ1 − σ0), `min` = longueur résolue.
    */
   shortBoards: {
     id: "FAB_LIMON_CENTRAL_BOIS_PLANCHES_COURTES",
-    ...sourceSpec(msg("compliance.source.woodCentralShortBoards")),
+    ...sourceSpec(msg("compliance.source.woodCentralShortBoardsAuto")),
     confidence: "faible",
     nature: "metier",
     severity: "avertissement",
@@ -277,13 +310,27 @@ export interface StackedBeamShape {
    */
   readonly kerfs?: readonly BeamKerf[];
   /**
-   * Haut de la zone tendue à l'abscisse σ, mm (QUESTIONS A37 (4) et (13), décision du
-   * 2026-10-10) : sous-face + `section.tensionZone` × hauteur verticale de la section résistante
-   * (reste sous entaille h_res) ; le décalage des aboutages `section.jointOffset` ne s'applique
-   * qu'aux joints dont la couche descend sous cette altitude à leur abscisse. Absent : partout
-   * (comportement antérieur).
+   * Haut de la part de hauteur de la bande tendue à l'abscisse σ, mm (QUESTIONS A37 (4) et (13),
+   * décision du 2026-10-10 ; A38 (3), décision du 2026-10-11) : sous-face + `section.tensionZone`
+   * × hauteur verticale de la section résistante (reste sous entaille h_res). Le décalage des
+   * aboutages `section.jointOffset` ne s'applique qu'aux joints de la bande : couche sous cette
+   * altitude, qui la contient, ou l'une des `section.tensionZoneLayers` couches au-dessus, et
+   * abscisse dans la part centrale `section.tensionZoneLength` de [sStart ; sEnd]. Absent :
+   * partout, sur toute la longueur (comportement antérieur).
    */
   readonly tensionZoneTop?: (s: Mm) => Mm;
+  /**
+   * Niveaux de joints de colle **imposés** en plus des assises, mm (QUESTIONS A38 (12), décision
+   * du 2026-10-11) : dessus voulu du logement de l'âme de pied d'une platine à âme noyée
+   * (épaisseur de platine + `anchors.plate.webDepth` + jeu d'atelier), pour que l'âme arrêtée au
+   * joint en dessous (A37 (8)) garde sa profondeur. Traités par l'empilement comme des niveaux
+   * d'assise (`layerBounds`, `stackedJointLevels`) quand ils tombent dans ]base ; dessus[ ;
+   * contraintes des perçages (broches au milieu de leur couche, A36 (12), pince de perçage de
+   * l'âme `webEdge`, A37) respectées ; niveau abandonné, avec une remarque, s'il tombe dans la
+   * zone interdite d'un perçage (`resolveImposedLevels`). Absent : aucun (comportement antérieur
+   * à A38).
+   */
+  readonly jointLevels?: readonly Mm[];
 }
 
 export interface StackedLayersInput {
@@ -420,11 +467,12 @@ const TEXT_HALF: Mm = 20;
 const MIN_LAYER: Mm = 1;
 /**
  * Garde technique : longueur minimale d'une planche quand les coupes sont déplacées (A36 (6)),
- * mm ; repli quand `section.minBoardLength` (A37 (14), à valider) n'est pas tenable.
+ * mm ; repli quand la longueur minimale résolue (`resolveMinBoardLength`, A37 (14), A38 (4) (9),
+ * à valider) n'est pas tenable.
  */
 const MIN_BOARD: Mm = 1;
 /**
- * Retrait des bornes d'un intervalle hors zone tendue (A37 (13)) : une coupe placée dans un tel
+ * Retrait des bornes d'un intervalle hors de la bande tendue (A37 (13), A38 (3)) : une coupe placée dans un tel
  * intervalle est hors de la zone à coup sûr (bornes affinées par dichotomie), mm.
  */
 const TENSION_EPS: Mm = 1e-4;
@@ -488,17 +536,13 @@ export function stackedJointLevels(
     const shape = sampleShape(input.beam);
     if (!shape || !(t > 0)) return () => [];
     const clearance = input.profile.wood.clearance;
-    const seats = input.beam.seatLevels ?? [];
+    const { baseZ, seatLevels = [], jointLevels = [] } = input.beam;
     return (holes) => {
       try {
-        const { bounds } = layerBounds(
-          input.beam.baseZ,
-          shape.zTop,
-          t,
-          seats,
-          MAX_LAYERS,
-          holeLevelsOf(holes, clearance),
-        );
+        const levels = holeLevelsOf(holes, clearance);
+        // Mêmes niveaux imposés que `buildStackedLayers` (A38 (12)).
+        const imposed = resolveImposedLevels(baseZ, shape.zTop, seatLevels, jointLevels, levels);
+        const { bounds } = layerBounds(baseZ, shape.zTop, t, imposed.levels, MAX_LAYERS, levels);
         if (bounds.length === 0) return [];
         return [bounds[0]!.z0, ...bounds.map((b) => b.z1)];
       } catch {
@@ -508,6 +552,62 @@ export function stackedJointLevels(
   } catch {
     return () => [];
   }
+}
+
+/** Niveau de joint imposé abandonné (QUESTIONS A38 (12)) : il couperait un perçage. */
+export interface DroppedJointLevel {
+  /** Altitude voulue du joint, mm. */
+  readonly z: Mm;
+  /** Repère du perçage le plus proche (remarque). */
+  readonly mark: string;
+  /** Altitude du centre de ce perçage, mm. */
+  readonly holeZ: Mm;
+  /** Distance exigée d'un joint au centre du perçage (`HoleLevel.r`), mm. */
+  readonly min: Mm;
+}
+
+/**
+ * Niveaux imposés aux joints de colle (QUESTIONS A35 (g) ; A38 (12), décision du 2026-10-11) :
+ * assises, puis niveaux imposés en plus (`StackedBeamShape.jointLevels`, dessus voulu du
+ * logement de l'âme de pied) retenus comme niveaux d'assise de plus, sauf :
+ * - hors de ]base ; dessus] (ou non finis) : ignorés ;
+ * - à moins de la garde technique `MIN_LAYER` de la base, d'une assise ou d'un niveau imposé déjà
+ *   retenu : fusionnés avec lui (l'assise prime), sans remarque ;
+ * - dans la zone interdite d'un perçage (|niveau − z| < `HoleLevel.r` = rayon + jeu, pas la zone
+ *   élargie `reach`) : abandonnés (`dropped`, remarque de `buildStackedLayers`).
+ * Fonction pure, partagée par `buildStackedLayers` et `stackedJointLevels` (mêmes joints) ; les
+ * niveaux rendus sont triés et dédoublonnés par `layerBounds`.
+ */
+export function resolveImposedLevels(
+  baseZ: Mm,
+  zTop: Mm,
+  seatLevels: readonly Mm[],
+  jointLevels: readonly Mm[],
+  holes: readonly HoleLevel[],
+): { readonly levels: readonly Mm[]; readonly dropped: readonly DroppedJointLevel[] } {
+  if (jointLevels.length === 0) return { levels: seatLevels, dropped: [] };
+  const inRange = (z: Mm): boolean => z > baseZ + LEVEL_EPS && z <= zTop + LEVEL_EPS;
+  const fixed: Mm[] = [baseZ, ...seatLevels.filter((z) => Number.isFinite(z) && inRange(z))];
+  const valid = holes.filter((h) => Number.isFinite(h.z) && Number.isFinite(h.r) && h.r > 0);
+  const kept: Mm[] = [];
+  const dropped: DroppedJointLevel[] = [];
+  const sorted = jointLevels.filter(Number.isFinite).sort((p, q) => p - q);
+  for (const z of sorted) {
+    if (!inRange(z)) continue;
+    if ([...fixed, ...kept].some((f) => Math.abs(f - z) < MIN_LAYER)) continue;
+    let hit: HoleLevel | null = null;
+    for (const h of valid) {
+      if (Math.abs(z - h.z) < h.r - POS_EPS && (!hit || Math.abs(z - h.z) < Math.abs(z - hit.z))) {
+        hit = h;
+      }
+    }
+    if (hit) {
+      dropped.push({ z, mark: hit.mark ?? "", holeZ: hit.z, min: hit.r });
+      continue;
+    }
+    kept.push(z);
+  }
+  return { levels: [...seatLevels, ...kept], dropped };
 }
 
 /**
@@ -1029,16 +1129,20 @@ interface JointRule {
   /** Entraxe minimal de deux joints : `jointOffset` + `fingerLength` (0 : aucun), mm. */
   readonly need: Mm;
   /**
-   * Une coupe de la couche à l'abscisse σ est en zone tendue (A37 (13)) : seules celles-là
-   * doivent être décalées de `need` des joints du dessous.
+   * Une coupe de la couche à l'abscisse σ est dans la bande tendue (A37 (13), A38 (3) : part de
+   * hauteur plus N couches, part centrale de la longueur) : seules celles-là doivent être
+   * décalées de `need` des joints du dessous.
    */
   readonly inTension: (x: Mm) => boolean;
   /**
-   * Abscisses de la couche hors zone tendue (intervalles fermés, bornes rentrées de
+   * Abscisses de la couche hors de la bande tendue (intervalles fermés, bornes rentrées de
    * `TENSION_EPS`) : une coupe y est libre.
    */
   readonly free: readonly Span[];
-  /** Longueur minimale d'une planche visée au placement des coupes (`minBoardLength`), mm. */
+  /**
+   * Longueur minimale d'une planche visée au placement des coupes (`resolveMinBoardLength` :
+   * saisie, ou `auto` = 2 × enture + marge, A38 (4) (9)), mm.
+   */
   readonly minBoard: Mm;
   /** Longueur des entures (`fingerLength`) : demi-enture ajoutée au gabarit par bout abouté. */
   readonly finger: Mm;
@@ -1047,7 +1151,7 @@ interface JointRule {
 }
 
 /**
- * Plus petit écart |c − c'| entre les coupes intérieures de `cuts` en zone tendue et `below`
+ * Plus petit écart |c − c'| entre les coupes intérieures de `cuts` dans la bande tendue et `below`
  * (∞ sans vis-à-vis).
  */
 function cutClearance(
@@ -1132,8 +1236,8 @@ function planBoards(
 }
 
 /**
- * Coupes d'une couche décalées des joints de la couche du dessous (A36 (6)) : en zone tendue
- * (A37 (13)), interdites à moins de `need` d'un joint du dessous, libres hors de la zone
+ * Coupes d'une couche décalées des joints de la couche du dessous (A36 (6)) : dans la bande tendue
+ * (A37 (13), A38 (3)), interdites à moins de `need` d'un joint du dessous, libres hors de la bande
  * (`joints.free`) ; planche [a ; e] admise si `fits(a, e)` (β_max, largeur ; supposé vrai sur
  * toute sous-planche). Pour chaque longueur minimale de planche de `minLens`, dans l'ordre
  * (A37 (14) : `minBoardLength`, paliers, puis la garde technique), on cherche le plus petit
@@ -1202,7 +1306,7 @@ function staggerCuts(
       const zones = joints.below.map((z) => ({ z, r: need }));
       const lo = sigma0 + minLen;
       const hi = sigma1 - minLen;
-      // Coupes permises : hors des zones des joints du dessous, ou hors zone tendue (A37 (13)).
+      // Coupes permises : hors des zones des joints du dessous, ou hors de la bande tendue (A38 (3)).
       const allowed = mergeSpans([
         ...allowedSpans(lo, hi, zones),
         ...joints.free
@@ -1422,14 +1526,16 @@ function build(input: StackedLayersInput, t: Mm, s: Mm): StackedLayersResult {
   // `centered` au milieu de leur couche (A37 (15)).
   const clearance = profile.wood.clearance;
   const holes: HoleLevel[] = holeLevelsOf(beam.holes ?? [], clearance);
-  const { count, bounds, issues } = layerBounds(
+  // Joints imposés (dessus voulu de l'âme de pied, A38 (12)) : niveaux d'assise de plus, sauf au
+  // travers d'un perçage (abandonnés, remarque).
+  const imposed = resolveImposedLevels(
     baseZ,
     zTop,
-    t,
     beam.seatLevels ?? [],
-    MAX_LAYERS,
+    beam.jointLevels ?? [],
     holes,
   );
+  const { count, bounds, issues } = layerBounds(baseZ, zTop, t, imposed.levels, MAX_LAYERS, holes);
   if (bounds.length === 0) {
     return empty([
       msg("structure.woodCentral.error.layerCount", {
@@ -1473,8 +1579,14 @@ function build(input: StackedLayersInput, t: Mm, s: Mm): StackedLayersResult {
   const finger = params.section.fingerLength;
   const offset = params.section.jointOffset;
   const need = offset > 0 ? offset + finger : 0;
-  const minBoard = params.section.minBoardLength;
+  // Longueur minimale résolue : saisie, ou `auto` = 2 × enture + marge (A38 (4) et (9)).
+  const minBoard = resolveMinBoardLength(params);
   const zone = params.section.tensionZone;
+  const zoneLayers = params.section.tensionZoneLayers;
+  const zoneLength = params.section.tensionZoneLength;
+  // Part centrale de la longueur où le décalage est exigé (A38 (3), [85] § 10.4 (a)) ; toute la
+  // longueur sans `tensionZoneTop` (comportement antérieur).
+  const band = tensionBand(beam, bounds, zoneLayers, zoneLength);
   const kerfs = beam.kerfs ?? [];
   const notes: Message[] = [];
   const parts: Part[] = [];
@@ -1490,7 +1602,7 @@ function build(input: StackedLayersInput, t: Mm, s: Mm): StackedLayersResult {
   let jointsFaced = 0;
   let jointsHeld = 0;
   let minOffset = Infinity;
-  // Couches composées dont des joints font face à ceux du dessous, hors zone tendue compris.
+  // Couches composées dont des joints font face à ceux du dessous, hors de la bande compris.
   let facedLayers = 0;
   const addPart = (
     partId: string,
@@ -1587,15 +1699,20 @@ function build(input: StackedLayersInput, t: Mm, s: Mm): StackedLayersResult {
       notes.push(msg("structure.woodCentral.note.layerDisjoint", { mark }));
     // Joints de la couche du dessous, si elle est jointive (A36 (6)).
     const below = prev && Math.abs(prev.z1 - slice.z0) < 1e-6 ? prev.cuts : [];
-    // Zone tendue (A37 (13)) : une coupe d'abscisse σ y est si la couche descend sous le haut de
-    // la zone à cette abscisse ; partout sans `tensionZoneTop`.
-    const top = beam.tensionZoneTop;
-    const inTension = top ? (x: Mm): boolean => slice.z0 < top(x) - POS_EPS : (): boolean => true;
+    // Bande tendue (A37 (13), A38 (3)) : une coupe d'abscisse σ y est si la couche est sous le
+    // haut de bande à cette abscisse (part de hauteur plus N couches) et σ dans la part centrale
+    // de la longueur ; partout sans `tensionZoneTop`.
+    const inTension = band
+      ? (x: Mm): boolean => band.central(x) && slice.z0 < band.topAt(x) - POS_EPS
+      : (): boolean => true;
     const plan = planBoards(trace, b, s, sigma0, sigma1, betaMax, maxWidth, {
       below,
       need,
       inTension,
-      free: top && below.length > 0 && need > 0 ? outsideSpans(sigma0, sigma1, xs, inTension) : [],
+      free:
+        band && below.length > 0 && need > 0
+          ? outsideSpans(sigma0, sigma1, [...xs, ...band.breaks], inTension)
+          : [],
       minBoard,
       finger,
       budget,
@@ -1692,7 +1809,7 @@ function build(input: StackedLayersInput, t: Mm, s: Mm): StackedLayersResult {
         }
       }
       // Un constat par couche composée, et non par planche (QUESTIONS A37 (13)) : seuls ses
-      // joints en zone tendue sont tenus au décalage.
+      // joints de la bande tendue (A38 (3)) sont tenus au décalage.
       const inner = plan.cuts.slice(1, -1);
       const tension = inner.filter(inTension);
       let tensionOffset: Mm | undefined;
@@ -1714,7 +1831,7 @@ function build(input: StackedLayersInput, t: Mm, s: Mm): StackedLayersResult {
           offset,
         ),
       );
-      // Décompte par joint en zone tendue (un plan de joint par coupe, toutes bandes confondues).
+      // Décompte par joint de la bande tendue (un plan de joint par coupe, toutes bandes confondues).
       for (const c of tension) {
         if (below.length === 0) continue;
         const gap = Math.min(...below.map((d) => Math.abs(c - d))) - finger;
@@ -1754,6 +1871,17 @@ function build(input: StackedLayersInput, t: Mm, s: Mm): StackedLayersResult {
     }
     // Remarques particulières (perçages, logements, aboutages), puis synthèses en tête.
     notes.push(...holeNotes(holes, issues ?? [], layers, clearance));
+    // Joints imposés abandonnés au travers d'un perçage (A38 (12)).
+    for (const d of imposed.dropped) {
+      notes.push(
+        msg("structure.woodCentral.note.layerJointLevelDropped", {
+          z: dec(d.z, 1),
+          mark: d.mark,
+          holeZ: dec(d.holeZ, 1),
+          min: dec(d.min, 1),
+        }),
+      );
+    }
     for (const [web, c] of kerfCount) {
       notes.push(
         c.milled > 0
@@ -1762,23 +1890,25 @@ function build(input: StackedLayersInput, t: Mm, s: Mm): StackedLayersResult {
       );
     }
     if (composed > 0) {
-      // Synthèse des aboutages (A37 (13)) : joints en zone tendue seulement, zone rappelée.
+      // Synthèse des aboutages (A37 (13), A38 (3)) : joints de la bande tendue seulement, bande
+      // rappelée (part de hauteur, couches en plus, part centrale de la longueur).
+      const bandArgs = {
+        finger: dec(finger, 0),
+        offset: dec(offset, 0),
+        zone: dec(zone * 100, 1),
+        layers: zoneLayers,
+        length: dec(zoneLength * 100, 0),
+      };
       notes.unshift(
         jointsFaced > 0
-          ? msg("structure.woodCentral.note.layerFingerJointsTension", {
-              finger: dec(finger, 0),
-              offset: dec(offset, 0),
-              zone: dec(zone * 100, 0),
+          ? msg("structure.woodCentral.note.layerFingerJointsBand", {
+              ...bandArgs,
               held: jointsHeld,
               joints: jointsFaced,
               min: dec(minOffset, 0),
             })
           : facedLayers > 0
-            ? msg("structure.woodCentral.note.layerFingerJointsNoTension", {
-                finger: dec(finger, 0),
-                offset: dec(offset, 0),
-                zone: dec(zone * 100, 0),
-              })
+            ? msg("structure.woodCentral.note.layerFingerJointsNoBand", bandArgs)
             : msg("structure.woodCentral.note.layerFingerJointsAlone", {
                 finger: dec(finger, 0),
                 offset: dec(offset, 0),
@@ -1824,9 +1954,10 @@ function build(input: StackedLayersInput, t: Mm, s: Mm): StackedLayersResult {
 
 /**
  * Constat de décalage d'une couche composée (A36 (6) ; un constat par couche et non par planche,
- * QUESTIONS A37 (13)) : `measured` = plus petit décalage de ses aboutages **en zone tendue** à
- * ceux de la couche du dessous (parties les plus proches), `min` = `jointOffset` ; `free` : aucun
- * aboutage du dessous en regard ; `outside` : aucun de ses aboutages en zone tendue (libres).
+ * QUESTIONS A37 (13)) : `measured` = plus petit décalage de ses aboutages **dans la bande
+ * tendue** (A38 (3)) à ceux de la couche du dessous (parties les plus proches), `min` =
+ * `jointOffset` ; `free` : aucun aboutage du dessous en regard ; `outside` : aucun de ses
+ * aboutages dans la bande (libres).
  */
 function jointFinding(
   partId: string,
@@ -1845,7 +1976,7 @@ function jointFinding(
       message:
         state.kind === "free"
           ? msg("structure.woodCentral.check.layerJointFree", { mark })
-          : msg("structure.woodCentral.check.layerJointsOutsideTension", { mark }),
+          : msg("structure.woodCentral.check.layerJointsOutsideBand", { mark }),
     };
   }
   const { measured } = state;
@@ -1867,9 +1998,9 @@ function jointFinding(
 }
 
 /**
- * Constat de longueur des planches d'une couche composée (QUESTIONS A37 (14)) : `measured` = plus
- * courte de ses planches (σ1 − σ0, sans les demi-entures), `min` = `minBoardLength` (0 : aucune
- * exigence, constat toujours tenu).
+ * Constat de longueur des planches d'une couche composée (QUESTIONS A37 (14), A38 (4) (9)) :
+ * `measured` = plus courte de ses planches (σ1 − σ0, sans les demi-entures), `min` = longueur
+ * minimale résolue (`resolveMinBoardLength` ; 0 : aucune exigence, constat toujours tenu).
  */
 function shortBoardFinding(
   partId: string,
@@ -1903,10 +2034,68 @@ function shortBoardFinding(
   };
 }
 
+/** Bande tendue du décalage des aboutages (QUESTIONS A38 (3)) vue par une coupe. */
+interface TensionBand {
+  /**
+   * Haut de la bande à l'abscisse σ, mm : une couche [z0 ; z1] est dans la bande si
+   * z0 < `topAt`(σ) (`bandTopAt`).
+   */
+  readonly topAt: (x: Mm) => Mm;
+  /** σ est dans la part centrale `tensionZoneLength` de [sStart ; sEnd]. */
+  readonly central: (x: Mm) => boolean;
+  /** Bornes de la part centrale : abscisses ajoutées à la grille de `outsideSpans`. */
+  readonly breaks: readonly Mm[];
+}
+
 /**
- * Abscisses de [σ0 ; σ1] hors zone tendue (A37 (13)) : intervalles fermés où `inTension` est faux,
- * lus sur la grille de la forme (`xs`) et affinés par dichotomie ; bornes intérieures rentrées de
- * `TENSION_EPS`, pour qu'une coupe placée dedans soit hors de la zone à coup sûr.
+ * Bande tendue de la poutre (QUESTIONS A38 (3), décision du 2026-10-11 ; ANSI A190.1-2017
+ * § 10.4 (a), C §1.11 [85]) : part de hauteur `tensionZoneTop` plus `layers` couches de
+ * l'empilement (`bounds`), sur la part centrale `length` de [sStart ; sEnd] mesurée le long de la
+ * trace. `null` sans `tensionZoneTop` : toutes les coupes sont dans la bande (comportement
+ * antérieur).
+ */
+function tensionBand(
+  beam: StackedBeamShape,
+  bounds: readonly LayerBound[],
+  layers: number,
+  length: number,
+): TensionBand | null {
+  const top = beam.tensionZoneTop;
+  if (!top) return null;
+  const L = beam.sEnd - beam.sStart;
+  const margin = ((1 - Math.min(Math.max(length, 0), 1)) * L) / 2;
+  const lo = beam.sStart + margin;
+  const hi = beam.sEnd - margin;
+  return {
+    topAt: (x) => bandTopAt(bounds, top(x), layers),
+    central: (x) => x >= lo - POS_EPS && x <= hi + POS_EPS,
+    breaks: margin > 0 ? [lo, hi] : [],
+  };
+}
+
+/**
+ * Haut de la bande tendue à une abscisse (QUESTIONS A38 (3)) : `bt` = haut de la part de
+ * hauteur (`tensionZoneTop`), relevé jusqu'au dessus (z1) de la couche de rang j + `layers`, j le
+ * rang de la couche de `bounds` (tranches contiguës, du bas vers le haut) où z0 ≤ bt < z1 (bt
+ * au-dessus de tout : dernière couche) ; bt sous la première couche : dessus de la couche de rang
+ * `layers` − 1 (aucune couche en plus si `layers` = 0). Une couche [z0 ; z1] est dans la bande si
+ * z0 < haut rendu ; avec `layers` = 0, c'est z0 < bt (zone d'avant A38) au cas d'égalité z0 = bt
+ * près. Valeur non finie : rendue telle quelle (NaN : aucune couche, +∞ : toutes).
+ */
+export function bandTopAt(bounds: readonly LayerBound[], bt: Mm, layers: number): Mm {
+  if (!Number.isFinite(bt) || bounds.length === 0) return bt;
+  const n = Math.max(0, Math.floor(layers));
+  let j = -1;
+  for (let i = 0; i < bounds.length && bounds[i]!.z0 <= bt; i++) j = i;
+  const k = Math.min(j + n, bounds.length - 1);
+  return k < 0 ? bt : Math.max(bt, bounds[k]!.z1);
+}
+
+/**
+ * Abscisses de [σ0 ; σ1] hors de la bande tendue (A37 (13), A38 (3)) : intervalles fermés où
+ * `inTension` est faux, lus sur la grille de la forme (`xs`, bornes de la part centrale
+ * comprises) et affinés par dichotomie ; bornes intérieures rentrées de `TENSION_EPS`, pour
+ * qu'une coupe placée dedans soit hors de la bande à coup sûr.
  */
 function outsideSpans(
   sigma0: Mm,
@@ -1914,7 +2103,8 @@ function outsideSpans(
   xs: readonly Mm[],
   inTension: (x: Mm) => boolean,
 ): Span[] {
-  const pts = [sigma0, ...xs.filter((x) => x > sigma0 && x < sigma1), sigma1];
+  const inner = xs.filter((x) => x > sigma0 && x < sigma1).sort((p, q) => p - q);
+  const pts = [sigma0, ...inner, sigma1];
   const out: Span[] = [];
   let start: Mm | null = inTension(sigma0) ? null : sigma0;
   for (let i = 1; i < pts.length; i++) {

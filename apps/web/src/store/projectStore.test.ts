@@ -5,6 +5,7 @@ import {
   DEMO_PRESET_LABELS,
   PRESET_IDS,
   PRESET_LABELS,
+  PROJECT_SCHEMA_VERSION,
   ProjectSchema,
   createProject,
   serializeProject,
@@ -137,7 +138,7 @@ describe("store du projet", () => {
     const client = (): Project => ({ ...createProject("straight"), name: "Mon escalier client" });
     const newer = (): string => {
       const json = JSON.parse(serializeProject(client())) as Record<string, unknown>;
-      return JSON.stringify({ ...json, schemaVersion: 2 });
+      return JSON.stringify({ ...json, schemaVersion: PROJECT_SCHEMA_VERSION + 1 });
     };
     const invalid = (): string => {
       const json = JSON.parse(serializeProject(client())) as { site: Record<string, unknown> };
@@ -145,7 +146,11 @@ describe("store du projet", () => {
     };
 
     it.each([
-      ["format plus récent", newer, /format 2, plus récent/],
+      [
+        "format plus récent",
+        newer,
+        new RegExp(`format ${PROJECT_SCHEMA_VERSION + 1}, plus récent`),
+      ],
       ["projet invalide", invalid, /invalide/i],
     ])("%s : message du cœur, copie de secours, original conservé", (_, text, message) => {
       const raw = text();
@@ -455,6 +460,60 @@ describe("remplacement du projet (assistant) et état d'interface", () => {
     expect(s.getState().project.name).toBe("Chalet");
     // Français : le nom du cœur (inchangé).
     expect(createProjectStore().getState().project.name).toBe(createProject("straight").name);
+  });
+
+  it("projet de limon central bois au format 1 : import et autosauvegarde migrés (A38 (14) (3) (4))", () => {
+    // Fichier écrit par une version déployée avant A38 : ancrage saisi (ancrage total), anciens
+    // défauts enregistrés par le formulaire, validation ◆ de l'ancrage.
+    const base = createProject("quarter-left");
+    const json = JSON.parse(serializeProject(base)) as Record<string, unknown> & {
+      stair: Record<string, unknown>;
+    };
+    const v1 = JSON.stringify({
+      ...json,
+      schemaVersion: 1,
+      stair: {
+        ...json.stair,
+        structure: {
+          kind: "wood-central",
+          params: {
+            lagScrews: { minAnchorage: 50 },
+            section: { tensionZone: 0.5, minBoardLength: 150 },
+          },
+        },
+      },
+      validatedValues: [
+        {
+          path: "stair.structure.params.lagScrews.minAnchorage",
+          value: 50,
+          structureKind: "wood-central",
+        },
+      ],
+    });
+    const expected = {
+      lagScrews: { minTotalAnchorage: 50 },
+      section: {},
+    };
+    const check = (project: Project) => {
+      expect(project.schemaVersion).toBe(PROJECT_SCHEMA_VERSION);
+      expect(project.stair.structure).toEqual({ kind: "wood-central", params: expected });
+      expect(project.validatedValues).toEqual([
+        {
+          path: "stair.structure.params.lagScrews.minTotalAnchorage",
+          value: 50,
+          structureKind: "wood-central",
+        },
+      ]);
+    };
+    const s = createProjectStore();
+    expect(s.getState().importText(v1).ok).toBe(true);
+    check(s.getState().project);
+    // Reprise d'une autosauvegarde au format 1 : même migration.
+    const storage = memoryStorage();
+    storage.setItem(AUTOSAVE_KEY, v1);
+    const restored = createProjectStore({ storage, autosaveDelayMs: 0 });
+    expect(restored.getState().notice?.kind).not.toBe("error");
+    check(restored.getState().project);
   });
 
   it("autosauvegarde refusée au démarrage : détails en `Message` (suivent la langue)", () => {

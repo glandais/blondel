@@ -576,14 +576,30 @@ const WOOD_CENTRAL: Readonly<Record<string, FieldText>> = {
     unit: MM,
     hint: TO_VALIDATE,
   },
-  // Zone tendue du décalage des aboutages, en part décimale de h_res depuis la sous-face (sans
-  // unité), et longueur minimale d'une planche (QUESTIONS A37 (4), (13) et (14)) ◆.
+  // Zone tendue du décalage des aboutages selon ANSI A190.1 § 10.4 (a) (QUESTIONS A37 (4), (13) ;
+  // A38 (3)) : part décimale de h_res depuis la sous-face (1/8), couches comptées en plus
+  // (entier) et part centrale de la longueur (décimale), sans unité ◆.
   "section.tensionZone": {
-    label: "ui.param.woodCentral.section.tensionZone.label",
+    label: "ui.param.woodCentral.section.tensionZoneDepth.label",
     hint: TO_VALIDATE,
   },
+  "section.tensionZoneLayers": {
+    label: "ui.param.woodCentral.section.tensionZoneLayers.label",
+    hint: TO_VALIDATE,
+  },
+  "section.tensionZoneLength": {
+    label: "ui.param.woodCentral.section.tensionZoneLength.label",
+    hint: TO_VALIDATE,
+  },
+  // Longueur minimale d'une planche aboutée, `auto` = 2 × enture + marge (QUESTIONS A37 (14) ;
+  // A38 (4) et (9)) ◆.
   "section.minBoardLength": {
-    label: "ui.param.woodCentral.section.minBoardLength.label",
+    label: "ui.param.woodCentral.section.minBoardLengthAuto.label",
+    unit: MM,
+    hint: TO_VALIDATE,
+  },
+  "section.boardLengthMargin": {
+    label: "ui.param.woodCentral.section.boardLengthMargin.label",
     unit: MM,
     hint: TO_VALIDATE,
   },
@@ -621,9 +637,15 @@ const WOOD_CENTRAL: Readonly<Record<string, FieldText>> = {
     unit: MM,
     hint: TO_VALIDATE,
   },
-  // Ancrage minimal : `auto` = pénétration de la partie filetée ≥ 6·d (QUESTIONS A37 (1)).
+  // Pénétration minimale de la partie filetée, saisie ou `auto` = 6·d (QUESTIONS A37 (1) ;
+  // A38 (14)) ; ancrage total minimal sous la marche, sens des projets antérieurs à A38 ◆.
   "lagScrews.minAnchorage": {
-    label: "ui.param.woodCentral.lagScrews.minAnchorageThreaded.label",
+    label: "ui.param.woodCentral.lagScrews.minThreadPenetration.label",
+    unit: MM,
+    hint: TO_VALIDATE,
+  },
+  "lagScrews.minTotalAnchorage": {
+    label: "ui.param.woodCentral.lagScrews.minTotalAnchorage.label",
     unit: MM,
     hint: TO_VALIDATE,
   },

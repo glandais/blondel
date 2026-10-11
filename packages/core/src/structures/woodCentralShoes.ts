@@ -97,14 +97,16 @@ export interface ShoeBeamGeometry {
    */
   readonly topAt?: (s: Mm) => Mm;
   /**
-   * Hauteur à laisser libre sous chaque assise au-dessus de l'âme de pied d'une platine à âme
-   * noyée (QUESTIONS A35 (a)) : place d'un tire-fond de marche, ancrage du plus court tire-fond
-   * admissible sur la grille des longueurs (`lagSeatClearance` : en `auto`, partie filetée
-   * pénétrant de 6·d au moins, QUESTIONS A37 (1) ; ancrage minimal saisi arrondi au pas sinon)
-   * plus `lagScrews.tipCover`, mm. Absent : `wood.minCheek` seul. La platine retient
-   * max(`wood.minCheek`, `seatClearance`) puis le jeu d'atelier.
+   * Hauteur à laisser libre sous l'assise à σ au-dessus de l'âme de pied d'une platine à âme
+   * noyée (QUESTIONS A35 (a), A38 (6), décision du 2026-10-11), mm ; 0 : rien. Place du tire-fond
+   * réellement posé sous cette assise (ancrage L − tm du plus long tire-fond posé par une
+   * pré-passe sans obstacle d'ancrage, plus `lagScrews.tipCover`), rien si aucun n'y tient ni
+   * sous une assise à seuls boulons traversants (`seatReservations` de la poutre).
+   * Constante par assise (entre deux assises qui se recouvrent : la plus grande). Absent :
+   * `wood.minCheek` seul. La platine retient max(`wood.minCheek`, place) puis le jeu d'atelier,
+   * et s'en sert pour placer ses broches de pied sous les tire-fonds.
    */
-  readonly seatClearance?: Mm;
+  readonly seatClearanceAt?: (s: Mm) => Mm;
   /**
    * Distance le long du fil du point (σ, z) du développement à la plus proche surface de bout
    * de la poutre (face avant, coupe au sol, faces de cran ; `grainEndDistance`, QUESTIONS

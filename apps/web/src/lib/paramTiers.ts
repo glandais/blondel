@@ -372,9 +372,13 @@ const STRUCTURE_BY_KIND: Readonly<Record<string, Readonly<Record<string, ParamTi
     "section.jointOffset": workshop(S),
     "section.fingerLength": workshop(S),
     // Zone tendue du décalage des aboutages et longueur minimale d'une planche (QUESTIONS A37
-    // (4), (13) et (14)) ◆.
+    // (4), (13) et (14)) ; bande d'ANSI A190.1 § 10.4 (a) et minimum `auto` = 2 × enture +
+    // marge (A38 (3), (4) et (9)) ◆.
     "section.tensionZone": workshop(S),
+    "section.tensionZoneLayers": workshop(S),
+    "section.tensionZoneLength": workshop(S),
     "section.minBoardLength": workshop(S),
+    "section.boardLengthMargin": workshop(S),
     notch: workshop(S),
     "notch.rearDepth": design(S, [more(5)]),
     bolts: workshop(S),
@@ -388,6 +392,9 @@ const STRUCTURE_BY_KIND: Readonly<Record<string, Readonly<Record<string, ParamTi
     lagScrews: workshop(S),
     "lagScrews.pilotDiameter": workshop(S),
     "lagScrews.minAnchorage": workshop(S),
+    // Ancrage total minimal sous la marche, sens des projets enregistrés avant la version 2 du
+    // format (A38 (14)) ◆, affiché seulement s'il est en vigueur (`structureParamApplies`).
+    "lagScrews.minTotalAnchorage": workshop(S),
     "lagScrews.tipCover": workshop(S),
     "lagScrews.maxLength": workshop(S),
     // Entraxe et pince avant des tire-fonds au plus sévère des règles de l'EC5 (A35 (l)).
@@ -672,10 +679,23 @@ export function structureParamApplies(
       leaf === "jointOffset" ||
       leaf === "fingerLength" ||
       leaf === "tensionZone" ||
-      leaf === "minBoardLength"
+      leaf === "tensionZoneLayers" ||
+      leaf === "tensionZoneLength" ||
+      leaf === "minBoardLength" ||
+      leaf === "boardLengthMargin"
     ) {
-      return curvedMethodOf(project, params) === "stacked";
+      if (curvedMethodOf(project, params) !== "stacked") return false;
+      // Marge de la longueur minimale `auto` : sans effet sur une longueur saisie (A38 (4)).
+      if (leaf === "boardLengthMargin")
+        return field(field(params, "section"), "minBoardLength") === "auto";
+      return true;
     }
+  }
+  // Ancrage total des tire-fonds (A38 (14)) : mode hérité des projets enregistrés avant la
+  // version 2 du format, reporté par la migration ; affiché seulement s'il est en vigueur (> 0).
+  if (head === "lagScrews" && path[1] === "minTotalAnchorage") {
+    const v = field(field(params, "lagScrews"), "minTotalAnchorage");
+    return typeof v === "number" && v > 0;
   }
   // Réduction selon l'angle du fil (A35 (j)) : poutre en couches empilées seulement.
   if (head === "grainAngle") return curvedMethodOf(project, params) === "stacked";

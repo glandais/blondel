@@ -19,6 +19,7 @@ import {
   intersectLineCurve,
   offsetCurve,
   projectOnCurve,
+  PROJECT_SCHEMA_VERSION,
   vec2,
   type ComplianceReport,
   type Curve2,
@@ -377,7 +378,7 @@ export function layoutProject(shape: {
   readonly opening?: ProjectInput["site"]["opening"];
 }): Project {
   return ProjectSchema.parse({
-    schemaVersion: 1,
+    schemaVersion: PROJECT_SCHEMA_VERSION,
     site: {
       floorToFloor: shape.floorToFloor ?? 2700,
       upperSlabThickness: 200,
@@ -578,7 +579,7 @@ export function sampleParts(): Part[] {
 
 export function sampleProject(o: { opening?: ProjectInput["site"]["opening"] } = {}): Project {
   const input: ProjectInput = {
-    schemaVersion: 1,
+    schemaVersion: PROJECT_SCHEMA_VERSION,
     name: "Essai exports",
     site: {
       floorToFloor: 2700,

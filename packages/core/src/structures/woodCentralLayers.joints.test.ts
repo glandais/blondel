@@ -14,6 +14,11 @@
  * des planches et constat `FAB_LIMON_CENTRAL_BOIS_PLANCHES_COURTES` ((14)) ; logement exact dans
  * le plan de l'âme (`BeamKerf.line`, (16)) ; logement découpé sans fraisage aux joints (8) ;
  * broches de tête `centered` au milieu de leur couche (15).
+ *
+ * Décision A38 (12) du 2026-10-11 (en fin de fichier) : joints de colle imposés
+ * (`StackedBeamShape.jointLevels`, dessus voulu de l'âme de pied) traités comme des assises par
+ * `resolveImposedLevels`, `layerBounds` et l'oracle `stackedJointLevels`, abandonnés au travers
+ * d'un perçage (remarque).
  */
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
@@ -35,8 +40,10 @@ import {
 } from "./woodCentral.test-helpers.js";
 import {
   buildStackedLayers,
+  holeLevelsOf,
   layerBounds,
   resolveDressingAllowance,
+  resolveImposedLevels,
   resolveLayerThickness,
   stackedJointLevels,
   WOOD_CENTRAL_LAYER_RULES,
@@ -591,9 +598,7 @@ describe("aboutages à entures (A36 (6)) : gabarit, débit, volume", () => {
       for (const c of cuts)
         for (const d of below) expect(Math.abs(c - d)).toBeGreaterThanOrEqual(115 - 1e-6);
     }
-    const note = r.notes.find(
-      (n) => n.key === "structure.woodCentral.note.layerFingerJointsTension",
-    )!;
+    const note = r.notes.find((n) => n.key === "structure.woodCentral.note.layerFingerJointsBand")!;
     expect(note.params?.["held"]).toBe(note.params?.["joints"]);
   });
 
@@ -932,6 +937,9 @@ describe("broches `centered` (A37 (15)) : au milieu de leur couche, aucun joint 
 describe("décalage des aboutages en zone tendue seulement (A37 (4) (13))", () => {
   /** Arc de 1 500 mm, planches ≈ 300 mm, décalage intenable de 400 mm. */
   const arc = simpleTrace(3000, 1500);
+  // Zone d'avant A38 (sens d'une valeur de `tensionZone` enregistrée avant A38, gardé par la
+  // migration du format) : aucune couche en plus, toute la longueur. La bande de [85] (A38 (3),
+  // défauts 1 couche et 75 %) est couverte dans `woodCentralLayers.tension.test.ts`.
   const section = {
     layerThickness: 40,
     dressingAllowance: 5,
@@ -939,6 +947,8 @@ describe("décalage des aboutages en zone tendue seulement (A37 (4) (13))", () =
     jointOffset: 400,
     fingerLength: 15,
     minBoardLength: 0,
+    tensionZoneLayers: 0,
+    tensionZoneLength: 1,
   };
 
   it("zone sous la base : aucun joint en zone tendue, aucune violation, remarque dédiée", () => {
@@ -951,14 +961,14 @@ describe("décalage des aboutages en zone tendue seulement (A37 (4) (13))", () =
     // Couches au-dessus d'une couche composée : joints hors zone, libres.
     for (const l of composed.slice(1)) {
       const [f] = findingOf(checks, RULE, l.partId);
-      expect(f!.message.key).toBe("structure.woodCentral.check.layerJointsOutsideTension");
+      expect(f!.message.key).toBe("structure.woodCentral.check.layerJointsOutsideBand");
       expect(f!.measured).toBeUndefined();
     }
     // Joints libres : partage égal gardé (aucun déplacement).
     const bare = runSimple(arc, {}, { ...section, jointOffset: 0 }).r;
     expect(r.layers.map(innerCuts)).toEqual(bare.layers.map(innerCuts));
     const keys = r.notes.map((x) => x.key);
-    expect(keys).toContain("structure.woodCentral.note.layerFingerJointsNoTension");
+    expect(keys).toContain("structure.woodCentral.note.layerFingerJointsNoBand");
   });
 
   it("zone au-dessus du dessus (tensionZone = 1 de toute la hauteur) : comportement « partout »", () => {
@@ -984,6 +994,8 @@ describe("décalage des aboutages en zone tendue seulement (A37 (4) (13))", () =
               width: c.b,
               jointOffset: offset,
               minBoardLength: 0,
+              tensionZoneLayers: 0,
+              tensionZoneLength: 1,
               ...(c.t !== undefined ? { layerThickness: c.t } : {}),
             },
           });
@@ -1010,7 +1022,7 @@ describe("décalage des aboutages en zone tendue seulement (A37 (4) (13))", () =
             }
             if (tension.length === 0) {
               expect(f!.status).toBe("ok");
-              expect(f!.message.key).toBe("structure.woodCentral.check.layerJointsOutsideTension");
+              expect(f!.message.key).toBe("structure.woodCentral.check.layerJointsOutsideBand");
               continue;
             }
             let gap = Infinity;
@@ -1282,5 +1294,144 @@ describe("logement exact dans le plan de l'âme (A37 (16)) et découpé aux join
     const notes = r.notes.map((x) => x.key);
     expect(notes).toContain("structure.woodCentral.note.layerKerf");
     expect(notes).not.toContain("structure.woodCentral.note.layerKerfMilled");
+  });
+});
+
+// ------------------------------------------------------------------ décision A38 (12) du 2026-10-11
+
+describe("joints de colle imposés (A38 (12)) : dessus voulu de l'âme de pied", () => {
+  /** Broche de pied Ø`d` (repère AP1, centrée par défaut) avec la pince de perçage de l'âme. */
+  const footPin = (z: Mm, d: Mm): ShoeBeamHole => ({
+    mark: "AP1",
+    sigma: 40,
+    z,
+    diameter: d,
+    webEdge: 25,
+  });
+  const straight = simpleTrace(Infinity, 600);
+  /** Forme droite : dessous à la base, dessus au dernier niveau, assises données. */
+  const flatShape = (base: Mm, seats: readonly Mm[], levels: readonly Mm[]): StackedBeamShape => ({
+    beamId: BEAM_ID,
+    beamMark: "LC1",
+    b: 80,
+    sStart: 0,
+    sEnd: 600,
+    bottomAt: () => base,
+    topAt: () => seats[seats.length - 1]!,
+    nodes: [],
+    baseZ: base,
+    seatLevels: seats,
+    jointLevels: levels,
+  });
+  const buildFlat = (shape: StackedBeamShape, tMax: Mm, holes: readonly ShoeBeamHole[]) => {
+    const ctx = QUARTER_CTX();
+    const params = woodCentralParams({ section: { layerThickness: tMax } });
+    const checks = new CheckCollector(ctx.project, ctx.stepping);
+    const r = buildStackedLayers({
+      params,
+      trace: straight,
+      profile: PROFILE,
+      checks,
+      beam: { ...shape, holes },
+    });
+    const oracle = stackedJointLevels({ params, profile: PROFILE, beam: shape })(holes);
+    return { r, oracle };
+  };
+
+  it("niveau imposé hors des perçages : joint de colle, broche centrée, couches ≤ t_max", () => {
+    // Base 8, assise 160, broche Ø12 à 56 (r = 7, pince 26) ; âme de 120 + jeu 1 : joint à 129.
+    const shape = flatShape(8, [160], [129]);
+    const { r, oracle } = buildFlat(shape, 75, [footPin(56, 12)]);
+    expect(r.errors).toEqual([]);
+    const bounds = r.layers.flatMap((l) => [l.z0, l.z1]);
+    expect(bounds.some((z) => Math.abs(z - 129) < 1e-9)).toBe(true);
+    expect(r.layers.some((l) => Math.abs((l.z0 + l.z1) / 2 - 56) < 1e-6)).toBe(true);
+    for (const l of r.layers) expect(l.z1 - l.z0).toBeLessThanOrEqual(75 + 1e-9);
+    expect(oracle).toEqual([...new Set(bounds)].sort((p, q) => p - q));
+    expect(r.notes.map((n) => n.key)).not.toContain(
+      "structure.woodCentral.note.layerJointLevelDropped",
+    );
+  });
+
+  it("niveau imposé au travers d'un perçage : abandonné, remarque ; près d'une assise : fusionné", () => {
+    const shape = flatShape(8, [160], [60]);
+    const { r, oracle } = buildFlat(shape, 75, [footPin(56, 12)]);
+    expect(r.errors).toEqual([]);
+    const note = r.notes.find((n) => n.key === "structure.woodCentral.note.layerJointLevelDropped");
+    expect(note?.params).toMatchObject({ mark: "AP1", z: { num: 60 }, holeZ: { num: 56 } });
+    expect(r.layers.flatMap((l) => [l.z0, l.z1]).some((z) => Math.abs(z - 60) < 7)).toBe(false);
+    // Même empilement que sans niveau imposé.
+    expect(oracle).toEqual(buildFlat(flatShape(8, [160], []), 75, [footPin(56, 12)]).oracle);
+    // À moins de 1 mm de l'assise ou de la base : fusionné, sans remarque.
+    const merged = resolveImposedLevels(8, 160, [160], [159.5, 8.4, 200, Number.NaN], []);
+    expect(merged).toEqual({ levels: [160], dropped: [] });
+  });
+
+  it("propriété : joint imposé hors des zones r, sinon abandonné ; broches centrées ; oracle = empilement", () => {
+    fc.assert(
+      fc.property(
+        fc.record({
+          seat: fc.integer({ min: 100, max: 260 }),
+          rise: fc.integer({ min: 120, max: 200 }),
+          tMax: fc.integer({ min: 30, max: 80 }),
+          d: fc.integer({ min: 10, max: 16 }),
+          pinFrac: fc.double({ min: 0.2, max: 0.6, noNaN: true }),
+          frac: fc.double({ min: 0.001, max: 0.999, noNaN: true }),
+        }),
+        (c) => {
+          const base = 8;
+          const seats = [c.seat, c.seat + c.rise];
+          const z = base + c.pinFrac * (c.seat - base);
+          const level = base + c.frac * (c.seat - base);
+          const holes = [footPin(z, c.d)];
+          const hl = holeLevelsOf(holes, CLEARANCE);
+          const r = hl[0]!.r;
+          const zTop = seats[1]!;
+          const imposed = resolveImposedLevels(base, zTop, seats, [level], hl);
+          const near = level - base < 1 || c.seat - level < 1;
+          const inR = Math.abs(level - z) < r - 1e-6;
+          const { bounds, issues } = layerBounds(base, zTop, c.tMax, imposed.levels, 1000, hl);
+          const levels = [bounds[0]!.z0, ...bounds.map((x) => x.z1)];
+          const has = (v: Mm): boolean => levels.some((x) => Math.abs(x - v) < 1e-9);
+          if (near) {
+            expect(imposed.dropped).toEqual([]);
+          } else if (inR) {
+            expect(imposed.dropped).toHaveLength(1);
+            expect(imposed.dropped[0]).toMatchObject({ mark: "AP1", z: level, min: r });
+            expect(has(level)).toBe(false);
+          } else {
+            expect(imposed.dropped).toEqual([]);
+            expect(has(level)).toBe(true);
+          }
+          // Assises toujours des joints, couches ≤ t_max, aucun joint dans la zone r.
+          for (const st of seats) expect(has(st)).toBe(true);
+          for (const x of bounds) expect(x.z1 - x.z0).toBeLessThanOrEqual(c.tMax + 1e-9);
+          expect(issues!.filter((i) => i.kind === "joint")).toEqual([]);
+          // Broche centrée quand l'intervalle qui la contient le permet (comme avant A38).
+          const kept = !near && !inR;
+          const lo = kept && level < z ? level : base;
+          const hi = kept && level > z ? level : c.seat;
+          const room = Math.min(c.tMax, 2 * (z - lo), 2 * (hi - z));
+          if (room >= 2 * r + 1e-6) {
+            expect(issues!.filter((i) => i.kind === "offCenter")).toEqual([]);
+            expect(bounds.some((x) => Math.abs((x.z0 + x.z1) / 2 - z) < 1e-6)).toBe(true);
+          }
+          // Oracle des platines et empilement : mêmes joints, même remarque.
+          const shape = flatShape(base, seats, [level]);
+          const built = buildFlat(shape, c.tMax, holes);
+          expect(built.r.errors).toEqual([]);
+          expect(built.oracle).toEqual(levels);
+          const zs = [...new Set(built.r.layers.flatMap((l) => [l.z0, l.z1]))].sort(
+            (p, q) => p - q,
+          );
+          expect(zs).toEqual(levels);
+          const dropNotes = built.r.notes.filter(
+            (n) => n.key === "structure.woodCentral.note.layerJointLevelDropped",
+          );
+          expect(dropNotes).toHaveLength(imposed.dropped.length);
+        },
+      ),
+      { numRuns: 60 },
+    );
   });
 });
