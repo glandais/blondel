@@ -32,6 +32,7 @@ import {
   type MessageKey,
   type MessageParam,
 } from "@blondel/i18n";
+import { discOverlap, wallCollision, wallPolygon } from "../geom2d/collide.js";
 import { rotateCurve, translateCurve } from "../geom2d/curve.js";
 import { pointInPolygon } from "../geom2d/polygon.js";
 import * as V from "../geom2d/vec.js";
@@ -82,12 +83,9 @@ import { ASSISTANT_DEFAULTS, DEFAULT_SCORE_WEIGHTS } from "./defaults.js";
 import {
   arrivalFrame,
   arrivalPlacements,
-  discOverlap,
   grossPieces,
   slabIntrusion,
   toWorld,
-  wallCollision,
-  wallPolygon,
   type Placement,
 } from "./placement.js";
 import { scoreModel, summarizeModel } from "./score.js";

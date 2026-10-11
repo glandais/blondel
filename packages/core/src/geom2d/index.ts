@@ -9,3 +9,4 @@ export * from "./curve.js";
 export * from "./intersect.js";
 export * from "./offset.js";
 export * from "./polygon.js";
+export * from "./collide.js";

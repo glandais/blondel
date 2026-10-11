@@ -1,19 +1,12 @@
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { fr } from "../i18n.test-helpers.js";
+import { wallCollision } from "../geom2d/collide.js";
 import { pointInPolygon } from "../geom2d/polygon.js";
 import * as V from "../geom2d/vec.js";
 import { openingPolygon } from "../headroom/headroom.js";
 import type { FlightsLayoutSpec } from "../model/project.js";
-import {
-  arrivalFrame,
-  arrivalPlacements,
-  convexOverlap,
-  discOverlap,
-  grossPieces,
-  toWorld,
-  wallCollision,
-} from "./placement.js";
+import { arrivalFrame, arrivalPlacements, grossPieces, toWorld } from "./placement.js";
 
 /** Cas d'acceptation n° 1 (examples/acceptance-01-quart-tournant.blondel.json). */
 const ACCEPTANCE_SPEC: FlightsLayoutSpec = {
@@ -105,15 +98,5 @@ describe("emprise et collisions", () => {
     const xs = pieces[0]!.map((p) => p.x);
     expect(Math.min(...xs)).toBe(-45);
     expect(Math.max(...xs)).toBe(845);
-  });
-
-  it("contact au nu : pas de collision ; recouvrement : collision", () => {
-    const a = [V.vec(0, 0), V.vec(10, 0), V.vec(10, 10), V.vec(0, 10)];
-    const b = [V.vec(10, 0), V.vec(20, 0), V.vec(20, 10), V.vec(10, 10)];
-    const c = [V.vec(9, 0), V.vec(20, 0), V.vec(20, 10), V.vec(9, 10)];
-    expect(convexOverlap(a, b, 0.5)).toBe(false);
-    expect(convexOverlap(a, c, 0.5)).toBe(true);
-    expect(discOverlap(V.vec(15, 5), 5, a, 0.5)).toBe(false);
-    expect(discOverlap(V.vec(14, 5), 5, a, 0.5)).toBe(true);
   });
 });
