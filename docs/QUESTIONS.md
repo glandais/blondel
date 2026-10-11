@@ -942,6 +942,7 @@ Le contrôle d'adéquation au site (`site/fit.ts`, ADR-0010) signale un dégagem
 - Proposition : (b) tant qu'aucune source n'est trouvée : dégagement d'arrivée par défaut = emmarchement (analogie avec `PALIER_LONGUEUR_METIER`, déjà utilisée par l'assistant), débattement de porte = largeur de la porte saisie, fenêtre signalée en conseil seulement ; aucune valeur en dur.
 - Aujourd'hui : seul l'assistant contrôle un dégagement d'arrivée (`limits.arrivalClearance`, défaut E, « à valider », `assistant/types.ts`) ; ni porte ni fenêtre dans le site.
 - Réf. : `rules.yaml` PALIER_LONGUEUR_METIER, PALIER_LONGUEUR_ERP_NON_CONTRARIE ; `assistant/propose.ts` ; ADR-0010.
+- Décidé le 2026-10-11 : (b), paramètres du profil d'atelier « à valider », aucune valeur en dur : dégagement d'arrivée par défaut = emmarchement, débattement de porte = largeur de la porte saisie, fenêtre signalée en conseil seulement. Mise en œuvre : ADR-0010, amendement du sous-lot 3b ; choix de mise en œuvre à valider : F15.
 
 ### F8. Nombre maximal de tronçons
 
@@ -1024,3 +1025,16 @@ Le sous-lot 2d a dû fixer, sans décision de l'utilisateur, la lecture de certa
 - Aujourd'hui : moteur à volées, un seul emmarchement, aucun palier droit, auto-recouvrement calculé pour l'hélicoïdal seulement.
 - Réf. : A10, F2, F9, F12, F13 ; ADR-0010, amendement du sous-lot 2d ; `guards/jour.ts`, `rules/check.ts` (`widthOver`, `widestWidth`, `junctionWidth`), `rules/evaluators/flights.ts`, `rules/evaluators/stair.ts`, `headroom/cage.ts` ; `docs/ledger/LEDGER-free-2d.md` (sous-lot 2d).
 - Décidé le 2026-10-11 : propositions (1) à (6) validées telles qu'appliquées au sous-lot 2d (jour étroit entre jonctions à ±90° de même sens seulement, E d'un palier = plus petite des largeurs qui le bordent, seuils minimaux sur la plus petite largeur et seuils déclencheurs sur le tronçon le plus large, palier droit ERP > 1 000 mm, échappée d'une cage qui se recouvre sur les sous-faces et non calculée quand un contour de marche sort de sa portion, `TREMIE_LONGUEUR` non évaluée après un tournant, une transition, un arc ou un palier droit).
+
+### F15. Sévérités et périmètre de l'adéquation au site (sous-lot 3b)
+
+Le sous-lot 3b (`site/fit.ts`, `Model.siteFit`) a dû fixer, sans décision de l'utilisateur, la sévérité de chaque conflit et le sens de certains contrôles. Propositions appliquées, « à valider » :
+
+- (1) **Sévérités** : mur, hors pièce, poteau, poteau rond, zone interdite → erreur ; débattement de porte → avertissement (la hauteur de la porte n'est pas saisie : une volée qui passe au-dessus est aussi signalée) ; fenêtre → conseil (F7) ; dégagement d'arrivée → avertissement ; échappée → sévérité effective de la règle ECHAPPEE_* reprise (bloquant → erreur) ; recouvrement de la cage sur elle-même → erreur.
+- (2) **Dalle haute** en deux niveaux : erreur quand la marche elle-même (surface, lignes de nez) sort de la trémie au-dessus de la sous-face ; avertissement quand seule l'épaisseur latérale de la structure (limon) passe sous la dalle (entaille ou appui sur le chevêtre à prévoir). Exemple : j3a, j3b (×2), j3c, j4 et j5b (limon côté extérieur au ras de la trémie) donnent un avertissement à la marche 14 ; en un seul niveau, ce serait une erreur sur ces exemples de référence. Quand c'est la ligne d'arrivée qui sort, le message nomme la ligne d'arrivée (aucune marche n'y porte de numéro).
+- (3) **« Devant une fenêtre »** : marche au contact de la baie (épaisseur du mur qui la porte, sinon segment `a`–`b`) dont le dessus est sous le linteau ; une volée éloignée de la baie n'est pas signalée (aucune profondeur sourcée).
+- (4) **Dégagement d'arrivée** : rectangle de la largeur hors tout de la ligne d'arrivée, testé contre les murs et les poteaux seulement (éléments qui montent sur toute la hauteur) ; zones interdites, portes, fenêtres et contour de la pièce décrivent le niveau bas et sont ignorés.
+- (5) **Échappée** dans les listes : les violations ECHAPPEE_* restent dans `Model.siteFit` (calque des conflits de l'éditeur de plan, lot 4) mais ne sont pas répétées dans la liste « Adéquation au site » de l'inspecteur ni dans la section du PDF, où leur carte de règle les montre déjà.
+- Options à trancher : garder (1) à (5) ; pour (1), porte en erreur, ou porte en conseil tant que la hauteur de porte n'est pas saisie ; pour (2), un seul niveau (erreur) ; pour (3), une profondeur de dégagement devant la baie (paramètre d'atelier « à valider ») ; pour (4), tester aussi zones et contour (zone ou contour qui vaudrait pour les deux niveaux), ou ajouter un contour de l'étage.
+- Aujourd'hui : l'assistant crible ses propositions avec ses propres sévérités (`assistant/placement.ts`, `assistant/propose.ts`) ; le sous-lot 3c doit l'aligner sur celles-ci.
+- Réf. : F7 ; ADR-0010, amendement du sous-lot 3b ; `site/fit.ts`, `site/fit.examples.test.ts` ; `docs/ledger/LEDGER-free-2d.md` (sous-lot 3b).

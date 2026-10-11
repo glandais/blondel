@@ -1,4 +1,4 @@
-import { textMessage } from "@blondel/i18n";
+import { msg, textMessage } from "@blondel/i18n";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { translatorOf } from "../i18n.js";
@@ -218,5 +218,71 @@ describe("sources citées et profil dans la langue du dossier (QUESTIONS A26 (b)
     expect(en).toContain("Blondel workshop profile (default value to be validated, LEDGER §2)");
     expect(en).not.toContain("Profil d'atelier Blondel");
     expect(en).not.toContain("Géométrie");
+  });
+});
+
+describe("adéquation au site (ADR-0010, sous-lot 3b)", () => {
+  const canvas = { textWidth: (t: string, size: number) => t.length * size * 0.5 };
+  const lines = (model: Model, locale: "fr" | "en"): string =>
+    complianceLines(model, canvas, 1e6, [], translatorOf({ locale }))
+      .map((l) => l.text)
+      .join("\n");
+  const base = {
+    errors: [],
+    compliance: {
+      rulesVersion: 1,
+      contexts: [],
+      profile: "strict",
+      summary: { bloquant: 0, avertissement: 0, conseil: 0 },
+      results: [],
+    },
+  };
+
+  it("conflits listés avec leur sévérité, en français par défaut et en anglais", () => {
+    const model = {
+      ...base,
+      siteFit: [
+        {
+          kind: "wall",
+          severity: "erreur",
+          message: msg("site.fit.wall", { wall: "M1" }),
+          zone: [],
+          targetId: "M1",
+        },
+        {
+          kind: "window",
+          severity: "conseil",
+          message: msg("site.fit.windowOne", { id: "F1", tread: 3, sill: 900, head: 2100 }),
+          zone: [],
+        },
+      ],
+    } as unknown as Model;
+    const fr = lines(model, "fr");
+    expect(fr).toContain("Adéquation au site (2)");
+    expect(fr).toContain("Erreur — L'escalier (structure comprise) empiète sur le mur « M1 ».");
+    expect(fr).toMatch(/^Conseil — L'escalier passe devant la fenêtre « F1 »/m);
+    const en = lines(model, "en");
+    expect(en).toContain("Site fit (2)");
+    expect(en).toContain("Error — The stair (structure included) encroaches on wall “M1”.");
+  });
+
+  it("échappée non répétée : déjà listée par sa règle ECHAPPEE_*", () => {
+    const model = {
+      ...base,
+      siteFit: [
+        {
+          kind: "headroom",
+          severity: "conseil",
+          message: textMessage("échappée"),
+          zone: [],
+          ruleId: "ECHAPPEE_RECO_PRIVATIF",
+        },
+      ],
+    } as unknown as Model;
+    expect(lines(model, "fr")).not.toContain("Adéquation au site");
+  });
+
+  it("sans conflit : aucune section d'adéquation", () => {
+    expect(lines(base as unknown as Model, "fr")).not.toContain("Adéquation au site");
   });
 });

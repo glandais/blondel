@@ -73,3 +73,76 @@ export function wallCollision(
   }
   return null;
 }
+
+/** Enveloppe convexe (chaîne monotone d'Andrew), CCW, sans sommet aligné ; vide sous 3 points. */
+export function convexHull(points: readonly Vec2[]): Polygon2 {
+  const pts = [...points].sort((p, q) => p.x - q.x || p.y - q.y);
+  if (pts.length < 3) return [];
+  const half = (list: readonly Vec2[]): Vec2[] => {
+    const out: Vec2[] = [];
+    for (const p of list) {
+      while (
+        out.length >= 2 &&
+        V.cross(
+          V.sub(out[out.length - 1]!, out[out.length - 2]!),
+          V.sub(p, out[out.length - 2]!),
+        ) <= 0
+      )
+        out.pop();
+      out.push(p);
+    }
+    out.pop();
+    return out;
+  };
+  const hull = [...half(pts), ...half([...pts].reverse())];
+  return hull.length >= 3 ? hull : [];
+}
+
+/**
+ * Triangulation d'un polygone simple par oreilles (sommets alignés ou confondus tolérés) :
+ * triangles CCW. Un polygone dégénéré rend les triangles trouvés avant le blocage.
+ */
+export function triangulateSimple(poly: Polygon2): Polygon2[] {
+  let area = 0;
+  for (let i = 0; i < poly.length; i++) area += V.cross(poly[i]!, poly[(i + 1) % poly.length]!);
+  const pts = area < 0 ? [...poly].reverse() : [...poly];
+  const out: Polygon2[] = [];
+  const inTri = (p: Vec2, a: Vec2, b: Vec2, c: Vec2): boolean =>
+    V.cross(V.sub(b, a), V.sub(p, a)) >= 0 &&
+    V.cross(V.sub(c, b), V.sub(p, b)) >= 0 &&
+    V.cross(V.sub(a, c), V.sub(p, c)) >= 0;
+  let guard = 0;
+  while (pts.length > 3 && guard++ < 10_000) {
+    const n = pts.length;
+    let clipped = false;
+    for (let i = 0; i < n; i++) {
+      const a = pts[(i + n - 1) % n]!;
+      const b = pts[i]!;
+      const c = pts[(i + 1) % n]!;
+      const turn = V.cross(V.sub(b, a), V.sub(c, b));
+      if (turn < 0) continue;
+      if (turn === 0) {
+        // Sommet aligné : retiré sans triangle.
+        pts.splice(i, 1);
+        clipped = true;
+        break;
+      }
+      if (pts.some((p) => p !== a && p !== b && p !== c && inTri(p, a, b, c))) continue;
+      out.push([a, b, c]);
+      pts.splice(i, 1);
+      clipped = true;
+      break;
+    }
+    if (!clipped) return out;
+  }
+  if (pts.length === 3) out.push([pts[0]!, pts[1]!, pts[2]!]);
+  return out;
+}
+
+/**
+ * Un polygone convexe recouvre-t-il un polygone simple quelconque de plus de `tol` ? Le second
+ * est triangulé (`triangulateSimple`), chaque triangle testé par l'axe séparateur.
+ */
+export function convexSimpleOverlap(convex: Polygon2, simple: Polygon2, tol: Mm): boolean {
+  return triangulateSimple(simple).some((t) => convexOverlap(convex, t, tol));
+}

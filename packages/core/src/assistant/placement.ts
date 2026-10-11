@@ -219,7 +219,7 @@ export function toWorld(p: Vec2, placement: { origin: Vec2; rotation: number }):
  * numéro de la première marche fautive, ou `null`.
  */
 export function slabIntrusion(
-  model: Model,
+  model: Pick<Model, "stepping">,
   opening: Polygon2,
   ceiling: Mm,
   innerThickness: Mm,

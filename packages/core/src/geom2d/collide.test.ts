@@ -2,7 +2,16 @@ import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import type { Polygon2, Vec2 } from "../model/primitives.js";
 import type { Wall } from "../model/project.js";
-import { convexOverlap, discOverlap, wallCollision, wallPolygon } from "./collide.js";
+import {
+  convexHull,
+  convexOverlap,
+  convexSimpleOverlap,
+  discOverlap,
+  triangulateSimple,
+  wallCollision,
+  wallPolygon,
+} from "./collide.js";
+import { isConvex, pointInPolygon, signedArea } from "./polygon.js";
 import * as V from "./vec.js";
 
 const rect = (x0: number, y0: number, x1: number, y1: number): Polygon2 => [
@@ -455,5 +464,115 @@ describe("propriétés de discOverlap", () => {
       }),
       { numRuns: 300 },
     );
+  });
+});
+
+describe("enveloppe convexe, triangulation, recouvrement d'un polygone simple", () => {
+  it("enveloppe convexe : CCW, convexe, contient tous les points", () => {
+    fc.assert(
+      fc.property(
+        fc.array(
+          fc.record({
+            x: fc.integer({ min: -500, max: 500 }),
+            y: fc.integer({ min: -500, max: 500 }),
+          }),
+          {
+            minLength: 3,
+            maxLength: 30,
+          },
+        ),
+        (pts) => {
+          const hull = convexHull(pts);
+          if (hull.length === 0) return; // points alignés
+          expect(signedArea(hull)).toBeGreaterThan(0);
+          expect(isConvex(hull)).toBe(true);
+          for (const p of pts) expect(pointInPolygon(p, hull, 1e-6)).not.toBe("outside");
+        },
+      ),
+      { numRuns: 300 },
+    );
+    expect(convexHull([V.vec(0, 0), V.vec(1, 1), V.vec(2, 2)])).toEqual([]);
+  });
+
+  it("triangulation d'un polygone simple : aire conservée (L, U, sens horaire)", () => {
+    const l: Polygon2 = [
+      V.vec(0, 0),
+      V.vec(300, 0),
+      V.vec(300, 100),
+      V.vec(100, 100),
+      V.vec(100, 300),
+      V.vec(0, 300),
+    ];
+    const u: Polygon2 = [
+      V.vec(0, 0),
+      V.vec(300, 0),
+      V.vec(300, 300),
+      V.vec(200, 300),
+      V.vec(200, 100),
+      V.vec(100, 100),
+      V.vec(100, 300),
+      V.vec(0, 300),
+    ];
+    for (const poly of [l, u, [...u].reverse()]) {
+      const tris = triangulateSimple(poly);
+      const area = tris.reduce((s, t) => s + signedArea(t), 0);
+      expect(area).toBeCloseTo(Math.abs(signedArea(poly)), 6);
+      for (const t of tris) expect(signedArea(t)).toBeGreaterThan(0);
+    }
+  });
+
+  it("propriété : triangulation d'un polygone étoilé, aire conservée et triangles CCW", () => {
+    // Polygone étoilé autour d'un centre (angles distincts triés, écart < 180°, rayons tirés),
+    // donc simple, souvent non convexe ; parcouru dans un sens ou dans l'autre.
+    const star = fc
+      .record({
+        cx: fc.double({ min: -3000, max: 3000, noNaN: true }),
+        cy: fc.double({ min: -3000, max: 3000, noNaN: true }),
+        angles: fc.uniqueArray(fc.integer({ min: 0, max: 359 }), { minLength: 3, maxLength: 14 }),
+        radii: fc.array(fc.double({ min: 20, max: 2000, noNaN: true }), {
+          minLength: 14,
+          maxLength: 14,
+        }),
+        flip: fc.boolean(),
+      })
+      .filter(({ angles }) => {
+        const a = [...angles].sort((x, y) => x - y);
+        return a.every((v, i) => (i === 0 ? v + 360 - a[a.length - 1]! : v - a[i - 1]!) < 180);
+      })
+      .map(({ cx, cy, angles, radii, flip }) => {
+        const poly = [...angles]
+          .sort((x, y) => x - y)
+          .map((deg, i) =>
+            V.addScaled(V.vec(cx, cy), V.fromAngle((deg * Math.PI) / 180), radii[i]!),
+          );
+        return flip ? poly.reverse() : poly;
+      });
+    fc.assert(
+      fc.property(star, (poly) => {
+        const expected = Math.abs(signedArea(poly));
+        const tris = triangulateSimple(poly);
+        const area = tris.reduce((s, t) => s + signedArea(t), 0);
+        expect(Math.abs(area - expected)).toBeLessThanOrEqual(1e-6 + 1e-9 * expected);
+        for (const t of tris) expect(signedArea(t)).toBeGreaterThanOrEqual(0);
+      }),
+      { numRuns: 500 },
+    );
+  });
+
+  it("recouvrement d'un polygone simple : le creux d'un U n'est pas recouvert", () => {
+    const u: Polygon2 = [
+      V.vec(0, 0),
+      V.vec(300, 0),
+      V.vec(300, 300),
+      V.vec(200, 300),
+      V.vec(200, 100),
+      V.vec(100, 100),
+      V.vec(100, 300),
+      V.vec(0, 300),
+    ];
+    expect(convexSimpleOverlap(rect(120, 120, 180, 280), u, 0.5)).toBe(false);
+    expect(convexSimpleOverlap(rect(120, 50, 180, 280), u, 0.5)).toBe(true);
+    // Contact au nu (fond du creux) : pas un recouvrement.
+    expect(convexSimpleOverlap(rect(120, 100, 180, 280), u, 0.5)).toBe(false);
   });
 });

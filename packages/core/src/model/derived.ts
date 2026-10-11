@@ -744,6 +744,52 @@ export interface ModelPrecheck {
   readonly notes: readonly Message[];
 }
 
+// ------------------------------------------------------------------ Adéquation au site
+
+/** Nature d'un conflit d'adéquation au site (`Model.siteFit`, `site/fit.ts`). */
+export type SiteConflictKind =
+  /** Emprise (structure comprise) qui empiète sur un mur. */
+  | "wall"
+  /** Emprise qui sort du contour de la pièce. */
+  | "outsideRoom"
+  /** Poteau, poteau rond ou zone interdite recouverts. */
+  | "obstacle"
+  /** Débattement d'une porte (secteur) recouvert. */
+  | "doorSwing"
+  /** Escalier qui passe devant une fenêtre (conseil seulement, décision F7). */
+  | "window"
+  /** Dégagement devant le nez d'arrivée encombré (mur, obstacle, contour de la pièce). */
+  | "arrivalClearance"
+  /** Marche qui traverse la dalle haute hors de la trémie. */
+  | "slab"
+  /** Échappée insuffisante (règle ECHAPPEE_* du contrôle, reprise sans recalcul). */
+  | "headroom"
+  /** Tronçons de la cage qui se superposent en plan (constat du tracé). */
+  | "selfOverlap";
+
+/**
+ * Sévérité d'un conflit d'adéquation : `erreur` (l'escalier ne tient pas : collision, dalle,
+ * règle bloquante), `avertissement`, `conseil`. Une règle reprise du contrôle garde sa sévérité
+ * effective (`bloquant` devient `erreur`).
+ */
+export type SiteConflictSeverity = "erreur" | "avertissement" | "conseil";
+
+/** Conflit d'adéquation au site (`Model.siteFit`). */
+export interface SiteConflict {
+  readonly kind: SiteConflictKind;
+  readonly severity: SiteConflictSeverity;
+  readonly message: Message;
+  /**
+   * Zone concernée, en coordonnées du site (mm) : polygone (intersection, secteur, marche) ou
+   * boîte rendue en rectangle ; pour le calque des conflits de l'éditeur 2D (lot 4).
+   */
+  readonly zone: Polygon2;
+  /** Identifiant du mur ou de l'obstacle en cause ; absent pour les autres conflits. */
+  readonly targetId?: string;
+  /** Règle de rules.yaml dont le conflit est repris (échappée) ; absent sinon. */
+  readonly ruleId?: string;
+}
+
 // ------------------------------------------------------------------ Résultat global
 
 export interface Model {
@@ -832,6 +878,13 @@ export interface Model {
    * aucun assemblage boulonné ou vissé connu (ou modèle construit hors pipeline).
    */
   readonly fasteners?: readonly Fastener[];
+  /**
+   * Adéquation au site (ADR-0010, plan E, sous-lot 3b, `site/fit.ts`) : conflits de l'escalier
+   * (structure comprise) avec les murs, le contour de la pièce, les obstacles, le dégagement
+   * d'arrivée, la dalle haute, l'échappée (règles ECHAPPEE_*, reprises du contrôle) et
+   * lui-même. Ajout rétrocompatible ; absent : aucun conflit (ou modèle construit hors pipeline).
+   */
+  readonly siteFit?: readonly SiteConflict[];
   /** Erreurs de génération (paramètres impossibles) : le modèle peut être partiel. */
   readonly errors: readonly Message[];
   /** Remarques non bloquantes du pipeline (pièces non générées, hypothèses). */

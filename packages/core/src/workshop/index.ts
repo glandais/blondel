@@ -70,3 +70,12 @@ export {
   type FastenerSettingField,
   type FastenerSettingInput,
 } from "./fasteners.js";
+export {
+  DEFAULT_SITE_FIT_PROFILE,
+  SITE_FIT_PROVENANCE,
+  SiteFitProfileInputSchema,
+  resolveSiteFitProfile,
+  type SiteFitProfile,
+  type SiteFitProfileInput,
+  type SiteFitSettingKey,
+} from "./siteFit.js";

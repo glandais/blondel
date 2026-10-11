@@ -237,13 +237,13 @@ export const SiteSchema = z.object({
   underlay: UnderlaySchema.optional(),
   /**
    * Contour fini intérieur de la pièce (ADR-0010) ; absent = pièce non décrite. Facultatif, sans
-   * défaut (un projet sans contour se relit et s'enregistre à l'identique) ; pas encore lu par
-   * le pipeline (adéquation au site : lot 3).
+   * défaut (un projet sans contour se relit et s'enregistre à l'identique) ; lu par la seule
+   * étape d'adéquation au site du pipeline (`site/fit.ts`, `Model.siteFit`).
    */
   room: RoomSchema.optional(),
   /**
    * Obstacles du site (ADR-0010) ; absent = aucun. Facultatif, sans défaut (pas de `[]` écrit à
-   * la lecture) ; pas encore lu par le pipeline (adéquation au site : lot 3).
+   * la lecture) ; lus par la seule étape d'adéquation au site du pipeline (`site/fit.ts`).
    */
   obstacles: ObstaclesSchema.optional(),
 });

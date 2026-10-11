@@ -4,6 +4,7 @@
  *   computeLayout → computeStepping → pièces de base → structure (plugin) → garde-corps
  *   → assemblages (`Part.assembledWith`) → visserie (`Model.fasteners`) → échappée
  *   → contrôle de conception (+ contrôles du plugin de structure et des garde-corps)
+ *   → adéquation au site (`Model.siteFit`, `site/fit.ts`)
  *   → chiffres clés (`Model.figures`, `pipeline/figures.ts`)
  *
  * - **Visserie** (QUESTIONS A27, `fasteners/compute.ts`) : éléments déduits des assemblages
@@ -70,6 +71,7 @@ import type {
   PartFamilyId,
   RuleResult,
   Severity,
+  SiteConflict,
   Stepping,
 } from "../model/derived.js";
 import { CAGE_FEATURE_LABELS, cageFeatures, type CageFeature } from "../model/cageFeatures.js";
@@ -101,6 +103,7 @@ import type { Fastener } from "../model/fasteners.js";
 import { SteppingError } from "../stepping/errors.js";
 import { computeRises } from "../stepping/rises.js";
 import { computeStepping } from "../stepping/stepping.js";
+import { headroomConflicts, siteGeometryConflicts, sortSiteConflicts } from "../site/fit.js";
 import { normalizeAssemblies } from "./assembly.js";
 import { computeFigures, requiredGuardHeightOf } from "./figures.js";
 import { LastValueCache } from "./memo.js";
@@ -120,6 +123,7 @@ const STAGE_LABELS = {
   headroom: msg("pipeline.stage.headroom"),
   compliance: msg("pipeline.stage.compliance"),
   fasteners: msg("pipeline.stage.fasteners"),
+  siteFit: msg("pipeline.stage.siteFit"),
 } as const;
 
 /**
@@ -253,29 +257,40 @@ function stableNewelTops(tops: NewelTops | undefined): NewelTops | undefined {
 }
 
 /**
- * Clés de mémoïsation du site : chaque champ (nom, valeur) **sauf le calque de fond**
- * (`site.underlay`), qu'aucune étape ne lit. Régler le calque ne recalcule ni la structure, ni
- * les garde-corps, ni l'échappée, ni le contrôle (QUESTIONS D5). Liste générique : un champ
+ * Champs du site exclus des clés de mémoïsation communes : le calque de fond (`site.underlay`),
+ * qu'aucune étape ne lit (QUESTIONS D5), le contour de pièce et les obstacles (`site.room`,
+ * `site.obstacles`), lus par la seule étape d'adéquation au site, qui les ajoute à sa clé.
+ */
+const SITE_KEYS_EXCLUDED: ReadonlySet<string> = new Set(["underlay", "room", "obstacles"]);
+
+/**
+ * Clés de mémoïsation du site : chaque champ (nom, valeur) **sauf** ceux de
+ * `SITE_KEYS_EXCLUDED`. Régler le calque, le contour de pièce ou un obstacle ne recalcule ni la
+ * structure, ni les garde-corps, ni l'échappée, ni le contrôle. Liste générique : un champ
  * ajouté au site est une dépendance par défaut.
  */
 function siteKeys(site: Project["site"]): unknown[] {
   const out: unknown[] = [];
   const record = site as unknown as Readonly<Record<string, unknown>>;
-  for (const k of Object.keys(record).sort()) if (k !== "underlay") out.push(k, record[k]);
+  for (const k of Object.keys(record).sort())
+    if (!SITE_KEYS_EXCLUDED.has(k)) out.push(k, record[k]);
   return out;
 }
 
 /**
  * Clés de mémoïsation du profil d'atelier pour la structure et les garde-corps : chaque champ
  * (nom, valeur) **sauf la visserie** (`workshop.fasteners`), que seule l'étape « Visserie »
- * lit. Régler la visserie ne recalcule ni la structure ni les garde-corps (QUESTIONS A27).
+ * lit, et l'adéquation au site (`workshop.siteFit`), lue par la seule étape du même nom.
+ * Régler l'une ou l'autre ne recalcule ni la structure ni les garde-corps (QUESTIONS A27).
  */
 function workshopKeys(workshop: Project["workshop"]): unknown[] {
   // Profil absent et profil vide se résolvent aux mêmes défauts : mêmes clés.
   if (workshop === undefined) return [];
   const out: unknown[] = [];
   const record = workshop as unknown as Readonly<Record<string, unknown>>;
-  for (const k of Object.keys(record).sort()) if (k !== "fasteners") out.push(k, record[k]);
+  // L'adéquation au site (`workshop.siteFit`) n'est lue que par l'étape du même nom.
+  for (const k of Object.keys(record).sort())
+    if (k !== "fasteners" && k !== "siteFit") out.push(k, record[k]);
   return out;
 }
 
@@ -399,6 +414,10 @@ const caches = {
   figures: new LastValueCache<ModelFigures | undefined>(),
   /** `Model.fasteners` (`fasteners/compute.ts`), à identité stable. */
   fasteners: new LastValueCache<Stage<readonly Fastener[]>>(),
+  /** Conflits géométriques d'adéquation au site (`site/fit.ts`). */
+  siteFit: new LastValueCache<Stage<readonly SiteConflict[]>>(),
+  /** `Model.siteFit` (conflits géométriques et échappée, triés), à identité stable. */
+  siteFitAll: new LastValueCache<readonly SiteConflict[]>(),
 };
 let models = new WeakMap<Project, Model>();
 
@@ -955,6 +974,39 @@ export function buildModel(project: Project, options: BuildModelOptions = {}): M
 
   // Échappée sur la largeur des marches : règle ECHAPPEE_LARGEUR du contrôle (QUESTIONS A7).
 
+  // 5 bis. Adéquation au site (ADR-0010, plan E, `site/fit.ts`) : conflits géométriques
+  // mémoïsés sur le site (sans calque ; contour de pièce et obstacles ajoutés à cette seule
+  // clé), le tracé, le découpage, la structure (épaisseurs latérales) et les réglages d'atelier ; puis violations ECHAPPEE_* reprises du contrôle,
+  // sans recalcul. Échec : `pipeline.internalError` (étape « Adéquation au site »), conflits
+  // géométriques absents.
+  let siteFit: readonly SiteConflict[] = [];
+  if (layout !== undefined) {
+    const siteGeometry = run(
+      caches.siteFit,
+      [
+        layout,
+        stepping,
+        ...siteKey,
+        site.room,
+        site.obstacles,
+        stair.structure,
+        project.workshop?.siteFit,
+      ],
+      () => attempt(STAGE_LABELS.siteFit, () => siteGeometryConflicts(project, layout, stepping)),
+    );
+    if (siteGeometry.error !== undefined) errors.push(siteGeometry.error);
+    const geometry = siteGeometry.value ?? [];
+    const headroomResults = compliance.results.filter(
+      (r) => r.status === "violation" && r.ruleId.startsWith("ECHAPPEE_"),
+    );
+    siteFit = run(caches.siteFitAll, [geometry, layout, stepping, ...headroomResults], () =>
+      sortSiteConflicts([
+        ...geometry,
+        ...headroomConflicts({ ...compliance, results: headroomResults }, layout, stepping),
+      ]),
+    );
+  }
+
   // 6. Chiffres clés (lectures des étapes précédentes et du contrôle). La hauteur exigée est
   // lue à chaque appel (le rapport fusionné est un objet neuf) et entre dans la clé par valeur.
   let figures: ModelFigures | undefined;
@@ -991,6 +1043,7 @@ export function buildModel(project: Project, options: BuildModelOptions = {}): M
     ...(headroom?.selfCover ? { soffits: headroom.selfCover } : {}),
     ...(figures ? { figures } : {}),
     ...(fasteners && fasteners.length > 0 ? { fasteners } : {}),
+    ...(siteFit.length > 0 ? { siteFit } : {}),
     upperFloor: upperFloorOf(site),
     errors,
     ...(notes.length > 0 ? { notes } : {}),

@@ -116,9 +116,12 @@ describe("site : contour de pièce et obstacles (schéma)", () => {
     expect(serializeProject(p)).toContain('"obstacles": []');
   });
 
-  it("pipeline inchangé : le modèle ne dépend ni du contour ni des obstacles", () => {
-    const base = buildModel(parseProjectText(exampleText(EXAMPLE)));
-    const withAll = buildModel(parseProject(withSite({ room: ROOM, obstacles: OBSTACLES })));
+  it("pipeline inchangé hors adéquation au site : contour et obstacles ne sont lus que par `siteFit`", () => {
+    // Sous-lot 3b : seule l'étape d'adéquation au site (`site/fit.ts`) lit contour et obstacles.
+    const { siteFit: _base, ...base } = buildModel(parseProjectText(exampleText(EXAMPLE)));
+    const { siteFit: _all, ...withAll } = buildModel(
+      parseProject(withSite({ room: ROOM, obstacles: OBSTACLES })),
+    );
     expect(withAll).toEqual(base);
   });
 

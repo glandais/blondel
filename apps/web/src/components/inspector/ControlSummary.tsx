@@ -2,7 +2,9 @@
  * Bloc « Contrôle de conception » de l'inspecteur sans sélection (maquette 2d, ADR-0009) :
  * profil (ouvre le panneau Contexte), contextes du rapport, quatre compteurs (bloquants,
  * avertissements, conseils, respectées), une carte par règle en défaut (groupes non vides
- * seulement), puis une ligne de liens qui déplient les listes repliées (non évaluées,
+ * seulement), les conflits d'adéquation au site (`Model.siteFit` sans l'échappée, déjà en carte
+ * de règle : `siteConflictsBesideRules`, sévérité et message), puis
+ * une ligne de liens qui déplient les listes repliées (non évaluées,
  * respectées, remarques, surcharges). Lecture du rapport rendu par le cœur : aucune règle
  * n'est évaluée ici.
  *
@@ -14,7 +16,11 @@
  * (`revealOverrides`) : la liste des surcharges se déplie, défile dans le champ et son résumé
  * reçoit le focus.
  */
-import { contextShortLabel } from "@blondel/core";
+import {
+  contextShortLabel,
+  siteConflictsBesideRules,
+  type SiteConflictSeverity,
+} from "@blondel/core";
 import type { MessageKey } from "@blondel/i18n";
 import { useEffect, useId, useMemo, useRef, useState, type ReactNode, type Ref } from "react";
 import { useT } from "../../i18n/useT.js";
@@ -49,6 +55,13 @@ export const COUNT_CELLS: readonly {
   { id: "conseil", short: "ui.control.count.conseil.short", full: "ui.control.count.conseil.full" },
   { id: "ok", short: "ui.control.count.ok.short", full: "ui.control.count.ok.full" },
 ];
+
+/** Libellés des sévérités d'adéquation au site (`Model.siteFit`). */
+const SITE_SEVERITY_LABELS: Readonly<Record<SiteConflictSeverity, MessageKey>> = {
+  erreur: "site.fit.severity.erreur",
+  avertissement: "site.fit.severity.avertissement",
+  conseil: "site.fit.severity.conseil",
+};
 
 const PROFILE_LABELS: Readonly<Record<"strict" | "souple", MessageKey>> = {
   strict: "ui.params.compliance.profile.strict",
@@ -156,6 +169,8 @@ export function ControlSummary({ initialOpen = [] }: ControlSummaryProps = {}) {
   const counts = controlCounts(groups);
   const violations = orderedViolations(groups);
   const notes = useMemo(() => modelNotes(model), [model]);
+  // Échappée exclue : déjà en carte de règle ECHAPPEE_* (pas de doublon).
+  const siteFit = useMemo(() => siteConflictsBesideRules(model?.siteFit), [model]);
   const overrides = useApp((s) => s.project.compliance.overrides);
   const projectProfile = useApp((s) => s.project.compliance.profile);
   const profile = report?.profile ?? projectProfile;
@@ -272,6 +287,19 @@ export function ControlSummary({ initialOpen = [] }: ControlSummaryProps = {}) {
         </ul>
       ) : report ? (
         <p className="inspector-control__none">{t.t("ui.control.noViolation")}</p>
+      ) : null}
+      {siteFit.length > 0 ? (
+        // Adéquation au site (ADR-0010, plan E) : conflits rendus par le cœur, lus tels quels.
+        <>
+          <h5 className="site-conflicts__title">{t.t("ui.control.siteFit.title")}</h5>
+          <ul className="site-conflicts" aria-label={t.t("ui.control.siteFit.label")}>
+            {siteFit.map((c, i) => (
+              <li key={i} className="site-conflict" data-severity={c.severity}>
+                <strong>{t.t(SITE_SEVERITY_LABELS[c.severity])}</strong> {t.t(c.message)}
+              </li>
+            ))}
+          </ul>
+        </>
       ) : null}
       <div className="control-folds" role="group" aria-label={t.t("ui.control.folds.label")}>
         {links.map((l, i) => {

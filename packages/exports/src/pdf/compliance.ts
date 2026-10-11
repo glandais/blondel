@@ -1,7 +1,8 @@
 /**
  * Pages du contrôle de conception (CHALLENGE P3) : avertissement « indicatif », résultats
- * groupés (violations par sévérité, non évaluées, respectées) avec nature, confiance, source et
- * source secondaire ; l'avertissement est rappelé en tête de chaque page de suite.
+ * groupés (conflits d'adéquation au site, violations par sévérité, non évaluées, respectées) avec
+ * nature, confiance, source et source secondaire ; l'avertissement est rappelé en tête de chaque
+ * page de suite.
  */
 import {
   contextShortLabel,
@@ -12,6 +13,8 @@ import {
   type RuleOverride,
   type RuleResult,
   type Severity,
+  type SiteConflictSeverity,
+  siteConflictsBesideRules,
 } from "@blondel/core";
 import type { MessageKey } from "@blondel/i18n";
 import { translatorOf, tr, type Translator } from "../i18n.js";
@@ -27,6 +30,18 @@ export const SEVERITY_COLOR: Readonly<Record<Severity, Rgb>> = {
   bloquant: [209, 36, 47],
   avertissement: [232, 134, 12],
   conseil: [191, 135, 0],
+};
+
+/** Libellés et couleurs des sévérités d'adéquation au site (`Model.siteFit`). */
+const SITE_SEVERITY_KEYS: Readonly<Record<SiteConflictSeverity, MessageKey>> = {
+  erreur: "site.fit.severity.erreur",
+  avertissement: "site.fit.severity.avertissement",
+  conseil: "site.fit.severity.conseil",
+};
+const SITE_SEVERITY_COLOR: Readonly<Record<SiteConflictSeverity, Rgb>> = {
+  erreur: SEVERITY_COLOR.bloquant,
+  avertissement: SEVERITY_COLOR.avertissement,
+  conseil: SEVERITY_COLOR.conseil,
 };
 
 const NATURE_KEYS: Readonly<Record<string, MessageKey>> = {
@@ -233,6 +248,25 @@ export function complianceLines(
       size: small,
       color: SEVERITY_COLOR.bloquant,
     });
+  // Adéquation au site (ADR-0010, plan E) : conflits du modèle, erreurs d'abord ; échappée
+  // exclue, déjà listée par sa règle ECHAPPEE_* (`siteConflictsBesideRules`).
+  const siteFit = siteConflictsBesideRules(model.siteFit);
+  if (siteFit.length > 0) {
+    push(t.t("pdf.compliance.siteFit", { count: String(siteFit.length) }), {
+      size: 3.6,
+      bold: true,
+      color: INK,
+      before: 4,
+    });
+    for (const c of siteFit)
+      push(
+        t.t("pdf.compliance.siteFitLine", {
+          severity: t.t(SITE_SEVERITY_KEYS[c.severity]),
+          text: tr(t, c.message),
+        }),
+        { size: body, color: SITE_SEVERITY_COLOR[c.severity], indent: 2, before: 1 },
+      );
+  }
   if (overrides.length > 0) {
     push(t.t("pdf.compliance.overrides", { count: String(overrides.length) }), {
       size: 3.6,

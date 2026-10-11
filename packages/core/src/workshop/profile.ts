@@ -28,6 +28,12 @@ import {
   resolveFastenerProfile,
   type FastenerProfile,
 } from "./fasteners.js";
+import {
+  DEFAULT_SITE_FIT_PROFILE,
+  SiteFitProfileInputSchema,
+  resolveSiteFitProfile,
+  type SiteFitProfile,
+} from "./siteFit.js";
 
 /** Essences de bois connues du modèle (`MaterialId` commençant par `wood-`). */
 export const WOOD_MATERIALS = [
@@ -119,6 +125,11 @@ export const WorkshopProfileSchema = z.object({
    * (`fasteners.ts`). Ajout rétrocompatible ; absent : défauts « à valider ».
    */
   fasteners: FastenerProfileInputSchema.optional(),
+  /**
+   * Adéquation au site (ADR-0010, décision F7) : dégagement d'arrivée et débattement de porte
+   * (`siteFit.ts`). Ajout rétrocompatible ; absent : défauts « à valider » déduits du projet.
+   */
+  siteFit: SiteFitProfileInputSchema.optional(),
 });
 export type WorkshopProfileInput = z.infer<typeof WorkshopProfileSchema>;
 
@@ -149,6 +160,8 @@ export interface WorkshopProfile {
   readonly costs: CostRates;
   /** Visserie (QUESTIONS A27), voir `fasteners.ts` ; valeurs par défaut « à valider ». */
   readonly fasteners: FastenerProfile;
+  /** Adéquation au site (décision F7), voir `siteFit.ts` ; défauts « à valider ». */
+  readonly siteFit: SiteFitProfile;
 }
 
 export type WoodSettingKey = keyof WorkshopProfile["wood"];
@@ -188,6 +201,7 @@ export const DEFAULT_WORKSHOP_PROFILE: WorkshopProfile = {
   },
   costs: {},
   fasteners: DEFAULT_FASTENER_PROFILE,
+  siteFit: DEFAULT_SITE_FIT_PROFILE,
 };
 
 /**
@@ -300,6 +314,7 @@ export function resolveWorkshopProfile(input?: WorkshopProfileInput): WorkshopPr
     densities: { ...d.densities, ...(input.densities ?? {}) },
     costs: input.costs ?? d.costs,
     fasteners: resolveFastenerProfile(input.fasteners),
+    siteFit: resolveSiteFitProfile(input.siteFit),
   };
 }
 
