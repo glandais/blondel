@@ -29,13 +29,17 @@
  *
  * Paramètres (`BalancingInput.params`) : `alpha` (degrés, défaut `HERSE_DEFAULT_ANGLE`) ;
  * `cornerSigma` (σ_A imposé, zone à un seul angle).
+ *
+ * Angle du tournant (décision F3 du 2026-10-11) : quart tournant (±90°) seulement ; une jonction
+ * de cage d'un autre angle est refusée (`balancing.m2.fail.angleNotSupported`), et le découpage
+ * lève l'erreur `balancing.m2.angleNotSupported` avant toute zone.
  */
-import { msg } from "@blondel/i18n";
+import { dec, msg } from "@blondel/i18n";
 import { curvePointAt } from "../geom2d/curve.js";
 import { projectOnCurve } from "../geom2d/intersect.js";
 import type { BalancingInput, BalancingSolution, BalancingStrategy } from "../model/plugins.js";
 import type { Mm } from "../model/primitives.js";
-import { numberParam, zoneEnds, zoneTurns } from "./zone.js";
+import { isRightAngleTurn, numberParam, turnAngle, zoneEnds, zoneTurns } from "./zone.js";
 
 /**
  * Angle par défaut de la herse (degrés) : « environ 20° » dans la construction de trepedia
@@ -142,6 +146,21 @@ export function herseAlphaMax(input: BalancingInput): number {
 
 function solve(input: BalancingInput): BalancingSolution {
   const { a, b } = zoneEnds(input);
+  // Décision F3 (2026-10-11) : herse construite pour un quart tournant seulement, refusée sur
+  // une jonction d'angle autre que ±90° tant que la construction n'y est pas vérifiée.
+  for (const j of zoneTurns(input)) {
+    const turn = input.layout.turns[j]!;
+    if (!isRightAngleTurn(turn)) {
+      const angle = turnAngle(turn);
+      return {
+        kind: "fail",
+        reason: msg("balancing.m2.fail.angleNotSupported", {
+          turn: j + 1,
+          angle: dec((angle * 180) / Math.PI),
+        }),
+      };
+    }
+  }
   const alpha = alphaOf(input);
   if (!(alpha > 0 && alpha < Math.PI / 2)) {
     return {

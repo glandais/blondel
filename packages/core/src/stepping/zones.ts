@@ -38,6 +38,18 @@
  *   qu'un nombre fournit un candidat régulier atteignant la cible (même choix que
  *   l'énumération complète, ADR-0006).
  * - M0 (rayonnant) en `auto` : la zone couvre exactement les nez situés sur l'arc de Γ.
+ * - Jonction de cage en mode `radiating` (sous-lot 2c, décision F3) : groupe propre
+ *   (`TurnGroup.radiating`), M0 **forcé** quelle que soit la méthode choisie, zone réduite aux
+ *   nez situés sur l'arc de Γ ; jamais réuni avec un tournant balancé (`winders`) en une zone
+ *   unique, mais une marche virtuelle fixe les sépare comme deux tournants balancés ; sans
+ *   aucun nez dans la partie droite intermédiaire (nulle ou plus courte qu'un giron), un **nez
+ *   de séparation** fixe et libre est pris sur l'arc rayonnant (dernier nez avant la partie
+ *   droite, sinon premier après), pour que les deux zones ne se chevauchent pas.
+ * - Palier droit d'une cage (jonction d'angle 0, `mode: "landing"`) : traité comme un palier
+ *   d'angle (nez aux bords, fixes et libres, aucune marche dedans : `positions.ts`).
+ * - Angle quelconque (cage) : les zones ne dépendent que des abscisses des tournants sur Γ
+ *   (`sStart`, `sEnd`), quel que soit leur angle ; la rotation attendue est lue par les
+ *   stratégies dans `TurnZone.angle` (M6).
  */
 import { errorMessage, type Message } from "@blondel/i18n";
 import { GEOM_EPS } from "../geom2d/tolerance.js";
@@ -95,6 +107,11 @@ export interface TurnGroup {
    * (`zoneContinuation`). Absent : aucun poteau.
    */
   readonly newel?: true;
+  /**
+   * Jonction de cage en marches rayonnantes (`TurnZone.mode` = `radiating`) : M0 forcé, zone
+   * réduite aux nez de l'arc de Γ. Absent : tournant balancé.
+   */
+  readonly radiating?: true;
 }
 
 /**
@@ -141,7 +158,7 @@ export function groupWinderTurns(
   fixed: Set<number>,
   options: GroupOptions = {},
 ): TurnGroup[] {
-  const winders = layout.turns.filter((t) => t.mode === "winders");
+  const winders = layout.turns.filter((t) => t.mode === "winders" || t.mode === "radiating");
   type Segment = {
     turn: number;
     sStart: Mm;
@@ -152,11 +169,14 @@ export function groupWinderTurns(
     head: boolean;
     /** Côté du jour du tournant. */
     side: "left" | "right";
+    /** Marches rayonnantes (cage). */
+    radiating: boolean;
   };
   const segments: Segment[] = [];
   for (const t of winders) {
     const mid = (t.sStart + t.sEnd) / 2;
     const side = t.collarSide ?? t.direction;
+    const radiating = t.mode === "radiating";
     const kc =
       options.perAngle && options.posts?.has(t.index) ? postNosing(s, t.sStart, t.sEnd) : -1;
     if (kc < 0) {
@@ -167,6 +187,7 @@ export function groupWinderTurns(
         corner: mid,
         head: true,
         side,
+        radiating,
       });
       continue;
     }
@@ -181,6 +202,7 @@ export function groupWinderTurns(
       post: kc,
       head: true,
       side,
+      radiating,
     });
     segments.push({
       turn: t.index,
@@ -190,6 +212,7 @@ export function groupWinderTurns(
       post: kc,
       head: false,
       side,
+      radiating,
     });
   }
   const groups: {
@@ -204,6 +227,7 @@ export function groupWinderTurns(
     newel: boolean;
     side: "left" | "right";
     straights: { sStart: Mm; sEnd: Mm }[];
+    radiating: boolean;
   }[] = [];
   for (const seg of segments) {
     const prev = groups[groups.length - 1];
@@ -219,7 +243,14 @@ export function groupWinderTurns(
       // S / Z : jamais de zone unique à travers deux jours opposés (le découpage refuse une
       // partie droite intermédiaire de moins d'un giron, CHALLENGE G3).
       const sameSide = seg.side === prev.side;
-      if ((gapEnd - gapStart < going - GEOM_EPS || betweenPosts) && !fixedInside && sameSide) {
+      // Marches rayonnantes (M0 forcé) et tournant balancé : jamais une zone unique.
+      const sameKind = seg.radiating === prev.radiating;
+      if (
+        (gapEnd - gapStart < going - GEOM_EPS || betweenPosts) &&
+        !fixedInside &&
+        sameSide &&
+        sameKind
+      ) {
         if (gapEnd - gapStart > GEOM_EPS) prev.straights.push({ sStart: gapStart, sEnd: gapEnd });
         prev.last = seg.turn;
         prev.sEnd = seg.sEnd;
@@ -237,6 +268,17 @@ export function groupWinderTurns(
           if (sk < gapStart - GEOM_EPS || sk > gapEnd + GEOM_EPS) return;
           if (best < 0 || Math.abs(sk - mid) < Math.abs(s[best]! - mid)) best = k;
         });
+        if (best < 0) {
+          // Aucun nez dans la partie droite (nulle ou plus courte qu'un giron, groupes non
+          // réunis : marches rayonnantes contre tournant balancé, ou jours opposés de marches
+          // rayonnantes) : sans nez fixe entre eux, les deux zones se chevaucheraient. Nez de
+          // séparation, fixe et libre (il tombe dans une partie tournante, aucune pente à
+          // raccorder) : le dernier nez de l'arc rayonnant précédent, sinon le premier de l'arc
+          // rayonnant suivant (la perpendiculaire à Γ y est déjà la ligne rayonnante), sinon le
+          // nez le plus proche du milieu.
+          best = separatorNosing(s, gapStart, gapEnd, prev.radiating, seg.radiating);
+          if (best >= 0) options.free?.add(best);
+        }
         if (best >= 0) fixed.add(best);
       }
     }
@@ -251,15 +293,44 @@ export function groupWinderTurns(
       newel: options.posts?.has(seg.turn) ?? false,
       side: seg.side,
       straights: [],
+      radiating: seg.radiating,
     });
   }
-  return groups.map(({ posts, endsAtPost: _endsAtPost, newel, straights, ...g }) => ({
+  return groups.map(({ posts, endsAtPost: _endsAtPost, newel, straights, radiating, ...g }) => ({
     ...g,
     sMid: (g.sStart + g.sEnd) / 2,
     ...(posts.length > 0 ? { posts } : {}),
     ...(straights.length > 0 ? { straights } : {}),
     ...(newel ? { newel: true as const } : {}),
+    ...(radiating ? { radiating: true as const } : {}),
   }));
+}
+
+/**
+ * Nez de séparation de deux groupes non réunis sans nez dans la partie droite [gapStart ;
+ * gapEnd] (voir `groupWinderTurns`) : dernier nez avant la partie droite si le groupe précédent
+ * est rayonnant, sinon premier nez après si le suivant l'est, sinon nez le plus proche du milieu.
+ * `-1` : aucun nez.
+ */
+function separatorNosing(
+  s: readonly Mm[],
+  gapStart: Mm,
+  gapEnd: Mm,
+  prevRadiating: boolean,
+  nextRadiating: boolean,
+): number {
+  if (prevRadiating) {
+    for (let k = s.length - 1; k >= 0; k--) if (s[k]! <= gapStart + GEOM_EPS) return k;
+  }
+  if (nextRadiating) {
+    for (let k = 0; k < s.length; k++) if (s[k]! >= gapEnd - GEOM_EPS) return k;
+  }
+  const mid = (gapStart + gapEnd) / 2;
+  let best = -1;
+  s.forEach((sk, k) => {
+    if (best < 0 || Math.abs(sk - mid) < Math.abs(s[best]! - mid)) best = k;
+  });
+  return best;
 }
 
 export interface ZoneBounds {

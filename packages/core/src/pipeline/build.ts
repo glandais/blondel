@@ -19,12 +19,14 @@
  *   tracé vide si le tracé échoue, découpage vide (hauteurs seules si elles sont calculables)
  *   si le découpage échoue, et un contrôle de conception toujours présent (règles non
  *   calculables `non-evaluee`).
- * - **Cage au-delà de ±90°** (garde-fou TEMPORAIRE des sous-lots 2a et 2b, levé aux sous-lots
- *   2c / 2d, ADR-0010) : angle quelconque, largeur variable, axe en arc, palier droit, pan
- *   coupé, congé côté mur ou marches rayonnantes (`cageFeatures`) : tracé rendu, découpage et
- *   suite sautés avec l'erreur
- *   `pipeline.cageDownstreamNotYetSupported`. Les avertissements du tracé (`Layout.notes`)
- *   vont dans `Model.notes`.
+ * - **Cage au-delà de ±90°** (garde-fou TEMPORAIRE, réduit au sous-lot 2c, levé au sous-lot
+ *   2d, ADR-0010) : angle quelconque, largeur variable, axe en arc, palier droit, pan coupé,
+ *   congé côté mur ou marches rayonnantes (`cageFeatures`) : tracé, découpage, balancement et
+ *   pièces de base calculés (structure « aucune » ; un plugin est déjà sauté pour toute cage
+ *   saisie, `structure.cageUnsupported`) ; garde-corps, échappée et règles sautés avec l'erreur
+ *   `pipeline.cageDownstreamNotYetSupported` (contrôle de conception sur un découpage réputé
+ *   absent : règles non calculables `non-evaluee`, comme avant le 2c). Les avertissements du
+ *   tracé (`Layout.notes`) vont dans `Model.notes`.
  * - **Structure** (`stair.structure.kind`) : `none` = pièces de base seules ; sinon le plugin
  *   enregistré (`structures/registry.ts`) est appelé avec ses paramètres par défaut
  *   (`defaults(ctx)`) surchargés par `structure.params` puis validés par son `paramsSchema`.
@@ -110,8 +112,10 @@ const STAGE_LABELS = {
 } as const;
 
 /**
- * Fonctions de cage que l'aval (découpage, balancement, garde-corps, règles) ne traite pas
- * encore : garde-fou TEMPORAIRE des sous-lots 2a et 2b, levé aux sous-lots 2c / 2d (ADR-0010).
+ * Fonctions de cage que l'aval ne traite pas encore entièrement : garde-fou TEMPORAIRE des
+ * sous-lots 2a et 2b. Depuis le sous-lot 2c, découpage, balancement et pièces de base les
+ * traitent ; seuls garde-corps, échappée et règles restent sautés jusqu'au sous-lot 2d
+ * (ADR-0010).
  */
 const CAGE_DOWNSTREAM_PENDING: ReadonlySet<CageFeature> = new Set<CageFeature>([
   "anyAngle",
@@ -604,10 +608,11 @@ export function buildModel(project: Project, options: BuildModelOptions = {}): M
   if (zeroJour !== undefined) errors.push(zeroJour);
   // Avertissements du tracé (cage : grand angle avec un mur vif, décision F4).
   if (layout?.notes) notes.push(...layout.notes);
-  // Garde-fou TEMPORAIRE (sous-lot 2a, levé aux sous-lots 2c / 2d, ADR-0010) : le découpage, le
-  // balancement, les garde-corps et les règles supposent encore des tournants à ±90° sans palier
-  // droit. Pour une cage qui va au-delà, le tracé est rendu (visible en plan) et la suite est
-  // sautée avec une erreur claire : modèle partiel, comme un découpage en échec.
+  // Garde-fou TEMPORAIRE (sous-lot 2a, réduit au 2c, levé au 2d, ADR-0010) : garde-corps,
+  // échappée et règles supposent encore des tournants à ±90° sans palier droit. Pour une cage
+  // qui va au-delà, tracé, découpage, balancement et pièces de base sont calculés ; garde-corps
+  // et échappée sont sautés, les règles évaluées comme sur un découpage absent, avec une erreur
+  // claire.
   const downstreamBlocked =
     layout !== undefined &&
     isCageLayout(stair.layout) &&
@@ -615,30 +620,29 @@ export function buildModel(project: Project, options: BuildModelOptions = {}): M
   if (downstreamBlocked) errors.push(msg("pipeline.cageDownstreamNotYetSupported"));
 
   // 2. Découpage.
-  const steppingStage: Stage<Stepping> | undefined =
-    layout && !downstreamBlocked
-      ? run(
-          caches.stepping,
-          // Tout `stair` sauf `placement` (porté par `layout`) et les paramètres de structure :
-          // le découpage ne lit que `structure.kind` (variante M3 des débillardés). Changer un
-          // paramètre de structure ne recalcule ni le découpage ni les garde-corps.
-          [
-            layout,
-            stair.layout,
-            stair.walkline,
-            stair.stepping,
-            stair.balancing,
-            // Des marches, le découpage ne lit que le débord (bord arrière des marches) et
-            // l'épaisseur (hélicoïdal) : contremarches et essence ne le recalculent pas (D5).
-            stair.treads.nosing,
-            stair.treads.thickness,
-            stair.nosingOverrides,
-            stair.structure.kind,
-            site.floorToFloor,
-          ],
-          () => attempt(STAGE_LABELS.stepping, () => computeStepping(project, layout)),
-        )
-      : undefined;
+  const steppingStage: Stage<Stepping> | undefined = layout
+    ? run(
+        caches.stepping,
+        // Tout `stair` sauf `placement` (porté par `layout`) et les paramètres de structure :
+        // le découpage ne lit que `structure.kind` (variante M3 des débillardés). Changer un
+        // paramètre de structure ne recalcule ni le découpage ni les garde-corps.
+        [
+          layout,
+          stair.layout,
+          stair.walkline,
+          stair.stepping,
+          stair.balancing,
+          // Des marches, le découpage ne lit que le débord (bord arrière des marches) et
+          // l'épaisseur (hélicoïdal) : contremarches et essence ne le recalculent pas (D5).
+          stair.treads.nosing,
+          stair.treads.thickness,
+          stair.nosingOverrides,
+          stair.structure.kind,
+          site.floorToFloor,
+        ],
+        () => attempt(STAGE_LABELS.stepping, () => computeStepping(project, layout)),
+      )
+    : undefined;
   if (steppingStage?.error !== undefined) errors.push(steppingStage.error);
   const stepping = steppingStage?.value;
   const complete = layout !== undefined && stepping !== undefined;
@@ -646,7 +650,7 @@ export function buildModel(project: Project, options: BuildModelOptions = {}): M
   // 3 (préalable). Garde-corps, calculés avant la structure (ils n'en dépendent pas) : la
   // structure lit le dessus des mains courantes aux poteaux d'angle (QUESTIONS A3).
   const guardsStage: Stage<GuardsAnalysis> | undefined =
-    complete && project.guards
+    complete && project.guards && !downstreamBlocked
       ? run(
           caches.guards,
           [
@@ -817,7 +821,7 @@ export function buildModel(project: Project, options: BuildModelOptions = {}): M
   // 4. Échappée.
   let headroom: HeadroomAnalysis | null = null;
   let headroomAtNosings: readonly (number | null)[] | undefined;
-  if (complete) {
+  if (complete && !downstreamBlocked) {
     const headroomStage = run(caches.headroom, [layout, stepping, ...siteKey], () =>
       attempt(STAGE_LABELS.headroom, () => computeHeadroom(site, layout, stepping)),
     );
@@ -849,11 +853,20 @@ export function buildModel(project: Project, options: BuildModelOptions = {}): M
     headroom !== null && (headroomClear || width === undefined)
       ? { walkline: headroomClear, width: width === undefined }
       : undefined;
-  const incomplete = layout === undefined ? "layout" : stepping === undefined ? "stepping" : null;
+  // Cage dont les règles ne sont pas encore généralisées (garde-fou temporaire, levé au sous-lot
+  // 2d) : contrôle évalué comme sur un découpage absent (seules les règles du projet et des
+  // hauteurs sont calculées), le découpage calculé restant dans le modèle.
+  const incomplete =
+    layout === undefined
+      ? "layout"
+      : stepping === undefined || downstreamBlocked
+        ? "stepping"
+        : null;
 
   // 5. Contrôle de conception (toujours produit, éventuellement sur un modèle partiel).
   const layoutOut = layout ?? EMPTY_LAYOUT;
   const steppingOut = stepping ?? emptyStepping(project);
+  const complianceStepping = downstreamBlocked ? emptyStepping(project) : steppingOut;
   const complianceStage = run(
     caches.compliance,
     [
@@ -862,7 +875,7 @@ export function buildModel(project: Project, options: BuildModelOptions = {}): M
       stair,
       project.rulesVersion,
       layoutOut,
-      steppingOut,
+      complianceStepping,
       headroom,
       project.guards,
       guards,
@@ -872,7 +885,7 @@ export function buildModel(project: Project, options: BuildModelOptions = {}): M
         report: evaluateComplianceDetailed({
           project,
           layout: layoutOut,
-          stepping: steppingOut,
+          stepping: complianceStepping,
           ...(headroomMin ? { headroom: headroomMin } : {}),
           ...(headroomClear ? { headroomClear } : {}),
           ...(width ? { headroomWidth: width } : {}),

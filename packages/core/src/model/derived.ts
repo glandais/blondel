@@ -31,7 +31,7 @@ export interface TurnZone {
   /**
    * Marches balancées, palier (d'angle, ou palier droit d'une cage : `angle` = 0, zone =
    * profondeur du palier sur Γ), ou marches rayonnantes d'une cage (zone marquée par le tracé,
-   * découpage M0 au sous-lot 2c).
+   * découpage M0 forcé depuis le sous-lot 2c, décision F3).
    */
   readonly mode: "winders" | "landing" | "radiating";
   /** Coin intérieur (sommet du jour) et coin extérieur, repère monde. */

@@ -889,6 +889,7 @@ Pour une jonction d'angle θ ≠ ±90°, comment mesurer le giron au collet et l
 - Proposition : (a), sans changer de seuil (les seuils restent lus dans `rules.yaml`).
 - Aujourd'hui : zones tournantes à ±90° seulement ; collet mesuré en corde (CHALLENGE.md G3 ; constat du CHALLENGE-panel, M3, point (e)).
 - Réf. : B §2.3, §2.4 ; CHALLENGE.md G3 ; CHALLENGE-panel, « Angle geometrie » et M3, point (e) ; `rules.yaml` G_COLLET_MIN.
+- Décidé le 2026-10-11 : (a), mêmes définitions qu'à 90° : giron en longueur d'arc sur Γ, collet en corde sur la ligne de mesure décalée du bord du jour (`rules/measurementLine.ts`), seuils inchangés lus dans `rules.yaml`. Appliqué au sous-lot 2c pour le découpage (`Tread.going` = longueur d'arc sur Γ entre deux nez, `Tread.colletChord` = corde entre les collets, à tout angle) ; la ligne de mesure des règles suit au sous-lot 2d.
 
 ### F3. Herse (M2) et rotation (M6) pour un angle autre que 90°
 
@@ -898,6 +899,7 @@ La herse (M2) et la rotation paramétrée (M6) sont décrites pour un quart tour
 - Proposition : (a) pour M6 ; (b) pour M2 tant que la construction n'est pas vérifiée sur un angle quelconque ; M0 forcé pour une jonction en mode `radiating`. Vérifier aussi le centre de tournant (`balancing/zone.ts`, `turnCenter`).
 - Aujourd'hui : ±π/2 écrit dans `balancing/m6.ts` ; M2 construit pour 90°.
 - Réf. : B §3.4, §3.8, §3.11 ; SPEC §2.3 ; ADR-0010.
+- Décidé le 2026-10-11 : M6 généralisée (rotation de 0 à `zone.angle` au lieu de ±π/2) ; M2 refusée hors de ±90° avec une erreur claire (clé `balancing.*`) tant que la construction n'est pas vérifiée sur un angle quelconque ; M0 forcé pour une jonction en mode `radiating` ; M0, M1 et M3 disponibles à tout angle ; vérifier `turnCenter` (`balancing/zone.ts`). Appliqué au sous-lot 2c : `balancing/m6.ts` lit `TurnZone.angle` (`turnAngle`, ±π/2 à défaut) ; découpage refusé par `balancing.m2.angleNotSupported` (et stratégie M2 en échec `balancing.m2.fail.angleNotSupported`) dès qu'une jonction balancée n'est pas à ±90° (paliers et marches rayonnantes non concernés) ; marches rayonnantes en zone propre, M0 forcé, jamais réunies avec un tournant balancé (`stepping/zones.ts`) ; `turnCenter` vérifié (centre K pour un jour vif ou un pan coupé, centre de l'arc du jour sinon ; palier droit sans centre, erreur claire) ; tests `stepping/cage.test.ts` et `stepping/cage.property.test.ts`.
 
 ### F4. Angle vif côté mur au-delà de 135° et à 180°
 
@@ -992,3 +994,17 @@ La décision F1 (a) place Γ aux jonctions tournantes et entre deux d'entre elle
 - Options à trancher : garder (1) à (4) ; pour (1), d_f constante sur la plus petite largeur ; pour (2), d_f du palier = celle de la jonction tournante précédente (Γ sans angle tant que les largeurs le permettent) ; pour (3), côté intérieur de la courbure prioritaire sur `walkline.side`.
 - Aujourd'hui : moteur à volées sans largeur variable, sans palier droit ni axe en arc.
 - Réf. : F1 ; ADR-0010, amendement du sous-lot 2b ; `layout/cage/general.ts` (en-tête) ; `docs/ledger/LEDGER-free-2d.md` (sous-lot 2b).
+- Décidé le 2026-10-11 : propositions (1) à (4) validées telles qu'appliquées au sous-lot 2b (escalier droit à largeur variable, palier droit, axe en arc, raccords vifs autour d'un arc). Les directions de nez qui en découlent au sous-lot 2c ne font pas partie de cette décision : voir F13.
+
+### F13. Direction des nez propres à une cage saisie (sous-lot 2c)
+
+Le découpage du sous-lot 2c a dû fixer, sans décision de l'utilisateur, la direction de certaines lignes de nez d'une cage saisie, là où la perpendiculaire à Γ ne convient pas. Propositions appliquées, « à valider » :
+
+- (1) **Bords d'un palier droit** (jonction d'angle 0) : Γ peut y être anguleuse (F12 (2)) ; le nez du bord suit la ligne transversale du tronçon voisin (ligne d'arrivée du tronçon entrant, ligne de départ du sortant), comme le nez du bord d'un palier d'angle suit le bord du carré d'angle.
+- (2) **Tronçon droit où Γ est oblique** (largeur variable sans transition) : nez perpendiculaires à l'axe du tronçon (parallèles à ses lignes de départ et d'arrivée), comme dans la transition d'un escalier en S ou en Z, et non à l'oblique de Γ.
+- (3) **Pan coupé au-delà de 90°** : Γ, arc de centre K (F6), balaie plus que le secteur du jour ; une perpendiculaire à Γ qui passe par K et ne rencontre plus le jour est dirigée vers le sommet du jour le plus proche (remarque `stepping.nosingAimedAtWellCorner` si la ligne reste hors zone de balancement).
+- (4) **Pan coupé avec palier d'angle, marches rayonnantes ou M0** : K est du côté de la matière par rapport au pan ; les nez des bords du palier et les nez rayonnants passent tous par K et s'y croisent dans la marche. Refusés aujourd'hui (`stepping.chamferLandingNotSupported`, `stepping.chamferRadiatingNotSupported`). Options : (a) garder le refus ; (b) diriger ces nez vers le pan (bords du palier vers les sommets du pan, nez rayonnants vers des points du pan répartis comme les nez sur Γ) ; (c) bords du palier sur les lignes transversales des sommets du pan (palier agrandi, Γ et girons à recalculer).
+- (5) **Marches rayonnantes contre un tournant balancé**, sans aucun nez dans la partie droite intermédiaire (nulle ou plus courte qu'un giron) : un nez de séparation, fixe et libre, est pris sur l'arc rayonnant (dernier nez avant la partie droite, sinon premier après) pour que les deux zones ne se chevauchent pas ; deux tournants balancés de sens opposés restent refusés dans ce cas (`stepping.oppositeTurnsTooClose`).
+- Options à trancher : garder (1) à (3) et (5) ; pour (1), nez perpendiculaires à Γ ; pour (2), nez perpendiculaires à Γ oblique ; pour (4), (a), (b) ou (c).
+- Aujourd'hui : moteur à volées sans pan coupé, palier droit ni largeur variable.
+- Réf. : F6, F12 ; ADR-0010, amendement du sous-lot 2c ; `stepping/sections.ts`, `stepping/stepping.ts` (`checkChamferRays`, `towardNearestVertex`), `stepping/zones.ts` ; `docs/ledger/LEDGER-free-2d.md` (sous-lot 2c).

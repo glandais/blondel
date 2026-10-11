@@ -4,7 +4,7 @@
 import { MessageError, msg } from "@blondel/i18n";
 import { curvePointAt, locate } from "../geom2d/curve.js";
 import { projectOnCurve } from "../geom2d/intersect.js";
-import type { Layout } from "../model/derived.js";
+import type { Layout, TurnZone } from "../model/derived.js";
 import type { BalancingInput } from "../model/plugins.js";
 import type { Mm, Vec2 } from "../model/primitives.js";
 
@@ -82,7 +82,34 @@ export function zoneMidS(layout: Layout, first: number, last: number): Mm {
   return (t0.sStart + t1.sEnd) / 2;
 }
 
-/** Centre de l'arc de Γ du tournant j (centre du rayonnement M0). */
+/**
+ * Angle signé du tournant (rad, positif à gauche en montant) : `TurnZone.angle` (cage, θ
+ * quelconque), à défaut ±π/2 selon le sens (tracé à volées).
+ */
+export function turnAngle(t: TurnZone): number {
+  return t.angle ?? ((t.direction === "left" ? 1 : -1) * Math.PI) / 2;
+}
+
+/**
+ * Tolérance (rad) d'un angle de tournant jugé à ±90° : bruit d'arrondi, pas une valeur métier
+ * (un tracé à volées porte ±π/2 exactement).
+ */
+const RIGHT_ANGLE_EPS = 1e-9;
+
+/**
+ * Le tournant est-il un quart tournant (±90°, à `RIGHT_ANGLE_EPS` près) ? Seul critère de la
+ * herse (M2, décision F3), partagé par le découpage et la stratégie.
+ */
+export function isRightAngleTurn(t: TurnZone): boolean {
+  return Math.abs(Math.abs(turnAngle(t)) - Math.PI / 2) <= RIGHT_ANGLE_EPS;
+}
+
+/**
+ * Centre de l'arc de Γ du tournant j (centre du rayonnement M0). Vérifié pour une jonction de
+ * cage d'angle quelconque (sous-lot 2c) : dans la zone d'une jonction tournante, Γ est un seul
+ * arc de balayage θ, de centre K (jour vif, pan coupé : décision F6) ou de centre l'arc du
+ * jour (raccord en arc) ; un palier droit (Γ droite) n'a pas de centre (erreur claire).
+ */
 export function turnCenter(layout: Layout, j: number): Vec2 {
   const t = layout.turns[j];
   if (!t) throw new MessageError(msg("balancing.error.unknownTurn", { turn: j }));

@@ -289,14 +289,19 @@ describe("schéma cage", () => {
     expect(model.layout.sections?.[1]).toMatchObject({ widthStart: 800, widthEnd: 1000 });
   });
 
-  it("buildModel sur une cage à largeur variable, limon à la française et garde-corps : même erreur, seule", () => {
+  it("buildModel sur une cage à largeur variable, limon à la française et garde-corps : aval sauté, structure refusée", () => {
     const project = cageProject(QUARTER, { guards: { flight: { enabled: true } } });
     (project.stair as Record<string, unknown>).structure = { kind: "wood-housed" };
     const p = parseProject(project);
     expect(p.stair.structure.kind).toBe("wood-housed");
     expect(p.guards?.flight.enabled).toBe(true);
     const model = buildModel(p);
-    expect(modelErrorKeys(model.errors)).toEqual(["pipeline.cageDownstreamNotYetSupported"]);
+    // Sous-lot 2c : découpage et pièces de base calculés ; le plugin reste sauté (cage saisie).
+    expect(modelErrorKeys(model.errors)).toEqual([
+      "pipeline.cageDownstreamNotYetSupported",
+      "structure.cageUnsupported",
+    ]);
+    expect(model.stepping.treads.length).toBeGreaterThan(0);
   });
 });
 

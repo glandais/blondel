@@ -23,7 +23,7 @@
  */
 import type { Layout } from "../model/derived.js";
 import type { Mm } from "../model/primitives.js";
-import type { Project } from "../model/project.js";
+import { isCageLayout, type Project } from "../model/project.js";
 import { curveLength } from "../geom2d/curve.js";
 import { GEOM_EPS } from "../geom2d/tolerance.js";
 import { resolveTargetGoing } from "../layout/resolve.js";
@@ -54,8 +54,7 @@ export function placeNosings(project: Project, layout: Layout, riserCount: numbe
 
   if (landings.length === 0) {
     let g = L / (n - 1);
-    const legs = project.stair.layout.legs;
-    if (legs.length === 1 && legs[0]!.length === "auto") {
+    if (isAutoStraightRun(project)) {
       const target = resolveTargetGoing(project, n);
       if (Math.abs(target * (n - 1) - L) <= GEOM_EPS * Math.max(1, L)) g = target;
     }
@@ -136,4 +135,19 @@ export function placeNosings(project: Project, layout: Layout, riserCount: numbe
     notes.push(msg("stepping.landings.shortStraightMerged"));
   }
   return { going: g, s, landingTreads, landingTurnOf, notes };
+}
+
+/**
+ * Escalier droit d'un seul tronçon de longueur `auto` (reculement déduit du giron cible) : volée
+ * unique `auto` d'un tracé à volées, ou cage saisie d'un seul tronçon droit `auto` (sous-lot 2c ;
+ * `Layout.sections` ne garde pas la saisie `auto`, lue dans la cage).
+ */
+export function isAutoStraightRun(project: Project): boolean {
+  const spec = project.stair.layout;
+  if (isCageLayout(spec)) {
+    const only = spec.sections.length === 1 ? spec.sections[0]! : undefined;
+    return only?.axis.kind === "straight" && only.axis.length === "auto";
+  }
+  const legs = spec.legs;
+  return legs.length === 1 && legs[0]!.length === "auto";
 }

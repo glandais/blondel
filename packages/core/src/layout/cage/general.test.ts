@@ -5,7 +5,7 @@
  * jonction à 60° avec un trapèze, retraits sur un bord du jour incliné, tronçon sans partie
  * droite avant un palier, demi-tour à bord du jour incliné, arc seul, arc entre deux tronçons
  * droits, arc et jonction, arc et palier, recouvrement entre tronçons consécutifs, refus clairs)
- * et garde-fou temporaire du pipeline. Les propriétés (dont l'accord avec le moteur à largeur unique) sont dans
+ * et garde-fou temporaire du pipeline (réduit au sous-lot 2c : découpage calculé). Les propriétés (dont l'accord avec le moteur à largeur unique) sont dans
  * `free.property.test.ts`.
  */
 import { describe, expect, it } from "vitest";
@@ -641,7 +641,7 @@ describe("axe en arc", () => {
   });
 });
 
-describe("pipeline (garde-fou temporaire des sous-lots 2a / 2b)", () => {
+describe("pipeline (garde-fou temporaire des sous-lots 2a / 2b, réduit au 2c)", () => {
   it.each<[string, CageLayoutSpecInput]>([
     [
       "largeur variable",
@@ -652,11 +652,12 @@ describe("pipeline (garde-fou temporaire des sous-lots 2a / 2b)", () => {
       },
     ],
     ["axe en arc", { kind: "cage", sections: [arcAxis(2000, 90, 1000)], junctions: [] }],
-  ])("%s : tracé rendu, aval sauté sans exception", (_name, spec) => {
+  ])("%s : tracé et découpage rendus, garde-corps / échappée / règles sautés", (_name, spec) => {
     const project = cageProject(spec);
     expect(computeLayout(project).sections).toBeDefined();
     const model = buildModel(project, { memo: false });
     expect(model.errors.map((e) => e.key)).toEqual(["pipeline.cageDownstreamNotYetSupported"]);
     expect(model.layout.sections).toHaveLength(spec.sections.length);
+    expect(model.stepping.treads.length).toBeGreaterThan(0);
   });
 });

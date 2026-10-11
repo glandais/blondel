@@ -11,7 +11,8 @@
  *
  * Lecture retenue [ANALYSE, choix Blondel, à valider] : w pondère les **incréments** de
  * rotation entre nez consécutifs, normalisés pour que la rotation totale de la zone soit celle
- * de ses nez fixes (φ_b − φ_a : ±90° par quart tournant) :
+ * de ses nez fixes (φ_b − φ_a : ±90° par quart tournant, θ = `TurnZone.angle` par jonction
+ * d'une cage, décision F3 du 2026-10-11 : rotation de 0 à θ au lieu de ±π/2) :
  *
  *   Δφ_k = (φ_b − φ_a)·w(d_k) / Σ_{i=a+1..b} w(d_i),   φ_k = φ_a + Σ_{i=a+1..k} Δφ_i,
  *
@@ -28,7 +29,7 @@ import { msg } from "@blondel/i18n";
 import { wrapPi } from "../geom2d/segment.js";
 import * as V from "../geom2d/vec.js";
 import type { BalancingInput, BalancingSolution, BalancingStrategy } from "../model/plugins.js";
-import { numberParam, zoneEnds, zoneTurns } from "./zone.js";
+import { numberParam, turnAngle, zoneEnds, zoneTurns } from "./zone.js";
 
 /** Portée λ par défaut (girons) : **[choix Blondel, à valider]**, sans source. */
 export const ROTATION_DEFAULT_REACH = 2;
@@ -56,11 +57,9 @@ function solve(input: BalancingInput): BalancingSolution {
   const { layout, going } = input;
   const turns = zoneTurns(input);
   const corners = turns.map((j) => (layout.turns[j]!.sStart + layout.turns[j]!.sEnd) / 2);
-  // Rotation totale attendue : ±90° par tournant (gauche : sens trigonométrique).
-  const expected = turns.reduce(
-    (acc, j) => acc + ((layout.turns[j]!.direction === "left" ? 1 : -1) * Math.PI) / 2,
-    0,
-  );
+  // Rotation totale attendue : angle signé de chaque tournant (`TurnZone.angle`, θ quelconque
+  // d'une cage, décision F3 ; ±90° d'un tracé à volées), gauche = sens trigonométrique.
+  const expected = turns.reduce((acc, j) => acc + turnAngle(layout.turns[j]!), 0);
   const phiA = V.angleOf(input.nosings[a]!.dir);
   const phiB = V.angleOf(input.nosings[b]!.dir);
   const total = expected + wrapPi(phiB - phiA - expected);

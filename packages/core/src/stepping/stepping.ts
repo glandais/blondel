@@ -24,14 +24,27 @@
  * `SteppingError`. Transition de la ligne de foulée (d_f ≠ E/2) : nez perpendiculaires à la
  * volée (et non à l'oblique de Γ), signalée dans les notes.
  *
+ * Cage saisie (sous-lot 2c, ADR-0010) : le découpage lit `Layout.turns` (angle quelconque
+ * `TurnZone.angle`, palier droit d'angle 0 traité comme un palier, marches rayonnantes en M0
+ * forcé, `zones.ts`) et `Layout.sections` (nez des bords d'un palier droit et des tronçons droits
+ * à Γ oblique, `sections.ts`) ; un tronçon unique `auto` garde le giron cible (`positions.ts`).
+ * Herse (M2) refusée sur une jonction balancée d'angle autre que ±90° (`SteppingError`
+ * `balancing.m2.angleNotSupported`, décision F3). Giron sur Γ en longueur d'arc, collet en corde
+ * (décision F2, comme à 90°). Pan coupé au-delà de 90° : une perpendiculaire qui manque le jour
+ * est dirigée vers le sommet du jour le plus proche (signalé si la ligne reste hors zone) ; pan
+ * coupé avec palier d'angle, marches rayonnantes ou M0 refusé (`checkChamferRays`, question
+ * F13). Une cage exprimable en volées garde exactement le découpage des volées.
+ *
  * Tracé hélicoïdal (`layout.helical`, jalon 5a) : découpage propre, `stepping/helical.ts`.
  */
 import { curvePointAt, curveTangentAt } from "../geom2d/curve.js";
+import { segEnd, segStart } from "../geom2d/segment.js";
 import { GEOM_EPS } from "../geom2d/tolerance.js";
 import * as V from "../geom2d/vec.js";
 import { getBalancingStrategy } from "../balancing/registry.js";
 import { HERSE_DEFAULT_ANGLE, herseAlphaMax } from "../balancing/m2.js";
 import { ROTATION_DEFAULT_REACH, ROTATION_DEFAULT_STEEPNESS } from "../balancing/m6.js";
+import { isRightAngleTurn } from "../balancing/zone.js";
 import {
   colletBetween,
   cornerMonotonyBreaks,
@@ -41,14 +54,15 @@ import {
 } from "../balancing/postprocess.js";
 import type { M3Variant } from "../balancing/profile.js";
 import type { Layout, NosingLine, Stepping } from "../model/derived.js";
-import type { Mm } from "../model/primitives.js";
-import type { Project } from "../model/project.js";
+import type { Mm, Vec2 } from "../model/primitives.js";
+import { isCageLayout, type Project } from "../model/project.js";
 import { dec, msg, type Message, type MessageKey, type MessageParam } from "@blondel/i18n";
 import { SteppingError } from "./errors.js";
 import { placeNosings } from "./positions.js";
 import { computeRises } from "./rises.js";
 import { developmentInner } from "./development.js";
 import { computeHelicalStepping } from "./helical.js";
+import { cageNosingTangent } from "./sections.js";
 import { buildTreads } from "./treads.js";
 import {
   collarSideAt,
@@ -172,6 +186,8 @@ export function computeStepping(
 ): Stepping {
   // Tracé hélicoïdal (jalon 5a) : nez rayonnants, sans balancement (`stepping/helical.ts`).
   if (layout.helical) return computeHelicalStepping(project, layout);
+  if (project.stair.balancing.method === "M2") checkHerseAngles(layout);
+  checkChamferRays(layout, project.stair.balancing.method);
   const notes: Message[] = [];
   const { riserCount: n, rise, rises, z } = computeRises(project);
   const positions = placeNosings(project, layout, n);
@@ -200,12 +216,17 @@ export function computeStepping(
   }
 
   // ------------------------------------------------------------ nez initiaux perpendiculaires
+  const nativeCage = isCageLayout(project.stair.layout);
   const outward = (t: ReturnType<typeof curveTangentAt>) =>
     layout.innerSide === "left" ? V.perpRight(t) : V.perpLeft(t);
   const seeds: NosingSeed[] = positions.s.map((s, k) => {
     // Transition S / Z : nez perpendiculaires à la volée, pas à l'oblique de Γ.
     const tr = transitions.find((t) => s >= t.sStart - GEOM_EPS && s <= t.sEnd + GEOM_EPS);
-    const tangent = tr ? tr.direction : curveTangentAt(layout.walkline, s);
+    // Cage saisie : bords d'un palier droit, Γ oblique sur un tronçon droit (`sections.ts`).
+    const tangent =
+      tr?.direction ??
+      (nativeCage ? cageNosingTangent(layout, s) : undefined) ??
+      curveTangentAt(layout.walkline, s);
     return {
       index: k,
       s,
@@ -215,9 +236,43 @@ export function computeStepping(
       perpendicular: outward(tangent),
     };
   });
-  const perpendicularOn = (lay: Layout, from: readonly NosingSeed[] = seeds): NosingLine[] =>
+  /** Nez initiaux du tracé dirigés vers un sommet du jour (repli, voir `perpendicularOn`). */
+  const aimedAtCorner = new Set<number>();
+  /**
+   * Nez initiaux perpendiculaires à Γ sur le tracé `lay` (tracé, jour de développement ou vue
+   * retournée). `track` : tracé lui-même, dont les nez sont ceux du découpage hors zones.
+   */
+  const perpendicularOn = (
+    lay: Layout,
+    from: readonly NosingSeed[] = seeds,
+    track = false,
+  ): NosingLine[] =>
     from.map((seed) => {
-      const res = realizeNosing(lay, seed, { kind: "dir", dir: seed.perpendicular }, false);
+      let res = realizeNosing(lay, seed, { kind: "dir", dir: seed.perpendicular }, false);
+      const missed = res.ok ? undefined : res.reason.key;
+      // Bord du jour au droit du nez dans ce tracé : `inner` si le jour du tournant le plus
+      // proche est du côté intérieur de la vue, `outer` sinon (S / Z, second jour).
+      const wellSide = collarSideAt(lay, seed.s) === lay.innerSide ? "inner" : "outer";
+      const missedSide =
+        missed === "balancing.fail.missesWell"
+          ? "inner"
+          : missed === "balancing.fail.missesWall"
+            ? "outer"
+            : undefined;
+      if (nativeCage && missedSide !== undefined && missedSide === wellSide) {
+        // Cage saisie (pan coupé au-delà de ±90° : Γ, arc de centre K, balaie plus que le
+        // secteur du jour, décision F6) : la perpendiculaire passe par K, dans la matière, et
+        // ne rencontre plus le jour ; ligne dirigée vers le sommet du jour le plus proche
+        // [choix Blondel, à valider, question F13]. Un bord côté mur manqué n'a pas de repli.
+        const dir = towardNearestVertex(lay, seed, missedSide);
+        if (dir) {
+          const alt = realizeNosing(lay, seed, { kind: "dir", dir }, false);
+          if (alt.ok) {
+            res = alt;
+            if (track) aimedAtCorner.add(seed.index);
+          }
+        }
+      }
       if (!res.ok) {
         throw new SteppingError(
           msg("stepping.perpendicularNosingImpossible", { reason: res.reason }),
@@ -225,7 +280,7 @@ export function computeStepping(
       }
       return res.nosing;
     });
-  const nosings = perpendicularOn(layout);
+  const nosings = perpendicularOn(layout, seeds, true);
   const devInner = developmentInner(layout, project);
   const devLayout: Layout = devInner === layout.inner ? layout : { ...layout, inner: devInner };
   const devNosings = devLayout === layout ? nosings.slice() : perpendicularOn(devLayout);
@@ -345,6 +400,8 @@ export function computeStepping(
             nosings: andList(group.posts.map((k) => msg("stepping.nosingRef", { nosing: k }))),
           })
         : turnLabel;
+      // Marches rayonnantes d'une cage : M0 forcé (décision F3), zone sur l'arc de Γ.
+      const gMethod = group.radiating ? "M0" : method;
       const bounds = zoneBounds(group, positions.s, fixed);
       const maxBefore = Math.min(WINDERS_PER_SIDE_MAX, bounds.kL - bounds.lo);
       const maxAfter = Math.min(WINDERS_PER_SIDE_MAX, bounds.hi - bounds.kR);
@@ -358,16 +415,16 @@ export function computeStepping(
         z,
         rise,
         going,
-        strategy,
-        params,
+        strategy: group.radiating ? getBalancingStrategy("M0") : strategy,
+        params: group.radiating ? {} : params,
         freeNosings: free,
         collarSide: group.side,
       };
-      const auto = windersPerSide === "auto" && method !== "M0";
+      const auto = windersPerSide === "auto" && gMethod !== "M0";
       const pairs: [number, number][] = [];
       // Choix automatique : couples hors de l'étendue K7, évalués seulement en repli.
       const beyondExtent: [number, number][] = [];
-      if (windersPerSide !== "auto") {
+      if (windersPerSide !== "auto" && !group.radiating) {
         const nb = Math.min(windersPerSide, bounds.kL - bounds.lo);
         const na = Math.min(windersPerSide, bounds.hi - bounds.kR);
         if (nb !== windersPerSide || na !== windersPerSide) {
@@ -381,7 +438,7 @@ export function computeStepping(
           );
         }
         pairs.push([nb, na]);
-      } else if (method === "M0") {
+      } else if (gMethod === "M0") {
         // Rayonnant : zone réduite aux nez situés sur l'arc de Γ.
         const inArc = (k: number): boolean =>
           positions.s[k]! > group.sStart + GEOM_EPS && positions.s[k]! < group.sEnd - GEOM_EPS;
@@ -426,6 +483,8 @@ export function computeStepping(
         }
       }
       if (cands.length === 0) {
+        // Marches rayonnantes sans nez sur l'arc de Γ : nez perpendiculaires, déjà rayonnants.
+        if (group.radiating) continue;
         notes.push(msg("stepping.noWinders", { turn: turnName }));
         continue;
       }
@@ -456,14 +515,14 @@ export function computeStepping(
         notes.push(msg("stepping.colletClampedToWell", { nosing: k }));
       }
       const { from, to } = chosen.zone;
-      const alphaMax = method === "M2" ? herseAlphaMax(balancingInput(ctx, chosen.zone)) : null;
+      const alphaMax = gMethod === "M2" ? herseAlphaMax(balancingInput(ctx, chosen.zone)) : null;
       balancedZones.push({
         turn: group.first,
         from,
         to,
-        method: methodLabel(method, variant),
+        method: methodLabel(gMethod, variant),
         ends: chosen.zone.ends,
-        ...(chosen.zone.continuation && method === "M3"
+        ...(chosen.zone.continuation && gMethod === "M3"
           ? { continuation: chosen.zone.continuation }
           : {}),
         ...(alphaMax !== null ? { herseAlphaMax: alphaMax } : {}),
@@ -478,7 +537,7 @@ export function computeStepping(
           to,
           endA: msg(zoneEndKey(chosen.zone.ends[0])),
           endB: msg(zoneEndKey(chosen.zone.ends[1])),
-          method: variantLabel(method, variant),
+          method: variantLabel(gMethod, variant),
           minChord: dec(chosen.minChord),
           minArc: dec(chosen.minArc),
         }),
@@ -500,7 +559,7 @@ export function computeStepping(
           }),
         );
       }
-      if (method === "M2") {
+      if (gMethod === "M2") {
         notes.push(
           msg("stepping.herseNote", {
             turn: turnName,
@@ -509,7 +568,7 @@ export function computeStepping(
           }),
         );
       }
-      if (method === "M6") {
+      if (gMethod === "M6") {
         notes.push(
           msg(
             rotationReach === undefined || rotationSteepness === undefined
@@ -523,7 +582,7 @@ export function computeStepping(
           ),
         );
       }
-      if (method === "M1" || method === "M2") {
+      if (gMethod === "M1" || gMethod === "M2") {
         const [endA, endB] = chosen.zone.ends;
         const parts: Message[] = [];
         if (endA === "tangent") {
@@ -546,7 +605,7 @@ export function computeStepping(
         }
         if (parts.length > 0) {
           notes.push(
-            msg(method === "M1" ? "stepping.m1EntryKnee" : "stepping.m2EntryJump", {
+            msg(gMethod === "M1" ? "stepping.m1EntryKnee" : "stepping.m2EntryJump", {
               turn: turnName,
               values: andList(parts),
             }),
@@ -660,6 +719,15 @@ export function computeStepping(
     }
   }
 
+  // Repli vers un sommet du jour : signalé pour les nez dont la ligne finale est encore la ligne
+  // redirigée (ni recalculés par une zone de balancement, ni retouchés par un angle imposé).
+  for (const k of [...aimedAtCorner].sort((a, b) => a - b)) {
+    const inZone = balancedZones.some((zr) => k > zr.from && k < zr.to);
+    if (!inZone && !computedAngles.has(k)) {
+      notes.push(msg("stepping.nosingAimedAtWellCorner", { nosing: k }));
+    }
+  }
+
   // Angle de chaque nez (même convention que la retouche « angle »), exposé pour l'interface.
   nosings.forEach((nosing, k) => {
     const computedAngle = computedAngles.get(k);
@@ -766,4 +834,68 @@ function checkOppositeTurns(layout: Layout, going: Mm): void {
       );
     }
   }
+}
+
+/**
+ * Herse (M2) : construction vérifiée pour un quart tournant seulement. Décision F3 du
+ * 2026-10-11 : refusée sur une jonction tournante balancée d'angle autre que ±90°, avec une
+ * erreur claire, tant que la construction n'est pas vérifiée sur un angle quelconque (M0, M1,
+ * M3 et M6 restent disponibles).
+ * @throws SteppingError sinon.
+ */
+function checkHerseAngles(layout: Layout): void {
+  for (const t of layout.turns) {
+    if (t.mode !== "winders" || t.angle === undefined || isRightAngleTurn(t)) continue;
+    throw new SteppingError(
+      msg("balancing.m2.angleNotSupported", {
+        turn: t.index + 1,
+        angle: dec((t.angle * 180) / Math.PI),
+      }),
+    );
+  }
+}
+
+/**
+ * Pan coupé (`well.kind` = `chamfer`) : Γ est un arc de centre K (décision F6), point situé du
+ * côté de la matière par rapport au pan. Les nez des bords d'un palier d'angle (perpendiculaires
+ * à Γ aux limites du tournant) et les nez rayonnants (M0, forcé en mode `radiating`) passent
+ * tous par K et s'y croisent, dans la marche. Refusés avec une erreur claire tant que la
+ * direction de ces nez n'est pas décidée (question F13) : marches balancées en M1, M3 ou M6, ou
+ * jour vif ou en arc.
+ * @throws SteppingError sinon.
+ */
+function checkChamferRays(layout: Layout, method: string): void {
+  for (const t of layout.turns) {
+    if (t.well?.kind !== "chamfer" || t.angle === 0) continue;
+    if (t.mode === "landing") {
+      throw new SteppingError(msg("stepping.chamferLandingNotSupported", { turn: t.index + 1 }));
+    }
+    if (t.mode === "radiating" || method === "M0") {
+      throw new SteppingError(msg("stepping.chamferRadiatingNotSupported", { turn: t.index + 1 }));
+    }
+  }
+}
+
+/**
+ * Direction (de l'intérieur vers l'extérieur) de la ligne de nez passant par P et par le sommet
+ * du bord `side` le plus proche, en angle, de la perpendiculaire à Γ (repli d'une perpendiculaire
+ * qui manque ce bord, cage saisie). `undefined` : aucun sommet du bon côté.
+ */
+function towardNearestVertex(
+  layout: Layout,
+  seed: NosingSeed,
+  side: "inner" | "outer",
+): Vec2 | undefined {
+  let best: { dir: Vec2; cos: number } | undefined;
+  for (const seg of layout[side].segments) {
+    for (const v of [segStart(seg), segEnd(seg)]) {
+      const w = side === "inner" ? V.sub(seed.p, v) : V.sub(v, seed.p);
+      if (V.norm(w) <= GEOM_EPS) continue;
+      const dir = V.normalize(w);
+      const cos = V.dot(dir, seed.perpendicular);
+      if (cos <= 0) continue;
+      if (!best || cos > best.cos) best = { dir, cos };
+    }
+  }
+  return best?.dir;
 }
