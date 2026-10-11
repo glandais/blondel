@@ -68,7 +68,8 @@ function siteIssue(ctx: z.RefinementCtx, path: PropertyKey[], message: Message):
   });
 }
 
-function roomDefectMessage(d: StoredPolygonDefect): Message {
+/** Message d'un défaut du contour de pièce (`site.room.*`), aussi rendu par `site/edit.ts`. */
+export function roomDefectMessage(d: StoredPolygonDefect): Message {
   switch (d.kind) {
     case "tooFewPoints":
       return msg("site.room.tooFewPoints", { count: d.count });
@@ -81,7 +82,8 @@ function roomDefectMessage(d: StoredPolygonDefect): Message {
   }
 }
 
-function zoneDefectMessage(d: StoredPolygonDefect): Message {
+/** Message d'un défaut de zone interdite (`site.obstacle.zone.*`), aussi rendu par `site/edit.ts`. */
+export function zoneDefectMessage(d: StoredPolygonDefect): Message {
   switch (d.kind) {
     case "tooFewPoints":
       return msg("site.obstacle.zone.tooFewPoints", { count: d.count });

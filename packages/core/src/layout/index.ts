@@ -4,6 +4,28 @@
 export { computeLayout, type LayoutOptions } from "./layout.js";
 export { LayoutError } from "./errors.js";
 export {
+  convertToCage,
+  dragJunctionAngle,
+  dragSectionEnd,
+  dragWidth,
+  insertLanding,
+  insertSection,
+  junctionFrame,
+  removeSection,
+  setJunctionAngle,
+  setJunctionMode,
+  setSectionAxis,
+  setSectionLength,
+  setSectionWidth,
+  setWallJoint,
+  setWellJoint,
+  splitSection,
+  withPlacement,
+  type JunctionFrame,
+  type NewSection,
+  type SectionWidthChange,
+} from "./cageEdit.js";
+export {
   arcPoints,
   computeHelicalLayout,
   helicalAngleAt,

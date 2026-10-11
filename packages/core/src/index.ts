@@ -5,6 +5,7 @@ export * from "./model/derived.js";
 export * from "./model/plugins.js";
 export * from "./model/messages.js";
 export * from "./model/fasteners.js";
+export * from "./model/edit.js";
 // Textes du modèle (ADR-0007) : types et constructeurs de `@blondel/i18n` utiles aux plugins et
 // aux consommateurs du `Model` (la traduction elle-même se fait à l'affichage).
 export {
