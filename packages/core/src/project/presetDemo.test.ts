@@ -73,14 +73,8 @@ describe("préréglages de démonstration", () => {
     const blocking = m.compliance.results.filter(
       (r) => r.status === "violation" && r.severity === "bloquant",
     );
-    // Seule exception : le prédimensionnement indicatif de la poutre en couches empilées du limon
-    // central bois, réduit par la formule de Hankinson (fil horizontal à ≈ 34° de l'axe,
-    // k_f ≈ 0,09), en violation de contrainte et de flèche (QUESTIONS A35 (j), A36 (8)).
-    const admitted = id === "demo-central-glulam" ? ["PRECHECK_CONTRAINTE", "PRECHECK_FLECHE"] : [];
-    expect(blocking.map((r) => r.ruleId).filter((r) => !admitted.includes(r))).toEqual([]);
-    expect(m.compliance.summary.bloquant).toBe(
-      blocking.filter((r) => admitted.includes(r.ruleId)).length,
-    );
+    expect(blocking.map((r) => r.ruleId)).toEqual([]);
+    expect(m.compliance.summary.bloquant).toBe(0);
     for (const part of m.parts) {
       // Pièce finie faite de composantes (poutre en couches empilées, QUESTIONS A33 (e)) : sa
       // matière est portée par ses composantes, imbriquées (planche → couche → poutre, A36 (9)).
@@ -161,20 +155,35 @@ describe("préréglages de démonstration", () => {
     expect(cm.parts.some((p) => p.id.startsWith("central-web-left-"))).toBe(true);
     expect(cm.parts.some((p) => p.id.endsWith("-central-bearing"))).toBe(true);
     expect(cm.executionClass).toBe("EXC2");
-    // Limon central bois (QUESTIONS A29, vague 2 ; A33 (e) (f), A34 (c)) : lamellé-collé en
-    // couches empilées par défaut (b = 88 > 60 mm), platines à âme noyée sur la poutre cintrée,
-    // k_r = 1 (pas de cintrage).
+    // Limon central bois (QUESTIONS A29 ; A33 (e) (f), A34 (c)) : lamellé-collé cintré sur moule
+    // (imposé : les couches empilées, choix `auto` pour b = 88 mm, portent deux bloquants de
+    // prédimensionnement, A35 (j)), platines à âme noyée sur la poutre cintrée.
     const glulam = createDemoProject("demo-central-glulam");
     expect(glulam.name).toBe("Quart tournant sur limon central bois lamellé-collé");
     expect(glulam.stair.structure.kind).toBe("wood-central");
     const gm = buildModel(glulam, { memo: false });
     expect(gm.parts.some((p) => p.id === "wood-central-beam" && p.mark === "LC1")).toBe(true);
-    expect(gm.parts.some((p) => p.componentOf === "wood-central-beam")).toBe(true);
+    expect(gm.parts.some((p) => p.componentOf === "wood-central-beam")).toBe(false);
     expect(gm.parts.some((p) => p.id === "wood-central-plate-foot")).toBe(true);
     expect(gm.parts.some((p) => p.id === "wood-central-plate-head")).toBe(true);
     expect(gm.parts.some((p) => p.id.startsWith("wood-central-shoe-"))).toBe(false);
     const kr = gm.compliance.results.filter((r) => r.ruleId === "LAMELLE_CINTRE_KR");
     expect(kr.map((r) => r.status)).toEqual(["ok"]);
+    // Escalier droit sur limon central bois : poutre droite, sabots en U (ancrage `auto`).
+    const straightCentral = createDemoProject("demo-straight-central-glulam");
+    expect(straightCentral.stair.layout.turns).toEqual([]);
+    const sm = buildModel(straightCentral, { memo: false });
+    expect(sm.parts.some((p) => p.id === "wood-central-beam")).toBe(true);
+    expect(sm.parts.some((p) => p.id.startsWith("wood-central-shoe-"))).toBe(true);
+    // Crémaillères chêne (`wood-cut`) : deux crémaillères, marches sans contremarche.
+    const cut = createDemoProject("demo-straight-cut-oak");
+    expect(cut.stair.structure.kind).toBe("wood-cut");
+    expect(cut.stair.treads.risers).toBe("none");
+    const cutParts = buildModel(cut, { memo: false }).parts;
+    expect(cutParts.filter((p) => p.id.startsWith("carriage-")).map((p) => p.mark)).toEqual([
+      "CI1",
+      "CE1",
+    ]);
   });
 });
 

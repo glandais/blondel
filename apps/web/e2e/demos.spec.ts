@@ -37,10 +37,9 @@ const DEMOS = [
   "Hélicoïdal à jour central",
   "Quart tournant sur limon central débillardé",
   "Quart tournant sur limon central bois lamellé-collé",
+  "Escalier droit sur limon central bois lamellé-collé",
+  "Escalier droit à crémaillères chêne",
 ] as const;
-
-/** Démo dont le prédimensionnement indicatif est en violation bloquante (QUESTIONS A36 (8)). */
-const GLULAM_CENTRAL_DEMO = "Quart tournant sur limon central bois lamellé-collé";
 
 // Mesures de temps : une reprise absorbe un pic de charge ponctuel de la machine.
 test.describe.configure({ retries: 1 });
@@ -103,12 +102,7 @@ test(`chaque démo : onglet 3D, aucun bloquant hors prédimensionnement de la d�
     // compte nul affiché.
     await expect(footer.locator(".guided-footer__count").first()).toBeVisible();
     await expect(footer.getByRole("button", { name: /^0 / })).toHaveCount(0);
-    // Exception : la démo du limon central bois lamellé-collé garde les deux bloquants de son
-    // prédimensionnement indicatif (couches empilées réduites par la formule de Hankinson,
-    // QUESTIONS A35 (j), A36 (8)).
-    if (label !== GLULAM_CENTRAL_DEMO) {
-      await expect(footer.locator('[data-severity="bloquant"]'), label).toHaveCount(0);
-    }
+    await expect(footer.locator('[data-severity="bloquant"]'), label).toHaveCount(0);
     await expect(page.locator(".notice")).toContainText(label);
     // La page tient dans la fenêtre, sans défilement horizontal ni vertical du document : seuls
     // les panneaux défilent (régression : `.visually-hidden` du panneau de droite agrandissait

@@ -219,7 +219,21 @@ describe("bloc « Ligne de nez »", () => {
   });
 
   it("marche balancée dont le nez avant précède la zone (démo débillardé, M3) : libellé cohérent", () => {
-    const m = load(parseProjectText(curvedDemo));
+    // Démo débillardé avec son ancien jour de 250 mm (300 mm depuis la revue des démos) : M3 y
+    // est balancée hors de la zone.
+    const demo = parseProjectText(curvedDemo);
+    const layout = demo.stair.layout;
+    if (layout.kind === "helical") throw new Error("tracé à volées attendu");
+    const m = load({
+      ...demo,
+      stair: {
+        ...demo.stair,
+        layout: {
+          ...layout,
+          turns: layout.turns.map((t) => ({ ...t, inner: { kind: "arc", radius: 250 } as const })),
+        },
+      },
+    });
     const n = m.stepping.treads.find(
       (t) =>
         t.kind === "winder" &&

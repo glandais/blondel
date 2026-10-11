@@ -33,6 +33,8 @@ export const DEMO_PRESET_IDS = [
   "demo-helical-well",
   "demo-central-wreathed",
   "demo-central-glulam",
+  "demo-straight-central-glulam",
+  "demo-straight-cut-oak",
 ] as const;
 export type DemoPresetId = (typeof DEMO_PRESET_IDS)[number];
 
@@ -48,6 +50,8 @@ export const DEMO_PRESET_LABELS: Readonly<Record<DemoPresetId, MessageKey>> = {
   "demo-helical-well": "preset.demo.helicalWell.label",
   "demo-central-wreathed": "preset.demo.centralWreathed.label",
   "demo-central-glulam": "preset.demo.centralGlulam.label",
+  "demo-straight-central-glulam": "preset.demo.straightCentralGlulam.label",
+  "demo-straight-cut-oak": "preset.demo.straightCutOak.label",
 };
 
 /** Clés des descriptions d'une ligne de chaque démo (sélecteur de l'interface). */
@@ -62,6 +66,8 @@ export const DEMO_PRESET_DESCRIPTIONS: Readonly<Record<DemoPresetId, MessageKey>
   "demo-helical-well": "preset.demo.helicalWell.description",
   "demo-central-wreathed": "preset.demo.centralWreathed.description",
   "demo-central-glulam": "preset.demo.centralGlulam.description",
+  "demo-straight-central-glulam": "preset.demo.straightCentralGlulam.description",
+  "demo-straight-cut-oak": "preset.demo.straightCutOak.description",
 };
 
 /** Garde-corps vitré à main courante inox (commun à plusieurs démos). */
@@ -118,12 +124,14 @@ function quarterCurved(name: string): Project {
       stair: {
         layout: {
           legs: [{ length: l1 }, { length: l2 }],
-          turns: [{ direction: "left", mode: "winders", inner: { kind: "arc", radius: 250 } }],
+          // Jour de 300 mm : appuis des marches balancées d'au moins 50 mm sur le limon débillardé
+          // (avec 250 mm, M6 n'avait que 37 mm d'appui, FAB_SUPPORT_LONGUEUR_MIN).
+          turns: [{ direction: "left", mode: "winders", inner: { kind: "arc", radius: 300 } }],
         },
       },
     },
   });
-  return withPatch(p, {
+  return withPatch(withOpening(p), {
     stair: { structure: { kind: "steel-curved", params: { finish: "painted" } } },
     guards: GLASS_GUARDS,
     appearance: { paintColor: "#f2f2ee", woodTone: "natural", glassTint: "clear" },
@@ -261,9 +269,12 @@ function centralWreathed(name: string): Project {
 
 /**
  * Quart tournant balancé sur limon central bois en lamellé-collé cintré sur moule (QUESTIONS
- * A29, vague 2) : marches chêne entaillées et boulonnées, sabots acier peint en pied et en tête,
- * garde-corps vitré (comme `demo-central-wreathed`). Jour vif du préréglage : la trace contourne
- * le jour à l'axe de l'emmarchement.
+ * A29) : marches chêne entaillées, fixées par tire-fonds, platines à âme noyée en pied et en
+ * tête, garde-corps vitré (comme `demo-central-wreathed`). Jour vif du préréglage : la trace
+ * contourne le jour à l'axe de l'emmarchement. Cintrage sur moule imposé : les couches empilées
+ * (choix `auto` pour b = 88 mm) portent deux constats bloquants de prédimensionnement (fil
+ * horizontal réduit par Hankinson, QUESTIONS A35 (j), A36 (8)) ; elles restent montrées par les
+ * exemples `j5c-limon-central-bois-{quart-tournant,helicoidal}`.
  */
 function centralGlulam(name: string): Project {
   const p = createProject("quarter-left", { name, width: 900 });
@@ -273,10 +284,46 @@ function centralGlulam(name: string): Project {
       // suivante (entaille arrière) ; avec des contremarches pleines, les marches seraient
       // posées sans entaille arrière (LIMON_ENTAILLE_MIN en violation).
       treads: { risers: "none", thickness: 80 },
-      structure: { kind: "wood-central", params: { section: { kind: "glulam" } } },
+      structure: {
+        kind: "wood-central",
+        params: { section: { kind: "glulam", curvedMethod: "mould" } },
+      },
     },
     guards: GLASS_GUARDS,
     appearance: { paintColor: "#2b2f33", woodTone: "natural", glassTint: "clear" },
+  });
+}
+
+/**
+ * Escalier droit sur limon central bois en lamellé-collé droit (QUESTIONS A29) : marches chêne
+ * de 80 mm sans contremarche entaillées dans la poutre, fixées par tire-fonds, sabots en U en
+ * pied et en tête (ancrage `auto` d'une poutre droite, QUESTIONS A34 (c)), garde-corps vitré.
+ */
+function straightCentralGlulam(name: string): Project {
+  const p = createProject("straight", {
+    name,
+    patch: { stair: { treads: { risers: "none", thickness: 80 } } },
+  });
+  return withPatch(p, {
+    stair: { structure: { kind: "wood-central", params: { section: { kind: "glulam" } } } },
+    guards: GLASS_GUARDS,
+    appearance: { paintColor: "#1f2328", woodTone: "light", glassTint: "extra-clear" },
+  });
+}
+
+/**
+ * Escalier droit à crémaillères en chêne (`wood-cut`, escalier droit seulement) : marches posées
+ * sur les dents, sans contremarche, garde-corps à balustres chêne.
+ */
+function straightCutOak(name: string): Project {
+  const p = createProject("straight", {
+    name,
+    patch: { stair: { treads: { risers: "none" } } },
+  });
+  const chosen = applyStructureChoice(p, "wood-cut", { material: "wood-oak" }).project;
+  return withPatch(chosen, {
+    guards: { infill: { kind: "balusters" }, material: "wood-oak" },
+    appearance: { woodTone: "natural" },
   });
 }
 
@@ -291,6 +338,8 @@ const BUILDERS: Readonly<Record<DemoPresetId, (name: string) => Project>> = {
   "demo-helical-well": helicalWell,
   "demo-central-wreathed": centralWreathed,
   "demo-central-glulam": centralGlulam,
+  "demo-straight-central-glulam": straightCentralGlulam,
+  "demo-straight-cut-oak": straightCutOak,
 };
 
 /** Vrai si `id` est une démo. */

@@ -315,7 +315,8 @@ test("pied : liste du contrôle par-dessus la vue, carte → Règle, Échap, Éc
   page,
 }) => {
   await openAppFresh(page);
-  await applyPreset(page, "Quart tournant débillardé soudé");
+  // Démo à avertissements (appuis courts autour des poteaux) ; le débillardé n'en a plus.
+  await applyPreset(page, "Demi-tournant industriel en tôle pliée");
   await expect(page.locator('.app[data-journey="guided"]')).toBeVisible();
   const footer = page.getByRole("contentinfo", { name: "Contrôle et étapes" });
   const warnings = footer.getByRole("button", { name: /^\d+ avertissements?$/ });

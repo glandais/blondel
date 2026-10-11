@@ -120,6 +120,7 @@
       "kind": "wood-central",
       "params": {
         "section": {
+          "curvedMethod": "mould",
           "kind": "glulam"
         }
       }

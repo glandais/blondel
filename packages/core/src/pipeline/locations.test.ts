@@ -18,8 +18,21 @@ const load = (file: string): Project =>
 beforeEach(() => clearModelCache());
 
 describe("localisation des constats", () => {
-  it("appui trop court : pièce porteuse et marche (démo débillardé)", () => {
-    const m = buildModel(load("demo-quarter-curved.blondel.json"));
+  it("appui trop court : pièce porteuse et marche (démo débillardé, jour ramené à 250 mm)", () => {
+    // La démo a un jour de 300 mm, sans appui trop court ; à 250 mm, M6 n'a que 37 mm d'appui.
+    const demo = load("demo-quarter-curved.blondel.json");
+    const layout = demo.stair.layout;
+    if (layout.kind === "helical") throw new Error("tracé à volées attendu");
+    const m = buildModel({
+      ...demo,
+      stair: {
+        ...demo.stair,
+        layout: {
+          ...layout,
+          turns: layout.turns.map((t) => ({ ...t, inner: { kind: "arc", radius: 250 } as const })),
+        },
+      },
+    });
     const short = m.compliance.results.filter(
       (r) => r.ruleId === "FAB_SUPPORT_LONGUEUR_MIN" && r.status === "violation",
     );

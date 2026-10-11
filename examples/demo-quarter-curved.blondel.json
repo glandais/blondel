@@ -67,9 +67,9 @@
     "opening": {
       "kind": "rect",
       "sizeX": 2930,
-      "sizeY": 1330,
+      "sizeY": 1340,
       "x": -1930,
-      "y": 570
+      "y": 560
     },
     "upperFinish": 0,
     "upperSlabThickness": 200,
@@ -96,7 +96,7 @@
           "direction": "left",
           "inner": {
             "kind": "arc",
-            "radius": 250
+            "radius": 300
           },
           "mode": "winders"
         }

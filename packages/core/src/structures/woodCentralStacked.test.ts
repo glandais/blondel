@@ -305,11 +305,7 @@ describe("joint de colle imposé sur le dessus voulu de l'âme de pied (QUESTION
 });
 
 describe("exemples en couches empilées : plus de perçage au droit d'un joint ni de fraisage partiel (A37 (8) (15) (16))", () => {
-  const examples = [
-    "j5c-limon-central-bois-quart-tournant",
-    "j5c-limon-central-bois-helicoidal",
-    "demo-central-glulam",
-  ];
+  const examples = ["j5c-limon-central-bois-quart-tournant", "j5c-limon-central-bois-helicoidal"];
   for (const name of examples) {
     it(name, () => {
       const url = new URL(`../../../../examples/${name}.blondel.json`, import.meta.url);

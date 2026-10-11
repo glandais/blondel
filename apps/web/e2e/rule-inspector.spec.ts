@@ -190,26 +190,33 @@ test("surcharge : justification obligatoire, puis levée (annulable)", async ({ 
   await expect(page.locator("#free-panel")).toContainText("0 surcharge(s) de règle justifiée(s).");
 });
 
-test("démo débillardé : appui localisé « LE1 · M6 », « Où » cliquable, règle sur la marche", async ({
+test("démo débillardé : échappée rattachée au nez le plus proche, plus « Point »", async ({
   page,
 }) => {
   await openApp(page);
   await applyPreset(page, "Quart tournant débillardé soudé");
+  await useFreeJourney(page);
+  await expect(
+    inspectorOf(page).locator('.rule-card[data-rule="ECHAPPEE_RECO_PRIVATIF"] .rule-card__loc'),
+  ).toHaveText(/^Nez \d+$/);
+});
+
+test("démo demi-tournant industriel : appui localisé « LI1 · M4 », « Où » cliquable, règle sur la marche", async ({
+  page,
+}) => {
+  await openApp(page);
+  await applyPreset(page, "Demi-tournant industriel en tôle pliée");
   // Une démo ouvre le parcours guidé : l'inspecteur est celui du libre.
   await useFreeJourney(page);
   const inspector = inspectorOf(page);
   const card = inspector.locator('.rule-card[data-rule="FAB_SUPPORT_LONGUEUR_MIN"]').first();
-  await expect(card.locator(".rule-card__loc")).toHaveText("LE1 · M6");
-  // Échappée rattachée au nez le plus proche, plus « Point ».
-  await expect(
-    inspector.locator('.rule-card[data-rule="ECHAPPEE_RECO_PRIVATIF"] .rule-card__loc'),
-  ).toHaveText(/^Nez \d+$/);
+  await expect(card.locator(".rule-card__loc")).toHaveText("LI1 · M4");
   await openRuleCard(page, "FAB_SUPPORT_LONGUEUR_MIN");
   const tags = inspector.locator(".rule-insp__where button.rule-insp__tag");
-  await expect(tags.first()).toContainText("LE1");
-  await inspector.locator(".rule-insp__where").getByRole("button", { name: "Marche 6" }).click();
+  await expect(tags.first()).toContainText("LI1");
+  await inspector.locator(".rule-insp__where").getByRole("button", { name: "Marche 4" }).click();
   await expect(inspector).toHaveAttribute("data-template", "tread");
-  await expect(inspector.locator('[data-tread-number="6"]')).toBeVisible();
+  await expect(inspector.locator('[data-tread-number="4"]')).toBeVisible();
   await expect(inspector.locator('.rule-card[data-rule="FAB_SUPPORT_LONGUEUR_MIN"]')).toHaveCount(
     1,
   );
