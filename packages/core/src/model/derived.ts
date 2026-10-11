@@ -207,8 +207,9 @@ export interface Layout {
    */
   readonly helical?: HelicalLayout;
   /**
-   * Tronçons du tracé (moteur de cage, ADR-0010), dans l'ordre de la montée. Ajout
-   * rétrocompatible : absent pour le moteur à volées et l'hélicoïdal.
+   * Tronçons du tracé (moteur de cage, ADR-0010), dans l'ordre de la montée : un par volée d'un
+   * tracé à volées (calculé par le moteur de cage depuis le sous-lot 1c), un par tronçon d'une
+   * cage. Ajout rétrocompatible : absent pour l'hélicoïdal.
    */
   readonly sections?: readonly LayoutSection[];
 }

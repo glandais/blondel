@@ -11,7 +11,7 @@
  * L − k·E, et inversement (`fromFlights.ts`). Le moteur retrouve l'étendue L = débords +
  * partie droite : à ±90°, chaque débord vaut E.
  *
- * Convention à valider par l'utilisateur (question F11, `docs/QUESTIONS.md`).
+ * Convention décidée par l'utilisateur le 2026-10-11 (question F11, `docs/QUESTIONS.md`).
  *
  * ## Vocabulaire des erreurs (`CageOrigin`)
  *

@@ -1,7 +1,7 @@
 /**
  * Tracé libre (CAGE, ADR-0010, sous-lot 0b) côté projet : schéma `kind: "cage"`, champs dérivés,
- * sérialisation stable, messages de validation et `buildModel` sans exception (pas encore de
- * moteur).
+ * sérialisation stable, messages de validation et `buildModel` sans exception (moteur de cage
+ * à ±90° depuis le sous-lot 1c ; les autres fonctions rendent une erreur « pas encore »).
  */
 import fc from "fast-check";
 import type { MessageKey } from "@blondel/i18n";
@@ -282,20 +282,20 @@ describe("schéma cage", () => {
     ).toContain("stair.layout.junctions[0].well.setbackIn");
   });
 
-  it("buildModel sur une cage ne lève pas : une seule erreur claire dans Model.errors", () => {
+  it("buildModel sur une cage pas encore calculée (largeur variable) : une seule erreur claire", () => {
     const p = parseProject(cageProject(QUARTER));
     const model = buildModel(p);
-    expect(modelErrorKeys(model.errors)).toEqual(["layout.cage.notYetComputed"]);
+    expect(modelErrorKeys(model.errors)).toEqual(["layout.cage.variableWidthNotYetSupported"]);
   });
 
-  it("buildModel sur une cage avec limon à la française et garde-corps : même erreur, seule", () => {
+  it("buildModel sur une cage pas encore calculée, limon à la française et garde-corps : même erreur, seule", () => {
     const project = cageProject(QUARTER, { guards: { flight: { enabled: true } } });
     (project.stair as Record<string, unknown>).structure = { kind: "wood-housed" };
     const p = parseProject(project);
     expect(p.stair.structure.kind).toBe("wood-housed");
     expect(p.guards?.flight.enabled).toBe(true);
     const model = buildModel(p);
-    expect(modelErrorKeys(model.errors)).toEqual(["layout.cage.notYetComputed"]);
+    expect(modelErrorKeys(model.errors)).toEqual(["layout.cage.variableWidthNotYetSupported"]);
   });
 });
 
@@ -441,13 +441,54 @@ describe("propriétés de la cage", () => {
     );
   });
 
-  it("buildModel ne lève jamais sur une cage valide", () => {
+  it("buildModel ne lève jamais sur une cage valide (tracé calculé ou erreur de cage)", () => {
+    // Cages calculables depuis 1c (±90°, largeur constante, jour vif ou en arc), tirées à part :
+    // `arbCage` n'en produit presque jamais de plus d'un tronçon.
+    const arbComputable = fc
+      .record({
+        width: fc.integer({ min: 600, max: 1500 }),
+        lengths: fc.array(fc.integer({ min: 600, max: 3000 }), { minLength: 2, maxLength: 4 }),
+        junctions: fc.array(
+          fc.record({
+            angle: fc.constantFrom(90, -90),
+            mode: fc.constantFrom("winders" as const, "landing" as const),
+            well: fc.oneof(
+              fc.constant({ kind: "sharp" as const }),
+              fc.record({
+                kind: fc.constant("arc" as const),
+                radius: fc.integer({ min: 1, max: 300 }),
+              }),
+            ),
+          }),
+          { minLength: 3, maxLength: 3 },
+        ),
+      })
+      .map((r) => ({
+        kind: "cage" as const,
+        sections: r.lengths.map((length) => ({
+          axis: { kind: "straight" as const, length },
+          width: r.width,
+        })),
+        junctions: r.junctions.slice(0, r.lengths.length - 1),
+      }));
+    let computedMulti = 0;
     fc.assert(
-      fc.property(arbCage, (layout) => {
-        const model = buildModel(parseProject(cageProject(layout)));
-        expect(modelErrorKeys(model.errors)).toEqual(["layout.cage.notYetComputed"]);
+      fc.property(fc.oneof(arbCage, arbComputable), (layout) => {
+        const model = buildModel(parseProject(cageProject(layout)), { memo: false });
+        const keys = modelErrorKeys(model.errors);
+        // Aucune erreur interne : un échec du tracé est une erreur `layout.*` explicite.
+        expect(keys.filter((k) => k === "pipeline.internalError")).toEqual([]);
+        if (model.layout.sections === undefined) {
+          expect(keys.some((k) => typeof k === "string" && k.startsWith("layout."))).toBe(true);
+        } else {
+          // Tracé calculé : un tronçon de sortie par tronçon saisi.
+          expect(model.layout.sections).toHaveLength(layout.sections.length);
+          if (layout.sections.length > 1) computedMulti++;
+        }
       }),
-      { numRuns: 20 },
+      { numRuns: 80 },
     );
+    // Les deux issues sont bien tirées : des cages de plusieurs tronçons sont calculées.
+    expect(computedMulti).toBeGreaterThan(0);
   });
 });

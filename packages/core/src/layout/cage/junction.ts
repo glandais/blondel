@@ -1,8 +1,9 @@
 /**
  * Jonctions tournantes d'une cage (ADR-0010) à ±90° : coins K (jour) et W (mur), raccords de jour
  * (vif, arc, poteau éventuellement décalé), arc de la ligne de foulée Γ, contrôles du poteau.
- * Formes fermées identiques à celles du moteur à volées (`layout/layout.ts`, « Raccords de
- * jour ») : mêmes opérations, dans le même ordre, pour l'égalité numérique.
+ * Formes fermées identiques à celles de l'ancien moteur à volées (`layout/legacyFlights.ts` ;
+ * conventions : `layout/layout.ts`, « Raccords de jour ») : mêmes opérations, dans le même
+ * ordre, pour l'égalité numérique.
  *
  * Repère d'une jonction j : celui du tronçon entrant (`SectionFrame`), d'étendue L (débords
  * compris) et de largeur E. Jonction à gauche : K = A + (L − E)·u (bord gauche),

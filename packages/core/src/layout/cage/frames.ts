@@ -6,8 +6,9 @@
  * u est la direction de montée (unitaire) d'un tronçon et r la normale unitaire gauche → droite.
  * Une jonction d'angle θ (degrés signés, positif = à gauche en montant) fait tourner (u, r) de θ.
  * Les angles 0 et ±90° sont traités **exactement**, par permutation des composantes (aucun
- * cos / sin), pour l'égalité numérique avec le moteur à volées (`layout/layout.ts`) ; les autres
- * angles (lot 2) passeront par une rotation trigonométrique et ne sont pas encore pris en charge.
+ * cos / sin), pour l'égalité numérique avec l'ancien moteur à volées
+ * (`layout/legacyFlights.ts`) ; les autres angles (lot 2) passeront par une rotation
+ * trigonométrique et ne sont pas encore pris en charge.
  *
  * ## Étendue d'un tronçon (`SectionFrame`)
  *
@@ -54,8 +55,8 @@ export function isExactAngle(angle: number): boolean {
 
 /**
  * Base du tronçon sortant d'une jonction d'angle `angle` (degrés signés). Exacte pour 0 et ±90°
- * (permutation, mêmes opérations que `layout/layout.ts`) ; `undefined` pour un autre angle (pas
- * encore pris en charge, lot 2).
+ * (permutation, mêmes opérations que l'ancien moteur, `layout/legacyFlights.ts`) ; `undefined`
+ * pour un autre angle (pas encore pris en charge, lot 2).
  */
 export function rotateBasis(basis: Basis, angle: number): Basis | undefined {
   const { u, r } = basis;

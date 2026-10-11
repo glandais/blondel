@@ -4,10 +4,12 @@
  *
  * Lot 1 (sous-lot 1b) : tronçons droits de largeur constante et jonctions tournantes à ±90°
  * (marches balancées ou palier d'angle ; jour vif, en arc ou à poteau éventuellement décalé ;
- * mur vif), c'est-à-dire exactement ce qu'exprime un tracé à volées. Le résultat est alors
- * **identique**, nombre pour nombre, à celui du moteur à volées (`layout/layout.ts`) pour la
- * cage issue de `flightsToCage` (test de parité `parity.test.ts`) ; `sections` et les champs
- * `angle`, `well`, `wall` des tournants sont en plus. Les autres fonctions de la cage (angle
+ * mur vif), c'est-à-dire exactement ce qu'exprime un tracé à volées. Depuis le sous-lot 1c,
+ * c'est le seul moteur des tracés à volées et des cages (`computeLayout`, `layout/layout.ts`) ;
+ * pour la cage issue de `flightsToCage`, le résultat est **identique**, nombre pour nombre, à
+ * celui de l'ancien moteur à volées (copie figée `layout/legacyFlights.ts`, réservée aux tests,
+ * parité `parity.test.ts`) ; `sections` et les champs `angle`, `well`, `wall` des tournants
+ * sont en plus. Les autres fonctions de la cage (angle
  * quelconque, palier droit, largeur variable, axe en arc, pan coupé, mur en arc, marches
  * rayonnantes) sont refusées par une `LayoutError` claire, en attendant le lot 2.
  *

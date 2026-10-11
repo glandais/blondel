@@ -6,7 +6,7 @@ import { curveLength } from "../geom2d/curve.js";
 import { computeLayout } from "../layout/layout.js";
 import { resolveRiserCount, resolveTargetGoing } from "../layout/resolve.js";
 import { buildModel } from "../pipeline/build.js";
-import type { Project } from "../model/project.js";
+import { ProjectSchema, type Project } from "../model/project.js";
 import {
   computeOpening,
   createProject,
@@ -286,6 +286,23 @@ describe("realignFlightsAndOpening (A18 a, précisé le 2026-09-30)", () => {
     const r = realignFlightsAndOpening(edited(p, { floorToFloor: 3000 }));
     expect(r.project.stair.layout.legs).toEqual([{ length: "auto" }]);
     expect(r.project.site.opening).not.toEqual(p.site.opening);
+  });
+
+  it("cage saisie (ADR-0010) : refus explicite par une clé du dictionnaire, jamais un texte brut", () => {
+    const straight = (length: number) => ({ axis: { kind: "straight", length }, width: 900 });
+    for (const layout of [
+      {
+        kind: "cage",
+        sections: [straight(1500), straight(600)],
+        junctions: [{ angle: 90, mode: "winders" }],
+      },
+      { kind: "cage", sections: [straight(2000)], junctions: [] },
+    ]) {
+      const base = createProject("straight");
+      const cage = ProjectSchema.parse({ ...base, stair: { ...base.stair, layout } });
+      expect(() => realignFlightsAndOpening(cage)).toThrow(RangeError);
+      expect(realignBlocker(cage)?.key).toBe("project.realign.cage");
+    }
   });
 
   it("refus explicites (bouton désactivé avec la raison du cœur) : hélicoïdal, H trop faible, volée devenue trop courte", () => {

@@ -26,6 +26,10 @@ Project (JSON validé par zod, immuable)
   │                                                          bord de mesure de Γ (`walklineSide`, layout/walklineSide.ts ;
   │                                                          automatique : lit murs et garde-corps, clé de cache
   │                                                          `autoWalklineSideKey`) ;
+  │                                                          un seul moteur pour volées et cage (ADR-0010, sous-lot
+  │                                                          1c) : volées → `flightsToCage` → `computeCageLayout`
+  │                                                          (layout/cage/, messages des volées), cage saisie →
+  │                                                          `computeCageLayout` ; tronçons dans `Layout.sections` ;
   │                                                          hélicoïdal (`kind: "helical"`) : layout/helical.ts
   ├─ computeStepping    → Stepping               stepping/   hauteurs, nez sur Γ, zones et stratégies de balancement ;
   │                                                          hélicoïdal : nez rayonnants, stepping/helical.ts ;

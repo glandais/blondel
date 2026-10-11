@@ -168,7 +168,7 @@ const openingText = (o: Opening): Message =>
 
 /**
  * Recale les volées et la trémie sur H, E, la dalle et le réglage des hauteurs (voir l'en-tête).
- * @throws RangeError si le tracé est hélicoïdal, si la position des tournants saisie rend le
+ * @throws RangeError si le tracé est hélicoïdal ou une cage saisie, si la position des tournants saisie rend le
  *   recalage impossible (H trop faible, palier hors d'un nombre entier de girons), ou si le
  *   tracé recalé est impossible (message du tracé).
  */
@@ -179,6 +179,10 @@ export function realignFlightsAndOpening(
   const spec = project.stair.layout;
   if (spec.kind === "helical") {
     throw new MessageRangeError(msg("project.realign.helical"));
+  }
+  // Cage saisie (ADR-0010) : `legs` / `turns` vides, recalage par tronçon au lot 2.
+  if (spec.kind === "cage") {
+    throw new MessageRangeError(msg("project.realign.cage"));
   }
   const clearance = options.openingClearance ?? PRESET_OPENING_CLEARANCE;
   requireOpeningClearance(clearance);

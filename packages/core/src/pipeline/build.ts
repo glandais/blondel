@@ -645,9 +645,17 @@ export function buildModel(project: Project, options: BuildModelOptions = {}): M
   let structureAuto: Readonly<Record<string, number>> | undefined;
   let assemblies: readonly PartAssembly[] | undefined;
   const kind = stair.structure.kind;
-  const plugin = kind !== "none" ? getStructure(kind) : undefined;
-  if (kind !== "none" && !plugin) {
+  const known = kind !== "none" ? getStructure(kind) : undefined;
+  if (kind !== "none" && !known) {
     notes.push(msg("pipeline.unknownStructure", { kind }));
+  }
+  // Garde-fou minimal des structures pour une cage saisie (avancé du lot 2f au sous-lot 1c,
+  // ADR-0010) : les plugins lisent encore les volées du projet (`legs` / `turns`, vides pour une
+  // cage). Le plugin est sauté avec une erreur claire ; les pièces de base restent produites.
+  const cageInput = stair.layout.kind === "cage";
+  const plugin = cageInput ? undefined : known;
+  if (complete && cageInput && known) {
+    errors.push(msg("structure.cageUnsupported", { structure: msg(known.labelKey) }));
   }
   if (complete) {
     const partsStage = run(caches.parts, [layout, stepping, stair.treads], () =>

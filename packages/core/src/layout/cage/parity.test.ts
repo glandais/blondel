@@ -1,9 +1,13 @@
 /**
- * Parité stricte du moteur de cage avec le moteur à volées (sous-lot 1b, ADR-0010) : pour tout
- * tracé à volées converti par `flightsToCage`, `computeCageLayout` rend le **même** `Layout`
- * (mêmes segments, même ordre, mêmes nombres : `toStrictEqual`, qui distingue même 0 et −0),
- * ou la même erreur (même clé, mêmes paramètres). Seuls les ajouts du moteur de cage sont
- * ignorés : `sections` et les champs `angle`, `well`, `wall` des tournants.
+ * Parité stricte du chemin unique de calcul avec l'ancien moteur à volées (sous-lots 1b et 1c,
+ * ADR-0010, plan B.5) : pour tout projet à volées, `computeLayout`, qui passe
+ * désormais par `flightsToCage` puis `computeCageLayout`, rend le **même** `Layout` que la copie
+ * figée de l'ancien moteur (`legacyComputeFlightsLayout`, `legacyFlights.ts`, réservée aux
+ * tests) : mêmes segments, même ordre, mêmes nombres (`toStrictEqual`, qui distingue même 0 et
+ * −0), ou la même erreur (même clé, mêmes paramètres). Seuls les ajouts du moteur de cage sont
+ * ignorés : `sections` et les champs `angle`, `well`, `wall` des tournants (champs facultatifs de
+ * `TurnZone` que l'ancien moteur ne remplissait pas). L'hélicoïdal n'est pas une parité (les
+ * deux chemins délèguent à `computeHelicalLayout`) : seul l'aiguillage est vérifié.
  */
 import { readdirSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
@@ -25,10 +29,10 @@ import {
 import { createDemoProject, DEMO_PRESET_IDS } from "../../project/presetDemo.js";
 import { createProject, OPPOSITE_TURNS_PRESET_IDS, PRESET_IDS } from "../../project/presets.js";
 import { parseProjectText } from "../../project/parse.js";
-import { computeLayout } from "../layout.js";
+import { computeHelicalLayout } from "../helical.js";
+import { computeLayout, type LayoutOptions } from "../layout.js";
+import { legacyComputeFlightsLayout } from "../legacyFlights.js";
 import { resolveLegLengths } from "../resolve.js";
-import { computeCageLayout } from "./cage.js";
-import { checkFlightsTopology, flightsToCage } from "./fromFlights.js";
 
 const EXAMPLES_DIR = resolve(dirname(fileURLToPath(import.meta.url)), "../../../../../examples");
 const EXAMPLE_FILES = readdirSync(EXAMPLES_DIR)
@@ -50,25 +54,16 @@ function outcome(run: () => Layout): Outcome {
   }
 }
 
-/** Tracé d'un projet à volées par le moteur de cage (ce que fera `computeLayout` au sous-lot 1c). */
-function viaCage(project: Project): Layout {
-  const spec = project.stair.layout as FlightsLayoutSpec;
-  checkFlightsTopology(spec);
-  return computeCageLayout(project, flightsToCage(spec, resolveLegLengths(project)), {
-    origin: "flights",
-  });
-}
-
-function expectParity(project: Project): void {
-  const legacy = outcome(() => computeLayout(project));
-  const cage = outcome(() => viaCage(project));
-  expect(cage).toStrictEqual(legacy);
+function expectParity(project: Project, options?: LayoutOptions): void {
+  const legacy = outcome(() => legacyComputeFlightsLayout(project, options));
+  const current = outcome(() => computeLayout(project, options));
+  expect(current).toStrictEqual(legacy);
 }
 
 const isFlights = (p: Project): boolean =>
   !isHelicalLayout(p.stair.layout) && !isCageLayout(p.stair.layout);
 
-describe("parité moteur de cage / moteur à volées", () => {
+describe("parité computeLayout (moteur de cage) / ancien moteur à volées", () => {
   const examples = EXAMPLE_FILES.map(
     (f) => [f, parseProjectText(readFileSync(join(EXAMPLES_DIR, f), "utf8"))] as const,
   ).filter(([, p]) => isFlights(p));
@@ -80,7 +75,11 @@ describe("parité moteur de cage / moteur à volées", () => {
   it.each(examples)("exemple %s", (_file, project) => {
     expectParity(project);
     // Le tracé est bien calculé (pas une parité d'erreurs).
-    expect("layout" in outcome(() => viaCage(project))).toBe(true);
+    expect("layout" in outcome(() => computeLayout(project))).toBe(true);
+    // Le chemin unique porte les tronçons, un par volée.
+    expect(computeLayout(project).sections).toHaveLength(
+      (project.stair.layout as FlightsLayoutSpec).legs.length,
+    );
   });
 
   it.each([...PRESET_IDS, ...OPPOSITE_TURNS_PRESET_IDS])("préréglage %s", (id) => {
@@ -89,6 +88,35 @@ describe("parité moteur de cage / moteur à volées", () => {
 
   it.each(DEMO_PRESET_IDS.filter((id) => isFlights(createDemoProject(id))))("démo %s", (id) => {
     expectParity(createDemoProject(id));
+  });
+
+  it("hélicoïdal : aiguillage vers computeHelicalLayout (pas une parité)", () => {
+    const helical = DEMO_PRESET_IDS.map((id) => createDemoProject(id)).filter((p) =>
+      isHelicalLayout(p.stair.layout),
+    );
+    const examplesHelical = EXAMPLE_FILES.map((f) =>
+      parseProjectText(readFileSync(join(EXAMPLES_DIR, f), "utf8")),
+    ).filter((p) => isHelicalLayout(p.stair.layout));
+    expect(helical.length + examplesHelical.length).toBeGreaterThan(0);
+    for (const p of [...helical, ...examplesHelical]) {
+      if (!isHelicalLayout(p.stair.layout)) continue;
+      const layout = computeLayout(p);
+      expect(layout.helical).toBeDefined();
+      expect(layout.sections).toBeUndefined();
+      expect(layout).toStrictEqual(computeHelicalLayout(p, p.stair.layout));
+    }
+  });
+
+  it("option legLengths (assistant) : mêmes longueurs imposées, même tracé", () => {
+    for (const id of [...PRESET_IDS, ...OPPOSITE_TURNS_PRESET_IDS]) {
+      const project = createProject(id);
+      if (!isFlights(project)) continue;
+      const lengths = resolveLegLengths(project).map((l) => l + 137);
+      expectParity(project, { legLengths: lengths });
+      // Nombre de longueurs incohérent, longueur non positive : même erreur.
+      expectParity(project, { legLengths: [...lengths, 1000] });
+      expectParity(project, { legLengths: lengths.map((l, i) => (i === 0 ? -1 : l)) });
+    }
   });
 
   it("erreurs : nombre de tournants, longueur auto hors escalier droit", () => {
@@ -128,7 +156,8 @@ describe("parité moteur de cage / moteur à volées", () => {
       },
     };
     expectParity(project);
-    expect(viaCage(project).turns).toHaveLength(16);
+    expect(computeLayout(project).turns).toHaveLength(16);
+    expect(computeLayout(project).sections).toHaveLength(17);
   });
 
   it("propriété : tracés à volées quelconques (1 à 4 volées, S / Z, raccords, d_f, placement)", () => {
@@ -248,7 +277,7 @@ describe("générateur de la propriété de parité", () => {
   it("couvre tracés calculés (0 à 3 tournants, S / Z, jour nul, emprises dégénérées) et erreurs", () => {
     const seen = new Set<string>();
     for (const project of fc.sample(flightsProjectArb, { numRuns: 500, seed: 1 })) {
-      const o = outcome(() => computeLayout(project));
+      const o = outcome(() => legacyComputeFlightsLayout(project));
       if ("error" in o) {
         seen.add(`error:${(o.error as { msg: { key: string } }).msg.key}`);
         continue;
