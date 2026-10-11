@@ -1,6 +1,6 @@
 # ADR-0002 — Modèle de données et pipeline
 
-- Statut : accepté (jalon 0) ; **amendé le 2026-09-29** (méthodes de balancement et typologies prises en charge, voir « Amendement »)
+- Statut : accepté (jalon 0) ; **amendé le 2026-09-29** (méthodes de balancement et typologies prises en charge, voir « Amendement ») ; **amendé le 2026-10-11** (tracé libre CAGE, voir « Amendement (2026-10-11) » et ADR-0010)
 
 ## Décision
 
@@ -16,6 +16,10 @@
 - **Balancement** : `BalancingSchema.method` = M0, M1, M2 (herse, option V1, `herseAngle`), M3 (défaut), M6 (rotation paramétrée, option V1) ; `BalancingStrategy.id` et le registre `balancing/registry.ts` dérivent de cette **liste unique** (`BalancingMethod`, `model/project.ts`). M7 (SPEC : V2) n'est pas encore un identifiant.
 - **Typologies** : `LayoutSpec` **est** une union discriminée rétrocompatible (`kind` absent = volées, `kind: "helical"` = hélicoïdal, jalon 5a). Les tournants de sens opposés (**S / Z**) sont pris en charge par le modèle à volées : `Layout.inner` est le bord du côté du jour du **premier** tournant, le jour d'un tournant de sens opposé est sur `Layout.outer` (`TurnZone.collarSide`, `Layout.walklineTransitions`, aide `stepping/sides.ts`), voir LEDGER §3 [core:layout].
 - **Pipeline** : le prédimensionnement indicatif des limons est rendu dans `Model.precheck` (plugin de structure s'il en fait un, `StructureOutput.precheck`, sinon `precheckStringers`) ; le calcul du `Model` côté application a lieu dans un Web Worker (ADR-0005 amendée).
+
+## Amendement (2026-10-11) — tracé libre (CAGE)
+
+- **Tracé générique** : le tracé « N volées reliées par N−1 tournants à 90° » devient un cas particulier d'une **CAGE** (tronçons droits ou en arc, de largeur propre éventuellement variable, reliés par des jonctions d'angle signé quelconque, paliers droits compris), variante `kind: "cage"` de `LayoutSpec`. Le tracé à volées reste une entrée sérialisée, normalisée en CAGE par `computeLayout` (un seul chemin de calcul, sans migration) ; l'hélicoïdal garde son `kind`. Détail : ADR-0010.
 
 ## Conséquences
 

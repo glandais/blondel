@@ -1,6 +1,6 @@
 # Architecture de Blondel
 
-Vue d'ensemble courte. Les décisions détaillées sont dans `docs/adr/` (ADR 0001 à 0009) et les arbitrages de conception dans `docs/CHALLENGE.md`. Le métier fait foi dans `docs/SPEC.md` et `docs/research/`.
+Vue d'ensemble courte. Les décisions détaillées sont dans `docs/adr/` (ADR 0001 à 0010) et les arbitrages de conception dans `docs/CHALLENGE.md`. Le métier fait foi dans `docs/SPEC.md` et `docs/research/`.
 
 ## Paquets
 

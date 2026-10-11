@@ -866,3 +866,99 @@ Sans objet désormais : Q25 (three.js retenu, ADR-0001) ; Q4 à Q12 tranchées l
 - Soldé le 2026-09-30 — relevé : seuil de détection **exact** (dichotomie sur l'ajustement non linéaire complet, erreur des deux signes, plus petit seuil rendu), à partir du seuil linéarisé ; sur l'exemple du ledger (A (0, 0), B (400, 0), C (165, 546), D (−1 500, 546)), CD vaut 55 mm dans un sens et 84 mm dans l'autre (64 mm linéarisé). `detectable` rend le plus petit des deux sens, `undetectable` le plus grand : c'est l'angle mort que « Limite du contrôle » annonce (relecture [review:pipeline-web] : le plus petit seuil sous-estimait l'angle mort, précisément le défaut signalé l. 264). ≈ 12 ms par relevé. Tests : `site/survey.test.ts` (propriété à ± 5 % sans restriction aux petites erreurs). Calage du relevé sur deux points du DXF : non traité (hors consigne).
 - Soldé le 2026-09-30 — quota `localStorage` mesuré dans Chromium (e2e `storage-quota.spec.ts`) : 5 242 880 caractères clé comprise, soit 242 880 de marge sur le budget d'autosauvegarde de 5 000 000 ; la copie de secours d'une autosauvegarde refusée ne tient donc pas en plus d'une autosauvegarde aux bornes (comportement déjà prévu : autosauvegarde suspendue, message).
 - Ajouté le 2026-09-30 — pluriels « (s) » dans quelques textes anglais (`drawing.common.complianceSummary`, `pdf.compliance.summary`, `pdf.toc.templateTiles`, `stepping.perAngleZones*`) : les passer en `.one` / `.other` demande de transmettre un `count` numérique à ces messages (le français garde sa forme actuelle). Réf. : ADR-0007, « Restes connus ».
+
+## F. Tracé libre (CAGE, ADR-0010)
+
+Questions ouvertes par le tracé libre (décisions de l'utilisateur du 2026-10-11, ADR-0010 ; plan et journal : `docs/ledger/LEDGER-free-2d.md`). Préfixe F (« free »), distinct de la numérotation A39 et suivantes. Chaque question est présentée à l'utilisateur, une par une, avant le sous-lot qui en dépend ; tant qu'elle n'est pas tranchée, la proposition est appliquée et signalée « à valider ». « Aujourd'hui » décrit le moteur à volées (tournants à ±90°, emmarchement unique).
+
+### F1. Ligne de foulée sur une largeur variable
+
+Quand un tronçon a une largeur de départ et une largeur d'arrivée différentes (trapèze), où placer la ligne de foulée Γ, et quelle largeur E prendre pour la règle du DTU (milieu si E ≤ 1 200 mm, 0,60 m du côté intérieur au-delà) ?
+
+- Options : (a) à chaque jonction, d_f calculée sur la plus petite des largeurs à la jonction, Γ rectiligne entre deux points de tangence ; (b) d_f proportionnelle à la largeur locale (Γ au milieu, puis à 0,60 m quand E dépasse 1 200 mm), Γ alors brisée là où E franchit 1 200 mm ; (c) d_f constante sur toute la cage, saisie.
+- Proposition : (a), généralisation du raccord linéaire déjà appliqué dans la volée intermédiaire d'un S / Z (`Layout.walklineTransitions`) ; la ligne de mesure réglementaire reste distincte de la ligne de conception (B §2.2).
+- Aujourd'hui : un seul emmarchement par escalier (`FlightsLayoutSpecSchema.width`), d_f unique ; transition linéaire seulement dans un S / Z.
+- Réf. : B §2.1, §2.2 ; CHALLENGE-panel, « Angle geometrie » (cas (2) : emmarchement variable) ; ADR-0010 ; `layout/layout.ts`, `model/derived.ts`.
+
+### F2. Collet et mesure du balancement pour un angle autre que 90°
+
+Pour une jonction d'angle θ ≠ ±90°, comment mesurer le giron au collet et le giron sur Γ dans la zone tournante (arc de Γ de balayage θ, corde du collet à la limite de l'emmarchement), et la règle `G_COLLET_MIN` s'applique-t-elle telle quelle ?
+
+- Options : (a) mêmes définitions qu'à 90° : giron en longueur d'arc sur Γ, collet en corde sur la ligne de mesure décalée du bord de jour (`rules/measurementLine.ts`) ; (b) collet en longueur d'arc sur le bord de jour.
+- Proposition : (a), sans changer de seuil (les seuils restent lus dans `rules.yaml`).
+- Aujourd'hui : zones tournantes à ±90° seulement ; collet mesuré en corde (CHALLENGE.md G3 ; constat du CHALLENGE-panel, M3, point (e)).
+- Réf. : B §2.3, §2.4 ; CHALLENGE.md G3 ; CHALLENGE-panel, « Angle geometrie » et M3, point (e) ; `rules.yaml` G_COLLET_MIN.
+
+### F3. Herse (M2) et rotation (M6) pour un angle autre que 90°
+
+La herse (M2) et la rotation paramétrée (M6) sont décrites pour un quart tournant. Pour θ ≠ ±90°, faut-il les généraliser ou les refuser ?
+
+- Options : (a) généraliser : M6 tourne de 0 à θ au lieu de 0 à ±π/2 (`zone.angle`), M2 construit la herse sur la bissectrice de l'angle θ (B §3.4, étape 1 : « répartir au prorata » en cas d'asymétrie) ; (b) refuser M2 et M6 hors de ±90° avec une erreur claire, M0, M1 et M3 restant disponibles.
+- Proposition : (a) pour M6 ; (b) pour M2 tant que la construction n'est pas vérifiée sur un angle quelconque ; M0 forcé pour une jonction en mode `radiating`. Vérifier aussi le centre de tournant (`balancing/zone.ts`, `turnCenter`).
+- Aujourd'hui : ±π/2 écrit dans `balancing/m6.ts` ; M2 construit pour 90°.
+- Réf. : B §3.4, §3.8, §3.11 ; SPEC §2.3 ; ADR-0010.
+
+### F4. Angle vif côté mur au-delà de 135° et à 180°
+
+Pour une jonction de grand angle (|θ| > 135°, jusqu'à 180°), le coin côté mur W s'éloigne fortement de la ligne de foulée (à 180°, les deux bords côté mur sont parallèles et W n'existe plus) : le raccord côté mur peut-il rester vif ?
+
+Le seuil de 135° n'est pas sourcé : c'est une valeur à trancher (paramètre « à valider » s'il est retenu), pas une limite métier établie.
+
+- Options : (a) angle vif admis jusqu'à 180° exclu, avec un avertissement au-delà du seuil ; (b) au-delà du seuil, raccord côté mur en arc imposé (rayon par défaut = largeur, paramètre « à valider ») ; (c) 180° traité comme deux jonctions de 90° reliées par un tronçon intermédiaire dont la longueur, mesurée côté jour, est égale au jour (convention du CHALLENGE-panel ; le générateur actuel saisit la même volée par sa longueur sur le bord extérieur, 2E + jour) ; (d) au-delà du seuil, erreur claire avec un raccord vif, en proposant (b).
+- Proposition : (c) pour 180° (demi-tournant) ; entre le seuil et 180° exclus, (a) ou (d) à trancher, avec un seuil de 135° proposé comme paramètre « à valider ».
+- Aujourd'hui : demi-tournant = deux tournants de 90° et une volée intermédiaire de longueur 2E + jour, mesurée sur le bord extérieur (jour côté intérieur) (`project/presets.ts`, `FlightsLayoutSpecSchema`).
+- Réf. : CHALLENGE-panel, « Angle geometrie » (demi-tournant : deux jonctions de 90° ou une jonction de 180°) ; B §1.1 (demi-tournant).
+
+### F5. Poteau sur un angle non droit
+
+Un poteau d'angle carré (`InnerCornerSchema`, `kind: "newel"`) reçoit deux limons perpendiculaires. Sur une jonction d'angle θ ≠ ±90°, quelle forme et quelle orientation lui donner ?
+
+- Options : (a) poteau refusé hors de ±90° (erreur claire, raccord vif, arc ou pan coupé proposés) ; (b) poteau carré orienté sur la bissectrice, limons assemblés en biais ; (c) poteau polygonal dont deux faces sont perpendiculaires aux deux tronçons.
+- Proposition : (a) au premier lot ; (b) ou (c) à décider avec un atelier quand une structure à poteau (limon à la française) est généralisée.
+- Aujourd'hui : poteau centré ou décalé sur le coin K d'un tournant à 90° (décision A13 pour les profilés).
+- Réf. : B §1.2 (poteau) ; A4, A13 ; `model/project.ts` (`InnerCornerSchema`), `structures/newel.ts`, `layout/newel.ts`.
+
+### F6. Centre de Γ avec un pan coupé
+
+Avec un raccord de jour en pan coupé (retraits haut et bas), le bord de jour a deux coins convexes : Γ, décalée de d_f, devient deux arcs centrés sur chaque coin et un segment parallèle au pan, ce que le CHALLENGE-panel signale comme « pas forcément voulu ». Quel centre prendre pour la zone tournante ?
+
+- Options : (a) un seul arc de Γ de centre K (intersection des bords de jour prolongés), comme un angle vif, le pan coupé n'étant qu'une forme du limon ; (b) Γ décalée exacte du pan coupé (deux arcs et un segment) ; (c) arc centré au milieu du pan.
+- Proposition : (a), giron mesuré sur l'arc de centre K comme le DTU le prévoit pour un tournant (« arc de cercle dont le centre est le point à l'intersection des faces internes des limons »).
+- Aujourd'hui : pas de pan coupé (jours vif, arc ou poteau).
+- Réf. : B §1.2 (pan coupé, retraits haut et bas), §2.1 ; CHALLENGE-panel, « Angle geometrie » (cas (4)).
+
+### F7. Dégagements à l'arrivée, devant une porte et devant une fenêtre
+
+Le contrôle d'adéquation au site (`site/fit.ts`, ADR-0010) signale un dégagement insuffisant à l'arrivée et un escalier qui empiète sur le débattement d'une porte ou devant une fenêtre. Quelles valeurs prendre, et d'où ?
+
+- Options : (a) une source réglementaire si elle existe (à chercher : palier d'arrivée, débattement de porte, allège) ; (b) paramètres du profil d'atelier « à valider ».
+- Proposition : (b) tant qu'aucune source n'est trouvée : dégagement d'arrivée par défaut = emmarchement (analogie avec `PALIER_LONGUEUR_METIER`, déjà utilisée par l'assistant), débattement de porte = largeur de la porte saisie, fenêtre signalée en conseil seulement ; aucune valeur en dur.
+- Aujourd'hui : seul l'assistant contrôle un dégagement d'arrivée (`limits.arrivalClearance`, défaut E, « à valider », `assistant/types.ts`) ; ni porte ni fenêtre dans le site.
+- Réf. : `rules.yaml` PALIER_LONGUEUR_METIER, PALIER_LONGUEUR_ERP_NON_CONTRARIE ; `assistant/propose.ts` ; ADR-0010.
+
+### F8. Nombre maximal de tronçons
+
+Faut-il borner le nombre de tronçons d'une cage ?
+
+- Options : (a) 7 tronçons, comme StairDesigner (« jusqu'à 7 volées ») ; (b) pas de borne métier, seulement une borne de calcul (performance, ADR-0006) ; (c) borne par le nombre de marches (25 marches sans palier, `VOLEE_MAX_DTU`, déjà contrôlé).
+- Proposition : (b), borne de calcul à 16 tronçons, non métier ; le nombre de marches par volée reste contrôlé par les règles.
+- Aujourd'hui : aucune borne explicite du nombre de volées.
+- Réf. : B §1.1 (multi-volées hétérogènes, StairDesigner) ; A §2.1 (25 marches sans palier) ; `rules.yaml` VOLEE_MAX_DTU.
+
+### F9. Profondeur minimale d'un palier droit
+
+Un palier droit intermédiaire (jonction d'angle 0) a une profondeur `depth`. Quel minimum imposer, et quelle valeur par défaut ?
+
+- Options : (a) défaut et minimum = emmarchement du tronçon (`PALIER_LONGUEUR_METIER`, palier au moins aussi long que l'emmarchement), contrôlé par la règle ; (b) défaut = emmarchement, minimum de saisie plus bas (un giron), la règle signalant l'écart ; (c) plus de 1 m entre volées non contrariées en ERP (`PALIER_LONGUEUR_ERP_NON_CONTRARIE`).
+- Proposition : (b), la règle `PALIER_LONGUEUR_METIER` (et la règle ERP dans son contexte) évaluée sur les paliers droits.
+- Aujourd'hui : paliers d'angle seulement (tournant en mode `landing`).
+- Réf. : `rules.yaml` PALIER_LONGUEUR_METIER, PALIER_LONGUEUR_ERP_NON_CONTRARIE, PALIER_LARGEUR_ERP ; B §1.1 (escalier à paliers).
+
+### F10. Unification de l'hélicoïdal
+
+L'hélicoïdal garde son `kind` et son calcul (ADR-0010, décision 4). Faut-il, plus tard, le ramener à une cage d'un tronçon à axe en arc ?
+
+- Options : (a) unifier, sous condition d'un test de parité (mêmes marches, mêmes cotes, instantanés inchangés) et du traitement d'un balayage au-delà de 360° (recouvrement de l'escalier sur lui-même) ; (b) garder deux moteurs.
+- Proposition : (b) jusqu'à la fin du lot 6 (structures généralisées), puis (a) si le test de parité passe.
+- Aujourd'hui : `layout/helical.ts`, `HelicalLayoutSpecSchema`, une quarantaine de fichiers hors tests qui testent `isHelicalLayout` ou le littéral `"helical"`.
+- Réf. : CHALLENGE-panel, « Angle geometrie » (hélicoïdal = 1 tronçon à axe en arc) ; B §1.1 ; ADR-0010.
