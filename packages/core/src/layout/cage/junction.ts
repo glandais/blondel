@@ -47,7 +47,7 @@ import { arcSeg, lineSeg } from "../../geom2d/segment.js";
 import { intersectSupports } from "../../geom2d/intersect.js";
 import { ANGLE_EPS } from "../../geom2d/tolerance.js";
 import * as V from "../../geom2d/vec.js";
-import { msg } from "@blondel/i18n";
+import { msg, type Message } from "@blondel/i18n";
 import { LayoutError } from "../errors.js";
 import { newelOffset, newelProtrusion, newelSetback } from "../newel.js";
 import { at, junctionSweep, rotateBasis, tanHalf, type SectionFrame } from "./frames.js";
@@ -123,6 +123,51 @@ export function checkWellAngle(junction: CageJunction, index: number): void {
       msg("layout.cage.newelAngle", { junction: index + 1, angle: String(junction.angle) }),
     );
   }
+}
+
+/**
+ * Domaine d'une jonction (doublant celui du schéma `CageLayoutSpecSchema` pour une cage non
+ * validée) : |angle| < 180°, palier droit en mode palier à raccords vifs, poteau à ±90°
+ * seulement (F5).
+ * @throws LayoutError (`layout.cage.*`) sinon.
+ */
+export function checkJunctionDomain(j: CageJunction, index: number): void {
+  if (!(Math.abs(j.angle) < 180)) {
+    throw new LayoutError(
+      msg("layout.cage.angleOutOfRange", { junction: index + 1, angle: String(j.angle) }),
+    );
+  }
+  if (j.angle === 0 && j.mode !== "landing") {
+    throw new LayoutError(msg("layout.cage.straightJunctionLanding", { junction: index + 1 }));
+  }
+  if (j.angle === 0 && (j.well.kind !== "sharp" || j.wall.kind !== "sharp")) {
+    throw new LayoutError(msg("layout.cage.straightJunctionSharp", { junction: index + 1 }));
+  }
+  checkWellAngle(j, index);
+}
+
+/**
+ * Avertissements F4 : jonction tournante de plus de `threshold` degrés (paramètre
+ * `wallSharpWarningAngle` de la cage, défaut `WALL_SHARP_WARNING_ANGLE`, « à valider ») avec un
+ * raccord côté mur vif.
+ */
+export function wideAngleNotes(
+  junctions: readonly JunctionGeom[],
+  threshold: number = WALL_SHARP_WARNING_ANGLE,
+): Message[] {
+  const notes: Message[] = [];
+  junctions.forEach((j, i) => {
+    if (j.kind === "turn" && Math.abs(j.angle) > threshold && j.wall.kind === "sharp") {
+      notes.push(
+        msg("layout.cage.wallSharpWideAngle", {
+          junction: i + 1,
+          angle: String(j.angle),
+          threshold,
+        }),
+      );
+    }
+  });
+  return notes;
 }
 
 /** Retrait du bord du jour sur le tronçon **entrant**, depuis K. */

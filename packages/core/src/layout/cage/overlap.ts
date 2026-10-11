@@ -14,7 +14,8 @@
  *
  * Une pièce de tronçon appartient à ce tronçon ; une pièce de jonction aux deux tronçons qu'elle
  * relie (comme le carré d'angle appartient aux deux volées dans l'étendue « au mur » du moteur à
- * volées). Deux tronçons i et j (j ≥ i + 2) se superposent si une pièce de l'un recouvre une
+ * volées). Deux tronçons i et j (j ≥ i + 2 ; consécutifs aussi, sous-lot 2b, voir
+ * `piecesOverlap`) se superposent si une pièce de l'un recouvre une
  * pièce de l'autre de plus de `GEOM_EPS` (un contact au nu n'est pas un recouvrement) ; les
  * dimensions signalées sont celles de la boîte englobante (axes du repère local) de la réunion
  * des intersections. À ±90°, tronçons et zones sont des rectangles alignés sur les axes et la
@@ -25,9 +26,11 @@
  * Contact « bord à bord » (constat `sectionsTouch`) : deux jonctions tournantes successives de
  * même sens, à jour vif, dont le tronçon intermédiaire n'a aucune partie droite et dont les
  * angles totalisent 180° : les tronçons qui se font face se touchent sur toute leur largeur
- * (demi-tour à jour nul). Au-delà de 180°, ils se recouvrent (constat `sectionsOverlap`).
+ * (demi-tour à jour nul). Au-delà de 180°, ils se recouvrent (constat `sectionsOverlap`). Le
+ * moteur général (`general.ts`) passe les balayages effectifs φ des bords du jour réels.
  */
-import type { Mm, Polygon2, Vec2 } from "../../model/primitives.js";
+import type { ArcSeg, Curve2, Mm, Polygon2, Vec2 } from "../../model/primitives.js";
+import { flattenCurve, reverseCurve } from "../../geom2d/curve.js";
 import { convexOverlap } from "../../geom2d/collide.js";
 import { bbox, ensureCCW, signedArea } from "../../geom2d/polygon.js";
 import { ANGLE_EPS, GEOM_EPS } from "../../geom2d/tolerance.js";
@@ -38,6 +41,8 @@ import {
   collarNormal,
   wallCorner,
   wellCorner,
+  wallTurnSegments,
+  wellTurnSegments,
   type JunctionGeom,
   type TurnJunction,
 } from "./junction.js";
@@ -98,10 +103,22 @@ export function clipConvex(subject: readonly Vec2[], clip: Polygon2): Vec2[] {
 }
 
 /**
+ * Coupe `poly` par un arc convexe (`arc`) : demi-plans de ses cordes, côté du centre (approche
+ * par défaut, les cordes étant dans le disque). Hors du secteur de l'arc, les prolongements des
+ * cordes passent au-delà du bord qu'il raccorde (arc convexe) et ne retirent rien de la bande.
+ */
+export function clipByArc(poly: readonly Vec2[], arc: ArcSeg): Vec2[] {
+  const pts = arcPoints(arc.center, arc.radius, arc.startAngle, arc.sweep);
+  let out = [...poly];
+  for (let i = 0; i + 1 < pts.length && out.length > 0; i++) {
+    out = clipHalfPlane(out, pts[i]!, pts[i + 1]!, arc.center);
+  }
+  return out;
+}
+
+/**
  * Coupe `poly` par le congé côté mur de la jonction `j` (tronçon entrant `incoming`), s'il y en
- * a un : demi-plans des cordes de l'arc, côté du centre (approche par défaut, les cordes étant
- * dans le disque). Hors du secteur de l'arc, les prolongements des cordes passent au-delà du
- * bord côté mur (arc convexe) et ne retirent rien de la bande.
+ * a un (`clipByArc`).
  */
 function clipByFillet(
   poly: readonly Vec2[],
@@ -109,16 +126,43 @@ function clipByFillet(
   incoming: SectionFrame,
   width: Mm,
 ): Vec2[] {
-  if (j.wall.kind !== "arc") return [...poly];
-  const radius = j.wall.radius;
-  const w = wallCorner(incoming, j.side, width);
-  const n = collarNormal(incoming, j.side);
-  const center = V.sub(V.addScaled(w, incoming.u, -radius * j.tanHalf), V.scale(n, radius));
-  const pts = arcPoints(center, radius, V.angleOf(n), j.sweep);
-  let out = [...poly];
-  for (let i = 0; i + 1 < pts.length && out.length > 0; i++) {
-    out = clipHalfPlane(out, pts[i]!, pts[i + 1]!, center);
-  }
+  const [fillet] = wallTurnSegments(
+    j,
+    wallCorner(incoming, j.side, width),
+    incoming.u,
+    collarNormal(incoming, j.side),
+  );
+  return fillet?.kind === "arc" ? clipByArc(poly, fillet) : [...poly];
+}
+
+/**
+ * Éventail de triangles depuis `apex` jusqu'aux cordes de l'arc `arc` (jour en arc d'une
+ * jonction, vu depuis le coin K : approche convexe par excès).
+ */
+export function arcFanPieces(apex: Vec2, arc: ArcSeg): Polygon2[] {
+  const pts = arcPoints(arc.center, arc.radius, arc.startAngle, arc.sweep);
+  const out: Polygon2[] = [];
+  for (let i = 0; i + 1 < pts.length; i++) out.push(ensureCCW([apex, pts[i]!, pts[i + 1]!]));
+  return out;
+}
+
+/**
+ * Pièces convexes d'un secteur de couronne (tronçon à axe en arc, sous-lot 2b) : éventail de
+ * trapèzes isocèles entre les rayons `inner` et `outer` (0 < inner < outer), au pas angulaire
+ * `ARC_STEP` au plus, depuis l'angle `start` sur le balayage signé `sweep`. Les cordes
+ * approchent le secteur à moins d'une flèche près (de l'ordre de 0,1 % du rayon).
+ */
+export function annulusPieces(
+  center: Vec2,
+  inner: Mm,
+  outer: Mm,
+  start: number,
+  sweep: number,
+): Polygon2[] {
+  const a = arcPoints(center, inner, start, sweep);
+  const b = arcPoints(center, outer, start, sweep);
+  const out: Polygon2[] = [];
+  for (let i = 0; i + 1 < a.length; i++) out.push(ensureCCW([a[i]!, a[i + 1]!, b[i + 1]!, b[i]!]));
   return out;
 }
 
@@ -145,10 +189,8 @@ function turnPieces(
   const pieces: Polygon2[] = kite.length >= 3 ? [ensureCCW(kite)] : [];
   const well = j.well;
   if (well.kind === "arc") {
-    const r = well.radius;
-    const center = V.sub(V.sub(k, V.scale(n, r)), V.scale(u, r * j.tanHalf));
-    const pts = arcPoints(center, r, V.angleOf(n), j.sweep);
-    for (let i = 0; i + 1 < pts.length; i++) pieces.push(ensureCCW([k, pts[i]!, pts[i + 1]!]));
+    const [arc] = wellTurnSegments(j, k, u, n, u2);
+    if (arc?.kind === "arc") pieces.push(...arcFanPieces(k, arc));
   } else if (well.kind === "chamfer") {
     pieces.push(
       ensureCCW([k, V.addScaled(k, u, -well.setbackIn), V.addScaled(k, u2, well.setbackOut)]),
@@ -223,34 +265,73 @@ export function cageOverlap(
   junctions: readonly JunctionGeom[],
   width: Mm,
 ): Message[] {
+  const out = sectionsTouch(junctions, (i) => frames[i]!.straight);
+  out.push(...piecesOverlap(cagePieces(frames, junctions, width), frames.length));
+  return out;
+}
+
+/**
+ * Constats de contact bord à bord (`layout.cage.sectionsTouch`) : deux jonctions tournantes
+ * successives de même sens dont le tronçon intermédiaire n'a aucune partie droite
+ * (`straight(i)`, longueur de la partie droite du tronçon `i` ; `undefined` pour un tronçon à
+ * axe en arc, jamais concerné) et dont les angles totalisent 180°.
+ */
+export function sectionsTouch(
+  junctions: readonly JunctionGeom[],
+  straight: (section: number) => Mm | undefined,
+): Message[] {
   const out: Message[] = [];
   for (let i = 0; i + 1 < junctions.length; i++) {
     const a = junctions[i]!;
     const b = junctions[i + 1]!;
     if (a.kind !== "turn" || b.kind !== "turn" || a.side !== b.side) continue;
-    const straight = frames[i + 1]!.straight;
+    const length = straight(i + 1);
+    if (length === undefined) continue;
     const halfTurn = Math.abs(Math.abs(a.sweep + b.sweep) - Math.PI) <= ANGLE_EPS;
-    if (straight <= GEOM_EPS && halfTurn) {
+    if (length <= GEOM_EPS && halfTurn) {
       out.push(
         msg("layout.cage.sectionsTouch", {
           junctionA: i + 1,
           junctionB: i + 2,
           section: i + 2,
-          length: mmText(straight),
+          length: mmText(length),
           before: i + 1,
           after: i + 3,
         }),
       );
     }
   }
-  const pieces = cagePieces(frames, junctions, width);
-  for (let a = 0; a < frames.length; a++) {
-    for (let b = a + 2; b < frames.length; b++) {
+  return out;
+}
+
+/**
+ * Constats de recouvrement en plan (`layout.cage.sectionsOverlap`) entre tronçons (`count`
+ * tronçons), à partir des pièces convexes de l'emprise : une pièce de l'un recouvre une pièce
+ * de l'autre de plus de `GEOM_EPS` ; dimensions de la boîte englobante (axes du repère local)
+ * de la réunion des intersections. Tronçons non consécutifs : toutes leurs pièces ; tronçons
+ * consécutifs a et a + 1 (sous-lot 2b : un axe en arc ou un bord incliné peut revenir sur le
+ * tronçon voisin ou sur la jonction qui les relie) : seulement les pièces propres à a, à a + 1
+ * et à la jonction qui les relie (propriétaires inclus dans {a, a + 1}), sauf les paires de
+ * deux pièces de cette jonction ; les pièces des jonctions a − 1 et a + 1 relèvent des paires
+ * non consécutives, déjà testées (sinon un recouvrement serait signalé deux fois). Une pièce
+ * de jonction et une pièce propre voisine n'ont qu'un bord commun, sans recouvrement d'aire.
+ * À largeur constante et axes droits, deux tronçons consécutifs ne se recouvrent jamais
+ * (|θ| < 180°) : constats du sous-lot 2a inchangés (propriété dans `free.property.test.ts`).
+ */
+export function piecesOverlap(pieces: readonly CagePiece[], count: number): Message[] {
+  const out: Message[] = [];
+  for (let a = 0; a < count; a++) {
+    for (let b = a + 1; b < count; b++) {
+      const consecutive = b === a + 1;
+      const local = (p: CagePiece): boolean => p.owners.every((o) => o === a || o === b);
       const hits: Vec2[] = [];
       for (const p of pieces) {
         if (!p.owners.includes(a)) continue;
+        if (consecutive && !local(p)) continue;
+        const pShared = p.owners.includes(b);
         for (const q of pieces) {
           if (q === p || !q.owners.includes(b)) continue;
+          if (consecutive && (!local(q) || (pShared && q.owners.includes(a)))) continue;
           if (!convexOverlap(p.polygon, q.polygon, GEOM_EPS)) continue;
           hits.push(...clipConvex(p.polygon, q.polygon));
         }
@@ -268,4 +349,16 @@ export function cageOverlap(
     }
   }
   return out;
+}
+
+/** Emprise : C_e à l'endroit puis C_i à l'envers, polygone CCW sans points doublés. */
+export function footprintOf(inner: Curve2, outer: Curve2): Polygon2 {
+  const raw = [...flattenCurve(outer), ...flattenCurve(reverseCurve(inner))];
+  const pts: Vec2[] = [];
+  for (const p of raw) {
+    const last = pts[pts.length - 1];
+    if (last === undefined || !V.equals(last, p)) pts.push(p);
+  }
+  while (pts.length > 1 && V.equals(pts[0]!, pts[pts.length - 1]!)) pts.pop();
+  return ensureCCW(pts);
 }

@@ -19,9 +19,10 @@
  *   tracé vide si le tracé échoue, découpage vide (hauteurs seules si elles sont calculables)
  *   si le découpage échoue, et un contrôle de conception toujours présent (règles non
  *   calculables `non-evaluee`).
- * - **Cage au-delà de ±90°** (garde-fou TEMPORAIRE du sous-lot 2a, levé aux sous-lots 2c / 2d,
- *   ADR-0010) : angle quelconque, palier droit, pan coupé, congé côté mur ou marches
- *   rayonnantes (`cageFeatures`) : tracé rendu, découpage et suite sautés avec l'erreur
+ * - **Cage au-delà de ±90°** (garde-fou TEMPORAIRE des sous-lots 2a et 2b, levé aux sous-lots
+ *   2c / 2d, ADR-0010) : angle quelconque, largeur variable, axe en arc, palier droit, pan
+ *   coupé, congé côté mur ou marches rayonnantes (`cageFeatures`) : tracé rendu, découpage et
+ *   suite sautés avec l'erreur
  *   `pipeline.cageDownstreamNotYetSupported`. Les avertissements du tracé (`Layout.notes`)
  *   vont dans `Model.notes`.
  * - **Structure** (`stair.structure.kind`) : `none` = pièces de base seules ; sinon le plugin
@@ -110,10 +111,12 @@ const STAGE_LABELS = {
 
 /**
  * Fonctions de cage que l'aval (découpage, balancement, garde-corps, règles) ne traite pas
- * encore : garde-fou TEMPORAIRE du sous-lot 2a, levé aux sous-lots 2c / 2d (ADR-0010).
+ * encore : garde-fou TEMPORAIRE des sous-lots 2a et 2b, levé aux sous-lots 2c / 2d (ADR-0010).
  */
 const CAGE_DOWNSTREAM_PENDING: ReadonlySet<CageFeature> = new Set<CageFeature>([
   "anyAngle",
+  "variableWidth",
+  "arcAxis",
   "straightLanding",
   "chamfer",
   "wallArc",

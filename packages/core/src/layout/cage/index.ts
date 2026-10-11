@@ -2,7 +2,8 @@
  * Moteur de tracé d'une cage (tracé libre, ADR-0010) : repères, jonctions, tronçons, conversion
  * depuis et vers un tracé à volées.
  */
-export { computeCageLayout, type CageLayoutOptions } from "./cage.js";
+export { computeCageLayout, needsGeneralEngine, type CageLayoutOptions } from "./cage.js";
+export { computeGeneralCageLayout, generalCagePieces } from "./general.js";
 export type { CageOrigin } from "./section.js";
 export {
   cageToFlights,

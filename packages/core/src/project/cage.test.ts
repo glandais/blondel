@@ -282,20 +282,21 @@ describe("schéma cage", () => {
     ).toContain("stair.layout.junctions[0].well.setbackIn");
   });
 
-  it("buildModel sur une cage pas encore calculée (largeur variable) : une seule erreur claire", () => {
+  it("buildModel sur une cage à largeur variable : tracé calculé, aval sauté avec une seule erreur claire", () => {
     const p = parseProject(cageProject(QUARTER));
     const model = buildModel(p);
-    expect(modelErrorKeys(model.errors)).toEqual(["layout.cage.variableWidthNotYetSupported"]);
+    expect(modelErrorKeys(model.errors)).toEqual(["pipeline.cageDownstreamNotYetSupported"]);
+    expect(model.layout.sections?.[1]).toMatchObject({ widthStart: 800, widthEnd: 1000 });
   });
 
-  it("buildModel sur une cage pas encore calculée, limon à la française et garde-corps : même erreur, seule", () => {
+  it("buildModel sur une cage à largeur variable, limon à la française et garde-corps : même erreur, seule", () => {
     const project = cageProject(QUARTER, { guards: { flight: { enabled: true } } });
     (project.stair as Record<string, unknown>).structure = { kind: "wood-housed" };
     const p = parseProject(project);
     expect(p.stair.structure.kind).toBe("wood-housed");
     expect(p.guards?.flight.enabled).toBe(true);
     const model = buildModel(p);
-    expect(modelErrorKeys(model.errors)).toEqual(["layout.cage.variableWidthNotYetSupported"]);
+    expect(modelErrorKeys(model.errors)).toEqual(["pipeline.cageDownstreamNotYetSupported"]);
   });
 });
 

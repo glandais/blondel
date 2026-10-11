@@ -11,7 +11,8 @@
  * à volées (copie figée `layout/legacyFlights.ts`, réservée aux tests, parité
  * `parity.test.ts`) : les angles 0 et ±90° gardent leurs branches exactes (`frames.ts`) ;
  * `sections` et les champs `angle`, `well`, `wall` des tournants sont en plus. Largeur variable
- * et axe en arc (sous-lot 2b) restent refusés par une `LayoutError` claire.
+ * et axe en arc (sous-lot 2b) : délégués au moteur général (`general.ts`, `needsGeneralEngine`),
+ * qui rend le même tracé que ce fichier sur une cage de largeur constante (à 1e-6 mm près).
  *
  * Avertissements (`Layout.notes`, non bloquants, repris dans `Model.notes`) : jonction de plus
  * de `wallSharpWarningAngle` (paramètre de la cage, défaut `WALL_SHARP_WARNING_ANGLE`, « à
@@ -32,16 +33,9 @@ import type {
   WalklineTransition,
   ZeroLengthInnerCorner,
 } from "../../model/derived.js";
-import type { Curve2, CurveSeg, Mm, Polygon2, Vec2 } from "../../model/primitives.js";
-import { CAGE_MAX_SECTIONS, type CageLayoutSpec, type Project } from "../../model/project.js";
-import {
-  flattenCurve,
-  makeCurve,
-  reverseCurve,
-  rotateCurve,
-  translateCurve,
-} from "../../geom2d/curve.js";
-import { ensureCCW } from "../../geom2d/polygon.js";
+import type { Curve2, CurveSeg, Mm, Vec2 } from "../../model/primitives.js";
+import type { CageLayoutSpec, Project } from "../../model/project.js";
+import { makeCurve, rotateCurve, translateCurve } from "../../geom2d/curve.js";
 import { lineSeg } from "../../geom2d/segment.js";
 import { GEOM_EPS } from "../../geom2d/tolerance.js";
 import * as V from "../../geom2d/vec.js";
@@ -51,9 +45,9 @@ import { walklineOffsetFor } from "../resolve.js";
 import { resolveWalklineSide } from "../walklineSide.js";
 import { at, buildFrames, type SectionFrame } from "./frames.js";
 import {
+  checkJunctionDomain,
   checkNewel,
   checkWallArc,
-  checkWellAngle,
   collarNormal,
   junctionGeom,
   sideOffset,
@@ -63,12 +57,15 @@ import {
   WALL_SHARP_WARNING_ANGLE,
   wellCorner,
   wellTurnSegments,
+  wideAngleNotes,
   type JunctionGeom,
   type Side,
   type TurnJunction,
 } from "./junction.js";
-import { cageOverlap } from "./overlap.js";
+import { cageOverlap, footprintOf } from "./overlap.js";
+import { computeGeneralCageLayout } from "./general.js";
 import {
+  checkSectionCount,
   checkSectionExtents,
   checkSectionLength,
   edgeRange,
@@ -79,52 +76,19 @@ import {
 } from "./section.js";
 
 /**
- * Refuse les fonctions de la cage pas encore calculées (largeur variable, axe en arc : sous-lot
- * 2b) et les jonctions hors domaine, puis rend les jonctions précalculées. La borne de calcul
- * `CAGE_MAX_SECTIONS` (F8) ne vaut que pour une cage saisie : un tracé à volées n'a pas de borne
- * du nombre de volées (`FlightsLayoutSpecSchema`) et doit rester calculé à l'identique ; une
- * cage issue de volées doit seulement avoir au moins un tronçon. Les contrôles d'angle et de
- * palier droit doublent ceux du schéma (`CageLayoutSpecSchema`) pour une cage non validée.
- * @throws LayoutError (`layout.cage.*`) au premier tronçon ou à la première jonction refusés.
+ * Vrai si la cage passe par le moteur général (`general.ts`) : un tronçon à axe en arc, ou une
+ * largeur non uniforme (`widthEnd` ≠ `width`, ou tronçons de largeurs différentes). Les autres
+ * cages (largeur constante, axes droits) gardent le calcul à largeur unique de ce fichier, dont
+ * la parité avec le moteur à volées est exacte.
  */
-function supportedJunctions(
-  spec: CageLayoutSpec,
-  origin: CageOrigin,
-): { width: Mm; junctions: JunctionGeom[] } {
-  const n = spec.sections.length;
-  if (n < 1 || (origin === "cage" && n > CAGE_MAX_SECTIONS)) {
-    throw new LayoutError(msg("layout.cage.sectionCount", { count: n, max: CAGE_MAX_SECTIONS }));
-  }
-  if (spec.junctions.length !== n - 1) {
-    throw new LayoutError(
-      msg("layout.cage.junctionCountMismatch", { sections: n, junctions: spec.junctions.length }),
-    );
-  }
-  const width = spec.sections[0]!.width;
-  spec.sections.forEach((s, i) => {
-    if (s.axis.kind === "arc") {
-      throw new LayoutError(msg("layout.cage.arcAxisNotYetSupported", { section: i + 1 }));
-    }
-    if (s.width !== width || (s.widthEnd !== undefined && s.widthEnd !== width)) {
-      throw new LayoutError(msg("layout.cage.variableWidthNotYetSupported", { section: i + 1 }));
-    }
-  });
-  const junctions = spec.junctions.map((j, i): JunctionGeom => {
-    if (!(Math.abs(j.angle) < 180)) {
-      throw new LayoutError(
-        msg("layout.cage.angleOutOfRange", { junction: i + 1, angle: String(j.angle) }),
-      );
-    }
-    if (j.angle === 0 && j.mode !== "landing") {
-      throw new LayoutError(msg("layout.cage.straightJunctionLanding", { junction: i + 1 }));
-    }
-    if (j.angle === 0 && (j.well.kind !== "sharp" || j.wall.kind !== "sharp")) {
-      throw new LayoutError(msg("layout.cage.straightJunctionSharp", { junction: i + 1 }));
-    }
-    checkWellAngle(j, i);
-    return junctionGeom(j, width);
-  });
-  return { width, junctions };
+export function needsGeneralEngine(spec: CageLayoutSpec): boolean {
+  const width = spec.sections[0]?.width;
+  return spec.sections.some(
+    (s) =>
+      s.axis.kind === "arc" ||
+      s.width !== width ||
+      (s.widthEnd !== undefined && s.widthEnd !== width),
+  );
 }
 
 /** Options de `computeCageLayout`. */
@@ -145,8 +109,8 @@ export interface CageLayoutOptions {
  * `auto` ; `spec` est la cage à calculer (celle du projet, ou celle d'un tracé à volées converti
  * par `flightsToCage`, avec `origin: "flights"`).
  *
- * @throws LayoutError si une fonction de la cage n'est pas encore prise en charge (largeur
- *   variable, axe en arc), si la topologie est incohérente ou si les cotes sont impossibles
+ * @throws LayoutError si une jonction est hors domaine, si la topologie est incohérente ou si
+ *   les cotes sont impossibles (largeur variable, axe en arc : voir `general.ts`)
  *   (pour une cage issue de volées : mêmes contrôles, dans le même ordre et avec les mêmes
  *   messages que le moteur à volées).
  */
@@ -156,7 +120,12 @@ export function computeCageLayout(
   options: CageLayoutOptions = {},
 ): Layout {
   const vocabulary: CageOrigin = options.origin ?? "cage";
-  const { width, junctions } = supportedJunctions(spec, vocabulary);
+  checkSectionCount(spec, vocabulary);
+  spec.junctions.forEach((j, i) => checkJunctionDomain(j, i));
+  // Largeur variable ou axe en arc (sous-lot 2b) : moteur général.
+  if (needsGeneralEngine(spec)) return computeGeneralCageLayout(project, spec);
+  const width = spec.sections[0]!.width;
+  const junctions = spec.junctions.map((j) => junctionGeom(j, width));
   const straight = resolveStraightLengths(project, spec);
   const frames = buildFrames(
     straight,
@@ -198,19 +167,7 @@ export function computeCageLayout(
 
   // Avertissements (décision F4) : grand angle avec un raccord côté mur vif ; seuil paramètre
   // du projet (`wallSharpWarningAngle`, défaut « à valider » `WALL_SHARP_WARNING_ANGLE`).
-  const threshold = spec.wallSharpWarningAngle ?? WALL_SHARP_WARNING_ANGLE;
-  const notes: Message[] = [];
-  turning.forEach(({ j, i }) => {
-    if (Math.abs(j.angle) > threshold && j.wall.kind === "sharp") {
-      notes.push(
-        msg("layout.cage.wallSharpWideAngle", {
-          junction: i + 1,
-          angle: String(j.angle),
-          threshold,
-        }),
-      );
-    }
-  });
+  const notes = wideAngleNotes(junctions, spec.wallSharpWarningAngle ?? WALL_SHARP_WARNING_ANGLE);
 
   /** Ajoute la droite [a, b] si elle n'est pas dégénérée ; renvoie la longueur ajoutée. */
   const pushLine = (segs: CurveSeg[], a: Vec2, b: Vec2): Mm => {
@@ -512,16 +469,4 @@ function degenerateFootprint(
     }
   }
   return out;
-}
-
-/** Emprise : C_e à l'endroit puis C_i à l'envers, polygone CCW sans points doublés. */
-function footprintOf(inner: Curve2, outer: Curve2): Polygon2 {
-  const raw = [...flattenCurve(outer), ...flattenCurve(reverseCurve(inner))];
-  const pts: Vec2[] = [];
-  for (const p of raw) {
-    const last = pts[pts.length - 1];
-    if (last === undefined || !V.equals(last, p)) pts.push(p);
-  }
-  while (pts.length > 1 && V.equals(pts[0]!, pts[pts.length - 1]!)) pts.pop();
-  return ensureCCW(pts);
 }

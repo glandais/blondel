@@ -24,7 +24,7 @@
  * `layout.cage.*` : « tronçon », longueurs de partie droite, comme la saisie.
  */
 import type { Mm } from "../../model/primitives.js";
-import type { CageLayoutSpec, Project } from "../../model/project.js";
+import { CAGE_MAX_SECTIONS, type CageLayoutSpec, type Project } from "../../model/project.js";
 import { GEOM_EPS } from "../../geom2d/tolerance.js";
 import { msg, type Message } from "@blondel/i18n";
 import { LayoutError } from "../errors.js";
@@ -62,17 +62,34 @@ export function mmText(v: Mm): string {
 }
 
 /**
- * Longueurs des parties droites (`axis.length`), `auto` résolu (cage d'un seul tronçon :
- * reculement déduit du giron cible, comme une volée droite). Axes droits seulement (l'appelant a
- * refusé les axes en arc).
+ * Nombre de tronçons et de jonctions. La borne de calcul `CAGE_MAX_SECTIONS` (F8) ne vaut que
+ * pour une cage saisie : un tracé à volées n'a pas de borne du nombre de volées
+ * (`FlightsLayoutSpecSchema`) et doit rester calculé à l'identique ; une cage issue de volées
+ * doit seulement avoir au moins un tronçon.
+ * @throws LayoutError (`layout.cage.sectionCount`, `layout.cage.junctionCountMismatch`) sinon.
+ */
+export function checkSectionCount(spec: CageLayoutSpec, origin: CageOrigin): void {
+  const n = spec.sections.length;
+  if (n < 1 || (origin === "cage" && n > CAGE_MAX_SECTIONS)) {
+    throw new LayoutError(msg("layout.cage.sectionCount", { count: n, max: CAGE_MAX_SECTIONS }));
+  }
+  if (spec.junctions.length !== n - 1) {
+    throw new LayoutError(
+      msg("layout.cage.junctionCountMismatch", { sections: n, junctions: spec.junctions.length }),
+    );
+  }
+}
+
+/**
+ * Longueurs des tronçons sur le bord d'ancrage : partie droite (`axis.length`) d'un axe droit,
+ * `auto` résolu (cage d'un seul tronçon : reculement déduit du giron cible, comme une volée
+ * droite) ; longueur d'arc R·|balayage| d'un axe en arc (moteur général, `general.ts`).
  * @throws LayoutError si `auto` est employé avec plusieurs tronçons.
  */
 export function resolveStraightLengths(project: Project, spec: CageLayoutSpec): Mm[] {
   return spec.sections.map((section, i) => {
     const axis = section.axis;
-    if (axis.kind !== "straight") {
-      throw new LayoutError(msg("layout.cage.arcAxisNotYetSupported", { section: i + 1 }));
-    }
+    if (axis.kind === "arc") return (axis.radius * Math.abs(axis.sweep) * Math.PI) / 180;
     if (axis.length !== "auto") return axis.length;
     if (spec.sections.length !== 1) {
       throw new LayoutError(msg("layout.cage.autoLengthSingleSection", { section: i + 1 }));

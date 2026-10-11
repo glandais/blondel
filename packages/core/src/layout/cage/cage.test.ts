@@ -1,7 +1,8 @@
 /**
  * Moteur de cage, sous-lot 1b (ADR-0010) : repères exacts, conversion volées ↔ cage, tronçons
- * (`Layout.sections`), refus clairs des fonctions du sous-lot 2b (angles quelconques et raccords
- * du sous-lot 2a : `junction.test.ts`, `free.property.test.ts`). La parité avec le moteur à volées
+ * (`Layout.sections`), domaine des cages (angles quelconques et raccords du sous-lot 2a :
+ * `junction.test.ts`, `free.property.test.ts` ; largeur variable et axe en arc du sous-lot 2b :
+ * `general.test.ts`). La parité avec le moteur à volées
  * est dans `parity.test.ts`.
  */
 import fc from "fast-check";
@@ -560,7 +561,7 @@ describe("computeCageLayout : cage native", () => {
     expect(computeCageLayout(project, cage, { origin: "flights" }).sections).toHaveLength(17);
   });
 
-  it("fonctions du sous-lot 2b : refus clairs ; celles du 2a calculées", () => {
+  it("fonctions des sous-lots 2a et 2b calculées ; domaine refusé clairement", () => {
     const key = (spec: CageLayoutSpecInput): MessageKey | undefined => {
       const project = cageProject(spec);
       return errorKey(() => computeCageLayout(project, cageOf(project)));
@@ -595,13 +596,14 @@ describe("computeCageLayout : cage native", () => {
         ...QUARTER,
         sections: [QUARTER.sections[0]!, { ...QUARTER.sections[1]!, width: 900 }],
       }),
-    ).toBe("layout.cage.variableWidthNotYetSupported");
+    ).toBeUndefined();
+    // Sous-lot 2b : largeur variable et axe en arc (moteur général, `general.test.ts`).
     expect(
       key({
         ...QUARTER,
         sections: [QUARTER.sections[0]!, { ...QUARTER.sections[1]!, widthEnd: 1100 }],
       }),
-    ).toBe("layout.cage.variableWidthNotYetSupported");
+    ).toBeUndefined();
     expect(
       key({
         ...QUARTER,
@@ -610,7 +612,16 @@ describe("computeCageLayout : cage native", () => {
           { axis: { kind: "arc", radius: 900, sweep: 90 }, width: 1000 },
         ],
       }),
-    ).toBe("layout.cage.arcAxisNotYetSupported");
+    ).toBeUndefined();
+    expect(
+      key({
+        ...QUARTER,
+        sections: [
+          QUARTER.sections[0]!,
+          { axis: { kind: "arc", radius: 400, sweep: 90 }, width: 1000 },
+        ],
+      }),
+    ).toBe("layout.cage.arcRadiusTooSmall");
     // Longueur `auto` d'un tronçon unique : reculement, comme une volée droite.
     expect(
       key({

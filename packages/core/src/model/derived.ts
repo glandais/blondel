@@ -58,6 +58,13 @@ export interface TurnZone {
   readonly well?: WellJoint;
   /** Raccord côté mur de la jonction (cage, ADR-0010). Absent : angle vif. */
   readonly wall?: WallJoint;
+  /**
+   * Distance d_f de la ligne de foulée au jour **propre à cette jonction** : cage à largeur
+   * variable ou à axe en arc (sous-lot 2b, décision F1 : règle du DTU sur la plus petite des
+   * largeurs à la jonction ; palier droit : depuis le bord de mesure). Ajout rétrocompatible ;
+   * absent : `Layout.walklineOffset`.
+   */
+  readonly walklineOffset?: Mm;
 }
 
 /** Ligne transversale d'un tronçon (départ ou arrivée), du bord gauche au bord droit, repère monde. */
@@ -73,14 +80,25 @@ export interface LayoutSectionLine {
 export interface LayoutSection {
   /** Indice du tronçon (0 = premier). */
   readonly index: number;
-  /** Axe du tronçon (droit seulement au lot 1). */
+  /** Axe du tronçon : droit, ou en arc (sous-lot 2b, voir `arc`). */
   readonly kind: "straight" | "arc";
-  /** Lignes de départ et d'arrivée de la partie droite. */
+  /**
+   * Lignes de départ et d'arrivée de la partie droite (perpendiculaires au bord d'ancrage), ou
+   * lignes radiales des extrémités d'un axe en arc.
+   */
   readonly start: LayoutSectionLine;
   readonly end: LayoutSectionLine;
-  /** Largeurs utiles au départ et à l'arrivée. */
+  /**
+   * Largeurs utiles au départ et à l'arrivée (largeur variable : bords interpolés linéairement
+   * le long du tronçon, sous-lot 2b ; largeur utile E des vérifications = la plus petite).
+   */
   readonly widthStart: Mm;
   readonly widthEnd: Mm;
+  /**
+   * Axe en arc (sous-lot 2b) : centre de courbure (repère monde), rayon mesuré sur le bord
+   * d'ancrage et balayage signé (rad, positif = à gauche en montant). Absent : axe droit.
+   */
+  readonly arc?: { readonly center: Vec2; readonly radius: Mm; readonly sweep: Rad };
   /** Côté du jour de la jonction d'entrée et de la jonction de sortie (absent sans jonction). */
   readonly startWellSide?: "left" | "right";
   readonly endWellSide?: "left" | "right";
@@ -97,7 +115,10 @@ export interface LayoutSection {
  * d_f ≠ E/2 (E > 1 200 mm en DTU, ou distance saisie) : la distance au jour change de côté
  * d'un tournant à l'autre. Raccord linéaire de d_f le long de la partie droite de la volée
  * (défaut Blondel, point en suspens du ledger) : Γ y est un segment oblique, anguleux à ses
- * extrémités.
+ * extrémités. Cage à largeur variable (sous-lot 2b, décision F1) : partie droite d'un tronçon
+ * où Γ est anguleuse au raccord avec l'arc d'une jonction tournante voisine, c'est-à-dire non
+ * parallèle au bord du jour de cette jonction. Une Γ oblique sans angle (trapèze seul,
+ * extrémité d'escalier) ou anguleuse seulement à la limite d'un palier droit n'en est pas une.
  */
 export interface WalklineTransition {
   /** Indice de la volée (0 = première). */
@@ -108,9 +129,14 @@ export interface WalklineTransition {
   /** Distances de Γ au bord `Layout.inner` au début et à la fin de la partie oblique. */
   readonly fromOffset: Mm;
   readonly toOffset: Mm;
-  /** Direction de montée de la volée (unitaire, repère monde) : les nez y restent perpendiculaires. */
+  /**
+   * Direction de montée de la volée (unitaire, repère monde) : les nez y restent perpendiculaires.
+   * Cage à largeur variable : direction du bord du jour de la jonction tournante où Γ est
+   * anguleuse (à l'entrée, sinon à la sortie) ; c'est la direction du tronçon à largeur
+   * constante.
+   */
   readonly direction: Vec2;
-  /** Angle (rad, > 0) entre Γ et la direction de la volée. */
+  /** Angle (rad, > 0) entre Γ et `direction`. */
   readonly angle: Rad;
 }
 
@@ -162,7 +188,9 @@ export interface Layout {
    * Distance ligne de foulée ↔ bord du jour (d_f) ; escalier droit : ↔ bord `walklineSide`.
    * Escalier en S ou en Z : distance au jour du
    * tournant voisin (côté `TurnZone.collarSide`), égale de part et d'autre ; voir
-   * `walklineTransitions` pour la partie où elle change de côté.
+   * `walklineTransitions` pour la partie où elle change de côté. Cage à largeur variable ou à
+   * axe en arc (sous-lot 2b, F1) : d_f de la première jonction tournante (sinon du départ),
+   * chaque jonction portant la sienne (`TurnZone.walklineOffset`).
    */
   readonly walklineOffset: Mm;
   /** Emprise en plan (contour de l'escalier). */
@@ -203,7 +231,9 @@ export interface Layout {
   /**
    * Escalier droit seulement : bord depuis lequel `walklineOffset` est mesurée (décision A16,
    * choix de l'utilisateur ou côté de la main courante principale). `innerSide` n'en dépend
-   * pas. Absent (tournants, hélicoïdal) : d_f est mesurée depuis le jour.
+   * pas. Cage sans jonction tournante (paliers droits, axe en arc) : même bord de mesure,
+   * choisi, sinon côté intérieur de la courbure du premier arc, sinon gauche. Absent
+   * (tournants, hélicoïdal) : d_f est mesurée depuis le jour.
    */
   readonly walklineSide?: "left" | "right";
   /**
