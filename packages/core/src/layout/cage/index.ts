@@ -10,4 +10,14 @@ export {
   flightsToCage,
   type FlightsShape,
 } from "./fromFlights.js";
-export { isExactAngle, rotateBasis, START_BASIS, type Basis, type SectionFrame } from "./frames.js";
+export {
+  isExactAngle,
+  junctionSweep,
+  rotateBasis,
+  START_BASIS,
+  tanHalf,
+  type Basis,
+  type SectionFrame,
+} from "./frames.js";
+export { WALL_SHARP_WARNING_ANGLE } from "./junction.js";
+export { cagePieces, type CagePiece } from "./overlap.js";

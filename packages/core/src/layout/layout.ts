@@ -87,6 +87,7 @@ import type { Mm } from "../model/primitives.js";
 import type { Project } from "../model/project.js";
 import { computeCageLayout } from "./cage/cage.js";
 import { checkFlightsTopology, flightsToCage } from "./cage/fromFlights.js";
+import { checkWellAngle } from "./cage/junction.js";
 import { LayoutError } from "./errors.js";
 import { computeHelicalLayout } from "./helical.js";
 import { resolveLegLengths } from "./resolve.js";
@@ -117,10 +118,13 @@ export function computeLayout(project: Project, options: LayoutOptions = {}): La
   if (spec.kind === "helical") return computeHelicalLayout(project, spec);
   // Tracé libre (CAGE, ADR-0010) : vocabulaire « tronçon », borne `CAGE_MAX_SECTIONS`.
   if (spec.kind === "cage") {
-    // Jour à poteau : le moteur le calcule, mais l'aval (découpage par angle, développé du
-    // jour, garde-corps) lit encore les poteaux dans `stair.layout.turns`, vide pour une cage
-    // (lots 2c / 2d) : refus explicite plutôt qu'un modèle faux sans erreur (ADR-0010 §5).
+    // Jour à poteau à ±90° : le moteur le calcule, mais l'aval (découpage par angle, développé
+    // du jour, garde-corps) lit encore les poteaux dans `stair.layout.turns`, vide pour une
+    // cage (lots 2c / 2d) : refus explicite plutôt qu'un modèle faux sans erreur (ADR-0010 §5).
+    // À un autre angle, refus définitif du poteau (décision F5, `checkWellAngle`). Les deux
+    // refus sont rendus dans l'ordre des jonctions (première jonction refusée).
     spec.junctions.forEach((j, i) => {
+      checkWellAngle(j, i);
       if (j.well.kind === "newel") {
         throw new LayoutError(msg("layout.cage.newelNotYetSupported", { junction: i + 1 }));
       }

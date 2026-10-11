@@ -7,6 +7,7 @@
  * « tracé » (clés de `pipeline/build.ts`).
  */
 import fc from "fast-check";
+import type { Message } from "@blondel/i18n";
 import { describe, expect, it } from "vitest";
 import type { Model } from "../../model/derived.js";
 import {
@@ -165,11 +166,25 @@ describe("cage saisie à ±90° : même tracé que la volée équivalente", () =
           expect("error" in a).toBe("error" in b);
           return;
         }
-        // Emprises dégénérées : messages propres à chaque vocabulaire.
+        // Emprises dégénérées : messages propres à chaque vocabulaire. Depuis le sous-lot 2a,
+        // une cage saisie passe par les pièces convexes (`overlap.ts`) : mêmes constats que la
+        // boîte englobante du moteur à volées, plus ceux d'un jour en arc qui déborde dans un
+        // jour trop petit (raccord compté dans l'emprise).
         const { errors: ea, ...la } = a.layout;
         const { errors: eb, ...lb } = b.layout;
         expect(la).toStrictEqual(lb);
-        expect(ea?.length).toBe(eb?.length);
+        const pairOf = (e: Message): string => {
+          const p = e.params ?? {};
+          const [x, y] = e.key.endsWith("Touch")
+            ? [p.junctionA ?? p.turnA, p.junctionB ?? p.turnB]
+            : [p.sectionA ?? p.flightA, p.sectionB ?? p.flightB];
+          return `${e.key.endsWith("Touch") ? "touch" : "overlap"}:${String(x)}-${String(y)}`;
+        };
+        const cagePairs = new Set((ea ?? []).map(pairOf));
+        for (const e of eb ?? []) expect(cagePairs).toContain(pairOf(e));
+        if (!shape.junctions.some((j) => j.well?.kind === "arc")) {
+          expect(ea?.length).toBe(eb?.length);
+        }
       }),
       { numRuns: 300 },
     );

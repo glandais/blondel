@@ -7,20 +7,24 @@
  * Une jonction d'angle θ (degrés signés, positif = à gauche en montant) fait tourner (u, r) de θ.
  * Les angles 0 et ±90° sont traités **exactement**, par permutation des composantes (aucun
  * cos / sin), pour l'égalité numérique avec l'ancien moteur à volées
- * (`layout/legacyFlights.ts`) ; les autres angles (lot 2) passeront par une rotation
- * trigonométrique et ne sont pas encore pris en charge.
+ * (`layout/legacyFlights.ts`) ; les autres angles (sous-lot 2a) passent par une rotation
+ * trigonométrique (cos / sin). De même, tan(|θ|/2) et le balayage θ en radians valent
+ * exactement 1 et ±π/2 à ±90° (`tanHalf`, `junctionSweep`) : `Math.tan(Math.PI / 4)` vaut
+ * 0,9999999999999999 en float64, ce qui casserait la parité.
  *
  * ## Étendue d'un tronçon (`SectionFrame`)
  *
  * Le repère d'un tronçon couvre sa partie droite **et** les débords jusqu'au coin du mur W des
  * jonctions voisines (`lead`, `tail`) : c'est la longueur « au mur » d'une volée
- * (`LegSchema.length`), carrés d'angle E × E compris. À ±90°, chaque débord vaut E (largeur du
- * tronçon) ; deux tronçons successifs se recouvrent sur le carré d'angle.
+ * (`LegSchema.length`), carrés d'angle E × E compris. Jonction tournante d'angle θ : débord
+ * E·tan(|θ|/2) de part et d'autre (E à ±90°) ; deux tronçons successifs se recouvrent sur la
+ * zone de jonction (« cerf-volant » K, K + E·n, W, K + E·n', `junction.ts`), qui redonne le
+ * carré d'angle E × E à ±90°. Palier droit (θ = 0) : le palier, de profondeur `depth`
+ * (défaut : E, décision F9), est porté par le débord de fin du tronçon entrant (`tail`) ; le
+ * tronçon sortant commence à son bord (`lead` = 0).
  */
 import type { Mm, Vec2 } from "../../model/primitives.js";
 import * as V from "../../geom2d/vec.js";
-import { msg } from "@blondel/i18n";
-import { LayoutError } from "../errors.js";
 
 /** Base d'un tronçon : direction de montée u et normale gauche → droite r (unitaires). */
 export interface Basis {
@@ -43,6 +47,8 @@ export interface SectionFrame {
   readonly lead: Mm;
   /** Débord après la partie droite (jonction de sortie), 0 à l'arrivée. */
   readonly tail: Mm;
+  /** Partie droite saisie (`axis.length`, F11) : `length` − `lead` − `tail`. */
+  readonly straight: Mm;
 }
 
 /** Base de départ du tracé (montée selon +Y, gauche en x = 0). */
@@ -54,18 +60,33 @@ export function isExactAngle(angle: number): boolean {
 }
 
 /**
- * Base du tronçon sortant d'une jonction d'angle `angle` (degrés signés). Exacte pour 0 et ±90°
- * (permutation, mêmes opérations que l'ancien moteur, `layout/legacyFlights.ts`) ; `undefined`
- * pour un autre angle (pas encore pris en charge, lot 2).
+ * Base du tronçon sortant d'une jonction d'angle `angle` (degrés signés, sens trigonométrique
+ * vu de dessus). Exacte pour 0 et ±90° (permutation, mêmes opérations que l'ancien moteur,
+ * `layout/legacyFlights.ts`) ; rotation trigonométrique sinon.
  */
-export function rotateBasis(basis: Basis, angle: number): Basis | undefined {
+export function rotateBasis(basis: Basis, angle: number): Basis {
   const { u, r } = basis;
   if (angle === 0) return basis;
   // À gauche : u' = −r, r' = u.
   if (angle === 90) return { u: V.scale(r, -1), r: u };
   // À droite : u' = r, r' = −u.
   if (angle === -90) return { u: r, r: V.scale(u, -1) };
-  return undefined;
+  const a = (angle * Math.PI) / 180;
+  return { u: V.rotate(u, a), r: V.rotate(r, a) };
+}
+
+/** tan(|θ|/2) d'une jonction (θ en degrés) : exactement 0 à 0° et 1 à ±90°. */
+export function tanHalf(angle: number): number {
+  if (angle === 0) return 0;
+  if (angle === 90 || angle === -90) return 1;
+  return Math.tan((Math.abs(angle) * Math.PI) / 360);
+}
+
+/** Balayage signé (rad) d'une jonction d'angle θ (degrés) : exactement ±π/2 à ±90°. */
+export function junctionSweep(angle: number): number {
+  if (angle === 90) return Math.PI / 2;
+  if (angle === -90) return -Math.PI / 2;
+  return (angle * Math.PI) / 180;
 }
 
 /** Point du tronçon à l'abscisse t (le long de u, depuis `left`) et à la distance o du bord gauche. */
@@ -75,44 +96,66 @@ export function at(frame: SectionFrame, t: Mm, o: Mm): Vec2 {
 
 /** Jonction vue par la propagation des repères. */
 export interface FrameJunction {
-  /** Angle en degrés signés (0 ou ±90° au lot 1). */
+  /** Angle en degrés signés (|θ| < 180°, 0 = palier droit). */
   readonly angle: number;
+  /** Profondeur d'un palier droit (angle 0) ; absente : largeur du tronçon (F9). */
+  readonly depth?: Mm | undefined;
+}
+
+/** Débords d'une jonction : fin du tronçon entrant (`tail`) et début du tronçon sortant (`lead`). */
+export interface Overhang {
+  readonly tail: Mm;
+  readonly lead: Mm;
 }
 
 /**
- * Repères des tronçons, de largeur constante `width`, à partir de leurs étendues « au mur »
- * (`lengths`, débords compris) et des jonctions (±90° seulement : l'appelant a refusé les
- * autres angles, sinon `LayoutError`). L'origine du tronçon sortant est celle de la volée
- * sortante du moteur à volées : à gauche, A' = A + (L − E)·u + E·r ; à droite, A' = A + L·u.
+ * Débords d'une jonction de tronçons de largeur `width` : E·tan(|θ|/2) de part et d'autre d'une
+ * jonction tournante (exactement E à ±90°) ; palier droit : profondeur du palier sur le tronçon
+ * entrant, rien sur le tronçon sortant.
+ */
+export function junctionOverhang(junction: FrameJunction, width: Mm): Overhang {
+  if (junction.angle === 0) return { tail: junction.depth ?? width, lead: 0 };
+  const o = width * tanHalf(junction.angle);
+  return { tail: o, lead: o };
+}
+
+/**
+ * Repères des tronçons, de largeur constante `width`, à partir de leurs parties droites
+ * (`straight`, `axis.length`) et des jonctions. L'étendue d'un tronçon est
+ * `lead` + partie droite + `tail` (`junctionOverhang`). L'origine du tronçon sortant :
+ * - à ±90°, celle de la volée sortante du moteur à volées (mêmes opérations) : à gauche,
+ *   A' = A + (L − E)·u + E·r ; à droite, A' = A + L·u ;
+ * - palier droit : A' = A + L·u (même direction) ;
+ * - angle θ quelconque : la ligne de départ du tronçon sortant passe par le coin du jour K
+ *   (fin de la partie droite du tronçon entrant, côté du jour), A' = K − o_j·r' − lead'·u'
+ *   (o_j : distance du bord du jour au bord gauche, 0 ou E).
  */
 export function buildFrames(
-  lengths: readonly Mm[],
+  straight: readonly Mm[],
   junctions: readonly FrameJunction[],
   width: Mm,
 ): SectionFrame[] {
   const frames: SectionFrame[] = [];
   let left: Vec2 = V.vec(0, 0);
   let basis: Basis = START_BASIS;
-  lengths.forEach((length, i) => {
-    const lead = i > 0 ? width : 0;
-    const tail = i < junctions.length ? width : 0;
-    frames.push({ left, u: basis.u, r: basis.r, length, lead, tail });
+  const overhangs = junctions.map((j) => junctionOverhang(j, width));
+  straight.forEach((s, i) => {
+    const lead = i > 0 ? overhangs[i - 1]!.lead : 0;
+    const tail = i < junctions.length ? overhangs[i]!.tail : 0;
+    const length = lead + s + tail;
+    frames.push({ left, u: basis.u, r: basis.r, length, lead, tail, straight: s });
     const junction = junctions[i];
     if (junction === undefined) return;
     const next = rotateBasis(basis, junction.angle);
-    if (next === undefined || junction.angle === 0) {
-      // Garde-fou : l'appelant n'appelle `buildFrames` qu'avec des jonctions à ±90°.
-      throw new LayoutError(
-        msg("layout.cage.angleNotYetSupported", {
-          junction: i + 1,
-          angle: String(junction.angle),
-        }),
-      );
+    if (junction.angle === 90) {
+      left = V.addScaled(V.addScaled(left, basis.u, length - width), basis.r, width);
+    } else if (junction.angle === -90 || junction.angle === 0) {
+      left = V.addScaled(left, basis.u, length);
+    } else {
+      const jour = junction.angle > 0 ? 0 : width;
+      const k = V.addScaled(V.addScaled(left, basis.u, length - tail), basis.r, jour);
+      left = V.addScaled(V.addScaled(k, next.r, -jour), next.u, -overhangs[i]!.lead);
     }
-    left =
-      junction.angle > 0
-        ? V.addScaled(V.addScaled(left, basis.u, length - width), basis.r, width)
-        : V.addScaled(left, basis.u, length);
     basis = next;
   });
   return frames;

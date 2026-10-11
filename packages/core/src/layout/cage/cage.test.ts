@@ -1,6 +1,7 @@
 /**
  * Moteur de cage, sous-lot 1b (ADR-0010) : repères exacts, conversion volées ↔ cage, tronçons
- * (`Layout.sections`), refus clairs des fonctions du lot 2. La parité avec le moteur à volées
+ * (`Layout.sections`), refus clairs des fonctions du sous-lot 2b (angles quelconques et raccords
+ * du sous-lot 2a : `junction.test.ts`, `free.property.test.ts`). La parité avec le moteur à volées
  * est dans `parity.test.ts`.
  */
 import fc from "fast-check";
@@ -22,7 +23,14 @@ import {
   type Project,
 } from "../../model/project.js";
 import { computeCageLayout } from "./cage.js";
-import { isExactAngle, rotateBasis, START_BASIS, type Basis } from "./frames.js";
+import {
+  isExactAngle,
+  junctionSweep,
+  rotateBasis,
+  START_BASIS,
+  tanHalf,
+  type Basis,
+} from "./frames.js";
 import { cageToFlights, checkFlightsTopology, flightsToCage } from "./fromFlights.js";
 
 /** Projet à cage minimal (repère monde = repère local). */
@@ -77,7 +85,7 @@ const QUARTER: CageLayoutSpecInput = {
 };
 
 describe("repères (frames.ts)", () => {
-  const turn = (b: Basis, angle: number): Basis => rotateBasis(b, angle)!;
+  const turn = (b: Basis, angle: number): Basis => rotateBasis(b, angle);
 
   it("rotations exactes : quatre quarts de tour reviennent au départ, ±90° inverses", () => {
     let b = START_BASIS;
@@ -92,12 +100,24 @@ describe("repères (frames.ts)", () => {
     expect(rotateBasis(START_BASIS, 0)).toBe(START_BASIS);
   });
 
-  it("autres angles : pas encore pris en charge", () => {
-    expect(rotateBasis(START_BASIS, 45)).toBeUndefined();
+  it("autres angles : rotation trigonométrique ; tan(θ/2) et balayage exacts à 0 et ±90°", () => {
+    const b = rotateBasis(START_BASIS, 45);
+    expect(b.u.x).toBeCloseTo(-Math.SQRT1_2, 12);
+    expect(b.u.y).toBeCloseTo(Math.SQRT1_2, 12);
+    expect(b.r.x).toBeCloseTo(Math.SQRT1_2, 12);
+    expect(b.r.y).toBeCloseTo(Math.SQRT1_2, 12);
     expect(isExactAngle(90)).toBe(true);
     expect(isExactAngle(-90)).toBe(true);
     expect(isExactAngle(0)).toBe(true);
     expect(isExactAngle(135)).toBe(false);
+    // Math.tan(π/4) vaut 0,9999999999999999 : la branche exacte garde la parité.
+    expect(tanHalf(90)).toBe(1);
+    expect(tanHalf(-90)).toBe(1);
+    expect(tanHalf(0)).toBe(0);
+    expect(tanHalf(60)).toBeCloseTo(Math.tan(Math.PI / 6), 15);
+    expect(junctionSweep(90)).toBe(Math.PI / 2);
+    expect(junctionSweep(-90)).toBe(-Math.PI / 2);
+    expect(junctionSweep(-30)).toBeCloseTo(-Math.PI / 6, 15);
   });
 });
 
@@ -540,26 +560,21 @@ describe("computeCageLayout : cage native", () => {
     expect(computeCageLayout(project, cage, { origin: "flights" }).sections).toHaveLength(17);
   });
 
-  it("fonctions du lot 2 : refus clairs", () => {
+  it("fonctions du sous-lot 2b : refus clairs ; celles du 2a calculées", () => {
     const key = (spec: CageLayoutSpecInput): MessageKey | undefined => {
       const project = cageProject(spec);
       return errorKey(() => computeCageLayout(project, cageOf(project)));
     };
-    expect(key({ ...QUARTER, junctions: [{ angle: 60, mode: "winders" }] })).toBe(
-      "layout.cage.angleNotYetSupported",
-    );
-    expect(key({ ...QUARTER, junctions: [{ angle: 0, mode: "landing" }] })).toBe(
-      "layout.cage.angleNotYetSupported",
-    );
-    expect(key({ ...QUARTER, junctions: [{ angle: 90, mode: "radiating" }] })).toBe(
-      "layout.cage.radiatingNotYetSupported",
-    );
+    // Sous-lot 2a : angle quelconque, palier droit, marches rayonnantes, mur en arc, pan coupé.
+    expect(key({ ...QUARTER, junctions: [{ angle: 60, mode: "winders" }] })).toBeUndefined();
+    expect(key({ ...QUARTER, junctions: [{ angle: 0, mode: "landing" }] })).toBeUndefined();
+    expect(key({ ...QUARTER, junctions: [{ angle: 90, mode: "radiating" }] })).toBeUndefined();
     expect(
       key({
         ...QUARTER,
         junctions: [{ angle: 90, mode: "winders", wall: { kind: "arc", radius: 50 } }],
       }),
-    ).toBe("layout.cage.wallArcNotYetSupported");
+    ).toBeUndefined();
     expect(
       key({
         ...QUARTER,
@@ -567,7 +582,14 @@ describe("computeCageLayout : cage native", () => {
           { angle: -90, mode: "winders", well: { kind: "chamfer", setbackIn: 9, setbackOut: 9 } },
         ],
       }),
-    ).toBe("layout.cage.chamferNotYetSupported");
+    ).toBeUndefined();
+    // Poteau hors de ±90° : refus définitif (F5).
+    expect(
+      key({
+        ...QUARTER,
+        junctions: [{ angle: 60, mode: "winders", well: { kind: "newel", size: 90 } }],
+      }),
+    ).toBe("layout.cage.newelAngle");
     expect(
       key({
         ...QUARTER,

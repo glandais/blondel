@@ -2,16 +2,24 @@
  * Moteur de tracé d'une cage (ADR-0010) : suite de tronçons reliés par des jonctions, bords C_i,
  * C_e et ligne de foulée Γ en forme fermée, jonction par jonction (CHALLENGE G1).
  *
- * Lot 1 (sous-lot 1b) : tronçons droits de largeur constante et jonctions tournantes à ±90°
- * (marches balancées ou palier d'angle ; jour vif, en arc ou à poteau éventuellement décalé ;
- * mur vif), c'est-à-dire exactement ce qu'exprime un tracé à volées. Depuis le sous-lot 1c,
- * c'est le seul moteur des tracés à volées et des cages (`computeLayout`, `layout/layout.ts`) ;
- * pour la cage issue de `flightsToCage`, le résultat est **identique**, nombre pour nombre, à
- * celui de l'ancien moteur à volées (copie figée `layout/legacyFlights.ts`, réservée aux tests,
- * parité `parity.test.ts`) ; `sections` et les champs `angle`, `well`, `wall` des tournants
- * sont en plus. Les autres fonctions de la cage (angle
- * quelconque, palier droit, largeur variable, axe en arc, pan coupé, mur en arc, marches
- * rayonnantes) sont refusées par une `LayoutError` claire, en attendant le lot 2.
+ * Tronçons droits de largeur constante ; jonctions tournantes d'angle quelconque (|θ| < 180°,
+ * marches balancées, palier d'angle ou marches rayonnantes ; jour vif, en arc, en pan coupé, ou
+ * à poteau à ±90° seulement ; mur vif ou en congé) et paliers droits (θ = 0) : sous-lot 2a,
+ * formes fermées dans `junction.ts`. Depuis le sous-lot 1c, c'est le seul moteur des tracés à
+ * volées et des cages (`computeLayout`, `layout/layout.ts`) ; pour la cage issue de
+ * `flightsToCage`, le résultat est **identique**, nombre pour nombre, à celui de l'ancien moteur
+ * à volées (copie figée `layout/legacyFlights.ts`, réservée aux tests, parité
+ * `parity.test.ts`) : les angles 0 et ±90° gardent leurs branches exactes (`frames.ts`) ;
+ * `sections` et les champs `angle`, `well`, `wall` des tournants sont en plus. Largeur variable
+ * et axe en arc (sous-lot 2b) restent refusés par une `LayoutError` claire.
+ *
+ * Avertissements (`Layout.notes`, non bloquants, repris dans `Model.notes`) : jonction de plus
+ * de `wallSharpWarningAngle` (paramètre de la cage, défaut `WALL_SHARP_WARNING_ANGLE`, « à
+ * valider ») avec un mur vif (décision F4).
+ *
+ * Recouvrement en plan : boîte englobante du moteur à volées pour une cage issue de volées
+ * (`degenerateFootprint`, parité des messages), pièces convexes pour une cage saisie
+ * (`overlap.ts`).
  *
  * Conventions (repère local, côtés du jour, S / Z, raccords, palier d'angle, emprise) : celles
  * de `layout/layout.ts`, dont ce moteur reprend les formes fermées. Mesure de `axis.length` et
@@ -25,12 +33,7 @@ import type {
   ZeroLengthInnerCorner,
 } from "../../model/derived.js";
 import type { Curve2, CurveSeg, Mm, Polygon2, Vec2 } from "../../model/primitives.js";
-import {
-  CAGE_MAX_SECTIONS,
-  type CageJunction,
-  type CageLayoutSpec,
-  type Project,
-} from "../../model/project.js";
+import { CAGE_MAX_SECTIONS, type CageLayoutSpec, type Project } from "../../model/project.js";
 import {
   flattenCurve,
   makeCurve,
@@ -49,42 +52,45 @@ import { resolveWalklineSide } from "../walklineSide.js";
 import { at, buildFrames, type SectionFrame } from "./frames.js";
 import {
   checkNewel,
+  checkWallArc,
+  checkWellAngle,
   collarNormal,
-  junctionSide,
-  supportedWell,
+  junctionGeom,
+  sideOffset,
   walklineArc,
   wallCorner,
+  wallTurnSegments,
+  WALL_SHARP_WARNING_ANGLE,
   wellCorner,
   wellTurnSegments,
+  type JunctionGeom,
   type Side,
-  type SupportedWell,
+  type TurnJunction,
 } from "./junction.js";
+import { cageOverlap } from "./overlap.js";
 import {
+  checkSectionExtents,
   checkSectionLength,
   edgeRange,
   resolveStraightLengths,
-  sectionExtents,
   walkRange,
   type CageOrigin,
   type SectionContext,
 } from "./section.js";
 
-/** Jonction tournante prise en charge au lot 1. */
-interface Turning {
-  readonly side: Side;
-  readonly mode: "winders" | "landing";
-  readonly well: SupportedWell;
-  readonly source: CageJunction;
-}
-
 /**
- * Refuse les fonctions de la cage pas encore calculées (lot 2) et rend les jonctions tournantes.
- * La borne de calcul `CAGE_MAX_SECTIONS` (F8) ne vaut que pour une cage saisie : un tracé à
- * volées n'a pas de borne du nombre de volées (`FlightsLayoutSpecSchema`) et doit rester calculé
- * à l'identique ; une cage issue de volées doit seulement avoir au moins un tronçon.
+ * Refuse les fonctions de la cage pas encore calculées (largeur variable, axe en arc : sous-lot
+ * 2b) et les jonctions hors domaine, puis rend les jonctions précalculées. La borne de calcul
+ * `CAGE_MAX_SECTIONS` (F8) ne vaut que pour une cage saisie : un tracé à volées n'a pas de borne
+ * du nombre de volées (`FlightsLayoutSpecSchema`) et doit rester calculé à l'identique ; une
+ * cage issue de volées doit seulement avoir au moins un tronçon. Les contrôles d'angle et de
+ * palier droit doublent ceux du schéma (`CageLayoutSpecSchema`) pour une cage non validée.
  * @throws LayoutError (`layout.cage.*`) au premier tronçon ou à la première jonction refusés.
  */
-function supportedTurns(spec: CageLayoutSpec, origin: CageOrigin): { width: Mm; turns: Turning[] } {
+function supportedJunctions(
+  spec: CageLayoutSpec,
+  origin: CageOrigin,
+): { width: Mm; junctions: JunctionGeom[] } {
   const n = spec.sections.length;
   if (n < 1 || (origin === "cage" && n > CAGE_MAX_SECTIONS)) {
     throw new LayoutError(msg("layout.cage.sectionCount", { count: n, max: CAGE_MAX_SECTIONS }));
@@ -103,21 +109,22 @@ function supportedTurns(spec: CageLayoutSpec, origin: CageOrigin): { width: Mm; 
       throw new LayoutError(msg("layout.cage.variableWidthNotYetSupported", { section: i + 1 }));
     }
   });
-  const turns = spec.junctions.map((j, i): Turning => {
-    if (j.angle !== 90 && j.angle !== -90) {
+  const junctions = spec.junctions.map((j, i): JunctionGeom => {
+    if (!(Math.abs(j.angle) < 180)) {
       throw new LayoutError(
-        msg("layout.cage.angleNotYetSupported", { junction: i + 1, angle: String(j.angle) }),
+        msg("layout.cage.angleOutOfRange", { junction: i + 1, angle: String(j.angle) }),
       );
     }
-    if (j.mode === "radiating") {
-      throw new LayoutError(msg("layout.cage.radiatingNotYetSupported", { junction: i + 1 }));
+    if (j.angle === 0 && j.mode !== "landing") {
+      throw new LayoutError(msg("layout.cage.straightJunctionLanding", { junction: i + 1 }));
     }
-    if (j.wall.kind !== "sharp") {
-      throw new LayoutError(msg("layout.cage.wallArcNotYetSupported", { junction: i + 1 }));
+    if (j.angle === 0 && (j.well.kind !== "sharp" || j.wall.kind !== "sharp")) {
+      throw new LayoutError(msg("layout.cage.straightJunctionSharp", { junction: i + 1 }));
     }
-    return { side: junctionSide(j), mode: j.mode, well: supportedWell(j, i), source: j };
+    checkWellAngle(j, i);
+    return junctionGeom(j, width);
   });
-  return { width, turns };
+  return { width, junctions };
 }
 
 /** Options de `computeCageLayout`. */
@@ -138,9 +145,10 @@ export interface CageLayoutOptions {
  * `auto` ; `spec` est la cage à calculer (celle du projet, ou celle d'un tracé à volées converti
  * par `flightsToCage`, avec `origin: "flights"`).
  *
- * @throws LayoutError si une fonction de la cage n'est pas encore prise en charge (lot 2), si la
- *   topologie est incohérente ou si les cotes sont impossibles (pour une cage issue de volées :
- *   mêmes contrôles, dans le même ordre et avec les mêmes messages que le moteur à volées).
+ * @throws LayoutError si une fonction de la cage n'est pas encore prise en charge (largeur
+ *   variable, axe en arc), si la topologie est incohérente ou si les cotes sont impossibles
+ *   (pour une cage issue de volées : mêmes contrôles, dans le même ordre et avec les mêmes
+ *   messages que le moteur à volées).
  */
 export function computeCageLayout(
   project: Project,
@@ -148,30 +156,61 @@ export function computeCageLayout(
   options: CageLayoutOptions = {},
 ): Layout {
   const vocabulary: CageOrigin = options.origin ?? "cage";
-  const { width, turns } = supportedTurns(spec, vocabulary);
-  const extents = sectionExtents(resolveStraightLengths(project, spec), width, vocabulary);
-
-  // Côté intérieur : jour du premier tournant (S / Z : le second tournant a son jour en face).
-  const innerSide: Side = turns[0]?.side ?? "left";
-
-  const df = walklineOffsetFor(project.stair.walkline, width);
-  turns.forEach((t, j) => checkNewel(t.well, j, df));
-
+  const { width, junctions } = supportedJunctions(spec, vocabulary);
+  const straight = resolveStraightLengths(project, spec);
   const frames = buildFrames(
-    extents,
-    turns.map((t) => ({ angle: t.source.angle })),
+    straight,
+    junctions.map((j) => ({
+      angle: j.source.angle,
+      depth: j.kind === "straight" ? j.depth : undefined,
+    })),
     width,
   );
+  checkSectionExtents(frames, vocabulary);
+
+  /** Jonctions tournantes, avec leur indice de jonction. */
+  const turning = junctions.flatMap((j, i) => (j.kind === "turn" ? [{ j, i }] : []));
+  const firstTurn = turning[0];
+  // Côté intérieur : jour du premier tournant (S / Z : le second tournant a son jour en face).
+  const innerSide: Side = firstTurn?.j.side ?? "left";
+
+  const df = walklineOffsetFor(project.stair.walkline, width);
+  turning.forEach(({ j, i }) => checkNewel(j.well, i, df));
+
   const contexts: SectionContext[] = frames.map((frame, i) => ({
     frame,
-    prev: i > 0 ? turns[i - 1] : undefined,
-    next: turns[i],
+    prev: i > 0 ? junctions[i - 1] : undefined,
+    next: junctions[i],
   }));
   contexts.forEach((ctx, i) => checkSectionLength(ctx, i, width, vocabulary));
 
+  const cornerOf = (i: number): Vec2 => {
+    const j = junctions[i] as TurnJunction;
+    return wellCorner(frames[i]!, j.side, width);
+  };
+  const normalOf = (i: number): Vec2 =>
+    collarNormal(frames[i]!, (junctions[i] as TurnJunction).side);
   // Emprises dégénérées (dette D3), signalées sans bloquer le calcul (`Layout.errors`).
-  const layoutErrors = degenerateFootprint(frames, turns, width, vocabulary);
-  const cornerOf = (j: number): Vec2 => wellCorner(frames[j]!, turns[j]!.side, width);
+  const layoutErrors =
+    vocabulary === "flights"
+      ? degenerateFootprint(frames, junctions, width)
+      : cageOverlap(frames, junctions, width);
+
+  // Avertissements (décision F4) : grand angle avec un raccord côté mur vif ; seuil paramètre
+  // du projet (`wallSharpWarningAngle`, défaut « à valider » `WALL_SHARP_WARNING_ANGLE`).
+  const threshold = spec.wallSharpWarningAngle ?? WALL_SHARP_WARNING_ANGLE;
+  const notes: Message[] = [];
+  turning.forEach(({ j, i }) => {
+    if (Math.abs(j.angle) > threshold && j.wall.kind === "sharp") {
+      notes.push(
+        msg("layout.cage.wallSharpWideAngle", {
+          junction: i + 1,
+          angle: String(j.angle),
+          threshold,
+        }),
+      );
+    }
+  });
 
   /** Ajoute la droite [a, b] si elle n'est pas dégénérée ; renvoie la longueur ajoutée. */
   const pushLine = (segs: CurveSeg[], a: Vec2, b: Vec2): Mm => {
@@ -184,17 +223,27 @@ export function computeCageLayout(
   // ---------------------------------------------------------------- bords gauche et droit
   const edgeSegments = (side: Side): CurveSeg[] => {
     const segs: CurveSeg[] = [];
-    const offset = side === "left" ? 0 : width;
+    const offset = sideOffset(side, width);
     contexts.forEach((ctx, i) => {
-      const [t0, t1] = edgeRange(ctx, side, width);
+      const [t0, t1] = edgeRange(ctx, side);
       pushLine(segs, at(ctx.frame, t0, offset), at(ctx.frame, t1, offset));
       const next = ctx.next;
-      if (next !== undefined && next.side === side) {
+      if (next?.kind !== "turn") return;
+      if (next.side === side) {
         segs.push(
           ...wellTurnSegments(
-            next.well,
-            next.side,
+            next,
             cornerOf(i),
+            ctx.frame.u,
+            collarNormal(ctx.frame, next.side),
+            frames[i + 1]!.u,
+          ),
+        );
+      } else {
+        segs.push(
+          ...wallTurnSegments(
+            next,
+            wallCorner(ctx.frame, next.side, width),
             ctx.frame.u,
             collarNormal(ctx.frame, next.side),
           ),
@@ -209,21 +258,35 @@ export function computeCageLayout(
   const outerSegs = innerSide === "left" ? rightSegs : leftSegs;
 
   // ---------------------------------------------------------------- ligne de foulée Γ
-  // Distance de Γ au bord gauche au droit de la jonction j : d_f du côté de son jour.
-  const walkOffsetAt = (j: number): Mm => (turns[j]!.side === "left" ? df : width - df);
-  // Escalier droit : d_f mesurée depuis le bord choisi ou automatique (décision A16).
-  const walklineSide = turns.length === 0 ? resolveWalklineSide(project, extents[0]!) : undefined;
+  // Distance de Γ au bord gauche au droit d'une jonction tournante : d_f du côté de son jour.
+  const turnOffset = (j: TurnJunction): Mm => (j.side === "left" ? df : width - df);
+  // Escalier droit d'un seul tronçon : d_f mesurée depuis le bord choisi ou automatique
+  // (décision A16). Escalier droit à paliers droits : bord choisi, sinon gauche (le bord
+  // automatique, qui lit les murs, n'est mémoïsé que pour un tronçon unique : sous-lot 2c).
+  const walklineSide =
+    junctions.length === 0
+      ? resolveWalklineSide(project, frames[0]!.length)
+      : firstTurn === undefined
+        ? (project.stair.walkline.side ?? "left")
+        : undefined;
   const startOffset =
-    turns.length > 0 ? walkOffsetAt(0) : walklineSide === "right" ? width - df : df;
+    firstTurn !== undefined ? turnOffset(firstTurn.j) : walklineSide === "right" ? width - df : df;
+  // Au droit de chaque jonction ; un palier droit garde la distance de la jonction précédente.
+  const junctionOffsets: Mm[] = [];
+  junctions.forEach((j, i) => {
+    junctionOffsets.push(
+      j.kind === "turn" ? turnOffset(j) : i > 0 ? junctionOffsets[i - 1]! : startOffset,
+    );
+  });
   const walkSegs: CurveSeg[] = [];
   const zones: { sStart: Mm; sEnd: Mm }[] = [];
   const transitions: { leg: number; sStart: Mm; sEnd: Mm; o0: Mm; o1: Mm; angle: number }[] = [];
   let s = 0;
   contexts.forEach((ctx, i) => {
     const { frame, prev, next } = ctx;
-    const [t0, t1] = walkRange(ctx, width);
-    const o0 = prev !== undefined ? walkOffsetAt(i - 1) : startOffset;
-    const o1 = next !== undefined ? walkOffsetAt(i) : o0;
+    const [t0, t1] = walkRange(ctx);
+    const o0 = prev !== undefined ? junctionOffsets[i - 1]! : startOffset;
+    const o1 = next !== undefined ? junctionOffsets[i]! : o0;
     if (Math.abs(o1 - o0) > GEOM_EPS && !(t1 - t0 > GEOM_EPS)) {
       throw new LayoutError(
         vocabulary === "flights"
@@ -253,15 +316,28 @@ export function computeCageLayout(
         angle: Math.atan2(Math.abs(o1 - o0), t1 - t0),
       });
     }
-    if (next !== undefined) {
-      const arc = walklineArc(next.well, next.side, frame, width, df);
+    if (next === undefined) return;
+    const sStart = s;
+    if (next.kind === "turn") {
+      const arc = walklineArc(next, frame, width, df);
       walkSegs.push(arc.seg);
-      const sStart = s;
       s += arc.length;
-      zones.push({ sStart, sEnd: s });
+    } else {
+      // Palier droit : Γ droite sur la profondeur du palier.
+      s += pushLine(walkSegs, at(frame, t1, o1), at(frame, frame.length, o1));
     }
+    zones.push({ sStart, sEnd: s });
   });
   const walkLength = s;
+
+  // Congés côté mur : ni Γ ni le bord du jour de la jonction ne coupent l'arc du congé (pan
+  // coupé : Γ à distance ≥ d_f du pan par construction, `junction.ts`).
+  turning.forEach(({ j, i }) =>
+    checkWallArc(j, i, wallCorner(frames[i]!, j.side, width), frames[i]!.u, normalOf(i), [
+      ...walkSegs,
+      ...(j.side === "left" ? leftSegs : rightSegs),
+    ]),
+  );
 
   // ---------------------------------------------------------------- repère monde
   const { origin, rotation } = project.stair.placement;
@@ -272,36 +348,59 @@ export function computeCageLayout(
   // Jour réduit à un point (quart tournant sans partie droite, angle vif) : courbe de longueur
   // nulle au coin ; signalement par le pipeline selon les murs (`zeroLengthJour.ts`).
   let zeroLengthInner: ZeroLengthInnerCorner[] | undefined;
-  if (innerSegs.length === 0) {
+  if (innerSegs.length === 0 && firstTurn !== undefined) {
     zeroLengthInner = [];
-    turns.forEach((t, j) => {
-      if (t.side !== innerSide) return;
+    turning.forEach(({ j, i }) => {
+      if (j.side !== innerSide) return;
       zeroLengthInner!.push({
-        corner: toWorld(cornerOf(j)),
-        incoming: V.rotate(frames[j]!.u, angle),
-        outgoing: V.rotate(frames[j + 1]!.u, angle),
+        corner: toWorld(cornerOf(i)),
+        incoming: V.rotate(frames[i]!.u, angle),
+        outgoing: V.rotate(frames[i + 1]!.u, angle),
       });
     });
-    innerSegs.push(lineSeg(cornerOf(0), cornerOf(0)));
+    innerSegs.push(lineSeg(cornerOf(firstTurn.i), cornerOf(firstTurn.i)));
   }
-  if (outerSegs.length === 0) outerSegs.push(lineSeg(cornerOf(0), cornerOf(0)));
+  if (outerSegs.length === 0 && firstTurn !== undefined) {
+    outerSegs.push(lineSeg(cornerOf(firstTurn.i), cornerOf(firstTurn.i)));
+  }
   const inner = curveToWorld(makeCurve(innerSegs));
   const outer = curveToWorld(makeCurve(outerSegs));
   const walkline = curveToWorld(makeCurve(walkSegs));
 
-  const turnZones: TurnZone[] = turns.map((t, j) => ({
-    index: j,
-    direction: t.side,
-    mode: t.mode,
-    innerCorner: toWorld(cornerOf(j)),
-    outerCorner: toWorld(wallCorner(frames[j]!, t.side, width)),
-    sStart: zones[j]!.sStart,
-    sEnd: zones[j]!.sEnd,
-    collarSide: t.side,
-    angle: ((t.side === "left" ? 1 : -1) * Math.PI) / 2,
-    well: t.source.well,
-    wall: t.source.wall,
-  }));
+  const innerOffset = sideOffset(innerSide, width);
+  const outerOffset = width - innerOffset;
+  const turnZones: TurnZone[] = junctions.map((j, i): TurnZone => {
+    const frame = frames[i]!;
+    if (j.kind === "straight") {
+      // Palier droit : coins au début (côté intérieur) et à la fin (côté extérieur) du palier.
+      return {
+        index: i,
+        direction: innerSide,
+        mode: "landing",
+        innerCorner: toWorld(at(frame, frame.length - frame.tail, innerOffset)),
+        outerCorner: toWorld(at(frame, frame.length, outerOffset)),
+        sStart: zones[i]!.sStart,
+        sEnd: zones[i]!.sEnd,
+        collarSide: innerSide,
+        angle: 0,
+        well: j.source.well,
+        wall: j.source.wall,
+      };
+    }
+    return {
+      index: i,
+      direction: j.side,
+      mode: j.mode,
+      innerCorner: toWorld(cornerOf(i)),
+      outerCorner: toWorld(wallCorner(frame, j.side, width)),
+      sStart: zones[i]!.sStart,
+      sEnd: zones[i]!.sEnd,
+      collarSide: j.side,
+      angle: j.sweep,
+      well: j.source.well,
+      wall: j.source.wall,
+    };
+  });
 
   // Distances à `inner` (et non au bord gauche) des transitions.
   const fromInner = (o: Mm): Mm => (innerSide === "left" ? o : width - o);
@@ -330,8 +429,8 @@ export function computeCageLayout(
       end: line(tEnd),
       widthStart: width,
       widthEnd: width,
-      ...(prev !== undefined ? { startWellSide: prev.side } : {}),
-      ...(next !== undefined ? { endWellSide: next.side } : {}),
+      ...(prev?.kind === "turn" ? { startWellSide: prev.side } : {}),
+      ...(next?.kind === "turn" ? { endWellSide: next.side } : {}),
       sStart: i > 0 ? zones[i - 1]!.sEnd : 0,
       sEnd: next !== undefined ? zones[i]!.sStart : walkLength,
     };
@@ -345,6 +444,7 @@ export function computeCageLayout(
     footprint: footprintOf(inner, outer),
     turns: turnZones,
     ...(layoutErrors.length > 0 ? { errors: layoutErrors } : {}),
+    ...(notes.length > 0 ? { notes } : {}),
     ...(zeroLengthInner !== undefined ? { zeroLengthInner } : {}),
     innerSide,
     ...(walklineSide !== undefined ? { walklineSide } : {}),
@@ -354,45 +454,38 @@ export function computeCageLayout(
 }
 
 /**
- * Emprises dégénérées d'une cage à jonctions de ±90° (tronçons alignés sur les axes du repère
- * local), mêmes constats que le moteur à volées (et mêmes messages pour une cage issue de
- * volées ; pour une cage saisie, messages `layout.cage.*` en tronçons, longueur de partie
- * droite) :
+ * Emprises dégénérées d'une cage **issue de volées** (jonctions de ±90°, tronçons alignés sur
+ * les axes du repère local), mêmes constats et mêmes messages que le moteur à volées (une cage
+ * saisie passe par `overlap.ts`) :
  * - deux jonctions successives de même sens dont le tronçon intermédiaire ne laisse aucun jour
  *   (partie droite nulle, jour à angle vif) : les tronçons qui se font face se touchent ;
  * - deux tronçons non consécutifs qui se superposent en plan (recouvrement d'aire non nulle de
  *   leurs rectangles hors tout).
- * Constats géométriques, sans seuil. (Lot 2 : découpage de l'emprise en pièces convexes.)
+ * Constats géométriques, sans seuil.
  */
 function degenerateFootprint(
   frames: readonly SectionFrame[],
-  turns: readonly Turning[],
+  turns: readonly JunctionGeom[],
   width: Mm,
-  origin: CageOrigin,
 ): Message[] {
   const out: Message[] = [];
+  const sideOf = (i: number): Side | undefined => {
+    const t = turns[i]!;
+    return t.kind === "turn" ? t.side : undefined;
+  };
   for (let i = 0; i + 1 < turns.length; i++) {
-    if (turns[i]!.side !== turns[i + 1]!.side) continue;
+    if (sideOf(i) !== sideOf(i + 1)) continue;
     const jour = frames[i + 1]!.length - 2 * width;
     if (jour <= GEOM_EPS) {
       out.push(
-        origin === "flights"
-          ? msg("layout.flightsTouch", {
-              turnA: i + 1,
-              turnB: i + 2,
-              flight: i + 2,
-              length: String(frames[i + 1]!.length),
-              before: i + 1,
-              after: i + 3,
-            })
-          : msg("layout.cage.sectionsTouch", {
-              junctionA: i + 1,
-              junctionB: i + 2,
-              section: i + 2,
-              length: String(jour),
-              before: i + 1,
-              after: i + 3,
-            }),
+        msg("layout.flightsTouch", {
+          turnA: i + 1,
+          turnB: i + 2,
+          flight: i + 2,
+          length: String(frames[i + 1]!.length),
+          before: i + 1,
+          after: i + 3,
+        }),
       );
     }
   }
@@ -414,11 +507,7 @@ function degenerateFootprint(
       if (ox > GEOM_EPS && oy > GEOM_EPS) {
         const x = String(Math.round(ox));
         const y = String(Math.round(oy));
-        out.push(
-          origin === "flights"
-            ? msg("layout.flightsOverlap", { flightA: i + 1, flightB: j + 1, x, y })
-            : msg("layout.cage.sectionsOverlap", { sectionA: i + 1, sectionB: j + 1, x, y }),
-        );
+        out.push(msg("layout.flightsOverlap", { flightA: i + 1, flightB: j + 1, x, y }));
       }
     }
   }

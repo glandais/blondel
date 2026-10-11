@@ -4,12 +4,16 @@
  *
  * ## Convention de mesure (amendement d'ADR-0010, sous-lot 1b)
  *
- * `axis.length` d'un tronçon droit est la longueur de sa **partie droite**, hors carrés d'angle
- * E × E des jonctions voisines, mesurée sur le bord d'ancrage (`anchor`, milieu par défaut ;
- * indifférent tant que la largeur est constante). Une volée de longueur L (au mur, carrés
- * d'angle compris) avec k tournants voisins (0, 1 ou 2) devient un tronçon de longueur
- * L − k·E, et inversement (`fromFlights.ts`). Le moteur retrouve l'étendue L = débords +
- * partie droite : à ±90°, chaque débord vaut E.
+ * `axis.length` d'un tronçon droit est la longueur de sa **partie droite**, hors zones des
+ * jonctions voisines (carrés d'angle E × E à ±90°, « cerf-volant » à un angle quelconque,
+ * rectangle d'un palier droit), mesurée sur le bord d'ancrage (`anchor`, milieu par défaut).
+ * Les lignes d'arrivée et de départ d'une jonction tournante sont perpendiculaires au tronçon
+ * et passent par le coin du jour K : à largeur constante, la partie droite a la même longueur
+ * sur les deux bords et sur l'axe, d'où l'indifférence de l'ancrage (sous-lot 2a). Une volée
+ * de longueur L (au mur, carrés d'angle compris) avec k tournants voisins (0, 1 ou 2) devient
+ * un tronçon de longueur L − k·E, et inversement (`fromFlights.ts`). Le moteur retrouve
+ * l'étendue = débords + partie droite (`frames.ts`, `junctionOverhang`) : E·tan(|θ|/2) par
+ * jonction tournante (E à ±90°), profondeur du palier pour un palier droit.
  *
  * Convention décidée par l'utilisateur le 2026-10-11 (question F11, `docs/QUESTIONS.md`).
  *
@@ -26,7 +30,15 @@ import { msg, type Message } from "@blondel/i18n";
 import { LayoutError } from "../errors.js";
 import { resolveStraightRun } from "../resolve.js";
 import type { SectionFrame } from "./frames.js";
-import { walkSetback, wellSetback, type Side, type SupportedWell } from "./junction.js";
+import {
+  walkSetback,
+  wallSetback,
+  wellSetbackIn,
+  wellSetbackOut,
+  type JunctionGeom,
+  type Side,
+  type TurnJunction,
+} from "./junction.js";
 
 /**
  * Origine de la cage calculée, qui fixe le vocabulaire des erreurs : `flights` pour une cage
@@ -34,18 +46,19 @@ import { walkSetback, wellSetback, type Side, type SupportedWell } from "./junct
  */
 export type CageOrigin = "cage" | "flights";
 
-/** Jonction voisine d'un tronçon, vue de ce tronçon. */
-export interface NeighbourJunction {
-  /** Côté du jour (sens du tournant). */
-  readonly side: Side;
-  readonly well: SupportedWell;
-}
-
 /** Tronçon et ses jonctions d'entrée (`prev`) et de sortie (`next`). */
 export interface SectionContext {
   readonly frame: SectionFrame;
-  readonly prev?: NeighbourJunction | undefined;
-  readonly next?: NeighbourJunction | undefined;
+  readonly prev?: JunctionGeom | undefined;
+  readonly next?: JunctionGeom | undefined;
+}
+
+const turnOf = (j: JunctionGeom | undefined): TurnJunction | undefined =>
+  j?.kind === "turn" ? j : undefined;
+
+/** Valeur en mm pour un message : entière telle quelle, sinon au dixième. */
+export function mmText(v: Mm): string {
+  return Number.isInteger(v) ? String(v) : v.toFixed(1);
 }
 
 /**
@@ -69,36 +82,33 @@ export function resolveStraightLengths(project: Project, spec: CageLayoutSpec): 
 }
 
 /**
- * Étendues « au mur » des tronçons (débords des jonctions à ±90° compris : E de chaque côté
- * tournant) : longueur d'une volée.
- * @throws LayoutError si une étendue n'est pas finie et positive : `layout.invalidLegLength`
- *   (longueur au mur) pour une cage issue de volées, `layout.cage.invalidSectionLength`
- *   (partie droite saisie) pour une cage saisie.
+ * Contrôle des étendues « au mur » des tronçons (`frames.ts` : `lead` + partie droite +
+ * `tail`), qui doivent être finies et positives.
+ * @throws LayoutError sinon : `layout.invalidLegLength` (longueur au mur) pour une cage issue
+ *   de volées, `layout.cage.invalidSectionLength` (partie droite saisie) pour une cage saisie.
  */
-export function sectionExtents(straight: readonly Mm[], width: Mm, origin: CageOrigin): Mm[] {
-  const last = straight.length - 1;
-  return straight.map((s, i) => {
-    const lead = i > 0 ? width : 0;
-    const tail = i < last ? width : 0;
-    const length = lead + s + tail;
-    if (!(Number.isFinite(length) && length > 0)) {
+export function checkSectionExtents(frames: readonly SectionFrame[], origin: CageOrigin): void {
+  frames.forEach((frame, i) => {
+    if (!(Number.isFinite(frame.length) && frame.length > 0)) {
+      const s = frame.straight;
       throw new LayoutError(
         origin === "flights"
           ? msg("layout.invalidLegLength", { flight: i + 1, length: String(s) })
           : msg("layout.cage.invalidSectionLength", { section: i + 1, length: String(s) }),
       );
     }
-    return length;
   });
 }
 
 /**
- * Faisabilité du tronçon `index` : son étendue doit contenir les carrés d'angle et les retraits
- * des raccords de jour voisins.
+ * Faisabilité du tronçon `index` : sa partie droite doit contenir les retraits des raccords de
+ * jour voisins (de part et d'autre, quel que soit leur côté, comme le moteur à volées), et
+ * chaque bord doit contenir ses retraits (raccords de jour de son côté, congés côté mur).
  * @throws LayoutError sinon : `layout.legTooShort` pour une cage issue de volées (même message
  *   et mêmes paramètres que le moteur à volées : longueur au mur et minimum requis au mur),
  *   `layout.cage.sectionTooShort` pour une cage saisie (partie droite saisie et minimum de la
- *   partie droite : somme des retraits des raccords de jour voisins).
+ *   partie droite : somme des retraits des raccords de jour voisins) ;
+ *   `layout.cage.wallArcDoesNotFit` si un congé côté mur ne tient pas sur son bord.
  */
 export function checkSectionLength(
   ctx: SectionContext,
@@ -106,49 +116,99 @@ export function checkSectionLength(
   width: Mm,
   origin: CageOrigin,
 ): void {
-  const before = ctx.prev !== undefined ? width + wellSetback(ctx.prev.well) : 0;
-  const after = ctx.next !== undefined ? width + wellSetback(ctx.next.well) : 0;
-  const required = before + after;
-  if (ctx.frame.length < required - GEOM_EPS) {
-    const { frame } = ctx;
-    const corners = frame.lead + frame.tail;
-    const message: Message =
-      origin === "flights"
-        ? msg("layout.legTooShort", {
-            flight: index + 1,
-            length: String(frame.length),
-            required: String(required),
-          })
-        : msg("layout.cage.sectionTooShort", {
-            section: index + 1,
-            length: String(frame.length - corners),
-            required: String(required - corners),
-          });
-    throw new LayoutError(message);
+  const { frame } = ctx;
+  const prev = turnOf(ctx.prev);
+  const next = turnOf(ctx.next);
+  if (origin === "flights") {
+    // Tracé à volées : tournants à ±90° seulement (`lead` = `tail` = E), contrôle d'origine.
+    const before = prev !== undefined ? width + wellSetbackIn(prev) : 0;
+    const after = next !== undefined ? width + wellSetbackIn(next) : 0;
+    const required = before + after;
+    if (frame.length < required - GEOM_EPS) {
+      throw new LayoutError(
+        msg("layout.legTooShort", {
+          flight: index + 1,
+          length: String(frame.length),
+          required: String(required),
+        }),
+      );
+    }
+    return;
+  }
+  const required =
+    (prev !== undefined ? wellSetbackOut(prev) : 0) +
+    (next !== undefined ? wellSetbackIn(next) : 0);
+  if (frame.straight < required - GEOM_EPS) {
+    throw new LayoutError(
+      msg("layout.cage.sectionTooShort", {
+        section: index + 1,
+        length: mmText(frame.straight),
+        required: mmText(required),
+      }),
+    );
+  }
+  for (const side of ["left", "right"] as const) {
+    const wallArc =
+      (prev !== undefined && prev.side !== side && prev.wall.kind === "arc") ||
+      (next !== undefined && next.side !== side && next.wall.kind === "arc");
+    if (!wallArc) continue;
+    const [t0, t1] = edgeRange(ctx, side);
+    if (t1 < t0 - GEOM_EPS) {
+      const junction =
+        next !== undefined && next.side !== side && next.wall.kind === "arc" ? index + 1 : index;
+      throw new LayoutError(
+        msg("layout.cage.wallArcDoesNotFit", {
+          junction,
+          section: index + 1,
+          required: mmText(t0 + (frame.length - t1)),
+          available: mmText(frame.length),
+        }),
+      );
+    }
   }
 }
 
 /**
  * Abscisses (le long de u, depuis l'origine du tronçon) de la partie droite du bord `side` : ce
- * bord porte le raccord de jour des jonctions de son côté (retrait E + retrait du raccord) et
- * l'angle vif du mur des autres (jusqu'au coin W).
+ * bord porte le raccord de jour des jonctions tournantes de son côté (débord + retrait du
+ * raccord) et le raccord côté mur des autres (jusqu'au coin W, ou au point de tangence du
+ * congé) ; il traverse un palier droit.
  */
-export function edgeRange(ctx: SectionContext, side: Side, width: Mm): readonly [Mm, Mm] {
-  const { frame, prev, next } = ctx;
-  const t0 = prev === undefined ? 0 : prev.side === side ? width + wellSetback(prev.well) : 0;
+export function edgeRange(ctx: SectionContext, side: Side): readonly [Mm, Mm] {
+  const { frame } = ctx;
+  const prev = turnOf(ctx.prev);
+  const next = turnOf(ctx.next);
+  const t0 =
+    prev === undefined
+      ? 0
+      : prev.side === side
+        ? frame.lead + wellSetbackOut(prev)
+        : prev.wall.kind === "arc"
+          ? wallSetback(prev)
+          : 0;
   const t1 =
     next === undefined
       ? frame.length
       : next.side === side
-        ? frame.length - width - wellSetback(next.well)
-        : frame.length;
+        ? frame.length - frame.tail - wellSetbackIn(next)
+        : next.wall.kind === "arc"
+          ? frame.length - wallSetback(next)
+          : frame.length;
   return [t0, t1];
 }
 
-/** Abscisses de la partie droite de Γ (retrait E + rayon du raccord de jour en arc). */
-export function walkRange(ctx: SectionContext, width: Mm): readonly [Mm, Mm] {
+/**
+ * Abscisses de la partie droite de Γ (débord + tangence d'un raccord de jour en arc ; un palier
+ * droit voisin arrête Γ droite à la fin de la partie droite, le palier étant sa zone).
+ */
+export function walkRange(ctx: SectionContext): readonly [Mm, Mm] {
   const { frame, prev, next } = ctx;
-  const t0 = prev !== undefined ? width + walkSetback(prev.well) : 0;
-  const t1 = next !== undefined ? frame.length - width - walkSetback(next.well) : frame.length;
+  const t0 = prev?.kind === "turn" ? frame.lead + walkSetback(prev) : 0;
+  const t1 =
+    next === undefined
+      ? frame.length
+      : next.kind === "turn"
+        ? frame.length - frame.tail - walkSetback(next)
+        : frame.length - frame.tail;
   return [t0, t1];
 }

@@ -909,6 +909,7 @@ Le seuil de 135° n'est pas sourcé : c'est une valeur à trancher (paramètre �
 - Aujourd'hui : demi-tournant = deux tournants de 90° et une volée intermédiaire de longueur 2E + jour, mesurée sur le bord extérieur (jour côté intérieur) (`project/presets.ts`, `FlightsLayoutSpecSchema`).
 - Réf. : CHALLENGE-panel, « Angle geometrie » (demi-tournant : deux jonctions de 90° ou une jonction de 180°) ; B §1.1 (demi-tournant).
 - Décidé le 2026-10-11 : |angle| < 180° strictement pour une jonction (borne du schéma, `layout.cage.angleOutOfRange`) ; un demi-tour se modélise par deux jonctions de 90° et un tronçon intermédiaire ; au-delà d'un seuil de 135° avec un raccord côté mur vif, avertissement (pas erreur), seuil = paramètre « à valider », produit par le moteur au lot 2.
+- Appliqué au sous-lot 2a : avertissement `layout.cage.wallSharpWideAngle` (remarque non bloquante, `Layout.notes` puis `Model.notes`) ; seuil = champ facultatif `wallSharpWarningAngle` de la cage (degrés, ]0 ; 180]), défaut 135° (`WALL_SHARP_WARNING_ANGLE`, `layout/cage/junction.ts`), valeur non sourcée « à valider ».
 
 ### F5. Poteau sur un angle non droit
 
@@ -918,6 +919,7 @@ Un poteau d'angle carré (`InnerCornerSchema`, `kind: "newel"`) reçoit deux lim
 - Proposition : (a) au premier lot ; (b) ou (c) à décider avec un atelier quand une structure à poteau (limon à la française) est généralisée.
 - Aujourd'hui : poteau centré ou décalé sur le coin K d'un tournant à 90° (décision A13 pour les profilés).
 - Réf. : B §1.2 (poteau) ; A4, A13 ; `model/project.ts` (`InnerCornerSchema`), `structures/newel.ts`, `layout/newel.ts`.
+- Décidé le 2026-10-11 : (a), poteau (well newel) refusé sur une jonction d'angle autre que ±90° : erreur claire `layout.cage.newelAngle` proposant un jour vif, en arc ou en pan coupé ; forme définitive ((b) ou (c)) à arrêter avec un atelier lors de la généralisation du limon à la française. Appliqué au sous-lot 2a (`layout/cage/junction.ts`, `checkWellAngle`).
 
 ### F6. Centre de Γ avec un pan coupé
 
@@ -927,6 +929,7 @@ Avec un raccord de jour en pan coupé (retraits haut et bas), le bord de jour a 
 - Proposition : (a), giron mesuré sur l'arc de centre K comme le DTU le prévoit pour un tournant (« arc de cercle dont le centre est le point à l'intersection des faces internes des limons »).
 - Aujourd'hui : pas de pan coupé (jours vif, arc ou poteau).
 - Réf. : B §1.2 (pan coupé, retraits haut et bas), §2.1 ; CHALLENGE-panel, « Angle geometrie » (cas (4)).
+- Décidé le 2026-10-11 : (a), Γ est un seul arc centré sur K (intersection des faces de jour prolongées), de rayon d_f, comme un angle vif ; le pan coupé n'est qu'une forme du bord du jour C_i ; Γ doit rester à distance strictement positive du pan, sinon erreur. Appliqué au sous-lot 2a (`layout/cage/junction.ts`) : cette condition est vraie **par construction**, sans contrôle ni clé d'erreur (relecture du 2a) : vus de K, le pan est dans le secteur du jour (de −u à u') et Γ dans le secteur opposé (de n à n'), à au moins 90° l'un de l'autre ; la distance de Γ au pan vaut donc au moins d_f > 0 quels que soient l'angle et les retraits (propriété fast-check dans `junction.test.ts`).
 
 ### F7. Dégagements à l'arrivée, devant une porte et devant une fenêtre
 

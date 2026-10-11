@@ -478,6 +478,13 @@ const CageLayoutInputSchema = z
     sections: z.array(CageSectionSchema),
     junctions: z.array(CageJunctionSchema),
     /**
+     * Seuil (degrés) de l'avertissement « grand angle avec un raccord côté mur vif » (décision
+     * F4) : une jonction dont |angle| le dépasse avec `wall` vif reçoit une remarque non
+     * bloquante. Absent : 135° (`WALL_SHARP_WARNING_ANGLE`, `layout/cage/junction.ts`), valeur
+     * non sourcée **à valider**. Ajout rétrocompatible.
+     */
+    wallSharpWarningAngle: z.number().positive().max(180).optional(),
+    /**
      * Champs dérivés (voir `CageLayoutSpecSchema`) : acceptés en entrée pour qu'un projet lu
      * puisse être relu tel quel, **ignorés** et recalculés.
      */

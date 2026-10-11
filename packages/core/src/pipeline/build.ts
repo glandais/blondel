@@ -19,6 +19,11 @@
  *   tracé vide si le tracé échoue, découpage vide (hauteurs seules si elles sont calculables)
  *   si le découpage échoue, et un contrôle de conception toujours présent (règles non
  *   calculables `non-evaluee`).
+ * - **Cage au-delà de ±90°** (garde-fou TEMPORAIRE du sous-lot 2a, levé aux sous-lots 2c / 2d,
+ *   ADR-0010) : angle quelconque, palier droit, pan coupé, congé côté mur ou marches
+ *   rayonnantes (`cageFeatures`) : tracé rendu, découpage et suite sautés avec l'erreur
+ *   `pipeline.cageDownstreamNotYetSupported`. Les avertissements du tracé (`Layout.notes`)
+ *   vont dans `Model.notes`.
  * - **Structure** (`stair.structure.kind`) : `none` = pièces de base seules ; sinon le plugin
  *   enregistré (`structures/registry.ts`) est appelé avec ses paramètres par défaut
  *   (`defaults(ctx)`) surchargés par `structure.params` puis validés par son `paramsSchema`.
@@ -58,7 +63,8 @@ import type {
   Stepping,
 } from "../model/derived.js";
 import type { StructureContext, StructureKind } from "../model/plugins.js";
-import { isHelicalLayout, type Project } from "../model/project.js";
+import { isCageLayout, isHelicalLayout, type Project } from "../model/project.js";
+import { cageFeatures, type CageFeature } from "../model/cageFeatures.js";
 import type { PartAssembly } from "../model/plugins.js";
 import { resolveLegLengths, resolveTargetGoing } from "../layout/resolve.js";
 import { buildBasicParts } from "../parts/basic.js";
@@ -101,6 +107,18 @@ const STAGE_LABELS = {
   compliance: msg("pipeline.stage.compliance"),
   fasteners: msg("pipeline.stage.fasteners"),
 } as const;
+
+/**
+ * Fonctions de cage que l'aval (découpage, balancement, garde-corps, règles) ne traite pas
+ * encore : garde-fou TEMPORAIRE du sous-lot 2a, levé aux sous-lots 2c / 2d (ADR-0010).
+ */
+const CAGE_DOWNSTREAM_PENDING: ReadonlySet<CageFeature> = new Set<CageFeature>([
+  "anyAngle",
+  "straightLanding",
+  "chamfer",
+  "wallArc",
+  "radiating",
+]);
 
 /**
  * Exécute une étape. Erreur métier de l'étape (`LayoutError`, `SteppingError`,
@@ -581,31 +599,43 @@ export function buildModel(project: Project, options: BuildModelOptions = {}): M
   // les murs du site hors de l'étape « tracé » (calcul léger, non mémoïsé).
   const zeroJour = layout ? zeroLengthJourError(project, layout) : undefined;
   if (zeroJour !== undefined) errors.push(zeroJour);
+  // Avertissements du tracé (cage : grand angle avec un mur vif, décision F4).
+  if (layout?.notes) notes.push(...layout.notes);
+  // Garde-fou TEMPORAIRE (sous-lot 2a, levé aux sous-lots 2c / 2d, ADR-0010) : le découpage, le
+  // balancement, les garde-corps et les règles supposent encore des tournants à ±90° sans palier
+  // droit. Pour une cage qui va au-delà, le tracé est rendu (visible en plan) et la suite est
+  // sautée avec une erreur claire : modèle partiel, comme un découpage en échec.
+  const downstreamBlocked =
+    layout !== undefined &&
+    isCageLayout(stair.layout) &&
+    cageFeatures(stair.layout).some((f) => CAGE_DOWNSTREAM_PENDING.has(f));
+  if (downstreamBlocked) errors.push(msg("pipeline.cageDownstreamNotYetSupported"));
 
   // 2. Découpage.
-  const steppingStage: Stage<Stepping> | undefined = layout
-    ? run(
-        caches.stepping,
-        // Tout `stair` sauf `placement` (porté par `layout`) et les paramètres de structure :
-        // le découpage ne lit que `structure.kind` (variante M3 des débillardés). Changer un
-        // paramètre de structure ne recalcule ni le découpage ni les garde-corps.
-        [
-          layout,
-          stair.layout,
-          stair.walkline,
-          stair.stepping,
-          stair.balancing,
-          // Des marches, le découpage ne lit que le débord (bord arrière des marches) et
-          // l'épaisseur (hélicoïdal) : contremarches et essence ne le recalculent pas (D5).
-          stair.treads.nosing,
-          stair.treads.thickness,
-          stair.nosingOverrides,
-          stair.structure.kind,
-          site.floorToFloor,
-        ],
-        () => attempt(STAGE_LABELS.stepping, () => computeStepping(project, layout)),
-      )
-    : undefined;
+  const steppingStage: Stage<Stepping> | undefined =
+    layout && !downstreamBlocked
+      ? run(
+          caches.stepping,
+          // Tout `stair` sauf `placement` (porté par `layout`) et les paramètres de structure :
+          // le découpage ne lit que `structure.kind` (variante M3 des débillardés). Changer un
+          // paramètre de structure ne recalcule ni le découpage ni les garde-corps.
+          [
+            layout,
+            stair.layout,
+            stair.walkline,
+            stair.stepping,
+            stair.balancing,
+            // Des marches, le découpage ne lit que le débord (bord arrière des marches) et
+            // l'épaisseur (hélicoïdal) : contremarches et essence ne le recalculent pas (D5).
+            stair.treads.nosing,
+            stair.treads.thickness,
+            stair.nosingOverrides,
+            stair.structure.kind,
+            site.floorToFloor,
+          ],
+          () => attempt(STAGE_LABELS.stepping, () => computeStepping(project, layout)),
+        )
+      : undefined;
   if (steppingStage?.error !== undefined) errors.push(steppingStage.error);
   const stepping = steppingStage?.value;
   const complete = layout !== undefined && stepping !== undefined;

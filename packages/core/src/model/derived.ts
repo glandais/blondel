@@ -24,10 +24,16 @@ import type { WallJoint, WellJoint } from "./project.js";
 // ------------------------------------------------------------------ Étape 2 : tracé
 
 export interface TurnZone {
-  /** Indice du tournant dans `LayoutSpec.turns`. */
+  /** Indice du tournant dans `LayoutSpec.turns` (cage : indice de la jonction). */
   readonly index: number;
+  /** Sens du tournant ; palier droit d'une cage (angle 0) : `Layout.innerSide`. */
   readonly direction: "left" | "right";
-  readonly mode: "winders" | "landing";
+  /**
+   * Marches balancées, palier (d'angle, ou palier droit d'une cage : `angle` = 0, zone =
+   * profondeur du palier sur Γ), ou marches rayonnantes d'une cage (zone marquée par le tracé,
+   * découpage M0 au sous-lot 2c).
+   */
+  readonly mode: "winders" | "landing" | "radiating";
   /** Coin intérieur (sommet du jour) et coin extérieur, repère monde. */
   readonly innerCorner: Vec2;
   readonly outerCorner: Vec2;
@@ -43,8 +49,9 @@ export interface TurnZone {
   readonly collarSide?: "left" | "right";
   /**
    * Angle signé de la jonction (rad, positif = à gauche en montant : +π/2 pour un tournant à
-   * gauche, −π/2 à droite). Ajout rétrocompatible (facultatif), rendu par le moteur de cage
-   * (ADR-0010) ; absent : ±π/2 selon `direction`.
+   * gauche, −π/2 à droite, θ quelconque d'une cage, 0 pour un palier droit). Ajout
+   * rétrocompatible (facultatif), rendu par le moteur de cage (ADR-0010) ; absent : ±π/2 selon
+   * `direction`.
    */
   readonly angle?: Rad;
   /** Raccord côté jour de la jonction (cage, ADR-0010). Absent : non renseigné. */
@@ -173,6 +180,11 @@ export interface Layout {
    * décrit par `zeroLengthInner` et signalé par le pipeline selon les murs du site.
    */
   readonly errors?: readonly Message[];
+  /**
+   * Avertissements du tracé, non bloquants (cage : jonction de grand angle avec un raccord côté
+   * mur vif, décision F4), repris dans `Model.notes`. Ajout rétrocompatible ; absent : aucun.
+   */
+  readonly notes?: readonly Message[];
   /**
    * Bord intérieur (jour) de longueur nulle (tournants à angle vif sans partie droite de part et
    * d'autre, QUESTIONS D3) : coins intérieurs K des tournants du côté du jour, avec les
