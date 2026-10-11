@@ -324,6 +324,33 @@ describe("de la proposition au projet", () => {
     expect(bare.guards).toBeUndefined();
   });
 
+  it("le projet retenu garde le contour de pièce et les obstacles du projet courant", () => {
+    const c = result.candidates[0]!;
+    const room = {
+      points: [
+        { x: -1000, y: -1000 },
+        { x: 6000, y: -1000 },
+        { x: 6000, y: 5000 },
+        { x: -1000, y: 5000 },
+      ],
+    };
+    const obstacles = [
+      {
+        kind: "circularPost" as const,
+        id: "obstacle-1",
+        center: { x: 5000, y: 4000 },
+        radius: 100,
+      },
+    ];
+    const withSite: Project = { ...straight, site: { ...straight.site, room, obstacles } };
+    const p = chosenProject(c, withSite, { guards: false });
+    expect(p.site.room).toEqual(room);
+    expect(p.site.obstacles).toEqual(obstacles);
+    const none = chosenProject(c, straight, { guards: false });
+    expect("room" in none.site).toBe(false);
+    expect("obstacles" in none.site).toBe(false);
+  });
+
   it("croquis : emprise, nez et trémie, boîte englobante non vide, clonable", () => {
     const c = result.candidates[0]!;
     const sketch = candidateSketch(buildModel(c.project), c.project);

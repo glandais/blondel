@@ -7,5 +7,12 @@ export * from "./schema.js";
 export * from "./underlay.js";
 export * from "./snap.js";
 export * from "./opening.js";
+export {
+  polygonDefect,
+  storedPolygonDefect,
+  type PolygonDefect,
+  type PolygonShapeDefect,
+  type StoredPolygonDefect,
+} from "./simplePolygon.js";
 export * from "./survey.js";
 export * from "./edit.js";

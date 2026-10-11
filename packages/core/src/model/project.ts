@@ -7,6 +7,7 @@ import { msg, translatorFor, type Message } from "@blondel/i18n";
 import { z } from "zod";
 import { GuardsSpecSchema } from "../guards/spec.js";
 import { UnderlaySchema } from "../site/schema.js";
+import { storedPolygonDefect, type StoredPolygonDefect } from "../site/simplePolygon.js";
 import { WOOD_MATERIALS, WorkshopProfileSchema } from "../workshop/profile.js";
 
 export const PROJECT_SCHEMA_VERSION = 2 as const;
@@ -57,6 +58,164 @@ export const WallSchema = z.object({
 });
 export type Wall = z.infer<typeof WallSchema>;
 
+/** Issue de validation du site : `Message` dans `params` (comme la cage, ADR-0007). */
+function siteIssue(ctx: z.RefinementCtx, path: PropertyKey[], message: Message): void {
+  ctx.addIssue({
+    code: "custom",
+    path,
+    message: translatorFor("fr").t(message),
+    params: { message },
+  });
+}
+
+function roomDefectMessage(d: StoredPolygonDefect): Message {
+  switch (d.kind) {
+    case "tooFewPoints":
+      return msg("site.room.tooFewPoints", { count: d.count });
+    case "duplicateVertex":
+      return msg("site.room.duplicateVertex", { index: d.index, other: d.other });
+    case "zeroArea":
+      return msg("site.room.zeroArea");
+    case "selfIntersecting":
+      return msg("site.room.selfIntersecting");
+  }
+}
+
+function zoneDefectMessage(d: StoredPolygonDefect): Message {
+  switch (d.kind) {
+    case "tooFewPoints":
+      return msg("site.obstacle.zone.tooFewPoints", { count: d.count });
+    case "duplicateVertex":
+      return msg("site.obstacle.zone.duplicateVertex", { index: d.index, other: d.other });
+    case "zeroArea":
+      return msg("site.obstacle.zone.zeroArea");
+    case "selfIntersecting":
+      return msg("site.obstacle.zone.selfIntersecting");
+  }
+}
+
+/**
+ * Contour fini intérieur de la pièce (ADR-0010, sous-lot 0c), dans le repère du site (mm) :
+ * polygone simple d'au moins 3 sommets, sans sommet répété (premier sommet compris), aire non
+ * nulle (`storedPolygonDefect`, mêmes contrôles d'aire et de recoupement que la trémie).
+ * Sommets enregistrés tels quels, dans l'ordre saisi. Un défaut refuse le projet entier.
+ */
+export const RoomSchema = z.object({ points: z.array(Vec2Schema) }).superRefine((v, ctx) => {
+  const defect = storedPolygonDefect(v.points);
+  if (defect !== null) siteIssue(ctx, ["points"], roomDefectMessage(defect));
+});
+export type Room = z.infer<typeof RoomSchema>;
+
+/**
+ * Obstacles du site (ADR-0010, sous-lot 0c) : union discriminée par `kind`, chacun avec un
+ * identifiant unique dans le site. Coordonnées dans le repère du site (mm), dimensions en mm
+ * entiers. Aucun dégagement ici : ils relèvent de l'adéquation au site (F7, lot 3).
+ */
+export const ObstacleSchema = z.discriminatedUnion("kind", [
+  /** Poteau rectangulaire `sizeX` × `sizeY` centré en `center`, tourné de `rotation` degrés. */
+  z.object({
+    kind: z.literal("post"),
+    id: z.string(),
+    center: Vec2Schema,
+    sizeX: mmPos,
+    sizeY: mmPos,
+    /** Rotation en degrés, sens trigonométrique (0 : côtés parallèles aux axes du site). */
+    rotation: z.number().default(0),
+  }),
+  /** Poteau rond. */
+  z.object({
+    kind: z.literal("circularPost"),
+    id: z.string(),
+    center: Vec2Schema,
+    radius: mmPos,
+  }),
+  /**
+   * Porte : `a`–`b` est le tableau de la baie (au moins 1 mm), `hinge` l'extrémité qui porte les gonds,
+   * `swing` le côté du débattement vu de `a` vers `b`.
+   */
+  z.object({
+    kind: z.literal("door"),
+    id: z.string(),
+    a: Vec2Schema,
+    b: Vec2Schema,
+    hinge: z.enum(["a", "b"]),
+    swing: z.enum(["left", "right"]),
+  }),
+  /**
+   * Fenêtre : `a`–`b` est le tableau de la baie (au moins 1 mm) ; `sill` (hauteur d'allège) et `head`
+   * (hauteur de linteau, > `sill`) sont mesurées depuis le sol fini bas.
+   */
+  z.object({
+    kind: z.literal("window"),
+    id: z.string(),
+    a: Vec2Schema,
+    b: Vec2Schema,
+    sill: mmNonNeg,
+    head: mmPos,
+  }),
+  /** Zone interdite libre : polygone simple d'au moins 3 sommets. */
+  z.object({
+    kind: z.literal("zone"),
+    id: z.string(),
+    points: z.array(Vec2Schema),
+  }),
+]);
+export type Obstacle = z.infer<typeof ObstacleSchema>;
+export type ObstacleKind = Obstacle["kind"];
+
+/**
+ * Largeur minimale d'une baie (porte, fenêtre) entre `a` et `b`, en mm : tolérance géométrique
+ * contre les baies dégénérées, du même ordre que le seuil d'aire des contours (1 mm²), et non
+ * valeur métier.
+ */
+const MIN_BAY_WIDTH = 1;
+
+const ObstaclesSchema = z.array(ObstacleSchema).superRefine((obstacles, ctx) => {
+  const seen = new Set<string>();
+  obstacles.forEach((o, i) => {
+    if (seen.has(o.id)) siteIssue(ctx, [i, "id"], msg("site.obstacle.duplicateId", { id: o.id }));
+    seen.add(o.id);
+    switch (o.kind) {
+      case "door":
+      case "window":
+        if (!(Math.hypot(o.b.x - o.a.x, o.b.y - o.a.y) >= MIN_BAY_WIDTH)) {
+          siteIssue(
+            ctx,
+            [i, "b"],
+            o.kind === "door"
+              ? msg("site.obstacle.door.sameEnds", { id: o.id })
+              : msg("site.obstacle.window.sameEnds", { id: o.id }),
+          );
+        }
+        // Comparés seulement s'ils sont valides : sinon le refus du champ suffit.
+        if (
+          o.kind === "window" &&
+          mmPos.safeParse(o.head).success &&
+          mmNonNeg.safeParse(o.sill).success &&
+          !(o.head > o.sill)
+        ) {
+          siteIssue(
+            ctx,
+            [i, "head"],
+            msg("site.obstacle.window.headNotAboveSill", {
+              id: o.id,
+              sill: o.sill,
+              head: o.head,
+            }),
+          );
+        }
+        break;
+      case "zone": {
+        const defect = storedPolygonDefect(o.points);
+        if (defect !== null) siteIssue(ctx, [i, "points"], zoneDefectMessage(defect));
+        break;
+      }
+      default:
+        break;
+    }
+  });
+});
+
 export const SiteSchema = z.object({
   /** Hauteur à monter H, sol fini bas → sol fini haut. */
   floorToFloor: mmPos,
@@ -74,6 +233,17 @@ export const SiteSchema = z.object({
    * calibrée. Facultatif, jamais lu par le pipeline ; ajout rétrocompatible.
    */
   underlay: UnderlaySchema.optional(),
+  /**
+   * Contour fini intérieur de la pièce (ADR-0010) ; absent = pièce non décrite. Facultatif, sans
+   * défaut (un projet sans contour se relit et s'enregistre à l'identique) ; pas encore lu par
+   * le pipeline (adéquation au site : lot 3).
+   */
+  room: RoomSchema.optional(),
+  /**
+   * Obstacles du site (ADR-0010) ; absent = aucun. Facultatif, sans défaut (pas de `[]` écrit à
+   * la lecture) ; pas encore lu par le pipeline (adéquation au site : lot 3).
+   */
+  obstacles: ObstaclesSchema.optional(),
 });
 export type Site = z.infer<typeof SiteSchema>;
 

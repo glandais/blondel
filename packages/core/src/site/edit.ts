@@ -7,7 +7,7 @@ import { msg } from "@blondel/i18n";
 import * as V from "../geom2d/vec.js";
 import { MessageRangeError } from "../project/errors.js";
 import type { Mm, Vec2 } from "../model/primitives.js";
-import type { Project, Wall } from "../model/project.js";
+import type { Project, Site, Wall } from "../model/project.js";
 import { polygonOpening } from "./opening.js";
 import type { DxfUnderlay, ImageUnderlay, Underlay } from "./schema.js";
 
@@ -22,6 +22,15 @@ export function nextWallId(walls: readonly Wall[]): string {
   let i = walls.length + 1;
   while (used.has(`wall-${i}`)) i++;
   return `wall-${i}`;
+}
+
+/** Identifiant d'obstacle libre (`obstacle-1`, `obstacle-2`…), comme `nextWallId`. */
+export function nextObstacleId(site: Pick<Site, "obstacles">): string {
+  const obstacles = site.obstacles ?? [];
+  const used = new Set(obstacles.map((o) => o.id));
+  let i = obstacles.length + 1;
+  while (used.has(`obstacle-${i}`)) i++;
+  return `obstacle-${i}`;
 }
 
 const r1 = (v: number): number => Math.round(v * 10) / 10;

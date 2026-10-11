@@ -489,8 +489,8 @@ export function variantCount(
 }
 
 /**
- * Projet retenu : celui du candidat, nommé comme le projet courant, calque de fond conservé,
- * garde-corps par défaut du cœur (côtés « automatiques » d'après les murs) si demandé. Validé
+ * Projet retenu : celui du candidat, nommé comme le projet courant, calque de fond, contour de
+ * pièce et obstacles conservés (l'assistant ne les lit pas encore, ADR-0010 lot 3), garde-corps par défaut du cœur (côtés « automatiques » d'après les murs) si demandé. Validé
  * par le schéma (forme canonique).
  */
 export function chosenProject(
@@ -499,11 +499,16 @@ export function chosenProject(
   options: { readonly guards: boolean },
 ): Project {
   const p = candidate.project;
-  const underlay = current.site.underlay;
+  const { underlay, room, obstacles } = current.site;
   return ProjectSchema.parse({
     ...p,
     name: current.name,
-    site: { ...p.site, ...(underlay ? { underlay } : {}) },
+    site: {
+      ...p.site,
+      ...(underlay ? { underlay } : {}),
+      ...(room ? { room } : {}),
+      ...(obstacles ? { obstacles } : {}),
+    },
     ...(options.guards && !p.guards ? { guards: GuardsSpecSchema.parse({}) } : {}),
   });
 }

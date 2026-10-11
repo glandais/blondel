@@ -77,3 +77,21 @@ Décisions de l'utilisateur du 2026-10-11 (points 1, 2, 5, 6 et 7) et choix du p
 - **F8** : au plus 16 tronçons (`CAGE_MAX_SECTIONS`), borne de calcul et non métier (`layout.cage.sectionCount`).
 - **F9** : `depth` d'un palier droit (angle 0 seulement, `layout.cage.depthStraightLandingOnly`) : strictement positive, défaut = emmarchement du tronçon, appliqué par le moteur ; le minimum métier relève de la règle PALIER_LONGUEUR_METIER.
 - Complément du schéma (relecture du sous-lot 0b) : un palier droit (angle 0) n'a ni coin K ni coin W ; ses raccords `well` et `wall` sont vifs seulement (`layout.cage.straightJunctionSharp`).
+
+## Amendement (2026-10-11) — schéma du site (sous-lot 0c)
+
+Précisions conformes au plan (`room {points}`, `obstacles[]` post, circularPost, door avec `hinge` et `swing`, window avec `sill` et `head`, zone) :
+
+- `room` et `obstacles` sont facultatifs et **sans défaut** : un projet sans eux se relit et s'enregistre à l'octet. Une liste `obstacles: []` explicite est conservée telle quelle.
+- Coordonnées (`room.points`, `center`, `a`, `b`, `zone.points`) en `Vec2` réels comme les murs et la trémie (les mutateurs du lot 3a arrondissent) ; dimensions en mm entiers (`sizeX`, `sizeY`, `radius` > 0 ; `sill` ≥ 0 ; `head` > `sill`, comparés seulement si les deux champs sont valides). Hauteurs de fenêtre mesurées depuis le sol fini bas.
+- Identifiants d'obstacle uniques dans le site (`site.obstacle.duplicateId`).
+- Les contours de pièce et de zone sont enregistrés **tels que saisis** (ni arrondi ni réorientation, contrairement à la trémie canonique de `polygonOpening`). Mêmes contrôles d'aire (> 1 mm²) et de recoupement que la trémie (`site/simplePolygon.ts`).
+- L'assistant conserve le contour de pièce et les obstacles du projet courant dans le projet retenu (`chosenProject`), comme le calque ; il ne les lit pas encore (crible unifié : lot 3c).
+
+Écarts au plan (choix du sous-lot 0c, à confirmer avec l'utilisateur si besoin) :
+
+- `post.rotation` : champ ajouté par ce sous-lot (le plan ne le prévoit pas), en degrés, sens trigonométrique, **facultatif, 0 par défaut**.
+- Contour de pièce ou zone non conforme (moins de 3 sommets, sommet confondu avec son voisin, aire nulle, recoupement) : **refusé dès la lecture**, donc le projet entier ne se relit pas, alors que le schéma de la trémie n'exige que 3 sommets (son contrôle complet est fait à la saisie par `polygonOpening`). Choix fait pour que le lot 3 ne reçoive que des polygones simples.
+- Sommet répété (premier sommet recopié en fin pour fermer le contour, ou sommet doublé) : refusé avec un défaut propre (`site.room.duplicateVertex`, `site.obstacle.zone.duplicateVertex`, numéros des deux sommets) et non comme un recoupement. Pas de normalisation silencieuse : un import de polyligne fermée (DXF, relevé) devra retirer le point de fermeture, ce que feront les mutateurs et l'import du lot 3a.
+- Porte et fenêtre : baie refusée si `a` et `b` sont à moins de 1 mm (`site.obstacle.door.sameEnds`, `site.obstacle.window.sameEnds`) ; la fenêtre n'est pas citée par le plan. Tolérance géométrique contre les baies dégénérées, du même ordre que le seuil d'aire, et non valeur métier.
+- Pas de clé `notNumeric` pour la pièce et la zone : `Vec2Schema` refuse déjà les nombres non finis.
