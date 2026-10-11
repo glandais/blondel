@@ -237,6 +237,60 @@ export function installationLines(
         length: fr(t, d.length, 1),
       }),
     });
+  // Cage saisie : implantation par tronçon et par jonction.
+  if (sheet.sections !== undefined && sheet.sections.length > 0) {
+    out.push({ text: t.t("pdf.installation.sections"), bold: true });
+    for (const s of sheet.sections) {
+      const index = String(s.number);
+      for (const [which, l] of [
+        [t.t("pdf.installation.section.start"), s.start],
+        [t.t("pdf.installation.section.end"), s.end],
+      ] as const) {
+        out.push({
+          text: t.t("pdf.installation.section.line", {
+            index,
+            which,
+            lx: fr(t, l.left.x, 1),
+            ly: fr(t, l.left.y, 1),
+            rx: fr(t, l.right.x, 1),
+            ry: fr(t, l.right.y, 1),
+          }),
+        });
+      }
+      out.push({
+        text: s.arc
+          ? t.t("pdf.installation.section.arc", {
+              index,
+              radius: fr(t, s.arc.radius, 1),
+              sweep: fr(t, s.arc.sweep, 1),
+              x: fr(t, s.arc.center.x, 1),
+              y: fr(t, s.arc.center.y, 1),
+            })
+          : t.t("pdf.installation.section.straight", {
+              index,
+              length: fr(t, s.length ?? 0, 1),
+              from: fr(t, s.widthStart, 1),
+              to: fr(t, s.widthEnd, 1),
+            }),
+      });
+    }
+    for (const j of sheet.junctions ?? []) {
+      out.push({
+        text:
+          j.depth !== undefined
+            ? t.t("pdf.installation.junction.landing", {
+                index: String(j.number),
+                depth: fr(t, j.depth, 1),
+              })
+            : t.t("pdf.installation.junction.turn", {
+                index: String(j.number),
+                angle: fr(t, j.angle, 1),
+                x: fr(t, j.innerCorner.x, 1),
+                y: fr(t, j.innerCorner.y, 1),
+              }),
+      });
+    }
+  }
   out.push({ text: t.t("pdf.installation.walls"), bold: true });
   if (!sheet.hasSite) out.push({ text: t.t("pdf.installation.noSite"), muted: true });
   else if (sheet.wallIds.length === 0)

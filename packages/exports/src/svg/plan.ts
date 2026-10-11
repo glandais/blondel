@@ -227,6 +227,26 @@ function renderDrawing(
     );
   }
 
+  // Annotations d'une cage saisie (angles des jonctions, balayages, raccords).
+  if (show.dimensions && d.labels !== undefined && d.labels.length > 0) {
+    out.push(
+      el(
+        "g",
+        {
+          class: "labels",
+          ...font,
+          "text-anchor": "middle",
+          "dominant-baseline": "central",
+          fill: theme.text,
+        },
+        d.labels.map((l) => {
+          const p = toPx(vp, l.at);
+          return text({ x: p.x, y: p.y, "data-label": l.kind }, l.text);
+        }),
+      ),
+    );
+  }
+
   // Marqueurs ponctuels du contrôle de conception.
   if (show.compliance && d.markers.length > 0) {
     out.push(

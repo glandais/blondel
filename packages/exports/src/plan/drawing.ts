@@ -8,6 +8,8 @@ import {
   curvePointAt,
   curveTangentAt,
   vec2,
+  type Layout,
+  type LayoutSection,
   type Mm,
   type Model,
   type Project,
@@ -52,8 +54,14 @@ const ZONE_METHOD_LABELS: Readonly<Record<string, MessageKey>> = {
 /** Fonction d'un élément de dessin (calque DXF, groupe SVG). */
 export type PlanLayer = "CONTOUR" | "MARCHES" | "NEZ" | "FOULEE" | "TREMIE" | "COTES" | "TEXTE";
 
-/** `radius` : rayon extérieur R_e d'un hélicoïdal (de l'axe au bord extérieur). */
-export type DimensionRole = "width" | "leg" | "run" | "going" | "height" | "radius";
+/**
+ * `radius` : rayon extérieur R_e d'un hélicoïdal (de l'axe au bord extérieur), ou rayon d'un
+ * tronçon à axe en arc d'une cage (mesuré sur le bord d'ancrage). `section` : longueur de la
+ * partie droite d'un tronçon de cage, mesurée sur le bord d'ancrage (F11) ; `landing` :
+ * profondeur d'un palier droit de cage (ADR-0010, sous-lot 2e).
+ */
+export type DimensionRole =
+  "width" | "leg" | "run" | "going" | "height" | "radius" | "section" | "landing";
 
 /**
  * Cote linéaire alignée : points mesurés `a` et `b`, ligne de cote décalée de `offset` selon
@@ -86,6 +94,17 @@ export interface PlanNosing {
   readonly severity?: Severity;
 }
 
+/**
+ * Annotation ponctuelle du plan coté d'une cage (ADR-0010, sous-lot 2e) : angle d'une jonction,
+ * balayage d'un axe en arc, raccord côté jour (rayon, pan coupé) ou côté mur (rayon du congé).
+ * Texte horizontal centré sur `at`, calque des cotes.
+ */
+export interface PlanLabel {
+  readonly kind: "junctionAngle" | "sweep" | "wellJoint" | "wallJoint";
+  readonly at: Vec2;
+  readonly text: string;
+}
+
 export interface PlanDrawing {
   /** Contour de l'escalier (jour, arrivée, mur, départ), arcs exacts. */
   readonly contour: PlanPath;
@@ -99,6 +118,8 @@ export interface PlanDrawing {
   readonly arrow: PlanPath;
   readonly opening?: PlanPath;
   readonly dimensions: readonly Dimension[];
+  /** Annotations ponctuelles d'une cage saisie (`Layout.cage`) ; absentes sinon. */
+  readonly labels?: readonly PlanLabel[];
   readonly markers: readonly {
     readonly at: Vec2;
     readonly radius: Mm;
@@ -242,14 +263,23 @@ export function buildPlanDrawing(model: Model, options: PlanDrawingOptions = {})
 
   // ---------------------------------------------------------------- cotes
   const dims: Dimension[] = [];
-  if (width > 0) {
+  if (width > 0 && !(layout.cage === true && layout.sections !== undefined)) {
     const t0 = curveTangentAt(layout.walkline, 0);
     dims.push(
       dimension(tx, "width", departInner, departOuter, vec2.scale(t0, -1), dimOffset, decimals),
     );
   }
+  // Cage saisie (ADR-0010) : cotes par tronçon (longueur de partie droite, largeurs, rayon et
+  // balayage d'un axe en arc, angles des jonctions, palier droit, raccords).
+  const cage = layout.cage === true && layout.sections !== undefined ? layout.sections : undefined;
+  const labels: PlanLabel[] = [];
+  if (cage) {
+    const c = cageAnnotations(tx, layout, cage, dimOffset, textHeight, decimals);
+    dims.push(...c.dims);
+    labels.push(...c.labels);
+  }
   // Longueurs de volées : tronçons droits du bord extérieur (mesure de `LegSchema.length`).
-  for (const seg of layout.outer.segments) {
+  for (const seg of cage ? [] : layout.outer.segments) {
     if (seg.kind !== "line") continue;
     const len = vec2.distance(seg.a, seg.b);
     if (len < 1) continue;
@@ -283,13 +313,26 @@ export function buildPlanDrawing(model: Model, options: PlanDrawingOptions = {})
       ),
     );
   }
-  if (first && last && layout.turns.length === 0 && last !== first && !helical) {
-    // Droit : reculement coté côté jour, du premier au dernier nez.
+  if (
+    first &&
+    last &&
+    layout.turns.length === 0 &&
+    last !== first &&
+    !helical &&
+    !cage?.some((s) => s.kind === "arc")
+  ) {
+    // Droit : reculement coté côté jour, du premier au dernier nez. Cage à axe en arc : pas de
+    // corde entre nez (le reculement du cartouche est celui de la ligne de foulée).
     const t = vec2.normalize(vec2.sub(last.q, first.q));
     const inward = vec2.scale(outwardFromOuter(t, layout.innerSide), -1);
     const run = dimension(tx, "run", first.q, last.q, inward, dimOffset, decimals);
     // Reculement égal à la longueur de volée : une seule cote (celle de la volée).
-    if (!dims.some((d) => d.role === "leg" && Math.abs(d.value - run.value) < 0.5)) dims.push(run);
+    if (
+      !dims.some(
+        (d) => (d.role === "leg" || d.role === "section") && Math.abs(d.value - run.value) < 0.5,
+      )
+    )
+      dims.push(run);
   }
   // Giron sur la ligne de foulée : première marche droite entre deux nez non balancés.
   for (let k = 0; k + 1 < stepping.nosings.length; k++) {
@@ -337,7 +380,7 @@ export function buildPlanDrawing(model: Model, options: PlanDrawingOptions = {})
     tx.t("drawing.plan.going", v(stepping.going, 1)),
     tx.t("drawing.plan.blondel", v(stepping.blondel, 1)),
     tx.t("drawing.plan.run", v(stepping.run, 0)),
-    tx.t("drawing.plan.width", v(width, 0)),
+    widthLine(tx, layout, width, v),
   );
   if (helical) cartouche.push(...helicalCartouche(helical, tx));
   if (model.headroom) cartouche.push(tx.t("drawing.plan.headroom", v(model.headroom.min, 0)));
@@ -366,6 +409,10 @@ export function buildPlanDrawing(model: Model, options: PlanDrawingOptions = {})
     const o = vec2.scale(d.normal, d.offset + 1.5 * textHeight);
     pts.push(vec2.add(d.a, o), vec2.add(d.b, o));
   }
+  for (const l of labels) {
+    const half = { x: (l.text.length * textHeight) / 2, y: textHeight };
+    pts.push(vec2.sub(l.at, half), vec2.add(l.at, half));
+  }
   for (const m of markers) {
     pts.push(
       vec2.sub(m.at, { x: m.radius, y: m.radius }),
@@ -389,11 +436,257 @@ export function buildPlanDrawing(model: Model, options: PlanDrawingOptions = {})
     arrow,
     ...(opening ? { opening: polygonPath(opening) } : {}),
     dimensions: dims,
+    ...(cage ? { labels } : {}),
     markers,
     cartouche,
     bounds,
     textHeight,
   };
+}
+
+/**
+ * Ligne « Emmarchement » du cartouche : E de la ligne de départ ; cage saisie de largeur
+ * variable : plus petite et plus grande largeur des tronçons.
+ */
+function widthLine(
+  tx: Translator,
+  layout: Layout,
+  width: Mm,
+  v: (x: number, d: number) => { value: string },
+): string {
+  const sections = layout.cage === true ? (layout.sections ?? []) : [];
+  const widths = sections.flatMap((s) => [s.widthStart, s.widthEnd]);
+  if (widths.length > 0) {
+    const min = Math.min(...widths);
+    const max = Math.max(...widths);
+    if (max - min >= 0.5) {
+      return tx.t("drawing.plan.widthRange", { min: v(min, 0).value, max: v(max, 0).value });
+    }
+  }
+  return tx.t("drawing.plan.width", v(width, 0));
+}
+
+/** Milieu d'une ligne transversale de tronçon. */
+const midOf = (l: LayoutSection["start"]): Vec2 => vec2.lerp(l.left, l.right, 0.5);
+
+/**
+ * Direction de montée (unitaire) d'un tronçon droit : perpendiculaire à ses lignes de départ et
+ * d'arrivée (parallèles, F11), orientée du départ vers l'arrivée.
+ */
+function sectionDirection(s: LayoutSection): Vec2 {
+  const across = vec2.sub(s.start.right, s.start.left);
+  let u = vec2.normalize(vec2.perpLeft(across));
+  if (vec2.dot(u, vec2.sub(midOf(s.end), midOf(s.start))) < 0) u = vec2.scale(u, -1);
+  return u;
+}
+
+/**
+ * Normale unitaire d'une ligne transversale `from`, orientée vers la ligne `to` (palier droit
+ * derrière un tronçon en arc : ligne radiale d'arrivée).
+ */
+function lineNormalToward(from: LayoutSection["start"], to: LayoutSection["start"]): Vec2 {
+  let u = vec2.normalize(vec2.perpLeft(vec2.sub(from.right, from.left)));
+  if (vec2.dot(u, vec2.sub(midOf(to), midOf(from))) < 0) u = vec2.scale(u, -1);
+  return u;
+}
+
+/** Normale unitaire vers l'extérieur du bord `side` d'un tronçon de direction `u`. */
+const sideNormal = (u: Vec2, side: "left" | "right"): Vec2 =>
+  side === "left" ? vec2.perpLeft(u) : vec2.perpRight(u);
+
+const otherSide = (side: "left" | "right"): "left" | "right" =>
+  side === "left" ? "right" : "left";
+
+/**
+ * Cotes et annotations d'une cage saisie (ADR-0010, sous-lot 2e), lues dans `Layout.sections`
+ * et `Layout.turns` :
+ * - longueur de la partie droite de chaque tronçon droit, distance entre ses lignes de départ et
+ *   d'arrivée (parallèles), qui est la longueur mesurée sur le bord d'ancrage (F11), cotée du
+ *   côté opposé au jour (côté mur) ;
+ * - largeur de départ du premier tronçon, puis chaque largeur qui change (début d'un tronçon de
+ *   largeur différente, fin d'un trapèze) ;
+ * - axe en arc : rayon (du centre au bord d'ancrage) et balayage ;
+ * - jonction tournante : angle (valeur absolue, sens lu sur le dessin) au coin du jour, raccord
+ *   côté jour (rayon, pan coupé) et côté mur (rayon du congé) ;
+ * - palier droit : profondeur (distance entre l'arrivée du tronçon entrant et le départ du
+ *   tronçon sortant), du même côté que les longueurs.
+ */
+function cageAnnotations(
+  tx: Translator,
+  layout: Layout,
+  sections: readonly LayoutSection[],
+  dimOffset: Mm,
+  textHeight: Mm,
+  decimals: number,
+): { dims: Dimension[]; labels: PlanLabel[] } {
+  const dims: Dimension[] = [];
+  const labels: PlanLabel[] = [];
+  const near = textHeight;
+  const deg = (rad: number): string =>
+    formatIn(tx, Math.abs((rad * 180) / Math.PI), {
+      decimals: 1,
+      thousands: drawingThousands(tx),
+      trimZeros: true,
+    });
+  const mmText = (x: number): string => fmt(tx, x, decimals);
+  /** Côté coté (longueurs, paliers) : opposé au jour de la jonction voisine. */
+  const dimSide = (s: LayoutSection): "left" | "right" => {
+    const well = s.startWellSide ?? s.endWellSide;
+    return well !== undefined ? otherSide(well) : otherSide(layout.innerSide);
+  };
+  /** Cote de la distance entre deux lignes transversales parallèles, côté `side`. */
+  const between = (
+    role: DimensionRole,
+    from: LayoutSection["start"],
+    to: LayoutSection["start"],
+    u: Vec2,
+    side: "left" | "right",
+  ): Dimension | null => {
+    const length = vec2.dot(vec2.sub(to.left, from.left), u);
+    if (!(length >= 1)) return null;
+    const a = from[side];
+    const b = vec2.addScaled(a, u, length);
+    const normal = sideNormal(u, side);
+    // Bord évasé (trapèze) : la ligne de cote passe au-delà du coin le plus saillant.
+    const reach = Math.max(0, vec2.dot(vec2.sub(to[side], a), normal));
+    return dimension(tx, role, a, b, normal, dimOffset + reach, decimals);
+  };
+
+  sections.forEach((s, i) => {
+    const prev = sections[i - 1];
+    if (s.kind === "straight") {
+      const u = sectionDirection(s);
+      const d = between("section", s.start, s.end, u, dimSide(s));
+      if (d) dims.push(d);
+      const changes = prev === undefined || Math.abs(s.widthStart - prev.widthEnd) >= 0.5;
+      if (changes && s.widthStart > 0) {
+        dims.push(
+          dimension(
+            tx,
+            "width",
+            s.start.left,
+            s.start.right,
+            vec2.scale(u, -1),
+            i === 0 ? dimOffset : near,
+            decimals,
+          ),
+        );
+      }
+      if (Math.abs(s.widthEnd - s.widthStart) >= 0.5 && s.widthEnd > 0) {
+        dims.push(
+          dimension(
+            tx,
+            "width",
+            s.end.left,
+            s.end.right,
+            u,
+            i === sections.length - 1 ? dimOffset : near,
+            decimals,
+          ),
+        );
+      }
+    } else if (s.arc) {
+      const { center, radius, sweep } = s.arc;
+      const dir0 = vec2.normalize(vec2.sub(midOf(s.start), center));
+      const onAnchor = vec2.addScaled(center, dir0, radius);
+      dims.push(
+        dimension(
+          tx,
+          "radius",
+          center,
+          onAnchor,
+          vec2.perpLeft(dir0),
+          0,
+          decimals,
+          "drawing.dimension.radius",
+        ),
+      );
+      // Même règle qu'un tronçon droit : largeur de départ, puis largeur qui change.
+      const changes = prev === undefined || Math.abs(s.widthStart - prev.widthEnd) >= 0.5;
+      if (changes && s.widthStart > 0) {
+        const tangent = vec2.scale(vec2.perpLeft(dir0), Math.sign(sweep) || 1);
+        dims.push(
+          dimension(
+            tx,
+            "width",
+            s.start.left,
+            s.start.right,
+            vec2.scale(tangent, -1),
+            i === 0 ? dimOffset : near,
+            decimals,
+          ),
+        );
+      }
+      labels.push({
+        kind: "sweep",
+        at: vec2.addScaled(center, vec2.rotate(dir0, sweep / 2), radius),
+        text: tx.t("drawing.plan.sweep", { value: deg(sweep) }),
+      });
+    }
+  });
+
+  for (const z of layout.turns) {
+    const before = sections[z.index];
+    const after = sections[z.index + 1];
+    if (z.angle === 0) {
+      // Palier droit : profondeur entre l'arrivée du tronçon entrant et le départ du sortant,
+      // mesurée perpendiculairement à la ligne d'arrivée (tronçon entrant en arc : ligne radiale,
+      // comme `lineGap` de la fiche de pose).
+      if (before && after) {
+        const u =
+          before.kind === "straight"
+            ? sectionDirection(before)
+            : lineNormalToward(before.end, after.start);
+        const d = between(
+          "landing",
+          before.end,
+          after.start,
+          u,
+          dimSide(before.kind === "straight" ? before : after),
+        );
+        if (d) dims.push(d);
+      }
+      continue;
+    }
+    // Côté du vide au coin du jour : du coin extérieur vers le coin intérieur, prolongé.
+    const away = vec2.normalize(vec2.sub(z.innerCorner, z.outerCorner));
+    const angle = z.angle ?? (z.direction === "left" ? Math.PI / 2 : -Math.PI / 2);
+    labels.push({
+      kind: "junctionAngle",
+      at: vec2.addScaled(z.innerCorner, away, 1.5 * textHeight),
+      text: tx.t("drawing.plan.junctionAngle", { value: deg(angle) }),
+    });
+    const well = z.well;
+    if (well?.kind === "arc") {
+      labels.push({
+        kind: "wellJoint",
+        at: vec2.addScaled(z.innerCorner, away, 4 * textHeight),
+        text: tx.t("drawing.dimension.radius", { value: mmText(well.radius) }),
+      });
+    } else if (well?.kind === "chamfer") {
+      labels.push({
+        kind: "wellJoint",
+        at: vec2.addScaled(z.innerCorner, away, 4 * textHeight),
+        text: tx.t("drawing.plan.chamfer", {
+          setbackIn: mmText(well.setbackIn),
+          setbackOut: mmText(well.setbackOut),
+        }),
+      });
+    }
+    const wall = z.wall;
+    if (wall?.kind === "arc") {
+      // Congé côté mur : le coin W (`outerCorner`) est virtuel ; l'étiquette va au milieu de
+      // l'arc du congé, à R / cos(|angle| / 2) − R de W vers le jour (bissectrice approchée par
+      // la direction W → coin du jour), décalée vers W pour rester hors des marches.
+      const toArc = wall.radius / Math.cos(Math.abs(angle) / 2) - wall.radius;
+      labels.push({
+        kind: "wallJoint",
+        at: vec2.addScaled(z.outerCorner, away, toArc - 1.5 * textHeight),
+        text: tx.t("drawing.dimension.radius", { value: mmText(wall.radius) }),
+      });
+    }
+  }
+  return { dims, labels };
 }
 
 /** Géométrie d'une cote : ligne de cote, lignes d'attache, position et angle du texte. */

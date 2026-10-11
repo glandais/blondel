@@ -116,7 +116,8 @@ describe("cage saisie à ±90° : même tracé que la volée équivalente", () =
           expect((e as LayoutError).msg.key).toBe("layout.cage.newelNotYetSupported");
         }
       } else {
-        expect(computeLayout(cage)).toStrictEqual(layout);
+        // `computeLayout` marque le tracé saisi (`Layout.cage`, cotes par tronçon des exports).
+        expect(computeLayout(cage)).toStrictEqual({ ...layout, cage: true });
       }
     }
   });
@@ -170,8 +171,10 @@ describe("cage saisie à ±90° : même tracé que la volée équivalente", () =
         // une cage saisie passe par les pièces convexes (`overlap.ts`) : mêmes constats que la
         // boîte englobante du moteur à volées, plus ceux d'un jour en arc qui déborde dans un
         // jour trop petit (raccord compté dans l'emprise).
-        const { errors: ea, ...la } = a.layout;
+        const { errors: ea, cage: marker, ...la } = a.layout;
         const { errors: eb, ...lb } = b.layout;
+        expect(marker).toBe(true);
+        expect(b.layout.cage).toBeUndefined();
         expect(la).toStrictEqual(lb);
         const pairOf = (e: Message): string => {
           const p = e.params ?? {};

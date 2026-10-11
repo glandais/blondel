@@ -25,6 +25,15 @@
  *   rectangulaire ; une trémie **polygonale** (saisie ou relevée) est conservée telle quelle ;
  *   un projet sans trémie (escalier extérieur) n'en reçoit pas.
  *
+ * **Cage saisie** (tracé libre, ADR-0010, sous-lot 2e) : même principe, seule la **partie
+ * droite du dernier tronçon** change (`axis.length`, F11) ; les autres tronçons, les jonctions
+ * (angles, raccords, paliers droits), les largeurs et le placement sont conservés. Sur un
+ * trapèze ou une ligne de foulée oblique, 1 mm de tronçon ne vaut plus 1 mm de Γ : la longueur
+ * est cherchée par la méthode de la sécante sur le tracé lui-même (`computeLayout`), puis
+ * arrondie au mm. Refus : dernier tronçon à axe en arc (balayage et rayon à ajuster à la main),
+ * palier mal placé (partie droite qui le précède hors d'un nombre entier de girons), H trop
+ * faible. Le placement n'est jamais modifié (le recalage cale les hauteurs, pas l'implantation).
+ *
  * Refus (`RangeError`, message lisible, repris par `realignBlocker` pour désactiver le bouton de
  * l'interface avec son explication) : hélicoïdal, H trop faible pour la position des tournants
  * saisie (il manque de la ligne de foulée après le dernier tournant), palier mal placé (voir
@@ -40,7 +49,7 @@ import { LayoutError } from "../layout/errors.js";
 import { resolveRiserCount, resolveTargetGoing } from "../layout/resolve.js";
 import type { Mm } from "../model/primitives.js";
 import type { Layout } from "../model/derived.js";
-import type { Opening, Project, Turn } from "../model/project.js";
+import type { CageLayoutSpec, Opening, Project, Turn } from "../model/project.js";
 import { SteppingError } from "../stepping/errors.js";
 import { errorMessageOf, MessageRangeError } from "./errors.js";
 import {
@@ -156,6 +165,110 @@ function realignedLegs(project: Project, layout: Layout, n: number, g: Mm): Mm[]
   return out;
 }
 
+/**
+ * Parties droites de Γ qui précèdent un palier (d'angle ou droit) : nombre entier de girons
+ * cible, sinon refus (`onFail` construit le message, avec l'indice du tournant / de la jonction).
+ */
+function checkLandings(
+  layout: Layout,
+  g: Mm,
+  onFail: (index: number, straight: Mm, count: number, gap: Mm) => Message,
+): void {
+  let cursor = 0;
+  for (const t of layout.turns.filter((z) => z.mode === "landing")) {
+    const straight = Math.max(0, t.sStart - cursor);
+    cursor = t.sEnd;
+    const count = Math.round(straight / g);
+    const gap = count * g - straight;
+    if (Math.abs(gap) > LANDING_STRAIGHT_TOLERANCE) {
+      throw new MessageRangeError(onFail(t.index, straight, count, gap));
+    }
+  }
+}
+
+/** Longueur de Γ hors paliers (partie qui reçoit les girons). */
+function walkOutsideLandings(layout: Layout): Mm {
+  const landings = layout.turns.filter((t) => t.mode === "landing");
+  return curveLength(layout.walkline) - landings.reduce((acc, t) => acc + (t.sEnd - t.sStart), 0);
+}
+
+/** Nombre maximal d'itérations de la sécante (convergence en 1 à 3 pas en pratique). */
+const SECANT_ITERATIONS = 8;
+/** Écart (mm) de Γ en deçà duquel la sécante s'arrête : bien en deçà de l'arrondi au mm. */
+const SECANT_TOLERANCE = 1e-3;
+
+/** Cage dont la partie droite du dernier tronçon vaut `length`. */
+function withLastSectionLength(project: Project, spec: CageLayoutSpec, length: Mm): Project {
+  const last = spec.sections.length - 1;
+  const sections = spec.sections.map((s, i) =>
+    i === last ? { ...s, axis: { kind: "straight" as const, length } } : s,
+  );
+  return { ...project, stair: { ...project.stair, layout: { ...spec, sections } } };
+}
+
+/**
+ * Partie droite recalée du dernier tronçon d'une cage (voir l'en-tête), ou `null` si elle est
+ * automatique (tronçon unique `auto`, conservé).
+ * @throws RangeError si le recalage est impossible (arc, palier, H trop faible).
+ */
+function realignedLastSection(
+  project: Project,
+  spec: CageLayoutSpec,
+  layout: Layout,
+  n: number,
+  g: Mm,
+): Mm | null {
+  const lastSection = spec.sections[spec.sections.length - 1]!;
+  if (lastSection.axis.kind === "straight" && lastSection.axis.length === "auto") return null;
+  checkLandings(layout, g, (index, straight) =>
+    msg("project.realign.cageLandingNotWhole", {
+      junction: index + 1,
+      straight: mm(straight),
+      going: mm(g),
+    }),
+  );
+  const landings = layout.turns.filter((t) => t.mode === "landing").length;
+  const target = (n - 1 - landings) * g;
+  const residual = (l: Layout): Mm => walkOutsideLandings(l) - target;
+  if (lastSection.axis.kind === "arc") {
+    // Axe en arc : rien à recaler si Γ a déjà la longueur voulue (à l'arrondi au mm près).
+    if (Math.abs(residual(layout)) <= LANDING_STRAIGHT_TOLERANCE) return null;
+    throw new MessageRangeError(msg("project.realign.cageArcLast"));
+  }
+  const current = lastSection.axis.length as Mm;
+  // Sécante sur la partie droite du dernier tronçon ; premier pas : 1 mm de tronçon = 1 mm de Γ.
+  let x0 = current;
+  let f0 = residual(layout);
+  let x1 = current - f0;
+  for (let i = 0; i < SECANT_ITERATIONS && Math.abs(f0) > SECANT_TOLERANCE; i++) {
+    if (x1 < 0) {
+      throw new MessageRangeError(
+        msg("project.realign.cageHeightTooLow", { missing: mm(Math.ceil(-x1)) }),
+      );
+    }
+    const f1 = residual(guarded(() => computeLayout(withLastSectionLength(project, spec, x1))));
+    if (Math.abs(f1) <= SECANT_TOLERANCE || f1 === f0) {
+      x0 = x1;
+      f0 = f1;
+      break;
+    }
+    const next = x1 - (f1 * (x1 - x0)) / (f1 - f0);
+    x0 = x1;
+    f0 = f1;
+    x1 = next;
+  }
+  if (Math.abs(f0) > LANDING_STRAIGHT_TOLERANCE) {
+    throw new MessageRangeError(msg("project.realign.cageNotConverged"));
+  }
+  const length = Math.round(x0);
+  if (length < 0) {
+    throw new MessageRangeError(
+      msg("project.realign.cageHeightTooLow", { missing: mm(Math.ceil(-x0)) }),
+    );
+  }
+  return length;
+}
+
 const openingText = (o: Opening): Message =>
   o.kind === "rect"
     ? msg("project.realign.openingRect", {
@@ -168,8 +281,8 @@ const openingText = (o: Opening): Message =>
 
 /**
  * Recale les volées et la trémie sur H, E, la dalle et le réglage des hauteurs (voir l'en-tête).
- * @throws RangeError si le tracé est hélicoïdal ou une cage saisie, si la position des tournants saisie rend le
- *   recalage impossible (H trop faible, palier hors d'un nombre entier de girons), ou si le
+ * @throws RangeError si le tracé est hélicoïdal, si la position des tournants (jonctions) saisie
+ *   rend le recalage impossible (H trop faible, palier hors d'un nombre entier de girons), ou si le
  *   tracé recalé est impossible (message du tracé).
  */
 export function realignFlightsAndOpening(
@@ -180,46 +293,60 @@ export function realignFlightsAndOpening(
   if (spec.kind === "helical") {
     throw new MessageRangeError(msg("project.realign.helical"));
   }
-  // Cage saisie (ADR-0010) : `legs` / `turns` vides, recalage par tronçon au lot 2.
-  if (spec.kind === "cage") {
-    throw new MessageRangeError(msg("project.realign.cage"));
-  }
   const clearance = options.openingClearance ?? PRESET_OPENING_CLEARANCE;
   requireOpeningClearance(clearance);
   const n = guarded(() => resolveRiserCount(project));
   const g = guarded(() => resolveTargetGoing(project, n));
   const current = guarded(() => computeLayout(project));
   const notes: Message[] = [];
-  const lengths = realignedLegs(project, current, n, g);
-  const legsChanged = lengths !== null && lengths.some((l, i) => spec.legs[i]?.length !== l);
-  const flights: Project =
-    lengths === null || !legsChanged
-      ? project
-      : {
-          ...project,
-          stair: {
-            ...project.stair,
-            layout: { ...spec, legs: lengths.map((length) => ({ length })) },
-          },
-        };
+  let flights: Project = project;
+  let legsChanged = false;
+  if (spec.kind === "cage") {
+    // Cage saisie : seule la partie droite du dernier tronçon change (voir l'en-tête).
+    const length = realignedLastSection(project, spec, current, n, g);
+    const last = spec.sections[spec.sections.length - 1]!.axis;
+    if (length !== null && last.kind === "straight" && last.length !== length) {
+      legsChanged = true;
+      flights = withLastSectionLength(project, spec, length);
+      notes.push(
+        msg("project.realign.lastSection", {
+          risers: String(n),
+          going: mm(g),
+          section: spec.sections.length,
+          from: mm(last.length as Mm),
+          to: mm(length),
+        }),
+      );
+    }
+  } else {
+    const lengths = realignedLegs(project, current, n, g);
+    legsChanged = lengths !== null && lengths.some((l, i) => spec.legs[i]?.length !== l);
+    if (lengths !== null && legsChanged) {
+      flights = {
+        ...project,
+        stair: {
+          ...project.stair,
+          layout: { ...spec, legs: lengths.map((length) => ({ length })) },
+        },
+      };
+      const last = spec.legs.length;
+      notes.push(
+        msg("project.realign.lastFlight", {
+          risers: String(n),
+          going: mm(g),
+          flight: last,
+          from: mm(spec.legs[last - 1]!.length as Mm),
+          to: mm(lengths[last - 1]!),
+        }),
+      );
+    }
+  }
   // Le tracé recalé doit être constructible (poteau, transition de Γ…) et non dégénéré : une
   // emprise dégénérée (`Layout.errors`, volées qui se touchent…) n'est pas levée par le tracé,
   // elle bloque donc le recalage ici, avec le message du tracé.
   const realigned = guarded(() => computeLayout(flights));
   if (realigned.errors !== undefined && realigned.errors.length > 0) {
     throw new MessageRangeError(realigned.errors[0]!);
-  }
-  if (legsChanged) {
-    const last = spec.legs.length;
-    notes.push(
-      msg("project.realign.lastFlight", {
-        risers: String(n),
-        going: mm(g),
-        flight: last,
-        from: mm(spec.legs[last - 1]!.length as Mm),
-        to: mm(lengths![last - 1]!),
-      }),
-    );
   }
 
   let next = flights;
@@ -246,8 +373,13 @@ export function realignFlightsAndOpening(
       }
     }
   }
-  if (next === project)
-    return { project, notes: [...notes, msg("project.realign.alreadyAligned")] };
+  if (next === project) {
+    const aligned =
+      spec.kind === "cage"
+        ? msg("project.realign.cageAlreadyAligned")
+        : msg("project.realign.alreadyAligned");
+    return { project, notes: [...notes, aligned] };
+  }
   if (legsChanged && project.stair.nosingOverrides.length > 0) {
     notes.push(msg("project.realign.overridesKept"));
   }

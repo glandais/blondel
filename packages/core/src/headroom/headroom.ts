@@ -72,6 +72,12 @@ export interface HeadroomAnalysis {
    * Repris dans `Model.headroomAtNosings`.
    */
   readonly atNosings: readonly (Mm | null)[];
+  /**
+   * Sous-faces déduites hors du découpage et prises comme plafonds (cage qui repasse au-dessus
+   * d'elle-même, `headroom/cage.ts`, sous-lot 2d) ; reprises dans `Model.soffits` pour
+   * l'élévation (sous-lot 2e). Absent : aucune (l'hélicoïdal garde `Stepping.soffits`).
+   */
+  readonly selfCover?: readonly Soffit[];
 }
 
 /** Contour CCW de la trémie, ou `null` sans trémie. */
@@ -223,7 +229,7 @@ export function computeHeadroom(
   const soffits = stepping.soffits ?? selfCover ?? [];
   if (soffits.length > 0) {
     const ceiling = ceilingOf(site);
-    return selfCoveredHeadroom({
+    const analysis = selfCoveredHeadroom({
       layout,
       stepping,
       soffits,
@@ -231,6 +237,7 @@ export function computeHeadroom(
       ceiling,
       covered: opening ? coveredIntervals(layout.walkline, opening) : [],
     });
+    return stepping.soffits === undefined ? { ...analysis, selfCover: soffits } : analysis;
   }
   if (!opening) return null;
   const ceiling = ceilingOf(site);

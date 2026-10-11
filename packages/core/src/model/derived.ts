@@ -254,6 +254,13 @@ export interface Layout {
    * cage. Ajout rétrocompatible : absent pour l'hélicoïdal.
    */
   readonly sections?: readonly LayoutSection[];
+  /**
+   * Tracé **saisi** en cage (`kind: "cage"`, ADR-0010, sous-lot 2e) : les exports cotent alors
+   * par tronçon (longueur de partie droite sur le bord d'ancrage, F11 ; largeurs ; angles des
+   * jonctions), au lieu des longueurs de volées au mur. Absent : tracé à volées (même calculé
+   * par le moteur de cage) ou hélicoïdal. Ajout rétrocompatible.
+   */
+  readonly cage?: true;
 }
 
 // ------------------------------------------------------------------ Étape 3 : découpage
@@ -805,6 +812,14 @@ export interface Model {
    * ADR-0009) ; absent : échappée non calculée (sans site, modèle partiel).
    */
   readonly headroomAtNosings?: readonly (Mm | null)[];
+  /**
+   * Sous-faces d'une **cage qui repasse au-dessus d'elle-même** (ADR-0010, sous-lots 2d et 2e) :
+   * marches prises comme plafonds par l'échappée (`headroom/cage.ts`), même contrat que
+   * `Stepping.soffits` (propre à l'hélicoïdal) ; l'élévation les dessine. Absent : aucun
+   * auto-recouvrement calculé (escalier à volées, hélicoïdal, cage sans recouvrement, échappée
+   * non calculée). Ajout rétrocompatible.
+   */
+  readonly soffits?: readonly Soffit[];
   /**
    * Chiffres clés lus par l'interface (bandes du panneau libre, étapes du guidé, spécification
    * de contenu § 2), calculés par `pipeline/figures.ts`. Ajout rétrocompatible (ADR-0009) ;

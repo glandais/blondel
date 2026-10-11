@@ -1,0 +1,97 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`plan coté d'une cage : par tronçon > 60° : parties droites (F11), largeur de départ, angle de la jonction 1`] = `
+{
+  "dimensions": [
+    "section 1500 « 1 500 »",
+    "width 900 « 900 »",
+    "section 1500 « 1 500 »",
+    "going 248 « g = 247,9 »",
+  ],
+  "labels": [
+    "junctionAngle « 60° »",
+  ],
+  "width": "Emmarchement E = 900 mm",
+}
+`;
+
+exports[`plan coté d'une cage : par tronçon > 120° à congé côté mur : angle et rayon du congé 1`] = `
+{
+  "dimensions": [
+    "section 1500 « 1 500 »",
+    "width 900 « 900 »",
+    "section 1500 « 1 500 »",
+    "going 282 « g = 281,6 »",
+  ],
+  "labels": [
+    "junctionAngle « 120° »",
+    "wallJoint « R 300 »",
+  ],
+  "width": "Emmarchement E = 900 mm",
+}
+`;
+
+exports[`plan coté d'une cage : par tronçon > arc élargi entre deux paliers droits : largeur de l'arc et profondeur des deux paliers 1`] = `
+{
+  "dimensions": [
+    "section 1500 « 1 500 »",
+    "width 900 « 900 »",
+    "radius 1500 « R 1 500 »",
+    "width 1100 « 1 100 »",
+    "section 800 « 800 »",
+    "landing 900 « 900 »",
+    "landing 600 « 600 »",
+    "going 300 « g = 300,0 »",
+  ],
+  "labels": [
+    "sweep « balayage 60° »",
+  ],
+  "width": "Emmarchement E = 900 à 1 100 mm",
+}
+`;
+
+exports[`plan coté d'une cage : par tronçon > palier droit : profondeur du palier, pas d'angle 1`] = `
+{
+  "dimensions": [
+    "section 1500 « 1 500 »",
+    "width 900 « 900 »",
+    "section 1500 « 1 500 »",
+    "landing 900 « 900 »",
+    "going 214 « g = 214,3 »",
+  ],
+  "labels": [],
+  "width": "Emmarchement E = 900 mm",
+}
+`;
+
+exports[`plan coté d'une cage : par tronçon > pan coupé et marches rayonnantes : raccords du jour annotés 1`] = `
+{
+  "dimensions": [
+    "section 1500 « 1 500 »",
+    "width 900 « 900 »",
+    "section 1500 « 1 500 »",
+    "going 282 « g = 281,6 »",
+  ],
+  "labels": [
+    "junctionAngle « 120° »",
+    "wellJoint « pan coupé 150 / 150 »",
+  ],
+  "width": "Emmarchement E = 900 mm",
+}
+`;
+
+exports[`plan coté d'une cage : par tronçon > trapèze : largeurs de départ et de fin, emmarchement de 900 à 1 300 mm 1`] = `
+{
+  "dimensions": [
+    "section 1500 « 1 500 »",
+    "width 900 « 900 »",
+    "width 1300 « 1 300 »",
+    "section 1500 « 1 500 »",
+    "going 283 « g = 282,6 »",
+  ],
+  "labels": [
+    "junctionAngle « 90° »",
+  ],
+  "width": "Emmarchement E = 900 à 1 300 mm",
+}
+`;

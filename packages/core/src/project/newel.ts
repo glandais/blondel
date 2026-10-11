@@ -110,12 +110,17 @@ export function newelLabel(n: NewelInner): Message {
     : msg("project.newel.label", { size: String(n.size) });
 }
 
-/** Projet dont les tournants `which` reçoivent le jour `target`. */
+/**
+ * Projet dont les tournants `which` reçoivent le jour `target`. Cage saisie (ADR-0010) : projet
+ * rendu tel quel (aucun tournant `turns` ; un poteau sur une jonction de cage est refusé en
+ * amont, `layout.cage.newelNotYetSupported`, et la structure n'est pas générée).
+ */
 export function withNewels(
   project: Project,
   target: NewelInner,
   which: (t: Turn, j: number) => boolean,
 ): Project {
+  if (project.stair.layout.kind === "cage") return project;
   const turns = project.stair.layout.turns.map((t, j) =>
     which(t, j) ? { ...t, inner: { ...target } } : t,
   );

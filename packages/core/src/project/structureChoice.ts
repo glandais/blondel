@@ -16,7 +16,11 @@
  *   `PROFILE_NEWEL_ITERATIONS`) jusqu'à un poteau qui convient à la section obtenue ;
  * - un jour en arc n'est jamais modifié (erreur explicite du plugin, jalon 5) ;
  * - un poteau que le tracé refuse (volée trop courte, ligne de foulée trop proche) n'est pas
- *   posé : remarque, jour conservé.
+ *   posé : remarque, jour conservé ;
+ * - cage saisie (tracé libre, ADR-0010) : la structure est posée sans adapter le jour (poteau
+ *   refusé en amont pour une jonction de cage) ; une structure autre que « aucune » n'est pas
+ *   encore générée pour une cage (`structure.cageUnsupported`) : remarque, avec la piste de la
+ *   reconversion en volées quand la cage s'écrit en volées (correction `cage-to-flights`).
  *
  * Fonction pure (les modèles intermédiaires sont calculés sans mémoïsation).
  */
@@ -24,6 +28,7 @@ import { msg, type Message } from "@blondel/i18n";
 import type { Model } from "../model/derived.js";
 import type { Mm } from "../model/primitives.js";
 import type { Project, Turn } from "../model/project.js";
+import { cageFeatures } from "../model/cageFeatures.js";
 import { buildModel } from "../pipeline/build.js";
 import { profileFlangeWidth } from "../structures/steelProfile.js";
 import {
@@ -37,6 +42,7 @@ import {
   withNewels,
   type NewelInner,
 } from "./newel.js";
+import { toFlightsLayout } from "./layoutConversion.js";
 
 /** Nombre maximal de modèles calculés pour le point fixe section ↔ poteau des profilés. */
 export const PROFILE_NEWEL_ITERATIONS = 3;
@@ -118,6 +124,19 @@ export function applyStructureChoice(
   params: Readonly<Record<string, unknown>> = {},
 ): StructureChoiceResult {
   const chosen = withStructure(project, kind, params);
+  const spec = chosen.stair.layout;
+  if (spec.kind === "cage") {
+    if (kind === "none") return { project: chosen, notes: [] };
+    const convertible = cageFeatures(spec).length === 0 && toFlightsLayout(chosen) !== null;
+    return {
+      project: chosen,
+      notes: [
+        convertible
+          ? msg("project.structureChoice.cageConvertible", { kind })
+          : msg("project.structureChoice.cage", { kind }),
+      ],
+    };
+  }
   if (!structureRequiresNewel(kind)) return { project: chosen, notes: [] };
   const turns = chosen.stair.layout.turns;
   const profile = kind === "steel-profile";

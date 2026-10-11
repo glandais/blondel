@@ -944,6 +944,7 @@ export function buildModel(project: Project, options: BuildModelOptions = {}): M
     ...(precheck ? { precheck } : {}),
     ...(autoValues ? { autoValues } : {}),
     ...(headroomAtNosings ? { headroomAtNosings } : {}),
+    ...(headroom?.selfCover ? { soffits: headroom.selfCover } : {}),
     ...(figures ? { figures } : {}),
     ...(fasteners && fasteners.length > 0 ? { fasteners } : {}),
     upperFloor: upperFloorOf(site),

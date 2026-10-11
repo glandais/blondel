@@ -16,9 +16,23 @@
  * - **jour plus étroit que la sphère T1** (pas de garde-corps de jour, remarque des garde-corps,
  *   décision A10) → régler le côté jour des garde-corps sur « mur », **seulement si le jour est
  *   fermé** : l'escalier ne le sait pas, la correction est libellée comme telle et n'est pas
- *   proposée quand l'utilisateur a déclaré le côté jour « vide » (`guards.flight.inner`).
+ *   proposée quand l'utilisateur a déclaré le côté jour « vide » (`guards.flight.inner`) ;
+ * - **cage qui s'écrit en volées et dont la structure n'est pas générée**
+ *   (`structure.cageUnsupported` dans le modèle, tracé libre sans aucune fonction de cage,
+ *   `cageFeatures` vide, ADR-0010, sous-lot 2e) → reconvertir en volées (`toFlightsLayout`, conversion exacte :
+ *   même tracé, aller-retour à l'identique) : le tracé à volées retrouve les structures, les
+ *   préréglages et les formulaires de volées. Sans cette erreur (structure « aucune »), la
+ *   cage saisie est gardée telle quelle, sans bandeau de correction permanent. Un S / Z saisi en cage (`oppositeTurns`) s'écrit
+ *   aussi en volées mais n'est pas proposé : les structures à limons le refusent en volées
+ *   comme en cage. Le patch porte `kind: "flights"` (une fusion profonde ne peut pas retirer le
+ *   `kind` de la cage) ; les champs propres à la cage sont écartés par le schéma.
+ *
+ * Cage saisie : les corrections de jour (poteau d'angle) ne s'appliquent pas, le poteau d'une
+ * cage étant refusé en amont (`layout.cage.newelNotYetSupported`) et la structure non générée
+ * (`structure.cageUnsupported`) ; `turns` d'une cage est vide.
  */
 import { msg, type Message } from "@blondel/i18n";
+import { cageFeatures } from "../model/cageFeatures.js";
 import type { Model } from "../model/derived.js";
 import { ProjectSchema, type Project, type ProjectInput } from "../model/project.js";
 import { GuardsSpecSchema } from "../guards/spec.js";
@@ -41,13 +55,15 @@ import {
   newelMatches,
   newelSatisfies,
 } from "./newel.js";
+import { toFlightsLayout } from "./layoutConversion.js";
 
 export { DEFAULT_NEWEL_SIZE };
 
 /** Action proposée : libellé affichable, raison, patch à fusionner dans le projet. */
 export interface FixSuggestion {
   /** Identifiant stable de la correction (pour l'UI et les tests). */
-  readonly id: "jour-newel" | "newel-profile" | "opening-clearance" | "jour-wall";
+  readonly id:
+    "jour-newel" | "newel-profile" | "opening-clearance" | "jour-wall" | "cage-to-flights";
   /** Libellé d'action, à l'infinitif (ex. « Passer le jour en poteau de 100 mm »). */
   readonly label: Message;
   /** Pourquoi cette correction est proposée. */
@@ -80,6 +96,31 @@ export function suggestFixes(
   model?: Pick<Model, "layout" | "compliance" | "errors"> & Partial<Pick<Model, "parts" | "notes">>,
 ): FixSuggestion[] {
   const out: FixSuggestion[] = [];
+
+  // 0. Cage qui s'écrit en volées : reconvertir (conversion exacte, voir l'en-tête).
+  const spec = project.stair.layout;
+  const cageRefused = model?.errors.some((e) => e.key === "structure.cageUnsupported") ?? false;
+  if (spec.kind === "cage" && cageRefused && cageFeatures(spec).length === 0) {
+    const flights = toFlightsLayout(project);
+    if (flights !== null) {
+      const layout = flights.stair.layout;
+      out.push({
+        id: "cage-to-flights",
+        label: msg("project.fix.cageToFlights.label", { count: layout.legs.length }),
+        reason: msg("project.fix.cageToFlights.reason"),
+        patch: {
+          stair: {
+            layout: {
+              kind: "flights",
+              width: layout.width,
+              legs: layout.legs.map((l) => ({ ...l })),
+              turns: layout.turns.map((t) => ({ ...t, inner: { ...t.inner } })),
+            },
+          },
+        },
+      });
+    }
+  }
 
   // 1. Jour à angle vif avec une structure à poteau d'angle ; poteau des profilés (A13).
   const turns = project.stair.layout.turns;

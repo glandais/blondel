@@ -91,6 +91,85 @@ export interface InstallationSheet {
   }[];
   /** Le projet (murs, trémie) a été fourni. */
   readonly hasSite: boolean;
+  /**
+   * Cage saisie (`Layout.cage`, ADR-0010, sous-lot 2e) : cotes d'implantation par tronçon
+   * (lignes de départ et d'arrivée, partie droite, largeurs, axe en arc) ; absent sinon.
+   */
+  readonly sections?: readonly InstallationSection[];
+  /** Cage saisie : jonctions (angle et coin du jour, ou profondeur d'un palier droit). */
+  readonly junctions?: readonly InstallationJunction[];
+}
+
+/** Tronçon d'une cage sur la fiche de pose (repère du site). */
+export interface InstallationSection {
+  /** Numéro du tronçon (1 = premier). */
+  readonly number: number;
+  readonly kind: "straight" | "arc";
+  /** Ligne de départ et ligne d'arrivée, du bord gauche au bord droit (sens de la montée). */
+  readonly start: { readonly left: Vec2; readonly right: Vec2 };
+  readonly end: { readonly left: Vec2; readonly right: Vec2 };
+  readonly widthStart: number;
+  readonly widthEnd: number;
+  /** Tronçon droit : partie droite, distance entre les lignes de départ et d'arrivée (F11). */
+  readonly length?: number;
+  /** Axe en arc : centre, rayon sur le bord d'ancrage, balayage signé (degrés). */
+  readonly arc?: { readonly center: Vec2; readonly radius: number; readonly sweep: number };
+}
+
+/** Jonction d'une cage sur la fiche de pose. */
+export interface InstallationJunction {
+  /** Numéro de la jonction (1 = première). */
+  readonly number: number;
+  /** Angle signé (degrés, positif = à gauche en montant ; 0 = palier droit). */
+  readonly angle: number;
+  /** Coin du jour (sommet K) et coin côté mur, repère du site. */
+  readonly innerCorner: Vec2;
+  readonly outerCorner: Vec2;
+  /** Palier droit : profondeur (arrivée du tronçon entrant → départ du sortant). */
+  readonly depth?: number;
+}
+
+/** Distance entre deux lignes transversales parallèles d'un tronçon droit (le long de la montée). */
+function lineGap(
+  from: { readonly left: Vec2; readonly right: Vec2 },
+  to: { readonly left: Vec2; readonly right: Vec2 },
+): number {
+  const across = vec2.sub(from.right, from.left);
+  const u = vec2.normalize(vec2.perpLeft(across));
+  return Math.abs(vec2.dot(vec2.sub(to.left, from.left), u));
+}
+
+/** Cotes d'implantation par tronçon et par jonction d'une cage saisie (voir `InstallationSheet`). */
+function cageInstallation(
+  layout: Model["layout"],
+): Pick<InstallationSheet, "sections" | "junctions"> {
+  if (layout.cage !== true || layout.sections === undefined) return {};
+  const deg = (rad: number): number => (rad * 180) / Math.PI;
+  const sections: InstallationSection[] = layout.sections.map((s) => ({
+    number: s.index + 1,
+    kind: s.kind,
+    start: { left: s.start.left, right: s.start.right },
+    end: { left: s.end.left, right: s.end.right },
+    widthStart: s.widthStart,
+    widthEnd: s.widthEnd,
+    ...(s.kind === "straight" ? { length: lineGap(s.start, s.end) } : {}),
+    ...(s.arc
+      ? { arc: { center: s.arc.center, radius: s.arc.radius, sweep: deg(s.arc.sweep) } }
+      : {}),
+  }));
+  const junctions: InstallationJunction[] = layout.turns.map((z) => {
+    const angle = z.angle ?? (z.direction === "left" ? Math.PI / 2 : -Math.PI / 2);
+    const before = layout.sections![z.index];
+    const after = layout.sections![z.index + 1];
+    return {
+      number: z.index + 1,
+      angle: deg(angle),
+      innerCorner: z.innerCorner,
+      outerCorner: z.outerCorner,
+      ...(angle === 0 && before && after ? { depth: lineGap(before.end, after.start) } : {}),
+    };
+  });
+  return { sections, junctions };
 }
 
 /** Nus d'un mur : axe décalé de ± épaisseur / 2. Renvoie le nu côté `p`. */
@@ -286,5 +365,6 @@ export function installationSheet(
     },
     nosings: stepping.nosings.map((n) => ({ index: n.index, q: n.q, r: n.r, z: n.z })),
     hasSite: project !== undefined,
+    ...cageInstallation(layout),
   };
 }

@@ -57,6 +57,7 @@ export {
 } from "./presetHelical.js";
 export { defaultOpening } from "./defaultOpening.js";
 export { DEFAULT_NEWEL_SIZE, suggestFixes, type FixSuggestion } from "./fixes.js";
+export { flightsToCageLayout, toCageLayout, toFlightsLayout } from "./layoutConversion.js";
 export {
   DEFAULT_NEWEL,
   expectedNewel,

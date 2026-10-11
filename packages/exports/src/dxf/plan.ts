@@ -60,6 +60,10 @@ export function exportPlanDxf(model: Model, options: PlanDxfOptions = {}): strin
     });
   }
 
+  for (const l of d.labels ?? []) {
+    w.text(l.at, th * 0.8, l.text, L.dimensions.name, { align: "center", middle: true });
+  }
+
   for (const t of d.treads) {
     w.text(t.label, th, String(t.number), L.text.name, { align: "center", middle: true });
   }

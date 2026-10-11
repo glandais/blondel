@@ -129,7 +129,8 @@ export function computeLayout(project: Project, options: LayoutOptions = {}): La
         throw new LayoutError(msg("layout.cage.newelNotYetSupported", { junction: i + 1 }));
       }
     });
-    return computeCageLayout(project, spec, { origin: "cage" });
+    // Marque « cage saisie » (`Layout.cage`) : les exports cotent alors par tronçon (F11).
+    return { ...computeCageLayout(project, spec, { origin: "cage" }), cage: true };
   }
   // Tracé à volées : générateur de cage, mêmes contrôles et mêmes messages que l'ancien moteur.
   checkFlightsTopology(spec);
