@@ -6,15 +6,17 @@ import { MessageError, dec, msg, type Message } from "@blondel/i18n";
 import { pointInPolygon } from "../../geom2d/polygon.js";
 import { curvePointAt } from "../../geom2d/curve.js";
 import { coveredIntervals, openingPolygon } from "../../headroom/headroom.js";
-import type { Location, Severity } from "../../model/derived.js";
+import type { Location, Severity, Tread } from "../../model/derived.js";
 import {
   NUMERIC_EPS,
   STAIR,
   checkValue,
   notApplicable,
   notEvaluated,
+  junctionWidth,
   treadLocation,
   treadsOfKind,
+  widestWidth,
   within,
   type Bounds,
 } from "../check.js";
@@ -138,13 +140,14 @@ const passageWidthUp: RuleEvaluator = (ctx) => {
 /**
  * MC_INTERMEDIAIRE_ERP : au-delà de 4 UP (`max`), mains courantes intermédiaires (CO 55 §1), que
  * Blondel ne modélise pas. Nombre d'UP de la largeur de passage (garde-corps décrits) ou de
- * l'emmarchement (majorant) sinon.
+ * l'emmarchement (majorant) sinon. Seuil déclencheur : une cage est jugée sur son tronçon le
+ * plus large (`widestWidth`, même déduction des mains courantes), ADR-0010 sous-lot 2d.
  */
 const intermediateHandrails: RuleEvaluator = (ctx) => {
   const max = ctx.rule.max;
   if (max === null) return [notEvaluated(msg("rules.MC_INTERMEDIAIRE_ERP.noMax"))];
   const p = passageWidth({ ...ctx, rule: getRule("LARGEUR_UP_ERP") });
-  const w = p ? p.width : width(ctx);
+  const w = (p ? p.width : width(ctx)) + (widestWidth(ctx) - width(ctx));
   const n = upCount(w);
   const base = { measured: n, min: null, max, location: p?.location ?? STAIR } as const;
   const params = { count: n, width: dec(w, 0), max: String(max) };
@@ -208,14 +211,36 @@ const betweenHandrails: RuleEvaluator = (ctx) => {
 // ------------------------------------------------------------------ Ligne de foulée / de mesure
 
 /**
+ * Groupe de marches contrôlé par une même ligne de mesure : tout l'escalier (tracé à volées,
+ * hélicoïdal, cage d'une seule distance), ou une jonction tournante de cage (ADR-0010) avec sa
+ * distance d_f de Γ au jour et son emmarchement E (`cageWalklineGroups`).
+ */
+interface WalklineGroup {
+  /** Distance d_f de la ligne de conception au jour pour ce groupe. */
+  readonly offset: number;
+  /** Marches balancées du groupe ; absent : toutes. */
+  readonly include?: (t: Tread) => boolean;
+  /**
+   * Distances pour la mesure (cage) : distance réglementaire et distance d_f de la jonction du
+   * groupe.
+   */
+  readonly target?: (s: number) => { readonly d: number; readonly offset: number };
+}
+
+/**
  * Compare la ligne de conception à la ligne de mesure réglementaire (SPEC X9 : la ligne de
  * conception est libre ; les contrôles portent sur la ligne de mesure).
  * - confondues : ok ;
  * - distinctes sans marche balancée : ok (les girons droits sont identiques sur toute ligne) ;
- * - distinctes avec marches balancées : non évaluée (lignes de mesure séparées non implémentées).
+ * - distinctes avec marches balancées : girons balancés mesurés sur la ligne de mesure.
  */
-function walklineAt(ctx: EvaluatorContext, expected: number, label: Message): Finding[] {
-  const d = ctx.layout.walklineOffset;
+function walklineAt(
+  ctx: EvaluatorContext,
+  expected: number,
+  label: Message,
+  group: WalklineGroup = { offset: ctx.layout.walklineOffset },
+): Finding[] {
+  const d = group.offset;
   const base = { measured: d, min: expected, max: expected, location: STAIR } as const;
   if (Math.abs(d - expected) <= NUMERIC_EPS) {
     return [
@@ -226,7 +251,10 @@ function walklineAt(ctx: EvaluatorContext, expected: number, label: Message): Fi
       },
     ];
   }
-  if (treadsOfKind(ctx.stepping, "winder").length === 0) {
+  const winders = treadsOfKind(ctx.stepping, "winder").filter(
+    (t) => !group.include || group.include(t),
+  );
+  if (winders.length === 0) {
     // Sans incidence : la ligne de conception n'est pas soumise à la borne ; ni mesure ni
     // bornes (sinon « mesuré 650 mm, attendu 600 mm » sur une ligne conforme).
     return [
@@ -243,7 +271,7 @@ function walklineAt(ctx: EvaluatorContext, expected: number, label: Message): Fi
       },
     ];
   }
-  return measurementLineFindings(ctx, expected, label);
+  return measurementLineFindings(ctx, expected, label, group);
 }
 
 /** Grandeur contrôlée sur la ligne de mesure par chaque règle de `regles_mesurees`. */
@@ -267,14 +295,18 @@ function measurementLineFindings(
   ctx: EvaluatorContext,
   expected: number,
   label: Message,
+  group: WalklineGroup,
 ): Finding[] {
-  const d = ctx.layout.walklineOffset;
+  const d = group.offset;
   const head = msg("compliance.walkline.head", {
     distance: dec(d),
     expected: dec(expected),
     label,
   });
-  const res = goingsOnMeasurementLine(ctx.layout, ctx.stepping, expected);
+  const res = goingsOnMeasurementLine(ctx.layout, ctx.stepping, expected, {
+    ...(group.include ? { include: group.include } : {}),
+    ...(group.target ? { target: group.target } : {}),
+  });
   if (!res.ok)
     return [
       {
@@ -383,20 +415,150 @@ function measurementLineFindings(
 /** Milieu si E ≤ seuil, 600 mm (valeur `min` de la règle large) sinon. */
 function dtuWalkline(branch: "narrow" | "wide" | "both"): RuleEvaluator {
   return (ctx) => {
-    const e = width(ctx);
     // Seuil de la règle évaluée (`parametres.E_seuil`), à défaut celui des règles DTU.
     const threshold = ctx.rule.parametres?.["E_seuil"] ?? LF_WIDE_THRESHOLD.value;
-    const narrow = e <= threshold;
-    const params = { width: dec(e), threshold: String(threshold) };
-    if (branch === "narrow" && !narrow)
-      return [notApplicable(msg("compliance.walkline.wideNotApplicable", params))];
-    if (branch === "wide" && narrow)
-      return [notApplicable(msg("compliance.walkline.narrowNotApplicable", params))];
-    if (narrow) return walklineAt(ctx, e / 2, msg("compliance.walkline.labelMiddle", params));
-    const d = branch === "wide" ? ctx.rule.min : wideDistance(ctx);
-    if (d === null) return [notEvaluated(msg("compliance.walkline.noDistance"))];
-    return walklineAt(ctx, d, msg("compliance.walkline.labelWide", params));
+    /** Distance attendue pour un emmarchement `e` ; `undefined` : sans objet pour la branche. */
+    const expectedFor = (e: number): number | null | undefined => {
+      const narrow = e <= threshold;
+      if ((branch === "narrow" && !narrow) || (branch === "wide" && narrow)) return undefined;
+      if (narrow) return e / 2;
+      return branch === "wide" ? ctx.rule.min : wideDistance(ctx);
+    };
+    const labelFor = (e: number): Message => {
+      const params = { width: dec(e), threshold: String(threshold) };
+      return e <= threshold
+        ? msg("compliance.walkline.labelMiddle", params)
+        : msg("compliance.walkline.labelWide", params);
+    };
+    const notApplicableFor = (e: number): Finding => {
+      const params = { width: dec(e), threshold: String(threshold) };
+      return notApplicable(
+        msg(
+          e <= threshold
+            ? "compliance.walkline.narrowNotApplicable"
+            : "compliance.walkline.wideNotApplicable",
+          params,
+        ),
+      );
+    };
+    const groups = cageWalklineGroups(ctx);
+    if (groups === null) {
+      const e = width(ctx);
+      const d = expectedFor(e);
+      if (d === undefined) return [notApplicableFor(e)];
+      if (d === null) return [notEvaluated(msg("compliance.walkline.noDistance"))];
+      return walklineAt(ctx, d, labelFor(e));
+    }
+    return perJunction(
+      ctx,
+      groups,
+      (g) => {
+        const d = expectedFor(g.width);
+        if (d === undefined) return null;
+        if (d === null) return { expected: null, label: labelFor(g.width) };
+        return { expected: d, label: labelFor(g.width) };
+      },
+      notApplicableFor(Math.min(...groups.map((g) => g.width))),
+    );
   };
+}
+
+/** Jonction tournante d'une cage et ses distances (voir `cageWalklineGroups`). */
+interface JunctionGroup {
+  /** Numéro de la jonction (1 …). */
+  readonly junction: number;
+  /** Distance d_f de Γ au jour à la jonction. */
+  readonly offset: number;
+  /** Emmarchement E à la jonction. */
+  readonly width: number;
+  readonly sStart: number;
+  readonly sEnd: number;
+}
+
+/** Groupe de la jonction la plus proche de l'abscisse s (premier à égalité, comme `collarSideAt`). */
+function nearestGroup(groups: readonly JunctionGroup[], s: number): JunctionGroup {
+  let best = groups[0]!;
+  let bestD = Infinity;
+  for (const g of groups) {
+    const d = Math.max(0, g.sStart - s, s - g.sEnd);
+    if (d < bestD) {
+      best = g;
+      bestD = d;
+    }
+  }
+  return best;
+}
+
+/**
+ * Cage (ADR-0010, décisions F1, F2) dont les jonctions tournantes n'ont pas toutes la distance
+ * d_f ni l'emmarchement E de l'escalier : un groupe par jonction tournante (angle ≠ 0), avec d_f
+ * de la jonction (`TurnZone.walklineOffset`) et E = plus petite largeur en présence à la
+ * jonction (`junctionWidth`, celle sur laquelle le tracé calcule d_f) ; chaque marche balancée
+ * relève de la jonction la plus proche. `null` : contrôle unique de l'escalier (tracé à volées,
+ * hélicoïdal, cage sans jonction tournante ou d'une seule distance et d'un seul emmarchement),
+ * inchangé.
+ */
+function cageWalklineGroups(ctx: EvaluatorContext): JunctionGroup[] | null {
+  if (ctx.project.stair.layout.kind !== "cage") return null;
+  const turning = ctx.layout.turns.filter((t) => t.angle !== undefined && t.angle !== 0);
+  if (turning.length === 0) return null;
+  const groups = turning.map((t) => ({
+    junction: t.index + 1,
+    offset: t.walklineOffset ?? ctx.layout.walklineOffset,
+    width: junctionWidth(ctx, t),
+    sStart: t.sStart,
+    sEnd: t.sEnd,
+  }));
+  const uniform = groups.every(
+    (g) =>
+      Math.abs(g.offset - ctx.layout.walklineOffset) <= NUMERIC_EPS &&
+      Math.abs(g.width - width(ctx)) <= NUMERIC_EPS,
+  );
+  return uniform ? null : groups;
+}
+
+/**
+ * Constats par jonction tournante d'une cage (`cageWalklineGroups`), chacun préfixé du numéro de
+ * la jonction. `expect` rend la distance attendue et son libellé pour une jonction (`null` : sans
+ * objet pour la règle, `expected: null` : distance absente de la table) ; marches balancées de
+ * la jonction mesurées sur la ligne à la distance attendue de chaque jonction. Toutes les
+ * jonctions sans objet : `none`.
+ */
+function perJunction(
+  ctx: EvaluatorContext,
+  groups: readonly JunctionGroup[],
+  expect: (g: JunctionGroup) => { expected: number | null; label: Message } | null,
+  none: Finding,
+): Finding[] {
+  const out: Finding[] = [];
+  for (const g of groups) {
+    const e = expect(g);
+    if (e === null) continue;
+    const expected = e.expected;
+    const findings: Finding[] =
+      expected === null
+        ? [notEvaluated(msg("compliance.walkline.noDistance"))]
+        : walklineAt(ctx, expected, e.label, {
+            offset: g.offset,
+            // Marches balancées dont la jonction la plus proche est `g` ; mesurées à la
+            // distance attendue de `g`, la ligne de mesure décalant Γ de d − d_f(g).
+            include: (t) => {
+              const a = ctx.stepping.nosings[t.number - 1];
+              const b = ctx.stepping.nosings[t.number];
+              return !!a && !!b && nearestGroup(groups, (a.s + b.s) / 2) === g;
+            },
+            target: () => ({ d: expected, offset: g.offset }),
+          });
+    for (const f of findings)
+      out.push({
+        ...f,
+        message: msg("compliance.walkline.atJunction", {
+          junction: g.junction,
+          message: f.message,
+        }),
+      });
+  }
+  return out.length > 0 ? out : [none];
 }
 
 /** Distance pour E large quand la règle elle-même n'a pas de `min` : celle de LF_POSITION_DTU_LARGE. */
@@ -408,7 +570,11 @@ function wideDistance(ctx: EvaluatorContext): number | null {
 const fixedWalkline: RuleEvaluator = (ctx) => {
   const d = ctx.rule.min ?? ctx.rule.max;
   if (d === null) return [notEvaluated(msg("compliance.walkline.noDistance"))];
-  return walklineAt(ctx, d, msg("compliance.walkline.labelRegulatory"));
+  const label = msg("compliance.walkline.labelRegulatory");
+  const groups = cageWalklineGroups(ctx);
+  if (groups === null) return walklineAt(ctx, d, label);
+  // Cage : même distance réglementaire à chaque jonction, d_f propre à chacune.
+  return perJunction(ctx, groups, () => ({ expected: d, label }), notApplicable(label));
 };
 
 // ------------------------------------------------------------------ Échappée
@@ -524,17 +690,19 @@ const openingLength: RuleEvaluator = (ctx) => {
   const edge = covered.length > 0 ? covered[covered.length - 1]!.s1 : 0;
   const length = sA - edge;
   const from = Math.max(0, sA - Math.max(required, length));
+  // Tournant, palier droit, transition de Γ ou axe en arc d'une cage (ADR-0010) avant
+  // l'arrivée : la dérivation suppose une volée droite à pente constante. Un palier droit
+  // (zone d'angle 0) garde Γ droite mais interrompt la pente : message propre.
+  const overlaps = (t: { sStart: number; sEnd: number }): boolean =>
+    t.sEnd > from + NUMERIC_EPS && t.sStart < sA - NUMERIC_EPS;
+  const zones = ctx.layout.turns.filter(overlaps);
   const curved =
-    ctx.layout.turns.some((t) => t.sEnd > from + NUMERIC_EPS && t.sStart < sA - NUMERIC_EPS) ||
-    (ctx.layout.walklineTransitions ?? []).some(
-      (t) => t.sEnd > from + NUMERIC_EPS && t.sStart < sA - NUMERIC_EPS,
-    );
-  if (curved)
-    return [
-      notEvaluated(
-        msg("rules.TREMIE_LONGUEUR.turn", { length: dec(Math.max(required, length), 0) }),
-      ),
-    ];
+    zones.some((t) => t.angle !== 0) ||
+    (ctx.layout.walklineTransitions ?? []).some(overlaps) ||
+    (ctx.layout.sections ?? []).some((sec) => sec.kind === "arc" && overlaps(sec));
+  const shown = { length: dec(Math.max(required, length), 0) };
+  if (curved) return [notEvaluated(msg("rules.TREMIE_LONGUEUR.turn", shown))];
+  if (zones.length > 0) return [notEvaluated(msg("rules.TREMIE_LONGUEUR.landing", shown))];
   const p = curvePointAt(ctx.layout.walkline, edge);
   return [
     checkValue(

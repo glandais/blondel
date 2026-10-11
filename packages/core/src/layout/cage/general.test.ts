@@ -641,7 +641,7 @@ describe("axe en arc", () => {
   });
 });
 
-describe("pipeline (garde-fou temporaire des sous-lots 2a / 2b, réduit au 2c)", () => {
+describe("pipeline (garde-fou temporaire des sous-lots 2a / 2b, levé au 2d)", () => {
   it.each<[string, CageLayoutSpecInput]>([
     [
       "largeur variable",
@@ -652,11 +652,11 @@ describe("pipeline (garde-fou temporaire des sous-lots 2a / 2b, réduit au 2c)",
       },
     ],
     ["axe en arc", { kind: "cage", sections: [arcAxis(2000, 90, 1000)], junctions: [] }],
-  ])("%s : tracé et découpage rendus, garde-corps / échappée / règles sautés", (_name, spec) => {
+  ])("%s : tracé, découpage et règles rendus sans erreur", (_name, spec) => {
     const project = cageProject(spec);
     expect(computeLayout(project).sections).toBeDefined();
     const model = buildModel(project, { memo: false });
-    expect(model.errors.map((e) => e.key)).toEqual(["pipeline.cageDownstreamNotYetSupported"]);
+    expect(model.errors.map((e) => e.key)).toEqual([]);
     expect(model.layout.sections).toHaveLength(spec.sections.length);
     expect(model.stepping.treads.length).toBeGreaterThan(0);
   });

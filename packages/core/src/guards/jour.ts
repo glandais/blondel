@@ -7,12 +7,20 @@
  * garde-corps de jour (décision de l'utilisateur 2026-09-29, QUESTIONS A10 : `GC_OBLIGATOIRE` en
  * conseil) ; au-dessus, la collision des poteaux des deux garde-corps de jour est contrôlée
  * (`GC_POTEAUX_JOUR`, avertissement).
+ *
+ * Cage (ADR-0010, sous-lot 2d) : raccord de jour lu dans `TurnZone.well` (à défaut, tournant du
+ * projet) ; deux jonctions forment un jour si elles sont à ±90° du même côté, séparées seulement
+ * par des paliers droits (angle 0) et des tronçons droits : leurs volées extrêmes se font face,
+ * perpendiculaires au bord du jour intermédiaire (même géométrie que le U à volées). Pour tout
+ * autre couple (angles quelconques, axe en arc entre les deux), aucun jour étroit n'est retenu :
+ * le garde-corps de jour est construit (côté de la sécurité, choix « à valider », QUESTIONS F14).
  */
 import type { Message, MessageKey } from "@blondel/i18n";
 import * as V from "../geom2d/vec.js";
-import type { Layout } from "../model/derived.js";
+import { isRightAngleTurn, turnAngle } from "../balancing/zone.js";
+import type { Layout, TurnZone } from "../model/derived.js";
 import type { Mm, Vec2 } from "../model/primitives.js";
-import type { Turn } from "../model/project.js";
+import type { InnerCorner, Turn, WellJoint } from "../model/project.js";
 import { newelSetback } from "../layout/newel.js";
 import { findRule } from "../rules/table.js";
 import { pointAt } from "./polyline.js";
@@ -41,28 +49,59 @@ export function narrowJourThreshold(): Mm | null {
 }
 
 /**
+ * Raccord côté jour du tournant `zone` : `TurnZone.well` (moteur de cage, tracés à volées
+ * compris), à défaut le raccord du tournant du projet de même indice (`turns`).
+ */
+export function zoneWell(
+  zone: TurnZone,
+  turns: readonly Turn[],
+): WellJoint | InnerCorner | undefined {
+  return zone.well ?? turns[zone.index]?.inner;
+}
+
+/**
  * Débord d'un jour de tournant dans le vide central : demi-côté d'un poteau (plus son décalage
  * vers le jour), 0 sinon.
  */
-function protrusion(turn: Turn | undefined): Mm {
-  return turn?.inner.kind === "newel" ? newelSetback(turn.inner) : 0;
+function protrusion(well: WellJoint | InnerCorner | undefined): Mm {
+  return well?.kind === "newel" ? newelSetback(well) : 0;
+}
+
+/**
+ * Couples de tournants dont les volées extrêmes se font face autour d'un jour (voir l'en-tête) :
+ * tournants à ±90° de même sens, séparés seulement par des paliers droits (angle 0) et des
+ * tronçons droits (`Layout.sections`, absent pour un tracé à volées sans tronçons).
+ */
+function facingPairs(layout: Layout): [TurnZone, TurnZone][] {
+  const out: [TurnZone, TurnZone][] = [];
+  const turning = layout.turns.filter((t) => turnAngle(t) !== 0);
+  for (let j = 0; j + 1 < turning.length; j++) {
+    const a = turning[j]!;
+    const b = turning[j + 1]!;
+    if (a.direction !== b.direction) continue;
+    if (!isRightAngleTurn(a) || !isRightAngleTurn(b)) continue;
+    const curved = (layout.sections ?? []).some(
+      (s) => s.index > a.index && s.index <= b.index && s.kind !== "straight",
+    );
+    if (curved) continue;
+    out.push([a, b]);
+  }
+  return out;
 }
 
 /**
  * Largeur minimale du jour (mm) entre tournants consécutifs de même sens ; `Infinity` sans
- * tel couple (droit, quart tournant, tournants de sens opposés). `turns` : tournants du projet
- * (`stair.layout.turns`), dans l'ordre de `layout.turns`.
+ * tel couple (droit, quart tournant, tournants de sens opposés, cage sans couple qui se fait
+ * face). `turns` : tournants du projet (`stair.layout.turns`, vide pour une cage), repli quand
+ * `TurnZone.well` est absent.
  */
 export function jourWidth(layout: Layout, turns: readonly Turn[]): Mm {
   let best = Infinity;
-  for (let j = 0; j + 1 < layout.turns.length; j++) {
-    const a = layout.turns[j]!;
-    const b = layout.turns[j + 1]!;
-    if (a.direction !== b.direction) continue;
+  for (const [a, b] of facingPairs(layout)) {
     const w =
       V.distance(a.innerCorner, b.innerCorner) -
-      protrusion(turns[a.index]) -
-      protrusion(turns[b.index]);
+      protrusion(zoneWell(a, turns)) -
+      protrusion(zoneWell(b, turns));
     if (w < best) best = w;
   }
   return best;
@@ -99,14 +138,11 @@ export function narrowJourZones(
   innerEdge: readonly Vec2[],
 ): NarrowJourZone[] {
   const out: NarrowJourZone[] = [];
-  for (let j = 0; j + 1 < layout.turns.length; j++) {
-    const ta = layout.turns[j]!;
-    const tb = layout.turns[j + 1]!;
-    if (ta.direction !== tb.direction) continue;
+  for (const [ta, tb] of facingPairs(layout)) {
     const w =
       V.distance(ta.innerCorner, tb.innerCorner) -
-      protrusion(turns[ta.index]) -
-      protrusion(turns[tb.index]);
+      protrusion(zoneWell(ta, turns)) -
+      protrusion(zoneWell(tb, turns));
     if (!(w < threshold)) continue;
     const a = ta.innerCorner;
     const b = tb.innerCorner;

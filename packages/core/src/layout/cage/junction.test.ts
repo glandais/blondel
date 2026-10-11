@@ -535,26 +535,24 @@ describe("recouvrement en plan (overlap.ts)", () => {
   });
 });
 
-describe("pipeline : garde-fou temporaire de l'aval (sous-lot 2a, réduit au 2c, levé au 2d)", () => {
+describe("pipeline : toute la chaîne sur une cage (garde-fou temporaire de l'aval levé au 2d)", () => {
   it.each([
     ["angle quelconque", two(60)],
     ["palier droit", { ...two(0), junctions: [{ angle: 0, mode: "landing" as const }] }],
     ["pan coupé à 90°", two(90, { well: { kind: "chamfer", setbackIn: 50, setbackOut: 50 } })],
     ["congé côté mur à 90°", two(90, { wall: { kind: "arc", radius: 100 } })],
     ["marches rayonnantes à 90°", two(90, { mode: "radiating" })],
-  ])(
-    "%s : tracé et découpage rendus, garde-corps / échappée / règles sautés avec une erreur claire",
-    (_name, spec) => {
-      const model = buildModel(cageProject(spec), { memo: false });
-      expect(model.errors.map((e) => e.key)).toEqual(["pipeline.cageDownstreamNotYetSupported"]);
-      expect(model.layout.sections).toHaveLength(2);
-      expect(model.layout.walkline.segments.length).toBeGreaterThan(0);
-      // Sous-lot 2c : découpage, balancement et pièces de base calculés.
-      expect(model.stepping.treads.length).toBeGreaterThan(0);
-      expect(model.parts.length).toBeGreaterThan(0);
-      expect(model.headroom).toBeUndefined();
-    },
-  );
+  ])("%s : tracé, découpage, pièces et règles rendus sans erreur", (_name, spec) => {
+    const model = buildModel(cageProject(spec), { memo: false });
+    expect(model.errors.map((e) => e.key)).toEqual([]);
+    expect(model.layout.sections).toHaveLength(2);
+    expect(model.layout.walkline.segments.length).toBeGreaterThan(0);
+    // Sous-lot 2c : découpage, balancement et pièces de base calculés.
+    expect(model.stepping.treads.length).toBeGreaterThan(0);
+    expect(model.parts.length).toBeGreaterThan(0);
+    // Sans trémie (projet de test) : pas de plafond, pas d'échappée.
+    expect(model.headroom).toBeUndefined();
+  });
 
   it("cage à ±90° sans ces fonctions : découpage produit (inchangé)", () => {
     const model = buildModel(cageProject(two(90)), { memo: false });

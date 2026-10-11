@@ -4,7 +4,10 @@
  *
  * - **Bord intérieur** : C_i (jour) mis en polyligne ; le contour d'un poteau d'angle (`newel`)
  *   est remplacé par le coin intérieur K (la ligne de garde-corps s'arrête sur le poteau, qui en
- *   tient lieu). **Bord extérieur** : C_e.
+ *   tient lieu). **Bord extérieur** : C_e. Les bords sont ceux du tracé, tronçon par tronçon
+ *   (`Layout.inner` / `Layout.outer`) : pour une cage (ADR-0010), bords réels des trapèzes, arcs
+ *   concentriques d'un axe en arc, raccords en arc, en pan coupé ou vifs, paliers droits ; le
+ *   raccord de jour (poteau) est lu dans `TurnZone.well`, jamais dans les volées du projet.
  * - **Hélicoïdal à fût central** : le bord intérieur longe le fût (pas de vide) : aucune portion,
  *   donc ni garde-corps ni main courante murale de ce côté (`isColumnSide`). À jour central, le
  *   bord intérieur est traité comme un jour.
@@ -24,6 +27,7 @@ import * as V from "../geom2d/vec.js";
 import type { Layout, Stepping } from "../model/derived.js";
 import type { Mm, Vec2, Vec3 } from "../model/primitives.js";
 import type { Project, Wall } from "../model/project.js";
+import { zoneWell } from "./jour.js";
 import { cumulative, dedupe, interp, project as projectOn, POLY_EPS } from "./polyline.js";
 import type { GuardSideMode, GuardsSpec } from "./spec.js";
 import type { SideAnalysis, SideInterval, StairSide } from "./types.js";
@@ -67,15 +71,17 @@ export function sideEdge(
   let pts = dedupe(flattenCurve(curve, 0.5));
   const newelCorners: { k: Vec2; size: number; reach: number; turn: number }[] = [];
   if (side === "inner") {
-    project.stair.layout.turns.forEach((t, i) => {
-      const zone = layout.turns[i];
-      if (t.inner.kind === "newel" && zone)
+    // Raccord de jour lu dans le tracé (`TurnZone.well`, cage comprise ; à défaut, tournant
+    // du projet de même indice) : une cage n'a pas de `stair.layout.turns`.
+    layout.turns.forEach((zone, i) => {
+      const well = zoneWell(zone, project.stair.layout.turns);
+      if (well?.kind === "newel")
         newelCorners.push({
           k: zone.innerCorner,
           // Poteau décalé vers le jour : côté équivalent d'un poteau centré qui le couvre
           // côté vide (2 × débord côté jour), pour l'emprise vue par les garde-corps.
-          size: 2 * newelSetback(t.inner),
-          reach: newelReach(t.inner),
+          size: 2 * newelSetback(well),
+          reach: newelReach(well),
           turn: i,
         });
     });

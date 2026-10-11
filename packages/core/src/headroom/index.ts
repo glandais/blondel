@@ -13,6 +13,13 @@ export {
   type HeadroomAnalysis,
   type HeadroomOnWalkline,
 } from "./headroom.js";
+export {
+  cageMaxSweep,
+  cageOutlineDefect,
+  cageOutlineReach,
+  cageSelfCovers,
+  cageSoffits,
+} from "./cage.js";
 export { requiredOpening, type RequiredOpening } from "./required.js";
 export { selfCoveredHeadroom, type SelfCoverInput } from "./selfcover.js";
 export {

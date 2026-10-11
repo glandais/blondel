@@ -282,26 +282,25 @@ describe("schéma cage", () => {
     ).toContain("stair.layout.junctions[0].well.setbackIn");
   });
 
-  it("buildModel sur une cage à largeur variable : tracé calculé, aval sauté avec une seule erreur claire", () => {
+  it("buildModel sur une cage à largeur variable : toute la chaîne calculée, sans erreur (garde-fou levé au 2d)", () => {
     const p = parseProject(cageProject(QUARTER));
     const model = buildModel(p);
-    expect(modelErrorKeys(model.errors)).toEqual(["pipeline.cageDownstreamNotYetSupported"]);
+    expect(modelErrorKeys(model.errors)).toEqual([]);
     expect(model.layout.sections?.[1]).toMatchObject({ widthStart: 800, widthEnd: 1000 });
   });
 
-  it("buildModel sur une cage à largeur variable, limon à la française et garde-corps : aval sauté, structure refusée", () => {
+  it("buildModel sur une cage à largeur variable, limon à la française et garde-corps : garde-corps calculés, structure refusée", () => {
     const project = cageProject(QUARTER, { guards: { flight: { enabled: true } } });
     (project.stair as Record<string, unknown>).structure = { kind: "wood-housed" };
     const p = parseProject(project);
     expect(p.stair.structure.kind).toBe("wood-housed");
     expect(p.guards?.flight.enabled).toBe(true);
     const model = buildModel(p);
-    // Sous-lot 2c : découpage et pièces de base calculés ; le plugin reste sauté (cage saisie).
-    expect(modelErrorKeys(model.errors)).toEqual([
-      "pipeline.cageDownstreamNotYetSupported",
-      "structure.cageUnsupported",
-    ]);
+    // Sous-lot 2d : garde-corps, échappée et règles calculés ; le plugin reste sauté (cage
+    // saisie, lot 2f).
+    expect(modelErrorKeys(model.errors)).toEqual(["structure.cageUnsupported"]);
     expect(model.stepping.treads.length).toBeGreaterThan(0);
+    expect(model.parts.some((part) => part.family === "guards")).toBe(true);
   });
 });
 

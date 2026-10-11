@@ -22,6 +22,7 @@ import {
   notApplicable,
   notEvaluated,
   unitSuffix,
+  widestWidth,
   within,
   type Bounds,
 } from "../check.js";
@@ -644,9 +645,11 @@ const handrailBothSides: RuleEvaluator = withGuards((ctx, g) => {
 /**
  * ERP : une main courante dès 1 UP, de chaque côté dès 2 UP (largeur ≥ 1 400 mm) ; pour un
  * tournant (ou un hélicoïdal) d'1 UP, la main courante doit être côté extérieur (CO 56 §3).
+ * Seuil déclencheur : une cage est jugée sur son tronçon le plus large (`widestWidth`, ADR-0010
+ * sous-lot 2d), une largeur minimale l'étant sur le plus étroit.
  */
 const handrailUp: RuleEvaluator = withGuards((ctx, g) => {
-  const twoUp = ctx.project.stair.layout.width >= UP2_WIDTH.value;
+  const twoUp = widestWidth(ctx) >= UP2_WIDTH.value;
   const count = handrailCount(ctx, g, twoUp ? 2 : (ctx.rule.min ?? 1));
   const turning = ctx.contexts.has("tournant") || ctx.contexts.has("helicoidal");
   if (twoUp || !turning || count.some((f) => f.status === "violation")) return count;

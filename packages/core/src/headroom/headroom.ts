@@ -22,6 +22,11 @@
  * plan (`selfcover.ts`). Le calcul reste exact : Γ et les segments de nez sont coupés aux côtés
  * de la trémie et des contours des sous-faces, le plafond est constant par morceau et le minimum
  * de chaque morceau est atteint à sa borne haute. Sans sous-face, le calcul est inchangé.
+ * Cage saisie qui repasse au-dessus d'elle-même (ADR-0010, sous-lot 2d) : sous-faces de ses
+ * marches déduites par `headroom/cage.ts` et passées à `computeHeadroom` (`selfCover`). Toute
+ * autre cage (angles quelconques, trapèzes, arcs, paliers droits) est traitée comme un tracé à
+ * volées : Γ, ses intersections analytiques avec la trémie et les segments de nez sont
+ * génériques.
  *
  * 3. **Échappée au droit de chaque nez** (`atNosings`, inspecteur Marche) : plafond le plus bas
  *    au-dessus du point P_k de Γ (dalle hors trémie, sous-faces de l'escalier qui le couvrent),
@@ -32,7 +37,7 @@ import { intersectLineCurve, segmentIntersect } from "../geom2d/intersect.js";
 import { ensureCCW, pointInPolygon } from "../geom2d/polygon.js";
 import { GEOM_EPS } from "../geom2d/tolerance.js";
 import * as V from "../geom2d/vec.js";
-import type { HeadroomOnWidth, Layout, NosingLine, Stepping } from "../model/derived.js";
+import type { HeadroomOnWidth, Layout, NosingLine, Soffit, Stepping } from "../model/derived.js";
 import type { Curve2, Mm, Polygon2, Vec2, Vec3 } from "../model/primitives.js";
 import type { Opening, Site } from "../model/project.js";
 import { slopeProfileOf, slopeZ, type SlopeProfile } from "./profile.js";
@@ -208,9 +213,14 @@ export function computeHeadroom(
   site: Site,
   layout: Layout,
   stepping: Stepping,
+  /**
+   * Sous-faces déduites hors du découpage (cage qui repasse au-dessus d'elle-même,
+   * `headroom/cage.ts`) ; ignorées si le découpage porte les siennes (hélicoïdal).
+   */
+  selfCover?: readonly Soffit[],
 ): HeadroomAnalysis | null {
   const opening = openingPolygon(site.opening);
-  const soffits = stepping.soffits ?? [];
+  const soffits = stepping.soffits ?? selfCover ?? [];
   if (soffits.length > 0) {
     const ceiling = ceilingOf(site);
     return selfCoveredHeadroom({

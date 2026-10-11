@@ -5,7 +5,7 @@
  * `dec()` de `@blondel/i18n` (rendu français identique à l'ancien `fmt`, supprimé).
  */
 import { dec, msg, type Message } from "@blondel/i18n";
-import type { Location, Stepping, Tread } from "../model/derived.js";
+import type { LayoutSection, Location, Stepping, Tread, TurnZone } from "../model/derived.js";
 import type { Polygon2 } from "../model/primitives.js";
 import type { EvaluatorContext, Finding } from "./types.js";
 
@@ -252,6 +252,91 @@ export function treadLocation(t: Tread): Location {
 
 export function treadsOfKind(stepping: Stepping, kind: Tread["kind"]): Tread[] {
   return stepping.treads.filter((t) => t.kind === kind);
+}
+
+// ------------------------------------------------------------------ Largeurs (cage)
+
+/** Largeur utile E d'un tronçon : la plus petite de ses largeurs de départ et d'arrivée. */
+export function sectionWidth(section: LayoutSection): number {
+  return Math.min(section.widthStart, section.widthEnd);
+}
+
+/**
+ * Largeur d'un tronçon à l'abscisse s de Γ : interpolation linéaire en s entre `widthStart`
+ * (en `sStart`) et `widthEnd` (en `sEnd`), exacte aux extrémités (bords interpolés linéairement
+ * le long du tronçon, sous-lot 2b ; à l'intérieur d'un tronçon en arc ou à Γ oblique, valeur
+ * approchée).
+ */
+function sectionWidthAt(section: LayoutSection, s: number): number {
+  const len = section.sEnd - section.sStart;
+  if (len <= NUMERIC_EPS) return Math.min(section.widthStart, section.widthEnd);
+  const f = Math.min(1, Math.max(0, (s - section.sStart) / len));
+  return section.widthStart + f * (section.widthEnd - section.widthStart);
+}
+
+/** Vrai si les largeurs se lisent tronçon par tronçon (cage saisie, ADR-0010). */
+function bySection(ctx: EvaluatorContext): boolean {
+  return ctx.project.stair.layout.kind === "cage" && (ctx.layout.sections?.length ?? 0) > 0;
+}
+
+/**
+ * Largeur utile E au droit de l'intervalle [s0 ; s1] de Γ (marche, palier) : plus petite largeur
+ * **sur la partie de chaque tronçon que l'intervalle recouvre** (largeur à ses bornes, ramenées
+ * dans le tronçon), une zone tournante touchant les deux tronçons qu'elle relie à leurs
+ * extrémités. Un palier (zone tournante, ou palier droit) a donc pour E les largeurs qui le
+ * bordent : arrivée du tronçon entrant, départ du tronçon sortant (comme `junctionWidth`), et
+ * non l'extrémité éloignée d'un trapèze voisin. Tracé à volées ou hélicoïdal : emmarchement
+ * unique `stair.layout.width` (inchangé). Cage : `stair.layout.width` (plus petite largeur de
+ * la cage) si aucun tronçon n'est touché.
+ */
+export function widthOver(ctx: EvaluatorContext, s0: number, s1: number): number {
+  const fallback = ctx.project.stair.layout.width;
+  if (!bySection(ctx)) return fallback;
+  const lo = Math.min(s0, s1);
+  const hi = Math.max(s0, s1);
+  let w = Infinity;
+  for (const sec of ctx.layout.sections!) {
+    if (sec.sEnd < lo - NUMERIC_EPS || sec.sStart > hi + NUMERIC_EPS) continue;
+    const a = Math.max(lo, sec.sStart);
+    const b = Math.min(hi, sec.sEnd);
+    w = Math.min(w, sectionWidthAt(sec, a), sectionWidthAt(sec, b));
+  }
+  for (const t of ctx.layout.turns) {
+    if (t.sEnd < lo - NUMERIC_EPS || t.sStart > hi + NUMERIC_EPS) continue;
+    for (const sec of ctx.layout.sections!) {
+      if (sec.index === t.index) w = Math.min(w, sec.widthEnd);
+      if (sec.index === t.index + 1) w = Math.min(w, sec.widthStart);
+    }
+  }
+  return Number.isFinite(w) ? w : fallback;
+}
+
+/**
+ * Plus grande largeur utile de l'escalier, pour une exigence **déclenchée** par un seuil de
+ * largeur (« dès que E ≥ … », par exemple 2 UP en ERP) : une cage est contrôlée sur sa partie
+ * la plus large (plus grande des largeurs de départ et d'arrivée de ses tronçons), alors qu'une
+ * largeur **minimale** se contrôle sur la plus petite (`stair.layout.width`). Tracé à volées ou
+ * hélicoïdal : emmarchement unique.
+ */
+export function widestWidth(ctx: EvaluatorContext): number {
+  const fallback = ctx.project.stair.layout.width;
+  if (!bySection(ctx)) return fallback;
+  return Math.max(fallback, ...ctx.layout.sections!.flatMap((s) => [s.widthStart, s.widthEnd]));
+}
+
+/**
+ * Largeur utile E d'une zone tournante (jonction j) : plus petite largeur en présence à la
+ * jonction (arrivée du tronçon j, départ du tronçon j + 1), celle sur laquelle le tracé calcule
+ * d_f (décision F1). Tracé à volées ou hélicoïdal : `stair.layout.width`.
+ */
+export function junctionWidth(ctx: EvaluatorContext, zone: TurnZone): number {
+  const fallback = ctx.project.stair.layout.width;
+  if (!bySection(ctx)) return fallback;
+  const secs = ctx.layout.sections!;
+  const a = secs.find((s) => s.index === zone.index);
+  const b = secs.find((s) => s.index === zone.index + 1);
+  const ws = [a?.widthEnd, b?.widthStart].filter((x): x is number => x !== undefined);
+  return ws.length > 0 ? Math.min(...ws) : fallback;
 }
 
 // ------------------------------------------------------------------ Géométrie légère

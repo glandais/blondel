@@ -12,6 +12,13 @@
  *
  * Seules les marches balancées sont mesurées : les nez d'une marche droite sont parallèles, son
  * giron est le même sur toute ligne parallèle aux bords.
+ *
+ * Cage (ADR-0010, sous-lot 2d, décision F2) : mêmes définitions qu'à 90°, à tout angle de
+ * jonction (giron = longueur sur la ligne de mesure entre les deux lignes de nez ; le collet
+ * reste la corde `Tread.colletChord` du découpage). Chaque jonction tournante porte sa propre
+ * distance d_f de Γ au jour (`TurnZone.walklineOffset`, décision F1) et sa propre distance
+ * réglementaire d (emmarchement à la jonction) : `options.target` les rend pour chaque marche,
+ * la ligne de mesure étant la décalée de Γ de d − d_f au droit de la jonction voisine.
  */
 import { errorMessage, msg, type Message } from "@blondel/i18n";
 import { intersectLineCurve } from "../geom2d/intersect.js";
@@ -52,15 +59,34 @@ function abscissaOn(curve: Curve2, nl: NosingLine, jourAtQ: boolean, d: Mm): Mm 
   return best?.s ?? null;
 }
 
+/** Distances de mesure au droit d'une marche (cage, voir l'en-tête). */
+export interface MeasurementTarget {
+  /** Distance réglementaire d de la ligne de mesure au bord du jour. */
+  readonly d: Mm;
+  /** Distance d_f de Γ au bord du jour au droit de la marche. */
+  readonly offset: Mm;
+}
+
+export interface MeasurementOptions {
+  /** Marches mesurées (parmi les balancées) ; absent : toutes. */
+  readonly include?: (tread: Tread) => boolean;
+  /**
+   * Distances au droit d'une marche (abscisse s du milieu de la marche sur Γ) ; absent : `d`
+   * et `layout.walklineOffset` pour toutes.
+   */
+  readonly target?: (s: Mm) => MeasurementTarget;
+}
+
 /**
  * Girons des marches balancées mesurés sur la ligne de mesure à distance `d` du bord du jour
  * (côté du jour du tournant le plus proche, `collarSideAt` : S / Z compris ; hélicoïdal : bord
- * intérieur).
+ * intérieur). Cage : distances par marche (`options.target`).
  */
 export function goingsOnMeasurementLine(
   layout: Layout,
   stepping: Stepping,
   d: Mm,
+  options: MeasurementOptions = {},
 ): MeasurementResult {
   const shift = d - layout.walklineOffset;
   const helical = layout.helical;
@@ -79,24 +105,26 @@ export function goingsOnMeasurementLine(
         .map((tread) => ({ tread, going: radius * helical.stepAngle })),
     };
   }
-  const curves = new Map<Side, Curve2>();
-  const curveFor = (side: Side): Curve2 => {
-    let c = curves.get(side);
+  const curves = new Map<string, Curve2>();
+  const curveFor = (side: Side, sh: Mm): Curve2 => {
+    const key = `${side}|${sh}`;
+    let c = curves.get(key);
     if (!c) {
       // Γ est à d_f du jour (au droit de chaque tournant, côté `side`) : la ligne de mesure en
       // est la décalée de d − d_f, vers le jour si d < d_f (Γ orientée dans le sens de la
       // montée, jour à gauche → décalage vers la gauche).
       c =
-        Math.abs(shift) <= 1e-9
+        Math.abs(sh) <= 1e-9
           ? layout.walkline
-          : offsetCurve(layout.walkline, Math.abs(shift), shift < 0 ? side : otherSide(side));
-      curves.set(side, c);
+          : offsetCurve(layout.walkline, Math.abs(sh), sh < 0 ? side : otherSide(side));
+      curves.set(key, c);
     }
     return c;
   };
   const goings: MeasuredGoing[] = [];
   for (const t of stepping.treads) {
     if (t.kind !== "winder") continue;
+    if (options.include && !options.include(t)) continue;
     const a = stepping.nosings[t.number - 1];
     const b = stepping.nosings[t.number];
     if (!a || !b)
@@ -104,10 +132,14 @@ export function goingsOnMeasurementLine(
         ok: false,
         reason: msg("compliance.measurementLine.missingNosings", { tread: t.number }),
       };
-    const side = collarSideAt(layout, (a.s + b.s) / 2);
+    const mid = (a.s + b.s) / 2;
+    const side = collarSideAt(layout, mid);
+    const target = options.target?.(mid);
+    const dt = target?.d ?? d;
+    const sh = target ? target.d - target.offset : shift;
     let curve: Curve2;
     try {
-      curve = curveFor(side);
+      curve = curveFor(side, sh);
     } catch (e) {
       return {
         ok: false,
@@ -115,8 +147,8 @@ export function goingsOnMeasurementLine(
       };
     }
     const jourAtQ = side === layout.innerSide;
-    const sa = abscissaOn(curve, a, jourAtQ, d);
-    const sb = abscissaOn(curve, b, jourAtQ, d);
+    const sa = abscissaOn(curve, a, jourAtQ, dt);
+    const sb = abscissaOn(curve, b, jourAtQ, dt);
     if (sa === null || sb === null)
       return {
         ok: false,

@@ -113,7 +113,9 @@ function newelTreadNumbers(ctx: EvaluatorContext): Set<number> {
   if (layout.kind === "helical") return out;
   const nosings = ctx.stepping.nosings;
   for (const turn of ctx.layout.turns) {
-    if (turn.mode !== "winders" || layout.turns[turn.index]?.inner.kind !== "newel") continue;
+    // Raccord de jour lu dans le tracé (cage comprise, ADR-0010), à défaut dans le projet.
+    const well = turn.well ?? layout.turns[turn.index]?.inner;
+    if (turn.mode !== "winders" || well?.kind !== "newel") continue;
     const mid = (turn.sStart + turn.sEnd) / 2;
     for (const t of ctx.stepping.treads) {
       const a = nosings[t.number - 1];
@@ -171,8 +173,9 @@ function groupCorners(ctx: EvaluatorContext, g: readonly Tread[]): number[] | nu
   }
   // Marches non consécutives (suite interrompue) : pas de repérage des angles.
   if (g.some((t, i) => t.number !== g[0]!.number + i)) return null;
+  // Angles du jour : tournants balancés et marches rayonnantes d'une cage (ADR-0010).
   const cornerS = ctx.layout.turns
-    .filter((t) => t.mode === "winders")
+    .filter((t) => t.mode === "winders" || t.mode === "radiating")
     .map((t) => (t.sStart + t.sEnd) / 2);
   return cornerPositions(s, cornerS);
 }

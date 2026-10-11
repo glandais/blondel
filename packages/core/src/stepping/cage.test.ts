@@ -206,10 +206,7 @@ describe("herse (M2) : refusée hors de ±90° (décision F3)", () => {
       expect((caught as SteppingError).msg.key).toBe("balancing.m2.angleNotSupported");
       expect((caught as SteppingError).msg.params).toMatchObject({ turn: 1 });
       const model = buildModel(project, { memo: false });
-      expect(model.errors.map((e) => e.key)).toEqual([
-        "pipeline.cageDownstreamNotYetSupported",
-        "balancing.m2.angleNotSupported",
-      ]);
+      expect(model.errors.map((e) => e.key)).toEqual(["balancing.m2.angleNotSupported"]);
       expect(model.stepping.treads).toHaveLength(0);
     },
   );
@@ -642,7 +639,7 @@ describe("longueur `auto` d'un tronçon unique", () => {
   });
 });
 
-describe("pipeline : découpage et pièces de base sur toute cage (garde-fou réduit au 2c)", () => {
+describe("pipeline : toute la chaîne sur toute cage (garde-fou aval levé au 2d)", () => {
   it.each<[string, CageLayoutSpecInput]>([
     ["60°", two({ angle: 60, mode: "winders" })],
     ["120° en arc", two({ angle: 120, mode: "winders", well: { kind: "arc", radius: 150 } })],
@@ -660,22 +657,26 @@ describe("pipeline : découpage et pièces de base sur toute cage (garde-fou ré
       },
     ],
     ["rayonnant", two({ angle: 90, mode: "radiating", well: { kind: "arc", radius: 200 } })],
-  ])("%s : marches et pièces produites, garde-corps / échappée / règles sautés", (_n, spec) => {
+  ])("%s : marches, pièces et garde-corps produits, règles évaluées", (_n, spec) => {
     const project = ProjectSchema.parse({
       ...cageProject(spec),
       guards: { flight: { enabled: true } },
     });
     const model = buildModel(project, { memo: false });
-    expect(model.errors.map((e) => e.key)).toEqual(["pipeline.cageDownstreamNotYetSupported"]);
+    expect(model.errors.map((e) => e.key)).toEqual([]);
     expect(model.stepping.treads.length).toBe(model.stepping.riserCount - 1);
     expect(model.stepping.treads.length).toBeGreaterThan(0);
     expect(model.parts.length).toBeGreaterThan(0);
-    // Garde-corps et échappée sautés ; règles évaluées sur un découpage réputé absent.
-    expect(model.parts.some((p) => p.family === "guards")).toBe(false);
-    expect(model.headroom).toBeUndefined();
-    expect(model.headroomAtNosings).toBeUndefined();
-    expect(model.compliance.notes?.some((n) => n.key === "compliance.engine.partialModel")).toBe(
-      true,
-    );
+    // Sous-lot 2d : garde-corps produits ; règles évaluées sur le découpage calculé (plus de
+    // remarque « modèle partiel »).
+    expect(model.parts.some((p) => p.family === "guards")).toBe(true);
+    expect(
+      model.compliance.notes?.some((n) => n.key === "compliance.engine.partialModel"),
+    ).not.toBe(true);
+    for (const id of ["G_MIN_DTU", "BLONDEL_DTU", "VOLEE_MAX_DTU"]) {
+      const rs = model.compliance.results.filter((r) => r.ruleId === id);
+      expect(rs.length).toBeGreaterThan(0);
+      expect(rs.every((r) => r.status !== "non-evaluee")).toBe(true);
+    }
   });
 });
