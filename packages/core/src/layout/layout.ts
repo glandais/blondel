@@ -139,7 +139,8 @@ type Side = "left" | "right";
 
 /**
  * Calcule le tracé (bords, ligne de foulée, tournants, emprise) d'un projet, en repère monde.
- * Un tracé hélicoïdal (`kind: "helical"`) est délégué à `computeHelicalLayout`.
+ * Un tracé hélicoïdal (`kind: "helical"`) est délégué à `computeHelicalLayout` ; une cage
+ * (`kind: "cage"`, ADR-0010) n'est pas encore calculée (`LayoutError`).
  *
  * @throws LayoutError si la topologie n'est pas prise en charge (nombre de tournants
  *   incohérent, `auto` hors escalier droit) ou si les cotes sont impossibles (volée trop courte
@@ -150,6 +151,8 @@ export function computeLayout(project: Project, options: LayoutOptions = {}): La
   const spec = project.stair.layout;
   // Tracé hélicoïdal (jalon 5a) : forme fermée propre, `layout/helical.ts`.
   if (spec.kind === "helical") return computeHelicalLayout(project, spec);
+  // Tracé libre (CAGE, ADR-0010) : pas encore de moteur (lot 1), erreur claire.
+  if (spec.kind === "cage") throw new LayoutError(msg("layout.cage.notYetComputed"));
   const width = spec.width;
   const turns = spec.turns;
   const legCount = spec.legs.length;

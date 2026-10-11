@@ -908,6 +908,7 @@ Le seuil de 135° n'est pas sourcé : c'est une valeur à trancher (paramètre �
 - Proposition : (c) pour 180° (demi-tournant) ; entre le seuil et 180° exclus, (a) ou (d) à trancher, avec un seuil de 135° proposé comme paramètre « à valider ».
 - Aujourd'hui : demi-tournant = deux tournants de 90° et une volée intermédiaire de longueur 2E + jour, mesurée sur le bord extérieur (jour côté intérieur) (`project/presets.ts`, `FlightsLayoutSpecSchema`).
 - Réf. : CHALLENGE-panel, « Angle geometrie » (demi-tournant : deux jonctions de 90° ou une jonction de 180°) ; B §1.1 (demi-tournant).
+- Décidé le 2026-10-11 : |angle| < 180° strictement pour une jonction (borne du schéma, `layout.cage.angleOutOfRange`) ; un demi-tour se modélise par deux jonctions de 90° et un tronçon intermédiaire ; au-delà d'un seuil de 135° avec un raccord côté mur vif, avertissement (pas erreur), seuil = paramètre « à valider », produit par le moteur au lot 2.
 
 ### F5. Poteau sur un angle non droit
 
@@ -944,6 +945,7 @@ Faut-il borner le nombre de tronçons d'une cage ?
 - Proposition : (b), borne de calcul à 16 tronçons, non métier ; le nombre de marches par volée reste contrôlé par les règles.
 - Aujourd'hui : aucune borne explicite du nombre de volées.
 - Réf. : B §1.1 (multi-volées hétérogènes, StairDesigner) ; A §2.1 (25 marches sans palier) ; `rules.yaml` VOLEE_MAX_DTU.
+- Décidé le 2026-10-11 : (b), borne de calcul de 16 tronçons au plus, non métier (`CAGE_MAX_SECTIONS`, `layout.cage.sectionCount`) ; le nombre de marches par volée reste contrôlé par VOLEE_MAX_DTU.
 
 ### F9. Profondeur minimale d'un palier droit
 
@@ -953,6 +955,7 @@ Un palier droit intermédiaire (jonction d'angle 0) a une profondeur `depth`. Qu
 - Proposition : (b), la règle `PALIER_LONGUEUR_METIER` (et la règle ERP dans son contexte) évaluée sur les paliers droits.
 - Aujourd'hui : paliers d'angle seulement (tournant en mode `landing`).
 - Réf. : `rules.yaml` PALIER_LONGUEUR_METIER, PALIER_LONGUEUR_ERP_NON_CONTRARIE, PALIER_LARGEUR_ERP ; B §1.1 (escalier à paliers).
+- Décidé le 2026-10-11 : profondeur `depth` d'un palier droit (jonction d'angle 0) par défaut = emmarchement du tronçon, saisie libre (minimum de saisie : strictement positive) ; le giron minimum sera contrôlé par la règle PALIER_LONGUEUR_METIER, pas par le schéma.
 
 ### F10. Unification de l'hélicoïdal
 

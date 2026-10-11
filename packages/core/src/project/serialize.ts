@@ -24,13 +24,13 @@ export function stableStringify(value: unknown, indent = 2): string {
 }
 
 /**
- * Projet tel qu'il est enregistré : les champs **dérivés** d'un tracé hélicoïdal (`width`,
- * `legs`, `turns`, recalculés à la lecture, voir `HelicalLayoutSpecSchema`) sont retirés. Les
- * autres projets sont rendus tels quels.
+ * Projet tel qu'il est enregistré : les champs **dérivés** d'un tracé hélicoïdal ou d'une cage
+ * (`width`, `legs`, `turns`, recalculés à la lecture, voir `HelicalLayoutSpecSchema` et
+ * `CageLayoutSpecSchema`) sont retirés. Les autres projets sont rendus tels quels.
  */
 function persistedForm(project: Project): unknown {
   const layout = project.stair.layout;
-  if (layout.kind !== "helical") return project;
+  if (layout.kind !== "helical" && layout.kind !== "cage") return project;
   const { width: _width, legs: _legs, turns: _turns, ...rest } = layout;
   return { ...project, stair: { ...project.stair, layout: rest } };
 }

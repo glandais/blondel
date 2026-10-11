@@ -3,7 +3,7 @@
  * C'est la **seule** entrée du pipeline : tout le reste est dérivé (fonctions pures).
  * Voir ADR-0002 (modèle de données) et ADR-0003 (unités).
  */
-import { msg, translatorFor } from "@blondel/i18n";
+import { msg, translatorFor, type Message } from "@blondel/i18n";
 import { z } from "zod";
 import { GuardsSpecSchema } from "../guards/spec.js";
 import { UnderlaySchema } from "../site/schema.js";
@@ -217,19 +217,225 @@ export const HelicalLayoutSpecSchema = HelicalLayoutInputSchema.transform((v) =>
 export type HelicalLayoutSpec = z.infer<typeof HelicalLayoutSpecSchema>;
 export type HelicalLayoutSpecInput = z.input<typeof HelicalLayoutSpecSchema>;
 
+// ------------------------------------------------------------------ Tracé libre (CAGE)
+
 /**
- * Tracé : union discriminée par `kind` (ADR-0002, jalon 5a), rétrocompatible : sans `kind`,
- * escalier à volées. Les deux variantes exposent `width`, `legs` et `turns`.
+ * Raccord côté jour d'une jonction de cage (ADR-0010, B §1.2) : angle vif, arc de rayon
+ * `radius` tangent aux deux bords, poteau carré (même contrat que `InnerCornerSchema`, poteau
+ * accepté à ±90° seulement tant que F5 n'est pas tranchée, contrôle du moteur) ou pan coupé de
+ * retraits `setbackIn` (sur le tronçon entrant, depuis le coin K) et `setbackOut` (sur le
+ * tronçon sortant).
+ */
+export const WellJointSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("sharp") }),
+  z.object({ kind: z.literal("arc"), radius: mmPos }),
+  z.object({ kind: z.literal("newel"), size: mmPos, offset: mmNonNeg.optional() }),
+  z.object({ kind: z.literal("chamfer"), setbackIn: mmPos, setbackOut: mmPos }),
+]);
+export type WellJoint = z.infer<typeof WellJointSchema>;
+
+/** Raccord côté mur d'une jonction de cage : angle vif (coin W) ou congé tangent de rayon `radius`. */
+export const WallJointSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("sharp") }),
+  z.object({ kind: z.literal("arc"), radius: mmPos }),
+]);
+export type WallJoint = z.infer<typeof WallJointSchema>;
+
+/**
+ * Axe d'un tronçon : droit, de longueur `length` (mm, `auto` seulement pour une cage d'un seul
+ * tronçon : longueur déduite du giron cible, comme une volée droite ; convention de mesure fixée
+ * par le moteur au lot 1, `flightsToCage`), ou en arc de rayon `radius` et de balayage `sweep`
+ * (degrés signés, positif = trigonométrique vu de dessus, 0 < |sweep| < 360).
+ */
+export const CageAxisSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("straight"), length: z.union([mmNonNeg, z.literal("auto")]) }),
+  z.object({ kind: z.literal("arc"), radius: mmPos, sweep: z.number() }),
+]);
+export type CageAxis = z.infer<typeof CageAxisSchema>;
+
+/**
+ * Tronçon de cage : axe, largeur utile `width` au départ et `widthEnd` à l'arrivée (largeur
+ * variable, trapèze, axe droit seulement ; absente : `width`). `anchor` : bord (ou milieu) que
+ * suit l'axe du tronçon, celui qui reste droit quand la largeur varie ; absent : choix du moteur
+ * (lot 1).
+ */
+export const CageSectionSchema = z.object({
+  axis: CageAxisSchema,
+  width: mmPos,
+  widthEnd: mmPos.optional(),
+  anchor: z.enum(["left", "right", "center"]).optional(),
+});
+export type CageSection = z.infer<typeof CageSectionSchema>;
+
+/**
+ * Jonction entre deux tronçons : `angle` en degrés signés (positif = à gauche en montant,
+ * |angle| < 180 ; le côté du jour se déduit du signe ; 0 = palier droit, mode `landing` et
+ * raccords `well` / `wall` vifs obligatoires), marches balancées, palier ou marches rayonnantes. Un demi-tour se modélise par
+ * deux jonctions de 90° et un tronçon intermédiaire (décision F4). `depth` : profondeur d'un
+ * palier droit (angle 0 seulement ; absente : emmarchement du tronçon, décision F9 ; le minimum
+ * métier est contrôlé par la règle PALIER_LONGUEUR_METIER, pas par le schéma).
+ */
+export const CageJunctionSchema = z.object({
+  angle: z.number(),
+  mode: z.enum(["winders", "landing", "radiating"]),
+  well: WellJointSchema.default({ kind: "sharp" }),
+  wall: WallJointSchema.default({ kind: "sharp" }),
+  depth: mmPos.optional(),
+});
+export type CageJunction = z.infer<typeof CageJunctionSchema>;
+
+/**
+ * Nombre maximal de tronçons d'une cage : borne de **calcul**, non métier (décision F8 du
+ * 2026-10-11) ; le nombre de marches par volée reste contrôlé par la règle VOLEE_MAX_DTU.
+ */
+export const CAGE_MAX_SECTIONS = 16;
+
+/** Issue de validation d'une cage : `Message` dans `params` (comme l'hélicoïdal, ADR-0007). */
+function cageIssue(ctx: z.RefinementCtx, path: PropertyKey[], message: Message): void {
+  ctx.addIssue({
+    code: "custom",
+    path,
+    message: translatorFor("fr").t(message),
+    params: { message },
+  });
+}
+
+const CageLayoutInputSchema = z
+  .object({
+    kind: z.literal("cage"),
+    sections: z.array(CageSectionSchema),
+    junctions: z.array(CageJunctionSchema),
+    /**
+     * Champs dérivés (voir `CageLayoutSpecSchema`) : acceptés en entrée pour qu'un projet lu
+     * puisse être relu tel quel, **ignorés** et recalculés.
+     */
+    width: z.number().optional(),
+    legs: z.array(LegSchema).max(0).optional(),
+    turns: z.array(TurnSchema).max(0).optional(),
+  })
+  .superRefine((v, ctx) => {
+    const n = v.sections.length;
+    if (n < 1 || n > CAGE_MAX_SECTIONS) {
+      cageIssue(
+        ctx,
+        ["sections"],
+        msg("layout.cage.sectionCount", { count: n, max: CAGE_MAX_SECTIONS }),
+      );
+    }
+    if (v.junctions.length !== Math.max(n - 1, 0)) {
+      cageIssue(
+        ctx,
+        ["junctions"],
+        msg("layout.cage.junctionCountMismatch", { sections: n, junctions: v.junctions.length }),
+      );
+    }
+    v.sections.forEach((s, i) => {
+      if (s.axis.kind === "straight" && s.axis.length === "auto" && n !== 1) {
+        cageIssue(
+          ctx,
+          ["sections", i, "axis", "length"],
+          msg("layout.cage.autoLengthSingleSection", { section: i + 1 }),
+        );
+      }
+      if (s.axis.kind === "arc") {
+        const a = Math.abs(s.axis.sweep);
+        if (!(a > 0 && a < 360)) {
+          cageIssue(
+            ctx,
+            ["sections", i, "axis", "sweep"],
+            msg("layout.cage.sweepOutOfRange", { section: i + 1, sweep: String(s.axis.sweep) }),
+          );
+        }
+        if (s.widthEnd !== undefined) {
+          cageIssue(
+            ctx,
+            ["sections", i, "widthEnd"],
+            msg("layout.cage.arcVariableWidth", { section: i + 1 }),
+          );
+        }
+      }
+    });
+    v.junctions.forEach((j, i) => {
+      if (!(Math.abs(j.angle) < 180)) {
+        cageIssue(
+          ctx,
+          ["junctions", i, "angle"],
+          msg("layout.cage.angleOutOfRange", { junction: i + 1, angle: String(j.angle) }),
+        );
+      }
+      if (j.angle === 0 && j.mode !== "landing") {
+        cageIssue(
+          ctx,
+          ["junctions", i, "mode"],
+          msg("layout.cage.straightJunctionLanding", { junction: i + 1 }),
+        );
+      }
+      if (j.angle === 0) {
+        // Palier droit : ni coin K ni coin W, donc aucun raccord autre que vif.
+        if (j.well.kind !== "sharp") {
+          cageIssue(
+            ctx,
+            ["junctions", i, "well"],
+            msg("layout.cage.straightJunctionSharp", { junction: i + 1 }),
+          );
+        }
+        if (j.wall.kind !== "sharp") {
+          cageIssue(
+            ctx,
+            ["junctions", i, "wall"],
+            msg("layout.cage.straightJunctionSharp", { junction: i + 1 }),
+          );
+        }
+      }
+      if (j.depth !== undefined && j.angle !== 0) {
+        cageIssue(
+          ctx,
+          ["junctions", i, "depth"],
+          msg("layout.cage.depthStraightLandingOnly", { junction: i + 1 }),
+        );
+      }
+    });
+  });
+
+/**
+ * Tracé libre (CAGE, ADR-0010) : suite de tronçons (`sections`) reliés par des jonctions
+ * (`junctions`, une de moins que de tronçons). Repère local : départ du premier tronçon comme un
+ * escalier à volées, placé par `stair.placement`.
+ *
+ * Champs **dérivés** ajoutés à la lecture, comme pour l'hélicoïdal (`HelicalLayoutSpecSchema`),
+ * pour que le code écrit pour les escaliers à volées reste typé : `width` = plus petite largeur
+ * de la cage (départs et arrivées de tous les tronçons), `legs` = [] et `turns` = []. Ils ne sont
+ * pas sérialisés (`serializeProject`) et sont recalculés à chaque lecture. Le code qui lit
+ * `legs` / `turns` doit traiter la cage à part (`isCageLayout`).
+ */
+export const CageLayoutSpecSchema = CageLayoutInputSchema.transform((v) => ({
+  ...v,
+  width: Math.min(...v.sections.flatMap((s) => [s.width, s.widthEnd ?? s.width])),
+  legs: [] as Leg[],
+  turns: [] as Turn[],
+}));
+export type CageLayoutSpec = z.infer<typeof CageLayoutSpecSchema>;
+export type CageLayoutSpecInput = z.input<typeof CageLayoutSpecSchema>;
+
+/**
+ * Tracé : union discriminée par `kind` (ADR-0002, jalon 5a ; ADR-0010), rétrocompatible : sans
+ * `kind`, escalier à volées. Toutes les variantes exposent `width`, `legs` et `turns`.
  */
 export const LayoutSpecSchema = z.discriminatedUnion("kind", [
   FlightsLayoutSpecSchema,
   HelicalLayoutSpecSchema,
+  CageLayoutSpecSchema,
 ]);
 export type LayoutSpec = z.infer<typeof LayoutSpecSchema>;
 
 /** Vrai si le tracé est hélicoïdal. */
 export function isHelicalLayout(spec: LayoutSpec): spec is HelicalLayoutSpec {
   return spec.kind === "helical";
+}
+
+/** Vrai si le tracé est une cage (tracé libre, ADR-0010). */
+export function isCageLayout(spec: LayoutSpec): spec is CageLayoutSpec {
+  return spec.kind === "cage";
 }
 
 export const PlacementSchema = z.object({

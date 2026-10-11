@@ -1,6 +1,6 @@
 # ADR-0010 — Tracé libre : modèle CAGE et éditeur 2D unifié
 
-- Statut : accepté le 2026-10-11 (décisions de l'utilisateur du même jour) ; amende ADR-0002 (tracé générique) ; mise en œuvre par lots dans le worktree `feat/free-2d` (journal : `docs/ledger/LEDGER-free-2d.md`)
+- Statut : accepté le 2026-10-11 (décisions de l'utilisateur du même jour) ; amende ADR-0002 (tracé générique) ; mise en œuvre par lots dans le worktree `feat/free-2d` (journal : `docs/ledger/LEDGER-free-2d.md`) ; **amendé le 2026-10-11** (décisions F4, F8 et F9, sous-lot 0b, voir « Amendement (2026-10-11) »)
 
 ## Constat
 
@@ -70,3 +70,10 @@ Décisions de l'utilisateur du 2026-10-11 (points 1, 2, 5, 6 et 7) et choix du p
 - **Schéma v2 avec migration des projets vers `cage`** : changerait tous les exemples et projets enregistrés sans gain de calcul ; écarté par le point 3 de la décision.
 - **Hélicoïdal converti en tronçon à axe en arc** : reporté (point 4 de la décision, F10).
 - **Solveur de contraintes** (placement ou dimensions déduits des contraintes du site) : écarté par la décision 6, au profit du retour visuel et des accroches.
+
+## Amendement (2026-10-11) — décisions F4, F8 et F9 (sous-lot 0b)
+
+- **F4** : l'angle d'une jonction vérifie |θ| < 180° strictement (refus du schéma, `layout.cage.angleOutOfRange`). Un demi-tour se modélise par **deux jonctions de 90°** et un tronçon intermédiaire (de longueur 0 admise). Le repère θ = 180° de la section « Moteur, Repères » est donc **hors domaine** : seuls θ ∈ {0, ±90°} sont traités exactement. Au-delà de 135° avec un raccord côté mur vif : avertissement produit par le moteur (lot 2), seuil = paramètre « à valider ».
+- **F8** : au plus 16 tronçons (`CAGE_MAX_SECTIONS`), borne de calcul et non métier (`layout.cage.sectionCount`).
+- **F9** : `depth` d'un palier droit (angle 0 seulement, `layout.cage.depthStraightLandingOnly`) : strictement positive, défaut = emmarchement du tronçon, appliqué par le moteur ; le minimum métier relève de la règle PALIER_LONGUEUR_METIER.
+- Complément du schéma (relecture du sous-lot 0b) : un palier droit (angle 0) n'a ni coin K ni coin W ; ses raccords `well` et `wall` sont vifs seulement (`layout.cage.straightJunctionSharp`).
