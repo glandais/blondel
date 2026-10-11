@@ -34,7 +34,7 @@
  * - **Avertissement F4** : au-delà de `WALL_SHARP_WARNING_ANGLE` avec un mur vif.
  *
  * À ±90°, les formes fermées et l'ordre des opérations sont ceux de l'ancien moteur à volées
- * (`layout/legacyFlights.ts`) : égalité numérique (parité, `parity.test.ts`).
+ * (supprimé au sous-lot 2f) : égalité numérique (parité figée, `parity.test.ts`).
  *
  * ## Palier droit (θ = 0, mode `landing`)
  *

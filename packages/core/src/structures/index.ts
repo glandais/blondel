@@ -27,10 +27,13 @@ export {
   listStructures,
   newelRequiredStructures,
   registerStructure,
+  structureAcceptsCage,
   structureAcceptsLayout,
+  structureCageFeatures,
   structureLateralThickness,
   structureLayouts,
   structureRequiresNewel,
+  structureUnsupportedCageFeatures,
   structureUnsupportedOptions,
   unregisterStructure,
 } from "./registry.js";

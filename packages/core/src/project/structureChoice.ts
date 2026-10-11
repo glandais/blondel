@@ -18,9 +18,11 @@
  * - un poteau que le tracé refuse (volée trop courte, ligne de foulée trop proche) n'est pas
  *   posé : remarque, jour conservé ;
  * - cage saisie (tracé libre, ADR-0010) : la structure est posée sans adapter le jour (poteau
- *   refusé en amont pour une jonction de cage) ; une structure autre que « aucune » n'est pas
- *   encore générée pour une cage (`structure.cageUnsupported`) : remarque, avec la piste de la
- *   reconversion en volées quand la cage s'écrit en volées (correction `cage-to-flights`).
+ *   refusé en amont pour une jonction de cage) ; une structure qui ne construit pas toutes les
+ *   fonctions de la cage (`structureAcceptsCage`, capacité `cage` du plugin, même règle que le
+ *   garde-fou de `buildModel` ; au lot 2, toute structure autre que « aucune ») n'est pas
+ *   générée (`structure.cageUnsupported`) : remarque, avec la piste de la reconversion en
+ *   volées quand la cage s'écrit en volées (correction `cage-to-flights`).
  *
  * Fonction pure (les modèles intermédiaires sont calculés sans mémoïsation).
  */
@@ -30,6 +32,7 @@ import type { Mm } from "../model/primitives.js";
 import type { Project, Turn } from "../model/project.js";
 import { cageFeatures } from "../model/cageFeatures.js";
 import { buildModel } from "../pipeline/build.js";
+import { structureAcceptsCage } from "../structures/registry.js";
 import { profileFlangeWidth } from "../structures/steelProfile.js";
 import {
   DEFAULT_NEWEL,
@@ -126,7 +129,9 @@ export function applyStructureChoice(
   const chosen = withStructure(project, kind, params);
   const spec = chosen.stair.layout;
   if (spec.kind === "cage") {
-    if (kind === "none") return { project: chosen, notes: [] };
+    // Même règle que le garde-fou de `buildModel` (capacité `cage` du plugin) : pas de remarque
+    // quand la structure construit toutes les fonctions de la cage (« aucune » : toujours).
+    if (structureAcceptsCage(kind, cageFeatures(spec))) return { project: chosen, notes: [] };
     const convertible = cageFeatures(spec).length === 0 && toFlightsLayout(chosen) !== null;
     return {
       project: chosen,

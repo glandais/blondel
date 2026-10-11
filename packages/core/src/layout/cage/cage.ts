@@ -8,7 +8,7 @@
  * formes fermées dans `junction.ts`. Depuis le sous-lot 1c, c'est le seul moteur des tracés à
  * volées et des cages (`computeLayout`, `layout/layout.ts`) ; pour la cage issue de
  * `flightsToCage`, le résultat est **identique**, nombre pour nombre, à celui de l'ancien moteur
- * à volées (copie figée `layout/legacyFlights.ts`, réservée aux tests, parité
+ * à volées (supprimé au sous-lot 2f ; parité figée en instantanés,
  * `parity.test.ts`) : les angles 0 et ±90° gardent leurs branches exactes (`frames.ts`) ;
  * `sections` et les champs `angle`, `well`, `wall` des tournants sont en plus. Largeur variable
  * et axe en arc (sous-lot 2b) : délégués au moteur général (`general.ts`, `needsGeneralEngine`),

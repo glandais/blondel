@@ -6,6 +6,7 @@
  * base seules) et ne peut pas être enregistré.
  */
 import { MessageError, msg, type Message } from "@blondel/i18n";
+import { CAGE_FEATURES, type CageFeature } from "../model/cageFeatures.js";
 import type { Mm } from "../model/primitives.js";
 import type {
   StructureKind,
@@ -72,6 +73,38 @@ export function structureLayouts(kind: string): readonly StructureLayoutKind[] {
 /** La structure `kind` accepte-t-elle ce type de tracé ? */
 export function structureAcceptsLayout(kind: string, layout: StructureLayoutKind): boolean {
   return structureLayouts(kind).includes(layout);
+}
+
+/**
+ * Fonctions de cage saisie (ADR-0010) que `kind` sait construire : toutes pour `none` (pièces de
+ * base seules) ; `null` si la structure ne lit aucune cage saisie (plugin inconnu, ou sans
+ * `capabilities.cage` : tous les plugins intégrés au lot 2, généralisés un par un aux lots 6 et
+ * suivants).
+ */
+export function structureCageFeatures(kind: string): readonly CageFeature[] | null {
+  if (kind === "none") return CAGE_FEATURES;
+  return registry.get(kind)?.capabilities?.cage ?? null;
+}
+
+/**
+ * Fonctions de `features` (celles d'une cage saisie, `cageFeatures`) que `kind` ne sait pas
+ * construire, dans l'ordre reçu ; `null` si la structure ne lit aucune cage saisie.
+ */
+export function structureUnsupportedCageFeatures(
+  kind: string,
+  features: readonly CageFeature[],
+): readonly CageFeature[] | null {
+  const accepted = structureCageFeatures(kind);
+  if (accepted === null) return null;
+  return features.filter((f) => !accepted.includes(f));
+}
+
+/**
+ * La structure `kind` sait-elle construire une cage saisie qui utilise `features`
+ * (`cageFeatures(spec)`, liste vide comprise) ? `none` : toujours.
+ */
+export function structureAcceptsCage(kind: string, features: readonly CageFeature[]): boolean {
+  return structureUnsupportedCageFeatures(kind, features)?.length === 0;
 }
 
 /** Les limons de jour de `kind` exigent-ils un poteau d'angle ? */

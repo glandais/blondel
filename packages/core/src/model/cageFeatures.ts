@@ -4,6 +4,7 @@
  * ou à poteau, mur vif). Lu par le garde-fou des structures (`StructureCapabilities.cage`, lot 2f)
  * et par la correction « reconvertir en volées » (liste vide).
  */
+import type { MessageKey } from "@blondel/i18n";
 import type { CageLayoutSpec } from "./project.js";
 
 /** Fonction d'une cage, dans l'ordre de `CAGE_FEATURES`. */
@@ -28,6 +29,18 @@ export const CAGE_FEATURES: readonly CageFeature[] = [
   "radiating",
   "oppositeTurns",
 ];
+
+/** Libellé court de chaque fonction (message du garde-fou des structures, interface). */
+export const CAGE_FEATURE_LABELS: Readonly<Record<CageFeature, MessageKey>> = {
+  anyAngle: "layout.cage.feature.anyAngle",
+  variableWidth: "layout.cage.feature.variableWidth",
+  arcAxis: "layout.cage.feature.arcAxis",
+  straightLanding: "layout.cage.feature.straightLanding",
+  wallArc: "layout.cage.feature.wallArc",
+  chamfer: "layout.cage.feature.chamfer",
+  radiating: "layout.cage.feature.radiating",
+  oppositeTurns: "layout.cage.feature.oppositeTurns",
+};
 
 /**
  * Fonctions utilisées par une cage, sans doublon, dans l'ordre de `CAGE_FEATURES` :

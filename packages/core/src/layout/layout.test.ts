@@ -544,6 +544,13 @@ describe("computeLayout — exemples du dépôt", () => {
     const project = parseProjectText(readFileSync(join(dir, file), "utf8"));
     const layout = computeLayout(project);
     const spec = project.stair.layout;
+    if (spec.kind === "cage") {
+      // Cage saisie (`examples/cage-*`, sous-lot 2f) : un tronçon calculé par tronçon saisi ;
+      // tracé couvert par `layout/cage/` et `project/cageExamples.test.ts`.
+      expect(layout.sections).toHaveLength(spec.sections.length);
+      expect(curveLength(layout.walkline)).toBeGreaterThan(0);
+      return;
+    }
     // DTU 36.3 : milieu si E ≤ 1 200, sinon 600 mm du jour (démo « grand escalier d'ERP »,
     // escalier droit de 1 400 mm : |Γ| = ΣL quel que soit d_f).
     expect(resolveWalklineOffset(project)).toBe(spec.width <= 1200 ? spec.width / 2 : 600);

@@ -34,6 +34,162 @@ exports[`buildModel — exemples du dépôt > acceptance-01-quart-tournant.blond
 }
 `;
 
+exports[`buildModel — exemples du dépôt > cage-60.blondel.json : cotes principales (non-régression) 1`] = `
+{
+  "blondel": 629.37,
+  "colletMin": 128.5,
+  "colletsChord": [
+    174.6,
+    128.5,
+    128.5,
+    174.6,
+  ],
+  "firstRise": 180,
+  "g": 269.37,
+  "h": 180,
+  "headroom": 1905.7,
+  "headroomWidth": {
+    "min": 1960,
+    "nosing": 2,
+  },
+  "n": 15,
+  "parts": 29,
+  "run": 3771.2,
+  "treads": "ssssswwwwsssss",
+  "violations": {
+    "avertissement": 0,
+    "bloquant": 0,
+    "conseil": 1,
+  },
+  "zones": [
+    "5-9 M3-cubic",
+  ],
+}
+`;
+
+exports[`buildModel — exemples du dépôt > cage-arc.blondel.json : cotes principales (non-régression) 1`] = `
+{
+  "blondel": 628.03,
+  "colletMin": null,
+  "colletsChord": [],
+  "firstRise": 180,
+  "g": 268.03,
+  "h": 180,
+  "headroom": 1994.9,
+  "headroomWidth": {
+    "min": 1960,
+    "nosing": 2,
+  },
+  "n": 15,
+  "parts": 29,
+  "run": 3752.5,
+  "treads": "ssssssssssssss",
+  "violations": {
+    "avertissement": 0,
+    "bloquant": 0,
+    "conseil": 1,
+  },
+  "zones": [],
+}
+`;
+
+exports[`buildModel — exemples du dépôt > cage-palier-droit.blondel.json : cotes principales (non-régression) 1`] = `
+{
+  "blondel": 630,
+  "colletMin": null,
+  "colletsChord": [],
+  "firstRise": 180,
+  "g": 270,
+  "h": 180,
+  "headroom": 1900,
+  "headroomWidth": {
+    "min": 1960,
+    "nosing": 2,
+  },
+  "n": 15,
+  "parts": 29,
+  "run": 4510,
+  "treads": "ssssssslssssss",
+  "violations": {
+    "avertissement": 0,
+    "bloquant": 0,
+    "conseil": 1,
+  },
+  "zones": [],
+}
+`;
+
+exports[`buildModel — exemples du dépôt > cage-rayonnant.blondel.json : cotes principales (non-régression) 1`] = `
+{
+  "blondel": 629.91,
+  "colletMin": 126.5,
+  "colletsChord": [
+    261.2,
+    126.5,
+    126.5,
+    126.5,
+    126.5,
+    261.2,
+  ],
+  "firstRise": 180,
+  "g": 269.91,
+  "h": 180,
+  "headroom": 1906.5,
+  "headroomWidth": {
+    "min": 1960,
+    "nosing": 2,
+  },
+  "n": 15,
+  "parts": 29,
+  "run": 3778.8,
+  "treads": "sssswwwwwwssss",
+  "violations": {
+    "avertissement": 0,
+    "bloquant": 0,
+    "conseil": 1,
+  },
+  "zones": [
+    "4-10 M0",
+  ],
+}
+`;
+
+exports[`buildModel — exemples du dépôt > cage-trapeze.blondel.json : cotes principales (non-régression) 1`] = `
+{
+  "blondel": 631.46,
+  "colletMin": 109.9,
+  "colletsChord": [
+    182.1,
+    128.1,
+    113.6,
+    109.9,
+    110.1,
+    128.1,
+    182.1,
+  ],
+  "firstRise": 180,
+  "g": 271.46,
+  "h": 180,
+  "headroom": 1946.7,
+  "headroomWidth": {
+    "min": 1960,
+    "nosing": 2,
+  },
+  "n": 15,
+  "parts": 29,
+  "run": 3800.4,
+  "treads": "ssswwwwwwwssss",
+  "violations": {
+    "avertissement": 0,
+    "bloquant": 0,
+    "conseil": 1,
+  },
+  "zones": [
+    "3-10 M3-cubic",
+  ],
+}
+`;
+
 exports[`buildModel — exemples du dépôt > demo-central-glulam.blondel.json : cotes principales (non-régression) 1`] = `
 {
   "blondel": 629.99,

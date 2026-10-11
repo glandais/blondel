@@ -97,7 +97,7 @@ Le type de tracé (volées ou hélicoïdal) se choisit en tête du panneau des p
 | `pnpm ux:captures`                  | Captures d'écran de l'interface (parcours guidé et libre, inspecteurs, Fabrication, sombre, 1 024 et 390 px) dans `docs/ux/captures-refonte/`. |
 | `pnpm pwa:icons`                    | Régénère les icônes PNG de l'application installable depuis `apps/web/public/favicon.svg` (`rsvg-convert`, ADR-0008).                          |
 
-Régénérer `examples/` : `UPDATE_EXAMPLES=1 pnpm vitest run packages/core/src/project/examples.test.ts packages/core/src/guards/acceptance.test.ts packages/core/src/structures/helicalExample.test.ts packages/core/src/structures/steelCurved.acceptance.test.ts packages/core/src/structures/steelCentral.acceptance.test.ts packages/core/src/project/presetDemo.test.ts`.
+Régénérer `examples/` : `UPDATE_EXAMPLES=1 pnpm vitest run packages/core/src/project/examples.test.ts packages/core/src/guards/acceptance.test.ts packages/core/src/structures/helicalExample.test.ts packages/core/src/structures/steelCurved.acceptance.test.ts packages/core/src/structures/steelCentral.acceptance.test.ts packages/core/src/project/presetDemo.test.ts packages/core/src/project/cageExamples.test.ts`.
 
 Variables de test utiles : `STEPPING_RUNS=1000` (tirages des propriétés du découpage), `PERF_STRICT=1` (seuil strict du test de performance du pipeline).
 

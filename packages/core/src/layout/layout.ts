@@ -5,8 +5,8 @@
  * cage (`flightsToCage`) puis calculé par le moteur de cage (`cage/cage.ts`, origine `flights` :
  * messages d'erreur du moteur à volées) ; une cage saisie est calculée par le même moteur
  * (origine `cage`) ; l'hélicoïdal garde son moteur (`helical.ts`). Le résultat d'un tracé à
- * volées est identique, champ pour champ, à celui de l'ancien moteur à volées (copie figée
- * `legacyFlights.ts`, réservée aux tests, test de parité `cage/parity.test.ts`) ; `sections`
+ * volées est identique, champ pour champ, à celui de l'ancien moteur à volées (supprimé au
+ * sous-lot 2f ; parité figée en instantanés, `cage/parity.test.ts`) ; `sections`
  * (tronçons) est en plus. Les conventions ci-dessous, établies pour les volées, sont celles du
  * moteur de cage à ±90°.
  *

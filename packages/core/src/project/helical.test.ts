@@ -65,7 +65,8 @@ describe("LayoutSpec : union discriminée rétrocompatible", () => {
       const text = readFileSync(join(EXAMPLES_DIR, file), "utf8");
       const p = parseProjectText(text);
       expect(serializeProject(p)).toBe(text);
-      if (p.stair.layout.kind === "helical") continue;
+      // Hélicoïdal et cage saisie (`examples/cage-*`, sous-lot 2f) : `kind` explicite.
+      if (p.stair.layout.kind === "helical" || p.stair.layout.kind === "cage") continue;
       expect(text).not.toContain('"kind": "flights"');
       expect(p.stair.layout.kind).toBeUndefined();
       expect(p.stair.layout.legs.length).toBeGreaterThan(0);

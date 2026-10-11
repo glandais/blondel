@@ -10,6 +10,7 @@ import type { z } from "zod";
 import type { Layout, ModelPrecheck, NosingLine, Part, RuleResult, Stepping } from "./derived.js";
 import type { Mm } from "./primitives.js";
 import type { BalancingMethod, Project } from "./project.js";
+import type { CageFeature } from "./cageFeatures.js";
 
 /**
  * Zone de balancement : nez `from` et `to` fixes (exclus), nez intermédiaires réorientés.
@@ -164,6 +165,16 @@ export interface StructureCapabilities<P = unknown> {
    * (vague « limon central »).
    */
   unsupportedOptions?(layout: StructureLayoutTraits): readonly UnsupportedParamOption[];
+  /**
+   * Cage saisie (tracé libre, ADR-0010, sous-lot 2f) : fonctions de cage (`cageFeatures`) que
+   * le plugin sait construire en lisant le tracé calculé (`layout.sections` et `layout.turns`).
+   * Absent : aucune cage saisie, même sans fonction (le plugin lit encore les volées du projet,
+   * `stair.layout.legs` / `turns`, vides pour une cage) ; `[]` : cages sans fonction seulement.
+   * Une cage n'est construite que si **toutes** ses fonctions sont déclarées ; sinon le pipeline
+   * saute le plugin avec `structure.cageUnsupported` (marches produites). Un tracé à volées
+   * (cage issue de volées) n'est pas concerné. Ajout rétrocompatible.
+   */
+  readonly cage?: readonly CageFeature[];
 }
 
 /** Tracé vu par les capacités, sans modèle : type de tracé et nombre de tournants. */

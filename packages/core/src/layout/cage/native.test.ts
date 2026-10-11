@@ -3,7 +3,8 @@
  * (ADR-0010) : même `Layout` que le tracé à volées équivalent (`cageToFlights`), `sections`
  * comprises ; jour à poteau calculé par le moteur mais refusé par `computeLayout` (aval pas
  * encore fiable, lots 2c / 2d) ; `buildModel` complet sans exception, structure sautée avec
- * `structure.cageUnsupported` (garde-fou minimal avancé de 2f) ; mémoïsation de l'étape
+ * `structure.cageUnsupported` (garde-fou des structures, sous-lot 2f, détaillé dans
+ * `structures/cageGuard.test.ts`) ; mémoïsation de l'étape
  * « tracé » (clés de `pipeline/build.ts`).
  */
 import fc from "fast-check";
@@ -220,7 +221,7 @@ describe("buildModel sur une cage saisie à ±90°", () => {
           expect(errorKeys(model)).toEqual(["layout.cage.newelNotYetSupported"]);
           continue;
         }
-        // Garde-fou minimal (avancé de 2f) : les plugins lisent encore `legs` / `turns`.
+        // Garde-fou des structures (2f) : aucun plugin ne déclare encore `capabilities.cage`.
         expect(errorKeys(model)).toEqual(["structure.cageUnsupported"]);
         expect(model.stepping.treads.length).toBeGreaterThan(0);
         expect(model.layout.sections).toHaveLength(s.sections.length);

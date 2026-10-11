@@ -1,0 +1,94 @@
+{
+  "compliance": {
+    "contexts": [
+      "bois_dtu",
+      "logement_interieur"
+    ],
+    "overrides": [],
+    "profile": "strict"
+  },
+  "name": "Tracé libre — volée en trapèze élargie à 1 200 mm, quart tournant",
+  "rulesVersion": 1,
+  "schemaVersion": 2,
+  "site": {
+    "floorToFloor": 2700,
+    "lowerFinish": 0,
+    "opening": {
+      "kind": "rect",
+      "sizeX": 2730,
+      "sizeY": 2190,
+      "x": -1550,
+      "y": 560
+    },
+    "upperFinish": 0,
+    "upperSlabThickness": 200,
+    "walls": []
+  },
+  "stair": {
+    "balancing": {
+      "method": "M3",
+      "targetCollet": 100,
+      "variant": "auto",
+      "windersPerSide": "auto"
+    },
+    "layout": {
+      "junctions": [
+        {
+          "angle": 90,
+          "mode": "winders",
+          "wall": {
+            "kind": "sharp"
+          },
+          "well": {
+            "kind": "sharp"
+          }
+        }
+      ],
+      "kind": "cage",
+      "sections": [
+        {
+          "axis": {
+            "kind": "straight",
+            "length": 1450
+          },
+          "width": 900,
+          "widthEnd": 1200
+        },
+        {
+          "axis": {
+            "kind": "straight",
+            "length": 1400
+          },
+          "width": 1200
+        }
+      ]
+    },
+    "nosingOverrides": [],
+    "placement": {
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "rotation": 0
+    },
+    "stepping": {
+      "firstRiseOffset": 0,
+      "riserCount": "auto",
+      "targetGoing": "auto",
+      "targetRise": 175
+    },
+    "structure": {
+      "kind": "none",
+      "params": {}
+    },
+    "treads": {
+      "nosing": 10,
+      "riserThickness": 20,
+      "risers": "full",
+      "thickness": 40
+    },
+    "walkline": {
+      "mode": "dtu"
+    }
+  }
+}

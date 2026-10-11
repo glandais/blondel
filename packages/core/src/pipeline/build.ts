@@ -21,9 +21,12 @@
  *   calculables `non-evaluee`).
  * - **Cage** (ADR-0010) : tout tracé de cage (angle quelconque, largeur variable, axe en arc,
  *   palier droit, pan coupé, congé côté mur, marches rayonnantes) passe par toute la chaîne
- *   (garde-fou aval temporaire levé au sous-lot 2d) ; seule la structure reste « aucune » pour
- *   une cage saisie (`structure.cageUnsupported`, lot 2f). Une cage qui repasse au-dessus
- *   d'elle-même calcule son échappée avec les sous-faces de ses marches (`headroom/cage.ts`).
+ *   (garde-fou aval temporaire levé au sous-lot 2d). Structure : garde-fou du sous-lot 2f, un
+ *   plugin ne construit une cage saisie que s'il en déclare toutes les fonctions
+ *   (`capabilities.cage`) ; sinon il est sauté avec `structure.cageUnsupported` (fonctions non
+ *   prises en charge), marches produites ; au lot 2, seule « aucune » accepte une cage saisie.
+ *   Une cage qui repasse au-dessus d'elle-même calcule son échappée avec les sous-faces de ses
+ *   marches (`headroom/cage.ts`).
  *   Les avertissements du tracé (`Layout.notes`) vont dans `Model.notes`.
  * - **Structure** (`stair.structure.kind`) : `none` = pièces de base seules ; sinon le plugin
  *   enregistré (`structures/registry.ts`) est appelé avec ses paramètres par défaut
@@ -69,6 +72,7 @@ import type {
   Severity,
   Stepping,
 } from "../model/derived.js";
+import { CAGE_FEATURE_LABELS, cageFeatures, type CageFeature } from "../model/cageFeatures.js";
 import type { StructureContext, StructureKind } from "../model/plugins.js";
 import { isCageLayout, isHelicalLayout, type Project } from "../model/project.js";
 import type { PartAssembly } from "../model/plugins.js";
@@ -84,7 +88,11 @@ import { computeGuards } from "../guards/compute.js";
 import { GuardError } from "../guards/errors.js";
 import { autoHandrailBothSides } from "../guards/handrailSides.js";
 import type { GuardsAnalysis } from "../guards/types.js";
-import { getStructure, StructureError } from "../structures/index.js";
+import {
+  getStructure,
+  StructureError,
+  structureUnsupportedCageFeatures,
+} from "../structures/index.js";
 import { ensureMass, normalizeWoodQuantities } from "../structures/quantities.js";
 import { resolveWorkshopProfile } from "../workshop/profile.js";
 import { resolveFastenerProfile } from "../workshop/fasteners.js";
@@ -437,6 +445,35 @@ export function deepMerge(
   return out;
 }
 
+/**
+ * Refus d'une cage saisie par une structure (garde-fou du sous-lot 2f) : `undefined` si le plugin
+ * construit toutes les fonctions de la cage, sinon `structure.cageUnsupported` avec la liste des
+ * fonctions non prises en charge (libellés traduits à l'affichage), ou, pour un plugin qui ne lit
+ * aucune cage saisie et une cage sans fonction, la raison « lit encore un tracé à volées »
+ * (`structure.cageUnsupported.plain`).
+ */
+function cageUnsupportedMessage(
+  plugin: StructureKind<unknown>,
+  features: readonly CageFeature[],
+): Message | undefined {
+  const missing = structureUnsupportedCageFeatures(plugin.kind, features);
+  if (missing !== null && missing.length === 0) return undefined;
+  const unsupported = missing ?? features;
+  const list = unsupported
+    .map((f) => msg(CAGE_FEATURE_LABELS[f]))
+    .reduceRight<Message | null>(
+      (rest, first) => (rest === null ? first : msg("common.list", { first, rest })),
+      null,
+    );
+  return msg("structure.cageUnsupported", {
+    structure: msg(plugin.labelKey),
+    reason:
+      list === null
+        ? msg("structure.cageUnsupported.plain")
+        : msg("structure.cageUnsupported.features", { features: list }),
+  });
+}
+
 /** Paramètres du plugin : défauts `defaults(ctx)` surchargés par le projet, validés par zod. */
 function resolveStructureParams(
   plugin: StructureKind<unknown>,
@@ -663,14 +700,21 @@ export function buildModel(project: Project, options: BuildModelOptions = {}): M
   if (kind !== "none" && !known) {
     notes.push(msg("pipeline.unknownStructure", { kind }));
   }
-  // Garde-fou minimal des structures pour une cage saisie (avancé du lot 2f au sous-lot 1c,
-  // ADR-0010) : les plugins lisent encore les volées du projet (`legs` / `turns`, vides pour une
-  // cage). Le plugin est sauté avec une erreur claire ; les pièces de base restent produites.
-  const cageInput = stair.layout.kind === "cage";
-  const plugin = cageInput ? undefined : known;
-  if (complete && cageInput && known) {
-    errors.push(msg("structure.cageUnsupported", { structure: msg(known.labelKey) }));
-  }
+  // Garde-fou des structures pour une cage saisie (ADR-0010, plan C.8, sous-lot 2f) : un plugin
+  // ne construit une cage que s'il déclare toutes ses fonctions (`capabilities.cage`,
+  // `structureAcceptsCage`). Sinon il est sauté avec une erreur claire qui nomme les fonctions
+  // non prises en charge ; les pièces de base (marches) restent produites. Une cage sans
+  // fonction est refusée aussi par un plugin qui ne déclare pas `capabilities.cage` : il lit
+  // encore les volées du projet (`stair.layout.legs` / `turns`, absents d'une cage) ; la
+  // correction « reconvertir en volées » (`project/fixes.ts`) y répond. Tracé à volées : non
+  // concerné (cage issue de volées, même chemin qu'avant).
+  const cageInput = isCageLayout(stair.layout) ? stair.layout : undefined;
+  const cageRefusal =
+    cageInput !== undefined && known !== undefined
+      ? cageUnsupportedMessage(known, cageFeatures(cageInput))
+      : undefined;
+  const plugin = cageRefusal !== undefined ? undefined : known;
+  if (complete && cageRefusal !== undefined) errors.push(cageRefusal);
   if (complete) {
     const partsStage = run(caches.parts, [layout, stepping, stair.treads], () =>
       attempt(STAGE_LABELS.parts, () => buildBasicParts(project, layout, stepping)),

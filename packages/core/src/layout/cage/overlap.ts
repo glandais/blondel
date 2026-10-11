@@ -20,7 +20,7 @@
  * dimensions signalées sont celles de la boîte englobante (axes du repère local) de la réunion
  * des intersections. À ±90°, tronçons et zones sont des rectangles alignés sur les axes et la
  * réunion des pièces d'un tronçon est son étendue « au mur » : mêmes constats que la boîte
- * englobante du moteur à volées (`layout/legacyFlights.ts`), gardée telle quelle pour une cage
+ * englobante de l'ancien moteur à volées (supprimé au sous-lot 2f), gardée telle quelle pour une cage
  * issue de volées (parité des messages, `cage.ts`).
  *
  * Contact « bord à bord » (constat `sectionsTouch`) : deux jonctions tournantes successives de
