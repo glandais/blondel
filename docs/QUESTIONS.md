@@ -1056,3 +1056,4 @@ Le sous-lot 6a généralise les limons à la française (`wood-housed`) à une c
 - Proposition : garder (1) à (6) tels qu'appliqués ; trancher la tolérance d'alignement de (6).
 - Aujourd'hui (avant 6a) : toute structure était refusée sur une cage saisie ; en volées, angle mural droit seulement (prolongement e), poteau au jour.
 - Réf. : C §1.6, §1.9 ; B §1.2 (pan coupé) ; F5 ; A4 ; ADR-0010, amendement du sous-lot 6a ; `structures/legs.ts`, `structures/woodHoused.ts`, `structures/woodHoused.cage.test.ts` ; `docs/ledger/LEDGER-free-2d.md` (sous-lot 6a).
+- Décidé le 2026-10-12 : garder (1) à (6) telles qu'appliquées au sous-lot 6a ; pour la tolérance d'alignement de (6), paramètre du profil d'atelier, 2 mm « à valider » (bords de palier à moins de 2 mm fusionnés, raccord au milieu du palier), à mettre en œuvre au sous-lot 6a2 (question posée par l'orchestrateur ; journal free-2d, 2026-10-12).
