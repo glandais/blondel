@@ -234,3 +234,130 @@
   stroke-dasharray: 4 3;
   pointer-events: none;
 }
+
+/* Éditeur de plan en calques (ADR-0010, sous-lot 4a) : sélection, tronçons, jonctions,
+   contour de pièce, obstacles, conflits d'adéquation au site. */
+.plan-site__svg--select {
+  cursor: default;
+}
+
+.plan-site__svg--select [data-plan-select] {
+  cursor: pointer;
+}
+
+/* Hors de l'outil de sélection, les clics traversent les éléments jusqu'au plan (tracé). Les murs
+   gardent le survol pour leur infobulle (`<title>`) : leurs clics remontent au plan. */
+.plan-site__svg:not(.plan-site__svg--select) [data-plan-select]:not(.plan-site__wall) {
+  pointer-events: none;
+}
+
+.plan-editor__section,
+.plan-editor__junction {
+  fill: transparent;
+  stroke: color-mix(in srgb, var(--accent) 45%, transparent);
+  stroke-width: 1px;
+  stroke-dasharray: 2 3;
+}
+
+.plan-editor__junction {
+  fill: color-mix(in srgb, var(--accent) 6%, transparent);
+}
+
+.plan-editor__passive,
+.plan-editor__room,
+.plan-editor__layer--conflicts,
+.plan-editor__layer--handles {
+  pointer-events: none;
+}
+
+.plan-editor__room {
+  fill: none;
+  stroke: var(--text);
+  stroke-width: 1px;
+  stroke-dasharray: 10 3 2 3;
+}
+
+.plan-editor__obstacle {
+  fill: color-mix(in srgb, var(--muted) 30%, transparent);
+  stroke: var(--muted);
+  stroke-width: 1.2px;
+}
+
+.plan-editor__bay {
+  stroke: var(--text);
+  stroke-width: 3px;
+}
+
+.plan-editor__swing {
+  fill: color-mix(in srgb, var(--muted) 12%, transparent);
+  stroke: var(--muted);
+  stroke-width: 1px;
+  stroke-dasharray: 3 3;
+}
+
+.plan-editor__vertex {
+  fill: var(--panel);
+  stroke: var(--selected);
+  stroke-width: 1.5px;
+}
+
+/* Surbrillance de l'élément sélectionné. */
+.plan-site__svg [data-selected="true"] {
+  stroke: var(--selected);
+  stroke-width: 3px;
+  stroke-dasharray: none;
+}
+
+.plan-site__svg [data-selected="true"]:is(path, polygon) {
+  fill: color-mix(in srgb, var(--selected) 18%, transparent);
+}
+
+.plan-editor__vertex[data-selected="true"] {
+  fill: var(--selected);
+}
+
+/* Focus clavier d'un élément du plan : contour épais en couleur de focus. */
+.plan-site__svg [data-plan-select]:focus-visible {
+  outline: none;
+  stroke: var(--focus);
+  stroke-width: 3px;
+}
+
+.plan-editor__conflict {
+  stroke-width: 1.5px;
+}
+
+.plan-editor__conflict--erreur {
+  fill: color-mix(in srgb, var(--danger) 30%, transparent);
+  stroke: var(--danger);
+}
+
+.plan-editor__conflict--avertissement {
+  fill: color-mix(in srgb, var(--warn) 30%, transparent);
+  stroke: var(--warn);
+}
+
+.plan-editor__conflict--conseil {
+  fill: color-mix(in srgb, var(--accent) 15%, transparent);
+  stroke: var(--accent);
+  stroke-dasharray: 4 3;
+}
+
+.plan-editor__selection {
+  margin: 0;
+  font-size: 0.85rem;
+}
+
+/* Outil de sélection : l'intérieur de la trémie laisse passer les clics vers l'escalier. */
+.plan-site__svg--select .plan-site__opening {
+  pointer-events: none;
+}
+
+/* Zone de clic élargie d'un contour (trémie, emprise de l'escalier) : invisible, seul le trait
+   capte les clics ; l'intérieur laisse passer les clics vers les éléments placés dessous. */
+.plan-editor__hit {
+  fill: none;
+  stroke: transparent;
+  stroke-width: 12px;
+  pointer-events: stroke;
+}

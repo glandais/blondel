@@ -3,7 +3,7 @@
  * § 2 « Chiffres affichés »). Aucun calcul métier : lectures du projet et du dernier modèle
  * calculé (il reste affiché pendant un calcul, chiffres du cœur dans `Model.figures`), comptes,
  * et fonctions de présentation existantes (`bomSummary`, `executionClassInfo`,
- * `precheckSummary`, `flightsTypologyLabel`). Un chiffre indisponible (modèle absent,
+ * `precheckSummary`, `layoutTypologyLabel`). Un chiffre indisponible (modèle absent,
  * structure sans acier…) s'affiche « – ».
  *
  * L'unité est toujours à droite du chiffre, jamais dans la légende (spécification de contenu,
@@ -16,7 +16,7 @@ import { useMemo, type CSSProperties } from "react";
 import { formatNumber } from "../../i18n/locale.js";
 import { useT } from "../../i18n/useT.js";
 import { BALANCING_METHOD_LABELS } from "../../lib/balancingForm.js";
-import { LAYOUT_KIND_LABELS, flightsTypologyLabel } from "../../lib/layoutKind.js";
+import { layoutTypologyLabel } from "../../lib/layoutKind.js";
 import { bomSummary } from "../../lib/parts.js";
 import { executionClassInfo, precheckSummary } from "../../lib/precheck.js";
 import type { SectionId } from "../../lib/sectionIds.js";
@@ -158,10 +158,7 @@ export function sectionFigures(
     }
     case "layout": {
       const layout = project.stair.layout;
-      const typology =
-        layout.kind === "helical"
-          ? t.t(LAYOUT_KIND_LABELS.helical)
-          : t.t(flightsTypologyLabel(layout.turns));
+      const typology = t.t(layoutTypologyLabel(layout));
       const fp = figures?.footprint;
       const footprintCaption = t.t("ui.figures.caption.footprint");
       return [

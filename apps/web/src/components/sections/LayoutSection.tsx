@@ -4,9 +4,15 @@
  * valeur n'est calculée ici : les valeurs proposées au sortir d'un mode automatique sont lues
  * dans le modèle rendu par le cœur. Répartition par niveau : `Tiered`. Dans le parcours guidé,
  * le type de tracé est choisi par les cartes de forme (`guided/ShapeCards`).
+ *
+ * Tracé libre (cage, ADR-0010, sous-lot 4a) : ni volées ni tournants (`legs` et `turns` dérivés
+ * sont vides) ; la section en montre un résumé en lecture seule (tronçons et jonctions, lus dans
+ * le projet) et, si le cœur la propose, la correction « Reconvertir en volées » ; l'édition fine
+ * des tronçons et des jonctions viendra dans l'éditeur de plan (sous-lot 4d).
  */
 import {
   DEFAULT_NEWEL_SIZE,
+  type CageLayoutSpec,
   type InnerCorner,
   type Leg,
   type Project,
@@ -18,15 +24,18 @@ import { formatNumber } from "../../i18n/locale.js";
 import { listMessages } from "../../i18n/text.js";
 import { useT } from "../../i18n/useT.js";
 import { autoValueOf } from "../../lib/autoValues.js";
+import { cageSummaryLines } from "../../lib/cageSummary.js";
+import { applyFixInStore, fixesFor } from "../../lib/fixes.js";
 import { addLeg, legAutoAllowed, removeLastLeg } from "../../lib/layoutEdit.js";
 import {
-  LAYOUT_KIND_LABELS,
-  flightsTypologyLabel,
+  LAYOUT_KIND_CHOICE_LABELS,
   hasOppositeTurns,
-  layoutKindOf,
+  layoutKindChoiceOf,
+  layoutTypologyLabel,
+  layoutWidthEditable,
   switchLayoutKind,
   withTurnSequence,
-  type LayoutKind,
+  type LayoutKindChoice,
   type TurnSequence,
 } from "../../lib/layoutKind.js";
 import type { Display } from "../../lib/paramTiers.js";
@@ -255,12 +264,47 @@ function transitionsOf(
 const deg = (rad: number, locale: Locale): string =>
   formatNumber(locale, (rad * 180) / Math.PI, { maximumFractionDigits: 1 });
 
+/**
+ * Résumé en lecture seule d'un tracé libre et correction « Reconvertir en volées » quand le cœur
+ * la propose (`suggestFixes`, id `cage-to-flights` : cage qui s'écrit exactement en volées et
+ * dont la structure n'est pas générée).
+ */
+function CageSummary({ layout }: { layout: CageLayoutSpec }) {
+  const t = useT();
+  const project = useApp((s) => s.project);
+  const { model } = useModel();
+  const fix = useMemo(
+    () => fixesFor(project, model).find((f) => f.id === "cage-to-flights") ?? null,
+    [project, model],
+  );
+  const lines = cageSummaryLines(layout, t.locale);
+  return (
+    <fieldset className="cage-summary">
+      <legend>{t.t("ui.params.cage.legend")}</legend>
+      <ul className="cage-summary__list" aria-label={t.t("ui.params.cage.list.label")}>
+        {lines.map((line, i) => (
+          <li key={i}>{t.t(line)}</li>
+        ))}
+      </ul>
+      <p className="muted">{t.t("ui.params.cage.hint")}</p>
+      {fix !== null ? (
+        <div className="button-row">
+          <button type="button" onClick={() => applyFixInStore(fix)}>
+            {t.t(fix.label)}
+          </button>
+          <p className="muted">{t.t("ui.params.cage.reconvert.reason", { reason: fix.reason })}</p>
+        </div>
+      ) : null}
+    </fieldset>
+  );
+}
+
 export function LayoutSection({ display }: SectionProps) {
   const layout = useApp((s) => s.project.stair.layout);
   const walkline = useApp((s) => s.project.stair.walkline);
   const { model } = useModel();
   const legs = layout.legs;
-  const kind = useApp((s) => layoutKindOf(s.project));
+  const kind = useApp((s) => layoutKindChoiceOf(s.project));
   const sideChoice = useApp((s) => walklineSideChoice(s.project));
   const sideApplies = useApp((s) => walklineSideApplies(s.project));
   const side = walkline.side !== undefined ? { side: walkline.side } : {};
@@ -269,6 +313,24 @@ export function LayoutSection({ display }: SectionProps) {
 
   const flightsItems = (): readonly (TieredItem | false)[] => {
     if (layout.kind === "helical") return [];
+    if (layout.kind === "cage") {
+      // Tracé libre : ni volées ni tournants ; typologie et résumé en lecture seule.
+      return [
+        {
+          key: "ui:layout.typology",
+          node: (
+            <p className="typology__label">
+              {t.t("ui.params.typology.label")} <strong>{t.t(layoutTypologyLabel(layout))}</strong>
+            </p>
+          ),
+        },
+        {
+          key: "ui:layout.typology",
+          id: "cage-summary",
+          node: <CageSummary layout={layout} />,
+        },
+      ];
+    }
     const turns = layout.turns;
     const opposite = hasOppositeTurns(turns);
     const transitions = transitionsOf(model);
@@ -285,7 +347,7 @@ export function LayoutSection({ display }: SectionProps) {
         group: typology,
         node: (
           <p className="typology__label">
-            {t.t("ui.params.typology.label")} <strong>{t.t(flightsTypologyLabel(turns))}</strong>
+            {t.t("ui.params.typology.label")} <strong>{t.t(layoutTypologyLabel(layout))}</strong>
           </p>
         ),
       },
@@ -387,15 +449,20 @@ export function LayoutSection({ display }: SectionProps) {
             display.kind === "guided" ? (
               <ShapeCards />
             ) : (
-              <SelectField<LayoutKind>
+              <SelectField<LayoutKindChoice>
                 label={t.t("ui.params.layout.kind.label")}
                 value={kind}
-                options={(["flights", "helical"] as const).map((k) => ({
+                // Tracé libre proposé seulement quand le projet en est un (lecture seule ici).
+                options={(kind === "cage"
+                  ? (["flights", "helical", "cage"] as const)
+                  : (["flights", "helical"] as const)
+                ).map((k) => ({
                   value: k,
-                  label: t.t(LAYOUT_KIND_LABELS[k]),
+                  label: t.t(LAYOUT_KIND_CHOICE_LABELS[k]),
                 }))}
                 hint={t.t("ui.params.layout.kind.hint")}
                 onCommit={(k) => {
+                  if (k === "cage") return { ok: true };
                   let note: Message | undefined;
                   const r = update((p) => {
                     const s = switchLayoutKind(p, k);
@@ -411,7 +478,8 @@ export function LayoutSection({ display }: SectionProps) {
         },
         // Ordre de la spécification de contenu (§ 3, tableau Tracé) : type, E, typologie,
         // volées et tournants, ligne de foulée, recalage, puis le bloc hélicoïdal.
-        layout.kind !== "helical" && {
+        // Tracé libre : largeur dérivée des tronçons (réglée par tronçon, sous-lot 4d).
+        layoutWidthEditable(layout) && {
           key: "stair.layout.width",
           node: (
             <IntField

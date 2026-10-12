@@ -28,10 +28,13 @@ export function legAutoAllowed(legCount: number): boolean {
  * `DEFAULT_NEW_TURN`). Une longueur `auto` devient la longueur résolue par le cœur, arrondie au
  * mm (saisies en mm entiers, ADR-0003), puisque `auto` est interdit à plusieurs volées.
  *
+ * Sans effet sur un tracé libre (cage : `legs` et `turns` dérivés, vides) ni sur un hélicoïdal.
+ *
  * @throws LayoutError (message pour l'utilisateur) si le cœur ne peut pas résoudre `auto`.
  */
 export function addLeg(p: Project): Project {
   const l = p.stair.layout;
+  if (l.kind === "cage" || l.kind === "helical") return p;
   const hasAuto = l.legs.some((leg) => leg.length === "auto");
   const legs: Leg[] = hasAuto
     ? resolveLegLengths(p).map((length) => ({ length: Math.max(1, Math.round(length)) }))
@@ -47,10 +50,13 @@ export function addLeg(p: Project): Project {
   };
 }
 
-/** Retire la dernière volée et le tournant qui la précède ; sans effet sur un escalier droit. */
+/**
+ * Retire la dernière volée et le tournant qui la précède ; sans effet sur un escalier droit, un
+ * tracé libre ou un hélicoïdal.
+ */
 export function removeLastLeg(p: Project): Project {
   const l = p.stair.layout;
-  if (l.legs.length <= 1) return p;
+  if (l.kind === "cage" || l.kind === "helical" || l.legs.length <= 1) return p;
   return {
     ...p,
     stair: {

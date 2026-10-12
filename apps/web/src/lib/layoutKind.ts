@@ -12,6 +12,7 @@ import {
   getStructure,
   structureAcceptsLayout,
   withHelicalCore,
+  type LayoutSpec,
   type PresetId,
   type PresetOptions,
   type Project,
@@ -35,6 +36,22 @@ export const HELICAL_STRUCTURE = "helical-core";
 
 export function layoutKindOf(project: Project): LayoutKind {
   return project.stair.layout.kind === "helical" ? "helical" : "flights";
+}
+
+/**
+ * Type de tracé affiché par la liste « Type de tracé » : celui de `layoutKindOf`, ou `cage` pour
+ * un tracé libre saisi (ADR-0010), proposé seulement quand le projet en est un (la conversion en
+ * tracé libre passe par l'éditeur de plan, sous-lot 4d).
+ */
+export type LayoutKindChoice = LayoutKind | "cage";
+
+export const LAYOUT_KIND_CHOICE_LABELS: Readonly<Record<LayoutKindChoice, MessageKey>> = {
+  ...LAYOUT_KIND_LABELS,
+  cage: "ui.label.layoutKind.cage",
+};
+
+export function layoutKindChoiceOf(project: Project): LayoutKindChoice {
+  return project.stair.layout.kind === "cage" ? "cage" : layoutKindOf(project);
 }
 
 /**
@@ -110,7 +127,9 @@ function basePreset(project: Project, kind: LayoutKind): LayoutSwitch {
  * @throws RangeError si le préréglage du cœur est impossible même avec la rotation provisoire.
  */
 export function switchLayoutKind(project: Project, kind: LayoutKind): LayoutSwitch {
-  if (layoutKindOf(project) === kind) return { project };
+  // Tracé libre (cage) → « À volées » : préréglage droit, comme depuis un hélicoïdal (la
+  // reconversion exacte est la correction « Reconvertir en volées » du cœur, quand elle existe).
+  if (layoutKindOf(project) === kind && project.stair.layout.kind !== "cage") return { project };
   const { project: base, note } = basePreset(project, kind);
   const next = adoptPreset(project, base, kind);
   return note === undefined ? { project: next } : { project: next, note };
@@ -181,6 +200,8 @@ export const SHAPE_PRESETS: Readonly<Record<ShapeId, PresetId>> = {
 export function pressedShapes(project: Project): ReadonlySet<ShapeId> {
   const layout = project.stair.layout;
   if (layout.kind === "helical") return new Set<ShapeId>(["helical"]);
+  // Tracé libre (cage) : `turns` est vide, ce n'est pas pour autant un escalier droit.
+  if (layout.kind === "cage") return new Set<ShapeId>();
   const turns = layout.turns;
   if (turns.length === 0) return new Set<ShapeId>(["straight"]);
   if (turns.length === 1) {
@@ -286,6 +307,29 @@ export function flightsTypologyLabel(turns: readonly Pick<Turn, "direction" | "m
     alternate: hasOppositeTurns(turns) ? msg("ui.lib.typology.suffix.alternate") : "",
     landing: withLanding,
   });
+}
+
+/**
+ * Typologie lisible de tout tracé : hélicoïdal, tracé libre (nombre de tronçons ; `turns` d'une
+ * cage est vide, `flightsTypologyLabel` y lirait un escalier droit), sinon typologie des volées.
+ */
+export function layoutTypologyLabel(layout: LayoutSpec): Message {
+  if (layout.kind === "helical") return msg(LAYOUT_KIND_LABELS.helical);
+  if (layout.kind === "cage") {
+    return msg("ui.lib.typology.cage", { count: layout.sections.length });
+  }
+  return flightsTypologyLabel(layout.turns);
+}
+
+/**
+ * L'emmarchement global (`stair.layout.width`) se saisit-il ? Non pour un hélicoïdal (largeur
+ * dérivée des rayons) ni pour un tracé libre : la largeur d'une cage est dérivée de celles de ses
+ * tronçons (`CageLayoutSpecSchema`, non sérialisée) et une saisie y serait ignorée sans rien dire.
+ */
+export function layoutWidthEditable(
+  layout: LayoutSpec,
+): layout is Exclude<LayoutSpec, { kind: "helical" | "cage" }> {
+  return layout.kind !== "helical" && layout.kind !== "cage";
 }
 
 /**

@@ -59,8 +59,14 @@ export function withWalklineSide(project: Project, choice: WalklineSideChoice): 
   return { ...project, stair: { ...project.stair, walkline } };
 }
 
-/** Le réglage du bord de mesure s'applique-t-il (escalier droit à volées) ? */
+/**
+ * Le réglage du bord de mesure s'applique-t-il ? Escalier droit à volées, ou tracé libre sans
+ * jonction tournante (paliers droits, axes en arc ; `Layout.walklineSide`).
+ */
 export function walklineSideApplies(project: Project): boolean {
   const layout = project.stair.layout;
+  // Tracé libre : `turns` est vide ; le bord de mesure vaut pour une cage sans jonction
+  // tournante (paliers droits, axes en arc ; `Layout.walklineSide`).
+  if (layout.kind === "cage") return layout.junctions.every((j) => j.angle === 0);
   return layout.kind !== "helical" && layout.turns.length === 0;
 }

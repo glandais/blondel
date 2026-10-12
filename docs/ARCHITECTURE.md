@@ -143,8 +143,10 @@ saisie ─► store zustand (projectStore) ─► Project canonique (ProjectSche
  Valeurs ◆ : lib/paramTiers.ts (◆ par chemin) ─► lib/toValidate.ts (lignes, valeur effective)
              ─► setValuesValidated (projectStore, annulable) ─► Project.validatedValues
              (cœur, project/validatedValues.ts, caducité) ─► compteurs, ToValidateList, PDF
- Site      : Plan 2D › « Site et saisie » : PlanSiteEditor (calque, trémie, murs, calibration,
-             accroches du cœur), PlanSurveyForm (relevé), UnderlayImport / ImportMenu (DXF, image)
+ Site      : Plan 2D › « Site et saisie » : plan/PlanEditor, en calques (fond, site, escalier
+             lu dans le Model, conflits Model.siteFit, poignées) ; outil et sélection dans
+             uiStore (store/planEditor.ts) ; saisie de la trémie, des murs, calibration,
+             accroches du cœur ; PlanSurveyForm (relevé), UnderlayImport / ImportMenu (DXF, image)
 ```
 
 - Le calcul tourne hors du fil principal (ADR-0006) : pendant un calcul, le dernier modèle publié reste affiché avec le projet dont il est issu (`pending`), et les exports sont désactivés tant que le modèle ne correspond pas au projet courant. `postMessage` clone le projet : sans le partage structurel (`apps/web/src/model/structuralShare.ts`), les caches par identité de `buildModel` ne serviraient jamais dans le worker.

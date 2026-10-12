@@ -210,8 +210,6 @@ export function projectSnapSegments(project: Project): CurveSeg[] {
 
 // ------------------------------------------------------------------ Tracé en cours
 
-export type PlanTool = "pan" | "opening" | "wall" | "calibrate";
-
 /** Clé du libellé d'un type d'accroche (bulle d'aide). */
 export const SNAP_LABELS: Readonly<Record<SnapCandidate["kind"], MessageKey>> = {
   endpoint: "ui.label.snap.endpoint",

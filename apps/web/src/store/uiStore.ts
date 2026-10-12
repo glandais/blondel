@@ -28,7 +28,13 @@
  * affiche la dernière vue de Fabrication, revenir en Conception rend la vue quittée ; une vue
  * choisie ailleurs (démo en 3D, import de calque sur le plan) ramène l'espace qui la contient.
  * Ni le projet, ni l'historique, ni la sélection ne changent.
+ *
+ * Éditeur de plan (ADR-0010, sous-lot 4a ; `planEditor.ts`) : `planTool` (outil courant, `select`
+ * par défaut) et `planSelection` (élément du plan sélectionné : escalier, tronçon, jonction, mur,
+ * extrémité de mur, trémie, sommet, obstacle). Distincte de la sélection de l'inspecteur
+ * (`appStore.selection`), elle ne touche ni au projet ni à l'historique.
  */
+import type { Model, Project } from "@blondel/core";
 import { useEffect, useRef } from "react";
 import { useStore } from "zustand";
 import { createStore, type StoreApi } from "zustand/vanilla";
@@ -38,6 +44,16 @@ import type { GuidedStep, SectionId } from "../lib/sectionIds.js";
 import type { ToValidateRow } from "../lib/toValidate.js";
 import { appStore, journeyStore } from "./appStore.js";
 import type { JourneyState } from "./journeyStore.js";
+import {
+  INITIAL_PLAN_EDITOR,
+  prunePlanSelection,
+  withPlanSelection,
+  withPlanTool,
+  withProjectOpened,
+  type PlanEditorState,
+  type PlanEditorTool,
+  type PlanSelection,
+} from "./planEditor.js";
 import type { ProjectStore, ViewTab } from "./projectStore.js";
 
 /** Vues de chaque espace de travail, dans l'ordre des onglets. */
@@ -57,7 +73,7 @@ export interface ViewCommand {
   readonly seq: number;
 }
 
-export interface UiState {
+export interface UiState extends PlanEditorState {
   readonly workshopOpen: boolean;
   readonly controlRevealSeq: number;
   readonly viewCommand: ViewCommand | null;
@@ -97,7 +113,61 @@ export function createUiStore(initialView: ViewTab = "plan"): StoreApi<UiState> 
     guidedControlContext: false,
     guidedControlContextSeq: 0,
     inspectorDrawerOpen: false,
+    ...INITIAL_PLAN_EDITOR,
   }));
+}
+
+/** Applique une transformation pure de l'état de l'éditeur de plan (rien si inchangé). */
+function applyPlanEditor(
+  ui: StoreApi<UiState>,
+  next: (s: PlanEditorState) => PlanEditorState,
+): void {
+  const s = ui.getState();
+  const cur: PlanEditorState = { planTool: s.planTool, planSelection: s.planSelection };
+  const r = next(cur);
+  if (r.planTool !== cur.planTool || r.planSelection !== cur.planSelection) ui.setState(r);
+}
+
+/** Outil de l'éditeur de plan (efface la sélection hors de l'outil de sélection). */
+export function setPlanTool(tool: PlanEditorTool, ui: StoreApi<UiState> = uiStore): void {
+  applyPlanEditor(ui, (s) => withPlanTool(s, tool));
+}
+
+/** Sélectionne un élément du plan (outil de sélection seulement) ; `null` désélectionne. */
+export function selectPlanElement(
+  selection: PlanSelection | null,
+  ui: StoreApi<UiState> = uiStore,
+): void {
+  applyPlanEditor(ui, (s) => withPlanSelection(s, selection));
+}
+
+/** Efface la sélection du plan ; rend vrai s'il y avait une sélection (Échap consommé). */
+export function clearPlanSelection(ui: StoreApi<UiState> = uiStore): boolean {
+  const had = ui.getState().planSelection !== null;
+  applyPlanEditor(ui, (s) => withPlanSelection(s, null));
+  return had;
+}
+
+/** Efface la sélection du plan si son élément a disparu du projet ou du modèle. */
+export function prunePlanElement(
+  project: Project,
+  model: Model | null,
+  ui: StoreApi<UiState> = uiStore,
+): void {
+  applyPlanEditor(ui, (s) => prunePlanSelection(s, project, model));
+}
+
+/**
+ * Lie l'éditeur de plan au chargement d'un projet (`lastOpened`, nouveau numéro) : outil et
+ * sélection reviennent à l'état initial (`withProjectOpened`). Annuler et refaire ne chargent pas
+ * de projet : la sélection y est seulement élaguée (`prunePlanElement`). Rend la fonction de
+ * désabonnement.
+ */
+export function linkPlanEditorToProject(app: ProjectStore, ui: StoreApi<UiState>): () => void {
+  return app.subscribe((s, prev) => {
+    if (s.lastOpened === null || s.lastOpened.seq === prev.lastOpened?.seq) return;
+    applyPlanEditor(ui, withProjectOpened);
+  });
 }
 
 /**
@@ -154,6 +224,7 @@ export const uiStore = createUiStore(appStore.getState().view);
 
 linkWorkspaceAndView(appStore, journeyStore, uiStore);
 linkDrawerToSelection(appStore, uiStore);
+linkPlanEditorToProject(appStore, uiStore);
 
 /** Élément qui avait le focus à l'ouverture du tiroir (focus rendu à sa fermeture). */
 let drawerOpener: HTMLElement | null = null;

@@ -4,8 +4,10 @@
  *   la marche par ses attributs `data-tread`, zoom − / + / Recadrer (`ZoomableSvg`) ; un clic
  *   hors d'une marche efface la sélection (retour à l'inspecteur « sans sélection ») ; le nez
  *   d'arrivée, qu'aucune marche ne porte, se sélectionne par sa ligne (QUESTIONS A28) ;
- * - « Site et saisie » (jalon 7) : calque de fond (DXF, image calibrée), murs, trémie
- *   polygonale, tracé assisté avec accroches et relevé de trémie (`PlanSiteEditor`).
+ * - « Site et saisie » (jalon 7) : éditeur de plan en calques (ADR-0010, sous-lot 4a,
+ *   `plan/PlanEditor`) : calque de fond (DXF, image calibrée), murs, trémie polygonale, tracé
+ *   assisté avec accroches et relevé de trémie, escalier lu dans le modèle (tronçons, jonctions),
+ *   conflits d'adéquation au site, sélection.
  *
  * L'ancien « Mode expert » (retouches des lignes de nez) est remplacé par le bloc « Ligne de
  * nez » de l'inspecteur Marche (ADR-0009 point 4).
@@ -24,7 +26,7 @@ import { arrivalNosingIndex } from "../lib/nosingOverrides.js";
 import { useT } from "../i18n/useT.js";
 import { renderPlanForScreen, withNosingTarget } from "../model/planSvg.js";
 import { appStore, useApp } from "../store/appStore.js";
-import { PlanSiteEditor } from "./PlanSiteEditor.js";
+import { PlanEditor } from "./plan/PlanEditor.js";
 import "./planSite.css";
 
 /**
@@ -123,7 +125,7 @@ export function PlanView({ model }: { model: Model }) {
         </button>
       </div>
       <div className="plan-view__body">
-        {mode === "site" ? <PlanSiteEditor model={model} /> : <DimensionedPlan model={model} />}
+        {mode === "site" ? <PlanEditor model={model} /> : <DimensionedPlan model={model} />}
       </div>
     </div>
   );

@@ -3,8 +3,13 @@ import { createJourneyStore } from "./journeyStore.js";
 import { memoryStorage } from "./persistence.js";
 import { createProjectStore } from "./projectStore.js";
 import {
+  clearPlanSelection,
   createUiStore,
+  prunePlanElement,
+  selectPlanElement,
+  setPlanTool,
   linkDrawerToSelection,
+  linkPlanEditorToProject,
   linkWorkspaceAndView,
   workspaceOfView,
 } from "./uiStore.js";
@@ -350,5 +355,60 @@ describe("tiroir de l'inspecteur (fenêtre moyenne, vague 6)", () => {
     });
     journeyStore.getState().setNarrowViewport(false);
     journeyStore.getState().setJourney("free");
+  });
+});
+
+describe("éditeur de plan : outil et sélection (état d'interface seul)", () => {
+  it("outil de sélection par défaut ; sélection, Échap, outil de tracé ; projet intact", () => {
+    const app = createProjectStore();
+    const ui = createUiStore();
+    const project = app.getState().project;
+    expect(ui.getState().planTool).toBe("select");
+    expect(ui.getState().planSelection).toBeNull();
+    selectPlanElement({ kind: "section", index: 0 }, ui);
+    expect(ui.getState().planSelection).toEqual({ kind: "section", index: 0 });
+    // Échap : rend vrai (consommé) s'il y avait une sélection, faux sinon.
+    expect(clearPlanSelection(ui)).toBe(true);
+    expect(clearPlanSelection(ui)).toBe(false);
+    selectPlanElement({ kind: "junction", index: 0 }, ui);
+    setPlanTool("wall", ui);
+    expect(ui.getState()).toMatchObject({ planTool: "wall", planSelection: null });
+    selectPlanElement({ kind: "stair" }, ui);
+    expect(ui.getState().planSelection).toBeNull();
+    setPlanTool("room", ui);
+    expect(ui.getState().planTool).toBe("wall");
+    expect(app.getState().project).toBe(project);
+    expect(app.getState().canUndo()).toBe(false);
+  });
+
+  it("un état inchangé ne notifie pas les abonnés", () => {
+    const ui = createUiStore();
+    selectPlanElement({ kind: "stair" }, ui);
+    let calls = 0;
+    const off = ui.subscribe(() => calls++);
+    selectPlanElement({ kind: "stair" }, ui);
+    setPlanTool("select", ui);
+    expect(calls).toBe(0);
+    // Élément disparu (aucun modèle) : sélection effacée.
+    prunePlanElement(createProjectStore().getState().project, null, ui);
+    expect(ui.getState().planSelection).toBeNull();
+    expect(calls).toBe(1);
+    off();
+  });
+
+  it("un projet chargé remet l'éditeur de plan à zéro ; annuler ne fait qu'élaguer", () => {
+    const app = createProjectStore();
+    const ui = createUiStore();
+    const off = linkPlanEditorToProject(app, ui);
+    selectPlanElement({ kind: "section", index: 0 }, ui);
+    // Une saisie (pas un chargement) garde la sélection.
+    app.getState().update((p) => ({ ...p, site: { ...p.site, floorToFloor: 2700 } }));
+    expect(ui.getState().planSelection).toEqual({ kind: "section", index: 0 });
+    app.getState().loadPreset("straight");
+    expect(ui.getState()).toMatchObject({ planTool: "select", planSelection: null });
+    setPlanTool("calibrate", ui);
+    app.getState().loadPreset("straight");
+    expect(ui.getState().planTool).toBe("select");
+    off();
   });
 });

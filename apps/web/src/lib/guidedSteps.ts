@@ -19,7 +19,7 @@ import { msg, type MessageKey, type Translator } from "@blondel/i18n";
 import type { PlanMode, ViewTab } from "../store/projectStore.js";
 import { INFILL_LABELS } from "./guardsForm.js";
 import { recommendedView } from "./journey.js";
-import { LAYOUT_KIND_LABELS, flightsTypologyLabel } from "./layoutKind.js";
+import { layoutTypologyLabel } from "./layoutKind.js";
 import { availableStructures } from "./optionalApi.js";
 import {
   STRUCTURE_PARAMS_PREFIX,
@@ -175,9 +175,7 @@ function structureLabel(kind: string, labelKey: MessageKey, t: Translator): stri
 /** Typologie affichée à l'étape 2 (hélicoïdal, ou typologie des volées). */
 function layoutTypology(project: Project, t: Translator): string {
   const layout = project.stair.layout;
-  return layout.kind === "helical"
-    ? t.t(LAYOUT_KIND_LABELS.helical)
-    : t.t(flightsTypologyLabel(layout.turns));
+  return t.t(layoutTypologyLabel(layout));
 }
 
 /** Tête tronquable du résumé d'une étape (étapes 2 et 5), `null` ailleurs. */

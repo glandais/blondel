@@ -1,21 +1,26 @@
 /**
- * Plan « Site et saisie » (jalon 7) : calque de fond (plan DXF, image calibrée), murs, trémie
- * polygonale et contour de l'escalier ; saisie assistée par clic avec accroche aux entités du
- * calque (extrémités, milieux, intersections, centres) et aux sommets existants.
+ * Éditeur de plan (ADR-0010, sous-lot 4a ; ancien `PlanSiteEditor` du jalon 7), en calques :
+ * fond calibré (`UnderlayLayer`), site (`SiteLayer` : murs, trémie, contour de pièce,
+ * obstacles), escalier (`StairLayer` : emprise, tronçons, jonctions, nez, Γ, lus dans le
+ * `Model`), conflits d'adéquation au site (`ConflictLayer`, `Model.siteFit`), poignées
+ * (`HandleLayer`, vide au 4a), puis le tracé en cours et l'accroche.
  *
- * Outils : Déplacer (glisser pour déplacer la vue, molette pour zoomer), Trémie (clic par sommet,
- * clic sur le premier sommet ou Entrée pour fermer), Mur (deux clics : axe du mur ; au nu, deux
- * clics sur le nu puis un troisième du côté du mur, QUESTIONS A24), Calibrer
- * (deux points de l'image puis la distance réelle). Échap abandonne le tracé, Retour arrière
- * retire le dernier sommet. Chaque tracé terminé est une entrée d'historique (annulable).
+ * Outils (`uiStore.planTool`) : Sélectionner (défaut : clic sur un élément pour le sélectionner,
+ * clic dans le vide ou Échap pour désélectionner, glisser, sur un élément comme dans le vide,
+ * pour déplacer la vue ; l'escalier se prend par son contour ;
+ * Tab parcourt les éléments, Entrée ou Espace sélectionne), Déplacer (glisser pour déplacer la
+ * vue, molette pour zoomer), Trémie (clic par sommet, clic sur le premier sommet ou Entrée pour
+ * fermer), Mur (deux clics : axe du mur ; au nu, deux clics sur le nu puis un troisième du côté
+ * du mur, QUESTIONS A24), Calibrer (deux points de l'image puis la distance réelle). Échap
+ * abandonne le tracé, Retour arrière retire le dernier sommet. Chaque tracé terminé est une
+ * entrée d'historique (annulable) ; la sélection, état d'interface seul, n'en crée pas.
  * Les commandes − / + / Recadrer de la vue centrale zooment autour du centre de la vue ou
- * reviennent au cadrage initial.
+ * reviennent au cadrage initial. Contour de pièce et obstacles se saisiront au lot 5.
  */
 import {
   buildSnapIndex,
   calibrateImage,
   imagePixelToSite,
-  openingPolygon,
   siteToImagePixel,
   snapPoint,
   underlaySegments,
@@ -28,8 +33,8 @@ import {
   type SnapHit,
   type Vec2,
 } from "@blondel/core";
+import { errorMessage, msg, type Locale, type Message, type MessageKey } from "@blondel/i18n";
 import {
-  memo,
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -39,17 +44,27 @@ import {
   type KeyboardEvent,
   type PointerEvent,
 } from "react";
-import { UnderlayImport } from "../components/UnderlayImport.js";
-import { appStore, useApp } from "../store/appStore.js";
-import { useViewCommand } from "../store/uiStore.js";
-import { errorMessage, msg, type Locale, type Message, type MessageKey } from "@blondel/i18n";
-import { formatNumber } from "../i18n/locale.js";
-import { useT } from "../i18n/useT.js";
-import "./planSite.css";
-import { PlanSurveyForm } from "./PlanSurveyForm.js";
+import { UnderlayImport } from "../../components/UnderlayImport.js";
+import { formatNumber } from "../../i18n/locale.js";
+import { useT } from "../../i18n/useT.js";
+import { appStore, useApp } from "../../store/appStore.js";
+import {
+  PLAN_TOOL_AVAILABLE,
+  type PlanEditorTool,
+  type PlanSelection,
+} from "../../store/planEditor.js";
+import {
+  clearPlanSelection,
+  prunePlanElement,
+  selectPlanElement,
+  setPlanTool,
+  useUi,
+  useViewCommand,
+} from "../../store/uiStore.js";
+import "../planSite.css";
+import { PlanSurveyForm } from "../PlanSurveyForm.js";
 import {
   DEFAULT_WALL_THICKNESS_MM,
-  dxfPathData,
   faceWallOutline,
   fitView,
   openingClick,
@@ -59,21 +74,29 @@ import {
   screenToSite,
   siteBounds,
   SNAP_LABELS,
-  stairOverlay,
   viewBoxAttr,
   wallClick,
   wallFaceSide,
-  wallOutline,
   zoomAt,
-  type PlanTool,
   type ViewBox,
   type WallTraceMode,
-} from "./planSiteGeometry.js";
+} from "../planSiteGeometry.js";
+import { ConflictLayer } from "./ConflictLayer.js";
+import { HandleLayer } from "./HandleLayer.js";
+import { parsePlanSelection, planSelectionKey } from "./planEditorGeometry.js";
+import { selectionLabel, type SelectContext } from "./selectable.js";
+import { SiteLayer } from "./SiteLayer.js";
+import { StairLayer } from "./StairLayer.js";
+import { UnderlayLayer } from "./UnderlayLayer.js";
 
 /** Rayon d'accroche à l'écran (pixels). */
 const SNAP_RADIUS_PX = 12;
 
-const TOOLS: readonly { id: PlanTool; label: MessageKey; title: MessageKey }[] = [
+/** Déplacement (pixels) au-delà duquel un appui est un glisser de la vue, pas un clic. */
+const CLICK_SLOP_PX = 3;
+
+const TOOLS: readonly { id: PlanEditorTool; label: MessageKey; title: MessageKey }[] = [
+  { id: "select", label: "ui.plan.editor.tool.select", title: "ui.plan.editor.tool.select.title" },
   { id: "pan", label: "ui.plan.site.tool.pan", title: "ui.plan.site.tool.pan.title" },
   { id: "opening", label: "ui.plan.site.tool.opening", title: "ui.plan.site.tool.opening.title" },
   { id: "wall", label: "ui.plan.site.tool.wall", title: "ui.plan.site.tool.wall.title" },
@@ -98,19 +121,19 @@ function commit(recipe: (p: Project) => Project): Note | null {
   return r.ok ? null : (r.issues[0] ?? msg("ui.plan.site.refused"));
 }
 
-/** Couche du calque DXF (mémoïsée : un seul chemin, recalculé seulement si le calque change). */
-const DxfLayer = memo(function DxfLayer({ d, opacity }: { d: string; opacity: number }) {
-  return (
-    <path className="plan-site__dxf" d={d} opacity={opacity} vectorEffect="non-scaling-stroke" />
-  );
-});
+/** Élément sélectionnable sous la cible d'un événement (attribut `data-plan-select`). */
+function selectionTarget(target: EventTarget | null) {
+  if (!(target instanceof Element)) return null;
+  return parsePlanSelection(target.closest("[data-plan-select]")?.getAttribute("data-plan-select"));
+}
 
-export function PlanSiteEditor({ model }: { model: Model }) {
+export function PlanEditor({ model }: { model: Model }) {
   const tr = useT();
   const project = useApp((s) => s.project);
   const site = project.site;
   const underlay = site.underlay;
-  const [tool, setTool] = useState<PlanTool>("pan");
+  const tool = useUi((s) => s.planTool);
+  const selection = useUi((s) => s.planSelection);
   const [draft, setDraft] = useState<Vec2[]>([]);
   const [cursor, setCursor] = useState<{ raw: Vec2; snap: SnapHit | null } | null>(null);
   const [snapOn, setSnapOn] = useState(true);
@@ -123,7 +146,17 @@ export function PlanSiteEditor({ model }: { model: Model }) {
   const [view, setView] = useState<ViewBox | null>(null);
   const svgRef = useRef<SVGSVGElement>(null);
   const boxRef = useRef<HTMLDivElement>(null);
-  const pan = useRef<{ x: number; y: number; view: ViewBox } | null>(null);
+  /**
+   * Glisser de la vue. `pick` : appui de l'outil de sélection, résolu au relâché s'il n'a pas
+   * bougé (clic) : l'élément sous l'appui est sélectionné, ou la sélection effacée (`null`, vide).
+   */
+  const pan = useRef<{
+    x: number;
+    y: number;
+    view: ViewBox;
+    pick: { readonly hit: PlanSelection | null } | null;
+    moved: boolean;
+  } | null>(null);
 
   const aspect = size.w / Math.max(1, size.h);
   const fitted = useMemo(
@@ -146,7 +179,18 @@ export function PlanSiteEditor({ model }: { model: Model }) {
     return () => ro?.disconnect();
   }, []);
 
-  const dxfD = useMemo(() => (underlay?.dxf ? dxfPathData(underlay.dxf) : ""), [underlay?.dxf]);
+  // Sélection effacée si son élément disparaît (annulation, suppression ; un projet chargé remet
+  // l'éditeur à zéro, `linkPlanEditorToProject`).
+  useEffect(() => {
+    prunePlanElement(project, model);
+  }, [project, model]);
+
+  // Calibrer sans image (image retirée, annulation) : retour à l'outil de sélection, plutôt
+  // qu'un bouton enfoncé mais désactivé et des clics sans effet.
+  useEffect(() => {
+    if (tool === "calibrate" && !underlay?.image) setPlanTool("select");
+  }, [tool, underlay?.image]);
+
   const segments = useMemo(
     () => [
       ...(underlay?.dxf ? underlaySegments(underlay.dxf) : []),
@@ -159,8 +203,6 @@ export function PlanSiteEditor({ model }: { model: Model }) {
     () => buildSnapIndex(segments, projectSnapPoints(project, draft)),
     [segments, draft, site.opening, site.walls],
   );
-  const stair = useMemo(() => stairOverlay(model), [model]);
-  const opening = useMemo(() => openingPolygon(site.opening), [site.opening]);
 
   const toSite = useCallback(
     (clientX: number, clientY: number): Vec2 | null => {
@@ -198,10 +240,10 @@ export function PlanSiteEditor({ model }: { model: Model }) {
     setCalib(null);
   };
 
-  const chooseTool = (t: PlanTool): void => {
+  const chooseTool = (t: PlanEditorTool): void => {
     reset();
     setMessage(null);
-    setTool(t);
+    setPlanTool(t);
   };
 
   const closeOpening = (points: readonly Vec2[]): void => {
@@ -252,13 +294,25 @@ export function PlanSiteEditor({ model }: { model: Model }) {
     }
   };
 
+  const startPan = (
+    e: PointerEvent<SVGSVGElement>,
+    pick: { readonly hit: PlanSelection | null } | null,
+  ): void => {
+    pan.current = { x: e.clientX, y: e.clientY, view: v, pick, moved: false };
+    e.currentTarget.setPointerCapture?.(e.pointerId);
+  };
+
   const onPointerDown = (e: PointerEvent<SVGSVGElement>): void => {
     if (tool === "pan" || e.button === 1) {
-      pan.current = { x: e.clientX, y: e.clientY, view: v };
-      e.currentTarget.setPointerCapture?.(e.pointerId);
+      startPan(e, null);
       return;
     }
     if (e.button !== 0) return;
+    if (tool === "select") {
+      // Sélection au relâché (clic) ; un glisser déplace la vue, même commencé sur un élément.
+      startPan(e, { hit: selectionTarget(e.target) });
+      return;
+    }
     const raw = toSite(e.clientX, e.clientY);
     if (!raw) return;
     const hit = snapOn ? snapPoint(index, raw, SNAP_RADIUS_PX * mmPerPx) : null;
@@ -268,30 +322,49 @@ export function PlanSiteEditor({ model }: { model: Model }) {
   const onPointerMove = (e: PointerEvent<SVGSVGElement>): void => {
     const start = pan.current;
     if (start) {
+      const dx = e.clientX - start.x;
+      const dy = e.clientY - start.y;
+      if (!start.moved && Math.hypot(dx, dy) < CLICK_SLOP_PX) return;
+      start.moved = true;
       const k = start.view.width / Math.max(1, size.w);
-      setView({
-        ...start.view,
-        cx: start.view.cx - (e.clientX - start.x) * k,
-        cy: start.view.cy + (e.clientY - start.y) * k,
-      });
+      setView({ ...start.view, cx: start.view.cx - dx * k, cy: start.view.cy + dy * k });
       return;
     }
     const raw = toSite(e.clientX, e.clientY);
     if (!raw) return;
-    const snap = snapOn && tool !== "pan" ? snapPoint(index, raw, SNAP_RADIUS_PX * mmPerPx) : null;
+    const snap =
+      snapOn && tool !== "pan" && tool !== "select"
+        ? snapPoint(index, raw, SNAP_RADIUS_PX * mmPerPx)
+        : null;
     setCursor({ raw, snap });
   };
 
   const onPointerUp = (): void => {
+    const start = pan.current;
     pan.current = null;
+    // Clic (sans glisser) de l'outil de sélection : l'élément, ou désélection dans le vide.
+    if (!start?.pick || start.moved) return;
+    if (start.pick.hit) selectPlanElement(start.pick.hit);
+    else clearPlanSelection();
   };
 
   const onKeyDown = (e: KeyboardEvent<HTMLDivElement>): void => {
     if (e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement) return;
     if (e.key === "Escape") {
-      // Échap consommé (tracé ou calibrage abandonné) : il ne ferme pas aussi le panneau libre.
-      if (draft.length > 0 || calib !== null) e.preventDefault();
-      reset();
+      // Échap consommé (tracé abandonné, sélection effacée) : il ne ferme pas aussi le panneau
+      // libre ; sans rien à abandonner, il suit la chaîne d'Échap de l'application.
+      if (draft.length > 0 || calib !== null) {
+        e.preventDefault();
+        reset();
+      } else if (clearPlanSelection()) {
+        e.preventDefault();
+      }
+    } else if ((e.key === "Enter" || e.key === " ") && tool === "select") {
+      const hit = selectionTarget(e.target);
+      if (hit) {
+        e.preventDefault();
+        selectPlanElement(hit);
+      }
     } else if (e.key === "Enter" && tool === "opening" && draft.length >= 3) {
       e.preventDefault();
       closeOpening(draft);
@@ -319,7 +392,8 @@ export function PlanSiteEditor({ model }: { model: Model }) {
     }
   };
 
-  const target = cursor?.snap?.point ?? cursor?.raw ?? null;
+  const drawing = tool !== "pan" && tool !== "select";
+  const target = drawing ? (cursor?.snap?.point ?? cursor?.raw ?? null) : (cursor?.raw ?? null);
   // Mur au nu, nu tracé : aperçu du mur du côté du pointeur (troisième clic).
   const faceDraft = tool === "wall" && wallMode === "face" && draft.length === 2;
   const faceSide = faceDraft && target ? wallFaceSide(draft[0]!, draft[1]!, target) : null;
@@ -329,17 +403,24 @@ export function PlanSiteEditor({ model }: { model: Model }) {
       : null;
   const markerR = 6 * mmPerPx;
   const img = underlay?.image;
-  const opacity = underlay?.opacity ?? 1;
   const stairBounds = useMemo(() => siteBounds(project, model, false), [project, model]);
+  const ctx: SelectContext = useMemo(
+    () => ({
+      interactive: tool === "select",
+      selectedKey: selection ? planSelectionKey(selection) : null,
+      tr,
+    }),
+    [tool, selection, tr],
+  );
 
   return (
-    <div className="plan-site" onKeyDown={onKeyDown}>
+    <div className="plan-site plan-editor" onKeyDown={onKeyDown}>
       <div
         className="plan-site__toolbar"
         role="toolbar"
         aria-label={tr.t("ui.plan.site.toolbar.label")}
       >
-        {TOOLS.map((t) => (
+        {TOOLS.filter((t) => PLAN_TOOL_AVAILABLE[t.id]).map((t) => (
           <button
             key={t.id}
             type="button"
@@ -375,7 +456,7 @@ export function PlanSiteEditor({ model }: { model: Model }) {
             ref={svgRef}
             className={`plan-site__svg plan-site__svg--${tool}`}
             viewBox={viewBoxAttr(v, aspect)}
-            role="img"
+            role="group"
             aria-label={tr.t("ui.plan.site.svg.label")}
             tabIndex={0}
             onPointerDown={onPointerDown}
@@ -384,63 +465,11 @@ export function PlanSiteEditor({ model }: { model: Model }) {
             onPointerLeave={() => setCursor(null)}
           >
             <g transform="scale(1,-1)">
-              {img ? (
-                <image
-                  href={img.dataUrl}
-                  width={img.widthPx}
-                  height={img.heightPx}
-                  opacity={opacity}
-                  preserveAspectRatio="none"
-                  transform={`translate(${img.placement.origin.x} ${img.placement.origin.y}) rotate(${img.placement.rotation}) scale(${img.mmPerPx} ${-img.mmPerPx})`}
-                />
-              ) : null}
-              {dxfD ? <DxfLayer d={dxfD} opacity={opacity} /> : null}
-              {site.walls.map((w) => (
-                <polygon
-                  key={w.id}
-                  className="plan-site__wall"
-                  points={pointsAttr(wallOutline(w))}
-                  vectorEffect="non-scaling-stroke"
-                >
-                  <title>
-                    {tr.t("ui.plan.site.wall.title", { id: w.id, thickness: String(w.thickness) })}
-                  </title>
-                </polygon>
-              ))}
-              {stair.footprint.length > 0 ? (
-                <polygon
-                  className="plan-site__stair"
-                  points={pointsAttr(stair.footprint)}
-                  vectorEffect="non-scaling-stroke"
-                />
-              ) : null}
-              {stair.nosings.map(([q, r], i) => (
-                <line
-                  key={i}
-                  className="plan-site__nosing"
-                  x1={q.x}
-                  y1={q.y}
-                  x2={r.x}
-                  y2={r.y}
-                  vectorEffect="non-scaling-stroke"
-                />
-              ))}
-              {stair.walkline.length > 1 ? (
-                <polyline
-                  className="plan-site__walkline"
-                  points={pointsAttr(stair.walkline)}
-                  vectorEffect="non-scaling-stroke"
-                />
-              ) : null}
-              {opening ? (
-                <polygon
-                  className="plan-site__opening"
-                  points={pointsAttr(opening)}
-                  vectorEffect="non-scaling-stroke"
-                >
-                  <title>{tr.t("ui.label.opening")}</title>
-                </polygon>
-              ) : null}
+              <UnderlayLayer underlay={underlay} />
+              <StairLayer model={model} ctx={ctx} />
+              <SiteLayer site={site} ctx={ctx} markerR={markerR} />
+              <ConflictLayer conflicts={model.siteFit} />
+              <HandleLayer />
               {preview ? (
                 <polygon
                   className="plan-site__preview"
@@ -458,9 +487,7 @@ export function PlanSiteEditor({ model }: { model: Model }) {
               {draft.length > 0 ? (
                 <polyline
                   className="plan-site__draft"
-                  points={pointsAttr(
-                    target && tool !== "pan" && !faceDraft ? [...draft, target] : draft,
-                  )}
+                  points={pointsAttr(target && drawing && !faceDraft ? [...draft, target] : draft)}
                   vectorEffect="non-scaling-stroke"
                 />
               ) : null}
@@ -507,6 +534,13 @@ export function PlanSiteEditor({ model }: { model: Model }) {
           </p>
         </div>
         <aside className="plan-site__panel" aria-label={tr.t("ui.plan.site.panel.label")}>
+          {tool === "select" ? (
+            <p className="plan-editor__selection muted" data-testid="plan-selection">
+              {selection
+                ? tr.t("ui.plan.editor.selection", { label: selectionLabel(selection, tr) })
+                : tr.t("ui.plan.editor.selection.none")}
+            </p>
+          ) : null}
           {message ? (
             <p
               className={`notice ${message.kind === "error" ? "notice--error" : "notice--info"}`}
