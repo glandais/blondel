@@ -4327,6 +4327,7 @@
   "workshop.provenance.wood.clearance": "Joint clearances of DTU 36.3 (RC 10) not found in open access (C §1.1).",
   "workshop.provenance.wood.densities": "No density in docs/research: orders of magnitude to be validated.",
   "workshop.provenance.wood.housingDepth": "15 mm to be validated; sourced lower bound: housing ≥ 14 mm (NF EN 16481 § 5.4.2, C §1.4).",
+  "workshop.provenance.wood.landingAlignmentTolerance": "Alignment tolerance of the edges of a straight landing (closed strings on a cage), decision F16: 2 mm, unsourced.",
   "workshop.provenance.wood.lengthAllowance": "Cutting length allowance (C §1.6 quotes it as a parameter, without a value).",
   "workshop.provenance.wood.maxBoardLength": "Board length, unsourced.",
   "workshop.provenance.wood.minCheek": "Minimum workshop cheek, unsourced.",

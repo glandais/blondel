@@ -4327,6 +4327,7 @@
   "workshop.provenance.wood.clearance": "Jeux d'assemblage du DTU 36.3 (RC 10) non trouvés en accès libre (C §1.1).",
   "workshop.provenance.wood.densities": "Aucune masse volumique dans docs/research : ordres de grandeur à valider.",
   "workshop.provenance.wood.housingDepth": "15 mm à valider ; borne basse sourcée : entaille ≥ 14 mm (NF EN 16481 § 5.4.2, C §1.4).",
+  "workshop.provenance.wood.landingAlignmentTolerance": "Tolérance d'alignement des bords d'un palier droit (limons à la française sur une cage), décision F16 : 2 mm, non sourcée.",
   "workshop.provenance.wood.lengthAllowance": "Surlongueur de débit (C §1.6 la cite comme paramètre, sans valeur).",
   "workshop.provenance.wood.maxBoardLength": "Longueur de plateau, non sourcée.",
   "workshop.provenance.wood.minCheek": "Joue mini d'atelier, non sourcée.",

@@ -14,6 +14,7 @@ import { translatorFor } from "@blondel/i18n";
 import { describe, expect, it } from "vitest";
 import * as V from "../geom2d/vec.js";
 import type { Model, Tread } from "../model/derived.js";
+import type { Vec2 } from "../model/primitives.js";
 import {
   PROJECT_SCHEMA_VERSION,
   ProjectSchema,
@@ -22,16 +23,20 @@ import {
   type Project,
 } from "../model/project.js";
 import { CAGE_FEATURE_LABELS, cageFeatures } from "../model/cageFeatures.js";
+import { buildBasicParts } from "../parts/basic.js";
 import { buildModel } from "../pipeline/build.js";
 import { resolveWorkshopProfile } from "../workshop/profile.js";
 import { housingsInside } from "./development.js";
 import { area, isSimplePolygon } from "./geom.js";
+import { readPlanExtrusion } from "./housing.js";
+import { stairGeometry, type LandingMerge } from "./legs.js";
 import { landingPitchGap } from "./pitch.test-helpers.js";
 import { QUANTITY_VOLUME_M3 } from "./quantities.js";
 import { structureCageFeatures } from "./registry.js";
 import {
   WoodHousedParamsSchema,
   buildWoodHoused,
+  snapToMergedLandings,
   type HousedResult,
   type HousedStringer,
 } from "./woodHoused.js";
@@ -80,10 +85,15 @@ const byMark = (r: HousedResult, mark: string): HousedStringer => {
  * zone d'angle saillant (profondeur d'encastrement · tan(φ/2)), où une marche de la face voisine
  * ne reçoit qu'un encastrement d'angle (F16 (2)) : marches que le limon doit porter.
  */
-function carriedTreads(s: HousedStringer, treads: readonly Tread[], depth: number): number[] {
+function carriedTreads(
+  s: HousedStringer,
+  treads: readonly Tread[],
+  depth: number,
+  tol = 1e-5,
+): number[] {
   const { face, development } = s;
   const on = (p: { x: number; y: number }): boolean =>
-    Math.abs(V.cross(face.dir, V.sub(p, face.a))) <= 1e-5;
+    Math.abs(V.cross(face.dir, V.sub(p, face.a))) <= tol;
   const u = (p: { x: number; y: number }): number => V.dot(V.sub(p, face.a), face.dir);
   const winLo =
     (face.start === "corner" ? Math.max(development.uLo, 0) : development.uLo) +
@@ -113,8 +123,12 @@ function housedOn(r: HousedResult, side: "inner" | "outer"): Set<number> {
   );
 }
 
-/** Invariants communs des limons générés sur une cage. */
-function expectSound(m: Model, r: HousedResult): void {
+/**
+ * Invariants communs des limons générés sur une cage. `tol` : distance d'une arête de marche à la
+ * face qui la porte (mm) ; jusqu'à la tolérance d'alignement des bords de palier (F16 (6)) quand
+ * des bords presque alignés sont fusionnés (marche coupée à la face du limon, d'au plus écart / 2).
+ */
+function expectSound(m: Model, r: HousedResult, tol = 1e-5): void {
   const profile = resolveWorkshopProfile(undefined);
   for (const s of r.stringers) {
     const o = s.development.outline;
@@ -126,7 +140,7 @@ function expectSound(m: Model, r: HousedResult): void {
     expect(
       withTread.sort((a, b) => a - b),
       s.face.mark,
-    ).toEqual(carriedTreads(s, m.stepping.treads, r.resolved.housingDepth));
+    ).toEqual(carriedTreads(s, m.stepping.treads, r.resolved.housingDepth, tol));
     // Débit et quantités : longueur de débit = longueur développée + surlongueur du profil.
     expect(s.face.faceLength, s.face.mark).toBeGreaterThan(0);
     expect(s.part.stock!.length).toBeCloseTo(
@@ -389,7 +403,9 @@ describe("straightLanding : limons le long d'un palier droit", () => {
     expectSound(m, r);
   });
 
-  it("bords presque alignés (1 à 4 mm) : le palier n'est porté que par les faces où il pose", () => {
+  it("bords presque alignés, tolérance nulle : le palier n'est porté que par les faces où il pose", () => {
+    // Écart 1,5 mm de chaque côté (largeurs 754 → 753 puis 750, axes centrés) ; tolérance
+    // d'alignement réglée à 0 dans le profil : comportement d'avant le sous-lot 6a2.
     const p = ProjectSchema.parse({
       ...cageProject({
         kind: "cage",
@@ -397,15 +413,38 @@ describe("straightLanding : limons le long d'un palier droit", () => {
         junctions: [{ angle: 0, mode: "landing", depth: 700 }],
       }),
       site: { floorToFloor: 2400, upperSlabThickness: 200 },
+      workshop: { wood: { landingAlignmentTolerance: 0 } },
     });
     const { m, r } = housed(p);
     const landing = m.stepping.treads.find((t) => t.kind === "landing")!;
     expect(landing).toBeDefined();
+    expect(r.stringers.map((s) => s.face.mark)).toEqual([
+      "LI1",
+      "LE1",
+      "LIP1",
+      "LEP1",
+      "LI2",
+      "LE2",
+    ]);
     // LI1 s'arrête au coin du bord du palier : le palier n'y pose pas (pas de mortaise portée).
     expect(byMark(r, "LI1").development.housings.some((h) => h.tread === landing.number)).toBe(
       false,
     );
     expectSound(m, r);
+    // Même cage, tolérance par défaut (2 mm) : bords fusionnés, raccord au milieu du palier.
+    const pMerged = ProjectSchema.parse({ ...p, workshop: undefined });
+    const merged = housed(pMerged);
+    expect(merged.r.stringers.map((s) => s.face.mark)).toEqual(["LI1", "LE1", "LI2", "LE2"]);
+    for (const s of merged.r.stringers) {
+      expect(
+        s.development.housings.some((h) => h.tread === landing.number),
+        s.face.mark,
+      ).toBe(true);
+    }
+    expectSound(merged.m, merged.r, 2);
+    // Bord d'avant incliné, écart des deux côtés : palier recoupé sur les deux faces (ressaut au
+    // raccord de chaque côté, 6 + 2 × 2 sommets).
+    expect(expectSnappedLanding(pMerged, merged.m, merged.r)).toHaveLength(10);
   });
 
   it("largeurs différentes de part et d'autre : limon propre au bord du palier, angles", () => {
@@ -435,6 +474,249 @@ describe("straightLanding : limons le long d'un palier droit", () => {
     expect([...housedOn(r, "outer")].sort((a, b) => a - b)).toEqual(all);
     expectSound(m, r);
   });
+});
+
+/** Géométrie des faces telle que `wood-housed` la lit (tolérance du profil, épaisseur des limons). */
+function housedGeometry(project: Project, m: Model, tolerance?: number) {
+  return stairGeometry(project, m.layout, {
+    landingAlignmentTolerance:
+      tolerance ?? resolveWorkshopProfile(project.workshop).wood.landingAlignmentTolerance,
+    stringerThickness: E_STRINGER,
+  });
+}
+
+/**
+ * Palier recoupé à la face des limons (`snapToMergedLandings`, F16 (6)) : contour simple ; sommets
+ * du contour de base inchangés ou déplacés d'au plus écart / 2 sur la face d'avant ou d'après ;
+ * deux sommets insérés par bord fusionné, consécutifs, projections du milieu du palier sur les
+ * deux faces (ressaut d'au plus l'écart) ; pièce remplacée dans la sortie du plugin. Rend le
+ * contour recoupé.
+ */
+function expectSnappedLanding(project: Project, m: Model, r: HousedResult): readonly Vec2[] {
+  const landing = m.stepping.treads.find((t) => t.kind === "landing")!;
+  const merges = housedGeometry(project, m).landingMerges;
+  expect(merges.length).toBeGreaterThan(0);
+  const id = `tread-${landing.number}`;
+  const basePart = buildBasicParts(project, m.layout, m.stepping).parts.find((x) => x.id === id)!;
+  const base = readPlanExtrusion(basePart.solid)!.outline;
+  const snapped = snapToMergedLandings(base, merges);
+  expect(isSimplePolygon(snapped)).toBe(true);
+  expect(snapped).toHaveLength(base.length + 2 * merges.length);
+  const onto = (l: LandingMerge["before"], q: Vec2): Vec2 =>
+    V.addScaled(l.a, l.dir, V.dot(V.sub(q, l.a), l.dir));
+  const onLine = (l: LandingMerge["before"], q: Vec2): boolean =>
+    Math.abs(V.cross(l.dir, V.sub(q, l.a))) < 1e-9;
+  const inserted = new Set<number>();
+  for (const g of merges) {
+    const mid = V.lerp(g.a, g.b, 0.5);
+    const mb = onto(g.before, mid);
+    const ma = onto(g.after, mid);
+    expect(V.distance(mb, ma)).toBeLessThanOrEqual(g.gap + 1e-9);
+    const ib = snapped.findIndex((q) => V.distance(q, mb) < 1e-9);
+    const ia = snapped.findIndex((q) => V.distance(q, ma) < 1e-9);
+    expect(ib).toBeGreaterThanOrEqual(0);
+    expect(ia).toBeGreaterThanOrEqual(0);
+    const n = snapped.length;
+    expect((ib + 1) % n === ia || (ia + 1) % n === ib).toBe(true);
+    // Ordre : chaque projection du milieu prolonge l'arête de la face sur laquelle elle est
+    // (bord coupé à la face d'avant puis d'après, ressaut perpendiculaire entre les deux).
+    const [first, second] = (ib + 1) % n === ia ? [ib, ia] : [ia, ib];
+    const lineOf = (i: number) => (i === ib ? g.before : g.after);
+    expect(onLine(lineOf(first), snapped[(first + n - 1) % n]!)).toBe(true);
+    expect(onLine(lineOf(second), snapped[(second + 1) % n]!)).toBe(true);
+    inserted.add(ib).add(ia);
+  }
+  const kept = snapped.filter((_, i) => !inserted.has(i));
+  expect(kept).toHaveLength(base.length);
+  const maxGap = Math.max(...merges.map((g) => g.gap));
+  kept.forEach((q, i) => {
+    const d = V.distance(q, base[i]!);
+    expect(d).toBeLessThanOrEqual(maxGap / 2 + 1e-9);
+    if (d > 0) expect(merges.some((g) => onLine(g.before, q) || onLine(g.after, q))).toBe(true);
+  });
+  // Pièce remplacée : contour prolongé dans les limons, à partir du contour recoupé.
+  const out = r.output.parts.find((x) => x.id === id);
+  expect(out).toBeDefined();
+  const ext = readPlanExtrusion(out!.solid)!.outline;
+  expect(isSimplePolygon(ext)).toBe(true);
+  expect(area(ext)).toBeGreaterThan(area(snapped));
+  return snapped;
+}
+
+/**
+ * Palier droit entre deux tronçons de largeurs voisines, axes ancrés du même côté : bords alignés
+ * du côté de l'ancrage, écart `gap` de l'autre (jour pour un ancrage à droite, jour à gauche).
+ */
+function offsetLanding(gap: number, anchor: "left" | "right", workshop?: unknown): Project {
+  return ProjectSchema.parse({
+    ...cageProject({
+      kind: "cage",
+      sections: [
+        { ...straight(1890, 900), anchor },
+        { ...straight(1620, 900 + gap), anchor },
+      ],
+      junctions: [{ angle: 0, mode: "landing", depth: 1000 }],
+    }),
+    ...(workshop !== undefined ? { workshop } : {}),
+  });
+}
+
+/** Limons fusionnés d'un côté (`I` ou `E`) : raccord au milieu du palier, palier encastré. */
+function expectMerged(m: Model, r: HousedResult, side: "I" | "E", gap: number): void {
+  const landing = m.stepping.treads.find((t) => t.kind === "landing")!;
+  const a = byMark(r, `L${side}1`);
+  const b = byMark(r, `L${side}2`);
+  expect(a.face.end).toBe("corner");
+  expect(b.face.start).toBe("corner");
+  expect(a.face.endReach).toBe(0);
+  expect(b.face.startReach).toBe(0);
+  expect(a.part.flat!.lines.find((l) => l.kind === "joint")?.label?.key).toBe(
+    "structure.woodHoused.joint.landingSplice",
+  );
+  // Chaque limon reste le long de la face de son tronçon, prolongée jusqu'au milieu du palier :
+  // les deux faces sont à `gap` l'une de l'autre (bords parallèles).
+  expect(Math.abs(V.cross(a.face.dir, b.face.dir))).toBeLessThan(1e-12);
+  expect(Math.abs(V.cross(a.face.dir, V.sub(b.face.a, a.face.a)))).toBeCloseTo(gap, 9);
+  expect(a.face.faceLength).toBeCloseTo(1890 + 500, 6);
+  for (const s of [a, b]) {
+    expect(
+      s.development.housings.some((h) => h.tread === landing.number),
+      s.face.mark,
+    ).toBe(true);
+  }
+  // Palier recoupé à la face des limons et encastré jusqu'au raccord : sa mortaise va jusqu'au
+  // bout du limon d'avant et part du début du limon d'après.
+  const pocket = (s: HousedStringer): number[] =>
+    s.development.housings
+      .filter((h) => h.tread === landing.number)
+      .flatMap((h) => h.polygons.flatMap((poly) => poly.map((pt) => pt.x)));
+  expect(Math.max(...pocket(a))).toBeCloseTo(a.face.faceLength, 6);
+  expect(Math.min(...pocket(b))).toBeCloseTo(0, 6);
+}
+
+describe("tolérance d'alignement des bords de palier droit (F16 (6), sous-lot 6a2)", () => {
+  it.each([
+    [0, true],
+    [1, true],
+    [2, true],
+    [3, false],
+    [4, false],
+  ])("écart latéral %d mm : fusion jusqu'à 2 mm inclus (tolérance par défaut)", (gap, merged) => {
+    for (const anchor of ["right", "left"] as const) {
+      // Ancrage à droite : bords alignés côté mur, écart côté jour (jour à gauche) ; à gauche,
+      // l'inverse.
+      const side = anchor === "right" ? "I" : "E";
+      const p = offsetLanding(gap, anchor);
+      const { m, r } = housed(p);
+      expect(keys(m)).toEqual([]);
+      expect(m.layout.innerSide).toBe("left");
+      if (merged) {
+        expect(r.stringers.map((s) => s.face.mark)).toEqual(["LI1", "LE1", "LI2", "LE2"]);
+        expectMerged(m, r, side, gap);
+        expectMerged(m, r, side === "I" ? "E" : "I", 0);
+        // Bord du palier côté écart coupé en deux au raccord (ressaut, 6 + 2 sommets).
+        if (gap > 0) expect(expectSnappedLanding(p, m, r)).toHaveLength(8);
+      } else {
+        // Au-delà : limon propre au bord du palier, assemblé à queues (F16 (4)).
+        expect(r.stringers.map((s) => s.face.mark)).toEqual([
+          "LI1",
+          "LE1",
+          `L${side}P1`,
+          "LI2",
+          "LE2",
+        ]);
+        expect(byMark(r, `L${side}1`).face.end).toBe("corner");
+        expect(
+          byMark(r, `L${side}1`).part.flat!.lines.find((l) => l.kind === "joint")?.label?.key,
+        ).not.toBe("structure.woodHoused.joint.landingSplice");
+      }
+      const all = m.stepping.treads.map((t) => t.number);
+      expect([...housedOn(r, "inner")].sort((a, b) => a - b)).toEqual(all);
+      expect([...housedOn(r, "outer")].sort((a, b) => a - b)).toEqual(all);
+      expectSound(m, r, merged ? 2 : 1e-5);
+    }
+  });
+
+  it("écart angulaire ramené sur le palier : 1,999996 mm fusionné, 2,01 mm non", () => {
+    // Tronçon 1 en trapèze 900 → 902 sur 1 000 mm (bord du jour incliné de 2 / 1 000), tronçon 2
+    // de 902 : écart = palier · 2 / √(1 000² + 2²), 1,999996 mm pour 1 000, 2,009996 pour 1 005.
+    const angular = (depth: number): Project =>
+      cageProject({
+        kind: "cage",
+        sections: [
+          { ...straight(1000, 900, 902), anchor: "right" },
+          { ...straight(1620, 902), anchor: "right" },
+        ],
+        junctions: [{ angle: 0, mode: "landing", depth }],
+      });
+    const at = housed(angular(1000));
+    expectSnappedLanding(angular(1000), at.m, at.r);
+    expect(at.r.stringers.map((s) => s.face.mark)).toEqual(["LI1", "LE1", "LI2", "LE2"]);
+    expect(byMark(at.r, "LI1").face.end).toBe("corner");
+    expect(byMark(at.r, "LI1").part.flat!.lines.find((l) => l.kind === "joint")?.label?.key).toBe(
+      "structure.woodHoused.joint.landingSplice",
+    );
+    expectSound(at.m, at.r, 2);
+    const over = housed(angular(1005));
+    // Bord du palier dans le prolongement du bord incliné : une face LI1 jusqu'au coin, puis
+    // angle (queues) avec LI2, pas de raccord de palier.
+    expect(over.r.stringers.map((s) => s.face.mark)).toEqual(["LI1", "LE1", "LI2", "LE2"]);
+    expect(byMark(over.r, "LI1").part.flat!.lines.find((l) => l.kind === "joint")?.label?.key).toBe(
+      "structure.woodHoused.joint.jourCorner",
+    );
+    expectSound(over.m, over.r);
+  });
+
+  it("tolérance réglée dans le profil d'atelier : 0 refuse 1 mm, 5 fusionne 4 mm", () => {
+    const strict = housed(offsetLanding(1, "right", { wood: { landingAlignmentTolerance: 0 } }));
+    expect(strict.r.stringers.map((s) => s.face.mark)).toEqual([
+      "LI1",
+      "LE1",
+      "LIP1",
+      "LI2",
+      "LE2",
+    ]);
+    expectSound(strict.m, strict.r);
+    const pWide = offsetLanding(4, "right", { wood: { landingAlignmentTolerance: 5 } });
+    const wide = housed(pWide);
+    expect(wide.r.stringers.map((s) => s.face.mark)).toEqual(["LI1", "LE1", "LI2", "LE2"]);
+    expectMerged(wide.m, wide.r, "I", 4);
+    expectSnappedLanding(pWide, wide.m, wide.r);
+    expectSound(wide.m, wide.r, 5);
+  });
+
+  it.each([1, 2, 3])(
+    "palier très court (%d mm) après un trapèze marqué : vrai angle rentrant, jamais de raccord",
+    (depth) => {
+      // Écart mesuré sur le palier < 2 mm, mais faces à ≈ 19,65° : |sin α| · e ≫ tolérance.
+      const p = cageProject({
+        kind: "cage",
+        sections: [
+          { ...straight(1400, 900, 1400), anchor: "right" },
+          { ...straight(1620, 1400), anchor: "right" },
+        ],
+        junctions: [{ angle: 0, mode: "landing", depth }],
+      });
+      const { m, r } = housed(p);
+      const geo = housedGeometry(p, m);
+      expect(geo.landingMerges).toEqual([]);
+      // Sans la borne d'angle, l'écart seul serait sous la tolérance.
+      const loose = stairGeometry(p, m.layout, { landingAlignmentTolerance: 2 });
+      expect(loose.landingMerges.map((g) => g.gap)[0]).toBeLessThan(2);
+      // Mêmes faces qu'avec une tolérance nulle : angle rentrant côté jour, LI1 prolongé de
+      // e·tan(φ/2), assemblé à queues.
+      const exact = housedGeometry(p, m, 0);
+      expect(geo.faces.map((f) => [f.side, f.start.kind, f.end.kind])).toEqual(
+        exact.faces.map((f) => [f.side, f.start.kind, f.end.kind]),
+      );
+      const li1 = byMark(r, "LI1");
+      expect(li1.face.end).toBe("corner");
+      expect(li1.face.endReach).toBeGreaterThan(5);
+      expect(li1.part.flat!.lines.find((l) => l.kind === "joint")?.label?.key).toBe(
+        "structure.woodHoused.joint.jourCorner",
+      );
+    },
+  );
 });
 
 describe("variableWidth : limons sur bords inclinés (trapèze)", () => {
@@ -574,5 +856,88 @@ describe("propriété : cages tirées parmi les fonctions déclarées", () => {
     );
     expect(built / runs).toBeGreaterThan(0.3);
     expect([...seen].sort()).toEqual(["anyAngle", "chamfer", "straightLanding", "variableWidth"]);
+  }, 120_000);
+});
+
+describe("propriété : paliers droits à bords presque alignés (F16 (6))", () => {
+  it("fusion ou limon propre selon la tolérance ; toutes les marches portées des deux côtés", () => {
+    const arb = fc.record({
+      width: fc.integer({ min: 750, max: 1100 }),
+      deltas: fc.array(fc.integer({ min: -5, max: 5 }), { minLength: 2, maxLength: 3 }),
+      taper: fc.option(fc.integer({ min: -3, max: 3 }), { nil: undefined }),
+      anchor: fc.constantFrom("left", "right", "center", undefined),
+      lengths: fc.array(fc.integer({ min: 700, max: 1500 }), { minLength: 3, maxLength: 3 }),
+      depth: fc.integer({ min: 700, max: 1300 }),
+      tolerance: fc.constantFrom(undefined, 0, 1, 2, 5),
+      floorToFloor: fc.integer({ min: 2400, max: 3000 }),
+    });
+    let merged = 0;
+    let runs = 0;
+    fc.assert(
+      fc.property(arb, (r) => {
+        let w = r.width;
+        const sections = r.deltas.map((d, i) => {
+          w += i === 0 ? 0 : d;
+          const end = i === 0 && r.taper !== undefined ? w + r.taper : undefined;
+          const s = {
+            ...straight(r.lengths[i]!, w, end),
+            ...(r.anchor ? { anchor: r.anchor } : {}),
+          };
+          if (end !== undefined) w = end;
+          return s;
+        });
+        const parsed = ProjectSchema.safeParse({
+          schemaVersion: PROJECT_SCHEMA_VERSION,
+          site: { floorToFloor: r.floorToFloor, upperSlabThickness: 200 },
+          ...(r.tolerance !== undefined
+            ? { workshop: { wood: { landingAlignmentTolerance: r.tolerance } } }
+            : {}),
+          stair: {
+            placement: { origin: { x: 0, y: 0 }, rotation: 0 },
+            layout: {
+              kind: "cage",
+              sections,
+              junctions: sections
+                .slice(1)
+                .map(() => ({ angle: 0, mode: "landing" as const, depth: r.depth })),
+            },
+            structure: { kind: "wood-housed" },
+          },
+        });
+        if (!parsed.success) return;
+        let model: Model | undefined;
+        expect(() => (model = buildModel(parsed.data, { memo: false }))).not.toThrow();
+        const k = keys(model!);
+        if (model!.stepping.treads.length === 0 || k.some((x) => !x.startsWith("structure.")))
+          return;
+        runs++;
+        const { r: res } = housed(parsed.data);
+        const tol = resolveWorkshopProfile(parsed.data.workshop).wood.landingAlignmentTolerance;
+        const geo = housedGeometry(parsed.data, model!);
+        for (const g of geo.landingMerges) {
+          expect(g.gap).toBeGreaterThan(1e-9);
+          expect(g.gap).toBeLessThanOrEqual(tol + 1e-9);
+        }
+        // Dans les deux sens : tout bord de palier candidat (écart et angle mesurés sans borne)
+        // est fusionné si et seulement si son écart et |sin α| · e sont sous la tolérance.
+        const all = housedGeometry(parsed.data, model!, 1e6).landingMerges;
+        for (const g of all) {
+          const skew = Math.abs(V.cross(g.before.dir, g.after.dir)) * E_STRINGER;
+          const within = g.gap <= tol + 1e-9 && skew <= tol + 1e-9;
+          const found = geo.landingMerges.some(
+            (x) => x.junction === g.junction && x.side === g.side,
+          );
+          expect(found, `${g.side} ${g.junction} écart ${g.gap}`).toBe(within);
+        }
+        if (geo.landingMerges.length > 0) merged++;
+        const numbers = model!.stepping.treads.map((t) => t.number);
+        expect([...housedOn(res, "inner")].sort((a, b) => a - b)).toEqual(numbers);
+        expect([...housedOn(res, "outer")].sort((a, b) => a - b)).toEqual(numbers);
+        expectSound(model!, res, Math.max(tol, 1e-5));
+      }),
+      { numRuns: 120, seed: 62 },
+    );
+    expect(runs).toBeGreaterThan(40);
+    expect(merged).toBeGreaterThan(0);
   }, 120_000);
 });

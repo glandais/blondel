@@ -116,6 +116,29 @@ describe("masses volumiques de tous les matériaux (QUESTIONS A6)", () => {
     expect(p.wood).toEqual(DEFAULT_WORKSHOP_PROFILE.wood);
   });
 
+  it("tolérance d'alignement des bords de palier droit (F16 (6)) : 2 mm « à valider », facultative", () => {
+    expect(DEFAULT_WORKSHOP_PROFILE.wood.landingAlignmentTolerance).toBe(2);
+    expect(WORKSHOP_PROVENANCE.landingAlignmentTolerance.status).toBe("a-valider");
+    expect(fr(WORKSHOP_PROVENANCE.landingAlignmentTolerance.note)).toContain("F16");
+    expect(resolveWorkshopProfile({ wood: {} }).wood.landingAlignmentTolerance).toBe(2);
+    expect(
+      resolveWorkshopProfile({ wood: { landingAlignmentTolerance: 0 } }).wood
+        .landingAlignmentTolerance,
+    ).toBe(0);
+    const p = makeSteppingProject({ width: 900, legs: ["auto"] });
+    expect(serializeProject(p)).not.toContain("landingAlignmentTolerance");
+    const set = ProjectSchema.parse({
+      ...p,
+      workshop: { wood: { landingAlignmentTolerance: 3.5 } },
+    });
+    expect(set.workshop?.wood?.landingAlignmentTolerance).toBe(3.5);
+    expect(serializeProject(set)).toContain('"landingAlignmentTolerance": 3.5');
+    expect(
+      ProjectSchema.safeParse({ ...p, workshop: { wood: { landingAlignmentTolerance: -1 } } })
+        .success,
+    ).toBe(false);
+  });
+
   it("visserie : schéma du projet (champ optionnel, quantité par point entière > 0)", () => {
     const base = makeSteppingProject({ width: 900, legs: ["auto"] });
     const ok = ProjectSchema.parse({

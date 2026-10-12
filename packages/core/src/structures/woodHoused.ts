@@ -16,9 +16,11 @@
  *   (`legs.ts`, `StairGeometry.faces`) ; angle quelconque (angle rentrant : limon prolongé de
  *   e·tan(φ/2) jusqu'à l'arête extérieure du coin ; angle saillant : limons arrêtés au coin),
  *   jour en pan coupé (limon propre au pan), palier droit (raccord bout à bout au milieu du
- *   palier si les bords sont alignés, sinon limon propre au bord du palier), bords inclinés d'un
- *   trapèze ; jour vif ou en arc : limons de jour non générés (`sharpJourCage`, `arcJourCage` :
- *   pas de poteau sur une cage). Conventions à valider, QUESTIONS F16.
+ *   palier si les bords sont alignés, à la tolérance du profil d'atelier près,
+ *   `wood.landingAlignmentTolerance`, le palier étant alors recoupé à la face des limons ; sinon
+ *   limon propre au bord du palier), bords inclinés d'un trapèze ; jour vif ou en arc : limons
+ *   de jour non générés (`sharpJourCage`, `arcJourCage` : pas de poteau sur une cage).
+ *   Conventions à valider, QUESTIONS F16.
  * - **Marches encastrées** : les marches, paliers et contremarches pleines (pièces de base)
  *   sont prolongés dans les limons et les poteaux de la profondeur d'encastrement.
  * - **Développés** 1:1 (fibre de référence : face intérieure, côté marches) avec mortaises,
@@ -86,6 +88,7 @@ import {
   stairGeometry,
   type EdgeFace,
   type FaceEnd,
+  type LandingMerge,
   type ReceivingFace,
   type StairGeometry,
 } from "./legs.js";
@@ -621,14 +624,17 @@ function extendPieces(
   depth: Mm,
   profile: WorkshopProfile,
   notes: Message[],
+  merges: readonly LandingMerge[] = [],
 ): { pieces: HousedPiece[]; replaced: Part[] } {
   const pieces: HousedPiece[] = [];
   const replaced: Part[] = [];
   for (const part of baseParts) {
     const num = baseNumber(part);
     if (!num) continue;
-    const ex = readPlanExtrusion(part.solid);
-    if (!ex) continue;
+    const read = readPlanExtrusion(part.solid);
+    if (!read) continue;
+    const snapped = snapToMergedLandings(read.outline, merges);
+    const ex = { ...read, outline: snapped };
     let extended = extendIntoFaces(ex.outline, faces, depth);
     if (!extended) {
       // Repli : limons seuls (poteaux jointifs, arêtes plus courtes que l'encastrement).
@@ -653,7 +659,7 @@ function extendPieces(
       zBottom: ex.zBottom,
       zTop: ex.zBottom + ex.height,
     });
-    if (extended && area(extended) > area(ex.outline) + 1e-6) {
+    if (extended && (snapped !== read.outline || area(extended) > area(ex.outline) + 1e-6)) {
       const volumeMm3 = area(extended) * ex.height;
       const surfaceMm2 = (part.quantities["surface"] ?? 0) * 1e6;
       const box = extentBox(extended, nosings[num.number - 1]);
@@ -679,6 +685,64 @@ function extendPieces(
     }
   }
   return { pieces, replaced };
+}
+
+/** Tolérance de pose d'un sommet sur le bord d'un palier fusionné (mm). */
+const MERGE_ON_TOL = 1e-6;
+
+/**
+ * Contour ramené sur les faces d'un palier droit à bords presque alignés (QUESTIONS F16 (6)) :
+ * chaque sommet posé sur le bord réel du palier [A ; B] est projeté sur la face d'avant (première
+ * moitié du bord) ou d'après (seconde moitié), d'au plus écart / 2 ≤ tolérance / 2 ; une arête
+ * qui franchit le milieu du palier y reçoit les deux projections du milieu (ressaut d'au plus
+ * l'écart, au droit du raccord des limons). La pièce est ainsi coupée à la face du limon qui la
+ * porte. Rend `outline` lui-même si aucun sommet ne bouge.
+ */
+export function snapToMergedLandings(
+  outline: readonly Vec2[],
+  merges: readonly LandingMerge[],
+): readonly Vec2[] {
+  let out: readonly Vec2[] = outline;
+  for (const m of merges) {
+    const ab = V.sub(m.b, m.a);
+    const len = V.norm(ab);
+    if (!(len > 0)) continue;
+    const d = V.scale(ab, 1 / len);
+    /** Abscisse relative sur [A ; B] d'un sommet posé sur le bord, sinon `null`. */
+    const along = (p: Vec2): number | null => {
+      const w = V.sub(p, m.a);
+      const t = V.dot(w, d);
+      if (Math.abs(V.cross(d, w)) > MERGE_ON_TOL * Math.max(1, len)) return null;
+      return t >= -MERGE_ON_TOL && t <= len + MERGE_ON_TOL ? t / len : null;
+    };
+    const onto = (line: { a: Vec2; dir: Vec2 }, p: Vec2): Vec2 =>
+      V.addScaled(line.a, line.dir, V.dot(V.sub(p, line.a), line.dir));
+    const mid = V.lerp(m.a, m.b, 0.5);
+    const midBefore = onto(m.before, mid);
+    const midAfter = onto(m.after, mid);
+    const next: Vec2[] = [];
+    let moved = false;
+    out.forEach((p, i) => {
+      const q = out[(i + 1) % out.length]!;
+      const tp = along(p);
+      const tq = along(q);
+      if (tp === null) next.push(p);
+      else {
+        const s = tp <= 0.5 ? onto(m.before, p) : onto(m.after, p);
+        if (V.distance(s, p) > 0) moved = true;
+        next.push(s);
+      }
+      // Arête le long du bord qui franchit le milieu : ressaut au droit du raccord.
+      if (tp !== null && tq !== null && (tp - 0.5) * (tq - 0.5) < 0) {
+        const pair = tp < tq ? [midBefore, midAfter] : [midAfter, midBefore];
+        if (V.distance(midBefore, midAfter) > MERGE_ON_TOL) next.push(pair[0]!, pair[1]!);
+        else next.push(pair[0]!);
+        moved = true;
+      }
+    });
+    if (moved) out = next;
+  }
+  return out;
 }
 
 /**
@@ -737,7 +801,10 @@ export function buildWoodHoused(ctx: StructureContext, params: WoodHousedParams)
   if (helical) return empty([helical]);
   if (nosings.length < 2) return empty([msg("structure.woodHoused.emptyStepping")]);
 
-  const geo = stairGeometry(project, layout);
+  const geo = stairGeometry(project, layout, {
+    landingAlignmentTolerance: profile.wood.landingAlignmentTolerance,
+    stringerThickness: e,
+  });
   const { faces, errors, notes: faceNotes } = stringerFaces(ctx, geo, e);
   notes.push(...faceNotes);
 
@@ -762,7 +829,15 @@ export function buildWoodHoused(ctx: StructureContext, params: WoodHousedParams)
     ...newelList.flatMap((nw) => newelFaces(nw.geom, nw.id)),
   ];
   const baseParts = ctx.baseParts ?? buildBasicParts(project, layout, stepping).parts;
-  const { pieces, replaced } = extendPieces(baseParts, nosings, receiving, depth, profile, notes);
+  const { pieces, replaced } = extendPieces(
+    baseParts,
+    nosings,
+    receiving,
+    depth,
+    profile,
+    notes,
+    geo.landingMerges,
+  );
 
   // 2. Mortaises provisoires → paramètres `auto`.
   const pitch: Record<Side, PiecewiseLinear> = {

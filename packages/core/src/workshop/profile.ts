@@ -103,6 +103,13 @@ export const WorkshopProfileSchema = z.object({
       minWoodBetweenHousings: mmNonNeg.optional(),
       /** Dépassement mini de la rive haute au-dessus de la ligne des nez, mm. */
       minUpperOffset: mmNonNeg.optional(),
+      /**
+       * Tolérance d'alignement des bords d'un palier droit (limons à la française sur une cage,
+       * QUESTIONS F16 (6)), mm : écart (`structures/legs.ts`) jusqu'auquel deux bords de palier
+       * sont fusionnés (raccord au milieu du palier) ; 0 : alignement exact seulement. Ajout
+       * rétrocompatible ; absent : défaut « à valider ».
+       */
+      landingAlignmentTolerance: mmNonNeg.optional(),
       /** Masses volumiques par essence, kg/m³. */
       densities: z.partialRecord(z.enum(WOOD_MATERIALS), mmPos).optional(),
     })
@@ -150,6 +157,8 @@ export interface WorkshopProfile {
     readonly minPerpendicularWidth: Mm;
     readonly minWoodBetweenHousings: Mm;
     readonly minUpperOffset: Mm;
+    /** Tolérance d'alignement des bords d'un palier droit (QUESTIONS F16 (6)). */
+    readonly landingAlignmentTolerance: Mm;
     readonly densities: Readonly<Record<WoodMaterialId, number>>;
   };
   /** Capacités métal (jalon 3b), voir `metal.ts` et `METAL_PROVENANCE`. */
@@ -185,6 +194,8 @@ export const DEFAULT_WORKSHOP_PROFILE: WorkshopProfile = {
     minPerpendicularWidth: 150,
     minWoodBetweenHousings: 30,
     minUpperOffset: 50,
+    // Décision F16 du 2026-10-12 : 2 mm « à valider » (aucune source).
+    landingAlignmentTolerance: 2,
     densities: {
       "wood-oak": 700,
       "wood-beech": 700,
@@ -280,6 +291,10 @@ export const WORKSHOP_PROVENANCE: Readonly<Record<WoodSettingKey, SettingProvena
     status: "a-valider",
     note: msg("workshop.provenance.wood.minUpperOffset"),
   },
+  landingAlignmentTolerance: {
+    status: "a-valider",
+    note: msg("workshop.provenance.wood.landingAlignmentTolerance"),
+  },
   densities: {
     status: "a-valider",
     note: msg("workshop.provenance.wood.densities"),
@@ -308,6 +323,7 @@ export function resolveWorkshopProfile(input?: WorkshopProfileInput): WorkshopPr
       minPerpendicularWidth: pick("minPerpendicularWidth"),
       minWoodBetweenHousings: pick("minWoodBetweenHousings"),
       minUpperOffset: pick("minUpperOffset"),
+      landingAlignmentTolerance: pick("landingAlignmentTolerance"),
       densities: { ...d.wood.densities, ...(w.densities ?? {}) },
     },
     metal: resolveMetalProfile(input.metal),

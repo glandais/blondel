@@ -30,9 +30,13 @@
  *   deux bouts ;
  * - palier droit : bords alignés → deux faces raccordées bout à bout au milieu du palier
  *   (`splice`, F16 (3)) ; une seule face continue seulement si une des parties droites voisines
- *   est de longueur nulle (raccord impossible) ; bords non alignés (largeurs ou ancrages
- *   différents) → face propre au bord du palier, reliée aux faces voisines par des angles
- *   rentrants ou saillants.
+ *   est de longueur nulle (raccord impossible) ; bords presque alignés, écart (`landingGap`) au
+ *   plus la tolérance d'alignement (`StairGeometryOptions`, profil d'atelier, F16 (6), sous-lot
+ *   6a2), et angle des faces borné (|sin α| · épaisseur du limon au plus la tolérance) →
+ *   fusionnés : raccord au milieu du palier, chaque face prolongée le long de la droite de
+ *   son tronçon (`LandingMerge` : la pièce encastrée est ramenée sur la face par le plugin) ;
+ *   au-delà, bords non alignés (largeurs ou ancrages différents) → face propre au bord du palier,
+ *   reliée aux faces voisines par des angles rentrants ou saillants.
  *
  * Angle entre deux faces droites consécutives d'un même côté : rentrant (la face suivante
  * repart vers les marches, le limon voisin doit être prolongé jusqu'à l'arête extérieure du coin,
@@ -126,9 +130,30 @@ export type FaceEnd =
   | { readonly kind: "open"; readonly junction: number }
   /**
    * Raccord bout à bout de deux limons alignés au milieu d'un palier droit (limons de rampe
-   * arrêtés dans la partie de niveau, sous-lot 6a, à valider : QUESTIONS F16).
+   * arrêtés dans la partie de niveau, sous-lot 6a, à valider : QUESTIONS F16). `gap` : écart des
+   * bords fusionnés à la tolérance d'alignement près (`LandingMerge`), absent s'ils sont alignés.
    */
-  | { readonly kind: "splice"; readonly junction: number };
+  | { readonly kind: "splice"; readonly junction: number; readonly gap?: Mm };
+
+/**
+ * Bords d'un palier droit presque alignés, fusionnés à la tolérance d'alignement près
+ * (`StairGeometryOptions.landingAlignmentTolerance`, QUESTIONS F16 (6)) : le bord réel du palier
+ * [`a` ; `b`] n'est porté par aucune face ; ses points sont ramenés sur la face d'avant
+ * (`before`, jusqu'au milieu du palier) ou d'après (`after`), d'au plus `gap` / 2.
+ */
+export interface LandingMerge {
+  readonly junction: number;
+  readonly side: FaceSide;
+  /** Bout du bord du palier sur la face d'avant (fin de la partie droite du tronçon entrant). */
+  readonly a: Vec2;
+  /** Bout du bord du palier sur la face d'après (début de la partie droite suivante). */
+  readonly b: Vec2;
+  /** Écart des deux bords (mm), ≤ tolérance (voir `landingGap`). */
+  readonly gap: Mm;
+  /** Droites des deux faces raccordées (origine, direction unitaire). */
+  readonly before: { readonly a: Vec2; readonly dir: Vec2 };
+  readonly after: { readonly a: Vec2; readonly dir: Vec2 };
+}
 
 /**
  * Face verticale plane d'un limon droit, vue en plan : u ∈ [0 ; `length`] depuis `a` le long de
@@ -170,6 +195,8 @@ export interface StairGeometry {
   readonly faces: readonly EdgeFace[];
   /** Jonctions dont le jour (angle vif, arc) n'est suivi par aucun limon droit. */
   readonly jourIssues: readonly JourIssue[];
+  /** Paliers droits dont les bords presque alignés sont fusionnés (vide sans tolérance). */
+  readonly landingMerges: readonly LandingMerge[];
   /** Plus petite largeur (largeur uniforme : l'emmarchement). */
   readonly width: Mm;
   /** Plus grande largeur des tronçons (domaine des règles de moyens). */
@@ -181,6 +208,49 @@ export interface StairGeometry {
 /** Tolérance de pose d'un point sur un segment, et d'alignement de deux faces (mm, sans unité). */
 const ON_EDGE_TOL = 1e-6;
 const ALIGN_TOL = 1e-9;
+
+/** Réglages de la reconstruction des faces. */
+export interface StairGeometryOptions {
+  /**
+   * Tolérance d'alignement des bords d'un palier droit (mm, profil d'atelier
+   * `wood.landingAlignmentTolerance`, QUESTIONS F16 (6)) ; absente ou 0 : alignement exact
+   * seulement (`ALIGN_TOL`), comme avant le sous-lot 6a2.
+   */
+  readonly landingAlignmentTolerance?: Mm;
+  /**
+   * Épaisseur des limons (mm) : borne aussi l'angle α entre les deux faces fusionnées,
+   * |sin α| · épaisseur ≤ tolérance (ouverture du raccord bout à bout sur l'épaisseur du limon),
+   * sans quoi un palier très court ramènerait un vrai angle à un raccord ; absente : 0 (pas de
+   * borne d'angle, la tolérance doit alors rester nulle).
+   */
+  readonly stringerThickness?: Mm;
+}
+
+/**
+ * Écart (mm) entre les bords de part et d'autre d'un palier droit (QUESTIONS F16 (6)) : plus
+ * grande distance d'un bout du bord du palier à la droite de la face de l'autre côté du palier,
+ * max(d(B, droite d'avant), d(A, droite d'après)), A : fin de la face d'avant, B : début de la
+ * face d'après. Il somme l'écart latéral et l'écart angulaire ramené sur la longueur du palier
+ * (d(B, droite d'avant) ≈ décalage latéral + |AB|·sin α, α : angle entre les deux faces) ; 0
+ * pour des bords alignés. `null` si les deux faces ne vont pas dans le même sens ou si le palier
+ * n'avance pas de A à B.
+ */
+export function landingGap(
+  before: { readonly a: Vec2; readonly dir: Vec2 },
+  a: Vec2,
+  after: { readonly a: Vec2; readonly dir: Vec2 },
+  b: Vec2,
+): Mm | null {
+  if (!(V.dot(before.dir, after.dir) > 0)) return null;
+  if (!(
+    V.dot(V.sub(b, a), before.dir) > ON_EDGE_TOL && V.dot(V.sub(b, a), after.dir) > ON_EDGE_TOL
+  ))
+    return null;
+  return Math.max(
+    Math.abs(V.cross(before.dir, V.sub(b, before.a))),
+    Math.abs(V.cross(after.dir, V.sub(a, after.a))),
+  );
+}
 
 /** Angle signé d'une jonction (rad), ±π/2 à défaut. */
 function zoneAngle(z: TurnZone): Rad {
@@ -262,7 +332,13 @@ const sideKey = (jourLeft: boolean, side: FaceSide): "left" | "right" =>
  *   tronçon à axe en arc ou un raccord côté mur en congé (pas de limon droit), ou si un tronçon
  *   n'a pas de segment droit de C_e (tracé incohérent avec `computeLayout`).
  */
-export function stairGeometry(_project: Project, layout: Layout): StairGeometry {
+export function stairGeometry(
+  _project: Project,
+  layout: Layout,
+  options: StairGeometryOptions = {},
+): StairGeometry {
+  const alignTol = options.landingAlignmentTolerance ?? 0;
+  const alignThickness = options.stringerThickness ?? 0;
   const sections: readonly LayoutSection[] = layout.sections ?? [];
   const zones = layout.turns;
   if (sections.length === 0 || zones.length !== sections.length - 1) {
@@ -386,6 +462,7 @@ export function stairGeometry(_project: Project, layout: Layout): StairGeometry 
 
   // 3. Jonctions : liaisons entre faces, faces propres aux pans coupés et aux bords de palier.
   const jourIssues: JourIssue[] = [];
+  const landingMerges: LandingMerge[] = [];
   const faces: EdgeFace[] = [];
   for (const side of ["inner", "outer"] as const) {
     const pieces = side === "inner" ? innerPieces : outerPieces;
@@ -451,10 +528,39 @@ export function stairGeometry(_project: Project, layout: Layout): StairGeometry 
           (viaEdge === null || viaEdge.kind === "aligned") && toPiece.kind === "aligned"
             ? splice(prev, piece, landingMiddle(j, side))
             : null;
+        // Bords presque alignés (écart ≤ tolérance d'alignement, F16 (6)) : fusionnés, raccord
+        // au milieu du palier, chaque limon le long de la face de son tronçon prolongée. L'angle
+        // des deux faces est borné à part (ouverture du raccord sur l'épaisseur du limon) : sur
+        // un palier très court, l'écart seul laisserait passer un vrai angle.
+        const gap =
+          spliced === null &&
+          alignTol > 0 &&
+          prev.section !== undefined &&
+          prev.length > ON_EDGE_TOL &&
+          piece.length > ON_EDGE_TOL
+            ? landingGap(prev, a, piece, piece.a)
+            : null;
+        const skew = Math.abs(V.cross(prev.dir, piece.dir)) * alignThickness;
+        const near =
+          gap !== null && gap <= alignTol + ALIGN_TOL && skew <= alignTol + ALIGN_TOL
+            ? splice(prev, piece, landingMiddle(j, side))
+            : null;
         if (spliced) {
           // Bords alignés d'un tronçon à l'autre : raccord au milieu du palier (F16).
           seq[seq.length - 1] = spliced.before;
           append({ kind: "splice", junction: j }, spliced.after);
+        } else if (near && gap !== null) {
+          landingMerges.push({
+            junction: j,
+            side,
+            a,
+            b: piece.a,
+            gap,
+            before: { a: near.before.a, dir: near.before.dir },
+            after: { a: near.after.a, dir: near.after.dir },
+          });
+          seq[seq.length - 1] = near.before;
+          append({ kind: "splice", junction: j, gap }, near.after);
         } else {
           if (edge && viaEdge) append(viaEdge, edge);
           append(toPiece, piece);
@@ -534,6 +640,7 @@ export function stairGeometry(_project: Project, layout: Layout): StairGeometry 
     newels,
     faces,
     jourIssues,
+    landingMerges,
     width: Math.min(...widths),
     maxWidth: Math.max(...widths),
     sign,
