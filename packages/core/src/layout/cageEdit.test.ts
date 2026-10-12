@@ -3,6 +3,7 @@
  * ajout / coupe / retrait, glisser. Tracé à volées modifié en volées tant qu'il s'y exprime,
  * converti en cage sinon ; refus typé hors schéma ; même projet si sans effet.
  */
+import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { curveLength, curvePointAt } from "../geom2d/curve.js";
 import * as V from "../geom2d/vec.js";
@@ -23,11 +24,14 @@ import {
   convertToCage,
   dragJunctionAngle,
   dragSectionEnd,
+  dragWellRadius,
   dragWidth,
   insertLanding,
   insertSection,
+  junctionAngleAt,
   junctionFrame,
   removeSection,
+  sectionEndLength,
   setJunctionAngle,
   setJunctionMode,
   setSectionAxis,
@@ -36,6 +40,7 @@ import {
   setWallJoint,
   setWellJoint,
   splitSection,
+  wellRadiusFrame,
   withPlacement,
 } from "./cageEdit.js";
 import { computeLayout } from "./layout.js";
@@ -621,5 +626,85 @@ describe("glisser", () => {
     const noSections: Layout = { ...layout, sections: undefined };
     expect(dragSectionEnd(p, noSections, 0, far).error?.key).toBe("layout.edit.notComputed");
     expect(dragJunctionAngle(p, noSections, 0, far).error?.key).toBe("layout.edit.notComputed");
+  });
+});
+
+describe("projections des poignées (accroches de l'éditeur)", () => {
+  it("sectionEndLength : longueur non arrondie, dont dragSectionEnd est l'arrondi borné", () => {
+    const p = quarter();
+    const layout = computeLayout(p);
+    const s = layout.sections![1]!;
+    const u = V.perpLeft(V.normalize(V.sub(s.start.right, s.start.left)));
+    const mid = V.lerp(s.end.left, s.end.right, 0.5);
+    fc.assert(
+      fc.property(fc.double({ min: -500, max: 800, noNaN: true }), (d) => {
+        const point = V.addScaled(mid, u, d);
+        const raw = sectionEndLength(p, layout, 1, point);
+        if (raw.error) return false;
+        const r = ok(dragSectionEnd(p, layout, 1, point));
+        // Tracé resté en volées ; partie droite (F11) lue sur la cage équivalente.
+        const cageLen = (cage(ok(convertToCage(r))).sections[1]!.axis as { length: number }).length;
+        return r.stair.layout.kind !== "cage" && cageLen === Math.max(0, Math.round(raw.length));
+      }),
+      { numRuns: 60 },
+    );
+    const arc = cageProject({
+      kind: "cage",
+      sections: [{ axis: { kind: "arc", radius: 1600, sweep: 90 }, width: 900 }],
+      junctions: [],
+    });
+    expect(sectionEndLength(arc, computeLayout(arc), 0, { x: 0, y: 0 }).error?.key).toBe(
+      "layout.edit.arcLength",
+    );
+  });
+
+  it("junctionAngleAt : angle non arrondi de dragJunctionAngle ; pivot : null ; sans tronçons : undefined", () => {
+    const p = cageProject({
+      kind: "cage",
+      sections: [straight(1200), straight(1000)],
+      junctions: [{ angle: 60, mode: "winders" }],
+    });
+    const layout = computeLayout(p);
+    const f = junctionFrame(layout, 0)!;
+    const point = V.addScaled(f.pivot, V.rotate(f.incoming, (47.4 * Math.PI) / 180), 500);
+    expect(junctionAngleAt(layout, 0, point)).toBeCloseTo(47.4, 9);
+    expect(cage(ok(dragJunctionAngle(p, layout, 0, point))).junctions[0]!.angle).toBe(47);
+    expect(junctionAngleAt(layout, 0, f.pivot)).toBeNull();
+    expect(junctionAngleAt(layout, 3, point)).toBeUndefined();
+    expect(junctionAngleAt(layout, 0, point, 4)).toBeUndefined();
+  });
+
+  it("dragWellRadius : rayon suivi au mm, idempotent ; refus sans raccord en arc", () => {
+    const p = cageProject({
+      kind: "cage",
+      sections: [straight(1200), straight(1000)],
+      junctions: [{ angle: 90, mode: "winders", well: { kind: "arc", radius: 150 } }],
+    });
+    const layout = computeLayout(p);
+    const f = wellRadiusFrame(layout, 0)!;
+    const handle = V.addScaled(f.base, f.incoming, -150);
+    expect(dragWellRadius(p, layout, 0, handle).project).toBe(p);
+    for (const d of [-80, 40, 300]) {
+      const point = V.addScaled(handle, f.incoming, -d);
+      const r = ok(dragWellRadius(p, layout, 0, point));
+      expect(cage(r).junctions[0]!.well).toEqual({ kind: "arc", radius: 150 + d });
+      const after = computeLayout(r);
+      const f2 = wellRadiusFrame(after, 0)!;
+      expect(V.distance(f2.base, f.base)).toBeLessThan(1e-6);
+      expect(dragWellRadius(r, after, 0, point).project).toBe(r);
+    }
+    expect(
+      cage(ok(dragWellRadius(p, layout, 0, V.addScaled(f.base, f.incoming, 50)))).junctions[0]!
+        .well,
+    ).toEqual({ kind: "arc", radius: 1 });
+    const sharp = cageProject({
+      kind: "cage",
+      sections: [straight(1200), straight(1000)],
+      junctions: [{ angle: 90, mode: "winders" }],
+    });
+    expect(dragWellRadius(sharp, computeLayout(sharp), 0, handle).error?.key).toBe(
+      "layout.edit.wellNotArc",
+    );
+    expect(dragWellRadius(p, layout, 2, handle).error?.key).toBe("layout.edit.junctionIndex");
   });
 });

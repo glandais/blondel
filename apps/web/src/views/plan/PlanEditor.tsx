@@ -3,7 +3,7 @@
  * fond calibré (`UnderlayLayer`), site (`SiteLayer` : murs, trémie, contour de pièce,
  * obstacles), escalier (`StairLayer` : emprise, tronçons, jonctions, nez, Γ, lus dans le
  * `Model`), conflits d'adéquation au site (`ConflictLayer`, `Model.siteFit`), poignées
- * (`HandleLayer`, vide au 4a), puis le tracé en cours et l'accroche.
+ * (`HandleLayer`, sous-lot 4b : poignées de la sélection), puis le tracé en cours et l'accroche.
  *
  * Outils (`uiStore.planTool`) : Sélectionner (défaut : clic sur un élément pour le sélectionner,
  * clic dans le vide ou Échap pour désélectionner, glisser, sur un élément comme dans le vide,
@@ -16,6 +16,12 @@
  * entrée d'historique (annulable) ; la sélection, état d'interface seul, n'en crée pas.
  * Les commandes − / + / Recadrer de la vue centrale zooment autour du centre de la vue ou
  * reviennent au cadrage initial. Contour de pièce et obstacles se saisiront au lot 5.
+ *
+ * Poignées (sous-lot 4b, `HandleLayer`, `usePlanDrag`) : l'escalier sélectionné se déplace en
+ * glissant son emprise (tronçon, jonction ou contour ; un clic sans glisser sélectionne toujours
+ * l'élément) ou sa poignée centrale, et pivote par sa poignée décalée ou R / Maj+R (±15°, sens
+ * trigonométrique vu de dessus) ; un tronçon ou une jonction sélectionnés montrent leurs
+ * poignées. Un glisser = une entrée d'historique ; Échap pendant le glisser l'annule.
  */
 import {
   buildSnapIndex,
@@ -47,7 +53,9 @@ import {
 import { UnderlayImport } from "../../components/UnderlayImport.js";
 import { formatNumber } from "../../i18n/locale.js";
 import { useT } from "../../i18n/useT.js";
-import { appStore, useApp } from "../../store/appStore.js";
+import { rotateStairBy } from "../../lib/planDrag.js";
+import { ROTATE_KEY_STEP_DEG } from "../../lib/planErgonomics.js";
+import { appStore, useApp, useModel } from "../../store/appStore.js";
 import {
   PLAN_TOOL_AVAILABLE,
   type PlanEditorTool,
@@ -82,12 +90,13 @@ import {
   type WallTraceMode,
 } from "../planSiteGeometry.js";
 import { ConflictLayer } from "./ConflictLayer.js";
-import { HandleLayer } from "./HandleLayer.js";
+import { HandleLayer, snapMessage } from "./HandleLayer.js";
 import { parsePlanSelection, planSelectionKey } from "./planEditorGeometry.js";
 import { selectionLabel, type SelectContext } from "./selectable.js";
 import { SiteLayer } from "./SiteLayer.js";
 import { StairLayer } from "./StairLayer.js";
 import { UnderlayLayer } from "./UnderlayLayer.js";
+import { usePlanDrag } from "./usePlanDrag.js";
 
 /** Rayon d'accroche à l'écran (pixels). */
 const SNAP_RADIUS_PX = 12;
@@ -156,7 +165,12 @@ export function PlanEditor({ model }: { model: Model }) {
     view: ViewBox;
     pick: { readonly hit: PlanSelection | null } | null;
     moved: boolean;
+    /** Appui sur l'emprise de l'escalier sélectionné : un glisser le déplace (sinon la vue). */
+    moveStair?: Vec2;
+    /** Le glisser est devenu un geste de l'escalier : plus de déplacement de la vue. */
+    gesture?: boolean;
   } | null>(null);
+  const modelProject = useModel().project;
 
   const aspect = size.w / Math.max(1, size.h);
   const fitted = useMemo(
@@ -165,6 +179,9 @@ export function PlanEditor({ model }: { model: Model }) {
   );
   const v = view ?? fitted;
   const mmPerPx = v.width / Math.max(1, size.w);
+  // Cadrage figé pendant un geste : le cadrage automatique suit l'emprise de l'escalier, il
+  // déplacerait le repère de l'écran sous le pointeur à chaque pas.
+  const drag = usePlanDrag(model, modelProject, mmPerPx, () => setView((cur) => cur ?? v));
 
   useLayoutEffect(() => {
     const el = boxRef.current;
@@ -309,8 +326,15 @@ export function PlanEditor({ model }: { model: Model }) {
     }
     if (e.button !== 0) return;
     if (tool === "select") {
-      // Sélection au relâché (clic) ; un glisser déplace la vue, même commencé sur un élément.
-      startPan(e, { hit: selectionTarget(e.target) });
+      // Sélection au relâché (clic) ; un glisser déplace la vue, même commencé sur un élément,
+      // sauf sur l'emprise de l'escalier sélectionné, qui se déplace alors.
+      const hit = selectionTarget(e.target);
+      startPan(e, { hit });
+      const onStair =
+        selection?.kind === "stair" &&
+        (hit?.kind === "stair" || hit?.kind === "section" || hit?.kind === "junction");
+      const at = onStair ? toSite(e.clientX, e.clientY) : null;
+      if (pan.current && at) pan.current.moveStair = at;
       return;
     }
     const raw = toSite(e.clientX, e.clientY);
@@ -320,12 +344,31 @@ export function PlanEditor({ model }: { model: Model }) {
   };
 
   const onPointerMove = (e: PointerEvent<SVGSVGElement>): void => {
+    if (drag.isActive()) {
+      const p = toSite(e.clientX, e.clientY);
+      if (p) drag.move(p, e.shiftKey);
+      return;
+    }
     const start = pan.current;
     if (start) {
       const dx = e.clientX - start.x;
       const dy = e.clientY - start.y;
       if (!start.moved && Math.hypot(dx, dy) < CLICK_SLOP_PX) return;
       start.moved = true;
+      if (start.moveStair) {
+        // Glisser de l'emprise de l'escalier sélectionné : geste de déplacement (modèle à jour
+        // requis ; sinon, déplacement de la vue).
+        const grab = start.moveStair;
+        start.moveStair = undefined;
+        const p = toSite(e.clientX, e.clientY);
+        if (p && drag.begin({ kind: "move" }, grab, grab)) {
+          start.gesture = true;
+          drag.move(p, e.shiftKey);
+          return;
+        }
+      }
+      // Geste de l'escalier annulé (Échap) avant le relâchement : la vue ne bouge pas.
+      if (start.gesture) return;
       const k = start.view.width / Math.max(1, size.w);
       setView({ ...start.view, cx: start.view.cx - dx * k, cy: start.view.cy + dy * k });
       return;
@@ -342,10 +385,17 @@ export function PlanEditor({ model }: { model: Model }) {
   const onPointerUp = (): void => {
     const start = pan.current;
     pan.current = null;
+    if (drag.end()) return;
     // Clic (sans glisser) de l'outil de sélection : l'élément, ou désélection dans le vide.
     if (!start?.pick || start.moved) return;
     if (start.pick.hit) selectPlanElement(start.pick.hit);
     else clearPlanSelection();
+  };
+
+  // Pointeur perdu (geste système, capture retirée) : le geste en cours est annulé.
+  const onPointerCancel = (): void => {
+    pan.current = null;
+    drag.cancel();
   };
 
   const onKeyDown = (e: KeyboardEvent<HTMLDivElement>): void => {
@@ -359,6 +409,27 @@ export function PlanEditor({ model }: { model: Model }) {
       } else if (clearPlanSelection()) {
         e.preventDefault();
       }
+    } else if (
+      (e.key === "r" || e.key === "R") &&
+      !e.ctrlKey &&
+      !e.metaKey &&
+      !e.altKey &&
+      tool === "select" &&
+      selection?.kind === "stair" &&
+      modelProject
+    ) {
+      // R / Maj+R : rotation de ±15° (sens trigonométrique vu de dessus) autour du centre.
+      e.preventDefault();
+      // Pendant un glisser, ignoré : l'entrée serait hors du groupe du geste, que chaque pas
+      // reprend depuis le projet de son début.
+      if (drag.isActive()) return;
+      const delta = e.shiftKey ? -ROTATE_KEY_STEP_DEG : ROTATE_KEY_STEP_DEG;
+      const r = rotateStairBy(appStore.getState().project, model, modelProject, delta);
+      const next = r.project;
+      const error = r.error ?? (next ? commit(() => next) : null);
+      drag.setNotice(
+        error ? { kind: "error", text: msg("ui.plan.editor.handle.refused", { error }) } : null,
+      );
     } else if ((e.key === "Enter" || e.key === " ") && tool === "select") {
       const hit = selectionTarget(e.target);
       if (hit) {
@@ -462,6 +533,8 @@ export function PlanEditor({ model }: { model: Model }) {
             onPointerDown={onPointerDown}
             onPointerMove={onPointerMove}
             onPointerUp={onPointerUp}
+            onPointerCancel={onPointerCancel}
+            onLostPointerCapture={onPointerCancel}
             onPointerLeave={() => setCursor(null)}
           >
             <g transform="scale(1,-1)">
@@ -469,7 +542,16 @@ export function PlanEditor({ model }: { model: Model }) {
               <StairLayer model={model} ctx={ctx} />
               <SiteLayer site={site} ctx={ctx} markerR={markerR} />
               <ConflictLayer conflicts={model.siteFit} />
-              <HandleLayer />
+              <HandleLayer
+                model={model}
+                layoutProject={modelProject}
+                project={project}
+                selection={selection}
+                active={tool === "select"}
+                mmPerPx={mmPerPx}
+                drag={drag}
+                toSite={toSite}
+              />
               {preview ? (
                 <polygon
                   className="plan-site__preview"
@@ -540,6 +622,24 @@ export function PlanEditor({ model }: { model: Model }) {
                 ? tr.t("ui.plan.editor.selection", { label: selectionLabel(selection, tr) })
                 : tr.t("ui.plan.editor.selection.none")}
             </p>
+          ) : null}
+          <p className="plan-editor__drag-status" aria-live="polite" data-testid="plan-drag-status">
+            {drag.notice?.kind === "snap"
+              ? tr.t(snapMessage(drag.notice.snap, (n) => fmt(n, tr.locale)))
+              : drag.notice?.kind === "info"
+                ? tr.t(drag.notice.text)
+                : ""}
+          </p>
+          {drag.notice?.kind === "error" ? (
+            <p className="notice notice--error" role="alert">
+              {tr.t(drag.notice.text)}
+            </p>
+          ) : null}
+          {tool === "select" &&
+          (selection?.kind === "stair" ||
+            selection?.kind === "section" ||
+            selection?.kind === "junction") ? (
+            <p className="muted plan-editor__handle-hint">{tr.t("ui.plan.editor.handle.hint")}</p>
           ) : null}
           {message ? (
             <p

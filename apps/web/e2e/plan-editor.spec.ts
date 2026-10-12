@@ -7,6 +7,11 @@
  * d'adéquation au site (`Model.siteFit`) affiché ; la sélection ne crée aucune entrée
  * d'historique (une seule annulation ramène avant l'import) ; section Tracé d'une cage (résumé,
  * « Tracé libre », pas d'emmarchement global) ; budget des tâches longues respecté.
+ *
+ * Poignées (sous-lot 4b) : déplacer et pivoter l'escalier (souris, clavier, R), glisser la fin
+ * d'un tronçon (accroche par girons entiers), la largeur d'arrivée (trapèze), l'angle d'une
+ * jonction (accroche de 15°, 90° → 60°) ; un geste = une annulation ; Échap pendant le glisser
+ * restaure ; budget des tâches longues respecté pendant les glissers.
  */
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -27,6 +32,9 @@ test.beforeEach(async ({ page }) => {
 });
 
 const CAGE_60 = fileURLToPath(new URL("../../../examples/cage-60.blondel.json", import.meta.url));
+const CAGE_TRAPEZE = fileURLToPath(
+  new URL("../../../examples/cage-trapeze.blondel.json", import.meta.url),
+);
 
 async function importProject(page: Page, file: string, name: string): Promise<void> {
   const chooser = page.waitForEvent("filechooser");
@@ -204,6 +212,253 @@ test("cage-60 : sélection d'un tronçon puis d'une jonction, Échap, calque des
   // La sélection est un état d'interface : seule l'entrée de l'import est dans l'historique.
   await undo.click();
   await expect(undo).toBeDisabled();
+
+  await settle(page);
+  const tasks = await takeLongTasks(page);
+  const over = overBudget(tasks);
+  expect(over, describeTasks(over, tasks)).toEqual([]);
+});
+
+// ------------------------------------------------------------------ Poignées (sous-lot 4b)
+
+interface Pt {
+  x: number;
+  y: number;
+}
+
+async function center(loc: Locator): Promise<Pt> {
+  const b = (await loc.boundingBox())!;
+  return { x: b.x + b.width / 2, y: b.y + b.height / 2 };
+}
+
+/** Glisser de `from` à `to` (pas intermédiaires), Maj enfoncée si `shift` (sans accroche). */
+async function dragFromTo(
+  page: Page,
+  from: Pt,
+  to: Pt | readonly Pt[],
+  { shift = false, steps = 8 }: { shift?: boolean; steps?: number } = {},
+): Promise<void> {
+  if (shift) await page.keyboard.down("Shift");
+  await page.mouse.move(from.x, from.y);
+  await page.mouse.down();
+  for (const p of Array.isArray(to) ? to : [to]) await page.mouse.move(p.x, p.y, { steps });
+  await page.mouse.up();
+  if (shift) await page.keyboard.up("Shift");
+}
+
+async function openSitePlan(page: Page, file: string, name: string): Promise<Locator> {
+  await openApp(page);
+  await importProject(page, file, name);
+  await openTab(page, "Plan");
+  await page.getByRole("button", { name: "Site et saisie", exact: true }).click();
+  await settle(page);
+  await takeLongTasks(page);
+  return page.getByRole("group", {
+    name: "Plan du site : calque de fond, murs, trémie et escalier",
+  });
+}
+
+const valueOf = async (loc: Locator): Promise<number> =>
+  Number(await loc.getAttribute("aria-valuenow"));
+
+test("cage-60 : poignées de l'escalier et d'un tronçon, un geste = une annulation, Échap", async ({
+  page,
+}) => {
+  const plan = await openSitePlan(page, CAGE_60, "cage-60.blondel.json");
+  const undo = page.getByRole("button", { name: "Annuler (Ctrl+Z)", exact: true });
+  const status = page.getByTestId("plan-selection");
+  const dragStatus = page.getByTestId("plan-drag-status");
+
+  // Escalier sélectionné (par son contour) : poignées de déplacement et de rotation.
+  const stairEdge = await hitPoint(plan, '[data-plan-select="stair"]', "edge");
+  await page.mouse.click(stairEdge!.x, stairEdge!.y);
+  await expect(status).toHaveText("Sélection : Escalier");
+  const move = plan.getByRole("slider", { name: "Déplacer l'escalier", exact: true });
+  const rotate = plan.getByRole("slider", { name: "Pivoter l'escalier", exact: true });
+  await expect(move).toHaveAttribute("aria-valuetext", "x 0 mm, y 0 mm");
+  await expect(rotate).toHaveAttribute("aria-valuenow", "0");
+
+  // Souris, Maj (sans accroche) : glisser la poignée centrale à droite ; une annulation défait
+  // tout le geste.
+  const c = await center(move);
+  await dragFromTo(page, c, { x: c.x + 90, y: c.y }, { shift: true, steps: 12 });
+  await settle(page);
+  expect(await valueOf(move)).toBeGreaterThan(100);
+  await expect(move).toHaveAttribute("aria-valuetext", /y 0 mm$/);
+  await undo.click();
+  await expect(move).toHaveAttribute("aria-valuetext", "x 0 mm, y 0 mm");
+  await settle(page);
+
+  // L'emprise se glisse aussi (escalier sélectionné) ; un clic sans glisser sélectionne encore.
+  const fill = await hitPoint(plan, '[data-plan-select="junction:0"]', "fill");
+  expect(fill, "point de l'emprise (jonction 1)").not.toBeNull();
+  await dragFromTo(page, fill!, { x: fill!.x, y: fill!.y - 60 }, { shift: true });
+  await settle(page);
+  await expect(move).toHaveAttribute("aria-valuetext", /^x 0 mm, y [1-9]\d* mm$/);
+  await undo.click();
+  await expect(move).toHaveAttribute("aria-valuetext", "x 0 mm, y 0 mm");
+  await settle(page);
+
+  // Échap pendant le glisser de l'emprise : escalier rendu, et la suite du glisser (bouton
+  // encore enfoncé) ne déplace pas la vue.
+  const viewBox = await plan.getAttribute("viewBox");
+  await page.keyboard.down("Shift");
+  await page.mouse.move(fill!.x, fill!.y);
+  await page.mouse.down();
+  await page.mouse.move(fill!.x, fill!.y - 60, { steps: 8 });
+  await expect(move).not.toHaveAttribute("aria-valuetext", "x 0 mm, y 0 mm");
+  await page.keyboard.up("Shift");
+  await page.keyboard.press("Escape");
+  await expect(move).toHaveAttribute("aria-valuetext", "x 0 mm, y 0 mm");
+  await page.mouse.move(fill!.x + 80, fill!.y - 120, { steps: 6 });
+  await page.mouse.up();
+  await expect(plan).toHaveAttribute("viewBox", viewBox!);
+  await expect(move).toHaveAttribute("aria-valuetext", "x 0 mm, y 0 mm");
+  await expect(status).toHaveText("Sélection : Escalier");
+  await settle(page);
+
+  // Clavier : flèches 10 mm, Maj 100 mm ; R / Maj+R ±15°.
+  await move.focus();
+  await page.keyboard.press("ArrowRight");
+  await page.keyboard.press("Shift+ArrowRight");
+  await page.keyboard.press("ArrowUp");
+  await expect(move).toHaveAttribute("aria-valuetext", "x 110 mm, y 10 mm");
+  await page.keyboard.press("r");
+  await expect(rotate).toHaveAttribute("aria-valuenow", "15");
+  await page.keyboard.press("Shift+R");
+  await expect(rotate).toHaveAttribute("aria-valuenow", "0");
+  await settle(page);
+
+  // Rotation à la souris, accroche de 15° : un quart de tour (sens trigonométrique à l'écran).
+  const pivot = await center(move);
+  const r0 = await center(rotate);
+  const v = { x: r0.x - pivot.x, y: r0.y - pivot.y };
+  const arc = [30, 60, 88].map((deg) => {
+    const a = (-deg * Math.PI) / 180;
+    return {
+      x: pivot.x + v.x * Math.cos(a) - v.y * Math.sin(a),
+      y: pivot.y + v.x * Math.sin(a) + v.y * Math.cos(a),
+    };
+  });
+  await dragFromTo(page, r0, arc, { steps: 4 });
+  await settle(page);
+  await expect(rotate).toHaveAttribute("aria-valuenow", "90");
+  await undo.click();
+  await expect(rotate).toHaveAttribute("aria-valuenow", "0");
+  await settle(page);
+
+  // Tronçon 2 : poignée de fin (longueur), accroche par girons entiers.
+  await page.keyboard.press("Escape");
+  await plan.getByRole("button", { name: "Tronçon 2", exact: true }).click();
+  await expect(status).toHaveText("Sélection : Tronçon 2");
+  const end = plan.getByRole("slider", { name: "Longueur du tronçon 2", exact: true });
+  await expect(end).toHaveAttribute("aria-valuenow", "1650");
+  const startLeft = await center(
+    plan.getByRole("slider", { name: "Largeur au départ du tronçon 2 (bord gauche)" }),
+  );
+  const startRight = await center(
+    plan.getByRole("slider", { name: "Largeur au départ du tronçon 2 (bord droit)" }),
+  );
+  const e0 = await center(end);
+  const mid = { x: (startLeft.x + startRight.x) / 2, y: (startLeft.y + startRight.y) / 2 };
+  const n = Math.hypot(e0.x - mid.x, e0.y - mid.y);
+  const u = { x: (e0.x - mid.x) / n, y: (e0.y - mid.y) / n };
+  const along = (d: number): Pt => ({ x: e0.x + u.x * d, y: e0.y + u.y * d });
+  await dragFromTo(page, e0, along(45), { steps: 15 });
+  await settle(page);
+  await expect(dragStatus).toHaveText(/^Accroche : \d+ girons \(\d[\d\s\u202f]* mm\)$/);
+  const snapped = await valueOf(end);
+  expect(snapped).toBeGreaterThan(1650);
+  // Un geste (15 pas) = une annulation.
+  await undo.click();
+  await expect(end).toHaveAttribute("aria-valuenow", "1650");
+  await settle(page);
+
+  // Échap pendant le glisser : retour à l'état d'avant le geste.
+  await page.mouse.move(e0.x, e0.y);
+  await page.mouse.down();
+  await page.mouse.move(along(60).x, along(60).y, { steps: 10 });
+  await expect(end).not.toHaveAttribute("aria-valuenow", "1650");
+  await page.keyboard.press("Escape");
+  await page.mouse.up();
+  await expect(end).toHaveAttribute("aria-valuenow", "1650");
+  await expect(dragStatus).toHaveText("Geste annulé : retour à l'état d'avant le glisser.");
+  await expect(status).toHaveText("Sélection : Tronçon 2");
+  await settle(page);
+
+  // Largeur d'arrivée (bord extérieur, Maj) : le tronçon devient un trapèze.
+  const endRight = plan.getByRole("slider", {
+    name: "Largeur à l'arrivée du tronçon 2 (bord droit)",
+  });
+  const endLeft = plan.getByRole("slider", {
+    name: "Largeur à l'arrivée du tronçon 2 (bord gauche)",
+  });
+  await expect(endRight).toHaveAttribute("aria-valuenow", "900");
+  const er = await center(endRight);
+  const el = await center(endLeft);
+  const w = Math.hypot(er.x - el.x, er.y - el.y);
+  const out = { x: er.x + ((er.x - el.x) / w) * 30, y: er.y + ((er.y - el.y) / w) * 30 };
+  await dragFromTo(page, er, out, { shift: true });
+  await settle(page);
+  expect(await valueOf(endRight)).toBeGreaterThan(900);
+  await expect(
+    plan.getByRole("slider", { name: "Largeur au départ du tronçon 2 (bord droit)" }),
+  ).toHaveAttribute("aria-valuenow", "900");
+
+  await settle(page);
+  const tasks = await takeLongTasks(page);
+  const over = overBudget(tasks);
+  expect(over, describeTasks(over, tasks)).toEqual([]);
+});
+
+test("cage-trapeze : angle de jonction glissé de 90° à 60° (accroche), clavier", async ({
+  page,
+}) => {
+  const plan = await openSitePlan(page, CAGE_TRAPEZE, "cage-trapeze.blondel.json");
+  const undo = page.getByRole("button", { name: "Annuler (Ctrl+Z)", exact: true });
+  await plan.getByRole("button", { name: "Jonction 1", exact: true }).click();
+  const angle = plan.getByRole("slider", { name: "Angle de la jonction 1", exact: true });
+  await expect(angle).toHaveAttribute("aria-valuenow", "90");
+  await expect(angle).toHaveAttribute("aria-valuetext", "90°");
+
+  // Trajet de la poignée autour du pivot (trait de rappel), dans le repère du site : −10°,
+  // −20°, −28° (sens horaire vu de dessus), projeté à l'écran.
+  const path = await plan.evaluate((svg) => {
+    const line = svg.querySelector<SVGLineElement>(".plan-editor__handle-guide")!;
+    const ctm = line.getScreenCTM()!;
+    const [x1, y1, x2, y2] = [line.x1, line.y1, line.x2, line.y2].map((a) => a.baseVal.value);
+    const at = (deg: number) => {
+      const a = (-deg * Math.PI) / 180;
+      const p = new DOMPoint(
+        x1! + (x2! - x1!) * Math.cos(a) - (y2! - y1!) * Math.sin(a),
+        y1! + (x2! - x1!) * Math.sin(a) + (y2! - y1!) * Math.cos(a),
+      ).matrixTransform(ctm);
+      return { x: p.x, y: p.y };
+    };
+    return [at(0), at(10), at(20), at(28)];
+  });
+  await dragFromTo(page, path[0]!, path.slice(1), { steps: 4 });
+  await settle(page);
+  await expect(angle).toHaveAttribute("aria-valuenow", "60");
+  await expect(page.getByTestId("plan-drag-status")).toHaveText("Accroche : 60°");
+
+  // Clavier : 1°, 15° avec Maj.
+  await angle.focus();
+  await page.keyboard.press("ArrowUp");
+  await expect(angle).toHaveAttribute("aria-valuenow", "61");
+  await page.keyboard.press("Shift+ArrowDown");
+  await expect(angle).toHaveAttribute("aria-valuenow", "46");
+  await settle(page);
+
+  // Tracé : la jonction est à 46°, le tracé reste libre ; annulations : clavier, puis le geste.
+  const panel = await openSection(page, "Tracé");
+  await expect(panel.getByLabel("Type de tracé", { exact: true })).toHaveValue("cage");
+  const summary = panel.getByRole("list", { name: "Tronçons et jonctions du tracé libre" });
+  await expect(summary.getByRole("listitem").nth(1)).toHaveText(/^Jonction 1 : 46°/);
+  await undo.click();
+  await expect(summary.getByRole("listitem").nth(1)).toHaveText(/^Jonction 1 : 60°/);
+  await undo.click();
+  await expect(summary.getByRole("listitem").nth(1)).toHaveText(/^Jonction 1 : 90°/);
 
   await settle(page);
   const tasks = await takeLongTasks(page);

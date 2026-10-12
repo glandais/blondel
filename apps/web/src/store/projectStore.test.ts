@@ -417,6 +417,25 @@ describe("remplacement du projet (assistant) et état d'interface", () => {
     expect(s.getState().project).toBe(p0);
   });
 
+  it("geste abandonné (revertGroup) : retour au projet d'avant, aucune entrée", () => {
+    const s = createProjectStore();
+    s.getState().setField(["site", "floorToFloor"], 2750);
+    s.getState().endGroup();
+    const p1 = s.getState().project;
+    const past = s.getState().history.past.length;
+    for (const h of [2760, 2770]) {
+      s.getState().update((p) => ({ ...p, site: { ...p.site, floorToFloor: h } }), "drag:1", {
+        sticky: true,
+      });
+    }
+    expect(s.getState().revertGroup("drag:2")).toBe(false);
+    expect(s.getState().revertGroup("drag:1")).toBe(true);
+    expect(s.getState().project).toBe(p1);
+    expect(s.getState().history.past).toHaveLength(past);
+    expect(s.getState().canRedo()).toBe(false);
+    expect(s.getState().revertGroup("drag:1")).toBe(false);
+  });
+
   it("refus d'une modification : motifs en `Message`, qui suivent un changement de langue", () => {
     const s = createProjectStore();
     const r = s.getState().setField(["site", "floorToFloor"], 2700.5);

@@ -6,15 +6,23 @@
  * Regroupement : une modification portant la même clé de groupe que la précédente, dans le
  * délai `groupWindowMs`, remplace l'état présent au lieu d'empiler un snapshot (glisser un
  * curseur ou taper un nombre = une seule entrée). `endGroup` clôt le groupe courant (perte de
- * focus d'un champ).
+ * focus d'un champ). Geste continu (`sticky`) : regroupé sans délai jusqu'à `endGroup` ;
+ * `revertGroup` l'abandonne (retour à l'état d'avant le geste).
  */
 
 export interface History<T> {
   readonly past: readonly T[];
   readonly present: T;
   readonly future: readonly T[];
-  /** Groupe ouvert : clé et instant de la dernière modification regroupée. */
-  readonly group: { readonly key: string; readonly at: number } | null;
+  /**
+   * Groupe ouvert : clé, instant de la dernière modification regroupée et pile « à refaire »
+   * d'avant sa première modification (rendue par `revertGroup`).
+   */
+  readonly group: {
+    readonly key: string;
+    readonly at: number;
+    readonly future?: readonly T[];
+  } | null;
 }
 
 export interface HistoryOptions {
@@ -60,10 +68,11 @@ export function commit<T>(
     h.group.key === key &&
     (opts.sticky === true ||
       (opts.now - h.group.at <= options.groupWindowMs && opts.now >= h.group.at));
-  const group = key === undefined ? null : { key, at: opts.now };
   if (grouped) {
+    const group = { key, at: opts.now, future: h.group?.future ?? [] };
     return { past: h.past, present: next, future: [], group };
   }
+  const group = key === undefined ? null : { key, at: opts.now, future: h.future };
   const past = [...h.past, h.present];
   if (past.length > options.limit) past.splice(0, past.length - options.limit);
   return { past, present: next, future: [], group };
@@ -76,6 +85,23 @@ export function reset<T>(present: T): History<T> {
 
 export function endGroup<T>(h: History<T>): History<T> {
   return h.group === null ? h : { ...h, group: null };
+}
+
+/**
+ * Abandon du groupe ouvert de clé `key` (Échap pendant le glisser d'une poignée, geste revenu à
+ * son point de départ) : l'état d'avant la première modification du groupe redevient présent,
+ * avec la pile « à refaire » d'avant le geste (que la première modification avait vidée), sans
+ * nouvelle entrée d'historique. Sans groupe ouvert de cette clé, ou sans état
+ * précédent : historique inchangé (même objet).
+ */
+export function revertGroup<T>(h: History<T>, key: string): History<T> {
+  if (h.group === null || h.group.key !== key || h.past.length === 0) return h;
+  return {
+    past: h.past.slice(0, -1),
+    present: h.past[h.past.length - 1] as T,
+    future: h.group.future ?? h.future,
+    group: null,
+  };
 }
 
 export function canUndo<T>(h: History<T>): boolean {

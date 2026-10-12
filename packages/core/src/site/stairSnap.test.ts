@@ -20,10 +20,13 @@ import { fr } from "../i18n.test-helpers.js";
 import { projectLateralThickness } from "./fit.js";
 import {
   placementDistance,
+  rotatePlacementAbout,
   snapAngle,
   snapPlacement,
   snapSectionLength,
+  stairPivot,
   stairSnapTargets,
+  toLocal,
   toWorld,
   type ArrivalSnapTarget,
   type StairPlacement,
@@ -441,5 +444,45 @@ describe("propriétés des accroches", () => {
 
   it("toWorld de l'origine locale : origine du placement", () => {
     expect(toWorld(V.ZERO, { origin: { x: 12, y: -3 }, rotation: 37 })).toEqual({ x: 12, y: -3 });
+  });
+});
+
+describe("rotation autour d'un pivot (poignée de rotation de l'éditeur)", () => {
+  it("propriété : le pivot reste immobile, la rotation est celle demandée", () => {
+    const arbVec = fc.record({
+      x: fc.double({ min: -1e4, max: 1e4, noNaN: true }),
+      y: fc.double({ min: -1e4, max: 1e4, noNaN: true }),
+    });
+    fc.assert(
+      fc.property(
+        arbVec,
+        fc.double({ min: -720, max: 720, noNaN: true }),
+        arbVec,
+        fc.double({ min: -720, max: 720, noNaN: true }),
+        (origin, rotation, pivot, next) => {
+          const from: StairPlacement = { origin, rotation };
+          const to = rotatePlacementAbout(from, pivot, next);
+          expect(to.rotation).toBe(next);
+          const local = toLocal(pivot, from);
+          expect(V.distance(toWorld(local, to), pivot)).toBeLessThan(1e-6);
+        },
+      ),
+      { numRuns: 200 },
+    );
+  });
+
+  it("pivot de l'escalier : centre de l'emprise, indépendant du placement en repère local", () => {
+    const p = createProject("quarter-left");
+    const m = build(p);
+    const c = stairPivot(p, m.layout);
+    const xs = m.layout.footprint.map((q) => q.x);
+    const ys = m.layout.footprint.map((q) => q.y);
+    // Rotation nulle : boîte locale = boîte du site, décalée de l'origine.
+    expect(p.stair.placement.rotation).toBe(0);
+    expect(c.x).toBeCloseTo((Math.min(...xs) + Math.max(...xs)) / 2, 9);
+    expect(c.y).toBeCloseTo((Math.min(...ys) + Math.max(...ys)) / 2, 9);
+    const other: StairPlacement = { origin: { x: 500, y: -200 }, rotation: 30 };
+    const moved = stairPivot(p, m.layout, other);
+    expect(V.distance(toLocal(moved, other), toLocal(c, p.stair.placement))).toBeLessThan(1e-9);
   });
 });

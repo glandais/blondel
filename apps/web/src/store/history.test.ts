@@ -5,6 +5,7 @@ import {
   canUndo,
   commit,
   endGroup,
+  revertGroup,
   initHistory,
   redo,
   undo,
@@ -150,5 +151,71 @@ describe("geste continu (regroupement collant)", () => {
     h = commit(h, 1, { groupKey: "g", now: 0 }, opts);
     h = commit(h, 2, { groupKey: "g", now: 5000 }, opts);
     expect(h.past).toEqual([0, 1]);
+  });
+});
+
+describe("abandon d'un geste (revertGroup)", () => {
+  it("rend l'état d'avant le geste, sans entrée ni « refaire »", () => {
+    let h = initHistory(0);
+    h = commit(h, 1, { now: 0 }, opts);
+    const before = h;
+    h = commit(h, 2, { groupKey: "drag", now: 10, sticky: true }, opts);
+    h = commit(h, 3, { groupKey: "drag", now: 20, sticky: true }, opts);
+    const r = revertGroup(h, "drag");
+    expect(r.present).toBe(1);
+    expect(r.past).toEqual(before.past);
+    expect(r.future).toEqual([]);
+    expect(r.group).toBeNull();
+  });
+
+  it("rend aussi la pile « à refaire » d'avant le geste", () => {
+    let h = initHistory(0);
+    h = commit(h, 1, { now: 0 }, opts);
+    h = commit(h, 2, { now: 10_000 }, opts);
+    h = undo(h);
+    expect(h.future).toEqual([2]);
+    h = commit(h, 3, { groupKey: "drag", now: 20_000, sticky: true }, opts);
+    h = commit(h, 4, { groupKey: "drag", now: 30_000, sticky: true }, opts);
+    expect(h.future).toEqual([]);
+    const r = revertGroup(h, "drag");
+    expect(r.present).toBe(1);
+    expect(r.future).toEqual([2]);
+    expect(redo(r).present).toBe(2);
+  });
+
+  it("sans groupe ouvert de cette clé : historique inchangé (même objet)", () => {
+    let h = initHistory(0);
+    expect(revertGroup(h, "drag")).toBe(h);
+    h = commit(h, 1, { groupKey: "other", now: 0, sticky: true }, opts);
+    expect(revertGroup(h, "drag")).toBe(h);
+    h = endGroup(commit(h, 2, { groupKey: "drag", now: 1, sticky: true }, opts));
+    expect(revertGroup(h, "drag")).toBe(h);
+  });
+
+  it("propriété : abandonner un geste de n pas rend l'état et la pile d'avant", () => {
+    fc.assert(
+      fc.property(
+        fc.array(fc.integer(), { maxLength: 6 }),
+        fc.nat({ max: 6 }),
+        fc.array(fc.integer(), { minLength: 1, maxLength: 8 }),
+        (before, undos, steps) => {
+          let h: History<unknown> = initHistory<unknown>(-1);
+          before.forEach((v, i) => (h = commit(h, v * 2 + 1000 + i, { now: i * 10_000 }, opts)));
+          // Annulations avant le geste : une pile « à refaire » existe.
+          for (let i = 0; i < undos; i++) h = undo(h);
+          const start = h;
+          steps.forEach(
+            (v, i) => (h = commit(h, { v, i }, { groupKey: "drag", now: 0, sticky: true }, opts)),
+          );
+          const r = revertGroup(h, "drag");
+          return (
+            r.present === start.present &&
+            r.past.length === start.past.length &&
+            r.future.length === start.future.length &&
+            r.future.every((x, i) => x === start.future[i])
+          );
+        },
+      ),
+    );
   });
 });

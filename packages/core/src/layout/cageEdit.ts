@@ -735,6 +735,29 @@ export function dragSectionEnd(
   return setSectionLength(project, i, length);
 }
 
+/**
+ * Projection de `dragSectionEnd` **avant arrondi** pour un tronçon droit : partie droite (mm,
+ * au sens de `setSectionLength`, F11) qu'amènerait le point `point`, non bornée. Sert à
+ * l'accroche par girons entiers de l'éditeur (`snapSectionLength`), qui applique ensuite la
+ * longueur accrochée par `setSectionLength`. Refus pour un axe en arc (`layout.edit.arcLength`)
+ * ou un tracé non éditable.
+ */
+export function sectionEndLength(
+  project: Project,
+  layout: Layout,
+  i: number,
+  point: Vec2,
+): { readonly length: number; readonly error?: undefined } | { readonly error: Message } {
+  const found = layoutSection(project, layout, i);
+  if (isError(found)) return found;
+  const { section, spec } = found;
+  if (spec.axis.kind !== "straight") {
+    return editError(msg("layout.edit.arcLength", { section: i + 1 }));
+  }
+  const start = anchorPoint(section.start, spec.anchor ?? "center");
+  return { length: V.dot(V.sub(point, start), lineDirection(section.start)) };
+}
+
 /** Pas de la sonde de `dragWidth` (mm de largeur), réglage numérique sans valeur métier. */
 const WIDTH_PROBE = 100;
 /** Pente sous laquelle le bord tiré est tenu pour fixe (mm de bord par mm de largeur). */
@@ -864,10 +887,80 @@ export function dragJunctionAngle(
   if (isError(from)) return from;
   const count = from.cage.junctions.length;
   if (!validIndex(j, count)) return junctionIndexError(j, count);
-  const frame = layout.sections?.length === count + 1 ? junctionFrame(layout, j) : null;
-  if (!frame) return editError(msg("layout.edit.notComputed"));
-  const d = V.sub(point, frame.pivot);
-  if (!(V.norm(d) > 0)) return { project };
-  const angle = Math.min(179, Math.max(-179, roundMm(V.signedAngle(frame.incoming, d) * DEG)));
+  const raw = junctionAngleAt(layout, j, point, count);
+  if (raw === undefined) return editError(msg("layout.edit.notComputed"));
+  if (raw === null) return { project };
+  const angle = Math.min(179, Math.max(-179, roundMm(raw)));
   return setJunctionAngle(project, j, angle);
+}
+
+/**
+ * Projection de `dragJunctionAngle` **avant arrondi** : angle signé (degrés, dans ]−180, 180]) de
+ * la direction entrante de la jonction `j` à la direction pivot → `point` (`junctionFrame`).
+ * `null` : point confondu avec le pivot ; `undefined` : tracé sans ces tronçons (ou, si
+ * `count` est donné, nombre de tronçons différent de `count + 1`). Sert à l'accroche angulaire
+ * de l'éditeur, qui applique l'angle accroché par `setJunctionAngle`.
+ */
+export function junctionAngleAt(
+  layout: Layout,
+  j: number,
+  point: Vec2,
+  count?: number,
+): number | null | undefined {
+  if (count !== undefined && layout.sections?.length !== count + 1) return undefined;
+  const frame = junctionFrame(layout, j);
+  if (!frame) return undefined;
+  const d = V.sub(point, frame.pivot);
+  if (!(V.norm(d) > 0)) return null;
+  return V.signedAngle(frame.incoming, d) * DEG;
+}
+
+/**
+ * Repère de la poignée du rayon d'un raccord du jour en arc (jonction `j`) : point de base =
+ * extrémité côté jour de la ligne d'arrivée du tronçon entrant (coin du jour de la partie
+ * droite), direction = direction de montée à cette arrivée. La poignée se place sur
+ * `base − R·incoming` (R : rayon du raccord), sur le bord du jour en amont du tournant. Le
+ * repère ne dépend pas du rayon (la partie droite est hors zone tournante) ; `null` si le tracé
+ * ne porte pas ces tronçons ou ce tournant.
+ */
+export interface WellRadiusFrame {
+  readonly base: Vec2;
+  readonly incoming: Vec2;
+}
+
+/** Repère de la poignée du rayon du raccord du jour de la jonction `j` (voir `WellRadiusFrame`). */
+export function wellRadiusFrame(layout: Layout, j: number): WellRadiusFrame | null {
+  const a = layout.sections?.[j];
+  const zone = layout.turns.find((t) => t.index === j) ?? layout.turns[j];
+  if (!a || !layout.sections?.[j + 1] || !zone) return null;
+  const side = zone.collarSide ?? zone.direction;
+  return { base: a.end[side], incoming: lineDirection(a.end) };
+}
+
+/**
+ * Glisser de la poignée du rayon du raccord du jour **en arc** de la jonction `j` jusqu'au point
+ * `point` : rayon = distance, le long de la direction entrante, du point au coin du jour
+ * (`wellRadiusFrame`), arrondie au mm, au moins 1 mm (`setWellJoint`). Refus si le raccord n'est
+ * pas en arc (`layout.edit.wellNotArc`) ; réappliquer le même point au projet obtenu le rend
+ * inchangé (le repère ne dépend pas du rayon).
+ */
+export function dragWellRadius(
+  project: Project,
+  layout: Layout,
+  j: number,
+  point: Vec2,
+): EditResult {
+  const from = editable(project);
+  if (isError(from)) return from;
+  const count = from.cage.junctions.length;
+  if (!validIndex(j, count)) return junctionIndexError(j, count);
+  const junction = from.cage.junctions[j]!;
+  if (junction.well?.kind !== "arc") {
+    return editError(msg("layout.edit.wellNotArc", { junction: j + 1 }));
+  }
+  const frame = layout.sections?.length === count + 1 ? wellRadiusFrame(layout, j) : null;
+  if (!frame) return editError(msg("layout.edit.notComputed"));
+  const radius = Math.max(1, roundMm(V.dot(V.sub(frame.base, point), frame.incoming)));
+  if (radius === junction.well.radius) return { project };
+  return setWellJoint(project, j, { kind: "arc", radius });
 }

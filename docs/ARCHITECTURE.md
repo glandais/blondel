@@ -147,6 +147,10 @@ saisie ─► store zustand (projectStore) ─► Project canonique (ProjectSche
              lu dans le Model, conflits Model.siteFit, poignées) ; outil et sélection dans
              uiStore (store/planEditor.ts) ; saisie de la trémie, des murs, calibration,
              accroches du cœur ; PlanSurveyForm (relevé), UnderlayImport / ImportMenu (DXF, image)
+             Poignées (4b) : HandleLayer ─► lib/planDrag.ts (mutateurs layout/cageEdit.ts,
+             accroches site/stairSnap.ts, chaque pas depuis le projet du début du geste)
+             ─► lib/planDragSession.ts (un pas par image, update collant, endGroup,
+             revertGroup sur Échap) ─► projectStore ; constantes lib/planErgonomics.ts
 ```
 
 - Le calcul tourne hors du fil principal (ADR-0006) : pendant un calcul, le dernier modèle publié reste affiché avec le projet dont il est issu (`pending`), et les exports sont désactivés tant que le modèle ne correspond pas au projet courant. `postMessage` clone le projet : sans le partage structurel (`apps/web/src/model/structuralShare.ts`), les caches par identité de `buildModel` ne serviraient jamais dans le worker.

@@ -402,6 +402,34 @@ function localCenter(project: Project, layout: Layout): Vec2 {
   return V.scale(V.add(c[0]!, c[2]!), 0.5);
 }
 
+/**
+ * Pivot de rotation de l'escalier dans l'éditeur 2D : centre de la boîte de l'emprise en repère
+ * local (indépendant de la rotation), placé dans le site par `placement` (défaut : celui du
+ * projet). `layout` : tracé calculé pour le placement de `project` ; un placement plus récent
+ * (modèle en retard sur le projet) place ce même centre local.
+ */
+export function stairPivot(
+  project: Project,
+  layout: Layout,
+  placement: StairPlacement = project.stair.placement,
+): Vec2 {
+  return toWorld(localCenter(project, layout), placement);
+}
+
+/**
+ * Placement de rotation `rotation` (degrés) qui laisse le point `pivot` du site immobile :
+ * rotation de l'escalier autour de ce point (poignée de rotation, touches R de l'éditeur).
+ * Origine non arrondie : `withPlacement` arrondit (mm, degré).
+ */
+export function rotatePlacementAbout(
+  placement: StairPlacement,
+  pivot: Vec2,
+  rotation: number,
+): StairPlacement {
+  const local = toLocal(pivot, placement);
+  return { rotation, origin: V.sub(pivot, V.rotate(local, rotation * RAD)) };
+}
+
 /** Angle (degrés) ramené dans ]−180 ; 180]. */
 function wrapDeg(d: number): number {
   let x = ((d % 360) + 360) % 360;

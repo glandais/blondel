@@ -1,0 +1,56 @@
+/* Poignées de l'éditeur de plan (ADR-0010, sous-lot 4b). Le calque est sans interaction
+   (`planSite.css`) ; seules les poignées captent le pointeur. */
+.plan-editor__handle {
+  fill: var(--panel);
+  stroke: var(--selected);
+  stroke-width: 2px;
+  pointer-events: all;
+  cursor: grab;
+  touch-action: none;
+}
+
+.plan-editor__handle--move {
+  fill: var(--selected);
+  cursor: move;
+}
+
+.plan-editor__handle--rotate {
+  fill: color-mix(in srgb, var(--selected) 35%, var(--panel));
+}
+
+.plan-editor__handle--rotate,
+.plan-editor__handle--junctionAngle {
+  cursor: alias;
+}
+
+.plan-editor__handle[data-dragging="true"] {
+  cursor: grabbing;
+  fill: var(--selected);
+}
+
+.plan-editor__handle[data-snapped] {
+  stroke: var(--ok);
+  stroke-width: 3px;
+}
+
+.plan-editor__handle:focus-visible {
+  outline: none;
+  stroke: var(--focus);
+  stroke-width: 3px;
+}
+
+.plan-editor__handle-guide {
+  stroke: var(--selected);
+  stroke-width: 1px;
+  stroke-dasharray: 3 3;
+  pointer-events: none;
+}
+
+/* Repère de la cible accrochée pendant le déplacement de l'escalier : emprise à la cible. */
+.plan-editor__snap-ghost {
+  fill: color-mix(in srgb, var(--ok) 12%, transparent);
+  stroke: var(--ok);
+  stroke-width: 2px;
+  stroke-dasharray: 6 3;
+  pointer-events: none;
+}

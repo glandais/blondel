@@ -33,6 +33,7 @@ import {
   canUndo,
   commit,
   endGroup,
+  revertGroup,
   initHistory,
   redo,
   reset,
@@ -162,8 +163,13 @@ export interface AppState {
   ): UpdateResult;
   /** Modifie une valeur par chemin (`["site", "floorToFloor"]`), regroupée par chemin. */
   setField(path: Path, value: unknown): UpdateResult;
-  /** Clôt le groupe de modifications en cours (perte de focus). */
+  /** Clôt le groupe de modifications en cours (perte de focus, fin d'un glisser). */
   endGroup(): void;
+  /**
+   * Abandonne le groupe ouvert de clé `groupKey` (Échap pendant un glisser) : retour au projet
+   * d'avant le geste, sans entrée d'historique. Vrai si un groupe a été abandonné.
+   */
+  revertGroup(groupKey: string): boolean;
   /**
    * Valide (`validated` vrai) ou dévalide des valeurs ◆ (ADR-0009 point 9) : `entries` porte
    * le chemin, la valeur effective et le plugin de structure. Une seule entrée d'historique,
@@ -421,6 +427,13 @@ export function createProjectStore(options: ProjectStoreOptions = {}): ProjectSt
       endGroup: () => {
         const h = get().history;
         if (h.group !== null) set({ history: endGroup(h) });
+      },
+      revertGroup: (groupKey) => {
+        const h = get().history;
+        const next = revertGroup(h, groupKey);
+        if (next === h) return false;
+        move(next);
+        return true;
       },
       setValuesValidated: (entries, validated) => {
         // Entrée d'historique distincte : un groupe ouvert (saisie en cours) est d'abord clos.
