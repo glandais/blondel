@@ -2,7 +2,10 @@
  * Plugin `wood-cut` : limons bois à l'anglaise (crémaillères), C §1.4.
  *
  * - **Escalier droit seulement au J3a** (le tableau FCBA ne couvre que l'escalier droit) : un
- *   tracé tournant rend une erreur explicite et aucune crémaillère.
+ *   tracé tournant rend une erreur explicite et aucune crémaillère. Cage saisie (ADR-0010,
+ *   sous-lot 6b) : un tronçon droit, de largeur constante (mêmes pièces que la volée) ou
+ *   variable (crémaillères sous les bords inclinés, faces du tracé, dents coupées en biais
+ *   signalées, domaine FCBA sur la plus longue crémaillère ; à valider, QUESTIONS F17).
  * - **Deux crémaillères** (par paire, domaine du tableau FCBA), sous les extrémités des
  *   marches : face extérieure de chaque crémaillère à `inset` du bord de l'emmarchement
  *   (C_i, C_e), épaisseur prise vers l'intérieur ; les marches reposent à plat sur les dents
@@ -204,6 +207,16 @@ function crossing(nosing: NosingLine, climb: Vec2, d: Mm, a: Vec2, dir: Vec2): M
   return hit ? V.dot(V.sub(hit.point, a), dir) : null;
 }
 
+/** Biais (degrés) au-delà duquel la coupe en biais des dents est signalée (arrondi d'affichage). */
+const SKEW_NOTE_DEG = 0.05;
+
+/** Angle (degrés) entre la crémaillère et la normale horizontale d'une ligne de nez. */
+function skewAngle(dir: Vec2, nosing: NosingLine): number {
+  const normal = V.normalize(V.perpLeft(nosing.dir));
+  const c = Math.min(1, Math.abs(V.dot(V.normalize(dir), normal)));
+  return (Math.acos(c) * 180) / Math.PI;
+}
+
 export function buildWoodCut(ctx: StructureContext, params: WoodCutParams): CutResult {
   const { project, layout, stepping } = ctx;
   const profile = resolveWorkshopProfile(project.workshop);
@@ -252,8 +265,44 @@ export function buildWoodCut(ctx: StructureContext, params: WoodCutParams): CutR
 
   const geo = stairGeometry(project, layout);
   const leg = geo.legs[0]!;
+  const tm = spec.thickness;
+  const toothOffset = spec.nosing + (spec.risers === "full" ? spec.riserThickness : 0);
+  // Face extérieure de chaque crémaillère (bord de l'emmarchement) : volée unique (`legs`) ; cage
+  // saisie (sous-lot 6b, un tronçon droit, largeur éventuellement variable) : face du tracé
+  // (`StairGeometry.faces`), bord incliné d'un trapèze compris.
+  const cage = layout.cage === true;
+  const edgeOf = (side: "inner" | "outer"): { start: Vec2; dir: Vec2; inward: Vec2 } => {
+    const face = cage ? geo.faces.find((f) => f.side === side) : undefined;
+    if (face) return { start: face.a, dir: face.dir, inward: V.scale(face.into, -1) };
+    return side === "inner"
+      ? { start: leg.innerOrigin, dir: leg.u, inward: leg.n }
+      : { start: leg.outerStart, dir: leg.u, inward: V.scale(leg.n, -1) };
+  };
+  /** Abscisses des dents le long de la face intérieure d'une crémaillère (`null` : parallèles). */
+  const teethOf = (side: "inner" | "outer"): { a: Vec2; dir: Vec2; into: Vec2; us: Mm[] } => {
+    const edge = edgeOf(side);
+    const a = V.addScaled(edge.start, edge.inward, params.inset + e);
+    const us: Mm[] = [];
+    for (const k of nosings) {
+      const u = crossing(k, edge.dir, toothOffset, a, edge.dir);
+      if (u === null) break;
+      us.push(u);
+    }
+    return { a, dir: edge.dir, into: V.scale(edge.inward, -1), us };
+  };
+  const teeth = { inner: teethOf("inner"), outer: teethOf("outer") };
   const H = project.site.floorToFloor;
-  const run = Math.abs(nosings[n - 1]!.s - nosings[0]!.s);
+  // Portée horizontale : ligne de foulée ; cage saisie, aussi la plus longue crémaillère (bord
+  // incliné d'un trapèze, plus long que la ligne de foulée : domaine FCBA du côté de la sécurité).
+  const walkRun = Math.abs(nosings[n - 1]!.s - nosings[0]!.s);
+  const run = cage
+    ? Math.max(
+        walkRun,
+        ...Object.values(teeth)
+          .filter((t) => t.us.length === n)
+          .map((t) => Math.abs(t.us[n - 1]! - t.us[0]!)),
+      )
+    : walkRun;
   const domain = fcbaDomainReason(table, H, run);
   let fcbaUnusable: Message | undefined;
   let required: number | null = null;
@@ -294,27 +343,21 @@ export function buildWoodCut(ctx: StructureContext, params: WoodCutParams): CutR
   // classe saisie, hors domaine ou épaisseur sous le tableau : inchangé.
   const hardwoodFallback = hardwoodFallbackClass(params, cls, domain, outOfRange);
 
-  const tm = spec.thickness;
-  const toothOffset = spec.nosing + (spec.risers === "full" ? spec.riserThickness : 0);
   const carriages: CarriageDetail[] = [];
   const stocks = new Map<string, ReturnType<typeof stockOf>>();
   for (const side of ["inner", "outer"] as const) {
     const sideName =
       side === "inner" ? msg("structure.woodCut.side.inner") : msg("structure.woodCut.side.outer");
-    const edgeStart = side === "inner" ? leg.innerOrigin : leg.outerStart;
-    const inward = side === "inner" ? leg.n : V.scale(leg.n, -1);
-    const a = V.addScaled(edgeStart, inward, params.inset + e);
-    const dir = leg.u;
-    const into = V.scale(inward, -1);
-    const us: Mm[] = [];
-    for (const k of nosings) {
-      const u = crossing(k, dir, toothOffset, a, dir);
-      if (u === null) break;
-      us.push(u);
-    }
+    const { a, dir, into, us } = teeth[side];
     if (us.length !== n) {
       notes.push(msg("structure.woodCut.parallelNosings", { side: sideName }));
       continue;
+    }
+    // Bord incliné (trapèze d'une cage saisie) : les lignes de nez ne sont pas d'équerre sur la
+    // crémaillère, la face d'about des dents est coupée en biais (cotes sur la face de référence).
+    const skew = cage ? skewAngle(dir, nosings[0]!) : 0;
+    if (skew > SKEW_NOTE_DEG) {
+      notes.push(msg("structure.woodCut.note.skewTeeth", { side: sideName, angle: dec(skew, 1) }));
     }
     const z = nosings.map((k) => k.z);
     const top: Vec2[] = [V.vec(us[0]!, 0)];
@@ -570,4 +613,11 @@ export const WOOD_CUT: StructureKind<WoodCutParams> = {
   paramsSchema: WoodCutParamsSchema,
   defaults: (_ctx: StructureContext) => WoodCutParamsSchema.parse({}),
   build: (ctx, params) => buildWoodCut(ctx, params).output,
+  capabilities: {
+    // Cage saisie (sous-lot 6b) : un tronçon droit, largeur éventuellement variable (crémaillères
+    // sous les bords inclinés) ; un tournant reste refusé par le plugin (escalier droit
+    // seulement, comme en volées), un palier droit par le garde-fou (`straightLanding` non
+    // déclaré).
+    cage: ["variableWidth"],
+  },
 };

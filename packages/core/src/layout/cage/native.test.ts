@@ -5,7 +5,8 @@
  * encore fiable, lots 2c / 2d) ; `buildModel` complet sans exception, structure sautée avec
  * `structure.cageUnsupported` (garde-fou des structures, sous-lot 2f, détaillé dans
  * `structures/cageGuard.test.ts`) sauf si elle déclare les fonctions de la cage (limons à la
- * française, sous-lot 6a : jour vif ou en arc signalé par le plugin) ; mémoïsation de l'étape
+ * française, sous-lot 6a, limons acier et crémaillères, sous-lot 6b : jour vif ou en arc signalé
+ * par le plugin, tournant refusé par les crémaillères) ; mémoïsation de l'étape
  * « tracé » (clés de `pipeline/build.ts`).
  */
 import fc from "fast-check";
@@ -98,6 +99,22 @@ const hasNewel = (s: CageLayoutSpecInput): boolean =>
 /** Moteur de cage seul (sans le refus du jour à poteau de `computeLayout`). */
 const cageEngine = (p: Project) =>
   computeCageLayout(p, p.stair.layout as CageLayoutSpec, { origin: "cage" });
+
+/** Erreurs d'un jour vif ou en arc sur une cage, par structure à limons qui la construit. */
+const JOUR_ERRORS: Readonly<Record<string, { sharp: string; arc: string }>> = {
+  "wood-housed": {
+    sharp: "structure.woodHoused.sharpJourCage",
+    arc: "structure.woodHoused.arcJourCage",
+  },
+  "steel-flat": {
+    sharp: "structure.steel.error.sharpWellCage",
+    arc: "structure.steel.error.arcWellCage",
+  },
+  "steel-profile": {
+    sharp: "structure.steel.error.sharpWellCage",
+    arc: "structure.steel.error.arcWellCage",
+  },
+};
 
 /** Structures enregistrées (noms réels du registre, pas de `pipeline.unknownStructure`). */
 const STRUCTURES = listStructures().map((s) => s.kind);
@@ -225,17 +242,25 @@ describe("buildModel sur une cage saisie à ±90°", () => {
           continue;
         }
         if (structureAcceptsCage(structure, cageFeatures(cage.stair.layout as CageLayoutSpec))) {
-          // Cage construite (limons à la française, sous-lot 6a) : seul un jour vif ou en arc,
-          // qu'aucun limon droit ne suit, est signalé par le plugin.
+          if (structure === "wood-cut") {
+            // Crémaillères (sous-lot 6b) : escalier droit seulement, comme en volées.
+            if (s.junctions.length > 0) {
+              expect(errorKeys(model)).toEqual(["structure.woodCut.turningUnsupported"]);
+            } else {
+              expect(errorKeys(model)).toEqual([]);
+              expect(model.parts.filter((p) => p.category === "carriage")).toHaveLength(2);
+            }
+            continue;
+          }
+          // Cage construite (limons à la française, sous-lot 6a ; limons acier, sous-lot 6b) :
+          // seul un jour vif ou en arc, qu'aucun limon droit ne suit, est signalé par le plugin
+          // (profilés : aussi le constat de prédimensionnement, sans rapport avec la cage).
           const jour = s.junctions.map((j) => j.well?.kind ?? "sharp");
-          expect(errorKeys(model)).toEqual(
-            jour.flatMap((k) =>
-              k === "sharp"
-                ? ["structure.woodHoused.sharpJourCage"]
-                : k === "arc"
-                  ? ["structure.woodHoused.arcJourCage"]
-                  : [],
-            ),
+          const keys = JOUR_ERRORS[structure]!;
+          expect(
+            errorKeys(model).filter((k) => k !== "structure.steelProfile.error.noSectionPasses"),
+          ).toEqual(
+            jour.flatMap((k) => (k === "sharp" ? [keys.sharp] : k === "arc" ? [keys.arc] : [])),
           );
           expect(model.parts.some((p) => p.category === "stringer")).toBe(true);
           continue;

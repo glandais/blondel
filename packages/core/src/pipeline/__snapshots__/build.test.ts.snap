@@ -34,6 +34,39 @@ exports[`buildModel — exemples du dépôt > acceptance-01-quart-tournant.blond
 }
 `;
 
+exports[`buildModel — exemples du dépôt > cage-45-palier-acier.blondel.json : cotes principales (non-régression) 1`] = `
+{
+  "blondel": 617.96,
+  "colletMin": 137.3,
+  "colletsChord": [
+    179.9,
+    137.3,
+    137.3,
+    180.1,
+  ],
+  "firstRise": 180,
+  "g": 257.96,
+  "h": 180,
+  "headroom": 1906.3,
+  "headroomWidth": {
+    "min": 1960,
+    "nosing": 2,
+  },
+  "n": 15,
+  "parts": 71,
+  "run": 4253.4,
+  "treads": "ssswwwwslsssss",
+  "violations": {
+    "avertissement": 0,
+    "bloquant": 0,
+    "conseil": 1,
+  },
+  "zones": [
+    "3-7 M3-cubic",
+  ],
+}
+`;
+
 exports[`buildModel — exemples du dépôt > cage-60.blondel.json : cotes principales (non-régression) 1`] = `
 {
   "blondel": 629.37,

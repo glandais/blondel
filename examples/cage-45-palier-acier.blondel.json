@@ -1,0 +1,113 @@
+{
+  "compliance": {
+    "contexts": [
+      "bois_dtu",
+      "logement_interieur"
+    ],
+    "overrides": [],
+    "profile": "strict"
+  },
+  "name": "Tracé libre — limons acier en plat, jonction à 45° balancée et palier droit",
+  "rulesVersion": 1,
+  "schemaVersion": 2,
+  "site": {
+    "floorToFloor": 2700,
+    "lowerFinish": 0,
+    "opening": {
+      "kind": "rect",
+      "sizeX": 2910,
+      "sizeY": 3160,
+      "x": -1910,
+      "y": 590
+    },
+    "upperFinish": 0,
+    "upperSlabThickness": 200,
+    "walls": []
+  },
+  "stair": {
+    "balancing": {
+      "method": "M3",
+      "targetCollet": 100,
+      "variant": "auto",
+      "windersPerSide": "auto"
+    },
+    "layout": {
+      "junctions": [
+        {
+          "angle": 45,
+          "mode": "winders",
+          "wall": {
+            "kind": "sharp"
+          },
+          "well": {
+            "kind": "chamfer",
+            "setbackIn": 250,
+            "setbackOut": 250
+          }
+        },
+        {
+          "angle": 0,
+          "depth": 900,
+          "mode": "landing",
+          "wall": {
+            "kind": "sharp"
+          },
+          "well": {
+            "kind": "sharp"
+          }
+        }
+      ],
+      "kind": "cage",
+      "sections": [
+        {
+          "axis": {
+            "kind": "straight",
+            "length": 1200
+          },
+          "width": 900
+        },
+        {
+          "axis": {
+            "kind": "straight",
+            "length": 500
+          },
+          "width": 900
+        },
+        {
+          "axis": {
+            "kind": "straight",
+            "length": 1300
+          },
+          "width": 900
+        }
+      ]
+    },
+    "nosingOverrides": [],
+    "placement": {
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "rotation": 0
+    },
+    "stepping": {
+      "firstRiseOffset": 0,
+      "riserCount": "auto",
+      "targetGoing": "auto",
+      "targetRise": 175
+    },
+    "structure": {
+      "kind": "steel-flat",
+      "params": {}
+    },
+    "treads": {
+      "nosing": 10,
+      "riserThickness": 20,
+      "risers": "full",
+      "thickness": 40
+    },
+    "walkline": {
+      "mode": "dtu"
+    }
+  }
+}

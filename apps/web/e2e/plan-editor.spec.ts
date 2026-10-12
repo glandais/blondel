@@ -26,9 +26,10 @@
  * (inspecteur, puis section Tracé, remarque par la notification), partie droite d'un tronçon
  * unique rendue à « auto » puis imposée à la valeur retenue, passage automatique annoncé,
  * annulations ; limons à la
- * française sur une cage (sous-lot 6a) : limons générés, sans erreur ; crémaillères bois sur une
- * cage : `structure.cageUnsupported` lisible et « Reconvertir en volées » proposé, puis structure
- * « aucune » : plus d'erreur ; budget des tâches longues respecté.
+ * française (sous-lot 6a) et crémaillères bois (sous-lot 6b) sur une cage : générés, sans
+ * erreur ; limon central acier sur une cage : `structure.cageUnsupported` lisible et
+ * « Reconvertir en volées » proposé, puis structure « aucune » : plus d'erreur ; budget des
+ * tâches longues respecté.
  */
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -912,7 +913,7 @@ test("inspecteur : insérer un palier, couper un tronçon (refus puis coupe), Su
   expect(over, describeTasks(over, tasks)).toEqual([]);
 });
 
-test("convertir un escalier à volées en tracé libre, annuler ; limons à la française puis crémaillères sur une cage : erreur lisible, puis « aucune »", async ({
+test("convertir un escalier à volées en tracé libre, annuler ; limons à la française, crémaillères puis limon central sur une cage : erreur lisible, puis « aucune »", async ({
   page,
 }) => {
   await openApp(page);
@@ -1001,8 +1002,12 @@ test("convertir un escalier à volées en tracé libre, annuler ; limons à la f
   await chooseStructure(page, "wood-housed");
   await expect(errors).toHaveCount(0);
 
-  // Crémaillères bois sur la cage : structure non générée, erreur lisible.
+  // Crémaillères bois sur la cage (sous-lot 6b, tronçon droit unique) : générées, sans erreur.
   await chooseStructure(page, "wood-cut");
+  await expect(errors).toHaveCount(0);
+
+  // Limon central acier sur la cage : structure non générée, erreur lisible.
+  await chooseStructure(page, "steel-central");
   await expect(errors).toHaveAttribute("title", /pas encore disponible pour ce tracé libre/);
 
   // Inspecteur de l'escalier : correction « Reconvertir en volées » proposée.

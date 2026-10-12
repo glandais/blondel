@@ -242,10 +242,10 @@ describe("toCageLayout / toFlightsLayout", () => {
 
 describe("correction « reconvertir en volées » (cage-to-flights)", () => {
   it("cage sans fonction de cage : proposée, le patch rend le tracé à volées équivalent", () => {
-    // Structure qui ne lit aucune cage saisie (acier plat) : refus du garde-fou.
+    // Structure qui ne lit aucune cage saisie (limon central acier) : refus du garde-fou.
     for (const id of PRESET_IDS) {
       const flights = createProject(id, {
-        patch: { stair: { structure: { kind: "steel-flat", params: {} } } },
+        patch: { stair: { structure: { kind: "steel-central", params: {} } } },
       });
       const cage = toCageLayout(flights)!;
       const model = buildModel(cage, { memo: false });
@@ -300,7 +300,7 @@ describe("correction « reconvertir en volées » (cage-to-flights)", () => {
         sections: [straight(1500), straight(600)],
         junctions: [{ angle: 90, mode: "winders" }],
       },
-      "steel-flat",
+      "steel-central",
     );
     const model = buildModel(cage, { memo: false });
     expect(model.errors.map((e) => e.key)).toContain("structure.cageUnsupported");
@@ -308,63 +308,82 @@ describe("correction « reconvertir en volées » (cage-to-flights)", () => {
     expect(ids).toEqual(["cage-to-flights"]);
   });
 
-  it("limons à la française sur une cage sans fonction (sous-lot 6a) : construits, reconversion proposée pour un jour vif", () => {
-    for (const id of PRESET_IDS) {
-      const flights = createProject(id, {
-        patch: { stair: { structure: { kind: "wood-housed", params: {} } } },
-      });
-      const cage = toCageLayout(flights)!;
-      const model = buildModel(cage, { memo: false });
-      const keys = model.errors.map((e) => e.key);
-      expect(keys, id).not.toContain("structure.cageUnsupported");
-      expect(
-        model.parts.some((p) => p.category === "stringer"),
-        id,
-      ).toBe(true);
-      const sharp = flights.stair.layout.turns.filter((t) => t.inner.kind === "sharp").length;
-      expect(
-        keys.filter((k) => k === "structure.woodHoused.sharpJourCage"),
-        id,
-      ).toHaveLength(sharp);
-      const fixes = suggestFixes(cage, model);
-      const fix = fixes.find((f) => f.id === "cage-to-flights");
-      if (sharp === 0) {
-        expect(fix, id).toBeUndefined();
-        continue;
+  it.each([
+    ["wood-housed", "structure.woodHoused.sharpJourCage"],
+    ["steel-flat", "structure.steel.error.sharpWellCage"],
+    ["steel-profile", "structure.steel.error.sharpWellCage"],
+  ] as const)(
+    "%s sur une cage sans fonction (sous-lots 6a, 6b) : construits, reconversion proposée pour un jour vif",
+    (kind, sharpKey) => {
+      for (const id of PRESET_IDS) {
+        const flights = createProject(id, {
+          patch: { stair: { structure: { kind, params: {} } } },
+        });
+        const cage = toCageLayout(flights)!;
+        const model = buildModel(cage, { memo: false });
+        const keys = model.errors.map((e) => e.key);
+        expect(keys, id).not.toContain("structure.cageUnsupported");
+        expect(
+          model.parts.some((p) => p.category === "stringer"),
+          id,
+        ).toBe(true);
+        const sharp = flights.stair.layout.turns.filter((t) => t.inner.kind === "sharp").length;
+        expect(
+          keys.filter((k) => k === sharpKey),
+          id,
+        ).toHaveLength(sharp);
+        const fixes = suggestFixes(cage, model);
+        const fix = fixes.find((f) => f.id === "cage-to-flights");
+        if (sharp === 0) {
+          expect(fix, id).toBeUndefined();
+          continue;
+        }
+        // Jour vif : en volées, le jour reçoit un poteau (correction `jour-newel` ensuite).
+        expect(fix?.reason.key, id).toBe("project.fix.cageToFlights.reasonNewel");
+        expect(
+          fixes.map((f) => f.id),
+          id,
+        ).not.toContain("jour-newel");
+        const applied = ProjectSchema.parse(deepMerge(cage, fix!.patch));
+        expect(applied.stair.layout).toStrictEqual({ kind: "flights", ...flights.stair.layout });
+        const after = buildModel(applied, { memo: false });
+        expect(
+          suggestFixes(applied, after).map((f) => f.id),
+          id,
+        ).toContain("jour-newel");
       }
-      // Jour vif : en volées, le jour reçoit un poteau (correction `jour-newel` ensuite).
-      expect(fix?.reason.key, id).toBe("project.fix.cageToFlights.reasonNewel");
-      expect(
-        fixes.map((f) => f.id),
-        id,
-      ).not.toContain("jour-newel");
-      const applied = ProjectSchema.parse(deepMerge(cage, fix!.patch));
-      expect(applied.stair.layout).toStrictEqual({ kind: "flights", ...flights.stair.layout });
-      const after = buildModel(applied, { memo: false });
-      expect(
-        suggestFixes(applied, after).map((f) => f.id),
-        id,
-      ).toContain("jour-newel");
-    }
-  });
+    },
+  );
 
-  it("limons à la française, jour en arc sur une cage sans fonction : pas de reconversion pour un poteau", () => {
-    const cage = cageProject(
-      {
-        kind: "cage",
-        sections: [straight(900), straight(900)],
-        junctions: [{ angle: 90, mode: "winders", well: { kind: "arc", radius: 200 } }],
-      },
-      "wood-housed",
-    );
-    const model = buildModel(cage, { memo: false });
-    expect(model.errors.map((e) => e.key)).toEqual(["structure.woodHoused.arcJourCage"]);
-    // En volées, un jour en arc ne reçoit pas de poteau (`jour-newel` ne vise que les jours vifs).
-    expect(suggestFixes(cage, model).map((f) => f.id)).not.toContain("cage-to-flights");
-    expect(applyStructureChoice(cage, "wood-housed").notes.map((n) => n.key)).toEqual([
-      "project.structureChoice.cageJour",
-    ]);
-  });
+  it.each([
+    ["wood-housed", "structure.woodHoused.arcJourCage"],
+    ["steel-flat", "structure.steel.error.arcWellCage"],
+    ["steel-profile", "structure.steel.error.arcWellCage"],
+  ] as const)(
+    "%s, jour en arc sur une cage sans fonction : pas de reconversion pour un poteau",
+    (kind, arcKey) => {
+      const cage = cageProject(
+        {
+          kind: "cage",
+          sections: [straight(900), straight(900)],
+          junctions: [{ angle: 90, mode: "winders", well: { kind: "arc", radius: 200 } }],
+        },
+        kind,
+      );
+      const model = buildModel(cage, { memo: false });
+      expect(
+        model.errors
+          .map((e) => e.key)
+          .filter((k) => k !== "structure.steelProfile.error.noSectionPasses"),
+      ).toEqual([arcKey]);
+      // En volées, un jour en arc ne reçoit pas de poteau (`jour-newel` ne vise que les jours
+      // vifs) : `arcWellCage` reste hors de `CAGE_JOUR_ERRORS`.
+      expect(suggestFixes(cage, model).map((f) => f.id)).not.toContain("cage-to-flights");
+      expect(applyStructureChoice(cage, kind).notes.map((n) => n.key)).toEqual([
+        "project.structureChoice.cageJour",
+      ]);
+    },
+  );
 });
 
 describe("branches cage de newel.ts et structureChoice.ts", () => {
@@ -384,10 +403,17 @@ describe("branches cage de newel.ts et structureChoice.ts", () => {
   });
 
   it("structure posée sans adapter le jour, remarque (reconversion si possible)", () => {
-    const a = applyStructureChoice(cage, "steel-flat");
-    expect(a.project.stair.structure.kind).toBe("steel-flat");
+    const a = applyStructureChoice(cage, "steel-central");
+    expect(a.project.stair.structure.kind).toBe("steel-central");
     expect(a.project.stair.layout).toBe(cage.stair.layout);
     expect(a.notes.map((n) => n.key)).toEqual(["project.structureChoice.cageConvertible"]);
+    // Limons acier (sous-lot 6b) : cage construite, jour vif signalé comme pour les limons à la
+    // française.
+    for (const kind of ["steel-flat", "steel-profile"]) {
+      const st = applyStructureChoice(cage, kind);
+      expect(st.project.stair.layout).toBe(cage.stair.layout);
+      expect(st.notes.map((n) => n.key)).toEqual(["project.structureChoice.cageJourConvertible"]);
+    }
     // Limons à la française (sous-lot 6a) : cage construite, jour vif signalé (pan coupé, ou
     // reconversion en volées pour un poteau) ; à 60°, pas de reconversion possible.
     const w = applyStructureChoice(cage, "wood-housed");
@@ -405,7 +431,7 @@ describe("branches cage de newel.ts et structureChoice.ts", () => {
       ],
     });
     expect(applyStructureChoice(chamfered, "wood-housed").notes).toEqual([]);
-    const b = applyStructureChoice(sixty, "steel-profile");
+    const b = applyStructureChoice(sixty, "steel-central");
     expect(b.project.stair.layout).toBe(sixty.stair.layout);
     expect(b.notes.map((n) => n.key)).toEqual(["project.structureChoice.cage"]);
     expect(applyStructureChoice(sixty, "none").notes).toEqual([]);

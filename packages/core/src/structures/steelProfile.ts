@@ -25,6 +25,12 @@
  *   UPN aile intérieure 650, aile extérieure 500, chant 200 ; IPE / IPN à plat 650, chant 1 400)
  *   → un limon de jour à petit rayon est **exclu** (bloquant) ; au-delà, le cintrage
  *   hélicoïdal reste à valider chez le cintreur et le limon cintré n'est pas généré (jalon 5).
+ * - **Cage saisie** (ADR-0010, sous-lot 6b) : mêmes faces que `steel-flat` (`steelCageFaces`),
+ *   mêmes fonctions sauf le palier droit (`STEEL_PROFILE_CAGE`) ; coupe d'onglet à φ/2 en plan à
+ *   un angle quelconque, rentrant ou saillant (`miterOffset`, `miterCutExtra`) ; onglets plus
+ *   longs que la face : limon non généré (`profileMiterFiberLength`) ; jour en arc : contrôle de
+ *   cintrage gardé. À valider, QUESTIONS F17. (Aboutage de palier `splice` : prêt, non atteint
+ *   tant que `straightLanding` n'est pas déclaré.)
  * - **Supports** : cornières (C §2.3 [58]) sous chaque marche, soudées ou vissées.
  * - **Développé** : vue de l'âme dépliée (face côté marches), repère de la barre (x le long de
  *   l'axe, y perpendiculaire de 0 à h) : coupes d'extrémité, perçages, traçage des supports.
@@ -44,6 +50,7 @@ import {
   sectionsOf,
   type SteelSection,
 } from "../catalog/sections.js";
+import type { CageFeature } from "../model/cageFeatures.js";
 import type { FlatPattern, NosingLine, Part, RuleResult, Tread } from "../model/derived.js";
 import type { Mm, Polygon2, Vec2 } from "../model/primitives.js";
 import type { StructureContext, StructureKind, StructureOutput } from "../model/plugins.js";
@@ -78,7 +85,16 @@ import {
   steelMaterial,
   steelQuantities,
 } from "./steelCommon.js";
-import { ascentDirection, steelStringerFaces, supportOn, treadNotCarried } from "./steelFlat.js";
+import {
+  ascentDirection,
+  MIN_CAGE_STRINGER_LENGTH,
+  steelCageFaces,
+  steelStringerFaces,
+  supportOn,
+  treadNotCarried,
+  type SteelCornerEnd,
+  type SteelStringerFace,
+} from "./steelFlat.js";
 import { cuttingPlan, type CutPiece, type CuttingPlan } from "./steelProfileCutting.js";
 import {
   boltCenters,
@@ -242,7 +258,7 @@ export const PROFILE_RULES = {
 } as const satisfies Record<string, PluginRuleSpec>;
 
 export interface ProfileStringer {
-  readonly face: StringerFace;
+  readonly face: SteelStringerFace;
   readonly part: Part;
   /** Ligne d'appui (corde) : altitude en u = z0 + m·(u − u0). */
   readonly line: { readonly u0: Mm; readonly z0: Mm; readonly slope: number };
@@ -283,7 +299,7 @@ function upOf(k: NosingLine, towards: Polygon2, sign: 1 | -1): Vec2 {
 
 /** Limon avant choix de section : face, portée et ligne d'appui (corde des nez). */
 interface Pre {
-  face: StringerFace;
+  face: SteelStringerFace;
   uLo: Mm;
   uHi: Mm;
   line: { u0: Mm; z0: Mm; slope: number };
@@ -424,9 +440,14 @@ export function buildSteelProfile(
 
   const geo = stairGeometry(project, ctx.layout);
   const turns = project.stair.layout.turns;
-  const faceInfo = steelStringerFaces(ctx, geo);
+  // Cage saisie (sous-lot 6b) : faces du tracé, onglets à φ/2 en plan aux angles (F17).
+  const cage = ctx.layout.cage === true;
+  const faceInfo: { faces: SteelStringerFace[]; errors: Message[]; notes: Message[] } = cage
+    ? steelCageFaces(geo, 0, "miter")
+    : steelStringerFaces(ctx, geo);
   notes.push(...faceInfo.notes);
-  // Jour en arc : message propre (cintrage des profilés), les autres erreurs sont reprises.
+  // Jour en arc (volées) : message propre (cintrage des profilés), les autres erreurs sont
+  // reprises ; sur une cage, le jour en arc garde l'erreur des limons droits (`arcWellCage`).
   errors.push(...faceInfo.errors.filter((e) => e.key !== "structure.steel.error.arcWell"));
   const faces = faceInfo.faces;
   const baseParts = ctx.baseParts ?? buildBasicParts(project, ctx.layout, stepping).parts;
@@ -522,7 +543,8 @@ export function buildSteelProfile(
     }
     return v;
   };
-  const tributaryWidth = project.stair.layout.width / 2;
+  // Cage saisie : plus grande largeur des tronçons (trapèze, du côté de la sécurité).
+  const tributaryWidth = (cage ? geo.maxWidth : project.stair.layout.width) / 2;
   const steelMat = steelMaterialOf(grade, pc, metal.density);
   const analyze = (p: Pre, s: SteelSection): InclinedBeamResult =>
     analyzeInclinedBeam({
@@ -605,9 +627,19 @@ export function buildSteelProfile(
   }
 
   // 6. Jours en arc : cintrage (C-M-06 / C-M-07).
-  const bend = profileBendFindings(turns, s, metal);
+  // Cage saisie : jours en arc lus sur les jonctions du tracé (`Layout.turns[].well`), même
+  // contrôle de cintrage qu'en volées ; l'erreur reste celle des limons droits (`arcWellCage`,
+  // qui conseille le pan coupé), le constat FAB_CINTRAGE_PROFILE dit si le rayon est cintrable.
+  const arcs = cage
+    ? ctx.layout.turns.flatMap((t, j) =>
+        t.well?.kind === "arc" ? [{ junction: j, radius: t.well.radius }] : [],
+      )
+    : turns.flatMap((t, j) =>
+        t.inner.kind === "arc" ? [{ junction: j, radius: t.inner.radius }] : [],
+      );
+  const bend = profileBendFindings(arcs, s, metal);
   const bendFindings = bend.findings;
-  errors.push(...bend.errors);
+  if (!cage) errors.push(...bend.errors);
 
   // 7. Limons.
   const stringers: ProfileStringer[] = [];
@@ -629,11 +661,15 @@ export function buildSteelProfile(
     top,
     analyze,
     needOfPre,
+    cage,
   };
   for (const p of pres) {
     const built = buildProfileStringer(sctx, p, mineOf.get(p.face.id) ?? []);
     notes.push(...built.notes);
-    if (!built.stringer) continue;
+    if (!built.stringer) {
+      errors.push(...(built.errors ?? []));
+      continue;
+    }
     supportMargins.push(...built.supportMargins);
     buttWeldTotal += built.buttWeld;
     beams.push(built.beam);
@@ -643,8 +679,8 @@ export function buildSteelProfile(
     if (built.spliceNote) notes.push(built.spliceNote);
   }
 
-  // Raccords d'onglet aux angles muraux.
-  const miterItems = profileMiterItems(stringers);
+  // Raccords d'onglet aux angles muraux (cage : angles et raccords de palier, côté par côté).
+  const miterItems = cage ? cageMiterItems(stringers) : profileMiterItems(stringers);
 
   // 8. Supports (pièces) : sur les profilés en I, cornière soudée sur l'âme (face décalée).
   const supportMarked = profileSupportParts(placements, s, shift, sup, material, profile);
@@ -884,7 +920,7 @@ function supportCandidates(
 
 /** Étape 4 : lignes d'appui des limons (corde du premier au dernier nez de leur portée). */
 function profileBearingLines(
-  faces: readonly StringerFace[],
+  faces: readonly SteelStringerFace[],
   windows: ReadonlyMap<string, StringerWindow>,
   stepping: StructureContext["stepping"],
   candidates: readonly SupportPlacement[],
@@ -923,15 +959,13 @@ function profileBearingLines(
 
 /** Étape 6 : cintrage des limons de jour sur les jours en arc (C-M-06 / C-M-07). */
 function profileBendFindings(
-  turns: StructureContext["project"]["stair"]["layout"]["turns"],
+  arcs: readonly { readonly junction: number; readonly radius: Mm }[],
   s: SteelSection,
   metal: WorkshopProfile["metal"],
 ): { findings: Finding[]; errors: Message[] } {
   const bendFindings: Finding[] = [];
   const errors: Message[] = [];
-  turns.forEach((t, j) => {
-    if (t.inner.kind !== "arc") return;
-    const r = t.inner.radius;
+  arcs.forEach(({ junction: j, radius: r }) => {
     const dir = bendDirection(s.family);
     const cap = minProfileBendRadius(metal, s.family, dir, s.h);
     const direction = msg(
@@ -1009,6 +1043,8 @@ interface ProfileStringerContext {
   readonly top: (p: Pre, u: Mm) => Mm;
   readonly analyze: (p: Pre, s: SteelSection) => InclinedBeamResult;
   readonly needOfPre: (p: Pre, s: SteelSection) => Mm;
+  /** Cage saisie (noms par tronçon, jonction). */
+  readonly cage: boolean;
 }
 
 /** Limon construit (étape 7) et ses constats ; `stringer` absent : limon non généré. */
@@ -1021,6 +1057,7 @@ interface BuiltProfileStringer {
   readonly height: PartCheckItem;
   readonly bearing: CheckItem[];
   readonly spliceNote?: Message;
+  readonly errors?: undefined;
 }
 
 /**
@@ -1031,8 +1068,31 @@ function buildProfileStringer(
   sc: ProfileStringerContext,
   p: Pre,
   mine: readonly SupportPlacement[],
-): BuiltProfileStringer | { readonly stringer?: undefined; readonly notes: Message[] } {
+):
+  | BuiltProfileStringer
+  | {
+      readonly stringer?: undefined;
+      readonly notes: Message[];
+      readonly errors?: Message[];
+    } {
   const { s, sup, depthSup, params, profile, material, grade, shift } = sc;
+  // Cage saisie : fibre la plus courte entre les onglets à φ/2 ; vide (pan coupé ou partie
+  // droite plus courte que les onglets) → limon non généré, erreur explicite.
+  if (p.face.startCorner || p.face.endCorner) {
+    const kept = profileMiterFiberLength(p, s.b);
+    if (!(kept > MIN_CAGE_STRINGER_LENGTH)) {
+      return {
+        notes: [],
+        errors: [
+          msg("structure.steel.error.cageFaceTooShort", {
+            mark: p.face.mark,
+            face: dec(p.face.faceLength, 0),
+            length: dec(kept, 0),
+          }),
+        ],
+      };
+    }
+  }
   const metal = profile.metal;
   const tfBand = s.shape === "I" ? s.tf : 0;
   const supportMargins: PartCheckItem[] = [];
@@ -1047,8 +1107,11 @@ function buildProfileStringer(
   // barre dépasse l'angle de d en plan. L'âme d'un profilé en I est à d = (b − t_w) / 2 : son
   // développé (face de l'âme vue des marches) dépasse l'angle d'autant ; celle d'un UPN est à
   // d = 0 (âme côté marches).
-  const uLoW = p.uLo - (f.start === "corner" ? shift : 0);
-  const uHiW = p.uHi + (f.end === "corner" ? shift : 0);
+  // Cage saisie : onglet à φ/2 en plan (angle φ entre les faces), l'âme dépasse le coin de
+  // shift·tan(φ/2) à un angle rentrant, s'arrête avant lui d'autant à un angle saillant ; raccord
+  // de palier : coupe d'aplomb bout à bout (aucun dépassement).
+  const uLoW = p.uLo - (f.start === "corner" ? miterOffset(f.startCorner, shift) : 0);
+  const uHiW = p.uHi + (f.end === "corner" ? miterOffset(f.endCorner, shift) : 0);
   let outline: Vec2[] = [
     V.vec(uLoW, lower(uLoW)),
     V.vec(uHiW, lower(uHiW)),
@@ -1119,6 +1182,8 @@ function buildProfileStringer(
   const endLabel = (which: "start" | "end"): Message => {
     const kind = which === "start" ? f.start : f.end;
     const angle = { angle: dec((alpha * 180) / Math.PI, 1) };
+    const corner = which === "start" ? f.startCorner : f.endCorner;
+    if (kind === "corner" && corner) return cageJointLabel(corner, which, alpha, params.splice);
     switch (kind) {
       case "floor":
         return msg("structure.steelProfile.joint.floor", angle);
@@ -1164,14 +1229,31 @@ function buildProfileStringer(
   // Débit : onglet d'angle mural (+ b en plan de chaque côté concerné, depuis la face côté
   // marches ; le développé en porte déjà `shift`).
   const miterEnds = (f.start === "corner" ? 1 : 0) + (f.end === "corner" ? 1 : 0);
-  const cutLength = barLength + (miterEnds * (s.b - shift)) / c;
+  const cutLength =
+    f.startCorner || f.endCorner
+      ? barLength +
+        ((f.start === "corner" ? miterCutExtra(f.startCorner, s.b, shift) : 0) +
+          (f.end === "corner" ? miterCutExtra(f.endCorner, s.b, shift) : 0)) /
+          c
+      : barLength + (miterEnds * (s.b - shift)) / c;
   const maxBar = Math.max(...metal.barLengths);
   const splices = cutLength > maxBar + 1e-9 ? Math.ceil(cutLength / maxBar) - 1 : 0;
-  const buttWeld = params.splice === "welded" ? splices * sectionPerimeter(s) : 0;
+  const formatButtWeld = params.splice === "welded" ? splices * sectionPerimeter(s) : 0;
   // Cordon sur une coupe d'aplomb : les deux rives verticales mesurent h / cos α, les
   // longueurs transversales (4b − 2t_w) sont multipliées par `k` (√2 pour l'onglet 45° en plan).
   const plumbPerimeter = (k: number): Mm => (2 * s.h) / c + (sectionPerimeter(s) - 2 * s.h) * k;
-  const cornerWeld = f.start === "corner" ? plumbPerimeter(Math.SQRT2) : 0;
+  // Cage saisie : onglet à φ/2, longueurs transversales × 1 / cos(φ/2) = √(1 + tan²(φ/2)) ;
+  // raccord de palier : aboutage selon `splice`, soudé bout à bout sur la coupe d'aplomb (EXC2)
+  // ou éclissé (sans cordon).
+  const landingStart = f.startCorner?.joint === "landing";
+  const cornerWeld =
+    f.start !== "corner" || landingStart
+      ? 0
+      : f.startCorner
+        ? plumbPerimeter(Math.sqrt(1 + f.startCorner.tanHalf ** 2))
+        : plumbPerimeter(Math.SQRT2);
+  const buttWeld =
+    formatButtWeld + (landingStart && params.splice === "welded" ? plumbPerimeter(1) : 0);
   const newelWeld =
     (f.start === "newel" ? plumbPerimeter(1) : 0) + (f.end === "newel" ? plumbPerimeter(1) : 0);
   const cuts = (f.start === "floor" ? 2 : 1) + 1;
@@ -1200,12 +1282,7 @@ function buildProfileStringer(
     id: f.id,
     mark: f.mark,
     category: "stringer",
-    name: msg(
-      f.side === "inner"
-        ? "structure.steelProfile.part.outerString"
-        : "structure.steelProfile.part.wallString",
-      { section: s.name, flight: f.leg + 1 },
-    ),
+    name: profileStringerName(f, s, sc.cage),
     material,
     solid: {
       kind: "extrusion",
@@ -1275,6 +1352,108 @@ function buildProfileStringer(
         }
       : {}),
   };
+}
+
+/** Nom d'un limon en profilé : volée (tracé à volées) ou nom de la face de cage et section. */
+function profileStringerName(f: SteelStringerFace, s: SteelSection, cage: boolean): Message {
+  if (cage) return msg("structure.steelProfile.part.cageString", { name: f.name, section: s.name });
+  return msg(
+    f.side === "inner"
+      ? "structure.steelProfile.part.outerString"
+      : "structure.steelProfile.part.wallString",
+    { section: s.name, flight: f.leg + 1 },
+  );
+}
+
+/**
+ * Dépassement (signé) de l'âme, à la profondeur `shift` derrière la face côté marches, au-delà
+ * du coin des faces, pour un onglet à φ/2 en plan (cage saisie, F17 (2), à valider) : + shift·tan
+ * à un angle rentrant, − shift·tan à un angle saillant, 0 au raccord de palier ; volées (sans
+ * `corner`) : onglet à 45° d'un angle rentrant, + shift.
+ */
+export function miterOffset(corner: SteelCornerEnd | undefined, shift: Mm): Mm {
+  if (!corner) return shift;
+  return (corner.concave ? 1 : -1) * shift * corner.tanHalf;
+}
+
+/**
+ * Longueur de débit ajoutée en plan par un onglet à φ/2 au-delà de l'âme (fibre la plus longue) :
+ * angle rentrant, dos des ailes (profondeur b) : (b − shift)·tan(φ/2) ; angle saillant, face côté
+ * marches (profondeur 0) : shift·tan(φ/2) ; raccord de palier : 0 ; volées : b − shift (45°).
+ */
+export function miterCutExtra(corner: SteelCornerEnd | undefined, b: Mm, shift: Mm): Mm {
+  if (!corner) return b - shift;
+  return (corner.concave ? b - shift : shift) * corner.tanHalf;
+}
+
+/**
+ * Plus courte fibre (mm, en plan) d'un limon de cage coupé d'onglet à φ/2 à ses extrémités
+ * `corner` : à la profondeur d derrière la face côté marches (0 ≤ d ≤ b), la fibre s'allonge de
+ * d·tan(φ/2) à un angle rentrant et raccourcit d'autant à un angle saillant (raccord de palier :
+ * 0) ; longueur affine en d, minimale en d = 0 ou d = b.
+ */
+export function profileMiterFiberLength(
+  p: { readonly face: SteelStringerFace; readonly uLo: Mm; readonly uHi: Mm },
+  b: Mm,
+): Mm {
+  const f = p.face;
+  const rate = (corner: SteelCornerEnd | undefined, kind: string): number =>
+    kind === "corner" && corner ? (corner.concave ? 1 : -1) * corner.tanHalf : 0;
+  const k = rate(f.startCorner, f.start) + rate(f.endCorner, f.end);
+  const len = p.uHi - p.uLo;
+  return Math.min(len, len + k * b);
+}
+
+/** Libellé de la coupe d'une extrémité `corner` d'un limon de cage (onglet, aboutage). */
+function cageJointLabel(
+  corner: SteelCornerEnd,
+  which: "start" | "end",
+  alpha: number,
+  splice: "welded" | "bolted",
+): Message {
+  const angle = dec((alpha * 180) / Math.PI, 1);
+  if (corner.joint === "landing") {
+    return msg(
+      splice === "welded"
+        ? "structure.steelProfile.joint.landingSpliceWelded"
+        : "structure.steelProfile.joint.landingSpliceBolted",
+      { angle },
+    );
+  }
+  const miter = dec((Math.atan(corner.tanHalf) * 180) / Math.PI, 1);
+  const key =
+    corner.joint === "jour"
+      ? which === "start"
+        ? "structure.steelProfile.joint.jourCornerWelded"
+        : "structure.steelProfile.joint.jourCorner"
+      : which === "start"
+        ? "structure.steelProfile.joint.wallCornerWelded"
+        : "structure.steelProfile.joint.wallCorner";
+  return msg(key, { miter, angle });
+}
+
+/**
+ * Écarts de rive haute entre limons consécutifs d'un même côté d'une cage saisie, au droit d'un
+ * onglet (angle) ou d'un raccord de palier (FAB_ONGLET_RACCORD).
+ */
+function cageMiterItems(stringers: readonly ProfileStringer[]): PartCheckItem[] {
+  const items: PartCheckItem[] = [];
+  for (const side of ["inner", "outer"] as const) {
+    const list = stringers.filter((x) => x.face.side === side);
+    for (let k = 0; k + 1 < list.length; k++) {
+      const a = list[k]!;
+      const b = list[k + 1]!;
+      if (a.face.end !== "corner" || b.face.start !== "corner") continue;
+      const za = a.line.z0 + a.line.slope * (a.face.faceLength - a.line.u0);
+      const zb = b.line.z0 + b.line.slope * (0 - b.line.u0);
+      items.push({
+        value: Math.abs(za - zb),
+        label: textMessage(`${a.face.mark} / ${b.face.mark}`),
+        partId: b.face.id,
+      });
+    }
+  }
+  return items;
 }
 
 /** Écarts de rive haute des limons muraux au droit des onglets d'angle (FAB_ONGLET_RACCORD). */
@@ -1639,6 +1818,17 @@ function addProfileChecks(
   }
 }
 
+/**
+ * Fonctions de cage saisie construites par les limons en profilés (sous-lot 6b) : celles des
+ * plats (`STEEL_STRINGER_CAGE`) **sauf le palier droit** (F17 (3)). Un profilé reste une barre
+ * droite dont la ligne d'appui est la corde des nez de sa portée : sur un palier droit, le limon
+ * qui arrive monterait jusqu'au milieu du palier et l'aboutage relierait deux barres décalées en
+ * hauteur de plusieurs centaines de mm (FAB_ONGLET_RACCORD en violation), et le limon de bord
+ * d'un palier non aligné serait incliné le long d'un palier de niveau. Refusé par le garde-fou
+ * tant que le limon ne suit pas un palier de niveau (partie horizontale ou raccord coudé).
+ */
+export const STEEL_PROFILE_CAGE: readonly CageFeature[] = ["anyAngle", "variableWidth", "chamfer"];
+
 export const STEEL_PROFILE: StructureKind<SteelProfileParams> = {
   kind: "steel-profile",
   labelKey: "structure.steelProfile.label",
@@ -1654,6 +1844,9 @@ export const STEEL_PROFILE: StructureKind<SteelProfileParams> = {
       const b = profileLateralWidth(p);
       return { inner: b, outer: b };
     },
+    // Cage saisie (sous-lot 6b) : onglets à φ/2 en plan aux angles (F17, à valider) ; palier
+    // droit, axe en arc (cintrage), congé côté mur, marches rayonnantes et S / Z refusés.
+    cage: STEEL_PROFILE_CAGE,
   },
 };
 

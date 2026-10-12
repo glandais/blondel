@@ -16,6 +16,12 @@
  *   le carré réservé par le tracé) ; les limons de jour s'arrêtent contre ses faces (soudés ou
  *   vissés sur platine). Jour à angle vif → **erreur explicite** (choisir un poteau), jour en
  *   arc → limon débillardé métal (jalon 5) : limons de jour non générés, limons muraux générés.
+ * - **Cage saisie** (ADR-0010, sous-lot 6b, `capabilities.cage` = `STEEL_STRINGER_CAGE`) : faces
+ *   lues dans le tracé (`steelCageFaces`, `StairGeometry.faces`, conventions de F16) ; coupes
+ *   d'équerre sans recouvrement aux angles quelconques, rentrants ou saillants
+ *   (`buttCornerCuts`, exactement l'angle mural des volées à 90°), aboutage bout à bout au milieu
+ *   d'un palier droit selon `splice` ; jour vif ou en arc : limons de jour non générés
+ *   (`sharpWellCage`, `arcWellCage`, pas de poteau sur une cage). À valider, QUESTIONS F17.
  * - **Supports de marche** (C §2.6, `supports.ts`) : cornières soudées ou vissées, ou plats
  *   soudés, sous chaque marche le long de chaque face porteuse (limon, poteau).
  * - **Marches** : bois (pièces de base, escalier mixte, C §2.4) ou **tôle pliée** Z / U
@@ -44,6 +50,7 @@ import {
 import { z } from "zod";
 import { signedArea } from "../geom2d/polygon.js";
 import * as V from "../geom2d/vec.js";
+import type { CageFeature } from "../model/cageFeatures.js";
 import type { FlatPattern, NosingLine, Part, Tread } from "../model/derived.js";
 import type { Mm, Polygon2, Vec2 } from "../model/primitives.js";
 import type { StructureContext, StructureKind, StructureOutput } from "../model/plugins.js";
@@ -86,7 +93,14 @@ import {
 } from "./folded.js";
 import { PiecewiseLinear, clipHalfPlane, dedupe, minAreaRect } from "./geom.js";
 import { readPlanExtrusion, verticalExtrusion } from "./housing.js";
-import { newelFaces, stairGeometry, type NewelGeometry, type StairGeometry } from "./legs.js";
+import {
+  newelFaces,
+  stairGeometry,
+  type EdgeFace,
+  type FaceEnd,
+  type NewelGeometry,
+  type StairGeometry,
+} from "./legs.js";
 import { newelTopWithHandrail } from "./newel.js";
 import {
   STEEL_RULES,
@@ -250,7 +264,7 @@ export type SteelFlatParams = z.output<typeof SteelFlatParamsSchema>;
 type Side = "inner" | "outer";
 
 export interface SteelStringer {
-  readonly face: StringerFace;
+  readonly face: SteelStringerFace;
   readonly development: StringerDevelopment;
   readonly part: Part;
   readonly mirrored: boolean;
@@ -406,11 +420,246 @@ export function steelStringerFaces(
 }
 
 /**
+ * Extrémité d'un limon acier à un angle ou à un raccord de palier d'une **cage saisie**
+ * (ADR-0010, sous-lot 6b), lue dans `StairGeometry.faces` (`legs.ts`, conventions de F16).
+ */
+export interface SteelCornerEnd {
+  /** Nature du joint : angle côté mur, angle côté jour, raccord bout à bout de palier droit. */
+  readonly joint: "wall" | "jour" | "landing";
+  /** Angle rentrant vu des marches (faux : saillant) ; raccord de palier : vrai, tan(φ/2) = 0. */
+  readonly concave: boolean;
+  /** tan(φ/2), φ angle entre les deux faces (exactement 1 à ±90° de largeur uniforme). */
+  readonly tanHalf: number;
+}
+
+/**
+ * Face de référence d'un limon acier : celle des volées (`steelStringerFaces`, sans
+ * `startCorner` / `endCorner`), ou celle d'une cage saisie (`steelCageFaces`) qui porte la
+ * nature et l'angle de ses extrémités `corner`.
+ */
+export type SteelStringerFace = StringerFace & {
+  readonly startCorner?: SteelCornerEnd;
+  readonly endCorner?: SteelCornerEnd;
+};
+
+/**
+ * Coupes d'équerre de deux plats soudés à un angle de cage (sous-lot 6b, **à valider**,
+ * QUESTIONS F17 (1)) : généralisation de l'angle mural à 90° des volées (le limon **qui arrive**
+ * est prolongé jusqu'à l'arête extérieure du coin, le limon **qui part** bute contre lui),
+ * sans recouvrement des deux plats (coupes laser d'équerre : aucun chanfrein).
+ *
+ * - `arrive` : prolongement (signé) du limon qui arrive au-delà de la fin de sa face ;
+ * - `depart` : retrait (signé) du début du limon qui part après le début de sa face.
+ *
+ * Angle **rentrant** φ ≤ 90° : `arrive` = e·tan(φ/2) (arête extérieure du coin, comme les
+ * limons bois de F16 (1)), `depart` = e·tan(φ/2)·cos φ (le bout d'équerre du limon qui part
+ * passe par l'arête intérieure du bout du limon qui arrive) ; φ > 90° : `arrive` = e / sin φ
+ * (jusqu'au plan arrière du limon qui part, sans le traverser), `depart` = 0. Exactement e et 0
+ * à 90° (volées). Angle **saillant** : même construction sur les arêtes extérieures (symétrie
+ * face / dos d'un plat), `arrive` − e·tan(φ/2) et `depart` + e·tan(φ/2) : φ ≤ 90°, le limon qui
+ * arrive s'arrête au coin des faces et celui qui part commence à e·sin φ (au plus e) ; φ > 90°,
+ * le limon qui arrive s'arrête e·(tan²(φ/2) − 1) / (2·tan(φ/2)) **avant** le coin des faces
+ * (`arrive` négatif) et celui qui part commence à e·tan(φ/2), **plus de e** après lui (tend vers
+ * l'infini quand φ tend vers 180°) : face sans plat des deux côtés du coin (F17 (1)). Le coin
+ * arrière reste ouvert (triangle fermé par le cordon d'angle). Raccord de palier (tan = 0) :
+ * bout à bout, 0. Fenêtre vide après les coupes : limon non généré (`steelCageFaces`).
+ */
+export function buttCornerCuts(e: Mm, corner: SteelCornerEnd): { arrive: Mm; depart: Mm } {
+  const t = corner.tanHalf;
+  if (!(t > 0)) return { arrive: 0, depart: 0 };
+  const cos = (1 - t * t) / (1 + t * t);
+  const sin = (2 * t) / (1 + t * t);
+  const concave = t <= 1 ? { arrive: e * t, depart: e * t * cos } : { arrive: e / sin, depart: 0 };
+  if (corner.concave) return concave;
+  return { arrive: concave.arrive - e * t, depart: concave.depart + e * t };
+}
+
+/** Libellé du trait de joint d'une extrémité `corner` de cage (développé du limon). */
+function steelJointLabel(corner: SteelCornerEnd, splice: "welded" | "bolted"): Message {
+  switch (corner.joint) {
+    case "landing":
+      return msg(
+        splice === "welded"
+          ? "structure.steel.joint.landingSpliceWelded"
+          : "structure.steel.joint.landingSpliceBolted",
+      );
+    case "jour":
+      return msg("structure.steel.joint.jourCorner");
+    case "wall":
+      return msg("structure.steel.joint.wallCorner");
+  }
+}
+
+/**
+ * Fonctions de cage saisie construites par les limons acier latéraux (`steel-flat`,
+ * `steel-profile`, sous-lot 6b) : celles des limons à la française (faces de `legs.ts`).
+ */
+export const STEEL_STRINGER_CAGE: readonly CageFeature[] = [
+  "anyAngle",
+  "variableWidth",
+  "straightLanding",
+  "chamfer",
+];
+
+/**
+ * Longueur minimale (mm) d'un limon acier de cage entre ses coupes d'extrémité : en deçà, le
+ * limon n'est pas généré (erreur `cageFaceTooShort`). Seuil géométrique, pas une valeur métier :
+ * même seuil de 1 mm que l'absence de partie droite côté jour (`noOuterStringSection`).
+ */
+export const MIN_CAGE_STRINGER_LENGTH: Mm = 1;
+
+/** Extrémité acier d'une face de cage ; `null` pour un raccord du jour non suivi (vif, arc). */
+function cageEnd(
+  face: EdgeFace,
+  end: FaceEnd,
+): { kind: "floor" | "arrival" | "newel" | "corner"; corner?: SteelCornerEnd } | null {
+  switch (end.kind) {
+    case "floor":
+    case "arrival":
+    case "newel":
+      return { kind: end.kind };
+    case "splice":
+      return { kind: "corner", corner: { joint: "landing", concave: true, tanHalf: 0 } };
+    case "corner":
+      return {
+        kind: "corner",
+        corner: {
+          joint: face.side === "inner" ? "jour" : "wall",
+          concave: end.concave,
+          tanHalf: end.tanHalf,
+        },
+      };
+    case "open":
+      return null;
+  }
+}
+
+/** Repère, nom et identifiant d'un limon acier de cage (mêmes repères que `wood-housed`). */
+function cageFaceIdentity(face: EdgeFace): {
+  id: string;
+  mark: string;
+  name: Message;
+  leg: number;
+} {
+  const inner = face.side === "inner";
+  const sideId = inner ? "inner" : "outer";
+  if (face.sections.length === 0) {
+    const j = face.junction ?? 0;
+    const chamfer = face.junctionKind === "chamfer";
+    return {
+      id: `stringer-${sideId}-j${j + 1}`,
+      mark: `${inner ? "LI" : "LE"}${chamfer ? "C" : "P"}${j + 1}`,
+      name: chamfer
+        ? msg("structure.steel.part.chamferString", { junction: j + 1 })
+        : msg(
+            inner
+              ? "structure.steel.part.outerLandingString"
+              : "structure.steel.part.wallLandingString",
+            { junction: j + 1 },
+          ),
+      leg: j,
+    };
+  }
+  const i = face.sections[0]!;
+  return {
+    id: `stringer-${sideId}-${i + 1}`,
+    mark: `${inner ? "LI" : "LE"}${i + 1}`,
+    name: msg(
+      inner ? "structure.steel.part.outerStringSection" : "structure.steel.part.wallStringSection",
+      { section: i + 1 },
+    ),
+    leg: i,
+  };
+}
+
+/**
+ * Faces de référence des limons acier sur une **cage saisie** (ADR-0010, sous-lot 6b) : faces
+ * du tracé (`StairGeometry.faces`, conventions de F16 : angle quelconque, pan coupé, bords de
+ * palier, raccord au milieu d'un palier droit à bords alignés, bords inclinés d'un trapèze).
+ * `corners` : `butt` (plats, `buttCornerCuts` : prolongements dans `startReach` / `endReach`)
+ * ou `miter` (profilés : faces arrêtées au coin, onglet à φ/2 en plan dans le plugin). Jour vif
+ * ou en arc : limons de jour voisins non générés, erreur dédiée (pas de poteau sur une cage).
+ */
+export function steelCageFaces(
+  geo: StairGeometry,
+  e: Mm,
+  corners: "butt" | "miter",
+): { faces: SteelStringerFace[]; errors: Message[]; notes: Message[] } {
+  const faces: SteelStringerFace[] = [];
+  const errors: Message[] = [];
+  const notes: Message[] = [];
+  for (const { junction: j, kind } of geo.jourIssues) {
+    errors.push(
+      msg(
+        kind === "arc"
+          ? "structure.steel.error.arcWellCage"
+          : "structure.steel.error.sharpWellCage",
+        {
+          junction: j + 1,
+          section: j + 1,
+          nextSection: j + 2,
+        },
+      ),
+    );
+  }
+  for (const face of geo.faces) {
+    const start = cageEnd(face, face.start);
+    const end = cageEnd(face, face.end);
+    if (start === null || end === null) continue;
+    if (start.kind === "arrival" || end.kind === "floor") continue;
+    const inner = face.side === "inner";
+    if (inner && !(face.length > MIN_CAGE_STRINGER_LENGTH)) {
+      if (face.sections.length > 0)
+        notes.push(
+          msg("structure.steel.note.noOuterStringSection", { section: face.sections[0]! + 1 }),
+        );
+      continue;
+    }
+    if (!inner && !(face.length > 0)) continue;
+    const { id, mark, name, leg } = cageFaceIdentity(face);
+    const startCut = start.corner && corners === "butt" ? buttCornerCuts(e, start.corner) : null;
+    const endCut = end.corner && corners === "butt" ? buttCornerCuts(e, end.corner) : null;
+    // Fenêtre laissée par les coupes d'équerre (plats) : vide ou quasi nulle (pan coupé ou
+    // partie droite plus courte que les coupes d'angle) → limon non généré, erreur explicite.
+    // Profilés : contrôle dans le plugin, section choisie (`profileMiterFiberLength`).
+    const kept = face.length + (endCut?.arrive ?? 0) - (startCut?.depart ?? 0);
+    if ((startCut || endCut) && !(kept > MIN_CAGE_STRINGER_LENGTH)) {
+      errors.push(
+        msg("structure.steel.error.cageFaceTooShort", {
+          mark,
+          face: dec(face.length, 0),
+          length: dec(kept, 0),
+        }),
+      );
+      continue;
+    }
+    faces.push({
+      id,
+      mark,
+      name,
+      side: face.side,
+      leg,
+      a: face.a,
+      dir: face.dir,
+      into: face.into,
+      sigmaA: face.sigmaA,
+      faceLength: face.length,
+      start: start.kind,
+      end: end.kind,
+      ...(start.corner ? { startCorner: start.corner, startReach: -(startCut?.depart ?? 0) } : {}),
+      ...(end.corner ? { endCorner: end.corner, endReach: endCut?.arrive ?? 0 } : {}),
+    });
+  }
+  return { faces, errors, notes };
+}
+
+/**
  * Fenêtre [u_lo ; u_hi] d'un limon acier (u depuis `face.a`). À un angle mural, contrairement
  * au bois (assemblage à queues : les deux limons occupent le carré e × e du coin), deux plats
  * soudés ne peuvent pas se recouvrir : le limon **qui arrive** à l'angle est prolongé de
  * l'épaisseur e jusqu'à l'arête extérieure du coin, le limon **qui part** de l'angle s'arrête
- * contre lui (u_lo = 0) et porte la soudure d'angle.
+ * contre lui (u_lo = 0) et porte la soudure d'angle. Cage saisie : prolongement et retrait de
+ * `buttCornerCuts` (`startReach` / `endReach`, mêmes valeurs à 90°).
  */
 function windowOf(
   f: StringerFace,
@@ -422,8 +671,18 @@ function windowOf(
   const u0 = sigmaOf(nosings[0]!, f.side) - f.sigmaA;
   const uN = sigmaOf(nosings[nosings.length - 1]!, f.side) - f.sigmaA;
   return {
-    uLo: f.start === "floor" ? u0 - startExt : 0,
-    uHi: f.end === "arrival" ? uN + endExt : f.end === "corner" ? f.faceLength + e : f.faceLength,
+    uLo:
+      f.start === "floor"
+        ? u0 - startExt
+        : f.start === "corner" && f.startReach !== undefined
+          ? -f.startReach
+          : 0,
+    uHi:
+      f.end === "arrival"
+        ? uN + endExt
+        : f.end === "corner"
+          ? f.faceLength + (f.endReach ?? e)
+          : f.faceLength,
   };
 }
 
@@ -574,7 +833,9 @@ export function buildSteelFlat(ctx: StructureContext, params: SteelFlatParams): 
   if (nosings.length < 2) return empty([msg("structure.steelFlat.error.emptyStepping")]);
 
   const geo = stairGeometry(project, layout);
-  const faceInfo = steelStringerFaces(ctx, geo);
+  // Cage saisie (sous-lot 6b) : faces du tracé, coupes d'équerre aux angles (`buttCornerCuts`).
+  const faceInfo =
+    layout.cage === true ? steelCageFaces(geo, e, "butt") : steelStringerFaces(ctx, geo);
   errors.push(...faceInfo.errors);
   notes.push(...faceInfo.notes);
   const faces = faceInfo.faces;
@@ -1643,7 +1904,7 @@ function fitsSheet(metal: WorkshopProfile["metal"], length: Mm, width: Mm): bool
  */
 function buildFlatStringer(
   sc: FlatStringerContext,
-  f: StringerFace,
+  f: SteelStringerFace,
 ): { stringer: SteelStringer; formatFinding: Finding; buttWeld: Mm } {
   const { params, nosings, metal, profile, material, grade, pitch, windows, lowerOffset } = sc;
   const { placements, depthSup, endPlateT } = sc;
@@ -1675,8 +1936,18 @@ function buildFlatStringer(
     .filter((k) => k.u >= span.lo - 1e-6 && k.u <= span.hi + 1e-6);
   const joints: { u: Mm; label: Message }[] = [];
   const cornerJoint = msg("structure.steel.joint.wallCorner");
-  if (f.start === "corner") joints.push({ u: 0, label: cornerJoint });
-  if (f.end === "corner") joints.push({ u: f.faceLength, label: cornerJoint });
+  // Cage saisie : joint au bout réel du limon qui part (retrait `buttCornerCuts`), libellé selon
+  // la nature du joint ; volées : coin des faces (u = 0, `uLo` = 0).
+  if (f.start === "corner")
+    joints.push({
+      u: f.startCorner ? uLo : 0,
+      label: f.startCorner ? steelJointLabel(f.startCorner, params.splice) : cornerJoint,
+    });
+  if (f.end === "corner")
+    joints.push({
+      u: f.endCorner ? Math.min(uHi, f.faceLength) : f.faceLength,
+      label: f.endCorner ? steelJointLabel(f.endCorner, params.splice) : cornerJoint,
+    });
   const newelJoint = msg(
     endPlateT > 0 ? "structure.steel.joint.newelEndPlate" : "structure.common.joint.newelFace",
   );
@@ -1765,15 +2036,21 @@ function buildFlatStringer(
       message: sheetFormatMessage("structure.steel.check.inSheetFormat", f.mark, box),
     };
   }
-  const buttWeld =
+  const formatButtWeld =
     params.splice === "welded" && Number.isFinite(splices)
       ? splices * dev.minPerpendicularWidth
       : 0;
-  // Soudure d'angle mural : comptée sur le limon qui part de l'angle (deux cordons).
-  const cornerWeld =
-    f.start === "corner"
-      ? 2 * Math.max(0, polyAt(dev.upperRive, 0) - Math.max(polyAt(dev.lowerRive, 0), 0))
-      : 0;
+  // Soudure d'angle mural : comptée sur le limon qui part de l'angle (deux cordons), au bout
+  // réel du limon (`uLo`, 0 en volées). Raccord de palier d'une cage (bout à bout) : aboutage
+  // selon `splice`, soudé bout à bout (une passe sur la hauteur, EXC2) ou éclissé (sans cordon).
+  const startHeight = Math.max(
+    0,
+    polyAt(dev.upperRive, uLo) - Math.max(polyAt(dev.lowerRive, uLo), 0),
+  );
+  const landingStart = f.startCorner?.joint === "landing";
+  const cornerWeld = f.start === "corner" && !landingStart ? 2 * startHeight : 0;
+  const landingWeld = landingStart && params.splice === "welded" ? startHeight : 0;
+  const buttWeld = formatButtWeld + landingWeld;
   const xDir = mirrored ? V.scale(f.dir, -1) : f.dir;
   let uMin = Infinity;
   let uMax = -Infinity;
@@ -2231,5 +2508,8 @@ export const STEEL_FLAT: StructureKind<SteelFlatParams> = {
     requiresNewel: true,
     // Limons hors emprise utile, côté jour et côté mur (CHALLENGE A3).
     lateralThickness: (p) => ({ inner: p.thickness, outer: p.thickness }),
+    // Cage saisie (sous-lot 6b) : faces du tracé, coupes d'équerre aux angles (F17, à valider) ;
+    // axe en arc (acier cintré), congé côté mur, marches rayonnantes et S / Z refusés.
+    cage: STEEL_STRINGER_CAGE,
   },
 };

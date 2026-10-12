@@ -6,7 +6,10 @@
  * fonctions non prises en charge, sans exception, marches produites ; un plugin qui déclare les
  * fonctions de la cage est appelé ; un tracé à volées n'est pas concerné. Depuis le sous-lot 6a,
  * les limons à la française (`wood-housed`) déclarent `WOOD_HOUSED_CAGE` : ils construisent une
- * cage qui n'utilise que ces fonctions et refusent les autres en ne nommant que celles-là.
+ * cage qui n'utilise que ces fonctions et refusent les autres en ne nommant que celles-là. Depuis
+ * le sous-lot 6b, les limons acier en plat (`steel-flat`) déclarent les mêmes fonctions, les
+ * profilés (`steel-profile`) les mêmes sauf le palier droit, les crémaillères (`wood-cut`) la seule largeur variable (un
+ * tronçon droit : un tournant reste refusé par le plugin, comme en volées).
  */
 import fc from "fast-check";
 import { msg, translatorFor, type Message } from "@blondel/i18n";
@@ -36,6 +39,7 @@ import {
   registerStructure,
   structureAcceptsCage,
   structureCageFeatures,
+  structureRequiresNewel,
   structureUnsupportedCageFeatures,
   unregisterStructure,
   WOOD_HOUSED,
@@ -135,8 +139,21 @@ const WOOD_HOUSED_CAGE: readonly CageFeature[] = [
   "straightLanding",
   "chamfer",
 ];
+/** Fonctions de cage des limons acier en plat (sous-lot 6b) : celles des limons à la française. */
+const STEEL_CAGE: readonly CageFeature[] = WOOD_HOUSED_CAGE;
+/** Fonctions de cage des limons en profilés (sous-lot 6b) : sans le palier droit (F17 (3)). */
+const STEEL_PROFILE_CAGE: readonly CageFeature[] = ["anyAngle", "variableWidth", "chamfer"];
+/** Fonctions de cage des crémaillères (sous-lot 6b) : un tronçon droit, largeur variable. */
+const WOOD_CUT_CAGE: readonly CageFeature[] = ["variableWidth"];
+/** Structures qui lisent une cage saisie, et les fonctions qu'elles déclarent. */
+const CAGE_STRUCTURES: Readonly<Record<string, readonly CageFeature[]>> = {
+  "wood-housed": WOOD_HOUSED_CAGE,
+  "steel-flat": STEEL_CAGE,
+  "steel-profile": STEEL_PROFILE_CAGE,
+  "wood-cut": WOOD_CUT_CAGE,
+};
 /** Structures qui ne lisent encore aucune cage saisie. */
-const FLIGHTS_ONLY = STRUCTURES.filter((k) => k !== "wood-housed");
+const FLIGHTS_ONLY = STRUCTURES.filter((k) => !(k in CAGE_STRUCTURES));
 
 /**
  * Raison attendue du refus de `kind` pour une cage de fonctions `features` (même jonction que
@@ -190,16 +207,21 @@ describe("capacités : structureCageFeatures / structureAcceptsCage", () => {
     expect(structureUnsupportedCageFeatures(kind, ["anyAngle"])).toBeNull();
   });
 
-  it("wood-housed : angle quelconque, largeur variable, palier droit, pan coupé (sous-lot 6a)", () => {
-    expect(structureCageFeatures("wood-housed")).toEqual(WOOD_HOUSED_CAGE);
-    expect(structureAcceptsCage("wood-housed", [])).toBe(true);
-    expect(structureAcceptsCage("wood-housed", WOOD_HOUSED_CAGE)).toBe(true);
-    for (const f of ["arcAxis", "wallArc", "radiating", "oppositeTurns"] as const) {
-      expect(structureAcceptsCage("wood-housed", [f]), f).toBe(false);
-      expect(structureAcceptsCage("wood-housed", ["anyAngle", f]), f).toBe(false);
-      expect(structureUnsupportedCageFeatures("wood-housed", ["anyAngle", f]), f).toEqual([f]);
-    }
-  });
+  it.each(Object.entries(CAGE_STRUCTURES))(
+    "%s : fonctions déclarées (sous-lots 6a, 6b), les autres refusées une à une",
+    (kind, declared) => {
+      expect(structureCageFeatures(kind)).toEqual(declared);
+      expect(structureAcceptsCage(kind, [])).toBe(true);
+      expect(structureAcceptsCage(kind, declared)).toBe(true);
+      // Axe en arc : lot « acier cintré », jamais déclaré par une structure à limons droits.
+      expect(declared).not.toContain("arcAxis");
+      for (const f of CAGE_FEATURES.filter((x) => !declared.includes(x))) {
+        expect(structureAcceptsCage(kind, [f]), f).toBe(false);
+        expect(structureAcceptsCage(kind, [...declared, f]), f).toBe(false);
+        expect(structureUnsupportedCageFeatures(kind, [...declared, f]), f).toEqual([f]);
+      }
+    },
+  );
 
   it("plugin inconnu : aucune cage", () => {
     expect(structureCageFeatures("inconnu")).toBeNull();
@@ -243,11 +265,19 @@ describe("buildModel : garde-fou sur chaque plugin du registre", () => {
         expect(() => (model = buildModel(project, { memo: false })), name).not.toThrow();
         const all = featuresOf(project);
         if (expectedRefusal(kind, all) === null) {
-          // Cage construite (limons à la française) : jamais de refus, pièces de structure.
+          // Cage construite (limons à la française, limons acier) : jamais de refus, pièces de
+          // structure ; crémaillères : escalier droit seulement (tournant refusé par le plugin).
           expect(keys(model!), name).not.toContain("structure.cageUnsupported");
           expect(keys(model!), name).not.toContain("pipeline.internalError");
+          const turning = (s.junctions ?? []).length > 0;
+          if (kind === "wood-cut" && turning) {
+            expect(keys(model!), name).toEqual(["structure.woodCut.turningUnsupported"]);
+            continue;
+          }
           expect(
-            model!.parts.some((p) => p.category === "stringer"),
+            model!.parts.some(
+              (p) => p.category === (kind === "wood-cut" ? "carriage" : "stringer"),
+            ),
             name,
           ).toBe(true);
           continue;
@@ -448,13 +478,14 @@ describe("buildModel : plugin qui déclare des fonctions de cage", () => {
       for (const kind of STRUCTURES) {
         const notes = applyStructureChoice(p, kind).notes.map((n) => n.key);
         if (expectedRefusal(kind, featuresOf(p)) === null) {
-          // Cage construite (limons à la française) : seule remarque possible, un jour vif ou en
-          // arc qu'aucun limon droit ne suit (pas de poteau sur une cage saisie).
+          // Cage construite (limons à la française, limons acier, crémaillères) : seule remarque
+          // possible, pour une structure à poteau, un jour vif ou en arc qu'aucun limon droit ne
+          // suit (pas de poteau sur une cage saisie).
           const layout = p.stair.layout as CageLayoutSpec;
           const open = layout.junctions.some(
             (j) => j.angle !== 0 && (j.well.kind === "sharp" || j.well.kind === "arc"),
           );
-          expect(notes.length).toBe(open ? 1 : 0);
+          expect(notes.length).toBe(open && structureRequiresNewel(kind) ? 1 : 0);
           for (const n of notes) {
             expect([
               "project.structureChoice.cageJour",

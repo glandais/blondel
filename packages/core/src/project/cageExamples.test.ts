@@ -3,7 +3,9 @@
  * sans structure (seule « aucune » acceptait une cage saisie au lot 2). Une fonction de cage par
  * exemple : jonction à 60° balancée, palier droit, trapèze (largeur variable), axe en arc, marches
  * rayonnantes. Sous-lot 6a : `cage-60-palier-limon`, limons à la française (`wood-housed`) sur
- * une jonction à 60° balancée à jour en pan coupé suivie d'un palier droit. Site des préréglages (H = 2 700, dalle de 200 mm, nez `PRESET_NOSING`), trémie du
+ * une jonction à 60° balancée à jour en pan coupé suivie d'un palier droit. Sous-lot 6b :
+ * `cage-45-palier-acier`, limons acier en plat (`steel-flat`) sur une jonction à 45° balancée à
+ * jour en pan coupé suivie d'un palier droit. Site des préréglages (H = 2 700, dalle de 200 mm, nez `PRESET_NOSING`), trémie du
  * calcul des préréglages (`defaultOpening`, échappée `PRESET_HEADROOM_MIN` sur la ligne de
  * foulée). Longueurs choisies pour un giron voisin de 270 mm et aucune violation bloquante.
  * Régénération : `UPDATE_EXAMPLES=1 pnpm vitest run packages/core/src/project/cageExamples.test.ts`.
@@ -133,6 +135,30 @@ export const CAGE_EXAMPLES: Readonly<Record<string, CageExample>> = {
         "wood-housed",
       ),
   },
+  "cage-45-palier-acier.blondel.json": {
+    features: ["anyAngle", "straightLanding", "chamfer"],
+    structure: "steel-flat",
+    build: () =>
+      // Limons acier en plat (sous-lot 6b) : jour en pan coupé de 250 mm (pas de poteau sur une
+      // cage saisie ; à 150 mm, les marches balancées du jour n'ont plus 50 mm d'appui), coupes
+      // d'équerre aux angles (F17), aboutage soudé des limons au milieu du palier droit.
+      cageExample(
+        "Tracé libre — limons acier en plat, jonction à 45° balancée et palier droit",
+        {
+          kind: "cage",
+          sections: [straight(1200), straight(500), straight(1300)],
+          junctions: [
+            {
+              angle: 45,
+              mode: "winders",
+              well: { kind: "chamfer", setbackIn: 250, setbackOut: 250 },
+            },
+            { angle: 0, mode: "landing", depth: 900 },
+          ],
+        },
+        "steel-flat",
+      ),
+  },
 };
 
 if (process.env["UPDATE_EXAMPLES"] === "1") {
@@ -176,5 +202,31 @@ describe("examples/cage-60-palier-limon : limons à la française sur une cage",
     expect(
       m.compliance.results.filter((r) => r.status === "violation").map((r) => r.ruleId),
     ).toEqual(["ECHAPPEE_RECO_PRIVATIF"]);
+  });
+});
+
+describe("examples/cage-45-palier-acier : limons acier en plat sur une cage", () => {
+  it("limons de jour et muraux, pan coupé, aboutages au milieu du palier, aucune violation", () => {
+    const p = parseProjectText(
+      readFileSync(join(EXAMPLES_DIR, "cage-45-palier-acier.blondel.json"), "utf8"),
+    );
+    const m = buildModel(p, { memo: false });
+    const stringers = m.parts.filter((x) => x.category === "stringer").map((x) => x.mark);
+    expect(stringers).toEqual(["LI1", "LE1", "LIC1", "LI2", "LE2", "LI3", "LE3"]);
+    expect(
+      m.compliance.results.filter((r) => r.status === "violation").map((r) => r.ruleId),
+    ).toEqual(["ECHAPPEE_RECO_PRIVATIF"]);
+    // Aboutage soudé bout à bout au milieu du palier droit : EXC2 (C §2.1).
+    expect(m.executionClass).toBe("EXC2");
+    // Platines de pied sous les limons de départ, de tête sur les limons d'arrivée.
+    const plates = m.parts.filter((x) => x.id.startsWith("plate-")).map((x) => x.id);
+    expect(plates).toEqual(
+      expect.arrayContaining([
+        "plate-foot-stringer-inner-1",
+        "plate-foot-stringer-outer-1",
+        "plate-head-stringer-inner-3",
+        "plate-head-stringer-outer-3",
+      ]),
+    );
   });
 });

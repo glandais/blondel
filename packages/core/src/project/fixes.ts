@@ -82,11 +82,16 @@ export interface FixSuggestion {
 
 /**
  * Erreurs d'une structure à poteau construite sur une cage saisie dont un jour vif n'est suivi
- * par aucun limon (limons à la française, sous-lot 6a) : en volées, ce jour peut recevoir un
- * poteau d'angle (correction `jour-newel`). Pas le jour en arc (`arcJourCage`) : en volées, il
- * reste refusé (`arcJourUnsupported`) et `jour-newel` ne vise que les jours vifs.
+ * par aucun limon (limons à la française, sous-lot 6a ; limons acier en plat et en profilés,
+ * sous-lot 6b) : en volées, ce jour peut recevoir un poteau d'angle (correction `jour-newel`).
+ * Pas le jour en arc (`arcJourCage`, `arcWellCage`) : en volées, il reste refusé
+ * (`arcJourUnsupported`, limon cintré des profilés non généré) et `jour-newel` ne vise que les
+ * jours vifs.
  */
-const CAGE_JOUR_ERRORS: ReadonlySet<string> = new Set(["structure.woodHoused.sharpJourCage"]);
+const CAGE_JOUR_ERRORS: ReadonlySet<string> = new Set([
+  "structure.woodHoused.sharpJourCage",
+  "structure.steel.error.sharpWellCage",
+]);
 
 /** Le tracé du projet corrigé par `patch` est-il constructible (`newel.ts`) ? */
 function layoutAccepts(project: Project, patch: DeepPartial<ProjectInput>): boolean {
