@@ -9,6 +9,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import type { Model } from "../model/derived.js";
 import type { StructureContext } from "../model/plugins.js";
 import type { Project } from "../model/project.js";
+import { convertToCage, setSectionLength } from "../layout/index.js";
 import { buildBasicParts } from "../parts/basic.js";
 import { parseProjectText } from "../project/parse.js";
 import { makeSteppingProject } from "../stepping/test-helpers.js";
@@ -186,6 +187,28 @@ describe("Model.autoValues — tracé et découpage", () => {
     expect(aq["stair.layout.legs.0.length"]).toBeUndefined();
     expect(aq["stair.stepping.targetGoing"]).toBeUndefined();
     expect(aq["stair.stepping.riserCount"]).toBe(15);
+  });
+
+  it("cage d'un tronçon `auto` : partie droite retenue, et l'imposer ne change rien", () => {
+    const flights = makeSteppingProject({ width: 900, legs: ["auto"] });
+    const converted = convertToCage(flights);
+    expect(converted.error).toBeUndefined();
+    const p = converted.project!;
+    expect(p.stair.layout.kind).toBe("cage");
+    const m = buildModel(p);
+    expect(m.errors).toEqual([]);
+    const a = m.autoValues!;
+    const key = "stair.layout.sections.0.axis.length";
+    expect(a[key]).toBeCloseTo(3780, 9);
+    expect(a["stair.stepping.targetGoing"]).toBeCloseTo(270, 9);
+    // Imposer la valeur retenue (« Imposer » de l'inspecteur) : même découpage, clé absente.
+    const imposed = setSectionLength(p, 0, a[key]!);
+    expect(imposed.error).toBeUndefined();
+    const mi = buildModel(imposed.project!);
+    expect(mi.errors).toEqual([]);
+    expect(mi.autoValues?.[key]).toBeUndefined();
+    expect(mi.stepping.riserCount).toBe(m.stepping.riserCount);
+    expect(mi.stepping.run).toBeCloseTo(m.stepping.run, 6);
   });
 
   it("identité stable pour un même résultat (mémoïsation)", () => {

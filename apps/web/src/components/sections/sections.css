@@ -103,3 +103,26 @@
 .site-section__traced .link {
   white-space: nowrap;
 }
+
+/* Inspecteur de l'éditeur de plan (`PlanInspector.tsx`, sous-lot 4d). */
+.plan-inspector {
+  display: grid;
+  gap: var(--gap, 8px);
+}
+
+.plan-inspector__group {
+  display: grid;
+  gap: var(--gap, 8px);
+  margin: 0;
+  padding: var(--space-2, 6px) var(--space-3, 10px);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.plan-inspector__actions {
+  flex-wrap: wrap;
+}
+
+.plan-inspector__remark {
+  margin: 0;
+}

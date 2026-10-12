@@ -21,11 +21,14 @@ import {
 } from "../model/project.js";
 import { createProject } from "../project/presets.js";
 import {
+  ARC_SEED_SWEEP_DEG,
+  axisSeed,
   convertToCage,
   dragJunctionAngle,
   dragSectionEnd,
   dragWellRadius,
   dragWidth,
+  editableCage,
   insertLanding,
   insertSection,
   junctionAngleAt,
@@ -33,6 +36,7 @@ import {
   removeSection,
   sectionEndLength,
   setJunctionAngle,
+  setJunctionDepth,
   setJunctionMode,
   setSectionAxis,
   setSectionLength,
@@ -270,6 +274,125 @@ describe("jonctions", () => {
     );
     expect(setJunctionMode(flat, 0, "winders").error?.key).toBe(
       "layout.cage.straightJunctionLanding",
+    );
+  });
+});
+
+describe("lecture et profondeur de palier (sous-lot 4d, inspecteur)", () => {
+  it("editableCage : cage du projet, équivalent d'un tracé à volées, null pour un hélicoïdal", () => {
+    const p = quarter();
+    expect(editableCage(p)).toStrictEqual(cage(ok(convertToCage(p))));
+    const c = ok(convertToCage(p));
+    expect(editableCage(c)).toBe(c.stair.layout);
+    expect(editableCage(createProject("helical"))).toBeNull();
+    // Tracé à volées non convertible (volée plus courte que ses carrés d'angle) : null, comme
+    // le refus des mutateurs.
+    const q = quarter();
+    const fl = flights(q);
+    const short: Project = {
+      ...q,
+      stair: { ...q.stair, layout: { ...fl, legs: [{ length: 600 }, ...fl.legs.slice(1)] } },
+    };
+    expect(convertToCage(short).error).toBeDefined();
+    expect(editableCage(short)).toBeNull();
+    expect(setSectionLength(short, 1, 2000).error?.key).toBe("layout.legTooShort");
+    // Escalier droit `auto` : tronçon unique `auto`.
+    const auto = ok(setSectionLength(createProject("straight"), 0, "auto"));
+    expect(editableCage(auto)?.sections.map((s) => s.axis)).toEqual([
+      { kind: "straight", length: "auto" },
+    ]);
+  });
+
+  it("setJunctionDepth : palier droit seulement, arrondi, retrait, refus", () => {
+    const flat = ok(setJunctionAngle(quarter(), 0, 0));
+    const d = ok(setJunctionDepth(flat, 0, 1000.4));
+    expect(cage(d).junctions[0]!.depth).toBe(1000);
+    expect(setJunctionDepth(d, 0, 1000).project).toBe(d);
+    const back = ok(setJunctionDepth(d, 0, null));
+    expect(cage(back).junctions[0]!.depth).toBeUndefined();
+    expect(back).toStrictEqual(flat);
+    expect(setJunctionDepth(flat, 0, null).project).toBe(flat);
+    expect(setJunctionDepth(flat, 0, 0).error?.key).toBe("layout.edit.invalidDepth");
+    expect(setJunctionDepth(flat, 0, Number.NaN).error?.key).toBe("layout.edit.invalidDepth");
+    // Borne du refus : profondeur arrondie au mm, nulle ou négative refusée.
+    for (const bad of [0.4, 0.49, -5, -0.4, Number.POSITIVE_INFINITY]) {
+      expect(setJunctionDepth(flat, 0, bad).error?.key, String(bad)).toBe(
+        "layout.edit.invalidDepth",
+      );
+    }
+    expect(cage(ok(setJunctionDepth(flat, 0, 0.5))).junctions[0]!.depth).toBe(1);
+    expect(setJunctionDepth(flat, 3, 900).error?.key).toBe("layout.edit.junctionIndex");
+    // Jonction tournante : refus du schéma.
+    expect(setJunctionDepth(quarter(), 0, 900).error?.key).toBe(
+      "layout.cage.depthStraightLandingOnly",
+    );
+    expectSchemaStable(d);
+  });
+
+  it("setJunctionDepth : propriété, toute profondeur positive gardée au mm, idempotente, au schéma", () => {
+    const flat = ok(setJunctionAngle(quarter(), 0, 0));
+    fc.assert(
+      fc.property(fc.double({ min: 1, max: 3000, noNaN: true }), (depth) => {
+        const r = ok(setJunctionDepth(flat, 0, depth));
+        expect(cage(r).junctions[0]!.depth).toBe(Math.round(depth));
+        expect(ok(setJunctionDepth(r, 0, depth))).toBe(r);
+        expectSchemaStable(r);
+      }),
+      { numRuns: 40 },
+    );
+  });
+});
+
+describe("axe en arc : graine et rayon du bord intérieur (sous-lot 4d)", () => {
+  it("axisSeed : arc accepté et calculé quel que soit l'ancrage ; droit : largeur d'arrivée", () => {
+    const base = ok(convertToCage(quarter()));
+    for (const anchor of ["left", "center", "right"] as const) {
+      const anchored = ok(
+        setSectionWidth(base, 1, { anchor: anchor === "center" ? null : anchor }),
+      );
+      const section = cage(anchored).sections[1]!;
+      const seed = axisSeed("arc", section);
+      expect(seed).toEqual({
+        kind: "arc",
+        radius: { left: 900, center: 1350, right: 1800 }[anchor],
+        sweep: ARC_SEED_SWEEP_DEG,
+      });
+      const r = ok(setSectionAxis(anchored, 1, seed));
+      expectSchemaStable(r);
+      expect(() => computeLayout(r), anchor).not.toThrow();
+    }
+    const s = cage(base).sections[0]!;
+    expect(axisSeed("straight", s)).toBe(s.axis);
+    expect(
+      axisSeed("straight", { axis: { kind: "arc", radius: 900, sweep: 90 }, width: 800 }),
+    ).toEqual({ kind: "straight", length: 800 });
+    expect(
+      axisSeed("straight", { axis: s.axis, width: 900, widthEnd: 700 }).kind === "straight",
+    ).toBe(true);
+  });
+
+  it("rayon trop petit pour l'ancrage : refus `layout.cage.arcRadiusTooSmall`, projet inchangé", () => {
+    const base = ok(convertToCage(quarter()));
+    const right = ok(setSectionWidth(base, 1, { anchor: "right" }));
+    // Arc à gauche ancré à droite : bord intérieur à 900 mm du bord d'ancrage.
+    const r = setSectionAxis(right, 1, { kind: "arc", radius: 900, sweep: 90 });
+    expect(r.error?.key).toBe("layout.cage.arcRadiusTooSmall");
+    expect(r.error?.params).toMatchObject({
+      section: 2,
+      radius: "900",
+      width: "900",
+      required: "900",
+    });
+    expect(setSectionAxis(right, 1, { kind: "arc", radius: 901, sweep: 90 }).error).toBeUndefined();
+    // Arc à droite ancré à droite : le bord d'ancrage est le bord intérieur.
+    expect(setSectionAxis(right, 1, { kind: "arc", radius: 10, sweep: -90 }).error).toBeUndefined();
+    // Ancrage changé sur un arc existant : même contrôle.
+    const arc = ok(setSectionAxis(base, 1, { kind: "arc", radius: 500, sweep: 90 }));
+    expect(setSectionWidth(arc, 1, { anchor: "right" }).error?.key).toBe(
+      "layout.cage.arcRadiusTooSmall",
+    );
+    expect(setSectionWidth(arc, 1, { width: 1000 }).error?.key).toBe(
+      "layout.cage.arcRadiusTooSmall",
     );
   });
 });

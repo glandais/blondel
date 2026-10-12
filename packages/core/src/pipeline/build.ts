@@ -79,6 +79,7 @@ import type { StructureContext, StructureKind } from "../model/plugins.js";
 import { isCageLayout, isHelicalLayout, type Project } from "../model/project.js";
 import type { PartAssembly } from "../model/plugins.js";
 import { resolveLegLengths, resolveTargetGoing } from "../layout/resolve.js";
+import { resolveStraightLengths } from "../layout/cage/section.js";
 import { buildBasicParts } from "../parts/basic.js";
 import { issuesFromZod, projectErrorMap, projectIssueMessage } from "../project/errors.js";
 import { checkSolids } from "../parts/solidChecks.js";
@@ -363,7 +364,8 @@ const STRUCTURE_PARAMS_PATH = "stair.structure.params.";
 /**
  * Valeurs retenues des paramètres numériques laissés en `auto` (`Model.autoValues`) : ceux du
  * plugin de structure (préfixés), longueur des volées d'un escalier droit
- * (`resolveLegLengths`), nombre de hauteurs (découpage) et giron cible quand il sert (longueur
+ * (`resolveLegLengths`) ou partie droite du tronçon unique `auto` d'une cage
+ * (`resolveStraightLengths`, clé `stair.layout.sections.<i>.axis.length`), nombre de hauteurs (découpage) et giron cible quand il sert (longueur
  * `auto`). `undefined` si aucune. Une résolution impossible est omise (l'erreur est déjà
  * rapportée par l'étape concernée).
  */
@@ -374,7 +376,23 @@ function computeAutoValues(
 ): Readonly<Record<string, number>> | undefined {
   const out: Record<string, number> = {};
   const { stair } = project;
-  if (!isHelicalLayout(stair.layout) && stair.layout.legs.some((l) => l.length === "auto")) {
+  if (isCageLayout(stair.layout)) {
+    const spec = stair.layout;
+    if (spec.sections.some((sec) => sec.axis.kind === "straight" && sec.axis.length === "auto")) {
+      try {
+        const lengths = resolveStraightLengths(project, spec);
+        spec.sections.forEach((sec, i) => {
+          const v = lengths[i];
+          if (sec.axis.kind === "straight" && sec.axis.length === "auto" && v !== undefined)
+            if (Number.isFinite(v)) out[`stair.layout.sections.${i}.axis.length`] = v;
+        });
+        if (stair.stepping.targetGoing === "auto" && stepping && stepping.riserCount > 0)
+          out["stair.stepping.targetGoing"] = resolveTargetGoing(project, stepping.riserCount);
+      } catch {
+        // Longueur impossible : erreur du tracé déjà rapportée.
+      }
+    }
+  } else if (!isHelicalLayout(stair.layout) && stair.layout.legs.some((l) => l.length === "auto")) {
     try {
       const lengths = resolveLegLengths(project);
       stair.layout.legs.forEach((leg, i) => {

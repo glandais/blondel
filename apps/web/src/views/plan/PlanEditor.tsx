@@ -32,6 +32,10 @@
  * dans une zone hors de l'escalier et du site pour sélectionner l'élément visé (règle
  * d'empilement : `ConflictLayer`), liste annoncée (`aria-live`) quand le modèle complet change,
  * jamais pendant un geste.
+ *
+ * Inspecteur (sous-lot 4d, `components/sections/PlanInspector.tsx`) : propriétés de la sélection
+ * dans le panneau, chaque champ par un mutateur pur du cœur ; Suppr sur un tronçon sélectionné le
+ * retire (`removeSection`, refus affiché) ; Suppr sur un mur ou un obstacle : lot 5.
  */
 import {
   buildSnapIndex,
@@ -61,10 +65,12 @@ import {
   type KeyboardEvent,
   type PointerEvent,
 } from "react";
+import { PlanInspector } from "../../components/sections/PlanInspector.js";
 import { UnderlayImport } from "../../components/UnderlayImport.js";
 import { formatNumber } from "../../i18n/locale.js";
 import { useT } from "../../i18n/useT.js";
 import { rotateStairBy } from "../../lib/planDrag.js";
+import { removeSectionInStore } from "../../lib/planInspector.js";
 import { ROTATE_KEY_STEP_DEG } from "../../lib/planErgonomics.js";
 import { appStore, useApp, useModel, useModelState } from "../../store/appStore.js";
 import {
@@ -515,6 +521,19 @@ export function PlanEditor({ model }: { model: Model }) {
       drag.setNotice(
         error ? { kind: "error", text: msg("ui.plan.editor.handle.refused", { error }) } : null,
       );
+    } else if (
+      e.key === "Delete" &&
+      tool === "select" &&
+      selection?.kind === "section" &&
+      !(e.target instanceof HTMLButtonElement || e.target instanceof HTMLTextAreaElement)
+    ) {
+      // Suppr sur un tronçon sélectionné : `removeSection` (refus affiché, projet inchangé). Sur
+      // un mur ou un obstacle : lot 5 (sans effet).
+      e.preventDefault();
+      if (drag.isActive()) return;
+      const o = removeSectionInStore(selection.index);
+      if (o.removed) clearPlanSelection();
+      setMessage(o.note);
     } else if ((e.key === "Enter" || e.key === " ") && tool === "select") {
       const under = selectionTarget(e.target);
       if (under) {
@@ -733,6 +752,13 @@ export function PlanEditor({ model }: { model: Model }) {
                 ? tr.t("ui.plan.editor.selection", { label: selectionLabel(selection, tr) })
                 : tr.t("ui.plan.editor.selection.none")}
             </p>
+          ) : null}
+          {tool === "select" ? (
+            <PlanInspector
+              key={selection ? planSelectionKey(selection) : "none"}
+              selection={selection}
+              onNote={setMessage}
+            />
           ) : null}
           <p
             className="visually-hidden"

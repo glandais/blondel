@@ -43,6 +43,9 @@ import {
 import { toCageLayout } from "../project/layoutConversion.js";
 import { issuesFromZod, projectIssueMessage } from "../project/errors.js";
 import { cageToFlights, flightsToCage } from "./cage/fromFlights.js";
+import { arcInnerReach } from "./cage/general.js";
+import { mmText } from "./cage/section.js";
+import { GEOM_EPS } from "../geom2d/tolerance.js";
 import { computeLayout } from "./layout.js";
 
 type Anchor = NonNullable<CageSection["anchor"]>;
@@ -137,6 +140,25 @@ function commitCage(
   // Bornes de la cage d'abord (messages `layout.cage.*`), même pour un tracé à volées.
   const checked = LayoutSpecSchema.safeParse(cage);
   if (!checked.success) return editError(schemaError(checked.error));
+  // Bord intérieur d'un tronçon en arc de rayon strictement positif (même contrôle que le moteur,
+  // `general.ts`) : refus sous le champ plutôt qu'un tracé en erreur.
+  const tight = sections.findIndex(
+    (s) =>
+      s.axis.kind === "arc" &&
+      !(s.axis.radius - arcInnerReach(s.anchor, s.width, s.axis.sweep) > GEOM_EPS),
+  );
+  if (tight >= 0) {
+    const s = sections[tight]!;
+    const axis = s.axis as Extract<CageAxis, { kind: "arc" }>;
+    return editError(
+      msg("layout.cage.arcRadiusTooSmall", {
+        section: tight + 1,
+        radius: String(axis.radius),
+        width: String(s.width),
+        required: mmText(arcInnerReach(s.anchor, s.width, axis.sweep)),
+      }),
+    );
+  }
   // Étendue non nulle de chaque tronçon droit (`checkSectionExtents`, `placeSections`) : une
   // partie droite nulle n'est admise qu'avec une jonction tournante d'entrée (carré d'angle) ou
   // une jonction de sortie.
@@ -218,6 +240,20 @@ function editJunction(
   );
 }
 
+// ------------------------------------------------------------------ Lecture
+
+/**
+ * Cage sur laquelle travaillent les mutateurs (sous-lot 4d, inspecteur du plan) : celle d'un
+ * tracé libre, ou celle qui équivaut à un tracé à volées (`flightsToCage`, convention F11) ;
+ * `null` pour un hélicoïdal ou un tracé à volées qui ne se convertit pas. Les indices des
+ * tronçons et des jonctions sont ceux qu'attendent les mutateurs : l'interface y lit les valeurs
+ * à afficher sans rien recalculer.
+ */
+export function editableCage(project: Project): CageLayoutSpec | null {
+  const from = editable(project);
+  return isError(from) ? null : from.cage;
+}
+
 // ------------------------------------------------------------------ Placement et conversion
 
 /**
@@ -272,6 +308,28 @@ export function setSectionAxis(project: Project, i: number, axis: CageAxis): Edi
     }
     return { ...s, axis: rounded };
   });
+}
+
+/** Balayage de départ d'un tronçon passé en arc (quart de tour à gauche, valeur de saisie). */
+export const ARC_SEED_SWEEP_DEG = 90;
+
+/**
+ * Axe de départ du type `kind` pour le tronçon `section` (sous-lot 4d, inspecteur : valeur de
+ * saisie à ajuster, pas une valeur métier) ; même objet si même type. Droit : partie droite égale
+ * à la largeur d'arrivée. En arc : balayage `ARC_SEED_SWEEP_DEG` et rayon (mesuré sur le bord
+ * d'ancrage, F11) tel que le bord intérieur garde un rayon égal à la largeur, quel que soit
+ * l'ancrage (gauche : largeur ; axe médian : 1,5 × largeur ; droite : 2 × largeur), donc
+ * toujours accepté par `setSectionAxis`.
+ */
+export function axisSeed(kind: CageAxis["kind"], section: CageSection): CageAxis {
+  if (kind === section.axis.kind) return section.axis;
+  if (kind === "straight") return { kind: "straight", length: section.widthEnd ?? section.width };
+  const sweep = ARC_SEED_SWEEP_DEG;
+  return {
+    kind: "arc",
+    radius: section.width + arcInnerReach(section.anchor, section.width, sweep),
+    sweep,
+  };
 }
 
 /**
@@ -434,6 +492,26 @@ export function setJunctionMode(
   mode: CageJunction["mode"],
 ): EditResult {
   return editJunction(project, j, (jn) => ({ ...jn, mode }));
+}
+
+/**
+ * Profondeur du palier droit de la jonction `j` (mm, arrondie ; `null` : retirée, profondeur par
+ * défaut = largeur du tronçon, F9). Refusée hors d'un palier droit (angle 0°,
+ * `layout.cage.depthStraightLandingOnly`, contrôle du schéma) ou si elle n'est pas positive.
+ */
+export function setJunctionDepth(project: Project, j: number, depth: number | null): EditResult {
+  if (depth !== null && !(Number.isFinite(depth) && roundMm(depth) > 0)) {
+    return editError(msg("layout.edit.invalidDepth", { junction: j + 1, depth: String(depth) }));
+  }
+  return editJunction(project, j, (jn) => {
+    if (depth === null) {
+      if (jn.depth === undefined) return jn;
+      const { depth: _d, ...rest } = jn;
+      return rest;
+    }
+    const d = roundMm(depth);
+    return d === jn.depth ? jn : { ...jn, depth: d };
+  });
 }
 
 /** Raccord côté jour de la jonction `j` (cotes arrondies au mm). */

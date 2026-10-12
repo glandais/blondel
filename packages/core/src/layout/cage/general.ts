@@ -228,6 +228,17 @@ function edgeOffset(anchor: Anchor, w: Mm, side: Side): Mm {
   return side === "left" ? left : left + w;
 }
 
+/**
+ * Distance (signée, positive vers l'intérieur) du bord d'ancrage d'un tronçon en arc de largeur
+ * `w` à son bord intérieur de courbure (à gauche si `sweepDeg` > 0, à droite sinon) : le bord
+ * intérieur a pour rayon `radius − arcInnerReach(…)`, qui doit rester strictement positif
+ * (`layout.cage.arcRadiusTooSmall`). Partagé avec les mutateurs (`cageEdit.ts`).
+ */
+export function arcInnerReach(anchor: Anchor | undefined, w: Mm, sweepDeg: number): Mm {
+  const sign = sweepDeg > 0 ? 1 : -1;
+  return -sign * edgeOffset(anchor ?? "center", w, sign > 0 ? "left" : "right");
+}
+
 /** Extrémité `side` de la ligne de départ (`end` = 0) ou d'arrivée (`end` = 1). */
 function crossPoint(sec: PlacedSection, end: 0 | 1, side: Side): Vec2 {
   return end === 0
@@ -345,7 +356,7 @@ function placeSections(spec: CageLayoutSpec, lengths: readonly Mm[]): PlacedSect
       const sign: 1 | -1 = sweep > 0 ? 1 : -1;
       const radius = s.axis.radius;
       // Bord intérieur de la courbure : à gauche si l'arc tourne à gauche.
-      const reach = sign * edgeOffset(anchor, w0, sign > 0 ? "left" : "right");
+      const reach = -arcInnerReach(anchor, w0, deg);
       if (!(radius + reach > GEOM_EPS)) {
         throw new LayoutError(
           msg("layout.cage.arcRadiusTooSmall", {

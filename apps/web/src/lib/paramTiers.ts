@@ -148,6 +148,7 @@ const TIERS: Readonly<Record<string, ParamTierEntry>> = {
   "stair.layout.legs.*.length": design("layout", [more(2)]),
   "ui:layout.realign": design("layout", [more(2)]),
   "ui:layout.addRemoveLeg": design("layout"),
+  "ui:layout.convertToCage": design("layout"),
   "ui:layout.turnSequence": design("layout"),
   "stair.walkline.mode": design("layout"),
   "stair.walkline.distance": design("layout"),

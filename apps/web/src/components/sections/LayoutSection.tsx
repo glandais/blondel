@@ -8,7 +8,9 @@
  * Tracé libre (cage, ADR-0010, sous-lot 4a) : ni volées ni tournants (`legs` et `turns` dérivés
  * sont vides) ; la section en montre un résumé en lecture seule (tronçons et jonctions, lus dans
  * le projet) et, si le cœur la propose, la correction « Reconvertir en volées » ; l'édition fine
- * des tronçons et des jonctions viendra dans l'éditeur de plan (sous-lot 4d).
+ * des tronçons et des jonctions se fait dans l'inspecteur de l'éditeur de plan (sous-lot 4d).
+ * Tracé à volées : formulaires des volées, et action « Convertir en tracé libre »
+ * (`ConvertToCageButton`, mutateur `convertToCage`, annulable).
  */
 import {
   DEFAULT_NEWEL_SIZE,
@@ -54,6 +56,7 @@ import type { Path } from "../../store/setIn.js";
 import { AutoIntField, IntField, SelectField } from "../fields.js";
 import { ShapeCards } from "../guided/ShapeCards.js";
 import { useHelicalItems } from "../HelicalEditor.js";
+import { ConvertToCageButton } from "./PlanInspector.js";
 import { Tiered, type SectionProps, type TieredGroup, type TieredItem } from "./Tiered.js";
 
 const set = (path: Path) => (value: unknown) => appStore.getState().setField(path, value);
@@ -286,7 +289,7 @@ function CageSummary({ layout }: { layout: CageLayoutSpec }) {
           <li key={i}>{t.t(line)}</li>
         ))}
       </ul>
-      <p className="muted">{t.t("ui.params.cage.hint")}</p>
+      <p className="muted">{t.t("ui.params.cage.editHint")}</p>
       {fix !== null ? (
         <div className="button-row">
           <button type="button" onClick={() => applyFixInStore(fix)}>
@@ -433,6 +436,10 @@ export function LayoutSection({ display }: SectionProps) {
             </button>
           </div>
         ),
+      },
+      {
+        key: "ui:layout.convertToCage",
+        node: <ConvertToCageButton />,
       },
     ];
   };

@@ -4,11 +4,14 @@
 export { computeLayout, type LayoutOptions } from "./layout.js";
 export { LayoutError } from "./errors.js";
 export {
+  ARC_SEED_SWEEP_DEG,
+  axisSeed,
   convertToCage,
   dragJunctionAngle,
   dragSectionEnd,
   dragWellRadius,
   dragWidth,
+  editableCage,
   insertLanding,
   insertSection,
   junctionAngleAt,
@@ -16,6 +19,7 @@ export {
   removeSection,
   sectionEndLength,
   setJunctionAngle,
+  setJunctionDepth,
   setJunctionMode,
   setSectionAxis,
   setSectionLength,

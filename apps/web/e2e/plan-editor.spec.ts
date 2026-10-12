@@ -18,11 +18,22 @@
  * vers le mur : le conflit apparaît pendant le geste (aperçu du worker, aucun modèle complet),
  * un seul modèle complet au relâchement, annonce de la liste, Ctrl+Z le fait disparaître ;
  * exemple lourd (j3a) : aperçus pendant le glisser, un modèle au relâchement, budget respecté.
+ *
+ * Inspecteur (sous-lot 4d) : angle d'une jonction réglé à 60° au clavier (refus hors domaine
+ * affiché sous le champ), raccord du jour, origine de l'escalier ; insérer un palier, couper un
+ * tronçon (refus puis coupe), Suppr et « Supprimer le tronçon » retirent un tronçon, Suppr sur le
+ * dernier tronçon refusé (sélection gardée) ; escalier à volées converti en tracé libre
+ * (inspecteur, puis section Tracé, remarque par la notification), partie droite d'un tronçon
+ * unique rendue à « auto » puis imposée à la valeur retenue, passage automatique annoncé,
+ * annulations ; limons à la
+ * française sur une cage : `structure.cageUnsupported` lisible et « Reconvertir en volées »
+ * proposé, puis structure « aucune » : plus d'erreur ; budget des tâches longues respecté.
  */
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import {
+  chooseStructure,
   describeTasks,
   instrument,
   openApp,
@@ -747,4 +758,267 @@ test(`glisser d'une longueur, cage-60 et j3a : aperçus pendant le geste, un mod
     const over = overBudget(tasks);
     expect(over, `${name}\n${describeTasks(over, tasks)}`).toEqual([]);
   }
+});
+
+// ------------------------------------------------------------- Inspecteur du plan (sous-lot 4d)
+
+/** Inspecteur de la sélection (panneau de l'éditeur de plan). */
+const inspector = (page: Page): Locator =>
+  page.getByRole("region", { name: "Propriétés de la sélection", exact: true });
+
+test("inspecteur : angle de jonction à 60°, refus sous le champ, origine de l'escalier, une validation = une annulation", async ({
+  page,
+}) => {
+  const plan = await openSitePlan(page, CAGE_TRAPEZE, "cage-trapeze.blondel.json");
+  const undo = page.getByRole("button", { name: "Annuler (Ctrl+Z)", exact: true });
+  await plan.getByRole("button", { name: "Jonction 1", exact: true }).click();
+  const panel = inspector(page);
+  await expect(panel.getByRole("group", { name: "Jonction 1", exact: true })).toBeVisible();
+  const angleField = panel.getByLabel("Angle de la jonction", { exact: true });
+  await expect(angleField).toHaveValue("90");
+  const angle = plan.getByRole("slider", { name: "Angle de la jonction 1", exact: true });
+
+  // Hors domaine : refus affiché sous le champ, projet inchangé.
+  await angleField.fill("200");
+  await angleField.press("Enter");
+  await expect(panel.getByRole("alert")).toContainText("hors domaine");
+  await expect(angleField).toHaveAttribute("aria-invalid", "true");
+  await expect(angle).toHaveAttribute("aria-valuenow", "90");
+
+  // 60° au clavier : une entrée d'historique, la poignée suit.
+  await angleField.fill("60");
+  await angleField.press("Enter");
+  await settle(page);
+  await expect(angle).toHaveAttribute("aria-valuenow", "60");
+  await expect(angleField).toHaveValue("60");
+  await expect(panel.getByRole("alert")).toHaveCount(0);
+
+  // Raccord du jour en arc : rayon repris d'une valeur de départ, réglable.
+  await panel.getByLabel("Raccord côté jour", { exact: true }).selectOption("arc");
+  await settle(page);
+  const radius = panel.getByLabel("Rayon du raccord côté jour", { exact: true });
+  await expect(radius).toBeVisible();
+  await undo.click();
+  await settle(page);
+  await expect(radius).toHaveCount(0);
+
+  // Escalier : origine saisie au clavier, la poignée de déplacement suit.
+  const stairEdge = await hitPoint(plan, '[data-plan-select="stair"]', "edge");
+  await page.mouse.click(stairEdge!.x, stairEdge!.y);
+  await expect(page.getByTestId("plan-selection")).toHaveText("Sélection : Escalier");
+  const x = panel.getByLabel("Origine de l'escalier : X", { exact: true });
+  await x.fill("250");
+  await x.press("Enter");
+  await settle(page);
+  await expect(
+    plan.getByRole("slider", { name: "Déplacer l'escalier", exact: true }),
+  ).toHaveAttribute("aria-valuetext", /^x 250 mm/);
+  // Tracé libre : pas de conversion proposée.
+  await expect(panel.getByRole("button", { name: "Convertir en tracé libre" })).toHaveCount(0);
+
+  // Deux validations, deux annulations : retour à 90°, puis à l'import seul.
+  await undo.click();
+  await undo.click();
+  await settle(page);
+  await plan.getByRole("button", { name: "Jonction 1", exact: true }).click();
+  await expect(panel.getByLabel("Angle de la jonction", { exact: true })).toHaveValue("90");
+  await undo.click();
+  await expect(undo).toBeDisabled();
+
+  await settle(page);
+  const tasks = await takeLongTasks(page);
+  const over = overBudget(tasks);
+  expect(over, describeTasks(over, tasks)).toEqual([]);
+});
+
+test("inspecteur : insérer un palier, couper un tronçon (refus puis coupe), Suppr retire un tronçon", async ({
+  page,
+}) => {
+  const plan = await openSitePlan(page, CAGE_60, "cage-60.blondel.json");
+  const undo = page.getByRole("button", { name: "Annuler (Ctrl+Z)", exact: true });
+  const panel = inspector(page);
+  const sectionBtn = (n: number) => plan.getByRole("button", { name: `Tronçon ${n}`, exact: true });
+  await expect(sectionBtn(3)).toHaveCount(0);
+
+  // Tronçon 2 : palier droit inséré au milieu (montée allongée) → trois tronçons.
+  await sectionBtn(2).click();
+  const actions = panel.getByRole("group", { name: "Actions sur le tronçon 2", exact: true });
+  await actions.getByRole("button", { name: "Insérer un palier", exact: true }).click();
+  await settle(page);
+  await expect(sectionBtn(3)).toHaveCount(1);
+  await expect(plan.getByRole("button", { name: "Jonction 2", exact: true })).toHaveCount(1);
+
+  // Couper le tronçon 2 (825 mm) par un palier de 900 mm : refusé, motif affiché, rien ne change.
+  await actions.getByRole("button", { name: "Couper le tronçon", exact: true }).click();
+  await expect(panel.getByRole("alert")).toContainText("Modification refusée");
+  await expect(sectionBtn(4)).toHaveCount(0);
+
+  // Couper le tronçon 1 (1 650 mm) : palier pris sur la partie droite → quatre tronçons.
+  await sectionBtn(1).click();
+  await panel
+    .getByRole("group", { name: "Actions sur le tronçon 1", exact: true })
+    .getByRole("button", { name: "Couper le tronçon", exact: true })
+    .click();
+  await settle(page);
+  await expect(sectionBtn(4)).toHaveCount(1);
+
+  // Suppr sur le tronçon 4 sélectionné (au plan) : retiré, sélection effacée.
+  await sectionBtn(4).click();
+  await expect(page.getByTestId("plan-selection")).toHaveText("Sélection : Tronçon 4");
+  await page.keyboard.press("Delete");
+  await settle(page);
+  await expect(sectionBtn(4)).toHaveCount(0);
+  await expect(page.getByTestId("plan-selection")).toHaveText(/Aucune sélection/);
+
+  // Bouton « Supprimer le tronçon » de l'inspecteur : même chemin que Suppr.
+  await sectionBtn(3).click();
+  await panel
+    .getByRole("group", { name: "Actions sur le tronçon 3", exact: true })
+    .getByRole("button", { name: "Supprimer le tronçon", exact: true })
+    .click();
+  await settle(page);
+  await expect(sectionBtn(3)).toHaveCount(0);
+  await expect(page.getByTestId("plan-selection")).toHaveText(/Aucune sélection/);
+  await sectionBtn(2).click();
+  await page.keyboard.press("Delete");
+  await settle(page);
+  await expect(sectionBtn(2)).toHaveCount(0);
+
+  // Suppr sur le dernier tronçon : refusé, motif affiché, sélection et tracé gardés.
+  await sectionBtn(1).click();
+  await page.keyboard.press("Delete");
+  await expect(
+    page
+      .getByRole("complementary", { name: "Import et saisie du site", exact: true })
+      .getByRole("alert"),
+  ).toContainText("Modification refusée");
+  await expect(page.getByTestId("plan-selection")).toHaveText("Sélection : Tronçon 1");
+  await expect(sectionBtn(1)).toHaveCount(1);
+
+  // Cinq modifications, cinq annulations, puis l'import.
+  for (const n of [2, 3, 4, 3, 2]) {
+    await undo.click();
+    await settle(page);
+    await expect(sectionBtn(n)).toHaveCount(1);
+    await expect(sectionBtn(n + 1)).toHaveCount(0);
+  }
+  await undo.click();
+  await expect(undo).toBeDisabled();
+
+  await settle(page);
+  const tasks = await takeLongTasks(page);
+  const over = overBudget(tasks);
+  expect(over, describeTasks(over, tasks)).toEqual([]);
+});
+
+test("convertir un escalier à volées en tracé libre, annuler ; limons à la française sur une cage : erreur lisible, puis « aucune »", async ({
+  page,
+}) => {
+  await openApp(page);
+  await openTab(page, "Plan");
+  await page.getByRole("button", { name: "Site et saisie", exact: true }).click();
+  await settle(page);
+  await takeLongTasks(page);
+  const plan = page.getByRole("group", {
+    name: "Plan du site : calque de fond, murs, trémie et escalier",
+  });
+  const undo = page.getByRole("button", { name: "Annuler (Ctrl+Z)", exact: true });
+  const panel = inspector(page);
+
+  // Escalier droit (volées) sélectionné : « Convertir en tracé libre », annulable.
+  const stairEdge = await hitPoint(plan, '[data-plan-select="stair"]', "edge");
+  await page.mouse.click(stairEdge!.x, stairEdge!.y);
+  await expect(page.getByTestId("plan-selection")).toHaveText("Sélection : Escalier");
+  await panel.getByRole("button", { name: "Convertir en tracé libre", exact: true }).click();
+  await expect(panel.getByTestId("plan-inspector-remark")).toHaveText(
+    "Tracé converti en tracé libre (annulable).",
+  );
+  await expect(panel.getByRole("button", { name: "Convertir en tracé libre" })).toHaveCount(0);
+
+  // Tronçon unique « auto » : la partie droite retenue par le calcul est affichée, « Imposer »
+  // fixe cette valeur (et non une valeur de départ).
+  await plan.getByRole("button", { name: "Tronçon 1", exact: true }).focus();
+  await page.keyboard.press("Enter");
+  await expect(page.getByTestId("plan-selection")).toHaveText("Sélection : Tronçon 1");
+  await panel.getByRole("button", { name: "Partie droite : automatique", exact: true }).click();
+  await settle(page);
+  const computedLength = panel.getByRole("button", { name: /^Partie droite : imposer \d/ });
+  await expect(computedLength).toBeVisible();
+  const retained = ((await computedLength.textContent()) ?? "").replace(/\D/g, "");
+  expect(Number(retained)).toBeGreaterThan(1000);
+  await panel.getByRole("button", { name: "Imposer", exact: true }).click();
+  await settle(page);
+  await expect(panel.getByRole("textbox", { name: "Partie droite", exact: true })).toHaveValue(
+    retained,
+  );
+  await undo.click();
+  await settle(page);
+  await expect(computedLength).toBeVisible();
+  await undo.click();
+  await settle(page);
+
+  const layout = await openSection(page, "Tracé");
+  const kind = layout.getByLabel("Type de tracé", { exact: true });
+  await expect(kind).toHaveValue("cage");
+  await undo.click();
+  await settle(page);
+  await expect(kind).toHaveValue("flights");
+
+  // Modification qui ne s'écrit plus en volées (largeur d'arrivée différente) : passage en tracé
+  // libre annoncé, annulable.
+  await openTab(page, "Plan");
+  // Au clavier (la poignée de déplacement de l'escalier sélectionné couvre le milieu du tronçon).
+  await plan.getByRole("button", { name: "Tronçon 1", exact: true }).focus();
+  await page.keyboard.press("Enter");
+  await expect(page.getByTestId("plan-selection")).toHaveText("Sélection : Tronçon 1");
+  const widthEnd = panel.getByLabel("Largeur à l'arrivée", { exact: true });
+  await widthEnd.fill("1000");
+  await widthEnd.press("Enter");
+  await expect(panel.getByTestId("plan-inspector-remark")).toHaveText(
+    /^Le tracé est passé en tracé libre/,
+  );
+  await settle(page);
+  await expect(kind).toHaveValue("cage");
+  await undo.click();
+  await settle(page);
+  await expect(kind).toHaveValue("flights");
+
+  // Section Tracé : même action ; la section passe au résumé du tracé libre.
+  await layout.getByRole("button", { name: "Convertir en tracé libre", exact: true }).click();
+  await settle(page);
+  await expect(kind).toHaveValue("cage");
+  // Le bouton disparaît avec la conversion : la remarque passe par la notification du store.
+  await expect(
+    page.getByRole("status").filter({ hasText: "Tracé converti en tracé libre (annulable)." }),
+  ).toBeVisible();
+  await expect(
+    layout.getByRole("list", { name: "Tronçons et jonctions du tracé libre" }),
+  ).toBeVisible();
+
+  // Limons à la française sur la cage : structure non générée, erreur lisible.
+  const errors = page.locator(".figure-line__errors");
+  await chooseStructure(page, "wood-housed");
+  await expect(errors).toHaveAttribute("title", /pas encore disponible pour ce tracé libre/);
+
+  // Inspecteur de l'escalier : correction « Reconvertir en volées » proposée.
+  // La sélection du plan (tronçon 1) survit au changement d'onglet, de tracé et de structure.
+  await openTab(page, "Plan");
+  await expect(page.getByTestId("plan-selection")).toHaveText("Sélection : Tronçon 1");
+  const edge = await hitPoint(plan, '[data-plan-select="stair"]', "edge");
+  await page.mouse.click(edge!.x, edge!.y);
+  await expect(page.getByTestId("plan-selection")).toHaveText("Sélection : Escalier");
+  await expect(
+    panel.getByRole("button", { name: /^Reconvertir le tracé libre en volées/ }),
+  ).toBeVisible();
+
+  // Structure « aucune » : plus d'erreur, plus de correction.
+  await chooseStructure(page, "none");
+  await expect(errors).toHaveCount(0);
+  await openTab(page, "Plan");
+  await expect(panel.getByRole("button", { name: /^Reconvertir le tracé libre/ })).toHaveCount(0);
+
+  await settle(page);
+  const tasks = await takeLongTasks(page);
+  const over = overBudget(tasks);
+  expect(over, describeTasks(over, tasks)).toEqual([]);
 });
