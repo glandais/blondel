@@ -228,6 +228,77 @@ export function splitWall(project: Project, id: string, point: Vec2): EditResult
   return r.error ? r : { project: r.project, id: newId };
 }
 
+/** Retire le mur `id` (contrat `EditResult` de `withoutWall` : mur inconnu refusé). */
+export function removeWall(project: Project, id: string): EditResult {
+  if (!findWall(project, id)) return unknownWall(id);
+  return withSite(project, {
+    ...project.site,
+    walls: project.site.walls.filter((w) => w.id !== id),
+  });
+}
+
+/** Nu d'un mur : côté gauche ou droit de son axe parcouru de `a` vers `b`. */
+export type WallSide = "left" | "right";
+
+/** Normale unitaire du nu `side` (vers l'extérieur du mur) ; `null` pour un axe dégénéré. */
+function faceNormal(wall: Wall, side: WallSide): Vec2 | null {
+  const u = V.sub(wall.b, wall.a);
+  const L = V.norm(u);
+  if (!(L > 0)) return null;
+  const left = V.perpLeft(V.scale(u, 1 / L));
+  return side === "left" ? left : V.scale(left, -1);
+}
+
+/**
+ * Épaisseur du mur `id` (mm, arrondie ; strictement positive) en **conservant le nu `keep`** :
+ * l'axe se décale d'une demi-variation vers le nu opposé. Ce décalage est arrondi au mm comme
+ * une translation (`translateWall`) : l'axe reste en mm entiers (ADR-0003, plan F §D), le nu
+ * conservé peut donc bouger d'au plus √2/2 mm (0,5 mm sur un mur parallèle à un axe).
+ */
+export function setWallThicknessKeepingFace(
+  project: Project,
+  id: string,
+  thickness: Mm,
+  keep: WallSide,
+): EditResult {
+  const wall = findWall(project, id);
+  if (!wall) return unknownWall(id);
+  const t = roundMm(thickness);
+  if (!(t > 0)) return editError(msg("site.wall.invalidThickness"));
+  if (t === wall.thickness) return { project };
+  const n = faceNormal(wall, keep === "left" ? "right" : "left");
+  if (!n) return editError(msg("site.wall.zeroLength"));
+  const d = roundPoint(V.scale(n, (t - wall.thickness) / 2));
+  return replaceWall(project, {
+    ...wall,
+    a: translated(wall.a, d),
+    b: translated(wall.b, d),
+    thickness: t,
+  });
+}
+
+/**
+ * Glisser du nu `side` du mur `id` jusqu'à `point` (poignée d'épaisseur) : nouvelle épaisseur =
+ * distance de `point` au nu opposé, mesurée selon la normale (arrondie au mm), nu opposé
+ * conservé (`setWallThicknessKeepingFace`, à l'arrondi de l'axe au mm près). Refusé si le point
+ * passe au-delà du nu opposé.
+ */
+export function dragWallFace(
+  project: Project,
+  id: string,
+  side: WallSide,
+  point: Vec2,
+): EditResult {
+  const wall = findWall(project, id);
+  if (!wall) return unknownWall(id);
+  const n = faceNormal(wall, side);
+  if (!n) return editError(msg("site.wall.zeroLength"));
+  // Nu opposé : axe décalé d'une demi-épaisseur à l'opposé de `n`.
+  const opposite = V.addScaled(wall.a, n, -wall.thickness / 2);
+  const thickness = V.dot(V.sub(point, opposite), n);
+  return setWallThicknessKeepingFace(project, id, thickness, side === "left" ? "right" : "left");
+}
+
 // --- Trémie
 
 /** Sommets d'une trémie, dans l'ordre enregistré (rectangle : coin min puis sens trigonométrique). */
@@ -304,6 +375,91 @@ export function translateOpening(project: Project, delta: Vec2): EditResult {
             : {}),
         };
   return withSite(project, { ...project.site, opening: moved });
+}
+
+/**
+ * Côté de la trémie le plus proche de `point` (indice `i` : du sommet `i` au suivant, ordre de
+ * `openingVertices`) ; `null` sans trémie. Double-clic sur un côté : insertion d'un sommet.
+ */
+export function openingEdgeNear(project: Project, point: Vec2): number | null {
+  const opening = project.site.opening;
+  if (!opening) return null;
+  const pts = openingVertices(opening);
+  let best: number | null = null;
+  let bestD = Infinity;
+  pts.forEach((a, i) => {
+    const b = pts[(i + 1) % pts.length]!;
+    const d = V.distance(point, closestOnSegment(a, b, point));
+    if (d < bestD) {
+      bestD = d;
+      best = i;
+    }
+  });
+  return best;
+}
+
+function closestOnSegment(a: Vec2, b: Vec2, p: Vec2): Vec2 {
+  const u = V.sub(b, a);
+  const L2 = V.normSq(u);
+  const t = L2 > 0 ? Math.min(1, Math.max(0, V.dot(V.sub(p, a), u) / L2)) : 0;
+  return V.addScaled(a, u, t);
+}
+
+/** Trémie polygonale canonique aux sommets `points`, ou refus (contour invalide). */
+function withOpeningPoints(
+  project: Project,
+  points: readonly Vec2[],
+  at: Vec2,
+  fallback: number,
+): EditResult<{ index: number }> {
+  const defect = openingDefectMessage(points);
+  if (defect) return editError(defect);
+  const next = polygonOpening(points);
+  const found = next.points.findIndex((q) => q.x === at.x && q.y === at.y);
+  const r = withSite(project, { ...project.site, opening: next });
+  return r.error ? r : { project: r.project, index: found >= 0 ? found : fallback };
+}
+
+/**
+ * Insère un sommet sur le côté `edge` de la trémie (du sommet `edge` au suivant, ordre de
+ * `openingVertices`) : au projeté de `point` sur ce côté (arrondi au mm), ou en son milieu sans
+ * `point`. Il devient le sommet `edge + 1` (`index` du résultat : son indice dans la trémie
+ * obtenue, forme canonique). Une trémie rectangulaire devient polygonale ; refusé si le sommet
+ * se confond avec une extrémité du côté.
+ */
+export function insertOpeningVertex(
+  project: Project,
+  edge: number,
+  point?: Vec2,
+): EditResult<{ index: number }> {
+  const opening = project.site.opening;
+  if (!opening) return editError(msg("site.edit.noOpening"));
+  const points = openingVertices(opening);
+  if (!(Number.isInteger(edge) && edge >= 0 && edge < points.length)) {
+    return vertexIndexError(edge, points.length);
+  }
+  const a = points[edge]!;
+  const b = points[(edge + 1) % points.length]!;
+  const p = roundPoint(point ? closestOnSegment(a, b, point) : V.lerp(a, b, 0.5));
+  points.splice(edge + 1, 0, p);
+  return withOpeningPoints(project, points, p, edge + 1);
+}
+
+/**
+ * Retire le sommet `index` de la trémie (ordre de `openingVertices`) ; refusé sous 3 sommets
+ * ou si le contour devient invalide. Une trémie rectangulaire devient un triangle polygonal.
+ */
+export function removeOpeningVertex(project: Project, index: number): EditResult {
+  const opening = project.site.opening;
+  if (!opening) return editError(msg("site.edit.noOpening"));
+  const points = openingVertices(opening);
+  if (!(Number.isInteger(index) && index >= 0 && index < points.length)) {
+    return vertexIndexError(index, points.length);
+  }
+  points.splice(index, 1);
+  const defect = openingDefectMessage(points);
+  if (defect) return editError(defect);
+  return withSite(project, { ...project.site, opening: polygonOpening(points) });
 }
 
 // --- Contour de pièce

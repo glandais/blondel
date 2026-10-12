@@ -4,7 +4,13 @@ import { segClosestPoint } from "../geom2d/segment.js";
 import * as V from "../geom2d/vec.js";
 import type { CurveSeg } from "../model/primitives.js";
 import type { DxfUnderlay } from "./schema.js";
-import { buildSnapIndex, segmentIntersections, segmentSnapPoints, snapPoint } from "./snap.js";
+import {
+  buildSnapIndex,
+  segmentIntersections,
+  segmentSnapPoints,
+  snapPoint,
+  snapRightAngle,
+} from "./snap.js";
 import { underlaySegments } from "./underlay.js";
 
 /** Calque : deux murs en croix, un rectangle (polyligne fermée), un arc et un poteau rond. */
@@ -164,6 +170,59 @@ describe("accroches — propriétés", () => {
         const coarse = snapPoint(buildSnapIndex(segs, [], 1e9), p, 300);
         expect(fine?.distance ?? null).toBe(coarse?.distance ?? null);
       }),
+    );
+  });
+});
+
+describe("snapRightAngle — équerre depuis l'extrémité fixe (sous-lot 5a)", () => {
+  const axes = [{ x: 1, y: 0 }];
+  it("ramène sur l'horizontale ou la verticale, rien au-delà du rayon", () => {
+    expect(snapRightAngle({ x: 0, y: 0 }, { x: 1000, y: 8 }, axes, 10)).toMatchObject({
+      point: { x: 1000, y: 0 },
+    });
+    const v = snapRightAngle({ x: 0, y: 0 }, { x: -6, y: 1000 }, axes, 10)!;
+    expect(v.point.x).toBeCloseTo(0, 9);
+    expect(v.point.y).toBeCloseTo(1000, 9);
+    expect(snapRightAngle({ x: 0, y: 0 }, { x: 1000, y: 30 }, axes, 10)).toBeNull();
+    expect(snapRightAngle({ x: 5, y: 5 }, { x: 5, y: 5 }, axes, 10)).toBeNull();
+  });
+
+  it("perpendiculaire à un mur oblique", () => {
+    const d = { x: 1, y: 1 };
+    const hit = snapRightAngle({ x: 0, y: 0 }, { x: -1000, y: 1010 }, [d], 20)!;
+    expect(hit.point.x + hit.point.y).toBeCloseTo(0, 9);
+  });
+
+  it("propriété : droite la plus proche parmi les directions et leurs perpendiculaires", () => {
+    fc.assert(
+      fc.property(
+        fc.double({ min: -5000, max: 5000, noNaN: true }),
+        fc.double({ min: -5000, max: 5000, noNaN: true }),
+        fc.array(fc.double({ min: 0, max: 2 * Math.PI, noNaN: true }), {
+          minLength: 2,
+          maxLength: 3,
+        }),
+        (x, y, angles) => {
+          const p = { x, y };
+          const dirs = angles.map((a) => ({ x: Math.cos(a), y: Math.sin(a) }));
+          const hit = snapRightAngle({ x: 0, y: 0 }, p, dirs, 50);
+          // Distance de `p` à chaque droite candidate (issue de l'origine).
+          const lines = dirs.flatMap((d) => [d, V.perpLeft(d)]);
+          const dists = lines.map((d) => Math.abs(V.cross(d, p)));
+          const nearest = Math.min(...dists);
+          if (!hit) {
+            if (V.norm(p) > 0) expect(nearest).toBeGreaterThan(50 - 1e-9);
+            return;
+          }
+          expect(hit.distance).toBeLessThanOrEqual(50 + 1e-9);
+          expect(hit.distance).toBeLessThanOrEqual(nearest + 1e-9);
+          expect(V.distance(hit.point, p)).toBeCloseTo(hit.distance, 9);
+          // Point accroché sur la droite de la direction retenue.
+          expect(Math.abs(V.cross(hit.direction, hit.point))).toBeLessThan(
+            1e-6 * Math.max(1, V.norm(hit.point)),
+          );
+        },
+      ),
     );
   });
 });

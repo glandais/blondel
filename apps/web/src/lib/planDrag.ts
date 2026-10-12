@@ -22,6 +22,19 @@
  */
 import {
   dragJunctionAngle,
+  dragWallFace,
+  moveOpeningVertex,
+  moveWallEnd,
+  openingVertices,
+  setWallThicknessKeepingFace,
+  siteSnapContext,
+  snapPoint,
+  snapTranslation,
+  snapWallEnd,
+  translateOpening,
+  translateWall,
+  type SiteSnapContext,
+  type SnapKind,
   dragSectionEnd,
   dragWellRadius,
   dragWidth,
@@ -43,6 +56,7 @@ import {
   type CageLayoutSpec,
   type EditResult,
   type Model,
+  type Opening,
   type PlacementSnapTarget,
   type Project,
   type StairPlacement,
@@ -57,7 +71,9 @@ import {
   KEY_STEP_DEG_LARGE,
   KEY_STEP_MM,
   KEY_STEP_MM_LARGE,
+  OPENING_VERTEX_EDIT_MAX,
 } from "./planErgonomics.js";
+import type { PlanSelection } from "../store/planEditor.js";
 
 /** Poignée de l'éditeur de plan. Indices à partir de 0. */
 export type PlanHandle =
@@ -71,7 +87,64 @@ export type PlanHandle =
       readonly edge: "left" | "right";
     }
   | { readonly kind: "junctionAngle"; readonly junction: number }
-  | { readonly kind: "wellRadius"; readonly junction: number };
+  | { readonly kind: "wellRadius"; readonly junction: number }
+  | SiteHandle;
+
+/**
+ * Poignées du site (sous-lot 5a) : extrémité d'un mur (`moveWallEnd`), mur entier
+ * (`translateWall`), nu d'un mur (épaisseur, nu opposé conservé : `dragWallFace`), trémie entière
+ * (`translateOpening`), sommet de la trémie (`moveOpeningVertex`, ordre de `openingVertices`).
+ */
+export type SiteHandle =
+  | { readonly kind: "wallEnd"; readonly id: string; readonly end: "a" | "b" }
+  | { readonly kind: "wallMove"; readonly id: string }
+  | { readonly kind: "wallFace"; readonly id: string; readonly side: "left" | "right" }
+  | { readonly kind: "openingMove" }
+  | { readonly kind: "openingVertex"; readonly index: number };
+
+const SITE_HANDLE_KINDS: ReadonlySet<PlanHandle["kind"]> = new Set([
+  "wallEnd",
+  "wallMove",
+  "wallFace",
+  "openingMove",
+  "openingVertex",
+]);
+
+/** Poignée du site (positions lues dans le projet courant, pas dans le `Model`). */
+export function isSiteHandle(h: PlanHandle): h is SiteHandle {
+  return SITE_HANDLE_KINDS.has(h.kind);
+}
+
+/**
+ * Poignée qui suit les flèches quand un élément du site est sélectionné (et non une poignée) :
+ * mur → mur entier, extrémité → extrémité, trémie → trémie entière, sommet → sommet.
+ */
+export function siteSelectionHandle(sel: PlanSelection | null): SiteHandle | null {
+  switch (sel?.kind) {
+    case "wall":
+      return { kind: "wallMove", id: sel.id };
+    case "wallEnd":
+      return { kind: "wallEnd", id: sel.id, end: sel.end };
+    case "opening":
+      return { kind: "openingMove" };
+    case "openingVertex":
+      return { kind: "openingVertex", index: sel.index };
+    default:
+      return null;
+  }
+}
+
+/** Élément du plan désigné par une poignée du site (clic sans glisser : sélection). */
+export function siteHandleSelection(h: PlanHandle): PlanSelection | null {
+  switch (h.kind) {
+    case "wallEnd":
+      return { kind: "wallEnd", id: h.id, end: h.end };
+    case "openingVertex":
+      return { kind: "openingVertex", index: h.index };
+    default:
+      return null;
+  }
+}
 
 /** Modèle lu par les contrôleurs (repères du tracé, girons des accroches). */
 export type DragModel = Pick<Model, "layout" | "stepping">;
@@ -89,6 +162,16 @@ export function handleKey(h: PlanHandle): string {
     case "junctionAngle":
     case "wellRadius":
       return `${h.kind}:${h.junction}`;
+    case "wallEnd":
+      return `wallEnd:${h.end}:${h.id}`;
+    case "wallMove":
+      return `wallMove:${h.id}`;
+    case "wallFace":
+      return `wallFace:${h.side}:${h.id}`;
+    case "openingMove":
+      return "openingMove";
+    case "openingVertex":
+      return `openingVertex:${h.index}`;
   }
 }
 
@@ -141,6 +224,7 @@ export function handleValue(project: Project, h: PlanHandle, maxMm: number): Han
     case "rotate":
       return { unit: "deg", now: wrapDeg(placement.rotation), min: -180, max: 180 };
   }
+  if (isSiteHandle(h)) return siteHandleValue(project, h, maxMm);
   const cage = editableCage(project);
   if (!cage) return null;
   switch (h.kind) {
@@ -164,6 +248,28 @@ export function handleValue(project: Project, h: PlanHandle, maxMm: number): Han
       const well = cage.junctions[h.junction]?.well;
       return well?.kind === "arc" ? { unit: "mm", now: well.radius, min: 1, max: maxMm } : null;
     }
+  }
+}
+
+/** Valeur d'une poignée du site, lue dans le site du projet. */
+function siteHandleValue(project: Project, h: SiteHandle, maxMm: number): HandleValue | null {
+  const position = (p: Vec2 | undefined): HandleValue | null =>
+    p ? { unit: "position", now: p.x, min: -maxMm, max: maxMm, position: p } : null;
+  const wallOf = (id: string) => project.site.walls.find((w) => w.id === id);
+  const opening = project.site.opening;
+  switch (h.kind) {
+    case "wallEnd":
+      return position(wallOf(h.id)?.[h.end]);
+    case "wallMove":
+      return position(wallOf(h.id)?.a);
+    case "wallFace": {
+      const w = wallOf(h.id);
+      return w ? { unit: "mm", now: w.thickness, min: 1, max: maxMm } : null;
+    }
+    case "openingMove":
+      return position(opening ? openingVertices(opening)[0] : undefined);
+    case "openingVertex":
+      return position(opening ? openingVertices(opening)[h.index] : undefined);
   }
 }
 
@@ -191,6 +297,11 @@ export interface DragGesture {
   readonly pivot?: Vec2;
   /** Cibles d'accroche des longueurs (poignée de fin d'un tronçon droit). */
   readonly targets: readonly StairSnapTarget[];
+  /**
+   * Accroches d'une poignée du site : index du calque de fond et du site **sans l'élément
+   * glissé** (`site/snap.ts`), directions d'équerre (axes du site, autres murs).
+   */
+  readonly site?: SiteSnapContext;
 }
 
 /**
@@ -213,6 +324,14 @@ export function beginDrag(
           (t) => t.kind === "sectionLength" && t.section === handle.section,
         )
       : [];
+  const site = isSiteHandle(handle)
+    ? siteSnapContext(
+        project,
+        handle.kind === "openingMove" || handle.kind === "openingVertex"
+          ? { kind: "opening" }
+          : { kind: "wall", id: handle.id },
+      )
+    : undefined;
   return {
     handle,
     key: `plan-drag:${handleKey(handle)}:${seq}`,
@@ -222,6 +341,7 @@ export function beginDrag(
     anchor,
     ...(pivot ? { pivot } : {}),
     targets,
+    ...(site ? { site } : {}),
   };
 }
 
@@ -239,11 +359,19 @@ export type DragSnap =
       readonly placement: StairPlacement;
     }
   | { readonly kind: "length"; readonly goings: number; readonly length: number }
-  | { readonly kind: "angle"; readonly angle: number };
+  | { readonly kind: "angle"; readonly angle: number }
+  | { readonly kind: "point"; readonly snap: SnapKind; readonly at: Vec2 }
+  | { readonly kind: "square"; readonly at: Vec2 };
 
 /** Résultat d'un pas : projet (le projet du début s'il est sans effet) et accroche, ou refus. */
 export type DragStepResult =
-  | { readonly project: Project; readonly snap: DragSnap | null; readonly error?: undefined }
+  | {
+      readonly project: Project;
+      readonly snap: DragSnap | null;
+      readonly error?: undefined;
+      /** Élément à sélectionner à la fin du geste (sommet de trémie réindexé). */
+      readonly selection?: PlanSelection;
+    }
   | {
       readonly project?: undefined;
       readonly snap?: undefined;
@@ -336,7 +464,85 @@ export function dragStep(g: DragGesture, pointer: Vec2, opts: DragStepOptions): 
     }
     case "wellRadius":
       return done(dragWellRadius(p, layout, h.junction, point));
+    default:
+      return siteStep(g, h, point, { x: dx, y: dy }, opts);
   }
+}
+
+/**
+ * Pas d'une poignée du site. Accroches (sauf Maj) : point visé sur une accroche du calque ou du
+ * site (`snapPoint` : extrémité, milieu, intersection, sommet), sinon, pour une extrémité de mur,
+ * à l'équerre de l'extrémité fixe (`snapRightAngle`) ; un mur ou une trémie translatés
+ * s'accrochent par le sommet déplacé le plus proche d'une accroche.
+ */
+function siteStep(
+  g: DragGesture,
+  h: SiteHandle,
+  point: Vec2,
+  delta: Vec2,
+  opts: DragStepOptions,
+): DragStepResult {
+  const p = g.project;
+  const snaps = opts.free ? undefined : g.site;
+  const pointSnap = (q: Vec2): DragSnap | null => {
+    const hit = snaps ? snapPoint(snaps.index, q, opts.snapRadius) : null;
+    return hit ? { kind: "point", snap: hit.kind, at: hit.point } : null;
+  };
+  /** Translation accrochée (cœur : sommet translaté le plus proche d'une accroche). */
+  const snappedDelta = (vertices: readonly Vec2[]): { d: Vec2; snap: DragSnap | null } => {
+    if (!snaps) return { d: delta, snap: null };
+    const t = snapTranslation(snaps, vertices, delta, opts.snapRadius);
+    return {
+      d: t.delta,
+      snap: t.hit ? { kind: "point", snap: t.hit.kind, at: t.hit.point } : null,
+    };
+  };
+  switch (h.kind) {
+    case "wallEnd": {
+      const wall = p.site.walls.find((w) => w.id === h.id);
+      const hit =
+        snaps && wall
+          ? snapWallEnd(snaps, wall[h.end === "a" ? "b" : "a"], point, opts.snapRadius)
+          : null;
+      const snap: DragSnap | null =
+        hit?.kind === "point"
+          ? { kind: "point", snap: hit.hit.kind, at: hit.point }
+          : hit
+            ? { kind: "square", at: hit.point }
+            : null;
+      return done(moveWallEnd(p, h.id, h.end, hit?.point ?? point), snap);
+    }
+    case "wallMove": {
+      const wall = p.site.walls.find((w) => w.id === h.id);
+      const t = snappedDelta(wall ? [wall.a, wall.b] : []);
+      return done(translateWall(p, h.id, t.d), t.snap);
+    }
+    case "wallFace":
+      return done(dragWallFace(p, h.id, h.side, point));
+    case "openingMove": {
+      const opening = p.site.opening;
+      const t = snappedDelta(opening ? openingVertices(opening) : []);
+      return done(translateOpening(p, t.d), t.snap);
+    }
+    case "openingVertex": {
+      const snap = pointSnap(point);
+      const r = moveOpeningVertex(p, h.index, snap?.kind === "point" ? snap.at : point);
+      if (r.error) return { error: r.error };
+      return r.index === h.index
+        ? { project: r.project, snap }
+        : { project: r.project, snap, selection: { kind: "openingVertex", index: r.index } };
+    }
+  }
+}
+
+/**
+ * Trémie éditée sommet par sommet depuis la trémie entière (poignées et champs par sommet) :
+ * ni trémie ronde (`circle` : le déplacement d'un sommet la rend polygonale), ni contour dense
+ * (au-delà de `OPENING_VERTEX_EDIT_MAX` sommets). Sinon, la trémie se déplace en bloc et un
+ * sommet s'édite une fois sélectionné sur le plan.
+ */
+export function openingVerticesEditable(opening: Opening, count: number): boolean {
+  return !(opening.kind === "polygon" && opening.circle) && count <= OPENING_VERTEX_EDIT_MAX;
 }
 
 // ------------------------------------------------------------------ Clavier
@@ -356,7 +562,7 @@ export function nudgeHandle(
   direction: 1 | -1,
   large: boolean,
   axis: "x" | "y" = "x",
-): EditResult {
+): SiteNudgeResult {
   const angle = isAngleHandle(h, project);
   const step =
     direction *
@@ -373,6 +579,7 @@ export function nudgeHandle(
     case "rotate":
       return rotateStairBy(project, model, layoutProject, step);
   }
+  if (isSiteHandle(h)) return nudgeSite(project, h, step, axis);
   const cage = editableCage(project);
   const current = cage ? handleValue(project, h, Number.POSITIVE_INFINITY) : null;
   if (!cage || !current || current.now === null) {
@@ -403,6 +610,58 @@ export function nudgeHandle(
       return setJunctionAngle(project, h.junction, Math.min(179, Math.max(-179, value)));
     case "wellRadius":
       return setWellJoint(project, h.junction, { kind: "arc", radius: Math.max(1, value) });
+  }
+}
+
+/**
+ * Résultat d'un pas du clavier : `selection`, élément à sélectionner ensuite quand la forme
+ * canonique a réindexé le sommet de trémie déplacé (contour retourné), absent sinon.
+ */
+export type SiteNudgeResult = EditResult<{ readonly selection?: PlanSelection }>;
+
+/**
+ * Pas du clavier sur une poignée du site (`step` signé en mm, `axis` : axe du site pour une
+ * position) : déplacement d'une extrémité, d'un mur, de la trémie ou d'un sommet ; épaisseur
+ * d'un nu (nu opposé conservé ; flèche haut ou droite : plus épais).
+ */
+export function nudgeSite(
+  project: Project,
+  h: SiteHandle,
+  step: number,
+  axis: "x" | "y",
+): SiteNudgeResult {
+  const d: Vec2 = { x: axis === "x" ? step : 0, y: axis === "y" ? step : 0 };
+  const shift = (q: Vec2): Vec2 => ({ x: q.x + d.x, y: q.y + d.y });
+  switch (h.kind) {
+    case "wallEnd": {
+      const wall = project.site.walls.find((w) => w.id === h.id);
+      if (!wall) return editError(msg("site.edit.unknownWall", { id: h.id }));
+      return moveWallEnd(project, h.id, h.end, shift(wall[h.end]));
+    }
+    case "wallMove":
+      return translateWall(project, h.id, d);
+    case "wallFace": {
+      const wall = project.site.walls.find((w) => w.id === h.id);
+      if (!wall) return editError(msg("site.edit.unknownWall", { id: h.id }));
+      return setWallThicknessKeepingFace(
+        project,
+        h.id,
+        wall.thickness + step,
+        h.side === "left" ? "right" : "left",
+      );
+    }
+    case "openingMove":
+      return translateOpening(project, d);
+    case "openingVertex": {
+      const opening = project.site.opening;
+      const v = opening ? openingVertices(opening)[h.index] : undefined;
+      if (!v) return editError(msg("site.edit.noOpening"));
+      const r = moveOpeningVertex(project, h.index, shift(v));
+      if (r.error) return r;
+      return r.index === h.index
+        ? { project: r.project }
+        : { project: r.project, selection: { kind: "openingVertex", index: r.index } };
+    }
   }
 }
 

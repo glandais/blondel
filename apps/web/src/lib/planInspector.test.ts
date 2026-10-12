@@ -13,6 +13,9 @@ import {
   removeSection,
   setJunctionAngle,
   setSectionLength,
+  circularOpening,
+  openingVertices,
+  withWall,
   type CageSection,
   type Project,
   type WallJoint,
@@ -29,7 +32,12 @@ import {
   inspectedSection,
   isFlightsLayout,
   newSectionAfter,
+  insertOpeningVertexInStore,
+  removeOpeningVertexInStore,
   removeSectionInStore,
+  removeWallInStore,
+  splitWallInStore,
+  trackedVertexMove,
   wallJointOfKind,
   wellJointOfKind,
 } from "./planInspector.js";
@@ -216,5 +224,100 @@ describe("raccords et axes d'un autre type", () => {
     const r = insertSection(p, 2, newSectionAfter(last));
     expect(r.error).toBeUndefined();
     expect(r.project?.stair.layout.kind).toBe("cage");
+  });
+});
+
+describe("actions du site (sous-lot 5a) : une entrée d'historique, sélection suivante, refus", () => {
+  function load(): Project {
+    const p = withWall(quarter(), { x: -100, y: 0 }, { x: -100, y: 3000 }, 200);
+    appStore.getState().replaceProject(p);
+    appStore.getState().endGroup();
+    return appStore.getState().project;
+  }
+
+  it("couper puis supprimer un mur", () => {
+    const p = load();
+    const id = p.site.walls[0]!.id;
+    const past = appStore.getState().history.past.length;
+    const cut = splitWallInStore(id, { x: -100, y: 1000 });
+    expect(cut.done).toBe(true);
+    expect(cut.selection).toEqual({ kind: "wall", id });
+    expect(cut.note?.text.key).toBe("ui.plan.editor.wall.split");
+    expect(appStore.getState().project.site.walls).toHaveLength(2);
+    expect(appStore.getState().history.past).toHaveLength(past + 1);
+    const refusedCut = splitWallInStore(id, { x: -100, y: 0 });
+    expect(refusedCut.done).toBe(false);
+    expect(refusedCut.note?.kind).toBe("error");
+    const removed = removeWallInStore(id);
+    expect(removed).toMatchObject({ done: true, selection: null });
+    expect(appStore.getState().project.site.walls).toHaveLength(1);
+    expect(appStore.getState().history.past).toHaveLength(past + 2);
+    expect(removeWallInStore("nope").done).toBe(false);
+    expect(appStore.getState().history.past).toHaveLength(past + 2);
+  });
+
+  it("insérer puis retirer un sommet de la trémie ; refus sous 3 sommets", () => {
+    const p = load();
+    const n = openingVertices(p.site.opening!).length;
+    const ins = insertOpeningVertexInStore(0);
+    expect(ins).toMatchObject({ done: true, selection: { kind: "openingVertex", index: 1 } });
+    expect(openingVertices(appStore.getState().project.site.opening!)).toHaveLength(n + 1);
+    const rem = removeOpeningVertexInStore(1);
+    expect(rem).toMatchObject({ done: true, selection: { kind: "opening" } });
+    expect(openingVertices(appStore.getState().project.site.opening!)).toEqual(
+      openingVertices(p.site.opening!),
+    );
+    removeOpeningVertexInStore(0);
+    const before = appStore.getState().project;
+    const refused = removeOpeningVertexInStore(0);
+    expect(refused.done).toBe(false);
+    expect((refused.note?.text.params?.error as { key?: string }).key).toBe(
+      "site.opening.tooFewPoints",
+    );
+    expect(appStore.getState().project).toBe(before);
+  });
+
+  it("champ x d'un sommet qui retourne le contour : le sommet déplacé est à resélectionner", () => {
+    const p = load();
+    const tri: Project = {
+      ...p,
+      site: {
+        ...p.site,
+        opening: {
+          kind: "polygon",
+          points: [
+            { x: 0, y: 0 },
+            { x: 2000, y: 0 },
+            { x: 0, y: 1000 },
+          ],
+        },
+      },
+    };
+    appStore.getState().replaceProject(tri);
+    appStore.getState().endGroup();
+    const m = trackedVertexMove(0, { x: 3000, y: 0 });
+    expect(commitEdit(m.edit).result.ok).toBe(true);
+    const sel = m.reselect();
+    expect(sel?.kind).toBe("openingVertex");
+    const index = sel?.kind === "openingVertex" ? sel.index : -1;
+    const now = openingVertices(appStore.getState().project.site.opening!);
+    expect(now[index]).toEqual({ x: 3000, y: 0 });
+    // Sans retournement : rien à resélectionner.
+    const same = trackedVertexMove(index, { x: 3100, y: 0 });
+    expect(commitEdit(same.edit).result.ok).toBe(true);
+    expect(same.reselect()).toBeNull();
+  });
+
+  it("trémie ronde : l'insertion d'un sommet annonce la perte du cercle", () => {
+    const p = load();
+    appStore
+      .getState()
+      .replaceProject({ ...p, site: { ...p.site, opening: circularOpening({ x: 0, y: 0 }, 800) } });
+    appStore.getState().endGroup();
+    const ins = insertOpeningVertexInStore(0);
+    expect(ins.done).toBe(true);
+    expect(ins.note?.text.key).toBe("ui.plan.editor.opening.circleLost");
+    const o = appStore.getState().project.site.opening!;
+    expect(o.kind === "polygon" && o.circle).toBeFalsy();
   });
 });

@@ -41,3 +41,10 @@ export const ANGLE_HANDLE_MIN_PX = 48;
  * schéma et les règles bornent les valeurs réelles).
  */
 export const SLIDER_MAX_MM = 100_000;
+
+/**
+ * Nombre de sommets au-delà duquel la trémie n'est plus éditée sommet par sommet depuis la
+ * trémie entière (pas de poignée ni de champs x, y par sommet ; sous-lot 5a) : contour dense,
+ * comme le polygone inscrit d'une trémie ronde. Ergonomie (navigation au clavier), non métier.
+ */
+export const OPENING_VERTEX_EDIT_MAX = 24;

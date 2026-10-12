@@ -1,11 +1,11 @@
 /**
  * Calque du site de l'éditeur de plan : murs, trémie, contour de la pièce, obstacles, lus dans
- * le site du `Project`. Murs, trémie (par son contour) et obstacles sont sélectionnables (outil
- * de sélection) ;
- * les extrémités d'un mur et les sommets de la trémie apparaissent quand ce mur ou la trémie
- * est sélectionné ; les sommets du contour de la pièce sont sélectionnables.
+ * le site du `Project` (courant : pendant un glisser du site, le dessin suit chaque pas). Murs,
+ * trémie (par son contour) et obstacles sont sélectionnables (outil de sélection) ; les
+ * extrémités d'un mur et les sommets de la trémie apparaissent quand ce mur ou la trémie est
+ * sélectionné ; les sommets du contour de la pièce sont sélectionnables.
  */
-import { openingPolygon, type Site, type Vec2 } from "@blondel/core";
+import { openingPolygon, openingVertices, type Site, type Vec2 } from "@blondel/core";
 import { memo, useMemo } from "react";
 import { pointsAttr, wallOutline } from "../planSiteGeometry.js";
 import { obstacleShape } from "./planEditorGeometry.js";
@@ -46,6 +46,12 @@ export const SiteLayer = memo(function SiteLayer({
 }) {
   const { tr } = ctx;
   const opening = useMemo(() => openingPolygon(site.opening), [site.opening]);
+  // Sommets dans l'ordre des mutateurs (`openingVertices`) : l'indice sélectionné est celui que
+  // `moveOpeningVertex` et `removeOpeningVertex` attendent.
+  const vertices = useMemo(
+    () => (site.opening ? openingVertices(site.opening) : []),
+    [site.opening],
+  );
   const sel = ctx.selectedKey;
   const openingActive =
     ctx.interactive && (sel === "opening" || (sel?.startsWith("openingVertex:") ?? false));
@@ -157,8 +163,8 @@ export const SiteLayer = memo(function SiteLayer({
             ));
           })
         : null}
-      {openingActive && opening
-        ? opening.map((p, i) => (
+      {openingActive
+        ? vertices.map((p, i) => (
             <Vertex
               key={`o${i}`}
               p={p}

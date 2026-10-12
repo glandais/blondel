@@ -24,6 +24,7 @@ import {
   rotateStairBy,
   snapAngleFrom,
   type PlanHandle,
+  type SiteHandle,
 } from "./planDrag.js";
 import { ANGLE_SNAP_DEG } from "./planErgonomics.js";
 
@@ -43,7 +44,7 @@ const lengthOf = (p: Project, i: number): number => {
 };
 
 /** Position d'une poignée de la sélection, lue comme l'éditeur (`selectionHandles`). */
-function spot(p: Project, m: Model, h: PlanHandle): Vec2 {
+function spot(p: Project, m: Model, h: Exclude<PlanHandle, SiteHandle>): Vec2 {
   const sel =
     h.kind === "move" || h.kind === "rotate"
       ? ({ kind: "stair" } as const)
@@ -58,7 +59,7 @@ function spot(p: Project, m: Model, h: PlanHandle): Vec2 {
 const FREE = { free: true, snapRadius: 0 } as const;
 
 describe("contrôleurs de glisser : début, pas, retour au départ", () => {
-  const handles: PlanHandle[] = [
+  const handles: Exclude<PlanHandle, SiteHandle>[] = [
     { kind: "move" },
     { kind: "rotate" },
     { kind: "sectionEnd", section: 0 },

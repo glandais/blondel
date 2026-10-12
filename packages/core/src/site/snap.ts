@@ -213,3 +213,41 @@ export function snapPoint(
   }
   return best;
 }
+
+/** Accroche d'équerre retenue : point accroché et direction suivie (unitaire). */
+export interface RightAngleHit {
+  readonly point: Vec2;
+  readonly direction: Vec2;
+  /** Distance du point accroché au point visé. */
+  readonly distance: Mm;
+}
+
+/**
+ * Accroche d'équerre (extrémité d'un mur glissée, sous-lot 5a) : `p` ramené sur la droite issue
+ * de `from` dans l'une des `directions` (vecteurs non nuls : axes du site, directions des autres
+ * murs) **ou leur perpendiculaire**, la plus proche, si elle passe à moins de `radius` (mm) de
+ * `p` ; `null` sinon (ou si `p` est confondu avec `from`).
+ */
+export function snapRightAngle(
+  from: Vec2,
+  p: Vec2,
+  directions: readonly Vec2[],
+  radius: Mm,
+): RightAngleHit | null {
+  const w = V.sub(p, from);
+  if (!(V.norm(w) > 0)) return null;
+  let best: RightAngleHit | null = null;
+  for (const d of directions) {
+    const L = V.norm(d);
+    if (!(L > 0) || !Number.isFinite(L)) continue;
+    const u = V.scale(d, 1 / L);
+    for (const dir of [u, V.perpLeft(u)]) {
+      const point = V.addScaled(from, dir, V.dot(w, dir));
+      const distance = V.distance(point, p);
+      if (distance <= radius && (best === null || distance < best.distance - 1e-9)) {
+        best = { point, direction: dir, distance };
+      }
+    }
+  }
+  return best;
+}

@@ -20,11 +20,22 @@
  *   rendus à l'éditeur.
  * - `newSectionAfter` : tronçon inséré après le tronçon `i` : même partie droite (ou sa largeur
  *   pour un tronçon en arc ou « auto »), relié par un palier droit (défaut d'`insertSection`).
+ * - Site (sous-lot 5a) : `removeWallInStore`, `splitWallInStore`, `removeOpeningVertexInStore`,
+ *   `insertOpeningVertexInStore` (boutons de l'inspecteur, Suppr et double-clic de l'éditeur :
+ *   même chemin), une entrée d'historique chacun, élément à sélectionner ensuite et remarque ou
+ *   refus rendus à l'éditeur ; une trémie ronde devenue polygonale l'annonce (cercle oublié).
+ *   `trackedVertexMove` : champ x, y d'un sommet, sommet réindexé à resélectionner.
  */
 import {
   DEFAULT_NEWEL_SIZE,
   editableCage,
+  insertOpeningVertex,
+  moveOpeningVertex,
+  removeOpeningVertex,
   removeSection,
+  removeWall,
+  splitWall,
+  type Vec2,
   type CageJunction,
   type CageSection,
   type EditResult,
@@ -35,6 +46,7 @@ import {
 } from "@blondel/core";
 import { msg, type Message } from "@blondel/i18n";
 import { appStore } from "../store/appStore.js";
+import type { PlanSelection } from "../store/planEditor.js";
 import type { UpdateResult } from "../store/projectStore.js";
 
 /** Résultat d'un mutateur pour l'inspecteur. */
@@ -192,4 +204,124 @@ export function newSectionAfter(section: CageSection): NewSection {
   const length =
     section.axis.kind === "straight" && section.axis.length !== "auto" ? section.axis.length : end;
   return { length, width: end };
+}
+
+// ------------------------------------------------------------------ Site (sous-lot 5a)
+
+/**
+ * Action du site sur la sélection : `done` (projet modifié), `selection` (élément à sélectionner
+ * ensuite ; `null` : sélection effacée, l'élément a disparu ; absent : inchangée), `note`
+ * (annonce ou refus, affichée par l'éditeur, qui survit au démontage de l'inspecteur).
+ */
+export interface SiteActionOutcome {
+  readonly done: boolean;
+  readonly selection?: PlanSelection | null;
+  readonly note: PlanNote | null;
+}
+
+function refused(result: UpdateResult): SiteActionOutcome {
+  const error = (result.ok ? null : result.issues[0]) ?? msg("ui.plan.site.refused");
+  return {
+    done: false,
+    note: { kind: "error", text: msg("ui.plan.inspector.refused", { error }) },
+  };
+}
+
+/** Suppression du mur `id` (Suppr, bouton « Supprimer le mur »). */
+export function removeWallInStore(id: string): SiteActionOutcome {
+  const o = commitEdit((p) => removeWall(p, id));
+  if (!o.result.ok) return refused(o.result);
+  return {
+    done: true,
+    selection: null,
+    note: { kind: "info", text: msg("ui.plan.editor.wall.removed", { id }) },
+  };
+}
+
+/** Coupe du mur `id` au projeté de `point` (double-clic, ou milieu de l'axe : inspecteur). */
+export function splitWallInStore(id: string, point: Vec2): SiteActionOutcome {
+  const got: { newId?: string } = {};
+  const o = commitEdit((p) => {
+    const r = splitWall(p, id, point);
+    if (!r.error) got.newId = r.id;
+    return r;
+  });
+  const newId = got.newId;
+  if (!o.result.ok || newId === undefined) return refused(o.result);
+  return {
+    done: true,
+    selection: { kind: "wall", id },
+    note: { kind: "info", text: msg("ui.plan.editor.wall.split", { id, newId }) },
+  };
+}
+
+/** Suppression du sommet `index` de la trémie (Suppr, bouton « Supprimer le sommet »). */
+export function removeOpeningVertexInStore(index: number): SiteActionOutcome {
+  const round = hasCircle();
+  const o = commitEdit((p) => removeOpeningVertex(p, index));
+  if (!o.result.ok) return refused(o.result);
+  return {
+    done: true,
+    selection: { kind: "opening" },
+    note: {
+      kind: "info",
+      text: circleNote(round, msg("ui.plan.editor.opening.vertexRemoved", { index: index + 1 })),
+    },
+  };
+}
+
+/** Trémie ronde (`circle`) dans le projet du store. */
+function hasCircle(): boolean {
+  const o = appStore.getState().project.site.opening;
+  return o?.kind === "polygon" && o.circle !== undefined;
+}
+
+/** Annonce complétée de la perte du cercle exact (trémie ronde devenue polygonale). */
+function circleNote(round: boolean, text: Message): Message {
+  return round ? msg("ui.plan.editor.opening.circleLost", { action: text }) : text;
+}
+
+/**
+ * Champ x ou y d'un sommet de la trémie (inspecteur) : mutateur `edit` (`moveOpeningVertex`) et
+ * `reselect`, à lire après une validation acceptée : sommet à sélectionner quand la forme
+ * canonique a réindexé le sommet déplacé (contour retourné), `null` sinon.
+ */
+export function trackedVertexMove(
+  index: number,
+  point: Vec2,
+): { readonly edit: (p: Project) => EditResult; reselect(): PlanSelection | null } {
+  let moved: number | null = null;
+  return {
+    edit: (p) => {
+      const r = moveOpeningVertex(p, index, point);
+      moved = r.error ? null : r.index;
+      return r;
+    },
+    reselect: () =>
+      moved !== null && moved !== index ? { kind: "openingVertex", index: moved } : null,
+  };
+}
+
+/**
+ * Insertion d'un sommet sur le côté `edge` de la trémie, au projeté de `point` (double-clic sur
+ * le côté) ou en son milieu (inspecteur) ; le nouveau sommet est sélectionné.
+ */
+export function insertOpeningVertexInStore(edge: number, point?: Vec2): SiteActionOutcome {
+  const round = hasCircle();
+  const got: { index?: number } = {};
+  const o = commitEdit((p) => {
+    const r = insertOpeningVertex(p, edge, point);
+    if (!r.error) got.index = r.index;
+    return r;
+  });
+  const index = got.index;
+  if (!o.result.ok || index === undefined) return refused(o.result);
+  return {
+    done: true,
+    selection: { kind: "openingVertex", index },
+    note: {
+      kind: "info",
+      text: circleNote(round, msg("ui.plan.editor.opening.vertexInserted", { index: index + 1 })),
+    },
+  };
 }

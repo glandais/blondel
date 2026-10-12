@@ -14,6 +14,9 @@ import {
   flattenCurve,
   imageCorners,
   openingPolygon,
+  projectSnapPoints,
+  projectSnapSegments,
+  wallOutline,
   placeSegment,
   segmentsBounds,
   type BBox,
@@ -23,8 +26,10 @@ import {
   type Project,
   type SnapCandidate,
   type Vec2,
-  type Wall,
 } from "@blondel/core";
+
+/** Contour d'un mur et accroches du projet : dans le cœur (`site/siteSnap.ts`), réexportés. */
+export { projectSnapPoints, projectSnapSegments, wallOutline };
 
 const n2 = (v: number): string => (Math.round(v * 100) / 100).toString();
 
@@ -68,21 +73,6 @@ export function dxfPathData(dxf: DxfUnderlay): string {
     }
   }
   return parts.join("");
-}
-
-/** Contour d'un mur (axe `a`–`b`, nus à ± épaisseur / 2). */
-export function wallOutline(w: Wall): Vec2[] {
-  const dx = w.b.x - w.a.x;
-  const dy = w.b.y - w.a.y;
-  const L = Math.hypot(dx, dy) || 1;
-  const nx = (-dy / L) * (w.thickness / 2);
-  const ny = (dx / L) * (w.thickness / 2);
-  return [
-    { x: w.a.x + nx, y: w.a.y + ny },
-    { x: w.b.x + nx, y: w.b.y + ny },
-    { x: w.b.x - nx, y: w.b.y - ny },
-    { x: w.a.x - nx, y: w.a.y - ny },
-  ];
 }
 
 /** Attribut `points` d'un polygone ou d'une polyligne. */
@@ -179,33 +169,6 @@ export function zoomAt(v: ViewBox, p: Vec2, k: number): ViewBox {
 export function screenToSite(v: ViewBox, aspect: number, u: number, w: number): Vec2 {
   const h = v.width / (aspect > 0 && Number.isFinite(aspect) ? aspect : 1);
   return { x: v.cx - v.width / 2 + u * v.width, y: v.cy + h / 2 - w * h };
-}
-
-/** Points d'accroche propres au projet : sommets de trémie, extrémités des murs, tracé en cours. */
-export function projectSnapPoints(project: Project, draft: readonly Vec2[] = []): SnapCandidate[] {
-  const out: SnapCandidate[] = [];
-  const opening = openingPolygon(project.site.opening);
-  if (opening) for (const p of opening) out.push({ point: p, kind: "point" });
-  for (const w of project.site.walls) {
-    out.push({ point: w.a, kind: "point" }, { point: w.b, kind: "point" });
-    for (const p of wallOutline(w)) out.push({ point: p, kind: "endpoint" });
-  }
-  for (const p of draft) out.push({ point: p, kind: "point" });
-  return out;
-}
-
-/** Segments d'accroche propres au projet : côtés de la trémie et nus des murs. */
-export function projectSnapSegments(project: Project): CurveSeg[] {
-  const segs: CurveSeg[] = [];
-  const ring = (pts: readonly Vec2[]) => {
-    for (let i = 0; i < pts.length; i++) {
-      segs.push({ kind: "line", a: pts[i]!, b: pts[(i + 1) % pts.length]! });
-    }
-  };
-  const opening = openingPolygon(project.site.opening);
-  if (opening) ring(opening);
-  for (const w of project.site.walls) ring(wallOutline(w));
-  return segs;
 }
 
 // ------------------------------------------------------------------ Tracé en cours

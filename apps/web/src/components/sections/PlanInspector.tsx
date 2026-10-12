@@ -9,7 +9,11 @@
  *   départ et d'arrivée, bord d'ancrage ; actions couper, insérer un palier, insérer un tronçon
  *   après, supprimer (`splitSection`, `insertLanding`, `insertSection`, `removeSection`) ;
  * - jonction : angle signé, mode, profondeur d'un palier droit, raccords côté jour et côté mur ;
- * - mur : épaisseur et caractère porteur (`site/edit.ts`) ; le reste du site au lot 5.
+ * - mur (sous-lot 5a) : épaisseur, caractère porteur, extrémités (x, y en mm entiers,
+ *   `moveWallEnd`) ; actions couper au milieu (`splitWall`) et supprimer (`removeWall`) ;
+ * - trémie : sommets (x, y, `moveOpeningVertex` ; résumé pour une trémie ronde ou dense) ; sommet : ses coordonnées, actions insérer un
+ *   sommet après (`insertOpeningVertex`) et supprimer (`removeOpeningVertex`) ; obstacles et
+ *   contour de pièce au sous-lot 5b.
  *
  * Aucun calcul : chaque champ appelle un mutateur pur du cœur par `commitEdit`
  * (`lib/planInspector.ts`), une validation = une entrée d'historique ; un refus s'affiche sous le
@@ -22,6 +26,8 @@ import {
   convertToCage,
   insertLanding,
   insertSection,
+  moveWallEnd,
+  openingVertices,
   setJunctionAngle,
   setJunctionDepth,
   setJunctionMode,
@@ -46,14 +52,21 @@ import { msg, type Message, type MessageKey } from "@blondel/i18n";
 import { useMemo, useState } from "react";
 import { useT } from "../../i18n/useT.js";
 import { autoValueOf } from "../../lib/autoValues.js";
+import { openingVerticesEditable } from "../../lib/planDrag.js";
 import { applyFixInStore, fixesFor } from "../../lib/fixes.js";
 import {
   commitEdit,
   inspectedJunction,
   inspectedSection,
+  insertOpeningVertexInStore,
   isFlightsLayout,
   newSectionAfter,
+  removeOpeningVertexInStore,
   removeSectionInStore,
+  removeWallInStore,
+  splitWallInStore,
+  trackedVertexMove,
+  type SiteActionOutcome,
   wallJointOfKind,
   type PlanNote,
   wellJointOfKind,
@@ -61,7 +74,7 @@ import {
 import { appStore, useApp, useModel } from "../../store/appStore.js";
 import type { PlanSelection } from "../../store/planEditor.js";
 import type { UpdateResult } from "../../store/projectStore.js";
-import { clearPlanSelection } from "../../store/uiStore.js";
+import { clearPlanSelection, selectPlanElement } from "../../store/uiStore.js";
 import { AutoIntField, CheckField, IntField, SelectField } from "../fields.js";
 import "./sections.css";
 
@@ -480,11 +493,39 @@ function JunctionInspector({ index, setRemark }: { index: number; setRemark: Set
   );
 }
 
-function WallInspector({ id, setRemark }: { id: string; setRemark: SetRemark }) {
+/**
+ * Action du site depuis l'inspecteur (même chemin que Suppr et le double-clic) : refus sous les
+ * actions ; sinon sélection suivante et remarque rendue à l'éditeur (l'inspecteur se démonte
+ * quand la sélection change).
+ */
+function siteAction(
+  o: SiteActionOutcome,
+  setRemark: SetRemark,
+  onNote: (note: PlanNote | null) => void,
+): void {
+  if (!o.done) {
+    setRemark(o.note);
+    return;
+  }
+  if (o.selection === null) clearPlanSelection();
+  else if (o.selection) selectPlanElement(o.selection);
+  onNote(o.note);
+}
+
+function WallInspector({
+  id,
+  setRemark,
+  onNote,
+}: {
+  id: string;
+  setRemark: SetRemark;
+  onNote: (note: PlanNote | null) => void;
+}) {
   const t = useT();
   const wall = useApp((s) => s.project.site.walls.find((w) => w.id === id));
   if (!wall) return null;
   const commit = (edit: (p: Project) => EditResult) => fieldCommit(setRemark, edit);
+  const ends = ["a", "b"] as const;
   return (
     <fieldset className="plan-inspector__group">
       <legend>{t.t("ui.plan.inspector.wall.legend", { id })}</legend>
@@ -492,6 +533,7 @@ function WallInspector({ id, setRemark }: { id: string; setRemark: SetRemark }) 
         label={t.t("ui.plan.inspector.wall.thickness")}
         value={wall.thickness}
         min={1}
+        hint={t.t("ui.plan.inspector.wall.thickness.hint")}
         onCommit={(thickness) => commit((p) => setWallThickness(p, id, thickness))}
       />
       <CheckField
@@ -499,6 +541,155 @@ function WallInspector({ id, setRemark }: { id: string; setRemark: SetRemark }) 
         checked={wall.loadBearing}
         onCommit={(loadBearing) => commit((p) => setWallLoadBearing(p, id, loadBearing))}
       />
+      {ends.map((end) => {
+        const at = wall[end];
+        const label = end.toUpperCase();
+        return (
+          <div key={end} className="plan-inspector__pair">
+            <IntField
+              label={t.t("ui.plan.inspector.wall.endX", { end: label })}
+              value={Math.round(at.x)}
+              onCommit={(x) => commit((p) => moveWallEnd(p, id, end, { x, y: at.y }))}
+            />
+            <IntField
+              label={t.t("ui.plan.inspector.wall.endY", { end: label })}
+              value={Math.round(at.y)}
+              onCommit={(y) => commit((p) => moveWallEnd(p, id, end, { x: at.x, y }))}
+            />
+          </div>
+        );
+      })}
+      <div
+        className="button-row plan-inspector__actions"
+        role="group"
+        aria-label={t.t("ui.plan.inspector.wall.actions", { id })}
+      >
+        <button
+          type="button"
+          title={t.t("ui.plan.inspector.wall.split.title")}
+          onClick={() =>
+            siteAction(
+              splitWallInStore(id, {
+                x: (wall.a.x + wall.b.x) / 2,
+                y: (wall.a.y + wall.b.y) / 2,
+              }),
+              setRemark,
+              onNote,
+            )
+          }
+        >
+          {t.t("ui.plan.inspector.wall.split")}
+        </button>
+        <button
+          type="button"
+          title={t.t("ui.plan.inspector.wall.remove.title")}
+          onClick={() => siteAction(removeWallInStore(id), setRemark, onNote)}
+        >
+          {t.t("ui.plan.inspector.wall.remove")}
+        </button>
+      </div>
+    </fieldset>
+  );
+}
+
+/**
+ * Champs x, y d'un sommet de la trémie (`moveOpeningVertex`, mm entiers). `selected` : le sommet
+ * est la sélection du plan ; si la forme canonique le réindexe (contour retourné), il reste
+ * sélectionné sous son nouvel indice.
+ */
+function VertexFields({
+  index,
+  at,
+  selected,
+  commit,
+}: {
+  index: number;
+  at: { x: number; y: number };
+  selected: boolean;
+  commit: (edit: (p: Project) => EditResult) => UpdateResult;
+}) {
+  const t = useT();
+  const move = (point: { x: number; y: number }): UpdateResult => {
+    const m = trackedVertexMove(index, point);
+    const result = commit(m.edit);
+    const next = result.ok && selected ? m.reselect() : null;
+    if (next) selectPlanElement(next);
+    return result;
+  };
+  return (
+    <div className="plan-inspector__pair">
+      <IntField
+        label={t.t("ui.plan.inspector.opening.vertexX", { index: index + 1 })}
+        value={Math.round(at.x)}
+        onCommit={(x) => move({ x, y: at.y })}
+      />
+      <IntField
+        label={t.t("ui.plan.inspector.opening.vertexY", { index: index + 1 })}
+        value={Math.round(at.y)}
+        onCommit={(y) => move({ x: at.x, y })}
+      />
+    </div>
+  );
+}
+
+function OpeningInspector({
+  vertex,
+  setRemark,
+  onNote,
+}: {
+  /** Sommet sélectionné ; `null` : la trémie entière. */
+  vertex: number | null;
+  setRemark: SetRemark;
+  onNote: (note: PlanNote | null) => void;
+}) {
+  const t = useT();
+  const opening = useApp((s) => s.project.site.opening);
+  const points = useMemo(() => (opening ? openingVertices(opening) : []), [opening]);
+  if (!opening) return null;
+  const commit = (edit: (p: Project) => EditResult) => fieldCommit(setRemark, edit);
+  if (vertex === null) {
+    return (
+      <fieldset className="plan-inspector__group">
+        <legend>{t.t("ui.plan.inspector.opening.legend")}</legend>
+        <p className="muted">{t.t("ui.plan.inspector.opening.hint")}</p>
+        {openingVerticesEditable(opening, points.length) ? (
+          points.map((at, i) => (
+            <VertexFields key={i} index={i} at={at} selected={false} commit={commit} />
+          ))
+        ) : (
+          <p className="muted">
+            {t.t("ui.plan.inspector.opening.dense", { count: points.length })}
+          </p>
+        )}
+      </fieldset>
+    );
+  }
+  const at = points[vertex];
+  if (!at) return <p className="muted">{t.t("ui.plan.inspector.none")}</p>;
+  return (
+    <fieldset className="plan-inspector__group">
+      <legend>{t.t("ui.plan.inspector.openingVertex.legend", { index: vertex + 1 })}</legend>
+      <VertexFields index={vertex} at={at} selected commit={commit} />
+      <div
+        className="button-row plan-inspector__actions"
+        role="group"
+        aria-label={t.t("ui.plan.inspector.openingVertex.actions", { index: vertex + 1 })}
+      >
+        <button
+          type="button"
+          title={t.t("ui.plan.inspector.openingVertex.insert.title")}
+          onClick={() => siteAction(insertOpeningVertexInStore(vertex), setRemark, onNote)}
+        >
+          {t.t("ui.plan.inspector.openingVertex.insert")}
+        </button>
+        <button
+          type="button"
+          title={t.t("ui.plan.inspector.openingVertex.remove.title")}
+          onClick={() => siteAction(removeOpeningVertexInStore(vertex), setRemark, onNote)}
+        >
+          {t.t("ui.plan.inspector.openingVertex.remove")}
+        </button>
+      </div>
     </fieldset>
   );
 }
@@ -525,7 +716,11 @@ export function PlanInspector({
         return <JunctionInspector index={selection.index} setRemark={setRemark} />;
       case "wall":
       case "wallEnd":
-        return <WallInspector id={selection.id} setRemark={setRemark} />;
+        return <WallInspector id={selection.id} setRemark={setRemark} onNote={onNote} />;
+      case "opening":
+        return <OpeningInspector vertex={null} setRemark={setRemark} onNote={onNote} />;
+      case "openingVertex":
+        return <OpeningInspector vertex={selection.index} setRemark={setRemark} onNote={onNote} />;
       default:
         return <p className="muted">{t.t("ui.plan.inspector.none")}</p>;
     }

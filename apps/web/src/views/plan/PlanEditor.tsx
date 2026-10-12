@@ -35,11 +35,22 @@
  *
  * Inspecteur (sous-lot 4d, `components/sections/PlanInspector.tsx`) : propriétés de la sélection
  * dans le panneau, chaque champ par un mutateur pur du cœur ; Suppr sur un tronçon sélectionné le
- * retire (`removeSection`, refus affiché) ; Suppr sur un mur ou un obstacle : lot 5.
+ * retire (`removeSection`, refus affiché).
+ *
+ * Site éditable (sous-lot 5a) : un mur sélectionné (ou une de ses extrémités) montre ses
+ * poignées (extrémités, mur entier, nus) et se glisse par son corps ; la trémie sélectionnée se
+ * glisse par son contour ou sa poignée centrale, ses sommets par leurs poignées ; mêmes gestes
+ * que l'escalier (un glisser = une annulation, Échap restaure, aperçu des conflits par le worker
+ * pendant le geste). Double-clic sur le mur sélectionné : coupe au point cliqué (`splitWall`) ;
+ * double-clic sur le contour de la trémie sélectionnée : sommet inséré sur le côté le plus proche
+ * (`openingEdgeNear`, `insertOpeningVertex`). Suppr : mur supprimé (`removeWall`), sommet de
+ * trémie retiré (`removeOpeningVertex`, refus sous 3 sommets). Flèches sur la sélection du site :
+ * 10 mm (Maj : 100 mm). Obstacles et contour de pièce : sous-lot 5b.
  */
 import {
   buildSnapIndex,
   calibrateImage,
+  openingEdgeNear,
   imagePixelToSite,
   siteToImagePixel,
   snapPoint,
@@ -63,15 +74,29 @@ import {
   useRef,
   useState,
   type KeyboardEvent,
+  type MouseEvent,
   type PointerEvent,
 } from "react";
 import { PlanInspector } from "../../components/sections/PlanInspector.js";
 import { UnderlayImport } from "../../components/UnderlayImport.js";
 import { formatNumber } from "../../i18n/locale.js";
 import { useT } from "../../i18n/useT.js";
-import { rotateStairBy } from "../../lib/planDrag.js";
-import { removeSectionInStore } from "../../lib/planInspector.js";
-import { ROTATE_KEY_STEP_DEG } from "../../lib/planErgonomics.js";
+import {
+  handleKey,
+  nudgeSite,
+  rotateStairBy,
+  siteSelectionHandle,
+  type PlanHandle,
+} from "../../lib/planDrag.js";
+import {
+  insertOpeningVertexInStore,
+  removeOpeningVertexInStore,
+  removeSectionInStore,
+  removeWallInStore,
+  splitWallInStore,
+  type SiteActionOutcome,
+} from "../../lib/planInspector.js";
+import { KEY_STEP_MM, KEY_STEP_MM_LARGE, ROTATE_KEY_STEP_DEG } from "../../lib/planErgonomics.js";
 import { appStore, useApp, useModel, useModelState } from "../../store/appStore.js";
 import {
   PLAN_TOOL_AVAILABLE,
@@ -149,6 +174,41 @@ function commit(recipe: (p: Project) => Project): Note | null {
 }
 
 /**
+ * Poignée prise en glissant le corps d'un élément sélectionné (sans poignée) : emprise de
+ * l'escalier (déplacement), mur sélectionné (mur entier), contour de la trémie sélectionnée
+ * (trémie entière) ; `null` sinon (le glisser déplace la vue). Une zone de conflit n'est jamais
+ * un corps : elle couvre aussi du sol libre.
+ */
+function bodyHandle(
+  selection: PlanSelection | null,
+  under: { readonly hit: PlanSelection; readonly fromConflict: boolean } | null,
+): PlanHandle | null {
+  if (!selection || !under || under.fromConflict) return null;
+  const hit = under.hit;
+  switch (selection.kind) {
+    case "stair":
+      return hit.kind === "stair" || hit.kind === "section" || hit.kind === "junction"
+        ? { kind: "move" }
+        : null;
+    case "wall":
+    case "wallEnd":
+      return hit.kind === "wall" && hit.id === selection.id
+        ? { kind: "wallMove", id: selection.id }
+        : null;
+    case "opening":
+    case "openingVertex":
+      return hit.kind === "opening" ? { kind: "openingMove" } : null;
+    default:
+      return null;
+  }
+}
+
+/** Sélection du site (mur, extrémité, trémie, sommet) : poignées et actions du sous-lot 5a. */
+function isSiteSelection(sel: PlanSelection | null): boolean {
+  return siteSelectionHandle(sel) !== null;
+}
+
+/**
  * Élément sélectionnable sous la cible d'un événement : attribut `data-plan-select` d'un élément
  * du plan (`fromConflict` faux), ou `data-plan-target` d'une zone de conflit (élément visé par le
  * conflit, `fromConflict` vrai : la zone n'est pas l'élément, un glisser y déplace la vue).
@@ -161,6 +221,23 @@ function selectionTarget(
   const own = el?.getAttribute("data-plan-select");
   const hit = parsePlanSelection(own ?? el?.getAttribute("data-plan-target"));
   return hit ? { hit, fromConflict: own == null } : null;
+}
+
+/** Élément du plan sous un point de l'écran, poignées et zones de conflit traversées. */
+function siteElementAt(
+  clientX: number,
+  clientY: number,
+): { readonly hit: PlanSelection; readonly fromConflict: boolean } | null {
+  const stack =
+    typeof document.elementsFromPoint === "function"
+      ? document.elementsFromPoint(clientX, clientY)
+      : [document.elementFromPoint(clientX, clientY)];
+  for (const el of stack) {
+    if (!el || el.closest("[data-plan-handle]")) continue;
+    const under = selectionTarget(el);
+    if (under && !under.fromConflict) return under;
+  }
+  return null;
 }
 
 export function PlanEditor({ model }: { model: Model }) {
@@ -192,9 +269,12 @@ export function PlanEditor({ model }: { model: Model }) {
     view: ViewBox;
     pick: { readonly hit: PlanSelection | null } | null;
     moved: boolean;
-    /** Appui sur l'emprise de l'escalier sélectionné : un glisser le déplace (sinon la vue). */
-    moveStair?: Vec2;
-    /** Le glisser est devenu un geste de l'escalier : plus de déplacement de la vue. */
+    /**
+     * Appui sur le corps de l'élément sélectionné (emprise de l'escalier, mur, contour de la
+     * trémie) : un glisser le déplace par cette poignée (sinon la vue).
+     */
+    moveBody?: { readonly handle: PlanHandle; readonly grab: Vec2 };
+    /** Le glisser est devenu un geste de l'élément : plus de déplacement de la vue. */
     gesture?: boolean;
   } | null>(null);
   const modelProject = useModel().project;
@@ -375,18 +455,13 @@ export function PlanEditor({ model }: { model: Model }) {
     if (e.button !== 0) return;
     if (tool === "select") {
       // Sélection au relâché (clic) ; un glisser déplace la vue, même commencé sur un élément,
-      // sauf sur l'emprise de l'escalier sélectionné, qui se déplace alors.
+      // sauf sur le corps de l'élément sélectionné (escalier, mur, trémie), qui se déplace alors.
       const under = selectionTarget(e.target);
       const hit = under?.hit ?? null;
       startPan(e, { hit });
-      // Emprise de l'escalier seulement (`data-plan-select`) : une zone de conflit qui vise
-      // l'escalier couvre aussi du sol libre, où un glisser déplace la vue.
-      const onStair =
-        selection?.kind === "stair" &&
-        under?.fromConflict === false &&
-        (hit?.kind === "stair" || hit?.kind === "section" || hit?.kind === "junction");
-      const at = onStair ? toSite(e.clientX, e.clientY) : null;
-      if (pan.current && at) pan.current.moveStair = at;
+      const handle = bodyHandle(selection, under);
+      const at = handle ? toSite(e.clientX, e.clientY) : null;
+      if (pan.current && handle && at) pan.current.moveBody = { handle, grab: at };
       return;
     }
     const raw = toSite(e.clientX, e.clientY);
@@ -445,19 +520,19 @@ export function PlanEditor({ model }: { model: Model }) {
       const dy = e.clientY - start.y;
       if (!start.moved && Math.hypot(dx, dy) < CLICK_SLOP_PX) return;
       start.moved = true;
-      if (start.moveStair) {
-        // Glisser de l'emprise de l'escalier sélectionné : geste de déplacement (modèle à jour
-        // requis ; sinon, déplacement de la vue).
-        const grab = start.moveStair;
-        start.moveStair = undefined;
+      if (start.moveBody) {
+        // Glisser du corps de l'élément sélectionné : geste de sa poignée (escalier : modèle à
+        // jour requis ; sinon, déplacement de la vue).
+        const { handle, grab } = start.moveBody;
+        start.moveBody = undefined;
         const p = toSite(e.clientX, e.clientY);
-        if (p && drag.begin({ kind: "move" }, grab, grab)) {
+        if (p && drag.begin(handle, grab, grab)) {
           start.gesture = true;
           drag.move(p, e.shiftKey);
           return;
         }
       }
-      // Geste de l'escalier annulé (Échap) avant le relâchement : la vue ne bouge pas.
+      // Geste de l'élément annulé (Échap) avant le relâchement : la vue ne bouge pas.
       if (start.gesture) return;
       const k = start.view.width / Math.max(1, size.w);
       setView({ ...start.view, cx: start.view.cx - dx * k, cy: start.view.cy + dy * k });
@@ -487,6 +562,46 @@ export function PlanEditor({ model }: { model: Model }) {
   const onPointerCancel = (): void => {
     pan.current = null;
     drag.cancel();
+  };
+
+  /** Résultat d'une action du site : sélection suivante et remarque ou refus. */
+  const applySiteAction = (o: SiteActionOutcome): void => {
+    if (o.selection === null) clearPlanSelection();
+    else if (o.selection) selectPlanElement(o.selection);
+    setMessage(o.note);
+  };
+
+  /**
+   * Double-clic (outil Sélectionner) : sur le mur sélectionné, coupe au point cliqué ; sur le
+   * contour de la trémie sélectionnée, sommet inséré sur le côté le plus proche.
+   */
+  const onDoubleClick = (e: MouseEvent<SVGSVGElement>): void => {
+    if (tool !== "select" || drag.isActive()) return;
+    // Le plan (ou une poignée) capture le pointeur à l'appui : la cible du double-clic n'est pas
+    // l'élément visé. On cherche sous le pointeur le premier élément sélectionnable du plan, en
+    // traversant les poignées (mur entier, nus, extrémités dessinés sur le mur) et les zones de
+    // conflit (qui couvrent aussi du sol libre).
+    const under = siteElementAt(e.clientX, e.clientY);
+    if (!under) return;
+    const hit = under.hit;
+    const p = toSite(e.clientX, e.clientY);
+    if (!p) return;
+    if (
+      hit.kind === "wall" &&
+      (selection?.kind === "wall" || selection?.kind === "wallEnd") &&
+      selection.id === hit.id
+    ) {
+      e.preventDefault();
+      applySiteAction(splitWallInStore(hit.id, p));
+    } else if (
+      hit.kind === "opening" &&
+      (selection?.kind === "opening" || selection?.kind === "openingVertex")
+    ) {
+      const edge = openingEdgeNear(appStore.getState().project, p);
+      if (edge === null) return;
+      e.preventDefault();
+      applySiteAction(insertOpeningVertexInStore(edge, p));
+    }
   };
 
   const onKeyDown = (e: KeyboardEvent<HTMLDivElement>): void => {
@@ -527,13 +642,59 @@ export function PlanEditor({ model }: { model: Model }) {
       selection?.kind === "section" &&
       !(e.target instanceof HTMLButtonElement || e.target instanceof HTMLTextAreaElement)
     ) {
-      // Suppr sur un tronçon sélectionné : `removeSection` (refus affiché, projet inchangé). Sur
-      // un mur ou un obstacle : lot 5 (sans effet).
+      // Suppr sur un tronçon sélectionné : `removeSection` (refus affiché, projet inchangé).
       e.preventDefault();
       if (drag.isActive()) return;
       const o = removeSectionInStore(selection.index);
       if (o.removed) clearPlanSelection();
       setMessage(o.note);
+    } else if (
+      e.key === "Delete" &&
+      tool === "select" &&
+      (selection?.kind === "wall" ||
+        selection?.kind === "wallEnd" ||
+        selection?.kind === "openingVertex") &&
+      !(e.target instanceof HTMLButtonElement || e.target instanceof HTMLTextAreaElement)
+    ) {
+      // Suppr sur un mur (ou une extrémité) : mur supprimé ; sur un sommet de trémie : sommet
+      // retiré si le contour reste valide (refus affiché, projet inchangé).
+      e.preventDefault();
+      if (drag.isActive()) return;
+      applySiteAction(
+        selection.kind === "openingVertex"
+          ? removeOpeningVertexInStore(selection.index)
+          : removeWallInStore(selection.id),
+      );
+    } else if (
+      (e.key === "ArrowLeft" ||
+        e.key === "ArrowRight" ||
+        e.key === "ArrowUp" ||
+        e.key === "ArrowDown") &&
+      tool === "select" &&
+      isSiteSelection(selection) &&
+      !e.ctrlKey &&
+      !e.metaKey &&
+      !e.altKey &&
+      !(e.target instanceof HTMLButtonElement || e.target instanceof HTMLTextAreaElement)
+    ) {
+      // Flèches sur la sélection du site (hors poignée, qui a son propre clavier) : 10 mm,
+      // Maj : 100 mm, par l'axe du site.
+      e.preventDefault();
+      if (drag.isActive()) return;
+      const h = siteSelectionHandle(selection);
+      if (!h) return;
+      const dir = e.key === "ArrowUp" || e.key === "ArrowRight" ? 1 : -1;
+      const axis = e.key === "ArrowUp" || e.key === "ArrowDown" ? "y" : "x";
+      const step = dir * (e.shiftKey ? KEY_STEP_MM_LARGE : KEY_STEP_MM);
+      const r = nudgeSite(appStore.getState().project, h, step, axis);
+      const next = r.project;
+      const u = next ? appStore.getState().update(() => next, `plan-key:${handleKey(h)}`) : null;
+      // Sommet de trémie réindexé (contour retourné) : le sommet déplacé reste sélectionné.
+      if (u?.ok && !r.error && r.selection) selectPlanElement(r.selection);
+      const error = r.error ?? (u && !u.ok ? (u.issues[0] ?? msg("ui.plan.site.refused")) : null);
+      drag.setNotice(
+        error ? { kind: "error", text: msg("ui.plan.editor.handle.refused", { error }) } : null,
+      );
     } else if ((e.key === "Enter" || e.key === " ") && tool === "select") {
       const under = selectionTarget(e.target);
       if (under) {
@@ -639,6 +800,7 @@ export function PlanEditor({ model }: { model: Model }) {
             onPointerUp={onPointerUp}
             onPointerCancel={onPointerCancel}
             onLostPointerCapture={onPointerCancel}
+            onDoubleClick={onDoubleClick}
             onPointerLeave={() => {
               setCursor(null);
               if (tip?.source === "hover") setTip(null);
@@ -785,6 +947,9 @@ export function PlanEditor({ model }: { model: Model }) {
             selection?.kind === "section" ||
             selection?.kind === "junction") ? (
             <p className="muted plan-editor__handle-hint">{tr.t("ui.plan.editor.handle.hint")}</p>
+          ) : null}
+          {tool === "select" && isSiteSelection(selection) ? (
+            <p className="muted plan-editor__handle-hint">{tr.t("ui.plan.editor.site.hint")}</p>
           ) : null}
           {message ? (
             <p

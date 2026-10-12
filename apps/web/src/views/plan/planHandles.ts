@@ -9,9 +9,15 @@
  *   poignées de bord (largeur au départ et à l'arrivée, bords gauche et droit).
  * - Jonction : angle (sur la direction sortante, à une largeur du pivot), et rayon du raccord du
  *   jour s'il est en arc (sur le bord du jour, à R du coin).
+ * - Site (sous-lot 5a, `siteHandles`, lu dans le site du projet **courant**, dessiné tel quel) :
+ *   mur ou extrémité de mur sélectionnés → deux extrémités, mur entier (milieu de l'axe), nus
+ *   gauche et droit (épaisseur, milieu de chaque nu) ; trémie → trémie entière (moyenne des
+ *   sommets) et sommets ; sommet de trémie → sommets. Trémie ronde ou dense
+ *   (`openingVerticesEditable`) : pas de poignée par sommet, sauf celle du sommet sélectionné.
  */
 import {
   junctionFrame,
+  openingVertices,
   stairPivot,
   toLocal,
   toWorld,
@@ -21,9 +27,10 @@ import {
   type StairPlacement,
   type Vec2,
 } from "@blondel/core";
-import type { PlanHandle } from "../../lib/planDrag.js";
+import { openingVerticesEditable, type PlanHandle } from "../../lib/planDrag.js";
 import { ANGLE_HANDLE_MIN_PX, ROTATE_HANDLE_OFFSET_PX } from "../../lib/planErgonomics.js";
 import type { PlanSelection } from "../../store/planEditor.js";
+import { wallOutline } from "../planSiteGeometry.js";
 
 /** Poignée placée : position, et origine du trait de rappel éventuel. */
 export interface HandleSpot {
@@ -96,6 +103,53 @@ export function selectionHandles(
           handle: { kind: "wellRadius", junction: j },
           at: along(well.base, well.incoming, -zone.well.radius),
           from: well.base,
+        });
+      }
+      return out;
+    }
+    default:
+      return [];
+  }
+}
+
+/** Poignées du site pour la sélection (voir l'en-tête) ; aucune pour un élément absent. */
+export function siteHandles(selection: PlanSelection | null, project: Project): HandleSpot[] {
+  if (!selection) return [];
+  const site = project.site;
+  switch (selection.kind) {
+    case "wall":
+    case "wallEnd": {
+      const w = site.walls.find((x) => x.id === selection.id);
+      if (!w) return [];
+      const [l0, l1, r1, r0] = wallOutline(w) as [Vec2, Vec2, Vec2, Vec2];
+      const axisMid = mid(w.a, w.b);
+      return [
+        { handle: { kind: "wallFace", id: w.id, side: "left" }, at: mid(l0, l1), from: axisMid },
+        { handle: { kind: "wallFace", id: w.id, side: "right" }, at: mid(r0, r1), from: axisMid },
+        { handle: { kind: "wallMove", id: w.id }, at: axisMid },
+        { handle: { kind: "wallEnd", id: w.id, end: "a" }, at: w.a },
+        { handle: { kind: "wallEnd", id: w.id, end: "b" }, at: w.b },
+      ];
+    }
+    case "opening":
+    case "openingVertex": {
+      if (!site.opening) return [];
+      const pts = openingVertices(site.opening);
+      const out: HandleSpot[] = [];
+      if (selection.kind === "opening") {
+        const c = {
+          x: pts.reduce((s, p) => s + p.x, 0) / pts.length,
+          y: pts.reduce((s, p) => s + p.y, 0) / pts.length,
+        };
+        out.push({ handle: { kind: "openingMove" }, at: c });
+      }
+      if (openingVerticesEditable(site.opening, pts.length)) {
+        pts.forEach((p, index) => out.push({ handle: { kind: "openingVertex", index }, at: p }));
+      } else if (selection.kind === "openingVertex" && pts[selection.index]) {
+        // Trémie ronde ou contour dense : seule la poignée du sommet sélectionné.
+        out.push({
+          handle: { kind: "openingVertex", index: selection.index },
+          at: pts[selection.index]!,
         });
       }
       return out;

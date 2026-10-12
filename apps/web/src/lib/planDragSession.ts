@@ -17,6 +17,7 @@
  */
 import type { Message } from "@blondel/i18n";
 import type { Project, Vec2 } from "@blondel/core";
+import type { PlanSelection } from "../store/planEditor.js";
 import {
   dragStep,
   type DragGesture,
@@ -27,8 +28,9 @@ import {
 
 /**
  * Retour en direct d'un geste (sous-lot 4c) : déplacement et rotation de l'escalier
- * transforment l'affichage du dernier modèle (`transform`, aucun calcul) ; les autres poignées
- * demandent un aperçu au worker (`preview`).
+ * transforment l'affichage du dernier modèle (`transform`, aucun calcul) ; les autres poignées,
+ * celles du site comprises (sous-lot 5a : murs et trémie, conflits recalculés), demandent un
+ * aperçu au worker (`preview`).
  */
 export function gestureMode(handle: PlanHandle): "transform" | "preview" {
   return handle.kind === "move" || handle.kind === "rotate" ? "transform" : "preview";
@@ -47,8 +49,15 @@ export interface DragHost {
   current(): Project;
   requestFrame(cb: () => void): number;
   cancelFrame(id: number): void;
-  /** Après chaque pas calculé : accroche retenue, ou refus. */
-  onStep?(step: { readonly snap: DragSnap | null; readonly error: Message | null }): void;
+  /**
+   * Après chaque pas calculé : accroche retenue, ou refus ; `selection` : élément à sélectionner
+   * à la fin du geste (sommet de trémie réindexé par la forme canonique), `null` sinon.
+   */
+  onStep?(step: {
+    readonly snap: DragSnap | null;
+    readonly error: Message | null;
+    readonly selection?: PlanSelection | null;
+  }): void;
 }
 
 export interface DragSession {
@@ -93,7 +102,7 @@ export function createDragSession(host: DragHost): DragSession {
       committed = true;
       last = project;
     }
-    host.onStep?.({ snap: r.snap, error: null });
+    host.onStep?.({ snap: r.snap, error: null, selection: r.selection ?? null });
   };
 
   const stopFrame = (): void => {
