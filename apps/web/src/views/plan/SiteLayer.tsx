@@ -1,11 +1,18 @@
 /**
  * Calque du site de l'éditeur de plan : murs, trémie, contour de la pièce, obstacles, lus dans
  * le site du `Project` (courant : pendant un glisser du site, le dessin suit chaque pas). Murs,
- * trémie (par son contour) et obstacles sont sélectionnables (outil de sélection) ; les
- * extrémités d'un mur et les sommets de la trémie apparaissent quand ce mur ou la trémie est
- * sélectionné ; les sommets du contour de la pièce sont sélectionnables.
+ * trémie et contour de la pièce (par leur contour) et obstacles sont sélectionnables (outil de
+ * sélection) ; les extrémités d'un mur, les sommets de la trémie et ceux du contour de la pièce
+ * apparaissent quand cet élément (ou l'un de ses sommets) est sélectionné. Une porte montre son
+ * débattement (`doorSwingSector` du cœur, réglage d'atelier `siteFit` du projet, décision F7).
  */
-import { openingPolygon, openingVertices, type Site, type Vec2 } from "@blondel/core";
+import {
+  openingPolygon,
+  openingVertices,
+  type Site,
+  type SiteFitProfileInput,
+  type Vec2,
+} from "@blondel/core";
 import { memo, useMemo } from "react";
 import { pointsAttr, wallOutline } from "../planSiteGeometry.js";
 import { obstacleShape } from "./planEditorGeometry.js";
@@ -36,10 +43,13 @@ function Vertex({
 
 export const SiteLayer = memo(function SiteLayer({
   site,
+  siteFit,
   ctx,
   markerR,
 }: {
   site: Site;
+  /** Réglage d'atelier de l'adéquation au site (rayon du débattement des portes). */
+  siteFit?: SiteFitProfileInput | undefined;
   ctx: SelectContext;
   /** Rayon des repères de sommet (mm du site, ≈ 6 px à l'écran). */
   markerR: number;
@@ -56,6 +66,8 @@ export const SiteLayer = memo(function SiteLayer({
   const openingActive =
     ctx.interactive && (sel === "opening" || (sel?.startsWith("openingVertex:") ?? false));
   const room = site.room?.points ?? [];
+  const roomActive =
+    ctx.interactive && (sel === "room" || (sel?.startsWith("roomVertex:") ?? false));
   return (
     <g className="plan-editor__layer plan-editor__layer--site">
       {room.length >= 3 ? (
@@ -63,10 +75,22 @@ export const SiteLayer = memo(function SiteLayer({
           className="plan-editor__room"
           points={pointsAttr(room)}
           vectorEffect="non-scaling-stroke"
+          {...(sel === "room" ? { "data-selected": "true" } : {})}
+        />
+      ) : null}
+      {room.length >= 3 ? (
+        // Le contour de la pièce entoure tout le plan : il se sélectionne par son trait (zone de
+        // clic élargie), l'intérieur laissant passer les clics.
+        <polygon
+          className="plan-editor__hit plan-editor__hit--room"
+          points={pointsAttr(room)}
+          vectorEffect="non-scaling-stroke"
+          {...selectable({ kind: "room" }, ctx)}
+          data-selected={undefined}
         />
       ) : null}
       {(site.obstacles ?? []).map((o) => {
-        const shape = obstacleShape(o);
+        const shape = obstacleShape(o, siteFit);
         const props = selectable({ kind: "obstacle", id: o.id }, ctx);
         const cls = `plan-editor__obstacle plan-editor__obstacle--${o.kind}`;
         if (shape.kind === "circle") {
@@ -174,7 +198,7 @@ export const SiteLayer = memo(function SiteLayer({
             />
           ))
         : null}
-      {ctx.interactive
+      {roomActive
         ? room.map((p, i) => (
             <Vertex
               key={`r${i}`}

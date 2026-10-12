@@ -11,9 +11,16 @@
  * - jonction : angle signé, mode, profondeur d'un palier droit, raccords côté jour et côté mur ;
  * - mur (sous-lot 5a) : épaisseur, caractère porteur, extrémités (x, y en mm entiers,
  *   `moveWallEnd`) ; actions couper au milieu (`splitWall`) et supprimer (`removeWall`) ;
- * - trémie : sommets (x, y, `moveOpeningVertex` ; résumé pour une trémie ronde ou dense) ; sommet : ses coordonnées, actions insérer un
- *   sommet après (`insertOpeningVertex`) et supprimer (`removeOpeningVertex`) ; obstacles et
- *   contour de pièce au sous-lot 5b.
+ * - trémie : sommets (x, y, `moveOpeningVertex` ; résumé pour une trémie ronde ou dense) ;
+ *   sommet : ses coordonnées, actions insérer un sommet après (`insertOpeningVertex`) et
+ *   supprimer (`removeOpeningVertex`) ;
+ * - contour de pièce (sous-lot 5b) : sommets (x, y, `moveRoomVertex`), action supprimer le
+ *   contour (`withRoom`) ; sommet du contour : ses coordonnées, actions insérer un sommet après
+ *   (`insertRoomVertex`) et supprimer (`removeRoomVertex`, refus sous 3 sommets) ;
+ * - obstacle : champs propres à son type (`updateObstacle`) : poteau (centre, côtés, rotation),
+ *   poteau rond (centre, rayon), porte (extrémités de la baie, gonds, sens d'ouverture), fenêtre
+ *   (extrémités, allège, linteau), zone interdite (sommets, `moveZoneVertex`) ; action supprimer
+ *   (`withoutObstacle`).
  *
  * Aucun calcul : chaque champ appelle un mutateur pur du cœur par `commitEdit`
  * (`lib/planInspector.ts`), une validation = une entrée d'historique ; un refus s'affiche sous le
@@ -26,7 +33,9 @@ import {
   convertToCage,
   insertLanding,
   insertSection,
+  moveRoomVertex,
   moveWallEnd,
+  moveZoneVertex,
   openingVertices,
   setJunctionAngle,
   setJunctionDepth,
@@ -44,6 +53,7 @@ import {
   type CageJunction,
   type CageSection,
   type EditResult,
+  type Obstacle,
   type Project,
   type WallJoint,
   type WellJoint,
@@ -64,6 +74,11 @@ import {
   removeOpeningVertexInStore,
   removeSectionInStore,
   removeWallInStore,
+  insertRoomVertexInStore,
+  obstaclePatch,
+  removeObstacleInStore,
+  removeRoomInStore,
+  removeRoomVertexInStore,
   splitWallInStore,
   trackedVertexMove,
   type SiteActionOutcome,
@@ -694,6 +709,278 @@ function OpeningInspector({
   );
 }
 
+/** Champs x, y d'un point (mm entiers), libellés `labelX`, `labelY`. */
+function PointFields({
+  at,
+  labelX,
+  labelY,
+  onCommit,
+}: {
+  at: { x: number; y: number };
+  labelX: string;
+  labelY: string;
+  onCommit: (point: { x: number; y: number }) => UpdateResult;
+}) {
+  return (
+    <div className="plan-inspector__pair">
+      <IntField
+        label={labelX}
+        value={Math.round(at.x)}
+        onCommit={(x) => onCommit({ x, y: at.y })}
+      />
+      <IntField
+        label={labelY}
+        value={Math.round(at.y)}
+        onCommit={(y) => onCommit({ x: at.x, y })}
+      />
+    </div>
+  );
+}
+
+function RoomInspector({
+  vertex,
+  setRemark,
+  onNote,
+}: {
+  /** Sommet sélectionné ; `null` : le contour entier. */
+  vertex: number | null;
+  setRemark: SetRemark;
+  onNote: (note: PlanNote | null) => void;
+}) {
+  const t = useT();
+  const room = useApp((s) => s.project.site.room);
+  if (!room) return null;
+  const commit = (edit: (p: Project) => EditResult) => fieldCommit(setRemark, edit);
+  const fields = (i: number) => (
+    <PointFields
+      key={i}
+      at={room.points[i]!}
+      labelX={t.t("ui.plan.inspector.room.vertexX", { index: i + 1 })}
+      labelY={t.t("ui.plan.inspector.room.vertexY", { index: i + 1 })}
+      onCommit={(point) => commit((p) => moveRoomVertex(p, i, point))}
+    />
+  );
+  if (vertex === null) {
+    return (
+      <fieldset className="plan-inspector__group">
+        <legend>{t.t("ui.plan.inspector.room.legend")}</legend>
+        <p className="muted">{t.t("ui.plan.inspector.room.hint")}</p>
+        {room.points.map((_, i) => fields(i))}
+        <div
+          className="button-row plan-inspector__actions"
+          role="group"
+          aria-label={t.t("ui.plan.inspector.room.actions")}
+        >
+          <button
+            type="button"
+            title={t.t("ui.plan.inspector.room.remove.title")}
+            onClick={() => siteAction(removeRoomInStore(), setRemark, onNote)}
+          >
+            {t.t("ui.plan.inspector.room.remove")}
+          </button>
+        </div>
+      </fieldset>
+    );
+  }
+  if (!room.points[vertex]) return <p className="muted">{t.t("ui.plan.inspector.none")}</p>;
+  return (
+    <fieldset className="plan-inspector__group">
+      <legend>{t.t("ui.plan.inspector.roomVertex.legend", { index: vertex + 1 })}</legend>
+      {fields(vertex)}
+      <div
+        className="button-row plan-inspector__actions"
+        role="group"
+        aria-label={t.t("ui.plan.inspector.roomVertex.actions", { index: vertex + 1 })}
+      >
+        <button
+          type="button"
+          title={t.t("ui.plan.inspector.roomVertex.insert.title")}
+          onClick={() => siteAction(insertRoomVertexInStore(vertex), setRemark, onNote)}
+        >
+          {t.t("ui.plan.inspector.openingVertex.insert")}
+        </button>
+        <button
+          type="button"
+          title={t.t("ui.plan.inspector.roomVertex.remove.title")}
+          onClick={() => siteAction(removeRoomVertexInStore(vertex), setRemark, onNote)}
+        >
+          {t.t("ui.plan.inspector.openingVertex.remove")}
+        </button>
+      </div>
+    </fieldset>
+  );
+}
+
+const OBSTACLE_LEGENDS = {
+  post: "ui.plan.inspector.obstacle.legend.post",
+  circularPost: "ui.plan.inspector.obstacle.legend.circularPost",
+  door: "ui.plan.inspector.obstacle.legend.door",
+  window: "ui.plan.inspector.obstacle.legend.window",
+  zone: "ui.plan.inspector.obstacle.legend.zone",
+} as const satisfies Record<Obstacle["kind"], MessageKey>;
+
+/** Champs propres au type de l'obstacle `o`. */
+function ObstacleFields({
+  o,
+  commit,
+}: {
+  o: Obstacle;
+  commit: (edit: (p: Project) => EditResult) => UpdateResult;
+}) {
+  const t = useT();
+  const id = o.id;
+  const patch = (fields: Parameters<typeof obstaclePatch>[1]) => commit(obstaclePatch(id, fields));
+  const center = (at: { x: number; y: number }) => (
+    <PointFields
+      at={at}
+      labelX={t.t("ui.plan.inspector.obstacle.centerX")}
+      labelY={t.t("ui.plan.inspector.obstacle.centerY")}
+      onCommit={(point) => patch({ center: point })}
+    />
+  );
+  const bay = (a: { x: number; y: number }, b: { x: number; y: number }) =>
+    (["a", "b"] as const).map((end) => (
+      <PointFields
+        key={end}
+        at={end === "a" ? a : b}
+        labelX={t.t("ui.plan.inspector.obstacle.endX", { end: end.toUpperCase() })}
+        labelY={t.t("ui.plan.inspector.obstacle.endY", { end: end.toUpperCase() })}
+        onCommit={(point) => patch({ [end]: point })}
+      />
+    ));
+  switch (o.kind) {
+    case "post":
+      return (
+        <>
+          {center(o.center)}
+          <IntField
+            label={t.t("ui.plan.inspector.obstacle.sizeX")}
+            value={o.sizeX}
+            min={1}
+            onCommit={(sizeX) => patch({ sizeX })}
+          />
+          <IntField
+            label={t.t("ui.plan.inspector.obstacle.sizeY")}
+            value={o.sizeY}
+            min={1}
+            onCommit={(sizeY) => patch({ sizeY })}
+          />
+          <IntField
+            label={t.t("ui.plan.inspector.obstacle.rotation")}
+            value={o.rotation ?? 0}
+            unit="°"
+            hint={t.t("ui.plan.inspector.obstacle.rotation.hint")}
+            onCommit={(rotation) => patch({ rotation })}
+          />
+        </>
+      );
+    case "circularPost":
+      return (
+        <>
+          {center(o.center)}
+          <IntField
+            label={t.t("ui.plan.inspector.obstacle.radius")}
+            value={o.radius}
+            min={1}
+            onCommit={(radius) => patch({ radius })}
+          />
+        </>
+      );
+    case "door":
+      return (
+        <>
+          {bay(o.a, o.b)}
+          <SelectField<"a" | "b">
+            label={t.t("ui.plan.editor.obstacle.hinge")}
+            value={o.hinge}
+            options={[
+              { value: "a", label: t.t("ui.plan.inspector.obstacle.hinge.a") },
+              { value: "b", label: t.t("ui.plan.inspector.obstacle.hinge.b") },
+            ]}
+            onCommit={(hinge) => patch({ hinge })}
+          />
+          <SelectField<"left" | "right">
+            label={t.t("ui.plan.editor.obstacle.swing")}
+            value={o.swing}
+            options={[
+              { value: "left", label: t.t("ui.plan.editor.obstacle.swing.left") },
+              { value: "right", label: t.t("ui.plan.editor.obstacle.swing.right") },
+            ]}
+            hint={t.t("ui.plan.inspector.obstacle.swing.hint")}
+            onCommit={(swing) => patch({ swing })}
+          />
+        </>
+      );
+    case "window":
+      return (
+        <>
+          {bay(o.a, o.b)}
+          <IntField
+            label={t.t("ui.plan.editor.obstacle.sill")}
+            value={o.sill}
+            min={0}
+            onCommit={(sill) => patch({ sill })}
+          />
+          <IntField
+            label={t.t("ui.plan.editor.obstacle.head")}
+            value={o.head}
+            min={1}
+            hint={t.t("ui.plan.editor.obstacle.heights.hint")}
+            onCommit={(head) => patch({ head })}
+          />
+        </>
+      );
+    case "zone":
+      return (
+        <>
+          {o.points.map((at, i) => (
+            <PointFields
+              key={i}
+              at={at}
+              labelX={t.t("ui.plan.inspector.room.vertexX", { index: i + 1 })}
+              labelY={t.t("ui.plan.inspector.room.vertexY", { index: i + 1 })}
+              onCommit={(point) => commit((p) => moveZoneVertex(p, id, i, point))}
+            />
+          ))}
+        </>
+      );
+  }
+}
+
+function ObstacleInspector({
+  id,
+  setRemark,
+  onNote,
+}: {
+  id: string;
+  setRemark: SetRemark;
+  onNote: (note: PlanNote | null) => void;
+}) {
+  const t = useT();
+  const o = useApp((s) => (s.project.site.obstacles ?? []).find((x) => x.id === id));
+  if (!o) return null;
+  const commit = (edit: (p: Project) => EditResult) => fieldCommit(setRemark, edit);
+  return (
+    <fieldset className="plan-inspector__group">
+      <legend>{t.t(OBSTACLE_LEGENDS[o.kind], { id })}</legend>
+      <ObstacleFields o={o} commit={commit} />
+      <div
+        className="button-row plan-inspector__actions"
+        role="group"
+        aria-label={t.t("ui.plan.inspector.obstacle.actions", { id })}
+      >
+        <button
+          type="button"
+          title={t.t("ui.plan.inspector.obstacle.remove.title")}
+          onClick={() => siteAction(removeObstacleInStore(id), setRemark, onNote)}
+        >
+          {t.t("ui.plan.inspector.obstacle.remove")}
+        </button>
+      </div>
+    </fieldset>
+  );
+}
+
 /** Inspecteur de la sélection du plan (voir l'en-tête). */
 export function PlanInspector({
   selection,
@@ -721,8 +1008,12 @@ export function PlanInspector({
         return <OpeningInspector vertex={null} setRemark={setRemark} onNote={onNote} />;
       case "openingVertex":
         return <OpeningInspector vertex={selection.index} setRemark={setRemark} onNote={onNote} />;
-      default:
-        return <p className="muted">{t.t("ui.plan.inspector.none")}</p>;
+      case "room":
+        return <RoomInspector vertex={null} setRemark={setRemark} onNote={onNote} />;
+      case "roomVertex":
+        return <RoomInspector vertex={selection.index} setRemark={setRemark} onNote={onNote} />;
+      case "obstacle":
+        return <ObstacleInspector id={selection.id} setRemark={setRemark} onNote={onNote} />;
     }
   })();
   return (

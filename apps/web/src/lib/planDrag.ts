@@ -23,7 +23,17 @@
 import {
   dragJunctionAngle,
   dragWallFace,
+  moveBayEnd,
   moveOpeningVertex,
+  moveRoomVertex,
+  moveZoneVertex,
+  postAngleAt,
+  resizePostToCorner,
+  setCircularPostRadiusAt,
+  translateObstacle,
+  updateObstacle,
+  type Obstacle,
+  type ObstacleDraft,
   moveWallEnd,
   openingVertices,
   setWallThicknessKeepingFace,
@@ -34,6 +44,7 @@ import {
   translateOpening,
   translateWall,
   type SiteSnapContext,
+  type SiteSnapExclude,
   type SnapKind,
   dragSectionEnd,
   dragWellRadius,
@@ -94,13 +105,25 @@ export type PlanHandle =
  * Poignées du site (sous-lot 5a) : extrémité d'un mur (`moveWallEnd`), mur entier
  * (`translateWall`), nu d'un mur (épaisseur, nu opposé conservé : `dragWallFace`), trémie entière
  * (`translateOpening`), sommet de la trémie (`moveOpeningVertex`, ordre de `openingVertices`).
+ * Sous-lot 5b : sommet du contour de pièce (`moveRoomVertex`), obstacle entier
+ * (`translateObstacle` ; une baie glisse le long de son mur), coin d'un poteau (`resizePostToCorner`),
+ * rotation d'un poteau (`postAngleAt`, accroche de 15°), rayon d'un poteau rond
+ * (`setCircularPostRadiusAt`), extrémité d'une porte ou d'une fenêtre le long de son mur
+ * (`moveBayEnd`), sommet d'une zone interdite (`moveZoneVertex`).
  */
 export type SiteHandle =
   | { readonly kind: "wallEnd"; readonly id: string; readonly end: "a" | "b" }
   | { readonly kind: "wallMove"; readonly id: string }
   | { readonly kind: "wallFace"; readonly id: string; readonly side: "left" | "right" }
   | { readonly kind: "openingMove" }
-  | { readonly kind: "openingVertex"; readonly index: number };
+  | { readonly kind: "openingVertex"; readonly index: number }
+  | { readonly kind: "roomVertex"; readonly index: number }
+  | { readonly kind: "obstacleMove"; readonly id: string }
+  | { readonly kind: "postSize"; readonly id: string }
+  | { readonly kind: "postRotate"; readonly id: string }
+  | { readonly kind: "postRadius"; readonly id: string }
+  | { readonly kind: "bayEnd"; readonly id: string; readonly end: "a" | "b" }
+  | { readonly kind: "zoneVertex"; readonly id: string; readonly index: number };
 
 const SITE_HANDLE_KINDS: ReadonlySet<PlanHandle["kind"]> = new Set([
   "wallEnd",
@@ -108,6 +131,13 @@ const SITE_HANDLE_KINDS: ReadonlySet<PlanHandle["kind"]> = new Set([
   "wallFace",
   "openingMove",
   "openingVertex",
+  "roomVertex",
+  "obstacleMove",
+  "postSize",
+  "postRotate",
+  "postRadius",
+  "bayEnd",
+  "zoneVertex",
 ]);
 
 /** Poignée du site (positions lues dans le projet courant, pas dans le `Model`). */
@@ -117,7 +147,9 @@ export function isSiteHandle(h: PlanHandle): h is SiteHandle {
 
 /**
  * Poignée qui suit les flèches quand un élément du site est sélectionné (et non une poignée) :
- * mur → mur entier, extrémité → extrémité, trémie → trémie entière, sommet → sommet.
+ * mur → mur entier, extrémité → extrémité, trémie → trémie entière, sommet → sommet, sommet du
+ * contour de pièce → ce sommet, obstacle → obstacle entier (le contour de pièce entier n'a pas
+ * de déplacement : aucune).
  */
 export function siteSelectionHandle(sel: PlanSelection | null): SiteHandle | null {
   switch (sel?.kind) {
@@ -129,6 +161,10 @@ export function siteSelectionHandle(sel: PlanSelection | null): SiteHandle | nul
       return { kind: "openingMove" };
     case "openingVertex":
       return { kind: "openingVertex", index: sel.index };
+    case "roomVertex":
+      return { kind: "roomVertex", index: sel.index };
+    case "obstacle":
+      return { kind: "obstacleMove", id: sel.id };
     default:
       return null;
   }
@@ -141,6 +177,8 @@ export function siteHandleSelection(h: PlanHandle): PlanSelection | null {
       return { kind: "wallEnd", id: h.id, end: h.end };
     case "openingVertex":
       return { kind: "openingVertex", index: h.index };
+    case "roomVertex":
+      return { kind: "roomVertex", index: h.index };
     default:
       return null;
   }
@@ -172,12 +210,23 @@ export function handleKey(h: PlanHandle): string {
       return "openingMove";
     case "openingVertex":
       return `openingVertex:${h.index}`;
+    case "roomVertex":
+      return `roomVertex:${h.index}`;
+    case "obstacleMove":
+    case "postSize":
+    case "postRotate":
+    case "postRadius":
+      return `${h.kind}:${h.id}`;
+    case "bayEnd":
+      return `bayEnd:${h.end}:${h.id}`;
+    case "zoneVertex":
+      return `zoneVertex:${h.index}:${h.id}`;
   }
 }
 
 /** Les poignées d'angle (degrés) ; les autres sont en mm (position, longueur, largeur, rayon). */
 function isAngleHandle(h: PlanHandle, project: Project): boolean {
-  if (h.kind === "rotate" || h.kind === "junctionAngle") return true;
+  if (h.kind === "rotate" || h.kind === "junctionAngle" || h.kind === "postRotate") return true;
   if (h.kind === "sectionEnd")
     return editableCage(project)?.sections[h.section]?.axis.kind === "arc";
   return false;
@@ -197,13 +246,70 @@ export function editableCage(project: Project): CageLayoutSpec | null {
 
 /** Valeur d'une poignée pour son curseur ARIA (`role="slider"`). */
 export interface HandleValue {
-  readonly unit: "mm" | "deg" | "position";
+  readonly unit: "mm" | "deg" | "position" | "size";
   /** Valeur courante ; `null` : non numérique (longueur `auto`). */
   readonly now: number | null;
   readonly min: number;
   readonly max: number;
   /** Position de l'escalier (poignée de déplacement). */
   readonly position?: Vec2;
+  /** Côtés x, y d'un poteau rectangulaire (poignée de coin, `unit` « size »). */
+  readonly size?: Vec2;
+}
+
+/** Obstacle `id` du site, ou `undefined`. */
+function obstacleOf(project: Project, id: string): Obstacle | undefined {
+  return (project.site.obstacles ?? []).find((o) => o.id === id);
+}
+
+/** Point repère d'un obstacle (valeur de sa poignée de déplacement) : centre, extrémité a, sommet 1. */
+function obstacleAnchor(o: Obstacle): Vec2 {
+  switch (o.kind) {
+    case "post":
+    case "circularPost":
+      return o.center;
+    case "door":
+    case "window":
+      return o.a;
+    case "zone":
+      return o.points[0]!;
+  }
+}
+
+/** Sommets d'un obstacle accrochés pendant sa translation (centre d'un poteau, sommets d'une zone). */
+function obstacleSnapVertices(o: Obstacle): readonly Vec2[] {
+  switch (o.kind) {
+    case "post":
+    case "circularPost":
+      return [o.center];
+    case "zone":
+      return o.points;
+    default:
+      return [];
+  }
+}
+
+/** Obstacle sans identifiant (brouillon de `updateObstacle`), une cote remplacée. */
+function obstacleWith(o: Obstacle, patch: Partial<ObstacleDraft>): ObstacleDraft {
+  const { id: _id, ...draft } = o;
+  return { ...draft, ...patch } as ObstacleDraft;
+}
+
+/** Élément exclu des accroches pendant le geste d'une poignée du site. */
+function snapExclude(h: SiteHandle): SiteSnapExclude {
+  switch (h.kind) {
+    case "openingMove":
+    case "openingVertex":
+      return { kind: "opening" };
+    case "wallEnd":
+    case "wallMove":
+    case "wallFace":
+      return { kind: "wall", id: h.id };
+    case "roomVertex":
+      return { kind: "room" };
+    default:
+      return { kind: "obstacle", id: h.id };
+  }
 }
 
 /**
@@ -270,6 +376,28 @@ function siteHandleValue(project: Project, h: SiteHandle, maxMm: number): Handle
       return position(opening ? openingVertices(opening)[0] : undefined);
     case "openingVertex":
       return position(opening ? openingVertices(opening)[h.index] : undefined);
+    case "roomVertex":
+      return position(project.site.room?.points[h.index]);
+  }
+  const o = obstacleOf(project, h.id);
+  if (!o) return null;
+  switch (h.kind) {
+    case "obstacleMove":
+      return position(obstacleAnchor(o));
+    case "postSize":
+      return o.kind === "post"
+        ? { unit: "size", now: o.sizeX, min: 1, max: maxMm, size: { x: o.sizeX, y: o.sizeY } }
+        : null;
+    case "postRotate":
+      return o.kind === "post"
+        ? { unit: "deg", now: wrapDeg(o.rotation ?? 0), min: -180, max: 180 }
+        : null;
+    case "postRadius":
+      return o.kind === "circularPost" ? { unit: "mm", now: o.radius, min: 1, max: maxMm } : null;
+    case "bayEnd":
+      return o.kind === "door" || o.kind === "window" ? position(o[h.end]) : null;
+    case "zoneVertex":
+      return o.kind === "zone" ? position(o.points[h.index]) : null;
   }
 }
 
@@ -324,14 +452,7 @@ export function beginDrag(
           (t) => t.kind === "sectionLength" && t.section === handle.section,
         )
       : [];
-  const site = isSiteHandle(handle)
-    ? siteSnapContext(
-        project,
-        handle.kind === "openingMove" || handle.kind === "openingVertex"
-          ? { kind: "opening" }
-          : { kind: "wall", id: handle.id },
-      )
-    : undefined;
+  const site = isSiteHandle(handle) ? siteSnapContext(project, snapExclude(handle)) : undefined;
   return {
     handle,
     key: `plan-drag:${handleKey(handle)}:${seq}`,
@@ -532,6 +653,40 @@ function siteStep(
         ? { project: r.project, snap }
         : { project: r.project, snap, selection: { kind: "openingVertex", index: r.index } };
     }
+    case "roomVertex": {
+      const snap = pointSnap(point);
+      return done(moveRoomVertex(p, h.index, snap?.kind === "point" ? snap.at : point), snap);
+    }
+    case "obstacleMove": {
+      const o = obstacleOf(p, h.id);
+      // Une baie glisse le long de son mur (projection du cœur), sans accroche.
+      if (o?.kind === "door" || o?.kind === "window")
+        return done(translateObstacle(p, h.id, delta));
+      const t = snappedDelta(o ? obstacleSnapVertices(o) : []);
+      return done(translateObstacle(p, h.id, t.d), t.snap);
+    }
+    case "postSize":
+      return done(resizePostToCorner(p, h.id, point));
+    case "postRotate": {
+      const o = obstacleOf(p, h.id);
+      const raw = postAngleAt(p, h.id, point);
+      if (o?.kind !== "post" || raw === null) return { project: p, snap: null };
+      const rotation = opts.free
+        ? snapAngle(raw, 1)
+        : snapAngleFrom(raw, wrapDeg(o.rotation ?? 0), ANGLE_SNAP_DEG);
+      return done(
+        updateObstacle(p, h.id, obstacleWith(o, { rotation })),
+        opts.free ? null : { kind: "angle", angle: wrapDeg(rotation) },
+      );
+    }
+    case "postRadius":
+      return done(setCircularPostRadiusAt(p, h.id, point));
+    case "bayEnd":
+      return done(moveBayEnd(p, h.id, h.end, point));
+    case "zoneVertex": {
+      const snap = pointSnap(point);
+      return done(moveZoneVertex(p, h.id, h.index, snap?.kind === "point" ? snap.at : point), snap);
+    }
   }
 }
 
@@ -662,7 +817,41 @@ export function nudgeSite(
         ? { project: r.project }
         : { project: r.project, selection: { kind: "openingVertex", index: r.index } };
     }
+    case "roomVertex": {
+      const v = project.site.room?.points[h.index];
+      if (!v) return editError(msg("site.edit.noRoom"));
+      return moveRoomVertex(project, h.index, shift(v));
+    }
+    case "obstacleMove":
+      return translateObstacle(project, h.id, d);
   }
+  const o = obstacleOf(project, h.id);
+  if (!o) return editError(msg("site.edit.unknownObstacle", { id: h.id }));
+  switch (h.kind) {
+    case "postSize":
+      // Flèches gauche / droite : côté x ; haut / bas : côté y.
+      if (o.kind !== "post") break;
+      return updateObstacle(
+        project,
+        h.id,
+        obstacleWith(o, axis === "x" ? { sizeX: o.sizeX + step } : { sizeY: o.sizeY + step }),
+      );
+    case "postRotate":
+      if (o.kind !== "post") break;
+      return updateObstacle(project, h.id, obstacleWith(o, { rotation: (o.rotation ?? 0) + step }));
+    case "postRadius":
+      if (o.kind !== "circularPost") break;
+      return updateObstacle(project, h.id, obstacleWith(o, { radius: o.radius + step }));
+    case "bayEnd":
+      if (o.kind !== "door" && o.kind !== "window") break;
+      return moveBayEnd(project, h.id, h.end, shift(o[h.end]));
+    case "zoneVertex": {
+      const v = o.kind === "zone" ? o.points[h.index] : undefined;
+      if (!v) break;
+      return moveZoneVertex(project, h.id, h.index, shift(v));
+    }
+  }
+  return editError(msg("site.edit.obstacleKind", { id: h.id }));
 }
 
 /**

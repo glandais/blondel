@@ -30,6 +30,7 @@ const round = (pts: readonly Vec2[]): [number, number][] =>
 const arbSelection: fc.Arbitrary<PlanSelection> = fc.oneof(
   fc.constant({ kind: "stair" } as const),
   fc.constant({ kind: "opening" } as const),
+  fc.constant({ kind: "room" } as const),
   fc.record({
     kind: fc.constantFrom(
       "section" as const,

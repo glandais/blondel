@@ -38,6 +38,13 @@ import {
   removeWallInStore,
   splitWallInStore,
   trackedVertexMove,
+  addObstacleInStore,
+  insertRoomVertexInStore,
+  obstaclePatch,
+  removeObstacleInStore,
+  removeRoomInStore,
+  removeRoomVertexInStore,
+  replaceRoomInStore,
   wallJointOfKind,
   wellJointOfKind,
 } from "./planInspector.js";
@@ -319,5 +326,98 @@ describe("actions du site (sous-lot 5a) : une entrée d'historique, sélection s
     expect(ins.note?.text.key).toBe("ui.plan.editor.opening.circleLost");
     const o = appStore.getState().project.site.opening!;
     expect(o.kind === "polygon" && o.circle).toBeFalsy();
+  });
+});
+
+describe("contour de pièce et obstacles (sous-lot 5b) : une entrée d'historique, refus", () => {
+  const SQUARE = [
+    { x: -2000, y: -1000 },
+    { x: 3000, y: -1000 },
+    { x: 3000, y: 5000 },
+    { x: -2000, y: 5000 },
+  ];
+
+  function load(): Project {
+    appStore.getState().replaceProject(quarter());
+    appStore.getState().endGroup();
+    return appStore.getState().project;
+  }
+
+  it("tracer, retracer (remplacement annulable), supprimer le contour", () => {
+    const p = load();
+    const past = appStore.getState().history.past.length;
+    const saved = replaceRoomInStore(SQUARE);
+    expect(saved).toMatchObject({ done: true });
+    expect(saved.note?.text.key).toBe("ui.plan.editor.room.saved");
+    const first = appStore.getState().project;
+    const tri = SQUARE.slice(0, 3);
+    const replaced = replaceRoomInStore(tri);
+    expect(replaced.note?.text.key).toBe("ui.plan.editor.room.replaced");
+    expect(appStore.getState().project.site.room!.points).toEqual(tri);
+    expect(appStore.getState().history.past).toHaveLength(past + 2);
+    appStore.getState().undo();
+    expect(appStore.getState().project).toBe(first);
+    // Contour invalide (aire nulle) : refus, projet inchangé.
+    const flat = replaceRoomInStore([
+      { x: 0, y: 0 },
+      { x: 1000, y: 0 },
+      { x: 2000, y: 0 },
+    ]);
+    expect(flat.done).toBe(false);
+    expect(appStore.getState().project).toBe(first);
+    const removed = removeRoomInStore();
+    expect(removed).toMatchObject({ done: true, selection: null });
+    expect(appStore.getState().project.site.room).toBeUndefined();
+    expect(removeRoomInStore().done).toBe(false);
+    appStore.getState().undo();
+    appStore.getState().undo();
+    expect(appStore.getState().project).toBe(p);
+  });
+
+  it("insérer puis retirer un sommet du contour ; refus sous 3 sommets", () => {
+    load();
+    replaceRoomInStore(SQUARE.slice(0, 3));
+    const ins = insertRoomVertexInStore(0);
+    expect(ins).toMatchObject({ done: true, selection: { kind: "roomVertex", index: 1 } });
+    expect(appStore.getState().project.site.room!.points[1]).toEqual({ x: 500, y: -1000 });
+    const rem = removeRoomVertexInStore(1);
+    expect(rem).toMatchObject({ done: true, selection: { kind: "room" } });
+    const before = appStore.getState().project;
+    const refused = removeRoomVertexInStore(0);
+    expect(refused.done).toBe(false);
+    expect((refused.note?.text.params?.error as { key?: string }).key).toBe(
+      "site.room.tooFewPoints",
+    );
+    expect(appStore.getState().project).toBe(before);
+  });
+
+  it("ajouter, modifier un champ, supprimer un obstacle", () => {
+    load();
+    const past = appStore.getState().history.past.length;
+    const added = addObstacleInStore({
+      kind: "window",
+      a: { x: 0, y: 0 },
+      b: { x: 900, y: 0 },
+      sill: 900,
+      head: 2100,
+    });
+    expect(added).toMatchObject({ done: true, id: "obstacle-1" });
+    expect(added.note?.text.key).toBe("ui.plan.editor.obstacle.added");
+    // Linteau sous l'allège : refus du schéma, rien d'appliqué.
+    const bad = commitEdit(obstaclePatch("obstacle-1", { head: 800 }));
+    expect(bad.result.ok).toBe(false);
+    const sill = commitEdit(obstaclePatch("obstacle-1", { sill: 1000 }));
+    expect(sill.result.ok).toBe(true);
+    expect(appStore.getState().project.site.obstacles![0]).toMatchObject({
+      id: "obstacle-1",
+      sill: 1000,
+      head: 2100,
+    });
+    expect(commitEdit(obstaclePatch("nope", { sill: 1 })).result.ok).toBe(false);
+    const removed = removeObstacleInStore("obstacle-1");
+    expect(removed).toMatchObject({ done: true, selection: null });
+    expect(appStore.getState().project.site.obstacles).toBeUndefined();
+    expect(appStore.getState().history.past).toHaveLength(past + 3);
+    expect(removeObstacleInStore("obstacle-1").done).toBe(false);
   });
 });

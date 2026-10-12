@@ -33,6 +33,12 @@ export const HANDLE_RADIUS_PX = 7;
  */
 export const ROTATE_HANDLE_OFFSET_PX = 64;
 
+/**
+ * Distance (pixels d'écran) de la poignée de rotation d'un poteau rectangulaire au milieu de son
+ * côté x+ (sous-lot 5b) : hors du poteau quel que soit le cadrage.
+ */
+export const POST_ROTATE_HANDLE_OFFSET_PX = 32;
+
 /** Distance minimale (pixels d'écran) de la poignée d'angle d'une jonction à son pivot. */
 export const ANGLE_HANDLE_MIN_PX = 48;
 

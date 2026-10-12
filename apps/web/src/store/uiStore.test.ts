@@ -375,8 +375,9 @@ describe("éditeur de plan : outil et sélection (état d'interface seul)", () =
     expect(ui.getState()).toMatchObject({ planTool: "wall", planSelection: null });
     selectPlanElement({ kind: "stair" }, ui);
     expect(ui.getState().planSelection).toBeNull();
+    // Contour de pièce (sous-lot 5b) : outil disponible, toujours sans sélection.
     setPlanTool("room", ui);
-    expect(ui.getState().planTool).toBe("wall");
+    expect(ui.getState()).toMatchObject({ planTool: "room", planSelection: null });
     expect(app.getState().project).toBe(project);
     expect(app.getState().canUndo()).toBe(false);
   });

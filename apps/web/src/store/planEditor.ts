@@ -5,23 +5,22 @@
  * ne modifie jamais le `Project` et n'entre pas dans l'historique.
  *
  * Outils : `select` (défaut : clic sur un élément pour le sélectionner, glisser dans le vide pour
- * déplacer la vue), `pan`, `opening` (trémie), `wall` (mur), `calibrate` (calibrage de l'image) ;
- * `room` (contour de la pièce) et `obstacle` sont déclarés mais masqués jusqu'au lot 5
- * (`PLAN_TOOL_AVAILABLE`).
+ * déplacer la vue), `pan`, `opening` (trémie), `wall` (mur), `room` (contour de la pièce) et
+ * `obstacle` (sous-lot 5b), `calibrate` (calibrage de l'image).
  */
 import { openingPolygon, type Model, type Project } from "@blondel/core";
 
 export type PlanEditorTool =
   "select" | "pan" | "opening" | "wall" | "room" | "obstacle" | "calibrate";
 
-/** Outils proposés dans la barre au sous-lot 4a ; `room` et `obstacle` arrivent au lot 5. */
+/** Outils proposés dans la barre (contour de pièce et obstacles : sous-lot 5b). */
 export const PLAN_TOOL_AVAILABLE: Readonly<Record<PlanEditorTool, boolean>> = {
   select: true,
   pan: true,
   opening: true,
   wall: true,
-  room: false,
-  obstacle: false,
+  room: true,
+  obstacle: true,
   calibrate: true,
 };
 
@@ -34,6 +33,7 @@ export type PlanSelection =
   | { readonly kind: "wallEnd"; readonly id: string; readonly end: "a" | "b" }
   | { readonly kind: "opening" }
   | { readonly kind: "openingVertex"; readonly index: number }
+  | { readonly kind: "room" }
   | { readonly kind: "roomVertex"; readonly index: number }
   | { readonly kind: "obstacle"; readonly id: string };
 
@@ -51,6 +51,7 @@ export function samePlanSelection(a: PlanSelection | null, b: PlanSelection | nu
   switch (a.kind) {
     case "stair":
     case "opening":
+    case "room":
       return true;
     case "section":
     case "junction":
@@ -113,6 +114,8 @@ export function planSelectionExists(
       return site.opening !== undefined;
     case "openingVertex":
       return inRange(selection.index, openingPolygon(site.opening)?.length ?? 0);
+    case "room":
+      return site.room !== undefined;
     case "roomVertex":
       return inRange(selection.index, site.room?.points.length ?? 0);
     case "obstacle":

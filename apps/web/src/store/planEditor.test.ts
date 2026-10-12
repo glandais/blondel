@@ -21,6 +21,7 @@ const TOOLS = Object.keys(PLAN_TOOL_AVAILABLE) as PlanEditorTool[];
 const arbSelection: fc.Arbitrary<PlanSelection> = fc.oneof(
   fc.constant({ kind: "stair" } as const),
   fc.constant({ kind: "opening" } as const),
+  fc.constant({ kind: "room" } as const),
   fc.record({ kind: fc.constant("section" as const), index: fc.nat(20) }),
   fc.record({ kind: fc.constant("junction" as const), index: fc.nat(20) }),
   fc.record({ kind: fc.constant("openingVertex" as const), index: fc.nat(20) }),
@@ -47,11 +48,15 @@ describe("outil et sélection de l'éditeur de plan (réducteurs)", () => {
     expect(INITIAL_PLAN_EDITOR).toEqual({ planTool: "select", planSelection: null });
   });
 
-  it("contour de pièce et obstacles masqués jusqu'au lot 5", () => {
-    expect(PLAN_TOOL_AVAILABLE.room).toBe(false);
-    expect(PLAN_TOOL_AVAILABLE.obstacle).toBe(false);
-    expect(withPlanTool(INITIAL_PLAN_EDITOR, "room")).toBe(INITIAL_PLAN_EDITOR);
-    expect(withPlanTool(INITIAL_PLAN_EDITOR, "obstacle")).toBe(INITIAL_PLAN_EDITOR);
+  it("contour de pièce et obstacles disponibles (sous-lot 5b)", () => {
+    expect(PLAN_TOOL_AVAILABLE.room).toBe(true);
+    expect(PLAN_TOOL_AVAILABLE.obstacle).toBe(true);
+    expect(withPlanTool(INITIAL_PLAN_EDITOR, "room")).toEqual({
+      planTool: "room",
+      planSelection: null,
+    });
+    const sel = withPlanSelection(INITIAL_PLAN_EDITOR, { kind: "obstacle", id: "obstacle-1" });
+    expect(withPlanTool(sel, "obstacle")).toEqual({ planTool: "obstacle", planSelection: null });
   });
 
   it("sélection, clic sur le même élément sans effet, désélection", () => {
@@ -146,7 +151,24 @@ describe("existence de l'élément sélectionné (cage-60)", () => {
     expect(planSelectionExists({ kind: "opening" }, noOpening, model)).toBe(false);
     expect(planSelectionExists({ kind: "openingVertex", index: 0 }, noOpening, model)).toBe(false);
     expect(planSelectionExists({ kind: "roomVertex", index: 0 }, project, model)).toBe(false);
+    expect(planSelectionExists({ kind: "room" }, project, model)).toBe(false);
     expect(planSelectionExists({ kind: "obstacle", id: "o1" }, project, model)).toBe(false);
+    const withRoom: Project = {
+      ...project,
+      site: {
+        ...project.site,
+        room: {
+          points: [
+            { x: -3000, y: -1000 },
+            { x: 2000, y: -1000 },
+            { x: 2000, y: 5000 },
+          ],
+        },
+      },
+    };
+    expect(planSelectionExists({ kind: "room" }, withRoom, model)).toBe(true);
+    expect(planSelectionExists({ kind: "roomVertex", index: 2 }, withRoom, model)).toBe(true);
+    expect(planSelectionExists({ kind: "roomVertex", index: 3 }, withRoom, model)).toBe(false);
   });
 
   it("prune : sélection d'un mur retiré effacée, sélection valide gardée telle quelle", () => {

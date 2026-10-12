@@ -3,7 +3,10 @@
  * calque de fond. Chaque fonction rend un nouveau projet (copie sur écriture), sans valider le
  * schéma complet (le store de l'interface le fait). Mutateurs de l'éditeur 2D (ADR-0010, plan D,
  * sous-lot 3a) en fin de fichier : contrat `EditResult` (`model/edit.ts`), refus typé au lieu
- * d'une exception, arrondi au mm, partage structurel.
+ * d'une exception, arrondi au mm, partage structurel. Gestes sur les obstacles (sous-lot 5b) :
+ * `postDraftFromCorner`, `circularPostDraftFromEdge`, `translateObstacle`, `moveBayEnd`,
+ * `resizePostToCorner`, `postAngleAt`, `setCircularPostRadiusAt`, `moveZoneVertex` ; contour de
+ * pièce : `roomEdgeNear`.
  */
 import { isMessage, msg, type Message } from "@blondel/i18n";
 import * as V from "../geom2d/vec.js";
@@ -20,6 +23,7 @@ import {
   type Wall,
 } from "../model/project.js";
 import { polygonOpening, validateOpeningPolygon } from "./opening.js";
+import { bayCarrier, onWallAxis } from "./siteSnap.js";
 import { storedPolygonDefect } from "./simplePolygon.js";
 import type { DxfUnderlay, ImageUnderlay, Underlay } from "./schema.js";
 
@@ -501,16 +505,37 @@ export function moveRoomVertex(project: Project, index: number, point: Vec2): Ed
 
 /**
  * Insère un sommet `point` (arrondi au mm) sur le côté `edge` du contour de pièce (du sommet
- * `edge` au suivant) : il devient le sommet `edge + 1`.
+ * `edge` au suivant), ou au milieu de ce côté sans `point` : il devient le sommet `edge + 1`.
  */
-export function insertRoomVertex(project: Project, edge: number, point: Vec2): EditResult {
+export function insertRoomVertex(project: Project, edge: number, point?: Vec2): EditResult {
   const points = roomPoints(project);
   if (!Array.isArray(points)) return points;
   if (!(Number.isInteger(edge) && edge >= 0 && edge < points.length)) {
     return vertexIndexError(edge, points.length);
   }
-  points.splice(edge + 1, 0, roundPoint(point));
+  const at = point ?? V.lerp(points[edge]!, points[(edge + 1) % points.length]!, 0.5);
+  points.splice(edge + 1, 0, roundPoint(at));
   return withRoomPoints(project, points);
+}
+
+/**
+ * Côté du contour de pièce le plus proche de `point` (indice `edge` : du sommet `edge` au
+ * suivant) et projeté de `point` sur ce côté ; `null` sans contour. Double-clic sur le contour :
+ * insertion d'un sommet (`insertRoomVertex`).
+ */
+export function roomEdgeNear(
+  project: Project,
+  point: Vec2,
+): { readonly edge: number; readonly point: Vec2 } | null {
+  const pts = project.site.room?.points;
+  if (!pts || pts.length < 2) return null;
+  let best = { edge: 0, point: pts[0]!, d: Infinity };
+  for (let i = 0; i < pts.length; i++) {
+    const q = closestOnSegment(pts[i]!, pts[(i + 1) % pts.length]!, point);
+    const d = V.distance(point, q);
+    if (d < best.d) best = { edge: i, point: q, d };
+  }
+  return { edge: best.edge, point: best.point };
 }
 
 /** Retire le sommet `index` du contour de pièce (refusé sous 3 sommets). */
@@ -608,4 +633,175 @@ export function withoutObstacle(project: Project, id: string): EditResult {
     project,
     obstacles.filter((o) => o.id !== id),
   );
+}
+
+// --- Gestes sur les obstacles (sous-lot 5b)
+
+/**
+ * Poteau rectangulaire d'axes parallèles à ceux du site, centré en `center`, dont un coin est
+ * `corner` (outil Obstacle : centre, puis coin) ; côtés arrondis au mm (un côté nul est refusé
+ * par `withObstacle`).
+ */
+export function postDraftFromCorner(center: Vec2, corner: Vec2): ObstacleDraft {
+  return {
+    kind: "post",
+    center: roundPoint(center),
+    sizeX: roundMm(2 * Math.abs(corner.x - center.x)),
+    sizeY: roundMm(2 * Math.abs(corner.y - center.y)),
+    rotation: 0,
+  };
+}
+
+/** Poteau rond centré en `center` passant par `edge` (rayon arrondi au mm). */
+export function circularPostDraftFromEdge(center: Vec2, edge: Vec2): ObstacleDraft {
+  return {
+    kind: "circularPost",
+    center: roundPoint(center),
+    radius: roundMm(V.distance(center, edge)),
+  };
+}
+
+// ------------------------------------------------------------------ Projections d'un glisser (sous-lot 5b)
+//
+// Gestes de l'éditeur de plan projetés en obstacle modifié (`updateObstacle` : arrondi au mm,
+// rotation au degré, contrôle du schéma). L'interface ne fait que les appeler.
+
+function findObstacle(project: Project, id: string): Obstacle | undefined {
+  return (project.site.obstacles ?? []).find((o) => o.id === id);
+}
+
+const unknownObstacle = (id: string) => editError(msg("site.edit.unknownObstacle", { id }));
+
+/** Obstacle sans identifiant (brouillon de `updateObstacle`). */
+function draftOf(o: Obstacle): ObstacleDraft {
+  const { id: _id, ...draft } = o;
+  return draft as ObstacleDraft;
+}
+
+/**
+ * Décalage entier (mm) qui fait glisser la baie `a`–`b` le long du mur `w` de la composante de
+ * `delta` selon son axe, bornée pour que la baie reste dans le segment du mur (une baie qui en
+ * dépasse déjà n'est pas repoussée). Le milieu de la baie est reprojeté sur l'axe, et le décalage
+ * est l'écart arrondi au mm entre ce projeté et le milieu actuel : le même décalage s'applique aux
+ * deux extrémités (largeur conservée) et le milieu reste à moins d'un demi-millimètre par
+ * coordonnée de l'axe, sans écart qui s'accumule d'un geste à l'autre sur un mur oblique. Décalage
+ * nul si la composante bornée est nulle.
+ */
+function bayShiftAlongWall(w: Wall, a: Vec2, b: Vec2, delta: Vec2): Vec2 {
+  const u = V.normalize(V.sub(w.b, w.a));
+  const L = V.distance(w.a, w.b);
+  const ta = V.dot(V.sub(a, w.a), u);
+  const tb = V.dot(V.sub(b, w.a), u);
+  const lo = Math.min(0, -Math.min(ta, tb));
+  const hi = Math.max(0, L - Math.max(ta, tb));
+  const s = Math.min(hi, Math.max(lo, V.dot(delta, u)));
+  if (s === 0) return { x: 0, y: 0 };
+  const mid = V.lerp(a, b, 0.5);
+  const target = V.addScaled(w.a, u, (ta + tb) / 2 + s);
+  return roundPoint(V.sub(target, mid));
+}
+
+/**
+ * Translate l'obstacle `id` du vecteur `delta` (arrondi au mm). Une porte ou une fenêtre portée
+ * par un mur (`bayCarrier`) glisse le long de ce mur sans en sortir : seule la composante de
+ * `delta` selon l'axe du mur est retenue, bornée au segment (`bayShiftAlongWall`).
+ */
+export function translateObstacle(project: Project, id: string, delta: Vec2): EditResult {
+  const o = findObstacle(project, id);
+  if (!o) return unknownObstacle(id);
+  let d = roundPoint(delta);
+  const shift = (p: Vec2): Vec2 => translated(p, d);
+  switch (o.kind) {
+    case "post":
+    case "circularPost":
+      if (d.x === 0 && d.y === 0) return { project };
+      return updateObstacle(project, id, draftOf({ ...o, center: shift(o.center) }));
+    case "door":
+    case "window": {
+      const wall = bayCarrier(project.site.walls, o.a, o.b);
+      if (wall) d = bayShiftAlongWall(wall, o.a, o.b, delta);
+      if (d.x === 0 && d.y === 0) return { project };
+      return updateObstacle(project, id, draftOf({ ...o, a: shift(o.a), b: shift(o.b) }));
+    }
+    case "zone":
+      if (d.x === 0 && d.y === 0) return { project };
+      return updateObstacle(project, id, draftOf({ ...o, points: o.points.map(shift) }));
+  }
+}
+
+/**
+ * Déplace l'extrémité `end` de la porte ou de la fenêtre `id` vers `point` : sur l'axe du mur qui
+ * la porte (`bayCarrier`, projeté borné au mur), sinon au point. Refusé pour un autre obstacle,
+ * ou si la baie devient nulle (schéma).
+ */
+export function moveBayEnd(project: Project, id: string, end: "a" | "b", point: Vec2): EditResult {
+  const o = findObstacle(project, id);
+  if (!o) return unknownObstacle(id);
+  if (o.kind !== "door" && o.kind !== "window") {
+    return editError(msg("site.edit.obstacleKind", { id }));
+  }
+  const wall = bayCarrier(project.site.walls, o.a, o.b);
+  const p = roundPoint(wall ? onWallAxis(wall, point) : point);
+  if (p.x === o[end].x && p.y === o[end].y) return { project };
+  return updateObstacle(project, id, draftOf({ ...o, [end]: p }));
+}
+
+/**
+ * Coin d'un poteau rectangulaire `id` glissé en `corner` : centre et rotation conservés, côtés =
+ * deux fois les distances de `corner` au centre selon les axes propres du poteau (arrondis au mm ;
+ * un côté nul est refusé par le schéma).
+ */
+export function resizePostToCorner(project: Project, id: string, corner: Vec2): EditResult {
+  const o = findObstacle(project, id);
+  if (!o) return unknownObstacle(id);
+  if (o.kind !== "post") return editError(msg("site.edit.obstacleKind", { id }));
+  const a = ((o.rotation ?? 0) * Math.PI) / 180;
+  const ux = V.fromAngle(a);
+  const rel = V.sub(corner, o.center);
+  const sizeX = roundMm(2 * Math.abs(V.dot(rel, ux)));
+  const sizeY = roundMm(2 * Math.abs(V.dot(rel, V.perpLeft(ux))));
+  if (sizeX === o.sizeX && sizeY === o.sizeY) return { project };
+  return updateObstacle(project, id, draftOf({ ...o, sizeX, sizeY }));
+}
+
+/**
+ * Orientation (degrés, sens trigonométrique, non arrondie) de la direction du centre du poteau
+ * rectangulaire `id` vers `point` : rotation qui aligne son axe propre x sur cette direction
+ * (poignée de rotation). `null` si l'obstacle n'est pas un poteau ou si `point` est au centre.
+ */
+export function postAngleAt(project: Project, id: string, point: Vec2): number | null {
+  const o = findObstacle(project, id);
+  if (o?.kind !== "post") return null;
+  const rel = V.sub(point, o.center);
+  if (!(V.norm(rel) > 0)) return null;
+  return (V.angleOf(rel) * 180) / Math.PI;
+}
+
+/** Rayon du poteau rond `id` = distance de son centre à `point` (arrondie au mm). */
+export function setCircularPostRadiusAt(project: Project, id: string, point: Vec2): EditResult {
+  const o = findObstacle(project, id);
+  if (!o) return unknownObstacle(id);
+  if (o.kind !== "circularPost") return editError(msg("site.edit.obstacleKind", { id }));
+  const radius = roundMm(V.distance(o.center, point));
+  if (radius === o.radius) return { project };
+  return updateObstacle(project, id, draftOf({ ...o, radius }));
+}
+
+/** Déplace le sommet `index` de la zone interdite `id` au point `point` (arrondi au mm). */
+export function moveZoneVertex(
+  project: Project,
+  id: string,
+  index: number,
+  point: Vec2,
+): EditResult {
+  const o = findObstacle(project, id);
+  if (!o) return unknownObstacle(id);
+  if (o.kind !== "zone") return editError(msg("site.edit.obstacleKind", { id }));
+  if (!(Number.isInteger(index) && index >= 0 && index < o.points.length)) {
+    return vertexIndexError(index, o.points.length);
+  }
+  const p = roundPoint(point);
+  if (p.x === o.points[index]!.x && p.y === o.points[index]!.y) return { project };
+  const points = o.points.map((q, i) => (i === index ? p : q));
+  return updateObstacle(project, id, draftOf({ ...o, points }));
 }

@@ -25,11 +25,25 @@
  *   même chemin), une entrée d'historique chacun, élément à sélectionner ensuite et remarque ou
  *   refus rendus à l'éditeur ; une trémie ronde devenue polygonale l'annonce (cercle oublié).
  *   `trackedVertexMove` : champ x, y d'un sommet, sommet réindexé à resélectionner.
+ * - Contour de pièce et obstacles (sous-lot 5b) : `replaceRoomInStore` (outil Contour de pièce :
+ *   un projet n'a qu'un contour, retracer le remplace, annulable), `removeRoomInStore`,
+ *   `insertRoomVertexInStore`, `removeRoomVertexInStore` (refus sous 3 sommets),
+ *   `addObstacleInStore` (outil Obstacle, identifiant `nextObstacleId` rendu par `withObstacle`),
+ *   `removeObstacleInStore` (Suppr, bouton) ; même contrat que les actions du site du sous-lot 5a.
+ *   `obstaclePatch` : champ de l'inspecteur d'un obstacle (cote remplacée, `updateObstacle`).
  */
 import {
   DEFAULT_NEWEL_SIZE,
   editableCage,
   insertOpeningVertex,
+  insertRoomVertex,
+  removeRoomVertex,
+  updateObstacle,
+  editError,
+  withObstacle,
+  withoutObstacle,
+  withRoom,
+  type ObstacleDraft,
   moveOpeningVertex,
   removeOpeningVertex,
   removeSection,
@@ -323,5 +337,117 @@ export function insertOpeningVertexInStore(edge: number, point?: Vec2): SiteActi
       kind: "info",
       text: circleNote(round, msg("ui.plan.editor.opening.vertexInserted", { index: index + 1 })),
     },
+  };
+}
+
+// ------------------------------------------------------------------ Contour et obstacles (5b)
+
+/**
+ * Contour de pièce tracé (outil Contour de pièce) : il remplace le contour existant (un seul par
+ * projet), une entrée d'historique ; refus (contour invalide) rendu sans modification.
+ */
+export function replaceRoomInStore(points: readonly Vec2[]): SiteActionOutcome {
+  const replaced = appStore.getState().project.site.room !== undefined;
+  const o = commitEdit((p) => withRoom(p, points));
+  if (!o.result.ok) return refused(o.result);
+  return {
+    done: true,
+    note: {
+      kind: "info",
+      text: msg(replaced ? "ui.plan.editor.room.replaced" : "ui.plan.editor.room.saved", {
+        count: points.length,
+      }),
+    },
+  };
+}
+
+/** Suppression du contour de pièce (Suppr sur le contour sélectionné, bouton). */
+export function removeRoomInStore(): SiteActionOutcome {
+  if (appStore.getState().project.site.room === undefined) {
+    return refused({ ok: false, issues: [msg("site.edit.noRoom")] });
+  }
+  const o = commitEdit((p) => withRoom(p, undefined));
+  if (!o.result.ok) return refused(o.result);
+  return {
+    done: true,
+    selection: null,
+    note: { kind: "info", text: msg("ui.plan.editor.room.removed") },
+  };
+}
+
+/**
+ * Sommet inséré sur le côté `edge` du contour de pièce, en `point` (double-clic : projeté sur le
+ * côté) ou au milieu du côté (inspecteur) ; le nouveau sommet `edge + 1` est sélectionné.
+ */
+export function insertRoomVertexInStore(edge: number, point?: Vec2): SiteActionOutcome {
+  const o = commitEdit((p) => insertRoomVertex(p, edge, point));
+  if (!o.result.ok) return refused(o.result);
+  return {
+    done: true,
+    selection: { kind: "roomVertex", index: edge + 1 },
+    note: {
+      kind: "info",
+      text: msg("ui.plan.editor.room.vertexInserted", { index: edge + 2 }),
+    },
+  };
+}
+
+/** Suppression du sommet `index` du contour de pièce (refus sous 3 sommets). */
+export function removeRoomVertexInStore(index: number): SiteActionOutcome {
+  const o = commitEdit((p) => removeRoomVertex(p, index));
+  if (!o.result.ok) return refused(o.result);
+  return {
+    done: true,
+    selection: { kind: "room" },
+    note: {
+      kind: "info",
+      text: msg("ui.plan.editor.room.vertexRemoved", { index: index + 1 }),
+    },
+  };
+}
+
+/** Obstacle ajouté (outil Obstacle) : identifiant rendu par le cœur, une entrée d'historique. */
+export function addObstacleInStore(draft: ObstacleDraft): SiteActionOutcome & {
+  readonly id?: string;
+} {
+  const got: { id?: string } = {};
+  const o = commitEdit((p) => {
+    const r = withObstacle(p, draft);
+    if (!r.error) got.id = r.id;
+    return r;
+  });
+  const id = got.id;
+  if (!o.result.ok || id === undefined) return refused(o.result);
+  return {
+    done: true,
+    id,
+    note: { kind: "info", text: msg("ui.plan.editor.obstacle.added", { id }) },
+  };
+}
+
+/** Suppression de l'obstacle `id` (Suppr, bouton « Supprimer l'obstacle »). */
+export function removeObstacleInStore(id: string): SiteActionOutcome {
+  const o = commitEdit((p) => withoutObstacle(p, id));
+  if (!o.result.ok) return refused(o.result);
+  return {
+    done: true,
+    selection: null,
+    note: { kind: "info", text: msg("ui.plan.editor.obstacle.removed", { id }) },
+  };
+}
+
+/**
+ * Champ de l'inspecteur d'un obstacle : mutateur qui remplace les cotes `patch` de l'obstacle
+ * `id` (`updateObstacle` : arrondi, contrôle du schéma ; identifiant et nature conservés).
+ */
+export function obstaclePatch(
+  id: string,
+  patch: Partial<ObstacleDraft>,
+): (p: Project) => EditResult {
+  return (p) => {
+    const o = (p.site.obstacles ?? []).find((x) => x.id === id);
+    if (!o) return editError(msg("site.edit.unknownObstacle", { id }));
+    const { id: _id, ...draft } = o;
+    return updateObstacle(p, id, { ...draft, ...patch } as ObstacleDraft);
   };
 }

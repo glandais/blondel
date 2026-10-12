@@ -103,7 +103,7 @@ function union(a: BBox | null, b: BBox | null): BBox | null {
   };
 }
 
-/** Emprise de ce qui est affiché : escalier, trémie, murs, calque DXF, image. */
+/** Emprise de ce qui est affiché : escalier, trémie, murs, contour de pièce, calque DXF, image. */
 export function siteBounds(
   project: Project,
   model: Model | null,
@@ -115,6 +115,8 @@ export function siteBounds(
   const opening = openingPolygon(project.site.opening);
   if (opening) pts.push(...opening);
   for (const w of project.site.walls) pts.push(...wallOutline(w));
+  // Contour de la pièce (sous-lot 5b) : il entoure l'escalier, le cadrage le montre en entier.
+  if (project.site.room) pts.push(...project.site.room.points);
   if (pts.length > 0) b = bbox(pts);
   const u = project.site.underlay;
   if (includeUnderlay && u?.dxf) {

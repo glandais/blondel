@@ -45,12 +45,31 @@
  * double-clic sur le contour de la trémie sélectionnée : sommet inséré sur le côté le plus proche
  * (`openingEdgeNear`, `insertOpeningVertex`). Suppr : mur supprimé (`removeWall`), sommet de
  * trémie retiré (`removeOpeningVertex`, refus sous 3 sommets). Flèches sur la sélection du site :
- * 10 mm (Maj : 100 mm). Obstacles et contour de pièce : sous-lot 5b.
+ * 10 mm (Maj : 100 mm).
+ *
+ * Contour de pièce et obstacles (sous-lot 5b) : outil Contour de pièce (clic par sommet, clic sur
+ * le premier sommet ou Entrée pour fermer, Échap abandonne ; un projet n'a qu'un contour : le
+ * retracer le remplace, annulable) ; outil Obstacle, au type choisi dans le panneau : poteau
+ * (centre puis coin, par deux clics ou un glisser), poteau rond (centre puis point du cercle),
+ * porte et fenêtre (deux points sur un même mur, projetés sur son axe par `wallBayPoint` ; gonds
+ * et sens d'ouverture de la porte, allège et linteau de la fenêtre saisis avant), zone interdite
+ * (contour au clic, comme la trémie). Sélection : contour par son trait, sommets par leurs
+ * poignées ; double-clic sur le contour sélectionné : sommet inséré (`roomEdgeNear`,
+ * `insertRoomVertex`) ; Suppr : contour, sommet du contour (refus sous 3 sommets) ou obstacle
+ * supprimé. Un obstacle sélectionné se glisse par son corps ou ses poignées ; conflits du contour
+ * et des obstacles en aperçu pendant le geste, comme pour les murs.
  */
 import {
   buildSnapIndex,
   calibrateImage,
+  circularPostDraftFromEdge,
   openingEdgeNear,
+  postDraftFromCorner,
+  roomEdgeNear,
+  wallBayPoint,
+  type Obstacle,
+  type ObstacleDraft,
+  type ObstacleKind,
   imagePixelToSite,
   siteToImagePixel,
   snapPoint,
@@ -89,10 +108,16 @@ import {
   type PlanHandle,
 } from "../../lib/planDrag.js";
 import {
+  addObstacleInStore,
   insertOpeningVertexInStore,
+  insertRoomVertexInStore,
+  removeObstacleInStore,
   removeOpeningVertexInStore,
+  removeRoomInStore,
+  removeRoomVertexInStore,
   removeSectionInStore,
   removeWallInStore,
+  replaceRoomInStore,
   splitWallInStore,
   type SiteActionOutcome,
 } from "../../lib/planInspector.js";
@@ -133,7 +158,7 @@ import {
 } from "../planSiteGeometry.js";
 import { ConflictHitLayer, ConflictLayer } from "./ConflictLayer.js";
 import { HandleLayer, snapMessage } from "./HandleLayer.js";
-import { parsePlanSelection, planSelectionKey } from "./planEditorGeometry.js";
+import { obstacleShape, parsePlanSelection, planSelectionKey } from "./planEditorGeometry.js";
 import { conflictAt, conflictsAnnouncement, conflictText, planDisplay } from "./planPreview.js";
 import { selectionLabel, type SelectContext } from "./selectable.js";
 import { SiteLayer } from "./SiteLayer.js";
@@ -152,12 +177,61 @@ const TOOLS: readonly { id: PlanEditorTool; label: MessageKey; title: MessageKey
   { id: "pan", label: "ui.plan.site.tool.pan", title: "ui.plan.site.tool.pan.title" },
   { id: "opening", label: "ui.plan.site.tool.opening", title: "ui.plan.site.tool.opening.title" },
   { id: "wall", label: "ui.plan.site.tool.wall", title: "ui.plan.site.tool.wall.title" },
+  { id: "room", label: "ui.plan.editor.tool.room", title: "ui.plan.editor.tool.room.title" },
+  {
+    id: "obstacle",
+    label: "ui.plan.editor.tool.obstacle",
+    title: "ui.plan.editor.tool.obstacle.title",
+  },
   {
     id: "calibrate",
     label: "ui.plan.site.tool.calibrate",
     title: "ui.plan.site.tool.calibrate.title",
   },
 ];
+
+/** Types d'obstacle de l'outil Obstacle (ordre de la liste) et leurs libellés. */
+const OBSTACLE_KINDS: readonly { value: ObstacleKind; key: MessageKey; hint: MessageKey }[] = [
+  {
+    value: "post",
+    key: "ui.plan.editor.obstacle.kind.post",
+    hint: "ui.plan.editor.obstacle.kind.post.hint",
+  },
+  {
+    value: "circularPost",
+    key: "ui.plan.editor.obstacle.kind.circularPost",
+    hint: "ui.plan.editor.obstacle.kind.circularPost.hint",
+  },
+  {
+    value: "door",
+    key: "ui.plan.editor.obstacle.kind.door",
+    hint: "ui.plan.editor.obstacle.kind.door.hint",
+  },
+  {
+    value: "window",
+    key: "ui.plan.editor.obstacle.kind.window",
+    hint: "ui.plan.editor.obstacle.kind.window.hint",
+  },
+  {
+    value: "zone",
+    key: "ui.plan.editor.obstacle.kind.zone",
+    hint: "ui.plan.editor.obstacle.kind.zone.hint",
+  },
+];
+
+/** Obstacles posés par deux points (centre puis coin ou bord ; deux points d'une baie). */
+const TWO_POINT_OBSTACLES: ReadonlySet<ObstacleKind> = new Set([
+  "post",
+  "circularPost",
+  "door",
+  "window",
+]);
+
+/** Saisie d'une hauteur en mm entiers (allège, linteau) ; `null` si vide ou invalide. */
+function heightMm(text: string): number | null {
+  const t = text.trim();
+  return /^\d+$/.test(t) ? Number(t) : null;
+}
 
 /**
  * Texte d'une remarque : message traduit au rendu (motif de refus, exception rendue par
@@ -198,14 +272,39 @@ function bodyHandle(
     case "opening":
     case "openingVertex":
       return hit.kind === "opening" ? { kind: "openingMove" } : null;
+    case "obstacle":
+      return hit.kind === "obstacle" && hit.id === selection.id
+        ? { kind: "obstacleMove", id: selection.id }
+        : null;
     default:
       return null;
   }
 }
 
-/** Sélection du site (mur, extrémité, trémie, sommet) : poignées et actions du sous-lot 5a. */
+/**
+ * Sélection du site qui suit les flèches (mur, extrémité, trémie, sommet, sommet du contour de
+ * pièce, obstacle) : poignées et actions des sous-lots 5a et 5b.
+ */
 function isSiteSelection(sel: PlanSelection | null): boolean {
   return siteSelectionHandle(sel) !== null;
+}
+
+/** Aide affichée sous la sélection du site, selon l'élément. */
+function siteHint(sel: PlanSelection | null): MessageKey | null {
+  switch (sel?.kind) {
+    case "wall":
+    case "wallEnd":
+    case "opening":
+    case "openingVertex":
+      return "ui.plan.editor.site.hint";
+    case "room":
+    case "roomVertex":
+      return "ui.plan.editor.room.hint";
+    case "obstacle":
+      return "ui.plan.editor.obstacle.hint";
+    default:
+      return null;
+  }
 }
 
 /**
@@ -255,6 +354,18 @@ export function PlanEditor({ model }: { model: Model }) {
   const [wallMode, setWallMode] = useState<WallTraceMode>("axis");
   const [calib, setCalib] = useState<{ a: Vec2; b?: Vec2; distance: string } | null>(null);
   const [preview, setPreview] = useState<readonly Vec2[] | null>(null);
+  const [obstacleKind, setObstacleKind] = useState<ObstacleKind>("post");
+  const [doorHinge, setDoorHinge] = useState<"a" | "b">("a");
+  const [doorSwing, setDoorSwing] = useState<"left" | "right">("left");
+  const [windowSill, setWindowSill] = useState("");
+  const [windowHead, setWindowHead] = useState("");
+  /** Mur du premier point d'une baie en cours de pose (porte, fenêtre). */
+  const [bayWall, setBayWall] = useState<string | null>(null);
+  /**
+   * Appui qui a posé le premier point d'un obstacle à deux points : relâché après un glisser, il
+   * pose le second (création par glisser) ; relâché sur place, on attend un second clic.
+   */
+  const press = useRef<{ x: number; y: number } | null>(null);
   const [size, setSize] = useState({ w: 800, h: 500 });
   const [view, setView] = useState<ViewBox | null>(null);
   const svgRef = useRef<SVGSVGElement>(null);
@@ -383,6 +494,8 @@ export function PlanEditor({ model }: { model: Model }) {
   const reset = (): void => {
     setDraft([]);
     setCalib(null);
+    setBayWall(null);
+    press.current = null;
   };
 
   const chooseTool = (t: PlanEditorTool): void => {
@@ -404,8 +517,94 @@ export function PlanEditor({ model }: { model: Model }) {
     setDraft([]);
   };
 
+  /** Contour de pièce ou zone interdite tracés : remplacement du contour, ou obstacle ajouté. */
+  const closePolygon = (points: readonly Vec2[]): void => {
+    const o =
+      tool === "room"
+        ? replaceRoomInStore(points)
+        : addObstacleInStore({ kind: "zone", points: [...points] });
+    setMessage(o.note);
+    setDraft([]);
+  };
+
+  /** Le tracé en cours est-il un contour (trémie, contour de pièce, zone interdite) ? */
+  const polygonTool =
+    tool === "opening" || tool === "room" || (tool === "obstacle" && obstacleKind === "zone");
+  const twoPointTool = tool === "obstacle" && TWO_POINT_OBSTACLES.has(obstacleKind);
+
+  /** Obstacle à deux points de `first` à `second` (brouillon), ou `null` (baie hors du mur). */
+  const twoPointDraft = (first: Vec2, second: Vec2): ObstacleDraft | null => {
+    switch (obstacleKind) {
+      case "post":
+        return postDraftFromCorner(first, second);
+      case "circularPost":
+        return circularPostDraftFromEdge(first, second);
+      case "door":
+      case "window": {
+        const hit = bayWall
+          ? wallBayPoint(site.walls, second, SNAP_RADIUS_PX * mmPerPx, bayWall)
+          : null;
+        if (!hit) return null;
+        if (obstacleKind === "door") {
+          return { kind: "door", a: first, b: hit.point, hinge: doorHinge, swing: doorSwing };
+        }
+        const sill = heightMm(windowSill);
+        const head = heightMm(windowHead);
+        // Allège et linteau saisis (contrôlés au premier point) ; effacés depuis : rien à poser.
+        if (sill === null || head === null) return null;
+        return { kind: "window", a: first, b: hit.point, sill, head };
+      }
+      default:
+        return null;
+    }
+  };
+
+  /**
+   * Clic de l'outil Obstacle pour un obstacle à deux points : premier point (rend vrai), ou
+   * second point (obstacle ajouté). Une baie commence sur un mur, allège et linteau saisis.
+   */
+  const placeTwoPoint = (p: Vec2): boolean => {
+    const bay = obstacleKind === "door" || obstacleKind === "window";
+    if (draft.length === 0) {
+      if (
+        obstacleKind === "window" &&
+        (heightMm(windowSill) === null || heightMm(windowHead) === null)
+      ) {
+        setMessage({ kind: "error", text: msg("ui.plan.editor.obstacle.window.heights") });
+        return false;
+      }
+      if (bay) {
+        const hit = wallBayPoint(site.walls, p, SNAP_RADIUS_PX * mmPerPx);
+        if (!hit) {
+          setMessage({ kind: "info", text: msg("ui.plan.editor.obstacle.bay.onWall") });
+          return false;
+        }
+        setBayWall(hit.wallId);
+        setDraft([hit.point]);
+      } else {
+        setDraft([p]);
+      }
+      setMessage(null);
+      return true;
+    }
+    const d = twoPointDraft(draft[0]!, p);
+    if (d) setMessage(addObstacleInStore(d).note);
+    else if (obstacleKind === "window") {
+      setMessage({ kind: "error", text: msg("ui.plan.editor.obstacle.window.heights") });
+    }
+    setDraft([]);
+    setBayWall(null);
+    return false;
+  };
+
   const act = (p: Vec2): void => {
-    if (tool === "opening") {
+    if (tool === "room" || (tool === "obstacle" && obstacleKind === "zone")) {
+      const r = openingClick(draft, p, SNAP_RADIUS_PX * mmPerPx);
+      if (r.closed) closePolygon(r.draft);
+      else setDraft(r.draft);
+    } else if (tool === "obstacle") {
+      placeTwoPoint(p);
+    } else if (tool === "opening") {
       const r = openingClick(draft, p, SNAP_RADIUS_PX * mmPerPx);
       if (r.closed) closeOpening(r.draft);
       else setDraft(r.draft);
@@ -467,6 +666,11 @@ export function PlanEditor({ model }: { model: Model }) {
     const raw = toSite(e.clientX, e.clientY);
     if (!raw) return;
     const hit = snapOn ? snapPoint(index, raw, SNAP_RADIUS_PX * mmPerPx) : null;
+    if (twoPointTool) {
+      const started = placeTwoPoint(hit?.point ?? raw);
+      press.current = started ? { x: e.clientX, y: e.clientY } : null;
+      return;
+    }
     act(hit?.point ?? raw);
   };
 
@@ -548,7 +752,18 @@ export function PlanEditor({ model }: { model: Model }) {
     hoverTip(raw, e.clientX, e.clientY);
   };
 
-  const onPointerUp = (): void => {
+  const onPointerUp = (e: PointerEvent<SVGSVGElement>): void => {
+    const down = press.current;
+    press.current = null;
+    if (down && twoPointTool && draft.length === 1) {
+      // Obstacle à deux points créé par un glisser : le relâchement pose le second point.
+      if (Math.hypot(e.clientX - down.x, e.clientY - down.y) >= CLICK_SLOP_PX) {
+        const raw = toSite(e.clientX, e.clientY);
+        const hit = raw && snapOn ? snapPoint(index, raw, SNAP_RADIUS_PX * mmPerPx) : null;
+        if (raw) placeTwoPoint(hit?.point ?? raw);
+      }
+      return;
+    }
     const start = pan.current;
     pan.current = null;
     if (drag.end()) return;
@@ -573,7 +788,8 @@ export function PlanEditor({ model }: { model: Model }) {
 
   /**
    * Double-clic (outil Sélectionner) : sur le mur sélectionné, coupe au point cliqué ; sur le
-   * contour de la trémie sélectionnée, sommet inséré sur le côté le plus proche.
+   * contour de la trémie (ou du contour de pièce) sélectionné, sommet inséré sur le côté le plus
+   * proche.
    */
   const onDoubleClick = (e: MouseEvent<SVGSVGElement>): void => {
     if (tool !== "select" || drag.isActive()) return;
@@ -601,6 +817,14 @@ export function PlanEditor({ model }: { model: Model }) {
       if (edge === null) return;
       e.preventDefault();
       applySiteAction(insertOpeningVertexInStore(edge, p));
+    } else if (
+      hit.kind === "room" &&
+      (selection?.kind === "room" || selection?.kind === "roomVertex")
+    ) {
+      const near = roomEdgeNear(appStore.getState().project, p);
+      if (near === null) return;
+      e.preventDefault();
+      applySiteAction(insertRoomVertexInStore(near.edge, near.point));
     }
   };
 
@@ -653,17 +877,27 @@ export function PlanEditor({ model }: { model: Model }) {
       tool === "select" &&
       (selection?.kind === "wall" ||
         selection?.kind === "wallEnd" ||
-        selection?.kind === "openingVertex") &&
+        selection?.kind === "openingVertex" ||
+        selection?.kind === "room" ||
+        selection?.kind === "roomVertex" ||
+        selection?.kind === "obstacle") &&
       !(e.target instanceof HTMLButtonElement || e.target instanceof HTMLTextAreaElement)
     ) {
-      // Suppr sur un mur (ou une extrémité) : mur supprimé ; sur un sommet de trémie : sommet
-      // retiré si le contour reste valide (refus affiché, projet inchangé).
+      // Suppr sur un mur (ou une extrémité) : mur supprimé ; sur un sommet de trémie ou du contour
+      // de pièce : sommet retiré si le contour reste valide (refus affiché, projet inchangé) ; sur
+      // le contour de pièce ou un obstacle : supprimé.
       e.preventDefault();
       if (drag.isActive()) return;
       applySiteAction(
         selection.kind === "openingVertex"
           ? removeOpeningVertexInStore(selection.index)
-          : removeWallInStore(selection.id),
+          : selection.kind === "roomVertex"
+            ? removeRoomVertexInStore(selection.index)
+            : selection.kind === "room"
+              ? removeRoomInStore()
+              : selection.kind === "obstacle"
+                ? removeObstacleInStore(selection.id)
+                : removeWallInStore(selection.id),
       );
     } else if (
       (e.key === "ArrowLeft" ||
@@ -701,9 +935,10 @@ export function PlanEditor({ model }: { model: Model }) {
         e.preventDefault();
         selectPlanElement(under.hit);
       }
-    } else if (e.key === "Enter" && tool === "opening" && draft.length >= 3) {
+    } else if (e.key === "Enter" && polygonTool && draft.length >= 3) {
       e.preventDefault();
-      closeOpening(draft);
+      if (tool === "opening") closeOpening(draft);
+      else closePolygon(draft);
     } else if (e.key === "Backspace" && draft.length > 0) {
       e.preventDefault();
       setDraft(draft.slice(0, -1));
@@ -738,6 +973,12 @@ export function PlanEditor({ model }: { model: Model }) {
       ? faceWallOutline(draft[0]!, draft[1]!, Number(wallThickness), faceSide)
       : null;
   const markerR = 6 * mmPerPx;
+  // Obstacle à deux points en cours de pose : forme au pointeur (brouillon du cœur).
+  const obstacleDraft =
+    twoPointTool && draft.length === 1 && target ? twoPointDraft(draft[0]!, target) : null;
+  const obstaclePreview = obstacleDraft
+    ? obstacleShape({ ...obstacleDraft, id: "" } as Obstacle, project.workshop?.siteFit)
+    : null;
   const img = underlay?.image;
   const stairBounds = useMemo(() => siteBounds(project, model, false), [project, model]);
   const ctx: SelectContext = useMemo(
@@ -780,6 +1021,11 @@ export function PlanEditor({ model }: { model: Model }) {
             {tr.t("ui.plan.site.opening.close")}
           </button>
         ) : null}
+        {polygonTool && tool !== "opening" && draft.length >= 3 ? (
+          <button type="button" onClick={() => closePolygon(draft)}>
+            {tr.t("ui.plan.editor.polygon.close")}
+          </button>
+        ) : null}
         {draft.length > 0 || calib ? (
           <button type="button" onClick={reset}>
             {tr.t("ui.plan.site.cancelDraft")}
@@ -817,7 +1063,12 @@ export function PlanEditor({ model }: { model: Model }) {
                 />
               ) : null}
               <StairLayer model={display.model} ctx={ctx} transform={display.transform} />
-              <SiteLayer site={site} ctx={ctx} markerR={markerR} />
+              <SiteLayer
+                site={site}
+                siteFit={project.workshop?.siteFit}
+                ctx={ctx}
+                markerR={markerR}
+              />
               <ConflictLayer conflicts={shownConflicts} transform={display.transform} />
               <HandleLayer
                 model={display.model}
@@ -844,7 +1095,42 @@ export function PlanEditor({ model }: { model: Model }) {
                   vectorEffect="non-scaling-stroke"
                 />
               ) : null}
-              {draft.length > 0 ? (
+              {obstaclePreview ? (
+                <g className="plan-editor__obstacle plan-editor__obstacle--draft">
+                  {obstaclePreview.kind === "circle" ? (
+                    <circle
+                      cx={obstaclePreview.center.x}
+                      cy={obstaclePreview.center.y}
+                      r={obstaclePreview.radius}
+                      vectorEffect="non-scaling-stroke"
+                    />
+                  ) : obstaclePreview.kind === "polygon" ? (
+                    <polygon
+                      points={pointsAttr(obstaclePreview.points)}
+                      vectorEffect="non-scaling-stroke"
+                    />
+                  ) : (
+                    <>
+                      {obstaclePreview.swing ? (
+                        <polygon
+                          className="plan-editor__swing"
+                          points={pointsAttr(obstaclePreview.swing)}
+                          vectorEffect="non-scaling-stroke"
+                        />
+                      ) : null}
+                      <line
+                        className="plan-editor__bay"
+                        x1={obstaclePreview.a.x}
+                        y1={obstaclePreview.a.y}
+                        x2={obstaclePreview.b.x}
+                        y2={obstaclePreview.b.y}
+                        vectorEffect="non-scaling-stroke"
+                      />
+                    </>
+                  )}
+                </g>
+              ) : null}
+              {draft.length > 0 && !twoPointTool ? (
                 <polyline
                   className="plan-site__draft"
                   points={pointsAttr(target && drawing && !faceDraft ? [...draft, target] : draft)}
@@ -904,6 +1190,9 @@ export function PlanEditor({ model }: { model: Model }) {
             {tool === "opening" && draft.length > 0
               ? tr.t("ui.plan.site.status.opening", { count: draft.length })
               : ""}
+            {polygonTool && tool !== "opening" && draft.length > 0
+              ? tr.t("ui.plan.editor.status.polygon", { count: draft.length })
+              : ""}
             {faceDraft ? tr.t("ui.plan.site.status.faceSide") : ""}
           </p>
         </div>
@@ -948,8 +1237,8 @@ export function PlanEditor({ model }: { model: Model }) {
             selection?.kind === "junction") ? (
             <p className="muted plan-editor__handle-hint">{tr.t("ui.plan.editor.handle.hint")}</p>
           ) : null}
-          {tool === "select" && isSiteSelection(selection) ? (
-            <p className="muted plan-editor__handle-hint">{tr.t("ui.plan.editor.site.hint")}</p>
+          {tool === "select" && siteHint(selection) !== null ? (
+            <p className="muted plan-editor__handle-hint">{tr.t(siteHint(selection)!)}</p>
           ) : null}
           {message ? (
             <p
@@ -995,6 +1284,89 @@ export function PlanEditor({ model }: { model: Model }) {
                     </button>
                   </div>
                 </div>
+              ) : null}
+            </div>
+          ) : null}
+          {tool === "room" ? (
+            <p className="muted">
+              {tr.t(site.room ? "ui.plan.editor.room.toolReplace" : "ui.plan.editor.room.tool")}
+            </p>
+          ) : null}
+          {tool === "obstacle" ? (
+            <div className="field">
+              <label htmlFor="plan-obstacle-kind">{tr.t("ui.plan.editor.obstacle.kind")}</label>
+              <select
+                id="plan-obstacle-kind"
+                value={obstacleKind}
+                onChange={(e) => {
+                  setObstacleKind(e.target.value as ObstacleKind);
+                  reset();
+                  setMessage(null);
+                }}
+              >
+                {OBSTACLE_KINDS.map((k) => (
+                  <option key={k.value} value={k.value}>
+                    {tr.t(k.key)}
+                  </option>
+                ))}
+              </select>
+              <small className="field__hint">
+                {tr.t(OBSTACLE_KINDS.find((k) => k.value === obstacleKind)!.hint)}
+              </small>
+              {obstacleKind === "door" ? (
+                <>
+                  <label htmlFor="plan-door-hinge">{tr.t("ui.plan.editor.obstacle.hinge")}</label>
+                  <select
+                    id="plan-door-hinge"
+                    value={doorHinge}
+                    onChange={(e) => setDoorHinge(e.target.value === "b" ? "b" : "a")}
+                  >
+                    <option value="a">{tr.t("ui.plan.editor.obstacle.hinge.a")}</option>
+                    <option value="b">{tr.t("ui.plan.editor.obstacle.hinge.b")}</option>
+                  </select>
+                  <label htmlFor="plan-door-swing">{tr.t("ui.plan.editor.obstacle.swing")}</label>
+                  <select
+                    id="plan-door-swing"
+                    value={doorSwing}
+                    onChange={(e) => setDoorSwing(e.target.value === "right" ? "right" : "left")}
+                  >
+                    <option value="left">{tr.t("ui.plan.editor.obstacle.swing.left")}</option>
+                    <option value="right">{tr.t("ui.plan.editor.obstacle.swing.right")}</option>
+                  </select>
+                </>
+              ) : null}
+              {obstacleKind === "window" ? (
+                <>
+                  <label htmlFor="plan-window-sill">{tr.t("ui.plan.editor.obstacle.sill")}</label>
+                  <span className="input-unit">
+                    <input
+                      id="plan-window-sill"
+                      type="text"
+                      inputMode="numeric"
+                      value={windowSill}
+                      onChange={(e) => setWindowSill(e.target.value)}
+                    />
+                    <span className="input-unit__unit" aria-hidden="true">
+                      mm
+                    </span>
+                  </span>
+                  <label htmlFor="plan-window-head">{tr.t("ui.plan.editor.obstacle.head")}</label>
+                  <span className="input-unit">
+                    <input
+                      id="plan-window-head"
+                      type="text"
+                      inputMode="numeric"
+                      value={windowHead}
+                      onChange={(e) => setWindowHead(e.target.value)}
+                    />
+                    <span className="input-unit__unit" aria-hidden="true">
+                      mm
+                    </span>
+                  </span>
+                  <small className="field__hint">
+                    {tr.t("ui.plan.editor.obstacle.heights.hint")}
+                  </small>
+                </>
               ) : null}
             </div>
           ) : null}

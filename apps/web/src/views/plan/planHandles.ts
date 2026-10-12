@@ -14,10 +14,17 @@
  *   gauche et droit (épaisseur, milieu de chaque nu) ; trémie → trémie entière (moyenne des
  *   sommets) et sommets ; sommet de trémie → sommets. Trémie ronde ou dense
  *   (`openingVerticesEditable`) : pas de poignée par sommet, sauf celle du sommet sélectionné.
+ * - Contour de pièce et obstacles (sous-lot 5b) : contour ou sommet du contour → sommets ;
+ *   poteau → déplacement (centre), coin (côtés, coin `postPolygon` du cœur) et rotation (au-delà
+ *   du milieu du côté x+, à distance fixe à l'écran) ; poteau rond → déplacement et rayon (point
+ *   du cercle à l'est du centre) ; porte, fenêtre → déplacement (milieu de la baie) et extrémités ;
+ *   zone → déplacement (moyenne des sommets, repère d'affichage) et sommets.
  */
 import {
   junctionFrame,
   openingVertices,
+  postPolygon,
+  type Obstacle,
   stairPivot,
   toLocal,
   toWorld,
@@ -28,7 +35,11 @@ import {
   type Vec2,
 } from "@blondel/core";
 import { openingVerticesEditable, type PlanHandle } from "../../lib/planDrag.js";
-import { ANGLE_HANDLE_MIN_PX, ROTATE_HANDLE_OFFSET_PX } from "../../lib/planErgonomics.js";
+import {
+  ANGLE_HANDLE_MIN_PX,
+  POST_ROTATE_HANDLE_OFFSET_PX,
+  ROTATE_HANDLE_OFFSET_PX,
+} from "../../lib/planErgonomics.js";
 import type { PlanSelection } from "../../store/planEditor.js";
 import { wallOutline } from "../planSiteGeometry.js";
 
@@ -112,8 +123,15 @@ export function selectionHandles(
   }
 }
 
-/** Poignées du site pour la sélection (voir l'en-tête) ; aucune pour un élément absent. */
-export function siteHandles(selection: PlanSelection | null, project: Project): HandleSpot[] {
+/**
+ * Poignées du site pour la sélection (voir l'en-tête) ; aucune pour un élément absent.
+ * `mmPerPx` : échelle de la vue (poignée de rotation d'un poteau).
+ */
+export function siteHandles(
+  selection: PlanSelection | null,
+  project: Project,
+  mmPerPx = 1,
+): HandleSpot[] {
   if (!selection) return [];
   const site = project.site;
   switch (selection.kind) {
@@ -154,8 +172,70 @@ export function siteHandles(selection: PlanSelection | null, project: Project): 
       }
       return out;
     }
+    case "room":
+    case "roomVertex":
+      return (site.room?.points ?? []).map((at, index) => ({
+        handle: { kind: "roomVertex", index },
+        at,
+      }));
+    case "obstacle": {
+      const o = (site.obstacles ?? []).find((x) => x.id === selection.id);
+      return o ? obstacleHandles(o, mmPerPx) : [];
+    }
     default:
       return [];
+  }
+}
+
+/** Poignées d'un obstacle sélectionné (voir l'en-tête). */
+function obstacleHandles(o: Obstacle, mmPerPx: number): HandleSpot[] {
+  const id = o.id;
+  switch (o.kind) {
+    case "post": {
+      const [, c1, c2] = postPolygon(o) as [Vec2, Vec2, Vec2, Vec2];
+      const side = mid(c1, c2);
+      const len = Math.hypot(side.x - o.center.x, side.y - o.center.y) || 1;
+      const dir = { x: (side.x - o.center.x) / len, y: (side.y - o.center.y) / len };
+      return [
+        { handle: { kind: "obstacleMove", id }, at: o.center },
+        { handle: { kind: "postSize", id }, at: c2 },
+        {
+          handle: { kind: "postRotate", id },
+          at: along(side, dir, POST_ROTATE_HANDLE_OFFSET_PX * mmPerPx),
+          from: o.center,
+        },
+      ];
+    }
+    case "circularPost":
+      return [
+        { handle: { kind: "obstacleMove", id }, at: o.center },
+        {
+          handle: { kind: "postRadius", id },
+          at: { x: o.center.x + o.radius, y: o.center.y },
+          from: o.center,
+        },
+      ];
+    case "door":
+    case "window":
+      return [
+        { handle: { kind: "obstacleMove", id }, at: mid(o.a, o.b) },
+        { handle: { kind: "bayEnd", id, end: "a" }, at: o.a },
+        { handle: { kind: "bayEnd", id, end: "b" }, at: o.b },
+      ];
+    case "zone": {
+      const n = o.points.length;
+      const c = {
+        x: o.points.reduce((s, p) => s + p.x, 0) / n,
+        y: o.points.reduce((s, p) => s + p.y, 0) / n,
+      };
+      return [
+        { handle: { kind: "obstacleMove", id }, at: c },
+        ...o.points.map((at, index): HandleSpot => ({
+          handle: { kind: "zoneVertex", id, index },
+          at,
+        })),
+      ];
+    }
   }
 }
 

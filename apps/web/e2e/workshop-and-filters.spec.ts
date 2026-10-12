@@ -200,14 +200,18 @@ test("site : mur tracé au nu, côté du mur donné par un troisième clic", asy
   await expect(wall).toHaveCount(1);
   await expect(wall.locator("title")).toHaveText(/200 mm/);
   // Mur entre x = −500 et −300 (nu sur la ligne tracée, corps du côté cliqué).
-  const xs = (await wall.getAttribute("points"))!
+  const pts = (await wall.getAttribute("points"))!
     .trim()
     .split(/\s+/)
-    .map((p) => Number(p.split(",")[0]));
+    .map((p) => p.split(",").map(Number) as [number, number]);
+  const xs = pts.map(([x]) => x);
   // Nu à la résolution du pointeur près (une fraction de pixel du plan : l'échelle du dessin est
-  // limitée par la hauteur utile sous l'accueil et les outils de saisie), épaisseur exacte, corps
-  // du côté cliqué.
+  // limitée par la hauteur utile sous l'accueil et les outils de saisie ; les deux clics peuvent
+  // donc donner un nu très légèrement oblique), épaisseur exacte (distance entre les deux nus,
+  // contour gauche a → b puis droit b → a), corps du côté cliqué.
   const [min, max] = [Math.min(...xs), Math.max(...xs)];
   expect(Math.abs(max - -300)).toBeLessThanOrEqual(1);
-  expect(max - min).toBeCloseTo(200, 3);
+  expect(min).toBeLessThan(-450);
+  const [l0, , , r0] = pts as [[number, number], unknown, unknown, [number, number]];
+  expect(Math.hypot(l0[0] - r0[0], l0[1] - r0[1])).toBeCloseTo(200, 3);
 });

@@ -8,8 +8,9 @@
  * de l'éditeur (voir `planSiteGeometry.ts`).
  */
 import {
-  doorSwingPolygon,
+  doorSwingSector,
   postPolygon,
+  type SiteFitProfileInput,
   type Layout,
   type LayoutSection,
   type Obstacle,
@@ -83,17 +84,17 @@ export type ObstacleShape =
 
 /**
  * Forme d'un obstacle : poteau (contour du cœur), poteau rond, baie de porte (avec son secteur
- * de débattement, rayon = largeur de la baie, `doorSwingPolygon` du cœur) ou de fenêtre (segment
- * de la baie), zone interdite.
+ * de débattement, `doorSwingSector` du cœur : rayon du réglage d'atelier `siteFit` du projet,
+ * sinon largeur de la baie, décision F7) ou de fenêtre (segment de la baie), zone interdite.
  */
-export function obstacleShape(o: Obstacle): ObstacleShape {
+export function obstacleShape(o: Obstacle, siteFit?: SiteFitProfileInput): ObstacleShape {
   switch (o.kind) {
     case "post":
       return { kind: "polygon", points: postPolygon(o) };
     case "circularPost":
       return { kind: "circle", center: o.center, radius: o.radius };
     case "door": {
-      const swing = doorSwingPolygon(o, Math.hypot(o.b.x - o.a.x, o.b.y - o.a.y));
+      const swing = doorSwingSector(o, siteFit);
       return swing.length > 0
         ? { kind: "bay", a: o.a, b: o.b, swing }
         : { kind: "bay", a: o.a, b: o.b };
@@ -114,6 +115,7 @@ export const SELECTION_LABELS: Readonly<Record<PlanSelection["kind"], MessageKey
   wallEnd: "ui.plan.editor.select.wallEnd",
   opening: "ui.plan.editor.select.opening",
   openingVertex: "ui.plan.editor.select.openingVertex",
+  room: "ui.plan.editor.select.room",
   roomVertex: "ui.plan.editor.select.roomVertex",
   obstacle: "ui.plan.editor.select.obstacle",
 };
@@ -123,6 +125,7 @@ export function selectionLabelParams(sel: PlanSelection): Record<string, string 
   switch (sel.kind) {
     case "stair":
     case "opening":
+    case "room":
       return {};
     case "section":
     case "junction":
@@ -145,6 +148,7 @@ export function planSelectionKey(sel: PlanSelection): string {
   switch (sel.kind) {
     case "stair":
     case "opening":
+    case "room":
       return sel.kind;
     case "section":
     case "junction":
@@ -169,6 +173,7 @@ export function parsePlanSelection(key: string | null | undefined): PlanSelectio
   switch (kind) {
     case "stair":
     case "opening":
+    case "room":
       return i < 0 ? { kind } : null;
     case "section":
     case "junction":

@@ -2,7 +2,14 @@ import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { createProject } from "../project/presets.js";
 import { withWall } from "./edit.js";
-import { siteSnapContext, snapTranslation, snapWallEnd } from "./siteSnap.js";
+import {
+  bayCarrier,
+  onWallAxis,
+  siteSnapContext,
+  snapTranslation,
+  snapWallEnd,
+  wallBayPoint,
+} from "./siteSnap.js";
 
 /** Projet sans trémie, deux murs : M1 vertical (x = −100), M2 horizontal (y = 4000). */
 function twoWalls() {
@@ -87,6 +94,73 @@ describe("accroches des gestes sur le site (sous-lot 5a)", () => {
           );
         },
       ),
+    );
+  });
+});
+
+describe("baies posées sur un mur (sous-lot 5b)", () => {
+  it("wallBayPoint : mur sous le pointeur, projeté sur son axe ; second point sur le même mur", () => {
+    const p = twoWalls();
+    const [m1, m2] = p.site.walls;
+    expect(wallBayPoint(p.site.walls, { x: -40, y: 1200 }, 10)).toEqual({
+      wallId: m1!.id,
+      point: { x: -100, y: 1200 },
+    });
+    // Hors de l'épaisseur (100 mm) plus la tolérance : aucun mur.
+    expect(wallBayPoint(p.site.walls, { x: 20, y: 1200 }, 10)).toBeNull();
+    // Avec le mur imposé : projeté borné, sans limite de distance.
+    expect(wallBayPoint(p.site.walls, { x: 2000, y: 9000 }, 10, m1!.id)).toEqual({
+      wallId: m1!.id,
+      point: { x: -100, y: 3000 },
+    });
+    expect(wallBayPoint(p.site.walls, { x: 2000, y: 4050 }, 10)?.wallId).toBe(m2!.id);
+    expect(wallBayPoint(p.site.walls, { x: 0, y: 0 }, 10, "nope")).toBeNull();
+  });
+
+  it("bayCarrier : mur dont l'axe passe à moins d'une demi-épaisseur des deux extrémités", () => {
+    const p = twoWalls();
+    const [m1] = p.site.walls;
+    expect(bayCarrier(p.site.walls, { x: -100, y: 0 }, { x: -60, y: 900 })?.id).toBe(m1!.id);
+    expect(bayCarrier(p.site.walls, { x: -100, y: 0 }, { x: 100, y: 900 })).toBeUndefined();
+    expect(onWallAxis(m1!, { x: 500, y: -50 })).toEqual({ x: -100, y: 0 });
+  });
+
+  it("bayCarrier : sur deux murs alignés, le tronçon qui contient la baie ; loin du segment, libre", () => {
+    const p = twoWalls();
+    // M3 prolonge M2 (y = 4000) de 4000 à 7000.
+    const p3 = withWall(p, { x: 4000, y: 4000 }, { x: 7000, y: 4000 }, 200);
+    const [, m2, m3] = p3.site.walls;
+    expect(bayCarrier(p3.site.walls, { x: 5000, y: 4000 }, { x: 5900, y: 4000 })?.id).toBe(m3!.id);
+    expect(bayCarrier(p3.site.walls, { x: 2000, y: 4000 }, { x: 2900, y: 4000 })?.id).toBe(m2!.id);
+    // À cheval sur la jonction : le tronçon qui en dépasse le moins.
+    expect(bayCarrier(p3.site.walls, { x: 3800, y: 4000 }, { x: 4300, y: 4000 })?.id).toBe(m3!.id);
+    // Sur le prolongement, au-delà des deux segments : baie libre.
+    expect(bayCarrier(p3.site.walls, { x: 8000, y: 4000 }, { x: 8900, y: 4000 })).toBeUndefined();
+  });
+
+  it("propriété : le point posé est sur l'axe du mur, dans le segment", () => {
+    const p = twoWalls();
+    fc.assert(
+      fc.property(
+        fc.double({ min: -6000, max: 6000, noNaN: true }),
+        fc.double({ min: -6000, max: 6000, noNaN: true }),
+        (x, y) => {
+          const hit = wallBayPoint(p.site.walls, { x, y }, 50);
+          if (!hit) return;
+          const w = p.site.walls.find((m) => m.id === hit.wallId)!;
+          // Sur l'axe (écart nul) et dans le segment (paramètre t dans [0, 1]).
+          const ux = w.b.x - w.a.x;
+          const uy = w.b.y - w.a.y;
+          const L2 = ux * ux + uy * uy;
+          const t = ((hit.point.x - w.a.x) * ux + (hit.point.y - w.a.y) * uy) / L2;
+          const cross = (ux * (hit.point.y - w.a.y) - uy * (hit.point.x - w.a.x)) / Math.sqrt(L2);
+          expect(Math.abs(cross)).toBeLessThanOrEqual(1e-9);
+          expect(t).toBeGreaterThanOrEqual(-1e-12);
+          expect(t).toBeLessThanOrEqual(1 + 1e-12);
+          expect(Math.hypot(x - hit.point.x, y - hit.point.y)).toBeLessThanOrEqual(150 + 1e-9);
+        },
+      ),
+      { numRuns: 500 },
     );
   });
 });

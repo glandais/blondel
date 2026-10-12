@@ -9,6 +9,15 @@
  *   trémie translatée par sa poignée ; un geste = une annulation.
  * - Conflits : le mur rapproché de l'escalier crée un conflit « mur » dès le geste (aperçu du
  *   worker, aucun modèle complet), un modèle au relâchement, l'annulation le fait disparaître.
+ * - Contour de pièce (sous-lot 5b) : tracé au clic (fermé sur le premier sommet), sommet glissé
+ *   qui fait sortir l'escalier : conflit « hors pièce » en aperçu pendant le geste, gardé au
+ *   relâchement, disparu à l'annulation ; retracer remplace le contour (une annulation) ; Échap
+ *   abandonne le tracé ; Suppr supprime le contour sélectionné.
+ * - Obstacles (sous-lot 5b, mur M2 adossé au flanc du tronçon 1) : poteau posé par un glisser
+ *   sur la trajectoire (conflit obstacle, une annulation) puis par deux clics ; poteau glissé hors
+ *   de l'escalier (conflit disparu en aperçu) ; porte sur M1, débattement dessiné, conflit quand
+ *   il couvre l'escalier (sens d'ouverture changé dans l'inspecteur) ; fenêtre sur M2 (conseil) ;
+ *   zone interdite fermée par Entrée ; Suppr supprime l'obstacle sélectionné.
  * - Budget des tâches longues respecté.
  */
 import { readFileSync } from "node:fs";
@@ -49,10 +58,23 @@ function addWallNearArrival(json: Record<string, unknown>): void {
   ];
 }
 
-async function openSitePlan(page: Page): Promise<Locator> {
+/** Mur M2 (200 mm) dont le nu touche le flanc droit du tronçon 1 (x = 900), y de −200 à 1 800. */
+function addFlankWall(json: Record<string, unknown>): void {
+  const site = json["site"] as { walls: unknown[] };
+  site.walls.push({
+    id: "M2",
+    a: { x: 1000, y: -200 },
+    b: { x: 1000, y: 1800 },
+    thickness: 200,
+    loadBearing: false,
+  });
+}
+
+async function openSitePlan(page: Page, flankWall = false): Promise<Locator> {
   await openApp(page);
   const json = JSON.parse(readFileSync(CAGE_60, "utf8")) as Record<string, unknown>;
   addWallNearArrival(json);
+  if (flankWall) addFlankWall(json);
   const chooser = page.waitForEvent("filechooser");
   await page.getByRole("button", { name: "Importer", exact: true }).click();
   await page.getByRole("menuitem", { name: "Projet (.blondel.json)…" }).click();
@@ -71,6 +93,21 @@ async function openSitePlan(page: Page): Promise<Locator> {
   return page.getByRole("group", {
     name: "Plan du site : calque de fond, murs, trémie et escalier",
   });
+}
+
+/** Point de l'écran d'un point du site (mm), par la matrice du groupe du plan. */
+async function screenOf(plan: Locator, p: Pt): Promise<Pt> {
+  return plan.evaluate((svg, q) => {
+    const g = svg.querySelector<SVGGElement>(":scope > g")!;
+    const s = new DOMPoint(q.x, q.y).matrixTransform(g.getScreenCTM()!);
+    return { x: s.x, y: s.y };
+  }, p);
+}
+
+/** Clic en un point du site. */
+async function clickAt(page: Page, plan: Locator, p: Pt): Promise<void> {
+  const s = await screenOf(plan, p);
+  await page.mouse.click(s.x, s.y);
 }
 
 async function center(loc: Locator): Promise<Pt> {
@@ -377,6 +414,247 @@ test("mur rapproché de l'escalier : conflit en aperçu pendant le geste, un mod
   await expect(page.getByTestId("plan-drag-status")).toHaveText(
     "Geste annulé : retour à l'état d'avant le glisser.",
   );
+
+  await settle(page);
+  const tasks = await takeLongTasks(page);
+  const over = overBudget(tasks);
+  expect(over, describeTasks(over, tasks)).toEqual([]);
+});
+
+test("contour de pièce : tracé, sommet glissé hors de l'escalier (conflit en aperçu), annulation, remplacement", async ({
+  page,
+}) => {
+  const plan = await openSitePlan(page);
+  const undo = page.getByRole("button", { name: "Annuler (Ctrl+Z)", exact: true });
+  const status = page.getByTestId("plan-selection");
+  const outside = plan.locator('.plan-editor__conflict[data-kind="outsideRoom"]');
+  const room = plan.locator(".plan-editor__room");
+  const ROOM = [
+    { x: -1900, y: -100 },
+    { x: 950, y: -100 },
+    { x: 950, y: 3900 },
+    { x: -1900, y: 3900 },
+  ];
+
+  await page.getByRole("button", { name: "Contour de pièce", exact: true }).click();
+  // Échap abandonne le tracé en cours.
+  await clickAt(page, plan, ROOM[0]!);
+  await clickAt(page, plan, ROOM[1]!);
+  await expect(plan.locator(".plan-site__draft")).toHaveCount(1);
+  await plan.focus();
+  await page.keyboard.press("Escape");
+  await expect(plan.locator(".plan-site__draft")).toHaveCount(0);
+  // Tracé fermé sur le premier sommet : une entrée d'historique.
+  for (const p of ROOM) await clickAt(page, plan, p);
+  await clickAt(page, plan, ROOM[0]!);
+  await settle(page);
+  await expect(
+    page.getByText("Contour de pièce de 4 sommets enregistré (annulable)."),
+  ).toBeVisible();
+  await expect(room).toHaveCount(1);
+  await expect(outside).toHaveCount(0);
+
+  // Sélection du contour (clavier), poignées de ses sommets.
+  await page.getByRole("button", { name: "Sélectionner", exact: true }).click();
+  await plan.getByRole("button", { name: "Contour de la pièce", exact: true }).focus();
+  await page.keyboard.press("Enter");
+  await expect(status).toHaveText("Sélection : Contour de la pièce");
+  const v2 = plan.getByRole("slider", {
+    name: "Déplacer le sommet 2 du contour de la pièce",
+    exact: true,
+  });
+  // Points cliqués à l'écran : au mm près des points visés (arrondi des pixels).
+  await expect(v2).toHaveAttribute("aria-valuetext", /^x 9[45]\d mm, y .(9\d|10\d) mm$/);
+  const v2Text = (await v2.getAttribute("aria-valuetext"))!;
+
+  // Sommet 2 glissé vers l'intérieur : l'escalier sort du contour, conflit dès l'aperçu.
+  await settle(page);
+  await takeLongTasks(page);
+  const before = await modelStats(page);
+  const from = await center(v2);
+  const to = await screenOf(plan, { x: 400, y: -100 });
+  await page.keyboard.down("Shift");
+  await page.mouse.move(from.x, from.y);
+  await page.mouse.down();
+  await page.mouse.move(to.x, to.y, { steps: 15 });
+  await expect(outside).toHaveCount(1);
+  expect((await modelStats(page)).builds).toBe(before.builds);
+  await page.mouse.up();
+  await page.keyboard.up("Shift");
+  await settle(page);
+  await expect(outside).toHaveCount(1);
+  await expect(page.getByTestId("plan-conflicts-status")).toContainText(
+    "sort du contour de la pièce",
+  );
+  // Une annulation défait le geste entier : conflit disparu.
+  await undo.click();
+  await settle(page);
+  await expect(outside).toHaveCount(0);
+  await expect(v2).toHaveAttribute("aria-valuetext", v2Text);
+
+  // Double-clic sur un côté du contour sélectionné : sommet inséré (une annulation le retire).
+  const vertices = plan.getByRole("slider", {
+    name: /^Déplacer le sommet \d+ du contour de la pièce$/,
+  });
+  await expect(vertices).toHaveCount(4);
+  const side = await screenOf(plan, { x: -1900, y: 1900 });
+  await page.mouse.dblclick(side.x, side.y);
+  await settle(page);
+  await expect(vertices).toHaveCount(5);
+  await expect(page.getByText("Sommet 5 inséré dans le contour de la pièce.")).toBeVisible();
+  await expect(status).toHaveText("Sélection : Sommet 5 du contour de la pièce");
+  // Annulation : le sommet disparaît, sa sélection aussi.
+  await undo.click();
+  await expect(status).toHaveText(/Aucune sélection/);
+  await plan.getByRole("button", { name: "Contour de la pièce", exact: true }).focus();
+  await page.keyboard.press("Enter");
+  await expect(vertices).toHaveCount(4);
+
+  // Retracer remplace le contour (une annulation le rend).
+  await page.getByRole("button", { name: "Contour de pièce", exact: true }).click();
+  await expect(
+    page.getByText("Le projet a déjà un contour de pièce : le nouveau tracé le remplacera"),
+  ).toBeVisible();
+  for (const p of [ROOM[0]!, ROOM[1]!, { x: -400, y: 3900 }]) await clickAt(page, plan, p);
+  await plan.focus();
+  await page.keyboard.press("Enter");
+  await settle(page);
+  await expect(page.getByText("Contour de pièce remplacé : 3 sommets (annulable).")).toBeVisible();
+  // Le triangle coupe l'escalier : hors pièce.
+  await expect(outside).toHaveCount(1);
+  await undo.click();
+  await settle(page);
+  await expect(outside).toHaveCount(0);
+
+  // Suppr sur le contour sélectionné : supprimé.
+  await page.getByRole("button", { name: "Sélectionner", exact: true }).click();
+  await plan.getByRole("button", { name: "Contour de la pièce", exact: true }).focus();
+  await page.keyboard.press("Enter");
+  await plan.focus();
+  await page.keyboard.press("Delete");
+  await settle(page);
+  await expect(page.getByText("Contour de pièce supprimé.")).toBeVisible();
+  await expect(room).toHaveCount(0);
+  await undo.click();
+  await expect(room).toHaveCount(1);
+
+  await settle(page);
+  const tasks = await takeLongTasks(page);
+  const over = overBudget(tasks);
+  expect(over, describeTasks(over, tasks)).toEqual([]);
+});
+
+test("obstacles : poteau, porte, fenêtre, zone interdite ; conflits, déplacement, suppression", async ({
+  page,
+}) => {
+  const plan = await openSitePlan(page, true);
+  const undo = page.getByRole("button", { name: "Annuler (Ctrl+Z)", exact: true });
+  const status = page.getByTestId("plan-selection");
+  const conflict = (kind: string) => plan.locator(`.plan-editor__conflict[data-kind="${kind}"]`);
+  const kind = page.getByLabel("Type d'obstacle", { exact: true });
+
+  await page.getByRole("button", { name: "Obstacle", exact: true }).click();
+  // Accroches coupées : points posés tels quels.
+  await page.getByRole("checkbox", { name: "Accroches" }).uncheck();
+  await expect(kind).toHaveValue("post");
+
+  // Poteau posé par un glisser (centre puis coin) sur la trajectoire : conflit obstacle.
+  const c = await screenOf(plan, { x: 450, y: 800 });
+  const corner = await screenOf(plan, { x: 550, y: 900 });
+  await page.mouse.move(c.x, c.y);
+  await page.mouse.down();
+  await page.mouse.move(corner.x, corner.y, { steps: 8 });
+  await page.mouse.up();
+  await settle(page);
+  await expect(page.getByText("Obstacle obstacle-1 ajouté (annulable).")).toBeVisible();
+  await expect(conflict("obstacle")).toHaveCount(1);
+  await undo.click();
+  await settle(page);
+  await expect(conflict("obstacle")).toHaveCount(0);
+  // Le même poteau par deux clics.
+  await clickAt(page, plan, { x: 450, y: 800 });
+  await clickAt(page, plan, { x: 550, y: 900 });
+  await settle(page);
+  await expect(conflict("obstacle")).toHaveCount(1);
+
+  // Porte sur M1 (deux clics le long du mur), ouverture à gauche : débattement dessiné, hors de
+  // l'escalier.
+  await kind.selectOption("door");
+  await clickAt(page, plan, { x: -1800, y: 2632 });
+  await clickAt(page, plan, { x: -1350, y: 3411 });
+  await settle(page);
+  await expect(page.getByText("Obstacle obstacle-2 ajouté (annulable).")).toBeVisible();
+  await expect(plan.locator(".plan-editor__obstacle--door .plan-editor__swing")).toHaveCount(1);
+  await expect(conflict("doorSwing")).toHaveCount(0);
+
+  // Fenêtre sur M2 (allège et linteau saisis) : conseil.
+  await kind.selectOption("window");
+  await clickAt(page, plan, { x: 1000, y: 300 });
+  await expect(page.getByText("Saisir l'allège et le linteau de la fenêtre")).toBeVisible();
+  await page.getByLabel("Allège", { exact: true }).fill("900");
+  await page.getByLabel("Linteau", { exact: true }).fill("2100");
+  await clickAt(page, plan, { x: 1000, y: 300 });
+  await clickAt(page, plan, { x: 1000, y: 1300 });
+  await settle(page);
+  await expect(conflict("window")).toHaveCount(1);
+  await expect(conflict("window")).toHaveAttribute("data-severity", "conseil");
+
+  // Zone interdite sur le tronçon 2, fermée par Entrée.
+  await kind.selectOption("zone");
+  for (const p of [
+    { x: -900, y: 2300 },
+    { x: -500, y: 2300 },
+    { x: -700, y: 2700 },
+  ])
+    await clickAt(page, plan, p);
+  await plan.focus();
+  await page.keyboard.press("Enter");
+  await settle(page);
+  await expect(page.getByText("Obstacle obstacle-4 ajouté (annulable).")).toBeVisible();
+  await expect(conflict("obstacle")).toHaveCount(2);
+
+  // Porte : ouverture à droite dans l'inspecteur, le débattement couvre l'escalier.
+  await page.getByRole("button", { name: "Sélectionner", exact: true }).click();
+  await plan.getByRole("button", { name: "Obstacle obstacle-2", exact: true }).focus();
+  await page.keyboard.press("Enter");
+  await expect(status).toHaveText("Sélection : Obstacle obstacle-2");
+  await page
+    .getByRole("combobox", { name: "Ouverture", exact: true })
+    .selectOption({ label: "À droite (vu de A vers B)" });
+  await settle(page);
+  await expect(conflict("doorSwing")).toHaveCount(1);
+
+  // Poteau glissé hors de l'escalier : conflit disparu dès l'aperçu ; une annulation le rend.
+  await plan.getByRole("button", { name: "Obstacle obstacle-1", exact: true }).focus();
+  await page.keyboard.press("Enter");
+  await expect(status).toHaveText("Sélection : Obstacle obstacle-1");
+  const move = plan.getByRole("slider", { name: "Déplacer l'obstacle obstacle-1", exact: true });
+  const m0 = await center(move);
+  const away = await screenOf(plan, { x: 450, y: -700 });
+  await page.keyboard.down("Shift");
+  await page.mouse.move(m0.x, m0.y);
+  await page.mouse.down();
+  await page.mouse.move(away.x, away.y, { steps: 12 });
+  await expect(conflict("obstacle")).toHaveCount(1);
+  await expect(page.getByTestId("plan-conflicts-status")).toHaveAttribute("data-preview", "true");
+  await page.mouse.up();
+  await page.keyboard.up("Shift");
+  await settle(page);
+  await expect(conflict("obstacle")).toHaveCount(1);
+  await undo.click();
+  await settle(page);
+  await expect(conflict("obstacle")).toHaveCount(2);
+
+  // Suppr : l'obstacle sélectionné est supprimé (une annulation le rend).
+  await plan.focus();
+  await page.keyboard.press("Delete");
+  await settle(page);
+  await expect(page.getByText("Obstacle obstacle-1 supprimé.")).toBeVisible();
+  await expect(status).toHaveText(/Aucune sélection/);
+  await expect(conflict("obstacle")).toHaveCount(1);
+  await undo.click();
+  await settle(page);
+  await expect(conflict("obstacle")).toHaveCount(2);
 
   await settle(page);
   const tasks = await takeLongTasks(page);

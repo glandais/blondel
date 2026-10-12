@@ -77,7 +77,11 @@ import type {
 import type { Mm, Polygon2, Vec2 } from "../model/primitives.js";
 import type { Obstacle, Project, Site, Wall } from "../model/project.js";
 import { structureLateralThickness } from "../structures/registry.js";
-import { resolveSiteFitProfile, type SiteFitProfile } from "../workshop/siteFit.js";
+import {
+  resolveSiteFitProfile,
+  type SiteFitProfile,
+  type SiteFitProfileInput,
+} from "../workshop/siteFit.js";
 
 /** Tolérance de contact au nu (mm), reprise de l'assistant (voir l'en-tête). */
 export const SITE_FIT_CONTACT_TOL: Mm = ASSISTANT_DEFAULTS.contactTolerance;
@@ -272,6 +276,25 @@ export function doorSwingPolygon(o: Extract<Obstacle, { kind: "door" }>, radius:
     );
   }
   return ensureCCW(pts);
+}
+
+/** Rayon du débattement d'une porte : réglage d'atelier, sinon largeur de la baie (F7). */
+export function doorSwingRadius(
+  o: Extract<Obstacle, { kind: "door" }>,
+  settings: Pick<SiteFitProfile, "doorSwingRadius">,
+): Mm {
+  return settings.doorSwingRadius ?? V.distance(o.a, o.b);
+}
+
+/**
+ * Secteur de débattement d'une porte (dessin de l'éditeur de plan) : même rayon que le contrôle
+ * (`doorSwingRadius`), avec le réglage partiel du projet (`Project.workshop.siteFit`).
+ */
+export function doorSwingSector(
+  o: Extract<Obstacle, { kind: "door" }>,
+  siteFit?: SiteFitProfileInput,
+): Polygon2 {
+  return doorSwingPolygon(o, doorSwingRadius(o, resolveSiteFitProfile(siteFit)));
 }
 
 /**
@@ -536,7 +559,7 @@ export function footprintConflicts(
         break;
       }
       case "door": {
-        const radius = settings.doorSwingRadius ?? V.distance(o.a, o.b);
+        const radius = doorSwingRadius(o, settings);
         const sector = doorSwingPolygon(o, radius);
         if (sector.length < 3) break;
         const hits = pieces.filter((p) => convexOverlap(p.polygon, sector, tol));

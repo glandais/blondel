@@ -9,20 +9,30 @@ import type { EditResult } from "../model/edit.js";
 import { ProjectSchema, type Project } from "../model/project.js";
 import { createProject } from "../project/presets.js";
 import {
+  circularPostDraftFromEdge,
   dragWallFace,
   insertOpeningVertex,
   insertRoomVertex,
-  openingEdgeNear,
-  removeOpeningVertex,
-  removeWall,
-  setWallThicknessKeepingFace,
+  moveBayEnd,
   moveOpeningVertex,
   moveRoomVertex,
   moveWallEnd,
+  moveZoneVertex,
+  openingEdgeNear,
+  openingVertices,
+  postAngleAt,
+  postDraftFromCorner,
+  removeOpeningVertex,
   removeRoomVertex,
+  removeWall,
+  resizePostToCorner,
+  roomEdgeNear,
+  setCircularPostRadiusAt,
   setWallLoadBearing,
   setWallThickness,
+  setWallThicknessKeepingFace,
   splitWall,
+  translateObstacle,
   translateOpening,
   translateWall,
   updateObstacle,
@@ -30,8 +40,9 @@ import {
   withoutObstacle,
   withRoom,
   withWall,
-  openingVertices,
+  type ObstacleDraft,
 } from "./edit.js";
+import { bayCarrier } from "./siteSnap.js";
 
 function base(): Project {
   const p = createProject("quarter-left");
@@ -465,6 +476,272 @@ describe("obstacles", () => {
     const back = ok(withoutObstacle(q, "obstacle-1"));
     expect(back).toStrictEqual(p);
     expect(withoutObstacle(p, "obstacle-1").error?.key).toBe("site.edit.unknownObstacle");
+  });
+});
+
+describe("gestes sur le contour de pièce et les obstacles (sous-lot 5b)", () => {
+  /** Base, plus une porte et une fenêtre sur le mur vertical (axe x = −100), un poteau, une zone. */
+  function withObstacles(): Project {
+    let p = base();
+    const drafts: ObstacleDraft[] = [
+      { kind: "door", a: { x: -100, y: 500 }, b: { x: -100, y: 1400 }, hinge: "a", swing: "left" },
+      { kind: "window", a: { x: -100, y: 2000 }, b: { x: -100, y: 2800 }, sill: 900, head: 2100 },
+      { kind: "post", center: { x: 2000, y: 2000 }, sizeX: 200, sizeY: 100, rotation: 0 },
+      { kind: "circularPost", center: { x: 3000, y: 500 }, radius: 100 },
+      {
+        kind: "zone",
+        points: [
+          { x: 1000, y: 3000 },
+          { x: 2000, y: 3000 },
+          { x: 1500, y: 3800 },
+        ],
+      },
+    ];
+    for (const d of drafts) p = ok(withObstacle(p, d));
+    return p;
+  }
+  const P5 = withObstacles();
+  const ob = (p: Project, id: string) => p.site.obstacles!.find((o) => o.id === id)!;
+
+  it("brouillons d'un poteau et d'un poteau rond (centre, coin ou bord ; arrondis)", () => {
+    expect(postDraftFromCorner({ x: 100.4, y: 0 }, { x: 250.2, y: -60.3 })).toEqual({
+      kind: "post",
+      center: { x: 100, y: 0 },
+      sizeX: 300,
+      sizeY: 121,
+      rotation: 0,
+    });
+    expect(circularPostDraftFromEdge({ x: 0, y: 0 }, { x: 30, y: 40 })).toEqual({
+      kind: "circularPost",
+      center: { x: 0, y: 0 },
+      radius: 50,
+    });
+    // Côté nul : refusé par le schéma à l'ajout.
+    expect(
+      withObstacle(P5, postDraftFromCorner({ x: 0, y: 0 }, { x: 0, y: 40 })).error,
+    ).toBeDefined();
+  });
+
+  it("translation : poteau libre, baie le long de son mur, zone ; sans effet = même projet", () => {
+    const post = ok(translateObstacle(P5, "obstacle-3", { x: 10.4, y: -20.6 }));
+    expect(ob(post, "obstacle-3")).toMatchObject({ center: { x: 2010, y: 1979 } });
+    expect(post.site.walls).toBe(P5.site.walls);
+    // Porte sur le mur vertical : seule la composante selon y est retenue.
+    const door = ok(translateObstacle(P5, "obstacle-1", { x: 300, y: 100 }));
+    expect(ob(door, "obstacle-1")).toMatchObject({
+      a: { x: -100, y: 600 },
+      b: { x: -100, y: 1500 },
+    });
+    expect(translateObstacle(P5, "obstacle-1", { x: 300, y: 0 }).project).toBe(P5);
+    const zone = ok(translateObstacle(P5, "obstacle-5", { x: 0, y: -100 }));
+    expect((ob(zone, "obstacle-5") as { points: unknown }).points).toEqual([
+      { x: 1000, y: 2900 },
+      { x: 2000, y: 2900 },
+      { x: 1500, y: 3700 },
+    ]);
+    expect(translateObstacle(P5, "nope", { x: 1, y: 1 }).error?.key).toBe(
+      "site.edit.unknownObstacle",
+    );
+  });
+
+  it("extrémité d'une baie projetée sur son mur ; baie nulle refusée ; autre obstacle refusé", () => {
+    const moved = ok(moveBayEnd(P5, "obstacle-2", "b", { x: 250, y: 3100.4 }));
+    expect(ob(moved, "obstacle-2")).toMatchObject({ b: { x: -100, y: 3000 } });
+    expect(moveBayEnd(P5, "obstacle-2", "b", { x: -100, y: 2000 }).error?.key).toBe(
+      "site.obstacle.window.sameEnds",
+    );
+    expect(moveBayEnd(P5, "obstacle-3", "a", { x: 0, y: 0 }).error?.key).toBe(
+      "site.edit.obstacleKind",
+    );
+    // Baie sans mur : extrémité au point (arrondi).
+    const { walls: _w, ...site } = P5.site;
+    const free = { ...P5, site: { ...site, walls: [] } };
+    expect(
+      ob(ok(moveBayEnd(free, "obstacle-1", "a", { x: 50.4, y: 60 })), "obstacle-1"),
+    ).toMatchObject({ a: { x: 50, y: 60 } });
+  });
+
+  it("coin et rotation d'un poteau, rayon d'un poteau rond, sommet d'une zone", () => {
+    // Poteau tourné de 90° : son axe propre x est l'axe y du site.
+    const turned = ok(
+      updateObstacle(P5, "obstacle-3", {
+        kind: "post",
+        center: { x: 2000, y: 2000 },
+        sizeX: 200,
+        sizeY: 100,
+        rotation: 90,
+      }),
+    );
+    const resized = ok(resizePostToCorner(turned, "obstacle-3", { x: 1900, y: 2150 }));
+    expect(ob(resized, "obstacle-3")).toMatchObject({ sizeX: 300, sizeY: 200, rotation: 90 });
+    expect(resizePostToCorner(P5, "obstacle-3", { x: 2100, y: 2050 }).project).toBe(P5);
+    expect(postAngleAt(P5, "obstacle-3", { x: 2000, y: 2500 })).toBeCloseTo(90, 9);
+    expect(postAngleAt(P5, "obstacle-3", { x: 2000, y: 2000 })).toBeNull();
+    expect(postAngleAt(P5, "obstacle-4", { x: 0, y: 0 })).toBeNull();
+    const r = ok(setCircularPostRadiusAt(P5, "obstacle-4", { x: 3000, y: 650.4 }));
+    expect(ob(r, "obstacle-4")).toMatchObject({ radius: 150 });
+    expect(setCircularPostRadiusAt(P5, "obstacle-4", { x: 3000, y: 500.2 }).error).toBeDefined();
+    const z = ok(moveZoneVertex(P5, "obstacle-5", 2, { x: 1500.4, y: 4000 }));
+    expect((ob(z, "obstacle-5") as { points: unknown[] }).points[2]).toEqual({ x: 1500, y: 4000 });
+    expect(moveZoneVertex(P5, "obstacle-5", 2, { x: 1000, y: 3000 }).error?.key).toBe(
+      "site.obstacle.zone.duplicateVertex",
+    );
+    expect(moveZoneVertex(P5, "obstacle-5", 3, { x: 0, y: 0 }).error?.key).toBe(
+      "site.edit.vertexIndex",
+    );
+    expect(moveZoneVertex(P5, "obstacle-3", 0, { x: 0, y: 0 }).error?.key).toBe(
+      "site.edit.obstacleKind",
+    );
+    expectSchemaStable(z);
+  });
+
+  it("contour de pièce : côté le plus proche et projeté ; sommet inséré au milieu sans point", () => {
+    const p = base();
+    expect(roomEdgeNear(p, { x: 1500, y: -1100 })).toEqual({
+      edge: 0,
+      point: { x: 1500, y: -1000 },
+    });
+    expect(roomEdgeNear(p, { x: 4100, y: 2000 })?.edge).toBe(1);
+    const { room: _r, ...site } = p.site;
+    expect(roomEdgeNear({ ...p, site }, { x: 0, y: 0 })).toBeNull();
+    const mid = ok(insertRoomVertex(p, 3));
+    expect(mid.site.room!.points[4]).toEqual({ x: -1000, y: 2000 });
+  });
+
+  it("translation d'une baie bornée au segment de son mur", () => {
+    const beyond = ok(translateObstacle(P5, "obstacle-1", { x: 0, y: 5000 }));
+    expect(ob(beyond, "obstacle-1")).toMatchObject({
+      a: { x: -100, y: 2100 },
+      b: { x: -100, y: 3000 },
+    });
+    const before = ok(translateObstacle(P5, "obstacle-1", { x: 0, y: -5000 }));
+    expect(ob(before, "obstacle-1")).toMatchObject({
+      a: { x: -100, y: 0 },
+      b: { x: -100, y: 900 },
+    });
+    // Déjà en butée : sans effet.
+    expect(translateObstacle(beyond, "obstacle-1", { x: 0, y: 100 }).project).toBe(beyond);
+  });
+
+  it("mur coupé par splitWall : la baie reste portée par le tronçon qui la contient", () => {
+    const w = withWall(base(), { x: 0, y: -2000 }, { x: 5000, y: -2000 }, 200);
+    const long = w.site.walls[1]!;
+    const split = splitWall(w, long.id, { x: 2000, y: -2000 });
+    if (split.error) throw new Error(split.error.key);
+    const cut = split.project;
+    const second = split.id;
+    const p = ok(
+      withObstacle(cut, {
+        kind: "door",
+        a: { x: 3000, y: -2000 },
+        b: { x: 3900, y: -2000 },
+        hinge: "a",
+        swing: "left",
+      }),
+    );
+    const id = p.site.obstacles!.at(-1)!.id;
+    const door0 = ob(p, id) as { a: { x: number; y: number }; b: { x: number; y: number } };
+    expect(bayCarrier(p.site.walls, door0.a, door0.b)?.id).toBe(second);
+    expect(ob(ok(moveBayEnd(p, id, "b", { x: 4200, y: -2000 })), id)).toMatchObject({
+      b: { x: 4200, y: -2000 },
+    });
+    expect(ob(ok(moveBayEnd(p, id, "b", { x: 3700, y: -1950 })), id)).toMatchObject({
+      b: { x: 3700, y: -2000 },
+    });
+    // Glissée au-delà de l'extrémité du tronçon : bornée à 5000.
+    expect(ob(ok(translateObstacle(p, id, { x: 3000, y: 0 })), id)).toMatchObject({
+      a: { x: 4100, y: -2000 },
+      b: { x: 5000, y: -2000 },
+    });
+    // Sur le prolongement du mur, loin de son segment : baie libre.
+    expect(bayCarrier(p.site.walls, { x: 7000, y: -2000 }, { x: 7900, y: -2000 })).toBeUndefined();
+  });
+
+  it("propriété : sur un mur oblique, des glissements répétés gardent la baie sur l'axe", () => {
+    fc.assert(
+      fc.property(
+        fc.double({ min: 0, max: 2 * Math.PI, noNaN: true }),
+        fc.array(
+          fc.record({
+            x: fc.double({ min: -600, max: 600, noNaN: true }),
+            y: fc.double({ min: -600, max: 600, noNaN: true }),
+          }),
+          { minLength: 1, maxLength: 40 },
+        ),
+        (angle, deltas) => {
+          const u = { x: Math.cos(angle), y: Math.sin(angle) };
+          const at = (t: number) => ({
+            x: Math.round(-3000 + t * u.x),
+            y: Math.round(-6000 + t * u.y),
+          });
+          const a0 = at(0);
+          const b0 = at(4000);
+          let p = withWall(base(), a0, b0, 200);
+          const wall = p.site.walls[1]!;
+          p = ok(
+            withObstacle(p, {
+              kind: "window",
+              a: at(1000),
+              b: at(1900),
+              sill: 900,
+              head: 2100,
+            }),
+          );
+          const id = p.site.obstacles!.at(-1)!.id;
+          const L = Math.hypot(b0.x - a0.x, b0.y - a0.y);
+          const w = { x: (b0.x - a0.x) / L, y: (b0.y - a0.y) / L };
+          const offAxis = (q: { x: number; y: number }) =>
+            Math.abs(w.x * (q.y - a0.y) - w.y * (q.x - a0.x));
+          const along = (q: { x: number; y: number }) => w.x * (q.x - a0.x) + w.y * (q.y - a0.y);
+          const width = (o: { a: { x: number; y: number }; b: { x: number; y: number } }) =>
+            Math.hypot(o.b.x - o.a.x, o.b.y - o.a.y);
+          const first = ob(p, id) as { a: { x: number; y: number }; b: { x: number; y: number } };
+          for (const d of deltas) {
+            const r = translateObstacle(p, id, d);
+            if (r.error) throw new Error(r.error.key);
+            p = r.project;
+            const o = ob(p, id);
+            if (o.kind !== "window") throw new Error("fenêtre attendue");
+            expect(bayCarrier(p.site.walls, o.a, o.b)?.id).toBe(wall.id);
+            expect(offAxis(o.a)).toBeLessThanOrEqual(Math.SQRT2 + 1e-9);
+            expect(offAxis(o.b)).toBeLessThanOrEqual(Math.SQRT2 + 1e-9);
+            expect(width(o)).toBeCloseTo(width(first), 9);
+            for (const q of [o.a, o.b]) {
+              expect(along(q)).toBeGreaterThanOrEqual(-1);
+              expect(along(q)).toBeLessThanOrEqual(L + 1);
+            }
+          }
+        },
+      ),
+      { numRuns: 150 },
+    );
+  });
+
+  it("propriété : une baie déplacée par ses gestes reste sur l'axe de son mur", () => {
+    const pt = fc.record({
+      x: fc.double({ min: -5000, max: 5000, noNaN: true }),
+      y: fc.double({ min: -5000, max: 5000, noNaN: true }),
+    });
+    fc.assert(
+      fc.property(fc.boolean(), fc.constantFrom("a" as const, "b" as const), pt, (move, end, q) => {
+        const r = move
+          ? translateObstacle(P5, "obstacle-1", q)
+          : moveBayEnd(P5, "obstacle-1", end, q);
+        if (r.error) return;
+        const door = ob(r.project, "obstacle-1");
+        if (door.kind !== "door") throw new Error("porte attendue");
+        // Mur vertical d'axe x = −100, de y = 0 à 3000 : extrémités sur l'axe (x exact).
+        expect(door.a.x).toBe(-100);
+        expect(door.b.x).toBe(-100);
+        // Dans le segment du mur (y de 0 à 3000), entier, et toujours portée par ce mur.
+        for (const y of [door.a.y, door.b.y]) {
+          expect(y >= 0 && y <= 3000 && Number.isInteger(y)).toBe(true);
+        }
+        expect(bayCarrier(r.project.site.walls, door.a, door.b)?.id).toBe(P5.site.walls[0]!.id);
+        expectSchemaStable(r.project);
+      }),
+      { numRuns: 300 },
+    );
   });
 });
 

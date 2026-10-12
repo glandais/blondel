@@ -18,6 +18,7 @@ import {
   arrivalZone,
   computeSiteFit,
   doorSwingPolygon,
+  doorSwingSector,
   projectLateralThickness,
   stairGrossPieces,
 } from "./fit.js";
@@ -218,6 +219,20 @@ describe("adéquation au site : obstacles", () => {
     // Gonds en b, ouverture à droite de a→b (vers −y) : secteur sous la baie.
     expect(Math.min(...sector.map((v) => v.y))).toBeCloseTo(-800, 6);
     expect(Math.max(...sector.map((v) => v.y))).toBeCloseTo(0, 6);
+  });
+
+  it("débattement dessiné (éditeur) : même rayon que le contrôle, réglage d'atelier compris", () => {
+    const door = {
+      kind: "door" as const,
+      id: "D",
+      a: { x: 0, y: 0 },
+      b: { x: 800, y: 0 },
+      hinge: "a" as const,
+      swing: "left" as const,
+    };
+    expect(doorSwingSector(door)).toEqual(doorSwingPolygon(door, 800));
+    expect(doorSwingSector(door, { doorSwingRadius: null })).toEqual(doorSwingPolygon(door, 800));
+    expect(doorSwingSector(door, { doorSwingRadius: 1200 })).toEqual(doorSwingPolygon(door, 1200));
   });
 
   it("fenêtre : conseil seulement, marches devant la baie sous le linteau", () => {

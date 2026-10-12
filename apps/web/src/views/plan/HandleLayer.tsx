@@ -11,7 +11,10 @@
  * - mur (sous-lot 5a) : extrémités (accroche aux autres murs, au calque, à l'équerre), mur entier,
  *   nus (épaisseur, nu opposé conservé) ; trémie : trémie entière et sommets. Positions lues dans
  *   le site du projet courant (jamais reportées) ; un clic sans glisser sur une extrémité ou un
- *   sommet le sélectionne.
+ *   sommet le sélectionne ;
+ * - contour de pièce (sous-lot 5b) : sommets ; obstacle : déplacement, et selon son type coin et
+ *   rotation (poteau ; flèches gauche / droite : côté x, haut / bas : côté y), rayon (poteau
+ *   rond), extrémités le long du mur (porte, fenêtre), sommets (zone).
  *
  * Maj pendant un glisser désactive les accroches. Chaque poignée est un curseur ARIA
  * (`role="slider"`, valeur en mm ou en degrés) : flèches = 10 mm ou 1°, avec Maj 100 mm ou 15° ;
@@ -92,6 +95,20 @@ function handleLabel(h: PlanHandle, project: Project): Message {
       return msg("ui.plan.editor.handle.openingMove");
     case "openingVertex":
       return msg("ui.plan.editor.handle.openingVertex", { index: h.index + 1 });
+    case "roomVertex":
+      return msg("ui.plan.editor.handle.roomVertex", { index: h.index + 1 });
+    case "obstacleMove":
+      return msg("ui.plan.editor.handle.obstacleMove", { id: h.id });
+    case "postSize":
+      return msg("ui.plan.editor.handle.postSize", { id: h.id });
+    case "postRotate":
+      return msg("ui.plan.editor.handle.postRotate", { id: h.id });
+    case "postRadius":
+      return msg("ui.plan.editor.handle.postRadius", { id: h.id });
+    case "bayEnd":
+      return msg("ui.plan.editor.handle.bayEnd", { id: h.id, end: h.end.toUpperCase() });
+    case "zoneVertex":
+      return msg("ui.plan.editor.handle.zoneVertex", { id: h.id, index: h.index + 1 });
   }
 }
 
@@ -125,6 +142,12 @@ export function snapMessage(snap: DragSnap, format: (v: number) => string): Mess
 const CLICK_SLOP_PX = 3;
 
 function valueText(v: HandleValue, format: (n: number) => string): Message {
+  if (v.unit === "size" && v.size) {
+    return msg("ui.plan.editor.handle.value.size", {
+      x: format(v.size.x),
+      y: format(v.size.y),
+    });
+  }
   if (v.unit === "position" && v.position) {
     return msg("ui.plan.editor.handle.value.position", {
       x: format(v.position.x),
@@ -179,7 +202,7 @@ export const HandleLayer = memo(function HandleLayer({
   const spots =
     active && layoutProject ? selectionHandles(selection, model, layoutProject, mmPerPx) : [];
   // Poignées du site : projet courant, jamais reportées (le site ne suit pas l'escalier).
-  const site = active ? siteHandles(selection, project) : [];
+  const site = active ? siteHandles(selection, project, mmPerPx) : [];
   const r = HANDLE_RADIUS_PX * mmPerPx;
   const ghost =
     drag.snap?.kind === "placement" && layoutProject
@@ -286,7 +309,10 @@ export const HandleLayer = memo(function HandleLayer({
         const key = handleKey(s.handle);
         const value = handleValue(project, s.handle, SLIDER_MAX_MM);
         const dragging = drag.activeKey === key;
-        const big = s.handle.kind === "move" || s.handle.kind === "openingMove";
+        const big =
+          s.handle.kind === "move" ||
+          s.handle.kind === "openingMove" ||
+          s.handle.kind === "obstacleMove";
         return (
           <circle
             key={key}
