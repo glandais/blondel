@@ -1,8 +1,10 @@
 /**
  * Propriétés de l'assistant sur des sites tirés dans des domaines réalistes (générateurs
  * contraints, CHALLENGE A7) : tout candidat rendu est sans erreur ni bloquant, arrive sur un
- * côté de la trémie, ses marches au-dessus de la sous-face de la dalle sont dans la trémie et
- * il ne heurte aucun mur.
+ * côté de la trémie, ses marches au-dessus de la sous-face de la dalle sont dans la trémie, il
+ * ne heurte aucun mur, n'a aucune erreur dans `Model.siteFit` (un seul crible), reprend ses
+ * avertissements dans le résumé, et une arrivée qui débouche contre un mur porte l'avertissement
+ * de dégagement d'arrivée (F15).
  */
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
@@ -100,6 +102,21 @@ describe("propriétés de proposeDesigns", () => {
           const model = buildModel(c.project, { memo: false });
           expect(model.errors).toEqual([]);
           expect(model.compliance.summary.bloquant).toBe(0);
+          // Un seul crible (sous-lot 3c) : aucune erreur d'adéquation au site (hors échappée,
+          // jugée par le contrôle, et recouvrement, dans `errors`) ; avertissements et conseils
+          // repris dans le résumé, hors échappée.
+          const fit = model.siteFit ?? [];
+          expect(
+            fit.filter(
+              (k) => k.severity === "erreur" && k.kind !== "headroom" && k.kind !== "selfOverlap",
+            ),
+            fr(c.label),
+          ).toEqual([]);
+          expect(c.summary.siteConflicts).toEqual(
+            fit
+              .filter((k) => k.severity !== "erreur" && k.kind !== "headroom")
+              .map((k) => ({ kind: k.kind, severity: k.severity, message: k.message })),
+          );
           const ceiling = ceilingOf(c.project.site);
           // Marches au-dessus de la sous-face de la dalle : dans la trémie.
           for (const t of model.stepping.treads) {
@@ -112,8 +129,7 @@ describe("propriétés de proposeDesigns", () => {
             const last = model.stepping.nosings[model.stepping.nosings.length - 1]!;
             expect(pointInPolygon(last.q, poly, 1e-3)).toBe("boundary");
             expect(pointInPolygon(last.r, poly, 1e-3)).toBe("boundary");
-            // Au-delà de l'arrivée, sur la profondeur E : aucun mur (on ne débouche pas dans
-            // un mur).
+            // Au-delà de l'arrivée, sur la profondeur E : un mur y est signalé.
             const mid = { x: (last.q.x + last.r.x) / 2, y: (last.q.y + last.r.y) / 2 };
             const len = Math.hypot(last.r.x - last.q.x, last.r.y - last.q.y);
             let nx = -(last.r.y - last.q.y) / len;
@@ -122,10 +138,18 @@ describe("propriétés de proposeDesigns", () => {
               nx = -nx;
               ny = -ny;
             }
+            // Depuis le sous-lot 3c (F15), un mur dans ce dégagement n'est plus un rejet mais un
+            // avertissement rapporté dans le résumé.
             const width = c.project.stair.layout.width;
-            for (const k of [0.05, 0.2, 0.5, 0.9]) {
+            const exitBlocked = [0.05, 0.2, 0.5, 0.9].some((k) => {
               const p = { x: mid.x + nx * width * k, y: mid.y + ny * width * k };
-              for (const wp of wallPolys) expect(pointInPolygon(p, wp, 0)).not.toBe("inside");
+              return wallPolys.some((wp) => pointInPolygon(p, wp, 0) === "inside");
+            });
+            if (exitBlocked) {
+              expect(
+                c.summary.siteConflicts.some((x) => x.kind === "arrivalClearance"),
+                fr(c.label),
+              ).toBe(true);
             }
             // Giron réel : le giron visé, arrondi des volées au mm par excès (jamais en dessous).
             const g = Number(/-g(\d+)-/.exec(c.id)![1]);

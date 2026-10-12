@@ -6,7 +6,8 @@ import { pointInPolygon } from "../geom2d/polygon.js";
 import * as V from "../geom2d/vec.js";
 import { openingPolygon } from "../headroom/headroom.js";
 import type { FlightsLayoutSpec } from "../model/project.js";
-import { arrivalFrame, arrivalPlacements, grossPieces, toWorld } from "./placement.js";
+import { arrivalPlacements, toWorld } from "../site/stairSnap.js";
+import { arrivalFrame, grossPieces } from "./placement.js";
 
 /** Cas d'acceptation n° 1 (examples/acceptance-01-quart-tournant.blondel.json). */
 const ACCEPTANCE_SPEC: FlightsLayoutSpec = {

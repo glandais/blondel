@@ -520,3 +520,43 @@ describe("adéquation au site : emprise et pipeline", () => {
     }
   });
 });
+
+describe("adéquation au site : limon extérieur d'un hélicoïdal entre deux nez", () => {
+  /** Mur court perpendiculaire au rayon du milieu de la marche 3, face à `face` du centre. */
+  function midTreadWall(p: Project, model: Model, face: number) {
+    const h = model.layout.helical!;
+    const n0 = model.stepping.nosings[2]!;
+    const n1 = model.stepping.nosings[3]!;
+    const a0 = Math.atan2(n0.r.y - h.center.y, n0.r.x - h.center.x);
+    const a1 = Math.atan2(n1.r.y - h.center.y, n1.r.x - h.center.x);
+    let d = a1 - a0;
+    d = Math.atan2(Math.sin(d), Math.cos(d));
+    const mid = a0 + d / 2;
+    const u = { x: Math.cos(mid), y: Math.sin(mid) };
+    const t = { x: -u.y, y: u.x };
+    const c = { x: h.center.x + u.x * (face + 100), y: h.center.y + u.y * (face + 100) };
+    return wall("H", [c.x - t.x * 100, c.y - t.y * 100], [c.x + t.x * 100, c.y + t.y * 100]);
+  }
+
+  for (const outer of [8, 60])
+    it(`épaisseur extérieure ${outer} mm : un mur qui entre de 5 mm à mi-marche est un conflit`, () => {
+      const base = createProject("helical");
+      const model = buildModel(base, { memo: false });
+      const R = model.layout.helical!.outerRadius;
+      const lateral = { inner: 0, outer };
+      const withWall = (face: number): Project =>
+        ProjectSchema.parse({
+          ...base,
+          site: { ...base.site, walls: [midTreadWall(base, model, face)] },
+        });
+      const wallsOf = (face: number) => {
+        const p = withWall(face);
+        return computeSiteFit(p, model.layout, model.stepping, { lateral }).filter(
+          (c) => c.kind === "wall",
+        );
+      };
+      expect(wallsOf(R + outer - 5).map((c) => [c.kind, c.severity])).toEqual([["wall", "erreur"]]);
+      // Au nu (1 mm de jeu) : rien.
+      expect(wallsOf(R + outer + 1)).toEqual([]);
+    });
+});

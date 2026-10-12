@@ -1,23 +1,23 @@
 /**
- * Calage d'un escalier à volées sur la trémie (CHALLENGE G8) et emprise hors tout (A3).
+ * Arrivée et emprise hors tout d'un escalier à volées en repère local, pour l'étage analytique
+ * de l'assistant (CHALLENGE G8, A3), sans découpage ni modèle :
  *
- * - **Arrivée au bord de trémie** : la ligne d'arrivée (nez d'arrivée, bord extérieur de la
- *   dernière volée) est posée sur un côté de la trémie, la montée sortant de la trémie par ce
- *   côté (le plancher haut commence au-delà du côté).
- * - **Emprise dans la trémie ou le long des murs** : la largeur hors tout de la dernière volée
- *   (E + épaisseurs de l'intention de structure côté jour et côté extérieur) doit tenir sur ce
- *   côté ; elle est calée à l'une ou l'autre extrémité du côté, centrée, ou au nu d'un mur
- *   perpendiculaire au côté.
- * - **Emprise hors tout** en repère local : un rectangle par volée (E + épaisseurs, longueur de
- *   la volée) et le carré de chaque poteau d'angle — reconstruits comme `computeLayout`.
+ * - **Arrivée** (`arrivalFrame`) : ligne d'arrivée (nez d'arrivée, bord extérieur de la dernière
+ *   volée), extrémités hors tout (E + épaisseurs de l'intention de structure côté jour et côté
+ *   extérieur) et direction de montée. Le calage sur les côtés de la trémie
+ *   (`arrivalPlacements`) est dans `site/stairSnap.ts`, partagé avec les accroches de l'éditeur.
+ * - **Emprise hors tout** (`grossPieces`) : un rectangle par volée (E + épaisseurs, longueur de
+ *   la volée) et le carré de chaque poteau d'angle — reconstruits comme `computeLayout`. Elle
+ *   passe par les mêmes contrôles que `Model.siteFit` (`footprintConflicts`, `site/fit.ts`).
+ *
+ * Sous-lot 3c : `arrivalPlacements`, `toWorld` et les types de calage sont passés dans
+ * `site/stairSnap.ts`, `slabIntrusion` dans `site/fit.ts` (un seul crible).
  */
-import { msg, type Message } from "@blondel/i18n";
-import { pointInPolygon } from "../geom2d/polygon.js";
 import * as V from "../geom2d/vec.js";
 import { newelProtrusion, newelSetback } from "../layout/newel.js";
-import type { Model } from "../model/derived.js";
 import type { Mm, Polygon2, Vec2 } from "../model/primitives.js";
-import type { FlightsLayoutSpec, Wall } from "../model/project.js";
+import type { FlightsLayoutSpec } from "../model/project.js";
+import type { ArrivalFrame } from "../site/stairSnap.js";
 
 /** Repère d'une volée (repère local du projet, placement nul), comme `computeLayout`. */
 interface LegFrame {
@@ -50,17 +50,7 @@ function legFrames(spec: FlightsLayoutSpec, lengths: readonly Mm[]): LegFrame[] 
 const legLengths = (spec: FlightsLayoutSpec): Mm[] =>
   spec.legs.map((l) => (typeof l.length === "number" ? l.length : 0));
 
-/** Arrivée d'un tracé à volées, repère local. */
-export interface ArrivalFrame {
-  /** Point de Γ sur la ligne d'arrivée. */
-  readonly walkPoint: Vec2;
-  /** Direction de montée à l'arrivée (unitaire). */
-  readonly dir: Vec2;
-  /** Extrémités hors tout de la ligne d'arrivée (jour − épaisseur, extérieur + épaisseur). */
-  readonly grossInner: Vec2;
-  readonly grossOuter: Vec2;
-}
-
+/** Arrivée d'un tracé à volées, repère local (`walkPoint` : point de Γ sur la ligne d'arrivée). */
 export function arrivalFrame(
   spec: FlightsLayoutSpec,
   walklineOffset: Mm,
@@ -101,142 +91,4 @@ export function grossPieces(
     pieces.push([at(-s, -s), at(p, -s), at(p, p), at(-s, p)]);
   });
   return pieces;
-}
-
-/** Placement d'un escalier (repère du site) et description du calage. */
-export interface Placement {
-  readonly origin: Vec2;
-  /** Degrés. */
-  readonly rotation: number;
-  /** Description du calage. */
-  readonly fit: Message;
-  /** Clé de calage (côté, alignement) stable d'un giron à l'autre. */
-  readonly key: string;
-}
-
-/** Côté de trémie trop court pour la largeur hors tout (diagnostic). */
-export interface PlacementMisfit {
-  readonly needed: Mm;
-  readonly available: Mm;
-}
-
-const snap = (v: number): number => (Math.abs(v - Math.round(v)) < 1e-6 ? Math.round(v) : v);
-
-/** Nom d'un côté de trémie d'après sa normale sortante. */
-function edgeName(normal: Vec2, index: number): Message {
-  const eps = 1e-9;
-  if (Math.abs(normal.x + 1) < eps) return msg("assistant.edge.xMin");
-  if (Math.abs(normal.x - 1) < eps) return msg("assistant.edge.xMax");
-  if (Math.abs(normal.y + 1) < eps) return msg("assistant.edge.yMin");
-  if (Math.abs(normal.y - 1) < eps) return msg("assistant.edge.yMax");
-  return msg("assistant.edge.index", { index: index + 1 });
-}
-
-/**
- * Placements qui posent l'arrivée sur un côté de la trémie (polygone CCW) avec la largeur hors
- * tout contenue dans ce côté. `misfit` : plus grand côté essayé quand aucun ne convient.
- */
-export function arrivalPlacements(
-  frame: ArrivalFrame,
-  opening: Polygon2,
-  walls: readonly Wall[],
-  tol: Mm,
-): { readonly placements: Placement[]; readonly misfit: PlacementMisfit | null } {
-  const placements: Placement[] = [];
-  const seen = new Set<string>();
-  let misfit: PlacementMisfit | null = null;
-  const m = opening.length;
-  for (let i = 0; i < m; i++) {
-    const a = opening[i]!;
-    const b = opening[(i + 1) % m]!;
-    const len = V.distance(a, b);
-    if (!(len > tol)) continue;
-    const u = V.scale(V.sub(b, a), 1 / len);
-    const out = V.perpRight(u);
-    let deg = ((V.angleOf(out) - V.angleOf(frame.dir)) * 180) / Math.PI;
-    deg = ((deg % 360) + 360) % 360;
-    const q = Math.round(deg / 90) * 90;
-    if (Math.abs(deg - q) < 1e-7) deg = q % 360;
-    const theta = (deg * Math.PI) / 180;
-    const gi = V.rotate(frame.grossInner, theta);
-    const go = V.rotate(frame.grossOuter, theta);
-    const c1 = V.dot(gi, u);
-    const c2 = V.dot(go, u);
-    const lo = Math.min(c1, c2);
-    const w = Math.abs(c2 - c1);
-    if (w > len + tol) {
-      if (misfit === null || len > misfit.available) misfit = { needed: w, available: len };
-      continue;
-    }
-    const on = -V.dot(V.rotate(frame.walkPoint, theta), out);
-    const name = edgeName(out, i);
-    // Au nu d'un mur d'abord : à position égale, le libellé du mur l'emporte (dédoublonnage).
-    const targets: { lo: number; label: Message; key: string }[] = [];
-    for (const wall of walls) {
-      const wd = V.sub(wall.b, wall.a);
-      const wl = V.norm(wd);
-      if (!(wl > 0) || Math.abs(V.cross(V.scale(wd, 1 / wl), out)) > 1e-6) continue;
-      const c = V.dot(V.sub(wall.a, a), u);
-      const half = wall.thickness / 2;
-      const label = msg("assistant.align.wall", { wall: wall.id });
-      targets.push({ lo: c + half, label, key: `wall-${wall.id}+` });
-      targets.push({ lo: c - half - w, label, key: `wall-${wall.id}-` });
-    }
-    targets.push(
-      { lo: 0, label: msg("assistant.align.start"), key: "start" },
-      { lo: len - w, label: msg("assistant.align.end"), key: "end" },
-      { lo: Math.floor((len - w) / 2), label: msg("assistant.align.center"), key: "center" },
-    );
-    for (const t of targets) {
-      if (t.lo < -tol || t.lo + w > len + tol) continue;
-      const ou = t.lo - lo;
-      const origin = V.add(a, V.add(V.scale(u, ou), V.scale(out, on)));
-      const o = { x: snap(origin.x), y: snap(origin.y) };
-      const id = `${o.x.toFixed(3)}|${o.y.toFixed(3)}|${deg}`;
-      if (seen.has(id)) continue;
-      seen.add(id);
-      placements.push({
-        origin: o,
-        rotation: deg,
-        fit: msg("assistant.fit.arrival", { edge: name, alignment: t.label }),
-        key: `${i}:${t.key}`,
-      });
-    }
-  }
-  return { placements, misfit };
-}
-
-/** Point du repère local placé dans le site. */
-export function toWorld(p: Vec2, placement: { origin: Vec2; rotation: number }): Vec2 {
-  return V.add(V.rotate(p, (placement.rotation * Math.PI) / 180), placement.origin);
-}
-
-/**
- * Dalle haute : toute marche dont le dessus dépasse la sous-face de la dalle (z > H − ep) doit
- * être dans la trémie en plan — surface de marche visible et extrémités hors tout de ses lignes
- * de nez. Le débord de la pièce (`outline`) n'est pas contrôlé : la dernière marche passe
- * légitimement de son débord sous la contremarche d'arrivée, contre le chevêtre. Rend le
- * numéro de la première marche fautive, ou `null`.
- */
-export function slabIntrusion(
-  model: Pick<Model, "stepping">,
-  opening: Polygon2,
-  ceiling: Mm,
-  innerThickness: Mm,
-  outerThickness: Mm,
-  tol: Mm,
-): number | null {
-  const inside = (p: Vec2): boolean => pointInPolygon(p, opening, tol) !== "outside";
-  for (const tread of model.stepping.treads) {
-    if (!(tread.z > ceiling + 1e-6)) continue;
-    if (!tread.walkingSurface.every(inside)) return tread.number;
-  }
-  for (const nosing of model.stepping.nosings) {
-    if (!(nosing.z > ceiling + 1e-6)) continue;
-    const gi = V.addScaled(nosing.q, nosing.dir, -innerThickness);
-    const go = V.addScaled(nosing.r, nosing.dir, outerThickness);
-    // Le nez k porte le dessus de la marche k + 1.
-    if (!inside(gi) || !inside(go)) return nosing.index + 1;
-  }
-  return null;
 }

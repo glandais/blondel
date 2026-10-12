@@ -82,4 +82,10 @@ export const DEFAULT_SCORE_WEIGHTS: ScoreWeights = {
   winders: 2,
   regularity: 1,
   warnings: 5,
+  /**
+   * Un avertissement de l'adéquation au site pèse plus que les écarts usuels de score entre
+   * variantes (quelques dizaines de points) : une proposition nette passe devant quand il en
+   * existe une, sans rejet (F15). **[choix Blondel, à valider]**
+   */
+  siteFit: 50,
 };

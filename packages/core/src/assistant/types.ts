@@ -7,6 +7,7 @@
  * modèle calculé et d'un score détaillé (pénalités pondérées, plus petit = meilleur).
  */
 import type { Locale, Message, MessageKey } from "@blondel/i18n";
+import type { SiteConflict } from "../model/derived.js";
 import type { Mm, Vec2 } from "../model/primitives.js";
 import type { Project, ProjectInput } from "../model/project.js";
 
@@ -92,8 +93,15 @@ export interface ScoreWeights {
   readonly winders: number;
   /** Par mm d'écart maximal des girons sur la ligne de foulée au giron nominal. */
   readonly regularity: number;
-  /** Par avertissement du contrôle de conception. */
+  /** Par avertissement du contrôle de conception (règles). */
   readonly warnings: number;
+  /**
+   * Par avertissement de l'adéquation au site (dégagement d'arrivée, débattement de porte,
+   * structure sous la dalle…, sous-lot 3c) : ces conflits ne rejettent plus une proposition
+   * (sévérités F15), ils la classent après les propositions nettes. Absent des poids fournis :
+   * valeur par défaut.
+   */
+  readonly siteFit: number;
 }
 
 /** Réglages de l'énumération (tous ont une valeur par défaut, `ASSISTANT_DEFAULTS`). */
@@ -128,9 +136,11 @@ export interface AssistantLimits {
   /** Pas de la recherche du giron (mm, > 0). */
   readonly goingStep?: Mm;
   /**
-   * Profondeur dégagée exigée au-delà de la ligne d'arrivée, sur toute la largeur hors tout
-   * (mm) : aucun mur ne doit s'y trouver (on ne débouche pas dans un mur). Absente : E du
-   * candidat, par analogie avec `PALIER_LONGUEUR_METIER` (palier ≥ E) **[choix Blondel, à
+   * Profondeur dégagée voulue au-delà de la ligne d'arrivée, sur toute la largeur hors tout
+   * (mm), contre les murs et les poteaux (dégagement d'arrivée de l'adéquation au site, F15) :
+   * un mur ou un poteau dans ce rectangle est un **avertissement** (rapporté, pénalisé au
+   * score), plus un rejet (sous-lot 3c). Absente : `workshop.siteFit.arrivalClearance`, sinon E
+   * du candidat, par analogie avec `PALIER_LONGUEUR_METIER` (palier ≥ E) **[choix Blondel, à
    * valider]**.
    */
   readonly arrivalClearance?: Mm;
@@ -194,10 +204,23 @@ export interface ModelSummary {
   readonly headroomMargin: Mm | null;
   readonly winderCount: number;
   readonly landingCount: number;
-  /** Violations du contrôle de conception par sévérité (bloquant toujours 0). */
+  /**
+   * Violations du contrôle de conception par sévérité (bloquant toujours 0) ; les conflits
+   * d'adéquation au site sont à part (`siteConflicts`).
+   */
   readonly violations: { readonly avertissement: number; readonly conseil: number };
   /** Règles en avertissement (identifiants), pour l'aperçu. */
   readonly warningRules: readonly string[];
+  /**
+   * Avertissements et conseils de l'adéquation au site (`Model.siteFit` hors échappée,
+   * sévérités F15 : dégagement d'arrivée, débattement de porte, structure sous la dalle,
+   * fenêtre…), dans l'ordre de `Model.siteFit`. Une erreur rejette la proposition.
+   */
+  readonly siteConflicts: readonly {
+    readonly kind: SiteConflict["kind"];
+    readonly severity: SiteConflict["severity"];
+    readonly message: Message;
+  }[];
   /** Placement retenu (repère du site). */
   readonly placement: { readonly origin: Vec2; readonly rotation: number };
   /** Calage : côté de trémie d'arrivée et alignement latéral. */
@@ -233,6 +256,7 @@ export type RejectionReason =
   | "headroom"
   | "walls"
   | "slab"
+  | "site"
   | "generation"
   | "blocking"
   | "structure"
@@ -246,6 +270,7 @@ export const REJECTION_LABELS: Readonly<Record<RejectionReason, MessageKey>> = {
   headroom: "assistant.rejection.headroom",
   walls: "assistant.rejection.walls",
   slab: "assistant.rejection.slab",
+  site: "assistant.rejection.site",
   generation: "assistant.rejection.generation",
   blocking: "assistant.rejection.blocking",
   structure: "assistant.rejection.structure",

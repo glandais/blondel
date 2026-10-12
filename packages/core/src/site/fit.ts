@@ -8,9 +8,14 @@
  * - **Emprise hors tout** (`stairGrossPieces`) : une pièce convexe par marche, enveloppe de sa
  *   surface de marche et des extrémités de ses lignes de nez prolongées de l'épaisseur latérale
  *   de la structure (`structureLateralThickness` : côté jour vers le vide, côté mur vers
- *   l'extérieur), coin extérieur d'un tournant décalé à angle vif. Sans découpage : quadrilatère
+ *   l'extérieur), coin extérieur d'un tournant décalé à angle vif ; hélicoïdal : arc extérieur
+ *   au rayon R_e + épaisseur extérieure, couvert entre les deux nez (polygone circonscrit, pas
+ *   de 2°), pas seulement aux extrémités des nez. Sans découpage : quadrilatère
  *   de chaque tronçon (`Layout.sections`), sans épaisseur. Même construction que l'emprise de
  *   l'assistant (`assistant/placement.ts`, `grossPieces`), généralisée à toute cage.
+ * - **Un seul crible** (sous-lot 3c) : `footprintConflicts` (murs, contour, obstacles) et
+ *   `arrivalClearanceConflicts` servent aussi à l'étage analytique de l'assistant, et l'étage
+ *   complet de l'assistant rejette une proposition dont `Model.siteFit` contient une erreur.
  * - **Contact au nu** : un recouvrement d'au plus `ASSISTANT_DEFAULTS.contactTolerance` (0,5 mm,
  *   tolérance géométrique de l'assistant, pas une valeur métier) n'est pas un conflit : un
  *   escalier adossé à un mur, au contour ou à un obstacle est admis.
@@ -30,7 +35,7 @@
  *   zones interdites, portes, fenêtres et le contour de la pièce décrivent le niveau bas et ne
  *   sont pas testés (QUESTIONS F15).
  * - **Dalle haute** : première marche au-dessus de la sous-face de la dalle hors de la trémie
- *   (`slabIntrusion`, même critère que l'assistant) : `erreur` si la marche seule (surface et
+ *   (`slabIntrusion`, critère repris de l'ancien crible de l'assistant) : `erreur` si la marche seule (surface et
  *   lignes de nez) sort de la trémie, `avertissement` si seule l'épaisseur latérale de la
  *   structure passe sous la dalle (limon le long d'un bord de trémie : entaille ou appui sur le
  *   chevêtre à prévoir). Quand c'est la ligne d'arrivée (dernier nez) qui sort, le message le
@@ -46,7 +51,6 @@
  */
 import { dec, msg, type Message } from "@blondel/i18n";
 import { ASSISTANT_DEFAULTS } from "../assistant/defaults.js";
-import { slabIntrusion } from "../assistant/placement.js";
 import {
   convexHull,
   convexOverlap,
@@ -64,21 +68,29 @@ import { clipConvex } from "../layout/cage/overlap.js";
 import type {
   ComplianceReport,
   Layout,
+  Model,
   RuleResult,
   SiteConflict,
   SiteConflictSeverity,
   Stepping,
 } from "../model/derived.js";
 import type { Mm, Polygon2, Vec2 } from "../model/primitives.js";
-import type { Obstacle, Project, Wall } from "../model/project.js";
+import type { Obstacle, Project, Site, Wall } from "../model/project.js";
 import { structureLateralThickness } from "../structures/registry.js";
-import { resolveSiteFitProfile } from "../workshop/siteFit.js";
+import { resolveSiteFitProfile, type SiteFitProfile } from "../workshop/siteFit.js";
 
 /** Tolérance de contact au nu (mm), reprise de l'assistant (voir l'en-tête). */
 export const SITE_FIT_CONTACT_TOL: Mm = ASSISTANT_DEFAULTS.contactTolerance;
 
 /** Pas angulaire de la discrétisation des secteurs et disques (géométrie, pas métier). */
 const ARC_SEGMENTS = 16;
+
+/**
+ * Pas angulaire maximal (rad) du polygone circonscrit à l'arc extérieur d'une marche
+ * hélicoïdale : 2°, débord sur l'arc ≤ R · (1 / cos 1° − 1) ≈ 1,5e-4 · R, sous la tolérance de
+ * contact jusqu'à R ≈ 3 m (géométrie, pas métier).
+ */
+const HELICAL_ARC_STEP = Math.PI / 90;
 
 /** Pièce convexe de l'emprise hors tout. */
 export interface GrossPiece {
@@ -134,6 +146,21 @@ export function stairGrossPieces(
       const reach = d / Math.max(Math.cos(half), 0.1);
       pts.push(V.addScaled(zone.outerCorner, axis, reach / len));
     }
+    // Hélicoïdal : arc extérieur hors tout (R_e + épaisseur extérieure) entre les deux nez,
+    // couvert par des points du polygone circonscrit (la corde sous-estimerait le limon).
+    const h = layout.helical;
+    const n0 = nosings[t.number - 1];
+    const n1 = nosings[t.number];
+    if (h && n0 && n1) {
+      const radius = h.outerRadius + lateral.outer;
+      const a0 = V.angleOf(V.sub(n0.r, h.center));
+      const sweep = V.signedAngle(V.sub(n0.r, h.center), V.sub(n1.r, h.center));
+      const m = Math.max(1, Math.ceil(Math.abs(sweep) / HELICAL_ARC_STEP));
+      const step = sweep / m;
+      const reach = radius / Math.cos(step / 2);
+      for (let k = 0; k < m; k++)
+        pts.push(V.addScaled(h.center, V.fromAngle(a0 + (k + 0.5) * step), reach));
+    }
     const polygon = convexHull(pts);
     if (polygon.length >= 3) out.push({ polygon, tread: t.number, z: t.z });
   }
@@ -143,6 +170,37 @@ export function stairGrossPieces(
     if (polygon.length >= 3) out.push({ polygon });
   }
   return out;
+}
+
+/**
+ * Dalle haute : toute marche dont le dessus dépasse la sous-face de la dalle (z > H − ep) doit
+ * être dans la trémie en plan — surface de marche visible et extrémités hors tout de ses lignes
+ * de nez. Le débord de la pièce (`outline`) n'est pas contrôlé : la dernière marche passe
+ * légitimement de son débord sous la contremarche d'arrivée, contre le chevêtre. Rend le
+ * numéro de la première marche fautive (nez d'arrivée : n, au-delà de la dernière marche), ou
+ * `null`. Déplacé de `assistant/placement.ts` au sous-lot 3c (seul crible : `computeSiteFit`).
+ */
+export function slabIntrusion(
+  model: Pick<Model, "stepping">,
+  opening: Polygon2,
+  ceiling: Mm,
+  innerThickness: Mm,
+  outerThickness: Mm,
+  tol: Mm,
+): number | null {
+  const inside = (p: Vec2): boolean => pointInPolygon(p, opening, tol) !== "outside";
+  for (const tread of model.stepping.treads) {
+    if (!(tread.z > ceiling + 1e-6)) continue;
+    if (!tread.walkingSurface.every(inside)) return tread.number;
+  }
+  for (const nosing of model.stepping.nosings) {
+    if (!(nosing.z > ceiling + 1e-6)) continue;
+    const gi = V.addScaled(nosing.q, nosing.dir, -innerThickness);
+    const go = V.addScaled(nosing.r, nosing.dir, outerThickness);
+    // Le nez k porte le dessus de la marche k + 1.
+    if (!inside(gi) || !inside(go)) return nosing.index + 1;
+  }
+  return null;
 }
 
 /** Rectangle (polygone CCW) d'une boîte. */
@@ -393,19 +451,17 @@ export interface SiteFitOptions {
 }
 
 /**
- * Conflits géométriques (tout sauf l'échappée), dans l'ordre : murs, contour, obstacles (ordre
- * du site), dégagement d'arrivée, dalle, recouvrement sur elle-même.
+ * Conflits d'une emprise hors tout (pièces convexes, repère du site) avec les murs, le contour de
+ * la pièce et les obstacles, dans l'ordre : murs, contour, obstacles (ordre du site). Les
+ * fenêtres ne sont testées que pour les pièces qui portent une marche (`tread`, `z`). Partagé
+ * par `siteGeometryConflicts` et le crible analytique de l'assistant (`assistant/propose.ts`).
  */
-export function siteGeometryConflicts(
-  project: Project,
-  layout: Layout,
-  stepping?: Stepping,
-  lateral: LateralThickness = projectLateralThickness(project),
+export function footprintConflicts(
+  site: Site,
+  pieces: readonly GrossPiece[],
+  settings: SiteFitProfile,
 ): SiteConflict[] {
-  const { site } = project;
   const tol = SITE_FIT_CONTACT_TOL;
-  const settings = resolveSiteFitProfile(project.workshop?.siteFit);
-  const pieces = stairGrossPieces(layout, stepping, lateral);
   const out: SiteConflict[] = [];
 
   // Murs.
@@ -524,34 +580,67 @@ export function siteGeometryConflicts(
     }
   }
 
+  return out;
+}
+
+/**
+ * Conflits du dégagement d'arrivée (`avertissement`) : rectangle `zone` (voir `arrivalZone`)
+ * contre les murs et les poteaux (droits, ronds) seulement, éléments qui montent sur toute la
+ * hauteur ; zones interdites, portes, fenêtres et contour décrivent le niveau bas (F15 (4)).
+ */
+export function arrivalClearanceConflicts(
+  site: Site,
+  zone: Polygon2,
+  clearance: Mm,
+): SiteConflict[] {
+  const tol = SITE_FIT_CONTACT_TOL;
+  const out: SiteConflict[] = [];
+  const c = dec(clearance, 0);
+  const blocked = (id: string, message: Message): void => {
+    out.push({
+      kind: "arrivalClearance",
+      severity: "avertissement",
+      message,
+      zone,
+      targetId: id,
+    });
+  };
+  for (const wall of site.walls)
+    if (convexOverlap(zone, wallPolygon(wall), tol))
+      blocked(wall.id, msg("site.fit.arrival.wall", { wall: wall.id, clearance: c }));
+  for (const o of site.obstacles ?? []) {
+    const hit =
+      o.kind === "post"
+        ? convexOverlap(zone, postPolygon(o), tol)
+        : o.kind === "circularPost"
+          ? discOverlap(o.center, o.radius, zone, tol)
+          : false;
+    if (hit) blocked(o.id, msg("site.fit.arrival.obstacle", { id: o.id, clearance: c }));
+  }
+  return out;
+}
+
+/**
+ * Conflits géométriques (tout sauf l'échappée), dans l'ordre : murs, contour, obstacles (ordre
+ * du site), dégagement d'arrivée, dalle, recouvrement sur elle-même.
+ */
+export function siteGeometryConflicts(
+  project: Project,
+  layout: Layout,
+  stepping?: Stepping,
+  lateral: LateralThickness = projectLateralThickness(project),
+): SiteConflict[] {
+  const { site } = project;
+  const tol = SITE_FIT_CONTACT_TOL;
+  const settings = resolveSiteFitProfile(project.workshop?.siteFit);
+  const pieces = stairGrossPieces(layout, stepping, lateral);
+  const out: SiteConflict[] = [];
+
+  out.push(...footprintConflicts(site, pieces, settings));
+
   // Dégagement d'arrivée.
   const arrival = arrivalZone(layout, stepping, lateral, settings.arrivalClearance);
-  if (arrival) {
-    const { zone, clearance } = arrival;
-    const c = dec(clearance, 0);
-    const blocked = (id: string, message: Message): void => {
-      out.push({
-        kind: "arrivalClearance",
-        severity: "avertissement",
-        message,
-        zone,
-        targetId: id,
-      });
-    };
-    for (const wall of site.walls)
-      if (convexOverlap(zone, wallPolygon(wall), tol))
-        blocked(wall.id, msg("site.fit.arrival.wall", { wall: wall.id, clearance: c }));
-    // Poteaux seulement : zones interdites, portes et fenêtres sont au niveau bas (F15).
-    for (const o of site.obstacles ?? []) {
-      const hit =
-        o.kind === "post"
-          ? convexOverlap(zone, postPolygon(o), tol)
-          : o.kind === "circularPost"
-            ? discOverlap(o.center, o.radius, zone, tol)
-            : false;
-      if (hit) blocked(o.id, msg("site.fit.arrival.obstacle", { id: o.id, clearance: c }));
-    }
-  }
+  if (arrival) out.push(...arrivalClearanceConflicts(site, arrival.zone, arrival.clearance));
 
   // Dalle haute.
   const opening = openingPolygon(site.opening);

@@ -10,12 +10,19 @@
  *    calée à une extrémité, centrée ou au nu d'un mur). Pour chaque calage, le giron est cherché
  *    du giron visé (module recommandé − 2h) vers le giron minimal, par pas de 5 mm : le premier
  *    dont l'**échappée exacte sur Γ** (mêmes fonctions que le pipeline) atteint le minimum
- *    bloquant et dont l'emprise hors tout ne heurte aucun mur est retenu.
+ *    bloquant et dont l'emprise hors tout n'a aucun conflit de sévérité `erreur` avec le site
+ *    est retenu. Conflits : mêmes fonctions que `Model.siteFit` (`footprintConflicts` : murs,
+ *    contour de la pièce, obstacles ; `arrivalClearanceConflicts` : dégagement d'arrivée), sur
+ *    l'emprise hors tout des volées (`grossPieces`) ; les avertissements (dégagement d'arrivée,
+ *    débattement de porte) ne rejettent pas, ils pénalisent le pré-score (poids `siteFit`).
  * 2. **Étage complet** : `buildModel` sur les survivants, par groupe (typologie × sens ×
  *    position du tournant) à tour de rôle et dans l'ordre d'un pré-score, dans la limite d'un
  *    budget de constructions et de temps ; élimination des erreurs de génération, des
- *    violations bloquantes (échappée comprise) et des marches qui traversent la dalle hors
- *    trémie ; score détaillé ; déduplication (même tracé, même placement, même n).
+ *    violations bloquantes (échappée comprise) et de toute **erreur de l'adéquation au site**
+ *    (`Model.siteFit`, sévérités F15 : mur, contour, obstacle, marche à travers la dalle hors
+ *    trémie…) — un seul crible, celui du pipeline ; avertissements et conseils de l'adéquation
+ *    rapportés dans le résumé et comptés au score ; score détaillé ; déduplication (même
+ *    tracé, même placement, même n).
  * 3. **Sélection diversifiée** (`select.ts`) : au plus `perShapeLimit` candidats par forme
  *    (typologie × position du tournant) dans la liste principale, les autres en variantes du
  *    meilleur de leur forme ; ou liste à plat avec `showAllVariants`.
@@ -32,9 +39,8 @@ import {
   type MessageKey,
   type MessageParam,
 } from "@blondel/i18n";
-import { discOverlap, wallCollision, wallPolygon } from "../geom2d/collide.js";
 import { rotateCurve, translateCurve } from "../geom2d/curve.js";
-import { pointInPolygon } from "../geom2d/polygon.js";
+import { ensureCCW, pointInPolygon } from "../geom2d/polygon.js";
 import * as V from "../geom2d/vec.js";
 import {
   ceilingOf,
@@ -45,7 +51,7 @@ import {
 import type { SlopeProfile } from "../headroom/profile.js";
 import { LayoutError } from "../layout/errors.js";
 import { computeLayout } from "../layout/layout.js";
-import type { Layout } from "../model/derived.js";
+import type { Layout, Model, SiteConflict } from "../model/derived.js";
 import type { Mm, Polygon2, Vec2 } from "../model/primitives.js";
 import {
   PROJECT_SCHEMA_VERSION,
@@ -81,13 +87,16 @@ import {
 } from "./bounds.js";
 import { ASSISTANT_DEFAULTS, DEFAULT_SCORE_WEIGHTS } from "./defaults.js";
 import {
-  arrivalFrame,
-  arrivalPlacements,
-  grossPieces,
-  slabIntrusion,
-  toWorld,
-  type Placement,
-} from "./placement.js";
+  arrivalClearanceConflicts,
+  computeSiteFit,
+  footprintConflicts,
+  projectLateralThickness,
+  siteConflictsBesideRules,
+} from "../site/fit.js";
+import { arrivalPlacements, toWorld, type ArrivalPlacement } from "../site/stairSnap.js";
+import { resolveSiteFitProfile } from "../workshop/siteFit.js";
+import { GEOM_EPS } from "../geom2d/tolerance.js";
+import { arrivalFrame, grossPieces } from "./placement.js";
 import { scoreModel, summarizeModel } from "./score.js";
 import { selectDiverse, shapeKey } from "./select.js";
 import {
@@ -115,6 +124,9 @@ import {
   type StructureIntent,
   type TypologyId,
 } from "./types.js";
+
+/** Calage d'une variante (assistant) : placement, description et clé stable. */
+type Placement = Pick<ArrivalPlacement, "origin" | "rotation" | "fit" | "key">;
 
 // Épaisseurs hors emprise utile (CHALLENGE A3), poteau exigé et tracés admis : déclarés par
 // les plugins (`StructureKind.capabilities`, dette D4), plus de liste tenue ici.
@@ -218,8 +230,6 @@ interface Survivor {
   readonly grossWidth: Mm;
   readonly fit: Message;
   readonly make: () => Project;
-  /** Emprise hors tout d'un hélicoïdal (disque) pour le contrôle des murs. */
-  readonly disc?: { readonly center: Vec2; readonly radius: Mm };
 }
 
 /** Typologie et sens : « Quart tournant à gauche ». */
@@ -429,6 +439,8 @@ export function proposeDesigns(input: AssistantInput): AssistantResult {
   const opening = openingPolygon(site.opening);
   const ceiling = ceilingOf(site);
   const tol = ASSISTANT_DEFAULTS.contactTolerance;
+  // Réglages de l'adéquation au site (profil d'atelier recopié dans les projets proposés).
+  const fitProfile = resolveSiteFitProfile(template.workshop?.siteFit);
   diagnostics.push(intent.note);
 
   const fallbacks = {
@@ -612,6 +624,7 @@ export function proposeDesigns(input: AssistantInput): AssistantResult {
       "headroom",
       "walls",
       "slab",
+      "site",
     ];
     if (flights.some((r) => !geometric.includes(r.reason))) {
       return msg("assistant.advice.rejectedByStructure");
@@ -640,6 +653,36 @@ export function proposeDesigns(input: AssistantInput): AssistantResult {
       n: String(best.n),
       g: dec(best.g, 0),
       longest: dec(longest, 0),
+    });
+  };
+
+  /**
+   * Conflits d'adéquation au site d'une proposition construite : `Model.siteFit` du pipeline,
+   * recalculé (`computeSiteFit`, mêmes fonctions) seulement quand l'assistant crible avec
+   * d'autres réglages que le projet : épaisseurs de l'intention de structure données
+   * explicitement (ou poteau élargi des profilés) ou dégagement d'arrivée
+   * `limits.arrivalClearance`.
+   */
+  const siteFitForSieve = (project: Project, model: Model): readonly SiteConflict[] => {
+    const own = projectLateralThickness(project);
+    const sameLateral = own.inner === intent.inner && own.outer === intent.outer;
+    if (sameLateral && limits.arrivalClearance === undefined) return model.siteFit ?? [];
+    const sieved: Project =
+      limits.arrivalClearance === undefined
+        ? project
+        : {
+            ...project,
+            workshop: {
+              ...project.workshop,
+              siteFit: {
+                ...project.workshop?.siteFit,
+                arrivalClearance: limits.arrivalClearance,
+              },
+            },
+          };
+    return computeSiteFit(sieved, model.layout, model.stepping, {
+      compliance: model.compliance,
+      lateral: { inner: intent.inner, outer: intent.outer },
     });
   };
 
@@ -707,7 +750,8 @@ export function proposeDesigns(input: AssistantInput): AssistantResult {
               );
               continue;
             }
-            const clearance = limits.arrivalClearance ?? width;
+            // Dégagement d'arrivée : réglage de l'assistant, sinon profil d'atelier, sinon E.
+            const clearance = limits.arrivalClearance ?? fitProfile.arrivalClearance ?? width;
             const maxA = maxFirstGoings({ typology, direction, firstGoings: 0 }, n);
             for (let a = typology === "quarter-landing" ? 1 : 0; a <= maxA; a++) {
               if (stop()) {
@@ -792,40 +836,37 @@ export function proposeDesigns(input: AssistantInput): AssistantResult {
                   profile: { s: positions.s, z: rises.z, landings: positions.landingTreads },
                 };
               };
-              /** Murs et échappée exacte sur Γ d'un calage : échappée (ou null) ou échec. */
+              /**
+               * Crible d'un calage : conflits avec le site (mêmes fonctions que
+               * `Model.siteFit`), puis échappée exacte sur Γ. Rend l'échappée (ou null) et le
+               * nombre d'avertissements, ou l'échec (première erreur).
+               */
               const check = (
                 st: Prepared,
                 pl: Placement,
                 going: number,
-              ): { headroom: number | null } | Failure => {
+              ): { headroom: number | null; warnings: number } | Failure => {
                 enumerated++;
-                const world = st.pieces.map((poly) => poly.map((p) => toWorld(p, pl)));
-                const wall = wallCollision(world, site.walls, tol);
-                if (wall) {
+                const pieces = st.pieces.map((poly) => ({
+                  polygon: ensureCCW(poly.map((p) => toWorld(p, pl))),
+                }));
+                const conflicts = footprintConflicts(site, pieces, fitProfile);
+                if (clearance > GEOM_EPS) {
+                  const zone = ensureCCW(st.arrival.map((p) => toWorld(p, pl)));
+                  conflicts.push(...arrivalClearanceConflicts(site, zone, clearance));
+                }
+                const error = conflicts.find((c) => c.severity === "erreur");
+                if (error) {
                   return {
-                    reason: "walls",
-                    example: msg("assistant.reject.wall", {
-                      variant: variantText(n, going, width, pl.fit),
-                      wall: wall.id,
+                    reason: error.kind === "wall" ? "walls" : "site",
+                    example: msg("assistant.reject.siteFit", {
+                      label: variantText(n, going, width, pl.fit),
+                      conflict: error.message,
                     }),
                   };
                 }
-                const exit = wallCollision(
-                  [st.arrival.map((p) => toWorld(p, pl))],
-                  site.walls,
-                  tol,
-                );
-                if (exit) {
-                  return {
-                    reason: "walls",
-                    example: msg("assistant.reject.exitWall", {
-                      variant: variantText(n, going, width, pl.fit),
-                      wall: exit.id,
-                      clearance: dec(clearance, 0),
-                    }),
-                  };
-                }
-                if (!opening || !bounds.headroomMin) return { headroom: null };
+                const warnings = conflicts.filter((c) => c.severity === "avertissement").length;
+                if (!opening || !bounds.headroomMin) return { headroom: null, warnings };
                 const walk = translateCurve(
                   rotateCurve(st.layout.walkline, (pl.rotation * Math.PI) / 180),
                   pl.origin,
@@ -847,7 +888,7 @@ export function proposeDesigns(input: AssistantInput): AssistantResult {
                     }),
                   };
                 }
-                return { headroom: hr?.min ?? null };
+                return { headroom: hr?.min ?? null, warnings };
               };
               // 1. Crible au plus petit giron : l'échappée et l'emprise y sont les plus
               //    favorables (escalier le plus court) ; un calage qui y échoue est éliminé.
@@ -858,7 +899,7 @@ export function proposeDesigns(input: AssistantInput): AssistantResult {
                 if (base.reason === "placement") break widths; // ne dépend que de E
                 continue;
               }
-              const alive = new Map<string, { headroom: number | null }>();
+              const alive = new Map<string, { headroom: number | null; warnings: number }>();
               for (const pl of base.placements) {
                 const r = check(base, pl, gFloor);
                 if ("reason" in r) reject(typology, direction, r.reason, r.example);
@@ -877,7 +918,9 @@ export function proposeDesigns(input: AssistantInput): AssistantResult {
                   if ("reason" in r) continue;
                   alive.delete(pl.key);
                   const headroom = r.headroom;
+                  // Avertissements de l'adéquation au site : construits après les calages nets.
                   const preScore =
+                    weights.siteFit * r.warnings +
                     weights.blondel * Math.abs(2 * rise + going - bounds.blondelTarget) +
                     (headroom !== null && bounds.headroomRecommended !== null
                       ? weights.headroom * Math.max(0, bounds.headroomRecommended - headroom)
@@ -1028,7 +1071,6 @@ export function proposeDesigns(input: AssistantInput): AssistantResult {
           grossWidth: width + intent.inner + intent.outer,
           fit: msg("assistant.fit.helical", { radius: dec(circle.radius, 0) }),
           make: () => named,
-          disc: { center: circle.center, radius: outerRadius + intent.outer },
         });
       }
     }
@@ -1126,39 +1168,30 @@ export function proposeDesigns(input: AssistantInput): AssistantResult {
         );
         continue;
       }
-      if (opening) {
-        const t = slabIntrusion(model, opening, ceiling, intent.inner, intent.outer, tol);
-        if (t !== null) {
-          reject(
-            s.typology,
-            s.direction,
-            "slab",
-            msg("assistant.reject.slab", {
-              label: s.label,
-              tread: String(t),
-              ceiling: dec(ceiling, 0),
-            }),
-          );
-          continue;
-        }
-      }
-      if (s.disc) {
-        const disc = s.disc;
-        const wall = site.walls.find((w) =>
-          discOverlap(disc.center, disc.radius, wallPolygon(w), tol),
+      // Adéquation au site (un seul crible) : toute erreur rejette ; l'échappée est déjà
+      // jugée par le contrôle (bloquant ci-dessus), le recouvrement par `model.errors`.
+      const conflicts = siteFitForSieve(project, model);
+      const fatal = conflicts.find(
+        (c) => c.severity === "erreur" && c.kind !== "headroom" && c.kind !== "selfOverlap",
+      );
+      if (fatal) {
+        reject(
+          s.typology,
+          s.direction,
+          fatal.kind === "wall" ? "walls" : fatal.kind === "slab" ? "slab" : "site",
+          msg("assistant.reject.siteFit", { label: s.label, conflict: fatal.message }),
         );
-        if (wall) {
-          reject(
-            s.typology,
-            s.direction,
-            "walls",
-            msg("assistant.reject.helicalWall", { label: s.label, wall: wall.id }),
-          );
-          continue;
-        }
+        continue;
       }
       const bounds = boundsFor(shapeContextsOf(s.typology));
-      const summary = summarizeModel(project, model, bounds, s.grossWidth, s.fit);
+      const summary = summarizeModel(
+        project,
+        model,
+        bounds,
+        s.grossWidth,
+        s.fit,
+        siteConflictsBesideRules(conflicts),
+      );
       const score = scoreModel(model, summary, bounds, weights, limits.headroomMarginTarget);
       accepted.push({
         id: s.id,

@@ -3,11 +3,12 @@
  * de pénalités — écart |2h + g − module recommandé|, collet minimal en corde sous le collet
  * recommandé, échappée sous l'échappée recommandée, marge d'échappée (au-dessus du minimum
  * bloquant) sous une marge visée, nombre de marches balancées, régularité
- * des girons sur la ligne de foulée, avertissements du contrôle de conception. Les cibles sont
- * les valeurs `recommande` des règles actives (`bounds.ts`) ; les poids sont des choix à valider.
+ * des girons sur la ligne de foulée, avertissements du contrôle de conception, avertissements
+ * de l'adéquation au site (sous-lot 3c ; rapportés dans `siteConflicts`, à part des
+ * `violations` du contrôle de conception). Les cibles sont les valeurs `recommande` des règles actives (`bounds.ts`) ; les poids sont des choix à valider.
  */
 import { msg, type Message } from "@blondel/i18n";
-import type { Model } from "../model/derived.js";
+import type { Model, SiteConflict } from "../model/derived.js";
 import type { Mm } from "../model/primitives.js";
 import type { Project } from "../model/project.js";
 import type { EnumerationBounds } from "./bounds.js";
@@ -19,11 +20,14 @@ export function summarizeModel(
   bounds: EnumerationBounds,
   grossWidth: Mm,
   fit: Message,
+  siteConflicts: readonly SiteConflict[] = [],
 ): ModelSummary {
   const st = model.stepping;
   const winders = st.treads.filter((t) => t.kind === "winder");
   const minCollet = winders.length > 0 ? Math.min(...winders.map((t) => t.colletChord)) : null;
   const headroom = model.headroom?.min ?? null;
+  // Adéquation au site : avertissements et conseils seulement (une erreur rejette), hors échappée.
+  const notes = siteConflicts.filter((c) => c.severity !== "erreur" && c.kind !== "headroom");
   const warnings = model.compliance.results.filter(
     (r) => r.status === "violation" && r.severity === "avertissement",
   );
@@ -46,6 +50,7 @@ export function summarizeModel(
       conseil: model.compliance.summary.conseil,
     },
     warningRules: [...new Set(warnings.map((r) => r.ruleId))],
+    siteConflicts: notes.map((c) => ({ kind: c.kind, severity: c.severity, message: c.message })),
     placement: {
       origin: project.stair.placement.origin,
       rotation: project.stair.placement.rotation,
@@ -125,7 +130,14 @@ export function scoreModel(
     term(
       "warnings",
       msg("assistant.score.warnings"),
-      summary.violations.avertissement,
+      model.compliance.summary.avertissement,
+      "nb",
+      weights,
+    ),
+    term(
+      "siteFit",
+      msg("assistant.score.siteFit"),
+      summary.siteConflicts.filter((c) => c.severity === "avertissement").length,
       "nb",
       weights,
     ),

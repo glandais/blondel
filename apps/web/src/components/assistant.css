@@ -164,6 +164,23 @@
   color: var(--warn);
 }
 
+.assistant__site {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  font-size: 0.8rem;
+  overflow-wrap: anywhere;
+}
+
+.assistant__site li {
+  padding-left: 6px;
+  border-left: 3px solid var(--sev-conseil);
+}
+
+.assistant__site li[data-severity="avertissement"] {
+  border-left-color: var(--sev-avertissement);
+}
+
 .assistant__score summary {
   cursor: pointer;
   font-size: 0.85rem;

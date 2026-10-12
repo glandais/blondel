@@ -21,6 +21,7 @@ import {
   errorMessageOf,
   openingPolygon,
   type DesignCandidate,
+  type SiteConflictSeverity,
   type SurveyMeasure,
   type TypologyId,
 } from "@blondel/core";
@@ -53,6 +54,13 @@ import {
 import type { AssistantOutcome } from "../model/assistantJob.js";
 import { appStore, useApp } from "../store/appStore.js";
 import "./assistant.css";
+
+/** Libellés des sévérités d'adéquation au site (mêmes que l'inspecteur). */
+const SITE_SEVERITY_LABELS: Readonly<Record<SiteConflictSeverity, MessageKey>> = {
+  erreur: "site.fit.severity.erreur",
+  avertissement: "site.fit.severity.avertissement",
+  conseil: "site.fit.severity.conseil",
+};
 
 /** Mesures du relevé : mêmes libellés que le relevé du plan « Site et saisie » (libellés unifiés). */
 const SURVEY_LABELS: readonly [SurveyMeasure, MessageKey][] = [
@@ -279,6 +287,17 @@ function CandidateCard({
                 },
               )}
         </p>
+        {s.siteConflicts.length > 0 ? (
+          // Adéquation au site (sous-lot 3c) : avertissements et conseils rendus par le cœur,
+          // à part des compteurs du contrôle de conception ; ils expliquent le rang.
+          <ul className="assistant__site" aria-label={t.t("ui.control.siteFit.label")}>
+            {s.siteConflicts.map((c, i) => (
+              <li key={i} data-severity={c.severity}>
+                <strong>{t.t(SITE_SEVERITY_LABELS[c.severity])}</strong> {t.t(c.message)}
+              </li>
+            ))}
+          </ul>
+        ) : null}
         <details className="assistant__score">
           <summary>
             {t.t("ui.assistant.score.label", {

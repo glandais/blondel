@@ -170,6 +170,7 @@ describe("cas d'acceptation n° 1 (H 2 700, trémie 2 800 × 900, dalle 200)", (
       "winders",
       "regularity",
       "warnings",
+      "siteFit",
     ]);
     const sum = c.score.terms.reduce((acc, t) => acc + t.penalty, 0);
     expect(c.score.total).toBeCloseTo(sum, 9);
@@ -332,8 +333,10 @@ describe("relecture adverse : régressions", () => {
     }
   });
 
-  it("on ne débouche pas dans un mur : arrivée dégagée sur la profondeur E", () => {
-    // Mur au nu du côté x = 0 de la trémie : au-delà de ce côté, pas de plancher.
+  it("arrivée contre un mur : avertissement de l'adéquation au site, classée après les arrivées dégagées (F15)", () => {
+    // Mur au nu du côté x = 0 de la trémie : au-delà de ce côté, pas de plancher. Depuis le
+    // sous-lot 3c, le dégagement d'arrivée est un avertissement de `Model.siteFit` (F15) : la
+    // proposition n'est plus rejetée, elle porte l'avertissement et passe après les autres.
     const wall = {
       id: "W",
       a: { x: -100, y: -3000 },
@@ -342,21 +345,105 @@ describe("relecture adverse : régressions", () => {
       loadBearing: true,
     };
     const site = { ...ACCEPTANCE_SITE, walls: [wall] };
-    const arrivesOnWallSide = (r: AssistantResult): boolean =>
-      r.candidates.some((c) => {
-        const model = buildModel(c.project, { memo: false });
-        const last = model.stepping.nosings[model.stepping.nosings.length - 1]!;
-        return Math.abs(last.q.x) < 1e-3 && Math.abs(last.r.x) < 1e-3;
-      });
-    const wallRejections = (r: AssistantResult): number =>
-      r.rejections.filter((t) => t.reason === "walls").reduce((acc, t) => acc + t.count, 0);
-    // Sans dégagement (comportement d'avant la relecture) : arrivée contre le mur.
+    const all = (r: AssistantResult) => r.candidates.flatMap((h) => [h, ...h.variants]);
+    const arrivesOnWallSide = (c: AssistantResult["candidates"][number]): boolean => {
+      const model = buildModel(c.project, { memo: false });
+      const last = model.stepping.nosings[model.stepping.nosings.length - 1]!;
+      return Math.abs(last.q.x) < 1e-3 && Math.abs(last.r.x) < 1e-3;
+    };
+    const blocked = (c: AssistantResult["candidates"][number]): boolean =>
+      c.summary.siteConflicts.some((k) => k.kind === "arrivalClearance");
+    // Sans dégagement : aucun avertissement d'arrivée.
     const before = proposeUntimed({ site, limits: { arrivalClearance: 0 } });
-    expect(arrivesOnWallSide(before)).toBe(true);
+    expect(all(before).some(arrivesOnWallSide)).toBe(true);
+    expect(all(before).some(blocked)).toBe(false);
     const r = proposeUntimed({ site });
     expect(r.candidates.length).toBeGreaterThan(0);
-    expect(arrivesOnWallSide(r)).toBe(false);
-    expect(wallRejections(r)).toBeGreaterThan(wallRejections(before));
+    // Tête de liste : arrivée dégagée.
+    expect(arrivesOnWallSide(r.candidates[0]!)).toBe(false);
+    expect(blocked(r.candidates[0]!)).toBe(false);
+    const flagged = all(r).filter(arrivesOnWallSide);
+    expect(flagged.length).toBeGreaterThan(0);
+    for (const c of flagged) {
+      expect(blocked(c), fr(c.label)).toBe(true);
+      const k = c.summary.siteConflicts.find((x) => x.kind === "arrivalClearance")!;
+      expect(k.severity).toBe("avertissement");
+      expect(fr(k.message)).toMatch(/Dégagement d'arrivée insuffisant : le mur « W »/);
+      const t = c.score.terms.find((x) => x.id === "siteFit")!;
+      expect(t.value).toBeGreaterThanOrEqual(1);
+      expect(c.score.total).toBeGreaterThan(r.candidates[0]!.score.total);
+      // Compteurs du contrôle de conception seuls : le conflit d'arrivée est à part.
+      expect(c.summary.violations.avertissement).toBe(
+        buildModel(c.project, { memo: false }).compliance.summary.avertissement,
+      );
+    }
+    expect(r.rejections.some((t) => t.reason === "walls")).toBe(true);
+  });
+
+  it("un seul crible (sous-lot 3c) : poteau et contour de la pièce écartent les calages, aucune proposition en erreur", () => {
+    // Poteau sous la trémie, au milieu du côté y max : avant le sous-lot 3c, l'assistant
+    // l'ignorait (il ne lisait que les murs).
+    const site = {
+      ...ACCEPTANCE_SITE,
+      obstacles: [
+        { kind: "post", id: "P", center: { x: 1400, y: 700 }, sizeX: 200, sizeY: 200, rotation: 0 },
+      ],
+      room: {
+        points: [
+          { x: -4000, y: -4000 },
+          { x: 2800, y: -4000 },
+          { x: 2800, y: 4000 },
+          { x: -4000, y: 4000 },
+        ],
+      },
+    };
+    const r = proposeUntimed({ site: site as AssistantInput["site"] });
+    const site_ = r.rejections.filter((t) => t.reason === "site");
+    expect(site_.length).toBeGreaterThan(0);
+    const examples = site_.map((t) => fr(t.example));
+    expect(examples.some((e) => /heurte le poteau « P »/.test(e))).toBe(true);
+    expect(examples.some((e) => /sort du contour de la pièce/.test(e))).toBe(true);
+    expect(r.candidates.length).toBeGreaterThan(0);
+    for (const c of r.candidates.flatMap((h) => [h, ...h.variants])) {
+      const model = buildModel(c.project, { memo: false });
+      const errors = (model.siteFit ?? []).filter((k) => k.severity === "erreur");
+      expect(errors, fr(c.label)).toEqual([]);
+    }
+  });
+
+  it("dalle en deux niveaux (F15 (2)) : limon seul sous la dalle accepté en avertissement, marche sous la dalle rejetée (motif `slab`)", () => {
+    // Trémie en trapèze : côtés obliques de 45 mm sur 900 mm de profondeur ; une arrivée calée
+    // contre un côté oblique laisse le limon sous la dalle aux marches du haut.
+    const site = {
+      floorToFloor: 2700,
+      upperSlabThickness: 200,
+      opening: {
+        kind: "polygon",
+        points: [
+          { x: 45, y: 0 },
+          { x: 2755, y: 0 },
+          { x: 2800, y: 900 },
+          { x: 0, y: 900 },
+        ],
+      },
+    } as AssistantInput["site"];
+    const housed = proposeUntimed({ site, preferences: { structure: { kind: "wood-housed" } } });
+    const flagged = housed.candidates
+      .flatMap((h) => [h, ...h.variants])
+      .filter((c) => c.summary.siteConflicts.some((k) => k.kind === "slab"));
+    expect(flagged.length).toBeGreaterThan(0);
+    for (const c of flagged) {
+      const k = c.summary.siteConflicts.find((x) => x.kind === "slab")!;
+      expect(k.severity).toBe("avertissement");
+      expect(fr(k.message)).toMatch(/^La structure passe sous la dalle haute/);
+      expect(c.score.terms.find((t) => t.id === "siteFit")!.value).toBeGreaterThanOrEqual(1);
+    }
+    const bare = proposeUntimed({ site, preferences: { structure: { kind: "none" } } });
+    const slab = bare.rejections.filter((t) => t.reason === "slab");
+    expect(slab.length).toBeGreaterThan(0);
+    expect(fr(slab[0]!.example)).toMatch(
+      /: La marche \d+ traverse la dalle haute hors de la trémie/,
+    );
   });
 
   it("site coûteux (H 6 000) : budget tenu dans l'énumération, pas de faux « trémie trop petite »", () => {
