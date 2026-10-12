@@ -20,9 +20,12 @@
  * - cage saisie (tracé libre, ADR-0010) : la structure est posée sans adapter le jour (poteau
  *   refusé en amont pour une jonction de cage) ; une structure qui ne construit pas toutes les
  *   fonctions de la cage (`structureAcceptsCage`, capacité `cage` du plugin, même règle que le
- *   garde-fou de `buildModel` ; au lot 2, toute structure autre que « aucune ») n'est pas
- *   générée (`structure.cageUnsupported`) : remarque, avec la piste de la reconversion en
- *   volées quand la cage s'écrit en volées (correction `cage-to-flights`).
+ *   garde-fou de `buildModel`) n'est pas générée (`structure.cageUnsupported`) : remarque, avec
+ *   la piste de la reconversion en volées quand la cage s'écrit en volées (correction
+ *   `cage-to-flights`) ; une structure à poteau qui construit la cage (limons à la française,
+ *   sous-lot 6a) reçoit une remarque pour chaque jonction tournante à jour vif ou en arc, qu'aucun
+ *   limon droit ne suit (pan coupé à choisir ; reconversion en volées pour un poteau seulement si
+ *   tous ces jours sont vifs : en volées, un jour en arc n'en reçoit pas).
  *
  * Fonction pure (les modèles intermédiaires sont calculés sans mémoïsation).
  */
@@ -131,12 +134,35 @@ export function applyStructureChoice(
   if (spec.kind === "cage") {
     // Même règle que le garde-fou de `buildModel` (capacité `cage` du plugin) : pas de remarque
     // quand la structure construit toutes les fonctions de la cage (« aucune » : toujours).
-    if (structureAcceptsCage(kind, cageFeatures(spec))) return { project: chosen, notes: [] };
-    const convertible = cageFeatures(spec).length === 0 && toFlightsLayout(chosen) !== null;
+    const convertible = (): boolean =>
+      cageFeatures(spec).length === 0 && toFlightsLayout(chosen) !== null;
+    if (structureAcceptsCage(kind, cageFeatures(spec))) {
+      if (!structureRequiresNewel(kind)) return { project: chosen, notes: [] };
+      // Jour vif ou en arc d'une jonction tournante : pas de poteau sur une cage saisie.
+      const open = spec.junctions
+        .map((j, i) =>
+          j.angle !== 0 && (j.well.kind === "sharp" || j.well.kind === "arc") ? i : -1,
+        )
+        .filter((i) => i >= 0);
+      if (open.length === 0) return { project: chosen, notes: [] };
+      const params = {
+        kind,
+        count: open.length,
+        junctions: open.map((i) => i + 1).join(", "),
+      };
+      return {
+        project: chosen,
+        notes: [
+          convertible() && open.every((i) => spec.junctions[i]!.well.kind === "sharp")
+            ? msg("project.structureChoice.cageJourConvertible", params)
+            : msg("project.structureChoice.cageJour", params),
+        ],
+      };
+    }
     return {
       project: chosen,
       notes: [
-        convertible
+        convertible()
           ? msg("project.structureChoice.cageConvertible", { kind })
           : msg("project.structureChoice.cage", { kind }),
       ],

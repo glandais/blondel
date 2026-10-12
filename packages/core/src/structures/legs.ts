@@ -1,32 +1,64 @@
 /**
- * Reconstruction des volées droites et des faces porteuses à partir du tracé (`Layout`) et du
- * `LayoutSpec` du projet, selon les conventions de `layout/layout.ts` :
+ * Reconstruction des faces porteuses (limons droits) et des poteaux à partir du tracé
+ * (`Layout`) seul : tronçons (`Layout.sections`) et jonctions (`Layout.turns` : angle, raccord
+ * côté jour `well`, côté mur `wall`), sans relire le `LayoutSpec` du projet (ADR-0010, sous-lot
+ * 6a). Un tracé à volées passe par le même chemin que la cage saisie (le moteur de cage calcule
+ * les deux, `layout/layout.ts`) et donne, nombre pour nombre, les faces d'avant le sous-lot 6a
+ * (parité stricte, `legs.parity.test.ts`).
  *
- * - C_e (mur) est toujours à angle vif : **un segment de droite par volée**, de longueur L_i
- *   (longueur de la volée mesurée au mur), du coin mur précédent W_{i−1} au coin W_i ;
- * - la face interne du limon de jour de la volée i est la droite I_i + t·u_i, avec
- *   I_i = début du segment de C_e − E·n_i (n_i : normale intérieur → extérieur), limitée à
- *   t ∈ [t0 ; t1] : t0 = E + retrait du tournant précédent (0 au départ), t1 = L_i − E −
- *   retrait du tournant suivant (L_i à l'arrivée) ; retrait = a/2 pour un poteau de côté a,
- *   r pour un jour en arc, 0 pour un angle vif ;
- * - poteau (`newel`) : carré de côté a centré sur le coin intérieur K du tournant (ou décalé
- *   vers le jour de δ, `offset`), côtés parallèles aux volées qu'il relie ; retrait = a/2 + δ.
+ * **Tronçon i** (axe droit) :
+ * - face côté mur : le segment droit de C_e qui porte la partie droite du tronçon côté mur, de
+ *   longueur L_i « au mur » (coin mur précédent W_{i−1} → coin W_i ; un palier droit est porté
+ *   par le tronçon entrant, comme dans le moteur de cage, `layout/cage/frames.ts`) ;
+ * - face côté jour, **largeur uniforme** (tous les tronçons de même largeur constante : volées,
+ *   cage sans largeur variable) : forme fermée, droite I_i + t·u_i avec I_i = début de la face
+ *   mur − E·n_i (n_i : normale jour → mur), limitée à t ∈ [t0 ; t1] : t0 = débord de la jonction
+ *   d'entrée (0 au départ), t1 = L_i − débord de la jonction de sortie (L_i à l'arrivée) ;
+ *   débord = E·tan(|θ|/2) (exactement E à ±90°, 0 sur un palier droit) + retrait du raccord du
+ *   jour : a/2 + δ pour un poteau de côté a, r·tan(|θ|/2) pour un jour en arc (r à ±90°), retrait
+ *   haut ou bas d'un pan coupé, 0 pour un angle vif ;
+ * - face côté jour, **largeur variable** (trapèze, tronçons de largeurs différentes) : le segment
+ *   droit de C_i qui porte la partie droite du tronçon côté jour (bord incliné compris), tel que
+ *   le moteur de cage l'a calculé.
+ *
+ * **Jonctions** (entre les faces des tronçons j et j + 1, d'un même côté) :
+ * - tournant, côté mur à angle vif : coin W, angle **rentrant** vu des marches ; côté mur en
+ *   congé : non pris en charge (`structure.common.legs.wallSegmentNotStraight`) ;
+ * - tournant, côté jour : angle vif ou arc → extrémités « ouvertes » (`open`, limon de jour non
+ *   construit par un limon droit, `jourIssues`) ; poteau → extrémités contre le poteau ; pan
+ *   coupé → face droite propre au pan (`junction`), angles **saillants** vus des marches à ses
+ *   deux bouts ;
+ * - palier droit : bords alignés → deux faces raccordées bout à bout au milieu du palier
+ *   (`splice`, F16 (3)) ; une seule face continue seulement si une des parties droites voisines
+ *   est de longueur nulle (raccord impossible) ; bords non alignés (largeurs ou ancrages
+ *   différents) → face propre au bord du palier, reliée aux faces voisines par des angles
+ *   rentrants ou saillants.
+ *
+ * Angle entre deux faces droites consécutives d'un même côté : rentrant (la face suivante
+ * repart vers les marches, le limon voisin doit être prolongé jusqu'à l'arête extérieure du coin,
+ * de e·tan(φ/2), e à 90°) ou saillant (les deux limons s'arrêtent au coin, zone d'assemblage
+ * dans l'épaisseur commune) ; φ = angle entre les deux faces (|θ| de la jonction à largeur
+ * uniforme, exact à ±90°).
+ *
+ * Poteau (`newel`, tracé à volées seulement : refusé en amont sur une cage saisie) : carré de
+ * côté a centré sur le coin intérieur K du tournant (ou décalé vers le jour de δ, `offset`), côtés
+ * parallèles aux volées qu'il relie ; retrait = a/2 + δ.
  */
 import { msg } from "@blondel/i18n";
 import { cumulativeLengths } from "../geom2d/curve.js";
 import { projectOnCurve } from "../geom2d/intersect.js";
 import * as V from "../geom2d/vec.js";
-import type { Layout } from "../model/derived.js";
-import type { Mm, Vec2 } from "../model/primitives.js";
-import type { InnerCorner, Project } from "../model/project.js";
+import type { Layout, LayoutSection, TurnZone } from "../model/derived.js";
+import type { Curve2, Mm, Rad, Vec2 } from "../model/primitives.js";
+import type { Project, WellJoint } from "../model/project.js";
 import { newelOffset, newelSetback } from "../layout/newel.js";
 import { StructureError } from "./registry.js";
 
 export interface LegGeometry {
   readonly index: number;
-  /** Direction de montée (unitaire). */
+  /** Direction de montée (unitaire) : direction de la face côté mur. */
   readonly u: Vec2;
-  /** Normale unitaire intérieur (jour) → extérieur (mur). */
+  /** Normale unitaire intérieur (jour) → extérieur (mur), de la face côté mur. */
   readonly n: Vec2;
   /** Début de la volée côté mur (coin mur précédent, ou départ) et longueur au mur. */
   readonly outerStart: Vec2;
@@ -35,11 +67,19 @@ export interface LegGeometry {
   readonly outerSigma0: Mm;
   /** Origine côté jour (sur la ligne de départ de la volée). */
   readonly innerOrigin: Vec2;
-  /** Portée de la face interne du limon de jour, abscisses t le long de u depuis `innerOrigin`. */
+  /**
+   * Portée de la face interne du limon de jour, abscisses t le long de `innerDir` depuis
+   * `innerOrigin`.
+   */
   readonly innerT0: Mm;
   readonly innerT1: Mm;
-  /** Abscisse sur C_i du point `innerOrigin + innerT0·u` (NaN si la face est dégénérée). */
+  /** Abscisse sur C_i du point `innerOrigin + innerT0·innerDir` (NaN si la face est dégénérée). */
   readonly innerSigma0: Mm;
+  /**
+   * Direction (unitaire) de la face côté jour : `u` à largeur uniforme, direction du bord incliné
+   * d'un tronçon à largeur variable (sous-lot 6a).
+   */
+  readonly innerDir: Vec2;
 }
 
 export interface NewelGeometry {
@@ -60,94 +100,491 @@ export interface NewelGeometry {
   readonly u: Vec2;
 }
 
+/** Côté d'une face porteuse : jour (C_i) ou mur (C_e). */
+export type FaceSide = "inner" | "outer";
+
+/**
+ * Extrémité d'une face porteuse :
+ * - `floor` / `arrival` : départ et arrivée de l'escalier ;
+ * - `newel` : contre un poteau (tournant `turn`) ;
+ * - `corner` : angle avec la face voisine du même côté, rentrant (`concave`) ou saillant, d'angle
+ *   φ entre les deux faces (`tanHalf` = tan(φ/2), exactement 1 à 90°) ;
+ * - `open` : raccord du jour qu'un limon droit ne sait pas suivre (angle vif, arc : `jourIssues`) ;
+ * - `splice` : raccord bout à bout au milieu d'un palier droit, entre deux faces alignées.
+ */
+export type FaceEnd =
+  | { readonly kind: "floor" }
+  | { readonly kind: "arrival" }
+  | { readonly kind: "newel"; readonly turn: number }
+  | {
+      readonly kind: "corner";
+      readonly concave: boolean;
+      readonly tanHalf: number;
+      /** Jonction de l'angle (indice dans `Layout.turns`). */
+      readonly junction: number;
+    }
+  | { readonly kind: "open"; readonly junction: number }
+  /**
+   * Raccord bout à bout de deux limons alignés au milieu d'un palier droit (limons de rampe
+   * arrêtés dans la partie de niveau, sous-lot 6a, à valider : QUESTIONS F16).
+   */
+  | { readonly kind: "splice"; readonly junction: number };
+
+/**
+ * Face verticale plane d'un limon droit, vue en plan : u ∈ [0 ; `length`] depuis `a` le long de
+ * `dir` ; σ = `sigmaA` + u sur le bord (C_i ou C_e).
+ */
+export interface EdgeFace {
+  readonly side: FaceSide;
+  readonly a: Vec2;
+  readonly dir: Vec2;
+  /** Normale unitaire vers l'épaisseur du limon (hors emprise utile : jour ou mur). */
+  readonly into: Vec2;
+  readonly length: Mm;
+  /** Abscisse de `a` sur le bord du côté (NaN si la face est dégénérée). */
+  readonly sigmaA: Mm;
+  /**
+   * Tronçons dont la face porte la partie droite, dans l'ordre ; vide pour une face propre à une
+   * jonction. Plusieurs seulement le long d'un palier droit à bords alignés dont une partie droite
+   * voisine est de longueur nulle (raccord au milieu du palier impossible) ; sinon un seul.
+   */
+  readonly sections: readonly number[];
+  /** Face propre à une jonction (pan coupé, bord de palier droit non aligné). */
+  readonly junction?: number;
+  /** Nature de la face propre à une jonction. */
+  readonly junctionKind?: "chamfer" | "landing";
+  readonly start: FaceEnd;
+  readonly end: FaceEnd;
+}
+
+/** Raccord du jour qu'aucun limon droit ne suit (erreur du plugin). */
+export interface JourIssue {
+  readonly junction: number;
+  readonly kind: "sharp" | "arc";
+}
+
 export interface StairGeometry {
   readonly legs: readonly LegGeometry[];
   readonly newels: readonly NewelGeometry[];
+  /** Faces porteuses des deux côtés, dans l'ordre de la montée (jour avant mur à rang égal). */
+  readonly faces: readonly EdgeFace[];
+  /** Jonctions dont le jour (angle vif, arc) n'est suivi par aucun limon droit. */
+  readonly jourIssues: readonly JourIssue[];
+  /** Plus petite largeur (largeur uniforme : l'emmarchement). */
   readonly width: Mm;
+  /** Plus grande largeur des tronçons (domaine des règles de moyens). */
+  readonly maxWidth: Mm;
   /** Côté du jour : +1 à gauche, −1 à droite. */
   readonly sign: 1 | -1;
 }
 
-function setback(inner: InnerCorner): Mm {
-  switch (inner.kind) {
+/** Tolérance de pose d'un point sur un segment, et d'alignement de deux faces (mm, sans unité). */
+const ON_EDGE_TOL = 1e-6;
+const ALIGN_TOL = 1e-9;
+
+/** Angle signé d'une jonction (rad), ±π/2 à défaut. */
+function zoneAngle(z: TurnZone): Rad {
+  return z.angle ?? (z.direction === "left" ? Math.PI / 2 : -Math.PI / 2);
+}
+
+/** tan(|θ|/2) d'une jonction (rad) : exactement 0 à 0 et 1 à ±π/2 (`layout/cage/frames.ts`). */
+export function tanHalfAngle(angle: Rad): number {
+  if (angle === 0) return 0;
+  if (angle === Math.PI / 2 || angle === -Math.PI / 2) return 1;
+  return Math.tan(Math.abs(angle) / 2);
+}
+
+/** tan(φ/2) de l'angle φ ∈ [0 ; π] entre deux directions unitaires. */
+function tanHalfBetween(d0: Vec2, d1: Vec2): number {
+  const phi = Math.atan2(Math.abs(V.cross(d0, d1)), V.dot(d0, d1));
+  return Math.tan(phi / 2);
+}
+
+/** Retrait de la face du jour depuis K, à l'entrée (`in` : tronçon entrant) ou à la sortie. */
+function wellSetback(well: WellJoint | undefined, angle: Rad, end: "in" | "out"): Mm {
+  if (!well) return 0;
+  switch (well.kind) {
     case "sharp":
       return 0;
     case "arc":
-      return inner.radius;
+      return well.radius * tanHalfAngle(angle);
     case "newel":
-      return newelSetback(inner);
+      return newelSetback(well);
+    case "chamfer":
+      return end === "in" ? well.setbackIn : well.setbackOut;
   }
 }
 
+/** Indice du segment droit de `curve` qui porte `p` (le plus parallèle à `dir`), sinon −1. */
+function lineSegmentAt(curve: Curve2, p: Vec2, dir: Vec2 | null): number {
+  let best = -1;
+  let bestPar = -Infinity;
+  curve.segments.forEach((s, k) => {
+    if (s.kind !== "line") return;
+    const ab = V.sub(s.b, s.a);
+    const len = V.norm(ab);
+    if (!(len > 0)) return;
+    const d = V.scale(ab, 1 / len);
+    const w = V.sub(p, s.a);
+    const along = V.dot(w, d);
+    if (Math.abs(V.cross(d, w)) > ON_EDGE_TOL * Math.max(1, len)) return;
+    if (along < -ON_EDGE_TOL || along > len + ON_EDGE_TOL) return;
+    const par = dir ? Math.abs(V.dot(d, dir)) : 0;
+    if (best < 0 || par > bestPar + 1e-12) {
+      best = k;
+      bestPar = par;
+    }
+  });
+  return best;
+}
+
+/** Morceau de face (partie droite d'un tronçon, pan coupé, bord de palier), avant fusion. */
+interface Piece {
+  readonly a: Vec2;
+  readonly dir: Vec2;
+  readonly length: Mm;
+  readonly sigmaA: Mm;
+  readonly section?: number;
+  readonly junction?: number;
+  readonly junctionKind?: "chamfer" | "landing";
+}
+
+const endOf = (p: Piece): Vec2 => V.addScaled(p.a, p.dir, p.length);
+
+/** Côté (`left` / `right`) d'une ligne de tronçon. */
+const sideKey = (jourLeft: boolean, side: FaceSide): "left" | "right" =>
+  (side === "inner") === jourLeft ? "left" : "right";
+
 /**
- * Volées et poteaux du tracé.
+ * Faces porteuses, poteaux et volées (rétrocompatibles) du tracé.
  *
- * @throws StructureError sur un S / Z (tournants de sens opposés : deux côtés de jour) ou si
- *   C_e ne compte pas un segment droit par volée (tracé incohérent avec `computeLayout`).
+ * @throws StructureError sur un S / Z (tournants de sens opposés : deux côtés de jour), sur un
+ *   tronçon à axe en arc ou un raccord côté mur en congé (pas de limon droit), ou si un tronçon
+ *   n'a pas de segment droit de C_e (tracé incohérent avec `computeLayout`).
  */
-export function stairGeometry(project: Project, layout: Layout): StairGeometry {
-  const spec = project.stair.layout;
-  const E = spec.width;
-  const turns = spec.turns;
-  const segs = layout.outer.segments;
+export function stairGeometry(_project: Project, layout: Layout): StairGeometry {
+  const sections: readonly LayoutSection[] = layout.sections ?? [];
+  const zones = layout.turns;
+  if (sections.length === 0 || zones.length !== sections.length - 1) {
+    throw new StructureError(msg("structure.common.legs.unexpectedOuterEdge"));
+  }
   // S / Z : le jour du second tournant est porté par C_e (`layout.ts`) ; les limons sont
-  // reconstruits ici avec un seul côté de jour (C_e = mur à angle vif) : non pris en charge.
-  if (turns.some((t, j) => j > 0 && t.direction !== turns[j - 1]!.direction)) {
+  // reconstruits ici avec un seul côté de jour (C_e = mur) : non pris en charge.
+  const turning = zones.filter((z) => zoneAngle(z) !== 0);
+  if (turning.some((z, j) => j > 0 && z.direction !== turning[j - 1]!.direction)) {
     throw new StructureError(msg("structure.common.legs.oppositeTurns"));
   }
-  if (segs.length !== spec.legs.length || segs.some((s) => s.kind !== "line")) {
+  if (sections.some((s) => s.kind !== "straight")) {
     throw new StructureError(msg("structure.common.legs.unexpectedOuterEdge"));
   }
   const sign: 1 | -1 = layout.innerSide === "left" ? 1 : -1;
-  const cum = cumulativeLengths(layout.outer);
-  const legs: LegGeometry[] = segs.map((seg, i) => {
+  const jourLeft = sign === 1;
+  const E0 = sections[0]!.widthStart;
+  const uniform = sections.every((s) => s.widthStart === E0 && s.widthEnd === E0);
+  const widths = sections.flatMap((s) => [s.widthStart, s.widthEnd]);
+  const last = sections.length - 1;
+
+  // 1. Face côté mur de chaque tronçon : segment droit de C_e.
+  const outerCum = cumulativeLengths(layout.outer);
+  const outerIdx = sections.map((s) => {
+    const k = sideKey(jourLeft, "outer");
+    const p0 = s.start[k];
+    const p1 = s.end[k];
+    const d = V.distance(p0, p1) > ON_EDGE_TOL ? V.normalize(V.sub(p1, p0)) : null;
+    const idx = lineSegmentAt(layout.outer, V.lerp(p0, p1, 0.5), d);
+    if (idx < 0) throw new StructureError(msg("structure.common.legs.unexpectedOuterEdge"));
+    return idx;
+  });
+  const outerPieces: Piece[] = outerIdx.map((k, i) => {
+    const seg = layout.outer.segments[k]!;
     if (seg.kind !== "line")
       throw new StructureError(msg("structure.common.legs.wallSegmentNotStraight"));
     const d = V.sub(seg.b, seg.a);
-    const length = V.norm(d);
-    const u = V.normalize(d);
-    // Jour à gauche : n = perpRight(u) ; jour à droite : n = perpLeft(u).
-    const n = sign === 1 ? V.perpRight(u) : V.perpLeft(u);
-    const innerOrigin = V.addScaled(seg.a, n, -E);
-    const t0 = i > 0 ? E + setback(turns[i - 1]!.inner) : 0;
-    const t1 = i < turns.length ? length - E - setback(turns[i]!.inner) : length;
-    const start = V.addScaled(innerOrigin, u, t0);
-    const innerSigma0 =
-      t1 - t0 > 1e-9 && layout.inner.segments.length > 0
-        ? projectOnCurve(start, layout.inner).s
-        : Number.NaN;
     return {
+      a: seg.a,
+      dir: V.normalize(d),
+      length: V.norm(d),
+      sigmaA: outerCum[k]!,
+      section: i,
+    };
+  });
+  // Jour à gauche : n = perpRight(u) ; jour à droite : n = perpLeft(u).
+  const normalOf = (u: Vec2): Vec2 => (jourLeft ? V.perpRight(u) : V.perpLeft(u));
+
+  // 2. Face côté jour de chaque tronçon.
+  const innerCum = cumulativeLengths(layout.inner);
+  const legs: LegGeometry[] = [];
+  const innerPieces: Piece[] = sections.map((s, i) => {
+    const out = outerPieces[i]!;
+    const u = out.dir;
+    const n = normalOf(u);
+    let innerOrigin: Vec2;
+    let innerDir: Vec2;
+    let t0: Mm;
+    let t1: Mm;
+    let innerSigma0: Mm;
+    if (uniform) {
+      const E = E0;
+      const before = i > 0 ? zones[i - 1]! : null;
+      const after = i < last ? zones[i]! : null;
+      const reach = (z: TurnZone, end: "in" | "out"): Mm => {
+        const a = zoneAngle(z);
+        return E * tanHalfAngle(a) + wellSetback(z.well, a, end);
+      };
+      innerOrigin = V.addScaled(out.a, n, -E);
+      innerDir = u;
+      t0 = before ? reach(before, "out") : 0;
+      t1 = after ? out.length - reach(after, "in") : out.length;
+      const start = V.addScaled(innerOrigin, u, t0);
+      innerSigma0 =
+        t1 - t0 > 1e-9 && layout.inner.segments.length > 0
+          ? projectOnCurve(start, layout.inner).s
+          : Number.NaN;
+    } else {
+      const k = sideKey(jourLeft, "inner");
+      const p0 = s.start[k];
+      const p1 = s.end[k];
+      const d = V.distance(p0, p1) > ON_EDGE_TOL ? V.normalize(V.sub(p1, p0)) : null;
+      const idx = lineSegmentAt(layout.inner, V.lerp(p0, p1, 0.5), d);
+      const seg = idx >= 0 ? layout.inner.segments[idx]! : null;
+      if (seg && seg.kind === "line") {
+        innerOrigin = seg.a;
+        innerDir = V.normalize(V.sub(seg.b, seg.a));
+        t0 = 0;
+        t1 = V.distance(seg.a, seg.b);
+        innerSigma0 = innerCum[idx]!;
+      } else {
+        // Partie droite sans segment propre (largeur nulle) : face dégénérée.
+        innerOrigin = p0;
+        innerDir = d ?? u;
+        t0 = 0;
+        t1 = 0;
+        innerSigma0 = Number.NaN;
+      }
+    }
+    legs.push({
       index: i,
       u,
       n,
-      outerStart: seg.a,
-      length,
-      outerSigma0: cum[i]!,
+      outerStart: out.a,
+      length: out.length,
+      outerSigma0: out.sigmaA,
       innerOrigin,
       innerT0: t0,
       innerT1: t1,
       innerSigma0,
+      innerDir,
+    });
+    return {
+      a: V.addScaled(innerOrigin, innerDir, t0),
+      dir: innerDir,
+      length: t1 - t0,
+      sigmaA: innerSigma0,
+      section: i,
     };
   });
+
+  // 3. Jonctions : liaisons entre faces, faces propres aux pans coupés et aux bords de palier.
+  const jourIssues: JourIssue[] = [];
+  const faces: EdgeFace[] = [];
+  for (const side of ["inner", "outer"] as const) {
+    const pieces = side === "inner" ? innerPieces : outerPieces;
+    const curve = side === "inner" ? layout.inner : layout.outer;
+    const into = (dir: Vec2): Vec2 =>
+      side === "inner" ? V.scale(normalOf(dir), -1) : normalOf(dir);
+    const sigmaOf = (p: Vec2): Mm =>
+      curve.segments.length > 0 ? projectOnCurve(p, curve).s : Number.NaN;
+    /** Milieu du palier droit `j` sur ce côté (fin et début des parties droites voisines). */
+    const landingMiddle = (j: number, sd: FaceSide): Vec2 => {
+      const k = sideKey(jourLeft, sd);
+      return V.lerp(sections[j]!.end[k], sections[j + 1]!.start[k], 0.5);
+    };
+    /** Coupe en `m` deux morceaux alignés ; `null` si `m` n'est pas strictement dans chacun. */
+    const splice = (
+      before: Piece,
+      after: Piece,
+      m: Vec2,
+    ): { before: Piece; after: Piece } | null => {
+      const l0 = V.dot(V.sub(m, before.a), before.dir);
+      const t = V.dot(V.sub(m, after.a), after.dir);
+      const l1 = after.length - t;
+      if (!(l0 > ON_EDGE_TOL && l1 > ON_EDGE_TOL)) return null;
+      const a1 = V.addScaled(after.a, after.dir, t);
+      return {
+        before: { ...before, length: l0 },
+        after: { ...after, a: a1, length: l1, sigmaA: sigmaOf(a1) },
+      };
+    };
+    /** Face droite propre à une jonction, de `a` à `b`. */
+    const own = (a: Vec2, b: Vec2, j: number, kind: "chamfer" | "landing"): Piece => {
+      const d = V.sub(b, a);
+      return {
+        a,
+        dir: V.normalize(d),
+        length: V.norm(d),
+        sigmaA: sigmaOf(a),
+        junction: j,
+        junctionKind: kind,
+      };
+    };
+    // Morceaux dans l'ordre de la montée ; links[k] relie seq[k] et seq[k + 1].
+    const seq: Piece[] = [pieces[0]!];
+    const links: Link[] = [];
+    const append = (link: Link, piece: Piece): void => {
+      links.push(link);
+      seq.push(piece);
+    };
+    for (let i = 1; i < pieces.length; i++) {
+      const j = i - 1;
+      const z = zones[j]!;
+      const angle = zoneAngle(z);
+      const prev = seq[seq.length - 1]!;
+      const piece = pieces[i]!;
+      if (angle === 0) {
+        // Palier droit : bord du palier s'il n'est porté par aucun des deux tronçons (largeurs ou
+        // ancrages différents), puis liaisons (alignées : raccord au milieu du palier).
+        const a = endOf(prev);
+        const edge = V.distance(a, piece.a) > ON_EDGE_TOL ? own(a, piece.a, j, "landing") : null;
+        const viaEdge = edge ? linkBetween(prev, edge, into, j) : null;
+        const toPiece = linkBetween(edge ?? prev, piece, into, j);
+        const spliced =
+          (viaEdge === null || viaEdge.kind === "aligned") && toPiece.kind === "aligned"
+            ? splice(prev, piece, landingMiddle(j, side))
+            : null;
+        if (spliced) {
+          // Bords alignés d'un tronçon à l'autre : raccord au milieu du palier (F16).
+          seq[seq.length - 1] = spliced.before;
+          append({ kind: "splice", junction: j }, spliced.after);
+        } else {
+          if (edge && viaEdge) append(viaEdge, edge);
+          append(toPiece, piece);
+        }
+      } else if (side === "outer") {
+        if (z.wall?.kind === "arc")
+          throw new StructureError(msg("structure.common.legs.wallSegmentNotStraight"));
+        const tanHalf = uniform ? tanHalfAngle(angle) : tanHalfBetween(prev.dir, piece.dir);
+        append({ kind: "corner", concave: true, tanHalf, junction: j }, piece);
+      } else {
+        const well: WellJoint = z.well ?? { kind: "sharp" };
+        if (well.kind === "sharp" || well.kind === "arc") {
+          jourIssues.push({ junction: j, kind: well.kind });
+          append({ kind: "open", junction: j }, piece);
+        } else if (well.kind === "newel") {
+          append({ kind: "newel", turn: j }, piece);
+        } else {
+          // Pan coupé : face droite propre, angles saillants à ses deux bouts.
+          // Une partie droite de longueur nulle (tronçon à 2 × retrait) reste une face à part,
+          // reliée par des angles : jamais fusionnée avec les pans (corde dans le vide du jour).
+          const pan = own(endOf(prev), piece.a, j, "chamfer");
+          append(linkBetween(prev, pan, into, j, false), pan);
+          append(linkBetween(pan, piece, into, j, false), piece);
+        }
+      }
+    }
+    // 4. Faces : morceaux alignés fusionnés (palier droit à bords alignés sans raccord possible).
+    let startEnd: FaceEnd = { kind: "floor" };
+    let k = 0;
+    while (k < seq.length) {
+      const group: Piece[] = [seq[k]!];
+      while (k < links.length && links[k]!.kind === "aligned") group.push(seq[++k]!);
+      const link = k < links.length ? links[k]! : null;
+      const endEnd: FaceEnd = link === null ? { kind: "arrival" } : (link as FaceEnd);
+      const face = mergeFace(group, into, sigmaOf);
+      const head = group[0]!;
+      const sectionsOf = group.flatMap((p) => (p.section !== undefined ? [p.section] : []));
+      faces.push({
+        side,
+        ...face,
+        sections: sectionsOf,
+        ...(sectionsOf.length === 0 && head.junction !== undefined
+          ? { junction: head.junction, junctionKind: head.junctionKind! }
+          : {}),
+        start: startEnd,
+        end: endEnd,
+      });
+      startEnd = endEnd;
+      k++;
+    }
+  }
+  // Ordre des faces : rang de la montée (tronçon i → 2i, jonction j → 2j + 1), jour avant mur.
+  const rank = (f: EdgeFace): number =>
+    f.sections.length > 0 ? 2 * f.sections[0]! : 2 * (f.junction ?? 0) + 1;
+  faces.sort((x, y) => rank(x) - rank(y) || (x.side === y.side ? 0 : x.side === "inner" ? -1 : 1));
+
+  // 5. Poteaux (tracé à volées : refusés en amont sur une cage saisie).
   const newels: NewelGeometry[] = [];
-  turns.forEach((t, j) => {
-    if (t.inner.kind !== "newel") return;
+  zones.forEach((z, j) => {
+    const well = z.well;
+    if (well?.kind !== "newel") return;
     const leg = legs[j]!;
-    const zone = layout.turns[j];
-    const k = zone ? zone.innerCorner : V.addScaled(leg.innerOrigin, leg.u, leg.length - E);
-    const offset = newelOffset(t.inner);
-    const center = V.sub(k, V.scale(V.add(leg.n, leg.u), offset));
+    const offset = newelOffset(well);
+    const center = V.sub(z.innerCorner, V.scale(V.add(leg.n, leg.u), offset));
     newels.push({
       turn: j,
       center,
-      size: t.inner.size,
+      size: well.size,
       offset,
-      jourExtent: newelSetback(t.inner),
+      jourExtent: newelSetback(well),
       n: leg.n,
       u: leg.u,
     });
   });
-  return { legs, newels, width: E, sign };
+  return {
+    legs,
+    newels,
+    faces,
+    jourIssues,
+    width: Math.min(...widths),
+    maxWidth: Math.max(...widths),
+    sign,
+  };
+}
+
+/** Liaison entre deux morceaux consécutifs d'un même côté. */
+type Link = FaceEnd | { readonly kind: "aligned" };
+
+/**
+ * Liaison entre deux morceaux consécutifs d'un même côté : alignés (même droite, ou, sur un palier
+ * droit seulement, morceau de longueur nulle : fusionnés en une face), sinon angle rentrant (la
+ * face suivante repart vers les marches, à l'opposé de l'épaisseur du limon) ou saillant. Sur une
+ * jonction tournante (`zeroAligned` faux), seules les directions comptent : un morceau de longueur
+ * nulle entre deux pans coupés reste une face à part, sans quoi la fusion tirerait une corde.
+ */
+function linkBetween(
+  prev: Piece,
+  next: Piece,
+  into: (dir: Vec2) => Vec2,
+  junction: number,
+  zeroAligned = true,
+): Link {
+  if (zeroAligned && (prev.length <= ON_EDGE_TOL || next.length <= ON_EDGE_TOL))
+    return { kind: "aligned" };
+  if (Math.abs(V.cross(prev.dir, next.dir)) <= ALIGN_TOL && V.dot(prev.dir, next.dir) > 0)
+    return { kind: "aligned" };
+  return {
+    kind: "corner",
+    concave: V.dot(next.dir, into(prev.dir)) < 0,
+    tanHalf: tanHalfBetween(prev.dir, next.dir),
+    junction,
+  };
+}
+
+/** Face d'un groupe de morceaux alignés : le morceau seul tel quel, sinon de bout en bout. */
+function mergeFace(
+  group: readonly Piece[],
+  into: (dir: Vec2) => Vec2,
+  sigmaOf: (p: Vec2) => Mm,
+): { a: Vec2; dir: Vec2; into: Vec2; length: Mm; sigmaA: Mm } {
+  const real = group.filter((p) => p.length > ON_EDGE_TOL);
+  if (real.length <= 1) {
+    const p = real[0] ?? group[0]!;
+    return { a: p.a, dir: p.dir, into: into(p.dir), length: p.length, sigmaA: p.sigmaA };
+  }
+  const a = real[0]!.a;
+  const d = V.sub(endOf(real[real.length - 1]!), a);
+  const dir = V.normalize(d);
+  const sigmaA = Number.isFinite(real[0]!.sigmaA) ? real[0]!.sigmaA : sigmaOf(a);
+  return { a, dir, into: into(dir), length: V.norm(d), sigmaA };
 }
 
 /** Face verticale plane d'une pièce réceptrice (limon, poteau), vue en plan. */

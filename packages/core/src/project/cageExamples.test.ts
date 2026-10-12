@@ -1,8 +1,9 @@
 /**
  * Exemples de cage saisie (tracé libre, ADR-0010, sous-lot 2f) : `examples/cage-*.blondel.json`,
- * sans structure (seule « aucune » accepte une cage saisie au lot 2). Une fonction de cage par
+ * sans structure (seule « aucune » acceptait une cage saisie au lot 2). Une fonction de cage par
  * exemple : jonction à 60° balancée, palier droit, trapèze (largeur variable), axe en arc, marches
- * rayonnantes. Site des préréglages (H = 2 700, dalle de 200 mm, nez `PRESET_NOSING`), trémie du
+ * rayonnantes. Sous-lot 6a : `cage-60-palier-limon`, limons à la française (`wood-housed`) sur
+ * une jonction à 60° balancée à jour en pan coupé suivie d'un palier droit. Site des préréglages (H = 2 700, dalle de 200 mm, nez `PRESET_NOSING`), trémie du
  * calcul des préréglages (`defaultOpening`, échappée `PRESET_HEADROOM_MIN` sur la ligne de
  * foulée). Longueurs choisies pour un giron voisin de 270 mm et aucune violation bloquante.
  * Régénération : `UPDATE_EXAMPLES=1 pnpm vitest run packages/core/src/project/cageExamples.test.ts`.
@@ -34,8 +35,11 @@ const straight = (length: number, width = 900, widthEnd?: number) => ({
   ...(widthEnd !== undefined ? { widthEnd } : {}),
 });
 
-/** Projet de cage sans structure, avec la trémie calculée comme pour les préréglages. */
-function cageExample(name: string, layout: CageLayoutSpecInput): Project {
+/**
+ * Projet de cage (sans structure par défaut), avec la trémie calculée comme pour les
+ * préréglages.
+ */
+function cageExample(name: string, layout: CageLayoutSpecInput, structure?: string): Project {
   const base = ProjectSchema.parse({
     schemaVersion: PROJECT_SCHEMA_VERSION,
     name,
@@ -44,6 +48,7 @@ function cageExample(name: string, layout: CageLayoutSpecInput): Project {
       placement: { origin: { x: 0, y: 0 }, rotation: 0 },
       layout,
       treads: { nosing: PRESET_NOSING },
+      ...(structure !== undefined ? { structure: { kind: structure } } : {}),
     },
   });
   const opening = defaultOpening(base);
@@ -54,6 +59,8 @@ interface CageExample {
   readonly build: () => Project;
   /** Fonctions de cage attendues (`cageFeatures`). */
   readonly features: readonly CageFeature[];
+  /** Structure de l'exemple ; absente : « aucune ». */
+  readonly structure?: string;
 }
 
 export const CAGE_EXAMPLES: Readonly<Record<string, CageExample>> = {
@@ -103,6 +110,29 @@ export const CAGE_EXAMPLES: Readonly<Record<string, CageExample>> = {
         junctions: [{ angle: 75, mode: "radiating", well: { kind: "arc", radius: 400 } }],
       }),
   },
+  "cage-60-palier-limon.blondel.json": {
+    features: ["anyAngle", "straightLanding", "chamfer"],
+    structure: "wood-housed",
+    build: () =>
+      // Limons à la française (sous-lot 6a) : jour en pan coupé (pas de poteau sur une cage
+      // saisie), assemblages à queues aux angles, raccord des limons au milieu du palier droit.
+      cageExample(
+        "Tracé libre — limons à la française, jonction à 60° balancée et palier droit",
+        {
+          kind: "cage",
+          sections: [straight(1100), straight(500), straight(1300)],
+          junctions: [
+            {
+              angle: 60,
+              mode: "winders",
+              well: { kind: "chamfer", setbackIn: 150, setbackOut: 150 },
+            },
+            { angle: 0, mode: "landing", depth: 900 },
+          ],
+        },
+        "wood-housed",
+      ),
+  },
 };
 
 if (process.env["UPDATE_EXAMPLES"] === "1") {
@@ -118,13 +148,13 @@ describe("examples/cage-*", () => {
   });
 
   it.each(Object.entries(CAGE_EXAMPLES))(
-    "%s : cage saisie, fonctions attendues, sans structure, trémie, modèle sans erreur ni violation bloquante",
-    (file, { features }) => {
+    "%s : cage saisie, fonctions attendues, structure, trémie, modèle sans erreur ni violation bloquante",
+    (file, { features, structure }) => {
       const p = parseProjectText(readFileSync(join(EXAMPLES_DIR, file), "utf8"));
       expect(p.stair.layout.kind).toBe("cage");
       if (p.stair.layout.kind !== "cage") return;
       expect(cageFeatures(p.stair.layout)).toEqual(features);
-      expect(p.stair.structure.kind).toBe("none");
+      expect(p.stair.structure.kind).toBe(structure ?? "none");
       expect(p.site.opening).toBeDefined();
       const m = buildModel(p, { memo: false });
       expect(m.errors).toEqual([]);
@@ -133,4 +163,18 @@ describe("examples/cage-*", () => {
       expect(m.stepping.going).toBeLessThan(285);
     },
   );
+});
+
+describe("examples/cage-60-palier-limon : limons à la française sur une cage", () => {
+  it("limons de jour et muraux, pan coupé, raccords au milieu du palier, aucune violation", () => {
+    const p = parseProjectText(
+      readFileSync(join(EXAMPLES_DIR, "cage-60-palier-limon.blondel.json"), "utf8"),
+    );
+    const m = buildModel(p, { memo: false });
+    const stringers = m.parts.filter((x) => x.category === "stringer").map((x) => x.mark);
+    expect(stringers).toEqual(["LI1", "LE1", "LIC1", "LI2", "LE2", "LI3", "LE3"]);
+    expect(
+      m.compliance.results.filter((r) => r.status === "violation").map((r) => r.ruleId),
+    ).toEqual(["ECHAPPEE_RECO_PRIVATIF"]);
+  });
 });

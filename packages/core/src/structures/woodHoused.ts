@@ -12,6 +12,13 @@
  *   Dans ces deux cas les limons de jour des volées concernées ne sont pas générés (message
  *   dans `Model.errors`), les limons muraux le sont. Au mur, les limons se rencontrent au coin
  *   W (faces de référence arrêtées au coin ; assemblage à queues, C §1.9, non dessiné).
+ * - **Cage saisie** (ADR-0010, sous-lot 6a, `capabilities.cage`) : faces lues dans le tracé
+ *   (`legs.ts`, `StairGeometry.faces`) ; angle quelconque (angle rentrant : limon prolongé de
+ *   e·tan(φ/2) jusqu'à l'arête extérieure du coin ; angle saillant : limons arrêtés au coin),
+ *   jour en pan coupé (limon propre au pan), palier droit (raccord bout à bout au milieu du
+ *   palier si les bords sont alignés, sinon limon propre au bord du palier), bords inclinés d'un
+ *   trapèze ; jour vif ou en arc : limons de jour non générés (`sharpJourCage`, `arcJourCage` :
+ *   pas de poteau sur une cage). Conventions à valider, QUESTIONS F16.
  * - **Marches encastrées** : les marches, paliers et contremarches pleines (pièces de base)
  *   sont prolongés dans les limons et les poteaux de la profondeur d'encastrement.
  * - **Développés** 1:1 (fibre de référence : face intérieure, côté marches) avec mortaises,
@@ -74,7 +81,14 @@ import {
   readPlanExtrusion,
   verticalExtrusion,
 } from "./housing.js";
-import { newelFaces, stairGeometry, type ReceivingFace, type StairGeometry } from "./legs.js";
+import {
+  newelFaces,
+  stairGeometry,
+  type EdgeFace,
+  type FaceEnd,
+  type ReceivingFace,
+  type StairGeometry,
+} from "./legs.js";
 import {
   buildNewel,
   newelTopWithHandrail,
@@ -161,6 +175,24 @@ export interface StringerFace {
   readonly faceLength: Mm;
   readonly start: StringerStart;
   readonly end: StringerEnd;
+  /**
+   * Prolongement au-delà de la face à un angle (`corner`) : e·tan(φ/2) à un angle rentrant
+   * (l'épaisseur e à 90°), 0 à un angle saillant ou à une autre extrémité. Renseigné par
+   * `stringerFaces` ; absent (faces construites par d'autres plugins) : sans objet.
+   */
+  readonly startReach?: Mm;
+  readonly endReach?: Mm;
+  /** Libellé du trait de joint à un angle (angle mural, angle côté jour d'une cage). */
+  readonly startJoint?: Message;
+  readonly endJoint?: Message;
+  /**
+   * Angle **saillant** à cette extrémité (pan coupé côté jour, bord de palier) : tan(φ/2), φ
+   * angle entre les deux faces. Les bandes d'encastrement des deux limons s'y recouvrent sur
+   * p·tan(φ/2) (p : profondeur d'encastrement) : une marche qui n'entre dans le limon que dans
+   * cette zone d'angle y laisse un encastrement d'angle, sans être portée. Absent : sans objet.
+   */
+  readonly startConvexTan?: number;
+  readonly endConvexTan?: number;
 }
 
 /** Détail d'un limon généré (tests, UI). */
@@ -184,93 +216,195 @@ const PROVISIONAL_REACH: Mm = 2000;
 
 const sigmaOf = (k: NosingLine, side: Side): Mm => (side === "inner" ? k.sigmaInner : k.sigmaOuter);
 
-/** Faces de référence des limons générables, et messages des tournants non supportés. */
+/** Repère, nom et identifiant d'un limon, selon la face et le vocabulaire du tracé. */
+function faceIdentity(
+  face: EdgeFace,
+  cage: boolean,
+): { id: string; mark: string; name: Message; leg: number } {
+  const inner = face.side === "inner";
+  const sideId = inner ? "inner" : "outer";
+  if (face.sections.length === 0) {
+    // Face propre à une jonction (cage) : pan coupé, bord de palier droit non aligné.
+    const j = face.junction ?? 0;
+    const chamfer = face.junctionKind === "chamfer";
+    return {
+      id: `stringer-${sideId}-j${j + 1}`,
+      mark: `${inner ? "LI" : "LE"}${chamfer ? "C" : "P"}${j + 1}`,
+      name: chamfer
+        ? msg("structure.woodHoused.part.chamferStringer", { junction: j + 1 })
+        : msg(
+            inner
+              ? "structure.woodHoused.part.innerLandingStringer"
+              : "structure.woodHoused.part.outerLandingStringer",
+            { junction: j + 1 },
+          ),
+      leg: j,
+    };
+  }
+  // Premier tronçon porté : une face ne réunit plusieurs tronçons que si la partie droite de
+  // l'un d'eux est de longueur nulle le long d'un palier droit (raccord impossible, `legs.ts`).
+  const i = face.sections[0]!;
+  const name: Message = !cage
+    ? msg(
+        inner
+          ? "structure.woodHoused.part.innerStringer"
+          : "structure.woodHoused.part.outerStringer",
+        { flight: i + 1 },
+      )
+    : msg(
+        inner
+          ? "structure.woodHoused.part.innerStringerSection"
+          : "structure.woodHoused.part.outerStringerSection",
+        { section: i + 1 },
+      );
+  return {
+    id: `stringer-${sideId}-${i + 1}`,
+    mark: `${inner ? "LI" : "LE"}${i + 1}`,
+    name,
+    leg: i,
+  };
+}
+
+/**
+ * Extrémité d'un limon et prolongement au-delà de sa face (angle rentrant : e·tan(φ/2), e à
+ * 90°) ; `null` pour un raccord du jour non suivi (angle vif, arc).
+ */
+function faceEnd(
+  end: FaceEnd,
+  e: Mm,
+): { kind: "floor" | "arrival" | "newel" | "corner"; reach: Mm } | null {
+  switch (end.kind) {
+    case "floor":
+    case "arrival":
+      return { kind: end.kind, reach: 0 };
+    case "newel":
+      return { kind: "newel", reach: 0 };
+    case "corner":
+      return { kind: "corner", reach: end.concave ? e * end.tanHalf : 0 };
+    case "splice":
+      return { kind: "corner", reach: 0 };
+    case "open":
+      return null;
+  }
+}
+
+/**
+ * Faces de référence des limons générables, et messages des raccords du jour non suivis.
+ * Vocabulaire des messages et des noms : volées et tournants pour un tracé à volées, tronçons et
+ * jonctions pour une cage saisie (`Layout.cage`).
+ */
 export function stringerFaces(
   ctx: StructureContext,
   geo: StairGeometry,
+  e: Mm,
 ): { faces: StringerFace[]; errors: Message[]; notes: Message[] } {
-  const turns = ctx.project.stair.layout.turns;
+  const cage = ctx.layout.cage === true;
   const faces: StringerFace[] = [];
   const errors: Message[] = [];
   const notes: Message[] = [];
-  turns.forEach((t, j) => {
-    if (t.inner.kind === "arc") {
+  for (const { junction: j, kind } of geo.jourIssues) {
+    if (!cage) {
+      const params = { turn: j + 1, flight: j + 1, nextFlight: j + 2 };
       errors.push(
-        msg("structure.woodHoused.arcJourUnsupported", {
-          turn: j + 1,
-          flight: j + 1,
-          nextFlight: j + 2,
-        }),
+        msg(
+          kind === "arc"
+            ? "structure.woodHoused.arcJourUnsupported"
+            : "structure.woodHoused.sharpJour",
+          params,
+        ),
       );
-    } else if (t.inner.kind === "sharp") {
+    } else {
+      const params = { junction: j + 1, section: j + 1, nextSection: j + 2 };
       errors.push(
-        msg("structure.woodHoused.sharpJour", { turn: j + 1, flight: j + 1, nextFlight: j + 2 }),
+        msg(
+          kind === "arc"
+            ? "structure.woodHoused.arcJourCage"
+            : "structure.woodHoused.sharpJourCage",
+          params,
+        ),
       );
     }
-  });
-  const last = geo.legs.length - 1;
-  for (const leg of geo.legs) {
-    const i = leg.index;
-    const before = i > 0 ? turns[i - 1]!.inner.kind : null;
-    const after = i < last ? turns[i]!.inner.kind : null;
-    const start: StringerStart | null = i === 0 ? "floor" : before === "newel" ? "newel" : null;
-    const end: StringerEnd | null = i === last ? "arrival" : after === "newel" ? "newel" : null;
-    const len = leg.innerT1 - leg.innerT0;
-    if (start && end) {
-      if (len > 1) {
-        faces.push({
-          id: `stringer-inner-${i + 1}`,
-          mark: `LI${i + 1}`,
-          name: msg("structure.woodHoused.part.innerStringer", { flight: i + 1 }),
-          side: "inner",
-          leg: i,
-          a: V.addScaled(leg.innerOrigin, leg.u, leg.innerT0),
-          dir: leg.u,
-          into: V.scale(leg.n, -1),
-          sigmaA: leg.innerSigma0,
-          faceLength: len,
-          start,
-          end,
-        });
-      } else {
-        notes.push(msg("structure.woodHoused.noInnerStraight", { flight: i + 1 }));
+  }
+  for (const face of geo.faces) {
+    const start = faceEnd(face.start, e);
+    const end = faceEnd(face.end, e);
+    // Limon de jour d'une volée voisine d'un jour vif ou en arc : non généré (message ci-dessus).
+    if (start === null || end === null) continue;
+    if (start.kind === "arrival" || end.kind === "floor") continue;
+    const { id, mark, name, leg } = faceIdentity(face, cage);
+    const inner = face.side === "inner";
+    if (inner && !(face.length > 1)) {
+      if (face.sections.length > 0) {
+        notes.push(
+          cage
+            ? msg("structure.woodHoused.noInnerStraightSection", { section: face.sections[0]! + 1 })
+            : msg("structure.woodHoused.noInnerStraight", { flight: face.sections[0]! + 1 }),
+        );
       }
+      continue;
     }
+    if (!inner && !(face.length > 0)) continue;
     faces.push({
-      id: `stringer-outer-${i + 1}`,
-      mark: `LE${i + 1}`,
-      name: msg("structure.woodHoused.part.outerStringer", { flight: i + 1 }),
-      side: "outer",
-      leg: i,
-      a: leg.outerStart,
-      dir: leg.u,
-      into: leg.n,
-      sigmaA: leg.outerSigma0,
-      faceLength: leg.length,
-      start: i === 0 ? "floor" : "corner",
-      end: i === last ? "arrival" : "corner",
+      id,
+      mark,
+      name,
+      side: face.side,
+      leg,
+      a: face.a,
+      dir: face.dir,
+      into: face.into,
+      sigmaA: face.sigmaA,
+      faceLength: face.length,
+      start: start.kind,
+      end: end.kind,
+      startReach: start.reach,
+      endReach: end.reach,
+      ...(start.kind === "corner" ? { startJoint: jointLabel(face, face.start, cage) } : {}),
+      ...(end.kind === "corner" ? { endJoint: jointLabel(face, face.end, cage) } : {}),
+      ...(face.start.kind === "corner" && !face.start.concave
+        ? { startConvexTan: face.start.tanHalf }
+        : {}),
+      ...(face.end.kind === "corner" && !face.end.concave
+        ? { endConvexTan: face.end.tanHalf }
+        : {}),
     });
   }
   return { faces, errors, notes };
 }
 
 /**
- * Fenêtre [u_lo ; u_hi] d'un limon (u depuis `face.a`). À un angle mural, le limon est prolongé
- * de l'épaisseur `e` du limon voisin, jusqu'à l'arête extérieure du coin (zone de l'assemblage
- * à queues, C §1.9) : sans ce prolongement, le carré e × e du coin n'appartient à aucun limon.
+ * Libellé du trait de joint à une extrémité `corner` : raccord de palier, angle côté jour d'une
+ * cage, sinon angle mural.
+ */
+function jointLabel(face: EdgeFace, end: FaceEnd, cage: boolean): Message {
+  if (end.kind === "splice") return msg("structure.woodHoused.joint.landingSplice");
+  return face.side === "inner" && cage
+    ? msg("structure.woodHoused.joint.jourCorner")
+    : msg("structure.woodHoused.joint.wallCorner");
+}
+
+/**
+ * Fenêtre [u_lo ; u_hi] d'un limon (u depuis `face.a`). À un angle rentrant, le limon est
+ * prolongé jusqu'à l'arête extérieure du coin (e·tan(φ/2), l'épaisseur e du limon voisin à 90° :
+ * zone de l'assemblage à queues, C §1.9) : sans ce prolongement, la zone d'angle n'appartient à
+ * aucun limon. À un angle saillant, le limon s'arrête au coin (prolongement nul).
  */
 function windowOf(
   f: StringerFace,
   nosings: readonly NosingLine[],
   startExt: Mm,
   endExt: Mm,
-  e: Mm,
 ): { uLo: Mm; uHi: Mm } {
   const u0 = sigmaOf(nosings[0]!, f.side) - f.sigmaA;
   const uN = sigmaOf(nosings[nosings.length - 1]!, f.side) - f.sigmaA;
   return {
-    uLo: f.start === "floor" ? u0 - startExt : f.start === "corner" ? -e : 0,
-    uHi: f.end === "arrival" ? uN + endExt : f.end === "corner" ? f.faceLength + e : f.faceLength,
+    uLo: f.start === "floor" ? u0 - startExt : f.start === "corner" ? -(f.startReach ?? 0) : 0,
+    uHi:
+      f.end === "arrival"
+        ? uN + endExt
+        : f.end === "corner"
+          ? f.faceLength + (f.endReach ?? 0)
+          : f.faceLength,
   };
 }
 
@@ -317,6 +451,15 @@ function housingsOn(
 ): Housing[] {
   const face = { a: f.a, dir: f.dir, into: f.into };
   const span = faceSpan(f, uLo, uHi);
+  // Portée « porteuse » : hors des zones d'angle saillant, où les bandes d'encastrement des deux
+  // limons se recouvrent (marche de la face voisine).
+  const carrying = {
+    lo: span.lo + depth * (f.startConvexTan ?? 0),
+    hi: span.hi - depth * (f.endConvexTan ?? 0),
+  };
+  // Face arrêtée à un angle (saillant ou rentrant) : une marche n'y est portée que si elle pose
+  // sur la face elle-même.
+  const cornered = f.start === "corner" || f.end === "corner";
   const treads = pieces.filter((p) => p.kind === "tread").sort((a, b) => a.number - b.number);
   const risers = new Map(pieces.filter((p) => p.kind === "riser").map((p) => [p.number, p]));
   const out: Housing[] = [];
@@ -328,10 +471,13 @@ function housingsOn(
     if (!tp && !rp) continue;
     if (riser) used.add(riser.number);
     const carried =
-      (span.lo <= uLo && span.hi >= uHi) ||
-      pocketInterval(t.outline, face, depth, span.lo, span.hi) !== null ||
-      (riser !== undefined &&
-        pocketInterval(riser.outline, face, depth, span.lo, span.hi) !== null);
+      ((carrying.lo <= uLo && carrying.hi >= uHi) ||
+        pocketInterval(t.outline, face, depth, carrying.lo, carrying.hi) !== null ||
+        (riser !== undefined &&
+          pocketInterval(riser.outline, face, depth, carrying.lo, carrying.hi) !== null)) &&
+      // Face à un angle : la marche doit aussi poser sur la face elle-même (arête du contour de
+      // base sur la face), et non seulement y déborder par son prolongement oblique.
+      (!cornered || restsOn(t, face, span) || (riser !== undefined && restsOn(riser, face, span)));
     const nosing = nosings[t.number - 1];
     let noseU: Mm | null = null;
     let sinBeta = 1;
@@ -392,6 +538,31 @@ function housingsOn(
     );
   }
   return out;
+}
+
+/** Tolérance de pose d'une arête de pièce sur une face (mm) et longueur portée minimale. */
+const REST_TOL = 1e-5;
+const REST_MIN = 1;
+
+/**
+ * La pièce (contour de base) a-t-elle une arête posée sur la face, sur plus de `REST_MIN` de la
+ * portée `span` ?
+ */
+function restsOn(
+  piece: HousedPiece,
+  face: { readonly a: Vec2; readonly dir: Vec2 },
+  span: { readonly lo: Mm; readonly hi: Mm },
+): boolean {
+  const poly = piece.base ?? piece.outline;
+  const u = (p: Vec2): Mm => V.dot(V.sub(p, face.a), face.dir);
+  const on = (p: Vec2): boolean => Math.abs(V.cross(face.dir, V.sub(p, face.a))) <= REST_TOL;
+  return poly.some((p, i) => {
+    const q = poly[(i + 1) % poly.length]!;
+    if (!on(p) || !on(q)) return false;
+    const lo = Math.max(Math.min(u(p), u(q)), span.lo);
+    const hi = Math.min(Math.max(u(p), u(q)), span.hi);
+    return hi - lo > REST_MIN;
+  });
 }
 
 function housingVertices(hs: readonly Housing[]): Vec2[] {
@@ -478,6 +649,7 @@ function extendPieces(
       number: num.number,
       mark: part.mark,
       outline,
+      base: ex.outline,
       zBottom: ex.zBottom,
       zTop: ex.zBottom + ex.height,
     });
@@ -566,18 +738,18 @@ export function buildWoodHoused(ctx: StructureContext, params: WoodHousedParams)
   if (nosings.length < 2) return empty([msg("structure.woodHoused.emptyStepping")]);
 
   const geo = stairGeometry(project, layout);
-  const { faces, errors, notes: faceNotes } = stringerFaces(ctx, geo);
+  const { faces, errors, notes: faceNotes } = stringerFaces(ctx, geo, e);
   notes.push(...faceNotes);
 
   // 1. Faces réceptrices (fenêtres provisoires) et prolongement des pièces de base.
   const provisional = faces.map((f) => ({
     f,
-    uLo: f.start === "floor" ? -PROVISIONAL_REACH : f.start === "corner" ? -e : 0,
+    uLo: f.start === "floor" ? -PROVISIONAL_REACH : f.start === "corner" ? -(f.startReach ?? 0) : 0,
     uHi:
       f.end === "arrival"
         ? f.faceLength + PROVISIONAL_REACH
         : f.end === "corner"
-          ? f.faceLength + e
+          ? f.faceLength + (f.endReach ?? 0)
           : f.faceLength,
   }));
   const newelList = geo.newels.map((nw) => ({
@@ -649,7 +821,7 @@ export function buildWoodHoused(ctx: StructureContext, params: WoodHousedParams)
   const assemblies: PartAssembly[] = [];
   const stocks = new Map<string, ReturnType<typeof stockOf>>();
   for (const f of faces) {
-    const { uLo, uHi } = windowOf(f, nosings, resolved.startExtension, resolved.endExtension, e);
+    const { uLo, uHi } = windowOf(f, nosings, resolved.startExtension, resolved.endExtension);
     const housings = housingsOn(f, pieces, nosings, depth, clearance, params.noseRadius, uLo, uHi);
     for (const h of housings) {
       if (h.tread !== undefined)
@@ -686,11 +858,11 @@ export function buildWoodHoused(ctx: StructureContext, params: WoodHousedParams)
       .map((k) => ({ u: sigmaOf(k, f.side) - f.sigmaA, z: k.z, index: k.index }))
       .filter((k) => k.u >= span.lo - 1e-6 && k.u <= span.hi + 1e-6);
     const joints: { u: Mm; label: Message }[] = [];
-    // Angle mural : trait à l'angle intérieur (face du limon voisin) ; au-delà, zone des queues.
-    const wallCorner = msg("structure.woodHoused.joint.wallCorner");
+    // Angle (mural, ou côté jour d'une cage) : trait au coin (face du limon voisin) ; au-delà,
+    // zone des queues.
     const newelFace = msg("structure.common.joint.newelFace");
-    if (f.start === "corner") joints.push({ u: 0, label: wallCorner });
-    if (f.end === "corner") joints.push({ u: f.faceLength, label: wallCorner });
+    if (f.start === "corner" && f.startJoint) joints.push({ u: 0, label: f.startJoint });
+    if (f.end === "corner" && f.endJoint) joints.push({ u: f.faceLength, label: f.endJoint });
     if (f.start === "newel") joints.push({ u: uLo, label: newelFace });
     if (f.end === "newel") joints.push({ u: uHi, label: newelFace });
     const flat = toFlatPattern(dev, {
@@ -841,7 +1013,9 @@ export function buildWoodHoused(ctx: StructureContext, params: WoodHousedParams)
   const partLoc = (id: string) => ({ partId: id });
   const thicknessRule = checks.yamlRule("LIMON_EPAISSEUR_MIN_DTU");
   if (thicknessRule && stringers.length > 0) {
-    const outside = stringerRulesOutOfDomain(thicknessRule, project.stair.layout.width);
+    // Domaine des règles de moyens : plus grande largeur des tronçons (l'emmarchement d'un
+    // escalier à volées).
+    const outside = stringerRulesOutOfDomain(thicknessRule, geo.maxWidth);
     if (outside !== null) {
       checks.add(thicknessRule, [
         {
@@ -1040,5 +1214,10 @@ export const WOOD_HOUSED: StructureKind<WoodHousedParams> = {
     requiresNewel: true,
     // Limons hors emprise utile, côté jour et côté mur (CHALLENGE A3).
     lateralThickness: (p) => ({ inner: p.thickness, outer: p.thickness }),
+    // Cage saisie (ADR-0010, sous-lot 6a) : limons droits sur des bords droits, quel que soit
+    // l'angle des jonctions (assemblage à queues, C §1.9), le long d'un palier droit (limon
+    // continu ou bord de palier), sur un bord incliné (largeur variable) et sur un pan coupé. Axe
+    // en arc, congé côté mur, marches rayonnantes et S / Z : refusés (`structure.cageUnsupported`).
+    cage: ["anyAngle", "variableWidth", "straightLanding", "chamfer"],
   },
 };

@@ -18,7 +18,10 @@
  *   fermé** : l'escalier ne le sait pas, la correction est libellée comme telle et n'est pas
  *   proposée quand l'utilisateur a déclaré le côté jour « vide » (`guards.flight.inner`) ;
  * - **cage qui s'écrit en volées et dont la structure n'est pas générée**
- *   (`structure.cageUnsupported` dans le modèle, tracé libre sans aucune fonction de cage,
+ *   (`structure.cageUnsupported` dans le modèle, ou limons à la française dont un jour vif
+ *   n'est suivi par aucun limon sur la cage : en volées, il peut recevoir un poteau ; pas pour
+ *   un jour en arc, que la correction `jour-newel` ne vise pas en volées ;
+ *   tracé libre sans aucune fonction de cage,
  *   `cageFeatures` vide, ADR-0010, sous-lot 2e) → reconvertir en volées (`toFlightsLayout`, conversion exacte :
  *   même tracé, aller-retour à l'identique) : le tracé à volées retrouve les structures, les
  *   préréglages et les formulaires de volées. Sans cette erreur (structure « aucune »), la
@@ -77,6 +80,14 @@ export interface FixSuggestion {
   readonly ruleIds?: readonly string[];
 }
 
+/**
+ * Erreurs d'une structure à poteau construite sur une cage saisie dont un jour vif n'est suivi
+ * par aucun limon (limons à la française, sous-lot 6a) : en volées, ce jour peut recevoir un
+ * poteau d'angle (correction `jour-newel`). Pas le jour en arc (`arcJourCage`) : en volées, il
+ * reste refusé (`arcJourUnsupported`) et `jour-newel` ne vise que les jours vifs.
+ */
+const CAGE_JOUR_ERRORS: ReadonlySet<string> = new Set(["structure.woodHoused.sharpJourCage"]);
+
 /** Le tracé du projet corrigé par `patch` est-il constructible (`newel.ts`) ? */
 function layoutAccepts(project: Project, patch: DeepPartial<ProjectInput>): boolean {
   const parsed = ProjectSchema.safeParse(deepMerge(project, patch));
@@ -100,14 +111,17 @@ export function suggestFixes(
   // 0. Cage qui s'écrit en volées : reconvertir (conversion exacte, voir l'en-tête).
   const spec = project.stair.layout;
   const cageRefused = model?.errors.some((e) => e.key === "structure.cageUnsupported") ?? false;
-  if (spec.kind === "cage" && cageRefused && cageFeatures(spec).length === 0) {
+  const jourRefused = model?.errors.some((e) => CAGE_JOUR_ERRORS.has(e.key as string)) ?? false;
+  if (spec.kind === "cage" && (cageRefused || jourRefused) && cageFeatures(spec).length === 0) {
     const flights = toFlightsLayout(project);
     if (flights !== null) {
       const layout = flights.stair.layout;
       out.push({
         id: "cage-to-flights",
         label: msg("project.fix.cageToFlights.label", { count: layout.legs.length }),
-        reason: msg("project.fix.cageToFlights.reason"),
+        reason: cageRefused
+          ? msg("project.fix.cageToFlights.reason")
+          : msg("project.fix.cageToFlights.reasonNewel"),
         patch: {
           stair: {
             layout: {

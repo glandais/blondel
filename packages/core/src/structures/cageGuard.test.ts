@@ -1,10 +1,12 @@
 /**
  * Garde-fou des structures pour une cage saisie (tracé libre, ADR-0010, plan C.8, sous-lot 2f) :
  * `capabilities.cage` et `structureAcceptsCage` ; dans `buildModel`, chaque plugin du registre
- * (limons à la française, crémaillères, acier plat, profilés, débillardé, limons centraux bois et
- * acier, qui lisent le tracé par `centralTrace.ts`) est sauté sur une cage avec une erreur
- * lisible qui nomme les fonctions non prises en charge, sans exception, marches produites ; un
- * plugin qui déclare les fonctions de la cage est appelé ; un tracé à volées n'est pas concerné.
+ * (crémaillères, acier plat, profilés, débillardé, limons centraux bois et acier, qui lisent le
+ * tracé par `centralTrace.ts`) est sauté sur une cage avec une erreur lisible qui nomme les
+ * fonctions non prises en charge, sans exception, marches produites ; un plugin qui déclare les
+ * fonctions de la cage est appelé ; un tracé à volées n'est pas concerné. Depuis le sous-lot 6a,
+ * les limons à la française (`wood-housed`) déclarent `WOOD_HOUSED_CAGE` : ils construisent une
+ * cage qui n'utilise que ces fonctions et refusent les autres en ne nommant que celles-là.
  */
 import fc from "fast-check";
 import { msg, translatorFor, type Message } from "@blondel/i18n";
@@ -126,6 +128,26 @@ function refusal(m: Model): Message {
 }
 
 const STRUCTURES = listStructures().map((s) => s.kind);
+/** Fonctions de cage des limons à la française (sous-lot 6a). */
+const WOOD_HOUSED_CAGE: readonly CageFeature[] = [
+  "anyAngle",
+  "variableWidth",
+  "straightLanding",
+  "chamfer",
+];
+/** Structures qui ne lisent encore aucune cage saisie. */
+const FLIGHTS_ONLY = STRUCTURES.filter((k) => k !== "wood-housed");
+
+/**
+ * Raison attendue du refus de `kind` pour une cage de fonctions `features` (même jonction que
+ * `build.ts`) : plugin sans `capabilities.cage`, toutes les fonctions (ou « lit encore un tracé à
+ * volées ») ; sinon les seules fonctions non déclarées ; `null` si la cage est construite.
+ */
+function expectedRefusal(kind: string, features: readonly CageFeature[]): Message | null {
+  const missing = structureUnsupportedCageFeatures(kind, features);
+  if (missing !== null && missing.length === 0) return null;
+  return expectedReason(missing ?? features);
+}
 
 /** Raison attendue du refus d'un plugin qui ne déclare rien (même jonction que `build.ts`). */
 function expectedReason(features: readonly CageFeature[]): Message {
@@ -161,11 +183,22 @@ describe("capacités : structureCageFeatures / structureAcceptsCage", () => {
     expect(structureUnsupportedCageFeatures("none", CAGE_FEATURES)).toEqual([]);
   });
 
-  it.each(STRUCTURES)("%s : aucune cage saisie au lot 2, même sans fonction", (kind) => {
+  it.each(FLIGHTS_ONLY)("%s : aucune cage saisie, même sans fonction", (kind) => {
     expect(structureCageFeatures(kind)).toBeNull();
     expect(structureAcceptsCage(kind, [])).toBe(false);
     expect(structureAcceptsCage(kind, ["anyAngle"])).toBe(false);
     expect(structureUnsupportedCageFeatures(kind, ["anyAngle"])).toBeNull();
+  });
+
+  it("wood-housed : angle quelconque, largeur variable, palier droit, pan coupé (sous-lot 6a)", () => {
+    expect(structureCageFeatures("wood-housed")).toEqual(WOOD_HOUSED_CAGE);
+    expect(structureAcceptsCage("wood-housed", [])).toBe(true);
+    expect(structureAcceptsCage("wood-housed", WOOD_HOUSED_CAGE)).toBe(true);
+    for (const f of ["arcAxis", "wallArc", "radiating", "oppositeTurns"] as const) {
+      expect(structureAcceptsCage("wood-housed", [f]), f).toBe(false);
+      expect(structureAcceptsCage("wood-housed", ["anyAngle", f]), f).toBe(false);
+      expect(structureUnsupportedCageFeatures("wood-housed", ["anyAngle", f]), f).toEqual([f]);
+    }
   });
 
   it("plugin inconnu : aucune cage", () => {
@@ -202,15 +235,28 @@ describe("buildModel : garde-fou sur chaque plugin du registre", () => {
   });
 
   it.each(STRUCTURES)(
-    "%s : plugin sauté sur toute cage, erreur lisible, aucune exception, marches produites",
+    "%s : plugin sauté sur toute cage non prise en charge, erreur lisible, aucune exception, marches produites",
     (kind) => {
       for (const [name, s] of Object.entries(CAGES)) {
         const project = cageProject(s, kind);
         let model: Model | undefined;
         expect(() => (model = buildModel(project, { memo: false })), name).not.toThrow();
+        const all = featuresOf(project);
+        if (expectedRefusal(kind, all) === null) {
+          // Cage construite (limons à la française) : jamais de refus, pièces de structure.
+          expect(keys(model!), name).not.toContain("structure.cageUnsupported");
+          expect(keys(model!), name).not.toContain("pipeline.internalError");
+          expect(
+            model!.parts.some((p) => p.category === "stringer"),
+            name,
+          ).toBe(true);
+          continue;
+        }
         expect(keys(model!), name).toEqual(["structure.cageUnsupported"]);
         const e = refusal(model!);
-        const features = featuresOf(project);
+        // Fonctions nommées : toutes celles de la cage pour un plugin sans `capabilities.cage`,
+        // les seules non déclarées sinon.
+        const features = structureUnsupportedCageFeatures(kind, all) ?? all;
         const fr = FR.t(e);
         const en = EN.t(e);
         expect(fr).toContain(FR.t(msg(getLabel(kind))));
@@ -219,7 +265,7 @@ describe("buildModel : garde-fou sur chaque plugin du registre", () => {
         // Paramètres exacts : la structure, et la raison qui nomme les fonctions de la cage,
         // toutes et seulement elles (ou « lit encore un tracé à volées » sans fonction).
         expect(e.params?.structure, name).toEqual(msg(getLabel(kind)));
-        expect(e.params?.reason, name).toEqual(expectedReason(features));
+        expect(e.params?.reason, name).toEqual(expectedRefusal(kind, all));
         for (const [t, text] of [
           [FR, fr],
           [EN, en],
@@ -330,7 +376,9 @@ describe("buildModel : garde-fou sur chaque plugin du registre", () => {
         built++;
         const features = featuresOf(project);
         for (const f of features) seen.add(f);
-        expect(refusal(model).params?.reason).toEqual(expectedReason(features));
+        const expected = expectedRefusal(r.structure, features);
+        if (expected === null) expect(k).not.toContain("structure.cageUnsupported");
+        else expect(refusal(model).params?.reason).toEqual(expected);
       }),
       { numRuns: 200, seed: 42 },
     );
@@ -399,6 +447,22 @@ describe("buildModel : plugin qui déclare des fonctions de cage", () => {
       expect(applyStructureChoice(p, "none").notes).toEqual([]);
       for (const kind of STRUCTURES) {
         const notes = applyStructureChoice(p, kind).notes.map((n) => n.key);
+        if (expectedRefusal(kind, featuresOf(p)) === null) {
+          // Cage construite (limons à la française) : seule remarque possible, un jour vif ou en
+          // arc qu'aucun limon droit ne suit (pas de poteau sur une cage saisie).
+          const layout = p.stair.layout as CageLayoutSpec;
+          const open = layout.junctions.some(
+            (j) => j.angle !== 0 && (j.well.kind === "sharp" || j.well.kind === "arc"),
+          );
+          expect(notes.length).toBe(open ? 1 : 0);
+          for (const n of notes) {
+            expect([
+              "project.structureChoice.cageJour",
+              "project.structureChoice.cageJourConvertible",
+            ]).toContain(n);
+          }
+          continue;
+        }
         expect(notes).toHaveLength(1);
         expect([
           "project.structureChoice.cage",

@@ -50,6 +50,8 @@ export interface HousedPiece {
   readonly number: number;
   readonly mark: string;
   readonly outline: Polygon2;
+  /** Contour avant prolongement dans les faces réceptrices (pièce de base). */
+  readonly base?: Polygon2;
   readonly zBottom: Mm;
   readonly zTop: Mm;
 }

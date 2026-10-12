@@ -289,18 +289,20 @@ describe("schéma cage", () => {
     expect(model.layout.sections?.[1]).toMatchObject({ widthStart: 800, widthEnd: 1000 });
   });
 
-  it("buildModel sur une cage à largeur variable, limon à la française et garde-corps : garde-corps calculés, structure refusée", () => {
+  it("buildModel sur une cage à largeur variable, limon à la française et garde-corps : garde-corps et limons calculés", () => {
     const project = cageProject(QUARTER, { guards: { flight: { enabled: true } } });
     (project.stair as Record<string, unknown>).structure = { kind: "wood-housed" };
     const p = parseProject(project);
     expect(p.stair.structure.kind).toBe("wood-housed");
     expect(p.guards?.flight.enabled).toBe(true);
     const model = buildModel(p);
-    // Sous-lot 2d : garde-corps, échappée et règles calculés ; le plugin reste sauté (cage
-    // saisie, lot 2f).
-    expect(modelErrorKeys(model.errors)).toEqual(["structure.cageUnsupported"]);
+    // Sous-lot 2d : garde-corps, échappée et règles calculés ; sous-lot 6a : limons à la
+    // française construits sur la largeur variable, jour en arc de la jonction signalé (aucun
+    // limon droit ne le suit).
+    expect(modelErrorKeys(model.errors)).toEqual(["structure.woodHoused.arcJourCage"]);
     expect(model.stepping.treads.length).toBeGreaterThan(0);
     expect(model.parts.some((part) => part.family === "guards")).toBe(true);
+    expect(model.parts.some((part) => part.category === "stringer")).toBe(true);
   });
 });
 

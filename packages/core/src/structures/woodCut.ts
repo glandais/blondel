@@ -223,7 +223,8 @@ export function buildWoodCut(ctx: StructureContext, params: WoodCutParams): CutR
       residual: Number.NaN,
     };
   }
-  if (project.stair.layout.turns.length > 0) {
+  // Escalier droit seulement : aucune jonction (tournant ou palier droit) dans le tracé.
+  if (layout.turns.length > 0) {
     return {
       output: {
         parts: [],
@@ -478,7 +479,8 @@ export function buildWoodCut(ctx: StructureContext, params: WoodCutParams): CutR
   }
   const thicknessRule = checks.yamlRule("LIMON_EPAISSEUR_MIN_DTU");
   if (thicknessRule && carriages.length > 0) {
-    const outside = stringerRulesOutOfDomain(thicknessRule, project.stair.layout.width);
+    // Domaine des règles de moyens : plus grande largeur des tronçons (`legs.ts`).
+    const outside = stringerRulesOutOfDomain(thicknessRule, geo.maxWidth);
     if (outside !== null) {
       checks.add(thicknessRule, [
         {

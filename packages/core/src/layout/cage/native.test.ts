@@ -4,7 +4,8 @@
  * comprises ; jour à poteau calculé par le moteur mais refusé par `computeLayout` (aval pas
  * encore fiable, lots 2c / 2d) ; `buildModel` complet sans exception, structure sautée avec
  * `structure.cageUnsupported` (garde-fou des structures, sous-lot 2f, détaillé dans
- * `structures/cageGuard.test.ts`) ; mémoïsation de l'étape
+ * `structures/cageGuard.test.ts`) sauf si elle déclare les fonctions de la cage (limons à la
+ * française, sous-lot 6a : jour vif ou en arc signalé par le plugin) ; mémoïsation de l'étape
  * « tracé » (clés de `pipeline/build.ts`).
  */
 import fc from "fast-check";
@@ -20,7 +21,8 @@ import {
   type Wall,
 } from "../../model/project.js";
 import { buildModel } from "../../pipeline/build.js";
-import { listStructures } from "../../structures/index.js";
+import { cageFeatures } from "../../model/cageFeatures.js";
+import { listStructures, structureAcceptsCage } from "../../structures/index.js";
 import { LayoutError } from "../errors.js";
 import { computeLayout } from "../layout.js";
 import { computeCageLayout } from "./cage.js";
@@ -216,12 +218,29 @@ describe("buildModel sur une cage saisie à ±90°", () => {
     "structure %s : plugin sauté, erreur claire `structure.cageUnsupported`, marches produites",
     (structure) => {
       for (const [, s] of Object.entries(SHAPES)) {
-        const model = buildModel(cageProject(s, { structure }), { memo: false });
+        const cage = cageProject(s, { structure });
+        const model = buildModel(cage, { memo: false });
         if (hasNewel(s)) {
           expect(errorKeys(model)).toEqual(["layout.cage.newelNotYetSupported"]);
           continue;
         }
-        // Garde-fou des structures (2f) : aucun plugin ne déclare encore `capabilities.cage`.
+        if (structureAcceptsCage(structure, cageFeatures(cage.stair.layout as CageLayoutSpec))) {
+          // Cage construite (limons à la française, sous-lot 6a) : seul un jour vif ou en arc,
+          // qu'aucun limon droit ne suit, est signalé par le plugin.
+          const jour = s.junctions.map((j) => j.well?.kind ?? "sharp");
+          expect(errorKeys(model)).toEqual(
+            jour.flatMap((k) =>
+              k === "sharp"
+                ? ["structure.woodHoused.sharpJourCage"]
+                : k === "arc"
+                  ? ["structure.woodHoused.arcJourCage"]
+                  : [],
+            ),
+          );
+          expect(model.parts.some((p) => p.category === "stringer")).toBe(true);
+          continue;
+        }
+        // Garde-fou des structures (2f) : plugin qui ne construit pas cette cage.
         expect(errorKeys(model)).toEqual(["structure.cageUnsupported"]);
         expect(model.stepping.treads.length).toBeGreaterThan(0);
         expect(model.layout.sections).toHaveLength(s.sections.length);
