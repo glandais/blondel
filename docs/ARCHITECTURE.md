@@ -100,7 +100,12 @@ saisie ─► store zustand (projectStore) ─► Project canonique (ProjectSche
               │            buildModel (cœur, mémoïsé) + meshParts ; comparateur : second worker
               │            (compareEpure) ; toute erreur, même d'envoi, rend une réponse « error »
               │            (handleWorkerRequest) ; repli sur le fil principal sans worker
-              ▼  ModelView { model, project d'origine, pending }
+              │         glisser de l'éditeur de plan (beginGesture / endGesture, ADR-0010 4c) :
+              │            déplacement, rotation : aucun calcul (dessin reporté par transform SVG) ;
+              │            autres poignées : voie « preview » du même worker (buildPlanPreview :
+              │            tracé, découpage léger, conflits géométriques ; latestRunner publishStale,
+              │            dernier aperçu reçu) ; un seul buildModel au relâchement
+              ▼  ModelView { model, project d'origine, pending } ; PreviewView pendant un geste
    ┌──────────┼──────────────┬──────────────────────┬──────────────────┬───────────────────────┐
  Plan 2D   Élévation      Vue 3D                Développés          Nomenclature        Contrôle de conception
  renderPlanSvg renderElevationSvg meshParts   renderFlatPatternSvg cutListRows        ComplianceReport + remarques

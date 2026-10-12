@@ -4,6 +4,10 @@
  * deux tronçons), lignes de nez (`stepping.nosings`) et ligne de foulée Γ (`layout.walkline`),
  * ces deux dernières sans interaction. Tronçons et jonctions recouvrent toute l'emprise :
  * l'escalier se sélectionne par son contour (zone de clic élargie placée au-dessus d'eux).
+ *
+ * Retour en direct (sous-lot 4c) : `model` est le dessin de l'éditeur (`planDisplay` : modèle
+ * complet ou aperçu du worker) ; `transform` reporte ce dessin au placement courant pendant un
+ * déplacement ou une rotation (aucun calcul).
  */
 import type { Model } from "@blondel/core";
 import { memo, useMemo } from "react";
@@ -14,9 +18,12 @@ import { selectable, type SelectContext } from "./selectable.js";
 export const StairLayer = memo(function StairLayer({
   model,
   ctx,
+  transform = null,
 }: {
   model: Model;
   ctx: SelectContext;
+  /** Report d'affichage au placement courant (`placementTransform`), ou `null`. */
+  transform?: string | null;
 }) {
   const stair = useMemo(() => stairOverlay(model), [model]);
   const sections = useMemo(
@@ -32,7 +39,10 @@ export const StairLayer = memo(function StairLayer({
     [model.layout],
   );
   return (
-    <g className="plan-editor__layer plan-editor__layer--stair">
+    <g
+      className="plan-editor__layer plan-editor__layer--stair"
+      {...(transform ? { transform, "data-transformed": "true" } : {})}
+    >
       {stair.footprint.length > 0 ? (
         <polygon
           className="plan-site__stair"

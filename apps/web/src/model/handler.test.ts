@@ -3,8 +3,9 @@
  * même quand `postMessage` échoue (sinon le client attendrait pour toujours), et conversion des
  * contenus PDF en octets (`toBytes`).
  */
-import { createProject } from "@blondel/core";
-import { msg, textMessage } from "@blondel/i18n";
+import { clearModelCache, createProject, modelCacheStats } from "@blondel/core";
+import fc from "fast-check";
+import { isMessage, msg, textMessage } from "@blondel/i18n";
 import { describe, expect, it } from "vitest";
 import { createJobRunner, handleWorkerRequest, toBytes, type JobRunner } from "./handler.js";
 import type { WorkerResponse } from "./protocol.js";
@@ -18,7 +19,7 @@ function runnerWith(content: unknown): JobRunner {
 /** Réponses postées (attend la fin des traitements asynchrones). */
 async function responses(
   runner: JobRunner,
-  type: "build" | "pdf",
+  type: "build" | "pdf" | "preview",
   post?: (m: WorkerResponse, t: Transferable[]) => void,
 ): Promise<{ message: WorkerResponse; transfer: Transferable[] }[]> {
   const out: { message: WorkerResponse; transfer: Transferable[] }[] = [];
@@ -148,5 +149,64 @@ describe("exports du worker : glTF et options du dossier PDF", () => {
     expect(structuredClone(toValidate)).toEqual(toValidate);
     await runner.pdf({ type: "pdf", project: createProject("straight") });
     expect(seen[1]).not.toHaveProperty("toValidate");
+  });
+});
+
+describe("voie d'aperçu de l'éditeur de plan (sous-lot 4c)", () => {
+  it("réponse « preview » : tracé, découpage, conflits ; clonable, sans tampon transféré", async () => {
+    const out = await responses(createJobRunner(), "preview");
+    expect(out).toHaveLength(1);
+    const { message, transfer } = out[0]!;
+    expect(message.type).toBe("preview");
+    if (message.type !== "preview") throw new Error("aperçu attendu");
+    expect(message.id).toBe(7);
+    expect(message.result.layout?.footprint.length).toBeGreaterThan(0);
+    expect(message.result.errors).toEqual([]);
+    expect(transfer).toEqual([]);
+    expect(structuredClone(message.result)).toEqual(message.result);
+  });
+
+  it("échec de postMessage → réponse « error »", async () => {
+    const out = await responses(createJobRunner(), "preview", (m) => {
+      if (m.type === "preview") throw new Error("clonage impossible");
+    });
+    expect(out.map((o) => o.message.type)).toEqual(["preview", "error"]);
+  });
+
+  it("partage structurel avec le modèle : le modèle complet du dernier aperçu retrouve son tracé", () => {
+    clearModelCache();
+    const runner = createJobRunner();
+    const project = createProject("quarter-left");
+    // Projets clonés (postMessage) : identités neuves à chaque demande.
+    runner.preview({ type: "preview", project: structuredClone(project) });
+    const before = modelCacheStats();
+    runner.build({ type: "build", project: structuredClone(project) });
+    const after = modelCacheStats();
+    expect(after.layout.hits - before.layout.hits).toBe(1);
+    expect(after.stepping.hits - before.stepping.hits).toBe(1);
+  });
+
+  it("propriété : projets dégradés (hauteur, largeur), jamais d'exception, erreurs en Message", () => {
+    const runner = createJobRunner();
+    const base = createProject("quarter-left");
+    fc.assert(
+      fc.property(
+        fc.integer({ min: -500, max: 6000 }),
+        fc.integer({ min: -100, max: 3000 }),
+        (h, w) => {
+          const project = {
+            ...base,
+            site: { ...base.site, floorToFloor: h },
+            stair: { ...base.stair, layout: { ...base.stair.layout, width: w } },
+          } as typeof base;
+          const r = runner.preview({ type: "preview", project });
+          expect(Array.isArray(r.errors)).toBe(true);
+          for (const e of r.errors) expect(isMessage(e)).toBe(true);
+          expect(Array.isArray(r.siteFit)).toBe(true);
+          if (r.layout === undefined) expect(r.errors.length).toBeGreaterThan(0);
+        },
+      ),
+      { numRuns: 40 },
+    );
   });
 });

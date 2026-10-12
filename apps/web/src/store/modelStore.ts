@@ -4,6 +4,14 @@
  * publiée (`latestRunner.ts`). Pendant un calcul, le dernier modèle publié reste affiché
  * (`pending` = vrai) : l'interface ne se fige jamais.
  *
+ * Glisser de l'éditeur de plan (ADR-0010, sous-lot 4c, `beginGesture` / `endGesture`) : pendant
+ * le geste, aucun modèle complet n'est demandé. Un déplacement ou une rotation de l'escalier
+ * (`transform`) ne calcule rien : l'éditeur transforme l'affichage du dernier modèle. Les autres
+ * glissers (`preview`) demandent un **aperçu** (`preview` : tracé, découpage léger, conflits
+ * géométriques) par la voie rapide du worker, publié dans `preview` (dernier aperçu reçu, même
+ * en retard d'une demande, `publishStale`). Au relâchement, un seul modèle complet est demandé
+ * (le dernier projet) ; l'aperçu reste affiché jusqu'à sa publication.
+ *
  * Le comparateur de variantes a son propre worker (un calcul long de comparaison ne retarde
  * pas le modèle) et n'est calculé qu'à la demande (onglet « Comparateur » affiché).
  */
@@ -15,6 +23,7 @@ import type { CompareOutcome } from "../lib/variants.js";
 import { createLatestRunner } from "../model/latestRunner.js";
 import type { JobExec } from "../model/workerClient.js";
 import type { ModelSnapshot } from "../model/snapshot.js";
+import type { PreviewResult } from "../model/protocol.js";
 import type { Variant } from "../lib/variants.js";
 
 export interface ModelView extends ModelSnapshot {
@@ -30,9 +39,34 @@ export interface CompareView {
   readonly pending: boolean;
 }
 
+/** Aperçu de l'éditeur de plan publié pendant un glisser (dernier reçu). */
+export interface PreviewView {
+  /** Projet dont l'aperçu est issu. */
+  readonly project: Project;
+  readonly result: PreviewResult;
+}
+
+/**
+ * Geste en cours de l'éditeur de plan : `transform` (déplacement, rotation : affichage
+ * transformé, aucun calcul), `preview` (autres poignées : aperçu du worker), `null` hors geste.
+ */
+export type GestureMode = "transform" | "preview" | null;
+
 export interface ModelState {
   readonly model: ModelView;
   readonly compare: CompareView;
+  /** Dernier aperçu reçu ; effacé à la publication du modèle complet après le geste. */
+  readonly preview: PreviewView | null;
+  readonly gesture: GestureMode;
+}
+
+/** Compteurs des calculs (diagnostic, mesure e2e de la voie d'aperçu). */
+export interface ModelStats {
+  /** Modèles complets lancés (`buildModel` + maillage). */
+  readonly builds: number;
+  /** Aperçus lancés, et publiés. */
+  readonly previews: number;
+  readonly previewsPublished: number;
 }
 
 export const EMPTY_MODEL_VIEW: ModelView = {
@@ -46,8 +80,16 @@ export const EMPTY_MODEL_VIEW: ModelView = {
 
 export interface ModelService {
   readonly store: StoreApi<ModelState>;
-  /** Demande le modèle d'un projet (publication dans `store`). */
+  /**
+   * Demande le modèle d'un projet (publication dans `store`) ; pendant un geste, un aperçu
+   * (`preview`) ou rien (`transform`).
+   */
   request(project: Project): void;
+  /** Début d'un glisser de l'éditeur de plan (voir l'en-tête). */
+  beginGesture(mode: "transform" | "preview"): void;
+  /** Fin du glisser : le modèle complet du dernier projet demandé est calculé (une fois). */
+  endGesture(): void;
+  stats(): ModelStats;
   /** Demande la comparaison des variantes d'un projet. */
   requestCompare(project: Project): void;
   /**
@@ -77,7 +119,11 @@ export function createModelService(options: ModelServiceOptions): ModelService {
   const store = createStore<ModelState>()(() => ({
     model: EMPTY_MODEL_VIEW,
     compare: { project: null, outcome: null, pending: false },
+    preview: null,
+    gesture: null,
   }));
+  /** Dernier projet demandé (pendant un geste : le modèle complet à calculer au relâchement). */
+  let latest: Project | undefined;
 
   const build = createLatestRunner<Project, ModelSnapshot>({
     exec: (p) => exec.build(p),
@@ -88,8 +134,28 @@ export function createModelService(options: ModelServiceOptions): ModelService {
       mesh: null,
     }),
     onResult: (project, result) =>
-      store.setState((s) => ({ model: { ...result, project, pending: s.model.pending } })),
+      store.setState((s) => ({
+        model: { ...result, project, pending: s.model.pending },
+        // Hors geste, le modèle complet remplace l'aperçu.
+        ...(s.gesture === null ? { preview: null } : {}),
+      })),
     onPending: (pending) => store.setState((s) => ({ model: { ...s.model, pending } })),
+  });
+
+  const preview = createLatestRunner<Project, PreviewResult>({
+    exec: (p) => exec.preview(p),
+    onError: (_p, e) => ({
+      siteFit: [],
+      errors: [msg("ui.worker.buildFailed", { detail: errorMessageOf(e) })],
+      timeMs: 0,
+    }),
+    onResult: (project, result) => {
+      // Un aperçu reçu après la fin du geste n'est plus affiché (le modèle complet arrive).
+      if (store.getState().gesture === null) return;
+      store.setState({ preview: { project, result } });
+    },
+    publishStale: true,
+    cacheSize: 4,
   });
 
   const compare = createLatestRunner<Project, CompareOutcome>({
@@ -107,7 +173,30 @@ export function createModelService(options: ModelServiceOptions): ModelService {
 
   return {
     store,
-    request: (project) => build.submit(project),
+    request: (project) => {
+      latest = project;
+      const gesture = store.getState().gesture;
+      if (gesture === null) build.submit(project);
+      else if (gesture === "preview") preview.submit(project);
+    },
+    beginGesture: (mode) => {
+      if (store.getState().gesture === mode) return;
+      store.setState({ gesture: mode, preview: null });
+    },
+    endGesture: () => {
+      if (store.getState().gesture === null) return;
+      preview.cancel();
+      store.setState({ gesture: null });
+      // Modèle complet du dernier projet (en cache s'il n'a pas changé : publié aussitôt, ce
+      // qui efface l'aperçu).
+      if (latest !== undefined) build.submit(latest);
+      else store.setState({ preview: null });
+    },
+    stats: () => ({
+      builds: build.started,
+      previews: preview.started,
+      previewsPublished: preview.published,
+    }),
     requestCompare: (project) => compare.submit(project),
     exportPdf: (project, pdfOptions, locale) => exec.pdf(project, pdfOptions, locale),
     exportGlb: (project, locale) => exec.glb(project, locale),

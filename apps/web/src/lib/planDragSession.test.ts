@@ -4,7 +4,7 @@ import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { createProjectStore } from "../store/projectStore.js";
 import { beginDrag, type PlanHandle } from "./planDrag.js";
-import { createDragSession, type DragHost } from "./planDragSession.js";
+import { createDragSession, gestureMode, type DragHost } from "./planDragSession.js";
 
 const cage60: Project = parseProjectText(cage60Text);
 const model60 = buildModel(cage60);
@@ -232,5 +232,16 @@ describe("session de glisser : cadence et historique", () => {
       ),
       { numRuns: 40 },
     );
+  });
+});
+
+describe("mode de retour en direct d'un geste (sous-lot 4c)", () => {
+  it("déplacement et rotation : affichage transformé ; autres poignées : aperçu du worker", () => {
+    expect(gestureMode({ kind: "move" })).toBe("transform");
+    expect(gestureMode({ kind: "rotate" })).toBe("transform");
+    expect(gestureMode({ kind: "sectionEnd", section: 0 })).toBe("preview");
+    expect(gestureMode({ kind: "width", section: 1, end: "end", edge: "left" })).toBe("preview");
+    expect(gestureMode({ kind: "junctionAngle", junction: 0 })).toBe("preview");
+    expect(gestureMode({ kind: "wellRadius", junction: 0 })).toBe("preview");
   });
 });

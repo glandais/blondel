@@ -119,6 +119,11 @@ export interface HandleLayerProps {
   readonly drag: PlanDrag;
   /** Point du site sous un pointeur (coordonnées d'écran). */
   readonly toSite: (clientX: number, clientY: number) => Vec2 | null;
+  /**
+   * Report d'affichage des poignées au placement courant (déplacement ou rotation en cours,
+   * sous-lot 4c), ou `null` ; le repère d'accroche (emprise à la cible) n'est pas reporté.
+   */
+  readonly transform?: string | null;
 }
 
 export const HandleLayer = memo(function HandleLayer({
@@ -130,6 +135,7 @@ export const HandleLayer = memo(function HandleLayer({
   mmPerPx,
   drag,
   toSite,
+  transform = null,
 }: HandleLayerProps) {
   const tr = useT();
   const format = (v: number): string => formatNumber(tr.locale, Math.round(v));
@@ -210,53 +216,55 @@ export const HandleLayer = memo(function HandleLayer({
           vectorEffect="non-scaling-stroke"
         />
       ) : null}
-      {spots.map((s) =>
-        s.from ? (
-          <line
-            key={`guide-${handleKey(s.handle)}`}
-            className="plan-editor__handle-guide"
-            x1={s.from.x}
-            y1={s.from.y}
-            x2={s.at.x}
-            y2={s.at.y}
-            vectorEffect="non-scaling-stroke"
-          />
-        ) : null,
-      )}
-      {spots.map((s) => {
-        const key = handleKey(s.handle);
-        const value = handleValue(project, s.handle, SLIDER_MAX_MM);
-        const dragging = drag.activeKey === key;
-        return (
-          <circle
-            key={key}
-            className={`plan-editor__handle plan-editor__handle--${s.handle.kind}`}
-            data-plan-handle={key}
-            {...(dragging ? { "data-dragging": "true" } : {})}
-            {...(dragging && drag.snap ? { "data-snapped": drag.snap.kind } : {})}
-            cx={s.at.x}
-            cy={s.at.y}
-            r={s.handle.kind === "move" ? r * 1.3 : r}
-            vectorEffect="non-scaling-stroke"
-            role="slider"
-            tabIndex={0}
-            aria-label={tr.t(handleLabel(s.handle, project))}
-            {...(value
-              ? {
-                  "aria-valuemin": value.min,
-                  "aria-valuemax": value.max,
-                  ...(value.now !== null ? { "aria-valuenow": Math.round(value.now) } : {}),
-                  "aria-valuetext": tr.t(valueText(value, format)),
-                }
-              : {})}
-            onPointerDown={onPointerDown(s.handle, s.at)}
-            onPointerMove={onPointerMove}
-            onPointerUp={onPointerUp}
-            onPointerCancel={() => drag.cancel()}
-            onKeyDown={onKeyDown(s.handle)}
-          />
-        );
-      })}
+      <g {...(transform ? { transform } : {})}>
+        {spots.map((s) =>
+          s.from ? (
+            <line
+              key={`guide-${handleKey(s.handle)}`}
+              className="plan-editor__handle-guide"
+              x1={s.from.x}
+              y1={s.from.y}
+              x2={s.at.x}
+              y2={s.at.y}
+              vectorEffect="non-scaling-stroke"
+            />
+          ) : null,
+        )}
+        {spots.map((s) => {
+          const key = handleKey(s.handle);
+          const value = handleValue(project, s.handle, SLIDER_MAX_MM);
+          const dragging = drag.activeKey === key;
+          return (
+            <circle
+              key={key}
+              className={`plan-editor__handle plan-editor__handle--${s.handle.kind}`}
+              data-plan-handle={key}
+              {...(dragging ? { "data-dragging": "true" } : {})}
+              {...(dragging && drag.snap ? { "data-snapped": drag.snap.kind } : {})}
+              cx={s.at.x}
+              cy={s.at.y}
+              r={s.handle.kind === "move" ? r * 1.3 : r}
+              vectorEffect="non-scaling-stroke"
+              role="slider"
+              tabIndex={0}
+              aria-label={tr.t(handleLabel(s.handle, project))}
+              {...(value
+                ? {
+                    "aria-valuemin": value.min,
+                    "aria-valuemax": value.max,
+                    ...(value.now !== null ? { "aria-valuenow": Math.round(value.now) } : {}),
+                    "aria-valuetext": tr.t(valueText(value, format)),
+                  }
+                : {})}
+              onPointerDown={onPointerDown(s.handle, s.at)}
+              onPointerMove={onPointerMove}
+              onPointerUp={onPointerUp}
+              onPointerCancel={() => drag.cancel()}
+              onKeyDown={onKeyDown(s.handle)}
+            />
+          );
+        })}
+      </g>
     </g>
   );
 });

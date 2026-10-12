@@ -2,19 +2,31 @@
  * Traitement des calculs du worker, partagé avec le repli sur le fil principal (navigateur sans
  * Web Worker, tests sous Node) : même code, mêmes résultats.
  */
-import { errorMessageOf, type Project } from "@blondel/core";
+import { buildPlanPreview, errorMessageOf, type Project } from "@blondel/core";
 import { DEFAULT_LOCALE, MessageError, msg, type Message } from "@blondel/i18n";
 import { exportGlb } from "@blondel/exports";
 import { loadExportPdf, type ExportPdfFn } from "../lib/optionalApi.js";
 import { runVariants, type CompareOutcome } from "../lib/variants.js";
 import { computeModel } from "./buildModel.js";
 import { createMeshCache, type MeshCache } from "./meshCache.js";
-import type { GlbResult, PdfResult, WorkerJob, WorkerRequest, WorkerResponse } from "./protocol.js";
+import type {
+  GlbResult,
+  PdfResult,
+  PreviewResult,
+  WorkerJob,
+  WorkerRequest,
+  WorkerResponse,
+} from "./protocol.js";
 import { computeSnapshot, type ModelSnapshot } from "./snapshot.js";
 import { shareUnchanged } from "./structuralShare.js";
 
 export interface JobRunner {
   build(job: Extract<WorkerJob, { type: "build" }>): ModelSnapshot;
+  /**
+   * Aperçu de l'éditeur de plan (`buildPlanPreview` : tracé, découpage léger, conflits
+   * géométriques), sans maillage ; ne lève jamais (erreurs en `Message`).
+   */
+  preview(job: Extract<WorkerJob, { type: "preview" }>): PreviewResult;
   compare(job: Extract<WorkerJob, { type: "compare" }>): CompareOutcome;
   /**
    * Dossier PDF du projet (`@blondel/exports/pdf`, chargé à la première demande). La mise en
@@ -28,6 +40,11 @@ export interface JobRunner {
    */
   glb(job: Extract<WorkerJob, { type: "glb" }>): GlbResult;
 }
+
+const now = (): number =>
+  typeof performance !== "undefined" && typeof performance.now === "function"
+    ? performance.now()
+    : Date.now();
 
 /** Motif d'un export sans modèle (`Message`, traduit à l'affichage). */
 function noModel(errors: readonly Message[]): Message {
@@ -69,10 +86,26 @@ export function createJobRunner(options: JobRunnerOptions = {}): JobRunner {
   const loadPdf = options.loadPdf ?? loadExportPdf;
   let lastBuild: Project | undefined;
   let lastCompare: Project | undefined;
+  // Dernier projet reçu, modèle ou aperçu : le modèle complet demandé au relâchement d'un geste
+  // partage ses sous-arbres avec le dernier aperçu (mêmes identités, caches du cœur partagés).
+  let lastShared: Project | undefined;
   return {
     build: (job) => {
-      const project = (lastBuild = shareUnchanged(lastBuild, job.project));
+      const project = (lastBuild = lastShared = shareUnchanged(lastShared, job.project));
       return computeSnapshot(project, meshCache);
+    },
+    preview: (job) => {
+      const t0 = now();
+      try {
+        const project = (lastShared = shareUnchanged(lastShared, job.project));
+        return { ...buildPlanPreview(project), timeMs: now() - t0 };
+      } catch (e) {
+        return {
+          siteFit: [],
+          errors: [msg("ui.worker.buildFailed", { detail: errorMessageOf(e) })],
+          timeMs: now() - t0,
+        };
+      }
     },
     compare: (job) => {
       const project = (lastCompare = shareUnchanged(lastCompare, job.project));
@@ -157,6 +190,8 @@ export function handleWorkerRequest(
       );
     } else if (req.type === "build") {
       post({ id: req.id, type: "build", result: runner.build(req) }, []);
+    } else if (req.type === "preview") {
+      post({ id: req.id, type: "preview", result: runner.preview(req) }, []);
     } else {
       post({ id: req.id, type: "compare", result: runner.compare(req) }, []);
     }

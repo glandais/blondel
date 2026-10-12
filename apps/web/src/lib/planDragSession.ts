@@ -17,7 +17,22 @@
  */
 import type { Message } from "@blondel/i18n";
 import type { Project, Vec2 } from "@blondel/core";
-import { dragStep, type DragGesture, type DragSnap, type DragStepOptions } from "./planDrag.js";
+import {
+  dragStep,
+  type DragGesture,
+  type DragSnap,
+  type DragStepOptions,
+  type PlanHandle,
+} from "./planDrag.js";
+
+/**
+ * Retour en direct d'un geste (sous-lot 4c) : déplacement et rotation de l'escalier
+ * transforment l'affichage du dernier modèle (`transform`, aucun calcul) ; les autres poignées
+ * demandent un aperçu au worker (`preview`).
+ */
+export function gestureMode(handle: PlanHandle): "transform" | "preview" {
+  return handle.kind === "move" || handle.kind === "rotate" ? "transform" : "preview";
+}
 
 /** Hôte d'une session : store du projet, horloge d'images, retour d'état. */
 export interface DragHost {

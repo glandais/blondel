@@ -608,6 +608,144 @@ export function mergeStructureChecks(
   return { ...rest, results, summary, ...(notes.length > 0 ? { notes } : {}) };
 }
 
+/** Exécution d'une étape, mémoïsée (`LastValueCache`) ou non. */
+type StageRunner = <R>(cache: LastValueCache<R>, keys: readonly unknown[], fn: () => R) => R;
+
+const memoRunner: StageRunner = (cache, keys, fn) => cache.get(keys, fn);
+const directRunner: StageRunner = (_cache, _keys, fn) => fn();
+
+/**
+ * Étape « Tracé », partagée par `buildModel` et `buildPlanPreview` (mêmes clés, même cache :
+ * le modèle complet calculé au relâchement d'un geste retrouve le tracé de son dernier aperçu).
+ */
+function layoutStageOf(project: Project, run: StageRunner): Stage<Layout> {
+  const { site, stair } = project;
+  return run(
+    caches.layout,
+    // Bord automatique d'un escalier droit (A16) : lit murs et garde-corps, clé par valeur.
+    [
+      stair.layout,
+      stair.placement,
+      stair.walkline,
+      stair.stepping,
+      site.floorToFloor,
+      autoWalklineSideKey(project),
+    ],
+    () => attempt(STAGE_LABELS.layout, () => computeLayout(project)),
+  );
+}
+
+/** Étape « Découpage » (voir `layoutStageOf`). */
+function steppingStageOf(project: Project, layout: Layout, run: StageRunner): Stage<Stepping> {
+  const { site, stair } = project;
+  return run(
+    caches.stepping,
+    // Tout `stair` sauf `placement` (porté par `layout`) et les paramètres de structure :
+    // le découpage ne lit que `structure.kind` (variante M3 des débillardés). Changer un
+    // paramètre de structure ne recalcule ni le découpage ni les garde-corps.
+    [
+      layout,
+      stair.layout,
+      stair.walkline,
+      stair.stepping,
+      stair.balancing,
+      // Des marches, le découpage ne lit que le débord (bord arrière des marches) et
+      // l'épaisseur (hélicoïdal) : contremarches et essence ne le recalculent pas (D5).
+      stair.treads.nosing,
+      stair.treads.thickness,
+      stair.nosingOverrides,
+      stair.structure.kind,
+      site.floorToFloor,
+    ],
+    () => attempt(STAGE_LABELS.stepping, () => computeStepping(project, layout)),
+  );
+}
+
+/**
+ * Conflits géométriques d'adéquation au site (sans l'échappée), mémoïsés sur le site (sans
+ * calque ; contour de pièce et obstacles ajoutés à cette seule clé), le tracé, le découpage, la
+ * structure (épaisseurs latérales) et les réglages d'atelier (voir `layoutStageOf`).
+ */
+function siteGeometryStageOf(
+  project: Project,
+  layout: Layout,
+  stepping: Stepping | undefined,
+  run: StageRunner,
+): Stage<readonly SiteConflict[]> {
+  const { site, stair } = project;
+  return run(
+    caches.siteFit,
+    [
+      layout,
+      stepping,
+      ...siteKeys(site),
+      site.room,
+      site.obstacles,
+      stair.structure,
+      project.workshop?.siteFit,
+    ],
+    () => attempt(STAGE_LABELS.siteFit, () => siteGeometryConflicts(project, layout, stepping)),
+  );
+}
+
+/**
+ * Aperçu de l'éditeur de plan pendant un glisser (ADR-0010, plan F, sous-lot 4c) : tracé, et
+ * conflits géométriques d'adéquation au site. Il ne contient ni pièces, ni structure, ni
+ * garde-corps, ni échappée, ni contrôle de conception : le modèle complet (`buildModel`) est
+ * calculé au relâchement du geste.
+ */
+export interface PlanPreview {
+  /** Tracé ; absent si l'étape « Tracé » échoue (l'erreur est dans `errors`). */
+  readonly layout?: Layout;
+  /**
+   * Découpage léger (`computeStepping`, sans pièce) ; absent si le tracé ou le découpage échoue.
+   * Il donne les lignes de nez affichées, l'emprise hors tout par marche, le dégagement
+   * d'arrivée et la dalle haute ; quelques millisecondes, même sur un exemple lourd.
+   */
+  readonly stepping?: Stepping;
+  /**
+   * Conflits géométriques (`siteGeometryConflicts`), triés par sévérité. L'échappée (règles
+   * ECHAPPEE_* du contrôle) n'y figure pas : elle revient avec le modèle complet.
+   */
+  readonly siteFit: readonly SiteConflict[];
+  /** Erreurs des étapes (`Message` neutres), comme `Model.errors`. */
+  readonly errors: readonly Message[];
+}
+
+/**
+ * Calcule l'aperçu de l'éditeur de plan (voir `PlanPreview`). Mêmes étapes et mêmes caches que
+ * `buildModel` (le modèle complet au relâchement retrouve le tracé et le découpage du dernier
+ * aperçu). Ne lève jamais : erreur d'une étape dans `errors`, toute autre exception en
+ * `pipeline.internalError`.
+ */
+export function buildPlanPreview(project: Project, options: BuildModelOptions = {}): PlanPreview {
+  const run = options.memo === false ? directRunner : memoRunner;
+  const errors: Message[] = [];
+  try {
+    const layoutStage = layoutStageOf(project, run);
+    if (layoutStage.error !== undefined) errors.push(layoutStage.error);
+    const layout = layoutStage.value;
+    if (layout === undefined) return { siteFit: [], errors };
+    if (layout.errors) errors.push(...layout.errors);
+    const steppingStage = steppingStageOf(project, layout, run);
+    if (steppingStage.error !== undefined) errors.push(steppingStage.error);
+    const stepping = steppingStage.value;
+    const geometry = siteGeometryStageOf(project, layout, stepping, run);
+    if (geometry.error !== undefined) errors.push(geometry.error);
+    return {
+      layout,
+      ...(stepping !== undefined ? { stepping } : {}),
+      siteFit: sortSiteConflicts(geometry.value ?? []),
+      errors,
+    };
+  } catch (e) {
+    errors.push(
+      msg("pipeline.internalError", { stage: STAGE_LABELS.layout, detail: errorMessage(e) }),
+    );
+    return { siteFit: [], errors };
+  }
+}
+
 /**
  * Calcule le modèle dérivé d'un projet. Ne lève pas d'exception pour des paramètres
  * impossibles : voir `Model.errors`.
@@ -628,19 +766,7 @@ export function buildModel(project: Project, options: BuildModelOptions = {}): M
   const notes: Message[] = [];
 
   // 1. Tracé.
-  const layoutStage = run(
-    caches.layout,
-    // Bord automatique d'un escalier droit (A16) : lit murs et garde-corps, clé par valeur.
-    [
-      stair.layout,
-      stair.placement,
-      stair.walkline,
-      stair.stepping,
-      site.floorToFloor,
-      autoWalklineSideKey(project),
-    ],
-    () => attempt(STAGE_LABELS.layout, () => computeLayout(project)),
-  );
+  const layoutStage = layoutStageOf(project, run);
   if (layoutStage.error !== undefined) errors.push(layoutStage.error);
   const layout = layoutStage.value;
   // Emprise dégénérée (volées qui se touchent ou se superposent, jour de longueur nulle, D3).
@@ -654,27 +780,7 @@ export function buildModel(project: Project, options: BuildModelOptions = {}): M
 
   // 2. Découpage.
   const steppingStage: Stage<Stepping> | undefined = layout
-    ? run(
-        caches.stepping,
-        // Tout `stair` sauf `placement` (porté par `layout`) et les paramètres de structure :
-        // le découpage ne lit que `structure.kind` (variante M3 des débillardés). Changer un
-        // paramètre de structure ne recalcule ni le découpage ni les garde-corps.
-        [
-          layout,
-          stair.layout,
-          stair.walkline,
-          stair.stepping,
-          stair.balancing,
-          // Des marches, le découpage ne lit que le débord (bord arrière des marches) et
-          // l'épaisseur (hélicoïdal) : contremarches et essence ne le recalculent pas (D5).
-          stair.treads.nosing,
-          stair.treads.thickness,
-          stair.nosingOverrides,
-          stair.structure.kind,
-          site.floorToFloor,
-        ],
-        () => attempt(STAGE_LABELS.stepping, () => computeStepping(project, layout)),
-      )
+    ? steppingStageOf(project, layout, run)
     : undefined;
   if (steppingStage?.error !== undefined) errors.push(steppingStage.error);
   const stepping = steppingStage?.value;
@@ -981,19 +1087,7 @@ export function buildModel(project: Project, options: BuildModelOptions = {}): M
   // géométriques absents.
   let siteFit: readonly SiteConflict[] = [];
   if (layout !== undefined) {
-    const siteGeometry = run(
-      caches.siteFit,
-      [
-        layout,
-        stepping,
-        ...siteKey,
-        site.room,
-        site.obstacles,
-        stair.structure,
-        project.workshop?.siteFit,
-      ],
-      () => attempt(STAGE_LABELS.siteFit, () => siteGeometryConflicts(project, layout, stepping)),
-    );
+    const siteGeometry = siteGeometryStageOf(project, layout, stepping, run);
     if (siteGeometry.error !== undefined) errors.push(siteGeometry.error);
     const geometry = siteGeometry.value ?? [];
     const headroomResults = compliance.results.filter(

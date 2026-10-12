@@ -60,6 +60,7 @@ const PUBLIC_ENTRIES = new Set([
 /** Étapes du pipeline et calculs du cœur réservés au worker (`model/`). */
 const PIPELINE = [
   "buildModel",
+  "buildPlanPreview",
   "computeLayout",
   "computeStepping",
   "buildBasicParts",

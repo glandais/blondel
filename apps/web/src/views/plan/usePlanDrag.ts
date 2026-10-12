@@ -6,16 +6,21 @@
  *
  * Un geste ne commence que si le `Model` affiché est celui du projet courant (`modelProject`) :
  * les mutateurs lisent leurs repères dans le tracé calculé, qui doit être celui du projet du
- * début du geste. Pendant le geste, le modèle est recalculé par le worker à chaque pas (la voie
- * d'aperçu rapide viendra au sous-lot 4c).
+ * début du geste.
+ *
+ * Retour en direct (sous-lot 4c, `modelService.beginGesture` / `endGesture`) : pendant un
+ * déplacement ou une rotation (`transform`), aucun calcul, l'éditeur transforme l'affichage du
+ * dernier modèle ; pendant les autres glissers (`preview`), chaque pas demande un aperçu au
+ * worker (tracé, découpage léger, conflits géométriques). Le modèle complet n'est demandé qu'une
+ * fois, au relâchement (ou à l'annulation).
  */
 import type { Model, Project, Vec2 } from "@blondel/core";
 import { msg, type Message } from "@blondel/i18n";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { beginDrag, handleKey, type DragSnap, type PlanHandle } from "../../lib/planDrag.js";
-import { createDragSession } from "../../lib/planDragSession.js";
+import { createDragSession, gestureMode } from "../../lib/planDragSession.js";
 import { HANDLE_SNAP_RADIUS_PX } from "../../lib/planErgonomics.js";
-import { appStore } from "../../store/appStore.js";
+import { appStore, modelService } from "../../store/appStore.js";
 
 /** Annonce de l'éditeur pendant un geste (accroche, refus, annulation). */
 export type DragNotice =
@@ -85,7 +90,9 @@ export function usePlanDrag(
   }, []);
 
   const cancel = useCallback((): boolean => {
-    if (!session.cancel()) return false;
+    const cancelled = session.cancel();
+    modelService.endGesture();
+    if (!cancelled) return false;
     finish();
     setNotice({ kind: "info", text: msg("ui.plan.editor.handle.cancelled") });
     return true;
@@ -105,7 +112,13 @@ export function usePlanDrag(
   }, [activeKey, cancel]);
 
   // Démontage pendant un geste (changement de vue) : le geste est clos tel quel.
-  useEffect(() => () => void session.end(), [session]);
+  useEffect(
+    () => () => {
+      session.end();
+      modelService.endGesture();
+    },
+    [session],
+  );
 
   const begin = useCallback(
     (handle: PlanHandle, anchor: Vec2, pointer: Vec2): boolean => {
@@ -113,6 +126,7 @@ export function usePlanDrag(
       if (modelProject !== project) return false;
       seq.current += 1;
       onBeginRef.current?.();
+      modelService.beginGesture(gestureMode(handle));
       session.begin(beginDrag(handle, project, model, pointer, anchor, seq.current));
       setActiveKey(handleKey(handle));
       setSnap(null);
@@ -130,7 +144,9 @@ export function usePlanDrag(
   );
 
   const end = useCallback((): boolean => {
-    if (!session.end()) return false;
+    const ended = session.end();
+    modelService.endGesture();
+    if (!ended) return false;
     finish();
     return true;
   }, [session, finish]);

@@ -11,7 +11,13 @@ import type { CompareOutcome, Variant } from "../lib/variants.js";
 import { createJobRunner, type JobRunner } from "./handler.js";
 import { MessageError, msg, type Locale } from "@blondel/i18n";
 import type { PdfJobOptions } from "../lib/optionalApi.js";
-import type { PdfResult, WorkerJob, WorkerRequest, WorkerResponse } from "./protocol.js";
+import type {
+  PdfResult,
+  PreviewResult,
+  WorkerJob,
+  WorkerRequest,
+  WorkerResponse,
+} from "./protocol.js";
 import type { ModelSnapshot } from "./snapshot.js";
 
 /** Sous-ensemble de `Worker` utilisé (injectable dans les tests). */
@@ -28,6 +34,11 @@ export type WorkerFactory = () => WorkerLike | null;
 
 export interface JobExec {
   build(project: Project): ModelSnapshot | Promise<ModelSnapshot>;
+  /**
+   * Aperçu de l'éditeur de plan pendant un glisser (tracé, découpage léger, conflits
+   * géométriques ; ADR-0010, sous-lot 4c), dans le worker (repli : fil principal).
+   */
+  preview(project: Project): PreviewResult | Promise<PreviewResult>;
   compare(project: Project, variants: readonly Variant[]): CompareOutcome | Promise<CompareOutcome>;
   /**
    * Dossier PDF du projet, mis en page dans le worker (repli : fil principal). Rejette avec le
@@ -82,7 +93,10 @@ export interface JobExecOptions {
   readonly watchdogMs?: number;
   /** Relances d'une même demande après expiration du délai (défaut 1) ; ensuite, rejet. */
   readonly watchdogRetries?: number;
-  /** Demandes surveillées (défaut : `build` et `compare` ; les exports peuvent être longs). */
+  /**
+   * Demandes surveillées (défaut : `build`, `preview` et `compare` ; les exports peuvent être
+   * longs).
+   */
   readonly watchdogJobs?: readonly WorkerJob["type"][];
 }
 
@@ -112,7 +126,7 @@ export function createJobExec(
   const watchdogMs = options.watchdogMs ?? DEFAULT_WATCHDOG_MS;
   const watchdogOn = watchdogMs > 0 && Number.isFinite(watchdogMs);
   const retries = Math.max(0, options.watchdogRetries ?? 1);
-  const watched = new Set(options.watchdogJobs ?? ["build", "compare"]);
+  const watched = new Set(options.watchdogJobs ?? ["build", "preview", "compare"]);
   let worker: WorkerLike | null | undefined;
   let broken = false;
   let local: JobRunner | undefined;
@@ -265,6 +279,15 @@ export function createJobExec(
       return p.then(
         (r) => (r.type === "build" ? r.result : runLocal().build({ type: "build", project })),
         (e: unknown) => recover(e, () => runLocal().build({ type: "build", project })),
+      );
+    },
+    preview(project) {
+      const job = { type: "preview", project } as const;
+      const p = call(job);
+      if (!p) return runLocal().preview(job);
+      return p.then(
+        (r) => (r.type === "preview" ? r.result : runLocal().preview(job)),
+        (e: unknown) => recover(e, () => runLocal().preview(job)),
       );
     },
     compare(project, variants) {

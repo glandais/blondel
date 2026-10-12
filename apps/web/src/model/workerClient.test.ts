@@ -49,9 +49,11 @@ function fakeWorker(options: { fail?: boolean; answerError?: boolean; unreadable
         const res: WorkerResponse =
           req.type === "build"
             ? { id: req.id, type: "build", result: runner.build(req) }
-            : req.type === "glb"
-              ? { id: req.id, type: "glb", result: runner.glb(req) }
-              : { id: req.id, type: "compare", result: runner.compare(req) };
+            : req.type === "preview"
+              ? { id: req.id, type: "preview", result: runner.preview(req) }
+              : req.type === "glb"
+                ? { id: req.id, type: "glb", result: runner.glb(req) }
+                : { id: req.id, type: "compare", result: runner.compare(req) };
         w.onmessage?.({ data: structuredClone(res) });
       }, 0);
     },
@@ -80,6 +82,27 @@ describe("client du worker de calcul", () => {
       expect(p.mesh.error, p.mesh.partId).toBeUndefined();
       expect(p.mesh.mesh.indices.length, p.mesh.partId).toBeGreaterThan(0);
     }
+  });
+
+  it("aperçu de l'éditeur de plan dans le worker : tracé et conflits clonables, sans pièce", async () => {
+    clearModelCache();
+    const w = fakeWorker();
+    const exec = createJobExec(() => w);
+    const project = parseProjectText(j4Text);
+    const preview = await exec.preview(project);
+    expect(w.received.map((r) => r.type)).toEqual(["preview"]);
+    expect(preview.layout?.footprint.length).toBeGreaterThan(0);
+    expect(preview.stepping?.nosings.length).toBeGreaterThan(0);
+    expect(preview.errors).toEqual([]);
+    expect("parts" in preview).toBe(false);
+    expect(preview.timeMs).toBeGreaterThanOrEqual(0);
+  });
+
+  it("aperçu : worker en panne → repli sur le fil principal", async () => {
+    const exec = createJobExec(() => fakeWorker({ answerError: true }));
+    const preview = await exec.preview(createProject("quarter-left"));
+    expect(preview.layout?.turns.length).toBe(1);
+    expect(exec.usesWorker).toBe(false);
   });
 
   it("appels simultanés routés par identifiant", async () => {

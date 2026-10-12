@@ -12,6 +12,12 @@
  * d'un tronçon (accroche par girons entiers), la largeur d'arrivée (trapèze), l'angle d'une
  * jonction (accroche de 15°, 90° → 60°) ; un geste = une annulation ; Échap pendant le glisser
  * restaure ; budget des tâches longues respecté pendant les glissers.
+ *
+ * Retour en direct et conflits (sous-lot 4c) : cage-60 avec un mur devant l'arrivée, bulle d'un
+ * conflit au survol et au focus, clic sur son contour (mur sélectionné), glisser d'une longueur
+ * vers le mur : le conflit apparaît pendant le geste (aperçu du worker, aucun modèle complet),
+ * un seul modèle complet au relâchement, annonce de la liste, Ctrl+Z le fait disparaître ;
+ * exemple lourd (j3a) : aperçus pendant le glisser, un modèle au relâchement, budget respecté.
  */
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -36,13 +42,22 @@ const CAGE_TRAPEZE = fileURLToPath(
   new URL("../../../examples/cage-trapeze.blondel.json", import.meta.url),
 );
 
-async function importProject(page: Page, file: string, name: string): Promise<void> {
+async function importProject(
+  page: Page,
+  file: string,
+  name: string,
+  edit?: (json: Record<string, unknown>) => void,
+): Promise<void> {
+  let buffer = readFileSync(file);
+  if (edit) {
+    const json = JSON.parse(buffer.toString("utf8")) as Record<string, unknown>;
+    edit(json);
+    buffer = Buffer.from(JSON.stringify(json));
+  }
   const chooser = page.waitForEvent("filechooser");
   await page.getByRole("button", { name: "Importer", exact: true }).click();
   await page.getByRole("menuitem", { name: "Projet (.blondel.json)…" }).click();
-  await (
-    await chooser
-  ).setFiles({ name, mimeType: "application/json", buffer: readFileSync(file) });
+  await (await chooser).setFiles({ name, mimeType: "application/json", buffer });
   await settle(page);
 }
 
@@ -246,9 +261,14 @@ async function dragFromTo(
   if (shift) await page.keyboard.up("Shift");
 }
 
-async function openSitePlan(page: Page, file: string, name: string): Promise<Locator> {
+async function openSitePlan(
+  page: Page,
+  file: string,
+  name: string,
+  edit?: (json: Record<string, unknown>) => void,
+): Promise<Locator> {
   await openApp(page);
-  await importProject(page, file, name);
+  await importProject(page, file, name, edit);
   await openTab(page, "Plan");
   await page.getByRole("button", { name: "Site et saisie", exact: true }).click();
   await settle(page);
@@ -279,10 +299,27 @@ test("cage-60 : poignées de l'escalier et d'un tronçon, un geste = une annulat
   await expect(rotate).toHaveAttribute("aria-valuenow", "0");
 
   // Souris, Maj (sans accroche) : glisser la poignée centrale à droite ; une annulation défait
-  // tout le geste.
+  // tout le geste. Pendant le geste (sous-lot 4c, niveau 1) : dessin reporté par une
+  // transformation SVG, poignée sous le pointeur, ni aperçu ni modèle calculés ; un seul modèle
+  // au relâchement.
   const c = await center(move);
-  await dragFromTo(page, c, { x: c.x + 90, y: c.y }, { shift: true, steps: 12 });
   await settle(page);
+  const stats0 = await modelStats(page);
+  await page.keyboard.down("Shift");
+  await page.mouse.move(c.x, c.y);
+  await page.mouse.down();
+  await page.mouse.move(c.x + 90, c.y, { steps: 12 });
+  await expect(plan.locator('.plan-editor__layer--stair[data-transformed="true"]')).toHaveCount(1);
+  const c1 = await center(move);
+  expect(Math.hypot(c1.x - (c.x + 90), c1.y - c.y)).toBeLessThan(4);
+  const statsDuring = await modelStats(page);
+  expect(statsDuring.builds).toBe(stats0.builds);
+  expect(statsDuring.previews).toBe(stats0.previews);
+  await page.mouse.up();
+  await page.keyboard.up("Shift");
+  await settle(page);
+  expect((await modelStats(page)).builds).toBe(stats0.builds + 1);
+  await expect(plan.locator('.plan-editor__layer--stair[data-transformed="true"]')).toHaveCount(0);
   expect(await valueOf(move)).toBeGreaterThan(100);
   await expect(move).toHaveAttribute("aria-valuetext", /y 0 mm$/);
   await undo.click();
@@ -464,4 +501,250 @@ test("cage-trapeze : angle de jonction glissé de 90° à 60° (accroche), clavi
   const tasks = await takeLongTasks(page);
   const over = overBudget(tasks);
   expect(over, describeTasks(over, tasks)).toEqual([]);
+});
+
+// ------------------------------------------------- Aperçu et conflits interactifs (sous-lot 4c)
+
+const J3A = fileURLToPath(
+  new URL("../../../examples/j3a-acceptance-01-bois.blondel.json", import.meta.url),
+);
+
+interface ModelStats {
+  builds: number;
+  previews: number;
+  previewsPublished: number;
+}
+
+const modelStats = (page: Page): Promise<ModelStats> =>
+  page.evaluate(() =>
+    (window as Window & { __blondelModelStats?: () => ModelStats }).__blondelModelStats!(),
+  );
+
+/**
+ * Mur M1 (200 mm) perpendiculaire au tronçon 2 de cage-60, à 300 mm de son nu devant la ligne
+ * d'arrivée : dégagement d'arrivée insuffisant (avertissement), et le tronçon allongé de 450 mm
+ * environ l'atteint (erreur « mur »).
+ */
+function addWallNearArrival(json: Record<string, unknown>): void {
+  const site = json["site"] as { walls: unknown[] };
+  site.walls = [
+    {
+      id: "M1",
+      a: { x: -2050, y: 2199 },
+      b: { x: -1050, y: 3931 },
+      thickness: 200,
+      loadBearing: false,
+    },
+  ];
+}
+
+/** Point de l'écran d'un point du repère du site, par le repère d'un élément du plan. */
+async function screenPoint(plan: Locator, selector: string, kind: "centroid" | "hit") {
+  return plan.evaluate(
+    (svg, args) => {
+      const el = svg.querySelector<SVGPolygonElement>(args.selector);
+      const ctm = el?.getScreenCTM();
+      if (!el || !ctm) return null;
+      const pts = Array.from(el.points);
+      if (args.kind === "centroid") {
+        const c = new DOMPoint(
+          pts.reduce((s, p) => s + p.x, 0) / pts.length,
+          pts.reduce((s, p) => s + p.y, 0) / pts.length,
+        ).matrixTransform(ctm);
+        return { x: c.x, y: c.y };
+      }
+      // Point de la zone qu'aucun élément de l'escalier ou du site ne recouvre.
+      const cx = pts.reduce((s, p) => s + p.x, 0) / pts.length;
+      const cy = pts.reduce((s, p) => s + p.y, 0) / pts.length;
+      for (const t of [0.5, 0.7, 0.3, 0.85, 0.15, 0.95]) {
+        for (const p of pts) {
+          const q = new DOMPoint(cx + (p.x - cx) * t, cy + (p.y - cy) * t).matrixTransform(ctm);
+          if (document.elementFromPoint(q.x, q.y) === el) return { x: q.x, y: q.y };
+        }
+      }
+      return null;
+    },
+    { selector, kind },
+  );
+}
+
+test("cage-60 et un mur : bulle et sélection d'un conflit, conflit en aperçu pendant le glisser, un modèle au relâchement, Ctrl+Z", async ({
+  page,
+}) => {
+  const plan = await openSitePlan(page, CAGE_60, "cage-60-mur.blondel.json", addWallNearArrival);
+  const status = page.getByTestId("plan-selection");
+  const tooltip = page.getByTestId("plan-conflict-tooltip");
+  const conflictsStatus = page.getByTestId("plan-conflicts-status");
+  const wallConflict = plan.locator('.plan-editor__conflict[data-kind="wall"]');
+  const arrival = '.plan-editor__conflict[data-kind="arrivalClearance"]';
+  await expect(plan.locator(arrival)).toHaveCount(1);
+  await expect(wallConflict).toHaveCount(0);
+  await expect(conflictsStatus).toContainText("Dégagement d'arrivée insuffisant");
+
+  // Survol de la zone du conflit : bulle avec la sévérité et le message traduit.
+  const inside = await screenPoint(plan, arrival, "centroid");
+  await page.mouse.move(inside!.x, inside!.y);
+  await expect(tooltip).toBeVisible();
+  await expect(tooltip).toHaveText(
+    /^Avertissement : Dégagement d'arrivée insuffisant : le mur « M1 »/,
+  );
+  await page.mouse.move(5, 5);
+  await expect(tooltip).toHaveCount(0);
+
+  // Clic dans la zone du conflit, hors de l'escalier et du mur : le mur visé est sélectionné.
+  const hit = '.plan-editor__conflict-hit[data-kind="arrivalClearance"]';
+  const free = await screenPoint(plan, hit, "hit");
+  expect(free, "point libre de la zone du conflit").not.toBeNull();
+  await page.mouse.click(free!.x, free!.y);
+  await expect(status).toHaveText("Sélection : Mur M1");
+  // Clavier : focus de la zone (bulle), Entrée sélectionne.
+  await page.keyboard.press("Escape");
+  await expect(status).toHaveText(/Aucune sélection/);
+  const button = plan.getByRole("button", { name: /^Avertissement : Dégagement d'arrivée/ });
+  await button.focus();
+  await expect(tooltip).toHaveText(/^Avertissement : Dégagement/);
+  await page.keyboard.press("Enter");
+  await expect(status).toHaveText("Sélection : Mur M1");
+  // Le tronçon reste sélectionnable par-dessus les zones (règle d'empilement).
+  await page.keyboard.press("Escape");
+  await plan.getByRole("button", { name: "Tronçon 2", exact: true }).click();
+  await expect(status).toHaveText("Sélection : Tronçon 2");
+  // Bulle de survol, tronçon focalisé : masquée quand le pointeur quitte le plan.
+  await page.mouse.move(inside!.x, inside!.y);
+  await expect(tooltip).toBeVisible();
+  await page.mouse.move(5, 5);
+  await expect(tooltip).toHaveCount(0);
+  await settle(page);
+  await takeLongTasks(page);
+
+  // Glisser de la fin du tronçon 2 (Maj : sans accroche) vers le mur, bouton maintenu.
+  const end = plan.getByRole("slider", { name: "Longueur du tronçon 2", exact: true });
+  const sl = await center(
+    plan.getByRole("slider", { name: "Largeur au départ du tronçon 2 (bord gauche)" }),
+  );
+  const sr = await center(
+    plan.getByRole("slider", { name: "Largeur au départ du tronçon 2 (bord droit)" }),
+  );
+  const pxPerMm = Math.hypot(sr.x - sl.x, sr.y - sl.y) / 900;
+  const e0 = await center(end);
+  const mid = { x: (sl.x + sr.x) / 2, y: (sl.y + sr.y) / 2 };
+  const n = Math.hypot(e0.x - mid.x, e0.y - mid.y);
+  const target = {
+    x: e0.x + ((e0.x - mid.x) / n) * 560 * pxPerMm,
+    y: e0.y + ((e0.y - mid.y) / n) * 560 * pxPerMm,
+  };
+  const before = await modelStats(page);
+  await page.keyboard.down("Shift");
+  await page.mouse.move(e0.x, e0.y);
+  await page.mouse.down();
+  await page.mouse.move(target.x, target.y, { steps: 20 });
+  // Pendant le geste : le conflit avec le mur apparaît (aperçu), sans modèle complet.
+  await expect(wallConflict).toHaveCount(1);
+  await expect(conflictsStatus).toHaveAttribute("data-preview", "true");
+  await expect(conflictsStatus).not.toContainText("empiète sur le mur");
+  const during = await modelStats(page);
+  expect(during.previews).toBeGreaterThan(before.previews);
+  expect(during.previewsPublished).toBeGreaterThan(before.previewsPublished);
+  expect(during.builds).toBe(before.builds);
+  // Les poignées suivent l'aperçu : la fin du tronçon est sous le pointeur.
+  const e1 = await center(end);
+  expect(Math.hypot(e1.x - target.x, e1.y - target.y)).toBeLessThan(6);
+  await page.mouse.up();
+  await page.keyboard.up("Shift");
+  await settle(page);
+  // Un seul modèle complet au relâchement ; la liste annoncée change à la fin du geste.
+  expect((await modelStats(page)).builds).toBe(before.builds + 1);
+  await expect(wallConflict).toHaveCount(1);
+  await expect(conflictsStatus).not.toHaveAttribute("data-preview", "true");
+  await expect(conflictsStatus).toContainText(
+    "Erreur : L'escalier (structure comprise) empiète sur le mur « M1 »",
+  );
+  expect(await valueOf(end)).toBeGreaterThan(2100);
+
+  // Annulation (Ctrl+Z) : le conflit disparaît.
+  await page.keyboard.press("Control+z");
+  await expect(end).toHaveAttribute("aria-valuenow", "1650");
+  await expect(wallConflict).toHaveCount(0);
+  await expect(conflictsStatus).not.toContainText("empiète sur le mur");
+  await settle(page);
+
+  // Déplacement de l'escalier (report d'affichage) : les conflits liés au site (dégagement
+  // devant le mur) ne suivent pas l'escalier, ils sont masqués jusqu'au modèle suivant.
+  await page.keyboard.press("Escape");
+  const stairEdge = await hitPoint(plan, '[data-plan-select="stair"]', "edge");
+  await page.mouse.click(stairEdge!.x, stairEdge!.y);
+  await expect(status).toHaveText("Sélection : Escalier");
+  const move = plan.getByRole("slider", { name: "Déplacer l'escalier", exact: true });
+  const m0 = await center(move);
+  await page.keyboard.down("Shift");
+  await page.mouse.move(m0.x, m0.y);
+  await page.mouse.down();
+  await page.mouse.move(m0.x + 4, m0.y, { steps: 4 });
+  await expect(plan.locator('.plan-editor__layer--stair[data-transformed="true"]')).toHaveCount(1);
+  await expect(plan.locator(arrival)).toHaveCount(0);
+  await page.keyboard.press("Escape");
+  await page.mouse.up();
+  await page.keyboard.up("Shift");
+  await settle(page);
+  await expect(plan.locator(arrival)).toHaveCount(1);
+
+  await settle(page);
+  const tasks = await takeLongTasks(page);
+  const over = overBudget(tasks);
+  expect(over, describeTasks(over, tasks)).toEqual([]);
+});
+
+test(`glisser d'une longueur, cage-60 et j3a : aperçus pendant le geste, un modèle au relâchement (tâches ≤ 200 ms)`, async ({
+  page,
+}) => {
+  for (const [file, name, section] of [
+    [CAGE_60, "cage-60.blondel.json", "Tronçon 2"],
+    [J3A, "j3a.blondel.json", "Tronçon 2"],
+  ] as const) {
+    const plan = await openSitePlan(page, file, name);
+    await plan.getByRole("button", { name: section, exact: true }).click();
+    const end = plan.getByRole("slider", {
+      name: `Longueur du ${section.toLowerCase()}`,
+      exact: true,
+    });
+    await expect(end).toBeVisible();
+    // Position de la poignée (j3a : tracé à volées avec poteau, valeur sans curseur ARIA).
+    const at0 = await end.evaluate((c) => `${c.getAttribute("cx")} ${c.getAttribute("cy")}`);
+    await settle(page);
+    await takeLongTasks(page);
+    const before = await modelStats(page);
+    const e0 = await center(end);
+    // Aller-retour le long du plan (Maj : sans accroche), 40 pas.
+    await page.keyboard.down("Shift");
+    await page.mouse.move(e0.x, e0.y);
+    await page.mouse.down();
+    await page.mouse.move(e0.x + 40, e0.y - 30, { steps: 20 });
+    await page.mouse.move(e0.x - 30, e0.y + 20, { steps: 20 });
+    await expect
+      .poll(async () => (await modelStats(page)).previewsPublished)
+      .toBeGreaterThan(before.previewsPublished);
+    // Un aperçu avec tracé est affiché (pas un aperçu en échec), et la poignée l'a suivi.
+    await expect(page.getByTestId("plan-conflicts-status"), name).toHaveAttribute(
+      "data-preview",
+      "true",
+    );
+    expect(
+      await end.evaluate((c) => `${c.getAttribute("cx")} ${c.getAttribute("cy")}`),
+      name,
+    ).not.toBe(at0);
+    expect((await modelStats(page)).builds, name).toBe(before.builds);
+    await page.mouse.up();
+    await page.keyboard.up("Shift");
+    await settle(page);
+    const after = await modelStats(page);
+    expect(after.previews, name).toBeGreaterThan(before.previews);
+    expect(after.builds - before.builds, name).toBe(1);
+    expect(
+      await end.evaluate((c) => `${c.getAttribute("cx")} ${c.getAttribute("cy")}`),
+      name,
+    ).not.toBe(at0);
+    const tasks = await takeLongTasks(page);
+    const over = overBudget(tasks);
+    expect(over, `${name}\n${describeTasks(over, tasks)}`).toEqual([]);
+  }
 });

@@ -4,8 +4,10 @@
 export {
   EMPTY_LAYOUT,
   buildModel,
+  buildPlanPreview,
   clearModelCache,
   mergeStructureChecks,
   modelCacheStats,
   type BuildModelOptions,
+  type PlanPreview,
 } from "./build.js";

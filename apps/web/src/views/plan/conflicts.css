@@ -1,0 +1,44 @@
+/* Calque des conflits interactif de l'éditeur de plan (ADR-0010, sous-lot 4c). Les zones
+   dessinées laissent passer le pointeur (`planSite.css`) ; les zones cliquables, invisibles,
+   sont sous l'escalier et le site (règle d'empilement : `ConflictLayer.tsx`). */
+.plan-editor__conflict-hit {
+  fill: transparent;
+  stroke: none;
+  pointer-events: fill;
+  cursor: pointer;
+}
+
+.plan-editor__conflict-hit:focus-visible {
+  outline: none;
+  stroke: var(--focus);
+  stroke-width: 3px;
+}
+
+/* Bulle d'un conflit (survol ou focus), au-dessus du plan. */
+.plan-editor__tooltip {
+  position: absolute;
+  z-index: 2;
+  max-width: min(22rem, calc(100% - 16px));
+  padding: 0.35rem 0.55rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--panel);
+  color: var(--text);
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--text) 18%, transparent);
+  font-size: 0.85rem;
+  line-height: 1.3;
+  pointer-events: none;
+  transform: translate(-50%, calc(-100% - 10px));
+}
+
+.plan-editor__tooltip[data-severity="erreur"] {
+  border-color: var(--danger);
+}
+
+.plan-editor__tooltip[data-severity="avertissement"] {
+  border-color: var(--warn);
+}
+
+.plan-editor__tooltip[data-severity="conseil"] {
+  border-color: var(--accent);
+}

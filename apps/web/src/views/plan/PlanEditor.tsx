@@ -22,6 +22,16 @@
  * l'élément) ou sa poignée centrale, et pivote par sa poignée décalée ou R / Maj+R (±15°, sens
  * trigonométrique vu de dessus) ; un tronçon ou une jonction sélectionnés montrent leurs
  * poignées. Un glisser = une entrée d'historique ; Échap pendant le glisser l'annule.
+ *
+ * Retour en direct (sous-lot 4c, `planPreview.ts`) : pendant un déplacement ou une rotation, le
+ * dernier dessin est reporté au placement courant (transformation SVG, aucun calcul) ; pendant
+ * les autres glissers, le dernier aperçu reçu du worker (tracé, nez, conflits géométriques)
+ * remplace celui du modèle, et les poignées le suivent ; au relâchement, un seul modèle complet.
+ * Pendant un report (déplacement, rotation), les conflits liés au site sont masqués.
+ * Calque des conflits interactif : bulle au survol d'une zone ou au focus de son contour, clic
+ * dans une zone hors de l'escalier et du site pour sélectionner l'élément visé (règle
+ * d'empilement : `ConflictLayer`), liste annoncée (`aria-live`) quand le modèle complet change,
+ * jamais pendant un geste.
  */
 import {
   buildSnapIndex,
@@ -36,6 +46,7 @@ import {
   withoutWall,
   type Model,
   type Project,
+  type SiteConflict,
   type SnapHit,
   type Vec2,
 } from "@blondel/core";
@@ -55,7 +66,7 @@ import { formatNumber } from "../../i18n/locale.js";
 import { useT } from "../../i18n/useT.js";
 import { rotateStairBy } from "../../lib/planDrag.js";
 import { ROTATE_KEY_STEP_DEG } from "../../lib/planErgonomics.js";
-import { appStore, useApp, useModel } from "../../store/appStore.js";
+import { appStore, useApp, useModel, useModelState } from "../../store/appStore.js";
 import {
   PLAN_TOOL_AVAILABLE,
   type PlanEditorTool,
@@ -89,9 +100,10 @@ import {
   type ViewBox,
   type WallTraceMode,
 } from "../planSiteGeometry.js";
-import { ConflictLayer } from "./ConflictLayer.js";
+import { ConflictHitLayer, ConflictLayer } from "./ConflictLayer.js";
 import { HandleLayer, snapMessage } from "./HandleLayer.js";
 import { parsePlanSelection, planSelectionKey } from "./planEditorGeometry.js";
+import { conflictAt, conflictsAnnouncement, conflictText, planDisplay } from "./planPreview.js";
 import { selectionLabel, type SelectContext } from "./selectable.js";
 import { SiteLayer } from "./SiteLayer.js";
 import { StairLayer } from "./StairLayer.js";
@@ -130,10 +142,19 @@ function commit(recipe: (p: Project) => Project): Note | null {
   return r.ok ? null : (r.issues[0] ?? msg("ui.plan.site.refused"));
 }
 
-/** Élément sélectionnable sous la cible d'un événement (attribut `data-plan-select`). */
-function selectionTarget(target: EventTarget | null) {
+/**
+ * Élément sélectionnable sous la cible d'un événement : attribut `data-plan-select` d'un élément
+ * du plan (`fromConflict` faux), ou `data-plan-target` d'une zone de conflit (élément visé par le
+ * conflit, `fromConflict` vrai : la zone n'est pas l'élément, un glisser y déplace la vue).
+ */
+function selectionTarget(
+  target: EventTarget | null,
+): { readonly hit: PlanSelection; readonly fromConflict: boolean } | null {
   if (!(target instanceof Element)) return null;
-  return parsePlanSelection(target.closest("[data-plan-select]")?.getAttribute("data-plan-select"));
+  const el = target.closest("[data-plan-select], [data-plan-target]");
+  const own = el?.getAttribute("data-plan-select");
+  const hit = parsePlanSelection(own ?? el?.getAttribute("data-plan-target"));
+  return hit ? { hit, fromConflict: own == null } : null;
 }
 
 export function PlanEditor({ model }: { model: Model }) {
@@ -171,6 +192,27 @@ export function PlanEditor({ model }: { model: Model }) {
     gesture?: boolean;
   } | null>(null);
   const modelProject = useModel().project;
+  const planPreview = useModelState((s) => s.preview);
+  const gesture = useModelState((s) => s.gesture);
+  // Dessin des calques escalier, conflits et poignées : modèle complet ou dernier aperçu,
+  // reporté au placement courant (retour en direct, sous-lot 4c).
+  const display = useMemo(
+    () => planDisplay(model, modelProject, planPreview, project),
+    [model, modelProject, planPreview, project],
+  );
+  const shownConflicts = display.model.siteFit;
+  /** Bulle d'un conflit : conflit montré et position dans le cadre du plan (px). */
+  const [tip, setTip] = useState<{
+    readonly conflict: SiteConflict;
+    readonly x: number;
+    readonly y: number;
+    /** Survol (masquée quand le pointeur quitte le plan) ou focus clavier d'une zone. */
+    readonly source: "hover" | "focus";
+  } | null>(null);
+  // Liste des conflits annoncée quand le modèle complet change ; figée pendant un geste.
+  const conflictsStatus = useMemo(() => conflictsAnnouncement(model.siteFit), [model.siteFit]);
+  const announced = useRef(conflictsStatus);
+  if (gesture === null) announced.current = conflictsStatus;
 
   const aspect = size.w / Math.max(1, size.h);
   const fitted = useMemo(
@@ -328,10 +370,14 @@ export function PlanEditor({ model }: { model: Model }) {
     if (tool === "select") {
       // Sélection au relâché (clic) ; un glisser déplace la vue, même commencé sur un élément,
       // sauf sur l'emprise de l'escalier sélectionné, qui se déplace alors.
-      const hit = selectionTarget(e.target);
+      const under = selectionTarget(e.target);
+      const hit = under?.hit ?? null;
       startPan(e, { hit });
+      // Emprise de l'escalier seulement (`data-plan-select`) : une zone de conflit qui vise
+      // l'escalier couvre aussi du sol libre, où un glisser déplace la vue.
       const onStair =
         selection?.kind === "stair" &&
+        under?.fromConflict === false &&
         (hit?.kind === "stair" || hit?.kind === "section" || hit?.kind === "junction");
       const at = onStair ? toSite(e.clientX, e.clientY) : null;
       if (pan.current && at) pan.current.moveStair = at;
@@ -343,14 +389,52 @@ export function PlanEditor({ model }: { model: Model }) {
     act(hit?.point ?? raw);
   };
 
+  /** Bulle du conflit sous le pointeur (outil Sélectionner, hors glisser). */
+  const hoverTip = (p: Vec2 | null, clientX: number, clientY: number): void => {
+    const box = boxRef.current?.getBoundingClientRect();
+    const shown =
+      display.source && display.transform
+        ? { from: display.source.stair.placement, to: project.stair.placement }
+        : null;
+    const i = p && box && tool === "select" ? conflictAt(shownConflicts, p, shown) : -1;
+    const conflict = i >= 0 ? shownConflicts?.[i] : undefined;
+    if (!conflict || !box) {
+      if (tip?.source === "hover") setTip(null);
+      return;
+    }
+    setTip({ conflict, x: clientX - box.left, y: clientY - box.top, source: "hover" });
+  };
+
+  /** Bulle au focus clavier du contour d'un conflit. */
+  const focusTip = useCallback(
+    (index: number | null, el: SVGElement | null): void => {
+      const box = boxRef.current?.getBoundingClientRect();
+      const conflict = index !== null ? shownConflicts?.[index] : undefined;
+      if (!conflict || !el || !box) {
+        setTip(null);
+        return;
+      }
+      const r = el.getBoundingClientRect();
+      setTip({
+        conflict,
+        x: r.left + r.width / 2 - box.left,
+        y: r.top - box.top,
+        source: "focus",
+      });
+    },
+    [shownConflicts],
+  );
+
   const onPointerMove = (e: PointerEvent<SVGSVGElement>): void => {
     if (drag.isActive()) {
+      if (tip) setTip(null);
       const p = toSite(e.clientX, e.clientY);
       if (p) drag.move(p, e.shiftKey);
       return;
     }
     const start = pan.current;
     if (start) {
+      if (tip && start.moved) setTip(null);
       const dx = e.clientX - start.x;
       const dy = e.clientY - start.y;
       if (!start.moved && Math.hypot(dx, dy) < CLICK_SLOP_PX) return;
@@ -380,6 +464,7 @@ export function PlanEditor({ model }: { model: Model }) {
         ? snapPoint(index, raw, SNAP_RADIUS_PX * mmPerPx)
         : null;
     setCursor({ raw, snap });
+    hoverTip(raw, e.clientX, e.clientY);
   };
 
   const onPointerUp = (): void => {
@@ -431,10 +516,10 @@ export function PlanEditor({ model }: { model: Model }) {
         error ? { kind: "error", text: msg("ui.plan.editor.handle.refused", { error }) } : null,
       );
     } else if ((e.key === "Enter" || e.key === " ") && tool === "select") {
-      const hit = selectionTarget(e.target);
-      if (hit) {
+      const under = selectionTarget(e.target);
+      if (under) {
         e.preventDefault();
-        selectPlanElement(hit);
+        selectPlanElement(under.hit);
       }
     } else if (e.key === "Enter" && tool === "opening" && draft.length >= 3) {
       e.preventDefault();
@@ -535,16 +620,28 @@ export function PlanEditor({ model }: { model: Model }) {
             onPointerUp={onPointerUp}
             onPointerCancel={onPointerCancel}
             onLostPointerCapture={onPointerCancel}
-            onPointerLeave={() => setCursor(null)}
+            onPointerLeave={() => {
+              setCursor(null);
+              if (tip?.source === "hover") setTip(null);
+            }}
           >
             <g transform="scale(1,-1)">
               <UnderlayLayer underlay={underlay} />
-              <StairLayer model={model} ctx={ctx} />
+              {tool === "select" ? (
+                <ConflictHitLayer
+                  conflicts={shownConflicts}
+                  site={site}
+                  transform={display.transform}
+                  onFocusConflict={focusTip}
+                />
+              ) : null}
+              <StairLayer model={display.model} ctx={ctx} transform={display.transform} />
               <SiteLayer site={site} ctx={ctx} markerR={markerR} />
-              <ConflictLayer conflicts={model.siteFit} />
+              <ConflictLayer conflicts={shownConflicts} transform={display.transform} />
               <HandleLayer
-                model={model}
-                layoutProject={modelProject}
+                model={display.model}
+                layoutProject={display.source}
+                transform={display.transform}
                 project={project}
                 selection={selection}
                 active={tool === "select"}
@@ -605,6 +702,20 @@ export function PlanEditor({ model }: { model: Model }) {
               ) : null}
             </g>
           </svg>
+          {tip && gesture === null && shownConflicts?.includes(tip.conflict) ? (
+            <div
+              className="plan-editor__tooltip"
+              role="tooltip"
+              data-testid="plan-conflict-tooltip"
+              data-severity={tip.conflict.severity}
+              style={{
+                left: Math.min(Math.max(tip.x, 0), size.w),
+                top: Math.max(tip.y, 0),
+              }}
+            >
+              {tr.t(conflictText(tip.conflict))}
+            </div>
+          ) : null}
           <p className="plan-site__status" aria-live="polite">
             {target
               ? `${cursor?.snap ? tr.t("ui.plan.site.status.snap", { snap: msg(SNAP_LABELS[cursor.snap.kind]) }) : ""}${tr.t("ui.plan.site.status.coords", { x: fmt(target.x, tr.locale), y: fmt(target.y, tr.locale) })}`
@@ -623,6 +734,14 @@ export function PlanEditor({ model }: { model: Model }) {
                 : tr.t("ui.plan.editor.selection.none")}
             </p>
           ) : null}
+          <p
+            className="visually-hidden"
+            aria-live="polite"
+            data-testid="plan-conflicts-status"
+            {...(display.previewing ? { "data-preview": "true" } : {})}
+          >
+            {tr.t(announced.current)}
+          </p>
           <p className="plan-editor__drag-status" aria-live="polite" data-testid="plan-drag-status">
             {drag.notice?.kind === "snap"
               ? tr.t(snapMessage(drag.notice.snap, (n) => fmt(n, tr.locale)))

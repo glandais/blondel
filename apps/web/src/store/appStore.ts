@@ -18,7 +18,13 @@ import { variantsFor } from "../lib/variants.js";
 import { withWorkshopRates } from "../lib/workshopRates.js";
 import { browserWorker, createJobExec } from "../model/workerClient.js";
 import { AUTOSAVE_KEY, browserStorage } from "./persistence.js";
-import { createModelService, type CompareView, type ModelView } from "./modelStore.js";
+import {
+  createModelService,
+  type CompareView,
+  type ModelState,
+  type ModelStats,
+  type ModelView,
+} from "./modelStore.js";
 import { createJourneyStore, linkJourneyToProject, type JourneyState } from "./journeyStore.js";
 import { createProjectStore, type AppState } from "./projectStore.js";
 import { createWorkshopStore, type WorkshopState } from "./workshopStore.js";
@@ -101,12 +107,24 @@ appStore.subscribe((s, prev) => {
   if (s.project !== prev.project) modelService.request(s.project);
 });
 
+// Compteurs des calculs pour les tests de bout en bout (navigateur piloté seulement) : aperçus
+// pendant un glisser de l'éditeur de plan, un seul modèle complet au relâchement.
+if (typeof window !== "undefined" && typeof navigator !== "undefined" && navigator.webdriver) {
+  (window as Window & { __blondelModelStats?: () => ModelStats }).__blondelModelStats = () =>
+    modelService.stats();
+}
+
 /**
  * Dernier modèle calculé. Pendant un calcul (`pending`), c'est celui du projet précédent :
  * `project` indique le projet dont il est issu.
  */
 export function useModel(): ModelView {
   return useStore(modelService.store, (s) => s.model);
+}
+
+/** Lecture de l'état du service de calcul (aperçu et geste de l'éditeur de plan). */
+export function useModelState<T>(selector: (s: ModelState) => T): T {
+  return useStore(modelService.store, selector);
 }
 
 /**
