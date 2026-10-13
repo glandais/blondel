@@ -50,7 +50,7 @@ Le sélecteur « Préréglage » du menu du projet (nom du projet, dans la barre
 | Grand escalier d'ERP                                | emmarchement de 1 400 mm, mains courantes des deux côtés, contextes ERP neuf                                                                        |
 | Hélicoïdal à jour central                           | marches portées par deux limons hélicoïdaux roulés autour d'un jour central                                                                         |
 | Quart tournant sur limon central débillardé         | limon central en caisson débillardé sous l'axe de l'emmarchement, consoles soudées, marches chêne, garde-corps verre                                |
-| Quart tournant sur limon central bois lamellé-collé | crémaillère centrale en lamellé-collé cintré sur moule, marches chêne entaillées et fixées par tire-fonds, platines à âme noyée, garde-corps vitré  |
+| Hélicoïdal sur limon central bois lamellé-collé     | hélicoïdal à grand rayon autour d'un jour, crémaillère cintrée sur moule, marches chêne entaillées et fixées par tire-fonds, garde-corps vitré      |
 | Escalier droit sur limon central bois lamellé-collé | poutre centrale droite en lamellé-collé, marches chêne clair de 80 mm sans contremarche fixées par tire-fonds, sabots acier, verre extra-clair      |
 | Escalier droit à crémaillères chêne                 | deux crémaillères en chêne, marches posées sur les dents sans contremarche, balustres chêne                                                         |
 | Tracé libre à 60°, chêne                            | tracé libre : jonction à 60° balancée à jour en pan coupé, palier droit, limons à la française et balustres en chêne                                |

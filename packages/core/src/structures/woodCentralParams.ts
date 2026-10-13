@@ -271,6 +271,21 @@ export const WoodCentralParamsSchema = z.object({
        * la planche par la machine à abouter), **à valider** par un fabricant.
        */
       boardLengthMargin: mmNonNeg.default(50),
+      /**
+       * Couches empilées : épaisseur finie minimale d'une couche bornée par un joint de colle
+       * **imposé** (`StackedBeamShape.jointLevels` : dessus voulu du logement de l'âme de pied,
+       * QUESTIONS A38 (12)), mm (QUESTIONS A39 (d), décision du 2026-10-13). Un joint imposé qui
+       * laisserait, entre lui et le joint ou l'assise voisine, une couche plus mince est
+       * abandonné, avec une remarque : l'âme de pied s'arrête alors au joint de colle en dessous
+       * (âme moins profonde). 20 : ordre de grandeur sans source (aucune épaisseur minimale de
+       * couche lue, C §1.11 ; EN 14080 non lue), **à valider** par un atelier ou un fabricant de
+       * lamellé-collé. 0 : aucun minimum (seule la garde technique `MIN_LAYER`, comportement
+       * A38). Sans effet sur les couches minces qui existent sans joint imposé (calées sur les
+       * assises, partage autour des perçages). Une valeur supérieure à l'épaisseur maximale des
+       * couches (`section.layerThickness`) abandonne toujours le joint imposé, donc désactive
+       * A38 (12) : la remarque d'abandon affiche alors ce minimum.
+       */
+      minLayerThickness: mmNonNeg.default(20),
     })
     .prefault({}),
   notch: z

@@ -13,8 +13,11 @@
  *   tracé sur les gabarits des couches.
  * - joint de colle imposé sur le dessus voulu du logement de l'âme de pied (épaisseur de
  *   platine + `anchors.plate.webDepth` + jeu, QUESTIONS A38 (12), décision du 2026-10-11) : l'âme
- *   garde sa profondeur partout où les assises ne la bornent pas (120 mm sur les préréglages
- *   cintrés par défaut, 73 mm avant A38).
+ *   garde sa profondeur partout où les assises ne la bornent pas, quand le joint est retenu ;
+ *   épaisseur minimale de couche `section.minLayerThickness` (QUESTIONS A39 (d), décision du
+ *   2026-10-13) : sur les préréglages cintrés par défaut, le joint de 129 mm laisserait une
+ *   couche de 11 mm sous l'assise de M1, il est abandonné et l'âme revient à 73 mm (120 mm avec
+ *   A38 seul).
  * Le plan réel de l'âme (`BeamKerf.line`) est vérifié contre le solide de l'âme dans
  * `woodCentralPlates.test.ts`.
  */
@@ -229,12 +232,31 @@ describe("préréglages cintrés par défaut : âme de pied arrêtée sur les jo
         expect(top - y).toBeGreaterThanOrEqual(hE - 0.5);
       }
       expect(expectHousings(beam, checks, params)).toEqual({ holeIssues: 0, kerfIssues: 0 });
-      // Écart voulu (QUESTIONS A38 (12), décision du 2026-10-11) : un joint de colle est calé
-      // sur le dessus voulu du logement (tp + webDepth + c) ; l'âme garde ses 120 mm (73 mm
-      // avant A38, arrêt au joint en dessous, A37 (8)).
+      // Écart voulu (QUESTIONS A39 (d), décision du 2026-10-13) : le joint imposé sur le dessus
+      // voulu du logement (tp + webDepth + c = 129 mm, A38 (12)) laisserait sous l'assise de M1
+      // (140 mm) une couche de 11 mm, plus mince que `section.minLayerThickness` (20 mm) : il est
+      // abandonné avec une remarque, l'âme est arrêtée au joint en dessous (82 mm), soit 73 mm
+      // de haut comme avant A38 (120 mm avec A38 seul).
       const tp = params.anchors.plate.thickness;
-      expect(top).toBeCloseTo(params.anchors.plate.webDepth, 6);
-      expect(onLevel(layerLevels(beam), tp + params.anchors.plate.webDepth + C)).toBe(true);
+      const wanted = tp + params.anchors.plate.webDepth + C;
+      const levels = layerLevels(beam);
+      expect(onLevel(levels, wanted)).toBe(false);
+      const below = Math.max(...levels.filter((z) => z <= wanted));
+      expect(top).toBeCloseTo(below - C - tp, 6);
+      expect(top).toBeCloseTo(73, 6);
+      const thin = beam.notes.find(
+        (n) => n.key === "structure.woodCentral.note.layerJointLevelThin",
+      );
+      expect(thin?.params).toMatchObject({
+        z: { num: wanted },
+        thickness: { num: 11 },
+        z0: { num: wanted },
+        z1: { num: 140 },
+        min: { num: params.section.minLayerThickness },
+      });
+      // Plus aucune couche de 11 mm : la plus mince fait au moins le minimum.
+      const thinnest = Math.min(...beam.stacked!.layers.map((l) => l.z1 - l.z0));
+      expect(thinnest).toBeGreaterThanOrEqual(params.section.minLayerThickness - 1e-9);
     });
   }
 });

@@ -67,7 +67,9 @@ const EXPECTED: Readonly<Record<string, readonly string[]>> = {
   // (jonction à 105°), limon au ras de la trémie (avertissement F15 (2), comme les exemples à
   // limons).
   "demo-cage-room": ["headroom conseil ECHAPPEE_RECO_PRIVATIF"],
-  "demo-central-glulam": ["headroom conseil ECHAPPEE_RECO_PRIVATIF"],
+  // Hélicoïdal à grand rayon (QUESTIONS A39) de moins d'un tour : aucune marche au-dessus, trémie
+  // couvrante, échappée non limitée (`headroomUnlimited`), plus de conseil ECHAPPEE_RECO_PRIVATIF.
+  "demo-central-glulam": [],
   "demo-central-wreathed": ["headroom conseil ECHAPPEE_RECO_PRIVATIF"],
   "demo-erp-grand": [
     "headroom conseil ECHAPPEE_RECO_PRIVATIF",

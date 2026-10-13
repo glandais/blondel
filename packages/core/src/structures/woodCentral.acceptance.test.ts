@@ -33,6 +33,7 @@ import { serializeProject } from "../project/serialize.js";
 import { fcbaTable, requiredCentralResidual } from "./fcba.js";
 import { CENTRAL_RULES } from "./steelCentral.js";
 import { WOOD_CENTRAL_RULES } from "./woodCentral.js";
+import { WOOD_CENTRAL_PLATE_FOOT_WEB_ID } from "./woodCentralPlates.js";
 import "./index.js";
 
 const EXAMPLES_DIR = resolve(dirname(fileURLToPath(import.meta.url)), "../../../../examples");
@@ -394,6 +395,48 @@ describe("exemples j5c : limon central bois", () => {
       for (const p of m.parts.filter((q) => q.componentOf !== undefined)) {
         expect(rootAssemblyId(m.parts, p.id)).toBe("wood-central-beam");
       }
+    },
+  );
+});
+
+describe("épaisseur minimale de couche au joint imposé de l'âme de pied (QUESTIONS A39 (d))", () => {
+  /** Hauteur de l'âme de pied AP1 (gabarit), mm. */
+  const footWebHeight = (m: Model): number => {
+    const web = m.parts.find((p) => p.id === WOOD_CENTRAL_PLATE_FOOT_WEB_ID);
+    const ys = web!.flat!.outline.outer.map((q) => q.y);
+    return Math.max(...ys) - Math.min(...ys);
+  };
+  const THIN = "structure.woodCentral.note.layerJointLevelThin";
+
+  it("quart tournant par défaut (couches empilées, platine) : plus de couche de 11 mm, âme AP1 de 73 mm", () => {
+    // Écart voulu (décision du 2026-10-13) : le joint imposé à z = 8 + 120 + 1 = 129 mm
+    // laisserait sous l'assise de M1 (140 mm) une couche de 11 mm, sous le minimum de 20 mm
+    // (`section.minLayerThickness`, à valider) : abandonné, âme arrêtée au joint de 82 mm,
+    // soit 73 mm de haut (120 mm avec A38 seul, 73 mm avant A38).
+    const m = buildModel(
+      deepMerge(createProject("quarter-left"), {
+        stair: { structure: { kind: "wood-central", params: {} } },
+      }),
+      { memo: false },
+    );
+    expect(frList(m.errors)).toEqual([]);
+    const note = (m.notes ?? []).find((n) => n.key === THIN);
+    expect(note?.params).toMatchObject({ z: { num: 129 }, thickness: { num: 11 } });
+    expect(footWebHeight(m)).toBeCloseTo(73, 6);
+    // Aucun constat bloquant nouveau : seul le prédimensionnement indicatif (PRECHECK_*).
+    const blocking = m.compliance.results
+      .filter((r) => r.status === "violation" && r.severity === "bloquant")
+      .map((r) => r.ruleId);
+    expect(blocking.filter((id) => !id.startsWith("PRECHECK_"))).toEqual([]);
+    expect(results(m, "FAB_PLATINE_AME_NOYEE").filter((r) => r.status !== "ok")).toEqual([]);
+  });
+
+  it.each([J5C_WOOD_QUARTER, J5C_WOOD_HELICAL])(
+    "%s : joint imposé gardé (couches voisines d'au moins 20 mm), âme AP1 de 120 mm inchangée",
+    (file) => {
+      const m = buildModel(load(file), { memo: false });
+      expect((m.notes ?? []).map((n) => n.key)).not.toContain(THIN);
+      expect(footWebHeight(m)).toBeCloseTo(120, 6);
     },
   );
 });

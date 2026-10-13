@@ -167,12 +167,20 @@ describe("préréglages de démonstration", () => {
     expect(cm.parts.some((p) => p.id.startsWith("central-web-left-"))).toBe(true);
     expect(cm.parts.some((p) => p.id.endsWith("-central-bearing"))).toBe(true);
     expect(cm.executionClass).toBe("EXC2");
-    // Limon central bois (QUESTIONS A29 ; A33 (e) (f), A34 (c)) : lamellé-collé cintré sur moule
-    // (imposé : les couches empilées, choix `auto` pour b = 88 mm, portent deux bloquants de
-    // prédimensionnement, A35 (j)), platines à âme noyée sur la poutre cintrée.
+    // Limon central bois (QUESTIONS A29 ; A33 (e) (f), A34 (c) ; A39 du 2026-10-13) : hélicoïdal
+    // à grand rayon, lamellé-collé cintré sur moule (imposé : les couches empilées restent
+    // montrées par `j5c-limon-central-bois-helicoidal`), platines à âme noyée sur la poutre
+    // cintrée, reste sous entaille saisi (au repli de 180 mm, deux bloquants `PRECHECK_*`).
     const glulam = createDemoProject("demo-central-glulam");
-    expect(glulam.name).toBe("Quart tournant sur limon central bois lamellé-collé");
-    expect(glulam.stair.structure.kind).toBe("wood-central");
+    expect(glulam.name).toBe("Hélicoïdal sur limon central bois lamellé-collé");
+    expect(glulam.stair.layout.kind).toBe("helical");
+    expect(glulam.stair.layout.kind === "helical" && glulam.stair.layout.core.kind).toBe("well");
+    expect(glulam.stair.treads.risers).toBe("none");
+    const glulamStructure = glulam.stair.structure;
+    expect(glulamStructure.kind).toBe("wood-central");
+    expect(glulamStructure.kind === "wood-central" && glulamStructure.params.section).toMatchObject(
+      { kind: "glulam", curvedMethod: "mould", residual: 250 },
+    );
     const gm = buildModel(glulam, { memo: false });
     expect(gm.parts.some((p) => p.id === "wood-central-beam" && p.mark === "LC1")).toBe(true);
     expect(gm.parts.some((p) => p.componentOf === "wood-central-beam")).toBe(false);
@@ -181,6 +189,11 @@ describe("préréglages de démonstration", () => {
     expect(gm.parts.some((p) => p.id.startsWith("wood-central-shoe-"))).toBe(false);
     const kr = gm.compliance.results.filter((r) => r.ruleId === "LAMELLE_CINTRE_KR");
     expect(kr.map((r) => r.status)).toEqual(["ok"]);
+    // Lamelles `auto` t = ⌊r_in / 240⌋ = 4 mm (r_in = 1 106 mm), 22 lamelles de 4 mm pour
+    // b = 88 mm, au lieu de 1 mm sur l'ancien quart tournant (r_in = 406 mm).
+    expect(
+      gm.autoValues?.["stair.structure.params.section.lamellaThickness"],
+    ).toBeGreaterThanOrEqual(4);
     // Escalier droit sur limon central bois : poutre droite, sabots en U (ancrage `auto`).
     const straightCentral = createDemoProject("demo-straight-central-glulam");
     expect(straightCentral.stair.layout.turns).toEqual([]);

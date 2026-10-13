@@ -544,6 +544,26 @@ describe("suites du limon central (A32 a, A33, A34 du 2026-10-09)", () => {
     );
   });
 
+  it("décision A39 (d) : épaisseur minimale d'une couche au joint de l'âme de pied ◆", () => {
+    const quarter = woodFields("quarter-left");
+    expect(at(quarter, "section.minLayerThickness")).toMatchObject({
+      unit: "mm",
+      toValidateHint: true,
+      group: "section",
+      label:
+        "Épaisseur minimale d'une couche sous ou sur un joint de colle imposé (dessus de l'âme de pied)",
+    });
+    const en = woodFields("quarter-left", "en");
+    expect(at(en, "section.minLayerThickness")?.label).toBe(
+      "Minimum thickness of a layer next to an imposed glue line (top of the foot web)",
+    );
+    expect(fieldText("wood-central", ["section", "minLayerThickness"])).toMatchObject({
+      label: "ui.param.woodCentral.section.minLayerThickness.label",
+      unit: "mm",
+      hint: "ui.param.toValidate",
+    });
+  });
+
   it("décisions A35 : pente de fil, tire-fonds, âme de pied, réduction de Hankinson ◆", () => {
     const f = woodFields("quarter-left");
     expect(at(f, "section.maxGrainSlope")).toMatchObject({

@@ -1323,9 +1323,12 @@ describe("joints de colle imposés (A38 (12)) : dessus voulu de l'âme de pied",
     seatLevels: seats,
     jointLevels: levels,
   });
+  // Comportement A38 exact : sans épaisseur minimale de couche au joint imposé
+  // (`section.minLayerThickness` = 0, QUESTIONS A39 (d) ; le minimum est éprouvé dans
+  // `woodCentralLayers.minLayer.test.ts`).
   const buildFlat = (shape: StackedBeamShape, tMax: Mm, holes: readonly ShoeBeamHole[]) => {
     const ctx = QUARTER_CTX();
-    const params = woodCentralParams({ section: { layerThickness: tMax } });
+    const params = woodCentralParams({ section: { layerThickness: tMax, minLayerThickness: 0 } });
     const checks = new CheckCollector(ctx.project, ctx.stepping);
     const r = buildStackedLayers({
       params,
@@ -1364,7 +1367,7 @@ describe("joints de colle imposés (A38 (12)) : dessus voulu de l'âme de pied",
     expect(oracle).toEqual(buildFlat(flatShape(8, [160], []), 75, [footPin(56, 12)]).oracle);
     // À moins de 1 mm de l'assise ou de la base : fusionné, sans remarque.
     const merged = resolveImposedLevels(8, 160, [160], [159.5, 8.4, 200, Number.NaN], []);
-    expect(merged).toEqual({ levels: [160], dropped: [] });
+    expect(merged).toEqual({ levels: [160], imposed: [], dropped: [] });
   });
 
   it("propriété : joint imposé hors des zones r, sinon abandonné ; broches centrées ; oracle = empilement", () => {
@@ -1397,7 +1400,12 @@ describe("joints de colle imposés (A38 (12)) : dessus voulu de l'âme de pied",
             expect(imposed.dropped).toEqual([]);
           } else if (inR) {
             expect(imposed.dropped).toHaveLength(1);
-            expect(imposed.dropped[0]).toMatchObject({ mark: "AP1", z: level, min: r });
+            expect(imposed.dropped[0]).toMatchObject({
+              reason: "hole",
+              mark: "AP1",
+              z: level,
+              min: r,
+            });
             expect(has(level)).toBe(false);
           } else {
             expect(imposed.dropped).toEqual([]);

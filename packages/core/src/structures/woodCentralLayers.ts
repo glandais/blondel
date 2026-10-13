@@ -94,13 +94,21 @@
  * Joints de colle imposés (QUESTIONS A38 (12), décision du 2026-10-11) : les niveaux
  * `StackedBeamShape.jointLevels` (dessus voulu du logement de l'âme de pied d'une platine à âme
  * noyée : base + `anchors.plate.webDepth` + jeu, posé par la poutre) sont des niveaux d'assise de
- * plus (`resolveImposedLevels`, mêmes niveaux pour `layerBounds` dans `buildStackedLayers` et pour
- * l'oracle `stackedJointLevels`) : ignorés hors de ]base ; dessus], fusionnés avec une assise ou
- * la base à moins de la garde technique `MIN_LAYER` (l'assise prime), **abandonnés** s'ils
- * tombent dans la zone interdite d'un perçage (|niveau − z| < rayon + jeu, `HoleLevel.r`), avec
- * une remarque ; sinon joints de colle, les intervalles voisins étant partagés comme entre deux
- * assises (broches `centered` au milieu de leur couche, A36 (12) ; zone `reach` de la pince de
- * perçage de l'âme préférée, A37 (8)).
+ * plus (`resolveImposedLevels` puis `layerBounds`, réunis dans `stackedBounds`, seul calcul
+ * partagé par `buildStackedLayers` et l'oracle `stackedJointLevels`) : ignorés hors de
+ * ]base ; dessus], fusionnés avec une assise ou la base à moins de la garde technique `MIN_LAYER`
+ * (l'assise prime), **abandonnés** s'ils tombent dans la zone interdite d'un perçage
+ * (|niveau − z| < rayon + jeu, `HoleLevel.r`), avec une remarque ; sinon joints de colle, les
+ * intervalles voisins étant partagés comme entre deux assises (broches `centered` au milieu de
+ * leur couche, A36 (12) ; zone `reach` de la pince de perçage de l'âme préférée, A37 (8)).
+ * Épaisseur minimale (QUESTIONS A39 (d), décision du 2026-10-13) : un niveau imposé qui
+ * laisserait, entre lui et le joint, l'assise, la base ou le dessus voisin, une couche plus mince
+ * que `section.minLayerThickness` (20 mm par défaut, sans source, à valider ; écart au niveau
+ * voisin, puis couches des intervalles qui l'encadrent après partage et perçages, A39 (d)) est
+ * **abandonné**, avec la remarque `note.layerJointLevelThin` : l'âme de pied s'arrête alors au
+ * joint en dessous (A37 (8)), moins profonde. 0 : aucun minimum (comportement A38). Sans effet sur
+ * les couches minces qui existent sans joint imposé (calées sur les assises, partage autour des
+ * perçages).
  *
  * Couche composée, pièce intermédiaire (QUESTIONS A36 (9), décision du 2026-10-09) : une couche
  * de plusieurs planches est une pièce `wood-central-layer-<k>` / `LC1-<k>` composante de la
@@ -157,8 +165,11 @@
  *
  * Question résolue (C §1.11 [8] : « crans non coupés ») : joints calés sur les assises, A35 (g).
  * Sans source (QUESTIONS A37 (14), état gardé le 2026-10-10) : épaisseur minimale d'une couche
- * (garde technique `MIN_LAYER` seulement). La longueur minimale d'une planche est le paramètre
- * `section.minBoardLength` (`auto` = 2 × enture + marge, à valider, QUESTIONS A38 (4) (9)).
+ * calée sur les assises ou partagée autour des perçages (garde technique `MIN_LAYER` seulement) ;
+ * aucune couche plus mince que `section.minLayerThickness` n'est due à un joint imposé (A39 (d),
+ * à valider).
+ * La longueur minimale d'une planche est le paramètre `section.minBoardLength` (`auto` =
+ * 2 × enture + marge, à valider, QUESTIONS A38 (4) (9)).
  *
  * `buildStackedLayers` ne lève jamais : erreurs dans `errors`.
  */
@@ -327,8 +338,10 @@ export interface StackedBeamShape {
    * d'assise (`layerBounds`, `stackedJointLevels`) quand ils tombent dans ]base ; dessus[ ;
    * contraintes des perçages (broches au milieu de leur couche, A36 (12), pince de perçage de
    * l'âme `webEdge`, A37) respectées ; niveau abandonné, avec une remarque, s'il tombe dans la
-   * zone interdite d'un perçage (`resolveImposedLevels`). Absent : aucun (comportement antérieur
-   * à A38).
+   * zone interdite d'un perçage (`resolveImposedLevels`) ou s'il laisserait contre lui une couche
+   * plus mince que `section.minLayerThickness` (`stackedBounds`, QUESTIONS A39 (d), décision du
+   * 2026-10-13 ; l'âme s'arrête alors au joint en dessous). Absent : aucun (comportement
+   * antérieur à A38).
    */
   readonly jointLevels?: readonly Mm[];
 }
@@ -523,7 +536,8 @@ export function buildStackedLayers(input: StackedLayersInput): StackedLayersResu
  * Niveaux des joints de colle (bornes des couches, base et sommet compris, croissants) que
  * `buildStackedLayers` retiendrait avec les perçages horizontaux donnés (QUESTIONS A37 (8) et
  * (15), décisions du 2026-10-10) : même échantillonnage de la forme, même épaisseur t_max, mêmes
- * niveaux d'assise et même lecture des perçages (`holeLevelsOf`) que les couches, de sorte que
+ * niveaux d'assise, mêmes joints imposés (`stackedBounds`, `section.minLayerThickness`) et même
+ * lecture des perçages (`holeLevelsOf`) que les couches, de sorte que
  * les platines arrêtent leurs logements et centrent leurs broches sur les joints réels. La forme
  * (`beam`, sans `holes`) est échantillonnée une fois ; la fonction rendue ne lève jamais (liste
  * vide si la forme ou l'empilement sont dégénérés).
@@ -537,12 +551,20 @@ export function stackedJointLevels(
     if (!shape || !(t > 0)) return () => [];
     const clearance = input.profile.wood.clearance;
     const { baseZ, seatLevels = [], jointLevels = [] } = input.beam;
+    const minLayer = input.params.section.minLayerThickness;
     return (holes) => {
       try {
         const levels = holeLevelsOf(holes, clearance);
-        // Mêmes niveaux imposés que `buildStackedLayers` (A38 (12)).
-        const imposed = resolveImposedLevels(baseZ, shape.zTop, seatLevels, jointLevels, levels);
-        const { bounds } = layerBounds(baseZ, shape.zTop, t, imposed.levels, MAX_LAYERS, levels);
+        // Mêmes niveaux imposés que `buildStackedLayers` (A38 (12), A39 (d)).
+        const { bounds } = stackedBounds(
+          baseZ,
+          shape.zTop,
+          t,
+          seatLevels,
+          jointLevels,
+          levels,
+          minLayer,
+        );
         if (bounds.length === 0) return [];
         return [bounds[0]!.z0, ...bounds.map((b) => b.z1)];
       } catch {
@@ -554,29 +576,56 @@ export function stackedJointLevels(
   }
 }
 
-/** Niveau de joint imposé abandonné (QUESTIONS A38 (12)) : il couperait un perçage. */
-export interface DroppedJointLevel {
-  /** Altitude voulue du joint, mm. */
-  readonly z: Mm;
-  /** Repère du perçage le plus proche (remarque). */
-  readonly mark: string;
-  /** Altitude du centre de ce perçage, mm. */
-  readonly holeZ: Mm;
-  /** Distance exigée d'un joint au centre du perçage (`HoleLevel.r`), mm. */
-  readonly min: Mm;
-}
+/**
+ * Niveau de joint imposé abandonné : il couperait un perçage (`hole`, QUESTIONS A38 (12)), ou il
+ * laisserait une couche plus mince que `section.minLayerThickness` (`thin`, QUESTIONS A39 (d),
+ * décision du 2026-10-13).
+ */
+export type DroppedJointLevel =
+  | {
+      readonly reason: "hole";
+      /** Altitude voulue du joint, mm. */
+      readonly z: Mm;
+      /** Repère du perçage le plus proche (remarque). */
+      readonly mark: string;
+      /** Altitude du centre de ce perçage, mm. */
+      readonly holeZ: Mm;
+      /** Distance exigée d'un joint au centre du perçage (`HoleLevel.r`), mm. */
+      readonly min: Mm;
+    }
+  | {
+      readonly reason: "thin";
+      /** Altitude voulue du joint, mm. */
+      readonly z: Mm;
+      /**
+       * Bornes de la couche trop mince, mm : l'une est le niveau imposé quand la couche le touche,
+       * sinon deux joints du partage d'un intervalle voisin (perçages), A39 (d).
+       */
+      readonly z0: Mm;
+      readonly z1: Mm;
+      /** Épaisseur de cette couche, mm. */
+      readonly thickness: Mm;
+      /** Épaisseur minimale exigée (`section.minLayerThickness`), mm. */
+      readonly min: Mm;
+    };
 
 /**
- * Niveaux imposés aux joints de colle (QUESTIONS A35 (g) ; A38 (12), décision du 2026-10-11) :
- * assises, puis niveaux imposés en plus (`StackedBeamShape.jointLevels`, dessus voulu du
- * logement de l'âme de pied) retenus comme niveaux d'assise de plus, sauf :
+ * Niveaux imposés aux joints de colle (QUESTIONS A35 (g) ; A38 (12), décision du 2026-10-11 ;
+ * A39 (d), décision du 2026-10-13) : assises, puis niveaux imposés en plus
+ * (`StackedBeamShape.jointLevels`, dessus voulu du logement de l'âme de pied) retenus comme
+ * niveaux d'assise de plus, sauf :
  * - hors de ]base ; dessus] (ou non finis) : ignorés ;
  * - à moins de la garde technique `MIN_LAYER` de la base, d'une assise ou d'un niveau imposé déjà
  *   retenu : fusionnés avec lui (l'assise prime), sans remarque ;
  * - dans la zone interdite d'un perçage (|niveau − z| < `HoleLevel.r` = rayon + jeu, pas la zone
- *   élargie `reach`) : abandonnés (`dropped`, remarque de `buildStackedLayers`).
- * Fonction pure, partagée par `buildStackedLayers` et `stackedJointLevels` (mêmes joints) ; les
- * niveaux rendus sont triés et dédoublonnés par `layerBounds`.
+ *   élargie `reach`) : abandonnés (`reason: "hole"`, remarque de `buildStackedLayers`) ;
+ * - à moins de `minLayer` (`section.minLayerThickness`) du niveau voisin le plus proche, au-dessus
+ *   ou en dessous (base, assises, niveaux imposés déjà retenus, dessus `zTop`) : abandonnés
+ *   (`reason: "thin"`, A39 (d)) ; un écart égal au minimum est admis.
+ * `minLayer` = 0 : aucun minimum, comportement A38 exact. Fonction pure ; les niveaux rendus sont
+ * triés et dédoublonnés par `layerBounds`. `imposed` : niveaux imposés retenus. Les couches
+ * réellement voisines d'un niveau retenu (partage d'un intervalle, perçages) sont contrôlées par
+ * `stackedBounds`.
  */
 export function resolveImposedLevels(
   baseZ: Mm,
@@ -584,11 +633,17 @@ export function resolveImposedLevels(
   seatLevels: readonly Mm[],
   jointLevels: readonly Mm[],
   holes: readonly HoleLevel[],
-): { readonly levels: readonly Mm[]; readonly dropped: readonly DroppedJointLevel[] } {
-  if (jointLevels.length === 0) return { levels: seatLevels, dropped: [] };
+  minLayer: Mm = 0,
+): {
+  readonly levels: readonly Mm[];
+  readonly imposed: readonly Mm[];
+  readonly dropped: readonly DroppedJointLevel[];
+} {
+  if (jointLevels.length === 0) return { levels: seatLevels, imposed: [], dropped: [] };
   const inRange = (z: Mm): boolean => z > baseZ + LEVEL_EPS && z <= zTop + LEVEL_EPS;
   const fixed: Mm[] = [baseZ, ...seatLevels.filter((z) => Number.isFinite(z) && inRange(z))];
   const valid = holes.filter((h) => Number.isFinite(h.z) && Number.isFinite(h.r) && h.r > 0);
+  const thin = Number.isFinite(minLayer) && minLayer > 0 ? minLayer : 0;
   const kept: Mm[] = [];
   const dropped: DroppedJointLevel[] = [];
   const sorted = jointLevels.filter(Number.isFinite).sort((p, q) => p - q);
@@ -602,12 +657,103 @@ export function resolveImposedLevels(
       }
     }
     if (hit) {
-      dropped.push({ z, mark: hit.mark ?? "", holeZ: hit.z, min: hit.r });
+      dropped.push({ reason: "hole", z, mark: hit.mark ?? "", holeZ: hit.z, min: hit.r });
       continue;
+    }
+    if (thin > 0) {
+      // Voisin le plus proche (base, assises, niveaux retenus, dessus), A39 (d).
+      let neighbour: Mm | null = null;
+      for (const f of [...fixed, ...kept, zTop]) {
+        if (neighbour === null || Math.abs(f - z) < Math.abs(neighbour - z)) neighbour = f;
+      }
+      if (neighbour !== null && Math.abs(neighbour - z) < thin - CMP_EPS) {
+        dropped.push({
+          reason: "thin",
+          z,
+          z0: Math.min(z, neighbour),
+          z1: Math.max(z, neighbour),
+          thickness: Math.abs(neighbour - z),
+          min: thin,
+        });
+        continue;
+      }
     }
     kept.push(z);
   }
-  return { levels: [...seatLevels, ...kept], dropped };
+  return { levels: [...seatLevels, ...kept], imposed: kept, dropped };
+}
+
+/**
+ * Bornes des couches de l'empilement avec les joints imposés (QUESTIONS A38 (12) ; A39 (d),
+ * décision du 2026-10-13), seul calcul partagé par `buildStackedLayers` et l'oracle des platines
+ * `stackedJointLevels` (mêmes joints) : `resolveImposedLevels`, puis `layerBounds`. Le partage
+ * des deux intervalles voisins d'un niveau imposé retenu (entre les niveaux d'empilement qui
+ * l'encadrent : base, assises, autres niveaux imposés, sommet ; couches égales, joints écartés
+ * des perçages, broches au milieu de leur couche) peut encore laisser une couche plus mince que
+ * `minLayer` : contre le niveau, ou ailleurs dans ces intervalles quand le niveau la crée (le
+ * même empilement sans ce niveau n'y a pas de couche aussi mince). Le niveau est alors abandonné
+ * (`reason: "thin"`, bornes et épaisseur de la couche la plus mince) et l'empilement recalculé,
+ * au plus une fois par niveau imposé. Garantie : entre les niveaux qui encadrent un niveau
+ * imposé retenu, aucune couche n'est plus mince que `minLayer`, sauf celles qui le sont déjà
+ * sans ce niveau (et jamais contre lui). `minLayer` = 0 : `layerBounds` sur les niveaux de
+ * `resolveImposedLevels` (comportement A38). Ne lève pas sur des entrées finies.
+ */
+export function stackedBounds(
+  baseZ: Mm,
+  zTop: Mm,
+  tMax: Mm,
+  seatLevels: readonly Mm[],
+  jointLevels: readonly Mm[],
+  holes: readonly HoleLevel[],
+  minLayer: Mm = 0,
+  max: number = MAX_LAYERS,
+): {
+  readonly count: number;
+  readonly bounds: readonly LayerBound[];
+  readonly issues?: readonly HoleIssue[];
+  readonly dropped: readonly DroppedJointLevel[];
+} {
+  const thin = Number.isFinite(minLayer) && minLayer > 0 ? minLayer : 0;
+  const thinDropped: DroppedJointLevel[] = [];
+  let joints = [...jointLevels];
+  for (let round = 0; ; round++) {
+    const res = resolveImposedLevels(baseZ, zTop, seatLevels, joints, holes, thin);
+    const lb = layerBounds(baseZ, zTop, tMax, res.levels, max, holes);
+    // Couche la plus mince due à un niveau imposé retenu, dans les intervalles qui l'encadrent.
+    let worst: { z: Mm; z0: Mm; z1: Mm; thickness: Mm } | null = null;
+    if (thin > 0 && round <= jointLevels.length && lb.bounds.length > 0) {
+      for (const z of res.imposed) {
+        const others = res.levels.filter((l) => Math.abs(l - z) >= LEVEL_EPS);
+        // Niveaux d'empilement qui encadrent z (base en dessous, rien au-dessus : jusqu'au sommet).
+        let lo = baseZ;
+        let hi = Infinity;
+        for (const l of others) {
+          if (l < z && l > lo) lo = l;
+          if (l > z && l < hi) hi = l;
+        }
+        const within = (b: LayerBound): boolean => b.z0 > lo - LEVEL_EPS && b.z1 < hi + LEVEL_EPS;
+        const near = lb.bounds.filter(within);
+        if (!near.some((b) => b.z1 - b.z0 < thin - CMP_EPS)) continue;
+        // Même empilement sans ce niveau : couche la plus mince entre lo et hi.
+        const without = layerBounds(baseZ, zTop, tMax, others, max, holes).bounds.filter(within);
+        const floor = without.length > 0 ? Math.min(...without.map((b) => b.z1 - b.z0)) : Infinity;
+        for (const { z0, z1 } of near) {
+          const thickness = z1 - z0;
+          const touches = Math.abs(z0 - z) < LEVEL_EPS || Math.abs(z1 - z) < LEVEL_EPS;
+          if (thickness >= thin - CMP_EPS) continue;
+          if (!touches && thickness >= floor - CMP_EPS) continue;
+          if (!worst || thickness < worst.thickness) worst = { z, z0, z1, thickness };
+        }
+      }
+    }
+    if (!worst) {
+      const dropped = [...res.dropped, ...thinDropped].sort((p, q) => p.z - q.z);
+      return { ...lb, dropped };
+    }
+    const w = worst;
+    thinDropped.push({ reason: "thin", ...w, min: thin });
+    joints = joints.filter((z) => z !== w.z);
+  }
 }
 
 /**
@@ -1527,15 +1673,17 @@ function build(input: StackedLayersInput, t: Mm, s: Mm): StackedLayersResult {
   const clearance = profile.wood.clearance;
   const holes: HoleLevel[] = holeLevelsOf(beam.holes ?? [], clearance);
   // Joints imposés (dessus voulu de l'âme de pied, A38 (12)) : niveaux d'assise de plus, sauf au
-  // travers d'un perçage (abandonnés, remarque).
-  const imposed = resolveImposedLevels(
+  // travers d'un perçage ou contre une couche plus mince que `section.minLayerThickness`
+  // (abandonnés, remarque, A39 (d)).
+  const { count, bounds, issues, dropped } = stackedBounds(
     baseZ,
     zTop,
+    t,
     beam.seatLevels ?? [],
     beam.jointLevels ?? [],
     holes,
+    params.section.minLayerThickness,
   );
-  const { count, bounds, issues } = layerBounds(baseZ, zTop, t, imposed.levels, MAX_LAYERS, holes);
   if (bounds.length === 0) {
     return empty([
       msg("structure.woodCentral.error.layerCount", {
@@ -1871,15 +2019,24 @@ function build(input: StackedLayersInput, t: Mm, s: Mm): StackedLayersResult {
     }
     // Remarques particulières (perçages, logements, aboutages), puis synthèses en tête.
     notes.push(...holeNotes(holes, issues ?? [], layers, clearance));
-    // Joints imposés abandonnés au travers d'un perçage (A38 (12)).
-    for (const d of imposed.dropped) {
+    // Joints imposés abandonnés au travers d'un perçage (A38 (12)) ou contre une couche trop
+    // mince (A39 (d)).
+    for (const d of dropped) {
       notes.push(
-        msg("structure.woodCentral.note.layerJointLevelDropped", {
-          z: dec(d.z, 1),
-          mark: d.mark,
-          holeZ: dec(d.holeZ, 1),
-          min: dec(d.min, 1),
-        }),
+        d.reason === "hole"
+          ? msg("structure.woodCentral.note.layerJointLevelDropped", {
+              z: dec(d.z, 1),
+              mark: d.mark,
+              holeZ: dec(d.holeZ, 1),
+              min: dec(d.min, 1),
+            })
+          : msg("structure.woodCentral.note.layerJointLevelThin", {
+              z: dec(d.z, 1),
+              thickness: dec(d.thickness, 1),
+              z0: dec(d.z0, 1),
+              z1: dec(d.z1, 1),
+              min: dec(d.min, 1),
+            }),
       );
     }
     for (const [web, c] of kerfCount) {

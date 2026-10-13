@@ -299,25 +299,38 @@ function centralWreathed(name: string): Project {
 }
 
 /**
- * Quart tournant balancé sur limon central bois en lamellé-collé cintré sur moule (QUESTIONS
- * A29) : marches chêne entaillées, fixées par tire-fonds, platines à âme noyée en pied et en
- * tête, garde-corps vitré (comme `demo-central-wreathed`). Jour vif du préréglage : la trace
- * contourne le jour à l'axe de l'emmarchement. Cintrage sur moule imposé : les couches empilées
- * (choix `auto` pour b = 88 mm) portent deux constats bloquants de prédimensionnement (fil
- * horizontal réduit par Hankinson, QUESTIONS A35 (j), A36 (8)) ; elles restent montrées par les
- * exemples `j5c-limon-central-bois-{quart-tournant,helicoidal}`.
+ * Hélicoïdal à grand rayon (R_e = 1 600 mm, jour central de 700 mm de rayon, emmarchement de
+ * 900 mm) sur limon central bois en lamellé-collé cintré sur moule (QUESTIONS A29, A39) :
+ * marches chêne de 80 mm sans contremarche entaillées dans la poutre et fixées par tire-fonds,
+ * platines à âme noyée en pied et en tête, garde-corps vitré. Trace à l'axe de l'emmarchement
+ * (r = 1 150 mm, r_in = 1 106 mm) : lamelles `auto` t = ⌊r_in / 240⌋ = 4 mm, 22 lamelles de
+ * 4 mm pour b = 88 mm, au lieu de 1 mm sur l'ancien quart tournant (r_in = 406 mm) ; 7 mm
+ * exigerait r_in ≥ 1 680 mm, hors de portée de ce rayon (sondage A39 du 2026-10-13).
+ *
+ * Reste sous entaille **saisi** à 250 mm : au repli de 180 mm (tableau FCBA non exploitable
+ * sur une trace courbe, A37 (2)), le prédimensionnement porte deux constats bloquants
+ * (`PRECHECK_FLECHE`, `PRECHECK_CONTRAINTE`) ; à 200 mm, `PRECHECK_FLECHE` reste bloquant ; à
+ * 220 mm, seul un conseil de flèche demeure ; 250 mm le lève aussi. Cintrage sur moule imposé :
+ * les couches empilées restent montrées par l'exemple `j5c-limon-central-bois-helicoidal`.
  */
 function centralGlulam(name: string): Project {
-  const p = createProject("quarter-left", { name, width: 900 });
+  const p = createHelicalProject({
+    name,
+    floorToFloor: 2750,
+    outerRadius: 1600,
+    patch: {
+      stair: {
+        layout: { core: { kind: "well", radius: 700 } },
+        // Marches ouvertes : l'arrière de chaque marche se loge dans la dent suivante.
+        treads: { risers: "none", thickness: 80 },
+      },
+    },
+  });
   return withPatch(p, {
     stair: {
-      // Marches ouvertes (sans contremarche) : l'arrière de chaque marche se loge dans la dent
-      // suivante (entaille arrière) ; avec des contremarches pleines, les marches seraient
-      // posées sans entaille arrière (LIMON_ENTAILLE_MIN en violation).
-      treads: { risers: "none", thickness: 80 },
       structure: {
         kind: "wood-central",
-        params: { section: { kind: "glulam", curvedMethod: "mould" } },
+        params: { section: { kind: "glulam", curvedMethod: "mould", residual: 250 } },
       },
     },
     guards: GLASS_GUARDS,

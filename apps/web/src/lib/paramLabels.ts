@@ -603,6 +603,13 @@ const WOOD_CENTRAL: Readonly<Record<string, FieldText>> = {
     unit: MM,
     hint: TO_VALIDATE,
   },
+  // Épaisseur minimale d'une couche bornée par le joint imposé au-dessus de l'âme de pied
+  // (QUESTIONS A39 (d)) ◆.
+  "section.minLayerThickness": {
+    label: "ui.param.woodCentral.section.minLayerThickness.label",
+    unit: MM,
+    hint: TO_VALIDATE,
+  },
   "notch.rearDepth": {
     label: "ui.param.woodCentral.notch.rearDepth.label",
     unit: MM,

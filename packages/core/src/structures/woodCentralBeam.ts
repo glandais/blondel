@@ -1807,7 +1807,9 @@ function beamOf(input: WoodCentralBeamInput): WoodCentralBeamResult {
           seatLevels: drafts.map((d) => d.z),
           // Joint de colle calé sur le dessus voulu du logement de l'âme de pied (épaisseur de
           // platine + `anchors.plate.webDepth` + jeu d'atelier, QUESTIONS A38 (12), décision du
-          // 2026-10-11) : l'âme arrêtée au joint en dessous (A37 (8)) garde sa profondeur.
+          // 2026-10-11) : l'âme arrêtée au joint en dessous (A37 (8)) garde sa profondeur ; joint
+          // abandonné s'il laisserait une couche plus mince que `section.minLayerThickness`
+          // (QUESTIONS A39 (d), décision du 2026-10-13) : l'âme s'arrête au joint en dessous.
           ...(footPlate ? { jointLevels: [floorLevel + params.anchors.plate.webDepth + c] } : {}),
           tensionZoneTop: (s: Mm): Mm =>
             zLow(s) + (params.section.tensionZone * residual) / cosAt(s),

@@ -380,6 +380,9 @@ const STRUCTURE_BY_KIND: Readonly<Record<string, Readonly<Record<string, ParamTi
     "section.tensionZoneLength": workshop(S),
     "section.minBoardLength": workshop(S),
     "section.boardLengthMargin": workshop(S),
+    // Épaisseur minimale d'une couche bornée par le joint imposé au-dessus de l'âme de pied
+    // (QUESTIONS A39 (d)) ◆.
+    "section.minLayerThickness": workshop(S),
     notch: workshop(S),
     "notch.rearDepth": design(S, [more(5)]),
     bolts: workshop(S),
@@ -616,7 +619,7 @@ function guardPaths(project: Project): (readonly string[])[] {
  * filière retenue sur une trace courbe (`resolveCurvedMethod` du cœur : lamelles et plis minces
  * pour le moule, couches pour les couches empilées, QUESTIONS A33 (e)), la présence des ancrages
  * (`anchors.*`) et leur type retenu (`resolveAnchorKind` : réglages du sabot ou de la platine à
- * âme noyée, A33 (f), A34 (c)). Les autres paramètres s'appliquent toujours. `params` : paramètres du plugin complétés par ses défauts.
+ * âme noyée, A33 (f), A34 (c) ; épaisseur minimale de couche au joint de l'âme de pied, A39 (d)). Les autres paramètres s'appliquent toujours. `params` : paramètres du plugin complétés par ses défauts.
  * Lecture du projet seulement, aucun calcul.
  */
 export function structureParamApplies(
@@ -683,9 +686,18 @@ export function structureParamApplies(
       leaf === "tensionZoneLayers" ||
       leaf === "tensionZoneLength" ||
       leaf === "minBoardLength" ||
-      leaf === "boardLengthMargin"
+      leaf === "boardLengthMargin" ||
+      leaf === "minLayerThickness"
     ) {
       if (curvedMethodOf(project, params) !== "stacked") return false;
+      // Épaisseur minimale d'une couche au joint imposé au-dessus de l'âme de pied (QUESTIONS
+      // A39 (d)) : seulement avec une platine à âme noyée au pied (`resolveAnchorKind`).
+      if (leaf === "minLayerThickness") {
+        return (
+          anchorKindOf(project, params) === "embeddedPlate" &&
+          field(field(params, "anchors"), "foot") !== false
+        );
+      }
       // Marge de la longueur minimale `auto` : sans effet sur une longueur saisie (A38 (4)).
       if (leaf === "boardLengthMargin")
         return field(field(params, "section"), "minBoardLength") === "auto";

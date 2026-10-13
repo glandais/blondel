@@ -36,7 +36,7 @@ const DEMOS = [
   "Grand escalier d'ERP",
   "Hélicoïdal à jour central",
   "Quart tournant sur limon central débillardé",
-  "Quart tournant sur limon central bois lamellé-collé",
+  "Hélicoïdal sur limon central bois lamellé-collé",
   "Escalier droit sur limon central bois lamellé-collé",
   "Escalier droit à crémaillères chêne",
   "Tracé libre à 60°, chêne",

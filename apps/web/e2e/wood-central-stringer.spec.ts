@@ -23,7 +23,8 @@
  *   prolongée sous les marches 2 et 3, M1 fixée (aucun constat `FAB_LIMON_CENTRAL_BOIS_BOULONS`
  *   sur M1) ; hélicoïdal : couches composées de plusieurs planches (LC1-k.1… dans la
  *   nomenclature) ;
- * - démo « Quart tournant sur limon central bois lamellé-collé » ;
+ * - démo « Hélicoïdal sur limon central bois lamellé-collé » (hélicoïdal à grand rayon cintré
+ *   sur moule, QUESTIONS A39 du 2026-10-13) ;
  * - parcours guidé : carte « Limon central bois » de l'étape Structure et résumé de l'étape ;
  * - comparateur sur l'hélicoïdal : variante « limon central hélicoïdal en lamellé-collé
  *   cintré » calculée, appliquée sans erreur, poutre LC1 ;
@@ -246,11 +247,11 @@ test("refus lisible à petit rayon : lamelles de 10 mm sur le quart tournant, au
   ).toHaveCount(0);
 });
 
-test("démo « Quart tournant sur limon central bois lamellé-collé » : aucune erreur", async ({
+test("démo « Hélicoïdal sur limon central bois lamellé-collé » : aucune erreur", async ({
   page,
 }) => {
   await openApp(page);
-  await applyPreset(page, "Quart tournant sur limon central bois lamellé-collé");
+  await applyPreset(page, "Hélicoïdal sur limon central bois lamellé-collé");
   await openSection(page, "Structure");
   await expect(structureSelect(page)).toHaveValue("wood-central");
   await expect(page.locator(".errors-bar")).toHaveCount(0);

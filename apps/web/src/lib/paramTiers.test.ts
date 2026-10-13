@@ -334,6 +334,9 @@ describe("clés", () => {
     ]) {
       expect(e(p), p).toMatchObject({ tier: "workshop", toValidate: true });
     }
+    // Décision A39 (d) du 2026-10-13 : épaisseur minimale d'une couche au joint imposé au-dessus
+    // de l'âme de pied, sans source : Atelier ◆.
+    expect(e("section.minLayerThickness")).toMatchObject({ tier: "workshop", toValidate: true });
     // Chaque chemin du schéma a son entrée (aucun repli Atelier implicite).
     const plugin = availableStructures().find((k) => k.kind === "wood-central")!;
     const defaults = plugin.paramsSchema.parse({});
@@ -801,6 +804,21 @@ describe("valeurs ◆ d'un projet", () => {
     const setLength = params({ section: { minBoardLength: 120 } });
     expect(at(quarter, setLength, "section.minBoardLength")).toBe(true);
     expect(at(quarter, setLength, "section.boardLengthMargin")).toBe(false);
+    // Épaisseur minimale d'une couche au joint imposé de l'âme de pied (A39 (d)) : couches
+    // empilées avec une platine à âme noyée au pied (ancrage par défaut d'une poutre cintrée).
+    const minLayer = "section.minLayerThickness";
+    expect(at(quarter, auto, minLayer)).toBe(true);
+    expect(at(helical, auto, minLayer)).toBe(true);
+    expect(at(quarter, params({ anchors: { head: false } }), minLayer)).toBe(true);
+    expect(at(quarter, mould, minLayer)).toBe(false);
+    expect(at(quarter, narrow, minLayer)).toBe(false);
+    expect(at(quarter, solid, minLayer)).toBe(false);
+    expect(at(straight, auto, minLayer)).toBe(false);
+    expect(at(straight, plate, minLayer)).toBe(false);
+    expect(at(quarter, shoe, minLayer)).toBe(false);
+    expect(at(helical, shoe, minLayer)).toBe(false);
+    expect(at(quarter, params({ anchors: { foot: false } }), minLayer)).toBe(false);
+    expect(at(helical, none, minLayer)).toBe(false);
     // Longueur filetée et bois entre filet et perçage (A37 (5), (17)) : toujours.
     for (const path of ["lagScrews.threadLength", "lagScrews.holeWood"]) {
       expect(at(straight, auto, path), path).toBe(true);
