@@ -39,6 +39,11 @@ const DEMOS = [
   "Quart tournant sur limon central bois lamellé-collé",
   "Escalier droit sur limon central bois lamellé-collé",
   "Escalier droit à crémaillères chêne",
+  "Tracé libre à 60°, chêne",
+  "Départ évasé sur limons acier",
+  "Tracé libre à 120° sur limon central",
+  "Volée courbe et palier droit, verre",
+  "Escalier dans sa pièce, frêne",
 ] as const;
 
 // Mesures de temps : une reprise absorbe un pic de charge ponctuel de la machine.
@@ -63,6 +68,27 @@ test("sélecteur : deux groupes, Basiques puis Démo, description d'une ligne", 
   await expect(page.locator(".toolbar__hint")).toHaveCount(0);
   await select.selectOption({ label: DEMOS[0] });
   await expect(page.locator(".toolbar__hint")).toContainText("garde-corps verre");
+});
+
+test("accueil : toutes les démos proposées, dont celles du tracé libre, sans débordement", async ({
+  page,
+}) => {
+  await openApp(page);
+  const welcome = page.getByRole("region", { name: "Accueil" });
+  await expect(welcome).toBeVisible();
+  const demos = welcome.getByRole("group", { name: "Démos" });
+  await expect(demos.getByRole("button")).toHaveText([...DEMOS]);
+  const overflow = await page.evaluate(() => {
+    const de = document.documentElement;
+    return { x: de.scrollWidth - de.clientWidth, y: de.scrollHeight - de.clientHeight };
+  });
+  expect(overflow, "débordement du document").toEqual({ x: 0, y: 0 });
+  // Démo du site libre (contour de pièce et obstacles) ouverte depuis l'accueil.
+  const label = "Escalier dans sa pièce, frêne";
+  await demos.getByRole("button", { name: label, exact: true }).click();
+  await settle(page);
+  await expect(page.locator(".topbar__project-name")).toHaveText(label);
+  await expect(page.locator(".errors-bar__errors")).toHaveCount(0);
 });
 
 test(`chaque démo : onglet 3D, aucun bloquant hors prédimensionnement de la démo lamellé-collé (A36 (8)), une entrée d'annulation (tâches ≤ ${LONG_TASK_BUDGET_MS} ms)`, async ({

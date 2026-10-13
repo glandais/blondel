@@ -57,6 +57,16 @@ const EXPECTED: Readonly<Record<string, readonly string[]>> = {
   "cage-palier-droit": ["headroom conseil ECHAPPEE_RECO_PRIVATIF"],
   "cage-rayonnant": ["headroom conseil ECHAPPEE_RECO_PRIVATIF"],
   "cage-trapeze": ["headroom conseil ECHAPPEE_RECO_PRIVATIF"],
+  // Démos du tracé libre (sous-lot 7a) : arrivée le long d'un axe du site, aucun conflit de
+  // dalle ; la démo en arc (volée courbe au départ) n'a pas même le conseil d'échappée.
+  "demo-cage-arc-glass": [],
+  "demo-cage-central-steel": ["headroom conseil ECHAPPEE_RECO_PRIVATIF"],
+  "demo-cage-flared-steel": ["headroom conseil ECHAPPEE_RECO_PRIVATIF"],
+  "demo-cage-oak-60": ["headroom conseil ECHAPPEE_RECO_PRIVATIF"],
+  // Démo du site libre : contour, murs, poteau, porte et fenêtre sans conflit ; arrivée oblique
+  // (jonction à 105°), limon au ras de la trémie (avertissement F15 (2), comme les exemples à
+  // limons).
+  "demo-cage-room": ["headroom conseil ECHAPPEE_RECO_PRIVATIF"],
   "demo-central-glulam": ["headroom conseil ECHAPPEE_RECO_PRIVATIF"],
   "demo-central-wreathed": ["headroom conseil ECHAPPEE_RECO_PRIVATIF"],
   "demo-erp-grand": [

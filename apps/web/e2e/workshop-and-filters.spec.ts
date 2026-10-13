@@ -209,8 +209,13 @@ test("site : mur tracé au nu, côté du mur donné par un troisième clic", asy
   // limitée par la hauteur utile sous l'accueil et les outils de saisie ; les deux clics peuvent
   // donc donner un nu très légèrement oblique), épaisseur exacte (distance entre les deux nus,
   // contour gauche a → b puis droit b → a), corps du côté cliqué.
+  // Tolérance : 1 mm, ou un pixel du plan s'il est plus grand (l'accueil liste toutes les démos,
+  // dix-sept depuis le sous-lot 7a, et réduit la hauteur utile du plan).
+  const pixelMm = await page
+    .locator("svg.plan-site__svg")
+    .evaluate((el) => 1 / Math.abs((el as SVGSVGElement).getScreenCTM()!.a));
   const [min, max] = [Math.min(...xs), Math.max(...xs)];
-  expect(Math.abs(max - -300)).toBeLessThanOrEqual(1);
+  expect(Math.abs(max - -300)).toBeLessThanOrEqual(Math.max(1, pixelMm));
   expect(min).toBeLessThan(-450);
   const [l0, , , r0] = pts as [[number, number], unknown, unknown, [number, number]];
   expect(Math.hypot(l0[0] - r0[0], l0[1] - r0[1])).toBeCloseTo(200, 3);

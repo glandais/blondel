@@ -40,6 +40,9 @@ function issueKeys(json: unknown): { path: string; key: MessageKey | undefined }
   throw new Error("projet accepté à tort");
 }
 
+/** Exemples qui portent un contour de pièce et des obstacles (démo du site libre). */
+const SITE_EXAMPLES: readonly string[] = ["demo-cage-room.blondel.json"];
+
 const ROOM = {
   points: [
     { x: -500, y: -500 },
@@ -82,12 +85,20 @@ const OBSTACLES: Obstacle[] = [
 ];
 
 describe("site : contour de pièce et obstacles (schéma)", () => {
-  it("sans les champs : tous les exemples se relisent et s'enregistrent à l'octet, sans room ni obstacles", () => {
+  it("tous les exemples se relisent et s'enregistrent à l'octet ; sans room ni obstacles hors démo du site libre", () => {
     const files = readdirSync(EXAMPLES_DIR).filter((f) => f.endsWith(".blondel.json"));
     expect(files.length).toBeGreaterThan(0);
     for (const file of files) {
       const text = exampleText(file);
       const p = parseProjectText(text);
+      // Seule la démo du site libre (sous-lot 7a) porte un contour et des obstacles : elle se
+      // relit aussi à l'octet ; tous les autres exemples sont écrits sans les champs.
+      if (SITE_EXAMPLES.includes(file)) {
+        expect(p.site.room).toBeDefined();
+        expect(p.site.obstacles?.length).toBeGreaterThan(0);
+        expect(serializeProject(p)).toBe(text);
+        continue;
+      }
       expect(p.site.room).toBeUndefined();
       expect(p.site.obstacles).toBeUndefined();
       expect("room" in p.site).toBe(false);

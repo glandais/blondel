@@ -315,6 +315,174 @@ exports[`buildModel — exemples du dépôt > cage-trapeze.blondel.json : cotes 
 }
 `;
 
+exports[`buildModel — exemples du dépôt > demo-cage-arc-glass.blondel.json : cotes principales (non-régression) 1`] = `
+{
+  "blondel": 629.61,
+  "colletMin": null,
+  "colletsChord": [],
+  "firstRise": 180,
+  "g": 269.61,
+  "h": 180,
+  "headroom": 2186,
+  "headroomWidth": {
+    "min": 1960,
+    "nosing": 2,
+  },
+  "n": 15,
+  "parts": 103,
+  "run": 4405,
+  "treads": "ssssssslssssss",
+  "violations": {
+    "avertissement": 0,
+    "bloquant": 0,
+    "conseil": 0,
+  },
+  "zones": [],
+}
+`;
+
+exports[`buildModel — exemples du dépôt > demo-cage-central-steel.blondel.json : cotes principales (non-régression) 1`] = `
+{
+  "blondel": 627.32,
+  "colletMin": 101.1,
+  "colletsChord": [
+    180.7,
+    126.5,
+    101.1,
+    105,
+    105,
+    110.8,
+    126.5,
+    180.7,
+  ],
+  "firstRise": 180,
+  "g": 267.32,
+  "h": 180,
+  "headroom": 2075.1,
+  "headroomWidth": {
+    "min": 1960,
+    "nosing": 2,
+  },
+  "n": 15,
+  "parts": 126,
+  "run": 3742.5,
+  "treads": "sssswwwwwwwwss",
+  "violations": {
+    "avertissement": 1,
+    "bloquant": 0,
+    "conseil": 1,
+  },
+  "zones": [
+    "4-12 M3-cubic",
+  ],
+}
+`;
+
+exports[`buildModel — exemples du dépôt > demo-cage-flared-steel.blondel.json : cotes principales (non-régression) 1`] = `
+{
+  "blondel": 628.91,
+  "colletMin": 114.2,
+  "colletsChord": [
+    188.8,
+    136.1,
+    114.2,
+    117.4,
+    121.3,
+    135.9,
+    188.8,
+  ],
+  "firstRise": 180,
+  "g": 268.91,
+  "h": 180,
+  "headroom": 1949.7,
+  "headroomWidth": {
+    "min": 1960,
+    "nosing": 2,
+  },
+  "n": 15,
+  "parts": 217,
+  "run": 3764.7,
+  "treads": "ssswwwwwwwssss",
+  "violations": {
+    "avertissement": 0,
+    "bloquant": 0,
+    "conseil": 1,
+  },
+  "zones": [
+    "3-10 M3-cubic",
+  ],
+}
+`;
+
+exports[`buildModel — exemples du dépôt > demo-cage-oak-60.blondel.json : cotes principales (non-régression) 1`] = `
+{
+  "blondel": 619.33,
+  "colletMin": 106.6,
+  "colletsChord": [
+    153.3,
+    106.6,
+    108.8,
+    148.2,
+  ],
+  "firstRise": 180,
+  "g": 259.33,
+  "h": 180,
+  "headroom": 2083.2,
+  "headroomWidth": {
+    "min": 1960,
+    "nosing": 2,
+  },
+  "n": 15,
+  "parts": 176,
+  "run": 4271.2,
+  "treads": "ssswwwwslsssss",
+  "violations": {
+    "avertissement": 0,
+    "bloquant": 0,
+    "conseil": 1,
+  },
+  "zones": [
+    "3-7 M3-cubic",
+  ],
+}
+`;
+
+exports[`buildModel — exemples du dépôt > demo-cage-room.blondel.json : cotes principales (non-régression) 1`] = `
+{
+  "blondel": 633.19,
+  "colletMin": 107.7,
+  "colletsChord": [
+    184.2,
+    116.7,
+    115.3,
+    107.7,
+    115.3,
+    129.9,
+    184.2,
+  ],
+  "firstRise": 180,
+  "g": 273.19,
+  "h": 180,
+  "headroom": 1904.9,
+  "headroomWidth": {
+    "min": 1960,
+    "nosing": 2,
+  },
+  "n": 15,
+  "parts": 53,
+  "run": 3824.7,
+  "treads": "sssswwwwwwwsss",
+  "violations": {
+    "avertissement": 0,
+    "bloquant": 0,
+    "conseil": 1,
+  },
+  "zones": [
+    "4-11 M3-cubic",
+  ],
+}
+`;
+
 exports[`buildModel — exemples du dépôt > demo-central-glulam.blondel.json : cotes principales (non-régression) 1`] = `
 {
   "blondel": 629.99,

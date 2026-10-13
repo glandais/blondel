@@ -10,12 +10,28 @@
  * présentation Blondel, à valider** : aucune n'est une règle métier.
  */
 import { DEFAULT_LOCALE, translatorFor, type MessageKey } from "@blondel/i18n";
-import { ProjectSchema, type Project, type ProjectInput } from "../model/project.js";
+import {
+  PROJECT_SCHEMA_VERSION,
+  ProjectSchema,
+  type CageLayoutSpecInput,
+  type Project,
+  type ProjectInput,
+} from "../model/project.js";
+import { ensureCCW } from "../geom2d/polygon.js";
+import * as V from "../geom2d/vec.js";
+import { polygonOpening } from "../site/opening.js";
+import { computeLayout } from "../layout/layout.js";
+import { computeStepping } from "../stepping/stepping.js";
+import { clipConvex, clipHalfPlane } from "../structures/geom.js";
+import { defaultOpening } from "./defaultOpening.js";
 import { createHelicalProject } from "./presetHelical.js";
 import {
   computeOpening,
   createProject,
   deepMerge,
+  DEFAULT_FLOOR_TO_FLOOR,
+  DEFAULT_SLAB_THICKNESS,
+  PRESET_NOSING,
   PRESET_OPENING_CLEARANCE,
   type DeepPartial,
 } from "./presets.js";
@@ -35,6 +51,11 @@ export const DEMO_PRESET_IDS = [
   "demo-central-glulam",
   "demo-straight-central-glulam",
   "demo-straight-cut-oak",
+  "demo-cage-oak-60",
+  "demo-cage-flared-steel",
+  "demo-cage-central-steel",
+  "demo-cage-arc-glass",
+  "demo-cage-room",
 ] as const;
 export type DemoPresetId = (typeof DEMO_PRESET_IDS)[number];
 
@@ -52,6 +73,11 @@ export const DEMO_PRESET_LABELS: Readonly<Record<DemoPresetId, MessageKey>> = {
   "demo-central-glulam": "preset.demo.centralGlulam.label",
   "demo-straight-central-glulam": "preset.demo.straightCentralGlulam.label",
   "demo-straight-cut-oak": "preset.demo.straightCutOak.label",
+  "demo-cage-oak-60": "preset.demo.cageOak60.label",
+  "demo-cage-flared-steel": "preset.demo.cageFlaredSteel.label",
+  "demo-cage-central-steel": "preset.demo.cageCentralSteel.label",
+  "demo-cage-arc-glass": "preset.demo.cageArcGlass.label",
+  "demo-cage-room": "preset.demo.cageRoom.label",
 };
 
 /** Clés des descriptions d'une ligne de chaque démo (sélecteur de l'interface). */
@@ -68,6 +94,11 @@ export const DEMO_PRESET_DESCRIPTIONS: Readonly<Record<DemoPresetId, MessageKey>
   "demo-central-glulam": "preset.demo.centralGlulam.description",
   "demo-straight-central-glulam": "preset.demo.straightCentralGlulam.description",
   "demo-straight-cut-oak": "preset.demo.straightCutOak.description",
+  "demo-cage-oak-60": "preset.demo.cageOak60.description",
+  "demo-cage-flared-steel": "preset.demo.cageFlaredSteel.description",
+  "demo-cage-central-steel": "preset.demo.cageCentralSteel.description",
+  "demo-cage-arc-glass": "preset.demo.cageArcGlass.description",
+  "demo-cage-room": "preset.demo.cageRoom.description",
 };
 
 /** Garde-corps vitré à main courante inox (commun à plusieurs démos). */
@@ -327,6 +358,288 @@ function straightCutOak(name: string): Project {
   });
 }
 
+// ------------------------------------------------------------------ Tracé libre (ADR-0010)
+
+/** Tronçon droit de cage (largeur constante, ou de `width` à `widthEnd`). */
+function straightSection(
+  length: number,
+  width = 900,
+  widthEnd?: number,
+): CageLayoutSpecInput["sections"][number] {
+  return {
+    axis: { kind: "straight", length },
+    width,
+    ...(widthEnd !== undefined ? { widthEnd } : {}),
+  };
+}
+
+/**
+ * Projet sur une cage saisie (tracé libre, ADR-0010) : site des préréglages (H = 2 700, dalle de
+ * 200 mm, nez `PRESET_NOSING`), trémie du calcul des préréglages (`defaultOpening`), comme les
+ * exemples `examples/cage-*`. `site` complète le site (murs, contour de pièce, obstacles).
+ */
+function cageProject(
+  name: string,
+  layout: CageLayoutSpecInput,
+  stair: DeepPartial<ProjectInput["stair"]> = {},
+  site: Partial<ProjectInput["site"]> = {},
+): Project {
+  const base = ProjectSchema.parse({
+    schemaVersion: PROJECT_SCHEMA_VERSION,
+    name,
+    site: { floorToFloor: DEFAULT_FLOOR_TO_FLOOR, upperSlabThickness: DEFAULT_SLAB_THICKNESS },
+    stair: deepMerge(
+      {
+        placement: { origin: { x: 0, y: 0 }, rotation: 0 },
+        layout,
+        treads: { nosing: PRESET_NOSING },
+      },
+      stair,
+    ),
+  });
+  const opening = defaultOpening(base);
+  return structuredClone(
+    ProjectSchema.parse({
+      ...base,
+      site: { ...base.site, ...(opening ? { opening } : {}), ...site },
+    }),
+  );
+}
+
+/**
+ * Tracé libre (ADR-0010) : jonction à 60° balancée à jour en pan coupé, palier droit puis volée
+ * d'arrivée, sur limons à la française en chêne (sous-lot 6a ; assemblages à queues aux angles,
+ * raccord des limons au milieu du palier droit), balustres chêne. Tracé de l'exemple
+ * `cage-60-palier-limon`, tourné de −60° pour que la volée d'arrivée longe un axe du site : la
+ * trémie rectangulaire du préréglage borde alors les garde-corps rampants (aucun constat
+ * `GC_CONFLIT_DALLE`, qui apparaît sur une arrivée oblique).
+ */
+function cageOak60(name: string): Project {
+  const p = cageProject(
+    name,
+    {
+      kind: "cage",
+      sections: [straightSection(1100), straightSection(500), straightSection(1300)],
+      junctions: [
+        { angle: 60, mode: "winders", well: { kind: "chamfer", setbackIn: 150, setbackOut: 150 } },
+        { angle: 0, mode: "landing", depth: 900 },
+      ],
+    },
+    { placement: { rotation: -60 } },
+  );
+  return withPatch(p, {
+    stair: { structure: { kind: "wood-housed", params: { material: "wood-oak" } } },
+    guards: { infill: { kind: "balusters" }, material: "wood-oak" },
+    appearance: { woodTone: "natural" },
+  });
+}
+
+/**
+ * Tracé libre : volée de départ évasée en trapèze (1 200 mm au pied, 900 mm au tournant), quart
+ * tournant balancé à jour en pan coupé de 250 mm (appui des marches balancées, comme
+ * `cage-45-palier-acier`), limons acier en plat (sous-lot 6b), barreaudage en plats d'acier.
+ */
+function cageFlaredSteel(name: string): Project {
+  const p = cageProject(name, {
+    kind: "cage",
+    sections: [straightSection(1400, 1200, 900), straightSection(1650)],
+    junctions: [
+      { angle: 90, mode: "winders", well: { kind: "chamfer", setbackIn: 250, setbackOut: 250 } },
+    ],
+  });
+  return withPatch(p, {
+    stair: { structure: { kind: "steel-flat", params: { finish: "painted" } } },
+    guards: {
+      infill: {
+        kind: "balusters",
+        spacing: 110,
+        section: { kind: "rect", width: 12, height: 40 },
+      },
+      material: "steel-painted",
+    },
+    appearance: { paintColor: "#2b2f33", guardPaintColor: "#2b2f33", woodTone: "natural" },
+  });
+}
+
+/**
+ * Tracé libre : jonction à 120° balancée à jour en pan coupé, sur limon central acier en caisson
+ * débillardé (sous-lot 6c ; trace autour des extrémités du pan coupé à la demi-largeur, F18),
+ * marches chêne, garde-corps vitré. Tournée de −120° : volée d'arrivée le long d'un axe du site
+ * (voir `cageOak60`).
+ */
+function cageCentralSteel(name: string): Project {
+  const p = cageProject(
+    name,
+    {
+      kind: "cage",
+      sections: [straightSection(1400), straightSection(1400)],
+      junctions: [
+        { angle: 120, mode: "winders", well: { kind: "chamfer", setbackIn: 150, setbackOut: 150 } },
+      ],
+    },
+    { placement: { rotation: -120 } },
+  );
+  return withPatch(p, {
+    stair: {
+      structure: {
+        kind: "steel-central",
+        params: { section: { kind: "box" }, finish: "painted" },
+      },
+    },
+    guards: GLASS_GUARDS,
+    appearance: { paintColor: "#2b2f33", woodTone: "natural", glassTint: "clear" },
+  });
+}
+
+/**
+ * Tracé libre : volée courbe à axe en arc (R = 1 800 mm, 60°), palier droit puis volée droite
+ * d'arrivée, sur limons débillardés acier des deux côtés (sous-lot 6d, F19), garde-corps vitré à
+ * main courante inox. Tournée de −60° : volée d'arrivée le long d'un axe du site (une arrivée en
+ * arc sous une trémie rectangulaire fait passer les garde-corps sous la dalle).
+ */
+function cageArcGlass(name: string): Project {
+  const p = cageProject(
+    name,
+    {
+      kind: "cage",
+      sections: [
+        { axis: { kind: "arc", radius: 1800, sweep: 60 }, width: 900 },
+        straightSection(1620),
+      ],
+      junctions: [{ angle: 0, mode: "landing", depth: 900 }],
+    },
+    { placement: { rotation: -60 } },
+  );
+  return withPatch(p, {
+    stair: { structure: { kind: "steel-curved", params: { finish: "painted" } } },
+    guards: GLASS_GUARDS,
+    appearance: { paintColor: "#f2f2ee", woodTone: "natural", glassTint: "clear" },
+  });
+}
+
+/**
+ * Recul (mm) du côté d'arrivée de la trémie de `demo-cage-room` au-delà du nez d'arrivée : pas de
+ * 10 mm des trémies des préréglages, choix de présentation à valider.
+ */
+const ROOM_DEMO_ARRIVAL_SETBACK = 10;
+
+/**
+ * Escalier dans sa pièce (ADR-0010, site libre) : contour de pièce à mur biais, jonction à 105°
+ * balancée qui suit ce mur, limons à la française et garde-corps vitré en frêne. Obstacles du
+ * site : poteau, porte (débattement vers la pièce) et fenêtre, placés hors de l'emprise de
+ * l'escalier et de son dégagement d'arrivée (`Model.siteFit` sans erreur ni avertissement de
+ * porte). Côté mur, le bord des marches est à 60 mm du contour (le limon mural tient dans ce
+ * jeu). Trémie polygonale : celle du préréglage, menée jusqu'aux murs droit et biais et rognée
+ * au contour de la pièce et au nez d'arrivée oblique (aucun mur traversé, sortie sur la dalle
+ * sans garde-corps de trémie).
+ */
+function cageRoom(name: string): Project {
+  /** Nu intérieur du mur droit (x, mm), le long de la première volée (bord des marches à x = 900). */
+  const rightWall = 960;
+  const p = cageProject(
+    name,
+    {
+      kind: "cage",
+      sections: [straightSection(1500), straightSection(1500)],
+      junctions: [
+        {
+          angle: 105,
+          mode: "winders",
+          well: { kind: "chamfer", setbackIn: 150, setbackOut: 150 },
+        },
+      ],
+    },
+    {},
+    {
+      // Murs de 200 mm au nu du contour le long de l'escalier : garde-corps côté mur supprimés
+      // (`guards.flight.outer` = `auto`, mur à moins de `wallTolerance`).
+      walls: [
+        {
+          id: "wall-1",
+          a: { x: 1060, y: -1600 },
+          b: { x: 1060, y: 2882 },
+          thickness: 200,
+          loadBearing: true,
+        },
+        {
+          id: "wall-2",
+          a: { x: 1060, y: 2882 },
+          b: { x: -3100, y: 1767 },
+          thickness: 200,
+          loadBearing: true,
+        },
+      ],
+      room: {
+        points: [
+          { x: rightWall, y: -1500 },
+          { x: rightWall, y: 2751 },
+          { x: -3000, y: 1690 },
+          { x: -3000, y: -1500 },
+        ],
+      },
+      obstacles: [
+        { kind: "post", id: "post-1", center: { x: -2500, y: 200 }, sizeX: 200, sizeY: 200 },
+        {
+          kind: "door",
+          id: "door-1",
+          a: { x: -1500, y: -1500 },
+          b: { x: -670, y: -1500 },
+          hinge: "a",
+          swing: "left",
+        },
+        {
+          kind: "window",
+          id: "window-1",
+          a: { x: -3000, y: -200 },
+          b: { x: -3000, y: 1000 },
+          sill: 900,
+          head: 2150,
+        },
+      ],
+    },
+  );
+  // Trémie : rectangle du préréglage étendu jusqu'aux murs, rogné au contour de la pièce (nus des
+  // murs droit et biais : la trémie ne traverse aucun mur, ses côtés le long des murs n'ont pas de
+  // garde-corps) et au nez d'arrivée, oblique de 15° (côté d'arrivée exclu du garde-corps de
+  // trémie, `openingChains` ; un côté droit du préréglage, non parallèle au nez, le fermerait).
+  const room = p.site.room;
+  const opening = p.site.opening;
+  const nosings = computeStepping(p, computeLayout(p)).nosings;
+  const arrival = nosings[nosings.length - 1];
+  const clipped =
+    opening?.kind === "rect" && room && arrival
+      ? (() => {
+          const top = Math.max(...room.points.map((q) => q.y));
+          const left = Math.min(...room.points.map((q) => q.x));
+          const rect = [
+            { x: left, y: opening.y },
+            { x: opening.x + opening.sizeX, y: opening.y },
+            { x: opening.x + opening.sizeX, y: top },
+            { x: left, y: top },
+          ];
+          // Côté de l'escalier par rapport au nez d'arrivée : opposé au sens de la montée
+          // (normale gauche du nez, de q vers r). Coupe reculée de `ROOM_DEMO_ARRIVAL_SETBACK`
+          // au-delà du nez (le nez reste dans la trémie malgré l'arrondi des sommets).
+          const climb = V.normalize(V.perpLeft(V.sub(arrival.r, arrival.q)));
+          const cut = V.addScaled(arrival.q, climb, ROOM_DEMO_ARRIVAL_SETBACK);
+          return polygonOpening(
+            clipHalfPlane(clipConvex(rect, ensureCCW(room.points)), cut, V.scale(climb, -1)),
+          );
+        })()
+      : opening;
+  return withPatch(
+    { ...p, site: { ...p.site, opening: clipped } },
+    {
+      stair: {
+        treads: { material: "wood-ash" },
+        structure: { kind: "wood-housed", params: { material: "wood-ash" } },
+      },
+      guards: { infill: { kind: "glass" }, material: "wood-ash" },
+      appearance: { woodTone: "light", glassTint: "extra-clear" },
+    },
+  );
+}
+
 const BUILDERS: Readonly<Record<DemoPresetId, (name: string) => Project>> = {
   "demo-helical-glass": helicalGlass,
   "demo-quarter-curved": quarterCurved,
@@ -340,6 +653,11 @@ const BUILDERS: Readonly<Record<DemoPresetId, (name: string) => Project>> = {
   "demo-central-glulam": centralGlulam,
   "demo-straight-central-glulam": straightCentralGlulam,
   "demo-straight-cut-oak": straightCutOak,
+  "demo-cage-oak-60": cageOak60,
+  "demo-cage-flared-steel": cageFlaredSteel,
+  "demo-cage-central-steel": cageCentralSteel,
+  "demo-cage-arc-glass": cageArcGlass,
+  "demo-cage-room": cageRoom,
 };
 
 /** Vrai si `id` est une démo. */

@@ -8,9 +8,18 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { translatorFor } from "@blondel/i18n";
+import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import "../structures/index.js";
-import { ProjectSchema } from "../model/project.js";
+import { cageFeatures, type CageFeature } from "../model/cageFeatures.js";
+import { ProjectSchema, type Project } from "../model/project.js";
+import { segmentIntersect } from "../geom2d/intersect.js";
+import { pointInPolygon } from "../geom2d/polygon.js";
+import * as V from "../geom2d/vec.js";
+import { computeGuards } from "../guards/compute.js";
+import { computeLayout } from "../layout/layout.js";
+import { OPENING_POINT_PRECISION } from "../site/opening.js";
+import { computeStepping } from "../stepping/stepping.js";
 import { assemblyQuantity } from "../parts/components.js";
 import { buildModel } from "../pipeline/build.js";
 import { parseProjectText } from "./parse.js";
@@ -20,6 +29,7 @@ import {
   DEMO_PRESET_IDS,
   DEMO_PRESET_LABELS,
   isDemoPresetId,
+  type DemoPresetId,
 } from "./presetDemo.js";
 import { ALL_PRESET_IDS, createProject, PRESET_LABELS } from "./presets.js";
 import { serializeProject } from "./serialize.js";
@@ -75,6 +85,8 @@ describe("préréglages de démonstration", () => {
     );
     expect(blocking.map((r) => r.ruleId)).toEqual([]);
     expect(m.compliance.summary.bloquant).toBe(0);
+    // Adéquation au site (ADR-0010) : aucun conflit de sévérité « erreur ».
+    expect((m.siteFit ?? []).filter((c) => c.severity === "erreur")).toEqual([]);
     for (const part of m.parts) {
       // Pièce finie faite de composantes (poutre en couches empilées, QUESTIONS A33 (e)) : sa
       // matière est portée par ses composantes, imbriquées (planche → couche → poutre, A36 (9)).
@@ -184,6 +196,169 @@ describe("préréglages de démonstration", () => {
       "CI1",
       "CE1",
     ]);
+  });
+});
+
+describe("démos du tracé libre (ADR-0010, sous-lot 7a)", () => {
+  /** Fonctions de cage et structure attendues de chaque démo à cage saisie. */
+  const CAGE_DEMOS: Readonly<
+    Partial<Record<DemoPresetId, { features: readonly CageFeature[]; structure: string }>>
+  > = {
+    "demo-cage-oak-60": {
+      features: ["anyAngle", "straightLanding", "chamfer"],
+      structure: "wood-housed",
+    },
+    "demo-cage-flared-steel": { features: ["variableWidth", "chamfer"], structure: "steel-flat" },
+    "demo-cage-central-steel": { features: ["anyAngle", "chamfer"], structure: "steel-central" },
+    "demo-cage-arc-glass": { features: ["arcAxis", "straightLanding"], structure: "steel-curved" },
+    "demo-cage-room": { features: ["anyAngle", "chamfer"], structure: "wood-housed" },
+  };
+
+  it("les démos à cage saisie sont celles listées ici", () => {
+    const cages = DEMO_PRESET_IDS.filter(
+      (id) => createDemoProject(id).stair.layout.kind === "cage",
+    );
+    expect(cages).toEqual(Object.keys(CAGE_DEMOS));
+  });
+
+  it.each(Object.entries(CAGE_DEMOS))(
+    "%s : fonctions de cage, structure générée, aucun constat évitable",
+    (id, { features, structure }) => {
+      const p = createDemoProject(id as DemoPresetId);
+      const layout = p.stair.layout;
+      expect(layout.kind).toBe("cage");
+      if (layout.kind !== "cage") return;
+      expect(cageFeatures(layout)).toEqual(features);
+      expect(p.stair.structure.kind).toBe(structure);
+      const m = buildModel(p, { memo: false });
+      expect(m.errors.map((e) => e.key)).not.toContain("structure.cageUnsupported");
+      expect(m.parts.some((x) => x.category === "stringer")).toBe(true);
+      // Garde-corps rampants dans la trémie (arrivée le long d'un axe du site).
+      const violations = m.compliance.results.filter((r) => r.status === "violation");
+      expect(violations.map((r) => r.ruleId)).not.toContain("GC_CONFLIT_DALLE");
+      expect(m.stepping.going).toBeGreaterThan(255);
+      expect(m.stepping.going).toBeLessThan(285);
+    },
+  );
+
+  it("départ évasé : la première volée passe de 1 200 à 900 mm", () => {
+    const layout = createDemoProject("demo-cage-flared-steel").stair.layout;
+    expect(
+      layout.kind === "cage" && [layout.sections[0]!.width, layout.sections[0]!.widthEnd],
+    ).toEqual([1200, 900]);
+  });
+
+  describe("demo-cage-room : escalier dans sa pièce", () => {
+    const project = createDemoProject("demo-cage-room");
+    const model = buildModel(project, { memo: false });
+
+    it("contour, murs, poteau, porte et fenêtre ; aucun conflit hors échappée", () => {
+      expect(project.site.room?.points.length).toBeGreaterThanOrEqual(4);
+      expect(new Set((project.site.obstacles ?? []).map((o) => o.kind))).toEqual(
+        new Set(["post", "door", "window"]),
+      );
+      expect(project.site.walls.length).toBe(2);
+      // Ni hors pièce, ni mur, ni obstacle, ni débattement de porte, ni fenêtre, ni dégagement
+      // d'arrivée, ni structure sous la dalle (trémie arrêtée au nez d'arrivée et menée jusqu'aux
+      // murs) : seule reste l'échappée recommandée (conseil).
+      const kinds = new Set((model.siteFit ?? []).map((c) => c.kind));
+      expect([...kinds].sort()).toEqual(["headroom"]);
+      expect((model.siteFit ?? []).every((c) => c.severity !== "erreur")).toBe(true);
+      // Côtés le long des murs : pas de garde-corps de volée extérieur (mur à moins de
+      // `wallTolerance`), garde-corps du jour présent.
+      const guards = model.parts.filter((x) => x.id.startsWith("guard-")).map((x) => x.id);
+      expect(guards.some((id) => id.startsWith("guard-inner-"))).toBe(true);
+      expect(guards.some((id) => id.startsWith("guard-outer-"))).toBe(false);
+    });
+
+    it("trémie dans la pièce : aucun sommet hors du contour, aucun mur traversé", () => {
+      const opening = project.site.opening;
+      expect(opening?.kind).toBe("polygon");
+      if (opening?.kind !== "polygon") return;
+      const room = project.site.room!.points;
+      // Sommets arrondis au dixième de mm (`polygonOpening`) : tolérance d'autant.
+      for (const q of opening.points)
+        expect(pointInPolygon(q, room, OPENING_POINT_PRECISION)).not.toBe("outside");
+      // Aucun côté de la trémie ne coupe l'axe d'un mur (contour convexe, murs au-delà du nu).
+      for (const w of project.site.walls)
+        for (let i = 0; i < opening.points.length; i++) {
+          const a = opening.points[i]!;
+          const b = opening.points[(i + 1) % opening.points.length]!;
+          expect(segmentIntersect(a, b, w.a, w.b)).toBeNull();
+        }
+    });
+
+    it("arrivée dégagée : aucun garde-corps de trémie ne barre la sortie sur la dalle", () => {
+      const layout = computeLayout(project);
+      const stepping = computeStepping(project, layout);
+      const runs = computeGuards(project, layout, stepping).runs.filter(
+        (r) => r.kind === "opening",
+      );
+      expect(runs.length).toBeGreaterThan(0);
+      const last = stepping.nosings[stepping.nosings.length - 1]!;
+      const climb = V.normalize(V.perpLeft(V.sub(last.r, last.q)));
+      // Lignes de marche de l'arrivée : du nez vers la dalle, sur toute la largeur du nez.
+      for (const t of [0.05, 0.25, 0.5, 0.75, 0.95]) {
+        const from = V.lerp(last.q, last.r, t);
+        const to = V.addScaled(from, climb, 1000);
+        for (const run of runs)
+          for (let i = 0; i + 1 < run.path.length; i++)
+            expect(segmentIntersect(from, to, run.path[i]!, run.path[i + 1]!)).toBeNull();
+      }
+    });
+
+    /** Projet de la démo avec le poteau déplacé en `center`. */
+    const withPost = (center: { x: number; y: number }): Project => ({
+      ...project,
+      site: {
+        ...project.site,
+        obstacles: (project.site.obstacles ?? []).map((o) =>
+          o.kind === "post" ? { ...o, center } : o,
+        ),
+      },
+    });
+
+    it("propriété : un poteau posé sur une marche est un conflit « erreur »", () => {
+      const treads = model.stepping.treads;
+      fc.assert(
+        fc.property(
+          fc.integer({ min: 0, max: treads.length - 1 }),
+          fc.double({ min: 0.2, max: 0.8, noNaN: true }),
+          fc.double({ min: 0.2, max: 0.8, noNaN: true }),
+          (i, u, v) => {
+            // Point intérieur de la marche : barycentre pondéré de trois sommets.
+            const o = treads[i]!.walkingSurface;
+            const [a, b, c] = [o[0]!, o[1]!, o[2]!];
+            const w = [u * v, u * (1 - v), 1 - u];
+            const center = {
+              x: Math.round(w[0]! * a.x + w[1]! * b.x + w[2]! * c.x),
+              y: Math.round(w[0]! * a.y + w[1]! * b.y + w[2]! * c.y),
+            };
+            if (pointInPolygon(center, o) !== "inside") return;
+            const m = buildModel(withPost(center), { memo: false });
+            expect(
+              (m.siteFit ?? []).some((x) => x.kind === "obstacle" && x.severity === "erreur"),
+            ).toBe(true);
+          },
+        ),
+        { numRuns: 12, seed: 7 },
+      );
+    });
+
+    it("un contour de pièce rétréci sous l'escalier est un conflit « erreur »", () => {
+      const room = project.site.room!;
+      const shrunk: Project = {
+        ...project,
+        site: {
+          ...project.site,
+          room: { points: room.points.map((q) => (q.x > 0 ? { ...q, x: q.x - 300 } : q)) },
+        },
+      };
+      const m = buildModel(shrunk, { memo: false });
+      expect(
+        (m.siteFit ?? []).some((c) => c.kind === "outsideRoom" && c.severity === "erreur"),
+      ).toBe(true);
+    });
   });
 });
 

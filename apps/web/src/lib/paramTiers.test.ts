@@ -376,7 +376,10 @@ function leaves(v: unknown, path: string[] = [], out = new Set<string>()): Set<s
  * Chemins non édités par les sections de paramètres : identité et versions du fichier,
  * placement (plan), murs et calque de fond (plan Site ; entrées `ui:`), surcharges de nez et de
  * règles (inspecteurs, contrôle), apparence (vue 3D), réglages des garde-corps sans champ
- * (rehausse sur palier, dépassement du poteau : défauts du cœur).
+ * (rehausse sur palier, dépassement du poteau : défauts du cœur). Tronçons et jonctions d'une
+ * cage saisie, contour de pièce et obstacles : édités par l'inspecteur de l'éditeur de plan
+ * (`PlanInspector`, ADR-0010), comme les murs ; présents depuis les démos du tracé libre et du
+ * site libre (sous-lot 7a).
  */
 const NOT_EDITABLE = [
   /^name$/,
@@ -386,6 +389,9 @@ const NOT_EDITABLE = [
   /^stair\.placement\./,
   /^site\.walls\./,
   /^site\.underlay\./,
+  /^site\.room\./,
+  /^site\.obstacles\./,
+  /^stair\.layout\.(sections|junctions)\./,
   /^stair\.nosingOverrides\./,
   /^compliance\.overrides\./,
   /^guards\.flight\.landing\./,
