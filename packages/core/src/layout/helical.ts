@@ -23,20 +23,19 @@
  *   de trou).
  */
 import type { HelicalLayout, Layout } from "../model/derived.js";
-import type { CurveSeg, Mm, Polygon2, Rad, Vec2 } from "../model/primitives.js";
+import type { Mm, Rad, Vec2 } from "../model/primitives.js";
 import type { HelicalLayoutSpec, Project } from "../model/project.js";
-import { flattenCurve, makeCurve } from "../geom2d/curve.js";
-import { ensureCCW } from "../geom2d/polygon.js";
-import { arcSeg } from "../geom2d/segment.js";
+import { arcPoints, discPolygon, sectorRing, splitArc } from "../geom2d/arc.js";
+import { makeCurve } from "../geom2d/curve.js";
 import * as V from "../geom2d/vec.js";
 import { msg } from "@blondel/i18n";
 import { LayoutError } from "./errors.js";
 import { resolveRiserCount, resolveWalklineOffset } from "./resolve.js";
 
-/** Balayage maximal d'un arc élémentaire des bords et de Γ. */
-const MAX_ARC_SWEEP: Rad = Math.PI / 2;
-/** Flèche de discrétisation des contours (mm), comme les marches des escaliers à volées. */
-const CHORD_TOL: Mm = 0.1;
+// Primitives d'arc (découpage à 90°, points, secteur, disque) : `geom2d/arc.ts`, partagées avec
+// le moteur de cage (F10, sous-lot P1) ; réexportées ici pour les appelants existants.
+export { arcPoints, sectorRing, splitArc };
+const disc = discPolygon;
 
 const DEG = Math.PI / 180;
 
@@ -53,33 +52,6 @@ export function helicalAngleAt(h: HelicalLayout, u: Rad): Rad {
 /** Point à la distance `radius` de l'axe, sur le rayon d'angle `angle`. */
 export function helicalPoint(h: Pick<HelicalLayout, "center">, radius: Mm, angle: Rad): Vec2 {
   return V.addScaled(h.center, V.fromAngle(angle), radius);
-}
-
-/** Arc découpé en arcs élémentaires d'au plus 90°. */
-export function splitArc(center: Vec2, radius: Mm, start: Rad, sweep: Rad): CurveSeg[] {
-  const count = Math.max(1, Math.ceil(Math.abs(sweep) / MAX_ARC_SWEEP - 1e-12));
-  const step = sweep / count;
-  return Array.from({ length: count }, (_, i) => arcSeg(center, radius, start + i * step, step));
-}
-
-/** Points d'un arc (flèche ≤ 0,1 mm), extrémités comprises. */
-export function arcPoints(center: Vec2, radius: Mm, start: Rad, sweep: Rad): Vec2[] {
-  if (sweep === 0) return [V.addScaled(center, V.fromAngle(start), radius)];
-  return flattenCurve(makeCurve(splitArc(center, radius, start, sweep)), CHORD_TOL);
-}
-
-/** Secteur de couronne (r_in ≤ r ≤ r_out, angles de `start` à `start + sweep`), CCW. */
-export function sectorRing(center: Vec2, rIn: Mm, rOut: Mm, start: Rad, sweep: Rad): Polygon2 {
-  const outer = arcPoints(center, rOut, start, sweep);
-  const inner = arcPoints(center, rIn, start, sweep).reverse();
-  return ensureCCW([...outer, ...inner]);
-}
-
-/** Disque (polygone inscrit, flèche ≤ 0,1 mm), CCW. */
-function disc(center: Vec2, radius: Mm): Polygon2 {
-  const pts = arcPoints(center, radius, 0, 2 * Math.PI);
-  pts.pop(); // dernier point = premier
-  return ensureCCW(pts);
 }
 
 /**

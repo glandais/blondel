@@ -49,12 +49,7 @@
  *   projet et étapes amont) sont les mêmes objets.
  */
 import { errorMessage, messageEquals, msg, type Message } from "@blondel/i18n";
-import {
-  cageOutlineDefect,
-  cageOutlineReach,
-  cageSelfCovers,
-  cageSoffits,
-} from "../headroom/cage.js";
+import { cageHeadroomCeilings } from "../headroom/cage.js";
 import { computeHeadroom, type HeadroomAnalysis } from "../headroom/headroom.js";
 import { computeLayout } from "../layout/layout.js";
 import { autoWalklineSideKey } from "../layout/walklineSide.js";
@@ -1003,19 +998,18 @@ export function buildModel(project: Project, options: BuildModelOptions = {}): M
         cageSpec ? stair.treads.nosing : undefined,
       ],
       (): Stage<HeadroomAnalysis | null> => {
-        const selfCovers = cageSpec !== undefined && cageSelfCovers(cageSpec, layout);
-        if (selfCovers) {
-          const reach = cageOutlineReach(cageSpec, stair.treads.nosing);
-          const tread = cageOutlineDefect(stepping, layout, reach);
-          if (tread !== null) return { error: msg("headroom.error.cageTreadOutline", { tread }) };
+        const ceilings = cageHeadroomCeilings(
+          cageSpec,
+          layout,
+          stepping,
+          stair.treads.thickness,
+          stair.treads.nosing,
+        );
+        if (ceilings.kind === "defect") {
+          return { error: msg("headroom.error.cageTreadOutline", { tread: ceilings.tread }) };
         }
         return attempt(STAGE_LABELS.headroom, () =>
-          computeHeadroom(
-            site,
-            layout,
-            stepping,
-            selfCovers ? cageSoffits(stepping, stair.treads.thickness) : undefined,
-          ),
+          computeHeadroom(site, layout, stepping, ceilings.soffits),
         );
       },
     );

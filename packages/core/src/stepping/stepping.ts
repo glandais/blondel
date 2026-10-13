@@ -36,6 +36,12 @@
  * F13). Une cage exprimable en volées garde exactement le découpage des volées.
  *
  * Tracé hélicoïdal (`layout.helical`, jalon 5a) : découpage propre, `stepping/helical.ts`.
+ *
+ * Cage issue d'un hélicoïdal (`layout.helicalOrigin`, `helicalToCage`, F10 sous-lot P1, jamais
+ * posée par `computeLayout` en P1) : découpage de cage (nez perpendiculaires à Γ, donc
+ * rayonnants) avec le vocabulaire de l'hélicoïdal : débord borné par le fût ou le jour
+ * (`stepping.helical.nosingReaches*`), surcharges de nez et giron cible ignorés et signalés,
+ * remarques `stepping.helical.*` en tête, `Stepping.helical`, marches dansantes (`treads.ts`).
  */
 import { curvePointAt, curveTangentAt } from "../geom2d/curve.js";
 import { segEnd, segStart } from "../geom2d/segment.js";
@@ -190,6 +196,9 @@ export function computeStepping(
   checkChamferRays(layout, project.stair.balancing.method);
   const notes: Message[] = [];
   const { riserCount: n, rise, rises, z } = computeRises(project);
+  // Cage issue d'un hélicoïdal (F10, sous-lot P1) : vocabulaire et contrôles de l'hélicoïdal.
+  const helicalOrigin = layout.helicalOrigin ? helicalOriginOf(layout, n) : undefined;
+  if (helicalOrigin) checkHelicalNosing(project, helicalOrigin);
   const positions = placeNosings(project, layout, n);
   notes.push(...positions.notes);
   const { going } = positions;
@@ -324,7 +333,8 @@ export function computeStepping(
     baseFree.add(k).add(k + 1);
   }
   const angleOverrides = new Map<number, number>();
-  for (const o of project.stair.nosingOverrides) {
+  // Cage issue d'un hélicoïdal : surcharges ignorées et signalées, comme l'hélicoïdal.
+  for (const o of helicalOrigin ? [] : project.stair.nosingOverrides) {
     if (o.index >= n) {
       notes.push(
         msg("stepping.override.orphan", { kind: overrideKind(o.kind), nosing: o.index, total: n }),
@@ -787,8 +797,90 @@ export function computeStepping(
     nosings,
     treads,
     balancedZones,
-    notes,
+    notes: helicalOrigin ? [...helicalNotes(project, helicalOrigin, going), ...notes] : notes,
+    ...(helicalOrigin ? { helical: true as const } : {}),
   };
+}
+
+/** Grandeurs de l'hélicoïdal d'origine, relues sur une cage issue d'un hélicoïdal. */
+interface HelicalOriginGeometry {
+  readonly core: "column" | "well";
+  /** Rayon de l'axe en arc, mesuré sur le bord d'ancrage = bord de l'axe (r_i). */
+  readonly innerRadius: Mm;
+  /** Rayon de Γ (r_i + d_f). */
+  readonly walklineRadius: Mm;
+  /** Angle total Θ et angle par marche Δθ = Θ / (n − 1). */
+  readonly totalAngle: number;
+  readonly stepAngle: number;
+}
+
+/**
+ * Grandeurs d'une cage issue d'un hélicoïdal (`Layout.helicalOrigin`, `helicalToCage`) : un
+ * tronçon à axe en arc ancré du côté de l'axe (rayon d'ancrage = r_i), Γ concentrique.
+ */
+function helicalOriginOf(layout: Layout, n: number): HelicalOriginGeometry {
+  const arc = layout.sections?.[0]?.arc;
+  const walk = layout.walkline.segments[0];
+  if (!arc || walk?.kind !== "arc" || layout.sections!.length !== 1) {
+    throw new SteppingError(msg("stepping.helical.flightLayout"));
+  }
+  const totalAngle = Math.abs(arc.sweep);
+  return {
+    core: layout.helicalOrigin!.core,
+    innerRadius: arc.radius,
+    walklineRadius: walk.radius,
+    totalAngle,
+    stepAngle: totalAngle / (n - 1),
+  };
+}
+
+/**
+ * Débord de nez d'une cage issue d'un hélicoïdal : il doit rester sous le rayon du fût ou du
+ * jour, comme `computeHelicalStepping` (même message).
+ * @throws SteppingError sinon.
+ */
+function checkHelicalNosing(project: Project, h: HelicalOriginGeometry): void {
+  const depth = project.stair.treads.nosing;
+  if (!(depth < h.innerRadius)) {
+    throw new SteppingError(
+      msg(
+        h.core === "column"
+          ? "stepping.helical.nosingReachesColumn"
+          : "stepping.helical.nosingReachesWell",
+        { depth: String(depth), radius: String(h.innerRadius) },
+      ),
+    );
+  }
+}
+
+/**
+ * Remarques d'une cage issue d'un hélicoïdal, celles de `computeHelicalStepping` (mêmes clés,
+ * mêmes paramètres) : synthèse, giron cible et surcharges de nez ignorés.
+ */
+function helicalNotes(project: Project, h: HelicalOriginGeometry, going: Mm): Message[] {
+  const deg = 180 / Math.PI;
+  const notes: Message[] = [
+    msg("stepping.helical.summary", {
+      stepAngle: dec(h.stepAngle * deg),
+      treadsPerTurn: dec((2 * Math.PI) / h.stepAngle),
+      totalAngle: dec(h.totalAngle * deg),
+      going: dec(going),
+      walklineRadius: dec(h.walklineRadius),
+      collet: dec(h.innerRadius * h.stepAngle),
+    }),
+  ];
+  const { targetGoing } = project.stair.stepping;
+  if (targetGoing !== "auto") {
+    notes.push(
+      msg("stepping.helical.targetGoingIgnored", { target: dec(targetGoing), going: dec(going) }),
+    );
+  }
+  for (const o of project.stair.nosingOverrides) {
+    notes.push(
+      msg("stepping.helical.overrideIgnored", { kind: overrideKind(o.kind), nosing: o.index }),
+    );
+  }
+  return notes;
 }
 
 /** En deçà (degrés), un angle de nez est rendu nul (pas de « −0 » ni de bruit d'arrondi). */

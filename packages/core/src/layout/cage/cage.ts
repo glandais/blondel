@@ -97,9 +97,18 @@ export interface CageLayoutOptions {
    * Origine de la cage (`section.ts`) : `cage` (défaut) pour une cage saisie, erreurs
    * `layout.cage.*` en tronçons et en parties droites, borne `CAGE_MAX_SECTIONS` ; `flights`
    * pour une cage issue de `flightsToCage`, erreurs du moteur à volées à l'identique (parité),
-   * sans borne du nombre de tronçons.
+   * sans borne du nombre de tronçons ; `helical` pour une cage issue d'un hélicoïdal
+   * (`helicalToCage`, F10 sous-lot P1) : un tronçon à axe en arc dont le balayage peut
+   * dépasser un tour, avec `core` et `arrival` (moteur général, `general.ts`).
    */
   readonly origin?: CageOrigin;
+  /** Origine `helical` : fût central (`column`) ou jour central (`well`), vocabulaire des erreurs. */
+  readonly core?: "column" | "well";
+  /**
+   * Origine `helical` : palier d'arrivée en secteur, prolongeant l'axe en arc au niveau du
+   * plancher haut, de balayage signé `sweep` (degrés, signe du sens de montée). Absent : aucun.
+   */
+  readonly arrival?: { readonly sweep: number };
 }
 
 /**
@@ -123,7 +132,7 @@ export function computeCageLayout(
   checkSectionCount(spec, vocabulary);
   spec.junctions.forEach((j, i) => checkJunctionDomain(j, i));
   // Largeur variable ou axe en arc (sous-lot 2b) : moteur général.
-  if (needsGeneralEngine(spec)) return computeGeneralCageLayout(project, spec);
+  if (needsGeneralEngine(spec)) return computeGeneralCageLayout(project, spec, options);
   const width = spec.sections[0]!.width;
   const junctions = spec.junctions.map((j) => junctionGeom(j, width));
   const straight = resolveStraightLengths(project, spec);

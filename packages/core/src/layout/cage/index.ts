@@ -5,6 +5,7 @@
 export { computeCageLayout, needsGeneralEngine, type CageLayoutOptions } from "./cage.js";
 export { computeGeneralCageLayout, generalCagePieces } from "./general.js";
 export type { CageOrigin } from "./section.js";
+export { helicalToCage, type HelicalToCage } from "./fromHelical.js";
 export {
   cageToFlights,
   checkFlightsTopology,

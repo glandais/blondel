@@ -261,6 +261,24 @@ export interface Layout {
    * par le moteur de cage) ou hélicoïdal. Ajout rétrocompatible.
    */
   readonly cage?: true;
+  /**
+   * Cage **issue d'un hélicoïdal** (`helicalToCage`, F10 sous-lot P1, ADR-0010) : un tronçon à
+   * axe en arc calculé avec l'origine `helical` (`CageLayoutOptions`). Le découpage en lit le
+   * vocabulaire de l'hélicoïdal (marches dansantes, remarques `stepping.helical.*`, débord
+   * borné par le fût ou le jour) et l'échappée le palier d'arrivée. Absent : toute autre cage,
+   * tracé à volées ou hélicoïdal. Ajout rétrocompatible, jamais posé par `computeLayout` en P1.
+   */
+  readonly helicalOrigin?: HelicalOrigin;
+}
+
+/** Données propres à une cage issue d'un hélicoïdal (`Layout.helicalOrigin`). */
+export interface HelicalOrigin {
+  /** Fût central (`column`) ou jour central (`well`) : vocabulaire des erreurs. */
+  readonly core: "column" | "well";
+  /** Balayage signé du palier d'arrivée en secteur (rad, signe du sens de montée ; 0 : aucun). */
+  readonly arrivalSweep: Rad;
+  /** Contour du palier d'arrivée (secteur de couronne au niveau du plancher haut), s'il y en a un. */
+  readonly arrivalOutline?: Polygon2;
 }
 
 // ------------------------------------------------------------------ Étape 3 : découpage

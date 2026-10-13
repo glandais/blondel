@@ -16,7 +16,7 @@
  *   sur ce jour virtuel et Q_k est toujours la première intersection avec le bord réel.
  */
 import { msg, type Message } from "@blondel/i18n";
-import { cumulativeLengths, curvePointAt, curveTangentAt } from "../geom2d/curve.js";
+import { cumulativeLengths, curveLength, curvePointAt, curveTangentAt } from "../geom2d/curve.js";
 import { segEnd, segStart } from "../geom2d/segment.js";
 import { intersectLineCurve, segmentIntersect, type CurveHit } from "../geom2d/intersect.js";
 import { GEOM_EPS } from "../geom2d/tolerance.js";
@@ -29,11 +29,19 @@ import type { Curve2, Mm, Vec2 } from "../model/primitives.js";
 const CROSS_PARAM_EPS = 1e-9;
 /** Marge (mm) du rejet rapide par boîtes englobantes dans `nosingsCross`. */
 const BOX_MARGIN: Mm = 1;
+/**
+ * Égalité des scores de tangente (produit scalaire de vecteurs unitaires) dans `firstHit` :
+ * tolérance numérique (même point d'un arc recalculé sur un autre tour), pas une valeur métier.
+ */
+const TANGENT_TIE = 1e-9;
 
 /**
  * Première intersection d'une droite (origine P, direction unitaire `dir`) avec une courbe, du
  * côté `back` (t < 0) ou `forward` (t > 0). `along` : direction de Γ pour départager des
- * intersections confondues.
+ * intersections confondues. `nearS` (facultatif) : abscisse attendue sur la courbe, départage
+ * final des intersections à égalité de distance **et** de tangente (à `TANGENT_TIE` près), qui
+ * retient la plus proche de `nearS` : bord qui repasse exactement au même point en plan (cage
+ * issue d'un hélicoïdal de plus d'un tour, F10 sous-lot P1). Absent : choix inchangé.
  */
 export function firstHit(
   origin: Vec2,
@@ -41,6 +49,7 @@ export function firstHit(
   curve: Curve2,
   side: "back" | "forward",
   along?: Vec2,
+  nearS?: Mm,
 ): CurveHit | null {
   const all: CurveHit[] = [...intersectLineCurve({ origin, dir }, curve)];
   // Portions de courbe colinéaires à la droite (ignorées par `intersectLineCurve`) : leurs
@@ -69,7 +78,12 @@ export function firstHit(
     } else if (Math.abs(h.t) <= Math.abs(best.t) + 1e-6) {
       bestScore ??= scoreOf(best);
       const score = scoreOf(h);
-      if (score > bestScore) {
+      if (nearS !== undefined && Math.abs(score - bestScore) <= TANGENT_TIE) {
+        if (Math.abs(h.s - nearS) < Math.abs(best.s - nearS)) {
+          best = h;
+          bestScore = score;
+        }
+      } else if (score > bestScore) {
         best = h;
         bestScore = score;
       }
@@ -97,6 +111,25 @@ export type RealizedNosing =
   | { readonly ok: true; readonly nosing: NosingLine; readonly corrected: boolean }
   | { readonly ok: false; readonly reason: Message };
 
+/**
+ * Abscisses attendues sur C_i et C_e du nez d'abscisse `s` sur Γ, au prorata des longueurs
+ * (s·|C|/|Γ|), pour départager des intersections confondues (`firstHit`, `nearS`) : seulement
+ * pour une cage issue d'un hélicoïdal (`Layout.helicalOrigin`, bords concentriques qui repassent
+ * au même point d'un tour à l'autre) ; aucune sinon (choix inchangé).
+ */
+export function expectedAbscissae(
+  layout: Layout,
+  s: Mm,
+): { readonly inner?: Mm; readonly outer?: Mm } {
+  if (!layout.helicalOrigin) return {};
+  const walk = curveLength(layout.walkline);
+  if (!(walk > 0)) return {};
+  return {
+    inner: (s * curveLength(layout.inner)) / walk,
+    outer: (s * curveLength(layout.outer)) / walk,
+  };
+}
+
 /** Construit la ligne de nez d'orientation donnée (σ du collet ou direction). */
 export function realizeNosing(
   layout: Layout,
@@ -106,6 +139,7 @@ export function realizeNosing(
   development: Curve2 = layout.inner,
 ): RealizedNosing {
   const { p } = seed;
+  const near = expectedAbscissae(layout, seed.s);
   let dir: Vec2;
   let q: Vec2;
   let sigmaInner: Mm;
@@ -119,7 +153,7 @@ export function realizeNosing(
     dir = V.normalize(v);
     q = q0;
     sigmaInner = spec.sigma;
-    const hit = firstHit(p, dir, layout.inner, "back", seed.tangent);
+    const hit = firstHit(p, dir, layout.inner, "back", seed.tangent, near.inner);
     if (development !== layout.inner) {
       // Jour de développement virtuel (poteau) : Q est toujours pris sur le bord réel.
       if (!hit)
@@ -133,13 +167,13 @@ export function realizeNosing(
     }
   } else {
     dir = V.normalize(spec.dir);
-    const hit = firstHit(p, dir, layout.inner, "back", seed.tangent);
+    const hit = firstHit(p, dir, layout.inner, "back", seed.tangent, near.inner);
     if (!hit)
       return { ok: false, reason: msg("balancing.fail.missesWell", { nosing: seed.index }) };
     q = hit.point;
     sigmaInner = hit.s;
   }
-  const out = firstHit(p, dir, layout.outer, "forward", seed.tangent);
+  const out = firstHit(p, dir, layout.outer, "forward", seed.tangent, near.outer);
   if (!out) return { ok: false, reason: msg("balancing.fail.missesWall", { nosing: seed.index }) };
   return {
     ok: true,

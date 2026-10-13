@@ -16,6 +16,7 @@ Légende des preuves : chemins relatifs à la racine du dépôt, nom du test ent
 | 6   | Interface et sorties en français ou en anglais (ADR-0007, ajouté le 2026-09-30)                         | atteint |
 | 7   | Refonte de l'interface : parcours guidé et parcours libre (ADR-0009, ajouté le 2026-10-06)              | atteint |
 | 8   | Tracé libre (cage) et éditeur de plan, lots 1 à 4 (ADR-0010, ajouté le 2026-10-12)                      | atteint |
+| 9   | Parité hélicoïdal / cage, sous-lot P1 (décision F10, ajouté le 2026-10-13, §19)                         | partiel |
 
 « Atteint » veut dire vérifié automatiquement, pas validé par un atelier : les valeurs du profil d'atelier et des plugins restent des hypothèses « à valider » (`docs/LEDGER.md` §2). Les réserves de chaque critère sont listées plus bas.
 
@@ -438,6 +439,24 @@ Réserves :
 Réserves :
 
 - Toujours sans source (20 mm à valider, C §1.11) ; âme moins profonde que voulu d'au plus le minimum, sans constat. Quand le voisin trop proche est en dessous, l'abandon A39 (d) reste (`webDepth` 80 et 90 → âme de 73 mm, 140 et 150 → 131 mm). Hors du balayage, la profondeur d'âme reste non monotone pour des raisons antérieures à A40, sans remarque d'abandon (`webDepth` 190, 200, 240, 250 → 131 mm), détail en `docs/QUESTIONS.md` A40.
+
+## 19. Parité hélicoïdal / cage, sous-lot P1 (décision F10 du 2026-10-13)
+
+**Partiel, en cours de revue** (branche `feat/helical-cage`, 2026-10-13 ; journal `docs/ledger/LEDGER-helical-cage.md`). Définition retenue : décision F10 (a) de `docs/QUESTIONS.md`, parité seule, sans bascule du pipeline. Constat chiffré : `docs/QUESTIONS.md`, F10.
+
+| Critère                                                                                                                                                                                                                                                                                                                                                                                                                    | Preuves                                                                                                                  |
+| -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| Conversion pure `helicalToCage` : un tronçon à axe en arc, placement recalé à gauche et à droite, balayage au-delà d'un tour, mêmes erreurs que `computeHelicalLayout`, aller-retour par le schéma de cage sous un tour                                                                                                                                                                                                    | `packages/core/src/layout/cage/fromHelical.test.ts`                                                                      |
+| Parité stricte (tracé, découpage, sous-faces, échappée, cotes N5 ; 1e-6 mm, 1e-9 rad) sur les 6 exemples hélicoïdaux avec leur palier, le préréglage et les 3 démos : aucun écart ; sans palier, 5 exemples sur 6 sans écart, `j5a-helicoidal` en TIE (emplacement du minimum d'échappée, valeur identique)                                                                                                                | `packages/core/src/layout/cage/helicalParity.test.ts` « — cas », « — cotes des exemples (N5) »                           |
+| Écarts résiduels assertés, jamais exclus : table `EXPECTED_GAPS` par cas (CUT, TIE) et propriété fast-check (trémie, `firstRiseOffset`, giron cible, côté de Γ et surcharges de nez tirés) où chaque tirage tombe exactement sur les écarts prévus par les lacunes (CUT : contours et sous-faces seulement, échappée stricte ; TIE : admis seulement si le point de la cage est un minimum ex æquo de la référence ; HALF) | `helicalParity.test.ts` « — propriété », « écart TIE : la valeur du minimum est identique »                              |
+| Échappée de la cage égale à la règle dérivée `helicalHeadroomBound` à 1e-6 près ; départage `firstHit` par l'abscisse attendue                                                                                                                                                                                                                                                                                             | `helicalParity.test.ts` « borne dérivée retrouvée par la cage » ; `packages/core/src/balancing/firstHit.test.ts`         |
+| Aiguillage inchangé (`computeLayout`, `computeStepping`, `buildModel` sur le moteur hélicoïdal) ; instantanés et `examples/` inchangés                                                                                                                                                                                                                                                                                     | `helicalParity.test.ts` « — aiguillage inchangé » ; `layout/cage/parity.test.ts` ; `pipeline/build.test.ts` (aucun `-u`) |
+
+Réserves :
+
+- Parité non tenue sur trois écarts (CUT géométrique, irréductible sans modifier l'hélicoïdal ; TIE et HALF, bruit d'arrondi) : la bascule (P2) attend la lecture du constat F10 par l'utilisateur.
+- Parité des erreurs de spécification portée par la conversion (`helicalToCage` rejoue les contrôles de l'hélicoïdal) : le moteur de cage seul accepte un angle par marche ≥ 180° (asserté), à reporter dans le moteur avant P2.
+- Règles, pièces, garde-corps et exports hors P1 (ils exigent la bascule) ; la cage d'origine `helical` est hors schéma au-delà d'un tour et porte le palier d'arrivée et le fût par des options de calcul.
 
 ## Vérifications de l'intégration (limon central bois, A39)
 

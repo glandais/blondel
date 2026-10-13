@@ -103,8 +103,9 @@ import type {
   WalklineTransition,
   ZeroLengthInnerCorner,
 } from "../../model/derived.js";
-import type { ArcSeg, Curve2, CurveSeg, Mm, Vec2 } from "../../model/primitives.js";
+import type { ArcSeg, Curve2, CurveSeg, Mm, Polygon2, Vec2 } from "../../model/primitives.js";
 import type { CageLayoutSpec, Project } from "../../model/project.js";
+import { discPolygon, sectorRing, splitArc } from "../../geom2d/arc.js";
 import { makeCurve, rotateCurve, translateCurve } from "../../geom2d/curve.js";
 import { intersectLines } from "../../geom2d/intersect.js";
 import { ensureCCW, signedArea } from "../../geom2d/polygon.js";
@@ -115,6 +116,7 @@ import { msg } from "@blondel/i18n";
 import { LayoutError } from "../errors.js";
 import { walklineOffsetFor } from "../resolve.js";
 import { resolveWalklineSide } from "../walklineSide.js";
+import type { CageLayoutOptions } from "./cage.js";
 import { rotateBasis, START_BASIS } from "./frames.js";
 import {
   checkNewel,
@@ -292,9 +294,14 @@ function effective(j: TurnJunction, d1: Vec2, d2: Vec2, exact: boolean): TurnJun
  * Place les tronçons (repère local) : propagation du repère et des points d'ancrage de jonction
  * en jonction.
  * @throws LayoutError si un tronçon est invalide (longueur, largeur variable sans partie
- *   droite, balayage, largeur variable sur un arc, rayon trop petit).
+ *   droite, balayage, largeur variable sur un arc, rayon trop petit). `fullTurns` (cage issue
+ *   d'un hélicoïdal, origine `helical`) : balayage d'un axe en arc accepté au-delà d'un tour.
  */
-function placeSections(spec: CageLayoutSpec, lengths: readonly Mm[]): PlacedSection[] {
+function placeSections(
+  spec: CageLayoutSpec,
+  lengths: readonly Mm[],
+  fullTurns = false,
+): PlacedSection[] {
   const out: PlacedSection[] = [];
   const first = spec.sections[0]!;
   let u = START_BASIS.u;
@@ -347,7 +354,7 @@ function placeSections(spec: CageLayoutSpec, lengths: readonly Mm[]): PlacedSect
         throw new LayoutError(msg("layout.cage.arcVariableWidth", { section: i + 1 }));
       }
       const deg = s.axis.sweep;
-      if (!(Math.abs(deg) > 0 && Math.abs(deg) < 360)) {
+      if (!(Math.abs(deg) > 0 && (fullTurns ? Number.isFinite(deg) : Math.abs(deg) < 360))) {
         throw new LayoutError(
           msg("layout.cage.sweepOutOfRange", { section: i + 1, sweep: String(deg) }),
         );
@@ -820,12 +827,15 @@ function checkSectionEdges(
 /**
  * Bords gauche et droit (`side`), repère local : parties droites (avec les retraits des
  * raccords), arcs des axes en arc, raccords de jour et congés côté mur, bords des paliers.
- * Appelé après `checkSectionEdges`.
+ * Appelé après `checkSectionEdges`. `split` (origine `helical`) : arcs des axes découpés en
+ * arcs élémentaires d'au plus 90° (`splitArc`, comme l'hélicoïdal), pour qu'un balayage de plus
+ * d'un tour reste lisible par les algorithmes génériques (intersections, sous-courbes).
  */
 function edgeSegments(
   side: Side,
   sections: readonly PlacedSection[],
   junctions: readonly PlacedJunction[],
+  split = false,
 ): CurveSeg[] {
   const segs: CurveSeg[] = [];
   const pushLine = (a: Vec2, b: Vec2): void => {
@@ -842,7 +852,9 @@ function edgeSegments(
       if (prev?.kind === "turn" && prev.side !== side) pushLine(prev.w, p0);
       const { center, radius, sweep, sign } = sec.arc;
       const rho = radius + sign * edgeOffset(sec.anchor, sec.w0, side);
-      segs.push(arcSeg(center, rho, V.angleOf(V.sub(p0, center)), sweep));
+      const a0 = V.angleOf(V.sub(p0, center));
+      if (split) segs.push(...splitArc(center, rho, a0, sweep));
+      else segs.push(arcSeg(center, rho, a0, sweep));
       if (next?.kind === "turn" && next.side !== side) pushLine(crossPoint(sec, 1, side), next.w);
     } else {
       const e = straightEdge(side, sections, junctions, i);
@@ -945,9 +957,9 @@ interface GeneralGeometry {
   readonly junctions: readonly PlacedJunction[];
 }
 
-function placeCage(project: Project, spec: CageLayoutSpec): GeneralGeometry {
+function placeCage(project: Project, spec: CageLayoutSpec, fullTurns = false): GeneralGeometry {
   const lengths = resolveStraightLengths(project, spec);
-  const sections = placeSections(spec, lengths);
+  const sections = placeSections(spec, lengths, fullTurns);
   const geoms = spec.junctions.map((j, i) => junctionGeom(j, sections[i]!.w1));
   const junctions = placeJunctions(project, spec, sections, geoms);
   return { sections, geoms, junctions };
@@ -969,17 +981,28 @@ export function generalCagePieces(project: Project, spec: CageLayoutSpec): CageP
  * jonctions.
  * @throws LayoutError si une cote est impossible (voir l'en-tête et les clés
  *   `layout.cage.*`).
+ *
+ * Origine `helical` (`options.origin`, cage issue d'un hélicoïdal, F10 sous-lot P1) : balayage
+ * d'un axe en arc accepté au-delà d'un tour ; arcs des bords et de Γ découpés à 90° au plus
+ * (`splitArc`) ; emprise en secteur de couronne, ou disque de R_e troué du disque de r_i au-delà
+ * d'un tour, palier d'arrivée compris (`options.arrival`), comme `layout/helical.ts` ;
+ * `Layout.helicalOrigin` (fût ou jour, palier d'arrivée). Sans effet sur toute autre cage.
  */
-export function computeGeneralCageLayout(project: Project, spec: CageLayoutSpec): Layout {
-  const { sections, geoms, junctions } = placeCage(project, spec);
+export function computeGeneralCageLayout(
+  project: Project,
+  spec: CageLayoutSpec,
+  options: CageLayoutOptions = {},
+): Layout {
+  const helical = options.origin === "helical";
+  const { sections, geoms, junctions } = placeCage(project, spec, helical);
   const start = startSide(project, spec, sections, geoms);
   const innerSide = innerSideOf(sections, junctions);
   const turning = junctions.flatMap((j, i) => (j.kind === "turn" ? [{ j, i }] : []));
   const firstTurn = turning[0];
 
   checkSectionEdges(sections, junctions);
-  const leftSegs = edgeSegments("left", sections, junctions);
-  const rightSegs = edgeSegments("right", sections, junctions);
+  const leftSegs = edgeSegments("left", sections, junctions, helical);
+  const rightSegs = edgeSegments("right", sections, junctions, helical);
   const innerSegs = innerSide === "left" ? leftSegs : rightSegs;
   const outerSegs = innerSide === "left" ? rightSegs : leftSegs;
 
@@ -1009,7 +1032,9 @@ export function computeGeneralCageLayout(project: Project, spec: CageLayoutSpec)
     const next = junctions[i];
     const sBefore = s;
     if (walk.arc !== undefined) {
-      walkSegs.push(walk.arc);
+      const { center, radius, startAngle, sweep } = walk.arc;
+      if (helical) walkSegs.push(...splitArc(center, radius, startAngle, sweep));
+      else walkSegs.push(walk.arc);
       s += walk.arc.radius * Math.abs(walk.arc.sweep);
     } else {
       const delta = V.sub(walk.g1, walk.g0);
@@ -1204,12 +1229,19 @@ export function computeGeneralCageLayout(project: Project, spec: CageLayoutSpec)
   // d_f : première jonction tournante, sinon départ (`TurnZone.walklineOffset` par jonction).
   const df = firstTurn?.j.df ?? walklineOffsetFor(project.stair.walkline, sections[0]!.w0);
 
+  // Origine `helical` : emprise et palier d'arrivée de l'hélicoïdal (`layout/helical.ts`).
+  const ring =
+    helical && sections.length === 1 && sections[0]!.arc !== undefined
+      ? helicalRing(sections[0]!, options, toWorld, angle)
+      : undefined;
+
   return {
     inner,
     outer,
     walkline,
     walklineOffset: df,
-    footprint: footprintOf(inner, outer),
+    footprint: ring?.footprint ?? footprintOf(inner, outer),
+    ...(ring?.footprintHoles ? { footprintHoles: ring.footprintHoles } : {}),
     turns: turnZones,
     ...(layoutErrors.length > 0 ? { errors: layoutErrors } : {}),
     ...(notes.length > 0 ? { notes } : {}),
@@ -1219,5 +1251,51 @@ export function computeGeneralCageLayout(project: Project, spec: CageLayoutSpec)
     ...(firstTurn === undefined ? { walklineSide: start } : {}),
     ...(transitions.length > 0 ? { walklineTransitions: transitions } : {}),
     sections: layoutSections,
+    ...(helical
+      ? {
+          helicalOrigin: {
+            core: options.core ?? "column",
+            arrivalSweep: ring?.arrivalSweep ?? 0,
+            ...(ring?.arrivalOutline ? { arrivalOutline: ring.arrivalOutline } : {}),
+          },
+        }
+      : {}),
+  };
+}
+
+/**
+ * Emprise d'une cage issue d'un hélicoïdal (un tronçon à axe en arc, repère monde), comme
+ * `layout/helical.ts` : secteur de couronne des marches et du palier d'arrivée si leur balayage
+ * cumulé reste sous un tour, sinon disque de R_e troué du disque de r_i (`footprintHoles`) ;
+ * contour du palier d'arrivée (secteur au-delà de l'arrivée de l'arc), s'il y en a un.
+ */
+function helicalRing(
+  sec: PlacedSection,
+  options: CageLayoutOptions,
+  toWorld: (p: Vec2) => Vec2,
+  rotation: number,
+): {
+  footprint: Polygon2;
+  footprintHoles?: Polygon2[];
+  arrivalSweep: number;
+  arrivalOutline?: Polygon2;
+} {
+  const { center, radius, sweep, sign } = sec.arc!;
+  const rhoL = radius + sign * edgeOffset(sec.anchor, sec.w0, "left");
+  const rhoR = radius + sign * edgeOffset(sec.anchor, sec.w0, "right");
+  const rIn = Math.min(rhoL, rhoR);
+  const rOut = Math.max(rhoL, rhoR);
+  const c = toWorld(center);
+  const start = V.angleOf(V.sub(sec.a0, center)) + rotation;
+  const landing = options.arrival ? (Math.abs(options.arrival.sweep) * Math.PI) / 180 : 0;
+  const arrivalOutline =
+    landing > 0 ? sectorRing(c, rIn, rOut, start + sweep, sign * landing) : undefined;
+  const covered = Math.abs(sweep) + landing;
+  const partial = covered < 2 * Math.PI - 1e-9;
+  return {
+    footprint: partial ? sectorRing(c, rIn, rOut, start, sign * covered) : discPolygon(c, rOut),
+    ...(!partial && rIn > 0 ? { footprintHoles: [discPolygon(c, rIn)] } : {}),
+    arrivalSweep: sign * landing,
+    ...(arrivalOutline ? { arrivalOutline } : {}),
   };
 }

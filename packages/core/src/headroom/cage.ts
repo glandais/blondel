@@ -26,7 +26,10 @@
  *   voisinage n'est pas détecté (limite consignée au journal du sous-lot 2d).
  *
  * Le découpage d'une cage ne porte pas de sous-faces (`Stepping.soffits` reste propre à
- * l'hélicoïdal) : elles sont déduites ici, au moment de l'échappée.
+ * l'hélicoïdal) : elles sont déduites ici, au moment de l'échappée (`cageHeadroomCeilings`,
+ * étape d'échappée du pipeline extraite en fonction pure). Cage issue d'un hélicoïdal
+ * (`Layout.helicalOrigin`, F10 sous-lot P1) : sous-faces toujours prises en compte, comme
+ * l'hélicoïdal, palier d'arrivée compris.
  */
 import { curveLength, subCurve } from "../geom2d/curve.js";
 import { distanceToCurve } from "../geom2d/intersect.js";
@@ -111,4 +114,36 @@ export function cageOutlineDefect(stepping: Stepping, layout: Layout, reach: Mm)
     }
   }
   return null;
+}
+
+/**
+ * Plafonds propres d'une cage pour l'échappée (étape d'échappée du pipeline, `build.ts`,
+ * extraite en fonction pure, F10 sous-lot P1) : `defect` si un contour de marche n'est pas
+ * fiable (échappée non calculée, erreur `headroom.error.cageTreadOutline`), sinon les sous-faces
+ * à passer à `computeHeadroom` (`undefined` : la cage ne se recouvre pas, ou tracé non saisi en
+ * cage). Cage issue d'un hélicoïdal (`Layout.helicalOrigin`) : sous-faces toujours prises en
+ * compte, comme l'hélicoïdal (`Stepping.soffits`), palier d'arrivée compris (contour
+ * `helicalOrigin.arrivalOutline`, altitude H − épaisseur des marches, abscisse du nez
+ * d'arrivée).
+ */
+export function cageHeadroomCeilings(
+  spec: CageLayoutSpec | undefined,
+  layout: Layout,
+  stepping: Stepping,
+  thickness: Mm,
+  nosing: Mm,
+):
+  | { readonly kind: "defect"; readonly tread: number }
+  | { readonly kind: "ceilings"; readonly soffits?: readonly Soffit[] } {
+  const helical = layout.helicalOrigin;
+  const selfCovers = spec !== undefined && (helical !== undefined || cageSelfCovers(spec, layout));
+  if (!selfCovers) return { kind: "ceilings" };
+  const tread = cageOutlineDefect(stepping, layout, cageOutlineReach(spec, nosing));
+  if (tread !== null) return { kind: "defect", tread };
+  const soffits = cageSoffits(stepping, thickness);
+  const last = stepping.nosings[stepping.nosings.length - 1];
+  if (helical?.arrivalOutline && last) {
+    soffits.push({ outline: helical.arrivalOutline, z: last.z - thickness, sStart: last.s });
+  }
+  return { kind: "ceilings", soffits };
 }

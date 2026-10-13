@@ -42,9 +42,12 @@ import {
 
 /**
  * Origine de la cage calculée, qui fixe le vocabulaire des erreurs : `flights` pour une cage
- * issue de `flightsToCage` (messages du moteur à volées, parité), `cage` pour une cage saisie.
+ * issue de `flightsToCage` (messages du moteur à volées, parité), `cage` pour une cage saisie,
+ * `helical` pour une cage issue d'un hélicoïdal (`helicalToCage`, F10 sous-lot P1) : erreurs de
+ * cage saisie, balayage de l'axe en arc au-delà d'un tour (`general.ts`) et options propres
+ * (`CageLayoutOptions` : fût ou jour, palier d'arrivée).
  */
-export type CageOrigin = "cage" | "flights";
+export type CageOrigin = "cage" | "flights" | "helical";
 
 /** Tronçon et ses jonctions d'entrée (`prev`) et de sortie (`next`). */
 export interface SectionContext {
