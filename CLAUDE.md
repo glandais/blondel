@@ -26,6 +26,8 @@ pnpm ux:captures                  # captures de l'interface -> docs/ux/captures-
 - Avant un commit : `typecheck`, `test`, `format:check`, build web, et `e2e` si `apps/web` a changé. Vérifier l'absence d'échec, pas seulement la ligne de synthèse.
 - E2E : budget de tâches longues de 200 ms (`E2E_LONG_TASK_BUDGET_MS`), sensible à la charge de la machine ; relancer un échec de budget avant de conclure à une régression. Options : `E2E_SKIP_BUILD=1`, `E2E_BASE_URL=<url>` (site déjà servi), `E2E_GPU=1`. D'autres projets lancent Playwright sur cette machine : utiliser `--output <dossier privé>` et ne jamais tuer de processus par motif (`pkill -f`).
 - Variables de test : `UPDATE_EXAMPLES=1` (régénère `examples/`, voir README), `STEPPING_RUNS=1000`, `PERF_STRICT=1`.
+- Après une montée de version de Playwright (Dependabot), installer le navigateur correspondant : `pnpm --filter @blondel/web exec playwright install chromium` (sinon tous les e2e échouent en quelques ms).
+- Propriétés intermittentes connues (graines notées dans `docs/LEDGER.md`) : `apps/web/src/model/structuralShare.test.ts` (clé `__proto__` tirée par `fc.jsonValue`) et la longueur minimale de plateau de `packages/core/src/structures/woodCentralLayers.joints.test.ts` (A37 (14)). Relancer avant de conclure à une régression.
 - `examples/*.blondel.json` sont **générés** par `serializeProject` et comparés octet par octet : ne pas les éditer à la main ni les passer à Prettier (exclus dans `.prettierignore`).
 
 ## Architecture
@@ -60,4 +62,5 @@ Invariants à respecter :
 ## Git et déploiement
 
 - Branche de travail et branche par défaut : `develop` (dépôt GitHub `glandais/blondel`). Un push sur `develop` déploie GitHub Pages (https://glandais.github.io/blondel/, `.github/workflows/pages.yml`, types et tests d'abord). `ci.yml` vérifie les pull requests (types, tests, format, build, e2e). Dependabot est configuré.
+- Alerte de sécurité sur une dépendance transitive : modifier seulement son entrée dans `pnpm-lock.yaml` (version et `integrity`), puis `pnpm install --frozen-lockfile` ; `pnpm update --depth Infinity <paquet>` remonte aussi d'autres paquets.
 - Quand plusieurs agents travaillent dans l'arbre, ne committer que ses propres fichiers (`git add <chemins>`, jamais `git add -A` ni `git stash`).
