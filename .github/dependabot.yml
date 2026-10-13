@@ -17,6 +17,8 @@ updates:
       prefix-development: deps-dev
     labels:
       - dependencies
+    assignees:
+      - glandais
     ignore:
       # r3f (@react-three/fiber 9.8) exige React >= 19 et < 19.4
       # (docs/SPEC.md §5) : on bloque React et React DOM sous 19.4.
@@ -68,6 +70,8 @@ updates:
       prefix: ci
     labels:
       - dependencies
+    assignees:
+      - glandais
     groups:
       github-actions:
         patterns:
