@@ -399,44 +399,128 @@ describe("exemples j5c : limon central bois", () => {
   );
 });
 
-describe("épaisseur minimale de couche au joint imposé de l'âme de pied (QUESTIONS A39 (d))", () => {
-  /** Hauteur de l'âme de pied AP1 (gabarit), mm. */
-  const footWebHeight = (m: Model): number => {
-    const web = m.parts.find((p) => p.id === WOOD_CENTRAL_PLATE_FOOT_WEB_ID);
-    const ys = web!.flat!.outline.outer.map((q) => q.y);
-    return Math.max(...ys) - Math.min(...ys);
-  };
-  const THIN = "structure.woodCentral.note.layerJointLevelThin";
+/** Hauteur de l'âme de pied AP1 (gabarit), mm. */
+const footWebHeight = (m: Model): number => {
+  const web = m.parts.find((p) => p.id === WOOD_CENTRAL_PLATE_FOOT_WEB_ID);
+  const ys = web!.flat!.outline.outer.map((q) => q.y);
+  return Math.max(...ys) - Math.min(...ys);
+};
+const THIN = "structure.woodCentral.note.layerJointLevelThin";
+const SHIFTED = "structure.woodCentral.note.layerJointLevelShifted";
+const noteKeys = (m: Model): string[] => (m.notes ?? []).map((n) => n.key);
 
-  it("quart tournant par défaut (couches empilées, platine) : plus de couche de 11 mm, âme AP1 de 73 mm", () => {
-    // Écart voulu (décision du 2026-10-13) : le joint imposé à z = 8 + 120 + 1 = 129 mm
+/** Préréglage en limon central bois (paramètres par défaut, sauf `params`). */
+const woodCentralPreset = (id: "quarter-left" | "helical", params: Record<string, unknown> = {}) =>
+  deepMerge(createProject(id), { stair: { structure: { kind: "wood-central", params } } });
+
+describe("épaisseur minimale de couche au joint imposé de l'âme de pied (QUESTIONS A39 (d), A40 (c))", () => {
+  it("quart tournant par défaut (couches empilées, platine) : plus de couche de 11 mm, joint recalé, âme AP1 de 111 mm", () => {
+    // Écart voulu (décisions du 2026-10-13) : le joint imposé à z = 8 + 120 + 1 = 129 mm
     // laisserait sous l'assise de M1 (140 mm) une couche de 11 mm, sous le minimum de 20 mm
-    // (`section.minLayerThickness`, à valider) : abandonné, âme arrêtée au joint de 82 mm,
-    // soit 73 mm de haut (120 mm avec A38 seul, 73 mm avant A38).
-    const m = buildModel(
-      deepMerge(createProject("quarter-left"), {
-        stair: { structure: { kind: "wood-central", params: {} } },
-      }),
-      { memo: false },
-    );
+    // (`section.minLayerThickness`, à valider). A39 (d) l'abandonnait (âme arrêtée au joint de
+    // 82 mm, 73 mm de haut) ; A40 (c) le cale à 140 − 20 = 120 mm : âme de 120 − 1 − 8 = 111 mm
+    // (120 mm avec A38 seul).
+    const m = buildModel(woodCentralPreset("quarter-left"), { memo: false });
     expect(frList(m.errors)).toEqual([]);
-    const note = (m.notes ?? []).find((n) => n.key === THIN);
-    expect(note?.params).toMatchObject({ z: { num: 129 }, thickness: { num: 11 } });
-    expect(footWebHeight(m)).toBeCloseTo(73, 6);
+    expect(noteKeys(m)).not.toContain(THIN);
+    const note = (m.notes ?? []).find((n) => n.key === SHIFTED);
+    expect(note?.params).toMatchObject({
+      z: { num: 129 },
+      at: { num: 120 },
+      neighbour: { num: 140 },
+      min: { num: 20 },
+      depth: { num: 111 },
+      wanted: { num: 120 },
+    });
+    expect(footWebHeight(m)).toBeCloseTo(111, 6);
     // Aucun constat bloquant nouveau : seul le prédimensionnement indicatif (PRECHECK_*).
     const blocking = m.compliance.results
       .filter((r) => r.status === "violation" && r.severity === "bloquant")
       .map((r) => r.ruleId);
     expect(blocking.filter((id) => !id.startsWith("PRECHECK_"))).toEqual([]);
-    expect(results(m, "FAB_PLATINE_AME_NOYEE").filter((r) => r.status !== "ok")).toEqual([]);
+    const plate = results(m, "FAB_PLATINE_AME_NOYEE");
+    expect(plate.length).toBeGreaterThan(0);
+    expect(plate.filter((r) => r.status !== "ok")).toEqual([]);
   });
 
   it.each([J5C_WOOD_QUARTER, J5C_WOOD_HELICAL])(
     "%s : joint imposé gardé (couches voisines d'au moins 20 mm), âme AP1 de 120 mm inchangée",
     (file) => {
       const m = buildModel(load(file), { memo: false });
-      expect((m.notes ?? []).map((n) => n.key)).not.toContain(THIN);
+      expect(noteKeys(m)).not.toContain(THIN);
+      expect(noteKeys(m)).not.toContain(SHIFTED);
       expect(footWebHeight(m)).toBeCloseTo(120, 6);
+    },
+  );
+
+  it("minimum nul : comportement A38 exact, âme AP1 de la profondeur voulue (120 mm), sans remarque", () => {
+    const m = buildModel(woodCentralPreset("quarter-left", { section: { minLayerThickness: 0 } }), {
+      memo: false,
+    });
+    expect(frList(m.errors)).toEqual([]);
+    expect(noteKeys(m)).not.toContain(THIN);
+    expect(noteKeys(m)).not.toContain(SHIFTED);
+    expect(footWebHeight(m)).toBeCloseTo(120, 6);
+  });
+});
+
+describe("QUESTIONS A40 (c) : joint calé à « voisin − minimum », profondeur d'âme monotone", () => {
+  const MIN = 20;
+  const DEPTHS = [100, 110, 120, 130, 140, 150, 160] as const;
+  /**
+   * Balayage de `anchors.plate.webDepth` en couches empilées sur platine : hauteur de l'âme AP1.
+   * Valeurs figées (préréglage, tp = 8, c = 1, assise de M1 à 140 mm, minimum de 20 mm) :
+   * - 100 et 110 : joints de 109 et 119 mm gardés (couche d'au moins 21 mm sous l'assise) ;
+   * - 120 et 130 : joints voulus de 129 et 139 mm trop près de l'assise (11 et 1 mm) au-dessus,
+   *   calés à 140 − 20 = 120 mm : âme de 111 mm (A39 : 73 mm, joint de 82 mm en dessous) ;
+   * - 140 et 150 : joints voulus de 149 et 159 mm trop près de l'assise (9 et 19 mm) en
+   *   dessous : abandonnés comme en A39 (un recalage vers le haut rendrait l'âme plus profonde
+   *   que voulu), l'âme s'arrête à l'assise : 140 − 9 = 131 mm ;
+   * - 160 : joint de 169 mm gardé.
+   */
+  const EXPECTED: Readonly<Record<(typeof DEPTHS)[number], number>> = {
+    100: 100,
+    110: 110,
+    120: 111,
+    130: 111,
+    140: 131,
+    150: 131,
+    160: 160,
+  };
+  const sweep = (id: "quarter-left" | "helical"): number[] =>
+    DEPTHS.map((webDepth) => {
+      const m = buildModel(
+        woodCentralPreset(id, {
+          section: { curvedMethod: "stacked" },
+          anchors: { kind: "embeddedPlate", plate: { webDepth } },
+        }),
+        { memo: false },
+      );
+      expect(frList(m.errors)).toEqual([]);
+      const h = footWebHeight(m);
+      // Jamais plus profonde que voulu, jamais moins d'au plus le minimum.
+      expect(h, `webDepth ${webDepth}`).toBeLessThanOrEqual(webDepth + 1e-6);
+      expect(h, `webDepth ${webDepth}`).toBeGreaterThanOrEqual(webDepth - MIN - 1e-6);
+      const shifted = (m.notes ?? []).find((n) => n.key === SHIFTED);
+      if (shifted) {
+        const p = shifted.params as Record<string, { num: number }>;
+        expect(p["depth"]!.num).toBeCloseTo(h, 1);
+        expect(p["wanted"]!.num).toBeCloseTo(webDepth, 1);
+        expect(p["neighbour"]!.num - p["at"]!.num).toBeCloseTo(MIN, 1);
+      }
+      return h;
+    });
+
+  it.each(["quarter-left", "helical"] as const)(
+    "%s : webDepth 100 → 160 au pas de 10, âme AP1 ≤ voulu, ≥ voulu − minimum, non décroissante (plus de chute à 73 mm)",
+    (id) => {
+      const heights = sweep(id);
+      for (let i = 1; i < heights.length; i++) {
+        expect(heights[i]!, `webDepth ${DEPTHS[i]}`).toBeGreaterThanOrEqual(heights[i - 1]! - 1e-6);
+      }
+      expect(heights.map((h) => Math.round(h * 1000) / 1000)).toEqual(
+        DEPTHS.map((d) => EXPECTED[d]),
+      );
     },
   );
 });

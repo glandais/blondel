@@ -16,8 +16,9 @@
  *   garde sa profondeur partout où les assises ne la bornent pas, quand le joint est retenu ;
  *   épaisseur minimale de couche `section.minLayerThickness` (QUESTIONS A39 (d), décision du
  *   2026-10-13) : sur les préréglages cintrés par défaut, le joint de 129 mm laisserait une
- *   couche de 11 mm sous l'assise de M1, il est abandonné et l'âme revient à 73 mm (120 mm avec
- *   A38 seul).
+ *   couche de 11 mm sous l'assise de M1 ; abandonné en A39 (âme de 73 mm), il est calé à
+ *   « voisin − minimum » = 120 mm depuis A40 (c) (décision du 2026-10-13), âme de 111 mm (120 mm
+ *   avec A38 seul).
  * Le plan réel de l'âme (`BeamKerf.line`) est vérifié contre le solide de l'âme dans
  * `woodCentralPlates.test.ts`.
  */
@@ -232,31 +233,45 @@ describe("préréglages cintrés par défaut : âme de pied arrêtée sur les jo
         expect(top - y).toBeGreaterThanOrEqual(hE - 0.5);
       }
       expect(expectHousings(beam, checks, params)).toEqual({ holeIssues: 0, kerfIssues: 0 });
-      // Écart voulu (QUESTIONS A39 (d), décision du 2026-10-13) : le joint imposé sur le dessus
+      // Écart voulu (QUESTIONS A40 (c), décision du 2026-10-13) : le joint imposé sur le dessus
       // voulu du logement (tp + webDepth + c = 129 mm, A38 (12)) laisserait sous l'assise de M1
-      // (140 mm) une couche de 11 mm, plus mince que `section.minLayerThickness` (20 mm) : il est
-      // abandonné avec une remarque, l'âme est arrêtée au joint en dessous (82 mm), soit 73 mm
-      // de haut comme avant A38 (120 mm avec A38 seul).
+      // (140 mm) une couche de 11 mm, plus mince que `section.minLayerThickness` (20 mm) : il
+      // n'est plus abandonné (A39 (d) : âme arrêtée au joint de 82 mm, 73 mm de haut) mais calé à
+      // « voisin − minimum » = 140 − 20 = 120 mm, avec une remarque ; l'âme s'arrête à ce joint
+      // recalé, 120 − c − tp = 111 mm de haut (moins profonde que voulu d'au plus le minimum).
       const tp = params.anchors.plate.thickness;
+      const min = params.section.minLayerThickness;
       const wanted = tp + params.anchors.plate.webDepth + C;
+      const seatM1 = 140;
+      const at = seatM1 - min;
       const levels = layerLevels(beam);
       expect(onLevel(levels, wanted)).toBe(false);
-      const below = Math.max(...levels.filter((z) => z <= wanted));
-      expect(top).toBeCloseTo(below - C - tp, 6);
-      expect(top).toBeCloseTo(73, 6);
-      const thin = beam.notes.find(
-        (n) => n.key === "structure.woodCentral.note.layerJointLevelThin",
+      expect(onLevel(levels, at)).toBe(true);
+      expect(onLevel(levels, seatM1)).toBe(true);
+      expect(top).toBeCloseTo(at - C - tp, 6);
+      expect(top).toBeCloseTo(111, 6);
+      const keys = beam.notes.map((n) => n.key);
+      expect(keys).not.toContain("structure.woodCentral.note.layerJointLevelThin");
+      const shifted = beam.notes.find(
+        (n) => n.key === "structure.woodCentral.note.layerJointLevelShifted",
       );
-      expect(thin?.params).toMatchObject({
+      expect(shifted?.params).toMatchObject({
         z: { num: wanted },
-        thickness: { num: 11 },
-        z0: { num: wanted },
-        z1: { num: 140 },
-        min: { num: params.section.minLayerThickness },
+        at: { num: at },
+        neighbour: { num: seatM1 },
+        min: { num: min },
+        depth: { num: at - tp - C },
+        wanted: { num: params.anchors.plate.webDepth },
       });
-      // Plus aucune couche de 11 mm : la plus mince fait au moins le minimum.
+      // Plus aucune couche de 11 mm : la plus mince fait au moins le minimum, dont celle de
+      // 20 mm entre le joint recalé et l'assise.
       const thinnest = Math.min(...beam.stacked!.layers.map((l) => l.z1 - l.z0));
-      expect(thinnest).toBeGreaterThanOrEqual(params.section.minLayerThickness - 1e-9);
+      expect(thinnest).toBeGreaterThanOrEqual(min - 1e-9);
+      expect(
+        beam.stacked!.layers.some(
+          (l) => Math.abs(l.z0 - at) < 1e-6 && Math.abs(l.z1 - seatM1) < 1e-6,
+        ),
+      ).toBe(true);
     });
   }
 });

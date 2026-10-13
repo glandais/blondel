@@ -1445,7 +1445,12 @@ function mergeSteps(steps: readonly Step[]): Step[] {
   return out;
 }
 
-/** Plus haut niveau de `levels` (croissants) au plus égal à z (à `EPS` près), −∞ sans niveau. */
+/**
+ * Plus haut niveau de `levels` (croissants) au plus égal à z (à `EPS` près), −∞ sans niveau. Sur
+ * l'oracle `stackedJointLevels`, le joint imposé au dessus voulu de l'âme de pied y figure à son
+ * altitude retenue, recalée s'il y a lieu (QUESTIONS A40 (c)) : l'âme s'arrête au joint recalé,
+ * sans recalcul ici.
+ */
 function jointBelow(levels: readonly Mm[], z: Mm): Mm {
   let out = -Infinity;
   for (const j of levels) if (j <= z + EPS) out = Math.max(out, j);

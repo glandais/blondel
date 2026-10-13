@@ -1367,7 +1367,7 @@ describe("joints de colle imposés (A38 (12)) : dessus voulu de l'âme de pied",
     expect(oracle).toEqual(buildFlat(flatShape(8, [160], []), 75, [footPin(56, 12)]).oracle);
     // À moins de 1 mm de l'assise ou de la base : fusionné, sans remarque.
     const merged = resolveImposedLevels(8, 160, [160], [159.5, 8.4, 200, Number.NaN], []);
-    expect(merged).toEqual({ levels: [160], imposed: [], dropped: [] });
+    expect(merged).toEqual({ levels: [160], imposed: [], dropped: [], shifted: [] });
   });
 
   it("propriété : joint imposé hors des zones r, sinon abandonné ; broches centrées ; oracle = empilement", () => {

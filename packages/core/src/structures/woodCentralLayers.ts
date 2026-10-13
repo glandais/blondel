@@ -101,14 +101,22 @@
  * (|niveau − z| < rayon + jeu, `HoleLevel.r`), avec une remarque ; sinon joints de colle, les
  * intervalles voisins étant partagés comme entre deux assises (broches `centered` au milieu de
  * leur couche, A36 (12) ; zone `reach` de la pince de perçage de l'âme préférée, A37 (8)).
- * Épaisseur minimale (QUESTIONS A39 (d), décision du 2026-10-13) : un niveau imposé qui
- * laisserait, entre lui et le joint, l'assise, la base ou le dessus voisin, une couche plus mince
- * que `section.minLayerThickness` (20 mm par défaut, sans source, à valider ; écart au niveau
- * voisin, puis couches des intervalles qui l'encadrent après partage et perçages, A39 (d)) est
- * **abandonné**, avec la remarque `note.layerJointLevelThin` : l'âme de pied s'arrête alors au
- * joint en dessous (A37 (8)), moins profonde. 0 : aucun minimum (comportement A38). Sans effet sur
- * les couches minces qui existent sans joint imposé (calées sur les assises, partage autour des
- * perçages).
+ * Épaisseur minimale (QUESTIONS A39 (d) et A40 (c), décisions du 2026-10-13) : un niveau imposé
+ * qui laisserait sous le niveau voisin **du dessus** (assise, joint imposé retenu, dessus, ou
+ * joint du partage d'un intervalle voisin autour des perçages) une couche plus mince que
+ * `section.minLayerThickness` (20 mm par défaut, sans source, à valider) est **recalé** à
+ * « voisin − minimum » (remarque `note.layerJointLevelShifted`) : la couche garde le minimum et
+ * l'âme de pied, arrêtée au joint recalé (A37 (8)), est moins profonde que voulu d'au plus le
+ * minimum, jamais plus profonde. Il est **abandonné** (remarque `note.layerJointLevelThin`, ou
+ * `note.layerJointLevelThinShifted` quand la couche en cause est celle du joint recalé ; l'âme
+ * s'arrête au joint en dessous s'il lui laisse assez de hauteur, sinon elle garde sa profondeur
+ * dans un logement fraisé, comme A39 (d)) quand le recalage n'est pas possible : voisin trop
+ * proche **en dessous** (base, assise, joint retenu : un recalage vers le haut approfondirait
+ * l'âme), couche restant sous le joint recalé plus mince que le minimum, joint recalé dans la
+ * zone d'un perçage, minimum supérieur à t_max, couche trop mince sous le niveau ou qui ne le
+ * touche pas après partage, ou recalage total au-delà du minimum (au plus un recalage au partage
+ * par niveau). 0 : aucun minimum (comportement A38). Sans effet sur les couches minces qui
+ * existent sans joint imposé (calées sur les assises, partage autour des perçages).
  *
  * Couche composée, pièce intermédiaire (QUESTIONS A36 (9), décision du 2026-10-09) : une couche
  * de plusieurs planches est une pièce `wood-central-layer-<k>` / `LC1-<k>` composante de la
@@ -167,7 +175,7 @@
  * Sans source (QUESTIONS A37 (14), état gardé le 2026-10-10) : épaisseur minimale d'une couche
  * calée sur les assises ou partagée autour des perçages (garde technique `MIN_LAYER` seulement) ;
  * aucune couche plus mince que `section.minLayerThickness` n'est due à un joint imposé (A39 (d),
- * à valider).
+ * A40 (c), à valider).
  * La longueur minimale d'une planche est le paramètre `section.minBoardLength` (`auto` =
  * 2 × enture + marge, à valider, QUESTIONS A38 (4) (9)).
  *
@@ -338,10 +346,14 @@ export interface StackedBeamShape {
    * d'assise (`layerBounds`, `stackedJointLevels`) quand ils tombent dans ]base ; dessus[ ;
    * contraintes des perçages (broches au milieu de leur couche, A36 (12), pince de perçage de
    * l'âme `webEdge`, A37) respectées ; niveau abandonné, avec une remarque, s'il tombe dans la
-   * zone interdite d'un perçage (`resolveImposedLevels`) ou s'il laisserait contre lui une couche
-   * plus mince que `section.minLayerThickness` (`stackedBounds`, QUESTIONS A39 (d), décision du
-   * 2026-10-13 ; l'âme s'arrête alors au joint en dessous). Absent : aucun (comportement
-   * antérieur à A38).
+   * zone interdite d'un perçage (`resolveImposedLevels`). S'il laisserait sous le niveau voisin du
+   * dessus une couche plus mince que `section.minLayerThickness`, il est recalé à « voisin −
+   * minimum » (QUESTIONS A40 (c), décision du 2026-10-13 ; remarque, âme moins profonde d'au plus
+   * le minimum), sinon abandonné (`stackedBounds`, QUESTIONS A39 (d) ; l'âme s'arrête alors au
+   * joint en dessous). Convention de la remarque de recalage : niveau = base de l'empilement
+   * (`baseZ`, dessus de la platine) + profondeur d'âme + jeu d'atelier, d'où profondeur voulue =
+   * niveau − `baseZ` − jeu et profondeur obtenue = niveau recalé − `baseZ` − jeu. Absent : aucun
+   * (comportement antérieur à A38).
    */
   readonly jointLevels?: readonly Mm[];
 }
@@ -555,7 +567,8 @@ export function stackedJointLevels(
     return (holes) => {
       try {
         const levels = holeLevelsOf(holes, clearance);
-        // Mêmes niveaux imposés que `buildStackedLayers` (A38 (12), A39 (d)).
+        // Mêmes niveaux imposés que `buildStackedLayers` (A38 (12), A39 (d), A40 (c) : joint
+        // recalé compris).
         const { bounds } = stackedBounds(
           baseZ,
           shape.zTop,
@@ -578,8 +591,8 @@ export function stackedJointLevels(
 
 /**
  * Niveau de joint imposé abandonné : il couperait un perçage (`hole`, QUESTIONS A38 (12)), ou il
- * laisserait une couche plus mince que `section.minLayerThickness` (`thin`, QUESTIONS A39 (d),
- * décision du 2026-10-13).
+ * laisserait une couche plus mince que `section.minLayerThickness` sans pouvoir être recalé
+ * (`thin`, QUESTIONS A39 (d) et A40 (c), décisions du 2026-10-13 ; `z` = altitude voulue).
  */
 export type DroppedJointLevel =
   | {
@@ -607,47 +620,69 @@ export type DroppedJointLevel =
       readonly thickness: Mm;
       /** Épaisseur minimale exigée (`section.minLayerThickness`), mm. */
       readonly min: Mm;
+      /**
+       * Altitude recalée essayée (QUESTIONS A40 (c)), mm, quand la couche trop mince est celle
+       * de l'empilement avec le joint recalé (`stackedBounds`) : ses bornes `z0`, `z1` sont alors
+       * relatives à `at`, pas à `z` (remarque `note.layerJointLevelThinShifted`). Absente : couche
+       * du joint à son altitude voulue `z` (remarque `note.layerJointLevelThin`).
+       */
+      readonly at?: Mm;
     };
 
 /**
- * Niveaux imposés aux joints de colle (QUESTIONS A35 (g) ; A38 (12), décision du 2026-10-11 ;
- * A39 (d), décision du 2026-10-13) : assises, puis niveaux imposés en plus
- * (`StackedBeamShape.jointLevels`, dessus voulu du logement de l'âme de pied) retenus comme
- * niveaux d'assise de plus, sauf :
- * - hors de ]base ; dessus] (ou non finis) : ignorés ;
- * - à moins de la garde technique `MIN_LAYER` de la base, d'une assise ou d'un niveau imposé déjà
- *   retenu : fusionnés avec lui (l'assise prime), sans remarque ;
- * - dans la zone interdite d'un perçage (|niveau − z| < `HoleLevel.r` = rayon + jeu, pas la zone
- *   élargie `reach`) : abandonnés (`reason: "hole"`, remarque de `buildStackedLayers`) ;
- * - à moins de `minLayer` (`section.minLayerThickness`) du niveau voisin le plus proche, au-dessus
- *   ou en dessous (base, assises, niveaux imposés déjà retenus, dessus `zTop`) : abandonnés
- *   (`reason: "thin"`, A39 (d)) ; un écart égal au minimum est admis.
- * `minLayer` = 0 : aucun minimum, comportement A38 exact. Fonction pure ; les niveaux rendus sont
- * triés et dédoublonnés par `layerBounds`. `imposed` : niveaux imposés retenus. Les couches
- * réellement voisines d'un niveau retenu (partage d'un intervalle, perçages) sont contrôlées par
- * `stackedBounds`.
+ * Niveau de joint imposé recalé (QUESTIONS A40 (c), décision du 2026-10-13) : le niveau voulu
+ * laisserait sous le niveau voisin du dessus (assise, joint imposé déjà retenu, dessus, ou joint
+ * du partage d'un intervalle voisin dans `stackedBounds`) une couche plus mince que
+ * `section.minLayerThickness` ; il est calé à « voisin − minimum » au lieu d'être abandonné
+ * (couche minimale gardée, âme de pied moins profonde que voulu d'au plus le minimum). Jamais
+ * recalé plus haut que voulu (l'âme ne doit jamais être plus profonde que voulu).
+ * Invariants : `z − min − CMP_EPS ≤ at < z` ; `at = neighbour − min` (à `CMP_EPS` près).
  */
-export function resolveImposedLevels(
+export interface ShiftedJointLevel {
+  /** Altitude voulue du joint (`StackedBeamShape.jointLevels`), mm. */
+  readonly z: Mm;
+  /** Altitude retenue du joint recalé, mm. */
+  readonly at: Mm;
+  /** Niveau voisin au-dessus, trop proche de l'altitude voulue (ou du premier recalage), mm. */
+  readonly neighbour: Mm;
+  /** Épaisseur minimale exigée (`section.minLayerThickness`), mm. */
+  readonly min: Mm;
+}
+
+/**
+ * Sort d'un niveau imposé dans `resolveTargets` : ignoré (hors plage, fusionné à moins de
+ * `MIN_LAYER`), abandonné, ou retenu à l'altitude `at` (recalé si `neighbour` est défini).
+ */
+type TargetOutcome =
+  | { readonly kind: "ignored" }
+  | { readonly kind: "dropped"; readonly dropped: DroppedJointLevel }
+  | { readonly kind: "kept"; readonly at: Mm; readonly neighbour?: Mm };
+
+/**
+ * Cœur de `resolveImposedLevels` : sort de chaque niveau voulu `zs[i]` (même indice), traités
+ * par altitude croissante. Partagé par `resolveImposedLevels` et `stackedBounds` (qui suit ses
+ * cibles par indice, sans retrouver un niveau par sa valeur).
+ */
+function resolveTargets(
   baseZ: Mm,
   zTop: Mm,
   seatLevels: readonly Mm[],
-  jointLevels: readonly Mm[],
+  zs: readonly Mm[],
   holes: readonly HoleLevel[],
-  minLayer: Mm = 0,
-): {
-  readonly levels: readonly Mm[];
-  readonly imposed: readonly Mm[];
-  readonly dropped: readonly DroppedJointLevel[];
-} {
-  if (jointLevels.length === 0) return { levels: seatLevels, imposed: [], dropped: [] };
+  thin: Mm,
+  tMax: Mm,
+): TargetOutcome[] {
   const inRange = (z: Mm): boolean => z > baseZ + LEVEL_EPS && z <= zTop + LEVEL_EPS;
   const fixed: Mm[] = [baseZ, ...seatLevels.filter((z) => Number.isFinite(z) && inRange(z))];
   const valid = holes.filter((h) => Number.isFinite(h.z) && Number.isFinite(h.r) && h.r > 0);
-  const thin = Number.isFinite(minLayer) && minLayer > 0 ? minLayer : 0;
+  const inHole = (z: Mm): boolean => valid.some((h) => Math.abs(z - h.z) < h.r - POS_EPS);
   const kept: Mm[] = [];
-  const dropped: DroppedJointLevel[] = [];
-  const sorted = jointLevels.filter(Number.isFinite).sort((p, q) => p - q);
-  for (const z of sorted) {
+  const out: TargetOutcome[] = zs.map(() => ({ kind: "ignored" }));
+  const order = zs
+    .map((z, i) => ({ z, i }))
+    .filter((e) => Number.isFinite(e.z))
+    .sort((p, q) => p.z - q.z);
+  for (const { z, i } of order) {
     if (!inRange(z)) continue;
     if ([...fixed, ...kept].some((f) => Math.abs(f - z) < MIN_LAYER)) continue;
     let hit: HoleLevel | null = null;
@@ -657,46 +692,148 @@ export function resolveImposedLevels(
       }
     }
     if (hit) {
-      dropped.push({ reason: "hole", z, mark: hit.mark ?? "", holeZ: hit.z, min: hit.r });
+      out[i] = {
+        kind: "dropped",
+        dropped: { reason: "hole", z, mark: hit.mark ?? "", holeZ: hit.z, min: hit.r },
+      };
       continue;
     }
     if (thin > 0) {
-      // Voisin le plus proche (base, assises, niveaux retenus, dessus), A39 (d).
-      let neighbour: Mm | null = null;
-      for (const f of [...fixed, ...kept, zTop]) {
-        if (neighbour === null || Math.abs(f - z) < Math.abs(neighbour - z)) neighbour = f;
+      // Voisins les plus proches en dessous (base, assises, niveaux retenus) et au-dessus
+      // (assises, niveaux retenus, dessus), A39 (d), A40 (c).
+      let down = baseZ;
+      let up = zTop;
+      for (const f of [...fixed, ...kept]) {
+        if (f <= z && f > down) down = f;
+        if (f >= z && f < up) up = f;
       }
-      if (neighbour !== null && Math.abs(neighbour - z) < thin - CMP_EPS) {
-        dropped.push({
-          reason: "thin",
-          z,
-          z0: Math.min(z, neighbour),
-          z1: Math.max(z, neighbour),
-          thickness: Math.abs(neighbour - z),
-          min: thin,
-        });
+      if (z - down < thin - CMP_EPS) {
+        // Voisin trop proche en dessous : jamais de recalage vers le haut (l'âme ne doit jamais
+        // être plus profonde que voulu) ; abandon A39 (d), l'âme s'arrête au joint `down`.
+        out[i] = {
+          kind: "dropped",
+          dropped: { reason: "thin", z, z0: down, z1: z, thickness: z - down, min: thin },
+        };
+        continue;
+      }
+      if (up - z < thin - CMP_EPS) {
+        // Voisin trop proche au-dessus : recalage à « voisin − minimum » (A40 (c)) s'il laisse
+        // au moins le minimum en dessous et sort des zones des perçages ; aucun recalage si le
+        // minimum dépasse l'épaisseur maximale des couches (toute couche serait plus mince).
+        const at = up - thin;
+        if (thin <= tMax + CMP_EPS && at - down >= thin - CMP_EPS && !inHole(at)) {
+          kept.push(at);
+          out[i] = { kind: "kept", at, neighbour: up };
+        } else {
+          out[i] = {
+            kind: "dropped",
+            dropped: { reason: "thin", z, z0: z, z1: up, thickness: up - z, min: thin },
+          };
+        }
         continue;
       }
     }
     kept.push(z);
+    out[i] = { kind: "kept", at: z };
   }
-  return { levels: [...seatLevels, ...kept], imposed: kept, dropped };
+  return out;
 }
 
 /**
- * Bornes des couches de l'empilement avec les joints imposés (QUESTIONS A38 (12) ; A39 (d),
- * décision du 2026-10-13), seul calcul partagé par `buildStackedLayers` et l'oracle des platines
- * `stackedJointLevels` (mêmes joints) : `resolveImposedLevels`, puis `layerBounds`. Le partage
- * des deux intervalles voisins d'un niveau imposé retenu (entre les niveaux d'empilement qui
- * l'encadrent : base, assises, autres niveaux imposés, sommet ; couches égales, joints écartés
- * des perçages, broches au milieu de leur couche) peut encore laisser une couche plus mince que
- * `minLayer` : contre le niveau, ou ailleurs dans ces intervalles quand le niveau la crée (le
- * même empilement sans ce niveau n'y a pas de couche aussi mince). Le niveau est alors abandonné
- * (`reason: "thin"`, bornes et épaisseur de la couche la plus mince) et l'empilement recalculé,
- * au plus une fois par niveau imposé. Garantie : entre les niveaux qui encadrent un niveau
- * imposé retenu, aucune couche n'est plus mince que `minLayer`, sauf celles qui le sont déjà
- * sans ce niveau (et jamais contre lui). `minLayer` = 0 : `layerBounds` sur les niveaux de
- * `resolveImposedLevels` (comportement A38). Ne lève pas sur des entrées finies.
+ * Niveaux imposés aux joints de colle (QUESTIONS A35 (g) ; A38 (12), décision du 2026-10-11 ;
+ * A39 (d) et A40 (c), décisions du 2026-10-13) : assises, puis niveaux imposés en plus
+ * (`StackedBeamShape.jointLevels`, dessus voulu du logement de l'âme de pied) retenus comme
+ * niveaux d'assise de plus, traités par altitude croissante, sauf :
+ * - hors de ]base ; dessus] (ou non finis) : ignorés ;
+ * - à moins de la garde technique `MIN_LAYER` de la base, d'une assise ou d'un niveau imposé déjà
+ *   retenu : fusionnés avec lui (l'assise prime), sans remarque ;
+ * - dans la zone interdite d'un perçage (|niveau − z| < `HoleLevel.r` = rayon + jeu, pas la zone
+ *   élargie `reach`) : abandonnés (`reason: "hole"`, remarque de `buildStackedLayers`) ;
+ * - à moins de `minLayer` (`section.minLayerThickness`) du niveau voisin **en dessous** (base,
+ *   assise, niveau imposé déjà retenu) : abandonnés (`reason: "thin"`, z0 = ce voisin, A39 (d)).
+ *   Aucun recalage vers le haut : l'âme ne doit jamais être plus profonde que voulu ; elle
+ *   s'arrête alors au joint en dessous, donc à moins du minimum sous la profondeur voulue (sauf
+ *   quand ce voisin est la base) ;
+ * - à moins de `minLayer` du niveau voisin **au-dessus** (assise, niveau imposé retenu, dessus
+ *   `zTop`) : **recalés** à « voisin − minimum » (QUESTIONS A40 (c), `shifted`) si la couche
+ *   restant en dessous garde au moins le minimum et si le niveau recalé sort des zones interdites
+ *   des perçages ; sinon abandonnés (`reason: "thin"`, z1 = ce voisin, comme A39 (d)). Le joint
+ *   recalé est moins profond que voulu d'au plus le minimum (z − minimum ≤ at < z). Si le minimum
+ *   dépasse l'épaisseur maximale des couches `tMax`, aucun recalage : toute couche serait plus
+ *   mince que lui, le joint ne peut jamais être tenu (abandon A39 (d) inchangé).
+ * Un écart égal au minimum est admis. `minLayer` = 0 : aucun minimum, comportement A38 exact
+ * (`shifted` vide). Fonction pure ; les niveaux rendus sont triés et dédoublonnés par
+ * `layerBounds`. `imposed` : niveaux imposés retenus (altitude retenue `at` d'un niveau recalé).
+ * Les couches réellement voisines d'un niveau retenu (partage d'un intervalle, perçages) sont
+ * contrôlées par `stackedBounds`.
+ */
+export function resolveImposedLevels(
+  baseZ: Mm,
+  zTop: Mm,
+  seatLevels: readonly Mm[],
+  jointLevels: readonly Mm[],
+  holes: readonly HoleLevel[],
+  minLayer: Mm = 0,
+  // Épaisseur maximale des couches : aucun recalage (A40 (c)) si `minLayer` la dépasse.
+  tMax: Mm = Infinity,
+): {
+  readonly levels: readonly Mm[];
+  readonly imposed: readonly Mm[];
+  readonly dropped: readonly DroppedJointLevel[];
+  /** Niveaux imposés recalés (A40 (c)) ; `imposed` contient leur altitude retenue `at`. */
+  readonly shifted: readonly ShiftedJointLevel[];
+} {
+  if (jointLevels.length === 0) {
+    return { levels: seatLevels, imposed: [], dropped: [], shifted: [] };
+  }
+  const thin = Number.isFinite(minLayer) && minLayer > 0 ? minLayer : 0;
+  const outcomes = resolveTargets(baseZ, zTop, seatLevels, jointLevels, holes, thin, tMax);
+  const order = jointLevels
+    .map((z, i) => ({ z, i }))
+    .filter((e) => Number.isFinite(e.z))
+    .sort((p, q) => p.z - q.z);
+  const imposed: Mm[] = [];
+  const dropped: DroppedJointLevel[] = [];
+  const shifted: ShiftedJointLevel[] = [];
+  for (const { z, i } of order) {
+    const o = outcomes[i]!;
+    if (o.kind === "dropped") dropped.push(o.dropped);
+    if (o.kind !== "kept") continue;
+    imposed.push(o.at);
+    if (o.neighbour !== undefined) shifted.push({ z, at: o.at, neighbour: o.neighbour, min: thin });
+  }
+  return { levels: [...seatLevels, ...imposed], imposed, dropped, shifted };
+}
+
+/**
+ * Bornes des couches de l'empilement avec les joints imposés (QUESTIONS A38 (12) ; A39 (d) et
+ * A40 (c), décisions du 2026-10-13), seul calcul partagé par `buildStackedLayers` et l'oracle des
+ * platines `stackedJointLevels` (mêmes joints, donc l'âme de pied s'arrête au joint recalé) :
+ * `resolveImposedLevels` (abandons et recalages contre les niveaux fixes), puis `layerBounds`.
+ * Le partage des deux intervalles voisins d'un niveau imposé retenu (entre les niveaux
+ * d'empilement qui l'encadrent : base, assises, autres niveaux imposés, sommet ; couches égales,
+ * joints écartés des perçages, broches au milieu de leur couche) peut encore laisser une couche
+ * plus mince que `minLayer` : contre le niveau, ou ailleurs dans ces intervalles quand le niveau
+ * la crée (le même empilement sans ce niveau n'y a pas de couche aussi mince). Pour la plus mince :
+ * - si elle est posée **sur** le niveau (au-dessus de lui, z0 = niveau), que ce niveau n'a pas
+ *   encore été recalé au partage, que `minLayer` ≤ `tMax` et que le recalage total depuis
+ *   l'altitude voulue reste au plus le minimum : le niveau est recalé à « z1 − minimum » (z1 =
+ *   joint du dessus de cette couche, A40 (c)) et l'empilement recalculé ; un niveau recalé qui
+ *   ne tient plus à ce tour (abandonné par `resolveImposedLevels`, ou recalé de nouveau au-delà
+ *   du minimum) est abandonné avec la couche trop mince qui a causé son recalage ;
+ * - sinon (couche sous le niveau ou qui ne le touche pas, recalage déjà fait ou trop grand) : le
+ *   niveau est abandonné (`reason: "thin"`, bornes et épaisseur de cette couche, z = altitude
+ *   voulue, `at` = altitude essayée quand le niveau était recalé : la couche est celle du joint
+ *   recalé) et l'empilement recalculé.
+ * Au plus un recalage et un abandon par niveau imposé (garde : 2 × nombre de niveaux tours).
+ * Garantie : entre les niveaux qui encadrent un niveau imposé retenu ou recalé, aucune couche
+ * n'est plus mince que `minLayer`, sauf celles qui le sont déjà sans ce niveau (et jamais contre
+ * lui) ; un niveau recalé vérifie z − minimum ≤ at < z. `shifted` : niveaux recalés retenus
+ * (une entrée par altitude voulue, jamais aussi dans `dropped`), sauf quand l'empilement final
+ * garde un joint du partage à l'altitude voulue même (l'âme de pied s'y arrête, profondeur
+ * voulue tenue : aucune remarque de recalage). `minLayer` = 0 : `layerBounds`
+ * sur les niveaux de `resolveImposedLevels` (comportement A38). Ne lève pas sur des entrées
+ * finies.
  */
 export function stackedBounds(
   baseZ: Mm,
@@ -712,18 +849,67 @@ export function stackedBounds(
   readonly bounds: readonly LayerBound[];
   readonly issues?: readonly HoleIssue[];
   readonly dropped: readonly DroppedJointLevel[];
+  /**
+   * Niveaux imposés recalés et retenus dans l'empilement final (A40 (c)), `z` = altitude voulue
+   * (`jointLevels`) ; leur altitude `at` est un joint de `bounds`.
+   */
+  readonly shifted: readonly ShiftedJointLevel[];
 } {
   const thin = Number.isFinite(minLayer) && minLayer > 0 ? minLayer : 0;
+  if (thin === 0) {
+    const res = resolveImposedLevels(baseZ, zTop, seatLevels, jointLevels, holes, 0, tMax);
+    return {
+      ...layerBounds(baseZ, zTop, tMax, res.levels, max, holes),
+      dropped: res.dropped,
+      shifted: [],
+    };
+  }
+  /** Cible : altitude voulue, altitude essayée, recalage du partage (voisin, couche en cause). */
+  interface Target {
+    readonly wanted: Mm;
+    z: Mm;
+    share: { readonly neighbour: Mm; readonly cause: DroppedJointLevel } | null;
+  }
+  let targets: Target[] = jointLevels
+    .filter(Number.isFinite)
+    .map((z) => ({ wanted: z, z, share: null }));
   const thinDropped: DroppedJointLevel[] = [];
-  let joints = [...jointLevels];
   for (let round = 0; ; round++) {
-    const res = resolveImposedLevels(baseZ, zTop, seatLevels, joints, holes, thin);
-    const lb = layerBounds(baseZ, zTop, tMax, res.levels, max, holes);
+    const outcomes = resolveTargets(
+      baseZ,
+      zTop,
+      seatLevels,
+      targets.map((t) => t.z),
+      holes,
+      thin,
+      tMax,
+    );
+    // Un niveau recalé au partage qui ne tient plus (abandonné, ignoré, ou recalé au total de
+    // plus que le minimum) est abandonné avec la couche qui a causé son recalage.
+    const failed = targets.filter((t, i) => {
+      const o = outcomes[i]!;
+      if (!t.share) return false;
+      return o.kind !== "kept" || o.at < t.wanted - thin - CMP_EPS;
+    });
+    if (failed.length > 0) {
+      for (const t of failed) thinDropped.push(t.share!.cause);
+      targets = targets.filter((t) => !failed.includes(t));
+      continue;
+    }
+    const seats = seatLevels.filter(Number.isFinite);
+    const kept = targets
+      .map((t, i) => ({ t, o: outcomes[i]! }))
+      .filter(
+        (e): e is { t: Target; o: Extract<TargetOutcome, { kind: "kept" }> } => e.o.kind === "kept",
+      );
+    const levels = [...seats, ...kept.map((e) => e.o.at)];
+    const lb = layerBounds(baseZ, zTop, tMax, levels, max, holes);
     // Couche la plus mince due à un niveau imposé retenu, dans les intervalles qui l'encadrent.
-    let worst: { z: Mm; z0: Mm; z1: Mm; thickness: Mm } | null = null;
-    if (thin > 0 && round <= jointLevels.length && lb.bounds.length > 0) {
-      for (const z of res.imposed) {
-        const others = res.levels.filter((l) => Math.abs(l - z) >= LEVEL_EPS);
+    let worst: { t: Target; at: Mm; z0: Mm; z1: Mm; thickness: Mm } | null = null;
+    if (round <= 2 * jointLevels.length && lb.bounds.length > 0) {
+      for (const { t, o } of kept) {
+        const z = o.at;
+        const others = levels.filter((l) => Math.abs(l - z) >= LEVEL_EPS);
         // Niveaux d'empilement qui encadrent z (base en dessous, rien au-dessus : jusqu'au sommet).
         let lo = baseZ;
         let hi = Infinity;
@@ -742,17 +928,54 @@ export function stackedBounds(
           const touches = Math.abs(z0 - z) < LEVEL_EPS || Math.abs(z1 - z) < LEVEL_EPS;
           if (thickness >= thin - CMP_EPS) continue;
           if (!touches && thickness >= floor - CMP_EPS) continue;
-          if (!worst || thickness < worst.thickness) worst = { z, z0, z1, thickness };
+          if (!worst || thickness < worst.thickness) worst = { t, at: z, z0, z1, thickness };
         }
       }
     }
     if (!worst) {
-      const dropped = [...res.dropped, ...thinDropped].sort((p, q) => p.z - q.z);
-      return { ...lb, dropped };
+      const dropped: DroppedJointLevel[] = [...thinDropped];
+      const shifted: ShiftedJointLevel[] = [];
+      // Joint du partage (perçages) à l'altitude voulue même : l'âme de pied s'y arrête avec sa
+      // profondeur voulue, le niveau n'est pas dit recalé (pas de remarque trompeuse).
+      const joints = lb.bounds.flatMap((x) => [x.z0, x.z1]);
+      targets.forEach((t, i) => {
+        const o = outcomes[i]!;
+        if (o.kind === "dropped") dropped.push({ ...o.dropped, z: t.wanted });
+        if (o.kind !== "kept" || Math.abs(o.at - t.wanted) < LEVEL_EPS) return;
+        if (joints.some((j) => Math.abs(j - t.wanted) < LEVEL_EPS)) return;
+        const neighbour = o.neighbour ?? t.share?.neighbour ?? o.at + thin;
+        shifted.push({ z: t.wanted, at: o.at, neighbour, min: thin });
+      });
+      dropped.sort((p, q) => p.z - q.z);
+      shifted.sort((p, q) => p.z - q.z);
+      return { ...lb, dropped, shifted };
     }
     const w = worst;
-    thinDropped.push({ reason: "thin", ...w, min: thin });
-    joints = joints.filter((z) => z !== w.z);
+    // Couche de l'empilement au niveau essayé `w.at` : quand il diffère du voulu (recalé), la
+    // cause le dit (`at`), ses bornes n'étant pas celles d'un joint à l'altitude voulue.
+    const cause: DroppedJointLevel = {
+      reason: "thin",
+      z: w.t.wanted,
+      z0: w.z0,
+      z1: w.z1,
+      thickness: w.thickness,
+      min: thin,
+      ...(Math.abs(w.at - w.t.wanted) >= LEVEL_EPS ? { at: w.at } : {}),
+    };
+    const next = w.z1 - thin;
+    if (
+      Math.abs(w.z0 - w.at) < LEVEL_EPS &&
+      !w.t.share &&
+      thin <= tMax + CMP_EPS &&
+      w.t.wanted - next <= thin + CMP_EPS
+    ) {
+      // Couche trop mince posée sur le niveau : recalage à « joint du dessus − minimum » (A40 (c)).
+      w.t.z = next;
+      w.t.share = { neighbour: w.z1, cause };
+    } else {
+      thinDropped.push(cause);
+      targets = targets.filter((t) => t !== w.t);
+    }
   }
 }
 
@@ -1674,8 +1897,8 @@ function build(input: StackedLayersInput, t: Mm, s: Mm): StackedLayersResult {
   const holes: HoleLevel[] = holeLevelsOf(beam.holes ?? [], clearance);
   // Joints imposés (dessus voulu de l'âme de pied, A38 (12)) : niveaux d'assise de plus, sauf au
   // travers d'un perçage ou contre une couche plus mince que `section.minLayerThickness`
-  // (abandonnés, remarque, A39 (d)).
-  const { count, bounds, issues, dropped } = stackedBounds(
+  // (recalés à « voisin − minimum », A40 (c), sinon abandonnés, A39 (d) ; remarques).
+  const { count, bounds, issues, dropped, shifted } = stackedBounds(
     baseZ,
     zTop,
     t,
@@ -2020,7 +2243,7 @@ function build(input: StackedLayersInput, t: Mm, s: Mm): StackedLayersResult {
     // Remarques particulières (perçages, logements, aboutages), puis synthèses en tête.
     notes.push(...holeNotes(holes, issues ?? [], layers, clearance));
     // Joints imposés abandonnés au travers d'un perçage (A38 (12)) ou contre une couche trop
-    // mince (A39 (d)).
+    // mince (A39 (d)), puis joints recalés (A40 (c)).
     for (const d of dropped) {
       notes.push(
         d.reason === "hole"
@@ -2030,13 +2253,36 @@ function build(input: StackedLayersInput, t: Mm, s: Mm): StackedLayersResult {
               holeZ: dec(d.holeZ, 1),
               min: dec(d.min, 1),
             })
-          : msg("structure.woodCentral.note.layerJointLevelThin", {
-              z: dec(d.z, 1),
-              thickness: dec(d.thickness, 1),
-              z0: dec(d.z0, 1),
-              z1: dec(d.z1, 1),
-              min: dec(d.min, 1),
-            }),
+          : d.at !== undefined
+            ? msg("structure.woodCentral.note.layerJointLevelThinShifted", {
+                z: dec(d.z, 1),
+                at: dec(d.at, 1),
+                thickness: dec(d.thickness, 1),
+                z0: dec(d.z0, 1),
+                z1: dec(d.z1, 1),
+                min: dec(d.min, 1),
+              })
+            : msg("structure.woodCentral.note.layerJointLevelThin", {
+                z: dec(d.z, 1),
+                thickness: dec(d.thickness, 1),
+                z0: dec(d.z0, 1),
+                z1: dec(d.z1, 1),
+                min: dec(d.min, 1),
+              }),
+      );
+    }
+    // Joint recalé (A40 (c)) : profondeurs d'âme voulue et obtenue, selon la convention de
+    // `StackedBeamShape.jointLevels` (base + webDepth + jeu d'atelier).
+    for (const sh of shifted) {
+      notes.push(
+        msg("structure.woodCentral.note.layerJointLevelShifted", {
+          z: dec(sh.z, 1),
+          at: dec(sh.at, 1),
+          neighbour: dec(sh.neighbour, 1),
+          min: dec(sh.min, 1),
+          wanted: dec(sh.z - baseZ - clearance, 1),
+          depth: dec(sh.at - baseZ - clearance, 1),
+        }),
       );
     }
     for (const [web, c] of kerfCount) {

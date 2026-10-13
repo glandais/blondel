@@ -94,10 +94,12 @@
  *   d'ancrage donne sous chaque assise la place du tire-fond réellement posé
  *   (`seatReservations`), lue par la platine pour le dessus de l'âme de pied, puis la passe
  *   finale avec les perçages et les traits. En couches empilées, un joint de colle est imposé
- *   sur le dessus voulu du logement de l'âme de pied (A38 (12), `StackedBeamShape.jointLevels`). Autour d'un perçage horizontal, un boulon s'écarte de l'entraxe des
- *   boulons ; un tire-fond garde le jeu géométrique plus le bois `lagScrews.holeWood` entre son
- *   filet et le bord du perçage (`lagHoleClearance`, relecture A35, QUESTIONS A36 (10) et
- *   A37 (17), `auto` 0,5·d, à valider), retiré sinon (avertissement).
+ *   sur le dessus voulu du logement de l'âme de pied (A38 (12), `StackedBeamShape.jointLevels` ;
+ *   recalé à « voisin − minimum » contre une couche trop mince, A40 (c), sinon abandonné, A39 (d)).
+ *   Autour d'un perçage horizontal, un boulon s'écarte de l'entraxe des boulons ; un tire-fond
+ *   garde le jeu géométrique plus le bois `lagScrews.holeWood` entre son filet et le bord du
+ *   perçage (`lagHoleClearance`, relecture A35, QUESTIONS A36 (10) et A37 (17), `auto` 0,5·d,
+ *   à valider), retiré sinon (avertissement).
  * - **Solide** : extrusion exacte du contour (entailles comprises) sur une trace droite ; surface
  *   réglée sur la face gauche, épaissie de b vers la droite, sur une trace courbe (dents
  *   d'équerre sur la trace au fond de l'entaille, entailles arrière non représentées en 3D).
@@ -1807,9 +1809,14 @@ function beamOf(input: WoodCentralBeamInput): WoodCentralBeamResult {
           seatLevels: drafts.map((d) => d.z),
           // Joint de colle calé sur le dessus voulu du logement de l'âme de pied (épaisseur de
           // platine + `anchors.plate.webDepth` + jeu d'atelier, QUESTIONS A38 (12), décision du
-          // 2026-10-11) : l'âme arrêtée au joint en dessous (A37 (8)) garde sa profondeur ; joint
-          // abandonné s'il laisserait une couche plus mince que `section.minLayerThickness`
-          // (QUESTIONS A39 (d), décision du 2026-10-13) : l'âme s'arrête au joint en dessous.
+          // 2026-10-11) : l'âme arrêtée au joint en dessous (A37 (8)) garde sa profondeur. S'il
+          // laisserait sous le niveau voisin du dessus une couche plus mince que
+          // `section.minLayerThickness`, l'empilement le recale à « voisin − minimum » (QUESTIONS
+          // A40 (c), décision du 2026-10-13 : âme moins profonde d'au plus le minimum), sinon
+          // l'abandonne (A39 (d) : l'âme s'arrête au joint en dessous). Niveau voulu, pas recalé :
+          // le recalage est fait par `stackedBounds`, seul calcul partagé avec l'oracle des
+          // platines. Convention reprise par la remarque de recalage (profondeurs = niveau −
+          // base − jeu, `StackedBeamShape.jointLevels`) : la changer ici impose de la changer là.
           ...(footPlate ? { jointLevels: [floorLevel + params.anchors.plate.webDepth + c] } : {}),
           tensionZoneTop: (s: Mm): Mm =>
             zLow(s) + (params.section.tensionZone * residual) / cosAt(s),

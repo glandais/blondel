@@ -274,16 +274,20 @@ export const WoodCentralParamsSchema = z.object({
       /**
        * Couches empilées : épaisseur finie minimale d'une couche bornée par un joint de colle
        * **imposé** (`StackedBeamShape.jointLevels` : dessus voulu du logement de l'âme de pied,
-       * QUESTIONS A38 (12)), mm (QUESTIONS A39 (d), décision du 2026-10-13). Un joint imposé qui
-       * laisserait, entre lui et le joint ou l'assise voisine, une couche plus mince est
-       * abandonné, avec une remarque : l'âme de pied s'arrête alors au joint de colle en dessous
-       * (âme moins profonde). 20 : ordre de grandeur sans source (aucune épaisseur minimale de
-       * couche lue, C §1.11 ; EN 14080 non lue), **à valider** par un atelier ou un fabricant de
-       * lamellé-collé. 0 : aucun minimum (seule la garde technique `MIN_LAYER`, comportement
-       * A38). Sans effet sur les couches minces qui existent sans joint imposé (calées sur les
-       * assises, partage autour des perçages). Une valeur supérieure à l'épaisseur maximale des
-       * couches (`section.layerThickness`) abandonne toujours le joint imposé, donc désactive
-       * A38 (12) : la remarque d'abandon affiche alors ce minimum.
+       * QUESTIONS A38 (12)), mm (QUESTIONS A39 (d) et A40 (c), décisions du 2026-10-13). Un joint
+       * imposé qui laisserait sous le niveau voisin du dessus une couche plus mince est recalé à
+       * « voisin − minimum », avec une remarque : l'âme de pied est moins profonde que voulu d'au
+       * plus ce minimum, jamais plus profonde. S'il ne peut l'être (voisin trop proche en dessous,
+       * couche voisine trop mince, perçage, minimum > épaisseur maximale), il est abandonné, avec
+       * une remarque : l'âme de pied s'arrête alors au joint de colle en dessous s'il lui laisse
+       * assez de hauteur (sinon logement fraisé). 20 : ordre de grandeur sans source (aucune
+       * épaisseur minimale de couche lue, C §1.11 ; EN 14080 non lue), **à valider** par un
+       * atelier ou un fabricant de lamellé-collé. 0 : aucun minimum (seule la garde technique
+       * `MIN_LAYER`, comportement A38). Sans effet sur les couches minces qui existent sans joint
+       * imposé (calées sur les assises, partage autour des perçages). Une valeur supérieure à
+       * l'épaisseur maximale des couches (`section.layerThickness`) abandonne toujours le joint
+       * imposé, sans recalage (aucune couche ne pourrait le tenir), donc désactive A38 (12) : la
+       * remarque d'abandon affiche alors ce minimum.
        */
       minLayerThickness: mmNonNeg.default(20),
     })
