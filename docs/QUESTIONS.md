@@ -986,6 +986,7 @@ L'hélicoïdal garde son `kind` et son calcul (ADR-0010, décision 4). Faut-il, 
 - Proposition : (b) jusqu'à la fin du lot 6 (structures généralisées), puis (a) si le test de parité passe.
 - Aujourd'hui : `layout/helical.ts`, `HelicalLayoutSpecSchema`, une quarantaine de fichiers hors tests qui testent `isHelicalLayout` ou le littéral `"helical"`.
 - Réf. : CHALLENGE-panel, « Angle geometrie » (hélicoïdal = 1 tronçon à axe en arc) ; B §1.1 ; ADR-0010.
+- **Décision de l'utilisateur (2026-10-13)** : (a) par étapes. D'abord un sous-lot de parité seul : conversion `helicalToCage` (hélicoïdal → cage d'un tronçon à axe en arc, balayage au-delà de 360°) et test de parité strict (mêmes marches, cotes, instantanés et exemples), sans basculer le pipeline. La bascule (pipeline, `helical-core` sur cage, retrait de `layout/helical.ts`) n'est faite que si la parité tient ; sinon retour à (b), avec le constat consigné ici.
 
 ### F11. Mesure de la longueur d'un tronçon et défaut d'`anchor`
 
