@@ -242,10 +242,11 @@ describe("toCageLayout / toFlightsLayout", () => {
 
 describe("correction « reconvertir en volées » (cage-to-flights)", () => {
   it("cage sans fonction de cage : proposée, le patch rend le tracé à volées équivalent", () => {
-    // Structure qui ne lit aucune cage saisie (limon central acier) : refus du garde-fou.
+    // Structure qui ne lit aucune cage saisie (limon débillardé acier ; le limon central la lit
+    // depuis le sous-lot 6c) : refus du garde-fou.
     for (const id of PRESET_IDS) {
       const flights = createProject(id, {
-        patch: { stair: { structure: { kind: "steel-central", params: {} } } },
+        patch: { stair: { structure: { kind: "steel-curved", params: {} } } },
       });
       const cage = toCageLayout(flights)!;
       const model = buildModel(cage, { memo: false });
@@ -300,7 +301,7 @@ describe("correction « reconvertir en volées » (cage-to-flights)", () => {
         sections: [straight(1500), straight(600)],
         junctions: [{ angle: 90, mode: "winders" }],
       },
-      "steel-central",
+      "steel-curved",
     );
     const model = buildModel(cage, { memo: false });
     expect(model.errors.map((e) => e.key)).toContain("structure.cageUnsupported");
@@ -403,10 +404,18 @@ describe("branches cage de newel.ts et structureChoice.ts", () => {
   });
 
   it("structure posée sans adapter le jour, remarque (reconversion si possible)", () => {
-    const a = applyStructureChoice(cage, "steel-central");
-    expect(a.project.stair.structure.kind).toBe("steel-central");
+    const a = applyStructureChoice(cage, "steel-curved");
+    expect(a.project.stair.structure.kind).toBe("steel-curved");
     expect(a.project.stair.layout).toBe(cage.stair.layout);
     expect(a.notes.map((n) => n.key)).toEqual(["project.structureChoice.cageConvertible"]);
+    // Limons centraux (sous-lot 6c) : cage construite, sans poteau : aucune remarque.
+    for (const kind of ["wood-central", "steel-central"]) {
+      for (const p of [cage, sixty]) {
+        const c = applyStructureChoice(p, kind);
+        expect(c.project.stair.layout).toBe(p.stair.layout);
+        expect(c.notes).toEqual([]);
+      }
+    }
     // Limons acier (sous-lot 6b) : cage construite, jour vif signalé comme pour les limons à la
     // française.
     for (const kind of ["steel-flat", "steel-profile"]) {
@@ -431,7 +440,7 @@ describe("branches cage de newel.ts et structureChoice.ts", () => {
       ],
     });
     expect(applyStructureChoice(chamfered, "wood-housed").notes).toEqual([]);
-    const b = applyStructureChoice(sixty, "steel-central");
+    const b = applyStructureChoice(sixty, "steel-curved");
     expect(b.project.stair.layout).toBe(sixty.stair.layout);
     expect(b.notes.map((n) => n.key)).toEqual(["project.structureChoice.cage"]);
     expect(applyStructureChoice(sixty, "none").notes).toEqual([]);

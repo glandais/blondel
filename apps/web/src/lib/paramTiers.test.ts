@@ -11,6 +11,7 @@ import {
   createProject,
   fastenerKindLabel,
   msg,
+  ProjectSchema,
   withValidatedValues,
   type Model,
   type Project,
@@ -37,6 +38,23 @@ import {
 } from "./paramTiers.js";
 import { GUIDED_STEPS, SECTION_IDS } from "./sectionIds.js";
 import { deriveParamFields, safeDefaults, structureContext } from "./structureForm.js";
+
+/** Cage saisie (ADR-0010) : jonctions données, deux tronçons droits. */
+const cageOf = (junction: { angle: number; mode: "winders" | "landing" }): Project =>
+  ProjectSchema.parse({
+    ...createProject("straight"),
+    stair: {
+      ...createProject("straight").stair,
+      layout: {
+        kind: "cage",
+        sections: [
+          { axis: { kind: "straight", length: 1650 }, width: 900 },
+          { axis: { kind: "straight", length: 1650 }, width: 900 },
+        ],
+        junctions: [junction],
+      },
+    },
+  });
 
 const projects: readonly Project[] = [
   ...ALL_PRESET_IDS.map((id) => createProject(id)),
@@ -782,6 +800,26 @@ describe("valeurs ◆ d'un projet", () => {
       expect(at(straight, auto, path), path).toBe(true);
       expect(at(helical, auto, path), path).toBe(true);
     }
+  });
+
+  it("limon central bois sur une cage tournante : réglages de la trace courbe (sous-lot 6c)", () => {
+    const plugin = availableStructures().find((k) => k.kind === "wood-central")!;
+    const auto = plugin.paramsSchema.parse({});
+    const turning = cageOf({ angle: 60, mode: "winders" });
+    const straight = cageOf({ angle: 0, mode: "landing" });
+    const at = (p: Project, path: string) => structureParamApplies(p, auto, path.split("."));
+    for (const path of [
+      "section.curvedMethod",
+      "section.mouldMaxWidth",
+      "section.layerThickness",
+    ]) {
+      expect(at(turning, path), path).toBe(true);
+      expect(at(straight, path), path).toBe(false);
+    }
+    // Ancrage automatique : platine noyée sur la poutre cintrée, sabot sur la poutre droite.
+    expect(at(turning, "anchors.plate.thickness")).toBe(true);
+    expect(at(turning, "anchors.cheekDepth")).toBe(false);
+    expect(at(straight, "anchors.cheekDepth")).toBe(true);
   });
 
   it("caisson du limon central métal : borne basse de l'entraxe des entretoises (A32 a)", () => {

@@ -9,7 +9,10 @@
  * cage qui n'utilise que ces fonctions et refusent les autres en ne nommant que celles-là. Depuis
  * le sous-lot 6b, les limons acier en plat (`steel-flat`) déclarent les mêmes fonctions, les
  * profilés (`steel-profile`) les mêmes sauf le palier droit, les crémaillères (`wood-cut`) la seule largeur variable (un
- * tronçon droit : un tournant reste refusé par le plugin, comme en volées).
+ * tronçon droit : un tournant reste refusé par le plugin, comme en volées). Depuis le sous-lot
+ * 6c, les limons centraux bois et acier (`wood-central`, `steel-central`) déclarent
+ * `CENTRAL_CAGE` : toutes les fonctions sauf l'axe en arc (lot « acier cintré ») ; le limon
+ * débillardé acier (`steel-curved`) reste le plugin qui ne lit aucune cage saisie.
  */
 import fc from "fast-check";
 import { msg, translatorFor, type Message } from "@blondel/i18n";
@@ -145,12 +148,29 @@ const STEEL_CAGE: readonly CageFeature[] = WOOD_HOUSED_CAGE;
 const STEEL_PROFILE_CAGE: readonly CageFeature[] = ["anyAngle", "variableWidth", "chamfer"];
 /** Fonctions de cage des crémaillères (sous-lot 6b) : un tronçon droit, largeur variable. */
 const WOOD_CUT_CAGE: readonly CageFeature[] = ["variableWidth"];
+/** Fonctions de cage des limons centraux bois et acier (sous-lot 6c) : toutes sauf l'axe en arc. */
+const CENTRAL_CAGE: readonly CageFeature[] = [
+  "anyAngle",
+  "variableWidth",
+  "straightLanding",
+  "wallArc",
+  "chamfer",
+  "radiating",
+  "oppositeTurns",
+];
 /** Structures qui lisent une cage saisie, et les fonctions qu'elles déclarent. */
 const CAGE_STRUCTURES: Readonly<Record<string, readonly CageFeature[]>> = {
   "wood-housed": WOOD_HOUSED_CAGE,
   "steel-flat": STEEL_CAGE,
   "steel-profile": STEEL_PROFILE_CAGE,
   "wood-cut": WOOD_CUT_CAGE,
+  "wood-central": CENTRAL_CAGE,
+  "steel-central": CENTRAL_CAGE,
+};
+/** Catégorie des pièces de structure attendues sur une cage construite. */
+const STRUCTURE_CATEGORY: Readonly<Record<string, string>> = {
+  "wood-cut": "carriage",
+  "wood-central": "carriage",
 };
 /** Structures qui ne lisent encore aucune cage saisie. */
 const FLIGHTS_ONLY = STRUCTURES.filter((k) => !(k in CAGE_STRUCTURES));
@@ -208,7 +228,7 @@ describe("capacités : structureCageFeatures / structureAcceptsCage", () => {
   });
 
   it.each(Object.entries(CAGE_STRUCTURES))(
-    "%s : fonctions déclarées (sous-lots 6a, 6b), les autres refusées une à une",
+    "%s : fonctions déclarées (sous-lots 6a, 6b, 6c), les autres refusées une à une",
     (kind, declared) => {
       expect(structureCageFeatures(kind)).toEqual(declared);
       expect(structureAcceptsCage(kind, [])).toBe(true);
@@ -265,8 +285,9 @@ describe("buildModel : garde-fou sur chaque plugin du registre", () => {
         expect(() => (model = buildModel(project, { memo: false })), name).not.toThrow();
         const all = featuresOf(project);
         if (expectedRefusal(kind, all) === null) {
-          // Cage construite (limons à la française, limons acier) : jamais de refus, pièces de
-          // structure ; crémaillères : escalier droit seulement (tournant refusé par le plugin).
+          // Cage construite (limons à la française, limons acier, limons centraux) : jamais de
+          // refus, pièces de structure ; crémaillères : escalier droit seulement (tournant
+          // refusé par le plugin).
           expect(keys(model!), name).not.toContain("structure.cageUnsupported");
           expect(keys(model!), name).not.toContain("pipeline.internalError");
           const turning = (s.junctions ?? []).length > 0;
@@ -275,9 +296,7 @@ describe("buildModel : garde-fou sur chaque plugin du registre", () => {
             continue;
           }
           expect(
-            model!.parts.some(
-              (p) => p.category === (kind === "wood-cut" ? "carriage" : "stringer"),
-            ),
+            model!.parts.some((p) => p.category === (STRUCTURE_CATEGORY[kind] ?? "stringer")),
             name,
           ).toBe(true);
           continue;
@@ -478,7 +497,8 @@ describe("buildModel : plugin qui déclare des fonctions de cage", () => {
       for (const kind of STRUCTURES) {
         const notes = applyStructureChoice(p, kind).notes.map((n) => n.key);
         if (expectedRefusal(kind, featuresOf(p)) === null) {
-          // Cage construite (limons à la française, limons acier, crémaillères) : seule remarque
+          // Cage construite (limons à la française, limons acier, crémaillères, limons
+          // centraux) : seule remarque
           // possible, pour une structure à poteau, un jour vif ou en arc qu'aucun limon droit ne
           // suit (pas de poteau sur une cage saisie).
           const layout = p.stair.layout as CageLayoutSpec;

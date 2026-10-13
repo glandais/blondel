@@ -32,6 +32,23 @@ const withStructure = (p: Project, kind: string, params: Record<string, unknown>
 
 const FR = translatorFor("fr");
 
+/** Cage saisie (ADR-0010) : jonctions données, deux tronçons droits. */
+const cageOf = (junction: { angle: number; mode: "winders" | "landing" }): Project =>
+  ProjectSchema.parse({
+    ...createProject("straight"),
+    stair: {
+      ...createProject("straight").stair,
+      layout: {
+        kind: "cage",
+        sections: [
+          { axis: { kind: "straight", length: 1650 }, width: 900 },
+          { axis: { kind: "straight", length: 1650 }, width: 900 },
+        ],
+        junctions: [junction],
+      },
+    },
+  });
+
 describe("comparateur de variantes", () => {
   it("variantes proposées : bois à l'anglaise seulement pour un escalier droit", () => {
     const all = availableStructures();
@@ -63,6 +80,17 @@ describe("comparateur de variantes", () => {
     expect(variantsFor(hea, all).map((v) => v.id)).toContain("current-steel-profile");
     // Structures absentes du cœur : non proposées.
     expect(variantsFor(createProject("straight"), [{ kind: "wood-housed" }])).toHaveLength(1);
+  });
+
+  it("cage tournante : limon central en caisson, sans bois à l'anglaise ; cage droite : tube", () => {
+    const all = availableStructures();
+    const turning = variantsFor(cageOf({ angle: 60, mode: "winders" }), all).map((v) => v.id);
+    expect(turning).toContain("steel-central-box");
+    expect(turning).not.toContain("steel-central-tube");
+    expect(turning).not.toContain("wood-cut");
+    const straight = variantsFor(cageOf({ angle: 0, mode: "landing" }), all).map((v) => v.id);
+    expect(straight).toContain("steel-central-tube");
+    expect(straight).not.toContain("steel-central-box");
   });
 
   it("limon central : la section (tube, caisson) distingue la variante du projet", () => {

@@ -94,6 +94,8 @@ import {
 import {
   beamTopAt,
   buildCentralTrace,
+  CENTRAL_CAGE,
+  centralStairWidth,
   type CentralTrace,
   type CentralTraceResult,
 } from "./centralTrace.js";
@@ -105,6 +107,7 @@ import {
   type FoldedTreadResult,
 } from "./folded.js";
 import { dedupe, minAreaRect } from "./geom.js";
+import { projectLayoutTraits } from "./registry.js";
 import {
   QUANTITY_WELD_MM,
   STEEL_RULES,
@@ -503,12 +506,12 @@ function addCantileverCheck(checks: CheckCollector, params: SteelCentralParams):
   ]);
 }
 
-/** Largeur reprise par la poutre : l'emmarchement entier (une seule poutre). */
+/**
+ * Largeur reprise par la poutre : l'emmarchement entier (une seule poutre ; cage : plus grande
+ * largeur, `centralStairWidth`).
+ */
 function tributaryWidth(ctx: StructureContext): Mm {
-  const h = ctx.layout.helical;
-  if (h) return h.outerRadius - h.innerRadius;
-  const lay = ctx.project.stair.layout;
-  return lay.kind === "helical" ? 0 : lay.width;
+  return centralStairWidth(ctx);
 }
 
 function buildUnsafe(
@@ -1791,12 +1794,9 @@ export const STEEL_CENTRAL: StructureKind<SteelCentralParams> = {
   // Section par défaut : tube sur un escalier droit, caisson sur une trace courbe (le tube
   // n'y est pas pris en charge, `unsupportedOptions`).
   defaults: (ctx) => {
-    const lay = ctx.project.stair.layout;
-    const curved = curvedLayout(
-      lay.kind === "helical"
-        ? { kind: "helical", turns: 0 }
-        : { kind: "flights", turns: lay.turns.length },
-    );
+    // Même critère que les options grisées de l'interface (cage saisie : jonctions d'angle non
+    // nul, palier droit exclu).
+    const curved = curvedLayout(projectLayoutTraits(ctx.project));
     return SteelCentralParamsSchema.parse({
       section: { kind: curved ? CENTRAL_SECTION_KINDS[1] : CENTRAL_SECTION_KINDS[0] },
     });
@@ -1808,5 +1808,7 @@ export const STEEL_CENTRAL: StructureKind<SteelCentralParams> = {
     // Poutre sous les marches : aucune épaisseur hors de l'emmarchement utile.
     lateralThickness: () => ({ inner: 0, outer: 0 }),
     unsupportedOptions: centralUnsupportedOptions,
+    // Cage saisie (sous-lot 6c) : trace lue sur les tronçons et les jonctions (`cageCurve`).
+    cage: CENTRAL_CAGE,
   },
 };

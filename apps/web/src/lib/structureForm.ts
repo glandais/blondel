@@ -8,6 +8,7 @@
  * ceux du plugin.
  */
 import {
+  projectLayoutTraits,
   structureUnsupportedOptions,
   type Model,
   type Project,
@@ -356,13 +357,11 @@ export function withDefaults(defaults: unknown, params: unknown): Record<string,
 
 /**
  * Tracé du projet vu par les capacités des plugins : type (volées ou hélicoïdal) et nombre de
- * tournants (0 en hélicoïdal). Lecture du projet seulement.
+ * tournants (0 en hélicoïdal ; jonctions tournantes d'une cage saisie). Critère du cœur
+ * (`projectLayoutTraits`), lecture du projet seulement.
  */
 export function layoutTraitsOf(project: Project): StructureLayoutTraits {
-  const layout = project.stair.layout;
-  return layout.kind === "helical"
-    ? { kind: "helical", turns: 0 }
-    : { kind: "flights", turns: layout.turns.length };
+  return projectLayoutTraits(project);
 }
 
 /**

@@ -42,6 +42,9 @@ const EXPECTED: Readonly<Record<string, readonly string[]>> = {
   "cage-60": ["headroom conseil ECHAPPEE_RECO_PRIVATIF"],
   // Limons à la française (sous-lot 6a) : limon au ras de la trémie à l'arrivée (épaisseur de
   // structure seule sous la dalle, avertissement F15 (2)).
+  // Limon central acier (sous-lot 6c) : poutre sous les marches, aucune épaisseur hors de
+  // l'emmarchement, pas de conflit de dalle.
+  "cage-60-palier-central": ["headroom conseil ECHAPPEE_RECO_PRIVATIF"],
   "cage-60-palier-limon": [
     "slab avertissement site.fit.slabStructureArrival",
     "headroom conseil ECHAPPEE_RECO_PRIVATIF",

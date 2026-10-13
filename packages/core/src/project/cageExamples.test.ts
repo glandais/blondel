@@ -5,7 +5,9 @@
  * rayonnantes. Sous-lot 6a : `cage-60-palier-limon`, limons à la française (`wood-housed`) sur
  * une jonction à 60° balancée à jour en pan coupé suivie d'un palier droit. Sous-lot 6b :
  * `cage-45-palier-acier`, limons acier en plat (`steel-flat`) sur une jonction à 45° balancée à
- * jour en pan coupé suivie d'un palier droit. Site des préréglages (H = 2 700, dalle de 200 mm, nez `PRESET_NOSING`), trémie du
+ * jour en pan coupé suivie d'un palier droit. Sous-lot 6c : `cage-60-palier-central`, limon
+ * central acier (`steel-central`, caisson débillardé) sur une jonction à 60° balancée à jour en
+ * pan coupé, un palier droit et une dernière volée élargie de 900 à 1 100 mm. Site des préréglages (H = 2 700, dalle de 200 mm, nez `PRESET_NOSING`), trémie du
  * calcul des préréglages (`defaultOpening`, échappée `PRESET_HEADROOM_MIN` sur la ligne de
  * foulée). Longueurs choisies pour un giron voisin de 270 mm et aucune violation bloquante.
  * Régénération : `UPDATE_EXAMPLES=1 pnpm vitest run packages/core/src/project/cageExamples.test.ts`.
@@ -159,6 +161,31 @@ export const CAGE_EXAMPLES: Readonly<Record<string, CageExample>> = {
         "steel-flat",
       ),
   },
+  "cage-60-palier-central.blondel.json": {
+    features: ["anyAngle", "variableWidth", "straightLanding", "chamfer"],
+    structure: "steel-central",
+    build: () =>
+      // Limon central acier (sous-lot 6c) : trace autour des extrémités du pan coupé à la
+      // demi-largeur, droite à travers le palier droit, puis vers le milieu de la ligne
+      // d'arrivée de la volée élargie (convention à valider, F18) ; caisson débillardé par
+      // défaut sur une trace courbe.
+      cageExample(
+        "Tracé libre — limon central acier, jonction à 60° balancée, palier droit, volée élargie",
+        {
+          kind: "cage",
+          sections: [straight(1100), straight(500), straight(1300, 900, 1100)],
+          junctions: [
+            {
+              angle: 60,
+              mode: "winders",
+              well: { kind: "chamfer", setbackIn: 150, setbackOut: 150 },
+            },
+            { angle: 0, mode: "landing", depth: 900 },
+          ],
+        },
+        "steel-central",
+      ),
+  },
 };
 
 if (process.env["UPDATE_EXAMPLES"] === "1") {
@@ -228,5 +255,30 @@ describe("examples/cage-45-palier-acier : limons acier en plat sur une cage", ()
         "plate-head-stringer-outer-3",
       ]),
     );
+  });
+});
+
+describe("examples/cage-60-palier-central : limon central acier sur une cage", () => {
+  it("caisson débillardé, chaque marche sur son support, aucune violation propre à la cage", () => {
+    const p = parseProjectText(
+      readFileSync(join(EXAMPLES_DIR, "cage-60-palier-central.blondel.json"), "utf8"),
+    );
+    const m = buildModel(p, { memo: false });
+    expect(m.errors).toEqual([]);
+    // Poutre en caisson (pas de tube sur une trace courbe) : tronçons de la poutre.
+    const beam = m.parts.filter((x) => x.category === "stringer");
+    expect(beam.length).toBeGreaterThan(0);
+    // Un support au moins par marche (palier compris).
+    const supported = new Set(
+      m.parts.filter((x) => x.category === "support").flatMap((x) => x.assembledWith ?? []),
+    );
+    for (const t of m.parts.filter((x) => x.category === "tread" || x.category === "landing")) {
+      expect(supported.has(t.id), t.mark).toBe(true);
+    }
+    // Remarque de la convention de l'axe à largeur variable (F18).
+    expect((m.notes ?? []).map((n) => n.key)).toContain("structure.steelCentral.note.cageAxis");
+    expect(
+      m.compliance.results.filter((r) => r.status === "violation").map((r) => r.ruleId),
+    ).toEqual(["ECHAPPEE_RECO_PRIVATIF", "LIMON_CENTRAL_PORTE_A_FAUX"]);
   });
 });

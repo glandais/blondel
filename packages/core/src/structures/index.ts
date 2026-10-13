@@ -35,6 +35,7 @@ export {
   structureRequiresNewel,
   structureUnsupportedCageFeatures,
   structureUnsupportedOptions,
+  projectLayoutTraits,
   unregisterStructure,
 } from "./registry.js";
 export {

@@ -6,7 +6,8 @@
  * `structure.cageUnsupported` (garde-fou des structures, sous-lot 2f, détaillé dans
  * `structures/cageGuard.test.ts`) sauf si elle déclare les fonctions de la cage (limons à la
  * française, sous-lot 6a, limons acier et crémaillères, sous-lot 6b : jour vif ou en arc signalé
- * par le plugin, tournant refusé par les crémaillères) ; mémoïsation de l'étape
+ * par le plugin, tournant refusé par les crémaillères ; limons centraux, sous-lot 6c : poutre
+ * construite sans erreur) ; mémoïsation de l'étape
  * « tracé » (clés de `pipeline/build.ts`).
  */
 import fc from "fast-check";
@@ -250,6 +251,14 @@ describe("buildModel sur une cage saisie à ±90°", () => {
               expect(errorKeys(model)).toEqual([]);
               expect(model.parts.filter((p) => p.category === "carriage")).toHaveLength(2);
             }
+            continue;
+          }
+          if (structure === "wood-central" || structure === "steel-central") {
+            // Limons centraux (sous-lot 6c) : la trace contourne le jour vif ou en arc, poutre
+            // construite, aucune erreur.
+            expect(errorKeys(model)).toEqual([]);
+            const category = structure === "wood-central" ? "carriage" : "stringer";
+            expect(model.parts.some((p) => p.category === category)).toBe(true);
             continue;
           }
           // Cage construite (limons à la française, sous-lot 6a ; limons acier, sous-lot 6b) :

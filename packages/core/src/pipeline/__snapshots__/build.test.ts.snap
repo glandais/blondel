@@ -100,6 +100,39 @@ exports[`buildModel — exemples du dépôt > cage-60.blondel.json : cotes princ
 }
 `;
 
+exports[`buildModel — exemples du dépôt > cage-60-palier-central.blondel.json : cotes principales (non-régression) 1`] = `
+{
+  "blondel": 619.33,
+  "colletMin": 106.6,
+  "colletsChord": [
+    153.3,
+    106.6,
+    108.8,
+    148.2,
+  ],
+  "firstRise": 180,
+  "g": 259.33,
+  "h": 180,
+  "headroom": 1902.9,
+  "headroomWidth": {
+    "min": 1960,
+    "nosing": 2,
+  },
+  "n": 15,
+  "parts": 86,
+  "run": 4271.2,
+  "treads": "ssswwwwslsssss",
+  "violations": {
+    "avertissement": 1,
+    "bloquant": 0,
+    "conseil": 1,
+  },
+  "zones": [
+    "3-7 M3-cubic",
+  ],
+}
+`;
+
 exports[`buildModel — exemples du dépôt > cage-60-palier-limon.blondel.json : cotes principales (non-régression) 1`] = `
 {
   "blondel": 619.33,

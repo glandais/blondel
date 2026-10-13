@@ -62,7 +62,12 @@ import { sourceSpec } from "../rules/sources.js";
 import type { RuleDef } from "../rules/table.js";
 import type { Finding } from "../rules/types.js";
 import { resolveWorkshopProfile } from "../workshop/profile.js";
-import { buildCentralTrace, type CentralTraceKind } from "./centralTrace.js";
+import {
+  buildCentralTrace,
+  CENTRAL_CAGE,
+  centralStairWidth,
+  type CentralTraceKind,
+} from "./centralTrace.js";
 import {
   CheckCollector,
   pluginRuleDef,
@@ -188,12 +193,12 @@ function addCantileverCheck(checks: CheckCollector, params: WoodCentralParams): 
   ]);
 }
 
-/** Largeur reprise par la poutre : l'emmarchement entier (une seule poutre). */
+/**
+ * Largeur reprise par la poutre : l'emmarchement entier (une seule poutre ; cage : plus grande
+ * largeur, `centralStairWidth`).
+ */
 function tributaryWidth(ctx: StructureContext): Mm {
-  const h = ctx.layout.helical;
-  if (h) return h.outerRadius - h.innerRadius;
-  const lay = ctx.project.stair.layout;
-  return lay.kind === "helical" ? 0 : lay.width;
+  return centralStairWidth(ctx);
 }
 
 function traceKindLabel(kind: CentralTraceKind): Message {
@@ -592,7 +597,12 @@ function addMeansChecks(
   // LIMON_EPAISSEUR_MIN_DTU : largeur b de la crémaillère centrale.
   const thicknessRule = checks.yamlRule("LIMON_EPAISSEUR_MIN_DTU");
   if (thicknessRule) {
-    const outside = stringerRulesOutOfDomain(thicknessRule, ctx.project.stair.layout.width);
+    // Cage saisie : plus grande largeur (sous-lot 6c) ; volées, hélicoïdal : largeur du tracé.
+    const lay = ctx.project.stair.layout;
+    const outside = stringerRulesOutOfDomain(
+      thicknessRule,
+      lay.kind === "cage" ? centralStairWidth(ctx) : lay.width,
+    );
     if (outside !== null) {
       checks.add(thicknessRule, [
         {
@@ -834,5 +844,7 @@ export const WOOD_CENTRAL: StructureKind<WoodCentralParams> = {
     // Poutre sous les marches : aucune épaisseur hors de l'emmarchement utile.
     lateralThickness: () => ({ inner: 0, outer: 0 }),
     unsupportedOptions: woodCentralUnsupportedOptions,
+    // Cage saisie (sous-lot 6c) : trace lue sur les tronçons et les jonctions (`cageCurve`).
+    cage: CENTRAL_CAGE,
   },
 };

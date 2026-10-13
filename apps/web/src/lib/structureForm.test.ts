@@ -8,6 +8,7 @@ import {
   registerStructure,
   unregisterStructure,
   TreadSpecSchema,
+  type Project,
   type StructureContext,
   type MessageKey,
   type StructureKind,
@@ -30,6 +31,23 @@ import {
   withDefaults,
 } from "./structureForm.js";
 import { availableStructures } from "./optionalApi.js";
+
+/** Cage saisie (ADR-0010) : jonctions données, deux tronçons droits. */
+const cageOf = (junction: { angle: number; mode: "winders" | "landing" }): Project =>
+  ProjectSchema.parse({
+    ...createProject("straight"),
+    stair: {
+      ...createProject("straight").stair,
+      layout: {
+        kind: "cage",
+        sections: [
+          { axis: { kind: "straight", length: 1650 }, width: 900 },
+          { axis: { kind: "straight", length: 1650 }, width: 900 },
+        ],
+        junctions: [junction],
+      },
+    },
+  });
 
 describe("lecture des schémas zod 4", () => {
   it("listes de choix d'un z.enum enveloppé par .default()", () => {
@@ -267,6 +285,25 @@ describe("options non prises en charge sur le tracé (capacité `unsupportedOpti
     expect(layoutTraitsOf(createProject("straight"))).toEqual({ kind: "flights", turns: 0 });
     expect(layoutTraitsOf(createProject("quarter-left"))).toEqual({ kind: "flights", turns: 1 });
     expect(layoutTraitsOf(createProject("helical"))).toEqual({ kind: "helical", turns: 0 });
+    // Cage saisie : jonctions tournantes (un palier droit, angle 0, ne tourne pas).
+    expect(layoutTraitsOf(cageOf({ angle: 60, mode: "winders" }))).toEqual({
+      kind: "flights",
+      turns: 1,
+    });
+    expect(layoutTraitsOf(cageOf({ angle: 0, mode: "landing" }))).toEqual({
+      kind: "flights",
+      turns: 0,
+    });
+  });
+
+  it("cage tournante : tube (acier) et massif (bois) grisés comme sur un tournant", () => {
+    const turning = cageOf({ angle: 60, mode: "winders" });
+    const values = (kind: string, p: Project) => unsupportedOptionsOf(kind, p).map((o) => o.value);
+    expect(values("steel-central", turning)).toEqual(["tube"]);
+    expect(values("wood-central", turning)).toEqual(["solid"]);
+    const straight = cageOf({ angle: 0, mode: "landing" });
+    expect(values("steel-central", straight)).toEqual([]);
+    expect(values("wood-central", straight)).toEqual([]);
   });
 
   it("lecture de la déclaration du plugin ; rien pour « aucune », un plugin inconnu ou qui lève", () => {

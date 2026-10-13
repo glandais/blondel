@@ -11,6 +11,13 @@
  * - **Poteau d'angle** du tracé (jour `newel`) : le limon central ne le génère pas ; le bord du
  *   jour qui contourne le poteau est ramené au coin intérieur K (droites des volées prolongées
  *   jusqu'à K), puis traité comme un jour vif (arc de rayon d centré en K). Remarque émise.
+ * - **Cage saisie** (ADR-0010, sous-lot 6c, `cageCurve`, convention à valider, QUESTIONS F18) :
+ *   lue sur `Layout.sections` et `Layout.turns` ; arc autour de chaque jour (coin K, centre du
+ *   jour en arc, extrémités d'un pan coupé) à la moitié de la plus petite largeur de la jonction
+ *   ∓ décalage, tangentes communes droites entre deux jours (croisées entre deux tournants de
+ *   sens opposés, droites à travers un palier droit), extrémités d'équerre sur les lignes de
+ *   départ et d'arrivée. À largeur uniforme : exactement la trace des volées. Le raccord côté
+ *   mur n'intervient pas (poutre sous les marches). Axe en arc : refusé (`CENTRAL_CAGE`).
  * - **Hélicoïdal** : arc de rayon (R_i + R_e)/2 + décalage autour de l'axe du tracé, du nez de
  *   départ au nez d'arrivée (le palier d'arrivée éventuel n'est pas sous la trace : il est au
  *   niveau du plancher d'arrivée). Fût (`core = column`) : non porteur, non généré (remarque).
@@ -29,13 +36,19 @@
  */
 import { dec, errorMessage, msg, type Message } from "@blondel/i18n";
 import { cumulativeLengths, curvePointAt, makeCurve, subCurve } from "../geom2d/curve.js";
-import { intersectLineCurve, projectOnCurve } from "../geom2d/intersect.js";
+import {
+  distanceToCurve,
+  intersectLineCurve,
+  intersectLines,
+  projectOnCurve,
+} from "../geom2d/intersect.js";
 import { offsetCurve } from "../geom2d/offset.js";
-import { lineSeg, segEnd, segLength, segStart, segTangentAt } from "../geom2d/segment.js";
-import { GEOM_EPS } from "../geom2d/tolerance.js";
+import { arcSeg, lineSeg, segEnd, segLength, segStart, segTangentAt } from "../geom2d/segment.js";
+import { ANGLE_EPS, GEOM_EPS } from "../geom2d/tolerance.js";
 import * as V from "../geom2d/vec.js";
 import { splitArc } from "../layout/helical.js";
-import type { Layout, NosingLine, Stepping } from "../model/derived.js";
+import type { CageFeature } from "../model/cageFeatures.js";
+import type { Layout, LayoutSection, NosingLine, Stepping } from "../model/derived.js";
 import type { StructureContext } from "../model/plugins.js";
 import type { Curve2, CurveSeg, Mm, Vec2 } from "../model/primitives.js";
 import type { LayoutSpec } from "../model/project.js";
@@ -55,6 +68,21 @@ export interface CentralTraceParams {
   readonly trace: { readonly lateralOffset: Mm };
   readonly section: { readonly width: Mm };
 }
+
+/**
+ * Fonctions de cage saisie (ADR-0010, sous-lot 6c) que les limons centraux (`wood-central`,
+ * `steel-central`) savent construire : la trace (`cageCurve`) ne lit que les tronçons, le côté du
+ * jour et le raccord du jour de chaque jonction. Refusé : l'axe en arc (lot « acier cintré »).
+ */
+export const CENTRAL_CAGE: readonly CageFeature[] = [
+  "anyAngle",
+  "variableWidth",
+  "straightLanding",
+  "wallArc",
+  "chamfer",
+  "radiating",
+  "oppositeTurns",
+];
 
 /** Type de trace : droite (escalier droit), débillardée (tournants), hélicoïdale. */
 export type CentralTraceKind = "straight" | "turning" | "helical";
@@ -120,6 +148,22 @@ export function buildCentralTrace(
   }
 }
 
+/**
+ * Emmarchement repris par la poutre unique (prédimensionnement, domaine des règles de moyens) :
+ * largeur du tracé à volées ; cage saisie : **plus grande** largeur de ses tronçons (sous-lot 6c,
+ * du côté de la sécurité, comme les limons des sous-lots 6a et 6b) ; hélicoïdal : R_e − R_i.
+ */
+export function centralStairWidth(ctx: StructureContext): Mm {
+  const h = ctx.layout.helical;
+  if (h) return h.outerRadius - h.innerRadius;
+  const lay = ctx.project.stair.layout;
+  if (lay.kind === "helical") return 0;
+  if (lay.kind === "cage" && ctx.layout.sections && ctx.layout.sections.length > 0) {
+    return Math.max(...ctx.layout.sections.flatMap((s) => [s.widthStart, s.widthEnd]));
+  }
+  return lay.width;
+}
+
 /** Dessus de la poutre en σ : ligne des nez sur la trace moins `topOffset` (mm). */
 export function beamTopAt(trace: CentralTrace, topOffset: Mm, sigma: Mm): Mm {
   return trace.nosingZ(sigma) - topOffset;
@@ -137,7 +181,9 @@ function traceOf(ctx: StructureContext, params: CentralTraceParams): CentralTrac
   const half = params.section.width / 2;
   const built = layout.helical
     ? helicalCurve(layout, params)
-    : flightsCurve(layout, project.stair.layout, params);
+    : layout.cage === true
+      ? cageCurve(layout, params)
+      : flightsCurve(layout, project.stair.layout, params);
   if ("errors" in built) return { ok: false, errors: built.errors };
   const { curve, notes } = built;
   const length = cumulativeLengths(curve).at(-1) ?? 0;
@@ -376,6 +422,333 @@ function flightsCurve(
     }
   }
   return { curve: makeCurve(segs, SPLICE_TOL), notes };
+}
+
+// ------------------------------------------------------------------ Cage saisie (sous-lot 6c)
+
+/**
+ * Pivot de la trace d'une cage : cercle autour duquel la trace tourne à une jonction tournante
+ * (coin du jour K, centre d'un jour en arc, extrémité d'un pan coupé), parcouru du côté `side`
+ * (+1 : centre à gauche de la montée, tournant à gauche).
+ */
+interface Pivot {
+  readonly center: Vec2;
+  readonly radius: Mm;
+  readonly side: 1 | -1;
+  /** Indice de la jonction. */
+  readonly junction: number;
+  /** Angle |θ| de la jonction (rad, borne du balayage de l'arc). */
+  readonly turn: number;
+}
+
+/** Pas d'échantillonnage du contrôle d'emprise de la poutre sur une cage (mm, borne de calcul). */
+const CAGE_SAMPLE_STEP: Mm = 25;
+
+/**
+ * Trace d'une cage saisie (ADR-0010, sous-lot 6c ; convention à valider, QUESTIONS F18) :
+ *
+ * - à chaque jonction tournante, l'axe tourne autour du jour à la distance ρ = W/2 ∓ décalage
+ *   (`trace.lateralOffset`, positif vers la gauche), W étant la plus petite des deux largeurs à
+ *   la jonction (même convention que d_f, F1) : arc de centre K (jour vif ; poteau, non généré,
+ *   comme en volées), du centre du jour en arc (rayon r + ρ) ou de chaque extrémité du pan
+ *   coupé (« pivots ») ;
+ * - entre deux pivots, l'axe est leur tangente commune (droite, croisée entre deux tournants de
+ *   sens opposés) ; un palier droit n'a pas de pivot : l'axe le traverse en ligne droite ;
+ * - aux extrémités, l'axe est **perpendiculaire** à la ligne de départ (d'arrivée) et tangent au
+ *   premier (dernier) pivot : la coupe d'aplomb de tête reste d'équerre sur le chevêtre et la
+ *   face avant sous le nez 0, comme en volées ; sans jonction tournante (droit, paliers droits),
+ *   droite perpendiculaire aux deux lignes, à mi-chemin de leurs milieux, ramenée dans
+ *   l'emmarchement si elle en sort (`straightAxisPosition`), puis décalée.
+ *
+ * La trace est continue en tangente (G1) par construction. À largeur uniforme, c'est exactement
+ * la parallèle au bord du jour des volées (`flightsCurve`), prouvé par les tests. La poutre doit
+ * rester dans l'emmarchement : distance de l'axe aux deux bords ≥ demi-largeur de la section,
+ * contrôlée sur toute la trace (`beamOutsideWidth`, ou `cageAxisOutsideWidth` sur une cage de
+ * largeur variable qui tourne : la convention fixe alors l'axe) ; tangentes impossibles ou à rebours
+ * (jonctions trop proches) : `cageTraceJunction`.
+ */
+function cageCurve(layout: Layout, params: CentralTraceParams): Built {
+  const sections = layout.sections ?? [];
+  const degenerate = (): Built => ({
+    errors: [msg("structure.steelCentral.error.traceDegenerate")],
+  });
+  if (sections.length === 0) return degenerate();
+  if (layout.zeroLengthInner && layout.zeroLengthInner.length > 0) {
+    return { errors: [msg("structure.steelCentral.error.zeroLengthWell")] };
+  }
+  const offset = params.trace.lateralOffset;
+  const half = params.section.width / 2;
+  const outside = (): Built => ({
+    errors: [
+      msg("structure.steelCentral.error.beamOutsideWidth", {
+        offset: dec(offset, 0),
+        width: dec(params.section.width, 0),
+      }),
+    ],
+  });
+  const outsideVariable = (): Built => ({
+    errors: [
+      msg("structure.steelCentral.error.cageAxisOutsideWidth", {
+        offset: dec(offset, 0),
+        width: dec(params.section.width, 0),
+      }),
+    ],
+  });
+  const notes: Message[] = [];
+  // Largeur variable : convention de l'axe à valider (QUESTIONS F18), rappelée en remarque.
+  const w0 = sections[0]!.widthStart;
+  const variable = sections.some((s) => s.widthStart !== w0 || s.widthEnd !== w0);
+  if (variable) notes.push(msg("structure.steelCentral.note.cageAxis"));
+
+  const pivots: Pivot[] = [];
+  for (const zone of layout.turns) {
+    const theta = zone.angle ?? (zone.direction === "left" ? Math.PI / 2 : -Math.PI / 2);
+    if (Math.abs(theta) <= ANGLE_EPS) continue; // palier droit : aucun pivot
+    const a = sections[zone.index];
+    const b = sections[zone.index + 1];
+    if (!a || !b) return degenerate();
+    const sideName = zone.collarSide ?? zone.direction;
+    const side: 1 | -1 = sideName === "left" ? 1 : -1;
+    const rho = Math.min(a.widthEnd, b.widthStart) / 2 - side * offset;
+    if (!(rho > 0)) return outside();
+    const dIn = sectionEdgeDir(a, sideName);
+    const dOut = sectionEdgeDir(b, sideName);
+    // Vers le jour depuis son bord (centre d'un jour en arc, côté du vide).
+    const towardWell = (d: Vec2): Vec2 => (side > 0 ? V.perpLeft(d) : V.perpRight(d));
+    const k = zone.innerCorner;
+    const well = zone.well ?? { kind: "sharp" as const };
+    const pivot = (center: Vec2, radius: Mm): Pivot => ({
+      center,
+      radius,
+      side,
+      junction: zone.index,
+      turn: Math.abs(theta),
+    });
+    if (well.kind === "arc") {
+      const hit = intersectLines(
+        { origin: V.addScaled(k, towardWell(dIn), well.radius), dir: dIn },
+        { origin: V.addScaled(k, towardWell(dOut), well.radius), dir: dOut },
+      );
+      if (!hit) return { errors: [cageJunctionError(zone.index)] };
+      pivots.push(pivot(hit.point, well.radius + rho));
+    } else if (well.kind === "chamfer") {
+      pivots.push(pivot(V.addScaled(k, dIn, -well.setbackIn), rho));
+      pivots.push(pivot(V.addScaled(k, dOut, well.setbackOut), rho));
+    } else {
+      const newelNote = msg("structure.steelCentral.note.newelNotGenerated");
+      if (well.kind === "newel" && !notes.some((n) => n.key === newelNote.key)) {
+        notes.push(newelNote);
+      }
+      pivots.push(pivot(k, rho));
+    }
+  }
+
+  // Pivots confondus (demi-tour sans partie droite du jour) : un seul arc.
+  const merged: Pivot[] = [];
+  for (const p of pivots) {
+    const last = merged.at(-1);
+    if (
+      last &&
+      last.side === p.side &&
+      V.distance(last.center, p.center) <= GEOM_EPS &&
+      Math.abs(last.radius - p.radius) <= GEOM_EPS
+    ) {
+      merged[merged.length - 1] = { ...last, turn: last.turn + p.turn };
+      continue;
+    }
+    merged.push(p);
+  }
+
+  // Lignes de départ et d'arrivée : direction de la montée.
+  const startLine = sections[0]!.start;
+  const endLine = sections.at(-1)!.end;
+  const climb = (l: LayoutSection["start"]): Vec2 =>
+    V.normalize(V.perpLeft(V.sub(l.right, l.left)));
+  const u0 = climb(startLine);
+  const uN = climb(endLine);
+
+  const segs: CurveSeg[] = [];
+  const pushLine = (a: Vec2, b: Vec2): void => {
+    if (V.distance(a, b) > GEOM_EPS) {
+      segs.push(lineSeg(segs.length > 0 ? segEnd(segs.at(-1)!) : a, b));
+    }
+  };
+  if (merged.length === 0) {
+    // Droit ou paliers droits seulement : lignes parallèles ; droite d'équerre à mi-chemin des
+    // milieux, ramenée dans l'emmarchement si elle en sort (trapèze ancré côté mur ou jour).
+    if (Math.abs(V.cross(u0, uN)) > ANGLE_EPS || !(V.dot(u0, uN) > 0)) return degenerate();
+    const n = V.perpLeft(u0);
+    const m0 = V.lerp(startLine.left, startLine.right, 0.5);
+    const mN = V.lerp(endLine.left, endLine.right, 0.5);
+    const at = (c: number): [Vec2, Vec2] => [
+      V.addScaled(m0, n, c - V.dot(m0, n)),
+      V.addScaled(mN, n, c - V.dot(mN, n)),
+    ];
+    const c = straightAxisPosition(
+      (V.dot(m0, n) + V.dot(mN, n)) / 2,
+      at,
+      [layout.inner, layout.outer],
+      n,
+      half,
+      [
+        Math.max(V.dot(startLine.right, n), V.dot(endLine.right, n)),
+        Math.min(V.dot(startLine.left, n), V.dot(endLine.left, n)),
+      ],
+    );
+    const [p0, pN] = at(c + offset);
+    pushLine(p0, pN);
+  } else {
+    // Contact de la droite de direction u tangente au pivot p (centre du côté `side`).
+    const touch = (p: Pivot, u: Vec2): Vec2 =>
+      V.addScaled(p.center, V.perpLeft(u), -p.side * p.radius);
+    const first = merged[0]!;
+    const last = merged.at(-1)!;
+    const t0 = touch(first, u0);
+    const tN = touch(last, uN);
+    const s0 = V.addScaled(t0, u0, V.dot(V.sub(startLine.left, t0), u0));
+    const sN = V.addScaled(tN, uN, V.dot(V.sub(endLine.left, tN), uN));
+    if (V.dot(V.sub(t0, s0), u0) < -GEOM_EPS)
+      return { errors: [cageJunctionError(first.junction)] };
+    if (V.dot(V.sub(sN, tN), uN) < -GEOM_EPS) return { errors: [cageJunctionError(last.junction)] };
+    // Points d'entrée et de sortie de chaque pivot (tangentes communes entre pivots).
+    const entries: Vec2[] = [t0];
+    const exits: Vec2[] = [];
+    for (let i = 0; i + 1 < merged.length; i++) {
+      const t = commonTangent(merged[i]!, merged[i + 1]!);
+      if (!t) return { errors: [cageJunctionError(merged[i + 1]!.junction)] };
+      exits.push(t.from);
+      entries.push(t.to);
+    }
+    exits.push(tN);
+    pushLine(s0, t0);
+    for (let i = 0; i < merged.length; i++) {
+      const p = merged[i]!;
+      const a0 = V.angleOf(V.sub(entries[i]!, p.center));
+      const a1 = V.angleOf(V.sub(exits[i]!, p.center));
+      let sweep = (((p.side * (a1 - a0)) % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
+      if (sweep > 2 * Math.PI - 1e-9) sweep = 0;
+      // Arc qui fait le tour du pivot : tangentes dans le désordre (pivots trop proches).
+      if (sweep > p.turn + Math.PI / 2) return { errors: [cageJunctionError(p.junction)] };
+      if (p.radius * sweep > GEOM_EPS) segs.push(arcSeg(p.center, p.radius, a0, p.side * sweep));
+      pushLine(exits[i]!, i + 1 < merged.length ? entries[i + 1]! : sN);
+    }
+  }
+  if (segs.length === 0) return degenerate();
+  const curve = makeCurve(segs, SPLICE_TOL);
+
+  // Poutre dans l'emmarchement : distance de l'axe à chaque bord ≥ demi-largeur de la section.
+  const cum = cumulativeLengths(curve);
+  const length = cum.at(-1)!;
+  const step = Math.min(CAGE_SAMPLE_STEP, Math.max(half, 1));
+  const samples = new Set<Mm>(cum);
+  for (let s = 0; s < length; s += step) samples.add(s);
+  for (const s of samples) {
+    const q = curvePointAt(curve, Math.min(Math.max(s, 0), length));
+    if (
+      distanceToCurve(q, layout.inner) < half - GEOM_EPS ||
+      distanceToCurve(q, layout.outer) < half - GEOM_EPS
+    ) {
+      // Largeur variable avec jonction tournante : la position de l'axe est imposée par la
+      // convention (d'équerre aux extrémités, tangent aux jours), erreur qui la nomme.
+      return merged.length > 0 && variable ? outsideVariable() : outside();
+    }
+  }
+  return { curve, notes };
+}
+
+/** Axe droit (cage sans jonction tournante) : clearance minimale aux bords, échantillonnée. */
+function lineClearance(a: Vec2, b: Vec2, edge: Curve2, step: Mm): number {
+  const len = V.distance(a, b);
+  const count = Math.max(1, Math.ceil(len / step));
+  let min = Infinity;
+  for (let i = 0; i <= count; i++) {
+    min = Math.min(min, distanceToCurve(V.lerp(a, b, i / count), edge));
+  }
+  return min;
+}
+
+/** Itérations de la dichotomie de `straightAxisPosition` (borne de calcul, ≈ 1e-9 de l'écart). */
+const AXIS_BISECTION_STEPS = 40;
+
+/**
+ * Position (coordonnée selon `n`, sans décalage latéral) de l'axe droit d'une cage sans jonction
+ * tournante : `preferred` (mi-chemin des milieux) s'il laisse la demi-largeur `half` aux deux
+ * bords, sinon la position admissible la plus proche, cherchée par dichotomie dans `range`
+ * (intersection des lignes de départ et d'arrivée) : la clearance au bord de gauche décroît
+ * quand l'axe s'en approche, celle au bord de droite croît. Sans position admissible :
+ * `preferred` (le contrôle d'emprise rend alors l'erreur).
+ */
+function straightAxisPosition(
+  preferred: number,
+  at: (c: number) => [Vec2, Vec2],
+  edges: readonly Curve2[],
+  n: Vec2,
+  half: Mm,
+  range: readonly [number, number],
+): number {
+  const step = Math.min(CAGE_SAMPLE_STEP, Math.max(half, 1));
+  const fits = (c: number, edge: Curve2): boolean =>
+    lineClearance(...at(c), edge, step) >= half - GEOM_EPS / 2;
+  if (edges.every((e) => fits(preferred, e))) return preferred;
+  const [a, b] = range;
+  if (!(b - a > 2 * half)) return preferred;
+  // Côté de chaque bord : position moyenne de ses sommets selon n.
+  const sideOf = (edge: Curve2): number => {
+    const pts = edge.segments.map((sg) => segStart(sg));
+    const mean = pts.reduce((acc, p) => acc + V.dot(p, n), 0) / Math.max(pts.length, 1);
+    return mean - (a + b) / 2;
+  };
+  let lo = a;
+  let hi = b;
+  for (const edge of edges) {
+    const left = sideOf(edge) > 0;
+    // Bord de gauche : admissible pour c ≤ c* ; bord de droite : pour c ≥ c*.
+    let x = a;
+    let y = b;
+    if (left ? !fits(a, edge) : !fits(b, edge)) return preferred;
+    for (let i = 0; i < AXIS_BISECTION_STEPS; i++) {
+      const mid = (x + y) / 2;
+      if (fits(mid, edge) === left) x = mid;
+      else y = mid;
+    }
+    if (left) hi = Math.min(hi, x);
+    else lo = Math.max(lo, y);
+  }
+  if (!(lo <= hi)) return preferred;
+  return Math.min(Math.max(preferred, lo), hi);
+}
+
+function cageJunctionError(junction: number): Message {
+  return msg("structure.steelCentral.error.cageTraceJunction", { junction: junction + 1 });
+}
+
+/**
+ * Direction unitaire (sens de la montée) du bord `side` d'un tronçon : de son départ à son
+ * arrivée ; partie droite nulle : normale à la ligne d'arrivée.
+ */
+function sectionEdgeDir(sec: LayoutSection, side: "left" | "right"): Vec2 {
+  const v = V.sub(sec.end[side], sec.start[side]);
+  if (V.norm(v) > GEOM_EPS) return V.normalize(v);
+  return V.normalize(V.perpLeft(V.sub(sec.end.right, sec.end.left)));
+}
+
+/**
+ * Tangente commune orientée de A vers B : direction t telle que A est à `A.side` et B à
+ * `B.side` de la droite parcourue dans le sens t ; points de contact.
+ * `null` si elle n'existe pas (cercles qui se recoupent) ou recule.
+ */
+function commonTangent(A: Pivot, B: Pivot): { from: Vec2; to: Vec2 } | null {
+  const D = V.sub(B.center, A.center);
+  const dist = V.norm(D);
+  const k = B.side * B.radius - A.side * A.radius;
+  if (!(dist > GEOM_EPS) || Math.abs(k) > dist + GEOM_EPS) return null;
+  const phi = V.angleOf(D) - Math.asin(Math.max(-1, Math.min(1, k / dist)));
+  const t = V.fromAngle(phi);
+  const n = V.perpLeft(t);
+  const from = V.addScaled(A.center, n, -A.side * A.radius);
+  const to = V.addScaled(B.center, n, -B.side * B.radius);
+  if (V.dot(V.sub(to, from), t) < -GEOM_EPS) return null;
+  return { from, to };
 }
 
 /**

@@ -32,7 +32,7 @@ import {
   type Translator,
 } from "@blondel/i18n";
 import { numberFormat } from "../i18n/locale.js";
-import { unsupportedOptionsOf } from "./structureForm.js";
+import { layoutTraitsOf, unsupportedOptionsOf } from "./structureForm.js";
 
 /** Variante à comparer : une structure et, éventuellement, des paramètres imposés. */
 export interface Variant {
@@ -144,7 +144,8 @@ export function variantsFor(
     }
     return withCurrent(project, out, has);
   }
-  const straight = project.stair.layout.turns.length === 0;
+  // Tournants lus par le critère des capacités (cage saisie : jonctions d'angle non nul).
+  const straight = layoutTraitsOf(project).turns === 0;
   if (has("wood-housed")) {
     out.push({ id: "wood-housed", kind: "wood-housed", label: msg("ui.lib.variant.woodHoused") });
   }
