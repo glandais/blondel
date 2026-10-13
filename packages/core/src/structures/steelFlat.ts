@@ -803,8 +803,40 @@ function upOf(k: NosingLine, towards: Polygon2, sign: 1 | -1): Vec2 {
   return n;
 }
 
+/**
+ * Réglages de `buildSteelFlat` pour un plugin qui le réutilise (`steel-curved`, sous-lot 6d).
+ */
+export interface SteelFlatOptions {
+  /**
+   * Côtés dont les limons en plat sont construits (défaut : les deux). `steel-curved` ne garde
+   * que le côté mur quand son limon débillardé porte tout le jour d'une cage saisie, et aucun
+   * côté sur une cage à axe en arc (limons cintrés des deux côtés) : les faces du tracé ne sont
+   * alors pas reconstruites (`stairGeometry` refuse un axe en arc) ; marches, contremarches et
+   * contrôles des tôles pliées restent ceux de `steel-flat`.
+   */
+  readonly sides?: readonly ("inner" | "outer")[];
+}
+
+/** Géométrie sans face ni poteau (aucun limon en plat construit). */
+function emptyStairGeometry(layout: StructureContext["layout"]): StairGeometry {
+  return {
+    legs: [],
+    newels: [],
+    faces: [],
+    jourIssues: [],
+    landingMerges: [],
+    width: 0,
+    maxWidth: 0,
+    sign: layout.innerSide === "left" ? 1 : -1,
+  };
+}
+
 /** Construction complète (détails compris). */
-export function buildSteelFlat(ctx: StructureContext, params: SteelFlatParams): SteelFlatResult {
+export function buildSteelFlat(
+  ctx: StructureContext,
+  params: SteelFlatParams,
+  options: SteelFlatOptions = {},
+): SteelFlatResult {
   const { project, layout, stepping } = ctx;
   const profile = resolveWorkshopProfile(project.workshop);
   const metal = profile.metal;
@@ -832,13 +864,14 @@ export function buildSteelFlat(ctx: StructureContext, params: SteelFlatParams): 
   if (helical) return empty([helical]);
   if (nosings.length < 2) return empty([msg("structure.steelFlat.error.emptyStepping")]);
 
-  const geo = stairGeometry(project, layout);
+  const sides = options.sides ?? (["inner", "outer"] as const);
+  const geo = sides.length === 0 ? emptyStairGeometry(layout) : stairGeometry(project, layout);
   // Cage saisie (sous-lot 6b) : faces du tracé, coupes d'équerre aux angles (`buttCornerCuts`).
   const faceInfo =
     layout.cage === true ? steelCageFaces(geo, e, "butt") : steelStringerFaces(ctx, geo);
   errors.push(...faceInfo.errors);
   notes.push(...faceInfo.notes);
-  const faces = faceInfo.faces;
+  const faces = faceInfo.faces.filter((f) => sides.includes(f.side));
   const baseParts = ctx.baseParts ?? buildBasicParts(project, layout, stepping).parts;
   const baseById = new Map(baseParts.map((p) => [p.id, p]));
   const checks = new CheckCollector(project, stepping);

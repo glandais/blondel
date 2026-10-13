@@ -27,15 +27,20 @@
  * unique rendue à « auto » puis imposée à la valeur retenue, passage automatique annoncé,
  * annulations ; limons à la
  * française (sous-lot 6a), crémaillères bois (sous-lot 6b), limons centraux bois et acier
- * (sous-lot 6c) sur une cage : générés, sans erreur ; limon débillardé acier sur une cage :
- * `structure.cageUnsupported` lisible et
- * « Reconvertir en volées » proposé, puis structure « aucune » : plus d'erreur ; budget des
- * tâches longues respecté.
+ * (sous-lot 6c) sur une cage : générés, sans erreur ; limon débillardé acier (sous-lot 6d) sur
+ * la cage droite : construit, erreur du plugin « escalier sans tournant » comme en volées ; la
+ * même cage élargie à l'arrivée (largeur variable, non déclarée par le débillardé) :
+ * `structure.cageUnsupported` lisible qui nomme la fonction, pas de « Reconvertir en volées »
+ * (la cage ne s'écrit plus en volées), puis structure « aucune » : plus d'erreur ; budget des
+ * tâches longues respecté ; quart tournant à jour vif converti en tracé libre, limon débillardé :
+ * jour vif refusé, « Reconvertir le tracé libre en volées » proposé (section Tracé, inspecteur
+ * de l'escalier) et appliqué.
  */
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import {
+  applyPreset,
   chooseStructure,
   describeTasks,
   instrument,
@@ -914,7 +919,7 @@ test("inspecteur : insérer un palier, couper un tronçon (refus puis coupe), Su
   expect(over, describeTasks(over, tasks)).toEqual([]);
 });
 
-test("convertir un escalier à volées en tracé libre, annuler ; limons à la française, crémaillères, limons centraux puis limon débillardé sur une cage : erreur lisible, puis « aucune »", async ({
+test("convertir un escalier à volées en tracé libre, annuler ; limons à la française, crémaillères, limons centraux puis limon débillardé sur une cage : erreurs lisibles, puis « aucune »", async ({
   page,
 }) => {
   await openApp(page);
@@ -1013,20 +1018,28 @@ test("convertir un escalier à volées en tracé libre, annuler ; limons à la f
   await chooseStructure(page, "steel-central");
   await expect(errors).toHaveCount(0);
 
-  // Limon débillardé acier sur la cage : structure non générée, erreur lisible.
+  // Limon débillardé acier sur la cage droite (sous-lot 6d) : construit, erreur du plugin
+  // lisible (pas de jour courbe sans tournant), comme sur la volée droite.
   await chooseStructure(page, "steel-curved");
-  await expect(errors).toHaveAttribute("title", /pas encore disponible pour ce tracé libre/);
+  await expect(errors).toHaveAttribute("title", /escalier sans tournant/);
 
-  // Inspecteur de l'escalier : correction « Reconvertir en volées » proposée.
-  // La sélection du plan (tronçon 1) survit au changement d'onglet, de tracé et de structure.
+  // Cage élargie à l'arrivée (largeur variable, non déclarée par le débillardé) : structure non
+  // générée, refus lisible qui nomme la fonction. La sélection du plan (tronçon 1) survit au
+  // changement d'onglet, de tracé et de structure.
   await openTab(page, "Plan");
   await expect(page.getByTestId("plan-selection")).toHaveText("Sélection : Tronçon 1");
+  const widened = panel.getByLabel("Largeur à l'arrivée", { exact: true });
+  await widened.fill("1000");
+  await widened.press("Enter");
+  await settle(page);
+  await expect(errors).toHaveAttribute("title", /pas encore disponible pour ce tracé libre/);
+  await expect(errors).toHaveAttribute("title", /largeur variable/);
+
+  // Inspecteur de l'escalier : la cage ne s'écrit plus en volées, pas de reconversion.
   const edge = await hitPoint(plan, '[data-plan-select="stair"]', "edge");
   await page.mouse.click(edge!.x, edge!.y);
   await expect(page.getByTestId("plan-selection")).toHaveText("Sélection : Escalier");
-  await expect(
-    panel.getByRole("button", { name: /^Reconvertir le tracé libre en volées/ }),
-  ).toBeVisible();
+  await expect(panel.getByRole("button", { name: /^Reconvertir le tracé libre/ })).toHaveCount(0);
 
   // Structure « aucune » : plus d'erreur, plus de correction.
   await chooseStructure(page, "none");
@@ -1038,4 +1051,44 @@ test("convertir un escalier à volées en tracé libre, annuler ; limons à la f
   const tasks = await takeLongTasks(page);
   const over = overBudget(tasks);
   expect(over, describeTasks(over, tasks)).toEqual([]);
+});
+
+test("quart tournant à jour vif en tracé libre, limon débillardé : « Reconvertir le tracé libre en volées » proposé (section Tracé, inspecteur) et appliqué", async ({
+  page,
+}) => {
+  await openApp(page);
+  await applyPreset(page, "Quart tournant à gauche");
+  const layout = await openSection(page, "Tracé");
+  const kind = layout.getByLabel("Type de tracé", { exact: true });
+  await layout.getByRole("button", { name: "Convertir en tracé libre", exact: true }).click();
+  await settle(page);
+  await expect(kind).toHaveValue("cage");
+
+  // Jour vif sur la cage : limons de jour refusés (poteau impossible en tracé libre) ; la cage
+  // s'écrit exactement en volées, où le jour vif peut recevoir un poteau.
+  await chooseStructure(page, "steel-curved");
+  const errors = page.locator(".figure-line__errors");
+  await expect(errors).toHaveAttribute("title", /jour à angle vif/);
+  const reconvert = /^Reconvertir le tracé libre en volées \(2 volées\)/;
+  await expect(
+    (await openSection(page, "Tracé")).getByRole("button", { name: reconvert }),
+  ).toBeVisible();
+
+  // Inspecteur de l'escalier : même correction, appliquée.
+  await openTab(page, "Plan");
+  await page.getByRole("button", { name: "Site et saisie", exact: true }).click();
+  await settle(page);
+  const plan = page.getByRole("group", {
+    name: "Plan du site : calque de fond, murs, trémie et escalier",
+  });
+  const edge = await hitPoint(plan, '[data-plan-select="stair"]', "edge");
+  await page.mouse.click(edge!.x, edge!.y);
+  await expect(page.getByTestId("plan-selection")).toHaveText("Sélection : Escalier");
+  const panel = inspector(page);
+  await panel.getByRole("button", { name: reconvert }).click();
+  await settle(page);
+  await expect(panel.getByRole("button", { name: /^Reconvertir le tracé libre/ })).toHaveCount(0);
+  await expect(
+    (await openSection(page, "Tracé")).getByLabel("Type de tracé", { exact: true }),
+  ).toHaveValue("flights");
 });

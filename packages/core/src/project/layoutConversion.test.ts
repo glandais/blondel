@@ -8,7 +8,8 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import fc from "fast-check";
 import type { Message } from "@blondel/i18n";
-import { describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { z } from "zod";
 import { computeLayout } from "../layout/layout.js";
 import { LayoutError } from "../layout/errors.js";
 import { cageFeatures } from "../model/cageFeatures.js";
@@ -21,6 +22,7 @@ import {
   type Project,
 } from "../model/project.js";
 import { buildModel } from "../pipeline/build.js";
+import { registerStructure, unregisterStructure, WOOD_HOUSED } from "../structures/index.js";
 import { suggestFixes } from "./fixes.js";
 import { flightsToCageLayout, toCageLayout, toFlightsLayout } from "./layoutConversion.js";
 import { DEFAULT_NEWEL, withNewels } from "./newel.js";
@@ -47,6 +49,33 @@ function cageProject(layout: CageLayoutSpecInput, structure = "none"): Project {
       layout,
       structure: { kind: structure },
     },
+  });
+}
+
+/**
+ * Plugin de test à volées qui ne lit aucune cage saisie (sans `capabilities.cage`) : depuis le
+ * sous-lot 6d (limon débillardé acier), tous les plugins à volées intégrés en lisent une ; le
+ * refus du garde-fou et la correction « reconvertir en volées » qui en découle se vérifient sur
+ * lui.
+ */
+const FLIGHTS_ONLY = "test-flights-only";
+
+function withFlightsOnlyPlugin(): void {
+  beforeAll(() =>
+    registerStructure(
+      {
+        kind: FLIGHTS_ONLY,
+        labelKey: WOOD_HOUSED.labelKey,
+        family: "bois",
+        paramsSchema: z.object({}),
+        defaults: () => ({}),
+        build: () => ({ parts: [], checks: [], notes: [] }),
+      },
+      { replace: true },
+    ),
+  );
+  afterAll(() => {
+    unregisterStructure(FLIGHTS_ONLY);
   });
 }
 
@@ -241,12 +270,14 @@ describe("toCageLayout / toFlightsLayout", () => {
 });
 
 describe("correction « reconvertir en volées » (cage-to-flights)", () => {
+  withFlightsOnlyPlugin();
+
   it("cage sans fonction de cage : proposée, le patch rend le tracé à volées équivalent", () => {
-    // Structure qui ne lit aucune cage saisie (limon débillardé acier ; le limon central la lit
-    // depuis le sous-lot 6c) : refus du garde-fou.
+    // Structure qui ne lit aucune cage saisie (plugin de test : tous les plugins à volées
+    // intégrés en lisent une depuis le sous-lot 6d) : refus du garde-fou.
     for (const id of PRESET_IDS) {
       const flights = createProject(id, {
-        patch: { stair: { structure: { kind: "steel-curved", params: {} } } },
+        patch: { stair: { structure: { kind: FLIGHTS_ONLY, params: {} } } },
       });
       const cage = toCageLayout(flights)!;
       const model = buildModel(cage, { memo: false });
@@ -301,7 +332,7 @@ describe("correction « reconvertir en volées » (cage-to-flights)", () => {
         sections: [straight(1500), straight(600)],
         junctions: [{ angle: 90, mode: "winders" }],
       },
-      "steel-curved",
+      FLIGHTS_ONLY,
     );
     const model = buildModel(cage, { memo: false });
     expect(model.errors.map((e) => e.key)).toContain("structure.cageUnsupported");
@@ -388,6 +419,7 @@ describe("correction « reconvertir en volées » (cage-to-flights)", () => {
 });
 
 describe("branches cage de newel.ts et structureChoice.ts", () => {
+  withFlightsOnlyPlugin();
   const cage = cageProject({
     kind: "cage",
     sections: [straight(1500), straight(600)],
@@ -404,10 +436,15 @@ describe("branches cage de newel.ts et structureChoice.ts", () => {
   });
 
   it("structure posée sans adapter le jour, remarque (reconversion si possible)", () => {
-    const a = applyStructureChoice(cage, "steel-curved");
-    expect(a.project.stair.structure.kind).toBe("steel-curved");
+    const a = applyStructureChoice(cage, FLIGHTS_ONLY);
+    expect(a.project.stair.structure.kind).toBe(FLIGHTS_ONLY);
     expect(a.project.stair.layout).toBe(cage.stair.layout);
     expect(a.notes.map((n) => n.key)).toEqual(["project.structureChoice.cageConvertible"]);
+    // Limon débillardé acier (sous-lot 6d) : cage sans fonction construite (jour en arc exigé
+    // par le plugin, comme en volées), pas de poteau : aucune remarque.
+    const curved = applyStructureChoice(cage, "steel-curved");
+    expect(curved.project.stair.layout).toBe(cage.stair.layout);
+    expect(curved.notes).toEqual([]);
     // Limons centraux (sous-lot 6c) : cage construite, sans poteau : aucune remarque.
     for (const kind of ["wood-central", "steel-central"]) {
       for (const p of [cage, sixty]) {

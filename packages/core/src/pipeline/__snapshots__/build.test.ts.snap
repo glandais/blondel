@@ -192,6 +192,32 @@ exports[`buildModel — exemples du dépôt > cage-arc.blondel.json : cotes prin
 }
 `;
 
+exports[`buildModel — exemples du dépôt > cage-arc-palier-cintre.blondel.json : cotes principales (non-régression) 1`] = `
+{
+  "blondel": 629.61,
+  "colletMin": null,
+  "colletsChord": [],
+  "firstRise": 180,
+  "g": 269.61,
+  "h": 180,
+  "headroom": 1900,
+  "headroomWidth": {
+    "min": 1960,
+    "nosing": 2,
+  },
+  "n": 15,
+  "parts": 65,
+  "run": 4405,
+  "treads": "sssssslsssssss",
+  "violations": {
+    "avertissement": 0,
+    "bloquant": 0,
+    "conseil": 1,
+  },
+  "zones": [],
+}
+`;
+
 exports[`buildModel — exemples du dépôt > cage-palier-droit.blondel.json : cotes principales (non-régression) 1`] = `
 {
   "blondel": 630,

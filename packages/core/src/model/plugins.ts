@@ -180,7 +180,10 @@ export interface StructureCapabilities<P = unknown> {
 /** Tracé vu par les capacités, sans modèle : type de tracé et nombre de tournants. */
 export interface StructureLayoutTraits {
   readonly kind: StructureLayoutKind;
-  /** Nombre de tournants d'un tracé à volées (0 : droit ; toujours 0 en hélicoïdal). */
+  /**
+   * Nombre de tournants d'un tracé à volées (0 : droit ; toujours 0 en hélicoïdal ; cage
+   * saisie : jonctions d'angle non nul et tronçons à axe en arc, `projectLayoutTraits`).
+   */
   readonly turns: number;
 }
 

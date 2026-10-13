@@ -11,8 +11,10 @@
  * profilés (`steel-profile`) les mêmes sauf le palier droit, les crémaillères (`wood-cut`) la seule largeur variable (un
  * tronçon droit : un tournant reste refusé par le plugin, comme en volées). Depuis le sous-lot
  * 6c, les limons centraux bois et acier (`wood-central`, `steel-central`) déclarent
- * `CENTRAL_CAGE` : toutes les fonctions sauf l'axe en arc (lot « acier cintré ») ; le limon
- * débillardé acier (`steel-curved`) reste le plugin qui ne lit aucune cage saisie.
+ * `CENTRAL_CAGE` : toutes les fonctions sauf l'axe en arc (lot « acier cintré »). Depuis le
+ * sous-lot 6d, le limon débillardé acier (`steel-curved`) déclare `STEEL_CURVED_CAGE` : axe en
+ * arc (limons cintrés des deux côtés) et palier droit ; l'hélicoïdal à fût (`helical-core`,
+ * tracé hélicoïdal seulement) reste le seul plugin qui ne lit aucune cage saisie.
  */
 import fc from "fast-check";
 import { msg, translatorFor, type Message } from "@blondel/i18n";
@@ -158,6 +160,8 @@ const CENTRAL_CAGE: readonly CageFeature[] = [
   "radiating",
   "oppositeTurns",
 ];
+/** Fonctions de cage du limon débillardé acier (sous-lot 6d) : axe en arc, palier droit. */
+const STEEL_CURVED_CAGE: readonly CageFeature[] = ["arcAxis", "straightLanding"];
 /** Structures qui lisent une cage saisie, et les fonctions qu'elles déclarent. */
 const CAGE_STRUCTURES: Readonly<Record<string, readonly CageFeature[]>> = {
   "wood-housed": WOOD_HOUSED_CAGE,
@@ -166,6 +170,7 @@ const CAGE_STRUCTURES: Readonly<Record<string, readonly CageFeature[]>> = {
   "wood-cut": WOOD_CUT_CAGE,
   "wood-central": CENTRAL_CAGE,
   "steel-central": CENTRAL_CAGE,
+  "steel-curved": STEEL_CURVED_CAGE,
 };
 /** Catégorie des pièces de structure attendues sur une cage construite. */
 const STRUCTURE_CATEGORY: Readonly<Record<string, string>> = {
@@ -220,6 +225,10 @@ describe("capacités : structureCageFeatures / structureAcceptsCage", () => {
     expect(structureUnsupportedCageFeatures("none", CAGE_FEATURES)).toEqual([]);
   });
 
+  it("seul l'hélicoïdal à fût ne lit aucune cage saisie (sous-lot 6d)", () => {
+    expect(FLIGHTS_ONLY).toEqual(["helical-core"]);
+  });
+
   it.each(FLIGHTS_ONLY)("%s : aucune cage saisie, même sans fonction", (kind) => {
     expect(structureCageFeatures(kind)).toBeNull();
     expect(structureAcceptsCage(kind, [])).toBe(false);
@@ -228,13 +237,13 @@ describe("capacités : structureCageFeatures / structureAcceptsCage", () => {
   });
 
   it.each(Object.entries(CAGE_STRUCTURES))(
-    "%s : fonctions déclarées (sous-lots 6a, 6b, 6c), les autres refusées une à une",
+    "%s : fonctions déclarées (sous-lots 6a à 6d), les autres refusées une à une",
     (kind, declared) => {
       expect(structureCageFeatures(kind)).toEqual(declared);
       expect(structureAcceptsCage(kind, [])).toBe(true);
       expect(structureAcceptsCage(kind, declared)).toBe(true);
-      // Axe en arc : lot « acier cintré », jamais déclaré par une structure à limons droits.
-      expect(declared).not.toContain("arcAxis");
+      // Axe en arc : lot « acier cintré », déclaré par le seul limon débillardé (limons cintrés).
+      expect(declared.includes("arcAxis")).toBe(kind === "steel-curved");
       for (const f of CAGE_FEATURES.filter((x) => !declared.includes(x))) {
         expect(structureAcceptsCage(kind, [f]), f).toBe(false);
         expect(structureAcceptsCage(kind, [...declared, f]), f).toBe(false);

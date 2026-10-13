@@ -140,9 +140,11 @@ export function structureLateralThickness(
  * Traits du tracé d'un projet vus par les capacités des plugins : type (volées ou hélicoïdal)
  * et nombre de tournants (0 en hélicoïdal). Une cage saisie (ADR-0010) est vue comme des
  * volées dont les tournants sont ses jonctions d'angle non nul (un palier droit, angle 0, ne
- * tourne pas) ; `project.stair.layout.turns` n'existe pas pour elle. Lecture du projet seule,
- * reprise par l'interface (options grisées, paramètres applicables, variantes) et par les
- * défauts de `steel-central`, pour un critère unique.
+ * tourne pas) et ses tronçons à axe en arc (sous-lot 6d : la trace y est courbe, l'escalier
+ * n'est pas droit) ; `project.stair.layout.turns` n'existe pas pour elle. Lecture du projet
+ * seule, reprise par l'interface (options grisées, paramètres applicables, variantes : limon
+ * débillardé proposé, crémaillères non) et par les défauts de `steel-central`, pour un critère
+ * unique.
  */
 export function projectLayoutTraits(project: Project): StructureLayoutTraits {
   const layout = project.stair.layout;
@@ -150,7 +152,12 @@ export function projectLayoutTraits(project: Project): StructureLayoutTraits {
     case "helical":
       return { kind: "helical", turns: 0 };
     case "cage":
-      return { kind: "flights", turns: layout.junctions.filter((j) => j.angle !== 0).length };
+      return {
+        kind: "flights",
+        turns:
+          layout.junctions.filter((j) => j.angle !== 0).length +
+          layout.sections.filter((s) => s.axis.kind === "arc").length,
+      };
     default:
       return { kind: "flights", turns: layout.turns.length };
   }

@@ -261,6 +261,27 @@ describe("buildModel sur une cage saisie à ±90°", () => {
             expect(model.parts.some((p) => p.category === category)).toBe(true);
             continue;
           }
+          if (structure === "steel-curved") {
+            // Limon débillardé (sous-lot 6d) : construction des volées, erreurs exactes (sans
+            // tournant ; jour vif : limon de jour en plat de `steel-flat` et refus du débillardé ;
+            // jour en arc de 100 mm : rayon roulé trop petit), limons en plat construits.
+            const turns = s.junctions.filter((j) => j.angle !== 0);
+            const sharp = turns.filter((j) => (j.well?.kind ?? "sharp") === "sharp");
+            expect(errorKeys(model)).toEqual(
+              turns.length === 0
+                ? ["structure.steelCurved.error.noTurn"]
+                : [
+                    ...sharp.map(() => "structure.steel.error.sharpWellCage"),
+                    ...turns.map((j) =>
+                      j.well?.kind === "arc"
+                        ? "structure.steelCurved.error.rollingRadius"
+                        : "structure.steelCurved.error.wellNotArc",
+                    ),
+                  ],
+            );
+            expect(model.parts.some((p) => p.category === "stringer")).toBe(true);
+            continue;
+          }
           // Cage construite (limons à la française, sous-lot 6a ; limons acier, sous-lot 6b) :
           // seul un jour vif ou en arc, qu'aucun limon droit ne suit, est signalé par le plugin
           // (profilés : aussi le constat de prédimensionnement, sans rapport avec la cage).

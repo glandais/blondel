@@ -294,6 +294,22 @@ describe("options non prises en charge sur le tracé (capacité `unsupportedOpti
       kind: "flights",
       turns: 0,
     });
+    // Tronçon à axe en arc (sous-lot 6d) : trace courbe, compté comme un tournant.
+    const arc = ProjectSchema.parse({
+      ...createProject("straight"),
+      stair: {
+        ...createProject("straight").stair,
+        layout: {
+          kind: "cage",
+          sections: [
+            { axis: { kind: "straight", length: 1350 }, width: 900 },
+            { axis: { kind: "arc", radius: 1600, sweep: 90 }, width: 900 },
+          ],
+          junctions: [{ angle: 0, mode: "landing" }],
+        },
+      },
+    });
+    expect(layoutTraitsOf(arc)).toEqual({ kind: "flights", turns: 1 });
   });
 
   it("cage tournante : tube (acier) et massif (bois) grisés comme sur un tournant", () => {

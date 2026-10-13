@@ -93,6 +93,27 @@ describe("comparateur de variantes", () => {
     expect(straight).not.toContain("steel-central-box");
   });
 
+  it("cage à axe en arc (sous-lot 6d) : limon débillardé proposé, crémaillères non", () => {
+    const all = availableStructures();
+    const arc = ProjectSchema.parse({
+      ...createProject("straight"),
+      stair: {
+        ...createProject("straight").stair,
+        layout: {
+          kind: "cage",
+          sections: [
+            { axis: { kind: "straight", length: 1350 }, width: 900 },
+            { axis: { kind: "arc", radius: 1600, sweep: 90 }, width: 900 },
+          ],
+          junctions: [{ angle: 0, mode: "landing" }],
+        },
+      },
+    });
+    const ids = variantsFor(arc, all).map((v) => v.id);
+    expect(ids).toContain("steel-curved");
+    expect(ids).not.toContain("wood-cut");
+  });
+
   it("limon central : la section (tube, caisson) distingue la variante du projet", () => {
     const all = availableStructures();
     const box = withStructure(createProject("straight"), "steel-central", {

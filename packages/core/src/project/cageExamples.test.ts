@@ -7,7 +7,9 @@
  * `cage-45-palier-acier`, limons acier en plat (`steel-flat`) sur une jonction à 45° balancée à
  * jour en pan coupé suivie d'un palier droit. Sous-lot 6c : `cage-60-palier-central`, limon
  * central acier (`steel-central`, caisson débillardé) sur une jonction à 60° balancée à jour en
- * pan coupé, un palier droit et une dernière volée élargie de 900 à 1 100 mm. Site des préréglages (H = 2 700, dalle de 200 mm, nez `PRESET_NOSING`), trémie du
+ * pan coupé, un palier droit et une dernière volée élargie de 900 à 1 100 mm. Sous-lot 6d :
+ * `cage-arc-palier-cintre`, limon débillardé acier (`steel-curved`) sur un tronçon droit, un
+ * palier droit et un tronçon à axe en arc de 60° (limons cintrés des deux côtés). Site des préréglages (H = 2 700, dalle de 200 mm, nez `PRESET_NOSING`), trémie du
  * calcul des préréglages (`defaultOpening`, échappée `PRESET_HEADROOM_MIN` sur la ligne de
  * foulée). Longueurs choisies pour un giron voisin de 270 mm et aucune violation bloquante.
  * Régénération : `UPDATE_EXAMPLES=1 pnpm vitest run packages/core/src/project/cageExamples.test.ts`.
@@ -186,6 +188,27 @@ export const CAGE_EXAMPLES: Readonly<Record<string, CageExample>> = {
         "steel-central",
       ),
   },
+  "cage-arc-palier-cintre.blondel.json": {
+    features: ["arcAxis", "straightLanding"],
+    structure: "steel-curved",
+    build: () =>
+      // Limons cintrés acier (sous-lot 6d) : un limon débillardé de chaque côté (C_i et C_e),
+      // continu du départ à l'arrivée à travers la partie droite, le palier droit et l'arc
+      // (raccords tangents, coupes aux naissances décalées dans la partie droite ; à valider,
+      // F19).
+      cageExample(
+        "Tracé libre — limons cintrés acier, volée droite, palier droit et volée courbe à 60°",
+        {
+          kind: "cage",
+          sections: [
+            straight(1620),
+            { axis: { kind: "arc", radius: 1800, sweep: 60 }, width: 900 },
+          ],
+          junctions: [{ angle: 0, mode: "landing", depth: 900 }],
+        },
+        "steel-curved",
+      ),
+  },
 };
 
 if (process.env["UPDATE_EXAMPLES"] === "1") {
@@ -280,5 +303,36 @@ describe("examples/cage-60-palier-central : limon central acier sur une cage", (
     expect(
       m.compliance.results.filter((r) => r.status === "violation").map((r) => r.ruleId),
     ).toEqual(["ECHAPPEE_RECO_PRIVATIF", "LIMON_CENTRAL_PORTE_A_FAUX"]);
+  });
+});
+
+describe("examples/cage-arc-palier-cintre : limons cintrés acier sur une cage à axe en arc", () => {
+  it("limons débillardés des deux côtés, chaque marche portée, aucune violation propre à la cage", () => {
+    const p = parseProjectText(
+      readFileSync(join(EXAMPLES_DIR, "cage-arc-palier-cintre.blondel.json"), "utf8"),
+    );
+    const m = buildModel(p, { memo: false });
+    expect(m.errors).toEqual([]);
+    const stringers = m.parts.filter((x) => x.category === "stringer").map((x) => x.mark);
+    // Tronçons du limon de jour (LD) puis du limon mural cintré (LDM), joints aux naissances.
+    expect(stringers.filter((x) => /^LD\d/.test(x)).length).toBeGreaterThan(1);
+    expect(stringers.filter((x) => /^LDM\d/.test(x)).length).toBeGreaterThan(1);
+    expect(stringers.every((x) => /^LDM?\d+$/.test(x))).toBe(true);
+    // Chaque marche (palier compris) portée des deux côtés ; soudures bout à bout : EXC2.
+    const carried = m.compliance.results.filter((r) => r.ruleId === "FAB_MARCHE_PORTEE");
+    expect(carried.length).toBe(m.stepping.treads.length);
+    expect(carried.every((r) => r.status === "ok")).toBe(true);
+    expect(m.executionClass).toBe("EXC2");
+    // Platines de pied et de tête sous chaque limon.
+    const plates = m.parts.filter((x) => x.id.startsWith("plate-")).map((x) => x.id);
+    expect(plates).toEqual(
+      expect.arrayContaining([
+        "plate-foot-stringer-inner-curved-1",
+        "plate-foot-stringer-outer-curved-1",
+      ]),
+    );
+    expect(
+      m.compliance.results.filter((r) => r.status === "violation").map((r) => r.ruleId),
+    ).toEqual(["ECHAPPEE_RECO_PRIVATIF"]);
   });
 });

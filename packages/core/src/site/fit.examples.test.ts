@@ -50,6 +50,10 @@ const EXPECTED: Readonly<Record<string, readonly string[]>> = {
     "headroom conseil ECHAPPEE_RECO_PRIVATIF",
   ],
   "cage-arc": ["headroom conseil ECHAPPEE_RECO_PRIVATIF"],
+  "cage-arc-palier-cintre": [
+    "slab avertissement site.fit.slabStructureArrival",
+    "headroom conseil ECHAPPEE_RECO_PRIVATIF",
+  ],
   "cage-palier-droit": ["headroom conseil ECHAPPEE_RECO_PRIVATIF"],
   "cage-rayonnant": ["headroom conseil ECHAPPEE_RECO_PRIVATIF"],
   "cage-trapeze": ["headroom conseil ECHAPPEE_RECO_PRIVATIF"],

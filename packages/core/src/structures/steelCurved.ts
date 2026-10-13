@@ -49,7 +49,8 @@ import { cumulativeLengths } from "../geom2d/curve.js";
 import { projectOnCurve } from "../geom2d/intersect.js";
 import { pointInPolygon, signedArea } from "../geom2d/polygon.js";
 import * as V from "../geom2d/vec.js";
-import type { FlatPattern, NosingLine, Part, Tread } from "../model/derived.js";
+import type { CageFeature } from "../model/cageFeatures.js";
+import type { FlatPattern, Layout, NosingLine, Part, Tread } from "../model/derived.js";
 import type { Mm, Polygon2, Vec2, Vec3 } from "../model/primitives.js";
 import type {
   PartAssembly,
@@ -225,6 +226,18 @@ export const CURVED_RULES = {
   },
 } as const satisfies Record<string, PluginRuleSpec>;
 
+/**
+ * Fonctions de cage saisie construites par `steel-curved` (sous-lot 6d, ADR-0010, à valider,
+ * QUESTIONS F19) : axe en arc (limons cintrés des deux côtés, débillardés le long de C_i et de
+ * C_e, continus à travers les parties droites et les paliers droits voisins) et palier droit
+ * (raccord tangent entre un tronçon droit et un tronçon en arc ; sans axe en arc, le limon de
+ * jour débillardé le traverse et les limons muraux en plat s'y aboutent, comme `steel-flat`).
+ * Sans fonction de cage : la construction des volées (jour en arc à chaque jonction tournante).
+ * Refusés par le garde-fou : angle quelconque, largeur variable, congé côté mur, pan coupé,
+ * marches rayonnantes, tournants opposés.
+ */
+export const STEEL_CURVED_CAGE: readonly CageFeature[] = ["arcAxis", "straightLanding"];
+
 // ------------------------------------------------------------------ Types du résultat
 
 /** Support de marche sur le limon débillardé (portée en σ sur C_i). */
@@ -317,7 +330,10 @@ export interface CurvedStringerResult {
 export interface SteelCurvedResult {
   readonly output: StructureOutput;
   readonly flat: SteelFlatResult;
+  /** Limon de jour débillardé (volées, cage). */
   readonly curved: CurvedStringerResult | null;
+  /** Limon mural cintré (cage à axe en arc, sous-lot 6d) ; absent ailleurs. */
+  readonly wall: CurvedStringerResult | null;
   readonly executionClass: "EXC1" | "EXC2";
 }
 
@@ -430,12 +446,12 @@ function treadZones(
 function curvedAutoValues(
   params: SteelCurvedParams,
   flat: SteelFlatResult,
-  curved: CurvedStringerResult | null,
+  curved: readonly CurvedStringerResult[],
 ): Record<string, number> | undefined {
   if (params.lowerOffset !== "auto") return undefined;
   const value = commonAutoValue([
     ...flat.stringers.map((s) => flat.lowerOffset[s.face.side]),
-    ...(curved ? [curved.lowerOffset] : []),
+    ...curved.map((c) => c.lowerOffset),
   ]);
   return value === undefined ? undefined : { lowerOffset: value };
 }
@@ -446,142 +462,129 @@ export function buildSteelCurved(
 ): SteelCurvedResult {
   const { project, layout, stepping } = ctx;
   const profile = resolveWorkshopProfile(project.workshop);
-  const metal = profile.metal;
-  const e = params.thickness;
   const sup = params.supports;
-  const turns = project.stair.layout.turns;
   const helical = flightsOnlyError("steel-curved", msg("structure.steelCurved.shortLabel"), layout);
-  const flat = buildSteelFlat(ctx, params);
   if (helical) {
     return {
       output: { parts: [], checks: [], notes: [], errors: [helical] },
-      flat,
+      flat: buildSteelFlat(ctx, params),
       curved: null,
+      wall: null,
       executionClass: "EXC1",
     };
   }
+  const cage = layout.cage === true;
+  const arcCage = cage && (layout.sections ?? []).some((s) => s.kind === "arc");
+  const checks = new CheckCollector(project, stepping);
+
+  // 1. Préconditions (G7) : jour courbe, rayon de roulage ; cage à axe en arc : limons cintrés
+  // des deux côtés, sans jonction tournante (sous-lot 6d, à valider, QUESTIONS F19).
+  const pre = arcCage
+    ? arcCagePreconditions(ctx, params, checks)
+    : turnPreconditions(
+        cage ? cageTurns(layout) : flightTurns(project),
+        stepping.nosings.length >= 2,
+        params,
+        resolveWorkshopProfile(project.workshop).metal.plateRolling,
+        checks,
+      );
+  // Limons en plat de `steel-flat` : muraux (et de jour d'un escalier sans jour courbe) ; sur une
+  // cage, le limon débillardé porte tout le jour (paliers droits compris) : côté mur seulement ;
+  // cage à axe en arc : aucun (limons cintrés des deux côtés).
+  const flat = buildSteelFlat(
+    ctx,
+    params,
+    arcCage ? { sides: [] } : cage && pre.inner ? { sides: ["outer"] } : {},
+  );
   const errors: Message[] = [
-    ...(flat.output.errors ?? []).filter((x) => x.key !== "structure.steel.error.arcWell"),
+    ...(flat.output.errors ?? []).filter((x) => !FLAT_JOUR_ERRORS.has(x.key)),
+    ...pre.errors,
   ];
   // Classe d'exécution : recalculée ici (joints du débillardé), celle de `steel-flat` est retirée.
-  const notes: Message[] = flat.output.notes.filter((x) => x.key !== "structure.steel.exc.note");
-  const checks = new CheckCollector(project, stepping);
-  const rule = (spec: PluginRuleSpec) => pluginRuleDef(spec);
+  const flatNotesDropped = arcCage ? FLAT_NOTES_ARC_CAGE : FLAT_NOTES_DROPPED;
+  const notes: Message[] = flat.output.notes.filter((x) => !flatNotesDropped.has(x.key));
 
-  // 1. Préconditions (G7) : jour courbe, rayon de roulage.
-  const jourFindings: Finding[] = [];
-  let curvedOk = stepping.nosings.length >= 2;
-  if (turns.length === 0) {
-    curvedOk = false;
-    errors.push(msg("structure.steelCurved.error.noTurn"));
-    jourFindings.push({
-      status: "violation",
-      message: msg("structure.steelCurved.check.noTurn"),
-    });
-  }
-  turns.forEach((t, j) => {
-    if (t.inner.kind !== "arc") {
-      curvedOk = false;
-      const what = msg(
-        t.inner.kind === "sharp"
-          ? "structure.steelCurved.well.sharp"
-          : "structure.steelCurved.well.newel",
-      );
-      errors.push(msg("structure.steelCurved.error.wellNotArc", { turn: j + 1, well: what }));
-      jourFindings.push({
-        status: "violation",
-        message: msg("structure.steelCurved.check.wellNotArc", { turn: j + 1, well: what }),
-      });
-    } else {
-      jourFindings.push({
-        status: "ok",
-        measured: t.inner.radius,
-        message: msg("structure.steelCurved.check.arcWell", {
-          turn: j + 1,
-          radius: dec(t.inner.radius, 0),
-        }),
-      });
-    }
-  });
-  checks.add(rule(CURVED_RULES.jour), jourFindings);
-  const rolling = metal.plateRolling;
-  const radiusItems: { value: Mm; label: Message }[] = [];
-  turns.forEach((t, j) => {
-    if (t.inner.kind !== "arc") return;
-    const inner = t.inner.radius - e;
-    radiusItems.push({
-      value: inner,
-      label: msg("structure.steelCurved.check.rollingRadiusItem", {
-        turn: j + 1,
-        radius: dec(t.inner.radius, 0),
-        thickness: dec(e, 0),
-      }),
-    });
-    if (inner < rolling.minInnerRadius - 1e-9) {
-      curvedOk = false;
-      errors.push(
-        msg("structure.steelCurved.error.rollingRadius", {
-          turn: j + 1,
-          inner: dec(inner, 0),
-          min: dec(rolling.minInnerRadius, 0),
-        }),
-      );
-    }
-  });
-  checks.addItems(
-    rule(CURVED_RULES.rollingRadius),
-    radiusItems,
-    msg("structure.steelCurved.quantity.rollingInnerRadius"),
-    { min: rolling.minInnerRadius - 1e-9, max: null },
-  );
-  checks.addItems(
-    rule(CURVED_RULES.rollingThickness),
-    radiusItems.length > 0
-      ? [{ value: e, label: msg("structure.steelCurved.check.wreathedPlate") }]
-      : [],
-    msg("structure.steelCurved.quantity.rolledThickness"),
-    { min: null, max: rolling.maxThickness },
-  );
-
-  let curved: CurvedStringerResult | null = null;
-  let innerSupports: CurvedSupport[] = [];
   const zones = treadZones(ctx, params, flat);
-  if (curvedOk) {
-    try {
-      curved = buildCurvedStringer(ctx, params, zones, checks, notes, errors);
-      innerSupports = [...curved.supports];
-    } catch (err) {
-      errors.push(msg("structure.steelCurved.error.notGenerated", { detail: errorMessage(err) }));
-      curved = null;
+  const built: { readonly spec: CurvedSideSpec; readonly result: CurvedStringerResult }[] = [];
+  const sides: readonly CurvedSideSpec[] = arcCage
+    ? [
+        { side: "inner", arcCage: true },
+        { side: "outer", arcCage: true },
+      ]
+    : [{ side: "inner", arcCage: false }];
+  for (const spec of sides) {
+    if (!pre[spec.side]) continue;
+    if (spec.side === "inner") {
+      try {
+        built.push({
+          spec,
+          result: buildCurvedStringer(ctx, params, zones, checks, notes, errors, spec),
+        });
+      } catch (err) {
+        errors.push(msg("structure.steelCurved.error.notGenerated", { detail: errorMessage(err) }));
+      }
+      continue;
     }
+    // Limon mural cintré (cage à axe en arc) : même construction sur C_e, épaisseur vers le mur ;
+    // remarques, erreurs et contrôles préfixés « Limon mural cintré ».
+    const wallNotes: Message[] = [];
+    const wallErrors: Message[] = [];
+    const wallChecks = new CheckCollector(project, stepping);
+    try {
+      built.push({
+        spec,
+        result: buildCurvedStringer(
+          wallSideContext(ctx),
+          params,
+          zones,
+          wallChecks,
+          wallNotes,
+          wallErrors,
+          spec,
+        ),
+      });
+    } catch (err) {
+      wallErrors.push(
+        msg("structure.steelCurved.error.notGenerated", { detail: errorMessage(err) }),
+      );
+    }
+    notes.push(...wallNotes.map((n) => (WALL_NOTES.has(n.key) ? n : wallTag(n))));
+    errors.push(...wallErrors.map(wallTag));
+    checks.results.push(...wallChecks.results.map((r) => ({ ...r, message: wallTag(r.message) })));
   }
+  const innerCurved = built.find((b) => b.spec.side === "inner")?.result ?? null;
+  const wallCurved = built.find((b) => b.spec.side === "outer")?.result ?? null;
 
-  // 1 bis. Marches en tôle vissées (A31) : perçages aux supports du limon débillardé, en plus de
-  // ceux des supports de `steel-flat` (déjà reportés).
-  const innerDrill = drillTreadsAtSupports(
+  // 1 bis. Marches en tôle vissées (A31) : perçages aux supports des limons débillardés, en plus
+  // de ceux des supports de `steel-flat` (déjà reportés).
+  const raw = built.flatMap((b) => b.result.supports.map((s) => ({ side: b.spec.side, s })));
+  const curvedDrill = drillTreadsAtSupports(
     flat.treads,
-    innerSupports.map((x) => x.placement),
+    raw.map((x) => x.s.placement),
     sup,
   );
-  // Supports du limon débillardé sous une marche en tôle : perçages de l'aile et visserie alignés
-  // sur les trous réellement faits dans la marche (A31) ; inchangés quand tous sont percés.
+  // Supports des limons débillardés sous une marche en tôle : perçages de l'aile et visserie
+  // alignés sur les trous réellement faits dans la marche (A31) ; inchangés quand tous sont percés.
   const steelNumbers = new Set(flat.treads.map((d) => d.number));
-  innerSupports = innerSupports.map((s, i) => {
-    const drilledPoints = innerDrill.drilledPoints[i]!;
+  const curvedSupports = raw.map(({ side, s }, i) => {
+    const drilledPoints = curvedDrill.drilledPoints[i]!;
     if (
       !steelNumbers.has(s.placement.tread) ||
       drilledPoints === treadScrewPoints(s.placement, sup).length
     ) {
-      return s;
+      return { side, s };
     }
     return {
-      ...s,
-      part: supportPart(s.placement, sup, "S", s.part.material, profile, "steel", drilledPoints),
+      side,
+      s: {
+        ...s,
+        part: supportPart(s.placement, sup, "S", s.part.material, profile, "steel", drilledPoints),
+      },
     };
   });
-  const drilledTreads = new Map(innerDrill.treads.map((d) => [d.part.id, d.part]));
-  const treadHolesSkipped = flat.treadHolesSkipped + innerDrill.skipped;
-  const treadGroups = groupIdenticalFlats(innerDrill.treads.map((d) => d.part));
+  const drilledTreads = new Map(curvedDrill.treads.map((d) => [d.part.id, d.part]));
+  const treadHolesSkipped = flat.treadHolesSkipped + curvedDrill.skipped;
+  const treadGroups = groupIdenticalFlats(curvedDrill.treads.map((d) => d.part));
   for (let i = 0; i < notes.length; i++) {
     const x = notes[i]!;
     if (x.key === "structure.steelFlat.note.foldedTreads" && x.params) {
@@ -608,12 +611,13 @@ export function buildSteelCurved(
   const flatSupportIds = new Set(flat.supports.map((s) => s.part.id));
   const flatPlateIds = new Set(flat.plates.map((p) => p.id));
   const allSupports = markGroups(
-    [...flat.supports.map((s) => s.part), ...innerSupports.map((s) => s.part)],
+    [...flat.supports.map((s) => s.part), ...curvedSupports.map((x) => x.s.part)],
     sup.kind === "angle" ? "CR" : "PS",
     (p) =>
       `${JSON.stringify(p.section)}|${Math.round((p.stock?.length ?? 0) / IDENTICAL_TOLERANCE)}|${p.quantities["holes"]}`,
   );
-  const plates = [...flat.plates, ...(curved?.plates ?? [])];
+  const curvedPlateParts = built.flatMap((b) => b.result.plates);
+  const plates = [...flat.plates, ...curvedPlateParts];
   const byPrefix = (prefix: string, mark: string): Part[] =>
     markGroups(
       plates.filter((p) => p.id.startsWith(prefix)),
@@ -627,7 +631,8 @@ export function buildSteelCurved(
     ...byPrefix("plate-end-", "PA"),
   ];
 
-  // 3. Marches portées (jour : supports du limon débillardé).
+  // 3. Marches portées (jour : supports du limon débillardé ; mur : limons en plat, ou limon
+  // mural cintré d'une cage à axe en arc).
   const carried = new Map<number, Set<"inner" | "outer">>();
   const carry = (tread: number, side: "inner" | "outer"): void => {
     const set = carried.get(tread) ?? new Set();
@@ -635,7 +640,7 @@ export function buildSteelCurved(
     carried.set(tread, set);
   };
   for (const s of flat.supports) carry(s.placement.tread, s.placement.face.side);
-  for (const s of innerSupports) carry(s.placement.tread, "inner");
+  for (const x of curvedSupports) carry(x.s.placement.tread, x.side);
   checks.add(
     rule(STEEL_RULES.treadCarried),
     zones.map((zn): Finding => {
@@ -660,15 +665,16 @@ export function buildSteelCurved(
     (s, x) => s + (x.part.quantities[QUANTITY_BUTT_WELD_MM] ?? 0),
     0,
   );
+  const segmentParts = built.flatMap((b) => b.result.segments.map((x) => x.part));
   const weldedParts = [
     ...flat.output.parts,
-    ...(curved?.segments.map((x) => x.part) ?? []),
-    ...innerSupports.map((x) => x.part),
-    ...(curved?.plates ?? []),
+    ...segmentParts,
+    ...curvedSupports.map((x) => x.s.part),
+    ...curvedPlateParts,
   ];
   const exc = deduceExecutionClass({
     grade: params.grade,
-    buttWeld: flatButt + (curved?.buttWeld ?? 0),
+    buttWeld: flatButt + built.reduce((s, b) => s + b.result.buttWeld, 0),
     welded: weldedParts.some((x) => (x.quantities[QUANTITY_WELD_MM] ?? 0) > 0),
   });
   checks.add(rule(STEEL_RULES.executionClass), [
@@ -687,27 +693,39 @@ export function buildSteelCurved(
     }),
   );
 
+  // Cage à axe en arc : contrôles de `steel-flat` sans élément (aucun limon en plat) écartés.
   const flatChecks = flat.output.checks.filter(
-    (c) => c.ruleId !== STEEL_RULES.executionClass.id && c.ruleId !== STEEL_RULES.treadCarried.id,
+    (c) =>
+      c.ruleId !== STEEL_RULES.executionClass.id &&
+      c.ruleId !== STEEL_RULES.treadCarried.id &&
+      !(arcCage && c.message.key === "structure.common.check.noItems"),
   );
   const otherParts = flat.output.parts
     .filter((p) => !flatSupportIds.has(p.id) && !flatPlateIds.has(p.id))
     .map((p) => drilledTreads.get(p.id) ?? p);
-  const parts = [
-    ...otherParts,
-    ...(curved?.segments.map((s) => s.part) ?? []),
-    ...allSupports,
-    ...allPlates,
-  ];
-  // Assemblages : supports (marche portée, limon ou poteau porteur), tronçons consécutifs du
-  // limon débillardé (joints soudés bout à bout).
-  const segmentIds = curved?.segments.map((s) => s.part.id) ?? [];
+  const parts = [...otherParts, ...segmentParts, ...allSupports, ...allPlates];
+  // Assemblages : supports (marche portée, limon ou poteau porteur), tronçons consécutifs de
+  // chaque limon débillardé (joints soudés bout à bout).
   const assemblies: PartAssembly[] = [
     ...supportAssemblies(flat.supports),
-    ...supportAssemblies(innerSupports),
-    ...segmentIds.slice(1).map((id, i) => ({ a: { partId: segmentIds[i]! }, b: { partId: id } })),
+    ...supportAssemblies(curvedSupports.map((x) => x.s)),
+    ...built.flatMap((b) => {
+      const ids = b.result.segments.map((s) => s.part.id);
+      return ids.slice(1).map((id, i) => ({ a: { partId: ids[i]! }, b: { partId: id } }));
+    }),
   ];
-  const autoValues = curvedAutoValues(params, flat, curved);
+  const autoValues = curvedAutoValues(
+    params,
+    flat,
+    built.map((b) => b.result),
+  );
+  const withMarkedSupports = (c: CurvedStringerResult): CurvedStringerResult => ({
+    ...c,
+    supports: c.supports.map((s) => ({
+      ...s,
+      part: allSupports.find((p) => p.id === s.part.id) ?? s.part,
+    })),
+  });
   return {
     output: {
       parts,
@@ -719,19 +737,308 @@ export function buildSteelCurved(
       ...(autoValues ? { autoValues } : {}),
       ...(assemblies.length > 0 ? { assemblies } : {}),
     },
-    flat: { ...flat, treads: innerDrill.treads, treadGroups, treadHolesSkipped },
-    curved: curved
-      ? {
-          ...curved,
-          supports: curved.supports.map((s) => ({
-            ...s,
-            part: allSupports.find((p) => p.id === s.part.id) ?? s.part,
-          })),
-        }
-      : null,
+    flat: { ...flat, treads: curvedDrill.treads, treadGroups, treadHolesSkipped },
+    curved: innerCurved ? withMarkedSupports(innerCurved) : null,
+    wall: wallCurved ? withMarkedSupports(wallCurved) : null,
     executionClass: exc.executionClass,
   };
 }
+
+// ------------------------------------------------------------------ préconditions
+
+const rule = (spec: PluginRuleSpec) => pluginRuleDef(spec);
+
+/** Erreurs de `steel-flat` levées par le limon débillardé (jour en arc : c'est son objet). */
+const FLAT_JOUR_ERRORS: ReadonlySet<string> = new Set([
+  "structure.steel.error.arcWell",
+  "structure.steel.error.arcWellCage",
+]);
+
+/** Remarques de `steel-flat` remplacées (classe d'exécution, recalculée ici). */
+const FLAT_NOTES_DROPPED: ReadonlySet<string> = new Set([
+  "structure.steel.exc.note",
+  // Cage : limon de jour en plat non construit, le débillardé porte le jour.
+  "structure.steel.note.noOuterStringSection",
+]);
+
+/** Cage à axe en arc : aucun limon en plat, résumé de `steel-flat` sans objet. */
+const FLAT_NOTES_ARC_CAGE: ReadonlySet<string> = new Set([
+  ...FLAT_NOTES_DROPPED,
+  "structure.steelFlat.note.summary",
+]);
+
+/** Tournant (volées) ou jonction tournante (cage) vu par le limon débillardé. */
+interface CurvedTurn {
+  /** Numéro affiché (tournant j + 1, ou jonction de cage i + 1). */
+  readonly number: number;
+  readonly well:
+    | { readonly kind: "arc"; readonly radius: Mm }
+    | { readonly kind: "sharp" | "newel" | "chamfer" };
+}
+
+function flightTurns(project: StructureContext["project"]): CurvedTurn[] {
+  const layout = project.stair.layout;
+  if (layout.kind === "helical" || layout.kind === "cage") return [];
+  return layout.turns.map((t, j) => ({ number: j + 1, well: t.inner }));
+}
+
+/** Jonctions tournantes d'une cage saisie (angle non nul ; un palier droit ne tourne pas). */
+function cageTurns(layout: Layout): CurvedTurn[] {
+  return layout.turns
+    .filter((t) => t.angle !== undefined && t.angle !== 0)
+    .map((t) => ({ number: t.index + 1, well: t.well ?? { kind: "sharp" } }));
+}
+
+/** Préconditions satisfaites par côté (limon de jour, limon mural cintré) et erreurs. */
+interface Preconditions {
+  readonly inner: boolean;
+  readonly outer: boolean;
+  readonly errors: readonly Message[];
+}
+
+/**
+ * Volées et cage sans axe en arc (G7) : jour en arc à chaque tournant, rayon intérieur de
+ * roulage r_j − e ≥ rayon mini de la rouleuse ; sans tournant, pas de jour courbe.
+ */
+function turnPreconditions(
+  turns: readonly CurvedTurn[],
+  enoughNosings: boolean,
+  params: SteelCurvedParams,
+  rolling: WorkshopProfile["metal"]["plateRolling"],
+  checks: CheckCollector,
+): Preconditions {
+  const e = params.thickness;
+  const errors: Message[] = [];
+  const jourFindings: Finding[] = [];
+  let curvedOk = enoughNosings;
+  if (turns.length === 0) {
+    curvedOk = false;
+    errors.push(msg("structure.steelCurved.error.noTurn"));
+    jourFindings.push({
+      status: "violation",
+      message: msg("structure.steelCurved.check.noTurn"),
+    });
+  }
+  for (const t of turns) {
+    if (t.well.kind !== "arc") {
+      curvedOk = false;
+      const what = msg(WELL_LABELS[t.well.kind]);
+      errors.push(msg("structure.steelCurved.error.wellNotArc", { turn: t.number, well: what }));
+      jourFindings.push({
+        status: "violation",
+        message: msg("structure.steelCurved.check.wellNotArc", { turn: t.number, well: what }),
+      });
+    } else {
+      jourFindings.push({
+        status: "ok",
+        measured: t.well.radius,
+        message: msg("structure.steelCurved.check.arcWell", {
+          turn: t.number,
+          radius: dec(t.well.radius, 0),
+        }),
+      });
+    }
+  }
+  checks.add(rule(CURVED_RULES.jour), jourFindings);
+  const radiusItems: { value: Mm; label: Message }[] = [];
+  for (const t of turns) {
+    if (t.well.kind !== "arc") continue;
+    const inner = t.well.radius - e;
+    radiusItems.push({
+      value: inner,
+      label: msg("structure.steelCurved.check.rollingRadiusItem", {
+        turn: t.number,
+        radius: dec(t.well.radius, 0),
+        thickness: dec(e, 0),
+      }),
+    });
+    if (inner < rolling.minInnerRadius - 1e-9) {
+      curvedOk = false;
+      errors.push(
+        msg("structure.steelCurved.error.rollingRadius", {
+          turn: t.number,
+          inner: dec(inner, 0),
+          min: dec(rolling.minInnerRadius, 0),
+        }),
+      );
+    }
+  }
+  addRollingChecks(checks, radiusItems, e, rolling);
+  return { inner: curvedOk, outer: false, errors };
+}
+
+/** Contrôles de la rouleuse : rayon intérieur de roulage, épaisseur roulée. */
+function addRollingChecks(
+  checks: CheckCollector,
+  radiusItems: readonly { value: Mm; label: Message }[],
+  e: Mm,
+  rolling: WorkshopProfile["metal"]["plateRolling"],
+): void {
+  checks.addItems(
+    rule(CURVED_RULES.rollingRadius),
+    radiusItems,
+    msg("structure.steelCurved.quantity.rollingInnerRadius"),
+    { min: rolling.minInnerRadius - 1e-9, max: null },
+  );
+  checks.addItems(
+    rule(CURVED_RULES.rollingThickness),
+    radiusItems.length > 0
+      ? [{ value: e, label: msg("structure.steelCurved.check.wreathedPlate") }]
+      : [],
+    msg("structure.steelCurved.quantity.rolledThickness"),
+    { min: null, max: rolling.maxThickness },
+  );
+}
+
+const WELL_LABELS: Readonly<Record<"sharp" | "newel" | "chamfer", MessageKey>> = {
+  sharp: "structure.steelCurved.well.sharp",
+  newel: "structure.steelCurved.well.newel",
+  chamfer: "structure.steelCurved.well.chamfer",
+};
+
+/**
+ * Cage à axe en arc (sous-lot 6d, à valider, QUESTIONS F19) : limons cintrés des deux côtés,
+ * continus du départ à l'arrivée à travers les parties droites et les paliers droits (raccords
+ * tangents) ; une jonction tournante n'est pas suivie (coin côté mur, que le limon mural cintré
+ * ne suit pas ; bord du jour vif quand elle est voisine de l'arc, F12) : erreur, limons non
+ * générés, rouleuse sans élément. Rouleuse : rayon intérieur roulé de chaque arc de chaque limon
+ * (face concave : r − e côté du centre de l'épaisseur, r sinon).
+ */
+function arcCagePreconditions(
+  ctx: StructureContext,
+  params: SteelCurvedParams,
+  checks: CheckCollector,
+): Preconditions {
+  const { project, layout, stepping } = ctx;
+  const e = params.thickness;
+  const rolling = resolveWorkshopProfile(project.workshop).metal.plateRolling;
+  const errors: Message[] = [];
+  const jourFindings: Finding[] = [];
+  let ok = stepping.nosings.length >= 2;
+  for (const s of layout.sections ?? []) {
+    if (!s.arc) continue;
+    jourFindings.push({
+      status: "ok",
+      measured: s.arc.radius,
+      message: msg("structure.steelCurved.check.arcAxis", {
+        section: s.index + 1,
+        radius: dec(s.arc.radius, 0),
+      }),
+    });
+  }
+  for (const t of cageTurns(layout)) {
+    ok = false;
+    errors.push(msg("structure.steelCurved.error.cageArcTurn", { junction: t.number }));
+    jourFindings.push({
+      status: "violation",
+      message: msg("structure.steelCurved.check.cageArcTurn", { junction: t.number }),
+    });
+  }
+  checks.add(rule(CURVED_RULES.jour), jourFindings);
+  const radiusItems: { value: Mm; label: Message }[] = [];
+  const sideOk = { inner: ok, outer: ok };
+  // Aucun limon construit (jonction tournante, nez insuffisants) : rouleuse sans élément.
+  for (const side of ok ? (["inner", "outer"] as const) : []) {
+    const curve = side === "inner" ? layout.inner : layout.outer;
+    const thicknessSide = side === "inner" ? layout.innerSide : opposite(layout.innerSide);
+    const stringer = msg(STRINGER_LABELS[side]);
+    for (const seg of curve.segments) {
+      if (seg.kind !== "arc" || !(seg.radius * Math.abs(seg.sweep) > 1e-6)) continue;
+      const concave = seg.sweep > 0 === (thicknessSide === "left");
+      const inner = concave ? seg.radius - e : seg.radius;
+      radiusItems.push({
+        value: inner,
+        label: msg("structure.steelCurved.check.rollingRadiusArc", {
+          stringer,
+          radius: dec(seg.radius, 0),
+          face: msg(concave ? THICKNESS_FACE[side] : "structure.steelCurved.face.steps"),
+        }),
+      });
+      if (inner < rolling.minInnerRadius - 1e-9) {
+        if (sideOk[side]) {
+          errors.push(
+            msg("structure.steelCurved.error.rollingRadiusArc", {
+              stringer,
+              radius: dec(seg.radius, 0),
+              inner: dec(inner, 0),
+              min: dec(rolling.minInnerRadius, 0),
+            }),
+          );
+        }
+        sideOk[side] = false;
+      }
+    }
+  }
+  addRollingChecks(checks, radiusItems, e, rolling);
+  return { inner: sideOk.inner, outer: sideOk.outer, errors };
+}
+
+function opposite(side: JourSide): JourSide {
+  return side === "left" ? "right" : "left";
+}
+
+/** Désignation de chaque limon débillardé. */
+const STRINGER_LABELS: Readonly<Record<"inner" | "outer", MessageKey>> = {
+  inner: "structure.steelCurved.part.outerString",
+  outer: "structure.steelCurved.part.wallString",
+};
+
+/** Face du côté de l'épaisseur (opposée aux marches) de chaque limon. */
+const THICKNESS_FACE: Readonly<Record<"inner" | "outer", MessageKey>> = {
+  inner: "structure.steelCurved.face.well",
+  outer: "structure.steelCurved.face.wall",
+};
+
+/** Remarques propres au limon mural cintré (déjà nommé), sans préfixe. */
+const WALL_NOTES: ReadonlySet<string> = new Set([
+  "structure.steelCurved.note.wallSummary",
+  "structure.steelCurved.note.wallSupportGap",
+]);
+
+/** Préfixe des remarques, erreurs et contrôles du limon mural cintré. */
+function wallTag(detail: Message): Message {
+  return msg("structure.steelCurved.wallStringer.detail", { detail });
+}
+
+/**
+ * Contexte vu du côté mur (cage à axe en arc) : C_e devient la courbe de référence, l'épaisseur
+ * va vers le mur, abscisses des nez sur C_e. La construction du limon de jour s'applique telle
+ * quelle (`buildCurvedStringer`).
+ */
+function wallSideContext(ctx: StructureContext): StructureContext {
+  const { layout, stepping } = ctx;
+  return {
+    ...ctx,
+    layout: {
+      ...layout,
+      inner: layout.outer,
+      outer: layout.inner,
+      innerSide: opposite(layout.innerSide),
+    },
+    stepping: {
+      ...stepping,
+      nosings: stepping.nosings.map((k) => ({
+        ...k,
+        q: k.r,
+        r: k.q,
+        sigmaInner: k.sigmaOuter,
+        sigmaOuter: k.sigmaInner,
+      })),
+    },
+  };
+}
+
+/** Côté d'un limon débillardé : jour (volées, cage) ou mur (cage à axe en arc, sous-lot 6d). */
+interface CurvedSideSpec {
+  readonly side: "inner" | "outer";
+  /**
+   * Cage à axe en arc : les arcs d'un même limon peuvent tourner dans les deux sens ; les lignes
+   * de roulage nomment la face roulée à l'intérieur, la référence du développé ne la fixe pas.
+   */
+  readonly arcCage: boolean;
+}
+
+const INNER_SIDE: CurvedSideSpec = { side: "inner", arcCage: false };
 
 /** Limon de jour débillardé : développement, tronçons, supports, platines, contrôles. */
 function buildCurvedStringer(
@@ -741,6 +1048,7 @@ function buildCurvedStringer(
   checks: CheckCollector,
   notes: Message[],
   errors: Message[],
+  spec: CurvedSideSpec = INNER_SIDE,
 ): CurvedStringerResult {
   const { project, layout, stepping } = ctx;
   const profile = resolveWorkshopProfile(project.workshop);
@@ -775,7 +1083,8 @@ function buildCurvedStringer(
 
   // 1. Supports côté jour (cornières tangentes à la joue).
   const depthSup = supportDepth(sup);
-  const { raw, shortSupports } = curvedRawSupports(zones, nosings, uLo, uHi, P, N, sup);
+  const wall = spec.side === "outer";
+  const { raw, shortSupports } = curvedRawSupports(zones, nosings, uLo, uHi, P, N, sup, wall);
 
   // 2. Rive basse automatique : supports sur la joue à `edgeMargin` de la rive basse.
   const lowerOffset = curvedLowerOffset(raw, F, depthSup, params);
@@ -823,8 +1132,9 @@ function buildCurvedStringer(
   const mirrored = jour === "right";
   const ivs = intervals();
   const segCount = ivs.length;
-  const idOf = (i: number): string => `stringer-inner-curved-${i + 1}`;
-  const markOf = (i: number): string => `LD${i + 1}`;
+  const idOf = (i: number): string =>
+    wall ? `stringer-outer-curved-${i + 1}` : `stringer-inner-curved-${i + 1}`;
+  const markOf = (i: number): string => (wall ? `LDM${i + 1}` : `LD${i + 1}`);
   const g: CurvedGeometry = {
     params,
     cp,
@@ -864,6 +1174,7 @@ function buildCurvedStringer(
     idOf,
     markOf,
     solidRows,
+    spec,
   };
   const supports = curvedSupportsOf(g, raw, ivs);
   const joints = curvedJointsOf(g, cuts, raw);
@@ -913,7 +1224,7 @@ function buildCurvedStringer(
     ),
   );
   notes.push(
-    msg("structure.steelCurved.note.summary", {
+    msg(wall ? "structure.steelCurved.note.wallSummary" : "structure.steelCurved.note.summary", {
       thickness: dec(e, 0),
       grade: params.grade,
       upperOffset: dec(params.upperOffset, 0),
@@ -925,7 +1236,14 @@ function buildCurvedStringer(
     }),
   );
   if (maxGap > 0.05) {
-    notes.push(msg("structure.steelCurved.note.supportGap", { gap: dec(maxGap, 1) }));
+    notes.push(
+      msg(
+        wall
+          ? "structure.steelCurved.note.wallSupportGap"
+          : "structure.steelCurved.note.supportGap",
+        { gap: dec(maxGap, 1) },
+      ),
+    );
   }
   if (segments.some((s) => !s.fits)) {
     errors.push(
@@ -969,6 +1287,7 @@ function curvedRawSupports(
   P: (s: Mm) => Vec2,
   N: (s: Mm) => Vec2,
   sup: SteelCurvedParams["supports"],
+  wall = false,
 ): { raw: CurvedRawSupport[]; shortSupports: CurvedShortSupport[] } {
   const raw: CurvedRawSupport[] = [];
   const shortSupports: CurvedShortSupport[] = [];
@@ -985,7 +1304,12 @@ function curvedRawSupports(
     const len = iv.s1 - iv.s0;
     shortSupports.push({
       value: len,
-      label: msg("structure.steelCurved.check.onOuterString", { mark: zn.mark }),
+      label: msg(
+        wall
+          ? "structure.steelCurved.check.onWallString"
+          : "structure.steelCurved.check.onOuterString",
+        { mark: zn.mark },
+      ),
       treadNumber: zn.tread.number,
       sigma: (iv.s0 + iv.s1) / 2,
     });
@@ -1266,6 +1590,7 @@ interface CurvedGeometry {
   readonly idOf: (i: number) => string;
   readonly markOf: (i: number) => string;
   readonly solidRows: (a: Mm, b: Mm) => Mm[];
+  readonly spec: CurvedSideSpec;
 }
 
 /** Portée d'un support côté jour sur C_i, avant découpe en tronçons. */
@@ -1281,7 +1606,7 @@ function curvedSupportsOf(
   raw: readonly CurvedRawSupport[],
   ivs: readonly { a: Mm; b: Mm }[],
 ): CurvedSupport[] {
-  const { P, T, N, sup, material, profile, idOf, markOf } = g;
+  const { P, T, N, sup, material, profile, idOf, markOf, spec } = g;
   return raw.map((r) => {
     const mid = (r.s0 + r.s1) / 2;
     const owner = Math.max(
@@ -1296,11 +1621,11 @@ function curvedSupportsOf(
     let gap = 0;
     for (let k = 0; k <= 8; k++) gap = Math.max(gap, lineDist(r.s0 + ((r.s1 - r.s0) * k) / 8));
     const face: SupportFace = {
-      key: `stringer-inner-curved-t${r.zone.tread.number}`,
+      key: `stringer-${spec.side}-curved-t${r.zone.tread.number}`,
       owner: idOf(owner),
       ownerMark: markOf(owner),
       kind: "stringer",
-      side: "inner",
+      side: spec.side,
       a: pm,
       dir: t,
       into: N(mid),
@@ -1365,7 +1690,8 @@ function curvedSegment(
 ): CurvedSegment {
   const { e, cp, sup, material, profile, params, nosings, layout, neutral, depthSup } = g;
   const { outlineN, upperN, lowerN, clipX, fits, floorLevel, topCut, mirrored } = g;
-  const { idOf, markOf, solidRows, zLowAt, zHighAt, P, N } = g;
+  const { idOf, markOf, solidRows, zLowAt, zHighAt, P, N, spec } = g;
+  const wall = spec.side === "outer";
   const x0 = neutral.toFiber(iv.a);
   const x1 = neutral.toFiber(iv.b);
   const outline = clipX(outlineN, x0, x1);
@@ -1426,10 +1752,18 @@ function curvedSegment(
         b: seg[1],
         ...(k === 0
           ? {
-              label: msg("structure.steelCurved.flatLine.rolling", {
-                inner: dec(innerR, 0),
-                neutral: dec(neutralR, 0),
-              }),
+              label: spec.arcCage
+                ? msg("structure.steelCurved.flatLine.rollingFace", {
+                    inner: dec(innerR, 0),
+                    neutral: dec(neutralR, 0),
+                    face: msg(
+                      p.concave ? THICKNESS_FACE[spec.side] : "structure.steelCurved.face.steps",
+                    ),
+                  })
+                : msg("structure.steelCurved.flatLine.rolling", {
+                    inner: dec(innerR, 0),
+                    neutral: dec(neutralR, 0),
+                  }),
             }
           : {}),
       });
@@ -1513,11 +1847,18 @@ function curvedSegment(
     thickness: e,
     reference: {
       kind: "neutral-fiber",
-      description: msg("structure.steelCurved.reference.segment", {
-        segment: i + 1,
-        segments: segCount,
-        ascent: ascentDirection(mirrored),
-      }),
+      description: spec.arcCage
+        ? msg("structure.steelCurved.reference.cageSegment", {
+            stringer: msg(STRINGER_LABELS[spec.side]),
+            segment: i + 1,
+            segments: segCount,
+            ascent: ascentDirection(mirrored),
+          })
+        : msg("structure.steelCurved.reference.segment", {
+            segment: i + 1,
+            segments: segCount,
+            ascent: ascentDirection(mirrored),
+          }),
     },
   };
   // Solide : surface réglée (face côté marches) épaissie vers le jour.
@@ -1541,7 +1882,13 @@ function curvedSegment(
     id: idOf(i),
     mark: markOf(i),
     category: "stringer",
-    name: msg("structure.steelCurved.part.segment", { segment: i + 1, segments: segCount }),
+    name: msg(
+      wall ? "structure.steelCurved.part.wallSegment" : "structure.steelCurved.part.segment",
+      {
+        segment: i + 1,
+        segments: segCount,
+      },
+    ),
     material,
     solid: { kind: "ruled", a: lower, b: upper, thickness: e, normals },
     flat,
@@ -1585,7 +1932,7 @@ function curvedSegment(
 /** Étape 6 : platines de pied et de tête du limon de jour. */
 function curvedPlates(g: CurvedGeometry, segCount: number): Part[] {
   const { params, dev, floorLevel, idOf, markOf, P, T, N, uHi, e, material, profile } = g;
-  const { zLowAt, zHighAt } = g;
+  const { zLowAt, zHighAt, spec } = g;
   const plates: Part[] = [];
   const pl = params.plates;
   const pseudoFace = (s: Mm): StringerFace => {
@@ -1593,8 +1940,8 @@ function curvedPlates(g: CurvedGeometry, segCount: number): Part[] {
     return {
       id: idOf(0),
       mark: markOf(0),
-      name: msg("structure.steelCurved.part.outerString"),
-      side: "inner",
+      name: msg(STRINGER_LABELS[spec.side]),
+      side: spec.side,
       leg: 0,
       a: V.addScaled(P(s), dir, -s),
       dir,
@@ -1704,6 +2051,7 @@ function addCurvedChecks(
   const { s0, sN, uLo, uHi, step, jourFace, F, params, lowerOffset, idOf, cp } = g;
   const { stepsFace, neutral, births, nosings, e, metal, sup, depthSup, dev } = g;
   const { joints, segments, supports, shortSupports } = input;
+  const wall = g.spec.side === "outer";
   const rule = (spec: PluginRuleSpec) => pluginRuleDef(spec);
   const minSigma = Math.min(s0, uLo);
   const maxSigma = Math.max(sN, uHi);
@@ -1721,7 +2069,11 @@ function addCurvedChecks(
     [
       {
         value: minPerp,
-        label: msg("structure.steelCurved.check.outerStringWellFace"),
+        label: msg(
+          wall
+            ? "structure.steelCurved.check.wallStringWallFace"
+            : "structure.steelCurved.check.outerStringWellFace",
+        ),
         partId: idOf(0),
       },
     ],
@@ -1764,11 +2116,16 @@ function addCurvedChecks(
       ...(cp.maxSlopeBreak !== undefined ? { max: cp.maxSlopeBreak } : {}),
       message: msg(key, {
         ...params,
-        fibers: msg("structure.steelCurved.check.fiberBreaks", {
-          steps: dec(fibersAt[0]!.degrees, 2),
-          neutral: dec(fibersAt[1]!.degrees, 2),
-          well: dec(fibersAt[2]!.degrees, 2),
-        }),
+        fibers: msg(
+          wall
+            ? "structure.steelCurved.check.wallFiberBreaks"
+            : "structure.steelCurved.check.fiberBreaks",
+          {
+            steps: dec(fibersAt[0]!.degrees, 2),
+            neutral: dec(fibersAt[1]!.degrees, 2),
+            well: dec(fibersAt[2]!.degrees, 2),
+          },
+        ),
         threshold:
           cp.maxSlopeBreak !== undefined
             ? msg("structure.steelCurved.check.threshold", { max: dec(cp.maxSlopeBreak, 2) })
@@ -1924,5 +2281,6 @@ export const STEEL_CURVED: StructureKind<SteelCurvedParams> = {
     // Limon de jour débillardé et limons muraux en plat, hors emprise utile (jour en arc exigé,
     // pas de poteau).
     lateralThickness: (p) => ({ inner: p.thickness, outer: p.thickness }),
+    cage: STEEL_CURVED_CAGE,
   },
 };
