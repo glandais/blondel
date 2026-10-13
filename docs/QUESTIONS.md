@@ -539,6 +539,7 @@ La mise en œuvre des décisions A38 du 2026-10-11 ne repose sur aucune source n
 - Options : (a) garder ; (b) quand l'autre face de la couche trop mince est une assise ou un joint au-dessus, arrêter l'âme sur ce niveau (âme plus profonde que voulue d'au plus le minimum : à faire valider pour l'âme et ses broches) ; (c) caler le joint à « niveau voisin − minimum » (âme moins profonde que voulue d'au plus le minimum) ; (d) garder la règle mais compléter la remarque par la profondeur d'âme obtenue et la profondeur qui garderait le joint.
 - Proposition : (c), qui garde la couche minimale et la profondeur la plus proche de la demande, ou (d) à défaut.
 - Réf. : A38 (12), A39 (d) ; `structures/woodCentralLayers.ts` (`resolveImposedLevels`, `stackedBounds`), `structures/woodCentralBeam.ts` (`jointLevels`), `structures/woodCentralPlates.ts` (`jointBelow`).
+- **Décisions de l'utilisateur (2026-10-13)** : (c) — quand le joint voulu laisserait une couche plus mince que le minimum, le caler à « niveau voisin − minimum » (couche minimale gardée, âme moins profonde que voulue d'au plus le minimum), au lieu de l'abandonner au profit du joint en dessous.
 
 ## B. Validations par un atelier ou un professionnel
 
