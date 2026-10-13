@@ -1091,3 +1091,4 @@ Le sous-lot 6c généralise à une cage saisie les limons centraux bois (`wood-c
 - Proposition : garder (1) à (6) tels qu'appliqués.
 - Aujourd'hui (avant 6c) : limons centraux refusés sur toute cage saisie (`structure.cageUnsupported`).
 - Réf. : A29 ; F1, F5, F16, F17 ; ADR-0010, amendement du sous-lot 6c ; `structures/centralTrace.ts` (`cageCurve`, `CENTRAL_CAGE`, `centralStairWidth`), `structures/centralCage.test.ts` ; `docs/ledger/LEDGER-free-2d.md` (sous-lot 6c).
+- Décidé le 2026-10-13 : garder (1) à (6) telles qu'appliquées au sous-lot 6c (rayon ρ sur la plus petite largeur à la jonction, tangentes communes, extrémités d'équerre sur les lignes de départ et d'arrivée, erreur dédiée si la poutre sort de l'emmarchement, palier droit traversé en ligne droite) (question posée par l'orchestrateur ; journal free-2d, 2026-10-13).
