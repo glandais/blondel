@@ -115,7 +115,6 @@ import type { FlatPattern, NosingLine, Part, PartFixing } from "../model/derived
 import type { PartAssembly, StructureContext } from "../model/plugins.js";
 import type { Mm, Vec2, Vec3 } from "../model/primitives.js";
 import { buildBasicParts } from "../parts/basic.js";
-import { helicalTreadOutline } from "../stepping/helical.js";
 import { outlineBetween } from "../stepping/treads.js";
 import type { BeamSection } from "../precheck/beam.js";
 import { HARDWOOD_WOOD_CLASS } from "../precheck/settings.js";
@@ -2564,8 +2563,10 @@ interface AnchorsOutput {
  * chaque marche entaillée t est prolongée sous la contremarche t + 1 jusqu'à la ligne de nez t
  * décalée de `depth` (débord + épaisseur de la contremarche + entaille arrière, plus le biais de
  * la ligne de nez sur la largeur de la poutre d'une marche balancée), contour coupé
- * sur C_i et C_e comme celui des pièces de base (`outlineBetween`, `helicalTreadOutline`) ; la
- * contremarche t + 1 est posée sur la marche (de son dessus au dessous de la marche suivante).
+ * sur C_i et C_e et sur la ligne du nez t + 1 avec la **même coupe** que la marche de base
+ * (`outlineBetween`, hélicoïdal compris : prolongement en arc sous l'origine `helical`, décision
+ * F10 (8)) ; la contremarche t + 1 est posée sur la marche (de son dessus au dessous de la
+ * marche suivante).
  * Pièces de base remplacées (même identifiant). Une marche dont le contour prolongé n'est pas
  * calculable est laissée telle quelle (remarque).
  */
@@ -2593,11 +2594,7 @@ function treadsUnderRisers(input: {
     if (!te || !re) continue;
     let outline: readonly Vec2[] | null = null;
     try {
-      const h = layout.helical;
-      const raw = h
-        ? helicalTreadOutline(h, (t - 1) * h.stepAngle, t * h.stepAngle, depth)
-        : outlineBetween(layout, front, back, depth, nosings[t + 1]);
-      outline = ensureCCW(raw);
+      outline = ensureCCW(outlineBetween(layout, front, back, depth, nosings[t + 1]));
     } catch {
       outline = null;
     }

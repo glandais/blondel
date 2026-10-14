@@ -7,10 +7,11 @@
  * sont jetables : ils ne sortent jamais de `computeLayout` (mémoïsé par le pipeline) et ne
  * servent de clé à aucun cache.
  *
- * `helicalLayoutOf` rend `Layout.helical` (axe, rayons, angles, palier), champ de
- * compatibilité lu par les consommateurs de l'hélicoïdal (structure, garde-corps, plan,
- * préréglage, emprise sur le site) : même formule, au bit près, que l'ancien
- * `computeHelicalLayout`, et non une reconstruction depuis les courbes de la cage (bruit de
+ * `helicalLayoutOf` rend `Layout.helical` (axe, rayons, angles, palier), résumé dérivé (contrat
+ * gardé en P3) lu par les consommateurs de l'hélicoïdal (structure, garde-corps, règles, plan,
+ * préréglage, éditeur, emprise sur le site) : même formule, au bit près, que l'ancien tracé
+ * hélicoïdal (`computeHelicalLayout`, retiré en P3 ; égalité figée par
+ * `fromHelical.test.ts`), et non une reconstruction depuis les courbes de la cage (bruit de
  * 1e-12 qui changerait la trémie des préréglages, sérialisée dans `examples/`).
  *
  * ## Correspondance
@@ -46,7 +47,7 @@
  *
  * La conversion ne contrôle que le genre du tracé et le domaine de n
  * (`layout.riserCountOutOfRange`, nécessaire au balayage en mode `treadsPerTurn`, levé en
- * premier comme dans `computeHelicalLayout`). Les autres contrôles de l'hélicoïdal (R_e > r_i,
+ * premier comme dans l'ancien tracé hélicoïdal). Les autres contrôles de l'hélicoïdal (R_e > r_i,
  * ligne de foulée dans l'emmarchement, angle par marche dans ]0 ; 180°[) sont faits par le moteur
  * de cage sous l'origine `helical` (`helicalChecks.ts`, F10 sous-lot P2), mêmes messages, même
  * ordre : la cage rendue peut donc être hors domaine (largeur nulle ou négative, Δθ ≥ 180°).
@@ -73,7 +74,7 @@ export interface HelicalToCage {
 /**
  * Convertit un projet hélicoïdal en projet à cage d'un tronçon à axe en arc (voir l'en-tête).
  * @throws LayoutError si le tracé n'est pas hélicoïdal ou si n sort du domaine (même message
- *   que `computeHelicalLayout`) ; les autres contrôles sont ceux du moteur (`helicalChecks.ts`).
+ *   que l'ancien tracé hélicoïdal) ; les autres contrôles sont ceux du moteur (`helicalChecks.ts`).
  */
 export function helicalToCage(project: Project): HelicalToCage {
   const helical = project.stair.layout;
@@ -130,8 +131,8 @@ export function helicalToCage(project: Project): HelicalToCage {
 const DEG = Math.PI / 180;
 
 /**
- * `Layout.helical` d'un projet hélicoïdal (voir l'en-tête) : construction de l'ancien
- * `computeHelicalLayout`, à l'identique (centre = origine du placement, angle de départ
+ * `Layout.helical` d'un projet hélicoïdal (voir l'en-tête) : construction de l'ancien tracé
+ * hélicoïdal (retiré en P3), à l'identique (centre = origine du placement, angle de départ
  * (`startAngle` + rotation)·DEG, Δθ, Θ = (n − 1)·Δθ, palier en secteur de couronne). Suppose
  * les contrôles passés (`computeCageLayout` sous l'origine `helical`, `helicalChecks.ts`) ;
  * `riserCount` = `resolveRiserCount(project)`.

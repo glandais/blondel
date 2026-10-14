@@ -17,7 +17,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, it } from "vitest";
-import { computeHeadroom } from "../headroom/headroom.js";
+import { headroomStage } from "../headroom/test-helpers.js";
 import { computeLayout } from "../layout/layout.js";
 import type { Project } from "../model/project.js";
 import { buildBasicParts } from "../parts/basic.js";
@@ -73,7 +73,7 @@ export function benchStages(project: Project): Record<string, number> {
         deepMerge(plugin.defaults(ctx) as Record<string, unknown>, project.stair.structure.params),
       )
     : null;
-  const headroom = computeHeadroom(project.site, layout, stepping);
+  const headroom = headroomStage(project, layout, stepping);
   const walk = headroom?.walkline;
   const out: Record<string, number> = {
     layout: time(() => computeLayout(project)),
@@ -81,7 +81,7 @@ export function benchStages(project: Project): Record<string, number> {
     parts: time(() => buildBasicParts(project, layout, stepping)),
   };
   if (plugin) out["structure"] = time(() => plugin.build(ctx, params));
-  out["headroom"] = time(() => computeHeadroom(project.site, layout, stepping));
+  out["headroom"] = time(() => headroomStage(project, layout, stepping));
   out["compliance"] = time(() =>
     evaluateComplianceDetailed({
       project,

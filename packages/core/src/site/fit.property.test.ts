@@ -229,7 +229,7 @@ describe("adéquation au site : propriétés", () => {
           const m = buildModel(empty, { memo: false });
           // Seule exception : l'échappée sous l'escalier lui-même (hélicoïdal de plus d'un tour,
           // sous-faces de ses propres marches), qui ne doit rien au site.
-          const selfCovered = (m.soffits ?? m.stepping.soffits ?? []).length > 0;
+          const selfCovered = (m.soffits ?? []).length > 0;
           for (const c of m.siteFit ?? []) {
             expect(c.kind).toBe("headroom");
             expect(selfCovered).toBe(true);

@@ -985,7 +985,7 @@ export function generalCagePieces(project: Project, spec: CageLayoutSpec): CageP
  * Origine `helical` (`options.origin`, cage issue d'un hélicoïdal, F10 sous-lot P1) : balayage
  * d'un axe en arc accepté au-delà d'un tour ; arcs des bords et de Γ découpés à 90° au plus
  * (`splitArc`) ; emprise en secteur de couronne, ou disque de R_e troué du disque de r_i au-delà
- * d'un tour, palier d'arrivée compris (`options.arrival`), comme `layout/helical.ts` ;
+ * d'un tour, palier d'arrivée compris (`options.arrival`), comme l'ancien tracé hélicoïdal ;
  * `Layout.helicalOrigin` (fût ou jour, palier d'arrivée). Sans effet sur toute autre cage.
  */
 export function computeGeneralCageLayout(
@@ -1229,7 +1229,7 @@ export function computeGeneralCageLayout(
   // d_f : première jonction tournante, sinon départ (`TurnZone.walklineOffset` par jonction).
   const df = firstTurn?.j.df ?? walklineOffsetFor(project.stair.walkline, sections[0]!.w0);
 
-  // Origine `helical` : emprise et palier d'arrivée de l'hélicoïdal (`layout/helical.ts`).
+  // Origine `helical` : emprise et palier d'arrivée de l'hélicoïdal.
   const ring =
     helical && sections.length === 1 && sections[0]!.arc !== undefined
       ? helicalRing(sections[0]!, options, toWorld, angle)
@@ -1265,7 +1265,7 @@ export function computeGeneralCageLayout(
 
 /**
  * Emprise d'une cage issue d'un hélicoïdal (un tronçon à axe en arc, repère monde), comme
- * `layout/helical.ts` : secteur de couronne des marches et du palier d'arrivée si leur balayage
+ * l'ancien tracé hélicoïdal : secteur de couronne des marches et du palier d'arrivée si leur balayage
  * cumulé reste sous un tour, sinon disque de R_e troué du disque de r_i (`footprintHoles`) ;
  * contour du palier d'arrivée (secteur au-delà de l'arrivée de l'arc), s'il y en a un.
  */

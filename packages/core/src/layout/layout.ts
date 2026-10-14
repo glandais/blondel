@@ -5,9 +5,9 @@
  * cage (`flightsToCage`) puis calculé par le moteur de cage (`cage/cage.ts`, origine `flights` :
  * messages d'erreur du moteur à volées) ; une cage saisie est calculée par le même moteur
  * (origine `cage`) ; un hélicoïdal aussi depuis le sous-lot P2 de F10 (`helicalToCage`, origine
- * `helical`, un tronçon à axe en arc au-delà d'un tour), avec `Layout.helical` en champ de
- * compatibilité (`helicalLayoutOf`) ; l'ancien moteur `helical.ts` n'est plus appelé par le
- * pipeline (retrait en P3, copie figée de référence `legacyHelical.ts`). Le résultat d'un tracé à
+ * `helical`, un tronçon à axe en arc au-delà d'un tour), avec `Layout.helical` en résumé
+ * dérivé (`helicalLayoutOf`) ; l'ancien moteur hélicoïdal et sa copie figée sont retirés
+ * (F10, sous-lot P3). Le résultat d'un tracé à
  * volées est identique, champ pour champ, à celui de l'ancien moteur à volées (supprimé au
  * sous-lot 2f ; parité figée en instantanés, `cage/parity.test.ts`) ; `sections`
  * (tronçons) est en plus. Les conventions ci-dessous, établies pour les volées, sont celles du
@@ -120,7 +120,7 @@ export function computeLayout(project: Project, options: LayoutOptions = {}): La
   const spec = project.stair.layout;
   // Tracé hélicoïdal (jalon 5a ; F10, sous-lot P2) : cage d'un tronçon à axe en arc
   // (`helicalToCage`, origine `helical` : contrôles et messages de l'hélicoïdal), plus
-  // `Layout.helical`, champ de compatibilité de ses consommateurs (`helicalLayoutOf`, formule
+  // `Layout.helical`, résumé dérivé lu par ses consommateurs (`helicalLayoutOf`, formule
   // d'origine au bit près). Le projet converti ne sort pas d'ici.
   if (spec.kind === "helical") {
     const conv = helicalToCage(project);

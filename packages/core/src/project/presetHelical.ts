@@ -37,7 +37,7 @@
 import { msg, type Message } from "@blondel/i18n";
 import { circularOpening, helicalHeadroomBound } from "../headroom/helical.js";
 import { ensureCCW } from "../geom2d/polygon.js";
-import { arcPoints } from "../layout/helical.js";
+import { arcPoints } from "../geom2d/arc.js";
 import { computeLayout } from "../layout/layout.js";
 import { LayoutError } from "../layout/errors.js";
 import { resolveRiserCount } from "../layout/resolve.js";
@@ -387,7 +387,7 @@ export function helicalOpening(
   const h = computeLayout(project).helical;
   if (!h || !(h.landingAngle > 0)) return circularOpening(c, radius);
   const sign = h.direction === "left" ? 1 : -1;
-  // Mêmes angles que le secteur du palier du tracé (`layout/helical.ts`).
+  // Mêmes angles que le secteur du palier du tracé (`helicalLayoutOf`, `layout/cage/fromHelical.ts`).
   const landingStart = h.startAngle + sign * h.totalAngle;
   const landingSweep = sign * h.landingAngle;
   const landingEnd = landingStart + landingSweep;

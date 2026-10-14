@@ -38,7 +38,8 @@
  */
 import { dec, msg, textMessage, type Message } from "@blondel/i18n";
 import { z } from "zod";
-import { arcPoints, helicalAngleAt, helicalPoint } from "../layout/helical.js";
+import { arcPoints } from "../geom2d/arc.js";
+import { helicalAngleAt, helicalPoint } from "../layout/helicalFrame.js";
 import { ensureCCW, signedArea } from "../geom2d/polygon.js";
 import type {
   FlatPattern,

@@ -1,8 +1,10 @@
 /**
- * Primitives d'arc partagées par le tracé hélicoïdal (`layout/helical.ts`) et le moteur de cage
- * (`layout/cage/general.ts`, cage issue d'un hélicoïdal, F10 sous-lot P1) : découpage d'un arc
- * en arcs élémentaires d'au plus 90°, points d'un arc à flèche bornée, secteur de couronne et
- * disque. Déplacées depuis `layout/helical.ts` sans changement de calcul (réexportées par lui).
+ * Primitives d'arc du moteur de cage (`layout/cage/general.ts`, cage issue d'un hélicoïdal, F10
+ * sous-lot P1), de la structure, des préréglages et du découpage : découpage d'un arc en arcs
+ * élémentaires d'au plus 90°, points d'un arc à flèche bornée, secteur de couronne et disque.
+ * Déplacées depuis l'ancien tracé hélicoïdal (`layout/helical.ts`, retiré en F10 P3) sans
+ * changement de calcul ; `arcPoints`, `sectorRing` et `splitArc` sont réexportées par
+ * `layout/index.ts`.
  */
 import type { CurveSeg, Mm, Polygon2, Rad, Vec2 } from "../model/primitives.js";
 import { flattenCurve, makeCurve } from "./curve.js";

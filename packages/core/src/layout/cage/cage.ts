@@ -123,7 +123,7 @@ export interface CageLayoutOptions {
  *   les cotes sont impossibles (largeur variable, axe en arc : voir `general.ts`)
  *   (pour une cage issue de volées : mêmes contrôles, dans le même ordre et avec les mêmes
  *   messages que le moteur à volées ; pour une cage issue d'un hélicoïdal, contrôles de
- *   `computeHelicalLayout` d'abord, `helicalChecks.ts`).
+ *   l'ancien tracé hélicoïdal d'abord, `helicalChecks.ts`).
  */
 export function computeCageLayout(
   project: Project,

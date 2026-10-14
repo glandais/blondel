@@ -46,7 +46,7 @@ import { offsetCurve } from "../geom2d/offset.js";
 import { arcSeg, lineSeg, segEnd, segLength, segStart, segTangentAt } from "../geom2d/segment.js";
 import { ANGLE_EPS, GEOM_EPS } from "../geom2d/tolerance.js";
 import * as V from "../geom2d/vec.js";
-import { splitArc } from "../layout/helical.js";
+import { splitArc } from "../geom2d/arc.js";
 import type { CageFeature } from "../model/cageFeatures.js";
 import type { Layout, LayoutSection, NosingLine, Stepping } from "../model/derived.js";
 import type { StructureContext } from "../model/plugins.js";

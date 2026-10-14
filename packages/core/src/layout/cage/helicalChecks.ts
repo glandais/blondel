@@ -1,6 +1,6 @@
 /**
  * Contrôles de spécification d'une cage issue d'un hélicoïdal (origine `helical`, F10, sous-lot
- * P2) : ceux de `computeHelicalLayout` (`layout/helical.ts`), dans le même ordre et avec les mêmes
+ * P2) : ceux de l'ancien tracé hélicoïdal (retiré en P3), dans le même ordre et avec les mêmes
  * messages, portés dans le moteur de cage (`computeCageLayout`, appelés avant tout autre
  * contrôle) pour que la parité des erreurs ne dépende plus de la conversion `helicalToCage`.
  *

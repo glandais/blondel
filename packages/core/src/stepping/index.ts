@@ -12,7 +12,6 @@ export { computeRises, type RiseSchedule } from "./rises.js";
 export { placeNosings, type WalkPositions } from "./positions.js";
 export { WINDERS_PER_SIDE_MAX } from "./zones.js";
 export { outlineBetween, surfaceBetween } from "./treads.js";
-export { computeHelicalStepping, helicalTreadOutline } from "./helical.js";
 export {
   collarSideAt,
   colletOnSide,

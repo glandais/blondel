@@ -1,7 +1,8 @@
 /**
  * Échappée avec **auto-recouvrement** (jalon 5a, CHALLENGE G4) : plafonds = dalle haute hors
- * trémie (s'il y a une trémie) + sous-faces de l'escalier lui-même (`Stepping.soffits` : marches
- * du tour supérieur et palier d'arrivée d'un hélicoïdal).
+ * trémie (s'il y a une trémie) + sous-faces de l'escalier lui-même (`SelfCoverInput.soffits`,
+ * déduites par l'étape d'échappée, `headroom/cage.ts` : marches du tour supérieur d'une cage qui
+ * se recouvre, et palier d'arrivée d'un hélicoïdal).
  *
  * Convention (décision Q4) : échappée **verticale** au-dessus de la ligne de pente sur Γ ; sur
  * la largeur, au-dessus du nez (altitude z_k) le long de chaque segment de nez Q_k R_k.

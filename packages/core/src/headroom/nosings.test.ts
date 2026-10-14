@@ -12,7 +12,8 @@ import type { Opening, Project } from "../model/project.js";
 import { buildModel } from "../pipeline/build.js";
 import { computeStepping } from "../stepping/stepping.js";
 import { makeSteppingProject, stairArb } from "../stepping/test-helpers.js";
-import { ceilingOf, computeHeadroom, openingPolygon } from "./headroom.js";
+import { ceilingOf, openingPolygon } from "./headroom.js";
+import { headroomStage } from "./test-helpers.js";
 
 const RUNS = Number(process.env["HEADROOM_RUNS"] ?? 40);
 const EPS = 1e-6;
@@ -27,7 +28,7 @@ function withOpening(p: Project, opening: Opening | undefined): Project {
 function analyse(p: Project) {
   const layout = computeLayout(p);
   const stepping = computeStepping(p, layout);
-  return { layout, stepping, headroom: computeHeadroom(p.site, layout, stepping) };
+  return { layout, stepping, headroom: headroomStage(p, layout, stepping) };
 }
 
 /** Escalier droit : H = 2 700, n = 15, g = 270, E = 900, Γ sur x = 450, y ∈ [0 ; 3 780]. */

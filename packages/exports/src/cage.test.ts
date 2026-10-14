@@ -420,7 +420,7 @@ describe("fiche de pose d'une cage : cotes d'implantation par tronçon", () => {
 describe("élévation d'une cage qui se recouvre", () => {
   it("sous-faces de l'échappée dessinées (Model.soffits)", () => {
     const m = model("cage qui se recouvre");
-    expect(m.stepping.soffits).toBeUndefined();
+    expect("soffits" in m.stepping).toBe(false);
     expect(m.soffits?.length).toBe(m.stepping.treads.length);
     const L = m.stepping.nosings[m.stepping.nosings.length - 1]!.s;
     expect(soffitIntervals(m, 0, L).length).toBeGreaterThan(0);

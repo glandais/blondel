@@ -4,7 +4,7 @@
  * Plafond (MVP) : sous-face de la dalle haute, z_p = H − `upperSlabThickness`, partout **hors**
  * de la trémie (le bord de la trémie appartient à la trémie). Les trémies sont dans le repère du
  * site, comme le tracé (placement de l'escalier déjà appliqué par `computeLayout`). Poutres,
- * obstacles et auto-recouvrement (hélicoïdal, U superposé) : jalon 5.
+ * obstacles : jalon 5.
  *
  * 1. **Échappée réglementaire, exacte sur Γ** : e(s) = z_p − z(s) aux points de Γ sous la dalle.
  *    z(s) est croissante (ligne de pente par les nez, `profile.ts`) et le plafond est constant :
@@ -15,15 +15,15 @@
  *    Q_k R_k dont une partie est sous la dalle ; minimum sur k. Donnée pour avertissement
  *    (objectif du pivot K8) ; ce n'est pas la grandeur réglementaire.
  *
- * **Auto-recouvrement** (jalon 5a, CHALLENGE G4) : quand le découpage fournit des sous-faces
- * (`Stepping.soffits`, marches du tour supérieur et palier d'arrivée d'un hélicoïdal), le plafond
- * en un point est le plus bas des plafonds présents au-dessus de lui : dalle (hors trémie, s'il
- * y a une trémie) et sous-faces des pièces situées plus loin dans la montée qui le couvrent en
- * plan (`selfcover.ts`). Le calcul reste exact : Γ et les segments de nez sont coupés aux côtés
- * de la trémie et des contours des sous-faces, le plafond est constant par morceau et le minimum
- * de chaque morceau est atteint à sa borne haute. Sans sous-face, le calcul est inchangé.
- * Cage saisie qui repasse au-dessus d'elle-même (ADR-0010, sous-lot 2d) : sous-faces de ses
- * marches déduites par `headroom/cage.ts` et passées à `computeHeadroom` (`selfCover`). Toute
+ * **Auto-recouvrement** (jalon 5a, CHALLENGE G4 ; ADR-0010, sous-lot 2d ; F10 P3) : pour toute
+ * cage qui repasse au-dessus d'elle-même, hélicoïdal compris, l'étape d'échappée déduit les
+ * sous-faces (`headroom/cage.ts` : marches du tour supérieur, et palier d'arrivée d'un
+ * hélicoïdal) et les passe à `computeHeadroom` (`selfCover`). Le plafond en un point est alors
+ * le plus bas des plafonds présents au-dessus de lui : dalle (hors trémie, s'il y a une trémie)
+ * et sous-faces des pièces situées plus loin dans la montée qui le couvrent en plan
+ * (`selfcover.ts`). Le calcul reste exact : Γ et les segments de nez sont coupés aux côtés de la
+ * trémie et des contours des sous-faces, le plafond est constant par morceau et le minimum de
+ * chaque morceau est atteint à sa borne haute. Sans sous-face, le calcul est inchangé. Toute
  * autre cage (angles quelconques, trapèzes, arcs, paliers droits) est traitée comme un tracé à
  * volées : Γ, ses intersections analytiques avec la trémie et les segments de nez sont
  * génériques.
@@ -73,9 +73,9 @@ export interface HeadroomAnalysis {
    */
   readonly atNosings: readonly (Mm | null)[];
   /**
-   * Sous-faces déduites hors du découpage et prises comme plafonds (cage qui repasse au-dessus
-   * d'elle-même, `headroom/cage.ts`, sous-lot 2d) ; reprises dans `Model.soffits` pour
-   * l'élévation (sous-lot 2e). Absent : aucune (l'hélicoïdal garde `Stepping.soffits`).
+   * Sous-faces prises comme plafonds (toute cage qui repasse au-dessus d'elle-même, hélicoïdal
+   * compris, `headroom/cage.ts`, sous-lot 2d et F10 P3) ; reprises dans `Model.soffits` pour
+   * l'élévation (sous-lot 2e). Absent : aucune.
    */
   readonly selfCover?: readonly Soffit[];
 }
@@ -220,13 +220,13 @@ export function computeHeadroom(
   layout: Layout,
   stepping: Stepping,
   /**
-   * Sous-faces déduites hors du découpage (cage qui repasse au-dessus d'elle-même,
-   * `headroom/cage.ts`) ; ignorées si le découpage porte les siennes (hélicoïdal).
+   * Sous-faces de l'escalier lui-même (toute cage qui repasse au-dessus d'elle-même, hélicoïdal
+   * compris), déduites par l'étape d'échappée (`headroom/cage.ts`, `cageHeadroomCeilings`).
    */
   selfCover?: readonly Soffit[],
 ): HeadroomAnalysis | null {
   const opening = openingPolygon(site.opening);
-  const soffits = stepping.soffits ?? selfCover ?? [];
+  const soffits = selfCover ?? [];
   if (soffits.length > 0) {
     const ceiling = ceilingOf(site);
     const analysis = selfCoveredHeadroom({
@@ -237,7 +237,7 @@ export function computeHeadroom(
       ceiling,
       covered: opening ? coveredIntervals(layout.walkline, opening) : [],
     });
-    return stepping.soffits === undefined ? { ...analysis, selfCover: soffits } : analysis;
+    return { ...analysis, selfCover: soffits };
   }
   if (!opening) return null;
   const ceiling = ceilingOf(site);

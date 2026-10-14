@@ -123,16 +123,16 @@ export interface SoffitInterval {
 }
 
 /**
- * Sous-faces de l'escalier au-dessus de la ligne de foulée (auto-recouvrement d'un hélicoïdal,
- * `Stepping.soffits`, ou d'une cage qui repasse au-dessus d'elle-même, `Model.soffits`,
- * CHALLENGE G4) : pour chaque sous-face, intervalles d'abscisse où la ligne
+ * Sous-faces de l'escalier au-dessus de la ligne de foulée (auto-recouvrement de toute cage qui
+ * repasse au-dessus d'elle-même, hélicoïdal compris, `Model.soffits`, déduites par l'étape
+ * d'échappée, CHALLENGE G4) : pour chaque sous-face, intervalles d'abscisse où la ligne
  * de foulée passe sous la pièce, limités aux points situés **avant** la pièce dans la montée
  * (s < `sStart`, même convention que le calcul d'échappée). Dessus : dessus de la marche, ou
  * niveau du plancher haut pour le palier d'arrivée.
  */
 export function soffitIntervals(model: Model, s0: Mm, s1: Mm, step: Mm = 5): SoffitInterval[] {
-  // Hélicoïdal : sous-faces du découpage ; cage qui se recouvre : celles de l'échappée.
-  const soffits = model.stepping.soffits ?? model.soffits ?? [];
+  // Modèle partiel (échappée non calculée) : aucune sous-face.
+  const soffits = model.soffits ?? [];
   if (soffits.length === 0 || !(s1 > s0)) return [];
   const L = curveLength(model.layout.walkline);
   const H = model.stepping.rises.reduce((x, y) => x + y, 0);

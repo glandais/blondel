@@ -255,6 +255,38 @@ describe("découpage — propriétés (générateur contraint : quart tournant, 
       { numRuns: Math.ceil(RUNS / 2) },
     );
   }, 600_000);
+
+  it("débord de 0 à 120 mm : contour de marche dans sa surface ∪ celle de la suivante (coupe par la ligne du nez k + 2)", () => {
+    // F10, sous-lot P3 : la coupe de `outlineBetween` par la ligne du nez k + 2 garde le côté
+    // qui contient le point d'appui quand le débord le porte au-delà de cette ligne (hélicoïdal
+    // à Δθ faible, marches prolongées sous contremarche). Sur les volées et les quarts / demi-
+    // tournants, ce cas ne se présente pas : la propriété fige que le contour reste, quel que
+    // soit le débord, sous la marche et la suivante.
+    fc.assert(
+      fc.property(
+        stairArb(undefined, ALL_TYPOLOGIES),
+        fc.constantFrom(0, 30, 60, 90, 120),
+        ({ project: base }, nosing) => {
+          const project = ProjectSchema.parse({
+            ...base,
+            stair: { ...base.stair, treads: { ...base.stair.treads, nosing } },
+          });
+          const st = computeStepping(project, computeLayout(project));
+          st.treads.forEach((t, i) => {
+            const next = st.treads[i + 1];
+            if (!next) return;
+            for (const v of t.outline) {
+              const inside = [t.walkingSurface, next.walkingSurface].some(
+                (poly) => pointInPolygon(v, poly, 1e-2) !== "outside",
+              );
+              expect(inside, `d = ${nosing}, M${t.number} : sommet (${v.x} ; ${v.y})`).toBe(true);
+            }
+          });
+        },
+      ),
+      { numRuns: Math.ceil(RUNS / 2) },
+    );
+  }, 600_000);
   it("contour de marche inclus dans l'emprise (à 0,2 mm près ; dernière marche : débord au-delà de l'arrivée)", () => {
     // Emprise = `layout.footprint` (arcs discrétisés à 0,1 mm de flèche, d'où la tolérance).
     // La dernière marche se prolonge de `treads.nosing` sous le plancher d'arrivée : ses sommets

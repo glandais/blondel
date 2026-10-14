@@ -34,16 +34,8 @@ export {
   type SectionWidthChange,
   type WellRadiusFrame,
 } from "./cageEdit.js";
-export {
-  arcPoints,
-  computeHelicalLayout,
-  helicalAngleAt,
-  helicalPoint,
-  helicalSign,
-  helicalStepAngle,
-  sectorRing,
-  splitArc,
-} from "./helical.js";
+export { arcPoints, sectorRing, splitArc } from "../geom2d/arc.js";
+export { helicalAngleAt, helicalPoint, helicalSign } from "./helicalFrame.js";
 export {
   AUTO_GOING_MODULE,
   RISER_COUNT_MAX,

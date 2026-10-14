@@ -1,10 +1,10 @@
 /**
- * Catalogue des cas de parité hélicoïdal / cage (F10, sous-lots P1 et P2), partagé par
- * `helicalParity.test.ts` (tracé, découpage, échappée) et `pipeline/helicalSwitch.parity.test.ts`
- * (`Model` entier) : exemples du dépôt (avec et sans palier), préréglage, démos, formes
- * synthétiques, cas d'erreur. Assistant de test, non exporté par le paquet (garde-fou de
- * `layout/legacyHelical.test.ts`). Les écarts attendus (`gaps`) sont ceux du niveau tracé /
- * découpage (chemins `N2:` / `N3:`, voir `helical-parity-helpers.ts`).
+ * Catalogue des cas de l'hélicoïdal (F10, sous-lots P1 à P3), partagé par `helicalCage.test.ts`
+ * (résumé figé du tracé, du découpage et de l'échappée) et `fromHelical.test.ts`
+ * (`Layout.helical` figé) : exemples du dépôt (avec et sans palier), préréglage, démos, formes
+ * synthétiques, cas d'erreur (clés attendues). Assistant de test, non exporté par le paquet.
+ * Jusqu'en P2, chaque cas était comparé à l'ancien moteur hélicoïdal (copie figée retirée en
+ * P3) ; les noms des cas sont ceux des instantanés : ne pas les changer.
  */
 import { readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
@@ -55,34 +55,11 @@ export const shape = (s: Partial<HelicalShape>): Project =>
 
 // ------------------------------------------------------------------ catalogue des cas
 
-/** Cas : projet hélicoïdal et écarts attendus (chemins normalisés, voir l'en-tête). */
+/** Cas : nom (celui de l'instantané) et projet hélicoïdal. */
 export interface ParityCase {
   readonly name: string;
   readonly project: () => Project;
-  /** Écarts attendus, par lacune ; vide : parité tenue. */
-  readonly gaps?: Readonly<Partial<Record<"CUT" | "HALF", readonly string[]>>>;
 }
-
-/** CUT : nombre de sommets des contours (et des sous-faces) en écart. */
-export const CUT_COUNT = ["N2:treads[*].outline.length", "N3:soffits[*].outline.length"];
-/** CUT : même nombre de sommets, sommets déplacés. */
-export const CUT_VERTICES = [
-  "N2:treads[*].outline[*].x",
-  "N2:treads[*].outline[*].y",
-  "N3:soffits[*].outline[*].x",
-  "N3:soffits[*].outline[*].y",
-];
-/**
- * Anciens cas TIE (P1) : minimum d'échappée atteint, à 1e-6 près, en plusieurs points ; la cage
- * et l'hélicoïdal départageaient différemment selon le bruit. Depuis la décision F10 (3)
- * (`selfcover.ts`, premier minimum en montant à `HEADROOM_TIE_TOL` près), plus aucun écart :
- * la table de ces cas est vide, et le test « ex æquo » vérifie le départage.
- */
-export const FORMER_TIE = new Set<string>();
-const formerTie = (name: string): string => {
-  FORMER_TIE.add(name);
-  return name;
-};
 
 export const HELICAL_PARITY_CASES: readonly ParityCase[] = [
   // Exemples du dépôt (tous à palier d'arrivée, `treadsPerTurn`, sens `left`).
@@ -92,10 +69,7 @@ export const HELICAL_PARITY_CASES: readonly ParityCase[] = [
   })),
   // Les mêmes, privés de leur palier (isole la lacune du palier d'arrivée).
   ...HELICAL_EXAMPLES.map((name): ParityCase => ({
-    name:
-      name === "j5a-helicoidal"
-        ? formerTie(`exemple ${name} sans palier`)
-        : `exemple ${name} sans palier`,
+    name: `exemple ${name} sans palier`,
     project: () => withHelical(loadExample(name), { landing: undefined }),
   })),
   { name: "préréglage helical", project: () => createProject("helical") },
@@ -118,22 +92,21 @@ export const HELICAL_PARITY_CASES: readonly ParityCase[] = [
       }),
   },
   // Mode `angle`.
-  // 90° : Δθ = 6°, d / sin Δθ = 191 mm > r_i = 100 mm (CUT).
+  // 90° : Δθ = 6°, d / sin Δθ = 191 mm > r_i = 100 mm (CUT : contour coupé sur le nez k + 2).
   {
     name: "angle 90°",
     project: () => shape({ totalAngle: 90, nosing: 20, landingAngle: 30 }),
-    gaps: { CUT: CUT_VERTICES },
   },
   ...[270, 359, 360].map((deg): ParityCase => ({
     name: `angle ${deg}°`,
     project: () => shape({ totalAngle: deg, nosing: 20, landingAngle: 30 }),
   })),
   ...[450, 720].map((deg): ParityCase => ({
-    name: formerTie(`angle ${deg}°`),
+    name: `angle ${deg}°`,
     project: () => shape({ totalAngle: deg, nosing: 20, landingAngle: 30 }),
   })),
   {
-    name: formerTie("angle 2 160° (n = 60)"),
+    name: "angle 2 160° (n = 60)",
     project: () =>
       shape({
         totalAngle: 2160,
@@ -149,7 +122,7 @@ export const HELICAL_PARITY_CASES: readonly ParityCase[] = [
   },
   // Mode `treadsPerTurn`.
   {
-    name: formerTie("N = 3 (Δθ = 120°)"),
+    name: "N = 3 (Δθ = 120°)",
     project: () => shape({ treadsPerTurn: 3, riserCount: 7, nosing: 10 }),
   },
   {
@@ -162,11 +135,11 @@ export const HELICAL_PARITY_CASES: readonly ParityCase[] = [
   { name: "jour central", project: () => shape({ core: "well", treadsPerTurn: 14 }) },
   // Ligne de foulée.
   {
-    name: formerTie("ligne de foulée fromInner 300"),
+    name: "ligne de foulée fromInner 300",
     project: () => shape({ walklineFromInner: 300 }),
   },
   {
-    name: formerTie("DTU, E ≤ seuil (E = 1 200)"),
+    name: "DTU, E ≤ seuil (E = 1 200)",
     project: () => shape({ outerRadius: 1300, coreRadius: 100 }),
   },
   {
@@ -184,7 +157,6 @@ export const HELICAL_PARITY_CASES: readonly ParityCase[] = [
   {
     name: "débord proche de r_i (r_i = 50, d = 40, Δθ = 30°)",
     project: () => shape({ coreRadius: 50, outerRadius: 950, nosing: 40, treadsPerTurn: 12 }),
-    gaps: { CUT: CUT_COUNT },
   },
   // Palier d'arrivée.
   {
@@ -216,7 +188,7 @@ export const HELICAL_PARITY_CASES: readonly ParityCase[] = [
       }),
   },
   {
-    name: formerTie("deux tours sans trémie"),
+    name: "deux tours sans trémie",
     project: () => shape({ totalAngle: 720, riserCount: 25, floorToFloor: 4400 }),
   },
   // Hauteurs non régulières, réglages des escaliers à volées.
@@ -240,7 +212,7 @@ export const HELICAL_PARITY_CASES: readonly ParityCase[] = [
   },
 ];
 
-/** Cas d'erreur : même niveau, même nom, même clé et mêmes paramètres. */
+/** Cas d'erreur : clé attendue (niveau, nom et paramètres figés par `helicalCage.test.ts`). */
 export const HELICAL_PARITY_ERROR_CASES: readonly {
   name: string;
   project: () => Project;

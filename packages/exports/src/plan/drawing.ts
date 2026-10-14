@@ -73,6 +73,10 @@ export interface Dimension {
   readonly b: Vec2;
   readonly normal: Vec2;
   readonly offset: Mm;
+  /**
+   * Valeur cotée : distance a → b, sauf le giron d'une marche dansante (escalier sans marche
+   * droite, décision F10 (9)), mesuré sur la ligne de foulée (arc) et coté sur la corde a → b.
+   */
   readonly value: Mm;
   readonly text: string;
 }
@@ -164,8 +168,10 @@ function dimension(
   offset: Mm,
   decimals: number,
   label?: MessageKey,
+  /** Valeur cotée quand elle diffère de la distance a → b (giron d'une dansante, sur Γ). */
+  measured?: Mm,
 ): Dimension {
-  const value = vec2.distance(a, b);
+  const value = measured ?? vec2.distance(a, b);
   const shown = fmt(tx, value, decimals);
   return {
     role,
@@ -334,28 +340,46 @@ export function buildPlanDrawing(model: Model, options: PlanDrawingOptions = {})
     )
       dims.push(run);
   }
-  // Giron sur la ligne de foulée : première marche droite entre deux nez non balancés.
+  // Giron sur la ligne de foulée : première marche droite entre deux nez non balancés. Sans
+  // aucune marche droite (hélicoïdal, cage en arc seul), première marche dansante (plus petit
+  // numéro : un ordre et non un minimum, stable face au bruit), décision F10 (9) : la ligne de
+  // cote est la corde n0.p → n1.p, la valeur cotée est le giron de la marche mesuré sur la
+  // ligne de foulée (longueur d'arc, `Tread.going`).
+  const goingDim = (n0: Vec2, n1: Vec2, measured?: Mm): Dimension => {
+    const t = vec2.normalize(vec2.sub(n1, n0));
+    const inward = vec2.scale(outwardFromOuter(t, layout.innerSide), -1);
+    const off = Math.min(layout.walklineOffset / 2, dimOffset);
+    return dimension(
+      tx,
+      "going",
+      n0,
+      n1,
+      inward,
+      off,
+      Math.max(decimals, 1),
+      "drawing.dimension.going",
+      measured,
+    );
+  };
+  let goingPlaced = false;
   for (let k = 0; k + 1 < stepping.nosings.length; k++) {
     const n0 = stepping.nosings[k]!;
     const n1 = stepping.nosings[k + 1]!;
     const tread = stepping.treads.find((t) => t.number === n1.index);
     if (n0.balanced || n1.balanced || tread?.kind !== "straight") continue;
-    const t = vec2.normalize(vec2.sub(n1.p, n0.p));
-    const inward = vec2.scale(outwardFromOuter(t, layout.innerSide), -1);
-    const off = Math.min(layout.walklineOffset / 2, dimOffset);
-    dims.push(
-      dimension(
-        tx,
-        "going",
-        n0.p,
-        n1.p,
-        inward,
-        off,
-        Math.max(decimals, 1),
-        "drawing.dimension.going",
-      ),
-    );
+    dims.push(goingDim(n0.p, n1.p));
+    goingPlaced = true;
     break;
+  }
+  if (!goingPlaced && !stepping.treads.some((t) => t.kind === "straight")) {
+    for (let k = 0; k + 1 < stepping.nosings.length; k++) {
+      const n0 = stepping.nosings[k]!;
+      const n1 = stepping.nosings[k + 1]!;
+      const tread = stepping.treads.find((t) => t.number === n1.index);
+      if (tread?.kind !== "winder") continue;
+      dims.push(goingDim(n0.p, n1.p, tread.going));
+      break;
+    }
   }
 
   const markers = violations.points.map((p) => ({

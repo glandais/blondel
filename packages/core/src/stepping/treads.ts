@@ -27,7 +27,7 @@
  * tronçon couvre toute Γ) ; bords échantillonnés comme un arc neuf partant du
  * nez (`arcEdge`, mêmes sommets que `arcPoints` de l'hélicoïdal, et non la sous-courbe coupée aux
  * jonctions des arcs élémentaires) ; contour de la dernière marche prolongé **sur le cercle**
- * au-delà de l'arrivée (angle asin(d / r), comme `helicalTreadOutline`) au lieu du prolongement
+ * au-delà de l'arrivée (angle asin(d / r), comme l'ancien découpage hélicoïdal) au lieu du prolongement
  * rectiligne ; intersections confondues d'un tour à l'autre départagées par l'abscisse attendue
  * (`firstHit`, `nearS`). Toute autre cage est inchangée.
  */
@@ -153,12 +153,21 @@ export function outlineBetween(
       len > GEOM_EPS ? intersectLines({ origin, dir: b.dir }, { origin: c.q, dir: span }) : null;
     const tol = len > GEOM_EPS ? GEOM_EPS / len : 0;
     if (hit && hit.t2 >= -tol && hit.t2 <= 1 + tol) {
-      if (hit.t1 < 0 && (!qiOk || hit.t1 > qi.t)) cutInner = hit.point;
-      if (hit.t1 > 0 && (!roOk || hit.t1 < ro.t)) cutOuter = hit.point;
+      // Partie de la ligne d'appui au-delà du nez suivant. D'ordinaire, `origin` (sur Γ,
+      // décalé du débord) est en deçà de la ligne de nez c : la partie au-delà est celle qui
+      // ne contient pas `origin` (côté jour si t1 < 0). Quand le débord porte `origin` au-delà
+      // de c (côté de la montée, lu sur la tangente de Γ en P_c : hélicoïdal à Δθ faible,
+      // marche prolongée sous contremarche, décisions F10 (2) et (8)), c'est celle qui le
+      // contient.
+      const side = (p: Vec2): number => V.cross(span, V.sub(p, c.q));
+      const originAhead = side(origin) * side(V.add(c.p, curveTangentAt(layout.walkline, c.s))) > 0;
+      const t1In = originAhead ? -hit.t1 : hit.t1;
+      if (t1In < 0 && (!qiOk || hit.t1 > qi.t)) cutInner = hit.point;
+      if (t1In > 0 && (!roOk || hit.t1 < ro.t)) cutOuter = hit.point;
     }
   }
   // Cage issue d'un hélicoïdal, au-delà de l'arrivée : prolongement sur le cercle du bord
-  // (angle asin(d / r), `helicalTreadOutline`), au lieu du prolongement rectiligne.
+  // (angle asin(d / r), comme l'ancien découpage hélicoïdal), au lieu du prolongement rectiligne.
   const beyondEnd = (curve: Curve2, sigma: Mm): Mm | null => {
     const last = curve.segments[curve.segments.length - 1];
     if (!helical || last?.kind !== "arc" || !(depth < last.radius)) return null;

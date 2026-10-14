@@ -5,6 +5,8 @@ import { pointInPolygon, signedArea } from "../geom2d/polygon.js";
 import * as V from "../geom2d/vec.js";
 import { helicalShapeArb, makeHelicalProject } from "../layout/helical-test-helpers.js";
 import { computeLayout } from "../layout/layout.js";
+import { cageHeadroomCeilings, helicalSoffits } from "../headroom/cage.js";
+import { buildModel } from "../pipeline/build.js";
 import { SteppingError } from "./errors.js";
 import { computeStepping } from "./stepping.js";
 import { frList } from "../i18n.test-helpers.js";
@@ -63,9 +65,12 @@ describe("computeStepping — hélicoïdal", () => {
           expect(nosing.balanced).toBe(false);
         }
         expect(st.nosings[n - 1]!.z).toBe(shape.floorToFloor);
-        // Sous-faces : une par marche (+ palier), à z_k − épaisseur.
-        expect(st.soffits).toHaveLength(n - 1);
-        st.soffits!.forEach((sf, k) => {
+        // Sous-faces (étape d'échappée, décision F10 (10a)) : une par marche (+ palier), à
+        // z_k − épaisseur ; le découpage n'en porte pas.
+        expect("soffits" in st).toBe(false);
+        const soffits = helicalSoffits(layout, st, project.stair.treads.thickness);
+        expect(soffits).toHaveLength(n - 1);
+        soffits.forEach((sf, k) => {
           expect(sf.z).toBeCloseTo(st.nosings[k]!.z - shape.treadThickness!, 9);
           expect(sf.sStart).toBeCloseTo(st.nosings[k]!.s, 9);
         });
@@ -151,7 +156,7 @@ describe("computeStepping — hélicoïdal", () => {
     expect(st.nosings.map((n) => n.p)).toEqual(plain.nosings.map((n) => n.p));
   });
 
-  it("palier d'arrivée : sous-face supplémentaire au niveau H − épaisseur", () => {
+  it("palier d'arrivée : sous-face supplémentaire au niveau H − épaisseur (étape d'échappée)", () => {
     const p = makeHelicalProject({
       outerRadius: 900,
       coreRadius: 70,
@@ -161,9 +166,15 @@ describe("computeStepping — hélicoïdal", () => {
       riserCount: 15,
       landingAngle: 45,
     });
-    const st = computeStepping(p, computeLayout(p));
-    expect(st.soffits).toHaveLength(15);
-    const landing = st.soffits![14]!;
+    const layout = computeLayout(p);
+    const st = computeStepping(p, layout);
+    const { thickness, nosing } = p.stair.treads;
+    const ceilings = cageHeadroomCeilings(undefined, layout, st, thickness, nosing);
+    expect(ceilings.kind).toBe("ceilings");
+    const soffits = ceilings.kind === "ceilings" ? (ceilings.soffits ?? []) : [];
+    expect(soffits).toHaveLength(15);
+    expect(buildModel(p, { memo: false }).soffits).toEqual(soffits);
+    const landing = soffits[14]!;
     expect(landing.tread).toBeUndefined();
     expect(landing.z).toBe(2700 - 40);
   });

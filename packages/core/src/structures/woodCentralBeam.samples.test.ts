@@ -27,7 +27,8 @@ describe("samples (poutre cintrée)", () => {
   it("propriété : croissant, écarts > GEOM_EPS, chaque nœud représenté", () => {
     fc.assert(
       fc.property(
-        fc.double({ min: -5000, max: 5000, noNaN: true }),
+        // `+ 0` ramène -0 à 0 : abscisse sans signe de zéro (graine -1073138483).
+        fc.double({ min: -5000, max: 5000, noNaN: true }).map((x) => x + 0),
         fc.double({ min: 1, max: 5000, noNaN: true }),
         fc.array(fc.double({ min: 0, max: 1, noNaN: true }), { maxLength: 12 }),
         fc.array(fc.double({ min: -1e-7, max: 1e-7, noNaN: true }), { maxLength: 12 }),

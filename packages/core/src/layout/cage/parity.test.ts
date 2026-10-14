@@ -18,9 +18,11 @@
  *   des résumés, une empreinte seule modifiée signale un écart géométrique.
  * Les ajouts du moteur de cage (`sections`, `angle`, `well`, `wall` des tournants) font partie
  * des instantanés. Un écart d'instantané est une régression du tracé à volées, sauf évolution
- * voulue et justifiée (`-u` documenté au journal). L'hélicoïdal n'est pas concerné : seul son
- * aiguillage vers la cage d'origine `helical` est vérifié ici (F10, sous-lot P2 ; parité
- * complète dans `helicalParity.test.ts` et `pipeline/helicalSwitch.parity.test.ts`).
+ * voulue et justifiée (`-u` documenté au journal). Hélicoïdal (F10, sous-lot P3) : `Layout`
+ * complet des exemples, démos et préréglage hélicoïdaux, calculés par la cage d'origine
+ * `helical`, figé de même ; instantanés enregistrés pendant que la parité stricte avec l'ancien
+ * tracé hélicoïdal (copie figée `legacyHelical.ts`, retirée en P3 : `Layout.helical` au bit, le
+ * reste à 1e-6 mm et 1e-9 rad) était encore vérifiée au même passage (journal du chantier).
  */
 import { createHash } from "node:crypto";
 import { readdirSync, readFileSync } from "node:fs";
@@ -41,13 +43,17 @@ import {
   type ProjectInput,
 } from "../../model/project.js";
 import { createDemoProject, DEMO_PRESET_IDS } from "../../project/presetDemo.js";
-import { createProject, OPPOSITE_TURNS_PRESET_IDS, PRESET_IDS } from "../../project/presets.js";
+import {
+  createProject,
+  HELICAL_PRESET_IDS,
+  OPPOSITE_TURNS_PRESET_IDS,
+  PRESET_IDS,
+} from "../../project/presets.js";
 import { parseProjectText } from "../../project/parse.js";
-import { legacyComputeHelicalLayout } from "../legacyHelical.js";
+
 import { computeLayout, type LayoutOptions } from "../layout.js";
 import { resolveLegLengths } from "../resolve.js";
 import { curveLength } from "../../geom2d/curve.js";
-import { compareValues, gapPaths, type Gaps } from "./helical-parity-helpers.js";
 
 const EXAMPLES_DIR = resolve(dirname(fileURLToPath(import.meta.url)), "../../../../../examples");
 const EXAMPLE_FILES = readdirSync(EXAMPLES_DIR)
@@ -161,36 +167,32 @@ describe("non-régression du tracé à volées (parité figée avec l'ancien mot
     expectFrozen(createDemoProject(id));
   });
 
-  it("hélicoïdal : aiguillage vers la cage d'origine helical (F10, P2)", () => {
-    const helical = DEMO_PRESET_IDS.map((id) => createDemoProject(id)).filter((p) =>
-      isHelicalLayout(p.stair.layout),
-    );
-    const examplesHelical = EXAMPLE_FILES.map((f) =>
-      parseProjectText(readFileSync(join(EXAMPLES_DIR, f), "utf8")),
-    ).filter((p) => isHelicalLayout(p.stair.layout));
-    expect(helical.length + examplesHelical.length).toBeGreaterThan(0);
-    for (const p of [...helical, ...examplesHelical]) {
-      if (!isHelicalLayout(p.stair.layout)) continue;
+  const helicalCases: readonly (readonly [string, Project])[] = [
+    ...EXAMPLE_FILES.map(
+      (f) =>
+        [`exemple ${f}`, parseProjectText(readFileSync(join(EXAMPLES_DIR, f), "utf8"))] as const,
+    ),
+    ...DEMO_PRESET_IDS.map((id) => [`démo ${id}`, createDemoProject(id)] as const),
+    ...HELICAL_PRESET_IDS.map((id) => [`préréglage ${id}`, createProject(id)] as const),
+  ].filter(([, p]) => isHelicalLayout(p.stair.layout));
+
+  it("des hélicoïdaux existent (exemples, démos, préréglage)", () => {
+    expect(helicalCases.length).toBe(10);
+  });
+
+  it.each(helicalCases)(
+    "hélicoïdal, %s : cage d'origine helical, tracé figé (F10, P3)",
+    (_name, p) => {
+      expectFrozen(p);
       const layout = computeLayout(p);
-      const legacy = legacyComputeHelicalLayout(p, p.stair.layout);
-      // `Layout.helical` : égalité EXACTE avec l'ancien tracé (copie figée, `helicalLayoutOf`).
-      expect(layout.helical).toStrictEqual(legacy.helical);
       // Ajouts de la cage d'origine `helical` ; pas de marque de cage saisie.
+      expect(layout.helical).toBeDefined();
       expect(layout.helicalOrigin).toBeDefined();
       expect(layout.sections?.length).toBe(1);
+      expect(layout.sections?.[0]?.kind).toBe("arc");
       expect(layout.cage).toBeUndefined();
-      // Le reste à la tolérance de P1 (1e-6 mm, 1e-9 rad, `helical-parity-helpers.ts`).
-      const gaps: Gaps = new Map();
-      compareValues(
-        legacy,
-        layout,
-        "",
-        gaps,
-        new Set(["helical", "sections", "walklineSide", "helicalOrigin"]),
-      );
-      expect(gapPaths(gaps)).toEqual([]);
-    }
-  });
+    },
+  );
 
   it.each([...PRESET_IDS, ...OPPOSITE_TURNS_PRESET_IDS])(
     "option legLengths (assistant), préréglage %s : longueurs imposées, nombre incohérent, longueur non positive",

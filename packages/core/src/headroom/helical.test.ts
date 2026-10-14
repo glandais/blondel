@@ -6,14 +6,9 @@ import { computeLayout } from "../layout/layout.js";
 import type { Opening } from "../model/project.js";
 import { buildModel } from "../pipeline/build.js";
 import { computeStepping } from "../stepping/stepping.js";
-import {
-  ceilingOf,
-  computeHeadroom,
-  coveredIntervals,
-  headroomOnWalkline,
-  openingPolygon,
-} from "./headroom.js";
+import { ceilingOf, coveredIntervals, headroomOnWalkline, openingPolygon } from "./headroom.js";
 import { circularOpening, helicalHeadroomBound, openingCircle } from "./helical.js";
+import { headroomStage } from "./test-helpers.js";
 import { slopeProfileOf } from "./profile.js";
 
 const E_MIN = 1900;
@@ -37,7 +32,7 @@ function analyse(shape: Parameters<typeof makeHelicalProject>[0]) {
     layout,
     stepping,
     bound,
-    headroom: computeHeadroom(project.site, layout, stepping),
+    headroom: headroomStage(project, layout, stepping),
   };
 }
 

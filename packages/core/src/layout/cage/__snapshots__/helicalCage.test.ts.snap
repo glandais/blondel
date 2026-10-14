@@ -1,0 +1,2410 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`hélicoïdal par la cage (F10) — catalogue figé > DTU, E > seuil (E = 1 400) 1`] = `
+{
+  "cotes": {
+    "blondel": 716.52,
+    "colletMin": 51.8,
+    "colletsChord": [
+      51.8,
+      51.8,
+      51.8,
+      51.8,
+      51.8,
+      51.8,
+      51.8,
+      51.8,
+      51.8,
+      51.8,
+      51.8,
+      51.8,
+      51.8,
+      51.8,
+      51.8,
+    ],
+    "firstRise": 175,
+    "g": 366.52,
+    "h": 175,
+    "headroom": 1880.2,
+    "headroomWidth": {
+      "min": 1885,
+      "nosing": 0,
+    },
+    "n": 16,
+    "run": 5497.8,
+    "treads": "wwwwwwwwwwwwwww",
+    "zones": [],
+  },
+  "headroom": "8f2c9435d339941e",
+  "layout": "8ed65402bfe98550",
+  "soffits": {
+    "count": 15,
+    "sha": "ec3473ef882a817a",
+  },
+  "stepping": "289eedfacf4c7795",
+  "walkline": {
+    "min": 1880.225189289,
+    "s": 10.000340167,
+  },
+}
+`;
+
+exports[`hélicoïdal par la cage (F10) — catalogue figé > DTU, E ≤ seuil (E = 1 200) 1`] = `
+{
+  "cotes": {
+    "blondel": 716.52,
+    "colletMin": 51.8,
+    "colletsChord": [
+      51.8,
+      51.8,
+      51.8,
+      51.8,
+      51.8,
+      51.8,
+      51.8,
+      51.8,
+      51.8,
+      51.8,
+      51.8,
+      51.8,
+      51.8,
+      51.8,
+      51.8,
+    ],
+    "firstRise": 175,
+    "g": 366.52,
+    "h": 175,
+    "headroom": 1880.2,
+    "headroomWidth": {
+      "min": 1885,
+      "nosing": 0,
+    },
+    "n": 16,
+    "run": 5497.8,
+    "treads": "wwwwwwwwwwwwwww",
+    "zones": [],
+  },
+  "headroom": "8504dbb3c0ad38bc",
+  "layout": "96b90e53670c8532",
+  "soffits": {
+    "count": 15,
+    "sha": "c527273050d15eec",
+  },
+  "stepping": "36458ce5fccfebee",
+  "walkline": {
+    "min": 1880.225189289,
+    "s": 10.000340167,
+  },
+}
+`;
+
+exports[`hélicoïdal par la cage (F10) — catalogue figé > N = 3 (Δθ = 120°) 1`] = `
+{
+  "cotes": {
+    "blondel": 1951.92,
+    "colletMin": 173.2,
+    "colletsChord": [
+      173.2,
+      173.2,
+      173.2,
+      173.2,
+      173.2,
+      173.2,
+    ],
+    "firstRise": 400,
+    "g": 1151.92,
+    "h": 400,
+    "headroom": 756.5,
+    "headroomWidth": {
+      "min": 760,
+      "nosing": 0,
+    },
+    "n": 7,
+    "run": 6911.5,
+    "treads": "wwwwww",
+    "zones": [],
+  },
+  "headroom": "0df9314e1f58aba5",
+  "layout": "d35fde3e9f9b40da",
+  "soffits": {
+    "count": 6,
+    "sha": "075f7c82c9c4d442",
+  },
+  "stepping": "808e1dde292f82e4",
+  "walkline": {
+    "min": 756.527337165,
+    "s": 10.000551046,
+  },
+}
+`;
+
+exports[`hélicoïdal par la cage (F10) — catalogue figé > N = 12, n = 13 (Θ = 360° exact) 1`] = `
+{
+  "cotes": {
+    "blondel": 718.75,
+    "colletMin": 51.8,
+    "colletsChord": [
+      51.8,
+      51.8,
+      51.8,
+      51.8,
+      51.8,
+      51.8,
+      51.8,
+      51.8,
+      51.8,
+      51.8,
+      51.8,
+      51.8,
+    ],
+    "firstRise": 215.38,
+    "g": 287.98,
+    "h": 215.38,
+    "headroom": null,
+    "headroomWidth": {
+      "min": 2329.2,
+      "nosing": 0,
+    },
+    "n": 13,
+    "run": 3455.8,
+    "treads": "wwwwwwwwwwww",
+    "zones": [],
+  },
+  "headroom": "c55b7142bd9f0b87",
+  "layout": "2e080580ac96564c",
+  "soffits": {
+    "count": 12,
+    "sha": "10ec0e6f5654c43b",
+  },
+  "stepping": "7c4d6cd153e229b6",
+  "walkline": null,
+}
+`;
+
+exports[`hélicoïdal par la cage (F10) — catalogue figé > N = 60 1`] = `
+{
+  "cotes": {
+    "blondel": 301.4,
+    "colletMin": 31.4,
+    "colletsChord": [
+      31.4,
+      31.4,
+      31.4,
+      31.4,
+      31.4,
+      31.4,
+      31.4,
+      31.4,
+      31.4,
+      31.4,
+      31.4,
+      31.4,
+      31.4,
+      31.4,
+      31.4,
+      31.4,
+      31.4,
+      31.4,
+      31.4,
+      31.4,
+      31.4,
+      31.4,
+      31.4,
+    ],
+    "firstRise": 116.67,
+    "g": 68.07,
+    "h": 116.67,
+    "headroom": null,
+    "headroomWidth": null,
+    "n": 24,
+    "run": 1565.6,
+    "treads": "wwwwwwwwwwwwwwwwwwwwwww",
+    "zones": [],
+  },
+  "headroom": "a3a03d7ce68c3cec",
+  "layout": "4a63a665aeaf1f05",
+  "soffits": {
+    "count": 23,
+    "sha": "aac29f6267614383",
+  },
+  "stepping": "495919e44f15d5f7",
+  "walkline": null,
+}
+`;
+
+exports[`hélicoïdal par la cage (F10) — catalogue figé > angle 2 160° (n = 60) 1`] = `
+{
+  "cotes": {
+    "blondel": 701.43,
+    "colletMin": 62.8,
+    "colletsChord": [
+      62.8,
+      62.8,
+      62.8,
+      62.8,
+      62.8,
+      62.8,
+      62.8,
+      62.8,
+      62.8,
+      62.8,
+      62.8,
+      62.8,
+      62.8,
+      62.8,
+      62.8,
+      62.8,
+      62.8,
+      62.8,
+      62.8,
+      62.8,
+      62.8,
+      62.8,
+      62.8,
+      62.8,
+      62.8,
+      62.8,
+      62.8,
+      62.8,
+      62.8,
+      62.8,
+      62.8,
+      62.8,
+      62.8,
+      62.8,
+      62.8,
+      62.8,
+      62.8,
+      62.8,
+      62.8,
+      62.8,
+      62.8,
+      62.8,
+      62.8,
+      62.8,
+      62.8,
+      62.8,
+      62.8,
+      62.8,
+      62.8,
+      62.8,
+      62.8,
+      62.8,
+      62.8,
+      62.8,
+      62.8,
+      62.8,
+      62.8,
+      62.8,
+      62.8,
+    ],
+    "firstRise": 175,
+    "g": 351.43,
+    "h": 175,
+    "headroom": 1495.9,
+    "headroomWidth": {
+      "min": 1535,
+      "nosing": 0,
+    },
+    "n": 60,
+    "run": 20734.5,
+    "treads": "wwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww",
+    "zones": [],
+  },
+  "headroom": "f088bac891e6444e",
+  "layout": "8c4fb471ac74b676",
+  "soffits": {
+    "count": 60,
+    "sha": "254926f766e9665e",
+  },
+  "stepping": "e0ac2eb83a2951b3",
+  "walkline": {
+    "min": 1495.871896016,
+    "s": 78.576476761,
+  },
+}
+`;
+
+exports[`hélicoïdal par la cage (F10) — catalogue figé > angle 90° 1`] = `
+{
+  "cotes": {
+    "blondel": 407.6,
+    "colletMin": 10.5,
+    "colletsChord": [
+      10.5,
+      10.5,
+      10.5,
+      10.5,
+      10.5,
+      10.5,
+      10.5,
+      10.5,
+      10.5,
+      10.5,
+      10.5,
+      10.5,
+      10.5,
+      10.5,
+      10.5,
+    ],
+    "firstRise": 175,
+    "g": 57.6,
+    "h": 175,
+    "headroom": null,
+    "headroomWidth": null,
+    "n": 16,
+    "run": 863.9,
+    "treads": "wwwwwwwwwwwwwww",
+    "zones": [],
+  },
+  "headroom": "67b720d7332e3fb1",
+  "layout": "11b7b21d13410fbd",
+  "soffits": {
+    "count": 16,
+    "sha": "28a1f4b838935445",
+  },
+  "stepping": "b86a44a247f74da9",
+  "walkline": null,
+}
+`;
+
+exports[`hélicoïdal par la cage (F10) — catalogue figé > angle 270° 1`] = `
+{
+  "cotes": {
+    "blondel": 522.79,
+    "colletMin": 31.3,
+    "colletsChord": [
+      31.3,
+      31.3,
+      31.3,
+      31.3,
+      31.3,
+      31.3,
+      31.3,
+      31.3,
+      31.3,
+      31.3,
+      31.3,
+      31.3,
+      31.3,
+      31.3,
+      31.3,
+    ],
+    "firstRise": 175,
+    "g": 172.79,
+    "h": 175,
+    "headroom": null,
+    "headroomWidth": null,
+    "n": 16,
+    "run": 2591.8,
+    "treads": "wwwwwwwwwwwwwww",
+    "zones": [],
+  },
+  "headroom": "67b720d7332e3fb1",
+  "layout": "2b46cb8d139e6054",
+  "soffits": {
+    "count": 16,
+    "sha": "a5d9ac157826e185",
+  },
+  "stepping": "91882adfaae679b2",
+  "walkline": null,
+}
+`;
+
+exports[`hélicoïdal par la cage (F10) — catalogue figé > angle 359° 1`] = `
+{
+  "cotes": {
+    "blondel": 579.74,
+    "colletMin": 41.5,
+    "colletsChord": [
+      41.5,
+      41.5,
+      41.5,
+      41.5,
+      41.5,
+      41.5,
+      41.5,
+      41.5,
+      41.5,
+      41.5,
+      41.5,
+      41.5,
+      41.5,
+      41.5,
+      41.5,
+    ],
+    "firstRise": 175,
+    "g": 229.74,
+    "h": 175,
+    "headroom": 2373,
+    "headroomWidth": {
+      "min": 2410,
+      "nosing": 0,
+    },
+    "n": 16,
+    "run": 3446.2,
+    "treads": "wwwwwwwwwwwwwww",
+    "zones": [],
+  },
+  "headroom": "e1db1e46a63fdcb5",
+  "layout": "21c0366422c5ed68",
+  "soffits": {
+    "count": 16,
+    "sha": "4d492ff008f482bc",
+  },
+  "stepping": "774ee3f8a532b40e",
+  "walkline": {
+    "min": 2372.95264624,
+    "s": 278.380015693,
+  },
+}
+`;
+
+exports[`hélicoïdal par la cage (F10) — catalogue figé > angle 359°, débord au-dessus du départ, sens droite 1`] = `
+{
+  "cotes": {
+    "blondel": 579.74,
+    "colletMin": 41.5,
+    "colletsChord": [
+      41.5,
+      41.5,
+      41.5,
+      41.5,
+      41.5,
+      41.5,
+      41.5,
+      41.5,
+      41.5,
+      41.5,
+      41.5,
+      41.5,
+      41.5,
+      41.5,
+      41.5,
+    ],
+    "firstRise": 175,
+    "g": 229.74,
+    "h": 175,
+    "headroom": 2394.4,
+    "headroomWidth": {
+      "min": 2410,
+      "nosing": 0,
+    },
+    "n": 16,
+    "run": 3446.2,
+    "treads": "wwwwwwwwwwwwwww",
+    "zones": [],
+  },
+  "headroom": "4a1b7adfd568d3d0",
+  "layout": "fd2c0c6c0e563bc9",
+  "soffits": {
+    "count": 15,
+    "sha": "343842e18abc3c92",
+  },
+  "stepping": "50ff8c7e6e8f1e1d",
+  "walkline": {
+    "min": 2394.449060451,
+    "s": 20.415585099,
+  },
+}
+`;
+
+exports[`hélicoïdal par la cage (F10) — catalogue figé > angle 360° 1`] = `
+{
+  "cotes": {
+    "blondel": 580.38,
+    "colletMin": 41.6,
+    "colletsChord": [
+      41.6,
+      41.6,
+      41.6,
+      41.6,
+      41.6,
+      41.6,
+      41.6,
+      41.6,
+      41.6,
+      41.6,
+      41.6,
+      41.6,
+      41.6,
+      41.6,
+      41.6,
+    ],
+    "firstRise": 175,
+    "g": 230.38,
+    "h": 175,
+    "headroom": 2366.3,
+    "headroomWidth": {
+      "min": 2410,
+      "nosing": 0,
+    },
+    "n": 16,
+    "run": 3455.8,
+    "treads": "wwwwwwwwwwwwwww",
+    "zones": [],
+  },
+  "headroom": "2662c49556332850",
+  "layout": "8970d9970d403f98",
+  "soffits": {
+    "count": 16,
+    "sha": "48f565be0afbe5fc",
+  },
+  "stepping": "c844cb3805a70fc0",
+  "walkline": {
+    "min": 2366.25,
+    "s": 287.979326579,
+  },
+}
+`;
+
+exports[`hélicoïdal par la cage (F10) — catalogue figé > angle 450° 1`] = `
+{
+  "cotes": {
+    "blondel": 637.98,
+    "colletMin": 51.8,
+    "colletsChord": [
+      51.8,
+      51.8,
+      51.8,
+      51.8,
+      51.8,
+      51.8,
+      51.8,
+      51.8,
+      51.8,
+      51.8,
+      51.8,
+      51.8,
+      51.8,
+      51.8,
+      51.8,
+    ],
+    "firstRise": 175,
+    "g": 287.98,
+    "h": 175,
+    "headroom": 1872.8,
+    "headroomWidth": {
+      "min": 1885,
+      "nosing": 0,
+    },
+    "n": 16,
+    "run": 4319.7,
+    "treads": "wwwwwwwwwwwwwww",
+    "zones": [],
+  },
+  "headroom": "a975df1dfa96391c",
+  "layout": "8f820db63f649dea",
+  "soffits": {
+    "count": 16,
+    "sha": "894683796a7c2983",
+  },
+  "stepping": "dd9cff568cb6b24b",
+  "walkline": {
+    "min": 1872.843669715,
+    "s": 20.004410338,
+  },
+}
+`;
+
+exports[`hélicoïdal par la cage (F10) — catalogue figé > angle 720° 1`] = `
+{
+  "cotes": {
+    "blondel": 810.77,
+    "colletMin": 81.3,
+    "colletsChord": [
+      81.3,
+      81.3,
+      81.3,
+      81.3,
+      81.3,
+      81.3,
+      81.3,
+      81.3,
+      81.3,
+      81.3,
+      81.3,
+      81.3,
+      81.3,
+      81.3,
+      81.3,
+    ],
+    "firstRise": 175,
+    "g": 460.77,
+    "h": 175,
+    "headroom": 1089.9,
+    "headroomWidth": {
+      "min": 1185,
+      "nosing": 0,
+    },
+    "n": 16,
+    "run": 6911.5,
+    "treads": "wwwwwwwwwwwwwww",
+    "zones": [],
+  },
+  "headroom": "21dc7a73c30dfd1e",
+  "layout": "cda8aa6d23160f28",
+  "soffits": {
+    "count": 16,
+    "sha": "44586079248e96a6",
+  },
+  "stepping": "4d923ae8e91f09ee",
+  "walkline": {
+    "min": 1089.902293572,
+    "s": 250.387871602,
+  },
+}
+`;
+
+exports[`hélicoïdal par la cage (F10) — catalogue figé > côté de Γ choisi à l'extérieur dans le projet source 1`] = `
+{
+  "cotes": {
+    "blondel": 615.83,
+    "colletMin": 47.9,
+    "colletsChord": [
+      47.9,
+      47.9,
+      47.9,
+      47.9,
+      47.9,
+      47.9,
+      47.9,
+      47.9,
+      47.9,
+      47.9,
+      47.9,
+      47.9,
+      47.9,
+      47.9,
+      47.9,
+    ],
+    "firstRise": 175,
+    "g": 265.83,
+    "h": 175,
+    "headroom": 2053.4,
+    "headroomWidth": {
+      "min": 2060,
+      "nosing": 0,
+    },
+    "n": 16,
+    "run": 3987.4,
+    "treads": "wwwwwwwwwwwwwww",
+    "zones": [],
+  },
+  "headroom": "2bfea965f5d0c5cb",
+  "layout": "6d71d60dadf756c7",
+  "soffits": {
+    "count": 15,
+    "sha": "7801b1379ca1f95b",
+  },
+  "stepping": "b7b65d37218dc8e0",
+  "walkline": {
+    "min": 2053.416410042,
+    "s": 10.000551046,
+  },
+}
+`;
+
+exports[`hélicoïdal par la cage (F10) — catalogue figé > deux tours sans trémie 1`] = `
+{
+  "cotes": {
+    "blondel": 639.98,
+    "colletMin": 51.8,
+    "colletsChord": [
+      51.8,
+      51.8,
+      51.8,
+      51.8,
+      51.8,
+      51.8,
+      51.8,
+      51.8,
+      51.8,
+      51.8,
+      51.8,
+      51.8,
+      51.8,
+      51.8,
+      51.8,
+      51.8,
+      51.8,
+      51.8,
+      51.8,
+      51.8,
+      51.8,
+      51.8,
+      51.8,
+      51.8,
+    ],
+    "firstRise": 176,
+    "g": 287.98,
+    "h": 176,
+    "headroom": 1889.9,
+    "headroomWidth": {
+      "min": 1896,
+      "nosing": 0,
+    },
+    "n": 25,
+    "run": 6911.5,
+    "treads": "wwwwwwwwwwwwwwwwwwwwwwww",
+    "zones": [],
+  },
+  "headroom": "903577471843dd4b",
+  "layout": "9527f72ae02239d7",
+  "soffits": {
+    "count": 24,
+    "sha": "a3464c5532192fe6",
+  },
+  "stepping": "4df1e17e4d1b890e",
+  "walkline": {
+    "min": 1889.888113411,
+    "s": 10.000551046,
+  },
+}
+`;
+
+exports[`hélicoïdal par la cage (F10) — catalogue figé > débord 0 1`] = `
+{
+  "cotes": {
+    "blondel": 637.98,
+    "colletMin": 51.8,
+    "colletsChord": [
+      51.8,
+      51.8,
+      51.8,
+      51.8,
+      51.8,
+      51.8,
+      51.8,
+      51.8,
+      51.8,
+      51.8,
+      51.8,
+      51.8,
+      51.8,
+      51.8,
+      51.8,
+    ],
+    "firstRise": 175,
+    "g": 287.98,
+    "h": 175,
+    "headroom": 1710,
+    "headroomWidth": {
+      "min": 1710,
+      "nosing": 5,
+    },
+    "n": 16,
+    "run": 4319.7,
+    "treads": "wwwwwwwwwwwwwww",
+    "zones": [],
+  },
+  "headroom": "81bfd3b264379856",
+  "layout": "f6972fb5b9e77dd9",
+  "soffits": {
+    "count": 16,
+    "sha": "30f8867003541bce",
+  },
+  "stepping": "79ea8e106159ab47",
+  "walkline": {
+    "min": 1710,
+    "s": 1439.896632895,
+  },
+}
+`;
+
+exports[`hélicoïdal par la cage (F10) — catalogue figé > débord 30 1`] = `
+{
+  "cotes": {
+    "blondel": 637.98,
+    "colletMin": 51.8,
+    "colletsChord": [
+      51.8,
+      51.8,
+      51.8,
+      51.8,
+      51.8,
+      51.8,
+      51.8,
+      51.8,
+      51.8,
+      51.8,
+      51.8,
+      51.8,
+      51.8,
+      51.8,
+      51.8,
+    ],
+    "firstRise": 175,
+    "g": 287.98,
+    "h": 175,
+    "headroom": 1710,
+    "headroomWidth": {
+      "min": 1710,
+      "nosing": 5,
+    },
+    "n": 16,
+    "run": 4319.7,
+    "treads": "wwwwwwwwwwwwwww",
+    "zones": [],
+  },
+  "headroom": "81bfd3b264379856",
+  "layout": "f6972fb5b9e77dd9",
+  "soffits": {
+    "count": 16,
+    "sha": "17cd4f14a7d6f292",
+  },
+  "stepping": "8c517c0b7f795c56",
+  "walkline": {
+    "min": 1710,
+    "s": 1439.896632895,
+  },
+}
+`;
+
+exports[`hélicoïdal par la cage (F10) — catalogue figé > débord proche de r_i (r_i = 50, d = 40, Δθ = 30°) 1`] = `
+{
+  "cotes": {
+    "blondel": 611.8,
+    "colletMin": 25.9,
+    "colletsChord": [
+      25.9,
+      25.9,
+      25.9,
+      25.9,
+      25.9,
+      25.9,
+      25.9,
+      25.9,
+      25.9,
+      25.9,
+      25.9,
+      25.9,
+      25.9,
+      25.9,
+      25.9,
+    ],
+    "firstRise": 175,
+    "g": 261.8,
+    "h": 175,
+    "headroom": 1858.2,
+    "headroomWidth": {
+      "min": 1710,
+      "nosing": 0,
+    },
+    "n": 16,
+    "run": 3927,
+    "treads": "wwwwwwwwwwwwwww",
+    "zones": [],
+  },
+  "headroom": "07bfa2a7467d44ba",
+  "layout": "722518b8089c736b",
+  "soffits": {
+    "count": 15,
+    "sha": "d7c7a9fd138d1a50",
+  },
+  "stepping": "782c5bc1957e588e",
+  "walkline": {
+    "min": 1858.233366541,
+    "s": 40.042790017,
+  },
+}
+`;
+
+exports[`hélicoïdal par la cage (F10) — catalogue figé > démo demo-central-glulam 1`] = `
+{
+  "cotes": {
+    "blondel": 657.91,
+    "colletMin": 190.6,
+    "colletsChord": [
+      190.6,
+      190.6,
+      190.6,
+      190.6,
+      190.6,
+      190.6,
+      190.6,
+      190.6,
+      190.6,
+      190.6,
+      190.6,
+      190.6,
+      190.6,
+      190.6,
+      190.6,
+    ],
+    "firstRise": 171.88,
+    "g": 314.16,
+    "h": 171.88,
+    "headroom": null,
+    "headroomWidth": null,
+    "n": 16,
+    "run": 4712.4,
+    "treads": "wwwwwwwwwwwwwww",
+    "zones": [],
+  },
+  "headroom": "539f6f4cc0d35e17",
+  "layout": "c308d15773769278",
+  "soffits": {
+    "count": 16,
+    "sha": "e2e96f6ae2631677",
+  },
+  "stepping": "1f440cbd975674f4",
+  "walkline": null,
+}
+`;
+
+exports[`hélicoïdal par la cage (F10) — catalogue figé > démo demo-helical-glass 1`] = `
+{
+  "cotes": {
+    "blondel": 588.79,
+    "colletMin": 29.1,
+    "colletsChord": [
+      29.1,
+      29.1,
+      29.1,
+      29.1,
+      29.1,
+      29.1,
+      29.1,
+      29.1,
+      29.1,
+      29.1,
+      29.1,
+      29.1,
+      29.1,
+      29.1,
+      29.1,
+    ],
+    "firstRise": 171.88,
+    "g": 245.04,
+    "h": 171.88,
+    "headroom": 1925.2,
+    "headroomWidth": {
+      "min": 1862.5,
+      "nosing": 3,
+    },
+    "n": 16,
+    "run": 3675.7,
+    "treads": "wwwwwwwwwwwwwww",
+    "zones": [],
+  },
+  "headroom": "36482359c842a185",
+  "layout": "8024eee1c45d5c9a",
+  "soffits": {
+    "count": 16,
+    "sha": "f993f1061524d87f",
+  },
+  "stepping": "429a33468f7bc8ef",
+  "walkline": {
+    "min": 1925.208333333,
+    "s": 816.814089933,
+  },
+}
+`;
+
+exports[`hélicoïdal par la cage (F10) — catalogue figé > démo demo-helical-well 1`] = `
+{
+  "cotes": {
+    "blondel": 648.09,
+    "colletMin": 136.6,
+    "colletsChord": [
+      136.6,
+      136.6,
+      136.6,
+      136.6,
+      136.6,
+      136.6,
+      136.6,
+      136.6,
+      136.6,
+      136.6,
+      136.6,
+      136.6,
+      136.6,
+      136.6,
+      136.6,
+    ],
+    "firstRise": 171.88,
+    "g": 304.34,
+    "h": 171.88,
+    "headroom": 1982.5,
+    "headroomWidth": {
+      "min": 1982.5,
+      "nosing": 3,
+    },
+    "n": 16,
+    "run": 4565.1,
+    "treads": "wwwwwwwwwwwwwww",
+    "zones": [],
+  },
+  "headroom": "00fa0c1064518622",
+  "layout": "a8d3062d2cfc8ae8",
+  "soffits": {
+    "count": 16,
+    "sha": "7b509ea9895ddf08",
+  },
+  "stepping": "71f76e7f0b1e731e",
+  "walkline": {
+    "min": 1982.5,
+    "s": 913.02536495,
+  },
+}
+`;
+
+exports[`hélicoïdal par la cage (F10) — catalogue figé > erreur : R_e ≤ r_i (projet construit hors schéma) 1`] = `
+{
+  "error": {
+    "msg": {
+      "key": "layout.helical.outerRadiusBelowColumn",
+      "params": {
+        "inner": "70",
+        "outer": "70",
+      },
+    },
+    "name": "LayoutError",
+  },
+  "level": "N1",
+}
+`;
+
+exports[`hélicoïdal par la cage (F10) — catalogue figé > erreur : R_e ≤ r_i, jour central (hors schéma) 1`] = `
+{
+  "error": {
+    "msg": {
+      "key": "layout.helical.outerRadiusBelowWell",
+      "params": {
+        "inner": "100",
+        "outer": "90",
+      },
+    },
+    "name": "LayoutError",
+  },
+  "level": "N1",
+}
+`;
+
+exports[`hélicoïdal par la cage (F10) — catalogue figé > erreur : d_f hors emmarchement (fromInner ≥ E) 1`] = `
+{
+  "error": {
+    "msg": {
+      "key": "layout.walklineOutsideWidth",
+      "params": {
+        "offset": "900",
+        "width": "900",
+      },
+    },
+    "name": "LayoutError",
+  },
+  "level": "N1",
+}
+`;
+
+exports[`hélicoïdal par la cage (F10) — catalogue figé > erreur : débord ≥ r_i (fût) 1`] = `
+{
+  "error": {
+    "msg": {
+      "key": "stepping.helical.nosingReachesColumn",
+      "params": {
+        "depth": "50",
+        "radius": "50",
+      },
+    },
+    "name": "SteppingError",
+  },
+  "level": "N2",
+}
+`;
+
+exports[`hélicoïdal par la cage (F10) — catalogue figé > erreur : débord ≥ r_i (jour) 1`] = `
+{
+  "error": {
+    "msg": {
+      "key": "stepping.helical.nosingReachesWell",
+      "params": {
+        "depth": "60",
+        "radius": "50",
+      },
+    },
+    "name": "SteppingError",
+  },
+  "level": "N2",
+}
+`;
+
+exports[`hélicoïdal par la cage (F10) — catalogue figé > erreur : n hors domaine 1`] = `
+{
+  "error": {
+    "msg": {
+      "key": "layout.riserCountOutOfRange",
+      "params": {
+        "count": "280",
+        "max": 60,
+        "min": 2,
+      },
+    },
+    "name": "LayoutError",
+  },
+  "level": "N1",
+}
+`;
+
+exports[`hélicoïdal par la cage (F10) — catalogue figé > erreur : Δθ ≥ 180° (angle 400°, n = 3) 1`] = `
+{
+  "error": {
+    "msg": {
+      "key": "layout.helical.invalidStepAngle",
+      "params": {
+        "angle": "200.0",
+      },
+    },
+    "name": "LayoutError",
+  },
+  "level": "N1",
+}
+`;
+
+exports[`hélicoïdal par la cage (F10) — catalogue figé > exemple demo-central-glulam 1`] = `
+{
+  "cotes": {
+    "blondel": 657.91,
+    "colletMin": 190.6,
+    "colletsChord": [
+      190.6,
+      190.6,
+      190.6,
+      190.6,
+      190.6,
+      190.6,
+      190.6,
+      190.6,
+      190.6,
+      190.6,
+      190.6,
+      190.6,
+      190.6,
+      190.6,
+      190.6,
+    ],
+    "firstRise": 171.88,
+    "g": 314.16,
+    "h": 171.88,
+    "headroom": null,
+    "headroomWidth": null,
+    "n": 16,
+    "run": 4712.4,
+    "treads": "wwwwwwwwwwwwwww",
+    "zones": [],
+  },
+  "headroom": "539f6f4cc0d35e17",
+  "layout": "c308d15773769278",
+  "soffits": {
+    "count": 16,
+    "sha": "e2e96f6ae2631677",
+  },
+  "stepping": "1f440cbd975674f4",
+  "walkline": null,
+}
+`;
+
+exports[`hélicoïdal par la cage (F10) — catalogue figé > exemple demo-central-glulam sans palier 1`] = `
+{
+  "cotes": {
+    "blondel": 657.91,
+    "colletMin": 190.6,
+    "colletsChord": [
+      190.6,
+      190.6,
+      190.6,
+      190.6,
+      190.6,
+      190.6,
+      190.6,
+      190.6,
+      190.6,
+      190.6,
+      190.6,
+      190.6,
+      190.6,
+      190.6,
+      190.6,
+    ],
+    "firstRise": 171.88,
+    "g": 314.16,
+    "h": 171.88,
+    "headroom": null,
+    "headroomWidth": null,
+    "n": 16,
+    "run": 4712.4,
+    "treads": "wwwwwwwwwwwwwww",
+    "zones": [],
+  },
+  "headroom": "539f6f4cc0d35e17",
+  "layout": "5d292142cec5ecab",
+  "soffits": {
+    "count": 15,
+    "sha": "130aceebce17a0a9",
+  },
+  "stepping": "1f440cbd975674f4",
+  "walkline": null,
+}
+`;
+
+exports[`hélicoïdal par la cage (F10) — catalogue figé > exemple demo-helical-glass 1`] = `
+{
+  "cotes": {
+    "blondel": 588.79,
+    "colletMin": 29.1,
+    "colletsChord": [
+      29.1,
+      29.1,
+      29.1,
+      29.1,
+      29.1,
+      29.1,
+      29.1,
+      29.1,
+      29.1,
+      29.1,
+      29.1,
+      29.1,
+      29.1,
+      29.1,
+      29.1,
+    ],
+    "firstRise": 171.88,
+    "g": 245.04,
+    "h": 171.88,
+    "headroom": 1925.2,
+    "headroomWidth": {
+      "min": 1862.5,
+      "nosing": 3,
+    },
+    "n": 16,
+    "run": 3675.7,
+    "treads": "wwwwwwwwwwwwwww",
+    "zones": [],
+  },
+  "headroom": "36482359c842a185",
+  "layout": "8024eee1c45d5c9a",
+  "soffits": {
+    "count": 16,
+    "sha": "f993f1061524d87f",
+  },
+  "stepping": "429a33468f7bc8ef",
+  "walkline": {
+    "min": 1925.208333333,
+    "s": 816.814089933,
+  },
+}
+`;
+
+exports[`hélicoïdal par la cage (F10) — catalogue figé > exemple demo-helical-glass sans palier 1`] = `
+{
+  "cotes": {
+    "blondel": 588.79,
+    "colletMin": 29.1,
+    "colletsChord": [
+      29.1,
+      29.1,
+      29.1,
+      29.1,
+      29.1,
+      29.1,
+      29.1,
+      29.1,
+      29.1,
+      29.1,
+      29.1,
+      29.1,
+      29.1,
+      29.1,
+      29.1,
+    ],
+    "firstRise": 171.88,
+    "g": 245.04,
+    "h": 171.88,
+    "headroom": 2319.2,
+    "headroomWidth": {
+      "min": 1862.5,
+      "nosing": 3,
+    },
+    "n": 16,
+    "run": 3675.7,
+    "treads": "wwwwwwwwwwwwwww",
+    "zones": [],
+  },
+  "headroom": "d6199cda759a201d",
+  "layout": "409236bed7af80af",
+  "soffits": {
+    "count": 15,
+    "sha": "cbff09fe5a51f13b",
+  },
+  "stepping": "429a33468f7bc8ef",
+  "walkline": {
+    "min": 2319.235618405,
+    "s": 10.000487073,
+  },
+}
+`;
+
+exports[`hélicoïdal par la cage (F10) — catalogue figé > exemple demo-helical-well 1`] = `
+{
+  "cotes": {
+    "blondel": 648.09,
+    "colletMin": 136.6,
+    "colletsChord": [
+      136.6,
+      136.6,
+      136.6,
+      136.6,
+      136.6,
+      136.6,
+      136.6,
+      136.6,
+      136.6,
+      136.6,
+      136.6,
+      136.6,
+      136.6,
+      136.6,
+      136.6,
+    ],
+    "firstRise": 171.88,
+    "g": 304.34,
+    "h": 171.88,
+    "headroom": 1982.5,
+    "headroomWidth": {
+      "min": 1982.5,
+      "nosing": 3,
+    },
+    "n": 16,
+    "run": 4565.1,
+    "treads": "wwwwwwwwwwwwwww",
+    "zones": [],
+  },
+  "headroom": "00fa0c1064518622",
+  "layout": "a8d3062d2cfc8ae8",
+  "soffits": {
+    "count": 16,
+    "sha": "7b509ea9895ddf08",
+  },
+  "stepping": "71f76e7f0b1e731e",
+  "walkline": {
+    "min": 1982.5,
+    "s": 913.02536495,
+  },
+}
+`;
+
+exports[`hélicoïdal par la cage (F10) — catalogue figé > exemple demo-helical-well sans palier 1`] = `
+{
+  "cotes": {
+    "blondel": 648.09,
+    "colletMin": 136.6,
+    "colletsChord": [
+      136.6,
+      136.6,
+      136.6,
+      136.6,
+      136.6,
+      136.6,
+      136.6,
+      136.6,
+      136.6,
+      136.6,
+      136.6,
+      136.6,
+      136.6,
+      136.6,
+      136.6,
+    ],
+    "firstRise": 171.88,
+    "g": 304.34,
+    "h": 171.88,
+    "headroom": null,
+    "headroomWidth": {
+      "min": 2034.4,
+      "nosing": 2,
+    },
+    "n": 16,
+    "run": 4565.1,
+    "treads": "wwwwwwwwwwwwwww",
+    "zones": [],
+  },
+  "headroom": "46143cfeb6ad0edd",
+  "layout": "1c9c8047acca0748",
+  "soffits": {
+    "count": 15,
+    "sha": "8f401a62f65e25bd",
+  },
+  "stepping": "71f76e7f0b1e731e",
+  "walkline": null,
+}
+`;
+
+exports[`hélicoïdal par la cage (F10) — catalogue figé > exemple j5a-helicoidal 1`] = `
+{
+  "cotes": {
+    "blondel": 590.24,
+    "colletMin": 33.5,
+    "colletsChord": [
+      33.5,
+      33.5,
+      33.5,
+      33.5,
+      33.5,
+      33.5,
+      33.5,
+      33.5,
+      33.5,
+      33.5,
+      33.5,
+      33.5,
+      33.5,
+      33.5,
+      33.5,
+    ],
+    "firstRise": 171.88,
+    "g": 246.49,
+    "h": 171.88,
+    "headroom": 1915.1,
+    "headroomWidth": {
+      "min": 1862.5,
+      "nosing": 3,
+    },
+    "n": 16,
+    "run": 3697.4,
+    "treads": "wwwwwwwwwwwwwww",
+    "zones": [],
+  },
+  "headroom": "5f76ddc1134d359f",
+  "layout": "da35aee8aea124c2",
+  "soffits": {
+    "count": 16,
+    "sha": "de64d648635ab50f",
+  },
+  "stepping": "b75a034a439e4ea7",
+  "walkline": {
+    "min": 1915.078125,
+    "s": 893.541448973,
+  },
+}
+`;
+
+exports[`hélicoïdal par la cage (F10) — catalogue figé > exemple j5a-helicoidal sans palier 1`] = `
+{
+  "cotes": {
+    "blondel": 590.24,
+    "colletMin": 33.5,
+    "colletsChord": [
+      33.5,
+      33.5,
+      33.5,
+      33.5,
+      33.5,
+      33.5,
+      33.5,
+      33.5,
+      33.5,
+      33.5,
+      33.5,
+      33.5,
+      33.5,
+      33.5,
+      33.5,
+    ],
+    "firstRise": 171.88,
+    "g": 246.49,
+    "h": 171.88,
+    "headroom": 2015.5,
+    "headroomWidth": {
+      "min": 1862.5,
+      "nosing": 3,
+    },
+    "n": 16,
+    "run": 3697.4,
+    "treads": "wwwwwwwwwwwwwww",
+    "zones": [],
+  },
+  "headroom": "8a633d757507275f",
+  "layout": "f48457f8b211c263",
+  "soffits": {
+    "count": 15,
+    "sha": "48e3dc173ce07d7e",
+  },
+  "stepping": "b75a034a439e4ea7",
+  "walkline": {
+    "min": 2015.52677222,
+    "s": 10.00064089,
+  },
+}
+`;
+
+exports[`hélicoïdal par la cage (F10) — catalogue figé > exemple j5c-limon-central-bois-helicoidal 1`] = `
+{
+  "cotes": {
+    "blondel": 648.09,
+    "colletMin": 136.6,
+    "colletsChord": [
+      136.6,
+      136.6,
+      136.6,
+      136.6,
+      136.6,
+      136.6,
+      136.6,
+      136.6,
+      136.6,
+      136.6,
+      136.6,
+      136.6,
+      136.6,
+      136.6,
+      136.6,
+    ],
+    "firstRise": 171.88,
+    "g": 304.34,
+    "h": 171.88,
+    "headroom": 1982.5,
+    "headroomWidth": {
+      "min": 1982.5,
+      "nosing": 3,
+    },
+    "n": 16,
+    "run": 4565.1,
+    "treads": "wwwwwwwwwwwwwww",
+    "zones": [],
+  },
+  "headroom": "00fa0c1064518622",
+  "layout": "a8d3062d2cfc8ae8",
+  "soffits": {
+    "count": 16,
+    "sha": "7b509ea9895ddf08",
+  },
+  "stepping": "71f76e7f0b1e731e",
+  "walkline": {
+    "min": 1982.5,
+    "s": 913.02536495,
+  },
+}
+`;
+
+exports[`hélicoïdal par la cage (F10) — catalogue figé > exemple j5c-limon-central-bois-helicoidal sans palier 1`] = `
+{
+  "cotes": {
+    "blondel": 648.09,
+    "colletMin": 136.6,
+    "colletsChord": [
+      136.6,
+      136.6,
+      136.6,
+      136.6,
+      136.6,
+      136.6,
+      136.6,
+      136.6,
+      136.6,
+      136.6,
+      136.6,
+      136.6,
+      136.6,
+      136.6,
+      136.6,
+    ],
+    "firstRise": 171.88,
+    "g": 304.34,
+    "h": 171.88,
+    "headroom": null,
+    "headroomWidth": {
+      "min": 2034.4,
+      "nosing": 2,
+    },
+    "n": 16,
+    "run": 4565.1,
+    "treads": "wwwwwwwwwwwwwww",
+    "zones": [],
+  },
+  "headroom": "46143cfeb6ad0edd",
+  "layout": "1c9c8047acca0748",
+  "soffits": {
+    "count": 15,
+    "sha": "8f401a62f65e25bd",
+  },
+  "stepping": "71f76e7f0b1e731e",
+  "walkline": null,
+}
+`;
+
+exports[`hélicoïdal par la cage (F10) — catalogue figé > exemple j5c-limon-central-helicoidal 1`] = `
+{
+  "cotes": {
+    "blondel": 648.09,
+    "colletMin": 136.6,
+    "colletsChord": [
+      136.6,
+      136.6,
+      136.6,
+      136.6,
+      136.6,
+      136.6,
+      136.6,
+      136.6,
+      136.6,
+      136.6,
+      136.6,
+      136.6,
+      136.6,
+      136.6,
+      136.6,
+    ],
+    "firstRise": 171.88,
+    "g": 304.34,
+    "h": 171.88,
+    "headroom": 1982.5,
+    "headroomWidth": {
+      "min": 1982.5,
+      "nosing": 3,
+    },
+    "n": 16,
+    "run": 4565.1,
+    "treads": "wwwwwwwwwwwwwww",
+    "zones": [],
+  },
+  "headroom": "00fa0c1064518622",
+  "layout": "a8d3062d2cfc8ae8",
+  "soffits": {
+    "count": 16,
+    "sha": "7b509ea9895ddf08",
+  },
+  "stepping": "71f76e7f0b1e731e",
+  "walkline": {
+    "min": 1982.5,
+    "s": 913.02536495,
+  },
+}
+`;
+
+exports[`hélicoïdal par la cage (F10) — catalogue figé > exemple j5c-limon-central-helicoidal sans palier 1`] = `
+{
+  "cotes": {
+    "blondel": 648.09,
+    "colletMin": 136.6,
+    "colletsChord": [
+      136.6,
+      136.6,
+      136.6,
+      136.6,
+      136.6,
+      136.6,
+      136.6,
+      136.6,
+      136.6,
+      136.6,
+      136.6,
+      136.6,
+      136.6,
+      136.6,
+      136.6,
+    ],
+    "firstRise": 171.88,
+    "g": 304.34,
+    "h": 171.88,
+    "headroom": null,
+    "headroomWidth": {
+      "min": 2034.4,
+      "nosing": 2,
+    },
+    "n": 16,
+    "run": 4565.1,
+    "treads": "wwwwwwwwwwwwwww",
+    "zones": [],
+  },
+  "headroom": "46143cfeb6ad0edd",
+  "layout": "1c9c8047acca0748",
+  "soffits": {
+    "count": 15,
+    "sha": "8f401a62f65e25bd",
+  },
+  "stepping": "71f76e7f0b1e731e",
+  "walkline": null,
+}
+`;
+
+exports[`hélicoïdal par la cage (F10) — catalogue figé > firstRiseOffset 12 1`] = `
+{
+  "cotes": {
+    "blondel": 637.98,
+    "colletMin": 51.8,
+    "colletsChord": [
+      51.8,
+      51.8,
+      51.8,
+      51.8,
+      51.8,
+      51.8,
+      51.8,
+      51.8,
+      51.8,
+      51.8,
+      51.8,
+      51.8,
+      51.8,
+      51.8,
+      51.8,
+    ],
+    "firstRise": 187,
+    "g": 287.98,
+    "h": 175,
+    "headroom": 1870.2,
+    "headroomWidth": {
+      "min": 1876.2,
+      "nosing": 0,
+    },
+    "n": 16,
+    "run": 4319.7,
+    "treads": "wwwwwwwwwwwwwww",
+    "zones": [],
+  },
+  "headroom": "0a0afa36bc71f95d",
+  "layout": "6c4f7148766e2ff1",
+  "soffits": {
+    "count": 15,
+    "sha": "f40c800e2cb8a408",
+  },
+  "stepping": "165f85a2dcdd59ed",
+  "walkline": {
+    "min": 1870.150621342,
+    "s": 10.000551046,
+  },
+}
+`;
+
+exports[`hélicoïdal par la cage (F10) — catalogue figé > fût central 1`] = `
+{
+  "cotes": {
+    "blondel": 596.84,
+    "colletMin": 44.5,
+    "colletsChord": [
+      44.5,
+      44.5,
+      44.5,
+      44.5,
+      44.5,
+      44.5,
+      44.5,
+      44.5,
+      44.5,
+      44.5,
+      44.5,
+      44.5,
+      44.5,
+      44.5,
+      44.5,
+    ],
+    "firstRise": 175,
+    "g": 246.84,
+    "h": 175,
+    "headroom": 2227.9,
+    "headroomWidth": {
+      "min": 2235,
+      "nosing": 0,
+    },
+    "n": 16,
+    "run": 3702.6,
+    "treads": "wwwwwwwwwwwwwww",
+    "zones": [],
+  },
+  "headroom": "1f449c3d62ad9438",
+  "layout": "5de2b4a46909cfec",
+  "soffits": {
+    "count": 15,
+    "sha": "38d80d48cc6390ed",
+  },
+  "stepping": "0df47d1775d47908",
+  "walkline": {
+    "min": 2227.909980046,
+    "s": 10.000551046,
+  },
+}
+`;
+
+exports[`hélicoïdal par la cage (F10) — catalogue figé > giron cible saisi 1`] = `
+{
+  "cotes": {
+    "blondel": 637.98,
+    "colletMin": 51.8,
+    "colletsChord": [
+      51.8,
+      51.8,
+      51.8,
+      51.8,
+      51.8,
+      51.8,
+      51.8,
+      51.8,
+      51.8,
+      51.8,
+      51.8,
+      51.8,
+      51.8,
+      51.8,
+      51.8,
+    ],
+    "firstRise": 175,
+    "g": 287.98,
+    "h": 175,
+    "headroom": 1878.9,
+    "headroomWidth": {
+      "min": 1885,
+      "nosing": 0,
+    },
+    "n": 16,
+    "run": 4319.7,
+    "treads": "wwwwwwwwwwwwwww",
+    "zones": [],
+  },
+  "headroom": "ba539e26d3582e20",
+  "layout": "6c4f7148766e2ff1",
+  "soffits": {
+    "count": 15,
+    "sha": "6c1ad26b275b0b9d",
+  },
+  "stepping": "a3306b84c5b5152a",
+  "walkline": {
+    "min": 1878.922840039,
+    "s": 10.000551046,
+  },
+}
+`;
+
+exports[`hélicoïdal par la cage (F10) — catalogue figé > jour central 1`] = `
+{
+  "cotes": {
+    "blondel": 596.84,
+    "colletMin": 44.5,
+    "colletsChord": [
+      44.5,
+      44.5,
+      44.5,
+      44.5,
+      44.5,
+      44.5,
+      44.5,
+      44.5,
+      44.5,
+      44.5,
+      44.5,
+      44.5,
+      44.5,
+      44.5,
+      44.5,
+    ],
+    "firstRise": 175,
+    "g": 246.84,
+    "h": 175,
+    "headroom": 2227.9,
+    "headroomWidth": {
+      "min": 2235,
+      "nosing": 0,
+    },
+    "n": 16,
+    "run": 3702.6,
+    "treads": "wwwwwwwwwwwwwww",
+    "zones": [],
+  },
+  "headroom": "1f449c3d62ad9438",
+  "layout": "ec10acdb91cf77d1",
+  "soffits": {
+    "count": 15,
+    "sha": "38d80d48cc6390ed",
+  },
+  "stepping": "0df47d1775d47908",
+  "walkline": {
+    "min": 2227.909980046,
+    "s": 10.000551046,
+  },
+}
+`;
+
+exports[`hélicoïdal par la cage (F10) — catalogue figé > ligne de foulée fromInner 300 1`] = `
+{
+  "cotes": {
+    "blondel": 559.44,
+    "colletMin": 51.8,
+    "colletsChord": [
+      51.8,
+      51.8,
+      51.8,
+      51.8,
+      51.8,
+      51.8,
+      51.8,
+      51.8,
+      51.8,
+      51.8,
+      51.8,
+      51.8,
+      51.8,
+      51.8,
+      51.8,
+    ],
+    "firstRise": 175,
+    "g": 209.44,
+    "h": 175,
+    "headroom": 1876.6,
+    "headroomWidth": {
+      "min": 1885,
+      "nosing": 0,
+    },
+    "n": 16,
+    "run": 3141.6,
+    "treads": "wwwwwwwwwwwwwww",
+    "zones": [],
+  },
+  "headroom": "9f748469800b4bb3",
+  "layout": "a14d4dbd2cbb59fa",
+  "soffits": {
+    "count": 15,
+    "sha": "c1888bec935b7fc5",
+  },
+  "stepping": "53cc3fe3dbfda17d",
+  "walkline": {
+    "min": 1876.643494864,
+    "s": 10.00104196,
+  },
+}
+`;
+
+exports[`hélicoïdal par la cage (F10) — catalogue figé > palier qui recouvre la montée (Θ = 300°, Λ = 90°) 1`] = `
+{
+  "cotes": {
+    "blondel": 541.99,
+    "colletMin": 34.7,
+    "colletsChord": [
+      34.7,
+      34.7,
+      34.7,
+      34.7,
+      34.7,
+      34.7,
+      34.7,
+      34.7,
+      34.7,
+      34.7,
+      34.7,
+      34.7,
+      34.7,
+      34.7,
+      34.7,
+    ],
+    "firstRise": 175,
+    "g": 191.99,
+    "h": 175,
+    "headroom": 2322.5,
+    "headroomWidth": {
+      "min": 2410,
+      "nosing": 1,
+    },
+    "n": 16,
+    "run": 2879.8,
+    "treads": "wwwwwwwwwwwwwww",
+    "zones": [],
+  },
+  "headroom": "be68c93c26f1bead",
+  "layout": "e54fba1455a33d7d",
+  "soffits": {
+    "count": 16,
+    "sha": "30a24e0afa41ada2",
+  },
+  "stepping": "5e819db197dc9faf",
+  "walkline": {
+    "min": 2322.5,
+    "s": 287.979326579,
+  },
+}
+`;
+
+exports[`hélicoïdal par la cage (F10) — catalogue figé > palier sans recouvrement (Θ = 180°, Λ = 45°) 1`] = `
+{
+  "cotes": {
+    "blondel": 465.19,
+    "colletMin": 20.9,
+    "colletsChord": [
+      20.9,
+      20.9,
+      20.9,
+      20.9,
+      20.9,
+      20.9,
+      20.9,
+      20.9,
+      20.9,
+      20.9,
+      20.9,
+      20.9,
+      20.9,
+      20.9,
+      20.9,
+    ],
+    "firstRise": 175,
+    "g": 115.19,
+    "h": 175,
+    "headroom": null,
+    "headroomWidth": null,
+    "n": 16,
+    "run": 1727.9,
+    "treads": "wwwwwwwwwwwwwww",
+    "zones": [],
+  },
+  "headroom": "67b720d7332e3fb1",
+  "layout": "dac547cd33afa475",
+  "soffits": {
+    "count": 16,
+    "sha": "fc686089e6a877f9",
+  },
+  "stepping": "29b8725193598a29",
+  "walkline": null,
+}
+`;
+
+exports[`hélicoïdal par la cage (F10) — catalogue figé > préréglage helical 1`] = `
+{
+  "cotes": {
+    "blondel": 606.49,
+    "colletMin": 33.5,
+    "colletsChord": [
+      33.5,
+      33.5,
+      33.5,
+      33.5,
+      33.5,
+      33.5,
+      33.5,
+      33.5,
+      33.5,
+      33.5,
+      33.5,
+      33.5,
+      33.5,
+      33.5,
+    ],
+    "firstRise": 180,
+    "g": 246.49,
+    "h": 180,
+    "headroom": 1910,
+    "headroomWidth": {
+      "min": 1780,
+      "nosing": 3,
+    },
+    "n": 15,
+    "run": 3450.9,
+    "treads": "wwwwwwwwwwwwww",
+    "zones": [],
+  },
+  "headroom": "aeb3cc4241008d81",
+  "layout": "3e83dd6c3e695f2c",
+  "soffits": {
+    "count": 15,
+    "sha": "dbcd090f14473468",
+  },
+  "stepping": "3dc6a7e581af5f48",
+  "walkline": {
+    "min": 1910,
+    "s": 780.56494393,
+  },
+}
+`;
+
+exports[`hélicoïdal par la cage (F10) — catalogue figé > sans trémie 1`] = `
+{
+  "cotes": {
+    "blondel": 615.83,
+    "colletMin": 47.9,
+    "colletsChord": [
+      47.9,
+      47.9,
+      47.9,
+      47.9,
+      47.9,
+      47.9,
+      47.9,
+      47.9,
+      47.9,
+      47.9,
+      47.9,
+      47.9,
+      47.9,
+      47.9,
+      47.9,
+    ],
+    "firstRise": 175,
+    "g": 265.83,
+    "h": 175,
+    "headroom": 1950.6,
+    "headroomWidth": {
+      "min": 2060,
+      "nosing": 0,
+    },
+    "n": 16,
+    "run": 3987.4,
+    "treads": "wwwwwwwwwwwwwww",
+    "zones": [],
+  },
+  "headroom": "7467050bf961a08c",
+  "layout": "f5e460c7f9a0c44e",
+  "soffits": {
+    "count": 16,
+    "sha": "af02d116b2bb1c9b",
+  },
+  "stepping": "b7b65d37218dc8e0",
+  "walkline": {
+    "min": 1950.625,
+    "s": 963.623131245,
+  },
+}
+`;
+
+exports[`hélicoïdal par la cage (F10) — catalogue figé > sens droite, départ 37°, placement (1 234 ; −567) −110° 1`] = `
+{
+  "cotes": {
+    "blondel": 590.24,
+    "colletMin": 33.5,
+    "colletsChord": [
+      33.5,
+      33.5,
+      33.5,
+      33.5,
+      33.5,
+      33.5,
+      33.5,
+      33.5,
+      33.5,
+      33.5,
+      33.5,
+      33.5,
+      33.5,
+      33.5,
+      33.5,
+    ],
+    "firstRise": 171.88,
+    "g": 246.49,
+    "h": 171.88,
+    "headroom": -200,
+    "headroomWidth": {
+      "min": -200,
+      "nosing": 15,
+    },
+    "n": 16,
+    "run": 3697.4,
+    "treads": "wwwwwwwwwwwwwww",
+    "zones": [],
+  },
+  "headroom": "442c1907311992e8",
+  "layout": "5d1a301ab9e061a1",
+  "soffits": {
+    "count": 16,
+    "sha": "9b1a2042f632f879",
+  },
+  "stepping": "6da68ec76c14b172",
+  "walkline": {
+    "min": -200,
+    "s": 3697.412892302,
+  },
+}
+`;
+
+exports[`hélicoïdal par la cage (F10) — catalogue figé > sens gauche, départ 37°, placement (1 234 ; −567) −110° 1`] = `
+{
+  "cotes": {
+    "blondel": 590.24,
+    "colletMin": 33.5,
+    "colletsChord": [
+      33.5,
+      33.5,
+      33.5,
+      33.5,
+      33.5,
+      33.5,
+      33.5,
+      33.5,
+      33.5,
+      33.5,
+      33.5,
+      33.5,
+      33.5,
+      33.5,
+      33.5,
+    ],
+    "firstRise": 171.88,
+    "g": 246.49,
+    "h": 171.88,
+    "headroom": -200,
+    "headroomWidth": {
+      "min": -200,
+      "nosing": 15,
+    },
+    "n": 16,
+    "run": 3697.4,
+    "treads": "wwwwwwwwwwwwwww",
+    "zones": [],
+  },
+  "headroom": "5f82eaaa09b70ef3",
+  "layout": "8f135b601d88f3a2",
+  "soffits": {
+    "count": 16,
+    "sha": "bdc98f57bef070af",
+  },
+  "stepping": "828d29c04182715b",
+  "walkline": {
+    "min": -200,
+    "s": 3697.412892302,
+  },
+}
+`;
+
+exports[`hélicoïdal par la cage (F10) — catalogue figé > surcharges de nez fixe et angle 1`] = `
+{
+  "cotes": {
+    "blondel": 637.98,
+    "colletMin": 51.8,
+    "colletsChord": [
+      51.8,
+      51.8,
+      51.8,
+      51.8,
+      51.8,
+      51.8,
+      51.8,
+      51.8,
+      51.8,
+      51.8,
+      51.8,
+      51.8,
+      51.8,
+      51.8,
+      51.8,
+    ],
+    "firstRise": 175,
+    "g": 287.98,
+    "h": 175,
+    "headroom": 1878.9,
+    "headroomWidth": {
+      "min": 1885,
+      "nosing": 0,
+    },
+    "n": 16,
+    "run": 4319.7,
+    "treads": "wwwwwwwwwwwwwww",
+    "zones": [],
+  },
+  "headroom": "ba539e26d3582e20",
+  "layout": "6c4f7148766e2ff1",
+  "soffits": {
+    "count": 15,
+    "sha": "6c1ad26b275b0b9d",
+  },
+  "stepping": "087f4f5e4fa0d236",
+  "walkline": {
+    "min": 1878.922840039,
+    "s": 10.000551046,
+  },
+}
+`;
+
+exports[`hélicoïdal par la cage (F10) — catalogue figé > trémie circulaire 1`] = `
+{
+  "cotes": {
+    "blondel": 615.83,
+    "colletMin": 47.9,
+    "colletsChord": [
+      47.9,
+      47.9,
+      47.9,
+      47.9,
+      47.9,
+      47.9,
+      47.9,
+      47.9,
+      47.9,
+      47.9,
+      47.9,
+      47.9,
+      47.9,
+      47.9,
+      47.9,
+    ],
+    "firstRise": 175,
+    "g": 265.83,
+    "h": 175,
+    "headroom": 1950.6,
+    "headroomWidth": {
+      "min": 2060,
+      "nosing": 0,
+    },
+    "n": 16,
+    "run": 3987.4,
+    "treads": "wwwwwwwwwwwwwww",
+    "zones": [],
+  },
+  "headroom": "c7f87a0413f68a70",
+  "layout": "f5e460c7f9a0c44e",
+  "soffits": {
+    "count": 16,
+    "sha": "af02d116b2bb1c9b",
+  },
+  "stepping": "b7b65d37218dc8e0",
+  "walkline": {
+    "min": 1950.625,
+    "s": 963.623131245,
+  },
+}
+`;
+
+exports[`hélicoïdal par la cage (F10) — catalogue figé > trémie rectangulaire 1`] = `
+{
+  "cotes": {
+    "blondel": 615.83,
+    "colletMin": 47.9,
+    "colletsChord": [
+      47.9,
+      47.9,
+      47.9,
+      47.9,
+      47.9,
+      47.9,
+      47.9,
+      47.9,
+      47.9,
+      47.9,
+      47.9,
+      47.9,
+      47.9,
+      47.9,
+      47.9,
+    ],
+    "firstRise": 175,
+    "g": 265.83,
+    "h": 175,
+    "headroom": -200,
+    "headroomWidth": {
+      "min": -200,
+      "nosing": 15,
+    },
+    "n": 16,
+    "run": 3987.4,
+    "treads": "wwwwwwwwwwwwwww",
+    "zones": [],
+  },
+  "headroom": "a946c40018f9d280",
+  "layout": "f5e460c7f9a0c44e",
+  "soffits": {
+    "count": 16,
+    "sha": "af02d116b2bb1c9b",
+  },
+  "stepping": "b7b65d37218dc8e0",
+  "walkline": {
+    "min": -200,
+    "s": 3987.406060326,
+  },
+}
+`;

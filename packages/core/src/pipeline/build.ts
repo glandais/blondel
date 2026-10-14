@@ -978,11 +978,14 @@ export function buildModel(project: Project, options: BuildModelOptions = {}): M
   let headroom: HeadroomAnalysis | null = null;
   let headroomAtNosings: readonly (number | null)[] | undefined;
   if (complete) {
-    // Cage qui repasse au-dessus d'elle-même (ADR-0010, sous-lot 2d) : sous-faces de ses
-    // marches comme plafonds (`headroom/cage.ts`, `selfCoveredHeadroom`). Contour de marche
-    // non fiable (ligne de nez arrêtée sur une autre partie de la cage) : échappée non
-    // calculée, erreur `headroom.error.cageTreadOutline`. Clés : le tracé saisi, l'épaisseur
-    // des marches et le débord de nez (valeurs), en plus du tracé et du découpage calculés.
+    // Cage qui repasse au-dessus d'elle-même, hélicoïdal compris (ADR-0010, sous-lot 2d ; F10
+    // P3, décision (10a)) : sous-faces de ses marches (et du palier d'arrivée d'un
+    // hélicoïdal) comme plafonds (`headroom/cage.ts`, `selfCoveredHeadroom`) ; cette étape est
+    // la seule source de `Model.soffits`. Contour de marche d'une cage saisie non fiable (ligne
+    // de nez arrêtée sur une autre partie de la cage) : échappée non calculée, erreur
+    // `headroom.error.cageTreadOutline`. Clés : le tracé saisi, l'épaisseur des marches (cage
+    // saisie ou hélicoïdal : altitude des sous-faces) et le débord de nez (valeurs), en plus du
+    // tracé et du découpage calculés.
     const cageSpec = isCageLayout(stair.layout) ? stair.layout : undefined;
     const headroomStage = run(
       caches.headroom,
@@ -991,7 +994,7 @@ export function buildModel(project: Project, options: BuildModelOptions = {}): M
         stepping,
         ...siteKey,
         cageSpec,
-        cageSpec ? stair.treads.thickness : undefined,
+        cageSpec || layout.helicalOrigin ? stair.treads.thickness : undefined,
         cageSpec ? stair.treads.nosing : undefined,
       ],
       (): Stage<HeadroomAnalysis | null> => {

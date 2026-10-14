@@ -2,7 +2,7 @@
  * Départage des minima d'échappée ex æquo (décision F10 (3), `selfcover.ts`) : parmi les
  * candidats à `HEADROOM_TIE_TOL` près du minimum strict, le premier en montant, avec sa propre
  * valeur ; deux passes, sans cumul de tolérance. L'effet sur les escaliers qui se recouvrent est
- * vérifié par la parité hélicoïdal / cage (`layout/cage/helicalParity.test.ts`, anciens cas TIE).
+ * figé par `layout/cage/helicalCage.test.ts` (catalogue, dont les anciens cas TIE de la parité).
  */
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";

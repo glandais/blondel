@@ -247,10 +247,10 @@ export interface Layout {
    * tracé hélicoïdal n'a pas de tournant à 90° (`turns` vide) ; `footprint` est le secteur de
    * couronne des marches et du palier d'arrivée (le disque de rayon R_e au-delà d'un tour, avec
    * le trou du jour central dans `footprintHoles`). Depuis le sous-lot P2 de F10, un hélicoïdal
-   * est calculé par le moteur de cage (`helicalOrigin`, `sections`) ; ce champ en est le
-   * **champ de compatibilité**, rendu au bit près par la formule d'origine
-   * (`helicalLayoutOf`), lu par la structure, les garde-corps, le plan coté, les préréglages et
-   * le contrôle sur le site (retrait envisagé en P3).
+   * est calculé par le moteur de cage (`helicalOrigin`, `sections`) ; ce champ en est un
+   * **résumé dérivé**, contrat gardé en P3 (ADR-0010) : rendu au bit près par la formule
+   * d'origine (`helicalLayoutOf`, `layout/cage/fromHelical.ts`), lu par la structure, les
+   * garde-corps, les règles, le plan coté, les préréglages, l'éditeur et le contrôle sur le site.
    */
   readonly helical?: HelicalLayout;
   /**
@@ -271,7 +271,8 @@ export interface Layout {
    * Cage **issue d'un hélicoïdal** (`helicalToCage`, F10 sous-lot P1, ADR-0010) : un tronçon à
    * axe en arc calculé avec l'origine `helical` (`CageLayoutOptions`). Le découpage en lit le
    * vocabulaire de l'hélicoïdal (marches dansantes, remarques `stepping.helical.*`, débord
-   * borné par le fût ou le jour, sous-faces dans `Stepping.soffits`, palier d'arrivée compris).
+   * borné par le fût ou le jour) et l'étape d'échappée ses sous-faces (`Model.soffits`, palier
+   * d'arrivée compris).
    * Posé par `computeLayout` pour tout tracé hélicoïdal depuis le sous-lot P2 (avec
    * `Layout.helical`). Absent : toute autre cage ou tracé à volées. Ajout rétrocompatible.
    */
@@ -381,12 +382,6 @@ export interface Stepping {
   }[];
   /** Diagnostics non bloquants du calcul (ex. « jour trop court, marches ajoutées »). */
   readonly notes: readonly Message[];
-  /**
-   * Sous-faces de l'escalier lui-même qui forment un plafond pour les parties plus basses
-   * (auto-recouvrement, CHALLENGE G4 : marches du tour supérieur et palier d'arrivée d'un
-   * hélicoïdal). Absent : aucun auto-recouvrement pris en compte (escaliers à volées).
-   */
-  readonly soffits?: readonly Soffit[];
   /**
    * Découpage d'un tracé **hélicoïdal** (nez rayonnants ; découpage de cage sous
    * `Layout.helicalOrigin` depuis F10 P2) : le moteur de règles en déduit le contexte de forme
@@ -884,11 +879,13 @@ export interface Model {
    */
   readonly headroomAtNosings?: readonly (Mm | null)[];
   /**
-   * Sous-faces d'une **cage qui repasse au-dessus d'elle-même** (ADR-0010, sous-lots 2d et 2e) :
-   * marches prises comme plafonds par l'échappée (`headroom/cage.ts`), même contrat que
-   * `Stepping.soffits` (propre à l'hélicoïdal) ; l'élévation les dessine. Absent : aucun
-   * auto-recouvrement calculé (escalier à volées, hélicoïdal, cage sans recouvrement, échappée
-   * non calculée). Ajout rétrocompatible.
+   * Sous-faces de **toute cage qui repasse au-dessus d'elle-même**, hélicoïdal compris
+   * (ADR-0010, sous-lots 2d et 2e ; F10 P3, décision (10a)) : marches (contour de pièce, altitude
+   * z − épaisseur des marches, dans l'ordre de la montée) puis, pour l'hélicoïdal, palier
+   * d'arrivée, prises comme plafonds par l'étape d'échappée (`headroom/cage.ts`,
+   * auto-recouvrement CHALLENGE G4) ; l'élévation les dessine. Absent : aucun auto-recouvrement
+   * calculé (escalier à volées, cage sans recouvrement, échappée non calculée : modèle partiel).
+   * Ajout rétrocompatible.
    */
   readonly soffits?: readonly Soffit[];
   /**
