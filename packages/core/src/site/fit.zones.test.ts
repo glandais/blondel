@@ -38,6 +38,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { convexOverlap } from "../geom2d/collide.js";
 import { bbox, signedArea } from "../geom2d/polygon.js";
+import { GEOM_EPS } from "../geom2d/tolerance.js";
 import type { SiteConflict } from "../model/derived.js";
 import type { Polygon2, Vec2 } from "../model/primitives.js";
 import { ProjectSchema, type Project } from "../model/project.js";
@@ -144,10 +145,11 @@ function conflictLines(
  */
 function provokingSite(project: Project, pieces: readonly GrossPiece[]): Project {
   const b = bbox(pieces.flatMap((p) => p.polygon));
-  const x0 = Math.floor(b.min.x);
-  const y0 = Math.floor(b.min.y);
-  const x1 = Math.ceil(b.max.x);
-  const y1 = Math.ceil(b.max.y);
+  // Arrondi à `GEOM_EPS` près : un bord à 900,0000000000001 (bruit d'arrondi) donne 900, pas 901.
+  const x0 = Math.floor(b.min.x + GEOM_EPS);
+  const y0 = Math.floor(b.min.y + GEOM_EPS);
+  const x1 = Math.ceil(b.max.x - GEOM_EPS);
+  const y1 = Math.ceil(b.max.y - GEOM_EPS);
   const cx = Math.round((x0 + x1) / 2);
   const cy = Math.round((y0 + y1) / 2);
   const qx = Math.round(x0 + (x1 - x0) / 4);

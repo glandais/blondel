@@ -5,7 +5,9 @@
  */
 import type { Mm, Polygon2, Vec2 } from "../model/primitives.js";
 import type { Wall } from "../model/project.js";
+import { lowestVertexIndex, pruneFlatVertices, rotateToStart } from "./canonical.js";
 import { pointInPolygon } from "./polygon.js";
+import { GEOM_EPS } from "./tolerance.js";
 import * as V from "./vec.js";
 
 /** Rectangle d'un mur (axe `a`–`b`, épaisseur totale). */
@@ -74,7 +76,21 @@ export function wallCollision(
   return null;
 }
 
-/** Enveloppe convexe (chaîne monotone d'Andrew), CCW, sans sommet aligné ; vide sous 3 points. */
+/**
+ * Enveloppe convexe (chaîne monotone d'Andrew), CCW, sans sommet aligné ; vide sous 3 points.
+ *
+ * Indépendante du bruit d'arrondi (chantier `stable-tiebreaks`) : un sommet à au plus
+ * `GEOM_EPS` du segment de ses voisins (quasi aligné ou quasi confondu) est retiré
+ * (`pruneFlatVertices`), au lieu d'être gardé ou non selon le signe du bruit ; l'enveloppe
+ * commence au sommet canonique (`lowestVertexIndex` à `GEOM_EPS` près) et non au premier du tri
+ * exact (x, y), qu'un bord gauche quasi vertical départageait par le bruit. Sur des données
+ * exactes sans tel sommet (coordonnées entières notamment), le résultat est celui de la chaîne
+ * monotone seule. L'enveloppe peut laisser hors d'elle un point d'au plus `GEOM_EPS` (plus
+ * seulement par retraits en cascade, voir `pruneFlatVertices`). Copie jumelle :
+ * `structures/geom.ts` (`convexHull`, mêmes élagage et départ ; elle garde ses conduites sous
+ * 3 points et pour des points alignés) ; toute évolution se fait dans les deux. La copie de
+ * `rules/check.ts` ne sert qu'à une largeur minimale (minimum continu, sans départage).
+ */
 export function convexHull(points: readonly Vec2[]): Polygon2 {
   const pts = [...points].sort((p, q) => p.x - q.x || p.y - q.y);
   if (pts.length < 3) return [];
@@ -94,8 +110,8 @@ export function convexHull(points: readonly Vec2[]): Polygon2 {
     out.pop();
     return out;
   };
-  const hull = [...half(pts), ...half([...pts].reverse())];
-  return hull.length >= 3 ? hull : [];
+  const hull = pruneFlatVertices([...half(pts), ...half([...pts].reverse())], GEOM_EPS);
+  return hull.length >= 3 ? rotateToStart(hull, lowestVertexIndex(hull, GEOM_EPS)) : [];
 }
 
 /**

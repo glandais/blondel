@@ -9,6 +9,7 @@
  */
 import {
   bbox,
+  GEOM_EPS,
   pointInPolygon,
   type FlatPattern,
   type Part,
@@ -174,6 +175,14 @@ function clearance(
  * être hors matière (pièce en L, limon cintré) ou dans un trou. `avoid` : segments à tenir à
  * distance aussi (contours de mortaises et de tenons : matière enlevée ou usinée) ; l'intérieur
  * de leurs contours fermés est exclu (un repère gravé au fond d'une mortaise disparaît).
+ *
+ * Départage indépendant du bruit d'arrondi (chantier `stable-tiebreaks`, F10 (7) et (11)) : à
+ * chaque passe, dégagement maximal d* sur la grille, puis premier point, dans l'ordre de
+ * balayage (point de départ de la passe en tête, puis indices (i, j) entiers croissants), dont
+ * le dégagement est ≥ d* − `GEOM_EPS`. Sur une pièce symétrique (bande, rectangle), toute une
+ * ligne de points est ex æquo : le bruit ne désigne plus le point retenu, ni donc la zone
+ * raffinée à la passe suivante. Hors ex æquo à la tolérance, le point retenu est celui d'avant
+ * (premier point balayé de dégagement maximal).
  */
 export function engravingPoint(
   shape: Shape2,
@@ -188,13 +197,18 @@ export function engravingPoint(
   let cx = best.at.x;
   let cy = best.at.y;
   for (let pass = 0; pass < 4; pass++) {
+    // Candidats dans l'ordre de balayage : point de départ de la passe en tête.
+    const candidates: { at: Vec2; d: number }[] = [best];
+    let dmax = best.d;
     for (let i = -24; i <= 24; i++) {
       for (let j = -24; j <= 24; j++) {
         const p = { x: cx + i * hx, y: cy + j * hy };
         const d = clearance(shape, p, avoid, loops);
-        if (d > best.d) best = { at: p, d };
+        candidates.push({ at: p, d });
+        if (d > dmax) dmax = d;
       }
     }
+    best = candidates.find((c) => c.d >= dmax - GEOM_EPS)!;
     cx = best.at.x;
     cy = best.at.y;
     hx /= 12;

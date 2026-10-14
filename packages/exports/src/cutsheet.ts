@@ -26,7 +26,7 @@
  * ronds) portent dans `stock` leur encombrement (h × b, Ø × paroi…) : ils sont groupés par
  * **section** et n'ont pas de volume brut (L × l × e serait le volume de leur boîte).
  */
-import { bbox, type MaterialId, type Part } from "@blondel/core";
+import { bbox, GEOM_EPS, REL_EPS, type MaterialId, type Part } from "@blondel/core";
 import {
   cutName,
   cutParts,
@@ -35,6 +35,7 @@ import {
   supplyLabel,
   type MassNote,
 } from "./csv/cutlist.js";
+import { groupNear, nearlyEqualRelative } from "./grouping.js";
 import {
   compareMarks,
   compareText,
@@ -128,54 +129,61 @@ function isSheetStock(p: Part, d: Pick<CutSheetRow, "thickness" | "source">): bo
 export function cutSheet(parts: readonly Part[], options: CutSheetOptions = {}): CutSheetGroup[] {
   const tx = translatorOf(options);
   const noteOf = options.massNote ?? defaultMassNote;
-  // Lignes : pièces identiques (même repère et même débit) regroupées.
-  const lines = new Map<
-    string,
-    { part: Part; row: Omit<CutSheetRow, "quantity">; sheet: boolean; count: number }
-  >();
-  for (const p of cutParts(parts)) {
+  // Lignes : pièces identiques (même repère et même débit) regroupées, débits comparés au bruit
+  // d'arrondi près (`groupNear`, chantier `stable-tiebreaks`) : dimensions de débit à
+  // `GEOM_EPS` (mm), masse unitaire à `REL_EPS` en relatif ; la ligne porte les valeurs de la
+  // première pièce du groupe.
+  const entries = cutParts(parts).map((p) => {
     const d = cutDims(p);
     // Lames identiques d'une pièce composée (lamellé-collé) : une ligne de débit par lame.
     const pieces =
       d.source === "stock" && p.stock?.count !== undefined && p.stock.count > 1 ? p.stock.count : 1;
     const partMass = partMassKg(p);
     const mass = partMass !== undefined ? partMass / pieces : undefined;
+    return { p, d, pieces, mass };
+  });
+  const sameDim = (a: number | undefined, b: number | undefined): boolean =>
+    a === undefined || b === undefined ? a === b : Math.abs(a - b) <= GEOM_EPS;
+  const lines = groupNear(
+    entries,
+    (e) =>
+      JSON.stringify([
+        e.p.mark,
+        e.p.material,
+        trOpt(tx, e.p.section) ?? null,
+        e.pieces,
+        e.p.stock?.supply ?? null,
+      ]),
+    (a, b) =>
+      sameDim(a.d.length, b.d.length) &&
+      sameDim(a.d.width, b.d.width) &&
+      sameDim(a.d.thickness, b.d.thickness) &&
+      nearlyEqualRelative(a.mass, b.mass, REL_EPS),
+  ).map((group) => {
+    const { p, d, mass } = group[0]!;
     const note = mass !== undefined ? noteOf(p.material, tx) : undefined;
-    const key = JSON.stringify([
-      p.mark,
-      p.material,
-      trOpt(tx, p.section) ?? null,
-      d.length ?? null,
-      d.width ?? null,
-      d.thickness ?? null,
-      pieces,
-      mass ?? null,
-      p.stock?.supply ?? null,
-    ]);
-    const l = lines.get(key);
     const supply = supplyLabel(tx, p);
-    if (l) l.count += pieces;
-    else
-      lines.set(key, {
-        part: p,
-        sheet: isSheetStock(p, d),
-        count: pieces,
-        row: {
-          mark: p.mark,
-          name: cutName(tx, p),
-          section: trOpt(tx, p.section) ?? "",
-          ...d,
-          ...(finite(mass) ? { unitMass: mass } : {}),
-          ...(note !== undefined && note !== "" ? { massNote: note } : {}),
-          ...(supply !== undefined ? { supply } : {}),
-        },
-      });
-  }
+    const row: Omit<CutSheetRow, "quantity"> = {
+      mark: p.mark,
+      name: cutName(tx, p),
+      section: trOpt(tx, p.section) ?? "",
+      ...d,
+      ...(finite(mass) ? { unitMass: mass } : {}),
+      ...(note !== undefined && note !== "" ? { massNote: note } : {}),
+      ...(supply !== undefined ? { supply } : {}),
+    };
+    return {
+      part: p,
+      sheet: isSheetStock(p, d),
+      count: group.reduce((n, e) => n + e.pieces, 0),
+      row,
+    };
+  });
   const groups = new Map<
     string,
     { material: MaterialId; thickness?: number; section?: string; rows: CutSheetRow[] }
   >();
-  for (const { part, row, sheet, count } of lines.values()) {
+  for (const { part, row, sheet, count } of lines) {
     const t = sheet && finite(row.thickness) ? Math.round(row.thickness * 1000) / 1000 : undefined;
     const gk = JSON.stringify([part.material, t ?? null, t === undefined ? row.section : null]);
     let g = groups.get(gk);

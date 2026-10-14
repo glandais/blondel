@@ -5,8 +5,9 @@
  *
  * Regroupement : les pièces de même repère (`Part.mark`) sont des pièces identiques ; la
  * quantité est leur nombre (deux pièces de même repère mais de débit différent restent sur deux
- * lignes). Pièce composée de plusieurs lames identiques (`Part.stock.count`, lamellé-collé) : la
- * ligne porte le débit d'une lame, la quantité compte les lames, volume et masse unitaires sont
+ * lignes ; débits comparés au bruit d'arrondi près : cotes à `GEOM_EPS`, volume et masse à
+ * `REL_EPS` en relatif). Pièce composée de plusieurs lames identiques
+ * (`Part.stock.count`, lamellé-collé) : la ligne porte le débit d'une lame, la quantité compte les lames, volume et masse unitaires sont
  * ceux d'une lame (part égale de la pièce), de sorte que les totaux restent ceux des pièces. Grandeurs lues dans `Part.quantities` : `volume` (m³) et la masse (kg), clé
  * normalisée `mass_kg` du cœur, à défaut clé historique `mass` (`partMassKg`) ; à défaut de
  * `volume`, volume brut du débit L × l × e (`Part.stock`). Aucune masse n'est inventée : sans
@@ -32,7 +33,9 @@
  */
 import {
   fabricatedParts,
+  GEOM_EPS,
   isWoodMaterial,
+  REL_EPS,
   type MaterialId,
   type Model,
   type Part,
@@ -41,6 +44,7 @@ import {
 } from "@blondel/core";
 import type { Locale, MessageKey } from "@blondel/i18n";
 import { formatIn } from "../format.js";
+import { groupNear, nearlyEqualRelative } from "../grouping.js";
 import {
   compareMarks,
   materialLabel,
@@ -231,6 +235,16 @@ export function cutName(t: Translator, part: Pick<Part, "name" | "stock">): stri
   return part.stock?.supply === "veneer" ? t.t("export.cutlist.veneer", { name }) : name;
 }
 
+/** Débits bruts égaux à `GEOM_EPS` près (L, l, e en mm ; deux débits absents sont égaux). */
+function sameStockDims(a: Pick<Part, "stock">, b: Pick<Part, "stock">): boolean {
+  if (a.stock === undefined || b.stock === undefined) return a.stock === b.stock;
+  return (
+    Math.abs(a.stock.length - b.stock.length) <= GEOM_EPS &&
+    Math.abs(a.stock.width - b.stock.width) <= GEOM_EPS &&
+    Math.abs(a.stock.thickness - b.stock.thickness) <= GEOM_EPS
+  );
+}
+
 export interface CutListRowsOptions extends LocaleOption {
   /** Remarque de masse par matériau (défaut : `defaultMassNote`). */
   readonly massNote?: MassNote;
@@ -245,32 +259,26 @@ export function cutListRows(
   const noteOf = options.massNote ?? defaultMassNote;
   // Même repère = pièces identiques. Deux pièces de même repère mais de caractéristiques de
   // débit différentes (erreur amont) ne sont jamais fusionnées en silence : une ligne chacune,
-  // le repère en double reste visible.
-  const groups = new Map<string, { part: Part; count: number }>();
-  for (const p of cutParts(parts)) {
-    const key = JSON.stringify([
-      p.mark,
-      p.category,
-      p.material,
-      trOpt(t, p.section) ?? null,
-      p.stock
-        ? [
-            p.stock.length,
-            p.stock.width,
-            p.stock.thickness,
-            p.stock.count ?? 1,
-            p.stock.supply ?? null,
-          ]
-        : null,
-      p.quantities[QUANTITY_VOLUME] ?? null,
-      partMassKg(p) ?? null,
-    ]);
-    const g = groups.get(key);
-    if (g) g.count += 1;
-    else groups.set(key, { part: p, count: 1 });
-  }
+  // le repère en double reste visible. Caractéristiques comparées au bruit d'arrondi près
+  // (`groupNear`, chantier `stable-tiebreaks`) : cotes de débit à `GEOM_EPS` (mm), volume et
+  // masse à `REL_EPS` en relatif ; la ligne porte les valeurs de la première pièce du groupe.
+  const groups = groupNear(
+    cutParts(parts),
+    (p) =>
+      JSON.stringify([
+        p.mark,
+        p.category,
+        p.material,
+        trOpt(t, p.section) ?? null,
+        p.stock ? [p.stock.count ?? 1, p.stock.supply ?? null] : null,
+      ]),
+    (a, b) =>
+      sameStockDims(a, b) &&
+      nearlyEqualRelative(a.quantities[QUANTITY_VOLUME], b.quantities[QUANTITY_VOLUME], REL_EPS) &&
+      nearlyEqualRelative(partMassKg(a), partMassKg(b), REL_EPS),
+  ).map((g) => ({ part: g[0]!, count: g.length }));
   const rows: CutListRow[] = [];
-  for (const { part, count } of groups.values()) {
+  for (const { part, count } of groups) {
     const s = part.stock;
     // Lames identiques d'une pièce composée (lamellé-collé) : une ligne de débit par lame.
     const pieces = s?.count !== undefined && s.count > 1 ? s.count : 1;

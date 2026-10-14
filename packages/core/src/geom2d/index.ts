@@ -4,6 +4,7 @@
  */
 export * as vec2 from "./vec.js";
 export * from "./tolerance.js";
+export * from "./canonical.js";
 export * from "./segment.js";
 export * from "./curve.js";
 export * from "./intersect.js";

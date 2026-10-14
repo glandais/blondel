@@ -4,7 +4,9 @@
  * fonctionnelle (ligne des nez développée).
  */
 import { MessageError, msg } from "@blondel/i18n";
+import { lowestVertexIndex, pruneFlatVertices, rotateToStart } from "../geom2d/canonical.js";
 import { signedArea } from "../geom2d/polygon.js";
+import { GEOM_EPS } from "../geom2d/tolerance.js";
 import * as V from "../geom2d/vec.js";
 import type { Mm, Polygon2, Vec2 } from "../model/primitives.js";
 
@@ -178,7 +180,13 @@ export function isSimplePolygon(poly: Polygon2): boolean {
   return true;
 }
 
-/** Enveloppe convexe (chaîne monotone), CCW. */
+/**
+ * Enveloppe convexe (chaîne monotone), CCW. Comme celle de `geom2d/collide.ts` (chantier
+ * `stable-tiebreaks`) : sommets à au plus `GEOM_EPS` du segment de leurs voisins retirés
+ * (`pruneFlatVertices`) et départ au sommet canonique (`lowestVertexIndex`), pour que l'ordre
+ * des sommets, critère de départage de `minAreaRect`, ne dépende pas du bruit d'arrondi.
+ * Moins de 3 points : les points triés ; points alignés : les deux extrémités.
+ */
 export function convexHull(points: readonly Vec2[]): Vec2[] {
   const p = [...points].sort((u, v) => u.x - v.x || u.y - v.y);
   if (p.length < 3) return p;
@@ -198,7 +206,8 @@ export function convexHull(points: readonly Vec2[]): Vec2[] {
   }
   upper.pop();
   lower.pop();
-  return lower.concat(upper);
+  const hull = pruneFlatVertices(lower.concat(upper), GEOM_EPS);
+  return rotateToStart(hull, lowestVertexIndex(hull, GEOM_EPS));
 }
 
 export interface OrientedBox {
@@ -208,20 +217,38 @@ export interface OrientedBox {
   readonly width: Mm;
   /** Direction unitaire de la grande dimension. */
   readonly axis: Vec2;
-  /** Coins CCW. */
+  /**
+   * Coins CCW, depuis celui de plus petites coordonnées (u, v) dans le repère (`axis`,
+   * `axis` tourné d'un quart de tour à gauche) : indépendant de l'arête qui a fourni le rectangle.
+   */
   readonly corners: readonly Vec2[];
 }
 
 /**
  * Rectangle englobant orienté d'aire minimale (un côté porté par une arête de l'enveloppe
- * convexe) ; départage à aire égale par la plus petite largeur.
+ * convexe) ; départage à aire égale par la plus petite largeur, puis par la première arête de
+ * l'enveloppe depuis son sommet canonique.
+ *
+ * Départages indépendants du bruit d'arrondi (chantier `stable-tiebreaks`, F10 (7) et (11)) :
+ * on calcule tous les candidats, puis, en deux passes, les ex æquo d'aire (aire ≤ A* +
+ * `GEOM_EPS` · (L* + l*), variation d'aire au premier ordre d'un déplacement des bords de
+ * `GEOM_EPS`) et, parmi eux, de largeur (largeur ≤ l* + `GEOM_EPS`) ; on retient le premier dans
+ * l'ordre de l'enveloppe (départ canonique, `convexHull`). L'axe d'un candidat est celui de son
+ * arête, sauf si sa cote perpendiculaire dépasse de plus de `GEOM_EPS` la cote le long de
+ * l'arête (carré : axe de l'arête). Un rectangle a toujours deux candidats ex æquo d'axes
+ * opposés (arêtes opposées) : le premier depuis le sommet canonique fixe l'orientation (le
+ * gabarit n'est plus retourné d'un demi-tour par le bruit). Sur des données exactes (sans ex
+ * æquo à la tolérance), le choix est celui d'avant : la première arête d'aire minimale depuis
+ * le plus petit sommet (x, y). Limite : le bruit incline une arête courte de c mm d'environ
+ * bruit / c radians, ce qui déplace le bord opposé du rectangle de L fois plus ; l'indépendance
+ * au bruit vaut tant que ce déplacement reste sous `GEOM_EPS` (bruit d'arrondi réel ≈ 1e-13
+ * relatif : largement ; bruit de 1e-9 mm : arêtes de 10 mm et plus pour L = 3 m).
  */
 export function minAreaRect(points: readonly Vec2[]): OrientedBox {
   const hull = convexHull(points);
   if (hull.length === 0) return { length: 0, width: 0, axis: V.vec(1, 0), corners: [] };
-  let best: OrientedBox | null = null;
-  let bestArea = Infinity;
   const edges = hull.length >= 2 ? hull.length : 1;
+  const candidates: { box: OrientedBox; area: number }[] = [];
   for (let i = 0; i < edges; i++) {
     const a = hull[i]!;
     const b = hull[(i + 1) % hull.length]!;
@@ -242,21 +269,27 @@ export function minAreaRect(points: readonly Vec2[]): OrientedBox {
     }
     const du = u1 - u0;
     const dv = v1 - v0;
-    const area = du * dv;
-    if (
-      area < bestArea - 1e-6 ||
-      (Math.abs(area - bestArea) <= 1e-6 && best && Math.min(du, dv) < best.width)
-    ) {
-      bestArea = area;
-      const at = (u: number, v: number): Vec2 => V.add(V.scale(axis, u), V.scale(perp, v));
-      const corners = [at(u0, v0), at(u1, v0), at(u1, v1), at(u0, v1)];
-      best =
-        du >= dv
-          ? { length: du, width: dv, axis, corners }
-          : { length: dv, width: du, axis: perp, corners };
-    }
+    const at = (u: number, v: number): Vec2 => V.add(V.scale(axis, u), V.scale(perp, v));
+    const corners = [at(u0, v0), at(u1, v0), at(u1, v1), at(u0, v1)];
+    const box: OrientedBox =
+      du >= dv - GEOM_EPS
+        ? { length: Math.max(du, dv), width: Math.min(du, dv), axis, corners }
+        : // Coins depuis celui de plus petit (u, v) dans le repère (axe, perpendiculaire à
+          // gauche) retenu, comme pour l'axe de l'arête : (u1, v0) du repère de l'arête.
+          {
+            length: dv,
+            width: du,
+            axis: perp,
+            corners: [corners[1]!, corners[2]!, corners[3]!, corners[0]!],
+          };
+    candidates.push({ box, area: du * dv });
   }
-  return best!;
+  let ref = candidates[0]!;
+  for (const c of candidates) if (c.area < ref.area) ref = c;
+  const areaTol = GEOM_EPS * (ref.box.length + ref.box.width);
+  const tied = candidates.filter((c) => c.area <= ref.area + areaTol);
+  const minWidth = Math.min(...tied.map((c) => c.box.width));
+  return tied.find((c) => c.box.width <= minWidth + GEOM_EPS)!.box;
 }
 
 /** Aire absolue d'un polygone. */

@@ -6,7 +6,8 @@
  * regroupée par l'interface avec `createZip` (archive ZIP « stockée », sans compression ni
  * dépendance, voir `../zip.ts`).
  */
-import type { Model, Part } from "@blondel/core";
+import { GEOM_EPS, type Model, type Part } from "@blondel/core";
+import { groupNear, nearlyEqualDeep } from "../grouping.js";
 import { exportPartDxf, type PartDxfOptions } from "./part.js";
 
 export interface PartDxfFile {
@@ -43,22 +44,28 @@ export function safeFileStem(text: string): string {
  * Un DXF par développé (repère), dans l'ordre des pièces du modèle. Les pièces sans
  * développé sont ignorées. Deux pièces de même repère mais de développés différents (erreur
  * amont de nomenclature) donnent deux fichiers distincts, jamais une fusion silencieuse.
+ *
+ * Développés « identiques » : même repère et même matériau, puis même structure (sommets,
+ * lignes, libellés et paramètres de `Message`) et nombres égaux à `GEOM_EPS` près (cotes en
+ * mm, angles de pli en degrés), comparés sommet à sommet (`groupNear`, chantier
+ * `stable-tiebreaks`) : deux développés que seul le bruit d'arrondi distingue ne donnent plus
+ * deux fichiers. Le fichier est écrit d'après la première pièce du groupe.
  */
 export function exportPartsDxf(
   model: Pick<Model, "parts">,
   options: PartsDxfOptions = {},
 ): PartDxfFile[] {
-  const groups = new Map<string, { part: Part; ids: string[] }>();
-  for (const part of model.parts) {
-    if (part.flat === undefined) continue;
-    const key = JSON.stringify([part.mark, part.material, part.flat]);
-    const g = groups.get(key);
-    if (g) g.ids.push(part.id);
-    else groups.set(key, { part, ids: [part.id] });
-  }
+  const groups = groupNear(
+    model.parts.filter((part) => part.flat !== undefined),
+    (part) => JSON.stringify([part.mark, part.material]),
+    (a, b) => nearlyEqualDeep(a.flat, b.flat, GEOM_EPS),
+  ).map((parts): { part: Part; ids: string[] } => ({
+    part: parts[0]!,
+    ids: parts.map((p) => p.id),
+  }));
   const used = new Set<string>();
   const out: PartDxfFile[] = [];
-  for (const { part, ids } of groups.values()) {
+  for (const { part, ids } of groups) {
     const stem = safeFileStem(part.mark);
     let name = stem;
     for (let i = 2; used.has(name.toLowerCase()); i++) name = `${stem}-${i}`;
