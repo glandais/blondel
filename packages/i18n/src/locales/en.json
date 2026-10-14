@@ -405,6 +405,7 @@
   "csv.total": "Total",
   "drawing.common.complianceSummary": "Design check — blocking: {blocking}, warnings: {warning}, advice: {advice}",
   "drawing.dimension.going": "G = {value}",
+  "drawing.dimension.goingWalkingLine": "G (walking line) = {value}",
   "drawing.dimension.radius": "R {value}",
   "drawing.elevation.blondel": "2 × rise + going = {value} mm — pitch {pitch}°",
   "drawing.elevation.gauge": "Required headroom {value} mm",

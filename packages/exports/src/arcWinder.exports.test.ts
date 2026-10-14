@@ -108,8 +108,9 @@ function checkGoingDimension(model: Model): void {
   // Valeur mesurée sur la ligne de foulée (longueur d'arc), pas la corde.
   expect(Math.abs(d.value - tread.going)).toBeLessThan(1e-9);
   expect(d.value).toBeGreaterThanOrEqual(vec2.distance(d.a, d.b) - 1e-9);
-  expect(d.text).toMatch(/^g = \d+,\d$/);
-  expect(Math.abs(Number(d.text.slice(4).replace(",", ".")) - tread.going)).toBeLessThanOrEqual(
+  // Texte « g (foulée) = … » : la valeur n'est pas la longueur dessinée (F10 (14)).
+  expect(d.text).toMatch(/^g \(foulée\) = \d+,\d$/);
+  expect(Math.abs(Number(d.text.slice(13).replace(",", ".")) - tread.going)).toBeLessThanOrEqual(
     0.05 + 1e-9,
   );
   // Ligne de cote dans l'emprise, entre le jour et la ligne de foulée.

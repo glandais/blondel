@@ -287,14 +287,14 @@ exports[`sorties hélicoïdales — exports (F10, P3, décision (10b)) > démo d
 "
 plan.dxf R12 fr
 calque CONTOUR : 1 entités, d089eb9d6acdaeb2
-calque COTES : 18 entités, 379f17b0d56176d1
+calque COTES : 18 entités, 4f7940e03b1bc7f9
 calque FOULEE : 3 entités, 0b1e25a31aa0557b
 calque MARCHES : 16 entités, e7364be51622ad5c
 calque NEZ : 16 entités, cbb07c5c6f904c34
 calque TEXTE : 25 entités, 5ca084120cef1a08
 calque TREMIE : 1 entités, cd192f5673ce3ca9
 plan.dxf R12 en
-calque DIMENSIONS : 18 entités, a079bdfafda48f40
+calque DIMENSIONS : 18 entités, 5e05d692d7306b38
 calque NOSINGS : 16 entités, d14d89fb981f65e6
 calque OPENING : 1 entités, b6e71484bb408c0e
 calque OUTLINE : 1 entités, f886f75036a8a130
@@ -303,14 +303,14 @@ calque TREADS : 16 entités, 14404e7ace418ab0
 calque WALKLINE : 3 entités, ae37dfeda5d2201b
 plan.dxf AC1021 fr
 calque CONTOUR : 1 entités, a73bd034968f3501
-calque COTES : 18 entités, 70b9fb1a5696a41d
+calque COTES : 18 entités, 9720d8c30de8b5b1
 calque FOULEE : 3 entités, 980f6f58099cb439
 calque MARCHES : 16 entités, 289e1b06d9d8c79c
 calque NEZ : 16 entités, 82a23750bc1549d8
 calque TEXTE : 25 entités, 58c380a0b9bf708c
 calque TREMIE : 1 entités, 313530254a2b81fb
 plan.dxf AC1021 en
-calque DIMENSIONS : 18 entités, 9bf43ea7eaffe541
+calque DIMENSIONS : 18 entités, 262185d6553e4809
 calque NOSINGS : 16 entités, b4032d964c5cc5cb
 calque OPENING : 1 entités, bc11d61c1dbfce79
 calque OUTLINE : 1 entités, 14c91eeb78750aab
@@ -335,19 +335,19 @@ LINE 8=COTES 10=1132.167653 20=-2.451 30=0 11=947.900067 21=-27.777996 31=0
 LINE 8=COTES 10=1089.522533 20=307.815287 30=0 11=905.254947 21=282.48829 31=0
 LINE 8=COTES 10=988.409437 20=-37.198961 30=0 11=954.943622 21=-11.821033 31=0
 LINE 8=COTES 10=945.764318 20=273.067326 30=0 11=912.298503 21=298.445254 31=0
-TEXT 8=COTES 10=902.801045 20=124.087147 30=0 40=48 1=g = 314,2 50=-82.173913 72=1 11=902.801045 21=124.087147 31=0 73=2
+TEXT 8=COTES 10=902.801045 20=124.087147 30=0 40=48 1=g (foul\\U+00E9e) = 314,2 50=-82.173913 72=1 11=902.801045 21=124.087147 31=0 73=2
 "
 `;
 
 exports[`sorties hélicoïdales — exports (F10, P3, décision (10b)) > démo demo-central-glulam > plan SVG 1`] = `
 "
-plan.svg fr light {"sha":"98363f02d9423048","kinds":{"landing":1,"winder":15},"dimensions":{"going":1,"radius":1,"width":1}}
-plan.svg fr dark {"sha":"553dfd4e04459318","kinds":{"landing":1,"winder":15},"dimensions":{"going":1,"radius":1,"width":1}}
-plan.svg en light {"sha":"690f3f4f15a570ea","kinds":{"landing":1,"winder":15},"dimensions":{"going":1,"radius":1,"width":1}}
-plan.svg en dark {"sha":"fdaa387ce38eba69","kinds":{"landing":1,"winder":15},"dimensions":{"going":1,"radius":1,"width":1}}
+plan.svg fr light {"sha":"b25ef8fb17eaade0","kinds":{"landing":1,"winder":15},"dimensions":{"going":1,"radius":1,"width":1}}
+plan.svg fr dark {"sha":"66bf575e35f593e4","kinds":{"landing":1,"winder":15},"dimensions":{"going":1,"radius":1,"width":1}}
+plan.svg en light {"sha":"f99f6e12b4fda6b2","kinds":{"landing":1,"winder":15},"dimensions":{"going":1,"radius":1,"width":1}}
+plan.svg en dark {"sha":"4d18fa5a26ef82c8","kinds":{"landing":1,"winder":15},"dimensions":{"going":1,"radius":1,"width":1}}
 cote width « 900 » value=900 d=M376 306.94L511 306.94M376 274.54L376 311.74M511 274.54L511 311.74M373.03 303.97L378.97 309.91M508.03 303.97L513.97 309.91
 cote radius « R 1 600 » value=1600 d=M271 354.94L511 354.94M271 274.54L271 359.74M511 274.54L511 359.74M268.03 351.97L273.97 357.91M508.03 351.97L513.97 357.91
-cote going « g = 314,2 » value=314.16 d=M410.06 275.54L403.66 229M439.93 271.43L405.3 276.19M433.53 224.89L398.91 229.65M413.41 278.07L406.71 273M407.01 231.53L400.32 226.46
+cote going « g (foulée) = 314,2 » value=314.16 d=M410.06 275.54L403.66 229M439.93 271.43L405.3 276.19M433.53 224.89L398.91 229.65M413.41 278.07L406.71 273M407.01 231.53L400.32 226.46
 "
 `;
 
@@ -585,14 +585,14 @@ exports[`sorties hélicoïdales — exports (F10, P3, décision (10b)) > démo d
 "
 plan.dxf R12 fr
 calque CONTOUR : 1 entités, 1b5a0e7019ea8e59
-calque COTES : 18 entités, bbfab8c7f5e04396
+calque COTES : 18 entités, 6be4dfa7c956f5c6
 calque FOULEE : 3 entités, 4759afc855bbe309
 calque MARCHES : 16 entités, 79faba25e1e4f3ab
 calque NEZ : 16 entités, c4d4b343f642b951
 calque TEXTE : 26 entités, 603af660838954b5
 calque TREMIE : 1 entités, 5d3de822bbfa2f97
 plan.dxf R12 en
-calque DIMENSIONS : 18 entités, ca7d3d1d7ee7c8bf
+calque DIMENSIONS : 18 entités, 8bf07c60fc424e5b
 calque NOSINGS : 16 entités, 35a0ba561a60e308
 calque OPENING : 1 entités, f6095d8208facc93
 calque OUTLINE : 1 entités, 32f0a3829bb26b0c
@@ -601,14 +601,14 @@ calque TREADS : 16 entités, 3ce57735dd38620d
 calque WALKLINE : 3 entités, bb948ad62cf0fe7d
 plan.dxf AC1021 fr
 calque CONTOUR : 1 entités, 04431b1fc858e113
-calque COTES : 18 entités, 8e78746677dc5663
+calque COTES : 18 entités, 8b2c80dcb04bba79
 calque FOULEE : 3 entités, 8abd67ab3f568b99
 calque MARCHES : 16 entités, 32bd3d8c22a5ecfa
 calque NEZ : 16 entités, 3afe7dd2ccbb9f91
 calque TEXTE : 26 entités, cc235b12ede02e2f
 calque TREMIE : 1 entités, 08ea1297583f9a02
 plan.dxf AC1021 en
-calque DIMENSIONS : 18 entités, 2cb1bd1d34dbc4b1
+calque DIMENSIONS : 18 entités, eb5d86a874c641cc
 calque NOSINGS : 16 entités, 7cc55e5369dc7f5c
 calque OPENING : 1 entités, 6b00dd8b20667137
 calque OUTLINE : 1 entités, 9c81b9b12b9a6bb7
@@ -633,19 +633,19 @@ LINE 8=COTES 10=564.850159 20=-4.282981 30=0 11=356.63514 21=-48.540449 31=0
 LINE 8=COTES 10=514.274252 20=233.657955 30=0 11=306.059233 21=189.400487 31=0
 LINE 8=COTES 10=403.657644 20=-55.9193 30=0 11=363.345545 21=-29.740317 31=0
 LINE 8=COTES 10=353.081736 20=182.021636 30=0 11=312.769638 21=208.200619 31=0
-TEXT 8=COTES 10=304.480732 20=64.719378 30=0 40=54.933333 1=g = 245,0 50=-78 72=1 11=304.480732 21=64.719378 31=0 73=2
+TEXT 8=COTES 10=304.480732 20=64.719378 30=0 40=54.933333 1=g (foul\\U+00E9e) = 245,0 50=-78 72=1 11=304.480732 21=64.719378 31=0 73=2
 "
 `;
 
 exports[`sorties hélicoïdales — exports (F10, P3, décision (10b)) > démo demo-helical-glass > plan SVG 1`] = `
 "
-plan.svg fr light {"sha":"4d65367359def2b9","kinds":{"landing":1,"winder":15},"dimensions":{"going":1,"radius":1,"width":1}}
-plan.svg fr dark {"sha":"111be16b7d4e83ba","kinds":{"landing":1,"winder":15},"dimensions":{"going":1,"radius":1,"width":1}}
-plan.svg en light {"sha":"5b93218de752825f","kinds":{"landing":1,"winder":15},"dimensions":{"going":1,"radius":1,"width":1}}
-plan.svg en dark {"sha":"dcc02c6a2e1e9173","kinds":{"landing":1,"winder":15},"dimensions":{"going":1,"radius":1,"width":1}}
+plan.svg fr light {"sha":"674a8667a7b78469","kinds":{"landing":1,"winder":15},"dimensions":{"going":1,"radius":1,"width":1}}
+plan.svg fr dark {"sha":"9302228b1e6c9dd9","kinds":{"landing":1,"winder":15},"dimensions":{"going":1,"radius":1,"width":1}}
+plan.svg en light {"sha":"752a6ad3bafbf889","kinds":{"landing":1,"winder":15},"dimensions":{"going":1,"radius":1,"width":1}}
+plan.svg en dark {"sha":"ba29f53b80237755","kinds":{"landing":1,"winder":15},"dimensions":{"going":1,"radius":1,"width":1}}
 cote width « 1 030 » value=1030 d=M206.46 232L360.96 232M206.46 199.6L206.46 236.8M360.96 199.6L360.96 236.8M203.49 229.03L209.43 234.97M357.99 229.03L363.93 234.97
 cote radius « R 1 100 » value=1100 d=M195.96 280L360.96 280M195.96 199.6L195.96 284.8M360.96 199.6L360.96 284.8M192.99 277.03L198.93 282.97M357.99 277.03L363.93 282.97
-cote going « g = 245,0 » value=245.04 d=M248.5 203.48L240.91 167.79M280.19 196.75L243.8 204.48M272.6 161.06L236.22 168.79M252.02 205.77L244.98 201.2M244.44 170.08L237.39 165.51
+cote going « g (foulée) = 245,0 » value=245.04 d=M248.5 203.48L240.91 167.79M280.19 196.75L243.8 204.48M272.6 161.06L236.22 168.79M252.02 205.77L244.98 201.2M244.44 170.08L237.39 165.51
 "
 `;
 
@@ -912,14 +912,14 @@ exports[`sorties hélicoïdales — exports (F10, P3, décision (10b)) > démo d
 "
 plan.dxf R12 fr
 calque CONTOUR : 1 entités, b594cc8fd5b2b142
-calque COTES : 18 entités, 6a94858739f8fe26
+calque COTES : 18 entités, 75e58b999c6fec6b
 calque FOULEE : 3 entités, 8fcf86c5def78276
 calque MARCHES : 16 entités, e4bb989a77e943ec
 calque NEZ : 16 entités, 51efac6b96c0cb0d
 calque TEXTE : 26 entités, 0bc791fa48ef4763
 calque TREMIE : 1 entités, 48b5310224c86cd7
 plan.dxf R12 en
-calque DIMENSIONS : 18 entités, 9f4296fc79ee3438
+calque DIMENSIONS : 18 entités, 3b07f5228a8044d0
 calque NOSINGS : 16 entités, 151bf8def650521c
 calque OPENING : 1 entités, 154d04edf8fb5538
 calque OUTLINE : 1 entités, 5a4b4f6f8f548193
@@ -928,14 +928,14 @@ calque TREADS : 16 entités, a396a3e14cee4a35
 calque WALKLINE : 3 entités, b9c728e3775ab0fa
 plan.dxf AC1021 fr
 calque CONTOUR : 1 entités, afdb785010a38091
-calque COTES : 18 entités, 90f79bbe3e33494c
+calque COTES : 18 entités, 4bb5107d333dcd2a
 calque FOULEE : 3 entités, 35fb5a9465da94bc
 calque MARCHES : 16 entités, 2e35c6bd88fa6710
 calque NEZ : 16 entités, 6327bb3e4b049b01
 calque TEXTE : 26 entités, b9637c71679e0f45
 calque TREMIE : 1 entités, 7773eb43ba6d5581
 plan.dxf AC1021 en
-calque DIMENSIONS : 18 entités, 92b935a04fbdb4b8
+calque DIMENSIONS : 18 entités, 2d24f1ac49ec8b45
 calque NOSINGS : 16 entités, 83d2871ac0609281
 calque OPENING : 1 entités, e7ae69be3bdc7ff1
 calque OUTLINE : 1 entités, ee68c60c242b54c4
@@ -960,19 +960,19 @@ LINE 8=COTES 10=758.32665 20=-3.316535 30=0 11=586.035369 21=-37.587402 31=0
 LINE 8=COTES 10=699.333288 20=293.263125 30=0 11=527.042007 21=258.992258 31=0
 LINE 8=COTES 10=624.757316 20=-44.184164 30=0 11=591.775688 21=-22.146545 31=0
 LINE 8=COTES 10=565.763954 20=252.395496 30=0 11=532.782326 21=274.433115 31=0
-TEXT 8=COTES 10=534.307555 20=106.280381 30=0 40=45.333333 1=g = 304,3 50=-78.75 72=1 11=534.307555 21=106.280381 31=0 73=2
+TEXT 8=COTES 10=534.307555 20=106.280381 30=0 40=45.333333 1=g (foul\\U+00E9e) = 304,3 50=-78.75 72=1 11=534.307555 21=106.280381 31=0 73=2
 "
 `;
 
 exports[`sorties hélicoïdales — exports (F10, P3, décision (10b)) > démo demo-helical-well > plan SVG 1`] = `
 "
-plan.svg fr light {"sha":"4c3fe1c437ed408c","kinds":{"landing":1,"winder":15},"dimensions":{"going":1,"radius":1,"width":1}}
-plan.svg fr dark {"sha":"b34a5d29b071c6bc","kinds":{"landing":1,"winder":15},"dimensions":{"going":1,"radius":1,"width":1}}
-plan.svg en light {"sha":"8ac53829809c2aa1","kinds":{"landing":1,"winder":15},"dimensions":{"going":1,"radius":1,"width":1}}
-plan.svg en dark {"sha":"c0f0f0517dc402fd","kinds":{"landing":1,"winder":15},"dimensions":{"going":1,"radius":1,"width":1}}
+plan.svg fr light {"sha":"529b8e68a47b685b","kinds":{"landing":1,"winder":15},"dimensions":{"going":1,"radius":1,"width":1}}
+plan.svg fr dark {"sha":"29d971ffbd88beea","kinds":{"landing":1,"winder":15},"dimensions":{"going":1,"radius":1,"width":1}}
+plan.svg en light {"sha":"40a0180d89b825cb","kinds":{"landing":1,"winder":15},"dimensions":{"going":1,"radius":1,"width":1}}
+plan.svg en dark {"sha":"d836cbf790edf35c","kinds":{"landing":1,"winder":15},"dimensions":{"going":1,"radius":1,"width":1}}
 cote width « 850 » value=850 d=M263.45 247L390.95 247M263.45 214.6L263.45 251.8M390.95 214.6L390.95 251.8M260.48 244.03L266.42 249.97M387.98 244.03L393.92 249.97
 cote radius « R 1 200 » value=1200 d=M210.95 295L390.95 295M210.95 214.6L210.95 299.8M390.95 214.6L390.95 299.8M207.98 292.03L213.92 297.97M387.98 292.03L393.92 297.97
-cote going « g = 304,3 » value=304.34 d=M295.93 217.22L287.09 172.73M323.67 211.7L291.23 218.15M314.82 167.21L282.38 173.67M299.43 219.55L292.44 214.88M290.58 175.06L283.59 170.4
+cote going « g (foulée) = 304,3 » value=304.34 d=M295.93 217.22L287.09 172.73M323.67 211.7L291.23 218.15M314.82 167.21L282.38 173.67M299.43 219.55L292.44 214.88M290.58 175.06L283.59 170.4
 "
 `;
 
@@ -1178,14 +1178,14 @@ exports[`sorties hélicoïdales — exports (F10, P3, décision (10b)) > exemple
 "
 plan.dxf R12 fr
 calque CONTOUR : 1 entités, dceb13a995223315
-calque COTES : 17 entités, 4d177b5a11fa327e
+calque COTES : 17 entités, 6fe9b86151bc49c1
 calque FOULEE : 3 entités, 3727d8cb1af49424
 calque MARCHES : 14 entités, e14bade1a9db52be
 calque NEZ : 15 entités, 9af7065e32194a5f
 calque TEXTE : 22 entités, a2790f36b1dd7c3c
 calque TREMIE : 1 entités, 2cff5079f4cee87e
 plan.dxf R12 en
-calque DIMENSIONS : 17 entités, a2631840cbb9e64b
+calque DIMENSIONS : 17 entités, 0a338646462d565c
 calque NOSINGS : 15 entités, 027b4e31641dfd3f
 calque OPENING : 1 entités, 0911f0042fb5ae18
 calque OUTLINE : 1 entités, 1be45bbadd6d5df3
@@ -1194,14 +1194,14 @@ calque TREADS : 14 entités, 68b4aa400138d3bd
 calque WALKLINE : 3 entités, a28c41700fa491c3
 plan.dxf AC1021 fr
 calque CONTOUR : 1 entités, 9efbab8497cf2a07
-calque COTES : 17 entités, f370676365a0b2a0
+calque COTES : 17 entités, bf9538fc8467ee45
 calque FOULEE : 3 entités, 4ec319238341a809
 calque MARCHES : 14 entités, b2ac31055aef21e7
 calque NEZ : 15 entités, c299f5b742750ed6
 calque TEXTE : 22 entités, a2f5c0d94ac7df9d
 calque TREMIE : 1 entités, 80b128368be15d57
 plan.dxf AC1021 en
-calque DIMENSIONS : 17 entités, f5cf6fa67719aaad
+calque DIMENSIONS : 17 entités, 592bea2df982f80d
 calque NOSINGS : 15 entités, 5753cf7384dc5d80
 calque OPENING : 1 entités, b68db494830c9ff6
 calque OUTLINE : 1 entités, c0ffdb17e479c8ac
@@ -1224,20 +1224,20 @@ LINE 8=COTES 10=432.034958 20=-1.121271 30=0 11=246.396185 21=-12.707737 31=0
 LINE 8=COTES 10=415.349252 20=266.217694 30=0 11=229.710479 21=254.631228 31=0
 LINE 8=COTES 10=286.09498 20=-25.108112 30=0 11=254.60417 21=2.682693 31=0
 LINE 8=COTES 10=269.409275 20=242.230853 30=0 11=237.918464 21=270.021658 31=0
-TEXT 8=COTES 10=214.099942 20=119.466717 30=0 40=48 1=g = 268,0 50=-86.428571 72=1 11=214.099942 21=119.466717 31=0 73=2
+TEXT 8=COTES 10=214.099942 20=119.466717 30=0 40=48 1=g (foul\\U+00E9e) = 268,0 50=-86.428571 72=1 11=214.099942 21=119.466717 31=0 73=2
 TEXT 8=COTES 10=-318.006639 20=1646.995553 30=0 40=48 1=balayage 100\\U+00B0 72=1 11=-318.006639 21=1646.995553 31=0 73=2
 "
 `;
 
 exports[`sorties hélicoïdales — exports (F10, P3, décision (10b)) > exemple cage-arc > plan SVG 1`] = `
 "
-plan.svg fr light {"sha":"981f3bbfcb719fd8","kinds":{"winder":14},"dimensions":{"going":1,"radius":1,"width":1}}
-plan.svg fr dark {"sha":"63bbadf4a51fbbac","kinds":{"winder":14},"dimensions":{"going":1,"radius":1,"width":1}}
-plan.svg en light {"sha":"314b0bb21924b504","kinds":{"winder":14},"dimensions":{"going":1,"radius":1,"width":1}}
-plan.svg en dark {"sha":"cdd62db41cc5b386","kinds":{"winder":14},"dimensions":{"going":1,"radius":1,"width":1}}
+plan.svg fr light {"sha":"f0ecc9266092ddea","kinds":{"winder":14},"dimensions":{"going":1,"radius":1,"width":1}}
+plan.svg fr dark {"sha":"33184663627e0b25","kinds":{"winder":14},"dimensions":{"going":1,"radius":1,"width":1}}
+plan.svg en light {"sha":"31f3d2e728aa8fee","kinds":{"winder":14},"dimensions":{"going":1,"radius":1,"width":1}}
+plan.svg en dark {"sha":"9afc02951303e0f3","kinds":{"winder":14},"dimensions":{"going":1,"radius":1,"width":1}}
 cote radius « R 2 150 » value=2150 d=M85 406L407.5 406M82.03 408.97L87.97 403.03M404.53 408.97L410.47 403.03
 cote width « 900 » value=900 d=M340 442L475 442M340 409.6L340 446.8M475 409.6L475 446.8M337.03 439.03L342.97 444.97M472.03 439.03L477.97 444.97
-cote going « g = 268,0 » value=268.03 d=M373.82 408.1L371.31 368M403.91 406.22L369.02 408.4M401.4 366.12L366.52 368.3M376.96 410.88L370.67 405.32M374.46 370.78L368.16 365.22
+cote going « g (foulée) = 268,0 » value=268.03 d=M373.82 408.1L371.31 368M403.91 406.22L369.02 408.4M401.4 366.12L366.52 368.3M376.96 410.88L370.67 405.32M374.46 370.78L368.16 365.22
 "
 `;
 
@@ -1537,14 +1537,14 @@ exports[`sorties hélicoïdales — exports (F10, P3, décision (10b)) > exemple
 "
 plan.dxf R12 fr
 calque CONTOUR : 1 entités, d089eb9d6acdaeb2
-calque COTES : 18 entités, 379f17b0d56176d1
+calque COTES : 18 entités, 4f7940e03b1bc7f9
 calque FOULEE : 3 entités, 0b1e25a31aa0557b
 calque MARCHES : 16 entités, e7364be51622ad5c
 calque NEZ : 16 entités, cbb07c5c6f904c34
 calque TEXTE : 25 entités, 5ca084120cef1a08
 calque TREMIE : 1 entités, cd192f5673ce3ca9
 plan.dxf R12 en
-calque DIMENSIONS : 18 entités, a079bdfafda48f40
+calque DIMENSIONS : 18 entités, 5e05d692d7306b38
 calque NOSINGS : 16 entités, d14d89fb981f65e6
 calque OPENING : 1 entités, b6e71484bb408c0e
 calque OUTLINE : 1 entités, f886f75036a8a130
@@ -1553,14 +1553,14 @@ calque TREADS : 16 entités, 14404e7ace418ab0
 calque WALKLINE : 3 entités, ae37dfeda5d2201b
 plan.dxf AC1021 fr
 calque CONTOUR : 1 entités, a73bd034968f3501
-calque COTES : 18 entités, 70b9fb1a5696a41d
+calque COTES : 18 entités, 9720d8c30de8b5b1
 calque FOULEE : 3 entités, 980f6f58099cb439
 calque MARCHES : 16 entités, 289e1b06d9d8c79c
 calque NEZ : 16 entités, 82a23750bc1549d8
 calque TEXTE : 25 entités, 58c380a0b9bf708c
 calque TREMIE : 1 entités, 313530254a2b81fb
 plan.dxf AC1021 en
-calque DIMENSIONS : 18 entités, 9bf43ea7eaffe541
+calque DIMENSIONS : 18 entités, 262185d6553e4809
 calque NOSINGS : 16 entités, b4032d964c5cc5cb
 calque OPENING : 1 entités, bc11d61c1dbfce79
 calque OUTLINE : 1 entités, 14c91eeb78750aab
@@ -1585,19 +1585,19 @@ LINE 8=COTES 10=1132.167653 20=-2.451 30=0 11=947.900067 21=-27.777996 31=0
 LINE 8=COTES 10=1089.522533 20=307.815287 30=0 11=905.254947 21=282.48829 31=0
 LINE 8=COTES 10=988.409437 20=-37.198961 30=0 11=954.943622 21=-11.821033 31=0
 LINE 8=COTES 10=945.764318 20=273.067326 30=0 11=912.298503 21=298.445254 31=0
-TEXT 8=COTES 10=902.801045 20=124.087147 30=0 40=48 1=g = 314,2 50=-82.173913 72=1 11=902.801045 21=124.087147 31=0 73=2
+TEXT 8=COTES 10=902.801045 20=124.087147 30=0 40=48 1=g (foul\\U+00E9e) = 314,2 50=-82.173913 72=1 11=902.801045 21=124.087147 31=0 73=2
 "
 `;
 
 exports[`sorties hélicoïdales — exports (F10, P3, décision (10b)) > exemple demo-central-glulam > plan SVG 1`] = `
 "
-plan.svg fr light {"sha":"98363f02d9423048","kinds":{"landing":1,"winder":15},"dimensions":{"going":1,"radius":1,"width":1}}
-plan.svg fr dark {"sha":"553dfd4e04459318","kinds":{"landing":1,"winder":15},"dimensions":{"going":1,"radius":1,"width":1}}
-plan.svg en light {"sha":"690f3f4f15a570ea","kinds":{"landing":1,"winder":15},"dimensions":{"going":1,"radius":1,"width":1}}
-plan.svg en dark {"sha":"fdaa387ce38eba69","kinds":{"landing":1,"winder":15},"dimensions":{"going":1,"radius":1,"width":1}}
+plan.svg fr light {"sha":"b25ef8fb17eaade0","kinds":{"landing":1,"winder":15},"dimensions":{"going":1,"radius":1,"width":1}}
+plan.svg fr dark {"sha":"66bf575e35f593e4","kinds":{"landing":1,"winder":15},"dimensions":{"going":1,"radius":1,"width":1}}
+plan.svg en light {"sha":"f99f6e12b4fda6b2","kinds":{"landing":1,"winder":15},"dimensions":{"going":1,"radius":1,"width":1}}
+plan.svg en dark {"sha":"4d18fa5a26ef82c8","kinds":{"landing":1,"winder":15},"dimensions":{"going":1,"radius":1,"width":1}}
 cote width « 900 » value=900 d=M376 306.94L511 306.94M376 274.54L376 311.74M511 274.54L511 311.74M373.03 303.97L378.97 309.91M508.03 303.97L513.97 309.91
 cote radius « R 1 600 » value=1600 d=M271 354.94L511 354.94M271 274.54L271 359.74M511 274.54L511 359.74M268.03 351.97L273.97 357.91M508.03 351.97L513.97 357.91
-cote going « g = 314,2 » value=314.16 d=M410.06 275.54L403.66 229M439.93 271.43L405.3 276.19M433.53 224.89L398.91 229.65M413.41 278.07L406.71 273M407.01 231.53L400.32 226.46
+cote going « g (foulée) = 314,2 » value=314.16 d=M410.06 275.54L403.66 229M439.93 271.43L405.3 276.19M433.53 224.89L398.91 229.65M413.41 278.07L406.71 273M407.01 231.53L400.32 226.46
 "
 `;
 
@@ -1835,14 +1835,14 @@ exports[`sorties hélicoïdales — exports (F10, P3, décision (10b)) > exemple
 "
 plan.dxf R12 fr
 calque CONTOUR : 1 entités, 1b5a0e7019ea8e59
-calque COTES : 18 entités, bbfab8c7f5e04396
+calque COTES : 18 entités, 6be4dfa7c956f5c6
 calque FOULEE : 3 entités, 4759afc855bbe309
 calque MARCHES : 16 entités, 79faba25e1e4f3ab
 calque NEZ : 16 entités, c4d4b343f642b951
 calque TEXTE : 26 entités, 603af660838954b5
 calque TREMIE : 1 entités, 5d3de822bbfa2f97
 plan.dxf R12 en
-calque DIMENSIONS : 18 entités, ca7d3d1d7ee7c8bf
+calque DIMENSIONS : 18 entités, 8bf07c60fc424e5b
 calque NOSINGS : 16 entités, 35a0ba561a60e308
 calque OPENING : 1 entités, f6095d8208facc93
 calque OUTLINE : 1 entités, 32f0a3829bb26b0c
@@ -1851,14 +1851,14 @@ calque TREADS : 16 entités, 3ce57735dd38620d
 calque WALKLINE : 3 entités, bb948ad62cf0fe7d
 plan.dxf AC1021 fr
 calque CONTOUR : 1 entités, 04431b1fc858e113
-calque COTES : 18 entités, 8e78746677dc5663
+calque COTES : 18 entités, 8b2c80dcb04bba79
 calque FOULEE : 3 entités, 8abd67ab3f568b99
 calque MARCHES : 16 entités, 32bd3d8c22a5ecfa
 calque NEZ : 16 entités, 3afe7dd2ccbb9f91
 calque TEXTE : 26 entités, cc235b12ede02e2f
 calque TREMIE : 1 entités, 08ea1297583f9a02
 plan.dxf AC1021 en
-calque DIMENSIONS : 18 entités, 2cb1bd1d34dbc4b1
+calque DIMENSIONS : 18 entités, eb5d86a874c641cc
 calque NOSINGS : 16 entités, 7cc55e5369dc7f5c
 calque OPENING : 1 entités, 6b00dd8b20667137
 calque OUTLINE : 1 entités, 9c81b9b12b9a6bb7
@@ -1883,19 +1883,19 @@ LINE 8=COTES 10=564.850159 20=-4.282981 30=0 11=356.63514 21=-48.540449 31=0
 LINE 8=COTES 10=514.274252 20=233.657955 30=0 11=306.059233 21=189.400487 31=0
 LINE 8=COTES 10=403.657644 20=-55.9193 30=0 11=363.345545 21=-29.740317 31=0
 LINE 8=COTES 10=353.081736 20=182.021636 30=0 11=312.769638 21=208.200619 31=0
-TEXT 8=COTES 10=304.480732 20=64.719378 30=0 40=54.933333 1=g = 245,0 50=-78 72=1 11=304.480732 21=64.719378 31=0 73=2
+TEXT 8=COTES 10=304.480732 20=64.719378 30=0 40=54.933333 1=g (foul\\U+00E9e) = 245,0 50=-78 72=1 11=304.480732 21=64.719378 31=0 73=2
 "
 `;
 
 exports[`sorties hélicoïdales — exports (F10, P3, décision (10b)) > exemple demo-helical-glass > plan SVG 1`] = `
 "
-plan.svg fr light {"sha":"4d65367359def2b9","kinds":{"landing":1,"winder":15},"dimensions":{"going":1,"radius":1,"width":1}}
-plan.svg fr dark {"sha":"111be16b7d4e83ba","kinds":{"landing":1,"winder":15},"dimensions":{"going":1,"radius":1,"width":1}}
-plan.svg en light {"sha":"5b93218de752825f","kinds":{"landing":1,"winder":15},"dimensions":{"going":1,"radius":1,"width":1}}
-plan.svg en dark {"sha":"dcc02c6a2e1e9173","kinds":{"landing":1,"winder":15},"dimensions":{"going":1,"radius":1,"width":1}}
+plan.svg fr light {"sha":"674a8667a7b78469","kinds":{"landing":1,"winder":15},"dimensions":{"going":1,"radius":1,"width":1}}
+plan.svg fr dark {"sha":"9302228b1e6c9dd9","kinds":{"landing":1,"winder":15},"dimensions":{"going":1,"radius":1,"width":1}}
+plan.svg en light {"sha":"752a6ad3bafbf889","kinds":{"landing":1,"winder":15},"dimensions":{"going":1,"radius":1,"width":1}}
+plan.svg en dark {"sha":"ba29f53b80237755","kinds":{"landing":1,"winder":15},"dimensions":{"going":1,"radius":1,"width":1}}
 cote width « 1 030 » value=1030 d=M206.46 232L360.96 232M206.46 199.6L206.46 236.8M360.96 199.6L360.96 236.8M203.49 229.03L209.43 234.97M357.99 229.03L363.93 234.97
 cote radius « R 1 100 » value=1100 d=M195.96 280L360.96 280M195.96 199.6L195.96 284.8M360.96 199.6L360.96 284.8M192.99 277.03L198.93 282.97M357.99 277.03L363.93 282.97
-cote going « g = 245,0 » value=245.04 d=M248.5 203.48L240.91 167.79M280.19 196.75L243.8 204.48M272.6 161.06L236.22 168.79M252.02 205.77L244.98 201.2M244.44 170.08L237.39 165.51
+cote going « g (foulée) = 245,0 » value=245.04 d=M248.5 203.48L240.91 167.79M280.19 196.75L243.8 204.48M272.6 161.06L236.22 168.79M252.02 205.77L244.98 201.2M244.44 170.08L237.39 165.51
 "
 `;
 
@@ -2162,14 +2162,14 @@ exports[`sorties hélicoïdales — exports (F10, P3, décision (10b)) > exemple
 "
 plan.dxf R12 fr
 calque CONTOUR : 1 entités, b594cc8fd5b2b142
-calque COTES : 18 entités, 6a94858739f8fe26
+calque COTES : 18 entités, 75e58b999c6fec6b
 calque FOULEE : 3 entités, 8fcf86c5def78276
 calque MARCHES : 16 entités, e4bb989a77e943ec
 calque NEZ : 16 entités, 51efac6b96c0cb0d
 calque TEXTE : 26 entités, 0bc791fa48ef4763
 calque TREMIE : 1 entités, 48b5310224c86cd7
 plan.dxf R12 en
-calque DIMENSIONS : 18 entités, 9f4296fc79ee3438
+calque DIMENSIONS : 18 entités, 3b07f5228a8044d0
 calque NOSINGS : 16 entités, 151bf8def650521c
 calque OPENING : 1 entités, 154d04edf8fb5538
 calque OUTLINE : 1 entités, 5a4b4f6f8f548193
@@ -2178,14 +2178,14 @@ calque TREADS : 16 entités, a396a3e14cee4a35
 calque WALKLINE : 3 entités, b9c728e3775ab0fa
 plan.dxf AC1021 fr
 calque CONTOUR : 1 entités, afdb785010a38091
-calque COTES : 18 entités, 90f79bbe3e33494c
+calque COTES : 18 entités, 4bb5107d333dcd2a
 calque FOULEE : 3 entités, 35fb5a9465da94bc
 calque MARCHES : 16 entités, 2e35c6bd88fa6710
 calque NEZ : 16 entités, 6327bb3e4b049b01
 calque TEXTE : 26 entités, b9637c71679e0f45
 calque TREMIE : 1 entités, 7773eb43ba6d5581
 plan.dxf AC1021 en
-calque DIMENSIONS : 18 entités, 92b935a04fbdb4b8
+calque DIMENSIONS : 18 entités, 2d24f1ac49ec8b45
 calque NOSINGS : 16 entités, 83d2871ac0609281
 calque OPENING : 1 entités, e7ae69be3bdc7ff1
 calque OUTLINE : 1 entités, ee68c60c242b54c4
@@ -2210,19 +2210,19 @@ LINE 8=COTES 10=758.32665 20=-3.316535 30=0 11=586.035369 21=-37.587402 31=0
 LINE 8=COTES 10=699.333288 20=293.263125 30=0 11=527.042007 21=258.992258 31=0
 LINE 8=COTES 10=624.757316 20=-44.184164 30=0 11=591.775688 21=-22.146545 31=0
 LINE 8=COTES 10=565.763954 20=252.395496 30=0 11=532.782326 21=274.433115 31=0
-TEXT 8=COTES 10=534.307555 20=106.280381 30=0 40=45.333333 1=g = 304,3 50=-78.75 72=1 11=534.307555 21=106.280381 31=0 73=2
+TEXT 8=COTES 10=534.307555 20=106.280381 30=0 40=45.333333 1=g (foul\\U+00E9e) = 304,3 50=-78.75 72=1 11=534.307555 21=106.280381 31=0 73=2
 "
 `;
 
 exports[`sorties hélicoïdales — exports (F10, P3, décision (10b)) > exemple demo-helical-well > plan SVG 1`] = `
 "
-plan.svg fr light {"sha":"4c3fe1c437ed408c","kinds":{"landing":1,"winder":15},"dimensions":{"going":1,"radius":1,"width":1}}
-plan.svg fr dark {"sha":"b34a5d29b071c6bc","kinds":{"landing":1,"winder":15},"dimensions":{"going":1,"radius":1,"width":1}}
-plan.svg en light {"sha":"8ac53829809c2aa1","kinds":{"landing":1,"winder":15},"dimensions":{"going":1,"radius":1,"width":1}}
-plan.svg en dark {"sha":"c0f0f0517dc402fd","kinds":{"landing":1,"winder":15},"dimensions":{"going":1,"radius":1,"width":1}}
+plan.svg fr light {"sha":"529b8e68a47b685b","kinds":{"landing":1,"winder":15},"dimensions":{"going":1,"radius":1,"width":1}}
+plan.svg fr dark {"sha":"29d971ffbd88beea","kinds":{"landing":1,"winder":15},"dimensions":{"going":1,"radius":1,"width":1}}
+plan.svg en light {"sha":"40a0180d89b825cb","kinds":{"landing":1,"winder":15},"dimensions":{"going":1,"radius":1,"width":1}}
+plan.svg en dark {"sha":"d836cbf790edf35c","kinds":{"landing":1,"winder":15},"dimensions":{"going":1,"radius":1,"width":1}}
 cote width « 850 » value=850 d=M263.45 247L390.95 247M263.45 214.6L263.45 251.8M390.95 214.6L390.95 251.8M260.48 244.03L266.42 249.97M387.98 244.03L393.92 249.97
 cote radius « R 1 200 » value=1200 d=M210.95 295L390.95 295M210.95 214.6L210.95 299.8M390.95 214.6L390.95 299.8M207.98 292.03L213.92 297.97M387.98 292.03L393.92 297.97
-cote going « g = 304,3 » value=304.34 d=M295.93 217.22L287.09 172.73M323.67 211.7L291.23 218.15M314.82 167.21L282.38 173.67M299.43 219.55L292.44 214.88M290.58 175.06L283.59 170.4
+cote going « g (foulée) = 304,3 » value=304.34 d=M295.93 217.22L287.09 172.73M323.67 211.7L291.23 218.15M314.82 167.21L282.38 173.67M299.43 219.55L292.44 214.88M290.58 175.06L283.59 170.4
 "
 `;
 
@@ -2396,14 +2396,14 @@ exports[`sorties hélicoïdales — exports (F10, P3, décision (10b)) > exemple
 "
 plan.dxf R12 fr
 calque CONTOUR : 1 entités, 807fdf1ddba6fe3d
-calque COTES : 18 entités, d1e78de1bd369c1c
+calque COTES : 18 entités, 715be466fcd5c7e4
 calque FOULEE : 3 entités, 1a19cc9f6f37a667
 calque MARCHES : 16 entités, 8f454d4702e22ce7
 calque NEZ : 16 entités, d9ed423acd1a9bc6
 calque TEXTE : 26 entités, 741e62298edc29c7
 calque TREMIE : 1 entités, 4493c8762e77380f
 plan.dxf R12 en
-calque DIMENSIONS : 18 entités, 2c851f25fa6f87c7
+calque DIMENSIONS : 18 entités, b45c973ba96accf7
 calque NOSINGS : 16 entités, c2860168424afa6f
 calque OPENING : 1 entités, 1eb5b6b50ded11e3
 calque OUTLINE : 1 entités, 28982ce28e360a3b
@@ -2412,14 +2412,14 @@ calque TREADS : 16 entités, 7554013030fe9b74
 calque WALKLINE : 3 entités, 6df657c2f31852c1
 plan.dxf AC1021 fr
 calque CONTOUR : 1 entités, 7a28944fe44b067c
-calque COTES : 18 entités, 02cbb008ca1335e2
+calque COTES : 18 entités, 11daea18aa8afaee
 calque FOULEE : 3 entités, c6d8c43053558eef
 calque MARCHES : 16 entités, de6f68b275c531cb
 calque NEZ : 16 entités, 8d01f88e79c60911
 calque TEXTE : 26 entités, dd8bbdf63d23b969
 calque TREMIE : 1 entités, 612aaaf64007ecd1
 plan.dxf AC1021 en
-calque DIMENSIONS : 18 entités, b09ce621888e3161
+calque DIMENSIONS : 18 entités, 641dad9e2ceeab52
 calque NOSINGS : 16 entités, c976caa6fdcdf1d2
 calque OPENING : 1 entités, 9158c9d64df79c41
 calque OUTLINE : 1 entités, cf6736ff4269ded1
@@ -2444,19 +2444,19 @@ LINE 8=COTES 10=492.911424 20=-4.211956 30=0 11=316.329472 21=-47.735498 31=0
 LINE 8=COTES 10=434.493997 20=232.796862 30=0 11=257.912045 21=189.27332 31=0
 LINE 8=COTES 10=356.686282 20=-52.742227 30=0 11=321.542198 21=-31.496887 31=0
 LINE 8=COTES 10=298.268855 20=184.266591 30=0 11=263.124771 21=205.511931 31=0
-TEXT 8=COTES 10=264.335991 20=65.15297 30=0 40=46.933333 1=g = 246,5 50=-76.153846 72=1 11=264.335991 21=65.15297 31=0 73=2
+TEXT 8=COTES 10=264.335991 20=65.15297 30=0 40=46.933333 1=g (foul\\U+00E9e) = 246,5 50=-76.153846 72=1 11=264.335991 21=65.15297 31=0 73=2
 "
 `;
 
 exports[`sorties hélicoïdales — exports (F10, P3, décision (10b)) > exemple j5a-helicoidal > plan SVG 1`] = `
 "
-plan.svg fr light {"sha":"fc040e607b616230","kinds":{"landing":1,"winder":15},"dimensions":{"going":1,"radius":1,"width":1}}
-plan.svg fr dark {"sha":"9d086901dcdcf3ae","kinds":{"landing":1,"winder":15},"dimensions":{"going":1,"radius":1,"width":1}}
-plan.svg en light {"sha":"d32757ed743202d2","kinds":{"landing":1,"winder":15},"dimensions":{"going":1,"radius":1,"width":1}}
-plan.svg en dark {"sha":"6e8a942c326da304","kinds":{"landing":1,"winder":15},"dimensions":{"going":1,"radius":1,"width":1}}
+plan.svg fr light {"sha":"44dcf826373da282","kinds":{"landing":1,"winder":15},"dimensions":{"going":1,"radius":1,"width":1}}
+plan.svg fr dark {"sha":"b78fa299107a9691","kinds":{"landing":1,"winder":15},"dimensions":{"going":1,"radius":1,"width":1}}
+plan.svg en light {"sha":"46f17cf4bee7d695","kinds":{"landing":1,"winder":15},"dimensions":{"going":1,"radius":1,"width":1}}
+plan.svg en dark {"sha":"4fb5836afafa40c2","kinds":{"landing":1,"winder":15},"dimensions":{"going":1,"radius":1,"width":1}}
 cote width « 880 » value=880 d=M183.98 206.92L315.98 206.92M183.98 174.52L183.98 211.72M315.98 174.52L315.98 211.72M181.01 203.95L186.95 209.89M313.01 203.95L318.95 209.89
 cote radius « R 950 » value=950 d=M173.48 254.92L315.98 254.92M173.48 174.52L173.48 259.72M315.98 174.52L315.98 259.72M170.51 251.95L176.45 257.89M313.01 251.95L318.95 257.89
-cote going « g = 246,5 » value=246.49 d=M217.94 178.82L209.18 143.27M246.49 171.78L213.28 179.97M237.72 136.23L204.52 144.41M221.53 180.99L214.35 176.64M212.77 145.44L205.58 141.09
+cote going « g (foulée) = 246,5 » value=246.49 d=M217.94 178.82L209.18 143.27M246.49 171.78L213.28 179.97M237.72 136.23L204.52 144.41M221.53 180.99L214.35 176.64M212.77 145.44L205.58 141.09
 "
 `;
 
@@ -3127,14 +3127,14 @@ exports[`sorties hélicoïdales — exports (F10, P3, décision (10b)) > exemple
 "
 plan.dxf R12 fr
 calque CONTOUR : 1 entités, b594cc8fd5b2b142
-calque COTES : 18 entités, 6a94858739f8fe26
+calque COTES : 18 entités, 75e58b999c6fec6b
 calque FOULEE : 3 entités, 8fcf86c5def78276
 calque MARCHES : 16 entités, e4bb989a77e943ec
 calque NEZ : 16 entités, 51efac6b96c0cb0d
 calque TEXTE : 26 entités, a4d920317a244e03
 calque TREMIE : 1 entités, 48b5310224c86cd7
 plan.dxf R12 en
-calque DIMENSIONS : 18 entités, 9f4296fc79ee3438
+calque DIMENSIONS : 18 entités, 3b07f5228a8044d0
 calque NOSINGS : 16 entités, 151bf8def650521c
 calque OPENING : 1 entités, 154d04edf8fb5538
 calque OUTLINE : 1 entités, 5a4b4f6f8f548193
@@ -3143,14 +3143,14 @@ calque TREADS : 16 entités, a396a3e14cee4a35
 calque WALKLINE : 3 entités, b9c728e3775ab0fa
 plan.dxf AC1021 fr
 calque CONTOUR : 1 entités, afdb785010a38091
-calque COTES : 18 entités, 90f79bbe3e33494c
+calque COTES : 18 entités, 4bb5107d333dcd2a
 calque FOULEE : 3 entités, 35fb5a9465da94bc
 calque MARCHES : 16 entités, 2e35c6bd88fa6710
 calque NEZ : 16 entités, 6327bb3e4b049b01
 calque TEXTE : 26 entités, 93277522ce488307
 calque TREMIE : 1 entités, 7773eb43ba6d5581
 plan.dxf AC1021 en
-calque DIMENSIONS : 18 entités, 92b935a04fbdb4b8
+calque DIMENSIONS : 18 entités, 2d24f1ac49ec8b45
 calque NOSINGS : 16 entités, 83d2871ac0609281
 calque OPENING : 1 entités, e7ae69be3bdc7ff1
 calque OUTLINE : 1 entités, ee68c60c242b54c4
@@ -3175,19 +3175,19 @@ LINE 8=COTES 10=758.32665 20=-3.316535 30=0 11=586.035369 21=-37.587402 31=0
 LINE 8=COTES 10=699.333288 20=293.263125 30=0 11=527.042007 21=258.992258 31=0
 LINE 8=COTES 10=624.757316 20=-44.184164 30=0 11=591.775688 21=-22.146545 31=0
 LINE 8=COTES 10=565.763954 20=252.395496 30=0 11=532.782326 21=274.433115 31=0
-TEXT 8=COTES 10=534.307555 20=106.280381 30=0 40=45.333333 1=g = 304,3 50=-78.75 72=1 11=534.307555 21=106.280381 31=0 73=2
+TEXT 8=COTES 10=534.307555 20=106.280381 30=0 40=45.333333 1=g (foul\\U+00E9e) = 304,3 50=-78.75 72=1 11=534.307555 21=106.280381 31=0 73=2
 "
 `;
 
 exports[`sorties hélicoïdales — exports (F10, P3, décision (10b)) > exemple j5c-limon-central-bois-helicoidal > plan SVG 1`] = `
 "
-plan.svg fr light {"sha":"dcb681f932406fca","kinds":{"landing":1,"winder":15},"dimensions":{"going":1,"radius":1,"width":1}}
-plan.svg fr dark {"sha":"f60761f1edf831f3","kinds":{"landing":1,"winder":15},"dimensions":{"going":1,"radius":1,"width":1}}
-plan.svg en light {"sha":"6bd6d21b94cb50b1","kinds":{"landing":1,"winder":15},"dimensions":{"going":1,"radius":1,"width":1}}
-plan.svg en dark {"sha":"74205b1c05230e8f","kinds":{"landing":1,"winder":15},"dimensions":{"going":1,"radius":1,"width":1}}
+plan.svg fr light {"sha":"5f0463ba947dc516","kinds":{"landing":1,"winder":15},"dimensions":{"going":1,"radius":1,"width":1}}
+plan.svg fr dark {"sha":"191c9f6cb3d4471e","kinds":{"landing":1,"winder":15},"dimensions":{"going":1,"radius":1,"width":1}}
+plan.svg en light {"sha":"aa534b17eb30d230","kinds":{"landing":1,"winder":15},"dimensions":{"going":1,"radius":1,"width":1}}
+plan.svg en dark {"sha":"1c6e8ff7d8b9ad1a","kinds":{"landing":1,"winder":15},"dimensions":{"going":1,"radius":1,"width":1}}
 cote width « 850 » value=850 d=M263.45 247L390.95 247M263.45 214.6L263.45 251.8M390.95 214.6L390.95 251.8M260.48 244.03L266.42 249.97M387.98 244.03L393.92 249.97
 cote radius « R 1 200 » value=1200 d=M210.95 295L390.95 295M210.95 214.6L210.95 299.8M390.95 214.6L390.95 299.8M207.98 292.03L213.92 297.97M387.98 292.03L393.92 297.97
-cote going « g = 304,3 » value=304.34 d=M295.93 217.22L287.09 172.73M323.67 211.7L291.23 218.15M314.82 167.21L282.38 173.67M299.43 219.55L292.44 214.88M290.58 175.06L283.59 170.4
+cote going « g (foulée) = 304,3 » value=304.34 d=M295.93 217.22L287.09 172.73M323.67 211.7L291.23 218.15M314.82 167.21L282.38 173.67M299.43 219.55L292.44 214.88M290.58 175.06L283.59 170.4
 "
 `;
 
@@ -3525,14 +3525,14 @@ exports[`sorties hélicoïdales — exports (F10, P3, décision (10b)) > exemple
 "
 plan.dxf R12 fr
 calque CONTOUR : 1 entités, b594cc8fd5b2b142
-calque COTES : 18 entités, 6a94858739f8fe26
+calque COTES : 18 entités, 75e58b999c6fec6b
 calque FOULEE : 3 entités, 8fcf86c5def78276
 calque MARCHES : 16 entités, e4bb989a77e943ec
 calque NEZ : 16 entités, 51efac6b96c0cb0d
 calque TEXTE : 26 entités, 0bc791fa48ef4763
 calque TREMIE : 1 entités, 48b5310224c86cd7
 plan.dxf R12 en
-calque DIMENSIONS : 18 entités, 9f4296fc79ee3438
+calque DIMENSIONS : 18 entités, 3b07f5228a8044d0
 calque NOSINGS : 16 entités, 151bf8def650521c
 calque OPENING : 1 entités, 154d04edf8fb5538
 calque OUTLINE : 1 entités, 5a4b4f6f8f548193
@@ -3541,14 +3541,14 @@ calque TREADS : 16 entités, a396a3e14cee4a35
 calque WALKLINE : 3 entités, b9c728e3775ab0fa
 plan.dxf AC1021 fr
 calque CONTOUR : 1 entités, afdb785010a38091
-calque COTES : 18 entités, 90f79bbe3e33494c
+calque COTES : 18 entités, 4bb5107d333dcd2a
 calque FOULEE : 3 entités, 35fb5a9465da94bc
 calque MARCHES : 16 entités, 2e35c6bd88fa6710
 calque NEZ : 16 entités, 6327bb3e4b049b01
 calque TEXTE : 26 entités, b9637c71679e0f45
 calque TREMIE : 1 entités, 7773eb43ba6d5581
 plan.dxf AC1021 en
-calque DIMENSIONS : 18 entités, 92b935a04fbdb4b8
+calque DIMENSIONS : 18 entités, 2d24f1ac49ec8b45
 calque NOSINGS : 16 entités, 83d2871ac0609281
 calque OPENING : 1 entités, e7ae69be3bdc7ff1
 calque OUTLINE : 1 entités, ee68c60c242b54c4
@@ -3573,19 +3573,19 @@ LINE 8=COTES 10=758.32665 20=-3.316535 30=0 11=586.035369 21=-37.587402 31=0
 LINE 8=COTES 10=699.333288 20=293.263125 30=0 11=527.042007 21=258.992258 31=0
 LINE 8=COTES 10=624.757316 20=-44.184164 30=0 11=591.775688 21=-22.146545 31=0
 LINE 8=COTES 10=565.763954 20=252.395496 30=0 11=532.782326 21=274.433115 31=0
-TEXT 8=COTES 10=534.307555 20=106.280381 30=0 40=45.333333 1=g = 304,3 50=-78.75 72=1 11=534.307555 21=106.280381 31=0 73=2
+TEXT 8=COTES 10=534.307555 20=106.280381 30=0 40=45.333333 1=g (foul\\U+00E9e) = 304,3 50=-78.75 72=1 11=534.307555 21=106.280381 31=0 73=2
 "
 `;
 
 exports[`sorties hélicoïdales — exports (F10, P3, décision (10b)) > exemple j5c-limon-central-helicoidal > plan SVG 1`] = `
 "
-plan.svg fr light {"sha":"e3a79bf443cd96c6","kinds":{"landing":1,"winder":15},"dimensions":{"going":1,"radius":1,"width":1}}
-plan.svg fr dark {"sha":"0e9429dacaea3001","kinds":{"landing":1,"winder":15},"dimensions":{"going":1,"radius":1,"width":1}}
-plan.svg en light {"sha":"4f0a2128bc13aabd","kinds":{"landing":1,"winder":15},"dimensions":{"going":1,"radius":1,"width":1}}
-plan.svg en dark {"sha":"7eb1c6109376ae91","kinds":{"landing":1,"winder":15},"dimensions":{"going":1,"radius":1,"width":1}}
+plan.svg fr light {"sha":"fa0aeb2b52eb5130","kinds":{"landing":1,"winder":15},"dimensions":{"going":1,"radius":1,"width":1}}
+plan.svg fr dark {"sha":"0a9631d542d83b0c","kinds":{"landing":1,"winder":15},"dimensions":{"going":1,"radius":1,"width":1}}
+plan.svg en light {"sha":"1ce5c154341d83ee","kinds":{"landing":1,"winder":15},"dimensions":{"going":1,"radius":1,"width":1}}
+plan.svg en dark {"sha":"283341d8e3363769","kinds":{"landing":1,"winder":15},"dimensions":{"going":1,"radius":1,"width":1}}
 cote width « 850 » value=850 d=M263.45 247L390.95 247M263.45 214.6L263.45 251.8M390.95 214.6L390.95 251.8M260.48 244.03L266.42 249.97M387.98 244.03L393.92 249.97
 cote radius « R 1 200 » value=1200 d=M210.95 295L390.95 295M210.95 214.6L210.95 299.8M390.95 214.6L390.95 299.8M207.98 292.03L213.92 297.97M387.98 292.03L393.92 297.97
-cote going « g = 304,3 » value=304.34 d=M295.93 217.22L287.09 172.73M323.67 211.7L291.23 218.15M314.82 167.21L282.38 173.67M299.43 219.55L292.44 214.88M290.58 175.06L283.59 170.4
+cote going « g (foulée) = 304,3 » value=304.34 d=M295.93 217.22L287.09 172.73M323.67 211.7L291.23 218.15M314.82 167.21L282.38 173.67M299.43 219.55L292.44 214.88M290.58 175.06L283.59 170.4
 "
 `;
 
@@ -3808,14 +3808,14 @@ exports[`sorties hélicoïdales — exports (F10, P3, décision (10b)) > préré
 "
 plan.dxf R12 fr
 calque CONTOUR : 1 entités, 5c758aaee52397e5
-calque COTES : 18 entités, d1e78de1bd369c1c
+calque COTES : 18 entités, 715be466fcd5c7e4
 calque FOULEE : 3 entités, a14d935236b4e0c6
 calque MARCHES : 15 entités, 6647a87c34a19c98
 calque NEZ : 15 entités, 09b892aa1f5a9010
 calque TEXTE : 25 entités, c826e0b9cc3dc140
 calque TREMIE : 1 entités, f53ef62accf5ef94
 plan.dxf R12 en
-calque DIMENSIONS : 18 entités, 2c851f25fa6f87c7
+calque DIMENSIONS : 18 entités, b45c973ba96accf7
 calque NOSINGS : 15 entités, 230dcc4d0080be99
 calque OPENING : 1 entités, f9618429fe5537c9
 calque OUTLINE : 1 entités, b7b5bc6d97989e1d
@@ -3824,14 +3824,14 @@ calque TREADS : 15 entités, 6c61a4aaec44b3b5
 calque WALKLINE : 3 entités, 1fd0419c33ec6de8
 plan.dxf AC1021 fr
 calque CONTOUR : 1 entités, b93112e34e341bec
-calque COTES : 18 entités, 02cbb008ca1335e2
+calque COTES : 18 entités, 11daea18aa8afaee
 calque FOULEE : 3 entités, cef7d2c21a1d8181
 calque MARCHES : 15 entités, 87a4ba7286521f93
 calque NEZ : 15 entités, dda5a0bb9e49fdde
 calque TEXTE : 25 entités, 9bb3bfc6e67e6e9c
 calque TREMIE : 1 entités, b14dbfd6df63b2cc
 plan.dxf AC1021 en
-calque DIMENSIONS : 18 entités, b09ce621888e3161
+calque DIMENSIONS : 18 entités, 641dad9e2ceeab52
 calque NOSINGS : 15 entités, 9b06f7b85ed0e583
 calque OPENING : 1 entités, 10d33f6244b8f509
 calque OUTLINE : 1 entités, 2ca314199c8484d8
@@ -3856,19 +3856,19 @@ LINE 8=COTES 10=492.911424 20=-4.211956 30=0 11=316.329472 21=-47.735498 31=0
 LINE 8=COTES 10=434.493997 20=232.796862 30=0 11=257.912045 21=189.27332 31=0
 LINE 8=COTES 10=356.686282 20=-52.742227 30=0 11=321.542198 21=-31.496887 31=0
 LINE 8=COTES 10=298.268855 20=184.266591 30=0 11=263.124771 21=205.511931 31=0
-TEXT 8=COTES 10=264.335991 20=65.15297 30=0 40=46.933333 1=g = 246,5 50=-76.153846 72=1 11=264.335991 21=65.15297 31=0 73=2
+TEXT 8=COTES 10=264.335991 20=65.15297 30=0 40=46.933333 1=g (foul\\U+00E9e) = 246,5 50=-76.153846 72=1 11=264.335991 21=65.15297 31=0 73=2
 "
 `;
 
 exports[`sorties hélicoïdales — exports (F10, P3, décision (10b)) > préréglage helical > plan SVG 1`] = `
 "
-plan.svg fr light {"sha":"966bfb299d6a4f17","kinds":{"landing":1,"winder":14},"dimensions":{"going":1,"radius":1,"width":1}}
-plan.svg fr dark {"sha":"5b5771db9579292a","kinds":{"landing":1,"winder":14},"dimensions":{"going":1,"radius":1,"width":1}}
-plan.svg en light {"sha":"5e28734daaeaa622","kinds":{"landing":1,"winder":14},"dimensions":{"going":1,"radius":1,"width":1}}
-plan.svg en dark {"sha":"3ac112bcb7b8bbec","kinds":{"landing":1,"winder":14},"dimensions":{"going":1,"radius":1,"width":1}}
+plan.svg fr light {"sha":"9b858cb309ab2447","kinds":{"landing":1,"winder":14},"dimensions":{"going":1,"radius":1,"width":1}}
+plan.svg fr dark {"sha":"32fa988eb7fab27c","kinds":{"landing":1,"winder":14},"dimensions":{"going":1,"radius":1,"width":1}}
+plan.svg en light {"sha":"ca16707d4cdc2ab6","kinds":{"landing":1,"winder":14},"dimensions":{"going":1,"radius":1,"width":1}}
+plan.svg en dark {"sha":"aabd8f8a7635d1cb","kinds":{"landing":1,"winder":14},"dimensions":{"going":1,"radius":1,"width":1}}
 cote width « 880 » value=880 d=M183.99 209.46L315.99 209.46M183.99 177.06L183.99 214.26M315.99 177.06L315.99 214.26M181.02 206.49L186.96 212.43M313.02 206.49L318.96 212.43
 cote radius « R 950 » value=950 d=M173.49 257.46L315.99 257.46M173.49 177.06L173.49 262.26M315.99 177.06L315.99 262.26M170.52 254.49L176.46 260.43M313.02 254.49L318.96 260.43
-cote going « g = 246,5 » value=246.49 d=M217.95 181.36L209.19 145.81M246.5 174.33L213.29 182.51M237.73 138.77L204.53 146.96M221.55 183.53L214.36 179.19M212.78 147.98L205.59 143.64
+cote going « g (foulée) = 246,5 » value=246.49 d=M217.95 181.36L209.19 145.81M246.5 174.33L213.29 182.51M237.73 138.77L204.53 146.96M221.55 183.53L214.36 179.19M212.78 147.98L205.59 143.64
 "
 `;
 

@@ -344,7 +344,8 @@ export function buildPlanDrawing(model: Model, options: PlanDrawingOptions = {})
   // aucune marche droite (hélicoïdal, cage en arc seul), première marche dansante (plus petit
   // numéro : un ordre et non un minimum, stable face au bruit), décision F10 (9) : la ligne de
   // cote est la corde n0.p → n1.p, la valeur cotée est le giron de la marche mesuré sur la
-  // ligne de foulée (longueur d'arc, `Tread.going`).
+  // ligne de foulée (longueur d'arc, `Tread.going`), dit dans le texte (« g (foulée) = … »,
+  // F10 (14)).
   const goingDim = (n0: Vec2, n1: Vec2, measured?: Mm): Dimension => {
     const t = vec2.normalize(vec2.sub(n1, n0));
     const inward = vec2.scale(outwardFromOuter(t, layout.innerSide), -1);
@@ -357,7 +358,7 @@ export function buildPlanDrawing(model: Model, options: PlanDrawingOptions = {})
       inward,
       off,
       Math.max(decimals, 1),
-      "drawing.dimension.going",
+      measured === undefined ? "drawing.dimension.going" : "drawing.dimension.goingWalkingLine",
       measured,
     );
   };

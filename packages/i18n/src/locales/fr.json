@@ -405,6 +405,7 @@
   "csv.total": "Total",
   "drawing.common.complianceSummary": "Contrôle de conception : {blocking} bloquant(s), {warning} avertissement(s), {advice} conseil(s)",
   "drawing.dimension.going": "g = {value}",
+  "drawing.dimension.goingWalkingLine": "g (foulée) = {value}",
   "drawing.dimension.radius": "R {value}",
   "drawing.elevation.blondel": "2h + g = {value} mm — pente {pitch}°",
   "drawing.elevation.gauge": "Échappée exigée {value} mm",
