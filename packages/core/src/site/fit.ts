@@ -159,7 +159,9 @@ export function stairGrossPieces(
       const radius = h.outerRadius + lateral.outer;
       const a0 = V.angleOf(V.sub(n0.r, h.center));
       const sweep = V.signedAngle(V.sub(n0.r, h.center), V.sub(n1.r, h.center));
-      const m = Math.max(1, Math.ceil(Math.abs(sweep) / HELICAL_ARC_STEP));
+      // Angle par marche multiple du pas (2° pour 10°, 30°, …) : le bruit d'arrondi de `sweep`
+      // ne doit pas ajouter un sous-arc (même tolérance que `splitArc`).
+      const m = Math.max(1, Math.ceil(Math.abs(sweep) / HELICAL_ARC_STEP - 1e-9));
       const step = sweep / m;
       const reach = radius / Math.cos(step / 2);
       for (let k = 0; k < m; k++)

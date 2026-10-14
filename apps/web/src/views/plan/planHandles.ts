@@ -42,6 +42,7 @@ import {
 } from "../../lib/planErgonomics.js";
 import type { PlanSelection } from "../../store/planEditor.js";
 import { wallOutline } from "../planSiteGeometry.js";
+import { editableSections } from "./planEditorGeometry.js";
 
 /** Poignée placée : position, et origine du trait de rappel éventuel. */
 export interface HandleSpot {
@@ -81,7 +82,7 @@ export function selectionHandles(
       ];
     }
     case "section": {
-      const s = layout.sections?.[selection.index];
+      const s = editableSections(layout)[selection.index];
       if (!s) return [];
       const i = selection.index;
       const out: HandleSpot[] = [

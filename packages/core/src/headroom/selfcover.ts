@@ -17,6 +17,15 @@
  * plafond est constant et la ligne de pente croissante : le minimum est atteint à la borne haute
  * (limite à gauche). Même découpage des segments de nez (les contours des sous-faces sont des
  * polygones : arcs discrétisés à 0,1 mm de flèche, côtés rayonnants exacts).
+ *
+ * Départage des minima ex æquo (décision F10 (3)) : l'échappée minimale d'un escalier qui se
+ * recouvre est souvent atteinte, avec la même valeur, en plusieurs points (images l'une de
+ * l'autre par le vissage d'une marche, à quelques nez ou à un tour d'écart). Le bruit d'arrondi
+ * ne doit pas décider du point retenu : parmi les candidats dont la valeur est à
+ * `HEADROOM_TIE_TOL` près du minimum strict, on retient le **premier en montant** (plus petite
+ * abscisse le long de Γ ; sur la largeur, premier nez, puis premier point de Q_k vers R_k), avec
+ * sa propre valeur. Deux passes (minimum strict, puis premier candidat), pour que la tolérance
+ * ne se cumule pas de proche en proche.
  */
 import { cumulativeLengths, curveLength, curvePointAt } from "../geom2d/curve.js";
 import { intersectLineCurve, segmentIntersect } from "../geom2d/intersect.js";
@@ -45,6 +54,25 @@ interface Ceiling {
   readonly box: BBox;
   readonly z: Mm;
   readonly sStart: Mm;
+}
+
+/**
+ * Tolérance de départage des minima d'échappée ex æquo (mm) : tolérance **numérique** (bruit
+ * d'arrondi des chemins de calcul), pas une valeur métier (décision F10 (3), voir l'en-tête).
+ */
+export const HEADROOM_TIE_TOL: Mm = 1e-6;
+
+/**
+ * Premier candidat (dans l'ordre de montée, celui du tableau) dont la valeur est à
+ * `HEADROOM_TIE_TOL` près du minimum strict ; `undefined` si aucun candidat.
+ */
+export function firstNearMinimum<T extends { readonly min: Mm }>(
+  candidates: readonly T[],
+): T | undefined {
+  if (candidates.length === 0) return undefined;
+  let m = Infinity;
+  for (const c of candidates) if (c.min < m) m = c.min;
+  return candidates.find((c) => c.min <= m + HEADROOM_TIE_TOL);
 }
 
 const inBox = (p: Vec2, b: BBox): boolean =>
@@ -97,7 +125,10 @@ function ceilingAt(
 }
 
 /** Échappée sur Γ avec auto-recouvrement. */
-function walklineHeadroom(input: SelfCoverInput, ceilings: readonly Ceiling[]) {
+function walklineHeadroom(
+  input: SelfCoverInput,
+  ceilings: readonly Ceiling[],
+): HeadroomOnWalkline | undefined {
   const curve = input.layout.walkline;
   const L = curveLength(curve);
   if (!(L > 0)) return undefined;
@@ -109,7 +140,8 @@ function walklineHeadroom(input: SelfCoverInput, ceilings: readonly Ceiling[]) {
     cuts.push(c.sStart);
   }
   const sorted = cuts.filter((s) => s >= 0 && s <= L).sort((x, y) => x - y);
-  let best: HeadroomOnWalkline | undefined;
+  // Candidats dans l'ordre des abscisses croissantes (borne haute de chaque morceau).
+  const candidates: { min: Mm; s: Mm; z: Mm }[] = [];
   for (let i = 0; i + 1 < sorted.length; i++) {
     const s0 = sorted[i]!;
     const s1 = sorted[i + 1]!;
@@ -119,13 +151,12 @@ function walklineHeadroom(input: SelfCoverInput, ceilings: readonly Ceiling[]) {
     if (top === null) continue;
     // Borne haute : limite à gauche de la ligne de pente (croissante sur le morceau).
     const z = slopeZ(profile, s1, "left");
-    const min = top - z;
-    if (best === undefined || min < best.min) {
-      const p = curvePointAt(curve, s1);
-      best = { min, at: { x: p.x, y: p.y, z }, s: s1 };
-    }
+    candidates.push({ min: top - z, s: s1, z });
   }
-  return best;
+  const best = firstNearMinimum(candidates);
+  if (best === undefined) return undefined;
+  const p = curvePointAt(curve, best.s);
+  return { min: best.min, at: { x: p.x, y: p.y, z: best.z }, s: best.s };
 }
 
 /** Échappée sur la largeur des marches (segments de nez) avec auto-recouvrement. */
@@ -133,7 +164,8 @@ function widthHeadroom(
   input: SelfCoverInput,
   ceilings: readonly Ceiling[],
 ): HeadroomOnWidth | undefined {
-  let best: HeadroomOnWidth | undefined;
+  // Candidats dans l'ordre de montée : nez dans l'ordre des abscisses, puis de Q vers R.
+  const candidates: HeadroomOnWidth[] = [];
   for (const nosing of input.stepping.nosings) {
     const { q, r } = nosing;
     const length = V.distance(q, r);
@@ -157,13 +189,14 @@ function widthHeadroom(
       const mid = V.lerp(q, r, (u0 + u1) / 2);
       const top = ceilingAt(mid, nosing.s, input.slab, above);
       if (top === null) continue;
-      const min = top - nosing.z;
-      if (best === undefined || min < best.min) {
-        best = { min, at: { x: mid.x, y: mid.y, z: nosing.z }, nosing: nosing.index };
-      }
+      candidates.push({
+        min: top - nosing.z,
+        at: { x: mid.x, y: mid.y, z: nosing.z },
+        nosing: nosing.index,
+      });
     }
   }
-  return best;
+  return firstNearMinimum(candidates);
 }
 
 /**

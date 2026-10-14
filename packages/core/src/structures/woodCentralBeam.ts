@@ -109,6 +109,7 @@
 import { dec, errorMessage, msg, textMessage, type Message } from "@blondel/i18n";
 import { cumulativeLengths } from "../geom2d/curve.js";
 import { ensureCCW, pointInPolygon } from "../geom2d/polygon.js";
+import { GEOM_EPS } from "../geom2d/tolerance.js";
 import * as V from "../geom2d/vec.js";
 import type { FlatPattern, NosingLine, Part, PartFixing } from "../model/derived.js";
 import type { PartAssembly, StructureContext } from "../model/plugins.js";
@@ -745,9 +746,26 @@ function verticalExtent(poly: readonly Vec2[], x: Mm): [Mm, Mm] | null {
   return hi > lo ? [lo, hi] : null;
 }
 
-/** Abscisses d'échantillonnage de [a ; b] : nœuds imposés, pas `SAMPLE_STEP` où `refine(x0, x1)`. */
-function samples(a: Mm, b: Mm, nodes: readonly Mm[], refine: (x0: Mm, x1: Mm) => boolean): Mm[] {
-  const base = [...new Set([a, b, ...nodes.filter((x) => x > a && x < b)])].sort((p, q) => p - q);
+/**
+ * Abscisses d'échantillonnage de [a ; b] : nœuds imposés, pas `SAMPLE_STEP` où `refine(x0, x1)`.
+ * Exportée pour ses tests.
+ */
+export function samples(
+  a: Mm,
+  b: Mm,
+  nodes: readonly Mm[],
+  refine: (x0: Mm, x1: Mm) => boolean,
+): Mm[] {
+  const sorted = [...new Set([a, b, ...nodes.filter((x) => x > a && x < b)])].sort((p, q) => p - q);
+  // Nœud intérieur confondu à `GEOM_EPS` près avec le précédent ou avec `b` (bruit d'arrondi
+  // entre une abscisse de nez et une jonction de la trace, F10 sous-lot P2) : un seul
+  // échantillon, sans bande de largeur nulle. Extrémités `a` et `b` toujours gardées.
+  const base: Mm[] = [];
+  for (const x of sorted) {
+    const interior = x !== a && x !== b;
+    if (interior && (x - base[base.length - 1]! <= GEOM_EPS || b - x <= GEOM_EPS)) continue;
+    base.push(x);
+  }
   const out: Mm[] = [];
   for (let i = 0; i < base.length; i++) {
     const x0 = base[i]!;

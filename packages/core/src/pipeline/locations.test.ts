@@ -79,4 +79,17 @@ describe("localisation des constats", () => {
     expect(nearestNosing(nosings, 9999)).toEqual({ nosingIndex: 2 });
     expect(nearestNosing([], 10)).toEqual({});
   });
+
+  it("nearestNosing : deux nez à égale distance (à HEADROOM_TIE_TOL près) → le premier en montant", () => {
+    // Départage de la bascule de l'hélicoïdal (F10, sous-lot P2), comme la décision (3).
+    const nosings = [{ s: 0 }, { s: 250 }, { s: 500 }] as unknown as Parameters<
+      typeof nearestNosing
+    >[0];
+    expect(nearestNosing(nosings, 125)).toEqual({ nosingIndex: 0 });
+    // Le second nez est plus proche du bruit d'arrondi seulement : toujours le premier.
+    expect(nearestNosing(nosings, 125 + 1e-9)).toEqual({ nosingIndex: 0 });
+    expect(nearestNosing(nosings, 375 + 1e-9)).toEqual({ nosingIndex: 1 });
+    // Hors tolérance, le plus proche.
+    expect(nearestNosing(nosings, 125 + 1e-3)).toEqual({ nosingIndex: 1 });
+  });
 });

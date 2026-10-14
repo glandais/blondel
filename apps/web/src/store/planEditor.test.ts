@@ -1,5 +1,11 @@
 import cage60Text from "../../../../examples/cage-60.blondel.json?raw";
-import { buildModel, parseProjectText, type Model, type Project } from "@blondel/core";
+import {
+  buildModel,
+  createProject,
+  parseProjectText,
+  type Model,
+  type Project,
+} from "@blondel/core";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import {
@@ -132,6 +138,14 @@ describe("existence de l'élément sélectionné (cage-60)", () => {
     expect(planSelectionExists({ kind: "junction", index: 1 }, project, model)).toBe(false);
     expect(planSelectionExists({ kind: "stair" }, project, model)).toBe(true);
     expect(planSelectionExists({ kind: "section", index: 0 }, project, null)).toBe(false);
+  });
+
+  it("hélicoïdal (moteur de cage, F10 P2) : son tronçon en arc n'est pas sélectionnable", () => {
+    const helical = createProject("helical");
+    const mh = buildModel(helical);
+    expect(mh.layout.sections).toHaveLength(1);
+    expect(planSelectionExists({ kind: "section", index: 0 }, helical, mh)).toBe(false);
+    expect(planSelectionExists({ kind: "stair" }, helical, mh)).toBe(true);
   });
 
   it("murs, extrémités, trémie, pièce et obstacles lus dans le site", () => {

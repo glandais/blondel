@@ -232,8 +232,9 @@ export interface Layout {
    * Escalier droit seulement : bord depuis lequel `walklineOffset` est mesurée (décision A16,
    * choix de l'utilisateur ou côté de la main courante principale). `innerSide` n'en dépend
    * pas. Cage sans jonction tournante (paliers droits, axe en arc) : même bord de mesure,
-   * choisi, sinon côté intérieur de la courbure du premier arc, sinon gauche. Absent
-   * (tournants, hélicoïdal) : d_f est mesurée depuis le jour.
+   * choisi, sinon côté intérieur de la courbure du premier arc, sinon gauche. Hélicoïdal
+   * (cage d'origine `helical`, F10 sous-lot P2) : côté de l'axe (`direction`). Absent
+   * (tournants) : d_f est mesurée depuis le jour.
    */
   readonly walklineSide?: "left" | "right";
   /**
@@ -242,16 +243,21 @@ export interface Layout {
    */
   readonly walklineTransitions?: readonly WalklineTransition[];
   /**
-   * Tracé hélicoïdal (jalon 5a) : axe, rayons, angles. Absent : escalier à volées. Un tracé
-   * hélicoïdal n'a pas de tournant à 90° (`turns` vide) ; `footprint` est le secteur de couronne
-   * des marches et du palier d'arrivée (le disque de rayon R_e au-delà d'un tour, avec le trou
-   * du jour central dans `footprintHoles`).
+   * Tracé hélicoïdal (jalon 5a) : axe, rayons, angles. Absent : escalier à volées ou cage. Un
+   * tracé hélicoïdal n'a pas de tournant à 90° (`turns` vide) ; `footprint` est le secteur de
+   * couronne des marches et du palier d'arrivée (le disque de rayon R_e au-delà d'un tour, avec
+   * le trou du jour central dans `footprintHoles`). Depuis le sous-lot P2 de F10, un hélicoïdal
+   * est calculé par le moteur de cage (`helicalOrigin`, `sections`) ; ce champ en est le
+   * **champ de compatibilité**, rendu au bit près par la formule d'origine
+   * (`helicalLayoutOf`), lu par la structure, les garde-corps, le plan coté, les préréglages et
+   * le contrôle sur le site (retrait envisagé en P3).
    */
   readonly helical?: HelicalLayout;
   /**
    * Tronçons du tracé (moteur de cage, ADR-0010), dans l'ordre de la montée : un par volée d'un
    * tracé à volées (calculé par le moteur de cage depuis le sous-lot 1c), un par tronçon d'une
-   * cage. Ajout rétrocompatible : absent pour l'hélicoïdal.
+   * cage, un seul tronçon à axe en arc pour un hélicoïdal (F10 sous-lot P2 ; balayage
+   * jusqu'à 2 160°, non éditable en plan). Ajout rétrocompatible.
    */
   readonly sections?: readonly LayoutSection[];
   /**
@@ -265,8 +271,9 @@ export interface Layout {
    * Cage **issue d'un hélicoïdal** (`helicalToCage`, F10 sous-lot P1, ADR-0010) : un tronçon à
    * axe en arc calculé avec l'origine `helical` (`CageLayoutOptions`). Le découpage en lit le
    * vocabulaire de l'hélicoïdal (marches dansantes, remarques `stepping.helical.*`, débord
-   * borné par le fût ou le jour) et l'échappée le palier d'arrivée. Absent : toute autre cage,
-   * tracé à volées ou hélicoïdal. Ajout rétrocompatible, jamais posé par `computeLayout` en P1.
+   * borné par le fût ou le jour, sous-faces dans `Stepping.soffits`, palier d'arrivée compris).
+   * Posé par `computeLayout` pour tout tracé hélicoïdal depuis le sous-lot P2 (avec
+   * `Layout.helical`). Absent : toute autre cage ou tracé à volées. Ajout rétrocompatible.
    */
   readonly helicalOrigin?: HelicalOrigin;
 }
@@ -381,9 +388,9 @@ export interface Stepping {
    */
   readonly soffits?: readonly Soffit[];
   /**
-   * Découpage d'un tracé **hélicoïdal** (nez rayonnants, `stepping/helical.ts`) : le moteur de
-   * règles en déduit le contexte de forme `helicoidal`. Absent : escalier à volées (ajout
-   * rétrocompatible).
+   * Découpage d'un tracé **hélicoïdal** (nez rayonnants ; découpage de cage sous
+   * `Layout.helicalOrigin` depuis F10 P2) : le moteur de règles en déduit le contexte de forme
+   * `helicoidal`. Absent : escalier à volées ou cage (ajout rétrocompatible).
    */
   readonly helical?: true;
 }

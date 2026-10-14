@@ -64,6 +64,7 @@ import {
 } from "./junction.js";
 import { cageOverlap, footprintOf } from "./overlap.js";
 import { computeGeneralCageLayout } from "./general.js";
+import { checkHelicalOrigin } from "./helicalChecks.js";
 import {
   checkSectionCount,
   checkSectionExtents,
@@ -121,7 +122,8 @@ export interface CageLayoutOptions {
  * @throws LayoutError si une jonction est hors domaine, si la topologie est incohérente ou si
  *   les cotes sont impossibles (largeur variable, axe en arc : voir `general.ts`)
  *   (pour une cage issue de volées : mêmes contrôles, dans le même ordre et avec les mêmes
- *   messages que le moteur à volées).
+ *   messages que le moteur à volées ; pour une cage issue d'un hélicoïdal, contrôles de
+ *   `computeHelicalLayout` d'abord, `helicalChecks.ts`).
  */
 export function computeCageLayout(
   project: Project,
@@ -129,6 +131,8 @@ export function computeCageLayout(
   options: CageLayoutOptions = {},
 ): Layout {
   const vocabulary: CageOrigin = options.origin ?? "cage";
+  // Origine `helical` : contrôles de l'hélicoïdal d'origine avant tout autre (F10, P2).
+  if (vocabulary === "helical") checkHelicalOrigin(project, spec, options.core);
   checkSectionCount(spec, vocabulary);
   spec.junctions.forEach((j, i) => checkJunctionDomain(j, i));
   // Largeur variable ou axe en arc (sous-lot 2b) : moteur général.

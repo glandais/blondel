@@ -8,6 +8,7 @@ import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import type { PlanSelection } from "../../store/planEditor.js";
 import {
+  editableSections,
   junctionPolygon,
   obstacleShape,
   parsePlanSelection,
@@ -181,5 +182,16 @@ describe("obstacles et attributs de sélection", () => {
     });
     const off = selectable(sel, { interactive: false, selectedKey: null, tr: fr });
     expect(off).toEqual({ "data-plan-select": "section:0" });
+  });
+});
+
+describe("tronçons éditables (F10, P2)", () => {
+  it("tous les tronçons d'une cage ou d'un tracé à volées ; aucun pour un hélicoïdal", () => {
+    for (const [file, text] of Object.entries(EXAMPLES)) {
+      const model = buildModel(parseProjectText(text));
+      const expected = model.layout.helical ? [] : (model.layout.sections ?? []);
+      expect(editableSections(model.layout), file).toEqual(expected);
+      if (model.layout.helical) expect(model.layout.sections?.length, file).toBe(1);
+    }
   });
 });

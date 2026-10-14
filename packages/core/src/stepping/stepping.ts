@@ -35,13 +35,16 @@
  * coupé avec palier d'angle, marches rayonnantes ou M0 refusé (`checkChamferRays`, question
  * F13). Une cage exprimable en volées garde exactement le découpage des volées.
  *
- * Tracé hélicoïdal (`layout.helical`, jalon 5a) : découpage propre, `stepping/helical.ts`.
- *
- * Cage issue d'un hélicoïdal (`layout.helicalOrigin`, `helicalToCage`, F10 sous-lot P1, jamais
- * posée par `computeLayout` en P1) : découpage de cage (nez perpendiculaires à Γ, donc
- * rayonnants) avec le vocabulaire de l'hélicoïdal : débord borné par le fût ou le jour
- * (`stepping.helical.nosingReaches*`), surcharges de nez et giron cible ignorés et signalés,
- * remarques `stepping.helical.*` en tête, `Stepping.helical`, marches dansantes (`treads.ts`).
+ * Hélicoïdal (jalon 5a ; F10 sous-lot P2) : `computeLayout` en rend une cage d'origine
+ * `helical` (`layout.helicalOrigin`, `helicalToCage`), découpée par ce chemin de cage (nez
+ * perpendiculaires à Γ, donc rayonnants) avec le vocabulaire de l'hélicoïdal : débord borné
+ * par le fût ou le jour (`stepping.helical.nosingReaches*`), surcharges de nez et giron cible
+ * ignorés et signalés, remarques `stepping.helical.*` en tête, `Stepping.helical`, marches
+ * dansantes (`treads.ts`) aux giron, collets et giron extérieur égaux par construction
+ * (`regularHelicalTreads`), angle des nez non exposé, sous-faces des marches et du palier
+ * d'arrivée dans `Stepping.soffits` (comme l'ancien découpage). Un tracé de l'ancien moteur
+ * (`layout.helical` sans `helicalOrigin`, assemblé à la main par d'anciens tests) passe encore
+ * par `stepping/helical.ts` : transitoire, retrait en P3.
  */
 import { curvePointAt, curveTangentAt } from "../geom2d/curve.js";
 import { segEnd, segStart } from "../geom2d/segment.js";
@@ -59,7 +62,7 @@ import {
   type NosingSeed,
 } from "../balancing/postprocess.js";
 import type { M3Variant } from "../balancing/profile.js";
-import type { Layout, NosingLine, Stepping } from "../model/derived.js";
+import type { Layout, NosingLine, Soffit, Stepping, Tread } from "../model/derived.js";
 import type { Mm, Vec2 } from "../model/primitives.js";
 import { isCageLayout, type Project } from "../model/project.js";
 import { dec, msg, type Message, type MessageKey, type MessageParam } from "@blondel/i18n";
@@ -68,6 +71,7 @@ import { placeNosings } from "./positions.js";
 import { computeRises } from "./rises.js";
 import { developmentInner } from "./development.js";
 import { computeHelicalStepping } from "./helical.js";
+import { cageSoffits } from "../headroom/cage.js";
 import { cageNosingTangent } from "./sections.js";
 import { buildTreads } from "./treads.js";
 import {
@@ -190,8 +194,10 @@ export function computeStepping(
   layout: Layout,
   options: SteppingOptions = {},
 ): Stepping {
-  // Tracé hélicoïdal (jalon 5a) : nez rayonnants, sans balancement (`stepping/helical.ts`).
-  if (layout.helical) return computeHelicalStepping(project, layout);
+  // Tracé de l'ancien moteur hélicoïdal (`Layout.helical` sans `helicalOrigin`) : transitoire,
+  // retrait en P3 (F10). `computeLayout` ne le rend plus depuis P2 (un hélicoïdal y est une cage
+  // d'origine `helical`) ; seuls d'anciens tests qui assemblent un tel tracé passent ici.
+  if (layout.helical && !layout.helicalOrigin) return computeHelicalStepping(project, layout);
   if (project.stair.balancing.method === "M2") checkHerseAngles(layout);
   checkChamferRays(layout, project.stair.balancing.method);
   const notes: Message[] = [];
@@ -738,15 +744,17 @@ export function computeStepping(
     }
   }
 
-  // Angle de chaque nez (même convention que la retouche « angle »), exposé pour l'interface.
-  nosings.forEach((nosing, k) => {
-    const computedAngle = computedAngles.get(k);
-    nosings[k] = {
-      ...nosing,
-      angle: nosingAngle(layout, seeds[k]!, nosing),
-      ...(computedAngle !== undefined ? { computedAngle } : {}),
-    };
-  });
+  // Angle de chaque nez (même convention que la retouche « angle »), exposé pour l'interface ;
+  // non exposé pour un hélicoïdal (`NosingLine.angle`, retouches de nez indisponibles).
+  if (!helicalOrigin)
+    nosings.forEach((nosing, k) => {
+      const computedAngle = computedAngles.get(k);
+      nosings[k] = {
+        ...nosing,
+        angle: nosingAngle(layout, seeds[k]!, nosing),
+        ...(computedAngle !== undefined ? { computedAngle } : {}),
+      };
+    });
 
   // ------------------------------------------------------------ contrôles K5 / K3 / collets
   for (const c of findCrossingsOnSides(layout, nosings)) {
@@ -777,7 +785,7 @@ export function computeStepping(
   }
 
   // ------------------------------------------------------------ marches
-  const treads = buildTreads({
+  const built = buildTreads({
     layout,
     nosings,
     landingTreads: positions.landingTreads,
@@ -785,6 +793,7 @@ export function computeStepping(
     winderArcs: layout.turns.filter((t) => t.mode === "winders"),
     nosingDepth: project.stair.treads.nosing,
   });
+  const treads = helicalOrigin ? regularHelicalTreads(built, going) : built;
   const run = positions.s[n - 1]! - positions.s[0]!;
 
   return {
@@ -798,8 +807,50 @@ export function computeStepping(
     treads,
     balancedZones,
     notes: helicalOrigin ? [...helicalNotes(project, helicalOrigin, going), ...notes] : notes,
-    ...(helicalOrigin ? { helical: true as const } : {}),
+    ...(helicalOrigin
+      ? {
+          soffits: helicalSoffits(layout, treads, nosings, project.stair.treads.thickness),
+          helical: true as const,
+        }
+      : {}),
   };
+}
+
+/**
+ * Grandeurs par marche d'un hélicoïdal (F10, sous-lot P2) : les marches se déduisent l'une de
+ * l'autre par le vissage (Δθ, h) de l'hélicoïde, leurs giron, collet (arc et corde) et giron
+ * extérieur sont donc égaux **par construction** (B §4.3, comme l'ancien découpage
+ * hélicoïdal : r_w·Δθ, r_i·Δθ, 2·r_i·sin(Δθ/2), R_e·Δθ). Le calcul général de la cage les
+ * retrouve au bruit d'arrondi près (1e-12 mm) ; ce bruit départagerait arbitrairement des
+ * marches ex æquo (marche citée par les contrôles « la plus défavorable », `rules/check.ts`).
+ * Chaque marche reçoit donc le giron du découpage (`going`, comme `Stepping.going`) et les
+ * collets et giron extérieur de la première marche.
+ */
+function regularHelicalTreads(treads: readonly Tread[], going: Mm): Tread[] {
+  const first = treads[0];
+  if (!first) return [...treads];
+  const { colletArc, colletChord, goingOuter } = first;
+  return treads.map((t) => ({ ...t, going, colletArc, colletChord, goingOuter }));
+}
+
+/**
+ * Sous-faces d'une cage issue d'un hélicoïdal (`Stepping.soffits`, CHALLENGE G4), comme
+ * l'ancien découpage hélicoïdal : chaque marche (contour de pièce, altitude z − épaisseur des
+ * marches, abscisse de son nez avant), puis le palier d'arrivée (`helicalOrigin.arrivalOutline`,
+ * altitude du nez d'arrivée − épaisseur, épaisseur supposée égale à celle des marches, à
+ * valider). Elles servent de plafond aux parties un tour plus bas (`headroom/selfcover.ts`).
+ */
+function helicalSoffits(
+  layout: Layout,
+  treads: readonly Tread[],
+  nosings: readonly NosingLine[],
+  thickness: Mm,
+): Soffit[] {
+  const soffits = cageSoffits({ treads, nosings }, thickness);
+  const last = nosings[nosings.length - 1];
+  const arrival = layout.helicalOrigin?.arrivalOutline;
+  if (arrival && last) soffits.push({ outline: arrival, z: last.z - thickness, sStart: last.s });
+  return soffits;
 }
 
 /** Grandeurs de l'hélicoïdal d'origine, relues sur une cage issue d'un hélicoïdal. */
@@ -836,7 +887,9 @@ function helicalOriginOf(layout: Layout, n: number): HelicalOriginGeometry {
 
 /**
  * Débord de nez d'une cage issue d'un hélicoïdal : il doit rester sous le rayon du fût ou du
- * jour, comme `computeHelicalStepping` (même message).
+ * jour, comme `computeHelicalStepping` (même message). Seul contrôle de l'hélicoïdal fait à
+ * l'étage découpage, comme dans l'hélicoïdal ; les contrôles de tracé (n, R_e > r_i, d_f, Δθ)
+ * sont dans le moteur de cage (`layout/cage/helicalChecks.ts`, F10 sous-lot P2).
  * @throws SteppingError sinon.
  */
 function checkHelicalNosing(project: Project, h: HelicalOriginGeometry): void {

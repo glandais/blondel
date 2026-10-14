@@ -34,19 +34,18 @@
 import fc from "fast-check";
 import { MessageError, type Message } from "@blondel/i18n";
 import { wrapPi } from "../../geom2d/segment.js";
-import { cageHeadroomCeilings } from "../../headroom/cage.js";
 import { computeHeadroom, type HeadroomAnalysis } from "../../headroom/headroom.js";
 import { circularOpening } from "../../headroom/helical.js";
 import { slopeProfileOf, slopeZ } from "../../headroom/profile.js";
 import { curvePointAt } from "../../geom2d/curve.js";
-import type { HelicalLayout, Layout, Soffit, Stepping } from "../../model/derived.js";
+import type { FlatPattern, HelicalLayout, Layout, Soffit, Stepping } from "../../model/derived.js";
+import type { Vec2 } from "../../model/primitives.js";
 import { ProjectSchema, type Opening, type Project } from "../../model/project.js";
 import { computeStepping } from "../../stepping/stepping.js";
-import { computeHelicalLayout } from "../helical.js";
+import { computeLayout } from "../layout.js";
+import { legacyComputeHelicalLayout, legacyComputeHelicalStepping } from "../legacyHelical.js";
 import { resolveRiserCount } from "../resolve.js";
 import { makeHelicalProject, type HelicalShape } from "../helical-test-helpers.js";
-import { computeCageLayout } from "./cage.js";
-import { helicalToCage, type HelicalToCage } from "./fromHelical.js";
 
 /** Tolérance des longueurs et coordonnées (mm), voir l'en-tête. */
 export const LENGTH_TOL = 1e-6;
@@ -86,6 +85,8 @@ export function compareValues(
 ): void {
   if (skip.has(path)) return;
   if (typeof a === "number" && typeof b === "number") {
+    // Valeur non calculée des deux côtés (modèle partiel) : identique.
+    if (Number.isNaN(a) && Number.isNaN(b)) return;
     if (exact || EXACT_KEYS.has(key) || EXACT_PATH.test(path)) {
       if (a !== b && !(a === 0 && b === 0)) record(out, path, Math.abs(a - b));
       return;
@@ -149,16 +150,47 @@ export interface EngineRun {
   readonly stepping?: Stepping;
   readonly soffits?: readonly Soffit[];
   readonly headroom?: HeadroomAnalysis | null;
-  readonly error?: { readonly level: "N0" | "N1" | "N2" | "N4"; readonly error: ErrorOutcome };
-  readonly conversion?: HelicalToCage;
+  readonly error?: { readonly level: "N1" | "N2" | "N4"; readonly error: ErrorOutcome };
 }
 
-/** Moteur hélicoïdal actuel (référence, inchangé), comme l'aiguillage du pipeline. */
+/**
+ * Ancien chemin hélicoïdal (référence) : copie figée `layout/legacyHelical.ts` (tracé et
+ * découpage, état d'avant la bascule P2), puis l'échappée partagée (`computeHeadroom` sur
+ * `Stepping.soffits`, départage TIE commun, décision F10 (3)).
+ */
 export function runHelical(project: Project): EngineRun {
   if (project.stair.layout.kind !== "helical") throw new Error("projet non hélicoïdal");
   let layout: Layout;
   try {
-    layout = computeHelicalLayout(project, project.stair.layout);
+    layout = legacyComputeHelicalLayout(project, project.stair.layout);
+  } catch (e) {
+    return { error: { level: "N1", error: errorOf(e) } };
+  }
+  let stepping: Stepping;
+  try {
+    stepping = legacyComputeHelicalStepping(project, layout);
+  } catch (e) {
+    return { layout, error: { level: "N2", error: errorOf(e) } };
+  }
+  try {
+    const headroom = computeHeadroom(project.site, layout, stepping);
+    return { layout, stepping, soffits: stepping.soffits ?? [], headroom };
+  } catch (e) {
+    return { layout, stepping, error: { level: "N4", error: errorOf(e) } };
+  }
+}
+
+/**
+ * Chemin du pipeline basculé (P2) : `computeLayout` (conversion `helicalToCage` et moteur de
+ * cage d'origine `helical`, plus `Layout.helical`), `computeStepping` et `computeHeadroom` sur
+ * le projet d'origine, comme les étapes de `buildModel` pour un hélicoïdal (le projet n'étant
+ * pas saisi en cage, l'étape d'échappée de cage `cageHeadroomCeilings` ne s'applique pas ; les
+ * sous-faces sont dans `Stepping.soffits`).
+ */
+export function runCage(project: Project): EngineRun {
+  let layout: Layout;
+  try {
+    layout = computeLayout(project);
   } catch (e) {
     return { error: { level: "N1", error: errorOf(e) } };
   }
@@ -173,57 +205,6 @@ export function runHelical(project: Project): EngineRun {
     return { layout, stepping, soffits: stepping.soffits ?? [], headroom };
   } catch (e) {
     return { layout, stepping, error: { level: "N4", error: errorOf(e) } };
-  }
-}
-
-/**
- * Moteur de cage sur `helicalToCage(project)`, sans `computeLayout` (aucun aiguillage
- * modifié) : `computeCageLayout`, `computeStepping`, puis l'étape d'échappée de cage du
- * pipeline (`cageHeadroomCeilings`, extraite de `build.ts`).
- */
-export function runCage(project: Project): EngineRun {
-  let conversion: HelicalToCage;
-  try {
-    conversion = helicalToCage(project);
-  } catch (e) {
-    return { error: { level: "N0", error: errorOf(e) } };
-  }
-  const p = conversion.project;
-  let layout: Layout;
-  try {
-    layout = computeCageLayout(p, conversion.spec, conversion.options);
-  } catch (e) {
-    return { conversion, error: { level: "N1", error: errorOf(e) } };
-  }
-  let stepping: Stepping;
-  try {
-    stepping = computeStepping(p, layout);
-  } catch (e) {
-    return { conversion, layout, error: { level: "N2", error: errorOf(e) } };
-  }
-  try {
-    const ceilings = cageHeadroomCeilings(
-      conversion.spec,
-      layout,
-      stepping,
-      p.stair.treads.thickness,
-      p.stair.treads.nosing,
-    );
-    if (ceilings.kind === "defect") {
-      return {
-        conversion,
-        layout,
-        stepping,
-        error: {
-          level: "N4",
-          error: { name: "HeadroomDefect", msg: `cageTreadOutline:${ceilings.tread}` },
-        },
-      };
-    }
-    const headroom = computeHeadroom(p.site, layout, stepping, ceilings.soffits);
-    return { conversion, layout, stepping, soffits: ceilings.soffits ?? [], headroom };
-  } catch (e) {
-    return { conversion, layout, stepping, error: { level: "N4", error: errorOf(e) } };
   }
 }
 
@@ -317,12 +298,14 @@ export function helicalParity(project: Project): ParityReport {
   const cage = runCage(project);
   const gaps: Gaps = new Map();
 
-  // Erreurs : même niveau, même nom, même clé et mêmes paramètres. Une erreur de
-  // spécification hélicoïdale (niveau N1 de la référence) doit sortir de la conversion (N0).
-  const refLevel = ref.error ? (ref.error.level === "N1" ? "N0" : ref.error.level) : undefined;
+  // Erreurs : même étage, même nom, même clé et mêmes paramètres. Une erreur de spécification
+  // hélicoïdale sort du tracé (`computeLayout` : conversion pour le domaine de n, moteur de cage
+  // pour les autres contrôles, `helicalChecks.ts`).
+  const refLevel = ref.error?.level;
+  const cageLevel = cage.error?.level;
   if (ref.error || cage.error) {
-    if (refLevel !== cage.error?.level) {
-      record(gaps, `error.level:${refLevel ?? "none"}→${cage.error?.level ?? "none"}`, Number.NaN);
+    if (refLevel !== cageLevel) {
+      record(gaps, `error.level:${refLevel ?? "none"}→${cageLevel ?? "none"}`, Number.NaN);
     } else {
       const g: Gaps = new Map();
       compareValues(ref.error!.error, cage.error!.error, "", g);
@@ -331,10 +314,13 @@ export function helicalParity(project: Project): ParityReport {
   }
   if (!ref.layout || !cage.layout) return { gaps, helical: ref, cage };
 
-  // N1 : tracé, ajouts de cage, reconstructibilité de `Layout.helical`.
+  // N1 : tracé, ajouts de cage, `Layout.helical` égal AU BIT (`helicalLayoutOf`), et cohérent
+  // avec la géométrie de la cage (reconstruction, à la tolérance).
   const n1: Gaps = new Map();
   const h = ref.layout.helical!;
   compareValues(ref.layout, cage.layout, "", n1, new Set(["helical", ...LAYOUT_CAGE_ADDITIONS]));
+  if (!cage.layout.helical) record(n1, "helical:missing", Number.NaN);
+  else compareValues(h, cage.layout.helical, "helical", n1, new Set(), "", true);
   const sec = cage.layout.sections;
   const sign = h.direction === "left" ? 1 : -1;
   if (sec?.length !== 1 || sec[0]!.kind !== "arc" || !sec[0]!.arc) {
@@ -359,20 +345,16 @@ export function helicalParity(project: Project): ParityReport {
     );
   }
   const rebuilt = reconstructHelical(cage.layout, resolveRiserCount(project));
-  if (!rebuilt) record(n1, "helical:rebuild", Number.NaN);
-  else compareValues(h, rebuilt, "helical", n1);
+  if (!rebuilt) record(n1, "helicalRebuilt", Number.NaN);
+  else compareValues(h, rebuilt, "helicalRebuilt", n1);
   prefixed("N1", n1, gaps);
 
   if (!ref.stepping || !cage.stepping) return { gaps, helical: ref, cage };
-  // N2 : découpage ; `soffits` comparées en N3 (emplacement différent, lacune consignée).
+  // N2 : découpage (angle des nez absent des deux côtés depuis P2) ; `soffits` présentes des
+  // deux côtés, contenu comparé en N3.
   const n2: Gaps = new Map();
-  compareValues(ref.stepping, cage.stepping, "", n2, new Set(["soffits", "nosings[*].angle"]));
-  cage.stepping.nosings.forEach((nl) => {
-    if (nl.angle === undefined || Math.abs(nl.angle) > ANGLE_TOL) {
-      record(n2, "nosings[*].angle", Number.NaN);
-    }
-  });
-  if (cage.stepping.soffits !== undefined) record(n2, "soffits:extra", Number.NaN);
+  compareValues(ref.stepping, cage.stepping, "", n2, new Set(["soffits"]));
+  if (cage.stepping.soffits === undefined) record(n2, "soffits:missing", Number.NaN);
   prefixed("N2", n2, gaps);
 
   // N3 : sous-faces (contenu, ordre compris).
@@ -382,10 +364,10 @@ export function helicalParity(project: Project): ParityReport {
     prefixed("N3", n3, gaps);
   }
 
-  // N4 : échappée complète ; `selfCover` (ajout de cage) = sous-faces de N3.
+  // N4 : échappée complète (`selfCover` absent des deux côtés : sous-faces dans le découpage).
   if (ref.headroom !== undefined && cage.headroom !== undefined) {
     const n4: Gaps = new Map();
-    compareValues(ref.headroom, cage.headroom, "headroom", n4, new Set(["headroom.selfCover"]));
+    compareValues(ref.headroom, cage.headroom, "headroom", n4);
     prefixed("N4", n4, gaps);
     // N5 : cotes des instantanés.
     compareN5(
@@ -594,3 +576,54 @@ export const helicalParityProjectArb: fc.Arbitrary<Project> = fc
       },
     });
   });
+
+/**
+ * Développé tourné d'un demi-tour autour du centre de la boîte englobante de son contour
+ * (symétrie centrale de chaque sommet, trou et ligne tracée, libellés inchangés ; un texte
+ * tracé garde son sens de lecture, seul son milieu tourne). Sert à
+ * reconnaître l'écart `ROT180` de la bascule (F10, sous-lot P2) : `minAreaRect`
+ * (`structures/geom.ts`) départage, par le bruit d'arrondi, deux côtés de même largeur de
+ * l'enveloppe convexe d'un gabarit de couche, qui sort alors retourné dans sa boîte.
+ */
+export function rotateFlat180(flat: FlatPattern): FlatPattern {
+  let x0 = Infinity;
+  let y0 = Infinity;
+  let x1 = -Infinity;
+  let y1 = -Infinity;
+  for (const p of flat.outline.outer) {
+    x0 = Math.min(x0, p.x);
+    y0 = Math.min(y0, p.y);
+    x1 = Math.max(x1, p.x);
+    y1 = Math.max(y1, p.y);
+  }
+  const turn = (p: Vec2): Vec2 => ({ x: x0 + x1 - p.x, y: y0 + y1 - p.y });
+  return {
+    ...flat,
+    outline: {
+      outer: flat.outline.outer.map(turn),
+      holes: flat.outline.holes.map((h) => h.map(turn)),
+    },
+    lines: flat.lines.map((l) => {
+      if (l.kind !== "text") return { ...l, a: turn(l.a), b: turn(l.b) };
+      // Texte tracé gardé lisible par le générateur : son milieu tourne, son sens reste.
+      const m = turn({ x: (l.a.x + l.b.x) / 2, y: (l.a.y + l.b.y) / 2 });
+      const hx = (l.b.x - l.a.x) / 2;
+      const hy = (l.b.y - l.a.y) / 2;
+      return { ...l, a: { x: m.x - hx, y: m.y - hy }, b: { x: m.x + hx, y: m.y + hy } };
+    }),
+  };
+}
+
+/**
+ * `ROT180` : `a` et `b` diffèrent tels quels, mais `b` est `a` tourné d'un demi-tour dans sa
+ * boîte (`rotateFlat180`), à 1e-6 mm près, mêmes sommets dans le même ordre, mêmes lignes et
+ * mêmes libellés.
+ */
+export function flatRotated180(a: FlatPattern, b: FlatPattern): boolean {
+  const asIs: Gaps = new Map();
+  compareValues(a, b, "", asIs);
+  if (asIs.size === 0) return false;
+  const turned: Gaps = new Map();
+  compareValues(rotateFlat180(a), b, "", turned);
+  return turned.size === 0;
+}

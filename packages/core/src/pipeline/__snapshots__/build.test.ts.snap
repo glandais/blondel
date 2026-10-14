@@ -169,8 +169,23 @@ exports[`buildModel — exemples du dépôt > cage-60-palier-limon.blondel.json 
 exports[`buildModel — exemples du dépôt > cage-arc.blondel.json : cotes principales (non-régression) 1`] = `
 {
   "blondel": 628.03,
-  "colletMin": null,
-  "colletsChord": [],
+  "colletMin": 211.8,
+  "colletsChord": [
+    211.8,
+    211.8,
+    211.8,
+    211.8,
+    211.8,
+    211.8,
+    211.8,
+    211.8,
+    211.8,
+    211.8,
+    211.8,
+    211.8,
+    211.8,
+    211.8,
+  ],
   "firstRise": 180,
   "g": 268.03,
   "h": 180,
@@ -182,7 +197,7 @@ exports[`buildModel — exemples du dépôt > cage-arc.blondel.json : cotes prin
   "n": 15,
   "parts": 29,
   "run": 3752.5,
-  "treads": "ssssssssssssss",
+  "treads": "wwwwwwwwwwwwww",
   "violations": {
     "avertissement": 0,
     "bloquant": 0,
@@ -195,8 +210,16 @@ exports[`buildModel — exemples du dépôt > cage-arc.blondel.json : cotes prin
 exports[`buildModel — exemples du dépôt > cage-arc-palier-cintre.blondel.json : cotes principales (non-régression) 1`] = `
 {
   "blondel": 629.61,
-  "colletMin": null,
-  "colletsChord": [],
+  "colletMin": 201.8,
+  "colletsChord": [
+    201.8,
+    201.8,
+    201.8,
+    201.8,
+    201.8,
+    201.8,
+    201.8,
+  ],
   "firstRise": 180,
   "g": 269.61,
   "h": 180,
@@ -208,7 +231,7 @@ exports[`buildModel — exemples du dépôt > cage-arc-palier-cintre.blondel.jso
   "n": 15,
   "parts": 65,
   "run": 4405,
-  "treads": "sssssslsssssss",
+  "treads": "sssssslwwwwwww",
   "violations": {
     "avertissement": 0,
     "bloquant": 0,
@@ -318,8 +341,16 @@ exports[`buildModel — exemples du dépôt > cage-trapeze.blondel.json : cotes 
 exports[`buildModel — exemples du dépôt > demo-cage-arc-glass.blondel.json : cotes principales (non-régression) 1`] = `
 {
   "blondel": 629.61,
-  "colletMin": null,
-  "colletsChord": [],
+  "colletMin": 201.8,
+  "colletsChord": [
+    201.8,
+    201.8,
+    201.8,
+    201.8,
+    201.8,
+    201.8,
+    201.8,
+  ],
   "firstRise": 180,
   "g": 269.61,
   "h": 180,
@@ -331,7 +362,7 @@ exports[`buildModel — exemples du dépôt > demo-cage-arc-glass.blondel.json :
   "n": 15,
   "parts": 103,
   "run": 4405,
-  "treads": "ssssssslssssss",
+  "treads": "wwwwwwwlssssss",
   "violations": {
     "avertissement": 0,
     "bloquant": 0,

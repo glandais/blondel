@@ -16,11 +16,15 @@
  *   en S ou en Z : collet et giron côté mur mesurés du côté du jour du tournant le plus proche
  *   (`sides.ts` : près d'un tournant de sens opposé, le jour est `outer` et le mur `inner`).
  * - `kind` : `landing` pour un palier ; `winder` si la marche appartient à une zone balancée,
- *   si l'un de ses nez est réorienté, ou si elle chevauche la partie courbe d'un tournant
- *   balancé ; `straight` sinon.
+ *   si l'un de ses nez est réorienté, si elle chevauche la partie courbe d'un tournant balancé,
+ *   ou si elle recouvre un tronçon à axe en arc (décision F10 (1), cage saisie comprise :
+ *   recouvrement strict, à `GEOM_EPS` près ; une marche qui ne touche l'arc qu'à un nez reste
+ *   droite, une marche à cheval sur une limite droit / arc est dansante) ; `straight` sinon.
  *
- * Cage issue d'un hélicoïdal (`Layout.helicalOrigin`, F10 sous-lot P1) : marches dansantes
- * (`winder`) comme celles de l'hélicoïdal ; bords échantillonnés comme un arc neuf partant du
+ * Cage issue d'un hélicoïdal (`Layout.helicalOrigin`, F10 sous-lots P1 et P2, tout hélicoïdal
+ * depuis la bascule) : marches dansantes
+ * (`winder`) comme celles de l'hélicoïdal, par la règle de l'axe en arc ci-dessus (un seul
+ * tronçon couvre toute Γ) ; bords échantillonnés comme un arc neuf partant du
  * nez (`arcEdge`, mêmes sommets que `arcPoints` de l'hélicoïdal, et non la sous-courbe coupée aux
  * jonctions des arcs élémentaires) ; contour de la dernière marche prolongé **sur le cercle**
  * au-delà de l'arrivée (angle asin(d / r), comme `helicalTreadOutline`) au lieu du prolongement
@@ -194,6 +198,7 @@ export interface TreadContext {
 
 export function buildTreads(ctx: TreadContext): Tread[] {
   const { layout, nosings } = ctx;
+  const arcSections = (layout.sections ?? []).filter((sec) => sec.kind === "arc");
   const treads: Tread[] = [];
   for (let k = 0; k + 1 < nosings.length; k++) {
     const a = nosings[k]!;
@@ -201,12 +206,13 @@ export function buildTreads(ctx: TreadContext): Tread[] {
     let kind: TreadKind = "straight";
     if (ctx.landingTreads.has(k)) kind = "landing";
     else if (
-      // Cage issue d'un hélicoïdal : marches dansantes rayonnantes, comme l'hélicoïdal.
-      layout.helicalOrigin !== undefined ||
       a.balanced ||
       b.balanced ||
       ctx.zones.some((zn) => zn.from <= k && k + 1 <= zn.to) ||
-      ctx.winderArcs.some((w) => a.s < w.sEnd - GEOM_EPS && b.s > w.sStart + GEOM_EPS)
+      ctx.winderArcs.some((w) => a.s < w.sEnd - GEOM_EPS && b.s > w.sStart + GEOM_EPS) ||
+      // Tronçon à axe en arc (décision F10 (1)) : marche dansante dès qu'elle le recouvre
+      // (cage saisie ou issue d'un hélicoïdal, dont l'unique tronçon couvre toute Γ).
+      arcSections.some((sec) => a.s < sec.sEnd - GEOM_EPS && b.s > sec.sStart + GEOM_EPS)
     ) {
       kind = "winder";
     }

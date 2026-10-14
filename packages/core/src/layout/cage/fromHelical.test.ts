@@ -1,8 +1,10 @@
 /**
- * Conversion `helicalToCage` (F10, sous-lot P1) : correspondance champ à champ, placement
- * recalé à gauche et à droite, aller-retour par le schéma de cage sous un tour, erreurs
- * identiques à celles de `computeHelicalLayout`, pureté et déterminisme. La parité des moteurs
- * est dans `helicalParity.test.ts`.
+ * Conversion `helicalToCage` (F10, sous-lots P1 et P2) : correspondance champ à champ, placement
+ * recalé à gauche et à droite, aller-retour par le schéma de cage sous un tour, erreurs de la
+ * conversion suivie du moteur de cage (et de `computeLayout`) identiques à celles de l'ancien
+ * tracé (copie figée `legacyComputeHelicalLayout` ; contrôles portés dans le moteur en P2),
+ * `helicalLayoutOf` égal au bit à l'ancien `Layout.helical` et cohérent avec la géométrie de la
+ * cage, pureté et déterminisme. La parité des moteurs est dans `helicalParity.test.ts`.
  */
 import { readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
@@ -12,11 +14,18 @@ import { describe, expect, it } from "vitest";
 import { MessageError } from "@blondel/i18n";
 import { CageLayoutSpecSchema, type HelicalLayoutSpec, type Project } from "../../model/project.js";
 import { parseProjectText } from "../../project/parse.js";
-import { computeHelicalLayout } from "../helical.js";
+import { computeLayout } from "../layout.js";
+import { legacyComputeHelicalLayout } from "../legacyHelical.js";
+import { resolveRiserCount } from "../resolve.js";
 import { makeHelicalProject } from "../helical-test-helpers.js";
 import { computeCageLayout } from "./cage.js";
-import { helicalToCage } from "./fromHelical.js";
-import { helicalParityShapeArb } from "./helical-parity-helpers.js";
+import { helicalLayoutOf, helicalToCage } from "./fromHelical.js";
+import {
+  compareValues,
+  gapPaths,
+  helicalParityShapeArb,
+  type Gaps,
+} from "./helical-parity-helpers.js";
 
 const EXAMPLES_DIR = resolve(dirname(fileURLToPath(import.meta.url)), "../../../../../examples");
 const j5a = (): Project =>
@@ -88,7 +97,7 @@ describe("helicalToCage — correspondance", () => {
       expect(spec.sections[0]!.axis).toEqual({ kind: "arc", radius: 150, sweep: sign * 300 });
       expect(spec.sections[0]!.anchor).toBe(direction);
       const layout = computeCageLayout(project, spec, options);
-      const ref = computeHelicalLayout(p, p.stair.layout as HelicalLayoutSpec).helical!;
+      const ref = legacyComputeHelicalLayout(p, p.stair.layout as HelicalLayoutSpec).helical!;
       const arc = layout.sections![0]!.arc!;
       expect(arc.center.x).toBeCloseTo(ref.center.x, 6);
       expect(arc.center.y).toBeCloseTo(ref.center.y, 6);
@@ -148,7 +157,10 @@ describe("helicalToCage — schéma de cage", () => {
   });
 });
 
-describe("helicalToCage — erreurs (mêmes que computeHelicalLayout)", () => {
+describe("helicalToCage + moteur de cage — erreurs (mêmes que l'ancien tracé)", () => {
+  // Depuis P2, la conversion ne contrôle que n ; R_e > r_i, d_f et Δθ sont contrôlés par le
+  // moteur de cage sous l'origine `helical` (`helicalChecks.ts`) : la chaîne conversion + tracé
+  // rend la même erreur que l'hélicoïdal (nom, clé, paramètres).
   const base = {
     outerRadius: 1000,
     coreRadius: 100,
@@ -188,9 +200,27 @@ describe("helicalToCage — erreurs (mêmes que computeHelicalLayout)", () => {
   ];
   it.each(cases)("%s", (_name, make) => {
     const p = make();
-    const expected = errorOf(() => computeHelicalLayout(p, p.stair.layout as HelicalLayoutSpec));
+    const expected = errorOf(() =>
+      legacyComputeHelicalLayout(p, p.stair.layout as HelicalLayoutSpec),
+    );
     expect(expected).not.toBeNull();
-    expect(errorOf(() => helicalToCage(p))).toEqual(expected);
+    expect(
+      errorOf(() => {
+        const c = helicalToCage(p);
+        computeCageLayout(c.project, c.spec, c.options);
+      }),
+    ).toEqual(expected);
+    // Même erreur par le pipeline (`computeLayout`, P2).
+    expect(errorOf(() => computeLayout(p))).toEqual(expected);
+  });
+
+  it("la conversion seule ne lève plus que n hors domaine", () => {
+    for (const [name, make] of cases) {
+      const err = errorOf(() => helicalToCage(make()));
+      if (name === "n hors domaine") {
+        expect(err).toMatchObject({ msg: { key: "layout.riserCountOutOfRange" } });
+      } else expect(err, name).toBeNull();
+    }
   });
 
   it("tracé non hélicoïdal refusé", () => {
@@ -210,6 +240,70 @@ describe("helicalToCage — pureté", () => {
         const b = helicalToCage(p);
         expect(a).toEqual(b);
         expect(JSON.stringify(p)).toBe(before);
+      }),
+      { numRuns: 200 },
+    );
+  });
+});
+
+describe("helicalLayoutOf — champ de compatibilité `Layout.helical` (P2)", () => {
+  it("égal AU BIT à l'ancien `Layout.helical` (copie figée), et rendu par computeLayout", () => {
+    fc.assert(
+      fc.property(helicalParityShapeArb, (s) => {
+        const p = makeHelicalProject(s);
+        const spec = p.stair.layout as HelicalLayoutSpec;
+        const legacy = legacyComputeHelicalLayout(p, spec).helical;
+        expect(helicalLayoutOf(p, spec, resolveRiserCount(p))).toStrictEqual(legacy);
+        expect(computeLayout(p).helical).toStrictEqual(legacy);
+      }),
+      { numRuns: 200 },
+    );
+  });
+
+  it("cohérent avec la géométrie de la cage (1e-6 mm, 1e-9 rad)", () => {
+    // Deux sources (formule de `helicalLayoutOf`, géométrie de la cage) : centre, rayon et
+    // balayage de l'axe, rayons des bords et de Γ, côté de Γ, fût ou jour, palier d'arrivée.
+    fc.assert(
+      fc.property(helicalParityShapeArb, (s) => {
+        const p = makeHelicalProject(s);
+        const layout = computeLayout(p);
+        const h = layout.helical!;
+        const sign = h.direction === "left" ? 1 : -1;
+        const sec = layout.sections?.[0];
+        expect(layout.sections?.length).toBe(1);
+        expect(sec?.kind).toBe("arc");
+        const radiusOf = (seg: (typeof layout.inner.segments)[number] | undefined): number =>
+          seg?.kind === "arc" ? seg.radius : Number.NaN;
+        const gaps: Gaps = new Map();
+        compareValues(
+          {
+            center: h.center,
+            radius: h.innerRadius,
+            sweep: sign * h.totalAngle,
+            inner: h.innerRadius,
+            outer: h.outerRadius,
+            walk: h.walklineRadius,
+            side: h.direction,
+            core: h.core,
+            arrivalSweep: sign * h.landingAngle,
+            arrivalOutline: h.landingOutline,
+          },
+          {
+            center: sec?.arc?.center,
+            radius: sec?.arc?.radius,
+            sweep: sec?.arc?.sweep,
+            inner: radiusOf(layout.inner.segments[0]),
+            outer: radiusOf(layout.outer.segments[0]),
+            walk: radiusOf(layout.walkline.segments[0]),
+            side: layout.walklineSide,
+            core: layout.helicalOrigin?.core,
+            arrivalSweep: layout.helicalOrigin?.arrivalSweep,
+            arrivalOutline: layout.helicalOrigin?.arrivalOutline,
+          },
+          "",
+          gaps,
+        );
+        expect(gapPaths(gaps)).toEqual([]);
       }),
       { numRuns: 200 },
     );

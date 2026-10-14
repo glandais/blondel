@@ -9,6 +9,7 @@
  * `obstacle` (sous-lot 5b), `calibrate` (calibrage de l'image).
  */
 import { openingPolygon, type Model, type Project } from "@blondel/core";
+import { editableSections } from "../views/plan/planEditorGeometry.js";
 
 export type PlanEditorTool =
   "select" | "pan" | "opening" | "wall" | "room" | "obstacle" | "calibrate";
@@ -104,7 +105,7 @@ export function planSelectionExists(
     case "stair":
       return model !== null && model.layout.footprint.length > 0;
     case "section":
-      return inRange(selection.index, model?.layout.sections?.length ?? 0);
+      return inRange(selection.index, model ? editableSections(model.layout).length : 0);
     case "junction":
       return inRange(selection.index, model?.layout.turns.length ?? 0);
     case "wall":

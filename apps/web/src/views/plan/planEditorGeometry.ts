@@ -52,6 +52,16 @@ export function sectionPathData(s: LayoutSection): string {
 const close = (a: Vec2, b: Vec2): boolean => Math.abs(a.x - b.x) + Math.abs(a.y - b.y) < 1e-6;
 
 /**
+ * Tronçons éditables du tracé dans l'éditeur de plan : ceux de `layout.sections`, sauf pour un
+ * hélicoïdal (`layout.helical`, F10 sous-lot P2). Calculé par le moteur de cage, l'hélicoïdal
+ * porte un tronçon à axe en arc qui peut dépasser un tour ; il se règle dans son propre
+ * formulaire (`HelicalEditor`) et reste non sélectionnable en plan, comme avant la bascule.
+ */
+export function editableSections(layout: Layout): readonly LayoutSection[] {
+  return layout.helical ? [] : (layout.sections ?? []);
+}
+
+/**
  * Contour de la jonction `j` (zone tournante ou palier entre les tronçons `j` et `j + 1`) pour
  * la sélection : arrivée du tronçon entrant, coin extérieur, départ du tronçon sortant, coin
  * intérieur (sommet du jour), dans l'ordre du pourtour ; sommets confondus retirés. Le coin du

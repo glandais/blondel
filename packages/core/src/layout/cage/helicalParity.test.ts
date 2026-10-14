@@ -1,19 +1,20 @@
 /**
- * Parité **hélicoïdal / cage** (F10, sous-lot P1, ADR-0010) : pour un projet hélicoïdal P, le
- * moteur hélicoïdal actuel (référence : `computeHelicalLayout`, `computeHelicalStepping`,
- * `computeHeadroom` sur `Stepping.soffits`) et le moteur de cage appliqué à `helicalToCage(P)`
- * (`computeCageLayout` origine `helical`, `computeStepping`, étape d'échappée de cage
- * `cageHeadroomCeilings`) rendent-ils les mêmes tracés, découpages, sous-faces, échappées et
- * cotes ? Le pipeline n'est pas basculé : `computeLayout` garde le moteur hélicoïdal.
+ * Parité **hélicoïdal / cage** (F10, sous-lots P1 et P2, ADR-0010) : pour un projet hélicoïdal
+ * P, l'ancien chemin hélicoïdal (référence : copie figée `layout/legacyHelical.ts`,
+ * `legacyComputeHelicalLayout`, `legacyComputeHelicalStepping`, puis `computeHeadroom` sur
+ * `Stepping.soffits`) et le pipeline basculé en P2 (`computeLayout` : `helicalToCage` et moteur
+ * de cage d'origine `helical`, plus `Layout.helical` ; `computeStepping` ; `computeHeadroom`)
+ * rendent-ils les mêmes tracés, découpages, sous-faces, échappées et cotes ? La parité au
+ * niveau du `Model` entier (pièces, contrôle, garde-corps, exports) est dans
+ * `pipeline/helicalSwitch.parity.test.ts`.
  *
  * Niveaux (comparateur et tolérances justifiées : `helical-parity-helpers.ts`) :
- * - N0 : conversion (erreurs de spécification identiques : nom, clé, paramètres) ;
+ * - erreurs de spécification identiques (nom, clé, paramètres, étage) ;
  * - N1 : `Layout` champ à champ, ajouts de cage vérifiés (`sections`, `walklineSide`,
- *   `helicalOrigin`), `Layout.helical` reconstruit depuis la cage et comparé ;
- * - N2 : `Stepping` champ à champ (nez, marches sommet par sommet, remarques, erreurs), angle des
- *   nez de la cage (ajout) nul ;
- * - N3 : sous-faces (`Stepping.soffits` de l'hélicoïdal contre sous-faces de l'étape d'échappée
- *   de cage, palier d'arrivée compris) ;
+ *   `helicalOrigin`), `Layout.helical` égal au bit, et reconstruit depuis la cage (cohérence) ;
+ * - N2 : `Stepping` champ à champ (nez, marches sommet par sommet, remarques, erreurs ; angle des
+ *   nez absent des deux côtés) ;
+ * - N3 : sous-faces (`Stepping.soffits` des deux chemins, palier d'arrivée compris) ;
  * - N4 : `HeadroomAnalysis` complet ;
  * - N5 : cotes de `mainDimensions` (`pipeline/build.test.ts`) restreintes au tracé, au
  *   découpage et à l'échappée, égalité stricte après arrondis.
@@ -22,52 +23,46 @@
  * lacune) ; le test exige l'égalité exacte de l'ensemble des chemins en écart avec la table : un
  * écart nouveau échoue, un écart qui disparaît aussi. Lacunes (constat consigné dans
  * `docs/QUESTIONS.md`, F10) :
- * - `CUT` (coupure par la ligne du nez k + 2, irréductible en P1) : quand d / sin Δθ > r_i, le
- *   contour de pièce de l'hélicoïdal (`helicalTreadOutline`) déborde au-delà du nez k + 2 sur le
- *   bord intérieur ; la cage le coupe sur cette ligne (`outlineBetween`, paramètre `c`), comme
- *   les contremarches. Corriger demanderait de modifier le moteur hélicoïdal (référence) ; la
- *   cage est la plus juste. Contours et sous-faces en écart ; l'échappée (valeurs, N4 et N5)
- *   reste comparée strictement (aucun écart d'échappée mesuré sur les tirages CUT : un écart
- *   de valeur y serait un écart nouveau, à documenter).
- * - `TIE` (égalité de minima, bruit) : l'échappée minimale est atteinte avec la même valeur (à
- *   1e-6 près) en plusieurs points, images l'un de l'autre par le vissage de Δθ, h (le plus
- *   souvent à 1 à 3 nez d'écart, parfois un tour) ; `selfcover.ts` retient le premier minimum
- *   strict, et le bruit d'arrondi des deux chemins de calcul départage différemment : point et
- *   abscisse (ou nez) du minimum en écart, **valeur** identique. Admis seulement si le point de
- *   la cage est vérifié comme minimum ex æquo de la référence (`tieOnReference` : même valeur,
- *   abscisse décalée d'un nombre entier de girons, point sur Γ et altitude sur la ligne de pente
- *   de référence ; sur la largeur, point sur le nez de référence de même indice, à son
- *   altitude). Corriger demanderait un départage avec tolérance dans `selfcover.ts`, partagé
- *   avec l'hélicoïdal (référence) : hors P1.
+ * - `CUT` (coupure par la ligne du nez k + 2), **écart voulu** (décision F10 (2), l'ancien moteur
+ *   n'est pas retouché) : quand d / sin Δθ > r_i, le contour de pièce de l'hélicoïdal
+ *   (`helicalTreadOutline`) déborde au-delà du nez k + 2 sur le bord intérieur ; la cage le
+ *   coupe sur cette ligne (`outlineBetween`, paramètre `c`), comme les contremarches. Contours
+ *   et sous-faces en écart ; les **valeurs** d'échappée (N4 et N5) restent comparées
+ *   strictement. Écart composé « CUT × TIE » (P2, non décidé, question F10) : depuis le
+ *   départage du premier minimum en montant, la bande de bord intérieur que seule la référence
+ *   couvre peut porter un minimum ex æquo plus tôt en montant ; l'**emplacement** du minimum
+ *   (sur Γ ou sur la largeur) peut alors différer, admis seulement sous CUT et si le point de
+ *   la cage est un minimum ex æquo de la référence (`tieOnReference`, propriété).
+ * - `TIE` (égalité de minima, bruit), **résolu en P2** (décision F10 (3)) : l'échappée minimale
+ *   est atteinte avec la même valeur (à 1e-6 près) en plusieurs points, images l'un de l'autre
+ *   par le vissage de Δθ, h ; en P1, `selfcover.ts` retenait le premier minimum strict et le
+ *   bruit des deux chemins de calcul départageait différemment (8 cas). `selfcover.ts` retient
+ *   désormais le premier minimum en montant à `HEADROOM_TIE_TOL` (1e-6 mm) près, pour les deux
+ *   moteurs : aucun écart TIE admis (les anciens cas sont marqués `formerTie`).
  * - `HALF` (arrondi d'une valeur au demi-pas, bruit) : une grandeur exactement à mi-chemin de
  *   deux arrondis (0,05 pour `dec` des remarques et r1, 0,005 pour r2) bascule d'un côté ou de
  *   l'autre selon le bruit (valeur brute égale à 1e-6 près, vérifiée).
  *
- * Erreurs (N0) : la parité des erreurs de spécification est une propriété de la **conversion**,
- * pas du moteur de cage : `helicalToCage` rejoue les contrôles de `computeHelicalLayout` (n, R_e >
- * r_i, d_f, Δθ) avant d'appeler la cage, et le contrôle de débord (`nosingReaches*`) est une copie
- * dans `stepping.ts` sous `helicalOrigin`. Le moteur de cage seul accepte un Δθ ≥ 180° (lacune
- * « contrôles », assertée par un test dédié) : à reporter dans le moteur avant la bascule (P2).
+ * Erreurs (étage du tracé) : depuis P2, la conversion ne contrôle que le domaine de n ; les contrôles de
+ * spécification de l'hélicoïdal (R_e > r_i, d_f, Δθ) sont faits par le moteur de cage sous
+ * l'origine `helical` (`helicalChecks.ts`, en tête de `computeCageLayout`), mêmes clés, mêmes
+ * paramètres, même ordre ; le contrôle de débord (`nosingReaches*`) reste à l'étage découpage
+ * (`stepping.ts`, sous `helicalOrigin`). La lacune « contrôles » de P1 (le moteur seul acceptait
+ * Δθ ≥ 180°) est levée : un test dédié vérifie que le moteur seul refuse ce cas.
  *
- * Les champs `Stepping.soffits` (hélicoïdal) et `HeadroomAnalysis.selfCover` (cage) portent les
- * mêmes sous-faces à des emplacements différents (lacune « emplacement des sous-faces ») : leur
- * contenu est comparé en N3, l'emplacement est asserté à part.
+ * Sous-faces : en P1, la cage les portait dans `HeadroomAnalysis.selfCover` (lacune
+ * « emplacement des sous-faces ») ; depuis P2, dans `Stepping.soffits` des deux côtés (asserté à
+ * part), contenu comparé en N3.
  */
-import { readFileSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
-import { circularOpening, helicalHeadroomBound } from "../../headroom/helical.js";
+import { MessageError } from "@blondel/i18n";
+import { helicalHeadroomBound } from "../../headroom/helical.js";
 import type { HelicalLayout } from "../../model/derived.js";
-import { ProjectSchema, type HelicalLayoutSpec, type Project } from "../../model/project.js";
-import { parseProjectText } from "../../project/parse.js";
-import { createDemoProject } from "../../project/presetDemo.js";
-import { createProject } from "../../project/presets.js";
+import { ProjectSchema, type Project } from "../../model/project.js";
 import { computeStepping } from "../../stepping/stepping.js";
 import { buildModel } from "../../pipeline/build.js";
 import { computeLayout } from "../layout.js";
-import { makeHelicalProject, type HelicalShape } from "../helical-test-helpers.js";
 import {
   compareValues,
   gapPaths,
@@ -80,284 +75,18 @@ import {
   type Gaps,
   type ParityReport,
 } from "./helical-parity-helpers.js";
+import {
+  FORMER_TIE,
+  HELICAL_EXAMPLES,
+  HELICAL_PARITY_CASES as CASES,
+  HELICAL_PARITY_ERROR_CASES as ERROR_CASES,
+  j5a,
+  loadExample,
+  shape,
+  type ParityCase,
+} from "./helical-parity-cases-helpers.js";
 import { computeCageLayout } from "./cage.js";
 import { helicalToCage } from "./fromHelical.js";
-
-const EXAMPLES_DIR = resolve(dirname(fileURLToPath(import.meta.url)), "../../../../../examples");
-const loadExample = (name: string): Project =>
-  parseProjectText(readFileSync(join(EXAMPLES_DIR, `${name}.blondel.json`), "utf8"));
-
-const HELICAL_EXAMPLES = [
-  "j5a-helicoidal",
-  "j5c-limon-central-helicoidal",
-  "j5c-limon-central-bois-helicoidal",
-  "demo-helical-glass",
-  "demo-helical-well",
-  "demo-central-glulam",
-] as const;
-
-/** Projet dont le tracé hélicoïdal est modifié (re-validé par le schéma). */
-function withHelical(project: Project, patch: Partial<HelicalLayoutSpec>): Project {
-  const layout = { ...(project.stair.layout as HelicalLayoutSpec), ...patch };
-  const { width: _w, legs: _l, turns: _t, ...input } = layout;
-  return ProjectSchema.parse({ ...project, stair: { ...project.stair, layout: input } });
-}
-
-/** Projet modifié au niveau de l'escalier (re-validé par le schéma). */
-function withStair(project: Project, patch: Partial<Project["stair"]>): Project {
-  const { width: _w, legs: _l, turns: _t, ...layout } = project.stair.layout as HelicalLayoutSpec;
-  return ProjectSchema.parse({ ...project, stair: { ...project.stair, layout, ...patch } });
-}
-
-const j5a = (): Project => loadExample("j5a-helicoidal");
-const shape = (s: Partial<HelicalShape>): Project =>
-  makeHelicalProject({
-    outerRadius: 1000,
-    coreRadius: 100,
-    direction: "left",
-    floorToFloor: 2800,
-    riserCount: 16,
-    ...s,
-  });
-
-// ------------------------------------------------------------------ catalogue des cas
-
-/** Cas : projet hélicoïdal et écarts attendus (chemins normalisés, voir l'en-tête). */
-interface ParityCase {
-  readonly name: string;
-  readonly project: () => Project;
-  /** Écarts attendus, par lacune ; vide : parité tenue. */
-  readonly gaps?: Readonly<Partial<Record<"CUT" | "TIE" | "HALF", readonly string[]>>>;
-}
-
-/** CUT : nombre de sommets des contours (et des sous-faces) en écart. */
-const CUT_COUNT = ["N2:treads[*].outline.length", "N3:soffits[*].outline.length"];
-/** CUT : même nombre de sommets, sommets déplacés. */
-const CUT_VERTICES = [
-  "N2:treads[*].outline[*].x",
-  "N2:treads[*].outline[*].y",
-  "N3:soffits[*].outline[*].x",
-  "N3:soffits[*].outline[*].y",
-];
-/** TIE : minimum sur Γ atteint (même valeur) en un autre point. */
-const TIE_WALK = [
-  "N4:headroom.walkline.at.x",
-  "N4:headroom.walkline.at.y",
-  "N4:headroom.walkline.at.z",
-  "N4:headroom.walkline.s",
-];
-/** TIE : minimum sur Γ atteint (même valeur) au même point en plan, un tour plus haut ou plus bas. */
-const TIE_WALK_TURN = ["N4:headroom.walkline.at.z", "N4:headroom.walkline.s"];
-
-const CASES: readonly ParityCase[] = [
-  // Exemples du dépôt (tous à palier d'arrivée, `treadsPerTurn`, sens `left`).
-  ...HELICAL_EXAMPLES.map((name): ParityCase => ({
-    name: `exemple ${name}`,
-    project: () => loadExample(name),
-  })),
-  // Les mêmes, privés de leur palier (isole la lacune du palier d'arrivée).
-  ...HELICAL_EXAMPLES.map((name): ParityCase => ({
-    name: `exemple ${name} sans palier`,
-    project: () => withHelical(loadExample(name), { landing: undefined }),
-    ...(name === "j5a-helicoidal" ? { gaps: { TIE: TIE_WALK } } : {}),
-  })),
-  { name: "préréglage helical", project: () => createProject("helical") },
-  { name: "démo demo-helical-glass", project: () => createDemoProject("demo-helical-glass") },
-  { name: "démo demo-helical-well", project: () => createDemoProject("demo-helical-well") },
-  { name: "démo demo-central-glulam", project: () => createDemoProject("demo-central-glulam") },
-  // Sens, angle de départ, placement quelconque.
-  {
-    name: "sens droite, départ 37°, placement (1 234 ; −567) −110°",
-    project: () =>
-      withStair(withHelical(j5a(), { direction: "right", startAngle: 37 }), {
-        placement: { origin: { x: 1234, y: -567 }, rotation: -110 },
-      }),
-  },
-  {
-    name: "sens gauche, départ 37°, placement (1 234 ; −567) −110°",
-    project: () =>
-      withStair(withHelical(j5a(), { startAngle: 37 }), {
-        placement: { origin: { x: 1234, y: -567 }, rotation: -110 },
-      }),
-  },
-  // Mode `angle`.
-  // 90° : Δθ = 6°, d / sin Δθ = 191 mm > r_i = 100 mm (CUT).
-  {
-    name: "angle 90°",
-    project: () => shape({ totalAngle: 90, nosing: 20, landingAngle: 30 }),
-    gaps: { CUT: CUT_VERTICES },
-  },
-  ...[270, 359, 360].map((deg): ParityCase => ({
-    name: `angle ${deg}°`,
-    project: () => shape({ totalAngle: deg, nosing: 20, landingAngle: 30 }),
-  })),
-  ...[450, 720].map((deg): ParityCase => ({
-    name: `angle ${deg}°`,
-    project: () => shape({ totalAngle: deg, nosing: 20, landingAngle: 30 }),
-    gaps: { TIE: TIE_WALK },
-  })),
-  {
-    name: "angle 2 160° (n = 60)",
-    project: () =>
-      shape({
-        totalAngle: 2160,
-        riserCount: 60,
-        floorToFloor: 10500,
-        nosing: 20,
-        landingAngle: 30,
-      }),
-    gaps: { TIE: TIE_WALK },
-  },
-  {
-    name: "angle 359°, débord au-dessus du départ, sens droite",
-    project: () => shape({ totalAngle: 359, nosing: 30, direction: "right" }),
-  },
-  // Mode `treadsPerTurn`.
-  {
-    name: "N = 3 (Δθ = 120°)",
-    project: () => shape({ treadsPerTurn: 3, riserCount: 7, nosing: 10 }),
-    gaps: { TIE: TIE_WALK_TURN },
-  },
-  {
-    name: "N = 12, n = 13 (Θ = 360° exact)",
-    project: () => shape({ treadsPerTurn: 12, riserCount: 13, nosing: 0 }),
-  },
-  { name: "N = 60", project: () => shape({ treadsPerTurn: 60, riserCount: 24, coreRadius: 300 }) },
-  // Fût contre jour central, même géométrie.
-  { name: "fût central", project: () => shape({ core: "column", treadsPerTurn: 14 }) },
-  { name: "jour central", project: () => shape({ core: "well", treadsPerTurn: 14 }) },
-  // Ligne de foulée.
-  {
-    name: "ligne de foulée fromInner 300",
-    project: () => shape({ walklineFromInner: 300 }),
-    gaps: { TIE: TIE_WALK },
-  },
-  {
-    name: "DTU, E ≤ seuil (E = 1 200)",
-    project: () => shape({ outerRadius: 1300, coreRadius: 100 }),
-    gaps: { TIE: TIE_WALK },
-  },
-  {
-    name: "DTU, E > seuil (E = 1 400)",
-    project: () => shape({ outerRadius: 1500, coreRadius: 100 }),
-  },
-  {
-    name: "côté de Γ choisi à l'extérieur dans le projet source",
-    project: () =>
-      withStair(shape({ treadsPerTurn: 13 }), { walkline: { mode: "dtu", side: "right" } }),
-  },
-  // Débord de nez.
-  { name: "débord 0", project: () => shape({ nosing: 0, landingAngle: 60 }) },
-  { name: "débord 30", project: () => shape({ nosing: 30, landingAngle: 60 }) },
-  {
-    name: "débord proche de r_i (r_i = 50, d = 40, Δθ = 30°)",
-    project: () => shape({ coreRadius: 50, outerRadius: 950, nosing: 40, treadsPerTurn: 12 }),
-    gaps: { CUT: CUT_COUNT },
-  },
-  // Palier d'arrivée.
-  {
-    name: "palier qui recouvre la montée (Θ = 300°, Λ = 90°)",
-    project: () => shape({ totalAngle: 300, landingAngle: 90 }),
-  },
-  {
-    name: "palier sans recouvrement (Θ = 180°, Λ = 45°)",
-    project: () => shape({ totalAngle: 180, landingAngle: 45 }),
-  },
-  // Trémies.
-  { name: "sans trémie", project: () => shape({ treadsPerTurn: 13, landingAngle: 45 }) },
-  {
-    name: "trémie rectangulaire",
-    project: () =>
-      shape({
-        treadsPerTurn: 13,
-        landingAngle: 45,
-        opening: { kind: "rect", x: -1100, y: -1100, sizeX: 2200, sizeY: 1100 },
-      }),
-  },
-  {
-    name: "trémie circulaire",
-    project: () =>
-      shape({
-        treadsPerTurn: 13,
-        landingAngle: 45,
-        opening: circularOpening({ x: 0, y: 0 }, 1050),
-      }),
-  },
-  {
-    name: "deux tours sans trémie",
-    project: () => shape({ totalAngle: 720, riserCount: 25, floorToFloor: 4400 }),
-    gaps: { TIE: TIE_WALK },
-  },
-  // Hauteurs non régulières, réglages des escaliers à volées.
-  { name: "firstRiseOffset 12", project: () => shape({ firstRiseOffset: 12 }) },
-  {
-    name: "giron cible saisi",
-    project: () =>
-      withStair(shape({}), {
-        stepping: { ...shape({}).stair.stepping, targetGoing: 250 },
-      }),
-  },
-  {
-    name: "surcharges de nez fixe et angle",
-    project: () =>
-      withStair(shape({}), {
-        nosingOverrides: [
-          { kind: "fixed", index: 3 },
-          { kind: "angle", index: 5, angle: 7 },
-        ],
-      }),
-  },
-];
-
-/** Cas d'erreur : même niveau, même nom, même clé et mêmes paramètres. */
-const ERROR_CASES: readonly { name: string; project: () => Project; key: string }[] = [
-  {
-    name: "Δθ ≥ 180° (angle 400°, n = 3)",
-    project: () => shape({ totalAngle: 400, riserCount: 3 }),
-    key: "layout.helical.invalidStepAngle",
-  },
-  {
-    name: "R_e ≤ r_i (projet construit hors schéma)",
-    project: () => {
-      const p = j5a();
-      const l = p.stair.layout as HelicalLayoutSpec;
-      return { ...p, stair: { ...p.stair, layout: { ...l, outerRadius: 70, width: 0 } } };
-    },
-    key: "layout.helical.outerRadiusBelowColumn",
-  },
-  {
-    name: "R_e ≤ r_i, jour central (hors schéma)",
-    project: () => {
-      const p = shape({ core: "well" });
-      const l = p.stair.layout as HelicalLayoutSpec;
-      return { ...p, stair: { ...p.stair, layout: { ...l, outerRadius: 90, width: -10 } } };
-    },
-    key: "layout.helical.outerRadiusBelowWell",
-  },
-  {
-    name: "d_f hors emmarchement (fromInner ≥ E)",
-    project: () => shape({ walklineFromInner: 900 }),
-    key: "layout.walklineOutsideWidth",
-  },
-  {
-    name: "débord ≥ r_i (fût)",
-    project: () => shape({ coreRadius: 50, outerRadius: 950, nosing: 50 }),
-    key: "stepping.helical.nosingReachesColumn",
-  },
-  {
-    name: "débord ≥ r_i (jour)",
-    project: () => shape({ core: "well", coreRadius: 50, outerRadius: 950, nosing: 60 }),
-    key: "stepping.helical.nosingReachesWell",
-  },
-  {
-    name: "n hors domaine",
-    project: () =>
-      withStair(shape({}), {
-        stepping: { ...shape({}).stair.stepping, riserCount: "auto", targetRise: 10 },
-      }),
-    key: "layout.riserCountOutOfRange",
-  },
-];
 
 /** Chemins en écart attendus d'un cas. */
 const expectedOf = (c: ParityCase): string[] =>
@@ -416,26 +145,33 @@ describe("parité hélicoïdal / cage (F10, P1) — cas", () => {
     expect(gapPaths(r.gaps)).toEqual(expectedOf(c));
   });
 
-  it("emplacement des sous-faces : `Stepping.soffits` (hélicoïdal), étape d'échappée (cage)", () => {
+  it("emplacement des sous-faces : `Stepping.soffits` des deux côtés (P2)", () => {
+    // En P1, la cage les déduisait à l'étape d'échappée (`HeadroomAnalysis.selfCover`) ; depuis
+    // la bascule, le découpage les range dans `Stepping.soffits`, comme l'ancien chemin, et
+    // l'échappée ne porte pas de `selfCover` (ni `Model.soffits`).
     for (const c of CASES) {
       const r = reportOf(c);
       expect(r.helical.stepping?.soffits, c.name).toBeDefined();
-      expect(r.cage.stepping?.soffits, c.name).toBeUndefined();
-      expect(r.cage.headroom?.selfCover, c.name).toEqual(r.cage.soffits);
+      expect(r.cage.stepping?.soffits, c.name).toBeDefined();
+      expect(r.cage.stepping?.soffits?.length, c.name).toBe(r.helical.stepping?.soffits?.length);
+      expect(r.helical.headroom?.selfCover, c.name).toBeUndefined();
+      expect(r.cage.headroom?.selfCover, c.name).toBeUndefined();
     }
   });
 
-  it("écart TIE : la valeur du minimum est identique, seul son emplacement diffère", () => {
-    for (const c of CASES) {
+  it("anciens cas TIE (décision F10 (3)) : même minimum, au même point, sur les deux moteurs", () => {
+    // Les 8 cas TIE de P1 (minima ex æquo départagés par le bruit) n'ont plus d'écart : le
+    // départage du premier minimum en montant (`selfcover.ts`) est commun aux deux moteurs.
+    expect(FORMER_TIE.size).toBe(8);
+    for (const c of CASES.filter((x) => FORMER_TIE.has(x.name))) {
       const r = reportOf(c);
-      const a = r.helical.headroom;
-      const b = r.cage.headroom;
-      if (!a || !b) continue;
-      if (a.walkline && b.walkline) {
-        expect(Math.abs(a.walkline.min - b.walkline.min), c.name).toBeLessThanOrEqual(1e-6);
-      }
-      // Emplacement en écart : vérifié comme minimum ex æquo de la référence.
-      if (c.gaps?.TIE) expect(tieOnReference(r.helical, r.cage).walkline, c.name).toBe(true);
+      const a = r.helical.headroom?.walkline;
+      const b = r.cage.headroom?.walkline;
+      expect(a, c.name).toBeDefined();
+      expect(b, c.name).toBeDefined();
+      expect(Math.abs(a!.min - b!.min), c.name).toBeLessThanOrEqual(1e-6);
+      expect(Math.abs(a!.s - b!.s), c.name).toBeLessThanOrEqual(1e-6);
+      expect(Math.abs(a!.at.z - b!.at.z), c.name).toBeLessThanOrEqual(1e-6);
     }
   });
 });
@@ -449,22 +185,45 @@ describe("parité hélicoïdal / cage (F10, P1) — erreurs", () => {
     expect(gapPaths(r.gaps)).toEqual([]);
   });
 
-  it("lacune « contrôles » : le moteur de cage seul accepte Δθ ≥ 180° (contrôle porté par la conversion)", () => {
+  it("contrôles dans le moteur : la cage seule refuse Δθ ≥ 180° comme l'hélicoïdal (P2)", () => {
     // Conversion d'un cas valide (400°, n = 16), puis n = 3 sur le projet converti : Δθ = 200°.
-    // L'hélicoïdal lève `layout.helical.invalidStepAngle` (cas d'erreur ci-dessus) ; la cage,
-    // appelée sans les contrôles de `helicalToCage`, calcule tracé et découpage sans erreur.
-    // Écart attendu et documenté (QUESTIONS F10) : à reporter dans le moteur avant P2.
+    // En P1, le moteur de cage appelé sans les contrôles de `helicalToCage` acceptait ce cas
+    // (lacune « contrôles ») ; depuis P2, il le refuse lui-même (`helicalChecks.ts`), avec la
+    // même erreur (nom, clé, paramètres) que l'hélicoïdal sur le même projet.
     const conv = helicalToCage(shape({ totalAngle: 400, riserCount: 16 }));
     const p = {
       ...conv.project,
       stair: { ...conv.project.stair, stepping: { ...conv.project.stair.stepping, riserCount: 3 } },
     };
-    const layout = computeCageLayout(p, conv.spec, conv.options);
-    const stepping = computeStepping(p, layout);
-    expect(stepping.riserCount).toBe(3);
-    expect(stepping.nosings).toHaveLength(3);
-    const keys = stepping.notes.map((m) => (typeof m === "string" ? m : m.key));
-    expect(keys).not.toContain("layout.helical.invalidStepAngle");
+    const ref = runHelical(shape({ totalAngle: 400, riserCount: 3 }));
+    expect(ref.error?.level).toBe("N1");
+    let error: unknown;
+    try {
+      computeCageLayout(p, conv.spec, conv.options);
+    } catch (e) {
+      error = e;
+    }
+    expect(error).toBeInstanceOf(MessageError);
+    const e = error as MessageError;
+    expect({ name: e.name, msg: e.msg }).toEqual(ref.error!.error);
+    expect(e.msg).toMatchObject({
+      key: "layout.helical.invalidStepAngle",
+      params: { angle: "200.0" },
+    });
+  });
+
+  it("contrôles dans le moteur : ordre de l'hélicoïdal, avant les contrôles de cage", () => {
+    // Δθ ≥ 180° avec un balayage hors borne de cage : la clé de l'hélicoïdal sort, pas
+    // `layout.cage.*` ; largeur nulle : clé de l'hélicoïdal, pas celle de la largeur de cage.
+    for (const c of ERROR_CASES) {
+      const project = c.project();
+      if (c.key.startsWith("stepping.")) continue;
+      const r = helicalParity(project);
+      const err = r.cage.error?.error.msg;
+      expect(typeof err === "string" ? err : err?.key, c.name).toBe(c.key);
+      // Étage du tracé (`computeLayout`) pour tous les contrôles de spécification.
+      expect(r.cage.error?.level, c.name).toBe("N1");
+    }
   });
 });
 
@@ -490,11 +249,11 @@ describe("parité hélicoïdal / cage (F10, P1) — cotes des exemples (N5)", ()
 describe("parité hélicoïdal / cage (F10, P1) — cas inverse `cage-arc`", () => {
   // L'exemple `cage-arc` (axe en arc de 100°, rayon d'axe 2 150 mm au milieu, E = 900, n = 15)
   // écrit à la main en hélicoïdal (r_i = 1 700, R_e = 2 600, angle 100°, axe au centre de
-  // l'arc). Moteur hélicoïdal contre l'instantané existant de `cage-arc` (`buildModel`, cage
-  // saisie, origine `cage`) : mêmes cotes, sauf la **nature des marches** (lacune consignée,
-  // question F10) : une cage saisie classe les marches d'un axe en arc en `straight`
-  // (« ssss… », sans collet listé), l'hélicoïdal en `winder` (« wwww… », collets listés).
-  it("mêmes cotes sauf la nature des marches et les collets qui en dépendent", () => {
+  // l'arc). Moteur hélicoïdal contre `cage-arc` (`buildModel`, cage saisie, origine `cage`) :
+  // en P1, mêmes cotes sauf la nature des marches (cage saisie « ssss… », hélicoïdal
+  // « wwww… ») ; depuis la décision F10 (1) (toute marche sur un axe en arc est dansante, cage
+  // saisie comprise), mêmes cotes **toutes comprises**, nature des marches et collets inclus.
+  it("mêmes cotes, nature des marches et collets compris (décision F10 (1))", () => {
     const cageArc = loadExample("cage-arc");
     const helical = ProjectSchema.parse({
       ...cageArc,
@@ -524,21 +283,29 @@ describe("parité hélicoïdal / cage (F10, P1) — cas inverse `cage-arc`", () 
     const differing = (Object.keys(a) as (keyof typeof a)[]).filter(
       (k) => JSON.stringify(a[k]) !== JSON.stringify(b[k]),
     );
-    expect(differing).toEqual(["treads", "colletsChord", "colletMin"]);
+    expect(differing).toEqual([]);
     expect(a.treads).toBe("w".repeat(14));
-    expect(b.treads).toBe("s".repeat(14));
+    expect(b.treads).toBe("w".repeat(14));
   });
 });
 
-describe("parité hélicoïdal / cage (F10, P1) — aiguillage inchangé", () => {
-  it("computeLayout et computeStepping passent toujours par le moteur hélicoïdal", () => {
+describe("parité hélicoïdal / cage (F10, P2) — aiguillage vers la cage", () => {
+  it("computeLayout et computeStepping passent par la cage d'origine helical", () => {
     const p = j5a();
     const layout = computeLayout(p);
-    expect(layout.helical).toBeDefined();
-    expect(layout.helicalOrigin).toBeUndefined();
-    expect(layout.sections).toBeUndefined();
-    expect(computeStepping(p, layout).helical).toBe(true);
-    expect(buildModel(p, { memo: false }).layout.helical).toBeDefined();
+    expect(layout.helicalOrigin).toEqual(expect.objectContaining({ core: "column" }));
+    expect(layout.sections?.length).toBe(1);
+    expect(layout.sections?.[0]?.kind).toBe("arc");
+    expect(layout.cage).toBeUndefined();
+    // Champ de compatibilité, égal au bit à l'ancien tracé (copie figée).
+    expect(layout.helical).toStrictEqual(runHelical(p).layout!.helical);
+    const stepping = computeStepping(p, layout);
+    expect(stepping.helical).toBe(true);
+    expect(stepping.soffits?.length).toBe(stepping.treads.length + 1);
+    expect(stepping.nosings.every((nl) => nl.angle === undefined)).toBe(true);
+    const m = buildModel(p, { memo: false });
+    expect(m.layout.helicalOrigin).toBeDefined();
+    expect(m.soffits).toBeUndefined();
   });
 });
 
@@ -631,17 +398,25 @@ function predictedGaps(
     outline.forEach((p) => allowed.add(p));
     required.push(outline);
   }
-  // TIE : emplacement du minimum, admis seulement si la cage tombe sur un minimum ex æquo de
-  // la référence (`tieOnReference` : même valeur, vissage d'un nombre entier de marches).
+  // TIE : aucun écart admis depuis la décision F10 (3) (départage commun dans `selfcover.ts`) ;
+  // un emplacement de minimum en écart est un écart nouveau, SAUF sous CUT (écart composé
+  // « CUT × TIE », non décidé, question F10) : le contour de référence, non coupé, couvre en
+  // plus une bande du bord intérieur ; un minimum ex æquo y est atteint plus tôt en montant
+  // (même valeur, image par vissage d'un nombre entier de marches), que la cage, coupée, n'a
+  // pas. Les **valeurs** restent strictes ; l'emplacement n'est admis que si le point de la cage
+  // est un minimum ex æquo de la référence (`tieOnReference`). Mesuré : 7 tirages sur 12 000
+  // (graines 1 à 6, 2 000 tirages chacune), tous sous CUT, tous vérifiés.
   const a = r.helical.headroom;
-  const tie = tieOnReference(r.helical, r.cage);
-  if (tie.walkline) {
-    for (const k of ["at.x", "at.y", "at.z", "s"]) allowed.add(`N4:headroom.walkline.${k}`);
-  }
-  if (tie.width) {
-    for (const k of ["at.x", "at.y", "at.z", "nosing"]) allowed.add(`N4:headroom.width.${k}`);
-    // Cote N5 `headroomWidth` = { min, nosing } : seul l'indice du nez peut différer.
-    allowed.add("N5:headroomWidth");
+  if (cut) {
+    const tie = tieOnReference(r.helical, r.cage);
+    if (tie.walkline) {
+      for (const k of ["at.x", "at.y", "at.z", "s"]) allowed.add(`N4:headroom.walkline.${k}`);
+    }
+    if (tie.width) {
+      for (const k of ["at.x", "at.y", "at.z", "nosing"]) allowed.add(`N4:headroom.width.${k}`);
+      // Cote N5 `headroomWidth` = { min, nosing } : seul l'indice du nez peut différer.
+      allowed.add("N5:headroomWidth");
+    }
   }
   // HALF : arrondis à mi-pas (remarques au dixième, cotes r1 / r2).
   const deg = 180 / Math.PI;

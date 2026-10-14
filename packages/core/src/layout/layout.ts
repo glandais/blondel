@@ -4,7 +4,10 @@
  * Un seul chemin de calcul depuis le sous-lot 1c (ADR-0010) : un tracé à volées est converti en
  * cage (`flightsToCage`) puis calculé par le moteur de cage (`cage/cage.ts`, origine `flights` :
  * messages d'erreur du moteur à volées) ; une cage saisie est calculée par le même moteur
- * (origine `cage`) ; l'hélicoïdal garde son moteur (`helical.ts`). Le résultat d'un tracé à
+ * (origine `cage`) ; un hélicoïdal aussi depuis le sous-lot P2 de F10 (`helicalToCage`, origine
+ * `helical`, un tronçon à axe en arc au-delà d'un tour), avec `Layout.helical` en champ de
+ * compatibilité (`helicalLayoutOf`) ; l'ancien moteur `helical.ts` n'est plus appelé par le
+ * pipeline (retrait en P3, copie figée de référence `legacyHelical.ts`). Le résultat d'un tracé à
  * volées est identique, champ pour champ, à celui de l'ancien moteur à volées (supprimé au
  * sous-lot 2f ; parité figée en instantanés, `cage/parity.test.ts`) ; `sections`
  * (tronçons) est en plus. Les conventions ci-dessous, établies pour les volées, sont celles du
@@ -87,10 +90,10 @@ import type { Mm } from "../model/primitives.js";
 import type { Project } from "../model/project.js";
 import { computeCageLayout } from "./cage/cage.js";
 import { checkFlightsTopology, flightsToCage } from "./cage/fromFlights.js";
+import { helicalLayoutOf, helicalToCage } from "./cage/fromHelical.js";
 import { checkWellAngle } from "./cage/junction.js";
 import { LayoutError } from "./errors.js";
-import { computeHelicalLayout } from "./helical.js";
-import { resolveLegLengths } from "./resolve.js";
+import { resolveLegLengths, resolveRiserCount } from "./resolve.js";
 
 export interface LayoutOptions {
   /**
@@ -103,8 +106,9 @@ export interface LayoutOptions {
 
 /**
  * Calcule le tracé (bords, ligne de foulée, tournants, tronçons, emprise) d'un projet, en repère
- * monde. Un tracé hélicoïdal (`kind: "helical"`) est délégué à `computeHelicalLayout` ; un tracé
- * à volées et une cage (`kind: "cage"`, ADR-0010) au moteur de cage (`computeCageLayout`).
+ * monde. Tout tracé passe par le moteur de cage (`computeCageLayout`, ADR-0010) : à volées
+ * (`flightsToCage`), cage saisie (`kind: "cage"`) ou hélicoïdal (`helicalToCage`, plus
+ * `Layout.helical`).
  *
  * @throws LayoutError si la topologie n'est pas prise en charge (nombre de tournants
  *   incohérent, `auto` hors escalier droit, fonction de la cage pas encore calculée ou dont
@@ -114,8 +118,15 @@ export interface LayoutOptions {
  */
 export function computeLayout(project: Project, options: LayoutOptions = {}): Layout {
   const spec = project.stair.layout;
-  // Tracé hélicoïdal (jalon 5a) : forme fermée propre, `layout/helical.ts`.
-  if (spec.kind === "helical") return computeHelicalLayout(project, spec);
+  // Tracé hélicoïdal (jalon 5a ; F10, sous-lot P2) : cage d'un tronçon à axe en arc
+  // (`helicalToCage`, origine `helical` : contrôles et messages de l'hélicoïdal), plus
+  // `Layout.helical`, champ de compatibilité de ses consommateurs (`helicalLayoutOf`, formule
+  // d'origine au bit près). Le projet converti ne sort pas d'ici.
+  if (spec.kind === "helical") {
+    const conv = helicalToCage(project);
+    const cage = computeCageLayout(conv.project, conv.spec, conv.options);
+    return { ...cage, helical: helicalLayoutOf(project, spec, resolveRiserCount(project)) };
+  }
   // Tracé libre (CAGE, ADR-0010) : vocabulaire « tronçon », borne `CAGE_MAX_SECTIONS`.
   if (spec.kind === "cage") {
     // Jour à poteau à ±90° : le moteur le calcule, mais l'aval (découpage par angle, développé

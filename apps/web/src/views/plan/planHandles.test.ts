@@ -60,6 +60,10 @@ describe("poignées de la sélection (positions lues dans le modèle)", () => {
     const helical = createProject("helical");
     const mh = buildModel(helical);
     expect(selectionHandles({ kind: "junction", index: 0 }, mh, helical, 2)).toEqual([]);
+    // Hélicoïdal calculé par le moteur de cage (F10, P2) : son tronçon à axe en arc n'a pas de
+    // poignée de longueur ni de largeur (réglé dans le formulaire de l'hélicoïdal).
+    expect(mh.layout.sections?.length).toBe(1);
+    expect(selectionHandles({ kind: "section", index: 0 }, mh, helical, 2)).toEqual([]);
   });
 
   it("emprise reportée : chaque sommet au même point local du placement cible (propriété)", () => {

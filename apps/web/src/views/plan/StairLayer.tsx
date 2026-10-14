@@ -12,7 +12,7 @@
 import type { Model } from "@blondel/core";
 import { memo, useMemo } from "react";
 import { pointsAttr, stairOverlay } from "../planSiteGeometry.js";
-import { junctionPolygon, sectionPathData } from "./planEditorGeometry.js";
+import { editableSections, junctionPolygon, sectionPathData } from "./planEditorGeometry.js";
 import { selectable, type SelectContext } from "./selectable.js";
 
 export const StairLayer = memo(function StairLayer({
@@ -27,7 +27,7 @@ export const StairLayer = memo(function StairLayer({
 }) {
   const stair = useMemo(() => stairOverlay(model), [model]);
   const sections = useMemo(
-    () => (model.layout.sections ?? []).map((s) => ({ index: s.index, d: sectionPathData(s) })),
+    () => editableSections(model.layout).map((s) => ({ index: s.index, d: sectionPathData(s) })),
     [model.layout],
   );
   const junctions = useMemo(

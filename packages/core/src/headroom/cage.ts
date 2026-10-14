@@ -25,11 +25,12 @@
  *   touche cette portion (coin extérieur d'un mur vif). Un contour faux mais resté dans ce
  *   voisinage n'est pas détecté (limite consignée au journal du sous-lot 2d).
  *
- * Le découpage d'une cage ne porte pas de sous-faces (`Stepping.soffits` reste propre à
- * l'hélicoïdal) : elles sont déduites ici, au moment de l'échappée (`cageHeadroomCeilings`,
- * étape d'échappée du pipeline extraite en fonction pure). Cage issue d'un hélicoïdal
- * (`Layout.helicalOrigin`, F10 sous-lot P1) : sous-faces toujours prises en compte, comme
- * l'hélicoïdal, palier d'arrivée compris.
+ * Le découpage d'une cage saisie ne porte pas de sous-faces : elles sont déduites ici, au
+ * moment de l'échappée (`cageHeadroomCeilings`, étape d'échappée du pipeline extraite en
+ * fonction pure). Hélicoïdal (cage d'origine `helical`, `Layout.helicalOrigin`, F10 sous-lot
+ * P2) : ses sous-faces, palier d'arrivée compris, sont rangées par le découpage dans
+ * `Stepping.soffits` (`cageSoffits`, comme l'ancien découpage hélicoïdal), donc hors de cette
+ * étape ; le projet n'étant pas saisi en cage, `cageHeadroomCeilings` ne s'y applique pas.
  */
 import { curveLength, subCurve } from "../geom2d/curve.js";
 import { distanceToCurve } from "../geom2d/intersect.js";
@@ -73,7 +74,10 @@ export function cageSelfCovers(spec: CageLayoutSpec, layout: Layout): boolean {
 }
 
 /** Sous-faces des marches d'une cage (voir l'en-tête). */
-export function cageSoffits(stepping: Stepping, thickness: Mm): Soffit[] {
+export function cageSoffits(
+  stepping: Pick<Stepping, "treads" | "nosings">,
+  thickness: Mm,
+): Soffit[] {
   const out: Soffit[] = [];
   for (const t of stepping.treads) {
     const front = stepping.nosings[t.number - 1];
@@ -121,10 +125,8 @@ export function cageOutlineDefect(stepping: Stepping, layout: Layout, reach: Mm)
  * extraite en fonction pure, F10 sous-lot P1) : `defect` si un contour de marche n'est pas
  * fiable (échappée non calculée, erreur `headroom.error.cageTreadOutline`), sinon les sous-faces
  * à passer à `computeHeadroom` (`undefined` : la cage ne se recouvre pas, ou tracé non saisi en
- * cage). Cage issue d'un hélicoïdal (`Layout.helicalOrigin`) : sous-faces toujours prises en
- * compte, comme l'hélicoïdal (`Stepping.soffits`), palier d'arrivée compris (contour
- * `helicalOrigin.arrivalOutline`, altitude H − épaisseur des marches, abscisse du nez
- * d'arrivée).
+ * cage). Hélicoïdal : non concerné (`spec` indéfini, sous-faces dans `Stepping.soffits`, voir
+ * l'en-tête).
  */
 export function cageHeadroomCeilings(
   spec: CageLayoutSpec | undefined,
@@ -135,15 +137,8 @@ export function cageHeadroomCeilings(
 ):
   | { readonly kind: "defect"; readonly tread: number }
   | { readonly kind: "ceilings"; readonly soffits?: readonly Soffit[] } {
-  const helical = layout.helicalOrigin;
-  const selfCovers = spec !== undefined && (helical !== undefined || cageSelfCovers(spec, layout));
-  if (!selfCovers) return { kind: "ceilings" };
+  if (spec === undefined || !cageSelfCovers(spec, layout)) return { kind: "ceilings" };
   const tread = cageOutlineDefect(stepping, layout, cageOutlineReach(spec, nosing));
   if (tread !== null) return { kind: "defect", tread };
-  const soffits = cageSoffits(stepping, thickness);
-  const last = stepping.nosings[stepping.nosings.length - 1];
-  if (helical?.arrivalOutline && last) {
-    soffits.push({ outline: helical.arrivalOutline, z: last.z - thickness, sStart: last.s });
-  }
-  return { kind: "ceilings", soffits };
+  return { kind: "ceilings", soffits: cageSoffits(stepping, thickness) };
 }

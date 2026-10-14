@@ -51,6 +51,7 @@
 import { errorMessage, messageEquals, msg, type Message } from "@blondel/i18n";
 import { cageHeadroomCeilings } from "../headroom/cage.js";
 import { computeHeadroom, type HeadroomAnalysis } from "../headroom/headroom.js";
+import { HEADROOM_TIE_TOL } from "../headroom/selfcover.js";
 import { computeLayout } from "../layout/layout.js";
 import { autoWalklineSideKey } from "../layout/walklineSide.js";
 import { LayoutError } from "../layout/errors.js";
@@ -335,21 +336,17 @@ function upperFloorOf(site: Project["site"]): ModelUpperFloor {
 
 /**
  * Nez le plus proche de l'abscisse `s` de la ligne de foulée (`Model.headroom.nosingIndex`) ;
- * `{}` sans nez.
+ * `{}` sans nez. Deux nez à égale distance à `HEADROOM_TIE_TOL` près (minimum d'échappée au
+ * milieu d'une marche) : le premier en montant, comme le départage des minima ex æquo
+ * (`headroom/selfcover.ts`, décision F10 (3)), en deux passes sans chaînage de tolérance.
  */
 export function nearestNosing(
   nosings: Stepping["nosings"],
   s: number,
 ): { readonly nosingIndex?: number } {
-  let best = -1;
-  let gap = Infinity;
-  nosings.forEach((n, k) => {
-    const d = Math.abs(n.s - s);
-    if (d < gap) {
-      gap = d;
-      best = k;
-    }
-  });
+  const gaps = nosings.map((n) => Math.abs(n.s - s));
+  const min = Math.min(...gaps);
+  const best = gaps.findIndex((d) => d <= min + HEADROOM_TIE_TOL);
   return best < 0 ? {} : { nosingIndex: best };
 }
 
