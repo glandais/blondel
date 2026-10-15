@@ -11,7 +11,7 @@
  * `bend_length_mm` (longueur cumulée des lignes de pli), `holes` (perçages et lumières),
  * `length_mm`.
  */
-import { dec, msg, type Message } from "@blondel/i18n";
+import { dec, msg, textMessage, type Message } from "@blondel/i18n";
 import { WORKSHOP_DEFAULT_SOURCE, sourceSpec } from "../rules/sources.js";
 import { signedArea } from "../geom2d/polygon.js";
 import { GEOM_EPS } from "../geom2d/tolerance.js";
@@ -325,15 +325,27 @@ function ranksWithin(values: readonly number[], eps: number): number[] {
  * apparition dans `items`, membres dans l'ordre d'entrée. `tol` : tolérance d'identité du
  * profil d'atelier (`WorkshopProfile.identicalPartTolerance`).
  */
-export function groupNearAnchor<X>(
+export function groupNearAnchor<X>(items: readonly X[], o: NearAnchorOptions<X>, tol: Mm): X[][] {
+  return groupNearAnchorAnchored(items, o, tol).map((g) => g.members);
+}
+
+/** Clé, mesures et identifiant d'une pièce pour `groupNearAnchor`. */
+export interface NearAnchorOptions<X> {
+  readonly key: (x: X) => string;
+  readonly measures: (x: X) => readonly number[];
+  readonly id: (x: X) => string;
+}
+
+/**
+ * `groupNearAnchor` avec l'ancre de chaque groupe (la pièce qui l'a ouvert : en une dimension,
+ * la plus courte, départagée par identifiant), représentant du repère pour la recopie
+ * (décision F10 Q3, `unifyMarkGroup`). Mêmes groupes, dans le même ordre.
+ */
+export function groupNearAnchorAnchored<X>(
   items: readonly X[],
-  o: {
-    readonly key: (x: X) => string;
-    readonly measures: (x: X) => readonly number[];
-    readonly id: (x: X) => string;
-  },
+  o: NearAnchorOptions<X>,
   tol: Mm,
-): X[][] {
+): { anchor: X; members: X[] }[] {
   const rows = items.map((x, index) => ({
     x,
     index,
@@ -359,7 +371,7 @@ export function groupNearAnchor<X>(
   });
   const lim = tol + GEOM_EPS;
   const taken = new Set<number>();
-  const groups: (typeof rows)[] = [];
+  const groups: { anchor: (typeof rows)[number]; g: typeof rows }[] = [];
   for (let i = 0; i < sorted.length; i++) {
     const anchor = sorted[i]!;
     if (taken.has(anchor.index)) continue;
@@ -378,9 +390,11 @@ export function groupNearAnchor<X>(
         g.push(r);
       }
     }
-    groups.push(g.sort((a, b) => a.index - b.index));
+    groups.push({ anchor, g: g.sort((a, b) => a.index - b.index) });
   }
-  return groups.sort((a, b) => a[0]!.index - b[0]!.index).map((g) => g.map((r) => r.x));
+  return groups
+    .sort((a, b) => a.g[0]!.index - b.g[0]!.index)
+    .map(({ anchor, g }) => ({ anchor: anchor.x, members: g.map((r) => r.x) }));
 }
 
 interface Canon {
@@ -399,12 +413,23 @@ function canon(p: Part): Canon | null {
     material: p.material,
     outer: f.outline.outer,
     holes: f.outline.holes,
+    // Toutes les lignes tracées sauf le texte du repère (réécrit au repère de chaque membre) :
+    // plis, traçages, roulages, joints. `unifyMarkGroup` recopie ces lignes du représentant :
+    // deux pièces n'ont un même repère que si elles les portent toutes, à T près.
     lines: f.lines
-      .filter((l) => l.kind === "bend")
+      .filter((l) => l.kind !== "text")
       .map((l) => ({
         a: l.a,
         b: l.b,
-        key: `${l.bendAngle ?? ""}|${l.bendUp ?? ""}|${l.bendRadius ?? ""}`,
+        key: JSON.stringify([
+          l.kind,
+          l.bendAngle ?? null,
+          l.bendUp ?? null,
+          l.bendRadius ?? null,
+          l.feature ?? null,
+          l.depth ?? null,
+          l.label ?? null,
+        ]),
       })),
   };
 }
@@ -480,8 +505,9 @@ function outerPerimeter(c: Canon): number {
 
 /**
  * Regroupe les pièces à développé identique (même épaisseur, matériau, contour, trous et lignes
- * de pli à `tol` près, à un déplacement plan près — sans retournement, qui inverserait le sens
- * des plis). Chaque pièce est comparée au premier membre de chaque groupe (l'ancre), dans un
+ * tracées — plis, traçages, roulages, joints, même nature et mêmes attributs, texte du repère
+ * excepté — à `tol` près, à un déplacement plan près — sans retournement, qui inverserait le
+ * sens des plis). Chaque pièce est comparée au premier membre de chaque groupe (l'ancre), dans un
  * ordre indépendant de celui du modèle (décision F10 Q1b) : aire nette croissante, puis
  * identifiant (aires égales à `GEOM_EPS` × périmètre près confondues, pour que l'ordre ne
  * dépende pas du bruit d'arrondi lié à la position de la pièce) ; l'ancre d'un groupe est donc
@@ -491,6 +517,18 @@ function outerPerimeter(c: Canon): number {
  * `parts`. `tol` : tolérance d'identité du profil d'atelier (`identicalPartTolerance`).
  */
 export function groupIdenticalFlats(parts: readonly Part[], tol: Mm): string[][] {
+  return groupIdenticalFlatsAnchored(parts, tol).map((g) => g.members);
+}
+
+/**
+ * `groupIdenticalFlats` avec l'ancre de chaque groupe (identifiant de sa plus petite pièce par
+ * l'aire nette, départagée par identifiant), représentant du repère pour la recopie (décision
+ * F10 Q3, `unifyMarkGroup`). Mêmes groupes, dans le même ordre.
+ */
+export function groupIdenticalFlatsAnchored(
+  parts: readonly Part[],
+  tol: Mm,
+): { anchor: string; members: string[] }[] {
   const rows: { canon: Canon; id: string; index: number; area: number }[] = [];
   parts.forEach((p, index) => {
     const c = canon(p);
@@ -506,16 +544,74 @@ export function groupIdenticalFlats(parts: readonly Part[], tol: Mm): string[][]
   const ranked = rows.map((r, k) => ({ ...r, rank: areaRank[k]! }));
   ranked.sort((a, b) => a.rank - b.rank || cmpStr(a.id, b.id) || a.index - b.index);
   const lim = tol + GEOM_EPS;
-  const groups: { canon: Canon; members: { id: string; index: number }[] }[] = [];
+  const groups: {
+    canon: Canon;
+    anchor: string;
+    members: { id: string; index: number }[];
+  }[] = [];
   for (const r of ranked) {
     const g = groups.find((x) => sameUpToRigid(x.canon, r.canon, lim));
     if (g) g.members.push(r);
-    else groups.push({ canon: r.canon, members: [r] });
+    else groups.push({ canon: r.canon, anchor: r.id, members: [r] });
   }
   return groups
-    .map((g) => g.members.sort((a, b) => a.index - b.index))
-    .sort((a, b) => a[0]!.index - b[0]!.index)
-    .map((g) => g.map((m) => m.id));
+    .map((g) => ({ anchor: g.anchor, members: g.members.sort((a, b) => a.index - b.index) }))
+    .sort((a, b) => a.members[0]!.index - b.members[0]!.index)
+    .map((g) => ({ anchor: g.anchor, members: g.members.map((m) => m.id) }));
+}
+
+/**
+ * Grandeurs d'assemblage d'une pièce (cordons de soudure faits en place, sur la pièce posée) :
+ * gardées par chaque membre d'un repère lors de la recopie (`unifyMarkGroup`), pour que les
+ * totaux de soudure (et la classe d'exécution qui en dépend) restent ceux de l'ouvrage. Deux
+ * tronçons de semelle au développé identique peuvent porter des joints bout à bout différents.
+ */
+const ASSEMBLY_QUANTITIES: readonly string[] = [QUANTITY_WELD_MM, QUANTITY_BUTT_WELD_MM];
+
+/**
+ * Une ligne de débit par repère (décision F10 Q3) : chaque membre d'un groupe de repère reçoit
+ * les cotes de débit du représentant `representative` — `stock` et `quantities` (copies, sauf
+ * les grandeurs d'assemblage `weld_mm` et `butt_weld_mm`, gardées du membre), `flat` (contour,
+ * trous, lignes ; textes « repère » au repère du membre) — et garde sa
+ * géométrie réelle (`solid`), son identifiant, sa désignation, sa section, ses fixations, ses
+ * assemblages et le texte de référence de son développé (`flat.reference`, qui nomme encore la
+ * pièce porteuse : décision Q5, sous-lot R2c). Le représentant est choisi par l'appelant selon
+ * l'ajustement de la famille (`markGroups` : plus petite par l'aire nette pour un développé,
+ * plus courte pour une barre). Le représentant et le membre d'un groupe d'une pièce sont rendus
+ * à l'identique (même objet, pour la mémoïsation) ; idempotente (en valeur). Ne lève jamais.
+ */
+export function unifyMarkGroup(members: readonly Part[], representative: Part): Part[] {
+  if (members.length < 2) return [...members];
+  return members.map((m) => unifyMember(m, representative));
+}
+
+function unifyMember(m: Part, r: Part): Part {
+  if (m === r) return m;
+  const flat = r.flat
+    ? {
+        ...r.flat,
+        lines: r.flat.lines.map((l) =>
+          l.kind === "text" ? { ...l, label: textMessage(m.mark) } : l,
+        ),
+        ...(m.flat?.reference
+          ? { reference: m.flat.reference }
+          : r.flat.reference
+            ? { reference: r.flat.reference }
+            : {}),
+      }
+    : undefined;
+  const quantities: Record<string, number> = { ...r.quantities };
+  for (const k of ASSEMBLY_QUANTITIES) {
+    const v = m.quantities[k];
+    if (v !== undefined) quantities[k] = v;
+    else delete quantities[k];
+  }
+  return {
+    ...m,
+    quantities,
+    ...(r.stock ? { stock: { ...r.stock } } : {}),
+    ...(flat ? { flat } : {}),
+  };
 }
 
 /**

@@ -6,8 +6,8 @@
  * regroupée par l'interface avec `createZip` (archive ZIP « stockée », sans compression ni
  * dépendance, voir `../zip.ts`).
  */
-import { GEOM_EPS, type Model, type Part } from "@blondel/core";
-import { groupNear, nearlyEqualDeep } from "../grouping.js";
+import type { Model } from "@blondel/core";
+import { flatPartGroups } from "../flatGroups.js";
 import { exportPartDxf, type PartDxfOptions } from "./part.js";
 
 export interface PartDxfFile {
@@ -45,24 +45,16 @@ export function safeFileStem(text: string): string {
  * développé sont ignorées. Deux pièces de même repère mais de développés différents (erreur
  * amont de nomenclature) donnent deux fichiers distincts, jamais une fusion silencieuse.
  *
- * Développés « identiques » : même repère et même matériau, puis même structure (sommets,
- * lignes, libellés et paramètres de `Message`) et nombres égaux à `GEOM_EPS` près (cotes en
- * mm, angles de pli en degrés), comparés sommet à sommet (`groupNear`, chantier
- * `stable-tiebreaks`) : deux développés que seul le bruit d'arrondi distingue ne donnent plus
- * deux fichiers. Le fichier est écrit d'après la première pièce du groupe.
+ * Développés « identiques » : partition commune au DXF et au PDF (`flatPartGroups`,
+ * convention C3) — même repère et même matériau, développés égaux à `GEOM_EPS` près ; deux
+ * développés que seul le bruit d'arrondi distingue ne donnent qu'un fichier. Le fichier est
+ * écrit d'après la première pièce du groupe.
  */
 export function exportPartsDxf(
   model: Pick<Model, "parts">,
   options: PartsDxfOptions = {},
 ): PartDxfFile[] {
-  const groups = groupNear(
-    model.parts.filter((part) => part.flat !== undefined),
-    (part) => JSON.stringify([part.mark, part.material]),
-    (a, b) => nearlyEqualDeep(a.flat, b.flat, GEOM_EPS),
-  ).map((parts): { part: Part; ids: string[] } => ({
-    part: parts[0]!,
-    ids: parts.map((p) => p.id),
-  }));
+  const groups = flatPartGroups(model.parts);
   const used = new Set<string>();
   const out: PartDxfFile[] = [];
   for (const { part, ids } of groups) {

@@ -30,6 +30,7 @@ import {
 import { QUANTITY_BUTT_WELD_MM, QUANTITY_HOLES, QUANTITY_WELD_MM } from "./steelCommon.js";
 import { treadSupportJoint } from "./treadFixing.js";
 import "./index.js";
+import { expectMarksUnified } from "./marks.testing.js";
 
 const EN = translatorFor("en");
 const CANTILEVER = CENTRAL_RULES.cantilever.id;
@@ -746,6 +747,7 @@ describe("propriétés (générateurs contraints)", () => {
         }
         if (m.errors.length > 0 || !r.trace) return;
         complete++;
+        expectMarksUnified(m);
         // Trace à l'axe de l'emmarchement : chaque marche a son support. Trace décalée : une
         // marche étroite au droit du jour peut ne plus avoir de zone d'appui au droit de la
         // poutre, signalée (FAB_MARCHE_PORTEE) et jamais silencieuse.

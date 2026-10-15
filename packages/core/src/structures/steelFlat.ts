@@ -109,11 +109,13 @@ import {
   executionClassReasons,
   QUANTITY_WELD_MM,
   groupIdenticalFlats,
-  groupNearAnchor,
+  groupIdenticalFlatsAnchored,
+  groupNearAnchorAnchored,
   holePolygon,
   plateMeasures,
   steelMaterial,
   steelQuantities,
+  unifyMarkGroup,
 } from "./steelCommon.js";
 import {
   boltCenters,
@@ -751,29 +753,40 @@ export function plateHoles(length: Mm, width: Mm, edge: Mm, perRow: number): Vec
  * de débit à au plus `tol` de celle de la plus courte du groupe (`groupNearAnchor`, décision
  * F10 Q1a). Rangs : groupes de développés d'abord, puis les autres, chacun dans l'ordre de
  * première apparition. `tol` : `WorkshopProfile.identicalPartTolerance`.
+ *
+ * Une ligne de débit par repère (décision F10 Q3, `options.unify`, par défaut) : chaque membre
+ * reçoit `stock`, `quantities` et `flat` du représentant de son groupe (`unifyMarkGroup`), son
+ * solide restant réel. Représentant : l'ancre du regroupement — pour un développé, la plus
+ * petite pièce par l'aire nette (entretoises EC logées entre deux faces, platines et consoles
+ * percées) ; pour une barre sans développé (cornière CR, plat PS, libres à leurs bouts), la plus
+ * courte. La plus petite par l'aire n'est pas forcément la plus petite sur chaque cote, mais
+ * chaque cote reste à au plus T (+ `GEOM_EPS`) de celle de toute pièce du groupe. `unify:
+ * false` : marques seules (plugin qui re-repère ces pièces ensuite, `steel-curved`).
  */
 export function markGroups(
   parts: Part[],
   prefix: string,
   key: (p: Part) => string | null,
   tol: Mm,
+  options?: { readonly unify?: boolean },
 ): Part[] {
-  const groups: string[][] = [];
-  const flatGroups = groupIdenticalFlats(
-    parts.filter((p) => p.flat),
-    tol,
+  const groups: { anchor: string; members: string[] }[] = [];
+  groups.push(
+    ...groupIdenticalFlatsAnchored(
+      parts.filter((p) => p.flat),
+      tol,
+    ),
   );
-  for (const g of flatGroups) groups.push(g);
   const rest = parts.filter((p) => !p.flat);
-  const near = groupNearAnchor(
+  const near = groupNearAnchorAnchored(
     rest,
     { key: (p) => key(p) ?? p.id, measures: (p) => [p.stock?.length ?? 0], id: (p) => p.id },
     tol,
   );
-  groups.push(...near.map((g) => g.map((p) => p.id)));
+  groups.push(...near.map((g) => ({ anchor: g.anchor.id, members: g.members.map((p) => p.id) })));
   const markOf = new Map<string, string>();
-  groups.forEach((g, i) => g.forEach((id) => markOf.set(id, `${prefix}${i + 1}`)));
-  return parts.map((p) => {
+  groups.forEach((g, i) => g.members.forEach((id) => markOf.set(id, `${prefix}${i + 1}`)));
+  const marked = parts.map((p) => {
     const mark = markOf.get(p.id) ?? p.mark;
     const flat = p.flat
       ? {
@@ -785,6 +798,16 @@ export function markGroups(
       : undefined;
     return { ...p, mark, ...(flat ? { flat } : {}) };
   });
+  if (options?.unify === false) return marked;
+  const byId = new Map(marked.map((p) => [p.id, p]));
+  const unified = new Map<string, Part>();
+  for (const g of groups) {
+    const rep = byId.get(g.anchor);
+    const members = g.members.map((id) => byId.get(id)).filter((p): p is Part => !!p);
+    if (!rep || members.length < 2) continue;
+    for (const u of unifyMarkGroup(members, rep)) unified.set(u.id, u);
+  }
+  return marked.map((p) => unified.get(p.id) ?? p);
 }
 
 /**
@@ -828,6 +851,14 @@ export interface SteelFlatOptions {
    * contrôles des tôles pliées restent ceux de `steel-flat`.
    */
   readonly sides?: readonly ("inner" | "outer")[];
+  /**
+   * Recopie du représentant de chaque repère sur ses membres pour les supports et platines
+   * (décision F10 Q3, `markGroups`), défaut `true`. `steel-curved` passe `false` : il re-repère
+   * ces pièces avec les siennes et ne recopie qu'une fois, sur les valeurs réelles (les contrôles
+   * de `steel-flat` qu'il reprend — format de tôle des platines, longueur de barre — lisent alors
+   * les valeurs réelles, à au plus T des valeurs débitées).
+   */
+  readonly unifyMarks?: boolean;
 }
 
 /** Géométrie sans face ni poteau (aucun limon en plat construit). */
@@ -853,6 +884,7 @@ export function buildSteelFlat(
   const { project, layout, stepping } = ctx;
   const profile = resolveWorkshopProfile(project.workshop);
   const identicalTol = profile.identicalPartTolerance;
+  const unify = { unify: options.unifyMarks ?? true };
   const metal = profile.metal;
   const nosings = stepping.nosings;
   const notes: Message[] = [];
@@ -1012,6 +1044,7 @@ export function buildSteelFlat(
     sup.kind === "angle" ? "CR" : "PS",
     supportGroupKey,
     identicalTol,
+    unify,
   );
   const platesMarked = [
     ...markGroups(
@@ -1019,24 +1052,28 @@ export function buildSteelFlat(
       "PF",
       () => null,
       identicalTol,
+      unify,
     ),
     ...markGroups(
       plates.filter((p) => p.id.startsWith("plate-head-")),
       "PH",
       () => null,
       identicalTol,
+      unify,
     ),
     ...markGroups(
       plates.filter((p) => p.id.startsWith("plate-post-")),
       "PP",
       () => null,
       identicalTol,
+      unify,
     ),
     ...markGroups(
       plates.filter((p) => p.id.startsWith("plate-end-")),
       "PA",
       () => null,
       identicalTol,
+      unify,
     ),
   ];
   const treadParts = treadDetails.map((d) => d.part);

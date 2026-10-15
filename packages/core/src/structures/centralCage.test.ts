@@ -22,6 +22,7 @@ import { cumulativeLengths, curvePointAt, curveTangentAt } from "../geom2d/curve
 import { distanceToCurve } from "../geom2d/intersect.js";
 import { offsetCurve } from "../geom2d/offset.js";
 import { pointInPolygon } from "../geom2d/polygon.js";
+import { GEOM_EPS } from "../geom2d/tolerance.js";
 import * as V from "../geom2d/vec.js";
 import { CAGE_FEATURES, cageFeatures, type CageFeature } from "../model/cageFeatures.js";
 import type { Model, SolidDesc } from "../model/derived.js";
@@ -52,6 +53,7 @@ import { buildSteelCentral } from "./steelCentral.js";
 import { SteelCentralParamsSchema } from "./steelCentralParams.js";
 import { woodBeamOf, woodCentralParams } from "./woodCentral.test-helpers.js";
 import "./index.js";
+import { expectFittedNotLarger, expectMarksUnified, sharedMarks } from "./marks.testing.js";
 
 const FR = translatorFor("fr");
 const KINDS = ["wood-central", "steel-central"] as const;
@@ -913,6 +915,7 @@ describe("propriétés : cages tirées parmi les fonctions déclarées", () => {
       let built = 0;
       let runs = 0;
       let traceFailures = 0;
+      let ecChecked = 0;
       const seen = new Set<CageFeature>();
       fc.assert(
         fc.property(centralCageArb, LATERAL_OFFSET_ARB, (layout, lateralOffset) => {
@@ -944,6 +947,13 @@ describe("propriétés : cages tirées parmi les fonctions déclarées", () => {
           for (const f of featuresOf(p)) seen.add(f);
           built++;
           expectSound(kind, p, m, JSON.stringify(layout));
+          expectMarksUnified(m);
+          // Entretoises EC (logées entre deux faces) : débit jamais plus grand que la pièce
+          // réelle (même projet à T = 0), cote par cote (F10 Q3).
+          if ([...sharedMarks(m.parts).keys()].some((k) => k.startsWith("EC"))) {
+            const exact = { ...p, workshop: { ...p.workshop, identicalPartTolerance: 0 } };
+            ecChecked += expectFittedNotLarger(m, buildModel(exact, { memo: false }), GEOM_EPS);
+          }
         }),
         { numRuns, seed: 67 },
       );
@@ -952,6 +962,7 @@ describe("propriétés : cages tirées parmi les fonctions déclarées", () => {
       expect(traceFailures / runs).toBeLessThanOrEqual(TRACE_FAILURE_MAX);
       expect(built / runs).toBeGreaterThan(BUILT_MIN);
       if (numRuns >= 120) expect([...seen].sort()).toEqual([...CENTRAL_CAGE].sort());
+      if (kind === "steel-central" && numRuns >= 120) expect(ecChecked).toBeGreaterThan(0);
     },
   );
 });

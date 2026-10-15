@@ -1,7 +1,8 @@
 /**
  * Règle d'identité des pièces repérées (décisions F10 Q1a, Q1b, chantier part-marks R2a) :
  * regroupement autour d'un représentant (`groupNearAnchor`) et comparaison des développés au
- * premier membre dans un ordre indépendant du modèle (`groupIdenticalFlats`).
+ * premier membre dans un ordre indépendant du modèle (`groupIdenticalFlats`). R2b (Q3) : ancres
+ * exposées (`…Anchored`) et recopie du représentant (`unifyMarkGroup`).
  */
 import { textMessage } from "@blondel/i18n";
 import fc from "fast-check";
@@ -10,7 +11,14 @@ import { GEOM_EPS } from "../geom2d/tolerance.js";
 import * as V from "../geom2d/vec.js";
 import type { Part } from "../model/derived.js";
 import type { Vec2 } from "../model/primitives.js";
-import { groupIdenticalFlats, groupNearAnchor } from "./steelCommon.js";
+import {
+  QUANTITY_WELD_MM,
+  groupIdenticalFlats,
+  groupIdenticalFlatsAnchored,
+  groupNearAnchor,
+  groupNearAnchorAnchored,
+  unifyMarkGroup,
+} from "./steelCommon.js";
 
 interface Item {
   readonly id: string;
@@ -327,5 +335,146 @@ describe("groupIdenticalFlats (F10 Q1b) : comparaison à l'ancre, ordre indépen
     const c = rectPart("c", 200.4, 80, 2, V.vec(0, 10));
     expect(groupIdenticalFlats([a, b, c], 0.5)).toEqual([["a"], ["b", "c"]]);
     expect(groupIdenticalFlats([c, a, b], 0.5)).toEqual([["c", "b"], ["a"]]);
+  });
+
+  it("lignes tracées (traçage, roulage, joint) comparées comme les plis ; texte du repère ignoré", () => {
+    type Line = NonNullable<Part["flat"]>["lines"][number];
+    const withLines = (p: Part, lines: Line[]): Part => ({ ...p, flat: { ...p.flat!, lines } });
+    const at = (x: number, kind: Line["kind"], label?: string): Line => ({
+      kind,
+      a: V.vec(x, 0),
+      b: V.vec(x, 80),
+      ...(label ? { label: textMessage(label) } : {}),
+    });
+    const base = rectPart("a", 200, 80, 0, V.ZERO);
+    const moved = rectPart("b", 200, 80, 1, V.vec(10, 0));
+    // Même traçage, déplacement plan compris ; texte du repère différent : un seul groupe.
+    const a = withLines(base, [at(50, "mark", "S"), at(100, "text", "EC1")]);
+    const rot = (x: number): Line => {
+      const l = at(x, "mark", "S");
+      const R = (p: Vec2): Vec2 => V.add(V.rotate(p, 1), V.vec(10, 0));
+      return { ...l, a: R(l.a), b: R(l.b) };
+    };
+    const b = withLines(moved, [rot(50), at(0, "text", "EC2")]);
+    expect(groupIdenticalFlats([a, b], 0.5)).toEqual([["a", "b"]]);
+    // Traçage décalé de plus que T, absent, d'une autre nature ou d'un autre libellé : séparés.
+    for (const lines of [
+      [rot(51)],
+      [],
+      [{ ...rot(50), kind: "joint" as const }],
+      [{ ...rot(50), label: textMessage("N") }],
+    ])
+      expect(groupIdenticalFlats([a, withLines(moved, lines)], 0.5)).toHaveLength(2);
+  });
+});
+
+// ------------------------------------------------------------------ R2b : ancres et recopie
+
+describe("ancres des regroupements (F10 Q3) : représentant du repère", () => {
+  it("groupNearAnchorAnchored : mêmes groupes ; ancre membre, première par le tri, indépendante de l'ordre", () => {
+    fc.assert(
+      fc.property(
+        fc.integer({ min: 1, max: 3 }).chain((d) => itemsArb(d)),
+        fc.double({ min: 0, max: 2, noNaN: true }),
+        fc.integer(),
+        (items, tol, seed) => {
+          const anchored = groupNearAnchorAnchored(items, opts, tol);
+          expect(anchored.map((g) => g.members)).toEqual(groupNearAnchor(items, opts, tol));
+          for (const g of anchored) {
+            expect(g.members).toContain(g.anchor);
+            expect(g.anchor).toBe(anchorOf(g.members));
+          }
+          const shuffled = fc.sample(fc.shuffledSubarray(items, { minLength: items.length }), {
+            seed,
+            numRuns: 1,
+          })[0]!;
+          const anchors = (xs: readonly Item[]) =>
+            groupNearAnchorAnchored(xs, opts, tol)
+              .map((g) => g.anchor.id)
+              .sort();
+          expect(anchors(shuffled)).toEqual(anchors(items));
+        },
+      ),
+      { numRuns: 200 },
+    );
+  });
+
+  it("groupIdenticalFlatsAnchored : mêmes groupes ; ancre = plus petite par l'aire, indépendante de l'ordre", () => {
+    const partArb = fc
+      .array(
+        fc.record({
+          L: fc.constantFrom(200, 200.2, 200.4, 200.8),
+          rot: fc.double({ min: -Math.PI, max: Math.PI, noNaN: true }),
+          sx: fc.double({ min: -500, max: 500, noNaN: true }),
+        }),
+        { maxLength: 10 },
+      )
+      .map((xs) => xs.map((x, i) => rectPart(`d${i}`, x.L, 80, x.rot, V.vec(x.sx, 0))));
+    fc.assert(
+      fc.property(partArb, fc.integer(), (parts, seed) => {
+        const anchored = groupIdenticalFlatsAnchored(parts, 0.5);
+        expect(anchored.map((g) => g.members)).toEqual(groupIdenticalFlats(parts, 0.5));
+        const len = new Map(
+          parts.map((p) => {
+            const o = p.flat!.outline.outer;
+            return [p.id, V.distance(o[0]!, o[1]!)];
+          }),
+        );
+        for (const g of anchored) {
+          expect(g.members).toContain(g.anchor);
+          const min = Math.min(...g.members.map((id) => len.get(id)!));
+          expect(len.get(g.anchor)!).toBeCloseTo(min, 6);
+        }
+        const shuffled = fc.sample(fc.shuffledSubarray(parts, { minLength: parts.length }), {
+          seed,
+          numRuns: 1,
+        })[0]!;
+        const anchors = (xs: readonly Part[]) =>
+          groupIdenticalFlatsAnchored(xs, 0.5)
+            .map((g) => g.anchor)
+            .sort();
+        expect(anchors(shuffled)).toEqual(anchors(parts));
+      }),
+      { numRuns: 200 },
+    );
+  });
+});
+
+describe("unifyMarkGroup (F10 Q3) : cotes de débit du représentant, pièce réelle gardée", () => {
+  const withText = (p: Part, mark: string, ref: string, weld: number): Part => ({
+    ...p,
+    mark,
+    section: textMessage("tôle 8"),
+    stock: { length: p.id === "a" ? 200 : 200.3, width: 80, thickness: 8 },
+    quantities: { mass_kg: p.id === "a" ? 1 : 1.002, holes: 2, [QUANTITY_WELD_MM]: weld },
+    fixings: [{ joint: "supportBolted", points: 2, with: [`owner-${p.id}`] }],
+    flat: {
+      ...p.flat!,
+      lines: [{ kind: "text", a: V.vec(0, 0), b: V.vec(1, 0), label: textMessage("X") }],
+      reference: { kind: "face", description: textMessage(ref) },
+    },
+  });
+  const rep = withText(rectPart("a", 200, 80, 0, V.ZERO), "EC1", "réf a", 10);
+  const other = withText(rectPart("b", 200.3, 80, 1, V.vec(5, 5)), "EC1", "réf b", 20);
+
+  it("membres : stock, quantités de débit et développé du représentant ; le reste est gardé", () => {
+    const [ua, ub] = unifyMarkGroup([rep, other], rep);
+    expect(ua).toBe(rep);
+    expect(ub!.stock).toEqual(rep.stock);
+    expect(ub!.stock).not.toBe(rep.stock);
+    expect(ub!.quantities).toEqual({ ...rep.quantities, [QUANTITY_WELD_MM]: 20 });
+    expect(ub!.flat!.outline).toEqual(rep.flat!.outline);
+    expect(ub!.flat!.lines).toEqual([
+      { kind: "text", a: V.vec(0, 0), b: V.vec(1, 0), label: textMessage("EC1") },
+    ]);
+    expect(ub!.flat!.reference).toEqual(other.flat!.reference);
+    for (const k of ["id", "name", "solid", "fixings", "section", "mark", "category"] as const)
+      expect(ub![k]).toEqual(other[k]);
+  });
+
+  it("groupe d'une pièce : même objet ; idempotente", () => {
+    expect(unifyMarkGroup([other], rep)[0]).toBe(other);
+    const once = unifyMarkGroup([rep, other], rep);
+    expect(unifyMarkGroup(once, once[0]!)).toEqual(once);
   });
 });

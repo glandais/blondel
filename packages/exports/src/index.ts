@@ -111,6 +111,7 @@ export {
   type PartDxfFile,
   type PartsDxfOptions,
 } from "./dxf/parts.js";
+export { flatPartGroups, type FlatPartGroup } from "./flatGroups.js";
 export {
   flatLineStyle,
   flatPatternExtent,

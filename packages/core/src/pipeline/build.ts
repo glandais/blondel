@@ -103,6 +103,7 @@ import { computeStepping } from "../stepping/stepping.js";
 import { headroomConflicts, siteGeometryConflicts, sortSiteConflicts } from "../site/fit.js";
 import { normalizeAssemblies } from "./assembly.js";
 import { computeFigures, requiredGuardHeightOf } from "./figures.js";
+import { identicalToleranceNote } from "./identicalToleranceNote.js";
 import { LastValueCache } from "./memo.js";
 
 /** Résultat d'une étape : valeur ou message d'erreur. */
@@ -1089,6 +1090,19 @@ export function buildModel(project: Project, options: BuildModelOptions = {}): M
       ...structureChecks,
       ...guardResults,
     ]);
+  // Tolérance d'identité des pièces repérées au-dessus du jeu des perçages (décision F10 (22)) :
+  // remarque du contrôle, sur les pièces de structure (garde-corps hors règle d'identité, Q4).
+  try {
+    const toleranceNote = identicalToleranceNote(
+      structureParts,
+      resolveWorkshopProfile(project.workshop).identicalPartTolerance,
+      resolveFastenerProfile(project.workshop?.fasteners).holeClearance,
+    );
+    if (toleranceNote)
+      compliance = { ...compliance, notes: [...(compliance.notes ?? []), toleranceNote] };
+  } catch {
+    // Profil illisible : déjà signalé par l'étape qui l'a lu ; aucune remarque.
+  }
 
   // Échappée sur la largeur des marches : règle ECHAPPEE_LARGEUR du contrôle (QUESTIONS A7).
 

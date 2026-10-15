@@ -15,6 +15,7 @@
 import fc from "fast-check";
 import { translatorFor } from "@blondel/i18n";
 import { describe, expect, it } from "vitest";
+import { GEOM_EPS } from "../geom2d/tolerance.js";
 import * as V from "../geom2d/vec.js";
 import type { Model, Tread } from "../model/derived.js";
 import type { Mm, Vec2 } from "../model/primitives.js";
@@ -47,6 +48,7 @@ import {
   profileMiterFiberLength,
   type SteelProfileResult,
 } from "./steelProfile.js";
+import { expectMarksUnified } from "./marks.testing.js";
 
 const FR = translatorFor("fr");
 const E = SteelFlatParamsSchema.parse({}).thickness;
@@ -808,6 +810,7 @@ describe("propriétés : cages tirées parmi les fonctions déclarées", () => {
                 );
           expect(b.length).toBeGreaterThan(0);
           expectPositiveLengths(m, b);
+          expectMarksUnified(m);
           expectCarriedBothSides(b, m.stepping.treads);
           if (kind === "steel-flat") expectButtJoints(b, E);
         }),
@@ -847,6 +850,7 @@ describe("propriété : pans coupés courts devant l'épaisseur des plats et le 
                   ),
                 );
           expectPositiveLengths(m, b);
+          expectMarksUnified(m);
           for (const x of b)
             expect(x.uHi - x.uLo, x.face.mark).toBeGreaterThan(MIN_CAGE_STRINGER_LENGTH);
           // Chaque pan coupé de plus de 1 mm : limon construit, ou erreur qui le nomme (profilés :
@@ -870,4 +874,33 @@ describe("propriété : pans coupés courts devant l'épaisseur des plats et le 
       );
     },
   );
+});
+
+describe("propriété : repères des cages acier à tolérance d'identité tirée (F10 Q3, C3)", () => {
+  it("T ∈ [0, 2] : une ligne de débit par repère, CR / PS à au plus T (longueurs réelles), débit sur la plus courte", () => {
+    let built = 0;
+    fc.assert(
+      fc.property(cageArbOf(true), fc.double({ min: 0, max: 2, noNaN: true }), (layout, t) => {
+        const base = cageProject(layout, "steel-flat");
+        const p: Project = { ...base, workshop: { ...base.workshop, identicalPartTolerance: t } };
+        const m = buildModel(p, { memo: false });
+        if (m.stepping.treads.length === 0 || m.errors.length > 0) return;
+        built++;
+        expectMarksUnified(m);
+        const bars = new Map<string, number[]>();
+        for (const x of m.parts) {
+          if (!/^(CR|PS)\d+$/.test(x.mark) || x.solid.kind !== "extrusion") continue;
+          bars.set(x.mark, [...(bars.get(x.mark) ?? []), x.solid.depth]);
+        }
+        for (const real of bars.values())
+          expect(Math.max(...real) - Math.min(...real)).toBeLessThanOrEqual(t + GEOM_EPS);
+        for (const x of m.parts) {
+          const real = bars.get(x.mark);
+          if (real) expect(x.stock!.length).toBeCloseTo(Math.min(...real), 9);
+        }
+      }),
+      { numRuns: 30, seed: 71 },
+    );
+    expect(built).toBeGreaterThan(10);
+  }, 120_000);
 });

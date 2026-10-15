@@ -289,6 +289,7 @@
   "compliance.nosing.noFullRiser": "Not applicable: no solid riser (see overlap).",
   "compliance.nosing.overhang": "Nosing projection",
   "compliance.notApplicable": "Not applicable.",
+  "compliance.note.identicalToleranceOverClearance": "Identity tolerance of marked parts ({tolerance} mm) exceeds the hole clearance ({clearance} mm): holes of a part cut to its mark's representative may be offset by more than the clearance; reduce the identity tolerance in the workshop profile (to be validated).",
   "compliance.profileName.souple": "Lenient",
   "compliance.profileName.strict": "Strict",
   "compliance.rise.quantity": "Rise",

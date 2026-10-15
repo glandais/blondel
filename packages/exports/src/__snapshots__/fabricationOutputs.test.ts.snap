@@ -181,10 +181,9 @@ groupe steel-painted thickness 8 {"quantity":7,"lengthM":11.063892,"volumeM3":0.
 groupe steel-painted thickness 10 {"quantity":4,"lengthM":0.95,"volumeM3":0.00114,"massKg":8.866593,"massNotes":[]}
   PF1 ×2 150×120×10 1.392398 - stock
   PH1 ×2 325×120×10 3.040898 - stock
-groupe steel-painted section « L 40 × 40 × 4 » {"quantity":31,"lengthM":7.359763,"massKg":17.563339,"massNotes":[]}
+groupe steel-painted section « L 40 × 40 × 4 » {"quantity":31,"lengthM":7.359307,"massKg":17.562249,"massNotes":[]}
   CR1 ×8 216.678647×40×40 0.517082 - stock
-  CR2 ×1 139.96406×40×40 0.33401 - stock
-  CR2 ×1 139.507277×40×40 0.33292 - stock
+  CR2 ×2 139.507277×40×40 0.33292 - stock
   CR3 ×1 293.422133×40×40 0.700223 - stock
   CR4 ×1 329.67121×40×40 0.786727 - stock
   CR5 ×1 96.521152×40×40 0.230338 - stock
@@ -227,9 +226,7 @@ groupe wood-oak thickness 40 {"quantity":14,"lengthM":12.972536,"volumeM3":0.176
   M13 ×1 900×270×40 6.804 - stock
   M14 ×1 900×270×40 6.804 - stock
   P1 ×1 900×910×40 22.932 - stock
---- repères en double 1
-CR2 support-4-stringer-inner-1 matériau=steel-painted section=L 40 × 40 × 4 L=139.96405992668065 l=40 e=40 lames=1 masse=0.33401023260903073 appro=-
-CR2 support-7-stringer-inner-j1 matériau=steel-painted section=L 40 × 40 × 4 L=139.5072768446874 l=40 e=40 lames=1 masse=0.332920165462162 appro=-
+--- repères en double 0
 "
 `;
 
@@ -244,8 +241,7 @@ LI2;Limon de jour acier, tronçon 2;Acier peint;tôle 8 (S235), largeur 424;796,
 LI3;Limon de jour acier, tronçon 3;Acier peint;tôle 8 (S235), largeur 377;2214,9;376,4;8,0;1;0,004524;0,004524;35,51;35,51;
 LIC1;Limon de jour acier, pan coupé de la jonction 1;Acier peint;tôle 8 (S235), largeur 234;957,3;233,4;8,0;1;0,001193;0,001193;9,37;9,37;
 CR1;Cornière soudée sous M1 (LI1);Acier peint;L 40 × 40 × 4;216,7;40,0;40,0;8;0,000066;0,000527;0,52;4,14;
-CR2;Cornière soudée sous M4 (LI1);Acier peint;L 40 × 40 × 4;140,0;40,0;40,0;1;0,000043;0,000043;0,33;0,33;
-CR2;Cornière soudée sous M7 (LIC1);Acier peint;L 40 × 40 × 4;139,5;40,0;40,0;1;0,000042;0,000042;0,33;0,33;
+CR2;Cornière soudée sous M4 (LI1);Acier peint;L 40 × 40 × 4;139,5;40,0;40,0;2;0,000042;0,000085;0,33;0,67;
 CR3;Cornière soudée sous M4 (LE1);Acier peint;L 40 × 40 × 4;293,4;40,0;40,0;1;0,000089;0,000089;0,70;0,70;
 CR4;Cornière soudée sous M5 (LE1);Acier peint;L 40 × 40 × 4;329,7;40,0;40,0;1;0,000100;0,000100;0,79;0,79;
 CR5;Cornière soudée sous M5 (LIC1);Acier peint;L 40 × 40 × 4;96,5;40,0;40,0;1;0,000029;0,000029;0,23;0,23;
@@ -288,11 +284,9 @@ CM15;Contremarche 15;Chêne;;900,0;180,0;20,0;1;0,003240;0,003240;2,27;2,27;mass
 P1;Palier (marche 9);Chêne;;900,0;910,0;40,0;1;0,032760;0,032760;22,93;22,93;masse volumique à valider
 PF1;Platine de pied de LI1;Acier peint;tôle 10;150,0;120,0;10,0;2;0,000177;0,000355;1,39;2,78;
 PH1;Platine de tête de LI3;Acier peint;tôle 10;325,0;120,0;10,0;2;0,000387;0,000775;3,04;6,08;
-Total;;;;;;;71;;0,234034;;345,83;masse volumique à valider
+Total;;;;;;;71;;0,234034;;345,84;masse volumique à valider
 
---- repères en double 1
-CR2 support-4-stringer-inner-1 cat=support matériau=steel-painted section=L 40 × 40 × 4 L=139.96405992668065 l=40 e=40 lames=1 appro=- volume=0.00004254907421771092 masse=0.33401023260903073
-CR2 support-7-stringer-inner-j1 cat=support matériau=steel-painted section=L 40 × 40 × 4 L=139.5072768446874 l=40 e=40 lames=1 appro=- volume=0.00004241021216078497 masse=0.332920165462162
+--- repères en double 0
 "
 `;
 
@@ -495,26 +489,26 @@ SB4.dxf ×1 SB4 [central-flange-bottom-4]
   empreinte be19ac02a480270a
 EC1.dxf ×1 EC1 [central-diaphragm-1]
   calques {"CONTOUR":1,"INFO":4,"TEXTE":2}
-  boîte {"min":{"x":0,"y":0},"max":{"x":84,"y":223.76525}}
+  boîte {"min":{"x":0,"y":0},"max":{"x":84,"y":223.752233}}
   contour 4 sommets CCW premier (0, 0)
-  repère « EC1 » (42, 111.882625) dégagement 42 texte h 21 (42, 111.882625) (2 textes)
-  rectMin L 223.76525 l 84 axe (0, 1) coin (84, 0)
-  empreinte ba41084f22401bb7
+  repère « EC1 » (42, 111.876117) dégagement 42 texte h 21 (42, 111.876117) (2 textes)
+  rectMin L 223.752233 l 84 axe (0, 1) coin (84, 0)
+  empreinte 147f331fc94c9b38
 EC1-2.dxf ×1 EC1 [central-diaphragm-2]
   calques {"CONTOUR":1,"INFO":4,"TEXTE":2}
-  boîte {"min":{"x":0,"y":0},"max":{"x":84,"y":223.806287}}
+  boîte {"min":{"x":0,"y":0},"max":{"x":84,"y":223.752233}}
   contour 4 sommets CCW premier (0, 0)
-  repère « EC1 » (42, 111.903144) dégagement 42 texte h 21 (42, 111.903144) (2 textes)
-  rectMin L 223.806287 l 84 axe (0, 1) coin (84, 0)
-  empreinte 1d105d60ee8ae04a
-  écart avec EC1.dxf géométrie 4.104e-2 textes [reference.description.params.index 1/2] différence réelle
+  repère « EC1 » (42, 111.876117) dégagement 42 texte h 21 (42, 111.876117) (2 textes)
+  rectMin L 223.752233 l 84 axe (0, 1) coin (84, 0)
+  empreinte e7b4033a5098018d
+  écart avec EC1.dxf géométrie 0.000e+0 textes [reference.description.params.index 1/2] différence réelle
 EC2.dxf ×1 EC2 [central-diaphragm-3]
   calques {"CONTOUR":1,"INFO":4,"TEXTE":2}
-  boîte {"min":{"x":0,"y":0},"max":{"x":84,"y":223.271039}}
+  boîte {"min":{"x":0,"y":0},"max":{"x":84,"y":223.14503}}
   contour 4 sommets CCW premier (0, 0)
-  repère « EC2 » (42, 111.63552) dégagement 42 texte h 21 (42, 111.63552) (2 textes)
-  rectMin L 223.271039 l 84 axe (0, 1) coin (84, 0)
-  empreinte 040821ff87797295
+  repère « EC2 » (42, 111.572515) dégagement 42 texte h 21 (42, 111.572515) (2 textes)
+  rectMin L 223.14503 l 84 axe (0, 1) coin (84, 0)
+  empreinte e49e6fdc206f4e0b
 EC2-2.dxf ×1 EC2 [central-diaphragm-4]
   calques {"CONTOUR":1,"INFO":4,"TEXTE":2}
   boîte {"min":{"x":0,"y":0},"max":{"x":84,"y":223.14503}}
@@ -522,7 +516,7 @@ EC2-2.dxf ×1 EC2 [central-diaphragm-4]
   repère « EC2 » (42, 111.572515) dégagement 42 texte h 21 (42, 111.572515) (2 textes)
   rectMin L 223.14503 l 84 axe (0, 1) coin (84, 0)
   empreinte bcb396e560a146b2
-  écart avec EC2.dxf géométrie 1.260e-1 textes [reference.description.params.index 3/4] différence réelle
+  écart avec EC2.dxf géométrie 0.000e+0 textes [reference.description.params.index 3/4] différence réelle
 EC3.dxf ×1 EC3 [central-diaphragm-5]
   calques {"CONTOUR":1,"INFO":4,"TEXTE":2}
   boîte {"min":{"x":0,"y":0},"max":{"x":84,"y":227.252128}}
@@ -537,31 +531,31 @@ EC1-3.dxf ×1 EC1 [central-diaphragm-6]
   repère « EC1 » (42, 111.876117) dégagement 42 texte h 21 (42, 111.876117) (2 textes)
   rectMin L 223.752233 l 84 axe (0, 1) coin (84, 0)
   empreinte 1c2d39ce003c0922
-  écart avec EC1.dxf géométrie 1.302e-2 textes [reference.description.params.index 1/6] différence réelle
+  écart avec EC1.dxf géométrie 0.000e+0 textes [reference.description.params.index 1/6] différence réelle
 EC1-4.dxf ×1 EC1 [central-diaphragm-7]
   calques {"CONTOUR":1,"INFO":4,"TEXTE":2}
-  boîte {"min":{"x":0,"y":0},"max":{"x":84,"y":223.791957}}
+  boîte {"min":{"x":0,"y":0},"max":{"x":84,"y":223.752233}}
   contour 4 sommets CCW premier (0, 0)
-  repère « EC1 » (42, 111.895979) dégagement 42 texte h 21 (42, 111.895979) (2 textes)
-  rectMin L 223.791957 l 84 axe (0, 1) coin (84, 0)
-  empreinte fd546169d5d67d40
-  écart avec EC1.dxf géométrie 2.671e-2 textes [reference.description.params.index 1/7] différence réelle
+  repère « EC1 » (42, 111.876117) dégagement 42 texte h 21 (42, 111.876117) (2 textes)
+  rectMin L 223.752233 l 84 axe (0, 1) coin (84, 0)
+  empreinte 78a359baec567012
+  écart avec EC1.dxf géométrie 0.000e+0 textes [reference.description.params.index 1/7] différence réelle
 EC1-5.dxf ×1 EC1 [central-diaphragm-8]
   calques {"CONTOUR":1,"INFO":4,"TEXTE":2}
-  boîte {"min":{"x":0,"y":0},"max":{"x":84,"y":223.791957}}
+  boîte {"min":{"x":0,"y":0},"max":{"x":84,"y":223.752233}}
   contour 4 sommets CCW premier (0, 0)
-  repère « EC1 » (42, 111.895979) dégagement 42 texte h 21 (42, 111.895979) (2 textes)
-  rectMin L 223.791957 l 84 axe (0, 1) coin (84, 0)
-  empreinte b0012f68879c5ba8
-  écart avec EC1.dxf géométrie 2.671e-2 textes [reference.description.params.index 1/8] différence réelle
+  repère « EC1 » (42, 111.876117) dégagement 42 texte h 21 (42, 111.876117) (2 textes)
+  rectMin L 223.752233 l 84 axe (0, 1) coin (84, 0)
+  empreinte 9d2a5690b52ae492
+  écart avec EC1.dxf géométrie 0.000e+0 textes [reference.description.params.index 1/8] différence réelle
 EC1-6.dxf ×1 EC1 [central-diaphragm-9]
   calques {"CONTOUR":1,"INFO":4,"TEXTE":2}
-  boîte {"min":{"x":0,"y":0},"max":{"x":84,"y":223.791957}}
+  boîte {"min":{"x":0,"y":0},"max":{"x":84,"y":223.752233}}
   contour 4 sommets CCW premier (0, 0)
-  repère « EC1 » (42, 111.895979) dégagement 42 texte h 21 (42, 111.895979) (2 textes)
-  rectMin L 223.791957 l 84 axe (0, 1) coin (84, 0)
-  empreinte e2fc056cb2964c96
-  écart avec EC1.dxf géométrie 2.671e-2 textes [reference.description.params.index 1/9] différence réelle
+  repère « EC1 » (42, 111.876117) dégagement 42 texte h 21 (42, 111.876117) (2 textes)
+  rectMin L 223.752233 l 84 axe (0, 1) coin (84, 0)
+  empreinte 3ee90272d71ce298
+  écart avec EC1.dxf géométrie 0.000e+0 textes [reference.description.params.index 1/9] différence réelle
 PF1.dxf ×1 PF1 [plate-foot-central]
   calques {"CONTOUR":5,"INFO":4,"TEXTE":2}
   boîte {"min":{"x":0,"y":0},"max":{"x":449.884215,"y":200}}
@@ -593,12 +587,12 @@ CO1-2.dxf ×1 CO1 [support-2-central]
   écart avec CO1.dxf géométrie 0.000e+0 textes [reference.description.params.tread M1/M2] différence réelle
 CO1-3.dxf ×1 CO1 [support-3-central]
   calques {"CONTOUR":1,"INFO":4,"TEXTE":2}
-  boîte {"min":{"x":0,"y":0},"max":{"x":800,"y":122.059023}}
-  contour 13 sommets CCW premier (0, 82.059023)
-  repère « CO1 » (400, 61.029511) dégagement 61.029511 texte h 30 (400, 61.029511) (2 textes)
-  rectMin L 800 l 122.059023 axe (1, 0) coin (0, 0)
-  empreinte c4e0a8e7a642edf5
-  écart avec CO1.dxf géométrie 5.902e-2 textes [reference.description.params.tread M1/M3] différence réelle
+  boîte {"min":{"x":0,"y":0},"max":{"x":800,"y":122}}
+  contour 13 sommets CCW premier (0, 82)
+  repère « CO1 » (400, 61) dégagement 61 texte h 30 (400, 61) (2 textes)
+  rectMin L 800 l 122 axe (1, 0) coin (0, 0)
+  empreinte 83e9b3153387c757
+  écart avec CO1.dxf géométrie 0.000e+0 textes [reference.description.params.tread M1/M3] différence réelle
 CO2.dxf ×1 CO2 [support-4-central]
   calques {"CONTOUR":1,"INFO":4,"TEXTE":2}
   boîte {"min":{"x":0,"y":0},"max":{"x":799.065525,"y":126.854517}}
@@ -741,7 +735,7 @@ AP1-4.dxf ×1 AP1 [support-8-central-bearing]
   repère « AP1 » (400, 30) dégagement 30 texte h 15 (400, 30) (2 textes)
   rectMin L 800 l 60 axe (1, 0) coin (0, 0)
   empreinte e514b1fc16c7d812
-  écart avec AP1.dxf géométrie 2.274e-13 textes [reference.description.params.tread M1/M8] différence réelle
+  écart avec AP1.dxf géométrie 0.000e+0 textes [reference.description.params.tread M1/M8] différence réelle
 AP1-5.dxf ×2 AP1 [support-9-central-1-bearing, support-9-central-2-bearing]
   calques {"CONTOUR":1,"INFO":4,"TEXTE":2}
   boîte {"min":{"x":0,"y":0},"max":{"x":800,"y":60}}
@@ -749,7 +743,7 @@ AP1-5.dxf ×2 AP1 [support-9-central-1-bearing, support-9-central-2-bearing]
   repère « AP1 » (400, 30) dégagement 30 texte h 15 (400, 30) (2 textes)
   rectMin L 800 l 60 axe (1, 0) coin (0, 0)
   empreinte d0e588452cf7d47b
-  écart avec AP1.dxf géométrie 3.411e-13 textes [reference.description.params.tread M1/P1] différence réelle
+  écart avec AP1.dxf géométrie 0.000e+0 textes [reference.description.params.tread M1/P1] différence réelle
 AP6.dxf ×1 AP6 [support-10-central-bearing]
   calques {"CONTOUR":1,"INFO":4,"TEXTE":2}
   boîte {"min":{"x":0,"y":0},"max":{"x":815.384615,"y":60}}
@@ -791,7 +785,7 @@ AP10.dxf ×1 AP10 [support-14-central-bearing]
 exports[`sorties de fabrication des exemples (stable-tiebreaks, S1) > exemple cage-60-palier-central > fiche de débit 1`] = `
 "
 groupes 4
-groupe steel-painted thickness 8 {"quantity":55,"lengthM":46.56255,"volumeM3":0.057945,"massKg":297.839905,"massNotes":[]}
+groupe steel-painted thickness 8 {"quantity":55,"lengthM":46.562238,"volumeM3":0.057944,"massKg":297.83659,"massNotes":[]}
   AP1 ×6 800×60×8 3.0144 - stock
   AP2 ×1 799.065525×60×8 3.010879 - stock
   AP3 ×1 760.682156×60×8 2.86625 - stock
@@ -802,8 +796,7 @@ groupe steel-painted thickness 8 {"quantity":55,"lengthM":46.56255,"volumeM3":0.
   AP8 ×1 895.384615×60×8 3.373809 - stock
   AP9 ×1 935.384615×60×8 3.524529 - stock
   AP10 ×1 975.384615×60×8 3.675249 - stock
-  CO1 ×2 800×122×8 4.32692 - stock
-  CO1 ×1 800×122.059023×8 4.328588 - stock
+  CO1 ×3 800×122×8 4.32692 - stock
   CO2 ×1 799.065525×126.854517×8 4.347654 - stock
   CO3 ×1 760.682156×125.32274×8 4.155824 - stock
   CO4 ×1 818.540778×126.783998×8 4.367875 - stock
@@ -816,12 +809,8 @@ groupe steel-painted thickness 8 {"quantity":55,"lengthM":46.56255,"volumeM3":0.
   CO11 ×1 895.384615×122×8 4.812122 - stock
   CO12 ×1 935.384615×122×8 5.015594 - stock
   CO13 ×1 975.384615×122×8 5.219066 - stock
-  EC1 ×1 223.76525×84×8 1.180406 - stock
-  EC1 ×1 223.806287×84×8 1.180623 - stock
-  EC1 ×1 223.752233×84×8 1.180338 - stock
-  EC1 ×3 223.791957×84×8 1.180547 - stock
-  EC2 ×1 223.271039×84×8 1.177799 - stock
-  EC2 ×1 223.14503×84×8 1.177135 - stock
+  EC1 ×6 223.752233×84×8 1.180338 - stock
+  EC2 ×2 223.14503×84×8 1.177135 - stock
   EC3 ×1 227.252128×84×8 1.1988 - stock
   FD1 ×1 877.482808×199.86852×8 8.334796 - stock
   FD2 ×1 696.853765×205.448169×8 7.022561 - stock
@@ -873,30 +862,15 @@ groupe wood-oak thickness 40 {"quantity":14,"lengthM":13.63387,"volumeM3":0.1898
   M13 ×1 1061.538462×270×40 7.868215 - stock
   M14 ×1 1100×270×40 8.1704 - stock
   P1 ×1 901.538462×910×40 22.932215 - stock
---- repères en double 3
-EC1 central-diaphragm-1 matériau=steel-painted section=tôle 8 L=223.76524958495446 l=84 e=8 lames=1 masse=1.1804064446105518 appro=-
-EC1 central-diaphragm-2 matériau=steel-painted section=tôle 8 L=223.80628721639664 l=84 e=8 lames=1 masse=1.1806229263239354 appro=-
-EC2 central-diaphragm-3 matériau=steel-painted section=tôle 8 L=223.27103900565305 l=84 e=8 lames=1 masse=1.177799384962621 appro=-
-EC2 central-diaphragm-4 matériau=steel-painted section=tôle 8 L=223.1450301475403 l=84 e=8 lames=1 masse=1.1771346630343045 appro=-
-EC1 central-diaphragm-6 matériau=steel-painted section=tôle 8 L=223.75223340392745 l=84 e=8 lames=1 masse=1.1803377816523983 appro=-
-EC1 central-diaphragm-7 matériau=steel-painted section=tôle 8 L=223.79195748883876 l=84 e=8 lames=1 masse=1.180547334145122 appro=-
-EC1 central-diaphragm-8 matériau=steel-painted section=tôle 8 L=223.79195748883785 l=84 e=8 lames=1 masse=1.1805473341451174 appro=-
-EC1 central-diaphragm-9 matériau=steel-painted section=tôle 8 L=223.7919574888383 l=84 e=8 lames=1 masse=1.1805473341451198 appro=-
-CO1 support-1-central matériau=steel-painted section=tôle 8 L=800 l=122 e=8 lames=1 masse=4.326919999999767 appro=-
-CO1 support-2-central matériau=steel-painted section=tôle 8 L=800 l=122 e=8 lames=1 masse=4.326919999999767 appro=-
-CO1 support-3-central matériau=steel-painted section=tôle 8 L=800 l=122.05902260860705 e=8 lames=1 masse=4.328587978919001 appro=-
+--- repères en double 0
 "
 `;
 
 exports[`sorties de fabrication des exemples (stable-tiebreaks, S1) > exemple cage-60-palier-central > liste de débit CSV 1`] = `
 "
 ﻿Repère;Désignation;Matériau;Section;Longueur (mm);Largeur (mm);Épaisseur (mm);Quantité;Volume unitaire (m³);Volume total (m³);Masse unitaire (kg);Masse totale (kg);Remarque masse
-EC1;Entretoise 1 du limon central;Acier peint;tôle 8;223,8;84,0;8,0;1;0,000150;0,000150;1,18;1,18;
-EC1;Entretoise 2 du limon central;Acier peint;tôle 8;223,8;84,0;8,0;1;0,000150;0,000150;1,18;1,18;
-EC1;Entretoise 6 du limon central;Acier peint;tôle 8;223,8;84,0;8,0;1;0,000150;0,000150;1,18;1,18;
-EC1;Entretoise 7 du limon central;Acier peint;tôle 8;223,8;84,0;8,0;3;0,000150;0,000451;1,18;3,54;
-EC2;Entretoise 3 du limon central;Acier peint;tôle 8;223,3;84,0;8,0;1;0,000150;0,000150;1,18;1,18;
-EC2;Entretoise 4 du limon central;Acier peint;tôle 8;223,1;84,0;8,0;1;0,000150;0,000150;1,18;1,18;
+EC1;Entretoise 1 du limon central;Acier peint;tôle 8;223,8;84,0;8,0;6;0,000150;0,000902;1,18;7,08;
+EC2;Entretoise 3 du limon central;Acier peint;tôle 8;223,1;84,0;8,0;2;0,000150;0,000300;1,18;2,35;
 EC3;Entretoise 5 du limon central;Acier peint;tôle 8;227,3;84,0;8,0;1;0,000153;0,000153;1,20;1,20;
 FD1;Flasque droite du limon central, tronçon 1/4;Acier peint;tôle 8;877,5;199,9;8,0;1;0,001062;0,001062;8,33;8,33;
 FD2;Flasque droite du limon central, tronçon 2/4;Acier peint;tôle 8 (S235) roulée, largeur 206;696,9;205,4;8,0;1;0,000895;0,000895;7,02;7,02;
@@ -924,8 +898,7 @@ AP7;Plat d'appui de la console de M11;Acier peint;tôle 8;855,4;60,0;8,0;1;0,000
 AP8;Plat d'appui de la console de M12;Acier peint;tôle 8;895,4;60,0;8,0;1;0,000430;0,000430;3,37;3,37;
 AP9;Plat d'appui de la console de M13;Acier peint;tôle 8;935,4;60,0;8,0;1;0,000449;0,000449;3,52;3,52;
 AP10;Plat d'appui de la console de M14;Acier peint;tôle 8;975,4;60,0;8,0;1;0,000468;0,000468;3,68;3,68;
-CO1;Console du limon central sous M1;Acier peint;tôle 8;800,0;122,0;8,0;2;0,000551;0,001102;4,33;8,65;
-CO1;Console du limon central sous M3;Acier peint;tôle 8;800,0;122,1;8,0;1;0,000551;0,000551;4,33;4,33;
+CO1;Console du limon central sous M1;Acier peint;tôle 8;800,0;122,0;8,0;3;0,000551;0,001654;4,33;12,98;
 CO2;Console du limon central sous M4;Acier peint;tôle 8;799,1;126,9;8,0;1;0,000554;0,000554;4,35;4,35;
 CO3;Console du limon central sous M5;Acier peint;tôle 8;760,7;125,3;8,0;1;0,000529;0,000529;4,16;4,16;
 CO4;Console du limon central sous M6;Acier peint;tôle 8;818,5;126,8;8,0;1;0,000556;0,000556;4,37;4,37;
@@ -969,20 +942,9 @@ CM15;Contremarche 15;Chêne;;1100,0;180,0;20,0;1;0,003960;0,003960;2,77;2,77;mas
 P1;Palier (marche 9);Chêne;;901,5;910,0;40,0;1;0,032760;0,032760;22,93;22,93;masse volumique à valider
 PF1;Platine de pied de FG1;Acier peint;tôle 10;449,9;200,0;10,0;1;0,000895;0,000895;7,02;7,02;
 PH1;Platine de tête de FG4;Acier peint;tôle 10;243,3;200,0;10,0;1;0,000484;0,000484;3,80;3,80;
-Total;;;;;;;86;;0,256892;;461,00;masse volumique à valider
+Total;;;;;;;86;;0,256894;;460,99;masse volumique à valider
 
---- repères en double 3
-EC1 central-diaphragm-1 cat=stringer matériau=steel-painted section=tôle 8 L=223.76524958495446 l=84 e=8 lames=1 appro=- volume=0.0001503702477210894 masse=1.1804064446105518
-EC1 central-diaphragm-2 cat=stringer matériau=steel-painted section=tôle 8 L=223.80628721639664 l=84 e=8 lames=1 appro=- volume=0.00015039782500941853 masse=1.1806229263239354
-EC2 central-diaphragm-3 cat=stringer matériau=steel-painted section=tôle 8 L=223.27103900565305 l=84 e=8 lames=1 appro=- volume=0.00015003813821179885 masse=1.177799384962621
-EC2 central-diaphragm-4 cat=stringer matériau=steel-painted section=tôle 8 L=223.1450301475403 l=84 e=8 lames=1 appro=- volume=0.00014995346025914707 masse=1.1771346630343045
-EC1 central-diaphragm-6 cat=stringer matériau=steel-painted section=tôle 8 L=223.75223340392745 l=84 e=8 lames=1 appro=- volume=0.00015036150084743927 masse=1.1803377816523983
-EC1 central-diaphragm-7 cat=stringer matériau=steel-painted section=tôle 8 L=223.79195748883876 l=84 e=8 lames=1 appro=- volume=0.00015038819543249963 masse=1.180547334145122
-EC1 central-diaphragm-8 cat=stringer matériau=steel-painted section=tôle 8 L=223.79195748883785 l=84 e=8 lames=1 appro=- volume=0.00015038819543249904 masse=1.1805473341451174
-EC1 central-diaphragm-9 cat=stringer matériau=steel-painted section=tôle 8 L=223.7919574888383 l=84 e=8 lames=1 appro=- volume=0.00015038819543249934 masse=1.1805473341451198
-CO1 support-1-central cat=support matériau=steel-painted section=tôle 8 L=800 l=122 e=8 lames=1 appro=- volume=0.0005511999999999702 masse=4.326919999999767
-CO1 support-2-central cat=support matériau=steel-painted section=tôle 8 L=800 l=122 e=8 lames=1 appro=- volume=0.0005511999999999702 masse=4.326919999999767
-CO1 support-3-central cat=support matériau=steel-painted section=tôle 8 L=800 l=122.05902260860705 e=8 lames=1 appro=- volume=0.0005514124813909555 masse=4.328587978919001
+--- repères en double 0
 "
 `;
 
@@ -1946,19 +1908,19 @@ SB4.dxf ×1 SB4 [central-flange-bottom-4]
   empreinte 00f575efc0cfb570
 EC1.dxf ×1 EC1 [central-diaphragm-1]
   calques {"CONTOUR":1,"INFO":4,"TEXTE":2}
-  boîte {"min":{"x":0,"y":0},"max":{"x":84,"y":221.825042}}
+  boîte {"min":{"x":0,"y":0},"max":{"x":84,"y":221.379782}}
   contour 4 sommets CCW premier (0, 0)
-  repère « EC1 » (42, 110.912521) dégagement 42 texte h 21 (42, 110.912521) (2 textes)
-  rectMin L 221.825042 l 84 axe (0, 1) coin (84, 0)
-  empreinte e4635056781d43d3
+  repère « EC1 » (42, 110.689891) dégagement 42 texte h 21 (42, 110.689891) (2 textes)
+  rectMin L 221.379782 l 84 axe (0, 1) coin (84, 0)
+  empreinte 3bbe6e1367432a53
 EC1-2.dxf ×1 EC1 [central-diaphragm-2]
   calques {"CONTOUR":1,"INFO":4,"TEXTE":2}
-  boîte {"min":{"x":0,"y":0},"max":{"x":84,"y":221.861876}}
+  boîte {"min":{"x":0,"y":0},"max":{"x":84,"y":221.379782}}
   contour 4 sommets CCW premier (0, 0)
-  repère « EC1 » (42, 110.930938) dégagement 42 texte h 21 (42, 110.930938) (2 textes)
-  rectMin L 221.861876 l 84 axe (0, 1) coin (84, 0)
-  empreinte cb6e6958f042683e
-  écart avec EC1.dxf géométrie 3.683e-2 textes [reference.description.params.index 1/2] différence réelle
+  repère « EC1 » (42, 110.689891) dégagement 42 texte h 21 (42, 110.689891) (2 textes)
+  rectMin L 221.379782 l 84 axe (0, 1) coin (84, 0)
+  empreinte f779458f59db9b6f
+  écart avec EC1.dxf géométrie 0.000e+0 textes [reference.description.params.index 1/2] différence réelle
 EC1-3.dxf ×1 EC1 [central-diaphragm-3]
   calques {"CONTOUR":1,"INFO":4,"TEXTE":2}
   boîte {"min":{"x":0,"y":0},"max":{"x":84,"y":221.379782}}
@@ -1966,7 +1928,7 @@ EC1-3.dxf ×1 EC1 [central-diaphragm-3]
   repère « EC1 » (42, 110.689891) dégagement 42 texte h 21 (42, 110.689891) (2 textes)
   rectMin L 221.379782 l 84 axe (0, 1) coin (84, 0)
   empreinte 02b88ab5f6572697
-  écart avec EC1.dxf géométrie 4.453e-1 textes [reference.description.params.index 1/3] différence réelle
+  écart avec EC1.dxf géométrie 0.000e+0 textes [reference.description.params.index 1/3] différence réelle
 EC2.dxf ×1 EC2 [central-diaphragm-4]
   calques {"CONTOUR":1,"INFO":4,"TEXTE":2}
   boîte {"min":{"x":0,"y":0},"max":{"x":84,"y":220.703221}}
@@ -1983,28 +1945,28 @@ EC3.dxf ×1 EC3 [central-diaphragm-5]
   empreinte 1c4d9400d743df91
 EC1-4.dxf ×1 EC1 [central-diaphragm-6]
   calques {"CONTOUR":1,"INFO":4,"TEXTE":2}
-  boîte {"min":{"x":0,"y":0},"max":{"x":84,"y":221.874071}}
+  boîte {"min":{"x":0,"y":0},"max":{"x":84,"y":221.379782}}
   contour 4 sommets CCW premier (0, 0)
-  repère « EC1 » (42, 110.937035) dégagement 42 texte h 21 (42, 110.937035) (2 textes)
-  rectMin L 221.874071 l 84 axe (0, 1) coin (84, 0)
-  empreinte f71f2e3324e9fe74
-  écart avec EC1.dxf géométrie 4.903e-2 textes [reference.description.params.index 1/6] différence réelle
+  repère « EC1 » (42, 110.689891) dégagement 42 texte h 21 (42, 110.689891) (2 textes)
+  rectMin L 221.379782 l 84 axe (0, 1) coin (84, 0)
+  empreinte 8e7cbc9b2626a329
+  écart avec EC1.dxf géométrie 0.000e+0 textes [reference.description.params.index 1/6] différence réelle
 EC1-5.dxf ×1 EC1 [central-diaphragm-7]
   calques {"CONTOUR":1,"INFO":4,"TEXTE":2}
-  boîte {"min":{"x":0,"y":0},"max":{"x":84,"y":221.825042}}
+  boîte {"min":{"x":0,"y":0},"max":{"x":84,"y":221.379782}}
   contour 4 sommets CCW premier (0, 0)
-  repère « EC1 » (42, 110.912521) dégagement 42 texte h 21 (42, 110.912521) (2 textes)
-  rectMin L 221.825042 l 84 axe (0, 1) coin (84, 0)
-  empreinte 5320b07143a6124a
-  écart avec EC1.dxf géométrie 9.663e-13 textes [reference.description.params.index 1/7] différence réelle
+  repère « EC1 » (42, 110.689891) dégagement 42 texte h 21 (42, 110.689891) (2 textes)
+  rectMin L 221.379782 l 84 axe (0, 1) coin (84, 0)
+  empreinte a80ef08de17622e7
+  écart avec EC1.dxf géométrie 0.000e+0 textes [reference.description.params.index 1/7] différence réelle
 EC1-6.dxf ×1 EC1 [central-diaphragm-8]
   calques {"CONTOUR":1,"INFO":4,"TEXTE":2}
-  boîte {"min":{"x":0,"y":0},"max":{"x":84,"y":221.825042}}
+  boîte {"min":{"x":0,"y":0},"max":{"x":84,"y":221.379782}}
   contour 4 sommets CCW premier (0, 0)
-  repère « EC1 » (42, 110.912521) dégagement 42 texte h 21 (42, 110.912521) (2 textes)
-  rectMin L 221.825042 l 84 axe (0, 1) coin (84, 0)
-  empreinte c72e2f9b1943a2db
-  écart avec EC1.dxf géométrie 9.663e-13 textes [reference.description.params.index 1/8] différence réelle
+  repère « EC1 » (42, 110.689891) dégagement 42 texte h 21 (42, 110.689891) (2 textes)
+  rectMin L 221.379782 l 84 axe (0, 1) coin (84, 0)
+  empreinte 67de9c06ad41cf31
+  écart avec EC1.dxf géométrie 0.000e+0 textes [reference.description.params.index 1/8] différence réelle
 PF1.dxf ×1 PF1 [plate-foot-central]
   calques {"CONTOUR":5,"INFO":4,"TEXTE":2}
   boîte {"min":{"x":0,"y":0},"max":{"x":458.081131,"y":200}}
@@ -2033,7 +1995,7 @@ CO1-2.dxf ×1 CO1 [support-2-central]
   repère « CO1 » (400, 61) dégagement 61 texte h 30 (400, 61) (2 textes)
   rectMin L 800 l 122 axe (1, 0) coin (0, 0)
   empreinte 73a69145996d1645
-  écart avec CO1.dxf géométrie 9.095e-11 textes [reference.description.params.tread M1/M2] différence réelle
+  écart avec CO1.dxf géométrie 0.000e+0 textes [reference.description.params.tread M1/M2] différence réelle
 CO1-3.dxf ×1 CO1 [support-3-central]
   calques {"CONTOUR":1,"INFO":4,"TEXTE":2}
   boîte {"min":{"x":0,"y":0},"max":{"x":800,"y":122}}
@@ -2041,15 +2003,15 @@ CO1-3.dxf ×1 CO1 [support-3-central]
   repère « CO1 » (400, 61) dégagement 61 texte h 30 (400, 61) (2 textes)
   rectMin L 800 l 122 axe (1, 0) coin (0, 0)
   empreinte 83e9b3153387c757
-  écart avec CO1.dxf géométrie 9.095e-11 textes [reference.description.params.tread M1/M3] différence réelle
+  écart avec CO1.dxf géométrie 0.000e+0 textes [reference.description.params.tread M1/M3] différence réelle
 CO1-4.dxf ×1 CO1 [support-4-central]
   calques {"CONTOUR":1,"INFO":4,"TEXTE":2}
-  boîte {"min":{"x":0,"y":0},"max":{"x":800,"y":122.04409}}
-  contour 13 sommets CCW premier (0, 82.04409)
-  repère « CO1 » (400, 61.022045) dégagement 61.022045 texte h 30 (400, 61.022045) (2 textes)
-  rectMin L 800 l 122.04409 axe (1, 0) coin (0, 0)
-  empreinte fb4f67c3a9a95f24
-  écart avec CO1.dxf géométrie 4.409e-2 textes [reference.description.params.tread M1/M4] différence réelle
+  boîte {"min":{"x":0,"y":0},"max":{"x":800,"y":122}}
+  contour 13 sommets CCW premier (0, 82)
+  repère « CO1 » (400, 61) dégagement 61 texte h 30 (400, 61) (2 textes)
+  rectMin L 800 l 122 axe (1, 0) coin (0, 0)
+  empreinte 992ee5a7a2d07bec
+  écart avec CO1.dxf géométrie 0.000e+0 textes [reference.description.params.tread M1/M4] différence réelle
 CO2.dxf ×1 CO2 [support-5-central]
   calques {"CONTOUR":1,"INFO":4,"TEXTE":2}
   boîte {"min":{"x":0,"y":0},"max":{"x":798.36043,"y":125.916975}}
@@ -2113,7 +2075,7 @@ CO1-5.dxf ×1 CO1 [support-13-central]
   repère « CO1 » (400, 61) dégagement 61 texte h 30 (400, 61) (2 textes)
   rectMin L 800 l 122 axe (1, 0) coin (0, 0)
   empreinte 5b018b953aff083d
-  écart avec CO1.dxf géométrie 4.547e-13 textes [reference.description.params.tread M1/M13] différence réelle
+  écart avec CO1.dxf géométrie 0.000e+0 textes [reference.description.params.tread M1/M13] différence réelle
 CO1-6.dxf ×1 CO1 [support-14-central]
   calques {"CONTOUR":1,"INFO":4,"TEXTE":2}
   boîte {"min":{"x":0,"y":0},"max":{"x":800,"y":122}}
@@ -2121,7 +2083,7 @@ CO1-6.dxf ×1 CO1 [support-14-central]
   repère « CO1 » (400, 61) dégagement 61 texte h 30 (400, 61) (2 textes)
   rectMin L 800 l 122 axe (1, 0) coin (0, 0)
   empreinte eb420a9980d6b9a1
-  écart avec CO1.dxf géométrie 4.547e-13 textes [reference.description.params.tread M1/M14] différence réelle
+  écart avec CO1.dxf géométrie 0.000e+0 textes [reference.description.params.tread M1/M14] différence réelle
 AP1.dxf ×1 AP1 [support-1-central-bearing]
   calques {"CONTOUR":1,"INFO":4,"TEXTE":2}
   boîte {"min":{"x":0,"y":0},"max":{"x":800,"y":60}}
@@ -2152,14 +2114,14 @@ AP1-4.dxf ×1 AP1 [support-4-central-bearing]
   repère « AP1 » (400, 30) dégagement 30 texte h 15 (400, 30) (2 textes)
   rectMin L 800 l 60 axe (1, 0) coin (0, 0)
   empreinte 4c1e35f05e82466f
-  écart avec AP1.dxf géométrie 1.137e-13 textes [reference.description.params.tread M1/M4] différence réelle
+  écart avec AP1.dxf géométrie 0.000e+0 textes [reference.description.params.tread M1/M4] différence réelle
 AP2.dxf ×1 AP2 [support-5-central-bearing]
   calques {"CONTOUR":1,"INFO":4,"TEXTE":2}
-  boîte {"min":{"x":0,"y":0},"max":{"x":798.36043,"y":60}}
+  boîte {"min":{"x":0,"y":0},"max":{"x":798.360202,"y":60}}
   contour 4 sommets CCW premier (0, 0)
-  repère « AP2 » (399.180215, 30) dégagement 30 texte h 15 (399.180215, 30) (2 textes)
-  rectMin L 798.36043 l 60 axe (1, 0) coin (0, 0)
-  empreinte 045a798779504fe3
+  repère « AP2 » (399.180101, 30) dégagement 30 texte h 15 (399.180101, 30) (2 textes)
+  rectMin L 798.360202 l 60 axe (1, 0) coin (0, 0)
+  empreinte fa04351b8938e7d7
 AP3.dxf ×1 AP3 [support-6-central-bearing]
   calques {"CONTOUR":1,"INFO":4,"TEXTE":2}
   boîte {"min":{"x":0,"y":0},"max":{"x":765.395867,"y":60}}
@@ -2209,7 +2171,7 @@ AP2-2.dxf ×1 AP2 [support-12-central-bearing]
   repère « AP2 » (399.180101, 30) dégagement 30 texte h 15 (399.180101, 30) (2 textes)
   rectMin L 798.360202 l 60 axe (1, 0) coin (0, 0)
   empreinte a86ed968daab59d6
-  écart avec AP2.dxf géométrie 2.281e-4 textes [reference.description.params.tread M5/M12] différence réelle
+  écart avec AP2.dxf géométrie 0.000e+0 textes [reference.description.params.tread M5/M12] différence réelle
 AP1-5.dxf ×1 AP1 [support-13-central-bearing]
   calques {"CONTOUR":1,"INFO":4,"TEXTE":2}
   boîte {"min":{"x":0,"y":0},"max":{"x":800,"y":60}}
@@ -2232,18 +2194,16 @@ AP1-6.dxf ×1 AP1 [support-14-central-bearing]
 exports[`sorties de fabrication des exemples (stable-tiebreaks, S1) > exemple demo-cage-central-steel > fiche de débit 1`] = `
 "
 groupes 7
-groupe steel-painted thickness 8 {"quantity":52,"lengthM":42.723917,"volumeM3":0.03931,"massKg":259.854233,"massNotes":[]}
+groupe steel-painted thickness 8 {"quantity":52,"lengthM":42.721605,"volumeM3":0.039308,"massKg":259.840789,"massNotes":[]}
   AP1 ×6 800×60×8 3.0144 - stock
-  AP2 ×1 798.36043×60×8 3.008222 - stock
-  AP2 ×1 798.360202×60×8 3.008221 - stock
+  AP2 ×2 798.360202×60×8 3.008221 - stock
   AP3 ×1 765.395867×60×8 2.884012 - stock
   AP4 ×1 942.68583×60×8 3.55204 - stock
   AP5 ×1 1423.665442×60×8 5.364371 - stock
   AP6 ×1 872.773278×60×8 3.28861 - stock
   AP7 ×1 707.045688×60×8 2.664148 - stock
   AP8 ×1 723.37008×60×8 2.725658 - stock
-  CO1 ×5 800×122×8 4.32692 - stock
-  CO1 ×1 800×122.04409×8 4.328166 - stock
+  CO1 ×6 800×122×8 4.32692 - stock
   CO2 ×1 798.36043×125.916975×8 4.339999 - stock
   CO3 ×1 765.395867×127.416214×8 4.205718 - stock
   CO4 ×1 942.68583×134.831123×8 5.31793 - stock
@@ -2252,10 +2212,7 @@ groupe steel-painted thickness 8 {"quantity":52,"lengthM":42.723917,"volumeM3":0
   CO7 ×1 707.045688×142.425054×8 4.016893 - stock
   CO8 ×1 723.37008×133.222094×8 3.983995 - stock
   CO9 ×1 798.360202×125.209178×8 4.319746 - stock
-  EC1 ×3 221.825042×84×8 1.170171 - stock
-  EC1 ×1 221.861876×84×8 1.170366 - stock
-  EC1 ×1 221.379782×84×8 1.167823 - stock
-  EC1 ×1 221.874071×84×8 1.17043 - stock
+  EC1 ×6 221.379782×84×8 1.167823 - stock
   EC2 ×1 220.703221×84×8 1.164254 - stock
   EC3 ×1 220.195411×84×8 1.161575 - stock
   FD1 ×1 1225.167276×200.157996×8 12.678364 - stock
@@ -2328,31 +2285,14 @@ groupe glass section « ép. 18 » {"quantity":18,"lengthM":16.006973,"massKg":6
   PN10 ×6 900×908×18 36.774 - stock
   PN11 ×2 995×908×18 40.6557 - stock
   PN12 ×1 37.564435×908×18 1.534883 - stock
---- repères en double 3
-EC1 central-diaphragm-1 matériau=steel-painted section=tôle 8 L=221.8250421301023 l=84 e=8 lames=1 masse=1.1701714622447157 appro=-
-EC1 central-diaphragm-2 matériau=steel-painted section=tôle 8 L=221.86187639565998 l=84 e=8 lames=1 masse=1.1703657703623855 appro=-
-EC1 central-diaphragm-3 matériau=steel-painted section=tôle 8 L=221.37978242507302 l=84 e=8 lames=1 masse=1.1678226282487452 appro=-
-EC1 central-diaphragm-6 matériau=steel-painted section=tôle 8 L=221.8740705249279 l=84 e=8 lames=1 masse=1.1704300968330994 appro=-
-EC1 central-diaphragm-7 matériau=steel-painted section=tôle 8 L=221.82504213010134 l=84 e=8 lames=1 masse=1.1701714622447108 appro=-
-EC1 central-diaphragm-8 matériau=steel-painted section=tôle 8 L=221.82504213010134 l=84 e=8 lames=1 masse=1.1701714622447108 appro=-
-CO1 support-1-central matériau=steel-painted section=tôle 8 L=799.9999999999998 l=122 e=8 lames=1 masse=4.326919999999764 appro=-
-CO1 support-2-central matériau=steel-painted section=tôle 8 L=799.9999999999998 l=122 e=8 lames=1 masse=4.326920000000232 appro=-
-CO1 support-3-central matériau=steel-painted section=tôle 8 L=799.9999999999998 l=122 e=8 lames=1 masse=4.326920000000232 appro=-
-CO1 support-4-central matériau=steel-painted section=tôle 8 L=799.9999999999997 l=122.04408995574227 e=8 lames=1 masse=4.3281659821495095 appro=-
-CO1 support-13-central matériau=steel-painted section=tôle 8 L=799.9999999999998 l=122 e=8 lames=1 masse=4.326919999999764 appro=-
-CO1 support-14-central matériau=steel-painted section=tôle 8 L=799.9999999999998 l=122 e=8 lames=1 masse=4.326919999999764 appro=-
-AP2 support-5-central-bearing matériau=steel-painted section=tôle 8 L=798.36043040671 l=60 e=8 lames=1 masse=3.008222101772483 appro=-
-AP2 support-12-central-bearing matériau=steel-painted section=tôle 8 L=798.3602022883389 l=60 e=8 lames=1 masse=3.008221242222461 appro=-
+--- repères en double 0
 "
 `;
 
 exports[`sorties de fabrication des exemples (stable-tiebreaks, S1) > exemple demo-cage-central-steel > liste de débit CSV 1`] = `
 "
 ﻿Repère;Désignation;Matériau;Section;Longueur (mm);Largeur (mm);Épaisseur (mm);Quantité;Volume unitaire (m³);Volume total (m³);Masse unitaire (kg);Masse totale (kg);Remarque masse
-EC1;Entretoise 1 du limon central;Acier peint;tôle 8;221,8;84,0;8,0;3;0,000149;0,000447;1,17;3,51;
-EC1;Entretoise 2 du limon central;Acier peint;tôle 8;221,9;84,0;8,0;1;0,000149;0,000149;1,17;1,17;
-EC1;Entretoise 3 du limon central;Acier peint;tôle 8;221,4;84,0;8,0;1;0,000149;0,000149;1,17;1,17;
-EC1;Entretoise 6 du limon central;Acier peint;tôle 8;221,9;84,0;8,0;1;0,000149;0,000149;1,17;1,17;
+EC1;Entretoise 1 du limon central;Acier peint;tôle 8;221,4;84,0;8,0;6;0,000149;0,000893;1,17;7,01;
 EC2;Entretoise 4 du limon central;Acier peint;tôle 8;220,7;84,0;8,0;1;0,000148;0,000148;1,16;1,16;
 EC3;Entretoise 5 du limon central;Acier peint;tôle 8;220,2;84,0;8,0;1;0,000148;0,000148;1,16;1,16;
 FD1;Flasque droite du limon central, tronçon 1/4;Acier peint;tôle 8;1225,2;200,2;8,0;1;0,001615;0,001615;12,68;12,68;
@@ -2372,16 +2312,14 @@ SH2;Semelle haute du limon central, tronçon 2/4;Acier peint;tôle 8;829,6;84,0;
 SH3;Semelle haute du limon central, tronçon 3/4;Acier peint;tôle 8;788,4;84,0;8,0;1;0,000530;0,000530;4,16;4,16;
 SH4;Semelle haute du limon central, tronçon 4/4;Acier peint;tôle 8;1374,3;84,0;8,0;1;0,000924;0,000924;7,25;7,25;
 AP1;Plat d'appui de la console de M1;Acier peint;tôle 8;800,0;60,0;8,0;6;0,000384;0,002304;3,01;18,09;
-AP2;Plat d'appui de la console de M5;Acier peint;tôle 8;798,4;60,0;8,0;1;0,000383;0,000383;3,01;3,01;
-AP2;Plat d'appui de la console de M12;Acier peint;tôle 8;798,4;60,0;8,0;1;0,000383;0,000383;3,01;3,01;
+AP2;Plat d'appui de la console de M5;Acier peint;tôle 8;798,4;60,0;8,0;2;0,000383;0,000766;3,01;6,02;
 AP3;Plat d'appui de la console de M6;Acier peint;tôle 8;765,4;60,0;8,0;1;0,000367;0,000367;2,88;2,88;
 AP4;Plat d'appui de la console de M7;Acier peint;tôle 8;942,7;60,0;8,0;1;0,000452;0,000452;3,55;3,55;
 AP5;Plat d'appui de la console de M8;Acier peint;tôle 8;1423,7;60,0;8,0;1;0,000683;0,000683;5,36;5,36;
 AP6;Plat d'appui de la console de M9;Acier peint;tôle 8;872,8;60,0;8,0;1;0,000419;0,000419;3,29;3,29;
 AP7;Plat d'appui de la console de M10;Acier peint;tôle 8;707,0;60,0;8,0;1;0,000339;0,000339;2,66;2,66;
 AP8;Plat d'appui de la console de M11;Acier peint;tôle 8;723,4;60,0;8,0;1;0,000347;0,000347;2,73;2,73;
-CO1;Console du limon central sous M1;Acier peint;tôle 8;800,0;122,0;8,0;5;0,000551;0,002756;4,33;21,63;
-CO1;Console du limon central sous M4;Acier peint;tôle 8;800,0;122,0;8,0;1;0,000551;0,000551;4,33;4,33;
+CO1;Console du limon central sous M1;Acier peint;tôle 8;800,0;122,0;8,0;6;0,000551;0,003307;4,33;25,96;
 CO2;Console du limon central sous M5;Acier peint;tôle 8;798,4;125,9;8,0;1;0,000553;0,000553;4,34;4,34;
 CO3;Console du limon central sous M6;Acier peint;tôle 8;765,4;127,4;8,0;1;0,000536;0,000536;4,21;4,21;
 CO4;Console du limon central sous M7;Acier peint;tôle 8;942,7;134,8;8,0;1;0,000677;0,000677;5,32;5,32;
@@ -2438,23 +2376,9 @@ PN11;Panneau de verre;Verre;ép. 18;995,0;908,0;18,0;2;0,016262;0,032525;40,66;8
 PN12;Panneau de verre;Verre;ép. 18;37,6;908,0;18,0;1;0,000614;0,000614;1,53;1,53;
 PF1;Platine de pied de FG1;Acier peint;tôle 10;458,1;200,0;10,0;1;0,000911;0,000911;7,15;7,15;
 PH1;Platine de tête de FG4;Acier peint;tôle 10;241,1;200,0;10,0;1;0,000480;0,000480;3,76;3,76;
-Total;;;;;;;126;;0,657257;;2273,17;masse volumique à valider
+Total;;;;;;;126;;0,657256;;2273,16;masse volumique à valider
 
---- repères en double 3
-EC1 central-diaphragm-1 cat=stringer matériau=steel-painted section=tôle 8 L=221.8250421301023 l=84 e=8 lames=1 appro=- volume=0.00014906642831142875 masse=1.1701714622447157
-EC1 central-diaphragm-2 cat=stringer matériau=steel-painted section=tôle 8 L=221.86187639565998 l=84 e=8 lames=1 appro=- volume=0.0001490911809378835 masse=1.1703657703623855
-EC1 central-diaphragm-3 cat=stringer matériau=steel-painted section=tôle 8 L=221.37978242507302 l=84 e=8 lames=1 appro=- volume=0.00014876721378964908 masse=1.1678226282487452
-EC1 central-diaphragm-6 cat=stringer matériau=steel-painted section=tôle 8 L=221.8740705249279 l=84 e=8 lames=1 appro=- volume=0.00014909937539275153 masse=1.1704300968330994
-EC1 central-diaphragm-7 cat=stringer matériau=steel-painted section=tôle 8 L=221.82504213010134 l=84 e=8 lames=1 appro=- volume=0.00014906642831142813 masse=1.1701714622447108
-EC1 central-diaphragm-8 cat=stringer matériau=steel-painted section=tôle 8 L=221.82504213010134 l=84 e=8 lames=1 appro=- volume=0.00014906642831142813 masse=1.1701714622447108
-CO1 support-1-central cat=support matériau=steel-painted section=tôle 8 L=799.9999999999998 l=122 e=8 lames=1 appro=- volume=0.0005511999999999699 masse=4.326919999999764
-CO1 support-2-central cat=support matériau=steel-painted section=tôle 8 L=799.9999999999998 l=122 e=8 lames=1 appro=- volume=0.0005512000000000296 masse=4.326920000000232
-CO1 support-3-central cat=support matériau=steel-painted section=tôle 8 L=799.9999999999998 l=122 e=8 lames=1 appro=- volume=0.0005512000000000296 masse=4.326920000000232
-CO1 support-4-central cat=support matériau=steel-painted section=tôle 8 L=799.9999999999997 l=122.04408995574227 e=8 lames=1 appro=- volume=0.0005513587238407018 masse=4.3281659821495095
-CO1 support-13-central cat=support matériau=steel-painted section=tôle 8 L=799.9999999999998 l=122 e=8 lames=1 appro=- volume=0.0005511999999999699 masse=4.326919999999764
-CO1 support-14-central cat=support matériau=steel-painted section=tôle 8 L=799.9999999999998 l=122 e=8 lames=1 appro=- volume=0.0005511999999999699 masse=4.326919999999764
-AP2 support-5-central-bearing cat=support matériau=steel-painted section=tôle 8 L=798.36043040671 l=60 e=8 lames=1 appro=- volume=0.00038321300659522077 masse=3.008222101772483
-AP2 support-12-central-bearing cat=support matériau=steel-painted section=tôle 8 L=798.3602022883389 l=60 e=8 lames=1 appro=- volume=0.0003832128970984027 masse=3.008221242222461
+--- repères en double 0
 "
 `;
 
@@ -2547,16 +2471,14 @@ groupe steel-painted section « 12×40 » {"quantity":129,"lengthM":110.932,"mas
 groupe steel-painted section « 80×80 » {"quantity":18,"lengthM":16.344,"massKg":821.12256,"massNotes":[]}
   PG1 ×9 858×80×80 43.10592 - stock
   PG2 ×9 958×80×80 48.12992 - stock
-groupe steel-painted section « L 40 × 40 × 4 » {"quantity":29,"lengthM":6.485157,"massKg":15.476179,"massNotes":[]}
-  CR1 ×6 228.784485×40×40 0.545971 - stock
-  CR1 ×6 228.906278×40×40 0.546262 - stock
+groupe steel-painted section « L 40 × 40 × 4 » {"quantity":29,"lengthM":6.484059,"massKg":15.473557,"massNotes":[]}
+  CR1 ×12 228.784485×40×40 0.545971 - stock
   CR2 ×1 148.86833×40×40 0.355259 - stock
   CR3 ×1 317.0606×40×40 0.756633 - stock
   CR4 ×1 95.117626×40×40 0.226989 - stock
   CR5 ×1 337.563953×40×40 0.805563 - stock
   CR6 ×1 360.952979×40×40 0.861378 - stock
-  CR7 ×1 77.161952×40×40 0.184139 - stock
-  CR7 ×1 77.529811×40×40 0.185017 - stock
+  CR7 ×2 77.161952×40×40 0.184139 - stock
   CR8 ×1 322.751618×40×40 0.770214 - stock
   CR9 ×1 169.101495×40×40 0.403544 - stock
   CR10 ×1 81.193117×40×40 0.193759 - stock
@@ -2601,21 +2523,7 @@ groupe wood-oak thickness 40 {"quantity":14,"lengthM":14.870615,"volumeM3":0.198
   M12 ×1 900×278.906278×40 7.028438 - stock
   M13 ×1 900×278.906278×40 7.028438 - stock
   M14 ×1 900×278.906278×40 7.028438 - stock
---- repères en double 2
-CR1 support-1-stringer-inner-1 matériau=steel-painted section=L 40 × 40 × 4 L=228.7844846039466 l=40 e=40 lames=1 masse=0.5459712940588581 appro=-
-CR1 support-1-stringer-outer-1 matériau=steel-painted section=L 40 × 40 × 4 L=228.78448460394665 l=40 e=40 lames=1 masse=0.5459712940588582 appro=-
-CR1 support-2-stringer-inner-1 matériau=steel-painted section=L 40 × 40 × 4 L=228.78448460394657 l=40 e=40 lames=1 masse=0.5459712940588581 appro=-
-CR1 support-2-stringer-outer-1 matériau=steel-painted section=L 40 × 40 × 4 L=228.78448460394668 l=40 e=40 lames=1 masse=0.5459712940588584 appro=-
-CR1 support-3-stringer-inner-1 matériau=steel-painted section=L 40 × 40 × 4 L=228.78448460394645 l=40 e=40 lames=1 masse=0.5459712940588578 appro=-
-CR1 support-3-stringer-outer-1 matériau=steel-painted section=L 40 × 40 × 4 L=228.78448460394634 l=40 e=40 lames=1 masse=0.5459712940588575 appro=-
-CR7 support-6-stringer-inner-j1 matériau=steel-painted section=L 40 × 40 × 4 L=77.1619518828998 l=40 e=40 lames=1 masse=0.1841392819733521 appro=-
-CR7 support-7-stringer-inner-j1 matériau=steel-painted section=L 40 × 40 × 4 L=77.52981145072386 l=40 e=40 lames=1 masse=0.18501714204600742 appro=-
-CR1 support-11-stringer-inner-2 matériau=steel-painted section=L 40 × 40 × 4 L=228.90627843345737 l=40 e=40 lames=1 masse=0.5462619428536027 appro=-
-CR1 support-11-stringer-outer-2 matériau=steel-painted section=L 40 × 40 × 4 L=228.90627843345737 l=40 e=40 lames=1 masse=0.5462619428536027 appro=-
-CR1 support-12-stringer-inner-2 matériau=steel-painted section=L 40 × 40 × 4 L=228.90627843345737 l=40 e=40 lames=1 masse=0.5462619428536027 appro=-
-CR1 support-12-stringer-outer-2 matériau=steel-painted section=L 40 × 40 × 4 L=228.90627843345737 l=40 e=40 lames=1 masse=0.5462619428536027 appro=-
-CR1 support-13-stringer-inner-2 matériau=steel-painted section=L 40 × 40 × 4 L=228.90627843345692 l=40 e=40 lames=1 masse=0.5462619428536016 appro=-
-CR1 support-13-stringer-outer-2 matériau=steel-painted section=L 40 × 40 × 4 L=228.90627843345692 l=40 e=40 lames=1 masse=0.5462619428536016 appro=-
+--- repères en double 0
 "
 `;
 
@@ -2627,15 +2535,13 @@ LE2;Limon mural acier, tronçon 2;Acier peint;tôle 8 (S235), largeur 412;2925,3
 LI1;Limon de jour acier, tronçon 1;Acier peint;tôle 8 (S235), largeur 344;1667,8;343,7;8,0;1;0,003026;0,003026;23,76;23,76;
 LI2;Limon de jour acier, tronçon 2;Acier peint;tôle 8 (S235), largeur 342;1944,3;342,0;8,0;1;0,003599;0,003599;28,25;28,25;
 LIC1;Limon de jour acier, pan coupé de la jonction 1;Acier peint;tôle 8 (S235), largeur 182;863,2;181,2;8,0;1;0,000853;0,000853;6,70;6,70;
-CR1;Cornière soudée sous M1 (LI1);Acier peint;L 40 × 40 × 4;228,8;40,0;40,0;6;0,000070;0,000417;0,55;3,28;
-CR1;Cornière soudée sous M11 (LI2);Acier peint;L 40 × 40 × 4;228,9;40,0;40,0;6;0,000070;0,000418;0,55;3,28;
+CR1;Cornière soudée sous M1 (LI1);Acier peint;L 40 × 40 × 4;228,8;40,0;40,0;12;0,000070;0,000835;0,55;6,55;
 CR2;Cornière soudée sous M4 (LI1);Acier peint;L 40 × 40 × 4;148,9;40,0;40,0;1;0,000045;0,000045;0,36;0,36;
 CR3;Cornière soudée sous M4 (LE1);Acier peint;L 40 × 40 × 4;317,1;40,0;40,0;1;0,000096;0,000096;0,76;0,76;
 CR4;Cornière soudée sous M5 (LI1);Acier peint;L 40 × 40 × 4;95,1;40,0;40,0;1;0,000029;0,000029;0,23;0,23;
 CR5;Cornière soudée sous M5 (LE1);Acier peint;L 40 × 40 × 4;337,6;40,0;40,0;1;0,000103;0,000103;0,81;0,81;
 CR6;Cornière soudée sous M6 (LE1);Acier peint;L 40 × 40 × 4;361,0;40,0;40,0;1;0,000110;0,000110;0,86;0,86;
-CR7;Cornière soudée sous M6 (LIC1);Acier peint;L 40 × 40 × 4;77,2;40,0;40,0;1;0,000023;0,000023;0,18;0,18;
-CR7;Cornière soudée sous M7 (LIC1);Acier peint;L 40 × 40 × 4;77,5;40,0;40,0;1;0,000024;0,000024;0,19;0,19;
+CR7;Cornière soudée sous M6 (LIC1);Acier peint;L 40 × 40 × 4;77,2;40,0;40,0;2;0,000023;0,000047;0,18;0,37;
 CR8;Cornière soudée sous M7 (LE1);Acier peint;L 40 × 40 × 4;322,8;40,0;40,0;1;0,000098;0,000098;0,77;0,77;
 CR9;Cornière soudée sous M7 (LE2);Acier peint;L 40 × 40 × 4;169,1;40,0;40,0;1;0,000051;0,000051;0,40;0,40;
 CR10;Cornière soudée sous M8 (LIC1);Acier peint;L 40 × 40 × 4;81,2;40,0;40,0;1;0,000025;0,000025;0,19;0,19;
@@ -2683,23 +2589,9 @@ BA1;Balustre;Acier peint;12×40;808,0;40,0;12,0;62;0,000388;0,024046;3,04;188,76
 BA2;Balustre;Acier peint;12×40;908,0;40,0;12,0;67;0,000436;0,029201;3,42;229,23;
 PF1;Platine de pied de LI1;Acier peint;tôle 10;150,0;120,0;10,0;2;0,000177;0,000355;1,39;2,78;
 PH1;Platine de tête de LI2;Acier peint;tôle 10;325,0;120,0;10,0;2;0,000387;0,000775;3,04;6,08;
-Total;;;;;;;217;;0,415390;;1760,98;masse volumique à valider
+Total;;;;;;;217;;0,415390;;1760,97;masse volumique à valider
 
---- repères en double 2
-CR1 support-1-stringer-inner-1 cat=support matériau=steel-painted section=L 40 × 40 × 4 L=228.7844846039466 l=40 e=40 lames=1 appro=- volume=0.00006955048331959977 masse=0.5459712940588581
-CR1 support-1-stringer-outer-1 cat=support matériau=steel-painted section=L 40 × 40 × 4 L=228.78448460394665 l=40 e=40 lames=1 appro=- volume=0.00006955048331959978 masse=0.5459712940588582
-CR1 support-2-stringer-inner-1 cat=support matériau=steel-painted section=L 40 × 40 × 4 L=228.78448460394657 l=40 e=40 lames=1 appro=- volume=0.00006955048331959977 masse=0.5459712940588581
-CR1 support-2-stringer-outer-1 cat=support matériau=steel-painted section=L 40 × 40 × 4 L=228.78448460394668 l=40 e=40 lames=1 appro=- volume=0.00006955048331959979 masse=0.5459712940588584
-CR1 support-3-stringer-inner-1 cat=support matériau=steel-painted section=L 40 × 40 × 4 L=228.78448460394645 l=40 e=40 lames=1 appro=- volume=0.00006955048331959973 masse=0.5459712940588578
-CR1 support-3-stringer-outer-1 cat=support matériau=steel-painted section=L 40 × 40 × 4 L=228.78448460394634 l=40 e=40 lames=1 appro=- volume=0.00006955048331959968 masse=0.5459712940588575
-CR7 support-6-stringer-inner-j1 cat=support matériau=steel-painted section=L 40 × 40 × 4 L=77.1619518828998 l=40 e=40 lames=1 appro=- volume=0.000023457233372401542 masse=0.1841392819733521
-CR7 support-7-stringer-inner-j1 cat=support matériau=steel-painted section=L 40 × 40 × 4 L=77.52981145072386 l=40 e=40 lames=1 appro=- volume=0.000023569062681020053 masse=0.18501714204600742
-CR1 support-11-stringer-inner-2 cat=support matériau=steel-painted section=L 40 × 40 × 4 L=228.90627843345737 l=40 e=40 lames=1 appro=- volume=0.00006958750864377105 masse=0.5462619428536027
-CR1 support-11-stringer-outer-2 cat=support matériau=steel-painted section=L 40 × 40 × 4 L=228.90627843345737 l=40 e=40 lames=1 appro=- volume=0.00006958750864377105 masse=0.5462619428536027
-CR1 support-12-stringer-inner-2 cat=support matériau=steel-painted section=L 40 × 40 × 4 L=228.90627843345737 l=40 e=40 lames=1 appro=- volume=0.00006958750864377105 masse=0.5462619428536027
-CR1 support-12-stringer-outer-2 cat=support matériau=steel-painted section=L 40 × 40 × 4 L=228.90627843345737 l=40 e=40 lames=1 appro=- volume=0.00006958750864377105 masse=0.5462619428536027
-CR1 support-13-stringer-inner-2 cat=support matériau=steel-painted section=L 40 × 40 × 4 L=228.90627843345692 l=40 e=40 lames=1 appro=- volume=0.00006958750864377091 masse=0.5462619428536016
-CR1 support-13-stringer-outer-2 cat=support matériau=steel-painted section=L 40 × 40 × 4 L=228.90627843345692 l=40 e=40 lames=1 appro=- volume=0.00006958750864377091 masse=0.5462619428536016
+--- repères en double 0
 "
 `;
 
@@ -3259,7 +3151,7 @@ EC2-2.dxf ×1 EC2 [central-diaphragm-3]
   repère « EC2 » (42, 110.571514) dégagement 42 texte h 21 (42, 110.571514) (2 textes)
   rectMin L 221.143028 l 84 axe (0, 1) coin (84, 0)
   empreinte 62ff4ec9d39a0b1e
-  écart avec EC2.dxf géométrie 3.411e-13 textes [reference.description.params.index 2/3] différence réelle
+  écart avec EC2.dxf géométrie 0.000e+0 textes [reference.description.params.index 2/3] différence réelle
 EC2-3.dxf ×1 EC2 [central-diaphragm-4]
   calques {"CONTOUR":1,"INFO":4,"TEXTE":2}
   boîte {"min":{"x":0,"y":0},"max":{"x":84,"y":221.143028}}
@@ -3267,7 +3159,7 @@ EC2-3.dxf ×1 EC2 [central-diaphragm-4]
   repère « EC2 » (42, 110.571514) dégagement 42 texte h 21 (42, 110.571514) (2 textes)
   rectMin L 221.143028 l 84 axe (0, 1) coin (84, 0)
   empreinte 4967ec9a5271736c
-  écart avec EC2.dxf géométrie 3.411e-13 textes [reference.description.params.index 2/4] différence réelle
+  écart avec EC2.dxf géométrie 0.000e+0 textes [reference.description.params.index 2/4] différence réelle
 EC2-4.dxf ×1 EC2 [central-diaphragm-5]
   calques {"CONTOUR":1,"INFO":4,"TEXTE":2}
   boîte {"min":{"x":0,"y":0},"max":{"x":84,"y":221.143028}}
@@ -3275,7 +3167,7 @@ EC2-4.dxf ×1 EC2 [central-diaphragm-5]
   repère « EC2 » (42, 110.571514) dégagement 42 texte h 21 (42, 110.571514) (2 textes)
   rectMin L 221.143028 l 84 axe (0, 1) coin (84, 0)
   empreinte 9f8d9d1063bd22c1
-  écart avec EC2.dxf géométrie 3.411e-13 textes [reference.description.params.index 2/5] différence réelle
+  écart avec EC2.dxf géométrie 0.000e+0 textes [reference.description.params.index 2/5] différence réelle
 EC2-5.dxf ×1 EC2 [central-diaphragm-6]
   calques {"CONTOUR":1,"INFO":4,"TEXTE":2}
   boîte {"min":{"x":0,"y":0},"max":{"x":84,"y":221.143028}}
@@ -3283,7 +3175,7 @@ EC2-5.dxf ×1 EC2 [central-diaphragm-6]
   repère « EC2 » (42, 110.571514) dégagement 42 texte h 21 (42, 110.571514) (2 textes)
   rectMin L 221.143028 l 84 axe (0, 1) coin (84, 0)
   empreinte 7b5892d189982602
-  écart avec EC2.dxf géométrie 3.411e-13 textes [reference.description.params.index 2/6] différence réelle
+  écart avec EC2.dxf géométrie 0.000e+0 textes [reference.description.params.index 2/6] différence réelle
 EC2-6.dxf ×1 EC2 [central-diaphragm-7]
   calques {"CONTOUR":1,"INFO":4,"TEXTE":2}
   boîte {"min":{"x":0,"y":0},"max":{"x":84,"y":221.143028}}
@@ -3291,7 +3183,7 @@ EC2-6.dxf ×1 EC2 [central-diaphragm-7]
   repère « EC2 » (42, 110.571514) dégagement 42 texte h 21 (42, 110.571514) (2 textes)
   rectMin L 221.143028 l 84 axe (0, 1) coin (84, 0)
   empreinte add65037f4cbd242
-  écart avec EC2.dxf géométrie 5.684e-13 textes [reference.description.params.index 2/7] différence réelle
+  écart avec EC2.dxf géométrie 0.000e+0 textes [reference.description.params.index 2/7] différence réelle
 EC2-7.dxf ×1 EC2 [central-diaphragm-8]
   calques {"CONTOUR":1,"INFO":4,"TEXTE":2}
   boîte {"min":{"x":0,"y":0},"max":{"x":84,"y":221.143028}}
@@ -3299,7 +3191,7 @@ EC2-7.dxf ×1 EC2 [central-diaphragm-8]
   repère « EC2 » (42, 110.571514) dégagement 42 texte h 21 (42, 110.571514) (2 textes)
   rectMin L 221.143028 l 84 axe (0, 1) coin (84, 0)
   empreinte ff2a362f1e3a5868
-  écart avec EC2.dxf géométrie 5.684e-13 textes [reference.description.params.index 2/8] différence réelle
+  écart avec EC2.dxf géométrie 0.000e+0 textes [reference.description.params.index 2/8] différence réelle
 PF1.dxf ×1 PF1 [plate-foot-central]
   calques {"CONTOUR":5,"INFO":4,"TEXTE":2}
   boîte {"min":{"x":0,"y":0},"max":{"x":460.545773,"y":200}}
@@ -3379,7 +3271,7 @@ CO1-4.dxf ×1 CO1 [support-9-central]
   repère « CO1 » (400, 61) dégagement 61 texte h 30 (400, 61) (2 textes)
   rectMin L 800 l 122 axe (1, 0) coin (0, 0)
   empreinte b69150e8dda37d94
-  écart avec CO1.dxf géométrie 2.274e-13 textes [reference.description.params.tread M1/M9] différence réelle
+  écart avec CO1.dxf géométrie 0.000e+0 textes [reference.description.params.tread M1/M9] différence réelle
 CO1-5.dxf ×1 CO1 [support-10-central]
   calques {"CONTOUR":1,"INFO":4,"TEXTE":2}
   boîte {"min":{"x":0,"y":0},"max":{"x":800,"y":122}}
@@ -3387,7 +3279,7 @@ CO1-5.dxf ×1 CO1 [support-10-central]
   repère « CO1 » (400, 61) dégagement 61 texte h 30 (400, 61) (2 textes)
   rectMin L 800 l 122 axe (1, 0) coin (0, 0)
   empreinte 2a79393c9b31184d
-  écart avec CO1.dxf géométrie 2.274e-13 textes [reference.description.params.tread M1/M10] différence réelle
+  écart avec CO1.dxf géométrie 0.000e+0 textes [reference.description.params.tread M1/M10] différence réelle
 CO1-6.dxf ×1 CO1 [support-11-central]
   calques {"CONTOUR":1,"INFO":4,"TEXTE":2}
   boîte {"min":{"x":0,"y":0},"max":{"x":800,"y":122}}
@@ -3395,7 +3287,7 @@ CO1-6.dxf ×1 CO1 [support-11-central]
   repère « CO1 » (400, 61) dégagement 61 texte h 30 (400, 61) (2 textes)
   rectMin L 800 l 122 axe (1, 0) coin (0, 0)
   empreinte 14e3eeeccb88c3ae
-  écart avec CO1.dxf géométrie 4.547e-13 textes [reference.description.params.tread M1/M11] différence réelle
+  écart avec CO1.dxf géométrie 0.000e+0 textes [reference.description.params.tread M1/M11] différence réelle
 CO1-7.dxf ×1 CO1 [support-12-central]
   calques {"CONTOUR":1,"INFO":4,"TEXTE":2}
   boîte {"min":{"x":0,"y":0},"max":{"x":800,"y":122}}
@@ -3462,7 +3354,7 @@ AP2-2.dxf ×1 AP2 [support-6-central-bearing]
   repère « AP2 » (399.633184, 30) dégagement 30 texte h 15 (399.633184, 30) (2 textes)
   rectMin L 799.266367 l 60 axe (1, 0) coin (0, 0)
   empreinte 32a9881fc5cf0369
-  écart avec AP2.dxf géométrie 1.137e-13 textes [reference.description.params.tread M2/M6] différence réelle
+  écart avec AP2.dxf géométrie 0.000e+0 textes [reference.description.params.tread M2/M6] différence réelle
 AP1-2.dxf ×1 AP1 [support-7-central-bearing]
   calques {"CONTOUR":1,"INFO":4,"TEXTE":2}
   boîte {"min":{"x":0,"y":0},"max":{"x":800,"y":60}}
@@ -4416,9 +4308,8 @@ groupe steel-painted thickness 8 {"quantity":5,"lengthM":9.917963,"volumeM3":0.0
 groupe steel-painted thickness 10 {"quantity":4,"lengthM":0.95,"volumeM3":0.00114,"massKg":8.866593,"massNotes":[]}
   PF1 ×2 150×120×10 1.392398 - stock
   PH1 ×2 325×120×10 3.040898 - stock
-groupe steel-painted section « L 40 × 40 × 4 » {"quantity":29,"lengthM":6.160755,"massKg":14.702026,"massNotes":[]}
-  CR1 ×6 203.435518×40×40 0.485479 - stock
-  CR1 ×6 203.43552×40×40 0.485479 - stock
+groupe steel-painted section « L 40 × 40 × 4 » {"quantity":29,"lengthM":6.160647,"massKg":14.701769,"massNotes":[]}
+  CR1 ×12 203.435518×40×40 0.485479 - stock
   CR2 ×1 244.453585×40×40 0.583364 - stock
   CR3 ×1 317.826976×40×40 0.758462 - stock
   CR4 ×1 418.296845×40×40 0.998224 - stock
@@ -4430,8 +4321,7 @@ groupe steel-painted section « L 40 × 40 × 4 » {"quantity":29,"lengthM":6.16
   CR10 ×1 193.435518×40×40 0.461615 - stock
   CR11 ×1 162.463028×40×40 0.387702 - stock
   CR12 ×1 95.261924×40×40 0.227333 - stock
-  CR13 ×1 69.607046×40×40 0.16611 - stock
-  CR13 ×1 69.71493×40×40 0.166368 - stock
+  CR13 ×2 69.607046×40×40 0.16611 - stock
   CR14 ×1 64.177763×40×40 0.153154 - stock
   CR15 ×1 91.84882×40×40 0.219188 - stock
   CR16 ×1 158.956739×40×40 0.379334 - stock
@@ -4485,21 +4375,7 @@ groupe glass section « ép. 18 » {"quantity":15,"lengthM":13.583821,"massKg":5
   PN8 ×6 890×908×18 36.3654 - stock
   PN9 ×1 1320×908×18 53.9352 - stock
   PN10 ×1 30×908×18 1.2258 - stock
---- repères en double 2
-CR1 support-1-stringer-outer-1 matériau=steel-painted section=L 40 × 40 × 4 L=203.43551750686945 l=40 e=40 lames=1 masse=0.4854785189783933 appro=-
-CR1 support-9-stringer-outer-2 matériau=steel-painted section=L 40 × 40 × 4 L=203.43551750686947 l=40 e=40 lames=1 masse=0.4854785189783933 appro=-
-CR1 support-10-stringer-outer-2 matériau=steel-painted section=L 40 × 40 × 4 L=203.43551750686925 l=40 e=40 lames=1 masse=0.4854785189783927 appro=-
-CR1 support-11-stringer-outer-2 matériau=steel-painted section=L 40 × 40 × 4 L=203.43551750686947 l=40 e=40 lames=1 masse=0.4854785189783933 appro=-
-CR1 support-12-stringer-outer-2 matériau=steel-painted section=L 40 × 40 × 4 L=203.43551750686947 l=40 e=40 lames=1 masse=0.4854785189783933 appro=-
-CR1 support-13-stringer-outer-2 matériau=steel-painted section=L 40 × 40 × 4 L=203.43551750686947 l=40 e=40 lames=1 masse=0.4854785189783933 appro=-
-CR1 support-1-stringer-inner-curved-t1 matériau=steel-painted section=L 40 × 40 × 4 L=203.43551950063556 l=40 e=40 lames=1 masse=0.4854785237363168 appro=-
-CR13 support-4-stringer-inner-curved-t4 matériau=steel-painted section=L 40 × 40 × 4 L=69.6070462100704 l=40 e=40 lames=1 masse=0.166110255075712 appro=-
-CR13 support-6-stringer-inner-curved-t6 matériau=steel-painted section=L 40 × 40 × 4 L=69.71492972826003 l=40 e=40 lames=1 masse=0.16636770830351974 appro=-
-CR1 support-9-stringer-inner-curved-t9 matériau=steel-painted section=L 40 × 40 × 4 L=203.43551950063556 l=40 e=40 lames=1 masse=0.4854785237363168 appro=-
-CR1 support-10-stringer-inner-curved-t10 matériau=steel-painted section=L 40 × 40 × 4 L=203.43551950063556 l=40 e=40 lames=1 masse=0.4854785237363168 appro=-
-CR1 support-11-stringer-inner-curved-t11 matériau=steel-painted section=L 40 × 40 × 4 L=203.43551950063556 l=40 e=40 lames=1 masse=0.4854785237363168 appro=-
-CR1 support-12-stringer-inner-curved-t12 matériau=steel-painted section=L 40 × 40 × 4 L=203.43551950063556 l=40 e=40 lames=1 masse=0.4854785237363168 appro=-
-CR1 support-13-stringer-inner-curved-t13 matériau=steel-painted section=L 40 × 40 × 4 L=203.43551950063556 l=40 e=40 lames=1 masse=0.4854785237363168 appro=-
+--- repères en double 0
 "
 `;
 
@@ -4511,8 +4387,7 @@ LD2;Limon de jour débillardé, tronçon 2/3;Acier peint;tôle 8 (S235) roulée,
 LD3;Limon de jour débillardé, tronçon 3/3;Acier peint;tôle 8 (S235) roulée, largeur 262;1972,4;261,3;8,0;1;0,003720;0,003720;29,20;29,20;
 LE1;Limon mural acier, volée 1;Acier peint;tôle 8 (S235), largeur 394;2129,9;393,0;8,0;1;0,004722;0,004722;37,07;37,07;
 LE2;Limon mural acier, volée 2;Acier peint;tôle 8 (S235), largeur 473;3442,1;472,4;8,0;1;0,007332;0,007332;57,56;57,56;
-CR1;Cornière soudée sous M1 (LE1);Acier peint;L 40 × 40 × 4;203,4;40,0;40,0;6;0,000062;0,000371;0,49;2,91;
-CR1;Cornière soudée sous M1 (LD1);Acier peint;L 40 × 40 × 4;203,4;40,0;40,0;6;0,000062;0,000371;0,49;2,91;
+CR1;Cornière soudée sous M1 (LE1);Acier peint;L 40 × 40 × 4;203,4;40,0;40,0;12;0,000062;0,000742;0,49;5,83;
 CR2;Cornière soudée sous M2 (LE1);Acier peint;L 40 × 40 × 4;244,5;40,0;40,0;1;0,000074;0,000074;0,58;0,58;
 CR3;Cornière soudée sous M3 (LE1);Acier peint;L 40 × 40 × 4;317,8;40,0;40,0;1;0,000097;0,000097;0,76;0,76;
 CR4;Cornière soudée sous M4 (LE1);Acier peint;L 40 × 40 × 4;418,3;40,0;40,0;1;0,000127;0,000127;1,00;1,00;
@@ -4524,8 +4399,7 @@ CR9;Cornière soudée sous M8 (LE2);Acier peint;L 40 × 40 × 4;248,1;40,0;40,0;
 CR10;Cornière soudée sous M14 (LE2);Acier peint;L 40 × 40 × 4;193,4;40,0;40,0;1;0,000059;0,000059;0,46;0,46;
 CR11;Cornière soudée sous M2 (LD1);Acier peint;L 40 × 40 × 4;162,5;40,0;40,0;1;0,000049;0,000049;0,39;0,39;
 CR12;Cornière soudée sous M3 (LD2);Acier peint;L 40 × 40 × 4;95,3;40,0;40,0;1;0,000029;0,000029;0,23;0,23;
-CR13;Cornière soudée sous M4 (LD2);Acier peint;L 40 × 40 × 4;69,6;40,0;40,0;1;0,000021;0,000021;0,17;0,17;
-CR13;Cornière soudée sous M6 (LD2);Acier peint;L 40 × 40 × 4;69,7;40,0;40,0;1;0,000021;0,000021;0,17;0,17;
+CR13;Cornière soudée sous M4 (LD2);Acier peint;L 40 × 40 × 4;69,6;40,0;40,0;2;0,000021;0,000042;0,17;0,33;
 CR14;Cornière soudée sous M5 (LD2);Acier peint;L 40 × 40 × 4;64,2;40,0;40,0;1;0,000020;0,000020;0,15;0,15;
 CR15;Cornière soudée sous M7 (LD2);Acier peint;L 40 × 40 × 4;91,8;40,0;40,0;1;0,000028;0,000028;0,22;0,22;
 CR16;Cornière soudée sous M8 (LD2);Acier peint;L 40 × 40 × 4;159,0;40,0;40,0;1;0,000048;0,000048;0,38;0,38;
@@ -4578,21 +4452,7 @@ PF1;Platine de pied de LE1;Acier peint;tôle 10;150,0;120,0;10,0;2;0,000177;0,00
 PH1;Platine de tête de LE2;Acier peint;tôle 10;325,0;120,0;10,0;2;0,000387;0,000775;3,04;6,08;
 Total;;;;;;;103;;0,552094;;1851,41;masse volumique à valider
 
---- repères en double 2
-CR1 support-1-stringer-outer-1 cat=support matériau=steel-painted section=L 40 × 40 × 4 L=203.43551750686945 l=40 e=40 lames=1 appro=- volume=0.00006184439732208832 masse=0.4854785189783933
-CR1 support-9-stringer-outer-2 cat=support matériau=steel-painted section=L 40 × 40 × 4 L=203.43551750686947 l=40 e=40 lames=1 appro=- volume=0.00006184439732208832 masse=0.4854785189783933
-CR1 support-10-stringer-outer-2 cat=support matériau=steel-painted section=L 40 × 40 × 4 L=203.43551750686925 l=40 e=40 lames=1 appro=- volume=0.00006184439732208825 masse=0.4854785189783927
-CR1 support-11-stringer-outer-2 cat=support matériau=steel-painted section=L 40 × 40 × 4 L=203.43551750686947 l=40 e=40 lames=1 appro=- volume=0.00006184439732208832 masse=0.4854785189783933
-CR1 support-12-stringer-outer-2 cat=support matériau=steel-painted section=L 40 × 40 × 4 L=203.43551750686947 l=40 e=40 lames=1 appro=- volume=0.00006184439732208832 masse=0.4854785189783933
-CR1 support-13-stringer-outer-2 cat=support matériau=steel-painted section=L 40 × 40 × 4 L=203.43551750686947 l=40 e=40 lames=1 appro=- volume=0.00006184439732208832 masse=0.4854785189783933
-CR1 support-1-stringer-inner-curved-t1 cat=support matériau=steel-painted section=L 40 × 40 × 4 L=203.43551950063556 l=40 e=40 lames=1 appro=- volume=0.00006184439792819322 masse=0.4854785237363168
-CR13 support-4-stringer-inner-curved-t4 cat=support matériau=steel-painted section=L 40 × 40 × 4 L=69.6070462100704 l=40 e=40 lames=1 appro=- volume=0.0000211605420478614 masse=0.166110255075712
-CR13 support-6-stringer-inner-curved-t6 cat=support matériau=steel-painted section=L 40 × 40 × 4 L=69.71492972826003 l=40 e=40 lames=1 appro=- volume=0.00002119333863739105 masse=0.16636770830351974
-CR1 support-9-stringer-inner-curved-t9 cat=support matériau=steel-painted section=L 40 × 40 × 4 L=203.43551950063556 l=40 e=40 lames=1 appro=- volume=0.00006184439792819322 masse=0.4854785237363168
-CR1 support-10-stringer-inner-curved-t10 cat=support matériau=steel-painted section=L 40 × 40 × 4 L=203.43551950063556 l=40 e=40 lames=1 appro=- volume=0.00006184439792819322 masse=0.4854785237363168
-CR1 support-11-stringer-inner-curved-t11 cat=support matériau=steel-painted section=L 40 × 40 × 4 L=203.43551950063556 l=40 e=40 lames=1 appro=- volume=0.00006184439792819322 masse=0.4854785237363168
-CR1 support-12-stringer-inner-curved-t12 cat=support matériau=steel-painted section=L 40 × 40 × 4 L=203.43551950063556 l=40 e=40 lames=1 appro=- volume=0.00006184439792819322 masse=0.4854785237363168
-CR1 support-13-stringer-inner-curved-t13 cat=support matériau=steel-painted section=L 40 × 40 × 4 L=203.43551950063556 l=40 e=40 lames=1 appro=- volume=0.00006184439792819322 masse=0.4854785237363168
+--- repères en double 0
 "
 `;
 
@@ -5912,11 +5772,10 @@ LE2.dxf ×1 LE2 [stringer-outer-2]
 exports[`sorties de fabrication des exemples (stable-tiebreaks, S1) > exemple j3c-acceptance-01-upn > fiche de débit 1`] = `
 "
 groupes 5
-groupe steel-painted section « L 40 × 40 × 4 » {"quantity":28,"lengthM":4.329733,"massKg":10.332474,"massNotes":[]}
+groupe steel-painted section « L 40 × 40 × 4 » {"quantity":28,"lengthM":4.329199,"massKg":10.331201,"massNotes":[]}
   CR1 ×1 71.770521×40×40 0.171273 - stock
   CR2 ×1 236.765147×40×40 0.565016 - stock
-  CR3 ×1 72.423664×40×40 0.172832 - stock
-  CR3 ×1 72.728352×40×40 0.173559 - stock
+  CR3 ×2 72.423664×40×40 0.172832 - stock
   CR4 ×1 273.364528×40×40 0.652357 - stock
   CR5 ×1 308.916723×40×40 0.737199 - stock
   CR6 ×1 346.134074×40×40 0.826014 - stock
@@ -5924,8 +5783,7 @@ groupe steel-painted section « L 40 × 40 × 4 » {"quantity":28,"lengthM":4.32
   CR8 ×1 175.33426×40×40 0.418418 - stock
   CR9 ×1 73.156322×40×40 0.17458 - stock
   CR10 ×1 151.466188×40×40 0.361459 - stock
-  CR11 ×1 82.641854×40×40 0.197217 - stock
-  CR11 ×1 82.413352×40×40 0.196671 - stock
+  CR11 ×2 82.413352×40×40 0.196671 - stock
   CR12 ×3 200.022752×40×40 0.477334 - stock
   CR13 ×1 50.502783×40×40 0.12052 - stock
   CR14 ×1 66.458068×40×40 0.158596 - stock
@@ -5977,11 +5835,7 @@ groupe wood-oak thickness 40 {"quantity":14,"lengthM":12.344676,"volumeM3":0.152
   M12 ×1 800×250.022752×40 5.60051 - stock
   M13 ×1 800×250.022752×40 5.60051 - stock
   M14 ×1 800×250.022752×40 5.60051 - stock
---- repères en double 2
-CR3 support-2-stringer-inner-1 matériau=steel-painted section=L 40 × 40 × 4 L=72.42366439925999 l=40 e=40 lames=1 masse=0.17283183272239405 appro=-
-CR3 support-3-stringer-inner-1 matériau=steel-painted section=L 40 × 40 × 4 L=72.7283517680138 l=40 e=40 lames=1 masse=0.17355893865918812 appro=-
-CR11 support-6-stringer-outer-2 matériau=steel-painted section=L 40 × 40 × 4 L=82.64185411675999 l=40 e=40 lames=1 masse=0.19721652066423603 appro=-
-CR11 support-9-stringer-outer-2 matériau=steel-painted section=L 40 × 40 × 4 L=82.41335159579421 l=40 e=40 lames=1 masse=0.1966712222482033 appro=-
+--- repères en double 0
 "
 `;
 
@@ -5994,8 +5848,7 @@ LI1;Limon de jour UPN 240, volée 1;Acier peint;UPN 240 (S235);917,4;240,0;85,0;
 LI2;Limon de jour UPN 240, volée 2;Acier peint;UPN 240 (S235);2889,4;240,0;85,0;1;0,012222;0,012222;95,94;95,94;
 CR1;Cornière soudée sous M1 (LI1);Acier peint;L 40 × 40 × 4;71,8;40,0;40,0;1;0,000022;0,000022;0,17;0,17;
 CR2;Cornière soudée sous M1 (LE1);Acier peint;L 40 × 40 × 4;236,8;40,0;40,0;1;0,000072;0,000072;0,57;0,57;
-CR3;Cornière soudée sous M2 (LI1);Acier peint;L 40 × 40 × 4;72,4;40,0;40,0;1;0,000022;0,000022;0,17;0,17;
-CR3;Cornière soudée sous M3 (LI1);Acier peint;L 40 × 40 × 4;72,7;40,0;40,0;1;0,000022;0,000022;0,17;0,17;
+CR3;Cornière soudée sous M2 (LI1);Acier peint;L 40 × 40 × 4;72,4;40,0;40,0;2;0,000022;0,000044;0,17;0,35;
 CR4;Cornière soudée sous M2 (LE1);Acier peint;L 40 × 40 × 4;273,4;40,0;40,0;1;0,000083;0,000083;0,65;0,65;
 CR5;Cornière soudée sous M3 (LE1);Acier peint;L 40 × 40 × 4;308,9;40,0;40,0;1;0,000094;0,000094;0,74;0,74;
 CR6;Cornière soudée sous M4 (LE2);Acier peint;L 40 × 40 × 4;346,1;40,0;40,0;1;0,000105;0,000105;0,83;0,83;
@@ -6003,8 +5856,7 @@ CR7;Cornière soudée sous M4 (PT1);Acier peint;L 40 × 40 × 4;74,5;40,0;40,0;1
 CR8;Cornière soudée sous M5 (LE2);Acier peint;L 40 × 40 × 4;175,3;40,0;40,0;1;0,000053;0,000053;0,42;0,42;
 CR9;Cornière soudée sous M5 (PT1);Acier peint;L 40 × 40 × 4;73,2;40,0;40,0;1;0,000022;0,000022;0,17;0,17;
 CR10;Cornière soudée sous M6 (LI2);Acier peint;L 40 × 40 × 4;151,5;40,0;40,0;1;0,000046;0,000046;0,36;0,36;
-CR11;Cornière soudée sous M6 (LE2);Acier peint;L 40 × 40 × 4;82,6;40,0;40,0;1;0,000025;0,000025;0,20;0,20;
-CR11;Cornière soudée sous M9 (LE2);Acier peint;L 40 × 40 × 4;82,4;40,0;40,0;1;0,000025;0,000025;0,20;0,20;
+CR11;Cornière soudée sous M6 (LE2);Acier peint;L 40 × 40 × 4;82,4;40,0;40,0;2;0,000025;0,000050;0,20;0,39;
 CR12;Cornière soudée sous M7 (LI2);Acier peint;L 40 × 40 × 4;200,0;40,0;40,0;3;0,000061;0,000182;0,48;1,43;
 CR13;Cornière soudée sous M7 (LE2);Acier peint;L 40 × 40 × 4;50,5;40,0;40,0;1;0,000015;0,000015;0,12;0,12;
 CR14;Cornière soudée sous M8 (LE2);Acier peint;L 40 × 40 × 4;66,5;40,0;40,0;1;0,000020;0,000020;0,16;0,16;
@@ -6050,11 +5902,7 @@ CM15;Contremarche 15;Chêne;;800,0;180,0;20,0;1;0,002880;0,002880;2,02;2,02;mass
 PT1;Poteau d'angle acier, tournant 1;Acier peint;tube carré 125 × 125 × 4;1103,4;125,0;125,0;1;0,002136;0,002136;16,77;16,77;
 Total;;;;;;;62;;0,205643;;454,23;masse volumique à valider
 
---- repères en double 2
-CR3 support-2-stringer-inner-1 cat=support matériau=steel-painted section=L 40 × 40 × 4 L=72.42366439925999 l=40 e=40 lames=1 appro=- volume=0.000022016793977375038 masse=0.17283183272239405
-CR3 support-3-stringer-inner-1 cat=support matériau=steel-painted section=L 40 × 40 × 4 L=72.7283517680138 l=40 e=40 lames=1 appro=- volume=0.000022109418937476193 masse=0.17355893865918812
-CR11 support-6-stringer-outer-2 cat=support matériau=steel-painted section=L 40 × 40 × 4 L=82.64185411675999 l=40 e=40 lames=1 appro=- volume=0.000025123123651495035 masse=0.19721652066423603
-CR11 support-9-stringer-outer-2 cat=support matériau=steel-painted section=L 40 × 40 × 4 L=82.41335159579421 l=40 e=40 lames=1 appro=- volume=0.00002505365888512144 masse=0.1966712222482033
+--- repères en double 0
 "
 `;
 
@@ -6798,8 +6646,7 @@ groupe steel-painted thickness 10 {"quantity":4,"lengthM":0.95,"volumeM3":0.0011
   PF1 ×2 150×120×10 1.392398 - stock
   PH1 ×2 325×120×10 3.040898 - stock
 groupe steel-painted section « L 40 × 40 × 4 » {"quantity":28,"lengthM":6.130468,"massKg":14.629748,"massNotes":[]}
-  CR1 ×6 204.968388×40×40 0.489137 - stock
-  CR1 ×6 204.96839×40×40 0.489137 - stock
+  CR1 ×12 204.968388×40×40 0.489137 - stock
   CR2 ×1 260.238373×40×40 0.621033 - stock
   CR3 ×1 349.814006×40×40 0.834796 - stock
   CR4 ×1 489.094121×40×40 1.167174 - stock
@@ -6847,19 +6694,7 @@ groupe wood-oak thickness 40 {"quantity":14,"lengthM":13.988218,"volumeM3":0.182
   M12 ×1 900×254.968388×40 6.425203 - stock
   M13 ×1 900×254.968388×40 6.425203 - stock
   M14 ×1 900×254.968388×40 6.425203 - stock
---- repères en double 1
-CR1 support-1-stringer-outer-1 matériau=steel-painted section=L 40 × 40 × 4 L=204.96838776831626 l=40 e=40 lames=1 masse=0.4891365605703099 appro=-
-CR1 support-2-stringer-outer-1 matériau=steel-painted section=L 40 × 40 × 4 L=204.9683877683163 l=40 e=40 lames=1 masse=0.48913656057031 appro=-
-CR1 support-10-stringer-outer-2 matériau=steel-painted section=L 40 × 40 × 4 L=204.96838776831646 l=40 e=40 lames=1 masse=0.48913656057031046 appro=-
-CR1 support-11-stringer-outer-2 matériau=steel-painted section=L 40 × 40 × 4 L=204.968387768316 l=40 e=40 lames=1 masse=0.4891365605703093 appro=-
-CR1 support-12-stringer-outer-2 matériau=steel-painted section=L 40 × 40 × 4 L=204.96838776831646 l=40 e=40 lames=1 masse=0.48913656057031046 appro=-
-CR1 support-13-stringer-outer-2 matériau=steel-painted section=L 40 × 40 × 4 L=204.968387768316 l=40 e=40 lames=1 masse=0.4891365605703093 appro=-
-CR1 support-1-stringer-inner-curved-t1 matériau=steel-painted section=L 40 × 40 × 4 L=204.96838976163417 l=40 e=40 lames=1 masse=0.48913656532716376 appro=-
-CR1 support-2-stringer-inner-curved-t2 matériau=steel-painted section=L 40 × 40 × 4 L=204.96838976163417 l=40 e=40 lames=1 masse=0.48913656532716376 appro=-
-CR1 support-10-stringer-inner-curved-t10 matériau=steel-painted section=L 40 × 40 × 4 L=204.96838976163417 l=40 e=40 lames=1 masse=0.48913656532716376 appro=-
-CR1 support-11-stringer-inner-curved-t11 matériau=steel-painted section=L 40 × 40 × 4 L=204.96838976163417 l=40 e=40 lames=1 masse=0.48913656532716376 appro=-
-CR1 support-12-stringer-inner-curved-t12 matériau=steel-painted section=L 40 × 40 × 4 L=204.96838976163417 l=40 e=40 lames=1 masse=0.48913656532716376 appro=-
-CR1 support-13-stringer-inner-curved-t13 matériau=steel-painted section=L 40 × 40 × 4 L=204.96838976163417 l=40 e=40 lames=1 masse=0.48913656532716376 appro=-
+--- repères en double 0
 "
 `;
 
@@ -6871,8 +6706,7 @@ LD2;Limon de jour débillardé, tronçon 2/3;Acier peint;tôle 8 (S235) roulée,
 LD3;Limon de jour débillardé, tronçon 3/3;Acier peint;tôle 8 (S235) roulée, largeur 311;2175,4;310,9;8,0;1;0,004024;0,004024;31,59;31,59;
 LE1;Limon mural acier, volée 1;Acier peint;tôle 8 (S235), largeur 396;2172,6;395,9;8,0;1;0,004721;0,004721;37,06;37,06;
 LE2;Limon mural acier, volée 2;Acier peint;tôle 8 (S235), largeur 485;3395,7;484,1;8,0;1;0,007332;0,007332;57,56;57,56;
-CR1;Cornière soudée sous M1 (LE1);Acier peint;L 40 × 40 × 4;205,0;40,0;40,0;6;0,000062;0,000374;0,49;2,93;
-CR1;Cornière soudée sous M1 (LD1);Acier peint;L 40 × 40 × 4;205,0;40,0;40,0;6;0,000062;0,000374;0,49;2,93;
+CR1;Cornière soudée sous M1 (LE1);Acier peint;L 40 × 40 × 4;205,0;40,0;40,0;12;0,000062;0,000748;0,49;5,87;
 CR2;Cornière soudée sous M3 (LE1);Acier peint;L 40 × 40 × 4;260,2;40,0;40,0;1;0,000079;0,000079;0,62;0,62;
 CR3;Cornière soudée sous M4 (LE1);Acier peint;L 40 × 40 × 4;349,8;40,0;40,0;1;0,000106;0,000106;0,83;0,83;
 CR4;Cornière soudée sous M5 (LE1);Acier peint;L 40 × 40 × 4;489,1;40,0;40,0;1;0,000149;0,000149;1,17;1,17;
@@ -6920,21 +6754,9 @@ CM14;Contremarche 14;Chêne;;900,0;180,0;20,0;1;0,003240;0,003240;2,27;2,27;mass
 CM15;Contremarche 15;Chêne;;900,0;180,0;20,0;1;0,003240;0,003240;2,27;2,27;masse volumique à valider
 PF1;Platine de pied de LE1;Acier peint;tôle 10;150,0;120,0;10,0;2;0,000177;0,000355;1,39;2,78;
 PH1;Platine de tête de LE2;Acier peint;tôle 10;325,0;120,0;10,0;2;0,000387;0,000775;3,04;6,08;
-Total;;;;;;;66;;0,213122;;307,27;masse volumique à valider
+Total;;;;;;;66;;0,213122;;307,28;masse volumique à valider
 
---- repères en double 1
-CR1 support-1-stringer-outer-1 cat=support matériau=steel-painted section=L 40 × 40 × 4 L=204.96838776831626 l=40 e=40 lames=1 appro=- volume=0.00006231038988156814 masse=0.4891365605703099
-CR1 support-2-stringer-outer-1 cat=support matériau=steel-painted section=L 40 × 40 × 4 L=204.9683877683163 l=40 e=40 lames=1 appro=- volume=0.00006231038988156816 masse=0.48913656057031
-CR1 support-10-stringer-outer-2 cat=support matériau=steel-painted section=L 40 × 40 × 4 L=204.96838776831646 l=40 e=40 lames=1 appro=- volume=0.00006231038988156821 masse=0.48913656057031046
-CR1 support-11-stringer-outer-2 cat=support matériau=steel-painted section=L 40 × 40 × 4 L=204.968387768316 l=40 e=40 lames=1 appro=- volume=0.00006231038988156806 masse=0.4891365605703093
-CR1 support-12-stringer-outer-2 cat=support matériau=steel-painted section=L 40 × 40 × 4 L=204.96838776831646 l=40 e=40 lames=1 appro=- volume=0.00006231038988156821 masse=0.48913656057031046
-CR1 support-13-stringer-outer-2 cat=support matériau=steel-painted section=L 40 × 40 × 4 L=204.968387768316 l=40 e=40 lames=1 appro=- volume=0.00006231038988156806 masse=0.4891365605703093
-CR1 support-1-stringer-inner-curved-t1 cat=support matériau=steel-painted section=L 40 × 40 × 4 L=204.96838976163417 l=40 e=40 lames=1 appro=- volume=0.00006231039048753679 masse=0.48913656532716376
-CR1 support-2-stringer-inner-curved-t2 cat=support matériau=steel-painted section=L 40 × 40 × 4 L=204.96838976163417 l=40 e=40 lames=1 appro=- volume=0.00006231039048753679 masse=0.48913656532716376
-CR1 support-10-stringer-inner-curved-t10 cat=support matériau=steel-painted section=L 40 × 40 × 4 L=204.96838976163417 l=40 e=40 lames=1 appro=- volume=0.00006231039048753679 masse=0.48913656532716376
-CR1 support-11-stringer-inner-curved-t11 cat=support matériau=steel-painted section=L 40 × 40 × 4 L=204.96838976163417 l=40 e=40 lames=1 appro=- volume=0.00006231039048753679 masse=0.48913656532716376
-CR1 support-12-stringer-inner-curved-t12 cat=support matériau=steel-painted section=L 40 × 40 × 4 L=204.96838976163417 l=40 e=40 lames=1 appro=- volume=0.00006231039048753679 masse=0.48913656532716376
-CR1 support-13-stringer-inner-curved-t13 cat=support matériau=steel-painted section=L 40 × 40 × 4 L=204.96838976163417 l=40 e=40 lames=1 appro=- volume=0.00006231039048753679 masse=0.48913656532716376
+--- repères en double 0
 "
 `;
 
@@ -9392,7 +9214,7 @@ EC1-2.dxf ×1 EC1 [central-diaphragm-2]
   repère « EC1 » (42, 105.657306) dégagement 42 texte h 21 (42, 105.657306) (2 textes)
   rectMin L 211.314611 l 84 axe (0, 1) coin (84, 0)
   empreinte deb556a04bab000d
-  écart avec EC1.dxf géométrie 2.274e-13 textes [reference.description.params.index 1/2] différence réelle
+  écart avec EC1.dxf géométrie 0.000e+0 textes [reference.description.params.index 1/2] différence réelle
 EC1-3.dxf ×1 EC1 [central-diaphragm-3]
   calques {"CONTOUR":1,"INFO":4,"TEXTE":2}
   boîte {"min":{"x":0,"y":0},"max":{"x":84,"y":211.314611}}
@@ -9400,7 +9222,7 @@ EC1-3.dxf ×1 EC1 [central-diaphragm-3]
   repère « EC1 » (42, 105.657306) dégagement 42 texte h 21 (42, 105.657306) (2 textes)
   rectMin L 211.314611 l 84 axe (0, 1) coin (84, 0)
   empreinte f09bfabe60abb881
-  écart avec EC1.dxf géométrie 2.274e-13 textes [reference.description.params.index 1/3] différence réelle
+  écart avec EC1.dxf géométrie 0.000e+0 textes [reference.description.params.index 1/3] différence réelle
 EC1-4.dxf ×1 EC1 [central-diaphragm-4]
   calques {"CONTOUR":1,"INFO":4,"TEXTE":2}
   boîte {"min":{"x":0,"y":0},"max":{"x":84,"y":211.314611}}
@@ -9408,7 +9230,7 @@ EC1-4.dxf ×1 EC1 [central-diaphragm-4]
   repère « EC1 » (42, 105.657306) dégagement 42 texte h 21 (42, 105.657306) (2 textes)
   rectMin L 211.314611 l 84 axe (0, 1) coin (84, 0)
   empreinte b757b364175ed742
-  écart avec EC1.dxf géométrie 3.411e-13 textes [reference.description.params.index 1/4] différence réelle
+  écart avec EC1.dxf géométrie 0.000e+0 textes [reference.description.params.index 1/4] différence réelle
 EC1-5.dxf ×1 EC1 [central-diaphragm-5]
   calques {"CONTOUR":1,"INFO":4,"TEXTE":2}
   boîte {"min":{"x":0,"y":0},"max":{"x":84,"y":211.314611}}
@@ -9416,7 +9238,7 @@ EC1-5.dxf ×1 EC1 [central-diaphragm-5]
   repère « EC1 » (42, 105.657306) dégagement 42 texte h 21 (42, 105.657306) (2 textes)
   rectMin L 211.314611 l 84 axe (0, 1) coin (84, 0)
   empreinte bd306ed2cd14f901
-  écart avec EC1.dxf géométrie 6.821e-13 textes [reference.description.params.index 1/5] différence réelle
+  écart avec EC1.dxf géométrie 0.000e+0 textes [reference.description.params.index 1/5] différence réelle
 EC1-6.dxf ×1 EC1 [central-diaphragm-6]
   calques {"CONTOUR":1,"INFO":4,"TEXTE":2}
   boîte {"min":{"x":0,"y":0},"max":{"x":84,"y":211.314611}}
@@ -9424,7 +9246,7 @@ EC1-6.dxf ×1 EC1 [central-diaphragm-6]
   repère « EC1 » (42, 105.657306) dégagement 42 texte h 21 (42, 105.657306) (2 textes)
   rectMin L 211.314611 l 84 axe (0, 1) coin (84, 0)
   empreinte 9aa42a81b459d295
-  écart avec EC1.dxf géométrie 6.821e-13 textes [reference.description.params.index 1/6] différence réelle
+  écart avec EC1.dxf géométrie 0.000e+0 textes [reference.description.params.index 1/6] différence réelle
 EC1-7.dxf ×1 EC1 [central-diaphragm-7]
   calques {"CONTOUR":1,"INFO":4,"TEXTE":2}
   boîte {"min":{"x":0,"y":0},"max":{"x":84,"y":211.314611}}
@@ -9432,7 +9254,7 @@ EC1-7.dxf ×1 EC1 [central-diaphragm-7]
   repère « EC1 » (42, 105.657306) dégagement 42 texte h 21 (42, 105.657306) (2 textes)
   rectMin L 211.314611 l 84 axe (0, 1) coin (84, 0)
   empreinte f9a9acef3051bfc3
-  écart avec EC1.dxf géométrie 2.274e-13 textes [reference.description.params.index 1/7] différence réelle
+  écart avec EC1.dxf géométrie 0.000e+0 textes [reference.description.params.index 1/7] différence réelle
 EC1-8.dxf ×1 EC1 [central-diaphragm-8]
   calques {"CONTOUR":1,"INFO":4,"TEXTE":2}
   boîte {"min":{"x":0,"y":0},"max":{"x":84,"y":211.314611}}
@@ -9440,7 +9262,7 @@ EC1-8.dxf ×1 EC1 [central-diaphragm-8]
   repère « EC1 » (42, 105.657306) dégagement 42 texte h 21 (42, 105.657306) (2 textes)
   rectMin L 211.314611 l 84 axe (0, 1) coin (84, 0)
   empreinte cc2f4d5d33e2a94e
-  écart avec EC1.dxf géométrie 2.274e-13 textes [reference.description.params.index 1/8] différence réelle
+  écart avec EC1.dxf géométrie 0.000e+0 textes [reference.description.params.index 1/8] différence réelle
 PF1.dxf ×1 PF1 [plate-foot-central]
   calques {"CONTOUR":5,"INFO":4,"TEXTE":2}
   boîte {"min":{"x":0,"y":0},"max":{"x":506.715363,"y":200}}
@@ -9469,7 +9291,7 @@ CO1-2.dxf ×1 CO1 [support-2-central]
   repère « CO1 » (374.816103, 60.53125) dégagement 60.53125 texte h 30 (374.816103, 60.53125) (2 textes)
   rectMin L 749.632206 l 121.0625 axe (1, 0) coin (0, 0)
   empreinte 23ebb954ee1a2ff5
-  écart avec CO1.dxf géométrie 9.101e-11 textes [reference.description.params.tread M1/M2] différence réelle
+  écart avec CO1.dxf géométrie 0.000e+0 textes [reference.description.params.tread M1/M2] différence réelle
 CO1-3.dxf ×1 CO1 [support-3-central]
   calques {"CONTOUR":1,"INFO":4,"TEXTE":2}
   boîte {"min":{"x":0,"y":0},"max":{"x":749.632206,"y":121.0625}}
@@ -9477,7 +9299,7 @@ CO1-3.dxf ×1 CO1 [support-3-central]
   repère « CO1 » (374.816103, 60.53125) dégagement 60.53125 texte h 30 (374.816103, 60.53125) (2 textes)
   rectMin L 749.632206 l 121.0625 axe (1, 0) coin (0, 0)
   empreinte dc14759e6d979bf7
-  écart avec CO1.dxf géométrie 9.106e-11 textes [reference.description.params.tread M1/M3] différence réelle
+  écart avec CO1.dxf géométrie 0.000e+0 textes [reference.description.params.tread M1/M3] différence réelle
 CO1-4.dxf ×1 CO1 [support-4-central]
   calques {"CONTOUR":1,"INFO":4,"TEXTE":2}
   boîte {"min":{"x":0,"y":0},"max":{"x":749.632206,"y":121.0625}}
@@ -9493,7 +9315,7 @@ CO1-5.dxf ×1 CO1 [support-5-central]
   repère « CO1 » (374.816103, 60.53125) dégagement 60.53125 texte h 30 (374.816103, 60.53125) (2 textes)
   rectMin L 749.632206 l 121.0625 axe (1, 0) coin (0, 0)
   empreinte 9861263fb51146e3
-  écart avec CO1.dxf géométrie 2.274e-13 textes [reference.description.params.tread M1/M5] différence réelle
+  écart avec CO1.dxf géométrie 0.000e+0 textes [reference.description.params.tread M1/M5] différence réelle
 CO1-6.dxf ×1 CO1 [support-6-central]
   calques {"CONTOUR":1,"INFO":4,"TEXTE":2}
   boîte {"min":{"x":0,"y":0},"max":{"x":749.632206,"y":121.0625}}
@@ -9501,7 +9323,7 @@ CO1-6.dxf ×1 CO1 [support-6-central]
   repère « CO1 » (374.816103, 60.53125) dégagement 60.53125 texte h 30 (374.816103, 60.53125) (2 textes)
   rectMin L 749.632206 l 121.0625 axe (1, 0) coin (0, 0)
   empreinte c50884077ef97eb5
-  écart avec CO1.dxf géométrie 9.095e-11 textes [reference.description.params.tread M1/M6] différence réelle
+  écart avec CO1.dxf géométrie 0.000e+0 textes [reference.description.params.tread M1/M6] différence réelle
 CO1-7.dxf ×1 CO1 [support-7-central]
   calques {"CONTOUR":1,"INFO":4,"TEXTE":2}
   boîte {"min":{"x":0,"y":0},"max":{"x":749.632206,"y":121.0625}}
@@ -9509,7 +9331,7 @@ CO1-7.dxf ×1 CO1 [support-7-central]
   repère « CO1 » (374.816103, 60.53125) dégagement 60.53125 texte h 30 (374.816103, 60.53125) (2 textes)
   rectMin L 749.632206 l 121.0625 axe (1, 0) coin (0, 0)
   empreinte 601e3222346c4f34
-  écart avec CO1.dxf géométrie 1.137e-13 textes [reference.description.params.tread M1/M7] différence réelle
+  écart avec CO1.dxf géométrie 0.000e+0 textes [reference.description.params.tread M1/M7] différence réelle
 CO1-8.dxf ×1 CO1 [support-8-central]
   calques {"CONTOUR":1,"INFO":4,"TEXTE":2}
   boîte {"min":{"x":0,"y":0},"max":{"x":749.632206,"y":121.0625}}
@@ -9525,7 +9347,7 @@ CO1-9.dxf ×1 CO1 [support-9-central]
   repère « CO1 » (374.816103, 60.53125) dégagement 60.53125 texte h 30 (374.816103, 60.53125) (2 textes)
   rectMin L 749.632206 l 121.0625 axe (1, 0) coin (0, 0)
   empreinte b7f33f351b72f4fe
-  écart avec CO1.dxf géométrie 2.274e-13 textes [reference.description.params.tread M1/M9] différence réelle
+  écart avec CO1.dxf géométrie 0.000e+0 textes [reference.description.params.tread M1/M9] différence réelle
 CO1-10.dxf ×1 CO1 [support-10-central]
   calques {"CONTOUR":1,"INFO":4,"TEXTE":2}
   boîte {"min":{"x":0,"y":0},"max":{"x":749.632206,"y":121.0625}}
@@ -9533,7 +9355,7 @@ CO1-10.dxf ×1 CO1 [support-10-central]
   repère « CO1 » (374.816103, 60.53125) dégagement 60.53125 texte h 30 (374.816103, 60.53125) (2 textes)
   rectMin L 749.632206 l 121.0625 axe (1, 0) coin (0, 0)
   empreinte e69049ec50f726c9
-  écart avec CO1.dxf géométrie 9.106e-11 textes [reference.description.params.tread M1/M10] différence réelle
+  écart avec CO1.dxf géométrie 0.000e+0 textes [reference.description.params.tread M1/M10] différence réelle
 CO1-11.dxf ×1 CO1 [support-11-central]
   calques {"CONTOUR":1,"INFO":4,"TEXTE":2}
   boîte {"min":{"x":0,"y":0},"max":{"x":749.632206,"y":121.0625}}
@@ -9541,7 +9363,7 @@ CO1-11.dxf ×1 CO1 [support-11-central]
   repère « CO1 » (374.816103, 60.53125) dégagement 60.53125 texte h 30 (374.816103, 60.53125) (2 textes)
   rectMin L 749.632206 l 121.0625 axe (1, 0) coin (0, 0)
   empreinte 4544b9e19767d39c
-  écart avec CO1.dxf géométrie 9.101e-11 textes [reference.description.params.tread M1/M11] différence réelle
+  écart avec CO1.dxf géométrie 0.000e+0 textes [reference.description.params.tread M1/M11] différence réelle
 CO1-12.dxf ×1 CO1 [support-12-central]
   calques {"CONTOUR":1,"INFO":4,"TEXTE":2}
   boîte {"min":{"x":0,"y":0},"max":{"x":749.632206,"y":121.0625}}
@@ -9549,7 +9371,7 @@ CO1-12.dxf ×1 CO1 [support-12-central]
   repère « CO1 » (374.816103, 60.53125) dégagement 60.53125 texte h 30 (374.816103, 60.53125) (2 textes)
   rectMin L 749.632206 l 121.0625 axe (1, 0) coin (0, 0)
   empreinte a9c945d47000fd2e
-  écart avec CO1.dxf géométrie 5.684e-14 textes [reference.description.params.tread M1/M12] différence réelle
+  écart avec CO1.dxf géométrie 0.000e+0 textes [reference.description.params.tread M1/M12] différence réelle
 CO1-13.dxf ×1 CO1 [support-13-central]
   calques {"CONTOUR":1,"INFO":4,"TEXTE":2}
   boîte {"min":{"x":0,"y":0},"max":{"x":749.632206,"y":121.0625}}
@@ -9557,7 +9379,7 @@ CO1-13.dxf ×1 CO1 [support-13-central]
   repère « CO1 » (374.816103, 60.53125) dégagement 60.53125 texte h 30 (374.816103, 60.53125) (2 textes)
   rectMin L 749.632206 l 121.0625 axe (1, 0) coin (0, 0)
   empreinte 0620025c5b0abecc
-  écart avec CO1.dxf géométrie 2.274e-13 textes [reference.description.params.tread M1/M13] différence réelle
+  écart avec CO1.dxf géométrie 0.000e+0 textes [reference.description.params.tread M1/M13] différence réelle
 CO1-14.dxf ×1 CO1 [support-14-central]
   calques {"CONTOUR":1,"INFO":4,"TEXTE":2}
   boîte {"min":{"x":0,"y":0},"max":{"x":749.632206,"y":121.0625}}
@@ -9565,7 +9387,7 @@ CO1-14.dxf ×1 CO1 [support-14-central]
   repère « CO1 » (374.816103, 60.53125) dégagement 60.53125 texte h 30 (374.816103, 60.53125) (2 textes)
   rectMin L 749.632206 l 121.0625 axe (1, 0) coin (0, 0)
   empreinte 4d11164df6aaae83
-  écart avec CO1.dxf géométrie 9.095e-11 textes [reference.description.params.tread M1/M14] différence réelle
+  écart avec CO1.dxf géométrie 0.000e+0 textes [reference.description.params.tread M1/M14] différence réelle
 CO1-15.dxf ×1 CO1 [support-15-central]
   calques {"CONTOUR":1,"INFO":4,"TEXTE":2}
   boîte {"min":{"x":0,"y":0},"max":{"x":749.632206,"y":121.0625}}
@@ -9573,7 +9395,7 @@ CO1-15.dxf ×1 CO1 [support-15-central]
   repère « CO1 » (374.816103, 60.53125) dégagement 60.53125 texte h 30 (374.816103, 60.53125) (2 textes)
   rectMin L 749.632206 l 121.0625 axe (1, 0) coin (0, 0)
   empreinte c899eaa171b99634
-  écart avec CO1.dxf géométrie 9.112e-11 textes [reference.description.params.tread M1/M15] différence réelle
+  écart avec CO1.dxf géométrie 0.000e+0 textes [reference.description.params.tread M1/M15] différence réelle
 AP1.dxf ×1 AP1 [support-1-central-bearing]
   calques {"CONTOUR":1,"INFO":4,"TEXTE":2}
   boîte {"min":{"x":0,"y":0},"max":{"x":749.632206,"y":60}}
@@ -9596,7 +9418,7 @@ AP1-3.dxf ×1 AP1 [support-3-central-bearing]
   repère « AP1 » (374.816103, 30) dégagement 30 texte h 15 (374.816103, 30) (2 textes)
   rectMin L 749.632206 l 60 axe (1, 0) coin (0, 0)
   empreinte 6054f04a84ad9b6c
-  écart avec AP1.dxf géométrie 1.137e-13 textes [reference.description.params.tread M1/M3] différence réelle
+  écart avec AP1.dxf géométrie 0.000e+0 textes [reference.description.params.tread M1/M3] différence réelle
 AP1-4.dxf ×1 AP1 [support-4-central-bearing]
   calques {"CONTOUR":1,"INFO":4,"TEXTE":2}
   boîte {"min":{"x":0,"y":0},"max":{"x":749.632206,"y":60}}
@@ -9612,7 +9434,7 @@ AP1-5.dxf ×1 AP1 [support-5-central-bearing]
   repère « AP1 » (374.816103, 30) dégagement 30 texte h 15 (374.816103, 30) (2 textes)
   rectMin L 749.632206 l 60 axe (1, 0) coin (0, 0)
   empreinte 4004c6ed7380e29a
-  écart avec AP1.dxf géométrie 2.274e-13 textes [reference.description.params.tread M1/M5] différence réelle
+  écart avec AP1.dxf géométrie 0.000e+0 textes [reference.description.params.tread M1/M5] différence réelle
 AP1-6.dxf ×1 AP1 [support-6-central-bearing]
   calques {"CONTOUR":1,"INFO":4,"TEXTE":2}
   boîte {"min":{"x":0,"y":0},"max":{"x":749.632206,"y":60}}
@@ -9644,7 +9466,7 @@ AP1-9.dxf ×1 AP1 [support-9-central-bearing]
   repère « AP1 » (374.816103, 30) dégagement 30 texte h 15 (374.816103, 30) (2 textes)
   rectMin L 749.632206 l 60 axe (1, 0) coin (0, 0)
   empreinte 3128152e63617dbb
-  écart avec AP1.dxf géométrie 2.274e-13 textes [reference.description.params.tread M1/M9] différence réelle
+  écart avec AP1.dxf géométrie 0.000e+0 textes [reference.description.params.tread M1/M9] différence réelle
 AP1-10.dxf ×1 AP1 [support-10-central-bearing]
   calques {"CONTOUR":1,"INFO":4,"TEXTE":2}
   boîte {"min":{"x":0,"y":0},"max":{"x":749.632206,"y":60}}
@@ -9676,7 +9498,7 @@ AP1-13.dxf ×1 AP1 [support-13-central-bearing]
   repère « AP1 » (374.816103, 30) dégagement 30 texte h 15 (374.816103, 30) (2 textes)
   rectMin L 749.632206 l 60 axe (1, 0) coin (0, 0)
   empreinte a9a5b1901d1e2062
-  écart avec AP1.dxf géométrie 2.274e-13 textes [reference.description.params.tread M1/M13] différence réelle
+  écart avec AP1.dxf géométrie 0.000e+0 textes [reference.description.params.tread M1/M13] différence réelle
 AP1-14.dxf ×1 AP1 [support-14-central-bearing]
   calques {"CONTOUR":1,"INFO":4,"TEXTE":2}
   boîte {"min":{"x":0,"y":0},"max":{"x":749.632206,"y":60}}
@@ -9692,7 +9514,7 @@ AP1-15.dxf ×1 AP1 [support-15-central-bearing]
   repère « AP1 » (374.816103, 30) dégagement 30 texte h 15 (374.816103, 30) (2 textes)
   rectMin L 749.632206 l 60 axe (1, 0) coin (0, 0)
   empreinte f56ae5d58b954ecd
-  écart avec AP1.dxf géométrie 1.137e-13 textes [reference.description.params.tread M1/M15] différence réelle
+  écart avec AP1.dxf géométrie 0.000e+0 textes [reference.description.params.tread M1/M15] différence réelle
 "
 `;
 
@@ -10001,7 +9823,7 @@ EC2-6.dxf ×1 EC2 [central-diaphragm-7]
   repère « EC2 » (42, 110.571514) dégagement 42 texte h 21 (42, 110.571514) (2 textes)
   rectMin L 221.143028 l 84 axe (0, 1) coin (84, 0)
   empreinte add65037f4cbd242
-  écart avec EC2.dxf géométrie 9.095e-13 textes [reference.description.params.index 2/7] différence réelle
+  écart avec EC2.dxf géométrie 0.000e+0 textes [reference.description.params.index 2/7] différence réelle
 EC2-7.dxf ×1 EC2 [central-diaphragm-8]
   calques {"CONTOUR":1,"INFO":4,"TEXTE":2}
   boîte {"min":{"x":0,"y":0},"max":{"x":84,"y":221.143028}}
@@ -10009,7 +9831,7 @@ EC2-7.dxf ×1 EC2 [central-diaphragm-8]
   repère « EC2 » (42, 110.571514) dégagement 42 texte h 21 (42, 110.571514) (2 textes)
   rectMin L 221.143028 l 84 axe (0, 1) coin (84, 0)
   empreinte ff2a362f1e3a5868
-  écart avec EC2.dxf géométrie 9.095e-13 textes [reference.description.params.index 2/8] différence réelle
+  écart avec EC2.dxf géométrie 0.000e+0 textes [reference.description.params.index 2/8] différence réelle
 PF1.dxf ×1 PF1 [plate-foot-central]
   calques {"CONTOUR":5,"INFO":4,"TEXTE":2}
   boîte {"min":{"x":0,"y":0},"max":{"x":460.545773,"y":200}}
@@ -10089,7 +9911,7 @@ CO1-4.dxf ×1 CO1 [support-9-central]
   repère « CO1 » (390, 61) dégagement 61 texte h 30 (390, 61) (2 textes)
   rectMin L 780 l 122 axe (1, 0) coin (0, 0)
   empreinte 4fd54f47da6e123a
-  écart avec CO1.dxf géométrie 2.274e-13 textes [reference.description.params.tread M1/M9] différence réelle
+  écart avec CO1.dxf géométrie 0.000e+0 textes [reference.description.params.tread M1/M9] différence réelle
 CO1-5.dxf ×1 CO1 [support-10-central]
   calques {"CONTOUR":1,"INFO":4,"TEXTE":2}
   boîte {"min":{"x":0,"y":0},"max":{"x":780,"y":122}}
@@ -10097,7 +9919,7 @@ CO1-5.dxf ×1 CO1 [support-10-central]
   repère « CO1 » (390, 61) dégagement 61 texte h 30 (390, 61) (2 textes)
   rectMin L 780 l 122 axe (1, 0) coin (0, 0)
   empreinte 077d7cc87c05a62c
-  écart avec CO1.dxf géométrie 2.274e-13 textes [reference.description.params.tread M1/M10] différence réelle
+  écart avec CO1.dxf géométrie 0.000e+0 textes [reference.description.params.tread M1/M10] différence réelle
 CO1-6.dxf ×1 CO1 [support-11-central]
   calques {"CONTOUR":1,"INFO":4,"TEXTE":2}
   boîte {"min":{"x":0,"y":0},"max":{"x":780,"y":122}}
@@ -10105,7 +9927,7 @@ CO1-6.dxf ×1 CO1 [support-11-central]
   repère « CO1 » (390, 61) dégagement 61 texte h 30 (390, 61) (2 textes)
   rectMin L 780 l 122 axe (1, 0) coin (0, 0)
   empreinte 0f94a3858885378a
-  écart avec CO1.dxf géométrie 4.547e-13 textes [reference.description.params.tread M1/M11] différence réelle
+  écart avec CO1.dxf géométrie 0.000e+0 textes [reference.description.params.tread M1/M11] différence réelle
 CO1-7.dxf ×1 CO1 [support-12-central]
   calques {"CONTOUR":1,"INFO":4,"TEXTE":2}
   boîte {"min":{"x":0,"y":0},"max":{"x":780,"y":122}}

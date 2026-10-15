@@ -643,7 +643,19 @@ export interface PartFixing {
    * résolues par l'étape « Visserie » (marche portée par un support, `treadScrewed`).
    */
   readonly with?: readonly string[];
+  /**
+   * Régime de répartition des points le long de la pièce (décision F10 (23)) : `centered` (un
+   * seul point, au milieu), `betweenEdges` (répartis entre les pinces `holeEdgeDistance` des
+   * bouts), `even` (pièce trop courte pour les pinces : répartis régulièrement sur sa
+   * longueur). Lu par la clé des repères (`supportGroupKey`) pour que deux supports aux
+   * perçages placés différemment ne partagent pas un repère. Absent : non précisé. Ajout
+   * rétrocompatible (sortie du `Model`).
+   */
+  readonly distribution?: FixingDistribution;
 }
+
+/** Régime de répartition des points d'une fixation le long de la pièce (`PartFixing`). */
+export type FixingDistribution = "centered" | "betweenEdges" | "even";
 
 // ------------------------------------------------------------------ Conformité
 

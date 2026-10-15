@@ -29,6 +29,7 @@ import { bendAllowance, findBendLaw, resolveBend } from "../workshop/metal.js";
 import { WorkshopProfileSchema, resolveWorkshopProfile } from "../workshop/profile.js";
 import "./index.js";
 import { fr, frList } from "../i18n.test-helpers.js";
+import { expectMarksUnified } from "./marks.testing.js";
 
 const EXAMPLES_DIR = resolve(dirname(fileURLToPath(import.meta.url)), "../../../../examples");
 const loadExample = (file: string): Project =>
@@ -277,8 +278,8 @@ describe("steel-flat — quart tournant à poteau (cas n° 1) en acier", () => {
           const steelTread = r.treads.some((d) => d.number === s.placement.tread);
           expect(fx.filter((f) => f.joint === "treadScrewed" || f.joint === "treadBolted")).toEqual(
             steelTread
-              ? [{ joint: "treadBolted", points: 2, holeDiameter: 9 }]
-              : [{ joint: "treadScrewed", points: 2 }],
+              ? [{ joint: "treadBolted", points: 2, holeDiameter: 9, distribution: "betweenEdges" }]
+              : [{ joint: "treadScrewed", points: 2, distribution: "betweenEdges" }],
           );
         }
         // Visserie du modèle : boulons de support seulement si les supports sont vissés.
@@ -514,6 +515,8 @@ describe("steel-flat — propriétés (tournants à poteau)", () => {
         const { m, r } = run(steel(p0, params));
         if (m.stepping.nosings.length < 2) return;
         expect(m.errors).toEqual([]);
+        // Une ligne de débit par repère (F10 Q3, C3).
+        expectMarksUnified(m);
         // Paliers : ligne des nez de niveau (profil des garde-corps).
         expect(landingPitchGap(m.stepping, r.stringers)).toBeLessThan(1e-6);
         for (const part of m.parts) {

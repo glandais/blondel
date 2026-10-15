@@ -491,11 +491,12 @@ export function buildSteelCurved(
   // Limons en plat de `steel-flat` : muraux (et de jour d'un escalier sans jour courbe) ; sur une
   // cage, le limon débillardé porte tout le jour (paliers droits compris) : côté mur seulement ;
   // cage à axe en arc : aucun (limons cintrés des deux côtés).
-  const flat = buildSteelFlat(
-    ctx,
-    params,
-    arcCage ? { sides: [] } : cage && pre.inner ? { sides: ["outer"] } : {},
-  );
+  const flat = buildSteelFlat(ctx, params, {
+    ...(arcCage ? { sides: [] } : cage && pre.inner ? { sides: ["outer"] } : {}),
+    // Supports et platines re-repérés ci-dessous (§ 2) avec ceux du limon débillardé : la
+    // recopie du représentant (décision F10 Q3) ne s'y fait qu'une fois, sur les valeurs réelles.
+    unifyMarks: false,
+  });
   const errors: Message[] = [
     ...(flat.output.errors ?? []).filter((x) => !FLAT_JOUR_ERRORS.has(x.key)),
     ...pre.errors,

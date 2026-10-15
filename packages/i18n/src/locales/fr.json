@@ -289,6 +289,7 @@
   "compliance.nosing.noFullRiser": "Sans objet : pas de contremarche pleine (voir recouvrement).",
   "compliance.nosing.overhang": "Débord du nez de marche",
   "compliance.notApplicable": "Sans objet.",
+  "compliance.note.identicalToleranceOverClearance": "Tolérance d'identité des pièces repérées ({tolerance} mm) supérieure au jeu de perçage ({clearance} mm) : les perçages d'une pièce débitée sur le représentant de son repère peuvent être décalés de plus que le jeu ; réduire la tolérance d'identité du profil d'atelier (à valider).",
   "compliance.profileName.souple": "souple",
   "compliance.profileName.strict": "strict",
   "compliance.rise.quantity": "Hauteur de marche",

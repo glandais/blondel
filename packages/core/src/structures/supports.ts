@@ -12,7 +12,7 @@
  */
 import { dec, msg, type Message } from "@blondel/i18n";
 import * as V from "../geom2d/vec.js";
-import type { Part, PartFixing } from "../model/derived.js";
+import type { FixingDistribution, Part, PartFixing } from "../model/derived.js";
 import type { PartAssembly } from "../model/plugins.js";
 import type { Frame3, Mm, Polygon2, Vec2 } from "../model/primitives.js";
 import type { WorkshopProfile } from "../workshop/profile.js";
@@ -143,6 +143,37 @@ export function boltCenters(p: SupportPlacement, spec: SupportSpec): Vec2[] {
   return Array.from({ length: spec.bolts }, (_, i) =>
     V.vec(lo + ((hi - lo) * i) / (spec.bolts - 1), z),
   );
+}
+
+/**
+ * Régime de répartition des perçages de boulons dans la joue (`boltCenters`, décision F10
+ * (23)) : `centered` pour un seul boulon (ou une pièce trop courte pour les pinces, qui n'en
+ * reçoit qu'un), `betweenEdges` sinon. `null` : aucun boulon.
+ */
+export function boltDistribution(
+  p: SupportPlacement,
+  spec: SupportSpec,
+): FixingDistribution | null {
+  const n = boltCenters(p, spec).length;
+  return n === 0 ? null : n === 1 ? "centered" : "betweenEdges";
+}
+
+/**
+ * Régime de répartition des points de fixation de la marche (`treadScrewPoints`, décision F10
+ * (23)) : `centered` (un seul point), `even` (support trop court pour les pinces
+ * `holeEdgeDistance` : points répartis régulièrement sur sa longueur), `betweenEdges` sinon.
+ * `null` : aucun point.
+ */
+export function treadScrewDistribution(
+  p: SupportPlacement,
+  spec: SupportSpec,
+): FixingDistribution | null {
+  const n = Number.isFinite(spec.treadScrews) ? Math.max(0, Math.floor(spec.treadScrews)) : 0;
+  if (n === 0) return null;
+  if (n === 1) return "centered";
+  const lo = p.u0 + spec.holeEdgeDistance;
+  const hi = p.u1 - spec.holeEdgeDistance;
+  return hi > lo ? "betweenEdges" : "even";
 }
 
 /**
@@ -289,14 +320,21 @@ export function supportFixings(
 ): PartFixing[] {
   const out: PartFixing[] = [];
   const bolts = boltCenters(p, spec).length;
+  const boltRegime = boltDistribution(p, spec);
   if (bolts > 0)
     out.push({
       joint: "supportBolted",
       points: bolts,
       holeDiameter: spec.holeDiameter,
       with: [p.face.owner],
+      ...(boltRegime ? { distribution: boltRegime } : {}),
     });
-  out.push(...supportTreadJoint(p, spec, tread, drilledPoints).fixings);
+  const treadRegime = treadScrewDistribution(p, spec);
+  out.push(
+    ...supportTreadJoint(p, spec, tread, drilledPoints).fixings.map((f) =>
+      treadRegime ? { ...f, distribution: treadRegime } : f,
+    ),
+  );
   return out;
 }
 
@@ -304,8 +342,9 @@ export function supportFixings(
  * Clé de regroupement d'une pièce support (cornière CR, plat PS) sans sa longueur (décision
  * F10 Q1a) : section, nombre de perçages et signature des perçages (nature et aile par
  * l'assemblage — `supportBolted` dans l'aile verticale, fixation de la marche dans l'aile
- * horizontale —, nombre de points, diamètre). La longueur est comparée à part, autour d'un
- * représentant (`groupNearAnchor`).
+ * horizontale —, nombre de points, diamètre, régime de répartition le long de la pièce —
+ * décision F10 (23)). La longueur est comparée à part, autour d'un représentant
+ * (`groupNearAnchor`).
  */
 export function supportGroupKey(p: Part): string {
   return `${JSON.stringify(p.section)}|${p.quantities["holes"]}|${drillingSignature(p)}`;
@@ -313,12 +352,14 @@ export function supportGroupKey(p: Part): string {
 
 /**
  * Signature des perçages d'une pièce (décision F10 Q1a, C4) : pour chaque fixation, assemblage
- * (nature et aile), nombre de points et diamètre, triés. Définition unique d'« identique » pour
+ * (nature et aile), nombre de points, diamètre et régime de répartition (`distribution`,
+ * décision F10 (23) : deux supports à T près de part et d'autre du seuil 2 × `holeEdgeDistance`
+ * ont leurs perçages placés différemment), triés. Définition unique d'« identique » pour
  * les repères (`supportGroupKey`) et le comparateur (`countUniqueParts`).
  */
 export function drillingSignature(p: Part): string {
   return (p.fixings ?? [])
-    .map((f) => `${f.joint}:${f.points}:${f.holeDiameter ?? "-"}`)
+    .map((f) => `${f.joint}:${f.points}:${f.holeDiameter ?? "-"}:${f.distribution ?? "-"}`)
     .sort()
     .join(",");
 }

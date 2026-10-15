@@ -27,6 +27,7 @@
 import type { Model, Part, Project } from "@blondel/core";
 import { cutListRows, defaultMassNote, massNoteFor, type MassNote } from "../csv/cutlist.js";
 import { cutSheet } from "../cutsheet.js";
+import { flatPartGroups } from "../flatGroups.js";
 import { pdfFlatTitle } from "../flatTerms.js";
 import { formatIn } from "../format.js";
 import {
@@ -514,17 +515,13 @@ function tocPages(
 
 // ------------------------------------------------------------------ assemblage
 
-/** Développés distincts (un par repère et développé identiques), dans l'ordre des pièces. */
+/**
+ * Développés distincts dessinables, dans l'ordre des pièces : partition commune au DXF
+ * (`flatPartGroups`, convention C3), puis retrait des groupes dont le contour a moins de trois
+ * sommets (rien à dessiner).
+ */
 function flatGroups(parts: readonly Part[]): { part: Part; ids: string[] }[] {
-  const groups = new Map<string, { part: Part; ids: string[] }>();
-  for (const p of parts) {
-    if (p.flat === undefined || p.flat.outline.outer.length < 3) continue;
-    const key = JSON.stringify([p.mark, p.material, p.flat]);
-    const g = groups.get(key);
-    if (g) g.ids.push(p.id);
-    else groups.set(key, { part: p, ids: [p.id] });
-  }
-  return [...groups.values()];
+  return flatPartGroups(parts).filter((g) => g.part.flat!.outline.outer.length >= 3);
 }
 
 function titlePart(part: Part, t: Translator): TitlePart {
