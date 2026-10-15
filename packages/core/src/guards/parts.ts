@@ -14,7 +14,7 @@ import type { MaterialId, Part, PartCategory, SolidDesc } from "../model/derived
 import type { Mm, Shape2, Vec2, Vec3 } from "../model/primitives.js";
 import { woodQuantities } from "../structures/quantities.js";
 import type { WorkshopProfile } from "../workshop/profile.js";
-import type { GuardSection } from "./spec.js";
+import { sectionLabel, type GuardSection } from "./spec.js";
 
 /** Nombre de côtés du polygone approchant une section ronde. */
 const ROUND_SIDES = 16;
@@ -148,11 +148,6 @@ function makePart(
 
 const r1 = (x: number): string => (Math.round(x * 10) / 10).toFixed(1);
 const r0 = (x: number): string => String(Math.round(x));
-
-/** Désignation de la section (« Ø42 », « 40×40 ») : signature des repères, sans traduction. */
-export function sectionLabel(s: GuardSection): string {
-  return s.kind === "round" ? `Ø${s.diameter}` : `${s.width}×${s.height}`;
-}
 
 /** Section d'une pièce (`Part.section`) : désignation seule, non traduite. */
 function sectionMessage(s: GuardSection): Message {

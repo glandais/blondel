@@ -60,6 +60,14 @@ export interface SideEdge {
   readonly newels: readonly { readonly u: Mm; readonly size: Mm; readonly turn: number }[];
 }
 
+/**
+ * Flèche maximale (mm) du facettage des bords de l'escalier en polyligne : tolérance géométrique
+ * de la mise en polyligne, sans valeur métier. Le descripteur de forme des pièces de garde-corps
+ * (`guardShape.ts`) n'accepte un arc reconstruit que si sa flèche par corde reste sous cette
+ * valeur ; les tests du descripteur facettent à cette flèche.
+ */
+export const GUARD_EDGE_CHORD_TOL: Mm = 0.5;
+
 /** Bord simplifié et profil d'un côté. */
 export function sideEdge(
   side: StairSide,
@@ -68,7 +76,7 @@ export function sideEdge(
   project: Project,
 ): SideEdge {
   const curve = side === "inner" ? layout.inner : layout.outer;
-  let pts = dedupe(flattenCurve(curve, 0.5));
+  let pts = dedupe(flattenCurve(curve, GUARD_EDGE_CHORD_TOL));
   const newelCorners: { k: Vec2; size: number; reach: number; turn: number }[] = [];
   if (side === "inner") {
     // Raccord de jour lu dans le tracé (`TurnZone.well`, cage comprise ; à défaut, tournant

@@ -45,6 +45,11 @@ export const GuardSectionSchema = z.discriminatedUnion("kind", [
 ]);
 export type GuardSection = z.infer<typeof GuardSectionSchema>;
 
+/** Désignation de la section (« Ø42 », « 40×40 ») : signature des repères, sans traduction. */
+export function sectionLabel(s: GuardSection): string {
+  return s.kind === "round" ? `Ø${s.diameter}` : `${s.width}×${s.height}`;
+}
+
 /**
  * Vide vertical entre le niveau de référence (ligne des nez sur un rampant, sol fini sur un
  * garde-corps horizontal) et le bas du remplissage. Défaut 50 mm : **à valider**.
