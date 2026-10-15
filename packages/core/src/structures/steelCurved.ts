@@ -50,7 +50,7 @@ import { projectOnCurve } from "../geom2d/intersect.js";
 import { pointInPolygon, signedArea } from "../geom2d/polygon.js";
 import * as V from "../geom2d/vec.js";
 import type { CageFeature } from "../model/cageFeatures.js";
-import type { FlatPattern, Layout, NosingLine, Part, Tread } from "../model/derived.js";
+import type { FlatPattern, Layout, NosingLine, Part, RuleResult, Tread } from "../model/derived.js";
 import type { Mm, Polygon2, Vec2, Vec3 } from "../model/primitives.js";
 import type {
   PartAssembly,
@@ -93,6 +93,8 @@ import {
 } from "./steelCommon.js";
 import {
   SteelFlatParamsSchema,
+  addBarLengthCheck,
+  addLaserCheck,
   ascentDirection,
   buildSteelFlat,
   drillTreadsAtSupports,
@@ -100,6 +102,7 @@ import {
   markGroups,
   plateHoles,
   plateObject,
+  plateSheetFindings,
   rectFlat,
   sheetFormatMessage,
   supportOn,
@@ -129,6 +132,7 @@ import {
   supportAssemblies,
   supportDepth,
   supportGroupKey,
+  supportMarkName,
   supportPart,
   treadScrewPoints,
   type SupportFace,
@@ -568,10 +572,10 @@ export function buildSteelCurved(
   // alignés sur les trous réellement faits dans la marche (A31) ; inchangés quand tous sont percés.
   const steelNumbers = new Set(flat.treads.map((d) => d.number));
   const curvedSupports = raw.map(({ side, s }, i) => {
-    const drilledPoints = curvedDrill.drilledPoints[i]!;
+    const drilled = curvedDrill.drilled[i]!;
     if (
       !steelNumbers.has(s.placement.tread) ||
-      drilledPoints === treadScrewPoints(s.placement, sup).length
+      drilled.length === treadScrewPoints(s.placement, sup).length
     ) {
       return { side, s };
     }
@@ -579,7 +583,7 @@ export function buildSteelCurved(
       side,
       s: {
         ...s,
-        part: supportPart(s.placement, sup, "S", s.part.material, profile, "steel", drilledPoints),
+        part: supportPart(s.placement, sup, "S", s.part.material, profile, "steel", drilled),
       },
     };
   });
@@ -619,21 +623,23 @@ export function buildSteelCurved(
     sup.kind === "angle" ? "CR" : "PS",
     supportGroupKey,
     profile.identicalPartTolerance,
+    { markName: () => supportMarkName(sup) },
   );
   const curvedPlateParts = built.flatMap((b) => b.result.plates);
   const plates = [...flat.plates, ...curvedPlateParts];
-  const byPrefix = (prefix: string, mark: string): Part[] =>
+  const byPrefix = (prefix: string, mark: string, markName: Message): Part[] =>
     markGroups(
       plates.filter((p) => p.id.startsWith(prefix)),
       mark,
       () => null,
       profile.identicalPartTolerance,
+      { markName: () => markName },
     );
   const allPlates = [
-    ...byPrefix("plate-foot-", "PF"),
-    ...byPrefix("plate-head-", "PH"),
-    ...byPrefix("plate-post-", "PP"),
-    ...byPrefix("plate-end-", "PA"),
+    ...byPrefix("plate-foot-", "PF", msg("structure.steel.markName.footPlate")),
+    ...byPrefix("plate-head-", "PH", msg("structure.steel.markName.headPlate")),
+    ...byPrefix("plate-post-", "PP", msg("structure.steel.markName.newelFootPlate")),
+    ...byPrefix("plate-end-", "PA", msg("structure.steel.markName.endPlate")),
   ];
 
   // 3. Marches portées (jour : supports du limon débillardé ; mur : limons en plat, ou limon
@@ -698,17 +704,33 @@ export function buildSteelCurved(
     }),
   );
 
-  // Cage à axe en arc : contrôles de `steel-flat` sans élément (aucun limon en plat) écartés.
-  const flatChecks = flat.output.checks.filter(
-    (c) =>
-      c.ruleId !== STEEL_RULES.executionClass.id &&
-      c.ruleId !== STEEL_RULES.treadCarried.id &&
-      !(arcCage && c.message.key === "structure.common.check.noItems"),
-  );
   const otherParts = flat.output.parts
     .filter((p) => !flatSupportIds.has(p.id) && !flatPlateIds.has(p.id))
     .map((p) => drilledTreads.get(p.id) ?? p);
   const parts = [...otherParts, ...segmentParts, ...allSupports, ...allPlates];
+  // Cage à axe en arc : contrôles de `steel-flat` sans élément (aucun limon en plat) écartés.
+  // Contrôles de `steel-flat` repris (format de tôle des platines, longueur de barre des supports
+  // et poteaux, épaisseur laser) refaits sur les pièces re-repérées et recopiées (décision F10
+  // (29)) : valeurs débitées et repères finaux, comme partout ailleurs.
+  const finalById = new Map(parts.map((p) => [p.id, p]));
+  const flatChecks = refreshRemarkedChecks(
+    flat.output.checks.filter(
+      (c) =>
+        c.ruleId !== STEEL_RULES.executionClass.id &&
+        c.ruleId !== STEEL_RULES.treadCarried.id &&
+        !(arcCage && c.message.key === "structure.common.check.noItems"),
+    ),
+    {
+      ctx,
+      plates: allPlates.filter((p) => flatPlateIds.has(p.id)),
+      bars: [...allSupports.filter((p) => flatSupportIds.has(p.id)), ...flat.posts],
+      laser: flat.laserPartIds.flatMap((id) => {
+        const p = finalById.get(id);
+        return p ? [p] : [];
+      }),
+      metal: profile.metal,
+    },
+  );
   // Assemblages : supports (marche portée, limon ou poteau porteur), tronçons consécutifs de
   // chaque limon débillardé (joints soudés bout à bout).
   const assemblies: PartAssembly[] = [
@@ -747,6 +769,55 @@ export function buildSteelCurved(
     wall: wallCurved ? withMarkedSupports(wallCurved) : null,
     executionClass: exc.executionClass,
   };
+}
+
+/**
+ * Contrôles de `steel-flat` repris par `steel-curved` refaits après son re-repérage et la recopie
+ * unique du représentant (décision F10 (29)) : chaque constat de format de tôle
+ * (`FAB_FORMAT_TOLE`) d'une platine de `steel-flat` est remplacé, à sa place, par celui de la
+ * platine finale ; le bloc de longueur de barre (`FAB_BARRE_LONGUEUR`) est remplacé, à la place
+ * de son premier constat, par le contrôle des barres finales (supports de `steel-flat`, poteaux) ;
+ * de même pour le bloc d'épaisseur laser (`FAB_LASER_EPAISSEUR`), refait sur les pièces finales
+ * (mêmes épaisseurs, libellés des repères finaux). Règles et bornes inchangées ; les autres
+ * constats sont rendus tels quels.
+ */
+export function refreshRemarkedChecks(
+  results: readonly RuleResult[],
+  input: {
+    readonly ctx: StructureContext;
+    readonly plates: readonly Part[];
+    readonly bars: readonly Part[];
+    /** Pièces finales du contrôle laser de `steel-flat`, dans son ordre. */
+    readonly laser: readonly Part[];
+    readonly metal: WorkshopProfile["metal"];
+  },
+): RuleResult[] {
+  const { project, stepping } = input.ctx;
+  const sheet = new CheckCollector(project, stepping);
+  sheet.add(rule(STEEL_RULES.sheetFormat), plateSheetFindings(input.plates, input.metal));
+  const sheetOf = new Map<string, RuleResult>();
+  for (const r of sheet.results) {
+    if (r.location.kind === "part") sheetOf.set(r.location.partId, r);
+  }
+  const bars = new CheckCollector(project, stepping);
+  addBarLengthCheck(bars, input.bars, input.metal);
+  const laser = new CheckCollector(project, stepping);
+  addLaserCheck(laser, input.laser, input.metal);
+  const out: RuleResult[] = [];
+  const placed = new Set<string>();
+  /** Bloc remplacé en entier, à la place de son premier constat. */
+  const block = (r: RuleResult, fresh: readonly RuleResult[]) => {
+    if (!placed.has(r.ruleId)) out.push(...fresh);
+    placed.add(r.ruleId);
+  };
+  for (const r of results) {
+    if (r.ruleId === STEEL_RULES.sheetFormat.id && r.location.kind === "part") {
+      out.push(sheetOf.get(r.location.partId) ?? r);
+    } else if (r.ruleId === STEEL_RULES.barLength.id) block(r, bars.results);
+    else if (r.ruleId === STEEL_RULES.laser.id) block(r, laser.results);
+    else out.push(r);
+  }
+  return out;
 }
 
 // ------------------------------------------------------------------ préconditions
@@ -1971,7 +2042,7 @@ function curvedPlates(g: CurvedGeometry, segCount: number): Part[] {
         holesAt,
         pl.holeDiameter,
         "PF",
-        msg("structure.steel.reference.footPlate", { mark: markOf(0) }),
+        msg("structure.steel.reference.footPlate"),
       );
       const o = V.add(V.addScaled(f.a, f.dir, mid - L / 2), V.scale(f.into, -(pl.width - e) / 2));
       const sgn = V.cross(f.dir, f.into) > 0 ? 1 : -1;
@@ -2012,7 +2083,7 @@ function curvedPlates(g: CurvedGeometry, segCount: number): Part[] {
         holesAt,
         pl.holeDiameter,
         "PH",
-        msg("structure.steel.reference.headPlate", { mark: markOf(last) }),
+        msg("structure.steel.reference.headPlate"),
       );
       plates.push(
         assembledTo(

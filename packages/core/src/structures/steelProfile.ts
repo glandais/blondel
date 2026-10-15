@@ -103,6 +103,7 @@ import {
   supportAssemblies,
   supportDepth,
   supportGroupKey,
+  supportMarkName,
   supportInterval,
   supportPart,
   type SupportFace,
@@ -1493,7 +1494,9 @@ function profileSupportParts(
     const face = onI ? { ...p.face, a: V.addScaled(p.face.a, p.face.into, shift) } : p.face;
     return supportPart({ ...p, face }, sup, "S", material, profile);
   });
-  return markGroups(supportParts, "CR", supportGroupKey, profile.identicalPartTolerance);
+  return markGroups(supportParts, "CR", supportGroupKey, profile.identicalPartTolerance, {
+    markName: () => supportMarkName(sup),
+  });
 }
 
 /** Poteau d'angle à construire (étape 9). */

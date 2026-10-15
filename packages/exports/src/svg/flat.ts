@@ -8,7 +8,7 @@ import { bbox, type Part, type Vec2 } from "@blondel/core";
 import { checkedFlat, flatEngravingPoint, partLineAnnotation, referenceText } from "../dxf/part.js";
 import { flatDrawingTitle } from "../flatTerms.js";
 import { formatIn } from "../format.js";
-import { materialLabel, translatorOf, tr, type LocaleOption } from "../i18n.js";
+import { materialLabel, partDesignation, translatorOf, tr, type LocaleOption } from "../i18n.js";
 import { polygonPath } from "../path.js";
 import { dimensionGeometry, type Dimension } from "../plan/drawing.js";
 import {
@@ -180,7 +180,7 @@ export function renderFlatPatternSvg(part: Part, options: FlatPatternSvgOptions 
   const t = formatIn(tx, flat.thickness, { decimals: 1, trimZeros: true, thousands: "" });
   const info = [
     part.mark,
-    tr(tx, part.name),
+    tr(tx, partDesignation(part)),
     materialLabel(tx, part.material),
     tx.t("drawing.flat.thickness", { value: t }),
     ...(part.section !== undefined ? [tr(tx, part.section)] : []),

@@ -53,7 +53,12 @@ import { buildSteelCentral } from "./steelCentral.js";
 import { SteelCentralParamsSchema } from "./steelCentralParams.js";
 import { woodBeamOf, woodCentralParams } from "./woodCentral.test-helpers.js";
 import "./index.js";
-import { expectFittedNotLarger, expectMarksUnified, sharedMarks } from "./marks.testing.js";
+import {
+  expectFittedNotLarger,
+  expectMarkNames,
+  expectMarksUnified,
+  sharedMarks,
+} from "./marks.testing.js";
 
 const FR = translatorFor("fr");
 const KINDS = ["wood-central", "steel-central"] as const;
@@ -948,6 +953,7 @@ describe("propriétés : cages tirées parmi les fonctions déclarées", () => {
           built++;
           expectSound(kind, p, m, JSON.stringify(layout));
           expectMarksUnified(m);
+          expectMarkNames(m);
           // Entretoises EC (logées entre deux faces) : débit jamais plus grand que la pièce
           // réelle (même projet à T = 0), cote par cote (F10 Q3).
           if ([...sharedMarks(m.parts).keys()].some((k) => k.startsWith("EC"))) {

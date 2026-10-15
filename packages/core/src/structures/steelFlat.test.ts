@@ -29,7 +29,7 @@ import { bendAllowance, findBendLaw, resolveBend } from "../workshop/metal.js";
 import { WorkshopProfileSchema, resolveWorkshopProfile } from "../workshop/profile.js";
 import "./index.js";
 import { fr, frList } from "../i18n.test-helpers.js";
-import { expectMarksUnified } from "./marks.testing.js";
+import { expectMarkNames, expectMarksUnified } from "./marks.testing.js";
 
 const EXAMPLES_DIR = resolve(dirname(fileURLToPath(import.meta.url)), "../../../../examples");
 const loadExample = (file: string): Project =>
@@ -276,11 +276,26 @@ describe("steel-flat — quart tournant à poteau (cas n° 1) en acier", () => {
           } else expect(b).toBeUndefined();
           // Marche bois : vis à bois ; marche en tôle (vissée par défaut, A31) : vis à métaux.
           const steelTread = r.treads.some((d) => d.number === s.placement.tread);
-          expect(fx.filter((f) => f.joint === "treadScrewed" || f.joint === "treadBolted")).toEqual(
+          const tf = fx.filter((f) => f.joint === "treadScrewed" || f.joint === "treadBolted");
+          expect(tf.map(({ positions: _, ...f }) => f)).toEqual(
             steelTread
               ? [{ joint: "treadBolted", points: 2, holeDiameter: 9, distribution: "betweenEdges" }]
               : [{ joint: "treadScrewed", points: 2, distribution: "betweenEdges" }],
           );
+          // Positions le long de la pièce (décision F10 (27)) : à la pince (20 mm) de chaque bout.
+          const L = s.part.stock!.length;
+          for (const f of tf) {
+            expect(f.positions).toHaveLength(2);
+            expect(f.positions![0]).toBeCloseTo(20, 9);
+            expect(f.positions![1]).toBeCloseTo(L - 20, 9);
+          }
+          if (b) {
+            expect(b.positions).toHaveLength(b.points);
+            for (const x of b.positions!) {
+              expect(x).toBeGreaterThanOrEqual(0);
+              expect(x).toBeLessThanOrEqual(L);
+            }
+          }
         }
         // Visserie du modèle : boulons de support seulement si les supports sont vissés.
         expect(m.fasteners?.some((f) => f.joint === "supportBolted") ?? false).toBe(bolted);
@@ -517,6 +532,7 @@ describe("steel-flat — propriétés (tournants à poteau)", () => {
         expect(m.errors).toEqual([]);
         // Une ligne de débit par repère (F10 Q3, C3).
         expectMarksUnified(m);
+        expectMarkNames(m);
         // Paliers : ligne des nez de niveau (profil des garde-corps).
         expect(landingPitchGap(m.stepping, r.stringers)).toBeLessThan(1e-6);
         for (const part of m.parts) {

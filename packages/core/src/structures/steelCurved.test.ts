@@ -26,7 +26,7 @@ import { arcFiberLength, fiberDevelopment } from "./steelCurvedGeometry.js";
 import { treadScrewPoints } from "./supports.js";
 import "./index.js";
 import { fr, frList } from "../i18n.test-helpers.js";
-import { expectMarksUnified } from "./marks.testing.js";
+import { expectMarkNames, expectMarksUnified } from "./marks.testing.js";
 
 const fmtMm = (x: number): string => fr(msg("common.text", { text: dec(x, 0) }));
 
@@ -603,6 +603,7 @@ describe("propriétés du limon débillardé (générateur contraint)", () => {
         if (!c) return;
         // Une ligne de débit par repère (F10 Q3, C3), recopie faite une fois (steel-curved).
         expectMarksUnified(m);
+        expectMarkNames(m);
         for (const k of m.stepping.nosings) {
           expect(Math.abs(c.profile.at(k.sigmaInner) - k.z)).toBeLessThan(0.05);
         }

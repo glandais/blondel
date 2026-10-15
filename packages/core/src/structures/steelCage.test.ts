@@ -48,7 +48,7 @@ import {
   profileMiterFiberLength,
   type SteelProfileResult,
 } from "./steelProfile.js";
-import { expectMarksUnified } from "./marks.testing.js";
+import { expectMarkNames, expectMarksUnified } from "./marks.testing.js";
 
 const FR = translatorFor("fr");
 const E = SteelFlatParamsSchema.parse({}).thickness;
@@ -811,6 +811,7 @@ describe("propriétés : cages tirées parmi les fonctions déclarées", () => {
           expect(b.length).toBeGreaterThan(0);
           expectPositiveLengths(m, b);
           expectMarksUnified(m);
+          expectMarkNames(m);
           expectCarriedBothSides(b, m.stepping.treads);
           if (kind === "steel-flat") expectButtJoints(b, E);
         }),
@@ -851,6 +852,7 @@ describe("propriété : pans coupés courts devant l'épaisseur des plats et le 
                 );
           expectPositiveLengths(m, b);
           expectMarksUnified(m);
+          expectMarkNames(m);
           for (const x of b)
             expect(x.uHi - x.uLo, x.face.mark).toBeGreaterThan(MIN_CAGE_STRINGER_LENGTH);
           // Chaque pan coupé de plus de 1 mm : limon construit, ou erreur qui le nomme (profilés :
@@ -887,6 +889,7 @@ describe("propriété : repères des cages acier à tolérance d'identité tiré
         if (m.stepping.treads.length === 0 || m.errors.length > 0) return;
         built++;
         expectMarksUnified(m);
+        expectMarkNames(m);
         const bars = new Map<string, number[]>();
         for (const x of m.parts) {
           if (!/^(CR|PS)\d+$/.test(x.mark) || x.solid.kind !== "extrusion") continue;

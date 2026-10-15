@@ -8,20 +8,25 @@
 import { readFileSync, readdirSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { msg, type Message } from "@blondel/i18n";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { GEOM_EPS } from "../geom2d/tolerance.js";
-import type { Model, Part } from "../model/derived.js";
+import type { Model, Part, RuleResult } from "../model/derived.js";
+import type { StructureContext } from "../model/plugins.js";
 import type { Project } from "../model/project.js";
 import { buildModel } from "../pipeline/build.js";
 import { parseProjectText } from "../project/parse.js";
 import { createProject } from "../project/presets.js";
 import { resolveWorkshopProfile } from "../workshop/profile.js";
 import { countUniqueParts } from "./compare.js";
-import { expectFittedNotLarger, expectMarksUnified } from "./marks.testing.js";
+import { expectFittedNotLarger, expectMarkNames, expectMarksUnified } from "./marks.testing.js";
 import { QUANTITY_BUTT_WELD_MM, QUANTITY_WELD_MM } from "./steelCommon.js";
+import { minAreaRect } from "./geom.js";
+import { refreshRemarkedChecks } from "./steelCurved.js";
 import { markGroups } from "./steelFlat.js";
 import {
+  drillingPositions,
   supportGroupKey,
   supportPart,
   treadScrewDistribution,
@@ -47,6 +52,9 @@ const markOf = (m: Model, id: string): string | undefined => m.parts.find((p) =>
 /** Longueur réelle d'une barre (profondeur de son solide extrudé), sinon longueur de débit. */
 const realLength = (p: Part): number =>
   p.solid.kind === "extrusion" ? p.solid.depth : (p.stock?.length ?? 0);
+
+/** Réglages de `markGroups` pour des cornières (désignation commune, décision F10 Q6). */
+const CR_OPTS = { markName: () => msg("structure.common.support.angleWelded") };
 
 /** Pièces d'un repère, groupées. */
 const byMark = (parts: readonly Part[]): Map<string, Part[]> => {
@@ -86,9 +94,21 @@ describe("repères des cornières et supports (F10 Q1a, Q2)", () => {
       ...p,
       fixings: [{ joint: "treadBolted", points: 2, holeDiameter: d }],
     });
-    const same = markGroups([drilled(cr1[0]!, 7), drilled(cr1[1]!, 7)], "CR", supportGroupKey, 0.5);
+    const same = markGroups(
+      [drilled(cr1[0]!, 7), drilled(cr1[1]!, 7)],
+      "CR",
+      supportGroupKey,
+      0.5,
+      CR_OPTS,
+    );
     expect(new Set(same.map((p) => p.mark)).size).toBe(1);
-    const diff = markGroups([drilled(cr1[0]!, 7), drilled(cr1[1]!, 9)], "CR", supportGroupKey, 0.5);
+    const diff = markGroups(
+      [drilled(cr1[0]!, 7), drilled(cr1[1]!, 9)],
+      "CR",
+      supportGroupKey,
+      0.5,
+      CR_OPTS,
+    );
     expect(diff.map((p) => p.mark)).toEqual(["CR1", "CR2"]);
   });
 
@@ -116,6 +136,7 @@ describe("repères des cornières et supports (F10 Q1a, Q2)", () => {
             for (const x of g) expect(x.stock!.length).toBeCloseTo(Math.min(...ls), 9);
           }
           expectMarksUnified(m);
+          expectMarkNames(m);
         },
       ),
       { numRuns: 12 },
@@ -158,12 +179,19 @@ const ALL_EXAMPLES = readdirSync(EXAMPLES_DIR)
   .sort();
 
 describe("une ligne de débit par repère (F10 Q3, C3) : cotes du représentant recopiées", () => {
-  it.each(ALL_EXAMPLES)("%s : pièces d'un même repère aux mêmes cotes de débit", (name) => {
-    expectMarksUnified(build(example(name)));
-  });
+  it.each(ALL_EXAMPLES)(
+    "%s : pièces d'un même repère aux mêmes cotes de débit, désignation et référence communes",
+    (name) => {
+      const m = build(example(name));
+      expectMarksUnified(m);
+      expectMarkNames(m);
+    },
+  );
 
   it("préréglage helical : pièces d'un même repère aux mêmes cotes de débit", () => {
-    expectMarksUnified(build(createProject("helical")));
+    const m = build(createProject("helical"));
+    expectMarksUnified(m);
+    expectMarkNames(m);
   });
 
   /** Pièces d'un repère et la pièce attendue comme représentant (cotes réelles à T = 0). */
@@ -314,7 +342,7 @@ describe("régime de répartition des perçages dans la clé des supports (F10 (
       expect(parts[0]!.quantities["holes"]).toBe(parts[1]!.quantities["holes"]);
       expect(parts[0]!.fixings?.[0]?.distribution).toBe("even");
       expect(parts[1]!.fixings?.[0]?.distribution).toBe("betweenEdges");
-      const marked = markGroups(parts, "CR", supportGroupKey, T);
+      const marked = markGroups(parts, "CR", supportGroupKey, T, CR_OPTS);
       expect(marked.map((p) => p.mark)).toEqual(["CR1", "CR2"]);
       expect(countUniqueParts(parts, T)).toBe(2);
       // Même régime : un seul repère.
@@ -322,7 +350,9 @@ describe("régime de répartition des perçages dans la clé des supports (F10 (
         supportPart(place(1, hi), spec, "S", "steel-painted", profile, tread),
         supportPart(place(2, hi + T / 4), spec, "S", "steel-painted", profile, tread),
       ];
-      expect(new Set(markGroups(same, "CR", supportGroupKey, T).map((p) => p.mark)).size).toBe(1);
+      expect(
+        new Set(markGroups(same, "CR", supportGroupKey, T, CR_OPTS).map((p) => p.mark)).size,
+      ).toBe(1);
       expect(countUniqueParts(same, T)).toBe(1);
     },
   );
@@ -398,13 +428,13 @@ describe("recopie du représentant faite une seule fois (F10 Q3, steel-curved)",
     const a = cr(1, 100.4);
     const b = cr(2, 100.8);
     const c = cr(3, 100);
-    const once = markGroups([a, b, c], "CR", supportGroupKey, 0.5);
+    const once = markGroups([a, b, c], "CR", supportGroupKey, 0.5, CR_OPTS);
     expect(once.map((p) => p.mark)).toEqual(["CR1", "CR2", "CR1"]);
     for (const p of once)
       expect(Math.abs(p.stock!.length - realLength(p))).toBeLessThanOrEqual(0.5 + GEOM_EPS);
     // Deux passages (a, b recopiés d'abord, puis c) : b, réelle 100,8, débitée à 100 (> T).
-    const first = markGroups([a, b], "CR", supportGroupKey, 0.5);
-    const twice = markGroups([...first, c], "CR", supportGroupKey, 0.5);
+    const first = markGroups([a, b], "CR", supportGroupKey, 0.5, CR_OPTS);
+    const twice = markGroups([...first, c], "CR", supportGroupKey, 0.5, CR_OPTS);
     expect(new Set(twice.map((p) => p.mark)).size).toBe(1);
     expect(twice[1]!.stock!.length).toBeCloseTo(100, 9);
     expect(realLength(twice[1]!)).toBeCloseTo(100.8, 9);
@@ -428,4 +458,387 @@ describe("recopie du représentant faite une seule fois (F10 Q3, steel-curved)",
     },
     60_000,
   );
+});
+
+// ------------------------------------------------------------------ R2c : décision (27)
+
+describe("positions des perçages le long de la pièce dans la clé des supports (F10 (27))", () => {
+  const spec: SupportSpec = {
+    kind: "angle",
+    fixing: "welded",
+    angleLeg: 40,
+    angleThickness: 4,
+    plateWidth: 60,
+    plateThickness: 8,
+    bolts: 0,
+    holeDiameter: 11,
+    slotLength: 0,
+    holeEdgeDistance: 30,
+    treadScrews: 2,
+  };
+  /** Face le long de x (sens `dir`), support de `u0` à `u0 + length`. */
+  const place = (
+    tread: number,
+    length: number,
+    face: { a: { x: number; y: number }; dir: { x: number; y: number } } = {
+      a: { x: 0, y: 0 },
+      dir: { x: 1, y: 0 },
+    },
+    u0 = 1000 * tread,
+  ): SupportPlacement => ({
+    tread,
+    treadMark: `M${tread}`,
+    face: {
+      key: "stringer-inner-1",
+      owner: "stringer-inner-1",
+      ownerMark: "LI1",
+      kind: "stringer",
+      side: "inner",
+      a: face.a,
+      dir: face.dir,
+      into: { x: 0, y: 1 },
+      uMin: -5000,
+      uMax: 5000,
+    },
+    u0,
+    u1: u0 + length,
+    zTop: 200 * tread,
+  });
+  const profile = resolveWorkshopProfile(undefined);
+  const T = profile.identicalPartTolerance;
+  const positionsOf = (p: Part): number[] => drillingPositions(p);
+  const marksOf = (parts: Part[], t = T): string[] =>
+    markGroups(parts, "CR", supportGroupKey, t, CR_OPTS).map((p) => p.mark);
+
+  it("positions par régime : centré, entre pinces, régulier ; boulons de la joue", () => {
+    const L = 200;
+    const e = spec.holeEdgeDistance;
+    const one = supportPart(
+      place(1, L),
+      { ...spec, treadScrews: 1 },
+      "S",
+      "steel-painted",
+      profile,
+    );
+    expect(positionsOf(one)).toEqual([L / 2]);
+    const two = supportPart(place(1, L), spec, "S", "steel-painted", profile);
+    expect(positionsOf(two)[0]).toBeCloseTo(e, 9);
+    expect(positionsOf(two)[1]).toBeCloseTo(L - e, 9);
+    const short = supportPart(place(1, 50), spec, "S", "steel-painted", profile);
+    expect(positionsOf(short)[0]).toBeCloseTo(50 / 3, 9);
+    expect(positionsOf(short)[1]).toBeCloseTo((2 * 50) / 3, 9);
+    const bolted = supportPart(
+      place(1, L),
+      { ...spec, fixing: "bolted", bolts: 3, treadScrews: 0 },
+      "S",
+      "steel-painted",
+      profile,
+    );
+    const b = bolted.fixings!.find((f) => f.joint === "supportBolted")!;
+    expect(b.positions!.map((x) => Math.round(x * 1e6) / 1e6)).toEqual([e, L / 2, L - e]);
+  });
+
+  it("marche en tôle : mêmes longueur et nombre de perçages, points percés différents ⇒ deux repères", () => {
+    const a = supportPart(place(1, 200), spec, "S", "steel-painted", profile, "steel", [0]);
+    const b = supportPart(place(2, 200), spec, "S", "steel-painted", profile, "steel", [1]);
+    expect(supportGroupKey(a)).toBe(supportGroupKey(b));
+    expect(marksOf([a, b])).toEqual(["CR1", "CR2"]);
+    expect(countUniqueParts([a, b], T)).toBe(2);
+    const c = supportPart(place(3, 200 + T / 2), spec, "S", "steel-painted", profile, "steel", [0]);
+    expect(marksOf([a, c])).toEqual(["CR1", "CR1"]);
+    expect(countUniqueParts([a, c], T)).toBe(1);
+  });
+
+  it("positions décalées à T près : un repère ; au-delà de T : deux", () => {
+    const base = supportPart(place(1, 200), spec, "S", "steel-painted", profile);
+    const shifted = (id: string, dx: number): Part => ({
+      ...base,
+      id,
+      fixings: base.fixings!.map((f) => ({
+        ...f,
+        positions: f.positions!.map((x, i) => (i === 0 ? x + dx : x)),
+      })),
+    });
+    expect(marksOf([base, shifted("near", 0.9 * T)])).toEqual(["CR1", "CR1"]);
+    expect(countUniqueParts([base, shifted("near", 0.9 * T)], T)).toBe(1);
+    expect(marksOf([base, shifted("far", 1.1 * T)])).toEqual(["CR1", "CR2"]);
+    expect(countUniqueParts([base, shifted("far", 1.1 * T)], T)).toBe(2);
+  });
+
+  it("positions propres à la pièce : même cornière posée depuis l'autre bout de la face", () => {
+    // A : face dans le sens +x ; B : même face parcourue dans le sens −x (origine en x = 200).
+    // Le point percé d'indice 0 de A et celui d'indice 1 de B sont au même endroit du monde,
+    // donc de la même pièce physique : mêmes positions, même repère.
+    const a = supportPart(
+      place(1, 200, undefined, 0),
+      spec,
+      "S",
+      "steel-painted",
+      profile,
+      "steel",
+      [0],
+    );
+    const b = supportPart(
+      place(2, 200, { a: { x: 200, y: 0 }, dir: { x: -1, y: 0 } }, 0),
+      spec,
+      "S",
+      "steel-painted",
+      profile,
+      "steel",
+      [1],
+    );
+    expect(positionsOf(a)).toEqual(positionsOf(b));
+    expect(marksOf([a, b])).toEqual(["CR1", "CR1"]);
+  });
+
+  it("recopie : les membres d'un repère portent les positions du représentant", () => {
+    const a = supportPart(place(1, 200), spec, "S", "steel-painted", profile);
+    const b = supportPart(place(2, 200.4), spec, "S", "steel-painted", profile);
+    const [ma, mb] = markGroups([a, b], "CR", supportGroupKey, T, CR_OPTS);
+    expect(ma!.mark).toBe(mb!.mark);
+    expect(positionsOf(mb!)).toEqual(positionsOf(a));
+    expect(mb!.fixings![0]!.joint).toBe(b.fixings![0]!.joint);
+  });
+
+  it("propriété : chaque membre à T (+ ε) de l'ancre sur la longueur et chaque position ; partition indépendante de l'ordre", () => {
+    fc.assert(
+      fc.property(
+        fc.array(
+          fc.record({
+            length: fc.double({ min: 150, max: 154, noNaN: true }),
+            drilled: fc.subarray([0, 1, 2], { minLength: 0 }),
+          }),
+          { minLength: 2, maxLength: 8 },
+        ),
+        fc.double({ min: 0, max: 2, noNaN: true }),
+        fc.integer({ min: 0, max: 1000 }),
+        (rows, t, seed) => {
+          const s3 = { ...spec, treadScrews: 3 };
+          const parts = rows.map((r, i) =>
+            supportPart(
+              place(i + 1, r.length),
+              s3,
+              "S",
+              "steel-painted",
+              profile,
+              "steel",
+              r.drilled,
+            ),
+          );
+          const real = new Map(parts.map((p) => [p.id, p]));
+          const marked = markGroups(parts, "CR", supportGroupKey, t, CR_OPTS);
+          const groups = new Map<string, Part[]>();
+          for (const p of marked) groups.set(p.mark, [...(groups.get(p.mark) ?? []), p]);
+          const lim = t + GEOM_EPS;
+          for (const g of groups.values()) {
+            const measures = g.map((p) => {
+              const r = real.get(p.id)!;
+              return [r.stock!.length, ...drillingPositions(r)];
+            });
+            const anchored = measures.some((a) =>
+              measures.every(
+                (m) => m.length === a.length && m.every((x, k) => Math.abs(x - a[k]!) <= lim),
+              ),
+            );
+            expect(anchored).toBe(true);
+            expect(new Set(g.map(supportGroupKey)).size).toBe(1);
+          }
+          const partition = (xs: Part[]): string[] => {
+            const by = new Map<string, string[]>();
+            for (const p of markGroups(xs, "CR", supportGroupKey, t, CR_OPTS))
+              by.set(p.mark, [...(by.get(p.mark) ?? []), p.id]);
+            return [...by.values()].map((ids) => ids.sort().join(",")).sort();
+          };
+          // Permutation déterministe tirée de `seed`.
+          const shuffled = parts
+            .map((p, i) => ({ p, k: (i * 7919 + seed * 104729) % 1009 }))
+            .sort((x, y) => x.k - y.k)
+            .map((x) => x.p);
+          expect(partition(shuffled)).toEqual(partition(parts));
+        },
+      ),
+      { numRuns: 200, seed: 27 },
+    );
+  });
+});
+
+// ------------------------------------------------------------------ R2c : décision (29)
+
+describe("steel-curved : contrôles repris de steel-flat refaits après la recopie (F10 (29))", () => {
+  const curved = [
+    "demo-quarter-curved",
+    "j5b-debillarde-soude",
+    "cage-arc-palier-cintre",
+    "demo-cage-arc-glass",
+  ];
+
+  /** Contrôles FAB_FORMAT_TOLE des platines et FAB_BARRE_LONGUEUR, sur les valeurs débitées. */
+  const expectChecksOnCutValues = (m: Model): { sheets: number; bars: number } => {
+    const byId = new Map(m.parts.map((p) => [p.id, p]));
+    let sheets = 0;
+    let bars = 0;
+    for (const r of m.compliance.results) {
+      if (r.ruleId === "FAB_FORMAT_TOLE" && r.location.kind === "part") {
+        const p = byId.get(r.location.partId)!;
+        if (!p.id.startsWith("plate-")) continue;
+        expect(r.measured).toBeCloseTo(minAreaRect(p.flat!.outline.outer).length, 9);
+        expect(r.message.params?.["mark"], p.id).toBe(p.mark);
+        sheets++;
+      }
+      if (r.ruleId === "FAB_BARRE_LONGUEUR" && r.status === "ok" && r.measured !== undefined) {
+        const item = r.message.params?.["item"] as Message | undefined;
+        const mark = item?.params?.["text"];
+        const members = m.parts.filter((p) => p.mark === mark);
+        expect(members.length, `repère ${String(mark)}`).toBeGreaterThan(0);
+        for (const p of members) expect(p.stock!.length).toBeCloseTo(r.measured, 9);
+        // Barres de steel-flat (supports hors limon débillardé) : aucune plus longue.
+        for (const p of m.parts) {
+          if (p.category !== "support" || p.id.includes("curved") || !p.stock) continue;
+          expect(p.stock.length).toBeLessThanOrEqual(r.measured + 1e-9);
+        }
+        bars++;
+      }
+      // Épaisseur laser : libellé d'un repère final, porté par une pièce de cette épaisseur.
+      if (r.ruleId === "FAB_LASER_EPAISSEUR" && r.measured !== undefined) {
+        // Limon de mur : constat enveloppé (`wallStringer.detail`).
+        const base = (r.message.params?.["detail"] as Message | undefined) ?? r.message;
+        const item = base.params?.["item"] as Message | undefined;
+        const mark = item?.params?.["text"];
+        const members = m.parts.filter((p) => p.mark === mark && p.flat);
+        expect(members.length, `repère laser ${String(mark)}`).toBeGreaterThan(0);
+        expect(members.map((p) => p.flat!.thickness)).toContain(r.measured);
+      }
+    }
+    return { sheets, bars };
+  };
+
+  it.each(curved.flatMap((n) => [0.5, 12, 150].map((t) => [n, t] as const)))(
+    "%s à T = %s : format de tôle des platines, longueur de barre et épaisseur laser lus sur les pièces finales",
+    (name, t) => {
+      const m = build(withTolerance(example(name), t));
+      const n = expectChecksOnCutValues(m);
+      if (name === "demo-quarter-curved" || name === "j5b-debillarde-soude") {
+        expect(n.sheets).toBe(2);
+        expect(n.bars).toBe(1);
+      }
+    },
+    60_000,
+  );
+
+  it("demo-quarter-curved à T = 150 : la barre la plus défavorable est lue débitée, pas réelle", () => {
+    // La recopie ne touche la barre la plus longue des exemples `steel-curved` qu'à partir de
+    // T = 30 mm (`demo-quarter-curved`, `j5b-debillarde-soude`) : contrôle refait 405,5 mm (CR3)
+    // contre 452,4 mm réels (CR2 du premier repérage) sans la décision (29).
+    const p = example("demo-quarter-curved");
+    const m = build(withTolerance(p, 150));
+    const bar = m.compliance.results.find((r) => r.ruleId === "FAB_BARRE_LONGUEUR")!;
+    const real = build(withTolerance(p, 0)).parts.filter(
+      (x) => x.category === "support" && !x.id.includes("curved"),
+    );
+    const longest = Math.max(...real.map((x) => x.stock!.length));
+    expect(bar.measured!).toBeLessThan(longest - 1);
+    expectChecksOnCutValues(m);
+  }, 60_000);
+
+  it("refreshRemarkedChecks : constats remplacés à leur place, sur les pièces finales ; le reste tel quel", () => {
+    const project = example("demo-quarter-curved");
+    const m = build(project);
+    const ctx: StructureContext = { project, layout: m.layout, stepping: m.stepping };
+    const metal = resolveWorkshopProfile(project.workshop).metal;
+    const rs = m.compliance.results;
+    const find = (pred: (r: RuleResult) => boolean): RuleResult => rs.find(pred)!;
+    const plateSheet = find(
+      (r) =>
+        r.ruleId === "FAB_FORMAT_TOLE" &&
+        r.location.kind === "part" &&
+        r.location.partId.startsWith("plate-"),
+    );
+    const plateId = (plateSheet.location as { partId: string }).partId;
+    const stringer = m.parts.find((p) => p.category === "stringer" && p.flat)!;
+    const bar = find((r) => r.ruleId === "FAB_BARRE_LONGUEUR");
+    const laser = find((r) => r.ruleId === "FAB_LASER_EPAISSEUR");
+    const other = find((r) => !/^FAB_(FORMAT_TOLE|BARRE_LONGUEUR|LASER_EPAISSEUR)$/.test(r.ruleId));
+    // Pièce finale différente de celle du premier repérage : autre repère, autre développé.
+    const plate = m.parts.find((p) => p.id === plateId)!;
+    const grown: Part = {
+      ...plate,
+      mark: "PF7",
+      flat: {
+        ...plate.flat!,
+        outline: {
+          outer: plate.flat!.outline.outer.map((q) => ({ x: q.x * 1.5, y: q.y * 1.25 })),
+          holes: [],
+        },
+      },
+    };
+    const supports = m.parts.filter((p) => p.category === "support" && p.stock).slice(0, 2);
+    const stale = (r: RuleResult, measured: number): RuleResult => ({
+      ...r,
+      measured,
+      message: msg("structure.steel.check.inSheetFormat", { mark: "PF9" }),
+    });
+    const stringerSheet: RuleResult = {
+      ...stale(plateSheet, 1),
+      location: { kind: "part", partId: stringer.id },
+    };
+    const input = [
+      other,
+      stale(plateSheet, 999),
+      stringerSheet,
+      stale(bar, 1),
+      stale(bar, 2),
+      stale(laser, 3),
+      stale(laser, 4),
+      other,
+    ];
+    const out = refreshRemarkedChecks(input, {
+      ctx,
+      plates: [grown],
+      bars: supports,
+      laser: [stringer, grown],
+      metal,
+    });
+    // Ordre : autre, format (platine), format (limon), bloc barres, bloc laser, autre.
+    expect(out[0]).toBe(other);
+    expect(out.at(-1)).toBe(other);
+    expect(out[1]!.ruleId).toBe("FAB_FORMAT_TOLE");
+    expect(out[1]!.measured).toBeCloseTo(minAreaRect(grown.flat!.outline.outer).length, 9);
+    expect(out[1]!.message.params?.["mark"]).toBe("PF7");
+    expect(out[1]!.location).toEqual({ kind: "part", partId: plateId });
+    expect(out[2]).toBe(stringerSheet);
+    const ruleIds = out.slice(3, -1).map((r) => r.ruleId);
+    const bars = out.slice(3, -1).filter((r) => r.ruleId === "FAB_BARRE_LONGUEUR");
+    const lasers = out.slice(3, -1).filter((r) => r.ruleId === "FAB_LASER_EPAISSEUR");
+    expect(ruleIds).toEqual([
+      ...bars.map(() => "FAB_BARRE_LONGUEUR"),
+      ...lasers.map(() => "FAB_LASER_EPAISSEUR"),
+    ]);
+    expect(bars.length).toBeGreaterThan(0);
+    expect(lasers.length).toBeGreaterThan(0);
+    const itemText = (r: RuleResult) =>
+      (r.message.params?.["item"] as Message | undefined)?.params?.["text"];
+    // Valeurs et libellés des pièces passées, aucun constat périmé.
+    for (const r of bars) {
+      expect(supports.map((p) => p.stock!.length)).toContain(r.measured);
+      expect(supports.map((p) => p.mark)).toContain(itemText(r));
+    }
+    for (const r of lasers) {
+      expect([stringer.flat!.thickness, grown.flat!.thickness]).toContain(r.measured);
+      expect([stringer.mark, "PF7"]).toContain(itemText(r));
+    }
+    expect(out.filter((r) => r.message.params?.["mark"] === "PF9")).toEqual([stringerSheet]);
+  });
+
+  it("propriété : T ∈ [0 ; 160] sur les exemples steel-curved", () => {
+    fc.assert(
+      fc.property(
+        fc.constantFrom(...curved),
+        fc.double({ min: 0, max: 160, noNaN: true }),
+        (name, t) => {
+          expectChecksOnCutValues(build(withTolerance(example(name), t)));
+        },
+      ),
+      { numRuns: 16, seed: 29 },
+    );
+  }, 300_000);
 });

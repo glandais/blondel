@@ -16,6 +16,7 @@ import type { Part } from "@blondel/core";
 import {
   localeOption,
   materialLabel,
+  partDesignation,
   translatorOf,
   tr,
   type LocaleOption,
@@ -370,7 +371,10 @@ export function templatePages(
       : title;
   const single = grid.cols === 1 && grid.rows === 1;
   const thickness = part.flat?.thickness;
-  const singleTitle = tx.t("pdf.template.title", { mark: part.mark, name: tr(tx, part.name) });
+  const singleTitle = tx.t("pdf.template.title", {
+    mark: part.mark,
+    name: tr(tx, partDesignation(part)),
+  });
   // Entrée du sommaire : gabarit d'une page, ou toutes les cases d'une grille regroupées.
   const tocTitle = single
     ? singleTitle

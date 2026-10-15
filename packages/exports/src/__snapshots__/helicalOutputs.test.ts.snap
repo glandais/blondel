@@ -3202,51 +3202,16 @@ elevation.svg en dark {"sha":"21c27a0700cdc936","kinds":{"landing":1,"tread":1,"
 
 exports[`sorties hélicoïdales — exports (F10, P3, décision (10b)) > exemple j5c-limon-central-helicoidal > DXF des développés 1`] = `
 "
-fichiers 44
+fichiers 9
 FG1.dxf ×1 FG1 [central-web-left-1] 7399e840dbc1324d
 FD1.dxf ×1 FD1 [central-web-right-1] 45e11cf0f7a8f91c
-SH1.dxf ×1 SH1 [central-flange-top-1] 453307ef86e3254e
-SB1.dxf ×1 SB1 [central-flange-bottom-1] e041ffcd7d841c84
-EC1.dxf ×1 EC1 [central-diaphragm-1] 1a35e27577f35865
-EC1-2.dxf ×1 EC1 [central-diaphragm-2] 759caec565dc92a0
-EC1-3.dxf ×1 EC1 [central-diaphragm-3] 3574711b7fdd23c8
-EC1-4.dxf ×1 EC1 [central-diaphragm-4] 32e9a8da3a55af0b
-EC1-5.dxf ×1 EC1 [central-diaphragm-5] c7cecd6bd2f98289
-EC1-6.dxf ×1 EC1 [central-diaphragm-6] bf2cf4b3bf7e2952
-EC1-7.dxf ×1 EC1 [central-diaphragm-7] 7cccd845a4ab5911
-EC1-8.dxf ×1 EC1 [central-diaphragm-8] 4667c6bc5404a73b
-PF1.dxf ×1 PF1 [plate-foot-central] 8450c9a30b8ec1c1
-PH1.dxf ×1 PH1 [plate-head-central] bed436d46b86bcd2
-CO1.dxf ×1 CO1 [support-1-central] 94ee5c3032d291d1
-CO1-2.dxf ×1 CO1 [support-2-central] a642858e11bb78a5
-CO1-3.dxf ×1 CO1 [support-3-central] a2aaf50d44c63247
-CO1-4.dxf ×1 CO1 [support-4-central] c76c2e51f6e465b7
-CO1-5.dxf ×1 CO1 [support-5-central] c4ff326606934a4f
-CO1-6.dxf ×1 CO1 [support-6-central] 463d96b9e680c5d5
-CO1-7.dxf ×1 CO1 [support-7-central] f18e3adbd4db048f
-CO1-8.dxf ×1 CO1 [support-8-central] b0700a2f1599628b
-CO1-9.dxf ×1 CO1 [support-9-central] 19d33084bbb1401e
-CO1-10.dxf ×1 CO1 [support-10-central] b9ddce5cc5a5d906
-CO1-11.dxf ×1 CO1 [support-11-central] cd0cea29eb3d1823
-CO1-12.dxf ×1 CO1 [support-12-central] cd86ea997d810b68
-CO1-13.dxf ×1 CO1 [support-13-central] 1b7bc8aa82356133
-CO1-14.dxf ×1 CO1 [support-14-central] 7717aef16470a8e4
-CO1-15.dxf ×1 CO1 [support-15-central] aac5ed1d90e01785
-AP1.dxf ×1 AP1 [support-1-central-bearing] 6bfeeafc3568e1b4
-AP1-2.dxf ×1 AP1 [support-2-central-bearing] eda75d2d3ccd1766
-AP1-3.dxf ×1 AP1 [support-3-central-bearing] 714d63d4be0e1610
-AP1-4.dxf ×1 AP1 [support-4-central-bearing] 99f8b3f637e9571d
-AP1-5.dxf ×1 AP1 [support-5-central-bearing] 1b5c09215f069988
-AP1-6.dxf ×1 AP1 [support-6-central-bearing] 6b0fdfbe87fe8a9f
-AP1-7.dxf ×1 AP1 [support-7-central-bearing] eadb13bd48d1d119
-AP1-8.dxf ×1 AP1 [support-8-central-bearing] 171ea9b643d7a6e1
-AP1-9.dxf ×1 AP1 [support-9-central-bearing] 90d5cc9ed9f552a2
-AP1-10.dxf ×1 AP1 [support-10-central-bearing] 5add858597dc622a
-AP1-11.dxf ×1 AP1 [support-11-central-bearing] 11791b13992a1a62
-AP1-12.dxf ×1 AP1 [support-12-central-bearing] 2f274595a600e834
-AP1-13.dxf ×1 AP1 [support-13-central-bearing] 01df5b5dc11bcb30
-AP1-14.dxf ×1 AP1 [support-14-central-bearing] bd853aee86e90709
-AP1-15.dxf ×1 AP1 [support-15-central-bearing] 55acdc32a9e4c729
+SH1.dxf ×1 SH1 [central-flange-top-1] c62270bd9447dac5
+SB1.dxf ×1 SB1 [central-flange-bottom-1] 789a9f9ac63590cb
+EC1.dxf ×8 EC1 [central-diaphragm-1, central-diaphragm-2, central-diaphragm-3, central-diaphragm-4, central-diaphragm-5, central-diaphragm-6, central-diaphragm-7, central-diaphragm-8] a16fc530cd7e25b1
+PF1.dxf ×1 PF1 [plate-foot-central] 96032e89d5ec78f4
+PH1.dxf ×1 PH1 [plate-head-central] e864d8b378145107
+CO1.dxf ×15 CO1 [support-1-central, support-2-central, support-3-central, support-4-central, support-5-central, support-6-central, support-7-central, support-8-central, support-9-central, support-10-central, support-11-central, support-12-central, support-13-central, support-14-central, support-15-central] a19b23b03c6ade59
+AP1.dxf ×15 AP1 [support-1-central-bearing, support-2-central-bearing, support-3-central-bearing, support-4-central-bearing, support-5-central-bearing, support-6-central-bearing, support-7-central-bearing, support-8-central-bearing, support-9-central-bearing, support-10-central-bearing, support-11-central-bearing, support-12-central-bearing, support-13-central-bearing, support-14-central-bearing, support-15-central-bearing] 81e5118d53e9c3c9
 "
 `;
 
@@ -3254,16 +3219,16 @@ exports[`sorties hélicoïdales — exports (F10, P3, décision (10b)) > exemple
 "
 groupes 27
 groupe {"material":"steel-painted","materialLabel":"Acier peint","basis":"thickness","thickness":8,"totals":{"quantity":42,"lengthM":43.558045,"volumeM3":0.039651,"massKg":280.588794,"massNotes":[]}}
-  ligne {"mark":"AP1","name":"Plat d'appui de la console de M1","section":"tôle 8","length":749.632206,"width":60,"thickness":8,"source":"stock","unitMass":2.824614,"quantity":15}
-  ligne {"mark":"CO1","name":"Console du limon central sous M1","section":"tôle 8","length":749.632206,"width":121.0625,"thickness":8,"source":"stock","unitMass":4.045698,"quantity":15}
-  ligne {"mark":"EC1","name":"Entretoise 1 du limon central","section":"tôle 8","length":211.314611,"width":84,"thickness":8,"source":"stock","unitMass":1.114727,"quantity":8}
+  ligne {"mark":"AP1","name":"Plat d'appui de console","section":"tôle 8","length":749.632206,"width":60,"thickness":8,"source":"stock","unitMass":2.824614,"quantity":15}
+  ligne {"mark":"CO1","name":"Console du limon central","section":"tôle 8","length":749.632206,"width":121.0625,"thickness":8,"source":"stock","unitMass":4.045698,"quantity":15}
+  ligne {"mark":"EC1","name":"Entretoise du limon central","section":"tôle 8","length":211.314611,"width":84,"thickness":8,"source":"stock","unitMass":1.114727,"quantity":8}
   ligne {"mark":"FD1","name":"Flasque droite du limon central","section":"tôle 8 (S235) roulée, largeur 203","length":5185.381512,"width":202.686998,"thickness":8,"source":"stock","unitMass":62.895947,"quantity":1}
   ligne {"mark":"FG1","name":"Flasque gauche du limon central","section":"tôle 8 (S235) roulée, largeur 197","length":4739.050178,"width":196.924463,"thickness":8,"source":"stock","unitMass":55.847923,"quantity":1}
   ligne {"mark":"SB1","name":"Semelle basse du limon central","section":"tôle 8","length":4493.518977,"width":84,"thickness":8,"source":"stock","unitMass":23.704211,"quantity":1}
   ligne {"mark":"SH1","name":"Semelle haute du limon central","section":"tôle 8","length":4960.610818,"width":84,"thickness":8,"source":"stock","unitMass":26.168214,"quantity":1}
 groupe {"material":"steel-painted","materialLabel":"Acier peint","basis":"thickness","thickness":10,"totals":{"quantity":2,"lengthM":0.736405,"volumeM3":0.001473,"massKg":11.499756,"massNotes":[]}}
-  ligne {"mark":"PF1","name":"Platine de pied de FG1","section":"tôle 10","length":506.715363,"width":200,"thickness":10,"source":"stock","unitMass":7.914228,"quantity":1}
-  ligne {"mark":"PH1","name":"Platine de tête de FG1","section":"tôle 10","length":229.689795,"width":200,"thickness":10,"source":"stock","unitMass":3.585528,"quantity":1}
+  ligne {"mark":"PF1","name":"Platine de pied de limon","section":"tôle 10","length":506.715363,"width":200,"thickness":10,"source":"stock","unitMass":7.914228,"quantity":1}
+  ligne {"mark":"PH1","name":"Platine de tête de limon","section":"tôle 10","length":229.689795,"width":200,"thickness":10,"source":"stock","unitMass":3.585528,"quantity":1}
 groupe {"material":"wood-oak","materialLabel":"Chêne","basis":"thickness","thickness":80,"totals":{"quantity":15,"lengthM":13.209015,"volumeM3":0.495014,"massKg":224.422839,"massNotes":["masse volumique à valider"]}}
   ligne {"mark":"M1","name":"Marche 1","section":"","length":880.601008,"width":468.442969,"thickness":80,"source":"stock","unitMass":14.961523,"massNote":"masse volumique à valider","quantity":1}
   ligne {"mark":"M2","name":"Marche 2","section":"","length":880.601008,"width":468.442969,"thickness":80,"source":"stock","unitMass":14.961523,"massNote":"masse volumique à valider","quantity":1}
@@ -3416,13 +3381,13 @@ exports[`sorties hélicoïdales — exports (F10, P3, décision (10b)) > exemple
 "
 --- cutlist.csv fr
 ﻿Repère;Désignation;Matériau;Section;Longueur (mm);Largeur (mm);Épaisseur (mm);Quantité;Volume unitaire (m³);Volume total (m³);Masse unitaire (kg);Masse totale (kg);Remarque masse
-EC1;Entretoise 1 du limon central;Acier peint;tôle 8;211,3;84,0;8,0;8;0,000142;0,001136;1,11;8,92;
+EC1;Entretoise du limon central;Acier peint;tôle 8;211,3;84,0;8,0;8;0,000142;0,001136;1,11;8,92;
 FD1;Flasque droite du limon central;Acier peint;tôle 8 (S235) roulée, largeur 203;5185,4;202,7;8,0;1;0,008012;0,008012;62,90;62,90;
 FG1;Flasque gauche du limon central;Acier peint;tôle 8 (S235) roulée, largeur 197;4739,1;196,9;8,0;1;0,007114;0,007114;55,85;55,85;
 SB1;Semelle basse du limon central;Acier peint;tôle 8;4493,5;84,0;8,0;1;0,003020;0,003020;23,70;23,70;
 SH1;Semelle haute du limon central;Acier peint;tôle 8;4960,6;84,0;8,0;1;0,003334;0,003334;26,17;26,17;
-AP1;Plat d'appui de la console de M1;Acier peint;tôle 8;749,6;60,0;8,0;15;0,000360;0,005397;2,82;42,37;
-CO1;Console du limon central sous M1;Acier peint;tôle 8;749,6;121,1;8,0;15;0,000515;0,007731;4,05;60,69;
+AP1;Plat d'appui de console;Acier peint;tôle 8;749,6;60,0;8,0;15;0,000360;0,005397;2,82;42,37;
+CO1;Console du limon central;Acier peint;tôle 8;749,6;121,1;8,0;15;0,000515;0,007731;4,05;60,69;
 M1;Marche 1;Chêne;;880,6;468,4;80,0;1;0,021374;0,021374;14,96;14,96;masse volumique à valider
 M2;Marche 2;Chêne;;880,6;468,4;80,0;1;0,021374;0,021374;14,96;14,96;masse volumique à valider
 M3;Marche 3;Chêne;;880,6;468,4;80,0;1;0,021374;0,021374;14,96;14,96;masse volumique à valider
@@ -3438,8 +3403,8 @@ M12;Marche 12;Chêne;;880,6;468,4;80,0;1;0,021374;0,021374;14,96;14,96;masse vol
 M13;Marche 13;Chêne;;880,6;468,4;80,0;1;0,021374;0,021374;14,96;14,96;masse volumique à valider
 M14;Marche 14;Chêne;;880,6;468,4;80,0;1;0,021374;0,021374;14,96;14,96;masse volumique à valider
 M15;Marche 15;Chêne;;880,6;468,4;80,0;1;0,021374;0,021374;14,96;14,96;masse volumique à valider
-PF1;Platine de pied de FG1;Acier peint;tôle 10;506,7;200,0;10,0;1;0,001008;0,001008;7,91;7,91;
-PH1;Platine de tête de FG1;Acier peint;tôle 10;229,7;200,0;10,0;1;0,000457;0,000457;3,59;3,59;
+PF1;Platine de pied de limon;Acier peint;tôle 10;506,7;200,0;10,0;1;0,001008;0,001008;7,91;7,91;
+PH1;Platine de tête de limon;Acier peint;tôle 10;229,7;200,0;10,0;1;0,000457;0,000457;3,59;3,59;
 Total;;;;;;;59;;0,357819;;516,50;masse volumique à valider
 
 --- fasteners.csv fr
@@ -3450,13 +3415,13 @@ Total;;;;;;66;;
 
 --- cutlist.csv en
 ﻿Mark,Description,Material,Section,Length (mm),Width (mm),Thickness (mm),Quantity,Unit volume (m³),Total volume (m³),Unit mass (kg),Total mass (kg),Mass note
-EC1,Mono-stringer diaphragm 1,Painted steel,plate 8,211.3,84.0,8.0,8,0.000142,0.001136,1.11,8.92,
+EC1,Mono-stringer diaphragm,Painted steel,plate 8,211.3,84.0,8.0,8,0.000142,0.001136,1.11,8.92,
 FD1,Mono-stringer right web,Painted steel,"rolled plate 8 (S235), width 203",5185.4,202.7,8.0,1,0.008012,0.008012,62.90,62.90,
 FG1,Mono-stringer left web,Painted steel,"rolled plate 8 (S235), width 197",4739.1,196.9,8.0,1,0.007114,0.007114,55.85,55.85,
 SB1,Mono-stringer bottom flange,Painted steel,plate 8,4493.5,84.0,8.0,1,0.003020,0.003020,23.70,23.70,
 SH1,Mono-stringer top flange,Painted steel,plate 8,4960.6,84.0,8.0,1,0.003334,0.003334,26.17,26.17,
-AP1,Bracket bearing plate of M1,Painted steel,plate 8,749.6,60.0,8.0,15,0.000360,0.005397,2.82,42.37,
-CO1,Mono-stringer bracket under M1,Painted steel,plate 8,749.6,121.1,8.0,15,0.000515,0.007731,4.05,60.69,
+AP1,Bracket bearing plate,Painted steel,plate 8,749.6,60.0,8.0,15,0.000360,0.005397,2.82,42.37,
+CO1,Mono-stringer bracket,Painted steel,plate 8,749.6,121.1,8.0,15,0.000515,0.007731,4.05,60.69,
 M1,Tread 1,Oak,,880.6,468.4,80.0,1,0.021374,0.021374,14.96,14.96,density to be validated
 M2,Tread 2,Oak,,880.6,468.4,80.0,1,0.021374,0.021374,14.96,14.96,density to be validated
 M3,Tread 3,Oak,,880.6,468.4,80.0,1,0.021374,0.021374,14.96,14.96,density to be validated
@@ -3472,8 +3437,8 @@ M12,Tread 12,Oak,,880.6,468.4,80.0,1,0.021374,0.021374,14.96,14.96,density to be
 M13,Tread 13,Oak,,880.6,468.4,80.0,1,0.021374,0.021374,14.96,14.96,density to be validated
 M14,Tread 14,Oak,,880.6,468.4,80.0,1,0.021374,0.021374,14.96,14.96,density to be validated
 M15,Tread 15,Oak,,880.6,468.4,80.0,1,0.021374,0.021374,14.96,14.96,density to be validated
-PF1,Base plate of FG1,Painted steel,plate 10,506.7,200.0,10.0,1,0.001008,0.001008,7.91,7.91,
-PH1,Head plate of FG1,Painted steel,plate 10,229.7,200.0,10.0,1,0.000457,0.000457,3.59,3.59,
+PF1,Stringer base plate,Painted steel,plate 10,506.7,200.0,10.0,1,0.001008,0.001008,7.91,7.91,
+PH1,Stringer head plate,Painted steel,plate 10,229.7,200.0,10.0,1,0.000457,0.000457,3.59,3.59,
 Total,,,,,,,59,,0.357819,,516.50,density to be validated
 
 --- fasteners.csv en

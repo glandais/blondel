@@ -17,7 +17,14 @@ import {
   type Vec2,
 } from "@blondel/core";
 import { formatIn } from "../format.js";
-import { materialLabel, translatorOf, tr, type LocaleOption, type Translator } from "../i18n.js";
+import {
+  materialLabel,
+  partDesignation,
+  translatorOf,
+  tr,
+  type LocaleOption,
+  type Translator,
+} from "../i18n.js";
 import { polygonPath } from "../path.js";
 import { DEFAULT_PART_DXF_VERSION, createDxfWriter } from "./create.js";
 import { localizedLayers, type LayerSpec } from "./layers.js";
@@ -296,7 +303,7 @@ export function exportPartDxf(part: Part, options: PartDxfOptions = {}): string 
   // Informations hors pièce.
   const t = formatIn(tx, flat.thickness, { decimals: 1, trimZeros: true, thousands: "" });
   const info = [
-    `${part.mark} - ${tr(tx, part.name)}`,
+    `${part.mark} - ${tr(tx, partDesignation(part))}`,
     tx.t("dxf.part.material", { material: materialLabel(tx, part.material), thickness: t }) +
       (part.section !== undefined ? ` - ${tr(tx, part.section)}` : ""),
   ];

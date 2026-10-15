@@ -541,6 +541,14 @@ export interface Part {
   readonly category: PartCategory;
   /** Désignation de la pièce (ex. « Marche 5 », « Limon de jour »), traduite à l'affichage. */
   readonly name: Message;
+  /**
+   * Désignation commune du repère (décision F10 Q6), sans la pièce porteuse (ex. « Cornière
+   * soudée », « Platine de pied de limon ») : renseignée pour toute pièce repérée par identité
+   * (`markGroups`), la même pour tous les membres d'un repère ; `name` garde la désignation de
+   * la pièce (avec sa pièce porteuse). Lue par la liste et la fiche de débit, les développés
+   * (DXF, SVG, PDF) ; absente : `name`. Ajout rétrocompatible (sortie du `Model`).
+   */
+  readonly markName?: Message;
   readonly material: MaterialId;
   readonly solid: SolidDesc;
   readonly flat?: FlatPattern;
@@ -652,6 +660,15 @@ export interface PartFixing {
    * rétrocompatible (sortie du `Model`).
    */
   readonly distribution?: FixingDistribution;
+  /**
+   * Positions des points le long de la pièce (mm, croissantes), depuis l'origine de la pièce
+   * (bout `z = 0` de son repère local, sens de son axe d'extrusion) : une par point percé
+   * (`points` valeurs). Lues par la clé des repères (décision F10 (27) : deux supports ne
+   * partagent un repère que si leurs perçages sont aux mêmes positions, à la tolérance
+   * d'identité près) et par le comparateur (`countUniqueParts`). Absent : non précisé (pièces
+   * autres que les supports). Ajout rétrocompatible (sortie du `Model`).
+   */
+  readonly positions?: readonly Mm[];
 }
 
 /** Régime de répartition des points d'une fixation le long de la pièce (`PartFixing`). */

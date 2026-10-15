@@ -20,6 +20,7 @@ export {
   compareText,
   localeOption,
   materialLabel,
+  partDesignation,
   translatorOf,
   type Locale,
   type LocaleOption,

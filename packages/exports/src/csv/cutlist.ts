@@ -48,6 +48,7 @@ import { groupNear, nearlyEqualRelative } from "../grouping.js";
 import {
   compareMarks,
   materialLabel,
+  partDesignation,
   translatorOf,
   tr,
   trOpt,
@@ -229,9 +230,12 @@ export function supplyLabel(t: Translator, part: Pick<Part, "stock">): string | 
   return part.stock?.supply === "veneer" ? t.t("export.cutlist.supply.veneer") : undefined;
 }
 
-/** Désignation d'une ligne de débit : nom de la pièce, suivi de « (placage) » s'il y a lieu. */
-export function cutName(t: Translator, part: Pick<Part, "name" | "stock">): string {
-  const name = tr(t, part.name);
+/**
+ * Désignation d'une ligne de débit : désignation commune du repère (`partDesignation`, décision
+ * F10 Q6), sinon nom de la pièce, suivi de « (placage) » s'il y a lieu.
+ */
+export function cutName(t: Translator, part: Pick<Part, "name" | "markName" | "stock">): string {
+  const name = tr(t, partDesignation(part));
   return part.stock?.supply === "veneer" ? t.t("export.cutlist.veneer", { name }) : name;
 }
 

@@ -4,7 +4,7 @@
  * premier membre dans un ordre indépendant du modèle (`groupIdenticalFlats`). R2b (Q3) : ancres
  * exposées (`…Anchored`) et recopie du représentant (`unifyMarkGroup`).
  */
-import { textMessage } from "@blondel/i18n";
+import { msg, textMessage } from "@blondel/i18n";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { GEOM_EPS } from "../geom2d/tolerance.js";
@@ -366,6 +366,38 @@ describe("groupIdenticalFlats (F10 Q1b) : comparaison à l'ancre, ordre indépen
     ])
       expect(groupIdenticalFlats([a, withLines(moved, lines)], 0.5)).toHaveLength(2);
   });
+
+  it("texte de référence : nature et clé comparées, paramètres ignorés (F10 (33))", () => {
+    type Reference = NonNullable<NonNullable<Part["flat"]>["reference"]>;
+    const withRef = (p: Part, reference?: Reference): Part => {
+      const { reference: _drop, ...flat } = p.flat!;
+      return { ...p, flat: reference ? { ...flat, reference } : flat };
+    };
+    const ref = (kind: Reference["kind"], description: Reference["description"]): Reference => ({
+      kind,
+      description,
+    });
+    const a = rectPart("a", 200, 80, 0, V.ZERO);
+    const b = rectPart("b", 200, 80, 1, V.vec(10, 0));
+    const plane = ref("face", msg("structure.steelCentral.reference.flange"));
+    // Même nature, même clé, paramètres différents : un seul groupe.
+    expect(
+      groupIdenticalFlats(
+        [
+          withRef(a, plane),
+          withRef(b, ref("face", msg("structure.steelCentral.reference.flange", { segment: 2 }))),
+        ],
+        0.5,
+      ),
+    ).toEqual([["a", "b"]]);
+    // Clé différente (aile plane / aile gauche), nature différente, ou référence absente : séparés.
+    for (const other of [
+      ref("face", msg("structure.steelCentral.reference.flangeWarped")),
+      ref("neutral-fiber", msg("structure.steelCentral.reference.flange")),
+      undefined,
+    ])
+      expect(groupIdenticalFlats([withRef(a, plane), withRef(b, other)], 0.5)).toHaveLength(2);
+  });
 });
 
 // ------------------------------------------------------------------ R2b : ancres et recopie
@@ -447,7 +479,15 @@ describe("unifyMarkGroup (F10 Q3) : cotes de débit du représentant, pièce ré
     section: textMessage("tôle 8"),
     stock: { length: p.id === "a" ? 200 : 200.3, width: 80, thickness: 8 },
     quantities: { mass_kg: p.id === "a" ? 1 : 1.002, holes: 2, [QUANTITY_WELD_MM]: weld },
-    fixings: [{ joint: "supportBolted", points: 2, with: [`owner-${p.id}`] }],
+    markName: textMessage(`désignation ${p.id}`),
+    fixings: [
+      {
+        joint: "supportBolted",
+        points: 2,
+        with: [`owner-${p.id}`],
+        positions: [20, p.id === "a" ? 180 : 180.3],
+      },
+    ],
     flat: {
       ...p.flat!,
       lines: [{ kind: "text", a: V.vec(0, 0), b: V.vec(1, 0), label: textMessage("X") }],
@@ -457,7 +497,7 @@ describe("unifyMarkGroup (F10 Q3) : cotes de débit du représentant, pièce ré
   const rep = withText(rectPart("a", 200, 80, 0, V.ZERO), "EC1", "réf a", 10);
   const other = withText(rectPart("b", 200.3, 80, 1, V.vec(5, 5)), "EC1", "réf b", 20);
 
-  it("membres : stock, quantités de débit et développé du représentant ; le reste est gardé", () => {
+  it("membres : stock, quantités de débit, développé (référence comprise), désignation commune et positions des perçages du représentant ; le reste est gardé", () => {
     const [ua, ub] = unifyMarkGroup([rep, other], rep);
     expect(ua).toBe(rep);
     expect(ub!.stock).toEqual(rep.stock);
@@ -467,8 +507,12 @@ describe("unifyMarkGroup (F10 Q3) : cotes de débit du représentant, pièce ré
     expect(ub!.flat!.lines).toEqual([
       { kind: "text", a: V.vec(0, 0), b: V.vec(1, 0), label: textMessage("EC1") },
     ]);
-    expect(ub!.flat!.reference).toEqual(other.flat!.reference);
-    for (const k of ["id", "name", "solid", "fixings", "section", "mark", "category"] as const)
+    // Texte de référence et désignation communs au repère (décisions F10 Q5, Q6).
+    expect(ub!.flat!.reference).toEqual(rep.flat!.reference);
+    expect(ub!.markName).toEqual(rep.markName);
+    // Perçages : positions du représentant (décision (27)), pièces assemblées du membre.
+    expect(ub!.fixings).toEqual([{ ...other.fixings![0]!, positions: [20, 180] }]);
+    for (const k of ["id", "name", "solid", "section", "mark", "category"] as const)
       expect(ub![k]).toEqual(other[k]);
   });
 

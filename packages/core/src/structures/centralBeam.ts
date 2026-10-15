@@ -1263,7 +1263,6 @@ function boxParts(
           onArc
             ? "structure.steelCentral.reference.flangeWarped"
             : "structure.steelCentral.reference.flange",
-          { segment: i + 1, segments: count },
         ),
       );
       // Solide : balayage de la section (b − 2t_w) × t_f le long de la rive à l'axe.
@@ -1359,7 +1358,7 @@ function boxParts(
       canVent ? holesAt : [],
       ventD,
       "EC",
-      msg("structure.steelCentral.reference.diaphragm", { index: j + 1 }),
+      msg("structure.steelCentral.reference.diaphragm"),
     );
     const left = trace.left(s);
     const t = trace.tangent(s);
@@ -1409,9 +1408,15 @@ function boxParts(
   // Repères des pièces identiques (semelles, entretoises).
   const marked = new Map<string, Part>();
   for (const p of [
-    ...markGroups(tops, "SH", () => null, profile.identicalPartTolerance),
-    ...markGroups(bottoms, "SB", () => null, profile.identicalPartTolerance),
-    ...markGroups(diaphragms, "EC", () => null, profile.identicalPartTolerance),
+    ...markGroups(tops, "SH", () => null, profile.identicalPartTolerance, {
+      markName: () => msg("structure.steelCentral.part.flangeTopWhole"),
+    }),
+    ...markGroups(bottoms, "SB", () => null, profile.identicalPartTolerance, {
+      markName: () => msg("structure.steelCentral.part.flangeBottomWhole"),
+    }),
+    ...markGroups(diaphragms, "EC", () => null, profile.identicalPartTolerance, {
+      markName: () => msg("structure.steelCentral.markName.diaphragm"),
+    }),
   ]) {
     marked.set(p.id, p);
   }
@@ -1671,7 +1676,7 @@ function beamPlates(
       plateHoles(L, W, pl.holeEdgeDistance, 2),
       pl.holeDiameter,
       "PF",
-      msg("structure.steel.reference.footPlate", { mark: firstMark }),
+      msg("structure.steel.reference.footPlate"),
     );
     const o = V.addScaled(V.addScaled(trace.point(mid), t, -L / 2), left, -W / 2);
     const w = 2 * (cut + sec.width);
@@ -1699,6 +1704,7 @@ function beamPlates(
         "PF",
         () => null,
         profile.identicalPartTolerance,
+        { markName: () => msg("structure.steel.markName.footPlate") },
       ),
     );
   }
@@ -1716,7 +1722,7 @@ function beamPlates(
         plateHoles(H, W, pl.holeEdgeDistance, 1),
         pl.holeDiameter,
         "PH",
-        msg("structure.steel.reference.headPlate", { mark: lastMark }),
+        msg("structure.steel.reference.headPlate"),
       );
       const o = V.addScaled(trace.point(s), left, -W / 2);
       const w = 2 * (H + sec.width);
@@ -1744,6 +1750,7 @@ function beamPlates(
           "PH",
           () => null,
           profile.identicalPartTolerance,
+          { markName: () => msg("structure.steel.markName.headPlate") },
         ),
       );
     }

@@ -41,6 +41,19 @@ export function tr(t: Translator, m: Message): string {
   return t.t(m);
 }
 
+/**
+ * Désignation d'une pièce dans les sorties de fabrication (liste et fiche de débit, développés
+ * DXF, SVG et PDF) : désignation commune de son repère (`Part.markName`, décision F10 Q6, sans
+ * pièce porteuse), sinon sa désignation propre (`Part.name`). Le glTF garde `Part.name` (il
+ * nomme l'instance posée).
+ */
+export function partDesignation(part: {
+  readonly name: Message;
+  readonly markName?: Message;
+}): Message {
+  return part.markName ?? part.name;
+}
+
 /** Texte d'un message optionnel (`undefined` s'il est absent). */
 export function trOpt(t: Translator, m: Message | undefined): string | undefined {
   return m === undefined ? undefined : t.t(m);

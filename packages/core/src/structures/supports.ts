@@ -146,6 +146,56 @@ export function boltCenters(p: SupportPlacement, spec: SupportSpec): Vec2[] {
 }
 
 /**
+ * Sens de l'axe d'extrusion de la pièce support (`supportPart`) le long de la face : `true` s'il
+ * va dans le sens de `face.dir` (origine de la pièce au bout `u0`), `false` sinon (origine au
+ * bout `u1`). Repère direct de la pièce : X = −`face.into`, Y = verticale, Z = X × Y.
+ */
+function partAxisForward(p: SupportPlacement): boolean {
+  return V.dot(V.perpRight(V.scale(p.face.into, -1)), p.face.dir) > 0;
+}
+
+/**
+ * Abscisse le long de la pièce support (depuis son origine, sens de son axe d'extrusion) d'un
+ * point d'abscisse `u` le long de la face : propre à la pièce, indépendante du sens de la face
+ * (deux supports identiques posés sur des faces de sens opposés ont les mêmes positions).
+ */
+function alongPart(p: SupportPlacement, u: Mm): Mm {
+  return partAxisForward(p) ? u - p.u0 : p.u1 - u;
+}
+
+/**
+ * Positions des perçages de boulons le long de la pièce (`PartFixing.positions`, décision F10
+ * (27)), dans l'ordre de `boltCenters`.
+ */
+export function boltAbscissae(p: SupportPlacement, spec: SupportSpec): Mm[] {
+  return boltCenters(p, spec).map((c) => alongPart(p, c.x));
+}
+
+/**
+ * Abscisses le long de la face (u) des points de fixation de la marche (`treadScrewPoints`),
+ * dans le même ordre.
+ */
+function treadScrewUs(p: SupportPlacement, spec: SupportSpec): Mm[] {
+  const n = Number.isFinite(spec.treadScrews) ? Math.max(0, Math.floor(spec.treadScrews)) : 0;
+  if (n === 0) return [];
+  const lo = p.u0 + spec.holeEdgeDistance;
+  const hi = p.u1 - spec.holeEdgeDistance;
+  if (n === 1) return [(p.u0 + p.u1) / 2];
+  if (!(hi > lo)) {
+    return Array.from({ length: n }, (_, i) => p.u0 + ((p.u1 - p.u0) * (i + 1)) / (n + 1));
+  }
+  return Array.from({ length: n }, (_, i) => lo + ((hi - lo) * i) / (n - 1));
+}
+
+/**
+ * Positions des points de fixation de la marche le long de la pièce (`PartFixing.positions`,
+ * décision F10 (27)), dans l'ordre de `treadScrewPoints`.
+ */
+export function treadScrewAbscissae(p: SupportPlacement, spec: SupportSpec): Mm[] {
+  return treadScrewUs(p, spec).map((u) => alongPart(p, u));
+}
+
+/**
  * Régime de répartition des perçages de boulons dans la joue (`boltCenters`, décision F10
  * (23)) : `centered` pour un seul boulon (ou une pièce trop courte pour les pinces, qui n'en
  * reçoit qu'un), `betweenEdges` sinon. `null` : aucun boulon.
@@ -184,37 +234,29 @@ export function treadScrewDistribution(
  * régulièrement sur sa longueur). Mêmes points dans l'aile du support et dans la marche.
  */
 export function treadScrewPoints(p: SupportPlacement, spec: SupportSpec): Vec2[] {
-  const n = Number.isFinite(spec.treadScrews) ? Math.max(0, Math.floor(spec.treadScrews)) : 0;
-  if (n === 0) return [];
   const across =
     spec.kind === "angle" ? (spec.angleLeg + spec.angleThickness) / 2 : spec.plateWidth / 2;
-  const at = (u: Mm): Vec2 =>
-    V.addScaled(V.addScaled(p.face.a, p.face.dir, u), p.face.into, -across);
-  const lo = p.u0 + spec.holeEdgeDistance;
-  const hi = p.u1 - spec.holeEdgeDistance;
-  if (n === 1) return [at((p.u0 + p.u1) / 2)];
-  if (!(hi > lo)) {
-    return Array.from({ length: n }, (_, i) => at(p.u0 + ((p.u1 - p.u0) * (i + 1)) / (n + 1)));
-  }
-  return Array.from({ length: n }, (_, i) => at(lo + ((hi - lo) * i) / (n - 1)));
+  return treadScrewUs(p, spec).map((u) =>
+    V.addScaled(V.addScaled(p.face.a, p.face.dir, u), p.face.into, -across),
+  );
 }
 
 /**
- * Fixation de la marche portée sur le support (A31), selon son matériau. `drilledPoints` : sous
- * une marche en tôle vissée, nombre de points réellement percés dans la marche
- * (`drillTreadsAtSupports`) ; le support n'est percé, et la visserie comptée, qu'à ces points.
- * Absent : `treadScrews`.
+ * Fixation de la marche portée sur le support (A31), selon son matériau. `drilled` : sous une
+ * marche en tôle vissée, indices (dans `treadScrewPoints`) des points réellement percés dans la
+ * marche (`drillTreadsAtSupports`) ; le support n'est percé, et la visserie comptée, qu'à ces
+ * points. Absent : tous les `treadScrews` points.
  */
 export function supportTreadJoint(
   p: SupportPlacement,
   spec: SupportSpec,
   tread: TreadMaterialKind = "wood",
-  drilledPoints?: number,
+  drilled?: readonly number[],
 ): TreadSupportJoint {
   return treadSupportJoint(
     {
       fixing: spec.treadFixing ?? "screwed",
-      screws: tread === "steel" && drilledPoints !== undefined ? drilledPoints : spec.treadScrews,
+      screws: tread === "steel" && drilled !== undefined ? drilled.length : spec.treadScrews,
       holeDiameter: spec.treadHoleDiameter ?? DEFAULT_TREAD_HOLE_DIAMETER,
     },
     tread,
@@ -223,9 +265,23 @@ export function supportTreadJoint(
 }
 
 /**
+ * Désignation commune d'un repère de supports (`Part.markName`, décision F10 Q6) : nature du
+ * support (« Cornière soudée », « Cornière vissée », « Plat support soudé »), sans la marche ni
+ * la pièce porteuse.
+ */
+export function supportMarkName(spec: SupportSpec): Message {
+  return spec.kind === "angle"
+    ? effectiveFixing(spec) === "welded"
+      ? msg("structure.common.support.angleWelded")
+      : msg("structure.common.support.angleBolted")
+    : msg("structure.common.support.plateWelded");
+}
+
+/**
  * Pièce « support » (barre sciée), solide extrudé le long de la face. `tread` : matériau de la
  * marche portée (A31 ; défaut bois) — perçages et cordons de la fixation de la marche ;
- * `drilledPoints` : points réellement percés dans une marche en tôle vissée (`supportTreadJoint`).
+ * `drilled` : indices des points réellement percés dans une marche en tôle vissée
+ * (`supportTreadJoint`).
  */
 export function supportPart(
   p: SupportPlacement,
@@ -234,13 +290,14 @@ export function supportPart(
   material: Part["material"],
   profile: WorkshopProfile,
   tread: TreadMaterialKind = "wood",
-  drilledPoints?: number,
+  drilled?: readonly number[],
 ): Part {
   const L = p.u1 - p.u0;
   const x = V.scale(p.face.into, -1);
   // Repère direct : Z = X × (0, 0, 1) = perpRight(X) ; origine à l'extrémité correspondante.
   const zDir = V.perpRight(x);
-  const forward = V.dot(zDir, p.face.dir) > 0;
+  // Même sens que les positions de perçage (`alongPart`) : une seule définition.
+  const forward = partAxisForward(p);
   const o = V.addScaled(p.face.a, p.face.dir, forward ? p.u0 : p.u1);
   const frame: Frame3 = {
     origin: { x: o.x, y: o.y, z: p.zTop },
@@ -264,14 +321,9 @@ export function supportPart(
   const sectionPerimeter =
     spec.kind === "angle" ? 4 * a : 2 * (spec.plateWidth + spec.plateThickness);
   const areaS = supportSectionArea(spec);
-  const kindLabel =
-    spec.kind === "angle"
-      ? fixing === "welded"
-        ? msg("structure.common.support.angleWelded")
-        : msg("structure.common.support.angleBolted")
-      : msg("structure.common.support.plateWelded");
-  const joint = supportTreadJoint(p, spec, tread, drilledPoints);
-  const fixings = supportFixings(p, spec, tread, drilledPoints);
+  const kindLabel = supportMarkName(spec);
+  const joint = supportTreadJoint(p, spec, tread, drilled);
+  const fixings = supportFixings(p, spec, tread, drilled);
   return {
     id: `support-${p.tread}-${p.face.key}`,
     mark,
@@ -310,32 +362,47 @@ export function supportPart(
  * perçage `holeDiameter`) et fixation de la marche dans l'aile horizontale (A31) : vis à bois
  * sous une marche bois (`treadScrewed`, perçage non dimensionné), vis à métaux sous une marche
  * en tôle vissée (`treadBolted`, perçage `treadHoleDiameter`), rien sous une marche soudée. La
- * marche portée est résolue par l'étape « Visserie » (assemblage support ↔ marche).
+ * marche portée est résolue par l'étape « Visserie » (assemblage support ↔ marche). Chaque
+ * fixation porte ses positions le long de la pièce (`positions`, décision F10 (27)) : sous une
+ * marche en tôle vissée, celles des seuls points percés (`drilled`).
  */
 export function supportFixings(
   p: SupportPlacement,
   spec: SupportSpec,
   tread: TreadMaterialKind = "wood",
-  drilledPoints?: number,
+  drilled?: readonly number[],
 ): PartFixing[] {
   const out: PartFixing[] = [];
-  const bolts = boltCenters(p, spec).length;
+  const boltPositions = boltAbscissae(p, spec);
   const boltRegime = boltDistribution(p, spec);
-  if (bolts > 0)
+  if (boltPositions.length > 0)
     out.push({
       joint: "supportBolted",
-      points: bolts,
+      points: boltPositions.length,
       holeDiameter: spec.holeDiameter,
       with: [p.face.owner],
       ...(boltRegime ? { distribution: boltRegime } : {}),
+      positions: ascending(boltPositions),
     });
   const treadRegime = treadScrewDistribution(p, spec);
+  const all = treadScrewAbscissae(p, spec);
+  const treadPositions = ascending(
+    tread === "steel" && drilled !== undefined
+      ? drilled.map((i) => all[i]).filter((x): x is number => x !== undefined)
+      : all,
+  );
   out.push(
-    ...supportTreadJoint(p, spec, tread, drilledPoints).fixings.map((f) =>
-      treadRegime ? { ...f, distribution: treadRegime } : f,
-    ),
+    ...supportTreadJoint(p, spec, tread, drilled).fixings.map((f) => ({
+      ...f,
+      ...(treadRegime ? { distribution: treadRegime } : {}),
+      ...(treadPositions.length === f.points ? { positions: treadPositions } : {}),
+    })),
   );
   return out;
+}
+
+function ascending(xs: readonly number[]): number[] {
+  return [...xs].sort((a, b) => a - b);
 }
 
 /**
@@ -343,8 +410,8 @@ export function supportFixings(
  * F10 Q1a) : section, nombre de perçages et signature des perçages (nature et aile par
  * l'assemblage — `supportBolted` dans l'aile verticale, fixation de la marche dans l'aile
  * horizontale —, nombre de points, diamètre, régime de répartition le long de la pièce —
- * décision F10 (23)). La longueur est comparée à part, autour d'un représentant
- * (`groupNearAnchor`).
+ * décision F10 (23)). La longueur et les positions des perçages (`drillingPositions`, décision
+ * F10 (27)) sont comparées à part, autour d'un représentant (`groupNearAnchor`).
  */
 export function supportGroupKey(p: Part): string {
   return `${JSON.stringify(p.section)}|${p.quantities["holes"]}|${drillingSignature(p)}`;
@@ -352,16 +419,38 @@ export function supportGroupKey(p: Part): string {
 
 /**
  * Signature des perçages d'une pièce (décision F10 Q1a, C4) : pour chaque fixation, assemblage
- * (nature et aile), nombre de points, diamètre et régime de répartition (`distribution`,
+ * (nature et aile), nombre de points, diamètre, régime de répartition (`distribution`,
  * décision F10 (23) : deux supports à T près de part et d'autre du seuil 2 × `holeEdgeDistance`
- * ont leurs perçages placés différemment), triés. Définition unique d'« identique » pour
- * les repères (`supportGroupKey`) et le comparateur (`countUniqueParts`).
+ * ont leurs perçages placés différemment) et nombre de positions connues (`positions`), triés.
+ * Définition unique d'« identique » pour les repères (`supportGroupKey`) et le comparateur
+ * (`countUniqueParts`), qui comparent en plus les positions (`drillingPositions`) à la
+ * tolérance d'identité près : deux pièces de même signature ont autant de positions, dans le
+ * même ordre de fixations.
  */
 export function drillingSignature(p: Part): string {
-  return (p.fixings ?? [])
-    .map((f) => `${f.joint}:${f.points}:${f.holeDiameter ?? "-"}:${f.distribution ?? "-"}`)
-    .sort()
+  return signedFixings(p)
+    .map((x) => x.sig)
     .join(",");
+}
+
+/**
+ * Positions des perçages le long de la pièce (décision F10 (27)) : `PartFixing.positions` de
+ * chaque fixation, concaténées dans l'ordre des signatures (`drillingSignature`). Mesures
+ * comparées à l'ancre, à la tolérance d'identité près (`groupNearAnchor`), avec la longueur ;
+ * positions mesurées depuis l'origine de la pièce, sans équivalence par retournement bout pour
+ * bout (une cornière retournée n'a plus son aile verticale contre la face).
+ */
+export function drillingPositions(p: Part): Mm[] {
+  return signedFixings(p).flatMap((x) => [...(x.f.positions ?? [])]);
+}
+
+function signedFixings(p: Part): { sig: string; f: PartFixing }[] {
+  return (p.fixings ?? [])
+    .map((f) => ({
+      f,
+      sig: `${f.joint}:${f.points}:${f.holeDiameter ?? "-"}:${f.distribution ?? "-"}:${f.positions?.length ?? "-"}`,
+    }))
+    .sort((a, b) => (a.sig < b.sig ? -1 : a.sig > b.sig ? 1 : 0));
 }
 
 /**

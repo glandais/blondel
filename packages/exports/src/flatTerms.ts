@@ -10,7 +10,7 @@
  */
 import { isWoodMaterial, type Part } from "@blondel/core";
 import type { MessageKey } from "@blondel/i18n";
-import { tr, type Translator } from "./i18n.js";
+import { partDesignation, tr, type Translator } from "./i18n.js";
 
 /** Catégories de pièces dont le développé bois s'appelle « development » en anglais. */
 const TIMBER_STRING_CATEGORIES: ReadonlySet<Part["category"]> = new Set(["stringer", "carriage"]);
@@ -81,7 +81,10 @@ export function flatDrawingTitle(
 /** Titre de la page de développé d'une pièce dans le dossier PDF (« Développé LI1 — Limon… »). */
 export function pdfFlatTitle(
   t: Translator,
-  part: Pick<Part, "mark" | "name" | "category" | "material">,
+  part: Pick<Part, "mark" | "name" | "markName" | "category" | "material">,
 ): string {
-  return t.t(flatTermKeys(part).pdfTitle, { mark: part.mark, name: tr(t, part.name) });
+  return t.t(flatTermKeys(part).pdfTitle, {
+    mark: part.mark,
+    name: tr(t, partDesignation(part)),
+  });
 }

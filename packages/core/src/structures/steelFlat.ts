@@ -119,11 +119,13 @@ import {
 } from "./steelCommon.js";
 import {
   boltCenters,
+  drillingPositions,
   effectiveFixing,
   supportDepth,
   supportInterval,
   supportAssemblies,
   supportGroupKey,
+  supportMarkName,
   supportPart,
   treadScrewPoints,
   type SupportFace,
@@ -298,6 +300,11 @@ export interface SteelFlatResult {
    * (A31 : hors de la partie plane du dessus, trop près d'un bord ou d'un autre perçage).
    */
   readonly treadHolesSkipped: number;
+  /**
+   * Ids des pièces du contrôle `FAB_LASER_EPAISSEUR` (limons, tôles pliées, platines), dans son
+   * ordre : `steel-curved` le refait sur les pièces re-repérées.
+   */
+  readonly laserPartIds: readonly string[];
 }
 
 const ceil5 = (x: Mm): Mm => Math.ceil(x / 5 - 1e-9) * 5;
@@ -749,9 +756,10 @@ export function plateHoles(length: Mm, width: Mm, edge: Mm, perRow: number): Vec
 
 /**
  * Marque les pièces identiques d'une liste : `${prefix}${rang du groupe}`. Pièces à développé :
- * `groupIdenticalFlats` ; autres pièces : même clé (`key`, `null` : la pièce seule) et longueur
- * de débit à au plus `tol` de celle de la plus courte du groupe (`groupNearAnchor`, décision
- * F10 Q1a). Rangs : groupes de développés d'abord, puis les autres, chacun dans l'ordre de
+ * `groupIdenticalFlats` ; autres pièces : même clé (`key`, `null` : la pièce seule), longueur
+ * de débit et positions des perçages le long de la pièce (`drillingPositions`, décision F10
+ * (27)) chacune à au plus `tol` de celles de la plus courte du groupe (`groupNearAnchor`,
+ * décision F10 Q1a). Rangs : groupes de développés d'abord, puis les autres, chacun dans l'ordre de
  * première apparition. `tol` : `WorkshopProfile.identicalPartTolerance`.
  *
  * Une ligne de débit par repère (décision F10 Q3, `options.unify`, par défaut) : chaque membre
@@ -762,13 +770,17 @@ export function plateHoles(length: Mm, width: Mm, edge: Mm, perRow: number): Vec
  * courte. La plus petite par l'aire n'est pas forcément la plus petite sur chaque cote, mais
  * chaque cote reste à au plus T (+ `GEOM_EPS`) de celle de toute pièce du groupe. `unify:
  * false` : marques seules (plugin qui re-repère ces pièces ensuite, `steel-curved`).
+ *
+ * Désignation commune (décision F10 Q6) : chaque pièce repérée reçoit `Part.markName`
+ * (`options.markName`, sans pièce porteuse), recopiée du représentant avec le développé, dont
+ * le texte de référence est lui aussi commun (Q5) ; `Part.name` garde la pièce porteuse.
  */
 export function markGroups(
   parts: Part[],
   prefix: string,
   key: (p: Part) => string | null,
   tol: Mm,
-  options?: { readonly unify?: boolean },
+  options: MarkGroupsOptions,
 ): Part[] {
   const groups: { anchor: string; members: string[] }[] = [];
   groups.push(
@@ -780,13 +792,17 @@ export function markGroups(
   const rest = parts.filter((p) => !p.flat);
   const near = groupNearAnchorAnchored(
     rest,
-    { key: (p) => key(p) ?? p.id, measures: (p) => [p.stock?.length ?? 0], id: (p) => p.id },
+    {
+      key: (p) => key(p) ?? p.id,
+      measures: (p) => [p.stock?.length ?? 0, ...drillingPositions(p)],
+      id: (p) => p.id,
+    },
     tol,
   );
   groups.push(...near.map((g) => ({ anchor: g.anchor.id, members: g.members.map((p) => p.id) })));
   const markOf = new Map<string, string>();
   groups.forEach((g, i) => g.members.forEach((id) => markOf.set(id, `${prefix}${i + 1}`)));
-  const marked = parts.map((p) => {
+  const marked = parts.map((p): Part => {
     const mark = markOf.get(p.id) ?? p.mark;
     const flat = p.flat
       ? {
@@ -796,9 +812,9 @@ export function markGroups(
           ),
         }
       : undefined;
-    return { ...p, mark, ...(flat ? { flat } : {}) };
+    return { ...p, mark, markName: options.markName(p), ...(flat ? { flat } : {}) };
   });
-  if (options?.unify === false) return marked;
+  if (options.unify === false) return marked;
   const byId = new Map(marked.map((p) => [p.id, p]));
   const unified = new Map<string, Part>();
   for (const g of groups) {
@@ -808,6 +824,17 @@ export function markGroups(
     for (const u of unifyMarkGroup(members, rep)) unified.set(u.id, u);
   }
   return marked.map((p) => unified.get(p.id) ?? p);
+}
+
+/** Réglages de `markGroups`. */
+export interface MarkGroupsOptions {
+  /**
+   * Désignation commune du repère (`Part.markName`, décision F10 Q6) : sans la pièce porteuse,
+   * la même pour toutes les pièces d'un appel (recopiée du représentant).
+   */
+  readonly markName: (p: Part) => Message;
+  /** Recopie du représentant sur les membres (décision F10 Q3) ; défaut `true`. */
+  readonly unify?: boolean;
 }
 
 /**
@@ -854,9 +881,9 @@ export interface SteelFlatOptions {
   /**
    * Recopie du représentant de chaque repère sur ses membres pour les supports et platines
    * (décision F10 Q3, `markGroups`), défaut `true`. `steel-curved` passe `false` : il re-repère
-   * ces pièces avec les siennes et ne recopie qu'une fois, sur les valeurs réelles (les contrôles
-   * de `steel-flat` qu'il reprend — format de tôle des platines, longueur de barre — lisent alors
-   * les valeurs réelles, à au plus T des valeurs débitées).
+   * ces pièces avec les siennes et ne recopie qu'une fois, sur les valeurs réelles ; les contrôles
+   * de `steel-flat` qu'il reprend — format de tôle des platines, longueur de barre — sont alors
+   * refaits sur les pièces finales (`refreshRemarkedChecks`, décision F10 (29)).
    */
   readonly unifyMarks?: boolean;
 }
@@ -905,6 +932,7 @@ export function buildSteelFlat(
     executionClass: "EXC1",
     treadGroups: [],
     treadHolesSkipped: 0,
+    laserPartIds: [],
   });
   const helical = flightsOnlyError("steel-flat", msg("structure.steelFlat.shortLabel"), layout);
   if (helical) return empty([helical]);
@@ -1038,13 +1066,13 @@ export function buildSteelFlat(
         material,
         profile,
         treadMaterialOf(steelTreads, p.tread),
-        drilled.drilledPoints[i],
+        drilled.drilled[i],
       ),
     ),
     sup.kind === "angle" ? "CR" : "PS",
     supportGroupKey,
     identicalTol,
-    unify,
+    { ...unify, markName: () => supportMarkName(sup) },
   );
   const platesMarked = [
     ...markGroups(
@@ -1052,28 +1080,28 @@ export function buildSteelFlat(
       "PF",
       () => null,
       identicalTol,
-      unify,
+      { ...unify, markName: () => msg("structure.steel.markName.footPlate") },
     ),
     ...markGroups(
       plates.filter((p) => p.id.startsWith("plate-head-")),
       "PH",
       () => null,
       identicalTol,
-      unify,
+      { ...unify, markName: () => msg("structure.steel.markName.headPlate") },
     ),
     ...markGroups(
       plates.filter((p) => p.id.startsWith("plate-post-")),
       "PP",
       () => null,
       identicalTol,
-      unify,
+      { ...unify, markName: () => msg("structure.steel.markName.newelFootPlate") },
     ),
     ...markGroups(
       plates.filter((p) => p.id.startsWith("plate-end-")),
       "PA",
       () => null,
       identicalTol,
-      unify,
+      { ...unify, markName: () => msg("structure.steel.markName.endPlate") },
     ),
   ];
   const treadParts = treadDetails.map((d) => d.part);
@@ -1218,6 +1246,7 @@ export function buildSteelFlat(
     executionClass: exc.executionClass,
     treadGroups,
     treadHolesSkipped: drilled.skipped,
+    laserPartIds: laserPartsOf(stringers, foldedParts, platesMarked).map((p) => p.id),
   };
 }
 
@@ -1235,49 +1264,51 @@ export function treadMaterialOf(
  * Perce les marches en tôle pliée vissées (A31) aux points de fixation (`treadScrewPoints`) de
  * tous leurs supports (`drillFoldedTreadPoints`, diamètre `treadHoleDiameter`) ; marches
  * soudées : rendues telles quelles. `skipped` : points non reportés (hors de la partie plane du
- * dessus, trop près d'un bord ou d'un autre perçage). `drilledPoints[i]` : points réellement
- * percés dans la marche pour `placements[i]` (tous ses points sous une marche absente de
- * `treads`, 0 sous une marche soudée), à passer à `supportPart` pour que les perçages de l'aile
- * et la visserie concordent avec la marche. Partagé avec `steel-curved` (supports du limon
- * débillardé).
+ * dessus, trop près d'un bord ou d'un autre perçage). `drilled[i]` : indices (dans
+ * `treadScrewPoints(placements[i])`) des points réellement percés dans la marche pour
+ * `placements[i]` (tous ses points sous une marche absente de `treads`, aucun sous une marche
+ * soudée), à passer à `supportPart` pour que les perçages de l'aile, leurs positions (clé des
+ * repères, décision F10 (27)) et la visserie concordent avec la marche. Partagé avec
+ * `steel-curved` (supports du limon débillardé).
  */
 export function drillTreadsAtSupports(
   treads: readonly FoldedTreadDetail[],
   placements: readonly SupportPlacement[],
   spec: SupportSpec,
-): { treads: FoldedTreadDetail[]; skipped: number; drilledPoints: number[] } {
+): { treads: FoldedTreadDetail[]; skipped: number; drilled: number[][] } {
   const pointsOf = placements.map((p) => treadScrewPoints(p, spec));
-  const drilledPoints = pointsOf.map((pts) => pts.length);
+  const drilled = pointsOf.map((pts) => pts.map((_, j) => j));
   if ((spec.treadFixing ?? "screwed") === "welded") {
     const steel = new Set(treads.map((d) => d.number));
     return {
       treads: [...treads],
       skipped: 0,
-      drilledPoints: placements.map((p, i) => (steel.has(p.tread) ? 0 : drilledPoints[i]!)),
+      drilled: placements.map((p, i) => (steel.has(p.tread) ? [] : drilled[i]!)),
     };
   }
   const diameter = spec.treadHoleDiameter ?? DEFAULT_TREAD_HOLE_DIAMETER;
   let skipped = 0;
   const out = treads.map((d) => {
-    const owners: number[] = [];
+    const owners: { i: number; j: number }[] = [];
     const points: Vec2[] = [];
     placements.forEach((p, i) => {
       if (p.tread !== d.number) return;
-      for (const pt of pointsOf[i]!) {
-        owners.push(i);
+      pointsOf[i]!.forEach((pt, j) => {
+        owners.push({ i, j });
         points.push(pt);
-      }
+      });
     });
     if (points.length === 0) return d;
-    const { part, drilled } = drillFoldedTreadPoints(d.part, d.result, points, diameter);
-    for (const i of new Set(owners)) drilledPoints[i] = 0;
-    drilled.forEach((ok, k) => {
-      if (ok) drilledPoints[owners[k]!]! += 1;
+    const done = drillFoldedTreadPoints(d.part, d.result, points, diameter);
+    for (const o of owners) drilled[o.i] = [];
+    done.drilled.forEach((ok, k) => {
+      const o = owners[k]!;
+      if (ok) drilled[o.i]!.push(o.j);
       else skipped += 1;
     });
-    return part === d.part ? d : { ...d, part };
+    return done.part === d.part ? d : { ...d, part: done.part };
   });
-  return { treads: out, skipped, drilledPoints };
+  return { treads: out, skipped, drilled };
 }
 
 /** Remarques de la fixation des marches en tôle sur leurs supports (A31). */
@@ -1762,6 +1793,84 @@ function autoLowerOffset(
   return lowerOffset;
 }
 
+/**
+ * Constats de format de tôle (`FAB_FORMAT_TOLE`) de tôles découpées à développé (tôles pliées,
+ * platines) : rectangle d'encombrement minimal du développé débité, comparé aux formats de tôle
+ * du profil d'atelier ; un constat par pièce, libellé par son repère. Repris par `steel-curved`
+ * sur ses platines re-repérées (décision F10 (29)).
+ */
+export function plateSheetFindings(
+  parts: readonly Part[],
+  metal: WorkshopProfile["metal"],
+): Finding[] {
+  return parts
+    .filter((p) => p.flat)
+    .map((p): Finding => {
+      const box = minAreaRect(p.flat!.outline.outer);
+      return fitsSheet(metal, box.length, box.width)
+        ? {
+            status: "ok",
+            measured: box.length,
+            location: { kind: "part", partId: p.id },
+            message: sheetFormatMessage("structure.steel.check.inSheetFormat", p.mark, box),
+          }
+        : {
+            status: "violation",
+            measured: box.length,
+            location: { kind: "part", partId: p.id },
+            message: sheetFormatMessage("structure.steel.check.outOfSheetFormats", p.mark, box),
+          };
+    });
+}
+
+/**
+ * Contrôle de longueur de barre (`FAB_BARRE_LONGUEUR`) des barres sciées (supports, poteaux) :
+ * longueur de débit, au plus la plus grande longueur de barre du profil d'atelier ; libellé :
+ * repère. Repris par `steel-curved` sur ses supports re-repérés (décision F10 (29)).
+ */
+export function addBarLengthCheck(
+  checks: CheckCollector,
+  bars: readonly Part[],
+  metal: WorkshopProfile["metal"],
+): void {
+  checks.addItems(
+    pluginRuleDef(STEEL_RULES.barLength),
+    bars.map((p) => ({ value: p.stock!.length, label: textMessage(p.mark), partId: p.id })),
+    msg("structure.steel.quantity.barLength"),
+    { min: null, max: Math.max(...metal.barLengths) },
+  );
+}
+
+/**
+ * Pièces découpées laser de `steel-flat` (limons, tôles pliées, platines), dans l'ordre du
+ * contrôle `FAB_LASER_EPAISSEUR`.
+ */
+function laserPartsOf(
+  stringers: readonly SteelStringer[],
+  foldedParts: readonly Part[],
+  platesMarked: readonly Part[],
+): Part[] {
+  return [...stringers.map((s) => s.part), ...foldedParts, ...platesMarked];
+}
+
+/**
+ * Contrôle d'épaisseur de découpe laser (`FAB_LASER_EPAISSEUR`) des pièces découpées à
+ * développé : épaisseur, au plus l'épaisseur maximale du laser du profil d'atelier ; libellé :
+ * repère. Refait par `steel-curved` sur ses pièces re-repérées (libellés des repères finaux).
+ */
+export function addLaserCheck(
+  checks: CheckCollector,
+  parts: readonly Part[],
+  metal: WorkshopProfile["metal"],
+): void {
+  checks.addItems(
+    pluginRuleDef(STEEL_RULES.laser),
+    parts.map((p) => ({ value: p.flat!.thickness, label: textMessage(p.mark), partId: p.id })),
+    msg("structure.steel.quantity.cutThickness"),
+    { min: null, max: metal.laser.maxThickness },
+  );
+}
+
 /** Étape 11 : contrôles de fabrication de `steel-flat` (ordre des résultats conservé). */
 function addFlatChecks(
   checks: CheckCollector,
@@ -1867,43 +1976,10 @@ function addFlatChecks(
       { min: null, max: metal.pressBrake.maxThickness },
     );
   }
-  const laserParts = [...stringers.map((s) => s.part), ...foldedParts, ...platesMarked];
-  checks.addItems(
-    rule(STEEL_RULES.laser),
-    laserParts.map((p) => ({
-      value: p.flat!.thickness,
-      label: textMessage(p.mark),
-      partId: p.id,
-    })),
-    msg("structure.steel.quantity.cutThickness"),
-    { min: null, max: metal.laser.maxThickness },
-  );
-  for (const p of [...foldedParts, ...platesMarked]) {
-    const box = minAreaRect(p.flat!.outline.outer);
-    formatFindings.push(
-      fitsSheet(metal, box.length, box.width)
-        ? {
-            status: "ok",
-            measured: box.length,
-            location: { kind: "part", partId: p.id },
-            message: sheetFormatMessage("structure.steel.check.inSheetFormat", p.mark, box),
-          }
-        : {
-            status: "violation",
-            measured: box.length,
-            location: { kind: "part", partId: p.id },
-            message: sheetFormatMessage("structure.steel.check.outOfSheetFormats", p.mark, box),
-          },
-    );
-  }
+  addLaserCheck(checks, laserPartsOf(stringers, foldedParts, platesMarked), metal);
+  formatFindings.push(...plateSheetFindings([...foldedParts, ...platesMarked], metal));
   if (formatFindings.length > 0) checks.add(rule(STEEL_RULES.sheetFormat), formatFindings);
-  const bars = [...supportParts, ...posts];
-  checks.addItems(
-    rule(STEEL_RULES.barLength),
-    bars.map((p) => ({ value: p.stock!.length, label: textMessage(p.mark), partId: p.id })),
-    msg("structure.steel.quantity.barLength"),
-    { min: null, max: Math.max(...metal.barLengths) },
-  );
+  addBarLengthCheck(checks, [...supportParts, ...posts], metal);
   checks.addItems(
     rule(STEEL_RULES.supportInStringer),
     stringers.flatMap((s) =>
@@ -2346,7 +2422,7 @@ function flatNewelPosts(
           holesAt,
           pl.holeDiameter,
           "PA",
-          msg("structure.steel.reference.endPlate", { string: s.face.mark, newel: nw.mark }),
+          msg("structure.steel.reference.endPlate"),
         );
         const atEnd = s.face.end === "newel" && s.face.leg === g.turn;
         const u = atEnd ? s.development.uHi : s.development.uLo;
@@ -2379,7 +2455,7 @@ function flatNewelPosts(
         holesAt,
         pl.holeDiameter,
         "PP",
-        msg("structure.steel.reference.newelFootPlate", { mark: nw.mark }),
+        msg("structure.steel.reference.newelFootPlate"),
       );
       const corner = at(-side / 2, -side / 2);
       plates.push(
@@ -2437,7 +2513,7 @@ function stringerPlates(
           holesAt,
           pl.holeDiameter,
           "PF",
-          msg("structure.steel.reference.footPlate", { mark: f.mark }),
+          msg("structure.steel.reference.footPlate"),
         );
         const o = V.add(V.addScaled(f.a, f.dir, mid - L / 2), across(pl.width));
         const sgn = V.cross(f.dir, f.into) > 0 ? 1 : -1;
@@ -2477,7 +2553,7 @@ function stringerPlates(
           holesAt,
           pl.holeDiameter,
           "PH",
-          msg("structure.steel.reference.headPlate", { mark: f.mark }),
+          msg("structure.steel.reference.headPlate"),
         );
         plates.push(
           assembledTo(

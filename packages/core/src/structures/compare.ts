@@ -67,7 +67,7 @@ import {
   groupIdenticalFlats,
   groupNearAnchor,
 } from "./steelCommon.js";
-import { drillingSignature } from "./supports.js";
+import { drillingPositions, drillingSignature } from "./supports.js";
 
 export interface VariantCost {
   /** Total € HT (matière + main-d'œuvre + finition). */
@@ -133,8 +133,9 @@ const zeroes = (): Record<Severity, number> => ({ bloquant: 0, avertissement: 0,
  * Nombre de pièces différentes, selon la règle des repères (décision F10, C4) : pièces à
  * développé regroupées par `groupIdenticalFlats`, autres pièces de même catégorie, matériau,
  * section, nombre et signature des perçages regroupées autour d'un représentant
- * (`groupNearAnchor`) quand longueur, largeur et épaisseur de débit sont chacune à au plus `tol`
- * de celles de l'ancre. `tol` : `WorkshopProfile.identicalPartTolerance`.
+ * (`groupNearAnchor`) quand longueur, largeur et épaisseur de débit et positions des perçages le
+ * long de la pièce (`drillingPositions`, décision F10 (27)) sont chacune à au plus `tol` de
+ * celles de l'ancre. `tol` : `WorkshopProfile.identicalPartTolerance`.
  */
 export function countUniqueParts(parts: readonly Part[], tol: Mm): number {
   const withFlat = parts.filter((p) => p.flat);
@@ -146,7 +147,12 @@ export function countUniqueParts(parts: readonly Part[], tol: Mm): number {
       // Section : `Message` sérialisé (mêmes clé et paramètres ⇒ même désignation).
       key: (p) =>
         `${p.category}|${p.material}|${p.section ? JSON.stringify(p.section) : ""}|${p.quantities[QUANTITY_HOLES] ?? 0}|${drillingSignature(p)}`,
-      measures: (p) => [p.stock?.length ?? 0, p.stock?.width ?? 0, p.stock?.thickness ?? 0],
+      measures: (p) => [
+        p.stock?.length ?? 0,
+        p.stock?.width ?? 0,
+        p.stock?.thickness ?? 0,
+        ...drillingPositions(p),
+      ],
       id: (p) => p.id,
     },
     tol,

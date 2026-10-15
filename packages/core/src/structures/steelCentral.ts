@@ -1243,7 +1243,7 @@ function consoleParts(
     thickness: t,
     reference: {
       kind: "face",
-      description: msg("structure.steelCentral.reference.console", { tread: b.treadMark }),
+      description: msg("structure.steelCentral.reference.console"),
     },
   };
   const zAxis = V.perpRight(across);
@@ -1296,7 +1296,7 @@ function consoleParts(
     thickness: bt,
     reference: {
       kind: "face",
-      description: msg("structure.steelCentral.reference.bearing", { tread: b.treadMark }),
+      description: msg("structure.steelCentral.reference.bearing"),
     },
   };
   const yAxis = V.perpLeft(across);
@@ -1535,9 +1535,17 @@ function markSupportParts(
     if (p1) bearings.push(p1);
   }
   const key = (p: Part): string => p.id;
+  const firstName =
+    kind === "console"
+      ? msg("structure.steelCentral.markName.console")
+      : msg("structure.steelCentral.markName.foldedSupport", { kind: supportKindLabel(kind) });
   return [
-    ...markGroups(first, kind === "console" ? "CO" : "SP", key, tol),
-    ...markGroups(bearings, "AP", key, tol),
+    ...markGroups(first, kind === "console" ? "CO" : "SP", key, tol, {
+      markName: () => firstName,
+    }),
+    ...markGroups(bearings, "AP", key, tol, {
+      markName: () => msg("structure.steelCentral.markName.bearing"),
+    }),
   ];
 }
 

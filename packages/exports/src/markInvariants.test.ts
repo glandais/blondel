@@ -1,27 +1,22 @@
 /**
- * Invariant des repères sur les sorties de fabrication (chantier part-marks R2b, décisions F10
- * Q3 et Q7, convention C3), sur tous les exemples et le préréglage `helical` : un repère = une
- * ligne de la liste de débit = une ligne de la fiche de débit ; les fichiers DXF d'un repère ne
- * diffèrent que par le texte de référence du développé (qui nomme encore la pièce porteuse :
- * l'invariant « un repère = un DXF » est posé au sous-lot R2c, décision Q5) ; partition des
- * développés du dossier PDF identique à celle des DXF.
+ * Invariant des repères sur les sorties de fabrication (chantier part-marks R2b et R2c,
+ * décisions F10 Q3, Q5, Q6 et Q7, convention C3), sur tous les exemples et le préréglage
+ * `helical` : un repère = une ligne de la liste de débit = une ligne de la fiche de débit = un
+ * seul fichier DXF de développé (texte de référence commun, sans pièce porteuse) = une seule
+ * désignation (`partDesignation`) ; partition des développés du dossier PDF identique à celle
+ * des DXF.
  */
 import { readFileSync, readdirSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import {
-  buildModel,
-  createProject,
-  parseProjectText,
-  type Part,
-  type Project,
-} from "@blondel/core";
+import { buildModel, createProject, parseProjectText, type Project } from "@blondel/core";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
-import { cutListRows } from "./csv/cutlist.js";
+import { cutListRows, cutParts } from "./csv/cutlist.js";
 import { cutSheet } from "./cutsheet.js";
 import { exportPartsDxf } from "./dxf/parts.js";
 import { flatPartGroups } from "./flatGroups.js";
+import { partDesignation, translatorOf } from "./i18n.js";
 import { RecordingCanvas } from "./pdf/canvas.js";
 import { renderPdf, type PdfPages } from "./pdf/document.js";
 
@@ -55,36 +50,53 @@ const FLATS_ONLY: PdfPages = {
   templates: false,
 };
 
-/** Pièce sans le texte de référence de son développé. */
-const withoutReference = (p: Part): Part => {
-  if (!p.flat?.reference) return p;
-  const { reference: _reference, ...flat } = p.flat;
-  return { ...p, flat };
-};
+/**
+ * Invariant C3 complet sur un modèle : une ligne de liste et de fiche de débit par repère (mêmes
+ * repères), un seul fichier DXF de développé par repère (et la partition `flatPartGroups` est
+ * celle des fichiers), une seule désignation traduite par repère sur les pièces du débit.
+ * Rend le nombre de repères portés par deux pièces ou plus.
+ */
+function expectOneOutputPerMark(model: ReturnType<typeof buildModel>): number {
+  const rows = cutListRows(model.parts).map((r) => r.mark);
+  expect(rows.length, "liste de débit").toBe(new Set(rows).size);
+  const sheet = cutSheet(model.parts).flatMap((g) => g.rows.map((r) => r.mark));
+  expect(sheet.length, "fiche de débit").toBe(new Set(sheet).size);
+  expect([...sheet].sort()).toEqual([...rows].sort());
+
+  const files = exportPartsDxf(model);
+  const fileMarks = files.map((f) => f.mark);
+  expect(
+    fileMarks.filter((m, i) => fileMarks.indexOf(m) !== i),
+    "repères en plusieurs DXF",
+  ).toEqual([]);
+  expect(canonical(flatPartGroups(model.parts).map((g) => g.ids))).toEqual(
+    canonical(files.map((f) => f.partIds)),
+  );
+
+  const t = translatorOf();
+  const names = new Map<string, Set<string>>();
+  for (const p of cutParts(model.parts)) {
+    names.set(p.mark, (names.get(p.mark) ?? new Set()).add(t.t(partDesignation(p))));
+  }
+  expect(
+    [...names].filter(([, s]) => s.size > 1).map(([m, s]) => `${m} : ${[...s].join(" / ")}`),
+    "repères à plusieurs désignations",
+  ).toEqual([]);
+  const counts = new Map<string, number>();
+  for (const p of model.parts) counts.set(p.mark, (counts.get(p.mark) ?? 0) + 1);
+  return [...counts.values()].filter((n) => n > 1).length;
+}
 
 const canonical = (groups: readonly (readonly string[])[]): string[] =>
   groups.map((g) => [...g].sort().join(",")).sort();
 
-describe("un repère = une ligne de débit = une ligne de fiche (F10 Q3, Q7, C3)", () => {
+describe("un repère = une ligne de débit = une ligne de fiche = un DXF = une désignation (F10 Q3, Q5, Q6, Q7, C3)", () => {
   it.each(PROJECTS)(
     "%s",
     (_name, make) => {
       const model = buildModel(make(), { memo: false });
-      const marks = (xs: readonly { mark: string }[]) => xs.map((x) => x.mark);
-
-      const rows = marks(cutListRows(model.parts));
-      expect(rows.length, "liste de débit").toBe(new Set(rows).size);
-
-      const sheet = marks(cutSheet(model.parts).flatMap((g) => g.rows));
-      expect(sheet.length, "fiche de débit").toBe(new Set(sheet).size);
-      expect([...sheet].sort()).toEqual([...rows].sort());
-
-      // DXF : fichiers d'un même repère et matériau distincts seulement par le texte de référence.
+      expectOneOutputPerMark(model);
       const files = exportPartsDxf(model);
-      const stripped = flatPartGroups(model.parts.map(withoutReference));
-      const keys = stripped.map((g) => `${g.part.mark}|${g.part.material}`);
-      expect(keys.length, "développés hors texte de référence").toBe(new Set(keys).size);
-      expect(new Set(files.map((f) => f.mark))).toEqual(new Set(stripped.map((g) => g.part.mark)));
 
       // PDF : partition des développés dessinés identique à celle des DXF.
       const pages = renderPdf(new RecordingCanvas(), model, { pages: FLATS_ONLY });
@@ -99,10 +111,10 @@ describe("un repère = une ligne de débit = une ligne de fiche (F10 Q3, Q7, C3)
   );
 });
 
-describe("propriété : un repère = une ligne de débit = une ligne de fiche (C3)", () => {
+describe("propriété : un repère = une ligne de débit = une ligne de fiche = un DXF = une désignation (C3)", () => {
   // Projets acier des exemples (tous les plugins acier), hauteur d'étage et tolérance
-  // d'identité T tirées : la clé de regroupement de la liste et de la fiche de débit ne doit
-  // jamais séparer deux pièces d'un même repère.
+  // d'identité T tirées : ni la clé de regroupement de la liste et de la fiche de débit, ni la
+  // partition des développés, ni la désignation ne doivent séparer deux pièces d'un même repère.
   const steel = PROJECTS.filter(([, make]) => make().stair.structure.kind.startsWith("steel-"));
 
   it("exemples acier, hauteur ± 90 mm, T ∈ [0, 2]", () => {
@@ -120,14 +132,7 @@ describe("propriété : un repère = une ligne de débit = une ligne de fiche (C
             workshop: { ...base.workshop, identicalPartTolerance: t },
           };
           const model = buildModel(project, { memo: false });
-          const rows = cutListRows(model.parts).map((r) => r.mark);
-          expect(rows.length, "liste de débit").toBe(new Set(rows).size);
-          const sheet = cutSheet(model.parts).flatMap((g) => g.rows.map((r) => r.mark));
-          expect(sheet.length, "fiche de débit").toBe(new Set(sheet).size);
-          expect([...sheet].sort()).toEqual([...rows].sort());
-          const counts = new Map<string, number>();
-          for (const p of model.parts) counts.set(p.mark, (counts.get(p.mark) ?? 0) + 1);
-          if ([...counts.values()].some((n) => n > 1)) shared++;
+          if (expectOneOutputPerMark(model) > 0) shared++;
         },
       ),
       { numRuns: 40, seed: 29 },

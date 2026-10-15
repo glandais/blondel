@@ -16,7 +16,7 @@ import { WORKSHOP_DEFAULT_SOURCE, sourceSpec } from "../rules/sources.js";
 import { signedArea } from "../geom2d/polygon.js";
 import { GEOM_EPS } from "../geom2d/tolerance.js";
 import * as V from "../geom2d/vec.js";
-import type { FlatPattern, MaterialId, Part } from "../model/derived.js";
+import type { FlatPattern, MaterialId, Part, PartFixing } from "../model/derived.js";
 import type { Mm, Polygon2, Vec2 } from "../model/primitives.js";
 import type { SteelGrade } from "../workshop/metal.js";
 import type { WorkshopProfile } from "../workshop/profile.js";
@@ -400,6 +400,13 @@ export function groupNearAnchorAnchored<X>(
 interface Canon {
   readonly thickness: Mm;
   readonly material: string;
+  /**
+   * Nature et texte de référence du développé (clé, sans ses paramètres, qui peuvent nommer la
+   * pièce, son tronçon ou son repère) : une semelle plane et une semelle gauche (formée « à la
+   * griffe ») de même développé ne partagent pas un repère. Le texte complet est commun au repère
+   * par la recopie du représentant (décision F10 Q5).
+   */
+  readonly reference: string;
   readonly outer: readonly Vec2[];
   readonly holes: readonly (readonly Vec2[])[];
   readonly lines: readonly { a: Vec2; b: Vec2; key: string }[];
@@ -411,6 +418,7 @@ function canon(p: Part): Canon | null {
   return {
     thickness: f.thickness,
     material: p.material,
+    reference: JSON.stringify([f.reference?.kind ?? null, f.reference?.description.key ?? null]),
     outer: f.outline.outer,
     holes: f.outline.holes,
     // Toutes les lignes tracées sauf le texte du repère (réécrit au repère de chaque membre) :
@@ -464,6 +472,7 @@ function ringsMatch(a: readonly Vec2[], b: readonly Vec2[], T: Rigid, tol: Mm): 
 
 function sameUpToRigid(A: Canon, B: Canon, tol: Mm): boolean {
   if (Math.abs(A.thickness - B.thickness) > 1e-9 || A.material !== B.material) return false;
+  if (A.reference !== B.reference) return false;
   const n = A.outer.length;
   if (n !== B.outer.length || A.holes.length !== B.holes.length) return false;
   if (A.lines.length !== B.lines.length || n < 2) return false;
@@ -504,10 +513,10 @@ function outerPerimeter(c: Canon): number {
 }
 
 /**
- * Regroupe les pièces à développé identique (même épaisseur, matériau, contour, trous et lignes
- * tracées — plis, traçages, roulages, joints, même nature et mêmes attributs, texte du repère
- * excepté — à `tol` près, à un déplacement plan près — sans retournement, qui inverserait le
- * sens des plis). Chaque pièce est comparée au premier membre de chaque groupe (l'ancre), dans un
+ * Regroupe les pièces à développé identique (même épaisseur, matériau, nature et clé du texte
+ * de référence, contour, trous et lignes tracées — plis, traçages, roulages, joints, même
+ * nature et mêmes attributs, texte du repère excepté — à `tol` près, à un déplacement plan
+ * près — sans retournement, qui inverserait le sens des plis). Chaque pièce est comparée au premier membre de chaque groupe (l'ancre), dans un
  * ordre indépendant de celui du modèle (décision F10 Q1b) : aire nette croissante, puis
  * identifiant (aires égales à `GEOM_EPS` × périmètre près confondues, pour que l'ordre ne
  * dépende pas du bruit d'arrondi lié à la position de la pièce) ; l'ancre d'un groupe est donc
@@ -571,11 +580,13 @@ const ASSEMBLY_QUANTITIES: readonly string[] = [QUANTITY_WELD_MM, QUANTITY_BUTT_
 /**
  * Une ligne de débit par repère (décision F10 Q3) : chaque membre d'un groupe de repère reçoit
  * les cotes de débit du représentant `representative` — `stock` et `quantities` (copies, sauf
- * les grandeurs d'assemblage `weld_mm` et `butt_weld_mm`, gardées du membre), `flat` (contour,
- * trous, lignes ; textes « repère » au repère du membre) — et garde sa
- * géométrie réelle (`solid`), son identifiant, sa désignation, sa section, ses fixations, ses
- * assemblages et le texte de référence de son développé (`flat.reference`, qui nomme encore la
- * pièce porteuse : décision Q5, sous-lot R2c). Le représentant est choisi par l'appelant selon
+ * les grandeurs d'assemblage `weld_mm` et `butt_weld_mm`, gardées du membre), `flat` en entier
+ * (contour, trous, lignes, texte de référence commun au repère, sans pièce porteuse : décision
+ * Q5 ; textes « repère » au repère du membre), désignation commune `markName` (Q6) et positions
+ * des perçages (`PartFixing.positions`, décision (27)) — et garde sa géométrie réelle
+ * (`solid`), son identifiant, sa désignation propre (`name`, avec sa pièce porteuse), sa
+ * section, ses fixations (hors positions) et ses assemblages. Le représentant est choisi par
+ * l'appelant selon
  * l'ajustement de la famille (`markGroups` : plus petite par l'aire nette pour un développé,
  * plus courte pour une barre). Le représentant et le membre d'un groupe d'une pièce sont rendus
  * à l'identique (même objet, pour la mémoïsation) ; idempotente (en valeur). Ne lève jamais.
@@ -593,11 +604,6 @@ function unifyMember(m: Part, r: Part): Part {
         lines: r.flat.lines.map((l) =>
           l.kind === "text" ? { ...l, label: textMessage(m.mark) } : l,
         ),
-        ...(m.flat?.reference
-          ? { reference: m.flat.reference }
-          : r.flat.reference
-            ? { reference: r.flat.reference }
-            : {}),
       }
     : undefined;
   const quantities: Record<string, number> = { ...r.quantities };
@@ -606,12 +612,37 @@ function unifyMember(m: Part, r: Part): Part {
     if (v !== undefined) quantities[k] = v;
     else delete quantities[k];
   }
+  const fixings = m.fixings ? withRepresentativePositions(m.fixings, r.fixings ?? []) : undefined;
   return {
     ...m,
     quantities,
     ...(r.stock ? { stock: { ...r.stock } } : {}),
     ...(flat ? { flat } : {}),
+    ...(fixings ? { fixings } : {}),
+    ...(r.markName ? { markName: r.markName } : {}),
   };
+}
+
+/**
+ * Positions des perçages du représentant (`PartFixing.positions`, décision F10 (27)) reportées
+ * sur les fixations du membre : la pièce est percée d'après le plan de son repère. Fixations
+ * appariées par assemblage, nombre de points, diamètre, régime et nombre de positions, dans
+ * l'ordre ; le reste (pièces assemblées `with`, longueur) est gardé du membre. Sans fixation
+ * appariée : positions du membre gardées.
+ */
+function withRepresentativePositions(
+  mine: readonly PartFixing[],
+  rep: readonly PartFixing[],
+): PartFixing[] {
+  const sig = (f: PartFixing): string =>
+    `${f.joint}:${f.points}:${f.holeDiameter ?? "-"}:${f.distribution ?? "-"}:${f.positions?.length ?? "-"}`;
+  const pool = new Map<string, PartFixing[]>();
+  for (const f of rep) pool.set(sig(f), [...(pool.get(sig(f)) ?? []), f]);
+  return mine.map((f) => {
+    if (!f.positions) return f;
+    const r = pool.get(sig(f))?.shift();
+    return r?.positions ? { ...f, positions: [...r.positions] } : f;
+  });
 }
 
 /**
