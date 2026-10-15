@@ -18,7 +18,7 @@ import type { Project } from "../model/project.js";
 import { buildModel } from "../pipeline/build.js";
 import { parseProjectText } from "../project/parse.js";
 import { createProject } from "../project/presets.js";
-import { MARK_REPRESENTATIVE_RULE, resolveWorkshopProfile } from "../workshop/profile.js";
+import { resolveWorkshopProfile } from "../workshop/profile.js";
 import { countUniqueParts } from "./compare.js";
 import { expectFittedNotLarger, expectMarkNames, expectMarksUnified } from "./marks.testing.js";
 import { QUANTITY_BUTT_WELD_MM, QUANTITY_WELD_MM } from "./steelCommon.js";
@@ -132,9 +132,12 @@ describe("repères des cornières et supports (F10 Q1a, Q2)", () => {
             const ls = g.map(realLength);
             expect(Math.max(...ls) - Math.min(...ls)).toBeLessThanOrEqual(t + GEOM_EPS);
             expect(new Set(g.map(supportGroupKey)).size).toBe(1);
-            // Représentant : la plus courte, règle exposée à l'interface (rappel ◆, décision (30)).
-            expect(MARK_REPRESENTATIVE_RULE).toBe("shortest");
-            for (const x of g) expect(x.stock!.length).toBeCloseTo(Math.min(...ls), 9);
+            // Représentant : la plus courte, règle portée par la pièce et rappelée à l'interface
+            // (rappel ◆, décisions (30), G-Q7).
+            for (const x of g) {
+              expect(x.markRepresentative).toBe("shortest");
+              expect(x.stock!.length).toBeCloseTo(Math.min(...ls), 9);
+            }
           }
           expectMarksUnified(m);
           expectMarkNames(m);
@@ -160,6 +163,8 @@ describe("repères des entretoises (F10 Q1b) : comparaison à la plus petite", (
       ["EC2", [3, 4]],
       ["EC3", [5]],
     ]);
+    // Représentant : la plus petite par l'aire nette, règle portée par la pièce (G-Q7).
+    for (const p of ec) expect(p.markRepresentative).toBe("smallestNetArea");
   });
 
   it("T = 0 : mêmes repères qu'à T = 1e-9 (développés identiques au bruit près réunis)", () => {

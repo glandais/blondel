@@ -1,5 +1,6 @@
 import { translatorFor } from "@blondel/i18n";
 import { describe, expect, it } from "vitest";
+import { GUARD_FACETED_IDENTITY_NOTE } from "../guards/sides.js";
 import { fr } from "../i18n.test-helpers.js";
 import { ProjectSchema } from "../model/project.js";
 import { serializeProject } from "../project/serialize.js";
@@ -7,7 +8,10 @@ import { makeSteppingProject } from "../stepping/test-helpers.js";
 import {
   DEFAULT_WORKSHOP_PROFILE,
   IDENTICAL_PART_TOLERANCE_PROVENANCE,
+  MARK_REPRESENTATIVE_AREA_PROVENANCE,
   MARK_REPRESENTATIVE_PROVENANCE,
+  MARK_REPRESENTATIVE_PROVENANCES,
+  MARK_REPRESENTATIVE_RULES,
   OTHER_DENSITY_PROVENANCE,
   OTHER_MATERIALS,
   WOOD_MATERIALS,
@@ -139,6 +143,35 @@ describe("masses volumiques de tous les matériaux (QUESTIONS A6)", () => {
     expect(fr(MARK_REPRESENTATIVE_PROVENANCE.note)).toContain("la plus courte");
     expect(fr(MARK_REPRESENTATIVE_PROVENANCE.note)).toContain("F10");
     expect(translatorFor("en").t(MARK_REPRESENTATIVE_PROVENANCE.note)).toContain("shortest");
+    // Élargie aux barres de garde-corps (G-Q7).
+    expect(fr(MARK_REPRESENTATIVE_PROVENANCE.note)).toContain("MC");
+    expect(fr(MARK_REPRESENTATIVE_PROVENANCE.note)).toContain("à confirmer par un atelier");
+  });
+
+  it("représentant d'un repère de développés ou de panneaux (G-Q7) : « à valider », aire nette fr / en", () => {
+    expect(MARK_REPRESENTATIVE_AREA_PROVENANCE.status).toBe("a-valider");
+    expect(fr(MARK_REPRESENTATIVE_AREA_PROVENANCE.note)).toContain("aire nette");
+    expect(fr(MARK_REPRESENTATIVE_AREA_PROVENANCE.note)).toContain("PN");
+    expect(fr(MARK_REPRESENTATIVE_AREA_PROVENANCE.note)).toContain("à confirmer par un atelier");
+    expect(translatorFor("en").t(MARK_REPRESENTATIVE_AREA_PROVENANCE.note)).toContain("net area");
+    // Une provenance par règle, dans l'ordre fixe des rappels.
+    expect(MARK_REPRESENTATIVE_RULES).toEqual(["shortest", "smallestNetArea"]);
+    expect(Object.keys(MARK_REPRESENTATIVE_PROVENANCES).sort()).toEqual(
+      [...MARK_REPRESENTATIVE_RULES].sort(),
+    );
+    expect(MARK_REPRESENTATIVE_PROVENANCES.shortest).toBe(MARK_REPRESENTATIVE_PROVENANCE);
+    expect(MARK_REPRESENTATIVE_PROVENANCES.smallestNetArea).toBe(
+      MARK_REPRESENTATIVE_AREA_PROVENANCE,
+    );
+  });
+
+  it("aide de T (G-Q9) : garde-corps cintrés comparés sur des facettes à 0,5 mm, fr / en", () => {
+    const f = fr(GUARD_FACETED_IDENTITY_NOTE);
+    expect(f).toMatch(/0,5\smm/);
+    expect(f).toContain("facettes");
+    const e = translatorFor("en").t(GUARD_FACETED_IDENTITY_NOTE);
+    expect(e).toMatch(/0\.5\smm/);
+    expect(e).toContain("facets");
   });
 
   it("tolérance d'alignement des bords de palier droit (F16 (6)) : 2 mm « à valider », facultative", () => {

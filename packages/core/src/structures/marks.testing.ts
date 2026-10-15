@@ -85,13 +85,18 @@ export const GUARD_MARK_PREFIXES: readonly string[] = ["PG", "BA", "LS", "CA", "
  * Désignation commune (décision F10 Q6, CG5) : chaque pièce d'un repère attribué par identité
  * (`IDENTITY_MARK_PREFIXES` hors repères de position du limon central bois, et
  * `GUARD_MARK_PREFIXES` sur la famille `guards`) porte `markName`, la même pour toutes les
- * pièces du repère, ainsi que le même texte de référence de développé (Q5). Rend le nombre de
- * pièces vérifiées.
+ * pièces du repère, ainsi que le même texte de référence de développé (Q5). Règle du
+ * représentant (G-Q7) : `markRepresentative` est posée si et seulement si `markName` l'est, la
+ * même dans tout le repère, `smallestNetArea` pour un développé ou un panneau de garde-corps
+ * (PN), `shortest` sinon. Rend le nombre de pièces vérifiées.
  */
 export function expectMarkNames(model: Pick<Model, "parts">): number {
   const byMark = new Map<string, Part[]>();
   let checked = 0;
   for (const p of model.parts) {
+    expect(p.markRepresentative !== undefined, `${p.mark} ${p.id} : markRepresentative`).toBe(
+      p.markName !== undefined,
+    );
     // Repères de position du limon central bois (C5, mêmes préfixes PP, SP… mais attribués par
     // position, pas par identité) : hors invariant.
     if (p.id.startsWith("wood-central-")) continue;
@@ -102,6 +107,10 @@ export function expectMarkNames(model: Pick<Model, "parts">): number {
         : IDENTITY_MARK_PREFIXES.includes(prefix);
     if (!identity || !/^[A-Z]+\d+$/.test(p.mark)) continue;
     expect(p.markName, `${p.mark} ${p.id} : markName`).toBeDefined();
+    const area = p.flat !== undefined || (p.family === "guards" && prefix === "PN");
+    expect(p.markRepresentative, `${p.mark} ${p.id} : règle du représentant`).toBe(
+      area ? "smallestNetArea" : "shortest",
+    );
     byMark.set(p.mark, [...(byMark.get(p.mark) ?? []), p]);
     checked++;
   }
@@ -110,6 +119,7 @@ export function expectMarkNames(model: Pick<Model, "parts">): number {
     for (const p of rest) {
       expect(messageEquals(p.markName!, r!.markName!), `${mark} : ${r!.id} / ${p.id}`).toBe(true);
       expect(p.flat?.reference, `${mark} : ${r!.id} / ${p.id}`).toEqual(r!.flat?.reference);
+      expect(p.markRepresentative, `${mark} : ${r!.id} / ${p.id}`).toBe(r!.markRepresentative);
     }
   }
   return checked;

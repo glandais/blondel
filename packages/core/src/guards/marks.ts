@@ -22,8 +22,10 @@
  *   plus courte des barres et prismes (PG, BA, LS, CA, MC) et la plus petite par l'aire nette des
  *   panneaux (PN). Le débit recopié d'une barre n'est jamais plus long que la pièce réelle ; celui
  *   d'un panneau peut dépasser une autre pièce du repère sur une cote (longueur en plan ou
- *   hauteur), d'au plus T, la forme étant comparée à T (QUESTIONS G-Q14). Règle à confirmer par
- *   un atelier (`MARK_REPRESENTATIVE_PROVENANCE`, `workshop/profile.ts`).
+ *   hauteur), d'au plus T, la forme étant comparée à T (QUESTIONS G-Q14). La règle est portée
+ *   par chaque pièce (`Part.markRepresentative`, posée par `makePart`, G-Q7) et rappelée en ◆
+ *   dans l'interface ; à confirmer par un atelier (`MARK_REPRESENTATIVE_PROVENANCES`,
+ *   `workshop/profile.ts`).
  *
  * Fonctions pures, sans texte affiché ; elles ne lèvent pas.
  */

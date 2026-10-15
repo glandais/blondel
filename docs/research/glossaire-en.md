@@ -208,6 +208,11 @@ En français, rien ne change : la hauteur de marche s'écrit déjà h (h1 pour l
 | ---------------------------- | ---------------------------- | ------------------- | ------------------------------------- |
 | Pièce                        | Part                         | —                   |                                       |
 | Repère                       | Mark                         | Part mark           | Les valeurs (`M5`) ne sont pas traduites |
+| Représentant (d'un repère)   | Representative               | —                   | Pièce dont le débit vaut pour tout le repère (G-Q7) |
+| Tolérance d'identité         | Identity tolerance           | —                   | Pièces repérées (F10 Q2)              |
+| Aire nette                   | Net area                     | —                   | Règle du représentant des développés et panneaux |
+| Facettage, facette           | Faceting, facet              | —                   | Bords cintrés des garde-corps (G-Q9)  |
+| Panneau (remplissage)        | Panel                        | —                   | Repère PN                             |
 | Développé                    | Flat pattern (tôle, acier), development (limon bois) | —  | Décision du 2026-10-06 (A26 (a)) : « Development » pour le développé d'un limon ou d'une crémaillère en bois (titres de dessin et de page, inspecteur, gabarit) ; « Flat pattern » pour la tôle, l'acier et les libellés génériques (onglet, menu d'export, nomenclature) ; point unique : `packages/exports/src/flatTerms.ts` |
 | Gabarit                      | Template                     | —                   |                                       |
 | Calibre rallongé             | Face mould                   | Face mold           |                                       |

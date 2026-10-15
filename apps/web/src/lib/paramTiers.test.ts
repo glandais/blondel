@@ -18,7 +18,7 @@ import {
 } from "@blondel/core";
 import { describe, expect, it } from "vitest";
 import { defaultGuards } from "./guardsForm.js";
-import { MARK_REPRESENTATIVE_KEY } from "./partMarks.js";
+import { MARK_REPRESENTATIVE_AREA_KEY, MARK_REPRESENTATIVE_KEY } from "./partMarks.js";
 import { availableStructures } from "./optionalApi.js";
 import { fieldText } from "./paramLabels.js";
 import {
@@ -544,7 +544,8 @@ describe("valeurs ◆ d'un projet", () => {
         (k) =>
           !k.startsWith("workshop.fasteners.") &&
           k !== "workshop.identicalPartTolerance" &&
-          k !== MARK_REPRESENTATIVE_KEY,
+          k !== MARK_REPRESENTATIVE_KEY &&
+          k !== MARK_REPRESENTATIVE_AREA_KEY,
       ),
     );
   });

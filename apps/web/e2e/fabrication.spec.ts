@@ -428,9 +428,16 @@ test("repères (F10, R2d) : nomenclature par repère, désignation selon la vue,
   await expect(tolerance.locator(".tv-list__value")).toHaveText(/^0,5\s?mm$/u);
   await expect(tolerance.locator(".tv-list__section")).toHaveText("Structure");
   const representative = list.locator("tbody tr").filter({
-    hasText: "Repérage des pièces · Représentant d'un repère de cornières ou de supports",
+    hasText:
+      "Repérage des pièces · Représentant d'un repère de barres (cornières, supports, garde-corps)",
   });
   await expect(representative.locator(".tv-list__value")).toHaveText("la plus courte");
+  // Limons plats : platines repérées (développés), second rappel (G-Q7).
+  const area = list.locator("tbody tr").filter({
+    hasText: "Repérage des pièces · Représentant d'un repère de développés ou de panneaux",
+  });
+  await expect(area.locator(".tv-list__value")).toHaveText("la plus petite par l'aire nette");
+  await expect(area.locator(".tv-list__section")).toHaveText("Structure");
   await tolerance.getByRole("button", { name: /^Ouvrir / }).click();
   await expect(page.locator(".app")).toHaveAttribute("data-workspace", "design");
   await expect(sectionTab(page, "Structure")).toHaveAttribute("aria-selected", "true");

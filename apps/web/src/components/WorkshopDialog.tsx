@@ -18,9 +18,10 @@
  * annulable), présent sur tout projet (T règle aussi le compte des pièces uniques du comparateur
  * et du chiffrage, bois compris). Seulement quand le modèle a des pièces repérées par identité
  * (mêmes conditions que les lignes de la liste ◆, question (38)) : marque ◆ tant que la valeur
- * effective n'est pas validée (lue sur le projet), rappel du représentant d'un repère de
- * cornières ou de supports et renvoi à la section Structure. Effacer, importer, exporter et
- * l'état du barème ne le touchent pas.
+ * effective n'est pas validée (lue sur le projet) et renvoi à la section Structure ; un rappel du
+ * représentant d'un repère par règle appliquée dans le modèle (G-Q7, règles lues sur le cœur).
+ * L'aide de la tolérance avertit des garde-corps cintrés comparés sur des facettes (G-Q9).
+ * Effacer, importer, exporter et l'état du barème ne le touchent pas.
  */
 import type { CostRates } from "@blondel/core";
 import { useEffect, useId, useRef, useState } from "react";
@@ -43,7 +44,11 @@ import { numberFormat } from "../i18n/locale.js";
 import { useLocale, useT } from "../i18n/useT.js";
 import { IdenticalToleranceField, MarkRepresentativeNote } from "./PartMarksFields.js";
 import { TvMark } from "./ui/TvMark.js";
-import { identicalToleranceValidated, partMarksInModel } from "../lib/partMarks.js";
+import {
+  identicalToleranceValidated,
+  markRepresentativeRulesInModel,
+  partMarksInModel,
+} from "../lib/partMarks.js";
 import "./workshop.css";
 
 const RATE_FORMAT: Intl.NumberFormatOptions = { maximumFractionDigits: 4, useGrouping: false };
@@ -119,9 +124,11 @@ export function WorkshopDialog() {
   const open = useUi((s) => s.workshopOpen);
   const [message, setMessage] = useState<{ kind: "info" | "error"; text: Message } | null>(null);
   const { model } = useModel();
-  // ◆ et rappel du représentant seulement quand la liste ◆ porte ces lignes (pièces repérées
-  // par identité, question (38)) ; validation lue sur le projet (valeur effective courante).
+  // ◆ seulement quand la liste ◆ porte la ligne (pièces repérées par identité, question (38)),
+  // un rappel du représentant par règle appliquée dans le modèle (G-Q7) ; validation lue sur le
+  // projet (valeur effective courante).
   const marked = partMarksInModel(model);
+  const rules = markRepresentativeRulesInModel(model);
   const toleranceTv = marked && !identicalToleranceValidated(project);
 
   useEffect(() => {
@@ -213,7 +220,9 @@ export function WorkshopDialog() {
               <IdenticalToleranceField />
               {toleranceTv ? <TvMark className="tiered__mark" /> : null}
             </div>
-            {marked ? <MarkRepresentativeNote /> : null}
+            {rules.map((rule) => (
+              <MarkRepresentativeNote key={rule} rule={rule} />
+            ))}
           </fieldset>
           {message ? (
             <p

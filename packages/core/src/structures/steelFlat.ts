@@ -773,7 +773,9 @@ export function plateHoles(length: Mm, width: Mm, edge: Mm, perRow: number): Vec
  *
  * Désignation commune (décision F10 Q6) : chaque pièce repérée reçoit `Part.markName`
  * (`options.markName`, sans pièce porteuse), recopiée du représentant avec le développé, dont
- * le texte de référence est lui aussi commun (Q5) ; `Part.name` garde la pièce porteuse.
+ * le texte de référence est lui aussi commun (Q5) ; `Part.name` garde la pièce porteuse. Elle
+ * reçoit aussi `Part.markRepresentative` (décision G-Q7) : `smallestNetArea` pour un développé,
+ * `shortest` sinon, la règle de l'ancre de son groupe.
  */
 export function markGroups(
   parts: Part[],
@@ -812,7 +814,13 @@ export function markGroups(
           ),
         }
       : undefined;
-    return { ...p, mark, markName: options.markName(p), ...(flat ? { flat } : {}) };
+    return {
+      ...p,
+      mark,
+      markName: options.markName(p),
+      markRepresentative: p.flat ? "smallestNetArea" : "shortest",
+      ...(flat ? { flat } : {}),
+    };
   });
   if (options.unify === false) return marked;
   const byId = new Map(marked.map((p) => [p.id, p]));

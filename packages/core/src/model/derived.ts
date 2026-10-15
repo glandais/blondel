@@ -530,6 +530,12 @@ export type PartCategory =
  */
 export type PartFamilyId = "treads" | "structure" | "guards";
 
+/**
+ * Règle du choix du représentant d'un repère par identité (décisions F10 Q3, G-Q7) : la pièce
+ * la plus courte (`shortest`) ou la plus petite par l'aire nette (`smallestNetArea`).
+ */
+export type MarkRepresentativeRule = "shortest" | "smallestNetArea";
+
 export interface Part {
   /**
    * Identifiant stable dans le projet (ex. `tread-5`, `stringer-inner-1`). Ne pas en déduire la
@@ -549,6 +555,15 @@ export interface Part {
    * (DXF, SVG, PDF) ; absente : `name`. Ajout rétrocompatible (sortie du `Model`).
    */
   readonly markName?: Message;
+  /**
+   * Règle du représentant du repère (décision G-Q7) : « la plus courte » pour les barres et
+   * prismes (cornières, supports, barres de garde-corps), « la plus petite par l'aire nette »
+   * pour les développés et les panneaux. Posée avec `markName` aux deux seuls sites de décision
+   * (`markGroups` de l'acier, `makePart` des garde-corps), la même pour tous les membres d'un
+   * repère ; lue par l'interface (`markRepresentativeRules`) pour les rappels ◆. Ajout
+   * rétrocompatible (sortie du `Model`).
+   */
+  readonly markRepresentative?: MarkRepresentativeRule;
   readonly material: MaterialId;
   readonly solid: SolidDesc;
   readonly flat?: FlatPattern;

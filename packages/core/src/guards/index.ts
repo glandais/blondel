@@ -33,7 +33,7 @@ export {
 } from "./checks.js";
 export { GuardError } from "./errors.js";
 export { isNarrowJourNote, jourWidth, NARROW_JOUR_NOTE_KEYS, narrowJourThreshold } from "./jour.js";
-export { WALL_PARALLEL_DEG } from "./sides.js";
+export { GUARD_FACETED_IDENTITY_NOTE, WALL_PARALLEL_DEG } from "./sides.js";
 export type {
   Foothold,
   GapMeasure,

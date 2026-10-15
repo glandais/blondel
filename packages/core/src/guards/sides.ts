@@ -21,6 +21,7 @@
  *   z(u) est affine entre nez successifs, horizontale sur un palier jusqu'à un giron (mesuré sur
  *   le bord) avant le nez suivant.
  */
+import { msg, num, type Message } from "@blondel/i18n";
 import { flattenCurve } from "../geom2d/curve.js";
 import { newelReach, newelSetback } from "../layout/newel.js";
 import * as V from "../geom2d/vec.js";
@@ -67,6 +68,17 @@ export interface SideEdge {
  * valeur ; les tests du descripteur facettent à cette flèche.
  */
 export const GUARD_EDGE_CHORD_TOL: Mm = 0.5;
+
+/**
+ * Aide de la tolérance d'identité des pièces repérées pour les garde-corps cintrés (décision
+ * G-Q9) : leurs bords sont facettés à `GUARD_EDGE_CHORD_TOL` près et comparés sur ces facettes ;
+ * sous environ cette flèche, des pièces identiques peuvent recevoir des repères distincts.
+ * `Message` du cœur, flèche passée en paramètre (jamais recopiée dans le texte).
+ */
+export const GUARD_FACETED_IDENTITY_NOTE: Message = msg(
+  "workshop.provenance.identicalPartTolerance.guardFacets",
+  { chord: num(GUARD_EDGE_CHORD_TOL, 1, "mm") },
+);
 
 /** Bord simplifié et profil d'un côté. */
 export function sideEdge(

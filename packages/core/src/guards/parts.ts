@@ -91,7 +91,8 @@ interface Common {
 /**
  * Pièce avec son débit et ses grandeurs propres, enregistrée pour le repérage (`shape` :
  * descripteur de forme ; `size` : taille de tri, la plus petite pièce d'un groupe en est
- * l'ancre). Repère provisoire vide, attribué par `MarkRegistry.apply`.
+ * l'ancre). Repère provisoire vide, attribué par `MarkRegistry.apply`. Règle du représentant
+ * (`Part.markRepresentative`, G-Q7) selon la forme : aire nette d'un panneau, longueur sinon.
  */
 function makePart(
   ctx: PartFactoryContext,
@@ -109,6 +110,9 @@ function makePart(
     category: c.category,
     name: c.name,
     markName: c.name,
+    // Règle du représentant (G-Q7) : l'ancre du groupe est la plus petite par `size`, aire nette
+    // d'un panneau, longueur d'une barre ou d'un prisme.
+    markRepresentative: shape.kind === "panel" ? "smallestNetArea" : "shortest",
     material: c.material,
     solid,
     section,

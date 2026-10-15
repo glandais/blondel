@@ -19,7 +19,7 @@ import {
   toValidateCountBySection,
   type Display,
 } from "../../lib/paramTiers.js";
-import { MARK_REPRESENTATIVE_KEY } from "../../lib/partMarks.js";
+import { MARK_REPRESENTATIVE_AREA_KEY, MARK_REPRESENTATIVE_KEY } from "../../lib/partMarks.js";
 import { SECTION_IDS } from "../../lib/sectionIds.js";
 import { pendingValidationEntries, toValidateRows } from "../../lib/toValidate.js";
 import { appStore, modelService } from "../../store/appStore.js";
@@ -251,14 +251,22 @@ describe("Structure : repérage des pièces (F10 (21), (30))", () => {
     const workshop = fold(html.slice(start), "workshop");
     expect(workshop).toContain('data-param="workshop.identicalPartTolerance"');
     expect(workshop).toContain(`data-param="${MARK_REPRESENTATIVE_KEY}"`);
+    expect(workshop).toContain(`data-param="${MARK_REPRESENTATIVE_AREA_KEY}"`);
     expect(workshop).toContain("Tolérance d&#x27;identité des pièces repérées");
     expect(workshop).toContain('value="0,5"');
     expect(workshop).toContain("la plus courte");
+    expect(workshop).toContain("la plus petite par l&#x27;aire nette");
     expect(workshop).toContain("à confirmer par un atelier");
+    // Aide de T (G-Q9) : garde-corps cintrés comparés sur des facettes.
+    expect(workshop).toContain("comparés sur ces facettes");
     // Les deux ◆ entrent dans le compte de la section Structure (rail) et de l'étape 7.
     const rows = toValidateRows(project, model).filter((r) => r.section === "structure");
     expect(rows.map((r) => r.key)).toEqual(
-      expect.arrayContaining(["workshop.identicalPartTolerance", MARK_REPRESENTATIVE_KEY]),
+      expect.arrayContaining([
+        "workshop.identicalPartTolerance",
+        MARK_REPRESENTATIVE_KEY,
+        MARK_REPRESENTATIVE_AREA_KEY,
+      ]),
     );
     const counts = toValidateCountBySection(project, model);
     expect(counts.structure).toBe(rows.filter((r) => !r.validated).length);
@@ -275,6 +283,18 @@ describe("Structure : repérage des pièces (F10 (21), (30))", () => {
     load(initial);
     const html = render(SECTION_COMPONENTS.structure, { kind: "free" });
     expect(html).not.toContain("workshop.identicalPartTolerance");
+  });
+
+  it("bois à balustres : rappel des barres seulement, sans ligne « développés ou panneaux » (G-Q7)", () => {
+    load({ ...initial, guards: defaultGuards() });
+    const html = render(SECTION_COMPONENTS.structure, { kind: "free" });
+    const start = html.indexOf("<legend>Repérage des pièces</legend>");
+    expect(start).toBeGreaterThan(0);
+    const workshop = fold(html.slice(start), "workshop");
+    expect(workshop).toContain(`data-param="${MARK_REPRESENTATIVE_KEY}"`);
+    expect(workshop).not.toContain(MARK_REPRESENTATIVE_AREA_KEY);
+    expect(workshop).toContain("cornières, supports, garde-corps");
+    expect(workshop).not.toContain("aire nette");
   });
 });
 
@@ -348,7 +368,10 @@ describe("clés du dictionnaire employées par les sections", () => {
       .map((f) => readFileSync(f, "utf8"))
       .join("\n");
     // Clé employée par sa constante (rappel du représentant d'un repère, `lib/partMarks.ts`).
-    const byConstant = new Map([[MARK_REPRESENTATIVE_KEY, "MARK_REPRESENTATIVE_KEY"]]);
+    const byConstant = new Map([
+      [MARK_REPRESENTATIVE_KEY, "MARK_REPRESENTATIVE_KEY"],
+      [MARK_REPRESENTATIVE_AREA_KEY, "MARK_REPRESENTATIVE_AREA_KEY"],
+    ]);
     const used = (k: string): boolean =>
       code.includes(`key: "${k}"`) ||
       (byConstant.has(k) && code.includes(`key: ${byConstant.get(k)!}`));

@@ -10,6 +10,7 @@ import {
   createProject,
   fastenerKindLabel,
   msg,
+  parseProjectText,
   withValidatedValues,
   type Fastener,
   type Model,
@@ -18,11 +19,16 @@ import {
 import { translatorFor } from "@blondel/i18n";
 import { toWinAnsi } from "@blondel/exports/pdf";
 import { describe, expect, it } from "vitest";
+import ashText from "../../../../examples/demo-quarter-landing-ash.blondel.json?raw";
 import { defaultGuards } from "./guardsForm.js";
 import { availableStructures } from "./optionalApi.js";
 import { guidedStepOfRow } from "./guidedSteps.js";
 import { toValidateItems } from "./paramTiers.js";
-import { MARK_REPRESENTATIVE_KEY, partMarksInModel } from "./partMarks.js";
+import {
+  MARK_REPRESENTATIVE_AREA_KEY,
+  MARK_REPRESENTATIVE_KEY,
+  partMarksInModel,
+} from "./partMarks.js";
 import {
   formatToValidateValue,
   pendingValidationEntries,
@@ -274,19 +280,20 @@ describe("visserie du profil d'atelier (QUESTIONS A27)", () => {
   });
 });
 
-describe("repérage des pièces (F10 (21), (30))", () => {
+describe("repérage des pièces (F10 (21), (30) ; G-Q7)", () => {
   const T = "workshop.identicalPartTolerance";
   const R = MARK_REPRESENTATIVE_KEY;
+  const A = MARK_REPRESENTATIVE_AREA_KEY;
   const keys = (rows: readonly ToValidateRow[]) => rows.map((r) => r.key);
 
-  it("deux lignes, section Structure, après la visserie, étape 7 du guidé", () => {
+  it("trois lignes (barres et développés), section Structure, après la visserie, étape 7 du guidé", () => {
     expect(partMarksInModel(steelModel)).toBe(true);
     const rows = toValidateRows(steel, steelModel);
     const k = keys(rows);
-    expect(k.slice(-2)).toEqual([T, R]);
+    expect(k.slice(-3)).toEqual([T, R, A]);
     const lastFastener = k.findLastIndex((x) => x.startsWith("workshop.fasteners."));
     expect(k.indexOf(T)).toBeGreaterThan(lastFastener);
-    for (const key of [T, R]) {
+    for (const key of [T, R, A]) {
       const row = rowOf(rows, key);
       expect(row.section).toBe("structure");
       expect(row.validated).toBe(false);
@@ -305,16 +312,24 @@ describe("repérage des pièces (F10 (21), (30))", () => {
     const r = rowOf(rows, R);
     expect(r.value).toBe("shortest");
     expect(FR.t(r.label)).toBe(
-      "Repérage des pièces · Représentant d'un repère de cornières ou de supports",
+      "Repérage des pièces · Représentant d'un repère de barres (cornières, supports, garde-corps)",
     );
     expect(formatToValidateValue(r, FR)).toBe("la plus courte");
     expect(formatToValidateValue(r, EN)).toBe("the shortest");
+    const a = rowOf(rows, A);
+    expect(a.value).toBe("smallestNetArea");
+    expect(FR.t(a.label)).toBe(
+      "Repérage des pièces · Représentant d'un repère de développés ou de panneaux",
+    );
+    expect(EN.t(a.label)).toBe("Part marking · Representative of a flat-pattern or panel mark");
+    expect(formatToValidateValue(a, FR)).toBe("la plus petite par l'aire nette");
+    expect(formatToValidateValue(a, EN)).toBe("the smallest by net area");
     const own: Project = { ...steel, workshop: { identicalPartTolerance: 0.3 } };
     expect(rowOf(toValidateRows(own, steelModel), T).value).toBe(0.3);
     // Dossier PDF : mêmes lignes, imprimables en WinAnsi.
     for (const tr of [FR, EN]) {
-      const doc = toValidateDocRows(steel, steelModel, tr).slice(-2);
-      expect(doc).toHaveLength(2);
+      const doc = toValidateDocRows(steel, steelModel, tr).slice(-3);
+      expect(doc).toHaveLength(3);
       for (const d of doc) expect(toWinAnsi(`${tr.t(d.label)} ${d.value}`)).not.toContain("?");
     }
   });
@@ -322,19 +337,43 @@ describe("repérage des pièces (F10 (21), (30))", () => {
   it("absentes sans pièce repérée par identité (bois) et sans modèle", () => {
     const wood = buildModel(base);
     expect(partMarksInModel(wood)).toBe(false);
-    expect(keys(toValidateRows(base, wood))).not.toContain(T);
-    expect(keys(toValidateRows(base, wood))).not.toContain(R);
-    expect(keys(toValidateRows(steel, null))).not.toContain(T);
-    expect(keys(toValidateRows(steel, null))).not.toContain(R);
+    for (const key of [T, R, A]) {
+      expect(keys(toValidateRows(base, wood))).not.toContain(key);
+      expect(keys(toValidateRows(steel, null))).not.toContain(key);
+    }
+  });
+
+  it("une ligne par règle appliquée dans le modèle (G-Q7)", () => {
+    const tail = (p: Project, m: Model) =>
+      keys(toValidateRows(p, m)).filter((k) => k === T || k === R || k === A);
+    // Bois à balustres : barres seulement, sans ligne « développés ou panneaux » (correction de
+    // l'affichage transitoire de G2c).
+    const woodGuards: Project = { ...base, guards: defaultGuards() };
+    expect(tail(woodGuards, buildModel(woodGuards))).toEqual([T, R]);
+    // Bois à panneaux de verre : barres et panneaux.
+    const ash = parseProjectText(ashText);
+    expect(tail(ash, buildModel(ash))).toEqual([T, R, A]);
+    // Limon central acier sans garde-corps : développés seulement, sans « la plus courte »
+    // (aucune barre repérée ; défaut d'affichage de R2d corrigé).
+    expect(availableStructures().some((s) => s.kind === "steel-central")).toBe(true);
+    const central: Project = {
+      ...base,
+      stair: { ...base.stair, structure: { kind: "steel-central", params: {} } },
+    };
+    const centralModel = buildModel(central);
+    expect(centralModel.errors).toEqual([]);
+    expect(tail(central, centralModel)).toEqual([T, A]);
   });
 
   it("validation : T validé, caduc si T change ; rappel validé sous sa clé `ui:`", () => {
     const rows = toValidateRows(steel, steelModel);
     expect(validationEntry(rowOf(rows, R))).toEqual({ path: R, value: "shortest" });
+    expect(validationEntry(rowOf(rows, A))).toEqual({ path: A, value: "smallestNetArea" });
     const validated = withValidatedValues(steel, pendingValidationEntries(rows));
     const after = toValidateRows(validated, steelModel);
     expect(rowOf(after, T).validated).toBe(true);
     expect(rowOf(after, R).validated).toBe(true);
+    expect(rowOf(after, A).validated).toBe(true);
     const changed: Project = { ...validated, workshop: { identicalPartTolerance: 0.3 } };
     expect(rowOf(toValidateRows(changed, steelModel), T).validated).toBe(false);
     expect(rowOf(toValidateRows(changed, steelModel), R).validated).toBe(true);

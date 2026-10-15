@@ -12,9 +12,11 @@
  * porteur sous « Visserie » ; nature et classe affichées par
  * leurs libellés du cœur.
  *
- * Repérage des pièces (lot « attribution des repères », F10 (21) et (30)) : « Repérage des
- * pièces · Tolérance d'identité des pièces repérées » (mm) et « Repérage des pièces ·
- * Représentant d'un repère de cornières ou de supports » (valeur « la plus courte »).
+ * Repérage des pièces (lot « attribution des repères », F10 (21) et (30) ; G-Q7) : « Repérage des
+ * pièces · Tolérance d'identité des pièces repérées » (mm), « Repérage des pièces · Représentant
+ * d'un repère de barres (cornières, supports, garde-corps) » (valeur « la plus courte ») et
+ * « Repérage des pièces · Représentant d'un repère de développés ou de panneaux » (valeur « la
+ * plus petite par l'aire nette »).
  */
 import {
   FASTENER_GRADES,
@@ -35,7 +37,11 @@ import { materialLabel } from "@blondel/exports";
 import { msg, textMessage, type Message, type MessageKey, type Translator } from "@blondel/i18n";
 import { toMessage } from "../i18n/text.js";
 import { fastenerSettingOf } from "./fasteners.js";
-import { MARK_REPRESENTATIVE_KEY, MARK_REPRESENTATIVE_LABEL } from "./partMarks.js";
+import {
+  MARK_REPRESENTATIVE_LABEL,
+  MARK_REPRESENTATIVE_TITLE,
+  markRepresentativeRuleOfKey,
+} from "./partMarks.js";
 import { GROUP_LABELS, fieldText } from "./paramLabels.js";
 import { STRUCTURE_PARAMS_PREFIX, toValidateStates, type ToValidateState } from "./paramTiers.js";
 import { SECTION_TITLE_KEYS, type GuidedStep, type SectionId } from "./sectionIds.js";
@@ -186,9 +192,8 @@ function partMarksPresentation(s: ToValidateState): { label: Message; unit?: str
   if (s.key === IDENTICAL_TOLERANCE_KEY) {
     return { label: grouped(title, msg("ui.partMarks.identicalTolerance")), unit: MM };
   }
-  if (s.key === MARK_REPRESENTATIVE_KEY) {
-    return { label: grouped(title, msg("ui.partMarks.representative")) };
-  }
+  const rule = markRepresentativeRuleOfKey(s.key);
+  if (rule !== undefined) return { label: grouped(title, msg(MARK_REPRESENTATIVE_TITLE[rule])) };
   return undefined;
 }
 
@@ -247,8 +252,10 @@ export function toValidateRows(
 /** Libellé d'un choix de liste (`undefined` : aucun libellé connu). */
 function optionLabel(row: ToValidateRow, value: string, t: Translator): string | undefined {
   if (row.key === "guards.material") return materialLabel(t, value);
-  if (row.key === MARK_REPRESENTATIVE_KEY && Object.hasOwn(MARK_REPRESENTATIVE_LABEL, value)) {
-    return t.t(MARK_REPRESENTATIVE_LABEL[value as keyof typeof MARK_REPRESENTATIVE_LABEL]);
+  if (markRepresentativeRuleOfKey(row.key) !== undefined) {
+    if (Object.hasOwn(MARK_REPRESENTATIVE_LABEL, value)) {
+      return t.t(MARK_REPRESENTATIVE_LABEL[value as keyof typeof MARK_REPRESENTATIVE_LABEL]);
+    }
   }
   const setting = fastenerSettingOf(row.path);
   if (setting?.field === "kind" && (FASTENER_KINDS as readonly string[]).includes(value)) {

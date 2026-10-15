@@ -291,6 +291,8 @@ describe("MarkRegistry (G2b)", () => {
             expect(p.stock!.length).toBeLessThanOrEqual(raw[i]!.stock!.length + GEOM_EPS);
             expect(p.solid).toBe(raw[i]!.solid);
             expect(p.markName).toEqual(raw[i]!.name);
+            // Règle du représentant d'une barre (G-Q7) : la plus courte.
+            expect(p.markRepresentative).toBe("shortest");
           });
         },
       ),
@@ -334,6 +336,8 @@ describe("MarkRegistry (G2b)", () => {
     for (const p of parts) {
       expect(p.stock).toEqual(raw[1]!.stock);
       expect(p.quantities).toEqual(raw[1]!.quantities);
+      // Règle du représentant d'un panneau (G-Q7) : la plus petite par l'aire nette.
+      expect(p.markRepresentative).toBe("smallestNetArea");
     }
     // Famille posée par le pipeline (`build.ts`).
     const guards = parts.map((p) => ({ ...p, family: "guards" as const }));
@@ -374,6 +378,8 @@ describe("MarkRegistry (G2b)", () => {
       mk("e", "part.guardHandrail.name", "steel-painted"),
     ]);
     expect(parts.map((p) => p.mark)).toEqual(["MC1", "MC2", "MC3", "MC4", "MC1"]);
+    // Règle du représentant d'une main courante (G-Q7) : la plus courte.
+    expect(parts.every((p) => p.markRepresentative === "shortest")).toBe(true);
   });
 
   it("repère réservé (main courante portée par la structure, G-Q6) : jamais attribué", () => {
@@ -436,6 +442,13 @@ describe("MarkRegistry (G2b)", () => {
         panel("d", 800.3),
       ]);
       expect(parts.map((p) => p.mark)).toEqual(expected);
+      // Règle du représentant (G-Q7) : poteaux, la plus courte ; panneaux, l'aire nette.
+      expect(parts.map((p) => p.markRepresentative)).toEqual([
+        "shortest",
+        "shortest",
+        "smallestNetArea",
+        "smallestNetArea",
+      ]);
     }
   });
 });

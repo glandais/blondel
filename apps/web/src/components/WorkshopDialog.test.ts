@@ -2,13 +2,15 @@
  * Dialogue « Atelier… » : réglage du profil d'atelier **du projet** (décision F10 (21)) sous le
  * barème de coût. La tolérance d'identité des pièces repérées s'y édite (même chemin du projet
  * que la section Structure, annulable), marquée ◆ tant qu'elle n'est pas validée quand le modèle
- * a des pièces repérées (sinon ni ◆ ni rappel du représentant, question (38)) ; le barème
- * (navigateur) ne la porte pas et ne la touche pas.
+ * a des pièces repérées (sinon ni ◆ ni rappel du représentant, question (38)) ; un rappel du
+ * représentant par règle appliquée dans le modèle (G-Q7) ; aide de T sur les garde-corps
+ * cintrés (G-Q9) ; le barème (navigateur) ne la porte pas et ne la touche pas.
  */
 import { buildModel, createProject, withValidatedValues, type Project } from "@blondel/core";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
+import { defaultGuards } from "../lib/guardsForm.js";
 import { IDENTICAL_TOLERANCE_PATH } from "../lib/partMarks.js";
 import { ratesToJson } from "../lib/workshopRates.js";
 import { appStore, modelService, workshopStore } from "../store/appStore.js";
@@ -57,7 +59,7 @@ describe("dialogue « Atelier… » : repérage des pièces (F10 (21))", () => {
     load(initial);
   });
 
-  it("fieldset distinct sous le barème : tolérance (0,5 mm, ◆), rappel du représentant", () => {
+  it("fieldset distinct sous le barème : tolérance (0,5 mm, ◆), rappels du représentant", () => {
     load(steel);
     const html = render();
     const form = html.indexOf('aria-label="Barème de coût"');
@@ -69,12 +71,28 @@ describe("dialogue « Atelier… » : repérage des pièces (F10 (21))", () => {
     expect(fieldset).toContain('value="0,5"');
     expect(fieldset).toContain("tiered__item--tv");
     expect(fieldset).toContain("la plus courte");
+    // Limons plats : développés (platines) repérés, second rappel (G-Q7).
+    expect(fieldset).toContain("la plus petite par l&#x27;aire nette");
+    expect(fieldset).toContain("Représentant d&#x27;un repère de développés ou de panneaux");
+    // Aide de T (G-Q9).
+    expect(fieldset).toContain("comparés sur ces facettes");
     expect(fieldset).toContain("dans la section Structure");
     expect(fieldset).toContain("compte des pièces uniques");
     const en = projectFieldset(render("en"));
     expect(en).toContain("Part marking (saved in the project)");
     expect(en).toContain('value="0.5"');
     expect(en).not.toContain("Repérage");
+    expect(en).toContain("the smallest by net area");
+    expect(en).toContain("compared on these facets");
+  });
+
+  it("bois à balustres : une seule règle, seul le rappel des barres (G-Q7)", () => {
+    load({ ...initial, guards: defaultGuards() });
+    const fieldset = projectFieldset(render());
+    expect(fieldset).toContain("tiered__item--tv");
+    expect(fieldset).toContain("la plus courte");
+    expect(fieldset).not.toContain("aire nette");
+    expect(fieldset).not.toContain("Représentant d&#x27;un repère de développés ou de panneaux");
   });
 
   it("saisie : chemin du projet, une entrée d'historique annulable ; ◆ retiré une fois validée", () => {
@@ -97,7 +115,10 @@ describe("dialogue « Atelier… » : repérage des pièces (F10 (21))", () => {
     expect(fieldset).toContain("compte des pièces uniques");
     expect(fieldset).not.toContain("tiered__item--tv");
     expect(fieldset).not.toContain("la plus courte");
+    expect(fieldset).not.toContain("aire nette");
     expect(fieldset).not.toContain("section Structure");
+    // Aide de T (G-Q9) : présente sur tout projet, comme le champ.
+    expect(fieldset).toContain("comparés sur ces facettes");
     // Validation enregistrée : sans effet visible, aucune ligne ◆ ne la porte sur ce projet.
     load(withValidatedValues(base, [{ path: "workshop.identicalPartTolerance", value: 0.5 }]));
     expect(projectFieldset(render())).not.toContain("tiered__item--tv");

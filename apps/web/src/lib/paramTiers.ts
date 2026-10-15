@@ -24,9 +24,10 @@
  *   d'après les défauts « à valider » du cœur cités en commentaire ;
  * - visserie du profil d'atelier (`workshop.fasteners.*`, QUESTIONS A27) : déclarée ici, valeurs
  *   présentes selon les assemblages du modèle (`lib/fasteners.ts`) ;
- * - repérage des pièces (`workshop.identicalPartTolerance` et rappel du représentant d'un repère
- *   de cornières ou de supports, F10 (21) et (30)) : déclaré ici, présent quand le modèle a des
- *   pièces repérées par identité (`lib/partMarks.ts`).
+ * - repérage des pièces (`workshop.identicalPartTolerance` et rappels du représentant d'un repère,
+ *   un par règle, F10 (21) et (30), G-Q7) : déclaré ici ; la tolérance présente quand le modèle a
+ *   des pièces repérées par identité, chaque rappel quand sa règle s'applique au modèle (règles
+ *   lues sur le cœur, `lib/partMarks.ts`).
  *
  * Validation des ◆ (ADR-0009 point 9) : `toValidateStates` donne, pour chaque valeur ◆ du
  * projet, sa valeur effective (défauts compris) et si elle est validée
@@ -48,9 +49,11 @@ import {
 import { fastenerSettingPaths, fastenerSettingValue } from "./fasteners.js";
 import {
   IDENTICAL_TOLERANCE_PATH,
+  MARK_REPRESENTATIVE_AREA_KEY,
   MARK_REPRESENTATIVE_KEY,
-  MARK_REPRESENTATIVE_VALUE,
+  MARK_REPRESENTATIVE_KEYS,
   identicalToleranceValue,
+  markRepresentativeRulesInModel,
   partMarksInModel,
 } from "./partMarks.js";
 import { availableStructures } from "./optionalApi.js";
@@ -250,12 +253,14 @@ const TIERS: Readonly<Record<string, ParamTierEntry>> = {
 
   // --- Repérage des pièces (lot « attribution des repères », décisions F10 (21) et (30)) :
   // tolérance d'identité du profil d'atelier (packages/core/src/workshop/profile.ts,
-  // IDENTICAL_PART_TOLERANCE_PROVENANCE « à valider ») et rappel du représentant d'un repère de
-  // cornières ou de supports (MARK_REPRESENTATIVE_PROVENANCE, « à confirmer par un atelier »),
-  // réglés dans « Réglages d'atelier » de la section Structure (et à l'étape 7) ; la tolérance
-  // s'édite aussi dans le dialogue « Atelier… » (hors section, sans entrée ici).
+  // IDENTICAL_PART_TOLERANCE_PROVENANCE « à valider ») et rappels du représentant d'un repère,
+  // un par règle (G-Q7) : barres, la plus courte, et développés ou panneaux, la plus petite par
+  // l'aire nette (MARK_REPRESENTATIVE_PROVENANCES, « à confirmer par un atelier »), réglés dans
+  // « Réglages d'atelier » de la section Structure (et à l'étape 7) ; la tolérance s'édite aussi
+  // dans le dialogue « Atelier… » (hors section, sans entrée ici).
   "workshop.identicalPartTolerance": workshop("structure", TV),
   [MARK_REPRESENTATIVE_KEY]: workshop("structure", TV),
+  [MARK_REPRESENTATIVE_AREA_KEY]: workshop("structure", TV),
 
   // --- Contexte de contrôle (pas d'étape : réglé par l'assistant, modifiable depuis le contrôle)
   "compliance.contexts": design("compliance"),
@@ -921,13 +926,13 @@ export function toValidateStates(
   // Visserie : seulement les assemblages présents dans le modèle (aucune sans modèle).
   for (const p of fastenerSettingPaths(model)) push(p, fastenerSettingValue(project, p));
   // Repérage des pièces, après la visserie : seulement si le modèle a des pièces repérées par
-  // identité (aucune sans modèle). Le rappel du représentant n'a pas de chemin : clé `ui:`.
-  if (partMarksInModel(model)) {
-    push(IDENTICAL_TOLERANCE_PATH, identicalToleranceValue(project));
-    const e = tierEntry(MARK_REPRESENTATIVE_KEY);
-    if (e?.toValidate === true) {
-      out.push(state(item(MARK_REPRESENTATIVE_KEY, [], e), MARK_REPRESENTATIVE_VALUE));
-    }
+  // identité (aucune sans modèle). Puis un rappel du représentant par règle appliquée par le cœur
+  // dans ce modèle, dans l'ordre fixe du cœur (G-Q7) ; sans chemin : clé `ui:`, valeur = règle.
+  if (partMarksInModel(model)) push(IDENTICAL_TOLERANCE_PATH, identicalToleranceValue(project));
+  for (const rule of markRepresentativeRulesInModel(model)) {
+    const key = MARK_REPRESENTATIVE_KEYS[rule];
+    const e = tierEntry(key);
+    if (e?.toValidate === true) out.push(state(item(key, [], e), rule));
   }
   return out;
 }

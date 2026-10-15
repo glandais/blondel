@@ -7,12 +7,15 @@
  */
 import { expect, test, type Page } from "@playwright/test";
 import {
+  applyPreset,
   chooseStructure,
   openApp,
   openMoreMenu,
+  openSection,
   openTab,
   openWorkspace,
   settle,
+  useFreeJourney,
   viewTab,
 } from "./support.js";
 
@@ -127,6 +130,9 @@ test("profil d'atelier : tolérance d'identité du projet (F10 (21)), hors barè
   });
   await expect(project.getByLabel("Tolérance d'identité des pièces repérées")).toHaveValue("0,5");
   await expect(project).not.toContainText("la plus courte");
+  await expect(project).not.toContainText("aire nette");
+  // Aide de T (G-Q9) : présente sur tout projet, comme le champ.
+  await expect(project).toContainText("comparés sur ces facettes");
   await expect(project.locator(".tiered__item--tv")).toHaveCount(0);
   await dialog.getByRole("button", { name: "Fermer" }).click();
   await expect(dialog).toBeHidden();
@@ -137,6 +143,8 @@ test("profil d'atelier : tolérance d'identité du projet (F10 (21)), hors barè
   await expect(project).toBeVisible();
   await expect(project.locator(".tiered__item--tv")).toHaveCount(1);
   await expect(project).toContainText("la plus courte");
+  // Limons plats : platines repérées (développés), second rappel (G-Q7).
+  await expect(project).toContainText("la plus petite par l'aire nette");
   const field = project.getByLabel("Tolérance d'identité des pièces repérées");
   await expect(field).toHaveValue("0,5");
   await field.fill("0,3");
@@ -160,6 +168,60 @@ test("profil d'atelier : tolérance d'identité du projet (F10 (21)), hors barè
   await page.getByRole("button", { name: "Annuler (Ctrl+Z)", exact: true }).click();
   await settle(page);
   await expect(row.locator(".tv-list__value")).toHaveText(/^0,5\s?mm$/u);
+});
+
+test("repérage (G-Q7) : une ligne ◆ par règle de représentant", async ({ page }) => {
+  const TOLERANCE = "Repérage des pièces · Tolérance d'identité des pièces repérées";
+  const BARS =
+    "Repérage des pièces · Représentant d'un repère de barres (cornières, supports, garde-corps)";
+  const AREA = "Repérage des pièces · Représentant d'un repère de développés ou de panneaux";
+  await openApp(page);
+  // Projet bois d'ouverture, sans garde-corps : aucune pièce repérée, aucune ligne ni réglage.
+  await openTab(page, "À valider");
+  const list = page.getByRole("region", { name: "Valeurs à valider", exact: true });
+  await expect(list.locator("tbody tr").filter({ hasText: "Repérage des pièces" })).toHaveCount(0);
+  await openWorkspace(page, "Conception");
+  await openSection(page, "Structure");
+  await expect(page.getByTestId("part-marks-settings")).toHaveCount(0);
+
+  // Bois à garde-corps de verre : barres (poteaux, lisses, mains courantes) et panneaux.
+  await applyPreset(page, "Quart tournant à palier, frêne et verre");
+  await useFreeJourney(page);
+  await openTab(page, "À valider");
+  for (const [label, value] of [
+    [TOLERANCE, /^0,5\s?mm$/u],
+    [BARS, "la plus courte"],
+    [AREA, "la plus petite par l'aire nette"],
+  ] as const) {
+    const row = list.locator("tbody tr").filter({ hasText: label });
+    await expect(row).toHaveCount(1);
+    await expect(row.locator(".tv-list__value")).toHaveText(value);
+    await expect(row.locator(".tv-list__section")).toHaveText("Structure");
+  }
+  // « Ouvrir » sur la ligne des panneaux mène à son rappel, dans la section Structure.
+  await list
+    .locator("tbody tr")
+    .filter({ hasText: AREA })
+    .getByRole("button", { name: /^Ouvrir / })
+    .click();
+  await expect(page.locator(".app")).toHaveAttribute("data-workspace", "design");
+  const note = page.locator(
+    '.free-panel [data-param="ui:workshop.markRepresentativeArea"] .part-marks__representative',
+  );
+  await expect(note).toBeFocused();
+  await expect(note).toContainText("à confirmer par un atelier");
+
+  // Dialogue « Atelier… » : les deux rappels.
+  await openMoreMenu(page);
+  await page.getByRole("button", { name: "Atelier…" }).click();
+  const dialog = page.getByRole("dialog", { name: "Profil d'atelier" });
+  const project = dialog.getByRole("group", {
+    name: "Repérage des pièces (enregistré dans le projet)",
+  });
+  await expect(project).toContainText("la plus courte");
+  await expect(project).toContainText("la plus petite par l'aire nette");
+  await dialog.getByRole("button", { name: "Fermer" }).click();
+  await expect(dialog).toBeHidden();
 });
 
 test("export : dossiers PDF filtrés par famille de gabarits", async ({ page }) => {
