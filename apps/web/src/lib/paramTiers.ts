@@ -23,7 +23,10 @@
  * - garde-corps et rotation M6 : déclarés ici (seule source de ces marqueurs dans l'interface),
  *   d'après les défauts « à valider » du cœur cités en commentaire ;
  * - visserie du profil d'atelier (`workshop.fasteners.*`, QUESTIONS A27) : déclarée ici, valeurs
- *   présentes selon les assemblages du modèle (`lib/fasteners.ts`).
+ *   présentes selon les assemblages du modèle (`lib/fasteners.ts`) ;
+ * - repérage des pièces (`workshop.identicalPartTolerance` et rappel du représentant d'un repère
+ *   de cornières ou de supports, F10 (21) et (30)) : déclaré ici, présent quand le modèle a des
+ *   pièces repérées par identité (`lib/partMarks.ts`).
  *
  * Validation des ◆ (ADR-0009 point 9) : `toValidateStates` donne, pour chaque valeur ◆ du
  * projet, sa valeur effective (défauts compris) et si elle est validée
@@ -43,6 +46,13 @@ import {
   type WoodCentralParams,
 } from "@blondel/core";
 import { fastenerSettingPaths, fastenerSettingValue } from "./fasteners.js";
+import {
+  IDENTICAL_TOLERANCE_PATH,
+  MARK_REPRESENTATIVE_KEY,
+  MARK_REPRESENTATIVE_VALUE,
+  identicalToleranceValue,
+  partMarksInModel,
+} from "./partMarks.js";
 import { availableStructures } from "./optionalApi.js";
 import { fieldText } from "./paramLabels.js";
 import { GUIDED_STEPS, SECTION_IDS, type GuidedStep, type SectionId } from "./sectionIds.js";
@@ -237,6 +247,15 @@ const TIERS: Readonly<Record<string, ParamTierEntry>> = {
   "workshop.fasteners.bracketSpacing": workshop("structure", TV),
   "workshop.fasteners.unknownWallLoadBearing": workshop("structure", TV),
   "workshop.fasteners.joints": workshop("structure", TV),
+
+  // --- Repérage des pièces (lot « attribution des repères », décisions F10 (21) et (30)) :
+  // tolérance d'identité du profil d'atelier (packages/core/src/workshop/profile.ts,
+  // IDENTICAL_PART_TOLERANCE_PROVENANCE « à valider ») et rappel du représentant d'un repère de
+  // cornières ou de supports (MARK_REPRESENTATIVE_PROVENANCE, « à confirmer par un atelier »),
+  // réglés dans « Réglages d'atelier » de la section Structure (et à l'étape 7) ; la tolérance
+  // s'édite aussi dans le dialogue « Atelier… » (hors section, sans entrée ici).
+  "workshop.identicalPartTolerance": workshop("structure", TV),
+  [MARK_REPRESENTATIVE_KEY]: workshop("structure", TV),
 
   // --- Contexte de contrôle (pas d'étape : réglé par l'assistant, modifiable depuis le contrôle)
   "compliance.contexts": design("compliance"),
@@ -857,7 +876,8 @@ export interface ToValidateState extends ToValidateItem {
  * Valeurs ◆ présentes dans ce projet, avec leur valeur effective et leur état de validation :
  * portée et raideur de la rotation M6 (défauts du cœur si absentes), paramètres du plugin de
  * structure courant (défauts du plugin compris), garde-corps présents (type de remplissage
- * courant), visserie des assemblages présents dans le modèle (profil d'atelier, défauts compris).
+ * courant), visserie des assemblages présents dans le modèle (profil d'atelier, défauts compris),
+ * tolérance d'identité et rappel du représentant quand le modèle a des pièces repérées.
  * Une valeur non calculable n'est jamais validée.
  */
 export function toValidateStates(
@@ -900,6 +920,15 @@ export function toValidateStates(
   for (const p of guardPaths(project)) push(p, getParam(project.guards, p.slice(1)));
   // Visserie : seulement les assemblages présents dans le modèle (aucune sans modèle).
   for (const p of fastenerSettingPaths(model)) push(p, fastenerSettingValue(project, p));
+  // Repérage des pièces, après la visserie : seulement si le modèle a des pièces repérées par
+  // identité (aucune sans modèle). Le rappel du représentant n'a pas de chemin : clé `ui:`.
+  if (partMarksInModel(model)) {
+    push(IDENTICAL_TOLERANCE_PATH, identicalToleranceValue(project));
+    const e = tierEntry(MARK_REPRESENTATIVE_KEY);
+    if (e?.toValidate === true) {
+      out.push(state(item(MARK_REPRESENTATIVE_KEY, [], e), MARK_REPRESENTATIVE_VALUE));
+    }
+  }
   return out;
 }
 

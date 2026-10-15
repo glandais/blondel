@@ -23,7 +23,11 @@ export function findParamField(key: string, root: ParentNode): HTMLElement | nul
   );
 }
 
-/** Déplie les replis qui contiennent `el`, lui donne le focus et le fait défiler. */
+/**
+ * Déplie les replis qui contiennent `el`, lui donne le focus et le fait défiler. Cible : premier
+ * contrôle actif du champ, sinon un élément focalisable par `tabindex` (texte en lecture seule,
+ * rappel du représentant d'un repère), sinon le champ lui-même.
+ */
 export function revealParamField(el: HTMLElement): void {
   for (let d = el.closest("details"); d !== null; d = d.parentElement?.closest("details") ?? null) {
     d.open = true;
@@ -31,7 +35,9 @@ export function revealParamField(el: HTMLElement): void {
   const target =
     el.querySelector<HTMLElement>(
       "input:not([type='hidden']):not(:disabled), select:not(:disabled), textarea, button:not(:disabled)",
-    ) ?? el;
+    ) ??
+    el.querySelector<HTMLElement>("[tabindex]") ??
+    el;
   target.focus({ preventScroll: true });
   target.scrollIntoView({ block: "center" });
 }

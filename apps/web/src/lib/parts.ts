@@ -1,10 +1,13 @@
 /**
  * Présentation des pièces du modèle : pièce sélectionnée, nomenclature groupée par repère
- * (lignes de `cutListRows` de `@blondel/exports`, mêmes regroupements que la liste de débit
- * CSV) et totaux. Aucune grandeur n'est calculée ici hormis les sommes des quantités rendues.
+ * (groupes de `cutListGroups` de `@blondel/exports` : mêmes lignes que la liste de débit CSV,
+ * pièces rattachées par appartenance au groupe, convention C2) et totaux. Chaque ligne porte
+ * les cotes de débit du repère (décision F10 (28)) et sa désignation commune (`markName`, à
+ * défaut `name`, décision (36)). Aucune grandeur n'est calculée ici hormis les sommes des
+ * quantités rendues ; aucun regroupement n'est fait ici.
  */
 import type { Location, Model, Part } from "@blondel/core";
-import { cutListRows, type CutListRow, type MassNote } from "@blondel/exports";
+import { cutListGroups, type CutListRow, type MassNote } from "@blondel/exports";
 import type { Locale } from "@blondel/i18n";
 import { treadPartId } from "./compliance.js";
 
@@ -24,7 +27,11 @@ export function selectedPart(
 }
 
 export interface BomLine extends CutListRow {
-  /** Identifiants des pièces regroupées sur la ligne (même repère, même débit). */
+  /**
+   * Identifiants des pièces de la ligne : membres du groupe de repère des exports
+   * (`cutListGroups`). Une pièce à lames (`stock.count`) y figure une fois et compte pour
+   * `stock.count` dans `quantity`.
+   */
   readonly partIds: readonly string[];
   /** Volume total de la ligne (m³), si connu. */
   readonly totalVolume?: number;
@@ -45,13 +52,6 @@ export interface BomSummary {
   readonly massNotes: readonly string[];
 }
 
-/** Clé d'une ligne de débit, quantité exclue. */
-function rowKey(row: CutListRow | undefined): string {
-  if (!row) return "";
-  const { quantity: _quantity, ...rest } = row;
-  return JSON.stringify(Object.entries(rest).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)));
-}
-
 /**
  * Nomenclature : lignes de la liste de débit dans la langue `locale` (désignations, matériaux,
  * remarques), complétées des identifiants de pièces (pour la sélection) et des totaux par ligne
@@ -63,24 +63,16 @@ export function bomSummary(
   massNote?: MassNote,
 ): BomSummary {
   const opts = massNote !== undefined ? { massNote, locale } : { locale };
-  const rows = cutListRows(parts, opts);
-  // Rattachement des pièces aux lignes par **ligne de débit identique** (repère, désignation,
-  // matériau, section, débit, volume, masse : la ligne que `cutListRows` produit pour la pièce
-  // seule), et non par repère seul : deux pièces de même repère mais de débits différents
-  // (repère en double, erreur amont) sont sur deux lignes distinctes.
-  const pool = new Map<string, Part[]>();
-  for (const p of parts) {
-    const key = rowKey(cutListRows([p], opts)[0]);
-    const list = pool.get(key);
-    if (list) list.push(p);
-    else pool.set(key, [p]);
-  }
+  // Rattachement des pièces aux lignes par **appartenance au groupe de repère** que les exports
+  // ont formé (`cutListGroups`, convention C2 du lot « attribution des repères ») : l'interface
+  // ne regroupe rien elle-même, ni par désignation ni par cotes. Une ligne de nomenclature est
+  // donc exactement une ligne de la liste de débit.
+  const groups = cutListGroups(parts, opts);
+  const rows = groups.map((g) => g.row);
   let count = 0;
   let volume: number | undefined = rows.length > 0 ? 0 : undefined;
   let mass: number | undefined = rows.length > 0 ? 0 : undefined;
-  const lines: BomLine[] = rows.map((r) => {
-    const same = pool.get(rowKey(r)) ?? [];
-    const taken = same.splice(0, r.quantity);
+  const lines: BomLine[] = groups.map(({ row: r, partIds }) => {
     count += r.quantity;
     const totalVolume = r.unitVolume === undefined ? undefined : r.unitVolume * r.quantity;
     const totalMass = r.unitMass === undefined ? undefined : r.unitMass * r.quantity;
@@ -88,7 +80,7 @@ export function bomSummary(
     mass = mass === undefined || totalMass === undefined ? undefined : mass + totalMass;
     return {
       ...r,
-      partIds: taken.map((p) => p.id),
+      partIds,
       ...(totalVolume === undefined ? {} : { totalVolume }),
       ...(totalMass === undefined ? {} : { totalMass }),
     };

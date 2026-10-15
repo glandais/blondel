@@ -13,6 +13,8 @@
  *
  * Visserie du profil d'atelier (QUESTIONS A27) : réglages ◆ par assemblage présent dans le modèle
  * (`FastenersFields`), sous les paramètres du plugin (zone « Réglages d'atelier », étape 7).
+ * Repérage des pièces (F10 (21), (30)) : tolérance d'identité et rappel du représentant ◆
+ * (`PartMarksFields`), à la suite de la visserie, quand le modèle a des pièces repérées.
  */
 import type { StructureContext, StructureKind } from "@blondel/core";
 import { useMemo, useState } from "react";
@@ -52,6 +54,7 @@ import { appStore, useApp, useModel } from "../store/appStore.js";
 import type { UpdateResult } from "../store/projectStore.js";
 import { AutoIntField, CheckField, NumberField, SelectField, TextField } from "./fields.js";
 import { FastenersFields } from "./FastenersFields.js";
+import { PartMarksFields } from "./PartMarksFields.js";
 import { ChoiceCards, type ChoiceCard } from "./ui/ChoiceCards.js";
 import { useValidatedKeys } from "./fabrication/useToValidate.js";
 import {
@@ -553,6 +556,7 @@ export function StructureSection({ display = DISPLAY_ALL }: Partial<SectionProps
       ) : null}
       <StructureParamError error={form.error} />
       <FastenersFields display={display} />
+      <PartMarksFields display={display} />
     </>
   );
 }

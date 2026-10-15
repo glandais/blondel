@@ -4,7 +4,9 @@
  * famille et filtre, réglage d'atelier modifié sur place puis annulé, « Ouvrir dans
  * Conception », valeurs ◆ à valider (bande, rail, annulation, « Tout valider », glyphe hors des
  * noms accessibles), dossier PDF
- * généré malgré des ◆ restantes, fiche de pose, nomenclature, comparateur, coût, Échap.
+ * généré malgré des ◆ restantes, fiche de pose, nomenclature, comparateur, coût, Échap ;
+ * repères (lot « attribution des repères », R2d) : ligne de nomenclature par repère portant la
+ * pièce choisie, désignation selon la vue, filtre par désignation commune, ◆ du repérage.
  */
 import { readFile } from "node:fs/promises";
 import { constants, inflateSync } from "node:zlib";
@@ -16,6 +18,7 @@ import {
   openTab,
   openWorkspace,
   sectionTab,
+  selectTreadOnPlan,
   settle,
   viewTab,
   type SectionName,
@@ -362,4 +365,76 @@ test("sorties : dossier PDF malgré des ◆ restantes, fiche de pose, coût ; no
   await expect(page.locator("#view-panel table").first()).toBeVisible();
   await openTab(page, "Comparer");
   await expect(page.locator(".compare caption")).toContainText(" ms)");
+});
+
+test("repères (F10, R2d) : nomenclature par repère, désignation selon la vue, filtre, ◆ du repérage", async ({
+  page,
+}) => {
+  await openApp(page);
+  await applyPreset(page, "Escalier droit");
+  await chooseStructure(page, "steel-flat");
+
+  // Une cornière de la marche 3 (pas la première pièce de son repère), choisie en Conception.
+  const inspector = await selectTreadOnPlan(page, 3);
+  const link = inspector
+    .getByRole("list", { name: "Pièces de cette marche" })
+    .getByRole("button")
+    .filter({ hasText: /CR\d/ })
+    .first();
+  const id = await link.getAttribute("data-part");
+  expect(id).not.toBeNull();
+  await link.click();
+  await settle(page);
+
+  // Pièces : en-tête de la pièce placée (désignation propre, pièce porteuse) ; bouton du
+  // repère titré par la désignation commune.
+  await openWorkspace(page, "Fabrication");
+  await openTab(page, "Pièces");
+  await expect(sheet(page)).toHaveAttribute("data-part", id!);
+  const mark = ((await sheet(page).locator(".fab-sheet__mark").textContent()) ?? "").trim();
+  expect(mark).toMatch(/^CR\d+$/);
+  await expect(sheet(page).locator(".fab-sheet__title")).toContainText(/M3/);
+  const pressed = partsList(page).locator('.fab-mark[aria-pressed="true"]');
+  await expect(pressed).toHaveAttribute("title", /^Cornière (soudée|vissée)$/);
+
+  // Nomenclature : la ligne du repère porte la pièce choisie (sélectionnée), désignation
+  // commune, plusieurs pièces.
+  await openTab(page, "Nomenclature");
+  const row = page
+    .locator("#view-panel table")
+    .first()
+    .locator("tbody tr")
+    .filter({ has: page.getByRole("rowheader", { name: mark, exact: true }) });
+  await expect(row).toHaveCount(1);
+  await expect(row).toHaveAttribute("aria-selected", "true");
+  const cells = row.locator("td");
+  await expect(cells.nth(0)).toHaveText(/^Cornière (soudée|vissée)$/);
+  expect(Number(await cells.nth(6).textContent())).toBeGreaterThan(1);
+
+  // Filtre de la liste : désignation commune (« pied de limon » : platines de pied).
+  await openTab(page, "Pièces");
+  const filter = partsList(page).getByPlaceholder("Filtrer : repère, matériau…");
+  await filter.fill("pied de limon");
+  const groups = partsList(page).locator(".fab-group");
+  await expect(groups.filter({ hasText: "Platines" })).toHaveCount(1);
+  await filter.fill("");
+
+  // À valider : tolérance d'identité et représentant, puis « Ouvrir » mène au champ.
+  await openTab(page, "À valider");
+  const list = page.getByRole("region", { name: "Valeurs à valider", exact: true });
+  const tolerance = list.locator("tbody tr").filter({
+    hasText: "Repérage des pièces · Tolérance d'identité des pièces repérées",
+  });
+  await expect(tolerance.locator(".tv-list__value")).toHaveText(/^0,5\s?mm$/u);
+  await expect(tolerance.locator(".tv-list__section")).toHaveText("Structure");
+  const representative = list.locator("tbody tr").filter({
+    hasText: "Repérage des pièces · Représentant d'un repère de cornières ou de supports",
+  });
+  await expect(representative.locator(".tv-list__value")).toHaveText("la plus courte");
+  await tolerance.getByRole("button", { name: /^Ouvrir / }).click();
+  await expect(page.locator(".app")).toHaveAttribute("data-workspace", "design");
+  await expect(sectionTab(page, "Structure")).toHaveAttribute("aria-selected", "true");
+  const field = page.locator('.free-panel [data-param="workshop.identicalPartTolerance"] input');
+  await expect(field).toBeFocused();
+  await expect(field).toHaveValue("0,5");
 });

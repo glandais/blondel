@@ -2,7 +2,8 @@
  * Décisions de l'utilisateur du 2026-09-29 (QUESTIONS A14, A20, A23, A24) dans l'interface :
  * panneau « Profil d'atelier » (barème hors projet, euros du comparateur), dossiers PDF filtrés
  * par famille de gabarits, filtre des marqueurs 3D par famille de règles, mur tracé au nu par
- * un troisième clic.
+ * un troisième clic ; tolérance d'identité des pièces repérées (réglage du projet, F10 (21)) dans
+ * le même dialogue.
  */
 import { expect, test, type Page } from "@playwright/test";
 import {
@@ -110,6 +111,55 @@ test("profil d'atelier : barème hors projet, euros du comparateur, persistance"
   await expect(page.getByRole("dialog", { name: "Profil d'atelier" })).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(page.getByRole("dialog", { name: "Profil d'atelier" })).toBeHidden();
+});
+
+test("profil d'atelier : tolérance d'identité du projet (F10 (21)), hors barème", async ({
+  page,
+}) => {
+  await openApp(page);
+  // Projet bois, sans pièce repérée : réglage éditable, sans ◆ ni rappel du représentant (38).
+  await settle(page);
+  await openMoreMenu(page);
+  await page.getByRole("button", { name: "Atelier…" }).click();
+  const dialog = page.getByRole("dialog", { name: "Profil d'atelier" });
+  const project = dialog.getByRole("group", {
+    name: "Repérage des pièces (enregistré dans le projet)",
+  });
+  await expect(project.getByLabel("Tolérance d'identité des pièces repérées")).toHaveValue("0,5");
+  await expect(project).not.toContainText("la plus courte");
+  await expect(project.locator(".tiered__item--tv")).toHaveCount(0);
+  await dialog.getByRole("button", { name: "Fermer" }).click();
+  await expect(dialog).toBeHidden();
+
+  await chooseStructure(page, "steel-flat");
+  await openMoreMenu(page);
+  await page.getByRole("button", { name: "Atelier…" }).click();
+  await expect(project).toBeVisible();
+  await expect(project.locator(".tiered__item--tv")).toHaveCount(1);
+  await expect(project).toContainText("la plus courte");
+  const field = project.getByLabel("Tolérance d'identité des pièces repérées");
+  await expect(field).toHaveValue("0,5");
+  await field.fill("0,3");
+  await field.press("Enter");
+  await settle(page);
+  await expect(field).toHaveValue("0,3");
+  // Le barème n'est pas touché.
+  await expect(dialog.getByRole("status", { name: "État du barème" })).toContainText(
+    "Barème incomplet (0 / 9)",
+  );
+  await dialog.getByRole("button", { name: "Fermer" }).click();
+  await expect(dialog).toBeHidden();
+
+  // Liste ◆ : valeur du projet ; annulation : défaut rétabli.
+  await openTab(page, "À valider");
+  const list = page.getByRole("region", { name: "Valeurs à valider", exact: true });
+  const row = list.locator("tbody tr").filter({
+    hasText: "Repérage des pièces · Tolérance d'identité des pièces repérées",
+  });
+  await expect(row.locator(".tv-list__value")).toHaveText(/^0,3\s?mm$/u);
+  await page.getByRole("button", { name: "Annuler (Ctrl+Z)", exact: true }).click();
+  await settle(page);
+  await expect(row.locator(".tv-list__value")).toHaveText(/^0,5\s?mm$/u);
 });
 
 test("export : dossiers PDF filtrés par famille de gabarits", async ({ page }) => {

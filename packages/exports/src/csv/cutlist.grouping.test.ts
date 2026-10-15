@@ -12,7 +12,7 @@ import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { cutSheet } from "../cutsheet.js";
 import { treadPart } from "../testing/fixtures.js";
-import { cutListRows, QUANTITY_MASS_KG, QUANTITY_VOLUME } from "./cutlist.js";
+import { cutListGroups, cutListRows, QUANTITY_MASS_KG, QUANTITY_VOLUME } from "./cutlist.js";
 
 const EXAMPLES_DIR = resolve(dirname(fileURLToPath(import.meta.url)), "../../../../examples");
 
@@ -171,5 +171,43 @@ describe("cas réel figé : cage-45-palier-acier", () => {
       .flatMap((g) => g.rows)
       .filter((r) => r.mark === "CR1");
     expect(sheet.map((r) => r.quantity)).toEqual([8]);
+  });
+});
+
+describe("appartenance des pièces aux lignes (`cutListGroups`, C2, R2d)", () => {
+  it("copies bruitées : mêmes lignes que `cutListRows`, partition par repère, ordre du modèle", () => {
+    fc.assert(
+      fc.property(noisyParts, ({ list, parts }) => {
+        const groups = cutListGroups(parts);
+        expect(groups.map((g) => g.row)).toEqual(cutListRows(parts));
+        const ids = groups.flatMap((g) => g.partIds);
+        expect([...ids].sort()).toEqual(parts.map((p) => p.id).sort());
+        expect(new Set(ids).size).toBe(ids.length);
+        for (const g of groups) {
+          const members = parts.filter((p) => g.partIds.includes(p.id));
+          expect(new Set(members.map((p) => p.mark))).toEqual(new Set([g.row.mark]));
+          expect(g.partIds).toEqual(members.map((p) => p.id));
+          expect(g.partIds).toHaveLength(g.row.quantity);
+        }
+        expect(groups).toHaveLength(list.length);
+      }),
+      { numRuns: 200 },
+    );
+  });
+
+  it("débit réellement différent : deux groupes d'une pièce chacun", () => {
+    const s: Spec = { mark: "M1", length: 1000, width: 300, thickness: 40, copies: 2 };
+    const a = partOf(s, "a", { mm: [0, 0, 0], rel: 0 });
+    const b = partOf(s, "b", { mm: [1, 0, 0], rel: 0 });
+    expect(cutListGroups([a, b]).map((g) => g.partIds)).toEqual([["a"], ["b"]]);
+  });
+
+  it("pièce à lames (`stock.count`) : un identifiant, quantité = nombre de lames", () => {
+    const s: Spec = { mark: "M1", length: 1000, width: 300, thickness: 40, copies: 1 };
+    const a = partOf(s, "a", { mm: [0, 0, 0], rel: 0 });
+    const laminated: Part = { ...a, stock: { ...a.stock!, count: 3 } };
+    const [g] = cutListGroups([laminated]);
+    expect(g!.partIds).toEqual(["a"]);
+    expect(g!.row.quantity).toBe(3);
   });
 });

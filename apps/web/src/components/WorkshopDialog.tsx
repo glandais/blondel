@@ -10,6 +10,17 @@
  * `uiStore.workshopOpen` (`openWorkshopDialog` : menu ⋯ de la barre du haut, lien de
  * l'inspecteur) ; toute fermeture (bouton, Échap, événement `close`) appelle
  * `closeWorkshopDialog`. Monté une seule fois, dans la barre du haut.
+ *
+ * Réglage du profil d'atelier **du projet** (décision F10 (21), lot « attribution des repères ») :
+ * sous le barème, un fieldset distinct « Repérage des pièces (enregistré dans le projet) » porte
+ * la tolérance d'identité des pièces repérées (`workshop.identicalPartTolerance`, même champ que
+ * la section Structure, `IdenticalToleranceField` : `setField`, une entrée d'historique,
+ * annulable), présent sur tout projet (T règle aussi le compte des pièces uniques du comparateur
+ * et du chiffrage, bois compris). Seulement quand le modèle a des pièces repérées par identité
+ * (mêmes conditions que les lignes de la liste ◆, question (38)) : marque ◆ tant que la valeur
+ * effective n'est pas validée (lue sur le projet), rappel du représentant d'un repère de
+ * cornières ou de supports et renvoi à la section Structure. Effacer, importer, exporter et
+ * l'état du barème ne le touchent pas.
  */
 import type { CostRates } from "@blondel/core";
 import { useEffect, useId, useRef, useState } from "react";
@@ -25,11 +36,14 @@ import {
   withRate,
   type CostFieldInfo,
 } from "../lib/workshopRates.js";
-import { useApp, useWorkshop, workshopStore } from "../store/appStore.js";
+import { useApp, useModel, useWorkshop, workshopStore } from "../store/appStore.js";
 import { closeWorkshopDialog, useUi } from "../store/uiStore.js";
 import { msg, type Locale, type Message } from "@blondel/i18n";
 import { numberFormat } from "../i18n/locale.js";
 import { useLocale, useT } from "../i18n/useT.js";
+import { IdenticalToleranceField, MarkRepresentativeNote } from "./PartMarksFields.js";
+import { TvMark } from "./ui/TvMark.js";
+import { identicalToleranceValidated, partMarksInModel } from "../lib/partMarks.js";
 import "./workshop.css";
 
 const RATE_FORMAT: Intl.NumberFormatOptions = { maximumFractionDigits: 4, useGrouping: false };
@@ -104,6 +118,11 @@ export function WorkshopDialog() {
   const titleId = useId();
   const open = useUi((s) => s.workshopOpen);
   const [message, setMessage] = useState<{ kind: "info" | "error"; text: Message } | null>(null);
+  const { model } = useModel();
+  // ◆ et rappel du représentant seulement quand la liste ◆ porte ces lignes (pièces repérées
+  // par identité, question (38)) ; validation lue sur le projet (valeur effective courante).
+  const marked = partMarksInModel(model);
+  const toleranceTv = marked && !identicalToleranceValidated(project);
 
   useEffect(() => {
     const d = dialog.current;
@@ -184,6 +203,18 @@ export function WorkshopDialog() {
               <RateField key={f.key} field={f} rates={rates} />
             ))}
           </form>
+          <fieldset className="part-marks workshop__project" data-testid="workshop-part-marks">
+            <legend>{t.t("ui.workshop.marks.legend")}</legend>
+            <p className="muted part-marks__hint">
+              {t.t("ui.workshop.marks.intro")}
+              {marked ? <> {t.t("ui.workshop.marks.alsoInStructure")}</> : null}
+            </p>
+            <div className={`tiered__item${toleranceTv ? " tiered__item--tv" : ""}`}>
+              <IdenticalToleranceField />
+              {toleranceTv ? <TvMark className="tiered__mark" /> : null}
+            </div>
+            {marked ? <MarkRepresentativeNote /> : null}
+          </fieldset>
           {message ? (
             <p
               className={`notice ${message.kind === "error" ? "notice--error" : "notice--info"}`}

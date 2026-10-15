@@ -4,7 +4,9 @@
  * (`lib/partGroups.ts`). Chaque groupe montre son nom, son nombre de pièces et un résumé
  * « repères · matériau » ; déplié, un bouton par repère distinct (« ×n » s'il y a plusieurs
  * pièces) sélectionne la première pièce du repère (sélection partagée avec la 3D, la nomenclature
- * et l'inspecteur).
+ * et l'inspecteur). Son titre est la désignation commune du repère (`markName`, à défaut `name`,
+ * décision F10 (36) : entrée regroupée par repère, comme la nomenclature), la pièce placée
+ * (inspecteur, fiche de pièce, développé) gardant `Part.name`.
  *
  * Le groupe de la pièce sélectionnée est déplié d'office ; avec un filtre, seuls les groupes qui
  * ont des correspondances sont montrés, dépliés. Dépliage et filtre : état local au composant.
@@ -15,6 +17,7 @@
  * (sélection partagée), le titre de la ligne rappelle ses assemblages et ses pièces.
  */
 import { fabricatedParts, type Model, type Part } from "@blondel/core";
+import { partDesignation } from "@blondel/exports";
 import { msg } from "@blondel/i18n";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { useId, useMemo, useState } from "react";
@@ -166,7 +169,7 @@ export function PartsList({ model }: { model: Pick<Model, "parts" | "fasteners">
                           type="button"
                           className="fab-mark"
                           aria-pressed={pressed}
-                          title={t.t(e.first.name)}
+                          title={t.t(partDesignation(e.first))}
                           onClick={() => select(e.first.id)}
                         >
                           <strong>{e.mark}</strong>

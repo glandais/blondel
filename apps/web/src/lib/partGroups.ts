@@ -178,8 +178,10 @@ export function foldText(text: string): string {
 }
 
 /**
- * La pièce répond-elle au filtre ? Recherche dans le repère, la désignation traduite, le
- * matériau et la section, sans tenir compte de la casse ni des accents. Filtre vide : oui.
+ * La pièce répond-elle au filtre ? Recherche dans le repère, la désignation propre traduite
+ * (`Part.name`, pièce porteuse comprise), la désignation commune du repère (`Part.markName`,
+ * décision F10 (36) : celle de la nomenclature et de la liste de débit), le matériau et la
+ * section, sans tenir compte de la casse ni des accents. Filtre vide : oui.
  */
 export function matchesPartFilter(part: Part, query: string, t: Translator): boolean {
   const q = foldText(query.trim());
@@ -187,6 +189,7 @@ export function matchesPartFilter(part: Part, query: string, t: Translator): boo
   const haystack = [
     part.mark,
     t.t(part.name),
+    part.markName ? t.t(part.markName) : "",
     materialLabel(t, part.material),
     part.section ? t.t(part.section) : "",
   ];

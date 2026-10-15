@@ -18,7 +18,7 @@ import type { Project } from "../model/project.js";
 import { buildModel } from "../pipeline/build.js";
 import { parseProjectText } from "../project/parse.js";
 import { createProject } from "../project/presets.js";
-import { resolveWorkshopProfile } from "../workshop/profile.js";
+import { MARK_REPRESENTATIVE_RULE, resolveWorkshopProfile } from "../workshop/profile.js";
 import { countUniqueParts } from "./compare.js";
 import { expectFittedNotLarger, expectMarkNames, expectMarksUnified } from "./marks.testing.js";
 import { QUANTITY_BUTT_WELD_MM, QUANTITY_WELD_MM } from "./steelCommon.js";
@@ -132,7 +132,8 @@ describe("repères des cornières et supports (F10 Q1a, Q2)", () => {
             const ls = g.map(realLength);
             expect(Math.max(...ls) - Math.min(...ls)).toBeLessThanOrEqual(t + GEOM_EPS);
             expect(new Set(g.map(supportGroupKey)).size).toBe(1);
-            // Représentant : la plus courte.
+            // Représentant : la plus courte, règle exposée à l'interface (rappel ◆, décision (30)).
+            expect(MARK_REPRESENTATIVE_RULE).toBe("shortest");
             for (const x of g) expect(x.stock!.length).toBeCloseTo(Math.min(...ls), 9);
           }
           expectMarksUnified(m);

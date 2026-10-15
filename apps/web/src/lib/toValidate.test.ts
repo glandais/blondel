@@ -20,7 +20,9 @@ import { toWinAnsi } from "@blondel/exports/pdf";
 import { describe, expect, it } from "vitest";
 import { defaultGuards } from "./guardsForm.js";
 import { availableStructures } from "./optionalApi.js";
+import { guidedStepOfRow } from "./guidedSteps.js";
 import { toValidateItems } from "./paramTiers.js";
+import { MARK_REPRESENTATIVE_KEY, partMarksInModel } from "./partMarks.js";
 import {
   formatToValidateValue,
   pendingValidationEntries,
@@ -269,5 +271,72 @@ describe("visserie du profil d'atelier (QUESTIONS A27)", () => {
       workshop: { fasteners: { joints: { plateFloor: { length: 140 } } } },
     };
     expect(rowOf(toValidateRows(changed, model), key).validated).toBe(false);
+  });
+});
+
+describe("repérage des pièces (F10 (21), (30))", () => {
+  const T = "workshop.identicalPartTolerance";
+  const R = MARK_REPRESENTATIVE_KEY;
+  const keys = (rows: readonly ToValidateRow[]) => rows.map((r) => r.key);
+
+  it("deux lignes, section Structure, après la visserie, étape 7 du guidé", () => {
+    expect(partMarksInModel(steelModel)).toBe(true);
+    const rows = toValidateRows(steel, steelModel);
+    const k = keys(rows);
+    expect(k.slice(-2)).toEqual([T, R]);
+    const lastFastener = k.findLastIndex((x) => x.startsWith("workshop.fasteners."));
+    expect(k.indexOf(T)).toBeGreaterThan(lastFastener);
+    for (const key of [T, R]) {
+      const row = rowOf(rows, key);
+      expect(row.section).toBe("structure");
+      expect(row.validated).toBe(false);
+      expect(guidedStepOfRow(row)).toBe(7);
+    }
+  });
+
+  it("valeurs et libellés fr / en : 0,5 mm par défaut, « la plus courte »", () => {
+    const rows = toValidateRows(steel, steelModel);
+    const t = rowOf(rows, T);
+    expect(t).toMatchObject({ value: 0.5, unit: "mm" });
+    expect(FR.t(t.label)).toBe("Repérage des pièces · Tolérance d'identité des pièces repérées");
+    expect(EN.t(t.label)).toBe("Part marking · Identity tolerance of marked parts");
+    expect(formatToValidateValue(t, FR)).toMatch(/^0,5\s?mm$/u);
+    expect(formatToValidateValue(t, EN)).toMatch(/^0\.5\s?mm$/u);
+    const r = rowOf(rows, R);
+    expect(r.value).toBe("shortest");
+    expect(FR.t(r.label)).toBe(
+      "Repérage des pièces · Représentant d'un repère de cornières ou de supports",
+    );
+    expect(formatToValidateValue(r, FR)).toBe("la plus courte");
+    expect(formatToValidateValue(r, EN)).toBe("the shortest");
+    const own: Project = { ...steel, workshop: { identicalPartTolerance: 0.3 } };
+    expect(rowOf(toValidateRows(own, steelModel), T).value).toBe(0.3);
+    // Dossier PDF : mêmes lignes, imprimables en WinAnsi.
+    for (const tr of [FR, EN]) {
+      const doc = toValidateDocRows(steel, steelModel, tr).slice(-2);
+      expect(doc).toHaveLength(2);
+      for (const d of doc) expect(toWinAnsi(`${tr.t(d.label)} ${d.value}`)).not.toContain("?");
+    }
+  });
+
+  it("absentes sans pièce repérée par identité (bois) et sans modèle", () => {
+    const wood = buildModel(base);
+    expect(partMarksInModel(wood)).toBe(false);
+    expect(keys(toValidateRows(base, wood))).not.toContain(T);
+    expect(keys(toValidateRows(base, wood))).not.toContain(R);
+    expect(keys(toValidateRows(steel, null))).not.toContain(T);
+    expect(keys(toValidateRows(steel, null))).not.toContain(R);
+  });
+
+  it("validation : T validé, caduc si T change ; rappel validé sous sa clé `ui:`", () => {
+    const rows = toValidateRows(steel, steelModel);
+    expect(validationEntry(rowOf(rows, R))).toEqual({ path: R, value: "shortest" });
+    const validated = withValidatedValues(steel, pendingValidationEntries(rows));
+    const after = toValidateRows(validated, steelModel);
+    expect(rowOf(after, T).validated).toBe(true);
+    expect(rowOf(after, R).validated).toBe(true);
+    const changed: Project = { ...validated, workshop: { identicalPartTolerance: 0.3 } };
+    expect(rowOf(toValidateRows(changed, steelModel), T).validated).toBe(false);
+    expect(rowOf(toValidateRows(changed, steelModel), R).validated).toBe(true);
   });
 });

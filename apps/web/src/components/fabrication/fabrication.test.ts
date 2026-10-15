@@ -15,6 +15,7 @@ import {
 } from "@blondel/core";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import { translatorFor } from "@blondel/i18n";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import j5bText from "../../../../../examples/j5b-debillarde-soude.blondel.json?raw";
 import { groupParts } from "../../lib/partGroups.js";
@@ -37,6 +38,11 @@ for (const store of [appStore, modelService.store, journeyStore, uiStore]) {
 }
 
 const initialProject = appStore.getState().project;
+
+/** Texte tel que le rendu serveur l'échappe (attributs et contenu). */
+const escapeHtml = (s: string): string =>
+  s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+const escapeRe = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 function part(over: Partial<Part> & Pick<Part, "id" | "mark" | "category">): Part {
   return {
@@ -204,6 +210,31 @@ describe("FabricationArea (rendu)", () => {
     expect(html).toMatch(new RegExp(`aria-pressed="true"[^>]*><strong>${ld.mark}</strong>`));
     // Tronçons et joints du limon débillardé.
     expect(html).toContain("flat-view__joints");
+  });
+
+  it("désignation selon la vue (F10 (36)) : repère et nomenclature `markName`, pièce placée `name`", () => {
+    const t = translatorFor("fr");
+    const marked = model.parts.find(
+      (p) => p.markName !== undefined && t.t(p.markName) !== t.t(p.name),
+    )!;
+    expect(marked).toBeDefined();
+    const designation = escapeHtml(t.t(marked.markName!));
+    const own = escapeHtml(t.t(marked.name));
+    appStore.getState().setView("flat");
+    appStore.getState().select({ location: { kind: "part", partId: marked.id } });
+    const html = render();
+    // Bouton du repère (entrée regroupée par repère) : désignation commune.
+    expect(html).toMatch(
+      new RegExp(`title="${escapeRe(designation)}"[^>]*><strong>${marked.mark}</strong>`),
+    );
+    // En-tête de la fiche de la pièce placée : désignation propre (pièce porteuse).
+    expect(html).toMatch(new RegExp(`fab-sheet__title[^]*${escapeRe(own)}`));
+    // Nomenclature : ligne du repère sélectionnée, désignation commune.
+    appStore.getState().setView("bom");
+    const bom = render();
+    expect(bom).toMatch(
+      new RegExp(`aria-selected="true"[^]*?${marked.mark}[^]*?${escapeRe(designation)}`),
+    );
   });
 
   it("pièce sans développé : renvoi à la nomenclature", () => {

@@ -11,6 +11,10 @@
  * jeu de perçage, série des diamètres nominaux, entraxe des supports et mur non décrit supposé
  * porteur sous « Visserie » ; nature et classe affichées par
  * leurs libellés du cœur.
+ *
+ * Repérage des pièces (lot « attribution des repères », F10 (21) et (30)) : « Repérage des
+ * pièces · Tolérance d'identité des pièces repérées » (mm) et « Repérage des pièces ·
+ * Représentant d'un repère de cornières ou de supports » (valeur « la plus courte »).
  */
 import {
   FASTENER_GRADES,
@@ -31,6 +35,7 @@ import { materialLabel } from "@blondel/exports";
 import { msg, textMessage, type Message, type MessageKey, type Translator } from "@blondel/i18n";
 import { toMessage } from "../i18n/text.js";
 import { fastenerSettingOf } from "./fasteners.js";
+import { MARK_REPRESENTATIVE_KEY, MARK_REPRESENTATIVE_LABEL } from "./partMarks.js";
 import { GROUP_LABELS, fieldText } from "./paramLabels.js";
 import { STRUCTURE_PARAMS_PREFIX, toValidateStates, type ToValidateState } from "./paramTiers.js";
 import { SECTION_TITLE_KEYS, type GuidedStep, type SectionId } from "./sectionIds.js";
@@ -172,6 +177,21 @@ function fastenerPresentation(s: ToValidateState): { label: Message; unit?: stri
   return unit === undefined ? { label } : { label, unit };
 }
 
+/** Clé de la tolérance d'identité des pièces repérées (profil d'atelier du projet). */
+const IDENTICAL_TOLERANCE_KEY = "workshop.identicalPartTolerance";
+
+/** Libellé et unité d'une valeur ◆ du repérage des pièces (`undefined` : autre clé). */
+function partMarksPresentation(s: ToValidateState): { label: Message; unit?: string } | undefined {
+  const title = msg("ui.partMarks.title");
+  if (s.key === IDENTICAL_TOLERANCE_KEY) {
+    return { label: grouped(title, msg("ui.partMarks.identicalTolerance")), unit: MM };
+  }
+  if (s.key === MARK_REPRESENTATIVE_KEY) {
+    return { label: grouped(title, msg("ui.partMarks.representative")) };
+  }
+  return undefined;
+}
+
 /** Libellé et unité d'une valeur ◆. */
 function presentation(project: Project, s: ToValidateState): { label: Message; unit?: string } {
   if (s.key.startsWith(STRUCTURE_PARAMS_PREFIX)) {
@@ -186,6 +206,8 @@ function presentation(project: Project, s: ToValidateState): { label: Message; u
   if (balancing !== undefined) return { label: msg(balancing) };
   const fastener = fastenerPresentation(s);
   if (fastener !== undefined) return fastener;
+  const marks = partMarksPresentation(s);
+  if (marks !== undefined) return marks;
   if (s.key === "guards.infill.thickness") {
     const glass = project.guards?.infill.kind === "glass";
     const leaf = msg(glass ? "ui.guards.infill.glassThickness" : "ui.guards.infill.panelThickness");
@@ -225,6 +247,9 @@ export function toValidateRows(
 /** Libellé d'un choix de liste (`undefined` : aucun libellé connu). */
 function optionLabel(row: ToValidateRow, value: string, t: Translator): string | undefined {
   if (row.key === "guards.material") return materialLabel(t, value);
+  if (row.key === MARK_REPRESENTATIVE_KEY && Object.hasOwn(MARK_REPRESENTATIVE_LABEL, value)) {
+    return t.t(MARK_REPRESENTATIVE_LABEL[value as keyof typeof MARK_REPRESENTATIVE_LABEL]);
+  }
   const setting = fastenerSettingOf(row.path);
   if (setting?.field === "kind" && (FASTENER_KINDS as readonly string[]).includes(value)) {
     return t.t(fastenerKindLabel(value as FastenerKind));

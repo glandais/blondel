@@ -4,7 +4,8 @@
  * `helical` : un repère = une ligne de la liste de débit = une ligne de la fiche de débit = un
  * seul fichier DXF de développé (texte de référence commun, sans pièce porteuse) = une seule
  * désignation (`partDesignation`) ; partition des développés du dossier PDF identique à celle
- * des DXF.
+ * des DXF ; chaque ligne de la liste porte exactement les pièces débitées de son repère
+ * (`cutListGroups`, appartenance lue par la nomenclature de l'interface, C2, R2d).
  */
 import { readFileSync, readdirSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
@@ -12,7 +13,7 @@ import { fileURLToPath } from "node:url";
 import { buildModel, createProject, parseProjectText, type Project } from "@blondel/core";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
-import { cutListRows, cutParts } from "./csv/cutlist.js";
+import { cutListGroups, cutListRows, cutParts } from "./csv/cutlist.js";
 import { cutSheet } from "./cutsheet.js";
 import { exportPartsDxf } from "./dxf/parts.js";
 import { flatPartGroups } from "./flatGroups.js";
@@ -59,6 +60,20 @@ const FLATS_ONLY: PdfPages = {
 function expectOneOutputPerMark(model: ReturnType<typeof buildModel>): number {
   const rows = cutListRows(model.parts).map((r) => r.mark);
   expect(rows.length, "liste de débit").toBe(new Set(rows).size);
+  // Appartenance (C2, R2d) : chaque ligne porte toutes les pièces débitées de son repère et
+  // seulement elles ; la nomenclature de l'interface la lit telle quelle.
+  const groups = cutListGroups(model.parts);
+  expect(groups.map((g) => g.row)).toEqual(cutListRows(model.parts));
+  const debited = cutParts(model.parts);
+  for (const g of groups) {
+    expect([...g.partIds].sort(), `pièces de ${g.row.mark}`).toEqual(
+      debited
+        .filter((p) => p.mark === g.row.mark)
+        .map((p) => p.id)
+        .sort(),
+    );
+  }
+  expect(groups.flatMap((g) => g.partIds).length).toBe(debited.length);
   const sheet = cutSheet(model.parts).flatMap((g) => g.rows.map((r) => r.mark));
   expect(sheet.length, "fiche de débit").toBe(new Set(sheet).size);
   expect([...sheet].sort()).toEqual([...rows].sort());

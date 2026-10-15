@@ -64,3 +64,29 @@
   flex: 1;
   min-width: 0;
 }
+
+/*
+ * Repérage des pièces : tolérance d'identité et rappel du représentant (`PartMarksFields`,
+ * section Structure ; fieldset du dialogue « Atelier… »).
+ */
+.part-marks {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap, 8px);
+}
+
+.part-marks__hint {
+  margin: 0;
+  font-size: 0.85rem;
+}
+
+.part-marks__representative {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.part-marks__representative:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}

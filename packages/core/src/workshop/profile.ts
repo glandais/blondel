@@ -322,6 +322,29 @@ export const IDENTICAL_PART_TOLERANCE_PROVENANCE: SettingProvenance = {
   note: msg("workshop.provenance.identicalPartTolerance"),
 };
 
+/**
+ * Provenance du choix du représentant d'un repère de cornières ou de supports (CR, PS) : la
+ * pièce la plus courte, dont le débit vaut pour toutes les pièces du repère (décision F10 Q3,
+ * rappel demandé par la décision (30)) ; **à confirmer par un atelier**. Constante de
+ * présentation, sans effet sur le calcul.
+ */
+export const MARK_REPRESENTATIVE_PROVENANCE: SettingProvenance = {
+  status: "a-valider",
+  note: msg("workshop.provenance.markRepresentative"),
+};
+
+/** Règles possibles du choix du représentant d'un repère de cornières ou de supports. */
+export type MarkRepresentativeRule = "shortest";
+
+/**
+ * Règle appliquée par le cœur au représentant d'un repère de cornières ou de supports (CR, PS) :
+ * la plus courte (ancre de `groupNearAnchorAnchored`, mesures triées par longueur de débit
+ * d'abord, décision F10 Q3). Lue par l'interface pour le rappel ◆ de la décision (30) ; tenue
+ * en accord avec le regroupement par `structures/partMarks.test.ts` (propriété « représentant :
+ * la plus courte »). À confirmer par un atelier (`MARK_REPRESENTATIVE_PROVENANCE`).
+ */
+export const MARK_REPRESENTATIVE_RULE: MarkRepresentativeRule = "shortest";
+
 /** Profil effectif d'un projet : profil par défaut surchargé champ par champ. */
 export function resolveWorkshopProfile(input?: WorkshopProfileInput): WorkshopProfile {
   const d = DEFAULT_WORKSHOP_PROFILE;

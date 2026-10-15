@@ -18,6 +18,7 @@ import {
 } from "@blondel/core";
 import { describe, expect, it } from "vitest";
 import { defaultGuards } from "./guardsForm.js";
+import { MARK_REPRESENTATIVE_KEY } from "./partMarks.js";
 import { availableStructures } from "./optionalApi.js";
 import { fieldText } from "./paramLabels.js";
 import {
@@ -536,15 +537,23 @@ describe("valeurs ◆ d'un projet", () => {
       ...p,
       stair: { ...p.stair, structure: { kind: "steel-flat", params } },
     };
-    // La visserie (QUESTIONS A27) dépend des assemblages du modèle : absente sans modèle.
-    expect(keysOf(saved)).toEqual(keysOf(p, m).filter((k) => !k.startsWith("workshop.fasteners.")));
+    // La visserie (QUESTIONS A27) dépend des assemblages du modèle, le repérage des pièces de ses
+    // repères (F10 (21), (30)) : absents sans modèle.
+    expect(keysOf(saved)).toEqual(
+      keysOf(p, m).filter(
+        (k) =>
+          !k.startsWith("workshop.fasteners.") &&
+          k !== "workshop.identicalPartTolerance" &&
+          k !== MARK_REPRESENTATIVE_KEY,
+      ),
+    );
   });
 
   it("visserie : réglages ◆ des assemblages du modèle seulement, section Structure (A27)", () => {
     const p = withStructure(base, "steel-flat");
     const m = buildModel(p);
     const none: Model = { ...m, fasteners: [] };
-    expect(keysOf(p, none).filter((k) => k.startsWith("workshop."))).toEqual([]);
+    expect(keysOf(p, none).filter((k) => k.startsWith("workshop.fasteners."))).toEqual([]);
     const withFasteners: Model = {
       ...m,
       fasteners: [

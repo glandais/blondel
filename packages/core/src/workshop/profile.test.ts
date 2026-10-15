@@ -7,6 +7,7 @@ import { makeSteppingProject } from "../stepping/test-helpers.js";
 import {
   DEFAULT_WORKSHOP_PROFILE,
   IDENTICAL_PART_TOLERANCE_PROVENANCE,
+  MARK_REPRESENTATIVE_PROVENANCE,
   OTHER_DENSITY_PROVENANCE,
   OTHER_MATERIALS,
   WOOD_MATERIALS,
@@ -131,6 +132,13 @@ describe("masses volumiques de tous les matériaux (QUESTIONS A6)", () => {
     expect(
       ProjectSchema.safeParse({ ...p, workshop: { identicalPartTolerance: -0.1 } }).success,
     ).toBe(false);
+  });
+
+  it("représentant d'un repère CR / PS (F10 Q3, (30)) : « à valider », rappel fr / en", () => {
+    expect(MARK_REPRESENTATIVE_PROVENANCE.status).toBe("a-valider");
+    expect(fr(MARK_REPRESENTATIVE_PROVENANCE.note)).toContain("la plus courte");
+    expect(fr(MARK_REPRESENTATIVE_PROVENANCE.note)).toContain("F10");
+    expect(translatorFor("en").t(MARK_REPRESENTATIVE_PROVENANCE.note)).toContain("shortest");
   });
 
   it("tolérance d'alignement des bords de palier droit (F16 (6)) : 2 mm « à valider », facultative", () => {

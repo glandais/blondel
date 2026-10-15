@@ -231,6 +231,24 @@ describe("filtre", () => {
     const section = FR.t(limon.section!);
     expect(matchesPartFilter(limon, section, FR)).toBe(true);
   });
+
+  it("désignation commune du repère (`markName`, F10 (36)) et désignation propre (`name`)", () => {
+    const platine = part({
+      id: "foot-plate-LI1",
+      mark: "PF1",
+      category: "fixing",
+      material: "steel-raw",
+      name: msg("structure.steel.part.footPlate", { mark: "LI1" }),
+      markName: msg("structure.steel.markName.footPlate"),
+    });
+    expect(matchesPartFilter(platine, "pied de limon", FR)).toBe(true);
+    expect(matchesPartFilter(platine, "PIED DE LIMON", FR)).toBe(true);
+    expect(matchesPartFilter(platine, "li1", FR)).toBe(true);
+    expect(matchesPartFilter(platine, "stringer base", EN)).toBe(true);
+    // Sans désignation commune : seule la désignation propre est lue.
+    const { markName: _m, ...plain } = platine;
+    expect(matchesPartFilter(plain, "pied de limon", FR)).toBe(false);
+  });
 });
 
 describe("groupe « Visserie » (QUESTIONS A27)", () => {

@@ -254,11 +254,34 @@ export interface CutListRowsOptions extends LocaleOption {
   readonly massNote?: MassNote;
 }
 
+/**
+ * Ligne de débit et pièces qu'elle regroupe (identifiants dans l'ordre du modèle). Appartenance
+ * exposée pour que l'interface rattache les pièces aux lignes sans les regrouper elle-même
+ * (convention C2 du lot « attribution des repères ») : une ligne de nomenclature = une ligne de
+ * débit.
+ */
+export interface CutListGroup {
+  readonly row: CutListRow;
+  /** Pièces débitées de la ligne ; une pièce à lames (`stock.count`) y figure une fois. */
+  readonly partIds: readonly string[];
+}
+
 /** Lignes de débit regroupées par repère, triées par catégorie puis repère. */
 export function cutListRows(
   parts: readonly Part[],
   options: CutListRowsOptions = {},
 ): CutListRow[] {
+  return cutListGroups(parts, options).map((g) => g.row);
+}
+
+/**
+ * Lignes de débit avec leurs pièces (mêmes lignes et même ordre que `cutListRows`, qui en
+ * dérive).
+ */
+export function cutListGroups(
+  parts: readonly Part[],
+  options: CutListRowsOptions = {},
+): CutListGroup[] {
   const t = translatorOf(options);
   const noteOf = options.massNote ?? defaultMassNote;
   // Même repère = pièces identiques. Deux pièces de même repère mais de caractéristiques de
@@ -280,9 +303,11 @@ export function cutListRows(
       sameStockDims(a, b) &&
       nearlyEqualRelative(a.quantities[QUANTITY_VOLUME], b.quantities[QUANTITY_VOLUME], REL_EPS) &&
       nearlyEqualRelative(partMassKg(a), partMassKg(b), REL_EPS),
-  ).map((g) => ({ part: g[0]!, count: g.length }));
-  const rows: CutListRow[] = [];
-  for (const { part, count } of groups) {
+  );
+  const out: CutListGroup[] = [];
+  for (const g of groups) {
+    const part = g[0]!;
+    const count = g.length;
     const s = part.stock;
     // Lames identiques d'une pièce composée (lamellé-collé) : une ligne de débit par lame.
     const pieces = s?.count !== undefined && s.count > 1 ? s.count : 1;
@@ -294,26 +319,31 @@ export function cutListRows(
     const mass = partMass !== undefined ? partMass / pieces : undefined;
     const note = mass !== undefined ? noteOf(part.material, t) : undefined;
     const supply = supplyLabel(t, part);
-    rows.push({
-      mark: part.mark,
-      name: cutName(t, part),
-      category: part.category,
-      material: materialLabel(t, part.material),
-      section: trOpt(t, part.section) ?? "",
-      ...(s ? { length: s.length, width: s.width, thickness: s.thickness } : {}),
-      quantity: count * pieces,
-      ...(volume !== undefined ? { unitVolume: volume } : {}),
-      ...(mass !== undefined ? { unitMass: mass } : {}),
-      ...(note !== undefined && note !== "" ? { massNote: note } : {}),
-      ...(supply !== undefined ? { supply } : {}),
+    out.push({
+      row: {
+        mark: part.mark,
+        name: cutName(t, part),
+        category: part.category,
+        material: materialLabel(t, part.material),
+        section: trOpt(t, part.section) ?? "",
+        ...(s ? { length: s.length, width: s.width, thickness: s.thickness } : {}),
+        quantity: count * pieces,
+        ...(volume !== undefined ? { unitVolume: volume } : {}),
+        ...(mass !== undefined ? { unitMass: mass } : {}),
+        ...(note !== undefined && note !== "" ? { massNote: note } : {}),
+        ...(supply !== undefined ? { supply } : {}),
+      },
+      partIds: g.map((p) => p.id),
     });
   }
   const rank = (c: PartCategory): number => {
     const i = CATEGORY_ORDER.indexOf(c);
     return i < 0 ? CATEGORY_ORDER.length : i;
   };
-  return rows.sort(
-    (a, b) => rank(a.category) - rank(b.category) || compareMarks(t, a.mark, b.mark),
+  // Tri stable (comme avant) : repère en double, ordre de première apparition.
+  return out.sort(
+    (a, b) =>
+      rank(a.row.category) - rank(b.row.category) || compareMarks(t, a.row.mark, b.row.mark),
   );
 }
 

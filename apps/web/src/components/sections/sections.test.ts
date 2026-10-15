@@ -13,7 +13,13 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it } from "vitest";
 import { formatNumber } from "../../i18n/locale.js";
 import { defaultGuards } from "../../lib/guardsForm.js";
-import { TIER_KEYS, tierEntry, type Display } from "../../lib/paramTiers.js";
+import {
+  TIER_KEYS,
+  tierEntry,
+  toValidateCountBySection,
+  type Display,
+} from "../../lib/paramTiers.js";
+import { MARK_REPRESENTATIVE_KEY } from "../../lib/partMarks.js";
 import { SECTION_IDS } from "../../lib/sectionIds.js";
 import { pendingValidationEntries, toValidateRows } from "../../lib/toValidate.js";
 import { appStore, modelService } from "../../store/appStore.js";
@@ -233,6 +239,45 @@ describe("valeurs ◆ validées", () => {
   });
 });
 
+describe("Structure : repérage des pièces (F10 (21), (30))", () => {
+  it("tolérance d'identité et rappel du représentant sous « Réglages d'atelier », comptés ◆", () => {
+    load(withStructure("steel-flat"));
+    const project = appStore.getState().project;
+    const model = modelService.store.getState().model.model;
+    const html = render(SECTION_COMPONENTS.structure, { kind: "free" });
+    // Fieldset propre (comme la visserie), champs dans son repli « Réglages d'atelier ».
+    const start = html.indexOf("<legend>Repérage des pièces</legend>");
+    expect(start).toBeGreaterThan(0);
+    const workshop = fold(html.slice(start), "workshop");
+    expect(workshop).toContain('data-param="workshop.identicalPartTolerance"');
+    expect(workshop).toContain(`data-param="${MARK_REPRESENTATIVE_KEY}"`);
+    expect(workshop).toContain("Tolérance d&#x27;identité des pièces repérées");
+    expect(workshop).toContain('value="0,5"');
+    expect(workshop).toContain("la plus courte");
+    expect(workshop).toContain("à confirmer par un atelier");
+    // Les deux ◆ entrent dans le compte de la section Structure (rail) et de l'étape 7.
+    const rows = toValidateRows(project, model).filter((r) => r.section === "structure");
+    expect(rows.map((r) => r.key)).toEqual(
+      expect.arrayContaining(["workshop.identicalPartTolerance", MARK_REPRESENTATIVE_KEY]),
+    );
+    const counts = toValidateCountBySection(project, model);
+    expect(counts.structure).toBe(rows.filter((r) => !r.validated).length);
+    // Guidé, étape 7 : à plat.
+    const guided = render(SECTION_COMPONENTS.structure, { kind: "guided", step: 7 });
+    expect(guided).toContain('data-param="workshop.identicalPartTolerance"');
+    // Anglais.
+    expect(render(SECTION_COMPONENTS.structure, { kind: "free" }, "en")).toContain(
+      "<legend>Part marking</legend>",
+    );
+  });
+
+  it("absent sans pièce repérée par identité (structure bois)", () => {
+    load(initial);
+    const html = render(SECTION_COMPONENTS.structure, { kind: "free" });
+    expect(html).not.toContain("workshop.identicalPartTolerance");
+  });
+});
+
 describe("tous les modes", () => {
   it("aucune clé brute ni texte français en anglais ; étape 2 : forme et tournants", () => {
     load({ ...withStructure("steel-flat"), guards: defaultGuards() });
@@ -298,10 +343,16 @@ describe("clés du dictionnaire employées par les sections", () => {
         .filter((f) => f.endsWith(".tsx"))
         .map((f) => join(here, f)),
       join(here, "..", "HelicalEditor.tsx"),
+      join(here, "..", "PartMarksFields.tsx"),
     ]
       .map((f) => readFileSync(f, "utf8"))
       .join("\n");
-    const unused = TIER_KEYS.filter((k) => k.startsWith("ui:") && !code.includes(`key: "${k}"`));
+    // Clé employée par sa constante (rappel du représentant d'un repère, `lib/partMarks.ts`).
+    const byConstant = new Map([[MARK_REPRESENTATIVE_KEY, "MARK_REPRESENTATIVE_KEY"]]);
+    const used = (k: string): boolean =>
+      code.includes(`key: "${k}"`) ||
+      (byConstant.has(k) && code.includes(`key: ${byConstant.get(k)!}`));
+    const unused = TIER_KEYS.filter((k) => k.startsWith("ui:") && !used(k));
     expect(unused).toEqual([]);
   });
 });

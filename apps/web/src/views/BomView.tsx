@@ -1,6 +1,9 @@
 /**
  * Onglet « Nomenclature » du mode Fabrication : pièces groupées par repère (mêmes lignes que la
- * liste de débit CSV), dimensions de débit, quantités, masses (`mass_kg` du cœur ; renvoi « * »
+ * liste de débit CSV, pièces rattachées par appartenance au groupe des exports, `bomSummary`,
+ * convention C2), désignation commune du repère (`markName`, à défaut `name`, décision F10 (36)),
+ * dimensions de débit (décision (28) : celles du représentant du repère, le solide 3D restant
+ * réel), quantités, masses (`mass_kg` du cœur ; renvoi « * »
  * pour une masse calculée avec une masse volumique à valider, QUESTIONS A6) et totaux, en tableau
  * Industry (`.table`). Un clic sur un repère sélectionne la pièce (surlignée en 3D, ouverte dans
  * l'onglet « Pièces »).
