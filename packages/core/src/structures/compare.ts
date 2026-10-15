@@ -58,7 +58,6 @@ import {
 } from "./quantities.js";
 import { getStructure } from "./registry.js";
 import {
-  IDENTICAL_TOLERANCE,
   QUANTITY_BENDS,
   QUANTITY_BUTT_WELD_MM,
   QUANTITY_CUTS,
@@ -66,7 +65,9 @@ import {
   QUANTITY_TREATED_SURFACE_M2,
   QUANTITY_WELD_MM,
   groupIdenticalFlats,
+  groupNearAnchor,
 } from "./steelCommon.js";
+import { drillingSignature } from "./supports.js";
 
 export interface VariantCost {
   /** Total € HT (matière + main-d'œuvre + finition). */
@@ -89,7 +90,10 @@ export interface VariantSummary {
   /** Surface à traiter (acier) ou de référence (bois), m². */
   readonly surfaceM2: number;
   readonly partCount: number;
-  /** Nombre de pièces différentes (développés identiques à 0,5 mm, sinon section et débit). */
+  /**
+   * Nombre de pièces différentes, selon la règle des repères (`countUniqueParts`, tolérance
+   * `WorkshopProfile.identicalPartTolerance` du profil de la variante).
+   */
   readonly uniqueParts: number;
   readonly weldMm: number;
   readonly buttWeldMm: number;
@@ -125,20 +129,29 @@ const sum = (parts: readonly Part[], key: string): number =>
 
 const zeroes = (): Record<Severity, number> => ({ bloquant: 0, avertissement: 0, conseil: 0 });
 
-/** Nombre de pièces différentes. */
-export function countUniqueParts(parts: readonly Part[]): number {
+/**
+ * Nombre de pièces différentes, selon la règle des repères (décision F10, C4) : pièces à
+ * développé regroupées par `groupIdenticalFlats`, autres pièces de même catégorie, matériau,
+ * section, nombre et signature des perçages regroupées autour d'un représentant
+ * (`groupNearAnchor`) quand longueur, largeur et épaisseur de débit sont chacune à au plus `tol`
+ * de celles de l'ancre. `tol` : `WorkshopProfile.identicalPartTolerance`.
+ */
+export function countUniqueParts(parts: readonly Part[], tol: Mm): number {
   const withFlat = parts.filter((p) => p.flat);
-  const flatGroups = groupIdenticalFlats(withFlat).length;
-  const keys = new Set<string>();
-  const r = (x: number | undefined): number => Math.round((x ?? 0) / IDENTICAL_TOLERANCE);
-  for (const p of parts) {
-    if (p.flat) continue;
-    // Section : `Message` sérialisé (mêmes clé et paramètres arrondis ⇒ même désignation).
-    keys.add(
-      `${p.category}|${p.material}|${p.section ? JSON.stringify(p.section) : ""}|${r(p.stock?.length)}|${r(p.stock?.width)}|${r(p.stock?.thickness)}|${p.quantities[QUANTITY_HOLES] ?? 0}`,
-    );
-  }
-  return flatGroups + keys.size;
+  const flatGroups = groupIdenticalFlats(withFlat, tol).length;
+  const rest = parts.filter((p) => !p.flat);
+  const groups = groupNearAnchor(
+    rest,
+    {
+      // Section : `Message` sérialisé (mêmes clé et paramètres ⇒ même désignation).
+      key: (p) =>
+        `${p.category}|${p.material}|${p.section ? JSON.stringify(p.section) : ""}|${p.quantities[QUANTITY_HOLES] ?? 0}|${drillingSignature(p)}`,
+      measures: (p) => [p.stock?.length ?? 0, p.stock?.width ?? 0, p.stock?.thickness ?? 0],
+      id: (p) => p.id,
+    },
+    tol,
+  );
+  return flatGroups + groups.length;
 }
 
 /** Coût d'une variante : `null` si le barème est incomplet (champs manquants listés). */
@@ -270,7 +283,10 @@ export function summarizeVariant(
   for (const r of precheckResults(variant, model.stepping, beams)) {
     if (r.status === "violation") pre[r.severity]++;
   }
-  const uniqueParts = countUniqueParts(parts);
+  const uniqueParts = countUniqueParts(
+    parts,
+    resolveWorkshopProfile(variant.workshop).identicalPartTolerance,
+  );
   const cuts = sum(parts, QUANTITY_CUTS);
   const weldMm = sum(parts, QUANTITY_WELD_MM);
   const bends = sum(parts, QUANTITY_BENDS);

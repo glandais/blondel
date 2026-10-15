@@ -301,6 +301,29 @@ export function supportFixings(
 }
 
 /**
+ * Clé de regroupement d'une pièce support (cornière CR, plat PS) sans sa longueur (décision
+ * F10 Q1a) : section, nombre de perçages et signature des perçages (nature et aile par
+ * l'assemblage — `supportBolted` dans l'aile verticale, fixation de la marche dans l'aile
+ * horizontale —, nombre de points, diamètre). La longueur est comparée à part, autour d'un
+ * représentant (`groupNearAnchor`).
+ */
+export function supportGroupKey(p: Part): string {
+  return `${JSON.stringify(p.section)}|${p.quantities["holes"]}|${drillingSignature(p)}`;
+}
+
+/**
+ * Signature des perçages d'une pièce (décision F10 Q1a, C4) : pour chaque fixation, assemblage
+ * (nature et aile), nombre de points et diamètre, triés. Définition unique d'« identique » pour
+ * les repères (`supportGroupKey`) et le comparateur (`countUniqueParts`).
+ */
+export function drillingSignature(p: Part): string {
+  return (p.fixings ?? [])
+    .map((f) => `${f.joint}:${f.points}:${f.holeDiameter ?? "-"}`)
+    .sort()
+    .join(",");
+}
+
+/**
  * Assemblages des supports (`StructureOutput.assemblies`) : chaque support est assemblé à la
  * marche qu'il porte (désignée par son numéro, résolue par le pipeline) et à la pièce porteuse
  * de sa face (limon ou poteau, `face.owner`).

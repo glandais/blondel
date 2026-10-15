@@ -1409,9 +1409,9 @@ function boxParts(
   // Repères des pièces identiques (semelles, entretoises).
   const marked = new Map<string, Part>();
   for (const p of [
-    ...markGroups(tops, "SH", () => null),
-    ...markGroups(bottoms, "SB", () => null),
-    ...markGroups(diaphragms, "EC", () => null),
+    ...markGroups(tops, "SH", () => null, profile.identicalPartTolerance),
+    ...markGroups(bottoms, "SB", () => null, profile.identicalPartTolerance),
+    ...markGroups(diaphragms, "EC", () => null, profile.identicalPartTolerance),
   ]) {
     marked.set(p.id, p);
   }
@@ -1698,6 +1698,7 @@ function beamPlates(
         ],
         "PF",
         () => null,
+        profile.identicalPartTolerance,
       ),
     );
   }
@@ -1742,6 +1743,7 @@ function beamPlates(
           ],
           "PH",
           () => null,
+          profile.identicalPartTolerance,
         ),
       );
     }

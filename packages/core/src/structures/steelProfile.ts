@@ -87,6 +87,7 @@ import {
 } from "./steelCommon.js";
 import {
   ascentDirection,
+  markGroups,
   MIN_CAGE_STRINGER_LENGTH,
   steelCageFaces,
   steelStringerFaces,
@@ -101,6 +102,7 @@ import {
   effectiveFixing,
   supportAssemblies,
   supportDepth,
+  supportGroupKey,
   supportInterval,
   supportPart,
   type SupportFace,
@@ -1491,14 +1493,7 @@ function profileSupportParts(
     const face = onI ? { ...p.face, a: V.addScaled(p.face.a, p.face.into, shift) } : p.face;
     return supportPart({ ...p, face }, sup, "S", material, profile);
   });
-  const groupKey = (p: Part): string =>
-    `${JSON.stringify(p.section)}|${Math.round((p.stock?.length ?? 0) / 0.5)}|${p.quantities["holes"]}`;
-  const groupIds = new Map<string, number>();
-  return supportParts.map((p) => {
-    const k = groupKey(p);
-    if (!groupIds.has(k)) groupIds.set(k, groupIds.size + 1);
-    return { ...p, mark: `CR${groupIds.get(k)}` };
-  });
+  return markGroups(supportParts, "CR", supportGroupKey, profile.identicalPartTolerance);
 }
 
 /** Poteau d'angle à construire (étape 9). */

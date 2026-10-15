@@ -4369,6 +4369,7 @@
   "workshop.provenance.fasteners.nominalDiameters": "Nominal diameter series of the fixings: M3, M4, M5, M6, M8, M10, M12, M16, M20, M24, M30 (first-choice metric threads), no source in docs/research, to be validated.",
   "workshop.provenance.fasteners.perPoint": "Quantity per fixing point (hole, post, handrail bracket): no value in docs/research, to be validated.",
   "workshop.provenance.fasteners.unknownWallLoadBearing": "Wall of a wall-mounted handrail not described by the site (wall imposed by the project): assumed load-bearing (mechanical anchor), to be validated.",
+  "workshop.provenance.identicalPartTolerance": "Identity tolerance of marked parts (length difference of angles and supports; vertex, hole and bend difference of a flat pattern, up to a planar move), decision F10: 0.5 mm, unsourced (ISO 13920 is a fabrication tolerance, not an identity criterion); keep below the hole clearance.",
   "workshop.provenance.metal.barLengths": "C-M-08 / C §4.3: bars of 6 m or 12 m ([46], medium confidence).",
   "workshop.provenance.metal.bendLaws": "Minimum radii and flanges: “classic values” for steel Rm 40–45 daN/mm² (C §2.6 [17], medium confidence); method and K factor to be validated (CHALLENGE G5).",
   "workshop.provenance.metal.defaultK": "K factor 0.33 unsourced (CHALLENGE G5): to be validated by a pilot bending shop.",

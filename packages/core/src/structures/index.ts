@@ -138,7 +138,6 @@ export {
   type SupportSpec,
 } from "./supports.js";
 export {
-  IDENTICAL_TOLERANCE,
   QUANTITY_BENDS,
   QUANTITY_BEND_LENGTH_MM,
   QUANTITY_BUTT_WELD_MM,
@@ -150,6 +149,7 @@ export {
   STEEL_RULES,
   deduceExecutionClass,
   groupIdenticalFlats,
+  groupNearAnchor,
   holePolygon,
   plateMeasures,
   steelMaterial,

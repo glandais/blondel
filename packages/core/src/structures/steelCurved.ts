@@ -90,7 +90,6 @@ import {
   steelMaterial,
   steelQuantities,
   groupIdenticalFlats,
-  IDENTICAL_TOLERANCE,
 } from "./steelCommon.js";
 import {
   SteelFlatParamsSchema,
@@ -129,6 +128,7 @@ import {
   boltCenters,
   supportAssemblies,
   supportDepth,
+  supportGroupKey,
   supportPart,
   treadScrewPoints,
   type SupportFace,
@@ -584,7 +584,10 @@ export function buildSteelCurved(
   });
   const drilledTreads = new Map(curvedDrill.treads.map((d) => [d.part.id, d.part]));
   const treadHolesSkipped = flat.treadHolesSkipped + curvedDrill.skipped;
-  const treadGroups = groupIdenticalFlats(curvedDrill.treads.map((d) => d.part));
+  const treadGroups = groupIdenticalFlats(
+    curvedDrill.treads.map((d) => d.part),
+    profile.identicalPartTolerance,
+  );
   for (let i = 0; i < notes.length; i++) {
     const x = notes[i]!;
     if (x.key === "structure.steelFlat.note.foldedTreads" && x.params) {
@@ -613,8 +616,8 @@ export function buildSteelCurved(
   const allSupports = markGroups(
     [...flat.supports.map((s) => s.part), ...curvedSupports.map((x) => x.s.part)],
     sup.kind === "angle" ? "CR" : "PS",
-    (p) =>
-      `${JSON.stringify(p.section)}|${Math.round((p.stock?.length ?? 0) / IDENTICAL_TOLERANCE)}|${p.quantities["holes"]}`,
+    supportGroupKey,
+    profile.identicalPartTolerance,
   );
   const curvedPlateParts = built.flatMap((b) => b.result.plates);
   const plates = [...flat.plates, ...curvedPlateParts];
@@ -623,6 +626,7 @@ export function buildSteelCurved(
       plates.filter((p) => p.id.startsWith(prefix)),
       mark,
       () => null,
+      profile.identicalPartTolerance,
     );
   const allPlates = [
     ...byPrefix("plate-foot-", "PF"),

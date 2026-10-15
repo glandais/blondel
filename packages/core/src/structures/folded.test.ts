@@ -293,7 +293,7 @@ describe("tôle pliée — jeu latéral et pièces identiques", () => {
     const c = flatOf({ riserDrop: 180.3 }, 0.3, V.vec(10, 10));
     const d = flatOf({ riserDrop: 181 }, 0, V.ZERO);
     const e = flatOf({ profile: "U" }, 0, V.ZERO);
-    const groups = groupIdenticalFlats([a, b, c, d, e]);
+    const groups = groupIdenticalFlats([a, b, c, d, e], 0.5);
     expect(groups).toEqual([[a.id, b.id, c.id], [d.id], [e.id]]);
   });
 });

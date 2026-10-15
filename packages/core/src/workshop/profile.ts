@@ -4,7 +4,8 @@
  * Le profil décrit ce que l'atelier sait débiter et usiner : épaisseurs et largeurs de débit
  * disponibles, longueur maximale de plateau, surcotes de corroyage, profondeur d'encastrement,
  * jeu d'assemblage, seuils de fabrication (largeur perpendiculaire, bois entre mortaises,
- * joues) et masses volumiques par essence.
+ * joues), masses volumiques par essence et tolérance d'identité des pièces repérées
+ * (`identicalPartTolerance`, décision F10 Q2).
  *
  * **Aucune de ces valeurs n'est une règle métier sourcée**, sauf mention contraire dans
  * `WORKSHOP_PROVENANCE` : les valeurs par défaut sont des hypothèses d'atelier **« à valider »**
@@ -77,6 +78,13 @@ const mmNonNeg = z.number().nonnegative();
 export const WorkshopProfileSchema = z.object({
   /** Nom du profil (affichage). */
   name: z.string().optional(),
+  /**
+   * Tolérance d'identité des pièces repérées (décision F10 Q2), mm, une seule pour toutes les
+   * familles : écart de longueur jusqu'auquel deux cornières ou supports sans développé
+   * reçoivent le même repère, écart des sommets, trous et plis de deux développés à un
+   * déplacement plan près. Ajout rétrocompatible ; absent : défaut « à valider ».
+   */
+  identicalPartTolerance: mmNonNeg.optional(),
   wood: z
     .object({
       /** Épaisseurs de débit brutes disponibles (plateaux), mm. */
@@ -144,6 +152,8 @@ export type WorkshopProfileInput = z.infer<typeof WorkshopProfileSchema>;
 export interface WorkshopProfile {
   /** Nom du profil : saisi (texte brut) ou nom du profil par défaut (traduit). */
   readonly name: Message;
+  /** Tolérance d'identité des pièces repérées (décision F10 Q2), mm. */
+  readonly identicalPartTolerance: Mm;
   readonly wood: {
     readonly thicknesses: readonly Mm[];
     readonly widths: readonly Mm[];
@@ -181,6 +191,8 @@ export type WoodSettingKey = keyof WorkshopProfile["wood"];
  */
 export const DEFAULT_WORKSHOP_PROFILE: WorkshopProfile = {
   name: msg("workshop.defaultProfileName"),
+  // Décision F10 Q2 du 2026-10-15 : 0,5 mm « à valider » (aucune source).
+  identicalPartTolerance: 0.5,
   wood: {
     thicknesses: [27, 34, 41, 54, 65, 80],
     widths: [150, 200, 250, 300, 350, 400, 450, 500],
@@ -301,6 +313,15 @@ export const WORKSHOP_PROVENANCE: Readonly<Record<WoodSettingKey, SettingProvena
   },
 };
 
+/**
+ * Provenance de la tolérance d'identité des pièces repérées (décision F10 Q2) : aucune source,
+ * **à valider**.
+ */
+export const IDENTICAL_PART_TOLERANCE_PROVENANCE: SettingProvenance = {
+  status: "a-valider",
+  note: msg("workshop.provenance.identicalPartTolerance"),
+};
+
 /** Profil effectif d'un projet : profil par défaut surchargé champ par champ. */
 export function resolveWorkshopProfile(input?: WorkshopProfileInput): WorkshopProfile {
   const d = DEFAULT_WORKSHOP_PROFILE;
@@ -310,6 +331,7 @@ export function resolveWorkshopProfile(input?: WorkshopProfileInput): WorkshopPr
     (w[k] ?? d.wood[k]) as WorkshopProfile["wood"][K];
   return {
     name: input.name !== undefined ? textMessage(input.name) : d.name,
+    identicalPartTolerance: input.identicalPartTolerance ?? d.identicalPartTolerance,
     wood: {
       thicknesses: pick("thicknesses"),
       widths: pick("widths"),

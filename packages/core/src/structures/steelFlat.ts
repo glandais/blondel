@@ -109,11 +109,11 @@ import {
   executionClassReasons,
   QUANTITY_WELD_MM,
   groupIdenticalFlats,
+  groupNearAnchor,
   holePolygon,
   plateMeasures,
   steelMaterial,
   steelQuantities,
-  IDENTICAL_TOLERANCE,
 } from "./steelCommon.js";
 import {
   boltCenters,
@@ -121,6 +121,7 @@ import {
   supportDepth,
   supportInterval,
   supportAssemblies,
+  supportGroupKey,
   supportPart,
   treadScrewPoints,
   type SupportFace,
@@ -744,20 +745,32 @@ export function plateHoles(length: Mm, width: Mm, edge: Mm, perRow: number): Vec
   return xs.flatMap((x) => [V.vec(x, edge), V.vec(x, width - edge)]);
 }
 
-/** Marque les pièces identiques d'une liste : `${prefix}${rang du groupe}`. */
-export function markGroups(parts: Part[], prefix: string, key: (p: Part) => string | null): Part[] {
+/**
+ * Marque les pièces identiques d'une liste : `${prefix}${rang du groupe}`. Pièces à développé :
+ * `groupIdenticalFlats` ; autres pièces : même clé (`key`, `null` : la pièce seule) et longueur
+ * de débit à au plus `tol` de celle de la plus courte du groupe (`groupNearAnchor`, décision
+ * F10 Q1a). Rangs : groupes de développés d'abord, puis les autres, chacun dans l'ordre de
+ * première apparition. `tol` : `WorkshopProfile.identicalPartTolerance`.
+ */
+export function markGroups(
+  parts: Part[],
+  prefix: string,
+  key: (p: Part) => string | null,
+  tol: Mm,
+): Part[] {
   const groups: string[][] = [];
-  const flatGroups = groupIdenticalFlats(parts.filter((p) => p.flat));
+  const flatGroups = groupIdenticalFlats(
+    parts.filter((p) => p.flat),
+    tol,
+  );
   for (const g of flatGroups) groups.push(g);
   const rest = parts.filter((p) => !p.flat);
-  const byKey = new Map<string, string[]>();
-  for (const p of rest) {
-    const k = key(p) ?? p.id;
-    const list = byKey.get(k) ?? [];
-    list.push(p.id);
-    byKey.set(k, list);
-  }
-  groups.push(...byKey.values());
+  const near = groupNearAnchor(
+    rest,
+    { key: (p) => key(p) ?? p.id, measures: (p) => [p.stock?.length ?? 0], id: (p) => p.id },
+    tol,
+  );
+  groups.push(...near.map((g) => g.map((p) => p.id)));
   const markOf = new Map<string, string>();
   groups.forEach((g, i) => g.forEach((id) => markOf.set(id, `${prefix}${i + 1}`)));
   return parts.map((p) => {
@@ -839,6 +852,7 @@ export function buildSteelFlat(
 ): SteelFlatResult {
   const { project, layout, stepping } = ctx;
   const profile = resolveWorkshopProfile(project.workshop);
+  const identicalTol = profile.identicalPartTolerance;
   const metal = profile.metal;
   const nosings = stepping.nosings;
   const notes: Message[] = [];
@@ -996,33 +1010,37 @@ export function buildSteelFlat(
       ),
     ),
     sup.kind === "angle" ? "CR" : "PS",
-    (p) =>
-      `${JSON.stringify(p.section)}|${Math.round((p.stock?.length ?? 0) / IDENTICAL_TOLERANCE)}|${p.quantities["holes"]}`,
+    supportGroupKey,
+    identicalTol,
   );
   const platesMarked = [
     ...markGroups(
       plates.filter((p) => p.id.startsWith("plate-foot-")),
       "PF",
       () => null,
+      identicalTol,
     ),
     ...markGroups(
       plates.filter((p) => p.id.startsWith("plate-head-")),
       "PH",
       () => null,
+      identicalTol,
     ),
     ...markGroups(
       plates.filter((p) => p.id.startsWith("plate-post-")),
       "PP",
       () => null,
+      identicalTol,
     ),
     ...markGroups(
       plates.filter((p) => p.id.startsWith("plate-end-")),
       "PA",
       () => null,
+      identicalTol,
     ),
   ];
   const treadParts = treadDetails.map((d) => d.part);
-  const treadGroups = groupIdenticalFlats(treadParts);
+  const treadGroups = groupIdenticalFlats(treadParts, identicalTol);
   /** Tôles pliées : marches et contremarche d'arrivée (contrôles de pliage, laser, format). */
   const foldedParts = arrival ? [...treadParts, arrival.part] : treadParts;
   const foldedChecks = [
@@ -1100,7 +1118,7 @@ export function buildSteelFlat(
         profile: ft.profile,
         parts: msg("structure.steelFlat.count.parts", { count: treadParts.length }),
         unique: msg("structure.steelFlat.count.uniqueParts", { count: treadGroups.length }),
-        tolerance: dec(IDENTICAL_TOLERANCE, 1),
+        tolerance: dec(identicalTol, 3),
       }),
     );
     notes.push(msg("structure.steelFlat.note.foldedSolids"));

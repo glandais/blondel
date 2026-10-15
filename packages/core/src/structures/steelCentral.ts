@@ -650,7 +650,7 @@ function buildUnsafe(
     const beamPart = beam.partAt(s.sigma);
     return beamPart === undefined ? s : { ...s, beamPart };
   });
-  const supportParts = markSupportParts(onBeam, sup.kind, fixing);
+  const supportParts = markSupportParts(onBeam, sup.kind, fixing, profile.identicalPartTolerance);
   const partById = new Map(supportParts.map((p) => [p.id, p]));
   const supports: CentralSupport[] = onBeam.map((s) => ({
     ...s,
@@ -1514,6 +1514,7 @@ function markSupportParts(
   supports: readonly CentralSupport[],
   kind: CentralSupportKind,
   fixing: "welded" | "bolted",
+  tol: Mm,
 ): Part[] {
   const first: Part[] = [];
   const bearings: Part[] = [];
@@ -1535,8 +1536,8 @@ function markSupportParts(
   }
   const key = (p: Part): string => p.id;
   return [
-    ...markGroups(first, kind === "console" ? "CO" : "SP", key),
-    ...markGroups(bearings, "AP", key),
+    ...markGroups(first, kind === "console" ? "CO" : "SP", key, tol),
+    ...markGroups(bearings, "AP", key, tol),
   ];
 }
 

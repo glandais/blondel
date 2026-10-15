@@ -4369,6 +4369,7 @@
   "workshop.provenance.fasteners.nominalDiameters": "Série des diamètres nominaux de la visserie : M3, M4, M5, M6, M8, M10, M12, M16, M20, M24, M30 (premier choix des filetages métriques), sans source dans docs/research, à valider.",
   "workshop.provenance.fasteners.perPoint": "Quantité par point de fixation (perçage, poteau, support de main courante) : aucune valeur dans docs/research, à valider.",
   "workshop.provenance.fasteners.unknownWallLoadBearing": "Mur d'une main courante murale que le site ne décrit pas (mur imposé par le projet) : supposé porteur (cheville mécanique), à valider.",
+  "workshop.provenance.identicalPartTolerance": "Tolérance d'identité des pièces repérées (écart de longueur des cornières et supports ; écart des sommets, trous et plis d'un développé, à un déplacement plan près), décision F10 : 0,5 mm, non sourcée (ISO 13920 est une tolérance de fabrication, pas un critère d'identité) ; à garder sous le jeu des perçages.",
   "workshop.provenance.metal.barLengths": "C-M-08 / C §4.3 : barres de 6 m ou 12 m ([46], confiance moyenne).",
   "workshop.provenance.metal.bendLaws": "Rayons et ailes mini : « valeurs classiques » acier Rm 40–45 daN/mm² (C §2.6 [17], confiance moyenne) ; méthode et facteur K à valider (CHALLENGE G5).",
   "workshop.provenance.metal.defaultK": "Facteur K 0,33 non sourcé (CHALLENGE G5) : à valider par un plieur pilote.",

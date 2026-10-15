@@ -6,6 +6,7 @@ import { serializeProject } from "../project/serialize.js";
 import { makeSteppingProject } from "../stepping/test-helpers.js";
 import {
   DEFAULT_WORKSHOP_PROFILE,
+  IDENTICAL_PART_TOLERANCE_PROVENANCE,
   OTHER_DENSITY_PROVENANCE,
   OTHER_MATERIALS,
   WOOD_MATERIALS,
@@ -114,6 +115,22 @@ describe("masses volumiques de tous les matériaux (QUESTIONS A6)", () => {
     expect(p.fasteners.joints.plateBolted).toBe(DEFAULT_FASTENER_PROFILE.joints.plateBolted);
     // Le reste du profil n'est pas touché.
     expect(p.wood).toEqual(DEFAULT_WORKSHOP_PROFILE.wood);
+  });
+
+  it("tolérance d'identité des pièces repérées (F10 Q2) : 0,5 mm « à valider », facultative", () => {
+    expect(DEFAULT_WORKSHOP_PROFILE.identicalPartTolerance).toBe(0.5);
+    expect(IDENTICAL_PART_TOLERANCE_PROVENANCE.status).toBe("a-valider");
+    expect(fr(IDENTICAL_PART_TOLERANCE_PROVENANCE.note)).toContain("F10");
+    expect(resolveWorkshopProfile({}).identicalPartTolerance).toBe(0.5);
+    expect(resolveWorkshopProfile({ identicalPartTolerance: 0 }).identicalPartTolerance).toBe(0);
+    const p = makeSteppingProject({ width: 900, legs: ["auto"] });
+    expect(serializeProject(p)).not.toContain("identicalPartTolerance");
+    const set = ProjectSchema.parse({ ...p, workshop: { identicalPartTolerance: 0.2 } });
+    expect(set.workshop?.identicalPartTolerance).toBe(0.2);
+    expect(serializeProject(set)).toContain('"identicalPartTolerance": 0.2');
+    expect(
+      ProjectSchema.safeParse({ ...p, workshop: { identicalPartTolerance: -0.1 } }).success,
+    ).toBe(false);
   });
 
   it("tolérance d'alignement des bords de palier droit (F16 (6)) : 2 mm « à valider », facultative", () => {

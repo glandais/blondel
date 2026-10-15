@@ -14,6 +14,7 @@
 import { dec, msg, type Message } from "@blondel/i18n";
 import { WORKSHOP_DEFAULT_SOURCE, sourceSpec } from "../rules/sources.js";
 import { signedArea } from "../geom2d/polygon.js";
+import { GEOM_EPS } from "../geom2d/tolerance.js";
 import * as V from "../geom2d/vec.js";
 import type { FlatPattern, MaterialId, Part } from "../model/derived.js";
 import type { Mm, Polygon2, Vec2 } from "../model/primitives.js";
@@ -291,8 +292,96 @@ export function holePolygon(c: Vec2, diameter: Mm, slot = 0, axis: Vec2 = V.vec(
 
 // ------------------------------------------------------------------ Pièces identiques
 
-/** Tolérance de regroupement des pièces identiques (mm). */
-export const IDENTICAL_TOLERANCE: Mm = 0.5;
+/** Comparaison totale de chaînes, indépendante de la locale. */
+function cmpStr(a: string, b: string): number {
+  return a < b ? -1 : a > b ? 1 : 0;
+}
+
+/**
+ * Rangs de valeurs à `eps` près : valeurs triées, rang incrémenté seulement quand l'écart avec la
+ * précédente dépasse `eps` (paquets de valeurs voisines). Clé de tri insensible au bruit
+ * d'arrondi : deux valeurs égales au bruit près ont le même rang et sont départagées ensuite par
+ * identifiant (convention des départages stables, F10 (7) et (11)).
+ */
+function ranksWithin(values: readonly number[], eps: number): number[] {
+  const order = values.map((v, i) => ({ v, i })).sort((a, b) => a.v - b.v || a.i - b.i);
+  const ranks = new Array<number>(values.length).fill(0);
+  let rank = 0;
+  order.forEach((o, k) => {
+    if (k > 0 && o.v - order[k - 1]!.v > eps) rank++;
+    ranks[o.i] = rank;
+  });
+  return ranks;
+}
+
+/**
+ * Regroupe des pièces autour d'un représentant (décision F10 Q1a) : les pièces sont triées
+ * (clé, puis mesures dans l'ordre lexicographique — chaque mesure par paquets de valeurs à
+ * `GEOM_EPS` près, pour que le bruit d'arrondi ne décide pas de l'ordre —, puis identifiant) ;
+ * la première pièce non
+ * prise ouvre un groupe (l'ancre : en une dimension, la plus courte) qui prend toutes les pièces
+ * de même clé dont **chaque** mesure est à au plus `tol` (+ `GEOM_EPS`) de celle de l'ancre.
+ * Le résultat ne dépend pas de l'ordre d'entrée ; groupes rendus dans l'ordre de première
+ * apparition dans `items`, membres dans l'ordre d'entrée. `tol` : tolérance d'identité du
+ * profil d'atelier (`WorkshopProfile.identicalPartTolerance`).
+ */
+export function groupNearAnchor<X>(
+  items: readonly X[],
+  o: {
+    readonly key: (x: X) => string;
+    readonly measures: (x: X) => readonly number[];
+    readonly id: (x: X) => string;
+  },
+  tol: Mm,
+): X[][] {
+  const rows = items.map((x, index) => ({
+    x,
+    index,
+    key: o.key(x),
+    m: o.measures(x),
+    id: o.id(x),
+  }));
+  const dims = rows.reduce((n, r) => Math.max(n, r.m.length), 0);
+  const ranks = Array.from({ length: dims }, (_, k) =>
+    ranksWithin(
+      rows.map((r) => r.m[k] ?? 0),
+      GEOM_EPS,
+    ),
+  );
+  const sorted = [...rows].sort((a, b) => {
+    const k = cmpStr(a.key, b.key);
+    if (k !== 0) return k;
+    for (const r of ranks) {
+      const d = r[a.index]! - r[b.index]!;
+      if (d !== 0) return d;
+    }
+    return cmpStr(a.id, b.id) || a.index - b.index;
+  });
+  const lim = tol + GEOM_EPS;
+  const taken = new Set<number>();
+  const groups: (typeof rows)[] = [];
+  for (let i = 0; i < sorted.length; i++) {
+    const anchor = sorted[i]!;
+    if (taken.has(anchor.index)) continue;
+    taken.add(anchor.index);
+    const g = [anchor];
+    for (let j = i + 1; j < sorted.length; j++) {
+      const r = sorted[j]!;
+      if (r.key !== anchor.key) break;
+      if (taken.has(r.index)) continue;
+      const n = Math.max(r.m.length, anchor.m.length);
+      let near = true;
+      for (let k = 0; k < n && near; k++)
+        near = Math.abs((r.m[k] ?? 0) - (anchor.m[k] ?? 0)) <= lim;
+      if (near) {
+        taken.add(r.index);
+        g.push(r);
+      }
+    }
+    groups.push(g.sort((a, b) => a.index - b.index));
+  }
+  return groups.sort((a, b) => a[0]!.index - b[0]!.index).map((g) => g.map((r) => r.x));
+}
 
 interface Canon {
   readonly thickness: Mm;
@@ -379,24 +468,54 @@ function sameUpToRigid(A: Canon, B: Canon, tol: Mm): boolean {
   return false;
 }
 
+/** Aire nette d'un développé (contour moins trous), mm² : clé de tri des développés. */
+function netFlatArea(c: Canon): number {
+  return Math.abs(signedArea(c.outer)) - c.holes.reduce((s, h) => s + Math.abs(signedArea(h)), 0);
+}
+
+/** Périmètre du contour d'un développé (mm) : échelle de la tolérance de bruit sur l'aire. */
+function outerPerimeter(c: Canon): number {
+  return c.outer.reduce((s, p, i) => s + V.distance(p, c.outer[(i + 1) % c.outer.length]!), 0);
+}
+
 /**
  * Regroupe les pièces à développé identique (même épaisseur, matériau, contour, trous et lignes
  * de pli à `tol` près, à un déplacement plan près — sans retournement, qui inverserait le sens
- * des plis). Pièces sans développé : ignorées. Groupes dans l'ordre de première apparition.
+ * des plis). Chaque pièce est comparée au premier membre de chaque groupe (l'ancre), dans un
+ * ordre indépendant de celui du modèle (décision F10 Q1b) : aire nette croissante, puis
+ * identifiant (aires égales à `GEOM_EPS` × périmètre près confondues, pour que l'ordre ne
+ * dépende pas du bruit d'arrondi lié à la position de la pièce) ; l'ancre d'un groupe est donc
+ * sa plus petite pièce. Écarts comparés à `tol` + `GEOM_EPS`, comme dans `groupNearAnchor`
+ * (T = 0 réunit encore les pièces identiques au bruit près). Pièces sans développé :
+ * ignorées. Groupes dans l'ordre de première apparition dans `parts`, membres dans l'ordre de
+ * `parts`. `tol` : tolérance d'identité du profil d'atelier (`identicalPartTolerance`).
  */
-export function groupIdenticalFlats(
-  parts: readonly Part[],
-  tol: Mm = IDENTICAL_TOLERANCE,
-): string[][] {
-  const groups: { canon: Canon; ids: string[] }[] = [];
-  for (const p of parts) {
+export function groupIdenticalFlats(parts: readonly Part[], tol: Mm): string[][] {
+  const rows: { canon: Canon; id: string; index: number; area: number }[] = [];
+  parts.forEach((p, index) => {
     const c = canon(p);
-    if (!c) continue;
-    const g = groups.find((x) => sameUpToRigid(x.canon, c, tol));
-    if (g) g.ids.push(p.id);
-    else groups.push({ canon: c, ids: [p.id] });
+    if (c) rows.push({ canon: c, id: p.id, index, area: netFlatArea(c) });
+  });
+  // Aires égales au bruit d'arrondi près (bruit qui dépend de la position de la pièce dans le
+  // plan) : même rang, départage par identifiant. Tolérance : `GEOM_EPS` × plus grand périmètre.
+  const areaEps = GEOM_EPS * rows.reduce((m, r) => Math.max(m, outerPerimeter(r.canon)), 1);
+  const areaRank = ranksWithin(
+    rows.map((r) => r.area),
+    areaEps,
+  );
+  const ranked = rows.map((r, k) => ({ ...r, rank: areaRank[k]! }));
+  ranked.sort((a, b) => a.rank - b.rank || cmpStr(a.id, b.id) || a.index - b.index);
+  const lim = tol + GEOM_EPS;
+  const groups: { canon: Canon; members: { id: string; index: number }[] }[] = [];
+  for (const r of ranked) {
+    const g = groups.find((x) => sameUpToRigid(x.canon, r.canon, lim));
+    if (g) g.members.push(r);
+    else groups.push({ canon: r.canon, members: [r] });
   }
-  return groups.map((g) => g.ids);
+  return groups
+    .map((g) => g.members.sort((a, b) => a.index - b.index))
+    .sort((a, b) => a[0]!.index - b[0]!.index)
+    .map((g) => g.map((m) => m.id));
 }
 
 /**

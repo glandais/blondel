@@ -1,6 +1,7 @@
-import { dec, isMessage, translatorFor, type Message } from "@blondel/i18n";
+import { dec, isMessage, textMessage, translatorFor, type Message } from "@blondel/i18n";
 import { describe, expect, it } from "vitest";
 import { fr } from "../i18n.test-helpers.js";
+import type { Part } from "../model/derived.js";
 import type { Project } from "../model/project.js";
 import { precheckModel } from "../precheck/stringers.js";
 import { buildModel } from "../pipeline/build.js";
@@ -11,6 +12,7 @@ import {
   adaptJour,
   compareEpure,
   compareVariants,
+  countUniqueParts,
   summarizeVariant,
   variantCost,
 } from "./compare.js";
@@ -342,5 +344,55 @@ describe("limon central bois (wood-central) dans le comparateur : pièces compos
     expect(stacked.surfaceM2 / mould.surfaceM2).toBeLessThan(1.05);
     expect(stacked.massKg / mould.massKg).toBeGreaterThan(0.9);
     expect(stacked.massKg / mould.massKg).toBeLessThan(1.1);
+  });
+});
+
+describe("countUniqueParts : règle des repères (F10, C4)", () => {
+  const board = (id: string, length: number, holeDiameter?: number): Part => ({
+    id,
+    mark: id,
+    category: "tread",
+    name: textMessage(id),
+    material: "wood-oak",
+    solid: { kind: "sweep", path: [], section: { outer: [], holes: [] } },
+    stock: { length, width: 280, thickness: 40 },
+    quantities: {},
+    ...(holeDiameter !== undefined
+      ? { fixings: [{ joint: "treadScrewed" as const, points: 2, holeDiameter }] }
+      : {}),
+  });
+
+  it("pièces à au plus T de la plus courte réunies ; séparées à T = 0 ; chaîne non transitive", () => {
+    const parts = [board("a", 915.62), board("b", 915.23), board("c", 916)];
+    // Ancre 915,23 : 915,62 à 0,39 (réunie), 916 à 0,77 (nouveau groupe).
+    expect(countUniqueParts(parts, 0.5)).toBe(2);
+    expect(countUniqueParts([...parts].reverse(), 0.5)).toBe(2);
+    expect(countUniqueParts(parts, 0)).toBe(3);
+    expect(countUniqueParts(parts, 1)).toBe(1);
+  });
+
+  it("signature des perçages dans la clé : même débit, diamètres différents ⇒ deux pièces", () => {
+    expect(countUniqueParts([board("a", 900, 7), board("b", 900, 7)], 0.5)).toBe(1);
+    expect(countUniqueParts([board("a", 900, 7), board("b", 900, 9)], 0.5)).toBe(2);
+  });
+
+  it("largeur et épaisseur de débit comparées aussi : même longueur, l ou e à plus de T ⇒ deux pièces", () => {
+    const sized = (id: string, width: number, thickness: number): Part => ({
+      ...board(id, 900),
+      stock: { length: 900, width, thickness },
+    });
+    expect(countUniqueParts([sized("a", 280, 40), sized("b", 280.4, 40.4)], 0.5)).toBe(1);
+    expect(countUniqueParts([sized("a", 280, 40), sized("b", 281, 40)], 0.5)).toBe(2);
+    expect(countUniqueParts([sized("a", 280, 40), sized("b", 280, 41)], 0.5)).toBe(2);
+  });
+
+  it("la tolérance du profil d'atelier est celle du comparateur", () => {
+    const p = base();
+    const strict = summarizeVariant({ ...p, workshop: { identicalPartTolerance: 0 } });
+    const loose = summarizeVariant({ ...p, workshop: { identicalPartTolerance: 1000 } });
+    expect(loose.uniqueParts).toBeLessThanOrEqual(strict.uniqueParts);
+    expect(summarizeVariant(p).uniqueParts).toBe(
+      countUniqueParts(fabricatedParts(summarizeVariant(p).model.parts), 0.5),
+    );
   });
 });
