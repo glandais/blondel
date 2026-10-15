@@ -17,7 +17,7 @@ Attribuer les repères des pièces sans dépendre d'un arrondi à seuil (`Math.r
 
 ## Sous-lots
 
-- [ ] **R1** — conception : état des lieux de l'attribution des repères, options et questions à l'utilisateur (aucun code de production modifié)
+- [x] **R1** — conception : état des lieux de l'attribution des repères, options et questions à l'utilisateur (aucun code de production modifié)
 - [ ] **R2** — implémentation des décisions, écarts d'instantanés justifiés
 
 ## Gabarit d'une ligne de journal
@@ -29,3 +29,5 @@ Attribuer les repères des pièces sans dépendre d'un arrondi à seuil (`Math.r
 ## Journal
 
 - 2026-10-14 [part-marks:0] orchestrateur — Fait : worktree `feat/part-marks` créé depuis `develop` (ac6ab7f, départages stables fusionnés), ce ledger. Questions : lot décidé par F10 (18) et (19).
+- 2026-10-15 [part-marks:R1] orchestrateur — Fait : workflow R1 (état des lieux, options, contre-examen ; aucun fichier suivi modifié, sondes supprimées). Constat : 11 repères sur 6 exemples s'étalent sur 16 lignes de débit en trop (arrondi à seuil des cornières `Math.round(L / 0,5)` dans `steelFlat.ts`, `steelCurved.ts`, `steelProfile.ts` ; comparaison gloutonne des développés au premier membre) ; 153 DXF de développés en trop (730 pour 577 couples repère × matériau), dont 143 par le texte de référence qui nomme la pièce porteuse ; `IDENTICAL_TOLERANCE` = 0,5 mm ni sourcée ni « à valider » ; garde-corps (`guards/parts.ts`) à arrondi à seuil `r0` 1 mm / `r1` 0,1° masqué par D1 (PN1 de `demo-helical-glass`, 0,52 mm) ; PDF regroupant les développés par clé JSON exacte (`pdf/document.ts:519`) ; nomenclature de l'interface rattachant les pièces par `rowKey` (CR1 de `demo-erp-grand` : 1 pièce sur 32). Questions : Q1a à Q7 tranchées par l'utilisateur, toutes sur l'option recommandée (voir `docs/QUESTIONS.md`, F10, décisions du 2026-10-15). Découpage de R2 : R2a (C1, Q2, Q1a, Q1b, C4 : règle et paramètre), R2b (Q3, C3 : recopie par famille, invariant, partition DXF / PDF commune), R2c (Q5, Q6 : textes et désignations i18n), R2d (C2 : interface, e2e).
+- 2026-10-15 [part-marks:R1] orchestrateur — Fait : R1 coché — [x] **R1** état des lieux et décisions de l'utilisateur.
