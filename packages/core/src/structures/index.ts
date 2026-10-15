@@ -30,6 +30,7 @@ export {
   structureAcceptsCage,
   structureAcceptsLayout,
   structureCageFeatures,
+  structureCarriedHandrails,
   structureLateralThickness,
   structureLayouts,
   structureRequiresNewel,

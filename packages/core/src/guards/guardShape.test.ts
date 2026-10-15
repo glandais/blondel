@@ -10,6 +10,7 @@ import { msg } from "@blondel/i18n";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { flattenCurve, makeCurve } from "../geom2d/curve.js";
+import { GEOM_EPS } from "../geom2d/tolerance.js";
 import type { Part } from "../model/derived.js";
 import type { Mm, Vec2, Vec3 } from "../model/primitives.js";
 import type { Project } from "../model/project.js";
@@ -26,7 +27,8 @@ import {
   type GuardMove,
   type GuardShape,
 } from "./guardShape.js";
-import { guardShapeOfPart } from "./guardShape.testing.js";
+import { guardMarkEntryOfPart, guardShapeOfPart } from "./guardShape.testing.js";
+import { groupGuardMarks, type GuardMarkEntry } from "./marks.js";
 import {
   MarkRegistry,
   panelMember,
@@ -560,6 +562,53 @@ describe("descripteur de forme : propriétés (G-Q2, G-Q3)", () => {
   const ROUND: GuardSection = { kind: "round", diameter: 42 };
   const T0 = DEFAULT_WORKSHOP_PROFILE.identicalPartTolerance;
 
+  it("sameGuardShape (minorant, arrêt précoce, G2b) ⇔ guardShapeDistance ≤ T + GEOM_EPS", () => {
+    fc.assert(
+      fc.property(
+        setupArb,
+        worldMoveArb,
+        fc.record({
+          // Écarts tirés sur une grille (les doubles de fast-check penchent vers 0).
+          dLen: fc.integer({ min: -300, max: 300 }).map((x) => x / 100),
+          dSlope: fc.integer({ min: -200, max: 200 }).map((x) => x / 1e5),
+          dHeight: fc.integer({ min: -200, max: 200 }).map((x) => x / 100),
+          // Écart de rayon à longueur égale : seul le résidu (recalage) le voit.
+          dRadius: fc.integer({ min: -30, max: 30 }),
+          // Écart de T autour de la distance (frontière), ou T quelconque.
+          around: fc.oneof(
+            fc.integer({ min: -50, max: 50 }).map((x) => x / 1000),
+            fc.constantFrom(-1e-10, 0, 1e-10),
+          ),
+          tolFree: fc.oneof(
+            fc.constant(null),
+            fc.integer({ min: 0, max: 300 }).map((x) => x / 100),
+          ),
+        }),
+        sectionArb,
+        (u, m, r, sec) => {
+          const v: Setup = {
+            ...u,
+            len: Math.max(50, u.len + r.dLen),
+            slope: u.slope + r.dSlope,
+            height: u.height + r.dHeight,
+            radius: u.radius + r.dRadius,
+          };
+          const pa = setupPiece(u);
+          const pb = movedPiece(setupPiece(v), m);
+          for (const [A, B] of [
+            [barShape(pa.bottom, sec), barShape(pb.bottom, sec)],
+            [panelShape(pa.bottom, pa.top, 10), panelShape(pb.bottom, pb.top, 10)],
+          ] as const) {
+            const d = guardShapeDistance(A, B);
+            const tol = r.tolFree ?? Math.max(0, d - GEOM_EPS + r.around);
+            expect(sameGuardShape(A, B, tol), `d = ${d}, T = ${tol}`).toBe(d <= tol + GEOM_EPS);
+          }
+        },
+      ),
+      { numRuns: RUNS },
+    );
+  });
+
   it("frontière : d = T réunit, d > T + GEOM_EPS sépare", () => {
     const sec: GuardSection = { kind: "rect", width: 80, height: 80 };
     expect(sameGuardShape(prismShape(sec, 858), prismShape(sec, 858 + T0), T0)).toBe(true);
@@ -682,7 +731,7 @@ describe("descripteur de forme : propriétés (G-Q2, G-Q3)", () => {
     fc.assert(
       fc.property(setupArb, sectionArb, fc.integer({ min: 6, max: 30 }), (u, sec, thickness) => {
         const ctx: PartFactoryContext = {
-          marks: new MarkRegistry(),
+          marks: new MarkRegistry(DEFAULT_WORKSHOP_PROFILE.identicalPartTolerance),
           profile: DEFAULT_WORKSHOP_PROFILE,
         };
         const common = {
@@ -757,28 +806,35 @@ describe("descripteur de forme : exemples", () => {
     },
   );
 
-  it("demo-cage-oak-60 en câbles, hauteur d'étage + 23 mm : les deux CA13 (éventail) sont séparés à T", () => {
+  it("demo-cage-oak-60 en câbles, hauteur d'étage + 23 mm : les deux câbles de l'ex-CA13 (éventail) sont séparés à T", () => {
     const j = JSON.parse(readFileSync(join(EXAMPLES_DIR, `demo-cage-oak-60${SUFFIX}`), "utf8"));
     j.guards.infill = { kind: "cables" };
     j.site.floorToFloor += 23;
     const p = parseProjectText(JSON.stringify(j));
-    const ca13 = buildModel(p, { memo: false }).parts.filter(
-      (x) => x.family === "guards" && x.mark === "CA13",
-    );
-    expect(ca13).toHaveLength(2);
-    const [a, b] = ca13.map(shapeOf);
+    const parts = buildModel(p, { memo: false }).parts;
+    const byId = (id: string): Part => {
+      const x = parts.find((q) => q.id === id);
+      expect(x, id).toBeDefined();
+      return x!;
+    };
+    const pa = byId("guard-inner-1-cable-20");
+    const pb = byId("guard-inner-1-cable-21");
+    const [a, b] = [pa, pb].map(shapeOf);
     const T = resolveWorkshopProfile(p.workshop).identicalPartTolerance;
     expect(T).toBe(0.5);
     expect(sameGuardShape(a!, b!, T)).toBe(false);
     expect(guardShapeDistance(a!, b!)).toBeGreaterThan(1);
+    // Repères distincts (G2b : regroupement à T ; l'ancien arrondi les réunissait en CA13).
+    expect(pa.mark).toBe("CA13");
+    expect(pb.mark).not.toBe(pa.mark);
   });
 
   /**
-   * Garde de non-régression pour G2b : sur tous les exemples, chaque repère actuel tient à T
-   * (autour de sa première pièce), et les seuls repères distincts de même préfixe identiques à T
-   * sont MC1 / MC2 des quatre exemples droits (mains courantes jumelles, décision G-Q5).
+   * Règle du repérage (G2b) sur tous les exemples : chaque repère est un seul groupe autour de
+   * son ancre (recalculée par `groupGuardMarks`), et aucune paire d'ancres de repères distincts
+   * de même clé n'est identique à T (MC1 / MC2 des exemples droits réunies, G-Q5).
    */
-  it("exemples : repères actuels identiques à T, seuls MC1 / MC2 des exemples droits se confondraient", () => {
+  it("exemples : chaque repère tient à T autour de son ancre, aucun repère distinct identique à T", () => {
     const projects: [string, Project][] = [
       ...readdirSync(EXAMPLES_DIR)
         .filter((f) => f.endsWith(SUFFIX))
@@ -796,26 +852,32 @@ describe("descripteur de forme : exemples", () => {
     for (const [name, p] of projects) {
       const T = resolveWorkshopProfile(p.workshop).identicalPartTolerance;
       const marks = guardMarks(buildModel(p, { memo: false }).parts);
-      const reps: { mark: string; shape: GuardShape }[] = [];
+      const anchors: { mark: string; entry: GuardMarkEntry }[] = [];
       for (const [mark, ps] of marks) {
-        const [anchor, ...rest] = ps.map(shapeOf);
-        for (const s of rest) expect(sameGuardShape(anchor!, s, T), `${name} ${mark}`).toBe(true);
-        reps.push({ mark, shape: anchor! });
+        const entries = ps.map((x) => {
+          const e = guardMarkEntryOfPart(x);
+          expect(e, `${name} ${x.id}`).not.toBeNull();
+          return e!;
+        });
+        const groups = groupGuardMarks(entries, T);
+        expect(groups, `${name} ${mark}`).toHaveLength(1);
+        const anchor = entries[groups[0]!.anchor]!;
+        for (const e of entries) {
+          expect(sameGuardShape(anchor.shape, e.shape, T), `${name} ${mark} ${e.id}`).toBe(true);
+        }
+        anchors.push({ mark, entry: anchor });
       }
-      for (let i = 0; i < reps.length; i++) {
-        for (let j = i + 1; j < reps.length; j++) {
-          const a = reps[i]!;
-          const b = reps[j]!;
-          if (a.mark.replace(/\d+$/, "") !== b.mark.replace(/\d+$/, "")) continue;
-          if (sameGuardShape(a.shape, b.shape, T)) near.push(`${name} ${a.mark}~${b.mark}`);
+      for (let i = 0; i < anchors.length; i++) {
+        for (let j = i + 1; j < anchors.length; j++) {
+          const a = anchors[i]!;
+          const b = anchors[j]!;
+          if (a.entry.key !== b.entry.key) continue;
+          if (sameGuardShape(a.entry.shape, b.entry.shape, T)) {
+            near.push(`${name} ${a.mark}~${b.mark}`);
+          }
         }
       }
     }
-    expect(near).toEqual([
-      "demo-erp-grand MC1~MC2",
-      "demo-straight-central-glulam MC1~MC2",
-      "demo-straight-cut-oak MC1~MC2",
-      "demo-straight-loft MC1~MC2",
-    ]);
+    expect(near).toEqual([]);
   });
 });

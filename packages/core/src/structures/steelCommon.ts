@@ -293,7 +293,7 @@ export function holePolygon(c: Vec2, diameter: Mm, slot = 0, axis: Vec2 = V.vec(
 // ------------------------------------------------------------------ Pièces identiques
 
 /** Comparaison totale de chaînes, indépendante de la locale. */
-function cmpStr(a: string, b: string): number {
+export function cmpStr(a: string, b: string): number {
   return a < b ? -1 : a > b ? 1 : 0;
 }
 
@@ -303,7 +303,7 @@ function cmpStr(a: string, b: string): number {
  * d'arrondi : deux valeurs égales au bruit près ont le même rang et sont départagées ensuite par
  * identifiant (convention des départages stables, F10 (7) et (11)).
  */
-function ranksWithin(values: readonly number[], eps: number): number[] {
+export function ranksWithin(values: readonly number[], eps: number): number[] {
   const order = values.map((v, i) => ({ v, i })).sort((a, b) => a.v - b.v || a.i - b.i);
   const ranks = new Array<number>(values.length).fill(0);
   let rank = 0;

@@ -2,11 +2,11 @@
  * Construction des pièces de garde-corps : poteaux et balustres (extrusions verticales),
  * lisses, câbles et mains courantes (balayages `sweep`), panneaux (surfaces réglées épaissies).
  *
- * Repères : pièces identiques (même nature, même section, même longueur et même pente, au
- * millimètre / dixième de degré près) → même repère ; les mains courantes ont chacune le leur.
- * Des pièces de même repère ont **exactement** le même débit et les mêmes grandeurs (celles de
- * la première pièce du repère) : sans cela, des écarts d'arrondi (2e-13 mm sur un balustre)
- * séparaient une même pièce sur plusieurs lignes de la fiche de débit (QUESTIONS D1).
+ * Repères (chantier guard-marks, G2b) : chaque pièce est enregistrée avec son descripteur de
+ * forme (`guardShape.ts`, construit depuis les entrées : section, axe ou bords non décalés) et
+ * rendue avec un repère provisoire vide ; `MarkRegistry.apply` (`marks.ts`, fin de
+ * `computeGuards`) regroupe les pièces identiques à T près et recopie sur chaque membre le débit
+ * et les grandeurs de la première pièce de son groupe (QUESTIONS D1).
  */
 import { msg, textMessage, type Message } from "@blondel/i18n";
 import * as V from "../geom2d/vec.js";
@@ -14,7 +14,11 @@ import type { MaterialId, Part, PartCategory, SolidDesc } from "../model/derived
 import type { Mm, Shape2, Vec2, Vec3 } from "../model/primitives.js";
 import { woodQuantities } from "../structures/quantities.js";
 import type { WorkshopProfile } from "../workshop/profile.js";
+import { barShape, panelShape, prismShape, type GuardShape } from "./guardShape.js";
+import { guardMarkKey, MarkRegistry } from "./marks.js";
 import { sectionLabel, type GuardSection } from "./spec.js";
+
+export { MarkRegistry };
 
 /** Nombre de côtés du polygone approchant une section ronde. */
 const ROUND_SIDES = 16;
@@ -70,43 +74,6 @@ function length3(path: readonly Vec3[]): Mm {
   return l;
 }
 
-/** Débit et grandeurs partagés par les pièces d'un même repère. */
-interface MarkMeasures {
-  readonly stock: { length: Mm; width: Mm; thickness: Mm };
-  readonly quantities: Record<string, number>;
-}
-
-/** Attribution des repères (préfixe + numéro par signature). */
-export class MarkRegistry {
-  private readonly byKey = new Map<string, string>();
-  private readonly counters = new Map<string, number>();
-  private readonly measures = new Map<string, MarkMeasures>();
-
-  /**
-   * Débit et grandeurs du repère `prefix|signature` : ceux de la première pièce qui l'a reçu
-   * (calculés par `make`), repris tels quels par les suivantes.
-   */
-  measuresOf(prefix: string, signature: string, make: () => MarkMeasures): MarkMeasures {
-    const key = `${prefix}|${signature}`;
-    const found = this.measures.get(key);
-    if (found) return found;
-    const m = make();
-    this.measures.set(key, m);
-    return m;
-  }
-
-  mark(prefix: string, signature: string): string {
-    const key = `${prefix}|${signature}`;
-    const found = this.byKey.get(key);
-    if (found) return found;
-    const n = (this.counters.get(prefix) ?? 0) + 1;
-    this.counters.set(prefix, n);
-    const m = `${prefix}${n}`;
-    this.byKey.set(key, m);
-    return m;
-  }
-}
-
 export interface PartFactoryContext {
   readonly marks: MarkRegistry;
   readonly profile: WorkshopProfile;
@@ -120,34 +87,40 @@ interface Common {
   readonly material: MaterialId;
 }
 
+/**
+ * Pièce avec son débit et ses grandeurs propres, enregistrée pour le repérage (`shape` :
+ * descripteur de forme ; `size` : taille de tri, la plus petite pièce d'un groupe en est
+ * l'ancre). Repère provisoire vide, attribué par `MarkRegistry.apply`.
+ */
 function makePart(
   ctx: PartFactoryContext,
   c: Common,
   solid: SolidDesc,
-  signature: string,
+  shape: GuardShape,
+  size: number,
   measures: { volumeMm3: number; surfaceMm2: number; length: Mm },
   stock: { length: Mm; width: Mm; thickness: Mm },
   section: Message,
 ): Part {
-  const shared = ctx.marks.measuresOf(c.prefix, signature, () => ({
-    stock,
-    quantities: woodQuantities(measures, c.material, ctx.profile, stock),
-  }));
-  return {
+  const part: Part = {
     id: c.id,
-    mark: ctx.marks.mark(c.prefix, signature),
+    mark: "",
     category: c.category,
     name: c.name,
     material: c.material,
     solid,
     section,
-    stock: { ...shared.stock },
-    quantities: { ...shared.quantities },
+    stock,
+    quantities: woodQuantities(measures, c.material, ctx.profile, stock),
   };
+  ctx.marks.add(part, {
+    prefix: c.prefix,
+    key: guardMarkKey(c.prefix, c.name.key, c.material, shape),
+    shape,
+    size,
+  });
+  return part;
 }
-
-const r1 = (x: number): string => (Math.round(x * 10) / 10).toFixed(1);
-const r0 = (x: number): string => String(Math.round(x));
 
 /** Section d'une pièce (`Part.section`) : désignation seule, non traduite. */
 function sectionMessage(s: GuardSection): Message {
@@ -188,7 +161,8 @@ export function verticalMember(
     ctx,
     c,
     solid,
-    `${section.kind}${sectionLabel(section)}|${r0(depth)}`,
+    prismShape(section, depth),
+    depth,
     { volumeMm3: area * depth, surfaceMm2: area, length: depth },
     { length: depth, width: Math.max(w, h), thickness: Math.min(w, h) },
     sectionMessage(section),
@@ -201,21 +175,17 @@ export function sweptMember(
   c: Common,
   path: readonly Vec3[],
   section: GuardSection,
-  signatureExtra = "",
 ): Part {
   const length = length3(path);
   const area = sectionArea(section);
   const w = sectionWidth(section);
   const h = sectionHeight(section);
-  const first = path[0]!;
-  const last = path[path.length - 1]!;
-  const slope =
-    (Math.atan2(last.z - first.z, Math.hypot(last.x - first.x, last.y - first.y)) * 180) / Math.PI;
   return makePart(
     ctx,
     c,
     { kind: "sweep", path, section: sectionShape(section) },
-    `${section.kind}${sectionLabel(section)}|${r0(length)}|${r1(slope)}|${path.length}${signatureExtra}`,
+    barShape(path, section),
+    length,
     { volumeMm3: area * length, surfaceMm2: w * length, length },
     { length, width: Math.max(w, h), thickness: Math.min(w, h) },
     sectionMessage(section),
@@ -250,19 +220,15 @@ export function panelMember(
     lengthPlan += l;
     areaMm2 += (l * (h0 + h1)) / 2;
   }
-  const heights = top.map((p, i) => p.z - bottom[i]!.z);
-  const height = Math.max(...heights);
-  const first = bottom[0]!;
-  const last = bottom[bottom.length - 1]!;
-  const slope = (Math.atan2(last.z - first.z, lengthPlan) * 180) / Math.PI;
+  const height = Math.max(...top.map((p, i) => p.z - bottom[i]!.z));
   return makePart(
     ctx,
     c,
     { kind: "ruled", a, b, thickness, normals },
-    // Hauteurs aux deux extrémités : un panneau de palier rehaussé (trapèze, QUESTIONS A1) ne
-    // doit pas partager le repère — ni donc le débit et la masse — d'un panneau rectangulaire
-    // de même longueur et de même hauteur maximale.
-    `${thickness}|${r0(lengthPlan)}|${r0(height)}|${r0(heights[0]!)}|${r0(heights[heights.length - 1]!)}|${r1(slope)}|${r0(areaMm2 / 1000)}`,
+    // Bords non décalés : un panneau de palier rehaussé (trapèze, QUESTIONS A1) diffère d'un
+    // panneau rectangulaire de même longueur et de même hauteur maximale par sa hauteur h(s).
+    panelShape(bottom, top, thickness),
+    areaMm2,
     { volumeMm3: areaMm2 * thickness, surfaceMm2: areaMm2, length: lengthPlan },
     { length: lengthPlan, width: height, thickness },
     msg("part.section.thickness", { thickness: String(thickness) }),

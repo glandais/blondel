@@ -3180,9 +3180,8 @@ groupe stainless-brushed section « 80×80 » {"quantity":21,"lengthM":19.118,"m
   PG1 ×10 858×80×80 43.38048 - stock
   PG2 ×11 958×80×80 48.43648 - stock
 groupe stainless-brushed section « Ø42 » {"quantity":3,"lengthM":22.318595,"massKg":238.046712,"massNotes":[]}
-  MC1 ×1 5919.297672×42×42 63.13432 - stock
-  MC2 ×1 5919.297672×42×42 63.13432 - stock
-  MC3 ×1 10480×42×42 111.778071 - stock
+  MC1 ×2 5919.297672×42×42 63.13432 - stock
+  MC2 ×1 10480×42×42 111.778071 - stock
 groupe glass section « ép. 18 » {"quantity":18,"lengthM":18.316,"massKg":707.72976,"massNotes":[]}
   PN1 ×8 1129.5×808×18 41.06862 - stock
   PN2 ×2 30×908×18 1.2258 - stock
@@ -3233,14 +3232,13 @@ CM16;Contremarche 16;Chêne;;1400,0;158,8;20,0;1;0,004447;0,004447;3,11;3,11;mas
 CM17;Contremarche 17;Chêne;;1400,0;158,8;20,0;1;0,004447;0,004447;3,11;3,11;masse volumique à valider
 PG1;Poteau de garde-corps;Inox brossé;80×80;858,0;80,0;80,0;10;0,005491;0,054912;43,38;433,80;
 PG2;Poteau de garde-corps;Inox brossé;80×80;958,0;80,0;80,0;11;0,006131;0,067443;48,44;532,80;
-MC1;Main courante de garde-corps;Inox brossé;Ø42;5919,3;42,0;42,0;1;0,007992;0,007992;63,13;63,13;
-MC2;Main courante de garde-corps;Inox brossé;Ø42;5919,3;42,0;42,0;1;0,007992;0,007992;63,13;63,13;
-MC3;Main courante de trémie;Inox brossé;Ø42;10480,0;42,0;42,0;1;0,014149;0,014149;111,78;111,78;
+MC1;Main courante de garde-corps;Inox brossé;Ø42;5919,3;42,0;42,0;2;0,007992;0,015983;63,13;126,27;
+MC2;Main courante de trémie;Inox brossé;Ø42;10480,0;42,0;42,0;1;0,014149;0,014149;111,78;111,78;
 PN1;Panneau de verre;Verre;ép. 18;1129,5;808,0;18,0;8;0,016427;0,131420;41,07;328,55;
 PN2;Panneau de verre;Verre;ép. 18;30,0;908,0;18,0;2;0,000490;0,000981;1,23;2,45;
 PN3;Panneau de verre;Verre;ép. 18;1293,3;908,0;18,0;6;0,021138;0,126829;52,85;317,07;
 PN4;Panneau de verre;Verre;ép. 18;730,0;908,0;18,0;2;0,011931;0,023862;29,83;59,66;
-Total;;;;;;;109;;0,831881;;2425,55;masse volumique à valider
+Total;;;;;;;109;;0,831880;;2425,56;masse volumique à valider
 
 --- repères en double 0
 "
@@ -4168,9 +4166,8 @@ groupe stainless-brushed section « 80×80 » {"quantity":18,"lengthM":16.444,"m
   PG1 ×8 858×80×80 43.38048 - stock
   PG2 ×10 958×80×80 48.43648 - stock
 groupe stainless-brushed section « Ø42 » {"quantity":3,"lengthM":17.625989,"massKg":187.996095,"massNotes":[]}
-  MC1 ×1 4812.994607×42×42 51.334662 - stock
-  MC2 ×1 4812.994607×42×42 51.334662 - stock
-  MC3 ×1 8000×42×42 85.326772 - stock
+  MC1 ×2 4812.994607×42×42 51.334662 - stock
+  MC2 ×1 8000×42×42 85.326772 - stock
 groupe glass section « ép. 18 » {"quantity":15,"lengthM":13.76,"massKg":531.4536,"massNotes":[]}
   PN1 ×6 1140×808×18 41.4504 - stock
   PN2 ×2 30×908×18 1.2258 - stock
@@ -4200,16 +4197,15 @@ M13;Marche 13;Chêne;;900,0;280,0;80,0;1;0,020160;0,020160;14,11;14,11;masse vol
 M14;Marche 14;Chêne;;900,0;280,0;80,0;1;0,020160;0,020160;14,11;14,11;masse volumique à valider
 PG1;Poteau de garde-corps;Inox brossé;80×80;858,0;80,0;80,0;8;0,005491;0,043930;43,38;347,04;
 PG2;Poteau de garde-corps;Inox brossé;80×80;958,0;80,0;80,0;10;0,006131;0,061312;48,44;484,36;
-MC1;Main courante de garde-corps;Inox brossé;Ø42;4813,0;42,0;42,0;1;0,006498;0,006498;51,33;51,33;
-MC2;Main courante de garde-corps;Inox brossé;Ø42;4813,0;42,0;42,0;1;0,006498;0,006498;51,33;51,33;
-MC3;Main courante de trémie;Inox brossé;Ø42;8000,0;42,0;42,0;1;0,010801;0,010801;85,33;85,33;
+MC1;Main courante de garde-corps;Inox brossé;Ø42;4813,0;42,0;42,0;2;0,006498;0,012996;51,33;102,67;
+MC2;Main courante de trémie;Inox brossé;Ø42;8000,0;42,0;42,0;1;0,010801;0,010801;85,33;85,33;
 PN1;Panneau de verre;Verre;ép. 18;1140,0;808,0;18,0;6;0,016580;0,099481;41,45;248,70;
 PN2;Panneau de verre;Verre;ép. 18;30,0;908,0;18,0;2;0,000490;0,000981;1,23;2,45;
 PN3;Panneau de verre;Verre;ép. 18;963,3;908,0;18,0;6;0,015745;0,094468;39,36;236,17;
 PN4;Panneau de verre;Verre;ép. 18;1080,0;908,0;18,0;1;0,017652;0,017652;44,13;44,13;
 SP1;Sabot de pied du limon central;Acier peint;tôle pliée en U 6 mm, S235;275,4;200,0;6,0;1;0,000326;0,000326;2,56;2,56;
 ST1;Sabot de tête du limon central;Acier peint;tôle pliée en U 6 mm, S235;377,4;200,0;6,0;1;0,000448;0,000448;3,52;3,52;
-Total;;;;;;;55;;0,722167;;1822,73;masse volumique à valider
+Total;;;;;;;55;;0,722167;;1822,74;masse volumique à valider
 
 --- repères en double 0
 "
@@ -4256,9 +4252,8 @@ groupe wood-oak thickness 40 {"quantity":112,"lengthM":96.784,"volumeM3":0.27581
   M13 ×1 900×280×40 7.056 - stock
   M14 ×1 900×280×40 7.056 - stock
 groupe wood-oak thickness 42 {"quantity":3,"lengthM":17.625989,"volumeM3":0.031092,"massKg":16.657882,"massNotes":["masse volumique à valider"]}
-  MC1 ×1 4812.994607×42×42 4.548641 - stock
-  MC2 ×1 4812.994607×42×42 4.548641 - stock
-  MC3 ×1 8000×42×42 7.5606 - stock
+  MC1 ×2 4812.994607×42×42 4.548641 - stock
+  MC2 ×1 8000×42×42 7.5606 - stock
 groupe wood-oak thickness 54 {"quantity":2,"lengthM":9.081613,"volumeM3":0.171642,"massKg":69.84552,"massNotes":["masse volumique à valider"]}
   CE1 ×1 4540.806599×350×54 34.92276 - stock
   CI1 ×1 4540.806599×350×54 34.92276 - stock
@@ -4290,9 +4285,8 @@ M13;Marche 13;Chêne;;900,0;280,0;40,0;1;0,010080;0,010080;7,06;7,06;masse volum
 M14;Marche 14;Chêne;;900,0;280,0;40,0;1;0,010080;0,010080;7,06;7,06;masse volumique à valider
 PG1;Poteau de garde-corps;Chêne;80×80;858,0;80,0;80,0;8;0,005491;0,043930;3,84;30,75;masse volumique à valider
 PG2;Poteau de garde-corps;Chêne;80×80;958,0;80,0;80,0;10;0,006131;0,061312;4,29;42,92;masse volumique à valider
-MC1;Main courante de garde-corps;Chêne;Ø42;4813,0;42,0;42,0;1;0,006498;0,006498;4,55;4,55;masse volumique à valider
-MC2;Main courante de garde-corps;Chêne;Ø42;4813,0;42,0;42,0;1;0,006498;0,006498;4,55;4,55;masse volumique à valider
-MC3;Main courante de trémie;Chêne;Ø42;8000,0;42,0;42,0;1;0,010801;0,010801;7,56;7,56;masse volumique à valider
+MC1;Main courante de garde-corps;Chêne;Ø42;4813,0;42,0;42,0;2;0,006498;0,012996;4,55;9,10;masse volumique à valider
+MC2;Main courante de trémie;Chêne;Ø42;8000,0;42,0;42,0;1;0,010801;0,010801;7,56;7,56;masse volumique à valider
 BA1;Balustre;Chêne;40×40;808,0;40,0;40,0;48;0,001293;0,062054;0,90;43,44;masse volumique à valider
 BA2;Balustre;Chêne;40×40;908,0;40,0;40,0;50;0,001453;0,072640;1,02;50,85;masse volumique à valider
 Total;;;;;;;135;;0,504633;;353,30;masse volumique à valider
@@ -4330,9 +4324,8 @@ groupe steel-painted section « 80×80 » {"quantity":18,"lengthM":16.444,"massK
 groupe steel-painted section « L 40 × 40 × 4 » {"quantity":28,"lengthM":1.975544,"massKg":4.714437,"massNotes":[]}
   CR1 ×28 70.555128×40×40 0.168373 - stock
 groupe steel-painted section « Ø42 » {"quantity":3,"lengthM":17.625989,"massKg":186.806246,"massNotes":[]}
-  MC1 ×1 4812.994607×42×42 51.009759 - stock
-  MC2 ×1 4812.994607×42×42 51.009759 - stock
-  MC3 ×1 8000×42×42 84.786729 - stock
+  MC1 ×2 4812.994607×42×42 51.009759 - stock
+  MC2 ×1 8000×42×42 84.786729 - stock
 groupe steel-painted section « UPN 200 (S235) » {"quantity":2,"lengthM":9.424356,"massKg":238.219455,"massNotes":[]}
   LE1 ×1 4712.178167×200×75 119.109728 - stock
   LI1 ×1 4712.178167×200×75 119.109728 - stock
@@ -4382,9 +4375,8 @@ M13;Marche 13;Chêne;;900,0;280,0;80,0;1;0,020160;0,020160;14,11;14,11;masse vol
 M14;Marche 14;Chêne;;900,0;280,0;80,0;1;0,020160;0,020160;14,11;14,11;masse volumique à valider
 PG1;Poteau de garde-corps;Acier peint;80×80;858,0;80,0;80,0;8;0,005491;0,043930;43,11;344,85;
 PG2;Poteau de garde-corps;Acier peint;80×80;958,0;80,0;80,0;10;0,006131;0,061312;48,13;481,30;
-MC1;Main courante de garde-corps;Acier peint;Ø42;4813,0;42,0;42,0;1;0,006498;0,006498;51,01;51,01;
-MC2;Main courante de garde-corps;Acier peint;Ø42;4813,0;42,0;42,0;1;0,006498;0,006498;51,01;51,01;
-MC3;Main courante de trémie;Acier peint;Ø42;8000,0;42,0;42,0;1;0,010801;0,010801;84,79;84,79;
+MC1;Main courante de garde-corps;Acier peint;Ø42;4813,0;42,0;42,0;2;0,006498;0,012996;51,01;102,02;
+MC2;Main courante de trémie;Acier peint;Ø42;8000,0;42,0;42,0;1;0,010801;0,010801;84,79;84,79;
 PN1;Panneau de verre;Verre;ép. 18;1140,0;808,0;18,0;6;0,016580;0,099481;41,45;248,70;
 PN2;Panneau de verre;Verre;ép. 18;30,0;908,0;18,0;2;0,000490;0,000981;1,23;2,45;
 PN3;Panneau de verre;Verre;ép. 18;963,3;908,0;18,0;6;0,015745;0,094468;39,36;236,17;

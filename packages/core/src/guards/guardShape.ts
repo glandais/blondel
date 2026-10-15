@@ -159,9 +159,59 @@ export function guardShapeDistance(
   return best;
 }
 
-/** Pièces identiques à `tol` près (et `GEOM_EPS`, comme `groupIdenticalFlats`). */
+/**
+ * Pièces identiques à `tol` près (et `GEOM_EPS`, comme `groupIdenticalFlats`) : même résultat
+ * que `guardShapeDistance(a, b) <= tol + GEOM_EPS` (min sur les déplacements de max(résidu,
+ * intrinsèque) ≤ lim ⇔ un déplacement a ses deux termes ≤ lim), calculé au plus court (G2b,
+ * regroupement des repères recalculé à chaque saisie) :
+ * 1. minorant sans déplacement : l'écart de longueur en plan du premier bord (terme d'`intrinsic`)
+ *    ne dépend du déplacement que par l'échange des bords ; s'il dépasse lim pour chaque bord
+ *    candidat, aucun déplacement ne convient ;
+ * 2. par déplacement, les termes intrinsèques (linéaires) d'abord, le résidu (recalage) ensuite ;
+ *    arrêt au premier déplacement accepté.
+ */
 export function sameGuardShape(a: GuardShape, b: GuardShape, tol: Mm): boolean {
-  return guardShapeDistance(a, b) <= tol + GEOM_EPS;
+  if (a.kind !== b.kind || a.key !== b.key) return false;
+  const lim = tol + GEOM_EPS;
+  if (a.kind === "prism" || b.kind === "prism") {
+    return a.kind === "prism" && b.kind === "prism" && Math.abs(a.length - b.length) <= lim;
+  }
+  const panel = a.kind === "panel";
+  // Minorant : marge relative (ordre de sommation inversé par la lecture à rebours), pour ne
+  // jamais écarter un déplacement que le calcul complet accepterait.
+  const La = planLength(a.edges[0]);
+  if (La !== null) {
+    const candidates = panel ? b.edges : [b.edges[0]];
+    const slack = lim + 1e-9 * (1 + La);
+    if (
+      candidates.every((e) => {
+        const Lb = planLength(e);
+        return Lb !== null && Math.abs(La - Lb) > slack;
+      })
+    ) {
+      return false;
+    }
+  }
+  for (const m of GUARD_MOVES) {
+    const B = moved(b.edges, m, panel);
+    if (!(intrinsic(a.edges, B, panel) <= lim)) continue;
+    if (residual(a.edges, B, panel) <= lim) return true;
+  }
+  return false;
+}
+
+/** Longueurs en plan des bords déjà mesurés (les descripteurs sont immuables). */
+const planLengths = new WeakMap<GuardEdge, number>();
+
+/** Longueur en plan d'un bord ; `null` pour un bord vide (pas de minorant). */
+function planLength(e: GuardEdge): number | null {
+  if (e.length === 0) return null;
+  let L = planLengths.get(e);
+  if (L === undefined) {
+    L = last(abscissae(e, true));
+    planLengths.set(e, L);
+  }
+  return L;
 }
 
 /** Bords déplacés (lecture éventuellement inversée, bords bas et haut échangés). */

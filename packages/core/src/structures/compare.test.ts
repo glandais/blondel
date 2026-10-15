@@ -386,6 +386,28 @@ describe("countUniqueParts : règle des repères (F10, C4)", () => {
     expect(countUniqueParts([sized("a", 280, 40), sized("b", 280, 41)], 0.5)).toBe(2);
   });
 
+  it("garde-corps (CG8) : repères distincts comptés, même débit ou non ; autres pièces inchangées", () => {
+    const guard = (id: string, mark: string, length: number): Part => ({
+      ...board(id, length),
+      mark,
+      category: "handrail",
+      family: "guards",
+    });
+    // Même débit, repères distincts (pièces de formes différentes) : deux pièces.
+    expect(countUniqueParts([guard("a", "MC1", 2000), guard("b", "MC2", 2000)], 0.5)).toBe(2);
+    // Débits différents, même repère (pièces identiques à T au descripteur) : une pièce.
+    expect(countUniqueParts([guard("a", "MC1", 2000), guard("b", "MC1", 2003)], 0.5)).toBe(1);
+    // Une pièce de structure de même débit n'est pas comptée avec les garde-corps.
+    expect(
+      countUniqueParts(
+        [guard("a", "MC1", 2000), { ...board("c", 2000), category: "handrail" }],
+        0.5,
+      ),
+    ).toBe(2);
+    // Pièces de structure : chemin inchangé.
+    expect(countUniqueParts([board("x", 915.62), board("y", 915.23)], 0.5)).toBe(1);
+  });
+
   it("la tolérance du profil d'atelier est celle du comparateur", () => {
     const p = base();
     const strict = summarizeVariant({ ...p, workshop: { identicalPartTolerance: 0 } });

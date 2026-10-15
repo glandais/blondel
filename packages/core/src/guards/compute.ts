@@ -25,6 +25,12 @@ import { openingPolygon } from "../headroom/headroom.js";
 import type { Layout, Location, MaterialId, Part, Stepping } from "../model/derived.js";
 import type { Mm, Vec2, Vec3 } from "../model/primitives.js";
 import type { Project, Wall } from "../model/project.js";
+import type { CarriedHandrail } from "../model/plugins.js";
+// `structureCarriedHandrails` lit le registre des structures, rempli par `structures/index.ts`
+// (chargé par l'entrée du paquet et par le pipeline). Pas d'import à effet de bord ici : il
+// formerait le cycle structures → rules/engine → evaluators/guards → guards/compute, qui casse
+// l'initialisation des modules (revue G2b, essayé).
+import { structureCarriedHandrails } from "../structures/registry.js";
 import { resolveWorkshopProfile } from "../workshop/profile.js";
 import { GuardError } from "./errors.js";
 import { autoHandrailBothSides } from "./handrailSides.js";
@@ -107,6 +113,12 @@ interface LineArgs {
   readonly extensionTop?: Mm;
   readonly nosingHeights: readonly { readonly index: number; readonly height: Mm }[];
   readonly fall: Mm;
+  /**
+   * Main courante portée par la structure de ce côté (`structureCarriedHandrails`, décision
+   * G-Q6) : identifiant de sa pièce. La ligne ne produit pas la sienne ; ses contrôles et ses
+   * localisations désignent cette pièce, la géométrie (hauteurs, remplissage) est inchangée.
+   */
+  readonly carriedHandrailId?: string;
 }
 
 interface LineOutput {
@@ -304,22 +316,23 @@ function buildLine(fctx: PartFactoryContext, spec: GuardsSpec, a: LineArgs): Lin
     const p = V.addScaled(path[path.length - 1]!, t, a.extensionTop);
     hPath.push({ x: p.x, y: p.y, z: hPath[hPath.length - 1]!.z });
   }
-  const handrailId = `${a.id}-handrail`;
-  parts.push(
-    sweptMember(
-      fctx,
-      {
-        id: handrailId,
-        prefix: "MC",
-        category: "handrail",
-        name: msg(a.kind === "rake" ? "part.guardHandrail.name" : "part.openingHandrail.name"),
-        material: spec.material,
-      },
-      hPath,
-      hr.section,
-      `|${a.id}`,
-    ),
-  );
+  const handrailId = a.carriedHandrailId ?? `${a.id}-handrail`;
+  if (a.carriedHandrailId === undefined) {
+    parts.push(
+      sweptMember(
+        fctx,
+        {
+          id: handrailId,
+          prefix: "MC",
+          category: "handrail",
+          name: msg(a.kind === "rake" ? "part.guardHandrail.name" : "part.openingHandrail.name"),
+          material: spec.material,
+        },
+        hPath,
+        hr.section,
+      ),
+    );
+  }
 
   // Remplissage par travée.
   const gaps: GapMeasure[] = [];
@@ -868,16 +881,34 @@ function withoutCollinearVertices(poly: readonly Vec2[]): Vec2[] {
   return out;
 }
 
+/** Options de `computeGuards`. */
+export interface ComputeGuardsOptions {
+  /**
+   * Mains courantes portées par la structure (G-Q6). Absent : celles que la structure du projet
+   * déclare (`structureCarriedHandrails`). Le pipeline passe `[]` quand la structure n'a pas
+   * produit la pièce annoncée (structure en échec) : le garde-corps garde alors la sienne.
+   */
+  readonly carried?: readonly CarriedHandrail[];
+}
+
 /** Calcule les garde-corps et mains courantes d'un escalier (voir l'en-tête du module). */
 export function computeGuards(
   project: Project,
   layout: Layout,
   stepping: Stepping,
+  options: ComputeGuardsOptions = {},
 ): GuardsAnalysis {
   const spec: GuardsSpec = project.guards ?? GuardsSpecSchema.parse({});
+  const profile = resolveWorkshopProfile(project.workshop);
+  // Mains courantes portées par la structure (G-Q6) : elles remplacent celle du garde-corps de
+  // leur côté, et leur repère n'est pas réattribué.
+  const carried = options.carried ?? structureCarriedHandrails(project);
   const fctx: PartFactoryContext = {
-    marks: new MarkRegistry(),
-    profile: resolveWorkshopProfile(project.workshop),
+    marks: new MarkRegistry(
+      profile.identicalPartTolerance,
+      carried.map((c) => c.mark),
+    ),
+    profile,
   };
   const notes: Message[] = [];
   const errors: Message[] = [];
@@ -1112,10 +1143,12 @@ export function computeGuards(
           }),
         );
       }
+      const carriedHandrail = carried.find((c) => c.side === analysis.side);
       const out = buildLine(fctx, spec, {
         id,
         kind: "rake",
         side: analysis.side,
+        ...(carriedHandrail ? { carriedHandrailId: carriedHandrail.partId } : {}),
         label,
         path,
         ref,
@@ -1226,7 +1259,6 @@ export function computeGuards(
           },
           path3,
           hr.section,
-          `|${id}`,
         ),
       );
       handrails.push({
@@ -1324,7 +1356,8 @@ export function computeGuards(
     handrails,
     unguardedOpeningEdges,
     openingFall,
-    parts,
+    // Repères attribués une fois toutes les pièces connues (regroupement à T, `marks.ts`).
+    parts: fctx.marks.apply(parts),
     ...(newelTops.size > 0 && spec.posts.newelOverrun !== "off"
       ? {
           newelHandrailTops: [...newelTops]

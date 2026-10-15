@@ -135,12 +135,17 @@ const zeroes = (): Record<Severity, number> => ({ bloquant: 0, avertissement: 0,
  * section, nombre et signature des perçages regroupées autour d'un représentant
  * (`groupNearAnchor`) quand longueur, largeur et épaisseur de débit et positions des perçages le
  * long de la pièce (`drillingPositions`, décision F10 (27)) sont chacune à au plus `tol` de
- * celles de l'ancre. `tol` : `WorkshopProfile.identicalPartTolerance`.
+ * celles de l'ancre. `tol` : `WorkshopProfile.identicalPartTolerance`. Pièces de garde-corps
+ * (`family === "guards"`) : leurs **repères distincts** (CG8 du chantier guard-marks), déjà
+ * regroupés à `tol` par le descripteur de forme (`guards/marks.ts`) ; une seule définition de
+ * l'identité, le `Part` ne portant ni axe ni bords.
  */
 export function countUniqueParts(parts: readonly Part[], tol: Mm): number {
-  const withFlat = parts.filter((p) => p.flat);
+  const guards = new Set(parts.filter((p) => p.family === "guards").map((p) => p.mark)).size;
+  const others = parts.filter((p) => p.family !== "guards");
+  const withFlat = others.filter((p) => p.flat);
   const flatGroups = groupIdenticalFlats(withFlat, tol).length;
-  const rest = parts.filter((p) => !p.flat);
+  const rest = others.filter((p) => !p.flat);
   const groups = groupNearAnchor(
     rest,
     {
@@ -157,7 +162,7 @@ export function countUniqueParts(parts: readonly Part[], tol: Mm): number {
     },
     tol,
   );
-  return flatGroups + groups.length;
+  return guards + flatGroups + groups.length;
 }
 
 /** Coût d'une variante : `null` si le barème est incomplet (champs manquants listés). */

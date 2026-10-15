@@ -62,7 +62,7 @@ exports[`repères de garde-corps des exemples (guard-marks, G2a) > exemple cage-
 
 exports[`repères de garde-corps des exemples (guard-marks, G2a) > exemple demo-cage-arc-glass 1`] = `
 "
-repères 17 ; pièces 38 ; pièces uniques 15 (T = 0.5)
+repères 17 ; pièces 38 ; pièces uniques 17 (T = 0.5)
 PG1 post part.guardPost.name stainless-brushed ×7 858 × 80 × 80
 PG2 post part.guardPost.name stainless-brushed ×1 927.5 × 80 × 80
 MC1 handrail part.guardHandrail.name stainless-brushed ×1 5072.6 × 42 × 42
@@ -85,7 +85,7 @@ PN11 infill part.glassPanel.name glass ×1 35 × 908 × 18
 
 exports[`repères de garde-corps des exemples (guard-marks, G2a) > exemple demo-cage-central-steel 1`] = `
 "
-repères 17 ; pièces 43 ; pièces uniques 11 (T = 0.5)
+repères 17 ; pièces 43 ; pièces uniques 17 (T = 0.5)
 PG1 post part.guardPost.name stainless-brushed ×11 858 × 80 × 80
 MC1 handrail part.guardHandrail.name stainless-brushed ×1 3954.7 × 42 × 42
 PN1 infill part.glassPanel.name glass ×1 1112.7 × 808 × 18
@@ -142,7 +142,7 @@ MC3 handrail part.openingHandrail.name wood-oak ×1 9840 × 42 × 42
 
 exports[`repères de garde-corps des exemples (guard-marks, G2a) > exemple demo-cage-room 1`] = `
 "
-repères 10 ; pièces 19 ; pièces uniques 9 (T = 0.5)
+repères 10 ; pièces 19 ; pièces uniques 10 (T = 0.5)
 PG1 post part.guardPost.name wood-ash ×4 858 × 80 × 80
 MC1 handrail part.guardHandrail.name wood-ash ×1 4130.7 × 42 × 42
 PN1 infill part.glassPanel.name glass ×1 1215.2 × 808 × 18
@@ -175,7 +175,7 @@ PN6 infill part.glassPanel.name glass ×1 31.2 × 908 × 18
 
 exports[`repères de garde-corps des exemples (guard-marks, G2a) > exemple demo-central-wreathed 1`] = `
 "
-repères 15 ; pièces 38 ; pièces uniques 12 (T = 0.5)
+repères 15 ; pièces 38 ; pièces uniques 15 (T = 0.5)
 PG1 post part.guardPost.name stainless-brushed ×9 858 × 80 × 80
 MC1 handrail part.guardHandrail.name stainless-brushed ×1 4274.4 × 42 × 42
 PN1 infill part.glassPanel.name glass ×1 390 × 808 × 18
@@ -196,13 +196,12 @@ PN10 infill part.glassPanel.name glass ×1 1080 × 908 × 18
 
 exports[`repères de garde-corps des exemples (guard-marks, G2a) > exemple demo-erp-grand 1`] = `
 "
-repères 9 ; pièces 42 ; pièces uniques 8 (T = 0.5)
+repères 8 ; pièces 42 ; pièces uniques 8 (T = 0.5)
 PG1 post part.guardPost.name stainless-brushed ×10 858 × 80 × 80
-MC1 handrail part.guardHandrail.name stainless-brushed ×1 5919.3 × 42 × 42
+MC1 handrail part.guardHandrail.name stainless-brushed ×2 5919.3 × 42 × 42
 PN1 infill part.glassPanel.name glass ×8 1129.5 × 808 × 18
-MC2 handrail part.guardHandrail.name stainless-brushed ×1 5919.3 × 42 × 42
 PG2 post part.guardPost.name stainless-brushed ×11 958 × 80 × 80
-MC3 handrail part.openingHandrail.name stainless-brushed ×1 10480 × 42 × 42
+MC2 handrail part.openingHandrail.name stainless-brushed ×1 10480 × 42 × 42
 PN2 infill part.glassPanel.name glass ×2 30 × 908 × 18
 PN3 infill part.glassPanel.name glass ×6 1293.3 × 908 × 18
 PN4 infill part.glassPanel.name glass ×2 730 × 908 × 18
@@ -258,7 +257,7 @@ PN6 infill part.glassPanel.name glass ×1 31.4 × 908 × 18
 
 exports[`repères de garde-corps des exemples (guard-marks, G2a) > exemple demo-quarter-curved 1`] = `
 "
-repères 15 ; pièces 36 ; pièces uniques 12 (T = 0.5)
+repères 15 ; pièces 36 ; pièces uniques 15 (T = 0.5)
 PG1 post part.guardPost.name stainless-brushed ×8 858 × 80 × 80
 MC1 handrail part.guardHandrail.name stainless-brushed ×1 3957.7 × 42 × 42
 PN1 infill part.glassPanel.name glass ×1 1206.9 × 808 × 18
@@ -300,13 +299,12 @@ PN9 infill part.glassPanel.name glass ×1 1080 × 908 × 18
 
 exports[`repères de garde-corps des exemples (guard-marks, G2a) > exemple demo-straight-central-glulam 1`] = `
 "
-repères 9 ; pièces 36 ; pièces uniques 8 (T = 0.5)
+repères 8 ; pièces 36 ; pièces uniques 8 (T = 0.5)
 PG1 post part.guardPost.name stainless-brushed ×8 858 × 80 × 80
-MC1 handrail part.guardHandrail.name stainless-brushed ×1 4813 × 42 × 42
+MC1 handrail part.guardHandrail.name stainless-brushed ×2 4813 × 42 × 42
 PN1 infill part.glassPanel.name glass ×6 1140 × 808 × 18
-MC2 handrail part.guardHandrail.name stainless-brushed ×1 4813 × 42 × 42
 PG2 post part.guardPost.name stainless-brushed ×10 958 × 80 × 80
-MC3 handrail part.openingHandrail.name stainless-brushed ×1 8000 × 42 × 42
+MC2 handrail part.openingHandrail.name stainless-brushed ×1 8000 × 42 × 42
 PN2 infill part.glassPanel.name glass ×2 30 × 908 × 18
 PN3 infill part.glassPanel.name glass ×6 963.3 × 908 × 18
 PN4 infill part.glassPanel.name glass ×1 1080 × 908 × 18
@@ -315,26 +313,24 @@ PN4 infill part.glassPanel.name glass ×1 1080 × 908 × 18
 
 exports[`repères de garde-corps des exemples (guard-marks, G2a) > exemple demo-straight-cut-oak 1`] = `
 "
-repères 7 ; pièces 119 ; pièces uniques 6 (T = 0.5)
+repères 6 ; pièces 119 ; pièces uniques 6 (T = 0.5)
 PG1 post part.guardPost.name wood-oak ×8 858 × 80 × 80
-MC1 handrail part.guardHandrail.name wood-oak ×1 4813 × 42 × 42
+MC1 handrail part.guardHandrail.name wood-oak ×2 4813 × 42 × 42
 BA1 baluster part.baluster.name wood-oak ×48 808 × 40 × 40
-MC2 handrail part.guardHandrail.name wood-oak ×1 4813 × 42 × 42
 PG2 post part.guardPost.name wood-oak ×10 958 × 80 × 80
-MC3 handrail part.openingHandrail.name wood-oak ×1 8000 × 42 × 42
+MC2 handrail part.openingHandrail.name wood-oak ×1 8000 × 42 × 42
 BA2 baluster part.baluster.name wood-oak ×50 908 × 40 × 40
 "
 `;
 
 exports[`repères de garde-corps des exemples (guard-marks, G2a) > exemple demo-straight-loft 1`] = `
 "
-repères 9 ; pièces 36 ; pièces uniques 8 (T = 0.5)
+repères 8 ; pièces 36 ; pièces uniques 8 (T = 0.5)
 PG1 post part.guardPost.name steel-painted ×8 858 × 80 × 80
-MC1 handrail part.guardHandrail.name steel-painted ×1 4813 × 42 × 42
+MC1 handrail part.guardHandrail.name steel-painted ×2 4813 × 42 × 42
 PN1 infill part.glassPanel.name glass ×6 1140 × 808 × 18
-MC2 handrail part.guardHandrail.name steel-painted ×1 4813 × 42 × 42
 PG2 post part.guardPost.name steel-painted ×10 958 × 80 × 80
-MC3 handrail part.openingHandrail.name steel-painted ×1 8000 × 42 × 42
+MC2 handrail part.openingHandrail.name steel-painted ×1 8000 × 42 × 42
 PN2 infill part.glassPanel.name glass ×2 30 × 908 × 18
 PN3 infill part.glassPanel.name glass ×6 963.3 × 908 × 18
 PN4 infill part.glassPanel.name glass ×1 1080 × 908 × 18

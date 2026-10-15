@@ -175,6 +175,24 @@ export interface StructureCapabilities<P = unknown> {
    * (cage issue de volées) n'est pas concerné. Ajout rétrocompatible.
    */
   readonly cage?: readonly CageFeature[];
+  /**
+   * Mains courantes que la structure construit elle-même (côté de l'escalier, identifiant et
+   * repère de sa pièce) : elles **remplacent** celle du garde-corps de ce côté (décision G-Q6 du
+   * chantier guard-marks) ; le garde-corps n'en produit pas, ses contrôles désignent la pièce de
+   * la structure et son repérage ne réattribue pas le repère. Lu sans construire de modèle
+   * (avant le plugin, par l'étape garde-corps et par le contrôle) : ne dépendre que de
+   * paramètres dont le défaut ne dépend pas du contexte. Absent : aucune. Ajout rétrocompatible.
+   */
+  carriedHandrails?(params: P): readonly CarriedHandrail[];
+}
+
+/** Main courante construite par une structure (`StructureCapabilities.carriedHandrails`). */
+export interface CarriedHandrail {
+  readonly side: "inner" | "outer";
+  /** Identifiant de la pièce de la structure. */
+  readonly partId: string;
+  /** Repère de la pièce de la structure. */
+  readonly mark: string;
 }
 
 /** Tracé vu par les capacités, sans modèle : type de tracé et nombre de tournants. */

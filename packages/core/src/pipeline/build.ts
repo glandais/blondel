@@ -73,7 +73,7 @@ import type {
 import { CAGE_FEATURE_LABELS, cageFeatures, type CageFeature } from "../model/cageFeatures.js";
 import type { StructureContext, StructureKind } from "../model/plugins.js";
 import { isCageLayout, isHelicalLayout, type Project } from "../model/project.js";
-import type { PartAssembly } from "../model/plugins.js";
+import type { CarriedHandrail, PartAssembly } from "../model/plugins.js";
 import { resolveLegLengths, resolveTargetGoing } from "../layout/resolve.js";
 import { resolveStraightLengths } from "../layout/cage/section.js";
 import { buildBasicParts } from "../parts/basic.js";
@@ -90,6 +90,7 @@ import type { GuardsAnalysis } from "../guards/types.js";
 import {
   getStructure,
   StructureError,
+  structureCarriedHandrails,
   structureUnsupportedCageFeatures,
 } from "../structures/index.js";
 import { ensureMass, normalizeWoodQuantities } from "../structures/quantities.js";
@@ -413,6 +414,8 @@ const caches = {
   parts: new LastValueCache<Stage<PartsStage>>(),
   structure: new LastValueCache<Stage<StructureStage>>(),
   guards: new LastValueCache<Stage<GuardsAnalysis>>(),
+  /** Garde-corps sans main courante portée, quand la structure ne l'a pas produite (G-Q6). */
+  guardsUncarried: new LastValueCache<Stage<GuardsAnalysis>>(),
   headroom: new LastValueCache<Stage<HeadroomAnalysis | null>>(),
   compliance: new LastValueCache<Stage<ComplianceStage>>(),
   /** Pièces finales avec `assembledWith` normalisé (`pipeline/assembly.ts`). */
@@ -799,30 +802,39 @@ export function buildModel(project: Project, options: BuildModelOptions = {}): M
 
   // 3 (préalable). Garde-corps, calculés avant la structure (ils n'en dépendent pas) : la
   // structure lit le dessus des mains courantes aux poteaux d'angle (QUESTIONS A3).
-  const guardsStage: Stage<GuardsAnalysis> | undefined =
-    complete && project.guards
-      ? run(
-          caches.guards,
-          [
-            project.guards,
-            layout,
-            stepping,
-            ...siteKey,
-            stair.layout,
-            ...workshopKey,
-            // `handrail.wallSides: auto` dépend des contextes réglementaires (QUESTIONS A2) :
-            // sans cette clé, changer de contexte (logement → ERP) rendait l'ancien résultat.
-            autoHandrailBothSides(project, stepping),
-          ],
-          () =>
-            attempt(STAGE_LABELS.guards, (): GuardsAnalysis => {
-              const g = computeGuards(project, layout, stepping);
-              // Famille explicite des pièces de garde-corps (QUESTIONS D6).
-              return { ...g, parts: g.parts.map((p) => withFamily(p, "guards")) };
-            }),
-        )
-      : undefined;
-  const newelHandrailTops = stableNewelTops(guardsStage?.value?.newelHandrailTops);
+  // Mains courantes portées par la structure (G-Q6) : celle du garde-corps de ce côté n'est pas
+  // produite. Si la structure ne produit pas la pièce annoncée (structure en échec), l'étape est
+  // recalculée sans elles plus bas (`guardsUncarried`).
+  const carried = complete && project.guards ? structureCarriedHandrails(project) : [];
+  const guardsStageWith = (
+    cache: LastValueCache<Stage<GuardsAnalysis>>,
+    carriedHere: readonly CarriedHandrail[],
+  ): Stage<GuardsAnalysis> =>
+    run(
+      cache,
+      [
+        project.guards,
+        layout,
+        stepping,
+        ...siteKey,
+        stair.layout,
+        ...workshopKey,
+        // `handrail.wallSides: auto` dépend des contextes réglementaires (QUESTIONS A2) :
+        // sans cette clé, changer de contexte (logement → ERP) rendait l'ancien résultat.
+        autoHandrailBothSides(project, stepping!),
+        // Basculer `handrail.enabled` d'`helical-core` retire ou rend celle du garde-corps.
+        carriedHere.map((c) => `${c.side}:${c.partId}:${c.mark}`).join("|"),
+      ],
+      () =>
+        attempt(STAGE_LABELS.guards, (): GuardsAnalysis => {
+          const g = computeGuards(project, layout!, stepping!, { carried: carriedHere });
+          // Famille explicite des pièces de garde-corps (QUESTIONS D6).
+          return { ...g, parts: g.parts.map((p) => withFamily(p, "guards")) };
+        }),
+    );
+  const carriedStage: Stage<GuardsAnalysis> | undefined =
+    complete && project.guards ? guardsStageWith(caches.guards, carried) : undefined;
+  const newelHandrailTops = stableNewelTops(carriedStage?.value?.newelHandrailTops);
 
   // 3. Pièces de base, puis structure (plugin) et grandeurs de nomenclature.
   let parts: readonly Part[] = [];
@@ -928,7 +940,13 @@ export function buildModel(project: Project, options: BuildModelOptions = {}): M
   /** Pièces avant les garde-corps (résultat mémoïsé de l'étape structure), clé des assemblages. */
   const structureParts = parts;
 
-  // 3 bis. Garde-corps et mains courantes (pièces ajoutées après la structure).
+  // 3 bis. Garde-corps et mains courantes (pièces ajoutées après la structure). Main courante
+  // portée annoncée mais absente des pièces de la structure (structure en échec, revue G2b) :
+  // garde-corps recalculés sans main courante portée, pour que le côté garde la sienne et que le
+  // contrôle ne désigne pas une pièce absente.
+  const carriedMissing = carried.some((c) => !structureParts.some((p) => p.id === c.partId));
+  const guardsStage =
+    carriedStage && carriedMissing ? guardsStageWith(caches.guardsUncarried, []) : carriedStage;
   let guards: GuardsAnalysis | null | undefined;
   let guardResults: readonly RuleResult[] = [];
   if (guardsStage && stepping) {

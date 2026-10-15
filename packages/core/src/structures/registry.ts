@@ -6,10 +6,11 @@
  * base seules) et ne peut pas être enregistré.
  */
 import { MessageError, msg, type Message } from "@blondel/i18n";
-import { CAGE_FEATURES, type CageFeature } from "../model/cageFeatures.js";
+import { CAGE_FEATURES, cageFeatures, type CageFeature } from "../model/cageFeatures.js";
 import type { Mm } from "../model/primitives.js";
-import type { Project } from "../model/project.js";
+import { isCageLayout, type Project } from "../model/project.js";
 import type {
+  CarriedHandrail,
   StructureKind,
   StructureLayoutKind,
   StructureLayoutTraits,
@@ -134,6 +135,34 @@ export function structureLateralThickness(
   if (!f) return { inner: 0, outer: 0 };
   const parsed = plugin.paramsSchema.safeParse(params ?? {});
   return parsed.success ? f(parsed.data) : null;
+}
+
+/**
+ * Mains courantes que la structure du projet construit elle-même
+ * (`capabilities.carriedHandrails`, décision G-Q6) : elles remplacent celle du garde-corps de ce
+ * côté. Seule définition, lue par l'étape garde-corps (`computeGuards`), donc aussi par le
+ * contrôle quand il la recalcule. Vide si la structure ne sera pas construite : `none`, plugin
+ * inconnu, paramètres invalides (erreur de structure), tracé non accepté, cage saisie refusée,
+ * capacité qui lève.
+ */
+export function structureCarriedHandrails(project: Project): readonly CarriedHandrail[] {
+  const { kind, params } = project.stair.structure;
+  if (kind === "none") return [];
+  const plugin = registry.get(kind);
+  const f = plugin?.capabilities?.carriedHandrails;
+  if (!plugin || !f) return [];
+  if (!structureAcceptsLayout(kind, projectLayoutTraits(project).kind)) return [];
+  const layout = project.stair.layout;
+  if (isCageLayout(layout) && !structureAcceptsCage(kind, cageFeatures(layout))) return [];
+  const parsed = plugin.paramsSchema.safeParse(params ?? {});
+  if (!parsed.success) return [];
+  // Lu dans la clé de mémoïsation de `buildModel`, hors de `attempt` : un plugin qui lève ne
+  // doit pas faire lever le pipeline (`buildModel` ne lève jamais) ; aucune main courante portée.
+  try {
+    return f(parsed.data);
+  } catch {
+    return [];
+  }
 }
 
 /**

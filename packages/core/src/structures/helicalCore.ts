@@ -860,8 +860,8 @@ export function buildHelicalCore(
     const tau = b / (radius * radius + b * b);
     const area = Math.abs(signedArea(section.outer));
     const base = {
-      id: "helical-handrail",
-      mark: "MC1",
+      id: HELICAL_HANDRAIL_ID,
+      mark: HELICAL_HANDRAIL_MARK,
       category: "handrail" as const,
       name: msg("structure.helicalCore.part.handrail"),
       solid: { kind: "sweep" as const, path, section },
@@ -970,6 +970,10 @@ export function buildHelicalCore(
   };
 }
 
+/** Identifiant et repère de la main courante hélicoïdale (`carriedHandrails`, G-Q6). */
+export const HELICAL_HANDRAIL_ID = "helical-handrail";
+export const HELICAL_HANDRAIL_MARK = "MC1";
+
 export const HELICAL_CORE: StructureKind<HelicalCoreParams> = {
   kind: "helical-core",
   labelKey: "structure.helicalCore.label",
@@ -989,6 +993,12 @@ export const HELICAL_CORE: StructureKind<HelicalCoreParams> = {
       inner: 0,
       outer: p.outerStringer.enabled ? p.outerStringer.thickness : 0,
     }),
+    // Main courante hélicoïdale côté extérieur : elle remplace celle du garde-corps (G-Q6).
+    // `handrail.enabled` a un défaut fixe (`defaults(ctx)` ne touche que le limon extérieur).
+    carriedHandrails: (p) =>
+      p.handrail.enabled
+        ? [{ side: "outer", partId: HELICAL_HANDRAIL_ID, mark: HELICAL_HANDRAIL_MARK }]
+        : [],
   },
 };
 
