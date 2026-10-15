@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import fc from "fast-check";
 import { beforeEach, describe, expect, it } from "vitest";
 import * as V from "../geom2d/vec.js";
@@ -6,12 +9,14 @@ import { computeLayout } from "../layout/layout.js";
 import type { Part } from "../model/derived.js";
 import { ProjectSchema, type Project, type ProjectInput } from "../model/project.js";
 import { buildModel, clearModelCache } from "../pipeline/build.js";
+import { parseProjectText } from "../project/parse.js";
 import { createProject, PRESET_IDS } from "../project/presets.js";
 import { computeStepping } from "../stepping/stepping.js";
 import { makeHelicalProject } from "../layout/helical-test-helpers.js";
 import { makeSteppingProject, stairArb } from "../stepping/test-helpers.js";
 import { computeGuards } from "./compute.js";
 import { GuardError } from "./errors.js";
+import { guardRealStock, guardSizeOfPart } from "./guardShape.testing.js";
 import { jourPostClashes } from "./checks.js";
 import { isNarrowJourNote, jourWidth } from "./jour.js";
 import { GuardsSpecSchema } from "./spec.js";
@@ -532,18 +537,61 @@ describe("computeGuards — mains courantes des deux côtés (QUESTIONS A2)", ()
   });
 });
 
-describe("computeGuards — pièces identiques (QUESTIONS D1)", () => {
-  it("même repère ⇒ même débit et mêmes grandeurs, exactement", () => {
-    const a = analyze(withGuards(createProject("quarter-left"), {}));
-    const byMark = new Map<string, Part>();
-    for (const q of a.parts) {
-      const first = byMark.get(q.mark);
-      if (!first) byMark.set(q.mark, q);
-      else {
-        expect(q.stock, q.id).toEqual(first.stock);
-        expect(q.quantities, q.id).toEqual(first.quantities);
-      }
+describe("computeGuards — pièces identiques (CG3, CG4)", () => {
+  /**
+   * Même repère ⇒ même débit et mêmes grandeurs, exactement, et ce débit est le débit réel du
+   * représentant : la pièce de plus petite taille du repère (longueur, aire nette d'un panneau).
+   */
+  const expectRepresentativeStock = (parts: readonly Part[]): number => {
+    const byMark = new Map<string, Part[]>();
+    for (const q of parts) {
+      // Pièces de garde-corps seules (famille posée par le pipeline, absente de `computeGuards`).
+      if (q.family !== undefined && q.family !== "guards") continue;
+      byMark.set(q.mark, [...(byMark.get(q.mark) ?? []), q]);
     }
+    let shared = 0;
+    for (const [mark, g] of byMark) {
+      const [first, ...rest] = g;
+      for (const q of rest) {
+        expect(q.stock, q.id).toEqual(first!.stock);
+        expect(q.quantities, q.id).toEqual(first!.quantities);
+      }
+      if (g.length > 1) shared++;
+      const smallest = g.reduce((a, b) => (guardSizeOfPart(b)! < guardSizeOfPart(a)! ? b : a));
+      const real = guardRealStock(smallest)!;
+      expect(first!.stock!.length, mark).toBeCloseTo(real[0], 6);
+      expect(first!.stock!.width, mark).toBeCloseTo(real[1], 6);
+      expect(first!.stock!.thickness, mark).toBeCloseTo(real[2], 6);
+    }
+    return shared;
+  };
+
+  it("même repère ⇒ même débit et mêmes grandeurs que le représentant", () => {
+    const a = analyze(withGuards(createProject("quarter-left"), {}));
+    expect(expectRepresentativeStock(a.parts)).toBeGreaterThan(0);
+  });
+
+  it("demo-central-glulam en lisses à T = 0,5 : LS2 débité sur la plus courte (rail-11), pas sur la première (rail-1)", () => {
+    const d = JSON.parse(
+      readFileSync(
+        resolve(
+          dirname(fileURLToPath(import.meta.url)),
+          "../../../../examples/demo-central-glulam.blondel.json",
+        ),
+        "utf8",
+      ),
+    );
+    d.guards = { ...(d.guards ?? {}), infill: { kind: "rails" } };
+    d.workshop = { ...(d.workshop ?? {}), identicalPartTolerance: 0.5 };
+    const m = buildModel(parseProjectText(JSON.stringify(d)), { memo: false });
+    expect(expectRepresentativeStock(m.parts)).toBeGreaterThan(0);
+    const ls2 = m.parts.filter((q) => q.mark === "LS2");
+    expect(ls2).toHaveLength(25);
+    const first = ls2.find((q) => q.id === "guard-outer-1-rail-1")!;
+    const shortest = ls2.find((q) => q.id === "guard-outer-1-rail-11")!;
+    expect(guardSizeOfPart(first)!).toBeCloseTo(1345.8087, 4);
+    expect(guardSizeOfPart(shortest)!).toBeCloseTo(1345.7363, 4);
+    for (const q of ls2) expect(q.stock!.length, q.id).toBeCloseTo(1345.7363, 4);
   });
 
   it("masse renseignée pour toutes les pièces, quel que soit le matériau (QUESTIONS A6)", () => {

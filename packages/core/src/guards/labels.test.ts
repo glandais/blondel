@@ -84,6 +84,16 @@ describe("libellés des garde-corps (ADR-0007)", () => {
     );
   });
 
+  it("remarque de main courante portée par la structure (G-Q12) : français et anglais", () => {
+    const note = msg("guard.note.carriedHandrail", { side: sideLabel("outer") });
+    expect(fr(note)).toBe(
+      "Main courante côté extérieur portée par la structure : ni le garde-corps ni le mur de ce côté n'en reçoivent une autre.",
+    );
+    expect(en.t(note)).toBe(
+      "Handrail (outer side): carried by the structure; neither the guard nor the wall on that side gets another one.",
+    );
+  });
+
   it("dédoublonnage structurel des messages", () => {
     const a = msg("guard.note.newelAsPost", { side: sideLabel("inner") });
     const b = msg("guard.note.newelAsPost", { side: sideLabel("inner") });

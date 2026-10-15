@@ -16,15 +16,21 @@
  *   d'une barre, aire nette d'un panneau). Numéros par préfixe dans l'ordre de première
  *   apparition des groupes dans les pièces ; numéros réservés sautés (repère d'une main courante
  *   portée par la structure, G-Q6).
- * - **Débit et grandeurs** : ceux de la **première pièce** du groupe dans l'ordre des pièces
- *   (QUESTIONS D1 : une seule ligne de fiche par repère), recopiés sur les autres membres.
+ * - **Débit, grandeurs et désignation** (CG3, CG4, CG5 ; QUESTIONS D1 remplacée) : ceux du
+ *   **représentant** du groupe, son ancre, recopiés sur les autres membres par `unifyMarkGroup`
+ *   (l'utilitaire de l'acier) ; le solide reste celui de la pièce réelle. Le représentant est la
+ *   plus courte des barres et prismes (PG, BA, LS, CA, MC) et la plus petite par l'aire nette des
+ *   panneaux (PN). Le débit recopié d'une barre n'est jamais plus long que la pièce réelle ; celui
+ *   d'un panneau peut dépasser une autre pièce du repère sur une cote (longueur en plan ou
+ *   hauteur), d'au plus T, la forme étant comparée à T (QUESTIONS G-Q14). Règle à confirmer par
+ *   un atelier (`MARK_REPRESENTATIVE_PROVENANCE`, `workshop/profile.ts`).
  *
  * Fonctions pures, sans texte affiché ; elles ne lèvent pas.
  */
 import { GEOM_EPS } from "../geom2d/tolerance.js";
 import type { Part } from "../model/derived.js";
 import type { Mm } from "../model/primitives.js";
-import { cmpStr, ranksWithin } from "../structures/steelCommon.js";
+import { cmpStr, ranksWithin, unifyMarkGroup } from "../structures/steelCommon.js";
 import { sameGuardShape, type GuardShape } from "./guardShape.js";
 
 /** Pièce à repérer. */
@@ -122,8 +128,10 @@ export class MarkRegistry {
   }
 
   /**
-   * Pièces repérées : `parts` (dans cet ordre) avec repère, débit et grandeurs de la première
-   * pièce de leur groupe. Une pièce non enregistrée est rendue telle quelle.
+   * Pièces repérées : `parts` (dans cet ordre) avec repère, puis débit, grandeurs et désignation
+   * commune (`markName`) du représentant de leur groupe, son ancre (la plus courte, ou la plus
+   * petite par l'aire nette d'un panneau ; règle à confirmer par un atelier,
+   * `MARK_REPRESENTATIVE_PROVENANCE`). Une pièce non enregistrée est rendue telle quelle.
    */
   apply(parts: readonly Part[]): Part[] {
     const at: number[] = [];
@@ -142,17 +150,14 @@ export class MarkRegistry {
       while (this.reserved.has(`${prefix}${n}`)) n++;
       counters.set(prefix, n);
       const mark = `${prefix}${n}`;
-      // QUESTIONS D1 : débit et grandeurs de la première pièce du groupe.
-      const first = parts[at[g.members[0]!]!]!;
-      for (const m of g.members) {
-        const i = at[m]!;
-        out[i] = {
-          ...parts[i]!,
-          mark,
-          stock: first.stock ? { ...first.stock } : first.stock,
-          quantities: { ...first.quantities },
-        };
-      }
+      const idx = g.members.map((m) => at[m]!);
+      for (const i of idx) out[i] = { ...parts[i]!, mark };
+      // CG3, CG4 : débit et grandeurs du représentant (l'ancre), recopiés sur chaque membre.
+      const unified = unifyMarkGroup(
+        idx.map((i) => out[i]!),
+        out[at[g.anchor]!]!,
+      );
+      idx.forEach((i, k) => (out[i] = unified[k]!));
     }
     return out;
   }

@@ -623,6 +623,7 @@
   "guard.note.autoBothMissingTwo": "“Auto” handrail: MC_DEUX_COTES requires a handrail on both sides, but the {first} and the {second} have neither a wall nor a guard to carry it.",
   "guard.note.autoBothSides": "“Auto” handrail: fitted on both sides (MC_DEUX_COTES, new public building (French ERP) or common parts of a residential building (BHC)); choose one side to go back to a single handrail.",
   "guard.note.cables": "Cables: treated as rails (SPEC X12); their gaps must not increase over time (slackening, NF P01-012:2024) — provide a re-tensioning device.",
+  "guard.note.carriedHandrail": "Handrail ({side}): carried by the structure; neither the guard nor the wall on that side gets another one.",
   "guard.note.continuedByOpening": "Guard ({side}): continued at the top by the stairwell opening guard ({length} mm), without its own handrail extension.",
   "guard.note.glass": "Glass (V1): only clearances and gaps are checked; product (laminated 1B1, NF DTU 39 P5), clamps and NF P01-013 tests not verified.",
   "guard.note.helicalColumn": "Spiral stair with centre column: no guard or handrail along the column (no void on that side).",

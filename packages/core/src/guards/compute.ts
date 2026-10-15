@@ -13,7 +13,10 @@
  *    tient lieu côté jour (pas de pièce générée par les garde-corps).
  * 5. **Remplissage** par travée (entre poteaux) et **vides analytiques** (voir `types.ts`).
  * 6. **Mains courantes** : continues (balayage `sweep`) sur chaque garde-corps, prolongées
- *    horizontalement aux extrémités de l'escalier ; murales selon `handrail.wallSides`.
+ *    horizontalement aux extrémités de l'escalier ; murales selon `handrail.wallSides`. Un côté
+ *    dont la main courante est portée par la structure (G-Q6) n'en reçoit pas d'autre, ni sur le
+ *    garde-corps ni au mur (G-Q13) : ses tronçons muraux restent pour le contrôle, rattachés à la
+ *    pièce de la structure (`HandrailRun.carried`), et une remarque le signale (G-Q12).
  *
  * Aucune valeur métier en dur : hauteurs, sections, entraxes et jeux viennent de la
  * spécification (`spec.ts`, défauts sourcés ou « à valider ») ; les seuils de contrôle sont lus
@@ -1167,6 +1170,7 @@ export function computeGuards(
         partId: out.run.handrailPartId!,
         side: analysis.side,
         onGuard: true,
+        ...(carriedHandrail ? { carried: true as const } : {}),
         from: iv.from,
         to: iv.to,
         nosingHeights,
@@ -1231,6 +1235,33 @@ export function computeGuards(
         msg("guard.line.wallHandrail", { side: sideLabel(analysis.side) }),
       );
       if (portion.path.length < 2) continue;
+      const id = `handrail-wall-${analysis.side}-${wallNo}`;
+      const run = {
+        id,
+        side: analysis.side,
+        onGuard: false,
+        from: iv.from,
+        to: iv.to,
+        nosingHeights: portion.nosings.map((k) => ({
+          index: k,
+          height: portion.nosingRef(k) + hr.height - stepping.nosings[k]!.z,
+        })),
+        ...(portion.touchesBottom ? { extensionBottom: ext.bottom } : {}),
+        ...(portion.touchesTop ? { extensionTop: ext.top } : {}),
+        sectionWidth: hw,
+        intrusion: Math.max(0, hr.wallClearance + hw - face),
+      };
+      // G-Q13 : main courante de ce côté portée par la structure, pas de pièce murale. Le
+      // tronçon est gardé pour le contrôle (la main courante portée est continue sur le côté,
+      // MC_DISCONTINUITE et MC_PROLONGEMENT restent ceux d'une main courante continue, G-Q11),
+      // rattaché à la pièce de la structure, sans supports (`carried`), et sans dégagement au mur :
+      // aucune main courante n'est fixée au mur de ce côté, MC_DEGAGEMENT_MUR ne le mesure pas
+      // (G-Q15).
+      const carriedHandrail = carried.find((c) => c.side === analysis.side);
+      if (carriedHandrail) {
+        handrails.push({ ...run, partId: carriedHandrail.partId, carried: true });
+        continue;
+      }
       const path3: Vec3[] = portion.path.map((p, i) => ({
         x: p.x,
         y: p.y,
@@ -1246,7 +1277,6 @@ export function computeGuards(
         const p = V.addScaled(portion.path[portion.path.length - 1]!, t, ext.top);
         path3.push({ x: p.x, y: p.y, z: path3[path3.length - 1]!.z });
       }
-      const id = `handrail-wall-${analysis.side}-${wallNo}`;
       parts.push(
         sweptMember(
           fctx,
@@ -1261,23 +1291,7 @@ export function computeGuards(
           hr.section,
         ),
       );
-      handrails.push({
-        id,
-        partId: id,
-        side: analysis.side,
-        onGuard: false,
-        from: iv.from,
-        to: iv.to,
-        nosingHeights: portion.nosings.map((k) => ({
-          index: k,
-          height: portion.nosingRef(k) + hr.height - stepping.nosings[k]!.z,
-        })),
-        ...(portion.touchesBottom ? { extensionBottom: ext.bottom } : {}),
-        ...(portion.touchesTop ? { extensionTop: ext.top } : {}),
-        wallClearance: hr.wallClearance,
-        sectionWidth: hw,
-        intrusion: Math.max(0, hr.wallClearance + hw - face),
-      });
+      handrails.push({ ...run, partId: id, wallClearance: hr.wallClearance });
       if (iv.wallId === undefined) {
         notes.push(msg("guard.note.wallHandrailAssumedWall", { side: sideLabel(analysis.side) }));
       }
@@ -1326,6 +1340,13 @@ export function computeGuards(
       });
       runs.push(out.run);
       parts.push(...out.parts);
+    }
+  }
+
+  // G-Q12 : main courante portée par la structure sur un côté équipé (garde-corps ou mur).
+  for (const c of carried) {
+    if (handrails.some((h) => h.partId === c.partId)) {
+      notes.push(msg("guard.note.carriedHandrail", { side: sideLabel(c.side) }));
     }
   }
 

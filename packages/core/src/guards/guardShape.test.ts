@@ -13,7 +13,7 @@ import { flattenCurve, makeCurve } from "../geom2d/curve.js";
 import { GEOM_EPS } from "../geom2d/tolerance.js";
 import type { Part } from "../model/derived.js";
 import type { Mm, Vec2, Vec3 } from "../model/primitives.js";
-import type { Project } from "../model/project.js";
+import { ProjectSchema, type Project, type ProjectInput } from "../model/project.js";
 import { buildModel } from "../pipeline/build.js";
 import { parseProjectText } from "../project/parse.js";
 import { createProject } from "../project/presets.js";
@@ -27,8 +27,16 @@ import {
   type GuardMove,
   type GuardShape,
 } from "./guardShape.js";
-import { guardMarkEntryOfPart, guardShapeOfPart } from "./guardShape.testing.js";
-import { groupGuardMarks, type GuardMarkEntry } from "./marks.js";
+import {
+  GUARD_MARK_PREFIXES,
+  expectMarkNames,
+  expectMarksUnified,
+} from "../structures/marks.testing.js";
+import {
+  expectGuardMarksOneGroup,
+  expectGuardStockNotLarger,
+  guardShapeOfPart,
+} from "./guardShape.testing.js";
 import {
   MarkRegistry,
   panelMember,
@@ -832,9 +840,10 @@ describe("descripteur de forme : exemples", () => {
   /**
    * Règle du repérage (G2b) sur tous les exemples : chaque repère est un seul groupe autour de
    * son ancre (recalculée par `groupGuardMarks`), et aucune paire d'ancres de repères distincts
-   * de même clé n'est identique à T (MC1 / MC2 des exemples droits réunies, G-Q5).
+   * de même clé n'est identique à T (MC1 / MC2 des exemples droits réunies, G-Q5). Débit du
+   * représentant (G2c, CG3, CG4) : jamais plus grand que la pièce réelle, cote par cote.
    */
-  it("exemples : chaque repère tient à T autour de son ancre, aucun repère distinct identique à T", () => {
+  it("exemples : chaque repère tient à T autour de son ancre, aucun repère distinct identique à T, débit jamais plus grand", () => {
     const projects: [string, Project][] = [
       ...readdirSync(EXAMPLES_DIR)
         .filter((f) => f.endsWith(SUFFIX))
@@ -849,35 +858,76 @@ describe("descripteur de forme : exemples", () => {
       ["préréglage helical", createProject("helical")],
     ];
     const near: string[] = [];
+    let checked = 0;
     for (const [name, p] of projects) {
       const T = resolveWorkshopProfile(p.workshop).identicalPartTolerance;
-      const marks = guardMarks(buildModel(p, { memo: false }).parts);
-      const anchors: { mark: string; entry: GuardMarkEntry }[] = [];
-      for (const [mark, ps] of marks) {
-        const entries = ps.map((x) => {
-          const e = guardMarkEntryOfPart(x);
-          expect(e, `${name} ${x.id}`).not.toBeNull();
-          return e!;
-        });
-        const groups = groupGuardMarks(entries, T);
-        expect(groups, `${name} ${mark}`).toHaveLength(1);
-        const anchor = entries[groups[0]!.anchor]!;
-        for (const e of entries) {
-          expect(sameGuardShape(anchor.shape, e.shape, T), `${name} ${mark} ${e.id}`).toBe(true);
-        }
-        anchors.push({ mark, entry: anchor });
-      }
-      for (let i = 0; i < anchors.length; i++) {
-        for (let j = i + 1; j < anchors.length; j++) {
-          const a = anchors[i]!;
-          const b = anchors[j]!;
-          if (a.entry.key !== b.entry.key) continue;
-          if (sameGuardShape(a.entry.shape, b.entry.shape, T)) {
-            near.push(`${name} ${a.mark}~${b.mark}`);
-          }
-        }
-      }
+      const model = buildModel(p, { memo: false });
+      near.push(...expectGuardMarksOneGroup(model, T, name));
+      checked += expectGuardStockNotLarger(model, GEOM_EPS, GUARD_MARK_PREFIXES);
     }
     expect(near).toEqual([]);
+    expect(checked).toBeGreaterThan(0);
   });
+});
+
+describe("repères de garde-corps : propriété sur des variantes (G2c, CG3 à CG6)", () => {
+  /** Projets à garde-corps : exemples qui en ont, `j5a-helicoidal` équipé, préréglage helical. */
+  const BASES: readonly (readonly [string, () => ProjectInput])[] = [
+    ...readdirSync(EXAMPLES_DIR)
+      .filter((f) => f.endsWith(SUFFIX))
+      .sort()
+      .map(
+        (f) =>
+          [f, JSON.parse(readFileSync(join(EXAMPLES_DIR, f), "utf8")) as ProjectInput] as const,
+      )
+      .filter(([, d]) => d.guards !== undefined)
+      .map(([f, d]) => [f, () => structuredClone(d)] as const),
+    [
+      "j5a-helicoidal + garde-corps",
+      () => ({
+        ...(JSON.parse(
+          readFileSync(join(EXAMPLES_DIR, `j5a-helicoidal${SUFFIX}`), "utf8"),
+        ) as ProjectInput),
+        guards: {},
+      }),
+    ],
+    [
+      "préréglage helical",
+      () => ({ ...(structuredClone(createProject("helical")) as ProjectInput), guards: {} }),
+    ],
+  ];
+  const INFILLS = [null, "rails", "cables", "glass", "balusters", "panel"] as const;
+
+  it("remplissage, hauteur ± 90 mm et T tirés : débit jamais plus grand, un repère = un groupe, repères unifiés et désignés", () => {
+    let shared = 0;
+    fc.assert(
+      fc.property(
+        fc.constantFrom(...BASES),
+        fc.constantFrom(...INFILLS),
+        fc.integer({ min: -90, max: 90 }),
+        fc.constantFrom(0, 0.3, 0.5, 1, 2),
+        ([name, make], infill, dh, t) => {
+          const d = make();
+          const guards = { ...(d.guards ?? {}), ...(infill ? { infill: { kind: infill } } : {}) };
+          const p = ProjectSchema.parse({
+            ...d,
+            guards,
+            site: { ...d.site, floorToFloor: d.site.floorToFloor + dh },
+            workshop: { ...(d.workshop ?? {}), identicalPartTolerance: t },
+          });
+          const model = buildModel(p, { memo: false });
+          const at = `${name} ${infill ?? "orig"} dh=${dh} T=${t}`;
+          expect(expectGuardMarksOneGroup(model, t, at)).toEqual([]);
+          expect(expectGuardStockNotLarger(model, GEOM_EPS, GUARD_MARK_PREFIXES)).toBeGreaterThan(
+            0,
+          );
+          expectMarksUnified(model);
+          expectMarkNames(model);
+          if ([...guardMarks(model.parts).values()].some((g) => g.length > 1)) shared++;
+        },
+      ),
+      { numRuns: 60, seed: 41 },
+    );
+    expect(shared).toBeGreaterThan(0);
+  }, 300_000);
 });

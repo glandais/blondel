@@ -246,7 +246,8 @@ function guardFixings(
     }
   }
   for (const hr of guards.handrails) {
-    if (hr.onGuard) continue;
+    // Main courante portée par la structure (G-Q13) : pas de supports muraux.
+    if (hr.onGuard || hr.carried) continue;
     const L = handrailLength(byId.get(hr.partId), hr);
     if (!(L > 0) || !(profile.bracketSpacing > 0)) continue;
     const brackets = Math.ceil(L / profile.bracketSpacing - 1e-9) + 1;

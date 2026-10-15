@@ -1,7 +1,7 @@
 /**
  * Invariant des repères pour les tests (chantier part-marks R2b et R2c, décisions F10 Q3, Q5,
- * Q6, (27), convention C3) : un repère = une ligne de débit = un développé = une désignation.
- * Fichier réservé aux tests.
+ * Q6, (27), convention C3 ; étendu aux garde-corps, chantier guard-marks G2c, CG6) : un repère =
+ * une ligne de débit = un développé = une désignation. Fichier réservé aux tests.
  */
 import { messageEquals } from "@blondel/i18n";
 import { expect } from "vitest";
@@ -15,11 +15,10 @@ const ASSEMBLY = new Set<string>([QUANTITY_WELD_MM, QUANTITY_BUTT_WELD_MM]);
 const cutQuantities = (p: Part): Record<string, number> =>
   Object.fromEntries(Object.entries(p.quantities).filter(([k]) => !ASSEMBLY.has(k)));
 
-/** Repères portés par deux pièces ou plus, hors garde-corps (statu quo D1, décision Q4). */
+/** Repères portés par deux pièces ou plus (garde-corps compris depuis G2c, CG6). */
 export function sharedMarks(parts: readonly Part[]): Map<string, Part[]> {
   const out = new Map<string, Part[]>();
   for (const p of parts) {
-    if (p.family === "guards") continue;
     out.set(p.mark, [...(out.get(p.mark) ?? []), p]);
   }
   for (const [k, g] of out) if (g.length < 2) out.delete(k);
@@ -27,7 +26,7 @@ export function sharedMarks(parts: readonly Part[]): Map<string, Part[]> {
 }
 
 /**
- * Toutes les pièces d'un même repère (hors garde-corps) ont même catégorie, matériau, section et
+ * Toutes les pièces d'un même repère ont même famille, catégorie, matériau, section et
  * désignation commune (`markName`), et des cotes de débit identiques : `stock`, `quantities` hors
  * grandeurs d'assemblage, `flat` en entier (texte de référence commun, décision F10 Q5),
  * positions des perçages (décision (27)).
@@ -37,6 +36,7 @@ export function expectMarksUnified(model: Pick<Model, "parts">): void {
     const [r, ...rest] = g;
     for (const p of rest) {
       const at = `${mark} : ${r!.id} / ${p.id}`;
+      expect(p.family, at).toBe(r!.family);
       expect(p.category, at).toBe(r!.category);
       expect(p.material, at).toBe(r!.material);
       expect(
@@ -72,20 +72,35 @@ export const IDENTITY_MARK_PREFIXES: readonly string[] = [
 ];
 
 /**
- * Désignation commune (décision F10 Q6) : chaque pièce d'un repère attribué par identité
- * (`IDENTITY_MARK_PREFIXES`, hors garde-corps et repères de position du limon central bois)
- * porte `markName`, la même pour toutes les pièces du repère, ainsi que le même texte de
- * référence de développé (Q5). Rend le nombre de pièces vérifiées.
+ * Préfixes des repères de garde-corps (attribués par identité à T, G2b), vérifiés sur la seule
+ * famille `guards` : le repère MC1 de la main courante portée par la structure (G-Q6, famille
+ * `structure`, `helical-handrail`) est un repère réservé et fixe, d'une pièce unique, non
+ * attribué par identité ; il ne porte pas de `markName` (sinon les réglages du repérage
+ * s'afficheraient sur un hélicoïdal sans garde-corps, où T n'agit sur aucune pièce). Qu'il ne
+ * soit porté que par la structure est vérifié par « un repère, une seule famille ».
+ */
+export const GUARD_MARK_PREFIXES: readonly string[] = ["PG", "BA", "LS", "CA", "PN", "MC"];
+
+/**
+ * Désignation commune (décision F10 Q6, CG5) : chaque pièce d'un repère attribué par identité
+ * (`IDENTITY_MARK_PREFIXES` hors repères de position du limon central bois, et
+ * `GUARD_MARK_PREFIXES` sur la famille `guards`) porte `markName`, la même pour toutes les
+ * pièces du repère, ainsi que le même texte de référence de développé (Q5). Rend le nombre de
+ * pièces vérifiées.
  */
 export function expectMarkNames(model: Pick<Model, "parts">): number {
   const byMark = new Map<string, Part[]>();
   let checked = 0;
   for (const p of model.parts) {
-    // Garde-corps (statu quo D1, Q4) et repères de position du limon central bois (C5, mêmes
-    // préfixes PP, SP… mais attribués par position, pas par identité) : hors invariant.
-    if (p.family === "guards" || p.id.startsWith("wood-central-")) continue;
+    // Repères de position du limon central bois (C5, mêmes préfixes PP, SP… mais attribués par
+    // position, pas par identité) : hors invariant.
+    if (p.id.startsWith("wood-central-")) continue;
     const prefix = /^[A-Z]+/.exec(p.mark)?.[0] ?? "";
-    if (!IDENTITY_MARK_PREFIXES.includes(prefix) || !/^[A-Z]+\d+$/.test(p.mark)) continue;
+    const identity =
+      p.family === "guards"
+        ? GUARD_MARK_PREFIXES.includes(prefix)
+        : IDENTITY_MARK_PREFIXES.includes(prefix);
+    if (!identity || !/^[A-Z]+\d+$/.test(p.mark)) continue;
     expect(p.markName, `${p.mark} ${p.id} : markName`).toBeDefined();
     byMark.set(p.mark, [...(byMark.get(p.mark) ?? []), p]);
     checked++;

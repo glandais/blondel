@@ -623,6 +623,7 @@
   "guard.note.autoBothMissingTwo": "Main courante « auto » : MC_DEUX_COTES demande une main courante des deux côtés, mais le {first} et le {second} n'ont ni mur ni garde-corps pour la recevoir.",
   "guard.note.autoBothSides": "Main courante « auto » : posée des deux côtés (MC_DEUX_COTES, ERP neuf ou parties communes de BHC) ; choisir un côté pour revenir à une seule main courante.",
   "guard.note.cables": "Câbles : traités comme des lisses (SPEC X12) ; leurs vides ne doivent pas augmenter dans le temps (détente, NF P01-012:2024) — prévoir un dispositif de retension.",
+  "guard.note.carriedHandrail": "Main courante {side} portée par la structure : ni le garde-corps ni le mur de ce côté n'en reçoivent une autre.",
   "guard.note.continuedByOpening": "Garde-corps {side} : prolongé à l'arrivée par le garde-corps de trémie ({length} mm), sans prolongement propre de la main courante.",
   "guard.note.glass": "Verre (V1) : seuls les jeux et vides sont contrôlés ; produit (feuilleté 1B1, NF DTU 39 P5), pinces et essais NF P01-013 non vérifiés.",
   "guard.note.helicalColumn": "Hélicoïdal à fût central : aucun garde-corps ni main courante le long du fût (pas de vide de ce côté).",

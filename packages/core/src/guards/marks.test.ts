@@ -1,6 +1,7 @@
 /**
- * Repérage des pièces de garde-corps (chantier guard-marks, G2b ; CG1, CG2, G-Q5, G-Q6) :
- * propriétés du regroupement à T autour d'une ancre, puis cas des exemples.
+ * Repérage des pièces de garde-corps (chantier guard-marks, G2b et G2c ; CG1 à CG5, G-Q5,
+ * G-Q6) : propriétés du regroupement à T autour d'une ancre, débit du représentant, puis cas
+ * des exemples.
  */
 import { readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
@@ -29,6 +30,7 @@ import {
   type GuardMarkEntry,
   type GuardMarkGroup,
 } from "./marks.js";
+import { expectGuardStockNotLarger } from "./guardShape.testing.js";
 import { panelMember, sweptMember, verticalMember, type PartFactoryContext } from "./parts.js";
 import type { GuardSection } from "./spec.js";
 
@@ -229,8 +231,28 @@ const line = (len: Mm, z = 0, dy = 0): Vec3[] => [
   { x: len, y: dy, z: z + 0.5 * len },
 ];
 
+/** Panneau plan PN de verre, droit, de longueur `len` et de hauteur `h`, décalé de `dy`. */
+const flatPanel = (ctx: PartFactoryContext, id: string, len: Mm, h: Mm, dy: Mm): Part =>
+  panelMember(
+    ctx,
+    common(id, "PN", "part.glassPanel.name", "glass"),
+    [
+      { x: 0, y: dy, z: 0 },
+      { x: len, y: dy, z: 0 },
+    ],
+    [
+      { x: 0, y: dy, z: h },
+      { x: len, y: dy, z: h },
+    ],
+    [
+      { x: 0, y: 1 },
+      { x: 0, y: 1 },
+    ],
+    10,
+  );
+
 describe("MarkRegistry (G2b)", () => {
-  it("repères dans l'ordre de première apparition, débit et grandeurs de la première pièce", () => {
+  it("repères dans l'ordre de première apparition, débit et grandeurs de la plus courte (CG3, CG4), markName = name (CG5)", () => {
     fc.assert(
       fc.property(
         fc.array(fc.constantFrom(0, 0.3, 2, 5), { minLength: 1, maxLength: 12 }),
@@ -256,21 +278,29 @@ describe("MarkRegistry (G2b)", () => {
           });
           expect(firsts.every((x) => x !== undefined)).toBe(true);
           expect([...firsts].sort((a, b) => a - b)).toEqual(firsts);
-          // QUESTIONS D1 : grandeurs et débit de la première pièce du repère.
-          for (const p of parts) {
-            const first = parts.find((q) => q.mark === p.mark)!;
-            expect(p.stock).toEqual(first.stock);
-            expect(p.quantities).toEqual(first.quantities);
-          }
+          // CG3, CG4 : débit et grandeurs du représentant, la plus courte pièce du repère ; le
+          // solide reste celui de la pièce réelle.
+          parts.forEach((p, i) => {
+            const members = raw.filter((_, k) => parts[k]!.mark === p.mark);
+            const shortest = members.reduce((a, b) =>
+              b.stock!.length < a.stock!.length - GEOM_EPS ? b : a,
+            );
+            expect(p.stock!.length).toBeCloseTo(shortest.stock!.length, 9);
+            expect(p.stock).toEqual(parts.find((q) => q.mark === p.mark)!.stock);
+            expect(p.quantities).toEqual(parts.find((q) => q.mark === p.mark)!.quantities);
+            expect(p.stock!.length).toBeLessThanOrEqual(raw[i]!.stock!.length + GEOM_EPS);
+            expect(p.solid).toBe(raw[i]!.solid);
+            expect(p.markName).toEqual(raw[i]!.name);
+          });
         },
       ),
       { numRuns: RUNS },
     );
   });
 
-  it("QUESTIONS D1 : débit et grandeurs de la première pièce de l'entrée, même quand l'ancre est une autre pièce", () => {
+  it("CG3, CG4 : débit et grandeurs de l'ancre (la plus courte), pas de la première pièce", () => {
     // Deltas [0,3 ; 0] à T = 0,5 : un seul repère, ancre = la plus courte (la seconde), première
-    // pièce = la plus longue. (À adapter en G2c, qui change le représentant.)
+    // pièce = la plus longue.
     const ctx = ctxOf(0.5);
     const raw = [0.3, 0].map((d, i) =>
       sweptMember(
@@ -284,9 +314,52 @@ describe("MarkRegistry (G2b)", () => {
     const parts = ctx.marks.apply(raw);
     expect(parts.map((p) => p.mark)).toEqual(["LS1", "LS1"]);
     for (const p of parts) {
-      expect(p.stock).toEqual(raw[0]!.stock);
-      expect(p.quantities).toEqual(raw[0]!.quantities);
+      expect(p.stock).toEqual(raw[1]!.stock);
+      expect(p.quantities).toEqual(raw[1]!.quantities);
+      expect(p.markName).toEqual(msg("part.rail.name"));
     }
+    // Le représentant est rendu tel quel (même objet, mémoïsation), repère posé.
+    expect(parts[1]).toEqual({ ...raw[1]!, mark: "LS1" });
+    expect(parts[0]!.solid).toBe(raw[0]!.solid);
+    expect(parts[0]!.id).toBe("r-0");
+  });
+
+  it("CG3, CG4 : panneaux de même forme à T, débit de la plus petite par l'aire nette, jamais plus grand que la pièce réelle", () => {
+    const ctx = ctxOf(0.5);
+    const panel = (id: string, len: Mm, h: Mm, dy: Mm) => flatPanel(ctx, id, len, h, dy);
+    // Plus grande d'abord (longueur et hauteur), puis la plus petite : un seul repère à T.
+    const raw = [panel("a", 1000.3, 800.2, 0), panel("b", 1000, 800, 100)];
+    const parts = ctx.marks.apply(raw);
+    expect(parts.map((p) => p.mark)).toEqual(["PN1", "PN1"]);
+    for (const p of parts) {
+      expect(p.stock).toEqual(raw[1]!.stock);
+      expect(p.quantities).toEqual(raw[1]!.quantities);
+    }
+    // Famille posée par le pipeline (`build.ts`).
+    const guards = parts.map((p) => ({ ...p, family: "guards" as const }));
+    expect(expectGuardStockNotLarger({ parts: guards }, GEOM_EPS)).toBe(2);
+    // Le débit de la plus grande, recopié, serait plus grand que la petite pièce réelle.
+    expect(() =>
+      expectGuardStockNotLarger(
+        { parts: guards.map((p) => ({ ...p, stock: raw[0]!.stock })) },
+        GEOM_EPS,
+      ),
+    ).toThrow();
+  });
+
+  it("CG3, CG4 : la plus petite par l'aire nette peut dépasser une autre pièce d'une cote, d'au plus T (G-Q14)", () => {
+    // Contre-exemple de revue : a = 1000 × 800, b = 1000,4 × 799,5, même repère à T = 0,5 ;
+    // l'aire nette de b est la plus petite (799 820 < 800 000) et son débit recopié dépasse la
+    // longueur réelle de a de 0,4 mm. La forme compare la longueur en plan et la hauteur point à
+    // point à T : l'excès par cote est borné par T, pas par `GEOM_EPS`.
+    const T = 0.5;
+    const ctx = ctxOf(T);
+    const raw = [flatPanel(ctx, "a", 1000, 800, 0), flatPanel(ctx, "b", 1000.4, 799.5, 100)];
+    const parts = ctx.marks.apply(raw).map((p) => ({ ...p, family: "guards" as const }));
+    expect(parts.map((p) => p.mark)).toEqual(["PN1", "PN1"]);
+    for (const p of parts) expect(p.stock).toEqual(raw[1]!.stock);
+    expect(() => expectGuardStockNotLarger({ parts }, GEOM_EPS)).toThrow();
+    expect(expectGuardStockNotLarger({ parts }, T + GEOM_EPS)).toBe(2);
   });
 
   it("nature ou matériau différents ⇒ repères distincts, même forme ; même nature ⇒ réunies", () => {

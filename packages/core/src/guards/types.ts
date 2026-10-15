@@ -184,12 +184,19 @@ export interface HandrailRun {
   /** Prolongements horizontaux réalisés aux extrémités de l'escalier (absent : extrémité non atteinte). */
   readonly extensionBottom?: Mm;
   readonly extensionTop?: Mm;
-  /** Dégagement au mur (main courante murale). */
+  /** Dégagement au mur (main courante murale ; absent sur un tronçon mural porté, G-Q15). */
   readonly wallClearance?: Mm;
   /** Épaisseur de préhension (largeur de la section). */
   readonly sectionWidth: Mm;
   /** Empiètement sur l'emmarchement (largeur entre mains courantes). */
   readonly intrusion: Mm;
+  /**
+   * Main courante portée par la structure (G-Q6, G-Q13) : `partId` est la pièce de la structure.
+   * Sur un tronçon mural (`onGuard` faux), aucune pièce murale n'est posée de ce côté ; le
+   * tronçon reste pour le contrôle (continuité, prolongements), sans dégagement au mur, et
+   * n'appelle pas de supports.
+   */
+  readonly carried?: true;
 }
 
 export interface GuardsAnalysis {

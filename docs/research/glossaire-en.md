@@ -193,6 +193,7 @@ En français, rien ne change : la hauteur de marche s'écrit déjà h (h1 pour l
 | Rampe (d'escalier)        | Balustrade               | Banister        |                                  |
 | Main courante             | Handrail                 | —               |                                  |
 | Main courante murale      | Wall handrail            | —               |                                  |
+| Main courante portée par la structure | Structure-carried handrail | — | Main courante de la structure (ex. hélicoïdale), G-Q6 |
 | Lisse                     | Rail                     | —               | Lisse basse : bottom rail        |
 | Balustre, barreau         | Baluster                 | Spindle         |                                  |
 | Remplissage               | Infill                   | —               |                                  |

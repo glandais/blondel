@@ -5,15 +5,26 @@
  * seul fichier DXF de développé (texte de référence commun, sans pièce porteuse) = une seule
  * désignation (`partDesignation`) ; partition des développés du dossier PDF identique à celle
  * des DXF ; chaque ligne de la liste porte exactement les pièces débitées de son repère
- * (`cutListGroups`, appartenance lue par la nomenclature de l'interface, C2, R2d).
+ * (`cutListGroups`, appartenance lue par la nomenclature de l'interface, C2, R2d). Étendu aux
+ * garde-corps (chantier guard-marks G2c, CG6, CG7) : propriété à remplissage, hauteur d'étage,
+ * T et murs tirés (main courante murale et sa visserie), un repère = une seule famille, une
+ * ligne de visserie par repère de visserie.
  */
 import { readFileSync, readdirSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { buildModel, createProject, parseProjectText, type Project } from "@blondel/core";
+import {
+  buildModel,
+  computeLayout,
+  createProject,
+  parseProjectText,
+  type Model,
+  type Project,
+} from "@blondel/core";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { cutListGroups, cutListRows, cutParts } from "./csv/cutlist.js";
+import { fastenerScheduleRows } from "./csv/fasteners.js";
 import { cutSheet } from "./cutsheet.js";
 import { exportPartsDxf } from "./dxf/parts.js";
 import { flatPartGroups } from "./flatGroups.js";
@@ -155,4 +166,174 @@ describe("propriété : un repère = une ligne de débit = une ligne de fiche = 
     expect(steel.length).toBeGreaterThan(5);
     expect(shared).toBeGreaterThan(0);
   }, 300_000);
+});
+
+/** Un repère n'est porté que par une seule famille (structure, garde-corps…, CG7, G-Q6). */
+function expectOneFamilyPerMark(model: Pick<Model, "parts">): void {
+  const families = new Map<string, Set<string>>();
+  for (const p of model.parts) {
+    families.set(p.mark, (families.get(p.mark) ?? new Set()).add(p.family ?? ""));
+  }
+  expect(
+    [...families].filter(([, f]) => f.size > 1).map(([m, f]) => `${m} : ${[...f].join(" / ")}`),
+    "repères portés par plusieurs familles",
+  ).toEqual([]);
+}
+
+/**
+ * Visserie : une ligne de la liste par repère de visserie, quantités conservées, chaque pièce
+ * assemblée existe et a un repère. Rend le nombre d'éléments de supports de main courante murale.
+ */
+function expectFastenerLines(model: Model): number {
+  const rows = fastenerScheduleRows(model);
+  const marks = rows.map((r) => r.mark);
+  expect(marks.length, "lignes de visserie").toBe(new Set(marks).size);
+  const fasteners = model.fasteners ?? [];
+  expect(rows.reduce((a, r) => a + r.quantity, 0)).toBe(
+    fasteners.reduce((a, f) => a + f.quantity, 0),
+  );
+  const ids = new Set(model.parts.map((p) => p.id));
+  for (const f of fasteners) for (const id of f.partIds) expect(ids.has(id), f.id).toBe(true);
+  for (const r of rows) expect(r.partMarks.length, r.mark).toBeGreaterThan(0);
+  return fasteners.filter((f) => f.joint === "handrailWall" || f.joint === "handrailPartition")
+    .length;
+}
+
+type Json = Record<string, any>;
+
+/** Murs en couronne (48 segments) à 120 mm de l'emprise, sur `arc` tour (tracé hélicoïdal). */
+function ringWalls(d: Json, arc: number): void {
+  const fp = computeLayout(parseProjectText(JSON.stringify(d))).footprint;
+  const xs = fp.map((q) => q.x);
+  const ys = fp.map((q) => q.y);
+  const cx = (Math.max(...xs) + Math.min(...xs)) / 2;
+  const cy = (Math.max(...ys) + Math.min(...ys)) / 2;
+  const R = Math.max(...fp.map((q) => Math.hypot(q.x - cx, q.y - cy)));
+  const n = 48;
+  const r = (R + 120) / Math.cos(Math.PI / n);
+  d["site"].walls = Array.from({ length: Math.round(n * arc) }, (_, i) => {
+    const a0 = (2 * Math.PI * i) / n;
+    const a1 = (2 * Math.PI * (i + 1)) / n;
+    return {
+      id: `w${i}`,
+      a: { x: cx + r * Math.cos(a0), y: cy + r * Math.sin(a0) },
+      b: { x: cx + r * Math.cos(a1), y: cy + r * Math.sin(a1) },
+      thickness: 200,
+      loadBearing: i % 2 === 0,
+    };
+  });
+}
+
+/** Murs en cadre autour de l'emprise, à 120 mm (côtés choisis par `mask`, 4 bits). */
+function boxWalls(d: Json, mask: number): void {
+  const fp = computeLayout(parseProjectText(JSON.stringify(d))).footprint;
+  const xs = fp.map((q) => q.x);
+  const ys = fp.map((q) => q.y);
+  const [x0, x1, y0, y1] = [
+    Math.min(...xs) - 120,
+    Math.max(...xs) + 120,
+    Math.min(...ys) - 120,
+    Math.max(...ys) + 120,
+  ];
+  const sides = [
+    [x0, y0, x1, y0],
+    [x1, y0, x1, y1],
+    [x1, y1, x0, y1],
+    [x0, y1, x0, y0],
+  ] as const;
+  d["site"].walls = sides
+    .map((side, i) => [side, i] as const)
+    .filter(([, i]) => (mask >> i) & 1)
+    .map(([[ax, ay, bx, by], i]) => ({
+      id: `b${i}`,
+      a: { x: ax - (bx - ax) * 0.1, y: ay - (by - ay) * 0.1 },
+      b: { x: bx + (bx - ax) * 0.1, y: by + (by - ay) * 0.1 },
+      thickness: 200,
+      loadBearing: i % 2 === 0,
+    }));
+}
+
+describe("propriété : repères de garde-corps, un repère = une ligne de débit = une ligne de fiche = une désignation = une famille (CG6, CG7)", () => {
+  /** Projets à garde-corps : exemples qui en ont, `j5a-helicoidal` équipé, préréglage helical. */
+  const guarded: readonly (readonly [string, () => Json])[] = [
+    ...readdirSync(EXAMPLES_DIR)
+      .filter((f) => f.endsWith(SUFFIX))
+      .sort()
+      .map((f) => [f, JSON.parse(readFileSync(join(EXAMPLES_DIR, f), "utf8")) as Json] as const)
+      .filter(([, d]) => d["guards"] !== undefined)
+      .map(([f, d]) => [f, (): Json => structuredClone(d)] as const),
+    [
+      "j5a-helicoidal + garde-corps",
+      (): Json => ({
+        ...(JSON.parse(
+          readFileSync(join(EXAMPLES_DIR, `j5a-helicoidal${SUFFIX}`), "utf8"),
+        ) as Json),
+        guards: {},
+      }),
+    ],
+    [
+      "préréglage helical + garde-corps",
+      (): Json => ({ ...structuredClone(createProject("helical")), guards: {} }),
+    ],
+  ];
+
+  it("remplissage, hauteur ± 90 mm, T et murs tirés", () => {
+    let shared = 0;
+    let wallHandrails = 0;
+    let wallBrackets = 0;
+    fc.assert(
+      fc.property(
+        fc.constantFrom(...guarded),
+        fc.constantFrom(null, "rails", "cables", "glass", "balusters"),
+        fc.integer({ min: -90, max: 90 }),
+        fc.constantFrom(0, 0.3, 0.5, 1, 2),
+        fc.constantFrom(0, 0.5, 1),
+        fc.integer({ min: 1, max: 15 }),
+        fc.constantFrom("auto", "both", "outer", "inner", "none"),
+        ([, make], infill, dh, t, arc, mask, wallSides) => {
+          const d = make();
+          if (infill) d["guards"].infill = { kind: infill };
+          d["site"].floorToFloor += dh;
+          d["workshop"] = { ...(d["workshop"] ?? {}), identicalPartTolerance: t };
+          if (arc > 0) {
+            if (d["stair"].layout.kind === "helical") ringWalls(d, arc);
+            else boxWalls(d, mask);
+            d["guards"].handrail = { ...(d["guards"].handrail ?? {}), wallSides };
+          }
+          const model = buildModel(parseProjectText(JSON.stringify(d)), { memo: false });
+          if (expectOneOutputPerMark(model) > 0) shared++;
+          expectOneFamilyPerMark(model);
+          wallBrackets += expectFastenerLines(model);
+          if (model.parts.some((p) => p.id.startsWith("handrail-wall-"))) wallHandrails++;
+        },
+      ),
+      { numRuns: 40, seed: 31 },
+    );
+    expect(guarded.length).toBeGreaterThan(5);
+    expect(shared).toBeGreaterThan(0);
+    expect(wallHandrails).toBeGreaterThan(0);
+    expect(wallBrackets).toBeGreaterThan(0);
+  }, 300_000);
+
+  it("j5a-helicoidal à garde-corps dans des murs : MC1 seulement sur la main courante de la structure", () => {
+    for (const wallSides of ["auto", "both", "outer"]) {
+      const d: Json = {
+        ...(JSON.parse(
+          readFileSync(join(EXAMPLES_DIR, `j5a-helicoidal${SUFFIX}`), "utf8"),
+        ) as Json),
+        guards: { handrail: { wallSides } },
+      };
+      ringWalls(d, 1);
+      const model = buildModel(parseProjectText(JSON.stringify(d)), { memo: false });
+      expect(model.errors).toEqual([]);
+      expectOneOutputPerMark(model);
+      expectOneFamilyPerMark(model);
+      expectFastenerLines(model);
+      expect(
+        model.parts.filter((p) => p.mark === "MC1").map((p) => p.id),
+        wallSides,
+      ).toEqual(["helical-handrail"]);
+      expect(model.parts.some((p) => p.id.startsWith("handrail-wall-outer"))).toBe(false);
+    }
+  }, 60_000);
 });

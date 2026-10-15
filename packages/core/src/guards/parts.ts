@@ -6,7 +6,8 @@
  * forme (`guardShape.ts`, construit depuis les entrées : section, axe ou bords non décalés) et
  * rendue avec un repère provisoire vide ; `MarkRegistry.apply` (`marks.ts`, fin de
  * `computeGuards`) regroupe les pièces identiques à T près et recopie sur chaque membre le débit
- * et les grandeurs de la première pièce de son groupe (QUESTIONS D1).
+ * et les grandeurs du représentant de son groupe (CG3, CG4). La désignation commune `markName`
+ * (CG5) est le nom générique de la pièce, déjà commun au repère (il entre dans la clé).
  */
 import { msg, textMessage, type Message } from "@blondel/i18n";
 import * as V from "../geom2d/vec.js";
@@ -107,6 +108,7 @@ function makePart(
     mark: "",
     category: c.category,
     name: c.name,
+    markName: c.name,
     material: c.material,
     solid,
     section,
