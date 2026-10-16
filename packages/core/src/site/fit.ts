@@ -300,10 +300,14 @@ export function doorSwingSector(
 }
 
 /**
- * Rectangle d'une baie de fenêtre : épaisseur du mur qui la porte (axe parallèle, `a` et `b` à
- * moins d'une demi-épaisseur de l'axe), sinon segment `a`–`b`.
+ * Mur qui porte une baie (porte, fenêtre) : premier mur d'axe parallèle à `a`–`b` dont l'axe est
+ * à moins d'une demi-épaisseur (plus la tolérance de contact) de `a` et de `b`, avec les
+ * extrémités de la baie ramenées sur son axe ; `undefined` si aucun mur ne la porte.
  */
-function windowPolygon(o: Extract<Obstacle, { kind: "window" }>, walls: readonly Wall[]): Polygon2 {
+export function bayWall(
+  o: { readonly a: Vec2; readonly b: Vec2 },
+  walls: readonly Wall[],
+): { readonly wall: Wall; readonly a: Vec2; readonly b: Vec2 } | undefined {
   const ab = V.sub(o.b, o.a);
   const len = V.norm(ab);
   for (const w of walls) {
@@ -314,14 +318,32 @@ function windowPolygon(o: Extract<Obstacle, { kind: "window" }>, walls: readonly
     const off = (p: Vec2): number => Math.abs(V.cross(V.scale(wd, 1 / wl), V.sub(p, w.a)));
     const half = w.thickness / 2 + SITE_FIT_CONTACT_TOL;
     if (off(o.a) <= half && off(o.b) <= half) {
-      // Baie ramenée sur l'axe du mur, épaisseur du mur.
       const u = V.scale(wd, 1 / wl);
-      const pa = V.addScaled(w.a, u, V.dot(V.sub(o.a, w.a), u));
-      const pb = V.addScaled(w.a, u, V.dot(V.sub(o.b, w.a), u));
-      return wallPolygon({ id: w.id, a: pa, b: pb, thickness: w.thickness, loadBearing: false });
+      return {
+        wall: w,
+        a: V.addScaled(w.a, u, V.dot(V.sub(o.a, w.a), u)),
+        b: V.addScaled(w.a, u, V.dot(V.sub(o.b, w.a), u)),
+      };
     }
   }
-  return [o.a, o.b];
+  return undefined;
+}
+
+/**
+ * Rectangle d'une baie de fenêtre : épaisseur du mur qui la porte (`bayWall`), sinon segment
+ * `a`–`b`.
+ */
+function windowPolygon(o: Extract<Obstacle, { kind: "window" }>, walls: readonly Wall[]): Polygon2 {
+  const on = bayWall(o, walls);
+  if (!on) return [o.a, o.b];
+  // Baie ramenée sur l'axe du mur, épaisseur du mur.
+  return wallPolygon({
+    id: on.wall.id,
+    a: on.a,
+    b: on.b,
+    thickness: on.wall.thickness,
+    loadBearing: false,
+  });
 }
 
 /** La pièce touche-t-elle la baie (contact au nu compris) sur une longueur de baie > tol ? */

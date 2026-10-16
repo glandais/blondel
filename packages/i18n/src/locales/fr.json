@@ -4328,6 +4328,7 @@
   "ui.viewer3d.selection": "Sélection : ",
   "ui.viewer3d.selection.name": " — {name}",
   "ui.viewer3d.showAll": "Tout afficher",
+  "ui.viewer3d.site": "Site (murs, baies, poteaux)",
   "ui.viewer3d.toolbar.label": "Outils 3D",
   "ui.welcome.close": "Fermer",
   "ui.welcome.demos": "Démos",

@@ -95,6 +95,13 @@ test(`outils 3D : cotes, éclatée, coupe, mesure, isolation (tâches ≤ ${LONG
   // Sélection puis isolation d'une pièce.
   await clickCanvas(page);
   await expect(page.locator(".viewer3d__selected")).toBeVisible();
+  // Un clic sur la pièce sélectionnée la désélectionne (clics espacés : pas un double clic).
+  await page.waitForTimeout(600);
+  await clickCanvas(page);
+  await expect(page.locator(".viewer3d__selected")).toHaveCount(0);
+  await page.waitForTimeout(600);
+  await clickCanvas(page);
+  await expect(page.locator(".viewer3d__selected")).toBeVisible();
   await page.getByRole("button", { name: "Isoler la pièce" }).click();
   await settle(page);
   await expect(overlay.locator("text")).toHaveCount(0);
@@ -191,4 +198,42 @@ test("vue 3D : boutons − / + et Recadrer de la vue centrale (sans recalcul)", 
     })
     .toBeLessThan(0.001);
   await expect(page.locator(".viewer3d__errors")).toHaveCount(0);
+});
+
+test("double clic : l'orbite se recentre sur le point visé, la caméra reste en place", async ({
+  page,
+}) => {
+  await openApp(page);
+  await applyPreset(page, "Escalier droit");
+  await chooseStructure(page, "wood-housed");
+  await openTab(page, "3D");
+  const pose = () =>
+    page.evaluate(() =>
+      (
+        window as unknown as {
+          __blondelViewer3D: { pose(): { position: number[]; target: number[] } };
+        }
+      ).__blondelViewer3D.pose(),
+    );
+  await expect.poll(async () => (await pose()).target.length).toBe(3);
+  const before = await pose();
+  const box = await page.locator(".viewer3d canvas").boundingBox();
+  if (!box) throw new Error("canevas 3D introuvable");
+  // Un peu à côté du centre : sur l'escalier, mais pas sur la cible actuelle.
+  await page.mouse.dblclick(box.x + box.width / 2 + 40, box.y + box.height / 2 + 30);
+  await expect
+    .poll(async () => {
+      const t = (await pose()).target;
+      return Math.hypot(...t.map((v, i) => v - before.target[i]!));
+    })
+    .toBeGreaterThan(0.01);
+  // Fin de la transition de recentrage (`PIVOT_TRANSITION_MS`).
+  await page.waitForTimeout(500);
+  const after = await pose();
+  after.position.forEach((v, i) => expect(v).toBeCloseTo(before.position[i]!, 3));
+  // Double clic dans le vide (coin supérieur, au-dessus de l'escalier) : rien ne bouge.
+  await page.mouse.dblclick(box.x + 5, box.y + 5);
+  await settle(page);
+  const still = await pose();
+  still.target.forEach((v, i) => expect(v).toBeCloseTo(after.target[i]!, 6));
 });

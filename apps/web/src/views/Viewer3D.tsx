@@ -12,7 +12,8 @@
  * (`three/section.ts`), mesure point à point (clic sur les pièces), isolation de la pièce
  * sélectionnée, cotes principales H / E / reculement en surimpression (`Viewer3DOverlay`),
  * apparence par famille de pièces (`lib/appearance.ts`, aperçu de rendu seulement), dans une
- * barre d'outils 3D.
+ * barre d'outils 3D. Double clic : l'orbite se recentre sur le point visé, marqué d'un trièdre
+ * (`OrbitPivot`, `three/orbitPivot.ts`) ; clic sur la pièce sélectionnée : désélection.
  *
  * Repère : le cœur travaille en mm, Z vers le haut ; la scène three.js en mètres, Y vers le
  * haut → groupe racine tourné de −90° autour de X et mis à l'échelle 1/1000.
@@ -34,19 +35,26 @@
 import { ruleTitle } from "@blondel/core";
 import type { Appearance, MaterialId, Model, Part, Project, Severity, Vec3 } from "@blondel/core";
 import { OrbitControls } from "@react-three/drei";
-import { Canvas, useThree, type ThreeEvent } from "@react-three/fiber";
+import { Canvas, useFrame, useThree, type ThreeEvent } from "@react-three/fiber";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
+  AxesHelper,
   Box3,
   BoxGeometry,
+  LineBasicMaterial,
+  LineLoop,
   BufferAttribute,
   BufferGeometry as ThreeBufferGeometry,
   DoubleSide,
   NeutralToneMapping,
   PMREMGenerator,
   Plane,
+  Raycaster,
   SphereGeometry,
+  Vector2,
   Vector3,
+  type Group,
+  type Object3D,
   type BufferGeometry,
   type Material,
 } from "three";
@@ -87,6 +95,7 @@ import {
   highlightColor3d,
   paintZoneFor,
   severityColors3d,
+  materialLookFor,
   type PaintZone,
   type Theme3d,
 } from "../three/materials.js";
@@ -99,6 +108,9 @@ import {
   type PartMaterial,
 } from "../three/pbr.js";
 import { NOSING_MARKER_SECTION_MM, nosingMarkerPose } from "../three/nosingMarker.js";
+import { pivotAt, pivotAxesLength } from "../three/orbitPivot.js";
+import { createDitheredDepthMaterial, type DitheredDepthMaterial } from "../three/shadowDepth.js";
+import { siteSceneMeshes } from "../three/siteScene.js";
 import { browserRenderQuality, type RenderQuality } from "../three/quality.js";
 import {
   NO_SECTION,
@@ -194,7 +206,22 @@ interface Materials {
   flagged: (id: MaterialId, severity: Severity, zone?: PaintZone) => PartMaterial;
   marker: (severity: Severity, selected: boolean) => SimpleMaterial;
   highlight: SimpleMaterial;
-  slab: SimpleMaterial;
+  /**
+   * Maçonnerie (dalle haute percée de la trémie, murs, poteaux) : translucide à l'affichage,
+   * opaque pour la lumière (ombres portées pleines).
+   */
+  masonry: SimpleMaterial;
+  /** Vantaux des portes du site (translucides à l'affichage, opaques pour la lumière). */
+  door: SimpleMaterial;
+  /** Zones interdites du site (au sol, sans ombre portée). */
+  zone: SimpleMaterial;
+  /** Contour de la pièce (ligne au sol). */
+  roomLine: LineBasicMaterial;
+  /**
+   * Matériau de profondeur d'un matériau translucide (`isTranslucent`) : ombre portée d'autant
+   * plus dense que son opacité affichée est forte (`three/shadowDepth.ts`).
+   */
+  shadowDepth: (id: MaterialId) => DitheredDepthMaterial;
   sphere: SphereGeometry;
   /** Plan de coupe partagé par les matériaux des pièces et de la dalle. */
   clip: Plane;
@@ -253,18 +280,22 @@ function useMaterials(quality: RenderQuality, theme: Theme3d): Materials {
         quality,
       ),
     );
-    const slab = clipped(
-      simpleMaterial(
-        {
-          color: "#9aa4ad",
-          transparent: true,
-          opacity: 0.25,
-          depthWrite: false,
-          side: DoubleSide,
-        },
-        quality,
-      ),
-    );
+    const translucent = (color: string, opacity: number) =>
+      clipped(
+        simpleMaterial(
+          { color, transparent: true, opacity, depthWrite: false, side: DoubleSide },
+          quality,
+        ),
+      );
+    const masonry = translucent("#9aa4ad", 0.25);
+    const door = translucent("#b08a5e", 0.35);
+    const zoneMaterial = translucent(severityColors["bloquant"], 0.3);
+    const roomLine = new LineBasicMaterial({ color: "#6b7480" });
+    if (quality.clipping) {
+      roomLine.clippingPlanes = [clip];
+    }
+    const depths = new Map<MaterialId, DitheredDepthMaterial>();
+    const opacityOf = (id: MaterialId): number => materialLookFor(id, tints).opacity ?? 1;
     const sphere = new SphereGeometry(POINT_MARKER_RADIUS, 20, 14);
     return {
       get: (id: MaterialId, zone: PaintZone = "structure") => {
@@ -297,6 +328,7 @@ function useMaterials(quality: RenderQuality, theme: Theme3d): Materials {
           const [id, zone] = k.split("|")[0]!.split("~") as [MaterialId, PaintZone?];
           tintPartMaterial(m as PartMaterial, id, quality, tints, zone);
         }
+        for (const [id, m] of depths) m.setShadowOpacity(opacityOf(id));
         return true;
       },
       setGlassThickness: (mm: number) => {
@@ -314,12 +346,31 @@ function useMaterials(quality: RenderQuality, theme: Theme3d): Materials {
             quality,
           );
         }),
+      shadowDepth: (id: MaterialId) => {
+        let m = depths.get(id);
+        if (!m) {
+          m = createDitheredDepthMaterial(opacityOf(id));
+          depths.set(id, m);
+        }
+        return m;
+      },
       highlight,
-      slab,
+      masonry,
+      door,
+      zone: zoneMaterial,
+      roomLine,
       sphere,
       clip,
       dispose: () => {
-        [...cache.values(), highlight, slab].forEach((m) => m.dispose());
+        [
+          ...cache.values(),
+          ...depths.values(),
+          highlight,
+          masonry,
+          door,
+          zoneMaterial,
+          roomLine,
+        ].forEach((m) => m.dispose());
         sphere.dispose();
       },
     };
@@ -347,8 +398,103 @@ function Slab({
   }, [project, model.layout.footprint]);
   useEffect(() => () => geometry?.dispose(), [geometry]);
   if (!geometry) return null;
-  return <mesh geometry={geometry} material={material} dispose={null} receiveShadow />;
+  // Maçonnerie : translucide à l'affichage, opaque pour la lumière.
+  return (
+    <mesh
+      geometry={geometry}
+      material={material}
+      dispose={null}
+      castShadow
+      receiveShadow
+      userData={PASS_THROUGH}
+    />
+  );
 }
+
+/**
+ * Objets de contexte translucides (maçonnerie, vantaux, zones) : le recentrage au double clic
+ * vise d'abord ce qui est derrière eux (`OrbitPivot`).
+ */
+const PASS_THROUGH = { passThrough: true } as const;
+
+/**
+ * Site du projet (`three/siteScene.ts`) : murs et poteaux en maçonnerie, vantaux des portes,
+ * vitrages des fenêtres (verre des pièces, ombre selon son opacité), zones interdites et contour
+ * de la pièce au sol.
+ */
+function SiteElements({ project, materials }: { project: Project; materials: Materials }) {
+  const site = project.site;
+  const geometries = useMemo(() => {
+    const s = siteSceneMeshes(site);
+    const g = (m: (typeof s)["solids"]) => (m ? toBufferGeometry(m, null) : undefined);
+    const room =
+      s.room.length >= 3
+        ? new ThreeBufferGeometry().setFromPoints(
+            s.room.map((p) => new Vector3(p.x, p.y, ROOM_LINE_Z_MM)),
+          )
+        : undefined;
+    return {
+      solids: g(s.solids),
+      doors: g(s.doors),
+      panes: g(s.panes),
+      zones: g(s.zones),
+      room,
+    };
+    // Recalcul au seul changement du site (projet immuable, partage structurel).
+  }, [site]);
+  useEffect(() => () => Object.values(geometries).forEach((g) => g?.dispose()), [geometries]);
+  const roomLine = useMemo(
+    () => (geometries.room ? new LineLoop(geometries.room, materials.roomLine) : undefined),
+    [geometries.room, materials.roomLine],
+  );
+  return (
+    <>
+      {geometries.solids ? (
+        <mesh
+          geometry={geometries.solids}
+          material={materials.masonry}
+          dispose={null}
+          castShadow
+          receiveShadow
+          userData={PASS_THROUGH}
+        />
+      ) : null}
+      {geometries.doors ? (
+        <mesh
+          geometry={geometries.doors}
+          material={materials.door}
+          dispose={null}
+          castShadow
+          receiveShadow
+          userData={PASS_THROUGH}
+        />
+      ) : null}
+      {geometries.panes ? (
+        <mesh
+          geometry={geometries.panes}
+          material={materials.get("glass")}
+          customDepthMaterial={materials.shadowDepth("glass")}
+          dispose={null}
+          castShadow
+          receiveShadow
+        />
+      ) : null}
+      {geometries.zones ? (
+        <mesh
+          geometry={geometries.zones}
+          material={materials.zone}
+          dispose={null}
+          receiveShadow
+          userData={PASS_THROUGH}
+        />
+      ) : null}
+      {roomLine ? <primitive object={roomLine} raycast={() => undefined} /> : null}
+    </>
+  );
+}
+
+/** Hauteur de la ligne du contour de pièce au-dessus du sol (mm : sans conflit de profondeur). */
+const ROOM_LINE_Z_MM = 2;
 
 /**
  * Environnement d'éclairage procédural (pièce neutre `RoomEnvironment` préfiltrée par PMREM),
@@ -563,6 +709,107 @@ function ViewCommandHandler({ box, maxDistance }: { box: Box3; maxDistance: numb
     invalidate();
   });
   return null;
+}
+
+/** Objet affiché : lui et tous ses parents visibles. */
+function isShown(o: Object3D | null): boolean {
+  for (let p = o; p; p = p.parent) if (!p.visible) return false;
+  return true;
+}
+
+/** Ordre de rendu du trièdre du pivot : dessiné en dernier, par-dessus les pièces. */
+const PIVOT_AXES_RENDER_ORDER = 1000;
+
+/**
+ * Pivot de l'orbite. Double clic dans la vue : la cible des contrôles glisse
+ * (`three/orbitPivot.ts`) vers le premier point affiché que touche le rayon de la caméra passant
+ * par le pointeur (partie retirée par le plan de coupe ignorée, comme pour la sélection) ; la
+ * caméra reste en place et tourne vers ce point, qui devient le centre de l'orbite. Un petit
+ * trièdre (x rouge, y vert, z bleu, axes du repère du cœur) marque ce centre, de taille
+ * constante à l'écran et visible à travers les pièces. Double clic dans le vide : sans effet.
+ */
+function OrbitPivot({ isClipped }: { isClipped: (p: Vector3) => boolean }) {
+  const gl = useThree((s) => s.gl);
+  const camera = useThree((s) => s.camera);
+  const scene = useThree((s) => s.scene);
+  const controls = useThree((s) => s.controls) as {
+    target?: Vector3;
+    update?: () => void;
+  } | null;
+  const invalidate = useThree((s) => s.invalidate);
+  // Élément qui reçoit les événements de pointeur de R3F (conteneur du canevas, sous les
+  // surimpressions SVG), à défaut le canevas.
+  const connected = useThree((s) => s.events.connected) as HTMLElement | undefined;
+  const holder = useRef<Group>(null);
+  const transition = useRef<{
+    from: [number, number, number];
+    to: [number, number, number];
+    start: number;
+  } | null>(null);
+  const axes = useMemo(() => {
+    const a = new AxesHelper(1);
+    const m = a.material as Material;
+    m.depthTest = false;
+    m.depthWrite = false;
+    m.toneMapped = false;
+    a.renderOrder = PIVOT_AXES_RENDER_ORDER;
+    a.raycast = () => undefined;
+    return a;
+  }, []);
+  useEffect(() => () => axes.dispose(), [axes]);
+  useEffect(() => {
+    const el = connected ?? gl.domElement;
+    const onDoubleClick = (ev: MouseEvent) => {
+      const target = controls?.target;
+      const rect = gl.domElement.getBoundingClientRect();
+      if (!target || !(rect.width > 0) || !(rect.height > 0)) return;
+      const ndc = new Vector2(
+        ((ev.clientX - rect.left) / rect.width) * 2 - 1,
+        -((ev.clientY - rect.top) / rect.height) * 2 + 1,
+      );
+      const ray = new Raycaster();
+      ray.setFromCamera(ndc, camera);
+      const hits = ray
+        .intersectObjects(scene.children, true)
+        .filter((h) => isShown(h.object) && !isClipped(h.point));
+      // Premier point touché, en traversant les objets de contexte translucides (maçonnerie,
+      // vantaux, zones) s'il y a quelque chose derrière eux.
+      const hit = hits.find((h) => h.object.userData.passThrough !== true) ?? hits[0];
+      if (!hit) return;
+      transition.current = {
+        from: [target.x, target.y, target.z],
+        to: [hit.point.x, hit.point.y, hit.point.z],
+        start: performance.now(),
+      };
+      invalidate();
+    };
+    el.addEventListener("dblclick", onDoubleClick);
+    return () => el.removeEventListener("dblclick", onDoubleClick);
+  }, [gl, connected, camera, scene, controls, invalidate, isClipped]);
+  useFrame(() => {
+    const target = controls?.target;
+    if (!target) return;
+    const t = transition.current;
+    if (t) {
+      const step = pivotAt(t.from, t.to, performance.now() - t.start);
+      target.set(...step.target);
+      controls?.update?.();
+      if (step.done) transition.current = null;
+      else invalidate();
+    }
+    const h = holder.current;
+    if (h) {
+      h.position.copy(target);
+      const fov = "fov" in camera && typeof camera.fov === "number" ? camera.fov : 40;
+      h.scale.setScalar(Math.max(pivotAxesLength(camera.position.distanceTo(target), fov), 1e-6));
+    }
+  });
+  return (
+    <group ref={holder}>
+      {/* Axes du cœur (z vers le haut) : même rotation que le groupe racine des pièces. */}
+      <primitive object={axes} rotation={[-Math.PI / 2, 0, 0]} />
+    </group>
+  );
 }
 
 /**
@@ -902,13 +1149,22 @@ export default function Viewer3D({
   // Plage de profondeur adaptée à la scène (précision de profondeur, `three/groundGrid.ts`).
   const clip = cameraClipRange(frame.size);
 
-  const onPartClick = (partId: string) => (e: ThreeEvent<MouseEvent>) => {
+  const isClippedHit = useCallback(
+    (p: Vector3) => quality.clipping && isClippedInScene(plane, p),
+    [quality.clipping, plane],
+  );
+
+  const onPartClick = (part: ShownPart) => (e: ThreeEvent<MouseEvent>) => {
     // Coupe exacte : le lancer de rayons ignore les plans de coupe ; un point de la partie
     // découpée (invisible) est ignoré et l'événement passe à l'intersection suivante.
     if (quality.clipping && isClippedInScene(plane, e.point)) return;
     e.stopPropagation();
+    const partId = part.partId;
     if (!tools.measuring) {
-      onSelectPart(partId);
+      // Second clic d'un double clic (recentrage de l'orbite, `OrbitPivot`) : sélection
+      // inchangée. Clic sur la pièce déjà sélectionnée : désélection.
+      if (e.nativeEvent.detail >= 2) return;
+      onSelectPart(isPartSelected(part, selection?.location) ? null : partId);
       return;
     }
     const point = pickPoint(partId, fromScene(snappedPoint(e)), offsets);
@@ -968,9 +1224,12 @@ export default function Viewer3D({
                 material={material}
                 position={[o.x, o.y, o.z]}
                 dispose={null}
-                castShadow={!isTranslucent(shown)}
+                castShadow
+                {...(isTranslucent(shown)
+                  ? { customDepthMaterial: materials.shadowDepth(shown) }
+                  : {})}
                 receiveShadow
-                onClick={onPartClick(part.partId)}
+                onClick={onPartClick(part)}
               />
             );
           })}
@@ -983,7 +1242,10 @@ export default function Viewer3D({
             />
           ) : null}
           {isolatedShown || sectionByParts ? null : (
-            <Slab project={project} model={model} material={materials.slab} />
+            <Slab project={project} model={model} material={materials.masonry} />
+          )}
+          {isolatedShown || sectionByParts || !tools.showSite ? null : (
+            <SiteElements project={project} materials={materials} />
           )}
           {arrivalNosing !== undefined && !isolatedShown ? (
             <NosingMarker nosing={arrivalNosing} material={materials.highlight} />
@@ -1002,6 +1264,7 @@ export default function Viewer3D({
         </mesh>
         <GroundGrid fadeDistance={gridFadeDistance(frame.size)} />
         <OrbitControls makeDefault target={frame.target} maxDistance={clip.far / 2} />
+        <OrbitPivot isClipped={isClippedHit} />
         <TextureInvalidator />
         <CameraTestHook target={frame.target} />
         <DemoFramer project={project} box={stairBox} ready={parts.length > 0} />

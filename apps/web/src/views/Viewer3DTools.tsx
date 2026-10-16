@@ -28,6 +28,8 @@ import type { SectionAxis } from "../three/section.js";
 export interface ToolsState {
   readonly showControls: boolean;
   readonly showDimensions: boolean;
+  /** Site affiché : murs, baies, poteaux, zones interdites, contour de la pièce. */
+  readonly showSite: boolean;
   /** Éclatement, 0 à 1. */
   readonly explode: number;
   readonly section: SectionAxis | "none";
@@ -42,6 +44,7 @@ export interface ToolsState {
 export const INITIAL_TOOLS: ToolsState = {
   showControls: true,
   showDimensions: true,
+  showSite: true,
   explode: 0,
   section: "none",
   sectionAt: 0.5,
@@ -208,6 +211,14 @@ export function Viewer3DTools({
             onChange={(e) => onChange({ showDimensions: e.target.checked })}
           />{" "}
           {t.t("ui.viewer3d.dimensions")}
+        </label>
+        <label className="viewer3d__check">
+          <input
+            type="checkbox"
+            checked={tools.showSite}
+            onChange={(e) => onChange({ showSite: e.target.checked })}
+          />{" "}
+          {t.t("ui.viewer3d.site")}
         </label>
         <label className="viewer3d__range">
           {t.t("ui.viewer3d.explode")}

@@ -4328,6 +4328,7 @@
   "ui.viewer3d.selection": "Selection: ",
   "ui.viewer3d.selection.name": " — {name}",
   "ui.viewer3d.showAll": "Show all",
+  "ui.viewer3d.site": "Site (walls, openings, posts)",
   "ui.viewer3d.toolbar.label": "3D tools",
   "ui.welcome.close": "Close",
   "ui.welcome.demos": "Demos",
