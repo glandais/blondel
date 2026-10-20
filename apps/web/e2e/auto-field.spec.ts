@@ -19,11 +19,11 @@ test("nombre de hauteurs : Auto, Imposer, saisie, Échap, annuler, retour à Aut
   await openSection(page, "Découpage");
   const label = "Nombre de hauteurs n";
   const group = page.getByRole("group", { name: label });
-  const auto = group.getByRole("button", { name: `${label} : automatique` });
+  const auto = group.getByRole("button", { name: `${label} : Auto`, exact: true });
   const impose = group.getByRole("button", { name: "Imposer", exact: true });
   const input = page.getByRole("textbox", { name: label, exact: true });
   const computedButton = page.getByRole("button", {
-    name: new RegExp(`^${label} : imposer \\d+$`),
+    name: new RegExp(`^${label} : \\d+ hauteurs calculées, imposer \\d+$`),
   });
   const undo = page.getByRole("button", { name: "Annuler (Ctrl+Z)", exact: true });
 

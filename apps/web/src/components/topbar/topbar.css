@@ -258,6 +258,8 @@
 
 .control-badge {
   --control-tone: var(--control-border);
+  position: relative;
+  cursor: pointer;
   height: 36px;
   gap: 10px;
   font-family: var(--font-body);
@@ -296,6 +298,32 @@
 
 .control-badge__count--conseil {
   color: var(--accent-ink);
+}
+
+/* Le bouton ne porte que le mot ; son ::after couvre la pastille (compteurs compris), qui porte
+   le contour de focus. */
+.control-badge__button {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: inherit;
+}
+
+.control-badge__button::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+}
+
+.control-badge__button:focus-visible {
+  outline: none;
+}
+
+.control-badge:has(.control-badge__button:focus-visible) {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
 }
 
 .control-badge__word {
@@ -400,8 +428,14 @@
 /* Très petit écran : menus et popovers pris dans la largeur de la fenêtre (position verticale
    statique, sous leur bouton), jamais hors de la fenêtre. */
 @media (max-width: 480px) {
+  /* Mot masqué à l'écran mais gardé comme nom du bouton (motif de `.visually-hidden`). */
   .control-badge__word {
-    display: none;
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
   }
 
   .topbar-popover,

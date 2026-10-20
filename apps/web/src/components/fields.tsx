@@ -385,7 +385,16 @@ export function AutoIntField(props: AutoIntFieldProps) {
             type="button"
             className="auto-int__value num"
             title={t.t("ui.common.input.imposeValue", { label, value: computedText })}
-            aria-label={t.t("ui.common.input.imposeValue", { label, value: computedText })}
+            // Le nom contient le texte affiché (WCAG 2.5.3, règle axe label-content-name-mismatch).
+            aria-label={
+              props.autoText === undefined
+                ? t.t("ui.common.input.imposeValue", { label, value: computedText })
+                : t.t("ui.common.input.imposeShown", {
+                    label,
+                    shown: props.autoText,
+                    value: computedText,
+                  })
+            }
             onClick={() => commit(proposed)}
           >
             {props.autoText ?? computedText}

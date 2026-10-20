@@ -948,7 +948,7 @@ test("convertir un escalier à volées en tracé libre, annuler ; limons à la f
   await plan.getByRole("button", { name: "Tronçon 1", exact: true }).focus();
   await page.keyboard.press("Enter");
   await expect(page.getByTestId("plan-selection")).toHaveText("Sélection : Tronçon 1");
-  await panel.getByRole("button", { name: "Partie droite : automatique", exact: true }).click();
+  await panel.getByRole("button", { name: "Partie droite : Auto", exact: true }).click();
   await settle(page);
   const computedLength = panel.getByRole("button", { name: /^Partie droite : imposer \d/ });
   await expect(computedLength).toBeVisible();

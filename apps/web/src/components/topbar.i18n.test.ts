@@ -297,12 +297,17 @@ describe("badge « Contrôle »", () => {
     expect(en.t(summary(1, 2, 1))).toBe("Check: 1 blocking issue, 2 warnings, 1 advice item");
   });
 
-  it("sans modèle : badge neutre, nom accessible commençant par « Contrôle »", () => {
+  it("sans modèle : badge neutre, bouton nommé par son texte, état en description", () => {
     const html = render("fr", ControlBadge);
     expect(html).toMatch(/class="btn btn-secondary control-badge"/);
     expect(html).toMatch(/data-severity="(none|ok|conseil|avertissement|bloquant)"/);
-    expect(html).toMatch(/aria-label="Contrôle/);
-    expect(render("en", ControlBadge)).toMatch(/aria-label="Check/);
+    expect(html).not.toMatch(/aria-label=/);
+    expect(html).toMatch(
+      /<button[^>]*aria-describedby="([^"]+)"[^>]*>.*>Contrôle<\/span><\/button><span id="\1" hidden="">Contrôle : /,
+    );
+    expect(render("en", ControlBadge)).toMatch(
+      />Check<\/span><\/button><span id="[^"]+" hidden="">Check: /,
+    );
   });
 
   it("sans modèle et sans calcul : « indisponible », pas « calcul en cours »", () => {

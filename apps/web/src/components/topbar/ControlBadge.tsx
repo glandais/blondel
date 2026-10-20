@@ -2,13 +2,16 @@
  * Badge « Contrôle » de la barre du haut (maquette 1b) : bordure et couleur de la sévérité la plus
  * haute du contrôle de conception, compteurs des bloquants, avertissements et conseils (affichés
  * seulement s'ils sont non nuls), puis le mot « Contrôle ». Un clic efface la sélection et montre
- * le bloc de contrôle de l'inspecteur (`revealControl`). Aucune règle n'est évaluée ici : les
- * résultats viennent du modèle calculé par le worker (comptes de `lib/compliance.ts`).
+ * le bloc de contrôle de l'inspecteur (`revealControl`). La pastille enveloppe les compteurs et le
+ * bouton, qui ne contient que le mot : le nom accessible est le texte affiché (WCAG 2.5.3), les
+ * comptes en toutes lettres en sont la description ; le bouton couvre toute la pastille. Aucune
+ * règle n'est évaluée ici : les résultats viennent du modèle calculé par le worker (comptes de
+ * `lib/compliance.ts`).
  */
 import type { ComplianceReport, Severity } from "@blondel/core";
 import { msg } from "@blondel/i18n";
 import { Info, OctagonX, TriangleAlert, type LucideIcon } from "lucide-react";
-import { useMemo } from "react";
+import { useId, useMemo } from "react";
 import { useT } from "../../i18n/useT.js";
 import {
   controlCounts,
@@ -43,6 +46,7 @@ export function ControlBadge() {
   const t = useT();
   const view = useModel();
   const report = view.model?.compliance;
+  const summaryId = useId();
   const badge = useMemo(() => badgeCounts(report), [report]);
   const counts = badge?.counts ?? null;
   const tone: ControlTone = badge?.tone ?? "none";
@@ -56,14 +60,7 @@ export function ControlBadge() {
       t.t(view.pending ? "ui.topbar.control.pending" : "ui.topbar.control.unavailable");
 
   return (
-    <button
-      type="button"
-      className="btn btn-secondary control-badge"
-      data-severity={tone}
-      aria-label={label}
-      title={t.t("ui.topbar.control.title")}
-      onClick={revealControl}
-    >
+    <div className="btn btn-secondary control-badge" data-severity={tone}>
       {counts
         ? COUNT_ICONS.filter((c) => counts[c.severity] > 0).map((c) => (
             <span
@@ -76,7 +73,18 @@ export function ControlBadge() {
             </span>
           ))
         : null}
-      <span className="control-badge__word">{t.t("ui.topbar.control.label")}</span>
-    </button>
+      <button
+        type="button"
+        className="control-badge__button"
+        aria-describedby={summaryId}
+        title={t.t("ui.topbar.control.title")}
+        onClick={revealControl}
+      >
+        <span className="control-badge__word">{t.t("ui.topbar.control.label")}</span>
+      </button>
+      <span id={summaryId} hidden>
+        {label}
+      </span>
+    </div>
   );
 }

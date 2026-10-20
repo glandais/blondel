@@ -39,7 +39,7 @@ describe("AutoIntField", () => {
   it("mode Auto : Auto enfoncé, valeur calculée affichée, aucun champ de saisie", () => {
     const html = render({ computed: 2700 });
     expect(pressed(html)).toEqual(["true", "false"]);
-    expect(html).toContain('aria-label="Volée 1 (bord extérieur) : automatique"');
+    expect(html).toContain('aria-label="Volée 1 (bord extérieur) : Auto"');
     expect(html).toMatch(/>Auto</);
     expect(html).toMatch(/>Imposer</);
     expect(html).toMatch(/>2\s700 mm</);
@@ -60,8 +60,10 @@ describe("AutoIntField", () => {
   it("texte Auto fourni par l'appelant ; unité vide", () => {
     const text = render({ computed: 15, autoText: "15 hauteurs calculées" });
     expect(text).toContain(">15 hauteurs calculées<");
-    // Le nom accessible garde la valeur seule.
-    expect(text).toContain("imposer 15");
+    // Le nom accessible contient le texte affiché (WCAG 2.5.3), puis la valeur imposée.
+    expect(text).toContain(
+      'aria-label="Volée 1 (bord extérieur) : 15 hauteurs calculées, imposer 15 mm"',
+    );
     // Sans valeur calculée, le texte de l'appelant n'est pas affiché.
     expect(render({ autoText: "15 hauteurs calculées" })).not.toContain("15 hauteurs");
     const html = render({ unit: "", computed: 15 });
@@ -82,7 +84,7 @@ describe("AutoIntField", () => {
 
   it("Auto impossible : bouton Auto désactivé, explication en titre et en aide", () => {
     const html = render({ value: 1800, autoAllowed: false, autoHint: "Une volée au moins." });
-    const auto = /<button[^>]*aria-label="[^"]*automatique"[^>]*>/.exec(html)![0];
+    const auto = /<button[^>]*aria-label="[^"]* : Auto"[^>]*>/.exec(html)![0];
     expect(auto).toContain("disabled");
     expect(auto).toContain('title="Une volée au moins."');
     expect(html).toContain("Une volée au moins.");
@@ -94,7 +96,7 @@ describe("AutoIntField", () => {
       const html = render({ label: "Flight 1", ...props }, "en");
       expect(html).toMatch(/>Auto</);
       expect(html).toMatch(/>Set</);
-      expect(html).toContain("Flight 1: automatic");
+      expect(html).toContain('aria-label="Flight 1: Auto"');
       expect(html).not.toMatch(/automatique|Imposer|Valeur|imposer|cliquez|calculé/);
     }
     expect(render({ label: "Flight 1", value: 1800 }, "en")).toContain("click Auto");

@@ -201,7 +201,8 @@ test("badge Contrôle : couleur de la sévérité, inspecteur sans sélection, f
   await commitField(page, page.getByLabel("Hauteur de marche cible"), "215");
   const badge = page.locator(".control-badge");
   await expect(badge).toHaveAttribute("data-severity", "bloquant");
-  await expect(badge).toHaveAccessibleName(/^Contrôle : \d+ bloquant/);
+  await expect(badge.getByRole("button")).toHaveAccessibleName("Contrôle");
+  await expect(badge.getByRole("button")).toHaveAccessibleDescription(/^Contrôle : \d+ bloquant/);
   // Bordure de la couleur de la sévérité la plus haute.
   const tone = await badge.evaluate((el) => {
     const probe = document.createElement("span");
