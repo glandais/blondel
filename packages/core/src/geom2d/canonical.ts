@@ -58,8 +58,30 @@ export function pruneFlatVertices<T extends Vec2>(ring: readonly T[], eps: numbe
   // était le premier du tri exact (x, y) (chaîne monotone), le bruit d'un bord gauche quasi
   // vertical déciderait du survivant, et l'arête voisine s'inclinerait de jusqu'à eps / c rad
   // (assez pour retourner `minAreaRect` d'un demi-tour). L'ordre cyclique d'un contour convexe
-  // ne dépend pas, lui, du bruit (sommets à plus du bruit les uns des autres).
-  const out = rotateToStart(ring, lowestVertexIndex(ring, eps));
+  // ne dépend pas, lui, du bruit (sommets à plus du bruit les uns des autres), sauf entre
+  // sommets quasi confondus (ordre de la chaîne monotone). La suite de sommets quasi confondus
+  // (à ≤ `eps` de proche en proche) qui contient le sommet canonique est donc réduite d'abord,
+  // sans dépendre de son ordre : le sommet canonique est retiré et le plus bas des autres
+  // (`lowestVertexIndex`) reste ; pour une paire, c'est l'autre sommet, comme en la parcourant
+  // depuis le sommet canonique. Sans cela, une cascade sur trois sommets (copies d'un même sommet
+  // de part et d'autre d'un coin, dont le bruit choisit la canonique) garde le coin ou une copie.
+  const n0 = ring.length;
+  const c = lowestVertexIndex(ring, eps);
+  const near = (i: number, j: number): boolean =>
+    Math.hypot(ring[i]!.x - ring[j]!.x, ring[i]!.y - ring[j]!.y) <= eps;
+  const run = new Set<number>(c < 0 ? [] : [c]);
+  for (let i = c; run.size < n0 && near(i, (i + n0 - 1) % n0); i = (i + n0 - 1) % n0)
+    run.add((i + n0 - 1) % n0);
+  for (let i = c; run.size < n0 && near(i, (i + 1) % n0); i = (i + 1) % n0) run.add((i + 1) % n0);
+  let out = rotateToStart(ring, c);
+  if (run.size >= 2 && run.size < n0) {
+    const others = [...run].filter((i) => i !== c);
+    const pts = others.map((i) => ring[i]!);
+    const keep = others[lowestVertexIndex(pts, eps)]!;
+    out = rotateToStart([...ring.keys()], (c + 1) % n0)
+      .filter((i) => i === keep || !run.has(i))
+      .map((i) => ring[i]!);
+  }
   let changed = true;
   while (changed && out.length >= 3) {
     changed = false;

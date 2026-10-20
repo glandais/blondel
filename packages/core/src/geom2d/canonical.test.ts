@@ -42,13 +42,16 @@ function exactHull(points: readonly Vec2[]): Vec2[] {
   return [...half(p), ...half([...p].reverse())];
 }
 
-const magnitude = fc.double({ min: 1e-8, max: 6e-7, noNaN: true });
+const magnitude = fc.double({ min: 1e-8, max: 4e-7, noNaN: true });
 
 /**
  * Contour convexe à coordonnées entières (abscisses multiples de 60 : bords verticaux
  * fréquents), avec, à leur place dans l'ordre cyclique, des sommets quasi alignés (paramètre
- * réel sur une arête) et des sommets quasi confondus avec un coin (décalage de 1e-8 à 6e-7 mm
- * sur chaque coordonnée : à moins de `GEOM_EPS` du coin, à bien plus que le bruit).
+ * réel sur une arête) et des sommets quasi confondus avec un coin (décalage de 1e-8 à 4e-7 mm
+ * sur chaque coordonnée : à moins de `GEOM_EPS` du coin, à bien plus que le bruit ; deux décalages
+ * opposés sur un bord vertical restent à au plus 8e-7 en x, loin du seuil `xmin + eps` du départ). Deux sommets
+ * quasi confondus avec un même coin diffèrent en y d'au moins 1e-8 : sinon le bruit seul les
+ * départage comme sommet canonique (limite documentée de `pruneFlatVertices`).
  */
 const ringWithFlats = fc
   .record({
@@ -77,15 +80,26 @@ const ringWithFlats = fc
     const nearStart: Vec2[][] = hull.map(() => []);
     const onEdge: { t: number; p: Vec2 }[][] = hull.map(() => []);
     const nearEnd: Vec2[][] = hull.map(() => []);
+    const nearYs: number[][] = hull.map(() => []);
+    const freeY = (corner: number, dy: number): boolean => {
+      if (nearYs[corner]!.some((y) => Math.abs(y - dy) < 1e-8)) return false;
+      nearYs[corner]!.push(dy);
+      return true;
+    };
     for (const { edge, kind, t, dx, dy, sx, sy } of inserts) {
       const i = edge % hull.length;
       const a = hull[i]!;
       const b = hull[(i + 1) % hull.length]!;
       const off = V.vec(sx ? dx : -dx, sy ? dy : -dy);
       if (kind === "onEdge") onEdge[i]!.push({ t, p: V.lerp(a, b, t) });
-      else if (kind === "nearStart" && nearStart[i]!.length === 0)
+      else if (kind === "nearStart" && nearStart[i]!.length === 0 && freeY(i, off.y))
         nearStart[i]!.push(V.add(a, off));
-      else if (kind === "nearEnd" && nearEnd[i]!.length === 0) nearEnd[i]!.push(V.add(b, off));
+      else if (
+        kind === "nearEnd" &&
+        nearEnd[i]!.length === 0 &&
+        freeY((i + 1) % hull.length, off.y)
+      )
+        nearEnd[i]!.push(V.add(b, off));
     }
     const ring: Vec2[] = [];
     hull.forEach((p, i) => {
@@ -157,6 +171,22 @@ describe("canonical.ts : cas fixes", () => {
     const cb = canonicalRing(b);
     expect(cb.length).toBe(ca.length);
     ca.forEach((p, i) => expect(V.distance(p, cb[i]!)).toBeLessThanOrEqual(1e-11));
+  });
+
+  it("pruneFlatVertices : survivant d'un trio quasi confondu indépendant du départ reçu", () => {
+    // Coin (−60, 1) entre deux copies d'un même sommet à 1,4e-8 mm (contre-exemple CI, graine
+    // −303113739) : le départ canonique tombe sur l'une ou l'autre copie selon le bruit ; partant
+    // de la seconde dans l'ordre cyclique, la cascade retirait aussi le coin.
+    const near = V.vec(-60.00000001, 0.99999999);
+    const ring = [V.vec(-60, 1), near, V.vec(0, 0), V.vec(0, 1), near];
+    const ref = canonicalRing(ring);
+    for (const k of [0, 1, 2, 3, 4])
+      for (const s of [0, 1]) {
+        const seeds = [s, s, 1 - s, 1 - s, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5];
+        const got = canonicalRing(rotateToStart(noisy(ring, seeds), k));
+        expect(got.length).toBe(ref.length);
+        ref.forEach((p, i) => expect(V.distance(got[i]!, p)).toBeLessThanOrEqual(1e-8));
+      }
   });
 });
 
