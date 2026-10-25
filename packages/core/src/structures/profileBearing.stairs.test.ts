@@ -301,8 +301,10 @@ describe("profileBearing — escaliers tournants générés (I2, I6, I7)", () =>
       }),
       { numRuns: RUNS },
     );
-    // Les tirages dont le découpage échoue ne prouvent rien : il en faut une majorité d'évalués.
-    expect(evaluated).toBeGreaterThan(RUNS / 2);
+    // Les tirages dont le découpage échoue ne prouvent rien : il en faut une part suffisante
+    // d'évalués. Environ la moitié échouent (tournants opposés S / Z) : une borne à la moitié
+    // échouait au hasard (13 évalués sur 30) ; au cinquième, l'échec fortuit devient négligeable.
+    expect(evaluated).toBeGreaterThan(RUNS / 5);
     expect(miters).toBeGreaterThan(0);
   });
 });

@@ -57,6 +57,8 @@ export const GROUP_LABELS: Readonly<Record<string, MessageKey>> = {
   bolts: "ui.param.group.bolts",
   lagScrews: "ui.param.group.lagScrews",
   anchors: "ui.param.group.anchorsFootHead",
+  // Limon coudé des profilés (`steel-profile`, QUESTIONS A41, K-Q9) : nettoyage des jarrets.
+  knee: "ui.param.group.knee",
 };
 
 const MM = "mm";
@@ -856,6 +858,27 @@ const BY_KIND: Readonly<Record<string, Readonly<Record<string, FieldText>>>> = {
   },
   "steel-flat": {
     thickness: { label: "ui.param.steelFlat.thickness.label", unit: MM, hint: TO_VALIDATE },
+  },
+  // Ligne d'appui des limons en profilés (CK16) et nettoyage des jarrets du limon coudé (K-Q9,
+  // valeurs ◆ à valider) ; exposition complète dans l'interface en K2c.
+  "steel-profile": {
+    stringerLine: {
+      label: "ui.param.stringerLine.label",
+      options: {
+        chord: "ui.param.stringerLine.option.chord",
+        nosing: "ui.param.stringerLine.option.nosing",
+      },
+    },
+    "knee.minSegmentLength": {
+      label: "ui.param.knee.minSegmentLength.label",
+      unit: MM,
+      hint: TO_VALIDATE,
+    },
+    "knee.minKneeAngle": {
+      label: "ui.param.knee.minKneeAngle.label",
+      unit: "°",
+      hint: TO_VALIDATE,
+    },
   },
   "steel-curved": {
     thickness: { label: "ui.param.steelCurved.thickness.label", unit: MM, hint: TO_VALIDATE },

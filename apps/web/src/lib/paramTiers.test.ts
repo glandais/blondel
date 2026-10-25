@@ -633,6 +633,33 @@ describe("valeurs ◆ d'un projet", () => {
     expect(structureParamApplies(withNewel, {}, ["newel", "bolts"])).toBe(true);
   });
 
+  it("limon coudé des profilés (K2b) : ligne d'appui en Atelier, jarrets ◆ seulement en `nosing`", () => {
+    const p = withStructure(createProject("quarter-left"), "steel-profile");
+    expect(structureParamEntry("steel-profile", ["stringerLine"]).tier).toBe("workshop");
+    expect(structureParamEntry("steel-profile", ["stringerLine"]).toValidate).toBeUndefined();
+    for (const leaf of ["minSegmentLength", "minKneeAngle"]) {
+      const e = structureParamEntry("steel-profile", ["knee", leaf]);
+      expect(e.tier).toBe("workshop");
+      expect(e.toValidate).toBe(true);
+      expect(structureParamApplies(p, { stringerLine: "chord" }, ["knee", leaf])).toBe(false);
+      expect(structureParamApplies(p, { stringerLine: "nosing" }, ["knee", leaf])).toBe(true);
+    }
+    expect(structureParamApplies(p, { stringerLine: "chord" }, ["stringerLine"])).toBe(true);
+    // Projet en barre droite (défaut) : aucun ◆ de jarret compté.
+    const m = buildModel(p);
+    expect(toValidateItems(p, m).filter((i) => i.key.includes(".knee."))).toEqual([]);
+    const nosing: Project = {
+      ...p,
+      stair: {
+        ...p.stair,
+        structure: { kind: "steel-profile", params: { stringerLine: "nosing" } },
+      },
+    };
+    const keys = toValidateItems(nosing, buildModel(nosing)).map((i) => i.key);
+    expect(keys).toContain("stair.structure.params.knee.minSegmentLength");
+    expect(keys).toContain("stair.structure.params.knee.minKneeAngle");
+  });
+
   it("paramètres conditionnels du limon central et de la fixation des marches (A31)", () => {
     const p = createProject("straight");
     const applies = (params: unknown, path: string) =>

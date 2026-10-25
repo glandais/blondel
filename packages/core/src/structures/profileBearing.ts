@@ -2,8 +2,8 @@
  * Noyau géométrique du **limon coudé** des profilés (`steel-profile`, chantier bent-stringer,
  * sous-lot K2a ; décisions de l'utilisateur QUESTIONS A41, conventions CK1 à CK18 du ledger
  * `docs/ledger/LEDGER-bent-stringer.md`). Fonctions pures, sans DOM ni texte : le noyau ne
- * rend que des données (et des constats typés `BearingIssue`). **Non branché** en K2a :
- * `steelProfile.ts` ne l'appelle pas encore.
+ * rend que des données (et des constats typés `BearingIssue`). Branché en K2b par
+ * `steelProfileCranked.ts`, derrière le paramètre `stringerLine` = `nosing` de `steel-profile`.
  *
  * - **Ligne d'appui** (CK2, K-Q1) : ligne des nez du côté de la face (palier compris), lue sur
  *   toute la fenêtre [uLo ; uHi] de la face, prolongée par le segment extrême avant le premier
@@ -65,8 +65,8 @@ export function bearingSectionOf(s: SteelSection): BearingSection {
 // ------------------------------------------------------------------------------ réglages
 
 /**
- * Réglages du nettoyage des sommets (QUESTIONS A41, K-Q9). Pas encore fusionnés dans
- * `SteelProfileParamsSchema` (K2b, clé `knee`).
+ * Réglages du nettoyage des sommets (QUESTIONS A41, K-Q9), fusionnés dans
+ * `SteelProfileParamsSchema` sous la clé `knee` (K2b, lus seulement en `stringerLine` = `nosing`).
  */
 export const KneeSettingsSchema = z.object({
   /**

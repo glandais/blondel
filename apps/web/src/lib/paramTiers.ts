@@ -472,6 +472,14 @@ const STRUCTURE_BY_KIND: Readonly<Record<string, Readonly<Record<string, ParamTi
     cantileverJustification: design(S, [more(5)]),
     laminationJustification: design(S, [more(5)]),
   },
+  // Limons en profilés : ligne d'appui (barre droite ou limon coudé, CK16) en Atelier ; nettoyage
+  // des jarrets (K-Q9) ◆, seulement en limon coudé (`structureParamApplies`).
+  "steel-profile": {
+    stringerLine: workshop(S),
+    knee: workshop(S),
+    "knee.minSegmentLength": workshop(S),
+    "knee.minKneeAngle": workshop(S),
+  },
   "helical-core": {
     column: workshop(S),
     "column.material": design(S, [more(5)]),
@@ -643,7 +651,7 @@ function guardPaths(project: Project): (readonly string[])[] {
  * filière retenue sur une trace courbe (`resolveCurvedMethod` du cœur : lamelles et plis minces
  * pour le moule, couches pour les couches empilées, QUESTIONS A33 (e)), la présence des ancrages
  * (`anchors.*`) et leur type retenu (`resolveAnchorKind` : réglages du sabot ou de la platine à
- * âme noyée, A33 (f), A34 (c) ; épaisseur minimale de couche au joint de l'âme de pied, A39 (d)). Les autres paramètres s'appliquent toujours. `params` : paramètres du plugin complétés par ses défauts.
+ * âme noyée, A33 (f), A34 (c) ; épaisseur minimale de couche au joint de l'âme de pied, A39 (d)), le nettoyage des jarrets du limon coudé des profilés (`knee.*`, K-Q9) seulement en limon coudé (`stringerLine` = `nosing`). Les autres paramètres s'appliquent toujours. `params` : paramètres du plugin complétés par ses défauts.
  * Lecture du projet seulement, aucun calcul.
  */
 export function structureParamApplies(
@@ -734,6 +742,8 @@ export function structureParamApplies(
     const v = field(field(params, "lagScrews"), "minTotalAnchorage");
     return typeof v === "number" && v > 0;
   }
+  // Nettoyage des jarrets du limon coudé des profilés (K-Q9) : seulement en limon coudé.
+  if (head === "knee") return field(params, "stringerLine") === "nosing";
   // Réduction selon l'angle du fil (A35 (j)) : poutre en couches empilées seulement.
   if (head === "grainAngle") return curvedMethodOf(project, params) === "stacked";
   // Justification des plis minces du lamellé-collé cintré : sans objet sans cintrage sur moule.

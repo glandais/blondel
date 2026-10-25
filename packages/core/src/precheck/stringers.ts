@@ -97,13 +97,39 @@ function xExtent(part: Part): number {
   return hi - lo;
 }
 
+/** Corde de la rive haute d'un développé en (u, z) : extrémités en x, point le plus haut de chacune. */
+function crankedChordLength(part: Part): Mm {
+  const pts = part.flat!.outline.outer;
+  let lo = Infinity;
+  let hi = -Infinity;
+  for (const p of pts) {
+    lo = Math.min(lo, p.x);
+    hi = Math.max(hi, p.x);
+  }
+  let zLo = -Infinity;
+  let zHi = -Infinity;
+  for (const p of pts) {
+    if (Math.abs(p.x - lo) < 1e-6) zLo = Math.max(zLo, p.y);
+    if (Math.abs(p.x - hi) < 1e-6) zHi = Math.max(zHi, p.y);
+  }
+  return Math.hypot(hi - lo, zHi - zLo);
+}
+
 /**
  * Portée horizontale d'un limon en profilé : le développé est la vue de l'âme dans le repère de
  * la barre (x le long de l'axe, y de 0 à h). Ses extrémités sont des coupes d'aplomb : l'étendue
  * totale en x vaut Δu / cos α + h·tan α (et la coupe de niveau au sol la rogne), mais la rive
  * haute (y = h) mesure exactement Δu / cos α. Repli : étendue totale × cos α.
+ *
+ * Limon coudé (`steel-profile`, `stringerLine` = `nosing`, solide `sweep`) : le développé est
+ * l'âme plane dans le repère (u, z) translaté (x horizontal le long de la face, y vertical). La
+ * longueur d'axe retenue est la corde de la rive haute entre les deux coupes d'extrémité (point
+ * le plus haut de chaque extrémité en x), rendue « × cos α » comme la barre droite pour que
+ * `analyzeInclinedBeam` retrouve cette longueur ; le plugin, qui connaît la corde exacte de la
+ * face, publie son propre prédimensionnement (CK12).
  */
 function profileSpanH(part: Part, h: Mm, cos: number): Mm {
+  if (part.solid.kind === "sweep") return crankedChordLength(part) * cos;
   const pts = part.flat!.outline.outer;
   let lo = Infinity;
   let hi = -Infinity;
