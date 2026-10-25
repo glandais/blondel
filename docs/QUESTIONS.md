@@ -558,6 +558,11 @@ Chantier `feat/bent-stringer`, état des lieux et conception K1 dans `docs/ledge
   - (K-Q10) cornière à cheval sur un jarret **décalée hors du jarret**, avec une remarque (non sourcé) ;
   - (K-Q11) limon coudé **par défaut** (`stringerLine` = `nosing`) à la bascule K2d, avec une remarque sur les projets recalculés ; la barre droite (`chord`) reste disponible ;
   - (K-Q6) termes anglais **cranked string / knee / segment**, inscrits au glossaire « à valider ».
+- **Décisions de l'utilisateur (2026-10-25), après les mesures de K2a** (`docs/ledger/LEDGER-bent-stringer.md`, lignes K2a), conformes aux propositions :
+  - (K-Q12) **repli par face sur la barre droite** : chaque face prend le limon coudé, sauf s'il y est infaisable (nez au-dessus de la rive haute, coupes qui se croisent, raccord raide, marche sans appui, fenêtre vide) ou s'il demande plus d'âme que la barre droite ; la face garde alors la barre droite d'aujourd'hui, avec une remarque. Erreur seulement si la barre droite échoue aussi. Aucun cas valide en barre droite ne devient invalide (cage-60-palier-limon, jours en pan coupé de cage) ;
+  - (K-Q13) nez au-dessus de la rive haute après retrait d'un jarret (girons courts près du poteau, en volées) : **même repli par face** que K-Q12 ;
+  - (K-Q9) défauts « à valider » : **longueur minimale de tronçon 50 mm** (creux de la distribution mesurée : fibres de 29 à 34 mm, puis ≥ 50 mm), **angle minimal de jarret 0,5°** ;
+  - ordre des sous-lots : la règle de cornière au coin (K-Q4) passe **avant** la bascule du défaut (K-Q11), sans quoi j4-demi et demo-half-turn-industrial passeraient de l'UPN 240 à l'UPN 260 ; référence de j5b pour les critères : chemin du comparateur (`adaptJour`, UPN 200, 184,5 mm d'âme).
 - Réf. : A13, F17 ; `docs/LEDGER.md` l. 178 et l. 304 ; `structures/steelProfile.ts`, `structures/steelProfileCutting.ts`.
 
 ## B. Validations par un atelier ou un professionnel
