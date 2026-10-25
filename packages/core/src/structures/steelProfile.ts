@@ -13,8 +13,11 @@
  *   A13, A41) : ligne d'appui sur la ligne des nez, jarret à chaque nez où la pente change,
  *   partie de niveau aux coins en plan (noyau `profileBearing.ts`, câblage
  *   `steelProfileCranked.ts`) ; repli par face sur la barre droite quand le coudé y est
- *   infaisable ou impose plus d'âme (K-Q12, K-Q13), avec une remarque. Pièce unique par face en
- *   K2b (tronçons, débit et cordons de jarret en K2c). Défaut `chord` : barre droite inchangée.
+ *   infaisable ou impose plus d'âme (K-Q12, K-Q13), avec une remarque. Face à jarrets (K2c) :
+ *   pièce finie (solide balayé, propriétaire des cornières) et une composante par tronçon
+ *   (`LE2-1`…, développé, débit, cordon de jarret sur le tronçon du dessus) ; cornière à cheval
+ *   sur un jarret : traçage coupé au joint (décalage K-Q10 non branché, voir
+ *   `kneeFreeSupport`). Défaut `chord` : barre droite inchangée.
  * - **Choix de section** : une section du catalogue (`catalog/`) ou `auto` = la plus légère de
  *   la famille qui (1) loge les supports dans la hauteur d'âme et (2) passe le
  *   **prédimensionnement indicatif** (`precheck/` : L/200, contrainte, f₁ ≥ 5 Hz) pour tous les
@@ -87,8 +90,10 @@ import {
   fitInWebPolyline,
   riveFns,
   type FaceBearing,
+  type Knee,
   type WebFitParams,
 } from "./profileBearing.js";
+import { QUANTITY_LENGTH_MM } from "./quantities.js";
 import {
   STEEL_RULES,
   deduceExecutionClass,
@@ -111,14 +116,24 @@ import {
   type SteelStringerFace,
 } from "./steelFlat.js";
 import {
+  componentIndexAt,
   crankedAxialEnds,
   crankedBearingFaces,
+  crankedComponentMark,
+  crankedComponentSpecs,
   crankedFallbackNote,
+  crankedJigItems,
+  crankedJigNote,
   crankedMiterItems,
   crankedNote,
   crankedOutline,
   crankedSectionPlan,
+  crankedSingleNote,
   crankedSweepPath,
+  kneeNormal,
+  kneeWeldLength,
+  type CrankedComponentSpec,
+  type CrankedJigItem,
   type CrankedFallbackReason,
   type CrankedSectionPlan,
 } from "./steelProfileCranked.js";
@@ -321,6 +336,13 @@ export interface ProfileStringer {
   readonly bearing?: FaceBearing;
   /** Repli sur la barre droite en `nosing` (K-Q12, K-Q13), avec sa raison. */
   readonly crankedFallback?: CrankedFallbackReason;
+  /**
+   * Composantes d'un limon coudé à plusieurs tronçons (K2c, CK8, contrat A33) : un tronçon par
+   * pièce (`componentOf` = `part.id`, repères `LE2-1`… du bas vers le haut), qui portent
+   * développé, débit, coupes, masse et cordons ; `part` est alors la pièce finie (solide,
+   * propriété des cornières, sans développé ni débit). Absent : pièce autonome.
+   */
+  readonly components?: readonly Part[];
 }
 
 export interface SteelProfileResult {
@@ -772,9 +794,15 @@ export function buildSteelProfile(
     }
     // Limon coudé : une remarque par face coudée et par face repliée, pour la section retenue,
     // seulement pour les limons construits (pas de remarque de repli sur un limon non généré).
+    // Face à plusieurs tronçons : remarque des tronçons et cotes de gabarit (CK8, CK17) ; un seul
+    // tronçon : remarque propre (pièce autonome).
     if (nosing) {
       const fp = planOf(s).faces.get(p.face.id);
-      if (fp?.bearing) notes.push(crankedNote(p.face.mark, fp.bearing));
+      if (fp?.bearing && fp.bearing.segments.length >= 2) {
+        notes.push(crankedNote(p.face.mark, fp.bearing));
+        const jig = crankedJigNote(p.face.mark, built.jig ?? []);
+        if (jig) notes.push(jig);
+      } else if (fp?.bearing) notes.push(crankedSingleNote(p.face.mark, fp.bearing));
       else if (fp?.fallback) notes.push(crankedFallbackNote(p.face.mark, fp.fallback));
     }
     supportMargins.push(...built.supportMargins);
@@ -829,10 +857,11 @@ export function buildSteelProfile(
 
   // 11. Classe d'exécution (S355 « soudé » seulement si une pièce porte un cordon, C §2.1) et
   // contrôles.
-  const weldTotal = [...stringers.map((x) => x.part), ...posts, ...supportMarked].reduce(
-    (acc, p) => acc + (p.quantities[QUANTITY_WELD_MM] ?? 0),
-    0,
-  );
+  const weldTotal = [
+    ...stringers.flatMap((x) => x.components ?? [x.part]),
+    ...posts,
+    ...supportMarked,
+  ].reduce((acc, p) => acc + (p.quantities[QUANTITY_WELD_MM] ?? 0), 0);
   const exc = deduceExecutionClass({
     grade,
     buttWeld: buttWeldTotal,
@@ -894,7 +923,12 @@ export function buildSteelProfile(
   const supports = placements.map((placement, i) => ({ placement, part: supportMarked[i]! }));
   return {
     output: {
-      parts: [...stringers.map((x) => x.part), ...posts, ...supportMarked],
+      // Limon coudé : pièce finie suivie de ses composantes (tronçons, CK8).
+      parts: [
+        ...stringers.flatMap((x) => [x.part, ...(x.components ?? [])]),
+        ...posts,
+        ...supportMarked,
+      ],
       checks: [...checks.results, ...precheck],
       executionClass: exc.executionClass,
       // Même calcul que les lignes PRECHECK_* (portée uHi − uLo, pente de la ligne, cornières
@@ -1259,6 +1293,8 @@ interface BuiltProfileStringer {
   readonly height: PartCheckItem;
   readonly bearing: CheckItem[];
   readonly spliceNote?: Message;
+  /** Cotes de gabarit d'un limon coudé à plusieurs tronçons (CK17). */
+  readonly jig?: readonly CrankedJigItem[];
   readonly errors?: undefined;
 }
 
@@ -1576,20 +1612,26 @@ function profileEndLabel(
 }
 
 /**
- * Étape 7, limon coudé (`stringerLine` = `nosing`, K2b) : pièce unique par face (les
- * composantes par tronçon, leurs développés, le débit et les cordons de jarret viennent en K2c).
+ * Étape 7, limon coudé (`stringerLine` = `nosing`, K2b, K2c ; QUESTIONS A41, CK8 à CK10, CK15,
+ * CK17, contrat A33).
  *
  * - Contour de l'âme en (u, z) entre les coupes d'extrémité (`crankedOutline`), coupé au sol.
- * - Développé : l'âme d'un limon coudé est **plane** (plan vertical de la face) ; repère
- *   x = u − u_min (miroir comme la barre droite), y = z − z_min, exact. Perçages et traçage des
- *   supports, coupes d'extrémité à la pente du tronçon d'extrémité, coupe de chaque jarret
- *   (ligne `joint` de la rive haute à la rive basse, sur la bissectrice, CK4, CK9).
- * - Longueur de débit : somme des encombrements axiaux des tronçons (onglets compris), moins la
- *   partie du premier tronçon retirée par la coupe de sol [approximation K2b, fibre nommée en K2c].
- * - Cordons : coupes d'extrémité comme la barre droite (cos α du tronçon d'extrémité) ; cordons
- *   de jarret **non comptés** en K2b (K2c, classe d'exécution des jarrets en K2d, K-Q2).
- * - Solide : balayage de la section le long de la rive basse (`crankedSweepPath`), onglets aux
- *   jarrets, extrémités d'équerre (CK15).
+ * - **Plusieurs tronçons** : pièce finie (identifiant et repère de la face, solide balayé,
+ *   section, propriétaire des cornières, poutre équivalente `beamChord` pour le
+ *   prédimensionnement de repli) **sans** développé, débit ni grandeurs de matière (longueur
+ *   seule) ; une composante par tronçon (`crankedComponentSpecs`, repères `LE2-1`… du bas vers le
+ *   haut) avec son développé dans le repère du tronçon, son débit, ses coupes (lignes `joint`,
+ *   jamais `bend`), ses perçages et le traçage des cornières qui y tombent, sa masse et ses
+ *   cordons : cordon de jarret porté par le tronçon du dessus (CK10, choix Blondel à valider),
+ *   compté en cordon simple (la classe d'exécution des jarrets, K-Q2, vient en K2d).
+ * - **Un seul tronçon** (pente propre, sans jarret) : pièce autonome, développé dans le repère du
+ *   tronçon, grandeurs complètes.
+ * - Longueur de débit d'un tronçon : encombrement axial (coupes de jarret et onglets compris),
+ *   moins la coupe de sol pour le premier ; Σ des tronçons = longueur de K2b.
+ * - Solide de la pièce finie : balayage de la section le long de la rive basse
+ *   (`crankedSweepPath`), onglets aux jarrets, prolongé aux coins en plan jusqu'à l'onglet.
+ *   Solide d'une composante : extrusion de la section le long de son tronçon, bouts d'équerre
+ *   qui l'enferment (non dessinée : scène 3D et glTF dessinent la pièce finie).
  * - Prédimensionnement : corde de la face (CK12), comme la barre droite.
  */
 function buildCrankedProfileStringer(
@@ -1612,10 +1654,8 @@ function buildCrankedProfileStringer(
   const supportMargins: PartCheckItem[] = [];
   const f = p.face;
   const rives = riveFns(fb);
-  const firstSeg = fb.segments[0]!;
-  const lastSeg = fb.segments[fb.segments.length - 1]!;
-  const alphaStart = firstSeg.alpha;
-  const alphaEnd = lastSeg.alpha;
+  const alphaStart = fb.segments[0]!.alpha;
+  const alphaEnd = fb.segments[fb.segments.length - 1]!.alpha;
   // Onglets : mêmes abscisses d'âme que la barre droite (`miterOffset`, CK5).
   const uLoW = p.uLo - (f.start === "corner" ? miterOffset(f.startCorner, shift) : 0);
   const uHiW = p.uHi + (f.end === "corner" ? miterOffset(f.endCorner, shift) : 0);
@@ -1624,49 +1664,9 @@ function buildCrankedProfileStringer(
   if (outline.length < 3) {
     return { notes: [msg("structure.steelProfile.note.underFloor", { mark: f.mark })] };
   }
-  // Développé : plan de l'âme, repère (u, z) translaté (miroir selon le sens de montée).
   const mirrored = V.dot(V.perpRight(f.into), f.dir) < 0;
-  let uMin = Infinity;
-  let uMax = -Infinity;
-  let zMin = Infinity;
-  for (const q of outline) {
-    uMin = Math.min(uMin, q.x);
-    uMax = Math.max(uMax, q.x);
-    zMin = Math.min(zMin, q.y);
-  }
-  const T = (q: Vec2): Vec2 => V.vec(mirrored ? uMax - q.x : q.x - uMin, q.y - zMin);
-  const barPts = outline.map(T);
-  if (signedArea(barPts) < 0) barPts.reverse();
-  /** Direction du tronçon en u, dans le repère du développé (axe des boutonnières). */
-  const axisAt = (u: Mm): Vec2 => {
-    const seg = fb.segments.find((x) => u <= x.u1 + 1e-9) ?? lastSeg;
-    const d = V.vec(Math.cos(seg.alpha), Math.sin(seg.alpha));
-    return mirrored ? V.vec(-d.x, d.y) : d;
-  };
-  const holes: Vec2[][] = [];
-  const lines: FlatPattern["lines"][number][] = [];
   for (const sp of mine) {
-    for (const cc of boltCenters(sp, sup)) {
-      const ring = holePolygon(T(cc), sup.holeDiameter, sup.slotLength, axisAt(cc.x));
-      holes.push(signedArea(ring) > 0 ? ring.reverse() : ring);
-    }
     const zb = sp.zTop - depthSup;
-    const rect = [
-      V.vec(sp.u0, zb),
-      V.vec(sp.u1, zb),
-      V.vec(sp.u1, sp.zTop),
-      V.vec(sp.u0, sp.zTop),
-    ].map(T);
-    rect.forEach((a, i) =>
-      lines.push({
-        kind: "mark",
-        a,
-        b: rect[(i + 1) % 4]!,
-        ...(i === 0
-          ? { label: msg("structure.steel.flatLine.support", { mark: sp.treadMark }) }
-          : {}),
-      }),
-    );
     for (const u of [sp.u0, sp.u1]) {
       supportMargins.push({
         value: Math.min(zb - (rives.lower(u) + tfBand), rives.upper(u) - tfBand - sp.zTop),
@@ -1676,61 +1676,17 @@ function buildCrankedProfileStringer(
       });
     }
   }
-  // Coupes de jarret (sur la bissectrice, de la rive haute à la rive basse, CK4, CK9).
-  for (const k of fb.knees) {
-    lines.push({
-      kind: "joint",
-      a: T(k.upper),
-      b: T(k.lower),
-      label: msg("structure.steelProfile.joint.knee", {
-        angle: dec((Math.abs(k.deltaAlpha) * 180) / Math.PI, 1),
-      }),
-    });
-  }
-  // Coupes d'extrémité, à la pente du tronçon d'extrémité.
-  for (const which of ["start", "end"] as const) {
-    const u = which === "start" ? uLoW : uHiW;
-    lines.push({
-      kind: "joint",
-      a: T(V.vec(u, Math.max(rives.lower(u), 0))),
-      b: T(V.vec(u, rives.upper(u))),
-      label: profileEndLabel(f, which, which === "start" ? alphaStart : alphaEnd, params.splice),
-    });
-  }
-  const uMid = (uLoW + uHiW) / 2;
-  const mid = T(V.vec(uMid, (Math.max(rives.lower(uMid), 0) + rives.upper(uMid)) / 2));
-  lines.push({
-    kind: "text",
-    a: V.vec(mid.x - 20, mid.y),
-    b: V.vec(mid.x + 20, mid.y),
-    label: textMessage(f.mark),
-  });
-  const flat: FlatPattern = {
-    outline: { outer: barPts, holes },
-    lines,
-    thickness: s.tw,
-    reference: {
-      kind: "face",
-      description: msg(
-        f.side === "inner"
-          ? "structure.steelProfile.reference.outerStringWeb"
-          : "structure.steelProfile.reference.wallStringWeb",
-        { section: s.name, ascent: ascentDirection(mirrored), height: dec(s.h, 0) },
-      ),
-    },
-  };
-  // Débit : somme des encombrements axiaux des tronçons (coupes de jarret et onglets compris),
-  // moins la partie du premier tronçon que la coupe de sol retire (comme la barre droite, dont la
-  // longueur est lue sur le contour coupé au sol).
+  // Longueurs de débit par tronçon (CK10) : encombrement axial, coupe de sol déduite du premier.
   const floorTrim = Math.max(0, crankedAxialEnds(fb, outline, uLoW, uHiW).start);
-  const cutLength = fb.segments.reduce((acc, x) => acc + x.fibres.axialExtent, 0) - floorTrim;
+  const specs = crankedComponentSpecs(fb, outline, floorTrim);
+  const cutLength = specs.reduce((acc, x) => acc + x.length, 0);
+  const multi = specs.length >= 2;
   const maxBar = Math.max(...metal.barLengths);
-  const splices = cutLength > maxBar + 1e-9 ? Math.ceil(cutLength / maxBar) - 1 : 0;
-  const formatButtWeld = params.splice === "welded" ? splices * sectionPerimeter(s) : 0;
+  const perimeter = sectionPerimeter(s);
   // Cordon sur une coupe d'aplomb d'extrémité : rives verticales h / cos α du tronçon
   // d'extrémité, longueurs transversales × k (onglet en plan).
   const plumbPerimeter = (k: number, alpha: number): Mm =>
-    (2 * s.h) / Math.cos(alpha) + (sectionPerimeter(s) - 2 * s.h) * k;
+    (2 * s.h) / Math.cos(alpha) + (perimeter - 2 * s.h) * k;
   const landingStart = f.startCorner?.joint === "landing";
   const cornerWeld =
     f.start !== "corner" || landingStart
@@ -1738,42 +1694,335 @@ function buildCrankedProfileStringer(
       : f.startCorner
         ? plumbPerimeter(Math.sqrt(1 + f.startCorner.tanHalf ** 2), alphaStart)
         : plumbPerimeter(Math.SQRT2, alphaStart);
-  const buttWeld =
-    formatButtWeld +
-    (landingStart && params.splice === "welded" ? plumbPerimeter(1, alphaStart) : 0);
-  const newelWeld =
-    (f.start === "newel" ? plumbPerimeter(1, alphaStart) : 0) +
-    (f.end === "newel" ? plumbPerimeter(1, alphaEnd) : 0);
-  // Coupes : extrémités comme la barre droite, plus deux coupes par jarret (une par tronçon).
-  const cuts = (f.start === "floor" ? 2 : 1) + 1 + 2 * fb.knees.length;
+  const landingWeld =
+    landingStart && params.splice === "welded" ? plumbPerimeter(1, alphaStart) : 0;
+  const newelStart = f.start === "newel" ? plumbPerimeter(1, alphaStart) : 0;
+  const newelEnd = f.end === "newel" ? plumbPerimeter(1, alphaEnd) : 0;
+  let uOrigin = Infinity;
+  for (const q of outline) uOrigin = Math.min(uOrigin, q.x);
   const sectionPts = sectionOutline(s).map((q) => V.vec(q.x, q.y));
-  const part: Part = {
-    id: f.id,
-    mark: f.mark,
-    category: "stringer",
-    name: profileStringerName(f, s, sc.cage),
-    material,
-    solid: {
-      kind: "sweep",
-      path: crankedSweepPath(fb, f, outline, uLoW, uHiW),
-      section: { outer: sectionPts, holes: [] },
-    },
-    flat,
-    section: msg("structure.steelProfile.section", { section: s.name, grade }),
-    stock: { length: cutLength, width: s.h, thickness: s.b },
-    quantities: steelQuantities(
+  const sectionLabel = msg("structure.steelProfile.section", { section: s.name, grade });
+  const name = profileStringerName(f, s, sc.cage);
+  const notes: Message[] = [];
+  let buttWeldTotal = 0;
+  /** Aboutages d'un tronçon plus long que la plus grande barre (CK10 : par composante). */
+  const splicesOf = (length: Mm, mark: string): { count: number; weld: Mm } => {
+    const count = length > maxBar + 1e-9 ? Math.ceil(length / maxBar) - 1 : 0;
+    if (count > 0) {
+      notes.push(
+        msg(
+          params.splice === "welded"
+            ? "structure.steelProfile.note.weldedSplices"
+            : "structure.steelProfile.note.boltedSplices",
+          { mark, length: dec(length, 0), bar: dec(maxBar, 0), count },
+        ),
+      );
+    }
+    return { count, weld: params.splice === "welded" ? count * perimeter : 0 };
+  };
+  /** Grandeurs d'un tronçon (ou d'une pièce autonome à un tronçon). */
+  const quantitiesOf = (
+    spec: CrankedComponentSpec,
+    mark: string,
+    holes: number,
+  ): Record<string, number> => {
+    const first = spec.index === 1;
+    const last = spec.index === specs.length;
+    const splices = splicesOf(spec.length, mark);
+    const buttWeld = splices.weld + (first ? landingWeld : 0);
+    buttWeldTotal += buttWeld;
+    const knee = spec.startKnee ? kneeWeldLength(spec.startKnee, s.h, perimeter) : 0;
+    const weld = buttWeld + (first ? cornerWeld + newelStart : 0) + (last ? newelEnd : 0) + knee;
+    const cuts = 2 + (first && f.start === "floor" ? 1 : 0) + splices.count;
+    return steelQuantities(
       {
-        volumeMm3: s.area * cutLength,
-        treatedSurfaceMm2: sectionPerimeter(s) * cutLength + 2 * s.area,
-        length: cutLength,
-        weld: buttWeld + cornerWeld + newelWeld,
+        volumeMm3: s.area * spec.length,
+        // Faces des coupes de jarret soudées : seules les extrémités de la face sont traitées.
+        treatedSurfaceMm2: perimeter * spec.length + ((first ? 1 : 0) + (last ? 1 : 0)) * s.area,
+        length: spec.length,
+        weld,
         buttWeld,
-        cuts: cuts + splices,
-        holes: holes.length,
+        cuts,
+        holes,
       },
       profile,
-    ),
+    );
   };
+  /**
+   * Développé d'un tronçon dans son repère (x le long du tronçon, y perpendiculaire, 0 = rive
+   * basse, h = rive haute ; miroir selon le sens de montée, comme la barre droite) : contour de
+   * la composante, perçages dont le centre y tombe, traçage des cornières coupé aux jarrets,
+   * coupes de jarret et d'extrémité (lignes `joint`), repère.
+   */
+  /**
+   * Perçages de cornière reportés après soudage des jarrets : centre à moins de la pince
+   * `holeEdgeDistance` (paramètre des supports, à valider), et jamais à moins du demi-encombrement
+   * du trou, de la coupe d'un jarret voisin du tronçon (mesure dans le plan de l'âme, normale à
+   * la bissectrice).
+   */
+  let deferredHoles = 0;
+  const holeReach = Math.max(sup.holeEdgeDistance, sup.holeDiameter / 2 + sup.slotLength / 2);
+  const nearKnee = (spec: CrankedComponentSpec, q: Vec2): boolean =>
+    [spec.startKnee, spec.endKnee].some(
+      (k) => k !== undefined && Math.abs(V.dot(V.sub(q, k.upper), kneeNormal(k))) < holeReach,
+    );
+  const flatOf = (
+    spec: CrankedComponentSpec,
+    mark: string,
+    reference: Message,
+  ): { flat: FlatPattern; holes: number; O: Vec2; t: Vec2; xMin: Mm; xMax: Mm } => {
+    const a = spec.segment.alpha;
+    const t = V.vec(Math.cos(a), Math.sin(a));
+    const nrm = V.vec(-Math.sin(a), Math.cos(a));
+    // Point de la rive basse du tronçon : sommet bas d'un jarret voisin (CK4), sinon rive basse
+    // à la coupe de début.
+    const O = spec.endKnee?.lower ?? spec.startKnee?.lower ?? V.vec(uLoW, rives.lower(uLoW));
+    const toSeg = (q: Vec2): Vec2 => {
+      const d = V.sub(q, O);
+      return V.vec(V.dot(d, t), V.dot(d, nrm));
+    };
+    let xMin = Infinity;
+    let xMax = -Infinity;
+    for (const q of spec.polygon) {
+      const x = toSeg(q).x;
+      xMin = Math.min(xMin, x);
+      xMax = Math.max(xMax, x);
+    }
+    const T = (q: Vec2): Vec2 => {
+      const r = toSeg(q);
+      const x = r.x - xMin;
+      return V.vec(mirrored ? xMax - xMin - x : x, r.y);
+    };
+    const pts = spec.polygon.map(T);
+    if (signedArea(pts) < 0) pts.reverse();
+    /** Partie du segment [a ; b] (u, z) comprise entre les coupes des jarrets voisins. */
+    const clipToSpec = (pa: Vec2, pb: Vec2): [Vec2, Vec2] | null => {
+      let t0 = 0;
+      let t1 = 1;
+      const cut = (k: Knee, keepAfter: boolean): void => {
+        const nk = kneeNormal(k);
+        const sa = V.dot(V.sub(pa, k.upper), nk) * (keepAfter ? 1 : -1);
+        const sb = V.dot(V.sub(pb, k.upper), nk) * (keepAfter ? 1 : -1);
+        if (sa < 0 && sb < 0) {
+          t1 = -1;
+          return;
+        }
+        if (sa >= 0 && sb >= 0) return;
+        const x = sa / (sa - sb);
+        if (sa < 0) t0 = Math.max(t0, x);
+        else t1 = Math.min(t1, x);
+      };
+      if (spec.startKnee) cut(spec.startKnee, true);
+      if (spec.endKnee) cut(spec.endKnee, false);
+      if (!(t1 - t0 > 1e-9)) return null;
+      return [V.lerp(pa, pb, t0), V.lerp(pa, pb, t1)];
+    };
+    const holes: Vec2[][] = [];
+    let drilled = 0;
+    const lines: FlatPattern["lines"][number][] = [];
+    for (const sp of mine) {
+      for (const cc of boltCenters(sp, sup)) {
+        if (componentIndexAt(fb, cc) !== spec.index) continue;
+        drilled++;
+        // Perçage trop près de la coupe d'un jarret voisin (cornière laissée à cheval, K-Q10 non
+        // branché) : non dessiné sur le développé du tronçon (il couperait le contour), percé
+        // sur la pièce finie après soudage du jarret (remarque) ; compté sur ce tronçon.
+        if (nearKnee(spec, cc)) {
+          deferredHoles++;
+          continue;
+        }
+        const ring = holePolygon(T(cc), sup.holeDiameter, sup.slotLength, V.vec(1, 0));
+        holes.push(signedArea(ring) > 0 ? ring.reverse() : ring);
+      }
+      const zb = sp.zTop - depthSup;
+      const rect = [
+        V.vec(sp.u0, zb),
+        V.vec(sp.u1, zb),
+        V.vec(sp.u1, sp.zTop),
+        V.vec(sp.u0, sp.zTop),
+      ];
+      let labelled = false;
+      rect.forEach((pa, i) => {
+        const piece = clipToSpec(pa, rect[(i + 1) % 4]!);
+        if (!piece) return;
+        lines.push({
+          kind: "mark",
+          a: T(piece[0]),
+          b: T(piece[1]),
+          ...(!labelled
+            ? { label: msg("structure.steel.flatLine.support", { mark: sp.treadMark }) }
+            : {}),
+        });
+        labelled = true;
+      });
+    }
+    // Coupes : jarret du bas (cordon porté par ce tronçon, CK10) ou extrémité basse de la face ;
+    // jarret du haut ou extrémité haute (lignes `joint`, jamais `bend`, CK9). Le libellé d'un
+    // jarret nomme le tronçon voisin (lecture d'atelier, panneau des tronçons de l'interface).
+    const kneeLabel = (k: Knee, other: number) => ({
+      other: crankedComponentMark(f.mark, other),
+      angle: dec((Math.abs(k.deltaAlpha) * 180) / Math.PI, 1),
+    });
+    if (spec.startKnee) {
+      lines.push({
+        kind: "joint",
+        a: T(spec.startKnee.upper),
+        b: T(spec.startKnee.lower),
+        label: msg(
+          "structure.steelProfile.joint.kneeWelded",
+          kneeLabel(spec.startKnee, spec.index - 1),
+        ),
+      });
+    } else {
+      lines.push({
+        kind: "joint",
+        a: T(V.vec(uLoW, Math.max(rives.lower(uLoW), 0))),
+        b: T(V.vec(uLoW, rives.upper(uLoW))),
+        label: profileEndLabel(f, "start", alphaStart, params.splice),
+      });
+    }
+    if (spec.endKnee) {
+      lines.push({
+        kind: "joint",
+        a: T(spec.endKnee.upper),
+        b: T(spec.endKnee.lower),
+        label: msg("structure.steelProfile.joint.knee", kneeLabel(spec.endKnee, spec.index + 1)),
+      });
+    } else {
+      lines.push({
+        kind: "joint",
+        a: T(V.vec(uHiW, Math.max(rives.lower(uHiW), 0))),
+        b: T(V.vec(uHiW, rives.upper(uHiW))),
+        label: profileEndLabel(f, "end", alphaEnd, params.splice),
+      });
+    }
+    // Repère au centre de la composante (convexe : son centroïde est dans la matière).
+    let cx = 0;
+    let cy = 0;
+    for (const q of pts) {
+      cx += q.x;
+      cy += q.y;
+    }
+    cx /= pts.length;
+    cy /= pts.length;
+    lines.push({
+      kind: "text",
+      a: V.vec(cx - 20, cy),
+      b: V.vec(cx + 20, cy),
+      label: textMessage(mark),
+    });
+    return {
+      flat: {
+        outline: { outer: pts, holes },
+        lines,
+        thickness: s.tw,
+        reference: { kind: "face", description: reference },
+      },
+      holes: drilled,
+      O,
+      t,
+      xMin,
+      xMax,
+    };
+  };
+  const ascent = ascentDirection(mirrored);
+  const standaloneReference = msg(
+    f.side === "inner"
+      ? "structure.steelProfile.reference.outerStringWeb"
+      : "structure.steelProfile.reference.wallStringWeb",
+    { section: s.name, ascent, height: dec(s.h, 0) },
+  );
+  // Coins en plan : balayage prolongé jusqu'à l'onglet (même allongement que le débit).
+  const extend = {
+    start: f.start === "corner" ? miterCutExtra(f.startCorner, s.b, shift) : 0,
+    end: f.end === "corner" ? miterCutExtra(f.endCorner, s.b, shift) : 0,
+  };
+  const sweep = {
+    kind: "sweep" as const,
+    path: crankedSweepPath(fb, f, outline, uLoW, uHiW, extend),
+    section: { outer: sectionPts, holes: [] },
+  };
+  let part: Part;
+  let components: Part[] | undefined;
+  if (!multi) {
+    const spec = specs[0]!;
+    const dev = flatOf(spec, f.mark, standaloneReference);
+    part = {
+      id: f.id,
+      mark: f.mark,
+      category: "stringer",
+      name,
+      material,
+      solid: sweep,
+      flat: dev.flat,
+      section: sectionLabel,
+      stock: { length: spec.length, width: s.h, thickness: s.b },
+      quantities: quantitiesOf(spec, f.mark, dev.holes),
+    };
+  } else {
+    const ids = specs.map((x) => `${f.id}-segment-${x.index}`);
+    components = specs.map((spec, i): Part => {
+      const mark = crankedComponentMark(f.mark, spec.index);
+      const uFrom = spec.startKnee ? spec.startKnee.upper.x : uLoW;
+      const uTo = spec.endKnee ? spec.endKnee.upper.x : uHiW;
+      const reference = msg("structure.steelProfile.reference.segmentWeb", {
+        index: spec.index,
+        count: specs.length,
+        parent: f.mark,
+        section: s.name,
+        ascent,
+        height: dec(s.h, 0),
+        from: dec(uFrom - uOrigin, 0),
+        to: dec(uTo - uOrigin, 0),
+        zFrom: dec(rives.upper(uFrom), 0),
+        zTo: dec(rives.upper(uTo), 0),
+        angle: dec((spec.segment.alpha * 180) / Math.PI, 1),
+      });
+      const dev = flatOf(spec, mark, reference);
+      return {
+        id: ids[i]!,
+        mark,
+        category: "stringer",
+        name: msg("structure.steelProfile.part.stringSegment", { name, index: spec.index }),
+        material,
+        solid: segmentSolid(f, sectionPts, dev.O, dev.t, dev.xMin, dev.xMax),
+        flat: dev.flat,
+        section: sectionLabel,
+        stock: { length: spec.length, width: s.h, thickness: s.b },
+        componentOf: f.id,
+        quantities: quantitiesOf(spec, mark, dev.holes),
+        assembledWith: [
+          ...(i > 0 ? [ids[i - 1]!] : []),
+          ...(i + 1 < ids.length ? [ids[i + 1]!] : []),
+        ],
+      };
+    });
+    if (deferredHoles > 0) {
+      notes.push(
+        msg("structure.steelProfile.note.kneeHolesAfterWeld", {
+          mark: f.mark,
+          count: deferredHoles,
+          edge: dec(holeReach, 0),
+        }),
+      );
+    }
+    // Pièce finie : ni développé, ni débit, ni grandeurs de matière (ses tronçons les portent,
+    // aucun double compte, A33) ; longueur seule, et poutre équivalente pour le repli du
+    // prédimensionnement (CK12).
+    part = {
+      id: f.id,
+      mark: f.mark,
+      category: "stringer",
+      name,
+      material,
+      solid: sweep,
+      section: sectionLabel,
+      beamChord: { span: uHiW - uLoW, slope: p.line.slope },
+      // Longueur de la pièce assemblée : axe du balayage (prolongé aux onglets), pas la somme
+      // des débits des tronçons, qui compte les recouvrements des coupes de jarret.
+      quantities: { [QUANTITY_LENGTH_MM]: polylineLength3(sweep.path) },
+    };
+  }
   const beam = sc.analyze(p, s);
   const bearing: CheckItem[] = [];
   if (s.shape === "I") {
@@ -1798,28 +2047,64 @@ function buildCrankedProfileStringer(
       precheck: beam,
       cutLength,
       bearing: fb,
+      ...(components ? { components } : {}),
     },
-    notes: [],
+    notes,
     supportMargins,
-    buttWeld,
+    buttWeld: buttWeldTotal,
     beam: { partId: f.id, label: textMessage(`${f.mark}, ${s.name} ${grade}`), result: beam },
     height: { value: s.h - sc.faceNeed(p, s), label: textMessage(f.mark), partId: f.id },
     bearing,
-    ...(splices > 0
-      ? {
-          spliceNote: msg(
-            params.splice === "welded"
-              ? "structure.steelProfile.note.weldedSplices"
-              : "structure.steelProfile.note.boltedSplices",
-            {
-              mark: f.mark,
-              length: dec(cutLength, 0),
-              bar: dec(maxBar, 0),
-              count: splices,
-            },
-          ),
-        }
-      : {}),
+    ...(multi ? { jig: crankedJigItems(fb, uOrigin) } : {}),
+  };
+}
+
+/** Longueur d'une ligne brisée de l'espace (axe d'un balayage). */
+function polylineLength3(path: readonly { x: number; y: number; z: number }[]): Mm {
+  let len = 0;
+  for (let i = 1; i < path.length; i++) {
+    const a = path[i - 1]!;
+    const b = path[i]!;
+    len += Math.hypot(b.x - a.x, b.y - a.y, b.z - a.z);
+  }
+  return len;
+}
+
+/**
+ * Solide d'une composante de limon coudé : section extrudée le long de son tronçon (repère de la
+ * barre droite, `buildProfileStringer`), bouts d'équerre qui enferment la composante (abscisses
+ * xMin à xMax sur le tronçon depuis le point O de sa rive basse). Non dessiné (la pièce finie
+ * l'est) ; valide pour le contrôle des solides.
+ */
+function segmentSolid(
+  f: SteelStringerFace,
+  sectionPts: readonly Vec2[],
+  O: Vec2,
+  t: Vec2,
+  xMin: Mm,
+  xMax: Mm,
+): Part["solid"] {
+  const c = t.x;
+  const sn = t.y;
+  const into3 = { x: f.into.x, y: f.into.y, z: 0 };
+  const axis3 = { x: f.dir.x * c, y: f.dir.y * c, z: sn };
+  const up3 = { x: -f.dir.x * sn, y: -f.dir.y * sn, z: c };
+  const cross = {
+    x: into3.y * up3.z - into3.z * up3.y,
+    y: into3.z * up3.x - into3.x * up3.z,
+    z: into3.x * up3.y - into3.y * up3.x,
+  };
+  const forward = cross.x * axis3.x + cross.y * axis3.y + cross.z * axis3.z > 0;
+  const at3 = (x: Mm) => {
+    const q = V.addScaled(O, t, x);
+    const pl = V.addScaled(f.a, f.dir, q.x);
+    return { x: pl.x, y: pl.y, z: q.y };
+  };
+  return {
+    kind: "extrusion",
+    frame: { origin: at3(forward ? xMin : xMax), xAxis: into3, yAxis: up3, zAxis: cross },
+    profile: { outer: [...sectionPts], holes: [] },
+    depth: Math.max(xMax - xMin, 1e-6),
   };
 }
 
@@ -2120,10 +2405,16 @@ function profileCutting(
     cutting[key] = cuttingPlan(pieces, metal.barLengths, kerf);
     labels.set(key, label);
   };
+  // Limon coudé : une pièce de débit par tronçon (CK10 : longueur sur la fibre nommée, trait de
+  // scie appliqué par `cuttingPlan`).
   addPlan(
     s.name,
     textMessage(s.name),
-    stringers.map((x) => ({ id: x.part.id, mark: x.part.mark, length: x.cutLength })),
+    stringers.flatMap((x) =>
+      x.components
+        ? x.components.map((c) => ({ id: c.id, mark: c.mark, length: c.stock?.length ?? 0 }))
+        : [{ id: x.part.id, mark: x.part.mark, length: x.cutLength }],
+    ),
   );
   // Clé de débit : désignation de la section dans la langue de référence (identifiant stable
   // de `SteelProfileResult.cutting`, « L 40 × 40 × 4 »), jamais affichée telle quelle.
@@ -2229,11 +2520,16 @@ function addProfileChecks(
   checks.addItems(
     rule(STEEL_RULES.barLength),
     [
-      ...input.stringers.map((x) => ({
-        value: x.cutLength,
-        label: textMessage(x.part.mark),
-        partId: x.part.id,
-      })),
+      // Limon coudé : longueur de débit par tronçon (CK13).
+      ...input.stringers.flatMap((x) =>
+        x.components
+          ? x.components.map((c) => ({
+              value: c.stock?.length ?? 0,
+              label: textMessage(c.mark),
+              partId: c.id,
+            }))
+          : [{ value: x.cutLength, label: textMessage(x.part.mark), partId: x.part.id }],
+      ),
       ...input.others.map((p) => ({
         value: p.stock!.length,
         label: textMessage(p.mark),

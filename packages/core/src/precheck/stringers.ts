@@ -97,39 +97,24 @@ function xExtent(part: Part): number {
   return hi - lo;
 }
 
-/** Corde de la rive haute d'un développé en (u, z) : extrémités en x, point le plus haut de chacune. */
-function crankedChordLength(part: Part): Mm {
-  const pts = part.flat!.outline.outer;
-  let lo = Infinity;
-  let hi = -Infinity;
-  for (const p of pts) {
-    lo = Math.min(lo, p.x);
-    hi = Math.max(hi, p.x);
-  }
-  let zLo = -Infinity;
-  let zHi = -Infinity;
-  for (const p of pts) {
-    if (Math.abs(p.x - lo) < 1e-6) zLo = Math.max(zLo, p.y);
-    if (Math.abs(p.x - hi) < 1e-6) zHi = Math.max(zHi, p.y);
-  }
-  return Math.hypot(hi - lo, zHi - zLo);
-}
-
 /**
  * Portée horizontale d'un limon en profilé : le développé est la vue de l'âme dans le repère de
  * la barre (x le long de l'axe, y de 0 à h). Ses extrémités sont des coupes d'aplomb : l'étendue
  * totale en x vaut Δu / cos α + h·tan α (et la coupe de niveau au sol la rogne), mais la rive
- * haute (y = h) mesure exactement Δu / cos α. Repli : étendue totale × cos α.
+ * haute (y = h) mesure exactement Δu / cos α. Repli : étendue totale × cos α. Un limon coudé à
+ * un seul tronçon (développé dans le repère du tronçon) est lu de même.
  *
- * Limon coudé (`steel-profile`, `stringerLine` = `nosing`, solide `sweep`) : le développé est
- * l'âme plane dans le repère (u, z) translaté (x horizontal le long de la face, y vertical). La
- * longueur d'axe retenue est la corde de la rive haute entre les deux coupes d'extrémité (point
- * le plus haut de chaque extrémité en x), rendue « × cos α » comme la barre droite pour que
- * `analyzeInclinedBeam` retrouve cette longueur ; le plugin, qui connaît la corde exacte de la
- * face, publie son propre prédimensionnement (CK12).
+ * Limon coudé fait de tronçons (`steel-profile`, `stringerLine` = `nosing`, CK12) : la pièce
+ * finie n'a pas de développé ; elle publie sa poutre équivalente (`Part.beamChord` : portée
+ * horizontale Δu entre les coupes d'extrémité et pente de la corde α_c). La longueur d'axe est
+ * Δu / cos α_c, l'équivalent exact de la rive haute de la barre droite, rendue « × cos α »
+ * (pente nominale) comme ci-dessus pour que `analyzeInclinedBeam` la retrouve ; le plugin
+ * publie son propre prédimensionnement sur la corde de la face.
  */
 function profileSpanH(part: Part, h: Mm, cos: number): Mm {
-  if (part.solid.kind === "sweep") return crankedChordLength(part) * cos;
+  if (part.beamChord) {
+    return (part.beamChord.span / Math.cos(Math.atan(part.beamChord.slope))) * cos;
+  }
   const pts = part.flat!.outline.outer;
   let lo = Infinity;
   let hi = -Infinity;
@@ -162,11 +147,15 @@ export function precheckStringers(
   const notes: Message[] = [];
   let steelPlates = false;
   for (const p of parts) {
-    if (p.category !== "stringer" || !p.flat) continue;
+    // Composantes (tronçons d'un limon coudé, CK12) ignorées : la poutre est la pièce finie, lue
+    // sur son développé ou sur sa poutre équivalente (`beamChord`).
+    if (p.category !== "stringer" || p.componentOf !== undefined) continue;
+    if (!p.flat && !p.beamChord) continue;
     // Désignation de la section lue dans son texte français (« UPN 200 (S355) … »), stable.
     const sectionText = p.section ? FR.t(p.section) : undefined;
     const catalog =
       sectionInLabel(sectionText) ?? (sectionText ? findSection(sectionText) : undefined);
+    if (!catalog && !p.flat) continue;
     let section: BeamSection;
     let spanH: number;
     let material: BeamMaterial;
@@ -178,8 +167,10 @@ export function precheckStringers(
       material = steelMaterialOf(grade, settings, profile.metal.density);
       label = msg("precheck.beam.profile", { mark: p.mark, section: catalog.name, grade });
     } else {
-      const b = p.flat.thickness;
-      const h = minAreaRect(p.flat.outline.outer).width;
+      // Hors catalogue : développé présent (filtré plus haut).
+      const flat = p.flat!;
+      const b = flat.thickness;
+      const h = minAreaRect(flat.outline.outer).width;
       section = { area: b * h, i: (b * h ** 3) / 12, w: (b * h * h) / 6 };
       spanH = xExtent(p);
       if (isWoodMaterial(p.material)) {

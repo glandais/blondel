@@ -148,6 +148,34 @@ describe("repères des cornières et supports (F10 Q1a, Q2)", () => {
   }, 120_000);
 });
 
+describe("repères des tronçons du limon coudé (bent-stringer K2c, CK8)", () => {
+  it("j3c en `nosing` : tronçons LE2-1… hors repérage par identité, repères uniques, invariants tenus", () => {
+    const p = example("j3c-acceptance-01-upn");
+    const m = build({
+      ...p,
+      stair: {
+        ...p.stair,
+        structure: {
+          ...p.stair.structure,
+          params: { ...p.stair.structure.params, stringerLine: "nosing" },
+        },
+      },
+    });
+    const segments = m.parts.filter((x) => /^L[EI]\d+-\d+$/.test(x.mark));
+    expect(segments).toHaveLength(13);
+    for (const s of segments) {
+      expect(s.componentOf).toBeDefined();
+      expect(s.mark.startsWith(`${markOf(m, s.componentOf!)!}-`)).toBe(true);
+      expect(s.markName).toBeUndefined();
+      expect(s.markRepresentative).toBeUndefined();
+    }
+    const counts = byMark(m.parts);
+    for (const s of segments) expect(counts.get(s.mark)).toHaveLength(1);
+    expectMarksUnified(m);
+    expectMarkNames(m);
+  });
+});
+
 describe("repères des entretoises (F10 Q1b) : comparaison à la plus petite", () => {
   it("cage-60-palier-central : EC1 = {1, 2, 6, 7, 8, 9}, EC2 = {3, 4}, EC3 = {5}", () => {
     const m = build(example("cage-60-palier-central"));

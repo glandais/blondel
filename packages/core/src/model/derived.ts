@@ -607,8 +607,22 @@ export interface Part {
    * solide mais ni gabarit, ni débit, ni grandeurs de matière (ses planches les portent).
    * Pièces fabriquées : `fabricatedParts` ; pièce dessinée : `rootAssemblyId`
    * (`parts/components.ts`).
+   *
+   * Limon coudé des profilés (`steel-profile`, `stringerLine` = `nosing`, QUESTIONS A41, CK8) :
+   * chaque tronçon d'un limon à jarrets est une composante (repère `LE2-1`, `LE2-2`… du bas vers
+   * le haut) qui porte son développé, son débit, ses coupes, sa masse et ses cordons ; le limon
+   * fini garde l'identifiant, le repère, le solide balayé et la propriété des cornières.
    */
   readonly componentOf?: string;
+  /**
+   * Poutre équivalente d'un limon fait de tronçons (limon coudé des profilés, QUESTIONS A41,
+   * CK12 ; ajout rétrocompatible) : portée horizontale entre les coupes d'extrémité (mm) et pente
+   * de la corde de la face, publiées sur la pièce finie (qui n'a pas de développé) pour le
+   * prédimensionnement de repli (`precheck/stringers.ts`). Absent : portée lue sur le développé.
+   * Toute pièce finie de limon (`category: "stringer"`) faite de composantes et sans développé
+   * doit le publier : le repli ignore les composantes et n'aurait sinon aucune poutre à lire.
+   */
+  readonly beamChord?: { readonly span: Mm; readonly slope: number };
   /** Grandeurs de coût/nomenclature (masse kg, volume m³, cordons mm, plis, coupes…). */
   readonly quantities: Readonly<Record<string, number>>;
   /** Direction du fil (bois) dans le repère du solide, pour les textures. */

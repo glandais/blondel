@@ -637,6 +637,8 @@ describe("valeurs ◆ d'un projet", () => {
     const p = withStructure(createProject("quarter-left"), "steel-profile");
     expect(structureParamEntry("steel-profile", ["stringerLine"]).tier).toBe("workshop");
     expect(structureParamEntry("steel-profile", ["stringerLine"]).toValidate).toBeUndefined();
+    // K2c : aide dédiée (convention à valider, QUESTIONS A41), sans ◆ compté.
+    expect(fieldText("steel-profile", ["stringerLine"])?.hint).toBe("ui.param.stringerLine.hint");
     for (const leaf of ["minSegmentLength", "minKneeAngle"]) {
       const e = structureParamEntry("steel-profile", ["knee", leaf]);
       expect(e.tier).toBe("workshop");

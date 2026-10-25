@@ -10,7 +10,8 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
-import { findSection, sectionsOf } from "../catalog/sections.js";
+import { findSection, sectionPerimeter, sectionsOf } from "../catalog/sections.js";
+import { resolveWorkshopProfile } from "../workshop/profile.js";
 import type { Model } from "../model/derived.js";
 import type { Project } from "../model/project.js";
 import { checkSolids } from "../parts/solidChecks.js";
@@ -410,6 +411,259 @@ describe("steel-profile — critères de fin de K2b en `nosing`", () => {
   }
 });
 
+/**
+ * Contrat des pièces d'un limon coudé (K2c, CK8, A33) sur un résultat du plugin : composantes
+ * rattachées à une pièce finie présente, pièce finie sans développé, débit, masse, cordons ni
+ * coupes, partition de l'âme, masse de débit des tronçons = ρ·A·(Σ encombrements − coupe de sol)
+ * à ±1 % (cohérence des grandeurs ; la masse de débit est comparée à des valeurs indépendantes
+ * dans le test de débit de j3c et dans les exports), tout anneau de perçage intérieur au contour
+ * de son tronçon, à la pince `holeEdgeDistance` au moins des coupes de jarret, aucune composante
+ * pour une face à un seul tronçon (I11).
+ */
+function expectCrankedParts(x: Run, density: number, project: Project): void {
+  const ids = new Set(x.m.parts.map((p) => p.id));
+  const s = x.r.section!;
+  const sup = SteelProfileParamsSchema.parse(project.stair.structure.params).supports;
+  const holeReach = Math.max(sup.holeEdgeDistance, sup.holeDiameter / 2 + sup.slotLength / 2);
+  for (const st of x.r.stringers) {
+    const comps = st.components ?? [];
+    if (!st.bearing || st.bearing.segments.length < 2) {
+      expect(comps, st.face.mark).toEqual([]);
+      continue;
+    }
+    expect(comps).toHaveLength(st.bearing.segments.length);
+    const f = st.part;
+    expect(f.flat, f.mark).toBeUndefined();
+    expect(f.stock, f.mark).toBeUndefined();
+    for (const k of ["mass_kg", "weld_mm", "cuts", "volume_m3", "holes"]) {
+      expect(f.quantities[k], `${f.mark} ${k}`).toBeUndefined();
+    }
+    expect(f.beamChord).toBeDefined();
+    expect(f.solid.kind).toBe("sweep");
+    comps.forEach((c, i) => {
+      expect(c.componentOf).toBe(f.id);
+      expect(ids.has(c.componentOf!)).toBe(true);
+      expect(c.mark).toBe(`${f.mark}-${i + 1}`);
+      expect(c.markName).toBeUndefined();
+      expect(c.flat).toBeDefined();
+      expect(c.flat!.lines.some((l) => l.kind === "bend")).toBe(false);
+      expect(c.stock!.length).toBeGreaterThan(0);
+    });
+    // Partition de l'âme : aires des développés = aire du contour coupé au sol.
+    const area = (pts: readonly { x: number; y: number }[]) => {
+      let a = 0;
+      for (let i = 0; i < pts.length; i++) {
+        const p = pts[i]!;
+        const q = pts[(i + 1) % pts.length]!;
+        a += p.x * q.y - q.x * p.y;
+      }
+      return Math.abs(a / 2);
+    };
+    const sumArea = comps.reduce((a, c) => a + area(c.flat!.outline.outer), 0);
+    expect(Math.abs(sumArea - area(st.outline)) / area(st.outline)).toBeLessThan(1e-6);
+    const sumL = comps.reduce((a, c) => a + c.stock!.length, 0);
+    expect(sumL).toBeCloseTo(st.cutLength, 6);
+    const sumMass = comps.reduce((a, c) => a + c.quantities["mass_kg"]!, 0);
+    const expected = (s.area * st.cutLength * density) / 1e9;
+    expect(Math.abs(sumMass - expected) / expected).toBeLessThan(0.01);
+    // Perçages : anneau entier dans le contour du tronçon, loin des coupes de jarret (un trou
+    // trop près d'une coupe est reporté sur la pièce finie, après soudage, remarque).
+    for (const c of comps) {
+      const flat = c.flat!;
+      const knees = flat.lines.filter(
+        (l) =>
+          l.label?.key === "structure.steelProfile.joint.knee" ||
+          l.label?.key === "structure.steelProfile.joint.kneeWelded",
+      );
+      for (const ring of flat.outline.holes) {
+        for (const q of ring) expect(insidePolygon(q, flat.outline.outer), c.mark).toBe(true);
+        const cx = ring.reduce((a, q) => a + q.x, 0) / ring.length;
+        const cy = ring.reduce((a, q) => a + q.y, 0) / ring.length;
+        for (const k of knees) {
+          expect(distanceToLine({ x: cx, y: cy }, k.a, k.b), c.mark).toBeGreaterThanOrEqual(
+            holeReach - 1e-6,
+          );
+        }
+      }
+      expect(c.quantities["holes"]!).toBeGreaterThanOrEqual(flat.outline.holes.length);
+    }
+  }
+}
+
+/** Point strictement intérieur à un polygone simple (parité des croisements). */
+function insidePolygon(q: { x: number; y: number }, poly: readonly { x: number; y: number }[]) {
+  let inside = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const a = poly[i]!;
+    const b = poly[j]!;
+    if (a.y > q.y !== b.y > q.y && q.x < ((b.x - a.x) * (q.y - a.y)) / (b.y - a.y) + a.x) {
+      inside = !inside;
+    }
+  }
+  return inside;
+}
+
+/** Distance du point q à la droite (a, b). */
+function distanceToLine(
+  q: { x: number; y: number },
+  a: { x: number; y: number },
+  b: { x: number; y: number },
+): number {
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  return Math.abs((q.x - a.x) * dy - (q.y - a.y) * dx) / Math.hypot(dx, dy);
+}
+
+describe("steel-profile — pièces du limon coudé (K2c, CK8 à CK10, A33)", () => {
+  const p = loadExample("j3c-acceptance-01-upn.blondel.json");
+  const x = run(withLine(p, "nosing"));
+  const density = resolveWorkshopProfile(p.workshop).metal.density;
+  const comps = x.r.stringers.flatMap((s) => s.components ?? []);
+
+  it("j3c : 4 pièces finies et 13 tronçons LI1 2, LE1 3, LI2 3, LE2 5 (du bas vers le haut)", () => {
+    expect(x.r.stringers.map((s) => [s.face.mark, s.components?.length])).toEqual([
+      ["LI1", 2],
+      ["LE1", 3],
+      ["LI2", 3],
+      ["LE2", 5],
+    ]);
+    for (const c of comps) expect(c.mark).toMatch(/^L[EI]\d-\d+$/);
+    // Ordre des pièces : chaque pièce finie suivie de ses tronçons.
+    const order = x.r.output.parts.filter((q) => q.category === "stringer").map((q) => q.mark);
+    expect(order.slice(0, 3)).toEqual(["LI1", "LI1-1", "LI1-2"]);
+    expectCrankedParts(x, density, withLine(p, "nosing"));
+    expect(checkSolids(x.m.parts)).toEqual([]);
+    // Tronçons consécutifs assemblés (relation normalisée par le pipeline).
+    const le2 = x.m.parts.filter((q) => q.componentOf === "stringer-outer-2");
+    expect(le2[1]!.assembledWith).toEqual(expect.arrayContaining([le2[0]!.id, le2[2]!.id]));
+  });
+
+  it("j3c : coupes de jarret en lignes `joint` (9 « jarret » et 9 « jarret soudé »), aucune `bend`", () => {
+    const lines = comps.flatMap((c) => c.flat!.lines);
+    const keys = lines.map((l) => l.label?.key);
+    expect(keys.filter((k) => k === "structure.steelProfile.joint.knee")).toHaveLength(9);
+    expect(keys.filter((k) => k === "structure.steelProfile.joint.kneeWelded")).toHaveLength(9);
+    expect(lines.some((l) => l.kind === "bend")).toBe(false);
+    for (const c of comps) {
+      const joints = c.flat!.lines.filter((l) => l.kind === "joint");
+      expect(joints, c.mark).toHaveLength(2);
+    }
+  });
+
+  it("j3c : débit Σ = longueurs K2b, coupes Σ = K2b, cordons = extrémités + cordons de jarret", () => {
+    const k2b: Record<string, { cut: number; cuts: number }> = {
+      LI1: { cut: 925.83, cuts: 5 },
+      LE1: { cut: 1618.79, cuts: 7 },
+      LI2: { cut: 2904.46, cuts: 6 },
+      LE2: { cut: 3841.75, cuts: 10 },
+    };
+    const s = x.r.section!;
+    const P = sectionPerimeter(s);
+    for (const st of x.r.stringers) {
+      const cs = st.components!;
+      const ref = k2b[st.face.mark]!;
+      expect(cs.reduce((a, c) => a + c.stock!.length, 0)).toBeCloseTo(ref.cut, 1);
+      expect(cs.reduce((a, c) => a + c.quantities["cuts"]!, 0)).toBe(ref.cuts);
+      // Masse de débit figée sur le débit K2b (valeurs indépendantes du calcul par tronçon).
+      const sumMass = cs.reduce((a, c) => a + c.quantities["mass_kg"]!, 0);
+      const k2bMass = (s.area * ref.cut * density) / 1e9;
+      expect(Math.abs(sumMass - k2bMass) / k2bMass).toBeLessThan(0.01);
+      // Cordon de jarret sur le tronçon du dessus, mesuré sur le développé : deux rives le long
+      // du trait de coupe soudé (sa longueur, de rive basse à rive haute, vaut h / cos β) et les
+      // largeurs transversales inchangées (P − 2h).
+      cs.forEach((c, i) => {
+        if (i === 0) return;
+        const cut = c.flat!.lines.find(
+          (l) => l.label?.key === "structure.steelProfile.joint.kneeWelded",
+        )!;
+        const knee = 2 * Math.hypot(cut.b.x - cut.a.x, cut.b.y - cut.a.y) + P - 2 * s.h;
+        const end =
+          i === cs.length - 1 && st.face.end === "newel"
+            ? (2 * s.h) / Math.cos(st.bearing!.segments[i]!.alpha) + P - 2 * s.h
+            : 0;
+        expect(c.quantities["weld_mm"]!).toBeCloseTo(knee + end, 6);
+      });
+      expect(cs.reduce((a, c) => a + c.quantities["holes"]!, 0)).toBe(0);
+    }
+  });
+
+  it("j3c en cornières boulonnées : perçages intérieurs aux tronçons, ceux d'un jarret reportés après soudage", () => {
+    const bolted = (line: Line): Project =>
+      withParams(p, {
+        ...p.stair.structure.params,
+        stringerLine: line,
+        supports: { fixing: "bolted", bolts: 2 },
+      });
+    const b = run(bolted("nosing"));
+    const c = run(bolted("chord"));
+    expect(b.m.errors).toEqual([]);
+    // Section de `nosing` au plus celle de la barre droite (UPN 180 contre UPN 240 en boulonné).
+    expect(mass(b)).toBeLessThanOrEqual(mass(c));
+    expectCrankedParts(b, density, bolted("nosing"));
+    let drawn = 0;
+    let counted = 0;
+    for (const st of b.r.stringers) {
+      const cs = st.components ?? [st.part];
+      const n = cs.reduce((a, q) => a + q.quantities["holes"]!, 0);
+      // Même nombre de perçages que la barre droite de la même face (aucun perdu ni doublé).
+      const bar = c.r.stringers.find((q) => q.face.mark === st.face.mark)!;
+      expect(n, st.face.mark).toBe(bar.part.quantities["holes"]);
+      counted += n;
+      drawn += cs.reduce((a, q) => a + q.flat!.outline.holes.length, 0);
+    }
+    expect(counted).toBeGreaterThan(0);
+    // Sans décalage K-Q10, au moins une cornière est à cheval sur un jarret (relecture K2c :
+    // LI2-2, LE2-3) : ses perçages trop près de la coupe sont reportés, avec une remarque.
+    const notes = b.r.output.notes.filter(
+      (n) => n.key === "structure.steelProfile.note.kneeHolesAfterWeld",
+    );
+    const deferred = notes.reduce((a, n) => a + Number(n.params?.["count"]), 0);
+    expect(deferred).toBeGreaterThan(0);
+    expect(drawn + deferred).toBe(counted);
+  });
+
+  it("j3c : débit des UPN par tronçon, trait de scie compris ; FAB_BARRE_LONGUEUR par tronçon", () => {
+    const plan = x.r.cutting[x.r.section!.name]!;
+    const pieces = plan.bars.flatMap((b) => b.pieces.map((q) => q.id));
+    expect(pieces.sort()).toEqual(comps.map((c) => c.id).sort());
+    // Tout est sous la plus grande barre : constat « ok » unique, mesuré sur la plus longue des
+    // pièces contrôlées (tronçons, cornières, poteaux ; aucune pièce finie).
+    const bar = x.r.output.checks.filter((c) => c.ruleId === "FAB_BARRE_LONGUEUR");
+    expect(bar).toHaveLength(1);
+    const others = [...x.r.posts, ...x.r.supports.map((sp) => sp.part)];
+    const longest = Math.max(...[...comps, ...others].map((q) => q.stock!.length));
+    expect(bar[0]!.measured).toBeCloseTo(longest, 9);
+    expect(bar[0]!.measured).toBeLessThan(Math.max(...x.r.stringers.map((s) => s.cutLength)));
+  });
+
+  it("remarques : tronçons et cotes de gabarit par face coudée", () => {
+    const keys = x.r.output.notes.map((n) => n.key);
+    expect(keys.filter((k) => k === "structure.steelProfile.note.cranked")).toHaveLength(4);
+    expect(keys.filter((k) => k === "structure.steelProfile.note.jigDimensions")).toHaveLength(4);
+  });
+
+  it("face coudée à un seul tronçon (U LI2) : pièce autonome, développé du tronçon, remarque propre", () => {
+    const up = withLine(choose(loadExample("two-quarters-u.blondel.json")), "nosing");
+    const u = run(up);
+    const single = u.r.stringers.filter((s) => s.bearing && s.bearing.segments.length === 1);
+    expect(single.length).toBeGreaterThan(0);
+    for (const s of single) {
+      expect(s.components).toBeUndefined();
+      expect(s.part.flat).toBeDefined();
+      expect(s.part.stock!.length).toBeCloseTo(s.cutLength, 9);
+      expect(s.part.quantities["mass_kg"]).toBeGreaterThan(0);
+      // Repère du tronçon : rive basse y = 0, rive haute y = h.
+      const ys = s.part.flat!.outline.outer.map((q) => q.y);
+      expect(Math.max(...ys)).toBeCloseTo(u.r.section!.h, 6);
+    }
+    const keys = u.r.output.notes.map((n) => n.key);
+    expect(keys.filter((k) => k === "structure.steelProfile.note.crankedSingle")).toHaveLength(
+      single.length,
+    );
+    expectCrankedParts(u, resolveWorkshopProfile(up.workshop).metal.density, up);
+  });
+});
+
 describe("steel-profile — point fixe section ↔ poteau en `nosing`", () => {
   const params = { family: "UPN", stringerLine: "nosing" };
   const which = (): boolean => true;
@@ -471,7 +725,7 @@ describe("steel-profile — propriété sur escaliers générés (limon coudé)"
     let evaluated = 0;
     let bent = 0;
     fc.assert(
-      fc.property(stairArb(undefined, ALL_TYPOLOGIES), ({ project }) => {
+      fc.property(stairArb(undefined, ALL_TYPOLOGIES), fc.boolean(), ({ project }, bolted) => {
         const withNewelsP: Project = {
           ...project,
           stair: {
@@ -488,7 +742,10 @@ describe("steel-profile — propriété sur escaliers générés (limon coudé)"
         let p: Project;
         let chord: Run;
         try {
-          p = choose(withNewelsP);
+          p = choose(withNewelsP, {
+            family: "UPN",
+            ...(bolted ? { supports: { fixing: "bolted", bolts: 2 } } : {}),
+          });
           chord = run(withLine(p, "chord"));
         } catch (e) {
           // Découpage en faces impossible (tournants opposés S / Z…) : hors du limon coudé.
@@ -523,6 +780,12 @@ describe("steel-profile — propriété sur escaliers générés (limon coudé)"
           ).length;
         expect(viol(nosing)).toBe(0);
         expect(checkSolids(nosing.m.parts)).toEqual([]);
+        // I11 (K2c) : composantes rattachées, aucun double compte, masses à ±1 %.
+        expectCrankedParts(nosing, resolveWorkshopProfile(p.workshop).metal.density, nosingProject);
+        const ids = new Set(nosing.m.parts.map((q) => q.id));
+        for (const q of nosing.m.parts) {
+          if (q.componentOf !== undefined) expect(ids.has(q.componentOf)).toBe(true);
+        }
       }),
       { numRuns: RUNS },
     );
