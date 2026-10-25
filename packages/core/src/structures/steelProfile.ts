@@ -410,19 +410,6 @@ export function buildSteelProfile(
   const errors: Message[] = [];
   const grade: SteelGrade = params.grade;
   const material = steelMaterial(params.finish);
-  const sup = {
-    kind: "angle" as const,
-    fixing: params.supports.fixing,
-    angleLeg: params.supports.angleLeg,
-    angleThickness: params.supports.angleThickness,
-    plateWidth: params.supports.angleLeg,
-    plateThickness: params.supports.angleThickness,
-    bolts: params.supports.bolts,
-    holeDiameter: params.supports.holeDiameter,
-    slotLength: params.supports.slotLength,
-    holeEdgeDistance: params.supports.holeEdgeDistance,
-    treadScrews: params.supports.treadScrews,
-  };
   const empty = (errs: Message[]): SteelProfileResult => ({
     output: { parts: [], checks: [], notes, errors: errs },
     section: null,
@@ -445,29 +432,16 @@ export function buildSteelProfile(
   const turns = project.stair.layout.turns;
   // Cage saisie (sous-lot 6b) : faces du tracé, onglets à φ/2 en plan aux angles (F17).
   const cage = ctx.layout.cage === true;
-  const faceInfo: { faces: SteelStringerFace[]; errors: Message[]; notes: Message[] } = cage
-    ? steelCageFaces(geo, 0, "miter")
-    : steelStringerFaces(ctx, geo);
+  // Étapes 0 à 3 (faces, zones d'appui, fenêtres, supports candidats) : `profileSupportSetup`.
+  const setup = profileSupportSetup(ctx, params, geo);
+  const { faceInfo, faces, windows, newelList, zones, candidates, sup, depthSup } = setup;
   notes.push(...faceInfo.notes);
   // Jour en arc (volées) : message propre (cintrage des profilés), les autres erreurs sont
   // reprises ; sur une cage, le jour en arc garde l'erreur des limons droits (`arcWellCage`).
   errors.push(...faceInfo.errors.filter((e) => e.key !== "structure.steel.error.arcWell"));
-  const faces = faceInfo.faces;
-  const baseParts = ctx.baseParts ?? buildBasicParts(project, ctx.layout, stepping).parts;
-  const baseById = new Map(baseParts.map((p) => [p.id, p]));
+  const baseParts = setup.baseParts;
   const checks = new CheckCollector(project, stepping);
-
-  // 1. Zones d'appui des marches (bois, pièces de base).
-  const zones = profileTreadZones(project, stepping, params, baseById);
-
-  // 2. Fenêtres des limons et faces porteuses.
-  const { windows, supportFaces, newelList } = profileSupportFaces(faces, geo, nosings, params);
-
-  // 3. Supports candidats (marche × face porteuse) ; sur les limons, ils sont ensuite rognés à
-  //    la partie de la marche où la cornière tient dans l'âme (dépend de la section).
   const minLen = params.supports.minLength;
-  const candidates = supportCandidates(zones, supportFaces);
-  const depthSup = supportDepth(sup);
   const edge = params.supports.edgeMargin;
 
   // 4. Lignes d'appui (cordes des nez de chaque face).
@@ -799,6 +773,84 @@ export function buildSteelProfile(
   };
 }
 
+/** Faces, zones d'appui, fenêtres et supports candidats des limons (étapes 0 à 3). */
+export interface ProfileSupportSetup {
+  readonly faceInfo: {
+    readonly faces: SteelStringerFace[];
+    readonly errors: Message[];
+    readonly notes: Message[];
+  };
+  readonly faces: readonly SteelStringerFace[];
+  readonly windows: ReadonlyMap<string, StringerWindow>;
+  readonly supportFaces: readonly SupportFace[];
+  readonly newelList: readonly ProfileNewelEntry[];
+  readonly zones: readonly TreadZone[];
+  readonly candidates: readonly SupportPlacement[];
+  readonly sup: SupportSpec & { readonly kind: "angle" };
+  readonly depthSup: Mm;
+  readonly baseParts: readonly Part[];
+}
+
+/**
+ * Étapes 0 à 3 de `buildSteelProfile`, sans effet de bord (aucune note ni erreur poussée) :
+ * faces des limons (cage ou volées), pièces de base, zones d'appui des marches, fenêtres et
+ * faces porteuses, supports candidats avant rognage à l'âme. Exportée pour le noyau du limon
+ * coudé (`profileBearing.ts`), ses tests et ses sondes.
+ */
+export function profileSupportSetup(
+  ctx: StructureContext,
+  params: SteelProfileParams,
+  geo: ReturnType<typeof stairGeometry>,
+): ProfileSupportSetup {
+  const { project, stepping } = ctx;
+  const sup = {
+    kind: "angle" as const,
+    fixing: params.supports.fixing,
+    angleLeg: params.supports.angleLeg,
+    angleThickness: params.supports.angleThickness,
+    plateWidth: params.supports.angleLeg,
+    plateThickness: params.supports.angleThickness,
+    bolts: params.supports.bolts,
+    holeDiameter: params.supports.holeDiameter,
+    slotLength: params.supports.slotLength,
+    holeEdgeDistance: params.supports.holeEdgeDistance,
+    treadScrews: params.supports.treadScrews,
+  };
+  const faceInfo: { faces: SteelStringerFace[]; errors: Message[]; notes: Message[] } =
+    ctx.layout.cage === true ? steelCageFaces(geo, 0, "miter") : steelStringerFaces(ctx, geo);
+  const faces = faceInfo.faces;
+  const baseParts = ctx.baseParts ?? buildBasicParts(project, ctx.layout, stepping).parts;
+  const baseById = new Map(baseParts.map((p) => [p.id, p]));
+
+  // 1. Zones d'appui des marches (bois, pièces de base).
+  const zones = profileTreadZones(project, stepping, params, baseById);
+
+  // 2. Fenêtres des limons et faces porteuses.
+  const { windows, supportFaces, newelList } = profileSupportFaces(
+    faces,
+    geo,
+    stepping.nosings,
+    params,
+  );
+
+  // 3. Supports candidats (marche × face porteuse) ; sur les limons, ils sont ensuite rognés à
+  //    la partie de la marche où la cornière tient dans l'âme (dépend de la section).
+  const candidates = supportCandidates(zones, supportFaces);
+  const depthSup = supportDepth(sup);
+  return {
+    faceInfo,
+    faces,
+    windows,
+    supportFaces,
+    newelList,
+    zones,
+    candidates,
+    sup,
+    depthSup,
+    baseParts,
+  };
+}
+
 // ------------------------------------------------------------------ étapes de buildSteelProfile
 
 /** Étape 1 : zones d'appui des marches (bois, pièces de base), rognées aux nez ± marges. */
@@ -830,7 +882,7 @@ function profileTreadZones(
 }
 
 /** Portée [uLo ; uHi] d'un limon le long de sa face. */
-type StringerWindow = { readonly uLo: Mm; readonly uHi: Mm };
+export type StringerWindow = { readonly uLo: Mm; readonly uHi: Mm };
 
 /**
  * Étape 2 : fenêtres des limons (prolongements au départ et à l'arrivée) et faces porteuses des
