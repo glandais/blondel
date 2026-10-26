@@ -16,8 +16,10 @@
  *   infaisable ou impose plus d'âme (K-Q12, K-Q13), avec une remarque. Face à jarrets (K2c) :
  *   pièce finie (solide balayé, propriétaire des cornières) et une composante par tronçon
  *   (`LE2-1`…, développé, débit, cordon de jarret sur le tronçon du dessus) ; cornière à cheval
- *   sur un jarret : traçage coupé au joint (décalage K-Q10 non branché, voir
- *   `kneeFreeSupport`). Défaut `chord` : barre droite inchangée.
+ *   sur un jarret gardée en place (K-Q10 révisée) : traçage coupé au joint, perçages trop près
+ *   de la coupe reportés après soudage. Marche au coin du mur (K-Q4, K2e) : une cornière
+ *   exigée, les autres gardées si elles tiennent dans la section, retirées sinon avec une
+ *   remarque (`crankedSectionPlan`). Défaut `chord` : barre droite inchangée.
  * - **Choix de section** : une section du catalogue (`catalog/`) ou `auto` = la plus légère de
  *   la famille qui (1) loge les supports dans la hauteur d'âme et (2) passe le
  *   **prédimensionnement indicatif** (`precheck/` : L/200, contrainte, f₁ ≥ 5 Hz) pour tous les
@@ -130,8 +132,12 @@ import {
   crankedSectionPlan,
   crankedSingleNote,
   crankedSweepPath,
+  cornerAngleRemovedNote,
+  cornerSupportGroups,
+  cornerSupportKey,
   kneeNormal,
   kneeWeldLength,
+  type CornerGroup,
   type CrankedComponentSpec,
   type CrankedJigItem,
   type CrankedFallbackReason,
@@ -362,6 +368,22 @@ export interface SteelProfileResult {
    * `chord`.
    */
   readonly cranked?: CrankedSectionPlan;
+  /**
+   * Cornières au coin du mur (K-Q4, K2e ; `nosing` seulement, pour les tests et les sondes) :
+   * groupes, clés exigées pour la section retenue et cornières facultatives retirées (partie
+   * logée sous `supports.minLength`, une autre cornière de la marche posée côté mur).
+   */
+  readonly cornerAngles?: {
+    readonly groups: readonly CornerGroup[];
+    readonly required: ReadonlySet<string>;
+    readonly removed: readonly {
+      readonly tread: number;
+      readonly treadMark: string;
+      readonly faceId: string;
+      readonly faceMark: string;
+      readonly logged: Mm;
+    }[];
+  };
 }
 
 const sigmaOf = (k: NosingLine, side: Side): Mm => (side === "inner" ? k.sigmaInner : k.sigmaOuter);
@@ -630,15 +652,19 @@ export function buildSteelProfile(
     tf: tfOf(sec),
     minLength: minLen,
   });
-  /** Marches que la barre droite ne porte pas, quelle que soit la hauteur (dessus de la rive). */
-  const chordLostOf = (p: Pre): number[] =>
-    p.candidates
-      .filter((c) => {
-        if (c.u1 - c.u0 < minLen - 1e-9) return false;
-        const fit = fitInWeb(p, c, null);
-        return fit.u1 - fit.u0 < minLen - 1e-9;
-      })
-      .map((c) => c.tread);
+  /** Support que la barre droite ne porte pas, quelle que soit la hauteur (dessus de la rive). */
+  const chordLostOfSupport = (p: Pre, c: SupportPlacement): boolean => {
+    if (c.u1 - c.u0 < minLen - 1e-9) return false;
+    const fit = fitInWeb(p, c, null);
+    return fit.u1 - fit.u0 < minLen - 1e-9;
+  };
+  // Marches au coin du mur (K-Q4, K2e) : une cornière exigée par marche, les autres facultatives
+  // (hors du besoin d'âme, posées si elles tiennent). Calculé une fois, hors du cache par section.
+  // Deux limons colinéaires (palier entre limons alignés) ne font pas un coin.
+  const dirOfFace = new Map(pres.map((p) => [p.face.id, p.face.dir]));
+  const cornerGroups: readonly CornerGroup[] = nosing
+    ? cornerSupportGroups(candidates, (id) => dirOfFace.get(id))
+    : [];
   const plans = new Map<SteelSection, CrankedSectionPlan>();
   const planOf = (sec: SteelSection): CrankedSectionPlan => {
     let plan = plans.get(sec);
@@ -652,8 +678,9 @@ export function buildSteelProfile(
         section: sec,
         webFit: webFitOf(sec),
         supportsOf: (p) => p.candidates,
-        chordNeedOf: (p) => needOfPre(p, sec),
-        chordLostOf,
+        chordNeedOfSupport: (p, c) => heightNeedOf(p, c, sec),
+        chordLostOfSupport,
+        cornerGroups,
       });
       plans.set(sec, plan);
     }
@@ -712,22 +739,60 @@ export function buildSteelProfile(
   const carried = new Map<number, Set<Side>>();
   const mineOf = new Map<string, SupportPlacement[]>();
   const preByFace = new Map(pres.map((p) => [p.face.id, p]));
-  for (const c of candidates) {
-    let pl = c;
-    if (c.face.kind === "stringer") {
-      const p = preByFace.get(c.face.owner);
-      if (!p) continue;
-      const fit = fitFor(p, c, s);
-      pl = { ...c, u0: fit.u0, u1: fit.u1 };
-    }
+  // Partie logée de chaque candidat (`null` : limon absent), dans l'ordre des candidats.
+  const fitted = candidates.map((c): SupportPlacement | null => {
+    if (c.face.kind !== "stringer") return c;
+    const p = preByFace.get(c.face.owner);
+    if (!p) return null;
+    const fit = fitFor(p, c, s);
+    return { ...c, u0: fit.u0, u1: fit.u1 };
+  });
+  // Cornière facultative du coin du mur (K-Q4, K2e) qui ne tient pas dans la section retenue :
+  // retirée (ni constat de longueur, ni appui) si une autre cornière de sa marche est posée côté
+  // mur, avec une remarque ; sinon (section infaisable) constat de longueur comme en K2b.
+  const corner = nosing ? planOf(s).corner : undefined;
+  const removedCorner: {
+    readonly tread: number;
+    readonly treadMark: string;
+    readonly faceId: string;
+    readonly faceMark: string;
+    readonly logged: Mm;
+  }[] = [];
+  const placedKeys = new Set<string>();
+  const keyOf = (c: SupportPlacement): string => cornerSupportKey(c.tread, c.face.key);
+  if (corner && corner.optional.size > 0) {
+    candidates.forEach((c, i) => {
+      const pl = fitted[i];
+      if (pl && pl.u1 - pl.u0 >= minLen - 1e-9) placedKeys.add(keyOf(c));
+    });
+  }
+  const groupOfTread = new Map(corner?.groups.map((g) => [g.tread, g]) ?? []);
+  const removable = (c: SupportPlacement, len: Mm): boolean => {
+    if (!corner || !corner.optional.has(keyOf(c)) || len >= minLen - 1e-9) return false;
+    const g = groupOfTread.get(c.tread);
+    return g !== undefined && g.candidates.some((x) => x.key !== keyOf(c) && placedKeys.has(x.key));
+  };
+  candidates.forEach((c, i) => {
+    const pl = fitted[i];
+    if (!pl) return;
     const len = pl.u1 - pl.u0;
+    if (removable(c, len)) {
+      removedCorner.push({
+        tread: c.tread,
+        treadMark: c.treadMark,
+        faceId: c.face.owner,
+        faceMark: c.face.ownerMark,
+        logged: len,
+      });
+      return;
+    }
     shortSupports.push({
       value: len,
       label: supportOn(c.treadMark, c.face.ownerMark),
       partId: c.face.owner,
       treadNumber: c.tread,
     });
-    if (len < minLen - 1e-9) continue;
+    if (len < minLen - 1e-9) return;
     placements.push(pl);
     const set = carried.get(c.tread) ?? new Set<Side>();
     set.add(c.face.side);
@@ -737,7 +802,7 @@ export function buildSteelProfile(
       list.push(pl);
       mineOf.set(c.face.owner, list);
     }
-  }
+  });
 
   // 6. Jours en arc : cintrage (C-M-06 / C-M-07).
   // Cage saisie : jours en arc lus sur les jonctions du tracé (`Layout.turns[].well`), même
@@ -812,6 +877,29 @@ export function buildSteelProfile(
     bearingItems.push(...built.bearing);
     stringers.push(built.stringer);
     if (built.spliceNote) notes.push(built.spliceNote);
+  }
+
+  // Cornières retirées au coin du mur (K-Q4, K2e) : une remarque par marche, dans l'ordre des
+  // marches (faces retirées, faces qui gardent la marche côté mur).
+  const removedByTread = new Map<number, (typeof removedCorner)[number][]>();
+  for (const r of removedCorner) {
+    removedByTread.set(r.tread, [...(removedByTread.get(r.tread) ?? []), r]);
+  }
+  for (const [tread, list] of [...removedByTread.entries()].sort((a, b) => a[0] - b[0])) {
+    const kept = (groupOfTread.get(tread)?.candidates ?? [])
+      .filter((x) => placedKeys.has(x.key))
+      .flatMap((x) => {
+        const mark = candidates.find((c) => keyOf(c) === x.key)?.face.ownerMark;
+        return mark === undefined ? [] : [mark];
+      });
+    notes.push(
+      cornerAngleRemovedNote(
+        list[0]!.treadMark,
+        list.map((r) => r.faceMark),
+        kept,
+        minLen,
+      ),
+    );
   }
 
   // Raccords d'onglet aux angles muraux (cage : angles et raccords de palier, côté par côté).
@@ -949,7 +1037,16 @@ export function buildSteelProfile(
     supports,
     cutting,
     executionClass: exc.executionClass,
-    ...(nosing ? { cranked: planOf(s) } : {}),
+    ...(nosing
+      ? {
+          cranked: planOf(s),
+          cornerAngles: {
+            groups: cornerGroups,
+            required: planOf(s).corner.required,
+            removed: removedCorner,
+          },
+        }
+      : {}),
   };
 }
 
@@ -1824,8 +1921,8 @@ function buildCrankedProfileStringer(
       for (const cc of boltCenters(sp, sup)) {
         if (componentIndexAt(fb, cc) !== spec.index) continue;
         drilled++;
-        // Perçage trop près de la coupe d'un jarret voisin (cornière laissée à cheval, K-Q10 non
-        // branché) : non dessiné sur le développé du tronçon (il couperait le contour), percé
+        // Perçage trop près de la coupe d'un jarret voisin (cornière gardée à cheval, K-Q10
+        // révisée) : non dessiné sur le développé du tronçon (il couperait le contour), percé
         // sur la pièce finie après soudage du jarret (remarque) ; compté sur ce tronçon.
         if (nearKnee(spec, cc)) {
           deferredHoles++;

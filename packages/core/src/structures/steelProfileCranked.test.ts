@@ -2,12 +2,13 @@
  * Câblage du limon coudé (`steelProfileCranked.ts`, sous-lot K2b) : décision par face et repli
  * sur la barre droite (K-Q12, K-Q13), en cas chiffrés et en propriété ; contour de l'âme, chemin
  * du balayage (solide valide, section orientée vers `into`), écarts d'onglet au bout d'aile
- * (CK13) et remarques traduites, sur des faces synthétiques.
+ * (CK13), cornière au coin du mur (K-Q4, K2e : groupes, cornière exigée, passes et garde-fou du
+ * plan) et remarques traduites, sur des faces synthétiques.
  */
 import { createTranslator, msg } from "@blondel/i18n";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
-import { findSection, sectionPerimeter } from "../catalog/sections.js";
+import { findSection, sectionPerimeter, sectionsOf } from "../catalog/sections.js";
 import { signedArea } from "../geom2d/polygon.js";
 import * as V from "../geom2d/vec.js";
 import type { Vec2 } from "../model/primitives.js";
@@ -16,14 +17,22 @@ import { PiecewiseLinear, clipHalfPlane } from "./geom.js";
 import {
   PROVISIONAL_KNEE_SETTINGS,
   bearingSectionOf,
+  faceHeightNeed,
+  fitInWebPolyline,
   profileBearings,
   riveFns,
+  supportHeightNeed,
   type BearingFace,
   type BearingIssue,
   type FaceBearing,
 } from "./profileBearing.js";
 import type { SteelStringerFace } from "./steelFlat.js";
 import {
+  chooseCornerRequired,
+  cornerAngleRemovedNote,
+  cornerSupportGroups,
+  cornerSupportKey,
+  crankedSectionPlan,
   componentIndexAt,
   crankedAxialEnds,
   crankedBearingFace,
@@ -38,10 +47,11 @@ import {
   crankedSingleNote,
   crankedSweepPath,
   decideCrankedFace,
-  kneeCutBand,
-  kneeFreeSupport,
   kneeWeldLength,
   isChordEquivalent,
+  type CornerCandidate,
+  type CornerGroup,
+  type CrankedSupport,
   type CrankedDecisionInput,
   type CrankedFallbackReason,
   type CrankedMiterStringer,
@@ -525,74 +535,384 @@ describe("tronçons du limon coudé (K2c, CK8 à CK10, CK17)", () => {
   });
 });
 
-describe("cornière à cheval sur un jarret (K-Q10, fonctions non branchées en K2c)", () => {
+// ------------------------------------------------------------------------------ cornière au coin du mur
+
+/** Réglages du logement des tests du coin : L 40, marge 10, UPN (t_f = 0), appui mini 50. */
+const WEBFIT = { depth: 40, edge: 10, tf: 0, minLength: 50 };
+
+/** Support synthétique côté mur sur une face du quart (clé de face = id). */
+function sup(face: string, tread: number, u0: number, u1: number, zTop: number): CrankedSupport {
+  return { u0, u1, zTop, tread, face: { key: face, owner: face, kind: "stringer", side: "outer" } };
+}
+
+/**
+ * Supports d'une marche par giron du quart synthétique (nez tous les 250 mm en σ, dessous de
+ * marche 40 mm sous le nez suivant), coupés au coin σ = 1 500 : la marche 6 (σ 1 350 → 1 600)
+ * a un candidat sur le1 [1 350 ; 1 500] et un sur le2 [0 ; 100].
+ */
+function quarterSupports(): CrankedSupport[] {
+  const out: CrankedSupport[] = [];
+  for (let k = 0; k <= 10; k++) {
+    const s0 = 100 + 250 * k;
+    const s1 = s0 + 250;
+    const zTop = 175 * (k + 2) - 40;
+    if (s1 <= 1500) out.push(sup("le1", k + 1, s0, s1, zTop));
+    else if (s0 >= 1500) out.push(sup("le2", k + 1, s0 - 1500, s1 - 1500, zTop));
+    else {
+      out.push(sup("le1", k + 1, s0, 1500, zTop));
+      out.push(sup("le2", k + 1, 0, s1 - 1500, zTop));
+    }
+  }
+  return out;
+}
+
+type QuarterPre = ReturnType<typeof quarter>["pres"][number];
+
+/** Rive haute de la barre droite d'une face (corde, d_h = 50). */
+const chordUpper = (p: QuarterPre): Vec2[] => {
+  const at = (u: number): Vec2 => ({
+    x: u,
+    y: p.line.z0 + p.line.slope * (u - p.line.u0) + 50,
+  });
+  return [at(p.uLo - 2000), at(p.uHi + 2000)];
+};
+
+/** Plan du quart pour une section, des supports et des groupes du coin donnés. */
+function planOf(
+  q: ReturnType<typeof quarter>,
+  supports: readonly CrankedSupport[],
+  groups: readonly CornerGroup[],
+  section = UPN180,
+  chordLost: (c: CrankedSupport) => boolean = (c) =>
+    c.u1 - c.u0 >= WEBFIT.minLength - 1e-9 &&
+    (() => {
+      const p = q.pres.find((x) => x.face.id === c.face.owner)!;
+      const f = fitInWebPolyline(chordUpper(p), null, c, WEBFIT);
+      return f.u1 - f.u0 < WEBFIT.minLength - 1e-9;
+    })(),
+  chordNeed: (p: QuarterPre, c: CrankedSupport) => number = (p, c) =>
+    supportHeightNeed(chordUpper(p), c, WEBFIT),
+) {
+  return crankedSectionPlan({
+    pres: q.pres,
+    bearingFaces: q.pres.map(crankedBearingFace),
+    pitch: { inner: q.pitch, outer: q.pitch },
+    upperOffset: 50,
+    knee: PROVISIONAL_KNEE_SETTINGS,
+    section,
+    webFit: WEBFIT,
+    supportsOf: (p) => supports.filter((c) => c.face.owner === p.face.id),
+    chordNeedOfSupport: chordNeed,
+    chordLostOfSupport: (_p, c) => chordLost(c),
+    cornerGroups: groups,
+  });
+}
+
+describe("cornière au coin du mur (K2e, K-Q4) — groupes et cornière exigée", () => {
+  it("groupes : marches côté mur sur au moins deux limons, triées ; côté jour et poteaux ignorés", () => {
+    const cands: CrankedSupport[] = [
+      sup("le2", 7, 0, 100, 1000),
+      sup("le1", 7, 1300, 1500, 1000),
+      sup("le1", 3, 400, 600, 500),
+      {
+        ...sup("li1", 5, 0, 80, 800),
+        face: { key: "li1", owner: "li1", kind: "stringer", side: "inner" },
+      },
+      {
+        ...sup("li2", 5, 0, 80, 800),
+        face: { key: "li2", owner: "li2", kind: "stringer", side: "inner" },
+      },
+      {
+        ...sup("pt1", 2, 0, 80, 800),
+        face: { key: "pt1-a", owner: "pt1", kind: "post", side: "outer" },
+      },
+      sup("le1", 2, 0, 80, 800),
+      sup("le2", 9, 0, 120, 900),
+      sup("le3", 9, 0, 140, 900),
+      sup("le4", 9, 0, 60, 900),
+    ];
+    const g = cornerSupportGroups(cands);
+    expect(g.map((x) => x.tread)).toEqual([7, 9]);
+    expect(g[0]!.candidates.map((c) => c.key)).toEqual([
+      cornerSupportKey(7, "le2"),
+      cornerSupportKey(7, "le1"),
+    ]);
+    expect(g[0]!.candidates[1]).toMatchObject({ u0: 1300, u1: 1500, zTop: 1000, faceId: "le1" });
+    // Trois faces au même coin : un seul groupe.
+    expect(g[1]!.candidates.map((c) => c.faceId)).toEqual(["le2", "le3", "le4"]);
+  });
+
+  const cand = (faceId: string, len: number): CornerCandidate => ({
+    u0: 0,
+    u1: len,
+    zTop: 0,
+    tread: 1,
+    faceId,
+    key: cornerSupportKey(1, faceId),
+  });
+  const rank = (id: string): number => Number(id.slice(1));
+
+  it("départages : plus petit besoin, puis plus longue zone brute, puis rang de face, puis clé", () => {
+    const one = (cs: CornerCandidate[], score: Record<string, number>): string =>
+      [...chooseCornerRequired([{ tread: 1, candidates: cs }], (c) => score[c.faceId]!, rank)][0]!;
+    expect(one([cand("f1", 100), cand("f2", 300)], { f1: 150, f2: 160 })).toBe("1|f1");
+    // Égalité à 1e-6 près : plus longue zone brute.
+    expect(one([cand("f1", 100), cand("f2", 300)], { f1: 0, f2: 5e-7 })).toBe("1|f2");
+    // Même longueur : plus petit rang de face.
+    expect(one([cand("f2", 100), cand("f1", 100)], { f1: 0, f2: 0 })).toBe("1|f1");
+    // Tout perdu (Infinity) : départage par la zone brute.
+    expect(one([cand("f1", 20), cand("f2", 300)], { f1: Infinity, f2: Infinity })).toBe("1|f2");
+    // Une perdue, l'autre logeable : jamais la perdue.
+    expect(one([cand("f1", 400), cand("f2", 60)], { f1: Infinity, f2: 250 })).toBe("1|f2");
+  });
+
+  it("propriété : une exigée par groupe, de besoin minimal, indépendante de l'ordre", () => {
+    const scoreArb = fc.oneof(
+      fc.constantFrom(0, 150, 166.4, Infinity),
+      fc.double({ min: 0, max: 400, noNaN: true }),
+    );
+    const groupArb = fc.uniqueArray(
+      fc.record({
+        face: fc.integer({ min: 1, max: 5 }),
+        len: fc.oneof(fc.constantFrom(20, 100), fc.double({ min: 0, max: 600, noNaN: true })),
+        score: scoreArb,
+      }),
+      { minLength: 2, maxLength: 4, selector: (x) => x.face },
+    );
+    fc.assert(
+      fc.property(fc.array(groupArb, { minLength: 1, maxLength: 4 }), fc.nat(), (raw, seed) => {
+        const scores = new Map<string, number>();
+        const groups: CornerGroup[] = raw.map((g, t) => ({
+          tread: t + 1,
+          candidates: g.map((c) => {
+            const key = cornerSupportKey(t + 1, `f${c.face}`);
+            scores.set(key, c.score);
+            return { u0: 0, u1: c.len, zTop: 0, tread: t + 1, faceId: `f${c.face}`, key };
+          }),
+        }));
+        const score = (c: CornerCandidate): number => scores.get(c.key)!;
+        const req = chooseCornerRequired(groups, score, rank);
+        for (const g of groups) {
+          const mine = g.candidates.filter((c) => req.has(c.key));
+          expect(mine).toHaveLength(1);
+          const min = Math.min(...g.candidates.map(score));
+          const s = score(mine[0]!);
+          expect(s === min || s <= min + 1e-6).toBe(true);
+        }
+        expect(req.size).toBe(groups.length);
+        // Permutation des groupes et des candidats (rotation déterministe).
+        const rot = <T>(xs: readonly T[], k: number): T[] =>
+          xs.map((_, i) => xs[(i + k) % xs.length]!);
+        const permuted = rot(groups, seed).map((g, i) => ({
+          ...g,
+          candidates: rot(g.candidates, seed + i).reverse(),
+        }));
+        expect([...chooseCornerRequired(permuted, score, rank)].sort()).toEqual([...req].sort());
+      }),
+      { numRuns: RUNS },
+    );
+  });
+});
+
+describe("cornière au coin du mur (K2e, K-Q4) — plan par section", () => {
   const q = quarter();
-  const fb = q.get("le2");
-  const k = fb.knees[1]!;
-  /** Le segment de coupe a → b traverse-t-il l'intérieur du rectangle (u, z) ? */
-  const hits = (a: Vec2, b: Vec2, u0: number, u1: number, z0: number, z1: number): boolean => {
-    const eps = 1e-6;
-    const zl = Math.max(z0 + eps, Math.min(a.y, b.y));
-    const zh = Math.min(z1 - eps, Math.max(a.y, b.y));
-    if (zl > zh) return false;
-    const uAt = (z: number) => a.x + ((b.x - a.x) * (z - a.y)) / (b.y - a.y);
-    const ua = Math.min(uAt(zl), uAt(zh));
-    const ub = Math.max(uAt(zl), uAt(zh));
-    return ua < u1 - eps && ub > u0 + eps;
-  };
+  const supports = quarterSupports();
+  const groups = cornerSupportGroups(supports);
+  const corner = groups[0]!;
 
-  it("étendue de la coupe dans une tranche : sur la bissectrice, nulle au-dessus du sommet haut", () => {
-    const z1 = k.upper.y - 10;
-    const z0 = z1 - 40;
-    const band = kneeCutBand(k, z0, z1)!;
-    const uAt = (z: number) =>
-      k.upper.x + ((k.lower.x - k.upper.x) * (z - k.upper.y)) / (k.lower.y - k.upper.y);
-    expect(band.u0).toBeCloseTo(Math.min(uAt(z0), uAt(z1)), 9);
-    expect(band.u1).toBeCloseTo(Math.max(uAt(z0), uAt(z1)), 9);
-    expect(kneeCutBand(k, k.upper.y + 1, k.upper.y + 50)).toBeNull();
+  it("fixture : une seule marche au coin (marche 6, le1 et le2), faces coudées", () => {
+    expect(groups.map((g) => g.tread)).toEqual([6]);
+    expect(corner.candidates.map((c) => c.faceId)).toEqual(["le1", "le2"]);
   });
 
-  it("aucune coupe touchée : même objet ; morceaux de part et d'autre : le plus long, ou le meilleur score", () => {
-    const zTop = k.upper.y - 20;
-    const far = { u0: k.upper.x - 400, u1: k.upper.x - 300, zTop, tread: 1 };
-    expect(kneeFreeSupport(fb, far, 40)).toBe(far);
-    const band = kneeCutBand(k, zTop - 40, zTop)!;
-    const c = { u0: band.u0 - 30, u1: band.u1 + 80, zTop, tread: 2 };
-    expect(kneeFreeSupport(fb, c, 40)).toMatchObject({ u0: band.u1, u1: c.u1, tread: 2 });
-    const shortest = kneeFreeSupport(fb, c, 40, (piece) => piece.u1 - piece.u0);
-    expect(shortest).toMatchObject({ u0: c.u0, u1: band.u0 });
-    // À égalité, le plus petit u0.
-    const tie = { u0: band.u0 - 50, u1: band.u1 + 50, zTop, tread: 3 };
-    expect(kneeFreeSupport(fb, tie, 40).u0).toBeCloseTo(tie.u0, 9);
-    // Entièrement dans la coupe : support vide.
-    const inside = { u0: band.u0 + 1e-3, u1: band.u1 - 1e-3, zTop, tread: 4 };
-    const r = kneeFreeSupport(fb, inside, 40);
-    expect(r.u1 - r.u0).toBe(0);
+  it("sans groupe : besoins de K2b (toutes les cornières), ensembles du coin vides", () => {
+    const plan = planOf(q, supports, []);
+    expect(plan.corner).toEqual({
+      groups: [],
+      required: new Set(),
+      optional: new Set(),
+      reverted: 0,
+    });
+    for (const p of q.pres) {
+      const f = plan.faces.get(p.face.id)!;
+      const list = supports.filter((c) => c.face.owner === p.face.id);
+      expect(f.bentNeed).toBe(faceHeightNeed(q.get(p.face.id), list, WEBFIT).need);
+      expect(f.chordNeed).toBe(
+        Math.max(0, ...list.map((c) => supportHeightNeed(chordUpper(p), c, WEBFIT))),
+      );
+      if (f.mode === "nosing") expect(f.need).toBe(f.bentNeed);
+    }
   });
 
-  it("propriété : le support rendu ne traverse aucune coupe de jarret de la face", () => {
+  it("avec le groupe : l'exigée demande le moins d'âme, la facultative sort du besoin de sa face", () => {
+    const plan = planOf(q, supports, groups);
+    const { required, optional } = plan.corner;
+    expect(required.size).toBe(1);
+    expect(optional.size).toBe(1);
+    expect(plan.corner.reverted).toBe(0);
+    const needOf = (c: CornerCandidate): number =>
+      supportHeightNeed(q.get(c.faceId).upperRive, c, WEBFIT);
+    const [a, b] = corner.candidates;
+    const req = required.has(a!.key) ? a! : b!;
+    const opt = req === a ? b! : a!;
+    expect(plan.faces.get(req.faceId)!.mode).toBe("nosing");
+    expect(plan.faces.get(opt.faceId)!.mode).toBe("nosing");
+    expect(needOf(req)).toBeLessThanOrEqual(needOf(opt));
+    // Besoin de la face de la facultative : ses autres supports seulement.
+    const others = supports.filter(
+      (c) => c.face.owner === opt.faceId && cornerSupportKey(c.tread, c.face.key) !== opt.key,
+    );
+    expect(plan.faces.get(opt.faceId)!.bentNeed).toBe(
+      faceHeightNeed(q.get(opt.faceId), others, WEBFIT).need,
+    );
+    // Face de l'exigée : tous ses supports.
+    const all = supports.filter((c) => c.face.owner === req.faceId);
+    expect(plan.faces.get(req.faceId)!.bentNeed).toBe(
+      faceHeightNeed(q.get(req.faceId), all, WEBFIT).need,
+    );
+  });
+
+  it("cornière perdue (au-dessus de la rive) ou trop courte : jamais exigée", () => {
+    const fb2 = q.get("le2");
+    const up = riveFns(fb2).upper(50);
+    // le2 perdue (dessus 200 mm au-dessus de la rive haute) : le1 exigée.
+    const lost = supports.map((c) =>
+      c.tread === 6 && c.face.owner === "le2" ? { ...c, zTop: up + 200 } : c,
+    );
+    const p1 = planOf(q, lost, cornerSupportGroups(lost));
+    expect([...p1.corner.required]).toEqual([cornerSupportKey(6, "le1")]);
+    // le1 trop courte (20 mm) : le2 exigée, même si son besoin serait nul.
+    const short = supports.map((c) =>
+      c.tread === 6 && c.face.owner === "le1" ? { ...c, u0: 1480 } : c,
+    );
+    const p2 = planOf(q, short, cornerSupportGroups(short));
+    expect([...p2.corner.required]).toEqual([cornerSupportKey(6, "le2")]);
+    expect([...p2.corner.optional]).toEqual([cornerSupportKey(6, "le1")]);
+  });
+
+  it("garde-fou : exigée perdue dans le mode final de sa face → groupe « tout exigé » (K2b)", () => {
+    // le1 trop courte (non logeable) ; le2 exigée mais très basse sous la rive : son besoin
+    // coudé dépasse la section et la barre droite (repli `heavier`), et la barre droite ne la
+    // porte pas (talon de test) : elle est perdue dans le mode final.
+    const fb2 = q.get("le2");
+    const z = riveFns(fb2).upper(50) - 300;
+    const s = supports.map((c) =>
+      c.tread === 6 && c.face.owner === "le1"
+        ? { ...c, u0: 1480 }
+        : c.tread === 6 && c.face.owner === "le2"
+          ? { ...c, zTop: z }
+          : c,
+    );
+    const key2 = cornerSupportKey(6, "le2");
+    const plan = planOf(
+      q,
+      s,
+      cornerSupportGroups(s),
+      UPN180,
+      (c) => cornerSupportKey(c.tread, c.face.key) === key2,
+      () => 0,
+    );
+    expect(plan.faces.get("le2")!.fallback?.kind).toBe("heavier");
+    expect(plan.corner.reverted).toBe(1);
+    expect([...plan.corner.required].sort()).toEqual([cornerSupportKey(6, "le1"), key2].sort());
+    expect(plan.corner.optional.size).toBe(0);
+  });
+
+  it("propriété (monotonie) : section faisable sans la règle → faisable avec ; exigée logée ; section insuffisante → plan de K2b", () => {
+    const sections = sectionsOf("UPN").filter((x) => x.h >= 140 && x.h <= 260);
     fc.assert(
       fc.property(
-        fc.constantFrom(...q.pres.map((p) => p.face.id)),
-        fc.double({ min: 0, max: 1, noNaN: true }),
-        fc.double({ min: 20, max: 600, noNaN: true }),
-        fc.double({ min: -200, max: 50, noNaN: true }),
-        (id, t, len, dz) => {
-          const f = q.get(id);
-          const u0 = f.uLo + t * (f.uHi - f.uLo);
-          const zTop = riveFns(f).upper(u0) + dz;
-          const r = kneeFreeSupport(f, { u0, u1: u0 + len, zTop }, 40);
-          expect(r.u0).toBeGreaterThanOrEqual(u0 - 1e-9);
-          expect(r.u1).toBeLessThanOrEqual(u0 + len + 1e-9);
-          if (r.u1 - r.u0 <= 1e-9) return;
-          for (const kk of f.knees) {
-            // Coupe prolongée sous le sommet bas (demi-droite) : aucune traversée.
-            const far = V.addScaled(kk.upper, V.sub(kk.lower, kk.upper), 10);
-            expect(hits(kk.upper, far, r.u0, r.u1, zTop - 40, zTop)).toBe(false);
+        fc.constantFrom(...sections),
+        fc.double({ min: 0, max: 140, noNaN: true }),
+        fc.double({ min: 0, max: 140, noNaN: true }),
+        fc.double({ min: -250, max: 40, noNaN: true }),
+        fc.double({ min: -250, max: 40, noNaN: true }),
+        (sec, cut1, cut2, dz1, dz2) => {
+          const s = supports.map((c) => {
+            if (c.tread !== 6) return c;
+            const up = riveFns(q.get(c.face.owner)).upper((c.u0 + c.u1) / 2);
+            return c.face.owner === "le1"
+              ? { ...c, u0: c.u0 + cut1, zTop: up + dz1 - 50 }
+              : { ...c, u1: Math.max(c.u0, c.u1 - cut2 * 0.6), zTop: up + dz2 - 50 };
+          });
+          const k2b = planOf(q, s, [], sec);
+          const k2e = planOf(q, s, cornerSupportGroups(s), sec);
+          const max = (pl: typeof k2b): number =>
+            Math.max(0, ...[...pl.faces.values()].map((f) => f.need));
+          if (max(k2b) <= sec.h + 1e-9) expect(max(k2e)).toBeLessThanOrEqual(sec.h + 1e-9);
+          if (max(k2e) > sec.h + 1e-9) {
+            // Section insuffisante : plan de K2b pour tous les groupes (aucune facultative).
+            expect(k2e.corner.reverted).toBe(k2e.corner.groups.length);
+            expect(k2e.corner.optional.size).toBe(0);
+            expect(k2e.faces).toEqual(k2b.faces);
+            return;
+          }
+          // Section faisable : l'exigée de chaque groupe non basculé est logée dans h, dans le
+          // mode final de sa face (recalculé indépendamment du plan).
+          if (k2e.corner.reverted > 0) return;
+          for (const g of k2e.corner.groups) {
+            const req = g.candidates.find((c) => k2e.corner.required.has(c.key))!;
+            const c = s.find((x) => cornerSupportKey(x.tread, x.face.key) === req.key)!;
+            const f = k2e.faces.get(req.faceId)!;
+            const p = q.pres.find((x) => x.face.id === req.faceId)!;
+            if (f.mode === "nosing") {
+              const need = faceHeightNeed(f.bearing!, [c], WEBFIT);
+              expect(need.lost).toEqual([]);
+              expect(need.need).toBeLessThanOrEqual(sec.h + 1e-9);
+            } else {
+              expect(supportHeightNeed(chordUpper(p), c, WEBFIT)).toBeLessThanOrEqual(sec.h + 1e-9);
+            }
           }
         },
       ),
       { numRuns: RUNS },
     );
+  });
+
+  it("section imposée trop basse : plan de K2b, aucune facultative (aucun appui mural retiré)", () => {
+    // Marche 9 de le2 (hors du coin) très basse sous la rive : aucune UPN 140 ne la loge.
+    const sec = sectionsOf("UPN").find((x) => x.h === 140)!;
+    const low = supports.map((c) =>
+      c.tread === 9 && c.face.owner === "le2"
+        ? { ...c, zTop: riveFns(q.get("le2")).upper((c.u0 + c.u1) / 2) - 250 }
+        : c,
+    );
+    const k2b = planOf(q, low, [], sec);
+    const k2e = planOf(q, low, cornerSupportGroups(low), sec);
+    expect(Math.max(...[...k2b.faces.values()].map((f) => f.need))).toBeGreaterThan(sec.h);
+    expect(k2e.faces).toEqual(k2b.faces);
+    expect(k2e.corner.reverted).toBe(1);
+    expect(k2e.corner.optional.size).toBe(0);
+  });
+
+  it("deux limons colinéaires (palier entre limons alignés) : pas de groupe du coin", () => {
+    const x = { x: 1, y: 0 };
+    const y = { x: 0, y: 1 };
+    const s = [sup("le1", 4, 1300, 1500, 800), sup("le2", 4, 0, 120, 800)];
+    expect(cornerSupportGroups(s, () => x)).toEqual([]);
+    expect(cornerSupportGroups(s, (id) => (id === "le1" ? x : y)).map((g) => g.tread)).toEqual([4]);
+    // Sans directions : groupe dès deux limons (contrat des tests unitaires).
+    expect(cornerSupportGroups(s)).toHaveLength(1);
+  });
+});
+
+describe("cornière au coin du mur (K2e, K-Q4) — remarque", () => {
+  it("une puis deux faces retirées, en fr et en : aucune clé brute, ni accolade, ni NaN", () => {
+    const one = cornerAngleRemovedNote("M5", ["LE2"], ["LE1"], 50);
+    const two = cornerAngleRemovedNote("M9", ["LE2", "LE3"], ["LE4"], 50);
+    expect(one.key).toBe("structure.steelProfile.note.cornerAngleRemoved");
+    for (const locale of ["fr", "en"] as const) {
+      const t = createTranslator(locale);
+      for (const n of [one, two]) expect(t.t(n)).not.toMatch(/structure\.|\{|\}|NaN|Infinity/);
+      expect(t.t(one)).toContain("M5");
+      expect(t.t(one)).toContain("LE2");
+      expect(t.t(one)).toContain("LE1");
+      expect(t.t(two)).toContain("LE3");
+      // Partie logée jamais citée (souvent nulle) : seule la longueur minimale d'appui l'est.
+      for (const n of [one, two]) expect(t.t(n)).toContain("50 mm");
+      for (const n of [one, two]) expect(t.t(n)).not.toMatch(/\D0 mm/);
+    }
+    expect(createTranslator("fr").t(two)).toContain("cornières");
+    expect(createTranslator("en").t(two)).toContain("angles");
   });
 });

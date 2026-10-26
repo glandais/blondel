@@ -3,7 +3,9 @@
  * escaliers réels : paramètres rétrocompatibles, `chord` sans nouveau chemin, escaliers droits
  * identiques en `nosing` (CK7), critères de fin de K2b (j3c, j5b du comparateur, onglets au bout
  * d'aile, hauteur de poteau, point fixe section ↔ poteau), non-régression par rapport à la barre
- * droite grâce au repli par face (K-Q12, K-Q13) et propriété sur escaliers générés.
+ * droite grâce au repli par face (K-Q12, K-Q13) et propriété sur escaliers générés ; cornière au
+ * coin du mur (K-Q4, K2e) : critères de fin, comparaison par règle à K2c, cornières retirées
+ * absentes des sorties, invariants dans la propriété.
  */
 import { readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
@@ -18,6 +20,7 @@ import { checkSolids } from "../parts/solidChecks.js";
 import { buildModel } from "../pipeline/build.js";
 import { expectedNewel, newelMatches, withNewels, type NewelInner } from "../project/newel.js";
 import { parseProjectText } from "../project/parse.js";
+import { createProject } from "../project/presets.js";
 import {
   PROFILE_NEWEL_ITERATIONS,
   applyStructureChoice,
@@ -26,7 +29,7 @@ import {
 import { precheckModel } from "../precheck/stringers.js";
 import { ALL_TYPOLOGIES, makeSteppingProject, stairArb } from "../stepping/test-helpers.js";
 import { adaptJour } from "./compare.js";
-import { riveFns } from "./profileBearing.js";
+import { fitInWebPolyline, riveFns } from "./profileBearing.js";
 import { StructureError } from "./registry.js";
 import {
   SteelProfileParamsSchema,
@@ -35,6 +38,7 @@ import {
   profileNewelFits,
   type SteelProfileResult,
 } from "./steelProfile.js";
+import { cornerSupportKey } from "./steelProfileCranked.js";
 import "./index.js";
 
 const EXAMPLES_DIR = resolve(dirname(fileURLToPath(import.meta.url)), "../../../../examples");
@@ -411,6 +415,335 @@ describe("steel-profile — critères de fin de K2b en `nosing`", () => {
   }
 });
 
+/** Violations du contrôle de conception par règle (compte, et non ensemble des identifiants). */
+const violationCounts = (x: Run): Record<string, number> => {
+  const out: Record<string, number> = {};
+  for (const c of x.m.compliance.results) {
+    if (c.status === "violation") out[c.ruleId] = (out[c.ruleId] ?? 0) + 1;
+  }
+  return out;
+};
+/** Clé d'un support posé (marche × face), comme dans les ensembles du coin. */
+const placedKey = (pl: { tread: number; face: { key: string } }): string =>
+  cornerSupportKey(pl.tread, pl.face.key);
+
+/**
+ * Invariants de la cornière au coin du mur (K-Q4, K2e) sur un résultat du plugin en `nosing` :
+ * chaque marche au coin garde au moins une cornière posée côté mur dès que l'une est logeable
+ * dans le mode final de sa face (section faisable), sans violation FAB_MARCHE_PORTEE côté mur ;
+ * les cornières retirées sont toutes facultatives, à partie logée < `minLength` ; une facultative
+ * est posée ou retirée (sauf marche sans aucune cornière posée, comportement de K2b) ; une
+ * remarque par marche qui perd une cornière. Rend le nombre de groupes vérifiés.
+ */
+function expectCornerAngles(x: Run, project: Project): number {
+  // Plugin arrêté avant le choix de section (hélicoïdal, découpage vide…) : rien à vérifier.
+  if (!x.r.section || !x.r.cornerAngles || !x.r.cranked) return 0;
+  const ca = x.r.cornerAngles;
+  const plan = x.r.cranked;
+  const params = SteelProfileParamsSchema.parse(project.stair.structure.params);
+  const minLen = params.supports.minLength;
+  // Supports des profilés : cornières (hauteur = aile).
+  const webFit = {
+    depth: params.supports.angleLeg,
+    edge: params.supports.edgeMargin,
+    tf: x.r.section!.shape === "I" ? x.r.section!.tf : 0,
+    minLength: minLen,
+  };
+  const placed = new Set(x.r.supports.map((s) => placedKey(s.placement)));
+  const removed = new Set(ca.removed.map((r) => cornerSupportKey(r.tread, r.faceId)));
+  const feasible = !errorKeys(x).includes("structure.steelProfile.error.noSectionPasses");
+  let checked = 0;
+  for (const g of ca.groups) {
+    // Logeable (à hauteur infinie) dans le mode final de sa face : rive coudée ou corde.
+    const loggable = g.candidates.some((c) => {
+      if (c.u1 - c.u0 < minLen - 1e-9) return false;
+      const st = x.r.stringers.find((s) => s.face.id === c.faceId);
+      if (!st) return false;
+      const upper = st.bearing
+        ? st.bearing.upperRive
+        : [st.uLo - 5000, st.uHi + 5000].map((u) => ({
+            x: u,
+            y: st.line.z0 + st.line.slope * (u - st.line.u0) + params.upperOffset,
+          }));
+      const f = fitInWebPolyline(upper, null, c, webFit);
+      return f.u1 - f.u0 >= minLen - 1e-9;
+    });
+    const kept = g.candidates.filter((c) => placed.has(c.key));
+    if (feasible && loggable) {
+      checked++;
+      expect(kept.length, `marche ${g.tread}`).toBeGreaterThanOrEqual(1);
+      const wall = x.m.compliance.results.filter(
+        (c) =>
+          c.ruleId === "FAB_MARCHE_PORTEE" &&
+          c.status === "violation" &&
+          c.location?.kind === "tread" &&
+          c.location.number === g.tread &&
+          (c.message.key === "structure.steel.check.treadNotCarried.wall" ||
+            c.message.key === "structure.steel.check.treadNotCarried.both"),
+      );
+      expect(wall, `marche ${g.tread}`).toEqual([]);
+    }
+    for (const c of g.candidates) {
+      if (!plan.corner.optional.has(c.key)) continue;
+      // Facultative : posée, ou retirée (une autre posée) ; ni l'un ni l'autre seulement si
+      // aucune cornière de la marche n'est posée (constat de longueur, comme K2b).
+      if (kept.length === 0) expect(removed.has(c.key)).toBe(false);
+      else expect(placed.has(c.key) !== removed.has(c.key), c.key).toBe(true);
+    }
+  }
+  for (const r of ca.removed) {
+    expect(plan.corner.optional.has(cornerSupportKey(r.tread, r.faceId))).toBe(true);
+    expect(r.logged).toBeLessThan(minLen);
+  }
+  const treads = new Set(ca.removed.map((r) => r.tread));
+  const notes = x.r.output.notes.filter(
+    (n) => n.key === "structure.steelProfile.note.cornerAngleRemoved",
+  );
+  expect(notes).toHaveLength(treads.size);
+  return checked;
+}
+
+describe("steel-profile — cornière au coin du mur (K2e, K-Q4) en `nosing`", () => {
+  const NOSING = { family: "UPN", stringerLine: "nosing" };
+  const pick = (file: string) => (): Project => choose(loadExample(file), NOSING);
+  const all = (): boolean => true;
+  const newel = (size: number, offset: number): NewelInner => ({ kind: "newel", size, offset });
+  /**
+   * Critères de fin de K2e. `k2c` : violations par règle mesurées sur 4c8b228 (K2c), identiques
+   * à eb7e331 (K2b), sur le projet posé par `applyStructureChoice`, dont le poteau est
+   * `k2cNewel` (`null` : cage sans poteau). `section` : section mesurée en K2e (égalité, pour
+   * qu'une régression vers une section plus lourde se voie). `pending` : violations de plus
+   * qu'en K2c sur le modèle livré, explicites et chiffrées, en attente d'une décision de
+   * l'utilisateur (ledger K2e). `errors` : erreurs attendues du modèle.
+   */
+  const cases: {
+    name: string;
+    make: () => Project;
+    k2cNewel: NewelInner | null;
+    k2c: Record<string, number>;
+    section: string;
+    pending?: Record<string, number>;
+    errors: string[];
+  }[] = [
+    {
+      name: "j3c",
+      make: pick("j3c-acceptance-01-upn.blondel.json"),
+      k2cNewel: newel(125, 43),
+      k2c: {
+        G_COLLET_MONOTONE: 1,
+        ECHAPPEE_RECO_PRIVATIF: 1,
+        ECHAPPEE_LARGEUR: 1,
+        FAB_PROFILE_AILE_HORS_EMPRISE: 1,
+        FAB_SUPPORT_LONGUEUR_MIN: 4,
+      },
+      section: "UPN 180",
+      errors: [],
+    },
+    {
+      name: "j5b (comparateur)",
+      make: () => j5bComparator("nosing"),
+      // Poteau posé par `adaptJour` en K2c (point fixe K2b : 130 / 45) ; 125 / 43 en K2e.
+      k2cNewel: newel(130, 45),
+      k2c: { FAB_PROFILE_AILE_HORS_EMPRISE: 1, FAB_SUPPORT_LONGUEUR_MIN: 6 },
+      section: "UPN 200",
+      errors: [],
+    },
+    {
+      name: "quart",
+      make: pick("quarter-left.blondel.json"),
+      k2cNewel: newel(120, 40),
+      k2c: {
+        ECHAPPEE_RECO_PRIVATIF: 1,
+        FAB_PROFILE_AILE_HORS_EMPRISE: 1,
+        FAB_SUPPORT_LONGUEUR_MIN: 3,
+        FAB_MARCHE_PORTEE: 1,
+      },
+      section: "UPN 180",
+      errors: [],
+    },
+    {
+      name: "U",
+      make: pick("two-quarters-u.blondel.json"),
+      k2cNewel: newel(115, 38),
+      k2c: { G_COLLET_MONOTONE: 1, FAB_PROFILE_AILE_HORS_EMPRISE: 1, FAB_SUPPORT_LONGUEUR_MIN: 5 },
+      section: "UPN 200",
+      errors: [],
+    },
+    {
+      name: "demi-tournant (préréglage)",
+      make: () => choose(createProject("half-turn"), NOSING),
+      k2cNewel: newel(130, 45),
+      k2c: {
+        G_COLLET_MIN: 3,
+        FAB_PROFILE_HAUTEUR: 1,
+        FAB_PROFILE_AILE_HORS_EMPRISE: 1,
+        FAB_SUPPORT_LONGUEUR_MIN: 9,
+        FAB_MARCHE_PORTEE: 3,
+      },
+      section: "UPN 200",
+      errors: [],
+    },
+    ...["j4-demi-tournant-acier-garde-corps", "demo-half-turn-industrial"].map((f) => ({
+      name: f,
+      make: pick(`${f}.blondel.json`),
+      k2cNewel: newel(130, 45),
+      k2c: {
+        FAB_PROFILE_AILE_HORS_EMPRISE: 1,
+        FAB_ONGLET_RACCORD: 2,
+        FAB_SUPPORT_LONGUEUR_MIN: 8,
+        FAB_MARCHE_PORTEE: 1,
+      },
+      section: "UPN 180",
+      // Poteau du point fixe 110 / 35 (K-Q8) au lieu de 130 / 45 : balancement recalculé, une
+      // G_COLLET_MONOTONE (avertissement, marche 6) et un appui court sur le poteau de plus (et
+      // deux FAB_ONGLET_RACCORD de moins). Même constat en K2c à 110 / 35 : effet du poteau, pas
+      // de la règle du coin. En attente de la question 1 du ledger K2e.
+      pending: { G_COLLET_MONOTONE: 1, FAB_SUPPORT_LONGUEUR_MIN: 1 },
+      errors: [],
+    })),
+    {
+      name: "cage-trapeze",
+      make: pick("cage-trapeze.blondel.json"),
+      k2cNewel: null,
+      k2c: {
+        ECHAPPEE_RECO_PRIVATIF: 1,
+        FAB_PROFILE_HAUTEUR: 1,
+        FAB_PROFILE_AILE_HORS_EMPRISE: 1,
+        FAB_SUPPORT_LONGUEUR_MIN: 1,
+        FAB_MARCHE_PORTEE: 14,
+      },
+      section: "UPN 180",
+      // Limons de jour refusés sur un jour vif de cage (CK14), sans lien avec le coin du mur.
+      errors: ["structure.steel.error.sharpWellCage"],
+    },
+    {
+      name: "demo-cage-flared-steel (pan coupé)",
+      make: pick("demo-cage-flared-steel.blondel.json"),
+      k2cNewel: null,
+      k2c: {
+        ECHAPPEE_RECO_PRIVATIF: 1,
+        FAB_PROFILE_HAUTEUR: 1,
+        FAB_PROFILE_AILE_HORS_EMPRISE: 1,
+        FAB_ONGLET_RACCORD: 2,
+        FAB_SUPPORT_LONGUEUR_MIN: 1,
+      },
+      // Section imposée par le jour en barre droite (repli K-Q12) : UPN 260 sans erreur.
+      section: "UPN 260",
+      errors: [],
+    },
+    {
+      name: "demo-cage-central-steel",
+      make: pick("demo-cage-central-steel.blondel.json"),
+      k2cNewel: null,
+      k2c: {
+        ECHAPPEE_RECO_PRIVATIF: 1,
+        FAB_PROFILE_AILE_HORS_EMPRISE: 1,
+        FAB_ONGLET_RACCORD: 2,
+        FAB_SUPPORT_LONGUEUR_MIN: 3,
+        FAB_MARCHE_PORTEE: 5,
+      },
+      section: "UPN 180",
+      errors: [],
+    },
+  ];
+  for (const c of cases) {
+    it(`${c.name} : ${c.section}, erreurs attendues seulement, violations par règle ≤ K2c, une cornière au moins par marche au coin`, () => {
+      const p = c.make();
+      const x = run(p);
+      expect(x.r.section!.name).toBe(c.section);
+      expect(errorKeys(x)).toEqual(c.errors);
+      expect(reserve(x)).toBeGreaterThanOrEqual(0);
+      expect(expectCornerAngles(x, p)).toBeGreaterThan(0);
+      // Même poteau qu'en K2c : chaque règle au plus autant de violations (la règle ne fait que
+      // retirer des contraintes).
+      const atK2c = c.k2cNewel ? run(withNewels(p, c.k2cNewel, all)) : x;
+      const counts = violationCounts(atK2c);
+      for (const [rule, n] of Object.entries(counts)) {
+        expect(n, rule).toBeLessThanOrEqual(c.k2c[rule] ?? 0);
+      }
+      // Modèle livré (poteau du point fixe) : chaque règle au plus autant qu'en K2c, sauf les
+      // écarts `pending`, explicites et chiffrés.
+      for (const [rule, n] of Object.entries(violationCounts(x))) {
+        expect(n, rule).toBeLessThanOrEqual((c.k2c[rule] ?? 0) + (c.pending?.[rule] ?? 0));
+      }
+    });
+  }
+
+  it("j5b (comparateur) : réserve d'âme ≥ 5 mm ; j3c et quart : UPN 180", () => {
+    expect(reserve(run(j5bComparator("nosing")))).toBeGreaterThanOrEqual(5);
+    expect(run(pick("j3c-acceptance-01-upn.blondel.json")()).r.section!.name).toBe("UPN 180");
+    expect(run(pick("quarter-left.blondel.json")()).r.section!.name).toBe("UPN 180");
+  });
+
+  it("demi-tournant (préréglage) : deux cornières retirées (M5 sur LE2, M8 sur LE3), absentes des supports, développés, débit et assemblages", () => {
+    const x = run(choose(createProject("half-turn"), NOSING));
+    expect(x.r.section!.name).toBe("UPN 200");
+    expect(x.r.output.errors ?? []).toEqual([]);
+    const removed = x.r.cornerAngles!.removed;
+    expect(removed.map((r) => [r.treadMark, r.faceMark])).toEqual([
+      ["M5", "LE2"],
+      ["M8", "LE3"],
+    ]);
+    const notes = x.r.output.notes.filter(
+      (n) => n.key === "structure.steelProfile.note.cornerAngleRemoved",
+    );
+    expect(notes.map((n) => n.params?.["mark"])).toEqual(["M5", "M8"]);
+    for (const r of removed) {
+      // Ni support posé, ni trait de cornière sur les développés de la face.
+      expect(
+        x.r.supports.some(
+          (s) => s.placement.tread === r.tread && s.placement.face.owner === r.faceId,
+        ),
+      ).toBe(false);
+      const st = x.r.stringers.find((s) => s.face.id === r.faceId)!;
+      const allMarks: unknown[] = [];
+      for (const q of st.components ?? [st.part]) {
+        const marks = (q.flat?.lines ?? [])
+          .filter((l) => l.label?.key === "structure.steel.flatLine.support")
+          .map((l) => l.label?.params?.["mark"]);
+        expect(marks, q.mark).not.toContain(r.treadMark);
+        allMarks.push(...marks);
+      }
+      // Contrôle positif : les cornières posées du même limon restent tracées.
+      const placedOnFace = x.r.supports.filter((s) => s.placement.face.owner === r.faceId);
+      expect(placedOnFace.length).toBeGreaterThan(0);
+      for (const s of placedOnFace) expect(allMarks).toContain(s.placement.treadMark);
+      // Assemblages : aucune cornière liée à la fois à la marche et au limon.
+      const assemblies = x.r.output.assemblies ?? [];
+      const byPart = new Map<string, { tread?: number; owner?: string }>();
+      for (const a of assemblies) {
+        if (!("partId" in a.a)) continue;
+        const e = byPart.get(a.a.partId) ?? {};
+        if ("treadNumber" in a.b) e.tread = a.b.treadNumber;
+        else e.owner = a.b.partId;
+        byPart.set(a.a.partId, e);
+      }
+      expect([...byPart.values()].some((e) => e.tread === r.tread && e.owner === r.faceId)).toBe(
+        false,
+      );
+    }
+    // Débit des cornières : une pièce par support posé, aucune pour les retirées.
+    // Clé du plan : désignation française de la section des cornières (« L 40 × 40 × 4 »).
+    const angles = Object.entries(x.r.cutting).find(([k]) => k.startsWith("L"))![1];
+    const pieces = angles.bars.reduce((a, b) => a + b.pieces.length, 0);
+    expect(pieces).toBe(x.r.supports.length);
+    expect(x.m.parts.filter((q) => q.category === "support").length).toBeGreaterThanOrEqual(
+      x.r.supports.length,
+    );
+    // FAB_MARCHE_PORTEE : marches 5 et 8 portées côté mur.
+    expect(expectCornerAngles(x, choose(createProject("half-turn"), NOSING))).toBe(2);
+  });
+
+  it("`chord` : aucun plan de coin, aucune remarque (sorties inchangées)", () => {
+    const p = withLine(choose(createProject("half-turn"), NOSING), "chord");
+    const x = run(p);
+    expect(x.r.cornerAngles).toBeUndefined();
+    expect(x.r.output.notes.map((n) => n.key)).not.toContain(
+      "structure.steelProfile.note.cornerAngleRemoved",
+    );
+  });
+});
+
 /**
  * Contrat des pièces d'un limon coudé (K2c, CK8, A33) sur un résultat du plugin : composantes
  * rattachées à une pièce finie présente, pièce finie sans développé, débit, masse, cordons ni
@@ -612,8 +945,9 @@ describe("steel-profile — pièces du limon coudé (K2c, CK8 à CK10, A33)", ()
       drawn += cs.reduce((a, q) => a + q.flat!.outline.holes.length, 0);
     }
     expect(counted).toBeGreaterThan(0);
-    // Sans décalage K-Q10, au moins une cornière est à cheval sur un jarret (relecture K2c :
-    // LI2-2, LE2-3) : ses perçages trop près de la coupe sont reportés, avec une remarque.
+    // Cornière gardée en place (K-Q10 révisée) : au moins une est à cheval sur un jarret
+    // (relecture K2c : LI2-2, LE2-3), ses perçages trop près de la coupe sont reportés, avec
+    // une remarque.
     const notes = b.r.output.notes.filter(
       (n) => n.key === "structure.steelProfile.note.kneeHolesAfterWeld",
     );
@@ -672,12 +1006,14 @@ describe("steel-profile — point fixe section ↔ poteau en `nosing`", () => {
 
   // Point fixe atteint : le poteau rendu est exact (aile + 2 × jeu de la section qu'il produit)
   // et a été vérifié sur son propre modèle avant le plafond de `PROFILE_NEWEL_ITERATIONS`
-  // modèles (la boucle s'arrête sur `newelMatches`, pas sur le plafond).
+  // modèles (la boucle s'arrête sur `newelMatches`, pas sur le plafond). K2e (cornière au coin du
+  // mur, K-Q4) : quart 120 / 40 (UPN 220) → 110 / 35 (UPN 180), j4-demi exact 110 / 35 (UPN 180,
+  // sans poteau exact en K2b) ; le demi-tournant passe dans les cas sans point fixe ci-dessous.
   const exact: [string, () => Project, number][] = [
     ["j3c", () => loadExample("j3c-acceptance-01-upn.blondel.json"), 2],
     ["quart", () => loadExample("quarter-left.blondel.json"), 2],
-    ["demi-tournant", () => loadExample("half-turn.blondel.json"), 2],
     ["U", () => loadExample("two-quarters-u.blondel.json"), 3],
+    ["j4-demi", () => loadExample("j4-demi-tournant-acier-garde-corps.blondel.json"), 2],
   ];
   for (const [name, make, expectedModels] of exact) {
     it(`${name} : point fixe exact, atteint en ${expectedModels} modèles (≤ ${PROFILE_NEWEL_ITERATIONS})`, () => {
@@ -698,32 +1034,55 @@ describe("steel-profile — point fixe section ↔ poteau en `nosing`", () => {
     }, 60_000);
   }
 
-  // j5b du comparateur : **aucun poteau exact** (question ouverte, ledger K2b). Le balancement
-  // change avec le poteau : le poteau attendu par la section obtenue sur le poteau rendu en
-  // donne une autre, dont le poteau attendu revient au premier (cycle). `resolveProfileNewel`
-  // rend le poteau vérifié qui reçoit sa section (`profileNewelFits`).
-  it("j5b (comparateur) : pas de point fixe, cycle entre deux poteaux ; poteau rendu qui reçoit sa section (UPN ≤ 240)", () => {
-    const variant = withParams(j5bReference("chord"), params);
-    const r = resolveProfileNewel(variant, which)!;
-    expect(r).not.toBeNull();
-    const b1 = flangeAt(variant, r.newel)!;
-    expect(b1).toBe(r.flangeWidth);
-    expect(profileNewelFits(r.newel, b1, SteelProfileParamsSchema.parse(params).newel)).toBe(true);
-    const atReturned = run(withNewels(variant, r.newel, which));
-    expect(atReturned.r.section!.h).toBeLessThanOrEqual(240);
-    const n2 = expectedNewel("steel-profile", params, b1)!;
-    expect(newelMatches(r.newel, n2)).toBe(false);
-    const atExpected = run(withNewels(variant, n2, which));
-    expect(atExpected.r.section!.h).toBeGreaterThan(240);
-    const n3 = expectedNewel("steel-profile", params, flangeAt(variant, n2))!;
-    expect(newelMatches(n3, r.newel)).toBe(true);
-  }, 60_000);
+  // Sans poteau exact (K-Q15) : le balancement change avec le poteau, et aucun poteau attendu
+  // (aile + 2 × jeu) ne redonne l'aile qui l'attend. On garde le poteau rendu par
+  // `resolveProfileNewel`, qui reçoit sa section (`profileNewelFits`). Mesures K2e (poteaux posés
+  // un à un sur le projet, ledger K2e) : j5b 100 → UPN 180, 110 / 35 et 115 / 38 → UPN 220,
+  // 120 / 40 → UPN 240, 125 / 43 et 130 / 45 → UPN 200 (rendu 125 / 43, dernier poteau attendu
+  // après le plafond de modèles) ; demi-tournant 100 à 115 / 38 → UPN 260, 120 / 40 → UPN 180,
+  // 125 / 43 et 130 / 45 → UPN 200 (rendu 130 / 45, vérifié).
+  // Troisième champ : poteau rendu vérifié sur son propre modèle. j5b : non (plafond de
+  // `PROFILE_NEWEL_ITERATIONS` modèles atteint, poteau rendu calculé sur le dernier modèle) ;
+  // écart à « poteau vérifié » de K-Q15 en attente de la question 2 du ledger K2e.
+  const noFixedPoint: [string, () => Project, boolean][] = [
+    ["j5b (comparateur)", () => j5bReference("chord"), false],
+    ["demi-tournant", () => loadExample("half-turn.blondel.json"), true],
+  ];
+  for (const [name, make, verified] of noFixedPoint) {
+    it(`${name} : pas de point fixe ; poteau rendu qui reçoit sa section (UPN ≤ 200, sans erreur), en ≤ ${PROFILE_NEWEL_ITERATIONS} modèles`, () => {
+      const variant = withParams(make(), params);
+      let models = 0;
+      const r = resolveProfileNewel(variant, which, (p) => {
+        models++;
+        return buildModel(p, { memo: false });
+      })!;
+      expect(r).not.toBeNull();
+      expect(models).toBeLessThanOrEqual(PROFILE_NEWEL_ITERATIONS);
+      const b1 = flangeAt(variant, r.newel)!;
+      if (verified) expect(b1).toBe(r.flangeWidth);
+      expect(profileNewelFits(r.newel, b1, SteelProfileParamsSchema.parse(params).newel)).toBe(
+        true,
+      );
+      expect(newelMatches(r.newel, expectedNewel("steel-profile", params, b1)!)).toBe(false);
+      const atReturned = run(withNewels(variant, r.newel, which));
+      expect(atReturned.r.section!.h).toBeLessThanOrEqual(200);
+      expect(errorKeys(atReturned)).toEqual([]);
+      expect(reserve(atReturned)).toBeGreaterThanOrEqual(5);
+      // Aucun poteau exact : pour chaque aile de la famille, le poteau qu'elle attend donne une
+      // autre aile.
+      for (const b of [...new Set(sectionsOf("UPN").map((s) => s.b))].filter((x) => x >= 60)) {
+        const n = expectedNewel("steel-profile", params, b)!;
+        expect(flangeAt(variant, n), `aile ${b}`).not.toBe(b);
+      }
+    }, 120_000);
+  }
 });
 
 describe("steel-profile — propriété sur escaliers générés (limon coudé)", () => {
-  it("ne lève pas, section ≤ barre droite, aucune erreur nouvelle, faces coudées, repliées ou à une seule pente", () => {
+  it("ne lève pas, section ≤ barre droite, aucune erreur nouvelle, faces coudées, repliées ou à une seule pente, cornière au coin du mur gardée (K2e)", () => {
     let evaluated = 0;
     let bent = 0;
+    let corners = 0;
     fc.assert(
       fc.property(stairArb(undefined, ALL_TYPOLOGIES), fc.boolean(), ({ project }, bolted) => {
         const withNewelsP: Project = {
@@ -786,11 +1145,15 @@ describe("steel-profile — propriété sur escaliers générés (limon coudé)"
         for (const q of nosing.m.parts) {
           if (q.componentOf !== undefined) expect(ids.has(q.componentOf)).toBe(true);
         }
+        // K2e (K-Q4) : au moins une cornière par marche au coin du mur, retirées facultatives
+        // et signalées (`expectCornerAngles`).
+        corners += expectCornerAngles(nosing, nosingProject);
       }),
       { numRuns: RUNS },
     );
     expect(evaluated).toBeGreaterThan(RUNS / 2);
     expect(bent).toBeGreaterThan(0);
+    expect(corners).toBeGreaterThan(0);
   }, 300_000);
 });
 

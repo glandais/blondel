@@ -4,7 +4,9 @@
  * AC1021, CSV, glTF, ZIP, PDF), en français et en anglais. K2c (CK8, contrat A33) : la pièce
  * finie (solide balayé) n'a pas de développé, ses tronçons LE2-1… en ont un chacun ; aucune pièce
  * n'est sortie deux fois dans le DXF ni dans le PDF, les textes anglais propres au limon coudé ne
- * gardent ni clé brute ni français, le solide balayé atteint l'onglet aux coins en plan.
+ * gardent ni clé brute ni français, le solide balayé atteint l'onglet aux coins en plan. K2e
+ * (K-Q4) : sur le demi-tournant du préréglage, une cornière retirée au coin du mur est absente de
+ * la liste de débit, des développés et des pages du PDF, et sa remarque est traduite.
  */
 import { readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
@@ -12,8 +14,10 @@ import { fileURLToPath } from "node:url";
 import {
   RULES,
   SteelProfileParamsSchema,
+  applyStructureChoice,
   buildModel,
   buildSteelProfile,
+  createProject,
   fabricatedParts,
   parseProjectText,
   type Project,
@@ -321,5 +325,72 @@ describe("limon coudé (K2b, K2c) — exports de j3c en `nosing`", () => {
       expect(ratio, f.mark).toBeGreaterThan(0.95);
       expect(ratio, f.mark).toBeLessThan(1.05);
     }
+  });
+});
+
+describe("limon coudé (K2e, K-Q4) — cornière retirée au coin du mur, demi-tournant (préréglage) en `nosing`", () => {
+  const project = applyStructureChoice(createProject("half-turn"), "steel-profile", {
+    family: "UPN",
+    stringerLine: "nosing",
+  }).project;
+  const model = buildModel(project);
+  const params = SteelProfileParamsSchema.parse(project.stair.structure.params);
+  const r = buildSteelProfile({ project, layout: model.layout, stepping: model.stepping }, params);
+  const removed = r.cornerAngles!.removed;
+  /** Pièces à développé (tronçons, ou pièce autonome) d'un limon. */
+  const flatsOf = (faceId: string) =>
+    model.parts.filter(
+      (p) => p.flat !== undefined && (p.id === faceId || p.componentOf === faceId),
+    );
+
+  it("sans erreur, deux cornières retirées (M5 sur LE2, M8 sur LE3)", () => {
+    expect(model.errors).toEqual([]);
+    expect(removed.map((x) => `${x.treadMark}/${x.faceMark}`)).toEqual(["M5/LE2", "M8/LE3"]);
+  });
+
+  it("liste de débit : autant de cornières que de supports posés", () => {
+    const n = cutListRows(model.parts)
+      .filter((row) => row.category === "support")
+      .reduce((a, row) => a + row.quantity, 0);
+    expect(n).toBe(r.supports.length);
+    const csv = exportCutListCsv(model);
+    expect(csv).not.toMatch(NON_FINITE);
+  });
+
+  it("développés (SVG) et pages du PDF du limon : aucun traçage de la cornière retirée", () => {
+    const c = new RecordingCanvas(297, 210, helveticaMeasure());
+    const pages = renderPdf(c, model, { project, date: "26/10/2026", locale: "fr" });
+    const texts = c.pageTexts();
+    for (const x of removed) {
+      const label = `Support ${x.treadMark}`;
+      const flats = flatsOf(x.faceId);
+      expect(flats.length).toBeGreaterThan(0);
+      // Contrôle positif : les autres cornières du même limon restent tracées (le test d'absence
+      // ne passe pas à vide si les libellés de support disparaissaient tous).
+      const svgAll: string[] = [];
+      const pdfAll: string[] = [];
+      for (const p of flats) {
+        const svg = renderFlatPatternSvg(p, { locale: "fr" });
+        expect(svg, p.mark).not.toContain(label);
+        const i = pages.findIndex((pg) => pg.kind === "flat" && pg.partIds?.includes(p.id));
+        expect(i, p.mark).toBeGreaterThanOrEqual(0);
+        expect(texts[i]!.join(" "), p.mark).not.toContain(label);
+        svgAll.push(svg);
+        pdfAll.push(texts[i]!.join(" "));
+      }
+      expect(svgAll.join(" "), x.faceMark).toMatch(/Support M\d+/);
+      expect(pdfAll.join(" "), x.faceMark).toMatch(/Support M\d+/);
+    }
+  });
+
+  it("remarque traduite en anglais sans clé brute ni français résiduel", () => {
+    const en = createTranslator("en");
+    const notes = (model.notes ?? []).filter(
+      (n) => n.key === "structure.steelProfile.note.cornerAngleRemoved",
+    );
+    expect(notes).toHaveLength(2);
+    const texts = notes.map((n) => en.t(n));
+    for (const t of texts) expect(t).not.toMatch(/structure\.|\{|NaN|Infinity/);
+    expect(residualFrench(texts)).toEqual([]);
   });
 });

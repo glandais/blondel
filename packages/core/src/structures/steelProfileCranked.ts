@@ -1,17 +1,19 @@
 /**
- * Câblage du **limon coudé** dans `steel-profile` (chantier bent-stringer, sous-lots K2b et K2c ;
+ * Câblage du **limon coudé** dans `steel-profile` (chantier bent-stringer, sous-lots K2b, K2c et K2e ;
  * décisions QUESTIONS A41, conventions CK1 à CK18 du ledger `docs/ledger/LEDGER-bent-stringer.md`).
  * Fonctions pures entre le noyau géométrique (`profileBearing.ts`) et le plugin : faces vues par
  * le noyau, plan par section essayée avec **repli par face sur la barre droite** (K-Q12, K-Q13),
  * contour de l'âme, tronçons (composantes, CK8), cordon de jarret (CK10), cotes de gabarit
- * (CK17), chemin du balayage (solide), écarts d'onglet au bout d'aile (CK13), cornière hors du
- * jarret (K-Q10, non branchée), remarques.
+ * (CK17), chemin du balayage (solide), écarts d'onglet au bout d'aile (CK13), cornière au coin
+ * du mur (K-Q4, sous-lot K2e), remarques. Une cornière à cheval sur un jarret reste en place
+ * (K-Q10 révisée) : son traçage est coupé au joint et ses perçages trop près de la coupe sont
+ * reportés après soudage (plugin).
  * Aucun texte en dur : les remarques sont des `Message` à clés littérales.
  *
  * Lu seulement quand le paramètre `stringerLine` vaut `nosing` (CK16) : en `chord`, le plugin
  * n'appelle rien d'ici et ses sorties restent identiques à l'octet.
  */
-import { dec, msg, type Message } from "@blondel/i18n";
+import { dec, msg, textMessage, type Message } from "@blondel/i18n";
 import type { SteelSection } from "../catalog/sections.js";
 import { signedArea } from "../geom2d/polygon.js";
 import type { Mm, Vec2, Vec3 } from "../model/primitives.js";
@@ -73,7 +75,10 @@ export interface CrankedFacePlan {
   readonly mode: "chord" | "nosing";
   /** Ligne d'appui coudée retenue (mode `nosing`). */
   readonly bearing?: FaceBearing;
-  /** Besoin de hauteur d'âme retenu pour la section (celui du mode choisi). */
+  /**
+   * Besoin de hauteur d'âme retenu pour la section (celui du mode choisi). Comme `chordNeed` et
+   * `bentNeed`, calculé sans les cornières facultatives du coin du mur (K-Q4, K2e).
+   */
   readonly need: Mm;
   readonly chordNeed: Mm;
   /** Besoin du limon coudé, quand il a été évalué. */
@@ -85,6 +90,8 @@ export interface CrankedFacePlan {
 export interface CrankedSectionPlan {
   readonly faces: ReadonlyMap<string, CrankedFacePlan>;
   readonly result: BearingResult;
+  /** Cornières au coin du mur (K-Q4, K2e) ; groupes vides : toutes exigées (K2b). */
+  readonly corner: CrankedCornerPlan;
 }
 
 /** Face vue par le noyau (`profileBearings`). */
@@ -202,7 +209,124 @@ export function decideCrankedFace(input: CrankedDecisionInput): {
   return { mode: "nosing" };
 }
 
-export interface CrankedPlanInput<P extends CrankedPre> {
+// ------------------------------------------------------------------------------ cornière au coin du mur
+
+/**
+ * Support candidat vu par le plan : zone d'appui brute [u0 ; u1], dessus zTop, marche et face
+ * porteuse (sous-ensemble structurel de `SupportPlacement`).
+ */
+export interface CrankedSupport extends WebSupport {
+  readonly tread: number;
+  readonly face: {
+    readonly key: string;
+    readonly owner: string;
+    readonly kind: string;
+    readonly side: string;
+  };
+}
+
+/** Candidat d'un groupe du coin du mur : support, face porteuse (`faceId`) et clé unique. */
+export type CornerCandidate = WebSupport & {
+  readonly tread: number;
+  readonly faceId: string;
+  readonly key: string;
+};
+
+/** Marche au coin du mur : ses supports candidats côté mur, sur au moins deux limons. */
+export interface CornerGroup {
+  readonly tread: number;
+  readonly candidates: readonly CornerCandidate[];
+}
+
+/** Tolérance de parallélisme de deux directions unitaires (sinus de l'angle, tolérance numérique). */
+const CORNER_PARALLEL = 1e-9;
+
+/** Clé d'un support (marche × face) dans les ensembles du coin. */
+export const cornerSupportKey = (tread: number, faceKey: string): string => `${tread}|${faceKey}`;
+
+/**
+ * Groupes du coin du mur (K-Q4, sous-lot K2e) : marches dont les supports candidats tombent,
+ * côté mur (`side` = `outer`), sur au moins deux limons différents (volées et cages ; un groupe
+ * de trois faces est possible). Le côté jour n'est pas concerné (K-Q4 dit « au coin du mur ») ;
+ * les faces de poteau non plus. Avec `dirOf` (direction en plan de chaque limon), deux limons
+ * colinéaires (palier entre deux limons alignés, pas de coin) ne forment pas un groupe : il faut
+ * deux directions non parallèles. Groupes triés par marche, candidats dans l'ordre reçu.
+ */
+export function cornerSupportGroups(
+  cands: readonly CrankedSupport[],
+  dirOf?: (faceId: string) => Vec2 | undefined,
+): CornerGroup[] {
+  const byTread = new Map<number, CornerCandidate[]>();
+  for (const c of cands) {
+    if (c.face.kind !== "stringer" || c.face.side !== "outer") continue;
+    const list = byTread.get(c.tread) ?? [];
+    list.push({
+      u0: c.u0,
+      u1: c.u1,
+      zTop: c.zTop,
+      tread: c.tread,
+      faceId: c.face.owner,
+      key: cornerSupportKey(c.tread, c.face.key),
+    });
+    byTread.set(c.tread, list);
+  }
+  return [...byTread.entries()]
+    .filter(([, list]) => {
+      const ids = [...new Set(list.map((c) => c.faceId))];
+      if (ids.length < 2) return false;
+      if (!dirOf) return true;
+      const dirs = ids.map(dirOf);
+      return dirs.some((d, i) =>
+        dirs.slice(i + 1).some((e) => !d || !e || Math.abs(V.cross(d, e)) > CORNER_PARALLEL),
+      );
+    })
+    .sort((a, b) => a[0] - b[0])
+    .map(([tread, candidates]) => ({ tread, candidates }));
+}
+
+/** Tolérance des départages de la cornière exigée (mm, précision de la dichotomie du besoin). */
+const CORNER_TIE = 1e-6;
+
+/**
+ * Cornière exigée de chaque groupe du coin (K-Q4) : celle de plus petit `score` (besoin d'âme
+ * pour la loger, `Infinity` si elle n'est pas logeable) ; départages, à 1e-6 mm près : plus
+ * longue zone d'appui brute (u1 − u0), puis plus petit rang de face (ordre des limons), puis
+ * plus petite clé. Chaque critère filtre un ensemble (minimum, puis filtre) : le résultat ne
+ * dépend pas de l'ordre des groupes ni des candidats. Rend les clés exigées.
+ */
+export function chooseCornerRequired(
+  groups: readonly CornerGroup[],
+  score: (c: CornerCandidate) => number,
+  faceRank: (faceId: string) => number,
+): ReadonlySet<string> {
+  const out = new Set<string>();
+  for (const g of groups) {
+    if (g.candidates.length === 0) continue;
+    const scored = g.candidates.map((c) => ({ c, s: score(c) }));
+    const sMin = Math.min(...scored.map((x) => x.s));
+    let pool = scored.filter((x) => x.s === sMin || x.s <= sMin + CORNER_TIE);
+    const lMax = Math.max(...pool.map((x) => x.c.u1 - x.c.u0));
+    pool = pool.filter((x) => x.c.u1 - x.c.u0 >= lMax - CORNER_TIE);
+    const rMin = Math.min(...pool.map((x) => faceRank(x.c.faceId)));
+    pool = pool.filter((x) => faceRank(x.c.faceId) === rMin);
+    pool.sort((a, b) => (a.c.key < b.c.key ? -1 : a.c.key > b.c.key ? 1 : 0));
+    out.add(pool[0]!.c.key);
+  }
+  return out;
+}
+
+/** Cornières du coin pour une section : groupes, exigées, facultatives, groupes basculés. */
+export interface CrankedCornerPlan {
+  readonly groups: readonly CornerGroup[];
+  /** Clés exigées (une par groupe ; toutes celles d'un groupe revenu à « tout exigé »). */
+  readonly required: ReadonlySet<string>;
+  /** Clés facultatives : hors du besoin d'âme, posées seulement si elles tiennent. */
+  readonly optional: ReadonlySet<string>;
+  /** Nombre de groupes revenus à « tout exigé » par le garde-fou (comportement de K2b). */
+  readonly reverted: number;
+}
+
+export interface CrankedPlanInput<P extends CrankedPre, S extends CrankedSupport> {
   readonly pres: readonly P[];
   readonly bearingFaces: readonly BearingFace[];
   readonly pitch: BearingInput["pitch"];
@@ -210,21 +334,53 @@ export interface CrankedPlanInput<P extends CrankedPre> {
   readonly knee: KneeSettings;
   readonly section: SteelSection;
   readonly webFit: WebFitParams;
-  /** Supports candidats de la face (avant rognage), avec leur marche. */
-  readonly supportsOf: (p: P) => readonly (WebSupport & { readonly tread: number })[];
-  /** Besoin de la barre droite pour la section (forme fermée du plugin). */
-  readonly chordNeedOf: (p: P) => Mm;
-  /** Marches que la barre droite ne peut pas porter, quelle que soit la hauteur. */
-  readonly chordLostOf: (p: P) => readonly number[];
+  /** Supports candidats de la face (avant rognage), avec leur marche et leur face. */
+  readonly supportsOf: (p: P) => readonly S[];
+  /** Besoin de la barre droite pour un support et la section (forme fermée du plugin). */
+  readonly chordNeedOfSupport: (p: P, c: S) => Mm;
+  /** La barre droite ne peut pas porter ce support, quelle que soit la hauteur. */
+  readonly chordLostOfSupport: (p: P, c: S) => boolean;
+  /** Groupes du coin du mur (K-Q4) ; absent ou vide : plan de K2b (toutes les cornières exigées). */
+  readonly cornerGroups?: readonly CornerGroup[];
+}
+
+/** Valeurs d'un support pour une section, calculées une seule fois par plan. */
+interface SupportEntry {
+  readonly key: string;
+  readonly tread: number;
+  readonly raw: Mm;
+  readonly chordNeed: Mm;
+  readonly chordLost: boolean;
+  readonly bentNeed?: Mm;
+  readonly bentLost?: boolean;
 }
 
 /**
  * Plan d'une section : lignes d'appui coudées de toutes les faces (`profileBearings`, qui
  * dépendent de h, b et shift), besoin du limon coudé par face (`faceHeightNeed`), décision par
  * face (`decideCrankedFace`). Ne lève jamais (le noyau non plus).
+ *
+ * **Cornière au coin du mur** (K-Q4, sous-lot K2e ; `cornerGroups` non vide, `nosing` seulement),
+ * en un nombre fini de passes :
+ * 1. décision provisoire de chaque face sans aucune cornière des groupes du coin ;
+ * 2. cornière exigée par groupe (`chooseCornerRequired`) : celle qui demande le moins d'âme sur
+ *    la ligne d'appui du mode provisoire de sa face (`Infinity` si sa zone brute ou sa partie
+ *    logée à hauteur infinie est sous `minLength` : sans cela, une cornière perdue, de besoin
+ *    nul, serait choisie), puis plus longue zone brute, puis rang de face ;
+ * 3. décision finale avec les cornières hors coin et les exigées ; les facultatives ne comptent
+ *    ni dans le besoin de leur face, ni dans ses marches perdues, ni dans le besoin de la barre
+ *    droite du repli (K-Q12, K-Q14) ;
+ * 4. garde-fou : un groupe dont l'exigée n'est pas logeable dans la section, dans le mode final
+ *    de sa face (besoin supérieur à h, ou perdue : face basculée en barre droite, section imposée
+ *    ou trop basse), redevient « tout exigé », comme en K2b, et les faces sont redécidées ; une
+ *    section faisable (besoin de chaque face ≤ h) n'en bascule aucun ; dans une section
+ *    insuffisante (une face au-delà de h), tous les groupes basculent : plan de K2b ; l'ensemble des groupes basculés ne fait que croître, donc au plus
+ *    (nombre de groupes + 3) passes, sans itération instable.
+ * `need`, `chordNeed` et `bentNeed` de chaque face sont ceux de la liste retenue (sans les
+ * facultatives). Sans groupe, le plan est exactement celui de K2b.
  */
-export function crankedSectionPlan<P extends CrankedPre>(
-  input: CrankedPlanInput<P>,
+export function crankedSectionPlan<P extends CrankedPre, S extends CrankedSupport>(
+  input: CrankedPlanInput<P, S>,
 ): CrankedSectionPlan {
   const result = profileBearings({
     faces: input.bearingFaces,
@@ -234,121 +390,116 @@ export function crankedSectionPlan<P extends CrankedPre>(
     settings: input.knee,
   });
   const byId = new Map(result.faces.map((f) => [f.faceId, f]));
-  const faces = new Map<string, CrankedFacePlan>();
-  for (const p of input.pres) {
+  const minLen = input.webFit.minLength;
+  // Valeurs par support, une fois par section : chaque passe ne fait ensuite que des max.
+  const ctxs = input.pres.map((p, rank) => {
     const id = p.face.id;
     const fb = byId.get(id);
-    const chordNeed = input.chordNeedOf(p);
     const issues = result.issues.filter((i) => "faceId" in i && i.faceId === id);
-    const chordEquivalent = fb !== undefined && isChordEquivalent(fb, p.line);
-    const bent =
-      fb && !chordEquivalent ? faceHeightNeed(fb, input.supportsOf(p), input.webFit) : undefined;
+    const bentEvaluated = fb !== undefined && !isChordEquivalent(fb, p.line);
+    const entries: SupportEntry[] = input.supportsOf(p).map((c) => {
+      const bent = bentEvaluated ? faceHeightNeed(fb, [c], input.webFit) : undefined;
+      return {
+        key: cornerSupportKey(c.tread, c.face.key),
+        tread: c.tread,
+        raw: c.u1 - c.u0,
+        chordNeed: input.chordNeedOfSupport(p, c),
+        chordLost: input.chordLostOfSupport(p, c),
+        ...(bent ? { bentNeed: bent.need, bentLost: bent.lost.length > 0 } : {}),
+      };
+    });
+    return { p, id, rank, fb, issues, bentEvaluated, entries };
+  });
+  type FaceCtx = (typeof ctxs)[number];
+  /** Décision d'une face sur ses supports actifs (même ordre de priorité qu'en K2b). */
+  const decideFor = (f: FaceCtx, active: (key: string) => boolean): CrankedFacePlan => {
+    const list = f.entries.filter((e) => active(e.key));
+    const chordNeed = Math.max(0, ...list.map((e) => e.chordNeed));
+    const bentNeed = f.bentEvaluated ? Math.max(0, ...list.map((e) => e.bentNeed!)) : undefined;
     const decision = decideCrankedFace({
-      fb,
-      issues,
-      line: p.line,
-      bentNeed: bent?.need ?? chordNeed,
-      bentLost: bent?.lost ?? [],
+      fb: f.fb,
+      issues: f.issues,
+      line: f.p.line,
+      bentNeed: bentNeed ?? chordNeed,
+      bentLost: f.bentEvaluated ? list.filter((e) => e.bentLost).map((e) => e.tread) : [],
       chordNeed,
-      chordLost: bent ? input.chordLostOf(p) : [],
+      chordLost: f.bentEvaluated ? list.filter((e) => e.chordLost).map((e) => e.tread) : [],
       sectionHeight: input.section.h,
     });
-    const nosing = decision.mode === "nosing" && fb !== undefined;
-    faces.set(id, {
-      faceId: id,
+    const nosing = decision.mode === "nosing" && f.fb !== undefined;
+    return {
+      faceId: f.id,
       mode: nosing ? "nosing" : "chord",
-      ...(nosing ? { bearing: fb } : {}),
-      need: nosing ? bent!.need : chordNeed,
+      ...(nosing ? { bearing: f.fb } : {}),
+      need: nosing ? bentNeed! : chordNeed,
       chordNeed,
-      ...(bent ? { bentNeed: bent.need } : {}),
+      ...(bentNeed !== undefined ? { bentNeed } : {}),
       ...(decision.fallback ? { fallback: decision.fallback } : {}),
+    };
+  };
+  const decideAll = (active: (key: string) => boolean): Map<string, CrankedFacePlan> =>
+    new Map(ctxs.map((f) => [f.id, decideFor(f, active)]));
+
+  const groups = input.cornerGroups ?? [];
+  if (groups.length === 0) {
+    return {
+      faces: decideAll(() => true),
+      result,
+      corner: { groups, required: new Set(), optional: new Set(), reverted: 0 },
+    };
+  }
+  const cornerKeys = new Set(groups.flatMap((g) => g.candidates.map((c) => c.key)));
+  const ctxById = new Map(ctxs.map((f) => [f.id, f]));
+  const faceRank = (id: string): number => ctxById.get(id)?.rank ?? Infinity;
+  const entryOf = (c: CornerCandidate): SupportEntry | undefined =>
+    ctxById.get(c.faceId)?.entries.find((e) => e.key === c.key);
+  /** Besoin d'âme du support dans le mode de sa face ; `Infinity` s'il n'y est pas logeable. */
+  const needIn = (plan: CrankedFacePlan | undefined, e: SupportEntry | undefined): number => {
+    if (!plan || !e || e.raw < minLen - 1e-9) return Infinity;
+    if (plan.mode === "nosing") return e.bentLost ? Infinity : (e.bentNeed ?? Infinity);
+    return e.chordLost ? Infinity : e.chordNeed;
+  };
+  // Passe 1 : modes provisoires sans aucune cornière du coin ; passe 2 : exigée par groupe.
+  const provisional = decideAll((key) => !cornerKeys.has(key));
+  const chosen = chooseCornerRequired(
+    groups,
+    (c) => needIn(provisional.get(c.faceId), entryOf(c)),
+    faceRank,
+  );
+  // Passes suivantes : décision finale, puis garde-fou des groupes dont l'exigée est perdue.
+  const reverted = new Set<number>();
+  const requiredNow = (): Set<string> => {
+    const out = new Set(chosen);
+    for (const gi of reverted) for (const c of groups[gi]!.candidates) out.add(c.key);
+    return out;
+  };
+  let required = requiredNow();
+  let faces = decideAll((key) => !cornerKeys.has(key) || required.has(key));
+  for (;;) {
+    let changed = false;
+    groups.forEach((g, gi) => {
+      if (reverted.has(gi)) return;
+      const req = g.candidates.find((c) => chosen.has(c.key));
+      // Exigée logeable dans la section elle-même (et pas seulement à hauteur infinie) : une
+      // section imposée ou trop basse ne doit pas retirer l'appui mural que K2b gardait.
+      if (req && needIn(faces.get(req.faceId), entryOf(req)) <= input.section.h + 1e-9) return;
+      reverted.add(gi);
+      changed = true;
     });
+    if (!changed) break;
+    required = requiredNow();
+    faces = decideAll((key) => !cornerKeys.has(key) || required.has(key));
   }
-  return { faces, result };
-}
-
-// ------------------------------------------------------------------------------ jarrets et cornières
-
-// Décalage K-Q10 (cornière hors du jarret) : `kneeCutBand`, `kneeFreePieces` et `kneeFreeSupport`
-// sont prêtes mais **non branchées** dans `steel-profile` (relecture K2c) : branché, le décalage
-// fait monter j3c en UPN 200 et j5b en UPN 220 sous la réserve de 5 mm (critères K2b). La
-// cornière reste à cheval sur le jarret, son traçage est coupé au joint et ses perçages trop
-// près de la coupe sont reportés après soudage (`structure.steelProfile.note.kneeHolesAfterWeld`),
-// en attendant l'arbitrage de l'utilisateur (QUESTIONS A41, K-Q10 reposée).
-
-/** Tolérance de recouvrement (mm) : une cornière qui touche une coupe de jarret n'est pas à cheval. */
-const BAND_EPS = 1e-9;
-
-/**
- * Étendue en u de la coupe d'un jarret dans la tranche z ∈ [z0 ; z1] : demi-droite de la
- * bissectrice issue du sommet de rive haute vers le sommet bas (et au-delà), indépendante de la
- * hauteur h de la section (la bissectrice ne dépend que des deux pentes) ; `null` si la tranche
- * est au-dessus du sommet de rive haute.
- */
-export function kneeCutBand(k: Knee, z0: Mm, z1: Mm): { u0: Mm; u1: Mm } | null {
-  const zh = Math.min(z1, k.upper.y);
-  if (z0 > zh) return null;
-  const d = V.sub(k.lower, k.upper);
-  if (!(d.y < -1e-12)) return { u0: k.upper.x, u1: k.upper.x };
-  const uAt = (z: Mm): Mm => k.upper.x + (d.x * (z - k.upper.y)) / d.y;
-  const a = uAt(z0);
-  const b = uAt(zh);
-  return { u0: Math.min(a, b), u1: Math.max(a, b) };
-}
-
-/**
- * Cornière à cheval sur un jarret **décalée hors du jarret** (décision K-Q10 de l'utilisateur,
- * convention Blondel non sourcée, à valider) : on retire de [c.u0 ; c.u1] l'étendue de chaque
- * coupe de jarret de la face dans la hauteur de la cornière [zTop − depth ; zTop] (`kneeFreePieces`)
- * et l'on garde le morceau de plus petit `score` (défaut : le plus long ; à égalité, le plus
- * petit u0). Aucun jeu ajouté entre la cornière et le cordon du jarret (aucune valeur sourcée).
- * Aucune coupe touchée : rend **le même objet** (identité) ; plus aucun morceau : support vide en
- * c.u0.
- *
- * **Non branché en K2c** : décaler la cornière hors du jarret de son propre nez repousse sa partie
- * logée vers le haut du tronçon et fait monter l'âme requise (j3c UPN 180 → UPN 200, j5b réserve
- * 4,65 mm en UPN 220, sous le critère K2b de 5 mm ; journal K2c) ; le plan K2c demandait alors de
- * s'arrêter et de reposer la question. Les cornières à cheval restent posées comme en K2b et
- * leur traçage est coupé au joint des tronçons (CK9).
- */
-export function kneeFreeSupport<S extends WebSupport>(
-  fb: FaceBearing,
-  c: S,
-  depth: Mm,
-  score?: (piece: S) => number,
-): S {
-  const pieces = kneeFreePieces(fb, c, depth);
-  if (pieces === null) return c;
-  let best: S | null = null;
-  let bestScore = Infinity;
-  for (const [a, b] of pieces) {
-    const piece = { ...c, u0: a, u1: b };
-    const sc = score ? score(piece) : -(b - a);
-    if (sc < bestScore - 1e-9) {
-      best = piece;
-      bestScore = sc;
-    }
+  // Section insuffisante (une face demande plus que h : section imposée, ou aucune section
+  // faisable) : plan de K2b pour tous les groupes. Retirer une facultative y changerait le mode
+  // d'une face (barre droite → coudé) et ferait perdre des marches hors du coin.
+  if ([...faces.values()].some((f) => f.need > input.section.h + 1e-9)) {
+    groups.forEach((_, gi) => reverted.add(gi));
+    required = requiredNow();
+    faces = decideAll(() => true);
   }
-  return best ?? { ...c, u0: c.u0, u1: c.u0 };
-}
-
-/** Morceaux de [c.u0 ; c.u1] hors des coupes de jarret (u croissants) ; `null` : aucune coupe touchée. */
-export function kneeFreePieces(fb: FaceBearing, c: WebSupport, depth: Mm): [Mm, Mm][] | null {
-  const bands: { u0: Mm; u1: Mm }[] = [];
-  for (const k of fb.knees) {
-    const b = kneeCutBand(k, c.zTop - depth, c.zTop);
-    if (b && b.u0 < c.u1 - BAND_EPS && b.u1 > c.u0 + BAND_EPS) bands.push(b);
-  }
-  if (bands.length === 0) return null;
-  bands.sort((a, b) => a.u0 - b.u0);
-  const out: [Mm, Mm][] = [];
-  let cur = c.u0;
-  for (const b of bands) {
-    if (b.u0 > cur) out.push([cur, b.u0]);
-    cur = Math.max(cur, b.u1);
-  }
-  if (cur < c.u1) out.push([cur, c.u1]);
-  return out;
+  const optional = new Set([...cornerKeys].filter((k) => !required.has(k)));
+  return { faces, result, corner: { groups, required, optional, reverted: reverted.size } };
 }
 
 // ------------------------------------------------------------------------------ tronçons
@@ -714,4 +865,26 @@ export function crankedJigNote(mark: string, items: readonly CrankedJigItem[]): 
     ),
   );
   return knees ? msg("structure.steelProfile.note.jigDimensions", { mark, knees }) : null;
+}
+
+/**
+ * Remarque d'une marche au coin du mur dont la cornière facultative ne tient pas dans la section
+ * retenue (K-Q4, K2e) : faces retirées, faces qui gardent la marche côté mur et longueur minimale
+ * d'appui (`supports.minLength`, règle existante de FAB_SUPPORT_LONGUEUR_MIN). La partie logée
+ * n'est pas citée : elle est le plus souvent nulle (zone entière hors de l'âme utile), ou c'est la
+ * zone brute elle-même qui est trop courte. Clé plurielle par nombre de faces retirées.
+ */
+export function cornerAngleRemovedNote(
+  treadMark: string,
+  removed: readonly string[],
+  kept: readonly string[],
+  min: Mm,
+): Message {
+  return msg("structure.steelProfile.note.cornerAngleRemoved", {
+    mark: treadMark,
+    count: removed.length,
+    removed: joinMessages(removed.map((m) => textMessage(m))) ?? "",
+    kept: joinMessages(kept.map((m) => textMessage(m))) ?? "",
+    min: dec(min, 0),
+  });
 }
