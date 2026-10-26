@@ -588,7 +588,10 @@ Chantier `feat/bent-stringer`, état des lieux et conception K1 dans `docs/ledge
     - (K-Q27, décision) **coudé forcé, sinon refus** : à un raccord de palier, le limon voisin d'un limon coudé reste coudé, même si sa section monte (pas de repli `heavier` ni K-Q14 à ce raccord) ; si le coudé y est infaisable (`noseAboveRive`, `steepSegment`, fenêtre vide…), le refus de F17 (3) revient en erreur, chiffré. cage-60-palier-limon peut rester refusée (LI2 : raccord raide du jour en pan coupé) ;
     - (K-Q28, décision) **remarque seule** : plat de palier non de niveau signalé (`landingNotLevel`), limon coudé gardé ;
     - (K-Q29) l'alourdissement en IPE dû à K-Q25 (arb46 IPE 270, arb13 IPE 240) est accepté ; la remarque `newelAddsViolations` n'est émise que si le poteau de la barre droite ajoute une violation, sinon une remarque neutre dit que le poteau est celui de la barre droite ;
-    - (K-Q30) paramètres invalides sur une cage à palier droit : l'erreur de paramètres (`pipeline.structureParamsInvalid`) remplace le refus « palier droit », en barre droite aussi (cas invalide seulement, aucun exemple touché).
+    - (K-Q30) paramètres invalides sur une cage à palier droit : l'erreur de paramètres (`pipeline.structureParamsInvalid`) remplace le refus « palier droit », en barre droite aussi (cas invalide seulement, aucun exemple touché) ;
+  - décisions du 2026-10-26, après la mesure de K2f2 :
+    - (K-Q31) une chaîne de raccords de palier **sans aucun limon coudé** (tous repliés en barre droite) est **refusée comme en F17 (3)**, avec sa cause chiffrée : le repli ne réintroduit pas la barre droite qui monte le long d'un palier de niveau ;
+    - (K-Q32) section imposée trop basse pour un limon gardé coudé à un raccord de palier : **refus** (« au-delà de la section imposée »), avec le besoin d'âme chiffré (cage-45-palier-acier en UPN 180 imposée : 186,9 mm demandés) ; pas de forçage avec violations publiées.
 - Réf. : A13, F17 ; `docs/LEDGER.md` l. 178 et l. 304 ; `structures/steelProfile.ts`, `structures/steelProfileCutting.ts`.
 
 ## B. Validations par un atelier ou un professionnel
