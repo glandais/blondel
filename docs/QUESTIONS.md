@@ -591,7 +591,13 @@ Chantier `feat/bent-stringer`, état des lieux et conception K1 dans `docs/ledge
     - (K-Q30) paramètres invalides sur une cage à palier droit : l'erreur de paramètres (`pipeline.structureParamsInvalid`) remplace le refus « palier droit », en barre droite aussi (cas invalide seulement, aucun exemple touché) ;
   - décisions du 2026-10-26, après la mesure de K2f2 :
     - (K-Q31) une chaîne de raccords de palier **sans aucun limon coudé** (tous repliés en barre droite) est **refusée comme en F17 (3)**, avec sa cause chiffrée : le repli ne réintroduit pas la barre droite qui monte le long d'un palier de niveau ;
-    - (K-Q32) section imposée trop basse pour un limon gardé coudé à un raccord de palier : **refus** (« au-delà de la section imposée »), avec le besoin d'âme chiffré (cage-45-palier-acier en UPN 180 imposée : 186,9 mm demandés) ; pas de forçage avec violations publiées.
+    - (K-Q32) section imposée trop basse pour un limon gardé coudé à un raccord de palier : **refus** (« au-delà de la section imposée »), avec le besoin d'âme chiffré (cage-45-palier-acier en UPN 180 imposée : 186,9 mm demandés) ; pas de forçage avec violations publiées ;
+  - décisions du 2026-10-26, après la mesure de K2d :
+    - (K-Q33) K-Q31 précisée : une chaîne de raccords de palier dont tous les limons sont repliés `heavier` est **forcée en coudé** (section qui monte, comme K-Q27) ; refus F17 (3) seulement si le coudé y est infaisable ;
+    - (K-Q34) cages à palier droit (barre droite refusée, pas de base K-Q24) : onglets ouverts aux coins **publiés** par FAB_ONGLET_RACCORD (conseil), sans seuil inventé ; écart acceptable renvoyé à l'atelier (B13) ;
+    - (K-Q35) **angle maximal de tronçon** du limon coudé : paramètre du plugin, « à valider », 75° proposé (aucune source) ; au-delà, la face se replie comme pour un tronçon trop court ; valeur renvoyée à l'atelier (B13) ;
+    - (K-Q36) quand le tracé d'un escalier en profilés passe d'une volée droite à un tournant, `stringerLine` = `nosing` est écrit dans le projet : la remarque de bascule ne reste que sur les fichiers enregistrés avant cette version ;
+    - conventions de l'orchestrateur sans arbitrage (K2d) : la correction « Poser le poteau des profilés » peut demander deux applications en limon coudé (quart tournant 110 / 35 puis 120 / 40 ; point fixe trop coûteux dans le fil principal) ; un projet enregistré dont le poteau dépasse le besoin du coudé garde son poteau, la correction reste proposée ; K-Q29 compare à la barre droite seule (sur le repli K-Q25 le modèle livré est le coudé au poteau de la barre droite, la base K-Q24 rendrait la remarque toujours muette).
 - Réf. : A13, F17 ; `docs/LEDGER.md` l. 178 et l. 304 ; `structures/steelProfile.ts`, `structures/steelProfileCutting.ts`.
 
 ## B. Validations par un atelier ou un professionnel
@@ -783,7 +789,9 @@ Réf. : `docs/research/glossaire-en.md`, `packages/i18n/src/locales/en.json`, AD
 À faire valider par un serrurier-métallier :
 
 - une marche au coin du mur peut-elle reposer sur un seul appui posé, une cornière murale (règle du coin, A41 K-Q4) ? Mesure de K2e2 : 91 marches au coin sur 528 cas n'ont qu'un appui posé ; par exemple, arb99 tient sur une seule cornière murale de 112 mm, sans erreur ni violation de règle ;
-- faut-il une longueur minimale de cornière gardée ou un nombre minimal d'appuis ? Aucune règle sourcée aujourd'hui ; la cornière retirée est signalée par une remarque.
+- faut-il une longueur minimale de cornière gardée ou un nombre minimal d'appuis ? Aucune règle sourcée aujourd'hui ; la cornière retirée est signalée par une remarque ;
+- quel écart d'onglet ouvert au coin est acceptable sur une cage à palier droit (K-Q34 ; tirage cage7#6 : 113 mm en UPN, 226 mm en IPE) ?
+- quel angle maximal de tronçon du limon coudé (K-Q35, 75° proposé ; tirages cage7#13 et cage99#56 : 71 à 83°) ?
 
 Réf. : A41 (K-Q4, K-Q16, K-Q26) ; `structures/steelProfileCranked.ts` ; `docs/ledger/LEDGER-bent-stringer.md` (K2e2).
 
