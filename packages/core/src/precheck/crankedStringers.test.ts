@@ -25,8 +25,29 @@ const withLine = (p: Project, stringerLine: "chord" | "nosing"): Project => ({
   },
 });
 
+/**
+ * j3c au poteau 125 / 43 de l'exemple d'avant la bascule du défaut (sous-lot K2d ; l'exemple
+ * régénéré pose 110 / 35) : quatre limons coudés à tronçons.
+ */
+const j3cAt125 = (): Project => {
+  const p = load("j3c-acceptance-01-upn.blondel.json");
+  return {
+    ...p,
+    stair: {
+      ...p.stair,
+      layout: {
+        ...p.stair.layout,
+        turns: p.stair.layout.turns.map((t) => ({
+          ...t,
+          inner: { kind: "newel" as const, size: 125, offset: 43 },
+        })),
+      },
+    },
+  };
+};
+
 describe("prédimensionnement de repli d'un limon coudé en tronçons (CK12)", () => {
-  const project = withLine(load("j3c-acceptance-01-upn.blondel.json"), "nosing");
+  const project = withLine(j3cAt125(), "nosing");
   const model = buildModel(project, { memo: false });
   const stringers = model.parts.filter((p) => p.category === "stringer");
   const finished = stringers.filter((p) => p.beamChord !== undefined);
@@ -43,7 +64,7 @@ describe("prédimensionnement de repli d'un limon coudé en tronçons (CK12)", (
     // y = h entre les coupes d'aplomb) ; le limon coudé a les mêmes abscisses d'âme aux
     // extrémités (CK5, UPN : shift = 0) et la même corde des nez, donc la même poutre
     // équivalente.
-    const chordProject = withLine(load("j3c-acceptance-01-upn.blondel.json"), "chord");
+    const chordProject = withLine(j3cAt125(), "chord");
     const chordModel = buildModel(chordProject, { memo: false });
     const ref = new Map(
       precheckModel(chordProject, chordModel).beams.map((b) => [b.partId, b.result.length]),
@@ -56,7 +77,7 @@ describe("prédimensionnement de repli d'un limon coudé en tronçons (CK12)", (
   });
 
   it("poutre équivalente d'une barre droite : même résultat que son développé", () => {
-    const chordProject = withLine(load("j3c-acceptance-01-upn.blondel.json"), "chord");
+    const chordProject = withLine(j3cAt125(), "chord");
     const chordModel = buildModel(chordProject, { memo: false });
     const ref = precheckModel(chordProject, chordModel).beams;
     // Barre droite UPN (shift = 0) : rive haute = Δu / cos α de la corde de la face, Δu lu sur

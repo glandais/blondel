@@ -132,8 +132,29 @@ const profiled = (p: Project, params: Record<string, unknown> = {}): Project => 
   ...p,
   stair: { ...p.stair, structure: { kind: "steel-profile", params } },
 });
+/** Poteau posé comme en barre droite (`chord`), celui des mesures K2a (avant la bascule K2d). */
 const choose = (p: Project): Project =>
-  applyStructureChoice(p, "steel-profile", { family: "UPN" }).project;
+  applyStructureChoice(p, "steel-profile", { family: "UPN", stringerLine: "chord" }).project;
+/**
+ * j3c au poteau 125 / 43 de l'exemple d'avant la bascule du défaut (sous-lot K2d ; l'exemple
+ * régénéré pose le poteau du limon coudé, 110 / 35) : mesures K2a.
+ */
+const j3cAt125 = (): Project => {
+  const p = loadExample("j3c-acceptance-01-upn.blondel.json");
+  return {
+    ...p,
+    stair: {
+      ...p.stair,
+      layout: {
+        ...p.stair.layout,
+        turns: p.stair.layout.turns.map((t) => ({
+          ...t,
+          inner: { kind: "newel" as const, size: 125, offset: 43 },
+        })),
+      },
+    },
+  };
+};
 /**
  * j5b de référence pour les mesures K2a et le critère de K2b : chemin du comparateur
  * (`adaptJour`, critère d'acceptation n° 2), puis UPN. Le chemin de l'interface
@@ -143,7 +164,7 @@ const choose = (p: Project): Project =>
 const j5bReference = (): Project => {
   const a = adaptJour(loadExample("j5b-debillarde-soude.blondel.json"), {
     kind: "steel-profile",
-    params: { family: "UPN" },
+    params: { family: "UPN", stringerLine: "chord" },
   }).project;
   return {
     ...a,
@@ -372,7 +393,7 @@ describe("profileBearing — symétrie et déterminisme (I8, I9)", () => {
 
 describe("profileBearing — exemples tournants et cages", () => {
   const cases: [string, () => Project][] = [
-    ["j3c", () => loadExample("j3c-acceptance-01-upn.blondel.json")],
+    ["j3c", () => j3cAt125()],
     ["cage-60", () => choose(loadExample("cage-60.blondel.json"))],
     ["cage-trapeze", () => choose(loadExample("cage-trapeze.blondel.json"))],
     ["demo-cage-flared-steel", () => choose(loadExample("demo-cage-flared-steel.blondel.json"))],
@@ -406,7 +427,7 @@ describe("profileBearing — chiffres épinglés (mesures K2a, réglages proviso
   const ups = sectionsOf("UPN");
   const cases: [string, () => Project, string, number][] = [
     // [cas, projet, section UPN la plus légère, besoin d'âme avec cette section (mm)]
-    ["j3c", () => loadExample("j3c-acceptance-01-upn.blondel.json"), "UPN 180", 167.0],
+    ["j3c", () => j3cAt125(), "UPN 180", 167.0],
     ["j5b (comparateur)", j5bReference, "UPN 200", 184.5],
     ["quart", () => choose(loadExample("quarter-left.blondel.json")), "UPN 220", 211.5],
     ["U", () => choose(loadExample("two-quarters-u.blondel.json")), "UPN 200", 197.3],
@@ -430,7 +451,7 @@ describe("profileBearing — chiffres épinglés (mesures K2a, réglages proviso
   }
 
   it("j3c : 9 jarrets en UPN 180 (le nettoyage n'en retire pas davantage)", () => {
-    const st = setupOf(loadExample("j3c-acceptance-01-upn.blondel.json"));
+    const st = setupOf(j3cAt125());
     const s = findSection("UPN 180")!;
     const count = (k: KneeSettings): number =>
       bearings(st, s, k).faces.reduce((a, f) => a + f.knees.length, 0);

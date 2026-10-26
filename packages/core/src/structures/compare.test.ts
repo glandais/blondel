@@ -353,8 +353,8 @@ describe("limon central bois (wood-central) dans le comparateur : pièces compos
 });
 
 describe("limon coudé des profilés (steel-profile, `nosing`) dans le comparateur : tronçons (K2c)", () => {
-  it("j3c : tronçons comptés à la place des limons finis, pièces uniques et coût chiffrés contre la barre droite", () => {
-    const j3c = parseProjectText(
+  it("j3c (poteau 125 / 43 d'avant la bascule K2d) : tronçons comptés à la place des limons finis, pièces uniques et coût chiffrés contre la barre droite", () => {
+    const raw = parseProjectText(
       readFileSync(
         resolve(
           dirname(fileURLToPath(import.meta.url)),
@@ -363,6 +363,21 @@ describe("limon coudé des profilés (steel-profile, `nosing`) dans le comparate
         "utf8",
       ),
     );
+    // Poteau de l'exemple avant la bascule du défaut (sous-lot K2d ; l'exemple régénéré pose
+    // 110 / 35) : chiffres de la relecture K2c.
+    const j3c: Project = {
+      ...raw,
+      stair: {
+        ...raw.stair,
+        layout: {
+          ...raw.stair.layout,
+          turns: raw.stair.layout.turns.map((t) => ({
+            ...t,
+            inner: { kind: "newel" as const, size: 125, offset: 43 },
+          })),
+        },
+      },
+    };
     const costs = {
       hourlyRate: 60,
       minutesPerCut: 2,

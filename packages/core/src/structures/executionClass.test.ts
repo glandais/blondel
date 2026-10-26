@@ -28,6 +28,32 @@ describe("deduceExecutionClass", () => {
     // Sans l'information : lecture conservatrice (soudé).
     expect(deduceExecutionClass({ grade: "S355", buttWeld: 0 }).executionClass).toBe("EXC2");
   });
+
+  it("jarrets et onglets du limon coudé (K-Q2, sous-lot K2d) : raison propre, le reste des soudures bout à bout gardé dans la raison générale, aucun seuil", () => {
+    const only = deduceExecutionClass({ grade: "S235", buttWeld: 812.4, crankedButtWeld: 812.4 });
+    expect(only.executionClass).toBe("EXC2");
+    expect(frList(only.reasons)).toEqual([
+      "jarrets et onglets du limon coudé soudés bout à bout (812 mm de cordon ; CNC2M N0169, application au jarret à valider)",
+    ]);
+    const mixed = deduceExecutionClass({ grade: "S235", buttWeld: 1000, crankedButtWeld: 700 });
+    expect(frList(mixed.reasons)).toEqual([
+      "soudures bout à bout (300 mm de cordon)",
+      "jarrets et onglets du limon coudé soudés bout à bout (700 mm de cordon ; CNC2M N0169, application au jarret à valider)",
+    ]);
+    // Absent ou nul : raisons d'avant le sous-lot K2d, à l'identique.
+    for (const crankedButtWeld of [undefined, 0]) {
+      expect(
+        deduceExecutionClass({
+          grade: "S235",
+          buttWeld: 120,
+          ...(crankedButtWeld !== undefined ? { crankedButtWeld } : {}),
+        }),
+      ).toEqual(deduceExecutionClass({ grade: "S235", buttWeld: 120 }));
+    }
+    expect(
+      deduceExecutionClass({ grade: "S235", buttWeld: 0, crankedButtWeld: 0 }).executionClass,
+    ).toBe("EXC1");
+  });
 });
 
 describe("plugins métal : champ `welded` renseigné d'après les cordons des pièces", () => {

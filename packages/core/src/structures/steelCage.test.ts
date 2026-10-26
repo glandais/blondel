@@ -457,6 +457,8 @@ describe("steel-flat sur une cage saisie (sous-lot 6b)", () => {
               junctions: [{ angle: 60, mode: "winders", well }],
             },
             kind,
+            // Profilés en barre droite (limon coudé par défaut depuis K2d : tronçons en plus).
+            kind === "steel-profile" ? { stringerLine: "chord" } : {},
           ),
           { memo: false },
         );
@@ -588,7 +590,7 @@ describe("steel-profile sur une cage saisie (sous-lot 6b)", () => {
           junctions: [{ angle: 45, mode: "winders", well: chamfer() }],
         },
         "steel-profile",
-        { family },
+        { family, stringerLine: "chord" },
       );
       const { m, r } = profiled(p);
       expect(
@@ -661,6 +663,7 @@ describe("steel-profile sur une cage saisie (sous-lot 6b)", () => {
             junctions: [{ angle: 0, mode: "landing", depth: 1000 }],
           },
           "steel-profile",
+          { stringerLine: "chord" },
         ),
         { memo: false },
       );
@@ -682,6 +685,20 @@ describe("steel-profile sur une cage saisie (sous-lot 6b)", () => {
       );
       expect(keys(nosing)).not.toContain("structure.cageUnsupported");
       expect(marks(nosing).length).toBeGreaterThan(0);
+      // Paramètres vides : limon coudé par défaut (K-Q11, sous-lot K2d), même modèle.
+      const byDefault = buildModel(
+        cageProject(
+          {
+            kind: "cage",
+            sections: [straight(1890, widths[0]), straight(1620, widths[1])],
+            junctions: [{ angle: 0, mode: "landing", depth: 1000 }],
+          },
+          "steel-profile",
+        ),
+        { memo: false },
+      );
+      expect(keys(byDefault)).toEqual(keys(nosing));
+      expect(marks(byDefault)).toEqual(marks(nosing));
     }
   });
 
@@ -710,7 +727,7 @@ describe("steel-profile sur une cage saisie (sous-lot 6b)", () => {
         junctions: [{ angle: 90, mode: "winders", well: chamfer(20) }],
       },
       "steel-profile",
-      { family: "IPE" },
+      { family: "IPE", stringerLine: "chord" },
     );
     const { m, r } = profiled(p);
     expect(keys(m).filter((k) => k !== "structure.steelProfile.error.noSectionPasses")).toEqual([
@@ -786,7 +803,8 @@ describe("propriétés : cages tirées parmi les fonctions déclarées", () => {
   it.each([
     ["steel-flat", {}],
     ["steel-flat", { treadKind: "folded-steel" }],
-    ["steel-profile", {}],
+    // Barre droite : palier droit refusé, hors du tirage (limon coudé par défaut depuis K2d).
+    ["steel-profile", { stringerLine: "chord" }],
     // Limon coudé : palier droit accepté (K-Q5, sous-lot K2f).
     ["steel-profile", { stringerLine: "nosing" }],
   ] as const)(
@@ -811,18 +829,22 @@ describe("propriétés : cages tirées parmi les fonctions déclarées", () => {
           // deux grands tournants de même sens, etc.) : hors du domaine de la propriété.
           if (m.stepping.treads.length === 0 || k.some((x) => x.startsWith("layout."))) return;
           built++;
-          // Raccord de palier où le limon coudé est infaisable (K-Q27, sous-lot K2f2) : refus
-          // chiffré du plugin, seules les marches produites ; hors des contrôles des pièces.
-          const landingRefused = "structure.steelProfile.error.landingSpliceRefused";
+          // Raccord de palier où le limon coudé est infaisable (K-Q27, sous-lot K2f2 ; chaîne sans
+          // limon coudé, K-Q31, sous-lot K2d) : refus chiffré du plugin, seules les marches
+          // produites ; hors des contrôles des pièces.
+          const landingKeys = [
+            "structure.steelProfile.error.landingSpliceRefused",
+            "structure.steelProfile.error.landingChainStraight",
+          ];
           expect(
             k.filter(
               (x) =>
                 x.startsWith("structure.") &&
                 x !== "structure.steelProfile.error.noSectionPasses" &&
-                x !== landingRefused,
+                !landingKeys.includes(x),
             ),
           ).toEqual([]);
-          if (k.includes(landingRefused)) {
+          if (k.some((x) => landingKeys.includes(x))) {
             refused++;
             expect(m.parts.some((q) => q.category === "stringer")).toBe(false);
             return;

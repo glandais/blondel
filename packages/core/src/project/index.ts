@@ -73,6 +73,7 @@ export {
   PROFILE_NEWEL_VERIFICATIONS,
   addedViolations,
   applyStructureChoice,
+  explicitStructureParams,
   resolveProfileNewel,
   violationCounts,
   type ProfileNewelModel,

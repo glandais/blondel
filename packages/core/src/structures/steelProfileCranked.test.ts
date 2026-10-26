@@ -549,18 +549,138 @@ describe("raccords de palier : coudé forcé, sinon refus (K-Q27, K2f2)", () => 
     ]);
   });
 
-  it("chaîne sans limon coudé (barres droites seules) : inchangée, ni forçage ni refus (K-Q27 : voisin d'un limon coudé seulement)", () => {
-    const steep = { kind: "steepSegment", alpha: 1.5 } as const;
-    for (const faces of [
+  it("chaîne sans limon coudé, tous repliés (K-Q31, K2d) : `heavier` sous la limite forcés, autre repli refusé `straight`", () => {
+    const nose = { kind: "noseAboveRive", excess: 23 } as const;
+    // [noseAboveRive, heavier ≤ limite] : refus `straight` du premier, forçage du second.
+    const r1 = forceLandingChains(
+      plans(folded("a", nose), folded("b", heavier)),
+      [["a", "b"]],
+      bearingOf,
+      LIMIT,
+    );
+    expect(r1.forced).toEqual(["b"]);
+    expect(r1.refusals).toEqual([{ chain: ["a", "b"], faceId: "a", reason: nose, straight: true }]);
+    expect(r1.faces.get("b")!.mode).toBe("nosing");
+    // [heavier, heavier] sous la limite : deux forcés, aucun refus (la section monte).
+    const r2 = forceLandingChains(
       plans(folded("a", heavier), folded("b", heavier)),
-      plans(folded("a", heavier), folded("b", steep)),
-    ]) {
-      const r = forceLandingChains(faces, [["a", "b"]], bearingOf, LIMIT);
-      expect(r.forced).toEqual([]);
-      expect(r.refusals).toEqual([]);
-      expect(r.faces.get("a")).toBe(faces.get("a"));
-      expect(r.faces.get("b")).toBe(faces.get("b"));
-    }
+      [["a", "b"]],
+      bearingOf,
+      LIMIT,
+    );
+    expect(r2.forced).toEqual(["a", "b"]);
+    expect(r2.refusals).toEqual([]);
+    expect([...r2.faces.values()].every((fp) => fp.mode === "nosing" && !fp.fallback)).toBe(true);
+    // Section imposée trop basse : `beyondSection`, marqué `straight`.
+    const imposed = { h: 180, section: "UPN 180", imposed: true };
+    const over = { kind: "heavier", bent: 186.9, chord: 186.7 } as const;
+    const r3 = forceLandingChains(
+      plans(folded("a", over, 186.9), folded("b", heavier)),
+      [["a", "b"]],
+      bearingOf,
+      imposed,
+    );
+    expect(r3.refusals).toEqual([
+      {
+        chain: ["a", "b"],
+        faceId: "a",
+        reason: { kind: "beyondSection", bent: 186.9, section: "UPN 180", h: 180 },
+        straight: true,
+      },
+      {
+        chain: ["a", "b"],
+        faceId: "b",
+        reason: { kind: "beyondSection", bent: 190, section: "UPN 180", h: 180 },
+        straight: true,
+      },
+    ]);
+    // Chaîne avec un limon coudé : refus K-Q27, jamais marqué `straight`.
+    const r4 = forceLandingChains(
+      plans(bent("a"), folded("b", nose)),
+      [["a", "b"]],
+      bearingOf,
+      LIMIT,
+    );
+    expect(r4.refusals).toEqual([{ chain: ["a", "b"], faceId: "b", reason: nose }]);
+  });
+
+  it("chaîne de faces à une seule pente (CK7, aucun repli) : inchangée, ni forçage ni refus", () => {
+    const single = (id: string): CrankedFacePlan => ({
+      faceId: id,
+      mode: "chord",
+      need: 186.7,
+      chordNeed: 186.7,
+      bentNeed: 186.7,
+    });
+    const faces = plans(single("a"), single("b"));
+    const r = forceLandingChains(faces, [["a", "b"]], bearingOf, LIMIT);
+    expect(r.forced).toEqual([]);
+    expect(r.refusals).toEqual([]);
+    expect(r.faces.get("a")).toBe(faces.get("a"));
+    expect(r.faces.get("b")).toBe(faces.get("b"));
+  });
+
+  it("propriété (K-Q27, K-Q31) : après décision, une chaîne sans refus n'a aucun membre replié ; une chaîne qui contient un repli est toute coudée (CK7 compris) ou refusée", () => {
+    const reasonArb: fc.Arbitrary<CrankedFallbackReason> = fc.oneof(
+      fc.constant<CrankedFallbackReason>({ kind: "emptyWindow" }),
+      fc.constant<CrankedFallbackReason>({ kind: "noseAboveRive", excess: 12 }),
+      fc.constant<CrankedFallbackReason>({ kind: "steepSegment", alpha: 1.5 }),
+      fc.constant<CrankedFallbackReason>({ kind: "lostSupport", treads: [3] }),
+      fc
+        .double({ min: 150, max: 320, noNaN: true })
+        .map((bent): CrankedFallbackReason => ({ kind: "heavier", bent, chord: 186.7 })),
+      fc.constant<CrankedFallbackReason>({ kind: "heavier", bent: Infinity, chord: 186.7 }),
+    );
+    const memberArb = fc.oneof(
+      fc.constant<"bent" | "single">("bent"),
+      fc.constant<"bent" | "single">("single"),
+      reasonArb,
+    );
+    fc.assert(
+      fc.property(
+        fc.array(memberArb, { minLength: 2, maxLength: 4 }),
+        fc.boolean(),
+        (members, imposed) => {
+          const ids = members.map((_, i) => ["a", "b", "c", "w"][i]!);
+          const faces = plans(
+            ...members.map((m, i): CrankedFacePlan => {
+              const id = ids[i]!;
+              if (m === "bent") return bent(id);
+              if (m === "single")
+                return {
+                  faceId: id,
+                  mode: "chord",
+                  need: 186.7,
+                  chordNeed: 186.7,
+                  bentNeed: 186.7,
+                };
+              return folded(id, m, m.kind === "heavier" ? m.bent : 190);
+            }),
+          );
+          const limit = imposed ? { h: 200, section: "UPN 200", imposed: true } : LIMIT;
+          const r = forceLandingChains(faces, [ids], bearingOf, limit);
+          const hadFallback = members.some((m) => typeof m !== "string");
+          const hadBent = members.includes("bent");
+          for (const x of r.refusals) expect(x.straight === true).toBe(!hadBent);
+          if (r.refusals.length === 0) {
+            for (const id of ids) expect(r.faces.get(id)!.fallback).toBeUndefined();
+          }
+          // Chaîne livrée : chaque repli a été forcé coudé, et seul un repli `heavier` peut l'être.
+          if (hadFallback && r.refusals.length === 0) {
+            members.forEach((m, i) => {
+              if (typeof m === "string") return;
+              expect(m.kind).toBe("heavier");
+              expect(r.forced).toContain(ids[i]);
+            });
+          }
+          if (!hadFallback) {
+            expect(r.refusals).toEqual([]);
+            expect(r.forced).toEqual([]);
+          }
+        },
+      ),
+      { numRuns: RUNS, seed: 31 },
+    );
   });
 
   it("face à une seule pente (CK7, barre droite sans repli, ligne confondue) : compatible avec un voisin coudé, ni forcée ni refusée", () => {
@@ -654,6 +774,35 @@ describe("raccords de palier : coudé forcé, sinon refus (K-Q27, K2f2)", () => 
     );
     expect(createTranslator("fr").t(steep)).toContain("86,4°");
     expect(createTranslator("en").t(steep)).toContain("86.4°");
+  });
+
+  it("refus d'une chaîne sans limon coudé (K-Q31) : clé propre, raccord, limon et cause chiffrés (fr, en)", () => {
+    const marks: Record<string, string> = { a: "LI1", b: "LI2" };
+    const markOf = (id: string): string => marks[id] ?? id;
+    const m = landingRefusalMessage(
+      {
+        chain: ["a", "b"],
+        faceId: "a",
+        reason: { kind: "noseAboveRive", excess: 61.6 },
+        straight: true,
+      },
+      markOf,
+    );
+    expect(m.key).toBe("structure.steelProfile.error.landingChainStraight");
+    const fr = createTranslator("fr").t(m);
+    const en = createTranslator("en").t(m);
+    expect(fr).toContain("LI1 / LI2");
+    expect(fr).toContain("aucun limon n'est coudé et le limon LI1");
+    expect(fr).toContain("62 mm");
+    expect(fr).toContain("K-Q31");
+    expect(en).toContain("LI1 / LI2");
+    expect(en).toContain("no string is cranked and string LI1");
+    expect(en).toContain("62 mm");
+    expect(en).toContain("K-Q31");
+    for (const text of [fr, en]) {
+      expect(text).not.toMatch(/structure\.|\{|\}|\[object|NaN|Infinity|undefined/);
+    }
+    expect(en).not.toMatch(/limon|palier|marche|raccord|âme|nez/i);
   });
 });
 
@@ -751,7 +900,7 @@ describe("tronçons du limon coudé (K2c, CK8 à CK10, CK17)", () => {
     );
   });
 
-  it("cotes de gabarit : abscisse et cote de rive haute de chaque jarret, pentes avant / après", () => {
+  it("cotes de gabarit : abscisse et cote de rive haute de chaque jarret, pentes avant / après (radians, ADR-0003)", () => {
     const fb = q.get("le2");
     const items = crankedJigItems(fb, -12.5);
     expect(items).toHaveLength(fb.knees.length);
@@ -759,9 +908,13 @@ describe("tronçons du limon coudé (K2c, CK8 à CK10, CK17)", () => {
       expect(it.index).toBe(j + 1);
       expect(it.x).toBeCloseTo(fb.knees[j]!.upper.x + 12.5, 9);
       expect(it.z).toBeCloseTo(riveFns(fb).upper(fb.knees[j]!.upper.x), 6);
-      expect(it.before).toBeCloseTo((fb.segments[j]!.alpha * 180) / Math.PI, 9);
-      expect(it.after).toBeCloseTo((fb.segments[j + 1]!.alpha * 180) / Math.PI, 9);
+      expect(it.before).toBe(fb.segments[j]!.alpha);
+      expect(it.after).toBe(fb.segments[j + 1]!.alpha);
     });
+    // Remarque : pentes converties en degrés à l'affichage.
+    const fr = createTranslator("fr").t(crankedJigNote("LE2", items)!);
+    const a = (items[0]!.after * 180) / Math.PI;
+    expect(fr).toContain(`→ ${a.toFixed(1).replace(".", ",")}°`);
     // Partie de niveau au coin (K-Q7) : le premier tronçon de le2 est de niveau.
     expect(items[0]!.before).toBeCloseTo(0, 9);
   });

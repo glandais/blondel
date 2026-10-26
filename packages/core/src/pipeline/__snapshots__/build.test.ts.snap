@@ -1053,14 +1053,13 @@ exports[`buildModel — exemples du dépôt > j3b-acceptance-01-tole-pliee.blond
 exports[`buildModel — exemples du dépôt > j3c-acceptance-01-upn.blondel.json : cotes principales (non-régression) 1`] = `
 {
   "blondel": 600.02,
-  "colletMin": 111.4,
+  "colletMin": 101.6,
   "colletsChord": [
-    111.4,
-    113.8,
-    119.1,
-    155.5,
-    151.5,
-    191.6,
+    120,
+    120,
+    120,
+    140.2,
+    101.6,
   ],
   "firstRise": 180,
   "g": 240.02,
@@ -1071,16 +1070,16 @@ exports[`buildModel — exemples du dépôt > j3c-acceptance-01-upn.blondel.json
     "nosing": 3,
   },
   "n": 15,
-  "parts": 62,
+  "parts": 69,
   "run": 3360.3,
-  "treads": "wwwwwwssssssss",
+  "treads": "wwwwwsssssssss",
   "violations": {
-    "avertissement": 6,
+    "avertissement": 4,
     "bloquant": 0,
-    "conseil": 3,
+    "conseil": 2,
   },
   "zones": [
-    "0-6 M3-cubic",
+    "0-4 M3-cubic",
   ],
 }
 `;

@@ -264,14 +264,22 @@ describe("capacités : structureCageFeatures / structureAcceptsCage", () => {
     expect(structureCageFeatures("steel-profile", { stringerLine: "chord" })).toEqual(
       structureCageFeatures("steel-profile"),
     );
-    expect(structureCageFeatures("steel-profile", {})).not.toContain("straightLanding");
+    // Paramètres vides : limon coudé par défaut (K-Q11, sous-lot K2d), palier droit accepté.
+    expect(structureCageFeatures("steel-profile", {})).toContain("straightLanding");
+    expect(structureCageFeatures("steel-profile", { stringerLine: "chord" })).not.toContain(
+      "straightLanding",
+    );
     expect(
       structureAcceptsCage("steel-profile", ["straightLanding"], { stringerLine: "nosing" }),
     ).toBe(true);
+    // Sans paramètres (capacité statique) : fonctions de la barre droite.
     expect(structureAcceptsCage("steel-profile", ["straightLanding"])).toBe(false);
-    expect(structureUnsupportedCageFeatures("steel-profile", ["straightLanding"], {})).toEqual([
-      "straightLanding",
-    ]);
+    expect(structureUnsupportedCageFeatures("steel-profile", ["straightLanding"], {})).toEqual([]);
+    expect(
+      structureUnsupportedCageFeatures("steel-profile", ["straightLanding"], {
+        stringerLine: "chord",
+      }),
+    ).toEqual(["straightLanding"]);
     // Paramètres invalides : fonctions statiques (`capabilities.cage`), jamais d'exception.
     expect(structureCageFeatures("steel-profile", { stringerLine: "arc" })).toEqual(
       structureCageFeatures("steel-profile"),
@@ -642,8 +650,11 @@ describe("buildModel : paramètres invalides d'un plugin à fonctions selon les 
     }
   });
 
-  it("paramètres valides : refus en barre droite, construit en limon coudé (inchangé)", () => {
-    expect(errorKeys(buildModel(landingCage({ family: "UPN" }), { memo: false }))).toContain(
+  it("paramètres valides : refus en barre droite, construit en limon coudé (inchangé ; défaut coudé depuis K2d)", () => {
+    expect(
+      errorKeys(buildModel(landingCage({ family: "UPN", stringerLine: "chord" }), { memo: false })),
+    ).toContain("structure.cageUnsupported");
+    expect(errorKeys(buildModel(landingCage({ family: "UPN" }), { memo: false }))).not.toContain(
       "structure.cageUnsupported",
     );
     const m = buildModel(landingCage({ family: "UPN", stringerLine: "nosing" }), { memo: false });

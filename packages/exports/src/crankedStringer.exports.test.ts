@@ -46,6 +46,11 @@ import { createZip } from "./zip.js";
 const EXAMPLES_DIR = resolve(dirname(fileURLToPath(import.meta.url)), "../../../examples");
 const NON_FINITE = /NaN|Infinity/;
 
+/**
+ * j3c en limon coudé au poteau 125 / 43 de l'exemple d'avant la bascule du défaut (sous-lot
+ * K2d ; l'exemple régénéré pose 110 / 35, où les limons de jour sont des barres droites) : quatre
+ * limons à jarrets, chiffres de K2b et K2c.
+ */
 function j3cNosing(): Project {
   const p = parseProjectText(
     readFileSync(join(EXAMPLES_DIR, "j3c-acceptance-01-upn.blondel.json"), "utf8"),
@@ -54,6 +59,13 @@ function j3cNosing(): Project {
     ...p,
     stair: {
       ...p.stair,
+      layout: {
+        ...p.stair.layout,
+        turns: p.stair.layout.turns.map((t) => ({
+          ...t,
+          inner: { kind: "newel" as const, size: 125, offset: 43 },
+        })),
+      },
       structure: {
         ...p.stair.structure,
         params: { ...p.stair.structure.params, stringerLine: "nosing" },
@@ -220,6 +232,76 @@ describe("limon coudé (K2b, K2c) — exports de j3c en `nosing`", () => {
         const page = texts[i]!.join(" ").replace(/\s+/g, " ");
         expect(page, s.mark).toContain(expected!);
       }
+    }
+  });
+
+  it("PDF (CK17, K2d) : page « Gabarits des jarrets » avant les développés, une ligne par jarret aux cotes de `Part.jig`, en français et en anglais", () => {
+    const withJig = finished.filter((p) => (p.jig?.length ?? 0) > 0);
+    expect(withJig.length).toBeGreaterThan(0);
+    for (const p of finished) {
+      // Pièce finie à tronçons : un jarret de moins que de tronçons.
+      const n = segments.filter((s) => s.componentOf === p.id).length;
+      expect(p.jig?.length ?? 0, p.mark).toBe(Math.max(0, n - 1));
+    }
+    const knees = withJig.flatMap((p) => p.jig!.map((k) => ({ mark: p.mark, ...k })));
+    for (const locale of ["fr", "en"] as const) {
+      const t = createTranslator(locale);
+      const c = new RecordingCanvas(297, 210, helveticaMeasure());
+      const pages = renderPdf(c, model, { project, date: "25/10/2026", locale });
+      const kinds = pages.map((pg) => pg.kind);
+      const at = kinds.indexOf("jigs");
+      expect(at).toBeGreaterThan(kinds.lastIndexOf("compliance"));
+      expect(at).toBeLessThan(kinds.indexOf("flat"));
+      expect(pages[at]!.title).toBe(locale === "fr" ? "Gabarits des jarrets" : "Knee jigs");
+      expect(pages[at]!.partIds).toEqual(withJig.map((p) => p.id));
+      const cells = c
+        .pageTexts()
+        .filter((_, i) => pages[i]!.kind === "jigs")
+        .flat();
+      for (const k of knees) {
+        const mm = (v: number): string => t.num(v, { digits: 0 });
+        const deg = (a: number): string => t.num((a * 180) / Math.PI, { digits: 1 });
+        expect(cells, `${k.mark} ${k.index}`).toContain(mm(k.x));
+        expect(cells, `${k.mark} ${k.index}`).toContain(mm(k.z));
+        expect(cells, `${k.mark} ${k.index}`).toContain(`${deg(k.before)} → ${deg(k.after)}`);
+      }
+      // Remarque des cotes de gabarit : mêmes valeurs (arrondies au mm et au dixième de degré).
+      const note = (model.notes ?? []).find(
+        (n) =>
+          n.key === "structure.steelProfile.note.jigDimensions" &&
+          n.params?.["mark"] === knees[0]!.mark,
+      );
+      expect(t.t(note!)).toContain(t.num(knees[0]!.x, { digits: 0 }));
+    }
+  });
+
+  it("classe d'exécution (K-Q2, K2d) : jarrets et onglets du limon coudé soudés bout à bout, EXC2 nommée dans le contrôle et le PDF ; bout à bout compris dans le cordon total de chaque pièce", () => {
+    expect(model.executionClass).toBe("EXC2");
+    const butt = segments.reduce((a, p) => a + (p.quantities["butt_weld_mm"] ?? 0), 0);
+    expect(butt).toBeGreaterThan(0);
+    // `butt_weld_mm` est la part bout à bout de `weld_mm` (jamais en plus du total).
+    for (const p of model.parts) {
+      const b = p.quantities["butt_weld_mm"] ?? 0;
+      expect(b, p.mark).toBeLessThanOrEqual((p.quantities["weld_mm"] ?? 0) + 1e-9);
+    }
+    const exc = model.compliance.results.filter((r) => r.ruleId === "EXC_CLASSE_EXECUTION");
+    const fr = createTranslator("fr");
+    const en = createTranslator("en");
+    expect(exc.map((r) => fr.t(r.message)).join(" ")).toContain(
+      "jarrets et onglets du limon coudé soudés bout à bout",
+    );
+    expect(exc.map((r) => en.t(r.message)).join(" ")).toContain(
+      "knees and mitres of the cranked string butt-welded",
+    );
+    for (const locale of ["fr", "en"] as const) {
+      const c = new RecordingCanvas(297, 210, helveticaMeasure());
+      const pages = renderPdf(c, model, { project, date: "25/10/2026", locale });
+      const compliance = c
+        .pageTexts()
+        .filter((_, i) => pages[i]!.kind === "compliance")
+        .flat()
+        .join(" ");
+      expect(compliance).toContain("EXC2");
     }
   });
 

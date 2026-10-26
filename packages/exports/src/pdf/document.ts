@@ -46,6 +46,7 @@ import { JsPdfCanvas, type PdfCanvas } from "./canvas.js";
 import { compliancePages } from "./compliance.js";
 import { fastenerPages } from "./fasteners.js";
 import { installationPages } from "./installation.js";
+import { jigPages } from "./jigs.js";
 import { toValidatePages, type PdfToValidateRow } from "./toValidate.js";
 import {
   MUTED,
@@ -82,6 +83,11 @@ export interface PdfPages {
   readonly compliance?: boolean;
   /** Valeurs à valider (seulement si `PdfLayoutOptions.toValidate` est fourni). */
   readonly toValidate?: boolean;
+  /**
+   * Liste des jarrets des limons coudés (CK17, QUESTIONS A41) : seulement si une pièce du modèle
+   * porte des cotes de gabarit (`Part.jig`).
+   */
+  readonly jigs?: boolean;
   readonly flats?: boolean;
   /** Gabarits 1:1 tuilés des développés. */
   readonly templates?: boolean;
@@ -149,6 +155,7 @@ export type PdfPageKind =
   | "cutsheet"
   | "compliance"
   | "toValidate"
+  | "jigs"
   | "flat"
   | "template";
 
@@ -557,6 +564,7 @@ export function renderPdf(
     cutsheet: true,
     compliance: true,
     toValidate: true,
+    jigs: true,
     flats: true,
     templates: true,
     ...options.pages,
@@ -623,6 +631,16 @@ export function renderPdf(
       ...toValidatePages(options.toValidate, frame, t, (title) => ({
         kind: "toValidate" as const,
         title,
+      })),
+    );
+  }
+  // Gabarits des jarrets (CK17) : avant les développés, aucune page sans limon coudé à jarrets.
+  if (show.jigs) {
+    pages.push(
+      ...jigPages(model, frame, t, (title, partIds) => ({
+        kind: "jigs" as const,
+        title,
+        partIds,
       })),
     );
   }

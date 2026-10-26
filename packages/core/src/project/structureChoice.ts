@@ -117,6 +117,26 @@ export interface StructureChoiceResult {
   readonly notes: readonly Message[];
 }
 
+/**
+ * Paramètres d'un **choix neuf** de structure (assistant, comparateur, choix dans l'interface,
+ * exemples) : pour les profilés sur un tracé à tournant (volées à tournant ou cage saisie), la
+ * ligne d'appui par défaut (`stringerLine` = `nosing`, décision K-Q11) est écrite explicitement
+ * quand elle manque, pour que la remarque de bascule `structure.steelProfile.note.defaultCranked`
+ * reste réservée aux projets enregistrés avant la bascule (sous-lot K2d). Escaliers droits
+ * inchangés (le limon y est droit dans les deux réglages, invariant I1 de K1) ; autres paramètres
+ * et autres structures rendus tels quels.
+ */
+export function explicitStructureParams(
+  project: Project,
+  kind: string,
+  params: Readonly<Record<string, unknown>>,
+): Readonly<Record<string, unknown>> {
+  if (kind !== "steel-profile" || Object.hasOwn(params, "stringerLine")) return params;
+  const layout = project.stair.layout;
+  const turning = layout.kind === "cage" || (layout.kind !== "helical" && layout.turns.length > 0);
+  return turning ? { ...params, stringerLine: "nosing" } : params;
+}
+
 /** Projet dont la structure est `kind` de paramètres `params`. */
 function withStructure(
   project: Project,
@@ -174,13 +194,14 @@ export type ProfileNewelModel = Pick<Model, "parts" | "compliance">;
  * `null` si aucun limon profilé n'est construit (tracé ou découpage en erreur). Le poteau
  * renvoyé peut être refusé par le tracé (`layoutAccepts`) : à l'appelant de le vérifier.
  *
- * - **Barre droite** (`stringerLine` = `chord`, défaut) : section lue sur le modèle (poteau par
+ * - **Barre droite** (`stringerLine` = `chord`) : section lue sur le modèle (poteau par
  *   défaut d'abord), puis modèle recalculé avec le poteau attendu pour cette section, jusqu'à un
  *   poteau qui est **exactement** celui de la section qu'il produit (aile + 2 × jeu, décision
  *   A13) ; à défaut (sections voisines qui alternent, au plus `PROFILE_NEWEL_ITERATIONS`
  *   modèles), le dernier poteau qui reçoit la section obtenue (`profileNewelFits`), sinon le
  *   dernier poteau attendu (`resolveChordNewel`, inchangé).
- * - **Limon coudé** (`nosing`, K2e2) : voir `resolveNosingNewel`.
+ * - **Limon coudé** (`nosing`, défaut depuis le sous-lot K2d, K-Q11 ; K2e2) : voir
+ *   `resolveNosingNewel`.
  */
 export function resolveProfileNewel(
   project: Project,
@@ -229,12 +250,18 @@ function resolveChordNewel(
   return fitting ?? last;
 }
 
-/** Clé d'un modèle du point fixe dans le cache d'un appel : ligne d'appui et jours. */
+/**
+ * Clé d'un modèle du point fixe dans le cache d'un appel : ligne d'appui et jours. La ligne
+ * d'appui est lue sur les paramètres complétés par les défauts du schéma (sous-lot K2d : un
+ * projet sans `stringerLine` est en limon coudé, il ne doit pas partager la clé de sa référence
+ * en barre droite, `stringerLine` = `chord` explicite).
+ */
 function newelModelKey(p: Project): string {
-  const params = p.stair.structure.params as Readonly<Record<string, unknown>>;
+  const parsed = SteelProfileParamsSchema.safeParse(p.stair.structure.params);
+  const line = parsed.success ? parsed.data.stringerLine : "invalid";
   const layout = p.stair.layout;
   const turns = layout.kind === "cage" ? "cage" : JSON.stringify(layout.turns.map((t) => t.inner));
-  return `${String(params["stringerLine"] ?? "chord")}|${turns}`;
+  return `${line}|${turns}`;
 }
 
 /** Même projet, paramètres de structure `params` (même `kind`). */
@@ -497,8 +524,9 @@ function resolveNosingNewel(
 export function applyStructureChoice(
   project: Project,
   kind: string,
-  params: Readonly<Record<string, unknown>> = {},
+  requested: Readonly<Record<string, unknown>> = {},
 ): StructureChoiceResult {
+  const params = explicitStructureParams(project, kind, requested);
   const chosen = withStructure(project, kind, params);
   const spec = chosen.stair.layout;
   if (spec.kind === "cage") {

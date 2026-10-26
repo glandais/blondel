@@ -37,8 +37,35 @@ import "./index.js";
 
 const EXAMPLES_DIR = resolve(dirname(fileURLToPath(import.meta.url)), "../../../../examples");
 
-const example = (name: string): Project =>
+const readExample = (name: string): Project =>
   parseProjectText(readFileSync(join(EXAMPLES_DIR, `${name}.blondel.json`), "utf8"));
+
+/**
+ * Exemple du dépôt ; j3c est pris tel qu'avant la bascule du limon coudé par défaut (sous-lot
+ * K2d) : barre droite (`stringerLine` = `chord`) au poteau 125 / 43, sur lequel les repères de
+ * ce fichier ont été mesurés (l'exemple régénéré pose 110 / 35 en limon coudé).
+ */
+const example = (name: string): Project => {
+  const p = readExample(name);
+  if (name !== "j3c-acceptance-01-upn") return p;
+  return {
+    ...p,
+    stair: {
+      ...p.stair,
+      structure: {
+        ...p.stair.structure,
+        params: { ...p.stair.structure.params, stringerLine: "chord" },
+      },
+      layout: {
+        ...p.stair.layout,
+        turns: p.stair.layout.turns.map((t) => ({
+          ...t,
+          inner: { kind: "newel" as const, size: 125, offset: 43 },
+        })),
+      },
+    },
+  };
+};
 
 const withTolerance = (p: Project, t: number): Project => ({
   ...p,

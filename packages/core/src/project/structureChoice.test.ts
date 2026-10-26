@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fr, frList } from "../i18n.test-helpers.js";
 import type { Project } from "../model/project.js";
 import { buildModel, clearModelCache } from "../pipeline/build.js";
-import { profileNewelFits } from "../structures/steelProfile.js";
+import { SteelProfileParamsSchema, profileNewelFits } from "../structures/steelProfile.js";
 import { DEFAULT_NEWEL_SIZE, suggestFixes } from "./fixes.js";
 import {
   layoutAccepts,
@@ -262,8 +262,9 @@ const newelKey = (p: Project): string => {
   const t = p.stair.layout.turns[0]!.inner;
   return t.kind === "newel" ? `${t.size}/${t.offset ?? 0}` : t.kind;
 };
+/** Ligne d'appui lue sur les paramètres complétés par les défauts (`nosing` depuis K2d). */
 const lineOf = (p: Project): string =>
-  String((p.stair.structure.params as Record<string, unknown>)["stringerLine"] ?? "chord");
+  SteelProfileParamsSchema.parse(p.stair.structure.params).stringerLine;
 
 /**
  * `build` simulée : réponse par ligne d'appui et par poteau (`100/0` : poteau par défaut) ; trace
@@ -292,7 +293,7 @@ describe("resolveProfileNewel — point fixe du limon coudé (K2e2 : K-Q15, K-Q1
     stair: { ...base.stair, structure: { kind: "steel-profile", params } },
   });
   const NOSING = project({ family: "UPN", stringerLine: "nosing" });
-  const CHORD = project({ family: "UPN" });
+  const CHORD = project({ family: "UPN", stringerLine: "chord" });
   const all = (): boolean => true;
   const n = (size: number, offset: number) => ({ kind: "newel" as const, size, offset });
   const BUDGET = PROFILE_NEWEL_ITERATIONS + PROFILE_NEWEL_VERIFICATIONS;
@@ -622,6 +623,12 @@ describe("resolveProfileNewel — point fixe du limon coudé (K2e2 : K-Q15, K-Q1
           }
           expect(r!.chordJour.rules).toEqual([...rules].sort());
           expect(r!.chordJour.rules.length).toBeGreaterThan(0);
+          // K-Q29 (vérification de K2d), rappel vrai par construction (max(a, b) ≥ b), qui ne
+          // teste pas le code : comparé à la base K-Q24 entière, le coudé au jour gardé n'ajoute
+          // jamais rien (il en est le second terme) ; la remarque `newelAddsViolations` serait
+          // inatteignable. Seule la barre droite, premier terme de la base, est comparée (testé
+          // ci-dessous sur `keptAdds`).
+          expect(addedViolations(fakeModel(nosing[rcKey]!), ref).size).toBe(0);
           // K-Q29 : règles que le coudé au jour gardé ajoute à la barre droite (seule).
           expect(r!.chordJour.keptAdds).toEqual(
             [

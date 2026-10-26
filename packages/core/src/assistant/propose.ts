@@ -63,7 +63,7 @@ import {
 } from "../model/project.js";
 import { buildModel } from "../pipeline/build.js";
 import { DEFAULT_NEWEL, expectedNewel } from "../project/newel.js";
-import { applyStructureChoice } from "../project/structureChoice.js";
+import { applyStructureChoice, explicitStructureParams } from "../project/structureChoice.js";
 import { HELICAL_DEFAULT_CORE_RADIUS, createHelicalProject } from "../project/presetHelical.js";
 import { errorMessageOf } from "../project/errors.js";
 import { PRESET_NOSING } from "../project/presets.js";
@@ -548,10 +548,16 @@ export function proposeDesigns(input: AssistantInput): AssistantResult {
     };
     return debillarde ? [arc] : [baseJour, arc];
   };
-  const finalize = (p: Project): Project =>
-    intent.kind === "steel-profile" && !expected
-      ? applyStructureChoice(p, intent.kind, p.stair.structure.params).project
-      : p;
+  const finalize = (p: Project): Project => {
+    if (intent.kind !== "steel-profile") return p;
+    if (!expected) return applyStructureChoice(p, intent.kind, p.stair.structure.params).project;
+    // Section imposée (poteau déjà posé) : seule la ligne d'appui par défaut est écrite, comme
+    // pour tout choix neuf (pas de remarque de bascule, sous-lot K2d).
+    const params = explicitStructureParams(p, intent.kind, p.stair.structure.params);
+    return params === p.stair.structure.params
+      ? p
+      : { ...p, stair: { ...p.stair, structure: { kind: intent.kind, params: { ...params } } } };
+  };
 
   /** Grille d'emmarchement : minimum, recommandé, pas réguliers, plus grand qui tient. */
   const widthGrid = (b: EnumerationBounds): number[] => {

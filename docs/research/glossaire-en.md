@@ -108,6 +108,10 @@ En français, rien ne change : la hauteur de marche s'écrit déjà h (h1 pour l
 | Délardement, marche délardée          | Soffit chamfering _(usage)_         | —                       | Délardement du dessous des marches (soffite continu) |
 | Courbe rampante                       | Wreath                              | —                       |                                                  |
 | Jarret                                | Knee _(usage)_                      | —                       | Changement brusque de pente du limon ou de la main courante |
+| Limon coudé (tronçons soudés aux jarrets) | Cranked string _(usage)_        | Cranked stringer        | Profilés `steel-profile`, ligne des nez (QUESTIONS A41 K-Q6, **à valider**, B12) |
+| Tronçon (de limon coudé)              | Segment _(usage)_                   | —                       | Repères `LE2-1`… du bas vers le haut (A41 K-Q6, à valider) |
+| Barre droite sur la corde des nez     | Straight bar on the nosing chord    | —                       | Ligne d'appui `chord` des profilés (A41)         |
+| Gabarit des jarrets (marbre)          | Knee jig _(usage)_                  | —                       | Liste des jarrets du dossier PDF (CK17, à valider) |
 | Point de naissance                    | Springing point _(usage)_           | —                       |                                                  |
 | Raccord, adoucissement                | Easing                              | —                       |                                                  |
 | Poteau                                | Newel post                          | —                       | « newel » dans les libellés courts               |

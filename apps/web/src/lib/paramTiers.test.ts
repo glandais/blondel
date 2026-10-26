@@ -647,9 +647,18 @@ describe("valeurs ◆ d'un projet", () => {
       expect(structureParamApplies(p, { stringerLine: "nosing" }, ["knee", leaf])).toBe(true);
     }
     expect(structureParamApplies(p, { stringerLine: "chord" }, ["stringerLine"])).toBe(true);
-    // Projet en barre droite (défaut) : aucun ◆ de jarret compté.
-    const m = buildModel(p);
-    expect(toValidateItems(p, m).filter((i) => i.key.includes(".knee."))).toEqual([]);
+    // Projet en barre droite : aucun ◆ de jarret compté.
+    const chord: Project = {
+      ...p,
+      stair: {
+        ...p.stair,
+        structure: { kind: "steel-profile", params: { stringerLine: "chord" } },
+      },
+    };
+    expect(
+      toValidateItems(chord, buildModel(chord)).filter((i) => i.key.includes(".knee.")),
+    ).toEqual([]);
+    // Limon coudé, explicite ou par défaut (paramètres vides, K-Q11, sous-lot K2d) : ◆ de jarret.
     const nosing: Project = {
       ...p,
       stair: {
@@ -657,9 +666,24 @@ describe("valeurs ◆ d'un projet", () => {
         structure: { kind: "steel-profile", params: { stringerLine: "nosing" } },
       },
     };
-    const keys = toValidateItems(nosing, buildModel(nosing)).map((i) => i.key);
-    expect(keys).toContain("stair.structure.params.knee.minSegmentLength");
-    expect(keys).toContain("stair.structure.params.knee.minKneeAngle");
+    for (const q of [nosing, p]) {
+      const keys = toValidateItems(q, buildModel(q)).map((i) => i.key);
+      expect(keys).toContain("stair.structure.params.knee.minSegmentLength");
+      expect(keys).toContain("stair.structure.params.knee.minKneeAngle");
+    }
+    // Escalier droit, paramètres vides ou `nosing` explicite : aucun jarret, aucun ◆ de jarret
+    // (invariant I1 : limon droit dans les deux réglages, K2d).
+    const straight = withStructure(createProject("straight"), "steel-profile");
+    for (const params of [{}, { stringerLine: "nosing" }]) {
+      const q: Project = {
+        ...straight,
+        stair: { ...straight.stair, structure: { kind: "steel-profile", params } },
+      };
+      expect(
+        structureParamApplies(q, { stringerLine: "nosing" }, ["knee", "minSegmentLength"]),
+      ).toBe(false);
+      expect(toValidateItems(q, buildModel(q)).filter((i) => i.key.includes(".knee."))).toEqual([]);
+    }
   });
 
   it("paramètres conditionnels du limon central et de la fixation des marches (A31)", () => {

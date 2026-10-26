@@ -228,7 +228,13 @@ describe("StepFigures : chiffres clés", () => {
     const model = load(steelProject());
     const t = createTranslator("fr");
     const f = fabricationStepFigures(model, 412.4, t);
-    expect(f.map((x) => x.value)).toEqual([String(model.parts.length), "412", "EXC1"]);
+    // Profilés en limon coudé par défaut (K-Q11, sous-lot K2d) : tronçons en composantes, non
+    // comptés deux fois ; jarrets et onglets soudés bout à bout, EXC2 (K-Q2).
+    expect(f.map((x) => x.value)).toEqual([
+      String(fabricatedParts(model.parts).length),
+      "412",
+      "EXC2",
+    ]);
     expect(fabricationStepFigures(null, undefined, t).map((x) => x.value)).toEqual(["–", "–", "–"]);
   });
 

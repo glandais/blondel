@@ -5201,80 +5201,107 @@ Total;;;;;;;49;;0,045832;;359,77;
 
 exports[`sorties de fabrication des exemples (stable-tiebreaks, S1) > exemple j3c-acceptance-01-upn > DXF des développés 1`] = `
 "
-fichiers 4
+fichiers 9
 LI1.dxf ×1 LI1 [stringer-inner-1]
   calques {"CONTOUR":1,"INFO":4,"JOINT":4,"TEXTE":2,"TRACAGE":15}
-  boîte {"min":{"x":0,"y":0},"max":{"x":917.397205,"y":240}}
-  contour 5 sommets CCW premier (101.065015, 0)
-  repère « LI1 » (458.698603, 120) dégagement 120 texte h 30 (458.698603, 120) (2 textes)
-  rectMin L 917.397205 l 240 axe (1, 0) coin (0, 0)
-  empreinte 081357ca5d2d50ff
-LE1.dxf ×1 LE1 [stringer-outer-1]
-  calques {"CONTOUR":1,"INFO":4,"JOINT":4,"TEXTE":2,"TRACAGE":15}
-  boîte {"min":{"x":0,"y":0},"max":{"x":1538.429975,"y":240}}
-  contour 5 sommets CCW premier (1538.429975, 49.890568)
-  repère « LE1 » (769.214987, 120) dégagement 120 texte h 30 (769.214987, 120) (2 textes)
-  rectMin L 1538.429975 l 240 axe (1, 0) coin (0, 0)
-  empreinte bdea9d63eb7c0d6b
+  boîte {"min":{"x":0,"y":0},"max":{"x":922.189076,"y":180}}
+  contour 5 sommets CCW premier (62.68098, 0)
+  repère « LI1 » (461.094538, 90) dégagement 90 texte h 30 (461.094538, 90) (2 textes)
+  rectMin L 922.189076 l 180 axe (1, 0) coin (0, 0)
+  empreinte ee78647ef76d25db
+LE1-1.dxf ×1 LE1-1 [stringer-outer-1-segment-1]
+  calques {"CONTOUR":1,"INFO":4,"JOINT":4,"TEXTE":2,"TRACAGE":13}
+  boîte {"min":{"x":0,"y":0},"max":{"x":950.954788,"y":180}}
+  contour 4 sommets CCW premier (860.966163, 180)
+  repère « LE1-1 » (475.477394, 90) dégagement 90 texte h 30 (475.477394, 90) (2 textes)
+  rectMin L 950.954788 l 180 axe (1, 0) coin (0, 0)
+  empreinte ead3f5081d23915c
+LE1-2.dxf ×1 LE1-2 [stringer-outer-1-segment-2]
+  calques {"CONTOUR":1,"INFO":4,"JOINT":4,"TEXTE":2,"TRACAGE":5}
+  boîte {"min":{"x":0,"y":0},"max":{"x":515.273251,"y":180}}
+  contour 4 sommets CCW premier (515.273251, 180)
+  repère « LE1-2 » (257.636625, 90) dégagement 90 texte h 30 (257.636625, 90) (2 textes)
+  rectMin L 515.273251 l 180 axe (1, 0) coin (0, 0)
+  empreinte aff8990e353714c9
+LE1-3.dxf ×1 LE1-3 [stringer-outer-1-segment-3]
+  calques {"CONTOUR":1,"INFO":4,"JOINT":4,"TEXTE":2}
+  boîte {"min":{"x":0,"y":0},"max":{"x":87.49687,"y":180}}
+  contour 4 sommets CCW premier (87.49687, 180)
+  repère « LE1-3 » (39.239831, 140.759549) dégagement 39.239831 texte h 21.874217 (39.239831, 140.759549) (2 textes)
+  rectMin L 180 l 87.49687 axe (0, 1) coin (87.49687, 0)
+  empreinte 99ebc66dad6b1583
 LI2.dxf ×1 LI2 [stringer-inner-2]
   calques {"CONTOUR":1,"INFO":4,"JOINT":4,"TEXTE":2,"TRACAGE":45}
-  boîte {"min":{"x":0,"y":0},"max":{"x":2889.428869,"y":240}}
+  boîte {"min":{"x":0,"y":0},"max":{"x":2837.394983,"y":180}}
   contour 4 sommets CCW premier (0, 0)
-  repère « LI2 » (1444.714435, 120) dégagement 120 texte h 30 (1444.714435, 120) (2 textes)
-  rectMin L 2889.428869 l 240 axe (1, 0) coin (0, 0)
-  empreinte ac0c70435a391039
-LE2.dxf ×1 LE2 [stringer-outer-2]
-  calques {"CONTOUR":1,"INFO":4,"JOINT":4,"TEXTE":2,"TRACAGE":55}
-  boîte {"min":{"x":0,"y":0},"max":{"x":3899.788741,"y":240}}
-  contour 4 sommets CCW premier (3731.024262, 240)
-  repère « LE2 » (1949.894371, 120) dégagement 120 texte h 30 (1949.894371, 120) (2 textes)
-  rectMin L 3899.788741 l 240 axe (1, 0) coin (0, 0)
-  empreinte 0b5c2fcc75318281
+  repère « LI2 » (1418.697491, 90) dégagement 90 texte h 30 (1418.697491, 90) (2 textes)
+  rectMin L 2837.394983 l 180 axe (1, 0) coin (0, 0)
+  empreinte ef7494c07b87d247
+LE2-1.dxf ×1 LE2-1 [stringer-outer-2-segment-1]
+  calques {"CONTOUR":1,"INFO":4,"JOINT":4,"TEXTE":2,"TRACAGE":4}
+  boîte {"min":{"x":0,"y":0},"max":{"x":80.69057,"y":180}}
+  contour 4 sommets CCW premier (80.69057, 180)
+  repère « LE2-1 » (43.759925, 36.931424) dégagement 36.930043 texte h 20.172642 (43.759925, 36.931424) (2 textes)
+  rectMin L 180 l 80.69057 axe (0, 1) coin (80.69057, 0)
+  empreinte 5e2f937d8664d9d2
+LE2-2.dxf ×1 LE2-2 [stringer-outer-2-segment-2]
+  calques {"CONTOUR":1,"INFO":4,"JOINT":4,"TEXTE":2,"TRACAGE":7}
+  boîte {"min":{"x":0,"y":0},"max":{"x":503.620759,"y":180}}
+  contour 4 sommets CCW premier (472.930189, 180)
+  repère « LE2-2 » (251.810379, 90) dégagement 90 texte h 30 (251.810379, 90) (2 textes)
+  rectMin L 503.620759 l 180 axe (1, 0) coin (0, 0)
+  empreinte 5ad5a77c94ae2da3
+LE2-3.dxf ×1 LE2-3 [stringer-outer-2-segment-3]
+  calques {"CONTOUR":1,"INFO":4,"JOINT":4,"TEXTE":2,"TRACAGE":9}
+  boîte {"min":{"x":0,"y":0},"max":{"x":468.615708,"y":180}}
+  contour 4 sommets CCW premier (461.171384, 180)
+  repère « LE2-3 » (234.307854, 90) dégagement 90 texte h 30 (234.307854, 90) (2 textes)
+  rectMin L 468.615708 l 180 axe (1, 0) coin (0, 0)
+  empreinte 4181534cef63bd4d
+LE2-4.dxf ×1 LE2-4 [stringer-outer-2-segment-4]
+  calques {"CONTOUR":1,"INFO":4,"JOINT":4,"TEXTE":2,"TRACAGE":44}
+  boîte {"min":{"x":0,"y":0},"max":{"x":2720.320113,"y":180}}
+  contour 4 sommets CCW premier (2700.163819, 180)
+  repère « LE2-4 » (1360.160057, 90) dégagement 90 texte h 30 (1360.160057, 90) (2 textes)
+  rectMin L 2720.320113 l 180 axe (1, 0) coin (0, 0)
+  empreinte ffb595d4c550fb8c
 "
 `;
 
 exports[`sorties de fabrication des exemples (stable-tiebreaks, S1) > exemple j3c-acceptance-01-upn > fiche de débit 1`] = `
 "
 groupes 5
-groupe steel-painted section « L 40 × 40 × 4 » {"quantity":28,"lengthM":4.329199,"massKg":10.331201,"massNotes":[]}
-  CR1 ×1 71.770521×40×40 0.171273 - stock
-  CR2 ×1 236.765147×40×40 0.565016 - stock
-  CR3 ×2 72.423664×40×40 0.172832 - stock
-  CR4 ×1 273.364528×40×40 0.652357 - stock
-  CR5 ×1 308.916723×40×40 0.737199 - stock
-  CR6 ×1 346.134074×40×40 0.826014 - stock
-  CR7 ×1 74.498979×40×40 0.177784 - stock
-  CR8 ×1 175.33426×40×40 0.418418 - stock
-  CR9 ×1 73.156322×40×40 0.17458 - stock
-  CR10 ×1 151.466188×40×40 0.361459 - stock
-  CR11 ×2 82.413352×40×40 0.196671 - stock
-  CR12 ×3 200.022752×40×40 0.477334 - stock
-  CR13 ×1 50.502783×40×40 0.12052 - stock
-  CR14 ×1 66.458068×40×40 0.158596 - stock
-  CR15 ×1 198.691115×40×40 0.474156 - stock
-  CR16 ×1 98.368636×40×40 0.234747 - stock
-  CR17 ×1 193.314899×40×40 0.461327 - stock
-  CR18 ×1 114.32392×40×40 0.272823 - stock
-  CR19 ×1 187.938684×40×40 0.448497 - stock
-  CR20 ×1 130.279204×40×40 0.310898 - stock
-  CR21 ×1 182.562468×40×40 0.435667 - stock
-  CR22 ×1 146.234488×40×40 0.348974 - stock
-  CR23 ×1 177.186252×40×40 0.422837 - stock
-  CR24 ×1 162.189772×40×40 0.38705 - stock
-groupe steel-painted section « tube carré 125 × 125 × 4 » {"quantity":1,"lengthM":1.103396,"massKg":16.768966,"massNotes":[]}
-  PT1 ×1 1103.395682×125×125 16.768966 - stock
-groupe steel-painted section « UPN 240 (S235) » {"quantity":4,"lengthM":9.441902,"massKg":313.523073,"massNotes":[]}
-  LE1 ×1 1631.375836×240×85 54.17065 - stock
-  LE2 ×1 4003.699967×240×85 132.944859 - stock
-  LI1 ×1 917.397205×240×85 30.462633 - stock
-  LI2 ×1 2889.428869×240×85 95.94493 - stock
-groupe wood-oak thickness 20 {"quantity":15,"lengthM":12.587676,"volumeM3":0.044676,"massKg":31.272943,"massNotes":["masse volumique à valider"]}
+groupe steel-painted section « L 40 × 40 × 4 » {"quantity":28,"lengthM":2.122939,"massKg":5.066182,"massNotes":[]}
+  CR1 ×1 80.300057×40×40 0.191628 - stock
+  CR2 ×1 82.497545×40×40 0.196872 - stock
+  CR3 ×1 78.838234×40×40 0.18814 - stock
+  CR4 ×1 81.035723×40×40 0.193384 - stock
+  CR5 ×1 74.397962×40×40 0.177543 - stock
+  CR6 ×1 83.288722×40×40 0.19876 - stock
+  CR7 ×1 121.262081×40×40 0.28938 - stock
+  CR8 ×1 61.101904×40×40 0.145814 - stock
+  CR9 ×1 84.961604×40×40 0.202752 - stock
+  CR10 ×1 55.246011×40×40 0.131839 - stock
+  CR11 ×18 73.333839×40×40 0.175004 - stock
+groupe steel-painted section « tube carré 110 × 110 × 4 » {"quantity":1,"lengthM":1.128654,"massKg":15.026444,"massNotes":[]}
+  PT1 ×1 1128.653705×110×110 15.026444 - stock
+groupe steel-painted section « UPN 180 (S235) » {"quantity":9,"lengthM":9.226556,"massKg":202.799703,"massNotes":[]}
+  LE1-1 ×1 950.954788×180×70 20.901986 - stock
+  LE1-2 ×1 515.273251×180×70 11.325706 - stock
+  LE1-3 ×1 157.49687×180×70 3.461781 - stock
+  LE2-1 ×1 150.69057×180×70 3.312179 - stock
+  LE2-2 ×1 503.620759×180×70 11.069584 - stock
+  LE2-3 ×1 468.615708×180×70 10.300173 - stock
+  LE2-4 ×1 2720.320113×180×70 59.792636 - stock
+  LI1 ×1 922.189076×180×70 20.269716 - stock
+  LI2 ×1 2837.394983×180×70 62.365942 - stock
+groupe wood-oak thickness 20 {"quantity":15,"lengthM":12.534862,"volumeM3":0.044486,"massKg":31.139853,"massNotes":["masse volumique à valider"]}
   CM1 ×1 800×140×20 1.568 - stock
-  CM2 ×1 840.312293×180×20 2.117587 - stock
-  CM3 ×1 948.514726×180×20 2.390257 - stock
-  CM4 ×1 1157.671342×180×20 2.917332 - stock
-  CM5 ×1 835.345653×180×20 2.105071 - stock
-  CM6 ×1 805.831743×180×20 2.030696 - stock
+  CM2 ×1 835.237597×180×20 2.104799 - stock
+  CM3 ×1 932.999132×180×20 2.351158 - stock
+  CM4 ×1 1129.824745×180×20 2.847158 - stock
+  CM5 ×1 836.800776×180×20 2.108738 - stock
+  CM6 ×1 800×180×20 2.016 - stock
   CM7 ×1 800×180×20 2.016 - stock
   CM8 ×1 800×180×20 2.016 - stock
   CM9 ×1 800×180×20 2.016 - stock
@@ -5284,13 +5311,13 @@ groupe wood-oak thickness 20 {"quantity":15,"lengthM":12.587676,"volumeM3":0.044
   CM13 ×1 800×180×20 2.016 - stock
   CM14 ×1 800×180×20 2.016 - stock
   CM15 ×1 800×180×20 2.016 - stock
-groupe wood-oak thickness 40 {"quantity":14,"lengthM":12.344676,"volumeM3":0.152848,"massKg":82.302148,"massNotes":["masse volumique à valider"]}
-  M1 ×1 800×379.100322×40 5.611797 - stock
-  M2 ×1 956.016081×359.961077×40 5.642094 - stock
-  M3 ×1 1217.495104×422.270925×40 7.109556 - stock
-  M4 ×1 1230.412826×411.433723×40 7.836549 - stock
-  M5 ×1 910.706127×337.543408×40 5.697566 - stock
-  M6 ×1 830.046195×296.249133×40 5.60051 - stock
+groupe wood-oak thickness 40 {"quantity":14,"lengthM":12.241605,"volumeM3":0.151466,"massKg":82.301493,"massNotes":["masse volumique à valider"]}
+  M1 ×1 800×370.485974×40 5.610376 - stock
+  M2 ×1 942.065683×356.026115×40 5.637749 - stock
+  M3 ×1 1186.54122×422.490039×40 7.027611 - stock
+  M4 ×1 1217.875752×418.044379×40 7.912414 - stock
+  M5 ×1 895.12191×384.602072×40 5.708756 - stock
+  M6 ×1 800×250.022752×40 5.60051 - stock
   M7 ×1 800×250.022752×40 5.60051 - stock
   M8 ×1 800×250.022752×40 5.60051 - stock
   M9 ×1 800×250.022752×40 5.60051 - stock
@@ -5306,40 +5333,32 @@ groupe wood-oak thickness 40 {"quantity":14,"lengthM":12.344676,"volumeM3":0.152
 exports[`sorties de fabrication des exemples (stable-tiebreaks, S1) > exemple j3c-acceptance-01-upn > liste de débit CSV 1`] = `
 "
 ﻿Repère;Désignation;Matériau;Section;Longueur (mm);Largeur (mm);Épaisseur (mm);Quantité;Volume unitaire (m³);Volume total (m³);Masse unitaire (kg);Masse totale (kg);Remarque masse
-LE1;Limon mural UPN 240, volée 1;Acier peint;UPN 240 (S235);1631,4;240,0;85,0;1;0,006901;0,006901;54,17;54,17;
-LE2;Limon mural UPN 240, volée 2;Acier peint;UPN 240 (S235);4003,7;240,0;85,0;1;0,016936;0,016936;132,94;132,94;
-LI1;Limon de jour UPN 240, volée 1;Acier peint;UPN 240 (S235);917,4;240,0;85,0;1;0,003881;0,003881;30,46;30,46;
-LI2;Limon de jour UPN 240, volée 2;Acier peint;UPN 240 (S235);2889,4;240,0;85,0;1;0,012222;0,012222;95,94;95,94;
-CR1;Cornière soudée;Acier peint;L 40 × 40 × 4;71,8;40,0;40,0;1;0,000022;0,000022;0,17;0,17;
-CR2;Cornière soudée;Acier peint;L 40 × 40 × 4;236,8;40,0;40,0;1;0,000072;0,000072;0,57;0,57;
-CR3;Cornière soudée;Acier peint;L 40 × 40 × 4;72,4;40,0;40,0;2;0,000022;0,000044;0,17;0,35;
-CR4;Cornière soudée;Acier peint;L 40 × 40 × 4;273,4;40,0;40,0;1;0,000083;0,000083;0,65;0,65;
-CR5;Cornière soudée;Acier peint;L 40 × 40 × 4;308,9;40,0;40,0;1;0,000094;0,000094;0,74;0,74;
-CR6;Cornière soudée;Acier peint;L 40 × 40 × 4;346,1;40,0;40,0;1;0,000105;0,000105;0,83;0,83;
-CR7;Cornière soudée;Acier peint;L 40 × 40 × 4;74,5;40,0;40,0;1;0,000023;0,000023;0,18;0,18;
-CR8;Cornière soudée;Acier peint;L 40 × 40 × 4;175,3;40,0;40,0;1;0,000053;0,000053;0,42;0,42;
-CR9;Cornière soudée;Acier peint;L 40 × 40 × 4;73,2;40,0;40,0;1;0,000022;0,000022;0,17;0,17;
-CR10;Cornière soudée;Acier peint;L 40 × 40 × 4;151,5;40,0;40,0;1;0,000046;0,000046;0,36;0,36;
-CR11;Cornière soudée;Acier peint;L 40 × 40 × 4;82,4;40,0;40,0;2;0,000025;0,000050;0,20;0,39;
-CR12;Cornière soudée;Acier peint;L 40 × 40 × 4;200,0;40,0;40,0;3;0,000061;0,000182;0,48;1,43;
-CR13;Cornière soudée;Acier peint;L 40 × 40 × 4;50,5;40,0;40,0;1;0,000015;0,000015;0,12;0,12;
-CR14;Cornière soudée;Acier peint;L 40 × 40 × 4;66,5;40,0;40,0;1;0,000020;0,000020;0,16;0,16;
-CR15;Cornière soudée;Acier peint;L 40 × 40 × 4;198,7;40,0;40,0;1;0,000060;0,000060;0,47;0,47;
-CR16;Cornière soudée;Acier peint;L 40 × 40 × 4;98,4;40,0;40,0;1;0,000030;0,000030;0,23;0,23;
-CR17;Cornière soudée;Acier peint;L 40 × 40 × 4;193,3;40,0;40,0;1;0,000059;0,000059;0,46;0,46;
-CR18;Cornière soudée;Acier peint;L 40 × 40 × 4;114,3;40,0;40,0;1;0,000035;0,000035;0,27;0,27;
-CR19;Cornière soudée;Acier peint;L 40 × 40 × 4;187,9;40,0;40,0;1;0,000057;0,000057;0,45;0,45;
-CR20;Cornière soudée;Acier peint;L 40 × 40 × 4;130,3;40,0;40,0;1;0,000040;0,000040;0,31;0,31;
-CR21;Cornière soudée;Acier peint;L 40 × 40 × 4;182,6;40,0;40,0;1;0,000055;0,000055;0,44;0,44;
-CR22;Cornière soudée;Acier peint;L 40 × 40 × 4;146,2;40,0;40,0;1;0,000044;0,000044;0,35;0,35;
-CR23;Cornière soudée;Acier peint;L 40 × 40 × 4;177,2;40,0;40,0;1;0,000054;0,000054;0,42;0,42;
-CR24;Cornière soudée;Acier peint;L 40 × 40 × 4;162,2;40,0;40,0;1;0,000049;0,000049;0,39;0,39;
-M1;Marche 1;Chêne;;800,0;379,1;40,0;1;0,008017;0,008017;5,61;5,61;masse volumique à valider
-M2;Marche 2;Chêne;;956,0;360,0;40,0;1;0,008060;0,008060;5,64;5,64;masse volumique à valider
-M3;Marche 3;Chêne;;1217,5;422,3;40,0;1;0,010157;0,010157;7,11;7,11;masse volumique à valider
-M4;Marche 4;Chêne;;1230,4;411,4;40,0;1;0,011195;0,011195;7,84;7,84;masse volumique à valider
-M5;Marche 5;Chêne;;910,7;337,5;40,0;1;0,008139;0,008139;5,70;5,70;masse volumique à valider
-M6;Marche 6;Chêne;;830,0;296,2;40,0;1;0,008001;0,008001;5,60;5,60;masse volumique à valider
+LE1-1;Limon mural UPN 180, volée 1, tronçon 1;Acier peint;UPN 180 (S235);951,0;180,0;70,0;1;0,002663;0,002663;20,90;20,90;
+LE1-2;Limon mural UPN 180, volée 1, tronçon 2;Acier peint;UPN 180 (S235);515,3;180,0;70,0;1;0,001443;0,001443;11,33;11,33;
+LE1-3;Limon mural UPN 180, volée 1, tronçon 3;Acier peint;UPN 180 (S235);157,5;180,0;70,0;1;0,000441;0,000441;3,46;3,46;
+LE2-1;Limon mural UPN 180, volée 2, tronçon 1;Acier peint;UPN 180 (S235);150,7;180,0;70,0;1;0,000422;0,000422;3,31;3,31;
+LE2-2;Limon mural UPN 180, volée 2, tronçon 2;Acier peint;UPN 180 (S235);503,6;180,0;70,0;1;0,001410;0,001410;11,07;11,07;
+LE2-3;Limon mural UPN 180, volée 2, tronçon 3;Acier peint;UPN 180 (S235);468,6;180,0;70,0;1;0,001312;0,001312;10,30;10,30;
+LE2-4;Limon mural UPN 180, volée 2, tronçon 4;Acier peint;UPN 180 (S235);2720,3;180,0;70,0;1;0,007617;0,007617;59,79;59,79;
+LI1;Limon de jour UPN 180, volée 1;Acier peint;UPN 180 (S235);922,2;180,0;70,0;1;0,002582;0,002582;20,27;20,27;
+LI2;Limon de jour UPN 180, volée 2;Acier peint;UPN 180 (S235);2837,4;180,0;70,0;1;0,007945;0,007945;62,37;62,37;
+CR1;Cornière soudée;Acier peint;L 40 × 40 × 4;80,3;40,0;40,0;1;0,000024;0,000024;0,19;0,19;
+CR2;Cornière soudée;Acier peint;L 40 × 40 × 4;82,5;40,0;40,0;1;0,000025;0,000025;0,20;0,20;
+CR3;Cornière soudée;Acier peint;L 40 × 40 × 4;78,8;40,0;40,0;1;0,000024;0,000024;0,19;0,19;
+CR4;Cornière soudée;Acier peint;L 40 × 40 × 4;81,0;40,0;40,0;1;0,000025;0,000025;0,19;0,19;
+CR5;Cornière soudée;Acier peint;L 40 × 40 × 4;74,4;40,0;40,0;1;0,000023;0,000023;0,18;0,18;
+CR6;Cornière soudée;Acier peint;L 40 × 40 × 4;83,3;40,0;40,0;1;0,000025;0,000025;0,20;0,20;
+CR7;Cornière soudée;Acier peint;L 40 × 40 × 4;121,3;40,0;40,0;1;0,000037;0,000037;0,29;0,29;
+CR8;Cornière soudée;Acier peint;L 40 × 40 × 4;61,1;40,0;40,0;1;0,000019;0,000019;0,15;0,15;
+CR9;Cornière soudée;Acier peint;L 40 × 40 × 4;85,0;40,0;40,0;1;0,000026;0,000026;0,20;0,20;
+CR10;Cornière soudée;Acier peint;L 40 × 40 × 4;55,2;40,0;40,0;1;0,000017;0,000017;0,13;0,13;
+CR11;Cornière soudée;Acier peint;L 40 × 40 × 4;73,3;40,0;40,0;18;0,000022;0,000401;0,18;3,15;
+M1;Marche 1;Chêne;;800,0;370,5;40,0;1;0,008015;0,008015;5,61;5,61;masse volumique à valider
+M2;Marche 2;Chêne;;942,1;356,0;40,0;1;0,008054;0,008054;5,64;5,64;masse volumique à valider
+M3;Marche 3;Chêne;;1186,5;422,5;40,0;1;0,010039;0,010039;7,03;7,03;masse volumique à valider
+M4;Marche 4;Chêne;;1217,9;418,0;40,0;1;0,011303;0,011303;7,91;7,91;masse volumique à valider
+M5;Marche 5;Chêne;;895,1;384,6;40,0;1;0,008155;0,008155;5,71;5,71;masse volumique à valider
+M6;Marche 6;Chêne;;800,0;250,0;40,0;1;0,008001;0,008001;5,60;5,60;masse volumique à valider
 M7;Marche 7;Chêne;;800,0;250,0;40,0;1;0,008001;0,008001;5,60;5,60;masse volumique à valider
 M8;Marche 8;Chêne;;800,0;250,0;40,0;1;0,008001;0,008001;5,60;5,60;masse volumique à valider
 M9;Marche 9;Chêne;;800,0;250,0;40,0;1;0,008001;0,008001;5,60;5,60;masse volumique à valider
@@ -5349,11 +5368,11 @@ M12;Marche 12;Chêne;;800,0;250,0;40,0;1;0,008001;0,008001;5,60;5,60;masse volum
 M13;Marche 13;Chêne;;800,0;250,0;40,0;1;0,008001;0,008001;5,60;5,60;masse volumique à valider
 M14;Marche 14;Chêne;;800,0;250,0;40,0;1;0,008001;0,008001;5,60;5,60;masse volumique à valider
 CM1;Contremarche 1;Chêne;;800,0;140,0;20,0;1;0,002240;0,002240;1,57;1,57;masse volumique à valider
-CM2;Contremarche 2;Chêne;;840,3;180,0;20,0;1;0,003025;0,003025;2,12;2,12;masse volumique à valider
-CM3;Contremarche 3;Chêne;;948,5;180,0;20,0;1;0,003415;0,003415;2,39;2,39;masse volumique à valider
-CM4;Contremarche 4;Chêne;;1157,7;180,0;20,0;1;0,004168;0,004168;2,92;2,92;masse volumique à valider
-CM5;Contremarche 5;Chêne;;835,3;180,0;20,0;1;0,003007;0,003007;2,11;2,11;masse volumique à valider
-CM6;Contremarche 6;Chêne;;805,8;180,0;20,0;1;0,002901;0,002901;2,03;2,03;masse volumique à valider
+CM2;Contremarche 2;Chêne;;835,2;180,0;20,0;1;0,003007;0,003007;2,10;2,10;masse volumique à valider
+CM3;Contremarche 3;Chêne;;933,0;180,0;20,0;1;0,003359;0,003359;2,35;2,35;masse volumique à valider
+CM4;Contremarche 4;Chêne;;1129,8;180,0;20,0;1;0,004067;0,004067;2,85;2,85;masse volumique à valider
+CM5;Contremarche 5;Chêne;;836,8;180,0;20,0;1;0,003012;0,003012;2,11;2,11;masse volumique à valider
+CM6;Contremarche 6;Chêne;;800,0;180,0;20,0;1;0,002880;0,002880;2,02;2,02;masse volumique à valider
 CM7;Contremarche 7;Chêne;;800,0;180,0;20,0;1;0,002880;0,002880;2,02;2,02;masse volumique à valider
 CM8;Contremarche 8;Chêne;;800,0;180,0;20,0;1;0,002880;0,002880;2,02;2,02;masse volumique à valider
 CM9;Contremarche 9;Chêne;;800,0;180,0;20,0;1;0,002880;0,002880;2,02;2,02;masse volumique à valider
@@ -5363,8 +5382,8 @@ CM12;Contremarche 12;Chêne;;800,0;180,0;20,0;1;0,002880;0,002880;2,02;2,02;mass
 CM13;Contremarche 13;Chêne;;800,0;180,0;20,0;1;0,002880;0,002880;2,02;2,02;masse volumique à valider
 CM14;Contremarche 14;Chêne;;800,0;180,0;20,0;1;0,002880;0,002880;2,02;2,02;masse volumique à valider
 CM15;Contremarche 15;Chêne;;800,0;180,0;20,0;1;0,002880;0,002880;2,02;2,02;masse volumique à valider
-PT1;Poteau d'angle acier, tournant 1;Acier peint;tube carré 125 × 125 × 4;1103,4;125,0;125,0;1;0,002136;0,002136;16,77;16,77;
-Total;;;;;;;62;;0,205643;;454,23;masse volumique à valider
+PT1;Poteau d'angle acier, tournant 1;Acier peint;tube carré 110 × 110 × 4;1128,7;110,0;110,0;1;0,001914;0,001914;15,03;15,03;
+Total;;;;;;;67;;0,190455;;336,38;masse volumique à valider
 
 --- repères en double 0
 "

@@ -6,6 +6,7 @@ import { buildModel, clearModelCache } from "../pipeline/build.js";
 import { DEFAULT_NEWEL_SIZE, suggestFixes } from "./fixes.js";
 import { newelRequiredStructures } from "./newel.js";
 import { createProject, deepMerge, PRESET_IDS } from "./presets.js";
+import { applyStructureChoice } from "./structureChoice.js";
 
 beforeEach(() => clearModelCache());
 
@@ -68,12 +69,12 @@ describe("suggestFixes — jour à angle vif et structure à poteau", () => {
 });
 
 describe("suggestFixes — poteau des profilés (décision A13)", () => {
-  it("poteau de 100 mm sous des UPN : poteau élargi proposé, qui lève FAB_POTEAU_RECEPTION, stable", () => {
+  it("poteau de 100 mm sous des UPN (barre droite) : poteau élargi proposé, qui lève FAB_POTEAU_RECEPTION, stable", () => {
     const base = createProject("quarter-left");
     const p = with_(base, {
       stair: {
         ...base.stair,
-        structure: { kind: "steel-profile", params: { family: "UPN" } },
+        structure: { kind: "steel-profile", params: { family: "UPN", stringerLine: "chord" } },
         layout: {
           ...base.stair.layout,
           turns: base.stair.layout.turns.map((t) => ({
@@ -101,6 +102,38 @@ describe("suggestFixes — poteau des profilés (décision A13)", () => {
     const mq = buildModel(q);
     expect(reception(mq)).toEqual([]);
     expect(suggestFixes(q, mq).some((f) => f.id === "newel-profile")).toBe(false);
+  });
+
+  it("limon coudé (défaut depuis K2d) : la correction lue sur l'aile du modèle converge en deux applications vers le poteau de `applyStructureChoice` (quart : 110 / 35 puis 120 / 40)", () => {
+    // La correction suit l'aile de la section du modèle courant (un pas du point fixe) ; en limon
+    // coudé, la section remonte avec le poteau (UPN 180 au poteau de 100 mm, UPN 220 à 110 / 35).
+    const base = createProject("quarter-left");
+    let p = with_(base, {
+      stair: {
+        ...base.stair,
+        structure: { kind: "steel-profile", params: { family: "UPN" } },
+        layout: {
+          ...base.stair.layout,
+          turns: base.stair.layout.turns.map((t) => ({
+            ...t,
+            inner: { kind: "newel", size: DEFAULT_NEWEL_SIZE },
+          })),
+        },
+      },
+    });
+    const steps: unknown[] = [];
+    for (let k = 0; k < 4; k++) {
+      const fix = suggestFixes(p, buildModel(p)).find((f) => f.id === "newel-profile");
+      if (!fix) break;
+      p = apply(p, fix.patch);
+      steps.push(p.stair.layout.turns[0]!.inner);
+    }
+    expect(steps).toEqual([
+      { kind: "newel", size: 110, offset: 35 },
+      { kind: "newel", size: 120, offset: 40 },
+    ]);
+    const chosen = applyStructureChoice(base, "steel-profile", { family: "UPN" }).project;
+    expect(p.stair.layout.turns[0]!.inner).toEqual(chosen.stair.layout.turns[0]!.inner);
   });
 
   it("autres structures : tout poteau convient, rien à proposer", () => {

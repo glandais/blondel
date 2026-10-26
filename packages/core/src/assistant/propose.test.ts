@@ -132,6 +132,28 @@ describe("cas d'acceptation n° 1 (H 2 700, trémie 2 800 × 900, dalle 200)", (
     }
   });
 
+  it("limons en profilés : proposition = choix neuf, ligne d'appui écrite, jamais la remarque de bascule (K-Q11, sous-lot K2d)", () => {
+    // Préférence telle que l'interface l'envoie (`{ kind }` seul), puis section imposée (poteau
+    // posé sans point fixe) : chaque proposition à tournant écrit `stringerLine` = `nosing` ; la
+    // remarque « limon coudé par défaut depuis cette version » reste réservée aux projets
+    // enregistrés sans le paramètre.
+    for (const structure of [
+      { kind: "steel-profile" },
+      { kind: "steel-profile", params: { section: "UPN 200" } },
+    ]) {
+      const r = proposeUntimed({
+        site: ACCEPTANCE_SITE,
+        preferences: { structure, typologies: ["quarter"] },
+      });
+      expect(r.candidates.length).toBeGreaterThan(0);
+      for (const c of r.candidates) {
+        expect(c.project.stair.structure.params["stringerLine"]).toBe("nosing");
+        const notes = buildModel(c.project).notes ?? [];
+        expect(notes.map((n) => n.key)).not.toContain("structure.steelProfile.note.defaultCranked");
+      }
+    }
+  });
+
   it("budget : ≤ 2 s (appelable dans le Web Worker)", () => {
     const t0 = performance.now();
     const r = proposeDesigns({ site: ACCEPTANCE_SITE });
@@ -158,6 +180,22 @@ describe("cas d'acceptation n° 1 (H 2 700, trémie 2 800 × 900, dalle 200)", (
     const elapsed = performance.now() - t0;
     console.info(
       `assistant, profilés coudés : ${elapsed.toFixed(0)} ms, ${r.stats.enumerated} variantes, ${r.stats.built} modèles`,
+    );
+    expect(r.candidates.length).toBeGreaterThan(0);
+    expect(elapsed).toBeLessThanOrEqual(BUDGET_MS * FACTOR);
+    if (FACTOR === 1) expect(r.stats.truncated).toBe(false);
+  });
+
+  it("budget : ≤ 2 s en profilés à paramètres sans ligne d'appui (limon coudé par défaut, K-Q11, sous-lot K2d)", () => {
+    // Mesuré à 0,96 s pour `nosing` explicite hors charge (sous-lot K2d).
+    const t0 = performance.now();
+    const r = proposeDesigns({
+      site: ACCEPTANCE_SITE,
+      preferences: { structure: { kind: "steel-profile", params: { family: "UPN" } } },
+    });
+    const elapsed = performance.now() - t0;
+    console.info(
+      `assistant, profilés par défaut : ${elapsed.toFixed(0)} ms, ${r.stats.enumerated} variantes, ${r.stats.built} modèles`,
     );
     expect(r.candidates.length).toBeGreaterThan(0);
     expect(elapsed).toBeLessThanOrEqual(BUDGET_MS * FACTOR);

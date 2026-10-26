@@ -12,6 +12,7 @@ import {
   deepMerge,
   epureDeviations,
   errorMessageOf,
+  explicitStructureParams,
   getStructure,
   stableStringify,
   structureAcceptsLayout,
@@ -360,7 +361,11 @@ export function applyVariant(
     stair: {
       ...project.stair,
       layout,
-      structure: { kind: row.kind, params: { ...row.params } },
+      // Choix neuf : ligne d'appui par défaut écrite (pas de remarque de bascule, K2d).
+      structure: {
+        kind: row.kind,
+        params: { ...explicitStructureParams(project, row.kind, row.params) },
+      },
     },
   };
 }

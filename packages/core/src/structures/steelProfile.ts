@@ -20,7 +20,9 @@
  *   de la coupe reportés après soudage. Marche au coin du mur (K-Q4, K2e) : une cornière
  *   exigée, les autres gardées si elles tiennent dans la section, retirées sinon avec une
  *   remarque (`crankedSectionPlan`) ; une marche sans appui côté jour (K-Q16) et les paliers
- *   (K-Q18) gardent toutes leurs cornières (K2e2). Défaut `chord` : barre droite inchangée.
+ *   (K-Q18) gardent toutes leurs cornières (K2e2). Limon coudé par défaut depuis le sous-lot K2d
+ *   (K-Q11) ; `chord` : barre droite inchangée. Jarrets et onglets du limon coudé soudés bout à
+ *   bout (K-Q2, EXC2) ; liste des jarrets sur la pièce finie (`Part.jig`, CK17).
  * - **Choix de section** : une section du catalogue (`catalog/`) ou `auto` = la plus légère de
  *   la famille qui (1) loge les supports dans la hauteur d'âme et (2) passe le
  *   **prédimensionnement indicatif** (`precheck/` : L/200, contrainte, f₁ ≥ 5 Hz) pour tous les
@@ -138,6 +140,7 @@ import {
   crankedSingleNote,
   crankedSweepPath,
   cornerAngleRemovedNote,
+  cornerPartnerOf,
   cornerSupportGroups,
   cornerSupportKey,
   kneeNormal,
@@ -270,12 +273,14 @@ export const SteelProfileParamsSchema = z.object({
   precheck: PrecheckSettingsSchema.prefault({}),
   /**
    * Ligne d'appui des limons (CK16) : `chord` = barre droite sur la corde des nez de chaque face
-   * (convention historique) ; `nosing` = limon coudé sur la ligne des nez, jarret à chaque nez où
-   * la pente change, partie de niveau aux coins en plan, repli par face sur la barre droite quand
-   * le limon coudé y est infaisable ou plus exigeant (QUESTIONS A13, A41 : K-Q1, K-Q3, K-Q7,
-   * K-Q12, K-Q13). Défaut `chord` jusqu'à la bascule décidée (K-Q11, sous-lot K2d).
+   * (convention historique, toujours disponible) ; `nosing` = limon coudé sur la ligne des nez,
+   * jarret à chaque nez où la pente change, partie de niveau aux coins en plan, repli par face sur
+   * la barre droite quand le limon coudé y est infaisable ou plus exigeant (QUESTIONS A13, A41 :
+   * K-Q1, K-Q3, K-Q7, K-Q12, K-Q13). **Défaut `nosing`** depuis la bascule décidée (K-Q11,
+   * sous-lot K2d) : un projet enregistré sans ce paramètre est recalculé en limon coudé, avec la
+   * remarque `structure.steelProfile.note.defaultCranked` (escaliers droits inchangés, CK7).
    */
-  stringerLine: z.enum(["chord", "nosing"]).default("chord"),
+  stringerLine: z.enum(["chord", "nosing"]).default("nosing"),
   /**
    * Nettoyage des jarrets du limon coudé (K-Q9 : longueur minimale de tronçon 50 mm, angle
    * minimal de jarret 0,5°, **à valider**, provenance dans `profileBearing.ts`) ; lu seulement
@@ -931,9 +936,16 @@ export function buildSteelProfile(
     faceNeed,
     cage,
   };
+  let crankedButtTotal = 0;
+  // Rang de la remarque de bascule du défaut (K-Q11), avant celles des limons.
+  const defaultNoteAt = notes.length;
   for (const p of pres) {
     const fb = bentOf(p, s);
     const mine = mineOf.get(p.face.id) ?? [];
+    // Barre droite dont l'onglet de départ rejoint un limon coudé : onglet du limon coudé, soudé
+    // bout à bout (K-Q2, sous-lot K2d) ; toujours faux en `chord`.
+    const partner = nosing && !fb ? cornerPartnerOf(pres, p) : undefined;
+    const cornerButt = partner !== undefined && bentOf(partner, s) !== undefined;
     const built = fb
       ? buildCrankedProfileStringer(sctx, p, fb, mine)
       : buildProfileStringer(
@@ -941,6 +953,7 @@ export function buildSteelProfile(
           p,
           mine,
           nosing ? planOf(s).faces.get(p.face.id)?.fallback : undefined,
+          cornerButt,
         );
     notes.push(...built.notes);
     if (!built.stringer) {
@@ -966,11 +979,24 @@ export function buildSteelProfile(
     }
     supportMargins.push(...built.supportMargins);
     buttWeldTotal += built.buttWeld;
+    crankedButtTotal += built.crankedButtWeld;
     beams.push(built.beam);
     heightFindings.push(built.height);
     bearingItems.push(...built.bearing);
     stringers.push(built.stringer);
     if (built.spliceNote) notes.push(built.spliceNote);
+  }
+  // Bascule du défaut (décision K-Q11, sous-lot K2d) : ligne d'appui non précisée dans le projet
+  // (projet enregistré avant cette version, ou paramètres de structure vides) et au moins un
+  // limon construit coudé : le projet est recalculé en limon coudé, la barre droite reste
+  // disponible. Aucune remarque sur un escalier droit (faces à une seule pente, CK7) ni quand le
+  // palier est refusé (retour anticipé ci-dessus).
+  if (
+    nosing &&
+    !Object.hasOwn(project.stair.structure.params, "stringerLine") &&
+    stringers.some((x) => x.bearing !== undefined)
+  ) {
+    notes.splice(defaultNoteAt, 0, msg("structure.steelProfile.note.defaultCranked"));
   }
 
   // Cornières retirées au coin du mur (K-Q4, K2e) : une remarque par marche, dans l'ordre des
@@ -1047,6 +1073,7 @@ export function buildSteelProfile(
   const exc = deduceExecutionClass({
     grade,
     buttWeld: buttWeldTotal,
+    ...(crankedButtTotal > 0 ? { crankedButtWeld: crankedButtTotal } : {}),
     welded: weldTotal + buttWeldTotal > 1e-9,
   });
   addProfileChecks(checks, {
@@ -1481,6 +1508,11 @@ interface BuiltProfileStringer {
   readonly notes: Message[];
   readonly supportMargins: PartCheckItem[];
   readonly buttWeld: Mm;
+  /**
+   * Part de `buttWeld` faite des jarrets et de l'onglet de coin d'un limon coudé (K-Q2, sous-lot
+   * K2d), nommée à part dans la classe d'exécution.
+   */
+  readonly crankedButtWeld: Mm;
   readonly beam: PrecheckedBeam;
   readonly height: PartCheckItem;
   readonly bearing: CheckItem[];
@@ -1492,13 +1524,16 @@ interface BuiltProfileStringer {
 
 /**
  * Étape 7 : un limon en profilé (âme dépliée, perçages et traçage des supports, coupes
- * d'extrémité, débit et aboutages, solide extrudé, prédimensionnement).
+ * d'extrémité, débit et aboutages, solide extrudé, prédimensionnement). `cornerButt` : onglet de
+ * départ à un coin dont le limon partenaire est coudé (`stringerLine` = `nosing`), soudé bout à
+ * bout (K-Q2, sous-lot K2d) ; le total des cordons est inchangé.
  */
 function buildProfileStringer(
   sc: ProfileStringerContext,
   p: Pre,
   mine: readonly SupportPlacement[],
   crankedFallback?: CrankedFallbackReason,
+  cornerButt = false,
 ):
   | BuiltProfileStringer
   | {
@@ -1596,7 +1631,7 @@ function buildProfileStringer(
   }
   // Coupes d'extrémité (libellés sur le développé).
   const endLabel = (which: "start" | "end"): Message =>
-    profileEndLabel(f, which, alpha, params.splice);
+    profileEndLabel(f, which, alpha, params.splice, cornerButt);
   for (const which of ["start", "end"] as const) {
     const u = which === "start" ? uLoW : uHiW;
     const a = T(V.vec(u, Math.max(lower(u), 0)));
@@ -1649,8 +1684,12 @@ function buildProfileStringer(
       : f.startCorner
         ? plumbPerimeter(Math.sqrt(1 + f.startCorner.tanHalf ** 2))
         : plumbPerimeter(Math.SQRT2);
+  // Onglet d'un coin dont le partenaire est coudé (K-Q2) : bout à bout, compté une seule fois.
+  const crankedButtWeld = cornerButt ? cornerWeld : 0;
   const buttWeld =
-    formatButtWeld + (landingStart && params.splice === "welded" ? plumbPerimeter(1) : 0);
+    formatButtWeld +
+    (landingStart && params.splice === "welded" ? plumbPerimeter(1) : 0) +
+    crankedButtWeld;
   const newelWeld =
     (f.start === "newel" ? plumbPerimeter(1) : 0) + (f.end === "newel" ? plumbPerimeter(1) : 0);
   const cuts = (f.start === "floor" ? 2 : 1) + 1;
@@ -1695,7 +1734,7 @@ function buildProfileStringer(
         volumeMm3: s.area * cutLength,
         treatedSurfaceMm2: sectionPerimeter(s) * cutLength + 2 * s.area,
         length: cutLength,
-        weld: buttWeld + cornerWeld + newelWeld,
+        weld: buttWeld + (cornerButt ? 0 : cornerWeld) + newelWeld,
         buttWeld,
         cuts: cuts + splices,
         holes: holes.length,
@@ -1731,6 +1770,7 @@ function buildProfileStringer(
     notes: [],
     supportMargins,
     buttWeld,
+    crankedButtWeld,
     beam: { partId: f.id, label: textMessage(`${f.mark}, ${s.name} ${grade}`), result: beam },
     height: { value: s.h - sc.faceNeed(p, s), label: textMessage(f.mark), partId: f.id },
     bearing,
@@ -1775,12 +1815,17 @@ function cageFaceTooShort(
   };
 }
 
-/** Libellé de la coupe d'une extrémité de limon (pente α du tronçon d'extrémité). */
+/**
+ * Libellé de la coupe d'une extrémité de limon (pente α du tronçon d'extrémité). `butt` : onglet
+ * de départ à un coin soudé bout à bout (limon coudé, ou barre droite dont le partenaire est
+ * coudé : décision K-Q2, sous-lot K2d), libellé `cornerButtWelded`.
+ */
 function profileEndLabel(
   f: SteelStringerFace,
   which: "start" | "end",
   alpha: number,
   splice: "welded" | "bolted",
+  butt = false,
 ): Message {
   const kind = which === "start" ? f.start : f.end;
   const angle = { angle: dec((alpha * 180) / Math.PI, 1) };
@@ -1795,9 +1840,11 @@ function profileEndLabel(
       return msg("structure.steelProfile.joint.newel", angle);
     case "corner":
       return msg(
-        which === "start"
-          ? "structure.steelProfile.joint.cornerWelded"
-          : "structure.steelProfile.joint.corner",
+        which === "end"
+          ? "structure.steelProfile.joint.corner"
+          : butt
+            ? "structure.steelProfile.joint.cornerButtWelded"
+            : "structure.steelProfile.joint.cornerWelded",
         angle,
       );
   }
@@ -1815,7 +1862,8 @@ function profileEndLabel(
  *   haut) avec son développé dans le repère du tronçon, son débit, ses coupes (lignes `joint`,
  *   jamais `bend`), ses perçages et le traçage des cornières qui y tombent, sa masse et ses
  *   cordons : cordon de jarret porté par le tronçon du dessus (CK10, choix Blondel à valider),
- *   compté en cordon simple (la classe d'exécution des jarrets, K-Q2, vient en K2d).
+ *   soudure bout à bout de continuité comme l'onglet de départ à un coin (décision K-Q2, sous-lot
+ *   K2d : EXC2, CNC2M N0169, application au jarret à valider) ; total des cordons inchangé.
  * - **Un seul tronçon** (pente propre, sans jarret) : pièce autonome, développé dans le repère du
  *   tronçon, grandeurs complètes.
  * - Longueur de débit d'un tronçon : encombrement axial (coupes de jarret et onglets compris),
@@ -1897,6 +1945,7 @@ function buildCrankedProfileStringer(
   const name = profileStringerName(f, s, sc.cage);
   const notes: Message[] = [];
   let buttWeldTotal = 0;
+  let crankedButtTotal = 0;
   /** Aboutages d'un tronçon plus long que la plus grande barre (CK10 : par composante). */
   const splicesOf = (length: Mm, mark: string): { count: number; weld: Mm } => {
     const count = length > maxBar + 1e-9 ? Math.ceil(length / maxBar) - 1 : 0;
@@ -1921,10 +1970,13 @@ function buildCrankedProfileStringer(
     const first = spec.index === 1;
     const last = spec.index === specs.length;
     const splices = splicesOf(spec.length, mark);
-    const buttWeld = splices.weld + (first ? landingWeld : 0);
-    buttWeldTotal += buttWeld;
     const knee = spec.startKnee ? kneeWeldLength(spec.startKnee, s.h, perimeter) : 0;
-    const weld = buttWeld + (first ? cornerWeld + newelStart : 0) + (last ? newelEnd : 0) + knee;
+    // K-Q2 (K2d) : jarret et onglet de départ du limon coudé soudés bout à bout.
+    const cranked = knee + (first ? cornerWeld : 0);
+    const buttWeld = splices.weld + (first ? landingWeld : 0) + cranked;
+    buttWeldTotal += buttWeld;
+    crankedButtTotal += cranked;
+    const weld = buttWeld + (first ? newelStart : 0) + (last ? newelEnd : 0);
     const cuts = 2 + (first && f.start === "floor" ? 1 : 0) + splices.count;
     return steelQuantities(
       {
@@ -2070,7 +2122,7 @@ function buildCrankedProfileStringer(
         kind: "joint",
         a: T(V.vec(uLoW, Math.max(rives.lower(uLoW), 0))),
         b: T(V.vec(uLoW, rives.upper(uLoW))),
-        label: profileEndLabel(f, "start", alphaStart, params.splice),
+        label: profileEndLabel(f, "start", alphaStart, params.splice, true),
       });
     }
     if (spec.endKnee) {
@@ -2210,6 +2262,8 @@ function buildCrankedProfileStringer(
       solid: sweep,
       section: sectionLabel,
       beamChord: { span: uHiW - uLoW, slope: p.line.slope },
+      // Cotes de gabarit (CK17, sous-lot K2d) : liste des jarrets imprimée dans le dossier PDF.
+      jig: crankedJigItems(fb, uOrigin),
       // Longueur de la pièce assemblée : axe du balayage (prolongé aux onglets), pas la somme
       // des débits des tronçons, qui compte les recouvrements des coupes de jarret.
       quantities: { [QUANTITY_LENGTH_MM]: polylineLength3(sweep.path) },
@@ -2244,6 +2298,7 @@ function buildCrankedProfileStringer(
     notes,
     supportMargins,
     buttWeld: buttWeldTotal,
+    crankedButtWeld: crankedButtTotal,
     beam: { partId: f.id, label: textMessage(`${f.mark}, ${s.name} ${grade}`), result: beam },
     height: { value: s.h - sc.faceNeed(p, s), label: textMessage(f.mark), partId: f.id },
     bearing,

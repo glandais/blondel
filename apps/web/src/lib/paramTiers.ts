@@ -742,8 +742,15 @@ export function structureParamApplies(
     const v = field(field(params, "lagScrews"), "minTotalAnchorage");
     return typeof v === "number" && v > 0;
   }
-  // Nettoyage des jarrets du limon coudé des profilés (K-Q9) : seulement en limon coudé.
-  if (head === "knee") return field(params, "stringerLine") === "nosing";
+  // Nettoyage des jarrets du limon coudé des profilés (K-Q9) : seulement en limon coudé, sur un
+  // tracé à tournant (volées à tournant ou cage saisie) ; escalier droit : limon droit dans les
+  // deux réglages, aucun jarret (invariant I1, sous-lot K2d).
+  if (head === "knee") {
+    const layout = project.stair.layout;
+    const turning =
+      layout.kind === "cage" || (layout.kind !== "helical" && layout.turns.length > 0);
+    return turning && field(params, "stringerLine") === "nosing";
+  }
   // Réduction selon l'angle du fil (A35 (j)) : poutre en couches empilées seulement.
   if (head === "grainAngle") return curvedMethodOf(project, params) === "stacked";
   // Justification des plis minces du lamellé-collé cintré : sans objet sans cintrage sur moule.

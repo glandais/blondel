@@ -536,6 +536,20 @@ export type PartFamilyId = "treads" | "structure" | "guards";
  */
 export type MarkRepresentativeRule = "shortest" | "smallestNetArea";
 
+/**
+ * Jarret d'un limon fait de tronçons (cotes de gabarit, CK17 de QUESTIONS A41) : numéro (1 à n,
+ * du bas vers le haut), abscisse horizontale du sommet de rive haute depuis l'extrémité basse du
+ * limon (mm), cote de la rive haute au-dessus du sol fini (mm), pentes des tronçons avant et
+ * après le jarret (radians, ADR-0003 : converties en degrés à l'affichage).
+ */
+export interface PartJigKnee {
+  readonly index: number;
+  readonly x: Mm;
+  readonly z: Mm;
+  readonly before: number;
+  readonly after: number;
+}
+
 export interface Part {
   /**
    * Identifiant stable dans le projet (ex. `tread-5`, `stringer-inner-1`). Ne pas en déduire la
@@ -623,6 +637,13 @@ export interface Part {
    * doit le publier : le repli ignore les composantes et n'aurait sinon aucune poutre à lire.
    */
   readonly beamChord?: { readonly span: Mm; readonly slope: number };
+  /**
+   * Cotes de gabarit d'un limon fait de tronçons soudés aux jarrets (limon coudé des profilés,
+   * QUESTIONS A41, CK17 ; ajout rétrocompatible, sous-lot K2d) : une entrée par jarret, du bas
+   * vers le haut, publiée sur la pièce finie et imprimée dans le dossier PDF (liste des jarrets).
+   * Absent : pièce sans jarret.
+   */
+  readonly jig?: readonly PartJigKnee[];
   /** Grandeurs de coût/nomenclature (masse kg, volume m³, cordons mm, plis, coupes…). */
   readonly quantities: Readonly<Record<string, number>>;
   /** Direction du fil (bois) dans le repère du solide, pour les textures. */

@@ -12,12 +12,15 @@
  * près de la coupe sont reportés après soudage (plugin).
  * Aucun texte en dur : les remarques sont des `Message` à clés littérales.
  *
- * Lu seulement quand le paramètre `stringerLine` vaut `nosing` (CK16) : en `chord`, le plugin
- * n'appelle rien d'ici et ses sorties restent identiques à l'octet.
+ * Lu seulement quand le paramètre `stringerLine` vaut `nosing` (CK16 ; défaut depuis le sous-lot
+ * K2d, décision K-Q11) : en `chord`, le plugin n'appelle rien d'ici et ses sorties restent
+ * identiques à l'octet. Sous-lot K2d : chaîne de raccords sans limon coudé refusée (K-Q31),
+ * jarrets et onglets soudés bout à bout (K-Q2), cotes de gabarit en radians (`Part.jig`, CK17).
  */
 import { dec, msg, textMessage, type Message } from "@blondel/i18n";
 import type { SteelSection } from "../catalog/sections.js";
 import { signedArea } from "../geom2d/polygon.js";
+import type { PartJigKnee } from "../model/derived.js";
 import type { Mm, Vec2, Vec3 } from "../model/primitives.js";
 import * as V from "../geom2d/vec.js";
 import {
@@ -118,12 +121,17 @@ export interface LandingHeightLimit {
   readonly imposed?: boolean;
 }
 
-/** Limon d'une chaîne de raccords de palier qui ne peut pas rester coudé (K-Q27). */
+/** Limon d'une chaîne de raccords de palier qui ne peut pas être coudé (K-Q27, K-Q31). */
 export interface LandingRefusal {
   /** Chaîne de raccords de palier (ids du bas vers le haut). */
   readonly chain: readonly string[];
   readonly faceId: string;
   readonly reason: LandingRefusalReason;
+  /**
+   * Chaîne sans aucun limon coudé avant la décision (tous repliés en barre droite, K-Q31) :
+   * message propre (aucun limon n'est coudé). Absent : la chaîne comptait un limon coudé (K-Q27).
+   */
+  readonly straight?: true;
 }
 
 /** Décision K-Q27 pour une section : chaînes, faces forcées coudées, refus. */
@@ -266,13 +274,17 @@ export function decideCrankedFace(input: CrankedDecisionInput): {
 // ------------------------------------------------------------------------------ raccords de palier (K-Q27)
 
 /**
- * Décision K-Q27 de l'utilisateur (QUESTIONS A41, sous-lot K2f2) : « coudé forcé, sinon refus ».
- * À un raccord de palier (chaîne de limons colinéaires aboutés au milieu d'un palier droit,
- * `BearingResult.landingChains`), le limon voisin d'un limon coudé reste coudé : un limon coudé
- * et une barre droite ne sont jamais aboutés :
- * - chaîne sans membre coudé (barres droites seules, comportement de K2f) ou dont tous les
- *   membres sont coudés : inchangée ;
- * - sinon, chaque membre en barre droite :
+ * Décisions K-Q27 (sous-lot K2f2) et K-Q31 (sous-lot K2d) de l'utilisateur (QUESTIONS A41) :
+ * « coudé forcé, sinon refus ». À un raccord de palier (chaîne de limons colinéaires aboutés au
+ * milieu d'un palier droit, `BearingResult.landingChains`), le limon voisin d'un limon coudé
+ * reste coudé : un limon coudé et une barre droite ne sont jamais aboutés ; une chaîne dont tous
+ * les limons sont repliés en barre droite n'est pas gardée en barre droite non plus (K-Q31 : le
+ * repli ne réintroduit pas la barre droite qui monte le long d'un palier de niveau, refus de
+ * F17 (3)) :
+ * - chaîne dont tous les membres sont coudés, ou sans aucun membre replié (faces à une seule
+ *   pente, CK7, qui ne montent pas le long d'un palier) : inchangée ;
+ * - sinon, chaque membre en barre droite (refus marqués `straight` quand la chaîne n'avait aucun
+ *   membre coudé, K-Q31) :
  *   - face à une seule pente (CK7, barre droite sans repli : ligne coudée confondue avec la
  *     barre droite) : compatible avec ses voisins, inchangée ;
  *   - repli `heavier` à besoin coudé fini, ligne coudée présente et besoin au plus la hauteur de
@@ -286,7 +298,10 @@ export function decideCrankedFace(input: CrankedDecisionInput): {
  *     `steepSegment`, `lostSupport`, `heavier` infini) ou ligne coudée absente : refus, avec la
  *     raison du repli (`emptyWindow` si elle manque).
  * Les faces hors chaîne ne sont pas touchées (un repli `heavier` hors raccord reste permis,
- * K-Q21). Pure, déterministe (chaînes et membres dans l'ordre reçu) ; ne lève jamais.
+ * K-Q21). Une chaîne sans membre coudé dont les replis sont tous `heavier` fini sous la limite
+ * est donc entièrement forcée coudée (sa section monte : en section automatique, la section
+ * essayée est écartée, comme pour K-Q27) ; tout autre repli y est refusé (lecture de K-Q31,
+ * sous-lot K2d). Pure, déterministe (chaînes et membres dans l'ordre reçu) ; ne lève jamais.
  */
 export function forceLandingChains(
   faces: ReadonlyMap<string, CrankedFacePlan>,
@@ -299,8 +314,11 @@ export function forceLandingChains(
   const refusals: LandingRefusal[] = [];
   for (const chain of chains) {
     const plans = chain.map((id) => faces.get(id));
-    if (!plans.some((fp) => fp?.mode === "nosing")) continue;
     if (plans.every((fp) => fp?.mode === "nosing")) continue;
+    // K-Q31 : chaîne sans limon coudé traitée comme K-Q27 dès qu'un de ses membres est replié.
+    const straight = !plans.some((fp) => fp?.mode === "nosing");
+    if (straight && !plans.some((fp) => fp?.fallback !== undefined)) continue;
+    const mark = straight ? ({ straight: true } as const) : {};
     chain.forEach((id, i) => {
       const fp = plans[i];
       if (fp?.mode === "nosing") return;
@@ -319,6 +337,7 @@ export function forceLandingChains(
               section: limit.section,
               h: limit.h,
             },
+            ...mark,
           });
           return;
         }
@@ -337,6 +356,7 @@ export function forceLandingChains(
         chain,
         faceId: id,
         reason: bearing && fb ? fb : { kind: "emptyWindow" },
+        ...mark,
       });
     });
   }
@@ -812,31 +832,24 @@ export function kneeWeldLength(k: Pick<Knee, "beta">, h: Mm, perimeter: Mm): Mm 
   return (2 * h) / Math.cos(k.beta) + (perimeter - 2 * h);
 }
 
-/** Cote de gabarit d'un jarret (CK17). */
-export interface CrankedJigItem {
-  readonly index: number;
-  /** Abscisse horizontale du sommet de rive haute depuis l'extrémité basse du limon (mm). */
-  readonly x: Mm;
-  /** Cote de la rive haute au jarret, au-dessus du sol fini (mm). */
-  readonly z: Mm;
-  /** Pentes avant et après le jarret (degrés). */
-  readonly before: number;
-  readonly after: number;
-}
+/**
+ * Cote de gabarit d'un jarret (CK17) : `PartJigKnee` du modèle (abscisse et cote de la rive haute
+ * en mm, pentes avant et après en radians, ADR-0003 ; publiée sur la pièce finie, sous-lot K2d).
+ */
+export type CrankedJigItem = PartJigKnee;
 
 /**
  * Cotes de gabarit (CK17, préfabrication au marbre) : pour chaque jarret, abscisse du sommet de
  * rive haute depuis l'extrémité basse (`uOrigin`, plus petit u du contour), cote de rive haute,
- * pentes du tronçon avant et après.
+ * pentes du tronçon avant et après (radians).
  */
 export function crankedJigItems(fb: FaceBearing, uOrigin: Mm): CrankedJigItem[] {
-  const deg = (a: number): number => (a * 180) / Math.PI;
   return fb.knees.map((k, j) => ({
     index: j + 1,
     x: k.upper.x - uOrigin,
     z: k.upper.y,
-    before: deg(fb.segments[j]!.alpha),
-    after: deg(fb.segments[j + 1]!.alpha),
+    before: fb.segments[j]!.alpha,
+    after: fb.segments[j + 1]!.alpha,
   }));
 }
 
@@ -957,6 +970,25 @@ export interface CrankedMiterStringer {
   readonly bearing?: FaceBearing;
 }
 
+/**
+ * Partenaire d'onglet de `b` : limon du même côté qui finit au coin où `b` commence (σ continu à
+ * 1e-6, même appariement que `crankedMiterItems`) ; `undefined` si `b` ne commence pas à un coin.
+ * Sert à dire si l'onglet d'un coin est celui d'un limon coudé (K-Q2, sous-lot K2d).
+ */
+export function cornerPartnerOf<F extends { readonly face: SteelStringerFace }>(
+  items: readonly F[],
+  b: F,
+): F | undefined {
+  if (b.face.start !== "corner") return undefined;
+  return items.find(
+    (x) =>
+      x !== b &&
+      x.face.side === b.face.side &&
+      x.face.end === "corner" &&
+      Math.abs(x.face.sigmaA + x.face.faceLength - b.face.sigmaA) < 1e-6,
+  );
+}
+
 /** Écart d'onglet (FAB_ONGLET_RACCORD), à la manière de `PartCheckItem`. */
 export interface CrankedMiterItem {
   readonly value: Mm;
@@ -1074,18 +1106,22 @@ export function spliceLabel(chain: readonly string[], markOf: (faceId: string) =
 }
 
 /**
- * Erreur du refus d'un raccord de palier (K-Q27) : palier droit non pris en charge pour cette
- * cage (F17 (3)), raccord, limon qui ne peut pas rester coudé et cause chiffrée.
+ * Erreur du refus d'un raccord de palier (K-Q27, K-Q31) : palier droit non pris en charge pour
+ * cette cage (F17 (3)), raccord, limon qui ne peut pas être coudé et cause chiffrée ; chaîne
+ * sans aucun limon coudé (K-Q31) : message propre.
  */
 export function landingRefusalMessage(
   r: LandingRefusal,
   markOf: (faceId: string) => string,
 ): Message {
-  return msg("structure.steelProfile.error.landingSpliceRefused", {
+  const params = {
     splice: spliceLabel(r.chain, markOf),
     mark: markOf(r.faceId),
     reason: landingRefusalReasonMessage(r.reason),
-  });
+  };
+  return r.straight
+    ? msg("structure.steelProfile.error.landingChainStraight", params)
+    : msg("structure.steelProfile.error.landingSpliceRefused", params);
 }
 
 /** Remarque d'une face repliée sur la barre droite (K-Q12, K-Q13). */
@@ -1150,14 +1186,15 @@ export function landingNotLevelNotes(
 
 /** Remarque des cotes de gabarit d'un limon coudé (CK17) ; `null` sans jarret. */
 export function crankedJigNote(mark: string, items: readonly CrankedJigItem[]): Message | null {
+  const deg = (a: number): number => (a * 180) / Math.PI;
   const knees = joinMessages(
     items.map((it) =>
       msg("structure.steelProfile.note.jigKnee", {
         index: it.index,
         x: dec(it.x, 0),
         z: dec(it.z, 0),
-        before: dec(it.before, 1),
-        after: dec(it.after, 1),
+        before: dec(deg(it.before), 1),
+        after: dec(deg(it.after), 1),
       }),
     ),
   );
