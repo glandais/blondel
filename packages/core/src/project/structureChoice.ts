@@ -132,9 +132,44 @@ export function explicitStructureParams(
   params: Readonly<Record<string, unknown>>,
 ): Readonly<Record<string, unknown>> {
   if (kind !== "steel-profile" || Object.hasOwn(params, "stringerLine")) return params;
-  const layout = project.stair.layout;
-  const turning = layout.kind === "cage" || (layout.kind !== "helical" && layout.turns.length > 0);
-  return turning ? { ...params, stringerLine: "nosing" } : params;
+  return isTurningLayout(project.stair.layout) ? { ...params, stringerLine: "nosing" } : params;
+}
+
+/** Tracé à tournant : volées à tournant ou cage saisie (l'hélicoïdal n'en est pas un ici). */
+export function isTurningLayout(layout: Project["stair"]["layout"]): boolean {
+  return layout.kind === "cage" || (layout.kind !== "helical" && layout.turns.length > 0);
+}
+
+/**
+ * Édition du tracé d'un escalier en profilés qui passe d'une volée droite à un tournant (volées
+ * à tournant ou cage saisie) : la ligne d'appui par défaut (`stringerLine` = `nosing`) est écrite
+ * dans le projet quand elle manque (décision K-Q36 de l'utilisateur, QUESTIONS A41, sous-lot
+ * K2h), comme pour un choix neuf (`explicitStructureParams`) : la remarque de bascule
+ * `structure.steelProfile.note.defaultCranked` ne reste que sur les fichiers enregistrés avant
+ * cette version. Appelée par l'interface après chaque édition du projet (pas au chargement d'un
+ * fichier, ni à l'annulation). Rend `next` lui-même (même objet, mémoïsation par identité)
+ * dans tous les autres cas : autre structure, ligne d'appui déjà choisie (`chord` compris),
+ * tracé précédent déjà à tournant, tracé suivant droit. Pure, ne lève jamais.
+ */
+export function stringerLineOnTurn(previous: Project, next: Project): Project {
+  // `next` n'est pas encore validé par le schéma (édition de l'interface, refusée ensuite si
+  // invalide) : une forme inattendue le rend tel quel.
+  try {
+    const structure = next.stair.structure;
+    const params: unknown = structure.params;
+    if (structure.kind !== "steel-profile" || typeof params !== "object" || params === null) {
+      return next;
+    }
+    if (Object.hasOwn(params, "stringerLine")) return next;
+    if (isTurningLayout(previous.stair.layout) || !isTurningLayout(next.stair.layout)) return next;
+    return withStructure(
+      next,
+      structure.kind,
+      explicitStructureParams(next, structure.kind, structure.params),
+    );
+  } catch {
+    return next;
+  }
 }
 
 /** Projet dont la structure est `kind` de paramètres `params`. */

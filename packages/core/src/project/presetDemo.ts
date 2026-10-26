@@ -56,6 +56,8 @@ export const DEMO_PRESET_IDS = [
   "demo-cage-central-steel",
   "demo-cage-arc-glass",
   "demo-cage-room",
+  "demo-quarter-cranked-steel",
+  "demo-cage-landing-steel",
 ] as const;
 export type DemoPresetId = (typeof DEMO_PRESET_IDS)[number];
 
@@ -78,6 +80,8 @@ export const DEMO_PRESET_LABELS: Readonly<Record<DemoPresetId, MessageKey>> = {
   "demo-cage-central-steel": "preset.demo.cageCentralSteel.label",
   "demo-cage-arc-glass": "preset.demo.cageArcGlass.label",
   "demo-cage-room": "preset.demo.cageRoom.label",
+  "demo-quarter-cranked-steel": "preset.demo.quarterCrankedSteel.label",
+  "demo-cage-landing-steel": "preset.demo.cageLandingSteel.label",
 };
 
 /** Clés des descriptions d'une ligne de chaque démo (sélecteur de l'interface). */
@@ -99,6 +103,8 @@ export const DEMO_PRESET_DESCRIPTIONS: Readonly<Record<DemoPresetId, MessageKey>
   "demo-cage-central-steel": "preset.demo.cageCentralSteel.description",
   "demo-cage-arc-glass": "preset.demo.cageArcGlass.description",
   "demo-cage-room": "preset.demo.cageRoom.description",
+  "demo-quarter-cranked-steel": "preset.demo.quarterCrankedSteel.description",
+  "demo-cage-landing-steel": "preset.demo.cageLandingSteel.description",
 };
 
 /** Garde-corps vitré à main courante inox (commun à plusieurs démos). */
@@ -653,6 +659,82 @@ function cageRoom(name: string): Project {
   );
 }
 
+// ------------------------------------------------------------ Limon coudé acier (A41, K2h)
+
+/**
+ * Poteau de `demo-quarter-cranked-steel` (mm, côté et décalage) : poteau du point fixe section ↔
+ * poteau des profilés en limon coudé (`resolveProfileNewel`, QUESTIONS A41 K-Q15, K-Q19),
+ * vérifié (il reçoit l'aile de l'UPN retenue et n'ajoute aucune violation). **Figé** ici, et non
+ * recalculé à la création : la démo est construite dans le fil principal de l'interface et le
+ * point fixe y coûterait 100 à 220 ms (budget des tâches longues de 200 ms) ; `presetDemo.test.ts`
+ * vérifie qu'il reste celui du point fixe. Choix de présentation à valider.
+ */
+const QUARTER_CRANKED_NEWEL = { size: 115, offset: 38 } as const;
+
+/**
+ * Quart tournant balancé (méthode M2) sur limons UPN **coudés** (limon coudé par pièces d'angle
+ * soudées, QUESTIONS A13 et A41) : un jarret à chaque nez où la pente change, partie de niveau au
+ * coin en plan (onglets jointifs), une seule cornière exigée au coin du mur (K-Q4), tronçons
+ * soudés au marbre sur gabarit ; marches chêne, garde-corps en plats d'acier. En barre droite sur
+ * la corde des nez, aucune UPN ne passe sur ce tracé (`noSectionPasses`) ; coudé, l'UPN 200
+ * suffit. Ligne d'appui écrite (`stringerLine` = `nosing`) : aucune remarque de bascule.
+ * Emmarchement de 950 mm sur les volées du préréglage (1 440 et 3 433 mm, giron 265,7 mm) : à
+ * 900 mm, la marche M3 n'a que 22 mm d'appui sur LI1 et 19,5 mm sur le poteau
+ * (FAB_SUPPORT_LONGUEUR_MIN) ; à 950 mm, aucun avertissement (sondage K2h).
+ */
+function quarterCrankedSteel(name: string): Project {
+  const p = createProject("quarter-left", {
+    name,
+    patch: {
+      stair: {
+        balancing: { method: "M2" },
+        treads: { material: "wood-oak" },
+        layout: {
+          width: 950,
+          legs: [{ length: 1440 }, { length: 3433 }],
+          turns: [
+            {
+              direction: "left",
+              mode: "winders",
+              inner: { kind: "newel", ...QUARTER_CRANKED_NEWEL },
+            },
+          ],
+        },
+      },
+    },
+  });
+  return withPatch(p, {
+    stair: {
+      structure: { kind: "steel-profile", params: { family: "UPN", stringerLine: "nosing" } },
+    },
+    guards: {
+      // Barreaudage en plats d'acier (40 × 12, entraxe 110) : vides < 110 mm (gabarit T1).
+      infill: { kind: "balusters", spacing: 110, section: { kind: "rect", width: 12, height: 40 } },
+      material: "steel-painted",
+    },
+    appearance: { paintColor: "#2b2f33", guardPaintColor: "#2b2f33", woodTone: "natural" },
+  });
+}
+
+/**
+ * Tracé libre (ADR-0010) : deux volées alignées de part et d'autre d'un palier droit de 1 000 mm
+ * (tracé de l'exemple `cage-palier-droit`), sur limons UPN **coudés** : la rive suit le plat du
+ * palier, raccord de palier au milieu (QUESTIONS A41 K-Q5, K-Q27). En barre droite le palier
+ * droit de cage est refusé (`structure.cageUnsupported`, F17 (3)) : ce cas n'existe qu'en limon
+ * coudé. Garde-corps vitré.
+ */
+function cageLandingSteel(name: string): Project {
+  const p = cageProject(name, {
+    kind: "cage",
+    sections: [straightSection(1890), straightSection(1620)],
+    junctions: [{ angle: 0, mode: "landing", depth: 1000 }],
+  });
+  return withPatch(applyStructureChoice(p, "steel-profile", { family: "UPN" }).project, {
+    guards: GLASS_GUARDS,
+    appearance: { paintColor: "#2b2f33", woodTone: "natural", glassTint: "clear" },
+  });
+}
+
 const BUILDERS: Readonly<Record<DemoPresetId, (name: string) => Project>> = {
   "demo-helical-glass": helicalGlass,
   "demo-quarter-curved": quarterCurved,
@@ -671,6 +753,8 @@ const BUILDERS: Readonly<Record<DemoPresetId, (name: string) => Project>> = {
   "demo-cage-central-steel": cageCentralSteel,
   "demo-cage-arc-glass": cageArcGlass,
   "demo-cage-room": cageRoom,
+  "demo-quarter-cranked-steel": quarterCrankedSteel,
+  "demo-cage-landing-steel": cageLandingSteel,
 };
 
 /** Vrai si `id` est une démo. */

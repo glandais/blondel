@@ -639,7 +639,7 @@ describe("valeurs ◆ d'un projet", () => {
     expect(structureParamEntry("steel-profile", ["stringerLine"]).toValidate).toBeUndefined();
     // K2c : aide dédiée (convention à valider, QUESTIONS A41), sans ◆ compté.
     expect(fieldText("steel-profile", ["stringerLine"])?.hint).toBe("ui.param.stringerLine.hint");
-    for (const leaf of ["minSegmentLength", "minKneeAngle"]) {
+    for (const leaf of ["minSegmentLength", "minKneeAngle", "maxSegmentAngle"]) {
       const e = structureParamEntry("steel-profile", ["knee", leaf]);
       expect(e.tier).toBe("workshop");
       expect(e.toValidate).toBe(true);
@@ -670,6 +670,7 @@ describe("valeurs ◆ d'un projet", () => {
       const keys = toValidateItems(q, buildModel(q)).map((i) => i.key);
       expect(keys).toContain("stair.structure.params.knee.minSegmentLength");
       expect(keys).toContain("stair.structure.params.knee.minKneeAngle");
+      expect(keys).toContain("stair.structure.params.knee.maxSegmentAngle");
     }
     // Escalier droit, paramètres vides ou `nosing` explicite : aucun jarret, aucun ◆ de jarret
     // (invariant I1 : limon droit dans les deux réglages, K2d).

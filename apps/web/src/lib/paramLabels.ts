@@ -881,6 +881,11 @@ const BY_KIND: Readonly<Record<string, Readonly<Record<string, FieldText>>>> = {
       unit: "°",
       hint: TO_VALIDATE,
     },
+    "knee.maxSegmentAngle": {
+      label: "ui.param.knee.maxSegmentAngle.label",
+      unit: "°",
+      hint: TO_VALIDATE,
+    },
   },
   "steel-curved": {
     thickness: { label: "ui.param.steelCurved.thickness.label", unit: MM, hint: TO_VALIDATE },

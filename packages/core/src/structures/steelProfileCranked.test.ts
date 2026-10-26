@@ -158,6 +158,8 @@ describe("decideCrankedFace — priorités (K-Q12, K-Q13)", () => {
         return { kind, faceId: "le2", u: 10, excess: 62 };
       case "steepSegment":
         return { kind, faceId: "le2", u0: 0, planLength: 17, alpha: 1.5 };
+      case "tooSteepSegment":
+        return { kind, faceId: "le2", u0: 0, alpha: 1.4, maxAngle: (75 * Math.PI) / 180 };
       default:
         return { kind: "emptyWindow", faceId: "le2" };
     }
@@ -188,13 +190,22 @@ describe("decideCrankedFace — priorités (K-Q12, K-Q13)", () => {
     expect(isChordEquivalent(s.fb, { ...s.pre.line, z0: s.pre.line.z0 + 1e-6 })).toBe(false);
   });
 
-  it("constats bloquants dans l'ordre emptyWindow, cutsCross, shortSegment, noseAboveRive, steepSegment", () => {
+  it("constats bloquants dans l'ordre emptyWindow, cutsCross, shortSegment, noseAboveRive, steepSegment, tooSteepSegment", () => {
     const d = (kinds: BearingIssue["kind"][]) =>
       decideCrankedFace({ ...base, issues: kinds.map(issue) }).fallback?.kind;
     expect(d(["steepSegment", "noseAboveRive"])).toBe("noseAboveRive");
     expect(d(["steepSegment", "shortSegment", "cutsCross"])).toBe("cutsCross");
     expect(d(["steepSegment", "shortSegment"])).toBe("shortSegment");
     expect(d(["steepSegment"])).toBe("steepSegment");
+    // Angle maximal de tronçon (K-Q35, sous-lot K2h) : dernier, comme un tronçon trop court.
+    expect(d(["tooSteepSegment", "steepSegment"])).toBe("steepSegment");
+    expect(d(["tooSteepSegment", "shortSegment"])).toBe("shortSegment");
+    expect(d(["tooSteepSegment"])).toBe("tooSteepSegment");
+    expect(decideCrankedFace({ ...base, issues: [issue("tooSteepSegment")] }).fallback).toEqual({
+      kind: "tooSteepSegment",
+      alpha: 1.4,
+      maxAngle: (75 * Math.PI) / 180,
+    });
     expect(d(["emptyWindow", "cutsCross"])).toBe("emptyWindow");
     // Constats non bloquants : sans effet.
     expect(
@@ -245,6 +256,7 @@ describe("decideCrankedFace — priorités (K-Q12, K-Q13)", () => {
       "shortSegment",
       "noseAboveRive",
       "steepSegment",
+      "tooSteepSegment",
       "levelCoversFace",
     ];
     fc.assert(
@@ -520,6 +532,7 @@ describe("raccords de palier : coudé forcé, sinon refus (K-Q27, K2f2)", () => 
       { kind: "shortSegment", shortest: 29.5 },
       { kind: "noseAboveRive", excess: 62 },
       { kind: "steepSegment", alpha: 1.508 },
+      { kind: "tooSteepSegment", alpha: 1.42, maxAngle: (75 * Math.PI) / 180 },
       { kind: "lostSupport", treads: [9] },
     ];
     for (const reason of blocking) {
@@ -813,6 +826,7 @@ describe("remarques du limon coudé", () => {
     { kind: "shortSegment", shortest: 29.5 },
     { kind: "noseAboveRive", excess: 62 },
     { kind: "steepSegment", alpha: 1.51 },
+    { kind: "tooSteepSegment", alpha: 1.42, maxAngle: (75 * Math.PI) / 180 },
     { kind: "lostSupport", treads: [7, 9] },
     { kind: "heavier", bent: 259.1, chord: 200.7 },
     { kind: "heavier", bent: Infinity, chord: 200.7 },
@@ -826,6 +840,25 @@ describe("remarques du limon coudé", () => {
         expect(text).not.toMatch(/structure\.|\{/);
       }
     }
+  });
+
+  it("tronçon trop raide (K-Q35) : angle et maximum en degrés, à valider", () => {
+    const note = crankedFallbackNote("LE2", {
+      kind: "tooSteepSegment",
+      alpha: (81.25 * Math.PI) / 180,
+      maxAngle: (75 * Math.PI) / 180,
+    });
+    expect(note.params?.["reason"]).toMatchObject({
+      key: "structure.steelProfile.crankedFallback.tooSteepSegment",
+    });
+    const fr = createTranslator("fr").t(note);
+    const en = createTranslator("en").t(note);
+    expect(fr).toContain("81,3°");
+    expect(fr).toContain("de 75°");
+    expect(fr).toContain("à valider");
+    expect(en).toContain("81.3°");
+    expect(en).toContain("the 75°");
+    expect(en).toContain("to be validated");
   });
 
   it("besoin coudé infini : clé dédiée, ni « Infinity » ni unité sans nombre", () => {

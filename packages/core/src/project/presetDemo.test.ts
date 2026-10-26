@@ -33,6 +33,7 @@ import {
 } from "./presetDemo.js";
 import { ALL_PRESET_IDS, createProject, PRESET_LABELS } from "./presets.js";
 import { serializeProject } from "./serialize.js";
+import { applyStructureChoice, resolveProfileNewel } from "./structureChoice.js";
 
 const EXAMPLES_DIR = resolve(dirname(fileURLToPath(import.meta.url)), "../../../../examples");
 const exampleFile = (id: string): string => `${id}.blondel.json`;
@@ -225,6 +226,7 @@ describe("démos du tracé libre (ADR-0010, sous-lot 7a)", () => {
     "demo-cage-central-steel": { features: ["anyAngle", "chamfer"], structure: "steel-central" },
     "demo-cage-arc-glass": { features: ["arcAxis", "straightLanding"], structure: "steel-curved" },
     "demo-cage-room": { features: ["anyAngle", "chamfer"], structure: "wood-housed" },
+    "demo-cage-landing-steel": { features: ["straightLanding"], structure: "steel-profile" },
   };
 
   it("les démos à cage saisie sont celles listées ici", () => {
@@ -372,6 +374,71 @@ describe("démos du tracé libre (ADR-0010, sous-lot 7a)", () => {
         (m.siteFit ?? []).some((c) => c.kind === "outsideRoom" && c.severity === "erreur"),
       ).toBe(true);
     });
+  });
+});
+
+describe("démos du limon coudé (QUESTIONS A41, sous-lot K2h)", () => {
+  const DEFAULT_NOTE = "structure.steelProfile.note.defaultCranked";
+  const CRANKED = ["demo-quarter-cranked-steel", "demo-cage-landing-steel"] as const;
+
+  it.each(CRANKED)(
+    "%s : profilés UPN, ligne d'appui écrite, aucune remarque de bascule, aucune règle en avertissement ou bloquante, limons coudés",
+    (id) => {
+      const p = createDemoProject(id);
+      expect(p.stair.structure).toEqual({
+        kind: "steel-profile",
+        params: { family: "UPN", stringerLine: "nosing" },
+      });
+      const m = buildModel(p, { memo: false });
+      expect(m.errors).toEqual([]);
+      expect((m.notes ?? []).map((n) => n.key)).not.toContain(DEFAULT_NOTE);
+      // Rendu soigné : seuls des conseils (échappée recommandée, aile hors emprise utile).
+      expect(m.compliance.summary.bloquant).toBe(0);
+      expect(m.compliance.summary.avertissement).toBe(0);
+      expect(m.notes?.some((n) => n.key === "structure.steelProfile.note.crankedFallback")).toBe(
+        false,
+      );
+      expect(m.notes?.some((n) => n.key === "structure.steelProfile.note.cranked")).toBe(true);
+      expect(m.parts.some((x) => x.id.includes("-segment-") && x.componentOf)).toBe(true);
+      expect(m.executionClass).toBe("EXC2");
+    },
+  );
+
+  it.each(CRANKED)("%s : point fixe du choix de structure (même projet, aucune remarque)", (id) => {
+    const p = createDemoProject(id);
+    const again = applyStructureChoice(p, "steel-profile", p.stair.structure.params);
+    expect(again.notes).toEqual([]);
+    expect(serializeProject(again.project)).toBe(serializeProject(p));
+  });
+
+  it("demo-quarter-cranked-steel : poteau figé = poteau vérifié du point fixe section ↔ poteau (115 / 38)", () => {
+    const p = createDemoProject("demo-quarter-cranked-steel");
+    const inner = p.stair.layout.turns[0]!.inner;
+    expect(inner).toEqual({ kind: "newel", size: 115, offset: 38 });
+    const resolved = resolveProfileNewel(p, (t) => t.inner.kind === "newel")!;
+    expect(resolved.verified).toBe(true);
+    expect(resolved.newel).toEqual(inner);
+    const m = buildModel(p, { memo: false });
+    expect(m.parts.find((x) => x.category === "stringer" && x.section)?.section).toMatchObject({
+      params: { section: "UPN 200" },
+    });
+  });
+
+  it("demo-cage-landing-steel : palier droit refusé en barre droite, accepté en limon coudé", () => {
+    const p = createDemoProject("demo-cage-landing-steel");
+    const chord: Project = {
+      ...p,
+      stair: {
+        ...p.stair,
+        structure: { kind: "steel-profile", params: { family: "UPN", stringerLine: "chord" } },
+      },
+    };
+    expect(buildModel(chord, { memo: false }).errors.map((e) => e.key)).toContain(
+      "structure.cageUnsupported",
+    );
+    const m = buildModel(p, { memo: false });
+    expect(m.errors).toEqual([]);
+    expect(m.parts.filter((x) => x.category === "stringer" && !x.componentOf).length).toBe(4);
   });
 });
 

@@ -16,7 +16,8 @@
  *   (raccord `landing`) forment une **chaîne** traitée comme une seule ligne d'appui, sans partie
  *   de niveau au raccord (coupes d'aplomb jointives, z et pente continus), puis découpée par
  *   membre ; un sous-tronçon voisin du raccord compte comme un tronçon (longueur minimale), une
- *   fin de plat trop proche du raccord est reportée à la longueur minimale après lui. Partie de
+ *   fin de plat trop proche du raccord est reportée à la longueur minimale après lui, tout autre
+ *   sommet exactement sur le raccord est retiré (sous-tronçon de longueur nulle, K2h). Partie de
  *   niveau d'un coin plus haute qu'un plat de palier qui la précède : **raccord glissant** parti
  *   du plat à la pente de référence (plus forte pente de la ligne des nez de la face), rive de
  *   niveau sur le palier jusqu'au départ (`CornerLevel.rampBefore`). Palier qui suit un coin
@@ -99,6 +100,17 @@ export const KneeSettingsSchema = z.object({
    * l'utilisateur (QUESTIONS A41, K-Q9).
    */
   minKneeAngle: z.number().nonnegative().max(45).default(0.5),
+  /**
+   * Angle maximal d'un tronçon (degrés, depuis l'horizontale) : une face dont un tronçon en pente
+   * (hors partie de niveau) est plus raide porte le constat `tooSteepSegment` et se replie sur la
+   * barre droite comme pour un tronçon trop court (QUESTIONS A41, K-Q35 ; 90 n'agit jamais).
+   * Valeur **provisoire, à valider** : aucune source (`docs/research/` muet) ; 75° proposé à
+   * l'utilisateur après la relecture K2d (tirages de cages cage7#13 et cage99#56 : tronçons de
+   * 71 à 83°), renvoyé à l'atelier (QUESTIONS B13) ; aucun tronçon au-delà de 75° sur les
+   * exemples, préréglages et démos livrés en profilés (test « projets livrés en profilés » de
+   * `steelProfile.cranked.test.ts`).
+   */
+  maxSegmentAngle: z.number().positive().max(90).default(75),
 });
 export type KneeSettings = z.output<typeof KneeSettingsSchema>;
 /** Réglages par défaut (provisoires, à valider). */
@@ -260,6 +272,18 @@ export type BearingIssue =
       readonly u0: Mm;
       readonly planLength: Mm;
       readonly alpha: number;
+    }
+  /**
+   * Tronçon plus raide que l'angle maximal de tronçon (`KneeSettings.maxSegmentAngle`, K-Q35,
+   * sous-lot K2h) : le plus raide des tronçons en pente (hors partie de niveau) de la face,
+   * `alpha` et `maxAngle` en radians, un constat par face au plus.
+   */
+  | {
+      readonly kind: "tooSteepSegment";
+      readonly faceId: string;
+      readonly u0: Mm;
+      readonly alpha: number;
+      readonly maxAngle: number;
     }
   /** Nez au-dessus de la rive haute (P − (B + d_h) > 0) : plus grand dépassement de la face. */
   | {
@@ -693,6 +717,19 @@ function chainPieces(
       });
     });
   });
+  // Sommet de la ligne sur un raccord de palier (à `STRUCT_EPS` près, sous-lot K2h) : écarté des
+  // deux membres ci-dessus, aucun sous-tronçon ne le désignerait ; le jarret tomberait sur la
+  // coupe d'aplomb et chaque membre garderait sa pente jusqu'au raccord (rives basses décalées
+  // de h·(1/cos α₂ − 1/cos α₁), 95,9 mm sur le tirage 1 275 399 715 de I2). Il borne un
+  // sous-tronçon de longueur nulle : candidat au retrait (raison `segment`, plus courte fibre 0)
+  // ou, fin de plat, reporté à la longueur minimale après le raccord (étape 0 de `cleanLine`).
+  chain.offsets.slice(1).forEach((joint) => {
+    for (let i = 1; i < last; i++) {
+      if (Math.abs(line[i]!.x - joint) <= STRUCT_EPS) {
+        checks.push({ shortest: 0, cands: [i], seg: -1, joint });
+      }
+    }
+  });
   return { pieces, checks };
 }
 
@@ -701,7 +738,8 @@ function chainPieces(
  * (tronçons, jarrets) et les retraits. Un raccord de palier n'est jamais un sommet de la ligne :
  * un tronçon qui le traverse est contrôlé comme deux sous-tronçons coupés d'aplomb ; un
  * sous-tronçon plus court que la longueur minimale désigne son sommet voisin comme candidat au
- * retrait (raison `segment`).
+ * retrait (raison `segment`) ; un sommet tombé exactement sur le raccord borne un sous-tronçon
+ * de longueur nulle (sous-lot K2h).
  */
 function cleanLine(
   raw: readonly Vtx[],
@@ -759,24 +797,10 @@ function cleanLine(
       verts[j] = { u: target, z: v.z, prot: true };
       moved.add(j);
     }
-    // Fin de plat exactement au raccord (sous-tronçon de longueur nulle, relecture K2f2) : aucun
-    // sous-tronçon ne la désigne (le point au raccord n'est pas un sommet de la ligne), et le
-    // jarret tombait sur la coupe d'aplomb : rives basses décalées de h·(1/cos α − 1) entre les
-    // deux membres (89,9 mm sur une cage alignée de 900 / 900 mm à palier de 300 mm en UPN 160).
-    // Même report à `m` après le raccord.
-    for (const joint of chain.offsets.slice(1)) {
-      for (let j = 1; j + 1 < verts.length; j++) {
-        const v = verts[j]!;
-        if (moved.has(j) || v.prot || Math.abs(v.u - joint) > STRUCT_EPS) continue;
-        const a = verts[j - 1]!;
-        const b = verts[j + 1]!;
-        if (Math.abs(a.z - v.z) > TOL || !(b.z > v.z + TOL)) continue;
-        const target = joint + m;
-        if (!(target < b.u - STRUCT_EPS)) continue;
-        verts[j] = { u: target, z: v.z, prot: true };
-        moved.add(j);
-      }
-    }
+    // Fin de plat exactement au raccord (relecture K2f2 : rives basses disjointes de
+    // h·(1/cos α − 1), 89,9 mm sur une cage alignée de 900 / 900 mm à palier de 300 mm en
+    // UPN 160) : traitée par la boucle ci-dessus depuis K2h, `chainPieces` désignant tout sommet
+    // au raccord par un sous-tronçon de longueur nulle (même report à `m` après le raccord).
   }
   // 1. Sommets alignés (même protégés) : pas de jarret. Un jarret de partie de niveau aligné
   //    (raccord de niveau) passe sa protection au sommet suivant de la partie de niveau, qui
@@ -870,6 +894,7 @@ export function profileBearings(input: BearingInput): BearingResult {
   const h = sec.h;
   const m = Math.max(settings.minSegmentLength, MIN_CAGE_STRINGER_LENGTH);
   const minAngle = (settings.minKneeAngle * Math.PI) / 180;
+  const maxAngle = (settings.maxSegmentAngle * Math.PI) / 180;
   const issues: BearingIssue[] = [];
 
   // Faces triées (I9 : indépendant de l'ordre d'entrée) ; fenêtres vides ou non finies écartées.
@@ -1334,6 +1359,30 @@ export function profileBearings(input: BearingInput): BearingResult {
       const piece = c.pieces[q]!;
       const o = chain.offsets[q]!;
       const pitchMax = pitchMaxOf(f);
+      // Sommet de la ligne resté sur le raccord de palier qui ouvre ce membre (protégé, ou non
+      // retiré) : sous-tronçon de longueur nulle, constat bloquant (K2h, voir `chainPieces`).
+      if (
+        q > 0 &&
+        c.line.some((p, j) => j > 0 && j + 1 < c.line.length && Math.abs(p.x - o) <= STRUCT_EPS)
+      ) {
+        issues.push({ kind: "shortSegment", faceId: f.id, u0: f.uLo, shortest: 0 });
+      }
+      // Angle maximal de tronçon (K-Q35, sous-lot K2h) : le plus raide des tronçons en pente du
+      // membre, au-delà du maximum (premier en u à égalité).
+      let steepest: BearingSegment | undefined;
+      for (const s of piece.segments) {
+        if (s.level) continue;
+        if (!steepest || Math.abs(s.alpha) > Math.abs(steepest.alpha)) steepest = s;
+      }
+      if (steepest && Math.abs(steepest.alpha) > maxAngle + EPS_ANGLE) {
+        issues.push({
+          kind: "tooSteepSegment",
+          faceId: f.id,
+          u0: steepest.u0,
+          alpha: Math.abs(steepest.alpha),
+          maxAngle,
+        });
+      }
       piece.segments.forEach((s, k) => {
         if (s.fibres.shortest >= m - TOL) {
           const raccord = piece.prot[k] === true || piece.prot[k + 1] === true;

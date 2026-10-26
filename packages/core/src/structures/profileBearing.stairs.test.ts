@@ -51,7 +51,7 @@ const EXAMPLES_DIR = resolve(dirname(fileURLToPath(import.meta.url)), "../../../
 const loadExample = (file: string): Project =>
   parseProjectText(readFileSync(join(EXAMPLES_DIR, file), "utf8"));
 const RUNS = Math.min(Number(process.env["STEPPING_RUNS"] ?? 30), 200);
-const ZERO: KneeSettings = { minSegmentLength: 0, minKneeAngle: 0 };
+const ZERO: KneeSettings = { minSegmentLength: 0, minKneeAngle: 0, maxSegmentAngle: 90 };
 
 interface Setup {
   readonly project: Project;

@@ -322,7 +322,7 @@ test("site : mur tracé au nu, côté du mur donné par un troisième clic", asy
   // donc donner un nu très légèrement oblique), épaisseur exacte (distance entre les deux nus,
   // contour gauche a → b puis droit b → a), corps du côté cliqué.
   // Tolérance : 1 mm, ou un pixel du plan s'il est plus grand (l'accueil liste toutes les démos,
-  // dix-sept depuis le sous-lot 7a, et réduit la hauteur utile du plan).
+  // dix-neuf depuis le sous-lot K2h du limon coudé, et réduit la hauteur utile du plan).
   const pixelMm = await page
     .locator("svg.plan-site__svg")
     .evaluate((el) => 1 / Math.abs((el as SVGSVGElement).getScreenCTM()!.a));

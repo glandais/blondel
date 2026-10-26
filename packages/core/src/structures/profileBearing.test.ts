@@ -32,7 +32,7 @@ import {
 import type { SteelCornerEnd } from "./steelFlat.js";
 
 const RUNS = Number(process.env["STEPPING_RUNS"] ?? 200);
-const ZERO: KneeSettings = { minSegmentLength: 0, minKneeAngle: 0 };
+const ZERO: KneeSettings = { minSegmentLength: 0, minKneeAngle: 0, maxSegmentAngle: 90 };
 const UPN200: BearingSection = { h: 200, b: 75, shift: 0, tf: 0 };
 const deg = (a: number): number => (a * Math.PI) / 180;
 
@@ -70,6 +70,8 @@ const sectionArb: fc.Arbitrary<BearingSection> = fc
 const settingsArb: fc.Arbitrary<KneeSettings> = fc.record({
   minSegmentLength: fc.integer({ min: 0, max: 200 }),
   minKneeAngle: fc.double({ min: 0, max: 3, noNaN: true }),
+  // Angle maximal de tronçon (K-Q35) sans effet ici : propriété dédiée dans le bloc K2h.
+  maxSegmentAngle: fc.constant(90),
 });
 
 /** Ligne des nez (4 à 18 nez, palier facultatif), faces chaînées par 0 à 2 coins, supports. */
@@ -325,6 +327,47 @@ function axialExtentOf(fb: FaceBearing, k: number, sec: BearingSection, face: Be
   return hi - lo;
 }
 
+/**
+ * I2 : continuité aux jarrets (sommet bas à h des deux décalées, égal au sommet de la rive basse
+ * hors tronçon court) et aux onglets (écart au bout d'aile et aux profondeurs intermédiaires).
+ */
+function i2Property() {
+  return fc.property(synthArb(), ({ input }) => {
+    const res = profileBearings(input);
+    const h = input.section.h;
+    for (const fb of res.faces) {
+      fb.knees.forEach((k, i) => {
+        expect(fb.upperRive[i + 1]!.x).toBeCloseTo(k.upper.x, 9);
+        expect(fb.upperRive[i + 1]!.y).toBeCloseTo(k.upper.y, 9);
+        const a = fb.upperRive[i]!;
+        const b = fb.upperRive[i + 1]!;
+        const c = fb.upperRive[i + 2]!;
+        expect(Math.abs(distToLine(k.lower, a, b) - h)).toBeLessThan(1e-6);
+        expect(Math.abs(distToLine(k.lower, b, c) - h)).toBeLessThan(1e-6);
+        // Le sommet bas publié est celui de la rive basse (hors tronçon court, où
+        // `lowerRiveOf` effondre un tronçon bas).
+        if (!shortIn(res, fb.faceId)) {
+          expect(Math.abs(fb.lowerRive[i + 1]!.x - k.lower.x)).toBeLessThan(1e-6);
+          expect(Math.abs(fb.lowerRive[i + 1]!.y - k.lower.y)).toBeLessThan(1e-6);
+        }
+      });
+    }
+    for (const [a, b] of cornerPairs(input)) {
+      if (shortIn(res, a.id) || shortIn(res, b.id)) continue;
+      if (!byId(res, a.id) || !byId(res, b.id)) continue;
+      const fa = byId(res, a.id);
+      const fbB = byId(res, b.id);
+      const corner = cornerOf(a, "end")!;
+      const gap = miterFlangeGap(riveFns(fa), riveFns(fbB), a.faceLength, corner, input.section);
+      expect(gap.max).toBeLessThan(1e-6);
+      // Profondeurs intermédiaires et sommets dans la portée de l'onglet.
+      for (const d of miterDepths(fa, fbB, a.faceLength, corner, input.section)) {
+        expect(miterGapAt(fa, fbB, a.faceLength, corner, d)).toBeLessThan(1e-6);
+      }
+    }
+  });
+}
+
 // ------------------------------------------------------------------------------ propriétés
 
 describe("profileBearing — propriétés (lignes synthétiques)", () => {
@@ -344,49 +387,16 @@ describe("profileBearing — propriétés (lignes synthétiques)", () => {
   });
 
   it("I2 : continuité aux jarrets (sommet bas sur les deux décalées) et aux onglets (bout d'aile)", () => {
-    fc.assert(
-      fc.property(synthArb(), ({ input }) => {
-        const res = profileBearings(input);
-        const h = input.section.h;
-        for (const fb of res.faces) {
-          fb.knees.forEach((k, i) => {
-            expect(fb.upperRive[i + 1]!.x).toBeCloseTo(k.upper.x, 9);
-            expect(fb.upperRive[i + 1]!.y).toBeCloseTo(k.upper.y, 9);
-            const a = fb.upperRive[i]!;
-            const b = fb.upperRive[i + 1]!;
-            const c = fb.upperRive[i + 2]!;
-            expect(Math.abs(distToLine(k.lower, a, b) - h)).toBeLessThan(1e-6);
-            expect(Math.abs(distToLine(k.lower, b, c) - h)).toBeLessThan(1e-6);
-            // Le sommet bas publié est celui de la rive basse (hors tronçon court, où
-            // `lowerRiveOf` effondre un tronçon bas).
-            if (!shortIn(res, fb.faceId)) {
-              expect(Math.abs(fb.lowerRive[i + 1]!.x - k.lower.x)).toBeLessThan(1e-6);
-              expect(Math.abs(fb.lowerRive[i + 1]!.y - k.lower.y)).toBeLessThan(1e-6);
-            }
-          });
-        }
-        for (const [a, b] of cornerPairs(input)) {
-          if (shortIn(res, a.id) || shortIn(res, b.id)) continue;
-          if (!byId(res, a.id) || !byId(res, b.id)) continue;
-          const fa = byId(res, a.id);
-          const fbB = byId(res, b.id);
-          const corner = cornerOf(a, "end")!;
-          const gap = miterFlangeGap(
-            riveFns(fa),
-            riveFns(fbB),
-            a.faceLength,
-            corner,
-            input.section,
-          );
-          expect(gap.max).toBeLessThan(1e-6);
-          // Profondeurs intermédiaires et sommets dans la portée de l'onglet.
-          for (const d of miterDepths(fa, fbB, a.faceLength, corner, input.section)) {
-            expect(miterGapAt(fa, fbB, a.faceLength, corner, d)).toBeLessThan(1e-6);
-          }
-        }
-      }),
-      { numRuns: RUNS },
-    );
+    fc.assert(i2Property(), { numRuns: RUNS });
+  });
+
+  /**
+   * Rejeu de I2 sur la graine 1 275 399 715 (sous-lot K2h) : au 141ᵉ tirage, nez à changement de
+   * pente exactement sur un raccord de palier, onglet ouvert de 95,9 mm avant la correction de
+   * `chainPieces` (cas réduit chiffré dans le bloc des paliers).
+   */
+  it("I2 : rejeu de la graine 1 275 399 715 (nez sur un raccord de palier)", () => {
+    fc.assert(i2Property(), { seed: 1275399715, numRuns: 200 });
   });
 
   it("I3 : fidélité à la ligne des nez hors des parties de niveau (réglages nuls), écart publié exact", () => {
@@ -738,8 +748,15 @@ function twoFaces(corner: SteelCornerEnd, slope: number, settings: KneeSettings,
 
 describe("profileBearing — cas chiffrés", () => {
   it("réglages : défauts provisoires, bornes", () => {
-    expect(PROVISIONAL_KNEE_SETTINGS).toEqual({ minSegmentLength: 50, minKneeAngle: 0.5 });
+    expect(PROVISIONAL_KNEE_SETTINGS).toEqual({
+      minSegmentLength: 50,
+      minKneeAngle: 0.5,
+      maxSegmentAngle: 75,
+    });
     expect(KneeSettingsSchema.safeParse({ minKneeAngle: 46 }).success).toBe(false);
+    expect(KneeSettingsSchema.safeParse({ maxSegmentAngle: 0 }).success).toBe(false);
+    expect(KneeSettingsSchema.safeParse({ maxSegmentAngle: 91 }).success).toBe(false);
+    expect(KneeSettingsSchema.safeParse({ maxSegmentAngle: 90 }).success).toBe(true);
     expect(KneeSettingsSchema.safeParse({ minSegmentLength: 12.5 }).success).toBe(false);
   });
 
@@ -755,7 +772,7 @@ describe("profileBearing — cas chiffrés", () => {
 
   it("(b) parties de niveau : λA = m + h·tan(α_A/2), λB = m (rentrant) ; + b·t (saillant)", () => {
     const m = 50;
-    const settings = { minSegmentLength: m, minKneeAngle: 0 };
+    const settings = { minSegmentLength: m, minKneeAngle: 0, maxSegmentAngle: 90 };
     for (const [corner, sail] of [
       [{ joint: "wall", concave: true, tanHalf: 1 }, 0],
       [{ joint: "jour", concave: false, tanHalf: 1 }, 75],
@@ -949,7 +966,7 @@ describe("profileBearing — cas chiffrés", () => {
       const p = knots[knots.length - 1]!;
       knots.push({ x: p.x + 500, y: p.y + 500 * Math.tan(a) });
     }
-    const res = single(knots, { minSegmentLength: 0, minKneeAngle: 0.3 });
+    const res = single(knots, { minSegmentLength: 0, minKneeAngle: 0.3, maxSegmentAngle: 90 });
     const fb = res.faces[0]!;
     expect(fb.removed[0]!.u).toBeCloseTo(500, 9);
     expect(fb.removed[0]!.reason).toBe("angle");
@@ -965,7 +982,7 @@ describe("profileBearing — cas chiffrés", () => {
       { x: 590, y: 356 },
       { x: 870, y: 531 },
     ];
-    const res = single(knots, { minSegmentLength: 50, minKneeAngle: 0 });
+    const res = single(knots, { minSegmentLength: 50, minKneeAngle: 0, maxSegmentAngle: 90 });
     const fb = res.faces[0]!;
     expect(fb.removed.map((r) => r.reason)).toContain("segment");
     expect(fb.removed.find((r) => r.reason === "segment")!.u).toBe(30);
@@ -1187,6 +1204,70 @@ function pitchMaxOf(pitch: PiecewiseLinear, f: BearingFace): number {
   return out;
 }
 
+describe("profileBearing — angle maximal de tronçon (K-Q35, sous-lot K2h)", () => {
+  it("propriété : constat `tooSteepSegment` si et seulement si un tronçon en pente dépasse le maximum, angle publié = plus raide de la face", () => {
+    let seen = 0;
+    fc.assert(
+      fc.property(
+        synthArb(
+          fc.record({
+            minSegmentLength: fc.integer({ min: 0, max: 200 }),
+            minKneeAngle: fc.double({ min: 0, max: 3, noNaN: true }),
+            maxSegmentAngle: fc.integer({ min: 20, max: 90 }),
+          }),
+        ),
+        ({ input }) => {
+          const res = profileBearings(input);
+          const max = deg(input.settings.maxSegmentAngle);
+          for (const fb of res.faces) {
+            const slopes = fb.segments.filter((s) => !s.level).map((s) => Math.abs(s.alpha));
+            const steepest = slopes.length > 0 ? Math.max(...slopes) : 0;
+            const found = res.issues.filter(
+              (i): i is Extract<BearingIssue, { kind: "tooSteepSegment" }> =>
+                i.kind === "tooSteepSegment" && i.faceId === fb.faceId,
+            );
+            expect(found.length).toBeLessThanOrEqual(1);
+            expect(found.length === 1).toBe(steepest > max + 1e-9);
+            if (found.length === 1) {
+              seen++;
+              expect(found[0]!.alpha).toBe(steepest);
+              expect(found[0]!.maxAngle).toBeCloseTo(max, 12);
+              const s = fb.segments.find((x) => x.u0 === found[0]!.u0)!;
+              expect(Math.abs(s.alpha)).toBe(steepest);
+            }
+          }
+        },
+      ),
+      { numRuns: RUNS },
+    );
+    expect(seen).toBeGreaterThan(0);
+  });
+
+  it("cas chiffré : girons de 40 mm pour 180 mm de hauteur (77,47°), constat à 75°, aucun à 80°", () => {
+    const knots = [
+      { x: 0, y: 0 },
+      { x: 250, y: 180 },
+      { x: 500, y: 360 },
+      { x: 540, y: 540 },
+      { x: 580, y: 720 },
+      { x: 620, y: 900 },
+      { x: 870, y: 1080 },
+      { x: 1120, y: 1260 },
+    ];
+    const sec: BearingSection = { h: 80, b: 45, shift: 0, tf: 0 };
+    const alpha = Math.atan2(180, 40);
+    expect((alpha * 180) / Math.PI).toBeCloseTo(77.47, 2);
+    const at75 = single(knots, { ...ZERO, maxSegmentAngle: 75 }, sec);
+    expect(at75.issues.filter((i) => i.kind === "tooSteepSegment")).toEqual([
+      { kind: "tooSteepSegment", faceId: "F1", u0: 500, alpha, maxAngle: deg(75) },
+    ]);
+    const at80 = single(knots, { ...ZERO, maxSegmentAngle: 80 }, sec);
+    expect(at80.issues.some((i) => i.kind === "tooSteepSegment")).toBe(false);
+    // Le constat ne change pas la ligne d'appui (repli décidé par le plugin).
+    expect(at80.faces).toEqual(at75.faces);
+  });
+});
+
 describe("profileBearing — paliers du limon coudé (sous-lot K2f)", () => {
   it("propriété : raccord de palier entre deux faces (chaîne) : rives et pente continues, aucune partie de niveau ni jarret au raccord", () => {
     let seen = 0;
@@ -1376,7 +1457,7 @@ describe("profileBearing — paliers du limon coudé (sous-lot K2f)", () => {
       pitch: { inner: pitch, outer: pitch },
       upperOffset: 0,
       section: { h: 80, b: 45, shift: 0, tf: 0 },
-      settings: { minSegmentLength: 120, minKneeAngle: 0 },
+      settings: { minSegmentLength: 120, minKneeAngle: 0, maxSegmentAngle: 90 },
     });
     expect(res.corners).toHaveLength(1);
     expect(res.corners[0]!.z).toBeCloseTo(pitch.at(1234.6), 9);
@@ -1683,5 +1764,218 @@ describe("profileBearing — paliers du limon coudé (sous-lot K2f)", () => {
     expect(Math.abs(ra.upper(1250) - rb.upper(0))).toBeLessThan(1e-9);
     expect(Math.abs(ra.lower(1250) - rb.lower(0))).toBeLessThan(1e-9);
     expect(res.landingChains).toEqual([["A", "B"]]);
+  });
+
+  /**
+   * Nez à changement de pente exactement sur le raccord de palier (sous-lot K2h, contre-exemple
+   * réduit de I2, graine 1 275 399 715, copié tel quel) : pente 150 / 353 (23,0°) avant, 150 / 73
+   * (64,1°) après, réglages nuls (m = 1), h = 80. Le sommet au raccord était écarté des deux
+   * membres : jarret sur la coupe d'aplomb, rives basses décalées de
+   * h·(1/cos α₂ − 1/cos α₁) = 80 × (2,28520 − 1,08654) = 95,893 mm. Il borne désormais un
+   * sous-tronçon de longueur nulle et il est retiré : la ligne traverse le raccord d'un seul
+   * segment.
+   */
+  it("nez à changement de pente sur le raccord (graine 1 275 399 715) : retiré, rives continues", () => {
+    const landing: SteelCornerEnd = { joint: "landing", concave: true, tanHalf: 0 };
+    const pitch = new PiecewiseLinear(
+      [1000, 1047, 1088, 1131, 1484, 1557, 1605].map((x, i) => ({ x, y: 170 + 150 * i })),
+    );
+    const faces: BearingFace[] = [
+      {
+        id: "F1",
+        side: "outer",
+        sigmaA: 700,
+        faceLength: 784,
+        uLo: 300,
+        uHi: 784,
+        start: "floor",
+        end: "corner",
+        endCorner: landing,
+      },
+      {
+        id: "F2",
+        side: "outer",
+        sigmaA: 1484,
+        faceLength: 421,
+        uLo: 0,
+        uHi: 121,
+        start: "corner",
+        end: "arrival",
+        startCorner: landing,
+      },
+    ];
+    const sec: BearingSection = { h: 80, b: 45, shift: 0, tf: 0 };
+    const res = profileBearings({
+      faces,
+      pitch: { inner: pitch, outer: pitch },
+      upperOffset: 0,
+      section: sec,
+      settings: ZERO,
+    });
+    const a = byId(res, "F1");
+    const b = byId(res, "F2");
+    // Retrait au raccord (u = 784 dans le repère de la chaîne, 0 dans celui de F2).
+    expect(b.removed).toContainEqual({
+      u: 0,
+      deltaAlpha: expect.any(Number) as number,
+      reason: "segment",
+      shortest: 0,
+    });
+    // Aucun jarret au raccord : F1 finit et F2 commence sur le même segment.
+    expect(a.line[a.line.length - 1]!.x).toBe(784);
+    expect(b.line[0]!.x).toBe(0);
+    const lastA = a.segments[a.segments.length - 1]!;
+    expect(b.segments[0]!.alpha).toBeCloseTo(lastA.alpha, 12);
+    const ra = riveFns(a);
+    const rb = riveFns(b);
+    expect(Math.abs(ra.lower(784) - rb.lower(0))).toBeLessThan(1e-9);
+    expect(Math.abs(ra.upper(784) - rb.upper(0))).toBeLessThan(1e-9);
+    expect(miterFlangeGap(ra, rb, 784, landing, sec).max).toBeLessThan(1e-6);
+    expect(res.landingChains).toEqual([["F1", "F2"]]);
+    expect(res.issues.some((i) => isShort(i))).toBe(false);
+  });
+
+  /**
+   * Début de plat exactement sur le raccord de palier (sous-lot K2h) : sommet au raccord retiré
+   * comme un sous-tronçon de longueur nulle, rives continues ; le palier n'est plus suivi de niveau
+   * et le nez du raccord passe au-dessus de la rive : constats publiés (repli de la face par le
+   * plugin, `noseAboveRive` étant bloquant ; dans une chaîne, refus du raccord).
+   * PROVISOIRE, en attente de la décision de l'utilisateur (question 3 du rapport K2h, ledger) :
+   * le miroir de la fin de plat (sommet avancé à `joint − m`) a été essayé à la relecture et ne
+   * suffit pas ici, la coupe du jarret convexe (rive basse en u = 1 261,4) franchissant le
+   * raccord (`cutsCross`, rives basses décalées de 10,3 mm) ; il faudrait reculer d'au moins
+   * m + h·tan β, β dépendant lui-même du report.
+   */
+  it("début de plat exactement au raccord : retiré, rives continues, constats publiés", () => {
+    const landing: SteelCornerEnd = { joint: "landing", concave: true, tanHalf: 0 };
+    const pitch = new PiecewiseLinear([
+      { x: 0, y: 0 },
+      { x: 250, y: 180 },
+      { x: 500, y: 360 },
+      { x: 750, y: 540 },
+      { x: 1000, y: 720 },
+      { x: 1250, y: 900 },
+      { x: 1650, y: 900 },
+      { x: 1900, y: 1080 },
+      { x: 2150, y: 1260 },
+    ]);
+    const faces: BearingFace[] = [
+      {
+        id: "A",
+        side: "outer",
+        sigmaA: 0,
+        faceLength: 1250,
+        uLo: 0,
+        uHi: 1250,
+        start: "floor",
+        end: "corner",
+        endCorner: landing,
+      },
+      {
+        id: "B",
+        side: "outer",
+        sigmaA: 1250,
+        faceLength: 900,
+        uLo: 0,
+        uHi: 900,
+        start: "corner",
+        end: "arrival",
+        startCorner: landing,
+      },
+    ];
+    const sec: BearingSection = { h: 160, b: 65, shift: 0, tf: 0 };
+    const res = profileBearings({
+      faces,
+      pitch: { inner: pitch, outer: pitch },
+      upperOffset: 40,
+      section: sec,
+      settings: PROVISIONAL_KNEE_SETTINGS,
+    });
+    const a = byId(res, "A");
+    const b = byId(res, "B");
+    expect(b.removed.filter((r) => r.reason === "segment")).toEqual([
+      { u: 0, deltaAlpha: expect.any(Number) as number, reason: "segment", shortest: 0 },
+    ]);
+    const ra = riveFns(a);
+    const rb = riveFns(b);
+    expect(Math.abs(ra.lower(1250) - rb.lower(0))).toBeLessThan(1e-9);
+    expect(Math.abs(ra.upper(1250) - rb.upper(0))).toBeLessThan(1e-9);
+    expect(res.issues.some((i) => i.kind === "landingNotLevel" && i.faceId === "B")).toBe(true);
+    expect(res.issues.some((i) => i.kind === "noseAboveRive")).toBe(true);
+    expect(res.landingChains).toEqual([["A", "B"]]);
+  });
+
+  /**
+   * Sommet protégé resté sur le raccord de palier (relecture K2h, branche jusque-là sans test) :
+   * coin mural rentrant W | A puis raccord de palier A | B, A long de m = 50 mm. La partie de
+   * niveau qui suit le coin mural mesure λB = m (cas (b)) : son jarret de fin, protégé, tombe
+   * exactement sur le raccord (u = 50 dans la chaîne, 0 dans le repère de B). Ni retiré ni
+   * reporté : constat bloquant `shortSegment` de longueur nulle sur B, à l'abscisse du raccord.
+   * À 40 mm, le jarret tombe dans B (constat de longueur sur A, sans sous-tronçon nul).
+   */
+  it("jarret protégé sur le raccord : constat `shortSegment` de longueur nulle au raccord", () => {
+    const wall: SteelCornerEnd = { joint: "wall", concave: true, tanHalf: 1 };
+    const landing: SteelCornerEnd = { joint: "landing", concave: true, tanHalf: 0 };
+    const pitch = new PiecewiseLinear(
+      Array.from({ length: 13 }, (_, k) => ({ x: 250 * k, y: 180 * k })),
+    );
+    const run = (la: number): BearingResult =>
+      profileBearings({
+        faces: [
+          {
+            id: "W",
+            side: "outer",
+            sigmaA: 0,
+            faceLength: 1000,
+            uLo: 0,
+            uHi: 1000,
+            start: "floor",
+            end: "corner",
+            endCorner: wall,
+          },
+          {
+            id: "A",
+            side: "outer",
+            sigmaA: 1000,
+            faceLength: la,
+            uLo: 0,
+            uHi: la,
+            start: "corner",
+            end: "corner",
+            startCorner: wall,
+            endCorner: landing,
+          },
+          {
+            id: "B",
+            side: "outer",
+            sigmaA: 1000 + la,
+            faceLength: 1000,
+            uLo: 0,
+            uHi: 1000,
+            start: "corner",
+            end: "arrival",
+            startCorner: landing,
+          },
+        ],
+        pitch: { inner: pitch, outer: pitch },
+        upperOffset: 0,
+        section: UPN200,
+        settings: { minSegmentLength: 50, minKneeAngle: 0, maxSegmentAngle: 90 },
+      });
+    const atJoint = run(50);
+    expect(atJoint.landingChains).toEqual([["A", "B"]]);
+    expect(atJoint.issues.filter((i) => i.kind === "shortSegment")).toEqual([
+      { kind: "shortSegment", faceId: "B", u0: 0, shortest: 0 },
+    ]);
+    // A reste de niveau jusqu'au raccord, B en part de niveau.
+    expect(byId(atJoint, "A").line).toEqual([
+      { x: 0, y: 720 },
+      { x: 50, y: 720 },
+    ]);
+    expect(byId(atJoint, "B").line[0]).toEqual({ x: 0, y: 720 });
+    const inside = run(40);
+    expect(
+      inside.issues.some((i) => i.kind === "shortSegment" && i.faceId === "B" && i.shortest === 0),
+    ).toBe(false);
   });
 });

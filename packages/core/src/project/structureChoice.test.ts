@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import fc from "fast-check";
 import { translatorFor, type Message } from "@blondel/i18n";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -13,19 +16,132 @@ import {
   profileNewelFamily,
   withNewels,
 } from "./newel.js";
-import { createProject, PRESET_IDS } from "./presets.js";
+import { toCageLayout, toFlightsLayout } from "./layoutConversion.js";
+import { parseProjectText } from "./parse.js";
+import { createDemoProject } from "./presetDemo.js";
+import { ALL_PRESET_IDS, createProject, PRESET_IDS } from "./presets.js";
 import {
   PROFILE_NEWEL_EXEMPT_RULES,
   PROFILE_NEWEL_ITERATIONS,
   PROFILE_NEWEL_VERIFICATIONS,
   addedViolations,
   applyStructureChoice,
+  isTurningLayout,
   resolveProfileNewel,
+  stringerLineOnTurn,
   violationCounts,
   type ProfileNewelModel,
 } from "./structureChoice.js";
 
 beforeEach(() => clearModelCache());
+
+const EXAMPLES_DIR = resolve(dirname(fileURLToPath(import.meta.url)), "../../../../examples");
+const loadExample = (file: string): Project =>
+  parseProjectText(readFileSync(join(EXAMPLES_DIR, file), "utf8"));
+
+describe("stringerLineOnTurn : ligne d'appui écrite au passage d'une volée droite à un tournant (K-Q36, sous-lot K2h)", () => {
+  // Préréglages (volées, hélicoïdal), cages saisies (démo à palier droit, exemple relu) et
+  // escalier droit converti en cage à un seul tronçon (relecture K2h).
+  const straightCage = toCageLayout(createProject("straight"))!;
+  const BASES = [
+    ...ALL_PRESET_IDS.map((id) => createProject(id)),
+    createDemoProject("demo-cage-landing-steel"),
+    loadExample("cage-palier-droit.blondel.json"),
+    straightCage,
+  ];
+  const withStructure = (p: Project, kind: string, params: Record<string, unknown>): Project => ({
+    ...p,
+    stair: { ...p.stair, structure: { kind, params } },
+  });
+
+  it("isTurningLayout : volées droites faux, volées à tournant vrai, hélicoïdal faux, cage vrai (même à un seul tronçon, voir la question 4 du ledger K2h)", () => {
+    expect(isTurningLayout(createProject("straight").stair.layout)).toBe(false);
+    expect(isTurningLayout(createProject("quarter-left").stair.layout)).toBe(true);
+    expect(isTurningLayout(createProject("two-quarters-s").stair.layout)).toBe(true);
+    expect(isTurningLayout(createProject("helical").stair.layout)).toBe(false);
+    expect(isTurningLayout(createDemoProject("demo-cage-landing-steel").stair.layout)).toBe(true);
+    expect(straightCage.stair.layout.kind).toBe("cage");
+    expect(
+      straightCage.stair.layout.kind === "cage" && straightCage.stair.layout.sections.length,
+    ).toBe(1);
+    expect(isTurningLayout(straightCage.stair.layout)).toBe(true);
+  });
+
+  it("escalier droit en profilés converti en cage (tracé libre) : `nosing` écrit ; retour aux volées droites : inchangé", () => {
+    const p = withStructure(createProject("straight"), "steel-profile", { family: "UPN" });
+    const cage = toCageLayout(p)!;
+    const out = stringerLineOnTurn(p, cage);
+    expect(out.stair.structure.params).toEqual({ family: "UPN", stringerLine: "nosing" });
+    expect(out.stair.layout).toBe(cage.stair.layout);
+    const back = toFlightsLayout(cage)!;
+    expect(stringerLineOnTurn(cage, back)).toBe(back);
+  });
+
+  it("propriété : écriture de `nosing` si et seulement si profilés sans ligne d'appui, tracé précédent droit et suivant à tournant ; sinon le même objet", () => {
+    let written = 0;
+    let writtenCage = 0;
+    fc.assert(
+      fc.property(
+        fc.nat({ max: BASES.length - 1 }),
+        fc.nat({ max: BASES.length - 1 }),
+        fc.constantFrom("steel-profile", "steel-flat", "wood-housed", "none"),
+        fc.constantFrom<Record<string, unknown>>(
+          {},
+          { family: "UPN" },
+          { family: "IPE", stringerLine: "chord" },
+          { stringerLine: "nosing" },
+        ),
+        (i, j, kind, params) => {
+          const previous = withStructure(BASES[i]!, kind, params);
+          const next = withStructure(BASES[j]!, kind, params);
+          const out = stringerLineOnTurn(previous, next);
+          const expected =
+            kind === "steel-profile" &&
+            !Object.hasOwn(params, "stringerLine") &&
+            !isTurningLayout(previous.stair.layout) &&
+            isTurningLayout(next.stair.layout);
+          if (!expected) {
+            expect(out).toBe(next);
+            return;
+          }
+          written++;
+          if (next.stair.layout.kind === "cage") writtenCage++;
+          expect(out.stair.structure).toEqual({
+            kind,
+            params: { ...params, stringerLine: "nosing" },
+          });
+          expect({ ...out, stair: { ...out.stair, structure: next.stair.structure } }).toEqual(
+            next,
+          );
+          // `chord` jamais remplacé, et une seconde application ne change plus rien.
+          expect(stringerLineOnTurn(previous, out)).toBe(out);
+        },
+      ),
+      {
+        numRuns: RUNS,
+        // Passages d'un escalier droit à chacune des trois cages, toujours exercés.
+        examples: [BASES.length - 3, BASES.length - 2, BASES.length - 1].map(
+          (j): [number, number, string, Record<string, unknown>] => [
+            ALL_PRESET_IDS.indexOf("straight"),
+            j,
+            "steel-profile",
+            { family: "UPN" },
+          ],
+        ),
+      },
+    );
+    expect(written).toBeGreaterThan(0);
+    expect(writtenCage).toBeGreaterThanOrEqual(3);
+  });
+
+  it("projet de forme inattendue (non validé) : rendu tel quel, sans lever", () => {
+    const p = createProject("straight");
+    const broken = { ...p, stair: { ...p.stair, layout: undefined } } as unknown as Project;
+    const profiles = withStructure(broken, "steel-profile", {});
+    expect(stringerLineOnTurn(p, profiles)).toBe(profiles);
+    expect(stringerLineOnTurn(profiles, profiles)).toBe(profiles);
+  });
+});
 
 const RUNS = Number(process.env["STEPPING_RUNS"] ?? 200);
 

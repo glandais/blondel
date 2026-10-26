@@ -473,12 +473,14 @@ const STRUCTURE_BY_KIND: Readonly<Record<string, Readonly<Record<string, ParamTi
     laminationJustification: design(S, [more(5)]),
   },
   // Limons en profilés : ligne d'appui (barre droite ou limon coudé, CK16) en Atelier ; nettoyage
-  // des jarrets (K-Q9) ◆, seulement en limon coudé (`structureParamApplies`).
+  // des jarrets (K-Q9) et angle maximal de tronçon (K-Q35) ◆, seulement en limon coudé
+  // (`structureParamApplies`).
   "steel-profile": {
     stringerLine: workshop(S),
     knee: workshop(S),
     "knee.minSegmentLength": workshop(S),
     "knee.minKneeAngle": workshop(S),
+    "knee.maxSegmentAngle": workshop(S),
   },
   "helical-core": {
     column: workshop(S),

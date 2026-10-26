@@ -70,6 +70,8 @@ export type CrankedFallbackReason =
   | { readonly kind: "shortSegment"; readonly shortest: Mm }
   | { readonly kind: "noseAboveRive"; readonly excess: Mm }
   | { readonly kind: "steepSegment"; readonly alpha: number }
+  /** Tronçon au-delà de l'angle maximal de tronçon (K-Q35) ; angles en radians. */
+  | { readonly kind: "tooSteepSegment"; readonly alpha: number; readonly maxAngle: number }
   | { readonly kind: "lostSupport"; readonly treads: readonly number[] }
   | { readonly kind: "heavier"; readonly bent: Mm; readonly chord: Mm };
 
@@ -202,6 +204,8 @@ const BLOCKING: readonly BearingIssue["kind"][] = [
   "shortSegment",
   "noseAboveRive",
   "steepSegment",
+  // Dernier (K-Q35, sous-lot K2h) : les raisons de repli antérieures ne changent pas.
+  "tooSteepSegment",
 ];
 
 export interface CrankedDecisionInput {
@@ -225,7 +229,8 @@ export interface CrankedDecisionInput {
  * 1. ligne coudée absente → repli `emptyWindow` ;
  * 2. face à une seule pente (CK7) → barre droite **sans** remarque ;
  * 3. constat bloquant du noyau sur la face (`emptyWindow`, `cutsCross`, `shortSegment`,
- *    `noseAboveRive`, `steepSegment`, dans cet ordre) → repli ;
+ *    `noseAboveRive`, `steepSegment`, `tooSteepSegment`, dans cet ordre) → repli (le dernier :
+ *    tronçon au-delà de l'angle maximal de tronçon, K-Q35, comme un tronçon trop court) ;
  * 4. marche que la barre droite porte et que le limon coudé ne porte pas → repli `lostSupport` ;
  * 5. limon coudé qui demande plus d'âme que la barre droite **et** que la section essayée
  *    (`Infinity` compris) → repli `heavier`. Un limon coudé un peu plus exigeant que la barre
@@ -254,6 +259,11 @@ export function decideCrankedFace(input: CrankedDecisionInput): {
         return { mode: "chord", fallback: { kind: "noseAboveRive", excess: i.excess } };
       case "steepSegment":
         return { mode: "chord", fallback: { kind: "steepSegment", alpha: i.alpha } };
+      case "tooSteepSegment":
+        return {
+          mode: "chord",
+          fallback: { kind: "tooSteepSegment", alpha: i.alpha, maxAngle: i.maxAngle },
+        };
       default:
         break;
     }
@@ -295,8 +305,8 @@ export function decideCrankedFace(input: CrankedDecisionInput): {
  *   - repli `heavier` fini au-delà de la limite : refus `beyondCatalog` (section automatique) ou
  *     `beyondSection` (section imposée) ;
  *   - tout autre repli (`emptyWindow`, `cutsCross`, `shortSegment`, `noseAboveRive`,
- *     `steepSegment`, `lostSupport`, `heavier` infini) ou ligne coudée absente : refus, avec la
- *     raison du repli (`emptyWindow` si elle manque).
+ *     `steepSegment`, `tooSteepSegment`, `lostSupport`, `heavier` infini) ou ligne coudée
+ *     absente : refus, avec la raison du repli (`emptyWindow` si elle manque).
  * Les faces hors chaîne ne sont pas touchées (un repli `heavier` hors raccord reste permis,
  * K-Q21). Une chaîne sans membre coudé dont les replis sont tous `heavier` fini sous la limite
  * est donc entièrement forcée coudée (sa section monte : en section automatique, la section
@@ -1056,6 +1066,11 @@ export function crankedFallbackReasonMessage(reason: CrankedFallbackReason): Mes
     case "steepSegment":
       return msg("structure.steelProfile.crankedFallback.steepSegment", {
         angle: dec((reason.alpha * 180) / Math.PI, 1),
+      });
+    case "tooSteepSegment":
+      return msg("structure.steelProfile.crankedFallback.tooSteepSegment", {
+        angle: dec((reason.alpha * 180) / Math.PI, 1),
+        max: dec((reason.maxAngle * 180) / Math.PI, 1),
       });
     case "lostSupport":
       return msg("structure.steelProfile.crankedFallback.lostSupport", {

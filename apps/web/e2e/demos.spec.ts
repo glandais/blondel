@@ -44,6 +44,8 @@ const DEMOS = [
   "Tracé libre à 120° sur limon central",
   "Volée courbe et palier droit, verre",
   "Escalier dans sa pièce, frêne",
+  "Quart tournant sur limons UPN coudés",
+  "Palier droit sur limons UPN coudés",
 ] as const;
 
 // Mesures de temps : une reprise absorbe un pic de charge ponctuel de la machine.
