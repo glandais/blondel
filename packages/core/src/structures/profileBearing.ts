@@ -23,6 +23,8 @@
  *   (palier après un tournant) : partie de niveau du coin relevée au niveau du palier quand le
  *   plat commence à portée de la partie de niveau de début. Plat de palier que la ligne ne suit
  *   pas de niveau hors du raccord glissant : constat `landingNotLevel` (QUESTIONS A41, K-Q28).
+ *   Les chaînes sont rendues (`BearingResult.landingChains`) pour la décision K-Q27 du plan
+ *   (sous-lot K2f2 : le limon voisin d'un limon coudé reste coudé au raccord, sinon refus).
  * - **Nettoyage** (CK6, K-Q9) : sommets alignés retirés (epsilon numérique), puis retrait
  *   déterministe (plus petit |Δα|, puis plus petit u) sous l'angle minimal de jarret et la
  *   longueur minimale de tronçon (`KneeSettings`, valeurs provisoires **à valider**).
@@ -324,6 +326,13 @@ export interface BearingResult {
   readonly faces: readonly FaceBearing[];
   readonly corners: readonly CornerLevel[];
   readonly issues: readonly BearingIssue[];
+  /**
+   * Chaînes de raccords de palier (sous-lot K2f) d'au moins deux limons, ids du bas vers le haut
+   * (σ croissant), dans l'ordre des faces triées (côté, σ, id : indépendant de l'ordre d'entrée,
+   * I9). Lues par le plan du limon coudé pour la décision K-Q27 (sous-lot K2f2 : coudé forcé à
+   * un raccord de palier, sinon refus).
+   */
+  readonly landingChains: readonly (readonly string[])[];
 }
 
 // ------------------------------------------------------------------------------ polylignes
@@ -749,6 +758,24 @@ function cleanLine(
       if (!(target > v.u) || !(target < b.u - STRUCT_EPS)) continue;
       verts[j] = { u: target, z: v.z, prot: true };
       moved.add(j);
+    }
+    // Fin de plat exactement au raccord (sous-tronçon de longueur nulle, relecture K2f2) : aucun
+    // sous-tronçon ne la désigne (le point au raccord n'est pas un sommet de la ligne), et le
+    // jarret tombait sur la coupe d'aplomb : rives basses décalées de h·(1/cos α − 1) entre les
+    // deux membres (89,9 mm sur une cage alignée de 900 / 900 mm à palier de 300 mm en UPN 160).
+    // Même report à `m` après le raccord.
+    for (const joint of chain.offsets.slice(1)) {
+      for (let j = 1; j + 1 < verts.length; j++) {
+        const v = verts[j]!;
+        if (moved.has(j) || v.prot || Math.abs(v.u - joint) > STRUCT_EPS) continue;
+        const a = verts[j - 1]!;
+        const b = verts[j + 1]!;
+        if (Math.abs(a.z - v.z) > TOL || !(b.z > v.z + TOL)) continue;
+        const target = joint + m;
+        if (!(target < b.u - STRUCT_EPS)) continue;
+        verts[j] = { u: target, z: v.z, prot: true };
+        moved.add(j);
+      }
     }
   }
   // 1. Sommets alignés (même protégés) : pas de jarret. Un jarret de partie de niveau aligné
@@ -1451,7 +1478,10 @@ export function profileBearings(input: BearingInput): BearingResult {
     });
   }
   out.sort((a, b) => cmpStr(a.faceId, b.faceId));
-  return { faces: out, corners: cornerLevels, issues };
+  const landingChains = chains
+    .filter((c) => c.members.length > 1)
+    .map((c) => c.members.map((f) => f.id));
+  return { faces: out, corners: cornerLevels, issues, landingChains };
 }
 
 // ------------------------------------------------------------------------------ rives

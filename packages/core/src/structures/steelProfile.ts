@@ -40,8 +40,11 @@
  * - **Cage saisie** (ADR-0010, sous-lot 6b) : mêmes faces que `steel-flat` (`steelCageFaces`),
  *   mêmes fonctions sauf le palier droit en barre droite (`STEEL_PROFILE_CAGE`) ; palier droit
  *   accepté en limon coudé (`STEEL_PROFILE_CAGE_NOSING`, K-Q5, sous-lot K2f), aboutage de palier
- *   selon `splice` ; coupe d'onglet à φ/2 en plan à un angle quelconque, rentrant ou saillant
- *   (`miterOffset`, `miterCutExtra`) ; onglets plus longs que la face : limon non généré
+ *   selon `splice` ; à un raccord de palier, le limon voisin d'un limon coudé reste coudé (sa
+ *   section peut monter), sinon refus du palier droit pour cette cage en erreur chiffrée, seules
+ *   les marches produites (K-Q27, sous-lot K2f2) ; coupe d'onglet à φ/2 en plan à un angle
+ *   quelconque, rentrant ou saillant (`miterOffset`, `miterCutExtra`) ; onglets plus longs que
+ *   la face : limon non généré
  *   (`profileMiterFiberLength`) ; jour en arc : contrôle de cintrage gardé. À valider,
  *   QUESTIONS F17.
  * - **Supports** : cornières (C §2.3 [58]) sous chaque marche, soudées ou vissées.
@@ -140,11 +143,14 @@ import {
   kneeNormal,
   kneeWeldLength,
   landingNotLevelNotes,
+  landingRefusalMessage,
   type CornerGroup,
   type CrankedComponentSpec,
   type CrankedJigItem,
   type CrankedFallbackReason,
   type CrankedSectionPlan,
+  type LandingHeightLimit,
+  type LandingRefusal,
 } from "./steelProfileCranked.js";
 import { cuttingPlan, type CutPiece, type CuttingPlan } from "./steelProfileCutting.js";
 import {
@@ -386,6 +392,19 @@ export interface SteelProfileResult {
       readonly faceMark: string;
       readonly logged: Mm;
     }[];
+  };
+  /**
+   * Raccords de palier (K-Q27, sous-lot K2f2 ; `nosing` seulement, pour les tests et les sondes) :
+   * chaînes du noyau et refus pour la section retenue (non vides : palier droit refusé, seules
+   * les marches produites) ; sections essayées dont le plan a forcé au moins un limon coudé
+   * (`forcedSections`, toutes écartées par le choix automatique) ou refusé un limon
+   * (`refusedSections`), dans l'ordre du catalogue puis la section imposée.
+   */
+  readonly landing?: {
+    readonly chains: readonly (readonly string[])[];
+    readonly refusals: readonly LandingRefusal[];
+    readonly forcedSections: readonly string[];
+    readonly refusedSections: readonly string[];
   };
 }
 
@@ -677,10 +696,21 @@ export function buildSteelProfile(
         (t) => landingTreads.has(t),
       )
     : [];
+  // K-Q27 (K2f2) : un limon de chaîne de palier gardé coudé ne peut pas demander plus que la
+  // plus haute section de la famille en section automatique (celle que retient
+  // `noSectionPasses`), ni plus que la section imposée (relecture K2f2 : sinon ses supports ne
+  // logent pas et une marche peut perdre son appui, violation que la barre droite n'a pas).
+  const familySections = params.section === "auto" ? sectionsOf(params.family) : [];
+  const deepest = familySections[familySections.length - 1];
+  const limitOf = (sec: SteelSection): LandingHeightLimit | undefined =>
+    params.section === "auto"
+      ? deepest && { h: deepest.h, section: deepest.name }
+      : { h: sec.h, section: sec.name, imposed: true };
   const plans = new Map<SteelSection, CrankedSectionPlan>();
   const planOf = (sec: SteelSection): CrankedSectionPlan => {
     let plan = plans.get(sec);
     if (!plan) {
+      const limit = limitOf(sec);
       plan = crankedSectionPlan({
         pres,
         bearingFaces,
@@ -693,6 +723,7 @@ export function buildSteelProfile(
         chordNeedOfSupport: (p, c) => heightNeedOf(p, c, sec),
         chordLostOfSupport,
         cornerGroups,
+        ...(limit ? { forcedHeightLimit: limit } : {}),
       });
       plans.set(sec, plan);
     }
@@ -712,22 +743,40 @@ export function buildSteelProfile(
       : fitInWeb(p, c, sec);
   };
   const heightNeed = (s: SteelSection): Mm => Math.max(0, ...pres.map((p) => faceNeed(p, s)));
+  /** Raccord de palier refusé dans la section (K-Q27) ; toujours faux en `chord`. */
+  const refusedAt = (s: SteelSection): boolean => nosing && planOf(s).landing.refusals.length > 0;
   let section: SteelSection | null;
   if (params.section === "auto") {
     const candidates = sectionsOf(params.family);
     section = lightestSection(
       candidates,
-      (s) => s.h >= heightNeed(s) - 1e-9 && pres.every((p) => passesPrecheck(analyze(p, s))),
+      (s) =>
+        !refusedAt(s) &&
+        s.h >= heightNeed(s) - 1e-9 &&
+        pres.every((p) => passesPrecheck(analyze(p, s))),
     );
     if (!section) {
       section = candidates[candidates.length - 1] ?? null;
-      if (section) {
+      // Refus du raccord de palier dans la plus haute section : erreur du refus seule, ci-dessous.
+      if (section && !refusedAt(section)) {
         errors.push(
           msg("structure.steelProfile.error.noSectionPasses", {
             family: params.family,
             section: section.name,
           }),
         );
+        // Sections écartées par un limon gardé coudé à un raccord de palier (K-Q27, relecture
+        // K2f2) : cause de `noSectionPasses` à nommer (aucun plan en `chord`).
+        const forcedNames = candidates
+          .filter((c) => (plans.get(c)?.landing.forced.length ?? 0) > 0)
+          .map((c) => textMessage(c.name));
+        const sections = forcedNames.reduceRight<Message | null>(
+          (rest, first) => (rest === null ? first : msg("common.list", { first, rest })),
+          null,
+        );
+        if (sections) {
+          notes.push(msg("structure.steelProfile.note.landingForcedSections", { sections }));
+        }
       }
     } else {
       notes.push(
@@ -742,6 +791,35 @@ export function buildSteelProfile(
   }
   if (!section) return empty([msg("structure.steelProfile.error.emptyCatalog")]);
   const s = section;
+  // Raccords de palier (K-Q27, K2f2) : sections essayées dont le plan a gardé un limon coudé.
+  const landingOf = (refusals: readonly LandingRefusal[]): SteelProfileResult["landing"] => {
+    const order = (x: SteelSection): number => {
+      const i = familySections.indexOf(x);
+      return i < 0 ? familySections.length : i;
+    };
+    const tried = [...plans.entries()].sort((a, b) => order(a[0]) - order(b[0]));
+    return {
+      chains: planOf(s).landing.chains,
+      refusals,
+      forcedSections: tried.filter(([, pl]) => pl.landing.forced.length > 0).map(([x]) => x.name),
+      refusedSections: tried
+        .filter(([, pl]) => pl.landing.refusals.length > 0)
+        .map(([x]) => x.name),
+    };
+  };
+  if (refusedAt(s)) {
+    // Coudé infaisable à un raccord de palier (K-Q27) : palier droit non pris en charge pour
+    // cette cage (refus de F17 (3)), une erreur chiffrée par limon ; seules les marches sont
+    // produites (aucune pièce de structure), comme le garde-fou de cage.
+    const refusals = planOf(s).landing.refusals;
+    const markOfFace = new Map(pres.map((p) => [p.face.id, p.face.mark]));
+    const markOf = (id: string): string => markOfFace.get(id) ?? id;
+    return {
+      ...empty([...errors, ...refusals.map((r) => landingRefusalMessage(r, markOf))]),
+      cranked: planOf(s),
+      landing: landingOf(refusals),
+    };
+  }
   const requiredHeight = heightNeed(s);
   const permanentArea = permanentAreaOf(s);
 
@@ -1061,6 +1139,7 @@ export function buildSteelProfile(
             required: planOf(s).corner.required,
             removed: removedCorner,
           },
+          landing: landingOf([]),
         }
       : {}),
   };

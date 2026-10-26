@@ -14,7 +14,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
-import { dec, msg, translatorFor } from "@blondel/i18n";
+import { dec, msg, textMessage, translatorFor, type Message } from "@blondel/i18n";
 import { CAGE_FEATURE_LABELS } from "../model/cageFeatures.js";
 import { findSection, sectionPerimeter, sectionsOf } from "../catalog/sections.js";
 import { resolveWorkshopProfile } from "../workshop/profile.js";
@@ -408,13 +408,16 @@ describe("steel-profile — critères de fin de K2b en `nosing`", () => {
   });
 
   // Cages à palier droit (K-Q5, sous-lot K2f) : `buildModel` refuse le palier droit en barre
-  // droite (`structure.cageUnsupported`, message inchangé) et le construit en limon coudé.
+  // droite (`structure.cageUnsupported`, message inchangé) et le construit en limon coudé, sauf
+  // raccord de palier où le coudé est infaisable (K-Q27, sous-lot K2f2 : cage-60-palier-limon,
+  // refus du plugin, seules les marches produites).
   for (const file of [
     "cage-60-palier-limon.blondel.json",
     "cage-60-palier-central.blondel.json",
     "cage-45-palier-acier.blondel.json",
   ]) {
-    it(`${file} : palier droit refusé en barre droite (message inchangé), construit en \`nosing\``, () => {
+    const refused = file === "cage-60-palier-limon.blondel.json";
+    it(`${file} : palier droit refusé en barre droite (message inchangé), ${refused ? "refusé par K-Q27" : "construit"} en \`nosing\``, () => {
       const p = choose(loadExample(file));
       const chord = run(withLine(p, "chord"));
       expect(errorKeys(chord)).toContain("structure.cageUnsupported");
@@ -430,7 +433,10 @@ describe("steel-profile — critères de fin de K2b en `nosing`", () => {
       );
       const nosing = run(withLine(p, "nosing"));
       expect(errorKeys(nosing)).not.toContain("structure.cageUnsupported");
-      expect(nosing.m.parts.some((q) => q.category === "stringer")).toBe(true);
+      expect(nosing.m.parts.some((q) => q.category === "stringer")).toBe(!refused);
+      expect(errorKeys(nosing).includes("structure.steelProfile.error.landingSpliceRefused")).toBe(
+        refused,
+      );
     });
   }
 
@@ -452,9 +458,10 @@ describe("steel-profile — critères de fin de K2b en `nosing`", () => {
 
   // Critères de fin de K2f (`nosing`) : section, erreurs, besoin, aucune règle en violation de
   // plus que la barre droite d'essai (référence `withRefKind`, base K-Q24) hors
-  // FAB_ONGLET_RACCORD (K-Q21 ; raccord de palier entre un limon coudé et un limon replié, K-Q27).
+  // FAB_ONGLET_RACCORD (K-Q21). K2f2 (K-Q27) : plus aucun raccord de palier mixte, chaque raccord
+  // relie deux limons coudés ; cage-60-palier-limon est refusée (test suivant), cage-45 et
+  // cage-60-palier-central sont inchangées (même section, même besoin).
   for (const [file, section, errors, need, joints] of [
-    ["cage-60-palier-limon.blondel.json", "UPN 240", [], 239.3, 1],
     ["cage-45-palier-acier.blondel.json", "UPN 220", [], 213.7, 2],
     // Jour en pan coupé (LI2, raccord raide replié en barre droite, K-Q12) : même erreur et même
     // besoin que la barre droite.
@@ -485,18 +492,21 @@ describe("steel-profile — critères de fin de K2b en `nosing`", () => {
         expect(n, rule).toBeLessThanOrEqual(base[rule] ?? 0);
       }
       // Raccords de palier entre deux limons coudés : rives continues (K2f (2c)). Le palier de
-      // cage-60-palier-central tourne légèrement (coin `wall` / `jour`, pas de raccord de palier) ;
-      // sur cage-60-palier-limon, LI2 est replié (raccord raide) : un seul raccord coudé.
+      // cage-60-palier-central tourne légèrement (coin `wall` / `jour`, pas de raccord de palier).
+      // K-Q27 : tout raccord de palier relie deux limons coudés (aucun mixte).
       let landingJoints = 0;
       for (const a of x.r.stringers) {
-        if (a.face.endCorner?.joint !== "landing" || !a.bearing) continue;
+        if (a.face.endCorner?.joint !== "landing") continue;
         const b = x.r.stringers.find(
           (s) =>
             s.face.side === a.face.side &&
             s.face.startCorner?.joint === "landing" &&
             Math.abs(s.face.sigmaA - a.face.sigmaA - a.face.faceLength) < 1e-6,
         );
-        if (!b?.bearing) continue;
+        if (!b) continue;
+        expect(a.bearing, `${a.face.mark} / ${b.face.mark}`).toBeDefined();
+        expect(b.bearing, `${a.face.mark} / ${b.face.mark}`).toBeDefined();
+        if (!a.bearing || !b.bearing) continue;
         landingJoints++;
         const ra = riveFns(a.bearing);
         const rb = riveFns(b.bearing);
@@ -504,6 +514,8 @@ describe("steel-profile — critères de fin de K2b en `nosing`", () => {
         expect(Math.abs(ra.lower(a.face.faceLength) - rb.lower(0))).toBeLessThan(1e-6);
       }
       expect(landingJoints).toBe(joints);
+      expect(x.r.landing!.chains).toHaveLength(joints);
+      expect(x.r.landing!.refusals).toEqual([]);
       if (file === "cage-60-palier-central.blondel.json") {
         expect(x.r.stringers.find((s) => s.face.mark === "LI2")!.crankedFallback?.kind).toBe(
           "steepSegment",
@@ -513,15 +525,96 @@ describe("steel-profile — critères de fin de K2b en `nosing`", () => {
     });
   }
 
-  it("cage-60-palier-limon : limon de jour en pan coupé replié (nez au-dessus de la rive, raccord raide), sans erreur", () => {
-    const x = run(withLine(choose(loadExample("cage-60-palier-limon.blondel.json")), "nosing"));
-    expect(x.r.output.errors ?? []).toEqual([]);
-    expect(errorKeys(x)).toEqual([]);
-    const reasons = new Map(
-      x.r.stringers.map((s) => [s.face.mark, s.crankedFallback?.kind ?? "coudé"]),
+  // K-Q27 (K2f2) : au raccord de palier LI2 / LI3, LI2 (jour en pan coupé) ne peut pas rester
+  // coudé (raccord raide, dans toutes les sections) : le palier droit est refusé pour cette cage,
+  // en erreur chiffrée qui nomme le limon, le raccord et la cause ; seules les marches sont
+  // produites. Angle lu sur la section où le refus est rendu : la plus haute de la famille en
+  // section automatique (UPN 260 : 86,7° ; IPE 300 : 89,8°), la section imposée sinon (UPN 240 :
+  // 86,4°, mesure de K2f).
+  for (const [params, angle] of [
+    [{ family: "UPN", stringerLine: "nosing" }, 86.7],
+    [{ family: "IPE", stringerLine: "nosing" }, 89.8],
+    [{ family: "UPN", stringerLine: "nosing", section: "UPN 240" }, 86.4],
+  ] as const) {
+    it(`cage-60-palier-limon (${JSON.stringify(params)}) : raccord de palier refusé (K-Q27), LI2 en raccord raide à ${angle}°, seules les marches produites`, () => {
+      const raw = loadExample("cage-60-palier-limon.blondel.json");
+      const p = withParams(choose(raw, params), params);
+      const x = run(p);
+      expect(errorKeys(x)).toEqual(["structure.steelProfile.error.landingSpliceRefused"]);
+      expect(x.r.stringers).toEqual([]);
+      expect(x.r.section).toBeNull();
+      expect(x.m.parts.some((q) => q.category === "stringer")).toBe(false);
+      expect(x.m.parts.some((q) => q.category === "tread")).toBe(true);
+      expect(x.r.landing!.refusals).toHaveLength(1);
+      const err = x.m.errors.find(
+        (e) => e.key === "structure.steelProfile.error.landingSpliceRefused",
+      )!;
+      expect(err.params?.["mark"]).toBe("LI2");
+      expect(translatorFor("fr").t(err.params?.["splice"] as Message)).toBe("LI2 / LI3");
+      const reason = err.params?.["reason"] as Message;
+      expect(reason.key).toBe("structure.steelProfile.crankedFallback.steepSegment");
+      expect(reason.params?.["angle"]).toEqual(dec(angle, 1));
+      // Rendu fr / en : chiffres formatés, aucun paramètre non résolu, pas de français en anglais.
+      const fr = translatorFor("fr").t(err);
+      const en = translatorFor("en").t(err);
+      expect(fr).toContain("LI2 / LI3");
+      expect(fr).toContain(`${String(angle).replace(".", ",")}°`);
+      expect(en).toContain(`${angle}°`);
+      expect(en).toContain("K-Q27");
+      for (const text of [fr, en]) expect(text).not.toMatch(/\{|\}|\[object|undefined|NaN/);
+      expect(en).not.toMatch(/limon|palier|marche|raccord/i);
+      // Refus du plugin, et non du garde-fou de cage (K-Q30 : paramètres valides).
+      expect(errorKeys(x)).not.toContain("structure.cageUnsupported");
+    });
+  }
+
+  // Relecture K2f2 : en section imposée, un limon de chaîne de palier ne peut pas demander plus
+  // que la section (ses supports ne logeraient pas, marche non portée possible, violation que la
+  // barre droite n'a pas) : LE2 (186,9 mm coudé contre 186,7 mm en barre droite) est refusé.
+  it("cage-45-palier-acier en UPN 180 imposée : LE2 ne loge pas coudé dans la section imposée au raccord LE2 / LE3 (K-Q27, `beyondSection`), palier droit refusé, seules les marches", () => {
+    const params = { family: "UPN", stringerLine: "nosing", section: "UPN 180" };
+    const x = run(
+      withParams(choose(loadExample("cage-45-palier-acier.blondel.json"), params), params),
     );
-    expect(reasons.get("LIC1")).toBe("noseAboveRive");
-    expect(reasons.get("LI2")).toBe("steepSegment");
+    expect(errorKeys(x)).toEqual(["structure.steelProfile.error.landingSpliceRefused"]);
+    expect(x.r.stringers).toEqual([]);
+    expect(x.m.parts.some((q) => q.category === "stringer")).toBe(false);
+    expect(x.m.parts.some((q) => q.category === "tread")).toBe(true);
+    expect(x.r.landing!.forcedSections).toEqual([]);
+    expect(x.r.landing!.refusedSections).toEqual(["UPN 180"]);
+    const [r] = x.r.landing!.refusals;
+    expect(x.r.landing!.refusals).toHaveLength(1);
+    expect(r!.reason.kind).toBe("beyondSection");
+    if (r!.reason.kind !== "beyondSection") return;
+    expect(r!.reason.bent).toBeCloseTo(186.9, 1);
+    expect(r!.reason.section).toBe("UPN 180");
+    const err = x.m.errors.find(
+      (e) => e.key === "structure.steelProfile.error.landingSpliceRefused",
+    )!;
+    expect(err.params?.["mark"]).toBe("LE2");
+    const fr = translatorFor("fr").t(err);
+    const en = translatorFor("en").t(err);
+    expect(fr).toContain("LE2 / LE3");
+    expect(fr).toContain("âme requise 186,9 mm, plus que la section imposée UPN 180 (180 mm)");
+    expect(en).toContain("required web 186.9 mm, more than the imposed section UPN 180 (180 mm)");
+    for (const text of [fr, en]) expect(text).not.toMatch(/\{|\}|\[object|undefined|NaN/);
+  });
+
+  it("cage-45-palier-acier en section automatique : LE2 forcé coudé de l'UPN 80 à l'UPN 180 (sections écartées), UPN 220 retenue comme en K2f", () => {
+    const x = run(withLine(choose(loadExample("cage-45-palier-acier.blondel.json")), "nosing"));
+    expect(x.r.landing!.forcedSections).toEqual([
+      "UPN 80",
+      "UPN 100",
+      "UPN 120",
+      "UPN 140",
+      "UPN 160",
+      "UPN 180",
+    ]);
+    expect(x.r.section!.name).toBe("UPN 220");
+    expect(x.r.landing!.refusedSections).toEqual([]);
+    for (const id of x.r.landing!.chains.flat()) {
+      expect(x.r.cranked!.faces.get(id)!.mode, id).toBe("nosing");
+    }
   });
 
   for (const [name, file, kinds] of [
@@ -893,6 +986,8 @@ describe("steel-profile — cornière au coin du mur (K2e, K-Q4 ; K2e2, K-Q16 à
       () => true,
     )!;
     expect(r.chordJour?.rules).toEqual(["FAB_SUPPORT_LONGUEUR_MIN"]);
+    // K-Q29 (K2f2) : le coudé au poteau de la barre droite n'ajoute rien à la barre droite.
+    expect(r.chordJour?.keptAdds).toEqual([]);
     const chordNewel = resolveProfileNewel(withParams(raw, { family: "UPN" }), () => true)!.newel;
     expect(r.newel).toEqual(chordNewel);
     const p = j5bComparator("nosing");
@@ -1474,25 +1569,32 @@ describe("steel-profile — point fixe section ↔ poteau en `nosing` (K-Q15, K-
     }, 60_000);
   }
 
-  it("aucun poteau retenu (escalier généré, IPE) : jour de la barre droite posé, signalé par une remarque (K-Q25)", () => {
+  it("aucun poteau retenu (escalier généré, IPE) : jour de la barre droite posé, remarque neutre (K-Q25, K-Q29)", () => {
     // Barre droite : poteau élargi refusé par le tracé, poteau par défaut (FAB_POTEAU_RECEPTION) ;
     // en coudé, les poteaux élargis acceptés par le tracé réduisent le collet (G_COLLET_MIN) :
     // aucun n'est retenu (K-Q19), le jour de la barre droite du même projet est gardé (K-Q25).
+    // Le coudé à ce jour n'ajoute rien à la barre droite : remarque neutre (K-Q29, K2f2).
     const project = fc.sample(stairArb(["M1", "M3"], SAME_SIDE_TYPOLOGIES), {
       numRuns: 1,
       seed: 777,
     })[0]!.project;
     const ipe = { family: "IPE", stringerLine: "nosing" };
     const chosen = applyStructureChoice(project, "steel-profile", ipe);
-    const note = chosen.notes.find((n) => n.key === "project.structureChoice.newelAddsViolations");
+    expect(chosen.notes.map((n) => n.key)).not.toContain(
+      "project.structureChoice.newelAddsViolations",
+    );
+    const note = chosen.notes.find((n) => n.key === "project.structureChoice.newelFromChord");
     expect(note).toBeDefined();
     // Rendu traduit (fr, en) : règles et jour gardé listés par `common.list`.
     const fr = translatorFor("fr").t(note!);
     const en = translatorFor("en").t(note!);
     expect(fr).toContain("FAB_MARCHE_PORTEE ; G_COLLET_MIN");
     expect(en).toContain("FAB_MARCHE_PORTEE; G_COLLET_MIN");
+    expect(fr).toContain("sans violation ajoutée");
+    expect(en).toContain("with no added violation");
     for (const text of [fr, en]) {
       expect(text).toContain("K-Q25");
+      expect(text).toContain("K-Q29");
       expect(text).not.toMatch(/\{|\}|\[object/);
     }
     const r = resolveProfileNewel(
@@ -1500,6 +1602,7 @@ describe("steel-profile — point fixe section ↔ poteau en `nosing` (K-Q15, K-
       (t) => t.inner.kind === "sharp" || t.inner.kind === "newel",
     )!;
     expect(r.chordJour?.rules).toEqual(["FAB_MARCHE_PORTEE", "G_COLLET_MIN"]);
+    expect(r.chordJour?.keptAdds).toEqual([]);
     // Jours posés = jours de la barre droite du même projet (`applyStructureChoice` en `chord`).
     const chordChoice = applyStructureChoice(project, "steel-profile", { family: "IPE" });
     const innersOf = (p: Project) =>
@@ -1510,14 +1613,78 @@ describe("steel-profile — point fixe section ↔ poteau en `nosing` (K-Q15, K-
     expect(chosen.notes.slice(0, -1)).toEqual(chordChoice.notes);
     expect(chosen.notes[chosen.notes.length - 1]).toBe(note);
     expect(note!.params?.["jour"]).toBeDefined();
-    // Aucune règle en violation de plus que la barre droite, hors celles signalées.
+    // Remarque neutre : aucune règle en violation de plus que la barre droite (FAB_ONGLET_RACCORD
+    // exempté, comme dans `keptAdds`).
     const nosingRun = run(chosen.project);
     const chordRun = run(chordChoice.project);
-    for (const rule of Object.keys(excessOverChord(chordRun, nosingRun))) {
-      expect(r.chordJour!.rules, rule).toContain(rule);
-    }
+    const excess = Object.keys(excessOverChord(chordRun, nosingRun));
+    expect(excess.filter((k) => k !== "FAB_ONGLET_RACCORD")).toEqual([]);
   }, 60_000);
 
+  // K-Q29 (K2f2) : escaliers générés en IPE (graine 4242) où aucun poteau n'est retenu (K-Q25).
+  // Seul arb113 garde un jour qui ajoute encore une violation à la barre droite
+  // (FAB_SUPPORT_DEBORD + 1, alors que ses poteaux écartés citaient FAB_SUPPORT_LONGUEUR_MIN) :
+  // `newelAddsViolations` avec `{added}` ; les autres prennent la remarque neutre.
+  const IPE_KQ25 = [
+    [13, []],
+    [46, []],
+    [52, []],
+    [72, []],
+    [76, []],
+    [92, []],
+    [113, ["FAB_SUPPORT_DEBORD"]],
+  ] as const;
+  it("K-Q29 : escaliers générés en IPE sans poteau retenu, remarque neutre sauf jour gardé qui ajoute une violation (arb113, FAB_SUPPORT_DEBORD), rendu fr / en", () => {
+    const projects = fc
+      .sample(stairArb(["M1", "M3"], ALL_TYPOLOGIES), { numRuns: 120, seed: 4242 })
+      .map((s) => s.project);
+    const ipe = { family: "IPE", stringerLine: "nosing" };
+    const which = (t: { inner: { kind: string } }): boolean =>
+      t.inner.kind === "sharp" || t.inner.kind === "newel";
+    for (const [i, adds] of IPE_KQ25) {
+      const project = projects[i]!;
+      const r = resolveProfileNewel(withParams(project, ipe), which)!;
+      expect(r.chordJour, `arb${i}`).toBeDefined();
+      expect(r.chordJour!.keptAdds, `arb${i}`).toEqual(adds);
+      const chosen = applyStructureChoice(project, "steel-profile", ipe);
+      const note = chosen.notes[chosen.notes.length - 1]!;
+      expect(note.key, `arb${i}`).toBe(
+        adds.length > 0
+          ? "project.structureChoice.newelAddsViolations"
+          : "project.structureChoice.newelFromChord",
+      );
+      const fr = translatorFor("fr").t(note);
+      const en = translatorFor("en").t(note);
+      for (const text of [fr, en]) {
+        expect(text).toContain("K-Q29");
+        expect(text).not.toMatch(/\{|\}|\[object/);
+      }
+      // Modèle livré contre la barre droite du même projet : excédent = règles annoncées.
+      const nosingRun = run(chosen.project);
+      const chordRun = run(
+        applyStructureChoice(project, "steel-profile", { family: "IPE" }).project,
+      );
+      const excess = Object.keys(excessOverChord(chordRun, nosingRun)).filter(
+        (k) => k !== "FAB_ONGLET_RACCORD",
+      );
+      expect(excess, `arb${i}`).toEqual([...adds]);
+      if (adds.length > 0) {
+        expect(note.params?.["added"]).toEqual(textMessage("FAB_SUPPORT_DEBORD"));
+        expect(fr).toContain("ajoute encore FAB_SUPPORT_DEBORD");
+        expect(en).toContain("still adds FAB_SUPPORT_DEBORD");
+        // Les poteaux écartés citaient une autre règle.
+        expect(r.chordJour!.rules).toEqual(["FAB_SUPPORT_LONGUEUR_MIN"]);
+      } else {
+        expect(fr).toContain("sans violation ajoutée");
+        expect(en).toContain("with no added violation");
+      }
+    }
+  }, 300_000);
+
+  // Les remarques K-Q29 ne sortent pas sur cette graine en UPN (relecture K2f2) : leurs deux
+  // branches sont prouvées par le test IPE épinglé ci-dessus (7 escaliers de la graine 4242). La
+  // propriété ne peut pas tirer d'IPE : la ligne coudée y crée un débord d'appui quel que soit le
+  // poteau (FAB_SUPPORT_DEBORD, lecture de K-Q24), excédent sans remarque attendu.
   it("propriété (UPN, escaliers générés) : applyStructureChoice en `nosing` ne lève pas ; aucune règle en violation de plus que la barre droite, sauf poteau signalé ; K-Q19 écarte des poteaux (compteur)", () => {
     let evaluated = 0;
     let acted = 0;
@@ -1534,13 +1701,23 @@ describe("steel-profile — point fixe section ↔ poteau en `nosing` (K-Q15, K-
         let nosing: Run;
         let chord: Run;
         let flagged: boolean;
+        let added: readonly string[] | null = null;
         let chosenProject: Project;
         try {
           const chosen = applyStructureChoice(project, "steel-profile", params);
           chosenProject = chosen.project;
-          flagged = chosen.notes.some(
+          const adds = chosen.notes.find(
             (n) => n.key === "project.structureChoice.newelAddsViolations",
           );
+          // K-Q29 : remarque qui nomme les règles ajoutées par le jour gardé, ou remarque neutre.
+          flagged =
+            adds !== undefined ||
+            chosen.notes.some((n) => n.key === "project.structureChoice.newelFromChord");
+          if (adds) {
+            const r = resolveProfileNewel(withParams(project, params), which)!;
+            added = r.chordJour!.keptAdds;
+            expect(added.length).toBeGreaterThan(0);
+          }
           nosing = run(chosen.project);
           chord = run(choose(project, { family: "UPN" }));
         } catch (e) {
@@ -1549,7 +1726,13 @@ describe("steel-profile — point fixe section ↔ poteau en `nosing` (K-Q15, K-
           throw e;
         }
         evaluated++;
+        // Sans remarque, ou remarque neutre (K-Q29) : aucun excédent sur la barre droite ;
+        // `newelAddsViolations` : excédent (hors FAB_ONGLET_RACCORD) = règles nommées `{added}`.
+        const excess = Object.keys(excessOverChord(chord, nosing)).filter(
+          (k) => k !== "FAB_ONGLET_RACCORD",
+        );
         if (!flagged) expect(excessOverChord(chord, nosing)).toEqual({});
+        else expect(excess).toEqual(added === null ? [] : [...added]);
         // K-Q25 : remarque présente ⇒ jours posés = jours de la barre droite du même projet.
         if (flagged) {
           const innersOf = (p: Project) =>
@@ -1735,6 +1918,9 @@ describe("steel-profile — limon coudé, IPE (âme à shift)", () => {
  * avec trois tronçons, à la dernière : palier droit **après un tournant** (relevé de la partie
  * de niveau du coin, relecture K2f).
  */
+/** Erreur du refus d'un raccord de palier (K-Q27, K2f2). */
+const LANDING_REFUSED = "structure.steelProfile.error.landingSpliceRefused";
+
 const landingCageArb = fc
   .record({
     sections: fc.array(
@@ -1871,6 +2057,8 @@ describe("steel-profile — propriété sur cages à palier droit générées (K
     let flats = 0;
     let notLevel = 0;
     let afterTurn = 0;
+    let refusedRuns = 0;
+    let raised = 0;
     fc.assert(
       fc.property(landingCageArb, (layout) => {
         const p = ProjectSchema.parse({
@@ -1899,25 +2087,40 @@ describe("steel-profile — propriété sur cages à palier droit générées (K
           afterTurn++;
         const x = run(p);
         const ref = run(withRefKind(withLine(p, "chord")));
-        const known = new Set(errorKeys(ref));
+        // K-Q27 (K2f2) : refus du raccord de palier, seule erreur permise en plus de la référence.
+        const known = new Set([...errorKeys(ref), LANDING_REFUSED]);
         expect(errorKeys(x).filter((k) => !known.has(k))).toEqual([]);
-        expect(mass(x)).toBeLessThanOrEqual(mass(ref));
+        const refused = errorKeys(x).includes(LANDING_REFUSED);
+        // Section plus lourde que la barre droite d'essai : seulement par K-Q27, la section de la
+        // barre droite étant écartée par un limon gardé coudé ou refusée à un raccord de palier.
+        if (!refused && mass(x) > mass(ref)) {
+          raised++;
+          expect(sectionDiscardedByKQ27(x, ref)).toBe(true);
+        }
         const a = violationCounts(x);
         const b = violationCounts(ref);
         for (const [rule, n] of Object.entries(a)) {
           if (rule !== "FAB_ONGLET_RACCORD") expect(n, rule).toBeLessThanOrEqual(b[rule] ?? 0);
         }
+        if (refused) {
+          refusedRuns++;
+          expect(x.m.parts.some((q) => q.category === "stringer")).toBe(false);
+          return;
+        }
         expectCrankedParts(x, resolveWorkshopProfile(p.workshop).metal.density, p);
-        // Raccords de palier entre deux limons coudés : rives haute et basse continues.
+        // Raccords de palier : deux limons coudés (K-Q27), rives haute et basse continues.
         for (const s of x.r.stringers) {
-          if (s.face.endCorner?.joint !== "landing" || !s.bearing) continue;
+          if (s.face.endCorner?.joint !== "landing") continue;
           const t = x.r.stringers.find(
             (q) =>
               q.face.side === s.face.side &&
               q.face.startCorner?.joint === "landing" &&
               Math.abs(q.face.sigmaA - s.face.sigmaA - s.face.faceLength) < 1e-6,
           );
-          if (!t?.bearing) continue;
+          if (!t) continue;
+          expect(s.bearing, `${s.face.mark} / ${t.face.mark}`).toBeDefined();
+          expect(t.bearing, `${s.face.mark} / ${t.face.mark}`).toBeDefined();
+          if (!s.bearing || !t.bearing) continue;
           joints++;
           const ra = riveFns(s.bearing);
           const rb = riveFns(t.bearing);
@@ -2000,5 +2203,242 @@ describe("steel-profile — propriété sur cages à palier droit générées (K
     expect(afterTurn, "paliers après un tournant").toBeGreaterThan(0);
     // Plats non de niveau (publiés) : cas de bord, bornés (mesure K2f : voir le journal).
     expect(notLevel, "plats non de niveau publiés").toBeLessThanOrEqual(flats / 10);
+    // Refus K-Q27 : minoritaires (mesure K2f2 : 2 sur 40 tirages de cette graine).
+    expect(refusedRuns, "refus K-Q27").toBeLessThanOrEqual(evaluated / 5);
+    // Sections montées (K-Q27) : rares, toutes expliquées ci-dessus (0 sur cette graine).
+    expect(raised, "sections montées").toBeLessThanOrEqual(evaluated / 10);
   }, 300_000);
+});
+
+/** Paires du plugin : limons consécutifs d'un même côté reliés par un raccord de palier. */
+function landingPairs(x: Run): [ProfileStringerOf, ProfileStringerOf][] {
+  const out: [ProfileStringerOf, ProfileStringerOf][] = [];
+  for (const s of x.r.stringers) {
+    if (s.face.endCorner?.joint !== "landing") continue;
+    const t = x.r.stringers.find(
+      (q) =>
+        q.face.side === s.face.side &&
+        q.face.startCorner?.joint === "landing" &&
+        Math.abs(q.face.sigmaA - s.face.sigmaA - s.face.faceLength) < 1e-6,
+    );
+    if (t) out.push([s, t]);
+  }
+  return out;
+}
+type ProfileStringerOf = SteelProfileResult["stringers"][number];
+
+/**
+ * Section de la barre droite d'essai écartée par K-Q27 dans le limon coudé : un limon de chaîne de
+ * palier y est gardé coudé au-delà de la section, ou refusé.
+ */
+function sectionDiscardedByKQ27(x: Run, ref: Run): boolean {
+  const name = ref.r.section?.name;
+  const landing = x.r.landing;
+  return (
+    name !== undefined &&
+    landing !== undefined &&
+    (landing.forcedSections.includes(name) || landing.refusedSections.includes(name))
+  );
+}
+
+/** Raccord mixte : un limon coudé abouté à une barre droite repliée (face à une seule pente exclue). */
+function isMixedSplice(s: ProfileStringerOf, t: ProfileStringerOf): boolean {
+  const straight = (q: ProfileStringerOf): boolean => !q.bearing && q.crankedFallback !== undefined;
+  return (!!s.bearing && straight(t)) || (straight(s) && !!t.bearing);
+}
+
+describe("steel-profile — raccords de palier, coudé forcé sinon refus (K-Q27, K2f2, `nosing`)", () => {
+  it("propriété (cages générées, graine 2026) : aucun raccord mixte, refus chiffré sinon, chaînes du noyau = paires du plugin, règles ≤ barre droite d'essai, aucun limon forcé dans la section retenue ; cas exercés (compteurs)", () => {
+    let splices = 0;
+    let refusals = 0;
+    // Modèles dont au moins une section essayée a été écartée par un limon gardé coudé (K-Q27) :
+    // un limon forcé ne loge jamais dans la section de son plan (repli `heavier`), donc aucune
+    // section retenue n'en porte (vérifié ci-dessous).
+    let sectionsDiscardedByForcing = 0;
+    let mixed = 0;
+    let forcedNoSection = 0;
+    const allowed = new Set([
+      "emptyWindow",
+      "cutsCross",
+      "shortSegment",
+      "noseAboveRive",
+      "steepSegment",
+      "lostSupport",
+      "heavier",
+      "beyondCatalog",
+      "beyondSection",
+    ]);
+    fc.assert(
+      fc.property(landingCageArb, (layout) => {
+        const p = ProjectSchema.parse({
+          schemaVersion: PROJECT_SCHEMA_VERSION,
+          site: { floorToFloor: 2700, upperSlabThickness: 200 },
+          stair: {
+            placement: { origin: { x: 0, y: 0 }, rotation: 0 },
+            layout,
+            structure: { kind: "steel-profile", params: { family: "UPN", stringerLine: "nosing" } },
+          },
+        });
+        let m!: Model;
+        expect(() => (m = buildModel(p, { memo: false }))).not.toThrow();
+        const keys = (m.errors ?? []).map((e) => e.key);
+        expect(keys).not.toContain("pipeline.internalError");
+        if (m.stepping.treads.length === 0 || keys.some((k) => k.startsWith("layout."))) return;
+        const x = run(p);
+        const ref = run(withRefKind(withLine(p, "chord")));
+        const known = new Set([...errorKeys(ref), LANDING_REFUSED]);
+        expect(errorKeys(x).filter((k) => !known.has(k))).toEqual([]);
+        // Aucune règle en violation de plus que la barre droite d'essai (K-Q24), hors onglet.
+        const a = violationCounts(x);
+        const b = violationCounts(ref);
+        for (const [rule, n] of Object.entries(a)) {
+          if (rule !== "FAB_ONGLET_RACCORD") expect(n, rule).toBeLessThanOrEqual(b[rule] ?? 0);
+        }
+        const landing = x.r.landing!;
+        if (landing.forcedSections.length > 0) sectionsDiscardedByForcing++;
+        if (errorKeys(x).includes(LANDING_REFUSED)) {
+          refusals++;
+          // Refus : seules les marches, une erreur par limon refusé, membre d'une chaîne.
+          expect(x.r.stringers).toEqual([]);
+          expect(x.m.parts.some((q) => q.category === "stringer")).toBe(false);
+          const errs = x.m.errors.filter((e) => e.key === LANDING_REFUSED);
+          expect(errs).toHaveLength(landing.refusals.length);
+          for (const r of landing.refusals) {
+            expect(landing.chains).toContainEqual(r.chain);
+            expect(r.chain).toContain(r.faceId);
+            expect(allowed.has(r.reason.kind), r.reason.kind).toBe(true);
+            if (r.reason.kind === "heavier") expect(Number.isFinite(r.reason.bent)).toBe(false);
+          }
+          for (const e of errs) {
+            const t = translatorFor("en").t(e);
+            expect(t).not.toMatch(/\{|\}|\[object|NaN|undefined/);
+          }
+          return;
+        }
+        expect(landing.refusals).toEqual([]);
+        // Aucun limon forcé dans la section retenue (section automatique : écartée par le choix).
+        for (const fp of x.r.cranked!.faces.values()) expect(fp.landingForced).toBeUndefined();
+        expect(landing.forcedSections).not.toContain(x.r.section!.name);
+        // `noSectionPasses` après des sections écartées par forçage : remarque qui les nomme.
+        if (
+          errorKeys(x).includes("structure.steelProfile.error.noSectionPasses") &&
+          landing.forcedSections.length > 0
+        ) {
+          forcedNoSection++;
+          expect(
+            x.r.output.notes.some(
+              (n) => n.key === "structure.steelProfile.note.landingForcedSections",
+            ),
+          ).toBe(true);
+        }
+        // Chaînes du noyau = paires du plugin (même côté, raccord de palier, σ continu).
+        const pairs = landingPairs(x);
+        const fromChains = landing.chains.flatMap((c) =>
+          c.slice(1).map((id, k) => `${c[k]}>${id}`),
+        );
+        expect(pairs.map(([s, t]) => `${s.face.id}>${t.face.id}`).sort()).toEqual(
+          [...fromChains].sort(),
+        );
+        for (const [s, t] of pairs) {
+          splices++;
+          if (isMixedSplice(s, t)) mixed++;
+          // Deux barres droites (aucun limon coudé) : hors K-Q27, comportement de K2f.
+          if (!s.bearing || !t.bearing) continue;
+          const ra = riveFns(s.bearing);
+          const rb = riveFns(t.bearing);
+          expect(Math.abs(ra.upper(s.face.faceLength) - rb.upper(0))).toBeLessThan(1e-6);
+          expect(Math.abs(ra.lower(s.face.faceLength) - rb.lower(0))).toBeLessThan(1e-6);
+        }
+        // Section plus lourde que la barre droite d'essai : seulement par K-Q27.
+        if (mass(x) > mass(ref)) expect(sectionDiscardedByKQ27(x, ref)).toBe(true);
+      }),
+      { numRuns: 100, seed: 2026 },
+    );
+    // Mesure (relecture K2f2) : 86 raccords, 9 refus, 8 modèles à sections écartées par forçage,
+    // 1 `noSectionPasses` après forçage.
+    expect(splices, "raccords de palier").toBeGreaterThan(0);
+    expect(mixed, "raccords mixtes").toBe(0);
+    expect(refusals, "refus K-Q27").toBeGreaterThanOrEqual(1);
+    expect(sectionsDiscardedByForcing, "sections écartées par forçage").toBeGreaterThanOrEqual(1);
+    expect(forcedNoSection, "noSectionPasses après forçage").toBeGreaterThanOrEqual(1);
+  }, 300_000);
+
+  // Section montée par K-Q27 (relecture K2f2 ; cage générée de la graine 31337, tirage 74) :
+  // cage alignée 909 / 1 064 / 1 338 mm, paliers droits de 309 et 1 196 mm, chaînes de trois
+  // limons par côté. Barre droite d'essai : UPN 220 (âme requise 206,5 mm, LI2 / LE2). Limon
+  // coudé : en UPN 220, LI1 et LI3 sont coudés et LI2 replié `heavier` (256,8 mm coudé) ; LI2
+  // est gardé coudé (K-Q27), il dépasse l'UPN 220, qui est écartée ; en UPN 240, toute la chaîne
+  // est coudée (LI2 : 166,4 mm). En UPN 220 imposée : refus `beyondSection` chiffré.
+  const RAISED_LAYOUT = {
+    kind: "cage" as const,
+    sections: [909, 1064, 1338].map((length) => ({
+      axis: { kind: "straight" as const, length },
+      width: 900,
+    })),
+    junctions: [309, 1196].map((depth) => ({ angle: 0, mode: "landing" as const, depth })),
+  };
+  const raisedProject = (params: Record<string, unknown>): Project =>
+    ProjectSchema.parse({
+      schemaVersion: PROJECT_SCHEMA_VERSION,
+      site: { floorToFloor: 2700, upperSlabThickness: 200 },
+      stair: {
+        placement: { origin: { x: 0, y: 0 }, rotation: 0 },
+        layout: RAISED_LAYOUT,
+        structure: { kind: "steel-profile", params },
+      },
+    });
+
+  it("section montée (cage 909 / 1 064 / 1 338, paliers 309 et 1 196) : UPN 240 retenue contre UPN 220 en barre droite d'essai, UPN 220 écartée par LI2 / LE2 gardés coudés (256,8 mm) ; chaînes toutes coudées", () => {
+    const p = raisedProject({ family: "UPN", stringerLine: "nosing" });
+    const x = run(p);
+    const ref = run(withRefKind(withLine(p, "chord")));
+    expect(ref.r.section!.name).toBe("UPN 220");
+    expect(ref.r.requiredHeight).toBeCloseTo(206.5, 1);
+    expect(x.r.section!.name).toBe("UPN 240");
+    expect(errorKeys(x)).toEqual([]);
+    expect(mass(x)).toBeGreaterThan(mass(ref));
+    expect(sectionDiscardedByKQ27(x, ref)).toBe(true);
+    const landing = x.r.landing!;
+    expect(landing.chains).toHaveLength(2);
+    expect(landing.chains.every((c) => c.length === 3)).toBe(true);
+    expect(landing.forcedSections).toEqual(["UPN 140", "UPN 160", "UPN 180", "UPN 200", "UPN 220"]);
+    expect(landing.refusedSections).toEqual([]);
+    for (const id of landing.chains.flat()) {
+      expect(x.r.cranked!.faces.get(id)!.mode, id).toBe("nosing");
+      expect(x.r.cranked!.faces.get(id)!.landingForced, id).toBeUndefined();
+    }
+    for (const [s, t] of landingPairs(x)) expect(isMixedSplice(s, t)).toBe(false);
+    // Aucune règle en violation de plus que la barre droite d'essai (hors onglet).
+    const a = violationCounts(x);
+    const b = violationCounts(ref);
+    for (const [rule, n] of Object.entries(a)) {
+      if (rule !== "FAB_ONGLET_RACCORD") expect(n, rule).toBeLessThanOrEqual(b[rule] ?? 0);
+    }
+    // UPN 220 imposée : LI2 et LE2 ne logent pas coudés, refus chiffré.
+    const imposed = run(
+      raisedProject({ family: "UPN", stringerLine: "nosing", section: "UPN 220" }),
+    );
+    expect(errorKeys(imposed)).toEqual([LANDING_REFUSED, LANDING_REFUSED]);
+    const marks = imposed.m.errors.map((e) => e.params?.["mark"]);
+    expect(marks).toEqual(["LI2", "LE2"]);
+    for (const r of imposed.r.landing!.refusals) {
+      expect(r.reason.kind).toBe("beyondSection");
+      if (r.reason.kind === "beyondSection") expect(r.reason.bent).toBeCloseTo(256.8, 1);
+    }
+    expect(translatorFor("fr").t(imposed.m.errors[0]!)).toContain(
+      "âme requise 256,8 mm, plus que la section imposée UPN 220 (220 mm)",
+    );
+  });
+
+  it("`noSectionPasses` après des sections écartées par forçage : remarque qui les nomme, rendu fr / en", () => {
+    const m = msg("structure.steelProfile.note.landingForcedSections", {
+      sections: msg("common.list", { first: textMessage("IPN 200"), rest: textMessage("IPN 220") }),
+    });
+    expect(translatorFor("fr").t(m)).toContain("sections IPN 200 ; IPN 220, écartées");
+    expect(translatorFor("en").t(m)).toContain("sections IPN 200; IPN 220, discarded");
+    for (const l of ["fr", "en"] as const) {
+      expect(translatorFor(l).t(m)).toContain("K-Q27");
+      expect(translatorFor(l).t(m)).not.toMatch(/\{|\}|\[object/);
+    }
+  });
 });

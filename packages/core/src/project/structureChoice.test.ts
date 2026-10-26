@@ -509,6 +509,28 @@ describe("resolveProfileNewel — point fixe du limon coudé (K2e2 : K-Q15, K-Q1
     expect(r.chordJour!.turns).toEqual([n(110, 35)]);
     expect(r.chordJour!.rules).toEqual(["G_COLLET_MONOTONE"]);
     expect(r.chordJour!.notes.map((m) => m.key)).toEqual(["project.structureChoice.change"]);
+    // K-Q29 : le coudé au jour gardé (110 / 35) n'ajoute rien à la barre droite (remarque neutre).
+    expect(r.chordJour!.keptAdds).toEqual([]);
+  });
+
+  it("K-Q29 : le jour gardé qui ajoute encore une violation à la barre droite la nomme (`keptAdds`, FAB_ONGLET_RACCORD exempté), sans modèle de plus", () => {
+    const { build, trace } = fakeBuild({
+      nosing: {
+        "100/0": { b: 80 },
+        "120/40": { b: 80, violations: { FAB_SUPPORT_DEBORD: 1, G_COLLET_MONOTONE: 1 } },
+        // Coudé au jour de la barre droite : FAB_SUPPORT_DEBORD (que la barre droite n'a pas)
+        // et FAB_ONGLET_RACCORD (exempté, K-Q21).
+        "110/35": { b: 85, violations: { FAB_SUPPORT_DEBORD: 1, FAB_ONGLET_RACCORD: 1 } },
+        "125/43": { b: 85, violations: { FAB_SUPPORT_DEBORD: 1, G_COLLET_MONOTONE: 2 } },
+        "130/45": { b: 90, violations: { FAB_SUPPORT_DEBORD: 1, G_COLLET_MONOTONE: 1 } },
+      },
+      chord: { "100/0": { b: 70 }, "110/35": { b: 70 } },
+    });
+    const r = resolveProfileNewel(NOSING, all, build)!;
+    expect(r.chordJour!.rules).toEqual(["G_COLLET_MONOTONE"]);
+    expect(r.chordJour!.keptAdds).toEqual(["FAB_SUPPORT_DEBORD"]);
+    // Le modèle du jour gardé est celui de la base : construit une seule fois.
+    expect(trace.filter((t) => t === "nosing 110/35")).toHaveLength(1);
   });
 
   it("FAB_ONGLET_RACCORD en excédent ne fait pas écarter un poteau (K-Q21)", () => {
@@ -600,6 +622,15 @@ describe("resolveProfileNewel — point fixe du limon coudé (K2e2 : K-Q15, K-Q1
           }
           expect(r!.chordJour.rules).toEqual([...rules].sort());
           expect(r!.chordJour.rules.length).toBeGreaterThan(0);
+          // K-Q29 : règles que le coudé au jour gardé ajoute à la barre droite (seule).
+          expect(r!.chordJour.keptAdds).toEqual(
+            [
+              ...addedViolations(
+                fakeModel(nosing[rcKey]!),
+                new Map(Object.entries(refViolations)),
+              ).keys(),
+            ].sort(),
+          );
         }
       }),
       { numRuns: RUNS },

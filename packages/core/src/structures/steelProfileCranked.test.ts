@@ -47,14 +47,19 @@ import {
   crankedSingleNote,
   crankedSweepPath,
   decideCrankedFace,
+  forceLandingChains,
   kneeWeldLength,
   isChordEquivalent,
+  landingRefusalMessage,
+  landingRefusalReasonMessage,
   type CornerCandidate,
   type CornerGroup,
   type CrankedSupport,
   type CrankedDecisionInput,
+  type CrankedFacePlan,
   type CrankedFallbackReason,
   type CrankedMiterStringer,
+  type LandingRefusalReason,
 } from "./steelProfileCranked.js";
 
 const RUNS = Number(process.env["STEPPING_RUNS"] ?? 200);
@@ -389,6 +394,266 @@ describe("géométrie du limon coudé (contour, balayage, onglets)", () => {
     expect(
       crankedMiterItems([strs[0]!, { ...strs[1]!, bearing: undefined }], UPN180, 50, label, true),
     ).toEqual(mixed);
+  });
+});
+
+describe("raccords de palier : coudé forcé, sinon refus (K-Q27, K2f2)", () => {
+  const q = quarter();
+  const fbA = q.get("le1");
+  const fbB = q.get("le2");
+  const bearings = new Map<string, FaceBearing>([
+    ["a", fbA],
+    ["b", fbB],
+    ["c", fbB],
+    ["w", fbA],
+    ["x", fbA],
+  ]);
+  const bearingOf = (id: string): FaceBearing | undefined => bearings.get(id);
+  const bent = (id: string, need = 170): CrankedFacePlan => ({
+    faceId: id,
+    mode: "nosing",
+    bearing: bearings.get(id)!,
+    need,
+    chordNeed: 180,
+    bentNeed: need,
+  });
+  const folded = (
+    id: string,
+    fallback: CrankedFallbackReason,
+    bentNeed = 190,
+  ): CrankedFacePlan => ({
+    faceId: id,
+    mode: "chord",
+    need: 186.7,
+    chordNeed: 186.7,
+    bentNeed,
+    fallback,
+  });
+  const heavier = { kind: "heavier", bent: 190, chord: 186.7 } as const;
+  const plans = (...ps: CrankedFacePlan[]) => new Map(ps.map((p) => [p.faceId, p]));
+  const LIMIT = { h: 260, section: "UPN 260" };
+
+  it("chaîne toute coudée : inchangée, rien de forcé, aucun refus", () => {
+    const faces = plans(bent("a"), bent("b"));
+    const r = forceLandingChains(faces, [["a", "b"]], bearingOf, LIMIT);
+    expect(r.forced).toEqual([]);
+    expect(r.refusals).toEqual([]);
+    expect(r.faces.get("a")).toBe(faces.get("a"));
+    expect(r.faces.get("b")).toBe(faces.get("b"));
+  });
+
+  it("repli `heavier` fini sous la limite : forcé coudé (besoin coudé, ligne coudée, repli noté, plus de repli)", () => {
+    const r = forceLandingChains(
+      plans(bent("a"), folded("b", heavier)),
+      [["a", "b"]],
+      bearingOf,
+      LIMIT,
+    );
+    expect(r.forced).toEqual(["b"]);
+    expect(r.refusals).toEqual([]);
+    const b = r.faces.get("b")!;
+    expect(b.mode).toBe("nosing");
+    expect(b.need).toBe(190);
+    expect(b.bearing).toBe(fbB);
+    expect(b.landingForced).toEqual(heavier);
+    expect(b.fallback).toBeUndefined();
+    expect("fallback" in b).toBe(false);
+    expect(b.chordNeed).toBe(186.7);
+  });
+
+  it("sans limite (noyau seul) : forcé même au-delà de toute section", () => {
+    const big = { kind: "heavier", bent: 9000, chord: 186.7 } as const;
+    const r = forceLandingChains(plans(bent("a"), folded("b", big, 9000)), [["a", "b"]], bearingOf);
+    expect(r.forced).toEqual(["b"]);
+    expect(r.faces.get("b")!.need).toBe(9000);
+  });
+
+  it("section imposée (relecture K2f2) : besoin coudé au-delà de la section imposée → refus `beyondSection`, jamais forcé", () => {
+    const imposed = { h: 180, section: "UPN 180", imposed: true };
+    const over = { kind: "heavier", bent: 186.9, chord: 186.7 } as const;
+    const r = forceLandingChains(
+      plans(bent("a"), folded("b", over, 186.9)),
+      [["a", "b"]],
+      bearingOf,
+      imposed,
+    );
+    expect(r.forced).toEqual([]);
+    expect(r.refusals).toEqual([
+      {
+        chain: ["a", "b"],
+        faceId: "b",
+        reason: { kind: "beyondSection", bent: 186.9, section: "UPN 180", h: 180 },
+      },
+    ]);
+  });
+
+  it("repli `heavier` au-delà de la plus haute section : refus `beyondCatalog` ; besoin infini : refus avec la raison du repli", () => {
+    const over = { kind: "heavier", bent: 281.5, chord: 249.9 } as const;
+    const r1 = forceLandingChains(
+      plans(bent("a"), folded("b", over, 281.5)),
+      [["a", "b"]],
+      bearingOf,
+      LIMIT,
+    );
+    expect(r1.forced).toEqual([]);
+    expect(r1.refusals).toEqual([
+      {
+        chain: ["a", "b"],
+        faceId: "b",
+        reason: { kind: "beyondCatalog", bent: 281.5, section: "UPN 260", h: 260 },
+      },
+    ]);
+    expect(r1.faces.get("b")!.mode).toBe("chord");
+    const inf = { kind: "heavier", bent: Infinity, chord: 249.9 } as const;
+    const r2 = forceLandingChains(
+      plans(bent("a"), folded("b", inf, Infinity)),
+      [["a", "b"]],
+      bearingOf,
+    );
+    expect(r2.refusals).toEqual([{ chain: ["a", "b"], faceId: "b", reason: inf }]);
+  });
+
+  it("constats bloquants et marche perdue : refus avec la raison du repli ; ligne coudée absente : `emptyWindow`", () => {
+    const blocking: CrankedFallbackReason[] = [
+      { kind: "emptyWindow" },
+      { kind: "cutsCross", shortest: -3.2 },
+      { kind: "shortSegment", shortest: 29.5 },
+      { kind: "noseAboveRive", excess: 62 },
+      { kind: "steepSegment", alpha: 1.508 },
+      { kind: "lostSupport", treads: [9] },
+    ];
+    for (const reason of blocking) {
+      const r = forceLandingChains(
+        plans(bent("a"), folded("b", reason)),
+        [["a", "b"]],
+        bearingOf,
+        LIMIT,
+      );
+      expect(r.forced, reason.kind).toEqual([]);
+      expect(r.refusals, reason.kind).toEqual([{ chain: ["a", "b"], faceId: "b", reason }]);
+    }
+    // `heavier` fini mais aucune ligne coudée pour la face : refus `emptyWindow`.
+    const r = forceLandingChains(
+      plans(bent("a"), folded("y", heavier)),
+      [["a", "y"]],
+      bearingOf,
+      LIMIT,
+    );
+    expect(r.refusals).toEqual([
+      { chain: ["a", "y"], faceId: "y", reason: { kind: "emptyWindow" } },
+    ]);
+    // Face absente du plan : refus `emptyWindow`.
+    const r0 = forceLandingChains(plans(bent("a")), [["a", "z"]], bearingOf, LIMIT);
+    expect(r0.refusals).toEqual([
+      { chain: ["a", "z"], faceId: "z", reason: { kind: "emptyWindow" } },
+    ]);
+  });
+
+  it("chaîne sans limon coudé (barres droites seules) : inchangée, ni forçage ni refus (K-Q27 : voisin d'un limon coudé seulement)", () => {
+    const steep = { kind: "steepSegment", alpha: 1.5 } as const;
+    for (const faces of [
+      plans(folded("a", heavier), folded("b", heavier)),
+      plans(folded("a", heavier), folded("b", steep)),
+    ]) {
+      const r = forceLandingChains(faces, [["a", "b"]], bearingOf, LIMIT);
+      expect(r.forced).toEqual([]);
+      expect(r.refusals).toEqual([]);
+      expect(r.faces.get("a")).toBe(faces.get("a"));
+      expect(r.faces.get("b")).toBe(faces.get("b"));
+    }
+  });
+
+  it("face à une seule pente (CK7, barre droite sans repli, ligne confondue) : compatible avec un voisin coudé, ni forcée ni refusée", () => {
+    const single: CrankedFacePlan = {
+      faceId: "b",
+      mode: "chord",
+      need: 186.7,
+      chordNeed: 186.7,
+      bentNeed: 186.7,
+    };
+    const faces = plans(bent("a"), single, folded("c", heavier));
+    const r = forceLandingChains(faces, [["a", "b", "c"]], bearingOf, LIMIT);
+    expect(r.refusals).toEqual([]);
+    expect(r.forced).toEqual(["c"]);
+    expect(r.faces.get("b")).toBe(single);
+  });
+
+  it("chaîne de trois membres, faces hors chaîne intactes, refus dans l'ordre des chaînes puis des membres", () => {
+    const steep = { kind: "steepSegment", alpha: 1.5 } as const;
+    const nose = { kind: "noseAboveRive", excess: 23 } as const;
+    const faces = plans(
+      folded("a", nose),
+      bent("b"),
+      folded("c", heavier),
+      folded("x", heavier),
+      folded("w", steep),
+    );
+    const r = forceLandingChains(
+      faces,
+      [
+        ["a", "b", "c"],
+        ["w", "b"],
+      ],
+      bearingOf,
+      LIMIT,
+    );
+    expect(r.forced).toEqual(["c"]);
+    expect(r.refusals.map((x) => [x.chain.join(">"), x.faceId, x.reason.kind])).toEqual([
+      ["a>b>c", "a", "noseAboveRive"],
+      ["w>b", "w", "steepSegment"],
+    ]);
+    // Hors chaîne : un repli `heavier` reste permis (K-Q21).
+    expect(r.faces.get("x")).toBe(faces.get("x"));
+    // Entrée non modifiée (fonction pure).
+    expect(faces.get("c")!.mode).toBe("chord");
+  });
+
+  it("refus traduit (fr, en) pour chaque raison : raccord, limon, chiffres formatés, aucune clé brute ni français en anglais", () => {
+    const marks: Record<string, string> = { a: "LI2", b: "LI3" };
+    const markOf = (id: string): string => marks[id] ?? id;
+    const reasons: LandingRefusalReason[] = [
+      { kind: "emptyWindow" },
+      { kind: "cutsCross", shortest: -3.2 },
+      { kind: "shortSegment", shortest: 29.5 },
+      { kind: "noseAboveRive", excess: 62 },
+      { kind: "steepSegment", alpha: 1.508 },
+      { kind: "lostSupport", treads: [7, 9] },
+      { kind: "heavier", bent: Infinity, chord: 200.7 },
+      { kind: "beyondCatalog", bent: 281.54, section: "UPN 260", h: 260 },
+      { kind: "beyondSection", bent: 186.94, section: "UPN 180", h: 180 },
+    ];
+    for (const reason of reasons) {
+      const m = landingRefusalMessage({ chain: ["a", "b"], faceId: "a", reason }, markOf);
+      expect(m.key).toBe("structure.steelProfile.error.landingSpliceRefused");
+      expect(landingRefusalReasonMessage(reason).key).not.toBe("");
+      const fr = createTranslator("fr").t(m);
+      const en = createTranslator("en").t(m);
+      for (const text of [fr, en]) {
+        expect(text, reason.kind).toContain("LI2 / LI3");
+        expect(text, reason.kind).toContain("K-Q27");
+        expect(text, reason.kind).not.toMatch(/structure\.|\{|\}|\[object|NaN|Infinity|undefined/);
+      }
+      expect(en, reason.kind).not.toMatch(/limon|palier|marche|raccord|âme|nez/i);
+    }
+    const beyond = landingRefusalMessage(
+      { chain: ["a", "b"], faceId: "a", reason: reasons[7]! },
+      markOf,
+    );
+    expect(createTranslator("fr").t(beyond)).toContain("281,5 mm");
+    expect(createTranslator("fr").t(beyond)).toContain("UPN 260 (260 mm)");
+    expect(createTranslator("en").t(beyond)).toContain("281.5 mm");
+    const imposed = landingRefusalMessage(
+      { chain: ["a", "b"], faceId: "a", reason: reasons[8]! },
+      markOf,
+    );
+    expect(createTranslator("fr").t(imposed)).toContain("section imposée UPN 180 (180 mm)");
+    expect(createTranslator("en").t(imposed)).toContain("imposed section UPN 180 (180 mm)");
+    const steep = landingRefusalMessage(
+      { chain: ["a", "b"], faceId: "a", reason: reasons[4]! },
+      markOf,
+    );
+    expect(createTranslator("fr").t(steep)).toContain("86,4°");
+    expect(createTranslator("en").t(steep)).toContain("86.4°");
   });
 });
 

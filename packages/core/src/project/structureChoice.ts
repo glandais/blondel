@@ -155,6 +155,14 @@ export interface ChordJour {
   readonly notes: readonly Message[];
   /** Règles que les poteaux essayés ajoutaient à la base (union triée, pour la remarque). */
   readonly rules: readonly string[];
+  /**
+   * Règles que le limon coudé au jour gardé ajoute encore à la **barre droite** du même projet
+   * (triées, `PROFILE_NEWEL_EXEMPT_RULES` à part ; décision K-Q29, sous-lot K2f2). Lues sur le
+   * modèle coudé de la base, déjà construit : aucun modèle de plus. Comparer à la base entière
+   * ne trouverait rien (elle contient ce modèle) : seul son premier terme, la barre droite,
+   * compte. Vide : remarque neutre `newelFromChord` ; sinon `newelAddsViolations`.
+   */
+  readonly keptAdds: readonly string[];
 }
 
 /** Modèle réduit lu par le point fixe : pièces (aile) et contrôle de conception (K-Q19). */
@@ -467,13 +475,16 @@ function resolveNosingNewel(
       r.newel ??
       r.fixed ??
       (aimedInner?.kind === "newel" ? (aimedInner as NewelInner) : DEFAULT_NEWEL);
-    const b = profileFlangeWidth(cached(withParams(r.project, params)).parts);
+    const kept = cached(withParams(r.project, params));
+    const b = profileFlangeWidth(kept.parts);
     const rules = [...new Set(rejected.flatMap((a) => [...a.keys()]))].sort();
+    // K-Q29 : violations que le jour gardé ajoute encore à la barre droite (même modèle, en cache).
+    const keptAdds = [...addedViolations(kept, r.chord).keys()].sort();
     return {
       newel,
       flangeWidth: b,
       verified: b !== null && newelSatisfies(newel, kind, params, b),
-      chordJour: { turns, notes: r.notes, rules },
+      chordJour: { turns, notes: r.notes, rules, keptAdds },
     };
   }
   return last;
@@ -568,9 +579,11 @@ function innerLabel(c: InnerCorner): Message {
 
 /**
  * Jour de la barre droite posé pour le limon coudé (K-Q25) : jours des tournants de la barre
- * droite du même projet, remarques de leur pose, puis la remarque `newelAddsViolations` (règles
- * que les poteaux essayés ajoutaient ; jours gardés des tournants, libellés distincts dans
- * l'ordre des tournants).
+ * droite du même projet, remarques de leur pose, puis une remarque (K-Q29, sous-lot K2f2) :
+ * `newelAddsViolations` si le jour gardé ajoute encore une violation à la barre droite (règles
+ * que les poteaux essayés ajoutaient, règles que le jour gardé ajoute), sinon la remarque neutre
+ * `newelFromChord` (le poteau est celui de la barre droite) ; jours gardés des tournants,
+ * libellés distincts dans l'ordre des tournants.
  */
 function chordJourChoice(chosen: Project, jour: ChordJour): StructureChoiceResult {
   const layout = chosen.stair.layout;
@@ -587,15 +600,17 @@ function chordJourChoice(chosen: Project, jour: ChordJour): StructureChoiceResul
       (rest, first) => (rest === null ? first : msg("common.list", { first, rest })),
       null,
     );
+  // Identifiants de règle cités tels quels, liés comme les jours (`common.list`).
+  const rules = join(jour.rules.map((r) => textMessage(r))) ?? "";
+  const kept = join(labels) ?? msg("project.structureChoice.sharpJour");
+  const added = join(jour.keptAdds.map((r) => textMessage(r)));
   return {
     project,
     notes: [
       ...jour.notes,
-      msg("project.structureChoice.newelAddsViolations", {
-        // Identifiants de règle cités tels quels, liés comme les jours (`common.list`).
-        rules: join(jour.rules.map((r) => textMessage(r))) ?? "",
-        jour: join(labels) ?? msg("project.structureChoice.sharpJour"),
-      }),
+      added
+        ? msg("project.structureChoice.newelAddsViolations", { rules, jour: kept, added })
+        : msg("project.structureChoice.newelFromChord", { rules, jour: kept }),
     ],
   };
 }

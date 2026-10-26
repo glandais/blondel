@@ -401,12 +401,13 @@ describe("limon coudé (K2e, K-Q4) — cornière retirée au coin du mur, j4-dem
 
 /**
  * Paliers du limon coudé (sous-lot K2f, K-Q5) : palier droit d'une cage (cage-45-palier-acier,
- * raccords de palier entre limons coudés, aboutage soudé bout à bout sur la coupe d'aplomb, EXC2 ;
- * cage-60-palier-limon, raccord entre un limon coudé et un limon replié, K-Q27) et palier d'angle
- * en volées (quarter-landing) traversent tous les exports en français et en
- * anglais ; aucune pièce sortie deux fois ; fichiers anglais sans français.
+ * raccords de palier entre limons coudés, aboutage soudé bout à bout sur la coupe d'aplomb, EXC2)
+ * et palier d'angle en volées (quarter-landing) traversent tous les exports en français et en
+ * anglais ; aucune pièce sortie deux fois ; fichiers anglais sans français. K2f2 (K-Q27) :
+ * cage-60-palier-limon est refusée (raccord de palier où LI2 ne peut pas rester coudé), seules
+ * les marches sont produites ; ses exports passent sans exception, message traduit.
  */
-describe("limon coudé (K2f, K-Q5) — paliers : cage-45-palier-acier, cage-60-palier-limon et quarter-landing en `nosing`", () => {
+describe("limon coudé (K2f, K-Q5) — paliers : cage-45-palier-acier et quarter-landing en `nosing`, cage-60-palier-limon refusée (K-Q27)", () => {
   const load = (file: string): Project =>
     applyStructureChoice(
       parseProjectText(readFileSync(join(EXAMPLES_DIR, file), "utf8")),
@@ -416,10 +417,46 @@ describe("limon coudé (K2f, K-Q5) — paliers : cage-45-palier-acier, cage-60-p
   const cases = [
     ["cage-45-palier-acier", load("cage-45-palier-acier.blondel.json")],
     ["quarter-landing", load("quarter-landing.blondel.json")],
-    // Raccord de palier entre un limon coudé et un limon replié en barre droite (K-Q27, relecture
-    // K2f) : aboutage de deux barres décalées en hauteur.
-    ["cage-60-palier-limon", load("cage-60-palier-limon.blondel.json")],
   ] as const;
+
+  it("cage-60-palier-limon : raccord de palier refusé (K-Q27), marches seules, exports sans exception ni grandeur non finie, message traduit (fr, en)", () => {
+    const project = load("cage-60-palier-limon.blondel.json");
+    const model = buildModel(project);
+    const refusal = model.errors.find(
+      (e) => e.key === "structure.steelProfile.error.landingSpliceRefused",
+    );
+    expect(refusal).toBeDefined();
+    expect(model.parts.some((p) => p.category === "stringer")).toBe(false);
+    expect(model.parts.some((p) => p.category === "tread")).toBe(true);
+    const fr = createTranslator("fr").t(refusal!);
+    const en = createTranslator("en").t(refusal!);
+    expect(fr).toContain("LI2 / LI3");
+    expect(en).toContain("LI2 / LI3");
+    for (const text of [fr, en]) expect(text).not.toMatch(/\{|\}|\[object|NaN|undefined/);
+    expect(residualFrench([en], ["LI2", "LI3", "K-Q27"])).toEqual([]);
+    for (const locale of ["fr", "en"] as const) {
+      const opts = { project, theme: "light" as const, title: project.name, locale };
+      for (const svg of [renderPlanSvg(model, opts), renderElevationSvg(model, opts)]) {
+        parseXml(svg);
+        expect(svg).not.toMatch(NON_FINITE);
+      }
+      expect(exportCutListCsv(model, { locale })).not.toMatch(NON_FINITE);
+      const { bytes } = exportPdfDocument(model, {
+        project,
+        date: "26/10/2026",
+        compress: false,
+        locale,
+      });
+      expect(new TextDecoder("latin1").decode(bytes)).not.toMatch(NON_FINITE);
+    }
+    for (const version of ["R12", "AC1021"] as const) {
+      expect(exportPlanDxf(model, { project, version })).not.toMatch(NON_FINITE);
+    }
+    const files = exportPartsDxf(model);
+    const zip = createZip(files.map((f) => ({ name: f.filename, data: f.content })));
+    expect(String.fromCharCode(zip[0]!, zip[1]!)).toBe("PK");
+    expect(readGlb(exportGlb(model, { project })).doc.nodes.length).toBeGreaterThan(0);
+  });
 
   for (const [name, project] of cases) {
     const model = buildModel(project);

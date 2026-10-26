@@ -6,7 +6,8 @@
  * contour de l'âme, tronçons (composantes, CK8), cordon de jarret (CK10), cotes de gabarit
  * (CK17), chemin du balayage (solide), écarts d'onglet au bout d'aile (CK13), cornière au coin
  * du mur (K-Q4, sous-lot K2e ; décisions K-Q16 à K-Q18 en K2e2 : marche sans appui côté jour et
- * paliers exclus du retrait, coin du mur seulement), remarques. Une cornière à cheval sur un
+ * paliers exclus du retrait, coin du mur seulement), raccords de palier (K-Q27, sous-lot K2f2 :
+ * coudé forcé, sinon refus), remarques. Une cornière à cheval sur un
  * jarret reste en place (K-Q10 révisée) : son traçage est coupé au joint et ses perçages trop
  * près de la coupe sont reportés après soudage (plugin).
  * Aucun texte en dur : les remarques sont des `Message` à clés littérales.
@@ -86,6 +87,56 @@ export interface CrankedFacePlan {
   readonly bentNeed?: Mm;
   /** Raison du repli ; absente : limon coudé, ou face à une seule pente (CK7). */
   readonly fallback?: CrankedFallbackReason;
+  /**
+   * Repli `heavier` annulé par la décision K-Q27 (sous-lot K2f2) : face d'une chaîne de raccords
+   * de palier gardée coudée (`mode` = `nosing`, `need` = besoin coudé), section à vérifier.
+   */
+  readonly landingForced?: Extract<CrankedFallbackReason, { kind: "heavier" }>;
+}
+
+/**
+ * Raison du refus d'un raccord de palier (K-Q27) : raison du repli que le limon aurait pris, ou
+ * besoin coudé au-delà de la section limite : la plus haute de la famille en section automatique
+ * (`beyondCatalog`), la section imposée sinon (`beyondSection`, relecture K2f2).
+ */
+export type LandingRefusalReason =
+  | CrankedFallbackReason
+  | {
+      readonly kind: "beyondCatalog" | "beyondSection";
+      readonly bent: Mm;
+      readonly section: string;
+      readonly h: Mm;
+    };
+
+/**
+ * Section limite d'un limon de chaîne de palier gardé coudé (K-Q27) : plus haute section de la
+ * famille en section automatique, section imposée sinon (`imposed`).
+ */
+export interface LandingHeightLimit {
+  readonly h: Mm;
+  readonly section: string;
+  readonly imposed?: boolean;
+}
+
+/** Limon d'une chaîne de raccords de palier qui ne peut pas rester coudé (K-Q27). */
+export interface LandingRefusal {
+  /** Chaîne de raccords de palier (ids du bas vers le haut). */
+  readonly chain: readonly string[];
+  readonly faceId: string;
+  readonly reason: LandingRefusalReason;
+}
+
+/** Décision K-Q27 pour une section : chaînes, faces forcées coudées, refus. */
+export interface CrankedLandingPlan {
+  readonly chains: readonly (readonly string[])[];
+  /**
+   * Ids des faces dont le repli `heavier` a été annulé (gardées coudées). Leur besoin coudé
+   * dépasse la section du plan (un repli `heavier` ne loge pas dans la section) : section
+   * automatique seulement, section alors écartée par le choix ; jamais dans la section retenue.
+   */
+  readonly forced: readonly string[];
+  /** Refus (non vides : palier droit non pris en charge pour cette cage, F17 (3)). */
+  readonly refusals: readonly LandingRefusal[];
 }
 
 export interface CrankedSectionPlan {
@@ -93,6 +144,8 @@ export interface CrankedSectionPlan {
   readonly result: BearingResult;
   /** Cornières au coin du mur (K-Q4, K2e) ; groupes vides : toutes exigées (K2b). */
   readonly corner: CrankedCornerPlan;
+  /** Raccords de palier (K-Q27, sous-lot K2f2) ; sans chaîne : rien de forcé, aucun refus. */
+  readonly landing: CrankedLandingPlan;
 }
 
 /** Face vue par le noyau (`profileBearings`). */
@@ -208,6 +261,86 @@ export function decideCrankedFace(input: CrankedDecisionInput): {
     };
   }
   return { mode: "nosing" };
+}
+
+// ------------------------------------------------------------------------------ raccords de palier (K-Q27)
+
+/**
+ * Décision K-Q27 de l'utilisateur (QUESTIONS A41, sous-lot K2f2) : « coudé forcé, sinon refus ».
+ * À un raccord de palier (chaîne de limons colinéaires aboutés au milieu d'un palier droit,
+ * `BearingResult.landingChains`), le limon voisin d'un limon coudé reste coudé : un limon coudé
+ * et une barre droite ne sont jamais aboutés :
+ * - chaîne sans membre coudé (barres droites seules, comportement de K2f) ou dont tous les
+ *   membres sont coudés : inchangée ;
+ * - sinon, chaque membre en barre droite :
+ *   - face à une seule pente (CK7, barre droite sans repli : ligne coudée confondue avec la
+ *     barre droite) : compatible avec ses voisins, inchangée ;
+ *   - repli `heavier` à besoin coudé fini, ligne coudée présente et besoin au plus la hauteur de
+ *     la section limite (`limit` : plus haute section de la famille en section automatique,
+ *     section imposée sinon) : membre **forcé** coudé (`mode` = `nosing`, `need` = besoin coudé,
+ *     repli annulé noté dans `landingForced`) ; sa section peut monter (le choix automatique
+ *     écarte la section, dont il dépasse la hauteur) ;
+ *   - repli `heavier` fini au-delà de la limite : refus `beyondCatalog` (section automatique) ou
+ *     `beyondSection` (section imposée) ;
+ *   - tout autre repli (`emptyWindow`, `cutsCross`, `shortSegment`, `noseAboveRive`,
+ *     `steepSegment`, `lostSupport`, `heavier` infini) ou ligne coudée absente : refus, avec la
+ *     raison du repli (`emptyWindow` si elle manque).
+ * Les faces hors chaîne ne sont pas touchées (un repli `heavier` hors raccord reste permis,
+ * K-Q21). Pure, déterministe (chaînes et membres dans l'ordre reçu) ; ne lève jamais.
+ */
+export function forceLandingChains(
+  faces: ReadonlyMap<string, CrankedFacePlan>,
+  chains: readonly (readonly string[])[],
+  bearingOf: (faceId: string) => FaceBearing | undefined,
+  limit?: LandingHeightLimit,
+): { faces: Map<string, CrankedFacePlan>; forced: string[]; refusals: LandingRefusal[] } {
+  const out = new Map(faces);
+  const forced: string[] = [];
+  const refusals: LandingRefusal[] = [];
+  for (const chain of chains) {
+    const plans = chain.map((id) => faces.get(id));
+    if (!plans.some((fp) => fp?.mode === "nosing")) continue;
+    if (plans.every((fp) => fp?.mode === "nosing")) continue;
+    chain.forEach((id, i) => {
+      const fp = plans[i];
+      if (fp?.mode === "nosing") return;
+      // Face à une seule pente (CK7) : barre droite confondue avec la ligne coudée.
+      if (fp && !fp.fallback && bearingOf(id)) return;
+      const fb = fp?.fallback;
+      const bearing = bearingOf(id);
+      if (fp && fb?.kind === "heavier" && Number.isFinite(fb.bent) && bearing) {
+        if (limit && !(fb.bent <= limit.h + 1e-9)) {
+          refusals.push({
+            chain,
+            faceId: id,
+            reason: {
+              kind: limit.imposed ? "beyondSection" : "beyondCatalog",
+              bent: fb.bent,
+              section: limit.section,
+              h: limit.h,
+            },
+          });
+          return;
+        }
+        const { fallback: _annulled, ...rest } = fp;
+        out.set(id, {
+          ...rest,
+          mode: "nosing",
+          bearing,
+          need: fp.bentNeed ?? fb.bent,
+          landingForced: fb,
+        });
+        forced.push(id);
+        return;
+      }
+      refusals.push({
+        chain,
+        faceId: id,
+        reason: bearing && fb ? fb : { kind: "emptyWindow" },
+      });
+    });
+  }
+  return { faces: out, forced, refusals };
 }
 
 // ------------------------------------------------------------------------------ cornière au coin du mur
@@ -382,6 +515,12 @@ export interface CrankedPlanInput<P extends CrankedPre, S extends CrankedSupport
   readonly chordLostOfSupport: (p: P, c: S) => boolean;
   /** Groupes du coin du mur (K-Q4) ; absent ou vide : plan de K2b (toutes les cornières exigées). */
   readonly cornerGroups?: readonly CornerGroup[];
+  /**
+   * Section limite (K-Q27) : plus haute section de la famille en section automatique, section
+   * imposée sinon ; un membre de chaîne de palier dont le besoin coudé la dépasse est refusé
+   * (`beyondCatalog`, `beyondSection`). Absente : aucune limite (tests du noyau seulement).
+   */
+  readonly forcedHeightLimit?: LandingHeightLimit;
 }
 
 /** Valeurs d'un support pour une section, calculées une seule fois par plan. */
@@ -427,6 +566,12 @@ interface SupportEntry {
  *    croître, donc au plus (nombre de groupes + 3) passes, sans itération instable.
  * `need`, `chordNeed` et `bentNeed` de chaque face sont ceux de la liste retenue (sans les
  * facultatives). Sans groupe, le plan est exactement celui de K2b.
+ *
+ * **Raccords de palier** (K-Q27, sous-lot K2f2) : à chaque passe (provisoire, choix, garde-fou,
+ * section insuffisante), la décision par face est suivie de `forceLandingChains` sur les chaînes
+ * du noyau ; la décision reste une fonction pure de (section, ensemble actif), donc les passes
+ * finissent comme avant. `landing` est lu sur la dernière passe ; sans chaîne, le plan est
+ * identique à celui de K2f.
  */
 export function crankedSectionPlan<P extends CrankedPre, S extends CrankedSupport>(
   input: CrankedPlanInput<P, S>,
@@ -486,14 +631,24 @@ export function crankedSectionPlan<P extends CrankedPre, S extends CrankedSuppor
       ...(decision.fallback ? { fallback: decision.fallback } : {}),
     };
   };
-  const decideAll = (active: (key: string) => boolean): Map<string, CrankedFacePlan> =>
-    new Map(ctxs.map((f) => [f.id, decideFor(f, active)]));
+  const chains = result.landingChains;
+  let landing: CrankedLandingPlan = { chains, forced: [], refusals: [] };
+  const decideAll = (active: (key: string) => boolean): Map<string, CrankedFacePlan> => {
+    const raw = new Map(ctxs.map((f) => [f.id, decideFor(f, active)]));
+    if (chains.length === 0) return raw;
+    // K-Q27 : coudé forcé aux raccords de palier, sinon refus (lu sur la dernière passe).
+    const kq27 = forceLandingChains(raw, chains, (id) => byId.get(id), input.forcedHeightLimit);
+    landing = { chains, forced: kq27.forced, refusals: kq27.refusals };
+    return kq27.faces;
+  };
 
   const groups = input.cornerGroups ?? [];
   if (groups.length === 0) {
+    const faces = decideAll(() => true);
     return {
-      faces: decideAll(() => true),
+      faces,
       result,
+      landing,
       corner: {
         groups,
         required: new Set(),
@@ -567,6 +722,7 @@ export function crankedSectionPlan<P extends CrankedPre, S extends CrankedSuppor
   return {
     faces,
     result,
+    landing,
     corner: { groups, required, optional, reverted: reverted.size, jourless },
   };
 }
@@ -884,6 +1040,52 @@ export function crankedFallbackReasonMessage(reason: CrankedFallbackReason): Mes
             chord: dec(reason.chord, 1),
           });
   }
+}
+
+/** Raison du refus d'un raccord de palier (K-Q27), traduite à l'affichage. */
+export function landingRefusalReasonMessage(reason: LandingRefusalReason): Message {
+  switch (reason.kind) {
+    case "beyondCatalog":
+      return msg("structure.steelProfile.landingRefusal.beyondCatalog", {
+        bent: dec(reason.bent, 1),
+        section: reason.section,
+        h: dec(reason.h, 0),
+      });
+    case "beyondSection":
+      return msg("structure.steelProfile.landingRefusal.beyondSection", {
+        bent: dec(reason.bent, 1),
+        section: reason.section,
+        h: dec(reason.h, 0),
+      });
+    default:
+      return crankedFallbackReasonMessage(reason);
+  }
+}
+
+/** Libellé d'un raccord de palier : repères de la chaîne, du bas vers le haut (« LI2 / LI3 »). */
+export function spliceLabel(chain: readonly string[], markOf: (faceId: string) => string): Message {
+  const marks = chain.map((id) => textMessage(markOf(id)));
+  return marks
+    .slice(1)
+    .reduce<Message>(
+      (first, second) => msg("structure.common.housingPair", { first, second }),
+      marks[0] ?? textMessage(""),
+    );
+}
+
+/**
+ * Erreur du refus d'un raccord de palier (K-Q27) : palier droit non pris en charge pour cette
+ * cage (F17 (3)), raccord, limon qui ne peut pas rester coudé et cause chiffrée.
+ */
+export function landingRefusalMessage(
+  r: LandingRefusal,
+  markOf: (faceId: string) => string,
+): Message {
+  return msg("structure.steelProfile.error.landingSpliceRefused", {
+    splice: spliceLabel(r.chain, markOf),
+    mark: markOf(r.faceId),
+    reason: landingRefusalReasonMessage(r.reason),
+  });
 }
 
 /** Remarque d'une face repliée sur la barre droite (K-Q12, K-Q13). */

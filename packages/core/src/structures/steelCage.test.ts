@@ -795,6 +795,7 @@ describe("propriétés : cages tirées parmi les fonctions déclarées", () => {
       let built = 0;
       let runs = 0;
       let landed = 0;
+      let refused = 0;
       const landings =
         kind !== "steel-profile" || (params as { stringerLine?: string }).stringerLine === "nosing";
       fc.assert(
@@ -810,12 +811,22 @@ describe("propriétés : cages tirées parmi les fonctions déclarées", () => {
           // deux grands tournants de même sens, etc.) : hors du domaine de la propriété.
           if (m.stepping.treads.length === 0 || k.some((x) => x.startsWith("layout."))) return;
           built++;
+          // Raccord de palier où le limon coudé est infaisable (K-Q27, sous-lot K2f2) : refus
+          // chiffré du plugin, seules les marches produites ; hors des contrôles des pièces.
+          const landingRefused = "structure.steelProfile.error.landingSpliceRefused";
           expect(
             k.filter(
               (x) =>
-                x.startsWith("structure.") && x !== "structure.steelProfile.error.noSectionPasses",
+                x.startsWith("structure.") &&
+                x !== "structure.steelProfile.error.noSectionPasses" &&
+                x !== landingRefused,
             ),
           ).toEqual([]);
+          if (k.includes(landingRefused)) {
+            refused++;
+            expect(m.parts.some((q) => q.category === "stringer")).toBe(false);
+            return;
+          }
           const b =
             kind === "steel-flat"
               ? flatBuilt(
@@ -842,6 +853,9 @@ describe("propriétés : cages tirées parmi les fonctions déclarées", () => {
       );
       expect(built / runs).toBeGreaterThan(0.5);
       if (landings) expect(landed).toBeGreaterThan(0);
+      // Refus K-Q27 : seulement en limon coudé, et minoritaires.
+      if (kind !== "steel-profile" || !landings) expect(refused).toBe(0);
+      expect(refused).toBeLessThanOrEqual(built / 5);
     },
   );
 });

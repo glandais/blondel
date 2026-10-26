@@ -1519,5 +1519,169 @@ describe("profileBearing — paliers du limon coudé (sous-lot K2f)", () => {
     const ra = riveFns(a);
     const rb = riveFns(b);
     expect(Math.abs(ra.lower(1444.5) - rb.lower(0))).toBeLessThan(1e-9);
+    // Chaîne rendue pour la décision K-Q27 (sous-lot K2f2), du bas vers le haut.
+    expect(res.landingChains).toEqual([["A", "B"]]);
+  });
+
+  it("chaînes rendues (K2f2) : aucune pour un coin mural, une par raccord de palier, indépendantes de l'ordre des faces", () => {
+    const pitch = new PiecewiseLinear([
+      { x: 0, y: 900 },
+      { x: 190, y: 1080 },
+      { x: 1493, y: 1080 },
+      { x: 1683, y: 1260 },
+    ]);
+    const mk = (joint: "wall" | "landing"): BearingFace[] => {
+      const c: SteelCornerEnd =
+        joint === "wall"
+          ? { joint: "wall", concave: true, tanHalf: 1 }
+          : { joint: "landing", concave: true, tanHalf: 0 };
+      return [
+        {
+          id: "Z2",
+          side: "outer",
+          sigmaA: 900,
+          faceLength: 783,
+          uLo: 0,
+          uHi: 783,
+          start: "corner",
+          end: "arrival",
+          startCorner: c,
+        },
+        {
+          id: "Z1",
+          side: "outer",
+          sigmaA: 0,
+          faceLength: 900,
+          uLo: 0,
+          uHi: 900,
+          start: "newel",
+          end: "corner",
+          endCorner: c,
+        },
+      ];
+    };
+    const run = (faces: BearingFace[]) =>
+      profileBearings({
+        faces,
+        pitch: { inner: pitch, outer: pitch },
+        upperOffset: 40,
+        section: UPN200,
+        settings: PROVISIONAL_KNEE_SETTINGS,
+      });
+    expect(run(mk("wall")).landingChains).toEqual([]);
+    // Ordre d'entrée inversé (Z2 avant Z1) : chaîne du bas vers le haut.
+    expect(run(mk("landing")).landingChains).toEqual([["Z1", "Z2"]]);
+    expect(run([...mk("landing")].reverse()).landingChains).toEqual([["Z1", "Z2"]]);
+  });
+
+  it("propriété (K2f2) : chaînes rendues = suites de raccords de palier (même côté, σ continu), au moins deux membres, chaque face au plus une fois, indépendantes de l'ordre (I9)", () => {
+    let seen = 0;
+    fc.assert(
+      fc.property(synthArb(), fc.integer({ min: 0, max: 5 }), ({ input }, rot) => {
+        const res = profileBearings(input);
+        const pairs = new Set(
+          cornerPairs(input)
+            .filter(
+              ([a, b]) =>
+                cornerOf(a, "end")?.joint === "landing" &&
+                cornerOf(b, "start")?.joint === "landing" &&
+                a.uHi >= a.faceLength - 1e-6 &&
+                b.uLo <= 1e-6 &&
+                a.uHi - a.uLo > 1e-9 &&
+                b.uHi - b.uLo > 1e-9,
+            )
+            .map(([a, b]) => `${a.id}>${b.id}`),
+        );
+        const listed = new Set<string>();
+        const members = new Set<string>();
+        for (const c of res.landingChains) {
+          expect(c.length).toBeGreaterThanOrEqual(2);
+          for (const id of c) {
+            expect(members.has(id), id).toBe(false);
+            members.add(id);
+          }
+          for (let k = 0; k + 1 < c.length; k++) listed.add(`${c[k]}>${c[k + 1]}`);
+        }
+        expect([...listed].sort()).toEqual([...pairs].sort());
+        seen += listed.size;
+        const n = input.faces.length;
+        const rotated = input.faces.map((_, i) => input.faces[(i + rot) % n]!);
+        expect(profileBearings({ ...input, faces: rotated }).landingChains).toEqual(
+          res.landingChains,
+        );
+      }),
+      { numRuns: RUNS },
+    );
+    expect(seen).toBeGreaterThan(0);
+  });
+
+  /**
+   * Fin du plat exactement au raccord de palier (relecture K2f2, contre-exemple réduit par
+   * fast-check d'une cage alignée de 900 / 900 mm à palier de 300 mm) : aucun sous-tronçon ne
+   * désignait ce sommet, le jarret tombait sur la coupe d'aplomb et les rives basses des deux
+   * membres s'écartaient de h·(1/cos α − 1) (89,9 mm en UPN 160 sur la cage). Fin du plat
+   * reportée à m après le raccord, comme un sous-tronçon trop court.
+   */
+  it("fin de plat exactement au raccord : reportée à m après lui, rives basses continues", () => {
+    const pitch = new PiecewiseLinear([
+      { x: 0, y: 0 },
+      { x: 250, y: 180 },
+      { x: 500, y: 360 },
+      { x: 750, y: 540 },
+      { x: 1000, y: 720 },
+      { x: 1250, y: 720 },
+      { x: 1500, y: 900 },
+      { x: 1750, y: 1080 },
+      { x: 2000, y: 1260 },
+    ]);
+    const landing: SteelCornerEnd = { joint: "landing", concave: true, tanHalf: 0 };
+    const faces: BearingFace[] = [
+      {
+        id: "A",
+        side: "outer",
+        sigmaA: 0,
+        faceLength: 1250,
+        uLo: 0,
+        uHi: 1250,
+        start: "floor",
+        end: "corner",
+        endCorner: landing,
+      },
+      {
+        id: "B",
+        side: "outer",
+        sigmaA: 1250,
+        faceLength: 750,
+        uLo: 0,
+        uHi: 750,
+        start: "corner",
+        end: "arrival",
+        startCorner: landing,
+      },
+    ];
+    const sec: BearingSection = { h: 160, b: 65, shift: 0, tf: 0 };
+    const res = profileBearings({
+      faces,
+      pitch: { inner: pitch, outer: pitch },
+      upperOffset: 40,
+      section: sec,
+      settings: PROVISIONAL_KNEE_SETTINGS,
+    });
+    const a = byId(res, "A");
+    const b = byId(res, "B");
+    const m = PROVISIONAL_KNEE_SETTINGS.minSegmentLength;
+    // A finit de niveau sur le plat ; B reste de niveau jusqu'à m, puis monte vers le nez suivant.
+    expect(a.line[a.line.length - 1]).toEqual({ x: 1250, y: 720 });
+    expect(a.segments[a.segments.length - 1]!.alpha).toBe(0);
+    expect(b.line[0]).toEqual({ x: 0, y: 720 });
+    expect(b.line[1]!.x).toBeCloseTo(m, 9);
+    expect(b.line[1]!.y).toBe(720);
+    expect(b.knees[0]!.protected).toBe(true);
+    expect(b.segments[0]!.alpha).toBe(0);
+    const ra = riveFns(a);
+    const rb = riveFns(b);
+    expect(Math.abs(ra.upper(1250) - rb.upper(0))).toBeLessThan(1e-9);
+    expect(Math.abs(ra.lower(1250) - rb.lower(0))).toBeLessThan(1e-9);
+    expect(res.landingChains).toEqual([["A", "B"]]);
   });
 });
