@@ -184,9 +184,14 @@ const FLIGHTS_ONLY = STRUCTURES.filter((k) => !(k in CAGE_STRUCTURES));
  * Raison attendue du refus de `kind` pour une cage de fonctions `features` (même jonction que
  * `build.ts`) : plugin sans `capabilities.cage`, toutes les fonctions (ou « lit encore un tracé à
  * volées ») ; sinon les seules fonctions non déclarées ; `null` si la cage est construite.
+ * `params` : paramètres de la structure du projet (fonctions selon les paramètres, K2f).
  */
-function expectedRefusal(kind: string, features: readonly CageFeature[]): Message | null {
-  const missing = structureUnsupportedCageFeatures(kind, features);
+function expectedRefusal(
+  kind: string,
+  features: readonly CageFeature[],
+  params?: unknown,
+): Message | null {
+  const missing = structureUnsupportedCageFeatures(kind, features, params);
   if (missing !== null && missing.length === 0) return null;
   return expectedReason(missing ?? features);
 }
@@ -252,6 +257,34 @@ describe("capacités : structureCageFeatures / structureAcceptsCage", () => {
     },
   );
 
+  it("fonctions selon les paramètres (`cageWith`, K2f) : palier droit des profilés en limon coudé seulement", () => {
+    expect(structureCageFeatures("steel-profile", { stringerLine: "nosing" })).toContain(
+      "straightLanding",
+    );
+    expect(structureCageFeatures("steel-profile", { stringerLine: "chord" })).toEqual(
+      structureCageFeatures("steel-profile"),
+    );
+    expect(structureCageFeatures("steel-profile", {})).not.toContain("straightLanding");
+    expect(
+      structureAcceptsCage("steel-profile", ["straightLanding"], { stringerLine: "nosing" }),
+    ).toBe(true);
+    expect(structureAcceptsCage("steel-profile", ["straightLanding"])).toBe(false);
+    expect(structureUnsupportedCageFeatures("steel-profile", ["straightLanding"], {})).toEqual([
+      "straightLanding",
+    ]);
+    // Paramètres invalides : fonctions statiques (`capabilities.cage`), jamais d'exception.
+    expect(structureCageFeatures("steel-profile", { stringerLine: "arc" })).toEqual(
+      structureCageFeatures("steel-profile"),
+    );
+    expect(structureCageFeatures("steel-profile", { family: 3 })).toEqual(
+      structureCageFeatures("steel-profile"),
+    );
+    // Plugins sans `cageWith` : paramètres sans effet.
+    expect(structureCageFeatures("steel-flat", { stringerLine: "nosing" })).toEqual(
+      structureCageFeatures("steel-flat"),
+    );
+  });
+
   it("plugin inconnu : aucune cage", () => {
     expect(structureCageFeatures("inconnu")).toBeNull();
     expect(structureAcceptsCage("inconnu", [])).toBe(false);
@@ -293,7 +326,8 @@ describe("buildModel : garde-fou sur chaque plugin du registre", () => {
         let model: Model | undefined;
         expect(() => (model = buildModel(project, { memo: false })), name).not.toThrow();
         const all = featuresOf(project);
-        if (expectedRefusal(kind, all) === null) {
+        const params = project.stair.structure.params;
+        if (expectedRefusal(kind, all, params) === null) {
           // Cage construite (limons à la française, limons acier, limons centraux) : jamais de
           // refus, pièces de structure ; crémaillères : escalier droit seulement (tournant
           // refusé par le plugin).
@@ -314,7 +348,7 @@ describe("buildModel : garde-fou sur chaque plugin du registre", () => {
         const e = refusal(model!);
         // Fonctions nommées : toutes celles de la cage pour un plugin sans `capabilities.cage`,
         // les seules non déclarées sinon.
-        const features = structureUnsupportedCageFeatures(kind, all) ?? all;
+        const features = structureUnsupportedCageFeatures(kind, all, params) ?? all;
         const fr = FR.t(e);
         const en = EN.t(e);
         expect(fr).toContain(FR.t(msg(getLabel(kind))));
@@ -323,7 +357,7 @@ describe("buildModel : garde-fou sur chaque plugin du registre", () => {
         // Paramètres exacts : la structure, et la raison qui nomme les fonctions de la cage,
         // toutes et seulement elles (ou « lit encore un tracé à volées » sans fonction).
         expect(e.params?.structure, name).toEqual(msg(getLabel(kind)));
-        expect(e.params?.reason, name).toEqual(expectedRefusal(kind, all));
+        expect(e.params?.reason, name).toEqual(expectedRefusal(kind, all, params));
         for (const [t, text] of [
           [FR, fr],
           [EN, en],
@@ -434,7 +468,7 @@ describe("buildModel : garde-fou sur chaque plugin du registre", () => {
         built++;
         const features = featuresOf(project);
         for (const f of features) seen.add(f);
-        const expected = expectedRefusal(r.structure, features);
+        const expected = expectedRefusal(r.structure, features, project.stair.structure.params);
         if (expected === null) expect(k).not.toContain("structure.cageUnsupported");
         else expect(refusal(model).params?.reason).toEqual(expected);
       }),
@@ -505,7 +539,7 @@ describe("buildModel : plugin qui déclare des fonctions de cage", () => {
       expect(applyStructureChoice(p, "none").notes).toEqual([]);
       for (const kind of STRUCTURES) {
         const notes = applyStructureChoice(p, kind).notes.map((n) => n.key);
-        if (expectedRefusal(kind, featuresOf(p)) === null) {
+        if (expectedRefusal(kind, featuresOf(p), p.stair.structure.params) === null) {
           // Cage construite (limons à la française, limons acier, crémaillères, limons
           // centraux) : seule remarque
           // possible, pour une structure à poteau, un jour vif ou en arc qu'aucun limon droit ne
@@ -574,5 +608,47 @@ describe("buildModel : plugin qui déclare des fonctions de cage", () => {
     );
     expect(keys(flights)).toEqual([]);
     expect(built).toEqual(["flights"]);
+  });
+});
+
+describe("buildModel : paramètres invalides d'un plugin à fonctions selon les paramètres (relecture K2f)", () => {
+  const landingCage = (params: Record<string, unknown>): Project =>
+    ProjectSchema.parse({
+      schemaVersion: PROJECT_SCHEMA_VERSION,
+      site: { floorToFloor: 2700, upperSlabThickness: 200 },
+      stair: {
+        placement: { origin: { x: 0, y: 0 }, rotation: 0 },
+        layout: {
+          kind: "cage",
+          sections: [straight(1800, 900), straight(1800, 900)],
+          junctions: [{ angle: 0, mode: "landing", depth: 900 }],
+        },
+        structure: { kind: "steel-profile", params },
+      },
+    });
+  const errorKeys = (m: Model): string[] => m.errors.map((e) => e.key);
+
+  it("palier droit : erreur de paramètres rendue (et non un refus « palier droit » trompeur), sans exception", () => {
+    for (const params of [
+      { family: "XYZ", stringerLine: "nosing" },
+      { stringerLine: "nosing", supports: { minLength: -5 } },
+    ]) {
+      let m!: Model;
+      expect(() => (m = buildModel(landingCage(params), { memo: false }))).not.toThrow();
+      const why = JSON.stringify(params);
+      expect(errorKeys(m), why).toContain("pipeline.structureParamsInvalid");
+      expect(errorKeys(m), why).not.toContain("structure.cageUnsupported");
+      expect(m.parts.some((p) => p.category === "stringer")).toBe(false);
+    }
+  });
+
+  it("paramètres valides : refus en barre droite, construit en limon coudé (inchangé)", () => {
+    expect(errorKeys(buildModel(landingCage({ family: "UPN" }), { memo: false }))).toContain(
+      "structure.cageUnsupported",
+    );
+    const m = buildModel(landingCage({ family: "UPN", stringerLine: "nosing" }), { memo: false });
+    expect(errorKeys(m)).not.toContain("structure.cageUnsupported");
+    expect(errorKeys(m)).not.toContain("pipeline.structureParamsInvalid");
+    expect(m.parts.some((p) => p.category === "stringer")).toBe(true);
   });
 });

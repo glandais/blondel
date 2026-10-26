@@ -14,10 +14,12 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
+import { dec, msg, translatorFor } from "@blondel/i18n";
+import { CAGE_FEATURE_LABELS } from "../model/cageFeatures.js";
 import { findSection, sectionPerimeter, sectionsOf } from "../catalog/sections.js";
 import { resolveWorkshopProfile } from "../workshop/profile.js";
 import type { Model } from "../model/derived.js";
-import type { Project } from "../model/project.js";
+import { PROJECT_SCHEMA_VERSION, ProjectSchema, type Project } from "../model/project.js";
 import { checkSolids } from "../parts/solidChecks.js";
 import { buildModel } from "../pipeline/build.js";
 import {
@@ -43,9 +45,11 @@ import {
   stairArb,
 } from "../stepping/test-helpers.js";
 import { adaptJour } from "./compare.js";
-import { fitInWebPolyline, riveFns } from "./profileBearing.js";
-import { StructureError } from "./registry.js";
+import { fitInWebPolyline, polylineAt, riveFns } from "./profileBearing.js";
+import { StructureError, registerStructure } from "./registry.js";
 import {
+  STEEL_PROFILE,
+  STEEL_PROFILE_CAGE,
   SteelProfileParamsSchema,
   buildSteelProfile,
   profileFlangeWidth,
@@ -70,6 +74,34 @@ const withLine = (p: Project, line: Line): Project =>
   withParams(p, { ...p.stair.structure.params, stringerLine: line });
 const choose = (p: Project, params: Record<string, unknown> = { family: "UPN" }): Project =>
   applyStructureChoice(p, "steel-profile", params).project;
+
+/**
+ * Plugin d'essai « barre droite qui accepte le palier droit » (K2f) : la vraie barre droite
+ * refuse le palier droit d'une cage (`structure.cageUnsupported`) ; la référence des critères
+ * « aucune règle de plus que la barre droite » sur ces cages est ce plugin, même code que
+ * `steel-profile`, garde-fou levé. Son nom (`kind`) diffère : les branches qui testent le nom
+ * de la structure (`newel.ts`, `compare.ts`, `fixes.ts`) ne portent que sur les tournants de
+ * volées, jamais sur une cage saisie ; un test vérifie qu'il rend le même modèle que
+ * `steel-profile` sur une cage sans palier.
+ */
+const REF_KIND = "steel-profile-k2f-ref";
+registerStructure(
+  {
+    ...STEEL_PROFILE,
+    kind: REF_KIND,
+    capabilities: {
+      ...STEEL_PROFILE.capabilities,
+      cageWith: undefined,
+      cage: [...STEEL_PROFILE_CAGE, "straightLanding"],
+    },
+  },
+  { replace: true },
+);
+/** Même projet, structure passée au plugin d'essai (paramètres conservés). */
+const withRefKind = (p: Project): Project => ({
+  ...p,
+  stair: { ...p.stair, structure: { ...p.stair.structure, kind: REF_KIND } },
+});
 
 interface Run {
   readonly m: Model;
@@ -375,27 +407,116 @@ describe("steel-profile — critères de fin de K2b en `nosing`", () => {
     }
   });
 
-  // Cages à palier droit : `buildModel` refuse les profilés (palier droit non pris en charge,
-  // `structure.cageUnsupported`) dans les deux modes ; les critères ci-dessous ne portent que sur
-  // le plugin appelé directement (chemin que l'utilisateur n'atteint pas encore).
+  // Cages à palier droit (K-Q5, sous-lot K2f) : `buildModel` refuse le palier droit en barre
+  // droite (`structure.cageUnsupported`, message inchangé) et le construit en limon coudé.
   for (const file of [
     "cage-60-palier-limon.blondel.json",
     "cage-60-palier-central.blondel.json",
     "cage-45-palier-acier.blondel.json",
   ]) {
-    it(`${file} : profilés refusés par buildModel dans les deux modes (aucun limon)`, () => {
+    it(`${file} : palier droit refusé en barre droite (message inchangé), construit en \`nosing\``, () => {
       const p = choose(loadExample(file));
-      for (const line of ["chord", "nosing"] as const) {
-        const x = run(withLine(p, line));
-        expect(errorKeys(x)).toContain("structure.cageUnsupported");
-        expect(x.m.parts.some((q) => q.category === "stringer")).toBe(false);
+      const chord = run(withLine(p, "chord"));
+      expect(errorKeys(chord)).toContain("structure.cageUnsupported");
+      expect(chord.m.parts.some((q) => q.category === "stringer")).toBe(false);
+      const refusal = chord.m.errors.find((e) => e.key === "structure.cageUnsupported")!;
+      expect(refusal).toEqual(
+        msg("structure.cageUnsupported", {
+          structure: msg("structure.steelProfile.label"),
+          reason: msg("structure.cageUnsupported.features", {
+            features: msg(CAGE_FEATURE_LABELS.straightLanding),
+          }),
+        }),
+      );
+      const nosing = run(withLine(p, "nosing"));
+      expect(errorKeys(nosing)).not.toContain("structure.cageUnsupported");
+      expect(nosing.m.parts.some((q) => q.category === "stringer")).toBe(true);
+    });
+  }
+
+  it("plugin d'essai de la barre droite : même modèle que `steel-profile` sur une cage sans palier droit (seul le garde-fou diffère)", () => {
+    const p = choose(loadExample("demo-cage-central-steel.blondel.json"));
+    for (const line of ["chord", "nosing"] as const) {
+      const a = run(withLine(p, line));
+      const b = run(withRefKind(withLine(p, line)));
+      expect(b.r.section?.name).toBe(a.r.section?.name);
+      expect(b.r.requiredHeight).toBe(a.r.requiredHeight);
+      expect(errorKeys(b)).toEqual(errorKeys(a));
+      expect(violationCounts(b)).toEqual(violationCounts(a));
+      expect(b.m.parts.map((q) => [q.id, q.category])).toEqual(
+        a.m.parts.map((q) => [q.id, q.category]),
+      );
+      expect(b.r.output.notes).toEqual(a.r.output.notes);
+    }
+  });
+
+  // Critères de fin de K2f (`nosing`) : section, erreurs, besoin, aucune règle en violation de
+  // plus que la barre droite d'essai (référence `withRefKind`, base K-Q24) hors
+  // FAB_ONGLET_RACCORD (K-Q21 ; raccord de palier entre un limon coudé et un limon replié, K-Q27).
+  for (const [file, section, errors, need, joints] of [
+    ["cage-60-palier-limon.blondel.json", "UPN 240", [], 239.3, 1],
+    ["cage-45-palier-acier.blondel.json", "UPN 220", [], 213.7, 2],
+    // Jour en pan coupé (LI2, raccord raide replié en barre droite, K-Q12) : même erreur et même
+    // besoin que la barre droite.
+    [
+      "cage-60-palier-central.blondel.json",
+      "UPN 260",
+      ["structure.steelProfile.error.noSectionPasses"],
+      293.4,
+      0,
+    ],
+  ] as const) {
+    it(`${file} : critères de fin de K2f en \`nosing\` (section, erreurs, règles ≤ barre droite)`, () => {
+      const p = choose(loadExample(file));
+      const x = run(withLine(p, "nosing"));
+      const ref = run(withRefKind(withLine(p, "chord")));
+      expect(x.r.section!.name).toBe(section);
+      expect(errorKeys(x)).toEqual(errors);
+      // Erreurs au plus celles de la barre droite d'essai (comparaison à la référence, pas
+      // seulement à la liste ci-dessus).
+      const known = new Set(errorKeys(ref));
+      expect(errorKeys(x).filter((k) => !known.has(k))).toEqual([]);
+      expect(x.r.requiredHeight).toBeCloseTo(need, 1);
+      expect(mass(x)).toBeLessThanOrEqual(mass(ref));
+      const excess = violationCounts(x);
+      const base = violationCounts(ref);
+      for (const [rule, n] of Object.entries(excess)) {
+        if (rule === "FAB_ONGLET_RACCORD") continue;
+        expect(n, rule).toBeLessThanOrEqual(base[rule] ?? 0);
+      }
+      // Raccords de palier entre deux limons coudés : rives continues (K2f (2c)). Le palier de
+      // cage-60-palier-central tourne légèrement (coin `wall` / `jour`, pas de raccord de palier) ;
+      // sur cage-60-palier-limon, LI2 est replié (raccord raide) : un seul raccord coudé.
+      let landingJoints = 0;
+      for (const a of x.r.stringers) {
+        if (a.face.endCorner?.joint !== "landing" || !a.bearing) continue;
+        const b = x.r.stringers.find(
+          (s) =>
+            s.face.side === a.face.side &&
+            s.face.startCorner?.joint === "landing" &&
+            Math.abs(s.face.sigmaA - a.face.sigmaA - a.face.faceLength) < 1e-6,
+        );
+        if (!b?.bearing) continue;
+        landingJoints++;
+        const ra = riveFns(a.bearing);
+        const rb = riveFns(b.bearing);
+        expect(Math.abs(ra.upper(a.face.faceLength) - rb.upper(0))).toBeLessThan(1e-6);
+        expect(Math.abs(ra.lower(a.face.faceLength) - rb.lower(0))).toBeLessThan(1e-6);
+      }
+      expect(landingJoints).toBe(joints);
+      if (file === "cage-60-palier-central.blondel.json") {
+        expect(x.r.stringers.find((s) => s.face.mark === "LI2")!.crankedFallback?.kind).toBe(
+          "steepSegment",
+        );
+        expect(ref.r.requiredHeight).toBeCloseTo(293.4, 1);
       }
     });
   }
 
-  it("cage-60-palier-limon, plugin seul : limon de jour en pan coupé replié (nez au-dessus de la rive, raccord raide), sans erreur", () => {
+  it("cage-60-palier-limon : limon de jour en pan coupé replié (nez au-dessus de la rive, raccord raide), sans erreur", () => {
     const x = run(withLine(choose(loadExample("cage-60-palier-limon.blondel.json")), "nosing"));
     expect(x.r.output.errors ?? []).toEqual([]);
+    expect(errorKeys(x)).toEqual([]);
     const reasons = new Map(
       x.r.stringers.map((s) => [s.face.mark, s.crankedFallback?.kind ?? "coudé"]),
     );
@@ -409,11 +530,13 @@ describe("steel-profile — critères de fin de K2b en `nosing`", () => {
       "demo-cage-flared-steel.blondel.json",
       ["noseAboveRive", "steepSegment"],
     ],
-    ["cage-45-palier-acier (plugin seul)", "cage-45-palier-acier.blondel.json", ["heavier"]],
+    ["cage-45-palier-acier", "cage-45-palier-acier.blondel.json", ["heavier"]],
   ] as const) {
     it(`${name} : repli signalé par une remarque, aucune erreur nouvelle`, () => {
       const p = choose(loadExample(file));
-      const chord = run(withLine(p, "chord"));
+      // Barre droite de référence : plugin d'essai qui accepte le palier droit (la vraie barre
+      // droite le refuse, K2f).
+      const chord = run(withRefKind(withLine(p, "chord")));
       const nosing = run(withLine(p, "nosing"));
       const fallbacks = nosing.r.stringers.filter((s) => s.crankedFallback);
       expect(fallbacks.length).toBeGreaterThan(0);
@@ -583,6 +706,54 @@ function expectCornerAngles(x: Run, project: Project): number {
   return checked;
 }
 
+/** Plus grande zone brute d'appui (u1 − u0) des faces de poteau côté jour de la marche au coin. */
+const postZone = (x: Run, tread: number): number => {
+  const g = x.r.cornerAngles?.groups.find((q) => q.tread === tread);
+  return Math.max(0, ...(g?.jour ?? []).filter((c) => c.onPost).map((c) => c.u1 - c.u0));
+};
+
+/**
+ * Marche au coin portée côté jour par un poteau à zone voisine de l'appui mini (signalement
+ * K2e2, sous-lot K2f) : vérifie la règle (K-Q16, K-Q23) plutôt qu'une égalité fragile. Zone sous
+ * `supports.minLength` (seuil inchangé) : marche sans appui côté jour, aucune cornière murale
+ * retirée, aucun support posé côté jour ; rend `true` (les attentes chiffrées du cas valent).
+ * Zone atteinte : marche appuyée côté jour par le poteau, règle du coin (une cornière exigée),
+ * section au plus celle de la barre droite, aucune erreur nouvelle ; rend `false`. Le message
+ * d'assertion porte la marge mesurée.
+ */
+function expectPostSensitive(x: Run, ref: Run, project: Project, tread: number): boolean {
+  const min = SteelProfileParamsSchema.parse(project.stair.structure.params).supports.minLength;
+  const z = postZone(x, tread);
+  const why = `zone sur poteau M${tread} : ${z.toFixed(2)} mm pour ${min} (marge ${(z - min).toFixed(2)} mm)`;
+  const jourPlaced = x.r.supports.filter(
+    (s) => s.placement.tread === tread && s.placement.face.side === "inner",
+  );
+  if (z < min - 1e-9) {
+    expect(x.r.cranked!.corner.jourless.has(tread), why).toBe(true);
+    expect(
+      x.r.cornerAngles!.removed.some((r) => r.tread === tread),
+      why,
+    ).toBe(false);
+    expect(jourPlaced, why).toEqual([]);
+    return true;
+  }
+  expect(x.r.cranked!.corner.jourless.has(tread), why).toBe(false);
+  expect(jourPlaced.length, why).toBeGreaterThan(0);
+  // Règle du coin (K-Q4, une cornière exigée) sur la marche, désormais appuyée côté jour.
+  expectCornerAngles(x, project);
+  expect(
+    x.r.cornerAngles!.groups.some((g) => g.tread === tread),
+    why,
+  ).toBe(true);
+  expect(mass(x), why).toBeLessThanOrEqual(mass(ref));
+  const known = new Set(errorKeys(ref));
+  expect(
+    errorKeys(x).filter((k) => !known.has(k)),
+    why,
+  ).toEqual([]);
+  return false;
+}
+
 describe("steel-profile — cornière au coin du mur (K2e, K-Q4 ; K2e2, K-Q16 à K-Q21) en `nosing`", () => {
   const NOSING = { family: "UPN", stringerLine: "nosing" };
   const CHORD = { family: "UPN" };
@@ -607,6 +778,13 @@ describe("steel-profile — cornière au coin du mur (K2e, K-Q4 ; K2e2, K-Q16 à
     errors: string[];
     /** Marches au coin sans appui côté jour (K-Q16), mesurées en K2e2. */
     jourless: number[];
+    /**
+     * Marche au coin dont l'appui côté jour est une face de poteau à zone brute voisine de la
+     * longueur minimale d'appui (signalement K2e2 : quart M4 49,6 mm, demi-tournant M8 49 mm,
+     * pour 50) : les attentes `section`, `errors` et `jourless` valent si la zone reste sous la
+     * longueur minimale ; sinon la marche suit la règle du coin (`expectPostSensitive`).
+     */
+    postTread?: number;
   }[] = [
     {
       name: "j3c",
@@ -628,6 +806,7 @@ describe("steel-profile — cornière au coin du mur (K2e, K-Q4 ; K2e2, K-Q16 à
       section: "UPN 220",
       errors: [],
       jourless: [4],
+      postTread: 4,
     },
     {
       name: "U",
@@ -642,6 +821,7 @@ describe("steel-profile — cornière au coin du mur (K2e, K-Q4 ; K2e2, K-Q16 à
       section: "UPN 260",
       errors: ["structure.steelProfile.error.noSectionPasses"],
       jourless: [8],
+      postTread: 8,
     },
     ...["j4-demi-tournant-acier-garde-corps", "demo-half-turn-industrial"].map((f) => ({
       name: f,
@@ -688,12 +868,14 @@ describe("steel-profile — cornière au coin du mur (K2e, K-Q4 ; K2e2, K-Q16 à
     it(`${c.name} : ${c.section}, erreurs attendues seulement, aucune règle en violation de plus que la barre droite`, () => {
       const p = c.make(NOSING);
       const x = run(p);
-      expect(x.r.section!.name).toBe(c.section);
-      expect(errorKeys(x)).toEqual(c.errors);
-      expect(x.r.cranked!.corner.jourless).toEqual(new Set(c.jourless));
-      const checked = expectCornerAngles(x, p);
-      if (c.errors.length === 0) expect(reserve(x)).toBeGreaterThanOrEqual(0);
       const ref = run(c.make(CHORD));
+      if (c.postTread === undefined || expectPostSensitive(x, ref, p, c.postTread)) {
+        expect(x.r.section!.name).toBe(c.section);
+        expect(errorKeys(x)).toEqual(c.errors);
+        expect(x.r.cranked!.corner.jourless).toEqual(new Set(c.jourless));
+      }
+      const checked = expectCornerAngles(x, p);
+      if (errorKeys(x).length === 0) expect(reserve(x)).toBeGreaterThanOrEqual(0);
       expect(excessOverChord(ref, x)).toEqual({});
       // Invariants du coin vérifiés sur au moins une marche quand la section est faisable.
       if (!c.errors.includes("structure.steelProfile.error.noSectionPasses")) {
@@ -702,16 +884,30 @@ describe("steel-profile — cornière au coin du mur (K2e, K-Q4 ; K2e2, K-Q16 à
     }, 60_000);
   }
 
-  it("j5b (comparateur) : poteau 125 / 43 vérifié, réserve d'âme ≥ 5 mm ; j3c : UPN 180", () => {
+  it("j5b (comparateur) : aucun poteau retenu (K-Q19), poteau de la barre droite 130 / 45 (K-Q25), réserve d'âme ≥ 5 mm ; j3c : UPN 180", () => {
+    // K2e2 rendait le « moindre excédent » (125 / 43, FAB_SUPPORT_LONGUEUR_MIN ajouté) ; K-Q25
+    // (sous-lot K2f) : le poteau de la barre droite du même projet (point fixe en `chord`).
+    const raw = loadExample("j5b-debillarde-soude.blondel.json");
+    const r = resolveProfileNewel(
+      withParams(raw, { family: "UPN", stringerLine: "nosing" }),
+      () => true,
+    )!;
+    expect(r.chordJour?.rules).toEqual(["FAB_SUPPORT_LONGUEUR_MIN"]);
+    const chordNewel = resolveProfileNewel(withParams(raw, { family: "UPN" }), () => true)!.newel;
+    expect(r.newel).toEqual(chordNewel);
     const p = j5bComparator("nosing");
     const turns = p.stair.layout.kind === "cage" ? [] : p.stair.layout.turns;
-    expect(turns.map((t) => t.inner)).toContainEqual({ kind: "newel", size: 125, offset: 43 });
+    expect(turns.map((t) => t.inner)).toContainEqual({ kind: "newel", size: 130, offset: 45 });
+    expect(run(p).r.section!.name).toBe("UPN 200");
     expect(reserve(run(p))).toBeGreaterThanOrEqual(5);
     expect(run(pick("j3c-acceptance-01-upn.blondel.json")(NOSING)).r.section!.name).toBe("UPN 180");
   });
 
-  it("quart : M4 sans appui côté jour (K-Q16), deux cornières murales, UPN 220", () => {
-    const x = run(pick("quarter-left.blondel.json")(NOSING));
+  it("quart : M4 sans appui côté jour (K-Q16), deux cornières murales, UPN 220 (si la zone sur poteau reste sous l'appui mini)", () => {
+    const p = pick("quarter-left.blondel.json")(NOSING);
+    const x = run(p);
+    expectCornerAngles(x, p);
+    if (!expectPostSensitive(x, run(pick("quarter-left.blondel.json")(CHORD)), p, 4)) return;
     expect(x.r.section!.name).toBe("UPN 220");
     expect(x.r.cranked!.corner.jourless).toEqual(new Set([4]));
     expect(x.r.cornerAngles!.removed).toEqual([]);
@@ -720,6 +916,18 @@ describe("steel-profile — cornière au coin du mur (K2e, K-Q4 ; K2e2, K-Q16 à
       m4.filter((s) => s.placement.face.side === "outer").map((s) => s.placement.face.ownerMark),
     ).toEqual(["LE1", "LE2"]);
     expect(m4.filter((s) => s.placement.face.side === "inner")).toEqual([]);
+  });
+
+  it("quart à appui mini de 49 mm : zone sur poteau de M4 atteinte, marche appuyée côté jour, règle du coin, section ≤ barre droite (branche « zone atteinte » de `expectPostSensitive`)", () => {
+    // Même projet, `supports.minLength` abaissé sous la zone mesurée de M4 (49,6 mm) : couvre la
+    // branche que le seuil de 50 mm n'exécute pas (relecture K2f).
+    const supports = { minLength: 49 };
+    const p = pick("quarter-left.blondel.json")({ ...NOSING, supports });
+    const x = run(p);
+    expect(postZone(x, 4)).toBeGreaterThanOrEqual(49);
+    expect(postZone(x, 4)).toBeLessThan(50);
+    const ref = run(pick("quarter-left.blondel.json")({ ...CHORD, supports }));
+    expect(expectPostSensitive(x, ref, p, 4)).toBe(false);
   });
 
   it("j4-demi au poteau 110 / 35 : M9 sans appui côté jour (K-Q16), deux cornières murales", () => {
@@ -754,6 +962,43 @@ describe("steel-profile — cornière au coin du mur (K2e, K-Q4 ; K2e2, K-Q16 à
         (s) => s.placement.tread === 3 && s.placement.face.side === "outer",
       );
       expect(wall.length, f).toBe(2);
+    }
+  });
+
+  it("palier d'angle en volées (K-Q5, K2f) : rive de niveau sur le plat du palier, onglet fermé, M3 sur ses deux cornières murales", () => {
+    for (const f of ["quarter-landing", "demo-quarter-landing-ash"]) {
+      const x = run(pick(`${f}.blondel.json`)(NOSING));
+      expect(errorKeys(x), f).toEqual([]);
+      const le1 = x.r.stringers.find((s) => s.face.mark === "LE1")!;
+      const le2 = x.r.stringers.find((s) => s.face.mark === "LE2")!;
+      expect(le1.bearing && le2.bearing, f).toBeTruthy();
+      // Altitude du palier (nez de la marche 3) et plat de la ligne des nez de chaque côté du
+      // coin : LE1 de niveau sur [540 ; 1 440], LE2 sur [0 ; 630] (mesures K2f).
+      const z = x.m.stepping.nosings[2]!.z;
+      for (const [st, lo, hi] of [
+        [le1, 540, 1440],
+        [le2, 0, 630],
+      ] as const) {
+        const us = [lo, hi, ...st.bearing!.line.map((q) => q.x).filter((u) => u > lo && u < hi)];
+        for (const u of us) {
+          const dz = Math.abs(polylineAt(st.bearing!.line, u) - z);
+          expect(dz, `${f} ${st.face.mark} u=${u}`).toBeLessThan(1e-6);
+        }
+      }
+      const miter = x.r.output.checks.filter((c) => c.ruleId === "FAB_ONGLET_RACCORD");
+      expect(miter.length, f).toBeGreaterThan(0);
+      for (const c of miter) expect(c.measured!, f).toBeLessThan(1e-6);
+      expect(violationCounts(x)["FAB_ONGLET_RACCORD"] ?? 0, f).toBe(0);
+      // Barre droite : 1 020 mm d'écart à l'onglet du même coin.
+      const ref = run(pick(`${f}.blondel.json`)(CHORD));
+      expect(
+        Math.max(
+          ...ref.r.output.checks
+            .filter((c) => c.ruleId === "FAB_ONGLET_RACCORD")
+            .map((c) => c.measured!),
+        ),
+        f,
+      ).toBeCloseTo(1020, 0);
     }
   });
 
@@ -1108,20 +1353,33 @@ describe("steel-profile — point fixe section ↔ poteau en `nosing` (K-Q15, K-
   // Point fixe atteint : le poteau rendu est exact (aile + 2 × jeu de la section qu'il produit),
   // vérifié sur son propre modèle, sans violation ajoutée à la barre droite. K2e2 (K-Q16, K-Q18) :
   // quart 120 / 40 (UPN 220, M4 sans appui côté jour) ; demi-tournant exact 130 / 45 (UPN 260 en
-  // erreur, comme la barre droite : M8 sans appui côté jour).
-  const exact: [string, () => Project, number][] = [
+  // erreur, comme la barre droite : M8 sans appui côté jour). Dépendance signalée en K2e2 : ces
+  // nombres de modèles supposent M4 (quart, 49,6 mm sur poteau) et M8 (demi-tournant, 49 mm) sans
+  // appui côté jour, à moins de 1 mm de la longueur minimale d'appui (50 mm) : un léger
+  // déplacement du balancement ou du poteau les ferait passer à la règle du coin et changerait la
+  // suite de modèles (voir `expectPostSensitive`).
+  // Quart et demi-tournant : le nombre exact de modèles n'est exigé que si la zone sur poteau de
+  // la marche au coin reste sous l'appui mini au poteau rendu (sinon : au plus le budget).
+  const exact: [string, () => Project, number, number?][] = [
     ["j3c", () => loadExample("j3c-acceptance-01-upn.blondel.json"), 2],
-    ["quart", () => loadExample("quarter-left.blondel.json"), 3],
+    ["quart", () => loadExample("quarter-left.blondel.json"), 3, 4],
     ["U", () => loadExample("two-quarters-u.blondel.json"), 3],
-    ["demi-tournant", () => loadExample("half-turn.blondel.json"), 2],
+    ["demi-tournant", () => loadExample("half-turn.blondel.json"), 2, 8],
   ];
-  for (const [name, make, expectedModels] of exact) {
+  for (const [name, make, expectedModels, postTread] of exact) {
     it(`${name} : point fixe exact et vérifié, atteint en ${expectedModels} modèles coudés`, () => {
       const variant = withParams(make(), params);
       const { r, nosingNewels, chordModels } = resolveCounted(variant);
       expect(r).not.toBeNull();
       expect(r!.verified).toBe(true);
-      expect(nosingNewels).toHaveLength(expectedModels);
+      const min = SteelProfileParamsSchema.parse(variant.stair.structure.params).supports.minLength;
+      const zone =
+        postTread === undefined
+          ? -Infinity
+          : postZone(run(withNewels(variant, r!.newel, which)), postTread);
+      const why = `zone sur poteau M${postTread} : ${zone.toFixed(2)} mm pour ${min}`;
+      if (zone < min - 1e-9) expect(nosingNewels, why).toHaveLength(expectedModels);
+      else expect(nosingNewels.length, why).toBeLessThanOrEqual(BUDGET);
       expect(chordModels).toBeLessThanOrEqual(BUDGET);
       // Arrêt sur le poteau exact : le dernier modèle coudé construit est celui du poteau rendu.
       expect(newelMatches(nosingNewels[nosingNewels.length - 1]!, r!.newel)).toBe(true);
@@ -1216,9 +1474,10 @@ describe("steel-profile — point fixe section ↔ poteau en `nosing` (K-Q15, K-
     }, 60_000);
   }
 
-  it("aucun poteau retenu (escalier généré, IPE) : le moins chargé est posé et signalé par une remarque", () => {
+  it("aucun poteau retenu (escalier généré, IPE) : jour de la barre droite posé, signalé par une remarque (K-Q25)", () => {
     // Barre droite : poteau élargi refusé par le tracé, poteau par défaut (FAB_POTEAU_RECEPTION) ;
-    // en coudé, les poteaux élargis acceptés par le tracé réduisent le collet (G_COLLET_MIN).
+    // en coudé, les poteaux élargis acceptés par le tracé réduisent le collet (G_COLLET_MIN) :
+    // aucun n'est retenu (K-Q19), le jour de la barre droite du même projet est gardé (K-Q25).
     const project = fc.sample(stairArb(["M1", "M3"], SAME_SIDE_TYPOLOGIES), {
       numRuns: 1,
       seed: 777,
@@ -1227,17 +1486,36 @@ describe("steel-profile — point fixe section ↔ poteau en `nosing` (K-Q15, K-
     const chosen = applyStructureChoice(project, "steel-profile", ipe);
     const note = chosen.notes.find((n) => n.key === "project.structureChoice.newelAddsViolations");
     expect(note).toBeDefined();
-    expect(note!.params?.["rules"]).toBe("FAB_MARCHE_PORTEE, G_COLLET_MIN");
+    // Rendu traduit (fr, en) : règles et jour gardé listés par `common.list`.
+    const fr = translatorFor("fr").t(note!);
+    const en = translatorFor("en").t(note!);
+    expect(fr).toContain("FAB_MARCHE_PORTEE ; G_COLLET_MIN");
+    expect(en).toContain("FAB_MARCHE_PORTEE; G_COLLET_MIN");
+    for (const text of [fr, en]) {
+      expect(text).toContain("K-Q25");
+      expect(text).not.toMatch(/\{|\}|\[object/);
+    }
     const r = resolveProfileNewel(
       withParams(project, ipe),
       (t) => t.inner.kind === "sharp" || t.inner.kind === "newel",
     )!;
-    expect(r.added).toEqual(
-      new Map([
-        ["G_COLLET_MIN", 1],
-        ["FAB_MARCHE_PORTEE", 1],
-      ]),
-    );
+    expect(r.chordJour?.rules).toEqual(["FAB_MARCHE_PORTEE", "G_COLLET_MIN"]);
+    // Jours posés = jours de la barre droite du même projet (`applyStructureChoice` en `chord`).
+    const chordChoice = applyStructureChoice(project, "steel-profile", { family: "IPE" });
+    const innersOf = (p: Project) =>
+      p.stair.layout.kind === "cage" ? [] : p.stair.layout.turns.map((t) => t.inner);
+    expect(innersOf(chosen.project)).toEqual(innersOf(chordChoice.project));
+    expect(r.chordJour?.turns).toEqual(innersOf(chordChoice.project));
+    // Remarques de pose de la barre droite, puis la remarque K-Q25 (jour gardé nommé).
+    expect(chosen.notes.slice(0, -1)).toEqual(chordChoice.notes);
+    expect(chosen.notes[chosen.notes.length - 1]).toBe(note);
+    expect(note!.params?.["jour"]).toBeDefined();
+    // Aucune règle en violation de plus que la barre droite, hors celles signalées.
+    const nosingRun = run(chosen.project);
+    const chordRun = run(chordChoice.project);
+    for (const rule of Object.keys(excessOverChord(chordRun, nosingRun))) {
+      expect(r.chordJour!.rules, rule).toContain(rule);
+    }
   }, 60_000);
 
   it("propriété (UPN, escaliers générés) : applyStructureChoice en `nosing` ne lève pas ; aucune règle en violation de plus que la barre droite, sauf poteau signalé ; K-Q19 écarte des poteaux (compteur)", () => {
@@ -1256,8 +1534,10 @@ describe("steel-profile — point fixe section ↔ poteau en `nosing` (K-Q15, K-
         let nosing: Run;
         let chord: Run;
         let flagged: boolean;
+        let chosenProject: Project;
         try {
           const chosen = applyStructureChoice(project, "steel-profile", params);
+          chosenProject = chosen.project;
           flagged = chosen.notes.some(
             (n) => n.key === "project.structureChoice.newelAddsViolations",
           );
@@ -1270,6 +1550,13 @@ describe("steel-profile — point fixe section ↔ poteau en `nosing` (K-Q15, K-
         }
         evaluated++;
         if (!flagged) expect(excessOverChord(chord, nosing)).toEqual({});
+        // K-Q25 : remarque présente ⇒ jours posés = jours de la barre droite du même projet.
+        if (flagged) {
+          const innersOf = (p: Project) =>
+            p.stair.layout.kind === "cage" ? [] : p.stair.layout.turns.map((t) => t.inner);
+          const chordChoice = applyStructureChoice(project, "steel-profile", { family: "UPN" });
+          expect(innersOf(chosenProject)).toEqual(innersOf(chordChoice.project));
+        }
         const variant = withParams(project, params);
         const a = resolveProfileNewel(variant, which);
         const b = resolveProfileNewel(variant, which, blind);
@@ -1408,13 +1695,16 @@ describe("steel-profile — propriété sur escaliers générés (limon coudé)"
           );
         },
       ),
-      { numRuns: RUNS },
+      // Graine fixée (relecture K2f) : sans graine, les compteurs de non-vacuité ci-dessous
+      // cédaient environ une fois sur dix au réglage par défaut (« sans appui côté jour » le plus
+      // souvent), d'autant plus que `STEPPING_RUNS` est petit.
+      { numRuns: RUNS, seed: 42 },
     );
-    expect(evaluated).toBeGreaterThan(RUNS / 2);
-    expect(bent).toBeGreaterThan(0);
-    expect(corners).toBeGreaterThan(0);
-    expect(jourless).toBeGreaterThan(0);
-    expect(landings).toBeGreaterThan(0);
+    expect(evaluated, "évalués").toBeGreaterThan(RUNS / 2);
+    expect(bent, "coudés").toBeGreaterThan(0);
+    expect(corners, "coins").toBeGreaterThan(0);
+    expect(jourless, "sans appui côté jour").toBeGreaterThan(0);
+    expect(landings, "paliers").toBeGreaterThan(0);
   }, 300_000);
 });
 
@@ -1436,4 +1726,279 @@ describe("steel-profile — limon coudé, IPE (âme à shift)", () => {
       sectionsOf("IPE").indexOf(run(withLine(p, "chord")).r.section!),
     );
   });
+});
+
+/**
+ * Cages à palier droit générées (sous-lot K2f) : deux ou trois tronçons droits, jonctions en
+ * palier droit (profondeur 300 à 1 500 mm) ou tournantes à pan coupé, bords de palier alignés
+ * (largeur constante) ou non (largeurs tirées). Le palier imposé est à la première jonction ou,
+ * avec trois tronçons, à la dernière : palier droit **après un tournant** (relevé de la partie
+ * de niveau du coin, relecture K2f).
+ */
+const landingCageArb = fc
+  .record({
+    sections: fc.array(
+      fc.record({
+        length: fc.integer({ min: 900, max: 2200 }),
+        width: fc.integer({ min: 800, max: 1100 }),
+        widthEnd: fc.option(fc.integer({ min: 800, max: 1100 }), { nil: undefined }),
+      }),
+      { minLength: 2, maxLength: 3 },
+    ),
+    junctions: fc.array(
+      fc.record({
+        landing: fc.boolean(),
+        angle: fc.integer({ min: 30, max: 120 }),
+        setback: fc.integer({ min: 200, max: 350 }),
+        depth: fc.integer({ min: 300, max: 1500 }),
+      }),
+      { minLength: 2, maxLength: 2 },
+    ),
+    sign: fc.constantFrom(1, -1),
+    aligned: fc.boolean(),
+    landingLast: fc.boolean(),
+  })
+  .map((r) => ({
+    kind: "cage" as const,
+    sections: r.sections.map((s) => ({
+      axis: { kind: "straight" as const, length: s.length },
+      width: r.aligned ? 900 : s.width,
+      ...(!r.aligned && s.widthEnd !== undefined ? { widthEnd: s.widthEnd } : {}),
+    })),
+    junctions: r.sections.slice(1).map((_, i) => {
+      const j = r.junctions[i]!;
+      const forced = r.landingLast ? i === r.sections.length - 2 : i === 0;
+      return j.landing || forced
+        ? { angle: 0, mode: "landing" as const, depth: j.depth }
+        : {
+            angle: r.sign * j.angle,
+            mode: "winders" as const,
+            well: { kind: "chamfer" as const, setbackIn: j.setback, setbackOut: j.setback },
+          };
+    }),
+  }));
+
+describe("steel-profile — plats de palier du limon coudé (relecture K2f)", () => {
+  const cage = (floorToFloor: number, layout: unknown): Project =>
+    ProjectSchema.parse({
+      schemaVersion: PROJECT_SCHEMA_VERSION,
+      site: { floorToFloor, upperSlabThickness: 200 },
+      stair: {
+        placement: { origin: { x: 0, y: 0 }, rotation: 0 },
+        layout,
+        structure: { kind: "steel-profile", params: { family: "UPN", stringerLine: "nosing" } },
+      },
+    });
+  const straight = (length: number, width: number, widthEnd: number) => ({
+    axis: { kind: "straight" as const, length },
+    width,
+    widthEnd,
+  });
+
+  it("palier droit après un tournant : partie de niveau du coin relevée au niveau du palier, rive de niveau sur le plat, aucun constat", () => {
+    // Cas de la relecture (graine 9191, #119) : le nez du palier tombe à 22,9 mm après le coin
+    // LI2 → LIP2 ; la partie de niveau était à P(σ) = 2 805,2, 13,3 mm sous lui, et LIP2 montait
+    // en pente le long du palier.
+    const p = cage(3347, {
+      kind: "cage",
+      sections: [straight(1776, 958, 1070), straight(1955, 1118, 913), straight(603, 874, 913)],
+      junctions: [
+        {
+          angle: -86,
+          mode: "winders",
+          well: { kind: "chamfer", setbackIn: 322, setbackOut: 322 },
+        },
+        { angle: 0, mode: "landing", depth: 1640 },
+      ],
+    });
+    const x = run(p);
+    expect(errorKeys(x)).toEqual([]);
+    const nos = x.m.stepping.nosings;
+    const landing = x.m.stepping.treads.find((t) => t.kind === "landing")!;
+    const zLanding = nos[landing.number - 1]!.z;
+    const result = x.r.cranked!.result;
+    const lip2 = x.r.stringers.find((s) => s.face.mark === "LIP2")!;
+    const corner = result.corners.find((c) => c.faceAfter === lip2.face.id)!;
+    expect(corner.z).toBeCloseTo(zLanding, 9);
+    expect(corner.skippedNoses).toContain(landing.number - 1);
+    expect(lip2.bearing).toBeDefined();
+    const k = landing.number - 1;
+    const going = nos[k + 2]!.sigmaInner - nos[k + 1]!.sigmaInner;
+    const flatEnd = nos[k + 1]!.sigmaInner - going - lip2.face.sigmaA;
+    expect(flatEnd).toBeGreaterThan(1000);
+    for (const u of [0, flatEnd / 2, flatEnd]) {
+      expect(polylineAt(lip2.bearing!.line, u)).toBeCloseTo(zLanding, 6);
+    }
+    expect(result.issues.filter((i) => i.kind === "landingNotLevel")).toEqual([]);
+  });
+
+  it("palier trop court entre les parties de niveau de ses coins : constat `landingNotLevel` et remarque de la face", () => {
+    // Cas de la relecture (graine 2026, cage#27) : palier de 310 mm, plat de 113,7 mm avant la
+    // montée vers la volée suivante ; la partie de niveau du coin haut (1 260) ne laisse pas de
+    // place à un raccord depuis la fin du plat : la rive monte de 180 mm sur le palier.
+    const p = cage(2700, {
+      kind: "cage",
+      sections: [straight(908, 853, 917), straight(1570, 893, 1074)],
+      junctions: [{ angle: 0, mode: "landing", depth: 310 }],
+    });
+    const x = run(p);
+    expect(errorKeys(x)).toEqual([]);
+    const result = x.r.cranked!.result;
+    for (const mark of ["LIP1", "LEP1"]) {
+      const st = x.r.stringers.find((s) => s.face.mark === mark)!;
+      expect(st.bearing, mark).toBeDefined();
+      const issues = result.issues.filter(
+        (i) => i.kind === "landingNotLevel" && i.faceId === st.face.id,
+      );
+      expect(issues, mark).toHaveLength(1);
+      const i = issues[0]!;
+      if (i.kind !== "landingNotLevel") throw new Error(mark);
+      expect(i.excess).toBeCloseTo(180, 6);
+      const notes = x.r.output.notes.filter(
+        (n) =>
+          n.key === "structure.steelProfile.note.landingNotLevel" && n.params?.["mark"] === mark,
+      );
+      expect(notes, mark).toHaveLength(1);
+      expect(notes[0]!.params?.["excess"]).toEqual(dec(180, 0));
+    }
+  });
+});
+
+describe("steel-profile — propriété sur cages à palier droit générées (K2f, `nosing`)", () => {
+  it("ne lève pas, palier construit, rives continues aux raccords de palier, plat du palier de niveau (ou écart justifié), composantes sans double compte, règles ≤ barre droite d'essai", () => {
+    let evaluated = 0;
+    let joints = 0;
+    let flats = 0;
+    let notLevel = 0;
+    let afterTurn = 0;
+    fc.assert(
+      fc.property(landingCageArb, (layout) => {
+        const p = ProjectSchema.parse({
+          schemaVersion: PROJECT_SCHEMA_VERSION,
+          site: { floorToFloor: 2700, upperSlabThickness: 200 },
+          stair: {
+            placement: { origin: { x: 0, y: 0 }, rotation: 0 },
+            layout,
+            structure: { kind: "steel-profile", params: { family: "UPN", stringerLine: "nosing" } },
+          },
+        });
+        let m!: Model;
+        expect(() => (m = buildModel(p, { memo: false }))).not.toThrow();
+        const keys = (m.errors ?? []).map((e) => e.key);
+        expect(keys).not.toContain("structure.cageUnsupported");
+        expect(keys).not.toContain("pipeline.internalError");
+        // Tracé impossible (tronçons qui se recouvrent…) : hors du domaine.
+        if (m.stepping.treads.length === 0 || keys.some((k) => k.startsWith("layout."))) return;
+        evaluated++;
+        const js = layout.junctions;
+        if (
+          js.some(
+            (j, i) => j.mode === "landing" && js.slice(0, i).some((q) => q.mode !== "landing"),
+          )
+        )
+          afterTurn++;
+        const x = run(p);
+        const ref = run(withRefKind(withLine(p, "chord")));
+        const known = new Set(errorKeys(ref));
+        expect(errorKeys(x).filter((k) => !known.has(k))).toEqual([]);
+        expect(mass(x)).toBeLessThanOrEqual(mass(ref));
+        const a = violationCounts(x);
+        const b = violationCounts(ref);
+        for (const [rule, n] of Object.entries(a)) {
+          if (rule !== "FAB_ONGLET_RACCORD") expect(n, rule).toBeLessThanOrEqual(b[rule] ?? 0);
+        }
+        expectCrankedParts(x, resolveWorkshopProfile(p.workshop).metal.density, p);
+        // Raccords de palier entre deux limons coudés : rives haute et basse continues.
+        for (const s of x.r.stringers) {
+          if (s.face.endCorner?.joint !== "landing" || !s.bearing) continue;
+          const t = x.r.stringers.find(
+            (q) =>
+              q.face.side === s.face.side &&
+              q.face.startCorner?.joint === "landing" &&
+              Math.abs(q.face.sigmaA - s.face.sigmaA - s.face.faceLength) < 1e-6,
+          );
+          if (!t?.bearing) continue;
+          joints++;
+          const ra = riveFns(s.bearing);
+          const rb = riveFns(t.bearing);
+          expect(Math.abs(ra.upper(s.face.faceLength) - rb.upper(0))).toBeLessThan(1e-6);
+          expect(Math.abs(ra.lower(s.face.faceLength) - rb.lower(0))).toBeLessThan(1e-6);
+        }
+        // K-Q18 : un palier ne forme aucun groupe du coin et garde toutes ses cornières.
+        expectCornerAngles(x, p);
+        // Plat du palier (convention de `nosingPitchLine` : du nez du palier à un giron avant le
+        // nez suivant) de niveau sur chaque limon coudé, au-dessus comme au-dessous, sauf le
+        // raccord glissant vers la partie de niveau d'un coin plus haut (`rampBefore`, convention
+        // K2f) ; tout autre écart (palier trop court entre les parties de niveau de ses coins,
+        // jarret retiré pour tronçon court) est publié par le constat `landingNotLevel` du noyau
+        // et par une remarque de la face.
+        const nos = x.m.stepping.nosings;
+        const result = x.r.cranked!.result;
+        for (const tr of x.m.stepping.treads) {
+          if (tr.kind !== "landing") continue;
+          const k = tr.number - 1;
+          if (k < 0 || k + 2 >= nos.length) continue;
+          for (const st of x.r.stringers) {
+            if (!st.bearing) continue;
+            const sg = (j: number): number =>
+              st.face.side === "inner" ? nos[j]!.sigmaInner : nos[j]!.sigmaOuter;
+            const g = sg(k + 2) - sg(k + 1);
+            const lo = Math.max(sg(k) - st.face.sigmaA, st.uLo);
+            let hi = Math.min(Math.max(sg(k), sg(k + 1) - g) - st.face.sigmaA, st.uHi);
+            // Raccord glissant lu sur le coin de fin de la chaîne de palier du limon (son départ
+            // peut tomber dans un membre précédent de la chaîne).
+            let last = st;
+            for (let guard = 0; guard < 8 && last.face.endCorner?.joint === "landing"; guard++) {
+              const end = last.face.sigmaA + last.face.faceLength;
+              const next = x.r.stringers.find(
+                (q) =>
+                  q.face.side === last.face.side &&
+                  q.face.startCorner?.joint === "landing" &&
+                  Math.abs(q.face.sigmaA - end) < 1e-6,
+              );
+              if (!next) break;
+              last = next;
+            }
+            const corner = result.corners.find((c) => c.faceBefore === last.face.id);
+            if (corner?.rampBefore !== undefined) {
+              const sigmaRamp = last.face.sigmaA + last.face.faceLength - corner.rampBefore;
+              hi = Math.min(hi, sigmaRamp - st.face.sigmaA);
+            }
+            if (!(hi - lo > 1e-6)) continue;
+            flats++;
+            const us = [lo, hi, ...st.bearing.line.map((q) => q.x).filter((u) => u > lo && u < hi)];
+            const dev = Math.max(
+              ...us.map((u) => Math.abs(polylineAt(st.bearing!.line, u) - nos[k]!.z)),
+            );
+            if (dev <= 1e-6) continue;
+            notLevel++;
+            const issue = result.issues.find(
+              (i) =>
+                i.kind === "landingNotLevel" &&
+                i.faceId === st.face.id &&
+                i.u0 < hi + 1e-6 &&
+                i.u1 > lo - 1e-6 &&
+                i.excess >= dev - 1e-6,
+            );
+            expect(issue, `${st.face.mark} M${tr.number} écart ${dev}`).toBeDefined();
+            expect(
+              x.r.output.notes.some(
+                (n) =>
+                  n.key === "structure.steelProfile.note.landingNotLevel" &&
+                  n.params?.["mark"] === st.face.mark,
+              ),
+              `${st.face.mark} M${tr.number} remarque`,
+            ).toBe(true);
+          }
+        }
+      }),
+      { numRuns: Math.max(RUNS, 40), seed: 2026 },
+    );
+    expect(evaluated, "évalués").toBeGreaterThan(20);
+    expect(joints, "raccords de palier coudés").toBeGreaterThan(0);
+    expect(flats, "plats de palier").toBeGreaterThan(0);
+    expect(afterTurn, "paliers après un tournant").toBeGreaterThan(0);
+    // Plats non de niveau (publiés) : cas de bord, bornés (mesure K2f : voir le journal).
+    expect(notLevel, "plats non de niveau publiés").toBeLessThanOrEqual(flats / 10);
+  }, 300_000);
 });

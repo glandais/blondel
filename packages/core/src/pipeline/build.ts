@@ -483,14 +483,26 @@ export function deepMerge(
  * construit toutes les fonctions de la cage, sinon `structure.cageUnsupported` avec la liste des
  * fonctions non prises en charge (libellés traduits à l'affichage), ou, pour un plugin qui ne lit
  * aucune cage saisie et une cage sans fonction, la raison « lit encore un tracé à volées »
- * (`structure.cageUnsupported.plain`).
+ * (`structure.cageUnsupported.plain`). Plugin dont les fonctions dépendent des paramètres
+ * (`capabilities.cageWith`) et paramètres invalides : le refus ne peut pas être lu, l'erreur de
+ * paramètres (`pipeline.structureParamsInvalid`, la même que celle de `resolveStructureParams`)
+ * est rendue à sa place (relecture K2f : sinon elle était masquée par un refus trompeur).
  */
 function cageUnsupportedMessage(
   plugin: StructureKind<unknown>,
   features: readonly CageFeature[],
+  params: unknown,
 ): Message | undefined {
-  const missing = structureUnsupportedCageFeatures(plugin.kind, features);
+  // Fonctions acceptées selon les paramètres de la structure (`capabilities.cageWith`, K2f).
+  const missing = structureUnsupportedCageFeatures(plugin.kind, features, params);
   if (missing !== null && missing.length === 0) return undefined;
+  if (plugin.capabilities?.cageWith) {
+    const parsed = plugin.paramsSchema.safeParse(params ?? {}, {
+      error: projectErrorMap,
+      reportInput: true,
+    });
+    if (!parsed.success) return paramsInvalidMessage(plugin.kind, parsed.error);
+  }
   const unsupported = missing ?? features;
   const list = unsupported
     .map((f) => msg(CAGE_FEATURE_LABELS[f]))
@@ -521,21 +533,22 @@ function resolveStructureParams(
     error: projectErrorMap,
     reportInput: true,
   });
-  if (!parsed.success) {
-    const issues = issuesFromZod(parsed.error)
-      .map(projectIssueMessage)
-      .reduceRight<Message | null>(
-        (rest, part) => (rest === null ? part : msg("common.list", { first: part, rest })),
-        null,
-      );
-    throw new StructureError(
-      msg("pipeline.structureParamsInvalid", {
-        kind: plugin.kind,
-        issues: issues ?? msg("project.issue.invalid"),
-      }),
-    );
-  }
+  if (!parsed.success) throw new StructureError(paramsInvalidMessage(plugin.kind, parsed.error));
   return parsed.data;
+}
+
+/** Erreur des paramètres invalides d'une structure (« chemin (libellé) : motif », listés). */
+function paramsInvalidMessage(kind: string, error: Parameters<typeof issuesFromZod>[0]): Message {
+  const issues = issuesFromZod(error)
+    .map(projectIssueMessage)
+    .reduceRight<Message | null>(
+      (rest, part) => (rest === null ? part : msg("common.list", { first: part, rest })),
+      null,
+    );
+  return msg("pipeline.structureParamsInvalid", {
+    kind,
+    issues: issues ?? msg("project.issue.invalid"),
+  });
 }
 
 /** Famille par défaut d'une pièce propre au plugin : marche, contremarche, palier, sinon ossature. */
@@ -859,7 +872,7 @@ export function buildModel(project: Project, options: BuildModelOptions = {}): M
   const cageInput = isCageLayout(stair.layout) ? stair.layout : undefined;
   const cageRefusal =
     cageInput !== undefined && known !== undefined
-      ? cageUnsupportedMessage(known, cageFeatures(cageInput))
+      ? cageUnsupportedMessage(known, cageFeatures(cageInput), stair.structure.params)
       : undefined;
   const plugin = cageRefusal !== undefined ? undefined : known;
   if (complete && cageRefusal !== undefined) errors.push(cageRefusal);

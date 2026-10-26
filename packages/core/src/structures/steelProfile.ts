@@ -38,11 +38,12 @@
  *   → un limon de jour à petit rayon est **exclu** (bloquant) ; au-delà, le cintrage
  *   hélicoïdal reste à valider chez le cintreur et le limon cintré n'est pas généré (jalon 5).
  * - **Cage saisie** (ADR-0010, sous-lot 6b) : mêmes faces que `steel-flat` (`steelCageFaces`),
- *   mêmes fonctions sauf le palier droit (`STEEL_PROFILE_CAGE`) ; coupe d'onglet à φ/2 en plan à
- *   un angle quelconque, rentrant ou saillant (`miterOffset`, `miterCutExtra`) ; onglets plus
- *   longs que la face : limon non généré (`profileMiterFiberLength`) ; jour en arc : contrôle de
- *   cintrage gardé. À valider, QUESTIONS F17. (Aboutage de palier `splice` : prêt, non atteint
- *   tant que `straightLanding` n'est pas déclaré.)
+ *   mêmes fonctions sauf le palier droit en barre droite (`STEEL_PROFILE_CAGE`) ; palier droit
+ *   accepté en limon coudé (`STEEL_PROFILE_CAGE_NOSING`, K-Q5, sous-lot K2f), aboutage de palier
+ *   selon `splice` ; coupe d'onglet à φ/2 en plan à un angle quelconque, rentrant ou saillant
+ *   (`miterOffset`, `miterCutExtra`) ; onglets plus longs que la face : limon non généré
+ *   (`profileMiterFiberLength`) ; jour en arc : contrôle de cintrage gardé. À valider,
+ *   QUESTIONS F17.
  * - **Supports** : cornières (C §2.3 [58]) sous chaque marche, soudées ou vissées.
  * - **Développé** : vue de l'âme dépliée (face côté marches), repère de la barre (x le long de
  *   l'axe, y perpendiculaire de 0 à h) : coupes d'extrémité, perçages, traçage des supports.
@@ -138,6 +139,7 @@ import {
   cornerSupportKey,
   kneeNormal,
   kneeWeldLength,
+  landingNotLevelNotes,
   type CornerGroup,
   type CrankedComponentSpec,
   type CrankedJigItem,
@@ -879,6 +881,10 @@ export function buildSteelProfile(
         if (jig) notes.push(jig);
       } else if (fp?.bearing) notes.push(crankedSingleNote(p.face.mark, fp.bearing));
       else if (fp?.fallback) notes.push(crankedFallbackNote(p.face.mark, fp.fallback));
+      // Plat de palier que la ligne coudée ne suit pas de niveau (K2f) : remarque, sans repli.
+      if (fp?.bearing) {
+        notes.push(...landingNotLevelNotes(p.face.mark, p.face.id, planOf(s).result.issues));
+      }
     }
     supportMargins.push(...built.supportMargins);
     buttWeldTotal += built.buttWeld;
@@ -2692,15 +2698,27 @@ function addProfileChecks(
 }
 
 /**
- * Fonctions de cage saisie construites par les limons en profilés (sous-lot 6b) : celles des
- * plats (`STEEL_STRINGER_CAGE`) **sauf le palier droit** (F17 (3)). Un profilé reste une barre
- * droite dont la ligne d'appui est la corde des nez de sa portée : sur un palier droit, le limon
- * qui arrive monterait jusqu'au milieu du palier et l'aboutage relierait deux barres décalées en
- * hauteur de plusieurs centaines de mm (FAB_ONGLET_RACCORD en violation), et le limon de bord
- * d'un palier non aligné serait incliné le long d'un palier de niveau. Refusé par le garde-fou
- * tant que le limon ne suit pas un palier de niveau (partie horizontale ou raccord coudé).
+ * Fonctions de cage saisie construites par les limons en profilés (sous-lot 6b) en barre droite
+ * (`stringerLine` = `chord`) : celles des plats (`STEEL_STRINGER_CAGE`) **sauf le palier droit**
+ * (F17 (3)). La barre droite a pour ligne d'appui la corde des nez de sa portée : sur un palier
+ * droit, le limon qui arrive monterait jusqu'au milieu du palier et l'aboutage relierait deux
+ * barres décalées en hauteur de plusieurs centaines de mm (FAB_ONGLET_RACCORD en violation), et
+ * le limon de bord d'un palier non aligné serait incliné le long d'un palier de niveau. Refusé
+ * par le garde-fou en barre droite ; accepté en limon coudé (`STEEL_PROFILE_CAGE_NOSING`).
  */
 export const STEEL_PROFILE_CAGE: readonly CageFeature[] = ["anyAngle", "variableWidth", "chamfer"];
+
+/**
+ * Fonctions de cage saisie du limon coudé (`stringerLine` = `nosing`, chantier bent-stringer,
+ * sous-lot K2f, décision K-Q5 de QUESTIONS A41) : celles de la barre droite **plus le palier
+ * droit**. La ligne d'appui suit la ligne des nez, donc le plat du palier (rive de niveau sur le
+ * palier, raccord glissant vers la partie de niveau d'un coin plus haut, limons colinéaires d'un
+ * raccord de palier traités comme une seule ligne coupée d'aplomb : `profileBearing.ts`).
+ */
+export const STEEL_PROFILE_CAGE_NOSING: readonly CageFeature[] = [
+  ...STEEL_PROFILE_CAGE,
+  "straightLanding",
+];
 
 export const STEEL_PROFILE: StructureKind<SteelProfileParams> = {
   kind: "steel-profile",
@@ -2717,9 +2735,11 @@ export const STEEL_PROFILE: StructureKind<SteelProfileParams> = {
       const b = profileLateralWidth(p);
       return { inner: b, outer: b };
     },
-    // Cage saisie (sous-lot 6b) : onglets à φ/2 en plan aux angles (F17, à valider) ; palier
-    // droit, axe en arc (cintrage), congé côté mur, marches rayonnantes et S / Z refusés.
+    // Cage saisie (sous-lot 6b) : onglets à φ/2 en plan aux angles (F17, à valider) ; axe en
+    // arc (cintrage), congé côté mur, marches rayonnantes et S / Z refusés ; palier droit refusé
+    // en barre droite, accepté en limon coudé (K-Q5, sous-lot K2f).
     cage: STEEL_PROFILE_CAGE,
+    cageWith: (p) => (p.stringerLine === "nosing" ? STEEL_PROFILE_CAGE_NOSING : STEEL_PROFILE_CAGE),
   },
 };
 

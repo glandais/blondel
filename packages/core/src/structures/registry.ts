@@ -81,32 +81,57 @@ export function structureAcceptsLayout(kind: string, layout: StructureLayoutKind
  * Fonctions de cage saisie (ADR-0010) que `kind` sait construire : toutes pour `none` (pièces de
  * base seules) ; `null` si la structure ne lit aucune cage saisie (plugin inconnu, ou sans
  * `capabilities.cage` : tous les plugins intégrés au lot 2, généralisés un par un aux lots 6 et
- * suivants).
+ * suivants). Avec `params` valides pour le schéma du plugin (défauts appliqués), les fonctions
+ * qui en dépendent (`capabilities.cageWith`, sous-lot K2f : palier droit des profilés en limon
+ * coudé) ; sans `params`, paramètres invalides ou capacité qui lève : `capabilities.cage`.
  */
-export function structureCageFeatures(kind: string): readonly CageFeature[] | null {
+export function structureCageFeatures(
+  kind: string,
+  params?: unknown,
+): readonly CageFeature[] | null {
   if (kind === "none") return CAGE_FEATURES;
-  return registry.get(kind)?.capabilities?.cage ?? null;
+  const plugin = registry.get(kind);
+  const base = plugin?.capabilities?.cage;
+  if (!plugin || !base) return null;
+  const f = plugin.capabilities?.cageWith;
+  if (!f || params === undefined) return base;
+  const parsed = plugin.paramsSchema.safeParse(params ?? {});
+  if (!parsed.success) return base;
+  // Lu hors de `attempt` (garde-fou de `buildModel`) : une capacité qui lève ne doit pas faire
+  // lever le pipeline (`buildModel` ne lève jamais) ; on garde alors les fonctions statiques.
+  try {
+    return f(parsed.data);
+  } catch {
+    return base;
+  }
 }
 
 /**
  * Fonctions de `features` (celles d'une cage saisie, `cageFeatures`) que `kind` ne sait pas
- * construire, dans l'ordre reçu ; `null` si la structure ne lit aucune cage saisie.
+ * construire (pour `params`, voir `structureCageFeatures`), dans l'ordre reçu ; `null` si la
+ * structure ne lit aucune cage saisie.
  */
 export function structureUnsupportedCageFeatures(
   kind: string,
   features: readonly CageFeature[],
+  params?: unknown,
 ): readonly CageFeature[] | null {
-  const accepted = structureCageFeatures(kind);
+  const accepted = structureCageFeatures(kind, params);
   if (accepted === null) return null;
   return features.filter((f) => !accepted.includes(f));
 }
 
 /**
  * La structure `kind` sait-elle construire une cage saisie qui utilise `features`
- * (`cageFeatures(spec)`, liste vide comprise) ? `none` : toujours.
+ * (`cageFeatures(spec)`, liste vide comprise), pour `params` s'ils sont donnés ? `none` :
+ * toujours.
  */
-export function structureAcceptsCage(kind: string, features: readonly CageFeature[]): boolean {
-  return structureUnsupportedCageFeatures(kind, features)?.length === 0;
+export function structureAcceptsCage(
+  kind: string,
+  features: readonly CageFeature[],
+  params?: unknown,
+): boolean {
+  return structureUnsupportedCageFeatures(kind, features, params)?.length === 0;
 }
 
 /** Les limons de jour de `kind` exigent-ils un poteau d'angle ? */
@@ -153,7 +178,7 @@ export function structureCarriedHandrails(project: Project): readonly CarriedHan
   if (!plugin || !f) return [];
   if (!structureAcceptsLayout(kind, projectLayoutTraits(project).kind)) return [];
   const layout = project.stair.layout;
-  if (isCageLayout(layout) && !structureAcceptsCage(kind, cageFeatures(layout))) return [];
+  if (isCageLayout(layout) && !structureAcceptsCage(kind, cageFeatures(layout), params)) return [];
   const parsed = plugin.paramsSchema.safeParse(params ?? {});
   if (!parsed.success) return [];
   // Lu dans la clé de mémoïsation de `buildModel`, hors de `attempt` : un plugin qui lève ne

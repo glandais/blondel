@@ -12,6 +12,17 @@
  *   au coin (comme `levelZones` de `steel-flat` et `wood-housed`), assez longue pour contenir
  *   les fibres de l'onglet à φ/2 et les coupes des jarrets voisins avec un tronçon d'au moins
  *   la longueur minimale ; faces trop courtes : coins fusionnés en une seule partie de niveau.
+ * - **Paliers** (sous-lot K2f, K-Q5) : deux limons colinéaires reliés au milieu d'un palier droit
+ *   (raccord `landing`) forment une **chaîne** traitée comme une seule ligne d'appui, sans partie
+ *   de niveau au raccord (coupes d'aplomb jointives, z et pente continus), puis découpée par
+ *   membre ; un sous-tronçon voisin du raccord compte comme un tronçon (longueur minimale), une
+ *   fin de plat trop proche du raccord est reportée à la longueur minimale après lui. Partie de
+ *   niveau d'un coin plus haute qu'un plat de palier qui la précède : **raccord glissant** parti
+ *   du plat à la pente de référence (plus forte pente de la ligne des nez de la face), rive de
+ *   niveau sur le palier jusqu'au départ (`CornerLevel.rampBefore`). Palier qui suit un coin
+ *   (palier après un tournant) : partie de niveau du coin relevée au niveau du palier quand le
+ *   plat commence à portée de la partie de niveau de début. Plat de palier que la ligne ne suit
+ *   pas de niveau hors du raccord glissant : constat `landingNotLevel` (QUESTIONS A41, K-Q28).
  * - **Nettoyage** (CK6, K-Q9) : sommets alignés retirés (epsilon numérique), puis retrait
  *   déterministe (plus petit |Δα|, puis plus petit u) sous l'angle minimal de jarret et la
  *   longueur minimale de tronçon (`KneeSettings`, valeurs provisoires **à valider**).
@@ -210,6 +221,12 @@ export interface CornerLevel {
   readonly lengthBefore: Mm;
   /** λB : longueur de niveau dans la face après, depuis le coin. */
   readonly lengthAfter: Mm;
+  /**
+   * Raccord glissant sur un plat de palier (sous-lot K2f) : distance du coin au départ du
+   * raccord (point du plat où la rive quitte le niveau du palier), dans la face avant ; absent
+   * sans raccord glissant.
+   */
+  readonly rampBefore?: Mm;
   readonly merged: boolean;
   /** Indices des nœuds de la ligne des nez (`PiecewiseLinear.xs`) sous la partie de niveau. */
   readonly skippedNoses: readonly number[];
@@ -247,6 +264,19 @@ export type BearingIssue =
       readonly kind: "noseAboveRive";
       readonly faceId: string;
       readonly u: Mm;
+      readonly excess: Mm;
+    }
+  /**
+   * Plat de palier de la ligne des nez (deux nœuds de même altitude) que la ligne d'appui ne
+   * suit pas de niveau (sous-lot K2f, K-Q5), hors du raccord glissant : palier trop court entre
+   * les parties de niveau de ses coins, ou jarret retiré pour tronçon court. [u0 ; u1] : partie
+   * du plat contrôlée dans la fenêtre de la face ; `excess` : plus grand écart |B − z du palier|.
+   */
+  | {
+      readonly kind: "landingNotLevel";
+      readonly faceId: string;
+      readonly u0: Mm;
+      readonly u1: Mm;
       readonly excess: Mm;
     }
   | { readonly kind: "levelCoversFace"; readonly faceId: string }
@@ -536,7 +566,8 @@ type FaceLevel =
   | {
       readonly kind: "ends";
       readonly start?: { readonly z: Mm; readonly lambda: Mm };
-      readonly end?: { readonly z: Mm; readonly lambda: Mm };
+      /** `slide` : départ du raccord glissant sur un plat de palier (K2f), sommet protégé. */
+      readonly end?: { readonly z: Mm; readonly lambda: Mm; readonly slide?: Vtx };
     };
 
 interface CornerRec {
@@ -544,14 +575,128 @@ interface CornerRec {
   after?: number;
   sigma: Mm;
   corner: SteelCornerEnd;
+  /** Coin apparié malgré un écart de σ (`cornerSigmaMismatch`) : pas de raccord glissant. */
+  mismatch?: boolean;
 }
 
 const cmpStr = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
 
-/** Nettoyage (CK6, K-Q9) d'une ligne brute ; rend la ligne, ses tronçons et les retraits. */
+/**
+ * Chaîne de faces reliées par des raccords de palier (`joint` = `landing`, sous-lot K2f) : faces
+ * colinéaires en plan, du même côté, σ continu. Une face sans raccord de palier est une chaîne à
+ * un seul membre (décalage 0).
+ */
+interface Chain {
+  readonly members: readonly BearingFace[];
+  /** Décalage de chaque membre dans le repère de la chaîne : σ_A du membre − σ_A du premier. */
+  readonly offsets: readonly Mm[];
+}
+
+/** Morceau de ligne d'appui d'un membre de chaîne, dans le repère du membre. */
+interface Piece {
+  readonly line: Vec2[];
+  readonly prot: boolean[];
+  readonly segments: BearingSegment[];
+  readonly knees: Knee[];
+}
+
+/**
+ * Contrôle de longueur d'un tronçon (ou d'un sous-tronçon coupé à un raccord de palier) : plus
+ * courte fibre, sommets de la ligne de la chaîne candidats au retrait s'il est trop court, indice
+ * du tronçon de la chaîne s'il n'est pas coupé (−1 sinon).
+ */
+interface PieceCheck {
+  readonly shortest: Mm;
+  readonly cands: readonly number[];
+  readonly seg: number;
+  /** Sous-tronçon coupé : abscisse (repère de la chaîne) du raccord de palier qui le borne. */
+  readonly joint?: Mm;
+}
+
+/**
+ * Découpe la ligne d'une chaîne en morceaux par membre (K2f) : sommet inséré à chaque raccord de
+ * palier (altitude de la ligne, donc z et pente continus, Δα = 0 au raccord, coupe d'aplomb),
+ * tronçons de chaque membre calculés dans son repère avec ses propres extrémités. Une chaîne à un
+ * seul membre donne exactement `segmentsOf` de la ligne.
+ */
+function chainPieces(
+  line: readonly Vec2[],
+  prot: readonly boolean[],
+  chain: Chain,
+  sec: BearingSection,
+  dh: Mm,
+): { pieces: Piece[]; checks: PieceCheck[] } {
+  const ms = chain.members;
+  const endOf = (f: BearingFace, which: "start" | "end"): CutEnd => ({
+    kind: which === "start" ? f.start : f.end,
+    corner: cornerOf(f, which),
+  });
+  if (ms.length === 1) {
+    const f = ms[0]!;
+    const r = segmentsOf(line, prot, endOf(f, "start"), endOf(f, "end"), sec, dh);
+    return {
+      pieces: [{ line: [...line], prot: [...prot], ...r }],
+      checks: r.segments.map((s, i) => ({
+        shortest: s.fibres.shortest,
+        cands: [i, i + 1],
+        seg: i,
+      })),
+    };
+  }
+  const pieces: Piece[] = [];
+  const checks: PieceCheck[] = [];
+  const last = line.length - 1;
+  ms.forEach((f, q) => {
+    const o = chain.offsets[q]!;
+    const a = q === 0 ? line[0]!.x : o;
+    const b = q === ms.length - 1 ? line[last]!.x : chain.offsets[q + 1]!;
+    // Sommets du membre : extrémité (sommet de la chaîne ou point au raccord), intérieurs, fin.
+    const idx: number[] = [];
+    const pts: Vec2[] = [];
+    const pr: boolean[] = [];
+    // Abscisses locales exactes aux extrémités du membre (fenêtre [uLo ; uHi] du membre, sans
+    // erreur d'arrondi du changement de repère).
+    const push = (vi: number, x: Mm, local: Mm = x - o): void => {
+      idx.push(vi);
+      pts.push({ x: local, y: vi >= 0 ? line[vi]!.y : polylineAt(line, x) });
+      pr.push(vi >= 0 ? prot[vi] === true : false);
+    };
+    if (q === 0) push(0, a, f.uLo);
+    else push(-1, o + f.uLo, f.uLo);
+    for (let i = 0; i <= last; i++) {
+      const x = line[i]!.x;
+      if (x > a + STRUCT_EPS && x < b - STRUCT_EPS) push(i, x);
+    }
+    if (q === ms.length - 1) push(last, b, f.uHi);
+    else push(-1, o + f.uHi, f.uHi);
+    const r = segmentsOf(pts, pr, endOf(f, "start"), endOf(f, "end"), sec, dh);
+    pieces.push({ line: pts, prot: pr, ...r });
+    r.segments.forEach((s, k) => {
+      const i0 = idx[k]!;
+      const i1 = idx[k + 1]!;
+      const whole = i0 >= 0 && i1 >= 0;
+      const joint = i0 < 0 ? o + f.uLo : i1 < 0 ? o + f.uHi : undefined;
+      checks.push({
+        shortest: s.fibres.shortest,
+        cands: [i0, i1].filter((j) => j >= 0),
+        seg: whole ? i0 : -1,
+        ...(joint !== undefined ? { joint } : {}),
+      });
+    });
+  });
+  return { pieces, checks };
+}
+
+/**
+ * Nettoyage (CK6, K-Q9) d'une ligne brute d'une chaîne ; rend la ligne, ses morceaux par membre
+ * (tronçons, jarrets) et les retraits. Un raccord de palier n'est jamais un sommet de la ligne :
+ * un tronçon qui le traverse est contrôlé comme deux sous-tronçons coupés d'aplomb ; un
+ * sous-tronçon plus court que la longueur minimale désigne son sommet voisin comme candidat au
+ * retrait (raison `segment`).
+ */
 function cleanLine(
   raw: readonly Vtx[],
-  face: BearingFace,
+  chain: Chain,
   sec: BearingSection,
   dh: Mm,
   m: Mm,
@@ -559,8 +704,7 @@ function cleanLine(
 ): {
   line: Vec2[];
   prot: boolean[];
-  segments: BearingSegment[];
-  knees: Knee[];
+  pieces: Piece[];
   removed: RemovedVertex[];
 } {
   let verts = [...raw];
@@ -568,6 +712,45 @@ function cleanLine(
   const deltaAt = (vs: readonly Vtx[], i: number): number =>
     slopeAngle({ x: vs[i]!.u, y: vs[i]!.z }, { x: vs[i + 1]!.u, y: vs[i + 1]!.z }) -
     slopeAngle({ x: vs[i - 1]!.u, y: vs[i - 1]!.z }, { x: vs[i]!.u, y: vs[i]!.z });
+  const build = (vs: readonly Vtx[]) =>
+    chainPieces(
+      vs.map((v) => ({ x: v.u, y: v.z })),
+      vs.map((v) => v.prot),
+      chain,
+      sec,
+      dh,
+    );
+  /** Plus courte fibre du tronçon i de la ligne s'il n'est coupé par aucun raccord (∞ sinon). */
+  const wholeShortest = (b: ReturnType<typeof build>, i: number): Mm =>
+    b.checks.find((c) => c.seg === i)?.shortest ?? Infinity;
+  // 0. Fin de plat de palier trop près d'un raccord de palier (chaîne, K2f) : le jarret de
+  //    fin du plat (niveau avant, montée après) dont le sous-tronçon voisin du raccord est plus
+  //    court que la longueur minimale est reporté à `m` après le raccord, sur le plat prolongé
+  //    (sous-tronçon de niveau coupé d'aplomb : plus courte fibre = sa longueur). Le palier reste
+  //    de niveau jusqu'au-delà du raccord et la montée vers le nez suivant est plus raide ; sans
+  //    ce report, le nettoyage retirerait le jarret et le palier entier serait tiré en corde.
+  //    Le sommet reporté est protégé (un raccord trop raide et trop court est alors signalé par
+  //    `steepSegment`, comme au coin). Impossible (montée plus courte que le report) : nettoyage
+  //    ordinaire, retrait signalé. Fait sur la ligne brute, avant le
+  //    retrait des sommets alignés : le nez suivant (aligné avec la volée) y est encore, et la
+  //    montée reportée le rejoint.
+  if (chain.members.length > 1) {
+    const b0 = build(verts);
+    const moved = new Set<number>();
+    for (const c of b0.checks) {
+      if (c.joint === undefined || c.cands.length !== 1 || c.shortest >= m - TOL) continue;
+      const j = c.cands[0]!;
+      if (moved.has(j) || j <= 0 || j + 1 >= verts.length || verts[j]!.prot) continue;
+      const a = verts[j - 1]!;
+      const v = verts[j]!;
+      const b = verts[j + 1]!;
+      if (Math.abs(a.z - v.z) > TOL || !(b.z > v.z + TOL)) continue;
+      const target = c.joint + m;
+      if (!(target > v.u) || !(target < b.u - STRUCT_EPS)) continue;
+      verts[j] = { u: target, z: v.z, prot: true };
+      moved.add(j);
+    }
+  }
   // 1. Sommets alignés (même protégés) : pas de jarret. Un jarret de partie de niveau aligné
   //    (raccord de niveau) passe sa protection au sommet suivant de la partie de niveau, qui
   //    devient le jarret de fin de niveau.
@@ -588,17 +771,6 @@ function cleanLine(
       if (i > 1) i--;
     } else i++;
   }
-  const startEnd: CutEnd = { kind: face.start, corner: cornerOf(face, "start") };
-  const endEnd: CutEnd = { kind: face.end, corner: cornerOf(face, "end") };
-  const build = (vs: readonly Vtx[]) =>
-    segmentsOf(
-      vs.map((v) => ({ x: v.u, y: v.z })),
-      vs.map((v) => v.prot),
-      startEnd,
-      endEnd,
-      sec,
-      dh,
-    );
   // 2. Retraits sous l'angle minimal et la longueur minimale de tronçon.
   let built = build(verts);
   for (let guard = 0; guard < raw.length + 2; guard++) {
@@ -608,15 +780,15 @@ function cleanLine(
         cand.set(i, { reason: "angle" });
       }
     }
-    built.segments.forEach((s, i) => {
-      if (s.fibres.shortest >= m - TOL) return;
-      for (const j of [i, i + 1]) {
+    for (const s of built.checks) {
+      if (s.shortest >= m - TOL) continue;
+      for (const j of s.cands) {
         if (j <= 0 || j + 1 >= verts.length || verts[j]!.prot) continue;
         const c = cand.get(j);
-        if (!c) cand.set(j, { reason: "segment", shortest: s.fibres.shortest });
-        else if (c.reason === "segment") c.shortest = Math.min(c.shortest!, s.fibres.shortest);
+        if (!c) cand.set(j, { reason: "segment", shortest: s.shortest });
+        else if (c.reason === "segment") c.shortest = Math.min(c.shortest!, s.shortest);
       }
-    });
+    }
     if (cand.size === 0) break;
     let pick = -1;
     let best = Infinity;
@@ -644,8 +816,10 @@ function cleanLine(
       const E = verts[end]!;
       verts[end] = { ...E, z: A.z + ((B.z - A.z) * (E.u - A.u)) / (B.u - A.u) };
     };
-    if (pick === 1 && built.segments[0]!.fibres.shortest < m - TOL) extend(0, 1, 2);
-    else if (pick === n - 2 && built.segments[n - 2]!.fibres.shortest < m - TOL) {
+    // (Seulement si ce tronçon d'extrémité n'est coupé par aucun raccord de palier : sinon c'est
+    // le sous-tronçon voisin du raccord qui est court, et l'extrémité ne bouge pas.)
+    if (pick === 1 && wholeShortest(built, 0) < m - TOL) extend(0, 1, 2);
+    else if (pick === n - 2 && wholeShortest(built, n - 2) < m - TOL) {
       extend(n - 1, n - 3, n - 2);
     }
     verts = verts.filter((_, i) => i !== pick);
@@ -654,8 +828,7 @@ function cleanLine(
   return {
     line: verts.map((v) => ({ x: v.u, y: v.z })),
     prot: verts.map((v) => v.prot),
-    segments: built.segments,
-    knees: built.knees,
+    pieces: built.pieces,
     removed,
   };
 }
@@ -676,14 +849,99 @@ export function profileBearings(input: BearingInput): BearingResult {
   const sorted = [...input.faces].sort(
     (a, b) => cmpStr(a.side, b.side) || a.sigmaA - b.sigmaA || cmpStr(a.id, b.id),
   );
-  const faces: BearingFace[] = [];
+  const realFaces: BearingFace[] = [];
   for (const f of sorted) {
     const finite = [f.uLo, f.uHi, f.sigmaA, f.faceLength].every((x) => Number.isFinite(x));
     if (!finite || !(f.uHi - f.uLo > STRUCT_EPS)) {
       issues.push({ kind: "emptyWindow", faceId: f.id });
-    } else faces.push(f);
+    } else realFaces.push(f);
   }
   const P = (f: BearingFace): PiecewiseLinear => input.pitch[f.side];
+  /** Pente la plus forte de la ligne des nez sur la fenêtre (segments qui la recoupent). */
+  const pitchMaxOf = (f: BearingFace): number => {
+    const plf = P(f);
+    let pitchMax = -Infinity;
+    for (let k = 0; k + 1 < plf.xs.length; k++) {
+      const a = plf.xs[k]! - f.sigmaA;
+      const b = plf.xs[k + 1]! - f.sigmaA;
+      if (b <= f.uLo || a >= f.uHi || !(b > a)) continue;
+      pitchMax = Math.max(pitchMax, Math.atan2(plf.ys[k + 1]! - plf.ys[k]!, b - a));
+    }
+    return pitchMax;
+  };
+
+  // 0. Chaînes de raccords de palier (sous-lot K2f). Deux limons colinéaires reliés au milieu
+  //    d'un palier droit (`joint` = `landing`, coupe d'aplomb bout à bout) sont traités comme une
+  //    seule ligne d'appui : pas de partie de niveau au raccord (deux barres colinéaires de même
+  //    pente coupées d'aplomb sont jointives sans plat), la ligne des nez suit le plat du palier.
+  //    La suite (coins, parties de niveau, nettoyage) tourne sur ces faces de chaîne ; la ligne
+  //    nettoyée est ensuite découpée par membre (`chainPieces`). Appariement : même côté, fin de
+  //    l'un et début de l'autre en raccord de palier, σ continu à 1e-6 mm, fenêtres pleines au
+  //    raccord ; départage par l'écart puis l'id (indépendant de l'ordre d'entrée, I9).
+  const landingAt = (f: BearingFace, which: "start" | "end"): boolean =>
+    cornerOf(f, which)?.joint === "landing";
+  const nextOf = new Map<number, number>();
+  const hasPrev = new Set<number>();
+  realFaces.forEach((x, i) => {
+    if (!landingAt(x, "end") || x.uHi < x.faceLength - 1e-6) return;
+    const sigmaEnd = x.sigmaA + x.faceLength;
+    let best = -1;
+    let bestGap = Infinity;
+    realFaces.forEach((y, j) => {
+      if (j === i || y.side !== x.side || hasPrev.has(j) || !landingAt(y, "start")) return;
+      if (y.uLo > 1e-6) return;
+      const gap = Math.abs(y.sigmaA - sigmaEnd);
+      if (gap > 1e-6) return;
+      if (
+        gap < bestGap - 1e-12 ||
+        (Math.abs(gap - bestGap) <= 1e-12 && best >= 0 && cmpStr(y.id, realFaces[best]!.id) < 0)
+      ) {
+        best = j;
+        bestGap = gap;
+      }
+    });
+    if (best >= 0) {
+      nextOf.set(i, best);
+      hasPrev.add(best);
+    }
+  });
+  const chains: Chain[] = [];
+  const faces: BearingFace[] = [];
+  realFaces.forEach((f0, i) => {
+    if (hasPrev.has(i)) return;
+    const members: BearingFace[] = [f0];
+    const seen = new Set<number>([i]);
+    for (let j = nextOf.get(i); j !== undefined && !seen.has(j); j = nextOf.get(j)) {
+      seen.add(j);
+      members.push(realFaces[j]!);
+    }
+    const offsets = members.map((f) => f.sigmaA - f0.sigmaA);
+    chains.push({ members, offsets });
+    if (members.length === 1) {
+      faces.push(f0);
+      return;
+    }
+    const fn = members[members.length - 1]!;
+    const on = offsets[offsets.length - 1]!;
+    faces.push({
+      id: f0.id,
+      side: f0.side,
+      sigmaA: f0.sigmaA,
+      faceLength: on + fn.faceLength,
+      uLo: f0.uLo,
+      uHi: on + fn.uHi,
+      start: f0.start,
+      end: fn.end,
+      ...(f0.startCorner ? { startCorner: f0.startCorner } : {}),
+      ...(fn.endCorner ? { endCorner: fn.endCorner } : {}),
+    });
+  });
+  /** Id du membre d'une face de chaîne au début ou à la fin (constats des coins). */
+  const memberId = (i: number, which: "start" | "end"): string => {
+    const ms = chains[i]!.members;
+    return (which === "start" ? ms[0]! : ms[ms.length - 1]!).id;
+  };
+  const memberIds = (i: number): string[] => chains[i]!.members.map((f) => f.id);
 
   // 1. Appariement des coins (§2.1).
   const corners: CornerRec[] = [];
@@ -707,7 +965,7 @@ export function profileBearings(input: BearingInput): BearingResult {
     });
     const corner = cornerOf(x, "end")!;
     if (best < 0) {
-      issues.push({ kind: "unpairedCorner", faceId: x.id, which: "end" });
+      issues.push({ kind: "unpairedCorner", faceId: memberId(i, "end"), which: "end" });
       endCornerOf.set(i, corners.length);
       corners.push({ before: i, sigma: sigmaEnd, corner });
       return;
@@ -715,16 +973,26 @@ export function profileBearings(input: BearingInput): BearingResult {
     const y = faces[best]!;
     let sigma = y.sigmaA;
     if (bestGap > 1e-6) {
-      issues.push({ kind: "cornerSigmaMismatch", faceIds: [x.id, y.id], gap: bestGap });
+      issues.push({
+        kind: "cornerSigmaMismatch",
+        faceIds: [memberId(i, "end"), memberId(best, "start")],
+        gap: bestGap,
+      });
       sigma = (sigmaEnd + y.sigmaA) / 2;
     }
     endCornerOf.set(i, corners.length);
     startCornerOf.set(best, corners.length);
-    corners.push({ before: i, after: best, sigma, corner });
+    corners.push({
+      before: i,
+      after: best,
+      sigma,
+      corner,
+      ...(bestGap > 1e-6 ? { mismatch: true } : {}),
+    });
   });
   faces.forEach((y, j) => {
     if (y.start !== "corner" || startCornerOf.has(j)) return;
-    issues.push({ kind: "unpairedCorner", faceId: y.id, which: "start" });
+    issues.push({ kind: "unpairedCorner", faceId: memberId(j, "start"), which: "start" });
     startCornerOf.set(j, corners.length);
     corners.push({ after: j, sigma: y.sigmaA, corner: cornerOf(y, "start")! });
   });
@@ -745,12 +1013,36 @@ export function profileBearings(input: BearingInput): BearingResult {
       .map((_, i) => i)
       .filter((i) => find(i) === g)
       .sort((a, b) => corners[a]!.sigma - corners[b]!.sigma);
+  /**
+   * Altitude de la partie de niveau d'un groupe de coins : ligne des nez au milieu du groupe
+   * (K-Q7), relevée au niveau d'un **palier qui suit le coin** (sous-lot K2f, K-Q5) quand le plat
+   * de ce palier commence avant la fin de la partie de niveau de début de la face après, plus la
+   * longueur minimale de tronçon, sans nœud de la ligne des nez entre les deux : sans relèvement, le nez du palier serait couvert par une
+   * partie de niveau plus basse que lui, ou retiré pour tronçon court, et la ligne monterait en
+   * pente le long du palier. Pendant, côté début de face, du raccord glissant. La ligne des nez
+   * est croissante : un plat qui commence avant le coin est déjà à P(σ) ou plus bas.
+   */
   const groupZ = (ci: number): Mm => {
     const members = groupMembers(find(ci));
     const first = corners[members[0]!]!;
-    const last = corners[members[members.length - 1]!]!;
+    const lastIdx = members[members.length - 1]!;
+    const last = corners[lastIdx]!;
     const face = faces[(first.before ?? first.after)!]!;
-    return P(face).at((first.sigma + last.sigma) / 2);
+    const pl = P(face);
+    let z = pl.at((first.sigma + last.sigma) / 2);
+    if (last.after === undefined) return z;
+    // Fin de la partie de niveau de début de la face après ; le plat doit commencer avant elle
+    // plus m, sans autre nœud de la ligne des nez entre elle et lui (la ligne resterait sinon
+    // croissante seulement par un retrait).
+    const levelEnd = last.sigma + lambdaAfter(lastIdx) + extraS[last.after]!;
+    for (let k = 0; k + 1 < pl.xs.length; k++) {
+      const x = pl.xs[k]!;
+      if (x >= levelEnd + m - STRUCT_EPS) break;
+      const flat = Math.abs(pl.ys[k + 1]! - pl.ys[k]!) <= TOL && pl.xs[k + 1]! - x > TOL;
+      if (flat && pl.ys[k]! > z) return pl.ys[k]!;
+      if (x > levelEnd + STRUCT_EPS) break;
+    }
+    return z;
   };
 
   const sailFlat = (c: SteelCornerEnd): Mm => (cornerSign(c) < 0 ? sec.b * c.tanHalf : 0);
@@ -782,18 +1074,52 @@ export function profileBearings(input: BearingInput): BearingResult {
    * où il est k⁻ (64 itérations, puis balayage et dichotomie si le point fixe n'est pas atteint :
    * λ rendu admissible, à 1e-6 mm près à la tangence). `null` si la face entière serait couverte.
    */
-  const lambdaBefore = (f: BearingFace, head: readonly Vtx[], zc: Mm, base: Mm): Mm | null => {
+  const lambdaBefore = (
+    f: BearingFace,
+    head: readonly Vtx[],
+    zc: Mm,
+    base: Mm,
+    refFace: BearingFace,
+    allowSlide: boolean,
+  ): { readonly lambda: Mm; readonly slide?: Vtx } | null => {
     const L = f.faceLength;
+    // Pente de référence lue sur la fenêtre de la face qui porte le coin (dernier membre d'une
+    // chaîne de palier), comme le constat `steepSegment`.
+    const ref = pitchMaxOf(refFace);
+    const tRef = Math.tan(ref);
     for (let j = head.length - 1; j >= 0; j--) {
       const k = head[j]!;
       const next = head[j + 1];
+      // Raccord glissant sur un plat de palier (sous-lot K2f) : le segment [k ; k⁺] est un plat
+      // de la ligne des nez (k⁺ nœud de la ligne des nez, pas le jarret d'une partie de niveau de
+      // début) et la partie de niveau du coin est plus haute. Le raccord part d'un point s du
+      // plat, à la pente de référence α_ref (plus forte pente de la ligne des nez dans la
+      // fenêtre, même référence que le constat `steepSegment` : aucun seuil nouveau), comme la
+      // ligne des nez « monte sur un giron » (`nosingPitchLine`) : rive de niveau sur le palier
+      // jusqu'à s, au lieu d'un raccord en rampe depuis le début du plat.
+      // Coin apparié malgré un écart de σ (`cornerSigmaMismatch`) : position du coin incertaine,
+      // pas de raccord glissant (il partirait de trop loin).
+      if (
+        allowSlide &&
+        next &&
+        !next.prot &&
+        Math.abs(next.z - k.z) <= TOL &&
+        zc > k.z + TOL &&
+        Number.isFinite(tRef) &&
+        tRef > TOL
+      ) {
+        const d = (zc - k.z) / tRef;
+        const lam = Math.max(base + h * Math.tan(ref / 2), L - next.u - d);
+        const s = L - lam - d;
+        if (s > k.u + STRUCT_EPS) return { lambda: lam, slide: { u: s, z: k.z, prot: true } };
+      }
       let lambda = Math.max(base, next ? L - next.u : base);
       const maxLambda = L - k.u - 1e-9;
       const needOf = (l: Mm): Mm =>
         base + h * Math.max(0, Math.tan(Math.atan((zc - k.z) / (L - l - k.u)) / 2));
       for (let it = 0; it < 64 && lambda < maxLambda; it++) {
         const need = needOf(lambda);
-        if (need <= lambda + 1e-9) return lambda;
+        if (need <= lambda + 1e-9) return { lambda };
         lambda = need;
       }
       if (lambda < maxLambda) {
@@ -812,12 +1138,12 @@ export function profileBearings(input: BearingInput): BearingResult {
               if (needOf(mid) <= mid + 1e-9) hi = mid;
               else lo = mid;
             }
-            return hi;
+            return { lambda: hi };
           }
           lo = x;
         }
         // Tangence (intervalle admissible plus fin que le pas) : déficit résiduel ≤ 1e-6 mm.
-        if (needOf(lambda) <= lambda + 1e-6) return needOf(lambda);
+        if (needOf(lambda) <= lambda + 1e-6) return { lambda: needOf(lambda) };
       }
     }
     return null;
@@ -835,12 +1161,22 @@ export function profileBearings(input: BearingInput): BearingResult {
     }
     const start =
       sc !== undefined ? { z: groupZ(sc), lambda: lambdaAfter(sc) + extraS[i]! } : undefined;
-    let end: { z: Mm; lambda: Mm } | undefined;
+    let end: { z: Mm; lambda: Mm; slide?: Vtx } | undefined;
     if (ec !== undefined) {
       const zc = groupZ(ec);
       const base = sailFlat(corners[ec]!.corner) + m + extraE[i]!;
-      const lambda = lambdaBefore(f, headVertices(f, start), zc, base);
-      end = { z: zc, lambda: lambda ?? f.faceLength - f.uLo };
+      const ms = chains[i]!.members;
+      const r = lambdaBefore(
+        f,
+        headVertices(f, start),
+        zc,
+        base,
+        ms[ms.length - 1]!,
+        corners[ec]!.mismatch !== true,
+      );
+      end = r
+        ? { z: zc, lambda: r.lambda, ...(r.slide ? { slide: r.slide } : {}) }
+        : { z: zc, lambda: f.faceLength - f.uLo };
     }
     return { kind: "ends", ...(start ? { start } : {}), ...(end ? { end } : {}) };
   };
@@ -866,17 +1202,26 @@ export function profileBearings(input: BearingInput): BearingResult {
     if (!changed) break;
   }
   for (const i of [...covered.keys()].sort((a, b) => a - b)) {
-    issues.push({ kind: "levelCoversFace", faceId: faces[i]!.id });
+    for (const id of memberIds(i)) issues.push({ kind: "levelCoversFace", faceId: id });
   }
   const roots = [...new Set(corners.map((_, i) => find(i)))].sort((a, b) => a - b);
   for (const g of roots) {
     const members = groupMembers(g);
     if (members.length < 2) continue;
     const ids = new Set<string>();
+    const befores = new Set(members.map((ci) => corners[ci]!.before));
+    const afters = new Set(members.map((ci) => corners[ci]!.after));
     for (const ci of members) {
       const c = corners[ci]!;
-      if (c.before !== undefined) ids.add(faces[c.before]!.id);
-      if (c.after !== undefined) ids.add(faces[c.after]!.id);
+      // Face de chaîne entre deux coins du groupe : de niveau en entier, tous ses membres.
+      if (c.before !== undefined) {
+        if (afters.has(c.before)) for (const id of memberIds(c.before)) ids.add(id);
+        else ids.add(memberId(c.before, "end"));
+      }
+      if (c.after !== undefined) {
+        if (befores.has(c.after)) for (const id of memberIds(c.after)) ids.add(id);
+        else ids.add(memberId(c.after, "start"));
+      }
     }
     issues.push({ kind: "cornerMerged", faceIds: [...ids].sort(cmpStr) });
   }
@@ -904,7 +1249,9 @@ export function profileBearings(input: BearingInput): BearingResult {
       return { raw: head, lv };
     }
     const knee = f.faceLength - lv.end.lambda;
-    const raw = head.filter((v) => v.u < knee - STRUCT_EPS);
+    const slide = lv.end.slide;
+    const raw = head.filter((v) => v.u < (slide ? slide.u : knee) - STRUCT_EPS);
+    if (slide) raw.push(slide);
     raw.push({ u: knee, z: lv.end.z, prot: true, level: "end" });
     if (f.uHi - knee > STRUCT_EPS) raw.push({ u: f.uHi, z: lv.end.z, prot: false });
     return { raw, lv };
@@ -912,17 +1259,19 @@ export function profileBearings(input: BearingInput): BearingResult {
   type Cleaned = ReturnType<typeof cleanLine> & { lv: FaceLevel };
   let cleaned: Cleaned[] = [];
   for (let round = 0; round < 5; round++) {
-    cleaned = faces.map((f, i) => {
+    cleaned = faces.map((_, i) => {
       const { raw, lv } = rawOf(i);
-      return { ...cleanLine(raw, f, sec, dh, m, minAngle), lv };
+      return { ...cleanLine(raw, chains[i]!, sec, dh, m, minAngle), lv };
     });
     if (round === 4) break;
     let deficient = false;
     cleaned.forEach((c, i) => {
-      if (c.lv.kind !== "ends" || c.segments.length === 0) return;
+      const segs0 = c.pieces[0]?.segments ?? [];
+      const segsN = c.pieces[c.pieces.length - 1]?.segments ?? [];
+      if (c.lv.kind !== "ends" || segs0.length === 0 || segsN.length === 0) return;
       const f = faces[i]!;
-      const first = c.segments[0]!;
-      const last = c.segments[c.segments.length - 1]!;
+      const first = segs0[0]!;
+      const last = segsN[segsN.length - 1]!;
       /** Garde l'allongement seulement s'il laisse une place ≥ m entre les deux niveaux. */
       const tryGain = (extra: number[], gain: number): void => {
         const before = extra[i]!;
@@ -943,86 +1292,114 @@ export function profileBearings(input: BearingInput): BearingResult {
     if (!deficient) break;
   }
 
-  // 4. Résultats par face.
+  // 4. Résultats par face (par membre de chaîne, dans le repère du membre).
+  /** Départ du raccord glissant de la face de chaîne `i` (repère de la chaîne), s'il existe. */
+  const slideOf = (i: number): Mm | undefined => {
+    const lv = cleaned[i]!.lv;
+    return lv.kind === "ends" && !covered.has(i) ? lv.end?.slide?.u : undefined;
+  };
   const out: FaceBearing[] = [];
-  faces.forEach((f, i) => {
+  faces.forEach((_, i) => {
     const c = cleaned[i]!;
-    // Pente la plus forte de la ligne des nez sur la fenêtre (segments qui la recoupent).
-    const plf = P(f);
-    let pitchMax = -Infinity;
-    for (let k = 0; k + 1 < plf.xs.length; k++) {
-      const a = plf.xs[k]! - f.sigmaA;
-      const b = plf.xs[k + 1]! - f.sigmaA;
-      if (b <= f.uLo || a >= f.uHi || !(b > a)) continue;
-      pitchMax = Math.max(pitchMax, Math.atan2(plf.ys[k + 1]! - plf.ys[k]!, b - a));
-    }
-    c.segments.forEach((s, k) => {
-      if (s.fibres.shortest >= m - TOL) {
-        const raccord = c.prot[k] === true || c.prot[k + 1] === true;
-        const steeper = s.alpha > pitchMax + EPS_ANGLE;
-        if (raccord && steeper && !s.level && s.u1 - s.u0 < m - TOL) {
+    const chain = chains[i]!;
+    const nMem = chain.members.length;
+    chain.members.forEach((f, q) => {
+      const piece = c.pieces[q]!;
+      const o = chain.offsets[q]!;
+      const pitchMax = pitchMaxOf(f);
+      piece.segments.forEach((s, k) => {
+        if (s.fibres.shortest >= m - TOL) {
+          const raccord = piece.prot[k] === true || piece.prot[k + 1] === true;
+          const steeper = s.alpha > pitchMax + EPS_ANGLE;
+          if (raccord && steeper && !s.level && s.u1 - s.u0 < m - TOL) {
+            issues.push({
+              kind: "steepSegment",
+              faceId: f.id,
+              u0: s.u0,
+              planLength: s.u1 - s.u0,
+              alpha: s.alpha,
+            });
+          }
+          return;
+        }
+        // Un point au raccord de palier (extrémité d'un morceau) n'est pas un sommet retirable.
+        const removable = (j: number): boolean =>
+          j > 0 && j + 1 < piece.line.length && !piece.prot[j];
+        if (!removable(k) && !removable(k + 1)) {
           issues.push({
-            kind: "steepSegment",
+            kind: s.fibres.shortest < -TOL ? "cutsCross" : "shortSegment",
             faceId: f.id,
             u0: s.u0,
-            planLength: s.u1 - s.u0,
-            alpha: s.alpha,
+            shortest: s.fibres.shortest,
           });
         }
-        return;
+      });
+      const line = piece.line;
+      const upperRive = line.map((p) => ({ x: p.x, y: p.y + dh }));
+      const pl = P(f);
+      let devMax = 0;
+      let devAt = f.uLo;
+      let above = 0;
+      let aboveAt = f.uLo;
+      for (let k = 0; k < pl.xs.length; k++) {
+        const u = pl.xs[k]! - f.sigmaA;
+        if (u < f.uLo - STRUCT_EPS || u > f.uHi + STRUCT_EPS) continue;
+        const B = polylineAt(line, u);
+        const d = Math.abs(B - pl.ys[k]!);
+        if (d > devMax) {
+          devMax = d;
+          devAt = u;
+        }
+        const e = pl.ys[k]! - (B + dh);
+        if (e > above) {
+          above = e;
+          aboveAt = u;
+        }
       }
-      const removable = (j: number): boolean => j > 0 && j + 1 < c.line.length && !c.prot[j];
-      if (!removable(k) && !removable(k + 1)) {
-        issues.push({
-          kind: s.fibres.shortest < -TOL ? "cutsCross" : "shortSegment",
-          faceId: f.id,
-          u0: s.u0,
-          shortest: s.fibres.shortest,
-        });
+      if (above > 1e-6) {
+        issues.push({ kind: "noseAboveRive", faceId: f.id, u: aboveAt, excess: above });
       }
-    });
-    const upperRive = c.line.map((p) => ({ x: p.x, y: p.y + dh }));
-    const pl = P(f);
-    let devMax = 0;
-    let devAt = f.uLo;
-    let above = 0;
-    let aboveAt = f.uLo;
-    for (let k = 0; k < pl.xs.length; k++) {
-      const u = pl.xs[k]! - f.sigmaA;
-      if (u < f.uLo - STRUCT_EPS || u > f.uHi + STRUCT_EPS) continue;
-      const B = polylineAt(c.line, u);
-      const d = Math.abs(B - pl.ys[k]!);
-      if (d > devMax) {
-        devMax = d;
-        devAt = u;
+      // Plats de palier (sous-lot K2f) : ligne d'appui de niveau sur le plat, hors du raccord
+      // glissant (départ `slide`, repère de la chaîne), sinon constat publié.
+      const slideU = slideOf(i);
+      for (let k = 0; k + 1 < pl.xs.length; k++) {
+        const zf = pl.ys[k]!;
+        if (Math.abs(pl.ys[k + 1]! - zf) > TOL || !(pl.xs[k + 1]! - pl.xs[k]! > TOL)) continue;
+        const a = Math.max(pl.xs[k]! - f.sigmaA, f.uLo);
+        let b = Math.min(pl.xs[k + 1]! - f.sigmaA, f.uHi);
+        if (slideU !== undefined) b = Math.min(b, slideU - o);
+        if (!(b - a > STRUCT_EPS)) continue;
+        const us = [a, b, ...line.map((p) => p.x).filter((u) => u > a && u < b)];
+        const excess = Math.max(...us.map((u) => Math.abs(polylineAt(line, u) - zf)));
+        if (excess > 1e-6)
+          issues.push({ kind: "landingNotLevel", faceId: f.id, u0: a, u1: b, excess });
       }
-      const e = pl.ys[k]! - (B + dh);
-      if (e > above) {
-        above = e;
-        aboveAt = u;
-      }
-    }
-    if (above > 1e-6) {
-      issues.push({ kind: "noseAboveRive", faceId: f.id, u: aboveAt, excess: above });
-    }
-    out.push({
-      faceId: f.id,
-      side: f.side,
-      start: f.start,
-      end: f.end,
-      uLo: f.uLo,
-      uHi: f.uHi,
-      line: c.line,
-      upperRive,
-      lowerRive: lowerRiveOf(upperRive, h),
-      segments: c.segments,
-      knees: c.knees,
-      removed: c.removed,
-      nosingDeviation: { max: devMax, atU: devAt },
-      endShift: {
-        start: polylineAt(c.line, f.uLo) - pl.at(f.sigmaA + f.uLo),
-        end: polylineAt(c.line, f.uHi) - pl.at(f.sigmaA + f.uHi),
-      },
+      // Retraits répartis par abscisse dans la chaîne, ramenés au repère du membre.
+      const lo = q === 0 ? -Infinity : o;
+      const hi = q === nMem - 1 ? Infinity : chain.offsets[q + 1]!;
+      const removed =
+        nMem === 1
+          ? c.removed
+          : c.removed.filter((r) => r.u >= lo && r.u < hi).map((r) => ({ ...r, u: r.u - o }));
+      out.push({
+        faceId: f.id,
+        side: f.side,
+        start: f.start,
+        end: f.end,
+        uLo: f.uLo,
+        uHi: f.uHi,
+        line,
+        upperRive,
+        lowerRive: lowerRiveOf(upperRive, h),
+        segments: piece.segments,
+        knees: piece.knees,
+        removed,
+        nosingDeviation: { max: devMax, atU: devAt },
+        endShift: {
+          start: polylineAt(line, f.uLo) - pl.at(f.sigmaA + f.uLo),
+          end: polylineAt(line, f.uHi) - pl.at(f.sigmaA + f.uHi),
+        },
+      });
     });
   });
 
@@ -1052,6 +1429,8 @@ export function profileBearings(input: BearingInput): BearingResult {
     const last = corners[members[members.length - 1]!]!;
     const lengthBefore = first.before !== undefined ? levelBefore(first.before) : 0;
     const lengthAfter = last.after !== undefined ? levelAfter(last.after) : 0;
+    const lvB = first.before !== undefined ? cleaned[first.before]!.lv : undefined;
+    const slide = lvB?.kind === "ends" && !covered.has(first.before!) ? lvB.end?.slide : undefined;
     const face = faces[(first.before ?? first.after)!]!;
     const pl = P(face);
     const s0 = first.sigma - lengthBefore;
@@ -1061,11 +1440,12 @@ export function profileBearings(input: BearingInput): BearingResult {
       if (x > s0 + STRUCT_EPS && x < s1 - STRUCT_EPS) skipped.push(k);
     });
     cornerLevels.push({
-      ...(first.before !== undefined ? { faceBefore: faces[first.before]!.id } : {}),
-      ...(last.after !== undefined ? { faceAfter: faces[last.after]!.id } : {}),
+      ...(first.before !== undefined ? { faceBefore: memberId(first.before, "end") } : {}),
+      ...(last.after !== undefined ? { faceAfter: memberId(last.after, "start") } : {}),
       z: groupZ(members[0]!),
       lengthBefore,
       lengthAfter,
+      ...(slide ? { rampBefore: faces[first.before!]!.faceLength - slide.u } : {}),
       merged: members.length > 1,
       skippedNoses: skipped,
     });

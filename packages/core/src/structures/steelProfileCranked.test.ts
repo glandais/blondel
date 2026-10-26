@@ -998,6 +998,20 @@ describe("cornière au coin du mur (K2e, K-Q4) — plan par section", () => {
     expect(plan.corner.optional.size).toBe(1);
   });
 
+  it("bord de K-Q16 (K2f) : zone sur poteau = longueur minimale d'appui → appuyée ; à 1e-6 mm près en dessous → sans appui côté jour", () => {
+    // Les cas réels du quart (M4, 49,6 mm) et du demi-tournant (M8, 49 mm) tombent à moins de
+    // 1 mm de la longueur minimale (50 mm) : la règle de pose est un seuil `>=` sur la zone brute.
+    const min = WEBFIT.minLength;
+    const under = [...quarterSupports(false), postSup(6, min - 1e-6, Z6)];
+    const pUnder = planOf(q, under, cornerSupportGroups(under));
+    expect(pUnder.corner.jourless).toEqual(new Set([6]));
+    expect(pUnder.corner.optional.size).toBe(0);
+    const at = [...quarterSupports(false), postSup(6, min, Z6)];
+    const pAt = planOf(q, at, cornerSupportGroups(at));
+    expect(pAt.corner.jourless.size).toBe(0);
+    expect(pAt.corner.optional.size).toBe(1);
+  });
+
   it("limon de jour (K-Q16) : support logé → règle du coin ; support au-dessus de la rive → sans appui côté jour", () => {
     const qj = quarterWithJour();
     const ok = [...quarterSupports(false), jourSup(1050)];

@@ -17,8 +17,8 @@
  *   limon coudé (`stringerLine` = `nosing`, chantier bent-stringer K2e2, décisions K-Q15, K-Q19,
  *   K-Q20 et K-Q21 de QUESTIONS A41), un poteau n'est retenu que s'il n'ajoute aucune violation
  *   de règle à la barre droite du même projet (base de comparaison : voir `resolveNosingNewel`),
- *   un modèle de vérification de plus est permis, et un poteau posé faute de mieux alors qu'il
- *   ajoute des violations est signalé par une remarque (voir `resolveProfileNewel`) ;
+ *   un modèle de vérification de plus est permis, et quand aucun poteau essayé n'est retenu, le
+ *   jour de la barre droite du même projet est posé, avec une remarque (K-Q25, sous-lot K2f) ;
  * - un jour en arc n'est jamais modifié (erreur explicite du plugin, jalon 5) ;
  * - un poteau que le tracé refuse (volée trop courte, ligne de foulée trop proche) n'est pas
  *   posé : remarque, jour conservé ;
@@ -34,10 +34,10 @@
  *
  * Fonction pure (les modèles intermédiaires sont calculés sans mémoïsation).
  */
-import { msg, type Message } from "@blondel/i18n";
+import { dec, msg, textMessage, type Message } from "@blondel/i18n";
 import type { Model } from "../model/derived.js";
 import type { Mm } from "../model/primitives.js";
-import type { Project, Turn } from "../model/project.js";
+import type { InnerCorner, Project, Turn } from "../model/project.js";
 import { cageFeatures } from "../model/cageFeatures.js";
 import { buildModel } from "../pipeline/build.js";
 import { structureAcceptsCage } from "../structures/registry.js";
@@ -137,11 +137,24 @@ export interface ResolvedProfileNewel {
    */
   readonly verified?: boolean;
   /**
-   * Limon coudé seulement : violations que ce poteau ajoute à la base de comparaison (K-Q19),
-   * renseigné seulement quand aucun poteau essayé n'est retenu (repli sur le poteau vérifié le
-   * moins chargé) ; absent sinon.
+   * Limon coudé seulement, quand aucun poteau essayé n'est retenu (K-Q19) : jour de la **barre
+   * droite du même projet** à poser tel quel (décision K-Q25, sous-lot K2f) ; absent sinon.
+   * `newel` et `flangeWidth` décrivent alors ce jour (poteau posé dans la barre droite, sinon
+   * poteau de son point fixe, sinon poteau du premier tournant visé, sinon poteau par défaut ;
+   * aile du limon coudé aux jours de la barre droite), `verified` dit s'il reçoit cette aile.
+   * `adaptJour` (comparateur) ne lit que `newel` et `flangeWidth`.
    */
-  readonly added?: ReadonlyMap<string, number>;
+  readonly chordJour?: ChordJour;
+}
+
+/** Jour de la barre droite gardé par le limon coudé (K-Q25). */
+export interface ChordJour {
+  /** Jour de chaque tournant du projet de la barre droite (`turns[j].inner`). */
+  readonly turns: readonly InnerCorner[];
+  /** Remarques de la pose du poteau dans la barre droite (`placeNewel`). */
+  readonly notes: readonly Message[];
+  /** Règles que les poteaux essayés ajoutaient à la base (union triée, pour la remarque). */
+  readonly rules: readonly string[];
 }
 
 /** Modèle réduit lu par le point fixe : pièces (aile) et contrôle de conception (K-Q19). */
@@ -261,12 +274,13 @@ function maxCounts(
  *    `PROFILE_NEWEL_VERIFICATIONS` modèle de plus, sur le plus petit poteau de la famille non
  *    essayé et accepté par le tracé, au-dessus de tous les poteaux non retenus et sous le poteau
  *    gardé ; rendu s'il est retenu ;
- * 3. sinon le poteau gardé (K-Q15) ; sinon le poteau posé dans la référence, s'il n'a pas été
- *    essayé, s'il est vérifié sur le modèle coudé de la base (sans modèle de plus) et qu'il
- *    pose les mêmes jours ; sinon le poteau vérifié qui ajoute le moins de violations
- *    (somme des excédents, puis aile, puis poteau les plus petits), rendu avec ses violations
- *    ajoutées (`added`, signalées par `applyStructureChoice`) ; sinon le dernier poteau attendu,
- *    non vérifié.
+ * 3. sinon le poteau gardé (K-Q15) ; sinon, si au moins un poteau vérifié a été écarté par
+ *    K-Q19 (aucun poteau essayé n'est retenu), **le jour de la barre droite du même projet**
+ *    (décision K-Q25, sous-lot K2f : plus de « moindre excédent ») : `chordJour` porte les jours
+ *    de la référence, ses remarques de pose et les règles ajoutées par les poteaux écartés ;
+ *    `applyStructureChoice` pose ces jours tels quels avec une remarque. Le modèle coudé au jour
+ *    de la référence est celui de la base, déjà construit (aucun modèle de plus) : son aile donne
+ *    `flangeWidth` et `verified` ; sinon le dernier poteau attendu, non vérifié.
  *
  * Budget : au plus `PROFILE_NEWEL_ITERATIONS` + `PROFILE_NEWEL_VERIFICATIONS` + 1 (base, si un
  * poteau dépasse la référence) modèles coudés et `PROFILE_NEWEL_ITERATIONS` en barre droite pour la référence (modèles mis
@@ -294,6 +308,9 @@ function resolveNosingNewel(
     readonly chord: Map<string, number>;
     readonly newel: NewelInner | null;
     readonly project: Project;
+    readonly notes: readonly Message[];
+    /** Poteau du point fixe de la barre droite (`resolveChordNewel`), posé ou non. */
+    readonly fixed: NewelInner | null;
     base?: Map<string, number>;
   };
   let ref: Reference | null = null;
@@ -312,7 +329,13 @@ function resolveNosingNewel(
       msg("project.structureChoice.why.profileNewel"),
     );
     const chord = violationCounts(cached(placed.project));
-    ref = { chord, newel: placed.posed, project: placed.project };
+    ref = {
+      chord,
+      newel: placed.posed,
+      project: placed.project,
+      notes: placed.notes,
+      fixed: rc?.newel ?? null,
+    };
     return ref;
   };
   /** Base : maximum de la référence et du limon coudé à son poteau (construit à la demande). */
@@ -330,19 +353,18 @@ function resolveNosingNewel(
   const stepUp = (from: NewelInner): NewelInner | undefined =>
     family.find((f) => compareNewels(f, from) > 0 && !wasTried(f) && !wasRefused(f));
   const unretained: NewelInner[] = [];
-  const rejected: { readonly r: ResolvedProfileNewel; readonly excess: number }[] = [];
+  /** Règles ajoutées par chaque poteau vérifié écarté par K-Q19. */
+  const rejected: ReadonlyMap<string, number>[] = [];
   let fitting: ResolvedProfileNewel | null = null;
   let last: ResolvedProfileNewel | null = null;
-  /** Poteau vérifié sur le modèle `m` d'aile `b` : retenu (K-Q19), sinon noté parmi les écartés. */
-  const retained = (candidate: NewelInner, m: ProfileNewelModel, b: Mm): boolean => {
+  /** Poteau vérifié sur le modèle `m` : retenu (K-Q19), sinon ses règles ajoutées sont notées. */
+  const retained = (m: ProfileNewelModel): boolean => {
     // La base majore la référence : sans excédent sur la référence, le modèle coudé à son poteau
     // n'est pas construit.
     if (addedViolations(m, reference().chord).size === 0) return true;
     const added = addedViolations(m, baseCounts());
     if (added.size === 0) return true;
-    let excess = 0;
-    for (const n of added.values()) excess += n;
-    rejected.push({ r: { newel: candidate, flangeWidth: b, verified: true, added }, excess });
+    rejected.push(added);
     return false;
   };
   let candidate: NewelInner = DEFAULT_NEWEL;
@@ -376,7 +398,7 @@ function resolveNosingNewel(
     let next = expectedNewel(kind, params, b);
     if (!next) break;
     if (i > 0 && newelSatisfies(candidate, kind, params, b)) {
-      if (retained(candidate, m, b)) {
+      if (retained(m)) {
         if (newelMatches(candidate, next)) {
           return { newel: candidate, flangeWidth: b, verified: true };
         }
@@ -423,31 +445,36 @@ function resolveNosingNewel(
       tried.push(k);
       const m = cached(current);
       const b = profileFlangeWidth(m.parts);
-      if (b !== null && newelSatisfies(k, kind, params, b) && retained(k, m, b)) {
+      if (b !== null && newelSatisfies(k, kind, params, b) && retained(m)) {
         return { newel: k, flangeWidth: b, verified: true };
       }
     }
   }
   if (fitting) return fitting;
-  // Tous les poteaux jugés sont écartés : poteau posé dans la référence, s'il n'a pas été essayé
-  // et que son modèle coudé est déjà construit (celui de la base : jugé sans modèle de plus).
-  const rn = (ref as Reference | null)?.newel ?? null;
-  if (rn && rejected.length > 0 && !wasTried(rn) && !wasRefused(rn)) {
-    const current = withNewels(project, rn, which);
-    const m = cache.get(newelModelKey(current));
-    const b = m ? profileFlangeWidth(m.parts) : null;
-    if (m && b !== null && newelSatisfies(rn, kind, params, b) && retained(rn, m, b)) {
-      return { newel: rn, flangeWidth: b, verified: true };
-    }
-  }
+  // K-Q25 : tous les poteaux vérifiés jugés sont écartés : jour de la barre droite du même projet,
+  // tel que la référence le pose (son modèle coudé est celui de la base, déjà construit).
   if (rejected.length > 0) {
-    const best = [...rejected].sort(
-      (x, y) =>
-        x.excess - y.excess ||
-        (x.r.flangeWidth ?? 0) - (y.r.flangeWidth ?? 0) ||
-        compareNewels(x.r.newel, y.r.newel),
-    )[0]!;
-    return best.r;
+    const r = reference();
+    const layout = r.project.stair.layout;
+    const turns = layout.kind === "cage" ? [] : layout.turns.map((t) => t.inner);
+    const firstAimed = project.stair.layout.kind === "cage" ? [] : project.stair.layout.turns;
+    const aimed = firstAimed.findIndex((t, j) => which(t, j));
+    const aimedInner = aimed >= 0 ? turns[aimed] : undefined;
+    // Poteau de la barre droite : posé dans la référence, sinon celui de son point fixe (jour non
+    // remplacé par `placeNewel`, jour en arc du comparateur par exemple : `adaptJour` le pose),
+    // sinon le jour du premier tournant visé s'il est un poteau, sinon le poteau par défaut.
+    const newel: NewelInner =
+      r.newel ??
+      r.fixed ??
+      (aimedInner?.kind === "newel" ? (aimedInner as NewelInner) : DEFAULT_NEWEL);
+    const b = profileFlangeWidth(cached(withParams(r.project, params)).parts);
+    const rules = [...new Set(rejected.flatMap((a) => [...a.keys()]))].sort();
+    return {
+      newel,
+      flangeWidth: b,
+      verified: b !== null && newelSatisfies(newel, kind, params, b),
+      chordJour: { turns, notes: r.notes, rules },
+    };
   }
   return last;
 }
@@ -468,7 +495,7 @@ export function applyStructureChoice(
     // quand la structure construit toutes les fonctions de la cage (« aucune » : toujours).
     const convertible = (): boolean =>
       cageFeatures(spec).length === 0 && toFlightsLayout(chosen) !== null;
-    if (structureAcceptsCage(kind, cageFeatures(spec))) {
+    if (structureAcceptsCage(kind, cageFeatures(spec), chosen.stair.structure.params)) {
       if (!structureRequiresNewel(kind)) return { project: chosen, notes: [] };
       // Jour vif ou en arc d'une jonction tournante : pas de poteau sur une cage saisie.
       const open = spec.junctions
@@ -512,31 +539,65 @@ export function applyStructureChoice(
   let target: NewelInner = DEFAULT_NEWEL;
   let flange: Mm | null = null;
   let why: Message = msg("project.structureChoice.why.cornerNewel", { kind });
-  let added: ReadonlyMap<string, number> | undefined;
   if (profile) {
     const resolved = resolveProfileNewel(chosen, candidate);
+    if (resolved?.chordJour) {
+      // Limon coudé : aucun poteau essayé n'est retenu (K-Q19) ; jour de la barre droite du même
+      // projet posé tel quel, avec ses remarques de pose et une remarque (K-Q25).
+      return chordJourChoice(chosen, resolved.chordJour);
+    }
     if (resolved) {
       target = resolved.newel;
       flange = resolved.flangeWidth;
-      added = resolved.added;
       why = msg("project.structureChoice.why.profileNewel");
     } else {
       why = msg("project.structureChoice.why.cornerNewelUnknownProfile", { kind });
     }
   }
   const placed = placeNewel(chosen, kind, params, candidate, target, flange, why);
-  // Limon coudé : aucun poteau essayé n'est retenu (K-Q19), le moins chargé est posé : signalé.
-  if (added && added.size > 0 && placed.posed && newelMatches(placed.posed, target)) {
-    const rules = [...added.keys()].sort().join(", ");
-    return {
-      project: placed.project,
-      notes: [
-        ...placed.notes,
-        msg("project.structureChoice.newelAddsViolations", { newel: newelLabel(target), rules }),
-      ],
-    };
-  }
   return { project: placed.project, notes: placed.notes };
+}
+
+/** Libellé d'un jour gardé (poteau, angle vif, jour en arc). */
+function innerLabel(c: InnerCorner): Message {
+  if (c.kind === "newel") return newelLabel(c as NewelInner);
+  if (c.kind === "arc")
+    return msg("structure.common.compare.jour.arc", { radius: dec(c.radius, 0) });
+  return msg("project.structureChoice.sharpJour");
+}
+
+/**
+ * Jour de la barre droite posé pour le limon coudé (K-Q25) : jours des tournants de la barre
+ * droite du même projet, remarques de leur pose, puis la remarque `newelAddsViolations` (règles
+ * que les poteaux essayés ajoutaient ; jours gardés des tournants, libellés distincts dans
+ * l'ordre des tournants).
+ */
+function chordJourChoice(chosen: Project, jour: ChordJour): StructureChoiceResult {
+  const layout = chosen.stair.layout;
+  if (layout.kind === "cage") return { project: chosen, notes: [] };
+  const turns = layout.turns.map((t, j) => ({ ...t, inner: jour.turns[j] ?? t.inner }));
+  const project: Project = { ...chosen, stair: { ...chosen.stair, layout: { ...layout, turns } } };
+  const labels: Message[] = [];
+  for (const t of turns) {
+    const l = innerLabel(t.inner);
+    if (!labels.some((x) => JSON.stringify(x) === JSON.stringify(l))) labels.push(l);
+  }
+  const join = (items: readonly Message[]): Message | null =>
+    items.reduceRight<Message | null>(
+      (rest, first) => (rest === null ? first : msg("common.list", { first, rest })),
+      null,
+    );
+  return {
+    project,
+    notes: [
+      ...jour.notes,
+      msg("project.structureChoice.newelAddsViolations", {
+        // Identifiants de règle cités tels quels, liés comme les jours (`common.list`).
+        rules: join(jour.rules.map((r) => textMessage(r))) ?? "",
+        jour: join(labels) ?? msg("project.structureChoice.sharpJour"),
+      }),
+    ],
+  };
 }
 
 /** Projet avec le poteau posé, remarques, et poteau posé sur les tournants visés (`null` : aucun). */

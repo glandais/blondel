@@ -205,7 +205,9 @@ function expectPositiveLengths(m: Model, built: readonly Built[]): void {
     expect(b.face.faceLength, b.face.mark).toBeGreaterThan(0);
     expect(b.uHi - b.uLo, b.face.mark).toBeGreaterThan(0);
   }
-  for (const p of m.parts.filter((x) => x.category === "stringer")) {
+  // Pièce finie d'un limon coudé (A33, K2c) : ni débit ni développé, portés par ses composantes.
+  const assembled = new Set(m.parts.flatMap((x) => (x.componentOf ? [x.componentOf] : [])));
+  for (const p of m.parts.filter((x) => x.category === "stringer" && !assembled.has(x.id))) {
     expect(p.stock!.length, p.mark).toBeGreaterThan(0);
     expect(area(p.flat!.outline.outer), p.mark).toBeGreaterThan(0);
   }
@@ -646,7 +648,7 @@ describe("steel-profile sur une cage saisie (sous-lot 6b)", () => {
     expectCarriedBothSides(profileBuilt(r), m.stepping.treads);
   });
 
-  it("palier droit refusé par le garde-fou (ligne d'appui inclinée sur un palier de niveau)", () => {
+  it("palier droit refusé par le garde-fou en barre droite (ligne d'appui inclinée sur un palier de niveau), accepté en limon coudé", () => {
     for (const widths of [
       [900, 900],
       [900, 1100],
@@ -665,6 +667,21 @@ describe("steel-profile sur une cage saisie (sous-lot 6b)", () => {
       expect(keys(m)).toEqual(["structure.cageUnsupported"]);
       expect(FR.t(m.errors[0]!)).toContain("palier droit");
       expect(marks(m)).toEqual([]);
+      // Limon coudé (K-Q5, sous-lot K2f) : palier droit construit, rive de niveau sur le palier.
+      const nosing = buildModel(
+        cageProject(
+          {
+            kind: "cage",
+            sections: [straight(1890, widths[0]), straight(1620, widths[1])],
+            junctions: [{ angle: 0, mode: "landing", depth: 1000 }],
+          },
+          "steel-profile",
+          { stringerLine: "nosing" },
+        ),
+        { memo: false },
+      );
+      expect(keys(nosing)).not.toContain("structure.cageUnsupported");
+      expect(marks(nosing).length).toBeGreaterThan(0);
     }
   });
 
@@ -770,13 +787,18 @@ describe("propriétés : cages tirées parmi les fonctions déclarées", () => {
     ["steel-flat", {}],
     ["steel-flat", { treadKind: "folded-steel" }],
     ["steel-profile", {}],
+    // Limon coudé : palier droit accepté (K-Q5, sous-lot K2f).
+    ["steel-profile", { stringerLine: "nosing" }],
   ] as const)(
     "%s %j : ne lève jamais, aucun refus, pièces, marches portées des deux côtés, longueurs > 0",
     (kind, params) => {
       let built = 0;
       let runs = 0;
+      let landed = 0;
+      const landings =
+        kind !== "steel-profile" || (params as { stringerLine?: string }).stringerLine === "nosing";
       fc.assert(
-        fc.property(cageArbOf(kind !== "steel-profile"), (layout) => {
+        fc.property(cageArbOf(landings), (layout) => {
           runs++;
           const p = cageProject(layout, kind, params);
           let m!: Model;
@@ -808,6 +830,7 @@ describe("propriétés : cages tirées parmi les fonctions déclarées", () => {
                     SteelProfileParamsSchema.parse(params),
                   ),
                 );
+          if (layout.junctions.some((j) => j.angle === 0)) landed++;
           expect(b.length).toBeGreaterThan(0);
           expectPositiveLengths(m, b);
           expectMarksUnified(m);
@@ -818,6 +841,7 @@ describe("propriétés : cages tirées parmi les fonctions déclarées", () => {
         { numRuns: 120, seed: 66 },
       );
       expect(built / runs).toBeGreaterThan(0.5);
+      if (landings) expect(landed).toBeGreaterThan(0);
     },
   );
 });

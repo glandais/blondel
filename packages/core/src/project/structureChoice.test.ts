@@ -489,7 +489,7 @@ describe("resolveProfileNewel — point fixe du limon coudé (K2e2 : K-Q15, K-Q1
     ]);
   });
 
-  it("aucun poteau retenu (poteau de la référence non vérifié en coudé) : le moins chargé est rendu avec ses violations ajoutées", () => {
+  it("aucun poteau retenu (K-Q25) : jour de la barre droite (110 / 35, non vérifié en coudé), règles ajoutées par les poteaux écartés", () => {
     const { build } = fakeBuild({
       nosing: {
         "100/0": { b: 80 },
@@ -501,13 +501,14 @@ describe("resolveProfileNewel — point fixe du limon coudé (K2e2 : K-Q15, K-Q1
       // Barre droite : point fixe exact 110 / 35 au deuxième modèle, sans violation.
       chord: { "100/0": { b: 70 }, "110/35": { b: 70 } },
     });
-    // 110 / 35 en coudé : aile 85, non reçue ; 120 / 40, 125 / 43 et 130 / 45 écartés.
-    expect(resolveProfileNewel(NOSING, all, build)).toEqual({
-      newel: n(120, 40),
-      flangeWidth: 80,
-      verified: true,
-      added: new Map([["G_COLLET_MONOTONE", 1]]),
-    });
+    // 110 / 35 en coudé : aile 85, non reçue ; 120 / 40, 125 / 43 et 130 / 45 écartés : le jour
+    // de la barre droite (110 / 35, posé sur le jour vif du quart) est rendu, plus de « moindre
+    // excédent » (K-Q25, K2f).
+    const r = resolveProfileNewel(NOSING, all, build)!;
+    expect(r).toMatchObject({ newel: n(110, 35), flangeWidth: 85, verified: false });
+    expect(r.chordJour!.turns).toEqual([n(110, 35)]);
+    expect(r.chordJour!.rules).toEqual(["G_COLLET_MONOTONE"]);
+    expect(r.chordJour!.notes.map((m) => m.key)).toEqual(["project.structureChoice.change"]);
   });
 
   it("FAB_ONGLET_RACCORD en excédent ne fait pas écarter un poteau (K-Q21)", () => {
@@ -578,16 +579,27 @@ describe("resolveProfileNewel — point fixe du limon coudé (K2e2 : K-Q15, K-Q1
           expect(r!.flangeWidth).toBe(nosing[key]!.b);
           expect(newelSatisfies(r!.newel, "steel-profile", params, r!.flangeWidth)).toBe(true);
         }
-        // Poteau retenu construit (hors poteau de départ, jamais jugé) ⇒ résultat retenu.
+        // Poteau retenu construit (hors poteau de départ, jamais jugé) ⇒ résultat retenu ; avec
+        // K-Q25, le poteau de la référence (modèle de la base) peut l'être par le jour gardé.
         if (nosingBuilt.slice(1).some(retained)) {
           expect(r!.verified).toBe(true);
           expect(retained(key)).toBe(true);
-          expect(r!.added).toBeUndefined();
+          if (r!.chordJour) expect(key).toBe(rcKey);
         }
-        // Repli sur le moins chargé : aucun poteau construit retenu, excédents de la base exacts.
-        if (r!.added) {
-          expect(nosingBuilt.slice(1).some(retained)).toBe(false);
-          expect(r!.added).toEqual(addedViolations(fakeModel(nosing[key]!), ref));
+        // K-Q25 : jour de la barre droite (poteau de son point fixe posé sur le jour vif), règles
+        // = union des règles ajoutées par les poteaux construits, reçus et non retenus.
+        if (r!.chordJour) {
+          expect(r!.chordJour.turns).toEqual([rc.newel]);
+          expect(r!.newel).toEqual(rc.newel);
+          const rules = new Set<string>();
+          for (const k of nosingBuilt.slice(1)) {
+            const a = nosing[k]!;
+            const [size, offset] = k.split("/").map(Number);
+            if (!newelSatisfies(n(size!, offset!), "steel-profile", params, a.b)) continue;
+            for (const rule of addedViolations(fakeModel(a), ref).keys()) rules.add(rule);
+          }
+          expect(r!.chordJour.rules).toEqual([...rules].sort());
+          expect(r!.chordJour.rules.length).toBeGreaterThan(0);
         }
       }),
       { numRuns: RUNS },

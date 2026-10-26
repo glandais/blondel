@@ -253,6 +253,25 @@ function cornerPairs(input: BearingInput): [BearingFace, BearingFace][] {
 const byId = (res: BearingResult, id: string): FaceBearing =>
   res.faces.find((f) => f.faceId === id)!;
 
+/** Faces reliées à `id` par des raccords de palier (chaîne de K2f), `id` compris. */
+function landingChainOf(input: BearingInput, id: string): Set<string> {
+  const out = new Set([id]);
+  for (let grew = true; grew;) {
+    grew = false;
+    for (const [a, b] of cornerPairs(input)) {
+      if (cornerOf(a, "end")?.joint !== "landing" || cornerOf(b, "start")?.joint !== "landing") {
+        continue;
+      }
+      if (out.has(a.id) !== out.has(b.id)) {
+        out.add(a.id);
+        out.add(b.id);
+        grew = true;
+      }
+    }
+  }
+  return out;
+}
+
 /** Segments (u0, z0)-(u1, z1) qui se coupent strictement. */
 function segmentsCross(p1: Vec2, p2: Vec2, q1: Vec2, q2: Vec2): boolean {
   const o = (a: Vec2, b: Vec2, c: Vec2): number =>
@@ -378,7 +397,9 @@ describe("profileBearing — propriétés (lignes synthétiques)", () => {
         const zones = res.corners.map((c) => {
           const fa = c.faceBefore ? input.faces.find((f) => f.id === c.faceBefore) : undefined;
           const fbF = c.faceAfter ? input.faces.find((f) => f.id === c.faceAfter) : undefined;
-          const s0 = fa ? fa.sigmaA + fa.faceLength - c.lengthBefore : fbF!.sigmaA;
+          // Raccord glissant (K2f) : la zone commence au départ du raccord sur le plat.
+          const before = Math.max(c.lengthBefore, c.rampBefore ?? 0);
+          const s0 = fa ? fa.sigmaA + fa.faceLength - before : fbF!.sigmaA;
           const s1 = fbF ? fbF.sigmaA + c.lengthAfter : fa!.sigmaA + fa!.faceLength;
           // Groupe fusionné : la zone couvre aussi les faces intérieures.
           return { s0: Math.min(s0, s1), s1: Math.max(s0, s1), z: c.z };
@@ -404,7 +425,13 @@ describe("profileBearing — propriétés (lignes synthétiques)", () => {
               }
               return;
             }
-            if (fb.removed.some((r) => r.reason === "segment")) return;
+            // Retrait pour tronçon court dans la face ou dans une face de sa chaîne de raccords
+            // de palier (K2f : une seule ligne nettoyée pour toute la chaîne).
+            const chain = landingChainOf(input, f.id);
+            const segRemoved = res.faces.some(
+              (x) => chain.has(x.faceId) && x.removed.some((r) => r.reason === "segment"),
+            );
+            if (segRemoved) return;
             expect(Math.abs(B - P)).toBeLessThan(1e-6);
           });
           expect(fb.nosingDeviation.max).toBeCloseTo(devMax, 9);
@@ -1143,5 +1170,354 @@ describe("profileBearing — cas chiffrés", () => {
       { x: 0, y: pitch.at(100) },
       { x: 20, y: pitch.at(120) },
     ]);
+  });
+});
+
+// ------------------------------------------------------------------------------ paliers (K2f)
+
+/** Pente la plus forte de la ligne des nez sur la fenêtre d'une face (référence α_ref). */
+function pitchMaxOf(pitch: PiecewiseLinear, f: BearingFace): number {
+  let out = -Infinity;
+  for (let k = 0; k + 1 < pitch.xs.length; k++) {
+    const a = pitch.xs[k]! - f.sigmaA;
+    const b = pitch.xs[k + 1]! - f.sigmaA;
+    if (b <= f.uLo || a >= f.uHi || !(b > a)) continue;
+    out = Math.max(out, Math.atan2(pitch.ys[k + 1]! - pitch.ys[k]!, b - a));
+  }
+  return out;
+}
+
+describe("profileBearing — paliers du limon coudé (sous-lot K2f)", () => {
+  it("propriété : raccord de palier entre deux faces (chaîne) : rives et pente continues, aucune partie de niveau ni jarret au raccord", () => {
+    let seen = 0;
+    fc.assert(
+      fc.property(synthArb(), ({ input }) => {
+        const res = profileBearings(input);
+        for (const [a, b] of cornerPairs(input)) {
+          if (
+            cornerOf(a, "end")?.joint !== "landing" ||
+            cornerOf(b, "start")?.joint !== "landing"
+          ) {
+            continue;
+          }
+          const fa = byId(res, a.id);
+          const fb = byId(res, b.id);
+          if (!fa || !fb) continue;
+          // Aucune partie de niveau rendue pour un raccord de palier.
+          expect(res.corners.some((c) => c.faceBefore === a.id && c.faceAfter === b.id)).toBe(
+            false,
+          );
+          seen++;
+          // Ligne continue (même altitude au raccord) et même pente de part et d'autre.
+          const za = fa.line[fa.line.length - 1]!.y;
+          const zb = fb.line[0]!.y;
+          expect(Math.abs(za - zb)).toBeLessThan(1e-9);
+          const la = fa.segments[fa.segments.length - 1]!;
+          const lb = fb.segments[0]!;
+          expect(Math.abs(la.alpha - lb.alpha)).toBeLessThan(1e-9);
+          // Coupes d'aplomb aux extrémités du raccord : rives haute et basse jointives (rive basse
+          // hors tronçon trop court, où `lowerRiveOf` effondre un tronçon bas).
+          const ra = riveFns(fa);
+          const rb = riveFns(fb);
+          expect(Math.abs(ra.upper(a.faceLength) - rb.upper(0))).toBeLessThan(1e-9);
+          if (shortIn(res, a.id) || shortIn(res, b.id)) continue;
+          expect(Math.abs(ra.lower(a.faceLength) - rb.lower(0))).toBeLessThan(1e-6);
+        }
+      }),
+      { numRuns: RUNS },
+    );
+    expect(seen).toBeGreaterThan(0);
+  });
+
+  it("propriété : raccord glissant (rampBefore) : départ sur le plat de la ligne des nez, pente ≤ α_ref, aucun nez au-dessus de la ligne d'appui", () => {
+    let seen = 0;
+    fc.assert(
+      fc.property(synthArb(), ({ input }) => {
+        const res = profileBearings(input);
+        const pitch = input.pitch.outer;
+        for (const c of res.corners) {
+          if (c.rampBefore === undefined || !c.faceBefore) continue;
+          const f = input.faces.find((x) => x.id === c.faceBefore)!;
+          const fb = byId(res, f.id);
+          const s = f.faceLength - c.rampBefore;
+          if (s < f.uLo) continue; // départ dans une face précédente de la chaîne
+          seen++;
+          // Le départ est sur la ligne des nez (plat du palier) et y reste un sommet.
+          expect(Math.abs(polylineAt(fb.line, s) - pitch.at(f.sigmaA + s))).toBeLessThan(1e-6);
+          const k = fb.line.findIndex((q) => Math.abs(q.x - s) < 1e-9);
+          expect(k).toBeGreaterThanOrEqual(0);
+          // Raccord à la pente de référence (au plus) jusqu'à la partie de niveau du coin.
+          const ref = pitchMaxOf(pitch, f);
+          const seg = fb.segments.find((x) => Math.abs(x.u0 - s) < 1e-9)!;
+          expect(seg.alpha).toBeLessThanOrEqual(ref + 1e-9);
+          expect(seg.alpha).toBeGreaterThan(0);
+          // Ligne d'appui au-dessus de la ligne des nez entre le départ et le coin.
+          pitch.xs.forEach((x, j) => {
+            const u = x - f.sigmaA;
+            if (u < s - 1e-9 || u > f.uHi + 1e-9) return;
+            expect(polylineAt(fb.line, u)).toBeGreaterThanOrEqual(pitch.ys[j]! - 1e-6);
+          });
+        }
+      }),
+      { numRuns: RUNS },
+    );
+    expect(seen).toBeGreaterThan(0);
+  });
+
+  it("propriété : plat de palier suivi de niveau par la ligne d'appui, sinon constat `landingNotLevel` (hors raccord glissant) ; partie de niveau relevée au niveau d'un palier qui suit le coin (relecture K2f)", () => {
+    let flats = 0;
+    let raised = 0;
+    fc.assert(
+      fc.property(synthArb(), ({ input }) => {
+        const res = profileBearings(input);
+        for (const fb of res.faces) {
+          const f = input.faces.find((x) => x.id === fb.faceId)!;
+          const pitch = input.pitch[f.side];
+          // Départ du raccord glissant (σ), lu sur le coin de fin de la chaîne de palier de la
+          // face : il peut tomber dans un membre précédent de la chaîne.
+          let rampSigma: number | undefined;
+          for (const c of res.corners) {
+            if (c.rampBefore === undefined || !c.faceBefore) continue;
+            if (!landingChainOf(input, c.faceBefore).has(f.id)) continue;
+            const fe = input.faces.find((x) => x.id === c.faceBefore)!;
+            rampSigma = fe.sigmaA + fe.faceLength - c.rampBefore;
+          }
+          for (let k = 0; k + 1 < pitch.xs.length; k++) {
+            const zf = pitch.ys[k]!;
+            if (Math.abs(pitch.ys[k + 1]! - zf) > 1e-9 || !(pitch.xs[k + 1]! > pitch.xs[k]!)) {
+              continue;
+            }
+            const a = Math.max(pitch.xs[k]! - f.sigmaA, f.uLo);
+            let b = Math.min(pitch.xs[k + 1]! - f.sigmaA, f.uHi);
+            if (rampSigma !== undefined) b = Math.min(b, rampSigma - f.sigmaA);
+            if (!(b - a > 1e-6)) continue;
+            flats++;
+            const us = [a, b, ...fb.line.map((q) => q.x).filter((u) => u > a && u < b)];
+            const dev = Math.max(...us.map((u) => Math.abs(polylineAt(fb.line, u) - zf)));
+            if (dev <= 1e-6) continue;
+            expect(
+              res.issues.some(
+                (i) =>
+                  i.kind === "landingNotLevel" &&
+                  i.faceId === f.id &&
+                  i.u0 < b + 1e-6 &&
+                  i.u1 > a - 1e-6 &&
+                  i.excess >= dev - 1e-6,
+              ),
+              `${f.id} plat [${a} ; ${b}] écart ${dev}`,
+            ).toBe(true);
+          }
+        }
+        // Partie de niveau au-dessus de la ligne des nez au coin : seulement au niveau d'un plat
+        // de palier qui commence après le coin (relèvement), jamais au-dessus de lui.
+        for (const c of res.corners) {
+          if (c.merged || !c.faceAfter || !c.faceBefore) continue;
+          const f = input.faces.find((x) => x.id === c.faceAfter)!;
+          const pitch = input.pitch[f.side];
+          if (!(c.z > pitch.at(f.sigmaA) + 1e-9)) continue;
+          raised++;
+          const k = pitch.xs.findIndex(
+            (x, j) =>
+              x > f.sigmaA &&
+              j + 1 < pitch.xs.length &&
+              Math.abs(pitch.ys[j]! - c.z) < 1e-9 &&
+              Math.abs(pitch.ys[j + 1]! - c.z) < 1e-9,
+          );
+          expect(k, `${c.faceBefore} → ${c.faceAfter}`).toBeGreaterThanOrEqual(0);
+        }
+      }),
+      { numRuns: RUNS },
+    );
+    expect(flats).toBeGreaterThan(0);
+    expect(raised).toBeGreaterThan(0);
+  });
+
+  /**
+   * Contre-exemple de I6 (relecture K2f, première version du relèvement) : un nœud de la ligne
+   * des nez (620 en σ = 1 433) entre la fin de la partie de niveau de début de F2 et le plat
+   * (770 dès σ = 1 473) ; relever la partie de niveau à 770 rendait la ligne décroissante. Pas
+   * de relèvement : partie de niveau à P(σ_c), ligne croissante.
+   */
+  it("relèvement refusé quand un nœud de la ligne des nez sépare la partie de niveau du plat", () => {
+    const pitch = new PiecewiseLinear([
+      { x: 1000, y: 170 },
+      { x: 1190, y: 320 },
+      { x: 1301, y: 470 },
+      { x: 1433, y: 620 },
+      { x: 1473, y: 770 },
+      { x: 2173, y: 770 },
+    ]);
+    const corner = { joint: "wall", concave: true, tanHalf: 0.2 } as const;
+    const res = profileBearings({
+      faces: [
+        {
+          id: "F1",
+          side: "outer",
+          sigmaA: 700,
+          faceLength: 534.6,
+          uLo: 300,
+          uHi: 534.6,
+          start: "floor",
+          end: "corner",
+          endCorner: corner,
+        },
+        {
+          id: "F2",
+          side: "outer",
+          sigmaA: 1234.6,
+          faceLength: 1238.4,
+          uLo: 0,
+          uHi: 938.4,
+          start: "corner",
+          end: "arrival",
+          startCorner: corner,
+        },
+      ],
+      pitch: { inner: pitch, outer: pitch },
+      upperOffset: 0,
+      section: { h: 80, b: 45, shift: 0, tf: 0 },
+      settings: { minSegmentLength: 120, minKneeAngle: 0 },
+    });
+    expect(res.corners).toHaveLength(1);
+    expect(res.corners[0]!.z).toBeCloseTo(pitch.at(1234.6), 9);
+    for (const fb of res.faces) {
+      for (let i = 0; i + 1 < fb.line.length; i++) {
+        expect(fb.line[i + 1]!.y).toBeGreaterThanOrEqual(fb.line[i]!.y - 1e-9);
+      }
+    }
+  });
+
+  /**
+   * Palier non aligné (cage#0 de la sonde K2f, graine 2026) : limon de bord du palier de 1 493 mm,
+   * plat des nez à 1 080 jusqu'à u = 1 303, coin au nez de sortie (1 260 en u = 1 493), pente de
+   * référence 180 / 190.
+   */
+  it("raccord glissant chiffré : plat de niveau jusqu'à s = L − λ − d, raccord à α_ref, partie de niveau du coin", () => {
+    const pitch = new PiecewiseLinear([
+      { x: 0, y: 900 },
+      { x: 190, y: 1080 },
+      { x: 1493, y: 1080 },
+      { x: 1683, y: 1260 },
+      { x: 1873, y: 1440 },
+    ]);
+    const faces: BearingFace[] = [
+      {
+        id: "LP",
+        side: "outer",
+        sigmaA: 190,
+        faceLength: 1493,
+        uLo: 0,
+        uHi: 1493,
+        start: "newel",
+        end: "corner",
+        endCorner: { joint: "wall", concave: true, tanHalf: 1 },
+      },
+      {
+        id: "L2",
+        side: "outer",
+        sigmaA: 1683,
+        faceLength: 190,
+        uLo: 0,
+        uHi: 190,
+        start: "corner",
+        end: "arrival",
+        startCorner: { joint: "wall", concave: true, tanHalf: 1 },
+      },
+    ];
+    const settings = PROVISIONAL_KNEE_SETTINGS;
+    const res = profileBearings({
+      faces,
+      pitch: { inner: pitch, outer: pitch },
+      upperOffset: 40,
+      section: UPN200,
+      settings,
+    });
+    const fb = byId(res, "LP");
+    const ref = Math.atan2(180, 190);
+    const d = 180 / Math.tan(ref);
+    const lambda = settings.minSegmentLength + UPN200.h * Math.tan(ref / 2);
+    const s = 1493 - lambda - d;
+    expect(fb.line).toHaveLength(4);
+    expect(fb.line[0]).toEqual({ x: 0, y: 1080 });
+    expect(fb.line[1]!.x).toBeCloseTo(s, 9);
+    expect(fb.line[1]!.y).toBe(1080);
+    expect(fb.line[2]!.x).toBeCloseTo(1493 - lambda, 9);
+    expect(fb.line[2]!.y).toBeCloseTo(1260, 9);
+    expect(fb.line[3]).toEqual({ x: 1493, y: 1260 });
+    expect(fb.segments[1]!.alpha).toBeCloseTo(ref, 12);
+    const c = res.corners.find((x) => x.faceBefore === "LP")!;
+    expect(c.rampBefore).toBeCloseTo(lambda + d, 9);
+    expect(c.lengthBefore).toBeCloseTo(lambda, 9);
+    // Avant K2f : raccord depuis le début du plat (rampe sur tout le palier).
+    expect(s).toBeGreaterThan(1100);
+    expect(res.issues).toEqual([]);
+  });
+
+  /**
+   * Palier aligné court (cage#25 de la sonde K2f) : deux limons colinéaires au raccord de palier
+   * (milieu du palier de 309 mm, à 104,4 mm du jarret de fin du plat), UPN 220 : la fin du plat
+   * est reportée à m après le raccord, le palier reste de niveau ; plus de partie de niveau à
+   * P(σ_c) au-dessus du palier (bosse de 72,6 mm avant K2f).
+   */
+  it("chaîne de palier chiffrée : fin du plat reportée à m après le raccord, palier de niveau, rives continues", () => {
+    const pitch = new PiecewiseLinear([
+      { x: 1032, y: 900 },
+      { x: 1290, y: 1080 },
+      { x: 1340.1, y: 1080 },
+      { x: 1599, y: 1260 },
+      { x: 1857.9, y: 1440 },
+    ]);
+    const landing: SteelCornerEnd = { joint: "landing", concave: true, tanHalf: 0 };
+    const faces: BearingFace[] = [
+      {
+        id: "A",
+        side: "outer",
+        sigmaA: 0,
+        faceLength: 1444.5,
+        uLo: 1032,
+        uHi: 1444.5,
+        start: "floor",
+        end: "corner",
+        endCorner: landing,
+      },
+      {
+        id: "B",
+        side: "outer",
+        sigmaA: 1444.5,
+        faceLength: 413.4,
+        uLo: 0,
+        uHi: 413.4,
+        start: "corner",
+        end: "arrival",
+        startCorner: landing,
+      },
+    ];
+    const sec: BearingSection = { h: 220, b: 80, shift: 0, tf: 0 };
+    const res = profileBearings({
+      faces,
+      pitch: { inner: pitch, outer: pitch },
+      upperOffset: 40,
+      section: sec,
+      settings: PROVISIONAL_KNEE_SETTINGS,
+    });
+    const a = byId(res, "A");
+    const b = byId(res, "B");
+    expect(res.corners).toEqual([]);
+    expect(res.issues).toEqual([]);
+    // Palier de niveau à 1 080 de son nez (1 290) jusqu'au raccord, et 50 mm au-delà.
+    expect(a.line.map((q) => [q.x, q.y])).toEqual([
+      [1032, 900],
+      [1290, 1080],
+      [1444.5, 1080],
+    ]);
+    expect(b.line[0]).toEqual({ x: 0, y: 1080 });
+    expect(b.line[1]!.x).toBeCloseTo(PROVISIONAL_KNEE_SETTINGS.minSegmentLength, 9);
+    expect(b.line[1]!.y).toBe(1080);
+    expect(b.line[2]!.x).toBeCloseTo(1599 - 1444.5, 9);
+    expect(b.line[2]!.y).toBe(1260);
+    expect(b.knees[0]!.protected).toBe(true);
+    const ra = riveFns(a);
+    const rb = riveFns(b);
+    expect(Math.abs(ra.lower(1444.5) - rb.lower(0))).toBeLessThan(1e-9);
   });
 });

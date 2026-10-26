@@ -920,6 +920,32 @@ export function crankedSingleNote(mark: string, fb: FaceBearing): Message {
   });
 }
 
+/**
+ * Remarques des plats de palier que la ligne d'appui d'une face coudée ne suit pas de niveau
+ * (constat `landingNotLevel` du noyau, sous-lot K2f) : une par plat, plus grand écart arrondi au
+ * mm. Palier trop court entre les parties de niveau de ses coins, ou jarret retiré pour tronçon
+ * court : la rive n'est pas de niveau sur le palier, à vérifier (aucun repli : la barre droite
+ * ne l'est pas davantage).
+ */
+export function landingNotLevelNotes(
+  mark: string,
+  faceId: string,
+  issues: readonly BearingIssue[],
+): Message[] {
+  return issues.flatMap((i) =>
+    i.kind === "landingNotLevel" && i.faceId === faceId
+      ? [
+          msg("structure.steelProfile.note.landingNotLevel", {
+            mark,
+            excess: dec(i.excess, 0),
+            from: dec(i.u0, 0),
+            to: dec(i.u1, 0),
+          }),
+        ]
+      : [],
+  );
+}
+
 /** Remarque des cotes de gabarit d'un limon coudé (CK17) ; `null` sans jarret. */
 export function crankedJigNote(mark: string, items: readonly CrankedJigItem[]): Message | null {
   const knees = joinMessages(

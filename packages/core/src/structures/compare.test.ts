@@ -21,6 +21,7 @@ import {
   variantCost,
 } from "./compare.js";
 import { layoutAccepts } from "../project/newel.js";
+import { applyStructureChoice } from "../project/structureChoice.js";
 import { createProject } from "../project/presets.js";
 import "./index.js";
 
@@ -422,6 +423,28 @@ describe("limon coudé des profilés (steel-profile, `nosing`) dans le comparate
     const minutes =
       nosing.cuts * 2 + nosing.weldMm / 100 + nosing.bends + nosing.holes + nosing.uniqueParts * 15;
     expect(nosing.cost!.labour).toBeCloseTo(minutes, 6);
+  });
+
+  it("palier d'angle (quarter-landing, K2f) : tronçons comptés à la place des limons finis, aucun double compte", () => {
+    const ql = parseProjectText(
+      readFileSync(
+        resolve(
+          dirname(fileURLToPath(import.meta.url)),
+          "../../../../examples/quarter-landing.blondel.json",
+        ),
+        "utf8",
+      ),
+    );
+    const v = summarizeVariant(
+      applyStructureChoice(ql, "steel-profile", { family: "UPN", stringerLine: "nosing" }).project,
+    );
+    const parts = v.model.parts;
+    const finished = new Set(parts.flatMap((p) => (p.componentOf ? [p.componentOf] : [])));
+    expect(v.model.errors).toEqual([]);
+    expect(finished.size).toBeGreaterThan(0);
+    expect(v.partCount).toBe(fabricatedParts(parts).length);
+    expect(v.partCount).toBe(parts.length - finished.size);
+    expect(v.massUnknown).toBe(0);
   });
 });
 

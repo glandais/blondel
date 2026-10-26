@@ -398,3 +398,131 @@ describe("limon coudé (K2e, K-Q4) — cornière retirée au coin du mur, j4-dem
     expect(residualFrench(texts)).toEqual([]);
   });
 });
+
+/**
+ * Paliers du limon coudé (sous-lot K2f, K-Q5) : palier droit d'une cage (cage-45-palier-acier,
+ * raccords de palier entre limons coudés, aboutage soudé bout à bout sur la coupe d'aplomb, EXC2 ;
+ * cage-60-palier-limon, raccord entre un limon coudé et un limon replié, K-Q27) et palier d'angle
+ * en volées (quarter-landing) traversent tous les exports en français et en
+ * anglais ; aucune pièce sortie deux fois ; fichiers anglais sans français.
+ */
+describe("limon coudé (K2f, K-Q5) — paliers : cage-45-palier-acier, cage-60-palier-limon et quarter-landing en `nosing`", () => {
+  const load = (file: string): Project =>
+    applyStructureChoice(
+      parseProjectText(readFileSync(join(EXAMPLES_DIR, file), "utf8")),
+      "steel-profile",
+      { family: "UPN", stringerLine: "nosing" },
+    ).project;
+  const cases = [
+    ["cage-45-palier-acier", load("cage-45-palier-acier.blondel.json")],
+    ["quarter-landing", load("quarter-landing.blondel.json")],
+    // Raccord de palier entre un limon coudé et un limon replié en barre droite (K-Q27, relecture
+    // K2f) : aboutage de deux barres décalées en hauteur.
+    ["cage-60-palier-limon", load("cage-60-palier-limon.blondel.json")],
+  ] as const;
+
+  for (const [name, project] of cases) {
+    const model = buildModel(project);
+    const stringers = model.parts.filter((p) => p.category === "stringer");
+    const finishedIds = new Set(
+      stringers.flatMap((p) => (p.componentOf !== undefined ? [p.componentOf] : [])),
+    );
+    const flats = model.parts.filter((p) => p.flat !== undefined);
+
+    it(`${name} : sans erreur, limons coudés à tronçons, exports sans exception ni grandeur non finie (fr, en)`, () => {
+      expect(model.errors).toEqual([]);
+      expect(finishedIds.size).toBeGreaterThan(0);
+      for (const locale of ["fr", "en"] as const) {
+        const opts = { project, theme: "light" as const, title: project.name, locale };
+        for (const svg of [renderPlanSvg(model, opts), renderElevationSvg(model, opts)]) {
+          parseXml(svg);
+          expect(svg).not.toMatch(NON_FINITE);
+        }
+        for (const s of flats) {
+          const svg = renderFlatPatternSvg(s, { locale });
+          parseXml(svg);
+          expect(svg, s.id).not.toMatch(NON_FINITE);
+        }
+        expect(exportCutListCsv(model, { locale })).not.toMatch(NON_FINITE);
+        const { bytes } = exportPdfDocument(model, {
+          project,
+          date: "26/10/2026",
+          compress: false,
+          locale,
+        });
+        expect(new TextDecoder("latin1").decode(bytes)).not.toMatch(NON_FINITE);
+      }
+      for (const version of ["R12", "AC1021"] as const) {
+        expect(exportPlanDxf(model, { project, version })).not.toMatch(NON_FINITE);
+        for (const s of flats) expect(exportPartDxf(s, { version }), s.id).not.toMatch(NON_FINITE);
+      }
+      const files = exportPartsDxf(model);
+      const zip = createZip(files.map((f) => ({ name: f.filename, data: f.content })));
+      expect(String.fromCharCode(zip[0]!, zip[1]!)).toBe("PK");
+      expect(readGlb(exportGlb(model, { project })).doc.nodes.length).toBeGreaterThan(0);
+    });
+
+    it(`${name} : aucune pièce sortie deux fois (DXF des pièces, pages du PDF, liste de débit)`, () => {
+      const groups = flatPartGroups(model.parts);
+      const seen = new Map<string, number>();
+      for (const g of groups) for (const id of g.ids) seen.set(id, (seen.get(id) ?? 0) + 1);
+      for (const [id, n] of seen) expect(n, id).toBe(1);
+      for (const id of finishedIds) expect(seen.has(id)).toBe(false);
+      const { pages } = exportPdfDocument(model, { project, date: "26/10/2026", compress: false });
+      const flatIds = pages.filter((p) => p.kind === "flat").flatMap((p) => p.partIds ?? []);
+      expect(new Set(flatIds).size).toBe(flatIds.length);
+      for (const id of flatIds) expect(finishedIds.has(id)).toBe(false);
+      const marks = new Set(cutListRows(model.parts).map((r) => r.mark));
+      for (const p of stringers) {
+        if (finishedIds.has(p.id)) expect(marks.has(p.mark), p.mark).toBe(false);
+      }
+      expect(fabricatedParts(model.parts).some((p) => finishedIds.has(p.id))).toBe(false);
+    });
+
+    it(`${name} : fichiers anglais (CSV, SVG, DXF des pièces et du plan, PDF) sans français`, () => {
+      const verbatim = [project.name, ...project.site.walls.map((w) => w.id)];
+      const svgTexts = (svg: string): string[] =>
+        [...svg.matchAll(/<(text|tspan|title|desc)[^>]*>([^<]+)</g)].map((m) =>
+          m[2]!.replace(/&apos;/g, "'").replace(/&amp;/g, "&"),
+        );
+      const dxfTexts = (dxf: string): string[] => {
+        const l = dxf.split(/\r?\n/);
+        const out: string[] = [];
+        for (let i = 0; i < l.length - 1; i++) if (l[i]!.trim() === "1") out.push(l[i + 1]!);
+        return out;
+      };
+      const opts = { project, theme: "light" as const, title: project.name, locale: "en" as const };
+      const texts = [
+        ...exportCutListCsv(model, { locale: "en" }).split(/\r?\n/),
+        ...svgTexts(renderPlanSvg(model, opts)),
+        ...svgTexts(renderElevationSvg(model, opts)),
+        ...flats.flatMap((s) => svgTexts(renderFlatPatternSvg(s, { locale: "en" }))),
+        ...flats.flatMap((s) => dxfTexts(exportPartDxf(s, { locale: "en", version: "AC1021" }))),
+        ...dxfTexts(exportPlanDxf(model, { project, version: "R12", locale: "en" })),
+      ];
+      expect(texts.length).toBeGreaterThan(100);
+      expect(residualFrench(texts, verbatim)).toEqual([]);
+      const c = new RecordingCanvas(297, 210, helveticaMeasure());
+      renderPdf(c, model, { project, date: "26/10/2026", locale: "en" });
+      const idents = [...RULES.map((r) => r.id), ...model.compliance.results.map((r) => r.ruleId)];
+      expect(
+        residualFrench(c.pageTexts().flat(), [...verbatim, ...idents], { citedSources: true }),
+      ).toEqual([]);
+    });
+  }
+
+  it("cage-45-palier-acier : raccords de palier soudés bout à bout sur la coupe d'aplomb des tronçons, classe d'exécution EXC2", () => {
+    const project = cases[0][1];
+    const model = buildModel(project);
+    const labels = model.parts
+      .filter((p) => p.componentOf !== undefined && p.flat)
+      .flatMap((p) => p.flat!.lines.map((l) => l.label?.key));
+    // Deux raccords de palier (côté jour et côté mur), deux coupes chacun.
+    expect(
+      labels.filter((k) => k === "structure.steelProfile.joint.landingSpliceWelded"),
+    ).toHaveLength(4);
+    const exc = model.compliance.results.filter((r) => r.ruleId === "EXC_CLASSE_EXECUTION");
+    expect(exc.length).toBeGreaterThan(0);
+    expect(JSON.stringify(exc.map((r) => r.message))).toContain("EXC2");
+  });
+});

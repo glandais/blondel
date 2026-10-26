@@ -176,6 +176,16 @@ export interface StructureCapabilities<P = unknown> {
    */
   readonly cage?: readonly CageFeature[];
   /**
+   * Fonctions de cage saisie selon les paramètres (paramètres complets, schéma du plugin
+   * appliqué) : remplace `cage` quand les paramètres sont connus et valides (garde-fou de
+   * `buildModel`, `applyStructureChoice`). Doit contenir `cage` (une fonction acceptée sans
+   * paramètres l'est pour tous). Lu sans construire de modèle : ne dépendre que de paramètres
+   * dont le défaut ne dépend pas du contexte, comme `carriedHandrails`. Absent : `cage`. Ajout
+   * rétrocompatible (chantier bent-stringer, sous-lot K2f : palier droit des profilés accepté en
+   * limon coudé seulement).
+   */
+  cageWith?(params: P): readonly CageFeature[];
+  /**
    * Mains courantes que la structure construit elle-même (côté de l'escalier, identifiant et
    * repère de sa pièce) : elles **remplacent** celle du garde-corps de ce côté (décision G-Q6 du
    * chantier guard-marks) ; le garde-corps n'en produit pas, ses contrôles désignent la pièce de
