@@ -145,6 +145,25 @@ describe("cas d'acceptation n° 1 (H 2 700, trémie 2 800 × 900, dalle 200)", (
     if (FACTOR === 1) expect(r.stats.truncated).toBe(false);
   });
 
+  it("budget : ≤ 2 s en limons profilés coudés (`nosing`, point fixe K-Q19 / K-Q20 du poteau)", () => {
+    // Chantier bent-stringer K2e2 : jusqu'à 3 + 1 (+ 1 base) modèles coudés et 3 + 1 en barre droite par
+    // pose du poteau élargi (`resolveProfileNewel`) ; mesuré à environ 0,8 à 1 s hors charge.
+    const t0 = performance.now();
+    const r = proposeDesigns({
+      site: ACCEPTANCE_SITE,
+      preferences: {
+        structure: { kind: "steel-profile", params: { family: "UPN", stringerLine: "nosing" } },
+      },
+    });
+    const elapsed = performance.now() - t0;
+    console.info(
+      `assistant, profilés coudés : ${elapsed.toFixed(0)} ms, ${r.stats.enumerated} variantes, ${r.stats.built} modèles`,
+    );
+    expect(r.candidates.length).toBeGreaterThan(0);
+    expect(elapsed).toBeLessThanOrEqual(BUDGET_MS * FACTOR);
+    if (FACTOR === 1) expect(r.stats.truncated).toBe(false);
+  });
+
   it("déterministe, projets canoniques et relisibles", () => {
     const a = acceptanceResult();
     const b = proposeUntimed({ site: ACCEPTANCE_SITE });

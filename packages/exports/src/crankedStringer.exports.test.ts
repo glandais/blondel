@@ -5,8 +5,10 @@
  * finie (solide balayé) n'a pas de développé, ses tronçons LE2-1… en ont un chacun ; aucune pièce
  * n'est sortie deux fois dans le DXF ni dans le PDF, les textes anglais propres au limon coudé ne
  * gardent ni clé brute ni français, le solide balayé atteint l'onglet aux coins en plan. K2e
- * (K-Q4) : sur le demi-tournant du préréglage, une cornière retirée au coin du mur est absente de
- * la liste de débit, des développés et des pages du PDF, et sa remarque est traduite.
+ * (K-Q4) : sur j4-demi-tournant-acier-garde-corps (K2e2 : le demi-tournant du préréglage n'a plus
+ * de cornière retirée, sa marche M8 sans appui côté jour garde ses deux cornières, K-Q16), une
+ * cornière retirée au coin du mur est absente de la liste de débit, des développés et des pages
+ * du PDF, et sa remarque est traduite.
  */
 import { readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
@@ -17,7 +19,6 @@ import {
   applyStructureChoice,
   buildModel,
   buildSteelProfile,
-  createProject,
   fabricatedParts,
   parseProjectText,
   type Project,
@@ -328,11 +329,14 @@ describe("limon coudé (K2b, K2c) — exports de j3c en `nosing`", () => {
   });
 });
 
-describe("limon coudé (K2e, K-Q4) — cornière retirée au coin du mur, demi-tournant (préréglage) en `nosing`", () => {
-  const project = applyStructureChoice(createProject("half-turn"), "steel-profile", {
-    family: "UPN",
-    stringerLine: "nosing",
-  }).project;
+describe("limon coudé (K2e, K-Q4) — cornière retirée au coin du mur, j4-demi en `nosing`", () => {
+  const project = applyStructureChoice(
+    parseProjectText(
+      readFileSync(join(EXAMPLES_DIR, "j4-demi-tournant-acier-garde-corps.blondel.json"), "utf8"),
+    ),
+    "steel-profile",
+    { family: "UPN", stringerLine: "nosing" },
+  ).project;
   const model = buildModel(project);
   const params = SteelProfileParamsSchema.parse(project.stair.structure.params);
   const r = buildSteelProfile({ project, layout: model.layout, stepping: model.stepping }, params);
@@ -343,9 +347,9 @@ describe("limon coudé (K2e, K-Q4) — cornière retirée au coin du mur, demi-t
       (p) => p.flat !== undefined && (p.id === faceId || p.componentOf === faceId),
     );
 
-  it("sans erreur, deux cornières retirées (M5 sur LE2, M8 sur LE3)", () => {
+  it("sans erreur, deux cornières retirées (M5 sur LE2, M9 sur LE3)", () => {
     expect(model.errors).toEqual([]);
-    expect(removed.map((x) => `${x.treadMark}/${x.faceMark}`)).toEqual(["M5/LE2", "M8/LE3"]);
+    expect(removed.map((x) => `${x.treadMark}/${x.faceMark}`)).toEqual(["M5/LE2", "M9/LE3"]);
   });
 
   it("liste de débit : autant de cornières que de supports posés", () => {

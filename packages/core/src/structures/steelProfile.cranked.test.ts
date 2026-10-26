@@ -4,8 +4,10 @@
  * identiques en `nosing` (CK7), critères de fin de K2b (j3c, j5b du comparateur, onglets au bout
  * d'aile, hauteur de poteau, point fixe section ↔ poteau), non-régression par rapport à la barre
  * droite grâce au repli par face (K-Q12, K-Q13) et propriété sur escaliers générés ; cornière au
- * coin du mur (K-Q4, K2e) : critères de fin, comparaison par règle à K2c, cornières retirées
- * absentes des sorties, invariants dans la propriété.
+ * coin du mur (K-Q4, K2e ; K-Q16 à K-Q21, K2e2) : critères de fin, comparaison par règle à la
+ * barre droite du même projet, marche sans appui côté jour et paliers gardant toutes leurs
+ * cornières, cornières retirées absentes des sorties, invariants dans les propriétés ; point fixe
+ * section ↔ poteau (K-Q19, K-Q20).
  */
 import { readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
@@ -18,16 +20,28 @@ import type { Model } from "../model/derived.js";
 import type { Project } from "../model/project.js";
 import { checkSolids } from "../parts/solidChecks.js";
 import { buildModel } from "../pipeline/build.js";
-import { expectedNewel, newelMatches, withNewels, type NewelInner } from "../project/newel.js";
+import {
+  expectedNewel,
+  newelMatches,
+  newelSatisfies,
+  withNewels,
+  type NewelInner,
+} from "../project/newel.js";
 import { parseProjectText } from "../project/parse.js";
 import { createProject } from "../project/presets.js";
 import {
   PROFILE_NEWEL_ITERATIONS,
+  PROFILE_NEWEL_VERIFICATIONS,
   applyStructureChoice,
   resolveProfileNewel,
 } from "../project/structureChoice.js";
 import { precheckModel } from "../precheck/stringers.js";
-import { ALL_TYPOLOGIES, makeSteppingProject, stairArb } from "../stepping/test-helpers.js";
+import {
+  ALL_TYPOLOGIES,
+  SAME_SIDE_TYPOLOGIES,
+  makeSteppingProject,
+  stairArb,
+} from "../stepping/test-helpers.js";
 import { adaptJour } from "./compare.js";
 import { fitInWebPolyline, riveFns } from "./profileBearing.js";
 import { StructureError } from "./registry.js";
@@ -423,6 +437,45 @@ const violationCounts = (x: Run): Record<string, number> => {
   }
   return out;
 };
+/**
+ * Règles en violation plus souvent dans `x` que dans la référence `ref` (barre droite du même
+ * projet), avec l'excédent. Seule tolérance (K-Q21) : FAB_ONGLET_RACCORD aux coins dont l'un des
+ * deux limons est replié `heavier` (onglet ouvert accepté par l'utilisateur) ; l'excédent de
+ * cette règle n'est retiré que de ces coins (partie reçue au coin ou limon qui y arrive).
+ */
+const excessOverChord = (ref: Run, x: Run): Record<string, number> => {
+  const a = violationCounts(x);
+  const b = violationCounts(ref);
+  const heavier = new Set(
+    x.r.stringers.filter((s) => s.crankedFallback?.kind === "heavier").map((s) => s.face.id),
+  );
+  // Coin dû au repli : la partie reçue (`partId` du constat, début `corner`) ou le limon qui
+  // arrive au même coin du même côté est replié `heavier`.
+  const dueToHeavier = (partId: string): boolean => {
+    if (heavier.has(partId)) return true;
+    const recv = x.r.stringers.find((s) => s.face.id === partId);
+    if (!recv) return false;
+    return x.r.stringers.some(
+      (s) =>
+        heavier.has(s.face.id) &&
+        s.face.side === recv.face.side &&
+        Math.abs(s.face.sigmaA + s.face.faceLength - recv.face.sigmaA) < 1e-6,
+    );
+  };
+  const tolerated = x.m.compliance.results.filter(
+    (c) =>
+      c.ruleId === "FAB_ONGLET_RACCORD" &&
+      c.status === "violation" &&
+      c.location?.kind === "part" &&
+      dueToHeavier(c.location.partId),
+  ).length;
+  const out: Record<string, number> = {};
+  for (const [rule, n] of Object.entries(a)) {
+    const allowed = (b[rule] ?? 0) + (rule === "FAB_ONGLET_RACCORD" ? tolerated : 0);
+    if (n > allowed) out[rule] = n - allowed;
+  }
+  return out;
+};
 /** Clé d'un support posé (marche × face), comme dans les ensembles du coin. */
 const placedKey = (pl: { tread: number; face: { key: string } }): string =>
   cornerSupportKey(pl.tread, pl.face.key);
@@ -433,7 +486,10 @@ const placedKey = (pl: { tread: number; face: { key: string } }): string =>
  * dans le mode final de sa face (section faisable), sans violation FAB_MARCHE_PORTEE côté mur ;
  * les cornières retirées sont toutes facultatives, à partie logée < `minLength` ; une facultative
  * est posée ou retirée (sauf marche sans aucune cornière posée, comportement de K2b) ; une
- * remarque par marche qui perd une cornière. Rend le nombre de groupes vérifiés.
+ * remarque par marche qui perd une cornière. K2e2 : une marche au coin sans support posé côté
+ * jour est une marche « sans appui côté jour » du plan (et réciproquement), qui ne perd aucune
+ * cornière et n'en a aucune facultative (K-Q16) ; un palier ne forme aucun groupe et ne perd
+ * aucune cornière (K-Q18). Rend le nombre de groupes vérifiés.
  */
 function expectCornerAngles(x: Run, project: Project): number {
   // Plugin arrêté avant le choix de section (hélicoïdal, découpage vide…) : rien à vérifier.
@@ -452,8 +508,32 @@ function expectCornerAngles(x: Run, project: Project): number {
   const placed = new Set(x.r.supports.map((s) => placedKey(s.placement)));
   const removed = new Set(ca.removed.map((r) => cornerSupportKey(r.tread, r.faceId)));
   const feasible = !errorKeys(x).includes("structure.steelProfile.error.noSectionPasses");
+  const landings = new Set(
+    x.m.stepping.treads.filter((t) => t.kind === "landing").map((t) => t.number),
+  );
+  for (const t of landings) {
+    expect(
+      ca.groups.some((g) => g.tread === t),
+      `palier M${t}`,
+    ).toBe(false);
+    expect(
+      ca.removed.some((r) => r.tread === t),
+      `palier M${t}`,
+    ).toBe(false);
+  }
   let checked = 0;
   for (const g of ca.groups) {
+    // K-Q16 : appui côté jour posé ⇔ marche jugée appuyée côté jour par le plan.
+    const jourPlaced = x.r.supports.some(
+      (s) => s.placement.tread === g.tread && s.placement.face.side === "inner",
+    );
+    expect(plan.corner.jourless.has(g.tread), `marche ${g.tread} (jour)`).toBe(!jourPlaced);
+    if (plan.corner.jourless.has(g.tread)) {
+      for (const c of g.candidates) {
+        expect(plan.corner.optional.has(c.key), c.key).toBe(false);
+        expect(removed.has(c.key), c.key).toBe(false);
+      }
+    }
     // Logeable (à hauteur infinie) dans le mode final de sa face : rive coudée ou corde.
     const loggable = g.candidates.some((c) => {
       if (c.u1 - c.u0 < minLen - 1e-9) return false;
@@ -503,191 +583,198 @@ function expectCornerAngles(x: Run, project: Project): number {
   return checked;
 }
 
-describe("steel-profile — cornière au coin du mur (K2e, K-Q4) en `nosing`", () => {
+describe("steel-profile — cornière au coin du mur (K2e, K-Q4 ; K2e2, K-Q16 à K-Q21) en `nosing`", () => {
   const NOSING = { family: "UPN", stringerLine: "nosing" };
-  const pick = (file: string) => (): Project => choose(loadExample(file), NOSING);
-  const all = (): boolean => true;
-  const newel = (size: number, offset: number): NewelInner => ({ kind: "newel", size, offset });
+  const CHORD = { family: "UPN" };
+  const pick =
+    (file: string) =>
+    (params: Record<string, unknown>): Project =>
+      choose(loadExample(file), params);
   /**
-   * Critères de fin de K2e. `k2c` : violations par règle mesurées sur 4c8b228 (K2c), identiques
-   * à eb7e331 (K2b), sur le projet posé par `applyStructureChoice`, dont le poteau est
-   * `k2cNewel` (`null` : cage sans poteau). `section` : section mesurée en K2e (égalité, pour
-   * qu'une régression vers une section plus lourde se voie). `pending` : violations de plus
-   * qu'en K2c sur le modèle livré, explicites et chiffrées, en attente d'une décision de
-   * l'utilisateur (ledger K2e). `errors` : erreurs attendues du modèle.
+   * Critères de fin de K2e2. Le modèle livré (`make(NOSING)`, poteau posé par
+   * `applyStructureChoice` ou par le comparateur) est comparé règle par règle à la **barre droite
+   * du même projet** (`make(CHORD)`, poteau de son propre point fixe) : aucune règle en violation
+   * plus souvent, sauf FAB_ONGLET_RACCORD dû à un repli `heavier` (K-Q21, `excessOverChord`).
+   * `section` : section mesurée en K2e2 (égalité, pour qu'une régression se voie) ; `errors` :
+   * erreurs attendues du modèle. Demi-tournant et trapèze : la marche au coin sans appui côté jour
+   * (M8, M7) garde ses deux cornières murales (K-Q16) ; aucune UPN ne les loge (288,4 et
+   * 270,9 mm), comme la barre droite (UPN 260 en erreur dans les deux modes).
    */
   const cases: {
     name: string;
-    make: () => Project;
-    k2cNewel: NewelInner | null;
-    k2c: Record<string, number>;
+    make: (params: Record<string, unknown>) => Project;
     section: string;
-    pending?: Record<string, number>;
     errors: string[];
+    /** Marches au coin sans appui côté jour (K-Q16), mesurées en K2e2. */
+    jourless: number[];
   }[] = [
     {
       name: "j3c",
       make: pick("j3c-acceptance-01-upn.blondel.json"),
-      k2cNewel: newel(125, 43),
-      k2c: {
-        G_COLLET_MONOTONE: 1,
-        ECHAPPEE_RECO_PRIVATIF: 1,
-        ECHAPPEE_LARGEUR: 1,
-        FAB_PROFILE_AILE_HORS_EMPRISE: 1,
-        FAB_SUPPORT_LONGUEUR_MIN: 4,
-      },
       section: "UPN 180",
       errors: [],
+      jourless: [],
     },
     {
       name: "j5b (comparateur)",
-      make: () => j5bComparator("nosing"),
-      // Poteau posé par `adaptJour` en K2c (point fixe K2b : 130 / 45) ; 125 / 43 en K2e.
-      k2cNewel: newel(130, 45),
-      k2c: { FAB_PROFILE_AILE_HORS_EMPRISE: 1, FAB_SUPPORT_LONGUEUR_MIN: 6 },
+      make: (pr) => j5bComparator(pr["stringerLine"] === "nosing" ? "nosing" : "chord"),
       section: "UPN 200",
       errors: [],
+      jourless: [],
     },
     {
       name: "quart",
       make: pick("quarter-left.blondel.json"),
-      k2cNewel: newel(120, 40),
-      k2c: {
-        ECHAPPEE_RECO_PRIVATIF: 1,
-        FAB_PROFILE_AILE_HORS_EMPRISE: 1,
-        FAB_SUPPORT_LONGUEUR_MIN: 3,
-        FAB_MARCHE_PORTEE: 1,
-      },
-      section: "UPN 180",
+      section: "UPN 220",
       errors: [],
+      jourless: [4],
     },
     {
       name: "U",
       make: pick("two-quarters-u.blondel.json"),
-      k2cNewel: newel(115, 38),
-      k2c: { G_COLLET_MONOTONE: 1, FAB_PROFILE_AILE_HORS_EMPRISE: 1, FAB_SUPPORT_LONGUEUR_MIN: 5 },
       section: "UPN 200",
       errors: [],
+      jourless: [],
     },
     {
       name: "demi-tournant (préréglage)",
-      make: () => choose(createProject("half-turn"), NOSING),
-      k2cNewel: newel(130, 45),
-      k2c: {
-        G_COLLET_MIN: 3,
-        FAB_PROFILE_HAUTEUR: 1,
-        FAB_PROFILE_AILE_HORS_EMPRISE: 1,
-        FAB_SUPPORT_LONGUEUR_MIN: 9,
-        FAB_MARCHE_PORTEE: 3,
-      },
-      section: "UPN 200",
-      errors: [],
+      make: (pr) => choose(createProject("half-turn"), pr),
+      section: "UPN 260",
+      errors: ["structure.steelProfile.error.noSectionPasses"],
+      jourless: [8],
     },
     ...["j4-demi-tournant-acier-garde-corps", "demo-half-turn-industrial"].map((f) => ({
       name: f,
       make: pick(`${f}.blondel.json`),
-      k2cNewel: newel(130, 45),
-      k2c: {
-        FAB_PROFILE_AILE_HORS_EMPRISE: 1,
-        FAB_ONGLET_RACCORD: 2,
-        FAB_SUPPORT_LONGUEUR_MIN: 8,
-        FAB_MARCHE_PORTEE: 1,
-      },
-      section: "UPN 180",
-      // Poteau du point fixe 110 / 35 (K-Q8) au lieu de 130 / 45 : balancement recalculé, une
-      // G_COLLET_MONOTONE (avertissement, marche 6) et un appui court sur le poteau de plus (et
-      // deux FAB_ONGLET_RACCORD de moins). Même constat en K2c à 110 / 35 : effet du poteau, pas
-      // de la règle du coin. En attente de la question 1 du ledger K2e.
-      pending: { G_COLLET_MONOTONE: 1, FAB_SUPPORT_LONGUEUR_MIN: 1 },
+      section: "UPN 200",
       errors: [],
+      jourless: [],
     })),
     {
       name: "cage-trapeze",
       make: pick("cage-trapeze.blondel.json"),
-      k2cNewel: null,
-      k2c: {
-        ECHAPPEE_RECO_PRIVATIF: 1,
-        FAB_PROFILE_HAUTEUR: 1,
-        FAB_PROFILE_AILE_HORS_EMPRISE: 1,
-        FAB_SUPPORT_LONGUEUR_MIN: 1,
-        FAB_MARCHE_PORTEE: 14,
-      },
-      section: "UPN 180",
-      // Limons de jour refusés sur un jour vif de cage (CK14), sans lien avec le coin du mur.
-      errors: ["structure.steel.error.sharpWellCage"],
+      section: "UPN 260",
+      // Limons de jour refusés sur un jour vif de cage (CK14) : M7 sans appui côté jour (K-Q16).
+      errors: [
+        "structure.steel.error.sharpWellCage",
+        "structure.steelProfile.error.noSectionPasses",
+      ],
+      jourless: [7],
     },
     {
       name: "demo-cage-flared-steel (pan coupé)",
       make: pick("demo-cage-flared-steel.blondel.json"),
-      k2cNewel: null,
-      k2c: {
-        ECHAPPEE_RECO_PRIVATIF: 1,
-        FAB_PROFILE_HAUTEUR: 1,
-        FAB_PROFILE_AILE_HORS_EMPRISE: 1,
-        FAB_ONGLET_RACCORD: 2,
-        FAB_SUPPORT_LONGUEUR_MIN: 1,
-      },
       // Section imposée par le jour en barre droite (repli K-Q12) : UPN 260 sans erreur.
       section: "UPN 260",
       errors: [],
+      jourless: [],
     },
     {
       name: "demo-cage-central-steel",
       make: pick("demo-cage-central-steel.blondel.json"),
-      k2cNewel: null,
-      k2c: {
-        ECHAPPEE_RECO_PRIVATIF: 1,
-        FAB_PROFILE_AILE_HORS_EMPRISE: 1,
-        FAB_ONGLET_RACCORD: 2,
-        FAB_SUPPORT_LONGUEUR_MIN: 3,
-        FAB_MARCHE_PORTEE: 5,
-      },
-      section: "UPN 180",
+      section: "UPN 220",
       errors: [],
+      jourless: [8],
+    },
+    {
+      name: "quarter-landing (palier d'angle)",
+      make: pick("quarter-landing.blondel.json"),
+      section: "UPN 200",
+      errors: [],
+      jourless: [],
     },
   ];
   for (const c of cases) {
-    it(`${c.name} : ${c.section}, erreurs attendues seulement, violations par règle ≤ K2c, une cornière au moins par marche au coin`, () => {
-      const p = c.make();
+    it(`${c.name} : ${c.section}, erreurs attendues seulement, aucune règle en violation de plus que la barre droite`, () => {
+      const p = c.make(NOSING);
       const x = run(p);
       expect(x.r.section!.name).toBe(c.section);
       expect(errorKeys(x)).toEqual(c.errors);
-      expect(reserve(x)).toBeGreaterThanOrEqual(0);
-      expect(expectCornerAngles(x, p)).toBeGreaterThan(0);
-      // Même poteau qu'en K2c : chaque règle au plus autant de violations (la règle ne fait que
-      // retirer des contraintes).
-      const atK2c = c.k2cNewel ? run(withNewels(p, c.k2cNewel, all)) : x;
-      const counts = violationCounts(atK2c);
-      for (const [rule, n] of Object.entries(counts)) {
-        expect(n, rule).toBeLessThanOrEqual(c.k2c[rule] ?? 0);
+      expect(x.r.cranked!.corner.jourless).toEqual(new Set(c.jourless));
+      const checked = expectCornerAngles(x, p);
+      if (c.errors.length === 0) expect(reserve(x)).toBeGreaterThanOrEqual(0);
+      const ref = run(c.make(CHORD));
+      expect(excessOverChord(ref, x)).toEqual({});
+      // Invariants du coin vérifiés sur au moins une marche quand la section est faisable.
+      if (!c.errors.includes("structure.steelProfile.error.noSectionPasses")) {
+        if (x.r.cornerAngles!.groups.length > 0) expect(checked).toBeGreaterThan(0);
       }
-      // Modèle livré (poteau du point fixe) : chaque règle au plus autant qu'en K2c, sauf les
-      // écarts `pending`, explicites et chiffrés.
-      for (const [rule, n] of Object.entries(violationCounts(x))) {
-        expect(n, rule).toBeLessThanOrEqual((c.k2c[rule] ?? 0) + (c.pending?.[rule] ?? 0));
-      }
-    });
+    }, 60_000);
   }
 
-  it("j5b (comparateur) : réserve d'âme ≥ 5 mm ; j3c et quart : UPN 180", () => {
-    expect(reserve(run(j5bComparator("nosing")))).toBeGreaterThanOrEqual(5);
-    expect(run(pick("j3c-acceptance-01-upn.blondel.json")()).r.section!.name).toBe("UPN 180");
-    expect(run(pick("quarter-left.blondel.json")()).r.section!.name).toBe("UPN 180");
+  it("j5b (comparateur) : poteau 125 / 43 vérifié, réserve d'âme ≥ 5 mm ; j3c : UPN 180", () => {
+    const p = j5bComparator("nosing");
+    const turns = p.stair.layout.kind === "cage" ? [] : p.stair.layout.turns;
+    expect(turns.map((t) => t.inner)).toContainEqual({ kind: "newel", size: 125, offset: 43 });
+    expect(reserve(run(p))).toBeGreaterThanOrEqual(5);
+    expect(run(pick("j3c-acceptance-01-upn.blondel.json")(NOSING)).r.section!.name).toBe("UPN 180");
   });
 
-  it("demi-tournant (préréglage) : deux cornières retirées (M5 sur LE2, M8 sur LE3), absentes des supports, développés, débit et assemblages", () => {
-    const x = run(choose(createProject("half-turn"), NOSING));
+  it("quart : M4 sans appui côté jour (K-Q16), deux cornières murales, UPN 220", () => {
+    const x = run(pick("quarter-left.blondel.json")(NOSING));
+    expect(x.r.section!.name).toBe("UPN 220");
+    expect(x.r.cranked!.corner.jourless).toEqual(new Set([4]));
+    expect(x.r.cornerAngles!.removed).toEqual([]);
+    const m4 = x.r.supports.filter((s) => s.placement.tread === 4);
+    expect(
+      m4.filter((s) => s.placement.face.side === "outer").map((s) => s.placement.face.ownerMark),
+    ).toEqual(["LE1", "LE2"]);
+    expect(m4.filter((s) => s.placement.face.side === "inner")).toEqual([]);
+  });
+
+  it("j4-demi au poteau 110 / 35 : M9 sans appui côté jour (K-Q16), deux cornières murales", () => {
+    const p = withNewels(
+      pick("j4-demi-tournant-acier-garde-corps.blondel.json")(NOSING),
+      { kind: "newel", size: 110, offset: 35 },
+      () => true,
+    );
+    const x = run(p);
+    expect(x.r.cranked!.corner.jourless).toEqual(new Set([9]));
+    expect(x.r.cornerAngles!.removed.map((r) => r.treadMark)).not.toContain("M9");
+    const m9 = x.r.supports.filter((s) => s.placement.tread === 9);
+    expect(
+      m9.filter((s) => s.placement.face.side === "outer").map((s) => s.placement.face.ownerMark),
+    ).toEqual(["LE2", "LE3"]);
+    expect(m9.filter((s) => s.placement.face.side === "inner")).toEqual([]);
+    expect(expectCornerAngles(x, p)).toBeGreaterThan(0);
+  });
+
+  it("paliers (K-Q18) : quarter-landing et demo-quarter-landing-ash, palier d'angle sans groupe, toutes ses cornières posées", () => {
+    for (const f of ["quarter-landing", "demo-quarter-landing-ash"]) {
+      const p = pick(`${f}.blondel.json`)(NOSING);
+      const x = run(p);
+      const landings = x.m.stepping.treads.filter((t) => t.kind === "landing").map((t) => t.number);
+      expect(landings.length, f).toBeGreaterThan(0);
+      for (const t of landings) {
+        expect(x.r.cornerAngles!.groups.some((g) => g.tread === t)).toBe(false);
+        expect(x.r.cornerAngles!.removed.some((r) => r.tread === t)).toBe(false);
+      }
+      // Palier d'angle (marche 3) : ses deux cornières murales posées.
+      const wall = x.r.supports.filter(
+        (s) => s.placement.tread === 3 && s.placement.face.side === "outer",
+      );
+      expect(wall.length, f).toBe(2);
+    }
+  });
+
+  // Écart à la lettre de K-Q16 (« j4-demi M9 sans appui côté jour », « UPN 220 attendu »), en
+  // attente d'arbitrage de l'utilisateur : au poteau retenu (130 / 45), M9 est portée côté jour
+  // par le poteau PT2, donc la règle du coin s'applique et retire M9 / LE3 (UPN 200) ; M9 n'est
+  // sans appui côté jour qu'au poteau 110 / 35 (test précédent), que le point fixe ne rend pas.
+  it("j4-demi (modèle livré, 130 / 45) : deux cornières retirées (M5 sur LE2, M9 sur LE3), absentes des supports, développés, débit et assemblages", () => {
+    const p = pick("j4-demi-tournant-acier-garde-corps.blondel.json")(NOSING);
+    const x = run(p);
     expect(x.r.section!.name).toBe("UPN 200");
     expect(x.r.output.errors ?? []).toEqual([]);
     const removed = x.r.cornerAngles!.removed;
     expect(removed.map((r) => [r.treadMark, r.faceMark])).toEqual([
       ["M5", "LE2"],
-      ["M8", "LE3"],
+      ["M9", "LE3"],
     ]);
     const notes = x.r.output.notes.filter(
       (n) => n.key === "structure.steelProfile.note.cornerAngleRemoved",
     );
-    expect(notes.map((n) => n.params?.["mark"])).toEqual(["M5", "M8"]);
+    expect(notes.map((n) => n.params?.["mark"])).toEqual(["M5", "M9"]);
     for (const r of removed) {
       // Ni support posé, ni trait de cornière sur les développés de la face.
       expect(
@@ -730,8 +817,8 @@ describe("steel-profile — cornière au coin du mur (K2e, K-Q4) en `nosing`", (
     expect(x.m.parts.filter((q) => q.category === "support").length).toBeGreaterThanOrEqual(
       x.r.supports.length,
     );
-    // FAB_MARCHE_PORTEE : marches 5 et 8 portées côté mur.
-    expect(expectCornerAngles(x, choose(createProject("half-turn"), NOSING))).toBe(2);
+    // FAB_MARCHE_PORTEE : marches 5 et 9 portées côté mur, et côté jour par les poteaux.
+    expect(expectCornerAngles(x, p)).toBe(2);
   });
 
   it("`chord` : aucun plan de coin, aucune remarque (sorties inchangées)", () => {
@@ -998,162 +1085,336 @@ describe("steel-profile — pièces du limon coudé (K2c, CK8 à CK10, A33)", ()
   });
 });
 
-describe("steel-profile — point fixe section ↔ poteau en `nosing`", () => {
+describe("steel-profile — point fixe section ↔ poteau en `nosing` (K-Q15, K-Q19, K-Q20)", () => {
   const params = { family: "UPN", stringerLine: "nosing" };
   const which = (): boolean => true;
   const flangeAt = (variant: Project, n: NewelInner): number | null =>
     profileFlangeWidth(buildModel(withNewels(variant, n, which), { memo: false }).parts);
+  const BUDGET = PROFILE_NEWEL_ITERATIONS + PROFILE_NEWEL_VERIFICATIONS;
+  /** Résolution instrumentée : poteaux des modèles `nosing`, nombre de modèles `chord`. */
+  const resolveCounted = (variant: Project) => {
+    const nosingNewels: NewelInner[] = [];
+    let chordModels = 0;
+    const r = resolveProfileNewel(variant, which, (p) => {
+      if ((p.stair.structure.params as Record<string, unknown>)["stringerLine"] === "nosing") {
+        const t = "turns" in p.stair.layout ? p.stair.layout.turns[0]?.inner : undefined;
+        if (t?.kind === "newel") nosingNewels.push(t);
+      } else chordModels++;
+      return buildModel(p, { memo: false });
+    });
+    return { r, nosingNewels, chordModels };
+  };
 
-  // Point fixe atteint : le poteau rendu est exact (aile + 2 × jeu de la section qu'il produit)
-  // et a été vérifié sur son propre modèle avant le plafond de `PROFILE_NEWEL_ITERATIONS`
-  // modèles (la boucle s'arrête sur `newelMatches`, pas sur le plafond). K2e (cornière au coin du
-  // mur, K-Q4) : quart 120 / 40 (UPN 220) → 110 / 35 (UPN 180), j4-demi exact 110 / 35 (UPN 180,
-  // sans poteau exact en K2b) ; le demi-tournant passe dans les cas sans point fixe ci-dessous.
+  // Point fixe atteint : le poteau rendu est exact (aile + 2 × jeu de la section qu'il produit),
+  // vérifié sur son propre modèle, sans violation ajoutée à la barre droite. K2e2 (K-Q16, K-Q18) :
+  // quart 120 / 40 (UPN 220, M4 sans appui côté jour) ; demi-tournant exact 130 / 45 (UPN 260 en
+  // erreur, comme la barre droite : M8 sans appui côté jour).
   const exact: [string, () => Project, number][] = [
     ["j3c", () => loadExample("j3c-acceptance-01-upn.blondel.json"), 2],
-    ["quart", () => loadExample("quarter-left.blondel.json"), 2],
+    ["quart", () => loadExample("quarter-left.blondel.json"), 3],
     ["U", () => loadExample("two-quarters-u.blondel.json"), 3],
-    ["j4-demi", () => loadExample("j4-demi-tournant-acier-garde-corps.blondel.json"), 2],
+    ["demi-tournant", () => loadExample("half-turn.blondel.json"), 2],
   ];
   for (const [name, make, expectedModels] of exact) {
-    it(`${name} : point fixe exact, atteint en ${expectedModels} modèles (≤ ${PROFILE_NEWEL_ITERATIONS})`, () => {
+    it(`${name} : point fixe exact et vérifié, atteint en ${expectedModels} modèles coudés`, () => {
       const variant = withParams(make(), params);
-      const built: NewelInner[] = [];
-      const r = resolveProfileNewel(variant, which, (p) => {
-        const t = "turns" in p.stair.layout ? p.stair.layout.turns[0]?.inner : undefined;
-        if (t?.kind === "newel") built.push(t);
-        return buildModel(p, { memo: false });
-      });
+      const { r, nosingNewels, chordModels } = resolveCounted(variant);
       expect(r).not.toBeNull();
-      expect(built).toHaveLength(expectedModels);
-      // Arrêt sur le poteau exact : le dernier modèle construit est celui du poteau rendu.
-      expect(newelMatches(built[built.length - 1]!, r!.newel)).toBe(true);
+      expect(r!.verified).toBe(true);
+      expect(nosingNewels).toHaveLength(expectedModels);
+      expect(chordModels).toBeLessThanOrEqual(BUDGET);
+      // Arrêt sur le poteau exact : le dernier modèle coudé construit est celui du poteau rendu.
+      expect(newelMatches(nosingNewels[nosingNewels.length - 1]!, r!.newel)).toBe(true);
       const b = flangeAt(variant, r!.newel);
       expect(b).toBe(r!.flangeWidth);
       expect(newelMatches(r!.newel, expectedNewel("steel-profile", params, b)!)).toBe(true);
     }, 60_000);
   }
 
-  // Sans poteau exact (K-Q15) : le balancement change avec le poteau, et aucun poteau attendu
-  // (aile + 2 × jeu) ne redonne l'aile qui l'attend. On garde le poteau rendu par
-  // `resolveProfileNewel`, qui reçoit sa section (`profileNewelFits`). Mesures K2e (poteaux posés
-  // un à un sur le projet, ledger K2e) : j5b 100 → UPN 180, 110 / 35 et 115 / 38 → UPN 220,
-  // 120 / 40 → UPN 240, 125 / 43 et 130 / 45 → UPN 200 (rendu 125 / 43, dernier poteau attendu
-  // après le plafond de modèles) ; demi-tournant 100 à 115 / 38 → UPN 260, 120 / 40 → UPN 180,
-  // 125 / 43 et 130 / 45 → UPN 200 (rendu 130 / 45, vérifié).
-  // Troisième champ : poteau rendu vérifié sur son propre modèle. j5b : non (plafond de
-  // `PROFILE_NEWEL_ITERATIONS` modèles atteint, poteau rendu calculé sur le dernier modèle) ;
-  // écart à « poteau vérifié » de K-Q15 en attente de la question 2 du ledger K2e.
-  const noFixedPoint: [string, () => Project, boolean][] = [
-    ["j5b (comparateur)", () => j5bReference("chord"), false],
-    ["demi-tournant", () => loadExample("half-turn.blondel.json"), true],
+  // Sans poteau exact atteint : poteau vérifié qui reçoit sa section (K-Q15), sans violation
+  // ajoutée (K-Q19). j5b : 100 → 110 / 35 → 120 / 40 (non vérifiés, plafond de trois modèles),
+  // puis le modèle de vérification de K-Q20 retient 125 / 43 (UPN 200). j4-demi : 130 / 45
+  // retenu non exact (UPN 200) ; K-Q20 essaie 115 / 38 (UPN 260, ne reçoit pas l'aile) et garde
+  // 130 / 45.
+  const noFixedPoint: [string, () => Project, NewelInner][] = [
+    ["j5b (comparateur)", () => j5bReference("chord"), { kind: "newel", size: 125, offset: 43 }],
+    [
+      "j4-demi",
+      () => loadExample("j4-demi-tournant-acier-garde-corps.blondel.json"),
+      { kind: "newel", size: 130, offset: 45 },
+    ],
   ];
-  for (const [name, make, verified] of noFixedPoint) {
-    it(`${name} : pas de point fixe ; poteau rendu qui reçoit sa section (UPN ≤ 200, sans erreur), en ≤ ${PROFILE_NEWEL_ITERATIONS} modèles`, () => {
+  for (const [name, make, want] of noFixedPoint) {
+    it(`${name} : poteau vérifié rendu (${want.size} / ${want.offset}), UPN ≤ 200 sans erreur ni violation ajoutée, en ≤ ${BUDGET} modèles coudés`, () => {
       const variant = withParams(make(), params);
-      let models = 0;
-      const r = resolveProfileNewel(variant, which, (p) => {
-        models++;
-        return buildModel(p, { memo: false });
-      })!;
+      const { r, nosingNewels, chordModels } = resolveCounted(variant);
       expect(r).not.toBeNull();
-      expect(models).toBeLessThanOrEqual(PROFILE_NEWEL_ITERATIONS);
-      const b1 = flangeAt(variant, r.newel)!;
-      if (verified) expect(b1).toBe(r.flangeWidth);
-      expect(profileNewelFits(r.newel, b1, SteelProfileParamsSchema.parse(params).newel)).toBe(
+      expect(r!.newel).toEqual(want);
+      expect(r!.verified).toBe(true);
+      expect(nosingNewels.length).toBeLessThanOrEqual(BUDGET);
+      expect(chordModels).toBeLessThanOrEqual(BUDGET);
+      const b1 = flangeAt(variant, r!.newel)!;
+      expect(b1).toBe(r!.flangeWidth);
+      expect(profileNewelFits(r!.newel, b1, SteelProfileParamsSchema.parse(params).newel)).toBe(
         true,
       );
-      expect(newelMatches(r.newel, expectedNewel("steel-profile", params, b1)!)).toBe(false);
-      const atReturned = run(withNewels(variant, r.newel, which));
+      const atReturned = run(withNewels(variant, r!.newel, which));
       expect(atReturned.r.section!.h).toBeLessThanOrEqual(200);
       expect(errorKeys(atReturned)).toEqual([]);
       expect(reserve(atReturned)).toBeGreaterThanOrEqual(5);
-      // Aucun poteau exact : pour chaque aile de la famille, le poteau qu'elle attend donne une
-      // autre aile.
-      for (const b of [...new Set(sectionsOf("UPN").map((s) => s.b))].filter((x) => x >= 60)) {
-        const n = expectedNewel("steel-profile", params, b)!;
-        expect(flangeAt(variant, n), `aile ${b}`).not.toBe(b);
-      }
     }, 120_000);
   }
-});
 
-describe("steel-profile — propriété sur escaliers générés (limon coudé)", () => {
-  it("ne lève pas, section ≤ barre droite, aucune erreur nouvelle, faces coudées, repliées ou à une seule pente, cornière au coin du mur gardée (K2e)", () => {
+  it("j4-demi : le poteau 110 / 35 n'est pas vérifié (UPN 260, aile 90, `newelSatisfies` faux : rejet du point fixe, pas de K-Q19), jamais rendu ; il ajouterait G_COLLET_MONOTONE et FAB_SUPPORT_LONGUEUR_MIN à la barre droite", () => {
+    const raw = loadExample("j4-demi-tournant-acier-garde-corps.blondel.json");
+    const variant = withParams(raw, params);
+    const n110: NewelInner = { kind: "newel", size: 110, offset: 35 };
+    // Montée de section due à K-Q16 (M9 sans appui côté jour à ce poteau) : aile 90.
+    expect(flangeAt(variant, n110)).toBe(90);
+    expect(newelSatisfies(n110, "steel-profile", params, 90)).toBe(false);
+    const ref = run(choose(raw, { family: "UPN" }));
+    const at110 = run(withNewels(variant, n110, which));
+    expect(excessOverChord(ref, at110)).toEqual({
+      G_COLLET_MONOTONE: 1,
+      FAB_SUPPORT_LONGUEUR_MIN: 1,
+    });
+    expect(resolveCounted(variant).r!.newel).not.toEqual(n110);
+  }, 60_000);
+
+  // K-Q19 sur modèle réel : exemples d'acceptation en IPE. Le point fixe coudé passe par 140 / 50
+  // (IPE 180, vérifié), qui ajoute FAB_SUPPORT_LONGUEUR_MIN et FAB_SUPPORT_DEBORD à la base
+  // (maximum de la barre droite à 190 / 75 et du coudé à 190 / 75) : écarté ; le poteau de la
+  // référence, 190 / 75, jugé sur le modèle coudé de la base, est retenu (IPE 200).
+  const ipeAcceptance = [
+    "acceptance-01-quart-tournant",
+    "j3a-acceptance-01-bois",
+    "j3b-acceptance-01-acier-plat",
+    "j3b-acceptance-01-tole-pliee",
+    "j3c-acceptance-01-upn",
+    "j4-acceptance-01-garde-corps",
+  ];
+  for (const f of ipeAcceptance) {
+    it(`${f} en IPE : 140 / 50 écarté (K-Q19), poteau de la barre droite 190 / 75 retenu, aucune règle en violation de plus que la barre droite`, () => {
+      const raw = loadExample(`${f}.blondel.json`);
+      const ipe = { family: "IPE", stringerLine: "nosing" };
+      const variant = withParams(raw, ipe);
+      const { r, nosingNewels } = resolveCounted(variant);
+      expect(nosingNewels).toContainEqual({ kind: "newel", size: 140, offset: 50 });
+      expect(r).toEqual({
+        newel: { kind: "newel", size: 190, offset: 75 },
+        flangeWidth: 100,
+        verified: true,
+      });
+      const chosen = applyStructureChoice(raw, "steel-profile", ipe);
+      expect(chosen.notes.map((n) => n.key)).not.toContain(
+        "project.structureChoice.newelAddsViolations",
+      );
+      const nosing = run(chosen.project);
+      const chord = run(choose(raw, { family: "IPE" }));
+      expect(nosing.r.section!.name).toBe("IPE 200");
+      expect(excessOverChord(chord, nosing)).toEqual({});
+    }, 60_000);
+  }
+
+  it("aucun poteau retenu (escalier généré, IPE) : le moins chargé est posé et signalé par une remarque", () => {
+    // Barre droite : poteau élargi refusé par le tracé, poteau par défaut (FAB_POTEAU_RECEPTION) ;
+    // en coudé, les poteaux élargis acceptés par le tracé réduisent le collet (G_COLLET_MIN).
+    const project = fc.sample(stairArb(["M1", "M3"], SAME_SIDE_TYPOLOGIES), {
+      numRuns: 1,
+      seed: 777,
+    })[0]!.project;
+    const ipe = { family: "IPE", stringerLine: "nosing" };
+    const chosen = applyStructureChoice(project, "steel-profile", ipe);
+    const note = chosen.notes.find((n) => n.key === "project.structureChoice.newelAddsViolations");
+    expect(note).toBeDefined();
+    expect(note!.params?.["rules"]).toBe("FAB_MARCHE_PORTEE, G_COLLET_MIN");
+    const r = resolveProfileNewel(
+      withParams(project, ipe),
+      (t) => t.inner.kind === "sharp" || t.inner.kind === "newel",
+    )!;
+    expect(r.added).toEqual(
+      new Map([
+        ["G_COLLET_MIN", 1],
+        ["FAB_MARCHE_PORTEE", 1],
+      ]),
+    );
+  }, 60_000);
+
+  it("propriété (UPN, escaliers générés) : applyStructureChoice en `nosing` ne lève pas ; aucune règle en violation de plus que la barre droite, sauf poteau signalé ; K-Q19 écarte des poteaux (compteur)", () => {
     let evaluated = 0;
-    let bent = 0;
-    let corners = 0;
+    let acted = 0;
+    const which = (t: { inner: { kind: string } }): boolean =>
+      t.inner.kind === "sharp" || t.inner.kind === "newel";
+    // Modèle sans contrôle de conception : K-Q19 n'écarte rien (référence du compteur).
+    const blind = (p: Project): Model => {
+      const m = buildModel(p, { memo: false });
+      return { ...m, compliance: { ...m.compliance, results: [] } };
+    };
     fc.assert(
-      fc.property(stairArb(undefined, ALL_TYPOLOGIES), fc.boolean(), ({ project }, bolted) => {
-        const withNewelsP: Project = {
-          ...project,
-          stair: {
-            ...project.stair,
-            layout: {
-              ...project.stair.layout,
-              turns: project.stair.layout.turns.map((t) => ({
-                ...t,
-                inner: { kind: "newel" as const, size: 120 },
-              })),
-            },
-          },
-        };
-        let p: Project;
+      fc.property(stairArb(undefined, ALL_TYPOLOGIES), ({ project }) => {
+        if (project.stair.layout.kind === "cage" || project.stair.layout.turns.length === 0) return;
+        let nosing: Run;
         let chord: Run;
+        let flagged: boolean;
         try {
-          p = choose(withNewelsP, {
-            family: "UPN",
-            ...(bolted ? { supports: { fixing: "bolted", bolts: 2 } } : {}),
-          });
-          chord = run(withLine(p, "chord"));
+          const chosen = applyStructureChoice(project, "steel-profile", params);
+          flagged = chosen.notes.some(
+            (n) => n.key === "project.structureChoice.newelAddsViolations",
+          );
+          nosing = run(chosen.project);
+          chord = run(choose(project, { family: "UPN" }));
         } catch (e) {
           // Découpage en faces impossible (tournants opposés S / Z…) : hors du limon coudé.
           if (e instanceof StructureError) return;
           throw e;
         }
-        const nosingProject = withLine(p, "nosing");
-        expect(() => buildModel(nosingProject, { memo: false })).not.toThrow();
-        const nosing = run(nosingProject);
         evaluated++;
-        expect(mass(nosing)).toBeLessThanOrEqual(mass(chord));
-        const known = new Set(errorKeys(chord));
-        expect(errorKeys(nosing).filter((k) => !known.has(k))).toEqual([]);
-        expect(newViolations(chord, nosing)).toEqual([]);
-        const plan = nosing.r.cranked!;
-        for (const s of nosing.r.stringers) {
-          const f = plan.faces.get(s.face.id)!;
-          if (s.bearing) {
-            bent++;
-            expect(f.mode).toBe("nosing");
-            expect(s.part.solid.kind).toBe("sweep");
-          } else {
-            expect(f.mode).toBe("chord");
-            // Repli signalé, ou face à une seule pente (CK7) sans remarque.
-            if (!f.fallback) expect(s.part.solid.kind).toBe("extrusion");
-            expect(s.crankedFallback).toEqual(f.fallback);
-          }
-        }
-        const viol = (x: Run): number =>
-          x.m.compliance.results.filter(
-            (c) => c.ruleId === "FAB_SUPPORT_DANS_LIMON" && c.status === "violation",
-          ).length;
-        expect(viol(nosing)).toBe(0);
-        expect(checkSolids(nosing.m.parts)).toEqual([]);
-        // I11 (K2c) : composantes rattachées, aucun double compte, masses à ±1 %.
-        expectCrankedParts(nosing, resolveWorkshopProfile(p.workshop).metal.density, nosingProject);
-        const ids = new Set(nosing.m.parts.map((q) => q.id));
-        for (const q of nosing.m.parts) {
-          if (q.componentOf !== undefined) expect(ids.has(q.componentOf)).toBe(true);
-        }
-        // K2e (K-Q4) : au moins une cornière par marche au coin du mur, retirées facultatives
-        // et signalées (`expectCornerAngles`).
-        corners += expectCornerAngles(nosing, nosingProject);
+        if (!flagged) expect(excessOverChord(chord, nosing)).toEqual({});
+        const variant = withParams(project, params);
+        const a = resolveProfileNewel(variant, which);
+        const b = resolveProfileNewel(variant, which, blind);
+        if (a && b && !newelMatches(a.newel, b.newel)) acted++;
       }),
+      { numRuns: 60, seed: 42 },
+    );
+    expect(evaluated).toBeGreaterThan(30);
+    expect(acted).toBeGreaterThan(0);
+  }, 300_000);
+});
+
+/**
+ * Escaliers à paliers en volées (quart ou deux quarts, palier d'angle `landing`), pour K-Q18 :
+ * H ∈ [2 400 ; 3 000], E ∈ [800 ; 1 000], volées de 1 300 à 3 900 mm ; tracé refusé : écarté.
+ */
+const landingArb = fc
+  .record({
+    H: fc.integer({ min: 2400, max: 3000 }),
+    E: fc.integer({ min: 800, max: 1000 }),
+    legs: fc.oneof(
+      fc.tuple(fc.integer({ min: 1300, max: 2600 }), fc.integer({ min: 2600, max: 3900 })),
+      fc.tuple(
+        fc.integer({ min: 1300, max: 2200 }),
+        fc.integer({ min: 1000, max: 1800 }),
+        fc.integer({ min: 1300, max: 2600 }),
+      ),
+    ),
+    direction: fc.constantFrom("left" as const, "right" as const),
+  })
+  .map((r) => ({
+    project: makeSteppingProject({
+      width: r.E,
+      legs: [...r.legs],
+      direction: r.direction,
+      mode: "landing",
+      floorToFloor: r.H,
+    }),
+  }));
+
+describe("steel-profile — propriété sur escaliers générés (limon coudé)", () => {
+  it("ne lève pas, section ≤ barre droite, aucune erreur nouvelle, faces coudées, repliées ou à une seule pente, cornière au coin du mur gardée (K2e), marche sans appui côté jour et palier gardant toutes leurs cornières (K2e2)", () => {
+    let evaluated = 0;
+    let bent = 0;
+    let corners = 0;
+    let jourless = 0;
+    let landings = 0;
+    fc.assert(
+      fc.property(
+        fc.oneof(stairArb(undefined, ALL_TYPOLOGIES), landingArb),
+        fc.boolean(),
+        ({ project }, bolted) => {
+          const withNewelsP: Project = {
+            ...project,
+            stair: {
+              ...project.stair,
+              layout: {
+                ...project.stair.layout,
+                turns: project.stair.layout.turns.map((t) => ({
+                  ...t,
+                  inner: { kind: "newel" as const, size: 120 },
+                })),
+              },
+            },
+          };
+          let p: Project;
+          let chord: Run;
+          try {
+            p = choose(withNewelsP, {
+              family: "UPN",
+              ...(bolted ? { supports: { fixing: "bolted", bolts: 2 } } : {}),
+            });
+            // Tracé refusé (palier généré trop court…) : hors du limon coudé.
+            if (!buildModel(p, { memo: false }).layout) return;
+            chord = run(withLine(p, "chord"));
+          } catch (e) {
+            // Découpage en faces impossible (tournants opposés S / Z…) : hors du limon coudé.
+            if (e instanceof StructureError) return;
+            throw e;
+          }
+          const nosingProject = withLine(p, "nosing");
+          expect(() => buildModel(nosingProject, { memo: false })).not.toThrow();
+          const nosing = run(nosingProject);
+          evaluated++;
+          expect(mass(nosing)).toBeLessThanOrEqual(mass(chord));
+          const known = new Set(errorKeys(chord));
+          expect(errorKeys(nosing).filter((k) => !known.has(k))).toEqual([]);
+          // Aucune règle nouvelle en violation ; FAB_ONGLET_RACCORD toléré aux coins d'un repli
+          // `heavier` (K-Q21 : onglet ouvert accepté, cas arb12 de la relecture K2e).
+          const excess = excessOverChord(chord, nosing);
+          expect(newViolations(chord, nosing).filter((r) => r in excess)).toEqual([]);
+          const plan = nosing.r.cranked!;
+          for (const s of nosing.r.stringers) {
+            const f = plan.faces.get(s.face.id)!;
+            if (s.bearing) {
+              bent++;
+              expect(f.mode).toBe("nosing");
+              expect(s.part.solid.kind).toBe("sweep");
+            } else {
+              expect(f.mode).toBe("chord");
+              // Repli signalé, ou face à une seule pente (CK7) sans remarque.
+              if (!f.fallback) expect(s.part.solid.kind).toBe("extrusion");
+              expect(s.crankedFallback).toEqual(f.fallback);
+            }
+          }
+          const viol = (x: Run): number =>
+            x.m.compliance.results.filter(
+              (c) => c.ruleId === "FAB_SUPPORT_DANS_LIMON" && c.status === "violation",
+            ).length;
+          expect(viol(nosing)).toBe(0);
+          expect(checkSolids(nosing.m.parts)).toEqual([]);
+          // I11 (K2c) : composantes rattachées, aucun double compte, masses à ±1 %.
+          expectCrankedParts(
+            nosing,
+            resolveWorkshopProfile(p.workshop).metal.density,
+            nosingProject,
+          );
+          const ids = new Set(nosing.m.parts.map((q) => q.id));
+          for (const q of nosing.m.parts) {
+            if (q.componentOf !== undefined) expect(ids.has(q.componentOf)).toBe(true);
+          }
+          // K2e (K-Q4) : au moins une cornière par marche au coin du mur, retirées facultatives
+          // et signalées ; K2e2 (K-Q16, K-Q18) : marche sans appui côté jour et palier sans
+          // retrait ni facultative (`expectCornerAngles`).
+          corners += expectCornerAngles(nosing, nosingProject);
+          jourless += plan?.corner.jourless.size ?? 0;
+          const landingTreads = nosing.m.stepping.treads.filter((t) => t.kind === "landing");
+          landings += landingTreads.length;
+          // Aucune remarque de retrait pour une marche sans appui côté jour ou un palier.
+          const kept = new Set([
+            ...(plan?.corner.jourless ?? []),
+            ...landingTreads.map((t) => t.number),
+          ]);
+          expect((nosing.r.cornerAngles?.removed ?? []).filter((r) => kept.has(r.tread))).toEqual(
+            [],
+          );
+        },
+      ),
       { numRuns: RUNS },
     );
     expect(evaluated).toBeGreaterThan(RUNS / 2);
     expect(bent).toBeGreaterThan(0);
     expect(corners).toBeGreaterThan(0);
+    expect(jourless).toBeGreaterThan(0);
+    expect(landings).toBeGreaterThan(0);
   }, 300_000);
 });
 

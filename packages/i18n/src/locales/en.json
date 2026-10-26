@@ -1159,6 +1159,7 @@
   "project.structureChoice.cageJourConvertible.one": "“{kind}” structure set: a corner newel post is not yet possible on a free layout, and the sharp well of junction {junctions} is followed by no straight string: its outer strings are not generated. Choose a chamfered well, or convert the layout back to flights (it is written exactly as flights) to add a corner newel post.",
   "project.structureChoice.cageJourConvertible.other": "“{kind}” structure set: a corner newel post is not yet possible on a free layout, and the sharp wells of junctions {junctions} are followed by no straight string: their outer strings are not generated. Choose a chamfered well, or convert the layout back to flights (it is written exactly as flights) to add a corner newel post.",
   "project.structureChoice.change": "Turn {turn}: {was} → {newel} ({why}). This change can be undone.",
+  "project.structureChoice.newelAddsViolations": "Newel post {newel}: no newel post tried for the cranked string avoids adding rule violations compared with the straight bar of the same project ({rules}); the one adding the fewest is kept, to be checked (decision K-Q19).",
   "project.structureChoice.refused": "{turns}: {newel} impossible in this layout (flight too short or walking line too close to the well)",
   "project.structureChoice.refusedDefaultNewel": "{refused}; default newel post fitted instead (outer string received without the clearance of decision A13: see FAB_POTEAU_RECEPTION).",
   "project.structureChoice.refusedKept": "{refused}; well kept.",

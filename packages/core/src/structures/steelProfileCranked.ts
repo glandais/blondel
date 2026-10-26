@@ -5,9 +5,10 @@
  * le noyau, plan par section essayée avec **repli par face sur la barre droite** (K-Q12, K-Q13),
  * contour de l'âme, tronçons (composantes, CK8), cordon de jarret (CK10), cotes de gabarit
  * (CK17), chemin du balayage (solide), écarts d'onglet au bout d'aile (CK13), cornière au coin
- * du mur (K-Q4, sous-lot K2e), remarques. Une cornière à cheval sur un jarret reste en place
- * (K-Q10 révisée) : son traçage est coupé au joint et ses perçages trop près de la coupe sont
- * reportés après soudage (plugin).
+ * du mur (K-Q4, sous-lot K2e ; décisions K-Q16 à K-Q18 en K2e2 : marche sans appui côté jour et
+ * paliers exclus du retrait, coin du mur seulement), remarques. Une cornière à cheval sur un
+ * jarret reste en place (K-Q10 révisée) : son traçage est coupé au joint et ses perçages trop
+ * près de la coupe sont reportés après soudage (plugin).
  * Aucun texte en dur : les remarques sont des `Message` à clés littérales.
  *
  * Lu seulement quand le paramètre `stringerLine` vaut `nosing` (CK16) : en `chord`, le plugin
@@ -232,10 +233,21 @@ export type CornerCandidate = WebSupport & {
   readonly key: string;
 };
 
+/**
+ * Support candidat côté jour d'une marche au coin du mur (limon de jour ou face de poteau) :
+ * sert seulement à juger si la marche est appuyée côté jour (K-Q16, sous-lot K2e2).
+ */
+export type CornerJourCandidate = CornerCandidate & {
+  /** Support sur une face de poteau (posé dès que sa zone atteint `minLength`, sans rognage). */
+  readonly onPost: boolean;
+};
+
 /** Marche au coin du mur : ses supports candidats côté mur, sur au moins deux limons. */
 export interface CornerGroup {
   readonly tread: number;
   readonly candidates: readonly CornerCandidate[];
+  /** Supports candidats côté jour de la marche (limons et poteaux), pour K-Q16. */
+  readonly jour: readonly CornerJourCandidate[];
 }
 
 /** Tolérance de parallélisme de deux directions unitaires (sinus de l'angle, tolérance numérique). */
@@ -251,13 +263,36 @@ export const cornerSupportKey = (tread: number, faceKey: string): string => `${t
  * les faces de poteau non plus. Avec `dirOf` (direction en plan de chaque limon), deux limons
  * colinéaires (palier entre deux limons alignés, pas de coin) ne forment pas un groupe : il faut
  * deux directions non parallèles. Groupes triés par marche, candidats dans l'ordre reçu.
+ *
+ * `excludeTread` (K-Q18, sous-lot K2e2) : marches exclues de la règle du coin (les paliers,
+ * palier d'angle compris) ; elles ne forment pas de groupe, donc toutes leurs cornières restent
+ * exigées, comme en K2b. Chaque groupe porte aussi les supports candidats côté jour de sa marche
+ * (`jour`, limons de jour et faces de poteau, `side` = `inner`), lus par `crankedSectionPlan`
+ * pour K-Q16 ; ils ne sont jamais rendus facultatifs (K-Q17 : coin du mur seulement).
  */
 export function cornerSupportGroups(
   cands: readonly CrankedSupport[],
   dirOf?: (faceId: string) => Vec2 | undefined,
+  excludeTread?: (tread: number) => boolean,
 ): CornerGroup[] {
   const byTread = new Map<number, CornerCandidate[]>();
+  const jourOf = new Map<number, CornerJourCandidate[]>();
   for (const c of cands) {
+    if (excludeTread?.(c.tread)) continue;
+    if (c.face.side === "inner" && (c.face.kind === "stringer" || c.face.kind === "post")) {
+      const list = jourOf.get(c.tread) ?? [];
+      list.push({
+        u0: c.u0,
+        u1: c.u1,
+        zTop: c.zTop,
+        tread: c.tread,
+        faceId: c.face.owner,
+        key: cornerSupportKey(c.tread, c.face.key),
+        onPost: c.face.kind === "post",
+      });
+      jourOf.set(c.tread, list);
+      continue;
+    }
     if (c.face.kind !== "stringer" || c.face.side !== "outer") continue;
     const list = byTread.get(c.tread) ?? [];
     list.push({
@@ -281,7 +316,7 @@ export function cornerSupportGroups(
       );
     })
     .sort((a, b) => a[0] - b[0])
-    .map(([tread, candidates]) => ({ tread, candidates }));
+    .map(([tread, candidates]) => ({ tread, candidates, jour: jourOf.get(tread) ?? [] }));
 }
 
 /** Tolérance des départages de la cornière exigée (mm, précision de la dichotomie du besoin). */
@@ -324,6 +359,11 @@ export interface CrankedCornerPlan {
   readonly optional: ReadonlySet<string>;
   /** Nombre de groupes revenus à « tout exigé » par le garde-fou (comportement de K2b). */
   readonly reverted: number;
+  /**
+   * Marches des groupes **sans appui côté jour** dans la section (K-Q16, K2e2) : toutes leurs
+   * cornières murales exigées, aucune facultative.
+   */
+  readonly jourless: ReadonlySet<number>;
 }
 
 export interface CrankedPlanInput<P extends CrankedPre, S extends CrankedSupport> {
@@ -367,6 +407,14 @@ interface SupportEntry {
  *    la ligne d'appui du mode provisoire de sa face (`Infinity` si sa zone brute ou sa partie
  *    logée à hauteur infinie est sous `minLength` : sans cela, une cornière perdue, de besoin
  *    nul, serait choisie), puis plus longue zone brute, puis rang de face ;
+ * 2 bis. marche sans appui côté jour (K-Q16, sous-lot K2e2) : un groupe dont aucun support
+ *    candidat côté jour n'est logeable dans la section (poteau : zone ≥ `minLength`, règle de pose
+ *    des supports sur poteau ; limon de jour : besoin d'âme ≤ h dans le mode provisoire de sa face,
+ *    même critère que le garde-fou ; face absente ou support perdu : non logeable) garde toutes
+ *    ses cornières murales, toutes exigées dans le besoin d'âme (la section peut monter) ; il
+ *    n'entre ni dans le choix de l'exigée ni dans le garde-fou. Le mode d'une face de jour ne
+ *    dépend d'aucune cornière du coin (toutes côté mur) : le jugement de la passe provisoire vaut
+ *    pour toutes les passes ;
  * 3. décision finale avec les cornières hors coin et les exigées ; les facultatives ne comptent
  *    ni dans le besoin de leur face, ni dans ses marches perdues, ni dans le besoin de la barre
  *    droite du repli (K-Q12, K-Q14) ;
@@ -374,8 +422,9 @@ interface SupportEntry {
  *    de sa face (besoin supérieur à h, ou perdue : face basculée en barre droite, section imposée
  *    ou trop basse), redevient « tout exigé », comme en K2b, et les faces sont redécidées ; une
  *    section faisable (besoin de chaque face ≤ h) n'en bascule aucun ; dans une section
- *    insuffisante (une face au-delà de h), tous les groupes basculent : plan de K2b ; l'ensemble des groupes basculés ne fait que croître, donc au plus
- *    (nombre de groupes + 3) passes, sans itération instable.
+ *    insuffisante (une face au-delà de h), tous les groupes basculent (ceux sans appui côté jour
+ *    sont déjà « tout exigé ») : plan de K2b ; l'ensemble des groupes basculés ne fait que
+ *    croître, donc au plus (nombre de groupes + 3) passes, sans itération instable.
  * `need`, `chordNeed` et `bentNeed` de chaque face sont ceux de la liste retenue (sans les
  * facultatives). Sans groupe, le plan est exactement celui de K2b.
  */
@@ -445,7 +494,13 @@ export function crankedSectionPlan<P extends CrankedPre, S extends CrankedSuppor
     return {
       faces: decideAll(() => true),
       result,
-      corner: { groups, required: new Set(), optional: new Set(), reverted: 0 },
+      corner: {
+        groups,
+        required: new Set(),
+        optional: new Set(),
+        reverted: 0,
+        jourless: new Set(),
+      },
     };
   }
   const cornerKeys = new Set(groups.flatMap((g) => g.candidates.map((c) => c.key)));
@@ -461,8 +516,14 @@ export function crankedSectionPlan<P extends CrankedPre, S extends CrankedSuppor
   };
   // Passe 1 : modes provisoires sans aucune cornière du coin ; passe 2 : exigée par groupe.
   const provisional = decideAll((key) => !cornerKeys.has(key));
+  // K-Q16 : appui côté jour logeable dans la section (jugé sur les modes provisoires).
+  const jourBears = (j: CornerJourCandidate): boolean =>
+    j.onPost
+      ? j.u1 - j.u0 >= minLen - 1e-9
+      : needIn(provisional.get(j.faceId), entryOf(j)) <= input.section.h + 1e-9;
+  const jourlessIdx = new Set(groups.flatMap((g, gi) => (g.jour.some(jourBears) ? [] : [gi])));
   const chosen = chooseCornerRequired(
-    groups,
+    groups.filter((_, gi) => !jourlessIdx.has(gi)),
     (c) => needIn(provisional.get(c.faceId), entryOf(c)),
     faceRank,
   );
@@ -470,6 +531,7 @@ export function crankedSectionPlan<P extends CrankedPre, S extends CrankedSuppor
   const reverted = new Set<number>();
   const requiredNow = (): Set<string> => {
     const out = new Set(chosen);
+    for (const gi of jourlessIdx) for (const c of groups[gi]!.candidates) out.add(c.key);
     for (const gi of reverted) for (const c of groups[gi]!.candidates) out.add(c.key);
     return out;
   };
@@ -478,7 +540,7 @@ export function crankedSectionPlan<P extends CrankedPre, S extends CrankedSuppor
   for (;;) {
     let changed = false;
     groups.forEach((g, gi) => {
-      if (reverted.has(gi)) return;
+      if (reverted.has(gi) || jourlessIdx.has(gi)) return;
       const req = g.candidates.find((c) => chosen.has(c.key));
       // Exigée logeable dans la section elle-même (et pas seulement à hauteur infinie) : une
       // section imposée ou trop basse ne doit pas retirer l'appui mural que K2b gardait.
@@ -494,12 +556,19 @@ export function crankedSectionPlan<P extends CrankedPre, S extends CrankedSuppor
   // faisable) : plan de K2b pour tous les groupes. Retirer une facultative y changerait le mode
   // d'une face (barre droite → coudé) et ferait perdre des marches hors du coin.
   if ([...faces.values()].some((f) => f.need > input.section.h + 1e-9)) {
-    groups.forEach((_, gi) => reverted.add(gi));
+    groups.forEach((_, gi) => {
+      if (!jourlessIdx.has(gi)) reverted.add(gi);
+    });
     required = requiredNow();
     faces = decideAll(() => true);
   }
   const optional = new Set([...cornerKeys].filter((k) => !required.has(k)));
-  return { faces, result, corner: { groups, required, optional, reverted: reverted.size } };
+  const jourless = new Set([...jourlessIdx].map((gi) => groups[gi]!.tread));
+  return {
+    faces,
+    result,
+    corner: { groups, required, optional, reverted: reverted.size, jourless },
+  };
 }
 
 // ------------------------------------------------------------------------------ tronçons

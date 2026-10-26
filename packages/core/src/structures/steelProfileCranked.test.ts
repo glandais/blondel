@@ -545,12 +545,27 @@ function sup(face: string, tread: number, u0: number, u1: number, zTop: number):
   return { u0, u1, zTop, tread, face: { key: face, owner: face, kind: "stringer", side: "outer" } };
 }
 
+/** Support synthétique côté jour sur une face de poteau `pt1`, zone [0 ; len]. */
+function postSup(tread: number, len: number, zTop: number): CrankedSupport {
+  return {
+    u0: 0,
+    u1: len,
+    zTop,
+    tread,
+    face: { key: `pt1-${tread}`, owner: "pt1", kind: "post", side: "inner" },
+  };
+}
+
+/** Dessus de la marche 6 du quart synthétique (σ 1 350 → 1 600). */
+const Z6 = 175 * 7 - 40;
+
 /**
  * Supports d'une marche par giron du quart synthétique (nez tous les 250 mm en σ, dessous de
  * marche 40 mm sous le nez suivant), coupés au coin σ = 1 500 : la marche 6 (σ 1 350 → 1 600)
- * a un candidat sur le1 [1 350 ; 1 500] et un sur le2 [0 ; 100].
+ * a un candidat sur le1 [1 350 ; 1 500] et un sur le2 [0 ; 100], et un appui côté jour sur un
+ * poteau (80 mm ≥ `minLength`, K-Q16) ; `jour` = false : sans cet appui.
  */
-function quarterSupports(): CrankedSupport[] {
+function quarterSupports(jour = true): CrankedSupport[] {
   const out: CrankedSupport[] = [];
   for (let k = 0; k <= 10; k++) {
     const s0 = 100 + 250 * k;
@@ -563,8 +578,33 @@ function quarterSupports(): CrankedSupport[] {
       out.push(sup("le2", k + 1, 0, s1 - 1500, zTop));
     }
   }
+  if (jour) out.push(postSup(6, 80, Z6));
   return out;
 }
+
+/**
+ * Quart synthétique augmenté d'un limon de jour droit `li1` (côté jour, une seule pente, mêmes
+ * nez : barre droite sans remarque, CK7), pour juger l'appui côté jour d'un limon (K-Q16).
+ */
+function quarterWithJour() {
+  const q = quarter();
+  const li = {
+    face: { ...faceOf("li1", 0, 1500, "floor", "arrival", "x"), side: "inner" as const },
+    uLo: 50,
+    uHi: 1500,
+    line: { u0: 100, z0: 175, slope: 0.7 },
+  };
+  return { ...q, pres: [...q.pres, li] };
+}
+
+/** Support côté jour sur `li1` sous la marche 6, dessus `zTop`. */
+const jourSup = (zTop: number): CrankedSupport => ({
+  u0: 1350,
+  u1: 1500,
+  zTop,
+  tread: 6,
+  face: { key: "li1", owner: "li1", kind: "stringer", side: "inner" },
+});
 
 type QuarterPre = ReturnType<typeof quarter>["pres"][number];
 
@@ -579,7 +619,7 @@ const chordUpper = (p: QuarterPre): Vec2[] => {
 
 /** Plan du quart pour une section, des supports et des groupes du coin donnés. */
 function planOf(
-  q: ReturnType<typeof quarter>,
+  q: Pick<ReturnType<typeof quarter>, "pres" | "pitch">,
   supports: readonly CrankedSupport[],
   groups: readonly CornerGroup[],
   section = UPN180,
@@ -633,6 +673,8 @@ describe("cornière au coin du mur (K2e, K-Q4) — groupes et cornière exigée"
     ];
     const g = cornerSupportGroups(cands);
     expect(g.map((x) => x.tread)).toEqual([7, 9]);
+    // Aucun support côté jour sur ces marches (ceux de la marche 5 ne forment pas de groupe).
+    expect(g.map((x) => x.jour)).toEqual([[], []]);
     expect(g[0]!.candidates.map((c) => c.key)).toEqual([
       cornerSupportKey(7, "le2"),
       cornerSupportKey(7, "le1"),
@@ -640,6 +682,48 @@ describe("cornière au coin du mur (K2e, K-Q4) — groupes et cornière exigée"
     expect(g[0]!.candidates[1]).toMatchObject({ u0: 1300, u1: 1500, zTop: 1000, faceId: "le1" });
     // Trois faces au même coin : un seul groupe.
     expect(g[1]!.candidates.map((c) => c.faceId)).toEqual(["le2", "le3", "le4"]);
+  });
+
+  it("supports côté jour du groupe (K-Q16) et marches exclues (K-Q18, paliers)", () => {
+    const cands: CrankedSupport[] = [
+      sup("le1", 4, 1300, 1500, 700),
+      sup("le2", 4, 0, 120, 700),
+      postSup(4, 70, 700),
+      {
+        ...sup("li1", 4, 1200, 1400, 700),
+        face: { key: "li1", owner: "li1", kind: "stringer", side: "inner" },
+      },
+      sup("le1", 8, 1300, 1500, 900),
+      sup("le2", 8, 0, 120, 900),
+    ];
+    const g = cornerSupportGroups(cands);
+    expect(g.map((x) => x.tread)).toEqual([4, 8]);
+    expect(g[0]!.jour).toEqual([
+      {
+        u0: 0,
+        u1: 70,
+        zTop: 700,
+        tread: 4,
+        faceId: "pt1",
+        key: cornerSupportKey(4, "pt1-4"),
+        onPost: true,
+      },
+      {
+        u0: 1200,
+        u1: 1400,
+        zTop: 700,
+        tread: 4,
+        faceId: "li1",
+        key: cornerSupportKey(4, "li1"),
+        onPost: false,
+      },
+    ]);
+    // Côté jour jamais candidat du coin (K-Q17 : coin du mur seulement).
+    expect(g[0]!.candidates.map((c) => c.faceId)).toEqual(["le1", "le2"]);
+    expect(g[1]!.jour).toEqual([]);
+    // Marche exclue (palier) : aucun groupe, donc toutes ses cornières exigées.
+    expect(cornerSupportGroups(cands, undefined, (t) => t === 8).map((x) => x.tread)).toEqual([4]);
+    expect(cornerSupportGroups(cands, undefined, () => true)).toEqual([]);
   });
 
   const cand = (faceId: string, len: number): CornerCandidate => ({
@@ -654,7 +738,13 @@ describe("cornière au coin du mur (K2e, K-Q4) — groupes et cornière exigée"
 
   it("départages : plus petit besoin, puis plus longue zone brute, puis rang de face, puis clé", () => {
     const one = (cs: CornerCandidate[], score: Record<string, number>): string =>
-      [...chooseCornerRequired([{ tread: 1, candidates: cs }], (c) => score[c.faceId]!, rank)][0]!;
+      [
+        ...chooseCornerRequired(
+          [{ tread: 1, candidates: cs, jour: [] }],
+          (c) => score[c.faceId]!,
+          rank,
+        ),
+      ][0]!;
     expect(one([cand("f1", 100), cand("f2", 300)], { f1: 150, f2: 160 })).toBe("1|f1");
     // Égalité à 1e-6 près : plus longue zone brute.
     expect(one([cand("f1", 100), cand("f2", 300)], { f1: 0, f2: 5e-7 })).toBe("1|f2");
@@ -689,6 +779,7 @@ describe("cornière au coin du mur (K2e, K-Q4) — groupes et cornière exigée"
             scores.set(key, c.score);
             return { u0: 0, u1: c.len, zTop: 0, tread: t + 1, faceId: `f${c.face}`, key };
           }),
+          jour: [],
         }));
         const score = (c: CornerCandidate): number => scores.get(c.key)!;
         const req = chooseCornerRequired(groups, score, rank);
@@ -720,9 +811,11 @@ describe("cornière au coin du mur (K2e, K-Q4) — plan par section", () => {
   const groups = cornerSupportGroups(supports);
   const corner = groups[0]!;
 
-  it("fixture : une seule marche au coin (marche 6, le1 et le2), faces coudées", () => {
+  it("fixture : une seule marche au coin (marche 6, le1 et le2), faces coudées, appui sur poteau", () => {
     expect(groups.map((g) => g.tread)).toEqual([6]);
     expect(corner.candidates.map((c) => c.faceId)).toEqual(["le1", "le2"]);
+    expect(corner.jour.map((j) => j.faceId)).toEqual(["pt1"]);
+    expect(planOf(q, supports, groups).corner.jourless).toEqual(new Set());
   });
 
   it("sans groupe : besoins de K2b (toutes les cornières), ensembles du coin vides", () => {
@@ -732,6 +825,7 @@ describe("cornière au coin du mur (K2e, K-Q4) — plan par section", () => {
       required: new Set(),
       optional: new Set(),
       reverted: 0,
+      jourless: new Set(),
     });
     for (const p of q.pres) {
       const f = plan.faces.get(p.face.id)!;
@@ -829,7 +923,7 @@ describe("cornière au coin du mur (K2e, K-Q4) — plan par section", () => {
         fc.double({ min: -250, max: 40, noNaN: true }),
         (sec, cut1, cut2, dz1, dz2) => {
           const s = supports.map((c) => {
-            if (c.tread !== 6) return c;
+            if (c.tread !== 6 || c.face.kind !== "stringer") return c;
             const up = riveFns(q.get(c.face.owner)).upper((c.u0 + c.u1) / 2);
             return c.face.owner === "le1"
               ? { ...c, u0: c.u0 + cut1, zTop: up + dz1 - 50 }
@@ -883,6 +977,96 @@ describe("cornière au coin du mur (K2e, K-Q4) — plan par section", () => {
     expect(k2e.faces).toEqual(k2b.faces);
     expect(k2e.corner.reverted).toBe(1);
     expect(k2e.corner.optional.size).toBe(0);
+  });
+
+  it("marche sans appui côté jour (K-Q16) : aucun support, ou poteau trop court → toutes exigées, plan de K2b", () => {
+    for (const jour of [[], [postSup(6, 30, Z6)]]) {
+      const s = [...quarterSupports(false), ...jour];
+      const gs = cornerSupportGroups(s);
+      const plan = planOf(q, s, gs);
+      expect(plan.corner.jourless).toEqual(new Set([6]));
+      expect(plan.corner.required).toEqual(new Set(gs[0]!.candidates.map((c) => c.key)));
+      expect(plan.corner.optional.size).toBe(0);
+      expect(plan.corner.reverted).toBe(0);
+      // Besoins d'âme de toutes les cornières : ceux du plan sans groupe (K2b).
+      expect(plan.faces).toEqual(planOf(q, s, []).faces);
+    }
+    // Poteau de 80 mm (≥ `minLength`) : règle du coin de K2e, une facultative.
+    const s = [...quarterSupports(false), postSup(6, 80, Z6)];
+    const plan = planOf(q, s, cornerSupportGroups(s));
+    expect(plan.corner.jourless.size).toBe(0);
+    expect(plan.corner.optional.size).toBe(1);
+  });
+
+  it("limon de jour (K-Q16) : support logé → règle du coin ; support au-dessus de la rive → sans appui côté jour", () => {
+    const qj = quarterWithJour();
+    const ok = [...quarterSupports(false), jourSup(1050)];
+    const pOk = planOf(qj, ok, cornerSupportGroups(ok));
+    expect(pOk.faces.get("li1")!.mode).toBe("chord");
+    expect(pOk.corner.jourless.size).toBe(0);
+    expect(pOk.corner.optional.size).toBe(1);
+    const lost = [...quarterSupports(false), jourSup(Z6 + 200)];
+    const pLost = planOf(qj, lost, cornerSupportGroups(lost));
+    expect(pLost.corner.jourless).toEqual(new Set([6]));
+    expect(pLost.corner.optional.size).toBe(0);
+    // Limon de jour absent du plan (limon refusé) : sans appui côté jour.
+    const pNone = planOf(q, ok, cornerSupportGroups(ok));
+    expect(pNone.corner.jourless).toEqual(new Set([6]));
+  });
+
+  it("propriété (K-Q16) : sans appui côté jour ⇔ aucun support de jour logeable ; alors toutes exigées", () => {
+    const qj = quarterWithJour();
+    const li = qj.pres.find((p) => p.face.id === "li1")!;
+    const sections = sectionsOf("UPN").filter((x) => x.h >= 140 && x.h <= 260);
+    const cosA = Math.cos(Math.atan(li.line.slope));
+    const seen = { bears: 0, jourless: 0, byStringer: 0 };
+    fc.assert(
+      fc.property(
+        fc.constantFrom(...sections),
+        fc.option(fc.double({ min: 0, max: 150, noNaN: true }), { nil: undefined }),
+        fc.option(fc.double({ min: 700, max: 1400, noNaN: true }), { nil: undefined }),
+        (sec, postLen, jourZ) => {
+          const s = [
+            ...quarterSupports(false),
+            ...(postLen === undefined ? [] : [postSup(6, postLen, Z6)]),
+            ...(jourZ === undefined ? [] : [jourSup(jourZ)]),
+          ];
+          // Logement du support du limon de jour dans la section, recalculé sur ses rives.
+          let jourLen = 0;
+          if (jourZ !== undefined) {
+            const up = chordUpper(li);
+            const low = up.map((pt) => ({ x: pt.x, y: pt.y - sec.h / cosA }));
+            const f = fitInWebPolyline(up, low, jourSup(jourZ), WEBFIT);
+            jourLen = f.u1 - f.u0;
+          }
+          fc.pre(Math.abs(jourLen - WEBFIT.minLength) > 1e-3);
+          fc.pre(postLen === undefined || Math.abs(postLen - WEBFIT.minLength) > 1e-9);
+          const bears =
+            (postLen !== undefined && postLen >= WEBFIT.minLength) || jourLen >= WEBFIT.minLength;
+          const gs = cornerSupportGroups(s);
+          const plan = planOf(qj, s, gs, sec);
+          expect(plan.corner.jourless.has(6)).toBe(!bears);
+          seen[bears ? "bears" : "jourless"]++;
+          if (
+            jourLen >= WEBFIT.minLength &&
+            !(postLen !== undefined && postLen >= WEBFIT.minLength)
+          ) {
+            seen.byStringer++;
+          }
+          if (!bears) {
+            for (const c of gs[0]!.candidates) {
+              expect(plan.corner.required.has(c.key)).toBe(true);
+              expect(plan.corner.optional.has(c.key)).toBe(false);
+            }
+          }
+        },
+      ),
+      { numRuns: RUNS },
+    );
+    // Non-vacuité : les deux issues, et un appui porté par le seul limon de jour.
+    expect(seen.bears).toBeGreaterThan(0);
+    expect(seen.jourless).toBeGreaterThan(0);
+    expect(seen.byStringer).toBeGreaterThan(0);
   });
 
   it("deux limons colinéaires (palier entre limons alignés) : pas de groupe du coin", () => {

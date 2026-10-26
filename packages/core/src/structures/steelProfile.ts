@@ -19,7 +19,8 @@
  *   sur un jarret gardée en place (K-Q10 révisée) : traçage coupé au joint, perçages trop près
  *   de la coupe reportés après soudage. Marche au coin du mur (K-Q4, K2e) : une cornière
  *   exigée, les autres gardées si elles tiennent dans la section, retirées sinon avec une
- *   remarque (`crankedSectionPlan`). Défaut `chord` : barre droite inchangée.
+ *   remarque (`crankedSectionPlan`) ; une marche sans appui côté jour (K-Q16) et les paliers
+ *   (K-Q18) gardent toutes leurs cornières (K2e2). Défaut `chord` : barre droite inchangée.
  * - **Choix de section** : une section du catalogue (`catalog/`) ou `auto` = la plus légère de
  *   la famille qui (1) loge les supports dans la hauteur d'âme et (2) passe le
  *   **prédimensionnement indicatif** (`precheck/` : L/200, contrainte, f₁ ≥ 5 Hz) pour tous les
@@ -660,10 +661,19 @@ export function buildSteelProfile(
   };
   // Marches au coin du mur (K-Q4, K2e) : une cornière exigée par marche, les autres facultatives
   // (hors du besoin d'âme, posées si elles tiennent). Calculé une fois, hors du cache par section.
-  // Deux limons colinéaires (palier entre limons alignés) ne font pas un coin.
+  // Deux limons colinéaires (palier entre limons alignés) ne font pas un coin. Paliers (palier
+  // d'angle compris) exclus de la règle (K-Q18, K2e2) : toutes leurs cornières exigées. Marche
+  // sans appui côté jour (K-Q16) : jugée par section dans `crankedSectionPlan`.
   const dirOfFace = new Map(pres.map((p) => [p.face.id, p.face.dir]));
+  const landingTreads = new Set(
+    stepping.treads.filter((t) => t.kind === "landing").map((t) => t.number),
+  );
   const cornerGroups: readonly CornerGroup[] = nosing
-    ? cornerSupportGroups(candidates, (id) => dirOfFace.get(id))
+    ? cornerSupportGroups(
+        candidates,
+        (id) => dirOfFace.get(id),
+        (t) => landingTreads.has(t),
+      )
     : [];
   const plans = new Map<SteelSection, CrankedSectionPlan>();
   const planOf = (sec: SteelSection): CrankedSectionPlan => {
