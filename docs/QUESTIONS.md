@@ -574,7 +574,13 @@ Chantier `feat/bent-stringer`, état des lieux et conception K1 dans `docs/ledge
     - (K-Q18) les **paliers** (palier d'angle compris) sont **exclus** de la règle du coin : un palier garde toutes ses cornières ;
     - (K-Q19) un poteau du point fixe qui **ajoute une violation** de règle par rapport à la barre droite est écarté : on prend le poteau vérifié suivant, quitte à monter d'une section (j4-demi, demo-half-turn-industrial : 110 / 35 écarté si G_COLLET_MONOTONE ou FAB_SUPPORT_LONGUEUR_MIN y apparaissent) ;
     - (K-Q20) si le poteau final du point fixe n'est pas vérifié (plafond de 3 modèles atteint, j5b 125 / 43 ; ou poteau plus petit possible, demi-tournant 120 / 40), on construit **un modèle de vérification de plus** : le poteau est gardé s'il est vérifié et n'ajoute aucune violation (K-Q19), sinon K-Q15 s'applique ; budget de l'assistant (2 s) à vérifier ;
-    - (K-Q21) le repli `heavier` d'une face entre deux faces coudées est accepté même s'il ouvre un onglet (FAB_ONGLET_RACCORD, conseil) : arb12 passe de l'UPN 240 à l'UPN 180.
+    - (K-Q21) le repli `heavier` d'une face entre deux faces coudées est accepté même s'il ouvre un onglet (FAB_ONGLET_RACCORD, conseil) : arb12 passe de l'UPN 240 à l'UPN 180 ;
+  - décisions du 2026-10-26, après la mesure de K2e2 :
+    - (K-Q22) demi-tournant (préréglage) et trapèze de cage sans section en limon coudé (UPN 260, `noSectionPasses`) par K-Q16 : **accepté**, c'est l'état de la barre droite ;
+    - (K-Q23) le **poteau compte comme appui côté jour** : une marche au coin portée côté jour par le poteau sort de K-Q16 et suit la règle du coin (j4-demi et industrial M9 : UPN 200) ;
+    - (K-Q24) base de K-Q19 validée : règle par règle, le maximum de la barre droite et du limon coudé posé sur le poteau de la barre droite ;
+    - (K-Q25) quand aucun poteau ne passe K-Q19, on pose **le même poteau que la barre droite** (pas de « moindre excédent »), avec une remarque ;
+    - (K-Q26) au moins deux appuis posés pour une marche au coin : pas de seuil inventé, question d'atelier B13, comportement actuel gardé.
 - Réf. : A13, F17 ; `docs/LEDGER.md` l. 178 et l. 304 ; `structures/steelProfile.ts`, `structures/steelProfileCutting.ts`.
 
 ## B. Validations par un atelier ou un professionnel
@@ -758,6 +764,15 @@ Valeurs et conventions « à valider » : toutes sont des paramètres modifiable
 - les termes de A26.
 
 Réf. : `docs/research/glossaire-en.md`, `packages/i18n/src/locales/en.json`, ADR-0007.
+
+### B13. Appuis d'une marche au coin du mur du limon coudé
+
+À faire valider par un serrurier-métallier :
+
+- une marche au coin du mur peut-elle reposer sur un seul appui posé, une cornière murale (règle du coin, A41 K-Q4) ? Mesure de K2e2 : 91 marches au coin sur 528 cas n'ont qu'un appui posé ; par exemple, arb99 tient sur une seule cornière murale de 112 mm, sans erreur ni violation de règle ;
+- faut-il une longueur minimale de cornière gardée ou un nombre minimal d'appuis ? Aucune règle sourcée aujourd'hui ; la cornière retirée est signalée par une remarque.
+
+Réf. : A41 (K-Q4, K-Q16, K-Q26) ; `structures/steelProfileCranked.ts` ; `docs/ledger/LEDGER-bent-stringer.md` (K2e2).
 
 ## C. Normes non lues et questions juridiques
 
