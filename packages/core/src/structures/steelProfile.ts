@@ -24,8 +24,9 @@
  *   toutes leurs cornières (K2e2). Limon coudé par défaut depuis le sous-lot K2d (K-Q11) ;
  *   `chord` : barre droite inchangée. Jarrets et onglets du limon coudé soudés bout à bout (K-Q2,
  *   EXC2) ; liste des jarrets sur la pièce finie (`Part.jig`, CK17). Escalier droit à nez
- *   imposés inclinés (`nosingOverrides` de type `angle`) : ligne des nez brisée, donc limon coudé
- *   en `nosing` (relecture K2g, question ouverte K-Q39).
+ *   imposés inclinés (`nosingOverrides` de type `angle`) : ligne des nez brisée, traitée comme un
+ *   tracé à tournant (décision K-Q39 option a) : limon coudé en `nosing`, défaut écrit par un
+ *   choix neuf (`hasBrokenNosingLine`, `project/structureChoice.ts`).
  * - **Choix de section** : une section du catalogue (`catalog/`) ou `auto` = la plus légère de
  *   la famille qui (1) loge les supports dans la hauteur d'âme et (2) passe le
  *   **prédimensionnement indicatif** (`precheck/` : L/200, contrainte, f₁ ≥ 5 Hz) pour tous les
@@ -284,7 +285,8 @@ export const SteelProfileParamsSchema = z.object({
    * K-Q1, K-Q3, K-Q7, K-Q12, K-Q13). **Défaut `nosing`** depuis la bascule décidée (K-Q11,
    * sous-lot K2d) : un projet enregistré sans ce paramètre est recalculé en limon coudé, avec la
    * remarque `structure.steelProfile.note.defaultCranked` (escaliers droits à une seule pente
-   * inchangés, CK7 ; à nez imposés inclinés, limon coudé : question ouverte K-Q39).
+   * inchangés, CK7 ; à nez imposés inclinés, ligne brisée : limon coudé, `nosing` écrit au
+   * choix neuf, décision K-Q39 option a).
    */
   stringerLine: z.enum(["chord", "nosing"]).default("nosing"),
   /**
@@ -996,8 +998,9 @@ export function buildSteelProfile(
   // (projet enregistré avant cette version, ou paramètres de structure vides) et au moins un
   // limon construit coudé : le projet est recalculé en limon coudé, la barre droite reste
   // disponible. Aucune remarque sur une face à une seule pente (escalier droit sans nez imposé
-  // incliné, CK7 ; avec, question ouverte K-Q39) ni quand le palier est refusé (retour anticipé
-  // ci-dessus).
+  // incliné, CK7) ni quand le palier est refusé (retour anticipé ci-dessus). Ligne des nez
+  // brisée par des nez imposés inclinés : remarque seulement pour un projet enregistré sans le
+  // paramètre, un choix neuf écrivant `nosing` (décision K-Q39 option a).
   if (
     nosing &&
     !Object.hasOwn(project.stair.structure.params, "stringerLine") &&

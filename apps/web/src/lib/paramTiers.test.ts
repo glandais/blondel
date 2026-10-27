@@ -685,11 +685,50 @@ describe("valeurs ◆ d'un projet", () => {
       ).toBe(false);
       expect(toValidateItems(q, buildModel(q)).filter((i) => i.key.includes(".knee."))).toEqual([]);
     }
-    // Cage saisie : tracé à tournant (`isTurningLayout` du cœur), jarrets ◆ seulement en `nosing`.
+    // Cage saisie : ligne des nez brisée (`hasBrokenNosingLine` du cœur), jarrets ◆ seulement en
+    // `nosing`.
     const cage = withStructure(cageOf({ angle: 90, mode: "winders" }), "steel-profile");
     for (const leaf of ["minSegmentLength", "minKneeAngle", "maxSegmentAngle"]) {
       expect(structureParamApplies(cage, { stringerLine: "nosing" }, ["knee", leaf])).toBe(true);
       expect(structureParamApplies(cage, { stringerLine: "chord" }, ["knee", leaf])).toBe(false);
+    }
+    // Escalier droit à nez imposé incliné (8° au nez 4) : ligne des nez brisée (décision K-Q39
+    // option a, sous-lot K2i), jarrets ◆ en `nosing`, explicite ou par défaut ; aucun en `chord`.
+    const withOverrides = (
+      q: Project,
+      nosingOverrides: Project["stair"]["nosingOverrides"],
+      params: Record<string, unknown>,
+    ): Project => ({
+      ...q,
+      stair: {
+        ...q.stair,
+        nosingOverrides,
+        structure: { kind: "steel-profile", params },
+      },
+    });
+    const tilted = [{ kind: "angle" as const, index: 4, angle: 8 }];
+    for (const leaf of ["minSegmentLength", "minKneeAngle", "maxSegmentAngle"]) {
+      const q = withOverrides(straight, tilted, {});
+      expect(structureParamApplies(q, { stringerLine: "nosing" }, ["knee", leaf])).toBe(true);
+      expect(structureParamApplies(q, { stringerLine: "chord" }, ["knee", leaf])).toBe(false);
+    }
+    for (const params of [{}, { stringerLine: "nosing" }]) {
+      const q = withOverrides(straight, tilted, params);
+      const keys = toValidateItems(q, buildModel(q)).map((i) => i.key);
+      expect(keys).toContain("stair.structure.params.knee.minSegmentLength");
+      expect(keys).toContain("stair.structure.params.knee.minKneeAngle");
+      expect(keys).toContain("stair.structure.params.knee.maxSegmentAngle");
+    }
+    // Angle nul ou nez fixe : face à une seule pente, aucun ◆ de jarret (I1).
+    for (const overrides of [
+      [{ kind: "angle" as const, index: 4, angle: 0 }],
+      [{ kind: "fixed" as const, index: 4 }],
+    ]) {
+      const q = withOverrides(straight, overrides, { stringerLine: "nosing" });
+      expect(
+        structureParamApplies(q, { stringerLine: "nosing" }, ["knee", "minSegmentLength"]),
+      ).toBe(false);
+      expect(toValidateItems(q, buildModel(q)).filter((i) => i.key.includes(".knee."))).toEqual([]);
     }
   });
 

@@ -37,6 +37,7 @@ import {
   PROFILE_NEWEL_ITERATIONS,
   PROFILE_NEWEL_VERIFICATIONS,
   applyStructureChoice,
+  hasBrokenNosingLine,
   resolveProfileNewel,
   violationCounts as modelViolationCounts,
 } from "../project/structureChoice.js";
@@ -2801,7 +2802,108 @@ describe("steel-profile — bascule du défaut (K2d, K-Q2, K-Q11, K-Q24)", () =>
     expect(translatorFor("fr").t(exc.message)).toContain("soudés bout à bout");
   });
 
-  it("K-Q11 : choix de structure neuf (`applyStructureChoice`) : ligne d'appui écrite sur tout tracé à tournant, jamais sur un escalier droit ; aucune remarque de bascule", () => {
+  it("K-Q39 option a (K2i) : escalier droit à nez imposés inclinés (nez 4 et 5 à 8°) traité comme à ligne des nez brisée : `nosing` écrit au choix neuf, limon coudé, aucune remarque de bascule ; projet enregistré sans le paramètre : remarque ; angle nul : face à une seule pente (I1)", () => {
+    const DEFAULT_NOTE = "structure.steelProfile.note.defaultCranked";
+    const straight = createProject("straight");
+    const tilted: Project = {
+      ...straight,
+      stair: {
+        ...straight.stair,
+        nosingOverrides: [
+          { kind: "angle", index: 4, angle: 8 },
+          { kind: "angle", index: 5, angle: 8 },
+        ],
+      },
+    };
+    const noteCount = (m: Model) => (m.notes ?? []).filter((n) => n.key === DEFAULT_NOTE).length;
+    // Choix neuf : ligne d'appui écrite, limon coudé, aucune remarque de bascule, EXC2.
+    const p = choose(tilted, { family: "UPN" });
+    expect(p.stair.structure.params).toMatchObject({ family: "UPN", stringerLine: "nosing" });
+    const x = run(p);
+    expect(x.r.stringers.some((s) => (s.bearing?.segments.length ?? 0) >= 2)).toBe(true);
+    expect((x.m.notes ?? []).some((n) => n.key === "structure.steelProfile.note.cranked")).toBe(
+      true,
+    );
+    expect(noteCount(x.m)).toBe(0);
+    expect(x.m.executionClass).toBe("EXC2");
+    // Projet enregistré sans `stringerLine` (même structure, paramètre retiré) : la bascule est
+    // réelle, une seule remarque.
+    const { stringerLine: _line, ...saved } = p.stair.structure.params;
+    expect(noteCount(buildModel(withParams(p, saved), { memo: false }))).toBe(1);
+    // `chord` explicite : jamais remplacé, barre droite.
+    const chord = choose(tilted, { family: "UPN", stringerLine: "chord" });
+    expect(chord.stair.structure.params["stringerLine"]).toBe("chord");
+    expect(run(chord).r.stringers.every((s) => s.bearing === undefined)).toBe(true);
+    // Angle nul : face à une seule pente, rien n'est écrit, `nosing` = `chord` (I1).
+    const zero: Project = {
+      ...straight,
+      stair: { ...straight.stair, nosingOverrides: [{ kind: "angle", index: 4, angle: 0 }] },
+    };
+    const z = choose(zero, { family: "UPN" });
+    expect(Object.hasOwn(z.stair.structure.params, "stringerLine")).toBe(false);
+    const zn = buildModel(withLine(z, "nosing"), { memo: false });
+    const zc = buildModel(withLine(z, "chord"), { memo: false });
+    expect(zn.parts).toEqual(zc.parts);
+    expect(zn.notes).toEqual(zc.notes);
+  }, 60_000);
+
+  it("propriété K-Q39 option a (K2i) : escalier droit à nez imposés d'angles générés, choix neuf des profilés : jamais de remarque de bascule, et limon coudé seulement si `hasBrokenNosingLine`", () => {
+    // Relie le prédicat du cœur à la géométrie du plugin : une autre source de cassure de la
+    // ligne des nez, non vue par le prédicat, ferait échouer la seconde assertion.
+    let cranked = 0;
+    fc.assert(
+      fc.property(
+        fc.integer({ min: 2400, max: 3400 }),
+        fc.integer({ min: 700, max: 1100 }),
+        fc.array(
+          fc.record({
+            index: fc.nat({ max: 18 }),
+            angle: fc.oneof(
+              fc.integer({ min: -20, max: 20 }).filter((a) => a !== 0),
+              fc.constantFrom(0, -0, 0.2, -0.3),
+            ),
+          }),
+          { maxLength: 3 },
+        ),
+        fc.constantFrom("UPN", "IPE", "HEA"),
+        (floorToFloor, width, drawn, family) => {
+          const base = createProject("straight", { floorToFloor, width });
+          const p: Project = {
+            ...base,
+            stair: {
+              ...base.stair,
+              nosingOverrides: drawn.map((o) => ({ kind: "angle" as const, ...o })),
+            },
+          };
+          const m = buildModel(choose(p, { family }), { memo: false });
+          const keys = (m.notes ?? []).map((n) => n.key);
+          expect(keys).not.toContain("structure.steelProfile.note.defaultCranked");
+          if (keys.includes("structure.steelProfile.note.cranked")) {
+            cranked++;
+            expect(hasBrokenNosingLine(p.stair)).toBe(true);
+          }
+        },
+      ),
+      // Toujours au moins un limon coudé : nez 4 et 5 à 8° sur le préréglage.
+      {
+        numRuns: RUNS,
+        examples: [
+          [
+            2600,
+            900,
+            [
+              { index: 4, angle: 8 },
+              { index: 5, angle: 8 },
+            ],
+            "UPN",
+          ],
+        ],
+      },
+    );
+    expect(cranked).toBeGreaterThan(0);
+  }, 300_000);
+
+  it("K-Q11 : choix de structure neuf (`applyStructureChoice`) : ligne d'appui écrite sur tout tracé à tournant, jamais sur un escalier droit à une seule pente ; aucune remarque de bascule", () => {
     const DEFAULT_NOTE = "structure.steelProfile.note.defaultCranked";
     let turning = 0;
     for (const id of ALL_PRESET_IDS) {

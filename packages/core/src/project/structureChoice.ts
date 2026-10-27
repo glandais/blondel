@@ -119,13 +119,14 @@ export interface StructureChoiceResult {
 
 /**
  * Paramètres d'un **choix neuf** de structure (assistant, comparateur, choix dans l'interface,
- * exemples) : pour les profilés sur un tracé à tournant (volées à tournant ou cage saisie), la
- * ligne d'appui par défaut (`stringerLine` = `nosing`, décision K-Q11) est écrite explicitement
- * quand elle manque, pour que la remarque de bascule `structure.steelProfile.note.defaultCranked`
- * reste réservée aux projets enregistrés avant la bascule (sous-lot K2d). Escaliers droits
- * inchangés (le limon y est droit dans les deux réglages, invariant I1 de K1, sauf nez imposés
- * inclinés : ligne des nez brisée, limon coudé et remarque de bascule, question ouverte K-Q39) ;
- * autres paramètres et autres structures rendus tels quels.
+ * exemples) : pour les profilés sur un tracé à ligne des nez brisée (`hasBrokenNosingLine` :
+ * volées à tournant, cage saisie, ou volées droites à nez imposé incliné, décision K-Q39
+ * option a), la ligne d'appui par défaut (`stringerLine` = `nosing`, décision K-Q11) est écrite
+ * explicitement quand elle manque, pour que la remarque de bascule
+ * `structure.steelProfile.note.defaultCranked` reste réservée aux projets enregistrés avant la
+ * bascule (sous-lot K2d). Faces à une seule pente (escalier droit sans nez imposé incliné)
+ * inchangées : le limon y est droit dans les deux réglages (invariant I1 de K1) ; autres
+ * paramètres et autres structures rendus tels quels.
  */
 export function explicitStructureParams(
   project: Project,
@@ -133,7 +134,7 @@ export function explicitStructureParams(
   params: Readonly<Record<string, unknown>>,
 ): Readonly<Record<string, unknown>> {
   if (kind !== "steel-profile" || Object.hasOwn(params, "stringerLine")) return params;
-  return isTurningLayout(project.stair.layout) ? { ...params, stringerLine: "nosing" } : params;
+  return hasBrokenNosingLine(project.stair) ? { ...params, stringerLine: "nosing" } : params;
 }
 
 /** Tracé à tournant : volées à tournant ou cage saisie (l'hélicoïdal n'en est pas un ici). */
@@ -142,15 +143,45 @@ export function isTurningLayout(layout: Project["stair"]["layout"]): boolean {
 }
 
 /**
- * Édition du tracé d'un escalier en profilés qui passe d'une volée droite à un tournant (volées
- * à tournant ou cage saisie) : la ligne d'appui par défaut (`stringerLine` = `nosing`) est écrite
- * dans le projet quand elle manque (décision K-Q36 de l'utilisateur, QUESTIONS A41, sous-lot
- * K2h), comme pour un choix neuf (`explicitStructureParams`) : la remarque de bascule
- * `structure.steelProfile.note.defaultCranked` ne reste que sur les fichiers enregistrés avant
- * cette version. Appelée par l'interface après chaque édition du projet (pas au chargement d'un
- * fichier, ni à l'annulation). Rend `next` lui-même (même objet, mémoïsation par identité)
- * dans tous les autres cas : autre structure, ligne d'appui déjà choisie (`chord` compris),
- * tracé précédent déjà à tournant, tracé suivant droit. Pure, ne lève jamais.
+ * Tracé à **ligne des nez brisée** (décision K-Q39 de l'utilisateur, option a « coudé assumé »,
+ * 2026-10-27, QUESTIONS A41, sous-lot K2i) : tracé à tournant (`isTurningLayout`), ou volées
+ * droites dont au moins un nez est imposé incliné (`nosingOverrides` de type `angle`, angle non
+ * nul ; quand un même nez a plusieurs angles, le dernier compte, comme dans le découpage). Seul
+ * prédicat du défaut `nosing` écrit (`explicitStructureParams`, `stringerLineOnTurn`) et de
+ * l'affichage des réglages `knee.*` dans l'interface. Hélicoïdal : retouches ignorées par le
+ * découpage, jamais brisé ici. Convention de l'implémenteur (K2i), à valider : le prédicat lit le
+ * projet seul, sans le modèle, donc trois classes d'angles non nuls comptent encore sans couder
+ * le limon : angle sur un nez d'extrémité d'une volée droite (nez 0 ou n−1, jamais appliqué par
+ * le découpage), angle orphelin (indice hors des nez) et angle sous l'angle minimal de jarret
+ * (`knee.minKneeAngle`, jarrets fusionnés). Sans effet sur la géométrie (le limon y reste droit
+ * dans les deux réglages, I1), il écrit seulement `nosing` et affiche `knee.*`.
+ */
+export function hasBrokenNosingLine(
+  stair: Pick<Project["stair"], "layout" | "nosingOverrides">,
+): boolean {
+  if (isTurningLayout(stair.layout)) return true;
+  if (stair.layout.kind === "helical") return false;
+  const angles = new Map<number, number>();
+  for (const o of stair.nosingOverrides) if (o.kind === "angle") angles.set(o.index, o.angle);
+  for (const angle of angles.values()) if (angle !== 0) return true;
+  return false;
+}
+
+/**
+ * Édition d'un escalier en profilés dont le tracé devient « à ligne des nez brisée »
+ * (`hasBrokenNosingLine`) : passage d'une volée droite à un tournant (volées à tournant ou cage
+ * saisie, décision K-Q36 de l'utilisateur, QUESTIONS A41, sous-lot K2h) ou ajout du premier nez
+ * imposé incliné sur des volées droites (décision K-Q39 option a, sous-lot K2i ; « tournant » se
+ * lit ici au sens large). La ligne d'appui par défaut (`stringerLine` = `nosing`) est alors
+ * écrite dans le projet quand elle manque, comme pour un choix neuf (`explicitStructureParams`) :
+ * la remarque de bascule `structure.steelProfile.note.defaultCranked` ne reste que sur les
+ * fichiers enregistrés avant cette version. Appelée par l'interface après chaque édition du
+ * projet (pas au chargement d'un fichier, ni à l'annulation). Rend `next` lui-même (même objet,
+ * mémoïsation par identité) dans tous les autres cas : autre structure, ligne d'appui déjà
+ * choisie (`chord` ou `nosing`), aucune des deux transitions (ni d'un tracé sans tournant à un
+ * tournant, ni d'un tracé à une seule pente à un tracé à ligne brisée : un droit déjà incliné qui
+ * devient tournant reçoit donc encore `nosing`), tracé suivant à une seule pente (retour à une
+ * volée droite ou retrait des nez inclinés : rien n'est retiré). Pure, ne lève jamais.
  */
 export function stringerLineOnTurn(previous: Project, next: Project): Project {
   // `next` n'est pas encore validé par le schéma (édition de l'interface, refusée ensuite si
@@ -162,7 +193,12 @@ export function stringerLineOnTurn(previous: Project, next: Project): Project {
       return next;
     }
     if (Object.hasOwn(params, "stringerLine")) return next;
-    if (isTurningLayout(previous.stair.layout) || !isTurningLayout(next.stair.layout)) return next;
+    // Union des deux transitions : un droit déjà incliné (fichier enregistré avant K2i, ou
+    // profilés choisis avant le premier nez incliné) qui devient tournant reçoit encore `nosing`
+    // (K-Q36), comme un droit qui reçoit son premier nez incliné (K-Q39).
+    const turned = !isTurningLayout(previous.stair.layout) && isTurningLayout(next.stair.layout);
+    const tilted = !hasBrokenNosingLine(previous.stair) && hasBrokenNosingLine(next.stair);
+    if (!turned && !tilted) return next;
     return withStructure(
       next,
       structure.kind,

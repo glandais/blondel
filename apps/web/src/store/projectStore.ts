@@ -413,8 +413,9 @@ export function createProjectStore(options: ProjectStoreOptions = {}): ProjectSt
       lastOpened: null,
 
       // Éditions du projet : ligne d'appui des profilés écrite quand le tracé passe d'une volée
-      // droite à un tournant (décision K-Q36, fonction du cœur ; pas au chargement d'un fichier
-      // ni à l'annulation, qui gardent le projet tel qu'il a été enregistré).
+      // droite à un tournant (décision K-Q36) ou quand le premier nez imposé incliné est ajouté
+      // (décision K-Q39 option a) ; fonction du cœur ; pas au chargement d'un fichier ni à
+      // l'annulation, qui gardent le projet tel qu'il a été enregistré.
       update: (recipe, groupKey, updateOptions) => {
         let next: Project;
         const p = get().project;

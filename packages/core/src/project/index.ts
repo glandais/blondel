@@ -74,6 +74,7 @@ export {
   addedViolations,
   applyStructureChoice,
   explicitStructureParams,
+  hasBrokenNosingLine,
   isTurningLayout,
   resolveProfileNewel,
   stringerLineOnTurn,

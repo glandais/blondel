@@ -26,6 +26,8 @@ import {
   PROFILE_NEWEL_VERIFICATIONS,
   addedViolations,
   applyStructureChoice,
+  explicitStructureParams,
+  hasBrokenNosingLine,
   isTurningLayout,
   resolveProfileNewel,
   stringerLineOnTurn,
@@ -38,13 +40,30 @@ beforeEach(() => clearModelCache());
 const EXAMPLES_DIR = resolve(dirname(fileURLToPath(import.meta.url)), "../../../../examples");
 const loadExample = (file: string): Project =>
   parseProjectText(readFileSync(join(EXAMPLES_DIR, file), "utf8"));
+const withNosingOverrides = (p: Project, nosingOverrides: Project["stair"]["nosingOverrides"]) => ({
+  ...p,
+  stair: { ...p.stair, nosingOverrides },
+});
 
-describe("stringerLineOnTurn : ligne d'appui écrite au passage d'une volée droite à un tournant (K-Q36, sous-lot K2h)", () => {
+describe("stringerLineOnTurn : ligne d'appui écrite au passage d'une volée droite à un tournant (K-Q36, sous-lot K2h) ou au premier nez imposé incliné (K-Q39 option a, sous-lot K2i)", () => {
   // Préréglages (volées, hélicoïdal), cages saisies (démo à palier droit, exemple relu) et
-  // escalier droit converti en cage à un seul tronçon (relecture K2h).
+  // escalier droit converti en cage à un seul tronçon (relecture K2h). Variantes de l'escalier
+  // droit à nez retouchés (K-Q39 option a, sous-lot K2i), placées avant les trois cages pour que
+  // les `examples` de la propriété gardent leurs indices.
   const straightCage = toCageLayout(createProject("straight"))!;
+  const straight = createProject("straight");
+  const TILTED = [
+    withNosingOverrides(straight, [{ kind: "angle", index: 4, angle: 8 }]),
+    withNosingOverrides(straight, [{ kind: "angle", index: 4, angle: 0 }]),
+    withNosingOverrides(straight, [{ kind: "fixed", index: 4 }]),
+    withNosingOverrides(straight, [
+      { kind: "angle", index: 4, angle: 8 },
+      { kind: "angle", index: 4, angle: 0 },
+    ]),
+  ];
   const BASES = [
     ...ALL_PRESET_IDS.map((id) => createProject(id)),
+    ...TILTED,
     createDemoProject("demo-cage-landing-steel"),
     loadExample("cage-palier-droit.blondel.json"),
     straightCage,
@@ -77,9 +96,199 @@ describe("stringerLineOnTurn : ligne d'appui écrite au passage d'une volée dro
     expect(stringerLineOnTurn(cage, back)).toBe(back);
   });
 
-  it("propriété : écriture de `nosing` si et seulement si profilés sans ligne d'appui, tracé précédent droit et suivant à tournant ; sinon le même objet", () => {
+  it("hasBrokenNosingLine (K-Q39 option a, K2i) : tournant, cage, ou volées droites à nez imposé incliné (dernier angle non nul) ; hélicoïdal jamais", () => {
+    const cases: [string, Project, boolean][] = [
+      ["droit", straight, false],
+      ["droit + fixe@4", withNosingOverrides(straight, [{ kind: "fixed", index: 4 }]), false],
+      [
+        "droit + 0°@4",
+        withNosingOverrides(straight, [{ kind: "angle", index: 4, angle: 0 }]),
+        false,
+      ],
+      [
+        "droit + 8°@4",
+        withNosingOverrides(straight, [{ kind: "angle", index: 4, angle: 8 }]),
+        true,
+      ],
+      [
+        "droit + −8°@4",
+        withNosingOverrides(straight, [{ kind: "angle", index: 4, angle: -8 }]),
+        true,
+      ],
+      [
+        "droit + [8°, 0°]@4 (dernier appliqué)",
+        withNosingOverrides(straight, [
+          { kind: "angle", index: 4, angle: 8 },
+          { kind: "angle", index: 4, angle: 0 },
+        ]),
+        false,
+      ],
+      [
+        "droit + [0°, 8°]@4",
+        withNosingOverrides(straight, [
+          { kind: "angle", index: 4, angle: 0 },
+          { kind: "angle", index: 4, angle: 8 },
+        ]),
+        true,
+      ],
+      [
+        "droit + 8°@999 (orphelin compté, convention de l'implémenteur K2i, à valider)",
+        withNosingOverrides(straight, [{ kind: "angle", index: 999, angle: 8 }]),
+        true,
+      ],
+      [
+        "droit + 6°@0 (nez de départ, jamais appliqué par le découpage, compté : même convention)",
+        withNosingOverrides(straight, [{ kind: "angle", index: 0, angle: 6 }]),
+        true,
+      ],
+      [
+        "droit + −0°@4 (angle nul)",
+        withNosingOverrides(straight, [{ kind: "angle", index: 4, angle: -0 }]),
+        false,
+      ],
+      ["quart gauche", createProject("quarter-left"), true],
+      [
+        "hélicoïdal + 8°@4 (retouches ignorées)",
+        withNosingOverrides(createProject("helical"), [{ kind: "angle", index: 4, angle: 8 }]),
+        false,
+      ],
+      ["cage à un seul tronçon", straightCage, true],
+    ];
+    for (const [label, p, expected] of cases) {
+      expect([label, hasBrokenNosingLine(p.stair)]).toEqual([label, expected]);
+    }
+    // Sans retouche, le prédicat est exactement `isTurningLayout`.
+    for (const p of [...ALL_PRESET_IDS.map((id) => createProject(id)), straightCage]) {
+      expect(p.stair.nosingOverrides).toEqual([]);
+      expect(hasBrokenNosingLine(p.stair)).toBe(isTurningLayout(p.stair.layout));
+    }
+  });
+
+  it("K-Q39 : premier nez imposé incliné d'un escalier droit en profilés : `nosing` écrit ; sinon le même objet", () => {
+    const p = withStructure(straight, "steel-profile", { family: "UPN" });
+    const tilted = withNosingOverrides(p, [{ kind: "angle", index: 4, angle: 8 }]);
+    const out = stringerLineOnTurn(p, tilted);
+    expect(out.stair.structure).toEqual({
+      kind: "steel-profile",
+      params: { family: "UPN", stringerLine: "nosing" },
+    });
+    expect({ ...out, stair: { ...out.stair, structure: tilted.stair.structure } }).toEqual(tilted);
+    // Tracé précédent déjà à ligne brisée (second nez incliné) : rien n'est écrit.
+    const second = withNosingOverrides(tilted, [
+      ...tilted.stair.nosingOverrides,
+      { kind: "angle", index: 6, angle: -5 },
+    ]);
+    expect(stringerLineOnTurn(tilted, second)).toBe(second);
+    // Retrait des retouches : rien n'est retiré ni écrit.
+    const removed = withNosingOverrides(tilted, []);
+    expect(stringerLineOnTurn(tilted, removed)).toBe(removed);
+    // `chord` jamais remplacé.
+    const chordParams = { family: "UPN", stringerLine: "chord" };
+    const chord = withStructure(tilted, "steel-profile", chordParams);
+    expect(stringerLineOnTurn(withStructure(p, "steel-profile", chordParams), chord)).toBe(chord);
+    // Angle nul : face à une seule pente, rien n'est écrit.
+    const zero = withNosingOverrides(p, [{ kind: "angle", index: 4, angle: 0 }]);
+    expect(stringerLineOnTurn(p, zero)).toBe(zero);
+  });
+
+  it("K-Q36 conservée (relecture K2i) : un droit déjà incliné sans ligne d'appui (fichier enregistré avant K2i, ou profilés choisis avant le premier nez incliné) qui devient tournant ou cage reçoit `nosing`", () => {
+    const tilted = withStructure(
+      withNosingOverrides(straight, [{ kind: "angle", index: 4, angle: 8 }]),
+      "steel-profile",
+      { family: "UPN" },
+    );
+    const targets: [string, Project][] = [
+      ...ALL_PRESET_IDS.filter((id) => isTurningLayout(createProject(id).stair.layout)).map(
+        (id): [string, Project] => [
+          id,
+          { ...tilted, stair: { ...tilted.stair, layout: createProject(id).stair.layout } },
+        ],
+      ),
+      ["cage", toCageLayout(tilted)!],
+    ];
+    expect(targets.length).toBeGreaterThan(2);
+    for (const [label, next] of targets) {
+      expect([label, stringerLineOnTurn(tilted, next).stair.structure.params]).toEqual([
+        label,
+        { family: "UPN", stringerLine: "nosing" },
+      ]);
+    }
+  });
+
+  it("explicitStructureParams (K-Q39 option a) : `nosing` écrit au choix neuf des profilés sur un droit à nez incliné, jamais sur un droit à une seule pente", () => {
+    const tilted = withNosingOverrides(straight, [{ kind: "angle", index: 4, angle: 8 }]);
+    expect(explicitStructureParams(tilted, "steel-profile", { family: "UPN" })).toEqual({
+      family: "UPN",
+      stringerLine: "nosing",
+    });
+    const chord = { family: "UPN", stringerLine: "chord" };
+    expect(explicitStructureParams(tilted, "steel-profile", chord)).toBe(chord);
+    const flat = { family: "UPN" };
+    expect(explicitStructureParams(tilted, "steel-flat", flat)).toBe(flat);
+    expect(explicitStructureParams(straight, "steel-profile", flat)).toBe(flat);
+    const params = applyStructureChoice(tilted, "steel-profile", { family: "UPN" }).project.stair
+      .structure.params;
+    expect(params).toMatchObject({ family: "UPN", stringerLine: "nosing" });
+  });
+
+  // L'identité du modèle découle de celle du projet : le plugin et le pipeline ne changent pas
+  // en K2i (diff de `steelProfile.ts` limité aux commentaires).
+  it("propriété I1 : escalier droit à une seule pente (retouches `fixed`, angle nul ou −0, dernier angle nul) : paramètres et projet inchangés", () => {
+    const override = fc.oneof(
+      fc.record({ kind: fc.constant("fixed" as const), index: fc.nat({ max: 20 }) }),
+      fc.record({
+        kind: fc.constant("angle" as const),
+        index: fc.nat({ max: 20 }),
+        angle: fc.constantFrom(0, -0),
+      }),
+      // Un nez incliné puis remis à zéro : le dernier angle compte.
+      fc.tuple(fc.nat({ max: 20 }), fc.integer({ min: -30, max: 30 })).map(([index, angle]) => [
+        { kind: "angle" as const, index, angle },
+        { kind: "angle" as const, index, angle: 0 },
+      ]),
+    );
+    fc.assert(
+      fc.property(
+        fc.integer({ min: 2400, max: 3200 }),
+        fc.integer({ min: 700, max: 1100 }),
+        fc.array(override, { maxLength: 4 }),
+        fc.constantFrom("steel-profile", "steel-flat", "wood-housed"),
+        fc.constantFrom<Record<string, unknown>>({}, { family: "UPN" }, { stringerLine: "chord" }),
+        (floorToFloor, width, drawn, kind, params) => {
+          const base = createProject("straight", { floorToFloor, width });
+          const p = withNosingOverrides(base, drawn.flat());
+          expect(hasBrokenNosingLine(p.stair)).toBe(false);
+          expect(explicitStructureParams(p, kind, params)).toBe(params);
+          const before = withStructure(base, kind, params);
+          const after = withStructure(p, kind, params);
+          expect(stringerLineOnTurn(before, after)).toBe(after);
+        },
+      ),
+      { numRuns: RUNS },
+    );
+    const chosen = applyStructureChoice(
+      withNosingOverrides(createProject("straight"), [{ kind: "angle", index: 4, angle: 0 }]),
+      "steel-profile",
+      { family: "UPN" },
+    ).project.stair.structure.params;
+    expect(Object.hasOwn(chosen, "stringerLine")).toBe(false);
+  });
+
+  // Oracle indépendant de la ligne des nez brisée (le dernier angle d'un nez compte, hélicoïdal
+  // exclu), pour ne pas prendre le prédicat testé comme son propre oracle.
+  const tiltedOracle = (p: Project): boolean => {
+    if (p.stair.layout.kind === "helical") return false;
+    const last = new Map<number, number>();
+    for (const o of p.stair.nosingOverrides) if (o.kind === "angle") last.set(o.index, o.angle);
+    return [...last.values()].some((a) => a !== 0);
+  };
+  const brokenOracle = (p: Project): boolean => isTurningLayout(p.stair.layout) || tiltedOracle(p);
+
+  it("propriété : écriture de `nosing` si et seulement si profilés sans ligne d'appui et passage à un tournant (K-Q36) ou d'une seule pente à une ligne des nez brisée (K-Q39) ; sinon le même objet", () => {
     let written = 0;
     let writtenCage = 0;
+    let writtenTilted = 0;
+    let writtenTiltedToTurn = 0;
     fc.assert(
       fc.property(
         fc.nat({ max: BASES.length - 1 }),
@@ -98,14 +307,16 @@ describe("stringerLineOnTurn : ligne d'appui écrite au passage d'une volée dro
           const expected =
             kind === "steel-profile" &&
             !Object.hasOwn(params, "stringerLine") &&
-            !isTurningLayout(previous.stair.layout) &&
-            isTurningLayout(next.stair.layout);
+            ((!isTurningLayout(previous.stair.layout) && isTurningLayout(next.stair.layout)) ||
+              (!brokenOracle(previous) && brokenOracle(next)));
           if (!expected) {
             expect(out).toBe(next);
             return;
           }
           written++;
           if (next.stair.layout.kind === "cage") writtenCage++;
+          if (!isTurningLayout(next.stair.layout)) writtenTilted++;
+          if (tiltedOracle(previous) && isTurningLayout(next.stair.layout)) writtenTiltedToTurn++;
           expect(out.stair.structure).toEqual({
             kind,
             params: { ...params, stringerLine: "nosing" },
@@ -119,19 +330,25 @@ describe("stringerLineOnTurn : ligne d'appui écrite au passage d'une volée dro
       ),
       {
         numRuns: RUNS,
-        // Passages d'un escalier droit à chacune des trois cages, toujours exercés.
-        examples: [BASES.length - 3, BASES.length - 2, BASES.length - 1].map(
-          (j): [number, number, string, Record<string, unknown>] => [
-            ALL_PRESET_IDS.indexOf("straight"),
-            j,
-            "steel-profile",
-            { family: "UPN" },
-          ],
-        ),
+        // Passages d'un escalier droit à chacune des trois cages et au droit à nez incliné de
+        // 8° (K-Q39), et du droit incliné au quart tournant (K-Q36), toujours exercés.
+        examples: [
+          ...[BASES.length - 3, BASES.length - 2, BASES.length - 1, ALL_PRESET_IDS.length].map(
+            (j): [number, number] => [ALL_PRESET_IDS.indexOf("straight"), j],
+          ),
+          [ALL_PRESET_IDS.length, ALL_PRESET_IDS.indexOf("quarter-left")] as [number, number],
+        ].map(([i, j]): [number, number, string, Record<string, unknown>] => [
+          i,
+          j,
+          "steel-profile",
+          { family: "UPN" },
+        ]),
       },
     );
     expect(written).toBeGreaterThan(0);
     expect(writtenCage).toBeGreaterThanOrEqual(3);
+    expect(writtenTilted).toBeGreaterThanOrEqual(1);
+    expect(writtenTiltedToTurn).toBeGreaterThanOrEqual(1);
   });
 
   it("projet de forme inattendue (non validé) : rendu tel quel, sans lever", () => {
