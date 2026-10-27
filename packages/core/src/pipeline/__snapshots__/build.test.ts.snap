@@ -445,6 +445,32 @@ exports[`buildModel — exemples du dépôt > demo-cage-flared-steel.blondel.jso
 }
 `;
 
+exports[`buildModel — exemples du dépôt > demo-cage-landing-steel.blondel.json : cotes principales (non-régression) 1`] = `
+{
+  "blondel": 630,
+  "colletMin": null,
+  "colletsChord": [],
+  "firstRise": 180,
+  "g": 270,
+  "h": 180,
+  "headroom": 1900,
+  "headroomWidth": {
+    "min": 1960,
+    "nosing": 2,
+  },
+  "n": 15,
+  "parts": 111,
+  "run": 4510,
+  "treads": "ssssssslssssss",
+  "violations": {
+    "avertissement": 0,
+    "bloquant": 0,
+    "conseil": 2,
+  },
+  "zones": [],
+}
+`;
+
 exports[`buildModel — exemples du dépôt > demo-cage-oak-60.blondel.json : cotes principales (non-régression) 1`] = `
 {
   "blondel": 619.33,
@@ -731,6 +757,42 @@ exports[`buildModel — exemples du dépôt > demo-helical-well.blondel.json : c
     "conseil": 2,
   },
   "zones": [],
+}
+`;
+
+exports[`buildModel — exemples du dépôt > demo-quarter-cranked-steel.blondel.json : cotes principales (non-régression) 1`] = `
+{
+  "blondel": 625.65,
+  "colletMin": 100.9,
+  "colletsChord": [
+    207.7,
+    148,
+    128.2,
+    100.9,
+    153.1,
+    173.7,
+    220.2,
+  ],
+  "firstRise": 180,
+  "g": 265.65,
+  "h": 180,
+  "headroom": 2055.7,
+  "headroomWidth": {
+    "min": 1960,
+    "nosing": 2,
+  },
+  "n": 15,
+  "parts": 233,
+  "run": 3719.1,
+  "treads": "wwwwwwwsssssss",
+  "violations": {
+    "avertissement": 0,
+    "bloquant": 0,
+    "conseil": 2,
+  },
+  "zones": [
+    "0-7 M2",
+  ],
 }
 `;
 
@@ -1053,14 +1115,13 @@ exports[`buildModel — exemples du dépôt > j3b-acceptance-01-tole-pliee.blond
 exports[`buildModel — exemples du dépôt > j3c-acceptance-01-upn.blondel.json : cotes principales (non-régression) 1`] = `
 {
   "blondel": 600.02,
-  "colletMin": 111.4,
+  "colletMin": 101.6,
   "colletsChord": [
-    111.4,
-    113.8,
-    119.1,
-    155.5,
-    151.5,
-    191.6,
+    120,
+    120,
+    120,
+    140.2,
+    101.6,
   ],
   "firstRise": 180,
   "g": 240.02,
@@ -1071,16 +1132,16 @@ exports[`buildModel — exemples du dépôt > j3c-acceptance-01-upn.blondel.json
     "nosing": 3,
   },
   "n": 15,
-  "parts": 62,
+  "parts": 69,
   "run": 3360.3,
-  "treads": "wwwwwwssssssss",
+  "treads": "wwwwwsssssssss",
   "violations": {
-    "avertissement": 6,
+    "avertissement": 4,
     "bloquant": 0,
-    "conseil": 3,
+    "conseil": 2,
   },
   "zones": [
-    "0-6 M3-cubic",
+    "0-4 M3-cubic",
   ],
 }
 `;

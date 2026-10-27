@@ -240,6 +240,7 @@ export const PDF_JOBS: Readonly<Record<PdfJobId, PdfJob>> = {
         cutsheet: false,
         compliance: false,
         toValidate: false,
+        jigs: false,
         flats: false,
         templates: false,
       },

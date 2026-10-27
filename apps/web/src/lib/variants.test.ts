@@ -154,6 +154,46 @@ describe("comparateur de variantes", () => {
     expect(variantParams(p, { id: "x", kind: "wood-housed", label: textMessage("x") })).toEqual({});
   });
 
+  it("variante profilés appliquée = choix neuf : ligne d'appui écrite sur un tournant, jamais la remarque de bascule (K-Q11, sous-lot K2d)", () => {
+    clearModelCache();
+    const project = parseProjectText(j3aText);
+    const { rows } = runVariants(project, variantsFor(project, availableStructures()));
+    const upn = rows.find((r) => r.kind === "steel-profile" && r.params["family"] === "UPN")!;
+    const applied = applyVariant(project, upn);
+    expect(applied.stair.structure.params).toMatchObject({ family: "UPN", stringerLine: "nosing" });
+    const keys = (buildModel(applied).notes ?? []).map((n) => n.key);
+    expect(keys).not.toContain("structure.steelProfile.note.defaultCranked");
+    // Barre droite choisie dans le projet : gardée par la variante de même structure.
+    const chord = withStructure(project, "steel-profile", { family: "UPN", stringerLine: "chord" });
+    const row = { ...upn, params: variantParams(chord, upn) };
+    expect(applyVariant(chord, row).stair.structure.params["stringerLine"]).toBe("chord");
+    // Escalier droit à une seule pente : paramètres rendus tels quels (invariant I1, aucun jarret
+    // possible).
+    const straight = createProject("straight");
+    expect(
+      applyVariant(straight, { kind: "steel-profile", params: { family: "UPN" }, adaptations: [] })
+        .stair.structure.params,
+    ).toEqual({ family: "UPN" });
+    // Escalier droit à nez imposé incliné : ligne des nez brisée (K-Q39 option a, sous-lot K2i),
+    // ligne d'appui écrite, aucune remarque de bascule.
+    const tilted: Project = {
+      ...straight,
+      stair: { ...straight.stair, nosingOverrides: [{ kind: "angle", index: 4, angle: 8 }] },
+    };
+    const appliedTilted = applyVariant(tilted, {
+      kind: "steel-profile",
+      params: { family: "UPN" },
+      adaptations: [],
+    });
+    expect(appliedTilted.stair.structure.params).toMatchObject({
+      family: "UPN",
+      stringerLine: "nosing",
+    });
+    expect((buildModel(appliedTilted).notes ?? []).map((n) => n.key)).not.toContain(
+      "structure.steelProfile.note.defaultCranked",
+    );
+  });
+
   it("tableau côte à côte sur le cas d'acceptation n° 1 : grandeurs du cœur, coût « profil d'atelier requis »", () => {
     clearModelCache();
     const project = parseProjectText(j3aText);

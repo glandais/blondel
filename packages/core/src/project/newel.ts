@@ -10,7 +10,7 @@
  *   décalé vers le jour), qui dépend de la section retenue.
  */
 import { msg, type Message } from "@blondel/i18n";
-import { findSection } from "../catalog/sections.js";
+import { findSection, sectionsOf } from "../catalog/sections.js";
 import { LayoutError } from "../layout/errors.js";
 import { computeLayout } from "../layout/layout.js";
 import type { Mm } from "../model/primitives.js";
@@ -60,6 +60,30 @@ export function expectedNewel(
   if (p.newel.size !== "auto") return profileNewel(0, p.newel);
   const b = flangeWidth ?? namedFlangeWidth(p);
   return b === null ? null : profileNewel(b, p.newel);
+}
+
+/**
+ * Poteaux attendus des profilés pour chaque largeur d'aile distincte de la famille des paramètres
+ * (`expectedNewel` pour chaque section du catalogue), sans doublon, triés par côté puis par
+ * décalage : ensemble des poteaux que le point fixe section ↔ poteau peut essayer (K-Q19, K-Q20,
+ * sous-lot K2e2 du limon coudé). Vide si la structure n'est pas `steel-profile`.
+ */
+export function profileNewelFamily(
+  kind: string,
+  params: Readonly<Record<string, unknown>>,
+): NewelInner[] {
+  if (kind !== "steel-profile") return [];
+  const out: NewelInner[] = [];
+  for (const s of sectionsOf(profileParams(params).family)) {
+    const n = expectedNewel(kind, params, s.b);
+    if (n && !out.some((m) => newelMatches(m, n))) out.push(n);
+  }
+  return out.sort(compareNewels);
+}
+
+/** Ordre des poteaux : côté, puis décalage vers le jour. */
+export function compareNewels(a: NewelInner, b: NewelInner): number {
+  return a.size - b.size || (a.offset ?? 0) - (b.offset ?? 0);
 }
 
 /** Paramètres `steel-profile` complétés (défauts du plugin si invalides). */

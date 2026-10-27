@@ -57,6 +57,8 @@ export const GROUP_LABELS: Readonly<Record<string, MessageKey>> = {
   bolts: "ui.param.group.bolts",
   lagScrews: "ui.param.group.lagScrews",
   anchors: "ui.param.group.anchorsFootHead",
+  // Limon coudé des profilés (`steel-profile`, QUESTIONS A41, K-Q9) : nettoyage des jarrets.
+  knee: "ui.param.group.knee",
 };
 
 const MM = "mm";
@@ -856,6 +858,34 @@ const BY_KIND: Readonly<Record<string, Readonly<Record<string, FieldText>>>> = {
   },
   "steel-flat": {
     thickness: { label: "ui.param.steelFlat.thickness.label", unit: MM, hint: TO_VALIDATE },
+  },
+  // Ligne d'appui des limons en profilés (CK16, niveau Atelier) et nettoyage des jarrets du limon
+  // coudé (K-Q9, valeurs ◆ à valider). L'aide de `stringerLine` dit la convention « à valider »
+  // (QUESTIONS A41) sans compter de ◆ : un choix de forme, pas une valeur numérique.
+  "steel-profile": {
+    stringerLine: {
+      label: "ui.param.stringerLine.label",
+      hint: "ui.param.stringerLine.hint",
+      options: {
+        chord: "ui.param.stringerLine.option.chord",
+        nosing: "ui.param.stringerLine.option.nosing",
+      },
+    },
+    "knee.minSegmentLength": {
+      label: "ui.param.knee.minSegmentLength.label",
+      unit: MM,
+      hint: TO_VALIDATE,
+    },
+    "knee.minKneeAngle": {
+      label: "ui.param.knee.minKneeAngle.label",
+      unit: "°",
+      hint: TO_VALIDATE,
+    },
+    "knee.maxSegmentAngle": {
+      label: "ui.param.knee.maxSegmentAngle.label",
+      unit: "°",
+      hint: TO_VALIDATE,
+    },
   },
   "steel-curved": {
     thickness: { label: "ui.param.steelCurved.thickness.label", unit: MM, hint: TO_VALIDATE },

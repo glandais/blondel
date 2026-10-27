@@ -45,8 +45,8 @@
           "direction": "left",
           "inner": {
             "kind": "newel",
-            "offset": 43,
-            "size": 125
+            "offset": 35,
+            "size": 110
           },
           "mode": "winders"
         }
@@ -70,7 +70,8 @@
     "structure": {
       "kind": "steel-profile",
       "params": {
-        "family": "UPN"
+        "family": "UPN",
+        "stringerLine": "nosing"
       }
     },
     "treads": {

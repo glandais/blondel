@@ -12,6 +12,7 @@ import {
   createProject,
   type DemoPresetId,
   stableStringify,
+  stringerLineOnTurn,
   type Location,
   type PresetId,
   type PresetOptions,
@@ -411,18 +412,23 @@ export function createProjectStore(options: ProjectStoreOptions = {}): ProjectSt
           : earlierCopy,
       lastOpened: null,
 
+      // Éditions du projet : ligne d'appui des profilés écrite quand le tracé passe d'une volée
+      // droite à un tournant (décision K-Q36) ou quand le premier nez imposé incliné est ajouté
+      // (décision K-Q39 option a) ; fonction du cœur ; pas au chargement d'un fichier ni à
+      // l'annulation, qui gardent le projet tel qu'il a été enregistré.
       update: (recipe, groupKey, updateOptions) => {
         let next: Project;
+        const p = get().project;
         try {
-          next = recipe(get().project);
+          next = recipe(p);
         } catch (e) {
           return { ok: false, issues: [errorMessageOf(e)] };
         }
-        return apply(next, groupKey, updateOptions?.sticky === true);
+        return apply(stringerLineOnTurn(p, next), groupKey, updateOptions?.sticky === true);
       },
       setField: (path, value) => {
         const p = get().project;
-        return apply(setIn(p, path, value), path.join("."));
+        return apply(stringerLineOnTurn(p, setIn(p, path, value)), path.join("."));
       },
       endGroup: () => {
         const h = get().history;

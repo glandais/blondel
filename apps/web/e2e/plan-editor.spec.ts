@@ -83,7 +83,12 @@ async function importProject(
 /**
  * Point de l'écran où l'élément `selector` du plan reçoit le clic : un point de son contour
  * (milieux et quarts des côtés) où `elementFromPoint` le désigne, éventuellement restreint à
- * l'intérieur d'un autre polygone (`inside`). `null` si aucun.
+ * l'intérieur d'un autre polygone (`inside`). `null` si aucun. Le plan est d'abord ramené dans la
+ * vue : en mise en page étroite (`.plan-site__main` défilant, plan de 640 px), une saisie dans
+ * l'inspecteur peut avoir fait défiler le dessin sous la barre de vue (sous-lot K2h : l'accueil à
+ * dix-neuf démos, plus haut d'une ligne, laissait le dessin défilé de 258 px). Robustesse du test
+ * seulement : le défilement de l'interface elle-même est un défaut noté en dette (QUESTIONS
+ * D6) ; si l'interface est corrigée, cet appel pourra être retiré.
  */
 async function hitPoint(
   plan: Locator,
@@ -91,6 +96,7 @@ async function hitPoint(
   where: "edge" | "fill",
   inside?: string,
 ): Promise<{ x: number; y: number } | null> {
+  await plan.scrollIntoViewIfNeeded();
   return plan.evaluate(
     (svg, args) => {
       const el = svg.querySelector<SVGPolygonElement>(args.selector);

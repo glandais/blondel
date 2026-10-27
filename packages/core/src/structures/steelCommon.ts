@@ -116,6 +116,12 @@ export interface ExecutionClassInput {
   readonly grade: SteelGrade;
   /** Longueur de soudures bout à bout (assemblages de continuité), mm. */
   readonly buttWeld: Mm;
+  /**
+   * Part de `buttWeld` faite des jarrets et onglets d'un limon coudé (décision K-Q2 de QUESTIONS
+   * A41, sous-lot K2d : soudures bout à bout de continuité, application au jarret à valider),
+   * nommée à part dans les raisons. Absent : 0 (autres plugins inchangés).
+   */
+  readonly crankedButtWeld?: Mm;
   readonly hotForming?: boolean;
   /**
    * La structure comporte-t-elle **au moins une soudure** (cordons d'angle compris) ? La nuance
@@ -142,8 +148,13 @@ export function deduceExecutionClass(input: ExecutionClassInput): {
   const reasons: Message[] = [];
   if (input.grade === "S355" && (input.welded ?? true))
     reasons.push(msg("structure.steel.exc.reason.s355Welded"));
-  if (input.buttWeld > 1e-9)
-    reasons.push(msg("structure.steel.exc.reason.buttWeld", { length: dec(input.buttWeld, 0) }));
+  // Jarrets et onglets du limon coudé (K-Q2) nommés à part ; la raison générale garde le reste.
+  const cranked = Math.min(Math.max(0, input.crankedButtWeld ?? 0), input.buttWeld);
+  const rest = input.buttWeld - cranked;
+  if (rest > 1e-9)
+    reasons.push(msg("structure.steel.exc.reason.buttWeld", { length: dec(rest, 0) }));
+  if (cranked > 1e-9)
+    reasons.push(msg("structure.steel.exc.reason.crankedButtWeld", { length: dec(cranked, 0) }));
   if (input.hotForming) reasons.push(msg("structure.steel.exc.reason.hotForming"));
   return { executionClass: reasons.length > 0 ? "EXC2" : "EXC1", reasons };
 }

@@ -116,6 +116,33 @@ describe("tronçons et joints (limon de jour débillardé)", () => {
   });
 });
 
+describe("tronçons du limon coudé des profilés (A41, bent-stringer K2c)", () => {
+  it("quart tournant en `nosing` : un groupe par limon coudé, joint au jarret nommant le voisin, nom du limon entier", () => {
+    const p = createProject("quarter-left");
+    const project: Project = {
+      ...p,
+      stair: {
+        ...p.stair,
+        structure: { kind: "steel-profile", params: { stringerLine: "nosing" } },
+      },
+    };
+    const model = buildModel(project);
+    const parts = model.parts.filter((x) => x.componentOf !== undefined);
+    const groups = segmentedParts(model).filter((g) => g.base.endsWith("-segment"));
+    expect(groups.length).toBeGreaterThan(0);
+    expect(groups.reduce((a, g) => a + g.segments.length, 0)).toBe(parts.length);
+    for (const g of groups) {
+      g.joints.forEach((j) => {
+        expect(j.weldMm).toBeGreaterThan(0);
+        expect(FR.t(j.label)).toMatch(/Jarret/);
+        expect(FR.t(j.label)).toContain(j.to.mark);
+      });
+      const whole = model.parts.find((x) => x.id === g.segments[0]!.part.componentOf)!;
+      expect(FR.t(segmentedPartName(g))).toBe(FR.t(whole.name));
+    }
+  });
+});
+
 describe("tronçons du limon central (A29)", () => {
   /** Tronçon fabriqué : développé rectangulaire portant un trait de joint. */
   const segment = (id: string, key: MessageKey, index: number): Part =>

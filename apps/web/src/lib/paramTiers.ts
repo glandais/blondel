@@ -37,6 +37,7 @@
 import {
   ROTATION_DEFAULT_REACH,
   ROTATION_DEFAULT_STEEPNESS,
+  hasBrokenNosingLine,
   isValueValidated,
   resolveAnchorKind,
   resolveCurvedMethod,
@@ -472,6 +473,16 @@ const STRUCTURE_BY_KIND: Readonly<Record<string, Readonly<Record<string, ParamTi
     cantileverJustification: design(S, [more(5)]),
     laminationJustification: design(S, [more(5)]),
   },
+  // Limons en profilés : ligne d'appui (barre droite ou limon coudé, CK16) en Atelier ; nettoyage
+  // des jarrets (K-Q9) et angle maximal de tronçon (K-Q35) ◆, seulement en limon coudé
+  // (`structureParamApplies`).
+  "steel-profile": {
+    stringerLine: workshop(S),
+    knee: workshop(S),
+    "knee.minSegmentLength": workshop(S),
+    "knee.minKneeAngle": workshop(S),
+    "knee.maxSegmentAngle": workshop(S),
+  },
   "helical-core": {
     column: workshop(S),
     "column.material": design(S, [more(5)]),
@@ -643,8 +654,12 @@ function guardPaths(project: Project): (readonly string[])[] {
  * filière retenue sur une trace courbe (`resolveCurvedMethod` du cœur : lamelles et plis minces
  * pour le moule, couches pour les couches empilées, QUESTIONS A33 (e)), la présence des ancrages
  * (`anchors.*`) et leur type retenu (`resolveAnchorKind` : réglages du sabot ou de la platine à
- * âme noyée, A33 (f), A34 (c) ; épaisseur minimale de couche au joint de l'âme de pied, A39 (d)). Les autres paramètres s'appliquent toujours. `params` : paramètres du plugin complétés par ses défauts.
- * Lecture du projet seulement, aucun calcul.
+ * âme noyée, A33 (f), A34 (c) ; épaisseur minimale de couche au joint de l'âme de pied,
+ * A39 (d)), le nettoyage des jarrets du limon coudé des profilés (`knee.*`, K-Q9) seulement en
+ * limon coudé (`stringerLine` = `nosing`) sur un tracé à ligne des nez brisée
+ * (`hasBrokenNosingLine` du cœur : tournant, cage saisie ou nez imposé incliné, K-Q39 option a).
+ * Les autres paramètres s'appliquent toujours. `params` : paramètres du plugin complétés par ses
+ * défauts. Lecture du projet seulement, aucun calcul.
  */
 export function structureParamApplies(
   project: Project,
@@ -733,6 +748,13 @@ export function structureParamApplies(
   if (head === "lagScrews" && path[1] === "minTotalAnchorage") {
     const v = field(field(params, "lagScrews"), "minTotalAnchorage");
     return typeof v === "number" && v > 0;
+  }
+  // Nettoyage des jarrets du limon coudé des profilés (K-Q9) : seulement en limon coudé, sur un
+  // tracé à ligne des nez brisée (`hasBrokenNosingLine` du cœur : volées à tournant, cage saisie
+  // ou nez imposé incliné, décision K-Q39 option a) ; escalier droit à une seule pente : limon
+  // droit dans les deux réglages, aucun jarret (invariant I1, sous-lot K2d).
+  if (head === "knee") {
+    return hasBrokenNosingLine(project.stair) && field(params, "stringerLine") === "nosing";
   }
   // Réduction selon l'angle du fil (A35 (j)) : poutre en couches empilées seulement.
   if (head === "grainAngle") return curvedMethodOf(project, params) === "stacked";

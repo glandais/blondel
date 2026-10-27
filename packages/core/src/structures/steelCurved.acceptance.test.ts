@@ -154,19 +154,35 @@ describe("critère d'acceptation n° 2 : comparateur sur la même épure", () =>
       expect(r.uniqueParts).toBeLessThanOrEqual(r.partCount);
       expect(r.weldMm).toBeGreaterThan(0);
     }
-    expect(upn!.buttWeldMm).toBe(0);
-    expect(upn!.executionClass).toBe("EXC1");
-    // Valeurs reprises dans docs/ACCEPTATION.md (critère n° 2), sans barème.
-    expect(upn!.massKg).toBeCloseTo(525.5, 0);
-    expect([upn!.partCount, upn!.uniqueParts]).toEqual([57, 35]);
-    expect(Math.round(upn!.weldMm)).toBe(11232);
+    // Limon coudé par défaut (K-Q11, sous-lot K2d) : jarrets et onglets du limon coudé soudés
+    // bout à bout (K-Q2), donc EXC2.
+    expect(upn!.buttWeldMm).toBeGreaterThan(0);
+    expect(Math.round(upn!.buttWeldMm)).toBe(8332);
+    expect(upn!.executionClass).toBe("EXC2");
+    // Valeurs reprises dans docs/ACCEPTATION.md (critère n° 2), sans barème. Limon coudé (QUESTIONS
+    // A13, A41) : UPN 200 sans erreur, poteau 130 / 45 (K-Q15). En barre droite (`chord`), le
+    // limon mural LE2 sur la corde des nez à travers le tournant demandait 340 mm d'âme : aucune
+    // section UPN (UPN 260 en erreur, 525,5 kg, 57 pièces dont 35 uniques, 11 232 mm de cordons).
+    expect(upn!.massKg).toBeCloseTo(402.7, 0);
+    expect([upn!.partCount, upn!.uniqueParts]).toEqual([73, 42]);
+    expect(Math.round(upn!.weldMm)).toBe(16271);
     expect(curved!.massKg).toBeCloseTo(307.2, 0);
     expect([curved!.partCount, curved!.uniqueParts]).toEqual([66, 40]);
-    // Limon mural LE2 en barre droite sur la corde des nez à travers le tournant : aucune
-    // section UPN du catalogue n'y loge les cornières (340 mm d'âme nécessaires), le
-    // prédimensionnement passe dès l'UPN 80 ; limon coudé soudé en V1 (QUESTIONS A13).
-    expect(frList(upn!.errors).join(" ")).toMatch(/aucune section UPN du catalogue ne passe/);
+    expect(upn!.errors).toEqual([]);
+    expect(upn!.model.parts.find((p) => p.category === "stringer" && p.section)?.section).toEqual(
+      expect.objectContaining({ params: expect.objectContaining({ section: "UPN 200" }) }),
+    );
     expect(upn!.precheck.violations).toEqual({ bloquant: 0, avertissement: 0, conseil: 0 });
+    // Barre droite toujours disponible : état d'avant la bascule, à l'identique.
+    const [chord] = compareEpure(project, [
+      { kind: "steel-profile", params: { family: "UPN", stringerLine: "chord" } },
+    ]);
+    expect(chord!.massKg).toBeCloseTo(525.5, 0);
+    expect([chord!.partCount, chord!.uniqueParts]).toEqual([57, 35]);
+    expect(Math.round(chord!.weldMm)).toBe(11232);
+    expect(chord!.buttWeldMm).toBe(0);
+    expect(chord!.executionClass).toBe("EXC1");
+    expect(frList(chord!.errors).join(" ")).toMatch(/aucune section UPN du catalogue ne passe/);
     expect(curved!.buttWeldMm).toBeGreaterThan(0);
     expect(curved!.weldMm).toBeGreaterThan(curved!.buttWeldMm);
     expect(curved!.executionClass).toBe("EXC2");
@@ -204,8 +220,15 @@ describe("critère d'acceptation n° 2 : comparateur sur la même épure", () =>
     // Même masse et mêmes pièces qu'en l'absence de barème : le coût ne change pas le modèle.
     expect(pu!.massKg).toBeCloseTo(upn!.massKg, 6);
     expect(pc!.partCount).toBe(curved!.partCount);
-    // Les cordons bout à bout du débillardé pèsent dans la main-d'œuvre.
-    expect(pc!.weldMm).toBeGreaterThan(pu!.weldMm);
+    // Les cordons bout à bout pèsent dans la main-d'œuvre des deux variantes : aboutages du
+    // débillardé, jarrets et onglets du limon coudé (K-Q2, sous-lot K2d : le limon coudé compte
+    // désormais plus de cordons que le débillardé, 16 271 contre 15 461 mm).
+    expect(pc!.buttWeldMm).toBeGreaterThan(0);
+    expect(pu!.buttWeldMm).toBeGreaterThan(0);
+    expect(pu!.weldMm).toBeGreaterThan(pc!.weldMm);
+    // Barème de test ci-dessus : 2 002,87 € pour le limon coudé, valeur mesurée au sous-lot K2d
+    // (ledger du chantier ; la barre droite, en erreur en UPN 260, n'est pas chiffrée ici).
+    expect(pu!.cost!.total).toBeCloseTo(2002.87, 1);
   });
 
   it("épure conservée (`jour: keep`) : incompatibilité seulement signalée, variante partielle", () => {

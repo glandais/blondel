@@ -68,9 +68,18 @@ export {
   type NewelInner,
 } from "./newel.js";
 export {
+  PROFILE_NEWEL_EXEMPT_RULES,
   PROFILE_NEWEL_ITERATIONS,
+  PROFILE_NEWEL_VERIFICATIONS,
+  addedViolations,
   applyStructureChoice,
+  explicitStructureParams,
+  hasBrokenNosingLine,
+  isTurningLayout,
   resolveProfileNewel,
+  stringerLineOnTurn,
+  violationCounts,
+  type ProfileNewelModel,
   type ResolvedProfileNewel,
   type StructureChoiceResult,
 } from "./structureChoice.js";

@@ -746,6 +746,276 @@ exports[`non-régression du tracé à volées (parité figée avec l'ancien mote
 }
 `;
 
+exports[`non-régression du tracé à volées (parité figée avec l'ancien moteur) > démo demo-quarter-cranked-steel 1`] = `
+{
+  "layout": {
+    "footprint": [
+      {
+        "x": 950,
+        "y": 0,
+      },
+      {
+        "x": 950,
+        "y": 1440,
+      },
+      {
+        "x": -2483,
+        "y": 1440,
+      },
+      {
+        "x": -2483,
+        "y": 490,
+      },
+      {
+        "x": -95.5,
+        "y": 490,
+      },
+      {
+        "x": -95.5,
+        "y": 509.5,
+      },
+      {
+        "x": 19.5,
+        "y": 509.5,
+      },
+      {
+        "x": 19.5,
+        "y": 394.5,
+      },
+      {
+        "x": 0,
+        "y": 394.5,
+      },
+      {
+        "x": 0,
+        "y": 0,
+      },
+    ],
+    "inner": {
+      "segments": [
+        {
+          "a": {
+            "x": 0,
+            "y": 0,
+          },
+          "b": {
+            "x": 0,
+            "y": 394.5,
+          },
+          "kind": "line",
+        },
+        {
+          "a": {
+            "x": 0,
+            "y": 394.5,
+          },
+          "b": {
+            "x": 19.5,
+            "y": 394.5,
+          },
+          "kind": "line",
+        },
+        {
+          "a": {
+            "x": 19.5,
+            "y": 394.5,
+          },
+          "b": {
+            "x": 19.5,
+            "y": 509.5,
+          },
+          "kind": "line",
+        },
+        {
+          "a": {
+            "x": 19.5,
+            "y": 509.5,
+          },
+          "b": {
+            "x": -95.5,
+            "y": 509.5,
+          },
+          "kind": "line",
+        },
+        {
+          "a": {
+            "x": -95.5,
+            "y": 509.5,
+          },
+          "b": {
+            "x": -95.5,
+            "y": 490,
+          },
+          "kind": "line",
+        },
+        {
+          "a": {
+            "x": -95.5,
+            "y": 490,
+          },
+          "b": {
+            "x": -2483,
+            "y": 490,
+          },
+          "kind": "line",
+        },
+      ],
+    },
+    "innerSide": "left",
+    "outer": {
+      "segments": [
+        {
+          "a": {
+            "x": 950,
+            "y": 0,
+          },
+          "b": {
+            "x": 950,
+            "y": 1440,
+          },
+          "kind": "line",
+        },
+        {
+          "a": {
+            "x": 950,
+            "y": 1440,
+          },
+          "b": {
+            "x": -2483,
+            "y": 1440,
+          },
+          "kind": "line",
+        },
+      ],
+    },
+    "sections": [
+      {
+        "end": {
+          "left": {
+            "x": 0,
+            "y": 490,
+          },
+          "right": {
+            "x": 950,
+            "y": 490,
+          },
+        },
+        "endWellSide": "left",
+        "index": 0,
+        "kind": "straight",
+        "sEnd": 490,
+        "sStart": 0,
+        "start": {
+          "left": {
+            "x": 0,
+            "y": 0,
+          },
+          "right": {
+            "x": 950,
+            "y": 0,
+          },
+        },
+        "widthEnd": 950,
+        "widthStart": 950,
+      },
+      {
+        "end": {
+          "left": {
+            "x": -2483,
+            "y": 490,
+          },
+          "right": {
+            "x": -2483,
+            "y": 1440,
+          },
+        },
+        "index": 1,
+        "kind": "straight",
+        "sEnd": 3719.128255227576,
+        "sStart": 1236.128255227576,
+        "start": {
+          "left": {
+            "x": 0,
+            "y": 490,
+          },
+          "right": {
+            "x": 0,
+            "y": 1440,
+          },
+        },
+        "startWellSide": "left",
+        "widthEnd": 950,
+        "widthStart": 950,
+      },
+    ],
+    "turns": [
+      {
+        "angle": 1.5707963267948966,
+        "collarSide": "left",
+        "direction": "left",
+        "index": 0,
+        "innerCorner": {
+          "x": 0,
+          "y": 490,
+        },
+        "mode": "winders",
+        "outerCorner": {
+          "x": 950,
+          "y": 1440,
+        },
+        "sEnd": 1236.128255227576,
+        "sStart": 490,
+        "wall": {
+          "kind": "sharp",
+        },
+        "well": {
+          "kind": "newel",
+          "offset": 38,
+          "size": 115,
+        },
+      },
+    ],
+    "walkline": {
+      "segments": [
+        {
+          "a": {
+            "x": 475,
+            "y": 0,
+          },
+          "b": {
+            "x": 475,
+            "y": 490,
+          },
+          "kind": "line",
+        },
+        {
+          "center": {
+            "x": 0,
+            "y": 490,
+          },
+          "kind": "arc",
+          "radius": 475,
+          "startAngle": 0,
+          "sweep": 1.5707963267948966,
+        },
+        {
+          "a": {
+            "x": 0,
+            "y": 965,
+          },
+          "b": {
+            "x": -2483,
+            "y": 965,
+          },
+          "kind": "line",
+        },
+      ],
+    },
+    "walklineOffset": 475,
+  },
+}
+`;
+
 exports[`non-régression du tracé à volées (parité figée avec l'ancien moteur) > démo demo-quarter-curved 1`] = `
 {
   "layout": {
@@ -3141,6 +3411,276 @@ exports[`non-régression du tracé à volées (parité figée avec l'ancien mote
       ],
     },
     "walklineOffset": 400,
+  },
+}
+`;
+
+exports[`non-régression du tracé à volées (parité figée avec l'ancien moteur) > exemple demo-quarter-cranked-steel.blondel.json 1`] = `
+{
+  "layout": {
+    "footprint": [
+      {
+        "x": 950,
+        "y": 0,
+      },
+      {
+        "x": 950,
+        "y": 1440,
+      },
+      {
+        "x": -2483,
+        "y": 1440,
+      },
+      {
+        "x": -2483,
+        "y": 490,
+      },
+      {
+        "x": -95.5,
+        "y": 490,
+      },
+      {
+        "x": -95.5,
+        "y": 509.5,
+      },
+      {
+        "x": 19.5,
+        "y": 509.5,
+      },
+      {
+        "x": 19.5,
+        "y": 394.5,
+      },
+      {
+        "x": 0,
+        "y": 394.5,
+      },
+      {
+        "x": 0,
+        "y": 0,
+      },
+    ],
+    "inner": {
+      "segments": [
+        {
+          "a": {
+            "x": 0,
+            "y": 0,
+          },
+          "b": {
+            "x": 0,
+            "y": 394.5,
+          },
+          "kind": "line",
+        },
+        {
+          "a": {
+            "x": 0,
+            "y": 394.5,
+          },
+          "b": {
+            "x": 19.5,
+            "y": 394.5,
+          },
+          "kind": "line",
+        },
+        {
+          "a": {
+            "x": 19.5,
+            "y": 394.5,
+          },
+          "b": {
+            "x": 19.5,
+            "y": 509.5,
+          },
+          "kind": "line",
+        },
+        {
+          "a": {
+            "x": 19.5,
+            "y": 509.5,
+          },
+          "b": {
+            "x": -95.5,
+            "y": 509.5,
+          },
+          "kind": "line",
+        },
+        {
+          "a": {
+            "x": -95.5,
+            "y": 509.5,
+          },
+          "b": {
+            "x": -95.5,
+            "y": 490,
+          },
+          "kind": "line",
+        },
+        {
+          "a": {
+            "x": -95.5,
+            "y": 490,
+          },
+          "b": {
+            "x": -2483,
+            "y": 490,
+          },
+          "kind": "line",
+        },
+      ],
+    },
+    "innerSide": "left",
+    "outer": {
+      "segments": [
+        {
+          "a": {
+            "x": 950,
+            "y": 0,
+          },
+          "b": {
+            "x": 950,
+            "y": 1440,
+          },
+          "kind": "line",
+        },
+        {
+          "a": {
+            "x": 950,
+            "y": 1440,
+          },
+          "b": {
+            "x": -2483,
+            "y": 1440,
+          },
+          "kind": "line",
+        },
+      ],
+    },
+    "sections": [
+      {
+        "end": {
+          "left": {
+            "x": 0,
+            "y": 490,
+          },
+          "right": {
+            "x": 950,
+            "y": 490,
+          },
+        },
+        "endWellSide": "left",
+        "index": 0,
+        "kind": "straight",
+        "sEnd": 490,
+        "sStart": 0,
+        "start": {
+          "left": {
+            "x": 0,
+            "y": 0,
+          },
+          "right": {
+            "x": 950,
+            "y": 0,
+          },
+        },
+        "widthEnd": 950,
+        "widthStart": 950,
+      },
+      {
+        "end": {
+          "left": {
+            "x": -2483,
+            "y": 490,
+          },
+          "right": {
+            "x": -2483,
+            "y": 1440,
+          },
+        },
+        "index": 1,
+        "kind": "straight",
+        "sEnd": 3719.128255227576,
+        "sStart": 1236.128255227576,
+        "start": {
+          "left": {
+            "x": 0,
+            "y": 490,
+          },
+          "right": {
+            "x": 0,
+            "y": 1440,
+          },
+        },
+        "startWellSide": "left",
+        "widthEnd": 950,
+        "widthStart": 950,
+      },
+    ],
+    "turns": [
+      {
+        "angle": 1.5707963267948966,
+        "collarSide": "left",
+        "direction": "left",
+        "index": 0,
+        "innerCorner": {
+          "x": 0,
+          "y": 490,
+        },
+        "mode": "winders",
+        "outerCorner": {
+          "x": 950,
+          "y": 1440,
+        },
+        "sEnd": 1236.128255227576,
+        "sStart": 490,
+        "wall": {
+          "kind": "sharp",
+        },
+        "well": {
+          "kind": "newel",
+          "offset": 38,
+          "size": 115,
+        },
+      },
+    ],
+    "walkline": {
+      "segments": [
+        {
+          "a": {
+            "x": 475,
+            "y": 0,
+          },
+          "b": {
+            "x": 475,
+            "y": 490,
+          },
+          "kind": "line",
+        },
+        {
+          "center": {
+            "x": 0,
+            "y": 490,
+          },
+          "kind": "arc",
+          "radius": 475,
+          "startAngle": 0,
+          "sweep": 1.5707963267948966,
+        },
+        {
+          "a": {
+            "x": 0,
+            "y": 965,
+          },
+          "b": {
+            "x": -2483,
+            "y": 965,
+          },
+          "kind": "line",
+        },
+      ],
+    },
+    "walklineOffset": 475,
   },
 }
 `;
@@ -5643,24 +6183,24 @@ exports[`non-régression du tracé à volées (parité figée avec l'ancien mote
         "y": 480,
       },
       {
-        "x": -105.5,
+        "x": -90,
         "y": 480,
       },
       {
-        "x": -105.5,
-        "y": 499.5,
+        "x": -90,
+        "y": 500,
       },
       {
-        "x": 19.5,
-        "y": 499.5,
+        "x": 20,
+        "y": 500,
       },
       {
-        "x": 19.5,
-        "y": 374.5,
+        "x": 20,
+        "y": 390,
       },
       {
         "x": 0,
-        "y": 374.5,
+        "y": 390,
       },
       {
         "x": 0,
@@ -5676,57 +6216,57 @@ exports[`non-régression du tracé à volées (parité figée avec l'ancien mote
           },
           "b": {
             "x": 0,
-            "y": 374.5,
+            "y": 390,
           },
           "kind": "line",
         },
         {
           "a": {
             "x": 0,
-            "y": 374.5,
+            "y": 390,
           },
           "b": {
-            "x": 19.5,
-            "y": 374.5,
+            "x": 20,
+            "y": 390,
           },
           "kind": "line",
         },
         {
           "a": {
-            "x": 19.5,
-            "y": 374.5,
+            "x": 20,
+            "y": 390,
           },
           "b": {
-            "x": 19.5,
-            "y": 499.5,
+            "x": 20,
+            "y": 500,
           },
           "kind": "line",
         },
         {
           "a": {
-            "x": 19.5,
-            "y": 499.5,
+            "x": 20,
+            "y": 500,
           },
           "b": {
-            "x": -105.5,
-            "y": 499.5,
+            "x": -90,
+            "y": 500,
           },
           "kind": "line",
         },
         {
           "a": {
-            "x": -105.5,
-            "y": 499.5,
+            "x": -90,
+            "y": 500,
           },
           "b": {
-            "x": -105.5,
+            "x": -90,
             "y": 480,
           },
           "kind": "line",
         },
         {
           "a": {
-            "x": -105.5,
+            "x": -90,
             "y": 480,
           },
           "b": {
@@ -5846,8 +6386,8 @@ exports[`non-régression du tracé à volées (parité figée avec l'ancien mote
         },
         "well": {
           "kind": "newel",
-          "offset": 43,
-          "size": 125,
+          "offset": 35,
+          "size": 110,
         },
       },
     ],

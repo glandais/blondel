@@ -119,6 +119,22 @@ BA2 baluster part.baluster.name steel-painted ×67 908 × 40 × 12
 "
 `;
 
+exports[`repères de garde-corps des exemples (guard-marks, G2a) > exemple demo-cage-landing-steel 1`] = `
+"
+repères 10 ; pièces 40 ; pièces uniques 10 (T = 0.5)
+PG1 post part.guardPost.name stainless-brushed ×8 858 × 80 × 80
+PG2 post part.guardPost.name stainless-brushed ×12 958 × 80 × 80
+MC1 handrail part.guardHandrail.name stainless-brushed ×2 5564.6 × 42 × 42
+PN1 infill part.glassPanel.name glass ×4 1007.5 × 808 × 18
+PN2 infill part.glassPanel.name glass ×2 1007.5 × 908 × 18
+PN3 infill part.glassPanel.name glass ×2 1007.5 × 908 × 18
+MC2 handrail part.openingHandrail.name stainless-brushed ×1 9460 × 42 × 42
+PN4 infill part.glassPanel.name glass ×2 30 × 908 × 18
+PN5 infill part.glassPanel.name glass ×6 1206.7 × 908 × 18
+PN6 infill part.glassPanel.name glass ×1 1080 × 908 × 18
+"
+`;
+
 exports[`repères de garde-corps des exemples (guard-marks, G2a) > exemple demo-cage-oak-60 1`] = `
 "
 repères 15 ; pièces 140 ; pièces uniques 15 (T = 0.5)
@@ -252,6 +268,20 @@ PN3 infill part.glassPanel.name glass ×1 457 × 908 × 18
 PN4 infill part.glassPanel.name glass ×1 834.6 × 908 × 18
 PN5 infill part.glassPanel.name glass ×5 1172.2 × 908 × 18
 PN6 infill part.glassPanel.name glass ×1 31.4 × 908 × 18
+"
+`;
+
+exports[`repères de garde-corps des exemples (guard-marks, G2a) > exemple demo-quarter-cranked-steel 1`] = `
+"
+repères 8 ; pièces 154 ; pièces uniques 8 (T = 0.5)
+PG1 post part.guardPost.name steel-painted ×8 858 × 80 × 80
+MC1 handrail part.guardHandrail.name steel-painted ×1 1011.2 × 42 × 42
+BA1 baluster part.baluster.name steel-painted ×62 808 × 40 × 12
+MC2 handrail part.guardHandrail.name steel-painted ×1 3197.9 × 42 × 42
+MC3 handrail part.guardHandrail.name steel-painted ×1 5851.2 × 42 × 42
+PG2 post part.guardPost.name steel-painted ×10 958 × 80 × 80
+MC4 handrail part.openingHandrail.name steel-painted ×1 8830 × 42 × 42
+BA2 baluster part.baluster.name steel-painted ×70 908 × 40 × 12
 "
 `;
 

@@ -1,6 +1,7 @@
 /**
  * Tronçons et joints des pièces débitées en plusieurs morceaux (limon de jour débillardé,
- * `steel-curved`, jalon 5b ; tube et tôles du limon central `steel-central`, A29) : les pièces dont le développé porte des lignes `joint` sont groupées
+ * `steel-curved`, jalon 5b ; tube et tôles du limon central `steel-central`, A29 ; tronçons du
+ * limon coudé des profilés `steel-profile`, A41) : les pièces dont le développé porte des lignes `joint` sont groupées
  * par identifiant de base (`stringer-inner-curved-1`, `-2`… → `stringer-inner-curved`), dans
  * l'ordre de la montée, et chaque joint entre deux tronçons consécutifs reçoit un repère J1, J2…
  * Présentation seulement : tronçons, joints et cordons viennent du modèle du cœur.
@@ -14,6 +15,7 @@ import {
 } from "@blondel/core";
 import {
   DEFAULT_LOCALE,
+  isMessage,
   msg,
   textMessage,
   translatorFor,
@@ -166,6 +168,12 @@ const WHOLE_PART_NAME: Readonly<Partial<Record<MessageKey, MessageKey>>> = {
 export function segmentedPartName(group: SegmentedPart): Message {
   const first = group.segments[0]?.part.name;
   if (first === undefined) return textMessage(group.base);
+  // Tronçon d'un limon coudé des profilés (« {name}, tronçon {index} ») : le nom de la pièce
+  // entière est son paramètre `name`.
+  if (first.key === "structure.steelProfile.part.stringSegment") {
+    const name = first.params?.["name"];
+    if (isMessage(name)) return name;
+  }
   const whole = WHOLE_PART_NAME[first.key];
   return whole !== undefined ? msg(whole) : first;
 }

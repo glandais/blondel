@@ -536,6 +536,20 @@ export type PartFamilyId = "treads" | "structure" | "guards";
  */
 export type MarkRepresentativeRule = "shortest" | "smallestNetArea";
 
+/**
+ * Jarret d'un limon fait de tronçons (cotes de gabarit, CK17 de QUESTIONS A41) : numéro (1 à n,
+ * du bas vers le haut), abscisse horizontale du sommet de rive haute depuis l'extrémité basse du
+ * limon (mm), cote de la rive haute au-dessus du sol fini (mm), pentes des tronçons avant et
+ * après le jarret (radians, ADR-0003 : converties en degrés à l'affichage).
+ */
+export interface PartJigKnee {
+  readonly index: number;
+  readonly x: Mm;
+  readonly z: Mm;
+  readonly before: number;
+  readonly after: number;
+}
+
 export interface Part {
   /**
    * Identifiant stable dans le projet (ex. `tread-5`, `stringer-inner-1`). Ne pas en déduire la
@@ -607,8 +621,29 @@ export interface Part {
    * solide mais ni gabarit, ni débit, ni grandeurs de matière (ses planches les portent).
    * Pièces fabriquées : `fabricatedParts` ; pièce dessinée : `rootAssemblyId`
    * (`parts/components.ts`).
+   *
+   * Limon coudé des profilés (`steel-profile`, `stringerLine` = `nosing`, QUESTIONS A41, CK8) :
+   * chaque tronçon d'un limon à jarrets est une composante (repère `LE2-1`, `LE2-2`… du bas vers
+   * le haut) qui porte son développé, son débit, ses coupes, sa masse et ses cordons ; le limon
+   * fini garde l'identifiant, le repère, le solide balayé et la propriété des cornières.
    */
   readonly componentOf?: string;
+  /**
+   * Poutre équivalente d'un limon fait de tronçons (limon coudé des profilés, QUESTIONS A41,
+   * CK12 ; ajout rétrocompatible) : portée horizontale entre les coupes d'extrémité (mm) et pente
+   * de la corde de la face, publiées sur la pièce finie (qui n'a pas de développé) pour le
+   * prédimensionnement de repli (`precheck/stringers.ts`). Absent : portée lue sur le développé.
+   * Toute pièce finie de limon (`category: "stringer"`) faite de composantes et sans développé
+   * doit le publier : le repli ignore les composantes et n'aurait sinon aucune poutre à lire.
+   */
+  readonly beamChord?: { readonly span: Mm; readonly slope: number };
+  /**
+   * Cotes de gabarit d'un limon fait de tronçons soudés aux jarrets (limon coudé des profilés,
+   * QUESTIONS A41, CK17 ; ajout rétrocompatible, sous-lot K2d) : une entrée par jarret, du bas
+   * vers le haut, publiée sur la pièce finie et imprimée dans le dossier PDF (liste des jarrets).
+   * Absent : pièce sans jarret.
+   */
+  readonly jig?: readonly PartJigKnee[];
   /** Grandeurs de coût/nomenclature (masse kg, volume m³, cordons mm, plis, coupes…). */
   readonly quantities: Readonly<Record<string, number>>;
   /** Direction du fil (bois) dans le repère du solide, pour les textures. */

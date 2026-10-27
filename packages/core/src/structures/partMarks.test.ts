@@ -37,8 +37,35 @@ import "./index.js";
 
 const EXAMPLES_DIR = resolve(dirname(fileURLToPath(import.meta.url)), "../../../../examples");
 
-const example = (name: string): Project =>
+const readExample = (name: string): Project =>
   parseProjectText(readFileSync(join(EXAMPLES_DIR, `${name}.blondel.json`), "utf8"));
+
+/**
+ * Exemple du dépôt ; j3c est pris tel qu'avant la bascule du limon coudé par défaut (sous-lot
+ * K2d) : barre droite (`stringerLine` = `chord`) au poteau 125 / 43, sur lequel les repères de
+ * ce fichier ont été mesurés (l'exemple régénéré pose 110 / 35 en limon coudé).
+ */
+const example = (name: string): Project => {
+  const p = readExample(name);
+  if (name !== "j3c-acceptance-01-upn") return p;
+  return {
+    ...p,
+    stair: {
+      ...p.stair,
+      structure: {
+        ...p.stair.structure,
+        params: { ...p.stair.structure.params, stringerLine: "chord" },
+      },
+      layout: {
+        ...p.stair.layout,
+        turns: p.stair.layout.turns.map((t) => ({
+          ...t,
+          inner: { kind: "newel" as const, size: 125, offset: 43 },
+        })),
+      },
+    },
+  };
+};
 
 const withTolerance = (p: Project, t: number): Project => ({
   ...p,
@@ -146,6 +173,34 @@ describe("repères des cornières et supports (F10 Q1a, Q2)", () => {
       { numRuns: 12 },
     );
   }, 120_000);
+});
+
+describe("repères des tronçons du limon coudé (bent-stringer K2c, CK8)", () => {
+  it("j3c en `nosing` : tronçons LE2-1… hors repérage par identité, repères uniques, invariants tenus", () => {
+    const p = example("j3c-acceptance-01-upn");
+    const m = build({
+      ...p,
+      stair: {
+        ...p.stair,
+        structure: {
+          ...p.stair.structure,
+          params: { ...p.stair.structure.params, stringerLine: "nosing" },
+        },
+      },
+    });
+    const segments = m.parts.filter((x) => /^L[EI]\d+-\d+$/.test(x.mark));
+    expect(segments).toHaveLength(13);
+    for (const s of segments) {
+      expect(s.componentOf).toBeDefined();
+      expect(s.mark.startsWith(`${markOf(m, s.componentOf!)!}-`)).toBe(true);
+      expect(s.markName).toBeUndefined();
+      expect(s.markRepresentative).toBeUndefined();
+    }
+    const counts = byMark(m.parts);
+    for (const s of segments) expect(counts.get(s.mark)).toHaveLength(1);
+    expectMarksUnified(m);
+    expectMarkNames(m);
+  });
 });
 
 describe("repères des entretoises (F10 Q1b) : comparaison à la plus petite", () => {

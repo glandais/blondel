@@ -633,6 +633,105 @@ describe("valeurs ◆ d'un projet", () => {
     expect(structureParamApplies(withNewel, {}, ["newel", "bolts"])).toBe(true);
   });
 
+  it("limon coudé des profilés (K2b) : ligne d'appui en Atelier, jarrets ◆ seulement en `nosing`", () => {
+    const p = withStructure(createProject("quarter-left"), "steel-profile");
+    expect(structureParamEntry("steel-profile", ["stringerLine"]).tier).toBe("workshop");
+    expect(structureParamEntry("steel-profile", ["stringerLine"]).toValidate).toBeUndefined();
+    // K2c : aide dédiée (convention à valider, QUESTIONS A41), sans ◆ compté.
+    expect(fieldText("steel-profile", ["stringerLine"])?.hint).toBe("ui.param.stringerLine.hint");
+    for (const leaf of ["minSegmentLength", "minKneeAngle", "maxSegmentAngle"]) {
+      const e = structureParamEntry("steel-profile", ["knee", leaf]);
+      expect(e.tier).toBe("workshop");
+      expect(e.toValidate).toBe(true);
+      expect(structureParamApplies(p, { stringerLine: "chord" }, ["knee", leaf])).toBe(false);
+      expect(structureParamApplies(p, { stringerLine: "nosing" }, ["knee", leaf])).toBe(true);
+    }
+    expect(structureParamApplies(p, { stringerLine: "chord" }, ["stringerLine"])).toBe(true);
+    // Projet en barre droite : aucun ◆ de jarret compté.
+    const chord: Project = {
+      ...p,
+      stair: {
+        ...p.stair,
+        structure: { kind: "steel-profile", params: { stringerLine: "chord" } },
+      },
+    };
+    expect(
+      toValidateItems(chord, buildModel(chord)).filter((i) => i.key.includes(".knee.")),
+    ).toEqual([]);
+    // Limon coudé, explicite ou par défaut (paramètres vides, K-Q11, sous-lot K2d) : ◆ de jarret.
+    const nosing: Project = {
+      ...p,
+      stair: {
+        ...p.stair,
+        structure: { kind: "steel-profile", params: { stringerLine: "nosing" } },
+      },
+    };
+    for (const q of [nosing, p]) {
+      const keys = toValidateItems(q, buildModel(q)).map((i) => i.key);
+      expect(keys).toContain("stair.structure.params.knee.minSegmentLength");
+      expect(keys).toContain("stair.structure.params.knee.minKneeAngle");
+      expect(keys).toContain("stair.structure.params.knee.maxSegmentAngle");
+    }
+    // Escalier droit, paramètres vides ou `nosing` explicite : aucun jarret, aucun ◆ de jarret
+    // (invariant I1 : limon droit dans les deux réglages, K2d).
+    const straight = withStructure(createProject("straight"), "steel-profile");
+    for (const params of [{}, { stringerLine: "nosing" }]) {
+      const q: Project = {
+        ...straight,
+        stair: { ...straight.stair, structure: { kind: "steel-profile", params } },
+      };
+      expect(
+        structureParamApplies(q, { stringerLine: "nosing" }, ["knee", "minSegmentLength"]),
+      ).toBe(false);
+      expect(toValidateItems(q, buildModel(q)).filter((i) => i.key.includes(".knee."))).toEqual([]);
+    }
+    // Cage saisie : ligne des nez brisée (`hasBrokenNosingLine` du cœur), jarrets ◆ seulement en
+    // `nosing`.
+    const cage = withStructure(cageOf({ angle: 90, mode: "winders" }), "steel-profile");
+    for (const leaf of ["minSegmentLength", "minKneeAngle", "maxSegmentAngle"]) {
+      expect(structureParamApplies(cage, { stringerLine: "nosing" }, ["knee", leaf])).toBe(true);
+      expect(structureParamApplies(cage, { stringerLine: "chord" }, ["knee", leaf])).toBe(false);
+    }
+    // Escalier droit à nez imposé incliné (8° au nez 4) : ligne des nez brisée (décision K-Q39
+    // option a, sous-lot K2i), jarrets ◆ en `nosing`, explicite ou par défaut ; aucun en `chord`.
+    const withOverrides = (
+      q: Project,
+      nosingOverrides: Project["stair"]["nosingOverrides"],
+      params: Record<string, unknown>,
+    ): Project => ({
+      ...q,
+      stair: {
+        ...q.stair,
+        nosingOverrides,
+        structure: { kind: "steel-profile", params },
+      },
+    });
+    const tilted = [{ kind: "angle" as const, index: 4, angle: 8 }];
+    for (const leaf of ["minSegmentLength", "minKneeAngle", "maxSegmentAngle"]) {
+      const q = withOverrides(straight, tilted, {});
+      expect(structureParamApplies(q, { stringerLine: "nosing" }, ["knee", leaf])).toBe(true);
+      expect(structureParamApplies(q, { stringerLine: "chord" }, ["knee", leaf])).toBe(false);
+    }
+    for (const params of [{}, { stringerLine: "nosing" }]) {
+      const q = withOverrides(straight, tilted, params);
+      const keys = toValidateItems(q, buildModel(q)).map((i) => i.key);
+      expect(keys).toContain("stair.structure.params.knee.minSegmentLength");
+      expect(keys).toContain("stair.structure.params.knee.minKneeAngle");
+      expect(keys).toContain("stair.structure.params.knee.maxSegmentAngle");
+    }
+    // Angle nul ou nez fixe : face à une seule pente, aucun ◆ de jarret (I1).
+    for (const overrides of [
+      [{ kind: "angle" as const, index: 4, angle: 0 }],
+      [{ kind: "fixed" as const, index: 4 }],
+    ]) {
+      const q = withOverrides(straight, overrides, { stringerLine: "nosing" });
+      expect(
+        structureParamApplies(q, { stringerLine: "nosing" }, ["knee", "minSegmentLength"]),
+      ).toBe(false);
+      expect(toValidateItems(q, buildModel(q)).filter((i) => i.key.includes(".knee."))).toEqual([]);
+    }
+  });
+
   it("paramètres conditionnels du limon central et de la fixation des marches (A31)", () => {
     const p = createProject("straight");
     const applies = (params: unknown, path: string) =>

@@ -1,12 +1,16 @@
+import { readFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { dec, isMessage, textMessage, translatorFor, type Message } from "@blondel/i18n";
 import { describe, expect, it } from "vitest";
+import { parseProjectText } from "../project/parse.js";
 import { fr } from "../i18n.test-helpers.js";
 import type { Part } from "../model/derived.js";
 import type { Project } from "../model/project.js";
 import { precheckModel } from "../precheck/stringers.js";
 import { buildModel } from "../pipeline/build.js";
 import { makeSteppingProject } from "../stepping/test-helpers.js";
-import { WorkshopProfileSchema } from "../workshop/profile.js";
+import { WorkshopProfileSchema, resolveWorkshopProfile } from "../workshop/profile.js";
 import { fabricatedParts } from "../parts/components.js";
 import {
   adaptJour,
@@ -17,6 +21,7 @@ import {
   variantCost,
 } from "./compare.js";
 import { layoutAccepts } from "../project/newel.js";
+import { applyStructureChoice } from "../project/structureChoice.js";
 import { createProject } from "../project/presets.js";
 import "./index.js";
 
@@ -344,6 +349,117 @@ describe("limon central bois (wood-central) dans le comparateur : pièces compos
     expect(stacked.surfaceM2 / mould.surfaceM2).toBeLessThan(1.05);
     expect(stacked.massKg / mould.massKg).toBeGreaterThan(0.9);
     expect(stacked.massKg / mould.massKg).toBeLessThan(1.1);
+  });
+});
+
+describe("limon coudé des profilés (steel-profile, `nosing`) dans le comparateur : tronçons (K2c)", () => {
+  it("j3c (poteau 125 / 43 d'avant la bascule K2d) : tronçons comptés à la place des limons finis, pièces uniques et coût chiffrés contre la barre droite", () => {
+    const raw = parseProjectText(
+      readFileSync(
+        resolve(
+          dirname(fileURLToPath(import.meta.url)),
+          "../../../../examples/j3c-acceptance-01-upn.blondel.json",
+        ),
+        "utf8",
+      ),
+    );
+    // Poteau de l'exemple avant la bascule du défaut (sous-lot K2d ; l'exemple régénéré pose
+    // 110 / 35) : chiffres de la relecture K2c.
+    const j3c: Project = {
+      ...raw,
+      stair: {
+        ...raw.stair,
+        layout: {
+          ...raw.stair.layout,
+          turns: raw.stair.layout.turns.map((t) => ({
+            ...t,
+            inner: { kind: "newel" as const, size: 125, offset: 43 },
+          })),
+        },
+      },
+    };
+    const costs = {
+      hourlyRate: 60,
+      minutesPerCut: 2,
+      minutesPerWeldMeter: 10,
+      minutesPerBend: 1,
+      minutesPerHole: 1,
+      minutesPerUniquePart: 15,
+      steelPricePerKg: 1.5,
+      woodPricePerM3: 1800,
+      finishPricePerM2: 20,
+    };
+    const line = (stringerLine: "chord" | "nosing"): Project => ({
+      ...j3c,
+      workshop: WorkshopProfileSchema.parse({ ...j3c.workshop, costs }),
+      stair: {
+        ...j3c.stair,
+        structure: {
+          ...j3c.stair.structure,
+          params: { ...j3c.stair.structure.params, stringerLine },
+        },
+      },
+    });
+    const nosing = summarizeVariant(line("nosing"));
+    const parts = nosing.model.parts;
+    const finished = parts.filter((p) => p.category === "stringer" && p.beamChord);
+    const segments = parts.filter((p) => p.componentOf !== undefined);
+    expect(finished).toHaveLength(4);
+    expect(segments).toHaveLength(13);
+    // Pièces fabriquées : 4 limons finis remplacés par leurs 13 tronçons.
+    expect(nosing.partCount).toBe(fabricatedParts(parts).length);
+    expect(nosing.partCount).toBe(parts.length - 4);
+    expect(nosing.massUnknown).toBe(0);
+    const stringerMass = segments.reduce((a, p) => a + (p.quantities["mass_kg"] ?? 0), 0);
+    expect(stringerMass).toBeGreaterThan(0);
+    // Chaque tronçon est une pièce unique (aucun regroupement des tronçons, CK8) : 13 pièces
+    // uniques de plus que les autres pièces fabriquées.
+    const marks = new Map<string, number>();
+    for (const p of parts) marks.set(p.mark, (marks.get(p.mark) ?? 0) + 1);
+    for (const s of segments) expect(marks.get(s.mark)).toBe(1);
+    const tol = resolveWorkshopProfile(line("nosing").workshop).identicalPartTolerance;
+    const finishedIds = new Set(finished.map((p) => p.id));
+    const others = parts.filter((p) => p.componentOf === undefined && !finishedIds.has(p.id));
+    expect(nosing.uniqueParts - countUniqueParts(others, tol)).toBe(13);
+    expect(nosing.cost).not.toBeNull();
+    expect(nosing.cost!.total).toBeGreaterThan(0);
+    // Chiffres figés (relecture K2c) : tronçons comptés comme pièces uniques (CK8), coût du
+    // barème ci-dessus. Contre la barre droite du même projet (autres supports, autres coupes
+    // d'extrémité, aboutages) : +9 pièces fabriquées, 4 pièces uniques de moins, coût −11,7 %.
+    const chord = summarizeVariant(line("chord"));
+    expect(chord.errors).toEqual([]);
+    expect([chord.partCount, nosing.partCount]).toEqual([62, 71]);
+    expect([chord.uniqueParts, nosing.uniqueParts]).toEqual([43, 39]);
+    expect([chord.cuts, nosing.cuts]).toEqual([68, 86]);
+    expect(nosing.holes).toBe(chord.holes);
+    expect(nosing.cost!.total).toBeCloseTo(1766.06, 1);
+    expect(chord.cost!.total).toBeCloseTo(1999.12, 1);
+    // Main-d'œuvre recalculée du barème sur les grandeurs du résumé (60 €/h).
+    const minutes =
+      nosing.cuts * 2 + nosing.weldMm / 100 + nosing.bends + nosing.holes + nosing.uniqueParts * 15;
+    expect(nosing.cost!.labour).toBeCloseTo(minutes, 6);
+  });
+
+  it("palier d'angle (quarter-landing, K2f) : tronçons comptés à la place des limons finis, aucun double compte", () => {
+    const ql = parseProjectText(
+      readFileSync(
+        resolve(
+          dirname(fileURLToPath(import.meta.url)),
+          "../../../../examples/quarter-landing.blondel.json",
+        ),
+        "utf8",
+      ),
+    );
+    const v = summarizeVariant(
+      applyStructureChoice(ql, "steel-profile", { family: "UPN", stringerLine: "nosing" }).project,
+    );
+    const parts = v.model.parts;
+    const finished = new Set(parts.flatMap((p) => (p.componentOf ? [p.componentOf] : [])));
+    expect(v.model.errors).toEqual([]);
+    expect(finished.size).toBeGreaterThan(0);
+    expect(v.partCount).toBe(fabricatedParts(parts).length);
+    expect(v.partCount).toBe(parts.length - finished.size);
+    expect(v.massUnknown).toBe(0);
   });
 });
 

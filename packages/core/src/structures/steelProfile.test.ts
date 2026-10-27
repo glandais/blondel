@@ -42,6 +42,31 @@ function profiled(p: Project, params: Record<string, unknown> = {}): Project {
   return { ...p, stair: { ...p.stair, structure: { kind: "steel-profile", params } } };
 }
 
+/**
+ * j3c en barre droite (`chord`) au poteau 125 / 43 de l'exemple d'avant la bascule du défaut
+ * (sous-lot K2d) : chiffres de la barre droite (UPN 240, aile 85 mm), indépendants de l'exemple
+ * régénéré en limon coudé (poteau 110 / 35).
+ */
+function j3cChordAt125(): Project {
+  const p = loadExample("j3c-acceptance-01-upn.blondel.json");
+  return profiled(
+    {
+      ...p,
+      stair: {
+        ...p.stair,
+        layout: {
+          ...p.stair.layout,
+          turns: p.stair.layout.turns.map((t) => ({
+            ...t,
+            inner: { kind: "newel" as const, size: 125, offset: 43 },
+          })),
+        },
+      },
+    },
+    { family: "UPN", stringerLine: "chord" },
+  );
+}
+
 function run(project: Project): { m: Model; r: SteelProfileResult } {
   const m = buildModel(project, { memo: false });
   const params = SteelProfileParamsSchema.parse(project.stair.structure.params);
@@ -274,7 +299,11 @@ describe("steel-profile — tournants", () => {
   });
 
   it("angle mural en onglet, profilé en I : l'âme du développé dépasse l'angle de (b − t_w)/2", () => {
-    const project = profiled(loadExample("quarter-left.blondel.json"), { family: "IPE" });
+    // Barre droite (`chord`, défaut avant K2d) : géométrie de la barre sur la corde.
+    const project = profiled(loadExample("quarter-left.blondel.json"), {
+      family: "IPE",
+      stringerLine: "chord",
+    });
     const { r } = run(project);
     const s = r.section!;
     const shift = (s.b - s.tw) / 2;
@@ -296,7 +325,9 @@ describe("steel-profile — tournants", () => {
   });
 
   it("cordon d'onglet : rives d'aplomb h / cos α, transversales × √2", () => {
-    const { r } = run(profiled(loadExample("quarter-left.blondel.json")));
+    const { r } = run(
+      profiled(loadExample("quarter-left.blondel.json"), { stringerLine: "chord" }),
+    );
     const s = r.section!;
     const st = r.stringers.find((x) => x.face.start === "corner")!;
     const c = Math.cos(Math.atan(st.line.slope));
@@ -367,8 +398,8 @@ describe("steel-profile — poteau élargi des profilés (décision A13)", () =>
     );
   });
 
-  it("cas n° 1 (j3c) : poteau élargi, limons de jour reçus (FAB_POTEAU_RECEPTION), UPN qui passe", () => {
-    const project = loadExample("j3c-acceptance-01-upn.blondel.json");
+  it("cas n° 1 (j3c, barre droite au poteau 125 / 43) : poteau élargi, limons de jour reçus (FAB_POTEAU_RECEPTION), UPN qui passe", () => {
+    const project = j3cChordAt125();
     expect(project.stair.layout.turns[0]!.inner).toEqual({ kind: "newel", size: 125, offset: 43 });
     const { m, r } = run(project);
     expect(m.errors).toEqual([]);
@@ -398,8 +429,12 @@ describe("steel-profile — poteau élargi des profilés (décision A13)", () =>
     // Revue : la résolution s'arrêtait sur 130 mm (aile de l'UPN 260 obtenu avec le poteau de
     // 100 mm) alors que ce poteau donne un UPN 240 (aile 85 → 125 mm), qui passe aussi avec
     // 125 mm : le côté n'était pas « aile de la section retenue + 2 × 20 ».
+    // Barre droite (`chord`) ; limon coudé par défaut (K2d) : voir l'exemple livré ci-dessous.
     const base = loadExample("acceptance-01-quart-tournant.blondel.json");
-    const { project } = applyStructureChoice(base, "steel-profile", { family: "UPN" });
+    const { project } = applyStructureChoice(base, "steel-profile", {
+      family: "UPN",
+      stringerLine: "chord",
+    });
     const inner = project.stair.layout.turns[0]!.inner;
     const m = buildModel(project);
     const b = profileFlangeWidth(m.parts)!;
@@ -407,6 +442,25 @@ describe("steel-profile — poteau élargi des profilés (décision A13)", () =>
     expect(inner).toEqual(profileNewel(b, { size: "auto", clearance: 20 }));
     expect(inner).toEqual({ kind: "newel", size: 125, offset: 43 });
     expect(m.errors).toEqual([]);
+  });
+
+  it("exemple j3c livré (limon coudé par défaut, K-Q11, sous-lot K2d) : ligne d'appui écrite par le choix de structure, poteau 110 / 35 = aile de l'UPN 180 + 2 × 20, sans remarque de bascule, EXC2", () => {
+    const project = loadExample("j3c-acceptance-01-upn.blondel.json");
+    expect(project.stair.structure.params).toEqual({ family: "UPN", stringerLine: "nosing" });
+    expect(project.stair.layout.turns[0]!.inner).toEqual({ kind: "newel", size: 110, offset: 35 });
+    const { m, r } = run(project);
+    expect(m.errors).toEqual([]);
+    expect(r.section!.name).toBe("UPN 180");
+    // Réserve d'âme (docs/ACCEPTATION.md §23 : 13,3 mm) et onglets fermés.
+    expect(r.section!.h - r.requiredHeight).toBeGreaterThanOrEqual(5);
+    expect(results(m, "FAB_ONGLET_RACCORD").filter((x) => x.status === "violation")).toEqual([]);
+    expect(profileFlangeWidth(m.parts)).toBe(70);
+    expect(r.stringers.some((x) => x.bearing !== undefined)).toBe(true);
+    expect(fr(r.posts[0]!.section)).toBe("tube carré 110 × 110 × 4");
+    expect(
+      (m.notes ?? []).filter((n) => n.key === "structure.steelProfile.note.defaultCranked"),
+    ).toEqual([]);
+    expect(m.executionClass).toBe("EXC2");
   });
 
   it("poteau de 100 mm centré : FAB_POTEAU_RECEPTION en violation, poteau attendu signalé", () => {
@@ -506,8 +560,8 @@ describe("steel-profile : contrôle a posteriori de l'épaisseur hors emprise en
     expect(profileLateralWidthFindings(named, wider!)).toEqual([]);
   });
 
-  it("cas n° 1 (j3c) : UPN 240 retenue, aile 85 mm contre 45 mm comptés → conseil", () => {
-    const { m } = run(loadExample("j3c-acceptance-01-upn.blondel.json"));
+  it("cas n° 1 (j3c, barre droite au poteau 125 / 43) : UPN 240 retenue, aile 85 mm contre 45 mm comptés → conseil", () => {
+    const { m } = run(j3cChordAt125());
     const r = results(m, "FAB_PROFILE_AILE_HORS_EMPRISE");
     expect(r).toHaveLength(1);
     expect(r[0]).toMatchObject({

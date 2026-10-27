@@ -7,12 +7,16 @@ import {
   PRESET_LABELS,
   PROJECT_SCHEMA_VERSION,
   ProjectSchema,
+  buildModel,
+  convertToCage,
   createProject,
   serializeProject,
   stableStringify,
   type Project,
 } from "@blondel/core";
 import { describe, expect, it, vi } from "vitest";
+import { addLeg } from "../lib/layoutEdit.js";
+import { withAngleOverride } from "../lib/nosingOverrides.js";
 import { AUTOSAVE_KEY, AUTOSAVE_REJECTED_KEY, memoryStorage } from "./persistence.js";
 import { createProjectStore } from "./projectStore.js";
 
@@ -647,5 +651,138 @@ describe("validation des valeurs ◆ (ADR-0009 point 9)", () => {
     expect(s.getState().project.validatedValues).toHaveLength(3);
     s.getState().undo();
     expect(s.getState().project).toBe(p1);
+  });
+});
+
+describe("ligne d'appui des profilés au passage d'une volée droite à un tournant (K-Q36)", () => {
+  const DEFAULT_NOTE = "structure.steelProfile.note.defaultCranked";
+  /** Escalier droit en profilés UPN, sans ligne d'appui enregistrée. */
+  const straightUpn = (params: Record<string, unknown> = { family: "UPN" }): Project => {
+    const p = createProject("straight");
+    return { ...p, stair: { ...p.stair, structure: { kind: "steel-profile", params } } };
+  };
+  const hasDefaultNote = (p: Project): boolean =>
+    (buildModel(p, { memo: false }).notes ?? []).some((n) => n.key === DEFAULT_NOTE);
+
+  it("ajout d'une volée (update) : `stringerLine` = `nosing` écrit, aucune remarque de bascule ; annulation : état sans le paramètre", () => {
+    const p0 = straightUpn();
+    const s = createProjectStore({ initialProject: p0 });
+    expect(s.getState().update(addLeg)).toEqual({ ok: true });
+    const p1 = s.getState().project;
+    expect(p1.stair.layout.kind !== "helical" && p1.stair.layout.turns.length).toBe(1);
+    expect(p1.stair.structure.params).toEqual({ family: "UPN", stringerLine: "nosing" });
+    expect(hasDefaultNote(p1)).toBe(false);
+    s.getState().undo();
+    expect(s.getState().project).toBe(p0);
+    expect(Object.hasOwn(s.getState().project.stair.structure.params, "stringerLine")).toBe(false);
+  });
+
+  it("tournant ajouté par setField : même écriture ; édition sans changement de tracé : structure inchangée", () => {
+    const p0 = straightUpn();
+    const s = createProjectStore({ initialProject: p0 });
+    expect(s.getState().setField(["site", "floorToFloor"], 2800)).toEqual({ ok: true });
+    expect(s.getState().project.stair.structure).toBe(p0.stair.structure);
+    const turned = addLeg(s.getState().project).stair.layout;
+    expect(s.getState().setField(["stair", "layout"], turned)).toEqual({ ok: true });
+    expect(s.getState().project.stair.structure.params).toEqual({
+      family: "UPN",
+      stringerLine: "nosing",
+    });
+  });
+
+  it("conversion en tracé libre (mutateur `convertToCage` de l'éditeur de plan, par `update`) : `nosing` écrit (une cage est un tournant, même à un seul tronçon) ; annulation : volées sans le paramètre", () => {
+    const p0 = straightUpn();
+    const s = createProjectStore({ initialProject: p0 });
+    const converted = convertToCage(p0).project;
+    expect(converted?.stair.layout.kind).toBe("cage");
+    expect(s.getState().update(() => converted!)).toEqual({ ok: true });
+    const p1 = s.getState().project;
+    expect(p1.stair.layout.kind).toBe("cage");
+    expect(p1.stair.structure.params).toEqual({ family: "UPN", stringerLine: "nosing" });
+    expect(hasDefaultNote(p1)).toBe(false);
+    s.getState().undo();
+    expect(s.getState().project).toBe(p0);
+  });
+
+  it("ligne d'appui choisie (`chord`) jamais remplacée ; fichier importé à tournant sans le paramètre : gardé tel quel (remarque de bascule)", () => {
+    const s = createProjectStore({
+      initialProject: straightUpn({ family: "UPN", stringerLine: "chord" }),
+    });
+    expect(s.getState().update(addLeg)).toEqual({ ok: true });
+    expect(s.getState().project.stair.structure.params["stringerLine"]).toBe("chord");
+    const saved = addLeg(straightUpn());
+    const s2 = createProjectStore();
+    expect(s2.getState().importText(serializeProject(saved)).ok).toBe(true);
+    const imported = s2.getState().project;
+    expect(Object.hasOwn(imported.stair.structure.params, "stringerLine")).toBe(false);
+    expect(hasDefaultNote(imported)).toBe(true);
+  });
+});
+
+describe("ligne d'appui des profilés à l'ajout du premier nez imposé incliné (K-Q39 option a, K2i)", () => {
+  const DEFAULT_NOTE = "structure.steelProfile.note.defaultCranked";
+  /** Escalier droit en profilés UPN, sans ligne d'appui enregistrée. */
+  const straightUpn = (params: Record<string, unknown> = { family: "UPN" }): Project => {
+    const p = createProject("straight");
+    return { ...p, stair: { ...p.stair, structure: { kind: "steel-profile", params } } };
+  };
+  const hasDefaultNote = (p: Project): boolean =>
+    (buildModel(p, { memo: false }).notes ?? []).some((n) => n.key === DEFAULT_NOTE);
+
+  it("nez incliné imposé par l'interface (update) : `nosing` écrit, aucune remarque de bascule ; annulation : état sans le paramètre", () => {
+    const p0 = straightUpn();
+    const s = createProjectStore({ initialProject: p0 });
+    expect(s.getState().update((p) => withAngleOverride(p, 4, 8))).toEqual({ ok: true });
+    const p1 = s.getState().project;
+    expect(p1.stair.nosingOverrides).toEqual([{ kind: "angle", index: 4, angle: 8 }]);
+    expect(p1.stair.structure.params).toEqual({ family: "UPN", stringerLine: "nosing" });
+    expect(hasDefaultNote(p1)).toBe(false);
+    s.getState().undo();
+    expect(s.getState().project).toBe(p0);
+    expect(Object.hasOwn(s.getState().project.stair.structure.params, "stringerLine")).toBe(false);
+  });
+
+  it("nez incliné par setField : même écriture ; angle nul : structure inchangée ; `chord` jamais remplacé", () => {
+    const s = createProjectStore({ initialProject: straightUpn() });
+    expect(
+      s.getState().setField(["stair", "nosingOverrides"], [{ kind: "angle", index: 4, angle: 8 }]),
+    ).toEqual({ ok: true });
+    expect(s.getState().project.stair.structure.params).toEqual({
+      family: "UPN",
+      stringerLine: "nosing",
+    });
+    const p0 = straightUpn();
+    const s2 = createProjectStore({ initialProject: p0 });
+    expect(s2.getState().update((p) => withAngleOverride(p, 4, 0))).toEqual({ ok: true });
+    expect(s2.getState().project.stair.structure).toBe(p0.stair.structure);
+    const s3 = createProjectStore({
+      initialProject: straightUpn({ family: "UPN", stringerLine: "chord" }),
+    });
+    expect(s3.getState().update((p) => withAngleOverride(p, 4, 8))).toEqual({ ok: true });
+    expect(s3.getState().project.stair.structure.params["stringerLine"]).toBe("chord");
+  });
+
+  it("fichier importé droit à nez incliné sans le paramètre : gardé tel quel (remarque de bascule) ; second nez incliné : rien n'est écrit", () => {
+    const saved = withAngleOverride(straightUpn(), 4, 8);
+    const s = createProjectStore();
+    expect(s.getState().importText(serializeProject(saved)).ok).toBe(true);
+    const imported = s.getState().project;
+    expect(Object.hasOwn(imported.stair.structure.params, "stringerLine")).toBe(false);
+    expect(hasDefaultNote(imported)).toBe(true);
+    // Tracé précédent déjà à ligne brisée (convention de K-Q36) : aucune écriture.
+    expect(s.getState().update((p) => withAngleOverride(p, 6, -5))).toEqual({ ok: true });
+    expect(Object.hasOwn(s.getState().project.stair.structure.params, "stringerLine")).toBe(false);
+  });
+
+  it("K-Q36 conservée (relecture K2i) : fichier importé droit à nez incliné sans le paramètre, puis ajout d'une volée ou conversion en tracé libre : `nosing` écrit, plus de remarque de bascule", () => {
+    const saved = withAngleOverride(straightUpn(), 4, 8);
+    for (const edit of [addLeg, (p: Project) => convertToCage(p).project!]) {
+      const s = createProjectStore();
+      expect(s.getState().importText(serializeProject(saved)).ok).toBe(true);
+      expect(s.getState().update(edit)).toEqual({ ok: true });
+      const p1 = s.getState().project;
+      expect(p1.stair.structure.params).toEqual({ family: "UPN", stringerLine: "nosing" });
+      expect(hasDefaultNote(p1)).toBe(false);
+    }
   });
 });

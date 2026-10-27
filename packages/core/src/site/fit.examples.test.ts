@@ -62,6 +62,8 @@ const EXPECTED: Readonly<Record<string, readonly string[]>> = {
   "demo-cage-arc-glass": [],
   "demo-cage-central-steel": ["headroom conseil ECHAPPEE_RECO_PRIVATIF"],
   "demo-cage-flared-steel": ["headroom conseil ECHAPPEE_RECO_PRIVATIF"],
+  // Démos du limon coudé (sous-lot K2h, aussi demo-quarter-cranked-steel) : aucun conflit de dalle.
+  "demo-cage-landing-steel": ["headroom conseil ECHAPPEE_RECO_PRIVATIF"],
   "demo-cage-oak-60": ["headroom conseil ECHAPPEE_RECO_PRIVATIF"],
   // Démo du site libre : contour, murs, poteau, porte et fenêtre sans conflit ; arrivée oblique
   // (jonction à 105°), limon au ras de la trémie (avertissement F15 (2), comme les exemples à
@@ -81,6 +83,7 @@ const EXPECTED: Readonly<Record<string, readonly string[]>> = {
     "headroom conseil ECHAPPEE_RECO_PRIVATIF",
   ],
   "demo-helical-well": ["headroom conseil ECHAPPEE_RECO_PRIVATIF"],
+  "demo-quarter-cranked-steel": ["headroom conseil ECHAPPEE_RECO_PRIVATIF"],
   "demo-quarter-curved": ["headroom conseil ECHAPPEE_RECO_PRIVATIF"],
   "demo-quarter-landing-ash": ["headroom conseil ECHAPPEE_RECO_PRIVATIF"],
   "demo-straight-central-glulam": ["headroom conseil ECHAPPEE_RECO_PRIVATIF"],

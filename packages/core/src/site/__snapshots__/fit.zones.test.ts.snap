@@ -850,6 +850,76 @@ marche 14 z 2520 4 sommets aire 246318.151045 sha edf1032411311b68 canonique edf
 "
 `;
 
+exports[`zones de conflit des exemples (stable-tiebreaks, S1) > exemple demo-cage-landing-steel > conflits 1`] = `
+"
+conflits 0
+"
+`;
+
+exports[`zones de conflit des exemples (stable-tiebreaks, S1) > exemple demo-cage-landing-steel > conflits provoqués 1`] = `
+"
+conflits 6
+wall erreur site.fit.wall T1
+  zone 4 sommets aire 198000 CCW canonique ea668c4942915f68
+  sommets (-45, 2155) (945, 2155) (945, 2355) (-45, 2355)
+  marches [8]
+wall erreur site.fit.wall T2
+  zone 6 sommets aire 875725.364413 CCW canonique a6d5b9ab61fcc377
+  sommets (-45, 0) (57.380936, 0) (945, 4043.597959) (945, 4510) (842.619064, 4510) (-45, 466.402041)
+  marches [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]
+outsideRoom erreur site.fit.outsideRoom -
+  zone 4 sommets aire 4464900 CCW canonique a429a277ec065a91
+  sommets (-45, 0) (945, 0) (945, 4510) (-45, 4510)
+  marches [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]
+obstacle erreur site.fit.post P1
+  zone 4 sommets aire 90000 CCW canonique 52aee983f88d1366
+  sommets (300, 2105) (600, 2105) (600, 2405) (300, 2405)
+  marches [8]
+obstacle erreur site.fit.circularPost P2
+  zone 16 sommets aire 68883.017826 CCW canonique 6b469d2a3407b956
+  sommets (53, 1128) (64.41807, 1070.597485) (96.933983, 1021.933983) (145.597485, 989.41807) (203, 978) (260.402515, 989.41807) (309.066017, 1021.933983) (341.58193, 1070.597485) (353, 1128) (341.58193, 1185.402515) (309.066017, 1234.066017) (260.402515, 1266.58193) (203, 1278) (145.597485, 1266.58193) (96.933983, 1234.066017) (64.41807, 1185.402515)
+  marches [4, 5]
+arrivalClearance avertissement site.fit.arrival.wall T2
+  zone 4 sommets aire 891000 CCW canonique aa04e18ee9e194aa
+  sommets (-45, 4510) (945, 4510) (945, 5410) (-45, 5410)
+  marches []
+"
+`;
+
+exports[`zones de conflit des exemples (stable-tiebreaks, S1) > exemple demo-cage-landing-steel > pièces hors tout 1`] = `
+"
+pièces 14
+marche 1 z 180 4 sommets aire 267300 sha 0af0d87d9031c9a8 canonique 0af0d87d9031c9a8
+  sommets (-45, 0) (945, 0) (945, 270) (-45, 270)
+marche 2 z 360 4 sommets aire 267300 sha 1417dfd0af85e073 canonique 1417dfd0af85e073
+  sommets (-45, 270) (945, 270) (945, 540) (-45, 540)
+marche 3 z 540 4 sommets aire 267300 sha 031e4f8dc941cabc canonique 031e4f8dc941cabc
+  sommets (-45, 540) (945, 540) (945, 810) (-45, 810)
+marche 4 z 720 4 sommets aire 267300 sha fdb74343efd09181 canonique fdb74343efd09181
+  sommets (-45, 810) (945, 810) (945, 1080) (-45, 1080)
+marche 5 z 900 4 sommets aire 267300 sha fcb9c497af61b20c canonique fcb9c497af61b20c
+  sommets (-45, 1080) (945, 1080) (945, 1350) (-45, 1350)
+marche 6 z 1080 4 sommets aire 267300 sha d4464f88b1b74cfd canonique d4464f88b1b74cfd
+  sommets (-45, 1350) (945, 1350) (945, 1620) (-45, 1620)
+marche 7 z 1260 4 sommets aire 267300 sha 0f4e5fc5f3e1e011 canonique 0f4e5fc5f3e1e011
+  sommets (-45, 1620) (945, 1620) (945, 1890) (-45, 1890)
+marche 8 z 1440 5 sommets aire 1006556.877108 sha 0e1681b7e89f04d5 canonique 0e1681b7e89f04d5
+  sommets (-45, 1890) (945, 1890) (945, 2890) (930.103413, 2923.448237) (-45, 2890)
+marche 9 z 1620 4 sommets aire 267300 sha 85634472ab7022d7 canonique 85634472ab7022d7
+  sommets (-45, 2890) (945, 2890) (945, 3160) (-45, 3160)
+marche 10 z 1800 4 sommets aire 267300 sha 0b3b88cbec367587 canonique 0b3b88cbec367587
+  sommets (-45, 3160) (945, 3160) (945, 3430) (-45, 3430)
+marche 11 z 1980 4 sommets aire 267300 sha 40732449c7837afd canonique 40732449c7837afd
+  sommets (-45, 3430) (945, 3430) (945, 3700) (-45, 3700)
+marche 12 z 2160 4 sommets aire 267300 sha eda883bf1c0d7f77 canonique eda883bf1c0d7f77
+  sommets (-45, 3700) (945, 3700) (945, 3970) (-45, 3970)
+marche 13 z 2340 4 sommets aire 267300 sha 999a7636a4afa805 canonique 999a7636a4afa805
+  sommets (-45, 3970) (945, 3970) (945, 4240) (-45, 4240)
+marche 14 z 2520 4 sommets aire 267300 sha 3cf597f75bf4f6ce canonique 3cf597f75bf4f6ce
+  sommets (-45, 4240) (945, 4240) (945, 4510) (-45, 4510)
+"
+`;
+
 exports[`zones de conflit des exemples (stable-tiebreaks, S1) > exemple demo-cage-oak-60 > conflits 1`] = `
 "
 conflits 0
@@ -1405,6 +1475,76 @@ marche 14 z 2406.25 16 sommets aire 259329.214266 sha e963f6cec130e973 canonique
   sommets (133.939201, -323.357836) (459.220119, -1108.655439) (477.36207, -1101.140797) (513.134801, -1084.932383) (548.358055, -1067.562197) (582.994113, -1049.048838) (617.005887, -1029.412131) (650.356955, -1008.673104) (683.011604, -986.853965) (714.934868, -963.978078) (746.092562, -940.069939) (776.45132, -915.155149) (805.978636, -889.260389) (834.642889, -862.413386) (848.528137, -848.528137) (247.487373, -247.487373)
 marche 15 z 2578.125 16 sommets aire 259329.214266 sha 4c0397e12972d27c canonique 4c0397e12972d27c
   sommets (247.487373, -247.487373) (848.528137, -848.528137) (862.413386, -834.642889) (889.260389, -805.978636) (915.155149, -776.45132) (940.069939, -746.092562) (963.978078, -714.934868) (986.853965, -683.011604) (1008.673104, -650.356955) (1029.412131, -617.005887) (1049.048838, -582.994113) (1067.562197, -548.358055) (1084.932383, -513.134801) (1101.140797, -477.36207) (1108.655439, -459.220119) (323.357836, -133.939201)
+"
+`;
+
+exports[`zones de conflit des exemples (stable-tiebreaks, S1) > exemple demo-quarter-cranked-steel > conflits 1`] = `
+"
+conflits 0
+"
+`;
+
+exports[`zones de conflit des exemples (stable-tiebreaks, S1) > exemple demo-quarter-cranked-steel > conflits provoqués 1`] = `
+"
+conflits 6
+wall erreur site.fit.wall T1
+  zone 5 sommets aire 694963.542691 CCW canonique 47f0baf25d9d8786
+  sommets (-2483, 643) (992.698913, 643) (992.192488, 723.703724) (990.593274, 843) (-2483, 843)
+  marches [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]
+wall erreur site.fit.wall T2
+  zone 5 sommets aire 515168.039895 CCW canonique 08b8fe0bf902c21a
+  sommets (-1695.43502, 445) (-1186.107068, 445) (989.765011, 1374.031063) (995, 1485) (732.920952, 1481.83399)
+  marches [4, 5, 6, 7, 8, 9, 10, 11, 12]
+outsideRoom erreur site.fit.outsideRoom -
+  zone 5 sommets aire 4622375 CCW canonique 006619eb367e2911
+  sommets (-2483, 445) (-45, 0) (995, 0) (995, 1485) (-2483, 1485)
+  marches [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]
+obstacle erreur site.fit.post P1
+  zone 4 sommets aire 90000 CCW canonique dd576798150347e9
+  sommets (-894, 593) (-594, 593) (-594, 893) (-894, 893)
+  marches [7, 8, 9]
+obstacle erreur site.fit.circularPost P2
+  zone 7 sommets aire 13460.024873 CCW canonique 146b1947ac4b23aa
+  sommets (-1740.491845, 445) (-1485.508155, 445) (-1506.933983, 477.066017) (-1555.597485, 509.58193) (-1613, 521) (-1670.402515, 509.58193) (-1719.066017, 477.066017)
+  marches [11, 12]
+arrivalClearance avertissement site.fit.arrival.wall T1
+  zone 4 sommets aire 988000 CCW canonique cfcb04614751c7bc
+  sommets (-2483, 445) (-2483, 1485) (-3433, 1485) (-3433, 445)
+  marches []
+"
+`;
+
+exports[`zones de conflit des exemples (stable-tiebreaks, S1) > exemple demo-quarter-cranked-steel > pièces hors tout 1`] = `
+"
+pièces 14
+marche 1 z 180 4 sommets aire 276190.230648 sha dc7e8a8c6d55fff7 canonique dc7e8a8c6d55fff7
+  sommets (-45, 0) (995, 0) (994.669235, 329.009777) (-44.669235, 202.29426)
+marche 2 z 360 4 sommets aire 276080.498159 sha 9a60ef60c0674601 canonique 9a60ef60c0674601
+  sommets (-44.669235, 202.29426) (994.669235, 329.009777) (992.192488, 723.703724) (-42.192488, 340.131299)
+marche 3 z 540 4 sommets aire 330085.829773 sha 1c6993e7e4d91a4d canonique 1c6993e7e4d91a4d
+  sommets (-42.192488, 340.131299) (992.192488, 723.703724) (984.866545, 1270.195597) (-15.366545, 454.076549)
+marche 4 z 720 5 sommets aire 409419.876651 sha 1139fbeda8906123 canonique 1139fbeda8906123
+  sommets (-100.37547, 470.628565) (-15.366545, 454.076549) (984.866545, 1270.195597) (995, 1485) (487.683694, 1478.871435)
+marche 5 z 900 4 sommets aire 287843.708798 sha 5610d16e19211c7e canonique 5610d16e19211c7e
+  sommets (-242.097226, 446.773549) (-100.37547, 470.628565) (487.683694, 1478.871435) (57.833554, 1483.226451)
+marche 6 z 1080 4 sommets aire 275752.517816 sha c10a3a13b37a6677 canonique c10a3a13b37a6677
+  sommets (-407.558403, 445.204908) (-242.097226, 446.773549) (57.833554, 1483.226451) (-308.009306, 1484.795092)
+marche 7 z 1260 4 sommets aire 276223.664779 sha 1ad4d27c844db9c0 canonique 1ad4d27c844db9c0
+  sommets (-623.435872, 445) (-407.558403, 445.204908) (-308.009306, 1484.795092) (-623.435872, 1485)
+marche 8 z 1440 4 sommets aire 276278.09896 sha bc56b775c60ebee9 canonique bc56b775c60ebee9
+  sommets (-889.087891, 445) (-623.435872, 445) (-623.435872, 1485) (-889.087891, 1485)
+marche 9 z 1620 4 sommets aire 276278.09896 sha 37b3611174909281 canonique 37b3611174909281
+  sommets (-1154.739909, 445) (-889.087891, 445) (-889.087891, 1485) (-1154.739909, 1485)
+marche 10 z 1800 4 sommets aire 276278.09896 sha 192dbc40a5133483 canonique 192dbc40a5133483
+  sommets (-1420.391927, 445) (-1154.739909, 445) (-1154.739909, 1485) (-1420.391927, 1485)
+marche 11 z 1980 4 sommets aire 276278.09896 sha eb3729c45f21f5fe canonique eb3729c45f21f5fe
+  sommets (-1686.043945, 445) (-1420.391927, 445) (-1420.391927, 1485) (-1686.043945, 1485)
+marche 12 z 2160 4 sommets aire 276278.09896 sha 95ee4c7e3c078cef canonique 95ee4c7e3c078cef
+  sommets (-1951.695964, 445) (-1686.043945, 445) (-1686.043945, 1485) (-1951.695964, 1485)
+marche 13 z 2340 4 sommets aire 276278.09896 sha fdc2214d20bc7536 canonique fdc2214d20bc7536
+  sommets (-2217.347982, 445) (-1951.695964, 445) (-1951.695964, 1485) (-2217.347982, 1485)
+marche 14 z 2520 4 sommets aire 276278.09896 sha 5bce6d3f33cbc2c8 canonique 5bce6d3f33cbc2c8
+  sommets (-2483, 445) (-2217.347982, 445) (-2217.347982, 1485) (-2483, 1485)
 "
 `;
 
@@ -2130,12 +2270,12 @@ exports[`zones de conflit des exemples (stable-tiebreaks, S1) > exemple j3c-acce
 "
 conflits 7
 wall erreur site.fit.wall T1
-  zone 5 sommets aire 618239.963309 CCW canonique 6d954e6c59b5c5c1
-  sommets (-2252, 563) (840.497445, 563) (837.954076, 759.015821) (837.892769, 763) (-2252, 763)
+  zone 5 sommets aire 618312.178502 CCW canonique a965b3e9b24c5b0e
+  sommets (-2252, 563) (840.783762, 563) (838.585245, 743.246548) (838.280687, 763) (-2252, 763)
   marches [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]
 wall erreur site.fit.wall T2
-  zone 5 sommets aire 437755.431092 CCW canonique 7e10c740799a5baa
-  sommets (-1489.47818, 435) (-981.019933, 435) (831.010706, 1210.247206) (845, 1325) (587.357046, 1323.539449)
+  zone 5 sommets aire 437768.045743 CCW canonique a10811c68420f52c
+  sommets (-1489.47818, 435) (-981.019933, 435) (831.382583, 1210.406308) (845, 1325) (587.217124, 1323.479586)
   marches [3, 4, 5, 6, 7, 8, 9, 10, 11]
 outsideRoom erreur site.fit.outsideRoom -
   zone 5 sommets aire 3623502.5 CCW canonique a5be12b224954be2
@@ -2163,18 +2303,18 @@ slab avertissement site.fit.slabStructure -
 exports[`zones de conflit des exemples (stable-tiebreaks, S1) > exemple j3c-acceptance-01-upn > pièces hors tout 1`] = `
 "
 pièces 14
-marche 1 z 180 4 sommets aire 213102.092045 sha 6512d9e280de6148 canonique 6512d9e280de6148
-  sommets (-45, 0) (845, 0) (842.841215, 382.367048) (-42.841215, 97.678456)
-marche 2 z 360 4 sommets aire 211410.911424 sha 1c4a13384b5088dc canonique 1c4a13384b5088dc
-  sommets (-42.841215, 97.678456) (842.841215, 382.367048) (837.954076, 759.015821) (-37.954076, 201.075191)
-marche 3 z 540 4 sommets aire 262610.417534 sha 852f908ba3b609ec canonique 852f908ba3b609ec
-  sommets (-37.954076, 201.075191) (837.954076, 759.015821) (830.338922, 1253.904707) (-30.338922, 311.07525)
-marche 4 z 720 5 sommets aire 300203.477942 sha 08686fa67c51ef42 canonique 08686fa67c51ef42
-  sommets (-30.338922, 311.07525) (830.338922, 1253.904707) (845, 1325) (323.817149, 1322.045469) (-5.951083, 457.454531)
-marche 5 z 900 4 sommets aire 217749.044305 sha e0f5b0c8f0f76ff2 canonique e0f5b0c8f0f76ff2
-  sommets (-145.585197, 435.325662) (-5.951083, 457.454531) (323.817149, 1322.045469) (-38.005264, 1324.674338)
-marche 6 z 1080 4 sommets aire 213542.08327 sha 0528e8c1f732160e canonique 0528e8c1f732160e
-  sommets (-331.817982, 435) (-145.585197, 435.325662) (-38.005264, 1324.674338) (-331.817982, 1325)
+marche 1 z 180 4 sommets aire 213164.568181 sha d3d9c0526d454d58 canonique d3d9c0526d454d58
+  sommets (-45, 0) (845, 0) (843.101508, 372.978408) (-43.101508, 107.067096)
+marche 2 z 360 4 sommets aire 211624.88238 sha 741348b5fe179a06 canonique 741348b5fe179a06
+  sommets (-43.101508, 107.067096) (843.101508, 372.978408) (838.585245, 743.246548) (-38.585245, 216.844463)
+marche 3 z 540 4 sommets aire 260131.881845 sha 0076af790e606a6f canonique 0076af790e606a6f
+  sommets (-38.585245, 216.844463) (838.585245, 743.246548) (831.066765, 1230.89006) (-31.066765, 327.444569)
+marche 4 z 720 5 sommets aire 303429.830912 sha 3dc26605527c49ef canonique 3dc26605527c49ef
+  sommets (-31.066765, 327.444569) (831.066765, 1230.89006) (845, 1325) (327.1107, 1321.945468) (-8.526202, 458.054532)
+marche 5 z 900 4 sommets aire 218511.842527 sha 9c3744c0818bd1b0 canonique 9c3744c0818bd1b0
+  sommets (-91.79523, 435) (-8.526202, 458.054532) (327.1107, 1321.945468) (-91.79523, 1325)
+marche 6 z 1080 4 sommets aire 213620.249453 sha 8d0e2a7506341589 canonique 8d0e2a7506341589
+  sommets (-331.817982, 435) (-91.79523, 435) (-91.79523, 1325) (-331.817982, 1325)
 marche 7 z 1260 4 sommets aire 213620.249453 sha 3649efdd88575157 canonique 3649efdd88575157
   sommets (-571.840735, 435) (-331.817982, 435) (-331.817982, 1325) (-571.840735, 1325)
 marche 8 z 1440 4 sommets aire 213620.249453 sha fbf652ca55babf98 canonique fbf652ca55babf98
