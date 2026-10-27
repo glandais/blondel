@@ -226,8 +226,8 @@ describe("critère d'acceptation n° 2 : comparateur sur la même épure", () =>
     expect(pc!.buttWeldMm).toBeGreaterThan(0);
     expect(pu!.buttWeldMm).toBeGreaterThan(0);
     expect(pu!.weldMm).toBeGreaterThan(pc!.weldMm);
-    // Barème de test ci-dessus : 2 002,87 € pour le limon coudé (sonde K2d ; 1 994,87 € pour la
-    // barre droite en erreur, UPN 260).
+    // Barème de test ci-dessus : 2 002,87 € pour le limon coudé, valeur mesurée au sous-lot K2d
+    // (ledger du chantier ; la barre droite, en erreur en UPN 260, n'est pas chiffrée ici).
     expect(pu!.cost!.total).toBeCloseTo(2002.87, 1);
   });
 

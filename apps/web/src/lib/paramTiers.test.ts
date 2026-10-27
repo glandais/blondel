@@ -685,6 +685,12 @@ describe("valeurs ◆ d'un projet", () => {
       ).toBe(false);
       expect(toValidateItems(q, buildModel(q)).filter((i) => i.key.includes(".knee."))).toEqual([]);
     }
+    // Cage saisie : tracé à tournant (`isTurningLayout` du cœur), jarrets ◆ seulement en `nosing`.
+    const cage = withStructure(cageOf({ angle: 90, mode: "winders" }), "steel-profile");
+    for (const leaf of ["minSegmentLength", "minKneeAngle", "maxSegmentAngle"]) {
+      expect(structureParamApplies(cage, { stringerLine: "nosing" }, ["knee", leaf])).toBe(true);
+      expect(structureParamApplies(cage, { stringerLine: "chord" }, ["knee", leaf])).toBe(false);
+    }
   });
 
   it("paramètres conditionnels du limon central et de la fixation des marches (A31)", () => {

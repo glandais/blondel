@@ -28,7 +28,7 @@
  *   (sous-lot K2f2 : le limon voisin d'un limon coudé reste coudé au raccord, sinon refus).
  * - **Nettoyage** (CK6, K-Q9) : sommets alignés retirés (epsilon numérique), puis retrait
  *   déterministe (plus petit |Δα|, puis plus petit u) sous l'angle minimal de jarret et la
- *   longueur minimale de tronçon (`KneeSettings`, valeurs provisoires **à valider**).
+ *   longueur minimale de tronçon (`KneeSettings`, défauts décidés, **à valider** par l'atelier).
  * - **Jarrets** (CK4) : coupe sur la bissectrice dans le plan de l'âme, β = |Δα| / 2 ; rive haute
  *   = ligne d'appui + d_h (verticale), rive basse décalée de h perpendiculairement, sommets sur
  *   les bissectrices.
@@ -86,35 +86,34 @@ export const KneeSettingsSchema = z.object({
   /**
    * Longueur minimale de tronçon (mm) : plus courte fibre d'un tronçon entre ses deux coupes
    * (les coupes de jarret h·(tan β₁ + tan β₂) sont donc déjà déduites : c'est la marge d'atelier
-   * de K-Q9) ; sert aussi de marge de la partie de niveau au coin. Valeur **provisoire, à
-   * valider** : aucune source (`docs/research/` muet) ; défaut fixé d'après la distribution
-   * mesurée en K2a (journal `docs/ledger/LEDGER-bent-stringer.md`, lignes K2a ; sonde de
-   * session `k2a/`), soumis à l'utilisateur (QUESTIONS A41, K-Q9).
+   * de K-Q9) ; sert aussi de marge de la partie de niveau au coin. Défaut décidé (QUESTIONS A41,
+   * K-Q9), **à valider** par l'atelier (QUESTIONS B5) : aucune source (`docs/research/` muet) ;
+   * fixé d'après la distribution mesurée en K2a (journal `docs/ledger/LEDGER-bent-stringer.md`,
+   * lignes K2a).
    */
   minSegmentLength: z.number().int().nonnegative().default(50),
   /**
    * Angle minimal de jarret (degrés) : un sommet dont le changement de pente est plus petit est
-   * retiré (hors parties de niveau). Valeur **provisoire, à valider** : aucune source
-   * (`docs/research/` muet) ; défaut fixé d'après la distribution mesurée en K2a (journal
-   * `docs/ledger/LEDGER-bent-stringer.md`, lignes K2a ; sonde de session `k2a/`), soumis à
-   * l'utilisateur (QUESTIONS A41, K-Q9).
+   * retiré (hors parties de niveau). Défaut décidé (QUESTIONS A41, K-Q9), **à valider** par
+   * l'atelier (QUESTIONS B5) : aucune source (`docs/research/` muet) ; fixé d'après la
+   * distribution mesurée en K2a (journal `docs/ledger/LEDGER-bent-stringer.md`, lignes K2a).
    */
   minKneeAngle: z.number().nonnegative().max(45).default(0.5),
   /**
    * Angle maximal d'un tronçon (degrés, depuis l'horizontale) : une face dont un tronçon en pente
    * (hors partie de niveau) est plus raide porte le constat `tooSteepSegment` et se replie sur la
    * barre droite comme pour un tronçon trop court (QUESTIONS A41, K-Q35 ; 90 n'agit jamais).
-   * Valeur **provisoire, à valider** : aucune source (`docs/research/` muet) ; 75° proposé à
-   * l'utilisateur après la relecture K2d (tirages de cages cage7#13 et cage99#56 : tronçons de
-   * 71 à 83°), renvoyé à l'atelier (QUESTIONS B13) ; aucun tronçon au-delà de 75° sur les
-   * exemples, préréglages et démos livrés en profilés (test « projets livrés en profilés » de
-   * `steelProfile.cranked.test.ts`).
+   * Défaut décidé (QUESTIONS A41, K-Q35 ; effet accepté, K-Q37), **à valider** par l'atelier
+   * (QUESTIONS B5, B13) : aucune source (`docs/research/` muet) ; 75° retenu après la relecture
+   * K2d (tirages de cages cage7#13 et cage99#56 : tronçons de 71 à 83°) ; aucun tronçon
+   * au-delà de 75° sur les exemples, préréglages et démos livrés en profilés (test « projets
+   * livrés en profilés » de `steelProfile.cranked.test.ts`).
    */
   maxSegmentAngle: z.number().positive().max(90).default(75),
 });
 export type KneeSettings = z.output<typeof KneeSettingsSchema>;
-/** Réglages par défaut (provisoires, à valider). */
-export const PROVISIONAL_KNEE_SETTINGS: KneeSettings = KneeSettingsSchema.parse({});
+/** Réglages par défaut (à valider). */
+export const DEFAULT_KNEE_SETTINGS: KneeSettings = KneeSettingsSchema.parse({});
 
 // ------------------------------------------------------------------------------ entrées
 

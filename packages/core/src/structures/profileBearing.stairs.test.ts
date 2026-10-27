@@ -20,7 +20,7 @@ import { adaptJour } from "./compare.js";
 import { nosingPitchLine } from "./development.js";
 import { stairGeometry } from "./legs.js";
 import {
-  PROVISIONAL_KNEE_SETTINGS,
+  DEFAULT_KNEE_SETTINGS,
   bearingSectionOf,
   cornerOf,
   faceHeightNeed,
@@ -279,12 +279,12 @@ describe("profileBearing — escaliers tournants générés (I2, I6, I7)", () =>
         }
         evaluated++;
         const s = findSection(name)!;
-        const settings = PROVISIONAL_KNEE_SETTINGS;
+        const settings = DEFAULT_KNEE_SETTINGS;
         const res = bearings(st, s, settings);
         miters += expectMitersClosed(st, res, s).checked;
         // Nez au-dessus de la rive haute : seulement là où la ligne d'appui quitte les nez (sommet
         // retiré pour coupes croisées ou trop court, partie de niveau d'un coin). Ce cas existe en
-        // volées : côté jour près du poteau, girons courts et raides (sonde de correction K2a,
+        // volées : côté jour près du poteau, girons courts et raides (mesure de la correction K2a,
         // 9 faces sur 267 escaliers, jusqu'à 170 mm). Raccord raide : toujours au bord d'un niveau.
         for (const i of cageOnly(res)) {
           const fb = res.faces.find((f) => "faceId" in i && f.faceId === i.faceId)!;
@@ -350,12 +350,12 @@ describe("profileBearing — symétrie et déterminisme (I8, I9)", () => {
     const a = setupOf(left());
     const b = setupOf(mirror(left()));
     const ups = sectionsOf("UPN");
-    const sa = lightestBearingSection(ups, (s) => needOf(a, s, PROVISIONAL_KNEE_SETTINGS));
-    const sb = lightestBearingSection(ups, (s) => needOf(b, s, PROVISIONAL_KNEE_SETTINGS));
+    const sa = lightestBearingSection(ups, (s) => needOf(a, s, DEFAULT_KNEE_SETTINGS));
+    const sb = lightestBearingSection(ups, (s) => needOf(b, s, DEFAULT_KNEE_SETTINGS));
     expect(sa?.name).toBe(sb?.name);
     const s = sa ?? findSection("UPN 200")!;
-    const ra = bearings(a, s, PROVISIONAL_KNEE_SETTINGS);
-    const rb = bearings(b, s, PROVISIONAL_KNEE_SETTINGS);
+    const ra = bearings(a, s, DEFAULT_KNEE_SETTINGS);
+    const rb = bearings(b, s, DEFAULT_KNEE_SETTINGS);
     expect(rb.faces.map((f) => f.faceId)).toEqual(ra.faces.map((f) => f.faceId));
     ra.faces.forEach((fa, i) => {
       const fb = rb.faces[i]!;
@@ -383,7 +383,7 @@ describe("profileBearing — symétrie et déterminisme (I8, I9)", () => {
       pitch: st.pitch,
       upperOffset: st.upperOffset,
       section: bearingSectionOf(s),
-      settings: PROVISIONAL_KNEE_SETTINGS,
+      settings: DEFAULT_KNEE_SETTINGS,
     };
     const res = profileBearings(input);
     expect(profileBearings({ ...input, faces: [...st.faces].reverse() })).toEqual(res);
@@ -404,7 +404,7 @@ describe("profileBearing — exemples tournants et cages", () => {
     it(`${name} : sans exception, onglets fermés au bout d'aile, parties de niveau aux coins`, () => {
       const st = setupOf(make());
       for (const s of [findSection("UPN 180")!, findSection("IPE 200")!]) {
-        for (const settings of [ZERO, PROVISIONAL_KNEE_SETTINGS]) {
+        for (const settings of [ZERO, DEFAULT_KNEE_SETTINGS]) {
           const res = bearings(st, s, settings);
           expect(expectMitersClosed(st, res, s).skipped).toBe(0);
           const cornerFaces = st.faces.filter((f) => f.end === "corner").length;
@@ -423,7 +423,7 @@ describe("profileBearing — exemples tournants et cages", () => {
   }
 });
 
-describe("profileBearing — chiffres épinglés (mesures K2a, réglages provisoires)", () => {
+describe("profileBearing — chiffres épinglés (mesures K2a, réglages par défaut)", () => {
   const ups = sectionsOf("UPN");
   const cases: [string, () => Project, string, number][] = [
     // [cas, projet, section UPN la plus légère, besoin d'âme avec cette section (mm)]
@@ -441,11 +441,11 @@ describe("profileBearing — chiffres épinglés (mesures K2a, réglages proviso
   for (const [name, make, section, need] of cases) {
     it(`${name} : ${section}, besoin ${need} mm ; ni nez au-dessus de la rive, ni raccord raide`, () => {
       const st = setupOf(make());
-      const s = lightestBearingSection(ups, (x) => needOf(st, x, PROVISIONAL_KNEE_SETTINGS));
+      const s = lightestBearingSection(ups, (x) => needOf(st, x, DEFAULT_KNEE_SETTINGS));
       expect(s?.name).toBe(section);
-      expect(Math.abs(needOf(st, s!, PROVISIONAL_KNEE_SETTINGS) - need)).toBeLessThan(0.5);
+      expect(Math.abs(needOf(st, s!, DEFAULT_KNEE_SETTINGS) - need)).toBeLessThan(0.5);
       for (const x of [s!, findSection("IPE 200")!]) {
-        expect(cageOnly(bearings(st, x, PROVISIONAL_KNEE_SETTINGS))).toEqual([]);
+        expect(cageOnly(bearings(st, x, DEFAULT_KNEE_SETTINGS))).toEqual([]);
       }
     });
   }
@@ -455,13 +455,13 @@ describe("profileBearing — chiffres épinglés (mesures K2a, réglages proviso
     const s = findSection("UPN 180")!;
     const count = (k: KneeSettings): number =>
       bearings(st, s, k).faces.reduce((a, f) => a + f.knees.length, 0);
-    expect(count(PROVISIONAL_KNEE_SETTINGS)).toBe(9);
+    expect(count(DEFAULT_KNEE_SETTINGS)).toBe(9);
     expect(count(ZERO)).toBe(10);
   });
 
   it("quart : extrémité de LI1 au poteau déplacée de −48,9 mm (prolongement, `endShift`)", () => {
     const st = setupOf(choose(loadExample("quarter-left.blondel.json")));
-    const res = bearings(st, findSection("UPN 220")!, PROVISIONAL_KNEE_SETTINGS);
+    const res = bearings(st, findSection("UPN 220")!, DEFAULT_KNEE_SETTINGS);
     const li1 = res.faces.find((f) => f.faceId === "stringer-inner-1")!;
     expect(li1.endShift.start).toBeCloseTo(0, 9);
     expect(li1.endShift.end).toBeCloseTo(-48.9, 1);
@@ -473,9 +473,9 @@ describe("profileBearing — jour en pan coupé de cage (K-Q12)", () => {
   it("cage-60-palier-limon : nez au-dessus de la rive haute, raccord raide, marche 7 perdue", () => {
     const st = setupOf(choose(loadExample("cage-60-palier-limon.blondel.json")));
     const ups = sectionsOf("UPN");
-    expect(lightestBearingSection(ups, (x) => needOf(st, x, PROVISIONAL_KNEE_SETTINGS))).toBeNull();
+    expect(lightestBearingSection(ups, (x) => needOf(st, x, DEFAULT_KNEE_SETTINGS))).toBeNull();
     const s = findSection("UPN 260")!;
-    const res = bearings(st, s, PROVISIONAL_KNEE_SETTINGS);
+    const res = bearings(st, s, DEFAULT_KNEE_SETTINGS);
     const above = res.issues.filter((i) => i.kind === "noseAboveRive");
     expect(above).toHaveLength(1);
     expect(above[0]!.kind === "noseAboveRive" && above[0]!.excess).toBeCloseTo(62.0, 1);

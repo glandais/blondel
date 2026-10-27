@@ -15,7 +15,7 @@ import type { Translator } from "../i18n.js";
 import { pagedTitle, tablePages, type Frame, type PageDraft } from "./layout.js";
 
 /** Ligne de la liste des jarrets (unités du modèle : mm, radians). */
-export interface JigRow {
+interface JigRow {
   readonly mark: string;
   readonly partId: string;
   readonly index: number;
@@ -26,7 +26,7 @@ export interface JigRow {
 }
 
 /** Lignes de la liste, dans l'ordre des pièces du modèle puis des jarrets (du bas vers le haut). */
-export function jigRows(model: Pick<Model, "parts">): JigRow[] {
+function jigRows(model: Pick<Model, "parts">): JigRow[] {
   return model.parts.flatMap((p) =>
     (p.jig ?? []).map((k) => ({
       mark: p.mark,

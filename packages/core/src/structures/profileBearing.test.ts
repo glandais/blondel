@@ -8,7 +8,7 @@ import type { Vec2 } from "../model/primitives.js";
 import { PiecewiseLinear } from "./geom.js";
 import {
   KneeSettingsSchema,
-  PROVISIONAL_KNEE_SETTINGS,
+  DEFAULT_KNEE_SETTINGS,
   chordRives,
   cornerOf,
   faceHeightNeed,
@@ -747,8 +747,8 @@ function twoFaces(corner: SteelCornerEnd, slope: number, settings: KneeSettings,
 }
 
 describe("profileBearing — cas chiffrés", () => {
-  it("réglages : défauts provisoires, bornes", () => {
-    expect(PROVISIONAL_KNEE_SETTINGS).toEqual({
+  it("réglages : défauts (K-Q9, K-Q35, à valider), bornes", () => {
+    expect(DEFAULT_KNEE_SETTINGS).toEqual({
       minSegmentLength: 50,
       minKneeAngle: 0.5,
       maxSegmentAngle: 75,
@@ -851,7 +851,7 @@ describe("profileBearing — cas chiffrés", () => {
       pitch: { inner: pitch, outer: pitch },
       upperOffset: 50,
       section: UPN200,
-      settings: PROVISIONAL_KNEE_SETTINGS,
+      settings: DEFAULT_KNEE_SETTINGS,
     });
     expect(res.issues).toContainEqual({ kind: "cornerMerged", faceIds: ["A", "B", "C"] });
     expect(res.corners).toHaveLength(1);
@@ -913,7 +913,7 @@ describe("profileBearing — cas chiffrés", () => {
       pitch: { inner: pitch, outer: pitch },
       upperOffset: 50,
       section: hea,
-      settings: PROVISIONAL_KNEE_SETTINGS,
+      settings: DEFAULT_KNEE_SETTINGS,
     });
     const B = byId(res, "B");
     expect(B.segments[0]!.fibres.shortest).toBeLessThan(0);
@@ -1149,7 +1149,7 @@ describe("profileBearing — cas chiffrés", () => {
       pitch: { inner: one, outer: one },
       upperOffset: 50,
       section: UPN200,
-      settings: PROVISIONAL_KNEE_SETTINGS,
+      settings: DEFAULT_KNEE_SETTINGS,
     });
     expect(res.issues).toContainEqual({ kind: "emptyWindow", faceId: "E" });
     expect(res.issues).toContainEqual({ kind: "emptyWindow", faceId: "Z" });
@@ -1178,7 +1178,7 @@ describe("profileBearing — cas chiffrés", () => {
       pitch: { inner: pitch, outer: pitch },
       upperOffset: 50,
       section: UPN200,
-      settings: PROVISIONAL_KNEE_SETTINGS,
+      settings: DEFAULT_KNEE_SETTINGS,
     });
     expect(short.issues).toEqual([
       { kind: "shortSegment", faceId: "N", u0: 0, shortest: expect.any(Number) },
@@ -1469,9 +1469,9 @@ describe("profileBearing — paliers du limon coudé (sous-lot K2f)", () => {
   });
 
   /**
-   * Palier non aligné (cage#0 de la sonde K2f, graine 2026) : limon de bord du palier de 1 493 mm,
-   * plat des nez à 1 080 jusqu'à u = 1 303, coin au nez de sortie (1 260 en u = 1 493), pente de
-   * référence 180 / 190.
+   * Palier non aligné (cage générée de la graine 2026, sous-lot K2f) : limon de bord du palier de
+   * 1 493 mm, plat des nez à 1 080 jusqu'à u = 1 303, coin au nez de sortie (1 260 en
+   * u = 1 493), pente de référence 180 / 190.
    */
   it("raccord glissant chiffré : plat de niveau jusqu'à s = L − λ − d, raccord à α_ref, partie de niveau du coin", () => {
     const pitch = new PiecewiseLinear([
@@ -1505,7 +1505,7 @@ describe("profileBearing — paliers du limon coudé (sous-lot K2f)", () => {
         startCorner: { joint: "wall", concave: true, tanHalf: 1 },
       },
     ];
-    const settings = PROVISIONAL_KNEE_SETTINGS;
+    const settings = DEFAULT_KNEE_SETTINGS;
     const res = profileBearings({
       faces,
       pitch: { inner: pitch, outer: pitch },
@@ -1535,7 +1535,7 @@ describe("profileBearing — paliers du limon coudé (sous-lot K2f)", () => {
   });
 
   /**
-   * Palier aligné court (cage#25 de la sonde K2f) : deux limons colinéaires au raccord de palier
+   * Palier aligné court (cage générée, sous-lot K2f) : deux limons colinéaires au raccord de palier
    * (milieu du palier de 309 mm, à 104,4 mm du jarret de fin du plat), UPN 220 : la fin du plat
    * est reportée à m après le raccord, le palier reste de niveau ; plus de partie de niveau à
    * P(σ_c) au-dessus du palier (bosse de 72,6 mm avant K2f).
@@ -1579,7 +1579,7 @@ describe("profileBearing — paliers du limon coudé (sous-lot K2f)", () => {
       pitch: { inner: pitch, outer: pitch },
       upperOffset: 40,
       section: sec,
-      settings: PROVISIONAL_KNEE_SETTINGS,
+      settings: DEFAULT_KNEE_SETTINGS,
     });
     const a = byId(res, "A");
     const b = byId(res, "B");
@@ -1592,7 +1592,7 @@ describe("profileBearing — paliers du limon coudé (sous-lot K2f)", () => {
       [1444.5, 1080],
     ]);
     expect(b.line[0]).toEqual({ x: 0, y: 1080 });
-    expect(b.line[1]!.x).toBeCloseTo(PROVISIONAL_KNEE_SETTINGS.minSegmentLength, 9);
+    expect(b.line[1]!.x).toBeCloseTo(DEFAULT_KNEE_SETTINGS.minSegmentLength, 9);
     expect(b.line[1]!.y).toBe(1080);
     expect(b.line[2]!.x).toBeCloseTo(1599 - 1444.5, 9);
     expect(b.line[2]!.y).toBe(1260);
@@ -1647,7 +1647,7 @@ describe("profileBearing — paliers du limon coudé (sous-lot K2f)", () => {
         pitch: { inner: pitch, outer: pitch },
         upperOffset: 40,
         section: UPN200,
-        settings: PROVISIONAL_KNEE_SETTINGS,
+        settings: DEFAULT_KNEE_SETTINGS,
       });
     expect(run(mk("wall")).landingChains).toEqual([]);
     // Ordre d'entrée inversé (Z2 avant Z1) : chaîne du bas vers le haut.
@@ -1746,11 +1746,11 @@ describe("profileBearing — paliers du limon coudé (sous-lot K2f)", () => {
       pitch: { inner: pitch, outer: pitch },
       upperOffset: 40,
       section: sec,
-      settings: PROVISIONAL_KNEE_SETTINGS,
+      settings: DEFAULT_KNEE_SETTINGS,
     });
     const a = byId(res, "A");
     const b = byId(res, "B");
-    const m = PROVISIONAL_KNEE_SETTINGS.minSegmentLength;
+    const m = DEFAULT_KNEE_SETTINGS.minSegmentLength;
     // A finit de niveau sur le plat ; B reste de niveau jusqu'à m, puis monte vers le nez suivant.
     expect(a.line[a.line.length - 1]).toEqual({ x: 1250, y: 720 });
     expect(a.segments[a.segments.length - 1]!.alpha).toBe(0);
@@ -1840,11 +1840,12 @@ describe("profileBearing — paliers du limon coudé (sous-lot K2f)", () => {
    * comme un sous-tronçon de longueur nulle, rives continues ; le palier n'est plus suivi de niveau
    * et le nez du raccord passe au-dessus de la rive : constats publiés (repli de la face par le
    * plugin, `noseAboveRive` étant bloquant ; dans une chaîne, refus du raccord).
-   * PROVISOIRE, en attente de la décision de l'utilisateur (question 3 du rapport K2h, ledger) :
-   * le miroir de la fin de plat (sommet avancé à `joint − m`) a été essayé à la relecture et ne
-   * suffit pas ici, la coupe du jarret convexe (rive basse en u = 1 261,4) franchissant le
-   * raccord (`cutsCross`, rives basses décalées de 10,3 mm) ; il faudrait reculer d'au moins
-   * m + h·tan β, β dépendant lui-même du report.
+   * Décision K-Q38 (QUESTIONS A41) : retrait du sommet et refus de la chaîne gardés ; report du
+   * début de plat (au moins m + h·tan β) en dette (QUESTIONS D4). Le miroir de la fin de plat
+   * (sommet avancé à `joint − m`) a été essayé à la relecture et ne suffit pas ici, la coupe du
+   * jarret convexe (rive basse en u = 1 261,4) franchissant le raccord (`cutsCross`, rives
+   * basses décalées de 10,3 mm) ; il faudrait reculer d'au moins m + h·tan β, β dépendant
+   * lui-même du report.
    */
   it("début de plat exactement au raccord : retiré, rives continues, constats publiés", () => {
     const landing: SteelCornerEnd = { joint: "landing", concave: true, tanHalf: 0 };
@@ -1889,7 +1890,7 @@ describe("profileBearing — paliers du limon coudé (sous-lot K2f)", () => {
       pitch: { inner: pitch, outer: pitch },
       upperOffset: 40,
       section: sec,
-      settings: PROVISIONAL_KNEE_SETTINGS,
+      settings: DEFAULT_KNEE_SETTINGS,
     });
     const a = byId(res, "A");
     const b = byId(res, "B");
@@ -1901,7 +1902,7 @@ describe("profileBearing — paliers du limon coudé (sous-lot K2f)", () => {
     expect(Math.abs(ra.lower(1250) - rb.lower(0))).toBeLessThan(1e-9);
     expect(Math.abs(ra.upper(1250) - rb.upper(0))).toBeLessThan(1e-9);
     expect(res.issues.some((i) => i.kind === "landingNotLevel" && i.faceId === "B")).toBe(true);
-    expect(res.issues.some((i) => i.kind === "noseAboveRive")).toBe(true);
+    expect(res.issues.some((i) => i.kind === "noseAboveRive" && i.faceId === "B")).toBe(true);
     expect(res.landingChains).toEqual([["A", "B"]]);
   });
 

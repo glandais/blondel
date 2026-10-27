@@ -2,27 +2,30 @@
  * Plugin `steel-profile` : limons en profilés du commerce UPN / IPN / IPE / HEA (C §2.3),
  * jalon 3c.
  *
- * - **Limons** : un limon de jour et un limon mural par volée (mêmes faces que `steel-flat` :
- *   faces côté marches = bords de l'emmarchement utile, limons hors emprise utile), **âme
- *   verticale**, barre droite. Ligne d'appui [choix Blondel, à valider] : corde de la ligne des
- *   nez de la face (du premier au dernier nez de la portée du limon) ; rive haute à d_h au-dessus
- *   (vertical), hauteur verticale h / cos α. UPN : âme côté marches, ailes vers l'extérieur
- *   (C §2.3 : « le U laisse voir ses ailes ») ; IPN / IPE / HEA : bouts d'ailes côté marches,
- *   supports soudés sur l'âme entre les ailes.
- * - **Limon coudé** (paramètre `stringerLine` = `nosing`, chantier bent-stringer K2b, QUESTIONS
- *   A13, A41) : ligne d'appui sur la ligne des nez, jarret à chaque nez où la pente change,
- *   partie de niveau aux coins en plan (noyau `profileBearing.ts`, câblage
- *   `steelProfileCranked.ts`) ; repli par face sur la barre droite quand le coudé y est
- *   infaisable ou impose plus d'âme (K-Q12, K-Q13), avec une remarque. Face à jarrets (K2c) :
- *   pièce finie (solide balayé, propriétaire des cornières) et une composante par tronçon
- *   (`LE2-1`…, développé, débit, cordon de jarret sur le tronçon du dessus) ; cornière à cheval
- *   sur un jarret gardée en place (K-Q10 révisée) : traçage coupé au joint, perçages trop près
- *   de la coupe reportés après soudage. Marche au coin du mur (K-Q4, K2e) : une cornière
- *   exigée, les autres gardées si elles tiennent dans la section, retirées sinon avec une
- *   remarque (`crankedSectionPlan`) ; une marche sans appui côté jour (K-Q16) et les paliers
- *   (K-Q18) gardent toutes leurs cornières (K2e2). Limon coudé par défaut depuis le sous-lot K2d
- *   (K-Q11) ; `chord` : barre droite inchangée. Jarrets et onglets du limon coudé soudés bout à
- *   bout (K-Q2, EXC2) ; liste des jarrets sur la pièce finie (`Part.jig`, CK17).
+ * - **Limons** : un limon de jour et un limon mural par volée (mêmes faces que `steel-flat` : faces
+ *   côté marches = bords de l'emmarchement utile, limons hors emprise utile), **âme verticale**,
+ *   barre droite (`stringerLine` = `chord`). Ligne d'appui [choix Blondel, à valider] : corde de la
+ *   ligne des nez de la face (du premier au dernier nez de la portée du limon) ; rive haute à d_h
+ *   au-dessus (vertical), hauteur verticale h / cos α. UPN : âme côté marches, ailes vers
+ *   l'extérieur (C §2.3 : « le U laisse voir ses ailes ») ; IPN / IPE / HEA : bouts d'ailes côté
+ *   marches, supports soudés sur l'âme entre les ailes.
+ * - **Limon coudé** (paramètre `stringerLine` = `nosing`, chantier bent-stringer, sous-lots K2b à
+ *   K2h, QUESTIONS A13, A41) : ligne d'appui sur la ligne des nez, jarret à chaque nez où la pente
+ *   change, partie de niveau aux coins en plan (noyau `profileBearing.ts`, câblage
+ *   `steelProfileCranked.ts`) ; repli par face sur la barre droite quand le coudé y est infaisable
+ *   ou impose plus d'âme (K-Q12, K-Q13, K-Q14), ou qu'un tronçon dépasse l'angle maximal
+ *   `knee.maxSegmentAngle` (K-Q35, repli `tooSteepSegment`), avec une remarque. Face à jarrets
+ *   (K2c) : pièce finie (solide balayé, propriétaire des cornières) et une composante par tronçon
+ *   (`LE2-1`…, développé, débit, cordon de jarret sur le tronçon du dessus) ; cornière à cheval sur
+ *   un jarret gardée en place (K-Q10 révisée) : traçage coupé au joint, perçages trop près de la
+ *   coupe reportés après soudage. Marche au coin du mur (K-Q4, K2e) : une cornière exigée, les
+ *   autres gardées si elles tiennent dans la section, retirées sinon avec une remarque
+ *   (`crankedSectionPlan`) ; une marche sans appui côté jour (K-Q16) et les paliers (K-Q18) gardent
+ *   toutes leurs cornières (K2e2). Limon coudé par défaut depuis le sous-lot K2d (K-Q11) ;
+ *   `chord` : barre droite inchangée. Jarrets et onglets du limon coudé soudés bout à bout (K-Q2,
+ *   EXC2) ; liste des jarrets sur la pièce finie (`Part.jig`, CK17). Escalier droit à nez
+ *   imposés inclinés (`nosingOverrides` de type `angle`) : ligne des nez brisée, donc limon coudé
+ *   en `nosing` (relecture K2g, question ouverte K-Q39).
  * - **Choix de section** : une section du catalogue (`catalog/`) ou `auto` = la plus légère de
  *   la famille qui (1) loge les supports dans la hauteur d'âme et (2) passe le
  *   **prédimensionnement indicatif** (`precheck/` : L/200, contrainte, f₁ ≥ 5 Hz) pour tous les
@@ -41,14 +44,16 @@
  *   hélicoïdal reste à valider chez le cintreur et le limon cintré n'est pas généré (jalon 5).
  * - **Cage saisie** (ADR-0010, sous-lot 6b) : mêmes faces que `steel-flat` (`steelCageFaces`),
  *   mêmes fonctions sauf le palier droit en barre droite (`STEEL_PROFILE_CAGE`) ; palier droit
- *   accepté en limon coudé (`STEEL_PROFILE_CAGE_NOSING`, K-Q5, sous-lot K2f), aboutage de palier
- *   selon `splice` ; à un raccord de palier, le limon voisin d'un limon coudé reste coudé (sa
- *   section peut monter), sinon refus du palier droit pour cette cage en erreur chiffrée, seules
- *   les marches produites (K-Q27, sous-lot K2f2) ; coupe d'onglet à φ/2 en plan à un angle
- *   quelconque, rentrant ou saillant (`miterOffset`, `miterCutExtra`) ; onglets plus longs que
- *   la face : limon non généré
- *   (`profileMiterFiberLength`) ; jour en arc : contrôle de cintrage gardé. À valider,
- *   QUESTIONS F17.
+ *   accepté en limon coudé (`STEEL_PROFILE_CAGE_NOSING` par `capabilities.cageWith`, K-Q5, sous-lot
+ *   K2f), aboutage de palier selon `splice` ; à un raccord de palier, le limon voisin d'un limon
+ *   coudé reste coudé (sa section peut monter), sinon refus du palier droit pour cette cage en
+ *   erreur chiffrée, seules les marches produites (K-Q27, sous-lot K2f2) ; chaîne de raccords toute
+ *   repliée `heavier` forcée en coudé (K-Q33), refusée si le coudé y est infaisable (K-Q31,
+ *   `landingChainStraight`) ou si le coudé dépasse la section imposée (K-Q32) ; coupe
+ *   d'onglet à φ/2 en plan à un angle quelconque, rentrant ou saillant (`miterOffset`,
+ *   `miterCutExtra`) ; onglets plus longs que la face : limon non généré
+ *   (`profileMiterFiberLength`) ; jour en arc : contrôle de cintrage gardé. À valider, QUESTIONS
+ *   F17.
  * - **Supports** : cornières (C §2.3 [58]) sous chaque marche, soudées ou vissées.
  * - **Développé** : vue de l'âme dépliée (face côté marches), repère de la barre (x le long de
  *   l'axe, y perpendiculaire de 0 à h) : coupes d'extrémité, perçages, traçage des supports.
@@ -278,7 +283,8 @@ export const SteelProfileParamsSchema = z.object({
    * la barre droite quand le limon coudé y est infaisable ou plus exigeant (QUESTIONS A13, A41 :
    * K-Q1, K-Q3, K-Q7, K-Q12, K-Q13). **Défaut `nosing`** depuis la bascule décidée (K-Q11,
    * sous-lot K2d) : un projet enregistré sans ce paramètre est recalculé en limon coudé, avec la
-   * remarque `structure.steelProfile.note.defaultCranked` (escaliers droits inchangés, CK7).
+   * remarque `structure.steelProfile.note.defaultCranked` (escaliers droits à une seule pente
+   * inchangés, CK7 ; à nez imposés inclinés, limon coudé : question ouverte K-Q39).
    */
   stringerLine: z.enum(["chord", "nosing"]).default("nosing"),
   /**
@@ -383,7 +389,7 @@ export interface SteelProfileResult {
    */
   readonly cranked?: CrankedSectionPlan;
   /**
-   * Cornières au coin du mur (K-Q4, K2e ; `nosing` seulement, pour les tests et les sondes) :
+   * Cornières au coin du mur (K-Q4, K2e ; `nosing` seulement, pour les tests) :
    * groupes, clés exigées pour la section retenue et cornières facultatives retirées (partie
    * logée sous `supports.minLength`, une autre cornière de la marche posée côté mur).
    */
@@ -399,7 +405,7 @@ export interface SteelProfileResult {
     }[];
   };
   /**
-   * Raccords de palier (K-Q27, sous-lot K2f2 ; `nosing` seulement, pour les tests et les sondes) :
+   * Raccords de palier (K-Q27, sous-lot K2f2 ; `nosing` seulement, pour les tests) :
    * chaînes du noyau et refus pour la section retenue (non vides : palier droit refusé, seules
    * les marches produites) ; sections essayées dont le plan a forcé au moins un limon coudé
    * (`forcedSections`, toutes écartées par le choix automatique) ou refusé un limon
@@ -989,8 +995,9 @@ export function buildSteelProfile(
   // Bascule du défaut (décision K-Q11, sous-lot K2d) : ligne d'appui non précisée dans le projet
   // (projet enregistré avant cette version, ou paramètres de structure vides) et au moins un
   // limon construit coudé : le projet est recalculé en limon coudé, la barre droite reste
-  // disponible. Aucune remarque sur un escalier droit (faces à une seule pente, CK7) ni quand le
-  // palier est refusé (retour anticipé ci-dessus).
+  // disponible. Aucune remarque sur une face à une seule pente (escalier droit sans nez imposé
+  // incliné, CK7 ; avec, question ouverte K-Q39) ni quand le palier est refusé (retour anticipé
+  // ci-dessus).
   if (
     nosing &&
     !Object.hasOwn(project.stair.structure.params, "stringerLine") &&
@@ -1194,7 +1201,7 @@ export interface ProfileSupportSetup {
  * Étapes 0 à 3 de `buildSteelProfile`, sans effet de bord (aucune note ni erreur poussée) :
  * faces des limons (cage ou volées), pièces de base, zones d'appui des marches, fenêtres et
  * faces porteuses, supports candidats avant rognage à l'âme. Exportée pour le noyau du limon
- * coudé (`profileBearing.ts`), ses tests et ses sondes.
+ * coudé (`profileBearing.ts`) et ses tests.
  */
 export function profileSupportSetup(
   ctx: StructureContext,

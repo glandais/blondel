@@ -37,6 +37,7 @@
 import {
   ROTATION_DEFAULT_REACH,
   ROTATION_DEFAULT_STEEPNESS,
+  isTurningLayout,
   isValueValidated,
   resolveAnchorKind,
   resolveCurvedMethod,
@@ -745,13 +746,11 @@ export function structureParamApplies(
     return typeof v === "number" && v > 0;
   }
   // Nettoyage des jarrets du limon coudé des profilés (K-Q9) : seulement en limon coudé, sur un
-  // tracé à tournant (volées à tournant ou cage saisie) ; escalier droit : limon droit dans les
-  // deux réglages, aucun jarret (invariant I1, sous-lot K2d).
+  // tracé à tournant (`isTurningLayout` du cœur : volées à tournant ou cage saisie) ; escalier
+  // droit : limon droit dans les deux réglages, aucun jarret (invariant I1, sous-lot K2d ; nez
+  // imposés inclinés : jarrets sans réglage affiché, question ouverte K-Q39).
   if (head === "knee") {
-    const layout = project.stair.layout;
-    const turning =
-      layout.kind === "cage" || (layout.kind !== "helical" && layout.turns.length > 0);
-    return turning && field(params, "stringerLine") === "nosing";
+    return isTurningLayout(project.stair.layout) && field(params, "stringerLine") === "nosing";
   }
   // Réduction selon l'angle du fil (A35 (j)) : poutre en couches empilées seulement.
   if (head === "grainAngle") return curvedMethodOf(project, params) === "stacked";

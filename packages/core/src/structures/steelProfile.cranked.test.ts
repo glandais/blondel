@@ -48,7 +48,7 @@ import {
   stairArb,
 } from "../stepping/test-helpers.js";
 import { adaptJour } from "./compare.js";
-import { fitInWebPolyline, polylineAt, riveFns } from "./profileBearing.js";
+import { DEFAULT_KNEE_SETTINGS, fitInWebPolyline, polylineAt, riveFns } from "./profileBearing.js";
 import { StructureError, registerStructure } from "./registry.js";
 import {
   STEEL_PROFILE,
@@ -1221,10 +1221,11 @@ describe("steel-profile — cornière au coin du mur (K2e, K-Q4 ; K2e2, K-Q16 à
     }
   });
 
-  // Écart à la lettre de K-Q16 (« j4-demi M9 sans appui côté jour », « UPN 220 attendu »), en
-  // attente d'arbitrage de l'utilisateur : au poteau retenu (130 / 45), M9 est portée côté jour
-  // par le poteau PT2, donc la règle du coin s'applique et retire M9 / LE3 (UPN 200) ; M9 n'est
-  // sans appui côté jour qu'au poteau 110 / 35 (test précédent), que le point fixe ne rend pas.
+  // Conforme à K-Q23 (le poteau compte comme appui côté jour), qui précise K-Q16 (« j4-demi M9
+  // sans appui côté jour », « UPN 220 attendu ») : au poteau retenu (130 / 45), M9 est portée
+  // côté jour par le poteau PT2, donc la règle du coin s'applique et retire M9 / LE3 (UPN 200) ;
+  // M9 n'est sans appui côté jour qu'au poteau 110 / 35 (test précédent), que le point fixe ne
+  // rend pas.
   it("j4-demi (modèle livré, 130 / 45) : deux cornières retirées (M5 sur LE2, M9 sur LE3), absentes des supports, développés, débit et assemblages", () => {
     const p = pick("j4-demi-tournant-acier-garde-corps.blondel.json")(NOSING);
     const x = run(p);
@@ -1997,8 +1998,9 @@ describe("steel-profile — propriété sur escaliers générés (limon coudé)"
             throw e;
           }
           const nosingProject = withLine(p, "nosing");
-          expect(() => buildModel(nosingProject, { memo: false })).not.toThrow();
           const nosing = run(nosingProject);
+          // `buildModel` ne lève jamais (erreur interne rendue dans `Model.errors`) : I10.
+          expect(errorKeys(nosing)).not.toContain("pipeline.internalError");
           evaluated++;
           expect(mass(nosing)).toBeLessThanOrEqual(mass(chord));
           const known = new Set(errorKeys(chord));
@@ -2620,7 +2622,7 @@ describe("steel-profile — raccords de palier, coudé forcé sinon refus (K-Q27
   });
 
   // Chaîne de raccords sans limon coudé (K-Q31, sous-lot K2d ; cage générée de la graine 31337,
-  // tirage 93 de la sonde de l'architecte) : cage alignée 1 813 / 927 / 1 736 mm, palier droit de
+  // 93e tirage, relevée par l'architecte) : cage alignée 1 813 / 927 / 1 736 mm, palier droit de
   // 208 mm puis quart tournant à −115°. En IPE, LI1 est replié `noseAboveRive` (nez 6 mm au-dessus
   // de la rive haute) et LI2 `heavier` (399,6 mm coudé, au-delà de l'IPE 300) : avant K-Q31, deux
   // barres droites montaient le long du palier ; désormais refus chiffré des deux limons.
@@ -2870,16 +2872,35 @@ describe("steel-profile — angle maximal de tronçon (K-Q35, sous-lot K2h)", ()
         .filter((x) => !x.level)
         .map((x) => (Math.abs(x.alpha) * 180) / Math.PI),
     );
+  /**
+   * Plus raide des tronçons, recalculé sur les sommets de la ligne d'appui (`bearing.line`),
+   * indépendamment de l'angle `alpha` que le plugin compare à `maxSegmentAngle` (relecture K2g).
+   */
+  const lineSteepestDeg = (s: SteelProfileResult["stringers"][number]): number => {
+    const line = s.bearing?.line ?? [];
+    let max = 0;
+    for (let i = 1; i < line.length; i++) {
+      const dx = line[i]!.x - line[i - 1]!.x;
+      const dy = line[i]!.y - line[i - 1]!.y;
+      if (dx > 0) max = Math.max(max, (Math.atan2(Math.abs(dy), dx) * 180) / Math.PI);
+    }
+    return max;
+  };
+  /** Angle maximal de tronçon par défaut (schéma, K-Q35). */
+  const MAX_DEFAULT = DEFAULT_KNEE_SETTINGS.maxSegmentAngle;
 
   it("défaut 75° : modèle identique au paramètre explicite, aucun repli `tooSteepSegment`", () => {
     const base = run(quarter);
-    const explicit = run(knee(quarter, 75));
+    const explicit = run(knee(quarter, MAX_DEFAULT));
     expect(explicit.m.parts).toEqual(base.m.parts);
     expect(explicit.m.errors).toEqual(base.m.errors);
     expect(explicit.m.notes).toEqual(base.m.notes);
     expect(explicit.m.compliance.results).toEqual(base.m.compliance.results);
     expect(base.r.stringers.some((s) => s.crankedFallback?.kind === "tooSteepSegment")).toBe(false);
-    expect(Math.max(...base.r.stringers.map(steepestDeg))).toBeLessThan(75);
+    expect(Math.max(...base.r.stringers.map(lineSteepestDeg))).toBeLessThan(MAX_DEFAULT);
+    for (const s of base.r.stringers) {
+      if (s.bearing) expect(lineSteepestDeg(s), s.part.mark).toBeCloseTo(steepestDeg(s), 6);
+    }
   });
 
   it("40° : chaque face coudée au tronçon plus raide que 40° se replie (`tooSteepSegment`, remarque chiffrée), les autres restent coudées", () => {
@@ -2937,7 +2958,7 @@ describe("steel-profile — angle maximal de tronçon (K-Q35, sous-lot K2h)", ()
         expect(s.crankedFallback?.kind, `${name} ${s.part.mark}`).not.toBe("tooSteepSegment");
         if (!s.bearing) continue;
         cranked++;
-        expect(steepestDeg(s), `${name} ${s.part.mark}`).toBeLessThan(75);
+        expect(lineSteepestDeg(s), `${name} ${s.part.mark}`).toBeLessThan(MAX_DEFAULT);
       }
     }
     expect(cranked).toBeGreaterThan(0);
@@ -3046,4 +3067,48 @@ describe("steel-profile — démos du limon coudé (sous-lot K2h), relevé du pl
       }
     }
   });
+});
+
+describe("steel-profile — intégration du limon coudé (I10, I11, sous-lot K2g)", () => {
+  it("exemples, préréglages et démos, tels quels et passés en UPN / IPE / HEA × `nosing` / `chord` : aucune erreur interne, composantes sans double compte", () => {
+    const projects: [string, Project][] = [
+      ...readdirSync(EXAMPLES_DIR)
+        .filter((f) => f.endsWith(".blondel.json"))
+        .sort()
+        .map((f): [string, Project] => [f, loadExample(f)]),
+      ...ALL_PRESET_IDS.map((id): [string, Project] => [id, createProject(id)]),
+      ...DEMO_PRESET_IDS.map((id): [string, Project] => [id, createDemoProject(id)]),
+    ];
+    let cranked = 0;
+    for (const [name, p] of projects) {
+      const variants: [string, Project][] = [["tel quel", p]];
+      for (const family of ["UPN", "IPE", "HEA"]) {
+        for (const line of ["nosing", "chord"] as const) {
+          variants.push([`${family} ${line}`, choose(p, { family, stringerLine: line })]);
+        }
+      }
+      for (const [variant, q] of variants) {
+        const tag = `${name} ${variant}`;
+        const m = buildModel(q, { memo: false });
+        const keys = (m.errors ?? []).map((e) => e.key);
+        expect(keys, tag).not.toContain("pipeline.internalError");
+        // Hors du plugin : autre structure, tracé refusé, ou cage refusée par le pipeline avant
+        // le plugin (palier droit ou rayonnant en barre droite, `structure.cageUnsupported`).
+        if (q.stair.structure.kind !== "steel-profile" || !m.layout) continue;
+        if (keys.includes("structure.cageUnsupported")) continue;
+        let x: Run;
+        try {
+          x = run(q);
+        } catch (e) {
+          // Découpage en faces impossible : rendu en erreur par le pipeline (vérifié ci-dessus).
+          if (e instanceof StructureError) continue;
+          throw e;
+        }
+        // I11 (K2c) : composantes rattachées, aucun double compte, masses à ±1 %.
+        expectCrankedParts(x, resolveWorkshopProfile(q.workshop).metal.density, q);
+        cranked += x.r.stringers.filter((s) => (s.components ?? []).length > 0).length;
+      }
+    }
+    expect(cranked).toBeGreaterThan(0);
+  }, 600_000);
 });

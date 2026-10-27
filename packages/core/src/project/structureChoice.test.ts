@@ -54,7 +54,7 @@ describe("stringerLineOnTurn : ligne d'appui écrite au passage d'une volée dro
     stair: { ...p.stair, structure: { kind, params } },
   });
 
-  it("isTurningLayout : volées droites faux, volées à tournant vrai, hélicoïdal faux, cage vrai (même à un seul tronçon, voir la question 4 du ledger K2h)", () => {
+  it("isTurningLayout : volées droites faux, volées à tournant vrai, hélicoïdal faux, cage vrai (même à un seul tronçon, convention de l'orchestrateur, QUESTIONS A41 K2h)", () => {
     expect(isTurningLayout(createProject("straight").stair.layout)).toBe(false);
     expect(isTurningLayout(createProject("quarter-left").stair.layout)).toBe(true);
     expect(isTurningLayout(createProject("two-quarters-s").stair.layout)).toBe(true);

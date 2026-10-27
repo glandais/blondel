@@ -15,7 +15,7 @@ import type { Vec2 } from "../model/primitives.js";
 import { solidProblem } from "../parts/solidChecks.js";
 import { PiecewiseLinear, clipHalfPlane } from "./geom.js";
 import {
-  PROVISIONAL_KNEE_SETTINGS,
+  DEFAULT_KNEE_SETTINGS,
   bearingSectionOf,
   faceHeightNeed,
   fitInWebPolyline,
@@ -109,7 +109,7 @@ function quarter() {
     pitch: { inner: pitch, outer: pitch },
     upperOffset: 50,
     section: bearingSectionOf(UPN180),
-    settings: PROVISIONAL_KNEE_SETTINGS,
+    settings: DEFAULT_KNEE_SETTINGS,
   });
   const get = (id: string): FaceBearing => res.faces.find((f) => f.faceId === id)!;
   return { pres, res, get, pitch };
@@ -131,7 +131,7 @@ function straight() {
     pitch: { inner: pitch, outer: pitch },
     upperOffset: 50,
     section: bearingSectionOf(UPN180),
-    settings: PROVISIONAL_KNEE_SETTINGS,
+    settings: DEFAULT_KNEE_SETTINGS,
   });
   return { pre, fb: res.faces[0]! };
 }
@@ -233,7 +233,7 @@ describe("decideCrankedFace — priorités (K-Q12, K-Q13)", () => {
     });
   });
 
-  it("plus d'âme que la barre droite et que la section essayée → repli ; logé dans la section → coudé (lecture K2b de K-Q12, à valider)", () => {
+  it("plus d'âme que la barre droite et que la section essayée → repli ; logé dans la section → coudé (K-Q14)", () => {
     expect(
       decideCrankedFace({ ...base, bentNeed: 250, chordNeed: 200, sectionHeight: 220 }).fallback,
     ).toEqual({ kind: "heavier", bent: 250, chord: 200 });
@@ -1089,7 +1089,7 @@ function planOf(
     bearingFaces: q.pres.map(crankedBearingFace),
     pitch: { inner: q.pitch, outer: q.pitch },
     upperOffset: 50,
-    knee: PROVISIONAL_KNEE_SETTINGS,
+    knee: DEFAULT_KNEE_SETTINGS,
     section,
     webFit: WEBFIT,
     supportsOf: (p) => supports.filter((c) => c.face.owner === p.face.id),

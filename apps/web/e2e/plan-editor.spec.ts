@@ -87,8 +87,8 @@ async function importProject(
  * vue : en mise en page étroite (`.plan-site__main` défilant, plan de 640 px), une saisie dans
  * l'inspecteur peut avoir fait défiler le dessin sous la barre de vue (sous-lot K2h : l'accueil à
  * dix-neuf démos, plus haut d'une ligne, laissait le dessin défilé de 258 px). Robustesse du test
- * seulement : le défilement de l'interface elle-même est soumis à l'utilisateur (question 5 du
- * ledger K2h) ; si l'interface est corrigée, cet appel pourra être retiré.
+ * seulement : le défilement de l'interface elle-même est un défaut noté en dette (QUESTIONS
+ * D6) ; si l'interface est corrigée, cet appel pourra être retiré.
  */
 async function hitPoint(
   plan: Locator,

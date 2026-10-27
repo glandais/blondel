@@ -766,7 +766,7 @@ export function kneeNormal(k: Knee): Vec2 {
 }
 
 /** Le point q est-il du côté du tronçon du dessus de la coupe du jarret (bissectrice) ? */
-export function afterKnee(k: Knee, q: Vec2): boolean {
+function afterKnee(k: Knee, q: Vec2): boolean {
   return V.dot(V.sub(q, k.upper), kneeNormal(k)) >= 0;
 }
 
@@ -1047,7 +1047,7 @@ export function crankedMiterItems(
 // ------------------------------------------------------------------------------ remarques
 
 /** Raison d'un repli, traduite à l'affichage. */
-export function crankedFallbackReasonMessage(reason: CrankedFallbackReason): Message {
+function crankedFallbackReasonMessage(reason: CrankedFallbackReason): Message {
   switch (reason.kind) {
     case "emptyWindow":
       return msg("structure.steelProfile.crankedFallback.emptyWindow");
@@ -1110,7 +1110,7 @@ export function landingRefusalReasonMessage(reason: LandingRefusalReason): Messa
 }
 
 /** Libellé d'un raccord de palier : repères de la chaîne, du bas vers le haut (« LI2 / LI3 »). */
-export function spliceLabel(chain: readonly string[], markOf: (faceId: string) => string): Message {
+function spliceLabel(chain: readonly string[], markOf: (faceId: string) => string): Message {
   const marks = chain.map((id) => textMessage(markOf(id)));
   return marks
     .slice(1)

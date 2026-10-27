@@ -123,8 +123,9 @@ export interface StructureChoiceResult {
  * ligne d'appui par défaut (`stringerLine` = `nosing`, décision K-Q11) est écrite explicitement
  * quand elle manque, pour que la remarque de bascule `structure.steelProfile.note.defaultCranked`
  * reste réservée aux projets enregistrés avant la bascule (sous-lot K2d). Escaliers droits
- * inchangés (le limon y est droit dans les deux réglages, invariant I1 de K1) ; autres paramètres
- * et autres structures rendus tels quels.
+ * inchangés (le limon y est droit dans les deux réglages, invariant I1 de K1, sauf nez imposés
+ * inclinés : ligne des nez brisée, limon coudé et remarque de bascule, question ouverte K-Q39) ;
+ * autres paramètres et autres structures rendus tels quels.
  */
 export function explicitStructureParams(
   project: Project,
@@ -330,8 +331,9 @@ function maxCounts(
  * une violation que la ligne d'appui coudée crée quel que soit le poteau (débord d'appui en
  * profilé IPE ou HEA, par exemple) n'est pas imputée au poteau ; seule compte celle qu'un poteau
  * ajoute par rapport au poteau de la barre droite (lecture de « ajoute une violation » de K-Q19,
- * à valider). Le poteau de la référence n'est donc jamais écarté par K-Q19. Le modèle coudé au
- * poteau de la référence n'est construit que pour juger un poteau qui dépasse la référence.
+ * validée par K-Q24). Le poteau de la référence n'est donc jamais écarté par K-Q19. Le modèle
+ * coudé au poteau de la référence n'est construit que pour juger un poteau qui dépasse la
+ * référence.
  *
  * 1. boucle du point fixe, au plus `PROFILE_NEWEL_ITERATIONS` modèles construits (un modèle
  *    déjà en cache, celui de la base, ne compte pas) : un poteau vérifié, retenu et exact est
