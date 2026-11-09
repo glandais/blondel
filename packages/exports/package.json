@@ -13,7 +13,7 @@
     "@blondel/core": "workspace:*",
     "@blondel/geometry": "workspace:*",
     "@blondel/i18n": "workspace:*",
-    "@tarikjabiri/dxf": "^2.9.0",
+    "@tarikjabiri/dxf": "^2.10.0",
     "jspdf": "^4.2.1"
   }
 }
